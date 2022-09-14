@@ -7,7 +7,7 @@
 //#error "KYTY_PLATFORM != KYTY_PLATFORM_LINUX"
 #else
 
-//#include <stdio.h>
+#include <cstdarg>
 
 namespace Kyty {
 

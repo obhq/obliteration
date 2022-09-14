@@ -33,8 +33,10 @@ System parameters (language, date format, etc.) are also hardcoded.
 
 ---
 ### Building
-Supported platforms:
-- Windows 10 x64
+
+#### Windows requirements
+
+Only Windows 10 x64 is supported at the moment.
 
 Toolchains:
 - Visual Studio + clang-cl + ninja
@@ -58,19 +60,78 @@ Define environment variable named Qt5_DIR pointing to the proper version of Qt
 MSVC compiler (cl.exe) is not supported!
 
 External dependencies:
-* Vulkan SDK 1.2.198.1
 * Qt 5.15.0
 
-## Donate
+#### Linux requirements
 
-If you would like to support the project:
+Any x86-64 (some distro use AMD64 wording) should be working.
 
-- Bitcoin: bc1qd66pjk3xj3hzvm379uxy470n533nnt2deenpea
+#### Install Vulkan SDK
 
-<img src="https://user-images.githubusercontent.com/7149418/181066559-7f35befb-ad23-480c-9a75-3b663b1b9957.png" width="200">
+Only version 1.2.198.1 has been tested but any later version should be fine.
 
-## Hire me
+For Windows just download from https://vulkan.lunarg.com/sdk/home. Once installed you need to restart your computer to make `VULKAN_SDK` environment variable effective.
 
-**I'm available for hiring.** If you need C++ developer, please take a look at my [profile](https://github.com/InoriRus) and contact me by email
+For Linux it will be depend on your distro. For Arch Linux just install `vulkan-devel` and set `VULKAN_SDK` to `/usr`. For other distro try to find in its package repository first. If not found visit https://vulkan.lunarg.com/sdk/home to download and install it manually.
 
-**Я в поисках работы.** Если вам нужен разработчик C++, пишите мне на почту.
+#### Clone the repository
+
+You need to clone this repository with submodules like this:
+
+```sh
+git clone --recurse-submodules https://github.com/InoriRus/Kyty.git
+```
+
+#### Initialize VCPKG
+
+Windows (CMD):
+
+```sh
+.\vcpkg\bootstrap-vcpkg.bat
+```
+
+Linux:
+
+```sh
+./vcpkg/bootstrap-vcpkg.sh
+```
+
+#### Install external dependencies
+
+Windows (PowerShell):
+
+```pwsh
+.\vcpkg-restore.ps1
+```
+
+Linux:
+
+```sh
+./vcpkg-restore.sh
+```
+
+If the above command produced an error about Vulkan SDK that mean you have improper Vulkan SDK installed.
+
+#### Build
+
+Run CMake to configure the build system:
+
+```sh
+cmake -B build -S source -D CMAKE_BUILD_TYPE=Release -D KYTY_FINAL=1
+```
+
+Then start building:
+
+```sh
+cmake --build build
+```
+
+## Development
+
+### Get a homebrew application for testing
+
+If you don't have a PS4 application for testing you can download PS Scene Quiz for free [here](https://pkg-zone.com/details/LAPY10010). Once downloaded you need to extract the downloaded `pkg` to get the real content. You can use [LibOrbisPkg](https://github.com/OpenOrbis/LibOrbisPkg) to extract it.
+
+## License
+
+MIT

@@ -8,8 +8,8 @@
 #include "Kyty/Sys/SysSwapByteOrder.h"
 #include "Kyty/Sys/SysTimer.h"
 
-#include "SDL_rwops.h"
-#include "SDL_stdinc.h"
+#include <SDL2/SDL_rwops.h>
+#include <SDL2/SDL_stdinc.h>
 
 // IWYU pragma: no_include <fileapi.h>
 // IWYU pragma: no_include <windows.h>

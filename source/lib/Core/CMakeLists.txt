@@ -10,17 +10,17 @@ add_library(core_obj OBJECT ${core_src})
 #add_library(core STATIC ${core_src})
 add_library(core STATIC $<TARGET_OBJECTS:core_obj>)
 
+find_package(SDL2 CONFIG REQUIRED)
+
 target_link_libraries(core sys)
 target_link_libraries(core math)
-target_link_libraries(core sdl2)
 target_link_libraries(core sqlite)
 target_link_libraries(core lzma)
 target_link_libraries(core zstd)
-
+target_link_libraries(core SDL2::SDL2 SDL2::SDL2main SDL2::SDL2-static)
 
 get_property(inc_headers TARGET core PROPERTY INCLUDE_DIRECTORIES)
 list(APPEND inc_headers 
-	${CMAKE_SOURCE_DIR}/3rdparty/sdl2/include 	
 	${CMAKE_SOURCE_DIR}/3rdparty/sqlite/include
 	${CMAKE_SOURCE_DIR}/3rdparty/lzma/include
 	${CMAKE_SOURCE_DIR}/3rdparty/zstd/lib

@@ -10,7 +10,7 @@
 // IWYU pragma: no_include "SDL_platform.h"
 // IWYU pragma: no_include "SDL_stdinc.h"
 
-#include "SDL.h"
+#include <SDL2/SDL.h>
 
 namespace Kyty::Core {
 
