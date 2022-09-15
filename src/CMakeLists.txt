@@ -12,7 +12,7 @@ target_compile_features(obliteration PUBLIC cxx_std_20)
 if(WIN32)
 	set_target_properties(obliteration PROPERTIES LINK_FLAGS "/DYNAMICBASE:NO /MAP:obliteration.map")
 else()
-	set_target_properties(obliteration PROPERTIES LINK_FLAGS "-Wl,--image-base=0x100000000000 -Wl,-Map=obliteration.map")
+	set_target_properties(obliteration PROPERTIES LINK_FLAGS "-Wl,image-base,0x100000000000 -Wl,-Map,obliteration.map")
 endif()
 
 install(TARGETS obliteration DESTINATION .)
