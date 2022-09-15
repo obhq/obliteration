@@ -1,38 +1,8 @@
-[![Build status](https://ci.appveyor.com/api/projects/status/0du32fg9flol63to?svg=true)](https://ci.appveyor.com/project/InoriRus/kyty) [![CI](https://github.com/InoriRus/Kyty/actions/workflows/ci.yml/badge.svg)](https://github.com/InoriRus/Kyty/actions/workflows/ci.yml)
+# Obliteration
 
-# Kyty
-## PS4 & PS5 emulator
+Obliteration is an experimental PS4 emulator based on [Kyty](https://github.com/InoriRus/Kyty). The project is still in an early stage so most of the games may not work.
 
----
-The project is in its early stage.
-
-[Vladimir M](mailto:inorirus@gmail.com)
-
-Licensed under the MIT license.
-
----
-It is possible to run some simple games for PS4 and homebrews for PS5
-
-There maybe graphics glitches, crashes, freezes and low FPS. It's OK for now.
-
-Features that are not implemented:
-- Audio input/output
-- MP4 video
-- Network
-- Multi-user
-
-Path to Savedata folder is hardcoded and can't be configured.
-System parameters (language, date format, etc.) are also hardcoded.
-
----
-### Screenshots
-#### PS4
-<img src="https://user-images.githubusercontent.com/7149418/169674296-4185e2da-99f9-4073-8ca9-19dc124c7459.png" width="400"> <img src="https://user-images.githubusercontent.com/7149418/169674298-df817d95-7288-46fe-a040-3c0a40c29a6b.png" width="400"> <img src="https://user-images.githubusercontent.com/7149418/169674301-37a3f947-76cd-4a9b-8c81-adec3d5d9c59.png" width="400"> <img src="https://user-images.githubusercontent.com/7149418/169674303-13edae7d-24d3-4ec6-ba94-586e13c69df5.png" width="400">
-#### PS5
-<img src="https://user-images.githubusercontent.com/7149418/185373811-3c12178d-d924-4da1-be7a-06ff6cb733b7.png" width="800">
-
----
-### Building
+## Building from source
 
 #### Windows requirements
 
@@ -79,7 +49,7 @@ For Linux it will be depend on your distro. For Arch Linux just install `vulkan-
 You need to clone this repository with submodules like this:
 
 ```sh
-git clone --recurse-submodules https://github.com/InoriRus/Kyty.git
+git clone --recurse-submodules https://github.com/ultimaweapon/obliteration.git
 ```
 
 #### Initialize VCPKG
