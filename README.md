@@ -3,15 +3,11 @@
 
 Obliteration is an experimental PS4 emulator based on [Kyty](https://github.com/InoriRus/Kyty). The project is still in an early stage so most of the games may not work.
 
+## System requirements
+
+- Windows 10 x64 or Linux x86-64.
+
 ## Building from source
-
-### Windows requirements
-
-Any non-legacy Windows x64 should be working.
-
-### Linux requirements
-
-Any x86-64 (some distro use AMD64 wording) should be working.
 
 ### Install Qt
 
@@ -68,13 +64,13 @@ If the above command produced an error about Vulkan SDK that mean you have impro
 Windows:
 
 ```pwsh
-cmake -B build -S source -D KYTY_FINAL=1 -A x64
+cmake -B build -S src -A x64
 ```
 
 Linux:
 
 ```sh
-cmake -B build -S source -D KYTY_FINAL=1 -D CMAKE_BUILD_TYPE=Release
+cmake -B build -S src -D CMAKE_BUILD_TYPE=Release
 ```
 
 ### Build

@@ -28,7 +28,7 @@ jobs:
     - name: Install VCPKG packages
       run: .\vcpkg-restore.ps1
     - name: Run CMake
-      run: cmake -B build -S source -D KYTY_FINAL=1 -A x64
+      run: cmake -B build -S src -A x64
     - name: Build
       run: cmake --build build --config Release
   build-linux:
@@ -38,7 +38,7 @@ jobs:
     - name: Checkout source
       uses: actions/checkout@v3
       with:
-        submodules: 'recursive'
+        submodules: recursive
     - name: Install dependencies
       run: |
         wget -qO - https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo apt-key add -
@@ -53,6 +53,6 @@ jobs:
     - name: Install VCPKG packages
       run: ./vcpkg-restore.sh
     - name: Run CMake
-      run: cmake -B build -S source -D KYTY_FINAL=1 -D CMAKE_BUILD_TYPE=Release
+      run: cmake -B build -S src -D CMAKE_BUILD_TYPE=Release
     - name: Build
       run: cmake --build build
