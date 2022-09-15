@@ -6,7 +6,7 @@ set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../vcpkg/scripts/buildsyst
 
 # Set warning level to maximum (including sub-directories).
 if(WIN32)
-    add_compile_options(/Wall)
+    add_compile_options(/W4)
 else()
     add_compile_options(-Wall -Wextra)
 endif()
