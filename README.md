@@ -67,7 +67,7 @@ If the above command produced an error about Vulkan SDK that mean you have impro
 Windows:
 
 ```pwsh
-cmake -B build -S source -D KYTY_FINAL=1
+cmake -B build -S source -D KYTY_FINAL=1 -A x64
 ```
 
 Linux:

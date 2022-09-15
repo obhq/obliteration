@@ -28,7 +28,7 @@ jobs:
     - name: Install VCPKG packages
       run: .\vcpkg-restore.ps1
     - name: Run CMake
-      run: cmake -B build -S source -D KYTY_FINAL=1
+      run: cmake -B build -S source -D KYTY_FINAL=1 -A x64
     - name: Build
       run: cmake --build build --config Release
   build-linux:
@@ -53,6 +53,6 @@ jobs:
     - name: Install VCPKG packages
       run: ./vcpkg-restore.sh
     - name: Run CMake
-      run: cmake -B build -S source -D CMAKE_BUILD_TYPE=Release -D KYTY_FINAL=1
+      run: cmake -B build -S source -D KYTY_FINAL=1 -D CMAKE_BUILD_TYPE=Release
     - name: Build
       run: cmake --build build
