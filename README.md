@@ -9,13 +9,21 @@ Obliteration is an experimental PS4 emulator based on [Kyty](https://github.com/
 
 ## Building from source
 
+### Windows prerequisites
+
+- Visual Studio 2019
+- CMake 3.12
+
+### Linux prerequisites
+
+- GCC 9.4
+- CMake 3.12
+
 ### Install Qt
 
-You need to manually install Qt 5 on your system before you proceed.
+You need to install Qt 5 manually on your system before you proceed.
 
 ### Install Vulkan SDK
-
-Only version 1.2.198.1 has been tested but any later version should be fine.
 
 For Windows just download from https://vulkan.lunarg.com/sdk/home. Once installed you need to restart your computer to make `VULKAN_SDK` environment variable effective.
 
