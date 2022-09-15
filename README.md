@@ -34,9 +34,9 @@ git clone --recurse-submodules https://github.com/ultimaweapon/obliteration.git
 
 ### Initialize VCPKG
 
-Windows (CMD):
+Windows:
 
-```sh
+```pwsh
 .\vcpkg\bootstrap-vcpkg.bat
 ```
 
@@ -62,15 +62,29 @@ Linux:
 
 If the above command produced an error about Vulkan SDK that mean you have improper Vulkan SDK installed.
 
-### Build
+### Configure build system
 
-Run CMake to configure the build system:
+Windows:
 
-```sh
-cmake -B build -S source -D CMAKE_BUILD_TYPE=Release -D KYTY_FINAL=1
+```pwsh
+cmake -B build -S source -D KYTY_FINAL=1
 ```
 
-Then start building:
+Linux:
+
+```sh
+cmake -B build -S source -D KYTY_FINAL=1 -D CMAKE_BUILD_TYPE=Release
+```
+
+### Build
+
+Windows:
+
+```pwsh
+cmake --build build --config Release
+```
+
+Linux:
 
 ```sh
 cmake --build build

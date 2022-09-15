@@ -24,16 +24,13 @@ jobs:
         .\VulkanSDK.exe --root C:\VulkanSDK  --accept-licenses --default-answer --confirm-command install
         echo "VULKAN_SDK=C:\VulkanSDK" >> $env:GITHUB_ENV
     - name: Initialize VCPKG
-      run: vcpkg\bootstrap-vcpkg.bat
-      shell: cmd
+      run: .\vcpkg\bootstrap-vcpkg.bat
     - name: Install VCPKG packages
       run: .\vcpkg-restore.ps1
     - name: Run CMake
       run: cmake -B build -S source -D KYTY_FINAL=1
-      shell: cmd
     - name: Build
       run: cmake --build build --config Release
-      shell: cmd
   build-linux:
     name: Build (Linux)
     runs-on: ubuntu-20.04
