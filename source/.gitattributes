@@ -1,3 +1,0 @@
-doc/** filter=lfs diff=lfs merge=lfs -text
-
-*.inc linguist-language=C++
