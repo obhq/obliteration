@@ -17,7 +17,7 @@ target_link_libraries(core math)
 target_link_libraries(core sqlite)
 target_link_libraries(core lzma)
 target_link_libraries(core zstd)
-target_link_libraries(core SDL2::SDL2 SDL2::SDL2main SDL2::SDL2-static)
+target_link_libraries(core PRIVATE SDL2::SDL2 SDL2::SDL2main SDL2::SDL2-static)
 
 get_property(inc_headers TARGET core PROPERTY INCLUDE_DIRECTORIES)
 list(APPEND inc_headers 
