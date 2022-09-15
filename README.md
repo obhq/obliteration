@@ -4,15 +4,19 @@ Obliteration is an experimental PS4 emulator based on [Kyty](https://github.com/
 
 ## Building from source
 
-#### Windows requirements
+### Windows requirements
 
 Any non-legacy Windows x64 should be working.
 
-#### Linux requirements
+### Linux requirements
 
 Any x86-64 (some distro use AMD64 wording) should be working.
 
-#### Install Vulkan SDK
+### Install Qt
+
+You need to manually install Qt 5 on your system before you proceed.
+
+### Install Vulkan SDK
 
 Only version 1.2.198.1 has been tested but any later version should be fine.
 
@@ -20,7 +24,7 @@ For Windows just download from https://vulkan.lunarg.com/sdk/home. Once installe
 
 For Linux it will be depend on your distro. For Arch Linux just install `vulkan-devel` and set `VULKAN_SDK` to `/usr`. For other distro try to find in its package repository first. If not found visit https://vulkan.lunarg.com/sdk/home to download and install it manually.
 
-#### Clone the repository
+### Clone the repository
 
 You need to clone this repository with submodules like this:
 
@@ -28,7 +32,7 @@ You need to clone this repository with submodules like this:
 git clone --recurse-submodules https://github.com/ultimaweapon/obliteration.git
 ```
 
-#### Initialize VCPKG
+### Initialize VCPKG
 
 Windows (CMD):
 
@@ -42,7 +46,7 @@ Linux:
 ./vcpkg/bootstrap-vcpkg.sh
 ```
 
-#### Install external dependencies
+### Install external dependencies
 
 Windows (PowerShell):
 
@@ -58,7 +62,7 @@ Linux:
 
 If the above command produced an error about Vulkan SDK that mean you have improper Vulkan SDK installed.
 
-#### Build
+### Build
 
 Run CMake to configure the build system:
 
