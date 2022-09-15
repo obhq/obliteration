@@ -48,7 +48,7 @@ Linux:
 
 ### Install external dependencies
 
-Windows (PowerShell):
+Windows:
 
 ```pwsh
 .\vcpkg-restore.ps1
