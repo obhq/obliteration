@@ -97,6 +97,14 @@ cmake --build build
 
 ## Development
 
+We recommended Visual Studio Code as a code editor with the following extensions:
+
+- [C/C++](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools)
+- [CMake](https://marketplace.visualstudio.com/items?itemName=twxs.cmake)
+- [CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools)
+
+Remove `build` directory from the previous step and open this folder with VS Code. Everything should work out of the box (e.g. code completion).
+
 ### Get a homebrew application for testing
 
 If you don't have a PS4 application for testing you can download PS Scene Quiz for free [here](https://pkg-zone.com/details/LAPY10010). Once downloaded you need to extract the downloaded `pkg` to get the real content. You can use [LibOrbisPkg](https://github.com/OpenOrbis/LibOrbisPkg) to extract it.
