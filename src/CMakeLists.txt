@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.16)
 
 project(obliteration)
 
@@ -30,4 +30,10 @@ target_compile_features(obliteration PRIVATE cxx_std_17)
 target_link_libraries(obliteration PRIVATE Qt5::Widgets)
 
 # Setup installation.
-install(TARGETS obliteration DESTINATION .)
+if(WIN32)
+    install(TARGETS obliteration DESTINATION .)
+else()
+    install(TARGETS obliteration DESTINATION bin)
+endif()
+
+install(SCRIPT post-install.cmake)

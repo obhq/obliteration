@@ -12,12 +12,12 @@ Obliteration is an experimental PS4 emulator based on [Kyty](https://github.com/
 ### Windows prerequisites
 
 - Visual Studio 2019
-- CMake 3.12
+- CMake 3.16
 
 ### Linux prerequisites
 
 - GCC 9.4
-- CMake 3.12
+- CMake 3.16
 
 ### Install Qt
 
