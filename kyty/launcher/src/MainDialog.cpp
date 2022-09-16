@@ -29,12 +29,6 @@
 
 #include <windows.h> // IWYU pragma: keep
 
-// IWYU pragma: no_include <minwindef.h>
-// IWYU pragma: no_include <processthreadsapi.h>
-// IWYU pragma: no_include <winbase.h>
-
-class QWidget;
-
 constexpr char SCRIPT_EXE[]    = "fc_script.exe";
 constexpr char CMD_EXE[]       = "cmd.exe";
 constexpr char CONEMU_EXE[]    = "C:/Program Files/ConEmu/ConEmu64.exe";
@@ -95,16 +89,6 @@ private:
 };
 
 QByteArray MainDialogPrivate::g_last_geometry;
-
-MainDialog::MainDialog(QWidget* parent): QDialog(parent), m_p(new MainDialogPrivate)
-{
-	m_p->Setup(this);
-}
-
-MainDialogPrivate::~MainDialogPrivate()
-{
-	delete m_ui;
-}
 
 void MainDialogPrivate::Setup(MainDialog* main_dialog)
 {
@@ -317,12 +301,6 @@ void MainDialog::ReadSettings(QSettings* s)
 	MainDialogPrivate::ReadSettings(s);
 }
 
-void MainDialog::resizeEvent(QResizeEvent* event)
-{
-	emit Resize();
-	QDialog::resizeEvent(event);
-}
-
 void MainDialogPrivate::WriteSettings(QSettings* s)
 {
 	s->beginGroup(SETTINGS_MAIN_DIALOG);
@@ -371,5 +349,3 @@ void MainDialogPrivate::Update()
 	m_ui->pushButton_Run->setEnabled(run_enabled);
 	m_ui->widget->SetRunEnabled(run_enabled);
 }
-
-#include "MainDialog.moc"
