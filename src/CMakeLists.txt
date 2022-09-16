@@ -4,14 +4,12 @@ find_package(Qt5 COMPONENTS Widgets REQUIRED)
 # Setup application target.
 add_executable(obliteration WIN32
     initialize_dialog.cpp
-    initialize_dialog.ui
     main.cpp
     main_window.cpp
     settings.cpp)
 
 set_property(TARGET obliteration PROPERTY AUTOMOC ON)
 set_property(TARGET obliteration PROPERTY AUTORCC ON)
-set_property(TARGET obliteration PROPERTY AUTOUIC ON)
 
 target_compile_features(obliteration PRIVATE cxx_std_17)
 
