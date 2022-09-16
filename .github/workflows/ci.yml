@@ -31,6 +31,13 @@ jobs:
       run: cmake -B build -S src -A x64
     - name: Build
       run: cmake --build build --config Release
+    - name: Export artifacts
+      run: cmake --install build --prefix dist
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: windows
+        path: dist
   build-linux:
     name: Build (Linux)
     runs-on: ubuntu-20.04
