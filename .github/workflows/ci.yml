@@ -28,7 +28,7 @@ jobs:
     - name: Install VCPKG packages
       run: .\vcpkg-restore.ps1
     - name: Run CMake
-      run: cmake -B build -S src -A x64
+      run: cmake -B build -A x64
     - name: Build
       run: cmake --build build --config Release
     - name: Export artifacts
@@ -60,6 +60,6 @@ jobs:
     - name: Install VCPKG packages
       run: ./vcpkg-restore.sh
     - name: Run CMake
-      run: cmake -B build -S src -D CMAKE_BUILD_TYPE=Release
+      run: cmake -B build -D CMAKE_BUILD_TYPE=Release
     - name: Build
       run: cmake --build build

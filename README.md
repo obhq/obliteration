@@ -72,13 +72,13 @@ If the above command produced an error about Vulkan SDK that mean you have impro
 Windows:
 
 ```pwsh
-cmake -B build -S src -A x64
+cmake -B build -A x64
 ```
 
 Linux:
 
 ```sh
-cmake -B build -S src -D CMAKE_BUILD_TYPE=Release
+cmake -B build -D CMAKE_BUILD_TYPE=Release
 ```
 
 ### Build
@@ -103,7 +103,7 @@ We recommended Visual Studio Code as a code editor with the following extensions
 - [CMake](https://marketplace.visualstudio.com/items?itemName=twxs.cmake)
 - [CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools)
 
-Remove `build` directory from the previous step and open this folder with VS Code. Everything should work out of the box (e.g. code completion).
+Remove `build` directory from the installation from source step and open this folder with VS Code. Everything should work out of the box (e.g. code completion).
 
 ### Get a homebrew application for testing
 

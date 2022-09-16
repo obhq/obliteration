@@ -1,6 +1,6 @@
 {
+  "cmake.configureOnOpen": true,
   "files.insertFinalNewline": true,
   "files.trimFinalNewlines": true,
-  "files.trimTrailingWhitespace": true,
-  "cmake.sourceDirectory": "${workspaceFolder}/src"
+  "files.trimTrailingWhitespace": true
 }
