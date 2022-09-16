@@ -15,7 +15,11 @@ endif()
 find_package(Qt5 COMPONENTS Widgets REQUIRED)
 
 # Setup application target.
-add_executable(obliteration main.cpp main_window.cpp)
+add_executable(obliteration
+    initialize_dialog.cpp
+    main.cpp
+    main_window.cpp
+    settings.cpp)
 
 set_property(TARGET obliteration PROPERTY AUTOMOC ON)
 set_property(TARGET obliteration PROPERTY AUTORCC ON)
