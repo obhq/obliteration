@@ -1,11 +1,14 @@
 #include "initialize_dialog.hpp"
+#include "settings.hpp"
 
 #include <QDialogButtonBox>
+#include <QDir>
 #include <QFileDialog>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QVBoxLayout>
 
@@ -41,6 +44,7 @@ QWidget *InitializeDialog::setupGamesDirectory()
 
     // Input.
     gamesDirectory = new QLineEdit();
+    gamesDirectory->setText(readGamesDirectorySetting());
 
     layout->addWidget(gamesDirectory, 0, 0);
 
@@ -65,8 +69,24 @@ QWidget *InitializeDialog::setupDialogActions()
 {
     auto actions = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
 
-    connect(actions, &QDialogButtonBox::accepted, this, &InitializeDialog::accept);
+    connect(actions, &QDialogButtonBox::accepted, this, &InitializeDialog::save);
     connect(actions, &QDialogButtonBox::rejected, this, &InitializeDialog::reject);
 
     return actions;
+}
+
+void InitializeDialog::save()
+{
+    // Check games directory.
+    auto gamesDirectory = this->gamesDirectory->text();
+
+    if (gamesDirectory.isEmpty() || !QDir(gamesDirectory).exists()) {
+        QMessageBox::critical(this, "Error", "The value for directory to store games is not valid.");
+        return;
+    }
+
+    // Write settings and close dialog.
+    writeGamesDirectorySetting(gamesDirectory);
+
+    accept();
 }

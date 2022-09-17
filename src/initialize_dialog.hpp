@@ -15,6 +15,7 @@ private slots:
 private:
     QWidget *setupGamesDirectory();
     QWidget *setupDialogActions();
+    void save();
 
 private:
     QLineEdit *gamesDirectory;
