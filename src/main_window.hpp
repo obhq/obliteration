@@ -10,8 +10,11 @@ public:
     MainWindow(GameListModel *games);
     ~MainWindow();
 
-private slots:
-    void quit();
+protected:
+    void closeEvent(QCloseEvent *event) override;
+
+private:
+    void restoreGeometry();
 
 private:
     QListView *m_games;
