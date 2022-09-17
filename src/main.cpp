@@ -42,7 +42,6 @@ int main(int argc, char *argv[])
     // Setup application.
     QCoreApplication::setOrganizationName("Obliteration");
     QCoreApplication::setApplicationName("Obliteration");
-    QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
     QCoreApplication::setAttribute(Qt::AA_DisableWindowContextHelpButton);
 
     // Initialize user settings.
