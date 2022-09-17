@@ -7,12 +7,14 @@
 int main(int argc, char *argv[])
 {
     // Setup application.
-    QApplication app(argc, argv);
-
     QCoreApplication::setOrganizationName("Obliteration");
     QCoreApplication::setApplicationName("Obliteration");
+    QCoreApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+    QCoreApplication::setAttribute(Qt::AA_DisableWindowContextHelpButton);
 
     // Initialize user settings.
+    QApplication app(argc, argv);
+
     if (!hasRequiredUserSettings()) {
         InitializeDialog init;
 
