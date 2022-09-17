@@ -80,7 +80,7 @@ void InitializeDialog::save()
     // Check games directory.
     auto gamesDirectory = this->gamesDirectory->text();
 
-    if (gamesDirectory.isEmpty() || !QDir(gamesDirectory).exists()) {
+    if (gamesDirectory.isEmpty() || !QDir(gamesDirectory).exists() || !QDir::isAbsolutePath(gamesDirectory)) {
         QMessageBox::critical(this, "Error", "The value for directory to store games is not valid.");
         return;
     }

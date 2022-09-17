@@ -1,11 +1,13 @@
 #include "main_window.hpp"
+#include "game_models.hpp"
 
 #include <QAction>
 #include <QCoreApplication>
+#include <QListView>
 #include <QMenuBar>
 #include <QMessageBox>
 
-MainWindow::MainWindow()
+MainWindow::MainWindow(GameListModel *games)
 {
     // Setup File menu.
     auto file = menuBar()->addMenu("&File");
@@ -16,7 +18,9 @@ MainWindow::MainWindow()
     file->addAction(quit);
 
     // Setup game list.
-    m_games = new QListWidget(this);
+    m_games = new QListView(this);
+    m_games->setViewMode(QListView::IconMode);
+    m_games->setModel(games);
 
     setCentralWidget(m_games);
 }

@@ -1,16 +1,18 @@
 #pragma once
 
-#include <QListWidget>
 #include <QMainWindow>
+
+class GameListModel;
+class QListView;
 
 class MainWindow final : public QMainWindow {
 public:
-    MainWindow();
+    MainWindow(GameListModel *games);
     ~MainWindow();
 
 private slots:
     void quit();
 
 private:
-    QListWidget *m_games;
+    QListView *m_games;
 };

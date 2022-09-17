@@ -3,6 +3,7 @@ find_package(Qt5 COMPONENTS Widgets REQUIRED)
 
 # Setup application target.
 add_executable(obliteration WIN32
+    game_models.cpp
     initialize_dialog.cpp
     main.cpp
     main_window.cpp
