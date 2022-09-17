@@ -18,7 +18,7 @@ int main(int argc, char *argv[])
     if (!hasRequiredUserSettings()) {
         InitializeDialog init;
 
-        if (init.exec() != QDialog::Accepted) {
+        if (!init.exec()) {
             return 1;
         }
     }
