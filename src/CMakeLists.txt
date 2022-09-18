@@ -3,6 +3,7 @@ include(ExternalProject)
 
 # External dependencies.
 find_package(Qt5 COMPONENTS Widgets REQUIRED)
+find_package(Threads REQUIRED)
 
 # Setup Rust target.
 ExternalProject_Add(emulator
@@ -39,7 +40,12 @@ set_property(TARGET obliteration PROPERTY AUTORCC ON)
 target_compile_features(obliteration PRIVATE cxx_std_17)
 
 target_link_libraries(obliteration PRIVATE Qt5::Widgets)
+target_link_libraries(obliteration PRIVATE Threads::Threads)
 target_link_libraries(obliteration PRIVATE debug ${EMULATOR_DEBUG} optimized ${EMULATOR_RELEASE})
+
+if(WIN32)
+    target_link_libraries(obliteration PRIVATE ws2_32)
+endif()
 
 # Setup installation.
 if(WIN32)
