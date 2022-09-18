@@ -13,6 +13,7 @@
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QProgressDialog>
+#include <QTabWidget>
 #include <QSettings>
 
 #include <cstring>
@@ -32,7 +33,7 @@ MainWindow::MainWindow(void *emulator) :
     file->addAction(quit);
 
     // Setup game list.
-    m_games = new QListView(this);
+    m_games = new QListView();
     m_games->setViewMode(QListView::IconMode);
     m_games->setContextMenuPolicy(Qt::CustomContextMenu);
     m_games->setModel(new GameListModel(this));
@@ -40,7 +41,12 @@ MainWindow::MainWindow(void *emulator) :
     connect(m_games, &QAbstractItemView::doubleClicked, this, &MainWindow::startGame);
     connect(m_games, &QWidget::customContextMenuRequested, this, &MainWindow::requestGamesContextMenu);
 
-    setCentralWidget(m_games);
+    // Setup central widget.
+    auto tab = new QTabWidget(this);
+
+    tab->addTab(m_games, "Games");
+
+    setCentralWidget(tab);
 
     // Setup status bar.
     statusBar();
