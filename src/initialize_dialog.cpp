@@ -4,8 +4,8 @@
 #include <QDialogButtonBox>
 #include <QDir>
 #include <QFileDialog>
-#include <QGridLayout>
 #include <QGroupBox>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
@@ -30,7 +30,7 @@ InitializeDialog::~InitializeDialog()
 
 void InitializeDialog::browse()
 {
-    auto path = QFileDialog::getExistingDirectory(this, "Location to store games");
+    auto path = QFileDialog::getExistingDirectory(this, "Location for PKG files");
 
     if (!path.isEmpty()) {
         m_gamesDirectory->setText(QDir::toNativeSeparators(path));
@@ -39,28 +39,22 @@ void InitializeDialog::browse()
 
 QWidget *InitializeDialog::setupGamesDirectory()
 {
-    auto group = new QGroupBox("Directory to store games");
-    auto layout = new QGridLayout(group);
+    auto group = new QGroupBox("Location for PKG files");
+    auto layout = new QHBoxLayout(group);
 
     // Input.
     m_gamesDirectory = new QLineEdit();
     m_gamesDirectory->setText(readGamesDirectorySetting());
+    m_gamesDirectory->setMinimumWidth(static_cast<int>(400.0 * devicePixelRatioF()));
 
-    layout->addWidget(m_gamesDirectory, 0, 0);
+    layout->addWidget(m_gamesDirectory);
 
     // Browse button.
     auto browse = new QPushButton("...");
 
     connect(browse, &QPushButton::clicked, this, &InitializeDialog::browse);
 
-    layout->addWidget(browse, 0, 1);
-
-    // Notice text.
-    auto notice = new QLabel("If this location already have some games Obliteration will load all of it upon initialization.");
-
-    notice->setStyleSheet("font-style: italic");
-
-    layout->addWidget(notice, 1, 0, 1, 2);
+    layout->addWidget(browse);
 
     return group;
 }
