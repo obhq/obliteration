@@ -18,5 +18,5 @@ private:
     void save();
 
 private:
-    QLineEdit *gamesDirectory;
+    QLineEdit *m_gamesDirectory;
 };

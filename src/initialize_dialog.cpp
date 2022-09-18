@@ -13,7 +13,7 @@
 #include <QVBoxLayout>
 
 InitializeDialog::InitializeDialog() :
-    gamesDirectory(nullptr)
+    m_gamesDirectory(nullptr)
 {
     auto layout = new QVBoxLayout(this);
 
@@ -33,7 +33,7 @@ void InitializeDialog::browse()
     auto path = QFileDialog::getExistingDirectory(this, "Location to store games");
 
     if (!path.isEmpty()) {
-        gamesDirectory->setText(path);
+        m_gamesDirectory->setText(path);
     }
 }
 
@@ -43,10 +43,10 @@ QWidget *InitializeDialog::setupGamesDirectory()
     auto layout = new QGridLayout(group);
 
     // Input.
-    gamesDirectory = new QLineEdit();
-    gamesDirectory->setText(readGamesDirectorySetting());
+    m_gamesDirectory = new QLineEdit();
+    m_gamesDirectory->setText(readGamesDirectorySetting());
 
-    layout->addWidget(gamesDirectory, 0, 0);
+    layout->addWidget(m_gamesDirectory, 0, 0);
 
     // Browse button.
     auto browse = new QPushButton("...");
@@ -78,7 +78,7 @@ QWidget *InitializeDialog::setupDialogActions()
 void InitializeDialog::save()
 {
     // Check games directory.
-    auto gamesDirectory = this->gamesDirectory->text();
+    auto gamesDirectory = m_gamesDirectory->text();
 
     if (gamesDirectory.isEmpty() || !QDir(gamesDirectory).exists() || !QDir::isAbsolutePath(gamesDirectory)) {
         QMessageBox::critical(this, "Error", "The value for directory to store games is not valid.");
