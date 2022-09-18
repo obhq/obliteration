@@ -1,4 +1,4 @@
-use libc::{c_char, c_void};
+use libc::{c_char, c_int, c_void};
 use std::ptr::null_mut;
 
 #[no_mangle]
@@ -26,6 +26,11 @@ pub extern "C" fn emulator_term(inst: *mut c_void) {
 #[no_mangle]
 pub extern "C" fn emulator_start(_: *const EmulatorConfig) -> *mut c_char {
     null_mut()
+}
+
+#[no_mangle]
+pub extern "C" fn emulator_running(_: *mut c_void) -> c_int {
+    0
 }
 
 #[repr(C)]

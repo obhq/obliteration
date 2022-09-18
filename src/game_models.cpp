@@ -9,7 +9,8 @@ Game::~Game()
 {
 }
 
-GameListModel::GameListModel()
+GameListModel::GameListModel(QObject *parent) :
+    QAbstractListModel(parent)
 {
 }
 
@@ -21,6 +22,19 @@ void GameListModel::add(Game *game)
 {
     game->setParent(this);
     m_items.append(game);
+}
+
+void GameListModel::clear()
+{
+    beginResetModel();
+
+    for (auto i : m_items) {
+        delete i;
+    }
+
+    m_items.clear();
+
+    endResetModel();
 }
 
 int GameListModel::rowCount(const QModelIndex &) const

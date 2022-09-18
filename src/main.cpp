@@ -1,65 +1,17 @@
-#include "initialize_dialog.hpp"
 #include "emulator.hpp"
-#include "game_models.hpp"
 #include "main_window.hpp"
-#include "settings.hpp"
 
 #include <QApplication>
-#include <QDir>
 #include <QMessageBox>
-#include <QProgressDialog>
 
 #include <cstdlib>
 
-static void *init(GameListModel &games)
+static int run(void *emulator)
 {
-    // Get game counts.
-    QDir gamesDirectory(readGamesDirectorySetting());
-    auto gameDirectories = gamesDirectory.entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-
-    // Setup loading progress.
-    int step = -1;
-    QProgressDialog progress;
-
-    progress.setMaximum(gameDirectories.size() + 1);
-    progress.setCancelButtonText("Cancel");
-    progress.setWindowModality(Qt::WindowModal);
-    progress.setValue(++step);
-
-    // Load games
-    progress.setLabelText("Loading games...");
-
-    for (auto &dir : gameDirectories) {
-        if (progress.wasCanceled()) {
-            return nullptr;
-        }
-
-        games.add(new Game(dir));
-        progress.setValue(++step);
-    }
-
-    // Initialize emulator system.
-    void *emulator;
-    char *error;
-
-    emulator = emulator_init(&error);
-
-    if (!emulator) {
-        QMessageBox::critical(&progress, "Fatal Error", QString::asprintf("Failed to initialize emulator: %s", error));
-        free(error);
-        return nullptr;
-    }
-
-    progress.setValue(++step);
-
-    return emulator;
-}
-
-static int run(GameListModel *games)
-{
-    MainWindow win(games);
+    MainWindow win(emulator);
 
     win.show();
+    win.reloadGames();
 
     return QApplication::exec();
 }
@@ -71,27 +23,21 @@ int main(int argc, char *argv[])
     QCoreApplication::setApplicationName("Obliteration");
     QCoreApplication::setAttribute(Qt::AA_DisableWindowContextHelpButton);
 
-    // Initialize user settings.
+    // Initialize.
     QApplication app(argc, argv);
+    void *emulator;
+    char *error;
 
-    if (!hasRequiredUserSettings()) {
-        InitializeDialog init;
-
-        if (!init.exec()) {
-            return 1;
-        }
-    }
-
-    // Initialize application.
-    GameListModel games;
-    auto emulator = init(games);
+    emulator = emulator_init(&error);
 
     if (!emulator) {
+        QMessageBox::critical(nullptr, "Fatal Error", QString::asprintf("Failed to initialize emulator: %s", error));
+        free(error);
         return 1;
     }
 
     // Run main window.
-    auto status = run(&games);
+    auto status = run(emulator);
 
     // Shutdown.
     emulator_term(emulator);

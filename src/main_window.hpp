@@ -2,13 +2,15 @@
 
 #include <QMainWindow>
 
-class GameListModel;
 class QListView;
 
 class MainWindow final : public QMainWindow {
 public:
-    MainWindow(GameListModel *games);
+    MainWindow(void *emulator);
     ~MainWindow();
+
+public:
+    void reloadGames();
 
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -19,7 +21,9 @@ private slots:
 
 private:
     void restoreGeometry();
+    bool requireEmulatorStopped();
 
 private:
+    void *m_emulator;
     QListView *m_games;
 };

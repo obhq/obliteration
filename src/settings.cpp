@@ -9,13 +9,6 @@ namespace UserSettings {
 
 #define scope(name) QSettings s; s.beginGroup(name)
 
-bool hasRequiredUserSettings()
-{
-    scope(SettingGroups::user);
-
-    return s.contains(UserSettings::gamesDirectory);
-}
-
 QString readGamesDirectorySetting()
 {
     scope(SettingGroups::user);

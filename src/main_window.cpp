@@ -7,15 +7,19 @@
 #include <QAction>
 #include <QCloseEvent>
 #include <QGuiApplication>
+#include <QDir>
 #include <QListView>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QProgressDialog>
 #include <QSettings>
 
 #include <cstring>
 
-MainWindow::MainWindow(GameListModel *games)
+MainWindow::MainWindow(void *emulator) :
+    m_emulator(emulator),
+    m_games(nullptr)
 {
     restoreGeometry();
 
@@ -31,7 +35,7 @@ MainWindow::MainWindow(GameListModel *games)
     m_games = new QListView(this);
     m_games->setViewMode(QListView::IconMode);
     m_games->setContextMenuPolicy(Qt::CustomContextMenu);
-    m_games->setModel(games);
+    m_games->setModel(new GameListModel(this));
 
     connect(m_games, &QAbstractItemView::doubleClicked, this, &MainWindow::startGame);
     connect(m_games, &QWidget::customContextMenuRequested, this, &MainWindow::requestGamesContextMenu);
@@ -46,20 +50,65 @@ MainWindow::~MainWindow()
 {
 }
 
+void MainWindow::reloadGames()
+{
+    if (!requireEmulatorStopped()) {
+        return;
+    }
+
+    // Get game counts.
+    auto directory = readGamesDirectorySetting();
+
+    if (directory.isNull()) {
+        return;
+    }
+
+    auto pkgs = QDir(directory, "*.pkg").entryList();
+
+    // Remove current games.
+    auto games = reinterpret_cast<GameListModel *>(m_games->model());
+
+    games->clear();
+
+    // Setup loading progress.
+    QProgressDialog progress(this);
+    int step = -1;
+
+    progress.setMaximum(pkgs.size());
+    progress.setCancelButtonText("Cancel");
+    progress.setWindowModality(Qt::WindowModal);
+    progress.setValue(++step);
+
+    // Load games
+    progress.setLabelText("Loading games...");
+
+    for (auto &file : pkgs) {
+        if (progress.wasCanceled()) {
+            QCoreApplication::exit();
+            return;
+        }
+
+        games->add(new Game(file));
+        progress.setValue(++step);
+    }
+}
+
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     // Ask user to confirm.
-    QMessageBox confirm(this);
+    if (emulator_running(m_emulator)) {
+        QMessageBox confirm(this);
 
-    confirm.setText("Do you want to exit?");
-    confirm.setInformativeText("All running games will be terminated.");
-    confirm.setStandardButtons(QMessageBox::Cancel | QMessageBox::Yes);
-    confirm.setDefaultButton(QMessageBox::Cancel);
-    confirm.setIcon(QMessageBox::Warning);
+        confirm.setText("Do you want to exit?");
+        confirm.setInformativeText("The running game will be terminated.");
+        confirm.setStandardButtons(QMessageBox::Cancel | QMessageBox::Yes);
+        confirm.setDefaultButton(QMessageBox::Cancel);
+        confirm.setIcon(QMessageBox::Warning);
 
-    if (confirm.exec() != QMessageBox::Yes) {
-        event->ignore();
-        return;
+        if (confirm.exec() != QMessageBox::Yes) {
+            event->ignore();
+            return;
+        }
     }
 
     // Save gometry.
@@ -127,9 +176,19 @@ void MainWindow::restoreGeometry()
 
     settings.beginGroup(SettingGroups::mainWindow);
 
-    resize(settings.value("size", QSize(800, 800)).toSize());
+    resize(settings.value("size", QSize(1000.0 * devicePixelRatioF(), 600.0 * devicePixelRatioF())).toSize());
 
     if (qGuiApp->platformName() != "wayland") {
-        move(settings.value("pos", QPoint(200, 200)).toPoint());
+        move(settings.value("pos", QPoint(200.0 * devicePixelRatioF(), 200.0 * devicePixelRatioF())).toPoint());
     }
+}
+
+bool MainWindow::requireEmulatorStopped()
+{
+    if (emulator_running(m_emulator)) {
+        QMessageBox::critical(this, "Error", "This functionality is not available while a game is running.");
+        return false;
+    }
+
+    return true;
 }
