@@ -13,6 +13,8 @@
 #include <QMessageBox>
 #include <QSettings>
 
+#include <cstring>
+
 MainWindow::MainWindow(GameListModel *games)
 {
     restoreGeometry();
@@ -76,11 +78,16 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
 void MainWindow::startGame(const QModelIndex &index)
 {
+    // Get target game.
     auto model = reinterpret_cast<GameListModel *>(m_games->model());
     auto game = model->get(index.row()); // Qt already guaranteed the index is valid.
-    auto &dir = game->directory();
 
-    start_game(reinterpret_cast<const std::uint16_t *>(dir.constData()), dir.size());
+    // Setup config.
+    emulator_config conf;
+
+    std::memset(&conf, 0, sizeof(conf));
+
+    emulator_start(&conf);
 }
 
 void MainWindow::requestGamesContextMenu(const QPoint &pos)

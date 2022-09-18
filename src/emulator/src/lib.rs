@@ -24,7 +24,16 @@ pub extern "C" fn emulator_term(inst: *mut c_void) {
 }
 
 #[no_mangle]
-pub extern "C" fn start_game(_: *const u16, _: usize) {}
+pub extern "C" fn emulator_start(_: *const EmulatorConfig) -> *mut c_char {
+    null_mut()
+}
+
+#[repr(C)]
+pub struct EmulatorConfig {}
+
+struct Emulator {
+    sdl: sdl2::Sdl,
+}
 
 fn set_error(msg: &str, dst: *mut *mut c_char) {
     let buf = unsafe { libc::malloc(msg.len() + 1) } as *mut c_char;
@@ -37,8 +46,4 @@ fn set_error(msg: &str, dst: *mut *mut c_char) {
     unsafe { *buf.offset(msg.len() as _) = 0 };
 
     unsafe { *dst = buf };
-}
-
-struct Emulator {
-    sdl: sdl2::Sdl,
 }
