@@ -13,6 +13,9 @@ public:
 protected:
     void closeEvent(QCloseEvent *event) override;
 
+private slots:
+    void startGame(const QModelIndex &index);
+
 private:
     void restoreGeometry();
 

@@ -22,6 +22,7 @@ public:
 
 public:
     void add(Game *game);
+    Game *get(int i) const { return m_items[i]; }
 
 public:
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;

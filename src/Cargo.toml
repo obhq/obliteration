@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "emulator"
+]
+
+default-members = ["emulator"]

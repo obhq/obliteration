@@ -1,5 +1,3 @@
-#include "MainDialog.h"
-
 #include "Common.h"
 #include "Configuration.h"
 #include "ConfigurationItem.h"
@@ -27,9 +25,6 @@
 
 #include "ui_main_dialog.h"
 
-#include <windows.h> // IWYU pragma: keep
-
-constexpr char SCRIPT_EXE[]    = "fc_script.exe";
 constexpr char CMD_EXE[]       = "cmd.exe";
 constexpr char CONEMU_EXE[]    = "C:/Program Files/ConEmu/ConEmu64.exe";
 constexpr char KYTY_MOUNT[]    = "kyty_mount";
@@ -73,8 +68,6 @@ public:
 	void FindInterpreter();
 	void Run();
 
-	[[nodiscard]] const QString& GetInterpreter() const { return m_interpreter; }
-
 	static void WriteSettings(QSettings* s);
 	static void ReadSettings(QSettings* s);
 
@@ -83,7 +76,6 @@ private:
 
 	Ui::MainDialog*    m_ui          = {nullptr};
 	MainDialog*        m_main_dialog = nullptr;
-	QString            m_interpreter;
 	DetachableProcess  m_process;
 	ConfigurationItem* m_running_item = nullptr;
 };
@@ -99,9 +91,6 @@ void MainDialogPrivate::Setup(MainDialog* main_dialog)
 	m_main_dialog = main_dialog;
 	m_ui->widget->SetMainDialog(main_dialog);
 
-	main_dialog->setWindowFlags(Qt::Dialog /*| Qt::MSWindowsFixedSizeDialogHint*/);
-
-	connect(main_dialog, &MainDialog::Start, this, &MainDialogPrivate::FindInterpreter, Qt::QueuedConnection);
 	connect(m_ui->pushButton_Run, &QPushButton::clicked, this, &MainDialogPrivate::Run);
 	connect(m_ui->widget, &ConfigurationListWidget::Select, this, &MainDialogPrivate::Update);
 	connect(m_ui->widget, &ConfigurationListWidget::Run, this, &MainDialogPrivate::Run);
@@ -124,69 +113,6 @@ void MainDialogPrivate::Setup(MainDialog* main_dialog)
 	m_ui->label_settings_file->setText(tr("Settings file: ") + m_ui->widget->GetSettingsFile());
 
 	m_main_dialog->restoreGeometry(g_last_geometry);
-
-	Update();
-}
-
-void MainDialogPrivate::FindInterpreter()
-{
-	QFile file(QDir(".").absoluteFilePath(SCRIPT_EXE));
-	if (file.exists())
-	{
-		m_interpreter = file.fileName();
-	} else
-	{
-		QFile file(QDir("..").absoluteFilePath(SCRIPT_EXE));
-		if (file.exists())
-		{
-			m_interpreter = file.fileName();
-		}
-	}
-
-	bool found = QFile::exists(m_interpreter);
-
-	if (found)
-	{
-		m_ui->label_Interpreter->setText(tr("Emulator: ") + m_interpreter);
-
-		QProcess test;
-		test.setProgram(m_interpreter);
-		test.start();
-		test.waitForFinished();
-
-		auto output = QString(test.readAllStandardOutput());
-		auto lines  = output.split(QRegExp("[\r\n]"), Qt::SkipEmptyParts);
-
-		if (lines.count() >= 2)
-		{
-			m_ui->label_Version->setText(tr("Version: ") + (lines.at(0).startsWith("exe_name") ? lines.at(1) : lines.at(0)));
-		} else
-		{
-			found = false;
-		}
-
-		found = found && lines.contains(QString("Lua function: ") + KYTY_MOUNT);
-		found = found && lines.contains(QString("Lua function: ") + KYTY_EXECUTE);
-		found = found && lines.contains(QString("Lua function: ") + KYTY_LOAD_ELF);
-		found = found && lines.contains(QString("Lua function: ") + KYTY_LOAD_SYMBOLS_ALL);
-		found = found && lines.contains(QString("Lua function: ") + KYTY_LOAD_PARAM_SFO);
-		found = found && lines.contains(QString("Lua function: ") + KYTY_INIT);
-	}
-
-	if (!found)
-	{
-		QMessageBox::critical(m_main_dialog, tr("Error"), tr("Can't find emulator"));
-		QApplication::quit();
-		return;
-	}
-
-	QFile console(CONEMU_EXE);
-	bool  con_emu = console.exists();
-
-	m_ui->radioButton_Cmd->setEnabled(true);
-	m_ui->radioButton_Cmd->setChecked(true);
-	m_ui->radioButton_ConEmu->setEnabled(con_emu);
-	m_ui->radioButton_ConEmu->setChecked(false);
 
 	Update();
 }
@@ -251,7 +177,8 @@ static bool CreateLuaScript(Kyty::Configuration* info, const QString& file_name)
 
 void MainDialog::RunInterpreter(QProcess* process, Kyty::Configuration* info, bool con_emu)
 {
-	const auto& interpreter = m_p->GetInterpreter();
+	// This is a function to start the emulator.
+	const auto& interpreter = m_p->GetInterpreter(); // full path to fc_script.exe
 
 	QFileInfo f(interpreter);
 	auto      dir = f.absoluteDir();

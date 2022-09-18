@@ -1,5 +1,19 @@
+# CMake modules
+include(ExternalProject)
+
 # External dependencies.
 find_package(Qt5 COMPONENTS Widgets REQUIRED)
+
+# Setup Rust target.
+ExternalProject_Add(emulator
+    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND cargo build $<IF:$<CONFIG:Debug>,-v,--release>
+    BUILD_IN_SOURCE ON
+    BUILD_ALWAYS ON
+    INSTALL_COMMAND ""
+    TEST_COMMAND cargo test
+    TEST_EXCLUDE_FROM_MAIN ON)
 
 # Setup application target.
 add_executable(obliteration WIN32
@@ -9,12 +23,17 @@ add_executable(obliteration WIN32
     main_window.cpp
     settings.cpp)
 
+add_dependencies(obliteration emulator)
+
 set_property(TARGET obliteration PROPERTY AUTOMOC ON)
 set_property(TARGET obliteration PROPERTY AUTORCC ON)
 
 target_compile_features(obliteration PRIVATE cxx_std_17)
 
 target_link_libraries(obliteration PRIVATE Qt5::Widgets)
+target_link_libraries(obliteration PRIVATE
+    debug ${CMAKE_CURRENT_SOURCE_DIR}/target/debug/libobliteration.a
+    optimized ${CMAKE_CURRENT_SOURCE_DIR}/target/release/libobliteration.a)
 
 # Setup installation.
 if(WIN32)

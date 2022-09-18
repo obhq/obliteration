@@ -1,1 +1,0 @@
-set(CMAKE_AUTOUIC_SEARCH_PATHS forms)

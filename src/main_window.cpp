@@ -2,6 +2,8 @@
 #include "game_models.hpp"
 #include "settings.hpp"
 
+#include "emulator/emulator.hpp"
+
 #include <QAction>
 #include <QCloseEvent>
 #include <QGuiApplication>
@@ -27,6 +29,7 @@ MainWindow::MainWindow(GameListModel *games)
     m_games->setViewMode(QListView::IconMode);
     m_games->setModel(games);
 
+    connect(m_games, &QAbstractItemView::doubleClicked, this, &MainWindow::startGame);
     setCentralWidget(m_games);
 
     // Setup status bar.
@@ -65,6 +68,15 @@ void MainWindow::closeEvent(QCloseEvent *event)
     }
 
     QMainWindow::closeEvent(event);
+}
+
+void MainWindow::startGame(const QModelIndex &index)
+{
+    auto model = reinterpret_cast<GameListModel *>(m_games->model());
+    auto game = model->get(index.row()); // Qt already guaranteed the index is valid.
+    auto &dir = game->directory();
+
+    start_game(reinterpret_cast<const std::uint16_t *>(dir.constData()), dir.size());
 }
 
 void MainWindow::restoreGeometry()

@@ -12,11 +12,13 @@ Obliteration is an experimental PS4 emulator based on [Kyty](https://github.com/
 ### Windows prerequisites
 
 - Visual Studio 2019
+- Rust 1.63
 - CMake 3.16
 
 ### Linux prerequisites
 
 - GCC 9.4
+- Rust 1.63
 - CMake 3.16
 
 ### Install Qt
@@ -100,6 +102,7 @@ cmake --build build
 We recommended Visual Studio Code as a code editor with the following extensions:
 
 - [C/C++](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools)
+- [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
 - [CMake](https://marketplace.visualstudio.com/items?itemName=twxs.cmake)
 - [CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools)
 
