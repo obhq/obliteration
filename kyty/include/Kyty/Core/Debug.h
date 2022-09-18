@@ -7,8 +7,6 @@
 
 namespace Kyty::Core {
 
-void core_debug_init(const char* app_name);
-
 #if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS && KYTY_BUILD == KYTY_BUILD_DEBUG && KYTY_COMPILER == KYTY_COMPILER_CLANG
 constexpr int DEBUG_MAX_STACK_DEPTH = 20;
 #else

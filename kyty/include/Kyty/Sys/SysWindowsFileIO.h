@@ -89,7 +89,6 @@ void              sys_file_write(uint32_t n, sys_file_t& f);       // NOLINT(goo
 void              sys_file_write_r(uint32_t n, sys_file_t& f);     // NOLINT(google-runtime-references)
 uint64_t          sys_file_size(const String& file_name);
 bool              sys_file_is_error(sys_file_t& f); // NOLINT(google-runtime-references)
-bool              sys_file_io_init();
 bool              sys_file_is_directory_existing(const String& path);
 bool              sys_file_is_file_existing(const String& name);
 bool              sys_file_create_directory(const String& path);

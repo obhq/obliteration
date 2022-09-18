@@ -12,6 +12,22 @@
 
 // IWYU pragma: no_include "sqlite3.h"
 
+// This file is initialize as the following:
+	// if (sqlite3_config(SQLITE_CONFIG_LOG, errorLogCallback, 0) != SQLITE_OK)
+	// {
+	// 	EXIT("sqlite3_config() failed\n");
+	// }
+
+	// if (sqlite3_initialize() != SQLITE_OK)
+	// {
+	// 	EXIT("sqlite3_initialize() failed\n");
+	// }
+
+	// if (sqlite3_threadsafe() == 0)
+	// {
+	// 	EXIT("sqlite3 is not multi-threaded\n");
+	// }
+
 extern "C" {
 void wxsqlite3_codec_data_set(sqlite3* db, const char* z_db_name, const char* param_name, const unsigned char* data);
 }
@@ -62,11 +78,6 @@ struct ConnectionPrivate
 	Connection*        parent;
 	Vector<Statement*> statements;
 };
-
-static void errorLogCallback(void* /*pArg*/, int i_err_code, const char* z_msg)
-{
-	printf("sqlite: (%d) %s\n", i_err_code, z_msg);
-}
 
 #if SQLITE_OS_OTHER
 
@@ -499,24 +510,6 @@ int sqlite3_os_end()
 }
 
 #endif
-
-void Init()
-{
-	if (sqlite3_config(SQLITE_CONFIG_LOG, errorLogCallback, 0) != SQLITE_OK)
-	{
-		EXIT("sqlite3_config() failed\n");
-	}
-
-	if (sqlite3_initialize() != SQLITE_OK)
-	{
-		EXIT("sqlite3_initialize() failed\n");
-	}
-
-	if (sqlite3_threadsafe() == 0)
-	{
-		EXIT("sqlite3 is not multi-threaded\n");
-	}
-}
 
 void StatementPrivate::Prepare(const char* sql_text)
 {

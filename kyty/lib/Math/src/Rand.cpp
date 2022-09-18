@@ -20,12 +20,7 @@ struct RandContextT // NOLINT(cert-msc32-c,cert-msc51-cpp)
 	    std::uniform_real_distribution<float>(0.0f, std::nextafterf(1.0f, FLT_MAX));
 };
 
-RandContextT* g_rand_context = nullptr;
-
-void Rand::Init()
-{
-	g_rand_context = new RandContextT;
-}
+RandContextT* g_rand_context = nullptr; // new RandContextT;
 
 // random in range [0, 2^32-1]
 uint32_t Rand::Uint()

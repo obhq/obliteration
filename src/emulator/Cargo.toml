@@ -7,3 +7,5 @@ edition = "2021"
 crate-type = ["staticlib"]
 
 [dependencies]
+libc = "0.2"
+sdl2 = { version = "0.35", features = ["static-link", "bundled"] }

@@ -32,7 +32,6 @@ void sys_stack_walk(void** stack, int* depth);
 void sys_stack_usage(sys_dbg_stack_info_t& s);           // NOLINT(google-runtime-references)
 void sys_stack_usage_print(sys_dbg_stack_info_t& stack); // NOLINT(google-runtime-references)
 void sys_get_code_info(uintptr_t* addr, size_t* size);
-void sys_set_exception_filter(exception_filter_func_t func);
 
 } // namespace Kyty
 

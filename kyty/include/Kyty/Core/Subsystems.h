@@ -17,7 +17,6 @@ class SubsystemsList
 public:
 	SubsystemsList();
 	virtual ~SubsystemsList();
-	void SetArgs(int argc, char* argv[]);
 
 	// void Add(Subsystem* s, const char* name, ...);
 	void Add(Subsystem* s, std::initializer_list<Subsystem*> deps);

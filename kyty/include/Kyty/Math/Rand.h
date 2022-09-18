@@ -10,8 +10,6 @@ namespace Kyty::Math {
 class Rand
 {
 public:
-	static void Init();
-
 	// random in range [0, 4294967295]
 	static uint32_t Uint();
 

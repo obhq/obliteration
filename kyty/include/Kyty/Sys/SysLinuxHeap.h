@@ -13,11 +13,6 @@ namespace Kyty {
 
 typedef SysCS* sys_heap_id_t;
 
-inline sys_heap_id_t sys_heap_create()
-{
-	return 0;
-}
-
 inline sys_heap_id_t sys_heap_deafult()
 {
 	return 0;

@@ -6,9 +6,6 @@
 
 namespace Kyty::Core {
 
-// SUBSYSTEM_DEFINE(Memory);
-void core_memory_init();
-
 struct MemStats
 {
 	int      state;
@@ -21,7 +18,6 @@ void* mem_realloc(void* ptr, size_t size);
 void  mem_free(void* ptr);
 void  mem_print(int from_state);
 void  mem_get_stat(MemStats* s);
-void  mem_set_max_size(size_t size);
 int   mem_new_state();
 bool  mem_tracker_enabled();
 void  mem_tracker_enable();

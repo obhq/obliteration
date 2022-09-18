@@ -30,8 +30,8 @@ namespace Kyty::Core {
 
 constexpr bool DBG_PRINTF = false;
 
-static DebugMap* g_dbg_map  = nullptr;
-static String*   g_exe_name = nullptr;
+static DebugMap* g_dbg_map  = nullptr; // new DebugMap; g_dbg_map->LoadCsv();
+static String*   g_exe_name = nullptr; // argv[0]
 
 struct DebugFunctionInfo
 {
@@ -79,21 +79,6 @@ struct DebugMapPrivate
 	DebugMapType   map;
 	char*          buf {nullptr};
 };
-
-static void exception_filter(void* /*addr*/)
-{
-	EXIT("Exception!!!");
-}
-
-void core_debug_init(const char* app_name)
-{
-	sys_set_exception_filter(exception_filter);
-
-	g_exe_name = new String(String::FromUtf8(app_name));
-	g_dbg_map  = new DebugMap;
-	// g_dbg_map->LoadMap();
-	g_dbg_map->LoadCsv();
-}
 
 DebugMap::DebugMap(): m_p(new DebugMapPrivate) {}
 

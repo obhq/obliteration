@@ -1,8 +1,7 @@
 #include "main_window.hpp"
+#include "emulator.hpp"
 #include "game_models.hpp"
 #include "settings.hpp"
-
-#include "emulator/emulator.hpp"
 
 #include <QAction>
 #include <QCloseEvent>

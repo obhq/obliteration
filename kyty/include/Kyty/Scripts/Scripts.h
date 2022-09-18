@@ -18,8 +18,6 @@ namespace Kyty::Scripts {
 
 using LuaState = void;
 
-KYTY_SUBSYSTEM_DEFINE(Scripts);
-
 enum class ScriptError
 {
 	Ok,
@@ -51,7 +49,6 @@ ScriptError   RunFile(const String& file_name);
 ScriptError   RunString(const String& source);
 const String& GetErrMsg();
 void          SetErrMsg(const String& msg);
-void          ResetErrMsg();
 void          PushString(const String& str);
 void          PushDouble(double d);
 #if KYTY_LUA_VER == KYTY_LUA_5_3

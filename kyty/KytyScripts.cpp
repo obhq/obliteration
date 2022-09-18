@@ -96,12 +96,7 @@ static void run_script(const String& lua_file_name, const StringList& args)
 
 int main(int argc, char* argv[])
 {
-	mem_set_max_size(static_cast<size_t>(2048) * 1024 * 1024 - 1);
-
 	auto& slist = *SubsystemsList::Instance();
-
-	slist.SetArgs(argc, argv);
-
 	auto Scripts  = ScriptsSubsystem::Instance();
 	auto Core     = CoreSubsystem::Instance();
 	auto UnitTest = UnitTestSubsystem::Instance();
@@ -117,8 +112,8 @@ int main(int argc, char* argv[])
 	slist.Add(Scripts, {Core});
 #if KYTY_PROJECT != KYTY_PROJECT_BUILD_TOOLS
 	slist.Add(Math, {Core});
-	slist.Add(SDL, {Core});
-	slist.Add(Threads, {Core, SDL});
+	slist.Add(SDL, {Core}); // Already migrate initialization logic.
+	slist.Add(Threads, {Core, SDL}); // <-- Next one.
 	slist.Add(Emulator, {Core, Scripts});
 #endif
 	slist.Add(BuildTools, {Core, Scripts});

@@ -15,16 +15,6 @@ namespace Kyty {
 
 typedef HANDLE sys_heap_id_t;
 
-
-inline sys_heap_id_t sys_heap_create()
-{
-	HANDLE h = HeapCreate(HEAP_NO_SERIALIZE, 0, 0);
-
-	EXIT_IF(h == NULL);
-
-	return h;
-}
-
 inline sys_heap_id_t sys_heap_deafult()
 {
 	HANDLE h = GetProcessHeap();
@@ -110,12 +100,6 @@ inline void sys_heap_free_s(sys_heap_id_t heap_id, void *p)
 namespace Kyty {
 
 using sys_heap_id_t = SysCS *;
-
-
-inline sys_heap_id_t sys_heap_create()
-{
-	return nullptr;
-}
 
 inline sys_heap_id_t sys_heap_deafult()
 {

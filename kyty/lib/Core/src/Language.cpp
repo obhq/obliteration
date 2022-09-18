@@ -52,21 +52,15 @@ static const char32_t* g_short_day_russian[] = {U"Пнд", U"Втн", U"Срд",
 static const char32_t* g_day_russian[] = {U"Понедельник", U"Вторник", U"Среда", U"Четверг", U"Пятница", U"Суббота", U"Воскресенье"};
 
 Hashmap<String, LanguageId>* g_lang_map = nullptr;
+	// g_lang_map = new Hashmap<String, LanguageId>;
 
-void Language::Init()
-{
-	g_lang_map = new Hashmap<String, LanguageId>;
-
-	g_lang_map->Put(U"de", LanguageId::German);
-	g_lang_map->Put(U"en", LanguageId::English);
-	g_lang_map->Put(U"fr", LanguageId::French);
-	g_lang_map->Put(U"it", LanguageId::Italian);
-	g_lang_map->Put(U"pt", LanguageId::Portuguese);
-	g_lang_map->Put(U"ru", LanguageId::Russian);
-	g_lang_map->Put(U"es", LanguageId::Spanish);
-}
-
-
+	// g_lang_map->Put(U"de", LanguageId::German);
+	// g_lang_map->Put(U"en", LanguageId::English);
+	// g_lang_map->Put(U"fr", LanguageId::French);
+	// g_lang_map->Put(U"it", LanguageId::Italian);
+	// g_lang_map->Put(U"pt", LanguageId::Portuguese);
+	// g_lang_map->Put(U"ru", LanguageId::Russian);
+	// g_lang_map->Put(U"es", LanguageId::Spanish);
 
 static String string_remove_duplicates(const String& s)
 {

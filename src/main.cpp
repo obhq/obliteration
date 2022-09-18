@@ -1,13 +1,17 @@
 #include "initialize_dialog.hpp"
+#include "emulator.hpp"
 #include "game_models.hpp"
 #include "main_window.hpp"
 #include "settings.hpp"
 
 #include <QApplication>
 #include <QDir>
+#include <QMessageBox>
 #include <QProgressDialog>
 
-static bool init(GameListModel &games)
+#include <cstdlib>
+
+static void *init(GameListModel &games)
 {
     // Get game counts.
     QDir gamesDirectory(readGamesDirectorySetting());
@@ -17,7 +21,7 @@ static bool init(GameListModel &games)
     int step = -1;
     QProgressDialog progress;
 
-    progress.setMaximum(gameDirectories.size());
+    progress.setMaximum(gameDirectories.size() + 1);
     progress.setCancelButtonText("Cancel");
     progress.setWindowModality(Qt::WindowModal);
     progress.setValue(++step);
@@ -27,14 +31,37 @@ static bool init(GameListModel &games)
 
     for (auto &dir : gameDirectories) {
         if (progress.wasCanceled()) {
-            return false;
+            return nullptr;
         }
 
         games.add(new Game(dir));
         progress.setValue(++step);
     }
 
-    return true;
+    // Initialize emulator system.
+    void *emulator;
+    char *error;
+
+    emulator = emulator_init(&error);
+
+    if (!emulator) {
+        QMessageBox::critical(&progress, "Fatal Error", QString::asprintf("Failed to initialize emulator: %s", error));
+        free(error);
+        return nullptr;
+    }
+
+    progress.setValue(++step);
+
+    return emulator;
+}
+
+static int run(GameListModel *games)
+{
+    MainWindow win(games);
+
+    win.show();
+
+    return QApplication::exec();
 }
 
 int main(int argc, char *argv[])
@@ -57,15 +84,17 @@ int main(int argc, char *argv[])
 
     // Initialize application.
     GameListModel games;
+    auto emulator = init(games);
 
-    if (!init(games)) {
+    if (!emulator) {
         return 1;
     }
 
-    // Show main window.
-    MainWindow win(&games);
+    // Run main window.
+    auto status = run(&games);
 
-    win.show();
+    // Shutdown.
+    emulator_term(emulator);
 
-    return app.exec();
+    return status;
 }

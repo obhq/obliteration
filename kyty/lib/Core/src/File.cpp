@@ -40,19 +40,8 @@ struct File::FilePrivate
 	sys_file_t* f;
 };
 
-String* g_assets_dir     = nullptr;
-String* g_assets_sub_dir = nullptr;
-
-void core_file_init()
-{
-	if (!sys_file_io_init())
-	{
-		EXIT("fail in sys_file_io_init()");
-	}
-
-	g_assets_dir     = new String();
-	g_assets_sub_dir = new String();
-}
+String* g_assets_dir     = nullptr; // new String()
+String* g_assets_sub_dir = nullptr; // new String()
 
 File::File(): m_p(new FilePrivate)
 {

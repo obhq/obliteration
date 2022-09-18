@@ -11,8 +11,6 @@ namespace Kyty::Core::Database {
 struct StatementPrivate;
 struct ConnectionPrivate;
 
-void Init();
-
 class Statement final
 {
 public:

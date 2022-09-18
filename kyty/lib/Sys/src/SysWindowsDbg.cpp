@@ -43,8 +43,6 @@ constexpr DWORD READABLE =
      static_cast<DWORD>(PAGE_READONLY) | static_cast<DWORD>(PAGE_READWRITE) | static_cast<DWORD>(PAGE_WRITECOPY));
 constexpr DWORD PROTECTED = (static_cast<DWORD>(PAGE_GUARD) | static_cast<DWORD>(PAGE_NOCACHE) | static_cast<DWORD>(PAGE_NOACCESS));
 
-exception_filter_func_t g_exception_filter_func = nullptr;
-
 bool sys_mem_read_allowed(void* ptr)
 {
 	MEMORY_BASIC_INFORMATION mbi;
@@ -281,18 +279,6 @@ void sys_get_code_info(uintptr_t* addr, size_t* size)
 	GetModuleInformation(GetCurrentProcess(), GetModuleHandle(nullptr), &info, sizeof(MODULEINFO));
 	*addr = reinterpret_cast<uintptr_t>(info.lpBaseOfDll);
 	*size = static_cast<size_t>(info.SizeOfImage);
-}
-
-static LONG WINAPI ExceptionFilter(PEXCEPTION_POINTERS exception)
-{
-	g_exception_filter_func(exception->ExceptionRecord->ExceptionAddress);
-	return EXCEPTION_EXECUTE_HANDLER;
-}
-
-void sys_set_exception_filter(exception_filter_func_t func)
-{
-	g_exception_filter_func = func;
-	SetUnhandledExceptionFilter(ExceptionFilter);
 }
 
 } // namespace Kyty

@@ -27,8 +27,6 @@ struct SDL_RWops;
 namespace Kyty::Core {
 
 // SUBSYSTEM_DEFINE(File);
-void core_file_init();
-
 class File
 {
 public:

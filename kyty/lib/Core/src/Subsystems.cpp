@@ -70,12 +70,6 @@ public:
 		}
 	}
 
-	void SetArgs(int argc, char** argv)
-	{
-		this->m_argc = argc;
-		this->m_argv = argv;
-	}
-
 	void Add(Subsystem* s, std::initializer_list<Subsystem*> deps)
 	{
 		EXIT_IF(!s);
@@ -267,8 +261,8 @@ public:
 
 	SubsListStruct* list      = nullptr;
 	SubsListStruct* last_init = nullptr;
-	int             m_argc    = 0;
-	char**          m_argv    = nullptr;
+	int             m_argc    = 0; // argc from main
+	char**          m_argv    = nullptr; // argc from main
 	const char*     fail_msg  = nullptr;
 	const char*     fail_name = nullptr;
 	SubsystemsList* parent;
@@ -355,11 +349,6 @@ const char* SubsystemsList::GetFailName() const
 const char* SubsystemsList::GetFailMsg() const
 {
 	return m_p->fail_msg;
-}
-
-void SubsystemsList::SetArgs(int argc, char* argv[])
-{
-	m_p->SetArgs(argc, argv);
 }
 
 void SubsystemsList::ShutdownAll()

@@ -30,11 +30,6 @@ static inline HANDLE KYTY_INVALID_HANDLE_VALUE()
 	return INVALID_HANDLE_VALUE; // NOLINT(cppcoreguidelines-pro-type-cstyle-cast)
 }
 
-bool sys_file_io_init()
-{
-	return true;
-}
-
 static DWORD get_cache_access_type(sys_file_cache_type_t t)
 {
 	if (t == SYS_FILE_CACHE_RANDOM_ACCESS)

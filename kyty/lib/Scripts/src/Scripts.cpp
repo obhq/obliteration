@@ -79,21 +79,6 @@ static void lua_init()
 	}
 }
 
-KYTY_SUBSYSTEM_INIT(Scripts)
-{
-	g_lua_state = nullptr;
-	g_lua_error = nullptr;
-	g_help_list = nullptr;
-
-	if (RunString(U"_script_check_a = _script_check_b") != ScriptError::Ok || RunString(U"_a _b _c _d") != ScriptError::SyntaxError ||
-	    RunString(U"_script_check_a = _script_check_b[1]") != ScriptError::RunError)
-	{
-		KYTY_SUBSYSTEM_FAIL("Can't run Lua scripts");
-	}
-
-	ResetErrMsg();
-}
-
 KYTY_SUBSYSTEM_UNEXPECTED_SHUTDOWN(Scripts) {}
 
 KYTY_SUBSYSTEM_DESTROY(Scripts)
@@ -695,14 +680,6 @@ const String& GetErrMsg()
 	}
 
 	return *g_lua_error;
-}
-
-void ResetErrMsg()
-{
-	lua_init();
-
-	delete g_lua_error;
-	g_lua_error = nullptr;
 }
 
 ScriptVar ArgGetVar(int index)
