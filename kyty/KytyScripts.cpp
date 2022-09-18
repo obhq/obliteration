@@ -112,18 +112,18 @@ int main(int argc, char* argv[])
 	slist.Add(Scripts, {Core});
 #if KYTY_PROJECT != KYTY_PROJECT_BUILD_TOOLS
 	slist.Add(Math, {Core});
-	slist.Add(SDL, {Core}); // Already migrate initialization logic.
-	slist.Add(Threads, {Core, SDL}); // <-- Next one.
-	slist.Add(Emulator, {Core, Scripts});
+	slist.Add(SDL, {Core});
+	slist.Add(Threads, {Core, SDL});
+	slist.Add(Emulator, {Core, Scripts}); // kyty_reg() in kyty/emulator/src/Kyty.cpp
 #endif
-	slist.Add(BuildTools, {Core, Scripts});
-	slist.Add(UnitTest, {Core});
+	slist.Add(BuildTools, {Core, Scripts}); // Init() in kyty/lib/Scripts/src/BuildTools.cpp
 
 	if (!slist.InitAll(false))
 	{
 		printf("Failed to initialize '%s' subsystem: %s\n", slist.GetFailName(), slist.GetFailMsg());
 	} else
 	{
+		// Next.
 		if (argc >= 2)
 		{
 			StringList args;

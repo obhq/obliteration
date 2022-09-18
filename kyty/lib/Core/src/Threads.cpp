@@ -169,7 +169,7 @@ private:
 	bool                 m_disabled  = false;
 };
 
-static std::atomic<WaitForGraph*> g_wait_for_graph = nullptr;
+static std::atomic<WaitForGraph*> g_wait_for_graph = nullptr; // new WaitForGraph;
 
 struct ThreadPrivate
 {
@@ -200,16 +200,9 @@ struct ThreadPrivate
 	std::thread      m_thread;
 };
 
-static thread_id_t      g_main_thread;
-static int              g_main_thread_int;
+static thread_id_t      g_main_thread; // std::this_thread::get_id()
+static int              g_main_thread_int; // Thread::GetThreadIdUnique();
 static std::atomic<int> g_thread_counter = 0;
-
-KYTY_SUBSYSTEM_INIT(Threads)
-{
-	g_main_thread     = std::this_thread::get_id();
-	g_main_thread_int = Thread::GetThreadIdUnique();
-	g_wait_for_graph  = new WaitForGraph;
-}
 
 KYTY_SUBSYSTEM_UNEXPECTED_SHUTDOWN(Threads) {}
 

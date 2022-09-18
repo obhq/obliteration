@@ -6,8 +6,6 @@
 
 namespace Kyty::Core {
 
-KYTY_SUBSYSTEM_DEFINE(Threads);
-
 using thread_func_t = void (*)(void*);
 
 struct ThreadPrivate;
