@@ -96,57 +96,29 @@ static void run_script(const String& lua_file_name, const StringList& args)
 
 int main(int argc, char* argv[])
 {
-	auto& slist = *SubsystemsList::Instance();
-	auto Scripts  = ScriptsSubsystem::Instance();
-	auto Core     = CoreSubsystem::Instance();
-	auto UnitTest = UnitTestSubsystem::Instance();
-#if KYTY_PROJECT != KYTY_PROJECT_BUILD_TOOLS
-	auto Math     = MathSubsystem::Instance();
-	auto SDL      = SDLSubsystem::Instance();
-	auto Threads  = ThreadsSubsystem::Instance();
-	auto Emulator = EmulatorSubsystem::Instance();
-#endif
-	auto BuildTools = BuildToolsSubsystem::Instance();
-
-	slist.Add(Core, {});
-	slist.Add(Scripts, {Core});
-#if KYTY_PROJECT != KYTY_PROJECT_BUILD_TOOLS
-	slist.Add(Math, {Core});
-	slist.Add(SDL, {Core});
-	slist.Add(Threads, {Core, SDL});
-	slist.Add(Emulator, {Core, Scripts}); // kyty_reg() in kyty/emulator/src/Kyty.cpp
-#endif
-	slist.Add(BuildTools, {Core, Scripts}); // Init() in kyty/lib/Scripts/src/BuildTools.cpp
-
-	if (!slist.InitAll(false))
+	// Important functions:
+	// kyty_reg() in kyty/emulator/src/Kyty.cpp
+	// Init() in kyty/lib/Scripts/src/BuildTools.cpp
+	if (argc >= 2)
 	{
-		printf("Failed to initialize '%s' subsystem: %s\n", slist.GetFailName(), slist.GetFailMsg());
+		StringList args;
+		for (int i = 0; i < argc; i++)
+		{
+			String str = String::FromUtf8(argv[i]);
+			if (str.StartsWith(U"'") && str.EndsWith(U"'"))
+			{
+				// Eclipse bug: https://bugs.eclipse.org/bugs/show_bug.cgi?id=494246
+				//				https://bugs.eclipse.org/bugs/show_bug.cgi?id=516027
+				str = str.Mid(1, str.Size() - 2);
+			}
+			args.Add(str);
+		}
+		run_script(args.At(1), args);
 	} else
 	{
-		// Next.
-		if (argc >= 2)
-		{
-			StringList args;
-			for (int i = 0; i < argc; i++)
-			{
-				String str = String::FromUtf8(argv[i]);
-				if (str.StartsWith(U"'") && str.EndsWith(U"'"))
-				{
-					// Eclipse bug: https://bugs.eclipse.org/bugs/show_bug.cgi?id=494246
-					//				https://bugs.eclipse.org/bugs/show_bug.cgi?id=516027
-					str = str.Mid(1, str.Size() - 2);
-				}
-				args.Add(str);
-			}
-			run_script(args.At(1), args);
-		} else
-		{
-			printf("%s\n", get_build_string().C_Str());
-			printf("fc_script <lua_script> args...\n\n");
-			PrintHelp();
-		}
-
-		slist.DestroyAll(false);
+		printf("%s\n", get_build_string().C_Str());
+		printf("fc_script <lua_script> args...\n\n");
+		PrintHelp();
 	}
 
 	return 0;

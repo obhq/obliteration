@@ -204,10 +204,6 @@ static thread_id_t      g_main_thread; // std::this_thread::get_id()
 static int              g_main_thread_int; // Thread::GetThreadIdUnique();
 static std::atomic<int> g_thread_counter = 0;
 
-KYTY_SUBSYSTEM_UNEXPECTED_SHUTDOWN(Threads) {}
-
-KYTY_SUBSYSTEM_DESTROY(Threads) {}
-
 void WaitForGraph::DbgDump(const Vector<Cycle>& list)
 {
 	std::lock_guard lock(m_mutex);

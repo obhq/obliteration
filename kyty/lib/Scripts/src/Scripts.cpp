@@ -79,13 +79,6 @@ static void lua_init()
 	}
 }
 
-KYTY_SUBSYSTEM_UNEXPECTED_SHUTDOWN(Scripts) {}
-
-KYTY_SUBSYSTEM_DESTROY(Scripts)
-{
-	// lua_close(g_lua_state);
-}
-
 void script_dbg_dump_stack(const String& prefix)
 {
 	lua_init();

@@ -321,8 +321,4 @@ void Init()
 	Scripts::RegisterFunc("db_key", BuildTools::db_key_func, BuildTools::db_key_help);
 }
 
-KYTY_SUBSYSTEM_UNEXPECTED_SHUTDOWN(BuildTools) {}
-
-KYTY_SUBSYSTEM_DESTROY(BuildTools) {}
-
 } // namespace Kyty::BuildTools
