@@ -44,7 +44,7 @@ target_link_libraries(obliteration PRIVATE Threads::Threads)
 target_link_libraries(obliteration PRIVATE debug ${EMULATOR_DEBUG} optimized ${EMULATOR_RELEASE})
 
 if(WIN32)
-    target_link_libraries(obliteration PRIVATE bcrypt ws2_32)
+    target_link_libraries(obliteration PRIVATE bcrypt userenv ws2_32)
 else()
     target_link_libraries(obliteration PRIVATE ${CMAKE_DL_LIBS})
 endif()
