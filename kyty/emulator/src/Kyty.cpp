@@ -94,7 +94,6 @@ static void Init(const Scripts::ScriptVar& cfg)
 	auto* controller  = Libs::Controller::ControllerSubsystem::Instance();
 	auto* file_system = Libs::LibKernel::FileSystem::FileSystemSubsystem::Instance();
 	auto* graphics    = Libs::Graphics::GraphicsSubsystem::Instance();
-	auto* log         = Log::LogSubsystem::Instance();
 	auto* memory      = Libs::LibKernel::Memory::MemorySubsystem::Instance();
 	auto* network     = Libs::Network::NetworkSubsystem::Instance();
 	auto* profiler    = Profiler::ProfilerSubsystem::Instance();
@@ -107,7 +106,6 @@ static void Init(const Scripts::ScriptVar& cfg)
 	slist->Add(controller, {core, log, config});
 	slist->Add(file_system, {core, log, pthread});
 	slist->Add(graphics, {core, log, pthread, memory, config, profiler, controller});
-	slist->Add(log, {core, config});
 	slist->Add(memory, {core, log});
 	slist->Add(network, {core, log, pthread});
 	slist->Add(profiler, {core, config});

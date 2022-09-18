@@ -70,7 +70,6 @@ enum class Direction
 };
 
 Direction GetDirection();
-void      SetDirection(Direction dir);
 void      SetOutputFile(const String& file_name, Core::File::Encoding enc = Core::File::Encoding::Utf8);
 
 bool   IsColoredPrintf();

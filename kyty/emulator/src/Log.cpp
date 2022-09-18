@@ -25,37 +25,13 @@ namespace Kyty {
 
 namespace Log {
 
-static bool                     g_log_initialized    = false;
-static Core::Mutex*             g_mutex              = nullptr;
-static Direction                g_dir                = Direction::Console;
+static bool                     g_log_initialized    = false; // true
+static Core::Mutex*             g_mutex              = nullptr; // new Core::Mutex;
+static Direction                g_dir                = Direction::Console; // Config::GetPrintfDirection()
 static Core::File*              g_file               = nullptr;
 static bool                     g_colored_printf     = false;
 static thread_local Core::File* g_thread_local_file  = nullptr;
-static Vector<Core::File*>*     g_thread_local_files = nullptr;
-
-static bool EnableVTMode()
-{
-#if KYTY_PLATFORM == KYTY_PLATFORM_WINDOWS
-	// Set output mode to handle virtual terminal sequences
-	HANDLE h = GetStdHandle(STD_OUTPUT_HANDLE);
-
-	// NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast)
-	if (h == INVALID_HANDLE_VALUE)
-	{
-		return false;
-	}
-
-	DWORD dw_mode = 0;
-	if (GetConsoleMode(h, &dw_mode) == 0)
-	{
-		return false;
-	}
-
-	dw_mode |= static_cast<DWORD>(ENABLE_VIRTUAL_TERMINAL_PROCESSING);
-	return (SetConsoleMode(h, dw_mode) != 0);
-#endif
-	return true;
-}
+static Vector<Core::File*>*     g_thread_local_files = nullptr; // new Vector<Core::File*>;
 
 bool IsColoredPrintf()
 {
@@ -85,108 +61,11 @@ String RemoveColors(const String& str)
 	return ret;
 }
 
-static void Close()
-{
-	if (g_log_initialized)
-	{
-		g_mutex->Lock();
-		if (g_dir == Direction::File && g_file != nullptr)
-		{
-			g_file->Flush();
-			g_file->Close();
-			delete g_file;
-			g_file = nullptr;
-		}
-		if (g_dir == Direction::Directory && !g_thread_local_files->IsEmpty())
-		{
-			for (auto* file: *g_thread_local_files)
-			{
-				file->Flush();
-				file->Close();
-				delete file;
-			}
-			g_thread_local_files->Clear();
-		}
-		g_mutex->Unlock();
-	}
-}
-
-KYTY_SUBSYSTEM_INIT(Log)
-{
-	if (!g_log_initialized)
-	{
-		g_mutex           = new Core::Mutex;
-		g_log_initialized = true;
-	}
-
-	auto dir = Config::GetPrintfDirection();
-	SetDirection(dir);
-	if (dir == Log::Direction::File)
-	{
-		SetOutputFile(Config::GetPrintfOutputFile());
-	}
-
-	g_thread_local_files = new Vector<Core::File*>;
-}
-
-KYTY_SUBSYSTEM_UNEXPECTED_SHUTDOWN(Log)
-{
-	Close();
-}
-
-KYTY_SUBSYSTEM_DESTROY(Log)
-{
-	Close();
-}
-
-void SetDirection(Direction dir)
-{
-	EXIT_IF(!Log::g_log_initialized);
-	EXIT_IF(!Core::Thread::IsMainThread());
-
-	if (dir == Direction::Console)
-	{
-		g_colored_printf = EnableVTMode();
-
-		if (!g_colored_printf)
-		{
-			::printf("Colored printf is not supported\n");
-		}
-	} else
-	{
-		g_colored_printf = false;
-	}
-
-	g_dir = dir;
-}
-
 Direction GetDirection()
 {
 	EXIT_IF(!Log::g_log_initialized);
 
 	return g_dir;
-}
-
-void SetOutputFile(const String& file_name, Core::File::Encoding enc)
-{
-	EXIT_IF(!Log::g_log_initialized);
-	EXIT_IF(!Core::Thread::IsMainThread());
-	EXIT_IF(Log::g_dir != Log::Direction::File);
-	EXIT_IF(Log::g_file != nullptr);
-
-	g_file = new Core::File;
-	g_file->Create(file_name);
-
-	if (g_file->IsInvalid())
-	{
-		::printf("Can't create log file: %s\n", file_name.C_Str());
-		delete g_file;
-		g_file = nullptr;
-	} else
-	{
-		g_file->SetEncoding(enc);
-		g_file->WriteBOM();
-	}
 }
 
 void SetOutputThreadLocalFile(const String& file_name, Core::File::Encoding enc)
