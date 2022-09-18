@@ -15,6 +15,14 @@ ExternalProject_Add(emulator
     TEST_COMMAND cargo test
     TEST_EXCLUDE_FROM_MAIN ON)
 
+if(WIN32)
+    set(EMULATOR_DEBUG ${CMAKE_CURRENT_SOURCE_DIR}/target/debug/obliteration.lib)
+    set(EMULATOR_RELEASE ${CMAKE_CURRENT_SOURCE_DIR}/target/release/obliteration.lib)
+else()
+    set(EMULATOR_DEBUG ${CMAKE_CURRENT_SOURCE_DIR}/target/debug/libobliteration.a)
+    set(EMULATOR_RELEASE ${CMAKE_CURRENT_SOURCE_DIR}/target/release/libobliteration.a)
+endif()
+
 # Setup application target.
 add_executable(obliteration WIN32
     game_models.cpp
@@ -31,9 +39,7 @@ set_property(TARGET obliteration PROPERTY AUTORCC ON)
 target_compile_features(obliteration PRIVATE cxx_std_17)
 
 target_link_libraries(obliteration PRIVATE Qt5::Widgets)
-target_link_libraries(obliteration PRIVATE
-    debug ${CMAKE_CURRENT_SOURCE_DIR}/target/debug/libobliteration.a
-    optimized ${CMAKE_CURRENT_SOURCE_DIR}/target/release/libobliteration.a)
+target_link_libraries(obliteration PRIVATE debug ${EMULATOR_DEBUG} optimized ${EMULATOR_RELEASE})
 
 # Setup installation.
 if(WIN32)
