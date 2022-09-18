@@ -114,11 +114,6 @@ int main(int argc, char* argv[])
 			args.Add(str);
 		}
 		run_script(args.At(1), args);
-	} else
-	{
-		printf("%s\n", get_build_string().C_Str());
-		printf("fc_script <lua_script> args...\n\n");
-		PrintHelp();
 	}
 
 	return 0;

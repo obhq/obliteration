@@ -1,12 +1,14 @@
 #include "main_window.hpp"
 #include "emulator.hpp"
 #include "game_models.hpp"
+#include "game_settings_dialog.hpp"
 #include "settings.hpp"
 
 #include <QAction>
 #include <QCloseEvent>
 #include <QGuiApplication>
 #include <QListView>
+#include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QSettings>
@@ -26,9 +28,12 @@ MainWindow::MainWindow(GameListModel *games)
     // Setup game list.
     m_games = new QListView(this);
     m_games->setViewMode(QListView::IconMode);
+    m_games->setContextMenuPolicy(Qt::CustomContextMenu);
     m_games->setModel(games);
 
     connect(m_games, &QAbstractItemView::doubleClicked, this, &MainWindow::startGame);
+    connect(m_games, &QWidget::customContextMenuRequested, this, &MainWindow::requestGamesContextMenu);
+
     setCentralWidget(m_games);
 
     // Setup status bar.
@@ -76,6 +81,37 @@ void MainWindow::startGame(const QModelIndex &index)
     auto &dir = game->directory();
 
     start_game(reinterpret_cast<const std::uint16_t *>(dir.constData()), dir.size());
+}
+
+void MainWindow::requestGamesContextMenu(const QPoint &pos)
+{
+    // Get item index.
+    auto index = m_games->indexAt(pos);
+
+    if (!index.isValid()) {
+        return;
+    }
+
+    auto model = reinterpret_cast<GameListModel *>(m_games->model());
+    auto game = model->get(index.row());
+
+    // Setup menu.
+    QMenu menu(this);
+    QAction settings("&Settings", this);
+
+    menu.addAction(&settings);
+
+    // Show menu.
+    auto selected = menu.exec(m_games->viewport()->mapToGlobal(pos));
+
+    if (!selected) {
+        return;
+    }
+
+    if (selected == &settings) {
+        GameSettingsDialog dialog(game, this);
+        dialog.exec();
+    }
 }
 
 void MainWindow::restoreGeometry()

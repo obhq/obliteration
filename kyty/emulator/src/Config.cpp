@@ -31,18 +31,7 @@ struct Config
 	String                 pipeline_dump_folder        = U"_Pipelines";
 };
 
-static Config* g_config = nullptr;
-
-KYTY_SUBSYSTEM_INIT(Config)
-{
-	EXIT_IF(g_config != nullptr);
-
-	g_config = new Config;
-}
-
-KYTY_SUBSYSTEM_UNEXPECTED_SHUTDOWN(Config) {}
-
-KYTY_SUBSYSTEM_DESTROY(Config) {}
+static Config* g_config = nullptr; // new Config;
 
 template <class T>
 void LoadInt(T& dst, const Scripts::ScriptVar& cfg, const String& key)

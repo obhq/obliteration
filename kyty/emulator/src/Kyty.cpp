@@ -88,10 +88,10 @@ static void Init(const Scripts::ScriptVar& cfg)
 
 	auto* slist = Core::SubsystemsList::Instance();
 
+	// Lookup definition by searching for KYTY_SUBSYSTEM_DEFINE
 	auto* audio       = Libs::Audio::AudioSubsystem::Instance();
 	auto* config      = Config::ConfigSubsystem::Instance();
 	auto* controller  = Libs::Controller::ControllerSubsystem::Instance();
-	auto* core        = Core::CoreSubsystem::Instance();
 	auto* file_system = Libs::LibKernel::FileSystem::FileSystemSubsystem::Instance();
 	auto* graphics    = Libs::Graphics::GraphicsSubsystem::Instance();
 	auto* log         = Log::LogSubsystem::Instance();
@@ -99,11 +99,7 @@ static void Init(const Scripts::ScriptVar& cfg)
 	auto* network     = Libs::Network::NetworkSubsystem::Instance();
 	auto* profiler    = Profiler::ProfilerSubsystem::Instance();
 	auto* pthread     = Libs::LibKernel::PthreadSubsystem::Instance();
-	auto* scripts     = Scripts::ScriptsSubsystem::Instance();
 	auto* timer       = Loader::Timer::TimerSubsystem::Instance();
-
-	slist->Add(config, {core, scripts});
-	slist->InitAll(true);
 
 	Config::Load(cfg);
 

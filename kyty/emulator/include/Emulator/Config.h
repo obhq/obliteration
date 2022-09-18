@@ -15,8 +15,6 @@ class ScriptVar;
 
 namespace Kyty::Config {
 
-KYTY_SUBSYSTEM_DEFINE(Config);
-
 enum class ShaderOptimizationType
 {
 	None,

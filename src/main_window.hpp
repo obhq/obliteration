@@ -15,6 +15,7 @@ protected:
 
 private slots:
     void startGame(const QModelIndex &index);
+    void requestGamesContextMenu(const QPoint &pos);
 
 private:
     void restoreGeometry();
