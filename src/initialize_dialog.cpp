@@ -33,7 +33,7 @@ void InitializeDialog::browse()
     auto path = QFileDialog::getExistingDirectory(this, "Location to store games");
 
     if (!path.isEmpty()) {
-        m_gamesDirectory->setText(path);
+        m_gamesDirectory->setText(QDir::toNativeSeparators(path));
     }
 }
 
@@ -86,7 +86,7 @@ void InitializeDialog::save()
     }
 
     // Write settings and close dialog.
-    writeGamesDirectorySetting(gamesDirectory);
+    writeGamesDirectorySetting(QDir::toNativeSeparators(gamesDirectory));
 
     accept();
 }
