@@ -3,6 +3,10 @@
 
 Obliteration is an experimental PS4 emulator based on [Kyty](https://github.com/InoriRus/Kyty). The project is in the process of migrating source from Kyty to make it work on both Windows and Linux so it cannot run any games that Kyty able to run yet.
 
+## Features
+
+- Able to run game from a PKG file directly.
+
 ## System requirements
 
 - Windows 10 x64 or Linux x86-64.
