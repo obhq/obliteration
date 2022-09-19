@@ -141,7 +141,7 @@ void MainWindow::reloadGames()
         emulator_pkg_close(pkg);
 
         // Add to list.
-        games->add(new Game(path.c_str()));
+        games->add(new Game(file, path.c_str()));
         progress.setValue(++step);
     }
 }

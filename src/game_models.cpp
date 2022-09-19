@@ -1,7 +1,8 @@
 #include "game_models.hpp"
 
-Game::Game(const QString &directory) :
-    m_directory(directory)
+Game::Game(const QString &name, const QString &file) :
+    m_name(name),
+    m_file(file)
 {
 }
 
@@ -49,7 +50,7 @@ QVariant GameListModel::data(const QModelIndex &index, int role) const
 {
     switch (role) {
     case Qt::DisplayRole:
-        return m_items[index.row()]->directory();
+        return m_items[index.row()]->name();
     default:
         return QVariant();
     }
