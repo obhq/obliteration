@@ -1,6 +1,5 @@
 use self::emulator::Emulator;
 use libc::{c_char, c_int};
-use std::fs::File;
 use std::ptr::null_mut;
 
 mod emulator;
@@ -47,18 +46,14 @@ pub extern "C" fn emulator_pkg_open<'e>(
     file: *const c_char,
     error: *mut *mut c_char,
 ) -> *mut pkg::PkgFile {
-    // Open PKG.
     let path = to_str(file);
-    let file = match File::open(path) {
-        Ok(v) => v,
+    let pkg = match pkg::PkgFile::open(path) {
+        Ok(v) => Box::new(v),
         Err(e) => {
             set_error(&e.to_string(), error);
             return null_mut();
         }
     };
-
-    // Construct instance.
-    let pkg = Box::new(pkg::PkgFile::new(file));
 
     Box::into_raw(pkg)
 }
