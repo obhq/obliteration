@@ -19,6 +19,7 @@
 #include <QSettings>
 
 #include <cstring>
+#include <filesystem>
 
 MainWindow::MainWindow(emulator_t emulator) :
     m_emulator(emulator),
@@ -103,12 +104,44 @@ void MainWindow::reloadGames()
     progress.setLabelText("Loading games...");
 
     for (auto &file : pkgs) {
+        // Check cancellation.
         if (progress.wasCanceled()) {
             QCoreApplication::exit();
             return;
         }
 
-        games->add(new Game(file));
+        // Get full path.
+        std::string path;
+
+        try {
+            std::filesystem::path b(directory.toStdString(), std::filesystem::path::native_format);
+
+            b /= file.toStdString();
+
+            path = b.u8string();
+        } catch (...) {
+            QMessageBox::critical(this, "Fatal Error", QString("An unexpected error occurred while reading %1.").arg(file));
+            QCoreApplication::exit();
+            return;
+        }
+
+        // Read PKG meta data.
+        emulator_pkg_t pkg;
+        char *error;
+
+        pkg = emulator_pkg_open(m_emulator, path.c_str(), &error);
+
+        if (!pkg) {
+            QMessageBox::critical(this, "Fatal Error", QString("Failed to open %1: %2").arg(path.c_str()).arg(error));
+            std::free(error);
+            QCoreApplication::exit();
+            return;
+        }
+
+        emulator_pkg_close(pkg);
+
+        // Add to list.
+        games->add(new Game(path.c_str()));
         progress.setValue(++step);
     }
 }
