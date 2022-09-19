@@ -1,5 +1,4 @@
 #include "main_window.hpp"
-#include "emulator.hpp"
 #include "game_models.hpp"
 #include "game_settings_dialog.hpp"
 #include "settings.hpp"
@@ -21,7 +20,7 @@
 
 #include <cstring>
 
-MainWindow::MainWindow(void *emulator) :
+MainWindow::MainWindow(emulator_t emulator) :
     m_emulator(emulator),
     m_games(nullptr)
 {
@@ -177,7 +176,7 @@ void MainWindow::startGame(const QModelIndex &index)
 
     std::memset(&conf, 0, sizeof(conf));
 
-    emulator_start(&conf);
+    emulator_start(m_emulator, &conf);
 }
 
 void MainWindow::requestGamesContextMenu(const QPoint &pos)

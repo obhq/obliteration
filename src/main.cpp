@@ -6,12 +6,12 @@
 
 #include <cstdlib>
 
-static int run(void *emulator)
+static int run(emulator_t emulator)
 {
-    MainWindow win(emulator);
+    MainWindow w(emulator);
 
-    win.show();
-    win.reloadGames();
+    w.show();
+    w.reloadGames();
 
     return QApplication::exec();
 }
@@ -25,7 +25,7 @@ int main(int argc, char *argv[])
 
     // Initialize.
     QApplication app(argc, argv);
-    void *emulator;
+    emulator_t emulator;
     char *error;
 
     emulator = emulator_init(&error);
