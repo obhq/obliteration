@@ -4,6 +4,7 @@ use std::ptr::null_mut;
 
 mod emulator;
 mod pkg;
+mod util;
 
 #[no_mangle]
 pub extern "C" fn emulator_init(error: *mut *mut c_char) -> *mut Emulator {

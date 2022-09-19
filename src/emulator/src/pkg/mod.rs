@@ -1,11 +1,15 @@
+use self::header::Header;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::path::Path;
 
+mod header;
+
 // https://www.psdevwiki.com/ps4/Package_Files
 pub struct PkgFile {
     raw: memmap2::Mmap,
+    header: Header,
 }
 
 impl PkgFile {
@@ -21,7 +25,13 @@ impl PkgFile {
             Err(e) => return Err(OpenError::MapFailed(e)),
         };
 
-        Ok(Self { raw })
+        // Read header.
+        let header = match Header::read(raw.as_ref()) {
+            Ok(v) => v,
+            Err(_) => return Err(OpenError::InvalidHeader),
+        };
+
+        Ok(Self { raw, header })
     }
 }
 
@@ -29,6 +39,7 @@ impl PkgFile {
 pub enum OpenError {
     OpenFailed(std::io::Error),
     MapFailed(std::io::Error),
+    InvalidHeader,
 }
 
 impl Error for OpenError {
@@ -36,6 +47,7 @@ impl Error for OpenError {
         match self {
             OpenError::OpenFailed(e) => Some(e),
             OpenError::MapFailed(e) => Some(e),
+            _ => None,
         }
     }
 }
@@ -45,6 +57,7 @@ impl Display for OpenError {
         match self {
             OpenError::OpenFailed(e) => e.fmt(f),
             OpenError::MapFailed(e) => e.fmt(f),
+            OpenError::InvalidHeader => f.write_str("invalid PKG header"),
         }
     }
 }
