@@ -8,12 +8,15 @@
 #include <QCloseEvent>
 #include <QGuiApplication>
 #include <QDir>
+#include <QFileDialog>
+#include <QIcon>
 #include <QListView>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QProgressDialog>
 #include <QTabWidget>
+#include <QToolBar>
 #include <QSettings>
 
 #include <cstring>
@@ -22,15 +25,27 @@ MainWindow::MainWindow(void *emulator) :
     m_emulator(emulator),
     m_games(nullptr)
 {
+    setWindowTitle("Obliteration");
     restoreGeometry();
 
     // Setup File menu.
-    auto file = menuBar()->addMenu("&File");
+    auto fileMenu = menuBar()->addMenu("&File");
+    auto openGames = new QAction(QIcon(":/resources/folder-open-outline.svg"), "&Open Games Folder", this);
     auto quit = new QAction("&Quit", this);
 
+    connect(openGames, &QAction::triggered, this, &MainWindow::openGamesFolder);
     connect(quit, &QAction::triggered, this, &MainWindow::close);
 
-    file->addAction(quit);
+    fileMenu->addAction(openGames);
+    fileMenu->addSeparator();
+    fileMenu->addAction(quit);
+
+    // Setup File toolbar.
+    auto fileBar = addToolBar("&File");
+
+    fileBar->setMovable(false);
+
+    fileBar->addAction(openGames);
 
     // Setup game list.
     m_games = new QListView();
@@ -129,6 +144,26 @@ void MainWindow::closeEvent(QCloseEvent *event)
     }
 
     QMainWindow::closeEvent(event);
+}
+
+void MainWindow::openGamesFolder()
+{
+    if (!requireEmulatorStopped()) {
+        return;
+    }
+
+    // Browse folder.
+    auto path = QFileDialog::getExistingDirectory(this, "Location for PKG files");
+
+    if (path.isEmpty()) {
+        return;
+    }
+
+    path = QDir::toNativeSeparators(path);
+
+    // Write setting and reload game list.
+    writeGamesDirectorySetting(path);
+    reloadGames();
 }
 
 void MainWindow::startGame(const QModelIndex &index)

@@ -16,6 +16,7 @@ protected:
     void closeEvent(QCloseEvent *event) override;
 
 private slots:
+    void openGamesFolder();
     void startGame(const QModelIndex &index);
     void requestGamesContextMenu(const QPoint &pos);
 

@@ -21,7 +21,10 @@ GameListModel::~GameListModel()
 void GameListModel::add(Game *game)
 {
     game->setParent(this);
+
+    beginInsertRows(QModelIndex(), m_items.size(), m_items.size());
     m_items.append(game);
+    endInsertRows();
 }
 
 void GameListModel::clear()

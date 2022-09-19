@@ -1,0 +1,6 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+  <qresource>
+    <file>resources/folder-open-outline.svg</file>
+  </qresource>
+</RCC>
