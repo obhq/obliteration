@@ -1,7 +1,9 @@
+use self::emulator::Emulator;
 use libc::{c_char, c_int};
 use std::fs::File;
 use std::ptr::null_mut;
 
+mod emulator;
 mod pkg;
 
 #[no_mangle]
@@ -16,9 +18,9 @@ pub extern "C" fn emulator_init(error: *mut *mut c_char) -> *mut Emulator {
     };
 
     // Construct instance.
-    let emu = Box::new(Emulator { sdl });
+    let e = Box::new(Emulator::new(sdl));
 
-    Box::into_raw(emu)
+    Box::into_raw(e)
 }
 
 #[no_mangle]
@@ -64,11 +66,6 @@ pub extern "C" fn emulator_pkg_open<'e>(
 #[no_mangle]
 pub extern "C" fn emulator_pkg_close(pkg: *mut pkg::PkgFile) {
     unsafe { Box::from_raw(pkg) };
-}
-
-// We don't need repr(C) due to the outside will treat it as opaque pointer.
-pub struct Emulator {
-    sdl: sdl2::Sdl,
 }
 
 #[repr(C)]
