@@ -1,6 +1,6 @@
 <!DOCTYPE RCC>
 <RCC version="1.0">
   <qresource>
-    <file>resources/folder-open-outline.svg</file>
+    <file>resources/archive-arrow-down-outline.svg</file>
   </qresource>
 </RCC>

@@ -1,8 +1,10 @@
 use crate::util::binary::{read_u32_be, read_u64_be};
 
 pub struct Header {
-    pfs_image_offset: u64,
-    pfs_image_size: u64,
+    entry_count: u32,
+    table_offset: u32,
+    pfs_offset: u64,
+    pfs_size: u64,
 }
 
 impl Header {
@@ -22,13 +24,25 @@ impl Header {
         }
 
         // Read fields.
-        let pfs_image_offset = read_u64_be(pkg, 0x410);
-        let pfs_image_size = read_u64_be(pkg, 0x418);
+        let entry_count = read_u32_be(pkg, 0x10);
+        let table_offset = read_u32_be(pkg, 0x018);
+        let pfs_offset = read_u64_be(pkg, 0x410);
+        let pfs_size = read_u64_be(pkg, 0x418);
 
         Ok(Self {
-            pfs_image_offset,
-            pfs_image_size,
+            entry_count,
+            table_offset,
+            pfs_offset,
+            pfs_size,
         })
+    }
+
+    pub fn entry_count(&self) -> usize {
+        self.entry_count as _
+    }
+
+    pub fn table_offset(&self) -> usize {
+        self.table_offset as _
     }
 }
 

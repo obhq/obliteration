@@ -29,10 +29,12 @@ add_executable(obliteration WIN32
     game_models.cpp
     game_settings.cpp
     game_settings_dialog.cpp
+    initialize_dialog.cpp
     main.cpp
     main_window.cpp
     resources.qrc
-    settings.cpp)
+    settings.cpp
+    util.cpp)
 
 add_dependencies(obliteration emulator)
 

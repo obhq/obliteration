@@ -7,6 +7,10 @@ edition = "2021"
 crate-type = ["staticlib"]
 
 [dependencies]
+aes = "0.8"
+cbc = "0.1"
 libc = "0.2"
 memmap2 = "0.5"
+rsa = "0.6"
 sdl2 = { version = "0.35", features = ["static-link", "bundled"] }
+sha2 = "0.10"

@@ -2,6 +2,8 @@
 
 #include <QString>
 
+bool hasRequiredUserSettings();
+
 QString readGamesDirectorySetting();
 void writeGamesDirectorySetting(const QString &v);
 

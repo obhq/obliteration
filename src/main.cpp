@@ -1,17 +1,22 @@
 #include "emulator.hpp"
+#include "initialize_dialog.hpp"
 #include "main_window.hpp"
+#include "settings.hpp"
 
 #include <QApplication>
 #include <QMessageBox>
 
 #include <cstdlib>
 
-static int run(emulator_t emulator)
+static int run(context_t context)
 {
-    MainWindow w(emulator);
+    MainWindow w(context);
 
     w.show();
-    w.reloadGames();
+
+    if (!w.loadGames()) {
+        return 1;
+    }
 
     return QApplication::exec();
 }
@@ -23,24 +28,34 @@ int main(int argc, char *argv[])
     QCoreApplication::setApplicationName("Obliteration");
     QCoreApplication::setAttribute(Qt::AA_DisableWindowContextHelpButton);
 
-    // Initialize.
+    // Initialize user settings.
     QApplication app(argc, argv);
-    emulator_t emulator;
+
+    if (!hasRequiredUserSettings()) {
+        InitializeDialog init;
+
+        if (!init.exec()) {
+            return 1;
+        }
+    }
+
+    // Initialize system.
+    context_t context;
     char *error;
 
-    emulator = emulator_init(&error);
+    context = emulator_init(&error);
 
-    if (!emulator) {
-        QMessageBox::critical(nullptr, "Fatal Error", QString::asprintf("Failed to initialize emulator: %s", error));
-        free(error);
+    if (!context) {
+        QMessageBox::critical(nullptr, "Fatal Error", QString("Failed to initialize emulator: %1").arg(error));
+        std::free(error);
         return 1;
     }
 
     // Run main window.
-    auto status = run(emulator);
+    auto status = run(context);
 
     // Shutdown.
-    emulator_term(emulator);
+    emulator_term(context);
 
     return status;
 }

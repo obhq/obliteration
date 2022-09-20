@@ -8,17 +8,17 @@ class QListView;
 
 class MainWindow final : public QMainWindow {
 public:
-    MainWindow(emulator_t emulator);
+    MainWindow(context_t emulator);
     ~MainWindow();
 
 public:
-    void reloadGames();
+    bool loadGames();
 
 protected:
     void closeEvent(QCloseEvent *event) override;
 
 private slots:
-    void openGamesFolder();
+    void installPkg();
     void startGame(const QModelIndex &index);
     void requestGamesContextMenu(const QPoint &pos);
 
@@ -27,6 +27,6 @@ private:
     bool requireEmulatorStopped();
 
 private:
-    emulator_t m_emulator;
+    context_t m_emulator;
     QListView *m_games;
 };

@@ -2,6 +2,7 @@
 #include "game_models.hpp"
 #include "game_settings_dialog.hpp"
 #include "settings.hpp"
+#include "util.hpp"
 
 #include <QAction>
 #include <QCloseEvent>
@@ -19,9 +20,8 @@
 #include <QSettings>
 
 #include <cstring>
-#include <filesystem>
 
-MainWindow::MainWindow(emulator_t emulator) :
+MainWindow::MainWindow(context_t emulator) :
     m_emulator(emulator),
     m_games(nullptr)
 {
@@ -30,13 +30,13 @@ MainWindow::MainWindow(emulator_t emulator) :
 
     // Setup File menu.
     auto fileMenu = menuBar()->addMenu("&File");
-    auto openGames = new QAction(QIcon(":/resources/folder-open-outline.svg"), "&Open Games Folder", this);
+    auto installPkg = new QAction(QIcon(":/resources/archive-arrow-down-outline.svg"), "&Install PKG", this);
     auto quit = new QAction("&Quit", this);
 
-    connect(openGames, &QAction::triggered, this, &MainWindow::openGamesFolder);
+    connect(installPkg, &QAction::triggered, this, &MainWindow::installPkg);
     connect(quit, &QAction::triggered, this, &MainWindow::close);
 
-    fileMenu->addAction(openGames);
+    fileMenu->addAction(installPkg);
     fileMenu->addSeparator();
     fileMenu->addAction(quit);
 
@@ -45,7 +45,7 @@ MainWindow::MainWindow(emulator_t emulator) :
 
     fileBar->setMovable(false);
 
-    fileBar->addAction(openGames);
+    fileBar->addAction(installPkg);
 
     // Setup game list.
     m_games = new QListView();
@@ -71,79 +71,41 @@ MainWindow::~MainWindow()
 {
 }
 
-void MainWindow::reloadGames()
+bool MainWindow::loadGames()
 {
-    if (!requireEmulatorStopped()) {
-        return;
-    }
-
     // Get game counts.
     auto directory = readGamesDirectorySetting();
-
-    if (directory.isNull()) {
-        return;
-    }
-
-    auto pkgs = QDir(directory, "*.pkg").entryList();
-
-    // Remove current games.
-    auto games = reinterpret_cast<GameListModel *>(m_games->model());
-
-    games->clear();
+    auto games = QDir(directory).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
 
     // Setup loading progress.
     QProgressDialog progress(this);
     int step = -1;
 
-    progress.setMaximum(pkgs.size());
+    progress.setMaximum(games.size());
     progress.setCancelButtonText("Cancel");
     progress.setWindowModality(Qt::WindowModal);
     progress.setValue(++step);
 
     // Load games
+    auto gameList = reinterpret_cast<GameListModel *>(m_games->model());
+
     progress.setLabelText("Loading games...");
 
-    for (auto &file : pkgs) {
+    for (auto &dir : games) {
         // Check cancellation.
         if (progress.wasCanceled()) {
-            QCoreApplication::exit();
-            return;
+            return false;
         }
 
         // Get full path.
-        std::string path;
-
-        try {
-            std::filesystem::path b(directory.toStdString(), std::filesystem::path::native_format);
-
-            b /= file.toStdString();
-
-            path = b.u8string();
-        } catch (...) {
-            QMessageBox::critical(this, "Fatal Error", QString("An unexpected error occurred while reading %1.").arg(file));
-            QCoreApplication::exit();
-            return;
-        }
-
-        // Read PKG meta data.
-        emulator_pkg_t pkg;
-        char *error;
-
-        pkg = emulator_pkg_open(m_emulator, path.c_str(), &error);
-
-        if (!pkg) {
-            QMessageBox::critical(this, "Fatal Error", QString("Failed to open %1: %2").arg(path.c_str()).arg(error));
-            std::free(error);
-            QCoreApplication::exit();
-            return;
-        }
-
-        emulator_pkg_close(pkg);
+        auto path = joinPath(directory, dir);
 
         // Add to list.
-        games->add(new Game(file, path.c_str()));
+        gameList->add(new Game(dir, path.c_str()));
         progress.setValue(++step);
     }
+
+    return true;
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)
@@ -178,24 +140,81 @@ void MainWindow::closeEvent(QCloseEvent *event)
     QMainWindow::closeEvent(event);
 }
 
-void MainWindow::openGamesFolder()
+void MainWindow::installPkg()
 {
-    if (!requireEmulatorStopped()) {
+    // Browse a PKG.
+    auto path = QDir::toNativeSeparators(QFileDialog::getOpenFileName(this, "Install PKG", QString(), "PKG Files (*.pkg)")).toStdString();
+
+    if (path.empty()) {
         return;
     }
 
-    // Browse folder.
-    auto path = QFileDialog::getExistingDirectory(this, "Location for PKG files");
+    // Prepare a directory to install.
+    auto gamesDirectory = readGamesDirectorySetting();
+    auto directory = joinPath(gamesDirectory, "installing");
 
-    if (path.isEmpty()) {
+    if (!QDir(directory.c_str()).removeRecursively()) {
+        QMessageBox::critical(this, "Error", "Failed to remove previous installation cache.");
         return;
     }
 
-    path = QDir::toNativeSeparators(path);
+    if (!QDir().mkpath(directory.c_str())) {
+        QMessageBox::critical(this, "Error", QString("Cannot create %1").arg(directory.c_str()));
+        return;
+    }
 
-    // Write setting and reload game list.
-    writeGamesDirectorySetting(path);
-    reloadGames();
+    // Open a PKG.
+    pkg_t pkg;
+    char *error;
+
+    pkg = pkg_open(m_emulator, path.c_str(), &error);
+
+    if (!pkg) {
+        QMessageBox::critical(this, "Error", QString("Cannot open %1: %2").arg(path.c_str()).arg(error));
+        std::free(error);
+        return;
+    }
+
+    // Read files.
+    auto failed = pkg_enum_entries(pkg, [](pkg_entry_t entry, std::size_t, void *ctx) -> void * {
+        // Get file name.
+        const char *name;
+
+        switch (pkg_entry_id(entry)) {
+        case PKG_ENTRY_PARAM_SFO:
+            name = "param.sfo";
+            break;
+        case PKG_ENTRY_PIC1_PNG:
+            name = "pic1.png";
+            break;
+        case PKG_ENTRY_ICON0_PNG:
+            name = "icon0.png";
+            break;
+        default:
+            return nullptr;
+        }
+
+        // Write file.
+        auto path = joinPath(reinterpret_cast<const char *>(ctx), name);
+        auto error = pkg_entry_read(entry, path.c_str());
+
+        if (error) {
+            auto message = QString("Failed to write %1 to %2: %3").arg(name).arg(path.c_str()).arg(error);
+            std::free(error);
+            return new QString(message);
+        }
+
+        return nullptr;
+    }, const_cast<char *>(directory.c_str()));
+
+    pkg_close(pkg);
+
+    if (failed) {
+        auto reason = reinterpret_cast<QString *>(failed);
+        QMessageBox::critical(this, "Error", *reason);
+        delete reason;
+        return;
+    }
 }
 
 void MainWindow::startGame(const QModelIndex &index)
