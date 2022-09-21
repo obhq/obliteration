@@ -102,6 +102,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4c78c047431fee22c1a7bb92e00ad095a02a983affe4d8a72e2a2c62c1b94f3"
 
 [[package]]
+name = "context"
+version = "0.1.0"
+dependencies = [
+ "rsa",
+ "sdl2",
+ "util",
+]
+
+[[package]]
 name = "cpufeatures"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -149,6 +158,13 @@ checksum = "adfbc57365a37acbd2ebf2b64d7e69bb766e2fea813521ed536f5d0520dcf86c"
 dependencies = [
  "block-buffer",
  "crypto-common",
+]
+
+[[package]]
+name = "emulator"
+version = "0.1.0"
+dependencies = [
+ "context",
 ]
 
 [[package]]
@@ -264,13 +280,9 @@ dependencies = [
 name = "obliteration"
 version = "0.1.0"
 dependencies = [
- "aes",
- "cbc",
- "libc",
- "memmap2",
- "rsa",
- "sdl2",
- "sha2",
+ "context",
+ "emulator",
+ "pkg",
 ]
 
 [[package]]
@@ -302,6 +314,19 @@ dependencies = [
  "der",
  "spki",
  "zeroize",
+]
+
+[[package]]
+name = "pkg"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "cbc",
+ "context",
+ "memmap2",
+ "rsa",
+ "sha2",
+ "util",
 ]
 
 [[package]]
@@ -427,6 +452,13 @@ name = "typenum"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dcf81ac59edc17cc8697ff311e8f5ef2d99fcbd9817b34cec66f90b6c3dfd987"
+
+[[package]]
+name = "util"
+version = "0.1.0"
+dependencies = [
+ "libc",
+]
 
 [[package]]
 name = "version-compare"

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "emulator.hpp"
+#include "context.hpp"
 
 #include <QMainWindow>
 
@@ -8,7 +8,7 @@ class QListView;
 
 class MainWindow final : public QMainWindow {
 public:
-    MainWindow(context_t emulator);
+    MainWindow(context *context);
     ~MainWindow();
 
 public:
@@ -27,6 +27,6 @@ private:
     bool requireEmulatorStopped();
 
 private:
-    context_t m_emulator;
+    context *m_context;
     QListView *m_games;
 };

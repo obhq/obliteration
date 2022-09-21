@@ -1,6 +1,10 @@
 [workspace]
 members = [
-    "emulator"
+    "context",
+    "emulator",
+    "obliteration",
+    "pkg",
+    "util"
 ]
 
-default-members = ["emulator"]
+default-members = ["obliteration"]

@@ -1,4 +1,4 @@
-#include "emulator.hpp"
+#include "context.hpp"
 #include "initialize_dialog.hpp"
 #include "main_window.hpp"
 #include "settings.hpp"
@@ -8,7 +8,7 @@
 
 #include <cstdlib>
 
-static int run(context_t context)
+static int run(context *context)
 {
     MainWindow w(context);
 
@@ -40,13 +40,13 @@ int main(int argc, char *argv[])
     }
 
     // Initialize system.
-    context_t context;
+    context *context;
     char *error;
 
-    context = emulator_init(&error);
+    context = context_new(&error);
 
     if (!context) {
-        QMessageBox::critical(nullptr, "Fatal Error", QString("Failed to initialize emulator: %1").arg(error));
+        QMessageBox::critical(nullptr, "Fatal Error", QString("Failed to initialize application system: %1").arg(error));
         std::free(error);
         return 1;
     }
@@ -55,7 +55,7 @@ int main(int argc, char *argv[])
     auto status = run(context);
 
     // Shutdown.
-    emulator_term(context);
+    context_free(context);
 
     return status;
 }

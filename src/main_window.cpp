@@ -1,6 +1,8 @@
 #include "main_window.hpp"
+#include "emulator.hpp"
 #include "game_models.hpp"
 #include "game_settings_dialog.hpp"
+#include "pkg.hpp"
 #include "settings.hpp"
 #include "util.hpp"
 
@@ -21,8 +23,8 @@
 
 #include <cstring>
 
-MainWindow::MainWindow(context_t emulator) :
-    m_emulator(emulator),
+MainWindow::MainWindow(context *context) :
+    m_context(context),
     m_games(nullptr)
 {
     setWindowTitle("Obliteration");
@@ -111,7 +113,7 @@ bool MainWindow::loadGames()
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     // Ask user to confirm.
-    if (emulator_running(m_emulator)) {
+    if (emulator_running(m_context)) {
         QMessageBox confirm(this);
 
         confirm.setText("Do you want to exit?");
@@ -164,10 +166,10 @@ void MainWindow::installPkg()
     }
 
     // Open a PKG.
-    pkg_t pkg;
+    pkg *pkg;
     char *error;
 
-    pkg = pkg_open(m_emulator, path.c_str(), &error);
+    pkg = pkg_open(m_context, path.c_str(), &error);
 
     if (!pkg) {
         QMessageBox::critical(this, "Error", QString("Cannot open %1: %2").arg(path.c_str()).arg(error));
@@ -176,7 +178,7 @@ void MainWindow::installPkg()
     }
 
     // Read files.
-    auto failed = pkg_enum_entries(pkg, [](pkg_entry_t entry, std::size_t, void *ctx) -> void * {
+    auto failed = pkg_enum_entries(pkg, [](const pkg_entry *entry, std::size_t, void *ctx) -> void * {
         // Get file name.
         const char *name;
 
@@ -196,7 +198,7 @@ void MainWindow::installPkg()
 
         // Write file.
         auto path = joinPath(reinterpret_cast<const char *>(ctx), name);
-        auto error = pkg_entry_read(entry, path.c_str());
+        auto error = pkg_entry_dump(entry, path.c_str());
 
         if (error) {
             auto message = QString("Failed to write %1 to %2: %3").arg(name).arg(path.c_str()).arg(error);
@@ -228,7 +230,7 @@ void MainWindow::startGame(const QModelIndex &index)
 
     std::memset(&conf, 0, sizeof(conf));
 
-    emulator_start(m_emulator, &conf);
+    emulator_start(m_context, &conf);
 }
 
 void MainWindow::requestGamesContextMenu(const QPoint &pos)
@@ -277,7 +279,7 @@ void MainWindow::restoreGeometry()
 
 bool MainWindow::requireEmulatorStopped()
 {
-    if (emulator_running(m_emulator)) {
+    if (emulator_running(m_context)) {
         QMessageBox::critical(this, "Error", "This functionality is not available while a game is running.");
         return false;
     }
