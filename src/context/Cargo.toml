@@ -5,5 +5,4 @@ edition = "2021"
 
 [dependencies]
 rsa = "0.6"
-sdl2 = { version = "0.35", features = ["static-link", "bundled"] }
 util = { path = "../util" }

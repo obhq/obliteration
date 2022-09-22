@@ -5,15 +5,6 @@ mod keys;
 
 #[no_mangle]
 pub extern "C" fn context_new(error: *mut *mut c_char) -> *mut Context {
-    // Initialize SDL.
-    let sdl = match sdl2::init() {
-        Ok(v) => v,
-        Err(v) => {
-            util::str::set_c(error, &v);
-            return null_mut();
-        }
-    };
-
     // Load RSA keys and cache precomputed exponent1, exponent2 and coefficient.
     let pkg_key3 = keys::pkg_key3();
 
@@ -23,7 +14,7 @@ pub extern "C" fn context_new(error: *mut *mut c_char) -> *mut Context {
     }
 
     // Construct context.
-    let ctx = Box::new(Context::new(sdl, pkg_key3));
+    let ctx = Box::new(Context::new(pkg_key3));
 
     Box::into_raw(ctx)
 }
@@ -34,13 +25,12 @@ pub extern "C" fn context_free(ctx: *mut Context) {
 }
 
 pub struct Context {
-    sdl: sdl2::Sdl,
     pkg_key3: rsa::RsaPrivateKey,
 }
 
 impl Context {
-    pub fn new(sdl: sdl2::Sdl, pkg_key3: rsa::RsaPrivateKey) -> Self {
-        Self { sdl, pkg_key3 }
+    pub fn new(pkg_key3: rsa::RsaPrivateKey) -> Self {
+        Self { pkg_key3 }
     }
 
     pub fn pkg_key3(&self) -> &rsa::RsaPrivateKey {
