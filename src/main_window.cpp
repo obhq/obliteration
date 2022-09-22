@@ -52,6 +52,7 @@ MainWindow::MainWindow(context *context) :
     // Setup game list.
     m_games = new QListView();
     m_games->setViewMode(QListView::IconMode);
+    m_games->setWordWrap(true);
     m_games->setContextMenuPolicy(Qt::CustomContextMenu);
     m_games->setModel(new GameListModel(this));
 

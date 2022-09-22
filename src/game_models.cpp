@@ -1,4 +1,7 @@
 #include "game_models.hpp"
+#include "util.hpp"
+
+#include <QPixmap>
 
 Game::Game(const QString &name, const QString &directory) :
     m_name(name),
@@ -51,6 +54,8 @@ QVariant GameListModel::data(const QModelIndex &index, int role) const
     switch (role) {
     case Qt::DisplayRole:
         return m_items[index.row()]->name();
+    case Qt::DecorationRole:
+        return QPixmap(joinPath(m_items[index.row()]->directory(), "icon0.png").c_str()).scaled(256, 256, Qt::KeepAspectRatio);
     default:
         return QVariant();
     }
