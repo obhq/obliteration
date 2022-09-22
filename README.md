@@ -129,7 +129,7 @@ If you don't have a PS4 application for testing you can download PS Scene Quiz f
 
 ### Rules for C++ sources
 
-Just follow how Qt is written (e.g. coding style, etc.). Always prefers Qt classes over `std`.
+Just follow how Qt is written (e.g. coding style, etc.). Always prefers Qt classes over `std` when possible so you don't need to handle exception. Do not use Qt `ui` file to design the UI because it will break on high-DPI screen.
 
 ### Starting point
 
