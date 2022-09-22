@@ -1,5 +1,5 @@
 use crate::Pkg;
-use util::binary::{read_u32_be, write_u32_be};
+use util::mem::{read_u32_be, write_u32_be};
 
 pub struct Entry<'c, 'p> {
     pkg: &'p Pkg<'c>,

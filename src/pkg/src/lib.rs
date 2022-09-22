@@ -1,5 +1,6 @@
 use self::entry::{Entry, EntryKey};
 use self::header::Header;
+use self::param::Param;
 use aes::cipher::{BlockDecryptMut, KeyIvInit};
 use context::Context;
 use sha2::Digest;
@@ -7,7 +8,7 @@ use std::error::Error;
 use std::ffi::c_void;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::os::raw::c_char;
 use std::path::Path;
 use std::ptr::null_mut;
@@ -15,6 +16,7 @@ use util::mem::uninit;
 
 pub mod entry;
 pub mod header;
+pub mod param;
 
 #[no_mangle]
 pub extern "C" fn pkg_open<'c>(
@@ -164,6 +166,65 @@ pub extern "C" fn pkg_entry_dump(entry: &Entry, file: *const c_char) -> *mut c_c
     }
 
     null_mut()
+}
+
+#[no_mangle]
+pub extern "C" fn pkg_param_open(file: *const c_char, error: *mut *mut c_char) -> *mut Param {
+    // Open file.
+    let mut file = match File::open(util::str::from_c_unchecked(file)) {
+        Ok(v) => v,
+        Err(e) => {
+            util::str::set_c(error, &e.to_string());
+            return null_mut();
+        }
+    };
+
+    // param.sfo is quite small so we can read all of it content into memory.
+    let mut data: Vec<u8> = Vec::new();
+
+    match file.metadata() {
+        Ok(v) => {
+            if v.len() <= 4096 {
+                if let Err(e) = file.read_to_end(&mut data) {
+                    util::str::set_c(error, &e.to_string());
+                    return null_mut();
+                }
+            } else {
+                util::str::set_c(error, "file too large");
+                return null_mut();
+            }
+        }
+        Err(e) => {
+            util::str::set_c(error, &e.to_string());
+            return null_mut();
+        }
+    };
+
+    // Parse.
+    let param = match Param::read(&data) {
+        Ok(v) => Box::new(v),
+        Err(e) => {
+            util::str::set_c(error, &e.to_string());
+            return null_mut();
+        }
+    };
+
+    Box::into_raw(param)
+}
+
+#[no_mangle]
+pub extern "C" fn pkg_param_title_id(param: &Param) -> *mut c_char {
+    util::str::to_c(param.title_id())
+}
+
+#[no_mangle]
+pub extern "C" fn pkg_param_title(param: &Param) -> *mut c_char {
+    util::str::to_c(param.title())
+}
+
+#[no_mangle]
+pub extern "C" fn pkg_param_close(param: *mut Param) {
+    unsafe { Box::from_raw(param) };
 }
 
 // https://www.psdevwiki.com/ps4/Package_Files

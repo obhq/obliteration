@@ -89,21 +89,13 @@ bool MainWindow::loadGames()
     progress.setValue(++step);
 
     // Load games
-    auto gameList = reinterpret_cast<GameListModel *>(m_games->model());
-
     progress.setLabelText("Loading games...");
 
-    for (auto &dir : games) {
-        // Check cancellation.
-        if (progress.wasCanceled()) {
+    for (auto &gameId : games) {
+        if (progress.wasCanceled() || !loadGame(&progress, gameId)) {
             return false;
         }
 
-        // Get full path.
-        auto path = joinPath(directory, dir);
-
-        // Add to list.
-        gameList->add(new Game(dir, path.c_str()));
         progress.setValue(++step);
     }
 
@@ -145,39 +137,55 @@ void MainWindow::closeEvent(QCloseEvent *event)
 void MainWindow::installPkg()
 {
     // Browse a PKG.
-    auto path = QDir::toNativeSeparators(QFileDialog::getOpenFileName(this, "Install PKG", QString(), "PKG Files (*.pkg)")).toStdString();
+    auto pkgPath = QDir::toNativeSeparators(QFileDialog::getOpenFileName(this, "Install PKG", QString(), "PKG Files (*.pkg)")).toStdString();
 
-    if (path.empty()) {
+    if (pkgPath.empty()) {
         return;
     }
 
-    // Prepare a directory to install.
+    // Prepare a temporary directory to extract PKG entries. We cannot use a standard temporary directory here becuase
+    // on Linux it will fail when we try to move it to a games directory.
     auto gamesDirectory = readGamesDirectorySetting();
-    auto directory = joinPath(gamesDirectory, "installing");
+    auto tempInstallPath = joinPath(gamesDirectory, "installing");
 
-    if (!QDir(directory.c_str()).removeRecursively()) {
+    if (!QDir(tempInstallPath.c_str()).removeRecursively()) {
         QMessageBox::critical(this, "Error", "Failed to remove previous installation cache.");
         return;
     }
 
-    if (!QDir().mkpath(directory.c_str())) {
-        QMessageBox::critical(this, "Error", QString("Cannot create %1").arg(directory.c_str()));
+    if (!QDir().mkpath(tempInstallPath.c_str())) {
+        QMessageBox::critical(this, "Error", QString("Cannot create %1").arg(tempInstallPath.c_str()));
         return;
     }
+
+    // Setup loading progress.
+    QProgressDialog progress(this);
+    int step = -1;
+
+    progress.setMaximum(5);
+    progress.setCancelButtonText("Cancel");
+    progress.setWindowModality(Qt::WindowModal);
+    progress.setValue(++step);
 
     // Open a PKG.
     pkg *pkg;
     char *error;
 
-    pkg = pkg_open(m_context, path.c_str(), &error);
+    progress.setLabelText(QString("Opening %1...").arg(pkgPath.c_str()));
+
+    pkg = pkg_open(m_context, pkgPath.c_str(), &error);
 
     if (!pkg) {
-        QMessageBox::critical(this, "Error", QString("Cannot open %1: %2").arg(path.c_str()).arg(error));
+        QMessageBox::critical(&progress, "Error", QString("Cannot open %1: %2").arg(pkgPath.c_str()).arg(error));
         std::free(error);
         return;
     }
 
-    // Read files.
+    progress.setValue(++step);
+
+    // Dump entries.
+    progress.setLabelText("Extracting PKG entries...");
+
     auto failed = pkg_enum_entries(pkg, [](const pkg_entry *entry, std::size_t, void *ctx) -> void * {
         // Get file name.
         const char *name;
@@ -207,16 +215,59 @@ void MainWindow::installPkg()
         }
 
         return nullptr;
-    }, const_cast<char *>(directory.c_str()));
+    }, const_cast<char *>(tempInstallPath.c_str()));
 
     pkg_close(pkg);
 
     if (failed) {
         auto reason = reinterpret_cast<QString *>(failed);
-        QMessageBox::critical(this, "Error", *reason);
+        QMessageBox::critical(&progress, "Error", *reason);
         delete reason;
         return;
     }
+
+    progress.setValue(++step);
+
+    // Get game ID from param.sfo.
+    progress.setLabelText("Getting game identifier...");
+
+    auto paramPath = joinPath(tempInstallPath.c_str(), "param.sfo");
+    auto param = pkg_param_open(paramPath.c_str(), &error);
+
+    if (!param) {
+        QMessageBox::critical(&progress, "Error", QString("Cannot open %1: %2").arg(paramPath.c_str(), error));
+        std::free(error);
+        QDir(tempInstallPath.c_str()).removeRecursively();
+        return;
+    }
+
+    auto gameId = fromMalloc(pkg_param_title_id(param));
+
+    pkg_param_close(param);
+    progress.setValue(++step);
+
+    // Rename directory to game ID.
+    auto installPath = joinPath(gamesDirectory, gameId);
+
+    progress.setLabelText("Extracting PFS...");
+
+    if (!QDir().rename(tempInstallPath.c_str(), installPath.c_str())) {
+        QMessageBox::critical(&progress, "Error", QString("Failed to rename %1 to %2.").arg(tempInstallPath.c_str(), installPath.c_str()));
+        return;
+    }
+
+    progress.setValue(++step);
+
+    // Add to game list.
+    progress.setLabelText("Adding to game list...");
+
+    if (!loadGame(&progress, gameId)) {
+        QDir(installPath.c_str()).removeRecursively();
+    }
+
+    progress.setValue(++step);
+
+    QMessageBox::information(this, "Success", "Installation completed successfully.");
 }
 
 void MainWindow::startGame(const QModelIndex &index)
@@ -262,6 +313,35 @@ void MainWindow::requestGamesContextMenu(const QPoint &pos)
         GameSettingsDialog dialog(game, this);
         dialog.exec();
     }
+}
+
+bool MainWindow::loadGame(QWidget *progress, const QString &gameId)
+{
+    auto gamesDirectory = readGamesDirectorySetting();
+    auto gamePath = joinPath(gamesDirectory, gameId);
+    auto gameList = reinterpret_cast<GameListModel *>(m_games->model());
+
+    // Read game title from param.sfo.
+    auto paramPath = joinPath(gamePath.c_str(), "param.sfo");
+    pkg_param *param;
+    char *error;
+
+    param = pkg_param_open(paramPath.c_str(), &error);
+
+    if (!param) {
+        QMessageBox::critical(progress, "Error", QString("Cannot open %1: %2").arg(paramPath.c_str()).arg(error));
+        std::free(error);
+        return false;
+    }
+
+    auto name = fromMalloc(pkg_param_title(param));
+
+    pkg_param_close(param);
+
+    // Add to list.
+    gameList->add(new Game(name, gamePath.c_str()));
+
+    return true;
 }
 
 void MainWindow::restoreGeometry()

@@ -1,8 +1,8 @@
 #include "game_models.hpp"
 
-Game::Game(const QString &name, const QString &file) :
+Game::Game(const QString &name, const QString &directory) :
     m_name(name),
-    m_file(file)
+    m_directory(directory)
 {
 }
 

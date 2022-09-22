@@ -23,6 +23,7 @@ private slots:
     void requestGamesContextMenu(const QPoint &pos);
 
 private:
+    bool loadGame(QWidget *progress, const QString &gameId);
     void restoreGeometry();
     bool requireEmulatorStopped();
 

@@ -1,4 +1,4 @@
-use util::binary::{read_u32_be, read_u64_be};
+use util::mem::{read_u32_be, read_u64_be};
 
 pub struct Header {
     entry_count: u32,

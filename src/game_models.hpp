@@ -5,16 +5,16 @@
 
 class Game final : public QObject {
 public:
-    Game(const QString &name, const QString &file);
+    Game(const QString &name, const QString &directory);
     ~Game() override;
 
 public:
     const QString &name() const { return m_name; }
-    const QString &file() const { return m_file; }
+    const QString &directory() const { return m_directory; }
 
 private:
     QString m_name;
-    QString m_file;
+    QString m_directory;
 };
 
 class GameListModel final : public QAbstractListModel {
