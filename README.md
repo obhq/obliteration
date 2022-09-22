@@ -3,13 +3,18 @@
 
 Obliteration is an experimental PS4 emulator based on [Kyty](https://github.com/InoriRus/Kyty). The project is in the process of migrating source from Kyty to make it work on both Windows and Linux so it cannot run any games that Kyty able to run yet.
 
+## Screen shots
+
+![Game list](screenshots/game-list.png)
+
 ## Features
 
-- Able to run game from a PKG file directly.
+- Built-in PKG file supports.
 
 ## System requirements
 
 - Windows 10 x64 or Linux x86-64.
+- CPU that supports all of instructions on [PS4 CPU](https://en.wikipedia.org/wiki/Jaguar_(microarchitecture)#Instruction_set_support). All modern Intel/AMD CPUs should meet with this requirement.
 
 ## Building from source
 
@@ -110,11 +115,25 @@ We recommended Visual Studio Code as a code editor with the following extensions
 - [CMake](https://marketplace.visualstudio.com/items?itemName=twxs.cmake)
 - [CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools)
 
-Remove `build` directory from the installation from source step and open this folder with VS Code. Everything should work out of the box (e.g. code completion).
+Remove `build` directory from the installation from source step and open this folder with VS Code. Everything should work out of the box (e.g. code completion, debugging, etc).
 
 ### Get a homebrew application for testing
 
 If you don't have a PS4 application for testing you can download PS Scene Quiz for free [here](https://pkg-zone.com/details/LAPY10010).
+
+### Rules for Rust sources
+
+- Don't be afraid to use `unsafe` when it is necessary. We are written an application that required very high performance code and we use Rust to assist us on this task, not to use Rust to compromise performance that C/C++ can provides.
+- Any functions that operate on pointers don't need to mark as `unsafe`. The reasons is because it will required the caller to wrap it in `unsafe`. We already embrace `unsafe` code so no point to make it harder to use.
+- Don't chain method calls without intermidate variable if the result code is hard to follow. We encourage code readability than a pleasure when writing so try to make it easy to read and understand for other people.
+
+### Rules for C++ sources
+
+Just follow how Qt is written (e.g. coding style, etc.). Always prefers Qt classes over `std`.
+
+### Starting point
+
+The entry point of the application is inside `src/main.cpp`.
 
 ## License
 
