@@ -1,11 +1,10 @@
-use self::entry::{Entry, EntryKey};
+use self::entry::Entry;
 use self::header::Header;
 use self::param::Param;
 use aes::cipher::{BlockDecryptMut, KeyIvInit};
 use context::Context;
 use sha2::Digest;
 use std::error::Error;
-use std::ffi::c_void;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::{Read, Write};
@@ -42,130 +41,26 @@ pub extern "C" fn pkg_close(pkg: *mut Pkg) {
 }
 
 #[no_mangle]
-pub extern "C" fn pkg_enum_entries(
-    pkg: &Pkg,
-    cb: extern "C" fn(&Entry, usize, *mut c_void) -> *mut c_void,
-    ud: *mut c_void,
-) -> *mut c_void {
-    let header = pkg.header();
-    let table = pkg.raw()[header.table_offset()..].as_ptr();
-
-    for i in 0..header.entry_count() {
-        // Read entry.
-        let entry = Entry::read(pkg, table, i);
-        let public = match entry.id() {
-            Entry::PARAM_SFO => true,
-            Entry::PIC1_PNG => true,
-            Entry::ICON0_PNG => true,
-            _ => false,
-        };
-
-        if !public {
-            continue;
+pub extern "C" fn pkg_get_param(pkg: &Pkg, error: *mut *mut c_char) -> *mut Param {
+    let param = match pkg.get_param() {
+        Ok(v) => Box::new(v),
+        Err(e) => {
+            util::str::set_c(error, &e.to_string());
+            return null_mut();
         }
-
-        // Invoke callback.
-        let result = cb(&entry, i, ud);
-
-        if !result.is_null() {
-            return result;
-        }
-    }
-
-    null_mut()
-}
-
-#[no_mangle]
-pub extern "C" fn pkg_entry_id(entry: &Entry) -> u32 {
-    entry.id()
-}
-
-#[no_mangle]
-pub extern "C" fn pkg_entry_dump(entry: &Entry, file: *const c_char) -> *mut c_char {
-    // Open destination file.
-    let mut dest = match File::create(util::str::from_c_unchecked(file)) {
-        Ok(v) => v,
-        Err(e) => return util::str::to_c(&e.to_string()),
     };
 
-    // Write destination file.
-    let pkg = entry.pkg();
-    let offset = entry.offset();
+    Box::into_raw(param)
+}
 
-    if entry.is_encrypted() {
-        if entry.key_index() != 3 {
-            return util::str::to_c("no decryption key for the entry");
-        }
+#[no_mangle]
+pub extern "C" fn pkg_dump_entry(pkg: &Pkg, id: u32, file: *const c_char) -> *mut c_char {
+    let file = util::str::from_c_unchecked(file);
 
-        // Get encrypted data.
-        let size = (entry.size() + 15) & !15; // We need to include padding.
-        let encrypted = match pkg.raw().get(offset..(offset + size)) {
-            Some(v) => v.as_ptr(),
-            None => return util::str::to_c("invalid data offset"),
-        };
-
-        // Get secret seed.
-        let mut secret_seed = Vec::from(entry.to_bytes());
-
-        match pkg.entry_key() {
-            Some(k) => {
-                let ctx = pkg.context();
-                let key3 = ctx.pkg_key3();
-
-                match key3.decrypt(rsa::PaddingScheme::PKCS1v15Encrypt, &k.keys()[3]) {
-                    Ok(v) => secret_seed.extend(v),
-                    Err(e) => return util::str::to_c(&e.to_string()),
-                }
-            }
-            None => return util::str::to_c("no decryption key for the entry"),
-        }
-
-        // Calculate secret.
-        let mut hasher = sha2::Sha256::new();
-
-        hasher.update(secret_seed.as_slice());
-
-        let secret = hasher.finalize();
-        let first = (&secret[..16]).as_ptr();
-        let last = (&secret[16..]).as_ptr();
-        let mut iv: [u8; 16] = uninit();
-        let mut key: [u8; 16] = uninit();
-
-        unsafe { first.copy_to_nonoverlapping(iv.as_mut_ptr(), 16) };
-        unsafe { last.copy_to_nonoverlapping(key.as_mut_ptr(), 16) };
-
-        // Dump content.
-        let mut decryptor = cbc::Decryptor::<aes::Aes128>::new(&key.into(), &iv.into());
-        let mut written = 0;
-
-        while written < size {
-            // Decrypt.
-            let mut block: [u8; 16] = uninit();
-            let source = unsafe { encrypted.offset(written as _) };
-
-            unsafe { source.copy_to_nonoverlapping(block.as_mut_ptr(), 16) };
-
-            decryptor.decrypt_block_mut(&mut block.into());
-
-            // Write file.
-            if let Err(e) = dest.write_all(&block) {
-                return util::str::to_c(&e.to_string());
-            }
-
-            written += 16;
-        }
-    } else {
-        let data = match pkg.raw().get(offset..(offset + entry.size())) {
-            Some(v) => v,
-            None => return util::str::to_c("invalid data offset"),
-        };
-
-        if let Err(e) = dest.write_all(data) {
-            return util::str::to_c(&e.to_string());
-        }
+    match pkg.dump_entry(id, file) {
+        Ok(_) => null_mut(),
+        Err(e) => util::str::to_c(&e.to_string()),
     }
-
-    null_mut()
 }
 
 #[no_mangle]
@@ -232,7 +127,7 @@ pub struct Pkg<'c> {
     ctx: &'c Context,
     raw: memmap2::Mmap,
     header: Header,
-    entry_key: Option<EntryKey>,
+    entry_keys: Option<EntryKeys>,
 }
 
 impl<'c> Pkg<'c> {
@@ -254,80 +149,188 @@ impl<'c> Pkg<'c> {
             Err(_) => return Err(OpenError::InvalidHeader),
         };
 
-        // Check file with the header.
-        let table_offset = header.table_offset();
-
-        if raw.len() < (table_offset + Entry::RAW_SIZE * header.entry_count()) {
-            return Err(OpenError::InvalidTableOffset);
-        }
-
+        // Find entry key.
         let mut pkg = Self {
             ctx,
             raw,
             header,
-            entry_key: None,
+            entry_keys: None,
         };
 
-        // Read keys entry.
-        let table = unsafe { pkg.raw.as_ptr().offset(table_offset as _) };
+        match pkg.find_entry(Entry::ENTRY_KEYS) {
+            Ok((_, index, mut data)) => {
+                // Read seed.
+                let mut seed: [u8; 32] = uninit();
 
-        for i in 0..pkg.header.entry_count() {
-            // Check if entry is a keys entry.
-            let entry = Entry::read(&pkg, table, i);
+                data = match util::array::read_from_slice(&mut seed, data) {
+                    Some(v) => v,
+                    None => return Err(OpenError::InvalidEntryOffset(index)),
+                };
 
-            if entry.id() != Entry::KEYS {
-                continue;
+                // Read digests.
+                let mut digests: [[u8; 32]; 7] = uninit();
+
+                for i in 0..7 {
+                    data = match util::array::read_from_slice(&mut digests[i], data) {
+                        Some(v) => v,
+                        None => return Err(OpenError::InvalidEntryOffset(index)),
+                    };
+                }
+
+                // Read keys.
+                let mut keys: [[u8; 256]; 7] = uninit();
+
+                for i in 0..7 {
+                    data = match util::array::read_from_slice(&mut keys[i], data) {
+                        Some(v) => v,
+                        None => return Err(OpenError::InvalidEntryOffset(index)),
+                    };
+                }
+
+                pkg.entry_keys = Some(EntryKeys {
+                    seed,
+                    digests,
+                    keys,
+                });
             }
-
-            // Slice entry data.
-            let offset = entry.offset();
-            let mut data = match pkg.raw.get(offset..(offset + (32 + 32 * 7 + 256 * 7))) {
-                Some(v) => v.as_ptr(),
-                None => return Err(OpenError::InvalidKeysOffset),
-            };
-
-            drop(entry);
-
-            // Read keys.
-            let mut seed: [u8; 32] = uninit();
-            let mut digests: [[u8; 32]; 7] = uninit();
-            let mut keys: [[u8; 256]; 7] = uninit();
-
-            unsafe { data.copy_to_nonoverlapping(seed.as_mut_ptr(), 32) };
-            unsafe { data = data.offset(32) };
-
-            for i in 0..7 {
-                unsafe { data.copy_to_nonoverlapping(digests[i].as_mut_ptr(), 32) };
-                unsafe { data = data.offset(32) };
-            }
-
-            for i in 0..7 {
-                unsafe { data.copy_to_nonoverlapping(keys[i].as_mut_ptr(), 256) };
-                unsafe { data = data.offset(256) };
-            }
-
-            pkg.entry_key = Some(EntryKey::new(seed, digests, keys));
-            break;
+            Err(e) => match e {
+                FindEntryError::NotFound => {}
+                _ => return Err(OpenError::FindEntryKeyFailed(e)),
+            },
         }
 
         Ok(pkg)
     }
 
-    pub fn context(&self) -> &'c Context {
-        self.ctx
+    pub fn get_param(&self) -> Result<Param, GetParamError> {
+        // Find an entry for param.sfo.
+        let (_, _, data) = match self.find_entry(Entry::PARAM_SFO) {
+            Ok(v) => v,
+            Err(e) => return Err(GetParamError::FindEntryFailed(e)),
+        };
+
+        // Parse data.
+        let param = match Param::read(data) {
+            Ok(v) => v,
+            Err(e) => return Err(GetParamError::ReadFailed(e)),
+        };
+
+        Ok(param)
     }
 
-    pub fn header(&self) -> &Header {
-        &self.header
+    pub fn dump_entry<F: AsRef<Path>>(&self, id: u32, file: F) -> Result<(), DumpEntryError> {
+        // Find target entry.
+        let (entry, index, mut data) = match self.find_entry(id) {
+            Ok(v) => v,
+            Err(e) => return Err(DumpEntryError::FindEntryFailed(e)),
+        };
+
+        // Open destination file.
+        let mut file = match File::create(file) {
+            Ok(v) => v,
+            Err(e) => return Err(DumpEntryError::CreateDestinationFailed(e)),
+        };
+
+        if entry.is_encrypted() {
+            if entry.key_index() != 3 {
+                return Err(DumpEntryError::NoDecryptionKey(index));
+            }
+
+            // Get secret seed.
+            let mut secret_seed = Vec::from(entry.to_bytes());
+
+            match self.entry_keys.as_ref() {
+                Some(k) => {
+                    let key3 = self.ctx.pkg_key3();
+
+                    match key3.decrypt(rsa::PaddingScheme::PKCS1v15Encrypt, &k.keys[3]) {
+                        Ok(v) => secret_seed.extend(v),
+                        Err(e) => return Err(DumpEntryError::KeyDecryptionFailed(index, e)),
+                    }
+                }
+                None => return Err(DumpEntryError::NoDecryptionKey(index)),
+            }
+
+            // Calculate secret.
+            let mut sha256 = sha2::Sha256::new();
+
+            sha256.update(secret_seed.as_slice());
+
+            let secret = sha256.finalize();
+            let first = (&secret[..16]).as_ptr();
+            let last = (&secret[16..]).as_ptr();
+            let mut iv: [u8; 16] = uninit();
+            let mut key: [u8; 16] = uninit();
+
+            unsafe { first.copy_to_nonoverlapping(iv.as_mut_ptr(), 16) };
+            unsafe { last.copy_to_nonoverlapping(key.as_mut_ptr(), 16) };
+
+            // Dump content.
+            let mut decryptor = cbc::Decryptor::<aes::Aes128>::new(&key.into(), &iv.into());
+
+            loop {
+                // Decrypt.
+                let mut block: [u8; 16] = uninit();
+
+                data = match util::array::read_from_slice(&mut block, data) {
+                    Some(v) => v,
+                    None => break,
+                };
+
+                decryptor.decrypt_block_mut(&mut block.into());
+
+                // Write file.
+                if let Err(e) = file.write_all(&block) {
+                    return Err(DumpEntryError::WriteDestinationFailed(e));
+                }
+            }
+        } else if let Err(e) = file.write_all(data) {
+            return Err(DumpEntryError::WriteDestinationFailed(e));
+        }
+
+        Ok(())
     }
 
-    pub fn raw(&self) -> &[u8] {
-        self.raw.as_ref()
-    }
+    fn find_entry<'a>(&'a self, id: u32) -> Result<(Entry, usize, &'a [u8]), FindEntryError> {
+        for num in 0..self.header.entry_count() {
+            // Check offset.
+            let offset = self.header.table_offset() + num * Entry::RAW_SIZE;
+            let raw = match self.raw.get(offset..(offset + Entry::RAW_SIZE)) {
+                Some(v) => v.as_ptr(),
+                None => return Err(FindEntryError::InvalidEntryOffset(num)),
+            };
 
-    pub fn entry_key(&self) -> Option<&EntryKey> {
-        self.entry_key.as_ref()
+            // Read entry.
+            let entry = Entry::read(raw);
+
+            if entry.id() != id {
+                continue;
+            }
+
+            // Get entry data.
+            let offset = entry.data_offset();
+            let size = if entry.is_encrypted() {
+                (entry.data_size() + 15) & !15 // We need to include padding.
+            } else {
+                entry.data_size()
+            };
+
+            let data = match self.raw.get(offset..(offset + size)) {
+                Some(v) => v,
+                None => return Err(FindEntryError::InvalidDataOffset(num)),
+            };
+
+            return Ok((entry, num, data));
+        }
+
+        Err(FindEntryError::NotFound)
     }
+}
+
+struct EntryKeys {
+    seed: [u8; 32],
+    digests: [[u8; 32]; 7],
+    keys: [[u8; 256]; 7],
 }
 
 #[derive(Debug)]
@@ -335,15 +338,16 @@ pub enum OpenError {
     OpenFailed(std::io::Error),
     MapFailed(std::io::Error),
     InvalidHeader,
-    InvalidTableOffset,
-    InvalidKeysOffset,
+    FindEntryKeyFailed(FindEntryError),
+    InvalidEntryOffset(usize),
 }
 
 impl Error for OpenError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            OpenError::OpenFailed(e) => Some(e),
-            OpenError::MapFailed(e) => Some(e),
+            Self::OpenFailed(e) => Some(e),
+            Self::MapFailed(e) => Some(e),
+            Self::FindEntryKeyFailed(e) => Some(e),
             _ => None,
         }
     }
@@ -352,11 +356,89 @@ impl Error for OpenError {
 impl Display for OpenError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
-            OpenError::OpenFailed(e) => e.fmt(f),
-            OpenError::MapFailed(e) => e.fmt(f),
-            OpenError::InvalidHeader => f.write_str("invalid PKG header"),
-            OpenError::InvalidTableOffset => f.write_str("invalid PKG table offset"),
-            OpenError::InvalidKeysOffset => f.write_str("invalid PKG keys offset"),
+            Self::OpenFailed(e) => e.fmt(f),
+            Self::MapFailed(e) => e.fmt(f),
+            Self::InvalidHeader => f.write_str("PKG header is not valid"),
+            Self::FindEntryKeyFailed(e) => e.fmt(f),
+            Self::InvalidEntryOffset(num) => write!(f, "entry #{} has invalid data offset", num),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum GetParamError {
+    FindEntryFailed(FindEntryError),
+    ReadFailed(param::ReadError),
+}
+
+impl Error for GetParamError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::FindEntryFailed(e) => Some(e),
+            Self::ReadFailed(e) => Some(e),
+        }
+    }
+}
+
+impl Display for GetParamError {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::FindEntryFailed(e) => match e {
+                FindEntryError::NotFound => f.write_str("the package does not have param.sfo"),
+                _ => e.fmt(f),
+            },
+            Self::ReadFailed(_) => f.write_str("the package has malformed param.sfo"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum DumpEntryError {
+    FindEntryFailed(FindEntryError),
+    CreateDestinationFailed(std::io::Error),
+    WriteDestinationFailed(std::io::Error),
+    NoDecryptionKey(usize),
+    KeyDecryptionFailed(usize, rsa::errors::Error),
+}
+
+impl Error for DumpEntryError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::FindEntryFailed(e) => Some(e),
+            Self::CreateDestinationFailed(e) | Self::WriteDestinationFailed(e) => Some(e),
+            Self::KeyDecryptionFailed(_, e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl Display for DumpEntryError {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::FindEntryFailed(e) => e.fmt(f),
+            Self::CreateDestinationFailed(e) => e.fmt(f),
+            Self::WriteDestinationFailed(e) => e.fmt(f),
+            Self::NoDecryptionKey(num) => write!(f, "no decryption key for entry #{}", num),
+            Self::KeyDecryptionFailed(_, e) => e.fmt(f),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum FindEntryError {
+    InvalidEntryOffset(usize),
+    NotFound,
+    InvalidDataOffset(usize),
+}
+
+impl Error for FindEntryError {}
+
+impl Display for FindEntryError {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::InvalidEntryOffset(num) => write!(f, "entry #{} has invalid offset", num),
+            Self::NotFound => f.write_str("the specified entry is not found"),
+            Self::InvalidDataOffset(num) => write!(f, "entry #{} has invalid data offset", num),
         }
     }
 }

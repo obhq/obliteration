@@ -3,10 +3,8 @@
 #include "context.hpp"
 
 #include <cinttypes>
-#include <cstddef>
 
 struct pkg;
-struct pkg_entry;
 struct pkg_param;
 
 #define PKG_ENTRY_PARAM_SFO 0x00001000 // param.sfo
@@ -18,10 +16,8 @@ extern "C" {
     pkg *pkg_open(const context *ctx, const char *file, char **error);
     void pkg_close(pkg *pkg);
 
-    void *pkg_enum_entries(const pkg *pkg, void * (*cb) (const pkg_entry *, std::size_t, void *), void *ud);
-
-    std::uint32_t pkg_entry_id(const pkg_entry *entry);
-    char *pkg_entry_dump(const pkg_entry *entry, const char *file);
+    pkg_param *pkg_get_param(const pkg *pkg, char **error);
+    char *pkg_dump_entry(const pkg *pkg, std::uint32_t id, const char *file);
 
     pkg_param *pkg_param_open(const char *file, char **error);
     char *pkg_param_title_id(const pkg_param *param);

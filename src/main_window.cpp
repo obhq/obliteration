@@ -144,26 +144,11 @@ void MainWindow::installPkg()
         return;
     }
 
-    // Prepare a temporary directory to extract PKG entries. We cannot use a standard temporary directory here becuase
-    // on Linux it will fail when we try to move it to a games directory.
-    auto gamesDirectory = readGamesDirectorySetting();
-    auto tempInstallPath = joinPath(gamesDirectory, "installing");
-
-    if (!QDir(tempInstallPath.c_str()).removeRecursively()) {
-        QMessageBox::critical(this, "Error", "Failed to remove previous installation cache.");
-        return;
-    }
-
-    if (!QDir().mkpath(tempInstallPath.c_str())) {
-        QMessageBox::critical(this, "Error", QString("Cannot create %1").arg(tempInstallPath.c_str()));
-        return;
-    }
-
     // Setup loading progress.
     QProgressDialog progress(this);
     int step = -1;
 
-    progress.setMaximum(5);
+    progress.setMaximum(3);
     progress.setCancelButtonText("Cancel");
     progress.setWindowModality(Qt::WindowModal);
     progress.setValue(++step);
@@ -184,91 +169,82 @@ void MainWindow::installPkg()
 
     progress.setValue(++step);
 
-    // Dump entries.
-    progress.setLabelText("Extracting PKG entries...");
-
-    auto failed = pkg_enum_entries(pkg, [](const pkg_entry *entry, std::size_t, void *ctx) -> void * {
-        // Get file name.
-        const char *name;
-
-        switch (pkg_entry_id(entry)) {
-        case PKG_ENTRY_PARAM_SFO:
-            name = "param.sfo";
-            break;
-        case PKG_ENTRY_PIC1_PNG:
-            name = "pic1.png";
-            break;
-        case PKG_ENTRY_ICON0_PNG:
-            name = "icon0.png";
-            break;
-        default:
-            return nullptr;
-        }
-
-        // Write file.
-        auto path = joinPath(reinterpret_cast<const char *>(ctx), name);
-        auto error = pkg_entry_dump(entry, path.c_str());
-
-        if (error) {
-            auto message = QString("Failed to write %1 to %2: %3").arg(name).arg(path.c_str()).arg(error);
-            std::free(error);
-            return new QString(message);
-        }
-
-        return nullptr;
-    }, const_cast<char *>(tempInstallPath.c_str()));
-
-    pkg_close(pkg);
-
-    if (failed) {
-        auto reason = reinterpret_cast<QString *>(failed);
-        QMessageBox::critical(&progress, "Error", *reason);
-        delete reason;
-        return;
-    }
-
-    progress.setValue(++step);
-
-    // Get game ID from param.sfo.
-    progress.setLabelText("Getting game identifier...");
-
-    auto paramPath = joinPath(tempInstallPath.c_str(), "param.sfo");
-    auto param = pkg_param_open(paramPath.c_str(), &error);
+    // Get game ID.
+    auto param = pkg_get_param(pkg, &error);
 
     if (!param) {
-        QMessageBox::critical(&progress, "Error", QString("Cannot open %1: %2").arg(paramPath.c_str(), error));
+        QMessageBox::critical(&progress, "Error", QString("Failed to get param.sfo from %1: %2").arg(pkgPath.c_str()).arg(error));
         std::free(error);
-        QDir(tempInstallPath.c_str()).removeRecursively();
+        pkg_close(pkg);
         return;
     }
 
     auto gameId = fromMalloc(pkg_param_title_id(param));
 
     pkg_param_close(param);
-    progress.setValue(++step);
 
-    // Rename directory to game ID.
-    auto installPath = joinPath(gamesDirectory, gameId);
+    // Create game directory.
+    auto gamesDirectory = readGamesDirectorySetting();
 
-    progress.setLabelText("Extracting PFS...");
+    progress.setLabelText("Extracting PKG entries...");
 
-    if (!QDir().rename(tempInstallPath.c_str(), installPath.c_str())) {
-        QMessageBox::critical(&progress, "Error", QString("Failed to rename %1 to %2.").arg(tempInstallPath.c_str(), installPath.c_str()));
+    if (!QDir(gamesDirectory).mkdir(gameId)) {
+        QString error("Cannot create a directory %1 inside %2.");
+
+        error += " If you have an unsuccessful installation from the previous attempt you need to remove this directory before install again.";
+
+        QMessageBox::critical(&progress, "Error", error.arg(gameId).arg(gamesDirectory));
+        pkg_close(pkg);
+        return;
+    }
+
+    auto directory = joinPath(gamesDirectory, gameId);
+
+    // Dump param.sfo.
+    error = pkg_dump_entry(pkg, PKG_ENTRY_PARAM_SFO, joinPath(directory.c_str(), "param.sfo").c_str());
+
+    if (error) {
+        QMessageBox::critical(&progress, "Error", QString("Failed to install param.sfo to %1: %2").arg(directory.c_str(), error));
+        std::free(error);
+        pkg_close(pkg);
+        return;
+    }
+
+    // Dump pic1.png.
+    error = pkg_dump_entry(pkg, PKG_ENTRY_PIC1_PNG, joinPath(directory.c_str(), "pic1.png").c_str());
+
+    if (error) {
+        QMessageBox::critical(&progress, "Error", QString("Failed to install pic1.png to %1: %2").arg(directory.c_str(), error));
+        std::free(error);
+        pkg_close(pkg);
+        return;
+    }
+
+    // Dump icon0.png.
+    error = pkg_dump_entry(pkg, PKG_ENTRY_ICON0_PNG, joinPath(directory.c_str(), "icon0.png").c_str());
+
+    if (error) {
+        QMessageBox::critical(&progress, "Error", QString("Failed to install pic1.png to %1: %2").arg(directory.c_str(), error));
+        std::free(error);
+        pkg_close(pkg);
         return;
     }
 
     progress.setValue(++step);
 
+    // Dump PFS.
+    progress.setLabelText("Extracting PFS...");
+
+    pkg_close(pkg);
+
     // Add to game list.
     progress.setLabelText("Adding to game list...");
-
-    if (!loadGame(&progress, gameId)) {
-        QDir(installPath.c_str()).removeRecursively();
-    }
-
+    auto success = loadGame(&progress, gameId);
     progress.setValue(++step);
 
-    QMessageBox::information(this, "Success", "Installation completed successfully.");
+    if (success) {
+        QMessageBox::information(this, "Success", "Installation completed successfully.");
+    }
 }
 
 void MainWindow::startGame(const QModelIndex &index)

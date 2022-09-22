@@ -164,8 +164,8 @@ impl Error for ReadError {}
 impl Display for ReadError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
-            Self::TooSmall => f.write_str("file are too small"),
-            Self::InvalidMagic => f.write_str("invalid file magic"),
+            Self::TooSmall => f.write_str("data too small"),
+            Self::InvalidMagic => f.write_str("invalid magic"),
             Self::InvalidEntryHeader(i) => write!(f, "entry #{} has invalid header", i),
             Self::InvalidKeyOffset(i) => write!(f, "invalid key offset for entry #{}", i),
             Self::InvalidValueOffset(i) => write!(f, "invalid value offset for entry #{}", i),
