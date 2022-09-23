@@ -127,7 +127,7 @@ pub struct Pkg<'c> {
     ctx: &'c Context,
     raw: memmap2::Mmap,
     header: Header,
-    entry_keys: Option<EntryKeys>,
+    entry_key3: Vec<u8>,
 }
 
 impl<'c> Pkg<'c> {
@@ -149,55 +149,15 @@ impl<'c> Pkg<'c> {
             Err(_) => return Err(OpenError::InvalidHeader),
         };
 
-        // Find entry key.
+        // Populate fields.
         let mut pkg = Self {
             ctx,
             raw,
             header,
-            entry_keys: None,
+            entry_key3: Vec::new(),
         };
 
-        match pkg.find_entry(Entry::ENTRY_KEYS) {
-            Ok((_, index, mut data)) => {
-                // Read seed.
-                let mut seed: [u8; 32] = uninit();
-
-                data = match util::array::read_from_slice(&mut seed, data) {
-                    Some(v) => v,
-                    None => return Err(OpenError::InvalidEntryOffset(index)),
-                };
-
-                // Read digests.
-                let mut digests: [[u8; 32]; 7] = uninit();
-
-                for i in 0..7 {
-                    data = match util::array::read_from_slice(&mut digests[i], data) {
-                        Some(v) => v,
-                        None => return Err(OpenError::InvalidEntryOffset(index)),
-                    };
-                }
-
-                // Read keys.
-                let mut keys: [[u8; 256]; 7] = uninit();
-
-                for i in 0..7 {
-                    data = match util::array::read_from_slice(&mut keys[i], data) {
-                        Some(v) => v,
-                        None => return Err(OpenError::InvalidEntryOffset(index)),
-                    };
-                }
-
-                pkg.entry_keys = Some(EntryKeys {
-                    seed,
-                    digests,
-                    keys,
-                });
-            }
-            Err(e) => match e {
-                FindEntryError::NotFound => {}
-                _ => return Err(OpenError::FindEntryKeyFailed(e)),
-            },
-        }
+        pkg.load_entry_key3()?;
 
         Ok(pkg)
     }
@@ -232,40 +192,12 @@ impl<'c> Pkg<'c> {
         };
 
         if entry.is_encrypted() {
-            if entry.key_index() != 3 {
+            // Get decryption key.
+            if entry.key_index() != 3 || self.entry_key3.is_empty() {
                 return Err(DumpEntryError::NoDecryptionKey(index));
             }
 
-            // Get secret seed.
-            let mut secret_seed = Vec::from(entry.to_bytes());
-
-            match self.entry_keys.as_ref() {
-                Some(k) => {
-                    let key3 = self.ctx.pkg_key3();
-
-                    match key3.decrypt(rsa::PaddingScheme::PKCS1v15Encrypt, &k.keys[3]) {
-                        Ok(v) => secret_seed.extend(v),
-                        Err(e) => return Err(DumpEntryError::KeyDecryptionFailed(index, e)),
-                    }
-                }
-                None => return Err(DumpEntryError::NoDecryptionKey(index)),
-            }
-
-            // Calculate secret.
-            let mut sha256 = sha2::Sha256::new();
-
-            sha256.update(secret_seed.as_slice());
-
-            let secret = sha256.finalize();
-            let first = (&secret[..16]).as_ptr();
-            let last = (&secret[16..]).as_ptr();
-            let mut iv: [u8; 16] = uninit();
-            let mut key: [u8; 16] = uninit();
-
-            unsafe { first.copy_to_nonoverlapping(iv.as_mut_ptr(), 16) };
-            unsafe { last.copy_to_nonoverlapping(key.as_mut_ptr(), 16) };
-
-            // Dump content.
+            let (key, iv) = self.derive_entry_key3(&entry);
             let mut decryptor = cbc::Decryptor::<aes::Aes128>::new(&key.into(), &iv.into());
 
             loop {
@@ -287,6 +219,81 @@ impl<'c> Pkg<'c> {
         } else if let Err(e) = file.write_all(data) {
             return Err(DumpEntryError::WriteDestinationFailed(e));
         }
+
+        Ok(())
+    }
+
+    /// Get key and IV for `entry` using `entry_key3`. The caller **MUST** check if `entry_key3` is
+    /// not empty before calling this method.
+    fn derive_entry_key3(&self, entry: &Entry) -> ([u8; 16], [u8; 16]) {
+        // Get secret seed.
+        let mut seed = Vec::from(entry.to_bytes());
+
+        seed.extend(self.entry_key3.as_slice());
+
+        // Calculate secret.
+        let mut sha256 = sha2::Sha256::new();
+
+        sha256.update(seed.as_slice());
+
+        let secret = sha256.finalize();
+
+        // Extract key and IV.
+        let mut key: [u8; 16] = uninit();
+        let mut iv: [u8; 16] = uninit();
+        let mut p = secret.as_ptr();
+
+        p = util::array::read_from_ptr(&mut iv, p);
+        util::array::read_from_ptr(&mut key, p);
+
+        (key, iv)
+    }
+
+    fn load_entry_key3(&mut self) -> Result<(), OpenError> {
+        // Locate entry keys.
+        let (_, index, mut data) = match self.find_entry(Entry::ENTRY_KEYS) {
+            Ok(v) => v,
+            Err(e) => match e {
+                FindEntryError::NotFound => return Ok(()),
+                _ => return Err(OpenError::FindEntryKeyFailed(e)),
+            },
+        };
+
+        // Read seed.
+        let mut seed: [u8; 32] = uninit();
+
+        data = match util::array::read_from_slice(&mut seed, data) {
+            Some(v) => v,
+            None => return Err(OpenError::InvalidEntryOffset(index)),
+        };
+
+        // Read digests.
+        let mut digests: [[u8; 32]; 7] = uninit();
+
+        for i in 0..7 {
+            data = match util::array::read_from_slice(&mut digests[i], data) {
+                Some(v) => v,
+                None => return Err(OpenError::InvalidEntryOffset(index)),
+            };
+        }
+
+        // Read keys.
+        let mut keys: [[u8; 256]; 7] = uninit();
+
+        for i in 0..7 {
+            data = match util::array::read_from_slice(&mut keys[i], data) {
+                Some(v) => v,
+                None => return Err(OpenError::InvalidEntryOffset(index)),
+            };
+        }
+
+        // Decrypt key 3.
+        let key3 = self.ctx.pkg_key3();
+
+        self.entry_key3 = match key3.decrypt(rsa::PaddingScheme::PKCS1v15Encrypt, &keys[3]) {
+            Ok(v) => v,
+            Err(e) => return Err(OpenError::DecryptEntryKeyFailed(3, e)),
+        };
 
         Ok(())
     }
@@ -327,12 +334,6 @@ impl<'c> Pkg<'c> {
     }
 }
 
-struct EntryKeys {
-    seed: [u8; 32],
-    digests: [[u8; 32]; 7],
-    keys: [[u8; 256]; 7],
-}
-
 #[derive(Debug)]
 pub enum OpenError {
     OpenFailed(std::io::Error),
@@ -340,6 +341,7 @@ pub enum OpenError {
     InvalidHeader,
     FindEntryKeyFailed(FindEntryError),
     InvalidEntryOffset(usize),
+    DecryptEntryKeyFailed(usize, rsa::errors::Error),
 }
 
 impl Error for OpenError {
@@ -348,6 +350,7 @@ impl Error for OpenError {
             Self::OpenFailed(e) => Some(e),
             Self::MapFailed(e) => Some(e),
             Self::FindEntryKeyFailed(e) => Some(e),
+            Self::DecryptEntryKeyFailed(_, e) => Some(e),
             _ => None,
         }
     }
@@ -361,6 +364,7 @@ impl Display for OpenError {
             Self::InvalidHeader => f.write_str("PKG header is not valid"),
             Self::FindEntryKeyFailed(e) => e.fmt(f),
             Self::InvalidEntryOffset(num) => write!(f, "entry #{} has invalid data offset", num),
+            Self::DecryptEntryKeyFailed(k, _) => write!(f, "cannot decrypt entry #{}", k),
         }
     }
 }
@@ -398,7 +402,6 @@ pub enum DumpEntryError {
     CreateDestinationFailed(std::io::Error),
     WriteDestinationFailed(std::io::Error),
     NoDecryptionKey(usize),
-    KeyDecryptionFailed(usize, rsa::errors::Error),
 }
 
 impl Error for DumpEntryError {
@@ -406,7 +409,6 @@ impl Error for DumpEntryError {
         match self {
             Self::FindEntryFailed(e) => Some(e),
             Self::CreateDestinationFailed(e) | Self::WriteDestinationFailed(e) => Some(e),
-            Self::KeyDecryptionFailed(_, e) => Some(e),
             _ => None,
         }
     }
@@ -419,7 +421,6 @@ impl Display for DumpEntryError {
             Self::CreateDestinationFailed(e) => e.fmt(f),
             Self::WriteDestinationFailed(e) => e.fmt(f),
             Self::NoDecryptionKey(num) => write!(f, "no decryption key for entry #{}", num),
-            Self::KeyDecryptionFailed(_, e) => e.fmt(f),
         }
     }
 }
