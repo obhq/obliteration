@@ -13,8 +13,18 @@ pub extern "C" fn context_new(error: *mut *mut c_char) -> *mut Context {
         return null_mut();
     }
 
+    let fake_pfs_key = keys::fake_pfs_key();
+
+    if let Err(e) = fake_pfs_key.validate() {
+        util::str::set_c(error, &e.to_string());
+        return null_mut();
+    }
+
     // Construct context.
-    let ctx = Box::new(Context::new(pkg_key3));
+    let ctx = Box::new(Context {
+        pkg_key3,
+        fake_pfs_key,
+    });
 
     Box::into_raw(ctx)
 }
@@ -26,14 +36,15 @@ pub extern "C" fn context_free(ctx: *mut Context) {
 
 pub struct Context {
     pkg_key3: rsa::RsaPrivateKey,
+    fake_pfs_key: rsa::RsaPrivateKey,
 }
 
 impl Context {
-    pub fn new(pkg_key3: rsa::RsaPrivateKey) -> Self {
-        Self { pkg_key3 }
-    }
-
     pub fn pkg_key3(&self) -> &rsa::RsaPrivateKey {
         &self.pkg_key3
+    }
+
+    pub fn fake_pfs_key(&self) -> &rsa::RsaPrivateKey {
+        &self.fake_pfs_key
     }
 }

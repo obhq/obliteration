@@ -1,6 +1,7 @@
 use self::entry::Entry;
 use self::header::Header;
 use self::param::Param;
+use aes::cipher::generic_array::GenericArray;
 use aes::cipher::{BlockDecryptMut, KeyIvInit};
 use context::Context;
 use sha2::Digest;
@@ -128,6 +129,7 @@ pub struct Pkg<'c> {
     raw: memmap2::Mmap,
     header: Header,
     entry_key3: Vec<u8>,
+    ekpfs: Vec<u8>,
 }
 
 impl<'c> Pkg<'c> {
@@ -155,9 +157,11 @@ impl<'c> Pkg<'c> {
             raw,
             header,
             entry_key3: Vec::new(),
+            ekpfs: Vec::new(),
         };
 
         pkg.load_entry_key3()?;
+        pkg.load_ekpfs()?;
 
         Ok(pkg)
     }
@@ -180,7 +184,7 @@ impl<'c> Pkg<'c> {
 
     pub fn dump_entry<F: AsRef<Path>>(&self, id: u32, file: F) -> Result<(), DumpEntryError> {
         // Find target entry.
-        let (entry, index, mut data) = match self.find_entry(id) {
+        let (entry, index, data) = match self.find_entry(id) {
             Ok(v) => v,
             Err(e) => return Err(DumpEntryError::FindEntryFailed(e)),
         };
@@ -192,32 +196,83 @@ impl<'c> Pkg<'c> {
         };
 
         if entry.is_encrypted() {
-            // Get decryption key.
             if entry.key_index() != 3 || self.entry_key3.is_empty() {
                 return Err(DumpEntryError::NoDecryptionKey(index));
             }
 
-            let (key, iv) = self.derive_entry_key3(&entry);
-            let mut decryptor = cbc::Decryptor::<aes::Aes128>::new(&key.into(), &iv.into());
-
-            loop {
-                // Decrypt.
-                let mut block: [u8; 16] = uninit();
-
-                data = match util::array::read_from_slice(&mut block, data) {
-                    Some(v) => v,
-                    None => break,
-                };
-
-                decryptor.decrypt_block_mut(&mut block.into());
-
-                // Write file.
-                if let Err(e) = file.write_all(&block) {
-                    return Err(DumpEntryError::WriteDestinationFailed(e));
-                }
+            // Decrypt and dump data.
+            if let Err(e) = self.decrypt_entry_data(&entry, data, |b| file.write_all(&b)) {
+                return Err(DumpEntryError::WriteDestinationFailed(e));
             }
         } else if let Err(e) = file.write_all(data) {
             return Err(DumpEntryError::WriteDestinationFailed(e));
+        }
+
+        Ok(())
+    }
+
+    fn load_ekpfs(&mut self) -> Result<(), OpenError> {
+        // Locate image key entry.
+        let (entry, _, data) = match self.find_entry(Entry::PFS_IMAGE_KEY) {
+            Ok(v) => v,
+            Err(e) => match e {
+                FindEntryError::NotFound => return Err(OpenError::PfsImageKeyNotFound),
+                _ => return Err(OpenError::FindPfsImageKeyFailed(e)),
+            },
+        };
+
+        // Decrypt the entry.
+        let mut encrypted: Vec<u8> = Vec::with_capacity(data.len());
+
+        let _ = self.decrypt_entry_data(&entry, data, |b| -> Result<(), ()> {
+            encrypted.extend(b);
+            Ok(())
+        });
+
+        // Decrypt EKPFS with fake pkg key.
+        let fake_key = self.ctx.fake_pfs_key();
+
+        self.ekpfs = match fake_key.decrypt(rsa::PaddingScheme::PKCS1v15Encrypt, &encrypted) {
+            Ok(v) => v,
+            Err(e) => return Err(OpenError::DecryptEkpsfFailed(e)),
+        };
+
+        Ok(())
+    }
+
+    fn decrypt_entry_data<O, E>(
+        &self,
+        entry: &Entry,
+        mut encrypted: &[u8],
+        mut output: O,
+    ) -> Result<(), E>
+    where
+        O: FnMut([u8; 16]) -> Result<(), E>,
+    {
+        if encrypted.len() % 16 != 0 {
+            panic!("The size of encrypted data must be multiply of 16");
+        }
+
+        // Setup decryptor.
+        let (key, iv) = self.derive_entry_key3(entry);
+        let mut decryptor = cbc::Decryptor::<aes::Aes128>::new(&key.into(), &iv.into());
+
+        // Dump blocks.
+        loop {
+            let mut block: [u8; 16] = uninit();
+
+            encrypted = match util::array::read_from_slice(&mut block, encrypted) {
+                Some(v) => v,
+                None => break,
+            };
+
+            decryptor.decrypt_block_mut(GenericArray::from_mut_slice(&mut block));
+
+            let result = output(block);
+
+            if result.is_err() {
+                return result;
+            }
         }
 
         Ok(())
@@ -254,7 +309,7 @@ impl<'c> Pkg<'c> {
         let (_, index, mut data) = match self.find_entry(Entry::ENTRY_KEYS) {
             Ok(v) => v,
             Err(e) => match e {
-                FindEntryError::NotFound => return Ok(()),
+                FindEntryError::NotFound => return Err(OpenError::EntryKeyNotFound),
                 _ => return Err(OpenError::FindEntryKeyFailed(e)),
             },
         };
@@ -339,9 +394,13 @@ pub enum OpenError {
     OpenFailed(std::io::Error),
     MapFailed(std::io::Error),
     InvalidHeader,
+    EntryKeyNotFound,
     FindEntryKeyFailed(FindEntryError),
     InvalidEntryOffset(usize),
     DecryptEntryKeyFailed(usize, rsa::errors::Error),
+    PfsImageKeyNotFound,
+    FindPfsImageKeyFailed(FindEntryError),
+    DecryptEkpsfFailed(rsa::errors::Error),
 }
 
 impl Error for OpenError {
@@ -351,6 +410,8 @@ impl Error for OpenError {
             Self::MapFailed(e) => Some(e),
             Self::FindEntryKeyFailed(e) => Some(e),
             Self::DecryptEntryKeyFailed(_, e) => Some(e),
+            Self::FindPfsImageKeyFailed(e) => Some(e),
+            Self::DecryptEkpsfFailed(e) => Some(e),
             _ => None,
         }
     }
@@ -362,9 +423,13 @@ impl Display for OpenError {
             Self::OpenFailed(e) => e.fmt(f),
             Self::MapFailed(e) => e.fmt(f),
             Self::InvalidHeader => f.write_str("PKG header is not valid"),
+            Self::EntryKeyNotFound => f.write_str("no PKG entry key available"),
             Self::FindEntryKeyFailed(e) => e.fmt(f),
             Self::InvalidEntryOffset(num) => write!(f, "entry #{} has invalid data offset", num),
-            Self::DecryptEntryKeyFailed(k, _) => write!(f, "cannot decrypt entry #{}", k),
+            Self::DecryptEntryKeyFailed(k, _) => write!(f, "cannot decrypt entry key #{}", k),
+            Self::PfsImageKeyNotFound => f.write_str("no PFS image key in the PKG"),
+            Self::FindPfsImageKeyFailed(e) => e.fmt(f),
+            Self::DecryptEkpsfFailed(_) => f.write_str("cannot decrypt EKPFS"),
         }
     }
 }

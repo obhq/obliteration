@@ -13,6 +13,7 @@ impl Entry {
     pub const RAW_SIZE: usize = 32;
 
     pub const ENTRY_KEYS: u32 = 0x00000010;
+    pub const PFS_IMAGE_KEY: u32 = 0x00000020;
     pub const PARAM_SFO: u32 = 0x00001000;
     pub const PIC1_PNG: u32 = 0x00001006;
     pub const ICON0_PNG: u32 = 0x00001200;
