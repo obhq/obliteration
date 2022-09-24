@@ -6,7 +6,7 @@ find_package(Qt6 COMPONENTS Widgets REQUIRED)
 find_package(Threads REQUIRED)
 
 # Setup Qt.
-qt_standard_project_setup()
+qt6_standard_project_setup()
 
 unset(CMAKE_AUTOMOC) # We don't want to enable AUTOMOC on sub-directories.
 unset(CMAKE_AUTOUIC) # Same here.
