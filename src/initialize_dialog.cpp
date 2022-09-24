@@ -45,7 +45,7 @@ QWidget *InitializeDialog::setupGamesDirectory()
     // Input.
     m_gamesDirectory = new QLineEdit();
     m_gamesDirectory->setText(readGamesDirectorySetting());
-    m_gamesDirectory->setMinimumWidth(400.0 * devicePixelRatioF());
+    m_gamesDirectory->setMinimumWidth(400);
 
     layout->addWidget(m_gamesDirectory);
 

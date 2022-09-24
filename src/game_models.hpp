@@ -2,6 +2,7 @@
 
 #include <QAbstractListModel>
 #include <QList>
+#include <QPixmap>
 
 class Game final : public QObject {
 public:
@@ -11,6 +12,7 @@ public:
 public:
     const QString &name() const { return m_name; }
     const QString &directory() const { return m_directory; }
+    QPixmap icon() const;
 
 private:
     QString m_name;

@@ -327,10 +327,10 @@ void MainWindow::restoreGeometry()
 
     settings.beginGroup(SettingGroups::mainWindow);
 
-    resize(settings.value("size", QSize(1000.0 * devicePixelRatioF(), 600.0 * devicePixelRatioF())).toSize());
+    resize(settings.value("size", QSize(1000, 600)).toSize());
 
     if (qGuiApp->platformName() != "wayland") {
-        move(settings.value("pos", QPoint(200.0 * devicePixelRatioF(), 200.0 * devicePixelRatioF())).toPoint());
+        move(settings.value("pos", QPoint(200, 200)).toPoint());
     }
 }
 
