@@ -5,12 +5,6 @@ include(ExternalProject)
 find_package(Qt6 COMPONENTS Widgets REQUIRED)
 find_package(Threads REQUIRED)
 
-# Setup Qt.
-qt6_standard_project_setup()
-
-unset(CMAKE_AUTOMOC) # We don't want to enable AUTOMOC on sub-directories.
-unset(CMAKE_AUTOUIC) # Same here.
-
 # Setup Rust target.
 if(WIN32)
     set(LIBOBLITERATION $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/debug/obliteration.lib,${CMAKE_CURRENT_SOURCE_DIR}/target/release/obliteration.lib>)
@@ -57,3 +51,12 @@ if(WIN32)
 else()
     target_link_libraries(obliteration PRIVATE ${CMAKE_DL_LIBS})
 endif()
+
+# Setup installation.
+if(WIN32)
+    install(TARGETS obliteration DESTINATION .)
+else()
+    install(TARGETS obliteration DESTINATION bin)
+endif()
+
+install(SCRIPT post-install.cmake)
