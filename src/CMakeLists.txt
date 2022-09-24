@@ -2,8 +2,14 @@
 include(ExternalProject)
 
 # External dependencies.
-find_package(Qt5 COMPONENTS Widgets REQUIRED)
+find_package(Qt6 COMPONENTS Widgets REQUIRED)
 find_package(Threads REQUIRED)
+
+# Setup Qt.
+qt_standard_project_setup()
+
+unset(CMAKE_AUTOMOC) # We don't want to enable AUTOMOC on sub-directories.
+unset(CMAKE_AUTOUIC) # Same here.
 
 # Setup Rust target.
 if(WIN32)
@@ -42,7 +48,7 @@ set_property(TARGET obliteration PROPERTY AUTORCC ON)
 
 target_compile_features(obliteration PRIVATE cxx_std_17)
 
-target_link_libraries(obliteration PRIVATE Qt5::Widgets)
+target_link_libraries(obliteration PRIVATE Qt6::Widgets)
 target_link_libraries(obliteration PRIVATE Threads::Threads)
 target_link_libraries(obliteration PRIVATE ${LIBOBLITERATION})
 
@@ -51,12 +57,3 @@ if(WIN32)
 else()
     target_link_libraries(obliteration PRIVATE ${CMAKE_DL_LIBS})
 endif()
-
-# Setup installation.
-if(WIN32)
-    install(TARGETS obliteration DESTINATION .)
-else()
-    install(TARGETS obliteration DESTINATION bin)
-endif()
-
-install(SCRIPT post-install.cmake)

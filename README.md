@@ -30,9 +30,9 @@ Obliteration is an experimental PS4 emulator based on [Kyty](https://github.com/
 - Rust 1.63
 - CMake 3.16
 
-### Install Qt
+### Install Qt 6.2
 
-You need to install Qt 5 manually on your system before you proceed.
+You need to install Qt 6.2 manually on your system before you proceed.
 
 ### Install Vulkan SDK
 
