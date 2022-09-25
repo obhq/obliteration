@@ -3,6 +3,7 @@ use util::mem::{read_u32_be, read_u64_be};
 pub struct Header {
     entry_count: u32,
     table_offset: u32,
+    pfs_flags: PfsFlags,
     pfs_offset: u64,
     pfs_size: u64,
 }
@@ -25,13 +26,15 @@ impl Header {
 
         // Read fields.
         let entry_count = read_u32_be(pkg, 0x10);
-        let table_offset = read_u32_be(pkg, 0x018);
+        let table_offset = read_u32_be(pkg, 0x18);
+        let pfs_flags = PfsFlags(read_u64_be(pkg, 0x408));
         let pfs_offset = read_u64_be(pkg, 0x410);
         let pfs_size = read_u64_be(pkg, 0x418);
 
         Ok(Self {
             entry_count,
             table_offset,
+            pfs_flags,
             pfs_offset,
             pfs_size,
         })
@@ -43,6 +46,28 @@ impl Header {
 
     pub fn table_offset(&self) -> usize {
         self.table_offset as _
+    }
+
+    pub fn pfs_flags(&self) -> PfsFlags {
+        self.pfs_flags
+    }
+
+    pub fn pfs_offset(&self) -> usize {
+        self.pfs_offset as _
+    }
+
+    pub fn pfs_size(&self) -> usize {
+        self.pfs_size as _
+    }
+}
+
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+pub struct PfsFlags(u64);
+
+impl PfsFlags {
+    pub fn is_new_encryption(&self) -> bool {
+        self.0 & 0x2000000000000000 != 0
     }
 }
 

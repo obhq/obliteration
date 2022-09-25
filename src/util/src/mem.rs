@@ -1,4 +1,4 @@
-use std::mem::MaybeUninit;
+use std::mem::{size_of, MaybeUninit};
 
 macro_rules! read_le {
     ($ty:ty, $from:ident, $offset:ident, $size:literal) => {{
@@ -43,6 +43,14 @@ macro_rules! write_be {
 /// Just a shortcut to `MaybeUninit::uninit().assume_init()`.
 pub fn uninit<T>() -> T {
     unsafe { MaybeUninit::uninit().assume_init() }
+}
+
+pub fn read_u8(p: *const u8, i: usize) -> u8 {
+    unsafe { *p.offset(i as _) }
+}
+
+pub fn write_u8(p: *mut u8, i: usize, v: u8) {
+    unsafe { *p.offset(i as _) = v };
 }
 
 pub fn read_u16_le(p: *const u8, i: usize) -> u16 {
@@ -91,4 +99,16 @@ pub fn read_u64_be(p: *const u8, i: usize) -> u64 {
 
 pub fn write_u64_be(p: *mut u8, i: usize, v: u64) {
     write_be!(p, i, v, 8)
+}
+
+pub fn read_array<T, const L: usize>(p: *const u8, i: usize) -> [T; L]
+where
+    T: Copy,
+{
+    let p = unsafe { p.offset(i as _) };
+    let mut r: [T; L] = uninit();
+
+    unsafe { p.copy_to_nonoverlapping(r.as_mut_ptr() as _, L * size_of::<T>()) };
+
+    r
 }

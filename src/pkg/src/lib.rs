@@ -6,6 +6,7 @@ use aes::cipher::{BlockDecryptMut, KeyIvInit};
 use context::Context;
 use sha2::Digest;
 use std::error::Error;
+use std::ffi::c_void;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::{Read, Write};
@@ -17,6 +18,7 @@ use util::mem::uninit;
 pub mod entry;
 pub mod header;
 pub mod param;
+pub mod pfs;
 
 #[no_mangle]
 pub extern "C" fn pkg_open<'c>(
@@ -62,6 +64,20 @@ pub extern "C" fn pkg_dump_entry(pkg: &Pkg, id: u32, file: *const c_char) -> *mu
         Ok(_) => null_mut(),
         Err(e) => util::str::to_c(&e.to_string()),
     }
+}
+
+#[no_mangle]
+pub extern "C" fn pkg_dump_pfs(
+    pkg: &Pkg,
+    dir: *const c_char,
+    progress: extern "C" fn(usize, usize, *mut c_void),
+    ud: *mut c_void,
+) -> *mut c_char {
+    if let Err(e) = pkg.dump_pfs() {
+        return util::str::to_c(&e.to_string());
+    }
+
+    null_mut()
 }
 
 #[no_mangle]
@@ -207,6 +223,24 @@ impl<'c> Pkg<'c> {
         } else if let Err(e) = file.write_all(data) {
             return Err(DumpEntryError::WriteDestinationFailed(e));
         }
+
+        Ok(())
+    }
+
+    pub fn dump_pfs(&self) -> Result<(), DumpPfsError> {
+        // Get outer PFS.
+        let outer_offset = self.header.pfs_offset();
+        let outer_size = self.header.pfs_size();
+        let outer = match self.raw.get(outer_offset..(outer_offset + outer_size)) {
+            Some(v) => v,
+            None => return Err(DumpPfsError::InvalidOuterOffset),
+        };
+
+        // Dump pfs_image.dat.
+        let reader = match pfs::Reader::new(outer, self.header.pfs_flags(), &self.ekpfs) {
+            Ok(v) => v,
+            Err(e) => return Err(DumpPfsError::CreateReaderFailed(e)),
+        };
 
         Ok(())
     }
@@ -453,10 +487,10 @@ impl Display for GetParamError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             Self::FindEntryFailed(e) => match e {
-                FindEntryError::NotFound => f.write_str("the package does not have param.sfo"),
+                FindEntryError::NotFound => f.write_str("the PKG does not have param.sfo"),
                 _ => e.fmt(f),
             },
-            Self::ReadFailed(_) => f.write_str("the package has malformed param.sfo"),
+            Self::ReadFailed(_) => f.write_str("the PKG has malformed param.sfo"),
         }
     }
 }
@@ -486,6 +520,30 @@ impl Display for DumpEntryError {
             Self::CreateDestinationFailed(e) => e.fmt(f),
             Self::WriteDestinationFailed(e) => e.fmt(f),
             Self::NoDecryptionKey(num) => write!(f, "no decryption key for entry #{}", num),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum DumpPfsError {
+    InvalidOuterOffset,
+    CreateReaderFailed(pfs::NewError),
+}
+
+impl Error for DumpPfsError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::CreateReaderFailed(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl Display for DumpPfsError {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::InvalidOuterOffset => f.write_str("the PKG have invalid offset for outer PFS"),
+            Self::CreateReaderFailed(_) => f.write_str("cannot create PFS reader"),
         }
     }
 }

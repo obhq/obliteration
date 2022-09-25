@@ -7,7 +7,9 @@ edition = "2021"
 aes = "0.8"
 cbc = "0.1"
 context = { path = "../context" }
+hmac = "0.12"
 memmap2 = "0.5"
 rsa = "0.6"
 sha2 = "0.10"
 util = { path = "../util" }
+xts-mode = "0.5"

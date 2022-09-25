@@ -136,6 +136,7 @@ checksum = "adfbc57365a37acbd2ebf2b64d7e69bb766e2fea813521ed536f5d0520dcf86c"
 dependencies = [
  "block-buffer",
  "crypto-common",
+ "subtle",
 ]
 
 [[package]]
@@ -164,6 +165,15 @@ dependencies = [
  "cfg-if",
  "libc",
  "wasi",
+]
+
+[[package]]
+name = "hmac"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c49c37c09c17a53d937dfbb742eb3a961d65a994e6bcdcf37e7399d0cc8ab5e"
+dependencies = [
+ "digest",
 ]
 
 [[package]]
@@ -301,10 +311,12 @@ dependencies = [
  "aes",
  "cbc",
  "context",
+ "hmac",
  "memmap2",
  "rsa",
  "sha2",
  "util",
+ "xts-mode",
 ]
 
 [[package]]
@@ -425,6 +437,16 @@ name = "wasi"
 version = "0.11.0+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
+
+[[package]]
+name = "xts-mode"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64b6e967c66bb6f22084acde482d13155703a9d0d1fa46fa875ffe9d9fe99745"
+dependencies = [
+ "byteorder",
+ "cipher",
+]
 
 [[package]]
 name = "zeroize"

@@ -71,7 +71,6 @@ impl Param {
             let key_offset = key_table + read_u16_le(entry, 0) as usize;
             let format = read_u16_be(entry, 2);
             let len = read_u32_le(entry, 4) as usize;
-            let max = read_u32_le(entry, 8);
             let data_offset = data_table + read_u32_le(entry, 12) as usize;
 
             if len == 0 {

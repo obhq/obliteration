@@ -93,7 +93,7 @@ bool MainWindow::loadGames()
     progress.setLabelText("Loading games...");
 
     for (auto &gameId : games) {
-        if (progress.wasCanceled() || !loadGame(&progress, gameId)) {
+        if (progress.wasCanceled() || !loadGame(gameId)) {
             return false;
         }
 
@@ -144,36 +144,23 @@ void MainWindow::installPkg()
         return;
     }
 
-    // Setup loading progress.
-    QProgressDialog progress(this);
-    int step = -1;
-
-    progress.setMaximum(3);
-    progress.setCancelButtonText("Cancel");
-    progress.setWindowModality(Qt::WindowModal);
-    progress.setValue(++step);
-
     // Open a PKG.
     pkg *pkg;
     char *error;
 
-    progress.setLabelText(QString("Opening %1...").arg(pkgPath.c_str()));
-
     pkg = pkg_open(m_context, pkgPath.c_str(), &error);
 
     if (!pkg) {
-        QMessageBox::critical(&progress, "Error", QString("Cannot open %1: %2").arg(pkgPath.c_str()).arg(error));
+        QMessageBox::critical(this, "Error", QString("Cannot open %1: %2").arg(pkgPath.c_str()).arg(error));
         std::free(error);
         return;
     }
-
-    progress.setValue(++step);
 
     // Get game ID.
     auto param = pkg_get_param(pkg, &error);
 
     if (!param) {
-        QMessageBox::critical(&progress, "Error", QString("Failed to get param.sfo from %1: %2").arg(pkgPath.c_str()).arg(error));
+        QMessageBox::critical(this, "Error", QString("Failed to get param.sfo from %1: %2").arg(pkgPath.c_str()).arg(error));
         std::free(error);
         pkg_close(pkg);
         return;
@@ -186,14 +173,12 @@ void MainWindow::installPkg()
     // Create game directory.
     auto gamesDirectory = readGamesDirectorySetting();
 
-    progress.setLabelText("Extracting PKG entries...");
-
     if (!QDir(gamesDirectory).mkdir(gameId)) {
         QString error("Cannot create a directory %1 inside %2.");
 
         error += " If you have an unsuccessful installation from the previous attempt you need to remove this directory before install again.";
 
-        QMessageBox::critical(&progress, "Error", error.arg(gameId).arg(gamesDirectory));
+        QMessageBox::critical(this, "Error", error.arg(gameId).arg(gamesDirectory));
         pkg_close(pkg);
         return;
     }
@@ -204,7 +189,7 @@ void MainWindow::installPkg()
     error = pkg_dump_entry(pkg, PKG_ENTRY_PARAM_SFO, joinPath(directory.c_str(), "param.sfo").c_str());
 
     if (error) {
-        QMessageBox::critical(&progress, "Error", QString("Failed to install param.sfo to %1: %2").arg(directory.c_str(), error));
+        QMessageBox::critical(this, "Error", QString("Failed to install param.sfo to %1: %2").arg(directory.c_str(), error));
         std::free(error);
         pkg_close(pkg);
         return;
@@ -214,7 +199,7 @@ void MainWindow::installPkg()
     error = pkg_dump_entry(pkg, PKG_ENTRY_PIC1_PNG, joinPath(directory.c_str(), "pic1.png").c_str());
 
     if (error) {
-        QMessageBox::critical(&progress, "Error", QString("Failed to install pic1.png to %1: %2").arg(directory.c_str(), error));
+        QMessageBox::critical(this, "Error", QString("Failed to install pic1.png to %1: %2").arg(directory.c_str(), error));
         std::free(error);
         pkg_close(pkg);
         return;
@@ -224,23 +209,41 @@ void MainWindow::installPkg()
     error = pkg_dump_entry(pkg, PKG_ENTRY_ICON0_PNG, joinPath(directory.c_str(), "icon0.png").c_str());
 
     if (error) {
-        QMessageBox::critical(&progress, "Error", QString("Failed to install pic1.png to %1: %2").arg(directory.c_str(), error));
+        QMessageBox::critical(this, "Error", QString("Failed to install pic1.png to %1: %2").arg(directory.c_str(), error));
         std::free(error);
         pkg_close(pkg);
         return;
     }
 
-    progress.setValue(++step);
-
     // Dump PFS.
+    QProgressDialog progress(this);
+
     progress.setLabelText("Extracting PFS...");
+    progress.setCancelButton(nullptr);
+    progress.setValue(0);
+    progress.setWindowModality(Qt::WindowModal);
+
+    error = pkg_dump_pfs(pkg, directory.c_str(), [](std::size_t written, std::size_t size, void *ud) {
+        auto progress = reinterpret_cast<QProgressDialog *>(ud);
+        auto toProgress = (size < (1024 * 1024 * 1024)) ? [](std::size_t v) { return static_cast<int>(v); } : [](std::size_t v) { return static_cast<int>(v / (1024 * 1024 * 1024)); };
+
+        if (!progress->value()) {
+            progress->setMaximum(toProgress(size));
+        }
+
+        progress->setValue(toProgress(written));
+    }, &progress);
 
     pkg_close(pkg);
 
+    if (error) {
+        QMessageBox::critical(&progress, "Error", QString("Failed to extract pfs_image.dat: %1").arg(error));
+        std::free(error);
+        return;
+    }
+
     // Add to game list.
-    progress.setLabelText("Adding to game list...");
-    auto success = loadGame(&progress, gameId);
-    progress.setValue(++step);
+    auto success = loadGame(gameId);
 
     if (success) {
         QMessageBox::information(this, "Success", "Installation completed successfully.");
@@ -292,7 +295,7 @@ void MainWindow::requestGamesContextMenu(const QPoint &pos)
     }
 }
 
-bool MainWindow::loadGame(QWidget *progress, const QString &gameId)
+bool MainWindow::loadGame(const QString &gameId)
 {
     auto gamesDirectory = readGamesDirectorySetting();
     auto gamePath = joinPath(gamesDirectory, gameId);
@@ -306,7 +309,7 @@ bool MainWindow::loadGame(QWidget *progress, const QString &gameId)
     param = pkg_param_open(paramPath.c_str(), &error);
 
     if (!param) {
-        QMessageBox::critical(progress, "Error", QString("Cannot open %1: %2").arg(paramPath.c_str()).arg(error));
+        QMessageBox::critical(this, "Error", QString("Cannot open %1: %2").arg(paramPath.c_str()).arg(error));
         std::free(error);
         return false;
     }
