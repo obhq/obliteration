@@ -1,6 +1,3 @@
-# The purpose of this crate is to generate a static library to link with the GUI. So it is required
-# to add other crates that expose API to the GUI as a dependency of this crate. It is also required
-# to re-export any API of those crates in src/lib.rs too.
 [package]
 name = "obliteration"
 version = "0.1.0"
@@ -12,4 +9,5 @@ crate-type = ["staticlib"]
 [dependencies]
 context = { path = "../context" }
 emulator = { path = "../emulator" }
+error = { path = "../error" }
 pkg = { path = "../pkg" }

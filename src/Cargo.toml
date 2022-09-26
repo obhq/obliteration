@@ -2,6 +2,7 @@
 members = [
     "context",
     "emulator",
+    "error",
     "obliteration",
     "pkg",
     "util"

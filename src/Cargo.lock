@@ -147,6 +147,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "error"
+version = "0.1.0"
+dependencies = [
+ "util",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -270,6 +277,7 @@ version = "0.1.0"
 dependencies = [
  "context",
  "emulator",
+ "error",
  "pkg",
 ]
 
