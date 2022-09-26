@@ -6,6 +6,7 @@ use util::mem::{read_array, read_u16_le, read_u32_le, read_u64_le};
 pub struct Header {
     mode: Mode,
     blocksz: u32,
+    ndinode: u64,
     ndinodeblock: u64,
     key_seed: [u8; 16],
 }
@@ -35,12 +36,14 @@ impl Header {
         // Read fields.
         let mode = Mode(read_u16_le(hdr, 0x1c));
         let blocksz = read_u32_le(hdr, 0x20);
+        let ndinode = read_u64_le(hdr, 0x30);
         let ndinodeblock = read_u64_le(hdr, 0x40);
         let key_seed = read_array(hdr, 0x370);
 
         Ok(Self {
             mode,
             blocksz,
+            ndinode,
             ndinodeblock,
             key_seed,
         })
@@ -54,6 +57,12 @@ impl Header {
         self.blocksz as _
     }
 
+    /// Gets a number of total inodes.
+    pub fn inode_count(&self) -> usize {
+        self.ndinode as _
+    }
+
+    /// Gets a number of blocks containing inode (not a number of inode).
     pub fn inode_block_count(&self) -> usize {
         self.ndinodeblock as _
     }

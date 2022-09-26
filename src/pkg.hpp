@@ -1,6 +1,7 @@
 #pragma once
 
 #include "context.hpp"
+#include "error.hpp"
 
 #include <cinttypes>
 #include <cstddef>
@@ -21,7 +22,7 @@ extern "C" {
     char *pkg_dump_entry(const pkg *pkg, std::uint32_t id, const char *file);
 
     // Dump the outer PFS to get pfs_image.dat.
-    char *pkg_dump_pfs(const pkg *pkg, const char *dir, void (*progress) (std::size_t, std::size_t, void *), void *ud);
+    error *pkg_dump_pfs(const pkg *pkg, const char *dir, void (*progress) (std::size_t, std::size_t, void *), void *ud);
 
     pkg_param *pkg_param_open(const char *file, char **error);
     char *pkg_param_title_id(const pkg_param *param);

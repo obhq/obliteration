@@ -1,3 +1,4 @@
+use self::inode::Inode;
 use crate::header::PfsFlags;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
@@ -7,9 +8,13 @@ use util::mem::uninit;
 
 mod block;
 pub mod header;
+mod inode;
 
 pub struct Reader<'image> {
+    header: header::Header,
+    inodes: Vec<Inode>,
     block_reader: Box<dyn block::Reader<'image> + 'image>,
+    block_buffer: Vec<u8>, // A temporary buffer with the size of header.blocksize() to read data.
 }
 
 impl<'image> Reader<'image> {
@@ -20,9 +25,8 @@ impl<'image> Reader<'image> {
             Err(e) => return Err(NewError::InvalidHeader(e)),
         };
 
-        let block_size = header.block_size();
-
         // Construct block reader.
+        let block_size = header.block_size();
         let block_reader: Box<dyn block::Reader<'image> + 'image> = if header.mode().is_encrypted()
         {
             let key_seed = header.key_seed();
@@ -35,7 +39,26 @@ impl<'image> Reader<'image> {
             Box::new(block::UnencryptedReader::new(image))
         };
 
-        Ok(Self { block_reader })
+        // Read inode blocks.
+        let mut reader = Self {
+            inodes: Vec::with_capacity(header.inode_count()),
+            header,
+            block_reader,
+            block_buffer: util::mem::new_buffer::<u8>(block_size),
+        };
+
+        for block_num in 0..reader.header.inode_block_count() {
+            let completed = match reader.read_inode_block(block_num) {
+                Ok(v) => v,
+                Err(e) => return Err(NewError::ReadBlockFailed(block_num + 1, e)),
+            };
+
+            if completed {
+                break;
+            }
+        }
+
+        Ok(reader)
     }
 
     /// Gets data key and tweak key.
@@ -74,17 +97,57 @@ impl<'image> Reader<'image> {
 
         (data_key, tweak_key)
     }
+
+    fn read_inode_block(&mut self, block_num: usize) -> Result<bool, block::ReadError> {
+        // Read block.
+        let block_size = self.header.block_size();
+        let offset = block_size + block_num * block_size;
+
+        if let Err(e) = self
+            .block_reader
+            .read(offset, self.block_buffer.as_mut_slice())
+        {
+            return Err(e);
+        }
+
+        let mut block_data = self.block_buffer.as_slice();
+
+        // Read inodes in the block.
+        let reader = if self.header.mode().is_signed() {
+            Inode::read_signed
+        } else {
+            Inode::read_unsigned
+        };
+
+        while self.inodes.len() < self.header.inode_count() {
+            let inode = match reader(&mut block_data) {
+                Ok(v) => v,
+                Err(e) => match e {
+                    inode::ReadError::TooSmall => return Ok(false),
+                    inode::ReadError::IoFailed(e) => {
+                        panic!("Failed to read inode from a buffer: {}", e)
+                    }
+                },
+            };
+
+            self.inodes.push(inode);
+        }
+
+        Ok(true)
+    }
 }
 
 #[derive(Debug)]
 pub enum NewError {
     InvalidHeader(header::ReadError),
+    ReadBlockFailed(usize, block::ReadError),
 }
 
 impl Error for NewError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::InvalidHeader(e) => Some(e),
+            Self::ReadBlockFailed(_, e) => Some(e),
         }
     }
 }
@@ -93,6 +156,7 @@ impl Display for NewError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             Self::InvalidHeader(_) => f.write_str("invalid header"),
+            Self::ReadBlockFailed(b, _) => write!(f, "cannot read block #{}", b),
         }
     }
 }

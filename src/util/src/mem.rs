@@ -45,6 +45,17 @@ pub fn uninit<T>() -> T {
     unsafe { MaybeUninit::uninit().assume_init() }
 }
 
+pub fn new_buffer<T>(size: usize) -> Vec<T>
+where
+    T: Copy,
+{
+    let mut r: Vec<T> = Vec::with_capacity(size);
+
+    unsafe { r.set_len(size) };
+
+    r
+}
+
 pub fn read_u8(p: *const u8, i: usize) -> u8 {
     unsafe { *p.offset(i as _) }
 }

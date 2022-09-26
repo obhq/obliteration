@@ -14,7 +14,7 @@ extern "C" {
 class Error final {
 public:
     Error() : m_obj(nullptr) {}
-    explicit Error(error *obj) : m_obj(obj) {}
+    Error(error *obj) : m_obj(obj) {}
     Error(const Error &) = delete;
     ~Error()
     {

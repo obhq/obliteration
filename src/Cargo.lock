@@ -319,6 +319,7 @@ dependencies = [
  "aes",
  "cbc",
  "context",
+ "error",
  "hmac",
  "memmap2",
  "rsa",

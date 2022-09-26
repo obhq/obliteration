@@ -174,11 +174,11 @@ void MainWindow::installPkg()
     auto gamesDirectory = readGamesDirectorySetting();
 
     if (!QDir(gamesDirectory).mkdir(gameId)) {
-        QString error("Cannot create a directory %1 inside %2.");
+        QString msg("Cannot create a directory %1 inside %2.");
 
-        error += " If you have an unsuccessful installation from the previous attempt you need to remove this directory before install again.";
+        msg += " If you have an unsuccessful installation from the previous attempt you need to remove this directory before install again.";
 
-        QMessageBox::critical(this, "Error", error.arg(gameId).arg(gamesDirectory));
+        QMessageBox::critical(this, "Error", msg.arg(gameId).arg(gamesDirectory));
         pkg_close(pkg);
         return;
     }
@@ -223,7 +223,7 @@ void MainWindow::installPkg()
     progress.setValue(0);
     progress.setWindowModality(Qt::WindowModal);
 
-    error = pkg_dump_pfs(pkg, directory.c_str(), [](std::size_t written, std::size_t size, void *ud) {
+    Error newError = pkg_dump_pfs(pkg, directory.c_str(), [](std::size_t written, std::size_t size, void *ud) {
         auto progress = reinterpret_cast<QProgressDialog *>(ud);
         auto toProgress = (size < (1024 * 1024 * 1024)) ? [](std::size_t v) { return static_cast<int>(v); } : [](std::size_t v) { return static_cast<int>(v / (1024 * 1024 * 1024)); };
 
@@ -236,9 +236,8 @@ void MainWindow::installPkg()
 
     pkg_close(pkg);
 
-    if (error) {
-        QMessageBox::critical(&progress, "Error", QString("Failed to extract pfs_image.dat: %1").arg(error));
-        std::free(error);
+    if (newError) {
+        QMessageBox::critical(&progress, "Error", QString("Failed to extract pfs_image.dat: %1").arg(newError.message()));
         return;
     }
 

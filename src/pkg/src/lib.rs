@@ -72,9 +72,9 @@ pub extern "C" fn pkg_dump_pfs(
     dir: *const c_char,
     progress: extern "C" fn(usize, usize, *mut c_void),
     ud: *mut c_void,
-) -> *mut c_char {
+) -> *mut error::Error {
     if let Err(e) = pkg.dump_pfs() {
-        return util::str::to_c(&e.to_string());
+        return error::Error::new(&e);
     }
 
     null_mut()
