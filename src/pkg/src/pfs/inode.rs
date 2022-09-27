@@ -1,21 +1,61 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::Read;
-use util::mem::uninit;
+use util::mem::{read_array, read_u32_le, uninit};
 
-pub struct Inode {}
+pub struct Inode {
+    blocks: u32,
+    direct_blocks: [u32; 12],
+    direct_sigs: [Option<[u8; 32]>; 12],
+    indirect_blocks: [u32; 5],
+    indirect_signs: [Option<[u8; 32]>; 5],
+}
 
 impl Inode {
     pub fn read_unsigned<F: Read>(from: &mut F) -> Result<Self, ReadError> {
+        // Read common fields.
         let raw: [u8; 168] = Self::read_raw(from)?;
+        let mut ptr = raw.as_ptr();
+        let mut inode = Self::read_commons(ptr);
 
-        Ok(Self {})
+        // Read block pointers.
+        ptr = unsafe { ptr.offset(0x64) };
+
+        for i in 0..12 {
+            inode.direct_blocks[i] = read_u32_le(ptr, 0);
+            ptr = unsafe { ptr.offset(4) };
+        }
+
+        for i in 0..5 {
+            inode.indirect_blocks[i] = read_u32_le(ptr, 0);
+            ptr = unsafe { ptr.offset(4) };
+        }
+
+        Ok(inode)
     }
 
     pub fn read_signed<F: Read>(from: &mut F) -> Result<Self, ReadError> {
+        // Read common fields.
         let raw: [u8; 712] = Self::read_raw(from)?;
+        let mut ptr = raw.as_ptr();
+        let mut inode = Self::read_commons(ptr);
 
-        Ok(Self {})
+        // Read block pointers.
+        ptr = unsafe { ptr.offset(0x64) };
+
+        for i in 0..12 {
+            inode.direct_sigs[i] = Some(read_array(ptr, 0));
+            inode.direct_blocks[i] = read_u32_le(ptr, 32);
+            ptr = unsafe { ptr.offset(36) };
+        }
+
+        for i in 0..5 {
+            inode.indirect_signs[i] = Some(read_array(ptr, 0));
+            inode.indirect_blocks[i] = read_u32_le(ptr, 32);
+            ptr = unsafe { ptr.offset(36) };
+        }
+
+        Ok(inode)
     }
 
     fn read_raw<const L: usize, F: Read>(from: &mut F) -> Result<[u8; L], ReadError> {
@@ -30,6 +70,18 @@ impl Inode {
         }
 
         Ok(raw)
+    }
+
+    fn read_commons(raw: *const u8) -> Self {
+        let blocks = read_u32_le(raw, 0x60);
+
+        Self {
+            blocks,
+            direct_blocks: [0; 12],
+            direct_sigs: [None; 12],
+            indirect_blocks: [0; 5],
+            indirect_signs: [None; 5],
+        }
     }
 }
 
