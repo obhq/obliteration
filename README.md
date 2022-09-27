@@ -137,4 +137,6 @@ The entry point of the application is inside `src/main.cpp`.
 
 ## License
 
-MIT
+- All source code except `src/pfs` and `src/pkg` are licensed under MIT license.
+- `src/pfs` and `src/pkg` licensed under LGPL-3.0 license.
+- All release binaries are under GPL-3.0 license.
