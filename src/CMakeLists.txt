@@ -7,18 +7,18 @@ find_package(Threads REQUIRED)
 
 # Setup Rust target.
 if(WIN32)
-    set(LIBOBLITERATION $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/debug/obliteration.lib,${CMAKE_CURRENT_SOURCE_DIR}/target/release/obliteration.lib>)
+    set(LIBCORE $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/debug/core.lib,${CMAKE_CURRENT_SOURCE_DIR}/target/release/core.lib>)
 else()
-    set(LIBOBLITERATION $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/debug/libobliteration.a,${CMAKE_CURRENT_SOURCE_DIR}/target/release/libobliteration.a>)
+    set(LIBCORE $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/debug/libcore.a,${CMAKE_CURRENT_SOURCE_DIR}/target/release/libcore.a>)
 endif()
 
-ExternalProject_Add(libobliteration
+ExternalProject_Add(libcore
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}
     CONFIGURE_COMMAND ""
     BUILD_COMMAND cargo build $<IF:$<CONFIG:Debug>,-v,--release>
     BUILD_IN_SOURCE ON
     BUILD_ALWAYS ON
-    BUILD_BYPRODUCTS ${LIBOBLITERATION}
+    BUILD_BYPRODUCTS ${LIBCORE}
     INSTALL_COMMAND ""
     TEST_COMMAND cargo test
     TEST_EXCLUDE_FROM_MAIN ON)
@@ -35,7 +35,7 @@ add_executable(obliteration WIN32
     settings.cpp
     util.cpp)
 
-add_dependencies(obliteration libobliteration)
+add_dependencies(obliteration libcore)
 
 set_property(TARGET obliteration PROPERTY AUTOMOC ON)
 set_property(TARGET obliteration PROPERTY AUTORCC ON)
@@ -44,7 +44,7 @@ target_compile_features(obliteration PRIVATE cxx_std_17)
 
 target_link_libraries(obliteration PRIVATE Qt6::Widgets)
 target_link_libraries(obliteration PRIVATE Threads::Threads)
-target_link_libraries(obliteration PRIVATE ${LIBOBLITERATION})
+target_link_libraries(obliteration PRIVATE ${LIBCORE})
 
 if(WIN32)
     target_link_libraries(obliteration PRIVATE bcrypt imm32 setupapi userenv version winmm ws2_32)

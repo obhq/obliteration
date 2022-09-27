@@ -1,12 +1,12 @@
 [workspace]
 members = [
     "context",
+    "core",
     "emulator",
     "error",
-    "obliteration",
     "pfs",
     "pkg",
     "util"
 ]
 
-default-members = ["obliteration"]
+default-members = ["core"]
