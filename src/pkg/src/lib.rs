@@ -18,7 +18,6 @@ use util::mem::uninit;
 pub mod entry;
 pub mod header;
 pub mod param;
-pub mod pfs;
 
 #[no_mangle]
 pub extern "C" fn pkg_open<'c>(
@@ -229,17 +228,17 @@ impl<'c> Pkg<'c> {
 
     pub fn dump_pfs(&self) -> Result<(), DumpPfsError> {
         // Get outer PFS.
-        let outer_offset = self.header.pfs_offset();
-        let outer_size = self.header.pfs_size();
-        let outer = match self.raw.get(outer_offset..(outer_offset + outer_size)) {
+        let image_offset = self.header.pfs_offset();
+        let image_size = self.header.pfs_size();
+        let image = match self.raw.get(image_offset..(image_offset + image_size)) {
             Some(v) => v,
             None => return Err(DumpPfsError::InvalidOuterOffset),
         };
 
         // Dump pfs_image.dat.
-        let reader = match pfs::Reader::new(outer, self.header.pfs_flags(), &self.ekpfs) {
+        let pfs = match pfs::Pfs::open(image, self.header.pfs_flags(), Some(&self.ekpfs)) {
             Ok(v) => v,
-            Err(e) => return Err(DumpPfsError::CreateReaderFailed(e)),
+            Err(e) => return Err(DumpPfsError::OpenOuterFailed(e)),
         };
 
         Ok(())
@@ -527,13 +526,13 @@ impl Display for DumpEntryError {
 #[derive(Debug)]
 pub enum DumpPfsError {
     InvalidOuterOffset,
-    CreateReaderFailed(pfs::NewError),
+    OpenOuterFailed(pfs::OpenError),
 }
 
 impl Error for DumpPfsError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::CreateReaderFailed(e) => Some(e),
+            Self::OpenOuterFailed(e) => Some(e),
             _ => None,
         }
     }
@@ -542,8 +541,8 @@ impl Error for DumpPfsError {
 impl Display for DumpPfsError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
-            Self::InvalidOuterOffset => f.write_str("the PKG have invalid offset for outer PFS"),
-            Self::CreateReaderFailed(_) => f.write_str("cannot create PFS reader"),
+            Self::InvalidOuterOffset => f.write_str("invalid offset for outer PFS"),
+            Self::OpenOuterFailed(_) => f.write_str("cannot open outer PFS"),
         }
     }
 }

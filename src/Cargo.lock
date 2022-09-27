@@ -291,6 +291,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "pfs"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "generic-array",
+ "hmac",
+ "sha2",
+ "util",
+ "xts-mode",
+]
+
+[[package]]
 name = "pkcs1"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -320,12 +332,11 @@ dependencies = [
  "cbc",
  "context",
  "error",
- "hmac",
  "memmap2",
+ "pfs",
  "rsa",
  "sha2",
  "util",
- "xts-mode",
 ]
 
 [[package]]

@@ -13,12 +13,12 @@ pub struct Header {
 }
 
 impl Header {
-    pub fn read(pfs: &[u8]) -> Result<Self, ReadError> {
-        if pfs.len() < 0x380 {
+    pub fn read(image: &[u8]) -> Result<Self, ReadError> {
+        if image.len() < 0x380 {
             return Err(ReadError::TooSmall);
         }
 
-        let hdr = pfs.as_ptr();
+        let hdr = image.as_ptr();
 
         // Check version.
         let version = read_u64_le(hdr, 0x00);

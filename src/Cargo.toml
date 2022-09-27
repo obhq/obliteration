@@ -4,6 +4,7 @@ members = [
     "emulator",
     "error",
     "obliteration",
+    "pfs",
     "pkg",
     "util"
 ]
