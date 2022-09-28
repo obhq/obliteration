@@ -88,6 +88,10 @@ impl Mode {
         self.0 & 0x1 != 0
     }
 
+    pub fn is_64bits(&self) -> bool {
+        self.0 & 0x2 != 0
+    }
+
     pub fn is_encrypted(&self) -> bool {
         self.0 & 0x4 != 0
     }

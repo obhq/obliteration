@@ -1,3 +1,4 @@
+use crate::header::Mode;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::Read;
@@ -58,6 +59,18 @@ impl Inode {
         Ok(inode)
     }
 
+    pub fn direct_blocks(&self) -> &[u32; 12] {
+        &self.direct_blocks
+    }
+
+    pub fn indirect_blocks(&self) -> &[u32; 5] {
+        &self.indirect_blocks
+    }
+
+    pub fn block_count(&self) -> usize {
+        self.blocks as _
+    }
+
     fn read_raw<const L: usize, F: Read>(from: &mut F) -> Result<[u8; L], ReadError> {
         let mut raw: [u8; L] = uninit();
 
@@ -81,6 +94,47 @@ impl Inode {
             direct_sigs: [None; 12],
             indirect_blocks: [0; 5],
             indirect_signs: [None; 5],
+        }
+    }
+}
+
+pub struct BlockPointers<'raw> {
+    mode: Mode,
+    next: &'raw [u8],
+}
+
+impl<'raw> BlockPointers<'raw> {
+    pub fn new(mode: Mode, raw: &'raw [u8]) -> Self {
+        if mode.is_64bits() {
+            panic!("64-bits inode is not supported");
+        }
+
+        Self { mode, next: raw }
+    }
+}
+
+impl<'raw> Iterator for BlockPointers<'raw> {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.mode.is_signed() {
+            let value = match self.next.get(..36) {
+                Some(v) => read_u32_le(v.as_ptr(), 32),
+                None => return None,
+            };
+
+            self.next = &self.next[36..];
+
+            Some(value as usize)
+        } else {
+            let value = match self.next.get(..4) {
+                Some(v) => read_u32_le(v.as_ptr(), 0),
+                None => return None,
+            };
+
+            self.next = &self.next[4..];
+
+            Some(value as usize)
         }
     }
 }

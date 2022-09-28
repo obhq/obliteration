@@ -97,3 +97,11 @@ pub fn write_u64_le<W: Write>(w: &mut W, v: u64) -> std::io::Result<()> {
 pub fn write_u64_be<W: Write>(w: &mut W, v: u64) -> std::io::Result<()> {
     write_be!(w, v)
 }
+
+pub fn read_array<R: Read, const L: usize>(r: &mut R) -> std::io::Result<[u8; L]> {
+    let mut buf: [u8; L] = uninit();
+
+    r.read_exact(&mut buf)?;
+
+    Ok(buf)
+}
