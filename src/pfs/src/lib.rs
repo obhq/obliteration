@@ -1,243 +1,113 @@
 use self::directory::Directory;
-use self::inode::{BlockPointers, Inode};
-use hmac::{Hmac, Mac};
-use sha2::Sha256;
+use self::header::Header;
+use self::inode::Inode;
+use aes::cipher::KeyInit;
+use aes::Aes128;
+use generic_array::GenericArray;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use util::mem::{new_buffer, uninit};
+use util::mem::new_buffer;
+use xts_mode::Xts128;
 
 pub mod directory;
+pub mod file;
 pub mod header;
+pub mod image;
 pub mod inode;
-pub mod reader;
 
-pub struct Pfs<'image> {
-    reader: Box<dyn reader::Reader + 'image>,
-    header: header::Header,
-    inodes: Vec<Inode>,
-    super_root: Directory,
+pub fn open<'raw>(
+    image: &'raw [u8],
+    flags: ImageFlags,
+    ekpfs: Option<&[u8]>,
+) -> Result<Box<dyn Image + 'raw>, OpenError> {
+    // Read header.
+    let header = match Header::read(image) {
+        Ok(v) => v,
+        Err(e) => return Err(OpenError::InvalidHeader(e)),
+    };
+
+    // Construct reader.
+    let block_size = header.block_size();
+    let image: Box<dyn Image + 'raw> = if header.mode().is_encrypted() {
+        // The super block (block that contain header) never get encrypted.
+        if block_size < image::XTS_BLOCK_SIZE {
+            return Err(OpenError::InvalidBlockSize);
+        }
+
+        // Setup decryptor.
+        let ekpfs = match ekpfs {
+            Some(v) => v,
+            None => panic!("The image is encrypted but no EKPFS is provided"),
+        };
+
+        let key_seed = header.key_seed();
+        let (data_key, tweak_key) = image::get_xts_keys(flags, ekpfs, key_seed);
+        let cipher_1 = Aes128::new(GenericArray::from_slice(&data_key));
+        let cipher_2 = Aes128::new(GenericArray::from_slice(&tweak_key));
+
+        Box::new(image::Encrypted::new(
+            image,
+            header,
+            Xts128::<Aes128>::new(cipher_1, cipher_2),
+            block_size / image::XTS_BLOCK_SIZE,
+        ))
+    } else {
+        Box::new(image::Unencrypted::new(image, header))
+    };
+
+    Ok(image)
 }
 
-impl<'image> Pfs<'image> {
-    pub fn open(
-        image: &'image [u8],
-        flags: ImageFlags,
-        ekpfs: Option<&[u8]>,
-    ) -> Result<Self, OpenError> {
-        // Read header.
-        let header = match header::Header::read(image) {
-            Ok(v) => v,
-            Err(e) => return Err(OpenError::InvalidHeader(e)),
-        };
+pub fn mount<'image, 'raw_image>(
+    image: &'image (dyn Image + 'raw_image),
+) -> Result<Pfs<'image, 'raw_image>, MountError> {
+    let header = image.header();
 
-        // Construct reader.
-        let block_size = header.block_size();
-        let reader: Box<dyn reader::Reader + 'image> = if header.mode().is_encrypted() {
-            let ekpfs = match ekpfs {
-                Some(v) => v,
-                None => panic!("The image is encrypted but no EKPFS is provided"),
-            };
-
-            let key_seed = header.key_seed();
-            let (data_key, tweak_key) = Self::derive_block_key(flags, ekpfs, key_seed);
-            let reader = reader::EncryptedReader::new(image, data_key, tweak_key, block_size);
-
-            Box::new(reader)
-        } else {
-            Box::new(reader::UnencryptedReader::new(image))
-        };
-
-        // Read inode blocks.
-        let mut pfs = Self {
-            inodes: Vec::with_capacity(header.inode_count()),
-            reader,
-            header,
-            super_root: Directory::empty(),
-        };
-
-        for block_num in 0..pfs.header.inode_block_count() {
-            let completed = match pfs.load_inodes(block_num) {
-                Ok(v) => v,
-                Err(e) => return Err(OpenError::ReadBlockFailed(block_num + 1, e)),
-            };
-
-            if completed {
-                break;
-            }
-        }
-
-        // Load super-root.
-        pfs.super_root = match pfs.load_directory(pfs.header.super_root_inode()) {
-            Ok(v) => v,
-            Err(e) => return Err(OpenError::LoadSuperRootFailed(e)),
-        };
-
-        Ok(pfs)
+    if header.mode().is_64bits() {
+        panic!("64-bits inode is not supported yet");
     }
 
-    fn load_directory(&self, inode: usize) -> Result<Directory, LoadDirectoryError> {
-        let blocks = match self.load_blocks(inode) {
-            Ok(v) => v,
-            Err(e) => return Err(LoadDirectoryError::LoadBlocksFailed(e)),
-        };
+    // Read inode blocks.
+    let block_size = header.block_size();
+    let mut block_data = new_buffer(block_size);
+    let mut inodes: Vec<Inode<'image, 'raw_image>> = Vec::with_capacity(header.inode_count());
 
-        Ok(Directory::empty())
-    }
-
-    fn load_blocks(&self, inode_index: usize) -> Result<Vec<usize>, LoadBlocksError> {
-        // Get target inode.
-        let inode = match self.inodes.get(inode_index) {
-            Some(v) => v,
-            None => return Err(LoadBlocksError::InvalidInode),
-        };
-
-        // Check if inode use contiguous blocks.
-        let mut pointers: Vec<usize> = Vec::with_capacity(inode.block_count());
-
-        if pointers.len() == inode.block_count() {
-            // This should not be possible but just in case for malformed image.
-            return Ok(pointers);
-        }
-
-        if inode.direct_blocks()[1] == 0xffffffff {
-            let start = inode.direct_blocks()[0] as usize;
-
-            for block in start..(start + inode.block_count()) {
-                pointers.push(block);
-            }
-
-            return Ok(pointers);
-        }
-
-        // Load direct pointers.
-        for i in 0..12 {
-            pointers.push(inode.direct_blocks()[i] as _);
-
-            if pointers.len() == inode.block_count() {
-                return Ok(pointers);
-            }
-        }
-
-        // Load indirect 0.
-        let block_num = inode.indirect_blocks()[0] as usize;
-        let block_size = self.header.block_size();
-        let mut block0 = new_buffer(block_size);
-
-        if let Err(e) = self.reader.read(block_num * block_size, &mut block0) {
-            return Err(LoadBlocksError::ReadBlockFailed(block_num, e));
-        }
-
-        for i in BlockPointers::new(self.header.mode(), &block0) {
-            pointers.push(i);
-
-            if pointers.len() == inode.block_count() {
-                return Ok(pointers);
-            }
-        }
-
-        // Load indirect 1.
-        let block_num = inode.indirect_blocks()[1] as usize;
-
-        if let Err(e) = self.reader.read(block_num * block_size, &mut block0) {
-            return Err(LoadBlocksError::ReadBlockFailed(block_num, e));
-        }
-
-        let mut block1 = new_buffer(block_size);
-
-        for i in BlockPointers::new(self.header.mode(), &block0) {
-            if let Err(e) = self.reader.read(i * block_size, &mut block1) {
-                return Err(LoadBlocksError::ReadBlockFailed(i, e));
-            }
-
-            for j in BlockPointers::new(self.header.mode(), &block1) {
-                pointers.push(j);
-
-                if pointers.len() == inode.block_count() {
-                    return Ok(pointers);
-                }
-            }
-        }
-
-        panic!(
-            "Data of inode #{} was spanned to indirect block #2, which we are not supported yet",
-            inode_index
-        );
-    }
-
-    /// `block_num` is a number of inode block, not image block.
-    fn load_inodes(&mut self, block_num: usize) -> Result<bool, reader::ReadError> {
-        // Get the offset for target block. The first inode block always start at image second
-        // block.
-        let block_size = self.header.block_size();
+    'load_block: for block_num in 0..header.inode_block_count() {
+        // Get the offset for target block. The first inode block always start at second block.
         let offset = block_size + block_num * block_size;
 
         // Read the whole block.
-        let mut block_data = new_buffer(block_size);
-
-        if let Err(e) = self.reader.read(offset, block_data.as_mut_slice()) {
-            return Err(e);
+        if let Err(e) = image.read(offset, &mut block_data) {
+            return Err(MountError::ReadBlockFailed(block_num + 1, e));
         }
 
         // Read inodes in the block.
         let mut src = block_data.as_slice();
 
-        if self.header.mode().is_64bits() {
-            panic!("64-bits inode is not supported yet");
-        }
-
-        let reader = if self.header.mode().is_signed() {
-            Inode::read_signed
+        let reader = if header.mode().is_signed() {
+            Inode::from_raw32_signed
         } else {
-            Inode::read_unsigned
+            Inode::from_raw32_unsigned
         };
 
-        while self.inodes.len() < self.header.inode_count() {
-            let inode = match reader(&mut src) {
+        while inodes.len() < header.inode_count() {
+            let inode = match reader(image, inodes.len(), &mut src) {
                 Ok(v) => v,
                 Err(e) => match e {
-                    inode::ReadError::TooSmall => return Ok(false),
-                    inode::ReadError::IoFailed(e) => {
+                    inode::FromRawError::TooSmall => continue 'load_block,
+                    inode::FromRawError::IoFailed(e) => {
                         panic!("Failed to read inode from a buffer: {}", e);
                     }
                 },
             };
 
-            self.inodes.push(inode);
+            inodes.push(inode);
         }
 
-        Ok(true)
+        break;
     }
 
-    /// Gets data key and tweak key.
-    fn derive_block_key(flags: ImageFlags, ekpfs: &[u8], seed: &[u8; 16]) -> ([u8; 16], [u8; 16]) {
-        // Derive EKPFS from seed if PFS use new encryption.
-        let ekpfs: Vec<u8> = if flags.is_new_encryption() {
-            let mut hmac = Hmac::<Sha256>::new_from_slice(ekpfs).unwrap();
-            hmac.update(seed);
-            hmac.finalize().into_bytes().to_vec()
-        } else {
-            ekpfs.into()
-        };
-
-        // Derive key.
-        let mut hmac = Hmac::<Sha256>::new_from_slice(ekpfs.as_slice()).unwrap();
-        let mut input: Vec<u8> = Vec::with_capacity(seed.len() + 4);
-
-        input.extend(&[0x01, 0x00, 0x00, 0x00]);
-        input.extend(seed);
-
-        hmac.update(input.as_slice());
-
-        // Split key.
-        let secret = hmac.finalize().into_bytes();
-        let mut data_key: [u8; 16] = uninit();
-        let mut tweak_key: [u8; 16] = uninit();
-
-        tweak_key.copy_from_slice(&secret[..16]);
-        data_key.copy_from_slice(&secret[16..]);
-
-        (data_key, tweak_key)
-    }
+    Ok(Pfs { image, inodes })
 }
 
 #[derive(Clone, Copy)]
@@ -256,19 +126,37 @@ impl From<u64> for ImageFlags {
     }
 }
 
+pub trait Image {
+    fn header(&self) -> &Header;
+
+    /// Fill `buf` from data beginning at `offset`.
+    fn read(&self, offset: usize, buf: &mut [u8]) -> Result<(), ReadError>;
+}
+
+pub struct Pfs<'image, 'raw_image> {
+    image: &'image (dyn Image + 'raw_image),
+    inodes: Vec<Inode<'image, 'raw_image>>,
+}
+
+impl<'image, 'raw_image> Pfs<'image, 'raw_image> {
+    pub fn super_root<'a>(&'a self) -> Directory<'a, 'image, 'raw_image> {
+        let header = self.image.header();
+
+        Directory::new(self.image, &self.inodes, header.super_root_inode())
+    }
+}
+
 #[derive(Debug)]
 pub enum OpenError {
     InvalidHeader(header::ReadError),
-    ReadBlockFailed(usize, reader::ReadError),
-    LoadSuperRootFailed(LoadDirectoryError),
+    InvalidBlockSize,
 }
 
 impl Error for OpenError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::InvalidHeader(e) => Some(e),
-            Self::ReadBlockFailed(_, e) => Some(e),
-            Self::LoadSuperRootFailed(e) => Some(e),
+            _ => None,
         }
     }
 }
@@ -277,53 +165,43 @@ impl Display for OpenError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             Self::InvalidHeader(_) => f.write_str("invalid header"),
-            Self::ReadBlockFailed(b, _) => write!(f, "cannot read block #{}", b),
-            Self::LoadSuperRootFailed(_) => f.write_str("cannot read super-root"),
+            Self::InvalidBlockSize => f.write_str("invalid block size"),
         }
     }
 }
 
 #[derive(Debug)]
-pub enum LoadDirectoryError {
-    LoadBlocksFailed(LoadBlocksError),
+pub enum MountError {
+    ReadBlockFailed(usize, ReadError),
 }
 
-impl Error for LoadDirectoryError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::LoadBlocksFailed(e) => Some(e),
-        }
-    }
-}
-
-impl Display for LoadDirectoryError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Self::LoadBlocksFailed(_) => f.write_str("cannot read data blocks"),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum LoadBlocksError {
-    InvalidInode,
-    ReadBlockFailed(usize, reader::ReadError),
-}
-
-impl Error for LoadBlocksError {
+impl Error for MountError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::ReadBlockFailed(_, e) => Some(e),
-            _ => None,
         }
     }
 }
 
-impl Display for LoadBlocksError {
+impl Display for MountError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
-            Self::InvalidInode => f.write_str("invalid inode"),
             Self::ReadBlockFailed(b, _) => write!(f, "cannot read block #{}", b),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum ReadError {
+    InvalidOffset,
+}
+
+impl Error for ReadError {}
+
+impl Display for ReadError {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::InvalidOffset => f.write_str("invalid offset"),
         }
     }
 }

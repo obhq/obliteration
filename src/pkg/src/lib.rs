@@ -235,10 +235,15 @@ impl<'c> Pkg<'c> {
             None => return Err(DumpPfsError::InvalidOuterOffset),
         };
 
-        // Dump pfs_image.dat.
-        let pfs = match pfs::Pfs::open(image, self.header.pfs_flags(), Some(&self.ekpfs)) {
+        // Mount outer PFS.
+        let image = match pfs::open(image, self.header.pfs_flags(), Some(&self.ekpfs)) {
             Ok(v) => v,
             Err(e) => return Err(DumpPfsError::OpenOuterFailed(e)),
+        };
+
+        let pfs = match pfs::mount(image.as_ref()) {
+            Ok(v) => v,
+            Err(e) => return Err(DumpPfsError::MountOuterFailed(e)),
         };
 
         Ok(())
@@ -527,12 +532,14 @@ impl Display for DumpEntryError {
 pub enum DumpPfsError {
     InvalidOuterOffset,
     OpenOuterFailed(pfs::OpenError),
+    MountOuterFailed(pfs::MountError),
 }
 
 impl Error for DumpPfsError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::OpenOuterFailed(e) => Some(e),
+            Self::MountOuterFailed(e) => Some(e),
             _ => None,
         }
     }
@@ -543,6 +550,7 @@ impl Display for DumpPfsError {
         match self {
             Self::InvalidOuterOffset => f.write_str("invalid offset for outer PFS"),
             Self::OpenOuterFailed(_) => f.write_str("cannot open outer PFS"),
+            Self::MountOuterFailed(_) => f.write_str("cannot mount outer PFS"),
         }
     }
 }

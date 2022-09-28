@@ -1,23 +1,30 @@
-use crate::header::Mode;
+use crate::Image;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::Read;
-use util::mem::{read_array, read_u32_le, uninit};
+use util::mem::{new_buffer, read_array, read_u32_le, uninit};
 
-pub struct Inode {
-    blocks: u32,
+pub(crate) struct Inode<'image, 'raw_image> {
+    image: &'image (dyn Image + 'raw_image),
+    index: usize,
+    blocks: usize,
     direct_blocks: [u32; 12],
     direct_sigs: [Option<[u8; 32]>; 12],
     indirect_blocks: [u32; 5],
     indirect_signs: [Option<[u8; 32]>; 5],
+    indirect_reader: fn(&mut &[u8]) -> Option<usize>,
 }
 
-impl Inode {
-    pub fn read_unsigned<F: Read>(from: &mut F) -> Result<Self, ReadError> {
+impl<'image, 'raw_image> Inode<'image, 'raw_image> {
+    pub(super) fn from_raw32_unsigned<R: Read>(
+        image: &'image (dyn Image + 'raw_image),
+        index: usize,
+        raw: &mut R,
+    ) -> Result<Self, FromRawError> {
         // Read common fields.
-        let raw: [u8; 168] = Self::read_raw(from)?;
+        let raw: [u8; 168] = Self::read_raw(raw)?;
         let mut ptr = raw.as_ptr();
-        let mut inode = Self::read_commons(ptr);
+        let mut inode = Self::read_common_fields(image, index, ptr, Self::read_indirect32_unsigned);
 
         // Read block pointers.
         ptr = unsafe { ptr.offset(0x64) };
@@ -35,11 +42,15 @@ impl Inode {
         Ok(inode)
     }
 
-    pub fn read_signed<F: Read>(from: &mut F) -> Result<Self, ReadError> {
+    pub(super) fn from_raw32_signed<R: Read>(
+        image: &'image (dyn Image + 'raw_image),
+        index: usize,
+        raw: &mut R,
+    ) -> Result<Self, FromRawError> {
         // Read common fields.
-        let raw: [u8; 712] = Self::read_raw(from)?;
+        let raw: [u8; 712] = Self::read_raw(raw)?;
         let mut ptr = raw.as_ptr();
-        let mut inode = Self::read_commons(ptr);
+        let mut inode = Self::read_common_fields(image, index, ptr, Self::read_indirect32_signed);
 
         // Read block pointers.
         ptr = unsafe { ptr.offset(0x64) };
@@ -59,93 +70,150 @@ impl Inode {
         Ok(inode)
     }
 
-    pub fn direct_blocks(&self) -> &[u32; 12] {
-        &self.direct_blocks
+    pub fn load_blocks(&self) -> Result<Vec<usize>, LoadBlocksError> {
+        // Check if inode use contiguous blocks.
+        let mut blocks: Vec<usize> = Vec::with_capacity(self.blocks);
+
+        if blocks.len() == self.blocks {
+            // inode with zero block should not be possible but just in case for malformed image.
+            return Ok(blocks);
+        }
+
+        if self.direct_blocks[1] == 0xffffffff {
+            let start = self.direct_blocks[0] as usize;
+
+            for block in start..(start + self.blocks) {
+                blocks.push(block);
+            }
+
+            return Ok(blocks);
+        }
+
+        // Load direct pointers.
+        for i in 0..12 {
+            blocks.push(self.direct_blocks[i] as usize);
+
+            if blocks.len() == self.blocks {
+                return Ok(blocks);
+            }
+        }
+
+        // FIXME: Refactor algorithm to read indirect blocks.
+        // Load indirect 0.
+        let block_num = self.indirect_blocks[0] as usize;
+        let block_size = self.image.header().block_size();
+        let mut block0 = new_buffer(block_size);
+
+        if let Err(e) = self.image.read(block_num * block_size, &mut block0) {
+            return Err(LoadBlocksError::ReadBlockFailed(block_num, e));
+        }
+
+        let mut data = block0.as_slice();
+
+        while let Some(i) = (self.indirect_reader)(&mut data) {
+            blocks.push(i);
+
+            if blocks.len() == self.blocks {
+                return Ok(blocks);
+            }
+        }
+
+        // Load indirect 1.
+        let block_num = self.indirect_blocks[1] as usize;
+
+        if let Err(e) = self.image.read(block_num * block_size, &mut block0) {
+            return Err(LoadBlocksError::ReadBlockFailed(block_num, e));
+        }
+
+        let mut block1 = new_buffer(block_size);
+        let mut data0 = block0.as_slice();
+
+        while let Some(i) = (self.indirect_reader)(&mut data0) {
+            if let Err(e) = self.image.read(i * block_size, &mut block1) {
+                return Err(LoadBlocksError::ReadBlockFailed(i, e));
+            }
+
+            let mut data1 = block1.as_slice();
+
+            while let Some(j) = (self.indirect_reader)(&mut data1) {
+                blocks.push(j);
+
+                if blocks.len() == self.blocks {
+                    return Ok(blocks);
+                }
+            }
+        }
+
+        panic!(
+            "Data of inode #{} was spanned to indirect block #2, which we are not supported yet",
+            self.index
+        );
     }
 
-    pub fn indirect_blocks(&self) -> &[u32; 5] {
-        &self.indirect_blocks
-    }
+    fn read_raw<const L: usize, R: Read>(raw: &mut R) -> Result<[u8; L], FromRawError> {
+        let mut buf: [u8; L] = uninit();
 
-    pub fn block_count(&self) -> usize {
-        self.blocks as _
-    }
-
-    fn read_raw<const L: usize, F: Read>(from: &mut F) -> Result<[u8; L], ReadError> {
-        let mut raw: [u8; L] = uninit();
-
-        if let Err(e) = from.read_exact(&mut raw) {
+        if let Err(e) = raw.read_exact(&mut buf) {
             return Err(if e.kind() == std::io::ErrorKind::UnexpectedEof {
-                ReadError::TooSmall
+                FromRawError::TooSmall
             } else {
-                ReadError::IoFailed(e)
+                FromRawError::IoFailed(e)
             });
         }
 
-        Ok(raw)
+        Ok(buf)
     }
 
-    fn read_commons(raw: *const u8) -> Self {
-        let blocks = read_u32_le(raw, 0x60);
+    fn read_common_fields(
+        image: &'image (dyn Image + 'raw_image),
+        index: usize,
+        raw: *const u8,
+        indirect_reader: fn(&mut &[u8]) -> Option<usize>,
+    ) -> Self {
+        let blocks = read_u32_le(raw, 0x60) as usize;
 
         Self {
+            image,
+            index,
             blocks,
             direct_blocks: [0; 12],
             direct_sigs: [None; 12],
             indirect_blocks: [0; 5],
             indirect_signs: [None; 5],
+            indirect_reader,
         }
     }
-}
 
-pub struct BlockPointers<'raw> {
-    mode: Mode,
-    next: &'raw [u8],
-}
+    fn read_indirect32_unsigned(raw: &mut &[u8]) -> Option<usize> {
+        let value = match raw.get(..4) {
+            Some(v) => read_u32_le(v.as_ptr(), 0),
+            None => return None,
+        };
 
-impl<'raw> BlockPointers<'raw> {
-    pub fn new(mode: Mode, raw: &'raw [u8]) -> Self {
-        if mode.is_64bits() {
-            panic!("64-bits inode is not supported");
-        }
+        *raw = &raw[4..];
 
-        Self { mode, next: raw }
+        Some(value as usize)
     }
-}
 
-impl<'raw> Iterator for BlockPointers<'raw> {
-    type Item = usize;
+    fn read_indirect32_signed(raw: &mut &[u8]) -> Option<usize> {
+        let value = match raw.get(..36) {
+            Some(v) => read_u32_le(v.as_ptr(), 32),
+            None => return None,
+        };
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.mode.is_signed() {
-            let value = match self.next.get(..36) {
-                Some(v) => read_u32_le(v.as_ptr(), 32),
-                None => return None,
-            };
+        *raw = &raw[36..];
 
-            self.next = &self.next[36..];
-
-            Some(value as usize)
-        } else {
-            let value = match self.next.get(..4) {
-                Some(v) => read_u32_le(v.as_ptr(), 0),
-                None => return None,
-            };
-
-            self.next = &self.next[4..];
-
-            Some(value as usize)
-        }
+        Some(value as usize)
     }
 }
 
 #[derive(Debug)]
-pub enum ReadError {
+pub enum FromRawError {
     IoFailed(std::io::Error),
     TooSmall,
 }
 
-impl Error for ReadError {
+impl Error for FromRawError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::IoFailed(e) => Some(e),
@@ -154,11 +222,32 @@ impl Error for ReadError {
     }
 }
 
-impl Display for ReadError {
+impl Display for FromRawError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             Self::IoFailed(_) => f.write_str("I/O failed"),
             Self::TooSmall => f.write_str("data too small"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum LoadBlocksError {
+    ReadBlockFailed(usize, crate::ReadError),
+}
+
+impl Error for LoadBlocksError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::ReadBlockFailed(_, e) => Some(e),
+        }
+    }
+}
+
+impl Display for LoadBlocksError {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::ReadBlockFailed(b, _) => write!(f, "cannot read block #{}", b),
         }
     }
 }
