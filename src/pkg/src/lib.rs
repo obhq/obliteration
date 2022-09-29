@@ -11,9 +11,9 @@ use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::{Read, Write};
 use std::os::raw::c_char;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
-use util::mem::uninit;
+use util::mem::{new_buffer, uninit};
 
 pub mod entry;
 pub mod header;
@@ -69,10 +69,10 @@ pub extern "C" fn pkg_dump_entry(pkg: &Pkg, id: u32, file: *const c_char) -> *mu
 pub extern "C" fn pkg_dump_pfs(
     pkg: &Pkg,
     dir: *const c_char,
-    progress: extern "C" fn(usize, usize, *mut c_void),
+    status: extern "C" fn(usize, usize, *const c_char, *mut c_void),
     ud: *mut c_void,
 ) -> *mut error::Error {
-    if let Err(e) = pkg.dump_pfs() {
+    if let Err(e) = pkg.dump_pfs(util::str::from_c_unchecked(dir), status, ud) {
         return error::Error::new(&e);
     }
 
@@ -226,7 +226,12 @@ impl<'c> Pkg<'c> {
         Ok(())
     }
 
-    pub fn dump_pfs(&self) -> Result<(), DumpPfsError> {
+    pub fn dump_pfs<O: AsRef<Path>>(
+        &self,
+        output: O,
+        status: extern "C" fn(usize, usize, *const c_char, *mut c_void),
+        ud: *mut c_void,
+    ) -> Result<(), DumpPfsError> {
         // Get outer PFS.
         let image_offset = self.header.pfs_offset();
         let image_size = self.header.pfs_size();
@@ -246,7 +251,136 @@ impl<'c> Pkg<'c> {
             Err(e) => return Err(DumpPfsError::MountOuterFailed(e)),
         };
 
+        let super_root = match pfs.open_super_root() {
+            Ok(v) => v,
+            Err(e) => return Err(DumpPfsError::OpenSuperRootFailed(e)),
+        };
+
+        // Dump files.
+        self.dump_pfs_directory(Vec::new(), super_root, output, status, ud)
+    }
+
+    fn dump_pfs_directory<O: AsRef<Path>>(
+        &self,
+        path: Vec<&[u8]>,
+        dir: pfs::directory::Directory,
+        output: O,
+        status: extern "C" fn(usize, usize, *const c_char, *mut c_void),
+        ud: *mut c_void,
+    ) -> Result<(), DumpPfsError> {
+        // Open PFS directory.
+        let items = match dir.open() {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(DumpPfsError::OpenDirectoryFailed(
+                    self.build_pfs_path(&path),
+                    e,
+                ));
+            }
+        };
+
+        // Enumerate items.
+        let mut buffer: Vec<u8> = new_buffer(32768);
+
+        for (name, item) in items {
+            // Build destination path.
+            let mut output: PathBuf = output.as_ref().into();
+
+            match std::str::from_utf8(&name) {
+                Ok(v) => output.push(v),
+                Err(_) => {
+                    return Err(DumpPfsError::UnsupportedFileName(
+                        self.build_pfs_path(&path),
+                    ));
+                }
+            }
+
+            // Build source path.
+            let mut path = path.clone();
+
+            path.push(&name);
+
+            // Handle item.
+            match item {
+                pfs::directory::Item::Directory(i) => {
+                    // Create output directory.
+                    if let Err(e) = std::fs::create_dir(&output) {
+                        return Err(DumpPfsError::CreateDirectoryFailed(output, e));
+                    }
+
+                    // Dump.
+                    self.dump_pfs_directory(path, i, &output, status, ud)?;
+                }
+                pfs::directory::Item::File(mut i) => {
+                    // Report initial status.
+                    let mut status_name = name.clone();
+
+                    status_name.push(0);
+
+                    (status)(0, i.size(), status_name.as_ptr() as _, ud);
+
+                    // Open destination file.
+                    let mut dest = std::fs::OpenOptions::new();
+
+                    dest.create_new(true);
+                    dest.write(true);
+
+                    let mut dest = match dest.open(&output) {
+                        Ok(v) => v,
+                        Err(e) => return Err(DumpPfsError::CreateFileFailed(output, e)),
+                    };
+
+                    // Copy.
+                    let mut written = 0;
+
+                    loop {
+                        // Read source.
+                        let read = match i.read(&mut buffer) {
+                            Ok(v) => v,
+                            Err(e) => {
+                                if e.kind() == std::io::ErrorKind::Interrupted {
+                                    continue;
+                                } else {
+                                    return Err(DumpPfsError::ReadFileFailed(
+                                        self.build_pfs_path(&path),
+                                        e,
+                                    ));
+                                }
+                            }
+                        };
+
+                        if read == 0 {
+                            break;
+                        }
+
+                        // Write destination.
+                        if let Err(e) = dest.write_all(&buffer[..read]) {
+                            return Err(DumpPfsError::WriteFileFailed(output, e));
+                        }
+
+                        written += read;
+
+                        // Update status.
+                        (status)(written, i.size(), status_name.as_ptr() as _, ud);
+                    }
+                }
+            }
+        }
+
         Ok(())
+    }
+
+    /// Gets a full path represents the item in PFS suitable for display to the user.
+    fn build_pfs_path(&self, path: &[&[u8]]) -> String {
+        let mut r = String::new();
+
+        r.push('/');
+
+        for c in path {
+            r.push_str(&String::from_utf8_lossy(c));
+        }
+
+        r
     }
 
     fn load_ekpfs(&mut self) -> Result<(), OpenError> {
@@ -533,6 +667,13 @@ pub enum DumpPfsError {
     InvalidOuterOffset,
     OpenOuterFailed(pfs::OpenError),
     MountOuterFailed(pfs::MountError),
+    OpenSuperRootFailed(pfs::OpenSuperRootError),
+    OpenDirectoryFailed(String, pfs::directory::OpenError),
+    UnsupportedFileName(String),
+    CreateDirectoryFailed(PathBuf, std::io::Error),
+    CreateFileFailed(PathBuf, std::io::Error),
+    ReadFileFailed(String, std::io::Error),
+    WriteFileFailed(PathBuf, std::io::Error),
 }
 
 impl Error for DumpPfsError {
@@ -540,6 +681,12 @@ impl Error for DumpPfsError {
         match self {
             Self::OpenOuterFailed(e) => Some(e),
             Self::MountOuterFailed(e) => Some(e),
+            Self::OpenSuperRootFailed(e) => Some(e),
+            Self::OpenDirectoryFailed(_, e) => Some(e),
+            Self::CreateDirectoryFailed(_, e) => Some(e),
+            Self::CreateFileFailed(_, e) => Some(e),
+            Self::ReadFileFailed(_, e) => Some(e),
+            Self::WriteFileFailed(_, e) => Some(e),
             _ => None,
         }
     }
@@ -551,6 +698,17 @@ impl Display for DumpPfsError {
             Self::InvalidOuterOffset => f.write_str("invalid offset for outer PFS"),
             Self::OpenOuterFailed(_) => f.write_str("cannot open outer PFS"),
             Self::MountOuterFailed(_) => f.write_str("cannot mount outer PFS"),
+            Self::OpenSuperRootFailed(_) => f.write_str("cannot open super-root"),
+            Self::OpenDirectoryFailed(p, _) => write!(f, "cannot open {}", p),
+            Self::UnsupportedFileName(p) => {
+                write!(f, "directory {} has file(s) with unsupported name", p)
+            }
+            Self::CreateDirectoryFailed(p, _) => {
+                write!(f, "cannot create directory {}", p.display())
+            }
+            Self::CreateFileFailed(p, _) => write!(f, "cannot create {}", p.display()),
+            Self::ReadFileFailed(p, _) => write!(f, "cannot read {}", p),
+            Self::WriteFileFailed(p, _) => write!(f, "cannot write {}", p.display()),
         }
     }
 }

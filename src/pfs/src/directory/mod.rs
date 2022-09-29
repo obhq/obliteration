@@ -12,14 +12,14 @@ pub mod dirent;
 pub struct Directory<'pfs, 'image, 'raw_image> {
     image: &'image (dyn Image + 'raw_image),
     inodes: &'pfs [Inode<'image, 'raw_image>],
-    inode: usize,
+    inode: &'pfs Inode<'image, 'raw_image>,
 }
 
 impl<'pfs, 'image, 'raw_image> Directory<'pfs, 'image, 'raw_image> {
     pub(super) fn new(
         image: &'image (dyn Image + 'raw_image),
         inodes: &'pfs [Inode<'image, 'raw_image>],
-        inode: usize,
+        inode: &'pfs Inode<'image, 'raw_image>,
     ) -> Self {
         Self {
             image,
@@ -29,14 +29,8 @@ impl<'pfs, 'image, 'raw_image> Directory<'pfs, 'image, 'raw_image> {
     }
 
     pub fn open(&self) -> Result<Items<'pfs, 'image, 'raw_image>, OpenError> {
-        // Get inode for current directory.
-        let inode = match self.inodes.get(self.inode) {
-            Some(v) => v,
-            None => return Err(OpenError::InvalidInode(self.inode)),
-        };
-
         // Load occupied blocks.
-        let blocks = match inode.load_blocks() {
+        let blocks = match self.inode.load_blocks() {
             Ok(v) => v,
             Err(e) => return Err(OpenError::LoadBlocksFailed(e)),
         };
@@ -68,6 +62,11 @@ impl<'pfs, 'image, 'raw_image> Directory<'pfs, 'image, 'raw_image> {
                     },
                 };
 
+                let inode = match self.inodes.get(dirent.inode()) {
+                    Some(v) => v,
+                    None => return Err(OpenError::InvalidInode(dirent.inode())),
+                };
+
                 // Skip remaining padding.
                 next = match next.get(dirent.padding_size()..) {
                     Some(v) => v,
@@ -81,12 +80,12 @@ impl<'pfs, 'image, 'raw_image> Directory<'pfs, 'image, 'raw_image> {
 
                 // Construct object.
                 if dirent.ty() == Dirent::PARENT {
-                    parent = Some(Directory::new(self.image, self.inodes, dirent.inode()));
+                    parent = Some(Directory::new(self.image, self.inodes, inode));
                 } else {
                     let item = match dirent.ty() {
-                        Dirent::FILE => Item::File(File::new(dirent.inode())),
+                        Dirent::FILE => Item::File(File::new(self.image, inode)),
                         Dirent::DIRECTORY => {
-                            Item::Directory(Directory::new(self.image, self.inodes, dirent.inode()))
+                            Item::Directory(Directory::new(self.image, self.inodes, inode))
                         }
                         Dirent::SELF => continue,
                         _ => {
@@ -111,9 +110,18 @@ pub struct Items<'pfs, 'image, 'raw_image> {
     items: HashMap<Vec<u8>, Item<'pfs, 'image, 'raw_image>>,
 }
 
+impl<'pfs, 'image, 'raw_image> IntoIterator for Items<'pfs, 'image, 'raw_image> {
+    type Item = (Vec<u8>, Item<'pfs, 'image, 'raw_image>);
+    type IntoIter = std::collections::hash_map::IntoIter<Vec<u8>, Item<'pfs, 'image, 'raw_image>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.items.into_iter()
+    }
+}
+
 pub enum Item<'pfs, 'image, 'raw_image> {
     Directory(Directory<'pfs, 'image, 'raw_image>),
-    File(File),
+    File(File<'pfs, 'image, 'raw_image>),
 }
 
 #[derive(Debug)]

@@ -221,23 +221,34 @@ void MainWindow::installPkg()
     progress.setLabelText("Extracting PFS...");
     progress.setCancelButton(nullptr);
     progress.setValue(0);
+    progress.setAutoClose(false);
     progress.setWindowModality(Qt::WindowModal);
 
-    Error newError = pkg_dump_pfs(pkg, directory.c_str(), [](std::size_t written, std::size_t size, void *ud) {
+    Error newError = pkg_dump_pfs(pkg, directory.c_str(), [](std::size_t written, std::size_t total, const char *name, void *ud) {
+        constexpr std::size_t mb = 1024 * 1024 * 1024;
+
         auto progress = reinterpret_cast<QProgressDialog *>(ud);
-        auto toProgress = (size < (1024 * 1024 * 1024)) ? [](std::size_t v) { return static_cast<int>(v); } : [](std::size_t v) { return static_cast<int>(v / (1024 * 1024 * 1024)); };
+        auto toProgress = (total < mb)
+            ? [](std::size_t v) { return static_cast<int>(v); }
+            : [](std::size_t v) { return static_cast<int>(v / mb); };
+        auto max = toProgress(total);
+        auto value = toProgress(written);
+        auto label = QString("Extracting %1...").arg(name);
 
-        if (!progress->value()) {
-            progress->setMaximum(toProgress(size));
+        if (progress->labelText() != label) {
+            progress->setLabelText(label);
+            progress->setValue(0);
+            progress->setMaximum(max);
+        } else {
+            progress->setValue(value == max && written != total ? value - 1 : value);
         }
-
-        progress->setValue(toProgress(written));
     }, &progress);
 
     pkg_close(pkg);
+    progress.close();
 
     if (newError) {
-        QMessageBox::critical(&progress, "Error", QString("Failed to extract pfs_image.dat: %1").arg(newError.message()));
+        QMessageBox::critical(this, "Error", QString("Failed to extract pfs_image.dat: %1").arg(newError.message()));
         return;
     }
 

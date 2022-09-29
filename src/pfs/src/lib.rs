@@ -139,10 +139,16 @@ pub struct Pfs<'image, 'raw_image> {
 }
 
 impl<'image, 'raw_image> Pfs<'image, 'raw_image> {
-    pub fn super_root<'a>(&'a self) -> Directory<'a, 'image, 'raw_image> {
+    pub fn open_super_root<'a>(
+        &'a self,
+    ) -> Result<Directory<'a, 'image, 'raw_image>, OpenSuperRootError> {
         let header = self.image.header();
+        let inode = match self.inodes.get(header.super_root_inode()) {
+            Some(v) => v,
+            None => return Err(OpenSuperRootError::InvalidInode),
+        };
 
-        Directory::new(self.image, &self.inodes, header.super_root_inode())
+        Ok(Directory::new(self.image, &self.inodes, inode))
     }
 }
 
@@ -187,6 +193,21 @@ impl Display for MountError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
             Self::ReadBlockFailed(b, _) => write!(f, "cannot read block #{}", b),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum OpenSuperRootError {
+    InvalidInode,
+}
+
+impl Error for OpenSuperRootError {}
+
+impl Display for OpenSuperRootError {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::InvalidInode => f.write_str("invalid inode"),
         }
     }
 }

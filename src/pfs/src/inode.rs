@@ -2,11 +2,13 @@ use crate::Image;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::Read;
-use util::mem::{new_buffer, read_array, read_u32_le, uninit};
+use util::mem::{new_buffer, read_array, read_u32_le, read_u64_le, uninit};
 
 pub(crate) struct Inode<'image, 'raw_image> {
     image: &'image (dyn Image + 'raw_image),
     index: usize,
+    size: usize,
+    size_compressed: usize,
     blocks: usize,
     direct_blocks: [u32; 12],
     direct_sigs: [Option<[u8; 32]>; 12],
@@ -68,6 +70,14 @@ impl<'image, 'raw_image> Inode<'image, 'raw_image> {
         }
 
         Ok(inode)
+    }
+
+    pub fn size(&self) -> usize {
+        self.size
+    }
+
+    pub fn compressed_size(&self) -> usize {
+        self.size_compressed
     }
 
     pub fn load_blocks(&self) -> Result<Vec<usize>, LoadBlocksError> {
@@ -170,11 +180,15 @@ impl<'image, 'raw_image> Inode<'image, 'raw_image> {
         raw: *const u8,
         indirect_reader: fn(&mut &[u8]) -> Option<usize>,
     ) -> Self {
+        let size = read_u64_le(raw, 0x08) as usize;
+        let size_compressed = read_u64_le(raw, 0x10) as usize;
         let blocks = read_u32_le(raw, 0x60) as usize;
 
         Self {
             image,
             index,
+            size,
+            size_compressed,
             blocks,
             direct_blocks: [0; 12],
             direct_sigs: [None; 12],

@@ -9,6 +9,8 @@
 struct pkg;
 struct pkg_param;
 
+typedef void (*pkg_dump_pfs_status_t) (std::size_t written, std::size_t total, const char *name, void *ud);
+
 #define PKG_ENTRY_PARAM_SFO 0x00001000 // param.sfo
 #define PKG_ENTRY_PIC1_PNG  0x00001006 // pic1.png
 #define PKG_ENTRY_ICON0_PNG 0x00001200 // icon0.png
@@ -21,8 +23,8 @@ extern "C" {
     pkg_param *pkg_get_param(const pkg *pkg, char **error);
     char *pkg_dump_entry(const pkg *pkg, std::uint32_t id, const char *file);
 
-    // Dump the outer PFS to get pfs_image.dat.
-    error *pkg_dump_pfs(const pkg *pkg, const char *dir, void (*progress) (std::size_t, std::size_t, void *), void *ud);
+    // Dump all files from outer PFS.
+    error *pkg_dump_pfs(const pkg *pkg, const char *dir, pkg_dump_pfs_status_t status, void *ud);
 
     pkg_param *pkg_param_open(const char *file, char **error);
     char *pkg_param_title_id(const pkg_param *param);
