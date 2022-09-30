@@ -114,8 +114,9 @@ We recommended Visual Studio Code as a code editor with the following extensions
 - [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
 - [CMake](https://marketplace.visualstudio.com/items?itemName=twxs.cmake)
 - [CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools)
+- [CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb)
 
-Remove `build` directory from the installation from source step and open this folder with VS Code. Everything should work out of the box (e.g. code completion, debugging, etc).
+Remove `build` directory from the previous step and open this folder with VS Code. Everything should work out of the box (e.g. code completion, debugging, etc).
 
 ### Get a homebrew application for testing
 

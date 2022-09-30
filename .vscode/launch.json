@@ -1,0 +1,13 @@
+{
+  "configurations": [
+    {
+      "name": "Launch",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/src/obliteration",
+      "args": [],
+      "cwd": "${workspaceFolder}"
+    }
+  ],
+  "version": "2.0.0"
+}
