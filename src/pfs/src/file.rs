@@ -1,12 +1,13 @@
 use crate::inode::Inode;
 use crate::Image;
-use std::io::{Error, ErrorKind, Read};
+use std::cmp::min;
+use std::io::{Error, ErrorKind, Read, Seek, SeekFrom};
 
 pub struct File<'pfs, 'image, 'raw_image> {
     image: &'image (dyn Image + 'raw_image),
     inode: &'pfs Inode<'image, 'raw_image>,
-    occupied_blocks: Vec<usize>,
-    next_block: usize, // Index into occupied_blocks.
+    occupied_blocks: Vec<u32>,
+    current_offset: u64,
     current_block: Vec<u8>,
 }
 
@@ -19,19 +20,67 @@ impl<'pfs, 'image, 'raw_image> File<'pfs, 'image, 'raw_image> {
             image,
             inode,
             occupied_blocks: Vec::new(),
-            next_block: 0,
+            current_offset: 0,
             current_block: Vec::new(),
         }
     }
 
-    pub fn size(&self) -> usize {
+    pub fn len(&self) -> u64 {
         self.inode.size()
+    }
+}
+
+impl<'pfs, 'image, 'raw_image> Seek for File<'pfs, 'image, 'raw_image> {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        self.current_offset = match pos {
+            SeekFrom::Start(v) => min(self.len(), v),
+            SeekFrom::End(v) => {
+                if v >= 0 {
+                    self.len()
+                } else {
+                    let v = v.abs() as u64;
+
+                    if v > self.len() {
+                        return Err(Error::from(ErrorKind::InvalidInput));
+                    }
+
+                    self.len() - v
+                }
+            }
+            SeekFrom::Current(v) => {
+                if v >= 0 {
+                    min(self.len(), self.current_offset + (v as u64))
+                } else {
+                    let v = v.abs() as u64;
+
+                    if v > self.current_offset {
+                        return Err(Error::from(ErrorKind::InvalidInput));
+                    }
+
+                    self.current_offset - v
+                }
+            }
+        };
+
+        self.current_block.clear();
+
+        Ok(self.current_offset)
+    }
+
+    fn rewind(&mut self) -> std::io::Result<()> {
+        self.current_offset = 0;
+        self.current_block.clear();
+        Ok(())
+    }
+
+    fn stream_position(&mut self) -> std::io::Result<u64> {
+        Ok(self.current_offset)
     }
 }
 
 impl<'pfs, 'image, 'raw_image> Read for File<'pfs, 'image, 'raw_image> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        if buf.is_empty() {
+        if buf.is_empty() || self.current_offset == self.len() {
             return Ok(0);
         }
 
@@ -44,51 +93,67 @@ impl<'pfs, 'image, 'raw_image> Read for File<'pfs, 'image, 'raw_image> {
         }
 
         // Copy data.
+        let block_size = self.image.header().block_size();
         let mut copied = 0usize;
 
         loop {
-            // Copy remaining data from the previous read.
-            let dest = unsafe { buf.as_mut_ptr().offset(copied as _) };
-            let amount = std::cmp::min(self.current_block.len(), buf.len() - copied);
+            // Load block for current offset.
+            if self.current_block.is_empty() {
+                // Get block number.
+                let block_index = self.current_offset / (block_size as u64);
+                let block_num = match self.occupied_blocks.get(block_index as usize) {
+                    Some(&v) => v,
+                    None => {
+                        break Err(Error::new(
+                            ErrorKind::Other,
+                            format!("block #{} is not available", block_index),
+                        ));
+                    }
+                };
 
-            unsafe { dest.copy_from_nonoverlapping(self.current_block.as_ptr(), amount) };
-            self.current_block.drain(..amount);
+                // Check if this is a last block.
+                let total = block_index * (block_size as u64) + (block_size as u64);
+                let read_amount = if total > self.len() {
+                    // Both total and len never be zero.
+                    (block_size as u64) - (total - self.len())
+                } else {
+                    block_size as u64
+                };
 
-            copied += amount;
+                // Allocate buffer.
+                self.current_block.reserve(read_amount as usize);
+                unsafe { self.current_block.set_len(read_amount as usize) };
 
-            if copied == buf.len() {
+                // Load block data.
+                let offset = (block_num as u64) * (block_size as u64);
+
+                if let Err(e) = self.image.read(offset as usize, &mut self.current_block) {
+                    break Err(Error::new(ErrorKind::Other, e));
+                }
+            }
+
+            // Get a window into current block from current offset.
+            let offset = self.current_offset % (block_size as u64);
+            let src = &self.current_block[(offset as usize)..];
+
+            // Copy the window to output buffer.
+            let dst = unsafe { buf.as_mut_ptr().offset(copied as _) };
+            let amount = min(src.len(), buf.len() - copied) as u32;
+
+            unsafe { dst.copy_from_nonoverlapping(src.as_ptr(), amount as usize) };
+            copied += amount as usize;
+
+            // Advance current offset.
+            self.current_offset += amount as u64;
+
+            if self.current_offset % (block_size as u64) == 0 {
+                self.current_block.clear();
+            }
+
+            // Check if completed.
+            if copied == buf.len() || self.current_offset == self.len() {
                 break Ok(copied);
             }
-
-            // Get next block.
-            let block_num = match self.occupied_blocks.get(self.next_block) {
-                Some(v) => v,
-                None => break Ok(copied),
-            };
-
-            // FIXME: Revisit this logic to see if there is a bug.
-            // Load next block.
-            let block_size = self.image.header().block_size();
-            let total = self.next_block * block_size + block_size;
-            let offset = block_num * block_size;
-            let need = if total > self.size() {
-                block_size - (total - self.size())
-            } else {
-                block_size
-            };
-
-            if need == 0 {
-                break Ok(copied);
-            }
-
-            self.current_block.reserve(need);
-            unsafe { self.current_block.set_len(need) };
-
-            if let Err(e) = self.image.read(offset, &mut self.current_block) {
-                break Err(Error::new(ErrorKind::Other, e));
-            }
-
-            self.next_block += 1;
         }
     }
 }

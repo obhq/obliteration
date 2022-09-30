@@ -30,7 +30,7 @@ pub fn open<'raw>(
     let block_size = header.block_size();
     let image: Box<dyn Image + 'raw> = if header.mode().is_encrypted() {
         // The super block (block that contain header) never get encrypted.
-        if block_size < image::XTS_BLOCK_SIZE {
+        if (block_size as usize) < image::XTS_BLOCK_SIZE {
             return Err(OpenError::InvalidBlockSize);
         }
 
@@ -49,7 +49,7 @@ pub fn open<'raw>(
             image,
             header,
             Xts128::<Aes128>::new(cipher_1, cipher_2),
-            block_size / image::XTS_BLOCK_SIZE,
+            (block_size as usize) / image::XTS_BLOCK_SIZE,
         ))
     } else {
         Box::new(image::Unencrypted::new(image, header))
@@ -69,15 +69,15 @@ pub fn mount<'image, 'raw_image>(
 
     // Read inode blocks.
     let block_size = header.block_size();
-    let mut block_data = new_buffer(block_size);
+    let mut block_data = new_buffer(block_size as usize);
     let mut inodes: Vec<Inode<'image, 'raw_image>> = Vec::with_capacity(header.inode_count());
 
     'load_block: for block_num in 0..header.inode_block_count() {
         // Get the offset for target block. The first inode block always start at second block.
-        let offset = block_size + block_num * block_size;
+        let offset = (block_size as u64) + (block_num as u64) * (block_size as u64);
 
         // Read the whole block.
-        if let Err(e) = image.read(offset, &mut block_data) {
+        if let Err(e) = image.read(offset as usize, &mut block_data) {
             return Err(MountError::ReadBlockFailed(block_num + 1, e));
         }
 
@@ -178,7 +178,7 @@ impl Display for OpenError {
 
 #[derive(Debug)]
 pub enum MountError {
-    ReadBlockFailed(usize, ReadError),
+    ReadBlockFailed(u32, ReadError),
 }
 
 impl Error for MountError {

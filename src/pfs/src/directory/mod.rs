@@ -39,11 +39,13 @@ impl<'pfs, 'image, 'raw_image> Directory<'pfs, 'image, 'raw_image> {
         let mut parent: Option<Directory<'pfs, 'image, 'raw_image>> = None;
         let mut items: HashMap<Vec<u8>, Item<'pfs, 'image, 'raw_image>> = HashMap::new();
         let block_size = self.image.header().block_size();
-        let mut block_data = new_buffer(block_size);
+        let mut block_data = new_buffer(block_size as usize);
 
         for block_num in blocks {
             // Read block data.
-            if let Err(e) = self.image.read(block_num * block_size, &mut block_data) {
+            let offset = (block_num as u64) * (block_size as u64);
+
+            if let Err(e) = self.image.read(offset as usize, &mut block_data) {
                 return Err(OpenError::ReadBlockFailed(block_num, e));
             }
 
@@ -128,9 +130,9 @@ pub enum Item<'pfs, 'image, 'raw_image> {
 pub enum OpenError {
     InvalidInode(usize),
     LoadBlocksFailed(crate::inode::LoadBlocksError),
-    ReadBlockFailed(usize, crate::ReadError),
-    InvalidDirent { block: usize, dirent: usize },
-    UnknownDirent { block: usize, dirent: usize },
+    ReadBlockFailed(u32, crate::ReadError),
+    InvalidDirent { block: u32, dirent: usize },
+    UnknownDirent { block: u32, dirent: usize },
 }
 
 impl Error for OpenError {

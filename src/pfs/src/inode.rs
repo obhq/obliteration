@@ -7,14 +7,14 @@ use util::mem::{new_buffer, read_array, read_u32_le, read_u64_le, uninit};
 pub(crate) struct Inode<'image, 'raw_image> {
     image: &'image (dyn Image + 'raw_image),
     index: usize,
-    size: usize,
-    size_compressed: usize,
-    blocks: usize,
+    size: u64,
+    size_compressed: usize, // It look like this one is the size of entry when de-compressed.
+    blocks: u32,
     direct_blocks: [u32; 12],
     direct_sigs: [Option<[u8; 32]>; 12],
     indirect_blocks: [u32; 5],
     indirect_signs: [Option<[u8; 32]>; 5],
-    indirect_reader: fn(&mut &[u8]) -> Option<usize>,
+    indirect_reader: fn(&mut &[u8]) -> Option<u32>,
 }
 
 impl<'image, 'raw_image> Inode<'image, 'raw_image> {
@@ -72,7 +72,7 @@ impl<'image, 'raw_image> Inode<'image, 'raw_image> {
         Ok(inode)
     }
 
-    pub fn size(&self) -> usize {
+    pub fn size(&self) -> u64 {
         self.size
     }
 
@@ -80,17 +80,17 @@ impl<'image, 'raw_image> Inode<'image, 'raw_image> {
         self.size_compressed
     }
 
-    pub fn load_blocks(&self) -> Result<Vec<usize>, LoadBlocksError> {
+    pub fn load_blocks(&self) -> Result<Vec<u32>, LoadBlocksError> {
         // Check if inode use contiguous blocks.
-        let mut blocks: Vec<usize> = Vec::with_capacity(self.blocks);
+        let mut blocks: Vec<u32> = Vec::with_capacity(self.blocks as usize);
 
-        if blocks.len() == self.blocks {
+        if blocks.len() == self.blocks as usize {
             // inode with zero block should not be possible but just in case for malformed image.
             return Ok(blocks);
         }
 
         if self.direct_blocks[1] == 0xffffffff {
-            let start = self.direct_blocks[0] as usize;
+            let start = self.direct_blocks[0];
 
             for block in start..(start + self.blocks) {
                 blocks.push(block);
@@ -101,20 +101,21 @@ impl<'image, 'raw_image> Inode<'image, 'raw_image> {
 
         // Load direct pointers.
         for i in 0..12 {
-            blocks.push(self.direct_blocks[i] as usize);
+            blocks.push(self.direct_blocks[i]);
 
-            if blocks.len() == self.blocks {
+            if blocks.len() == self.blocks as usize {
                 return Ok(blocks);
             }
         }
 
         // FIXME: Refactor algorithm to read indirect blocks.
         // Load indirect 0.
-        let block_num = self.indirect_blocks[0] as usize;
+        let block_num = self.indirect_blocks[0];
         let block_size = self.image.header().block_size();
-        let mut block0 = new_buffer(block_size);
+        let offset = block_num * block_size;
+        let mut block0 = new_buffer(block_size as usize);
 
-        if let Err(e) = self.image.read(block_num * block_size, &mut block0) {
+        if let Err(e) = self.image.read(offset as usize, &mut block0) {
             return Err(LoadBlocksError::ReadBlockFailed(block_num, e));
         }
 
@@ -123,23 +124,24 @@ impl<'image, 'raw_image> Inode<'image, 'raw_image> {
         while let Some(i) = (self.indirect_reader)(&mut data) {
             blocks.push(i);
 
-            if blocks.len() == self.blocks {
+            if blocks.len() == self.blocks as usize {
                 return Ok(blocks);
             }
         }
 
         // Load indirect 1.
-        let block_num = self.indirect_blocks[1] as usize;
+        let block_num = self.indirect_blocks[1];
+        let offset = block_num * block_size;
 
-        if let Err(e) = self.image.read(block_num * block_size, &mut block0) {
+        if let Err(e) = self.image.read(offset as usize, &mut block0) {
             return Err(LoadBlocksError::ReadBlockFailed(block_num, e));
         }
 
-        let mut block1 = new_buffer(block_size);
+        let mut block1 = new_buffer(block_size as usize);
         let mut data0 = block0.as_slice();
 
         while let Some(i) = (self.indirect_reader)(&mut data0) {
-            if let Err(e) = self.image.read(i * block_size, &mut block1) {
+            if let Err(e) = self.image.read((i * block_size) as usize, &mut block1) {
                 return Err(LoadBlocksError::ReadBlockFailed(i, e));
             }
 
@@ -148,7 +150,7 @@ impl<'image, 'raw_image> Inode<'image, 'raw_image> {
             while let Some(j) = (self.indirect_reader)(&mut data1) {
                 blocks.push(j);
 
-                if blocks.len() == self.blocks {
+                if blocks.len() == self.blocks as usize {
                     return Ok(blocks);
                 }
             }
@@ -178,11 +180,11 @@ impl<'image, 'raw_image> Inode<'image, 'raw_image> {
         image: &'image (dyn Image + 'raw_image),
         index: usize,
         raw: *const u8,
-        indirect_reader: fn(&mut &[u8]) -> Option<usize>,
+        indirect_reader: fn(&mut &[u8]) -> Option<u32>,
     ) -> Self {
-        let size = read_u64_le(raw, 0x08) as usize;
+        let size = read_u64_le(raw, 0x08);
         let size_compressed = read_u64_le(raw, 0x10) as usize;
-        let blocks = read_u32_le(raw, 0x60) as usize;
+        let blocks = read_u32_le(raw, 0x60);
 
         Self {
             image,
@@ -198,7 +200,7 @@ impl<'image, 'raw_image> Inode<'image, 'raw_image> {
         }
     }
 
-    fn read_indirect32_unsigned(raw: &mut &[u8]) -> Option<usize> {
+    fn read_indirect32_unsigned(raw: &mut &[u8]) -> Option<u32> {
         let value = match raw.get(..4) {
             Some(v) => read_u32_le(v.as_ptr(), 0),
             None => return None,
@@ -206,10 +208,10 @@ impl<'image, 'raw_image> Inode<'image, 'raw_image> {
 
         *raw = &raw[4..];
 
-        Some(value as usize)
+        Some(value)
     }
 
-    fn read_indirect32_signed(raw: &mut &[u8]) -> Option<usize> {
+    fn read_indirect32_signed(raw: &mut &[u8]) -> Option<u32> {
         let value = match raw.get(..36) {
             Some(v) => read_u32_le(v.as_ptr(), 32),
             None => return None,
@@ -217,7 +219,7 @@ impl<'image, 'raw_image> Inode<'image, 'raw_image> {
 
         *raw = &raw[36..];
 
-        Some(value as usize)
+        Some(value)
     }
 }
 
@@ -247,7 +249,7 @@ impl Display for FromRawError {
 
 #[derive(Debug)]
 pub enum LoadBlocksError {
-    ReadBlockFailed(usize, crate::ReadError),
+    ReadBlockFailed(u32, crate::ReadError),
 }
 
 impl Error for LoadBlocksError {

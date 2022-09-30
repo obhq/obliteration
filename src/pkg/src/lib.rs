@@ -69,7 +69,7 @@ pub extern "C" fn pkg_dump_entry(pkg: &Pkg, id: u32, file: *const c_char) -> *mu
 pub extern "C" fn pkg_dump_pfs(
     pkg: &Pkg,
     dir: *const c_char,
-    status: extern "C" fn(usize, usize, *const c_char, *mut c_void),
+    status: extern "C" fn(u64, u64, *const c_char, *mut c_void),
     ud: *mut c_void,
 ) -> *mut error::Error {
     if let Err(e) = pkg.dump_pfs(util::str::from_c_unchecked(dir), status, ud) {
@@ -229,7 +229,7 @@ impl<'c> Pkg<'c> {
     pub fn dump_pfs<O: AsRef<Path>>(
         &self,
         output: O,
-        status: extern "C" fn(usize, usize, *const c_char, *mut c_void),
+        status: extern "C" fn(u64, u64, *const c_char, *mut c_void),
         ud: *mut c_void,
     ) -> Result<(), DumpPfsError> {
         // Get outer PFS.
@@ -265,7 +265,7 @@ impl<'c> Pkg<'c> {
         path: Vec<&[u8]>,
         dir: pfs::directory::Directory,
         output: O,
-        status: extern "C" fn(usize, usize, *const c_char, *mut c_void),
+        status: extern "C" fn(u64, u64, *const c_char, *mut c_void),
         ud: *mut c_void,
     ) -> Result<(), DumpPfsError> {
         // Open PFS directory.
@@ -317,7 +317,7 @@ impl<'c> Pkg<'c> {
 
                     status_name.push(0);
 
-                    (status)(0, i.size(), status_name.as_ptr() as _, ud);
+                    (status)(0, i.len(), status_name.as_ptr() as _, ud);
 
                     // Open destination file.
                     let mut dest = std::fs::OpenOptions::new();
@@ -331,7 +331,7 @@ impl<'c> Pkg<'c> {
                     };
 
                     // Copy.
-                    let mut written = 0;
+                    let mut written = 0u64;
 
                     loop {
                         // Read source.
@@ -358,10 +358,10 @@ impl<'c> Pkg<'c> {
                             return Err(DumpPfsError::WriteFileFailed(output, e));
                         }
 
-                        written += read;
+                        written += read as u64; // Buffer size just 32768.
 
                         // Update status.
-                        (status)(written, i.size(), status_name.as_ptr() as _, ud);
+                        (status)(written, i.len(), status_name.as_ptr() as _, ud);
                     }
                 }
             }

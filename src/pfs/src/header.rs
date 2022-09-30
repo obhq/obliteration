@@ -7,7 +7,7 @@ pub struct Header {
     mode: Mode,
     blocksz: u32,
     ndinode: u64,
-    ndinodeblock: u64,
+    ndinodeblock: u32,
     superroot_ino: u64,
     key_seed: [u8; 16],
 }
@@ -42,11 +42,17 @@ impl Header {
         let superroot_ino = read_u64_le(hdr, 0x48);
         let key_seed = read_array(hdr, 0x370);
 
+        // Usually block will be references by u32. Not sure why ndinodeblock is 64-bits. Design
+        // flaws?
+        if ndinodeblock > (u32::MAX as u64) {
+            return Err(ReadError::TooManyInodeBlocks);
+        }
+
         Ok(Self {
             mode,
             blocksz,
             ndinode,
-            ndinodeblock,
+            ndinodeblock: ndinodeblock as u32,
             superroot_ino,
             key_seed,
         })
@@ -56,8 +62,8 @@ impl Header {
         self.mode
     }
 
-    pub fn block_size(&self) -> usize {
-        self.blocksz as _
+    pub fn block_size(&self) -> u32 {
+        self.blocksz
     }
 
     /// Gets a number of total inodes.
@@ -66,8 +72,8 @@ impl Header {
     }
 
     /// Gets a number of blocks containing inode (not a number of inode).
-    pub fn inode_block_count(&self) -> usize {
-        self.ndinodeblock as _
+    pub fn inode_block_count(&self) -> u32 {
+        self.ndinodeblock
     }
 
     pub fn super_root_inode(&self) -> usize {
@@ -102,6 +108,7 @@ pub enum ReadError {
     TooSmall,
     InvalidVersion,
     InvalidFormat,
+    TooManyInodeBlocks,
 }
 
 impl Error for ReadError {}
@@ -112,6 +119,7 @@ impl Display for ReadError {
             Self::TooSmall => f.write_str("data too small"),
             Self::InvalidVersion => f.write_str("invalid version"),
             Self::InvalidFormat => f.write_str("invalid format"),
+            Self::TooManyInodeBlocks => f.write_str("too many blocks for inodes"),
         }
     }
 }

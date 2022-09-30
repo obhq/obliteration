@@ -9,7 +9,7 @@ Obliteration is an experimental PS4 emulator based on [Kyty](https://github.com/
 
 ## Features
 
-- Built-in PKG file supports.
+- Built-in PKG file supports for Fake PKG.
 
 ## System requirements
 
@@ -127,6 +127,7 @@ If you don't have a PS4 application for testing you can download PS Scene Quiz f
 - Don't be afraid to use `unsafe` when it is necessary. We are written an application that required very high performance code and we use Rust to assist us on this task, not to use Rust to compromise performance that C/C++ can provides.
 - Any functions that operate on pointers don't need to mark as `unsafe`. The reasons is because it will required the caller to wrap it in `unsafe`. We already embrace `unsafe` code so no point to make it harder to use.
 - Don't chain method calls without intermidate variable if the result code is hard to follow. We encourage code readability than a pleasure when writing so try to make it easy to read and understand for other people.
+- Do not blindly cast an integer. Always check if a value can be fit in a destination type. We don't have any plans to support non 64-bits system so the pointer size and it related types like `usize` is always 64-bits.
 
 ### Rules for C++ sources
 
