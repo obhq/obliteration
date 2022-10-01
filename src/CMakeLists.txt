@@ -35,6 +35,10 @@ add_executable(obliteration WIN32
     settings.cpp
     util.cpp)
 
+if(WIN32)
+    target_sources(obliteration PRIVATE resources.rc)
+endif()
+
 add_dependencies(obliteration libcore)
 
 set_property(TARGET obliteration PROPERTY AUTOMOC ON)
