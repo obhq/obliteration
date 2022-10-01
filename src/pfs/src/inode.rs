@@ -7,6 +7,7 @@ use util::mem::{new_buffer, read_array, read_u32_le, read_u64_le, uninit};
 pub(crate) struct Inode<'image, 'raw_image> {
     image: &'image (dyn Image + 'raw_image),
     index: usize,
+    flags: InodeFlags,
     size: u64,
     size_compressed: usize, // It look like this one is the size of entry when de-compressed.
     blocks: u32,
@@ -70,6 +71,10 @@ impl<'image, 'raw_image> Inode<'image, 'raw_image> {
         }
 
         Ok(inode)
+    }
+
+    pub fn flags(&self) -> InodeFlags {
+        self.flags
     }
 
     pub fn size(&self) -> u64 {
@@ -182,6 +187,7 @@ impl<'image, 'raw_image> Inode<'image, 'raw_image> {
         raw: *const u8,
         indirect_reader: fn(&mut &[u8]) -> Option<u32>,
     ) -> Self {
+        let flags = InodeFlags(read_u32_le(raw, 0x04));
         let size = read_u64_le(raw, 0x08);
         let size_compressed = read_u64_le(raw, 0x10) as usize;
         let blocks = read_u32_le(raw, 0x60);
@@ -189,6 +195,7 @@ impl<'image, 'raw_image> Inode<'image, 'raw_image> {
         Self {
             image,
             index,
+            flags,
             size,
             size_compressed,
             blocks,
@@ -220,6 +227,16 @@ impl<'image, 'raw_image> Inode<'image, 'raw_image> {
         *raw = &raw[36..];
 
         Some(value)
+    }
+}
+
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+pub struct InodeFlags(u32);
+
+impl InodeFlags {
+    pub fn is_compressed(self) -> bool {
+        self.0 & 0x00000001 != 0
     }
 }
 

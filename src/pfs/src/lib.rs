@@ -14,6 +14,7 @@ pub mod file;
 pub mod header;
 pub mod image;
 pub mod inode;
+pub mod pfsc;
 
 pub fn open<'raw>(
     image: &'raw [u8],

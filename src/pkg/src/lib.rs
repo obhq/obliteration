@@ -311,13 +311,25 @@ impl<'c> Pkg<'c> {
                     // Dump.
                     self.dump_pfs_directory(path, i, &output, status, ud)?;
                 }
-                pfs::directory::Item::File(mut i) => {
+                pfs::directory::Item::File(i) => {
+                    // Check if file is compressed.
+                    let (size, mut file): (u64, Box<dyn Read>) = if i.is_compressed() {
+                        let r = match pfs::pfsc::Reader::open(i) {
+                            Ok(v) => v,
+                            Err(_) => todo!(),
+                        };
+
+                        (r.len(), Box::new(r))
+                    } else {
+                        (i.len(), Box::new(i))
+                    };
+
                     // Report initial status.
                     let mut status_name = name.clone();
 
                     status_name.push(0);
 
-                    (status)(0, i.len(), status_name.as_ptr() as _, ud);
+                    (status)(0, size, status_name.as_ptr() as _, ud);
 
                     // Open destination file.
                     let mut dest = std::fs::OpenOptions::new();
@@ -335,7 +347,7 @@ impl<'c> Pkg<'c> {
 
                     loop {
                         // Read source.
-                        let read = match i.read(&mut buffer) {
+                        let read = match file.read(&mut buffer) {
                             Ok(v) => v,
                             Err(e) => {
                                 if e.kind() == std::io::ErrorKind::Interrupted {
@@ -361,7 +373,7 @@ impl<'c> Pkg<'c> {
                         written += read as u64; // Buffer size just 32768.
 
                         // Update status.
-                        (status)(written, i.len(), status_name.as_ptr() as _, ud);
+                        (status)(written, size, status_name.as_ptr() as _, ud);
                     }
                 }
             }

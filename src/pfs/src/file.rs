@@ -28,11 +28,16 @@ impl<'pfs, 'image, 'raw_image> File<'pfs, 'image, 'raw_image> {
     pub fn len(&self) -> u64 {
         self.inode.size()
     }
+
+    pub fn is_compressed(&self) -> bool {
+        self.inode.flags().is_compressed()
+    }
 }
 
 impl<'pfs, 'image, 'raw_image> Seek for File<'pfs, 'image, 'raw_image> {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
-        self.current_offset = match pos {
+        // Calculate new offset.
+        let offset = match pos {
             SeekFrom::Start(v) => min(self.len(), v),
             SeekFrom::End(v) => {
                 if v >= 0 {
@@ -62,7 +67,11 @@ impl<'pfs, 'image, 'raw_image> Seek for File<'pfs, 'image, 'raw_image> {
             }
         };
 
-        self.current_block.clear();
+        // Update offset.
+        if offset != self.current_offset {
+            self.current_offset = offset;
+            self.current_block.clear();
+        }
 
         Ok(self.current_offset)
     }
