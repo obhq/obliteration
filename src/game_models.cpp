@@ -1,4 +1,5 @@
 #include "game_models.hpp"
+#include "pkg.hpp"
 #include "util.hpp"
 
 Game::Game(const QString &name, const QString &directory) :
@@ -13,7 +14,7 @@ Game::~Game()
 
 QPixmap Game::icon() const
 {
-    QPixmap icon(joinPath(directory(), "icon0.png").c_str());
+    QPixmap icon(joinPath(directory(), PKG_ENTRY_ICON0_PNG).c_str());
 
     icon.setDevicePixelRatio(2.0);
 

@@ -11,9 +11,9 @@ struct pkg_param;
 
 typedef void (*pkg_dump_pfs_status_t) (std::uint64_t written, std::uint64_t total, const char *name, void *ud);
 
-#define PKG_ENTRY_PARAM_SFO 0x00001000 // param.sfo
-#define PKG_ENTRY_PIC1_PNG  0x00001006 // pic1.png
-#define PKG_ENTRY_ICON0_PNG 0x00001200 // icon0.png
+#define PKG_ENTRY_PARAM_SFO "entry_4096" // param.sfo
+#define PKG_ENTRY_PIC1_PNG  "entry_4102" // pic1.png
+#define PKG_ENTRY_ICON0_PNG "entry_4608" // icon0.png
 
 extern "C" {
     // The returned pkg must not outlive ctx.
@@ -21,7 +21,7 @@ extern "C" {
     void pkg_close(pkg *pkg);
 
     pkg_param *pkg_get_param(const pkg *pkg, char **error);
-    char *pkg_dump_entry(const pkg *pkg, std::uint32_t id, const char *file);
+    error *pkg_dump_entries(const pkg *pkg, const char *dir);
 
     // Dump all files from outer PFS.
     error *pkg_dump_pfs(const pkg *pkg, const char *dir, pkg_dump_pfs_status_t status, void *ud);

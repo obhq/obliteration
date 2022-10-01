@@ -185,32 +185,13 @@ void MainWindow::installPkg()
 
     auto directory = joinPath(gamesDirectory, gameId);
 
-    // Dump param.sfo.
-    error = pkg_dump_entry(pkg, PKG_ENTRY_PARAM_SFO, joinPath(directory.c_str(), "param.sfo").c_str());
+    // Dump entries.
+    Error newError;
 
-    if (error) {
-        QMessageBox::critical(this, "Error", QString("Failed to install param.sfo to %1: %2").arg(directory.c_str(), error));
-        std::free(error);
-        pkg_close(pkg);
-        return;
-    }
+    newError = pkg_dump_entries(pkg, directory.c_str());
 
-    // Dump pic1.png.
-    error = pkg_dump_entry(pkg, PKG_ENTRY_PIC1_PNG, joinPath(directory.c_str(), "pic1.png").c_str());
-
-    if (error) {
-        QMessageBox::critical(this, "Error", QString("Failed to install pic1.png to %1: %2").arg(directory.c_str(), error));
-        std::free(error);
-        pkg_close(pkg);
-        return;
-    }
-
-    // Dump icon0.png.
-    error = pkg_dump_entry(pkg, PKG_ENTRY_ICON0_PNG, joinPath(directory.c_str(), "icon0.png").c_str());
-
-    if (error) {
-        QMessageBox::critical(this, "Error", QString("Failed to install pic1.png to %1: %2").arg(directory.c_str(), error));
-        std::free(error);
+    if (newError) {
+        QMessageBox::critical(this, "Error", QString("Failed to extract PKG entries: %1").arg(newError.message()));
         pkg_close(pkg);
         return;
     }
@@ -224,7 +205,7 @@ void MainWindow::installPkg()
     progress.setAutoClose(false);
     progress.setWindowModality(Qt::WindowModal);
 
-    Error newError = pkg_dump_pfs(pkg, directory.c_str(), [](std::uint64_t written, std::uint64_t total, const char *name, void *ud) {
+    newError = pkg_dump_pfs(pkg, directory.c_str(), [](std::uint64_t written, std::uint64_t total, const char *name, void *ud) {
         auto toProgress = [total](std::uint64_t v) -> int {
             if (total >= 1024UL*1024UL*1024UL*1024UL) { // >= 1TB
                 return v / 1024UL*1024UL*1024UL*10UL; // 10GB step.
@@ -323,7 +304,7 @@ bool MainWindow::loadGame(const QString &gameId)
     auto gameList = reinterpret_cast<GameListModel *>(m_games->model());
 
     // Read game title from param.sfo.
-    auto paramPath = joinPath(gamePath.c_str(), "param.sfo");
+    auto paramPath = joinPath(gamePath.c_str(), PKG_ENTRY_PARAM_SFO);
     pkg_param *param;
     char *error;
 

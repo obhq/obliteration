@@ -56,12 +56,12 @@ pub extern "C" fn pkg_get_param(pkg: &Pkg, error: *mut *mut c_char) -> *mut Para
 }
 
 #[no_mangle]
-pub extern "C" fn pkg_dump_entry(pkg: &Pkg, id: u32, file: *const c_char) -> *mut c_char {
-    let file = util::str::from_c_unchecked(file);
+pub extern "C" fn pkg_dump_entries(pkg: &Pkg, dir: *const c_char) -> *mut error::Error {
+    let dir = util::str::from_c_unchecked(dir);
 
-    match pkg.dump_entry(id, file) {
+    match pkg.dump_entries(dir) {
         Ok(_) => null_mut(),
-        Err(e) => util::str::to_c(&e.to_string()),
+        Err(e) => error::Error::new(&e),
     }
 }
 
@@ -197,30 +197,62 @@ impl<'c> Pkg<'c> {
         Ok(param)
     }
 
-    pub fn dump_entry<F: AsRef<Path>>(&self, id: u32, file: F) -> Result<(), DumpEntryError> {
-        // Find target entry.
-        let (entry, index, data) = match self.find_entry(id) {
-            Ok(v) => v,
-            Err(e) => return Err(DumpEntryError::FindEntryFailed(e)),
-        };
+    pub fn dump_entries<D: AsRef<Path>>(&self, dir: D) -> Result<(), DumpEntryError> {
+        let dir = dir.as_ref();
 
-        // Open destination file.
-        let mut file = match File::create(file) {
-            Ok(v) => v,
-            Err(e) => return Err(DumpEntryError::CreateDestinationFailed(e)),
-        };
+        for num in 0..self.header.entry_count() {
+            // Check offset.
+            let offset = self.header.table_offset() + num * Entry::RAW_SIZE;
+            let raw = match self.raw.get(offset..(offset + Entry::RAW_SIZE)) {
+                Some(v) => v.as_ptr(),
+                None => return Err(DumpEntryError::InvalidEntryOffset(num)),
+            };
 
-        if entry.is_encrypted() {
-            if entry.key_index() != 3 || self.entry_key3.is_empty() {
-                return Err(DumpEntryError::NoDecryptionKey(index));
+            // Read entry.
+            let entry = Entry::read(raw);
+
+            // Skip all entries that we don't have decryption key. We have decryption key for all
+            // required entries so it is safe to skip one that we don't have.
+            if entry.is_encrypted() {
+                if entry.key_index() != 3 {
+                    continue;
+                } else if self.entry_key3.is_empty() {
+                    return Err(DumpEntryError::NoDecryptionKey(num));
+                }
             }
 
-            // Decrypt and dump data.
-            if let Err(e) = self.decrypt_entry_data(&entry, data, |b| file.write_all(&b)) {
-                return Err(DumpEntryError::WriteDestinationFailed(e));
+            // Get entry data.
+            let offset = entry.data_offset();
+            let size = if entry.is_encrypted() {
+                (entry.data_size() + 15) & !15 // We need to include padding.
+            } else {
+                entry.data_size()
+            };
+
+            let data = match self.raw.get(offset..(offset + size)) {
+                Some(v) => v,
+                None => return Err(DumpEntryError::InvalidDataOffset(num)),
+            };
+
+            // Get destination path.
+            let mut path = dir.to_path_buf();
+
+            path.push(format!("entry_{}", entry.id()));
+
+            // Open destination file.
+            let mut file = match File::create(&path) {
+                Ok(v) => v,
+                Err(e) => return Err(DumpEntryError::CreateDestinationFailed(path, e)),
+            };
+
+            // Dump entry data.
+            if entry.is_encrypted() {
+                if let Err(e) = self.decrypt_entry_data(&entry, data, |b| file.write_all(&b)) {
+                    return Err(DumpEntryError::WriteDestinationFailed(path, e));
+                }
+            } else if let Err(e) = file.write_all(data) {
+                return Err(DumpEntryError::WriteDestinationFailed(path, e));
             }
-        } else if let Err(e) = file.write_all(data) {
-            return Err(DumpEntryError::WriteDestinationFailed(e));
         }
 
         Ok(())
@@ -647,17 +679,17 @@ impl Display for GetParamError {
 
 #[derive(Debug)]
 pub enum DumpEntryError {
-    FindEntryFailed(FindEntryError),
-    CreateDestinationFailed(std::io::Error),
-    WriteDestinationFailed(std::io::Error),
+    InvalidEntryOffset(usize),
+    InvalidDataOffset(usize),
+    CreateDestinationFailed(PathBuf, std::io::Error),
+    WriteDestinationFailed(PathBuf, std::io::Error),
     NoDecryptionKey(usize),
 }
 
 impl Error for DumpEntryError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::FindEntryFailed(e) => Some(e),
-            Self::CreateDestinationFailed(e) | Self::WriteDestinationFailed(e) => Some(e),
+            Self::CreateDestinationFailed(_, e) | Self::WriteDestinationFailed(_, e) => Some(e),
             _ => None,
         }
     }
@@ -666,10 +698,11 @@ impl Error for DumpEntryError {
 impl Display for DumpEntryError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
-            Self::FindEntryFailed(e) => e.fmt(f),
-            Self::CreateDestinationFailed(e) => e.fmt(f),
-            Self::WriteDestinationFailed(e) => e.fmt(f),
-            Self::NoDecryptionKey(num) => write!(f, "no decryption key for entry #{}", num),
+            Self::InvalidEntryOffset(i) => write!(f, "entry #{} has invalid offset", i),
+            Self::InvalidDataOffset(i) => write!(f, "entry #{} has invalid data offset", i),
+            Self::CreateDestinationFailed(p, _) => write!(f, "cannot create {}", p.display()),
+            Self::WriteDestinationFailed(p, _) => write!(f, "cannot write {}", p.display()),
+            Self::NoDecryptionKey(i) => write!(f, "no decryption key for entry #{}", i),
         }
     }
 }

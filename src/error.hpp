@@ -25,6 +25,16 @@ public:
 
 public:
     Error &operator=(const Error &) = delete;
+    Error &operator=(error *obj)
+    {
+        if (m_obj) {
+            error_free(m_obj);
+        }
+
+        m_obj = obj;
+        return *this;
+    }
+
     error **operator&() { return &m_obj; }
     operator bool() const { return m_obj != nullptr; }
 
