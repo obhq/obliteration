@@ -9,7 +9,7 @@ Obliteration is an experimental PS4 emulator based on [Kyty](https://github.com/
 
 ## Features
 
-- Built-in PKG file supports for Fake PKG.
+- [x] Built-in PKG file supports for Fake PKG.
 
 ## System requirements
 
