@@ -16,6 +16,14 @@ Obliteration is an experimental PS4 emulator based on [Kyty](https://github.com/
 - Windows 10 x64 or Linux x86-64.
 - CPU that supports all of instructions on [PS4 CPU](https://en.wikipedia.org/wiki/Jaguar_(microarchitecture)#Instruction_set_support). All modern Intel/AMD CPUs should meet with this requirement.
 
+### Windows specific requirements
+
+- [Microsoft Visual C++ 2019 Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist). It is likely your system already have it so try to run Obliteration first. If there is an error related to `msvcp140.dll`, `vcruntime140.dll` or `vcruntime140_1.dll` that mean you need to install this manually.
+
+## Get a daily build
+
+You can download Window binary for the latest development [here](https://github.com/ultimaweapon/obliteration/actions/workflows/ci.yml).
+
 ## Building from source
 
 ### Windows prerequisites
@@ -127,7 +135,7 @@ If you don't have a PS4 application for testing you can download PS Scene Quiz f
 - Don't be afraid to use `unsafe` when it is necessary. We are written an application that required very high performance code and we use Rust to assist us on this task, not to use Rust to compromise performance that C/C++ can provides.
 - Any functions that operate on pointers don't need to mark as `unsafe`. The reasons is because it will required the caller to wrap it in `unsafe`. We already embrace `unsafe` code so no point to make it harder to use.
 - Don't chain method calls without intermidate variable if the result code is hard to follow. We encourage code readability than a pleasure when writing so try to make it easy to read and understand for other people.
-- Do not blindly cast an integer. Always check if a value can be fit in a destination type. We don't have any plans to support non 64-bits system so the pointer size and it related types like `usize` is always 64-bits.
+- Do not blindly cast an integer. Make sure the value can be fit in a destination type. We don't have any plans to support non 64-bits system so the pointer size and it related types like `usize` is always 64-bits.
 
 ### Rules for C++ sources
 
