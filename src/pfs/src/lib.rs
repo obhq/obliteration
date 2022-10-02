@@ -18,7 +18,6 @@ pub mod pfsc;
 
 pub fn open<'raw>(
     image: &'raw [u8],
-    flags: ImageFlags,
     ekpfs: Option<&[u8]>,
 ) -> Result<Box<dyn Image + 'raw>, OpenError> {
     // Read header.
@@ -42,7 +41,7 @@ pub fn open<'raw>(
         };
 
         let key_seed = header.key_seed();
-        let (data_key, tweak_key) = image::get_xts_keys(flags, ekpfs, key_seed);
+        let (data_key, tweak_key) = image::get_xts_keys(ekpfs, key_seed);
         let cipher_1 = Aes128::new(GenericArray::from_slice(&data_key));
         let cipher_2 = Aes128::new(GenericArray::from_slice(&tweak_key));
 
@@ -109,22 +108,6 @@ pub fn mount<'image, 'raw_image>(
     }
 
     Ok(Pfs { image, inodes })
-}
-
-#[derive(Clone, Copy)]
-#[repr(transparent)]
-pub struct ImageFlags(u64);
-
-impl ImageFlags {
-    pub fn is_new_encryption(&self) -> bool {
-        self.0 & 0x2000000000000000 != 0
-    }
-}
-
-impl From<u64> for ImageFlags {
-    fn from(v: u64) -> Self {
-        Self(v)
-    }
 }
 
 pub trait Image {

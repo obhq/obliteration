@@ -208,15 +208,15 @@ void MainWindow::installPkg()
     newError = pkg_dump_pfs(pkg, directory.c_str(), [](std::uint64_t written, std::uint64_t total, const char *name, void *ud) {
         auto toProgress = [total](std::uint64_t v) -> int {
             if (total >= 1024UL*1024UL*1024UL*1024UL) { // >= 1TB
-                return v / 1024UL*1024UL*1024UL*10UL; // 10GB step.
+                return v / (1024UL*1024UL*1024UL*10UL); // 10GB step.
             } else if (total >= 1024UL*1024UL*1024UL*100UL) { // >= 100GB
-                return v / 1024UL*1024UL*1024UL; // 1GB step.
+                return v / (1024UL*1024UL*1024UL); // 1GB step.
             } else if (total >= 1024UL*1024UL*1024UL*10UL) { // >= 10GB
-                return v / 1024UL*1024UL*100UL; // 100MB step.
+                return v / (1024UL*1024UL*100UL); // 100MB step.
             } else if (total >= 1024UL*1024UL*1024UL) { // >= 1GB
-                return v / 1024UL*1024UL*10UL; // 10MB step.
+                return v / (1024UL*1024UL*10UL); // 10MB step.
             } else if (total >= 1024UL*1024UL*100UL) { // >= 100MB
-                return v / 1024UL*1024UL;// 1MB step.
+                return v / (1024UL*1024UL);// 1MB step.
             } else {
                 return v;
             }

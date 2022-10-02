@@ -3,7 +3,6 @@ use util::mem::{read_u32_be, read_u64_be};
 pub struct Header {
     entry_count: u32,
     table_offset: u32,
-    pfs_flags: pfs::ImageFlags,
     pfs_offset: u64,
     pfs_size: u64,
 }
@@ -27,14 +26,12 @@ impl Header {
         // Read fields.
         let entry_count = read_u32_be(pkg, 0x10);
         let table_offset = read_u32_be(pkg, 0x18);
-        let pfs_flags = read_u64_be(pkg, 0x408).into();
         let pfs_offset = read_u64_be(pkg, 0x410);
         let pfs_size = read_u64_be(pkg, 0x418);
 
         Ok(Self {
             entry_count,
             table_offset,
-            pfs_flags,
             pfs_offset,
             pfs_size,
         })
@@ -46,10 +43,6 @@ impl Header {
 
     pub fn table_offset(&self) -> usize {
         self.table_offset as _
-    }
-
-    pub fn pfs_flags(&self) -> pfs::ImageFlags {
-        self.pfs_flags
     }
 
     pub fn pfs_offset(&self) -> usize {

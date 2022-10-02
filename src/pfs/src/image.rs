@@ -1,5 +1,5 @@
 use crate::header::Header;
-use crate::{Image, ImageFlags, ReadError};
+use crate::{Image, ReadError};
 use aes::Aes128;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
@@ -9,22 +9,9 @@ use xts_mode::{get_tweak_default, Xts128};
 pub(super) const XTS_BLOCK_SIZE: usize = 0x1000;
 
 /// Gets data key and tweak key.
-pub(super) fn get_xts_keys(
-    flags: ImageFlags,
-    ekpfs: &[u8],
-    seed: &[u8; 16],
-) -> ([u8; 16], [u8; 16]) {
-    // Derive EKPFS from seed if PFS use new encryption.
-    let ekpfs: Vec<u8> = if flags.is_new_encryption() {
-        let mut hmac = Hmac::<Sha256>::new_from_slice(ekpfs).unwrap();
-        hmac.update(seed);
-        hmac.finalize().into_bytes().to_vec()
-    } else {
-        ekpfs.into()
-    };
-
+pub(super) fn get_xts_keys(ekpfs: &[u8], seed: &[u8; 16]) -> ([u8; 16], [u8; 16]) {
     // Derive key.
-    let mut hmac = Hmac::<Sha256>::new_from_slice(ekpfs.as_slice()).unwrap();
+    let mut hmac = Hmac::<Sha256>::new_from_slice(ekpfs).unwrap();
     let mut input: Vec<u8> = Vec::with_capacity(seed.len() + 4);
 
     input.extend(&[0x01, 0x00, 0x00, 0x00]);

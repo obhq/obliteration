@@ -273,7 +273,7 @@ impl<'c> Pkg<'c> {
         };
 
         // Mount outer PFS.
-        let image = match pfs::open(image, self.header.pfs_flags(), Some(&self.ekpfs)) {
+        let image = match pfs::open(image, Some(&self.ekpfs)) {
             Ok(v) => v,
             Err(e) => return Err(DumpPfsError::OpenOuterFailed(e)),
         };
@@ -343,17 +343,20 @@ impl<'c> Pkg<'c> {
                     // Dump.
                     self.dump_pfs_directory(path, i, &output, status, ud)?;
                 }
-                pfs::directory::Item::File(i) => {
+                pfs::directory::Item::File(mut i) => {
                     // Check if file is compressed.
-                    let (size, mut file): (u64, Box<dyn Read>) = if i.is_compressed() {
-                        let r = match pfs::pfsc::Reader::open(i) {
+                    let mut pfsc;
+                    let (size, file): (u64, &mut dyn Read) = if i.is_compressed() {
+                        pfsc = match pfs::pfsc::Reader::open(i) {
                             Ok(v) => v,
-                            Err(_) => todo!(),
+                            Err(e) => {
+                                return Err(DumpPfsError::CreateDecompressorFailed(output, e));
+                            }
                         };
 
-                        (r.len(), Box::new(r))
+                        (pfsc.len(), &mut pfsc)
                     } else {
-                        (i.len(), Box::new(i))
+                        (i.len(), &mut i)
                     };
 
                     // Report initial status.
@@ -716,6 +719,7 @@ pub enum DumpPfsError {
     OpenDirectoryFailed(String, pfs::directory::OpenError),
     UnsupportedFileName(String),
     CreateDirectoryFailed(PathBuf, std::io::Error),
+    CreateDecompressorFailed(PathBuf, pfs::pfsc::OpenError),
     CreateFileFailed(PathBuf, std::io::Error),
     ReadFileFailed(String, std::io::Error),
     WriteFileFailed(PathBuf, std::io::Error),
@@ -729,6 +733,7 @@ impl Error for DumpPfsError {
             Self::OpenSuperRootFailed(e) => Some(e),
             Self::OpenDirectoryFailed(_, e) => Some(e),
             Self::CreateDirectoryFailed(_, e) => Some(e),
+            Self::CreateDecompressorFailed(_, e) => Some(e),
             Self::CreateFileFailed(_, e) => Some(e),
             Self::ReadFileFailed(_, e) => Some(e),
             Self::WriteFileFailed(_, e) => Some(e),
@@ -750,6 +755,9 @@ impl Display for DumpPfsError {
             }
             Self::CreateDirectoryFailed(p, _) => {
                 write!(f, "cannot create directory {}", p.display())
+            }
+            Self::CreateDecompressorFailed(p, _) => {
+                write!(f, "cannot create decompressor for {}", p.display())
             }
             Self::CreateFileFailed(p, _) => write!(f, "cannot create {}", p.display()),
             Self::ReadFileFailed(p, _) => write!(f, "cannot read {}", p),

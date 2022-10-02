@@ -14,22 +14,8 @@ macro_rules! utf8 {
     }};
 }
 
-macro_rules! integer {
-    ($num:ident, $value:ident, $format:ident) => {{
-        if $format != 0x0404 {
-            return Err(ReadError::InvalidValueFormat($num));
-        } else if $value.len() != 4 {
-            return Err(ReadError::InvalidValue($num));
-        } else {
-            read_u32_le($value.as_ptr(), 0)
-        }
-    }};
-}
-
 // https://www.psdevwiki.com/ps4/Param.sfo#Internal_Structure
 pub struct Param {
-    attribute: u32,
-    system_ver: u32,
     title: String,
     title_id: String,
 }
@@ -55,8 +41,6 @@ impl Param {
         let entries = read_u32_le(header, 16) as usize;
 
         // Read entries.
-        let mut attribute: Option<u32> = None;
-        let mut system_ver: Option<u32> = None;
         let mut title: Option<String> = None;
         let mut title_id: Option<String> = None;
 
@@ -97,8 +81,6 @@ impl Param {
 
             // Parse value.
             match key {
-                b"ATTRIBUTE" => attribute = Some(integer!(i, value, format)),
-                b"SYSTEM_VER" => system_ver = Some(integer!(i, value, format)),
                 b"TITLE" => title = Some(utf8!(i, value, format)),
                 b"TITLE_ID" => title_id = Some(utf8!(i, value, format)),
                 _ => continue,
@@ -106,16 +88,6 @@ impl Param {
         }
 
         // Check required values.
-        let attribute = match attribute {
-            Some(v) => v,
-            None => return Err(ReadError::MissingAttribute),
-        };
-
-        let system_ver = match system_ver {
-            Some(v) => v,
-            None => return Err(ReadError::MissingSystemVer),
-        };
-
         let title = match title {
             Some(v) => v,
             None => return Err(ReadError::MissingTitle),
@@ -126,12 +98,7 @@ impl Param {
             None => todo!(),
         };
 
-        Ok(Self {
-            attribute,
-            system_ver,
-            title,
-            title_id,
-        })
+        Ok(Self { title, title_id })
     }
 
     pub fn title_id(&self) -> &str {

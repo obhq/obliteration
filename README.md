@@ -22,7 +22,7 @@ Obliteration is an experimental PS4 emulator based on [Kyty](https://github.com/
 
 ## Get a daily build
 
-You can download Window binary for the latest development [here](https://github.com/ultimaweapon/obliteration/actions/workflows/ci.yml).
+You can download Windows binary for the latest development [here](https://github.com/ultimaweapon/obliteration/actions/workflows/ci.yml).
 
 ## Building from source
 
