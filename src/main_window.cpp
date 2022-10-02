@@ -3,6 +3,7 @@
 #include "game_models.hpp"
 #include "game_settings_dialog.hpp"
 #include "pkg.hpp"
+#include "progress_dialog.hpp"
 #include "settings.hpp"
 #include "util.hpp"
 
@@ -144,6 +145,9 @@ void MainWindow::installPkg()
         return;
     }
 
+    // Show dialog to display progress.
+    ProgressDialog progress("Install PKG", "Opening PKG...", this);
+
     // Open a PKG.
     pkg *pkg;
     char *error;
@@ -151,7 +155,7 @@ void MainWindow::installPkg()
     pkg = pkg_open(m_context, pkgPath.c_str(), &error);
 
     if (!pkg) {
-        QMessageBox::critical(this, "Error", QString("Cannot open %1: %2").arg(pkgPath.c_str()).arg(error));
+        QMessageBox::critical(&progress, "Error", QString("Cannot open %1: %2").arg(pkgPath.c_str()).arg(error));
         std::free(error);
         return;
     }
@@ -160,13 +164,14 @@ void MainWindow::installPkg()
     auto param = pkg_get_param(pkg, &error);
 
     if (!param) {
-        QMessageBox::critical(this, "Error", QString("Failed to get param.sfo from %1: %2").arg(pkgPath.c_str()).arg(error));
+        QMessageBox::critical(&progress, "Error", QString("Failed to get param.sfo from %1: %2").arg(pkgPath.c_str()).arg(error));
         std::free(error);
         pkg_close(pkg);
         return;
     }
 
     auto gameId = fromMalloc(pkg_param_title_id(param));
+    auto gameTitle = fromMalloc(pkg_param_title(param));
 
     pkg_param_close(param);
 
@@ -178,7 +183,7 @@ void MainWindow::installPkg()
 
         msg += " If you have an unsuccessful installation from the previous attempt you need to remove this directory before install again.";
 
-        QMessageBox::critical(this, "Error", msg.arg(gameId).arg(gamesDirectory));
+        QMessageBox::critical(&progress, "Error", msg.arg(gameId).arg(gamesDirectory));
         pkg_close(pkg);
         return;
     }
@@ -191,19 +196,13 @@ void MainWindow::installPkg()
     newError = pkg_dump_entries(pkg, directory.c_str());
 
     if (newError) {
-        QMessageBox::critical(this, "Error", QString("Failed to extract PKG entries: %1").arg(newError.message()));
+        QMessageBox::critical(&progress, "Error", QString("Failed to extract PKG entries: %1").arg(newError.message()));
         pkg_close(pkg);
         return;
     }
 
     // Dump PFS.
-    QProgressDialog progress(this);
-
-    progress.setLabelText("Extracting PFS...");
-    progress.setCancelButton(nullptr);
-    progress.setValue(0);
-    progress.setAutoClose(false);
-    progress.setWindowModality(Qt::WindowModal);
+    progress.setWindowTitle(gameTitle);
 
     newError = pkg_dump_pfs(pkg, directory.c_str(), [](std::uint64_t written, std::uint64_t total, const char *name, void *ud) {
         auto toProgress = [total](std::uint64_t v) -> int {
@@ -222,13 +221,13 @@ void MainWindow::installPkg()
             }
         };
 
-        auto progress = reinterpret_cast<QProgressDialog *>(ud);
+        auto progress = reinterpret_cast<ProgressDialog *>(ud);
         auto max = toProgress(total);
         auto value = toProgress(written);
-        auto label = QString("Extracting %1...").arg(name);
+        auto label = QString("Installing %1...").arg(name);
 
-        if (progress->labelText() != label) {
-            progress->setLabelText(label);
+        if (progress->statusText() != label) {
+            progress->setStatusText(label);
             progress->setValue(0);
             progress->setMaximum(max);
         } else {
@@ -237,7 +236,7 @@ void MainWindow::installPkg()
     }, &progress);
 
     pkg_close(pkg);
-    progress.close();
+    progress.complete();
 
     if (newError) {
         QMessageBox::critical(this, "Error", QString("Failed to extract pfs_image.dat: %1").arg(newError.message()));

@@ -9,7 +9,6 @@ pub(crate) struct Inode<'image, 'raw_image> {
     index: usize,
     flags: InodeFlags,
     size: u64,
-    size_compressed: usize, // It look like this one is the size of entry when de-compressed.
     blocks: u32,
     direct_blocks: [u32; 12],
     direct_sigs: [Option<[u8; 32]>; 12],
@@ -79,10 +78,6 @@ impl<'image, 'raw_image> Inode<'image, 'raw_image> {
 
     pub fn size(&self) -> u64 {
         self.size
-    }
-
-    pub fn compressed_size(&self) -> usize {
-        self.size_compressed
     }
 
     pub fn load_blocks(&self) -> Result<Vec<u32>, LoadBlocksError> {
@@ -189,7 +184,6 @@ impl<'image, 'raw_image> Inode<'image, 'raw_image> {
     ) -> Self {
         let flags = InodeFlags(read_u32_le(raw, 0x04));
         let size = read_u64_le(raw, 0x08);
-        let size_compressed = read_u64_le(raw, 0x10) as usize;
         let blocks = read_u32_le(raw, 0x60);
 
         Self {
@@ -197,7 +191,6 @@ impl<'image, 'raw_image> Inode<'image, 'raw_image> {
             index,
             flags,
             size,
-            size_compressed,
             blocks,
             direct_blocks: [0; 12],
             direct_sigs: [None; 12],

@@ -31,6 +31,7 @@ add_executable(obliteration WIN32
     initialize_dialog.cpp
     main.cpp
     main_window.cpp
+    progress_dialog.cpp
     resources.qrc
     settings.cpp
     util.cpp)
