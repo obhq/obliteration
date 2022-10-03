@@ -1,6 +1,7 @@
 #pragma once
 
 #include "context.hpp"
+#include "kernel.hpp"
 
 #include <QMainWindow>
 
@@ -30,4 +31,5 @@ private:
 private:
     context *m_context;
     QListView *m_games;
+    kernel *m_kernel;
 };

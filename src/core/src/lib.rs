@@ -2,6 +2,6 @@
 // to add other crates that expose API to the GUI as a dependency of this crate then re-export all
 // of those APIs here.
 pub use context::*;
-pub use emulator::*;
 pub use error::*;
+pub use kernel::*;
 pub use pkg::*;

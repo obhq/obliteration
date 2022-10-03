@@ -8,6 +8,6 @@ crate-type = ["staticlib"]
 
 [dependencies]
 context = { path = "../context" }
-emulator = { path = "../emulator" }
 error = { path = "../error" }
+kernel = { path = "../kernel" }
 pkg = { path = "../pkg" }

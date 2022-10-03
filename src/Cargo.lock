@@ -99,8 +99,8 @@ name = "core"
 version = "0.1.0"
 dependencies = [
  "context",
- "emulator",
  "error",
+ "kernel",
  "pkg",
 ]
 
@@ -165,13 +165,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "emulator"
-version = "0.1.0"
-dependencies = [
- "context",
-]
-
-[[package]]
 name = "error"
 version = "0.1.0"
 dependencies = [
@@ -226,6 +219,13 @@ checksum = "a0c10553d664a4d0bcff9f4215d0aac67a639cc68ef660840afe309b807bc9f5"
 dependencies = [
  "block-padding",
  "generic-array",
+]
+
+[[package]]
+name = "kernel"
+version = "0.1.0"
+dependencies = [
+ "error",
 ]
 
 [[package]]

@@ -2,8 +2,8 @@
 members = [
     "context",
     "core",
-    "emulator",
     "error",
+    "kernel",
     "pfs",
     "pkg",
     "util"

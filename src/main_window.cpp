@@ -1,5 +1,4 @@
 #include "main_window.hpp"
-#include "emulator.hpp"
 #include "game_models.hpp"
 #include "game_settings_dialog.hpp"
 #include "pkg.hpp"
@@ -22,11 +21,10 @@
 #include <QToolBar>
 #include <QSettings>
 
-#include <cstring>
-
 MainWindow::MainWindow(context *context) :
     m_context(context),
-    m_games(nullptr)
+    m_games(nullptr),
+    m_kernel(nullptr)
 {
     setWindowTitle("Obliteration");
     restoreGeometry();
@@ -107,7 +105,7 @@ bool MainWindow::loadGames()
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     // Ask user to confirm.
-    if (emulator_running(m_context)) {
+    if (m_kernel) {
         QMessageBox confirm(this);
 
         confirm.setText("Do you want to exit?");
@@ -120,6 +118,10 @@ void MainWindow::closeEvent(QCloseEvent *event)
             event->ignore();
             return;
         }
+
+        // Shutdown.
+        kernel_shutdown(m_kernel);
+        m_kernel = nullptr;
     }
 
     // Save gometry.
@@ -256,13 +258,6 @@ void MainWindow::startGame(const QModelIndex &index)
     // Get target game.
     auto model = reinterpret_cast<GameListModel *>(m_games->model());
     auto game = model->get(index.row()); // Qt already guaranteed the index is valid.
-
-    // Setup config.
-    emulator_config conf;
-
-    std::memset(&conf, 0, sizeof(conf));
-
-    emulator_start(m_context, &conf);
 }
 
 void MainWindow::requestGamesContextMenu(const QPoint &pos)
@@ -340,7 +335,7 @@ void MainWindow::restoreGeometry()
 
 bool MainWindow::requireEmulatorStopped()
 {
-    if (emulator_running(m_context)) {
+    if (m_kernel) {
         QMessageBox::critical(this, "Error", "This functionality is not available while a game is running.");
         return false;
     }
