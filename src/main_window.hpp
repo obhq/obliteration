@@ -21,6 +21,8 @@ protected:
 
 private slots:
     void installPkg();
+    void reportIssue();
+    void aboutObliteration();
     void startGame(const QModelIndex &index);
     void requestGamesContextMenu(const QPoint &pos);
 

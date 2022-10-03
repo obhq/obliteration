@@ -7,7 +7,9 @@
 #include "util.hpp"
 
 #include <QAction>
+#include <QApplication>
 #include <QCloseEvent>
+#include <QDesktopServices>
 #include <QGuiApplication>
 #include <QDir>
 #include <QFileDialog>
@@ -18,9 +20,10 @@
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QProgressDialog>
+#include <QSettings>
 #include <QTabWidget>
 #include <QToolBar>
-#include <QSettings>
+#include <QUrl>
 
 MainWindow::MainWindow(context *context) :
     m_context(context),
@@ -32,7 +35,7 @@ MainWindow::MainWindow(context *context) :
     setWindowTitle("Obliteration");
     restoreGeometry();
 
-    // Setup File menu.
+    // File menu.
     auto fileMenu = menuBar()->addMenu("&File");
     auto installPkg = new QAction(QIcon(":/resources/archive-arrow-down-outline.svg"), "&Install PKG", this);
     auto quit = new QAction("&Quit", this);
@@ -44,14 +47,29 @@ MainWindow::MainWindow(context *context) :
     fileMenu->addSeparator();
     fileMenu->addAction(quit);
 
-    // Setup File toolbar.
+    // Help menu.
+    auto helpMenu = menuBar()->addMenu("&Help");
+    auto reportIssue = new QAction("&Report Issue", this);
+    auto aboutQt = new QAction("About &Qt", this);
+    auto about = new QAction("&About Obliteration", this);
+
+    connect(reportIssue, &QAction::triggered, this, &MainWindow::reportIssue);
+    connect(aboutQt, &QAction::triggered, &QApplication::aboutQt);
+    connect(about, &QAction::triggered, this, &MainWindow::aboutObliteration);
+
+    helpMenu->addAction(reportIssue);
+    helpMenu->addSeparator();
+    helpMenu->addAction(aboutQt);
+    helpMenu->addAction(about);
+
+    // File toolbar.
     auto fileBar = addToolBar("&File");
 
     fileBar->setMovable(false);
 
     fileBar->addAction(installPkg);
 
-    // Setup central widget.
+    // Central widget.
     m_tab = new QTabWidget(this);
 
     setCentralWidget(m_tab);
@@ -261,6 +279,18 @@ void MainWindow::installPkg()
     if (success) {
         QMessageBox::information(this, "Success", "Installation completed successfully.");
     }
+}
+
+void MainWindow::reportIssue()
+{
+    if (!QDesktopServices::openUrl(QUrl("https://github.com/ultimaweapon/obliteration/issues"))) {
+        QMessageBox::critical(this, "Error", "Failed to open https://github.com/ultimaweapon/obliteration/issues with your browser.");
+    }
+}
+
+void MainWindow::aboutObliteration()
+{
+    QMessageBox::about(this, "About Obliteration", "Obliteration is a free and open-source software for playing your PlayStation 4 titles on PC.");
 }
 
 void MainWindow::startGame(const QModelIndex &index)
