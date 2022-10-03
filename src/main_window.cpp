@@ -273,12 +273,21 @@ void MainWindow::startGame(const QModelIndex &index)
     auto model = reinterpret_cast<GameListModel *>(m_games->model());
     auto game = model->get(index.row()); // Qt already guaranteed the index is valid.
 
-    // Setup kernel.
+    // Setup rootfs.
     Error error;
 
-    m_kernel = kernel_new(&error);
+    auto rootfs = kernel_rootfs_new(&error);
+
+    if (!rootfs) {
+        QMessageBox::critical(this, "Error", QString("Failed to create rootfs: %1").arg(error.message()));
+        return;
+    }
+
+    // Setup kernel.
+    m_kernel = kernel_new(rootfs, &error);
 
     if (!m_kernel) {
+        kernel_rootfs_free(rootfs);
         QMessageBox::critical(this, "Error", QString("Failed to create kernel: %1").arg(error.message()));
         return;
     }

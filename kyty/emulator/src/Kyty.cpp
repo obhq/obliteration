@@ -298,21 +298,6 @@ KYTY_SCRIPT_FUNC(kyty_execute_func)
 	return 0;
 }
 
-KYTY_SCRIPT_FUNC(kyty_mount_func)
-{
-	if (Scripts::ArgGetVarCount() != 2)
-	{
-		EXIT("invalid args\n");
-	}
-
-	Scripts::ScriptVar folder = Scripts::ArgGetVar(0);
-	Scripts::ScriptVar point  = Scripts::ArgGetVar(1);
-
-	Libs::LibKernel::FileSystem::Mount(folder.ToString(), point.ToString());
-
-	return 0;
-}
-
 KYTY_SCRIPT_FUNC(kyty_shader_disable)
 {
 	if (Scripts::ArgGetVarCount() != 1)
@@ -428,7 +413,6 @@ void kyty_reg()
 	Scripts::RegisterFunc("kyty_load_param_sfo", LuaFunc::kyty_load_param_sfo_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_dbg_dump", LuaFunc::kyty_dbg_dump_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_execute", LuaFunc::kyty_execute_func, LuaFunc::kyty_help);
-	Scripts::RegisterFunc("kyty_mount", LuaFunc::kyty_mount_func, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_shader_disable", LuaFunc::kyty_shader_disable, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_shader_printf", LuaFunc::kyty_shader_printf, LuaFunc::kyty_help);
 	Scripts::RegisterFunc("kyty_run_tests", LuaFunc::kyty_run_tests, LuaFunc::kyty_help);

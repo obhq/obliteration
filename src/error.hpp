@@ -35,7 +35,16 @@ public:
         return *this;
     }
 
-    error **operator&() { return &m_obj; }
+    error **operator&()
+    {
+        if (m_obj) {
+            error_free(m_obj);
+            m_obj = nullptr;
+        }
+
+        return &m_obj;
+    }
+
     operator bool() const { return m_obj != nullptr; }
 
 public:
