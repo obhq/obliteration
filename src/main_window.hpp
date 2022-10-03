@@ -6,6 +6,7 @@
 #include <QMainWindow>
 
 class QListView;
+class QPlainTextEdit;
 
 class MainWindow final : public QMainWindow {
 public:
@@ -25,11 +26,14 @@ private slots:
 
 private:
     bool loadGame(const QString &gameId);
+    void appendLog(int pid, int err, const char *msg);
     void restoreGeometry();
     bool requireEmulatorStopped();
 
 private:
     context *m_context;
+    QTabWidget *m_tab;
     QListView *m_games;
+    QPlainTextEdit *m_log;
     kernel *m_kernel;
 };

@@ -16,6 +16,7 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QPlainTextEdit>
 #include <QProgressDialog>
 #include <QTabWidget>
 #include <QToolBar>
@@ -23,7 +24,9 @@
 
 MainWindow::MainWindow(context *context) :
     m_context(context),
+    m_tab(nullptr),
     m_games(nullptr),
+    m_log(nullptr),
     m_kernel(nullptr)
 {
     setWindowTitle("Obliteration");
@@ -48,6 +51,11 @@ MainWindow::MainWindow(context *context) :
 
     fileBar->addAction(installPkg);
 
+    // Setup central widget.
+    m_tab = new QTabWidget(this);
+
+    setCentralWidget(m_tab);
+
     // Setup game list.
     m_games = new QListView();
     m_games->setViewMode(QListView::IconMode);
@@ -58,12 +66,14 @@ MainWindow::MainWindow(context *context) :
     connect(m_games, &QAbstractItemView::doubleClicked, this, &MainWindow::startGame);
     connect(m_games, &QWidget::customContextMenuRequested, this, &MainWindow::requestGamesContextMenu);
 
-    // Setup central widget.
-    auto tab = new QTabWidget(this);
+    m_tab->addTab(m_games, "Games");
 
-    tab->addTab(m_games, "Games");
+    // Setup log view.
+    m_log = new QPlainTextEdit();
+    m_log->setReadOnly(true);
+    m_log->setMaximumBlockCount(10000);
 
-    setCentralWidget(tab);
+    m_tab->addTab(m_log, "Log");
 
     // Setup status bar.
     statusBar();
@@ -255,9 +265,31 @@ void MainWindow::installPkg()
 
 void MainWindow::startGame(const QModelIndex &index)
 {
+    if (!requireEmulatorStopped()) {
+        return;
+    }
+
     // Get target game.
     auto model = reinterpret_cast<GameListModel *>(m_games->model());
     auto game = model->get(index.row()); // Qt already guaranteed the index is valid.
+
+    // Setup kernel.
+    Error error;
+
+    m_kernel = kernel_new(&error);
+
+    if (!m_kernel) {
+        QMessageBox::critical(this, "Error", QString("Failed to create kernel: %1").arg(error.message()));
+        return;
+    }
+
+    kernel_set_logger(m_kernel, [](int pid, int err, const char *msg, void *ud) {
+        reinterpret_cast<MainWindow *>(ud)->appendLog(pid, err, msg);
+    }, this);
+
+    // Clear previous log and switch to log view.
+    m_log->clear();
+    m_tab->setCurrentIndex(1);
 }
 
 void MainWindow::requestGamesContextMenu(const QPoint &pos)
@@ -318,6 +350,21 @@ bool MainWindow::loadGame(const QString &gameId)
     gameList->add(new Game(name, gamePath.c_str()));
 
     return true;
+}
+
+void MainWindow::appendLog(int pid, int err, const char *msg)
+{
+    m_log->appendHtml(QString("<strong>[PID:%1]:</strong> ").arg(pid));
+
+    if (err) {
+        m_log->appendHtml(R"(<span style="color:red">)");
+    }
+
+    m_log->appendPlainText(msg);
+
+    if (err) {
+        m_log->appendHtml(R"(</span>)");
+    }
 }
 
 void MainWindow::restoreGeometry()
