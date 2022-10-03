@@ -66,14 +66,14 @@ MainWindow::MainWindow(context *context) :
     connect(m_games, &QAbstractItemView::doubleClicked, this, &MainWindow::startGame);
     connect(m_games, &QWidget::customContextMenuRequested, this, &MainWindow::requestGamesContextMenu);
 
-    m_tab->addTab(m_games, "Games");
+    m_tab->addTab(m_games, QIcon(":/resources/view-comfy.svg"), "Games");
 
     // Setup log view.
     m_log = new QPlainTextEdit();
     m_log->setReadOnly(true);
     m_log->setMaximumBlockCount(10000);
 
-    m_tab->addTab(m_log, "Log");
+    m_tab->addTab(m_log, QIcon(":/resources/card-text-outline.svg"), "Log");
 
     // Setup status bar.
     statusBar();
