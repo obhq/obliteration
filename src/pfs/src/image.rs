@@ -30,24 +30,24 @@ pub(super) fn get_xts_keys(ekpfs: &[u8], seed: &[u8; 16]) -> ([u8; 16], [u8; 16]
     (data_key, tweak_key)
 }
 
-pub(super) struct Unencrypted<'raw> {
-    raw: &'raw [u8],
+pub(super) struct Unencrypted<R: AsRef<[u8]>> {
+    raw: R,
     header: Header,
 }
 
-impl<'raw> Unencrypted<'raw> {
-    pub fn new(raw: &'raw [u8], header: Header) -> Self {
+impl<R: AsRef<[u8]>> Unencrypted<R> {
+    pub fn new(raw: R, header: Header) -> Self {
         Self { raw, header }
     }
 }
 
-impl<'raw> Image for Unencrypted<'raw> {
+impl<R: AsRef<[u8]>> Image for Unencrypted<R> {
     fn header(&self) -> &Header {
         &self.header
     }
 
     fn read(&self, offset: usize, buf: &mut [u8]) -> Result<(), ReadError> {
-        let block = match self.raw.get(offset..(offset + buf.len())) {
+        let block = match self.raw.as_ref().get(offset..(offset + buf.len())) {
             Some(v) => v,
             None => return Err(ReadError::InvalidOffset),
         };
@@ -58,20 +58,15 @@ impl<'raw> Image for Unencrypted<'raw> {
     }
 }
 
-pub(super) struct Encrypted<'raw> {
-    raw: &'raw [u8],
+pub(super) struct Encrypted<R: AsRef<[u8]>> {
+    raw: R,
     header: Header,
     decryptor: Xts128<Aes128>,
     encrypted_start: usize,
 }
 
-impl<'raw> Encrypted<'raw> {
-    pub fn new(
-        raw: &'raw [u8],
-        header: Header,
-        decryptor: Xts128<Aes128>,
-        encrypted_start: usize,
-    ) -> Self {
+impl<R: AsRef<[u8]>> Encrypted<R> {
+    pub fn new(raw: R, header: Header, decryptor: Xts128<Aes128>, encrypted_start: usize) -> Self {
         Self {
             raw,
             header,
@@ -81,12 +76,12 @@ impl<'raw> Encrypted<'raw> {
     }
 }
 
-impl<'raw> Encrypted<'raw> {
+impl<R: AsRef<[u8]>> Encrypted<R> {
     /// Fill `buf` with decrypted data.
     fn read_xts_block(&self, num: usize, buf: &mut [u8; XTS_BLOCK_SIZE]) -> Result<(), ReadError> {
         // Read block.
         let offset = num * XTS_BLOCK_SIZE;
-        let data = match self.raw.get(offset..(offset + XTS_BLOCK_SIZE)) {
+        let data = match self.raw.as_ref().get(offset..(offset + XTS_BLOCK_SIZE)) {
             Some(v) => v,
             None => return Err(ReadError::InvalidOffset),
         };
@@ -103,7 +98,7 @@ impl<'raw> Encrypted<'raw> {
     }
 }
 
-impl<'raw> Image for Encrypted<'raw> {
+impl<R: AsRef<[u8]>> Image for Encrypted<R> {
     fn header(&self) -> &Header {
         &self.header
     }

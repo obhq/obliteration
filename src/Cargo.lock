@@ -226,6 +226,9 @@ name = "kernel"
 version = "0.1.0"
 dependencies = [
  "error",
+ "memmap2",
+ "pfs",
+ "util",
 ]
 
 [[package]]
