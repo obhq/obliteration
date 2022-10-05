@@ -42,8 +42,11 @@ endif()
 
 add_dependencies(obliteration libcore)
 
-set_property(TARGET obliteration PROPERTY AUTOMOC ON)
-set_property(TARGET obliteration PROPERTY AUTORCC ON)
+set_target_properties(obliteration PROPERTIES AUTOMOC ON AUTORCC ON)
+
+if(WIN32)
+    set_target_properties(obliteration PROPERTIES OUTPUT_NAME Obliteration)
+endif()
 
 target_compile_features(obliteration PRIVATE cxx_std_17)
 
