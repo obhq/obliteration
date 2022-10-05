@@ -17,6 +17,4 @@ extern "C" {
 
     kernel_rootfs *kernel_rootfs_new(error **err);
     void kernel_rootfs_free(kernel_rootfs *fs);
-
-    kernel_pfs *kernel_pfs_new(error **err);
 }
