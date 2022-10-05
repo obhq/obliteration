@@ -27,9 +27,11 @@ int main(int argc, char *argv[])
     QCoreApplication::setOrganizationName("Obliteration");
     QCoreApplication::setApplicationName("Obliteration");
 
-    // Initialize user settings.
     QApplication app(argc, argv);
 
+    QGuiApplication::setWindowIcon(QIcon(":/resources/obliteration-icon.png"));
+
+    // Initialize user settings.
     if (!hasRequiredUserSettings()) {
         InitializeDialog init;
 

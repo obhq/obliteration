@@ -3,6 +3,7 @@
   <qresource>
     <file>resources/archive-arrow-down-outline.svg</file>
     <file>resources/card-text-outline.svg</file>
+    <file>resources/obliteration-icon.png</file>
     <file>resources/view-comfy.svg</file>
   </qresource>
 </RCC>
