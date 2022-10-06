@@ -83,7 +83,7 @@ jobs:
         run: cmake -B build -D CMAKE_BUILD_TYPE=Release
       - name: Build (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: Run cmake --build build
+        run: cmake --build build
       - name: Export artifacts (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: cmake --install build --prefix dist
