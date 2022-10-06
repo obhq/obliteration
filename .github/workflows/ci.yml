@@ -92,5 +92,5 @@ jobs:
         uses: TheDoctor0/zip-release@main
         with:
           type: 'zip'
-          path: '.\build\src\'
+          path: '.\dist\bin\obliteration\'
           filename: Obliteration-${{ env.version }}-${{ matrix.release_suffix }}.zip
