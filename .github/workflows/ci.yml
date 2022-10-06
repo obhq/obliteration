@@ -3,11 +3,6 @@ name: Main Compilation
 on:
   push:
     branches: [ "main" ]
-    
-env:
-  major: 0
-  minor: 1
-  version: v${{ env.major }}.${{ env.minor }}.${{ github.run_number }}
 
 concurrency: ci-${{ github.ref }}
 jobs:
@@ -22,6 +17,10 @@ jobs:
           - os: ubuntu-latest
             release_suffix: Linux
     runs-on: ${{ matrix.os }}
+    env:
+      major: 0
+      minor: 1
+      version: v${{ env.major }}.${{ env.minor }}.${{ github.run_number }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v3
