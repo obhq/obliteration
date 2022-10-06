@@ -85,7 +85,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: cmake --build build
       - name: path test (Linux)
-        uses: philips-labs/list-folders-action@v1
+        uses: philips-labs/list-folder-action@v1
         with:
           path: ./
       - name: ZIP Obliteration (Linux)
