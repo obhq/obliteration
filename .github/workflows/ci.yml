@@ -4,6 +4,9 @@ on:
   push:
     branches: [ "main" ]
 
+env:
+  version: v0.1.${{ github.run_number }}
+
 concurrency: ci-${{ github.ref }}
 jobs:
   build_release:
@@ -17,10 +20,6 @@ jobs:
           - os: ubuntu-latest
             release_suffix: Linux
     runs-on: ${{ matrix.os }}
-    env:
-      major: 0
-      minor: 1
-      version: v${{ env.major }}.${{ env.minor }}.${{ github.run_number }}
     steps:
       - name: Checkout source
         uses: actions/checkout@v3
