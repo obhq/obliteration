@@ -6,19 +6,22 @@ find_package(Qt6 COMPONENTS Widgets REQUIRED)
 find_package(Threads REQUIRED)
 
 # Setup Rust target.
+set(RUST_OUTPUTS $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/debug,${CMAKE_CURRENT_SOURCE_DIR}/target/release>)
+set(KERNEL ${RUST_OUTPUTS}/obliteration-kernel${CMAKE_EXECUTABLE_SUFFIX})
+
 if(WIN32)
-    set(LIBCORE $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/debug/core.lib,${CMAKE_CURRENT_SOURCE_DIR}/target/release/core.lib>)
+    set(LIBCORE ${RUST_OUTPUTS}/core.lib)
 else()
-    set(LIBCORE $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/debug/libcore.a,${CMAKE_CURRENT_SOURCE_DIR}/target/release/libcore.a>)
+    set(LIBCORE ${RUST_OUTPUTS}/libcore.a)
 endif()
 
-ExternalProject_Add(libcore
+ExternalProject_Add(core
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}
     CONFIGURE_COMMAND ""
     BUILD_COMMAND cargo build $<IF:$<CONFIG:Debug>,-v,--release>
     BUILD_IN_SOURCE ON
     BUILD_ALWAYS ON
-    BUILD_BYPRODUCTS ${LIBCORE}
+    BUILD_BYPRODUCTS ${KERNEL} ${LIBCORE}
     INSTALL_COMMAND ""
     TEST_COMMAND cargo test
     TEST_EXCLUDE_FROM_MAIN ON)
@@ -40,7 +43,7 @@ if(WIN32)
     target_sources(obliteration PRIVATE resources.rc)
 endif()
 
-add_dependencies(obliteration libcore)
+add_dependencies(obliteration core)
 
 set_target_properties(obliteration PROPERTIES AUTOMOC ON AUTORCC ON)
 
@@ -67,4 +70,5 @@ else()
     install(TARGETS obliteration DESTINATION bin)
 endif()
 
+install(PROGRAMS ${KERNEL} TYPE BIN)
 install(SCRIPT post-install.cmake)

@@ -4,6 +4,7 @@
 #include "pkg.hpp"
 #include "progress_dialog.hpp"
 #include "settings.hpp"
+#include "string.hpp"
 #include "util.hpp"
 
 #include <QAction>
@@ -12,6 +13,7 @@
 #include <QDesktopServices>
 #include <QGuiApplication>
 #include <QDir>
+#include <QFile>
 #include <QFileDialog>
 #include <QIcon>
 #include <QListView>
@@ -24,6 +26,8 @@
 #include <QTabWidget>
 #include <QToolBar>
 #include <QUrl>
+
+#include <filesystem>
 
 MainWindow::MainWindow(context *context) :
     m_context(context),
@@ -147,9 +151,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
             return;
         }
 
-        // Shutdown.
-        kernel_shutdown(m_kernel);
-        m_kernel = nullptr;
+        killKernel();
     }
 
     // Save gometry.
@@ -293,44 +295,6 @@ void MainWindow::aboutObliteration()
     QMessageBox::about(this, "About Obliteration", "Obliteration is a free and open-source software for playing your PlayStation 4 titles on PC.");
 }
 
-void MainWindow::startGame(const QModelIndex &index)
-{
-    if (!requireEmulatorStopped()) {
-        return;
-    }
-
-    // Get target game.
-    auto model = reinterpret_cast<GameListModel *>(m_games->model());
-    auto game = model->get(index.row()); // Qt already guaranteed the index is valid.
-
-    // Setup rootfs.
-    Error error;
-
-    auto rootfs = kernel_rootfs_new(&error);
-
-    if (!rootfs) {
-        QMessageBox::critical(this, "Error", QString("Failed to create rootfs: %1").arg(error.message()));
-        return;
-    }
-
-    // Setup kernel.
-    m_kernel = kernel_new(rootfs, &error);
-
-    if (!m_kernel) {
-        kernel_rootfs_free(rootfs);
-        QMessageBox::critical(this, "Error", QString("Failed to create kernel: %1").arg(error.message()));
-        return;
-    }
-
-    kernel_set_logger(m_kernel, [](int pid, int err, const char *msg, void *ud) {
-        reinterpret_cast<MainWindow *>(ud)->appendLog(pid, err, msg);
-    }, this);
-
-    // Clear previous log and switch to log view.
-    m_log->clear();
-    m_tab->setCurrentIndex(1);
-}
-
 void MainWindow::requestGamesContextMenu(const QPoint &pos)
 {
     // Get item index.
@@ -362,6 +326,107 @@ void MainWindow::requestGamesContextMenu(const QPoint &pos)
     }
 }
 
+void MainWindow::startGame(const QModelIndex &index)
+{
+    if (!requireEmulatorStopped()) {
+        return;
+    }
+
+    // Get target game.
+    auto model = reinterpret_cast<GameListModel *>(m_games->model());
+    auto game = model->get(index.row()); // Qt already guaranteed the index is valid.
+
+    // Clear previous log and switch to log view.
+    m_log->clear();
+    m_tab->setCurrentIndex(1);
+
+    // Get full path to kernel binary.
+    QString path;
+
+    if (QFile::exists(".obliteration-development")) {
+        auto b = std::filesystem::current_path();
+
+        b /= S("src");
+        b /= S("target");
+#ifdef NDEBUG
+        b /= S("release");
+#else
+        b /= S("debug");
+#endif
+
+#ifdef _WIN32
+        b /= L"obliteration-kernel.exe";
+        path = QString::fromStdWString(b.wstring());
+#else
+        b /= "obliteration-kernel";
+        path = QString::fromStdString(b.string());
+#endif
+    } else {
+#ifdef _WIN32
+        std::filesystem::path b(QCoreApplication::applicationDirPath().toStdString(), std::filesystem::path::native_format);
+        b /= L"bin";
+        b /= L"obliteration-kernel.exe";
+        path = QString::fromStdWString(b.wstring());
+#else
+        std::filesystem::path b(QCoreApplication::applicationDirPath().toStdString(), std::filesystem::path::native_format);
+        b /= "obliteration-kernel";
+        path = QString::fromStdString(b.string());
+#endif
+    }
+
+    // Prepare kernel launching.
+    m_kernel = new QProcess(this);
+    m_kernel->setProgram(path);
+    m_kernel->setProcessChannelMode(QProcess::MergedChannels);
+
+    connect(m_kernel, &QProcess::errorOccurred, this, &MainWindow::kernelError);
+    connect(m_kernel, &QIODevice::readyRead, this, &MainWindow::kernelOutput);
+    connect(m_kernel, &QProcess::finished, this, &MainWindow::kernelTerminated);
+
+    // Launch kernel.
+    m_kernel->start(QIODeviceBase::ReadOnly | QIODeviceBase::Text);
+}
+
+void MainWindow::kernelError(QProcess::ProcessError error)
+{
+    // Display error.
+    QString msg;
+
+    switch (error) {
+    case QProcess::FailedToStart:
+        msg = QString("Failed to launch %1.").arg(m_kernel->program());
+        break;
+    case QProcess::Crashed:
+        msg = "The kernel crashed.";
+        break;
+    default:
+        msg = "An unknown error occurred on the kernel";
+    }
+
+    QMessageBox::critical(this, "Error", msg);
+
+    // Destroy object.
+    m_kernel->deleteLater();
+    m_kernel = nullptr;
+}
+
+void MainWindow::kernelOutput()
+{
+    while (m_kernel->canReadLine()) {
+        auto line = QString::fromUtf8(m_kernel->readLine());
+
+        m_log->appendPlainText(line);
+    }
+}
+
+void MainWindow::kernelTerminated(int, QProcess::ExitStatus)
+{
+    kernelOutput();
+
+    m_kernel->deleteLater();
+    m_kernel = nullptr;
+}
+
 bool MainWindow::loadGame(const QString &gameId)
 {
     auto gamesDirectory = readGamesDirectorySetting();
@@ -391,19 +456,16 @@ bool MainWindow::loadGame(const QString &gameId)
     return true;
 }
 
-void MainWindow::appendLog(int pid, int err, const char *msg)
+void MainWindow::killKernel()
 {
-    m_log->appendHtml(QString("<strong>[PID:%1]:</strong> ").arg(pid));
+    // We need to disconnect all slots first otherwise the application will be freezing.
+    disconnect(m_kernel, nullptr, nullptr, nullptr);
 
-    if (err) {
-        m_log->appendHtml(R"(<span style="color:red">)");
-    }
+    m_kernel->kill();
+    m_kernel->waitForFinished(-1);
 
-    m_log->appendPlainText(msg);
-
-    if (err) {
-        m_log->appendHtml(R"(</span>)");
-    }
+    delete m_kernel;
+    m_kernel = nullptr;
 }
 
 void MainWindow::restoreGeometry()

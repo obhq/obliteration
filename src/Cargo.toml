@@ -9,4 +9,4 @@ members = [
     "util"
 ]
 
-default-members = ["core"]
+default-members = ["core", "kernel"]

@@ -3,5 +3,4 @@
 // of those APIs here.
 pub use context::*;
 pub use error::*;
-pub use kernel::*;
 pub use pkg::*;

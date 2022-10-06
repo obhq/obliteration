@@ -3,6 +3,10 @@ name = "kernel"
 version = "0.1.0"
 edition = "2021"
 
+[[bin]]
+name = "obliteration-kernel"
+path = "src/main.rs"
+
 [dependencies]
 error = { path = "../error" }
 memmap2 = "0.5"

@@ -1,9 +1,9 @@
 #pragma once
 
 #include "context.hpp"
-#include "kernel.hpp"
 
 #include <QMainWindow>
+#include <QProcess>
 
 class QListView;
 class QPlainTextEdit;
@@ -23,12 +23,15 @@ private slots:
     void installPkg();
     void reportIssue();
     void aboutObliteration();
-    void startGame(const QModelIndex &index);
     void requestGamesContextMenu(const QPoint &pos);
+    void startGame(const QModelIndex &index);
+    void kernelError(QProcess::ProcessError error);
+    void kernelOutput();
+    void kernelTerminated(int exitCode, QProcess::ExitStatus exitStatus);
 
 private:
     bool loadGame(const QString &gameId);
-    void appendLog(int pid, int err, const char *msg);
+    void killKernel();
     void restoreGeometry();
     bool requireEmulatorStopped();
 
@@ -37,5 +40,5 @@ private:
     QTabWidget *m_tab;
     QListView *m_games;
     QPlainTextEdit *m_log;
-    kernel *m_kernel;
+    QProcess *m_kernel;
 };

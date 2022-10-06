@@ -1,5 +1,8 @@
 {
   "cmake.configureOnOpen": true,
+  "cmake.debugConfig": {
+    "cwd": "${workspaceFolder}"
+  },
   "files.insertFinalNewline": true,
   "files.trimFinalNewlines": true,
   "files.trimTrailingWhitespace": true
