@@ -83,4 +83,14 @@ jobs:
         run: cmake -B build -D CMAKE_BUILD_TYPE=Release
       - name: Build (Linux)
         if: matrix.os == 'ubuntu-latest'
-        run: cmake --build build
+        run: Run cmake --build build
+      - name: Export artifacts (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: cmake --install build --prefix dist
+      - name: ZIP Obliteration (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        uses: TheDoctor0/zip-release@main
+        with:
+          type: 'zip'
+          path: '.\build\src\'
+          filename: Obliteration-${{ env.version }}-${{ matrix.release_suffix }}.zip
