@@ -2,20 +2,19 @@ use crate::inode::Inode;
 use crate::Image;
 use std::cmp::min;
 use std::io::{Error, ErrorKind, Read, Seek, SeekFrom};
+use std::sync::Arc;
 
-pub struct File<'pfs, 'image, 'raw_image> {
-    image: &'image (dyn Image + 'raw_image),
-    inode: &'pfs Inode<'image, 'raw_image>,
+#[derive(Clone)]
+pub struct File<'pfs, 'image> {
+    image: Arc<dyn Image + 'image>,
+    inode: &'pfs Inode<'image>,
     occupied_blocks: Vec<u32>,
     current_offset: u64,
     current_block: Vec<u8>,
 }
 
-impl<'pfs, 'image, 'raw_image> File<'pfs, 'image, 'raw_image> {
-    pub(crate) fn new(
-        image: &'image (dyn Image + 'raw_image),
-        inode: &'pfs Inode<'image, 'raw_image>,
-    ) -> Self {
+impl<'pfs, 'image> File<'pfs, 'image> {
+    pub(crate) fn new(image: Arc<dyn Image + 'image>, inode: &'pfs Inode<'image>) -> Self {
         Self {
             image,
             inode,
@@ -23,6 +22,10 @@ impl<'pfs, 'image, 'raw_image> File<'pfs, 'image, 'raw_image> {
             current_offset: 0,
             current_block: Vec::new(),
         }
+    }
+
+    pub fn inode(&self) -> usize {
+        self.inode.index()
     }
 
     pub fn len(&self) -> u64 {
@@ -34,7 +37,7 @@ impl<'pfs, 'image, 'raw_image> File<'pfs, 'image, 'raw_image> {
     }
 }
 
-impl<'pfs, 'image, 'raw_image> Seek for File<'pfs, 'image, 'raw_image> {
+impl<'pfs, 'image> Seek for File<'pfs, 'image> {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         // Calculate new offset.
         let offset = match pos {
@@ -87,7 +90,7 @@ impl<'pfs, 'image, 'raw_image> Seek for File<'pfs, 'image, 'raw_image> {
     }
 }
 
-impl<'pfs, 'image, 'raw_image> Read for File<'pfs, 'image, 'raw_image> {
+impl<'pfs, 'image> Read for File<'pfs, 'image> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         if buf.is_empty() || self.current_offset == self.len() {
             return Ok(0);

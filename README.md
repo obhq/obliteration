@@ -14,7 +14,7 @@ Thanks [Mou-Ikkai](https://github.com/Mou-Ikkai) for an awesome icon!
 ## Features
 
 - [x] Built-in PKG file supports for Fake PKG.
-- [ ] Direct mounting PFS image.
+- [x] Direct mounting PFS image.
 
 ## System requirements
 

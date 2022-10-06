@@ -2,10 +2,11 @@ use crate::Image;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::Read;
+use std::sync::Arc;
 use util::mem::{new_buffer, read_array, read_u32_le, read_u64_le, uninit};
 
-pub(crate) struct Inode<'image, 'raw_image> {
-    image: &'image (dyn Image + 'raw_image),
+pub(crate) struct Inode<'image> {
+    image: Arc<dyn Image + 'image>,
     index: usize,
     flags: InodeFlags,
     size: u64,
@@ -17,9 +18,9 @@ pub(crate) struct Inode<'image, 'raw_image> {
     indirect_reader: fn(&mut &[u8]) -> Option<u32>,
 }
 
-impl<'image, 'raw_image> Inode<'image, 'raw_image> {
+impl<'image> Inode<'image> {
     pub(super) fn from_raw32_unsigned<R: Read>(
-        image: &'image (dyn Image + 'raw_image),
+        image: Arc<dyn Image + 'image>,
         index: usize,
         raw: &mut R,
     ) -> Result<Self, FromRawError> {
@@ -45,7 +46,7 @@ impl<'image, 'raw_image> Inode<'image, 'raw_image> {
     }
 
     pub(super) fn from_raw32_signed<R: Read>(
-        image: &'image (dyn Image + 'raw_image),
+        image: Arc<dyn Image + 'image>,
         index: usize,
         raw: &mut R,
     ) -> Result<Self, FromRawError> {
@@ -70,6 +71,10 @@ impl<'image, 'raw_image> Inode<'image, 'raw_image> {
         }
 
         Ok(inode)
+    }
+
+    pub fn index(&self) -> usize {
+        self.index
     }
 
     pub fn flags(&self) -> InodeFlags {
@@ -177,7 +182,7 @@ impl<'image, 'raw_image> Inode<'image, 'raw_image> {
     }
 
     fn read_common_fields(
-        image: &'image (dyn Image + 'raw_image),
+        image: Arc<dyn Image + 'image>,
         index: usize,
         raw: *const u8,
         indirect_reader: fn(&mut &[u8]) -> Option<u32>,

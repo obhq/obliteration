@@ -377,6 +377,7 @@ void MainWindow::startGame(const QModelIndex &index)
     // Prepare kernel launching.
     m_kernel = new QProcess(this);
     m_kernel->setProgram(path);
+    m_kernel->setArguments(QStringList() << "--game" << game->directory());
     m_kernel->setProcessChannelMode(QProcess::MergedChannels);
 
     connect(m_kernel, &QProcess::errorOccurred, this, &MainWindow::kernelError);
@@ -422,6 +423,8 @@ void MainWindow::kernelOutput()
 void MainWindow::kernelTerminated(int, QProcess::ExitStatus)
 {
     kernelOutput();
+
+    QMessageBox::critical(this, "Error", "The emulator kernel has been stopped unexpectedly. Please take a look on the log and report the issue.");
 
     m_kernel->deleteLater();
     m_kernel = nullptr;

@@ -8,7 +8,7 @@ name = "obliteration-kernel"
 path = "src/main.rs"
 
 [dependencies]
-error = { path = "../error" }
+clap = { version = "4.0", features = ["derive"] }
 memmap2 = "0.5"
 pfs = { path = "../pfs" }
 util = { path = "../util" }
