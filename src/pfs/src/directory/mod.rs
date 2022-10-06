@@ -5,22 +5,21 @@ use crate::Image;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::sync::Arc;
 use util::mem::new_buffer;
 
 pub mod dirent;
 
-pub struct Directory<'pfs, 'image> {
-    image: Arc<dyn Image + 'image>,
-    inodes: &'pfs [Inode<'image>],
-    inode: &'pfs Inode<'image>,
+pub struct Directory<'pfs, 'image, 'raw_image> {
+    image: &'image (dyn Image + 'raw_image),
+    inodes: &'pfs [Inode<'image, 'raw_image>],
+    inode: &'pfs Inode<'image, 'raw_image>,
 }
 
-impl<'pfs, 'image> Directory<'pfs, 'image> {
+impl<'pfs, 'image, 'raw_image> Directory<'pfs, 'image, 'raw_image> {
     pub(super) fn new(
-        image: Arc<dyn Image + 'image>,
-        inodes: &'pfs [Inode<'image>],
-        inode: &'pfs Inode<'image>,
+        image: &'image (dyn Image + 'raw_image),
+        inodes: &'pfs [Inode<'image, 'raw_image>],
+        inode: &'pfs Inode<'image, 'raw_image>,
     ) -> Self {
         Self {
             image,
@@ -29,7 +28,7 @@ impl<'pfs, 'image> Directory<'pfs, 'image> {
         }
     }
 
-    pub fn open(&self) -> Result<Items<'pfs, 'image>, OpenError> {
+    pub fn open(&self) -> Result<Items<'pfs, 'image, 'raw_image>, OpenError> {
         // Load occupied blocks.
         let blocks = match self.inode.load_blocks() {
             Ok(v) => v,
@@ -37,8 +36,8 @@ impl<'pfs, 'image> Directory<'pfs, 'image> {
         };
 
         // Read all dirents.
-        let mut parent: Option<Directory<'pfs, 'image>> = None;
-        let mut items: HashMap<Vec<u8>, Item<'pfs, 'image>> = HashMap::new();
+        let mut parent: Option<Directory<'pfs, 'image, 'raw_image>> = None;
+        let mut items: HashMap<Vec<u8>, Item<'pfs, 'image, 'raw_image>> = HashMap::new();
         let block_size = self.image.header().block_size();
         let mut block_data = new_buffer(block_size as usize);
 
@@ -83,12 +82,12 @@ impl<'pfs, 'image> Directory<'pfs, 'image> {
 
                 // Construct object.
                 if dirent.ty() == Dirent::PARENT {
-                    parent = Some(Directory::new(self.image.clone(), self.inodes, inode));
+                    parent = Some(Directory::new(self.image, self.inodes, inode));
                 } else {
                     let item = match dirent.ty() {
-                        Dirent::FILE => Item::File(File::new(self.image.clone(), inode)),
+                        Dirent::FILE => Item::File(File::new(self.image, inode)),
                         Dirent::DIRECTORY => {
-                            Item::Directory(Directory::new(self.image.clone(), self.inodes, inode))
+                            Item::Directory(Directory::new(self.image, self.inodes, inode))
                         }
                         Dirent::SELF => continue,
                         _ => {
@@ -108,23 +107,23 @@ impl<'pfs, 'image> Directory<'pfs, 'image> {
     }
 }
 
-pub struct Items<'pfs, 'image> {
-    parent: Option<Directory<'pfs, 'image>>,
-    items: HashMap<Vec<u8>, Item<'pfs, 'image>>,
+pub struct Items<'pfs, 'image, 'raw_image> {
+    parent: Option<Directory<'pfs, 'image, 'raw_image>>,
+    items: HashMap<Vec<u8>, Item<'pfs, 'image, 'raw_image>>,
 }
 
-impl<'pfs, 'image> IntoIterator for Items<'pfs, 'image> {
-    type Item = (Vec<u8>, Item<'pfs, 'image>);
-    type IntoIter = std::collections::hash_map::IntoIter<Vec<u8>, Item<'pfs, 'image>>;
+impl<'pfs, 'image, 'raw_image> IntoIterator for Items<'pfs, 'image, 'raw_image> {
+    type Item = (Vec<u8>, Item<'pfs, 'image, 'raw_image>);
+    type IntoIter = std::collections::hash_map::IntoIter<Vec<u8>, Item<'pfs, 'image, 'raw_image>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.items.into_iter()
     }
 }
 
-pub enum Item<'pfs, 'image> {
-    Directory(Directory<'pfs, 'image>),
-    File(File<'pfs, 'image>),
+pub enum Item<'pfs, 'image, 'raw_image> {
+    Directory(Directory<'pfs, 'image, 'raw_image>),
+    File(File<'pfs, 'image, 'raw_image>),
 }
 
 #[derive(Debug)]

@@ -2,11 +2,10 @@ use crate::Image;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::Read;
-use std::sync::Arc;
 use util::mem::{new_buffer, read_array, read_u32_le, read_u64_le, uninit};
 
-pub(crate) struct Inode<'image> {
-    image: Arc<dyn Image + 'image>,
+pub(crate) struct Inode<'image, 'raw_image> {
+    image: &'image (dyn Image + 'raw_image),
     index: usize,
     flags: InodeFlags,
     size: u64,
@@ -18,9 +17,9 @@ pub(crate) struct Inode<'image> {
     indirect_reader: fn(&mut &[u8]) -> Option<u32>,
 }
 
-impl<'image> Inode<'image> {
+impl<'image, 'raw_image> Inode<'image, 'raw_image> {
     pub(super) fn from_raw32_unsigned<R: Read>(
-        image: Arc<dyn Image + 'image>,
+        image: &'image (dyn Image + 'raw_image),
         index: usize,
         raw: &mut R,
     ) -> Result<Self, FromRawError> {
@@ -46,7 +45,7 @@ impl<'image> Inode<'image> {
     }
 
     pub(super) fn from_raw32_signed<R: Read>(
-        image: Arc<dyn Image + 'image>,
+        image: &'image (dyn Image + 'raw_image),
         index: usize,
         raw: &mut R,
     ) -> Result<Self, FromRawError> {
@@ -178,7 +177,7 @@ impl<'image> Inode<'image> {
     }
 
     fn read_common_fields(
-        image: Arc<dyn Image + 'image>,
+        image: &'image (dyn Image + 'raw_image),
         index: usize,
         raw: *const u8,
         indirect_reader: fn(&mut &[u8]) -> Option<u32>,

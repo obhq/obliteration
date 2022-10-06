@@ -278,7 +278,7 @@ impl<'c> Pkg<'c> {
             Err(e) => return Err(DumpPfsError::OpenOuterFailed(e)),
         };
 
-        let pfs = match pfs::mount(image) {
+        let pfs = match pfs::mount(image.as_ref()) {
             Ok(v) => v,
             Err(e) => return Err(DumpPfsError::MountOuterFailed(e)),
         };

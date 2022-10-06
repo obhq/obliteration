@@ -148,7 +148,14 @@ Just follow how Qt is written (e.g. coding style, etc.). Always prefers Qt class
 
 ### Starting point
 
-The entry point of the application is inside `src/main.cpp`.
+The application consist of 2 binaries:
+
+1. Main application. This is what user will see when they launch Obliteration. Its entry point is inside `src/main.cpp`.
+2. Emulator kernel. This is where PS4 emulation take place. Its entry point is inside `src/kernel/src/main.rs`.
+
+### Action icons
+
+We use icons from https://materialdesignicons.com for action icon (e.g. on menu and toolbar).
 
 ## License
 
