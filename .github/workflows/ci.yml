@@ -1,21 +1,34 @@
-name: CI
+name: Main Compilation
+
 on:
   push:
-    branches:
-    - '*'
-  pull_request:
-    branches:
-    - '*'
+    branches: [ "main" ]
+    
+env:
+  major: 0
+  minor: 1
+  version: v${{ env.major }}.${{ env.minor }}.${{ github.run_number }}
+
 concurrency: ci-${{ github.ref }}
 jobs:
-  build-windows:
-    name: Build (Windows)
-    runs-on: windows-2019 # Qt 6.2 only support MSVC 2019.
+  build_release:
+    name: Build Releases
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+            release_suffix: Windows
+          - os: ubuntu-latest
+            release_suffix: Linux
+    runs-on: ${{ matrix.os }}
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
       with:
         submodules: recursive
+    - name: Windows Compilation
+      if: matrix.os == 'windows-latest'
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
@@ -35,19 +48,15 @@ jobs:
       run: cmake --build build --config Release
     - name: Export artifacts
       run: cmake --install build --prefix dist
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v3
+    - name: ZIP Obliteration
+      uses: TheDoctor0/zip-release@main
       with:
-        name: obliteration-windows
-        path: dist
-  build-linux:
-    name: Build (Linux)
-    runs-on: ubuntu-20.04 # We cannot use 22.04 due to Vulkan SDK does not available.
-    steps:
-    - name: Checkout source
-      uses: actions/checkout@v3
-      with:
-        submodules: recursive
+        type: 'zip'
+        path: .\dist\*
+        filename: Obliteration-${{ env.version }}-${{ matrix.release_suffix }}.zip
+        
+    - name: Build (Linux)
+      if: matrix.os == 'ubuntu-latest'
     - name: Install system dependencies
       run: |
         wget -qO - https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo apt-key add -
@@ -69,3 +78,9 @@ jobs:
       run: cmake -B build -D CMAKE_BUILD_TYPE=Release
     - name: Build
       run: cmake --build build
+    - name: ZIP Obliteration
+      uses: TheDoctor0/zip-release@main
+      with:
+        type: 'zip'
+        path: .\dist\*
+        filename: Obliteration-${{ env.version }}-${{ matrix.release_suffix }}.zip
