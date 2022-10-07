@@ -8,9 +8,6 @@ on:
     branches:
     - '*'
 
-env:
-  version: v0.DEV-${{ github.sha }}
-
 concurrency: ci-${{ github.ref }}
 jobs:
   build_release:
@@ -37,6 +34,9 @@ jobs:
         with:
           version: 6.2.*
           
+      - name: Add SHORT_SHA env property with commit short sha
+        run: echo "version=`echo "DEV-${GITHUB_SHA::7}`" >> $GITHUB_ENV
+      
     # Windows Specific Setup
     
       - name: Install Vulkan SDK (Windows)
