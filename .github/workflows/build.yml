@@ -37,8 +37,8 @@ jobs:
       - name: Add Shortened SHA for DEV Version (Push)
         if: github.event_name != 'pull_request'
         run: |
-          echo "::set-output name=version::DEV-$(git rev-parse --short "$GITHUB_SHA")"
-          echo "${{ steps.vars.outputs.version }}"
+          echo "version=`echo DEV-${GITHUB_SHA} | cut -c1-12`" >> $GITHUB_ENV
+          echo "${{ version }}"
       
       - name: Add Shortened SHA for DEV Version (Pull Request)
         if: github.event_name == 'pull_request'
@@ -96,5 +96,5 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: Obliteration-${{ steps.vars.outputs.version }}-${{ matrix.release_suffix }}
+          name: Obliteration-${{ version }}-${{ matrix.release_suffix }}
           path: dist/
