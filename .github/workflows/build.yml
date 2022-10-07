@@ -34,9 +34,16 @@ jobs:
         with:
           version: 6.2.*
           
-      - name: Add Shortened SHA for DEV Version
+      - name: Add Shortened SHA for DEV Version (Push)
+        if: github.event_name != 'pull_request'
         run: |
           echo "::set-output name=version::DEV-$(git rev-parse --short "$GITHUB_SHA")"
+          echo "${{ steps.vars.outputs.version }}"
+      
+      - name: Add Shortened SHA for DEV Version (Pull Request)
+        if: github.event_name == 'pull_request'
+        run: |
+          echo "::set-output name=version::DEV-$(git rev-parse --short "$github.event.pull_request.head.sha")"
           echo "${{ steps.vars.outputs.version }}"
       
     # Windows Specific Setup
