@@ -61,11 +61,11 @@ jobs:
           sudo apt-get install -y libxkbcommon-dev vulkan-sdk
           echo "VULKAN_SDK=/usr" >> $GITHUB_ENV
           
-      - name: Initialize VCPKG (Linux)
+      - name: Initialize VCPKG (Ubuntu)
         if: matrix.release_suffix == 'Ubuntu'
         run: ./vcpkg/bootstrap-vcpkg.sh
         
-      - name: Install VCPKG packages (Linux)
+      - name: Install VCPKG packages (Ubuntu)
         if: matrix.release_suffix == 'Ubuntu'
         run: ./vcpkg-restore.sh
         
