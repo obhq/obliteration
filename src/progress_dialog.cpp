@@ -19,6 +19,7 @@ ProgressDialog::ProgressDialog(const QString &title, const QString &status, QWid
     // Progress bar.
     m_progress = new QProgressBar();
     m_progress->setMaximum(0);
+    m_progress->setTextVisible(false);
     m_progress->setMinimumWidth(400);
 
     layout->addWidget(m_progress);
