@@ -56,7 +56,7 @@ jobs:
         uses: TheDoctor0/zip-release@main
         with:
           type: 'zip'
-          path: '.\build\src\'
+          path: '.\build\src\*'
           filename: Obliteration-${{ env.version }}-${{ matrix.release_suffix }}.zip
       - name: Release Windows Executable
         if: matrix.os == 'windows-latest'
@@ -102,6 +102,7 @@ jobs:
         uses: TheDoctor0/zip-release@main
         with:
           type: 'zip'
+          path: './build/src/*'
           filename: Obliteration-${{ env.version }}-${{ matrix.release_suffix }}.zip
       - name: Release Linux Executable
         if: matrix.os == 'ubuntu-latest'
