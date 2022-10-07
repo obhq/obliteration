@@ -34,17 +34,10 @@ jobs:
         with:
           version: 6.2.*
           
-      - name: Add Shortened SHA for DEV Version (Push)
-        if: github.event_name != 'pull_request'
+      - name: Add Shortened SHA for DEV Version
         run: |
           echo "version=`echo DEV-${GITHUB_SHA} | cut -c1-12`" >> $GITHUB_ENV
-          echo "${{ version }}"
-      
-      - name: Add Shortened SHA for DEV Version (Pull Request)
-        if: github.event_name == 'pull_request'
-        run: |
-          echo "::set-output name=version::DEV-$(git rev-parse --short "$github.event.pull_request.head.sha")"
-          echo "${{ steps.vars.outputs.version }}"
+          echo "${{ env.version }}"
       
     # Windows Specific Setup
     
@@ -96,5 +89,5 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: Obliteration-${{ version }}-${{ matrix.release_suffix }}
+          name: Obliteration-${{ env.version }}-${{ matrix.release_suffix }}
           path: dist/
