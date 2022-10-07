@@ -8,6 +8,9 @@ on:
     branches:
     - '*'
 
+env:
+  version: DEV-${GITHUB_SHA::7}
+
 concurrency: ci-${{ github.ref }}
 jobs:
   build_release:
@@ -33,11 +36,6 @@ jobs:
         uses: jurplel/install-qt-action@v3
         with:
           version: 6.2.*
-          
-      - name: Add Shortened SHA for DEV Version
-        run: |
-          echo "version=`echo DEV-${GITHUB_SHA} | cut -c1-12`" >> $GITHUB_ENV
-          echo "${{ env.version }}"
       
     # Windows Specific Setup
     
