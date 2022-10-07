@@ -36,7 +36,7 @@ jobs:
           
       - name: Add Shortened SHA for DEV Version
         run: |
-          echo "::set-output name=version::DEV-$(git rev-parse --short HEAD)"
+          echo "::set-output name=version::DEV-$(git rev-parse --short "$GITHUB_SHA")"
           echo "${{ steps.vars.outputs.version }}"
       
     # Windows Specific Setup
