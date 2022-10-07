@@ -1,11 +1,19 @@
 {
   "configurations": [
     {
-      "name": "Launch",
+      "name": "Main",
       "type": "lldb",
       "request": "launch",
       "program": "${workspaceFolder}/build/src/obliteration",
       "args": [],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Kernel",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/target/debug/obliteration-kernel",
+      "args": ["--debug"],
       "cwd": "${workspaceFolder}"
     }
   ],

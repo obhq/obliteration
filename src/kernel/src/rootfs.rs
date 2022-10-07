@@ -1,4 +1,4 @@
-use crate::fs::driver::{Driver, Entry, OpenError};
+use crate::fs::driver::{self, Driver, Entry, OpenError};
 use std::marker::PhantomData;
 
 /// Represents a virtual root file system. The directory structure the kernel will see will be the
@@ -12,27 +12,45 @@ impl RootFs {
 }
 
 impl Driver for RootFs {
-    fn open_root(&self, _: &str) -> Result<Box<dyn crate::fs::driver::Directory + '_>, OpenError> {
+    fn open_root(&self, path: &str) -> Result<Box<dyn driver::Directory + '_>, OpenError> {
         Ok(Box::new(Directory {
+            path: path.into(),
             phantom: PhantomData,
         }))
     }
 }
 
 struct Directory<'driver> {
+    path: String,
     phantom: PhantomData<&'driver RootFs>,
 }
 
-impl<'driver> crate::fs::driver::Directory<'driver> for Directory<'driver> {
-    fn open(&self, _: &str) -> Result<Entry<'driver>, OpenError> {
-        Err(OpenError::NotFound)
+impl<'driver> driver::Directory<'driver> for Directory<'driver> {
+    fn open(&self, name: &str) -> Result<Entry<'driver>, OpenError> {
+        // Build full path.
+        let path = if self.path == "/" {
+            format!("/{}", name)
+        } else {
+            format!("{}/{}", self.path, name)
+        };
+
+        // Map entry.
+        let entry = match path.as_str() {
+            "/mnt" | "/mnt/app0" => Entry::Directory(Box::new(Directory {
+                path,
+                phantom: PhantomData,
+            })),
+            _ => return Err(OpenError::NotFound),
+        };
+
+        Ok(entry)
     }
 
-    fn to_token(&self) -> Box<dyn crate::fs::driver::DirectoryToken> {
+    fn to_token(&self) -> Box<dyn driver::DirectoryToken> {
         Box::new(DirectoryToken {})
     }
 }
 
 struct DirectoryToken;
 
-impl crate::fs::driver::DirectoryToken for DirectoryToken {}
+impl driver::DirectoryToken for DirectoryToken {}

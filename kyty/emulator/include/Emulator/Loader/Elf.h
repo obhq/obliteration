@@ -141,8 +141,8 @@ struct SelfHeader
 	uint8_t  ident[12];
 	uint16_t size1;
 	uint16_t size2;
-	uint64_t file_size;
-	uint16_t segments_num;
+	uint64_t file_size; // 0x10
+	uint16_t segments_num; // 0x18
 	uint16_t unknown;
 	uint32_t pad;
 };

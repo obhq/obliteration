@@ -153,6 +153,10 @@ The application consist of 2 binaries:
 1. Main application. This is what user will see when they launch Obliteration. Its entry point is inside `src/main.cpp`.
 2. Emulator kernel. This is where PS4 emulation take place. Its entry point is inside `src/kernel/src/main.rs`.
 
+### Debugging kernel
+
+Create `.kernel-debug` in the root of repository. The content of this file is YAML and the kernel will deserialize it to `Args` struct in `src/kernel/src/main.rs` when passing `--debug` flag to the kernel. We already provided a launch configuration for VS Code so all you need to do is just choose `Kernel` as a configuration and start debugging.
+
 ### Action icons
 
 We use icons from https://materialdesignicons.com for action icon (e.g. on menu and toolbar).

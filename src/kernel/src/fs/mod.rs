@@ -1,10 +1,12 @@
 use self::driver::Driver;
+use self::file::File;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
 use std::sync::{Arc, RwLock};
 
 pub mod driver;
+pub mod file;
 pub mod path;
 
 pub struct Fs {
@@ -52,22 +54,22 @@ impl Fs {
                     Ok(v) => v,
                     Err(e) => return Err(GetError::DriverFailed(current, e)),
                 };
+            } else {
+                // Open directory.
+                let entry = match directory.open(component) {
+                    Ok(v) => v,
+                    Err(e) => return Err(GetError::DriverFailed(current, e)),
+                };
 
-                continue;
-            }
-
-            // Open directory.
-            let entry = match directory.open(component) {
-                Ok(v) => v,
-                Err(e) => return Err(GetError::DriverFailed(current, e)),
-            };
-
-            match entry {
-                driver::Entry::Directory(v) => directory = v,
-                driver::Entry::File(v) => {
-                    return Ok(Item::File(File(driver.clone(), v.to_token())));
+                match entry {
+                    driver::Entry::Directory(v) => directory = v,
+                    driver::Entry::File(v) => {
+                        return Ok(Item::File(File::new(driver.clone(), v.to_token(), current)));
+                    }
                 }
             }
+
+            current.push('/');
         }
 
         // If we reached here that mean the the last component is a directory.
@@ -102,12 +104,30 @@ pub enum Item {
 
 pub struct Directory(Arc<dyn Driver>, Box<dyn driver::DirectoryToken>);
 
-pub struct File(Arc<dyn Driver>, Box<dyn driver::FileToken>);
-
+#[derive(Debug)]
 pub enum GetError {
     InvalidPath,
     NoRootFs,
     DriverFailed(String, driver::OpenError),
+}
+
+impl Error for GetError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::DriverFailed(_, e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl Display for GetError {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        match self {
+            Self::InvalidPath => f.write_str("invalid path"),
+            Self::NoRootFs => f.write_str("no rootfs mounted"),
+            Self::DriverFailed(p, _) => write!(f, "driver failed on {}", p),
+        }
+    }
 }
 
 #[derive(Debug)]

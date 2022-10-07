@@ -11,4 +11,6 @@ path = "src/main.rs"
 clap = { version = "4.0", features = ["derive"] }
 memmap2 = "0.5"
 pfs = { path = "../pfs" }
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.9"
 util = { path = "../util" }

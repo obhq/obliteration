@@ -26,5 +26,9 @@ macro_rules! error {
 
         // End with full stop and new line.
         eprintln!(".");
-    }}
+    }};
+    ($pid:expr, $($arg:tt)*) => {
+        eprint!("{}: ", $pid);
+        eprintln!($($arg)*);
+    }
 }

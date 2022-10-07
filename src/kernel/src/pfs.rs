@@ -13,12 +13,30 @@ impl<'image> Pfs<'image> {
 
 impl<'image> driver::Driver for Pfs<'image> {
     fn open_root(&self, _: &str) -> Result<Box<dyn driver::Directory + '_>, OpenError> {
-        match self.pfs.open_super_root() {
-            Ok(v) => Ok(Box::new(Directory {
-                pfs: v,
+        // Open super-root.
+        let super_root = match self.pfs.open_super_root() {
+            Ok(v) => v,
+            Err(e) => return Err(OpenError::DriverFailed(e.into())),
+        };
+
+        // Open "uroot", which is a real root.
+        let entries = match super_root.open() {
+            Ok(v) => v,
+            Err(e) => return Err(OpenError::DriverFailed(e.into())),
+        };
+
+        let uroot = match entries.get(b"uroot") {
+            Some(v) => v,
+            None => return Err(OpenError::NotFound),
+        };
+
+        // Check if uroot is a directory.
+        match uroot {
+            pfs::directory::Item::Directory(v) => Ok(Box::new(Directory {
+                pfs: v.clone(),
                 phantom: PhantomData,
             })),
-            Err(e) => Err(OpenError::DriverFailed(e.into())),
+            pfs::directory::Item::File(_) => Err(OpenError::NotFound),
         }
     }
 }

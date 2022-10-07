@@ -103,6 +103,48 @@ impl Mode {
     }
 }
 
+impl Display for Mode {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "{:x}", self.0)?;
+
+        let mut op = false;
+        let mut first = true;
+        let mut flag = |name: &str| -> std::fmt::Result {
+            if !op {
+                f.write_str(" (")?;
+                op = true;
+            }
+
+            if !first {
+                f.write_str(", ")?;
+            }
+
+            f.write_str(name)?;
+            first = false;
+
+            Ok(())
+        };
+
+        if self.is_signed() {
+            flag("signed")?;
+        }
+
+        if self.is_64bits() {
+            flag("64-bits")?;
+        }
+
+        if self.is_encrypted() {
+            flag("encrypted")?;
+        }
+
+        if op {
+            f.write_str(")")?;
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 pub enum ReadError {
     TooSmall,
