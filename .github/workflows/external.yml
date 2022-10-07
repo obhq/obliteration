@@ -1,0 +1,97 @@
+name: External Compilation
+
+on:
+  push:
+    branches-ignore:
+      - main
+  pull_request:
+    branches:
+    - '*'
+
+env:
+  version: v0.1.${{ github.run_number }}
+
+concurrency: ci-${{ github.ref }}
+jobs:
+  build_release:
+    name: Build Releases
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+            release_suffix: Windows
+          - os: ubuntu-latest
+            release_suffix: Linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - name: Install Qt (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: 6.2.*
+      - name: Install Vulkan SDK (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/1.3.224.1/windows/VulkanSDK-1.3.224.1-Installer.exe" -OutFile VulkanSDK.exe
+          .\VulkanSDK.exe --root C:\VulkanSDK  --accept-licenses --default-answer --confirm-command install
+          echo "VULKAN_SDK=C:\VulkanSDK" >> $env:GITHUB_ENV
+      - name: Initialize VCPKG (Windows)
+        if: matrix.os == 'windows-latest'
+        run: .\vcpkg\bootstrap-vcpkg.bat
+      - name: Install VCPKG packages (Windows)
+        if: matrix.os == 'windows-latest'
+        run: .\vcpkg-restore.ps1
+      - name: Run CMake (Windows)
+        if: matrix.os == 'windows-latest'
+        run: cmake -B build -A x64
+      - name: Build (Windows)
+        if: matrix.os == 'windows-latest'
+        run: cmake --build build --config Release
+      - name: Export artifacts (Windows)
+        if: matrix.os == 'windows-latest'
+        run: cmake --install build --prefix dist
+      - name: Upload Artifacts (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v3
+        with:
+          name: Obliteration-${{ env.version }}-${{ matrix.release_suffix }}
+          path: build/src/
+      - name: Install system dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          wget -qO - https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo apt-key add -
+          sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-1.3.224-focal.list https://packages.lunarg.com/vulkan/1.3.224/lunarg-vulkan-1.3.224-focal.list
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev vulkan-sdk
+          echo "VULKAN_SDK=/usr" >> $GITHUB_ENV
+      - name: Install Qt (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        uses: jurplel/install-qt-action@v3
+        with:
+          version: 6.2.*
+      - name: Initialize VCPKG (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: ./vcpkg/bootstrap-vcpkg.sh
+      - name: Install VCPKG packages (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: ./vcpkg-restore.sh
+      - name: Run CMake (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: cmake -B build -D CMAKE_BUILD_TYPE=Release
+      - name: Build (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: cmake --build build
+      - name: Export artifacts (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: cmake --install build --prefix dist
+      - name: Upload Artifacts (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v3
+        with:
+          name: Obliteration-${{ env.version }}-${{ matrix.release_suffix }}
+          path: build/src/
