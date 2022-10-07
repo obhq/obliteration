@@ -81,14 +81,16 @@ jobs:
       - name: Export artifacts
         run: cmake --install build --prefix dist
         
-      - name: ZIP Obliteration
+      - name: ZIP Obliteration (WINDOWS ONLY | UBUNTU BROKEN)
+        if: matrix.release_suffix == 'Windows'
         uses: TheDoctor0/zip-release@main
         with:
           type: 'zip'
           path: './dist/*'
           filename: Obliteration-${{ env.version }}-${{ matrix.release_suffix }}.zip
           
-      - name: Release Executable
+      - name: Release Executable (WINDOWS ONLY | UBUNTU BROKEN)
+        if: matrix.release_suffix == 'Windows'
         uses: ncipollo/release-action@v1.11.1
         with:
           artifacts: "Obliteration-${{ env.version }}-${{ matrix.release_suffix }}.zip"
