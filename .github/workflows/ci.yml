@@ -58,6 +58,16 @@ jobs:
           type: 'zip'
           path: '.\build\src\'
           filename: Obliteration-${{ env.version }}-${{ matrix.release_suffix }}.zip
+      - name: Release Windows Executable
+        if: matrix.os == 'windows-latest'
+        uses: ncipollo/release-action@v1.11.1
+        with:
+          artifacts: "Obliteration-${{ env.version }}-${{ matrix.release_suffix }}.zip"
+          generateReleaseNotes: true
+          name: Release ${{ env.version }}
+          tag: ${{ env.version }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          allowUpdates: true
         
       - name: Install system dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'
@@ -93,11 +103,13 @@ jobs:
         with:
           type: 'zip'
           filename: Obliteration-${{ env.version }}-${{ matrix.release_suffix }}.zip
-      - name: GH Release
-        uses: ncipollo/release-action@v1
+      - name: Release Linux Executable
+        if: matrix.os == 'ubuntu-latest'
+        uses: ncipollo/release-action@v1.11.1
         with:
-          artifacts: "bliteration-${{ env.version }}-${{ matrix.release_suffix }}.zip"
+          artifacts: "Obliteration-${{ env.version }}-${{ matrix.release_suffix }}.zip"
           generateReleaseNotes: true
           name: Release ${{ env.version }}
           tag: ${{ env.version }}
           token: ${{ secrets.GITHUB_TOKEN }}
+          allowUpdates: true
