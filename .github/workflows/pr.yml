@@ -1,0 +1,11 @@
+name: PR Build
+on:
+  pull_request:
+    branches:
+    - '*'
+concurrency: pr-${{ github.ref }}
+jobs:
+  windows:
+    uses: ./.github/workflows/ci-windows.yml
+  linux:
+    uses: ./.github/workflows/ci-linux.yml

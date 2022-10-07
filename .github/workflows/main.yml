@@ -1,0 +1,11 @@
+name: Development Build
+on:
+  push:
+    branches:
+    - main
+concurrency: dev-${{ github.ref }}
+jobs:
+  windows:
+    uses: ./.github/workflows/ci-windows.yml
+  linux:
+    uses: ./.github/workflows/ci-linux.yml
