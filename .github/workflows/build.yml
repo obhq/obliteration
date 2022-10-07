@@ -34,8 +34,10 @@ jobs:
         with:
           version: 6.2.*
           
-      - name: Add SHORT_SHA env property with commit short sha
-        run: echo "version=`echo "DEV-${GITHUB_SHA::7}`" >> $GITHUB_ENV
+      - name: Add Shortened SHA for DEV Version
+        run: |
+          echo "env.version=`echo "DEV-${GITHUB_SHA::7}`" >> $GITHUB_ENV
+          echo ${{ env.version }}
       
     # Windows Specific Setup
     
