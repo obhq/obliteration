@@ -36,8 +36,8 @@ jobs:
           
       - name: Add Shortened SHA for DEV Version
         run: |
-          echo "env.version=`echo DEV-$(git rev-parse --short HEAD)`" >> $GITHUB_ENV
-          echo "${{ env.version }}"
+          echo "::set-output name=version::DEV-$(git rev-parse --short HEAD)"
+          echo "${{ steps.vars.outputs.version }}"
       
     # Windows Specific Setup
     
@@ -89,5 +89,5 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@v3
         with:
-          name: Obliteration-${{ env.version }}-${{ matrix.release_suffix }}
+          name: Obliteration-${{ steps.vars.outputs.version }}-${{ matrix.release_suffix }}
           path: dist/
