@@ -9,7 +9,7 @@ on:
     - '*'
 
 env:
-  version: DEV-${{ GITHUB_SHA }}
+  version: DEV-${{ GITHUB.SHA::7 }}
 
 concurrency: ci-${{ github.ref }}
 jobs:
