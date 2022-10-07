@@ -694,13 +694,9 @@ RuntimeLinker::~RuntimeLinker()
 
 Program* RuntimeLinker::LoadProgram(const String& elf_name)
 {
-	KYTY_PROFILER_FUNCTION();
-
 	Core::LockGuard lock(m_mutex);
 
 	static int32_t id_seq = 0;
-
-	printf("Loading: %s\n", elf_name.C_Str());
 
 	auto* program = new Program;
 

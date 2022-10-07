@@ -78,12 +78,12 @@ private:
 
 struct SystemContent
 {
-	String                 psf_path;
-	Psf                    psf;
-	String                 playgo_path;
-	PlayGo                 playgo;
-	String                 icon_path;
-	Libs::Graphics::Image* icon = nullptr;
+	String                 psf_path; // path to param.sfo
+	Psf                    psf; // loaded from psf_path
+	String                 playgo_path; // path to playgo-chunk.dat (in the same directory of psf_path)
+	PlayGo                 playgo; // loaded from playgo_path
+	String                 icon_path; // path to icon0.png (in the same directory of psf_path)
+	Libs::Graphics::Image* icon = nullptr; // non-null if icon_path exists
 };
 
 Psf::~Psf()
@@ -345,46 +345,6 @@ void PlayGo::DbgPrint()
 	if (m_opened)
 	{
 		printf("PlayGo: chunks num = %" PRIu16 "\n", m_chunks_num);
-	}
-}
-
-void SystemContentLoadParamSfo(const String& file_name)
-{
-	auto* sc = Core::Singleton<SystemContent>::Instance();
-
-	if (!Core::File::IsFileExisting(file_name))
-	{
-		EXIT("Can't find file: %s\n", file_name.C_Str());
-	}
-
-	sc->psf.Open(file_name);
-
-	if (!sc->psf.IsValid())
-	{
-		EXIT("invalid file: %s\n", file_name.C_Str());
-	}
-
-	sc->psf_path = file_name;
-	sc->psf.DbgPrint();
-
-	sc->icon_path = file_name.DirectoryWithoutFilename() + U"icon0.png";
-	delete sc->icon;
-
-	if (Core::File::IsFileExisting(sc->icon_path))
-	{
-		sc->icon = new Libs::Graphics::Image(sc->icon_path);
-		sc->icon->Load();
-	} else
-	{
-		sc->icon = nullptr;
-	}
-
-	sc->playgo_path = file_name.DirectoryWithoutFilename() + U"playgo-chunk.dat";
-	sc->playgo.Open(sc->playgo_path);
-
-	if (sc->playgo.IsValid())
-	{
-		sc->playgo.DbgPrint();
 	}
 }
 

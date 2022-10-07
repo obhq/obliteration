@@ -94,6 +94,7 @@ MainWindow::MainWindow(context *context) :
     m_log = new QPlainTextEdit();
     m_log->setReadOnly(true);
     m_log->setMaximumBlockCount(10000);
+    m_log->document()->setDefaultFont(QFont("monospace", 10));
 
     m_tab->addTab(m_log, QIcon(":/resources/card-text-outline.svg"), "Log");
 
@@ -414,9 +415,13 @@ void MainWindow::kernelError(QProcess::ProcessError error)
 void MainWindow::kernelOutput()
 {
     while (m_kernel->canReadLine()) {
-        auto line = QString::fromUtf8(m_kernel->readLine());
+        auto line = m_kernel->readLine();
 
-        m_log->appendPlainText(line);
+        if (line.endsWith('\n')) {
+            line.chop(1);
+        }
+
+        m_log->appendPlainText(QString::fromUtf8(line));
     }
 }
 
