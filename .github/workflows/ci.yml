@@ -93,3 +93,11 @@ jobs:
         with:
           type: 'zip'
           filename: Obliteration-${{ env.version }}-${{ matrix.release_suffix }}.zip
+      - name: GH Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "bliteration-${{ env.version }}-${{ matrix.release_suffix }}.zip"
+          generateReleaseNotes: true
+          name: Release ${{ env.version }}
+          tag: ${{ env.version }}
+          token: ${{ secrets.GITHUB_TOKEN }}
