@@ -88,4 +88,4 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: Obliteration-${{ env.version }}-${{ matrix.release_suffix }}
-          path: build/src/
+          path: dist/
