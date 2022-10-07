@@ -1,4 +1,4 @@
-name: Main Compilation
+name: Release Compilation
 
 on:
   push:
