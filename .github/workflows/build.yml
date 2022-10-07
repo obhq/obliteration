@@ -84,7 +84,8 @@ jobs:
       - name: Export artifacts
         run: cmake --install build --prefix dist
         
-      - name: Upload Artifacts
+      - name: Upload Artifacts (WINDOWS ONLY | UBUNTU BROKEN)
+        if: matrix.release_suffix == 'Windows'
         uses: actions/upload-artifact@v3
         with:
           name: Obliteration-${{ env.version }}-${{ matrix.release_suffix }}
