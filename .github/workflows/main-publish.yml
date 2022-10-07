@@ -72,7 +72,7 @@ jobs:
     # Build and Release (Both OSes)
     
       - name: Run CMake
-        run: cmake -B build -A x64
+        run: cmake -B build -D CMAKE_BUILD_TYPE=Release
         
       - name: Build 
         run: cmake --build build --config Release
