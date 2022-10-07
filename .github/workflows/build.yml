@@ -1,9 +1,9 @@
-name: External Compilation
+name: Artifact Compilation
 
 on:
   push:
-    branches-ignore:
-      - main
+    branches:
+    - '*'
   pull_request:
     branches:
     - '*'
