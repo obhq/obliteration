@@ -1,11 +1,12 @@
 name: Main Compilation
 
 on:
-  schedule:
-    - cron: "0 0 * * 1"
+  push:
+      tags:
+      - 'v*.*.*'
 
 env:
-  version: v0.1.${{ github.run_number }}
+  version: ${{ github.ref_name }}
 
 concurrency: ci-${{ github.ref }}
 jobs:
