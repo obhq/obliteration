@@ -1,5 +1,5 @@
 # Obliteration
-[![CI](https://github.com/ultimaweapon/obliteration/actions/workflows/ci.yml/badge.svg)](https://github.com/ultimaweapon/obliteration/actions/workflows/ci.yml)
+[![CI](https://github.com/ultimaweapon/obliteration/actions/workflows/build.yml/badge.svg)]([https://github.com/ultimaweapon/obliteration/actions/workflows/build.yml](https://github.com/ultimaweapon/obliteration/actions/workflows/build.yml))
 
 Obliteration is an experimental PS4 emulator based on [Kyty](https://github.com/InoriRus/Kyty). The project is in the process of migrating source from Kyty to make it work on both Windows and Linux so it cannot run any games that Kyty able to run yet.
 
@@ -9,7 +9,7 @@ Obliteration is an experimental PS4 emulator based on [Kyty](https://github.com/
 
 ![Game list](screenshots/game-list.png)
 
-Thanks [Mou-Ikkai](https://github.com/Mou-Ikkai) for an awesome icon!
+Thanks [Mou-Ikkai](https://github.com/Mou-Ikkai) for the awesome icon!
 
 ## Features
 
@@ -27,7 +27,7 @@ Thanks [Mou-Ikkai](https://github.com/Mou-Ikkai) for an awesome icon!
 
 ## Get a daily build
 
-You can download Windows binary for the latest development [here](https://github.com/ultimaweapon/obliteration/actions/workflows/ci.yml).
+You can download Windows binary for the latest development [here](https://github.com/ultimaweapon/obliteration/actions/workflows/build.yml).
 
 ## Building from source
 
