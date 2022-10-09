@@ -20,7 +20,13 @@ Thanks [Mou-Ikkai](https://github.com/Mou-Ikkai) for the awesome icon!
 ## System requirements
 
 - Windows 10 x64 or Linux x86-64.
-- CPU that supports all of instructions on [PS4 CPU](https://en.wikipedia.org/wiki/Jaguar_(microarchitecture)#Instruction_set_support). All modern Intel/AMD CPUs should meet with this requirement.
+- CPU that supports all of instructions on [PS4 CPU](https://en.wikipedia.org/wiki/Jaguar_(microarchitecture)#Instruction_set_support).
+  - AMD:
+    - Minimum (Based on Required Instruction Sets): Jaguar-Based CPUs or newer
+    - Recommended (Based on Performance): Zen-Based CPUs or newer
+  - INTEL:
+    - Minimum (Based on Required Instruction Sets): Haswell-Based CPUs or newer
+    - Recommended (Based on Performance): 5th Gen CPUs or newer
 
 ### Windows specific requirements
 
