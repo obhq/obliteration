@@ -93,8 +93,6 @@ fn run() -> bool {
         }
     };
 
-    info!(0, "Class: {}", app.class());
-
     // Create a process for eboot.bin.
     info!(0, "Creating a process for eboot.bin.");
 
