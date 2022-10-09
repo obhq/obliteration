@@ -1,10 +1,13 @@
+use self::directory::Directory;
 use self::driver::Driver;
 use self::file::File;
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{Debug, Display, Formatter};
+use std::mem::transmute;
 use std::sync::{Arc, RwLock};
 
+pub mod directory;
 pub mod driver;
 pub mod file;
 pub mod path;
@@ -64,7 +67,11 @@ impl Fs {
                 match entry {
                     driver::Entry::Directory(v) => directory = v,
                     driver::Entry::File(v) => {
-                        return Ok(Item::File(File::new(driver.clone(), v.to_token(), current)));
+                        return Ok(Item::File(File::new(
+                            driver.clone(),
+                            unsafe { transmute(v) },
+                            current,
+                        )));
                     }
                 }
             }
@@ -73,9 +80,10 @@ impl Fs {
         }
 
         // If we reached here that mean the the last component is a directory.
-        Ok(Item::Directory(Directory(
+        Ok(Item::Directory(Directory::new(
             driver.clone(),
-            directory.to_token(),
+            unsafe { transmute(directory) },
+            current,
         )))
     }
 
@@ -101,8 +109,6 @@ pub enum Item {
     Directory(Directory),
     File(File),
 }
-
-pub struct Directory(Arc<dyn Driver>, Box<dyn driver::DirectoryToken>);
 
 #[derive(Debug)]
 pub enum GetError {

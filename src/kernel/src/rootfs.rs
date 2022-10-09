@@ -45,12 +45,4 @@ impl<'driver> driver::Directory<'driver> for Directory<'driver> {
 
         Ok(entry)
     }
-
-    fn to_token(&self) -> Box<dyn driver::DirectoryToken> {
-        Box::new(DirectoryToken {})
-    }
 }
-
-struct DirectoryToken;
-
-impl driver::DirectoryToken for DirectoryToken {}

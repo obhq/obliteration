@@ -10,20 +10,11 @@ pub enum Entry<'driver> {
     File(Box<dyn File<'driver> + 'driver>),
 }
 
-/// Represents a directory in the filesystem. The implementation must be cheap to create.
 pub trait Directory<'driver> {
     fn open(&self, name: &str) -> Result<Entry<'driver>, OpenError>;
-    fn to_token(&self) -> Box<dyn DirectoryToken>;
 }
 
-pub trait DirectoryToken {}
-
-/// Represents a file in the filesystem. The implementation must be cheap to create.
-pub trait File<'driver> {
-    fn to_token(&self) -> Box<dyn FileToken>;
-}
-
-pub trait FileToken {}
+pub trait File<'driver> {}
 
 #[derive(Debug)]
 pub enum OpenError {

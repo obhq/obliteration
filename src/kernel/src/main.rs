@@ -124,9 +124,10 @@ fn mount_pfs<G: AsRef<Path>>(fs: &Fs, game: G) -> bool {
 
     info!(
         0,
-        "PFS is mapped to {:p} - {:p}.",
+        "PFS is mapped to {:p} - {:p} ({} bytes).",
         &raw[..],
-        &raw[raw.len()..]
+        &raw[raw.len()..],
+        raw.len(),
     );
 
     // Create reader.

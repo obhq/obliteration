@@ -1,9 +1,9 @@
 use super::driver;
 use std::sync::Arc;
 
-pub struct File {
+pub struct Directory {
     path: String,
-    entry: Box<dyn driver::File<'static>>,
+    entry: Box<dyn driver::Directory<'static>>,
 
     // We need to hold this because "entry" is referencing it. So it should destroy after "entry"
     // that why we placed it here.
@@ -11,10 +11,10 @@ pub struct File {
     driver: Arc<dyn driver::Driver>,
 }
 
-impl File {
+impl Directory {
     pub(super) fn new(
         driver: Arc<dyn driver::Driver>,
-        entry: Box<dyn driver::File<'static>>,
+        entry: Box<dyn driver::Directory<'static>>,
         path: String,
     ) -> Self {
         Self {
@@ -24,6 +24,7 @@ impl File {
         }
     }
 
+    /// The value is always end with "/".
     pub fn path(&self) -> &str {
         self.path.as_ref()
     }

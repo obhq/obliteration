@@ -1,4 +1,4 @@
-use crate::fs::driver::{self, OpenError};
+use crate::fs::driver::{self, Entry, OpenError};
 use std::marker::PhantomData;
 
 pub(super) struct Pfs<'image> {
@@ -49,7 +49,7 @@ struct Directory<'driver, 'pfs, 'image> {
 impl<'driver, 'pfs: 'driver, 'image> driver::Directory<'driver>
     for Directory<'driver, 'pfs, 'image>
 {
-    fn open(&self, name: &str) -> Result<driver::Entry<'driver>, OpenError> {
+    fn open(&self, name: &str) -> Result<Entry<'driver>, OpenError> {
         // Load entries.
         let entries = match self.pfs.open() {
             Ok(v) => v,
@@ -63,37 +63,21 @@ impl<'driver, 'pfs: 'driver, 'image> driver::Directory<'driver>
         };
 
         Ok(match entry {
-            pfs::directory::Item::Directory(v) => driver::Entry::Directory(Box::new(Directory {
+            pfs::directory::Item::Directory(v) => Entry::Directory(Box::new(Directory {
                 pfs: v.clone(),
                 phantom: PhantomData,
             })),
-            pfs::directory::Item::File(v) => driver::Entry::File(Box::new(File {
+            pfs::directory::Item::File(v) => Entry::File(Box::new(File {
                 pfs: v.clone(),
                 phantom: PhantomData,
             })),
         })
     }
-
-    fn to_token(&self) -> Box<dyn driver::DirectoryToken> {
-        Box::new(DirectoryToken(self.pfs.inode()))
-    }
 }
-
-struct DirectoryToken(usize);
-
-impl driver::DirectoryToken for DirectoryToken {}
 
 struct File<'driver, 'pfs, 'image> {
     pfs: pfs::file::File<'pfs, 'image>,
     phantom: PhantomData<&'driver Pfs<'image>>,
 }
 
-impl<'driver, 'pfs, 'image> driver::File<'driver> for File<'driver, 'pfs, 'image> {
-    fn to_token(&self) -> Box<dyn driver::FileToken> {
-        Box::new(FileToken(self.pfs.inode()))
-    }
-}
-
-struct FileToken(usize);
-
-impl driver::FileToken for FileToken {}
+impl<'driver, 'pfs, 'image> driver::File<'driver> for File<'driver, 'pfs, 'image> {}
