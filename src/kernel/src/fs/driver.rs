@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::fmt::Display;
+use std::io::{Read, Seek, Write};
 
 pub trait Driver {
     fn open_root(&self, path: &str) -> Result<Box<dyn Directory + '_>, OpenError>;
@@ -14,7 +15,7 @@ pub trait Directory<'driver> {
     fn open(&self, name: &str) -> Result<Entry<'driver>, OpenError>;
 }
 
-pub trait File<'driver> {}
+pub trait File<'driver>: Seek + Read + Write {}
 
 #[derive(Debug)]
 pub enum OpenError {

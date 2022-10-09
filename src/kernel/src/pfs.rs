@@ -1,4 +1,5 @@
 use crate::fs::driver::{self, Entry, OpenError};
+use std::io::{Error, ErrorKind, IoSlice, IoSliceMut, Read, Seek, SeekFrom, Write};
 use std::marker::PhantomData;
 
 pub(super) struct Pfs<'image> {
@@ -81,3 +82,61 @@ struct File<'driver, 'pfs, 'image> {
 }
 
 impl<'driver, 'pfs, 'image> driver::File<'driver> for File<'driver, 'pfs, 'image> {}
+
+impl<'driver, 'pfs, 'image> Seek for File<'driver, 'pfs, 'image> {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        self.pfs.seek(pos)
+    }
+
+    fn rewind(&mut self) -> std::io::Result<()> {
+        self.pfs.rewind()
+    }
+
+    fn stream_position(&mut self) -> std::io::Result<u64> {
+        self.pfs.stream_position()
+    }
+}
+
+impl<'driver, 'pfs, 'image> Read for File<'driver, 'pfs, 'image> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.pfs.read(buf)
+    }
+
+    fn read_vectored(&mut self, bufs: &mut [IoSliceMut]) -> std::io::Result<usize> {
+        self.pfs.read_vectored(bufs)
+    }
+
+    fn read_to_end(&mut self, buf: &mut Vec<u8>) -> std::io::Result<usize> {
+        self.pfs.read_to_end(buf)
+    }
+
+    fn read_to_string(&mut self, buf: &mut String) -> std::io::Result<usize> {
+        self.pfs.read_to_string(buf)
+    }
+
+    fn read_exact(&mut self, buf: &mut [u8]) -> std::io::Result<()> {
+        self.pfs.read_exact(buf)
+    }
+}
+
+impl<'driver, 'pfs, 'image> Write for File<'driver, 'pfs, 'image> {
+    fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+        Err(Error::from(ErrorKind::PermissionDenied))
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Err(Error::from(ErrorKind::PermissionDenied))
+    }
+
+    fn write_vectored(&mut self, _: &[IoSlice]) -> std::io::Result<usize> {
+        Err(Error::from(ErrorKind::PermissionDenied))
+    }
+
+    fn write_all(&mut self, _: &[u8]) -> std::io::Result<()> {
+        Err(Error::from(ErrorKind::PermissionDenied))
+    }
+
+    fn write_fmt(&mut self, _: std::fmt::Arguments<'_>) -> std::io::Result<()> {
+        Err(Error::from(ErrorKind::PermissionDenied))
+    }
+}
