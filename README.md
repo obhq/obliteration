@@ -1,7 +1,7 @@
 # Obliteration
 [![CI](https://github.com/ultimaweapon/obliteration/actions/workflows/main.yml/badge.svg)](https://github.com/ultimaweapon/obliteration/actions/workflows/main.yml)
 
-Obliteration is an experimental PS4 emulator based on [Kyty](https://github.com/InoriRus/Kyty). The project is in the process of migrating source from Kyty to make it work on both Windows and Linux so it cannot run any games that Kyty able to run yet.
+Obliteration is an experimental PS4 emulator using [Kyty](https://github.com/InoriRus/Kyty) as a reference. The project is under development and cannot run any games that Kyty is able to run yet.
 
 **The original author of Kyty does not involved in the development of Obliteration in anyway.** Obliteration is a completely separated project. You can think Obliteration is a port of Kyty from C++ to Rust for both Windows and Linux.
 
@@ -14,6 +14,7 @@ Thanks [Mou-Ikkai](https://github.com/Mou-Ikkai) for the awesome icon!
 ## Features
 
 - [x] Built-in PKG file supports for Fake PKG.
+- [x] Game library.
 - [x] Direct mounting PFS image.
 
 ## System requirements
