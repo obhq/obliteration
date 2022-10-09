@@ -3,7 +3,7 @@ on:
   workflow_call:
 jobs:
   build:
-    name: Build (Linux)
+    name: Linux
     runs-on: ubuntu-20.04 # We cannot use 22.04 due to Vulkan SDK does not available.
     steps:
     - name: Checkout source

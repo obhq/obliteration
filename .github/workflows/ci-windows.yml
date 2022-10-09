@@ -3,7 +3,7 @@ on:
   workflow_call:
 jobs:
   build:
-    name: Build (Windows)
+    name: Windows
     runs-on: windows-2019 # Qt 6.2 only support MSVC 2019.
     steps:
     - name: Checkout source

@@ -6,6 +6,8 @@ on:
 concurrency: pr-${{ github.ref }}
 jobs:
   windows:
+    name: Build
     uses: ./.github/workflows/ci-windows.yml
   linux:
+    name: Build
     uses: ./.github/workflows/ci-linux.yml
