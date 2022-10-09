@@ -24,7 +24,7 @@ Thanks [Mou-Ikkai](https://github.com/Mou-Ikkai) for the awesome icon!
   - AMD:
     - Minimum (Based on Required Instruction Sets): Jaguar-Based CPUs or newer
     - Recommended (Based on Performance): Zen-Based CPUs or newer
-  - INTEL:
+  - Intel:
     - Minimum (Based on Required Instruction Sets): Haswell-Based CPUs or newer
     - Recommended (Based on Performance): 5th Gen CPUs or newer
 
