@@ -67,11 +67,9 @@ impl Fs {
                 match entry {
                     driver::Entry::Directory(v) => directory = v,
                     driver::Entry::File(v) => {
-                        return Ok(Item::File(File::new(
-                            driver.clone(),
-                            unsafe { transmute(v) },
-                            current,
-                        )));
+                        return Ok(Item::File(File::new(driver.clone(), unsafe {
+                            transmute(v)
+                        })));
                     }
                 }
             }

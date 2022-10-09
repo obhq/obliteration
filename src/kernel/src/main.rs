@@ -1,3 +1,4 @@
+use self::exe::Executable;
 use self::fs::Fs;
 use self::process::Process;
 use self::rootfs::RootFs;
@@ -7,6 +8,7 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+mod exe;
 mod fs;
 mod log;
 mod pfs;
@@ -81,12 +83,25 @@ fn run() -> bool {
     };
 
     // Load eboot.bin.
-    info!(0, "Loading {}.", app.path());
+    info!(0, "Loading eboot.bin.");
+
+    let app = match Executable::load(app) {
+        Ok(v) => v,
+        Err(e) => {
+            error!(0, e, "Load failed");
+            return false;
+        }
+    };
+
+    info!(0, "Class: {}", app.class());
+
+    // Create a process for eboot.bin.
+    info!(0, "Creating a process for eboot.bin.");
 
     let app = match Process::load(app) {
         Ok(v) => v,
         Err(e) => {
-            error!(0, e, "Load failed");
+            error!(0, e, "Create failed");
             return false;
         }
     };
