@@ -1,8 +1,12 @@
+use self::section::Section64;
 use crate::fs::file::File;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::{Read, Seek, SeekFrom};
-use util::mem::{read_array, read_u16_le, read_u64_le, read_u8, uninit};
+use std::ops::IndexMut;
+use util::mem::{new_buffer, read_array, read_u16_le, read_u32_le, read_u64_le, read_u8, uninit};
+
+pub mod section;
 
 // https://www.psdevwiki.com/ps4/SELF_File_Format
 pub enum Executable {
@@ -85,6 +89,7 @@ impl Little64 {
         let e_shoff = read_u64_le(hdr, 0x28 - 0x10);
         let e_phnum = read_u16_le(hdr, 0x38 - 0x10);
         let e_shnum = read_u16_le(hdr, 0x3c - 0x10);
+        let e_shstrndx = read_u16_le(hdr, 0x3e - 0x10);
 
         // Load program headers.
         file.seek(SeekFrom::Start(hdr_offset + e_phoff)).unwrap();
@@ -99,6 +104,8 @@ impl Little64 {
         }
 
         // Load section headers.
+        let mut sections: Vec<Section64> = Vec::with_capacity(e_shnum as _);
+
         file.seek(SeekFrom::Start(hdr_offset + e_shoff)).unwrap();
 
         for i in 0..e_shnum {
@@ -108,7 +115,48 @@ impl Little64 {
             if let Err(e) = file.read_exact(&mut hdr) {
                 return Err(LoadError::ReadSectionHeaderFailed(i as _, e));
             }
+
+            let hdr = hdr.as_ptr();
+
+            // Load fields.
+            let sh_name = read_u32_le(hdr, 0);
+            let sh_offset = read_u64_le(hdr, 24);
+            let sh_size = read_u64_le(hdr, 32);
+
+            sections.push(Section64::new(sh_name, sh_offset, sh_size));
         }
+
+        // Load section names.
+        if e_shstrndx != 0 {
+            // Get section.
+            let section = match sections.get(e_shstrndx as usize) {
+                Some(v) => v,
+                None => return Err(LoadError::InvalidSectionNamesIndex),
+            };
+
+            // Load name table.
+            let mut names = new_buffer(section.size() as _);
+
+            file.seek(SeekFrom::Start(section.offset())).unwrap();
+
+            if let Err(e) = file.read_exact(&mut names) {
+                return Err(LoadError::ReadSectionNamesFailed(e));
+            }
+
+            drop(section);
+
+            // Populate section's name.
+            for i in 0..sections.len() {
+                let section = sections.index_mut(i);
+                let name = &names[(section.name_offset() as usize)..];
+                let end = match name.iter().position(|&b| b == 0) {
+                    Some(v) => v,
+                    None => return Err(LoadError::InvalidSectionName(i)),
+                };
+
+                section.set_name(&name[..end]);
+            }
+        };
 
         Ok(Self {})
     }
@@ -124,6 +172,9 @@ pub enum LoadError {
     UnsupportedArchitecture,
     ReadProgramHeaderFailed(usize, std::io::Error),
     ReadSectionHeaderFailed(usize, std::io::Error),
+    InvalidSectionNamesIndex,
+    ReadSectionNamesFailed(std::io::Error),
+    InvalidSectionName(usize),
 }
 
 impl Error for LoadError {
@@ -133,7 +184,8 @@ impl Error for LoadError {
             | Self::ReadSelfSegmentHeaderFailed(_, e)
             | Self::ReadElfHeaderFailed(e)
             | Self::ReadProgramHeaderFailed(_, e)
-            | Self::ReadSectionHeaderFailed(_, e) => Some(e),
+            | Self::ReadSectionHeaderFailed(_, e)
+            | Self::ReadSectionNamesFailed(e) => Some(e),
             _ => None,
         }
     }
@@ -152,6 +204,9 @@ impl Display for LoadError {
             Self::UnsupportedArchitecture => f.write_str("unsupported architecture"),
             Self::ReadProgramHeaderFailed(i, _) => write!(f, "cannot read program header #{}", i),
             Self::ReadSectionHeaderFailed(i, _) => write!(f, "cannot read section header #{}", i),
+            Self::InvalidSectionNamesIndex => f.write_str("invalid index to section names"),
+            Self::ReadSectionNamesFailed(_) => f.write_str("cannot read section name table"),
+            Self::InvalidSectionName(i) => write!(f, "invalid section name for section #{}", i),
         }
     }
 }
