@@ -1,11 +1,11 @@
-pub struct Section64 {
+pub struct Section {
     name_offset: u32,
     offset: u64,
     size: u64,
     name: Vec<u8>,
 }
 
-impl Section64 {
+impl Section {
     pub(super) fn new(name_offset: u32, offset: u64, size: u64) -> Self {
         Self {
             name_offset,

@@ -1,12 +1,12 @@
 use std::fmt::{Display, Formatter};
 
-pub struct Program64 {
+pub struct Program {
     ty: ProgramType,
     offset: u64,
     file_size: u64,
 }
 
-impl Program64 {
+impl Program {
     pub(super) fn new(ty: ProgramType, offset: u64, file_size: u64) -> Self {
         Self {
             ty,

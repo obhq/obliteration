@@ -6,11 +6,6 @@ pub struct Process {}
 
 impl Process {
     pub fn load(exe: Executable) -> Result<Self, LoadError> {
-        // All PS4 exe should be 64-bits little endian.
-        let exe = match exe {
-            Executable::Little64(v) => v,
-        };
-
         Ok(Self {})
     }
 }
