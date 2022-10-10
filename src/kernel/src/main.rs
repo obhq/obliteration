@@ -1,4 +1,4 @@
-use self::exe::Executable;
+use self::exe::{Executable, Executable64};
 use self::fs::Fs;
 use self::process::Process;
 use self::rootfs::RootFs;
@@ -92,6 +92,33 @@ fn run() -> bool {
             return false;
         }
     };
+
+    match &app {
+        Executable::Little64(v) => {
+            info!(0, "eboot.bin is 64-bits little-endian.");
+            info!(0, "Number of programs: {}", v.programs().len());
+            info!(0, "Number of sections: {}", v.sections().len());
+
+            for (i, p) in v.programs().iter().enumerate() {
+                info!(0, "============= Program #{} =============", i);
+                info!(0, "Type        : {}", p.ty());
+                info!(0, "Offset      : {}", p.offset());
+                info!(0, "Size in file: {}", p.file_size());
+            }
+
+            for (i, s) in v.sections().iter().enumerate() {
+                info!(0, "============= Section #{} =============", i);
+                info!(
+                    0,
+                    "Name  : {} ({})",
+                    String::from_utf8_lossy(s.name()),
+                    s.name_offset()
+                );
+                info!(0, "Offset: {}", s.offset());
+                info!(0, "Size  : {}", s.size());
+            }
+        }
+    }
 
     // Create a process for eboot.bin.
     info!(0, "Creating a process for eboot.bin.");

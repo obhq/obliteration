@@ -27,6 +27,10 @@ impl Section64 {
         self.size
     }
 
+    pub fn name(&self) -> &[u8] {
+        self.name.as_slice()
+    }
+
     pub fn set_name<N: Into<Vec<u8>>>(&mut self, name: N) {
         self.name = name.into();
     }

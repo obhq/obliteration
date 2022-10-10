@@ -1,3 +1,4 @@
+use self::program::Program64;
 use self::section::Section64;
 use crate::fs::file::File;
 use std::error::Error;
@@ -6,6 +7,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::ops::IndexMut;
 use util::mem::{new_buffer, read_array, read_u16_le, read_u32_le, read_u64_le, read_u8, uninit};
 
+pub mod program;
 pub mod section;
 
 // https://www.psdevwiki.com/ps4/SELF_File_Format
@@ -72,7 +74,10 @@ impl Executable {
     }
 }
 
-pub struct Little64 {}
+pub struct Little64 {
+    programs: Vec<Program64>,
+    sections: Vec<Section64>,
+}
 
 impl Little64 {
     fn load(mut file: File, hdr_offset: u64) -> Result<Self, LoadError> {
@@ -92,6 +97,8 @@ impl Little64 {
         let e_shstrndx = read_u16_le(hdr, 0x3e - 0x10);
 
         // Load program headers.
+        let mut programs: Vec<Program64> = Vec::with_capacity(e_phnum as _);
+
         file.seek(SeekFrom::Start(hdr_offset + e_phoff)).unwrap();
 
         for i in 0..e_phnum {
@@ -101,6 +108,15 @@ impl Little64 {
             if let Err(e) = file.read_exact(&mut hdr) {
                 return Err(LoadError::ReadProgramHeaderFailed(i as _, e));
             }
+
+            let hdr = hdr.as_ptr();
+
+            // Load fields.
+            let p_type = read_u32_le(hdr, 0x00);
+            let p_offset = read_u64_le(hdr, 0x08);
+            let p_filesz = read_u64_le(hdr, 0x20);
+
+            programs.push(Program64::new(p_type.into(), p_offset, p_filesz));
         }
 
         // Load section headers.
@@ -158,8 +174,23 @@ impl Little64 {
             }
         };
 
-        Ok(Self {})
+        Ok(Self { programs, sections })
     }
+}
+
+impl Executable64 for Little64 {
+    fn programs(&self) -> &[Program64] {
+        self.programs.as_slice()
+    }
+
+    fn sections(&self) -> &[Section64] {
+        self.sections.as_slice()
+    }
+}
+
+pub trait Executable64 {
+    fn programs(&self) -> &[Program64];
+    fn sections(&self) -> &[Section64];
 }
 
 #[derive(Debug)]
