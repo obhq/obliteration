@@ -2,16 +2,32 @@ use std::fmt::{Display, Formatter};
 
 pub struct Program {
     ty: ProgramType,
+    flags: ProgramFlags,
     offset: u64,
+    virtual_addr: usize,
     file_size: u64,
+    memory_size: usize,
+    aligment: usize,
 }
 
 impl Program {
-    pub(super) fn new(ty: ProgramType, offset: u64, file_size: u64) -> Self {
+    pub(super) fn new(
+        ty: ProgramType,
+        flags: ProgramFlags,
+        offset: u64,
+        virtual_addr: usize,
+        file_size: u64,
+        memory_size: usize,
+        aligment: usize,
+    ) -> Self {
         Self {
             ty,
+            flags,
             offset,
+            virtual_addr,
             file_size,
+            memory_size,
+            aligment,
         }
     }
 
@@ -19,12 +35,36 @@ impl Program {
         self.ty
     }
 
+    pub fn flags(&self) -> ProgramFlags {
+        self.flags
+    }
+
     pub fn offset(&self) -> u64 {
         self.offset
     }
 
+    pub fn virtual_addr(&self) -> usize {
+        self.virtual_addr
+    }
+
     pub fn file_size(&self) -> u64 {
         self.file_size
+    }
+
+    pub fn memory_size(&self) -> usize {
+        self.memory_size
+    }
+
+    pub fn aligned_size(&self) -> usize {
+        if self.aligment != 0 {
+            (self.memory_size + (self.aligment - 1)) & !(self.aligment - 1)
+        } else {
+            self.memory_size
+        }
+    }
+
+    pub fn aligment(&self) -> usize {
+        self.aligment
     }
 }
 
@@ -68,5 +108,21 @@ impl Display for ProgramType {
             &Self::PT_GNU_EH_FRAME => f.write_str("PT_GNU_EH_FRAME"),
             t => write!(f, "{:#010x}", t.0),
         }
+    }
+}
+
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+pub struct ProgramFlags(u32);
+
+impl From<u32> for ProgramFlags {
+    fn from(v: u32) -> Self {
+        Self(v)
+    }
+}
+
+impl Display for ProgramFlags {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        write!(f, "{:#010x}", self.0)
     }
 }

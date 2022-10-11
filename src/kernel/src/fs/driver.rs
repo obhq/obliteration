@@ -15,7 +15,9 @@ pub trait Directory<'driver> {
     fn open(&self, name: &str) -> Result<Entry<'driver>, OpenError>;
 }
 
-pub trait File<'driver>: Seek + Read + Write {}
+pub trait File<'driver>: Seek + Read + Write {
+    fn len(&self) -> std::io::Result<u64>;
+}
 
 #[derive(Debug)]
 pub enum OpenError {

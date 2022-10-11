@@ -18,6 +18,10 @@ impl File {
     ) -> Self {
         Self { driver, entry }
     }
+
+    pub fn len(&self) -> std::io::Result<u64> {
+        self.entry.len()
+    }
 }
 
 impl Seek for File {

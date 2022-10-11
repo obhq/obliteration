@@ -81,7 +81,11 @@ struct File<'driver, 'pfs, 'image> {
     phantom: PhantomData<&'driver Pfs<'image>>,
 }
 
-impl<'driver, 'pfs, 'image> driver::File<'driver> for File<'driver, 'pfs, 'image> {}
+impl<'driver, 'pfs, 'image> driver::File<'driver> for File<'driver, 'pfs, 'image> {
+    fn len(&self) -> std::io::Result<u64> {
+        Ok(self.pfs.len())
+    }
+}
 
 impl<'driver, 'pfs, 'image> Seek for File<'driver, 'pfs, 'image> {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {

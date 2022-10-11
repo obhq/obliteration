@@ -16,6 +16,7 @@ Thanks [Mou-Ikkai](https://github.com/Mou-Ikkai) for the awesome icon!
 - [x] Built-in PKG file supports for Fake PKG.
 - [x] Game library.
 - [x] Direct mounting PFS image.
+- [ ] Emulate system calls instead of user space libraries.
 
 ## System requirements
 

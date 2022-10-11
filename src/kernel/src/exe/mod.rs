@@ -1,5 +1,6 @@
 use self::program::Program;
 use self::section::Section;
+use self::segment::Segment;
 use crate::fs::file::File;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
@@ -9,15 +10,19 @@ use util::mem::{new_buffer, read_array, read_u16_le, read_u32_le, read_u64_le, r
 
 pub mod program;
 pub mod section;
+pub mod segment;
 
 // https://www.psdevwiki.com/ps4/SELF_File_Format
 pub struct Executable {
+    file_size: u64,
+    entry_addr: usize,
+    segments: Vec<Segment>,
     programs: Vec<Program>,
     sections: Vec<Section>,
 }
 
 impl Executable {
-    pub fn load(mut file: File) -> Result<Self, LoadError> {
+    pub fn load(file: &mut File) -> Result<Self, LoadError> {
         // Read SELF header.
         let mut hdr: [u8; 32] = uninit();
 
@@ -37,15 +42,35 @@ impl Executable {
             return Err(LoadError::InvalidSelfMagic);
         }
 
-        // Load SELF segment headers.
-        let segments = read_u16_le(hdr, 0x18);
+        // Load SELF fields.
+        let file_size = read_u64_le(hdr, 0x10);
 
-        for i in 0..segments {
+        // Load SELF segment headers.
+        let segment_count = read_u16_le(hdr, 0x18) as usize;
+        let mut segments: Vec<Segment> = Vec::with_capacity(segment_count);
+
+        for i in 0..segment_count {
+            // Read header.
             let mut hdr: [u8; 32] = uninit();
 
             if let Err(e) = file.read_exact(&mut hdr) {
-                return Err(LoadError::ReadSelfSegmentHeaderFailed(i as _, e));
+                return Err(LoadError::ReadSelfSegmentHeaderFailed(i, e));
             }
+
+            let hdr = hdr.as_ptr();
+
+            // Load fields.
+            let flags = read_u64_le(hdr, 0);
+            let offset = read_u64_le(hdr, 8);
+            let compressed_size = read_u64_le(hdr, 16);
+            let decompressed_size = read_u64_le(hdr, 24);
+
+            segments.push(Segment::new(
+                flags.into(),
+                offset,
+                compressed_size,
+                decompressed_size,
+            ));
         }
 
         // Read ELF header.
@@ -75,6 +100,7 @@ impl Executable {
         }
 
         // Load ELF header.
+        let e_entry = read_u64_le(hdr, 0x18);
         let e_phoff = read_u64_le(hdr, 0x20);
         let e_shoff = read_u64_le(hdr, 0x28);
         let e_phnum = read_u16_le(hdr, 0x38);
@@ -98,10 +124,22 @@ impl Executable {
 
             // Load fields.
             let p_type = read_u32_le(hdr, 0x00);
+            let p_flags = read_u32_le(hdr, 0x04);
             let p_offset = read_u64_le(hdr, 0x08);
+            let p_vaddr = read_u64_le(hdr, 0x10);
             let p_filesz = read_u64_le(hdr, 0x20);
+            let p_memsz = read_u64_le(hdr, 0x28);
+            let p_align = read_u64_le(hdr, 0x30);
 
-            programs.push(Program::new(p_type.into(), p_offset, p_filesz));
+            programs.push(Program::new(
+                p_type.into(),
+                p_flags.into(),
+                p_offset,
+                p_vaddr as _,
+                p_filesz,
+                p_memsz as _,
+                p_align as _,
+            ));
         }
 
         // Load section headers.
@@ -159,7 +197,25 @@ impl Executable {
             }
         };
 
-        Ok(Self { programs, sections })
+        Ok(Self {
+            file_size,
+            entry_addr: e_entry as _,
+            segments,
+            programs,
+            sections,
+        })
+    }
+
+    pub fn file_size(&self) -> u64 {
+        self.file_size
+    }
+
+    pub fn entry_addr(&self) -> usize {
+        self.entry_addr
+    }
+
+    pub fn segments(&self) -> &[Segment] {
+        self.segments.as_slice()
     }
 
     pub fn programs(&self) -> &[Program] {

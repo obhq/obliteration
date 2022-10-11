@@ -68,7 +68,7 @@ fn run() -> bool {
     // Get eboot.bin.
     info!(0, "Getting /mnt/app0/eboot.bin.");
 
-    let app = match fs.get("/mnt/app0/eboot.bin") {
+    let mut eboot = match fs.get("/mnt/app0/eboot.bin") {
         Ok(v) => match v {
             fs::Item::Directory(_) => {
                 error!(0, "Path to eboot.bin is a directory.");
@@ -85,7 +85,7 @@ fn run() -> bool {
     // Load eboot.bin.
     info!(0, "Loading eboot.bin.");
 
-    let app = match Executable::load(app) {
+    let exe = match Executable::load(&mut eboot) {
         Ok(v) => v,
         Err(e) => {
             error!(0, e, "Load failed");
@@ -93,17 +93,33 @@ fn run() -> bool {
         }
     };
 
-    info!(0, "Number of programs: {}", app.programs().len());
-    info!(0, "Number of sections: {}", app.sections().len());
+    info!(0, "Size from header  : {}", exe.file_size());
+    info!(0, "Entry address     : {:#018x}", exe.entry_addr());
+    info!(0, "Number of segments: {}", exe.segments().len());
+    info!(0, "Number of programs: {}", exe.programs().len());
+    info!(0, "Number of sections: {}", exe.sections().len());
 
-    for (i, p) in app.programs().iter().enumerate() {
-        info!(0, "============= Program #{} =============", i);
-        info!(0, "Type        : {}", p.ty());
-        info!(0, "Offset      : {}", p.offset());
-        info!(0, "Size in file: {}", p.file_size());
+    for (i, s) in exe.segments().iter().enumerate() {
+        info!(0, "============= Segment #{} =============", i);
+        info!(0, "Flags            : {}", s.flags());
+        info!(0, "Offset           : {}", s.offset());
+        info!(0, "Compressed size  : {}", s.compressed_size());
+        info!(0, "Decompressed size: {}", s.decompressed_size());
     }
 
-    for (i, s) in app.sections().iter().enumerate() {
+    for (i, p) in exe.programs().iter().enumerate() {
+        info!(0, "============= Program #{} =============", i);
+        info!(0, "Type           : {}", p.ty());
+        info!(0, "Flags          : {}", p.flags());
+        info!(0, "Offset         : {:#018x}", p.offset());
+        info!(0, "Virtual address: {:#018x}", p.virtual_addr());
+        info!(0, "Size in file   : {:#018x}", p.file_size());
+        info!(0, "Size in memory : {:#018x}", p.memory_size());
+        info!(0, "Aligned size   : {:#018x}", p.aligned_size());
+        info!(0, "Aligment       : {:#018x}", p.aligment());
+    }
+
+    for (i, s) in exe.sections().iter().enumerate() {
         info!(0, "============= Section #{} =============", i);
         info!(
             0,
@@ -118,7 +134,7 @@ fn run() -> bool {
     // Create a process for eboot.bin.
     info!(0, "Creating a process for eboot.bin.");
 
-    let app = match Process::load(app) {
+    let mut process = match Process::load(exe, eboot) {
         Ok(v) => v,
         Err(e) => {
             error!(0, e, "Create failed");
@@ -126,7 +142,21 @@ fn run() -> bool {
         }
     };
 
-    loop {}
+    // Run eboot.bin.
+    info!(0, "Running eboot.bin.");
+
+    let exit_code = match process.run() {
+        Ok(v) => v,
+        Err(e) => {
+            error!(0, e, "Run failed");
+            return false;
+        }
+    };
+
+    // Most program should never reach this state.
+    info!(0, "eboot.bin exited with code {}.", exit_code);
+
+    true
 }
 
 fn mount_pfs<G: AsRef<Path>>(fs: &Fs, game: G) -> bool {

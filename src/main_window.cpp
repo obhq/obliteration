@@ -93,6 +93,7 @@ MainWindow::MainWindow(context *context) :
     // Setup log view.
     m_log = new QPlainTextEdit();
     m_log->setReadOnly(true);
+    m_log->setLineWrapMode(QPlainTextEdit::NoWrap);
     m_log->setMaximumBlockCount(10000);
     m_log->document()->setDefaultFont(QFont("monospace", 10));
 
