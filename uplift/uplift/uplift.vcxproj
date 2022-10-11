@@ -1,0 +1,187 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>15.0</VCProjectVersion>
+    <ProjectGuid>{E534A9E0-01A2-4C94-A1DF-6F425B8073B4}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>uplift</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v142</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+    <OutDir>$(SolutionDir)build\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>build\$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <OutDir>$(SolutionDir)build\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>build\$(Platform)\$(Configuration)\</IntDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>src\stdafx;..\third_party;..\third_party\llvm\include;..\third_party\xbyak\include;..\third_party\xenia_base\src;..\third_party\capstone\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ShowIncludes>false</ShowIncludes>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <StackReserveSize>8388608</StackReserveSize>
+      <AdditionalDependencies>ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>src\stdafx;..\third_party;..\third_party\llvm\include;..\third_party\xbyak\include;..\third_party\xenia_base\src;..\third_party\capstone\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <ShowIncludes>false</ShowIncludes>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <StackReserveSize>8388608</StackReserveSize>
+      <AdditionalDependencies>ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="src\bmi1.hpp" />
+    <ClInclude Include="src\code_generators.hpp" />
+    <ClInclude Include="src\devices\console_device.hpp" />
+    <ClInclude Include="src\devices\deci_tty_device.hpp" />
+    <ClInclude Include="src\devices\device.hpp" />
+    <ClInclude Include="src\devices\dipsw_device.hpp" />
+    <ClInclude Include="src\devices\direct_memory_device.hpp" />
+    <ClInclude Include="src\devices\gc_device.hpp" />
+    <ClInclude Include="src\devices\notification_device.hpp" />
+    <ClInclude Include="src\devices\_devices.hpp" />
+    <ClInclude Include="src\dynamic_info.hpp" />
+    <ClInclude Include="src\helpers.hpp" />
+    <ClInclude Include="src\ipmi\ipmi_client.hpp" />
+    <ClInclude Include="src\ipmi\_ipmi.h" />
+    <ClInclude Include="src\module.hpp" />
+    <ClInclude Include="src\objects\eport.hpp" />
+    <ClInclude Include="src\objects\event_flag.hpp" />
+    <ClInclude Include="src\objects\file.hpp" />
+    <ClInclude Include="src\objects\object.hpp" />
+    <ClInclude Include="src\objects\queue.hpp" />
+    <ClInclude Include="src\objects\semaphore.hpp" />
+    <ClInclude Include="src\objects\shared_memory.hpp" />
+    <ClInclude Include="src\objects\_objects.hpp" />
+    <ClInclude Include="src\runtime.hpp" />
+    <ClInclude Include="src\match.hpp" />
+    <ClInclude Include="src\object_table.hpp" />
+    <ClInclude Include="src\program_info.hpp" />
+    <ClInclude Include="src\rip_pointers.hpp" />
+    <ClInclude Include="src\rip_zone.hpp" />
+    <ClInclude Include="src\sockets\internet_socket.hpp" />
+    <ClInclude Include="src\sockets\socket.hpp" />
+    <ClInclude Include="src\sockets\_sockets.hpp" />
+    <ClInclude Include="src\stdafx\stdafx.h" />
+    <ClInclude Include="src\stdafx\targetver.h" />
+    <ClInclude Include="src\syscalls.hpp" />
+    <ClInclude Include="src\syscall_errors.hpp" />
+    <ClInclude Include="src\syscall_error_table.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="src\bmi1.cpp" />
+    <ClCompile Include="src\code_generators.cpp" />
+    <ClCompile Include="src\devices\console_device.cpp" />
+    <ClCompile Include="src\devices\deci_tty_device.cpp" />
+    <ClCompile Include="src\devices\device.cpp" />
+    <ClCompile Include="src\devices\dipsw_device.cpp" />
+    <ClCompile Include="src\devices\direct_memory_device.cpp" />
+    <ClCompile Include="src\devices\gc_device.cpp" />
+    <ClCompile Include="src\devices\notification_device.cpp" />
+    <ClCompile Include="src\dynamic_info.cpp" />
+    <ClCompile Include="src\helpers.cpp" />
+    <ClCompile Include="src\ipmi\ipmi_client.cpp" />
+    <ClCompile Include="src\module.cpp" />
+    <ClCompile Include="src\objects\eport.cpp" />
+    <ClCompile Include="src\objects\event_flag.cpp" />
+    <ClCompile Include="src\objects\file.cpp" />
+    <ClCompile Include="src\objects\object.cpp" />
+    <ClCompile Include="src\objects\queue.cpp" />
+    <ClCompile Include="src\objects\semaphore.cpp" />
+    <ClCompile Include="src\objects\shared_memory.cpp" />
+    <ClCompile Include="src\runtime.cpp" />
+    <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\match.cpp" />
+    <ClCompile Include="src\object_table.cpp" />
+    <ClCompile Include="src\program_info.cpp" />
+    <ClCompile Include="src\sockets\internet_socket.cpp" />
+    <ClCompile Include="src\sockets\socket.cpp" />
+    <ClCompile Include="src\stdafx\stdafx.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="src\syscalls.cpp" />
+    <ClCompile Include="src\syscalls_win.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="src\syscall_table.inl">
+      <FileType>CppHeader</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\third_party\capstone\msvc\capstone_static\capstone_static.vcxproj">
+      <Project>{5b01d900-2359-44ca-9914-6b0c6afb7be7}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\third_party\xbyak\xbyak.vcxproj">
+      <Project>{98691662-0d15-4039-b1e3-c1883258c630}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\third_party\xenia_base\xenia_base.vcxproj">
+      <Project>{122baa7b-a7d2-4e0d-812c-edf7733b367a}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

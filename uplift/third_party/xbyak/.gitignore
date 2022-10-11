@@ -1,0 +1,95 @@
+# ==============================================================================
+# Misc system junk
+# ==============================================================================
+
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+.com.apple.*
+Thumbs.db
+Desktop.ini
+.svn
+
+# ==============================================================================
+# Projects/IDE files
+# ==============================================================================
+
+*~
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# VIM
+.*.sw[a-z]
+*.un~
+Session.vim
+
+# TextMate
+*.tmproj
+*.tmproject
+tmtags
+
+# Eclipse
+.project
+.metadata
+
+# WebStorm
+.idea
+
+# VS
+.vs
+*.user
+*.sdf
+*.opensdf
+bin/
+obj/
+
+# ==============================================================================
+# Temp generated code
+# ==============================================================================
+
+*.py[co]
+.coverage
+*.o
+*.aps
+
+# ==============================================================================
+# Logs and dumps
+# ==============================================================================
+
+npm-debug.log
+private/
+*.trace
+imgui.ini
+*.log
+
+# ==============================================================================
+# Build system output
+# ==============================================================================
+
+# npm/node
+.lock-wscript
+node_modules/
+node_modules/**/build/
+node_modules/.bin/
+
+# coverage/etc
+/scratch/
+
+build/
+
+# ==============================================================================
+# Local-only paths
+# ==============================================================================
+
+.vagrant
+/attic/
+/content/
+/third_party/binutils/binutils-2.24.tar.gz
+/third_party/binutils/bin/
+/third_party/binutils/powerpc-none-elf/
+/third_party/binutils/share/
+/third_party/binutils/binutils*
+/third_party/vasm/

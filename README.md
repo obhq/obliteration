@@ -1,9 +1,9 @@
 # Obliteration
 [![CI](https://github.com/ultimaweapon/obliteration/actions/workflows/main.yml/badge.svg)](https://github.com/ultimaweapon/obliteration/actions/workflows/main.yml)
 
-Obliteration is an experimental PS4 emulator using [Kyty](https://github.com/InoriRus/Kyty) as a reference. The project is under development and cannot run any games that Kyty is able to run yet.
+Obliteration is an experimental PS4 emulator using [Kyty](https://github.com/InoriRus/Kyty) and [Uplift](https://github.com/idc/uplift) as a reference. The project is under development and cannot run any games that Kyty is able to run yet.
 
-**The original author of Kyty does not involved in the development of Obliteration in anyway.** Obliteration is a completely separated project. You can think Obliteration is a port of Kyty from C++ to Rust for both Windows and Linux.
+**The original author of Kyty does not involved in the development of Obliteration in anyway.** Obliteration is a completely separated project. The reason you see the author of Kyty in a contributor list because this project contains commits from Kyty.
 
 ## Screenshots
 
