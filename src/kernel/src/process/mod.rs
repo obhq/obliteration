@@ -1,6 +1,6 @@
 use self::recompiler::{NativeCode, Recompiler};
-use crate::exe::program::ProgramType;
-use crate::exe::Executable;
+use crate::elf::program::ProgramType;
+use crate::elf::SignedElf;
 use crate::fs::file::File;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
@@ -21,11 +21,11 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn load(exe: Executable, mut file: File) -> Result<Self, LoadError> {
+    pub fn load(elf: SignedElf, mut file: File) -> Result<Self, LoadError> {
         // Get size of memory for mapping executable.
         let mut mapped_size = 0;
 
-        for prog in exe.programs() {
+        for prog in elf.programs() {
             if prog.ty() != ProgramType::PT_LOAD && prog.ty() != ProgramType::PT_SCE_RELRO {
                 continue;
             }
@@ -42,7 +42,7 @@ impl Process {
         let mut dynamic: Vec<u8> = Vec::new();
         let mut dynamic_data: Vec<u8> = Vec::new();
 
-        for prog in exe.programs() {
+        for prog in elf.programs() {
             let offset = prog.offset();
 
             match prog.ty() {
@@ -50,17 +50,17 @@ impl Process {
                     let addr = prog.virtual_addr();
                     let to = &mut mapped[addr..(addr + prog.file_size() as usize)];
 
-                    Self::load_program_segment(&mut file, &exe, offset, to)?;
+                    Self::load_program_segment(&mut file, &elf, offset, to)?;
                 }
                 ProgramType::PT_DYNAMIC => {
                     dynamic = new_buffer(prog.file_size() as _);
 
-                    Self::load_program_segment(&mut file, &exe, offset, &mut dynamic)?;
+                    Self::load_program_segment(&mut file, &elf, offset, &mut dynamic)?;
                 }
                 ProgramType::PT_SCE_DYNLIBDATA => {
                     dynamic_data = new_buffer(prog.file_size() as _);
 
-                    Self::load_program_segment(&mut file, &exe, offset, &mut dynamic_data)?;
+                    Self::load_program_segment(&mut file, &elf, offset, &mut dynamic_data)?;
                 }
                 _ => continue,
             }
@@ -69,7 +69,7 @@ impl Process {
         // Recompile executable.
         let mut modules: Vec<(Vec<u8>, NativeCode)> = Vec::new();
         let recompiler = Recompiler::new(&mapped);
-        let entry = match recompiler.run(&[exe.entry_addr()]) {
+        let entry = match recompiler.run(&[elf.entry_addr()]) {
             Ok((n, e)) => {
                 modules.push((mapped, n));
                 e[0]
@@ -92,18 +92,18 @@ impl Process {
     // FIXME: Refactor this because the logic does not make sense.
     fn load_program_segment(
         bin: &mut File,
-        exe: &Executable,
+        elf: &SignedElf,
         offset: u64,
         to: &mut [u8],
     ) -> Result<(), LoadError> {
-        for (i, seg) in exe.segments().iter().enumerate() {
+        for (i, seg) in elf.segments().iter().enumerate() {
             let flags = seg.flags();
 
             if !flags.is_blocked() {
                 continue;
             }
 
-            let prog = match exe.programs().get(flags.id() as usize) {
+            let prog = match elf.programs().get(flags.id() as usize) {
                 Some(v) => v,
                 None => return Err(LoadError::InvalidSelfSegmentId(i)),
             };
@@ -130,8 +130,8 @@ impl Process {
             }
         }
 
-        if (bin.len().unwrap() as usize) - (exe.file_size() as usize) == to.len() {
-            bin.seek(SeekFrom::Start(exe.file_size())).unwrap();
+        if (bin.len().unwrap() as usize) - (elf.file_size() as usize) == to.len() {
+            bin.seek(SeekFrom::Start(elf.file_size())).unwrap();
             bin.read_exact(to).unwrap();
 
             return Ok(());

@@ -1,13 +1,13 @@
 use std::fmt::{Display, Formatter};
 
-pub struct Segment {
+pub struct SignedSegment {
     flags: SegmentFlags,
     offset: u64,
     compressed_size: u64,
     decompressed_size: u64,
 }
 
-impl Segment {
+impl SignedSegment {
     pub(super) fn new(
         flags: SegmentFlags,
         offset: u64,

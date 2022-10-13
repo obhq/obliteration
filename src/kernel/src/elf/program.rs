@@ -57,6 +57,7 @@ impl Program {
 
     pub fn aligned_size(&self) -> usize {
         if self.aligment != 0 {
+            // FIXME: Refactor this for readability.
             (self.memory_size + (self.aligment - 1)) & !(self.aligment - 1)
         } else {
             self.memory_size

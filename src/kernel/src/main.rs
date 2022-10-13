@@ -1,4 +1,4 @@
-use self::exe::Executable;
+use self::elf::SignedElf;
 use self::fs::Fs;
 use self::process::Process;
 use self::rootfs::RootFs;
@@ -8,7 +8,7 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-mod exe;
+mod elf;
 mod fs;
 mod log;
 mod pfs;
@@ -85,7 +85,7 @@ fn run() -> bool {
     // Load eboot.bin.
     info!(0, "Loading eboot.bin.");
 
-    let exe = match Executable::load(&mut eboot) {
+    let elf = match SignedElf::load(&mut eboot) {
         Ok(v) => v,
         Err(e) => {
             error!(0, e, "Load failed");
@@ -93,13 +93,13 @@ fn run() -> bool {
         }
     };
 
-    info!(0, "Size from header  : {}", exe.file_size());
-    info!(0, "Entry address     : {:#018x}", exe.entry_addr());
-    info!(0, "Number of segments: {}", exe.segments().len());
-    info!(0, "Number of programs: {}", exe.programs().len());
-    info!(0, "Number of sections: {}", exe.sections().len());
+    info!(0, "Size from header  : {}", elf.file_size());
+    info!(0, "Entry address     : {:#018x}", elf.entry_addr());
+    info!(0, "Number of segments: {}", elf.segments().len());
+    info!(0, "Number of programs: {}", elf.programs().len());
+    info!(0, "Number of sections: {}", elf.sections().len());
 
-    for (i, s) in exe.segments().iter().enumerate() {
+    for (i, s) in elf.segments().iter().enumerate() {
         info!(0, "============= Segment #{} =============", i);
         info!(0, "Flags            : {}", s.flags());
         info!(0, "Offset           : {}", s.offset());
@@ -107,7 +107,7 @@ fn run() -> bool {
         info!(0, "Decompressed size: {}", s.decompressed_size());
     }
 
-    for (i, p) in exe.programs().iter().enumerate() {
+    for (i, p) in elf.programs().iter().enumerate() {
         info!(0, "============= Program #{} =============", i);
         info!(0, "Type           : {}", p.ty());
         info!(0, "Flags          : {}", p.flags());
@@ -119,7 +119,7 @@ fn run() -> bool {
         info!(0, "Aligment       : {:#018x}", p.aligment());
     }
 
-    for (i, s) in exe.sections().iter().enumerate() {
+    for (i, s) in elf.sections().iter().enumerate() {
         info!(0, "============= Section #{} =============", i);
         info!(
             0,
@@ -134,7 +134,7 @@ fn run() -> bool {
     // Create a process for eboot.bin.
     info!(0, "Creating a process for eboot.bin.");
 
-    let mut process = match Process::load(exe, eboot) {
+    let mut process = match Process::load(elf, eboot) {
         Ok(v) => v,
         Err(e) => {
             error!(0, e, "Create failed");

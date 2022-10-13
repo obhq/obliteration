@@ -1,6 +1,6 @@
 use self::program::Program;
 use self::section::Section;
-use self::segment::Segment;
+use self::segment::SignedSegment;
 use crate::fs::file::File;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
@@ -13,15 +13,15 @@ pub mod section;
 pub mod segment;
 
 // https://www.psdevwiki.com/ps4/SELF_File_Format
-pub struct Executable {
+pub struct SignedElf {
     file_size: u64,
     entry_addr: usize,
-    segments: Vec<Segment>,
+    segments: Vec<SignedSegment>,
     programs: Vec<Program>,
     sections: Vec<Section>,
 }
 
-impl Executable {
+impl SignedElf {
     pub fn load(file: &mut File) -> Result<Self, LoadError> {
         // Read SELF header.
         let mut hdr: [u8; 32] = uninit();
@@ -47,7 +47,7 @@ impl Executable {
 
         // Load SELF segment headers.
         let segment_count = read_u16_le(hdr, 0x18) as usize;
-        let mut segments: Vec<Segment> = Vec::with_capacity(segment_count);
+        let mut segments: Vec<SignedSegment> = Vec::with_capacity(segment_count);
 
         for i in 0..segment_count {
             // Read header.
@@ -65,7 +65,7 @@ impl Executable {
             let compressed_size = read_u64_le(hdr, 16);
             let decompressed_size = read_u64_le(hdr, 24);
 
-            segments.push(Segment::new(
+            segments.push(SignedSegment::new(
                 flags.into(),
                 offset,
                 compressed_size,
@@ -214,7 +214,7 @@ impl Executable {
         self.entry_addr
     }
 
-    pub fn segments(&self) -> &[Segment] {
+    pub fn segments(&self) -> &[SignedSegment] {
         self.segments.as_slice()
     }
 
