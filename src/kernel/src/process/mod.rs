@@ -2,16 +2,23 @@ use self::recompiler::{NativeCode, Recompiler};
 use crate::elf::program::ProgramType;
 use crate::elf::SignedElf;
 use crate::fs::file::File;
+use crate::info;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::{Read, Seek, SeekFrom};
 use std::mem::transmute;
-use util::mem::new_buffer;
+use std::os::raw::c_int;
+use std::pin::Pin;
+use std::ptr::null_mut;
+use util::mem::{new_buffer, uninit};
 
 pub mod recompiler;
 
+/// This struct and its data is highly unsafe. **So make sure you understand what it does before
+/// editing any code here.**
 pub struct Process {
-    entry: extern "sysv64" fn(),
+    id: c_int,
+    entry: extern "sysv64" fn(*mut Arg, extern "sysv64" fn()),
 
     // This field hold a recompiled code that is executing by host CPU and an original mapped SELF
     // so we need to keep it and drop it as a last field. The reason we need to keep the original
@@ -21,7 +28,7 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn load(elf: SignedElf, mut file: File) -> Result<Self, LoadError> {
+    pub fn load(elf: SignedElf, mut file: File) -> Result<Pin<Box<Self>>, LoadError> {
         // Get size of memory for mapping executable.
         let mut mapped_size = 0;
 
@@ -66,27 +73,59 @@ impl Process {
             }
         }
 
+        // Setup recompiler.
+        let mut proc = Box::pin(Self {
+            id: 1,
+            entry: uninit(),
+            modules: Vec::new(),
+        });
+
+        let recompiler = Recompiler::new(&mapped, &mut *proc);
+
         // Recompile executable.
-        let mut modules: Vec<(Vec<u8>, NativeCode)> = Vec::new();
-        let recompiler = Recompiler::new(&mapped);
-        let entry = match recompiler.run(&[elf.entry_addr()]) {
+        proc.entry = match recompiler.run(&[elf.entry_addr()]) {
             Ok((n, e)) => {
-                modules.push((mapped, n));
-                e[0]
+                proc.modules.push((mapped, n));
+                unsafe { transmute(e[0]) }
             }
             Err(e) => return Err(LoadError::RecompileFailed(e)),
         };
 
-        Ok(Self {
-            entry: unsafe { transmute(entry) },
-            modules,
-        })
+        Ok(proc)
     }
 
     pub fn run(&mut self) -> Result<i32, RunError> {
-        (self.entry)();
+        // TODO: Check how the actual binary read its argument.
+        // Setup arguments.
+        let mut argv: Vec<*mut u8> = Vec::new();
+        let mut arg1 = b"prog\0".to_vec();
+
+        argv.push(arg1.as_mut_ptr());
+        argv.push(null_mut());
+
+        // Invoke entry point.
+        let mut arg = Arg {
+            argc: (argv.len() as i32) - 1,
+            argv: argv.as_mut_ptr(),
+        };
+
+        (self.entry)(&mut arg, Self::exit);
 
         Ok(0)
+    }
+
+    extern "sysv64" fn exit() {
+        // TODO: What should we do here?
+    }
+
+    extern "sysv64" fn handle_ud2(&mut self, addr: usize) -> ! {
+        info!(
+            self.id,
+            "Process exited with UD2 instruction from {:#018x}.", addr
+        );
+
+        // FIXME: Return to "run" without stack unwinding on Windows.
+        std::process::exit(0);
     }
 
     // FIXME: Refactor this because the logic does not make sense.
@@ -139,6 +178,12 @@ impl Process {
 
         panic!("missing self segment");
     }
+}
+
+#[repr(C)]
+struct Arg {
+    argc: i32,
+    argv: *mut *mut u8,
 }
 
 #[derive(Debug)]

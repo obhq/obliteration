@@ -1,4 +1,5 @@
-use iced_x86::code_asm::{CodeAssembler, CodeLabel};
+use super::Process;
+use iced_x86::code_asm::{rdi, rsi, CodeAssembler, CodeLabel};
 use iced_x86::{BlockEncoderOptions, Code, Decoder, DecoderOptions, Instruction};
 use std::collections::VecDeque;
 use std::error::Error;
@@ -7,6 +8,7 @@ use std::mem::transmute;
 
 pub(super) struct Recompiler<'input> {
     input: &'input [u8],
+    proc: *mut Process,
     assembler: CodeAssembler,
     jobs: VecDeque<(usize, CodeLabel)>,
     output_size: usize, // Roughly estimation size of the output but not less than the actual size.
@@ -14,9 +16,10 @@ pub(super) struct Recompiler<'input> {
 
 impl<'input> Recompiler<'input> {
     /// `input` is a mapped SELF.
-    pub fn new(input: &'input [u8]) -> Self {
+    pub fn new(input: &'input [u8], proc: *mut Process) -> Self {
         Self {
             input,
+            proc,
             assembler: CodeAssembler::new(64).unwrap(),
             jobs: VecDeque::new(),
             output_size: 0,
@@ -106,6 +109,10 @@ impl<'input> Recompiler<'input> {
                 Code::Mov_rm32_r32 => self.preserve(i),
                 Code::Mov_rm64_r64 => self.preserve(i),
                 Code::Push_r64 => self.preserve(i),
+                Code::Ud2 => {
+                    end = true;
+                    self.transform_ud2(i)
+                }
                 Code::Xor_rm32_r32 => self.preserve(i),
                 _ => {
                     return Err(RunError::UnknownInstruction(
@@ -132,6 +139,18 @@ impl<'input> Recompiler<'input> {
         self.jobs.push_back((offset, label));
 
         15
+    }
+
+    fn transform_ud2(&mut self, i: Instruction) -> usize {
+        let handler: extern "sysv64" fn(&mut Process, usize) -> ! = Process::handle_ud2;
+        let handler: u64 = unsafe { transmute(handler) };
+        let proc: u64 = unsafe { transmute(self.proc) };
+
+        self.assembler.mov(rsi, self.offset(i.ip()) as u64).unwrap();
+        self.assembler.mov(rdi, proc).unwrap();
+        self.assembler.call(handler).unwrap();
+
+        15 * 3
     }
 
     fn preserve(&mut self, i: Instruction) -> usize {
