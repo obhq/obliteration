@@ -1,5 +1,5 @@
 use super::Process;
-use iced_x86::code_asm::{rdi, rsi, CodeAssembler, CodeLabel};
+use iced_x86::code_asm::{get_gpr64, qword_ptr, rdi, rsi, CodeAssembler, CodeLabel};
 use iced_x86::{BlockEncoderOptions, Code, Decoder, DecoderOptions, Instruction};
 use std::collections::{HashMap, VecDeque};
 use std::error::Error;
@@ -133,7 +133,7 @@ impl<'input> Recompiler<'input> {
 
             self.output_size += match i.code() {
                 Code::Call_rel32_64 => self.transform_call_rel32(i),
-                Code::Lea_r64_m => self.preserve(i),
+                Code::Lea_r64_m => self.transform_lea64(i),
                 Code::Mov_r32_rm32 => self.preserve(i),
                 Code::Mov_rm32_r32 => self.preserve(i),
                 Code::Mov_rm64_r64 => self.preserve(i),
@@ -173,6 +173,28 @@ impl<'input> Recompiler<'input> {
         }
 
         15
+    }
+
+    fn transform_lea64(&mut self, i: Instruction) -> usize {
+        if i.is_ip_rel_memory_operand() {
+            // TODO: Check if source address fall under data segment.
+            let dst = get_gpr64(i.op0_register()).unwrap();
+            let src = i.ip_rel_memory_address();
+
+            if let Some(&label) = self.labels.get(&src) {
+                self.assembler.lea(dst, qword_ptr(label)).unwrap();
+            } else {
+                let label = self.assembler.create_label();
+
+                self.assembler.lea(dst, qword_ptr(label)).unwrap();
+                self.jobs.push_back((src, self.offset(src), label));
+            }
+
+            15
+        } else {
+            self.assembler.add_instruction(i).unwrap();
+            i.len()
+        }
     }
 
     fn transform_ud2(&mut self, i: Instruction) -> usize {
