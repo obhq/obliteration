@@ -1,4 +1,4 @@
-use super::Process;
+use crate::process::Process;
 use iced_x86::code_asm::{get_gpr64, qword_ptr, rdi, rsi, CodeAssembler, CodeLabel};
 use iced_x86::{BlockEncoderOptions, Code, Decoder, DecoderOptions, Instruction};
 use std::collections::{HashMap, VecDeque};
