@@ -1,6 +1,6 @@
 use self::recompiler::{NativeCode, Recompiler};
 use super::Process;
-use crate::elf::program::ProgramType;
+use crate::elf::program::{ProgramFlags, ProgramType};
 use crate::elf::SignedElf;
 use crate::fs::file::File;
 use std::error::Error;
@@ -39,9 +39,11 @@ impl Module {
         }
 
         // Load program segments.
+        let mut segments: Vec<Segment> = Vec::new();
         let mut mapped: Vec<u8> = vec![0; mapped_size];
         let mut dynamic: Vec<u8> = Vec::new();
         let mut dynamic_data: Vec<u8> = Vec::new();
+        let base: usize = unsafe { transmute(mapped.as_ptr()) };
 
         for prog in elf.programs() {
             let offset = prog.offset();
@@ -49,9 +51,16 @@ impl Module {
             match prog.ty() {
                 ProgramType::PT_LOAD | ProgramType::PT_SCE_RELRO => {
                     let addr = prog.virtual_addr();
+                    let base = base + addr;
                     let to = &mut mapped[addr..(addr + prog.file_size() as usize)];
 
                     Self::load_program_segment(&mut file, &elf, offset, to)?;
+
+                    segments.push(Segment {
+                        start: base,
+                        end: base + prog.memory_size(),
+                        flags: prog.flags(),
+                    });
                 }
                 ProgramType::PT_DYNAMIC => {
                     dynamic = new_buffer(prog.file_size() as _);
@@ -68,7 +77,7 @@ impl Module {
         }
 
         // Setup recompiler.
-        let recompiler = Recompiler::new(&mapped, proc);
+        let recompiler = Recompiler::new(proc, &mapped, segments);
 
         // Recompile module.
         let (entry, recompiled) = match recompiler.run(&[elf.entry_addr()]) {
@@ -145,6 +154,12 @@ pub(super) type EntryPoint = extern "sysv64" fn(*mut Arg, extern "sysv64" fn());
 pub(super) struct Arg {
     pub argc: i32,
     pub argv: *mut *mut u8,
+}
+
+pub(super) struct Segment {
+    start: usize,
+    end: usize, // Pass the last byte.
+    flags: ProgramFlags,
 }
 
 #[derive(Debug)]

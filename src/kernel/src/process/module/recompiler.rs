@@ -1,3 +1,4 @@
+use super::Segment;
 use crate::process::Process;
 use iced_x86::code_asm::{get_gpr64, qword_ptr, rdi, rsi, CodeAssembler, CodeLabel};
 use iced_x86::{BlockEncoderOptions, Code, Decoder, DecoderOptions, Instruction};
@@ -7,8 +8,9 @@ use std::fmt::{Display, Formatter};
 use std::mem::transmute;
 
 pub(super) struct Recompiler<'input> {
-    input: &'input [u8],
     proc: *mut Process,
+    input: &'input [u8],
+    segments: Vec<Segment>,
     assembler: CodeAssembler,
     jobs: VecDeque<(u64, usize, CodeLabel)>,
     labels: HashMap<u64, CodeLabel>, // Original address to recompiled label.
@@ -17,10 +19,11 @@ pub(super) struct Recompiler<'input> {
 
 impl<'input> Recompiler<'input> {
     /// `input` is a mapped SELF.
-    pub fn new(input: &'input [u8], proc: *mut Process) -> Self {
+    pub fn new(proc: *mut Process, input: &'input [u8], segments: Vec<Segment>) -> Self {
         Self {
-            input,
             proc,
+            input,
+            segments,
             assembler: CodeAssembler::new(64).unwrap(),
             jobs: VecDeque::new(),
             labels: HashMap::new(),
@@ -134,15 +137,15 @@ impl<'input> Recompiler<'input> {
             self.output_size += match i.code() {
                 Code::Call_rel32_64 => self.transform_call_rel32(i),
                 Code::Lea_r64_m => self.transform_lea64(i),
-                Code::Mov_r32_rm32 => self.preserve(i),
-                Code::Mov_rm32_r32 => self.preserve(i),
-                Code::Mov_rm64_r64 => self.preserve(i),
+                Code::Mov_r32_rm32 => self.transform_mov_r32_rm32(i),
+                Code::Mov_rm32_r32 => self.transform_mov_rm32_r32(i),
+                Code::Mov_rm64_r64 => self.transform_mov_rm64_r64(i),
                 Code::Push_r64 => self.preserve(i),
                 Code::Ud2 => {
                     end = true;
                     self.transform_ud2(i)
                 }
-                Code::Xor_rm32_r32 => self.preserve(i),
+                Code::Xor_rm32_r32 => self.transform_xor_rm32_r32(i),
                 _ => {
                     return Err(RunError::UnknownInstruction(
                         offset,
@@ -176,21 +179,59 @@ impl<'input> Recompiler<'input> {
     }
 
     fn transform_lea64(&mut self, i: Instruction) -> usize {
+        // Check if second operand use RIP-relative.
         if i.is_ip_rel_memory_operand() {
-            // TODO: Check if source address fall under data segment.
+            // Check if second operand already recompiled.
             let dst = get_gpr64(i.op0_register()).unwrap();
             let src = i.ip_rel_memory_address();
 
             if let Some(&label) = self.labels.get(&src) {
                 self.assembler.lea(dst, qword_ptr(label)).unwrap();
             } else {
-                let label = self.assembler.create_label();
+                // Check which segment the second operand fall under.
+                let segment = self.segment(src);
 
-                self.assembler.lea(dst, qword_ptr(label)).unwrap();
-                self.jobs.push_back((src, self.offset(src), label));
+                if segment.flags.is_executable() {
+                    let label = self.assembler.create_label();
+
+                    self.assembler.lea(dst, qword_ptr(label)).unwrap();
+                    self.jobs.push_back((src, self.offset(src), label));
+                } else {
+                    self.assembler.lea(dst, qword_ptr(src)).unwrap();
+                }
             }
 
             15
+        } else {
+            self.assembler.add_instruction(i).unwrap();
+            i.len()
+        }
+    }
+
+    fn transform_mov_r32_rm32(&mut self, i: Instruction) -> usize {
+        // Check if second operand use RIP-relative.
+        if i.is_ip_rel_memory_operand() {
+            panic!("MOV r32, r/m32 with second operand as RIP-relative is not supported yet.");
+        } else {
+            self.assembler.add_instruction(i).unwrap();
+            i.len()
+        }
+    }
+
+    fn transform_mov_rm32_r32(&mut self, i: Instruction) -> usize {
+        // Check if first operand use RIP-relative.
+        if i.is_ip_rel_memory_operand() {
+            panic!("MOV r/m32, r32 with first operand as RIP-relative is not supported yet.");
+        } else {
+            self.assembler.add_instruction(i).unwrap();
+            i.len()
+        }
+    }
+
+    fn transform_mov_rm64_r64(&mut self, i: Instruction) -> usize {
+        // Check if first operand use RIP-relative.
+        if i.is_ip_rel_memory_operand() {
+            panic!("MOV r/m64, r64 with first operand as RIP-relative is not supported yet.");
         } else {
             self.assembler.add_instruction(i).unwrap();
             i.len()
@@ -209,9 +250,31 @@ impl<'input> Recompiler<'input> {
         15 * 3
     }
 
+    fn transform_xor_rm32_r32(&mut self, i: Instruction) -> usize {
+        // Check if first operand use RIP-relative.
+        if i.is_ip_rel_memory_operand() {
+            panic!("XOR r/m32, r32 with first operand as RIP-relative is not supported yet.");
+        } else {
+            self.assembler.add_instruction(i).unwrap();
+            i.len()
+        }
+    }
+
     fn preserve(&mut self, i: Instruction) -> usize {
         self.assembler.add_instruction(i).unwrap();
         i.len()
+    }
+
+    fn segment(&self, addr: u64) -> &Segment {
+        let addr = addr as usize;
+
+        for s in &self.segments {
+            if s.start >= addr && addr < s.end {
+                return s;
+            }
+        }
+
+        panic!("Address {} is not mapped.", addr);
     }
 
     fn offset(&self, addr: u64) -> usize {
