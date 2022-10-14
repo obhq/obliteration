@@ -1,7 +1,7 @@
 use super::Process;
 use iced_x86::code_asm::{rdi, rsi, CodeAssembler, CodeLabel};
 use iced_x86::{BlockEncoderOptions, Code, Decoder, DecoderOptions, Instruction};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::mem::transmute;
@@ -10,7 +10,8 @@ pub(super) struct Recompiler<'input> {
     input: &'input [u8],
     proc: *mut Process,
     assembler: CodeAssembler,
-    jobs: VecDeque<(usize, CodeLabel)>,
+    jobs: VecDeque<(u64, usize, CodeLabel)>,
+    labels: HashMap<u64, CodeLabel>, // Original address to recompiled label.
     output_size: usize, // Roughly estimation size of the output but not less than the actual size.
 }
 
@@ -22,30 +23,36 @@ impl<'input> Recompiler<'input> {
             proc,
             assembler: CodeAssembler::new(64).unwrap(),
             jobs: VecDeque::new(),
+            labels: HashMap::new(),
             output_size: 0,
         }
     }
 
-    /// The `input` that was specified in [`new`] **MUST** outlive the returned [`NativeCode`].
+    /// All items in `starts` **MUST** be unique and the `input` that was specified in [`new`]
+    /// **MUST** outlive the returned [`NativeCode`].
     pub fn run(mut self, starts: &[usize]) -> Result<(NativeCode, Vec<*const u8>), RunError> {
         // Recompile all start offset.
-        let mut start_labels: Vec<CodeLabel> = Vec::new();
+        let mut start_addrs: Vec<u64> = Vec::with_capacity(starts.len());
 
         for &start in starts {
-            let mut label = self.assembler.create_label();
+            // Recompile start offset.
+            let label = self.assembler.create_label();
+            let addr = self.recompile(start, label)?;
 
-            self.assembler.set_label(&mut label).unwrap();
-            self.recompile(start)?;
+            start_addrs.push(addr);
 
-            start_labels.push(label);
-        }
+            // Recompile all of references recursively.
+            while !self.jobs.is_empty() {
+                let (addr, offset, label) = unsafe { self.jobs.pop_front().unwrap_unchecked() };
 
-        // Recompile all of references recursively.
-        while !self.jobs.is_empty() {
-            let (offset, mut label) = unsafe { self.jobs.pop_front().unwrap_unchecked() };
+                // Skip job for the same destination as previous job. The example cases for this
+                // scenario is the block contains multiple jmp to the same location.
+                if self.labels.contains_key(&addr) {
+                    continue;
+                }
 
-            self.assembler.set_label(&mut label).unwrap();
-            self.recompile(offset)?;
+                self.recompile(offset, label)?;
+            }
         }
 
         // Allocate executable pages.
@@ -69,17 +76,19 @@ impl<'input> Recompiler<'input> {
         native.copy_from(assembled.inner.code_buffer.as_slice());
 
         // Get entry address.
-        let mut start_addrs: Vec<*const u8> = Vec::with_capacity(start_labels.len());
+        let mut start_ptrs: Vec<*const u8> = Vec::with_capacity(start_addrs.len());
 
-        for label in start_labels {
-            let addr = assembled.label_ip(&label).unwrap();
-            start_addrs.push(unsafe { transmute(addr) });
+        for addr in start_addrs {
+            let label = self.labels.get(&addr).unwrap();
+            let addr = assembled.label_ip(label).unwrap();
+
+            start_ptrs.push(unsafe { transmute(addr) });
         }
 
-        Ok((native, start_addrs))
+        Ok((native, start_ptrs))
     }
 
-    fn recompile(&mut self, offset: usize) -> Result<(), RunError> {
+    fn recompile(&mut self, offset: usize, label: CodeLabel) -> Result<u64, RunError> {
         // Setup decoder.
         let input = self.input;
         let base: u64 = unsafe { transmute(input.as_ptr()) };
@@ -91,12 +100,32 @@ impl<'input> Recompiler<'input> {
         );
 
         // Re-assemble offset until return.
+        let start = offset;
+
         for i in decoder {
             // Check if instruction valid.
             let offset = (i.ip() - base) as usize;
 
             if i.is_invalid() {
                 return Err(RunError::InvalidInstruction(offset));
+            }
+
+            // Map address to the label.
+            match self.labels.entry(i.ip()) {
+                std::collections::hash_map::Entry::Occupied(v) => {
+                    self.assembler.jmp(v.get().clone()).unwrap();
+                    self.output_size += 15;
+                    break;
+                }
+                std::collections::hash_map::Entry::Vacant(v) => {
+                    let label = if offset == start {
+                        label
+                    } else {
+                        self.assembler.create_label()
+                    };
+
+                    self.assembler.set_label(v.insert(label)).unwrap();
+                }
             }
 
             // Transform instruction.
@@ -128,15 +157,20 @@ impl<'input> Recompiler<'input> {
             }
         }
 
-        Ok(())
+        Ok(base + start as u64)
     }
 
     fn transform_call_rel32(&mut self, i: Instruction) -> usize {
-        let label = self.assembler.create_label();
-        let offset = self.offset(i.near_branch64());
+        let dest = i.near_branch64();
 
-        self.assembler.call(label).unwrap();
-        self.jobs.push_back((offset, label));
+        if let Some(label) = self.labels.get(&dest) {
+            self.assembler.call(label.clone()).unwrap();
+        } else {
+            let label = self.assembler.create_label();
+
+            self.assembler.call(label).unwrap();
+            self.jobs.push_back((dest, self.offset(dest), label));
+        }
 
         15
     }
@@ -248,10 +282,6 @@ impl NativeCode {
 
     pub fn addr(&self) -> usize {
         unsafe { transmute(self.ptr) }
-    }
-
-    pub fn len(&self) -> usize {
-        self.len
     }
 
     fn copy_from(&mut self, src: &[u8]) {
