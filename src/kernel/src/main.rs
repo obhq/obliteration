@@ -97,7 +97,6 @@ fn run() -> bool {
     info!(0, "Entry address     : {:#018x}", elf.entry_addr());
     info!(0, "Number of segments: {}", elf.segments().len());
     info!(0, "Number of programs: {}", elf.programs().len());
-    info!(0, "Number of sections: {}", elf.sections().len());
 
     for (i, s) in elf.segments().iter().enumerate() {
         info!(0, "============= Segment #{} =============", i);
@@ -117,18 +116,6 @@ fn run() -> bool {
         info!(0, "Size in memory : {:#018x}", p.memory_size());
         info!(0, "Aligned size   : {:#018x}", p.aligned_size());
         info!(0, "Aligment       : {:#018x}", p.aligment());
-    }
-
-    for (i, s) in elf.sections().iter().enumerate() {
-        info!(0, "============= Section #{} =============", i);
-        info!(
-            0,
-            "Name  : {} ({})",
-            String::from_utf8_lossy(s.name()),
-            s.name_offset()
-        );
-        info!(0, "Offset: {}", s.offset());
-        info!(0, "Size  : {}", s.size());
     }
 
     // Create a process for eboot.bin.

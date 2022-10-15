@@ -1,15 +1,12 @@
 use self::program::Program;
-use self::section::Section;
 use self::segment::SignedSegment;
 use crate::fs::file::File;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::{Read, Seek, SeekFrom};
-use std::ops::IndexMut;
-use util::mem::{new_buffer, read_array, read_u16_le, read_u32_le, read_u64_le, read_u8, uninit};
+use util::mem::{read_array, read_u16_le, read_u32_le, read_u64_le, read_u8, uninit};
 
 pub mod program;
-pub mod section;
 pub mod segment;
 
 // https://www.psdevwiki.com/ps4/SELF_File_Format
@@ -18,7 +15,6 @@ pub struct SignedElf {
     entry_addr: usize,
     segments: Vec<SignedSegment>,
     programs: Vec<Program>,
-    sections: Vec<Section>,
 }
 
 impl SignedElf {
@@ -102,10 +98,7 @@ impl SignedElf {
         // Load ELF header.
         let e_entry = read_u64_le(hdr, 0x18);
         let e_phoff = read_u64_le(hdr, 0x20);
-        let e_shoff = read_u64_le(hdr, 0x28);
         let e_phnum = read_u16_le(hdr, 0x38);
-        let e_shnum = read_u16_le(hdr, 0x3c);
-        let e_shstrndx = read_u16_le(hdr, 0x3e);
 
         // Load program headers.
         let mut programs: Vec<Program> = Vec::with_capacity(e_phnum as _);
@@ -142,67 +135,11 @@ impl SignedElf {
             ));
         }
 
-        // Load section headers.
-        let mut sections: Vec<Section> = Vec::with_capacity(e_shnum as _);
-
-        file.seek(SeekFrom::Start(elf_offset + e_shoff)).unwrap();
-
-        for i in 0..e_shnum {
-            // Read header.
-            let mut hdr: [u8; 64] = uninit();
-
-            if let Err(e) = file.read_exact(&mut hdr) {
-                return Err(LoadError::ReadSectionHeaderFailed(i as _, e));
-            }
-
-            let hdr = hdr.as_ptr();
-
-            // Load fields.
-            let sh_name = read_u32_le(hdr, 0);
-            let sh_offset = read_u64_le(hdr, 24);
-            let sh_size = read_u64_le(hdr, 32);
-
-            sections.push(Section::new(sh_name, sh_offset, sh_size));
-        }
-
-        // Load section names.
-        if e_shstrndx != 0 {
-            // Get section.
-            let section = match sections.get(e_shstrndx as usize) {
-                Some(v) => v,
-                None => return Err(LoadError::InvalidSectionNamesIndex),
-            };
-
-            // Load name table.
-            let mut names = new_buffer(section.size() as _);
-
-            file.seek(SeekFrom::Start(section.offset())).unwrap();
-
-            if let Err(e) = file.read_exact(&mut names) {
-                return Err(LoadError::ReadSectionNamesFailed(e));
-            }
-
-            drop(section);
-
-            // Populate section's name.
-            for i in 0..sections.len() {
-                let section = sections.index_mut(i);
-                let name = &names[(section.name_offset() as usize)..];
-                let end = match name.iter().position(|&b| b == 0) {
-                    Some(v) => v,
-                    None => return Err(LoadError::InvalidSectionName(i)),
-                };
-
-                section.set_name(&name[..end]);
-            }
-        };
-
         Ok(Self {
             file_size,
             entry_addr: e_entry as _,
             segments,
             programs,
-            sections,
         })
     }
 
@@ -221,10 +158,6 @@ impl SignedElf {
     pub fn programs(&self) -> &[Program] {
         self.programs.as_slice()
     }
-
-    pub fn sections(&self) -> &[Section] {
-        self.sections.as_slice()
-    }
 }
 
 #[derive(Debug)]
@@ -237,10 +170,6 @@ pub enum LoadError {
     UnsupportedBitness,
     UnsupportedEndianness,
     ReadProgramHeaderFailed(usize, std::io::Error),
-    ReadSectionHeaderFailed(usize, std::io::Error),
-    InvalidSectionNamesIndex,
-    ReadSectionNamesFailed(std::io::Error),
-    InvalidSectionName(usize),
 }
 
 impl Error for LoadError {
@@ -249,9 +178,7 @@ impl Error for LoadError {
             Self::ReadSelfHeaderFailed(e)
             | Self::ReadSelfSegmentHeaderFailed(_, e)
             | Self::ReadElfHeaderFailed(e)
-            | Self::ReadProgramHeaderFailed(_, e)
-            | Self::ReadSectionHeaderFailed(_, e)
-            | Self::ReadSectionNamesFailed(e) => Some(e),
+            | Self::ReadProgramHeaderFailed(_, e) => Some(e),
             _ => None,
         }
     }
@@ -270,10 +197,6 @@ impl Display for LoadError {
             Self::UnsupportedBitness => f.write_str("unsupported bitness"),
             Self::UnsupportedEndianness => f.write_str("unsupported endianness"),
             Self::ReadProgramHeaderFailed(i, _) => write!(f, "cannot read program header #{}", i),
-            Self::ReadSectionHeaderFailed(i, _) => write!(f, "cannot read section header #{}", i),
-            Self::InvalidSectionNamesIndex => f.write_str("invalid index to section names"),
-            Self::ReadSectionNamesFailed(_) => f.write_str("cannot read section name table"),
-            Self::InvalidSectionName(i) => write!(f, "invalid section name for section #{}", i),
         }
     }
 }
