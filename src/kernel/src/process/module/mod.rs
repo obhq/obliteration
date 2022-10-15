@@ -58,7 +58,7 @@ impl Module {
 
                     segments.push(Segment {
                         start: base,
-                        end: base + prog.memory_size(),
+                        end: base + prog.aligned_size(),
                         flags: prog.flags(),
                     });
                 }

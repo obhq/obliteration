@@ -1,7 +1,9 @@
 use super::Segment;
 use crate::process::Process;
-use iced_x86::code_asm::{get_gpr64, qword_ptr, rdi, rsi, CodeAssembler, CodeLabel};
-use iced_x86::{BlockEncoderOptions, Code, Decoder, DecoderOptions, Instruction};
+use iced_x86::code_asm::{
+    byte_ptr, get_gpr64, get_gpr8, qword_ptr, rdi, rsi, CodeAssembler, CodeLabel,
+};
+use iced_x86::{BlockEncoderOptions, Code, Decoder, DecoderOptions, Instruction, OpKind, Register};
 use std::collections::{HashMap, VecDeque};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
@@ -136,10 +138,20 @@ impl<'input> Recompiler<'input> {
 
             self.output_size += match i.code() {
                 Code::Call_rel32_64 => self.transform_call_rel32(i),
+                Code::Jmp_rm64 => {
+                    end = true;
+                    self.transform_jmp_rm64(i)
+                }
+                Code::Jmp_rel32_64 => {
+                    end = true;
+                    self.transform_jmp_rel32_64(i)
+                }
                 Code::Lea_r64_m => self.transform_lea64(i),
+                Code::Mov_r8_rm8 => self.transform_mov_r8_rm8(i),
                 Code::Mov_r32_rm32 => self.transform_mov_r32_rm32(i),
                 Code::Mov_rm32_r32 => self.transform_mov_rm32_r32(i),
                 Code::Mov_rm64_r64 => self.transform_mov_rm64_r64(i),
+                Code::Pushq_imm32 => self.preserve(i),
                 Code::Push_r64 => self.preserve(i),
                 Code::Ud2 => {
                     end = true;
@@ -178,6 +190,42 @@ impl<'input> Recompiler<'input> {
         15
     }
 
+    fn transform_jmp_rm64(&mut self, i: Instruction) -> usize {
+        // Check if first operand use RIP-relative.
+        if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
+            let dst = i.ip_rel_memory_address();
+
+            if let Some(&label) = self.labels.get(&dst) {
+                self.assembler.jmp(label).unwrap();
+            } else {
+                let label = self.assembler.create_label();
+
+                self.assembler.jmp(label).unwrap();
+                self.jobs.push_back((dst, self.offset(dst), label));
+            }
+
+            15
+        } else {
+            self.assembler.add_instruction(i).unwrap();
+            i.len()
+        }
+    }
+
+    fn transform_jmp_rel32_64(&mut self, i: Instruction) -> usize {
+        let dst = i.near_branch64();
+
+        if let Some(&label) = self.labels.get(&dst) {
+            self.assembler.jmp(label).unwrap();
+        } else {
+            let label = self.assembler.create_label();
+
+            self.assembler.jmp(label).unwrap();
+            self.jobs.push_back((dst, self.offset(dst), label));
+        }
+
+        15
+    }
+
     fn transform_lea64(&mut self, i: Instruction) -> usize {
         // Check if second operand use RIP-relative.
         if i.is_ip_rel_memory_operand() {
@@ -197,7 +245,7 @@ impl<'input> Recompiler<'input> {
                     self.assembler.lea(dst, qword_ptr(label)).unwrap();
                     self.jobs.push_back((src, self.offset(src), label));
                 } else {
-                    self.assembler.lea(dst, qword_ptr(src)).unwrap();
+                    self.assembler.mov(dst, src).unwrap();
                 }
             }
 
@@ -208,9 +256,38 @@ impl<'input> Recompiler<'input> {
         }
     }
 
+    fn transform_mov_r8_rm8(&mut self, i: Instruction) -> usize {
+        // Check if second operand use RIP-relative.
+        if i.op1_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
+            let dst = i.op0_register();
+            let src = i.ip_rel_memory_address();
+            let dst64 = dst.full_register();
+            let tmp = get_gpr64(Self::temp_register64(dst64)).unwrap();
+
+            if self.is_executable(src) {
+                panic!(
+                    "MOV r8, r/m8 with second operand from executable segment is not supported."
+                );
+            }
+
+            // Transform to absolute address.
+            self.assembler.push(tmp).unwrap();
+            self.assembler.mov(tmp, src).unwrap();
+            self.assembler
+                .mov(get_gpr8(dst).unwrap(), byte_ptr(tmp))
+                .unwrap();
+            self.assembler.pop(tmp).unwrap();
+
+            15 * 4
+        } else {
+            self.assembler.add_instruction(i).unwrap();
+            i.len()
+        }
+    }
+
     fn transform_mov_r32_rm32(&mut self, i: Instruction) -> usize {
         // Check if second operand use RIP-relative.
-        if i.is_ip_rel_memory_operand() {
+        if i.op1_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
             panic!("MOV r32, r/m32 with second operand as RIP-relative is not supported yet.");
         } else {
             self.assembler.add_instruction(i).unwrap();
@@ -220,7 +297,7 @@ impl<'input> Recompiler<'input> {
 
     fn transform_mov_rm32_r32(&mut self, i: Instruction) -> usize {
         // Check if first operand use RIP-relative.
-        if i.is_ip_rel_memory_operand() {
+        if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
             panic!("MOV r/m32, r32 with first operand as RIP-relative is not supported yet.");
         } else {
             self.assembler.add_instruction(i).unwrap();
@@ -230,7 +307,7 @@ impl<'input> Recompiler<'input> {
 
     fn transform_mov_rm64_r64(&mut self, i: Instruction) -> usize {
         // Check if first operand use RIP-relative.
-        if i.is_ip_rel_memory_operand() {
+        if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
             panic!("MOV r/m64, r64 with first operand as RIP-relative is not supported yet.");
         } else {
             self.assembler.add_instruction(i).unwrap();
@@ -252,7 +329,7 @@ impl<'input> Recompiler<'input> {
 
     fn transform_xor_rm32_r32(&mut self, i: Instruction) -> usize {
         // Check if first operand use RIP-relative.
-        if i.is_ip_rel_memory_operand() {
+        if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
             panic!("XOR r/m32, r32 with first operand as RIP-relative is not supported yet.");
         } else {
             self.assembler.add_instruction(i).unwrap();
@@ -265,20 +342,38 @@ impl<'input> Recompiler<'input> {
         i.len()
     }
 
+    /// Get register other than `keep`.
+    fn temp_register64(keep: Register) -> Register {
+        match keep {
+            Register::RAX => Register::RBX,
+            r => panic!("Register {:?} is not implemented yet.", r),
+        }
+    }
+
+    fn offset(&self, addr: u64) -> usize {
+        let base: u64 = unsafe { transmute(self.input.as_ptr()) };
+
+        (addr - base) as usize
+    }
+
+    fn is_executable(&self, addr: u64) -> bool {
+        self.segment(addr).flags.is_executable()
+    }
+
     fn segment(&self, addr: u64) -> &Segment {
         let addr = addr as usize;
 
         for s in &self.segments {
-            if s.start >= addr && addr < s.end {
+            if addr >= s.start && addr < s.end {
                 return s;
             }
         }
 
-        panic!("Address {} is not mapped.", addr);
-    }
-
-    fn offset(&self, addr: u64) -> usize {
-        (addr as usize) - unsafe { transmute::<*const u8, usize>(self.input.as_ptr()) }
+        panic!(
+            "Address {:#018x} ({:#018x}) is not mapped.",
+            addr,
+            self.offset(addr as _)
+        );
     }
 
     fn aligned_output_size(&self) -> usize {

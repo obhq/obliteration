@@ -118,35 +118,21 @@ pub struct ProgramFlags(u32);
 
 #[allow(dead_code)]
 impl ProgramFlags {
-    pub const READ: ProgramFlags = ProgramFlags(1);
-    pub const WRITE: ProgramFlags = ProgramFlags(2);
-    pub const EXECUTE: ProgramFlags = ProgramFlags(4);
-    pub const GPU_EXECUTE: ProgramFlags = ProgramFlags(8);
-    pub const GPU_READ: ProgramFlags = ProgramFlags(16);
-    pub const GPU_WRITE: ProgramFlags = ProgramFlags(32);
+    // https://github.com/freebsd/freebsd-src/blob/main/sys/sys/elf_common.h
+    pub const EXECUTE: ProgramFlags = ProgramFlags(0x00000001);
+    pub const WRITE: ProgramFlags = ProgramFlags(0x00000002);
+    pub const READ: ProgramFlags = ProgramFlags(0x00000004);
 
-    pub fn is_readable(self) -> bool {
-        (self.0 & 1) != 0
+    pub fn is_executable(self) -> bool {
+        (self.0 & 0x00000001) != 0
     }
 
     pub fn is_writable(self) -> bool {
-        (self.0 & 2) != 0
+        (self.0 & 0x00000002) != 0
     }
 
-    pub fn is_executable(self) -> bool {
-        (self.0 & 4) != 0
-    }
-
-    pub fn is_gpu_executable(self) -> bool {
-        (self.0 & 8) != 0
-    }
-
-    pub fn is_gpu_readable(self) -> bool {
-        (self.0 & 16) != 0
-    }
-
-    pub fn is_gpu_writable(self) -> bool {
-        (self.0 & 32) != 0
+    pub fn is_readable(self) -> bool {
+        (self.0 & 0x00000004) != 0
     }
 }
 
