@@ -95,7 +95,12 @@ MainWindow::MainWindow(context *context) :
     m_log->setReadOnly(true);
     m_log->setLineWrapMode(QPlainTextEdit::NoWrap);
     m_log->setMaximumBlockCount(10000);
+
+#ifdef _WIN32
+    m_log->document()->setDefaultFont(QFont("Courier New", 10));
+#else
     m_log->document()->setDefaultFont(QFont("monospace", 10));
+#endif
 
     m_tab->addTab(m_log, QIcon(":/resources/card-text-outline.svg"), "Log");
 
