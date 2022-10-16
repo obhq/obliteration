@@ -1,4 +1,5 @@
 #include "main_window.hpp"
+#include "app_data.hpp"
 #include "game_models.hpp"
 #include "game_settings_dialog.hpp"
 #include "pkg.hpp"
@@ -381,10 +382,17 @@ void MainWindow::startGame(const QModelIndex &index)
 #endif
     }
 
+    // Setup kernel arguments.
+    QStringList args;
+
+    args << "--game" << game->directory();
+    args << "--debug-dump" << kernelDebugDump();
+    args << "--clear-debug-dump";
+
     // Prepare kernel launching.
     m_kernel = new QProcess(this);
     m_kernel->setProgram(path);
-    m_kernel->setArguments(QStringList() << "--game" << game->directory());
+    m_kernel->setArguments(args);
     m_kernel->setProcessChannelMode(QProcess::MergedChannels);
 
     connect(m_kernel, &QProcess::errorOccurred, this, &MainWindow::kernelError);

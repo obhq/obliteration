@@ -5,6 +5,7 @@ use crate::info;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::os::raw::c_int;
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::ptr::null_mut;
 use util::mem::uninit;
@@ -23,15 +24,28 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn load(elf: SignedElf, file: File) -> Result<Pin<Box<Self>>, LoadError> {
+    pub(super) fn load(
+        elf: SignedElf,
+        file: File,
+        debug: DebugOpts,
+    ) -> Result<Pin<Box<Self>>, LoadError> {
         let mut proc = Box::pin(Self {
             id: 1,
             entry: uninit(),
             modules: Vec::new(),
         });
 
+        // Create a directory for debug dump.
+        if let Err(e) = std::fs::create_dir_all(&debug.dump_path) {
+            return Err(LoadError::CreateDumpDirectoryFailed(debug.dump_path, e));
+        }
+
         // Load main module.
-        match Module::load(&mut *proc, elf, file) {
+        let debug = module::DebugOpts {
+            original_mapped_dump: debug.dump_path.join("eboot.bin.mapped"),
+        };
+
+        match Module::load(&mut *proc, elf, file, debug) {
             Ok(v) => {
                 proc.entry = v.entry();
                 proc.modules.push(v);
@@ -77,14 +91,20 @@ impl Process {
     }
 }
 
+pub(super) struct DebugOpts {
+    pub dump_path: PathBuf,
+}
+
 #[derive(Debug)]
 pub enum LoadError {
+    CreateDumpDirectoryFailed(PathBuf, std::io::Error),
     LoadMainModuleFailed(module::LoadError),
 }
 
 impl Error for LoadError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
+            Self::CreateDumpDirectoryFailed(_, e) => Some(e),
             Self::LoadMainModuleFailed(e) => Some(e),
         }
     }
@@ -93,6 +113,9 @@ impl Error for LoadError {
 impl Display for LoadError {
     fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
         match self {
+            Self::CreateDumpDirectoryFailed(p, _) => {
+                write!(f, "cannot create {} for debug dump", p.display())
+            }
             Self::LoadMainModuleFailed(_) => f.write_str("cannot load main module"),
         }
     }

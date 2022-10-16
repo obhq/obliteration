@@ -19,6 +19,12 @@ mod rootfs;
 struct Args {
     #[arg(long)]
     game: PathBuf,
+
+    #[arg(long)]
+    debug_dump: PathBuf,
+
+    #[arg(long)]
+    clear_debug_dump: bool,
 }
 
 fn main() {
@@ -47,9 +53,20 @@ fn run() -> bool {
         Args::parse()
     };
 
+    // Remove previous debug dump.
+    if args.clear_debug_dump {
+        if let Err(e) = std::fs::remove_dir_all(&args.debug_dump) {
+            if e.kind() != std::io::ErrorKind::NotFound {
+                error!(0, e, "Failed to remove {}", args.debug_dump.display());
+                return false;
+            }
+        }
+    }
+
     // Show basic infomation.
     info!(0, "Starting Obliteration kernel.");
     info!(0, "Game directory is {}.", args.game.display());
+    info!(0, "Debug dump directory is: {}.", args.debug_dump.display());
 
     // Initialize filesystem.
     let fs = Fs::new();
@@ -121,7 +138,11 @@ fn run() -> bool {
     // Create a process for eboot.bin.
     info!(0, "Creating a process for eboot.bin.");
 
-    let mut process = match Process::load(elf, eboot) {
+    let debug = process::DebugOpts {
+        dump_path: args.debug_dump.join("process"),
+    };
+
+    let mut process = match Process::load(elf, eboot, debug) {
         Ok(v) => v,
         Err(e) => {
             error!(0, e, "Create failed");

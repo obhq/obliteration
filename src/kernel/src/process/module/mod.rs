@@ -5,8 +5,9 @@ use crate::elf::SignedElf;
 use crate::fs::file::File;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::mem::transmute;
+use std::path::PathBuf;
 use util::mem::new_buffer;
 
 pub mod recompiler;
@@ -22,7 +23,12 @@ pub(super) struct Module {
 }
 
 impl Module {
-    pub fn load(proc: *mut Process, elf: SignedElf, mut file: File) -> Result<Self, LoadError> {
+    pub fn load(
+        proc: *mut Process,
+        elf: SignedElf,
+        mut file: File,
+        debug: DebugOpts,
+    ) -> Result<Self, LoadError> {
         // Get size of memory for mapping executable.
         let mut mapped_size = 0;
 
@@ -73,6 +79,24 @@ impl Module {
                     Self::load_program_segment(&mut file, &elf, offset, &mut dynamic_data)?;
                 }
                 _ => continue,
+            }
+        }
+
+        // Dump mapped.
+        match std::fs::File::create(&debug.original_mapped_dump) {
+            Ok(mut v) => {
+                if let Err(e) = v.write_all(&mapped) {
+                    return Err(LoadError::WriteOriginalMappedDumpFailed(
+                        debug.original_mapped_dump,
+                        e,
+                    ));
+                }
+            }
+            Err(e) => {
+                return Err(LoadError::CreateOriginalMappedDumpFailed(
+                    debug.original_mapped_dump,
+                    e,
+                ));
             }
         }
 
@@ -148,6 +172,10 @@ impl Module {
     }
 }
 
+pub(super) struct DebugOpts {
+    pub original_mapped_dump: PathBuf,
+}
+
 pub(super) type EntryPoint = extern "sysv64" fn(*mut Arg, extern "sysv64" fn());
 
 #[repr(C)]
@@ -165,12 +193,16 @@ pub(super) struct Segment {
 #[derive(Debug)]
 pub enum LoadError {
     InvalidSelfSegmentId(usize),
+    CreateOriginalMappedDumpFailed(PathBuf, std::io::Error),
+    WriteOriginalMappedDumpFailed(PathBuf, std::io::Error),
     RecompileFailed(recompiler::RunError),
 }
 
 impl Error for LoadError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
+            Self::CreateOriginalMappedDumpFailed(_, e)
+            | Self::WriteOriginalMappedDumpFailed(_, e) => Some(e),
             Self::RecompileFailed(e) => Some(e),
             _ => None,
         }
@@ -182,6 +214,12 @@ impl Display for LoadError {
         match self {
             Self::InvalidSelfSegmentId(i) => {
                 write!(f, "invalid identifier for SELF segment #{}", i)
+            }
+            Self::CreateOriginalMappedDumpFailed(p, _) => {
+                write!(f, "cannot create {} to dump mapped SELF", p.display())
+            }
+            Self::WriteOriginalMappedDumpFailed(p, _) => {
+                write!(f, "cannot write mapped SELF to {}", p.display())
             }
             Self::RecompileFailed(_) => f.write_str("cannot recompile executable"),
         }

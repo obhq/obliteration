@@ -28,6 +28,7 @@ ExternalProject_Add(core
 
 # Setup application target.
 add_executable(obliteration WIN32
+    app_data.cpp
     game_models.cpp
     game_settings.cpp
     game_settings_dialog.cpp
