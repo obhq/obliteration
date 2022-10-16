@@ -135,6 +135,7 @@ impl<'input> Recompiler<'input> {
 
             // Transform instruction.
             let (size, end) = match i.code() {
+                Code::Add_rm8_r8 => (self.transform_add_rm8_r8(i), false),
                 Code::Add_rm64_imm8 => (self.transform_add_rm64_imm8(i), false),
                 Code::Call_rm64 => (self.transform_call_rm64(i), false),
                 Code::Call_rel32_64 => (self.transform_call_rel32(i), false),
@@ -154,6 +155,7 @@ impl<'input> Recompiler<'input> {
                 Code::Mov_r32_rm32 => (self.transform_mov_r32_rm32(i), false),
                 Code::Mov_r64_rm64 => (self.transform_mov_r64_rm64(i), false),
                 Code::Mov_rm8_imm8 => (self.transform_mov_rm8_imm8(i), false),
+                Code::Mov_rm8_r8 => (self.transform_mov_rm8_r8(i), false),
                 Code::Mov_rm32_r32 => (self.transform_mov_rm32_r32(i), false),
                 Code::Mov_rm64_r64 => (self.transform_mov_rm64_r64(i), false),
                 Code::Nop_rm16 | Code::Nop_rm32 | Code::Nopw => (self.preserve(i), false),
@@ -169,6 +171,7 @@ impl<'input> Recompiler<'input> {
                 Code::VEX_Vmovdqa_xmmm128_xmm => (self.transform_vmovdqa_xmmm128_xmm(i), false),
                 Code::VEX_Vmovq_xmm_rm64 => (self.transform_vmovq_xmm_rm64(i), false),
                 Code::VEX_Vpslldq_xmm_xmm_imm8 => (self.preserve(i), false),
+                Code::Xchg_rm32_r32 => (self.transform_xchg_rm32_r32(i), false),
                 Code::Xor_rm32_r32 => (self.transform_xor_rm32_r32(i), false),
                 _ => {
                     let opcode = &input[offset..(offset + i.len())];
@@ -185,6 +188,16 @@ impl<'input> Recompiler<'input> {
         }
 
         Ok(base + start as u64)
+    }
+
+    fn transform_add_rm8_r8(&mut self, i: Instruction) -> usize {
+        // Check if first operand use RIP-relative.
+        if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
+            panic!("ADD r/m8, r8 with first operand as RIP-relative is not supported yet.");
+        } else {
+            self.assembler.add_instruction(i).unwrap();
+            i.len()
+        }
     }
 
     fn transform_add_rm64_imm8(&mut self, i: Instruction) -> usize {
@@ -503,6 +516,16 @@ impl<'input> Recompiler<'input> {
         }
     }
 
+    fn transform_mov_rm8_r8(&mut self, i: Instruction) -> usize {
+        // Check if first operand use RIP-relative.
+        if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
+            panic!("MOV r/m8, r8 with first operand as RIP-relative is not supported yet.");
+        } else {
+            self.assembler.add_instruction(i).unwrap();
+            i.len()
+        }
+    }
+
     fn transform_mov_rm32_r32(&mut self, i: Instruction) -> usize {
         // Check if first operand use RIP-relative.
         if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
@@ -588,6 +611,18 @@ impl<'input> Recompiler<'input> {
         // Check if second operand use RIP-relative.
         if i.op1_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
             panic!("VMOVQ xmm1, r/m64 with second operand as RIP-relative is not supported yet.");
+        } else {
+            self.assembler.add_instruction(i).unwrap();
+            i.len()
+        }
+    }
+
+    fn transform_xchg_rm32_r32(&mut self, i: Instruction) -> usize {
+        // Either operand can be memory for this instruction so we need to check both of it.
+        if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
+            panic!("XCHG r/m32, r32 with first operand as RIP-relative is not supported yet.");
+        } else if i.op1_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
+            panic!("XCHG r32, r/m32 with second operand as RIP-relative is not supported yet.");
         } else {
             self.assembler.add_instruction(i).unwrap();
             i.len()
