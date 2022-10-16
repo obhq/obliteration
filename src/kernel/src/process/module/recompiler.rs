@@ -134,64 +134,50 @@ impl<'input> Recompiler<'input> {
             }
 
             // Transform instruction.
-            let mut end = false;
-
-            self.output_size += match i.code() {
-                Code::Add_rm64_imm8 => self.transform_add_rm64_imm8(i),
-                Code::Call_rm64 => self.transform_call_rm64(i),
-                Code::Call_rel32_64 => self.transform_call_rel32(i),
-                Code::Cmp_r64_rm64 => self.transform_cmp_r64_rm64(i),
-                Code::Cmp_rm64_imm8 => self.transform_cmp_rm64_imm8(i),
-                Code::Cmp_rm64_r64 => self.transform_cmp_rm64_r64(i),
-                Code::Jae_rel8_64 => self.transform_jae_rel8_64(i),
-                Code::Jb_rel8_64 => self.transform_jb_rel8_64(i),
-                Code::Jbe_rel8_64 => self.transform_jbe_rel8_64(i),
-                Code::Je_rel8_64 | Code::Je_rel32_64 => self.transform_je_rel(i),
-                Code::Jmp_rm64 => {
-                    end = true;
-                    self.transform_jmp_rm64(i)
-                }
-                Code::Jmp_rel8_64 | Code::Jmp_rel32_64 => {
-                    end = true;
-                    self.transform_jmp_rel(i)
-                }
-                Code::Jne_rel8_64 | Code::Jne_rel32_64 => self.transform_jne_rel(i),
-                Code::Lea_r64_m => self.transform_lea64(i),
-                Code::Mov_r8_rm8 => self.transform_mov_r8_rm8(i),
-                Code::Mov_r32_imm32 => self.preserve(i),
-                Code::Mov_r32_rm32 => self.transform_mov_r32_rm32(i),
-                Code::Mov_r64_rm64 => self.transform_mov_r64_rm64(i),
-                Code::Mov_rm8_imm8 => self.transform_mov_rm8_imm8(i),
-                Code::Mov_rm32_r32 => self.transform_mov_rm32_r32(i),
-                Code::Mov_rm64_r64 => self.transform_mov_rm64_r64(i),
-                Code::Nop_rm16 | Code::Nop_rm32 | Code::Nopw => self.preserve(i),
-                Code::Pop_r64 => self.preserve(i),
-                Code::Pushq_imm32 => self.preserve(i),
-                Code::Push_r64 => self.preserve(i),
-                Code::Retnq => {
-                    end = true;
-                    self.preserve(i)
-                }
-                Code::Sub_rm64_imm32 => self.transform_sub_rm64_imm32(i),
-                Code::Test_rm8_r8 => self.transform_test_rm8_r8(i),
-                Code::Test_rm32_r32 => self.transform_test_rm32_r32(i),
-                Code::Test_rm64_r64 => self.transform_test_rm64_r64(i),
-                Code::Ud2 => {
-                    end = true;
-                    self.transform_ud2(i)
-                }
-                Code::VEX_Vmovdqa_xmmm128_xmm => self.transform_vmovdqa_xmmm128_xmm(i),
-                Code::VEX_Vmovq_xmm_rm64 => self.transform_vmovq_xmm_rm64(i),
-                Code::VEX_Vpslldq_xmm_xmm_imm8 => self.preserve(i),
-                Code::Xor_rm32_r32 => self.transform_xor_rm32_r32(i),
+            let (size, end) = match i.code() {
+                Code::Add_rm64_imm8 => (self.transform_add_rm64_imm8(i), false),
+                Code::Call_rm64 => (self.transform_call_rm64(i), false),
+                Code::Call_rel32_64 => (self.transform_call_rel32(i), false),
+                Code::Cmp_r64_rm64 => (self.transform_cmp_r64_rm64(i), false),
+                Code::Cmp_rm64_imm8 => (self.transform_cmp_rm64_imm8(i), false),
+                Code::Cmp_rm64_r64 => (self.transform_cmp_rm64_r64(i), false),
+                Code::Jae_rel8_64 => (self.transform_jae_rel8_64(i), false),
+                Code::Jb_rel8_64 => (self.transform_jb_rel8_64(i), false),
+                Code::Jbe_rel8_64 => (self.transform_jbe_rel8_64(i), false),
+                Code::Je_rel8_64 | Code::Je_rel32_64 => (self.transform_je_rel(i), false),
+                Code::Jmp_rm64 => (self.transform_jmp_rm64(i), true),
+                Code::Jmp_rel8_64 | Code::Jmp_rel32_64 => (self.transform_jmp_rel(i), true),
+                Code::Jne_rel8_64 | Code::Jne_rel32_64 => (self.transform_jne_rel(i), false),
+                Code::Lea_r64_m => (self.transform_lea64(i), false),
+                Code::Mov_r8_rm8 => (self.transform_mov_r8_rm8(i), false),
+                Code::Mov_r32_imm32 => (self.preserve(i), false),
+                Code::Mov_r32_rm32 => (self.transform_mov_r32_rm32(i), false),
+                Code::Mov_r64_rm64 => (self.transform_mov_r64_rm64(i), false),
+                Code::Mov_rm8_imm8 => (self.transform_mov_rm8_imm8(i), false),
+                Code::Mov_rm32_r32 => (self.transform_mov_rm32_r32(i), false),
+                Code::Mov_rm64_r64 => (self.transform_mov_rm64_r64(i), false),
+                Code::Nop_rm16 | Code::Nop_rm32 | Code::Nopw => (self.preserve(i), false),
+                Code::Pop_r64 => (self.preserve(i), false),
+                Code::Pushq_imm32 => (self.preserve(i), false),
+                Code::Push_r64 => (self.preserve(i), false),
+                Code::Retnq => (self.preserve(i), true),
+                Code::Sub_rm64_imm32 => (self.transform_sub_rm64_imm32(i), false),
+                Code::Test_rm8_r8 => (self.transform_test_rm8_r8(i), false),
+                Code::Test_rm32_r32 => (self.transform_test_rm32_r32(i), false),
+                Code::Test_rm64_r64 => (self.transform_test_rm64_r64(i), false),
+                Code::Ud2 => (self.transform_ud2(i), true),
+                Code::VEX_Vmovdqa_xmmm128_xmm => (self.transform_vmovdqa_xmmm128_xmm(i), false),
+                Code::VEX_Vmovq_xmm_rm64 => (self.transform_vmovq_xmm_rm64(i), false),
+                Code::VEX_Vpslldq_xmm_xmm_imm8 => (self.preserve(i), false),
+                Code::Xor_rm32_r32 => (self.transform_xor_rm32_r32(i), false),
                 _ => {
-                    return Err(RunError::UnknownInstruction(
-                        offset,
-                        (&input[offset..(offset + i.len())]).into(),
-                        i,
-                    ))
+                    let opcode = &input[offset..(offset + i.len())];
+
+                    return Err(RunError::UnknownInstruction(offset, opcode.into(), i));
                 }
             };
+
+            self.output_size += size;
 
             if end {
                 break;
