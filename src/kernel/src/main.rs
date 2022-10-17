@@ -16,6 +16,7 @@ mod process;
 mod rootfs;
 
 #[derive(Parser, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 struct Args {
     #[arg(long)]
     game: PathBuf,
