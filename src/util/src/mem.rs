@@ -96,6 +96,14 @@ pub fn write_u32_be(p: *mut u8, i: usize, v: u32) {
     write_be!(p, i, v, 4)
 }
 
+pub fn read_i64_le(p: *const u8, i: usize) -> i64 {
+    read_le!(i64, p, i, 8)
+}
+
+pub fn write_i64_le(p: *mut u8, i: usize, v: i64) {
+    write_le!(p, i, v, 8)
+}
+
 pub fn read_u64_le(p: *const u8, i: usize) -> u64 {
     read_le!(u64, p, i, 8)
 }
