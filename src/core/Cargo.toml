@@ -10,3 +10,4 @@ crate-type = ["staticlib"]
 context = { path = "../context" }
 error = { path = "../error" }
 pkg = { path = "../pkg" }
+pup = { path = "../pup" }
