@@ -23,4 +23,16 @@ impl Entry {
             uncompressed_size,
         }
     }
+
+    pub fn id(&self) -> u16 {
+        (self.flags >> 20) as u16
+    }
+
+    pub fn is_blocked(&self) -> bool {
+        (self.flags & 0x800) != 0
+    }
+
+    pub fn flags(&self) -> u32 {
+        self.flags
+    }
 }

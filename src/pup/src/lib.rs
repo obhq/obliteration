@@ -31,6 +31,7 @@ pub extern "C" fn pup_free(pup: *mut Pup) {
 pub struct Pup {
     file: memmap2::Mmap,
     entries: Vec<Entry>,
+    table_entries: Vec<Option<usize>>,
 }
 
 impl Pup {
@@ -72,7 +73,39 @@ impl Pup {
             entries.push(entry);
         }
 
-        Ok(Self { file, entries })
+        // TODO: What is table?
+        let mut table_entries: Vec<Option<usize>> = vec![None; entries.len()];
+
+        for i in 0..entries.len() {
+            let entry = &entries[i];
+
+            if entry.is_blocked() {
+                if ((entry.id() | 0x100) & 0xf00) == 0xf00 {
+                    // What is this?
+                    todo!();
+                }
+
+                let table = entries
+                    .iter()
+                    .position(|e| (e.flags() & 1) != 0 && (e.id() as usize) == i)
+                    .unwrap();
+
+                if table_entries[table].is_some() {
+                    // What is this?
+                    todo!();
+                }
+
+                table_entries[table] = Some(i);
+            } else {
+                table_entries[i] = None;
+            }
+        }
+
+        Ok(Self {
+            file,
+            entries,
+            table_entries,
+        })
     }
 }
 
