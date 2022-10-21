@@ -36,3 +36,17 @@ impl Entry {
         self.flags
     }
 }
+
+pub struct EntryReader<'entry> {
+    entry: &'entry Entry,
+}
+
+impl<'entry> EntryReader<'entry> {
+    pub(super) fn new(entry: &'entry Entry) -> Self {
+        if entry.is_blocked() {
+            todo!()
+        }
+
+        Self { entry }
+    }
+}

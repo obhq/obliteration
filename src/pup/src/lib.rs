@@ -1,4 +1,4 @@
-use self::entry::Entry;
+use self::entry::{Entry, EntryReader};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
@@ -106,6 +106,23 @@ impl Pup {
             entries,
             table_entries,
         })
+    }
+
+    pub fn get_system_image(&self) -> Option<EntryReader<'_>> {
+        for i in 0..self.entries.len() {
+            let entry = &self.entries[i];
+            let special = entry.flags() & 0xf0000000;
+
+            if special == 0xe0000000 || special == 0xf0000000 || self.table_entries[i].is_some() {
+                continue;
+            }
+
+            if entry.id() == 6 {
+                return Some(EntryReader::new(entry));
+            }
+        }
+
+        None
     }
 }
 
