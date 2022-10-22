@@ -1,13 +1,16 @@
-use self::entry::{Entry, EntryReader};
+use self::entry::Entry;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
+use std::io::Read;
 use std::os::raw::c_char;
 use std::path::Path;
 use std::ptr::null_mut;
 use util::mem::{read_array, read_u16_le};
 
+pub mod compressed;
 pub mod entry;
+pub mod uncompressed;
 
 #[no_mangle]
 pub extern "C" fn pup_open(file: *const c_char, err: *mut *mut error::Error) -> *mut Pup {
@@ -108,7 +111,7 @@ impl Pup {
         })
     }
 
-    pub fn get_system_image(&self) -> Option<EntryReader<'_>> {
+    pub fn get_system_image(&self) -> Option<Box<dyn Read + '_>> {
         for i in 0..self.entries.len() {
             let entry = &self.entries[i];
             let special = entry.flags() & 0xf0000000;
@@ -118,11 +121,19 @@ impl Pup {
             }
 
             if entry.id() == 6 {
-                return Some(EntryReader::new(entry));
+                return Some(self.create_reader(entry));
             }
         }
 
         None
+    }
+
+    fn create_reader<'a>(&'a self, entry: &'a Entry) -> Box<dyn Read + 'a> {
+        if entry.is_compressed() {
+            Box::new(compressed::Reader::new(entry, &self.file))
+        } else {
+            Box::new(uncompressed::Reader::new(entry, &self.file))
+        }
     }
 }
 

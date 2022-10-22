@@ -28,6 +28,10 @@ impl Entry {
         (self.flags >> 20) as u16
     }
 
+    pub fn is_compressed(&self) -> bool {
+        (self.flags & 8) != 0
+    }
+
     pub fn is_blocked(&self) -> bool {
         (self.flags & 0x800) != 0
     }
@@ -35,18 +39,16 @@ impl Entry {
     pub fn flags(&self) -> u32 {
         self.flags
     }
-}
 
-pub struct EntryReader<'entry> {
-    entry: &'entry Entry,
-}
+    pub fn offset(&self) -> u64 {
+        self.offset
+    }
 
-impl<'entry> EntryReader<'entry> {
-    pub(super) fn new(entry: &'entry Entry) -> Self {
-        if entry.is_blocked() {
-            todo!()
-        }
+    pub fn compressed_size(&self) -> u64 {
+        self.compressed_size
+    }
 
-        Self { entry }
+    pub fn uncompressed_size(&self) -> u64 {
+        self.uncompressed_size
     }
 }

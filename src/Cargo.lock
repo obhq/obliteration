@@ -539,6 +539,7 @@ name = "pup"
 version = "0.1.0"
 dependencies = [
  "error",
+ "flate2",
  "memmap2",
  "util",
 ]
