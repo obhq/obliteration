@@ -1,7 +1,7 @@
 #pragma once
 
 #ifdef _WIN32
-#define S(x) L##x
+#define STR(x) L##x
 #else
-#define S(x) x
+#define STR(x) x
 #endif

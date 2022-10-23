@@ -2,6 +2,7 @@
 #include "initialize_dialog.hpp"
 #include "main_window.hpp"
 #include "settings.hpp"
+#include "system.hpp"
 
 #include <QApplication>
 #include <QMessageBox>
@@ -36,6 +37,13 @@ int main(int argc, char *argv[])
         InitializeDialog init;
 
         if (!init.exec()) {
+            return 1;
+        }
+    }
+
+    // Install system files.
+    if (!hasSystemFilesInstalled()) {
+        if (!updateSystemFiles(nullptr)) {
             return 1;
         }
     }

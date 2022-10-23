@@ -4,6 +4,7 @@
 
 // Keys for user settings.
 namespace UserSettings {
+    static const QString systemDirectory("systemDirectory");
     static const QString gamesDirectory("gamesDirectory");
 }
 
@@ -13,7 +14,23 @@ bool hasRequiredUserSettings()
 {
     scope(SettingGroups::user);
 
-    return s.contains(UserSettings::gamesDirectory);
+    return s.contains(UserSettings::systemDirectory) && s.contains(UserSettings::gamesDirectory);
+}
+
+QString readSystemDirectorySetting()
+{
+    scope(SettingGroups::user);
+
+    auto v = s.value(UserSettings::systemDirectory);
+
+    return v.isNull() ? QString() : v.toString();
+}
+
+void writeSystemDirectorySetting(const QString &v)
+{
+    scope(SettingGroups::user);
+
+    s.setValue(UserSettings::systemDirectory, v);
 }
 
 QString readGamesDirectorySetting()

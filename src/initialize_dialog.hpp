@@ -2,6 +2,7 @@
 
 #include <QDialog>
 
+class QLayout;
 class QLineEdit;
 
 class InitializeDialog final : public QDialog {
@@ -10,13 +11,17 @@ public:
     ~InitializeDialog();
 
 private slots:
-    void browse();
+    void browseSystemDirectory();
+    void browseGamesDirectory();
 
 private:
-    QWidget *setupGamesDirectory();
+    QLayout *setupSettings();
+    QLayout *setupSystemDirectory();
+    QLayout *setupGamesDirectory();
     QWidget *setupDialogActions();
     void save();
 
 private:
+    QLineEdit *m_systemDirectory;
     QLineEdit *m_gamesDirectory;
 };

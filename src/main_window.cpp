@@ -354,12 +354,12 @@ void MainWindow::startGame(const QModelIndex &index)
     if (QFile::exists(".obliteration-development")) {
         auto b = std::filesystem::current_path();
 
-        b /= S("src");
-        b /= S("target");
+        b /= STR("src");
+        b /= STR("target");
 #ifdef NDEBUG
-        b /= S("release");
+        b /= STR("release");
 #else
-        b /= S("debug");
+        b /= STR("debug");
 #endif
 
 #ifdef _WIN32
