@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 error = { path = "../error" }
+exfat = { path = "../exfat" }
 flate2 = "1.0"
 memmap2 = "0.5"
 util = { path = "../util" }

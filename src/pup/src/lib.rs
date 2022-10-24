@@ -1,4 +1,4 @@
-use self::entry::Entry;
+use self::entry::{BlockedReader, ContiguousReader, Entry};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
@@ -8,9 +8,7 @@ use std::path::Path;
 use std::ptr::null_mut;
 use util::mem::{read_array, read_u16_le};
 
-pub mod compressed;
 pub mod entry;
-pub mod uncompressed;
 
 #[no_mangle]
 pub extern "C" fn pup_open(file: *const c_char, err: *mut *mut error::Error) -> *mut Pup {
@@ -24,6 +22,17 @@ pub extern "C" fn pup_open(file: *const c_char, err: *mut *mut error::Error) -> 
     };
 
     Box::into_raw(pup)
+}
+
+#[no_mangle]
+pub extern "C" fn pup_dump_system(pup: &Pup, path: *const c_char) -> *mut error::Error {
+    let path = util::str::from_c_unchecked(path);
+
+    if let Err(e) = pup.dump_system_image(path) {
+        return error::Error::new(&e);
+    }
+
+    null_mut()
 }
 
 #[no_mangle]
@@ -111,7 +120,23 @@ impl Pup {
         })
     }
 
-    pub fn get_system_image(&self) -> Option<Box<dyn Read + '_>> {
+    pub fn dump_system_image<O: AsRef<Path>>(&self, output: O) -> Result<(), DumpSystemImageError> {
+        // Get entry.
+        let (entry, index) = match self.get_data_entry(6) {
+            Some(v) => v,
+            None => return Err(DumpSystemImageError::EntryNotFound),
+        };
+
+        // Create reader.
+        let raw = match self.create_reader(entry, index) {
+            Ok(v) => v,
+            Err(e) => return Err(DumpSystemImageError::CreateEntryReaderFailed(e)),
+        };
+
+        Ok(())
+    }
+
+    fn get_data_entry(&self, id: u16) -> Option<(&Entry, usize)> {
         for i in 0..self.entries.len() {
             let entry = &self.entries[i];
             let special = entry.flags() & 0xf0000000;
@@ -120,20 +145,32 @@ impl Pup {
                 continue;
             }
 
-            if entry.id() == 6 {
-                return Some(self.create_reader(entry));
+            if entry.id() == id {
+                return Some((entry, i));
             }
         }
 
         None
     }
 
-    fn create_reader<'a>(&'a self, entry: &'a Entry) -> Box<dyn Read + 'a> {
-        if entry.is_compressed() {
-            Box::new(compressed::Reader::new(entry, &self.file))
+    fn create_reader<'a>(
+        &'a self,
+        entry: &'a Entry,
+        index: usize,
+    ) -> Result<Box<dyn Read + 'a>, entry::ReaderError> {
+        let reader: Box<dyn Read + 'a> = if entry.is_blocked() {
+            let table = self
+                .entries
+                .iter()
+                .position(|e| (e.flags() & 1) != 0 && e.id() as usize == index)
+                .unwrap();
+
+            Box::new(BlockedReader::new(entry, &self.entries[table], &self.file)?)
         } else {
-            Box::new(uncompressed::Reader::new(entry, &self.file))
-        }
+            Box::new(ContiguousReader::new(entry, &self.file))
+        };
+
+        Ok(reader)
     }
 }
 
@@ -161,6 +198,30 @@ impl Display for OpenError {
             Self::MapFailed(_) => f.write_str("cannot map file"),
             Self::TooSmall => f.write_str("file too small"),
             Self::InvalidMagic => f.write_str("invalid magic"),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum DumpSystemImageError {
+    EntryNotFound,
+    CreateEntryReaderFailed(entry::ReaderError),
+}
+
+impl Error for DumpSystemImageError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::CreateEntryReaderFailed(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
+impl Display for DumpSystemImageError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EntryNotFound => f.write_str("entry not found"),
+            Self::CreateEntryReaderFailed(_) => f.write_str("cannot create entry reader"),
         }
     }
 }

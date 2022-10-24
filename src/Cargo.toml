@@ -3,6 +3,7 @@ members = [
     "context",
     "core",
     "error",
+    "exfat",
     "kernel",
     "pfs",
     "pkg",
