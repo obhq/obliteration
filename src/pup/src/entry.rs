@@ -1,10 +1,9 @@
-use flate2::read::DeflateDecoder;
-use flate2::{Decompress, FlushDecompress};
+use flate2::read::ZlibDecoder;
 use std::cmp::min;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::{ErrorKind, IoSliceMut, Read};
-use util::mem::{new_buffer, read_u32_le, read_u64_le, uninit};
+use util::mem::{read_u32_le, read_u64_le, uninit};
 
 pub struct Entry {
     flags: u32,
@@ -70,7 +69,7 @@ impl<'pup> ContiguousReader<'pup> {
 
         Self {
             reader: if entry.is_compressed() {
-                Box::new(DeflateDecoder::new(data))
+                Box::new(ZlibDecoder::new(data))
             } else {
                 Box::new(data)
             },
@@ -129,7 +128,7 @@ impl<'pup> BlockedReader<'pup> {
             let table_data = &pup[table_offset..(table_offset + table.compressed_size() as usize)];
             let mut blocks: Vec<Block> = Vec::with_capacity(block_count as _);
             let mut table_reader: Box<dyn Read + 'pup> = if table.is_compressed() {
-                Box::new(DeflateDecoder::new(table_data))
+                Box::new(ZlibDecoder::new(table_data))
             } else {
                 Box::new(table_data)
             };
@@ -229,22 +228,17 @@ impl<'pup> Read for BlockedReader<'pup> {
             };
 
             if compressed {
-                let mut deflate = Decompress::new(false);
-                let mut decompressed: Vec<u8> = new_buffer(block.len());
-                let status =
-                    match deflate.decompress(block, &mut decompressed, FlushDecompress::Finish) {
-                        Ok(v) => v,
-                        Err(e) => return Err(std::io::Error::new(ErrorKind::Other, e)),
-                    };
+                // FIXME: Improve performance by pre-allocate output buffer in a single call.
+                let mut decoder = ZlibDecoder::new(block);
+                let mut decompressed: Vec<u8> = Vec::with_capacity(block.len());
 
-                if status != flate2::Status::StreamEnd {
+                if let Err(_) = decoder.read_to_end(&mut decompressed) {
                     return Err(std::io::Error::new(
                         ErrorKind::Other,
                         format!("invalid data on block #{}", self.next_block),
                     ));
-                }
+                };
 
-                unsafe { decompressed.set_len(deflate.total_out() as _) };
                 self.current_block.extend(decompressed);
             } else {
                 self.current_block.extend_from_slice(block);
