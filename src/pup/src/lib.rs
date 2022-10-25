@@ -1,4 +1,5 @@
 use self::entry::{BlockedReader, ContiguousReader, Entry};
+use exfat::ExFat;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
@@ -127,10 +128,16 @@ impl Pup {
             None => return Err(DumpSystemImageError::EntryNotFound),
         };
 
-        // Create reader.
-        let raw = match self.create_reader(entry, index) {
+        // Create entry reader.
+        let entry = match self.create_reader(entry, index) {
             Ok(v) => v,
             Err(e) => return Err(DumpSystemImageError::CreateEntryReaderFailed(e)),
+        };
+
+        // Create exFAT reader.
+        let fat = match ExFat::open(entry) {
+            Ok(v) => v,
+            Err(e) => return Err(DumpSystemImageError::CreateImageReaderFailed(e)),
         };
 
         Ok(())
@@ -206,12 +213,14 @@ impl Display for OpenError {
 pub enum DumpSystemImageError {
     EntryNotFound,
     CreateEntryReaderFailed(entry::ReaderError),
+    CreateImageReaderFailed(exfat::OpenError),
 }
 
 impl Error for DumpSystemImageError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::CreateEntryReaderFailed(e) => Some(e),
+            Self::CreateImageReaderFailed(e) => Some(e),
             _ => None,
         }
     }
@@ -222,6 +231,7 @@ impl Display for DumpSystemImageError {
         match self {
             Self::EntryNotFound => f.write_str("entry not found"),
             Self::CreateEntryReaderFailed(_) => f.write_str("cannot create entry reader"),
+            Self::CreateImageReaderFailed(_) => f.write_str("cannot create image reader"),
         }
     }
 }
