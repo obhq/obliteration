@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::Read;
-use util::mem::read_array;
+use util::mem::{read_array, uninit};
 
 pub struct ExFat<I: Read> {
     image: I,
@@ -11,6 +11,7 @@ pub struct ExFat<I: Read> {
 impl<I: Read> ExFat<I> {
     pub fn open(mut image: I) -> Result<Self, OpenError> {
         let boot_sector = Self::read_boot_sector(&mut image)?;
+        Self::read_extended_boot_sectors(&mut image)?;
 
         Ok(Self { image, boot_sector })
     }
@@ -39,6 +40,18 @@ impl<I: Read> ExFat<I> {
 
         Ok(BootSector {})
     }
+
+    fn read_extended_boot_sectors(image: &mut I) -> Result<(), OpenError> {
+        for i in 0..8usize {
+            let mut sector: [u8; 512] = uninit();
+
+            if let Err(e) = image.read_exact(&mut sector) {
+                return Err(OpenError::ReadExtendedBootSectorsFailed(i, e));
+            }
+        }
+
+        Ok(())
+    }
 }
 
 pub struct BootSector {}
@@ -47,12 +60,13 @@ pub struct BootSector {}
 pub enum OpenError {
     ReadBootSectorFailed(std::io::Error),
     NotExFat,
+    ReadExtendedBootSectorsFailed(usize, std::io::Error),
 }
 
 impl Error for OpenError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::ReadBootSectorFailed(e) => Some(e),
+            Self::ReadBootSectorFailed(e) | Self::ReadExtendedBootSectorsFailed(_, e) => Some(e),
             _ => None,
         }
     }
@@ -63,6 +77,9 @@ impl Display for OpenError {
         match self {
             Self::ReadBootSectorFailed(_) => f.write_str("cannot read boot sector"),
             Self::NotExFat => f.write_str("image is not exFAT"),
+            Self::ReadExtendedBootSectorsFailed(i, _) => {
+                write!(f, "cannot read extended boot sectors #{}", i)
+            }
         }
     }
 }
