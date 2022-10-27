@@ -12,6 +12,7 @@ impl<I: Read> ExFat<I> {
     pub fn open(mut image: I) -> Result<Self, OpenError> {
         let boot_sector = Self::read_boot_sector(&mut image)?;
         Self::read_extended_boot_sectors(&mut image)?;
+        Self::read_oem_parameters(&mut image)?;
 
         Ok(Self { image, boot_sector })
     }
@@ -52,6 +53,16 @@ impl<I: Read> ExFat<I> {
 
         Ok(())
     }
+
+    fn read_oem_parameters(image: &mut I) -> Result<(), OpenError> {
+        let mut sector: [u8; 512] = uninit();
+
+        if let Err(e) = image.read_exact(&mut sector) {
+            return Err(OpenError::ReadOemParametersFailed(e));
+        }
+
+        Ok(())
+    }
 }
 
 pub struct BootSector {}
@@ -61,12 +72,15 @@ pub enum OpenError {
     ReadBootSectorFailed(std::io::Error),
     NotExFat,
     ReadExtendedBootSectorsFailed(usize, std::io::Error),
+    ReadOemParametersFailed(std::io::Error),
 }
 
 impl Error for OpenError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::ReadBootSectorFailed(e) | Self::ReadExtendedBootSectorsFailed(_, e) => Some(e),
+            Self::ReadBootSectorFailed(e)
+            | Self::ReadExtendedBootSectorsFailed(_, e)
+            | Self::ReadOemParametersFailed(e) => Some(e),
             _ => None,
         }
     }
@@ -80,6 +94,7 @@ impl Display for OpenError {
             Self::ReadExtendedBootSectorsFailed(i, _) => {
                 write!(f, "cannot read extended boot sectors #{}", i)
             }
+            Self::ReadOemParametersFailed(_) => f.write_str("cannot read OEM parameters"),
         }
     }
 }
