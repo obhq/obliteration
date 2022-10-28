@@ -32,5 +32,5 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v3
       with:
-        name: obliteration-win32
+        name: obliteration-win64
         path: dist
