@@ -22,6 +22,9 @@ QString readSystemDirectorySetting()
     scope(SettingGroups::user);
 
     auto v = s.value(UserSettings::systemDirectory);
+    if (v.isEmpty()) {
+        v = "C:\ProgramData\Obliteration\SystemData\";
+    }
 
     return v.isNull() ? QString() : v.toString();
 }
@@ -38,6 +41,10 @@ QString readGamesDirectorySetting()
     scope(SettingGroups::user);
 
     auto v = s.value(UserSettings::gamesDirectory);
+    
+    if (v.isEmpty()) {
+        v = "C:\ProgramData\Obliteration\GameData\";
+    }
 
     return v.isNull() ? QString() : v.toString();
 }
