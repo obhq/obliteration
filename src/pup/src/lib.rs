@@ -135,7 +135,7 @@ impl Pup {
         };
 
         // Create exFAT reader.
-        let fat = match ExFat::open(entry) {
+        let fat = match ExFat::open(entry, false) {
             Ok(v) => v,
             Err(e) => return Err(DumpSystemImageError::CreateImageReaderFailed(e)),
         };
@@ -231,7 +231,9 @@ impl Display for DumpSystemImageError {
         match self {
             Self::EntryNotFound => f.write_str("entry not found"),
             Self::CreateEntryReaderFailed(_) => f.write_str("cannot create entry reader"),
-            Self::CreateImageReaderFailed(_) => f.write_str("cannot create image reader"),
+            Self::CreateImageReaderFailed(_) => {
+                f.write_str("cannot create reader for system image")
+            }
         }
     }
 }
