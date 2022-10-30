@@ -197,7 +197,8 @@ impl<'pup> Read for BlockedReader<'pup> {
 
             drop(src);
 
-            if copied == buf.len() {
+            // Check if completed.
+            if copied == buf.len() || self.next_block == self.block_count {
                 break Ok(copied);
             }
 
@@ -227,19 +228,16 @@ impl<'pup> Read for BlockedReader<'pup> {
                 (&self.pup[offset..(offset + size)], false)
             };
 
+            // Write to the buffer.
             if compressed {
-                // FIXME: Improve performance by pre-allocate output buffer in a single call.
                 let mut decoder = ZlibDecoder::new(block);
-                let mut decompressed: Vec<u8> = Vec::with_capacity(block.len());
 
-                if let Err(_) = decoder.read_to_end(&mut decompressed) {
+                if let Err(_) = decoder.read_to_end(&mut self.current_block) {
                     return Err(std::io::Error::new(
                         ErrorKind::Other,
                         format!("invalid data on block #{}", self.next_block),
                     ));
                 };
-
-                self.current_block.extend(decompressed);
             } else {
                 self.current_block.extend_from_slice(block);
             }
