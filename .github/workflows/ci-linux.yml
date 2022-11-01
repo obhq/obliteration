@@ -12,9 +12,9 @@ jobs:
         submodules: recursive
     - name: Install system dependencies
       uses: awalsh128/cache-apt-pkgs-action@latest
-        with:
-          packages: libxkbcommon-dev vulkan-sdk
-          version: ${{ runner.os }}-vulkanSDK
+      with:
+        packages: libxkbcommon-dev vulkan-sdk
+        version: ${{ runner.os }}-vulkanSDK
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
