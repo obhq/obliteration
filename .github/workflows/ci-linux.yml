@@ -19,9 +19,17 @@ jobs:
         sudo apt-get install -y libxkbcommon-dev vulkan-sdk
 
         echo "VULKAN_SDK=/usr" >> $GITHUB_ENV
+    - name: Cache System Dependencies
+      uses: actions/cache@v3.0.11
+      with:
+        path: ~/usr
+        # An explicit key for restoring and saving the cache
+        key: ${{ runner.os }}-vulkanSDK
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
+        cache: true
+        cache-key-prefix: ${{ runner.os }}-install-qt-action
         version: 6.2.*
     - name: Initialize VCPKG
       run: ./vcpkg/bootstrap-vcpkg.sh
