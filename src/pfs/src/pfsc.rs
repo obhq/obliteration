@@ -1,4 +1,4 @@
-use flate2::read::ZlibDecoder;
+use flate2::FlushDecompress;
 use std::cmp::min;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
