@@ -110,7 +110,7 @@ impl<F: Read + Seek> Reader<F> {
             let mut deflate = ZlibDecoder::new(slicecompressed);
             let status = deflate.read_to_end(&mut compressed)?;
             
-            if status != flate2::Status::StreamEnd || deflate.total_out() as usize != buf.len() {
+            if deflate.total_out() as usize != buf.len() {
                 return Err(std::io::Error::new(
                     ErrorKind::Other,
                     format!("invalid data on block #{}", num),
