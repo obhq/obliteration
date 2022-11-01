@@ -1,9 +1,10 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::Read;
-use util::mem::{read_array, uninit};
+use util::mem::uninit;
 use util::slice::as_mut_bytes;
 
+// https://learn.microsoft.com/en-us/windows/win32/fileio/exfat-specification
 pub struct ExFat<I: Read> {
     image: I,
 }
@@ -11,134 +12,78 @@ pub struct ExFat<I: Read> {
 impl<I: Read> ExFat<I> {
     pub fn open(mut image: I, boot_checksum: bool) -> Result<Self, OpenError> {
         // Read main boot region.
-        let mut sectors: Vec<u8> = Vec::with_capacity(512 * 11);
-
-        Self::read_boot_sector(&mut image, &mut sectors)?;
-        Self::read_extended_boot_sectors(&mut image, &mut sectors)?;
-        Self::read_oem_parameters(&mut image, &mut sectors)?;
-        Self::read_reserved(&mut image, &mut sectors)?;
-
-        if !Self::read_boot_checksum(&mut image, &sectors)? && boot_checksum {
-            return Err(OpenError::InvalidMainBootChecksum);
+        if let Err(e) = Self::read_boot_region(&mut image, boot_checksum) {
+            return Err(match e {
+                BootRegionError::IoFailed(e) => OpenError::ReadMainBootFailed(e),
+                BootRegionError::NotExFat => OpenError::NotExFat,
+                BootRegionError::InvalidChecksum => OpenError::InvalidMainBootChecksum,
+            });
         }
 
         Ok(Self { image })
     }
 
-    fn read_boot_sector(image: &mut I, sectors: &mut Vec<u8>) -> Result<(), OpenError> {
-        // Load sector.
-        let sector: [u8; 512] = match util::io::read_array(image) {
+    fn read_boot_region(image: &mut I, do_checksum: bool) -> Result<(), BootRegionError> {
+        // Read all sectors except checksum.
+        let sectors: [u8; 512 * 11] = match util::io::read_array(image) {
             Ok(v) => v,
-            Err(e) => return Err(OpenError::ReadBootSectorFailed(e)),
+            Err(e) => return Err(BootRegionError::IoFailed(e)),
         };
 
-        sectors.extend_from_slice(&sector);
-
         // Check type.
-        let sector = sector.as_ptr();
-        let file_system_name: [u8; 8] = read_array(sector, 3);
-
-        if &file_system_name != b"EXFAT   " {
-            return Err(OpenError::NotExFat);
+        if &sectors[3..11] != b"EXFAT   " || !sectors[11..64].iter().all(|&b| b == 0) {
+            return Err(BootRegionError::NotExFat);
         }
 
-        let must_be_zero: [u8; 53] = read_array(sector, 11);
+        // Read checksum.
+        let mut checksums: [u32; 512 / 4] = uninit();
 
-        if !must_be_zero.iter().all(|&b| b == 0) {
-            return Err(OpenError::NotExFat);
+        if let Err(e) = image.read_exact(as_mut_bytes(&mut checksums)) {
+            return Err(BootRegionError::IoFailed(e));
         }
 
-        Ok(())
-    }
-
-    fn read_extended_boot_sectors(image: &mut I, sectors: &mut Vec<u8>) -> Result<(), OpenError> {
-        for i in 0..8usize {
-            let mut sector: [u8; 512] = uninit();
-
-            if let Err(e) = image.read_exact(&mut sector) {
-                return Err(OpenError::ReadExtendedBootSectorsFailed(i, e));
-            }
-
-            sectors.extend_from_slice(&sector);
+        // Do checksum.
+        if do_checksum && !Self::checksum_boot_region(&checksums, &sectors) {
+            return Err(BootRegionError::InvalidChecksum);
         }
 
         Ok(())
     }
 
-    fn read_oem_parameters(image: &mut I, sectors: &mut Vec<u8>) -> Result<(), OpenError> {
-        let mut sector: [u8; 512] = uninit();
-
-        if let Err(e) = image.read_exact(&mut sector) {
-            return Err(OpenError::ReadOemParametersFailed(e));
-        }
-
-        sectors.extend_from_slice(&sector);
-
-        Ok(())
-    }
-
-    fn read_reserved(image: &mut I, sectors: &mut Vec<u8>) -> Result<(), OpenError> {
-        let mut sector: [u8; 512] = uninit();
-
-        if let Err(e) = image.read_exact(&mut sector) {
-            return Err(OpenError::ReadReservedFailed(e));
-        }
-
-        sectors.extend_from_slice(&sector);
-
-        Ok(())
-    }
-
-    fn read_boot_checksum(image: &mut I, sectors: &[u8]) -> Result<bool, OpenError> {
-        // Read sector.
-        let mut sector: [u32; 512 / 4] = uninit();
-
-        if let Err(e) = image.read_exact(as_mut_bytes(&mut sector)) {
-            return Err(OpenError::ReadBootChecksumFailed(e));
-        }
-
-        // Calculate checksum.
+    fn checksum_boot_region(checksums: &[u32], sectors: &[u8]) -> bool {
         let mut checksum: u32 = 0;
 
         for i in 0..sectors.len() {
             if i == 106 || i == 107 || i == 112 {
                 continue;
             }
+
             checksum = (checksum >> 1)
                 + sectors[i] as u32
                 + if (checksum & 1) != 0 { 0x80000000 } else { 0 };
         }
 
-        // Do checksum.
-        for expect in sector {
+        for &expect in checksums {
             if expect != checksum {
-                return Ok(false);
+                return false;
             }
         }
 
-        Ok(true)
+        true
     }
 }
 
 #[derive(Debug)]
 pub enum OpenError {
-    ReadBootSectorFailed(std::io::Error),
+    ReadMainBootFailed(std::io::Error),
     NotExFat,
-    ReadExtendedBootSectorsFailed(usize, std::io::Error),
-    ReadOemParametersFailed(std::io::Error),
-    ReadReservedFailed(std::io::Error),
-    ReadBootChecksumFailed(std::io::Error),
     InvalidMainBootChecksum,
 }
 
 impl Error for OpenError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::ReadBootSectorFailed(e)
-            | Self::ReadExtendedBootSectorsFailed(_, e)
-            | Self::ReadOemParametersFailed(e)
-            | Self::ReadReservedFailed(e)
-            | Self::ReadBootChecksumFailed(e) => Some(e),
+            Self::ReadMainBootFailed(e) => Some(e),
             _ => None,
         }
     }
@@ -147,15 +92,15 @@ impl Error for OpenError {
 impl Display for OpenError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::ReadBootSectorFailed(_) => f.write_str("cannot read boot sector"),
+            Self::ReadMainBootFailed(_) => f.write_str("cannot read main boot region"),
             Self::NotExFat => f.write_str("image is not exFAT"),
-            Self::ReadExtendedBootSectorsFailed(i, _) => {
-                write!(f, "cannot read extended boot sectors #{}", i)
-            }
-            Self::ReadOemParametersFailed(_) => f.write_str("cannot read OEM parameters"),
-            Self::ReadReservedFailed(_) => f.write_str("cannot read reserved region"),
-            Self::ReadBootChecksumFailed(_) => f.write_str("cannot read boot checksum"),
             Self::InvalidMainBootChecksum => f.write_str("invalid checksum for main boot region"),
         }
     }
+}
+
+enum BootRegionError {
+    IoFailed(std::io::Error),
+    NotExFat,
+    InvalidChecksum,
 }
