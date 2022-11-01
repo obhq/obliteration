@@ -101,12 +101,13 @@ impl<F: Read + Seek> Reader<F> {
         } else {
             // Read compressed.
             let mut compressed = new_buffer(size as usize);
+            let mut slicecompressed = compressed.as_slice();
 
             self.file.seek(SeekFrom::Start(offset))?;
             self.file.read_exact(&mut compressed)?;
 
             // Decompress.
-            let mut deflate = ZlibDecoder::new(buf);
+            let mut deflate = ZlibDecoder::new(slicecompressed);
             let status = match deflate.read_to_end(&mut compressed) {
                 Ok(v) => v,
                 Err(e) => return Err(std::io::Error::new(ErrorKind::Other, e)),
