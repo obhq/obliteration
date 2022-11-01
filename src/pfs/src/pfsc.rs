@@ -108,7 +108,7 @@ impl<F: Read + Seek> Reader<F> {
 
             // Decompress.
             let mut deflate = ZlibDecoder::new(slicecompressed);
-            let status = match deflate.read_to_end(&mut slicecompressed) {
+            let status = match deflate.read_to_end(&mut compressed) {
                 Ok(v) => v,
                 Err(e) => return Err(std::io::Error::new(ErrorKind::Other, e)),
             };
