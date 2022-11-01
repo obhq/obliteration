@@ -100,14 +100,14 @@ impl<F: Read + Seek> Reader<F> {
             buf.fill(0);
         } else {
             // Read compressed.
-            let mut compressed = new_buffer(size as usize - 2);
+            let mut compressed = new_buffer(size as usize);
 
-            self.file.seek(SeekFrom::Start(offset + 2))?;
+            self.file.seek(SeekFrom::Start(offset))?;
             self.file.read_exact(&mut compressed)?;
 
             // Decompress.
-            let mut deflate = flate2::Decompress::new(false);
-            let status = match deflate.decompress(&compressed, buf, FlushDecompress::Finish) {
+            let mut deflate = ZlibDecoder::new(buf);
+            let status = match deflate.read_to_end(&mut compressed) {
                 Ok(v) => v,
                 Err(e) => return Err(std::io::Error::new(ErrorKind::Other, e)),
             };
