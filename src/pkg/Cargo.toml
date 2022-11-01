@@ -10,6 +10,6 @@ context = { path = "../context" }
 error = { path = "../error" }
 memmap2 = "0.5"
 pfs = { path = "../pfs" }
-rsa = "0.6"
+rsa = "0.7"
 sha2 = "0.10"
 util = { path = "../util" }
