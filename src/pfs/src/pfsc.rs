@@ -103,6 +103,7 @@ impl<F: Read + Seek> Reader<F> {
             let mut compressed = new_buffer(size as usize);
             let mut slicecompressed = compressed.as_slice();
 
+
             self.file.seek(SeekFrom::Start(offset))?;
             self.file.read_exact(&mut compressed)?;
 
