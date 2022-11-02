@@ -27,7 +27,7 @@ jobs:
         version: 6.2.*
     - name: Initialize VCPKG
       run: ./vcpkg/bootstrap-vcpkg.sh
-    - name: Cache vcpkg
+    - name: Cache VCPKG
       uses: actions/cache@v3.0.11
       id: cache-vcpkg
       with:
@@ -36,6 +36,14 @@ jobs:
     - if: ${{ steps.cache-vcpkg.outputs.cache-hit != 'true' }}
       name: Install VCPKG packages
       run: ./vcpkg-restore.sh
+    - name: Cache CMake Build Files
+      uses: actions/cache@v3.0.11
+      id: cache-cmake
+      with:
+        path: |
+          /home/runner/work/obliteration/obliteration/build
+          /home/runner/work/obliteration/obliteration/src/target
+        key: ${{ runner.os }}-cmake-${{ hashFiles('**/CMakeLists.txt', '**/Cargo.lock', '**/Cargo.toml') }}
     - name: Run CMake
       run: cmake -B build -D CMAKE_BUILD_TYPE=Release
     - name: Build
