@@ -1,5 +1,5 @@
 <p align="center">
-  <img alt="Obliteration" src=".github/ReadME/obliteration-full-icon.png">
+  <img alt="Obliteration" src="logo.png">
 </p>
 
 ---
