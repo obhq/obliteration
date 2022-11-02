@@ -1,9 +1,20 @@
-# Obliteration
-[![CI](https://github.com/ultimaweapon/obliteration/actions/workflows/main.yml/badge.svg)](https://github.com/ultimaweapon/obliteration/actions/workflows/main.yml)
+<p align="center">
+  <img alt="Obliteration" src=".github/ReadME/obliteration-full-icon.png">
+</p>
+
+---
+
+## About
 
 Obliteration is an experimental PS4 emulator using [Kyty](https://github.com/InoriRus/Kyty) and [Uplift](https://github.com/idc/uplift) as a reference. The project is under development and cannot run any games that Kyty is able to run yet.
 
 **The original author of Kyty does not involved in the development of Obliteration in anyway.** Obliteration is a completely separated project. The reason you see the author of Kyty in a contributor list because this project contains commits from Kyty.
+
+## Get a daily build
+
+You can download Windows binary for the latest development [here](https://github.com/ultimaweapon/obliteration/actions/workflows/main.yml).
+
+[![CI](https://github.com/ultimaweapon/obliteration/actions/workflows/main.yml/badge.svg)](https://github.com/ultimaweapon/obliteration/actions/workflows/main.yml)
 
 ## Screenshots
 
@@ -32,10 +43,6 @@ Thanks [Mou-Ikkai](https://github.com/Mou-Ikkai) for the awesome icon!
 ### Windows specific requirements
 
 - [Microsoft Visual C++ 2019 Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist). It is likely your system already have it so try to run Obliteration first. If there is an error related to `msvcp140.dll`, `vcruntime140.dll` or `vcruntime140_1.dll` that mean you need to install this manually.
-
-## Get a daily build
-
-You can download Windows binary for the latest development [here](https://github.com/ultimaweapon/obliteration/actions/workflows/main.yml).
 
 ## Building from source
 
