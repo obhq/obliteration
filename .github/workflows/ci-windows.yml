@@ -47,7 +47,7 @@ jobs:
         path: |
           D:/a/obliteration/obliteration/build
           D:/a/obliteration/obliteration/src/target
-        key: ${{ runner.os }}-cmake-${{ runner_tool_cache }}-${{ hashFiles('**/CMakeLists.txt', '**/Cargo.lock', '**/Cargo.toml') }}
+        key: ${{ runner.os }}-cmake-${{ hashFiles('**/CMakeLists.txt', '**/Cargo.lock', '**/Cargo.toml') }}
     - name: Run CMake
       run: cmake -B build -A x64
     - name: Build
