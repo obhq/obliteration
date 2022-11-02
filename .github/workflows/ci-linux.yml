@@ -34,7 +34,7 @@ jobs:
         path: /usr/local/share/vcpkg/packages
         key: ${{ runner.os }}-VCPKG-${{ hashFiles('**/CMakeLists.txt', '**/Cargo.lock', '**/Cargo.toml') }}
     - if: ${{ steps.cache-vcpkg.outputs.cache-hit != 'true' }}
-    - name: Install VCPKG packages
+      name: Install VCPKG packages
       run: ./vcpkg-restore.sh
     - name: Run CMake
       run: cmake -B build -D CMAKE_BUILD_TYPE=Release
