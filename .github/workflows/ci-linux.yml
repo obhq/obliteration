@@ -43,7 +43,7 @@ jobs:
         path: |
           /home/runner/work/obliteration/obliteration/build
           /home/runner/work/obliteration/obliteration/src/target
-        key: ${{ runner.os }}-cmake-${{ hashFiles('**/CMakeLists.txt', '**/Cargo.lock', '**/Cargo.toml') }}
+        key: ${{ runner.os }}-cmake-${{ runner_tool_cache }}-${{ hashFiles('**/CMakeLists.txt', '**/Cargo.lock', '**/Cargo.toml') }}
     - name: Run CMake
       run: cmake -B build -D CMAKE_BUILD_TYPE=Release
     - name: Build
