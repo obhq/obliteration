@@ -31,7 +31,7 @@ jobs:
       run:  echo "VULKAN_SDK=C:\VulkanSDK" >> $env:GITHUB_ENV 
     - name: Initialize VCPKG
       run: .\vcpkg\bootstrap-vcpkg.bat
-    - name: Cache vcpkg
+    - name: Cache VCPKG
       uses: actions/cache@v3.0.11
       id: cache-vcpkg
       with:
@@ -40,6 +40,14 @@ jobs:
     - if: ${{ steps.cache-vcpkg.outputs.cache-hit != 'true' }}
       name: Install VCPKG packages
       run: .\vcpkg-restore.ps1
+    - name: Cache CMake Build Files
+      uses: actions/cache@v3.0.11
+      id: cache-cmake
+      with:
+        path: |
+          D:/a/obliteration/obliteration/build
+          D:/a/obliteration/obliteration/src/target
+        key: ${{ runner.os }}-cmake-${{ hashFiles('**/CMakeLists.txt', '**/Cargo.lock', '**/Cargo.toml') }}
     - name: Run CMake
       run: cmake -B build -A x64
     - name: Build
