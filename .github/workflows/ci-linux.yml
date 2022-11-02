@@ -27,6 +27,13 @@ jobs:
         version: 6.2.*
     - name: Initialize VCPKG
       run: ./vcpkg/bootstrap-vcpkg.sh
+    - name: Cache vcpkg
+      uses: actions/cache@v3.0.11
+      id: cache-vcpkg
+      with:
+        path: /usr/local/share/vcpkg/packages
+        key: ${{ runner.os }}-VCPKG-${{ hashFiles('**/CMakeLists.txt', '**/Cargo.lock', '**/Cargo.toml') }}
+    - if: ${{ steps.cache-vcpkg.outputs.cache-hit != 'true' }}
     - name: Install VCPKG packages
       run: ./vcpkg-restore.sh
     - name: Run CMake
