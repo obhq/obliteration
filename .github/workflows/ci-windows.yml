@@ -31,7 +31,14 @@ jobs:
       run:  echo "VULKAN_SDK=C:\VulkanSDK" >> $env:GITHUB_ENV 
     - name: Initialize VCPKG
       run: .\vcpkg\bootstrap-vcpkg.bat
-    - name: Install VCPKG packages
+    - name: Cache vcpkg
+      uses: actions/cache@v3.0.11
+      id: cache-vcpkg
+      with:
+        path: C:\Users\runneradmin\AppData\Local\vcpkg\archives
+        key: ${{ runner.os }}-VCPKG-${{ hashFiles('**/CMakeLists.txt', '**/Cargo.lock', '**/Cargo.toml') }}
+    - if: ${{ steps.cache-vcpkg.outputs.cache-hit != 'true' }}
+      name: Install VCPKG packages
       run: .\vcpkg-restore.ps1
     - name: Run CMake
       run: cmake -B build -A x64
