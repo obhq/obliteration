@@ -16,6 +16,8 @@ jobs:
         cache: true
         cache-key-prefix: ${{ runner.os }}-install-qt-action
         version: 6.2.*
+    - name: Get latest CMake and ninja
+      uses: lukka/get-cmake@latest
     - name: Cache Vulkan SDK
       id: cache-vulkan
       uses: actions/cache@v3.0.11
