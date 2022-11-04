@@ -51,9 +51,9 @@ jobs:
     - name: Run CMake
       run: cmake -B build -A x64
     - name: Build
-      run: cmake --build build --config Release --parallel 2
+      run: cmake --build build --config Release
     - name: Export artifacts
-      run: cmake --install build --prefix dist --parallel 2
+      run: cmake --install build --prefix dist
     - name: Upload artifacts
       uses: actions/upload-artifact@v3
       with:
