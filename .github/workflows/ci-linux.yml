@@ -47,4 +47,4 @@ jobs:
     - name: Run CMake
       run: cmake -B build -D CMAKE_BUILD_TYPE=Release -- --parallel 2
     - name: Build
-      run: cmake --build build --parallel 2
+      run: cmake --build build -- --parallel 2
