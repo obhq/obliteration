@@ -1,15 +1,16 @@
-use self::entry::{BlockedReader, ContiguousReader, Entry};
+use self::entry::Entry;
+use self::reader::{BlockedReader, EntryReader, NonBlockedReader};
 use exfat::ExFat;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
-use std::io::Read;
 use std::os::raw::c_char;
 use std::path::Path;
 use std::ptr::null_mut;
 use util::mem::{read_array, read_u16_le};
 
 pub mod entry;
+pub mod reader;
 
 #[no_mangle]
 pub extern "C" fn pup_open(file: *const c_char, err: *mut *mut error::Error) -> *mut Pup {
@@ -44,7 +45,6 @@ pub extern "C" fn pup_free(pup: *mut Pup) {
 pub struct Pup {
     file: memmap2::Mmap,
     entries: Vec<Entry>,
-    table_entries: Vec<Option<usize>>,
 }
 
 impl Pup {
@@ -86,39 +86,7 @@ impl Pup {
             entries.push(entry);
         }
 
-        // TODO: What is table?
-        let mut table_entries: Vec<Option<usize>> = vec![None; entries.len()];
-
-        for i in 0..entries.len() {
-            let entry = &entries[i];
-
-            if entry.is_blocked() {
-                if ((entry.id() | 0x100) & 0xf00) == 0xf00 {
-                    // What is this?
-                    todo!();
-                }
-
-                let table = entries
-                    .iter()
-                    .position(|e| (e.flags() & 1) != 0 && (e.id() as usize) == i)
-                    .unwrap();
-
-                if table_entries[table].is_some() {
-                    // What is this?
-                    todo!();
-                }
-
-                table_entries[table] = Some(i);
-            } else {
-                table_entries[i] = None;
-            }
-        }
-
-        Ok(Self {
-            file,
-            entries,
-            table_entries,
-        })
+        Ok(Self { file, entries })
     }
 
     pub fn dump_system_image<O: AsRef<Path>>(&self, output: O) -> Result<(), DumpSystemImageError> {
@@ -146,9 +114,8 @@ impl Pup {
     fn get_data_entry(&self, id: u16) -> Option<(&Entry, usize)> {
         for i in 0..self.entries.len() {
             let entry = &self.entries[i];
-            let special = entry.flags() & 0xf0000000;
 
-            if special == 0xe0000000 || special == 0xf0000000 || self.table_entries[i].is_some() {
+            if entry.is_table() {
                 continue;
             }
 
@@ -164,17 +131,18 @@ impl Pup {
         &'a self,
         entry: &'a Entry,
         index: usize,
-    ) -> Result<Box<dyn Read + 'a>, entry::ReaderError> {
-        let reader: Box<dyn Read + 'a> = if entry.is_blocked() {
+    ) -> Result<Box<dyn EntryReader + 'a>, Box<dyn Error>> {
+        let reader: Box<dyn EntryReader + 'a> = if entry.is_blocked() && entry.is_compressed() {
             let table = self
                 .entries
                 .iter()
-                .position(|e| (e.flags() & 1) != 0 && e.id() as usize == index)
+                .position(|e| e.is_table() && e.id() as usize == index)
                 .unwrap();
+            let table = &self.entries[table];
 
-            Box::new(BlockedReader::new(entry, &self.entries[table], &self.file)?)
+            Box::new(BlockedReader::new(entry, table, &self.file)?)
         } else {
-            Box::new(ContiguousReader::new(entry, &self.file))
+            Box::new(NonBlockedReader::new(entry, &self.file)?)
         };
 
         Ok(reader)
@@ -212,14 +180,14 @@ impl Display for OpenError {
 #[derive(Debug)]
 pub enum DumpSystemImageError {
     EntryNotFound,
-    CreateEntryReaderFailed(entry::ReaderError),
+    CreateEntryReaderFailed(Box<dyn Error>),
     CreateImageReaderFailed(exfat::OpenError),
 }
 
 impl Error for DumpSystemImageError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::CreateEntryReaderFailed(e) => Some(e),
+            Self::CreateEntryReaderFailed(e) => Some(e.as_ref()),
             Self::CreateImageReaderFailed(e) => Some(e),
             _ => None,
         }
