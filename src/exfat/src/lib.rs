@@ -1,75 +1,63 @@
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::io::Read;
-use util::mem::uninit;
+use std::io::{Read, Seek, SeekFrom};
+use util::mem::{new_buffer, read_u32_le, read_u8};
 use util::slice::as_mut_bytes;
 
 // https://learn.microsoft.com/en-us/windows/win32/fileio/exfat-specification
-pub struct ExFat<I: Read> {
+pub struct ExFat<I: Read + Seek> {
     image: I,
 }
 
-impl<I: Read> ExFat<I> {
-    pub fn open(mut image: I, boot_checksum: bool) -> Result<Self, OpenError> {
-        // Read main boot region.
-        if let Err(e) = Self::read_boot_region(&mut image, boot_checksum) {
-            return Err(match e {
-                BootRegionError::IoFailed(e) => OpenError::ReadMainBootFailed(e),
-                BootRegionError::NotExFat => OpenError::NotExFat,
-                BootRegionError::InvalidChecksum => OpenError::InvalidMainBootChecksum,
-            });
-        }
-
-        Ok(Self { image })
-    }
-
-    fn read_boot_region(image: &mut I, do_checksum: bool) -> Result<(), BootRegionError> {
-        // Read all sectors except checksum.
-        let sectors: [u8; 512 * 11] = match util::io::read_array(image) {
+impl<I: Read + Seek> ExFat<I> {
+    pub fn open(mut image: I) -> Result<Self, OpenError> {
+        // Read boot sector.
+        let boot: [u8; 512] = match util::io::read_array(&mut image) {
             Ok(v) => v,
-            Err(e) => return Err(BootRegionError::IoFailed(e)),
+            Err(e) => return Err(OpenError::ReadMainBootFailed(e)),
         };
 
         // Check type.
-        if &sectors[3..11] != b"EXFAT   " || !sectors[11..64].iter().all(|&b| b == 0) {
-            return Err(BootRegionError::NotExFat);
+        if &boot[3..11] != b"EXFAT   " || !boot[11..64].iter().all(|&b| b == 0) {
+            return Err(OpenError::NotExFat);
         }
 
-        // Read checksum.
-        let mut checksums: [u32; 512 / 4] = uninit();
+        // Load fields.
+        let boot = boot.as_ptr();
+        let fat_offset = read_u32_le(boot, 80) as u64; // in sector
+        let cluster_count = read_u32_le(boot, 92) as usize;
+        let bytes_per_sector = match 1u64.checked_shl(read_u8(boot, 108) as _) {
+            Some(v) => v,
+            None => return Err(OpenError::InvalidBytesPerSectorShift),
+        };
 
-        if let Err(e) = image.read_exact(as_mut_bytes(&mut checksums)) {
-            return Err(BootRegionError::IoFailed(e));
-        }
+        // Read FAT region.
+        let offset = match fat_offset.checked_mul(bytes_per_sector) {
+            Some(v) => v,
+            None => return Err(OpenError::InvalidFatOffset),
+        };
 
-        // Do checksum.
-        if do_checksum && !Self::checksum_boot_region(&checksums, &sectors) {
-            return Err(BootRegionError::InvalidChecksum);
-        }
-
-        Ok(())
-    }
-
-    fn checksum_boot_region(checksums: &[u32], sectors: &[u8]) -> bool {
-        let mut checksum: u32 = 0;
-
-        for i in 0..sectors.len() {
-            if i == 106 || i == 107 || i == 112 {
-                continue;
+        match image.seek(SeekFrom::Start(offset)) {
+            Ok(v) => {
+                if v != offset {
+                    return Err(OpenError::InvalidFatOffset);
+                }
             }
-
-            checksum = (checksum >> 1)
-                + sectors[i] as u32
-                + if (checksum & 1) != 0 { 0x80000000 } else { 0 };
+            Err(e) => return Err(OpenError::ReadFatRegionFailed(e)),
         }
 
-        for &expect in checksums {
-            if expect != checksum {
-                return false;
-            }
+        let mut fat_entries: Vec<u32> = new_buffer(cluster_count + 2);
+
+        if let Err(e) = image.read_exact(as_mut_bytes(&mut fat_entries)) {
+            return Err(OpenError::ReadFatRegionFailed(e));
         }
 
-        true
+        // Check first fat.
+        if fat_entries[0] != 0xfffffff8 {
+            return Err(OpenError::InvalidFatEntry(0));
+        }
+
+        Ok(Self { image })
     }
 }
 
@@ -77,13 +65,16 @@ impl<I: Read> ExFat<I> {
 pub enum OpenError {
     ReadMainBootFailed(std::io::Error),
     NotExFat,
-    InvalidMainBootChecksum,
+    InvalidBytesPerSectorShift,
+    InvalidFatOffset,
+    ReadFatRegionFailed(std::io::Error),
+    InvalidFatEntry(usize),
 }
 
 impl Error for OpenError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::ReadMainBootFailed(e) => Some(e),
+            Self::ReadMainBootFailed(e) | Self::ReadFatRegionFailed(e) => Some(e),
             _ => None,
         }
     }
@@ -94,13 +85,10 @@ impl Display for OpenError {
         match self {
             Self::ReadMainBootFailed(_) => f.write_str("cannot read main boot region"),
             Self::NotExFat => f.write_str("image is not exFAT"),
-            Self::InvalidMainBootChecksum => f.write_str("invalid checksum for main boot region"),
+            Self::InvalidBytesPerSectorShift => f.write_str("invalid BytesPerSectorShift"),
+            Self::InvalidFatOffset => f.write_str("invalid FatOffset"),
+            Self::ReadFatRegionFailed(_) => f.write_str("cannot read FAT region"),
+            Self::InvalidFatEntry(i) => write!(f, "FAT entry #{} is not valid", i),
         }
     }
-}
-
-enum BootRegionError {
-    IoFailed(std::io::Error),
-    NotExFat,
-    InvalidChecksum,
 }
