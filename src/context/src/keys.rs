@@ -72,7 +72,7 @@ pub fn pkg_key3() -> RsaPrivateKey {
         ]),
     ];
 
-    RsaPrivateKey::from_components(n, e, d, primes)
+    RsaPrivateKey::from_components(n, e, d, primes).unwrap()
 }
 
 pub fn fake_pfs_key() -> RsaPrivateKey {
@@ -147,5 +147,5 @@ pub fn fake_pfs_key() -> RsaPrivateKey {
         ]),
     ];
 
-    RsaPrivateKey::from_components(n, e, d, primes)
+    RsaPrivateKey::from_components(n, e, d, primes).unwrap()
 }
