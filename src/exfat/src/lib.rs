@@ -1,11 +1,19 @@
+use self::fat::Fat;
+use self::param::Params;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::io::{Read, Seek, SeekFrom};
-use util::mem::{new_buffer, read_u32_le, read_u8};
-use util::slice::as_mut_bytes;
+use std::io::{Read, Seek};
+use std::sync::Arc;
+use util::mem::{read_u32_le, read_u8};
+
+pub mod cluster;
+pub mod fat;
+pub mod param;
 
 // https://learn.microsoft.com/en-us/windows/win32/fileio/exfat-specification
 pub struct ExFat<I: Read + Seek> {
+    params: Arc<Params>,
+    fat: Fat,
     image: I,
 }
 
@@ -24,40 +32,28 @@ impl<I: Read + Seek> ExFat<I> {
 
         // Load fields.
         let boot = boot.as_ptr();
-        let fat_offset = read_u32_le(boot, 80) as u64; // in sector
-        let cluster_count = read_u32_le(boot, 92) as usize;
-        let bytes_per_sector = match 1u64.checked_shl(read_u8(boot, 108) as _) {
-            Some(v) => v,
-            None => return Err(OpenError::InvalidBytesPerSectorShift),
-        };
+        let params = Arc::new(Params {
+            fat_offset: read_u32_le(boot, 80) as u64,
+            cluster_heap_offset: read_u32_le(boot, 88) as u64,
+            cluster_count: read_u32_le(boot, 92) as usize,
+            first_cluster_of_root_directory: read_u32_le(boot, 96) as usize,
+            bytes_per_sector: match read_u8(boot, 108) {
+                v if v >= 9 && v <= 12 => 1u64 << v,
+                _ => return Err(OpenError::InvalidBytesPerSectorShift),
+            },
+            sectors_per_cluster: match read_u8(boot, 109) {
+                v if v <= 25 - read_u8(boot, 108) => 1u64 << v,
+                _ => return Err(OpenError::InvalidSectorsPerClusterShift),
+            },
+        });
 
         // Read FAT region.
-        let offset = match fat_offset.checked_mul(bytes_per_sector) {
-            Some(v) => v,
-            None => return Err(OpenError::InvalidFatOffset),
+        let fat = match Fat::load(params.clone(), &mut image) {
+            Ok(v) => v,
+            Err(e) => return Err(OpenError::ReadFatRegionFailed(e)),
         };
 
-        match image.seek(SeekFrom::Start(offset)) {
-            Ok(v) => {
-                if v != offset {
-                    return Err(OpenError::InvalidFatOffset);
-                }
-            }
-            Err(e) => return Err(OpenError::ReadFatRegionFailed(e)),
-        }
-
-        let mut fat_entries: Vec<u32> = new_buffer(cluster_count + 2);
-
-        if let Err(e) = image.read_exact(as_mut_bytes(&mut fat_entries)) {
-            return Err(OpenError::ReadFatRegionFailed(e));
-        }
-
-        // Check first fat.
-        if fat_entries[0] != 0xfffffff8 {
-            return Err(OpenError::InvalidFatEntry(0));
-        }
-
-        Ok(Self { image })
+        Ok(Self { params, fat, image })
     }
 }
 
@@ -66,15 +62,15 @@ pub enum OpenError {
     ReadMainBootFailed(std::io::Error),
     NotExFat,
     InvalidBytesPerSectorShift,
-    InvalidFatOffset,
-    ReadFatRegionFailed(std::io::Error),
-    InvalidFatEntry(usize),
+    InvalidSectorsPerClusterShift,
+    ReadFatRegionFailed(fat::LoadError),
 }
 
 impl Error for OpenError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::ReadMainBootFailed(e) | Self::ReadFatRegionFailed(e) => Some(e),
+            Self::ReadMainBootFailed(e) => Some(e),
+            Self::ReadFatRegionFailed(e) => Some(e),
             _ => None,
         }
     }
@@ -86,9 +82,8 @@ impl Display for OpenError {
             Self::ReadMainBootFailed(_) => f.write_str("cannot read main boot region"),
             Self::NotExFat => f.write_str("image is not exFAT"),
             Self::InvalidBytesPerSectorShift => f.write_str("invalid BytesPerSectorShift"),
-            Self::InvalidFatOffset => f.write_str("invalid FatOffset"),
+            Self::InvalidSectorsPerClusterShift => f.write_str("invalid SectorsPerClusterShift"),
             Self::ReadFatRegionFailed(_) => f.write_str("cannot read FAT region"),
-            Self::InvalidFatEntry(i) => write!(f, "FAT entry #{} is not valid", i),
         }
     }
 }
