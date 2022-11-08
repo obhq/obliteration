@@ -1,3 +1,4 @@
 /.kernel-debug
 /build/
 /src/target/
+Cargo.lock
