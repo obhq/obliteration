@@ -2,17 +2,15 @@ use crate::param::Params;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::{Read, Seek, SeekFrom};
-use std::sync::Arc;
 use util::mem::new_buffer;
 use util::slice::as_mut_bytes;
 
 pub(super) struct Fat {
-    params: Arc<Params>,
     entries: Vec<u32>,
 }
 
 impl Fat {
-    pub fn load<I: Read + Seek>(params: Arc<Params>, image: &mut I) -> Result<Self, LoadError> {
+    pub fn load<I: Read + Seek>(params: &Params, image: &mut I) -> Result<Self, LoadError> {
         // Seek to FAT region.
         let offset = match params.fat_offset.checked_mul(params.bytes_per_sector) {
             Some(v) => v,
@@ -35,12 +33,11 @@ impl Fat {
             return Err(LoadError::IoFailed(e));
         }
 
-        Ok(Self { params, entries })
+        Ok(Self { entries })
     }
 
     pub fn get_cluster_chain(&self, first: usize) -> ClusterChain<'_> {
         ClusterChain {
-            params: &self.params,
             entries: &self.entries,
             next: first,
         }
@@ -48,7 +45,6 @@ impl Fat {
 }
 
 pub(crate) struct ClusterChain<'fat> {
-    params: &'fat Params,
     entries: &'fat [u32],
     next: usize,
 }

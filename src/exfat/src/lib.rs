@@ -1,3 +1,4 @@
+use self::directory::Directory;
 use self::fat::Fat;
 use self::param::Params;
 use std::error::Error;
@@ -7,6 +8,7 @@ use std::sync::Arc;
 use util::mem::{read_u32_le, read_u8};
 
 pub mod cluster;
+pub mod directory;
 pub mod fat;
 pub mod param;
 
@@ -48,12 +50,23 @@ impl<I: Read + Seek> ExFat<I> {
         });
 
         // Read FAT region.
-        let fat = match Fat::load(params.clone(), &mut image) {
+        let fat = match Fat::load(&params, &mut image) {
             Ok(v) => v,
             Err(e) => return Err(OpenError::ReadFatRegionFailed(e)),
         };
 
         Ok(Self { params, fat, image })
+    }
+
+    pub fn open_root(&mut self) -> Result<Directory, directory::OpenError> {
+        let params = &self.params;
+
+        Directory::open(
+            params,
+            &self.fat,
+            &mut self.image,
+            params.first_cluster_of_root_directory,
+        )
     }
 }
 

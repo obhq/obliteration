@@ -1,6 +1,7 @@
 use self::entry::Entry;
 use self::reader::{BlockedReader, EntryReader, NonBlockedReader};
 use exfat::ExFat;
+use std::collections::VecDeque;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
@@ -103,10 +104,20 @@ impl Pup {
         };
 
         // Create exFAT reader.
-        let fat = match ExFat::open(entry) {
+        let mut fat = match ExFat::open(entry) {
             Ok(v) => v,
             Err(e) => return Err(DumpSystemImageError::CreateImageReaderFailed(e)),
         };
+
+        // Dump files.
+        let mut directories: VecDeque<exfat::directory::Directory> = VecDeque::new();
+
+        match fat.open_root() {
+            Ok(v) => directories.push_back(v),
+            Err(e) => return Err(DumpSystemImageError::OpenRootFailed(e)),
+        }
+
+        while let Some(directory) = directories.pop_front() {}
 
         Ok(())
     }
@@ -182,6 +193,7 @@ pub enum DumpSystemImageError {
     EntryNotFound,
     CreateEntryReaderFailed(Box<dyn Error>),
     CreateImageReaderFailed(exfat::OpenError),
+    OpenRootFailed(exfat::directory::OpenError),
 }
 
 impl Error for DumpSystemImageError {
@@ -189,6 +201,7 @@ impl Error for DumpSystemImageError {
         match self {
             Self::CreateEntryReaderFailed(e) => Some(e.as_ref()),
             Self::CreateImageReaderFailed(e) => Some(e),
+            Self::OpenRootFailed(e) => Some(e),
             _ => None,
         }
     }
@@ -202,6 +215,7 @@ impl Display for DumpSystemImageError {
             Self::CreateImageReaderFailed(_) => {
                 f.write_str("cannot create reader for system image")
             }
+            Self::OpenRootFailed(_) => f.write_str("cannot open root directory"),
         }
     }
 }
