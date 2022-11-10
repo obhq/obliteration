@@ -1,4 +1,4 @@
-use self::directory::Directory;
+use self::directory::entry::EntrySet;
 use self::fat::Fat;
 use self::param::Params;
 use std::error::Error;
@@ -14,9 +14,10 @@ pub mod param;
 
 // https://learn.microsoft.com/en-us/windows/win32/fileio/exfat-specification
 pub struct ExFat<I: Read + Seek> {
+    image: I,
     params: Arc<Params>,
     fat: Fat,
-    image: I,
+    volume_label: Option<String>,
 }
 
 impl<I: Read + Seek> ExFat<I> {
@@ -55,18 +56,23 @@ impl<I: Read + Seek> ExFat<I> {
             Err(e) => return Err(OpenError::ReadFatRegionFailed(e)),
         };
 
-        Ok(Self { params, fat, image })
+        // Load root directory.
+        let root_cluster = params.first_cluster_of_root_directory;
+        let entries = match EntrySet::load(&params, &fat, &mut image, root_cluster) {
+            Ok(v) => v,
+            Err(e) => return Err(OpenError::ReadRootFailed(e)),
+        };
+
+        Ok(Self {
+            image,
+            params,
+            fat,
+            volume_label: entries.volume_label,
+        })
     }
 
-    pub fn open_root(&mut self) -> Result<Directory, directory::OpenError> {
-        let params = &self.params;
-
-        Directory::open(
-            params,
-            &self.fat,
-            &mut self.image,
-            params.first_cluster_of_root_directory,
-        )
+    pub fn volume_label(&self) -> Option<&str> {
+        self.volume_label.as_deref()
     }
 }
 
@@ -77,6 +83,7 @@ pub enum OpenError {
     InvalidBytesPerSectorShift,
     InvalidSectorsPerClusterShift,
     ReadFatRegionFailed(fat::LoadError),
+    ReadRootFailed(directory::entry::LoadEntriesError),
 }
 
 impl Error for OpenError {
@@ -84,6 +91,7 @@ impl Error for OpenError {
         match self {
             Self::ReadMainBootFailed(e) => Some(e),
             Self::ReadFatRegionFailed(e) => Some(e),
+            Self::ReadRootFailed(e) => Some(e),
             _ => None,
         }
     }
@@ -97,6 +105,7 @@ impl Display for OpenError {
             Self::InvalidBytesPerSectorShift => f.write_str("invalid BytesPerSectorShift"),
             Self::InvalidSectorsPerClusterShift => f.write_str("invalid SectorsPerClusterShift"),
             Self::ReadFatRegionFailed(_) => f.write_str("cannot read FAT region"),
+            Self::ReadRootFailed(_) => f.write_str("cannot read root directory"),
         }
     }
 }
