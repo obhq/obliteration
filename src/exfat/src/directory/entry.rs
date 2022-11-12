@@ -4,9 +4,11 @@ use crate::param::Params;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::{Read, Seek};
+use util::mem::{read_u32_le, read_u64_le, read_u8};
 
 pub(crate) struct EntrySet {
     pub volume_label: Option<String>,
+    pub allocation_bitmaps: [Option<DataDescriptor>; 2],
 }
 
 impl EntrySet {
@@ -16,7 +18,10 @@ impl EntrySet {
         image: &mut I,
         first_cluster: usize,
     ) -> Result<Self, LoadEntriesError> {
-        let mut set = Self { volume_label: None };
+        let mut set = Self {
+            volume_label: None,
+            allocation_bitmaps: [None, None],
+        };
 
         'cluster_chain: for cluster_index in fat.get_cluster_chain(first_cluster) {
             // Create cluster reader.
@@ -32,23 +37,24 @@ impl EntrySet {
 
             loop {
                 // Read primary entry.
-                let (entry_index, entry) = reader.read()?;
-                let ty = EntryType(entry[0]);
+                let entry = reader.read()?;
+                let ty = EntryType(entry.data[0]);
 
                 if !ty.is_regular() {
                     break 'cluster_chain;
                 } else if ty.type_category() != EntryType::PRIMARY {
-                    return Err(LoadEntriesError::NotPrimary(entry_index, cluster_index));
+                    return Err(LoadEntriesError::NotPrimary(entry.index, entry.cluster));
                 }
 
                 // Parse primary entry.
                 match (ty.type_importance(), ty.type_code()) {
+                    (EntryType::CRITICAL, 1) => set.read_allocation_bitmap(entry)?,
                     (EntryType::CRITICAL, 3) => set.read_volume_label(entry)?,
                     _ => {
                         return Err(LoadEntriesError::UnknownEntry(
                             ty,
-                            entry_index,
-                            cluster_index,
+                            entry.index,
+                            entry.cluster,
                         ));
                     }
                 }
@@ -58,20 +64,45 @@ impl EntrySet {
         Ok(set)
     }
 
-    fn read_volume_label(&mut self, entry: [u8; 32]) -> Result<(), LoadEntriesError> {
+    fn read_allocation_bitmap(&mut self, entry: RawEntry) -> Result<(), LoadEntriesError> {
+        // Get next index.
+        let index = if self.allocation_bitmaps[1].is_some() {
+            return Err(LoadEntriesError::TooManyAllocationBitmap);
+        } else if self.allocation_bitmaps[0].is_some() {
+            1
+        } else {
+            0
+        };
+
+        // Load fields.
+        let data = entry.data.as_ptr();
+        let bitmap_flags = read_u8(data, 1) as usize;
+
+        if (bitmap_flags & 1) != index {
+            return Err(LoadEntriesError::WrongAllocationBitmap);
+        }
+
+        // Update set.
+        self.allocation_bitmaps[index] = Some(DataDescriptor::load(&entry)?);
+
+        Ok(())
+    }
+
+    fn read_volume_label(&mut self, entry: RawEntry) -> Result<(), LoadEntriesError> {
         // Check if more than one volume label.
         if self.volume_label.is_some() {
             return Err(LoadEntriesError::MultipleVolumeLabel);
         }
 
         // Load fields.
-        let character_count = entry[1] as usize;
+        let data = entry.data;
+        let character_count = data[1] as usize;
 
         if character_count > 11 {
             return Err(LoadEntriesError::InvalidVolumeLabel);
         }
 
-        let volume_label = &entry[2..(2 + character_count * 2)];
+        let volume_label = &data[2..(2 + character_count * 2)];
 
         // Update set.
         self.volume_label = Some(String::from_utf16_lossy(util::slice::from_bytes(
@@ -97,7 +128,7 @@ impl<'a, I: Read + Seek> SetReader<'a, I> {
         }
     }
 
-    fn read(&mut self) -> Result<(usize, [u8; 32]), LoadEntriesError> {
+    fn read(&mut self) -> Result<RawEntry, LoadEntriesError> {
         let index = self.entry_index;
         let entry: [u8; 32] = match util::io::read_array(&mut self.cluster_reader) {
             Ok(v) => v,
@@ -112,8 +143,18 @@ impl<'a, I: Read + Seek> SetReader<'a, I> {
 
         self.entry_index += 1;
 
-        Ok((index, entry))
+        Ok(RawEntry {
+            index,
+            cluster: self.cluster_index,
+            data: entry,
+        })
     }
+}
+
+struct RawEntry {
+    index: usize,
+    cluster: usize,
+    data: [u8; 32],
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -165,12 +206,56 @@ impl Display for EntryType {
     }
 }
 
+pub(crate) struct DataDescriptor {
+    first_cluster: usize,
+    data_length: u64,
+}
+
+impl DataDescriptor {
+    fn load(entry: &RawEntry) -> Result<Self, LoadEntriesError> {
+        let data = entry.data.as_ptr();
+        let first_cluster = read_u32_le(data, 20) as usize;
+        let data_length = read_u64_le(data, 24);
+
+        if first_cluster == 0 {
+            if data_length != 0 {
+                return Err(LoadEntriesError::InvalidDataLength(
+                    entry.index,
+                    entry.cluster,
+                ));
+            }
+        } else if first_cluster < 2 {
+            return Err(LoadEntriesError::InvalidFirstCluster(
+                entry.index,
+                entry.cluster,
+            ));
+        }
+
+        Ok(Self {
+            first_cluster,
+            data_length,
+        })
+    }
+
+    pub fn first_cluster(&self) -> usize {
+        self.first_cluster
+    }
+
+    pub fn data_length(&self) -> u64 {
+        self.data_length
+    }
+}
+
 #[derive(Debug)]
 pub enum LoadEntriesError {
     CreateClusterReaderFailed(usize, crate::cluster::NewError),
     ReadEntryFailed(usize, usize, std::io::Error),
     NotPrimary(usize, usize),
     UnknownEntry(EntryType, usize, usize),
+    InvalidFirstCluster(usize, usize),
+    InvalidDataLength(usize, usize),
+    TooManyAllocationBitmap,
+    WrongAllocationBitmap,
     MultipleVolumeLabel,
     InvalidVolumeLabel,
 }
@@ -200,7 +285,23 @@ impl Display for LoadEntriesError {
             Self::UnknownEntry(t, e, c) => {
                 write!(f, "unknown entry #{} on cluster #{} ({})", e, c, t)
             }
-            Self::MultipleVolumeLabel => f.write_str("multiple volume label"),
+            Self::InvalidFirstCluster(e, c) => write!(
+                f,
+                "invalid FirstCluster at entry #{} from cluster #{}",
+                e, c
+            ),
+            Self::InvalidDataLength(e, c) => {
+                write!(f, "invalid DataLength at entry #{} from cluster #{}", e, c)
+            }
+            Self::TooManyAllocationBitmap => {
+                f.write_str("more than 2 allocation bitmaps exists in the directory")
+            }
+            Self::WrongAllocationBitmap => {
+                f.write_str("allocation bitmap in the directory is not for its corresponding FAT")
+            }
+            Self::MultipleVolumeLabel => {
+                f.write_str("multiple volume label exists in the directory")
+            }
             Self::InvalidVolumeLabel => f.write_str("invalid volume label"),
         }
     }

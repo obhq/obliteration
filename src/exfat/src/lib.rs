@@ -5,7 +5,7 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::{Read, Seek};
 use std::sync::Arc;
-use util::mem::{read_u32_le, read_u8};
+use util::mem::{read_u16_le, read_u32_le, read_u8};
 
 pub mod cluster;
 pub mod directory;
@@ -40,13 +40,35 @@ impl<I: Read + Seek> ExFat<I> {
             cluster_heap_offset: read_u32_le(boot, 88) as u64,
             cluster_count: read_u32_le(boot, 92) as usize,
             first_cluster_of_root_directory: read_u32_le(boot, 96) as usize,
-            bytes_per_sector: match read_u8(boot, 108) {
-                v if v >= 9 && v <= 12 => 1u64 << v,
-                _ => return Err(OpenError::InvalidBytesPerSectorShift),
+            volume_flags: read_u16_le(boot, 106).into(),
+            bytes_per_sector: {
+                let v = read_u8(boot, 108);
+
+                if v >= 9 && v <= 12 {
+                    1u64 << v
+                } else {
+                    return Err(OpenError::InvalidBytesPerSectorShift);
+                }
             },
-            sectors_per_cluster: match read_u8(boot, 109) {
-                v if v <= 25 - read_u8(boot, 108) => 1u64 << v,
-                _ => return Err(OpenError::InvalidSectorsPerClusterShift),
+            sectors_per_cluster: {
+                let v = read_u8(boot, 109);
+
+                // No need to check if subtraction is underflow because we already checked for the
+                // valid value on the above.
+                if v <= (25 - read_u8(boot, 108)) {
+                    1u64 << v
+                } else {
+                    return Err(OpenError::InvalidSectorsPerClusterShift);
+                }
+            },
+            number_of_fats: {
+                let v = read_u8(boot, 110);
+
+                if v == 1 || v == 2 {
+                    v
+                } else {
+                    return Err(OpenError::InvalidNumberOfFats);
+                }
             },
         });
 
@@ -82,6 +104,7 @@ pub enum OpenError {
     NotExFat,
     InvalidBytesPerSectorShift,
     InvalidSectorsPerClusterShift,
+    InvalidNumberOfFats,
     ReadFatRegionFailed(fat::LoadError),
     ReadRootFailed(directory::entry::LoadEntriesError),
 }
@@ -104,6 +127,7 @@ impl Display for OpenError {
             Self::NotExFat => f.write_str("image is not exFAT"),
             Self::InvalidBytesPerSectorShift => f.write_str("invalid BytesPerSectorShift"),
             Self::InvalidSectorsPerClusterShift => f.write_str("invalid SectorsPerClusterShift"),
+            Self::InvalidNumberOfFats => f.write_str("invalid NumberOfFats"),
             Self::ReadFatRegionFailed(_) => f.write_str("cannot read FAT region"),
             Self::ReadRootFailed(_) => f.write_str("cannot read root directory"),
         }
