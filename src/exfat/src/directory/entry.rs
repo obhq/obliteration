@@ -7,8 +7,9 @@ use std::io::{Read, Seek};
 use util::mem::{read_u32_le, read_u64_le, read_u8};
 
 pub(crate) struct EntrySet {
-    pub volume_label: Option<String>,
     pub allocation_bitmaps: [Option<DataDescriptor>; 2],
+    pub upcase_table: Option<UpcaseTableDescriptor>,
+    pub volume_label: Option<String>,
 }
 
 impl EntrySet {
@@ -19,8 +20,9 @@ impl EntrySet {
         first_cluster: usize,
     ) -> Result<Self, LoadEntriesError> {
         let mut set = Self {
-            volume_label: None,
             allocation_bitmaps: [None, None],
+            upcase_table: None,
+            volume_label: None,
         };
 
         'cluster_chain: for cluster_index in fat.get_cluster_chain(first_cluster) {
@@ -49,6 +51,7 @@ impl EntrySet {
                 // Parse primary entry.
                 match (ty.type_importance(), ty.type_code()) {
                     (EntryType::CRITICAL, 1) => set.read_allocation_bitmap(entry)?,
+                    (EntryType::CRITICAL, 2) => set.read_upcase_table(entry)?,
                     (EntryType::CRITICAL, 3) => set.read_volume_label(entry)?,
                     _ => {
                         return Err(LoadEntriesError::UnknownEntry(
@@ -84,6 +87,23 @@ impl EntrySet {
 
         // Update set.
         self.allocation_bitmaps[index] = Some(DataDescriptor::load(&entry)?);
+
+        Ok(())
+    }
+
+    fn read_upcase_table(&mut self, entry: RawEntry) -> Result<(), LoadEntriesError> {
+        // Check if more than one up-case table.
+        if self.upcase_table.is_some() {
+            return Err(LoadEntriesError::MultipleUpcaseTable);
+        }
+
+        // Load fields.
+        let data = entry.data.as_ptr();
+        let checksum = read_u32_le(data, 4);
+        let data = DataDescriptor::load(&entry)?;
+
+        // Update set.
+        self.upcase_table = Some(UpcaseTableDescriptor { checksum, data });
 
         Ok(())
     }
@@ -246,6 +266,21 @@ impl DataDescriptor {
     }
 }
 
+pub(crate) struct UpcaseTableDescriptor {
+    checksum: u32,
+    data: DataDescriptor,
+}
+
+impl UpcaseTableDescriptor {
+    pub fn checksum(&self) -> u32 {
+        self.checksum
+    }
+
+    pub fn data(&self) -> &DataDescriptor {
+        &self.data
+    }
+}
+
 #[derive(Debug)]
 pub enum LoadEntriesError {
     CreateClusterReaderFailed(usize, crate::cluster::NewError),
@@ -256,6 +291,7 @@ pub enum LoadEntriesError {
     InvalidDataLength(usize, usize),
     TooManyAllocationBitmap,
     WrongAllocationBitmap,
+    MultipleUpcaseTable,
     MultipleVolumeLabel,
     InvalidVolumeLabel,
 }
@@ -298,6 +334,9 @@ impl Display for LoadEntriesError {
             }
             Self::WrongAllocationBitmap => {
                 f.write_str("allocation bitmap in the directory is not for its corresponding FAT")
+            }
+            Self::MultipleUpcaseTable => {
+                f.write_str("multiple up-case table exists in the directory")
             }
             Self::MultipleVolumeLabel => {
                 f.write_str("multiple volume label exists in the directory")
