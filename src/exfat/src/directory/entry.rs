@@ -1,15 +1,17 @@
 use crate::cluster::ClusterReader;
 use crate::fat::Fat;
 use crate::param::Params;
+use std::cmp::min;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::{Read, Seek};
-use util::mem::{read_u32_le, read_u64_le, read_u8};
+use util::mem::{read_u16_le, read_u32_le, read_u64_le, read_u8};
 
 pub(crate) struct EntrySet {
     pub allocation_bitmaps: [Option<DataDescriptor>; 2],
     pub upcase_table: Option<UpcaseTableDescriptor>,
     pub volume_label: Option<String>,
+    pub files: Vec<FileDescriptor>,
 }
 
 impl EntrySet {
@@ -23,6 +25,7 @@ impl EntrySet {
             allocation_bitmaps: [None, None],
             upcase_table: None,
             volume_label: None,
+            files: Vec::new(),
         };
 
         'cluster_chain: for cluster_index in fat.get_cluster_chain(first_cluster) {
@@ -53,6 +56,7 @@ impl EntrySet {
                     (EntryType::CRITICAL, 1) => set.read_allocation_bitmap(entry)?,
                     (EntryType::CRITICAL, 2) => set.read_upcase_table(entry)?,
                     (EntryType::CRITICAL, 3) => set.read_volume_label(entry)?,
+                    (EntryType::CRITICAL, 5) => set.read_file(entry, &mut reader)?,
                     _ => {
                         return Err(LoadEntriesError::UnknownEntry(
                             ty,
@@ -131,6 +135,146 @@ impl EntrySet {
 
         Ok(())
     }
+
+    fn read_file<I: Read + Seek>(
+        &mut self,
+        entry: RawEntry,
+        directory: &mut SetReader<I>,
+    ) -> Result<(), LoadEntriesError> {
+        // Get number of secondary entries.
+        let secondary_count = entry.data[1] as usize;
+
+        if secondary_count < 1 {
+            return Err(LoadEntriesError::NoStreamExtension(
+                entry.index,
+                entry.cluster,
+            ));
+        } else if secondary_count < 2 {
+            return Err(LoadEntriesError::NoFileName(entry.index, entry.cluster));
+        }
+
+        // Read stream extension.
+        let stream = directory.read()?;
+        let ty = stream.ty();
+
+        if !ty.is_critical_secondary(0) {
+            return Err(LoadEntriesError::WrongEntry(
+                ty,
+                stream.index,
+                stream.cluster,
+            ));
+        }
+
+        // Read file names.
+        let mut names: Vec<RawEntry> = Vec::with_capacity(secondary_count - 1);
+
+        for _ in 0..names.capacity() {
+            let entry = directory.read()?;
+            let ty = entry.ty();
+
+            if !ty.is_critical_secondary(1) {
+                return Err(LoadEntriesError::WrongEntry(ty, entry.index, entry.cluster));
+            }
+
+            names.push(entry);
+        }
+
+        // Load fields.
+        let data = entry.data.as_ptr();
+        let file_attributes = FileAttributes(read_u16_le(data, 4));
+
+        // Update set.
+        let stream = Self::read_stream(stream)?;
+        let name = Self::read_file_names(&entry, &stream, &names)?;
+
+        self.files.push(FileDescriptor {
+            attributes: file_attributes,
+            stream,
+            name,
+        });
+
+        Ok(())
+    }
+
+    fn read_stream(entry: RawEntry) -> Result<StreamDescriptor, LoadEntriesError> {
+        // Load fields.
+        let data = entry.data.as_ptr();
+        let general_secondary_flags = SecondaryFlags(read_u8(data, 1));
+
+        if !general_secondary_flags.allocation_possible() {
+            return Err(LoadEntriesError::InvalidStreamExtension(
+                entry.index,
+                entry.cluster,
+            ));
+        }
+
+        let name_length = read_u8(data, 3) as usize;
+
+        if name_length < 1 {
+            return Err(LoadEntriesError::InvalidStreamExtension(
+                entry.index,
+                entry.cluster,
+            ));
+        }
+
+        let valid_data_length = read_u64_le(data, 8);
+        let data = DataDescriptor::load(&entry)?;
+
+        if valid_data_length > data.data_length {
+            return Err(LoadEntriesError::InvalidStreamExtension(
+                entry.index,
+                entry.cluster,
+            ));
+        }
+
+        Ok(StreamDescriptor {
+            no_fat_chain: general_secondary_flags.no_fat_chain(),
+            name_length,
+            valid_data_length,
+        })
+    }
+
+    fn read_file_names(
+        file: &RawEntry,
+        stream: &StreamDescriptor,
+        names: &[RawEntry],
+    ) -> Result<String, LoadEntriesError> {
+        // TODO: Use div_ceil when https://github.com/rust-lang/rust/issues/88581 stabilized.
+        if names.len() != (stream.name_length + 15 - 1) / 15 {
+            return Err(LoadEntriesError::WrongFileNames(file.index, file.cluster));
+        }
+
+        let mut need = stream.name_length * 2;
+        let mut name = String::with_capacity(15 * names.len());
+
+        for entry in names {
+            let data = &entry.data;
+            let general_secondary_flags = SecondaryFlags(data[1]);
+
+            if general_secondary_flags.allocation_possible() {
+                return Err(LoadEntriesError::InvalidFileName(
+                    entry.index,
+                    entry.cluster,
+                ));
+            }
+
+            let file_name = &data[2..(2 + min(30, need))];
+
+            need -= file_name.len();
+
+            match String::from_utf16(util::slice::from_bytes(file_name)) {
+                Ok(v) => name.push_str(&v),
+                Err(_) => {
+                    return Err(LoadEntriesError::InvalidFileName(
+                        entry.index,
+                        entry.cluster,
+                    ));
+                }
+            }
+        }
+
+        Ok(name)
+    }
 }
 
 struct SetReader<'a, I: Read + Seek> {
@@ -177,6 +321,12 @@ struct RawEntry {
     data: [u8; 32],
 }
 
+impl RawEntry {
+    fn ty(&self) -> EntryType {
+        EntryType(self.data[0])
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 #[repr(transparent)]
 pub struct EntryType(u8);
@@ -202,6 +352,13 @@ impl EntryType {
     pub fn type_category(self) -> u8 {
         (self.0 & 0x40) >> 6
     }
+
+    pub fn is_critical_secondary(self, code: u8) -> bool {
+        self.is_regular()
+            && self.type_importance() == Self::CRITICAL
+            && self.type_category() == Self::SECONDARY
+            && self.type_code() == code
+    }
 }
 
 impl Display for EntryType {
@@ -223,6 +380,20 @@ impl Display for EntryType {
         } else {
             write!(f, "{:#04x}", self.0)
         }
+    }
+}
+
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+struct SecondaryFlags(u8);
+
+impl SecondaryFlags {
+    fn allocation_possible(self) -> bool {
+        (self.0 & 1) != 0
+    }
+
+    fn no_fat_chain(self) -> bool {
+        (self.0 & 2) != 0
     }
 }
 
@@ -281,12 +452,79 @@ impl UpcaseTableDescriptor {
     }
 }
 
+pub(crate) struct FileDescriptor {
+    attributes: FileAttributes,
+    stream: StreamDescriptor,
+    name: String,
+}
+
+impl FileDescriptor {
+    pub fn attributes(&self) -> FileAttributes {
+        self.attributes
+    }
+
+    pub fn stream(&self) -> &StreamDescriptor {
+        &self.stream
+    }
+
+    pub fn name(&self) -> &str {
+        self.name.as_ref()
+    }
+}
+
+#[derive(Clone, Copy)]
+#[repr(transparent)]
+pub struct FileAttributes(u16);
+
+impl FileAttributes {
+    pub fn is_read_only(self) -> bool {
+        (self.0 & 0x0001) != 0
+    }
+
+    pub fn is_hidden(self) -> bool {
+        (self.0 & 0x0002) != 0
+    }
+
+    pub fn is_system(self) -> bool {
+        (self.0 & 0x0004) != 0
+    }
+
+    pub fn is_directory(self) -> bool {
+        (self.0 & 0x0010) != 0
+    }
+
+    pub fn is_archive(self) -> bool {
+        (self.0 & 0x0020) != 0
+    }
+}
+
+pub(crate) struct StreamDescriptor {
+    no_fat_chain: bool,
+    name_length: usize,
+    valid_data_length: u64,
+}
+
+impl StreamDescriptor {
+    pub fn no_fat_chain(&self) -> bool {
+        self.no_fat_chain
+    }
+
+    pub fn name_length(&self) -> usize {
+        self.name_length
+    }
+
+    pub fn valid_data_length(&self) -> u64 {
+        self.valid_data_length
+    }
+}
+
 #[derive(Debug)]
 pub enum LoadEntriesError {
     CreateClusterReaderFailed(usize, crate::cluster::NewError),
     ReadEntryFailed(usize, usize, std::io::Error),
     NotPrimary(usize, usize),
     UnknownEntry(EntryType, usize, usize),
+    WrongEntry(EntryType, usize, usize),
     InvalidFirstCluster(usize, usize),
     InvalidDataLength(usize, usize),
     TooManyAllocationBitmap,
@@ -294,6 +532,11 @@ pub enum LoadEntriesError {
     MultipleUpcaseTable,
     MultipleVolumeLabel,
     InvalidVolumeLabel,
+    NoStreamExtension(usize, usize),
+    NoFileName(usize, usize),
+    InvalidStreamExtension(usize, usize),
+    WrongFileNames(usize, usize),
+    InvalidFileName(usize, usize),
 }
 
 impl Error for LoadEntriesError {
@@ -321,6 +564,9 @@ impl Display for LoadEntriesError {
             Self::UnknownEntry(t, e, c) => {
                 write!(f, "unknown entry #{} on cluster #{} ({})", e, c, t)
             }
+            Self::WrongEntry(t, e, c) => {
+                write!(f, "entry #{} on cluster #{} cannot be {}", e, c, t)
+            }
             Self::InvalidFirstCluster(e, c) => write!(
                 f,
                 "invalid FirstCluster at entry #{} from cluster #{}",
@@ -342,6 +588,27 @@ impl Display for LoadEntriesError {
                 f.write_str("multiple volume label exists in the directory")
             }
             Self::InvalidVolumeLabel => f.write_str("invalid volume label"),
+            Self::NoStreamExtension(e, c) => write!(
+                f,
+                "no stream extension is followed entry #{} on cluster #{}",
+                e, c
+            ),
+            Self::NoFileName(e, c) => {
+                write!(f, "no file name is followed entry #{} on cluster #{}", e, c)
+            }
+            Self::InvalidStreamExtension(e, c) => write!(
+                f,
+                "entry #{} on cluster #{} is not a valid stream extension",
+                e, c
+            ),
+            Self::WrongFileNames(c, e) => write!(
+                f,
+                "entry #{} on cluster #{} has wrong number of file names",
+                e, c
+            ),
+            Self::InvalidFileName(c, e) => {
+                write!(f, "entry #{} on cluster #{} is not a valid file name", e, c)
+            }
         }
     }
 }
