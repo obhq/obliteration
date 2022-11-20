@@ -1,5 +1,6 @@
 pub(crate) struct Params {
     pub fat_offset: u64,          // in sector
+    pub fat_length: u64,          // in sector
     pub cluster_heap_offset: u64, // in sector
     pub cluster_count: usize,
     pub first_cluster_of_root_directory: usize,
@@ -14,8 +15,8 @@ pub(crate) struct Params {
 pub(crate) struct VolumeFlags(u16);
 
 impl VolumeFlags {
-    pub fn active_fat(self) -> u16 {
-        self.0 & 1
+    pub fn active_fat(self) -> usize {
+        (self.0 & 1) as usize
     }
 }
 

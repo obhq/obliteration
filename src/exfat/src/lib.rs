@@ -37,6 +37,7 @@ impl<I: Read + Seek> ExFat<I> {
         let boot = boot.as_ptr();
         let params = Arc::new(Params {
             fat_offset: read_u32_le(boot, 80) as u64,
+            fat_length: read_u32_le(boot, 84) as u64,
             cluster_heap_offset: read_u32_le(boot, 88) as u64,
             cluster_count: read_u32_le(boot, 92) as usize,
             first_cluster_of_root_directory: read_u32_le(boot, 96) as usize,
@@ -73,9 +74,14 @@ impl<I: Read + Seek> ExFat<I> {
         });
 
         // Read FAT region.
-        let fat = match Fat::load(&params, &mut image) {
-            Ok(v) => v,
-            Err(e) => return Err(OpenError::ReadFatRegionFailed(e)),
+        let active_fat = params.volume_flags.active_fat();
+        let fat = if active_fat == 0 || params.number_of_fats == 2 {
+            match Fat::load(&params, &mut image, active_fat) {
+                Ok(v) => v,
+                Err(e) => return Err(OpenError::ReadFatRegionFailed(e)),
+            }
+        } else {
+            return Err(OpenError::InvalidNumberOfFats);
         };
 
         // Load root directory.

@@ -10,9 +10,21 @@ pub(super) struct Fat {
 }
 
 impl Fat {
-    pub fn load<I: Read + Seek>(params: &Params, image: &mut I) -> Result<Self, LoadError> {
+    pub fn load<I: Read + Seek>(
+        params: &Params,
+        image: &mut I,
+        index: usize,
+    ) -> Result<Self, LoadError> {
         // Seek to FAT region.
-        let offset = match params.fat_offset.checked_mul(params.bytes_per_sector) {
+        let sector = match params.fat_length.checked_mul(index as u64) {
+            Some(v) => match params.fat_offset.checked_add(v) {
+                Some(v) => v,
+                None => return Err(LoadError::InvalidFatOffset),
+            },
+            None => return Err(LoadError::InvalidFatLength),
+        };
+
+        let offset = match sector.checked_mul(params.bytes_per_sector) {
             Some(v) => v,
             None => return Err(LoadError::InvalidFatOffset),
         };
@@ -70,6 +82,7 @@ impl<'fat> Iterator for ClusterChain<'fat> {
 
 #[derive(Debug)]
 pub enum LoadError {
+    InvalidFatLength,
     InvalidFatOffset,
     IoFailed(std::io::Error),
 }
@@ -86,6 +99,7 @@ impl Error for LoadError {
 impl Display for LoadError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::InvalidFatLength => f.write_str("invalid FatLength"),
             Self::InvalidFatOffset => f.write_str("invalid FatOffset"),
             Self::IoFailed(_) => f.write_str("I/O failed"),
         }
