@@ -2,12 +2,31 @@ pub(crate) struct Params {
     pub fat_offset: u64,          // in sector
     pub fat_length: u64,          // in sector
     pub cluster_heap_offset: u64, // in sector
-    pub cluster_count: usize,
+    pub cluster_count: usize,     // not including the first 2 pseudo clusters
     pub first_cluster_of_root_directory: usize,
     pub volume_flags: VolumeFlags,
     pub bytes_per_sector: u64,
     pub sectors_per_cluster: u64,
     pub number_of_fats: u8,
+}
+
+impl Params {
+    pub fn cluster_offset(&self, index: usize) -> Option<u64> {
+        if index < 2 {
+            return None;
+        }
+
+        let index = index - 2;
+
+        if index >= self.cluster_count {
+            return None;
+        }
+
+        let sector = self.cluster_heap_offset + self.sectors_per_cluster * index as u64;
+        let offset = self.bytes_per_sector * sector;
+
+        Some(offset)
+    }
 }
 
 #[derive(Clone, Copy)]

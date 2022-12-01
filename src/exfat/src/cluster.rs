@@ -1,58 +1,144 @@
+use crate::fat::Fat;
 use crate::param::Params;
 use std::cmp::min;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::io::SeekFrom::Start;
-use std::io::{Read, Seek};
+use std::io::{ErrorKind, Read, Seek, SeekFrom};
 
-pub(crate) struct ClusterReader<'a, I: Read + Seek> {
+pub(crate) struct ClustersReader<'a, I: Read + Seek> {
+    params: &'a Params,
     image: &'a mut I,
-    begin: u64,
-    end: u64,
-    offset: u64,
+    chain: Vec<usize>,
+    cluster_size: u64, // in bytes
+    tail_size: u64,
+    cluster: usize, // index into chain
+    offset: u64,    // offset into current cluster
 }
 
-impl<'a, I: Read + Seek> ClusterReader<'a, I> {
-    pub fn new(params: &Params, image: &'a mut I, index: usize) -> Result<Self, NewError> {
-        if index < 2 {
-            return Err(NewError::InvalidIndex);
+impl<'a, I: Read + Seek> ClustersReader<'a, I> {
+    pub fn new(
+        params: &'a Params,
+        fat: &Fat,
+        image: &'a mut I,
+        first_cluster: usize,
+        data_length: Option<u64>,
+    ) -> Result<Self, NewError> {
+        if first_cluster < 2 {
+            return Err(NewError::InvalidFirstCluster);
         }
 
-        let cluster = index as u64 - 2;
-        let first_sector = params.cluster_heap_offset + (params.sectors_per_cluster * cluster);
-        let begin = params.bytes_per_sector * first_sector;
+        // Get cluster chain.
+        let chain: Vec<usize> = fat.get_cluster_chain(first_cluster).collect();
 
-        match image.seek(Start(begin)) {
-            Ok(v) => {
-                if v != begin {
-                    return Err(NewError::InvalidClusterHeapOffset);
+        if chain.is_empty() {
+            return Err(NewError::InvalidFirstCluster);
+        }
+
+        // Get data length.
+        let cluster_size = params.bytes_per_sector * params.sectors_per_cluster;
+        let data_length = match data_length {
+            Some(v) => {
+                if v > cluster_size * chain.len() as u64 {
+                    return Err(NewError::InvalidDataLength);
+                } else {
+                    v
                 }
             }
-            Err(e) => return Err(NewError::IoFailed(e)),
+            None => params.bytes_per_sector * (params.sectors_per_cluster * chain.len() as u64),
+        };
+
+        let tail_size = data_length % cluster_size;
+
+        // Seek to first cluster.
+        let mut reader = Self {
+            params,
+            image,
+            chain,
+            cluster_size,
+            tail_size: if tail_size == 0 {
+                cluster_size
+            } else {
+                tail_size
+            },
+            cluster: 0,
+            offset: 0,
+        };
+
+        if let Err(e) = reader.seek() {
+            return Err(NewError::IoFailed(e));
         }
 
-        Ok(Self {
-            image,
-            begin,
-            end: params.bytes_per_sector * (first_sector + params.sectors_per_cluster),
-            offset: 0,
-        })
+        Ok(reader)
+    }
+
+    pub fn cluster(&self) -> usize {
+        self.chain[self.cluster]
+    }
+
+    fn seek(&mut self) -> Result<(), std::io::Error> {
+        // Get offset into image.
+        let cluster = self.cluster();
+        let offset = match self.params.cluster_offset(cluster) {
+            Some(v) => v + self.offset,
+            None => {
+                return Err(std::io::Error::new(
+                    ErrorKind::Other,
+                    format!("cluster #{} is not available", cluster),
+                ));
+            }
+        };
+
+        // Seek image reader.
+        match self.image.seek(SeekFrom::Start(offset)) {
+            Ok(v) => {
+                if v != offset {
+                    return Err(std::io::Error::new(
+                        ErrorKind::Other,
+                        format!("cluster #{} is not available", cluster),
+                    ));
+                }
+            }
+            Err(e) => return Err(e),
+        }
+
+        Ok(())
     }
 }
 
-impl<'a, I: Read + Seek> Read for ClusterReader<'a, I> {
+impl<'a, I: Read + Seek> Read for ClustersReader<'a, I> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let offset = self.begin + self.offset;
-
-        if buf.is_empty() || offset == self.end {
+        // Check if the actual read is required.
+        if buf.is_empty() || self.cluster == self.chain.len() {
             return Ok(0);
         }
 
-        let remain = self.end - offset;
-        let amount = min(buf.len(), remain as usize);
-        let read = self.image.read(&mut buf[..amount])?;
+        // Get cluster size.
+        let cluster_size = if self.cluster == self.chain.len() - 1 {
+            self.tail_size
+        } else {
+            self.cluster_size
+        };
+
+        // Read image.
+        let remaining = cluster_size - self.offset;
+        let target = min(buf.len(), remaining as usize);
+        let read = self.image.read(&mut buf[..target])?;
+
+        if read == 0 {
+            return Err(ErrorKind::UnexpectedEof.into());
+        }
 
         self.offset += read as u64;
+
+        // Check if all data in the current cluster is read.
+        if self.offset == cluster_size {
+            self.cluster += 1;
+            self.offset = 0;
+
+            if self.cluster < self.chain.len() {
+                self.seek()?;
+            }
+        }
 
         Ok(read)
     }
@@ -60,8 +146,8 @@ impl<'a, I: Read + Seek> Read for ClusterReader<'a, I> {
 
 #[derive(Debug)]
 pub enum NewError {
-    InvalidIndex,
-    InvalidClusterHeapOffset,
+    InvalidFirstCluster,
+    InvalidDataLength,
     IoFailed(std::io::Error),
 }
 
@@ -77,8 +163,8 @@ impl Error for NewError {
 impl Display for NewError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::InvalidIndex => f.write_str("the specified index is not valid"),
-            Self::InvalidClusterHeapOffset => f.write_str("invalid ClusterHeapOffset"),
+            Self::InvalidFirstCluster => f.write_str("first cluster is not valid"),
+            Self::InvalidDataLength => f.write_str("data length is not valid"),
             Self::IoFailed(_) => f.write_str("I/O failed"),
         }
     }

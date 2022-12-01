@@ -219,8 +219,10 @@ impl<'pup> Seek for BlockedReader<'pup> {
             }
         };
 
-        self.current_block.clear();
-        self.offset = offset as usize;
+        if offset as usize != self.offset {
+            self.current_block.clear();
+            self.offset = offset as usize;
+        }
 
         Ok(offset)
     }

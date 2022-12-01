@@ -1,4 +1,4 @@
-use crate::cluster::ClusterReader;
+use crate::cluster::ClustersReader;
 use crate::fat::Fat;
 use crate::param::Params;
 use std::cmp::min;
@@ -28,42 +28,34 @@ impl EntrySet {
             files: Vec::new(),
         };
 
-        'cluster_chain: for cluster_index in fat.get_cluster_chain(first_cluster) {
-            // Create cluster reader.
-            let mut reader = match ClusterReader::new(params, image, cluster_index) {
-                Ok(v) => SetReader::new(v, cluster_index),
-                Err(e) => {
-                    return Err(LoadEntriesError::CreateClusterReaderFailed(
-                        cluster_index,
-                        e,
+        let mut reader = match ClustersReader::new(params, fat, image, first_cluster, None) {
+            Ok(v) => SetReader::new(v),
+            Err(e) => return Err(LoadEntriesError::CreateClustersReaderFailed(e)),
+        };
+
+        loop {
+            // Read primary entry.
+            let entry = reader.read()?;
+            let ty = EntryType(entry.data[0]);
+
+            if !ty.is_regular() {
+                break;
+            } else if ty.type_category() != EntryType::PRIMARY {
+                return Err(LoadEntriesError::NotPrimary(entry.index, entry.cluster));
+            }
+
+            // Parse primary entry.
+            match (ty.type_importance(), ty.type_code()) {
+                (EntryType::CRITICAL, 1) => set.read_allocation_bitmap(entry)?,
+                (EntryType::CRITICAL, 2) => set.read_upcase_table(entry)?,
+                (EntryType::CRITICAL, 3) => set.read_volume_label(entry)?,
+                (EntryType::CRITICAL, 5) => set.read_file(entry, &mut reader)?,
+                _ => {
+                    return Err(LoadEntriesError::UnknownEntry(
+                        ty,
+                        entry.index,
+                        entry.cluster,
                     ));
-                }
-            };
-
-            loop {
-                // Read primary entry.
-                let entry = reader.read()?;
-                let ty = EntryType(entry.data[0]);
-
-                if !ty.is_regular() {
-                    break 'cluster_chain;
-                } else if ty.type_category() != EntryType::PRIMARY {
-                    return Err(LoadEntriesError::NotPrimary(entry.index, entry.cluster));
-                }
-
-                // Parse primary entry.
-                match (ty.type_importance(), ty.type_code()) {
-                    (EntryType::CRITICAL, 1) => set.read_allocation_bitmap(entry)?,
-                    (EntryType::CRITICAL, 2) => set.read_upcase_table(entry)?,
-                    (EntryType::CRITICAL, 3) => set.read_volume_label(entry)?,
-                    (EntryType::CRITICAL, 5) => set.read_file(entry, &mut reader)?,
-                    _ => {
-                        return Err(LoadEntriesError::UnknownEntry(
-                            ty,
-                            entry.index,
-                            entry.cluster,
-                        ));
-                    }
                 }
             }
         }
@@ -278,38 +270,39 @@ impl EntrySet {
 }
 
 struct SetReader<'a, I: Read + Seek> {
-    cluster_reader: ClusterReader<'a, I>,
-    cluster_index: usize,
+    reader: ClustersReader<'a, I>,
     entry_index: usize,
 }
 
 impl<'a, I: Read + Seek> SetReader<'a, I> {
-    fn new(cluster_reader: ClusterReader<'a, I>, cluster_index: usize) -> Self {
+    fn new(reader: ClustersReader<'a, I>) -> Self {
         Self {
-            cluster_reader,
-            cluster_index,
+            reader,
             entry_index: 0,
         }
     }
 
+    fn cluster_index(&self) -> usize {
+        self.reader.cluster()
+    }
+
     fn read(&mut self) -> Result<RawEntry, LoadEntriesError> {
+        let cluster = self.cluster_index();
         let index = self.entry_index;
-        let entry: [u8; 32] = match util::io::read_array(&mut self.cluster_reader) {
+        let entry: [u8; 32] = match util::io::read_array(&mut self.reader) {
             Ok(v) => v,
-            Err(e) => {
-                return Err(LoadEntriesError::ReadEntryFailed(
-                    index,
-                    self.cluster_index,
-                    e,
-                ));
-            }
+            Err(e) => return Err(LoadEntriesError::ReadEntryFailed(index, cluster, e)),
         };
 
-        self.entry_index += 1;
+        if self.cluster_index() != cluster {
+            self.entry_index = 0;
+        } else {
+            self.entry_index += 1;
+        }
 
         Ok(RawEntry {
             index,
-            cluster: self.cluster_index,
+            cluster,
             data: entry,
         })
     }
@@ -520,7 +513,7 @@ impl StreamDescriptor {
 
 #[derive(Debug)]
 pub enum LoadEntriesError {
-    CreateClusterReaderFailed(usize, crate::cluster::NewError),
+    CreateClustersReaderFailed(crate::cluster::NewError),
     ReadEntryFailed(usize, usize, std::io::Error),
     NotPrimary(usize, usize),
     UnknownEntry(EntryType, usize, usize),
@@ -542,7 +535,7 @@ pub enum LoadEntriesError {
 impl Error for LoadEntriesError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::CreateClusterReaderFailed(_, e) => Some(e),
+            Self::CreateClustersReaderFailed(e) => Some(e),
             Self::ReadEntryFailed(_, _, e) => Some(e),
             _ => None,
         }
@@ -552,8 +545,8 @@ impl Error for LoadEntriesError {
 impl Display for LoadEntriesError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::CreateClusterReaderFailed(i, _) => {
-                write!(f, "cannot create reader for cluster #{}", i)
+            Self::CreateClustersReaderFailed(_) => {
+                f.write_str("cannot create a reader for cluster chain")
             }
             Self::ReadEntryFailed(e, c, _) => {
                 write!(f, "cannot read entry #{} from cluster #{}", e, c)
