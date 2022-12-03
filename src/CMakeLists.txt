@@ -18,7 +18,7 @@ endif()
 ExternalProject_Add(core
     SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}
     CONFIGURE_COMMAND ""
-    BUILD_COMMAND cargo build $<IF:$<CONFIG:Debug>,-v,--release>
+    BUILD_COMMAND cargo build $<IF:$<CONFIG:Debug>,--profile=dev,--release>
     BUILD_IN_SOURCE ON
     BUILD_ALWAYS ON
     BUILD_BYPRODUCTS ${KERNEL} ${LIBCORE}

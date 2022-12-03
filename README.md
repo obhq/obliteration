@@ -1,10 +1,9 @@
 <p align="center">
-  <img alt="Obliteration" src="logo.png">
+  <img alt="Logo" src="logo.png">
 </p>
 
----
-
 ## About
+[![CI](https://github.com/ultimaweapon/obliteration/actions/workflows/main.yml/badge.svg)](https://github.com/ultimaweapon/obliteration/actions/workflows/main.yml)
 
 Obliteration is an experimental PS4 emulator using [Kyty](https://github.com/InoriRus/Kyty) and [Uplift](https://github.com/idc/uplift) as a reference. The project is under development and cannot run any games that Kyty is able to run yet.
 
@@ -14,8 +13,6 @@ Obliteration is an experimental PS4 emulator using [Kyty](https://github.com/Ino
 
 You can download Windows binary for the latest development [here](https://github.com/ultimaweapon/obliteration/actions/workflows/main.yml).
 
-[![CI](https://github.com/ultimaweapon/obliteration/actions/workflows/main.yml/badge.svg)](https://github.com/ultimaweapon/obliteration/actions/workflows/main.yml)
-
 ## Screenshots
 
 ![Game list](screenshots/game-list.png)
@@ -24,6 +21,7 @@ Thanks [Mou-Ikkai](https://github.com/Mou-Ikkai) for the awesome icon!
 
 ## Features
 
+- [ ] Built-in PUP file supports for decrypted PUP from [pup_decrypt](https://github.com/idc/ps4-pup_decrypt).
 - [x] Built-in PKG file supports for Fake PKG.
 - [x] Game library.
 - [x] Direct mounting PFS image.
@@ -44,74 +42,59 @@ Thanks [Mou-Ikkai](https://github.com/Mou-Ikkai) for the awesome icon!
 
 - [Microsoft Visual C++ 2019 Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist). It is likely your system already have it so try to run Obliteration first. If there is an error related to `msvcp140.dll`, `vcruntime140.dll` or `vcruntime140_1.dll` that mean you need to install this manually.
 
+## Get a required PS4 system files
+
+Obliteration required `PS4UPDATE1.PUP.dec` file in order to work. We can't provide these files due to legal reason. You can use [pup_decrypt](https://github.com/idc/ps4-pup_decrypt) to get `PS4UPDATE1.PUP.dec` from `PS4UPDATE.PUP` using your PS4.
+
 ## Building from source
 
 ### Windows prerequisites
 
+- Git
 - Visual Studio 2019
-- Rust 1.63
-- CMake 3.16
+  - `Desktop development with C++` workload is required
+  - You can use 2022 but you need to install `MSVC v142 - VS 2019 C++ x64/x86 build tools` component
+- Rust 1.63+
+- CMake 3.16+
+  - Make sure you have selected `Add CMake to the system PATH` when installing
 
 ### Linux prerequisites
 
-- GCC 9.4
-- Rust 1.63
-- CMake 3.16
+- Git
+- GCC 9.4+
+- Rust 1.63+
+- CMake 3.16+
 
-### Install Qt 6.2
+### Install Qt 6
 
-You need to install Qt 6.2 manually on your system before you proceed.
+You need to install Qt 6 on your system before you proceed. The minimum version is 6.2.
+
+#### Windows specific requirements
+
+You need `Qt Online Installer` for open-source to install Qt and it can be download from https://www.qt.io. The installer will ask you to sign in with Qt account, which you can create for free. You need to check `Custom installation` and do not check `Qt for desktop development` that is using MinGW toolchain. Make sure you have checked `MSVC 2019 64-bit` component in the `Select Components` page for the version you which to install and uncheck all of other components.
 
 ### Install Vulkan SDK
 
-For Windows just download from https://vulkan.lunarg.com/sdk/home. Once installed you need to restart your computer to make `VULKAN_SDK` environment variable effective.
+For Windows just download from https://vulkan.lunarg.com/sdk/home. The default installation options are sufficient.
 
 For Linux it will be depend on your distro. For Arch Linux just install `vulkan-devel` and set `VULKAN_SDK` to `/usr`. For other distro try to find in its package repository first. If not found visit https://vulkan.lunarg.com/sdk/home to download and install it manually.
 
-### Clone the repository
+### Open Qt Command Prompt (Windows only)
 
-You need to clone this repository with submodules like this:
-
-```sh
-git clone --recurse-submodules https://github.com/ultimaweapon/obliteration.git
-```
-
-### Initialize VCPKG
-
-Windows:
-
-```pwsh
-.\vcpkg\bootstrap-vcpkg.bat
-```
-
-Linux:
-
-```sh
-./vcpkg/bootstrap-vcpkg.sh
-```
-
-### Install external dependencies
-
-Windows:
-
-```pwsh
-.\vcpkg-restore.ps1
-```
-
-Linux:
-
-```sh
-./vcpkg-restore.sh
-```
-
-If the above command produced an error about Vulkan SDK that mean you have improper Vulkan SDK installed.
+You should restart your computer before you proceed to make sure all of environment variables that was updated from the previous steps is effective. Once restarted open `Qt 6.X.X (MSVC 2019 64-bit)` from Start > Qt.
 
 ### Configure build system
 
-Windows:
+Windows (Visual Studio 2019):
 
-```pwsh
+```bat
 cmake -B build -A x64
+```
+
+Windows (Visual Studio 2022):
+
+```bat
+cmake -B build -A x64 -T v142
 ```
 
 Linux:
@@ -124,7 +107,7 @@ cmake -B build -D CMAKE_BUILD_TYPE=Release
 
 Windows:
 
-```pwsh
+```bat
 cmake --build build --config Release
 ```
 
@@ -175,6 +158,10 @@ Create `.kernel-debug` in the root of repository. The content of this file is YA
 ### Action icons
 
 We use icons from https://materialdesignicons.com for action icon (e.g. on menu and toolbar).
+
+### Development discussion
+
+We have an IRC channel `#obliteration` on [OFTC](https://www.oftc.net) to discuss about the development. This channel is intended for discussion about the development and technical things only. You may get banned from the channel if you send other kind of messages that does not related to development.
 
 ## License
 

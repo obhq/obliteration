@@ -8,8 +8,6 @@ jobs:
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
-      with:
-        submodules: recursive
     - name: Install system dependencies
       run: |
         wget -qO - https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo apt-key add -
@@ -25,17 +23,6 @@ jobs:
         cache: true
         cache-key-prefix: ${{ runner.os }}-install-qt-action
         version: 6.2.*
-    - name: Initialize VCPKG
-      run: ./vcpkg/bootstrap-vcpkg.sh
-    - name: Cache VCPKG
-      uses: actions/cache@v3.0.11
-      id: cache-vcpkg
-      with:
-        path: /usr/local/share/vcpkg/packages
-        key: ${{ runner.os }}-VCPKG-${{ hashFiles('**/CMakeLists.txt', '**/Cargo.lock', '**/Cargo.toml') }}
-    - if: ${{ steps.cache-vcpkg.outputs.cache-hit != 'true' }}
-      name: Install VCPKG packages
-      run: ./vcpkg-restore.sh
     - name: Cache CMake Build Files
       uses: actions/cache@v3.0.11
       id: cache-cmake

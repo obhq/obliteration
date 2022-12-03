@@ -9,6 +9,6 @@ if(WIN32)
         --no-system-d3d-compiler # --no-quick-import does not implicit enable this.
         --no-opengl-sw # Same here.
         --no-compiler-runtime # We required user to install VC redistribution by themself.
-        ${CMAKE_INSTALL_PREFIX}/obliteration.exe
+        ${CMAKE_INSTALL_PREFIX}/Obliteration.exe
         COMMAND_ECHO STDOUT)
 endif()
