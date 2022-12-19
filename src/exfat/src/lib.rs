@@ -91,6 +91,15 @@ impl<I: Read + Seek> ExFat<I> {
             Err(e) => return Err(OpenError::ReadRootFailed(e)),
         };
 
+        // Check allocation bitmap count.
+        if params.number_of_fats == 2 {
+            if entries.allocation_bitmaps[1].is_none() {
+                return Err(OpenError::NoAllocationBitmap);
+            }
+        } else if entries.allocation_bitmaps[0].is_none() {
+            return Err(OpenError::NoAllocationBitmap);
+        }
+
         Ok(Self {
             image,
             params,
@@ -113,6 +122,7 @@ pub enum OpenError {
     InvalidNumberOfFats,
     ReadFatRegionFailed(fat::LoadError),
     ReadRootFailed(directory::entry::LoadEntriesError),
+    NoAllocationBitmap,
 }
 
 impl Error for OpenError {
@@ -136,6 +146,9 @@ impl Display for OpenError {
             Self::InvalidNumberOfFats => f.write_str("invalid NumberOfFats"),
             Self::ReadFatRegionFailed(_) => f.write_str("cannot read FAT region"),
             Self::ReadRootFailed(_) => f.write_str("cannot read root directory"),
+            Self::NoAllocationBitmap => {
+                f.write_str("no Allocation Bitmap available for active FAT")
+            }
         }
     }
 }
