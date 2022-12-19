@@ -1,9 +1,8 @@
 use crate::fat::Fat;
 use crate::param::Params;
 use std::cmp::min;
-use std::error::Error;
-use std::fmt::{Display, Formatter};
 use std::io::{ErrorKind, Read, Seek, SeekFrom};
+use thiserror::Error;
 
 pub(crate) struct ClustersReader<'a, I: Read + Seek> {
     params: &'a Params,
@@ -144,28 +143,14 @@ impl<'a, I: Read + Seek> Read for ClustersReader<'a, I> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum NewError {
+    #[error("first cluster is not valid")]
     InvalidFirstCluster,
+
+    #[error("data length is not valid")]
     InvalidDataLength,
-    IoFailed(std::io::Error),
-}
 
-impl Error for NewError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::IoFailed(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
-impl Display for NewError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::InvalidFirstCluster => f.write_str("first cluster is not valid"),
-            Self::InvalidDataLength => f.write_str("data length is not valid"),
-            Self::IoFailed(_) => f.write_str("I/O failed"),
-        }
-    }
+    #[error("I/O failed")]
+    IoFailed(#[source] std::io::Error),
 }
