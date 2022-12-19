@@ -1,10 +1,9 @@
 use self::directory::entry::EntrySet;
 use self::fat::Fat;
 use self::param::Params;
-use std::error::Error;
-use std::fmt::{Display, Formatter};
 use std::io::{Read, Seek};
 use std::sync::Arc;
+use thiserror::Error;
 use util::mem::{read_u16_le, read_u32_le, read_u8};
 
 pub mod cluster;
@@ -113,42 +112,29 @@ impl<I: Read + Seek> ExFat<I> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum OpenError {
-    ReadMainBootFailed(std::io::Error),
+    #[error("cannot read main boot region")]
+    ReadMainBootFailed(#[source] std::io::Error),
+
+    #[error("image is not exFAT")]
     NotExFat,
+
+    #[error("invalid BytesPerSectorShift")]
     InvalidBytesPerSectorShift,
+
+    #[error("invalid SectorsPerClusterShift")]
     InvalidSectorsPerClusterShift,
+
+    #[error("invalid NumberOfFats")]
     InvalidNumberOfFats,
-    ReadFatRegionFailed(fat::LoadError),
-    ReadRootFailed(directory::entry::LoadEntriesError),
+
+    #[error("cannot read FAT region")]
+    ReadFatRegionFailed(#[source] fat::LoadError),
+
+    #[error("cannot read root directory")]
+    ReadRootFailed(#[source] directory::entry::LoadEntriesError),
+
+    #[error("no Allocation Bitmap available for active FAT")]
     NoAllocationBitmap,
-}
-
-impl Error for OpenError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::ReadMainBootFailed(e) => Some(e),
-            Self::ReadFatRegionFailed(e) => Some(e),
-            Self::ReadRootFailed(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
-impl Display for OpenError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::ReadMainBootFailed(_) => f.write_str("cannot read main boot region"),
-            Self::NotExFat => f.write_str("image is not exFAT"),
-            Self::InvalidBytesPerSectorShift => f.write_str("invalid BytesPerSectorShift"),
-            Self::InvalidSectorsPerClusterShift => f.write_str("invalid SectorsPerClusterShift"),
-            Self::InvalidNumberOfFats => f.write_str("invalid NumberOfFats"),
-            Self::ReadFatRegionFailed(_) => f.write_str("cannot read FAT region"),
-            Self::ReadRootFailed(_) => f.write_str("cannot read root directory"),
-            Self::NoAllocationBitmap => {
-                f.write_str("no Allocation Bitmap available for active FAT")
-            }
-        }
-    }
 }
