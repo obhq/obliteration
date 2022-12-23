@@ -14,13 +14,13 @@ jobs:
     name: Build Releases
     strategy:
       matrix:
-        os: [windows-2019, ubuntu-20.04, macOS-latest]
+        os: [windows-2019, ubuntu-20.04, macOS-12]
         include:
           - os: windows-2019
             release_suffix: Windows
           - os: ubuntu-20.04
             release_suffix: Ubuntu
-          - os: macOS-latest
+          - os: macOS-12
             release_suffix: Mac
     runs-on: ${{ matrix.os }}
     steps:

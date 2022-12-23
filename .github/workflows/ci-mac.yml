@@ -4,7 +4,7 @@ on:
 jobs:
   build:
     name: Mac
-    runs-on: macOS-Latest
+    runs-on: macOS-12
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
