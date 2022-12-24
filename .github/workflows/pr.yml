@@ -11,3 +11,6 @@ jobs:
   linux:
     name: Build
     uses: ./.github/workflows/ci-linux.yml
+  mac:
+    name: Build
+    uses: ./.github/workflows/ci-mac.yml
