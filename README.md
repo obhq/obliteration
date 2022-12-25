@@ -29,7 +29,7 @@ Thanks [Mou-Ikkai](https://github.com/Mou-Ikkai) for the awesome icon!
 
 ## System requirements
 
-- Windows 10 x64 or Linux x86-64.
+- Windows 10 x64, Linux x86-64, and macOS x86-64.
 - CPU that supports all of the instructions on the [PS4 CPU](https://en.wikipedia.org/wiki/Jaguar_(microarchitecture)#Instruction_set_support).
   - AMD:
     - Minimum (Based on Required Instruction Sets): Jaguar-Based CPUs or newer
@@ -65,6 +65,15 @@ Obliteration requires the `PS4UPDATE1.PUP.dec` firmware file in order to work. W
 - Rust 1.63+
 - CMake 3.16+
 
+### macOS prerequisites
+
+- macOS 12+
+- Git
+- Clang 13+
+- Rust 1.63+
+- CMake 3.16+
+
+
 ### Install Qt 6
 
 You need to install Qt 6 on your system before you proceed. The minimum version is 6.2.
@@ -73,12 +82,11 @@ You need to install Qt 6 on your system before you proceed. The minimum version 
 
 You need `Qt Online Installer` for open-source to install Qt, downloaded from https://www.qt.io. The installer will ask you to sign in with a Qt account, which you can create for free. You need to check `Custom installation` and do not check `Qt for desktop development` that is using the MinGW toolchain. Make sure you have checked `MSVC 2019 64-bit` component in the `Select Components` page for the version you which to install and uncheck all of other components.
 
-### Install Vulkan SDK
+### Install Qt with Homebrew (macOS only)
 
-For Windows just download from https://vulkan.lunarg.com/sdk/home. The default installation options are sufficient.
-
-For Linux it will be depend on your distro. For Arch Linux just install `vulkan-devel` and set `VULKAN_SDK` to `/usr`. For other distros try to find it in the package repository first. If not available, visit https://vulkan.lunarg.com/sdk/home to download and install it manually.
-
+```sh
+brew install qt@6
+```
 ### Open Qt Command Prompt (Windows only)
 
 You should restart your computer before you proceed, to make sure all of environment variables that were updated from the previous steps are effective. Once restarted, open `Qt 6.X.X (MSVC 2019 64-bit)` from Start > Qt.
@@ -97,7 +105,7 @@ Windows (Visual Studio 2022):
 cmake -B build -A x64 -T v142
 ```
 
-Linux:
+Linux and macOS:
 
 ```sh
 cmake -B build -D CMAKE_BUILD_TYPE=Release
@@ -111,7 +119,7 @@ Windows:
 cmake --build build --config Release
 ```
 
-Linux:
+Linux and macOS:
 
 ```sh
 cmake --build build
