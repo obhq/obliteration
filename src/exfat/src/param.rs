@@ -27,6 +27,11 @@ impl Params {
 
         Some(offset)
     }
+
+    /// Gets the size of cluster, in bytes.
+    pub fn cluster_size(&self) -> u64 {
+        self.bytes_per_sector * self.sectors_per_cluster
+    }
 }
 
 #[derive(Clone, Copy)]

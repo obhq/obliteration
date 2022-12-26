@@ -1,3 +1,4 @@
+use crate::directory::entry::DataDescriptor;
 use crate::fat::Fat;
 use crate::param::Params;
 use std::cmp::min;
@@ -15,6 +16,51 @@ pub(crate) struct ClustersReader<'a, I: Read + Seek> {
 }
 
 impl<'a, I: Read + Seek> ClustersReader<'a, I> {
+    pub fn from_descriptor(
+        params: &'a Params,
+        fat: &Fat,
+        image: &'a mut I,
+        desc: &DataDescriptor,
+        no_fat_chain: Option<bool>,
+    ) -> Result<Self, FromDescriptorError> {
+        // Get cluster chain.
+        let first_cluster = desc.first_cluster();
+        let data_length = desc.data_length();
+        let cluster_size = params.cluster_size();
+        let chain: Vec<usize> = if no_fat_chain.unwrap_or(false) {
+            fat.get_cluster_chain(first_cluster).collect()
+        } else if data_length == 0 {
+            return Err(FromDescriptorError::InvalidDataLength);
+        } else {
+            // FIXME: Use div_ceil once https://github.com/rust-lang/rust/issues/88581 stabilized.
+            let count = (data_length + cluster_size - 1) / cluster_size;
+
+            (first_cluster..(first_cluster + count as usize)).collect()
+        };
+
+        // Seek to first cluster.
+        let tail_size = data_length % cluster_size;
+        let mut reader = Self {
+            params,
+            image,
+            chain,
+            cluster_size,
+            tail_size: if tail_size == 0 {
+                cluster_size
+            } else {
+                tail_size
+            },
+            cluster: 0,
+            offset: 0,
+        };
+
+        if let Err(e) = reader.seek() {
+            return Err(FromDescriptorError::IoFailed(e));
+        }
+
+        Ok(reader)
+    }
+
     pub fn new(
         params: &'a Params,
         fat: &Fat,
@@ -34,7 +80,7 @@ impl<'a, I: Read + Seek> ClustersReader<'a, I> {
         }
 
         // Get data length.
-        let cluster_size = params.bytes_per_sector * params.sectors_per_cluster;
+        let cluster_size = params.cluster_size();
         let data_length = match data_length {
             Some(v) => {
                 if v > cluster_size * chain.len() as u64 {
@@ -141,6 +187,15 @@ impl<'a, I: Read + Seek> Read for ClustersReader<'a, I> {
 
         Ok(read)
     }
+}
+
+#[derive(Debug, Error)]
+pub enum FromDescriptorError {
+    #[error("data length is not valid")]
+    InvalidDataLength,
+
+    #[error("I/O failed")]
+    IoFailed(#[source] std::io::Error),
 }
 
 #[derive(Debug, Error)]
