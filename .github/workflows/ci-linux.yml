@@ -24,7 +24,7 @@ jobs:
         cache-key-prefix: ${{ runner.os }}-install-qt-action
         version: 6.2.*
     - name: Cache CMake Build Files
-      uses: actions/cache@v3.2.1
+      uses: actions/cache@v3.2.2
       id: cache-cmake
       with:
         path: |
