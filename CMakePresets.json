@@ -28,7 +28,7 @@
     {
       "name": "linux",
       "inherits": "default",
-      "generator": "Ninja",
+      "generator": "Unix Makefiles",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -52,7 +52,7 @@
     {
       "name": "mac",
       "inherits": "default",
-      "generator": "Ninja",
+      "generator": "Unix Makefiles",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
