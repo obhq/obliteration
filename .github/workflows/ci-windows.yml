@@ -4,7 +4,7 @@ on:
 jobs:
   build:
     name: Windows
-    runs-on: windows-2019 # Qt 6.2 only support MSVC 2019.
+    runs-on: windows-2022
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
@@ -36,9 +36,9 @@ jobs:
           D:/a/obliteration/obliteration/src/target
         key: ${{ runner.os }}-cmake-${{ hashFiles('**/CMakeLists.txt', '**/Cargo.lock', '**/Cargo.toml', '.github/workflows/*.yml') }}
     - name: Run CMake
-      run: cmake -B build -A x64
+      run: cmake --preset windows-release .
     - name: Build
-      run: cmake --build build --config Release
+      run: cmake --build --preset windows-release
     - name: Export artifacts
       run: cmake --install build --prefix dist
     - name: Upload artifacts

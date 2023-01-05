@@ -1,6 +1,4 @@
-<p align="center">
-  <img alt="Logo" src="logo.png">
-</p>
+<p align="center"><img alt="Logo" src="logo.png"></p>
 
 ## About
 [![CI](https://github.com/ultimaweapon/obliteration/actions/workflows/main.yml/badge.svg)](https://github.com/ultimaweapon/obliteration/actions/workflows/main.yml)
@@ -50,29 +48,26 @@ Obliteration requires the `PS4UPDATE1.PUP.dec` firmware file in order to work. W
 
 ### Windows prerequisites
 
-- Git
-- Visual Studio 2019
+- Visual Studio 2022
   - `Desktop development with C++` workload is required
-  - You can use 2022 but you need to install the `MSVC v142 - VS 2019 C++ x64/x86 build tools` component
+  - You need to install the `MSVC v142 - VS 2019 C++ x64/x86 build tools` component
 - Rust 1.63+
-- CMake 3.16+
+- CMake 3.21+
   - Make sure you have `Add CMake to the system PATH` selected when installing
 
 ### Linux prerequisites
 
-- Git
 - GCC 9.4+
 - Rust 1.63+
-- CMake 3.16+
+- CMake 3.21+
 
 ### macOS prerequisites
 
 - macOS 12+
-- Git
+- Homebrew
 - Clang 13+
 - Rust 1.63+
-- CMake 3.16+
-
+- CMake 3.21+
 
 ### Install Qt 6
 
@@ -82,47 +77,35 @@ You need to install Qt 6 on your system before you proceed. The minimum version 
 
 You need `Qt Online Installer` for open-source to install Qt, downloaded from https://www.qt.io. The installer will ask you to sign in with a Qt account, which you can create for free. You need to check `Custom installation` and do not check `Qt for desktop development` that is using the MinGW toolchain. Make sure you have checked `MSVC 2019 64-bit` component in the `Select Components` page for the version you which to install and uncheck all of other components.
 
-### Install Qt with Homebrew (macOS only)
+Once installation is completed you need to set `CMAKE_PREFIX_PATH` environment variable to full path of the installed version (e.g. `C:\Qt\6.2.4\msvc2019_64`) then restart your computer to make it effective.
+
+#### Install Qt with Homebrew (macOS only)
 
 ```sh
 brew install qt@6
 ```
-### Open Qt Command Prompt (Windows only)
-
-You should restart your computer before you proceed, to make sure all of environment variables that were updated from the previous steps are effective. Once restarted, open `Qt 6.X.X (MSVC 2019 64-bit)` from Start > Qt.
 
 ### Configure build system
 
-Windows (Visual Studio 2019):
-
-```bat
-cmake -B build -A x64
-```
-
-Windows (Visual Studio 2022):
-
-```bat
-cmake -B build -A x64 -T v142
-```
-
-Linux and macOS:
-
 ```sh
-cmake -B build -D CMAKE_BUILD_TYPE=Release
+cmake --preset PRESET .
 ```
+
+The value of `PRESET` will be depend on your platform and the build configuration you want to use. Current available presets are:
+
+- windows-release
+- windows-debug
+- linux-release
+- linux-debug
+- mac-release
+- mac-debug
+
+Choose `[YOUR-PLATFORM]-release` for optimized outputs. The `*-debug` is designed for development only and the outputs will not optimized.
 
 ### Build
 
-Windows:
-
-```bat
-cmake --build build --config Release
-```
-
-Linux and macOS:
-
 ```sh
-cmake --build build
+cmake --build --preset PRESET
 ```
 
 ## Development
@@ -135,7 +118,7 @@ We recommended Visual Studio Code as a code editor with the following extensions
 - [CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools)
 - [CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb)
 
-Remove `build` directory from the previous step and open this folder with VS Code. Everything should work out of the box (e.g. code completion, debugging, etc).
+Remove `build` directory from the previous step and open this folder with VS Code. It will ask which CMake preset to use and you need to choose the debug version (e.g. `windows-debug`). Everything should work out of the box (e.g. code completion, debugging, etc).
 
 ### Get a homebrew application for testing
 
