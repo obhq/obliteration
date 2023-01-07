@@ -17,11 +17,11 @@ jobs:
         os: [windows-2019, ubuntu-20.04, macOS-12]
         include:
           - os: windows-2019
-            release_suffix: Windows
+            release_suffix: windows
           - os: ubuntu-20.04
-            release_suffix: Ubuntu
+            release_suffix: linux
           - os: macOS-12
-            release_suffix: Mac
+            release_suffix: mac
     runs-on: ${{ matrix.os }}
     steps:
     # Checkout and Install QT (Both OSes)
@@ -34,29 +34,31 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v3
         with:
+          cache: true
+          cache-key-prefix: ${{ runner.os }}-install-qt-action
           version: 6.2.*
 
     # Windows Specific Setup
 
+      - name: Cache Vulkan SDK (Windows)
+        if: matrix.release_suffix == 'windows'
+        id: cache-vulkan
+        uses: actions/cache@v3.2.2
+        with:
+          path: C:\VulkanSDK
+          key: ${{ runner.os }}-vulkanSDK
+          
       - name: Install Vulkan SDK (Windows)
-        if: matrix.release_suffix == 'Windows'
+        if: matrix.release_suffix == 'windows' && ${{ steps.cache-vulkan.outputs.cache-hit != 'true' }}
         run: |
           Invoke-WebRequest -Uri "https://sdk.lunarg.com/sdk/download/1.3.224.1/windows/VulkanSDK-1.3.224.1-Installer.exe" -OutFile VulkanSDK.exe
           .\VulkanSDK.exe --root C:\VulkanSDK  --accept-licenses --default-answer --confirm-command install
           echo "VULKAN_SDK=C:\VulkanSDK" >> $env:GITHUB_ENV
 
-      - name: Initialize VCPKG (Windows)
-        if: matrix.release_suffix == 'Windows'
-        run: .\vcpkg\bootstrap-vcpkg.bat
-
-      - name: Install VCPKG packages (Windows)
-        if: matrix.release_suffix == 'Windows'
-        run: .\vcpkg-restore.ps1
-
     # Ubuntu Specific Setup
 
       - name: Install system dependencies (Ubuntu)
-        if: matrix.release_suffix == 'Ubuntu'
+        if: matrix.release_suffix == 'linux'
         run: |
           wget -qO - https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo apt-key add -
           sudo wget -qO /etc/apt/sources.list.d/lunarg-vulkan-1.3.224-focal.list https://packages.lunarg.com/vulkan/1.3.224/lunarg-vulkan-1.3.224-focal.list
@@ -64,27 +66,19 @@ jobs:
           sudo apt-get install -y libxkbcommon-dev vulkan-sdk
           echo "VULKAN_SDK=/usr" >> $GITHUB_ENV
 
-      - name: Initialize VCPKG (Ubuntu)
-        if: matrix.release_suffix == 'Ubuntu'
-        run: ./vcpkg/bootstrap-vcpkg.sh
-
-      - name: Install VCPKG packages (Ubuntu)
-        if: matrix.release_suffix == 'Ubuntu'
-        run: ./vcpkg-restore.sh
-
     # Build and Release (Both OSes)
 
       - name: Run CMake
-        run: cmake -B build -D CMAKE_BUILD_TYPE=Release
+        run: cmake --preset ${{ matrix.release_suffix }}-release .
 
       - name: Build
-        run: cmake --build build --config Release
+        run: cmake --build --preset ${{ matrix.release_suffix }}-release
 
       - name: Export artifacts
         run: cmake --install build --prefix dist
 
       - name: ZIP Obliteration (WINDOWS ONLY | UBUNTU BROKEN)
-        if: matrix.release_suffix == 'Windows'
+        if: matrix.release_suffix == 'windows'
         uses: TheDoctor0/zip-release@main
         with:
           type: 'zip'
@@ -92,7 +86,7 @@ jobs:
           filename: Obliteration-${{ env.version }}-${{ matrix.release_suffix }}.zip
 
       - name: Release Executable (WINDOWS ONLY | UBUNTU BROKEN)
-        if: matrix.release_suffix == 'Windows'
+        if: matrix.release_suffix == 'windows'
         uses: ncipollo/release-action@v1.12.0
         with:
           artifacts: "Obliteration-${{ env.version }}-${{ matrix.release_suffix }}.zip"
