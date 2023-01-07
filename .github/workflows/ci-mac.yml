@@ -21,7 +21,7 @@ jobs:
         path: |
           /home/runner/work/obliteration/obliteration/build
           /home/runner/work/obliteration/obliteration/src/target
-        key: ${{ runner.os }}-cmake-${{ hashFiles('**/CMakeLists.txt', '**/Cargo.lock', '**/Cargo.toml', '.github/workflows/*.yml') }}
+        key: ${{ runner.os }}-cmake-${{ hashFiles('**/CMakeLists.*', '**/Cargo.lock', '**/Cargo.toml', '.github/workflows/*.yml') }}
     - name: Run CMake
       run: cmake --preset mac-release .
     - name: Build
