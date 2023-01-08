@@ -4,9 +4,20 @@
       "name": "Main",
       "type": "lldb",
       "request": "launch",
-      "program": "${workspaceFolder}/build/src/obliteration",
       "args": [],
-      "cwd": "${workspaceFolder}"
+      "cwd": "${workspaceFolder}",
+      "windows": {
+        "program": "${workspaceFolder}/build/src/Debug/Obliteration.exe",
+        "env": {
+          "Path": "${env:Path};${env:CMAKE_PREFIX_PATH}\\bin"
+        }
+      },
+      "linux": {
+        "program": "${workspaceFolder}/build/src/obliteration"
+      },
+      "osx": {
+        "program": "${workspaceFolder}/build/src/obliteration"
+      }
     },
     {
       "name": "Kernel",
