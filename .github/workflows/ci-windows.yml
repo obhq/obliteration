@@ -16,7 +16,7 @@ jobs:
         version: 6.2.*
     - name: Cache Vulkan SDK
       id: cache-vulkan
-      uses: actions/cache@v3.2.2
+      uses: actions/cache@v3.2.3
       with:
         path: C:\VulkanSDK
         key: ${{ runner.os }}-vulkanSDK
@@ -28,7 +28,7 @@ jobs:
     - name: Set Vulkan SDK path
       run:  echo "VULKAN_SDK=C:\VulkanSDK" >> $env:GITHUB_ENV
     - name: Cache CMake Build Files
-      uses: actions/cache@v3.2.2
+      uses: actions/cache@v3.2.3
       id: cache-cmake
       with:
         path: |
