@@ -75,7 +75,7 @@ You need to install Qt 6 on your system before you proceed. The minimum version 
 
 #### Windows specific requirements
 
-You need `Qt Online Installer` for open-source to install Qt, downloaded from https://www.qt.io. The installer will ask you to sign in with a Qt account, which you can create for free. You need to check `Custom installation` and do not check `Qt for desktop development` that is using the MinGW toolchain. Make sure you have checked `MSVC 2019 64-bit` component in the `Select Components` page for the version you which to install and uncheck all of other components.
+You need `Qt Online Installer` for open-source to install Qt, downloaded from https://www.qt.io. The installer will ask you to sign in with a Qt account, which you can create for free. You need to check `Custom installation` and do not check `Qt for desktop development` that is using the MinGW toolchain. Make sure you have checked `MSVC 2019 64-bit` component in the `Select Components` page for the version you wish to install and uncheck all of other components.
 
 Once installation is completed you need to set `CMAKE_PREFIX_PATH` environment variable to full path of the installed version (e.g. `C:\Qt\6.2.4\msvc2019_64`) then restart your computer to make it effective.
 
