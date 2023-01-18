@@ -70,7 +70,7 @@ impl DynamicLinking {
     pub const DT_SCE_HASHSZ: i64 = 0x6100003d;
     pub const DT_SCE_SYMTABSZ: i64 = 0x6100003f;
 
-    pub fn parse(data: &[u8], dynlib: &[u8]) -> Result<Self, ParseError> {
+    pub fn parse(data: &[u8], _dynlib: &[u8]) -> Result<Self, ParseError> {
         // Simple check to see if data valid.
         if data.len() % 16 != 0 {
             return Err(ParseError::InvalidDataSize);
@@ -98,7 +98,7 @@ impl DynamicLinking {
 
         while offset < data.len() {
             // Read fields.
-            let data = unsafe { data.as_ptr().offset(offset as _) };
+            let data = unsafe { data.as_ptr().add(offset) };
             let tag = read_i64_le(data, 0);
             let value = read_u64_le(data, 8);
 
