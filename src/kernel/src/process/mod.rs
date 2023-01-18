@@ -127,7 +127,7 @@ pub enum RunError {}
 impl Error for RunError {}
 
 impl Display for RunError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+    fn fmt(&self, _f: &mut Formatter) -> std::fmt::Result {
         Ok(())
     }
 }

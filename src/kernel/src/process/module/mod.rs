@@ -51,7 +51,7 @@ impl Module {
         let mut mapped: Vec<u8> = vec![0; mapped_size];
         let mut dynamic_linking: Vec<u8> = Vec::new();
         let mut dynlib_data: Vec<u8> = Vec::new();
-        let base: usize = unsafe { transmute(mapped.as_ptr()) };
+        let base: usize = unsafe { mapped.as_ptr() as usize };
 
         for prog in elf.programs() {
             let offset = prog.offset();

@@ -96,7 +96,7 @@ impl<'input> Recompiler<'input> {
     fn recompile(&mut self, offset: usize, label: CodeLabel) -> Result<u64, RunError> {
         // Setup decoder.
         let input = self.input;
-        let base: u64 = unsafe { transmute(input.as_ptr()) };
+        let base: u64 = unsafe { input.as_ptr() as u64 };
         let decoder = Decoder::with_ip(
             64,
             &input[offset..],
@@ -118,7 +118,7 @@ impl<'input> Recompiler<'input> {
             // Map address to the label.
             match self.labels.entry(i.ip()) {
                 std::collections::hash_map::Entry::Occupied(v) => {
-                    self.assembler.jmp(v.get().clone()).unwrap();
+                    self.assembler.jmp(*v.get()).unwrap();
                     self.output_size += 15;
                     break;
                 }
@@ -224,7 +224,7 @@ impl<'input> Recompiler<'input> {
         let dest = i.near_branch64();
 
         if let Some(label) = self.labels.get(&dest) {
-            self.assembler.call(label.clone()).unwrap();
+            self.assembler.call(*label).unwrap();
         } else {
             let label = self.assembler.create_label();
 
@@ -585,8 +585,8 @@ impl<'input> Recompiler<'input> {
 
     fn transform_ud2(&mut self, i: Instruction) -> usize {
         let handler: extern "sysv64" fn(&mut Process, usize) -> ! = Process::handle_ud2;
-        let handler: u64 = unsafe { transmute(handler) };
-        let proc: u64 = unsafe { transmute(self.proc) };
+        let handler: u64 = unsafe { handler as u64 };
+        let proc: u64 = unsafe { self.proc as u64 };
 
         self.assembler.mov(rsi, self.offset(i.ip()) as u64).unwrap();
         self.assembler.mov(rdi, proc).unwrap();
@@ -654,7 +654,7 @@ impl<'input> Recompiler<'input> {
     }
 
     fn offset(&self, addr: u64) -> usize {
-        let base: u64 = unsafe { transmute(self.input.as_ptr()) };
+        let base: u64 = unsafe { self.input.as_ptr() as u64 };
 
         (addr - base) as usize
     }
@@ -764,7 +764,7 @@ impl NativeCode {
     }
 
     pub fn addr(&self) -> usize {
-        unsafe { transmute(self.ptr) }
+        unsafe { self.ptr as usize }
     }
 
     fn copy_from(&mut self, src: &[u8]) {

@@ -25,7 +25,7 @@ impl Fs {
 
     pub fn get(&self, path: &str) -> Result<Item, GetError> {
         // Check if path absolute.
-        if path.chars().next() != Some('/') {
+        if !path.starts_with('/') {
             return Err(GetError::InvalidPath);
         }
 
