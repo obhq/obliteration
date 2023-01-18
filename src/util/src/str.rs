@@ -17,7 +17,7 @@ pub fn to_c(s: &str) -> *mut c_char {
     }
 
     unsafe { c.copy_from_nonoverlapping(s.as_ptr() as _, s.len()) };
-    unsafe { *c.offset(s.len() as _) = 0 };
+    unsafe { *c.add(s.len()) = 0 };
 
     c
 }

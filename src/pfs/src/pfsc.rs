@@ -155,11 +155,11 @@ impl<F: Read + Seek> Read for Reader<F> {
             let src = &self.current_block[(offset as usize)..];
 
             // Copy the window to output buffer.
-            let dst = unsafe { buf.as_mut_ptr().offset(copied as _) };
+            let dst = unsafe { buf.as_mut_ptr().add(copied) };
             let amount = min(src.len(), buf.len() - copied);
 
-            unsafe { dst.copy_from_nonoverlapping(src.as_ptr(), amount as usize) };
-            copied += amount as usize;
+            unsafe { dst.copy_from_nonoverlapping(src.as_ptr(), amount) };
+            copied += amount;
 
             // Advance current offset.
             self.current_offset += amount as u64;

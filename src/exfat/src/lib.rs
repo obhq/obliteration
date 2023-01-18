@@ -44,7 +44,7 @@ impl<I: Read + Seek> ExFat<I> {
             bytes_per_sector: {
                 let v = read_u8(boot, 108);
 
-                if v >= 9 && v <= 12 {
+                if (9..=12).contains(&v) {
                     1u64 << v
                 } else {
                     return Err(OpenError::InvalidBytesPerSectorShift);

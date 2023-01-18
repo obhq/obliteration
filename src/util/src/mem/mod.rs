@@ -20,11 +20,11 @@ where
 }
 
 pub fn read_u8(p: *const u8, i: usize) -> u8 {
-    unsafe { *p.offset(i as _) }
+    unsafe { *p.add(i) }
 }
 
 pub fn write_u8(p: *mut u8, i: usize, v: u8) {
-    unsafe { *p.offset(i as _) = v };
+    unsafe { *p.add(i) = v };
 }
 
 pub fn read_u16_le(p: *const u8, i: usize) -> u16 {
@@ -87,7 +87,7 @@ pub fn read_array<T, const L: usize>(p: *const u8, i: usize) -> [T; L]
 where
     T: Copy,
 {
-    let p = unsafe { p.offset(i as _) };
+    let p = unsafe { p.add(i) };
     let mut r: [T; L] = uninit();
 
     unsafe { p.copy_to_nonoverlapping(r.as_mut_ptr() as _, L * size_of::<T>()) };
