@@ -14,7 +14,7 @@ pub(super) fn get_xts_keys(ekpfs: &[u8], seed: &[u8; 16]) -> ([u8; 16], [u8; 16]
     let mut hmac = Hmac::<Sha256>::new_from_slice(ekpfs).unwrap();
     let mut input: Vec<u8> = Vec::with_capacity(seed.len() + 4);
 
-    input.extend(&[0x01, 0x00, 0x00, 0x00]);
+    input.extend([0x01, 0x00, 0x00, 0x00]);
     input.extend(seed);
 
     hmac.update(input.as_slice());
@@ -116,7 +116,7 @@ impl<R: AsRef<[u8]>> Image for Encrypted<R> {
         let mut copied = 0;
 
         loop {
-            let dest = unsafe { dest.offset(copied as _) };
+            let dest = unsafe { dest.add(copied) };
 
             // Check if remaining block can fill the remaining buffer.
             let need = buf.len() - copied;

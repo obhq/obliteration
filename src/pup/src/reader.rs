@@ -306,7 +306,7 @@ impl<'pup> Read for BlockedReader<'pup> {
             }
 
             // Copy data.
-            let dst = unsafe { dst.offset(copied as _) };
+            let dst = unsafe { dst.add(copied) };
             let need = buf.len() - copied;
             let amount = min(self.current_block.len(), need);
             let src = self.current_block.drain(..amount);

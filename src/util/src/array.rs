@@ -18,5 +18,5 @@ where
     T: Copy,
 {
     unsafe { from.copy_to_nonoverlapping(to.as_mut_ptr(), L) };
-    unsafe { from.offset(L as _) }
+    unsafe { from.add(L) }
 }

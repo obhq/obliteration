@@ -46,7 +46,7 @@ impl<'pfs, 'image> Seek for File<'pfs, 'image> {
                 if v >= 0 {
                     self.len()
                 } else {
-                    let v = v.abs() as u64;
+                    let v = v.unsigned_abs();
 
                     if v > self.len() {
                         return Err(Error::from(ErrorKind::InvalidInput));
@@ -59,7 +59,7 @@ impl<'pfs, 'image> Seek for File<'pfs, 'image> {
                 if v >= 0 {
                     min(self.len(), self.current_offset + (v as u64))
                 } else {
-                    let v = v.abs() as u64;
+                    let v = v.unsigned_abs();
 
                     if v > self.current_offset {
                         return Err(Error::from(ErrorKind::InvalidInput));
@@ -149,7 +149,7 @@ impl<'pfs, 'image> Read for File<'pfs, 'image> {
             let src = &self.current_block[(offset as usize)..];
 
             // Copy the window to output buffer.
-            let dst = unsafe { buf.as_mut_ptr().offset(copied as _) };
+            let dst = unsafe { buf.as_mut_ptr().add(copied) };
             let amount = min(src.len(), buf.len() - copied) as u32;
 
             unsafe { dst.copy_from_nonoverlapping(src.as_ptr(), amount as usize) };
