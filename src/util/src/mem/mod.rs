@@ -1,4 +1,4 @@
-use self::macros::{read_le, write_le, read_be, write_be};
+use self::macros::{read_be, read_le, write_be, write_le};
 use std::mem::{size_of, MaybeUninit};
 
 mod macros;

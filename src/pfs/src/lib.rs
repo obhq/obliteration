@@ -122,9 +122,7 @@ pub struct Pfs<'image> {
 }
 
 impl<'image> Pfs<'image> {
-    pub fn open_super_root<'a>(
-        &'a self,
-    ) -> Result<Directory<'a, 'image>, OpenSuperRootError> {
+    pub fn open_super_root<'a>(&'a self) -> Result<Directory<'a, 'image>, OpenSuperRootError> {
         let header = self.image.header();
         let inode = match self.inodes.get(header.super_root_inode()) {
             Some(v) => v,
