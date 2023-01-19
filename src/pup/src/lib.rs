@@ -89,7 +89,10 @@ impl Pup {
         Ok(Self { file, entries })
     }
 
-    pub fn dump_system_image<O: AsRef<Path>>(&self, _output: O) -> Result<(), DumpSystemImageError> {
+    pub fn dump_system_image<O: AsRef<Path>>(
+        &self,
+        _output: O,
+    ) -> Result<(), DumpSystemImageError> {
         // Get entry.
         let (entry, index) = match self.get_data_entry(6) {
             Some(v) => v,
