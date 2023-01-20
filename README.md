@@ -17,6 +17,10 @@ You can download the Windows binaries from the latest commits [here](https://git
 
 Thanks [Mou-Ikkai](https://github.com/Mou-Ikkai) for the awesome icon!
 
+### Obliteration discussion
+
+We have a Matrix Room Space `#obliteration:matrix.org` on [Matrix.to](https://matrix.to/#/#obliteration:matrix.org) to discuss about the project. Read each room's Topic for more information. 
+
 ## Features
 
 - [ ] Built-in PUP file supports for decrypted PUP from [pup_decrypt](https://github.com/idc/ps4-pup_decrypt).
@@ -77,7 +81,7 @@ You need to install Qt 6 on your system before you proceed. The minimum version 
 
 You need `Qt Online Installer` for open-source to install Qt, downloaded from https://www.qt.io. The installer will ask you to sign in with a Qt account, which you can create for free. You need to check `Custom installation` and do not check `Qt for desktop development` that is using the MinGW toolchain. Make sure you have checked `MSVC 2019 64-bit` component in the `Select Components` page for the version you wish to install and uncheck all of other components.
 
-Once installation is completed you need to set `CMAKE_PREFIX_PATH` environment variable to full path of the installed version (e.g. `C:\Qt\6.2.4\msvc2019_64`) then restart your computer to make it effective.
+Once installation is completed you need to set the `CMAKE_PREFIX_PATH` environment variable to the full path of the installed version (e.g. `C:\Qt\6.2.4\msvc2019_64`) then restart your computer to make it effective.
 
 #### Install Qt with Homebrew (macOS only)
 
@@ -149,10 +153,6 @@ Create `.kernel-debug` in the root of repository. The content of this file is YA
 ### Action icons
 
 We use icons from https://materialdesignicons.com for action icon (e.g. on menu and toolbar).
-
-### Development discussion
-
-We have an IRC channel `#obliteration` on [OFTC](https://www.oftc.net) to discuss about the development. This channel is intended for discussion about the development and technical things only. You may get banned from the channel if you send other kind of messages that does not related to development.
 
 ## License
 
