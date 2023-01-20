@@ -17,7 +17,7 @@ You can download the Windows binaries from the latest commits [here](https://git
 
 Thanks [Mou-Ikkai](https://github.com/Mou-Ikkai) for the awesome icon!
 
-### Obliteration discussion
+## Obliteration discussion
 
 We have a Matrix Room Space `#obliteration:matrix.org` on [Matrix.to](https://matrix.to/#/#obliteration:matrix.org) to discuss about the project. Read each room's Topic for more information. 
 
@@ -81,7 +81,14 @@ You need to install Qt 6 on your system before you proceed. The minimum version 
 
 You need `Qt Online Installer` for open-source to install Qt, downloaded from https://www.qt.io. The installer will ask you to sign in with a Qt account, which you can create for free. You need to check `Custom installation` and do not check `Qt for desktop development` that is using the MinGW toolchain. Make sure you have checked `MSVC 2019 64-bit` component in the `Select Components` page for the version you wish to install and uncheck all of other components.
 
-Once installation is completed you need to set the `CMAKE_PREFIX_PATH` environment variable to the full path of the installed version (e.g. `C:\Qt\6.2.4\msvc2019_64`) then restart your computer to make it effective.
+Once installation is completed you need to set the `CMAKE_PREFIX_PATH` environment variable to the full path of the installed version (e.g. `C:\Qt\6.2.4\msvc2019_64`). To set an environment variable:
+
+1. Open a run dialog with <kbd>Win</kbd> + <kbd>R</kbd>.
+2. Enter `sysdm.cpl` then click `OK`.
+3. Go to `Advanced` tab then click on `Environment Variables...`.
+4. Click `New...` to create a new environment variable. Just create for either `User variables` or `System variables`, not both.
+
+Then restart your computer to make it effective.
 
 #### Install Qt with Homebrew (macOS only)
 
