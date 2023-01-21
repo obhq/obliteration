@@ -451,7 +451,7 @@ impl<'c> Pkg<'c> {
         // Decrypt EKPFS with fake pkg key.
         let fake_key = self.ctx.fake_pfs_key();
 
-        self.ekpfs = match fake_key.decrypt(rsa::PaddingScheme::PKCS1v15Encrypt, &encrypted) {
+        self.ekpfs = match fake_key.decrypt(rsa::Pkcs1v15Encrypt, &encrypted) {
             Ok(v) => v,
             Err(e) => return Err(OpenError::DecryptEkpsfFailed(e)),
         };
@@ -564,7 +564,7 @@ impl<'c> Pkg<'c> {
         // Decrypt key 3.
         let key3 = self.ctx.pkg_key3();
 
-        self.entry_key3 = match key3.decrypt(rsa::PaddingScheme::PKCS1v15Encrypt, &keys[3]) {
+        self.entry_key3 = match key3.decrypt(rsa::Pkcs1v15Encrypt, &keys[3]) {
             Ok(v) => v,
             Err(e) => return Err(OpenError::DecryptEntryKeyFailed(3, e)),
         };
