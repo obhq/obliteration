@@ -1,5 +1,6 @@
 use self::elf::SignedElf;
 use self::fs::Fs;
+use self::memory::MemoryManager;
 use self::process::Process;
 use self::rootfs::RootFs;
 use clap::Parser;
@@ -9,8 +10,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 mod elf;
+mod errno;
 mod fs;
 mod log;
+mod memory;
 mod pfs;
 mod process;
 mod rootfs;
@@ -66,7 +69,7 @@ fn run() -> bool {
 
     // Show basic infomation.
     info!(0, "Starting Obliteration kernel.");
-    info!(0, "Game directory is {}.", args.game.display());
+    info!(0, "Game directory is: {}.", args.game.display());
     info!(0, "Debug dump directory is: {}.", args.debug_dump.display());
 
     // Initialize filesystem.
@@ -82,6 +85,19 @@ fn run() -> bool {
     if !mount_pfs(&fs, &args.game) {
         return false;
     }
+
+    // Initialize memory manager.
+    info!(0, "Initializing memory manager.");
+
+    let mm = match MemoryManager::new(1024 * 1024 * 1024 * 8) {
+        Ok(v) => Arc::new(v),
+        Err(e) => {
+            error!(0, e, "Initialization failed");
+            return false;
+        }
+    };
+
+    info!(0, "Page size is: {}.", mm.page_size());
 
     // Get eboot.bin.
     info!(0, "Getting /mnt/app0/eboot.bin.");
