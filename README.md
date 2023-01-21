@@ -19,7 +19,7 @@ Thanks [Mou-Ikkai](https://github.com/Mou-Ikkai) for the awesome icon!
 
 ## Obliteration discussion
 
-We have a Matrix Room Space `#obliteration:matrix.org` on [Matrix.to](https://matrix.to/#/#obliteration:matrix.org) to discuss about the project. Read each room's Topic for more information. 
+We have a Matrix Room Space `#obliteration:matrix.org` on [Matrix.to](https://matrix.to/#/#obliteration:matrix.org) to discuss about the project. Read each room's Topic for more information.
 
 ## Features
 
@@ -39,10 +39,16 @@ We have a Matrix Room Space `#obliteration:matrix.org` on [Matrix.to](https://ma
   - Intel:
     - Minimum (Based on Required Instruction Sets): Haswell-Based CPUs or newer
     - Recommended (Based on Performance): 5th Gen CPUs or newer
+- 16 GB of memory.
+  - Obliteration itself required 8 GB. The remaining are for your OS.
 
 ### Windows specific requirements
 
 - [Microsoft Visual C++ 2019 Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist). It's likely your system already has it, so try to run Obliteration first. If there is an error related to `msvcp140.dll`, `vcruntime140.dll` or `vcruntime140_1.dll` that means you need to install this manually.
+
+### Linux specific requirements
+
+Obliteration supports only 4KB/8KB/16KB page. Most people should not have any problem with this because 4KB is the default for most distros.
 
 ## Get the required PS4 system files
 
