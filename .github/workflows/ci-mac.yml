@@ -19,10 +19,17 @@ jobs:
       id: cache-cmake
       with:
         path: |
-          /home/runner/work/obliteration/obliteration/build
-          /home/runner/work/obliteration/obliteration/src/target
+          /Users/runner/work/obliteration/obliteration/build
+          /Users/runner/work/obliteration/obliteration/src/target
         key: ${{ runner.os }}-cmake-${{ hashFiles('**/CMakeLists.*', '**/Cargo.lock', '**/Cargo.toml', '.github/workflows/*.yml') }}
     - name: Run CMake
       run: cmake --preset mac-release .
     - name: Build
       run: cmake --build --preset mac-release
+    - name: Export artifacts
+      run: cmake --install build --prefix dist
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: obliteration-mac64
+        path: dist
