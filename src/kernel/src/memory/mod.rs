@@ -1,16 +1,18 @@
-use crate::errno::EINVAL;
+use self::alloc::Allocator;
+use crate::errno::{EINVAL, ENOMEM};
 use crate::syserr;
 use bitflags::bitflags;
-use std::collections::BTreeMap;
-use std::sync::RwLock;
+use std::sync::Mutex;
 use thiserror::Error;
+
+pub mod alloc;
 
 /// Manage all paged memory that can be seen by a PS4 app.
 pub struct MemoryManager {
     ptr: *mut u8,
     len: usize,
     page_size: usize,
-    allocations: RwLock<BTreeMap<usize, AllocInfo>>,
+    alloc: Mutex<Allocator>, // We cannot use RwLock here because Allocator only Send, not Sync.
 }
 
 impl MemoryManager {
@@ -45,7 +47,7 @@ impl MemoryManager {
             ptr,
             len,
             page_size,
-            allocations: RwLock::new(BTreeMap::new()),
+            alloc: Mutex::new(Allocator::new(ptr, len, Self::VIRTUAL_PAGE_SIZE)),
         })
     }
 
@@ -100,28 +102,50 @@ impl MemoryManager {
 
         // Check mapping source.
         if flags.contains(MappingFlags::MAP_ANON) {
-            if fd >= 0 {
-                return Err(MmapError::NonNegativeFd);
-            } else if offset != 0 {
-                return Err(MmapError::NonZeroOffset);
-            }
+            self.mmap_anon(len, fd, offset)
         } else {
             syserr!("non-anonymous mapping is not supported yet");
         }
-
-        todo!()
     }
 
     pub fn munmap(&self, addr: *mut u8, len: usize) -> Result<(), MunmapError> {
         todo!()
     }
 
+    fn mmap_anon(&self, len: usize, fd: i32, offset: i64) -> Result<*mut u8, MmapError> {
+        // Check if arguments valid.
+        if fd >= 0 {
+            return Err(MmapError::NonNegativeFd);
+        } else if offset != 0 {
+            return Err(MmapError::NonZeroOffset);
+        }
+
+        // Do allocation.
+        let mut alloc = self.alloc.lock().unwrap();
+
+        match alloc.alloc(len) {
+            Ok(v) => Ok(v.as_ptr()),
+            Err(e) => Err(match e {
+                alloc::AllocError::NoMem => MmapError::NoMem(len),
+            }),
+        }
+    }
+
     #[cfg(unix)]
     fn alloc_pages(len: usize) -> Result<*mut u8, std::io::Error> {
-        use libc::{mmap, MAP_ANON, MAP_FAILED, MAP_PRIVATE, PROT_NONE};
+        use libc::{mmap, MAP_ANON, MAP_FAILED, MAP_PRIVATE, PROT_READ, PROT_WRITE};
         use std::ptr::null_mut;
 
-        let ptr = unsafe { mmap(null_mut(), len, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0) };
+        let ptr = unsafe {
+            mmap(
+                null_mut(),
+                len,
+                PROT_READ | PROT_WRITE,
+                MAP_PRIVATE | MAP_ANON,
+                -1,
+                0,
+            )
+        };
 
         if ptr == MAP_FAILED {
             Err(std::io::Error::last_os_error())
@@ -134,10 +158,10 @@ impl MemoryManager {
     fn alloc_pages(len: usize) -> Result<*mut u8, std::io::Error> {
         use std::ptr::null;
         use windows_sys::Win32::System::Memory::{
-            VirtualAlloc, MEM_COMMIT, MEM_RESERVE, PAGE_NOACCESS,
+            VirtualAlloc, MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE,
         };
 
-        let ptr = unsafe { VirtualAlloc(null(), len, MEM_COMMIT | MEM_RESERVE, PAGE_NOACCESS) };
+        let ptr = unsafe { VirtualAlloc(null(), len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) };
 
         if ptr.is_null() {
             Err(std::io::Error::last_os_error())
@@ -199,12 +223,6 @@ impl Drop for MemoryManager {
     }
 }
 
-/// Contains information for an allocation of virtual pages.
-struct AllocInfo {
-    len: usize,
-    prot: Protections,
-}
-
 bitflags! {
     /// Flags to tell what access is possible for the virtual page.
     #[repr(transparent)]
@@ -260,7 +278,7 @@ pub enum NewError {
     ZeroLen,
 
     #[error("cannot allocate {0} bytes of memory")]
-    AllocFailed(usize, std::io::Error),
+    AllocFailed(usize, #[source] std::io::Error),
 }
 
 /// Errors for [`MemoryManager::mmap()`].
@@ -280,6 +298,9 @@ pub enum MmapError {
 
     #[error("MAP_ANON is specified with non-zero offset")]
     NonZeroOffset,
+
+    #[error("no memory available for {0} bytes")]
+    NoMem(usize),
 }
 
 impl MmapError {
@@ -290,6 +311,7 @@ impl MmapError {
             | Self::InvalidBehavior
             | Self::NonNegativeFd
             | Self::NonZeroOffset => EINVAL,
+            Self::NoMem(_) => ENOMEM,
         }
     }
 }
