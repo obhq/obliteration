@@ -72,6 +72,11 @@ impl MemoryManager {
             return Err(MmapError::ZeroLen);
         }
 
+        // Check prot.
+        if prot.contains_unknown() {
+            syserr!("unknown prot {:#010x}", prot);
+        }
+
         // Check if either MAP_SHARED or MAP_PRIVATE is specified. not both.
         // See https://stackoverflow.com/a/39945292/1829232 for how each flag is working.
         let is_private = match flags.behavior() {
@@ -102,7 +107,7 @@ impl MemoryManager {
 
         // Check mapping source.
         if flags.contains(MappingFlags::MAP_ANON) {
-            self.mmap_anon(len, fd, offset)
+            self.mmap_anon(len, prot, fd, offset)
         } else {
             syserr!("non-anonymous mapping is not supported yet");
         }
@@ -112,7 +117,13 @@ impl MemoryManager {
         todo!()
     }
 
-    fn mmap_anon(&self, len: usize, fd: i32, offset: i64) -> Result<*mut u8, MmapError> {
+    fn mmap_anon(
+        &self,
+        len: usize,
+        prot: Protections,
+        fd: i32,
+        offset: i64,
+    ) -> Result<*mut u8, MmapError> {
         // Check if arguments valid.
         if fd >= 0 {
             return Err(MmapError::NonNegativeFd);
@@ -123,7 +134,7 @@ impl MemoryManager {
         // Do allocation.
         let mut alloc = self.alloc.lock().unwrap();
 
-        match alloc.alloc(len) {
+        match alloc.alloc(len, prot) {
             Ok(v) => Ok(v.as_ptr()),
             Err(e) => Err(match e {
                 alloc::AllocError::NoMem => MmapError::NoMem(len),
@@ -226,14 +237,20 @@ impl Drop for MemoryManager {
 bitflags! {
     /// Flags to tell what access is possible for the virtual page.
     #[repr(transparent)]
-    pub struct Protections: u8 {
-        const NONE = 0;
-        const CPU_READ = 1;
-        const CPU_WRITE = 2;
-        const CPU_EXEC = 4;
-        const GPU_EXEC = 8;
-        const GPU_READ = 16;
-        const GPU_WRITE = 32;
+    pub struct Protections: u32 {
+        const NONE = 0x00000000;
+        const CPU_READ = 0x00000001;
+        const CPU_WRITE = 0x00000002;
+        const CPU_EXEC = 0x00000004;
+        const GPU_EXEC = 0x00000008;
+        const GPU_READ = 0x00000010;
+        const GPU_WRITE = 0x00000020;
+    }
+}
+
+impl Protections {
+    pub fn contains_unknown(self) -> bool {
+        (self.bits >> 6) != 0
     }
 }
 
