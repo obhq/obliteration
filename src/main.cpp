@@ -3,6 +3,9 @@
 #include "main_window.hpp"
 #include "settings.hpp"
 #include "system.hpp"
+#ifdef Q_OS_WIN
+    #include "darkmode.hpp"
+#endif
 
 #include <QApplication>
 #include <QMessageBox>
@@ -31,6 +34,11 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
 
     QGuiApplication::setWindowIcon(QIcon(":/resources/obliteration-icon.png"));
+
+    // Set dark/light mode for Windows, Qt already handles MacOS and Linux themes.
+    #ifdef Q_OS_WIN
+        set_darkmode();
+    #endif
 
     // Initialize user settings.
     if (!hasRequiredUserSettings()) {
