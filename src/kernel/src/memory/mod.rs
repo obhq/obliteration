@@ -1,59 +1,51 @@
-use self::alloc::Allocator;
 use crate::errno::{EINVAL, ENOMEM};
 use crate::syserr;
 use bitflags::bitflags;
-use std::sync::Mutex;
+use std::collections::BTreeMap;
+use std::os::raw::c_void;
+use std::sync::RwLock;
 use thiserror::Error;
-
-pub mod alloc;
 
 /// Manage all paged memory that can be seen by a PS4 app.
 pub struct MemoryManager {
-    ptr: *mut u8,
-    len: usize,
     page_size: usize,
-    alloc: Mutex<Allocator>, // We cannot use RwLock here because Allocator only Send, not Sync.
+    allocation_granularity: usize,
+    allocations: RwLock<BTreeMap<usize, AllocInfo>>,
 }
 
 impl MemoryManager {
     /// Size of a memory page on PS4.
     pub const VIRTUAL_PAGE_SIZE: usize = 0x4000;
 
-    pub(super) fn new(len: usize) -> Result<Self, NewError> {
-        if len == 0 {
-            return Err(NewError::ZeroLen);
-        }
-
-        // Check if page size on the host is supported.
-        let page_size = Self::get_page_size();
+    pub(super) fn new() -> Self {
+        // Check if page size on the host is supported. We don't need to check allocation
+        // granularity because it is always multiply of page size, which is a correct value.
+        let (page_size, allocation_granularity) = Self::get_memory_model();
 
         if page_size > Self::VIRTUAL_PAGE_SIZE || (Self::VIRTUAL_PAGE_SIZE % page_size) != 0 {
+            // If page size is larger than PS4 we will have a problem with memory protection.
+            // Let's say page size on the host is 32K and we have 2 adjacent virtual pages, which is
+            // 16K per virtual page. The first virtual page want to use read/write while the second
+            // virtual page want to use read-only. This scenario will not be possible because those
+            // two virtual pages are on the same page.
             panic!("Your system are using unsupported page size.");
         }
 
-        // Round-up the size of total memory.
-        let len = match len % page_size {
-            0 => len,
-            v => len + (page_size - v),
-        };
-
-        // Allocate a memory that ack as a total available memory for PS4.
-        let ptr = match Self::alloc_pages(len) {
-            Ok(v) => v,
-            Err(e) => return Err(NewError::AllocFailed(len, e)),
-        };
-
-        Ok(Self {
-            ptr,
-            len,
+        Self {
             page_size,
-            alloc: Mutex::new(Allocator::new(ptr, len, Self::VIRTUAL_PAGE_SIZE)),
-        })
+            allocation_granularity,
+            allocations: RwLock::new(BTreeMap::new()),
+        }
     }
 
     /// Gets size of page on the host system.
     pub fn page_size(&self) -> usize {
         self.page_size
+    }
+
+    /// Gets allocation granularity on the host system.
+    pub fn allocation_granularity(&self) -> usize {
+        self.allocation_granularity
     }
 
     pub fn mmap(
@@ -105,6 +97,12 @@ impl MemoryManager {
             syserr!("MAP_STACK is not supported yet");
         }
 
+        // Round len up to virtual page boundary.
+        let len = match len % Self::VIRTUAL_PAGE_SIZE {
+            0 => len,
+            r => len + (Self::VIRTUAL_PAGE_SIZE - r),
+        };
+
         // Check mapping source.
         if flags.contains(MappingFlags::MAP_ANON) {
             self.mmap_anon(len, prot, fd, offset)
@@ -132,57 +130,188 @@ impl MemoryManager {
         }
 
         // Do allocation.
-        let mut alloc = self.alloc.lock().unwrap();
+        let (ptr, info) = match self.alloc(len, prot) {
+            Ok(v) => v,
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::OutOfMemory {
+                    return Err(MmapError::NoMem(len));
+                } else {
+                    // We should not hit other error except for out of memory.
+                    syserr!("{}", e);
+                }
+            }
+        };
 
-        match alloc.alloc(len, prot) {
-            Ok(v) => Ok(v.as_ptr()),
-            Err(e) => Err(match e {
-                alloc::AllocError::NoMem => MmapError::NoMem(len),
-            }),
+        // Store allocation info.
+        let mut allocs = self.allocations.write().unwrap();
+
+        if allocs.insert(ptr as usize, info).is_some() {
+            syserr!("address {:p} is already allocated", ptr);
         }
+
+        Ok(ptr)
     }
 
     #[cfg(unix)]
-    fn alloc_pages(len: usize) -> Result<*mut u8, std::io::Error> {
-        use libc::{mmap, MAP_ANON, MAP_FAILED, MAP_PRIVATE, PROT_READ, PROT_WRITE};
+    fn alloc(&self, len: usize, prot: Protections) -> Result<(*mut u8, AllocInfo), std::io::Error> {
+        use libc::{mmap, munmap, MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, PROT_NONE};
         use std::ptr::null_mut;
 
-        let ptr = unsafe {
-            mmap(
-                null_mut(),
-                len,
-                PROT_READ | PROT_WRITE,
-                MAP_PRIVATE | MAP_ANON,
-                -1,
-                0,
-            )
-        };
+        // Determine how to allocate.
+        if self.allocation_granularity < Self::VIRTUAL_PAGE_SIZE {
+            // If allocation granularity is smaller than the virtual page that mean the result of
+            // mmap may not aligned correctly. In this case we need to do 2 allocations. The first
+            // allocation will be large enough for a second allocation with fixed address.
+            // The whole idea is coming from: https://stackoverflow.com/a/31411825/1829232
+            let reserved_len = self.get_reserved_size(len);
+            let reserved_addr = unsafe {
+                mmap(
+                    null_mut(),
+                    reserved_len,
+                    PROT_NONE,
+                    MAP_PRIVATE | MAP_ANON,
+                    -1,
+                    0,
+                )
+            };
 
-        if ptr == MAP_FAILED {
-            Err(std::io::Error::last_os_error())
+            if reserved_addr == MAP_FAILED {
+                return Err(std::io::Error::last_os_error());
+            }
+
+            // Do the second allocation.
+            let ptr = unsafe {
+                mmap(
+                    Self::align_virtual_page(reserved_addr),
+                    len,
+                    prot.into_host(),
+                    MAP_PRIVATE | MAP_ANON | MAP_FIXED,
+                    -1,
+                    0,
+                )
+            };
+
+            if ptr == MAP_FAILED {
+                let e = std::io::Error::last_os_error();
+                unsafe { munmap(reserved_addr, reserved_len) };
+                return Err(e);
+            }
+
+            // Build allocation info.
+            let info = AllocInfo {
+                reserved_addr: reserved_addr as _,
+                reserved_len,
+            };
+
+            Ok((ptr as _, info))
         } else {
-            Ok(ptr as _)
+            // If allocation granularity is equal or larger than the virtual page that mean the
+            // result of mmap will always aligned correctly.
+            let ptr = unsafe {
+                mmap(
+                    null_mut(),
+                    len,
+                    prot.into_host(),
+                    MAP_PRIVATE | MAP_ANON,
+                    -1,
+                    0,
+                )
+            };
+
+            if ptr == MAP_FAILED {
+                return Err(std::io::Error::last_os_error());
+            }
+
+            // Build allocation info.
+            let info = AllocInfo {
+                reserved_addr: null_mut(),
+                reserved_len: 0,
+            };
+
+            Ok((ptr as _, info))
         }
     }
 
     #[cfg(windows)]
-    fn alloc_pages(len: usize) -> Result<*mut u8, std::io::Error> {
-        use std::ptr::null;
+    fn alloc(&self, len: usize, prot: Protections) -> Result<(*mut u8, AllocInfo), std::io::Error> {
+        use std::ptr::{null, null_mut};
         use windows_sys::Win32::System::Memory::{
-            VirtualAlloc, MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE,
+            VirtualAlloc, VirtualFree, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_NOACCESS,
         };
 
-        let ptr = unsafe { VirtualAlloc(null(), len, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) };
+        // Determine how to allocate.
+        if self.allocation_granularity < Self::VIRTUAL_PAGE_SIZE {
+            // If allocation granularity is smaller than the virtual page that mean the result of
+            // VirtualAlloc may not aligned correctly. In this case we need to do 2 allocations. The
+            // first allocation will be large enough for a second allocation with fixed address.
+            // The whole idea is coming from: https://stackoverflow.com/a/7617465/1829232
+            let reserved_len = self.get_reserved_size(len);
+            let reserved_addr =
+                unsafe { VirtualAlloc(null(), reserved_len, MEM_RESERVE, PAGE_NOACCESS) };
 
-        if ptr.is_null() {
-            Err(std::io::Error::last_os_error())
+            if reserved_addr.is_null() {
+                return Err(std::io::Error::last_os_error());
+            }
+
+            // Do the second allocation.
+            let ptr = unsafe {
+                VirtualAlloc(
+                    Self::align_virtual_page(reserved_addr),
+                    len,
+                    MEM_COMMIT,
+                    prot.into_host(),
+                )
+            };
+
+            if ptr.is_null() {
+                let e = std::io::Error::last_os_error();
+                unsafe { VirtualFree(reserved_addr, 0, MEM_RELEASE) };
+                return Err(e);
+            }
+
+            // Build allocation info.
+            let info = AllocInfo {
+                reserved_addr: reserved_addr as _,
+                reserved_len,
+            };
+
+            Ok((ptr as _, info))
         } else {
-            Ok(ptr as _)
+            // If allocation granularity is equal or larger than the virtual page that mean the
+            // result of VirtualAlloc will always aligned correctly.
+            let ptr =
+                unsafe { VirtualAlloc(null(), len, MEM_COMMIT | MEM_RESERVE, prot.into_host()) };
+
+            if ptr.is_null() {
+                return Err(std::io::Error::last_os_error());
+            }
+
+            // Build allocation info.
+            let info = AllocInfo {
+                reserved_addr: null_mut(),
+                reserved_len: 0,
+            };
+
+            Ok((ptr as _, info))
         }
     }
 
+    fn get_reserved_size(&self, need: usize) -> usize {
+        need + (Self::VIRTUAL_PAGE_SIZE - self.allocation_granularity)
+    }
+
+    fn align_virtual_page(ptr: *mut c_void) -> *mut c_void {
+        let addr = ptr as usize;
+        let aligned = match addr % Self::VIRTUAL_PAGE_SIZE {
+            0 => addr,
+            v => addr + (Self::VIRTUAL_PAGE_SIZE - v),
+        };
+
+        aligned as *mut c_void
+    }
+
     #[cfg(unix)]
-    fn get_page_size() -> usize {
+    fn get_memory_model() -> (usize, usize) {
         let v = unsafe { libc::sysconf(libc::_SC_PAGE_SIZE) };
 
         if v < 0 {
@@ -190,48 +319,24 @@ impl MemoryManager {
             panic!("Failed to get page size: {}.", e);
         }
 
-        v as usize
+        (v as usize, v as usize)
     }
 
     #[cfg(windows)]
-    fn get_page_size() -> usize {
+    fn get_memory_model() -> (usize, usize) {
         use windows_sys::Win32::System::SystemInformation::{GetSystemInfo, SYSTEM_INFO};
         let mut i: SYSTEM_INFO = util::mem::uninit();
 
         unsafe { GetSystemInfo(&mut i) };
 
-        i.dwPageSize as usize
+        (i.dwPageSize as usize, i.dwAllocationGranularity as usize)
     }
 }
 
-impl Drop for MemoryManager {
-    #[cfg(unix)]
-    fn drop(&mut self) {
-        use libc::munmap;
-
-        if unsafe { munmap(self.ptr as _, self.len) } < 0 {
-            let e = std::io::Error::last_os_error();
-
-            panic!(
-                "Failed to unmap {} bytes starting at {:p}: {}",
-                self.len, self.ptr, e
-            );
-        }
-    }
-
-    #[cfg(windows)]
-    fn drop(&mut self) {
-        use windows_sys::Win32::System::Memory::{VirtualFree, MEM_RELEASE};
-
-        if unsafe { VirtualFree(self.ptr as _, 0, MEM_RELEASE) } == 0 {
-            let e = std::io::Error::last_os_error();
-
-            panic!(
-                "Failed to free {} bytes starting at {:p}: {}",
-                self.len, self.ptr, e
-            );
-        }
-    }
+/// Contains information for an allocation of virtual pages.
+struct AllocInfo {
+    reserved_addr: *mut u8,
+    reserved_len: usize,
 }
 
 bitflags! {
@@ -242,15 +347,65 @@ bitflags! {
         const CPU_READ = 0x00000001;
         const CPU_WRITE = 0x00000002;
         const CPU_EXEC = 0x00000004;
+        const CPU_MASK = 0x00000007;
         const GPU_EXEC = 0x00000008;
         const GPU_READ = 0x00000010;
         const GPU_WRITE = 0x00000020;
+        const GPU_MASK = 0x00000056;
     }
 }
 
 impl Protections {
     pub fn contains_unknown(self) -> bool {
         (self.bits >> 6) != 0
+    }
+
+    #[cfg(unix)]
+    fn into_host(self) -> std::ffi::c_int {
+        use libc::{PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE};
+
+        let mut host = PROT_NONE;
+
+        if self.contains(Self::CPU_READ) {
+            host |= PROT_READ;
+        }
+
+        if self.contains(Self::CPU_WRITE) {
+            host |= PROT_WRITE;
+        }
+
+        if self.contains(Self::CPU_EXEC) {
+            host |= PROT_EXEC;
+        }
+
+        host
+    }
+
+    #[cfg(windows)]
+    fn into_host(self) -> windows_sys::Win32::System::Memory::PAGE_PROTECTION_FLAGS {
+        use windows_sys::Win32::System::Memory::{
+            PAGE_EXECUTE, PAGE_EXECUTE_READ, PAGE_EXECUTE_READWRITE, PAGE_NOACCESS, PAGE_READONLY,
+            PAGE_READWRITE,
+        };
+
+        // We cannot use "match" here because we need "|" to do bitwise OR.
+        let cpu = self & Self::CPU_MASK;
+
+        if cpu == Self::CPU_EXEC {
+            PAGE_EXECUTE
+        } else if cpu == Self::CPU_EXEC | Self::CPU_READ {
+            PAGE_EXECUTE_READ
+        } else if cpu == Self::CPU_EXEC | Self::CPU_READ | Self::CPU_WRITE {
+            PAGE_EXECUTE_READWRITE
+        } else if cpu == Self::CPU_READ {
+            PAGE_READONLY
+        } else if cpu == Self::CPU_READ | Self::CPU_WRITE {
+            PAGE_READWRITE
+        } else if cpu == Self::CPU_WRITE {
+            PAGE_READWRITE
+        } else {
+            PAGE_NOACCESS
+        }
     }
 }
 
@@ -286,16 +441,6 @@ impl MappingFlags {
     pub fn alignment(self) -> usize {
         (self.bits >> 24) as usize
     }
-}
-
-/// Error for [`MemoryManager::new()`].
-#[derive(Debug, Error)]
-pub enum NewError {
-    #[error("len is zero")]
-    ZeroLen,
-
-    #[error("cannot allocate {0} bytes of memory")]
-    AllocFailed(usize, #[source] std::io::Error),
 }
 
 /// Errors for [`MemoryManager::mmap()`].

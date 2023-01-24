@@ -89,15 +89,14 @@ fn run() -> bool {
     // Initialize memory manager.
     info!(0, "Initializing memory manager.");
 
-    let mm = match MemoryManager::new(1024 * 1024 * 1024 * 8) {
-        Ok(v) => Arc::new(v),
-        Err(e) => {
-            error!(0, e, "Initialization failed");
-            return false;
-        }
-    };
+    let mm = Arc::new(MemoryManager::new());
 
     info!(0, "Page size is: {}.", mm.page_size());
+    info!(
+        0,
+        "Allocation granularity is: {}.",
+        mm.allocation_granularity()
+    );
 
     // Get eboot.bin.
     info!(0, "Getting /mnt/app0/eboot.bin.");

@@ -39,8 +39,6 @@ We have a Matrix Room Space `#obliteration:matrix.org` on [Matrix.to](https://ma
   - Intel:
     - Minimum (Based on Required Instruction Sets): Haswell-Based CPUs or newer
     - Recommended (Based on Performance): 5th Gen CPUs or newer
-- 16 GB of memory.
-  - Obliteration itself required 8 GB. The remaining are for your OS.
 
 ### Windows specific requirements
 
