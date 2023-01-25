@@ -5,4 +5,3 @@ edition = "2021"
 
 [dependencies]
 libc = "0.2"
-clap = { version = "4.0", features = ["derive"] }

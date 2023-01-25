@@ -3,6 +3,7 @@ use self::fs::Fs;
 use self::memory::MemoryManager;
 use self::process::Process;
 use self::rootfs::RootFs;
+use clap::Parser;
 use std::fs::File;
 use std::path::Path;
 use std::sync::Arc;
@@ -10,14 +11,12 @@ use std::sync::Arc;
 mod elf;
 mod errno;
 mod fs;
+mod kernel_debug_parser;
 mod log;
 mod memory;
 mod pfs;
 mod process;
 mod rootfs;
-
-use clap::Parser;
-use util::kernel_debug_parser::Args;
 
 fn main() {
     std::process::exit(if run() { 0 } else { 1 });
@@ -34,7 +33,7 @@ fn run() -> bool {
             }
         };
 
-        match Args::from_file(&mut file) {
+        match kernel_debug_parser::Args::from_file(&mut file) {
             Ok(v) => v,
             Err(e) => {
                 error!(0, e, "Failed to read .kernel-debug");
@@ -42,7 +41,7 @@ fn run() -> bool {
             }
         }
     } else {
-        Args::parse()
+        kernel_debug_parser::Args::parse()
     };
 
     // Remove previous debug dump.
