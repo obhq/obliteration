@@ -4,32 +4,19 @@ use self::memory::MemoryManager;
 use self::process::Process;
 use self::rootfs::RootFs;
 use clap::Parser;
-use serde::Deserialize;
 use std::fs::File;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 
 mod elf;
 mod errno;
 mod fs;
+mod kernel_debug_parser;
 mod log;
 mod memory;
 mod pfs;
 mod process;
 mod rootfs;
-
-#[derive(Parser, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-struct Args {
-    #[arg(long)]
-    game: PathBuf,
-
-    #[arg(long)]
-    debug_dump: PathBuf,
-
-    #[arg(long)]
-    clear_debug_dump: bool,
-}
 
 fn main() {
     std::process::exit(if run() { 0 } else { 1 });
@@ -38,7 +25,7 @@ fn main() {
 fn run() -> bool {
     // Load arguments.
     let args = if std::env::args().any(|a| a == "--debug") {
-        let file = match File::open(".kernel-debug") {
+        let mut file = match File::open(".kernel-debug") {
             Ok(v) => v,
             Err(e) => {
                 error!(0, e, "Failed to open .kernel-debug");
@@ -46,7 +33,7 @@ fn run() -> bool {
             }
         };
 
-        match serde_yaml::from_reader(file) {
+        match kernel_debug_parser::Args::from_file(&mut file) {
             Ok(v) => v,
             Err(e) => {
                 error!(0, e, "Failed to read .kernel-debug");
@@ -54,7 +41,7 @@ fn run() -> bool {
             }
         }
     } else {
-        Args::parse()
+        kernel_debug_parser::Args::parse()
     };
 
     // Remove previous debug dump.

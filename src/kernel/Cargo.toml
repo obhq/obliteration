@@ -15,8 +15,6 @@ libc = "0.2"
 linked_list_allocator = { version = "0.10", default-features = false }
 memmap2 = "0.5"
 pfs = { path = "../pfs" }
-serde = { version = "1.0", features = ["derive"] }
-serde_yaml = "0.9"
 thiserror = "1.0"
 util = { path = "../util" }
 
