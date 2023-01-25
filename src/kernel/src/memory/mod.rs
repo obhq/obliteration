@@ -28,7 +28,7 @@ impl MemoryManager {
             // 16K per virtual page. The first virtual page want to use read/write while the second
             // virtual page want to use read-only. This scenario will not be possible because those
             // two virtual pages are on the same page.
-            panic!("Your system are using unsupported page size.");
+            panic!("Your system is using an unsupported page size.");
         }
 
         Self {
