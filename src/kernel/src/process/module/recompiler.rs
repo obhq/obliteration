@@ -158,11 +158,14 @@ impl<'input> Recompiler<'input> {
                 Code::Mov_rm8_r8 => (self.transform_mov_rm8_r8(i), false),
                 Code::Mov_rm32_r32 => (self.transform_mov_rm32_r32(i), false),
                 Code::Mov_rm64_r64 => (self.transform_mov_rm64_r64(i), false),
-                Code::Nop_rm16 | Code::Nop_rm32 | Code::Nopw => (self.preserve(i), false),
+                Code::Movzx_r32_rm8 => (self.preserve(i), false),
+                Code::Nop_rm16 | Code::Nop_rm32 | Code::Nopd | Code::Nopw => (self.preserve(i), false),
                 Code::Pop_r64 => (self.preserve(i), false),
                 Code::Pushq_imm32 => (self.preserve(i), false),
                 Code::Push_r64 => (self.preserve(i), false),
                 Code::Retnq => (self.preserve(i), true),
+                Code::Setne_rm8 => (self.preserve(i), false),
+                Code::Sub_rm64_imm8 => (self.transform_sub_rm64_imm8(i), false),
                 Code::Sub_rm64_imm32 => (self.transform_sub_rm64_imm32(i), false),
                 Code::Test_rm8_r8 => (self.transform_test_rm8_r8(i), false),
                 Code::Test_rm32_r32 => (self.transform_test_rm32_r32(i), false),
@@ -546,6 +549,16 @@ impl<'input> Recompiler<'input> {
         }
     }
 
+    fn transform_sub_rm64_imm8(&mut self, i: Instruction) -> usize {
+        // Check if first operand use RIP-relative.
+        if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
+            panic!("SUB r/m64, imm8 with first operand as RIP-relative is not supported yet.");
+        } else {
+            self.assembler.add_instruction(i).unwrap();
+            i.len()
+        }
+    }
+
     fn transform_sub_rm64_imm32(&mut self, i: Instruction) -> usize {
         // Check if first operand use RIP-relative.
         if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
@@ -647,8 +660,22 @@ impl<'input> Recompiler<'input> {
     /// Get register other than `keep`.
     fn temp_register64(keep: Register) -> Register {
         match keep {
+            Register::R8 => Register::R9,
+            Register::R9 => Register::R8,
+            Register::R10 => Register::R11,
+            Register::R11 => Register::R10,
+            Register::R12 => Register::R13,
+            Register::R13 => Register::R12,
+            Register::R14 => Register::R15,
+            Register::R15 => Register::R14,
+            Register::RDI => Register::RSI,
+            Register::RSI => Register::RDI,
+            Register::RBP => Register::RSP,
+            Register::RSP => Register::RBP,
             Register::RAX => Register::RBX,
             Register::RBX => Register::RAX,
+            Register::RCX => Register::RDX,
+            Register::RDX => Register::RCX,
             r => panic!("Register {:?} is not implemented yet.", r),
         }
     }
