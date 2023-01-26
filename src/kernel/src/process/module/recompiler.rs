@@ -139,7 +139,7 @@ impl<'input> Recompiler<'input> {
                 Code::Add_rm8_r8 => (self.transform_add_rm8_r8(i), false),
                 Code::Add_rm32_r32 => (self.transform_add_rm32_r32(i), false),
                 Code::Add_rm64_imm8 => (self.transform_add_rm64_imm8(i), false),
-                Code::And_EAX_imm32 => (self.transform_preserve(i), false),
+                Code::And_EAX_imm32 => (self.preserve(i), false),
                 Code::Call_rm64 => (self.transform_call_rm64(i), false),
                 Code::Call_rel32_64 => (self.transform_call_rel32(i), false),
                 Code::Cmp_rm8_imm8 => (self.transform_cmp_rm8_imm8(i), false),
