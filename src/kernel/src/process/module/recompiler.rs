@@ -139,7 +139,7 @@ impl<'input> Recompiler<'input> {
                 Code::Add_rm8_r8 => (self.transform_add_rm8_r8(i), false),
                 Code::Add_rm32_r32 => (self.transform_add_rm32_r32(i), false),
                 Code::Add_rm64_imm8 => (self.transform_add_rm64_imm8(i), false),
-                Code::And_EAX_imm32 => (self.transform_and_eax_imm32(i), false),
+                Code::And_EAX_imm32 => (self.transform_preserve(i), false),
                 Code::Call_rm64 => (self.transform_call_rm64(i), false),
                 Code::Call_rel32_64 => (self.transform_call_rel32(i), false),
                 Code::Cmp_rm8_imm8 => (self.transform_cmp_rm8_imm8(i), false),
@@ -238,16 +238,6 @@ impl<'input> Recompiler<'input> {
         // Check if first operand use RIP-relative.
         if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
             panic!("ADD r/m64, imm8 with first operand as RIP-relative is not supported yet.");
-        } else {
-            self.assembler.add_instruction(i).unwrap();
-            i.len()
-        }
-    }
-
-    fn transform_and_eax_imm32(&mut self, i: Instruction) -> usize {
-        // Check if first operand use RIP-relative.
-        if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
-            panic!("AND imm32 with first operand as RIP-relative is not supported yet.");
         } else {
             self.assembler.add_instruction(i).unwrap();
             i.len()
@@ -723,9 +713,9 @@ impl<'input> Recompiler<'input> {
     }
 
     fn transform_movzx_r32_rm8(&mut self, i: Instruction) -> usize {
-        // Check if first operand use RIP-relative.
-        if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
-            panic!("MOVZX r32, r/m8 with first operand as RIP-relative is not supported yet.");
+        // Check if second operand use RIP-relative.
+        if i.op1_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
+            panic!("MOVZX r32, r/m8 with second operand as RIP-relative is not supported yet.");
         } else {
             self.assembler.add_instruction(i).unwrap();
             i.len()
