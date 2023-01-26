@@ -2,7 +2,6 @@ use crate::errno::{EINVAL, ENOMEM};
 use crate::syserr;
 use bitflags::bitflags;
 use std::collections::BTreeMap;
-use std::os::raw::c_void;
 use std::sync::RwLock;
 use thiserror::Error;
 
@@ -112,7 +111,94 @@ impl MemoryManager {
     }
 
     pub fn munmap(&self, addr: *mut u8, len: usize) -> Result<(), MunmapError> {
-        todo!()
+        // Check arguments.
+        let addr = addr as usize;
+
+        if addr % Self::VIRTUAL_PAGE_SIZE != 0 {
+            return Err(MunmapError::UnalignedAddr);
+        } else if len == 0 {
+            return Err(MunmapError::ZeroLen);
+        }
+
+        // Find the first allocation info.
+        let mut allocs = self.allocations.write().unwrap();
+        let first = match allocs.range(..=addr).next_back() {
+            Some(v) => v.1,
+            None => return Ok(()),
+        };
+
+        // Check if the target address is in the range of first allocation. If it does not that mean
+        // the target address is not mapped.
+        if (first.end() as usize) <= addr {
+            return Ok(());
+        }
+
+        // Do unmapping every pages in the range.
+        let mut removes: Vec<usize> = Vec::with_capacity(allocs.len());
+        let mut splitted: Option<AllocInfo> = None;
+        let end = (addr + len) as *mut u8;
+        let free = |info: &AllocInfo| -> usize {
+            // Unmap the whole region.
+            let end = (info.addr as usize) + info.len;
+            let addr = match info.original_addr {
+                Some(v) => v,
+                None => info.addr,
+            };
+
+            if let Err(e) = Self::free(addr, end - (addr as usize)) {
+                // We should never hit any errors if our code are working correctly.
+                syserr!("{}", e);
+            }
+
+            info.addr as usize
+        };
+
+        // FIXME: In theory it is possible to make this more efficient by remove allocation
+        // info in-place. Unfortunately Rust does not provides API to achieve what we want.
+        for (&addr, info) in allocs.range((first.addr as usize)..) {
+            if end <= info.aligned_addr() {
+                // The current region is not in the range to unmap.
+                break;
+            } else if end < info.end() {
+                // The current region is the last region.
+                let end = Self::align_virtual_page(end);
+
+                if end == info.end() {
+                    // Unmap the whole region.
+                    removes.push(free(info));
+                } else {
+                    // Decommit the partial region.
+                    let len = (end as usize) - (info.addr as usize);
+
+                    if let Err(e) = Self::decommit(info.addr, len) {
+                        // We should never hit any errors if our code are working correctly.
+                        syserr!("{}", e);
+                    }
+
+                    // Split the region.
+                    removes.push(addr);
+
+                    splitted = Some(AllocInfo {
+                        addr: end,
+                        len: info.len - len,
+                        original_addr: info.original_addr.or(Some(info.addr)),
+                    });
+                }
+            } else {
+                // Unmap the whole region.
+                removes.push(free(info));
+            }
+        }
+
+        for addr in removes {
+            allocs.remove(&addr);
+        }
+
+        if let Some(v) = splitted {
+            allocs.insert(v.addr as usize, v);
+        }
+
+        Ok(())
     }
 
     fn mmap_anon(
@@ -122,6 +208,8 @@ impl MemoryManager {
         fd: i32,
         offset: i64,
     ) -> Result<*mut u8, MmapError> {
+        use std::collections::btree_map::Entry;
+
         // Check if arguments valid.
         if fd >= 0 {
             return Err(MmapError::NonNegativeFd);
@@ -130,7 +218,7 @@ impl MemoryManager {
         }
 
         // Do allocation.
-        let (ptr, info) = match self.alloc(len, prot) {
+        let info = match self.alloc(len, prot) {
             Ok(v) => v,
             Err(e) => {
                 if e.kind() == std::io::ErrorKind::OutOfMemory {
@@ -145,15 +233,14 @@ impl MemoryManager {
         // Store allocation info.
         let mut allocs = self.allocations.write().unwrap();
 
-        if allocs.insert(ptr as usize, info).is_some() {
-            syserr!("address {:p} is already allocated", ptr);
+        match allocs.entry(info.addr as usize) {
+            Entry::Occupied(e) => syserr!("address {:p} is already allocated", e.key()),
+            Entry::Vacant(e) => Ok(e.insert(info).aligned_addr()),
         }
-
-        Ok(ptr)
     }
 
     #[cfg(unix)]
-    fn alloc(&self, len: usize, prot: Protections) -> Result<(*mut u8, AllocInfo), std::io::Error> {
+    fn alloc(&self, len: usize, prot: Protections) -> Result<AllocInfo, std::io::Error> {
         use libc::{mmap, munmap, MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, PROT_NONE};
         use std::ptr::null_mut;
 
@@ -163,27 +250,24 @@ impl MemoryManager {
             // mmap may not aligned correctly. In this case we need to do 2 allocations. The first
             // allocation will be large enough for a second allocation with fixed address.
             // The whole idea is coming from: https://stackoverflow.com/a/31411825/1829232
-            let reserved_len = self.get_reserved_size(len);
-            let reserved_addr = unsafe {
-                mmap(
-                    null_mut(),
-                    reserved_len,
-                    PROT_NONE,
-                    MAP_PRIVATE | MAP_ANON,
-                    -1,
-                    0,
-                )
-            };
+            let len = self.get_reserved_size(len);
+            let addr = unsafe { mmap(null_mut(), len, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0) };
 
-            if reserved_addr == MAP_FAILED {
+            if addr == MAP_FAILED {
                 return Err(std::io::Error::last_os_error());
             }
+
+            let info = AllocInfo {
+                addr: addr as _,
+                len,
+                original_addr: None,
+            };
 
             // Do the second allocation.
             let ptr = unsafe {
                 mmap(
-                    Self::align_virtual_page(reserved_addr),
-                    len,
+                    info.aligned_addr() as _,
+                    info.aligned_len(),
                     prot.into_host(),
                     MAP_PRIVATE | MAP_ANON | MAP_FIXED,
                     -1,
@@ -193,21 +277,15 @@ impl MemoryManager {
 
             if ptr == MAP_FAILED {
                 let e = std::io::Error::last_os_error();
-                unsafe { munmap(reserved_addr, reserved_len) };
+                unsafe { munmap(info.addr as _, info.len) };
                 return Err(e);
             }
 
-            // Build allocation info.
-            let info = AllocInfo {
-                reserved_addr: reserved_addr as _,
-                reserved_len,
-            };
-
-            Ok((ptr as _, info))
+            Ok(info)
         } else {
             // If allocation granularity is equal or larger than the virtual page that mean the
             // result of mmap will always aligned correctly.
-            let ptr = unsafe {
+            let addr = unsafe {
                 mmap(
                     null_mut(),
                     len,
@@ -218,22 +296,20 @@ impl MemoryManager {
                 )
             };
 
-            if ptr == MAP_FAILED {
+            if addr == MAP_FAILED {
                 return Err(std::io::Error::last_os_error());
             }
 
-            // Build allocation info.
-            let info = AllocInfo {
-                reserved_addr: null_mut(),
-                reserved_len: 0,
-            };
-
-            Ok((ptr as _, info))
+            Ok(AllocInfo {
+                addr: addr as _,
+                len,
+                original_addr: None,
+            })
         }
     }
 
     #[cfg(windows)]
-    fn alloc(&self, len: usize, prot: Protections) -> Result<(*mut u8, AllocInfo), std::io::Error> {
+    fn alloc(&self, len: usize, prot: Protections) -> Result<AllocInfo, std::io::Error> {
         use std::ptr::{null, null_mut};
         use windows_sys::Win32::System::Memory::{
             VirtualAlloc, VirtualFree, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_NOACCESS,
@@ -245,19 +321,24 @@ impl MemoryManager {
             // VirtualAlloc may not aligned correctly. In this case we need to do 2 allocations. The
             // first allocation will be large enough for a second allocation with fixed address.
             // The whole idea is coming from: https://stackoverflow.com/a/7617465/1829232
-            let reserved_len = self.get_reserved_size(len);
-            let reserved_addr =
-                unsafe { VirtualAlloc(null(), reserved_len, MEM_RESERVE, PAGE_NOACCESS) };
+            let len = self.get_reserved_size(len);
+            let addr = unsafe { VirtualAlloc(null(), len, MEM_RESERVE, PAGE_NOACCESS) };
 
-            if reserved_addr.is_null() {
+            if addr.is_null() {
                 return Err(std::io::Error::last_os_error());
             }
+
+            let info = AllocInfo {
+                addr: addr as _,
+                len,
+                original_addr: None,
+            };
 
             // Do the second allocation.
             let ptr = unsafe {
                 VirtualAlloc(
-                    Self::align_virtual_page(reserved_addr),
-                    len,
+                    info.aligned_addr() as _,
+                    info.aligned_len(),
                     MEM_COMMIT,
                     prot.into_host(),
                 )
@@ -265,34 +346,70 @@ impl MemoryManager {
 
             if ptr.is_null() {
                 let e = std::io::Error::last_os_error();
-                unsafe { VirtualFree(reserved_addr, 0, MEM_RELEASE) };
+                unsafe { VirtualFree(info.addr as _, 0, MEM_RELEASE) };
                 return Err(e);
             }
 
-            // Build allocation info.
-            let info = AllocInfo {
-                reserved_addr: reserved_addr as _,
-                reserved_len,
-            };
-
-            Ok((ptr as _, info))
+            Ok(info)
         } else {
             // If allocation granularity is equal or larger than the virtual page that mean the
             // result of VirtualAlloc will always aligned correctly.
-            let ptr =
+            let addr =
                 unsafe { VirtualAlloc(null(), len, MEM_COMMIT | MEM_RESERVE, prot.into_host()) };
 
-            if ptr.is_null() {
+            if addr.is_null() {
                 return Err(std::io::Error::last_os_error());
             }
 
-            // Build allocation info.
-            let info = AllocInfo {
-                reserved_addr: null_mut(),
-                reserved_len: 0,
-            };
+            Ok(AllocInfo {
+                addr: addr as _,
+                len,
+                original_addr: None,
+            })
+        }
+    }
 
-            Ok((ptr as _, info))
+    #[cfg(unix)]
+    fn decommit(addr: *mut u8, len: usize) -> Result<(), std::io::Error> {
+        use libc::{mprotect, PROT_NONE};
+
+        if unsafe { mprotect(addr as _, len, PROT_NONE) } < 0 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+
+    #[cfg(windows)]
+    fn decommit(addr: *mut u8, len: usize) -> Result<(), std::io::Error> {
+        use windows_sys::Win32::System::Memory::{VirtualFree, MEM_DECOMMIT};
+
+        if unsafe { VirtualFree(addr as _, len, MEM_DECOMMIT) } == 0 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+
+    #[cfg(unix)]
+    fn free(addr: *mut u8, len: usize) -> Result<(), std::io::Error> {
+        use libc::munmap;
+
+        if unsafe { munmap(addr as _, len) } < 0 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+
+    #[cfg(windows)]
+    fn free(addr: *mut u8, len: usize) -> Result<(), std::io::Error> {
+        use windows_sys::Win32::System::Memory::{VirtualFree, MEM_RELEASE};
+
+        if unsafe { VirtualFree(addr as _, 0, MEM_RELEASE) } == 0 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(())
         }
     }
 
@@ -300,14 +417,11 @@ impl MemoryManager {
         need + (Self::VIRTUAL_PAGE_SIZE - self.allocation_granularity)
     }
 
-    fn align_virtual_page(ptr: *mut c_void) -> *mut c_void {
-        let addr = ptr as usize;
-        let aligned = match addr % Self::VIRTUAL_PAGE_SIZE {
-            0 => addr,
-            v => addr + (Self::VIRTUAL_PAGE_SIZE - v),
-        };
-
-        aligned as *mut c_void
+    fn align_virtual_page(ptr: *mut u8) -> *mut u8 {
+        match (ptr as usize) % Self::VIRTUAL_PAGE_SIZE {
+            0 => ptr,
+            v => unsafe { ptr.add(Self::VIRTUAL_PAGE_SIZE - v) },
+        }
     }
 
     #[cfg(unix)]
@@ -335,8 +449,26 @@ impl MemoryManager {
 
 /// Contains information for an allocation of virtual pages.
 struct AllocInfo {
-    reserved_addr: *mut u8,
-    reserved_len: usize,
+    addr: *mut u8,
+    len: usize,
+    original_addr: Option<*mut u8>,
+}
+
+impl AllocInfo {
+    fn end(&self) -> *mut u8 {
+        unsafe { self.addr.add(self.len) }
+    }
+
+    fn aligned_addr(&self) -> *mut u8 {
+        MemoryManager::align_virtual_page(self.addr)
+    }
+
+    fn aligned_len(&self) -> usize {
+        let addr = self.addr as usize;
+        let aligned_addr = self.aligned_addr() as usize;
+
+        self.len - (aligned_addr - addr)
+    }
 }
 
 bitflags! {
@@ -480,4 +612,18 @@ impl MmapError {
 
 /// Errors for [`MemoryManager::munmap()`].
 #[derive(Debug, Error)]
-pub enum MunmapError {}
+pub enum MunmapError {
+    #[error("addr is not aligned")]
+    UnalignedAddr,
+
+    #[error("len is zero")]
+    ZeroLen,
+}
+
+impl MunmapError {
+    pub fn errno(&self) -> i32 {
+        match self {
+            Self::UnalignedAddr | Self::ZeroLen => EINVAL,
+        }
+    }
+}
