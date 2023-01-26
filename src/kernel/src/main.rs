@@ -174,8 +174,16 @@ fn mount_pfs<G: AsRef<Path>>(fs: &Fs, game: G) -> bool {
     // Open PFS image.
     let mut path = game.as_ref().to_path_buf();
 
-    path.push("uroot");
-    path.push("pfs_image.dat");
+    #[cfg(unix)]
+    {
+        path.push("uroot");
+        path.push("pfs_image.dat");
+    }
+    #[cfg(windows)]
+    {
+        path.push("\\uroot");
+        path.push("\\pfs_image.dat");
+    }
 
     info!(0, "Opening PFS image {}.", path.display());
 
