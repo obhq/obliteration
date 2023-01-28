@@ -194,7 +194,7 @@ pub(super) struct DebugOpts {
     pub original_mapped_dump: PathBuf,
 }
 
-pub(super) type EntryPoint = extern "sysv64" fn(*mut Arg, extern "sysv64" fn());
+pub(super) type EntryPoint = extern "C" fn(*mut Arg, extern "C" fn());
 
 #[repr(C)]
 pub(super) struct Arg {

@@ -76,11 +76,11 @@ impl Process {
         Ok(0)
     }
 
-    extern "sysv64" fn exit() {
+    extern "C" fn exit() {
         // TODO: What should we do here?
     }
 
-    extern "sysv64" fn handle_ud2(&mut self, addr: usize) -> ! {
+    extern "C" fn handle_ud2(&mut self, addr: usize) -> ! {
         info!(
             self.id,
             "Process exited with UD2 instruction from {:#018x}.", addr
