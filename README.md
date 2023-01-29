@@ -59,14 +59,14 @@ Obliteration requires the `PS4UPDATE1.PUP.dec` firmware file in order to work. W
 - Visual Studio 2022
   - `Desktop development with C++` workload is required
   - You need to install the `MSVC v142 - VS 2019 C++ x64/x86 build tools` component
-- Rust 1.63+
+- Rust on latest stable channel
 - CMake 3.21+
   - Make sure you have `Add CMake to the system PATH` selected when installing
 
 ### Linux prerequisites
 
 - GCC 9.4+
-- Rust 1.63+
+- Rust on latest stable channel
 - CMake 3.21+
 
 ### macOS prerequisites
@@ -74,7 +74,7 @@ Obliteration requires the `PS4UPDATE1.PUP.dec` firmware file in order to work. W
 - macOS 12+
 - Homebrew
 - Clang 13+
-- Rust 1.63+
+- Rust on latest stable channel
 - CMake 3.21+
 
 ### Install Qt 6
