@@ -100,6 +100,7 @@ impl<'input> Recompiler<'input> {
     pub fn run(mut self, starts: &[usize]) -> Result<(NativeCode, Vec<*const u8>), RunError> {
         Err(RunError::UnsupportedArchError)
     }
+
     #[cfg(target_arch = "x86_64")]
     fn recompile(&mut self, offset: usize, label: CodeLabel) -> Result<u64, RunError> {
         // Setup decoder.
@@ -803,7 +804,7 @@ impl<'input> Recompiler<'input> {
     }
 
     fn transform_ud2(&mut self, i: Instruction) -> usize {
-        let handler: extern "C" fn(&mut Process, usize) -> ! = Process::handle_ud2;
+        let handler: extern "sysv64" fn(&mut Process, usize) -> ! = Process::handle_ud2;
         let handler: u64 = handler as u64;
         let proc: u64 = self.proc as u64;
 
