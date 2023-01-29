@@ -803,8 +803,8 @@ impl<'input> Recompiler<'input> {
         }
     }
 
-    #[cfg(target_arch = "x86_64")]
     /// Will not compile on an non-x86_64 machine!
+    #[cfg(target_arch = "x86_64")]
     fn transform_ud2(&mut self, i: Instruction) -> usize {
         let handler: extern "sysv64" fn(&mut Process, usize) -> ! = Process::handle_ud2;
         let handler: u64 = handler as u64;
