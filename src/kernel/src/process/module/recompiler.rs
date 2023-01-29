@@ -175,7 +175,7 @@ impl<'input> Recompiler<'input> {
                 Code::Jl_rel8_64 | Code::Jl_rel32_64 => (self.transform_jl_rel(i), false),
                 Code::Jle_rel8_64 | Code::Jle_rel32_64 => (self.transform_jle_rel(i), false),
                 Code::Jmp_rm64 => (self.transform_jmp_rm64(i), true),
-                Code::Jmp_rel8_64 | Code::Jmp_rel32_64 => (self.transform_jmp_rel(i), false),
+                Code::Jmp_rel8_64 | Code::Jmp_rel32_64 => (self.transform_jmp_rel(i), true),
                 Code::Jne_rel8_64 | Code::Jne_rel32_64 => (self.transform_jne_rel(i), false),
                 Code::Jns_rel8_64 | Code::Jns_rel32_64 => (self.transform_jns_rel(i), false),
                 Code::Jo_rel8_64 | Code::Jo_rel32_64 => (self.transform_jo_rel(i), false),
