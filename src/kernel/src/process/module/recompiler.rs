@@ -151,6 +151,7 @@ impl<'input> Recompiler<'input> {
                 Code::Call_rel32_64 => (self.transform_call_rel32(i), false),
                 Code::Cmove_r64_rm64 => (self.transform_cmove_r64_rm64(i), false),
                 Code::Cmovne_r64_rm64 => (self.transform_cmovne_r64_rm64(i), false),
+                Code::Cmp_RAX_imm32 => (self.transform_cmp_rax_imm32(i), false),
                 Code::Cmp_r8_rm8 => (self.transform_cmp_r8_rm8(i), false),
                 Code::Cmp_rm8_imm8 => (self.transform_cmp_rm8_imm8(i), false),
                 Code::Cmp_rm8_r8 => (self.transform_cmp_rm8_r8(i), false),
@@ -164,6 +165,7 @@ impl<'input> Recompiler<'input> {
                 Code::Imul_r32_rm32_imm8 => (self.transform_imul_r32_rm32_imm8(i), false),
                 Code::In_AL_imm8 | Code::In_EAX_imm8 => (self.preserve(i), false),
                 Code::Inc_rm32 | Code::Inc_rm64 => (self.preserve(i), false),
+                Code::Ja_rel8_64 => (self.transform_ja_rel8_64(i), false),
                 Code::Jae_rel8_64 => (self.transform_jae_rel8_64(i), false),
                 Code::Jb_rel8_64 => (self.transform_jb_rel8_64(i), false),
                 Code::Jbe_rel8_64 => (self.transform_jbe_rel8_64(i), false),
@@ -222,11 +224,14 @@ impl<'input> Recompiler<'input> {
                 Code::VEX_Vmovdqu_ymm_ymmm256 => (self.transform_vmovdqu_ymm_ymmm256(i), false),
                 Code::VEX_Vmovdqu_ymmm256_ymm => (self.transform_vmovdqu_ymmm256_ymm(i), false),
                 Code::VEX_Vmovq_xmm_rm64 => (self.transform_vmovq_xmm_rm64(i), false),
+                Code::VEX_Vmovups_xmm_xmmm128 => (self.transform_vmovups_xmm_xmmm128(i), false),
+                Code::VEX_Vmovups_xmmm128_xmm => (self.transform_vmovups_xmmm128_xmm(i), false),
                 Code::VEX_Vmovups_ymm_ymmm256 => (self.transform_vmovups_ymm_ymmm256(i), false),
                 Code::VEX_Vmovups_ymmm256_ymm => (self.transform_vmovups_ymmm256_ymm(i), false),
                 Code::VEX_Vpshufd_xmm_xmmm128_imm8 => (self.transform_vpshufd_xmm_xmmm128_imm8(i), false),
                 Code::VEX_Vpslldq_xmm_xmm_imm8 => (self.transform_vpslldq_xmm_xmm_imm8(i), false),
                 Code::VEX_Vpxor_xmm_xmm_xmmm128 => (self.transform_vpxor_xmm_xmm_xmmm128(i), false),
+                Code::VEX_Vxorps_xmm_xmm_xmmm128 => (self.transform_vxorps_xmm_xmm_xmmm128(i), false),
                 Code::VEX_Vxorps_ymm_ymm_ymmm256 => (self.transform_vxorps_ymm_ymm_ymmm256(i), false),
                 Code::Xadd_rm32_r32 => (self.transform_xadd_rm32_r32(i), false),
                 Code::Xchg_r32_EAX => (self.transform_xchg_r32_eax(i), false),
@@ -410,6 +415,16 @@ impl<'input> Recompiler<'input> {
         }
     }
 
+    fn transform_cmp_rax_imm32(&mut self, i: Instruction) -> usize {
+        // Check if first operand use RIP-relative.
+        if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
+            panic!("CMP RAX, imm32 with first operand as RIP-relative is not supported yet.");
+        } else {
+            self.assembler.add_instruction(i).unwrap();
+            i.len()
+        }
+    }
+
     fn transform_cmp_r8_rm8(&mut self, i: Instruction) -> usize {
         // Check if second operand use RIP-relative.
         if i.op1_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
@@ -441,7 +456,22 @@ impl<'input> Recompiler<'input> {
     fn transform_cmp_rm8_imm8(&mut self, i: Instruction) -> usize {
         // Check if first operand use RIP-relative.
         if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
-            panic!("CMP r/m8, imm8 with first operand as RIP-relative is not supported yet.");
+            let dst = i.ip_rel_memory_address();
+            let src = i.immediate8();
+
+            if self.is_executable(dst) {
+                panic!(
+                    "CMP r/m8, imm8 with first operand from executable segment is not supported."
+                );
+            }
+
+            // Transform to absolute address.
+            self.assembler.push(rax).unwrap();
+            self.assembler.mov(rax, dst).unwrap();
+            self.assembler.cmp(byte_ptr(rax), src as u32).unwrap();
+            self.assembler.pop(rax).unwrap();
+
+            15 * 4
         } else {
             self.assembler.add_instruction(i).unwrap();
             i.len()
@@ -594,6 +624,21 @@ impl<'input> Recompiler<'input> {
             self.assembler.add_instruction(i).unwrap();
             i.len()
         }
+    }
+
+    fn transform_ja_rel8_64(&mut self, i: Instruction) -> usize {
+        let dst = i.near_branch64();
+
+        if let Some(&label) = self.labels.get(&dst) {
+            self.assembler.ja(label).unwrap();
+        } else {
+            let label = self.assembler.create_label();
+
+            self.assembler.ja(label).unwrap();
+            self.jobs.push_back((dst, self.offset(dst), label));
+        }
+
+        15
     }
 
     fn transform_jae_rel8_64(&mut self, i: Instruction) -> usize {
@@ -1431,6 +1476,30 @@ impl<'input> Recompiler<'input> {
         }
     }
 
+    fn transform_vmovups_xmm_xmmm128(&mut self, i: Instruction) -> usize {
+        // Check if first operand use RIP-relative.
+        if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
+            panic!(
+                "VMOVUPS xmm1, xmm2/m128 with first operand as RIP-relative is not supported yet."
+            );
+        } else {
+            self.assembler.add_instruction(i).unwrap();
+            i.len()
+        }
+    }
+
+    fn transform_vmovups_xmmm128_xmm(&mut self, i: Instruction) -> usize {
+        // Check if first operand use RIP-relative.
+        if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
+            panic!(
+                "VMOVUPS xmm2/m128, xmm1 with first operand as RIP-relative is not supported yet."
+            );
+        } else {
+            self.assembler.add_instruction(i).unwrap();
+            i.len()
+        }
+    }
+
     fn transform_vmovups_ymm_ymmm256(&mut self, i: Instruction) -> usize {
         // Check if first operand use RIP-relative.
         if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
@@ -1484,6 +1553,18 @@ impl<'input> Recompiler<'input> {
         if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
             panic!(
                 "VPXOR xmm1, xmm1, xmm2/m128, with first operand as RIP-relative is not supported yet."
+            );
+        } else {
+            self.assembler.add_instruction(i).unwrap();
+            i.len()
+        }
+    }
+
+    fn transform_vxorps_xmm_xmm_xmmm128(&mut self, i: Instruction) -> usize {
+        // Check if first operand use RIP-relative.
+        if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
+            panic!(
+                "VXORPS xmm1, xmm1, xmm2/m128, with first operand as RIP-relative is not supported yet."
             );
         } else {
             self.assembler.add_instruction(i).unwrap();
