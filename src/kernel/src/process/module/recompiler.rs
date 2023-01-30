@@ -151,7 +151,7 @@ impl<'input> Recompiler<'input> {
                 Code::Call_rel32_64 => (self.transform_call_rel32(i), false),
                 Code::Cmove_r64_rm64 => (self.transform_cmove_r64_rm64(i), false),
                 Code::Cmovne_r64_rm64 => (self.transform_cmovne_r64_rm64(i), false),
-                Code::Cmp_RAX_imm32 => (self.transform_cmp_rax_imm32(i), false),
+                Code::Cmp_RAX_imm32 => (self.preserve(i), false),
                 Code::Cmp_r8_rm8 => (self.transform_cmp_r8_rm8(i), false),
                 Code::Cmp_rm8_imm8 => (self.transform_cmp_rm8_imm8(i), false),
                 Code::Cmp_rm8_r8 => (self.transform_cmp_rm8_r8(i), false),
@@ -244,11 +244,11 @@ impl<'input> Recompiler<'input> {
                 Code::VEX_Vxorps_ymm_ymm_ymmm256 => (self.transform_vxorps_ymm_ymm_ymmm256(i), false),
                 Code::Wait => (self.preserve(i), false),
                 Code::Xadd_rm32_r32 => (self.transform_xadd_rm32_r32(i), false),
-                Code::Xchg_r32_EAX => (self.transform_xchg_r32_eax(i), false),
+                Code::Xchg_r32_EAX => (self.preserve(i), false),
                 Code::Xchg_rm8_r8 => (self.transform_xchg_rm8_r8(i), false),
                 Code::Xchg_rm32_r32 => (self.transform_xchg_rm32_r32(i), false),
-                Code::Xor_AL_imm8 => (self.transform_xor_al_imm8(i), false),
-                Code::Xor_EAX_imm32 => (self.transform_xor_eax_imm32(i), false),
+                Code::Xor_AL_imm8 => (self.preserve(i), false),
+                Code::Xor_EAX_imm32 => (self.preserve(i), false),
                 Code::Xor_rm8_r8 => (self.transform_xor_rm8_r8(i), false),
                 Code::Xor_rm32_r32 => (self.transform_xor_rm32_r32(i), false),
                 _ => {
@@ -419,16 +419,6 @@ impl<'input> Recompiler<'input> {
             self.assembler.pop(tmp).unwrap();
 
             15 * 4
-        } else {
-            self.assembler.add_instruction(i).unwrap();
-            i.len()
-        }
-    }
-
-    fn transform_cmp_rax_imm32(&mut self, i: Instruction) -> usize {
-        // Check if first operand use RIP-relative.
-        if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
-            panic!("CMP RAX, imm32 with first operand as RIP-relative is not supported yet.");
         } else {
             self.assembler.add_instruction(i).unwrap();
             i.len()
@@ -1697,18 +1687,6 @@ impl<'input> Recompiler<'input> {
         }
     }
 
-    fn transform_xchg_r32_eax(&mut self, i: Instruction) -> usize {
-        // Either operand can be memory for this instruction so we need to check both of it.
-        if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
-            panic!("XCHG r32, eax with first operand as RIP-relative is not supported yet.");
-        } else if i.op1_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
-            panic!("XCHG eax, r32 with second operand as RIP-relative is not supported yet.");
-        } else {
-            self.assembler.add_instruction(i).unwrap();
-            i.len()
-        }
-    }
-
     fn transform_xchg_rm8_r8(&mut self, i: Instruction) -> usize {
         // Either operand can be memory for this instruction so we need to check both of it.
         if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
@@ -1727,26 +1705,6 @@ impl<'input> Recompiler<'input> {
             panic!("XCHG r/m32, r32 with first operand as RIP-relative is not supported yet.");
         } else if i.op1_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
             panic!("XCHG r32, r/m32 with second operand as RIP-relative is not supported yet.");
-        } else {
-            self.assembler.add_instruction(i).unwrap();
-            i.len()
-        }
-    }
-
-    fn transform_xor_al_imm8(&mut self, i: Instruction) -> usize {
-        // Check if first operand use RIP-relative.
-        if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
-            panic!("XOR AL, imm8 with first operand as RIP-relative is not supported yet.");
-        } else {
-            self.assembler.add_instruction(i).unwrap();
-            i.len()
-        }
-    }
-
-    fn transform_xor_eax_imm32(&mut self, i: Instruction) -> usize {
-        // Check if first operand use RIP-relative.
-        if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
-            panic!("XOR EAX, imm32 with first operand as RIP-relative is not supported yet.");
         } else {
             self.assembler.add_instruction(i).unwrap();
             i.len()
@@ -1781,7 +1739,7 @@ impl<'input> Recompiler<'input> {
     // Get register other than `keep`.
     fn temp_register64(keep: Register) -> Register {
         match keep {
-            // 64Bit | 32Bit | 16Bit | 8Bit starting Registers => 64Bit ending Registers (Non-64Bit ending registers return NONE error.)
+            /// 64Bit | 32Bit | 16Bit | 8Bit starting Registers => 64Bit ending Registers (Non-64Bit ending registers return NONE error.)
             Register::R8 | Register::R8D | Register::R8W | Register::R8L => Register::R9,
             Register::R9 | Register::R9D | Register::R9W | Register::R9L => Register::R8,
             Register::R10 | Register::R10D | Register::R10W | Register::R10L => Register::R11,
