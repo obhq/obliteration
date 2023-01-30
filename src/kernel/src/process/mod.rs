@@ -76,17 +76,35 @@ impl Process {
         Ok(0)
     }
 
+    #[cfg(target_arch = "x86_64")]
     extern "sysv64" fn exit() {
         // TODO: What should we do here?
     }
 
+    #[cfg(not(target_arch = "x86_64"))]
+    extern "C" fn exit() {
+        // TODO: What should we do here?
+    }
+
+    #[cfg(target_arch = "x86_64")]
     extern "sysv64" fn handle_ud2(&mut self, addr: usize) -> ! {
         info!(
             self.id,
-            "Process exited with UD2 instruction from {:#018x}.", addr
+            "process exited with ud2 instruction from {:#018x}.", addr
         );
 
-        // FIXME: Return to "run" without stack unwinding on Windows.
+        // fixme: return to "run" without stack unwinding on windows.
+        std::process::exit(0);
+    }
+
+    #[cfg(not(target_arch = "x86_64"))]
+    extern "C" fn handle_ud2(&mut self, addr: usize) -> ! {
+        info!(
+            self.id,
+            "process exited with ud2 instruction from {:#018x}.", addr
+        );
+
+        // fixme: return to "run" without stack unwinding on windows.
         std::process::exit(0);
     }
 }

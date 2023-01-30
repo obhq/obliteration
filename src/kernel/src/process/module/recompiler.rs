@@ -1,13 +1,15 @@
 use super::Segment;
 use crate::process::Process;
 use iced_x86::code_asm::{
-    byte_ptr, get_gpr64, get_gpr32, get_gpr8, qword_ptr, dword_ptr, rax, rdi, rsi, CodeAssembler, CodeLabel,
+    get_gpr64, get_gpr32, get_gpr8, dword_ptr, qword_ptr, byte_ptr, rax, rdi, rsi, CodeAssembler, CodeLabel,
 };
 use iced_x86::{BlockEncoderOptions, Code, Decoder, DecoderOptions, Instruction, OpKind, Register};
 use std::collections::{HashMap, VecDeque};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::mem::transmute;
+
+use std::env::consts::ARCH;
 
 pub(super) struct Recompiler<'input> {
     proc: *mut Process,
@@ -35,6 +37,7 @@ impl<'input> Recompiler<'input> {
 
     /// All items in `starts` **MUST** be unique and the `input` that was specified in [`new`]
     /// **MUST** outlive the returned [`NativeCode`].
+    #[cfg(target_arch = "x86_64")]
     pub fn run(mut self, starts: &[usize]) -> Result<(NativeCode, Vec<*const u8>), RunError> {
         // Recompile all start offset.
         let mut start_addrs: Vec<u64> = Vec::with_capacity(starts.len());
@@ -93,6 +96,12 @@ impl<'input> Recompiler<'input> {
         Ok((native, start_ptrs))
     }
 
+    #[cfg(not(target_arch = "x86_64"))]
+    pub fn run(mut self, starts: &[usize]) -> Result<(NativeCode, Vec<*const u8>), RunError> {
+        Err(RunError::UnsupportedArchError)
+    }
+
+    #[cfg(target_arch = "x86_64")]
     fn recompile(&mut self, offset: usize, label: CodeLabel) -> Result<u64, RunError> {
         // Setup decoder.
         let input = self.input;
@@ -266,6 +275,11 @@ impl<'input> Recompiler<'input> {
         }
 
         Ok(base + start as u64)
+    }
+
+    #[cfg(not(target_arch = "x86_64"))]
+    fn recompile(&mut self, offset: usize, label: CodeLabel) -> Result<u64, RunError> {
+        Err(RunError::UnsupportedArchError)
     }
 
     fn transform_add_r32_rm32(&mut self, i: Instruction) -> usize {
@@ -1106,7 +1120,6 @@ impl<'input> Recompiler<'input> {
         }
     }
 
-
     fn transform_mov_rm64_imm32(&mut self, i: Instruction) -> usize {
         // Check if first operand use RIP-relative.
         if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
@@ -1131,7 +1144,6 @@ impl<'input> Recompiler<'input> {
             i.len()
         }
     }
-
 
     fn transform_mov_rm8_r8(&mut self, i: Instruction) -> usize {
         // Check if first operand use RIP-relative.
@@ -1487,6 +1499,8 @@ impl<'input> Recompiler<'input> {
         }
     }
 
+    /// Will not compile on an non-x86_64 machine!
+    #[cfg(target_arch = "x86_64")]
     fn transform_ud2(&mut self, i: Instruction) -> usize {
         let handler: extern "sysv64" fn(&mut Process, usize) -> ! = Process::handle_ud2;
         let handler: u64 = handler as u64;
@@ -1912,6 +1926,7 @@ pub enum RunError {
     UnknownInstruction(usize, Vec<u8>, Instruction),
     AllocatePagesFailed(usize, std::io::Error),
     AssembleFailed(iced_x86::IcedError),
+    UnsupportedArchError,
 }
 
 impl Error for RunError {
@@ -1935,6 +1950,7 @@ impl Display for RunError {
             }
             Self::AllocatePagesFailed(s, _) => write!(f, "cannot allocate pages for {} bytes", s),
             Self::AssembleFailed(_) => f.write_str("cannot assemble"),
+            Self::UnsupportedArchError => write!(f, "{} target is not supported", ARCH),
         }
     }
 }
