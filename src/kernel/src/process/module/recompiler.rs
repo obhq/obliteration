@@ -704,14 +704,15 @@ impl<'input> Recompiler<'input> {
             // Transform to absolute address.
             self.assembler.push(tmp).unwrap();
             self.assembler.mov(tmp, src).unwrap();
-            self.assembler.imul(get_gpr32(dst).unwrap()).unwrap();
+            self.assembler.imul_2(get_gpr32(dst).unwrap(), dword_ptr(tmp)) .unwrap();
             self.assembler.pop(tmp).unwrap();
 
-            15 * 4
-        } else {
-            self.assembler.add_instruction(i).unwrap();
-            i.len()
-        }
+        15 * 4
+    } else {
+
+        self.assembler.add_instruction(i).unwrap();
+        i.len()
+    }
     }
 
     fn transform_imul_r32_rm32_imm32(&mut self, i: Instruction) -> usize {
@@ -730,7 +731,7 @@ impl<'input> Recompiler<'input> {
             // Transform to absolute address.
             self.assembler.push(tmp).unwrap();
             self.assembler.mov(tmp, src).unwrap();
-            self.assembler.imul(get_gpr32(dst).unwrap()).unwrap();
+            self.assembler.imul_2(get_gpr32(dst).unwrap(), dword_ptr(tmp)).unwrap();
             self.assembler.pop(tmp).unwrap();
 
             15 * 4
