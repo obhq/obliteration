@@ -719,7 +719,7 @@ impl<'input> Recompiler<'input> {
         // Check if second operand use RIP-relative.
         if i.op1_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
             let dst = i.op0_register();
-            let imm = i.immediate8();
+            let imm = i.immediate32();
             let src = i.ip_rel_memory_address();
             let tmp = get_gpr64(Self::temp_register64(dst)).unwrap();
 
