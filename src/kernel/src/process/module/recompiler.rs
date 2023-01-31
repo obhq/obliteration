@@ -201,7 +201,7 @@ impl<'input> Recompiler<'input> {
                 Code::Mov_r32_imm32 => (self.preserve(i), false),
                 Code::Mov_r32_rm32 => (self.transform_mov_r32_rm32(i), false),
                 Code::Mov_r64_rm64 => (self.transform_mov_r64_rm64(i), false),
-                Code::Mov_rm8_imm8 => (self.preserve(i), false),
+                Code::Mov_rm8_imm8 => (self.transform_mov_rm8_imm8(i), false),
                 Code::Mov_rm32_imm32 => (self.transform_mov_rm32_imm32(i), false),
                 Code::Mov_rm64_imm32 => (self.transform_mov_rm64_imm32(i), false),
                 Code::Mov_rm8_r8 => (self.transform_mov_rm8_r8(i), false),
@@ -692,6 +692,7 @@ impl<'input> Recompiler<'input> {
         // Check if second operand use RIP-relative.
         if i.op1_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
             let dst = i.op0_register();
+            let imm = i.immediate8();
             let src = i.ip_rel_memory_address();
             let tmp = get_gpr64(Self::temp_register64(dst)).unwrap();
 
@@ -704,7 +705,7 @@ impl<'input> Recompiler<'input> {
             // Transform to absolute address.
             self.assembler.push(tmp).unwrap();
             self.assembler.mov(tmp, src).unwrap();
-            self.assembler.imul_2(get_gpr32(dst).unwrap(), dword_ptr(tmp)) .unwrap();
+            self.assembler.imul_3(get_gpr32(dst).unwrap(), dword_ptr(tmp), imm) .unwrap();
             self.assembler.pop(tmp).unwrap();
 
             15 * 4
@@ -718,6 +719,7 @@ impl<'input> Recompiler<'input> {
         // Check if second operand use RIP-relative.
         if i.op1_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
             let dst = i.op0_register();
+            let imm = i.immediate8();
             let src = i.ip_rel_memory_address();
             let tmp = get_gpr64(Self::temp_register64(dst)).unwrap();
 
@@ -730,7 +732,7 @@ impl<'input> Recompiler<'input> {
             // Transform to absolute address.
             self.assembler.push(tmp).unwrap();
             self.assembler.mov(tmp, src).unwrap();
-            self.assembler.imul_2(get_gpr32(dst).unwrap(), dword_ptr(tmp)).unwrap();
+            self.assembler.imul_3(get_gpr32(dst).unwrap(), dword_ptr(tmp), imm).unwrap();
             self.assembler.pop(tmp).unwrap();
 
             15 * 4
@@ -1131,6 +1133,31 @@ impl<'input> Recompiler<'input> {
                     .unwrap();
                 self.assembler.pop(tmp).unwrap();
             }
+
+            15 * 4
+        } else {
+            self.assembler.add_instruction(i).unwrap();
+            i.len()
+        }
+    }
+
+    fn transform_mov_rm8_imm8(&mut self, i: Instruction) -> usize {
+        // Check if first operand use RIP-relative.
+        if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
+            let dst = i.ip_rel_memory_address();
+            let src = i.immediate8();
+
+            if self.is_executable(dst) {
+                panic!(
+                    "MOV r/m8, imm8 with first operand from executable segment is not supported."
+                );
+            }
+
+            // Transform to absolute address.
+            self.assembler.push(rax).unwrap();
+            self.assembler.mov(rax, dst).unwrap();
+            self.assembler.mov(byte_ptr(rax), src as u32).unwrap();
+            self.assembler.pop(rax).unwrap();
 
             15 * 4
         } else {
