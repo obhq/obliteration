@@ -705,7 +705,7 @@ impl<'input> Recompiler<'input> {
             // Transform to absolute address.
             self.assembler.push(tmp).unwrap();
             self.assembler.mov(tmp, src).unwrap();
-            self.assembler.imul_3(get_gpr32(dst).unwrap(), dword_ptr(tmp), imm as u32) .unwrap();
+            self.assembler.imul_3(get_gpr32(dst).unwrap(), dword_ptr(tmp), imm as i32) .unwrap();
             self.assembler.pop(tmp).unwrap();
 
             15 * 4
