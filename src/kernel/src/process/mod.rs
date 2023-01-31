@@ -1,6 +1,5 @@
 use self::module::{Arg, EntryPoint, Module};
 use crate::elf::SignedElf;
-use crate::fs::file::File;
 use crate::info;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
@@ -24,11 +23,7 @@ pub struct Process {
 }
 
 impl Process {
-    pub(super) fn load(
-        elf: SignedElf,
-        file: File,
-        debug: DebugOpts,
-    ) -> Result<Pin<Box<Self>>, LoadError> {
+    pub(super) fn load(elf: SignedElf, debug: DebugOpts) -> Result<Pin<Box<Self>>, LoadError> {
         let mut proc = Box::pin(Self {
             id: 1,
             entry: uninit(),
@@ -45,7 +40,7 @@ impl Process {
             original_mapped_dump: debug.dump_path.join("eboot.bin.mapped"),
         };
 
-        match Module::load(&mut *proc, elf, file, debug) {
+        match Module::load(&mut *proc, elf, debug) {
             Ok(v) => {
                 proc.entry = v.entry();
                 proc.modules.push(v);

@@ -101,7 +101,7 @@ fn run() -> bool {
     // Get eboot.bin.
     info!(0, "Getting /mnt/app0/eboot.bin.");
 
-    let mut eboot = match fs.get("/mnt/app0/eboot.bin") {
+    let eboot = match fs.get("/mnt/app0/eboot.bin") {
         Ok(v) => match v {
             fs::Item::Directory(_) => {
                 error!(0, "Path to eboot.bin is a directory.");
@@ -118,7 +118,7 @@ fn run() -> bool {
     // Load eboot.bin.
     info!(0, "Loading eboot.bin.");
 
-    let elf = match SignedElf::load(&mut eboot) {
+    let elf = match SignedElf::load(eboot) {
         Ok(v) => v,
         Err(e) => {
             error!(0, e, "Load failed");
@@ -158,7 +158,7 @@ fn run() -> bool {
         dump_path: args.debug_dump.join("process"),
     };
 
-    let mut process = match Process::load(elf, eboot, debug) {
+    let mut process = match Process::load(elf, debug) {
         Ok(v) => v,
         Err(e) => {
             error!(0, e, "Create failed");

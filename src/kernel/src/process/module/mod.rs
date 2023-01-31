@@ -1,14 +1,12 @@
 use self::dynamic::DynamicLinking;
 use self::recompiler::{NativeCode, Recompiler};
 use super::Process;
-use crate::elf::program::{ProgramFlags, ProgramType};
+use crate::elf::program::{Program, ProgramFlags, ProgramType};
 use crate::elf::SignedElf;
-use crate::fs::file::File;
-use std::error::Error;
-use std::fmt::{Display, Formatter};
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::Write;
 use std::mem::transmute;
 use std::path::PathBuf;
+use thiserror::Error;
 use util::mem::new_buffer;
 
 pub mod dynamic;
@@ -27,14 +25,16 @@ pub(super) struct Module {
 impl Module {
     pub fn load(
         proc: *mut Process,
-        elf: SignedElf,
-        mut file: File,
+        mut elf: SignedElf,
         debug: DebugOpts,
     ) -> Result<Self, LoadError> {
+        // FIXME: Remove this temporary variable.
+        let programs: Vec<Program> = elf.programs().to_vec();
+
         // Get size of memory for mapping executable.
         let mut mapped_size = 0;
 
-        for prog in elf.programs() {
+        for prog in &programs {
             if prog.ty() != ProgramType::PT_LOAD && prog.ty() != ProgramType::PT_SCE_RELRO {
                 continue;
             }
@@ -53,8 +53,8 @@ impl Module {
         let mut dynlib_data: Vec<u8> = Vec::new();
         let base: usize = mapped.as_ptr() as usize;
 
-        for prog in elf.programs() {
-            let offset = prog.offset();
+        for i in 0..programs.len() {
+            let prog = &programs[i];
 
             match prog.ty() {
                 ProgramType::PT_LOAD | ProgramType::PT_SCE_RELRO => {
@@ -62,7 +62,9 @@ impl Module {
                     let base = base + addr;
                     let to = &mut mapped[addr..(addr + prog.file_size() as usize)];
 
-                    Self::load_program_segment(&mut file, &elf, offset, to)?;
+                    if let Err(e) = elf.read_program(i, to) {
+                        return Err(LoadError::LoadProgramFailed(i, e));
+                    }
 
                     segments.push(Segment {
                         start: base,
@@ -73,12 +75,16 @@ impl Module {
                 ProgramType::PT_DYNAMIC => {
                     dynamic_linking = new_buffer(prog.file_size() as _);
 
-                    Self::load_program_segment(&mut file, &elf, offset, &mut dynamic_linking)?;
+                    if let Err(e) = elf.read_program(i, &mut dynamic_linking) {
+                        return Err(LoadError::LoadProgramFailed(i, e));
+                    }
                 }
                 ProgramType::PT_SCE_DYNLIBDATA => {
                     dynlib_data = new_buffer(prog.file_size() as _);
 
-                    Self::load_program_segment(&mut file, &elf, offset, &mut dynlib_data)?;
+                    if let Err(e) = elf.read_program(i, &mut dynlib_data) {
+                        return Err(LoadError::LoadProgramFailed(i, e));
+                    }
                 }
                 _ => continue,
             }
@@ -137,57 +143,6 @@ impl Module {
     pub fn entry(&self) -> EntryPoint {
         self.entry
     }
-
-    // FIXME: Refactor this because the logic does not make sense.
-    fn load_program_segment(
-        bin: &mut File,
-        elf: &SignedElf,
-        offset: u64,
-        to: &mut [u8],
-    ) -> Result<(), LoadError> {
-        for (i, seg) in elf.segments().iter().enumerate() {
-            let flags = seg.flags();
-
-            if !flags.is_blocked() {
-                continue;
-            }
-
-            let prog = match elf.programs().get(flags.id() as usize) {
-                Some(v) => v,
-                None => return Err(LoadError::InvalidSelfSegmentId(i)),
-            };
-
-            if offset >= prog.offset() && offset < prog.offset() + prog.file_size() {
-                if seg.compressed_size() != seg.decompressed_size() {
-                    panic!("Compressed SELF segment is not supported yet.");
-                }
-
-                if seg.decompressed_size() != prog.file_size() {
-                    panic!("SELF segment size different than associated program segment is not supported yet.");
-                }
-
-                let offset = offset - prog.offset();
-
-                if (offset as usize) + to.len() > seg.decompressed_size() as usize {
-                    panic!("Segment block is smaller than the size specified in program header.");
-                }
-
-                bin.seek(SeekFrom::Start(offset + seg.offset())).unwrap();
-                bin.read_exact(to).unwrap();
-
-                return Ok(());
-            }
-        }
-
-        if (bin.len().unwrap() as usize) - (elf.file_size() as usize) == to.len() {
-            bin.seek(SeekFrom::Start(elf.file_size())).unwrap();
-            bin.read_exact(to).unwrap();
-
-            return Ok(());
-        }
-
-        panic!("missing self segment");
-    }
 }
 
 pub(super) struct DebugOpts {
@@ -212,55 +167,29 @@ pub(super) struct Segment {
     flags: ProgramFlags,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum LoadError {
-    InvalidSelfSegmentId(usize),
-    ParseDynamicLinkingFailed(dynamic::ParseError),
+    #[error("cannot read program #{0}")]
+    LoadProgramFailed(usize, #[source] crate::elf::ReadProgramError),
+
+    #[error("cannot parse dynamic linking information")]
+    ParseDynamicLinkingFailed(#[source] dynamic::ParseError),
+
+    #[error("dynamic linking entry DT_RELAENT or DT_SCE_RELAENT has invalid value")]
     InvalidRelaent,
+
+    #[error("dynamic linking entry DT_SYMENT or DT_SCE_SYMENT has invalid value")]
     InvalidSyment,
+
+    #[error("dynamic linking entry DT_PLTREL or DT_SCE_PLTREL has value other than DT_RELA")]
     InvalidPltrel,
-    CreateOriginalMappedDumpFailed(PathBuf, std::io::Error),
-    WriteOriginalMappedDumpFailed(PathBuf, std::io::Error),
-    RecompileFailed(recompiler::RunError),
-}
 
-impl Error for LoadError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::ParseDynamicLinkingFailed(e) => Some(e),
-            Self::CreateOriginalMappedDumpFailed(_, e)
-            | Self::WriteOriginalMappedDumpFailed(_, e) => Some(e),
-            Self::RecompileFailed(e) => Some(e),
-            _ => None,
-        }
-    }
-}
+    #[error("cannot create {0} to dump mapped SELF")]
+    CreateOriginalMappedDumpFailed(PathBuf, #[source] std::io::Error),
 
-impl Display for LoadError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Self::InvalidSelfSegmentId(i) => {
-                write!(f, "invalid identifier for SELF segment #{}", i)
-            }
-            Self::ParseDynamicLinkingFailed(_) => {
-                f.write_str("cannot parse dynamic linking information")
-            }
-            Self::InvalidRelaent => {
-                f.write_str("dynamic linking entry DT_RELAENT or DT_SCE_RELAENT has invalid value")
-            }
-            Self::InvalidSyment => {
-                f.write_str("dynamic linking entry DT_SYMENT or DT_SCE_SYMENT has invalid value")
-            }
-            Self::InvalidPltrel => f.write_str(
-                "dynamic linking entry DT_PLTREL or DT_SCE_PLTREL has value other than DT_RELA",
-            ),
-            Self::CreateOriginalMappedDumpFailed(p, _) => {
-                write!(f, "cannot create {} to dump mapped SELF", p.display())
-            }
-            Self::WriteOriginalMappedDumpFailed(p, _) => {
-                write!(f, "cannot write mapped SELF to {}", p.display())
-            }
-            Self::RecompileFailed(_) => f.write_str("cannot recompile executable"),
-        }
-    }
+    #[error("cannot write mapped SELF to {0}")]
+    WriteOriginalMappedDumpFailed(PathBuf, #[source] std::io::Error),
+
+    #[error("cannot recompile executable")]
+    RecompileFailed(#[source] recompiler::RunError),
 }
