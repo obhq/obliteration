@@ -691,7 +691,7 @@ impl<'input> Recompiler<'input> {
     fn transform_imul_r32_rm32_imm8(&mut self, i: Instruction) -> usize {
         // Check if second operand use RIP-relative.
         if i.op1_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
-            let dst = i.op0_register();
+            /*let dst = i.op0_register();
             let imm = i.immediate8();
             let src = i.ip_rel_memory_address();
             let tmp = get_gpr64(Self::temp_register64(dst)).unwrap();
@@ -708,7 +708,9 @@ impl<'input> Recompiler<'input> {
             self.assembler.imul_3(get_gpr32(dst).unwrap(), dword_ptr(tmp), imm) .unwrap();
             self.assembler.pop(tmp).unwrap();
 
-            15 * 4
+            15 * 4*/
+            // Temporary until https://github.com/icedland/iced/issues/384 fixed.
+            panic!("IMUL r32, r/m32, imm8 with second operand as RIP-relative is not supported due to an Iced-x86 issue.");
         } else {
             self.assembler.add_instruction(i).unwrap();
             i.len()
