@@ -1,16 +1,18 @@
 use self::program::Program;
 use self::segment::SignedSegment;
 use crate::fs::file::File;
-use std::error::Error;
-use std::fmt::{Display, Formatter};
 use std::io::{Read, Seek, SeekFrom};
+use thiserror::Error;
 use util::mem::{read_array, read_u16_le, read_u32_le, read_u64_le, read_u8, uninit};
 
 pub mod program;
 pub mod segment;
 
-// https://www.psdevwiki.com/ps4/SELF_File_Format
+/// Represents a SELF file.
+///
+/// See https://www.psdevwiki.com/ps4/SELF_File_Format for some basic information.
 pub struct SignedElf {
+    file: File,
     file_size: u64,
     entry_addr: usize,
     segments: Vec<SignedSegment>,
@@ -18,7 +20,7 @@ pub struct SignedElf {
 }
 
 impl SignedElf {
-    pub fn load(file: &mut File) -> Result<Self, LoadError> {
+    pub fn load(mut file: File) -> Result<Self, LoadError> {
         // Read SELF header.
         let mut hdr: [u8; 32] = uninit();
 
@@ -136,6 +138,7 @@ impl SignedElf {
         }
 
         Ok(Self {
+            file,
             file_size,
             entry_addr: e_entry as _,
             segments,
@@ -158,45 +161,116 @@ impl SignedElf {
     pub fn programs(&self) -> &[Program] {
         self.programs.as_slice()
     }
-}
 
-#[derive(Debug)]
-pub enum LoadError {
-    ReadSelfHeaderFailed(std::io::Error),
-    InvalidSelfMagic,
-    ReadSelfSegmentHeaderFailed(usize, std::io::Error),
-    ReadElfHeaderFailed(std::io::Error),
-    InvalidElfMagic,
-    UnsupportedBitness,
-    UnsupportedEndianness,
-    ReadProgramHeaderFailed(usize, std::io::Error),
-}
+    pub fn read_program(&mut self, index: usize, buf: &mut [u8]) -> Result<(), ReadProgramError> {
+        // Get target program.
+        let prog = match self.programs.get(index) {
+            Some(v) => v,
+            None => return Err(ReadProgramError::InvalidIndex),
+        };
 
-impl Error for LoadError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::ReadSelfHeaderFailed(e)
-            | Self::ReadSelfSegmentHeaderFailed(_, e)
-            | Self::ReadElfHeaderFailed(e)
-            | Self::ReadProgramHeaderFailed(_, e) => Some(e),
-            _ => None,
+        // Check if buffer is large enough.
+        let len = prog.file_size() as usize;
+
+        if buf.len() < len {
+            return Err(ReadProgramError::InsufficientBuffer(len));
         }
-    }
-}
 
-impl Display for LoadError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Self::ReadSelfHeaderFailed(_) => f.write_str("cannot read SELF header"),
-            Self::InvalidSelfMagic => f.write_str("invalid SELF magic"),
-            Self::ReadSelfSegmentHeaderFailed(i, _) => {
-                write!(f, "cannot read header for SELF segment #{}", i)
+        // Find the target segment.
+        let offset = prog.offset();
+
+        for seg in &self.segments {
+            // Skip if not blocked segment.
+            let flags = seg.flags();
+
+            if !flags.is_blocked() {
+                continue;
             }
-            Self::ReadElfHeaderFailed(_) => f.write_str("cannot read ELF header"),
-            Self::InvalidElfMagic => f.write_str("invalid ELF magic"),
-            Self::UnsupportedBitness => f.write_str("unsupported bitness"),
-            Self::UnsupportedEndianness => f.write_str("unsupported endianness"),
-            Self::ReadProgramHeaderFailed(i, _) => write!(f, "cannot read program header #{}", i),
+
+            // Check if the target offset inside the associated program.
+            let prog = &self.programs[flags.id() as usize];
+
+            if offset >= prog.offset() && offset < prog.offset() + prog.file_size() {
+                // Check if segment supported.
+                if seg.compressed_size() != seg.decompressed_size() {
+                    panic!("Compressed SELF segment is not supported yet.");
+                }
+
+                if seg.decompressed_size() != prog.file_size() {
+                    panic!("SELF segment size different than associated program segment is not supported yet.");
+                }
+
+                // Seek file to data offset.
+                let offset = offset - prog.offset();
+
+                if (offset as usize) + len > seg.decompressed_size() as usize {
+                    panic!("Segment block is smaller than the size specified in program header.");
+                }
+
+                let offset = offset + seg.offset();
+
+                match self.file.seek(SeekFrom::Start(offset)) {
+                    Ok(v) => {
+                        if v != offset {
+                            panic!("File is smaller than {} bytes.", offset);
+                        }
+                    }
+                    Err(e) => return Err(ReadProgramError::SeekFailed(offset, e)),
+                }
+
+                // Read data.
+                if let Err(e) = self.file.read_exact(&mut buf[..len]) {
+                    return Err(ReadProgramError::ReadFailed(offset, len, e));
+                }
+
+                return Ok(());
+            }
         }
+
+        Ok(())
     }
+}
+
+/// Represents errors for [`SignedElf::load()`].
+#[derive(Debug, Error)]
+pub enum LoadError {
+    #[error("cannot read SELF header")]
+    ReadSelfHeaderFailed(#[source] std::io::Error),
+
+    #[error("invalid SELF magic")]
+    InvalidSelfMagic,
+
+    #[error("cannot read header for SELF segment #{0}")]
+    ReadSelfSegmentHeaderFailed(usize, #[source] std::io::Error),
+
+    #[error("cannot read ELF header")]
+    ReadElfHeaderFailed(#[source] std::io::Error),
+
+    #[error("invalid ELF magic")]
+    InvalidElfMagic,
+
+    #[error("unsupported bitness")]
+    UnsupportedBitness,
+
+    #[error("unsupported endianness")]
+    UnsupportedEndianness,
+
+    #[error("cannot read program header #{0}")]
+    ReadProgramHeaderFailed(usize, #[source] std::io::Error),
+}
+
+/// Represents errors for [`SignedElf::read_program()`].
+#[derive(Debug, Error)]
+pub enum ReadProgramError {
+    #[error("invalid program index")]
+    InvalidIndex,
+
+    #[error("insufficient buffer (need {0} bytes)")]
+    InsufficientBuffer(usize),
+
+    #[error("cannot seek to offset {0:#018x}")]
+    SeekFailed(u64, #[source] std::io::Error),
+
+    #[error("cannot read {1} bytes at offset {0:#018x}")]
+    ReadFailed(u64, usize, #[source] std::io::Error),
 }

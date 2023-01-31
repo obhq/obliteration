@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 
+#[derive(Clone)]
 pub struct Program {
     ty: ProgramType,
     flags: ProgramFlags,
