@@ -1,0 +1,12 @@
+name: Quality Check (rustfmt)
+ on: 
+   workflow_call: 
+ jobs: 
+   build: 
+     name: Windows 
+     runs-on: windows-2022 
+     steps: 
+     - name: Checkout source 
+       uses: actions/checkout@v3
+     - name: Check Rust syntax using rustfmt
+       run: cargo fmt --all
