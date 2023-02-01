@@ -4,9 +4,9 @@ on:
 jobs: 
   qualitycheck: 
     name: qualitycheck
-    runs-on: windows-2022 
-    steps: 
-    - name: Checkout source 
-      uses: actions/checkout@v3
+    runs-on: windows-2022 
+    steps: 
+    - name: Checkout source 
+      uses: actions/checkout@v3
     - name: Check Rust syntax using rustfmt
       run: cargo fmt --all
