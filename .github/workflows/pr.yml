@@ -6,14 +6,17 @@ on:
 concurrency: pr-${{ github.ref }}
 jobs:
   quality-checks:
-    name: Quality Checks
+    name: QC
     uses: ./.github/workflows/qualitychecks.yml
   windows:
+    needs: QC
     name: Build
     uses: ./.github/workflows/ci-windows.yml
   linux:
+    needs: QC
     name: Build
     uses: ./.github/workflows/ci-linux.yml
   mac:
+    needs: QC
     name: Build
     uses: ./.github/workflows/ci-mac.yml
