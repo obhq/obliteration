@@ -2,11 +2,11 @@ name: Quality Check
 on: 
   workflow_call: 
 jobs: 
-  qualitycheck: 
-    name: qualitycheck
-    runs-on: windows-2022 
-    steps: 
-    - name: Checkout source 
-      uses: actions/checkout@v3
-    - name: Check Rust syntax using rustfmt
+  qualitycheck: 
+    name: Quality Check
+    runs-on: ubuntu-20.04
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v3
+    - name: Execute Rustfmt check
       run: cargo fmt --all
