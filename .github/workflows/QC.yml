@@ -1,9 +1,9 @@
-name: Quality Check (rustfmt)
+name: Quality Check
  on: 
    workflow_call: 
  jobs: 
-   build: 
-     name: Windows 
+   quality-check: 
+     name: RustFMT
      runs-on: windows-2022 
      steps: 
      - name: Checkout source 
