@@ -1,7 +1,8 @@
 use super::Segment;
 use crate::process::Process;
 use iced_x86::code_asm::{
-    get_gpr64, get_gpr32, get_gpr8, dword_ptr, qword_ptr, byte_ptr, rax, rdi, rsi, CodeAssembler, CodeLabel,
+    byte_ptr, dword_ptr, get_gpr32, get_gpr64, get_gpr8, qword_ptr, rax, rdi, rsi, CodeAssembler,
+    CodeLabel,
 };
 use iced_x86::{BlockEncoderOptions, Code, Decoder, DecoderOptions, Instruction, OpKind, Register};
 use std::collections::{HashMap, VecDeque};
@@ -220,7 +221,9 @@ impl<'input> Recompiler<'input> {
                 Code::Or_rm64_r64 => (self.transform_or_rm64_r64(i), false),
                 Code::Out_imm8_AL | Code::Out_imm8_EAX => (self.preserve(i), false),
                 Code::Outsb_DX_m8 => (self.transform_outsb_dx_m8(i), false),
-                Code::Nop_rm16 | Code::Nop_rm32 | Code::Nopd | Code::Nopw => (self.preserve(i), false),
+                Code::Nop_rm16 | Code::Nop_rm32 | Code::Nopd | Code::Nopw => {
+                    (self.preserve(i), false)
+                }
                 Code::Pop_r64 => (self.preserve(i), false),
                 Code::Pshufd_xmm_xmmm128_imm8 => (self.transform_pshufd_xmm_xmmm128_imm8(i), false),
                 Code::Pushq_imm32 => (self.preserve(i), false),
@@ -252,11 +255,17 @@ impl<'input> Recompiler<'input> {
                 Code::VEX_Vmovups_xmmm128_xmm => (self.transform_vmovups_xmmm128_xmm(i), false),
                 Code::VEX_Vmovups_ymm_ymmm256 => (self.transform_vmovups_ymm_ymmm256(i), false),
                 Code::VEX_Vmovups_ymmm256_ymm => (self.transform_vmovups_ymmm256_ymm(i), false),
-                Code::VEX_Vpshufd_xmm_xmmm128_imm8 => (self.transform_vpshufd_xmm_xmmm128_imm8(i), false),
+                Code::VEX_Vpshufd_xmm_xmmm128_imm8 => {
+                    (self.transform_vpshufd_xmm_xmmm128_imm8(i), false)
+                }
                 Code::VEX_Vpslldq_xmm_xmm_imm8 => (self.preserve(i), false),
                 Code::VEX_Vpxor_xmm_xmm_xmmm128 => (self.transform_vpxor_xmm_xmm_xmmm128(i), false),
-                Code::VEX_Vxorps_xmm_xmm_xmmm128 => (self.transform_vxorps_xmm_xmm_xmmm128(i), false),
-                Code::VEX_Vxorps_ymm_ymm_ymmm256 => (self.transform_vxorps_ymm_ymm_ymmm256(i), false),
+                Code::VEX_Vxorps_xmm_xmm_xmmm128 => {
+                    (self.transform_vxorps_xmm_xmm_xmmm128(i), false)
+                }
+                Code::VEX_Vxorps_ymm_ymm_ymmm256 => {
+                    (self.transform_vxorps_ymm_ymm_ymmm256(i), false)
+                }
                 Code::Wait => (self.preserve(i), false),
                 Code::Xadd_rm32_r32 => (self.transform_xadd_rm32_r32(i), false),
                 Code::Xchg_r32_EAX => (self.preserve(i), false),
@@ -599,7 +608,9 @@ impl<'input> Recompiler<'input> {
             // Transform to absolute address.
             self.assembler.push(tmp).unwrap();
             self.assembler.mov(tmp, dst).unwrap();
-            self.assembler.cmp(get_gpr32(src).unwrap(), dword_ptr(tmp)).unwrap();
+            self.assembler
+                .cmp(get_gpr32(src).unwrap(), dword_ptr(tmp))
+                .unwrap();
             self.assembler.pop(tmp).unwrap();
 
             15 * 4
@@ -608,8 +619,6 @@ impl<'input> Recompiler<'input> {
             i.len()
         }
     }
-
-
 
     fn transform_cmp_rm64_imm8(&mut self, i: Instruction) -> usize {
         // Check if first operand use RIP-relative.
@@ -734,7 +743,9 @@ impl<'input> Recompiler<'input> {
             // Transform to absolute address.
             self.assembler.push(tmp).unwrap();
             self.assembler.mov(tmp, src).unwrap();
-            self.assembler.imul_3(get_gpr32(dst).unwrap(), dword_ptr(tmp), imm).unwrap();
+            self.assembler
+                .imul_3(get_gpr32(dst).unwrap(), dword_ptr(tmp), imm)
+                .unwrap();
             self.assembler.pop(tmp).unwrap();
 
             15 * 4
@@ -1066,7 +1077,9 @@ impl<'input> Recompiler<'input> {
                 // Call function to execute code at source memory location
                 self.assembler.call(src).unwrap();
                 // Move the result to the destination register
-                self.assembler.mov(get_gpr8(dst).unwrap(), byte_ptr(tmp)).unwrap();
+                self.assembler
+                    .mov(get_gpr8(dst).unwrap(), byte_ptr(tmp))
+                    .unwrap();
             } else {
                 // Transform to absolute address.
                 self.assembler.push(tmp).unwrap();
@@ -1096,7 +1109,9 @@ impl<'input> Recompiler<'input> {
                 // Call function to execute code at source memory location
                 self.assembler.call(src).unwrap();
                 // Move the result to the destination register
-                self.assembler.mov(get_gpr32(dst).unwrap(), dword_ptr(tmp)).unwrap();
+                self.assembler
+                    .mov(get_gpr32(dst).unwrap(), dword_ptr(tmp))
+                    .unwrap();
             } else {
                 // Transform to absolute address.
                 self.assembler.push(tmp).unwrap();
@@ -1125,7 +1140,9 @@ impl<'input> Recompiler<'input> {
                 // Call function to execute code at source memory location
                 self.assembler.call(src).unwrap();
                 // Move the result to the destination register
-                self.assembler.mov(get_gpr64(dst).unwrap(), qword_ptr(tmp)).unwrap();
+                self.assembler
+                    .mov(get_gpr64(dst).unwrap(), qword_ptr(tmp))
+                    .unwrap();
             } else {
                 // Transform to absolute address.
                 self.assembler.push(tmp).unwrap();
@@ -1226,9 +1243,7 @@ impl<'input> Recompiler<'input> {
             let tmp = get_gpr64(Self::temp_register64(src)).unwrap();
 
             if self.is_executable(dst) {
-                panic!(
-                    "MOV r/m8, r8 with first operand from executable segment is not supported."
-                );
+                panic!("MOV r/m8, r8 with first operand from executable segment is not supported.");
             }
 
             // Transform to absolute address.
@@ -1305,7 +1320,9 @@ impl<'input> Recompiler<'input> {
     fn transform_movaps_xmm_xmmm128(&mut self, i: Instruction) -> usize {
         // Check if second operand use RIP-relative.
         if i.op1_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
-            panic!("MOVAPS xmm1, xmm2/m128 with second operand as RIP-relative is not supported yet.");
+            panic!(
+                "MOVAPS xmm1, xmm2/m128 with second operand as RIP-relative is not supported yet."
+            );
         } else {
             self.assembler.add_instruction(i).unwrap();
             i.len()
@@ -1325,7 +1342,9 @@ impl<'input> Recompiler<'input> {
     fn transform_movdqu_xmmm128_xmm(&mut self, i: Instruction) -> usize {
         // Check if first operand use RIP-relative.
         if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
-            panic!("MOVDQU xmm2/m128, xmm1 with second operand as RIP-relative is not supported yet.");
+            panic!(
+                "MOVDQU xmm2/m128, xmm1 with second operand as RIP-relative is not supported yet."
+            );
         } else {
             self.assembler.add_instruction(i).unwrap();
             i.len()
