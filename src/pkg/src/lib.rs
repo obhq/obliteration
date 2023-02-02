@@ -9,7 +9,7 @@ use std::error::Error;
 use std::ffi::c_void;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::{Cursor, Read, Write};
 use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
@@ -273,19 +273,9 @@ impl<'c> Pkg<'c> {
         };
 
         // Mount outer PFS.
-        let image = match pfs::open(image, Some(&self.ekpfs)) {
+        let super_root = match pfs::open(Cursor::new(image), Some(&self.ekpfs)) {
             Ok(v) => v,
             Err(e) => return Err(DumpPfsError::OpenOuterFailed(e)),
-        };
-
-        let pfs = match pfs::mount(image) {
-            Ok(v) => v,
-            Err(e) => return Err(DumpPfsError::MountOuterFailed(e)),
-        };
-
-        let super_root = match pfs.open_super_root() {
-            Ok(v) => v,
-            Err(e) => return Err(DumpPfsError::OpenSuperRootFailed(e)),
         };
 
         // Dump files.
@@ -346,7 +336,7 @@ impl<'c> Pkg<'c> {
                 pfs::directory::Item::File(mut i) => {
                     // Check if file is compressed.
                     let mut pfsc;
-                    let (size, file): (u64, &mut dyn Read) = if i.is_compressed() {
+                    let (size, file): (u64, &mut dyn Read) = if i.is_compressed().unwrap() {
                         pfsc = match pfs::pfsc::Reader::open(i) {
                             Ok(v) => v,
                             Err(e) => {
@@ -356,7 +346,7 @@ impl<'c> Pkg<'c> {
 
                         (pfsc.len(), &mut pfsc)
                     } else {
-                        (i.len(), &mut i)
+                        (i.len().unwrap(), &mut i)
                     };
 
                     // Report initial status.
@@ -714,8 +704,6 @@ impl Display for DumpEntryError {
 pub enum DumpPfsError {
     InvalidOuterOffset,
     OpenOuterFailed(pfs::OpenError),
-    MountOuterFailed(pfs::MountError),
-    OpenSuperRootFailed(pfs::OpenSuperRootError),
     OpenDirectoryFailed(String, pfs::directory::OpenError),
     UnsupportedFileName(String),
     CreateDirectoryFailed(PathBuf, std::io::Error),
@@ -729,8 +717,6 @@ impl Error for DumpPfsError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::OpenOuterFailed(e) => Some(e),
-            Self::MountOuterFailed(e) => Some(e),
-            Self::OpenSuperRootFailed(e) => Some(e),
             Self::OpenDirectoryFailed(_, e) => Some(e),
             Self::CreateDirectoryFailed(_, e) => Some(e),
             Self::CreateDecompressorFailed(_, e) => Some(e),
@@ -747,8 +733,6 @@ impl Display for DumpPfsError {
         match self {
             Self::InvalidOuterOffset => f.write_str("invalid offset for outer PFS"),
             Self::OpenOuterFailed(_) => f.write_str("cannot open outer PFS"),
-            Self::MountOuterFailed(_) => f.write_str("cannot mount outer PFS"),
-            Self::OpenSuperRootFailed(_) => f.write_str("cannot open super-root"),
             Self::OpenDirectoryFailed(p, _) => write!(f, "cannot open {}", p),
             Self::UnsupportedFileName(p) => {
                 write!(f, "directory {} has file(s) with unsupported name", p)

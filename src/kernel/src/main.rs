@@ -6,6 +6,7 @@ use self::rootfs::RootFs;
 use clap::Parser;
 use serde::Deserialize;
 use std::fs::File;
+use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -219,33 +220,13 @@ fn mount_pfs<G: AsRef<Path>>(fs: &Fs, game: G) -> bool {
         raw.len(),
     );
 
-    // Create reader.
-    info!(0, "Initializing PFS reader.");
-
-    let image = match ::pfs::open(raw, None) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(0, e, "Initialization failed",);
-            return false;
-        }
-    };
-
-    let hdr = image.header();
-
-    info!(0, "Mode        : {}", hdr.mode());
-    info!(0, "Block size  : {}", hdr.block_size());
-    info!(0, "Inodes      : {}", hdr.inode_count());
-    info!(0, "Inode blocks: {}", hdr.inode_block_count());
-    info!(0, "Super-root  : {}", hdr.super_root_inode());
-    info!(0, "Key seed    : {:02x?}", hdr.key_seed());
-
     // Load PFS.
     info!(0, "Loading PFS.");
 
-    let pfs = match ::pfs::mount(image) {
+    let pfs = match ::pfs::open(Cursor::new(raw), None) {
         Ok(v) => v,
         Err(e) => {
-            error!(0, e, "Load failed",);
+            error!(0, e, "Initialization failed",);
             return false;
         }
     };

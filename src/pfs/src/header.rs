@@ -1,9 +1,12 @@
-use std::error::Error;
 use std::fmt::{Display, Formatter};
-use util::mem::{read_array, read_u16_le, read_u32_le, read_u64_le};
+use std::io::Read;
+use thiserror::Error;
+use util::mem::{read_array, read_u16_le, read_u32_le, read_u64_le, uninit};
 
-// https://www.psdevwiki.com/ps4/PFS#Header.2FSuperblock
-pub struct Header {
+/// Contains PFS header.
+///
+/// See https://www.psdevwiki.com/ps4/PFS#Header.2FSuperblock for some basic information.
+pub(crate) struct Header {
     mode: Mode,
     blocksz: u32,
     ndinode: u64,
@@ -13,12 +16,15 @@ pub struct Header {
 }
 
 impl Header {
-    pub fn read(image: &[u8]) -> Result<Self, ReadError> {
-        if image.len() < 0x380 {
-            return Err(ReadError::TooSmall);
+    pub(super) fn read<I: Read>(image: &mut I) -> Result<Self, ReadError> {
+        // Read the whole header into the buffer.
+        let mut hdr: [u8; 0x380] = uninit();
+
+        if let Err(e) = image.read_exact(&mut hdr) {
+            return Err(ReadError::IoFailed(e));
         }
 
-        let hdr = image.as_ptr();
+        let hdr = hdr.as_ptr();
 
         // Check version.
         let version = read_u64_le(hdr, 0x00);
@@ -85,9 +91,10 @@ impl Header {
     }
 }
 
+/// Contains PFS flags.
 #[derive(Clone, Copy)]
 #[repr(transparent)]
-pub struct Mode(u16);
+pub(crate) struct Mode(u16);
 
 impl Mode {
     pub fn is_signed(&self) -> bool {
@@ -145,23 +152,18 @@ impl Display for Mode {
     }
 }
 
-#[derive(Debug)]
+/// Errors for [read()][Header::read()].
+#[derive(Debug, Error)]
 pub enum ReadError {
-    TooSmall,
+    #[error("cannot read image")]
+    IoFailed(#[source] std::io::Error),
+
+    #[error("invalid version")]
     InvalidVersion,
+
+    #[error("invalid format")]
     InvalidFormat,
+
+    #[error("too many blocks for inodes")]
     TooManyInodeBlocks,
-}
-
-impl Error for ReadError {}
-
-impl Display for ReadError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Self::TooSmall => f.write_str("data too small"),
-            Self::InvalidVersion => f.write_str("invalid version"),
-            Self::InvalidFormat => f.write_str("invalid format"),
-            Self::TooManyInodeBlocks => f.write_str("too many blocks for inodes"),
-        }
-    }
 }
