@@ -1,0 +1,12 @@
+name: Quality Check
+on: 
+  workflow_call: 
+jobs: 
+  qualitychecks: 
+    name: Quality Checks
+    runs-on: ubuntu-20.04
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v3
+    - name: Run RustFMT Check
+      run: cd src && cargo fmt --check
