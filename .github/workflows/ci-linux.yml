@@ -50,8 +50,3 @@ jobs:
       run: cmake --preset linux-release .
     - name: Build
       run: cmake --build --parallel 4 --preset linux-release
-    - name: Show results only for build job
-      if: always()
-      uses: actions/bin/filter@v1.0.1
-      with:
-        args: build

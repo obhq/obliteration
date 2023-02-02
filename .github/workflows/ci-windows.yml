@@ -61,8 +61,3 @@ jobs:
       with:
         name: obliteration-win64
         path: dist
-    - name: Show results only for build job
-      if: always()
-      uses: actions/bin/filter@v1.0.1
-      with:
-        args: build
