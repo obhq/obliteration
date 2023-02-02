@@ -53,7 +53,7 @@ jobs:
     - name: Run CMake
       run: cmake --preset windows-release .
     - name: Build
-      run: cmake --build --preset windows-release --parallel 4
+      run: cmake --build --parallel 4 --preset windows-release
     - name: Export artifacts
       run: cmake --install build --prefix dist
     - name: Upload artifacts
@@ -61,3 +61,8 @@ jobs:
       with:
         name: obliteration-win64
         path: dist
+    - name: Show results only for build job
+      if: always()
+      uses: actions/bin/filter@v1.0.1
+      with:
+        args: build
