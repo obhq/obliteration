@@ -2,18 +2,28 @@ name: CI (Windows)
 on:
   workflow_call:
 jobs:
-  build:
-    name: Windows
+  init:
+    name: Checkout
     runs-on: windows-2022
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
+  qt-dep:
+    needs: init
+    name: Install Qt
+    runs-on: windows-2022
+    steps:
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
         cache: true
         cache-key-prefix: ${{ runner.os }}-install-qt-action
         version: 6.2.*
+  vulkan-dep:
+    needs: init
+    name: Install Vulkan SDK
+    runs-on: windows-2022
+    steps:
     - name: Cache Vulkan SDK
       id: cache-vulkan
       uses: actions/cache@v3.2.4
@@ -27,6 +37,11 @@ jobs:
         .\VulkanSDK.exe --root C:\VulkanSDK  --accept-licenses --default-answer --confirm-command install
     - name: Set Vulkan SDK path
       run:  echo "VULKAN_SDK=C:\VulkanSDK" >> $env:GITHUB_ENV
+  build:
+    needs: [qt-dep, vulkan-dep]
+    name: Build
+    runs-on: windows-2022
+    steps:
     - name: Cache CMake Build Files
       uses: actions/cache@v3.2.4
       id: cache-cmake
@@ -38,7 +53,7 @@ jobs:
     - name: Run CMake
       run: cmake --preset windows-release .
     - name: Build
-      run: cmake --build --preset windows-release
+      run: cmake --build --preset windows-release --parallel 4
     - name: Export artifacts
       run: cmake --install build --prefix dist
     - name: Upload artifacts
