@@ -1,12 +1,12 @@
 use crate::Image;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::io::Read;
-use std::sync::Arc;
+use std::io::{Read, SeekFrom};
+use thiserror::Error;
 use util::mem::{new_buffer, read_array, read_u32_le, read_u64_le, uninit};
 
-pub(crate) struct Inode<'image> {
-    image: Arc<dyn Image + 'image>,
+/// Contains information for an inode.
+pub(crate) struct Inode {
     index: usize,
     flags: InodeFlags,
     size: u64,
@@ -18,16 +18,15 @@ pub(crate) struct Inode<'image> {
     indirect_reader: fn(&mut &[u8]) -> Option<u32>,
 }
 
-impl<'image> Inode<'image> {
-    pub(super) fn from_raw32_unsigned<R: Read>(
-        image: Arc<dyn Image + 'image>,
-        index: usize,
-        raw: &mut R,
-    ) -> Result<Self, FromRawError> {
+impl Inode {
+    pub(super) fn from_raw32_unsigned<R>(index: usize, raw: &mut R) -> Result<Self, FromRawError>
+    where
+        R: Read,
+    {
         // Read common fields.
         let raw: [u8; 168] = Self::read_raw(raw)?;
         let mut ptr = raw.as_ptr();
-        let mut inode = Self::read_common_fields(image, index, ptr, Self::read_indirect32_unsigned);
+        let mut inode = Self::read_common_fields(index, ptr, Self::read_indirect32_unsigned);
 
         // Read block pointers.
         ptr = unsafe { ptr.offset(0x64) };
@@ -45,15 +44,14 @@ impl<'image> Inode<'image> {
         Ok(inode)
     }
 
-    pub(super) fn from_raw32_signed<R: Read>(
-        image: Arc<dyn Image + 'image>,
-        index: usize,
-        raw: &mut R,
-    ) -> Result<Self, FromRawError> {
+    pub(super) fn from_raw32_signed<R>(index: usize, raw: &mut R) -> Result<Self, FromRawError>
+    where
+        R: Read,
+    {
         // Read common fields.
         let raw: [u8; 712] = Self::read_raw(raw)?;
         let mut ptr = raw.as_ptr();
-        let mut inode = Self::read_common_fields(image, index, ptr, Self::read_indirect32_signed);
+        let mut inode = Self::read_common_fields(index, ptr, Self::read_indirect32_signed);
 
         // Read block pointers.
         ptr = unsafe { ptr.offset(0x64) };
@@ -73,10 +71,6 @@ impl<'image> Inode<'image> {
         Ok(inode)
     }
 
-    pub fn index(&self) -> usize {
-        self.index
-    }
-
     pub fn flags(&self) -> InodeFlags {
         self.flags
     }
@@ -85,7 +79,7 @@ impl<'image> Inode<'image> {
         self.size
     }
 
-    pub fn load_blocks(&self) -> Result<Vec<u32>, LoadBlocksError> {
+    pub fn load_blocks(&self, image: &mut dyn Image) -> Result<Vec<u32>, LoadBlocksError> {
         // Check if inode use contiguous blocks.
         let mut blocks: Vec<u32> = Vec::with_capacity(self.blocks as usize);
 
@@ -116,11 +110,21 @@ impl<'image> Inode<'image> {
         // FIXME: Refactor algorithm to read indirect blocks.
         // Load indirect 0.
         let block_num = self.indirect_blocks[0];
-        let block_size = self.image.header().block_size();
-        let offset = block_num * block_size;
+        let block_size = image.header().block_size();
+        let offset = (block_num * block_size) as u64;
+
+        match image.seek(SeekFrom::Start(offset)) {
+            Ok(v) => {
+                if v != offset {
+                    return Err(LoadBlocksError::BlockNotExists(block_num));
+                }
+            }
+            Err(e) => return Err(LoadBlocksError::SeekFailed(block_num, e)),
+        }
+
         let mut block0 = new_buffer(block_size as usize);
 
-        if let Err(e) = self.image.read(offset as usize, &mut block0) {
+        if let Err(e) = image.read_exact(&mut block0) {
             return Err(LoadBlocksError::ReadBlockFailed(block_num, e));
         }
 
@@ -136,9 +140,18 @@ impl<'image> Inode<'image> {
 
         // Load indirect 1.
         let block_num = self.indirect_blocks[1];
-        let offset = block_num * block_size;
+        let offset = (block_num * block_size) as u64;
 
-        if let Err(e) = self.image.read(offset as usize, &mut block0) {
+        match image.seek(SeekFrom::Start(offset)) {
+            Ok(v) => {
+                if v != offset {
+                    return Err(LoadBlocksError::BlockNotExists(block_num));
+                }
+            }
+            Err(e) => return Err(LoadBlocksError::SeekFailed(block_num, e)),
+        }
+
+        if let Err(e) = image.read_exact(&mut block0) {
             return Err(LoadBlocksError::ReadBlockFailed(block_num, e));
         }
 
@@ -146,7 +159,18 @@ impl<'image> Inode<'image> {
         let mut data0 = block0.as_slice();
 
         while let Some(i) = (self.indirect_reader)(&mut data0) {
-            if let Err(e) = self.image.read((i * block_size) as usize, &mut block1) {
+            let offset = (i * block_size) as u64;
+
+            match image.seek(SeekFrom::Start(offset)) {
+                Ok(v) => {
+                    if v != offset {
+                        return Err(LoadBlocksError::BlockNotExists(i));
+                    }
+                }
+                Err(e) => return Err(LoadBlocksError::SeekFailed(i, e)),
+            }
+
+            if let Err(e) = image.read_exact(&mut block1) {
                 return Err(LoadBlocksError::ReadBlockFailed(i, e));
             }
 
@@ -182,7 +206,6 @@ impl<'image> Inode<'image> {
     }
 
     fn read_common_fields(
-        image: Arc<dyn Image + 'image>,
         index: usize,
         raw: *const u8,
         indirect_reader: fn(&mut &[u8]) -> Option<u32>,
@@ -192,7 +215,6 @@ impl<'image> Inode<'image> {
         let blocks = read_u32_le(raw, 0x60);
 
         Self {
-            image,
             index,
             flags,
             size,
@@ -262,23 +284,15 @@ impl Display for FromRawError {
     }
 }
 
-#[derive(Debug)]
+/// Errors for [`load_blocks()`][Inode::load_blocks()].
+#[derive(Debug, Error)]
 pub enum LoadBlocksError {
-    ReadBlockFailed(u32, crate::ReadError),
-}
+    #[error("cannot seek to block #{0}")]
+    SeekFailed(u32, #[source] std::io::Error),
 
-impl Error for LoadBlocksError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::ReadBlockFailed(_, e) => Some(e),
-        }
-    }
-}
+    #[error("block #{0} does not exists")]
+    BlockNotExists(u32),
 
-impl Display for LoadBlocksError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Self::ReadBlockFailed(b, _) => write!(f, "cannot read block #{}", b),
-        }
-    }
+    #[error("cannot read block #{0}")]
+    ReadBlockFailed(u32, #[source] std::io::Error),
 }

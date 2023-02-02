@@ -9,5 +9,6 @@ flate2 = "1.0"
 generic-array = "0.14"
 hmac = "0.12"
 sha2 = "0.10"
+thiserror = "1.0"
 util = { path = "../util" }
 xts-mode = "0.5"

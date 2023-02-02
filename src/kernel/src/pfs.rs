@@ -3,25 +3,19 @@ use std::io::{Error, ErrorKind, IoSlice, IoSliceMut, Read, Seek, SeekFrom, Write
 use std::marker::PhantomData;
 
 pub(super) struct Pfs<'image> {
-    pfs: pfs::Pfs<'image>,
+    super_root: pfs::directory::Directory<'image>,
 }
 
 impl<'image> Pfs<'image> {
-    pub fn new(pfs: pfs::Pfs<'image>) -> Self {
-        Self { pfs }
+    pub fn new(super_root: pfs::directory::Directory<'image>) -> Self {
+        Self { super_root }
     }
 }
 
 impl<'image> driver::Driver for Pfs<'image> {
     fn open_root(&self, _: &str) -> Result<Box<dyn driver::Directory + '_>, OpenError> {
-        // Open super-root.
-        let super_root = match self.pfs.open_super_root() {
-            Ok(v) => v,
-            Err(e) => return Err(OpenError::DriverFailed(e.into())),
-        };
-
         // Open "uroot", which is a real root.
-        let entries = match super_root.open() {
+        let entries = match self.super_root.open() {
             Ok(v) => v,
             Err(e) => return Err(OpenError::DriverFailed(e.into())),
         };
@@ -42,14 +36,12 @@ impl<'image> driver::Driver for Pfs<'image> {
     }
 }
 
-struct Directory<'driver, 'pfs, 'image> {
-    pfs: pfs::directory::Directory<'pfs, 'image>,
+struct Directory<'driver, 'image> {
+    pfs: pfs::directory::Directory<'image>,
     phantom: PhantomData<&'driver Pfs<'image>>,
 }
 
-impl<'driver, 'pfs: 'driver, 'image> driver::Directory<'driver>
-    for Directory<'driver, 'pfs, 'image>
-{
+impl<'driver, 'image> driver::Directory<'driver> for Directory<'driver, 'image> {
     fn open(&self, name: &str) -> Result<Entry<'driver>, OpenError> {
         // Load entries.
         let entries = match self.pfs.open() {
@@ -76,18 +68,18 @@ impl<'driver, 'pfs: 'driver, 'image> driver::Directory<'driver>
     }
 }
 
-struct File<'driver, 'pfs, 'image> {
-    pfs: pfs::file::File<'pfs, 'image>,
+struct File<'driver, 'image> {
+    pfs: pfs::file::File<'image>,
     phantom: PhantomData<&'driver Pfs<'image>>,
 }
 
-impl<'driver, 'pfs, 'image> driver::File<'driver> for File<'driver, 'pfs, 'image> {
+impl<'driver, 'image> driver::File<'driver> for File<'driver, 'image> {
     fn len(&self) -> std::io::Result<u64> {
-        Ok(self.pfs.len())
+        Ok(self.pfs.len().unwrap())
     }
 }
 
-impl<'driver, 'pfs, 'image> Seek for File<'driver, 'pfs, 'image> {
+impl<'driver, 'image> Seek for File<'driver, 'image> {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         self.pfs.seek(pos)
     }
@@ -101,7 +93,7 @@ impl<'driver, 'pfs, 'image> Seek for File<'driver, 'pfs, 'image> {
     }
 }
 
-impl<'driver, 'pfs, 'image> Read for File<'driver, 'pfs, 'image> {
+impl<'driver, 'image> Read for File<'driver, 'image> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.pfs.read(buf)
     }
@@ -123,7 +115,7 @@ impl<'driver, 'pfs, 'image> Read for File<'driver, 'pfs, 'image> {
     }
 }
 
-impl<'driver, 'pfs, 'image> Write for File<'driver, 'pfs, 'image> {
+impl<'driver, 'image> Write for File<'driver, 'image> {
     fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
         Err(Error::from(ErrorKind::PermissionDenied))
     }
