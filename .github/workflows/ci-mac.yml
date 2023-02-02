@@ -3,7 +3,7 @@ on:
   workflow_call:
 jobs:
   build:
-    name: Build Mac
+    name: Mac
     runs-on: macos-12
     steps:
     - name: Checkout source
@@ -25,4 +25,4 @@ jobs:
     - name: Run CMake
       run: cmake --preset mac-release .
     - name: Build
-      run: cmake --build --parallel 6 --preset mac-release
+      run: cmake --build --preset mac-release --parallel 6
