@@ -124,6 +124,55 @@ impl<F: Read + Seek> Reader<F> {
     }
 }
 
+impl<F: Read + Seek> Seek for Reader<F> {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        use std::io::Error;
+
+        // Calculate the new offset.
+        let offset = match pos {
+            SeekFrom::Start(v) => min(v, self.original_size),
+            SeekFrom::End(v) => {
+                if v >= 0 {
+                    self.original_size
+                } else {
+                    match self.original_size.checked_sub(v.unsigned_abs()) {
+                        Some(v) => v,
+                        None => return Err(Error::from(ErrorKind::InvalidInput)),
+                    }
+                }
+            }
+            SeekFrom::Current(v) => {
+                if v >= 0 {
+                    min(self.current_offset + (v as u64), self.original_size)
+                } else {
+                    match self.current_offset.checked_sub(v.unsigned_abs()) {
+                        Some(v) => v,
+                        None => return Err(Error::from(ErrorKind::InvalidInput)),
+                    }
+                }
+            }
+        };
+
+        // Check if we need to update the offset.
+        if offset != self.current_offset {
+            self.current_offset = offset;
+            self.current_block.clear();
+        }
+
+        Ok(offset)
+    }
+
+    fn rewind(&mut self) -> std::io::Result<()> {
+        self.current_offset = 0;
+        self.current_block.clear();
+        Ok(())
+    }
+
+    fn stream_position(&mut self) -> std::io::Result<u64> {
+        Ok(self.current_offset)
+    }
+}
+
 impl<F: Read + Seek> Read for Reader<F> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         if buf.is_empty() || self.current_offset == self.original_size {
