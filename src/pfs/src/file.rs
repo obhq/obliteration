@@ -1,22 +1,23 @@
 use crate::inode::Inode;
-use crate::Image;
+use crate::Pfs;
 use std::cmp::min;
 use std::io::{Error, ErrorKind, Read, Seek, SeekFrom};
+use std::ops::DerefMut;
 use std::sync::Arc;
 
-#[derive(Clone)]
-pub struct File<'pfs, 'image> {
-    image: Arc<dyn Image + 'image>,
-    inode: &'pfs Inode<'image>,
+/// Represents a file in the PFS.
+pub struct File<'a> {
+    pfs: Arc<Pfs<'a>>,
+    inode: usize,
     occupied_blocks: Vec<u32>,
     current_offset: u64,
     current_block: Vec<u8>,
 }
 
-impl<'pfs, 'image> File<'pfs, 'image> {
-    pub(crate) fn new(image: Arc<dyn Image + 'image>, inode: &'pfs Inode<'image>) -> Self {
+impl<'a> File<'a> {
+    pub(crate) fn new(pfs: Arc<Pfs<'a>>, inode: usize) -> Self {
         Self {
-            image,
+            pfs,
             inode,
             occupied_blocks: Vec::new(),
             current_offset: 0,
@@ -24,40 +25,63 @@ impl<'pfs, 'image> File<'pfs, 'image> {
         }
     }
 
-    pub fn inode(&self) -> usize {
-        self.inode.index()
+    pub fn len(&self) -> Option<u64> {
+        self.inode().map(|i| i.size())
     }
 
-    pub fn len(&self) -> u64 {
-        self.inode.size()
+    pub fn is_compressed(&self) -> Option<bool> {
+        self.inode().map(|i| i.flags().is_compressed())
     }
 
-    pub fn is_compressed(&self) -> bool {
-        self.inode.flags().is_compressed()
+    fn inode(&self) -> Option<&Inode> {
+        self.pfs.inodes.get(self.inode)
     }
 }
 
-impl<'pfs, 'image> Seek for File<'pfs, 'image> {
+impl<'a> Clone for File<'a> {
+    fn clone(&self) -> Self {
+        Self {
+            pfs: self.pfs.clone(),
+            inode: self.inode,
+            occupied_blocks: Vec::new(),
+            current_offset: self.current_offset,
+            current_block: Vec::new(),
+        }
+    }
+}
+
+impl<'a> Seek for File<'a> {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        // Get inode.
+        let inode = match self.pfs.inodes.get(self.inode) {
+            Some(v) => v,
+            None => {
+                return Err(Error::new(
+                    ErrorKind::Other,
+                    format!("inode #{} does not exists", self.inode),
+                ))
+            }
+        };
+
         // Calculate new offset.
         let offset = match pos {
-            SeekFrom::Start(v) => min(self.len(), v),
+            SeekFrom::Start(v) => min(inode.size(), v),
             SeekFrom::End(v) => {
                 if v >= 0 {
-                    self.len()
+                    inode.size()
                 } else {
                     let v = v.unsigned_abs();
 
-                    if v > self.len() {
+                    if v > inode.size() {
                         return Err(Error::from(ErrorKind::InvalidInput));
                     }
 
-                    self.len() - v
+                    inode.size() - v
                 }
             }
             SeekFrom::Current(v) => {
                 if v >= 0 {
-                    min(self.len(), self.current_offset + (v as u64))
+                    min(inode.size(), self.current_offset + (v as u64))
                 } else {
                     let v = v.unsigned_abs();
 
@@ -90,22 +114,37 @@ impl<'pfs, 'image> Seek for File<'pfs, 'image> {
     }
 }
 
-impl<'pfs, 'image> Read for File<'pfs, 'image> {
+impl<'a> Read for File<'a> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        if buf.is_empty() || self.current_offset == self.len() {
+        // Get inode.
+        let inode = match self.pfs.inodes.get(self.inode) {
+            Some(v) => v,
+            None => {
+                return Err(Error::new(
+                    ErrorKind::Other,
+                    format!("inode #{} does not exists", self.inode),
+                ))
+            }
+        };
+
+        // Check if we need to do the actual read.
+        if buf.is_empty() || self.current_offset == inode.size() {
             return Ok(0);
         }
 
         // Load occupied blocks.
+        let mut image = self.pfs.image.lock().unwrap();
+        let image = image.deref_mut();
+
         if self.occupied_blocks.is_empty() {
-            self.occupied_blocks = match self.inode.load_blocks() {
+            self.occupied_blocks = match inode.load_blocks(image.as_mut()) {
                 Ok(v) => v,
                 Err(e) => return Err(Error::new(ErrorKind::Other, e)),
             };
         }
 
         // Copy data.
-        let block_size = self.image.header().block_size();
+        let block_size = image.header().block_size();
         let mut copied = 0usize;
 
         loop {
@@ -125,9 +164,9 @@ impl<'pfs, 'image> Read for File<'pfs, 'image> {
 
                 // Check if this is a last block.
                 let total = block_index * (block_size as u64) + (block_size as u64);
-                let read_amount = if total > self.len() {
+                let read_amount = if total > inode.size() {
                     // Both total and len never be zero.
-                    (block_size as u64) - (total - self.len())
+                    (block_size as u64) - (total - inode.size())
                 } else {
                     block_size as u64
                 };
@@ -136,12 +175,23 @@ impl<'pfs, 'image> Read for File<'pfs, 'image> {
                 self.current_block.reserve(read_amount as usize);
                 unsafe { self.current_block.set_len(read_amount as usize) };
 
-                // Load block data.
+                // Seek to block.
                 let offset = (block_num as u64) * (block_size as u64);
 
-                if let Err(e) = self.image.read(offset as usize, &mut self.current_block) {
-                    break Err(Error::new(ErrorKind::Other, e));
+                match image.seek(SeekFrom::Start(offset)) {
+                    Ok(v) => {
+                        if v != offset {
+                            return Err(Error::new(
+                                ErrorKind::Other,
+                                format!("block #{} does not exists", block_num),
+                            ));
+                        }
+                    }
+                    Err(e) => return Err(e),
                 }
+
+                // Load block data.
+                image.read_exact(&mut self.current_block)?;
             }
 
             // Get a window into current block from current offset.
@@ -163,7 +213,7 @@ impl<'pfs, 'image> Read for File<'pfs, 'image> {
             }
 
             // Check if completed.
-            if copied == buf.len() || self.current_offset == self.len() {
+            if copied == buf.len() || self.current_offset == inode.size() {
                 break Ok(copied);
             }
         }

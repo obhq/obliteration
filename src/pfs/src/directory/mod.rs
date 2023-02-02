@@ -1,56 +1,62 @@
 use self::dirent::Dirent;
 use crate::file::File;
-use crate::inode::Inode;
-use crate::Image;
+use crate::Pfs;
 use std::collections::HashMap;
-use std::error::Error;
-use std::fmt::{Display, Formatter};
+use std::io::SeekFrom;
+use std::ops::DerefMut;
 use std::sync::Arc;
+use thiserror::Error;
 use util::mem::new_buffer;
 
 pub mod dirent;
 
+/// Represents a directory in the PFS.
 #[derive(Clone)]
-pub struct Directory<'pfs, 'image> {
-    image: Arc<dyn Image + 'image>,
-    inodes: &'pfs [Inode<'image>],
-    inode: &'pfs Inode<'image>,
+pub struct Directory<'a> {
+    pfs: Arc<Pfs<'a>>,
+    inode: usize,
 }
 
-impl<'pfs, 'image> Directory<'pfs, 'image> {
-    pub(super) fn new(
-        image: Arc<dyn Image + 'image>,
-        inodes: &'pfs [Inode<'image>],
-        inode: &'pfs Inode<'image>,
-    ) -> Self {
-        Self {
-            image,
-            inodes,
-            inode,
-        }
+impl<'a> Directory<'a> {
+    pub(super) fn new(pfs: Arc<Pfs<'a>>, inode: usize) -> Self {
+        Self { pfs, inode }
     }
 
-    pub fn inode(&self) -> usize {
-        self.inode.index()
-    }
+    pub fn open(&self) -> Result<Items<'a>, OpenError> {
+        // Get inode.
+        let inode = match self.pfs.inodes.get(self.inode) {
+            Some(v) => v,
+            None => return Err(OpenError::InvalidInode(self.inode)),
+        };
 
-    pub fn open(&self) -> Result<Items<'pfs, 'image>, OpenError> {
         // Load occupied blocks.
-        let blocks = match self.inode.load_blocks() {
+        let mut image = self.pfs.image.lock().unwrap();
+        let image = image.deref_mut();
+        let blocks = match inode.load_blocks(image.as_mut()) {
             Ok(v) => v,
             Err(e) => return Err(OpenError::LoadBlocksFailed(e)),
         };
 
         // Read all dirents.
-        let mut items: HashMap<Vec<u8>, Item<'pfs, 'image>> = HashMap::new();
-        let block_size = self.image.header().block_size();
+        let mut items: HashMap<Vec<u8>, Item<'a>> = HashMap::new();
+        let block_size = image.header().block_size();
         let mut block_data = new_buffer(block_size as usize);
 
         for block_num in blocks {
-            // Read block data.
+            // Seek to block.
             let offset = (block_num as u64) * (block_size as u64);
 
-            if let Err(e) = self.image.read(offset as usize, &mut block_data) {
+            match image.seek(SeekFrom::Start(offset)) {
+                Ok(v) => {
+                    if v != offset {
+                        return Err(OpenError::BlockNotExists(block_num));
+                    }
+                }
+                Err(e) => return Err(OpenError::SeekToBlockFailed(block_num, e)),
+            }
+
+            // Read block data.
+            if let Err(e) = image.read_exact(&mut block_data) {
                 return Err(OpenError::ReadBlockFailed(block_num, e));
             }
 
@@ -69,11 +75,6 @@ impl<'pfs, 'image> Directory<'pfs, 'image> {
                     },
                 };
 
-                let inode = match self.inodes.get(dirent.inode()) {
-                    Some(v) => v,
-                    None => return Err(OpenError::InvalidInode(dirent.inode())),
-                };
-
                 // Skip remaining padding.
                 next = match next.get(dirent.padding_size()..) {
                     Some(v) => v,
@@ -86,11 +87,10 @@ impl<'pfs, 'image> Directory<'pfs, 'image> {
                 };
 
                 // Construct object.
+                let inode = dirent.inode();
                 let item = match dirent.ty() {
-                    Dirent::FILE => Item::File(File::new(self.image.clone(), inode)),
-                    Dirent::DIRECTORY => {
-                        Item::Directory(Directory::new(self.image.clone(), self.inodes, inode))
-                    }
+                    Dirent::FILE => Item::File(File::new(self.pfs.clone(), inode)),
+                    Dirent::DIRECTORY => Item::Directory(Directory::new(self.pfs.clone(), inode)),
                     Dirent::SELF | Dirent::PARENT => continue,
                     _ => {
                         return Err(OpenError::UnknownDirent {
@@ -108,61 +108,53 @@ impl<'pfs, 'image> Directory<'pfs, 'image> {
     }
 }
 
-pub struct Items<'pfs, 'image> {
-    items: HashMap<Vec<u8>, Item<'pfs, 'image>>,
+/// Represents a collection of items in the directory.
+pub struct Items<'a> {
+    items: HashMap<Vec<u8>, Item<'a>>,
 }
 
-impl<'pfs, 'image> Items<'pfs, 'image> {
-    pub fn get(&self, name: &[u8]) -> Option<&Item<'pfs, 'image>> {
+impl<'a> Items<'a> {
+    pub fn get(&self, name: &[u8]) -> Option<&Item<'a>> {
         self.items.get(name)
     }
 }
 
-impl<'pfs, 'image> IntoIterator for Items<'pfs, 'image> {
-    type Item = (Vec<u8>, Item<'pfs, 'image>);
-    type IntoIter = std::collections::hash_map::IntoIter<Vec<u8>, Item<'pfs, 'image>>;
+impl<'a> IntoIterator for Items<'a> {
+    type Item = (Vec<u8>, Item<'a>);
+    type IntoIter = std::collections::hash_map::IntoIter<Vec<u8>, Item<'a>>;
 
     fn into_iter(self) -> Self::IntoIter {
         self.items.into_iter()
     }
 }
 
-pub enum Item<'pfs, 'image> {
-    Directory(Directory<'pfs, 'image>),
-    File(File<'pfs, 'image>),
+/// Represents an item in the directory.
+pub enum Item<'a> {
+    Directory(Directory<'a>),
+    File(File<'a>),
 }
 
-#[derive(Debug)]
+/// Errors of [`open()`][Directory::open()].
+#[derive(Debug, Error)]
 pub enum OpenError {
+    #[error("inode #{0} is not valid")]
     InvalidInode(usize),
-    LoadBlocksFailed(crate::inode::LoadBlocksError),
-    ReadBlockFailed(u32, crate::ReadError),
+
+    #[error("cannot load occupied blocks")]
+    LoadBlocksFailed(#[source] crate::inode::LoadBlocksError),
+
+    #[error("cannot seek to block #{0}")]
+    SeekToBlockFailed(u32, #[source] std::io::Error),
+
+    #[error("block #{0} does not exists")]
+    BlockNotExists(u32),
+
+    #[error("cannot read block #{0}")]
+    ReadBlockFailed(u32, #[source] std::io::Error),
+
+    #[error("Dirent #{dirent:} in block #{block:} has invalid size")]
     InvalidDirent { block: u32, dirent: usize },
+
+    #[error("Dirent #{dirent:} in block #{block:} has unknown type")]
     UnknownDirent { block: u32, dirent: usize },
-}
-
-impl Error for OpenError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::LoadBlocksFailed(e) => Some(e),
-            Self::ReadBlockFailed(_, e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
-impl Display for OpenError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Self::InvalidInode(i) => write!(f, "inode #{} is not valid", i),
-            Self::LoadBlocksFailed(_) => f.write_str("cannot load occupied blocks"),
-            Self::ReadBlockFailed(b, _) => write!(f, "cannot read block #{}", b),
-            Self::InvalidDirent { block, dirent } => {
-                write!(f, "Dirent #{} in block #{} has invalid size", dirent, block)
-            }
-            Self::UnknownDirent { block, dirent } => {
-                write!(f, "Dirent #{} in block #{} has unknown type", dirent, block)
-            }
-        }
-    }
 }

@@ -1,8 +1,10 @@
 use crate::header::Header;
-use crate::{Image, ReadError};
+use crate::Image;
 use aes::Aes128;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
+use std::cmp::min;
+use std::io::{IoSliceMut, Read, Seek, SeekFrom};
 use util::mem::uninit;
 use xts_mode::{get_tweak_default, Xts128};
 
@@ -30,113 +32,225 @@ pub(super) fn get_xts_keys(ekpfs: &[u8], seed: &[u8; 16]) -> ([u8; 16], [u8; 16]
     (data_key, tweak_key)
 }
 
-pub(super) struct Unencrypted<R: AsRef<[u8]>> {
-    raw: R,
+/// Encapsulate an unencrypted PFS image.
+pub(super) struct Unencrypted<I: Read + Seek> {
+    image: I,
     header: Header,
 }
 
-impl<R: AsRef<[u8]>> Unencrypted<R> {
-    pub fn new(raw: R, header: Header) -> Self {
-        Self { raw, header }
+impl<I: Read + Seek> Unencrypted<I> {
+    pub fn new(image: I, header: Header) -> Self {
+        Self { image, header }
     }
 }
 
-impl<R: AsRef<[u8]>> Image for Unencrypted<R> {
+impl<I: Read + Seek> Image for Unencrypted<I> {
     fn header(&self) -> &Header {
         &self.header
     }
+}
 
-    fn read(&self, offset: usize, buf: &mut [u8]) -> Result<(), ReadError> {
-        let block = match self.raw.as_ref().get(offset..(offset + buf.len())) {
-            Some(v) => v,
-            None => return Err(ReadError::InvalidOffset),
-        };
+impl<I: Read + Seek> Seek for Unencrypted<I> {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        self.image.seek(pos)
+    }
 
-        buf.copy_from_slice(block);
+    fn rewind(&mut self) -> std::io::Result<()> {
+        self.image.rewind()
+    }
 
-        Ok(())
+    fn stream_position(&mut self) -> std::io::Result<u64> {
+        self.image.stream_position()
     }
 }
 
-pub(super) struct Encrypted<R: AsRef<[u8]>> {
-    raw: R,
-    header: Header,
-    decryptor: Xts128<Aes128>,
-    encrypted_start: usize,
+impl<I: Read + Seek> Read for Unencrypted<I> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.image.read(buf)
+    }
+
+    fn read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> std::io::Result<usize> {
+        self.image.read_vectored(bufs)
+    }
+
+    fn read_to_end(&mut self, buf: &mut Vec<u8>) -> std::io::Result<usize> {
+        self.image.read_to_end(buf)
+    }
+
+    fn read_to_string(&mut self, buf: &mut String) -> std::io::Result<usize> {
+        self.image.read_to_string(buf)
+    }
+
+    fn read_exact(&mut self, buf: &mut [u8]) -> std::io::Result<()> {
+        self.image.read_exact(buf)
+    }
 }
 
-impl<R: AsRef<[u8]>> Encrypted<R> {
-    pub fn new(raw: R, header: Header, decryptor: Xts128<Aes128>, encrypted_start: usize) -> Self {
+/// Encapsulate an encrypted PFS image.
+pub(super) struct Encrypted<I: Read + Seek> {
+    image: I,
+    len: u64,
+    header: Header,
+    decryptor: Xts128<Aes128>,
+    encrypted_start: usize, // Block index, not offset.
+    offset: u64,
+    current_block: Vec<u8>,
+}
+
+impl<I: Read + Seek> Encrypted<I> {
+    pub fn new(
+        image: I,
+        image_len: u64,
+        header: Header,
+        decryptor: Xts128<Aes128>,
+        encrypted_start: usize,
+        current_offset: u64,
+    ) -> Self {
         Self {
-            raw,
+            image,
+            len: image_len,
             header,
             decryptor,
             encrypted_start,
+            offset: current_offset,
+            current_block: Vec::new(),
         }
     }
 }
 
-impl<R: AsRef<[u8]>> Encrypted<R> {
-    /// Fill `buf` with decrypted data.
-    fn read_xts_block(&self, num: usize, buf: &mut [u8; XTS_BLOCK_SIZE]) -> Result<(), ReadError> {
-        // Read block.
-        let offset = num * XTS_BLOCK_SIZE;
-        let data = match self.raw.as_ref().get(offset..(offset + XTS_BLOCK_SIZE)) {
-            Some(v) => v,
-            None => return Err(ReadError::InvalidOffset),
-        };
-
-        buf.copy_from_slice(data);
-
-        // Decrypt block.
-        if num >= self.encrypted_start {
-            let tweak = get_tweak_default(num as _);
-            self.decryptor.decrypt_sector(buf, tweak);
-        }
-
-        Ok(())
-    }
-}
-
-impl<R: AsRef<[u8]>> Image for Encrypted<R> {
+impl<I: Read + Seek> Image for Encrypted<I> {
     fn header(&self) -> &Header {
         &self.header
     }
+}
 
-    fn read(&self, offset: usize, buf: &mut [u8]) -> Result<(), ReadError> {
-        // Read a first block for destination offset.
-        let mut block_num = offset / XTS_BLOCK_SIZE;
-        let mut block_data: [u8; XTS_BLOCK_SIZE] = uninit();
+impl<I: Read + Seek> Seek for Encrypted<I> {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        use std::io::{Error, ErrorKind};
 
-        self.read_xts_block(block_num, &mut block_data)?;
-
-        // Fill output buffer.
-        let mut src = &block_data[(offset % XTS_BLOCK_SIZE)..];
-        let dest = buf.as_mut_ptr();
-        let mut copied = 0;
-
-        loop {
-            let dest = unsafe { dest.add(copied) };
-
-            // Check if remaining block can fill the remaining buffer.
-            let need = buf.len() - copied;
-
-            if need <= src.len() {
-                unsafe { dest.copy_from_nonoverlapping(src.as_ptr(), need) };
-                break;
-            } else {
-                unsafe { dest.copy_from_nonoverlapping(src.as_ptr(), src.len()) };
-                copied += src.len();
+        // Calculate the offset.
+        let offset = match pos {
+            SeekFrom::Start(v) => min(v, self.len),
+            SeekFrom::End(v) => {
+                if v >= 0 {
+                    self.len
+                } else {
+                    match self.len.checked_sub(v.unsigned_abs()) {
+                        Some(v) => v,
+                        None => return Err(Error::from(ErrorKind::InvalidInput)),
+                    }
+                }
             }
+            SeekFrom::Current(v) => {
+                if v >= 0 {
+                    min(self.offset + (v as u64), self.len)
+                } else {
+                    match self.offset.checked_sub(v.unsigned_abs()) {
+                        Some(v) => v,
+                        None => return Err(Error::from(ErrorKind::InvalidInput)),
+                    }
+                }
+            }
+        };
 
-            // Read next block.
-            block_num += 1;
+        // Update the offset if it is difference.
+        if offset != self.offset {
+            self.offset = offset;
+            self.current_block.clear();
+        }
 
-            self.read_xts_block(block_num, &mut block_data)?;
+        Ok(offset)
+    }
 
-            src = &block_data;
+    fn rewind(&mut self) -> std::io::Result<()> {
+        if self.offset != 0 {
+            self.offset = 0;
+            self.current_block.clear();
         }
 
         Ok(())
+    }
+
+    fn stream_position(&mut self) -> std::io::Result<u64> {
+        Ok(self.offset)
+    }
+}
+
+impl<I: Read + Seek> Read for Encrypted<I> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        use std::io::{Error, ErrorKind};
+
+        // Check if we need to do the actual read.
+        if buf.is_empty() || self.offset == self.len {
+            return Ok(0);
+        }
+
+        // Fill output buffer until it is full or EOF.
+        let mut copied = 0;
+
+        loop {
+            // Check if we have remaining data available for current block.
+            if self.current_block.is_empty() {
+                // Get offset for current block.
+                let block = (self.offset as usize) / XTS_BLOCK_SIZE;
+                let offset = (block * XTS_BLOCK_SIZE) as u64;
+
+                // Seek image file to the target offset.
+                match self.image.seek(SeekFrom::Start(offset)) {
+                    Ok(v) => {
+                        if v != offset {
+                            return Err(Error::new(
+                                ErrorKind::Other,
+                                format!("unable to seek to offset {}", offset),
+                            ));
+                        }
+                    }
+                    Err(e) => return Err(e),
+                }
+
+                // Read the current block.
+                self.current_block.reserve(XTS_BLOCK_SIZE);
+
+                unsafe {
+                    let buf = std::slice::from_raw_parts_mut(
+                        self.current_block.as_mut_ptr(),
+                        XTS_BLOCK_SIZE,
+                    );
+
+                    self.image.read_exact(buf)?;
+                    self.current_block.set_len(XTS_BLOCK_SIZE);
+                }
+
+                // Decrypt block.
+                if block >= self.encrypted_start {
+                    let tweak = get_tweak_default(block as _);
+
+                    self.decryptor
+                        .decrypt_sector(&mut self.current_block, tweak);
+                }
+
+                // Discard any data before current offset.
+                let offset = (self.offset as usize) % XTS_BLOCK_SIZE;
+
+                self.current_block.drain(..offset);
+            }
+
+            // Copy data to output buffer.
+            let amount = min(buf.len() - copied, self.current_block.len());
+            let src = self.current_block.drain(..amount);
+            let dst = &mut buf[copied..(copied + amount)];
+
+            dst.copy_from_slice(src.as_slice());
+            copied += amount;
+
+            // Advance the offset.
+            drop(src);
+            self.offset += amount as u64;
+
+            // Check if output buffer is filled or EOF.
+            if copied == buf.len() || self.offset == self.len {
+                break Ok(copied);
+            }
+        }
     }
 }
