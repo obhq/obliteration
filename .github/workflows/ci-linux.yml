@@ -2,28 +2,12 @@ name: CI (Linux)
 on:
   workflow_call:
 jobs:
-  init:
-    name: Checkout
-    runs-on: ubuntu-20.04 # We cannot use 22.04 as Vulkan SDK is not available.
+  build:
+    name: Linux
+    runs-on: ubuntu-20.04 # We cannot use 22.04 due to Vulkan SDK does not available.
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
-  qt-dep:
-    needs: init
-    name: Install Qt
-    runs-on: ubuntu-20.04
-    steps:
-    - name: Install Qt
-      uses: jurplel/install-qt-action@v3
-      with:
-        cache: true
-        cache-key-prefix: ${{ runner.os }}-install-qt-action
-        version: 6.2.*
-  sys-dep:
-    needs: init
-    name: Install system dependencies
-    runs-on: ubuntu-20.04
-    steps:
     - name: Install system dependencies
       run: |
         wget -qO - https://packages.lunarg.com/lunarg-signing-key-pub.asc | sudo apt-key add -
@@ -33,11 +17,12 @@ jobs:
         sudo apt-get install -y libxkbcommon-dev vulkan-sdk
 
         echo "VULKAN_SDK=/usr" >> $GITHUB_ENV
-  build:
-    needs: [qt-dep, sys-dep]
-    name: Build
-    runs-on: ubuntu-20.04
-    steps:
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        cache: true
+        cache-key-prefix: ${{ runner.os }}-install-qt-action
+        version: 6.2.*
     - name: Cache CMake Build Files
       uses: actions/cache@v3.2.4
       id: cache-cmake
@@ -49,4 +34,4 @@ jobs:
     - name: Run CMake
       run: cmake --preset linux-release .
     - name: Build
-      run: cmake --build --parallel 4 --preset linux-release
+      run: cmake --build --preset linux-release --parallel 4

@@ -6,11 +6,11 @@ on:
 concurrency: dev-${{ github.ref }}
 jobs:
   windows:
-    name: Windows Build
+    name: Build
     uses: ./.github/workflows/ci-windows.yml
   linux:
-    name: Linux Build
+    name: Build
     uses: ./.github/workflows/ci-linux.yml
   mac:
-    name: Mac Build
+    name: Build
     uses: ./.github/workflows/ci-mac.yml
