@@ -1,0 +1,32 @@
+app-id: io.github.obhq.Obliteration
+default-branch: stable
+runtime: org.kde.Platform
+runtime-version: '6.4'
+platform-extensions:
+- org.freedesktop.Platform.GL.default
+sdk: org.kde.Sdk
+sdk-extensions:
+- org.freedesktop.Sdk.Extension.rust-stable
+command: obliteration
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+  build-args:
+  - --share=network
+finish-args:
+  - --filesystem=host
+  - --share=network
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  - --socket=pulseaudio
+modules:
+- name: obliteration
+  buildsystem: simple # cmake does not work somehow
+  build-commands:
+  - cmake --preset linux-release .
+  - cmake --build --preset linux-release
+  - cmake --install build --prefix "$FLATPAK_DEST"
+  sources:
+  - type: dir
+    path: .
