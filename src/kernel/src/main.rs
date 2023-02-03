@@ -1,13 +1,12 @@
 use self::elf::SignedElf;
 use self::fs::Fs;
+use self::fs::MountPoint;
 use self::memory::MemoryManager;
 use self::process::Process;
-use self::rootfs::RootFs;
 use clap::Parser;
 use serde::Deserialize;
 use std::fs::File;
-use std::io::Cursor;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 mod elf;
@@ -15,13 +14,14 @@ mod errno;
 mod fs;
 mod log;
 mod memory;
-mod pfs;
 mod process;
-mod rootfs;
 
 #[derive(Parser, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 struct Args {
+    #[arg(long)]
+    system: PathBuf,
+
     #[arg(long)]
     game: PathBuf,
 
@@ -70,20 +70,22 @@ fn run() -> bool {
 
     // Show basic infomation.
     info!(0, "Starting Obliteration kernel.");
-    info!(0, "Game directory is: {}.", args.game.display());
     info!(0, "Debug dump directory is: {}.", args.debug_dump.display());
 
     // Initialize filesystem.
-    let fs = Fs::new();
+    let fs = Arc::new(Fs::new());
 
-    info!(0, "Mounting rootfs to /.");
+    info!(0, "Mounting / to {}.", args.system.display());
 
-    if let Err(e) = fs.mount("/", Arc::new(RootFs::new())) {
+    if let Err(e) = fs.mount("/", MountPoint::new(args.system.clone())) {
         error!(0, e, "Mount failed");
         return false;
     }
 
-    if !mount_pfs(&fs, &args.game) {
+    info!(0, "Mounting /mnt/app0 to {}.", args.game.display());
+
+    if let Err(e) = fs.mount("/mnt/app0", MountPoint::new(args.game.clone())) {
+        error!(0, e, "Mount failed");
         return false;
     }
 
@@ -180,64 +182,6 @@ fn run() -> bool {
 
     // Most program should never reach this state.
     info!(0, "eboot.bin exited with code {}.", exit_code);
-
-    true
-}
-
-fn mount_pfs<G: AsRef<Path>>(fs: &Fs, game: G) -> bool {
-    // Open PFS image.
-    let mut path = game.as_ref().to_path_buf();
-
-    path.push("uroot");
-    path.push("pfs_image.dat");
-
-    info!(0, "Opening PFS image {}.", path.display());
-
-    let file = match File::open(&path) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(0, e, "Open failed");
-            return false;
-        }
-    };
-
-    // Map PFS image.
-    info!(0, "Mapping PFS image to memory.");
-
-    let raw = match unsafe { memmap2::Mmap::map(&file) } {
-        Ok(v) => v,
-        Err(e) => {
-            error!(0, e, "Map failed");
-            return false;
-        }
-    };
-
-    info!(
-        0,
-        "PFS is mapped to {:p} - {:p} ({} bytes).",
-        &raw[..],
-        &raw[raw.len()..],
-        raw.len(),
-    );
-
-    // Load PFS.
-    info!(0, "Loading PFS.");
-
-    let pfs = match ::pfs::open(Cursor::new(raw), None) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(0, e, "Initialization failed",);
-            return false;
-        }
-    };
-
-    // Mount PFS image.
-    info!(0, "Mounting PFS to /mnt/app0.");
-
-    if let Err(e) = fs.mount("/mnt/app0", Arc::new(pfs::Pfs::new(pfs))) {
-        error!(0, e, "Mount failed");
-        return false;
-    }
 
     true
 }

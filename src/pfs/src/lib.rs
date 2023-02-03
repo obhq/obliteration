@@ -120,8 +120,14 @@ where
         break;
     }
 
-    // Construct super-root.
+    // Check if super-root valid
     let super_root = image.header().super_root_inode();
+
+    if super_root >= inodes.len() {
+        return Err(OpenError::InvalidSuperRoot);
+    }
+
+    // Construct super-root.
     let pfs = Pfs {
         image: Mutex::new(image),
         inodes,
@@ -161,4 +167,7 @@ pub enum OpenError {
 
     #[error("cannot read block #{0}")]
     ReadBlockFailed(u32, #[source] std::io::Error),
+
+    #[error("invalid super-root")]
+    InvalidSuperRoot,
 }

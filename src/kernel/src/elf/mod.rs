@@ -1,6 +1,6 @@
 use self::program::Program;
 use self::segment::SignedSegment;
-use crate::fs::file::File;
+use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use thiserror::Error;
 use util::mem::{read_array, read_u16_le, read_u32_le, read_u64_le, read_u8, uninit};
@@ -20,7 +20,13 @@ pub struct SignedElf {
 }
 
 impl SignedElf {
-    pub fn load(mut file: File) -> Result<Self, LoadError> {
+    pub fn load(file: crate::fs::File) -> Result<Self, LoadError> {
+        // Open the file without allocating a virtual file descriptor.
+        let mut file = match File::open(file.path()) {
+            Ok(v) => v,
+            Err(e) => return Err(LoadError::OpenFailed(e)),
+        };
+
         // Read SELF header.
         let mut hdr: [u8; 32] = uninit();
 
@@ -234,6 +240,9 @@ impl SignedElf {
 /// Represents errors for [`SignedElf::load()`].
 #[derive(Debug, Error)]
 pub enum LoadError {
+    #[error("cannot open SELF file")]
+    OpenFailed(#[source] std::io::Error),
+
     #[error("cannot read SELF header")]
     ReadSelfHeaderFailed(#[source] std::io::Error),
 

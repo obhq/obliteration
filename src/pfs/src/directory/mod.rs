@@ -1,5 +1,6 @@
 use self::dirent::Dirent;
 use crate::file::File;
+use crate::inode::Inode;
 use crate::Pfs;
 use std::collections::HashMap;
 use std::io::SeekFrom;
@@ -22,16 +23,59 @@ impl<'a> Directory<'a> {
         Self { pfs, inode }
     }
 
-    pub fn open(&self) -> Result<Items<'a>, OpenError> {
-        // Get inode.
-        let inode = match self.pfs.inodes.get(self.inode) {
-            Some(v) => v,
-            None => return Err(OpenError::InvalidInode(self.inode)),
-        };
+    pub fn mode(&self) -> u16 {
+        self.inode().mode()
+    }
 
+    pub fn flags(&self) -> u32 {
+        self.inode().flags().value()
+    }
+
+    pub fn atime(&self) -> u64 {
+        self.inode().atime()
+    }
+
+    pub fn mtime(&self) -> u64 {
+        self.inode().mtime()
+    }
+
+    pub fn ctime(&self) -> u64 {
+        self.inode().ctime()
+    }
+
+    pub fn birthtime(&self) -> u64 {
+        self.inode().birthtime()
+    }
+
+    pub fn mtimensec(&self) -> u32 {
+        self.inode().mtimensec()
+    }
+
+    pub fn atimensec(&self) -> u32 {
+        self.inode().atimensec()
+    }
+
+    pub fn ctimensec(&self) -> u32 {
+        self.inode().ctimensec()
+    }
+
+    pub fn birthnsec(&self) -> u32 {
+        self.inode().birthnsec()
+    }
+
+    pub fn uid(&self) -> u32 {
+        self.inode().uid()
+    }
+
+    pub fn gid(&self) -> u32 {
+        self.inode().gid()
+    }
+
+    pub fn open(&self) -> Result<Items<'a>, OpenError> {
         // Load occupied blocks.
         let mut image = self.pfs.image.lock().unwrap();
         let image = image.deref_mut();
+        let inode = &self.pfs.inodes[self.inode];
         let blocks = match inode.load_blocks(image.as_mut()) {
             Ok(v) => v,
             Err(e) => return Err(OpenError::LoadBlocksFailed(e)),
@@ -86,8 +130,14 @@ impl<'a> Directory<'a> {
                     }
                 };
 
-                // Construct object.
+                // Check if inode valid.
                 let inode = dirent.inode();
+
+                if inode >= self.pfs.inodes.len() {
+                    return Err(OpenError::InvalidInode(inode));
+                }
+
+                // Construct object.
                 let item = match dirent.ty() {
                     Dirent::FILE => Item::File(File::new(self.pfs.clone(), inode)),
                     Dirent::DIRECTORY => Item::Directory(Directory::new(self.pfs.clone(), inode)),
@@ -106,6 +156,10 @@ impl<'a> Directory<'a> {
 
         Ok(Items { items })
     }
+
+    fn inode(&self) -> &Inode {
+        &self.pfs.inodes[self.inode]
+    }
 }
 
 /// Represents a collection of items in the directory.
@@ -116,6 +170,10 @@ pub struct Items<'a> {
 impl<'a> Items<'a> {
     pub fn get(&self, name: &[u8]) -> Option<&Item<'a>> {
         self.items.get(name)
+    }
+
+    pub fn take(&mut self, name: &[u8]) -> Option<Item<'a>> {
+        self.items.remove(name)
     }
 }
 

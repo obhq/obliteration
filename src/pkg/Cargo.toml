@@ -8,8 +8,10 @@ aes = "0.8"
 cbc = "0.1"
 context = { path = "../context" }
 error = { path = "../error" }
+fs = { path = "../fs" }
 memmap2 = "0.5"
 pfs = { path = "../pfs" }
 rsa = "0.8"
 sha2 = "0.10"
+thiserror = "1.0"
 util = { path = "../util" }
