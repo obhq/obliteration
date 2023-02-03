@@ -432,41 +432,24 @@ impl<'c> Pkg<'c> {
 
                     meta
                 }
-                Item::File(mut i) => {
+                Item::File(mut file) => {
                     // Construct metadata.
                     let meta = fs::Metadata {
-                        mode: i.mode().into(),
-                        atime: i.atime(),
-                        mtime: i.mtime(),
-                        ctime: i.ctime(),
-                        birthtime: i.birthtime(),
-                        mtimensec: i.mtimensec(),
-                        atimensec: i.atimensec(),
-                        ctimensec: i.ctimensec(),
-                        birthnsec: i.birthnsec(),
-                        uid: i.uid(),
-                        gid: i.gid(),
-                    };
-
-                    // Check if file is compressed.
-                    let mut pfsc;
-                    let (size, file): (u64, &mut dyn Read) = if i.is_compressed() {
-                        pfsc = match pfs::pfsc::Reader::open(i) {
-                            Ok(v) => v,
-                            Err(e) => {
-                                return Err(ExtractError::CreateDecompressorFailed(
-                                    self.build_pfs_path(&path),
-                                    e,
-                                ));
-                            }
-                        };
-
-                        (pfsc.len(), &mut pfsc)
-                    } else {
-                        (i.len(), &mut i)
+                        mode: file.mode().into(),
+                        atime: file.atime(),
+                        mtime: file.mtime(),
+                        ctime: file.ctime(),
+                        birthtime: file.birthtime(),
+                        mtimensec: file.mtimensec(),
+                        atimensec: file.atimensec(),
+                        ctimensec: file.ctimensec(),
+                        birthnsec: file.birthnsec(),
+                        uid: file.uid(),
+                        gid: file.gid(),
                     };
 
                     // Report initial status.
+                    let size = file.len();
                     let status_name = CString::new(name).unwrap();
 
                     status(status_name.as_ptr(), size, 0, ud);
@@ -848,9 +831,6 @@ pub enum ExtractError {
 
     #[error("directory {0} on inner PFS has file(s) with unsupported name")]
     UnsupportedFileName(String),
-
-    #[error("cannot create a decompressor for {0} on inner PFS")]
-    CreateDecompressorFailed(String, #[source] pfs::pfsc::OpenError),
 
     #[error("cannot create a file {0}")]
     CreateFileFailed(PathBuf, #[source] std::io::Error),
