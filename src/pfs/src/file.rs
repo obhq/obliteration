@@ -25,16 +25,68 @@ impl<'a> File<'a> {
         }
     }
 
-    pub fn len(&self) -> Option<u64> {
-        self.inode().map(|i| i.size())
+    pub fn mode(&self) -> u16 {
+        self.inode().mode()
     }
 
-    pub fn is_compressed(&self) -> Option<bool> {
-        self.inode().map(|i| i.flags().is_compressed())
+    pub fn flags(&self) -> u32 {
+        self.inode().flags().value()
     }
 
-    fn inode(&self) -> Option<&Inode> {
-        self.pfs.inodes.get(self.inode)
+    pub fn len(&self) -> u64 {
+        self.inode().size()
+    }
+
+    pub fn decompressed_len(&self) -> u64 {
+        self.inode().decompressed_size()
+    }
+
+    pub fn atime(&self) -> u64 {
+        self.inode().atime()
+    }
+
+    pub fn mtime(&self) -> u64 {
+        self.inode().mtime()
+    }
+
+    pub fn ctime(&self) -> u64 {
+        self.inode().ctime()
+    }
+
+    pub fn birthtime(&self) -> u64 {
+        self.inode().birthtime()
+    }
+
+    pub fn mtimensec(&self) -> u32 {
+        self.inode().mtimensec()
+    }
+
+    pub fn atimensec(&self) -> u32 {
+        self.inode().atimensec()
+    }
+
+    pub fn ctimensec(&self) -> u32 {
+        self.inode().ctimensec()
+    }
+
+    pub fn birthnsec(&self) -> u32 {
+        self.inode().birthnsec()
+    }
+
+    pub fn uid(&self) -> u32 {
+        self.inode().uid()
+    }
+
+    pub fn gid(&self) -> u32 {
+        self.inode().gid()
+    }
+
+    pub fn is_compressed(&self) -> bool {
+        self.inode().flags().is_compressed()
+    }
+
+    fn inode(&self) -> &Inode {
+        &self.pfs.inodes[self.inode]
     }
 }
 

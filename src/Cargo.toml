@@ -4,6 +4,7 @@ members = [
     "core",
     "error",
     "exfat",
+    "fs",
     "kernel",
     "pfs",
     "pkg",

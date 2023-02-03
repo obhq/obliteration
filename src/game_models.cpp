@@ -14,7 +14,12 @@ Game::~Game()
 
 QPixmap Game::icon() const
 {
-    QPixmap icon(joinPath(directory(), PKG_ENTRY_ICON0_PNG).c_str());
+    // Get icon path.
+    auto dir = joinPath(m_directory, "sce_sys");
+    auto path = joinPath(dir.c_str(), "icon0.png");
+
+    // Construct icon object.
+    QPixmap icon(path.c_str());
 
     icon.setDevicePixelRatio(2.0);
 

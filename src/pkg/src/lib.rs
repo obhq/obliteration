@@ -6,13 +6,14 @@ use aes::cipher::{BlockDecryptMut, KeyIvInit};
 use context::Context;
 use sha2::Digest;
 use std::error::Error;
-use std::ffi::c_void;
+use std::ffi::{c_void, CString};
 use std::fmt::{Display, Formatter};
-use std::fs::File;
+use std::fs::{create_dir_all, File};
 use std::io::{Cursor, Read, Write};
 use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
+use thiserror::Error;
 use util::mem::{new_buffer, uninit};
 
 pub mod entry;
@@ -56,27 +57,18 @@ pub extern "C" fn pkg_get_param(pkg: &Pkg, error: *mut *mut c_char) -> *mut Para
 }
 
 #[no_mangle]
-pub extern "C" fn pkg_dump_entries(pkg: &Pkg, dir: *const c_char) -> *mut error::Error {
+pub extern "C" fn pkg_extract(
+    pkg: &Pkg,
+    dir: *const c_char,
+    status: extern "C" fn(*const c_char, u64, u64, ud: *mut c_void),
+    ud: *mut c_void,
+) -> *mut error::Error {
     let dir = util::str::from_c_unchecked(dir);
 
-    match pkg.dump_entries(dir) {
+    match pkg.extract(dir, status, ud) {
         Ok(_) => null_mut(),
         Err(e) => error::Error::new(&e),
     }
-}
-
-#[no_mangle]
-pub extern "C" fn pkg_dump_pfs(
-    pkg: &Pkg,
-    dir: *const c_char,
-    status: extern "C" fn(u64, u64, *const c_char, *mut c_void),
-    ud: *mut c_void,
-) -> *mut error::Error {
-    if let Err(e) = pkg.dump_pfs(util::str::from_c_unchecked(dir), status, ud) {
-        return error::Error::new(&e);
-    }
-
-    null_mut()
 }
 
 #[no_mangle]
@@ -197,28 +189,46 @@ impl<'c> Pkg<'c> {
         Ok(param)
     }
 
-    pub fn dump_entries<D: AsRef<Path>>(&self, dir: D) -> Result<(), DumpEntryError> {
+    pub fn extract<D: AsRef<Path>>(
+        &self,
+        dir: D,
+        status: extern "C" fn(*const c_char, u64, u64, ud: *mut c_void),
+        ud: *mut c_void,
+    ) -> Result<(), ExtractError> {
         let dir = dir.as_ref();
 
+        self.extract_entries(dir.join("sce_sys"), status, ud)?;
+        self.extract_pfs(dir, status, ud)?;
+
+        Ok(())
+    }
+
+    fn extract_entries<D: AsRef<Path>>(
+        &self,
+        dir: D,
+        status: extern "C" fn(*const c_char, u64, u64, ud: *mut c_void),
+        ud: *mut c_void,
+    ) -> Result<(), ExtractError> {
         for num in 0..self.header.entry_count() {
             // Check offset.
             let offset = self.header.table_offset() + num * Entry::RAW_SIZE;
             let raw = match self.raw.get(offset..(offset + Entry::RAW_SIZE)) {
                 Some(v) => v.as_ptr(),
-                None => return Err(DumpEntryError::InvalidEntryOffset(num)),
+                None => return Err(ExtractError::InvalidEntryOffset(num)),
             };
 
             // Read entry.
             let entry = Entry::read(raw);
 
-            // Skip all entries that we don't have decryption key. We have decryption key for all
-            // required entries so it is safe to skip one that we don't have.
-            if entry.is_encrypted() {
-                if entry.key_index() != 3 {
-                    continue;
-                } else if self.entry_key3.is_empty() {
-                    return Err(DumpEntryError::NoDecryptionKey(num));
-                }
+            // Get file path.
+            let path = match entry.to_path(dir.as_ref()) {
+                Some(v) => v,
+                None => continue,
+            };
+
+            // Check if we have a decryption key.
+            if entry.is_encrypted() && (entry.key_index() != 3 || self.entry_key3.is_empty()) {
+                return Err(ExtractError::NoEntryDecryptionKey(num));
             }
 
             // Get entry data.
@@ -231,70 +241,139 @@ impl<'c> Pkg<'c> {
 
             let data = match self.raw.get(offset..(offset + size)) {
                 Some(v) => v,
-                None => return Err(DumpEntryError::InvalidDataOffset(num)),
+                None => return Err(ExtractError::InvalidEntryDataOffset(num)),
             };
 
-            // Get destination path.
-            let mut path = dir.to_path_buf();
+            // Report status.
+            let name = CString::new(path.to_string_lossy().as_ref()).unwrap();
 
-            path.push(format!("entry_{}", entry.id()));
+            status(name.as_ptr(), size as u64, 0, ud);
+
+            // Create a directory for destination file.
+            let dir = path.parent().unwrap();
+
+            if let Err(e) = create_dir_all(dir) {
+                return Err(ExtractError::CreateDirectoryFailed(dir.to_path_buf(), e));
+            }
 
             // Open destination file.
             let mut file = match File::create(&path) {
                 Ok(v) => v,
-                Err(e) => return Err(DumpEntryError::CreateDestinationFailed(path, e)),
+                Err(e) => return Err(ExtractError::CreateEntryFailed(path, e)),
             };
 
             // Dump entry data.
             if entry.is_encrypted() {
                 if let Err(e) = self.decrypt_entry_data(&entry, data, |b| file.write_all(&b)) {
-                    return Err(DumpEntryError::WriteDestinationFailed(path, e));
+                    return Err(ExtractError::WriteEntryFailed(path, e));
                 }
             } else if let Err(e) = file.write_all(data) {
-                return Err(DumpEntryError::WriteDestinationFailed(path, e));
+                return Err(ExtractError::WriteEntryFailed(path, e));
             }
+
+            // Report status.
+            status(name.as_ptr(), size as u64, size as u64, ud);
         }
 
         Ok(())
     }
 
-    pub fn dump_pfs<O: AsRef<Path>>(
+    fn extract_pfs<D: AsRef<Path>>(
         &self,
-        output: O,
-        status: extern "C" fn(u64, u64, *const c_char, *mut c_void),
+        dir: D,
+        status: extern "C" fn(*const c_char, u64, u64, ud: *mut c_void),
         ud: *mut c_void,
-    ) -> Result<(), DumpPfsError> {
+    ) -> Result<(), ExtractError> {
+        use pfs::directory::Item;
+
         // Get outer PFS.
         let image_offset = self.header.pfs_offset();
         let image_size = self.header.pfs_size();
-        let image = match self.raw.get(image_offset..(image_offset + image_size)) {
+        let outer = match self.raw.get(image_offset..(image_offset + image_size)) {
             Some(v) => v,
-            None => return Err(DumpPfsError::InvalidOuterOffset),
+            None => return Err(ExtractError::InvalidOuterOffset),
         };
 
-        // Mount outer PFS.
-        let super_root = match pfs::open(Cursor::new(image), Some(&self.ekpfs)) {
-            Ok(v) => v,
-            Err(e) => return Err(DumpPfsError::OpenOuterFailed(e)),
+        // Open outer PFS.
+        let mut outer = match pfs::open(Cursor::new(outer), Some(&self.ekpfs)) {
+            Ok(v) => match v.open() {
+                Ok(v) => v,
+                Err(e) => return Err(ExtractError::OpenOuterSuperRootFailed(e)),
+            },
+            Err(e) => return Err(ExtractError::OpenOuterFailed(e)),
         };
 
-        // Dump files.
-        self.dump_pfs_directory(Vec::new(), super_root, output, status, ud)
+        // Open outer uroot directory.
+        let mut uroot = match outer.take(b"uroot") {
+            Some(v) => match v {
+                Item::Directory(v) => match v.open() {
+                    Ok(v) => v,
+                    Err(e) => return Err(ExtractError::OpenOuterUrootFailed(e)),
+                },
+                Item::File(_) => return Err(ExtractError::NoOuterUroot),
+            },
+            None => return Err(ExtractError::NoOuterUroot),
+        };
+
+        // Get inner PFS.
+        let inner = match uroot.take(b"pfs_image.dat") {
+            Some(v) => match v {
+                Item::Directory(_) => return Err(ExtractError::NoInnerImage),
+                Item::File(v) => v,
+            },
+            None => return Err(ExtractError::NoInnerImage),
+        };
+
+        // Open inner PFS.
+        let mut inner = if inner.is_compressed() {
+            let pfsc = match pfs::pfsc::Reader::open(inner) {
+                Ok(v) => v,
+                Err(e) => return Err(ExtractError::CreateInnerDecompressorFailed(e)),
+            };
+
+            match pfs::open(pfsc, None) {
+                Ok(v) => match v.open() {
+                    Ok(v) => v,
+                    Err(e) => return Err(ExtractError::OpenInnerSuperRootFailed(e)),
+                },
+                Err(e) => return Err(ExtractError::OpenInnerFailed(e)),
+            }
+        } else {
+            match pfs::open(inner, None) {
+                Ok(v) => match v.open() {
+                    Ok(v) => v,
+                    Err(e) => return Err(ExtractError::OpenInnerSuperRootFailed(e)),
+                },
+                Err(e) => return Err(ExtractError::OpenInnerFailed(e)),
+            }
+        };
+
+        // Open inner uroot directory.
+        let uroot = match inner.take(b"uroot") {
+            Some(v) => match v {
+                Item::Directory(v) => v,
+                Item::File(_) => return Err(ExtractError::NoInnerUroot),
+            },
+            None => return Err(ExtractError::NoInnerUroot),
+        };
+
+        // Extract inner uroot.
+        self.extract_directory(Vec::new(), uroot, dir, status, ud)
     }
 
-    fn dump_pfs_directory<O: AsRef<Path>>(
+    fn extract_directory<O: AsRef<Path>>(
         &self,
         path: Vec<&[u8]>,
         dir: pfs::directory::Directory,
         output: O,
-        status: extern "C" fn(u64, u64, *const c_char, *mut c_void),
+        status: extern "C" fn(*const c_char, u64, u64, ud: *mut c_void),
         ud: *mut c_void,
-    ) -> Result<(), DumpPfsError> {
+    ) -> Result<(), ExtractError> {
         // Open PFS directory.
         let items = match dir.open() {
             Ok(v) => v,
             Err(e) => {
-                return Err(DumpPfsError::OpenDirectoryFailed(
+                return Err(ExtractError::OpenDirectoryFailed(
                     self.build_pfs_path(&path),
                     e,
                 ));
@@ -305,56 +384,92 @@ impl<'c> Pkg<'c> {
         let mut buffer: Vec<u8> = new_buffer(32768);
 
         for (name, item) in items {
-            // Build destination path.
-            let mut output: PathBuf = output.as_ref().into();
-
-            match std::str::from_utf8(&name) {
-                Ok(v) => output.push(v),
-                Err(_) => {
-                    return Err(DumpPfsError::UnsupportedFileName(
-                        self.build_pfs_path(&path),
-                    ));
-                }
-            }
+            use pfs::directory::Item;
 
             // Build source path.
             let mut path = path.clone();
 
             path.push(&name);
 
-            // Handle item.
-            match item {
-                pfs::directory::Item::Directory(i) => {
+            // Build destination path.
+            let mut output = output.as_ref().to_path_buf();
+            let name = match std::str::from_utf8(&name) {
+                Ok(v) => v,
+                Err(_) => {
+                    return Err(ExtractError::UnsupportedFileName(
+                        self.build_pfs_path(&path),
+                    ));
+                }
+            };
+
+            output.push(name);
+
+            // Extract item.
+            let meta = match item {
+                Item::Directory(i) => {
+                    // Constructe metadata.
+                    let meta = fs::Metadata {
+                        mode: i.mode().into(),
+                        atime: i.atime(),
+                        mtime: i.mtime(),
+                        ctime: i.ctime(),
+                        birthtime: i.birthtime(),
+                        mtimensec: i.mtimensec(),
+                        atimensec: i.atimensec(),
+                        ctimensec: i.ctimensec(),
+                        birthnsec: i.birthnsec(),
+                        uid: i.uid(),
+                        gid: i.gid(),
+                    };
+
                     // Create output directory.
-                    if let Err(e) = std::fs::create_dir(&output) {
-                        return Err(DumpPfsError::CreateDirectoryFailed(output, e));
+                    if let Err(e) = create_dir_all(&output) {
+                        return Err(ExtractError::CreateDirectoryFailed(output, e));
                     }
 
-                    // Dump.
-                    self.dump_pfs_directory(path, i, &output, status, ud)?;
+                    // Extract files.
+                    self.extract_directory(path, i, &output, status, ud)?;
+
+                    meta
                 }
-                pfs::directory::Item::File(mut i) => {
+                Item::File(mut i) => {
+                    // Construct metadata.
+                    let meta = fs::Metadata {
+                        mode: i.mode().into(),
+                        atime: i.atime(),
+                        mtime: i.mtime(),
+                        ctime: i.ctime(),
+                        birthtime: i.birthtime(),
+                        mtimensec: i.mtimensec(),
+                        atimensec: i.atimensec(),
+                        ctimensec: i.ctimensec(),
+                        birthnsec: i.birthnsec(),
+                        uid: i.uid(),
+                        gid: i.gid(),
+                    };
+
                     // Check if file is compressed.
                     let mut pfsc;
-                    let (size, file): (u64, &mut dyn Read) = if i.is_compressed().unwrap() {
+                    let (size, file): (u64, &mut dyn Read) = if i.is_compressed() {
                         pfsc = match pfs::pfsc::Reader::open(i) {
                             Ok(v) => v,
                             Err(e) => {
-                                return Err(DumpPfsError::CreateDecompressorFailed(output, e));
+                                return Err(ExtractError::CreateDecompressorFailed(
+                                    self.build_pfs_path(&path),
+                                    e,
+                                ));
                             }
                         };
 
                         (pfsc.len(), &mut pfsc)
                     } else {
-                        (i.len().unwrap(), &mut i)
+                        (i.len(), &mut i)
                     };
 
                     // Report initial status.
-                    let mut status_name = name.clone();
+                    let status_name = CString::new(name).unwrap();
 
-                    status_name.push(0);
-
-                    (status)(0, size, status_name.as_ptr() as _, ud);
+                    status(status_name.as_ptr(), size, 0, ud);
 
                     // Open destination file.
                     let mut dest = std::fs::OpenOptions::new();
@@ -364,7 +479,7 @@ impl<'c> Pkg<'c> {
 
                     let mut dest = match dest.open(&output) {
                         Ok(v) => v,
-                        Err(e) => return Err(DumpPfsError::CreateFileFailed(output, e)),
+                        Err(e) => return Err(ExtractError::CreateFileFailed(output, e)),
                     };
 
                     // Copy.
@@ -378,7 +493,7 @@ impl<'c> Pkg<'c> {
                                 if e.kind() == std::io::ErrorKind::Interrupted {
                                     continue;
                                 } else {
-                                    return Err(DumpPfsError::ReadFileFailed(
+                                    return Err(ExtractError::ReadFileFailed(
                                         self.build_pfs_path(&path),
                                         e,
                                     ));
@@ -392,15 +507,22 @@ impl<'c> Pkg<'c> {
 
                         // Write destination.
                         if let Err(e) = dest.write_all(&buffer[..read]) {
-                            return Err(DumpPfsError::WriteFileFailed(output, e));
+                            return Err(ExtractError::WriteFileFailed(output, e));
                         }
 
                         written += read as u64; // Buffer size just 32768.
 
                         // Update status.
-                        (status)(written, size, status_name.as_ptr() as _, ud);
+                        status(status_name.as_ptr(), size, written, ud);
                     }
+
+                    meta
                 }
+            };
+
+            // Create metadata.
+            if let Err(e) = meta.create_for(&output) {
+                return Err(ExtractError::CreateMetadataFailed(output, e));
             }
         }
 
@@ -670,84 +792,77 @@ impl Display for GetParamError {
     }
 }
 
-#[derive(Debug)]
-pub enum DumpEntryError {
+/// Errors for [`extract()`][Pkg::extract()].
+#[derive(Debug, Error)]
+pub enum ExtractError {
+    #[error("cannot create a directory {0}")]
+    CreateDirectoryFailed(PathBuf, #[source] std::io::Error),
+
+    #[error("entry #{0} has invalid offset")]
     InvalidEntryOffset(usize),
-    InvalidDataOffset(usize),
-    CreateDestinationFailed(PathBuf, std::io::Error),
-    WriteDestinationFailed(PathBuf, std::io::Error),
-    NoDecryptionKey(usize),
-}
 
-impl Error for DumpEntryError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::CreateDestinationFailed(_, e) | Self::WriteDestinationFailed(_, e) => Some(e),
-            _ => None,
-        }
-    }
-}
+    #[error("no decryption key for entry #{0}")]
+    NoEntryDecryptionKey(usize),
 
-impl Display for DumpEntryError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Self::InvalidEntryOffset(i) => write!(f, "entry #{} has invalid offset", i),
-            Self::InvalidDataOffset(i) => write!(f, "entry #{} has invalid data offset", i),
-            Self::CreateDestinationFailed(p, _) => write!(f, "cannot create {}", p.display()),
-            Self::WriteDestinationFailed(p, _) => write!(f, "cannot write {}", p.display()),
-            Self::NoDecryptionKey(i) => write!(f, "no decryption key for entry #{}", i),
-        }
-    }
-}
+    #[error("entry #{0} has invalid data offset")]
+    InvalidEntryDataOffset(usize),
 
-#[derive(Debug)]
-pub enum DumpPfsError {
+    #[error("cannot create {0}")]
+    CreateEntryFailed(PathBuf, #[source] std::io::Error),
+
+    #[error("cannot write {0}")]
+    WriteEntryFailed(PathBuf, #[source] std::io::Error),
+
+    #[error("invalid offset for outer PFS")]
     InvalidOuterOffset,
-    OpenOuterFailed(pfs::OpenError),
-    OpenDirectoryFailed(String, pfs::directory::OpenError),
+
+    #[error("cannot open outer PFS")]
+    OpenOuterFailed(#[source] pfs::OpenError),
+
+    #[error("cannot open a super-root on outer PFS")]
+    OpenOuterSuperRootFailed(#[source] pfs::directory::OpenError),
+
+    #[error("no uroot directory on outer PFS")]
+    NoOuterUroot,
+
+    #[error("cannot open a uroot directory on outer PFS")]
+    OpenOuterUrootFailed(#[source] pfs::directory::OpenError),
+
+    #[error("outer PFS does not contains pfs_image.dat")]
+    NoInnerImage,
+
+    #[error("cannot create a decompressor for inner PFS")]
+    CreateInnerDecompressorFailed(#[source] pfs::pfsc::OpenError),
+
+    #[error("cannot open inner PFS")]
+    OpenInnerFailed(#[source] pfs::OpenError),
+
+    #[error("cannot open a super-root on inner PFS")]
+    OpenInnerSuperRootFailed(#[source] pfs::directory::OpenError),
+
+    #[error("no uroot directory on inner PFS")]
+    NoInnerUroot,
+
+    #[error("cannot open directory {0} on inner PFS")]
+    OpenDirectoryFailed(String, #[source] pfs::directory::OpenError),
+
+    #[error("directory {0} on inner PFS has file(s) with unsupported name")]
     UnsupportedFileName(String),
-    CreateDirectoryFailed(PathBuf, std::io::Error),
-    CreateDecompressorFailed(PathBuf, pfs::pfsc::OpenError),
-    CreateFileFailed(PathBuf, std::io::Error),
-    ReadFileFailed(String, std::io::Error),
-    WriteFileFailed(PathBuf, std::io::Error),
-}
 
-impl Error for DumpPfsError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::OpenOuterFailed(e) => Some(e),
-            Self::OpenDirectoryFailed(_, e) => Some(e),
-            Self::CreateDirectoryFailed(_, e) => Some(e),
-            Self::CreateDecompressorFailed(_, e) => Some(e),
-            Self::CreateFileFailed(_, e) => Some(e),
-            Self::ReadFileFailed(_, e) => Some(e),
-            Self::WriteFileFailed(_, e) => Some(e),
-            _ => None,
-        }
-    }
-}
+    #[error("cannot create a decompressor for {0} on inner PFS")]
+    CreateDecompressorFailed(String, #[source] pfs::pfsc::OpenError),
 
-impl Display for DumpPfsError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Self::InvalidOuterOffset => f.write_str("invalid offset for outer PFS"),
-            Self::OpenOuterFailed(_) => f.write_str("cannot open outer PFS"),
-            Self::OpenDirectoryFailed(p, _) => write!(f, "cannot open {}", p),
-            Self::UnsupportedFileName(p) => {
-                write!(f, "directory {} has file(s) with unsupported name", p)
-            }
-            Self::CreateDirectoryFailed(p, _) => {
-                write!(f, "cannot create directory {}", p.display())
-            }
-            Self::CreateDecompressorFailed(p, _) => {
-                write!(f, "cannot create decompressor for {}", p.display())
-            }
-            Self::CreateFileFailed(p, _) => write!(f, "cannot create {}", p.display()),
-            Self::ReadFileFailed(p, _) => write!(f, "cannot read {}", p),
-            Self::WriteFileFailed(p, _) => write!(f, "cannot write {}", p.display()),
-        }
-    }
+    #[error("cannot create a file {0}")]
+    CreateFileFailed(PathBuf, #[source] std::io::Error),
+
+    #[error("cannot read {0} on inner PFS")]
+    ReadFileFailed(String, #[source] std::io::Error),
+
+    #[error("cannot write {0}")]
+    WriteFileFailed(PathBuf, #[source] std::io::Error),
+
+    #[error("cannot create metadata for {0}")]
+    CreateMetadataFailed(PathBuf, #[source] fs::CreateForError),
 }
 
 #[derive(Debug)]

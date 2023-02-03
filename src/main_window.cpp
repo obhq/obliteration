@@ -189,7 +189,7 @@ void MainWindow::installPkg()
     ProgressDialog progress("Install PKG", "Opening PKG...", this);
 
     // Open a PKG.
-    pkg *pkg;
+    Pkg pkg;
     char *error;
 
     pkg = pkg_open(m_context, pkgPath.c_str(), &error);
@@ -206,7 +206,6 @@ void MainWindow::installPkg()
     if (!param) {
         QMessageBox::critical(&progress, "Error", QString("Failed to get param.sfo from %1: %2").arg(pkgPath.c_str()).arg(error));
         std::free(error);
-        pkg_close(pkg);
         return;
     }
 
@@ -224,27 +223,15 @@ void MainWindow::installPkg()
         msg += " If you have an unsuccessful installation from the previous attempt you need to remove this directory before install again.";
 
         QMessageBox::critical(&progress, "Error", msg.arg(gameId).arg(gamesDirectory));
-        pkg_close(pkg);
         return;
     }
 
     auto directory = joinPath(gamesDirectory, gameId);
 
-    // Dump entries.
-    Error newError;
-
-    newError = pkg_dump_entries(pkg, directory.c_str());
-
-    if (newError) {
-        QMessageBox::critical(&progress, "Error", QString("Failed to extract PKG entries: %1").arg(newError.message()));
-        pkg_close(pkg);
-        return;
-    }
-
-    // Dump PFS.
+    // Extract items.
     progress.setWindowTitle(gameTitle);
 
-    newError = pkg_dump_pfs(pkg, directory.c_str(), [](std::uint64_t written, std::uint64_t total, const char *name, void *ud) {
+    Error newError = pkg_extract(pkg, directory.c_str(), [](const char *name, std::uint64_t total, std::uint64_t written, void *ud) {
         auto toProgress = [total](std::uint64_t v) -> int {
             if (total >= 1024UL*1024UL*1024UL*1024UL) { // >= 1TB
                 return v / (1024UL*1024UL*1024UL*10UL); // 10GB step.
@@ -275,11 +262,11 @@ void MainWindow::installPkg()
         }
     }, &progress);
 
-    pkg_close(pkg);
+    pkg.close();
     progress.complete();
 
     if (newError) {
-        QMessageBox::critical(this, "Error", QString("Failed to extract pfs_image.dat: %1").arg(newError.message()));
+        QMessageBox::critical(this, "Error", QString("Failed to extract %1: %2").arg(pkgPath.c_str()).arg(newError.message()));
         return;
     }
 
@@ -385,6 +372,7 @@ void MainWindow::startGame(const QModelIndex &index)
     // Setup kernel arguments.
     QStringList args;
 
+    args << "--system" << readSystemDirectorySetting();
     args << "--game" << game->directory();
     args << "--debug-dump" << kernelDebugDump();
     args << "--clear-debug-dump";
@@ -456,7 +444,8 @@ bool MainWindow::loadGame(const QString &gameId)
     auto gameList = reinterpret_cast<GameListModel *>(m_games->model());
 
     // Read game title from param.sfo.
-    auto paramPath = joinPath(gamePath.c_str(), PKG_ENTRY_PARAM_SFO);
+    auto paramDir = joinPath(gamePath.c_str(), "sce_sys");
+    auto paramPath = joinPath(paramDir.c_str(), "param.sfo");
     pkg_param *param;
     char *error;
 

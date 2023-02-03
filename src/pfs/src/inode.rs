@@ -3,13 +3,25 @@ use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::{Read, SeekFrom};
 use thiserror::Error;
-use util::mem::{new_buffer, read_array, read_u32_le, read_u64_le, uninit};
+use util::mem::{new_buffer, read_array, read_u16_le, read_u32_le, read_u64_le, uninit};
 
 /// Contains information for an inode.
 pub(crate) struct Inode {
     index: usize,
+    mode: u16,
     flags: InodeFlags,
     size: u64,
+    decompressed_size: u64,
+    atime: u64,
+    mtime: u64,
+    ctime: u64,
+    birthtime: u64,
+    mtimensec: u32,
+    atimensec: u32,
+    ctimensec: u32,
+    birthnsec: u32,
+    uid: u32,
+    gid: u32,
     blocks: u32,
     direct_blocks: [u32; 12],
     direct_sigs: [Option<[u8; 32]>; 12],
@@ -71,12 +83,60 @@ impl Inode {
         Ok(inode)
     }
 
+    pub fn mode(&self) -> u16 {
+        self.mode
+    }
+
     pub fn flags(&self) -> InodeFlags {
         self.flags
     }
 
     pub fn size(&self) -> u64 {
         self.size
+    }
+
+    pub fn decompressed_size(&self) -> u64 {
+        self.decompressed_size
+    }
+
+    pub fn atime(&self) -> u64 {
+        self.atime
+    }
+
+    pub fn mtime(&self) -> u64 {
+        self.mtime
+    }
+
+    pub fn ctime(&self) -> u64 {
+        self.ctime
+    }
+
+    pub fn birthtime(&self) -> u64 {
+        self.birthtime
+    }
+
+    pub fn mtimensec(&self) -> u32 {
+        self.mtimensec
+    }
+
+    pub fn atimensec(&self) -> u32 {
+        self.atimensec
+    }
+
+    pub fn ctimensec(&self) -> u32 {
+        self.ctimensec
+    }
+
+    pub fn birthnsec(&self) -> u32 {
+        self.birthnsec
+    }
+
+    pub fn uid(&self) -> u32 {
+        self.uid
+    }
+
+    pub fn gid(&self) -> u32 {
+        self.gid
     }
 
     pub fn load_blocks(&self, image: &mut dyn Image) -> Result<Vec<u32>, LoadBlocksError> {
@@ -210,14 +270,38 @@ impl Inode {
         raw: *const u8,
         indirect_reader: fn(&mut &[u8]) -> Option<u32>,
     ) -> Self {
+        let mode = read_u16_le(raw, 0x00);
         let flags = InodeFlags(read_u32_le(raw, 0x04));
         let size = read_u64_le(raw, 0x08);
+        let decompressed_size = read_u64_le(raw, 0x10);
+        let atime = read_u64_le(raw, 0x18);
+        let mtime = read_u64_le(raw, 0x20);
+        let ctime = read_u64_le(raw, 0x28);
+        let birthtime = read_u64_le(raw, 0x30);
+        let mtimensec = read_u32_le(raw, 0x38);
+        let atimensec = read_u32_le(raw, 0x3c);
+        let ctimensec = read_u32_le(raw, 0x40);
+        let birthnsec = read_u32_le(raw, 0x44);
+        let uid = read_u32_le(raw, 0x48);
+        let gid = read_u32_le(raw, 0x4c);
         let blocks = read_u32_le(raw, 0x60);
 
         Self {
             index,
+            mode,
             flags,
             size,
+            decompressed_size,
+            atime,
+            mtime,
+            ctime,
+            birthtime,
+            mtimensec,
+            atimensec,
+            ctimensec,
+            birthnsec,
+            uid,
+            gid,
             blocks,
             direct_blocks: [0; 12],
             direct_sigs: [None; 12],
@@ -250,13 +334,18 @@ impl Inode {
     }
 }
 
+/// Flags of the inode.
 #[derive(Clone, Copy)]
 #[repr(transparent)]
-pub struct InodeFlags(u32);
+pub(crate) struct InodeFlags(u32);
 
 impl InodeFlags {
     pub fn is_compressed(self) -> bool {
         self.0 & 0x00000001 != 0
+    }
+
+    pub fn value(self) -> u32 {
+        self.0
     }
 }
 
