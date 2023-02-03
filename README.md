@@ -9,7 +9,7 @@ Obliteration is an experimental PS4 emulator using [Kyty](https://github.com/Ino
 
 ## Get a daily build
 
-You can download the Windows binaries from the latest commits [here](https://github.com/obhq/obliteration/actions/workflows/main.yml). You **MUST** sign-in to GitHub otherwise you will not be able to download the file.
+You can download the binaries from the latest commits [here](https://github.com/obhq/obliteration/actions/workflows/main.yml). You **MUST** sign-in to GitHub otherwise you will not be able to download the file.
 
 ## Screenshots
 
@@ -26,7 +26,6 @@ We have a Matrix Room Space `#obliteration:matrix.org` on [Matrix.to](https://ma
 - [ ] Built-in PUP file supports for decrypted PUP from [pup_decrypt](https://github.com/idc/ps4-pup_decrypt).
 - [x] Built-in PKG file supports for Fake PKG.
 - [x] Game library.
-- [x] Direct mounting PFS image.
 - [ ] Emulate system calls instead of user space libraries.
 
 ## System requirements
