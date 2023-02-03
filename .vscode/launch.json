@@ -23,7 +23,7 @@
       "name": "Kernel",
       "type": "lldb",
       "request": "launch",
-      "program": "${workspaceFolder}/src/target/debug/obliteration-kernel",
+      "program": "${workspaceFolder}/src/target/debug/obkrnl",
       "args": ["--debug"],
       "cwd": "${workspaceFolder}"
     }
