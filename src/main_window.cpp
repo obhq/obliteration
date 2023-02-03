@@ -363,21 +363,21 @@ void MainWindow::startGame(const QModelIndex &index)
 #endif
 
 #ifdef _WIN32
-        b /= L"obliteration-kernel.exe";
+        b /= L"obkrnl.exe";
         path = QString::fromStdWString(b.wstring());
 #else
-        b /= "obliteration-kernel";
+        b /= "obkrnl";
         path = QString::fromStdString(b.string());
 #endif
     } else {
 #ifdef _WIN32
         std::filesystem::path b(QCoreApplication::applicationDirPath().toStdString(), std::filesystem::path::native_format);
         b /= L"bin";
-        b /= L"obliteration-kernel.exe";
+        b /= L"obkrnl.exe";
         path = QString::fromStdWString(b.wstring());
 #else
         std::filesystem::path b(QCoreApplication::applicationDirPath().toStdString(), std::filesystem::path::native_format);
-        b /= "obliteration-kernel";
+        b /= "obkrnl";
         path = QString::fromStdString(b.string());
 #endif
     }

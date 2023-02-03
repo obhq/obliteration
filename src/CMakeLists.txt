@@ -7,7 +7,7 @@ find_package(Threads REQUIRED)
 
 # Setup Rust target.
 set(RUST_OUTPUTS $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/debug,${CMAKE_CURRENT_SOURCE_DIR}/target/release>)
-set(KERNEL ${RUST_OUTPUTS}/obliteration-kernel${CMAKE_EXECUTABLE_SUFFIX})
+set(KERNEL ${RUST_OUTPUTS}/obkrnl${CMAKE_EXECUTABLE_SUFFIX})
 
 if(WIN32)
     set(LIBCORE ${RUST_OUTPUTS}/core.lib)
