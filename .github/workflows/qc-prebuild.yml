@@ -1,9 +1,9 @@
-name: Quality Check
+name: Prebuild Quality Checks
 on:
   workflow_call:
 jobs:
-  qualitychecks:
-    name: Quality Checks
+  rustfmt:
+    name: Rustfmt Check
     runs-on: ubuntu-22.04
     steps:
     - name: Checkout source
