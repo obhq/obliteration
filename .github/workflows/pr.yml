@@ -7,7 +7,7 @@ concurrency: pr-${{ github.ref }}
 jobs:
   quality-checks:
     name: Pre-Build
-    uses: ./.github/workflows/qualitychecks.yml
+    uses: ./.github/workflows/qc-prebuild.yml
   windows:
     needs: quality-checks
     name: Build
