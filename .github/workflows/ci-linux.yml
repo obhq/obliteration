@@ -15,7 +15,7 @@ jobs:
     - name: Add Flathub
       run: flatpak remote-add --user flathub https://flathub.org/repo/flathub.flatpakrepo
     - name: Install Flatpak Runtimes
-      run: flatpak install -y flathub org.kde.Platform//6.4 org.kde.Sdk//6.4
+      run: flatpak install -y flathub org.kde.Platform//6.4 org.kde.Sdk//6.4 org.freedesktop.Sdk.Extension.rust-stable//22.08
     - name: Build Flatpak
       run: flatpak-builder --default-branch dev build flatpak.yml
     - name: Export Flatpak
