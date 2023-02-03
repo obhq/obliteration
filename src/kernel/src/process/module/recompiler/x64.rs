@@ -1,18 +1,16 @@
-use super::Segment;
+use super::{LabelType, NativeCode, Recompiler, RunError};
+use crate::process::module::Segment;
 use crate::process::Process;
 use iced_x86::code_asm::{
     byte_ptr, dword_ptr, get_gpr32, get_gpr64, get_gpr8, qword_ptr, rax, rdi, rsi, CodeAssembler,
     CodeLabel,
 };
 use iced_x86::{BlockEncoderOptions, Code, Decoder, DecoderOptions, Instruction, OpKind, Register};
+
 use std::collections::{HashMap, VecDeque};
-use std::error::Error;
-use std::fmt::{Display, Formatter};
 use std::mem::transmute;
 
-use std::env::consts::ARCH;
-
-pub(super) struct Recompiler<'input> {
+pub struct X64Emitter<'input> {
     proc: *mut Process,
     input: &'input [u8],
     segments: Vec<Segment>,
@@ -22,7 +20,7 @@ pub(super) struct Recompiler<'input> {
     output_size: usize, // Roughly estimation size of the output but not less than the actual size.
 }
 
-impl<'input> Recompiler<'input> {
+impl<'input> X64Emitter<'input> {
     /// `input` is a mapped SELF.
     pub fn new(proc: *mut Process, input: &'input [u8], segments: Vec<Segment>) -> Self {
         Self {
@@ -36,17 +34,40 @@ impl<'input> Recompiler<'input> {
         }
     }
 
+    /// Get register other than `keep`.
+    fn temp_register64(keep: Register) -> Register {
+        match keep {
+            // 64Bit | 32Bit | 16Bit | 8Bit starting Registers => 64Bit ending Registers (Non-64Bit ending registers return NONE error.)
+            Register::R8 | Register::R8D | Register::R8W | Register::R8L => Register::R9,
+            Register::R9 | Register::R9D | Register::R9W | Register::R9L => Register::R8,
+            Register::R10 | Register::R10D | Register::R10W | Register::R10L => Register::R11,
+            Register::R11 | Register::R11D | Register::R11W | Register::R11L => Register::R10,
+            Register::R12 | Register::R12D | Register::R12W | Register::R12L => Register::R13,
+            Register::R13 | Register::R13D | Register::R13W | Register::R13L => Register::R12,
+            Register::R14 | Register::R14D | Register::R14W | Register::R14L => Register::R15,
+            Register::R15 | Register::R15D | Register::R15W | Register::R15L => Register::R14,
+            Register::RDI | Register::EDI | Register::DI | Register::DIL => Register::RSI,
+            Register::RSI | Register::ESI | Register::SI | Register::SIL => Register::RDI,
+            Register::RAX | Register::EAX | Register::AX | Register::AL => Register::RBX,
+            Register::RBX | Register::EBX | Register::BX | Register::BL => Register::RAX,
+            Register::RCX | Register::ECX | Register::CX | Register::CL => Register::RDX,
+            Register::RDX | Register::EDX | Register::DX | Register::DL => Register::RCX,
+            r => panic!("Register {:?} is not implemented yet.", r),
+        }
+    }
+}
+
+impl Recompiler for X64Emitter<'_> {
     /// All items in `starts` **MUST** be unique and the `input` that was specified in [`new`]
     /// **MUST** outlive the returned [`NativeCode`].
-    #[cfg(target_arch = "x86_64")]
-    pub fn run(mut self, starts: &[usize]) -> Result<(NativeCode, Vec<*const u8>), RunError> {
+    fn run(mut self, starts: &[usize]) -> Result<(NativeCode, Vec<*const u8>), RunError> {
         // Recompile all start offset.
         let mut start_addrs: Vec<u64> = Vec::with_capacity(starts.len());
 
         for &start in starts {
             // Recompile start offset.
             let label = self.assembler.create_label();
-            let addr = self.recompile(start, label)?;
+            let addr = self.recompile(start, LabelType::X64CodeLabel(label))?;
 
             start_addrs.push(addr);
 
@@ -60,7 +81,7 @@ impl<'input> Recompiler<'input> {
                     continue;
                 }
 
-                self.recompile(offset, label)?;
+                self.recompile(offset, LabelType::X64CodeLabel(label))?;
             }
         }
 
@@ -97,13 +118,7 @@ impl<'input> Recompiler<'input> {
         Ok((native, start_ptrs))
     }
 
-    #[cfg(not(target_arch = "x86_64"))]
-    pub fn run(mut self, starts: &[usize]) -> Result<(NativeCode, Vec<*const u8>), RunError> {
-        Err(RunError::UnsupportedArchError)
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    fn recompile(&mut self, offset: usize, label: CodeLabel) -> Result<u64, RunError> {
+    fn recompile(&mut self, offset: usize, label_type: LabelType) -> Result<u64, RunError> {
         // Setup decoder.
         let input = self.input;
         let base: u64 = input.as_ptr() as u64;
@@ -134,7 +149,7 @@ impl<'input> Recompiler<'input> {
                 }
                 std::collections::hash_map::Entry::Vacant(v) => {
                     let label = if offset == start {
-                        label
+                        label_type.as_x64_label().unwrap()
                     } else {
                         self.assembler.create_label()
                     };
@@ -1866,28 +1881,6 @@ impl<'input> Recompiler<'input> {
         i.len()
     }
 
-    /// Get register other than `keep`.
-    fn temp_register64(keep: Register) -> Register {
-        match keep {
-            // 64Bit | 32Bit | 16Bit | 8Bit starting Registers => 64Bit ending Registers (Non-64Bit ending registers return NONE error.)
-            Register::R8 | Register::R8D | Register::R8W | Register::R8L => Register::R9,
-            Register::R9 | Register::R9D | Register::R9W | Register::R9L => Register::R8,
-            Register::R10 | Register::R10D | Register::R10W | Register::R10L => Register::R11,
-            Register::R11 | Register::R11D | Register::R11W | Register::R11L => Register::R10,
-            Register::R12 | Register::R12D | Register::R12W | Register::R12L => Register::R13,
-            Register::R13 | Register::R13D | Register::R13W | Register::R13L => Register::R12,
-            Register::R14 | Register::R14D | Register::R14W | Register::R14L => Register::R15,
-            Register::R15 | Register::R15D | Register::R15W | Register::R15L => Register::R14,
-            Register::RDI | Register::EDI | Register::DI | Register::DIL => Register::RSI,
-            Register::RSI | Register::ESI | Register::SI | Register::SIL => Register::RDI,
-            Register::RAX | Register::EAX | Register::AX | Register::AL => Register::RBX,
-            Register::RBX | Register::EBX | Register::BX | Register::BL => Register::RAX,
-            Register::RCX | Register::ECX | Register::CX | Register::CL => Register::RDX,
-            Register::RDX | Register::EDX | Register::DX | Register::DL => Register::RCX,
-            r => panic!("Register {:?} is not implemented yet.", r),
-        }
-    }
-
     fn offset(&self, addr: u64) -> usize {
         let base: u64 = self.input.as_ptr() as u64;
 
@@ -1923,150 +1916,5 @@ impl<'input> Recompiler<'input> {
         }
 
         page_count * page_size
-    }
-
-    #[cfg(unix)]
-    fn page_size() -> usize {
-        let v = unsafe { libc::sysconf(libc::_SC_PAGE_SIZE) };
-
-        if v < 0 {
-            // This should never happen.
-            let e = std::io::Error::last_os_error();
-            panic!("Failed to get page size: {}", e);
-        }
-
-        v as _
-    }
-
-    #[cfg(windows)]
-    fn page_size() -> usize {
-        use windows_sys::Win32::System::SystemInformation::{GetSystemInfo, SYSTEM_INFO};
-        let mut i: SYSTEM_INFO = util::mem::uninit();
-
-        unsafe { GetSystemInfo(&mut i) };
-
-        i.dwPageSize as _
-    }
-}
-
-pub struct NativeCode {
-    ptr: *mut u8,
-    len: usize,
-}
-
-impl NativeCode {
-    #[cfg(unix)]
-    fn new(len: usize) -> Result<Self, std::io::Error> {
-        let ptr = unsafe {
-            libc::mmap(
-                std::ptr::null_mut(),
-                len,
-                libc::PROT_EXEC | libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_PRIVATE | libc::MAP_ANON,
-                -1,
-                0,
-            )
-        };
-
-        if ptr == libc::MAP_FAILED {
-            Err(std::io::Error::last_os_error())
-        } else {
-            Ok(Self { ptr: ptr as _, len })
-        }
-    }
-
-    #[cfg(windows)]
-    fn new(len: usize) -> Result<Self, std::io::Error> {
-        use std::ptr::null;
-        use windows_sys::Win32::System::Memory::{
-            VirtualAlloc, MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE,
-        };
-
-        let ptr = unsafe {
-            VirtualAlloc(
-                null(),
-                len,
-                MEM_COMMIT | MEM_RESERVE,
-                PAGE_EXECUTE_READWRITE,
-            )
-        };
-
-        if ptr.is_null() {
-            Err(std::io::Error::last_os_error())
-        } else {
-            Ok(Self { ptr: ptr as _, len })
-        }
-    }
-
-    pub fn addr(&self) -> usize {
-        self.ptr as usize
-    }
-
-    fn copy_from(&mut self, src: &[u8]) {
-        debug_assert!(src.len() <= self.len);
-        unsafe { self.ptr.copy_from_nonoverlapping(src.as_ptr(), src.len()) };
-    }
-}
-
-impl Drop for NativeCode {
-    #[cfg(unix)]
-    fn drop(&mut self) {
-        if unsafe { libc::munmap(self.ptr as _, self.len) } < 0 {
-            let e = std::io::Error::last_os_error();
-
-            panic!(
-                "Failed to unmap {} bytes starting at {:p}: {}",
-                self.len, self.ptr, e
-            );
-        }
-    }
-
-    #[cfg(windows)]
-    fn drop(&mut self) {
-        use windows_sys::Win32::System::Memory::{VirtualFree, MEM_RELEASE};
-
-        if unsafe { VirtualFree(self.ptr as _, 0, MEM_RELEASE) } == 0 {
-            let e = std::io::Error::last_os_error();
-
-            panic!(
-                "Failed to free {} bytes starting at {:p}: {}",
-                self.len, self.ptr, e
-            );
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum RunError {
-    InvalidInstruction(usize),
-    UnknownInstruction(usize, Vec<u8>, Instruction),
-    AllocatePagesFailed(usize, std::io::Error),
-    AssembleFailed(iced_x86::IcedError),
-    UnsupportedArchError,
-}
-
-impl Error for RunError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::AllocatePagesFailed(_, e) => Some(e),
-            Self::AssembleFailed(e) => Some(e),
-            _ => None,
-        }
-    }
-}
-
-impl Display for RunError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Self::InvalidInstruction(o) => {
-                write!(f, "invalid instruction at {:#018x}", o)
-            }
-            Self::UnknownInstruction(o, r, i) => {
-                write!(f, "unknown instruction '{}' ({:02x?}) at {:#018x}", i, r, o)
-            }
-            Self::AllocatePagesFailed(s, _) => write!(f, "cannot allocate pages for {} bytes", s),
-            Self::AssembleFailed(_) => f.write_str("cannot assemble"),
-            Self::UnsupportedArchError => write!(f, "{} target is not supported", ARCH),
-        }
     }
 }

@@ -1,8 +1,11 @@
 use self::dynamic::DynamicLinking;
+use self::recompiler::x64::X64Emitter;
 use self::recompiler::{NativeCode, Recompiler};
 use super::Process;
 use crate::elf::program::{Program, ProgramFlags, ProgramType};
 use crate::elf::SignedElf;
+#[allow(unused_imports)]
+use std::env::consts::ARCH;
 use std::io::Write;
 use std::mem::transmute;
 use std::path::PathBuf;
@@ -125,7 +128,11 @@ impl Module {
         }
 
         // Setup recompiler.
-        let recompiler = Recompiler::new(proc, &mapped, segments);
+        #[cfg(target_arch = "x86_64")]
+        let recompiler = X64Emitter::new(proc, &mapped, segments);
+
+        #[cfg(not(target_arch = "x86_64"))]
+        panic!("{} target is not supported.", ARCH);
 
         // Recompile module.
         let (entry, recompiled) = match recompiler.run(&[elf.entry_addr()]) {
@@ -161,7 +168,7 @@ pub(super) struct Arg {
     pub argv: *mut *mut u8,
 }
 
-pub(super) struct Segment {
+pub struct Segment {
     start: usize,
     end: usize, // Pass the last byte.
     flags: ProgramFlags,
