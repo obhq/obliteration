@@ -1,6 +1,4 @@
-cmake_minimum_required(VERSION 3.22)
-
-set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum OS X deployment version")
+cmake_minimum_required(VERSION 3.21)
 
 project(obliteration)
 
