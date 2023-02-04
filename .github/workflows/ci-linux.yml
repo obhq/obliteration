@@ -14,7 +14,14 @@ jobs:
         sudo apt-get install -y flatpak flatpak-builder
     - name: Add Flathub
       run: flatpak remote-add --user flathub https://flathub.org/repo/flathub.flatpakrepo
-    - name: Install Flatpak Runtimes
+    - name: Cache Flatpak Runtimes
+      id: cache-flatpak
+      uses: actions/cache@v3.2.4
+      with:
+        path: ~/.local/share/flatpak/runtime
+        key: ${{ runner.os }}-flatpak-runtime-${{ hashFiles('.github/workflows/ci-linux.yml') }}
+    - if: ${{ steps.cache-flatpak.outputs.cache-hit != 'true' }}
+      name: Install Flatpak Runtimes
       run: flatpak install --noninteractive flathub org.kde.Platform//6.4 org.kde.Sdk//6.4 org.freedesktop.Sdk.Extension.rust-stable//22.08
     - name: Build Flatpak
       run: flatpak-builder --default-branch dev build flatpak.yml
@@ -25,5 +32,5 @@ jobs:
     - name: Upload Flatpak
       uses: actions/upload-artifact@v3
       with:
-        name: obliteration-linux
+        name: obliteration-linux-amd64
         path: obliteration.flatpak
