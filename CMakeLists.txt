@@ -11,7 +11,6 @@ endif()
 
 add_subdirectory(src)
 
-
 if(UNIX AND NOT APPLE)
     set(CPACK_PACKAGE_VERSION_MAJOR 0)
     set(CPACK_PACKAGE_VERSION_MINOR 1)
