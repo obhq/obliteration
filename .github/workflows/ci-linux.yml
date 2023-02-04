@@ -18,7 +18,7 @@ jobs:
       id: cache-flatpak
       uses: actions/cache@v3.2.4
       with:
-        path: /var/lib/flatpak/runtime
+        path: /home/runner/work/obliteration/.local/share/flatpak/
         key: ${{ runner.os }}-flatpak-runtime-${{ hashFiles('.github/workflows/ci-linux.yml') }}
     - if: ${{ steps.cache-flatpak.outputs.cache-hit != 'true' }}
       name: Install Flatpak Runtimes
@@ -28,8 +28,8 @@ jobs:
       id: cache-cmake
       with:
         path: |
-          /run/build/obliteration/build
-          /run/build/obliteration/src/target
+          /home/runner/work/obliteration/obliteration/.flatpak-builder/build
+          /home/runner/work/obliteration/obliteration/.flatpak-builder/src/target
         key: ${{ runner.os }}-cmake-${{ hashFiles('**/CMakeLists.*', '**/Cargo.lock', '**/Cargo.toml', '.github/workflows/*.yml') }}
     - name: Build Flatpak
       run: flatpak-builder --default-branch dev build flatpak.yml
