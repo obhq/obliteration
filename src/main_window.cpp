@@ -30,8 +30,7 @@
 
 #include <filesystem>
 
-MainWindow::MainWindow(context *context) :
-    m_context(context),
+MainWindow::MainWindow() :
     m_tab(nullptr),
     m_games(nullptr),
     m_log(nullptr),
@@ -190,17 +189,18 @@ void MainWindow::installPkg()
 
     // Open a PKG.
     Pkg pkg;
-    char *error;
+    Error newError;
 
-    pkg = pkg_open(m_context, pkgPath.c_str(), &error);
+    pkg = pkg_open(pkgPath.c_str(), &newError);
 
     if (!pkg) {
-        QMessageBox::critical(&progress, "Error", QString("Cannot open %1: %2").arg(pkgPath.c_str()).arg(error));
-        std::free(error);
+        QMessageBox::critical(&progress, "Error", QString("Cannot open %1: %2").arg(pkgPath.c_str()).arg(newError.message()));
         return;
     }
 
     // Get game ID.
+    char *error;
+
     auto param = pkg_get_param(pkg, &error);
 
     if (!param) {
@@ -231,7 +231,7 @@ void MainWindow::installPkg()
     // Extract items.
     progress.setWindowTitle(gameTitle);
 
-    Error newError = pkg_extract(pkg, directory.c_str(), [](const char *name, std::uint64_t total, std::uint64_t written, void *ud) {
+    newError = pkg_extract(pkg, directory.c_str(), [](const char *name, std::uint64_t total, std::uint64_t written, void *ud) {
         auto toProgress = [total](std::uint64_t v) -> int {
             if (total >= 1024UL*1024UL*1024UL*1024UL) { // >= 1TB
                 return v / (1024UL*1024UL*1024UL*10UL); // 10GB step.

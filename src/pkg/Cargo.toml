@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 aes = "0.8"
 cbc = "0.1"
-context = { path = "../context" }
 error = { path = "../error" }
 fs = { path = "../fs" }
 memmap2 = "0.5"
