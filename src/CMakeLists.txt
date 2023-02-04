@@ -5,11 +5,6 @@ include(ExternalProject)
 find_package(Qt6 COMPONENTS Widgets REQUIRED)
 find_package(Threads REQUIRED)
 
-set(CMAKE_INCLUDE_CURRENT_DIR ON)
-set(prefix "${PROJECT_NAME}.app/Contents")
-set(INSTALL_RUNTIME_DIR "${prefix}/MacOS")
-set(INSTALL_CMAKE_DIR "${prefix}/Resources")
-
 # Setup Rust target.
 set(RUST_OUTPUTS $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/debug,${CMAKE_CURRENT_SOURCE_DIR}/target/release>)
 set(KERNEL ${RUST_OUTPUTS}/obkrnl${CMAKE_EXECUTABLE_SUFFIX})
@@ -32,7 +27,7 @@ ExternalProject_Add(core
     TEST_EXCLUDE_FROM_MAIN ON)
 
 # Setup application target.
-add_executable(obliteration MACOSX_BUNDLE
+add_executable(obliteration WIN32
     app_data.cpp
     game_models.cpp
     game_settings.cpp
@@ -78,31 +73,5 @@ else()
     install(TARGETS obliteration DESTINATION bin)
 endif()
 
-# install(PROGRAMS ${KERNEL} TYPE BIN)
-install(TARGETS obliteration
-    BUNDLE DESTINATION . COMPONENT Runtime
-    RUNTIME DESTINATION bin COMPONENT Runtime
-    )
-
-set(APPS "\${CMAKE_INSTALL_PREFIX}/obliteration.app")
-# install(SCRIPT post-install.cmake)
-
-# Build MacOS package
-# set_target_properties(obliteration PROPERTIES
-#     MACOSX_BUNDLE True
-#     MACOSX_BUNDLE_GUI_IDENTIFIER com.github.obhq.obliteration
-#     MACOSX_BUNDLE_BUNDLE_NAME obliteration
-#     MACOSX_BUNDLE_BUNDLE_VERSION "0.1"
-#     MACOSX_BUNDLE_SHORT_VERSION_STRING "0.1"
-#     MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/cmake/customtemplate.plist.in
-# )
-
-
-# Directories to look for dependencies
-set(DIRS ${CMAKE_BINARY_DIR})
-
-install(CODE "include(BundleUtilities)
-    fixup_bundle(\"${APPS}\" \"\" \"${DIRS}\")")
-
-set(CPACK_GENERATOR "DRAGNDROP")
-include(CPack)
+install(PROGRAMS ${KERNEL} TYPE BIN)
+install(SCRIPT post-install.cmake)
