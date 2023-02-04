@@ -1,17 +1,12 @@
 use super::{LabelType, NativeCode, Recompiler, RunError};
 use crate::process::module::Segment;
 use crate::process::Process;
-use iced_x86::code_asm::{CodeAssembler, CodeLabel};
-use iced_x86::{Instruction, Register};
-use std::collections::{HashMap, VecDeque};
+use iced_x86::Instruction;
 
 pub struct Aarch64Emitter<'input> {
     proc: *mut Process,
     input: &'input [u8],
     segments: Vec<Segment>,
-    assembler: CodeAssembler,
-    jobs: VecDeque<(u64, usize, CodeLabel)>,
-    labels: HashMap<u64, CodeLabel>,
     output_size: usize,
 }
 
@@ -21,15 +16,8 @@ impl<'input> Aarch64Emitter<'input> {
             proc,
             input,
             segments,
-            assembler: CodeAssembler::new(64).unwrap(),
-            jobs: VecDeque::new(),
-            labels: HashMap::new(),
             output_size: 0,
         }
-    }
-
-    fn temp_register64(keep: Register) -> Register {
-        unimplemented!();
     }
 }
 
