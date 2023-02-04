@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "context",
     "core",
     "error",
     "exfat",

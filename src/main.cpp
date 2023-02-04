@@ -1,4 +1,3 @@
-#include "context.hpp"
 #include "initialize_dialog.hpp"
 #include "main_window.hpp"
 #include "settings.hpp"
@@ -11,19 +10,6 @@
 #include <QMessageBox>
 
 #include <cstdlib>
-
-static int run(context *context)
-{
-    MainWindow w(context);
-
-    w.show();
-
-    if (!w.loadGames()) {
-        return 1;
-    }
-
-    return QApplication::exec();
-}
 
 int main(int argc, char *argv[])
 {
@@ -56,23 +42,14 @@ int main(int argc, char *argv[])
         }
     }
 
-    // Initialize system.
-    context *context;
-    char *error;
+    // Run main window.
+    MainWindow win;
 
-    context = context_new(&error);
+    win.show();
 
-    if (!context) {
-        QMessageBox::critical(nullptr, "Fatal Error", QString("Failed to initialize application system: %1").arg(error));
-        std::free(error);
+    if (!win.loadGames()) {
         return 1;
     }
 
-    // Run main window.
-    auto status = run(context);
-
-    // Shutdown.
-    context_free(context);
-
-    return status;
+    return QApplication::exec();
 }

@@ -1,6 +1,5 @@
 #pragma once
 
-#include "context.hpp"
 #include "error.hpp"
 
 #include <cinttypes>
@@ -12,8 +11,7 @@ struct pkg_param;
 typedef void (*pkg_extract_status_t) (const char *name, std::uint64_t total, std::uint64_t written, void *ud);
 
 extern "C" {
-    // The returned pkg must not outlive ctx.
-    pkg *pkg_open(const context *ctx, const char *file, char **error);
+    pkg *pkg_open(const char *file, error **error);
     void pkg_close(pkg *pkg);
 
     pkg_param *pkg_get_param(const pkg *pkg, char **error);
