@@ -18,7 +18,7 @@ jobs:
       id: cache-flatpak
       uses: actions/cache@v3.2.4
       with:
-        path: ~/.local/share/flatpak
+        path: ~/.local/share/flatpak/runtime
         key: ${{ runner.os }}-flatpak-runtime-${{ hashFiles('.github/workflows/ci-linux.yml') }}
     - if: ${{ steps.cache-flatpak.outputs.cache-hit != 'true' }}
       name: Install Flatpak Runtimes
