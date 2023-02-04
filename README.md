@@ -1,6 +1,7 @@
 <p align="center"><img alt="Logo" src="logo.png"></p>
 
 ## About
+
 [![CI](https://github.com/obhq/obliteration/actions/workflows/main.yml/badge.svg)](https://github.com/obhq/obliteration/actions/workflows/main.yml) [![Matrix](https://img.shields.io/matrix/obliteration:matrix.org?color=740d03&label=Obliteration&logo=matrix)](https://matrix.to/#/#obliteration:matrix.org)
 
 Obliteration is an experimental PS4 emulator using [Kyty](https://github.com/InoriRus/Kyty) and [Uplift](https://github.com/idc/uplift) as a reference. The project is under development and cannot run any games that Kyty is able to run yet.
@@ -31,7 +32,7 @@ We have a Matrix Room Space `#obliteration:matrix.org` on [Matrix.to](https://ma
 ## System requirements
 
 - Windows 10 x64, Linux x86-64, and macOS x86-64.
-- CPU that supports all of the instructions on the [PS4 CPU](https://en.wikipedia.org/wiki/Jaguar_(microarchitecture)#Instruction_set_support).
+- CPU that supports all of the instructions on the [PS4 CPU](<https://en.wikipedia.org/wiki/Jaguar_(microarchitecture)#Instruction_set_support>).
   - AMD:
     - Minimum (Based on Required Instruction Sets): Jaguar-Based CPUs or newer
     - Recommended (Based on Performance): Zen-Based CPUs or newer
@@ -120,6 +121,12 @@ Choose `[YOUR-PLATFORM]-release` for optimized outputs. The `*-debug` is designe
 
 ```sh
 cmake --build --preset PRESET
+```
+
+### Generate DEB package (Linux Debian-like only)
+
+```sh
+cd build && cpack -G DEB
 ```
 
 ## Development
