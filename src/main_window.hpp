@@ -1,7 +1,5 @@
 #pragma once
 
-#include "context.hpp"
-
 #include <QMainWindow>
 #include <QProcess>
 
@@ -10,7 +8,7 @@ class QPlainTextEdit;
 
 class MainWindow final : public QMainWindow {
 public:
-    MainWindow(context *context);
+    MainWindow();
     ~MainWindow();
 
 public:
@@ -36,7 +34,6 @@ private:
     bool requireEmulatorStopped();
 
 private:
-    context *m_context;
     QTabWidget *m_tab;
     QListView *m_games;
     QPlainTextEdit *m_log;

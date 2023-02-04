@@ -7,7 +7,6 @@ edition = "2021"
 crate-type = ["staticlib"]
 
 [dependencies]
-context = { path = "../context" }
 error = { path = "../error" }
 pkg = { path = "../pkg" }
 pup = { path = "../pup" }

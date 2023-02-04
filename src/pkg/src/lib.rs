@@ -1,9 +1,9 @@
 use self::entry::Entry;
 use self::header::Header;
+use self::keys::{fake_pfs_key, pkg_key3};
 use self::param::Param;
 use aes::cipher::generic_array::GenericArray;
 use aes::cipher::{BlockDecryptMut, KeyIvInit};
-use context::Context;
 use sha2::Digest;
 use std::error::Error;
 use std::ffi::{c_void, CString};
@@ -18,19 +18,16 @@ use util::mem::{new_buffer, uninit};
 
 pub mod entry;
 pub mod header;
+pub mod keys;
 pub mod param;
 
 #[no_mangle]
-pub extern "C" fn pkg_open<'c>(
-    ctx: &'c Context,
-    file: *const c_char,
-    error: *mut *mut c_char,
-) -> *mut Pkg<'c> {
+pub extern "C" fn pkg_open(file: *const c_char, error: *mut *mut error::Error) -> *mut Pkg {
     let path = util::str::from_c_unchecked(file);
-    let pkg = match Pkg::open(ctx, path) {
+    let pkg = match Pkg::open(path) {
         Ok(v) => Box::new(v),
         Err(e) => {
-            util::str::set_c(error, &e.to_string());
+            unsafe { *error = error::Error::new(&e) };
             return null_mut();
         }
     };
@@ -131,16 +128,15 @@ pub extern "C" fn pkg_param_close(param: *mut Param) {
 }
 
 // https://www.psdevwiki.com/ps4/Package_Files
-pub struct Pkg<'c> {
-    ctx: &'c Context,
+pub struct Pkg {
     raw: memmap2::Mmap,
     header: Header,
     entry_key3: Vec<u8>,
     ekpfs: Vec<u8>,
 }
 
-impl<'c> Pkg<'c> {
-    pub fn open<P: AsRef<Path>>(ctx: &'c Context, path: P) -> Result<Self, OpenError> {
+impl Pkg {
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, OpenError> {
         // Open file and map it to memory.
         let file = match File::open(path) {
             Ok(v) => v,
@@ -160,7 +156,6 @@ impl<'c> Pkg<'c> {
 
         // Populate fields.
         let mut pkg = Self {
-            ctx,
             raw,
             header,
             entry_key3: Vec::new(),
@@ -544,7 +539,7 @@ impl<'c> Pkg<'c> {
         });
 
         // Decrypt EKPFS with fake pkg key.
-        let fake_key = self.ctx.fake_pfs_key();
+        let fake_key = fake_pfs_key();
 
         self.ekpfs = match fake_key.decrypt(rsa::Pkcs1v15Encrypt, &encrypted) {
             Ok(v) => v,
@@ -657,7 +652,7 @@ impl<'c> Pkg<'c> {
         }
 
         // Decrypt key 3.
-        let key3 = self.ctx.pkg_key3();
+        let key3 = pkg_key3();
 
         self.entry_key3 = match key3.decrypt(rsa::Pkcs1v15Encrypt, &keys[3]) {
             Ok(v) => v,
