@@ -1,4 +1,7 @@
 use self::dynamic::DynamicLinking;
+#[cfg(target_arch = "aarch64")]
+use self::recompiler::aarch64::Aarch64Emitter;
+#[cfg(target_arch = "x86_64")]
 use self::recompiler::x64::X64Emitter;
 use self::recompiler::{NativeCode, Recompiler};
 use super::Process;
@@ -131,8 +134,8 @@ impl Module {
         #[cfg(target_arch = "x86_64")]
         let recompiler = X64Emitter::new(proc, &mapped, segments);
 
-        #[cfg(not(target_arch = "x86_64"))]
-        panic!("{} target is not supported.", ARCH);
+        #[cfg(target_arch = "aarch64")]
+        let recompiler = Aarch64Emitter::new(proc, &mapped, segments);
 
         // Recompile module.
         let (entry, recompiled) = match recompiler.run(&[elf.entry_addr()]) {
