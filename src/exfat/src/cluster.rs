@@ -1,31 +1,33 @@
-use crate::directory::entry::DataDescriptor;
+use crate::entries::ClusterAllocation;
 use crate::fat::Fat;
 use crate::param::Params;
 use std::cmp::min;
 use std::io::{ErrorKind, Read, Seek, SeekFrom};
 use thiserror::Error;
 
+/// A cluster reader to read all data in a cluster chain.
 pub(crate) struct ClustersReader<'a, I: Read + Seek> {
     params: &'a Params,
     image: &'a mut I,
     chain: Vec<usize>,
-    cluster_size: u64, // in bytes
-    tail_size: u64,
-    cluster: usize, // index into chain
-    offset: u64,    // offset into current cluster
+    cluster_size: u64, // In bytes.
+    tail_size: u64,    // In bytes.
+    cluster: usize,    // Index into chain.
+    offset: u64,       // Offset into the current cluster.
 }
 
 impl<'a, I: Read + Seek> ClustersReader<'a, I> {
-    pub fn from_descriptor(
+    /// Construct a [`ClustersReader`] from the specified [`ClusterAllocation`].
+    pub fn from_alloc(
         params: &'a Params,
         fat: &Fat,
         image: &'a mut I,
-        desc: &DataDescriptor,
+        alloc: &ClusterAllocation,
         no_fat_chain: Option<bool>,
     ) -> Result<Self, FromDescriptorError> {
         // Get cluster chain.
-        let first_cluster = desc.first_cluster();
-        let data_length = desc.data_length();
+        let first_cluster = alloc.first_cluster();
+        let data_length = alloc.data_length();
         let cluster_size = params.cluster_size();
         let chain: Vec<usize> = if no_fat_chain.unwrap_or(false) {
             fat.get_cluster_chain(first_cluster).collect()
