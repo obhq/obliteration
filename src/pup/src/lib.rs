@@ -106,10 +106,13 @@ impl Pup {
         };
 
         // Create exFAT reader.
-        let _fat = match ExFat::open(entry) {
+        let fat = match ExFat::open(entry) {
             Ok(v) => v,
             Err(e) => return Err(DumpSystemImageError::CreateImageReaderFailed(e)),
         };
+
+        // Dump files.
+        for item in fat {}
 
         Ok(())
     }
