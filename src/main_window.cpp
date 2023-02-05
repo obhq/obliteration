@@ -75,6 +75,7 @@ MainWindow::MainWindow() :
 
     // Central widget.
     m_tab = new QTabWidget(this);
+    m_tab->setDocumentMode(true);
 
     setCentralWidget(m_tab);
 
