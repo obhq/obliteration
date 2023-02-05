@@ -112,7 +112,9 @@ impl Pup {
         };
 
         // Dump files.
-        for item in fat {}
+        for item in fat {
+            // TODO: Implements file extraction.
+        }
 
         Ok(())
     }
