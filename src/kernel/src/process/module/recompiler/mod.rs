@@ -341,7 +341,6 @@ impl NativeCode {
     }
 
     fn copy_from(&mut self, src: &[u8]) {
-        debug_assert!(src.len() <= self.len);
         unsafe { self.ptr.copy_from_nonoverlapping(src.as_ptr(), src.len()) };
     }
 }
