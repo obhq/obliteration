@@ -379,7 +379,7 @@ impl Pkg {
         };
 
         // Enumerate items.
-        let mut buffer: Vec<u8> = new_buffer(32768);
+        let mut buffer: Vec<u8> = unsafe{new_buffer(32768)};
 
         for (name, item) in items {
             use pfs::directory::Item;

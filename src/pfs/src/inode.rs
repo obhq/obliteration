@@ -182,7 +182,7 @@ impl Inode {
             Err(e) => return Err(LoadBlocksError::SeekFailed(block_num, e)),
         }
 
-        let mut block0 = new_buffer(block_size as usize);
+        let mut block0 = unsafe{new_buffer(block_size as usize)};
 
         if let Err(e) = image.read_exact(&mut block0) {
             return Err(LoadBlocksError::ReadBlockFailed(block_num, e));
@@ -215,7 +215,7 @@ impl Inode {
             return Err(LoadBlocksError::ReadBlockFailed(block_num, e));
         }
 
-        let mut block1 = new_buffer(block_size as usize);
+        let mut block1 = unsafe{new_buffer(block_size as usize)};
         let mut data0 = block0.as_slice();
 
         while let Some(i) = (self.indirect_reader)(&mut data0) {

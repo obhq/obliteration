@@ -10,7 +10,7 @@ pub unsafe fn uninit<T>() -> T {
 }
 
 #[allow(clippy::uninit_vec)]
-pub fn new_buffer<T>(size: usize) -> Vec<T>
+pub unsafe fn new_buffer<T>(size: usize) -> Vec<T>
 where
     T: Copy,
 {

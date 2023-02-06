@@ -167,7 +167,6 @@ impl<'a> Seek for File<'a> {
 }
 
 impl<'a> Read for File<'a> {
-    #[allow(clippy::uninit_vec)]
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         // Get inode.
         let inode = match self.pfs.inodes.get(self.inode) {
@@ -224,9 +223,11 @@ impl<'a> Read for File<'a> {
                     block_size as u64
                 };
 
-                // Allocate buffer.
-                self.current_block.reserve(read_amount as usize);
-                unsafe { self.current_block.set_len(read_amount as usize) };
+                #[allow(clippy::uninit_vec)]{ // calling `set_len()` immediately after reserving a buffer creates uninitialized values
+                    // Allocate buffer.
+                    self.current_block.reserve(read_amount as usize);
+                    unsafe { self.current_block.set_len(read_amount as usize) };
+                }
 
                 // Seek to block.
                 let offset = (block_num as u64) * (block_size as u64);

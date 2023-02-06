@@ -34,7 +34,7 @@ impl Dirent {
         let namelen = unsafe { read_u32_le(raw, 0x08) } as usize;
 
         // Read name.
-        let mut name = new_buffer(namelen);
+        let mut name = unsafe{new_buffer(namelen)};
 
         from.read_exact(&mut name)?;
 
