@@ -2,19 +2,13 @@ name: Prebuild Quality Checks
 on:
   workflow_call:
 jobs:
-  rustfmt:
-    name: Rustfmt Check
+  code-checks:
+    name: Code Checks (RustFMT and Clippy)
     runs-on: ubuntu-22.04
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
     - name: Run RustFMT Check
       run: cd src && cargo fmt --check
-  rust-clippy:
-    name: Rust-Clippy Check
-    runs-on: ubuntu-22.04
-    steps:
-    - name: Checkout source
-      uses: actions/checkout@v3
     - name: Run Rust-Clippy Check
-      run: cd src && cargo clippy
+      run: cargo clippy
