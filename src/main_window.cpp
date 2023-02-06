@@ -35,7 +35,6 @@ MainWindow::MainWindow() :
     m_tab(nullptr),
     m_games(nullptr),
     m_log(nullptr),
-    m_formatter(nullptr),
     m_kernel(nullptr)
 {
     setWindowTitle("Obliteration");
@@ -94,21 +93,21 @@ MainWindow::MainWindow() :
     m_tab->addTab(m_games, QIcon(":/resources/view-comfy.svg"), "Games");
 
     // Setup log view.
-    m_log = new QPlainTextEdit();
-    m_log->setReadOnly(true);
-    m_log->setLineWrapMode(QPlainTextEdit::NoWrap);
-    m_log->setMaximumBlockCount(10000);
+    auto log = new QPlainTextEdit();
+
+    log->setReadOnly(true);
+    log->setLineWrapMode(QPlainTextEdit::NoWrap);
+    log->setMaximumBlockCount(10000);
 
 #ifdef _WIN32
-    m_log->document()->setDefaultFont(QFont("Courier New", 10));
+    log->document()->setDefaultFont(QFont("Courier New", 10));
 #else
-    m_log->document()->setDefaultFont(QFont("monospace", 10));
+    log->document()->setDefaultFont(QFont("monospace", 10));
 #endif
 
-    m_tab->addTab(m_log, QIcon(":/resources/card-text-outline.svg"), "Log");
+    m_log = new LogFormatter(log, this);
 
-    // Setup log formatter.
-    m_formatter = new LogFormatter(m_log);
+    m_tab->addTab(log, QIcon(":/resources/card-text-outline.svg"), "Log");
 
     // Setup status bar.
     statusBar();
@@ -338,7 +337,7 @@ void MainWindow::startGame(const QModelIndex &index)
     auto game = model->get(index.row()); // Qt already guaranteed the index is valid.
 
     // Clear previous log and switch to log view.
-    m_formatter->reset();
+    m_log->reset();
     m_tab->setCurrentIndex(1);
 
     // Get full path to kernel binary.
@@ -430,7 +429,7 @@ void MainWindow::kernelOutput()
     while (m_kernel && m_kernel->canReadLine()) {
         auto line = QString::fromUtf8(m_kernel->readLine());
 
-        m_formatter->appendMessage(line, InfoMessageFormat);
+        m_log->appendMessage(line, InfoMessageFormat);
     }
 }
 

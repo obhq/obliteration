@@ -21,7 +21,7 @@ enum LogFormat {
 class LogFormatter : public QObject {
     Q_OBJECT
 public:
-    LogFormatter(QPlainTextEdit *plainTextEdit);
+    LogFormatter(QPlainTextEdit *output, QObject *parent = nullptr);
     ~LogFormatter() override;
 
 public:
@@ -42,7 +42,7 @@ private:
 
 private:
     AnsiEscape m_escapeCodeHandler;
-    QPlainTextEdit *m_plainTextEdit;
+    QPlainTextEdit *m_output;
     QTextCursor m_cursor;
     QTextCharFormat m_formats[NumberOfFormats];
     QPair<QString, LogFormat> m_incompleteLine;

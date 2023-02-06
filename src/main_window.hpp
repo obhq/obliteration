@@ -5,7 +5,6 @@
 
 class LogFormatter;
 class QListView;
-class QPlainTextEdit;
 
 class MainWindow final : public QMainWindow {
 public:
@@ -37,7 +36,6 @@ private:
 private:
     QTabWidget *m_tab;
     QListView *m_games;
-    QPlainTextEdit *m_log;
-    LogFormatter *m_formatter;
+    LogFormatter *m_log;
     QProcess *m_kernel;
 };

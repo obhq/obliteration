@@ -17,9 +17,10 @@ static QString normalizeNewlines(const QString &text)
     return res;
 }
 
-LogFormatter::LogFormatter(QPlainTextEdit *plainTextEdit) :
-    m_plainTextEdit(plainTextEdit),
-    m_cursor(plainTextEdit->textCursor()),
+LogFormatter::LogFormatter(QPlainTextEdit *output, QObject *parent) :
+    QObject(parent),
+    m_output(output),
+    m_cursor(output->textCursor()),
     m_prependLineFeed(false),
     m_prependCarriageReturn(false)
 {
@@ -89,7 +90,7 @@ void LogFormatter::appendMessage(const QString &text, LogFormat format)
 
 void LogFormatter::reset()
 {
-    m_plainTextEdit->clear();
+    m_output->clear();
     m_prependLineFeed = false;
     m_prependCarriageReturn = false;
     m_incompleteLine.first.clear();
@@ -192,7 +193,7 @@ void LogFormatter::clearLastLine()
 
 void LogFormatter::scroll()
 {
-    auto bar = m_plainTextEdit->verticalScrollBar();
+    auto bar = m_output->verticalScrollBar();
     auto max = bar->maximum();
     auto bottom  = (bar->value() >= (max - 4)); // 4 is an error threshold.
 
