@@ -410,6 +410,9 @@ void MainWindow::kernelError(QProcess::ProcessError error)
 
     QMessageBox::critical(this, "Error", msg);
 
+    // Flush the kenel log before we destroy its object.
+    kernelOutput();
+
     // Destroy object.
     m_kernel->deleteLater();
     m_kernel = nullptr;
@@ -417,7 +420,9 @@ void MainWindow::kernelError(QProcess::ProcessError error)
 
 void MainWindow::kernelOutput()
 {
-    while (m_kernel->canReadLine()) {
+    // It is possible for Qt to signal this slot after QProcess::errorOccurred or QProcess::finished
+    // so we need to check if the those signals has been received.
+    while (m_kernel && m_kernel->canReadLine()) {
         auto line = m_kernel->readLine();
 
         if (line.endsWith('\n')) {
