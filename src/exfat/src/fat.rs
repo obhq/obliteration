@@ -39,7 +39,7 @@ impl Fat {
         }
 
         // Load entries.
-        let mut entries: Vec<u32> = unsafe{new_buffer(params.cluster_count + 2)};
+        let mut entries: Vec<u32> = unsafe { new_buffer(params.cluster_count + 2) };
 
         if let Err(e) = image.read_exact(as_mut_bytes(&mut entries)) {
             return Err(LoadError::IoFailed(e));

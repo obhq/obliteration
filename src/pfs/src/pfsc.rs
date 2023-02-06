@@ -54,7 +54,7 @@ impl<F: Read + Seek> Reader<F> {
         }
 
         let original_block_count = original_size / original_block_size + 1;
-        let mut compressed_blocks: Vec<u64> = unsafe{new_buffer(original_block_count as usize)};
+        let mut compressed_blocks: Vec<u64> = unsafe { new_buffer(original_block_count as usize) };
 
         if let Err(e) = file.read_exact(as_mut_bytes(&mut compressed_blocks)) {
             return Err(OpenError::ReadBlockMappingFailed(e));
@@ -86,7 +86,9 @@ impl<F: Read + Seek> Reader<F> {
         let offset = self.compressed_blocks[num as usize];
         let size = end - offset;
 
-        #[allow(clippy::uninit_vec)]{ // calling `set_len()` immediately after reserving a buffer creates uninitialized values
+        #[allow(clippy::uninit_vec)]
+        {
+            // calling `set_len()` immediately after reserving a buffer creates uninitialized values
             // Allocate buffer.
             self.current_block.reserve(self.block_size as usize);
             unsafe { self.current_block.set_len(self.block_size as usize) };
@@ -102,7 +104,7 @@ impl<F: Read + Seek> Reader<F> {
             buf.fill(0);
         } else {
             // Read compressed.
-            let mut compressed = unsafe{new_buffer(size as usize)};
+            let mut compressed = unsafe { new_buffer(size as usize) };
 
             self.file.seek(SeekFrom::Start(offset))?;
             self.file.read_exact(&mut compressed)?;

@@ -223,7 +223,9 @@ impl<'a> Read for File<'a> {
                     block_size as u64
                 };
 
-                #[allow(clippy::uninit_vec)]{ // calling `set_len()` immediately after reserving a buffer creates uninitialized values
+                #[allow(clippy::uninit_vec)]
+                {
+                    // calling `set_len()` immediately after reserving a buffer creates uninitialized values
                     // Allocate buffer.
                     self.current_block.reserve(read_amount as usize);
                     unsafe { self.current_block.set_len(read_amount as usize) };
