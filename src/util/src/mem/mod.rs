@@ -4,11 +4,13 @@ use std::mem::{size_of, MaybeUninit};
 mod macros;
 
 /// Just a shortcut to `MaybeUninit::uninit().assume_init()`.
-#[allow(clippy::uninit_assumed_init)] pub unsafe fn uninit<T>() -> T {
+#[allow(clippy::uninit_assumed_init)]
+pub unsafe fn uninit<T>() -> T {
     unsafe { MaybeUninit::uninit().assume_init() }
 }
 
-#[allow(clippy::uninit_vec)] pub fn new_buffer<T>(size: usize) -> Vec<T>
+#[allow(clippy::uninit_vec)]
+pub fn new_buffer<T>(size: usize) -> Vec<T>
 where
     T: Copy,
 {
