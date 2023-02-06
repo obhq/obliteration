@@ -2,6 +2,7 @@
 #include "app_data.hpp"
 #include "game_models.hpp"
 #include "game_settings_dialog.hpp"
+#include "log_formatter.hpp"
 #include "pkg.hpp"
 #include "progress_dialog.hpp"
 #include "settings.hpp"
@@ -34,6 +35,7 @@ MainWindow::MainWindow() :
     m_tab(nullptr),
     m_games(nullptr),
     m_log(nullptr),
+    m_formatter(nullptr),
     m_kernel(nullptr)
 {
     setWindowTitle("Obliteration");
@@ -104,6 +106,9 @@ MainWindow::MainWindow() :
 #endif
 
     m_tab->addTab(m_log, QIcon(":/resources/card-text-outline.svg"), "Log");
+
+    // Setup log formatter.
+    m_formatter = new LogFormatter(m_log);
 
     // Setup status bar.
     statusBar();
@@ -333,7 +338,7 @@ void MainWindow::startGame(const QModelIndex &index)
     auto game = model->get(index.row()); // Qt already guaranteed the index is valid.
 
     // Clear previous log and switch to log view.
-    m_log->clear();
+    m_formatter->reset();
     m_tab->setCurrentIndex(1);
 
     // Get full path to kernel binary.
@@ -423,13 +428,9 @@ void MainWindow::kernelOutput()
     // It is possible for Qt to signal this slot after QProcess::errorOccurred or QProcess::finished
     // so we need to check if the those signals has been received.
     while (m_kernel && m_kernel->canReadLine()) {
-        auto line = m_kernel->readLine();
+        auto line = QString::fromUtf8(m_kernel->readLine());
 
-        if (line.endsWith('\n')) {
-            line.chop(1);
-        }
-
-        m_log->appendPlainText(QString::fromUtf8(line));
+        m_formatter->appendMessage(line, InfoMessageFormat);
     }
 }
 

@@ -3,6 +3,7 @@
 #include <QMainWindow>
 #include <QProcess>
 
+class LogFormatter;
 class QListView;
 class QPlainTextEdit;
 
@@ -37,5 +38,6 @@ private:
     QTabWidget *m_tab;
     QListView *m_games;
     QPlainTextEdit *m_log;
+    LogFormatter *m_formatter;
     QProcess *m_kernel;
 };
