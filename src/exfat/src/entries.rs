@@ -111,7 +111,7 @@ impl FileEntry {
         }
 
         // Load stream extension.
-        let stream = StreamEntry::load(stream)?;
+        let stream = StreamEntry::load(stream, attributes)?;
 
         // Read file names.
         let name_count = secondary_count - 1;
@@ -177,10 +177,11 @@ pub(crate) struct StreamEntry {
     no_fat_chain: bool,
     name_length: usize,
     valid_data_length: u64,
+    alloc: ClusterAllocation,
 }
 
 impl StreamEntry {
-    fn load(raw: RawEntry) -> Result<Self, FileEntryError> {
+    fn load(raw: RawEntry, attrs: FileAttributes) -> Result<Self, FileEntryError> {
         // Load GeneralSecondaryFlags.
         let data = raw.data.as_ptr();
         let general_secondary_flags = SecondaryFlags(unsafe { read_u8(data, 1) });
@@ -214,7 +215,14 @@ impl StreamEntry {
             }
         };
 
-        if valid_data_length > alloc.data_length {
+        if attrs.is_directory() {
+            if valid_data_length != alloc.data_length {
+                return Err(FileEntryError::InvalidStreamExtension(
+                    raw.index,
+                    raw.cluster,
+                ));
+            }
+        } else if valid_data_length > alloc.data_length {
             return Err(FileEntryError::InvalidStreamExtension(
                 raw.index,
                 raw.cluster,
@@ -225,6 +233,7 @@ impl StreamEntry {
             no_fat_chain: general_secondary_flags.no_fat_chain(),
             name_length,
             valid_data_length,
+            alloc,
         })
     }
 
@@ -232,12 +241,12 @@ impl StreamEntry {
         self.no_fat_chain
     }
 
-    pub fn name_length(&self) -> usize {
-        self.name_length
-    }
-
     pub fn valid_data_length(&self) -> u64 {
         self.valid_data_length
+    }
+
+    pub fn allocation(&self) -> &ClusterAllocation {
+        &self.alloc
     }
 }
 
@@ -314,13 +323,14 @@ impl SecondaryFlags {
 }
 
 /// Represents FirstCluster and DataLength fields in the Directory Entry.
-pub(crate) struct ClusterAllocation {
+#[derive(Debug, Clone)]
+pub struct ClusterAllocation {
     first_cluster: usize,
     data_length: u64,
 }
 
 impl ClusterAllocation {
-    pub fn load(entry: &RawEntry) -> Result<Self, ClusterAllocationError> {
+    pub(crate) fn load(entry: &RawEntry) -> Result<Self, ClusterAllocationError> {
         // Load fields.
         let data = entry.data().as_ptr();
         let first_cluster = unsafe { read_u32_le(data, 20) } as usize;
@@ -341,12 +351,18 @@ impl ClusterAllocation {
         })
     }
 
-    pub fn first_cluster(&self) -> usize {
+    pub(crate) fn first_cluster(&self) -> usize {
         self.first_cluster
     }
 
-    pub fn data_length(&self) -> u64 {
+    pub(crate) fn data_length(&self) -> u64 {
         self.data_length
+    }
+}
+
+impl Display for ClusterAllocation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.first_cluster, self.data_length)
     }
 }
 
