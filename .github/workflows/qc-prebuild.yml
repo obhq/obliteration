@@ -11,4 +11,4 @@ jobs:
     - name: Run RustFMT Check
       run: cd src && cargo fmt --check
     - name: Run Rust-Clippy Check
-      run: cargo clippy
+      run: cd src && cargo clippy
