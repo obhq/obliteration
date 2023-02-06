@@ -310,7 +310,7 @@ impl MemoryManager {
 
     #[cfg(windows)]
     fn alloc(&self, len: usize, prot: Protections) -> Result<AllocInfo, std::io::Error> {
-        use std::ptr::{null, null_mut};
+        use std::ptr::null;
         use windows_sys::Win32::System::Memory::{
             VirtualAlloc, VirtualFree, MEM_COMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_NOACCESS,
         };
@@ -403,7 +403,7 @@ impl MemoryManager {
     }
 
     #[cfg(windows)]
-    fn free(addr: *mut u8, len: usize) -> Result<(), std::io::Error> {
+    fn free(addr: *mut u8, _len: usize) -> Result<(), std::io::Error> {
         use windows_sys::Win32::System::Memory::{VirtualFree, MEM_RELEASE};
 
         if unsafe { VirtualFree(addr as _, 0, MEM_RELEASE) } == 0 {
@@ -439,7 +439,7 @@ impl MemoryManager {
     #[cfg(windows)]
     fn get_memory_model() -> (usize, usize) {
         use windows_sys::Win32::System::SystemInformation::{GetSystemInfo, SYSTEM_INFO};
-        let mut i: SYSTEM_INFO = util::mem::uninit();
+        let mut i: SYSTEM_INFO = unsafe { util::mem::uninit() };
 
         unsafe { GetSystemInfo(&mut i) };
 

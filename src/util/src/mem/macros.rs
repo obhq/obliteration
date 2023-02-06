@@ -1,6 +1,6 @@
 macro_rules! read_le {
     ($ty:ty, $from:ident, $offset:ident, $size:literal) => {{
-        let mut buf: [u8; $size] = uninit();
+        let mut buf: [u8; $size] = unsafe { uninit() };
         let from = unsafe { $from.add($offset) };
 
         unsafe { from.copy_to_nonoverlapping(buf.as_mut_ptr(), $size) };
@@ -11,7 +11,7 @@ macro_rules! read_le {
 
 macro_rules! read_be {
     ($ty:ty, $from:ident, $offset:ident, $size:literal) => {{
-        let mut buf: [u8; $size] = uninit();
+        let mut buf: [u8; $size] = unsafe { uninit() };
         let from = unsafe { $from.add($offset) };
 
         unsafe { from.copy_to_nonoverlapping(buf.as_mut_ptr(), $size) };

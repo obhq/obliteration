@@ -18,20 +18,20 @@ impl Dirent {
 
     pub fn read<F: Read>(from: &mut F) -> Result<Self, ReadError> {
         // Read static sized fields.
-        let mut data: [u8; 16] = uninit();
+        let mut data: [u8; 16] = unsafe { uninit() };
 
         from.read_exact(&mut data)?;
 
         let raw = data.as_ptr();
-        let entsize = read_u32_le(raw, 0x0c) as usize;
+        let entsize = unsafe { read_u32_le(raw, 0x0c) } as usize;
 
         if entsize == 0 {
             return Err(ReadError::EndOfEntry);
         }
 
-        let ino = read_u32_le(raw, 0x00) as usize;
-        let ty = read_u32_le(raw, 0x04);
-        let namelen = read_u32_le(raw, 0x08) as usize;
+        let ino = unsafe { read_u32_le(raw, 0x00) } as usize;
+        let ty = unsafe { read_u32_le(raw, 0x04) };
+        let namelen = unsafe { read_u32_le(raw, 0x08) } as usize;
 
         // Read name.
         let mut name = new_buffer(namelen);

@@ -43,14 +43,14 @@ impl<I: Read + Seek> ExFat<I> {
         // Load fields.
         let boot = boot.as_ptr();
         let params = Params {
-            fat_offset: read_u32_le(boot, 80) as u64,
-            fat_length: read_u32_le(boot, 84) as u64,
-            cluster_heap_offset: read_u32_le(boot, 88) as u64,
-            cluster_count: read_u32_le(boot, 92) as usize,
-            first_cluster_of_root_directory: read_u32_le(boot, 96) as usize,
-            volume_flags: read_u16_le(boot, 106).into(),
+            fat_offset: unsafe { read_u32_le(boot, 80) } as u64,
+            fat_length: unsafe { read_u32_le(boot, 84) } as u64,
+            cluster_heap_offset: unsafe { read_u32_le(boot, 88) } as u64,
+            cluster_count: unsafe { read_u32_le(boot, 92) } as usize,
+            first_cluster_of_root_directory: unsafe { read_u32_le(boot, 96) } as usize,
+            volume_flags: unsafe { read_u16_le(boot, 106) }.into(),
             bytes_per_sector: {
-                let v = read_u8(boot, 108);
+                let v = unsafe { read_u8(boot, 108) };
 
                 if (9..=12).contains(&v) {
                     1u64 << v
@@ -59,18 +59,18 @@ impl<I: Read + Seek> ExFat<I> {
                 }
             },
             sectors_per_cluster: {
-                let v = read_u8(boot, 109);
+                let v = unsafe { read_u8(boot, 109) };
 
                 // No need to check if subtraction is underflow because we already checked for the
                 // valid value on the above.
-                if v <= (25 - read_u8(boot, 108)) {
+                if v <= (25 - unsafe { read_u8(boot, 108) }) {
                     1u64 << v
                 } else {
                     return Err(OpenError::InvalidSectorsPerClusterShift);
                 }
             },
             number_of_fats: {
-                let v = read_u8(boot, 110);
+                let v = unsafe { read_u8(boot, 110) };
 
                 if v == 1 || v == 2 {
                     v
@@ -159,7 +159,7 @@ impl<I: Read + Seek> ExFat<I> {
 
                     // Load fields.
                     let data = entry.data().as_ptr();
-                    let checksum = read_u32_le(data, 4);
+                    let checksum = unsafe { read_u32_le(data, 4) };
                     let data = match ClusterAllocation::load(&entry) {
                         Ok(v) => v,
                         Err(e) => {

@@ -29,16 +29,16 @@ impl Param {
 
         // Check magic.
         let header = raw.as_ptr();
-        let magic = read_u32_be(header, 0);
+        let magic = unsafe { read_u32_be(header, 0) };
 
         if magic != 0x00505346 {
             return Err(ReadError::InvalidMagic);
         }
 
         // Read header.
-        let key_table = read_u32_le(header, 8) as usize;
-        let data_table = read_u32_le(header, 12) as usize;
-        let entries = read_u32_le(header, 16) as usize;
+        let key_table = unsafe { read_u32_le(header, 8) } as usize;
+        let data_table = unsafe { read_u32_le(header, 12) } as usize;
+        let entries = unsafe { read_u32_le(header, 16) } as usize;
 
         // Read entries.
         let mut title: Option<String> = None;
@@ -52,10 +52,10 @@ impl Param {
                 None => return Err(ReadError::TooSmall),
             };
 
-            let key_offset = key_table + read_u16_le(entry, 0) as usize;
-            let format = read_u16_be(entry, 2);
-            let len = read_u32_le(entry, 4) as usize;
-            let data_offset = data_table + read_u32_le(entry, 12) as usize;
+            let key_offset = key_table + unsafe { read_u16_le(entry, 0) } as usize;
+            let format = unsafe { read_u16_be(entry, 2) };
+            let len = unsafe { read_u32_le(entry, 4) } as usize;
+            let data_offset = data_table + unsafe { read_u32_le(entry, 12) } as usize;
 
             if len == 0 {
                 return Err(ReadError::InvalidEntryHeader(i));

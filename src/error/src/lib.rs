@@ -8,7 +8,7 @@ pub extern "C" fn error_free(err: *mut Error) {
 
 #[no_mangle]
 pub extern "C" fn error_message(err: &Error) -> *const c_char {
-    util::str::to_c(&err.to_string())
+    unsafe { util::str::to_c(&err.to_string()) }
 }
 
 /// Represents an error to return to C world. Usually this will be using on any functions that

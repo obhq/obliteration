@@ -11,10 +11,10 @@ impl Entry {
     pub(super) const RAW_SIZE: usize = 32;
 
     pub(super) fn read(data: *const u8) -> Self {
-        let flags = read_u32_le(data, 0);
-        let offset = read_u64_le(data, 8);
-        let compressed_size = read_u64_le(data, 16);
-        let uncompressed_size = read_u64_le(data, 24);
+        let flags = unsafe { read_u32_le(data, 0) };
+        let offset = unsafe { read_u64_le(data, 8) };
+        let compressed_size = unsafe { read_u64_le(data, 16) };
+        let uncompressed_size = unsafe { read_u64_le(data, 24) };
 
         Self {
             flags,

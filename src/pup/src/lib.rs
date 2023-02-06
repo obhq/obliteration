@@ -14,7 +14,7 @@ pub mod reader;
 
 #[no_mangle]
 pub extern "C" fn pup_open(file: *const c_char, err: *mut *mut error::Error) -> *mut Pup {
-    let file = util::str::from_c_unchecked(file);
+    let file = unsafe { util::str::from_c_unchecked(file) };
     let pup = match Pup::open(file) {
         Ok(v) => Box::new(v),
         Err(e) => {
@@ -28,7 +28,7 @@ pub extern "C" fn pup_open(file: *const c_char, err: *mut *mut error::Error) -> 
 
 #[no_mangle]
 pub extern "C" fn pup_dump_system(pup: &Pup, path: *const c_char) -> *mut error::Error {
-    let path = util::str::from_c_unchecked(path);
+    let path = unsafe { util::str::from_c_unchecked(path) };
 
     if let Err(e) = pup.dump_system_image(path) {
         return error::Error::new(&e);
@@ -66,14 +66,14 @@ impl Pup {
 
         // Check magic.
         let hdr = file.as_ptr();
-        let magic: [u8; 4] = read_array(hdr, 0);
+        let magic: [u8; 4] = unsafe { read_array(hdr, 0) };
 
         if magic != [0x4f, 0x15, 0x3d, 0x1d] {
             return Err(OpenError::InvalidMagic);
         }
 
         // Read entry headers.
-        let entry_count = read_u16_le(hdr, 24) as usize;
+        let entry_count = unsafe { read_u16_le(hdr, 24) } as usize;
         let mut entries: Vec<Entry> = Vec::with_capacity(entry_count);
 
         for i in 0..entry_count {

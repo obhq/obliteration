@@ -3,7 +3,7 @@ use std::io::{Read, Write};
 
 macro_rules! read_le {
     ($ty:ty, $from:ident, $size:literal) => {{
-        let mut buf: [u8; $size] = uninit();
+        let mut buf: [u8; $size] = unsafe { uninit() };
 
         $from.read_exact(&mut buf)?;
 
@@ -13,7 +13,7 @@ macro_rules! read_le {
 
 macro_rules! read_be {
     ($ty:ty, $from:ident, $size:literal) => {{
-        let mut buf: [u8; $size] = uninit();
+        let mut buf: [u8; $size] = unsafe { uninit() };
 
         $from.read_exact(&mut buf)?;
 
@@ -35,7 +35,7 @@ macro_rules! write_be {
 
 pub fn read_c_str<R: Read>(r: &mut R) -> std::io::Result<Vec<u8>> {
     let mut buf: Vec<u8> = Vec::new();
-    let mut ch: [u8; 1] = uninit();
+    let mut ch: [u8; 1] = unsafe { uninit() };
 
     loop {
         r.read_exact(&mut ch)?;
@@ -99,7 +99,7 @@ pub fn write_u64_be<W: Write>(w: &mut W, v: u64) -> std::io::Result<()> {
 }
 
 pub fn read_array<R: Read, const L: usize>(r: &mut R) -> std::io::Result<[u8; L]> {
-    let mut buf: [u8; L] = uninit();
+    let mut buf: [u8; L] = unsafe { uninit() };
 
     r.read_exact(&mut buf)?;
 

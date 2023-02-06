@@ -99,8 +99,8 @@ impl DynamicLinking {
         while offset < data.len() {
             // Read fields.
             let data = unsafe { data.as_ptr().add(offset) };
-            let tag = read_i64_le(data, 0);
-            let value = read_u64_le(data, 8);
+            let tag = unsafe { read_i64_le(data, 0) };
+            let value = unsafe { read_u64_le(data, 8) };
 
             // Parse entry.
             match tag {
