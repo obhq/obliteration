@@ -140,8 +140,7 @@ If you don't have a PS4 application for testing you can download PS Scene Quiz f
 
 ### Rules for Rust sources
 
-- Don't be afraid to use `unsafe` when it is necessary. We are writing an application that requires very high-performance code and we use Rust to assist us on this task, not to use Rust to compromise performance that C/C++ can provide.
-- Any functions that operate on pointers don't need to mark as `unsafe`. The reason is that it will require the caller to wrap it in `unsafe`. We already embrace `unsafe` code so no point to make it harder to use.
+- Use unsafe code only when you know what you are doing. When you do try to wrap it in a safe function so other people who are not familiar with unsafe code can have a safe life.
 - Don't chain method calls without an intermediate variable if the result code is hard to follow. We encourage code readability as a pleasure when writing so try to make it easy to read and understand for other people.
 - Do not blindly cast an integer. Make sure the value can fit in a destination type. We don't have any plans to support non-64-bit systems so the pointer size and its related types like `usize` are always 64-bits.
 
@@ -166,6 +165,7 @@ We use icons from https://materialdesignicons.com for action icons (e.g. on the 
 
 ## License
 
-- All source code except `src/pfs` and `src/pkg` is licensed under MIT license.
+- `src/ansi_escape.hpp`, `src/ansi_escape.cpp`, `src/log_formatter.hpp` and `src/log_formatter.cpp` are licensed under GPL-3.0 only.
 - `src/pfs` and `src/pkg` are licensed under LGPL-3.0 license.
+- All other source code is licensed under MIT license.
 - All release binaries are under GPL-3.0 license.

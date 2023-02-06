@@ -28,11 +28,13 @@ ExternalProject_Add(core
 
 # Setup application target.
 add_executable(obliteration WIN32
+    ansi_escape.cpp
     app_data.cpp
     game_models.cpp
     game_settings.cpp
     game_settings_dialog.cpp
     initialize_dialog.cpp
+    log_formatter.cpp
     main.cpp
     main_window.cpp
     path.cpp

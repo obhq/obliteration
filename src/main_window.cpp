@@ -2,6 +2,7 @@
 #include "app_data.hpp"
 #include "game_models.hpp"
 #include "game_settings_dialog.hpp"
+#include "log_formatter.hpp"
 #include "pkg.hpp"
 #include "progress_dialog.hpp"
 #include "settings.hpp"
@@ -92,18 +93,21 @@ MainWindow::MainWindow() :
     m_tab->addTab(m_games, QIcon(":/resources/view-comfy.svg"), "Games");
 
     // Setup log view.
-    m_log = new QPlainTextEdit();
-    m_log->setReadOnly(true);
-    m_log->setLineWrapMode(QPlainTextEdit::NoWrap);
-    m_log->setMaximumBlockCount(10000);
+    auto log = new QPlainTextEdit();
+
+    log->setReadOnly(true);
+    log->setLineWrapMode(QPlainTextEdit::NoWrap);
+    log->setMaximumBlockCount(10000);
 
 #ifdef _WIN32
-    m_log->document()->setDefaultFont(QFont("Courier New", 10));
+    log->document()->setDefaultFont(QFont("Courier New", 10));
 #else
-    m_log->document()->setDefaultFont(QFont("monospace", 10));
+    log->document()->setDefaultFont(QFont("monospace", 10));
 #endif
 
-    m_tab->addTab(m_log, QIcon(":/resources/card-text-outline.svg"), "Log");
+    m_log = new LogFormatter(log, this);
+
+    m_tab->addTab(log, QIcon(":/resources/card-text-outline.svg"), "Log");
 
     // Setup status bar.
     statusBar();
@@ -333,7 +337,7 @@ void MainWindow::startGame(const QModelIndex &index)
     auto game = model->get(index.row()); // Qt already guaranteed the index is valid.
 
     // Clear previous log and switch to log view.
-    m_log->clear();
+    m_log->reset();
     m_tab->setCurrentIndex(1);
 
     // Get full path to kernel binary.
@@ -423,18 +427,19 @@ void MainWindow::kernelOutput()
     // It is possible for Qt to signal this slot after QProcess::errorOccurred or QProcess::finished
     // so we need to check if the those signals has been received.
     while (m_kernel && m_kernel->canReadLine()) {
-        auto line = m_kernel->readLine();
+        auto line = QString::fromUtf8(m_kernel->readLine());
 
-        if (line.endsWith('\n')) {
-            line.chop(1);
-        }
-
-        m_log->appendPlainText(QString::fromUtf8(line));
+        m_log->appendMessage(line, InfoMessageFormat);
     }
 }
 
 void MainWindow::kernelTerminated(int, QProcess::ExitStatus)
 {
+    // Do nothing if we got QProcess::errorOccurred before this signal.
+    if (!m_kernel) {
+        return;
+    }
+
     kernelOutput();
 
     QMessageBox::critical(this, "Error", "The emulator kernel has been stopped unexpectedly. Please take a look on the log and report the issue.");
