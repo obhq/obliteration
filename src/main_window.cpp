@@ -435,6 +435,11 @@ void MainWindow::kernelOutput()
 
 void MainWindow::kernelTerminated(int, QProcess::ExitStatus)
 {
+    // Do nothing if we got QProcess::errorOccurred before this signal.
+    if (!m_kernel) {
+        return;
+    }
+
     kernelOutput();
 
     QMessageBox::critical(this, "Error", "The emulator kernel has been stopped unexpectedly. Please take a look on the log and report the issue.");
