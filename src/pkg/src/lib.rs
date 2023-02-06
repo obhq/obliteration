@@ -22,7 +22,7 @@ pub mod keys;
 pub mod param;
 
 #[no_mangle]
-pub extern "C" fn pkg_open(file: *const c_char, error: *mut *mut error::Error) -> *mut Pkg {
+pub unsafe extern "C" fn pkg_open(file: *const c_char, error: *mut *mut error::Error) -> *mut Pkg {
     let path = unsafe { util::str::from_c_unchecked(file) };
     let pkg = match Pkg::open(path) {
         Ok(v) => Box::new(v),
@@ -36,12 +36,12 @@ pub extern "C" fn pkg_open(file: *const c_char, error: *mut *mut error::Error) -
 }
 
 #[no_mangle]
-pub extern "C" fn pkg_close(pkg: *mut Pkg) {
+pub unsafe extern "C" fn pkg_close(pkg: *mut Pkg) {
     unsafe { Box::from_raw(pkg) };
 }
 
 #[no_mangle]
-pub extern "C" fn pkg_get_param(pkg: &Pkg, error: *mut *mut c_char) -> *mut Param {
+pub unsafe extern "C" fn pkg_get_param(pkg: &Pkg, error: *mut *mut c_char) -> *mut Param {
     let param = match pkg.get_param() {
         Ok(v) => Box::new(v),
         Err(e) => {
@@ -54,7 +54,7 @@ pub extern "C" fn pkg_get_param(pkg: &Pkg, error: *mut *mut c_char) -> *mut Para
 }
 
 #[no_mangle]
-pub extern "C" fn pkg_extract(
+pub unsafe extern "C" fn pkg_extract(
     pkg: &Pkg,
     dir: *const c_char,
     status: extern "C" fn(*const c_char, u64, u64, ud: *mut c_void),
@@ -69,7 +69,10 @@ pub extern "C" fn pkg_extract(
 }
 
 #[no_mangle]
-pub extern "C" fn pkg_param_open(file: *const c_char, error: *mut *mut c_char) -> *mut Param {
+pub unsafe extern "C" fn pkg_param_open(
+    file: *const c_char,
+    error: *mut *mut c_char,
+) -> *mut Param {
     // Open file.
     let mut file = match File::open(unsafe { util::str::from_c_unchecked(file) }) {
         Ok(v) => v,
@@ -113,17 +116,17 @@ pub extern "C" fn pkg_param_open(file: *const c_char, error: *mut *mut c_char) -
 }
 
 #[no_mangle]
-pub extern "C" fn pkg_param_title_id(param: &Param) -> *mut c_char {
+pub unsafe extern "C" fn pkg_param_title_id(param: &Param) -> *mut c_char {
     unsafe { util::str::to_c(param.title_id()) }
 }
 
 #[no_mangle]
-pub extern "C" fn pkg_param_title(param: &Param) -> *mut c_char {
+pub unsafe extern "C" fn pkg_param_title(param: &Param) -> *mut c_char {
     unsafe { util::str::to_c(param.title()) }
 }
 
 #[no_mangle]
-pub extern "C" fn pkg_param_close(param: *mut Param) {
+pub unsafe extern "C" fn pkg_param_close(param: *mut Param) {
     unsafe { Box::from_raw(param) };
 }
 
@@ -213,7 +216,7 @@ impl Pkg {
             };
 
             // Read entry.
-            let entry = Entry::read(raw);
+            let entry = unsafe { Entry::read(raw) };
 
             // Get file path.
             let path = match entry.to_path(dir.as_ref()) {
@@ -672,7 +675,7 @@ impl Pkg {
             };
 
             // Read entry.
-            let entry = Entry::read(raw);
+            let entry = unsafe { Entry::read(raw) };
 
             if entry.id() != id {
                 continue;

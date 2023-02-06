@@ -167,6 +167,7 @@ impl<'a> Seek for File<'a> {
 }
 
 impl<'a> Read for File<'a> {
+    #[allow(clippy::uninit_vec)]
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         // Get inode.
         let inode = match self.pfs.inodes.get(self.inode) {

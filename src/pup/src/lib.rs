@@ -13,7 +13,7 @@ pub mod entry;
 pub mod reader;
 
 #[no_mangle]
-pub extern "C" fn pup_open(file: *const c_char, err: *mut *mut error::Error) -> *mut Pup {
+pub unsafe extern "C" fn pup_open(file: *const c_char, err: *mut *mut error::Error) -> *mut Pup {
     let file = unsafe { util::str::from_c_unchecked(file) };
     let pup = match Pup::open(file) {
         Ok(v) => Box::new(v),
@@ -27,7 +27,7 @@ pub extern "C" fn pup_open(file: *const c_char, err: *mut *mut error::Error) -> 
 }
 
 #[no_mangle]
-pub extern "C" fn pup_dump_system(pup: &Pup, path: *const c_char) -> *mut error::Error {
+pub unsafe extern "C" fn pup_dump_system(pup: &Pup, path: *const c_char) -> *mut error::Error {
     let path = unsafe { util::str::from_c_unchecked(path) };
 
     if let Err(e) = pup.dump_system_image(path) {
@@ -38,7 +38,7 @@ pub extern "C" fn pup_dump_system(pup: &Pup, path: *const c_char) -> *mut error:
 }
 
 #[no_mangle]
-pub extern "C" fn pup_free(pup: *mut Pup) {
+pub unsafe extern "C" fn pup_free(pup: *mut Pup) {
     unsafe { Box::from_raw(pup) };
 }
 

@@ -75,6 +75,7 @@ impl<F: Read + Seek> Reader<F> {
         self.original_size
     }
 
+    #[allow(clippy::uninit_vec)]
     fn read_compressed_block(&mut self, num: u64) -> std::io::Result<()> {
         // Get end offset.
         let end = match self.compressed_blocks.get(num as usize + 1) {

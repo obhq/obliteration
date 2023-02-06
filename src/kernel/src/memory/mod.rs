@@ -531,9 +531,7 @@ impl Protections {
             PAGE_EXECUTE_READWRITE
         } else if cpu == Self::CPU_READ {
             PAGE_READONLY
-        } else if cpu == Self::CPU_READ | Self::CPU_WRITE {
-            PAGE_READWRITE
-        } else if cpu == Self::CPU_WRITE {
+        } else if cpu == (Self::CPU_READ | Self::CPU_WRITE) || cpu == Self::CPU_WRITE {
             PAGE_READWRITE
         } else {
             PAGE_NOACCESS

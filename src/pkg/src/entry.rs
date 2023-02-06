@@ -41,7 +41,7 @@ impl Entry {
     pub const PIC0_DDS: u32 = 0x000012a0;
     pub const PIC1_DDS: u32 = 0x000012c0;
 
-    pub fn read(raw: *const u8) -> Self {
+    pub unsafe fn read(raw: *const u8) -> Self {
         let id = unsafe { read_u32_be(raw, 0) };
         let filename_offset = unsafe { read_u32_be(raw, 4) };
         let flags1 = unsafe { read_u32_be(raw, 8) };
