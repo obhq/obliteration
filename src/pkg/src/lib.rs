@@ -22,8 +22,8 @@ pub mod keys;
 pub mod param;
 
 #[no_mangle]
-pub extern "C" fn pkg_open(file: *const c_char, error: *mut *mut error::Error) -> *mut Pkg {
-    let path = util::str::from_c_unchecked(file);
+pub unsafe extern "C" fn pkg_open(file: *const c_char, error: *mut *mut error::Error) -> *mut Pkg {
+    let path = unsafe { util::str::from_c_unchecked(file) };
     let pkg = match Pkg::open(path) {
         Ok(v) => Box::new(v),
         Err(e) => {
@@ -36,16 +36,16 @@ pub extern "C" fn pkg_open(file: *const c_char, error: *mut *mut error::Error) -
 }
 
 #[no_mangle]
-pub extern "C" fn pkg_close(pkg: *mut Pkg) {
+pub unsafe extern "C" fn pkg_close(pkg: *mut Pkg) {
     unsafe { Box::from_raw(pkg) };
 }
 
 #[no_mangle]
-pub extern "C" fn pkg_get_param(pkg: &Pkg, error: *mut *mut c_char) -> *mut Param {
+pub unsafe extern "C" fn pkg_get_param(pkg: &Pkg, error: *mut *mut c_char) -> *mut Param {
     let param = match pkg.get_param() {
         Ok(v) => Box::new(v),
         Err(e) => {
-            util::str::set_c(error, &e.to_string());
+            unsafe { util::str::set_c(error, &e.to_string()) };
             return null_mut();
         }
     };
@@ -54,13 +54,13 @@ pub extern "C" fn pkg_get_param(pkg: &Pkg, error: *mut *mut c_char) -> *mut Para
 }
 
 #[no_mangle]
-pub extern "C" fn pkg_extract(
+pub unsafe extern "C" fn pkg_extract(
     pkg: &Pkg,
     dir: *const c_char,
     status: extern "C" fn(*const c_char, u64, u64, ud: *mut c_void),
     ud: *mut c_void,
 ) -> *mut error::Error {
-    let dir = util::str::from_c_unchecked(dir);
+    let dir = unsafe { util::str::from_c_unchecked(dir) };
 
     match pkg.extract(dir, status, ud) {
         Ok(_) => null_mut(),
@@ -69,12 +69,15 @@ pub extern "C" fn pkg_extract(
 }
 
 #[no_mangle]
-pub extern "C" fn pkg_param_open(file: *const c_char, error: *mut *mut c_char) -> *mut Param {
+pub unsafe extern "C" fn pkg_param_open(
+    file: *const c_char,
+    error: *mut *mut c_char,
+) -> *mut Param {
     // Open file.
-    let mut file = match File::open(util::str::from_c_unchecked(file)) {
+    let mut file = match File::open(unsafe { util::str::from_c_unchecked(file) }) {
         Ok(v) => v,
         Err(e) => {
-            util::str::set_c(error, &e.to_string());
+            unsafe { util::str::set_c(error, &e.to_string()) };
             return null_mut();
         }
     };
@@ -86,16 +89,16 @@ pub extern "C" fn pkg_param_open(file: *const c_char, error: *mut *mut c_char) -
         Ok(v) => {
             if v.len() <= 4096 {
                 if let Err(e) = file.read_to_end(&mut data) {
-                    util::str::set_c(error, &e.to_string());
+                    unsafe { util::str::set_c(error, &e.to_string()) };
                     return null_mut();
                 }
             } else {
-                util::str::set_c(error, "file too large");
+                unsafe { util::str::set_c(error, "file too large") };
                 return null_mut();
             }
         }
         Err(e) => {
-            util::str::set_c(error, &e.to_string());
+            unsafe { util::str::set_c(error, &e.to_string()) };
             return null_mut();
         }
     };
@@ -104,7 +107,7 @@ pub extern "C" fn pkg_param_open(file: *const c_char, error: *mut *mut c_char) -
     let param = match Param::read(&data) {
         Ok(v) => Box::new(v),
         Err(e) => {
-            util::str::set_c(error, &e.to_string());
+            unsafe { util::str::set_c(error, &e.to_string()) };
             return null_mut();
         }
     };
@@ -113,17 +116,17 @@ pub extern "C" fn pkg_param_open(file: *const c_char, error: *mut *mut c_char) -
 }
 
 #[no_mangle]
-pub extern "C" fn pkg_param_title_id(param: &Param) -> *mut c_char {
-    util::str::to_c(param.title_id())
+pub unsafe extern "C" fn pkg_param_title_id(param: &Param) -> *mut c_char {
+    unsafe { util::str::to_c(param.title_id()) }
 }
 
 #[no_mangle]
-pub extern "C" fn pkg_param_title(param: &Param) -> *mut c_char {
-    util::str::to_c(param.title())
+pub unsafe extern "C" fn pkg_param_title(param: &Param) -> *mut c_char {
+    unsafe { util::str::to_c(param.title()) }
 }
 
 #[no_mangle]
-pub extern "C" fn pkg_param_close(param: *mut Param) {
+pub unsafe extern "C" fn pkg_param_close(param: *mut Param) {
     unsafe { Box::from_raw(param) };
 }
 
@@ -213,7 +216,7 @@ impl Pkg {
             };
 
             // Read entry.
-            let entry = Entry::read(raw);
+            let entry = unsafe { Entry::read(raw) };
 
             // Get file path.
             let path = match entry.to_path(dir.as_ref()) {
@@ -376,7 +379,7 @@ impl Pkg {
         };
 
         // Enumerate items.
-        let mut buffer: Vec<u8> = new_buffer(32768);
+        let mut buffer: Vec<u8> = unsafe { new_buffer(32768) };
 
         for (name, item) in items {
             use pfs::directory::Item;
@@ -568,7 +571,7 @@ impl Pkg {
 
         // Dump blocks.
         loop {
-            let mut block: [u8; 16] = uninit();
+            let mut block: [u8; 16] = unsafe { uninit() };
 
             encrypted = match util::array::read_from_slice(&mut block, encrypted) {
                 Some(v) => v,
@@ -603,12 +606,12 @@ impl Pkg {
         let secret = sha256.finalize();
 
         // Extract key and IV.
-        let mut key: [u8; 16] = uninit();
-        let mut iv: [u8; 16] = uninit();
+        let mut key: [u8; 16] = unsafe { uninit() };
+        let mut iv: [u8; 16] = unsafe { uninit() };
         let mut p = secret.as_ptr();
 
-        p = util::array::read_from_ptr(&mut iv, p);
-        util::array::read_from_ptr(&mut key, p);
+        p = unsafe { util::array::read_from_ptr(&mut iv, p) };
+        unsafe { util::array::read_from_ptr(&mut key, p) };
 
         (key, iv)
     }
@@ -624,7 +627,7 @@ impl Pkg {
         };
 
         // Read seed.
-        let mut seed: [u8; 32] = uninit();
+        let mut seed: [u8; 32] = unsafe { uninit() };
 
         data = match util::array::read_from_slice(&mut seed, data) {
             Some(v) => v,
@@ -632,7 +635,7 @@ impl Pkg {
         };
 
         // Read digests.
-        let mut digests: [[u8; 32]; 7] = uninit();
+        let mut digests: [[u8; 32]; 7] = unsafe { uninit() };
 
         for i in 0..7 {
             data = match util::array::read_from_slice(&mut digests[i], data) {
@@ -642,7 +645,7 @@ impl Pkg {
         }
 
         // Read keys.
-        let mut keys: [[u8; 256]; 7] = uninit();
+        let mut keys: [[u8; 256]; 7] = unsafe { uninit() };
 
         for i in 0..7 {
             data = match util::array::read_from_slice(&mut keys[i], data) {
@@ -672,7 +675,7 @@ impl Pkg {
             };
 
             // Read entry.
-            let entry = Entry::read(raw);
+            let entry = unsafe { Entry::read(raw) };
 
             if entry.id() != id {
                 continue;

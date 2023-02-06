@@ -23,8 +23,8 @@ pub(super) fn get_xts_keys(ekpfs: &[u8], seed: &[u8; 16]) -> ([u8; 16], [u8; 16]
 
     // Split key.
     let secret = hmac.finalize().into_bytes();
-    let mut data_key: [u8; 16] = uninit();
-    let mut tweak_key: [u8; 16] = uninit();
+    let mut data_key: [u8; 16] = unsafe { uninit() };
+    let mut tweak_key: [u8; 16] = unsafe { uninit() };
 
     tweak_key.copy_from_slice(&secret[..16]);
     data_key.copy_from_slice(&secret[16..]);

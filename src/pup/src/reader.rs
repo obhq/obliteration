@@ -145,7 +145,7 @@ impl<'pup> BlockedReader<'pup> {
 
         // Not sure what is this data. Maybe signature?
         for _ in 0..block_count {
-            let mut buf: [u8; 32] = uninit();
+            let mut buf: [u8; 32] = unsafe { uninit() };
 
             if let Err(e) = table_reader.read_exact(&mut buf) {
                 return Err(BlockedReaderError::ReadTableFailed(e));
@@ -162,8 +162,8 @@ impl<'pup> BlockedReader<'pup> {
             };
 
             let data = data.as_ptr();
-            let offset = read_u32_le(data, 0);
-            let size = read_u32_le(data, 4);
+            let offset = unsafe { read_u32_le(data, 0) };
+            let size = unsafe { read_u32_le(data, 4) };
 
             blocks.push(Block { offset, size })
         }

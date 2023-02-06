@@ -85,8 +85,8 @@ impl FileEntry {
     {
         // Load fields.
         let data = raw.data.as_ptr();
-        let secondary_count = read_u8(data, 1) as usize;
-        let attributes = FileAttributes(read_u16_le(data, 4));
+        let secondary_count = unsafe { read_u8(data, 1) } as usize;
+        let attributes = FileAttributes(unsafe { read_u16_le(data, 4) });
 
         if secondary_count < 1 {
             return Err(FileEntryError::NoStreamExtension(raw.index, raw.cluster));
@@ -183,7 +183,7 @@ impl StreamEntry {
     fn load(raw: RawEntry) -> Result<Self, FileEntryError> {
         // Load GeneralSecondaryFlags.
         let data = raw.data.as_ptr();
-        let general_secondary_flags = SecondaryFlags(read_u8(data, 1));
+        let general_secondary_flags = SecondaryFlags(unsafe { read_u8(data, 1) });
 
         if !general_secondary_flags.allocation_possible() {
             return Err(FileEntryError::InvalidStreamExtension(
@@ -193,7 +193,7 @@ impl StreamEntry {
         }
 
         // Load NameLength.
-        let name_length = read_u8(data, 3) as usize;
+        let name_length = unsafe { read_u8(data, 3) } as usize;
 
         if name_length < 1 {
             return Err(FileEntryError::InvalidStreamExtension(
@@ -203,7 +203,7 @@ impl StreamEntry {
         }
 
         // Load ValidDataLength and cluster allocation.
-        let valid_data_length = read_u64_le(data, 8);
+        let valid_data_length = unsafe { read_u64_le(data, 8) };
         let alloc = match ClusterAllocation::load(&raw) {
             Ok(v) => v,
             Err(_) => {
@@ -323,8 +323,8 @@ impl ClusterAllocation {
     pub fn load(entry: &RawEntry) -> Result<Self, ClusterAllocationError> {
         // Load fields.
         let data = entry.data().as_ptr();
-        let first_cluster = read_u32_le(data, 20) as usize;
-        let data_length = read_u64_le(data, 24);
+        let first_cluster = unsafe { read_u32_le(data, 20) } as usize;
+        let data_length = unsafe { read_u64_le(data, 24) };
 
         // Check values.
         if first_cluster == 0 {

@@ -5,5 +5,6 @@
   },
   "files.insertFinalNewline": true,
   "files.trimFinalNewlines": true,
-  "files.trimTrailingWhitespace": true
+  "files.trimTrailingWhitespace": true,
+  "sarif-viewer.connectToGithubCodeScanning": "off"
 }

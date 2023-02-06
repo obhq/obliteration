@@ -7,7 +7,6 @@ use std::fmt::{Display, Formatter};
 
 use iced_x86::code_asm::CodeLabel;
 use iced_x86::Instruction;
-use libc;
 
 use super::Segment;
 
@@ -280,7 +279,7 @@ pub trait Recompiler {
     #[cfg(windows)]
     fn page_size() -> usize {
         use windows_sys::Win32::System::SystemInformation::{GetSystemInfo, SYSTEM_INFO};
-        let mut i: SYSTEM_INFO = util::mem::uninit();
+        let mut i: SYSTEM_INFO = unsafe { util::mem::uninit() };
 
         unsafe { GetSystemInfo(&mut i) };
 

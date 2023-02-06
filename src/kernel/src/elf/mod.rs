@@ -28,7 +28,7 @@ impl SignedElf {
         };
 
         // Read SELF header.
-        let mut hdr: [u8; 32] = uninit();
+        let mut hdr: [u8; 32] = unsafe { uninit() };
 
         if let Err(e) = file.read_exact(&mut hdr) {
             return Err(LoadError::ReadSelfHeaderFailed(e));
@@ -39,23 +39,23 @@ impl SignedElf {
         // Check magic.
         // Kyty also checking if Category = 0x01 & Program Type = 0x01 & Padding = 0x00.
         // Let's check only magic for now until something is broken.
-        let magic: [u8; 8] = read_array(hdr, 0x00);
-        let unknown = read_u16_le(hdr, 0x1a);
+        let magic: [u8; 8] = unsafe { read_array(hdr, 0x00) };
+        let unknown = unsafe { read_u16_le(hdr, 0x1a) };
 
         if magic != [0x4f, 0x15, 0x3d, 0x1d, 0x00, 0x01, 0x01, 0x12] || unknown != 0x22 {
             return Err(LoadError::InvalidSelfMagic);
         }
 
         // Load SELF fields.
-        let file_size = read_u64_le(hdr, 0x10);
+        let file_size = unsafe { read_u64_le(hdr, 0x10) };
 
         // Load SELF segment headers.
-        let segment_count = read_u16_le(hdr, 0x18) as usize;
+        let segment_count = unsafe { read_u16_le(hdr, 0x18) } as usize;
         let mut segments: Vec<SignedSegment> = Vec::with_capacity(segment_count);
 
         for i in 0..segment_count {
             // Read header.
-            let mut hdr: [u8; 32] = uninit();
+            let mut hdr: [u8; 32] = unsafe { uninit() };
 
             if let Err(e) = file.read_exact(&mut hdr) {
                 return Err(LoadError::ReadSelfSegmentHeaderFailed(i, e));
@@ -64,10 +64,10 @@ impl SignedElf {
             let hdr = hdr.as_ptr();
 
             // Load fields.
-            let flags = read_u64_le(hdr, 0);
-            let offset = read_u64_le(hdr, 8);
-            let compressed_size = read_u64_le(hdr, 16);
-            let decompressed_size = read_u64_le(hdr, 24);
+            let flags = unsafe { read_u64_le(hdr, 0) };
+            let offset = unsafe { read_u64_le(hdr, 8) };
+            let compressed_size = unsafe { read_u64_le(hdr, 16) };
+            let decompressed_size = unsafe { read_u64_le(hdr, 24) };
 
             segments.push(SignedSegment::new(
                 flags.into(),
@@ -79,7 +79,7 @@ impl SignedElf {
 
         // Read ELF header.
         let elf_offset = file.stream_position().unwrap();
-        let mut hdr: [u8; 64] = uninit();
+        let mut hdr: [u8; 64] = unsafe { uninit() };
 
         if let Err(e) = file.read_exact(&mut hdr) {
             return Err(LoadError::ReadElfHeaderFailed(e));
@@ -88,25 +88,25 @@ impl SignedElf {
         let hdr = hdr.as_ptr();
 
         // Check ELF magic.
-        let magic: [u8; 4] = read_array(hdr, 0x00);
+        let magic: [u8; 4] = unsafe { read_array(hdr, 0x00) };
 
         if magic != [0x7f, 0x45, 0x4c, 0x46] {
             return Err(LoadError::InvalidElfMagic);
         }
 
         // Check ELF type.
-        if read_u8(hdr, 0x04) != 2 {
+        if unsafe { read_u8(hdr, 0x04) } != 2 {
             return Err(LoadError::UnsupportedBitness);
         }
 
-        if read_u8(hdr, 0x05) != 1 {
+        if unsafe { read_u8(hdr, 0x05) } != 1 {
             return Err(LoadError::UnsupportedEndianness);
         }
 
         // Load ELF header.
-        let e_entry = read_u64_le(hdr, 0x18);
-        let e_phoff = read_u64_le(hdr, 0x20);
-        let e_phnum = read_u16_le(hdr, 0x38);
+        let e_entry = unsafe { read_u64_le(hdr, 0x18) };
+        let e_phoff = unsafe { read_u64_le(hdr, 0x20) };
+        let e_phnum = unsafe { read_u16_le(hdr, 0x38) };
 
         // Load program headers.
         let mut programs: Vec<Program> = Vec::with_capacity(e_phnum as _);
@@ -115,7 +115,7 @@ impl SignedElf {
 
         for i in 0..e_phnum {
             // Read header.
-            let mut hdr: [u8; 0x38] = uninit();
+            let mut hdr: [u8; 0x38] = unsafe { uninit() };
 
             if let Err(e) = file.read_exact(&mut hdr) {
                 return Err(LoadError::ReadProgramHeaderFailed(i as _, e));
@@ -124,13 +124,13 @@ impl SignedElf {
             let hdr = hdr.as_ptr();
 
             // Load fields.
-            let p_type = read_u32_le(hdr, 0x00);
-            let p_flags = read_u32_le(hdr, 0x04);
-            let p_offset = read_u64_le(hdr, 0x08);
-            let p_vaddr = read_u64_le(hdr, 0x10);
-            let p_filesz = read_u64_le(hdr, 0x20);
-            let p_memsz = read_u64_le(hdr, 0x28);
-            let p_align = read_u64_le(hdr, 0x30);
+            let p_type = unsafe { read_u32_le(hdr, 0x00) };
+            let p_flags = unsafe { read_u32_le(hdr, 0x04) };
+            let p_offset = unsafe { read_u64_le(hdr, 0x08) };
+            let p_vaddr = unsafe { read_u64_le(hdr, 0x10) };
+            let p_filesz = unsafe { read_u64_le(hdr, 0x20) };
+            let p_memsz = unsafe { read_u64_le(hdr, 0x28) };
+            let p_align = unsafe { read_u64_le(hdr, 0x30) };
 
             programs.push(Program::new(
                 p_type.into(),

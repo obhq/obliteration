@@ -84,7 +84,7 @@ impl<'a> Directory<'a> {
         // Read all dirents.
         let mut items: HashMap<Vec<u8>, Item<'a>> = HashMap::new();
         let block_size = image.header().block_size();
-        let mut block_data = new_buffer(block_size as usize);
+        let mut block_data = unsafe { new_buffer(block_size as usize) };
 
         for block_num in blocks {
             // Seek to block.

@@ -13,7 +13,7 @@ where
 }
 
 /// Fill `to` with `from` and return a pointer started on a next element. `to` and `from` **MUST** not overlap.
-pub fn read_from_ptr<T, const L: usize>(to: &mut [T; L], from: *const T) -> *const T
+pub unsafe fn read_from_ptr<T, const L: usize>(to: &mut [T; L], from: *const T) -> *const T
 where
     T: Copy,
 {

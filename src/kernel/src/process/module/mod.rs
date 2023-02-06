@@ -79,14 +79,14 @@ impl Module {
                     });
                 }
                 ProgramType::PT_DYNAMIC => {
-                    dynamic_linking = new_buffer(prog.file_size() as _);
+                    dynamic_linking = unsafe { new_buffer(prog.file_size() as _) };
 
                     if let Err(e) = elf.read_program(i, &mut dynamic_linking) {
                         return Err(LoadError::LoadProgramFailed(i, e));
                     }
                 }
                 ProgramType::PT_SCE_DYNLIBDATA => {
-                    dynlib_data = new_buffer(prog.file_size() as _);
+                    dynlib_data = unsafe { new_buffer(prog.file_size() as _) };
 
                     if let Err(e) = elf.read_program(i, &mut dynlib_data) {
                         return Err(LoadError::LoadProgramFailed(i, e));

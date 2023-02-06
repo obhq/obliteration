@@ -17,17 +17,17 @@ impl Header {
         let pkg = pkg.as_ptr();
 
         // Check magic.
-        let magic = read_u32_be(pkg, 0);
+        let magic = unsafe { read_u32_be(pkg, 0) };
 
         if magic != 0x7f434e54 {
             return Err(ReadError::InvalidMagic);
         }
 
         // Read fields.
-        let entry_count = read_u32_be(pkg, 0x10);
-        let table_offset = read_u32_be(pkg, 0x18);
-        let pfs_offset = read_u64_be(pkg, 0x410);
-        let pfs_size = read_u64_be(pkg, 0x418);
+        let entry_count = unsafe { read_u32_be(pkg, 0x10) };
+        let table_offset = unsafe { read_u32_be(pkg, 0x18) };
+        let pfs_offset = unsafe { read_u64_be(pkg, 0x410) };
+        let pfs_size = unsafe { read_u64_be(pkg, 0x418) };
 
         Ok(Self {
             entry_count,

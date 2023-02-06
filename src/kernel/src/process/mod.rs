@@ -26,7 +26,7 @@ impl Process {
     pub(super) fn load(elf: SignedElf, debug: DebugOpts) -> Result<Pin<Box<Self>>, LoadError> {
         let mut proc = Box::pin(Self {
             id: 1,
-            entry: uninit(),
+            entry: unsafe { uninit() },
             modules: Vec::new(),
         });
 

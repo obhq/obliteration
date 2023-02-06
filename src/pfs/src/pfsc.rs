@@ -25,7 +25,7 @@ impl<F: Read + Seek> Reader<F> {
         }
 
         // Check header.
-        let mut hdr: [u8; 48] = uninit();
+        let mut hdr: [u8; 48] = unsafe { uninit() };
 
         if let Err(e) = file.read_exact(&mut hdr) {
             return Err(if e.kind() == ErrorKind::UnexpectedEof {
@@ -36,17 +36,17 @@ impl<F: Read + Seek> Reader<F> {
         }
 
         let hdr = hdr.as_ptr();
-        let magic: [u8; 4] = read_array(hdr, 0);
+        let magic: [u8; 4] = unsafe { read_array(hdr, 0) };
 
         if &magic != b"PFSC" {
             return Err(OpenError::InvalidMagic);
         }
 
         // Read header.
-        let block_size = read_u32_le(hdr, 0x0c); // BlockSz
-        let original_block_size = read_u64_le(hdr, 0x10); // BlockSz2
-        let block_offsets = read_u64_le(hdr, 0x18); // BlockOffsets
-        let original_size = read_u64_le(hdr, 0x28); // DataLength
+        let block_size = unsafe { read_u32_le(hdr, 0x0c) }; // BlockSz
+        let original_block_size = unsafe { read_u64_le(hdr, 0x10) }; // BlockSz2
+        let block_offsets = unsafe { read_u64_le(hdr, 0x18) }; // BlockOffsets
+        let original_size = unsafe { read_u64_le(hdr, 0x28) }; // DataLength
 
         // Read block offsets.
         if let Err(e) = file.seek(SeekFrom::Start(block_offsets)) {
@@ -54,7 +54,7 @@ impl<F: Read + Seek> Reader<F> {
         }
 
         let original_block_count = original_size / original_block_size + 1;
-        let mut compressed_blocks: Vec<u64> = new_buffer(original_block_count as usize);
+        let mut compressed_blocks: Vec<u64> = unsafe { new_buffer(original_block_count as usize) };
 
         if let Err(e) = file.read_exact(as_mut_bytes(&mut compressed_blocks)) {
             return Err(OpenError::ReadBlockMappingFailed(e));
@@ -86,9 +86,13 @@ impl<F: Read + Seek> Reader<F> {
         let offset = self.compressed_blocks[num as usize];
         let size = end - offset;
 
-        // Allocate buffer.
-        self.current_block.reserve(self.block_size as usize);
-        unsafe { self.current_block.set_len(self.block_size as usize) };
+        #[allow(clippy::uninit_vec)]
+        {
+            // calling `set_len()` immediately after reserving a buffer creates uninitialized values
+            // Allocate buffer.
+            self.current_block.reserve(self.block_size as usize);
+            unsafe { self.current_block.set_len(self.block_size as usize) };
+        }
 
         let buf = self.current_block.as_mut_slice();
 
@@ -100,7 +104,7 @@ impl<F: Read + Seek> Reader<F> {
             buf.fill(0);
         } else {
             // Read compressed.
-            let mut compressed = new_buffer(size as usize);
+            let mut compressed = unsafe { new_buffer(size as usize) };
 
             self.file.seek(SeekFrom::Start(offset))?;
             self.file.read_exact(&mut compressed)?;
