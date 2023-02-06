@@ -222,13 +222,15 @@ impl<I: Read + Seek> ExFat<I> {
         let mut items: Vec<Item<I>> = Vec::with_capacity(files.len());
 
         for file in files {
+            let name = file.name;
             let attrs = file.attributes;
+            let stream = file.stream;
 
             // Check if directory.
             let item = if attrs.is_directory() {
-                Item::Directory(Directory::new(image.clone()))
+                Item::Directory(Directory::new(image.clone(), name, stream))
             } else {
-                Item::File(File::new(image.clone()))
+                Item::File(File::new(image.clone(), name, stream))
             };
 
             items.push(item);

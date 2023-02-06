@@ -24,7 +24,7 @@ impl<'a, I: Read + Seek> ClustersReader<'a, I> {
         image: &'a mut I,
         alloc: &ClusterAllocation,
         no_fat_chain: Option<bool>,
-    ) -> Result<Self, FromDescriptorError> {
+    ) -> Result<Self, FromAllocError> {
         // Get cluster chain.
         let first_cluster = alloc.first_cluster();
         let data_length = alloc.data_length();
@@ -32,7 +32,7 @@ impl<'a, I: Read + Seek> ClustersReader<'a, I> {
         let chain: Vec<usize> = if no_fat_chain.unwrap_or(false) {
             fat.get_cluster_chain(first_cluster).collect()
         } else if data_length == 0 {
-            return Err(FromDescriptorError::InvalidDataLength);
+            return Err(FromAllocError::InvalidDataLength);
         } else {
             // FIXME: Use div_ceil once https://github.com/rust-lang/rust/issues/88581 stabilized.
             let count = (data_length + cluster_size - 1) / cluster_size;
@@ -57,7 +57,7 @@ impl<'a, I: Read + Seek> ClustersReader<'a, I> {
         };
 
         if let Err(e) = reader.seek() {
-            return Err(FromDescriptorError::IoFailed(e));
+            return Err(FromAllocError::IoFailed(e));
         }
 
         Ok(reader)
@@ -191,8 +191,9 @@ impl<'a, I: Read + Seek> Read for ClustersReader<'a, I> {
     }
 }
 
+/// Represents an error for [`from_alloc()`][ClustersReader::from_alloc].
 #[derive(Debug, Error)]
-pub enum FromDescriptorError {
+pub enum FromAllocError {
     #[error("data length is not valid")]
     InvalidDataLength,
 
