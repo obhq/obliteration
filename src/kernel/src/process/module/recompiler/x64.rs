@@ -2,8 +2,8 @@ use super::{LabelType, NativeCode, Recompiler, RunError};
 use crate::process::module::Segment;
 use crate::process::Process;
 use iced_x86::code_asm::{
-    byte_ptr, dword_ptr, get_gpr32, get_gpr64, get_gpr8, get_xmm, get_ymm, qword_ptr, rax, rdi, rsi,
-    xmmword_ptr, ymmword_ptr, CodeAssembler, CodeLabel,
+    byte_ptr, dword_ptr, get_gpr32, get_gpr64, get_gpr8, get_xmm, get_ymm, qword_ptr, rax, rdi,
+    rsi, xmmword_ptr, ymmword_ptr, CodeAssembler, CodeLabel,
 };
 use iced_x86::{BlockEncoderOptions, Code, Decoder, DecoderOptions, Instruction, OpKind, Register};
 
@@ -1789,7 +1789,7 @@ impl Recompiler for X64Emitter<'_> {
 
             if self.is_executable(src) {
                 panic!("VMOVUPS xmm1, xmm2/m128 with second operand from executable segment is not supported.");
-            } 
+            }
 
             // Transform to absolute address.
             self.assembler.push(tmp).unwrap();
@@ -1828,7 +1828,7 @@ impl Recompiler for X64Emitter<'_> {
 
             if self.is_executable(src) {
                 panic!("VMOVUPS ymm1, ymm2/m256 with second operand from executable segment is not supported.");
-            } 
+            }
 
             // Transform to absolute address.
             self.assembler.push(tmp).unwrap();
