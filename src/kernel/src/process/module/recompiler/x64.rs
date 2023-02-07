@@ -53,110 +53,6 @@ impl<'input> X64Emitter<'input> {
             Register::RCX | Register::ECX | Register::CX | Register::CL => Register::RDX,
             Register::RDX | Register::EDX | Register::DX | Register::DL => Register::RCX,
 
-            // AVX REGISTERS
-
-            // ZMM Registers
-            Register::ZMM0 => Register::ZMM1,
-            Register::ZMM1 => Register::ZMM0,
-            Register::ZMM2 => Register::ZMM3,
-            Register::ZMM3 => Register::ZMM2,
-            Register::ZMM4 => Register::ZMM5,
-            Register::ZMM5 => Register::ZMM4,
-            Register::ZMM6 => Register::ZMM7,
-            Register::ZMM7 => Register::ZMM6,
-            Register::ZMM8 => Register::ZMM9,
-            Register::ZMM9 => Register::ZMM8,
-            Register::ZMM10 => Register::ZMM11,
-            Register::ZMM11 => Register::ZMM10,
-            Register::ZMM12 => Register::ZMM13,
-            Register::ZMM13 => Register::ZMM12,
-            Register::ZMM14 => Register::ZMM15,
-            Register::ZMM15 => Register::ZMM14,
-            Register::ZMM16 => Register::ZMM17,
-            Register::ZMM17 => Register::ZMM16,
-            Register::ZMM18 => Register::ZMM19,
-            Register::ZMM19 => Register::ZMM18,
-            Register::ZMM20 => Register::ZMM21,
-            Register::ZMM21 => Register::ZMM20,
-            Register::ZMM22 => Register::ZMM23,
-            Register::ZMM23 => Register::ZMM22,
-            Register::ZMM24 => Register::ZMM25,
-            Register::ZMM25 => Register::ZMM24,
-            Register::ZMM26 => Register::ZMM27,
-            Register::ZMM27 => Register::ZMM26,
-            Register::ZMM28 => Register::ZMM29,
-            Register::ZMM29 => Register::ZMM28,
-            Register::ZMM30 => Register::ZMM31,
-            Register::ZMM31 => Register::ZMM30,
-
-            // YMM Registers
-            Register::YMM0 => Register::YMM1,
-            Register::YMM1 => Register::YMM0,
-            Register::YMM2 => Register::YMM3,
-            Register::YMM3 => Register::YMM2,
-            Register::YMM4 => Register::YMM5,
-            Register::YMM5 => Register::YMM4,
-            Register::YMM6 => Register::YMM7,
-            Register::YMM7 => Register::YMM6,
-            Register::YMM8 => Register::YMM9,
-            Register::YMM9 => Register::YMM8,
-            Register::YMM10 => Register::YMM11,
-            Register::YMM11 => Register::YMM10,
-            Register::YMM12 => Register::YMM13,
-            Register::YMM13 => Register::YMM12,
-            Register::YMM14 => Register::YMM15,
-            Register::YMM15 => Register::YMM14,
-            Register::YMM16 => Register::YMM17,
-            Register::YMM17 => Register::YMM16,
-            Register::YMM18 => Register::YMM19,
-            Register::YMM19 => Register::YMM18,
-            Register::YMM20 => Register::YMM21,
-            Register::YMM21 => Register::YMM20,
-            Register::YMM22 => Register::YMM23,
-            Register::YMM23 => Register::YMM22,
-            Register::YMM24 => Register::YMM25,
-            Register::YMM25 => Register::YMM24,
-            Register::YMM26 => Register::YMM27,
-            Register::YMM27 => Register::YMM26,
-            Register::YMM28 => Register::YMM29,
-            Register::YMM29 => Register::YMM28,
-            Register::YMM30 => Register::YMM31,
-            Register::YMM31 => Register::YMM30,
-
-            // XMM Registers
-            Register::XMM0 => Register::XMM1,
-            Register::XMM1 => Register::XMM0,
-            Register::XMM2 => Register::XMM3,
-            Register::XMM3 => Register::XMM2,
-            Register::XMM4 => Register::XMM5,
-            Register::XMM5 => Register::XMM4,
-            Register::XMM6 => Register::XMM7,
-            Register::XMM7 => Register::XMM6,
-            Register::XMM8 => Register::XMM9,
-            Register::XMM9 => Register::XMM8,
-            Register::XMM10 => Register::XMM11,
-            Register::XMM11 => Register::XMM10,
-            Register::XMM12 => Register::XMM13,
-            Register::XMM13 => Register::XMM12,
-            Register::XMM14 => Register::XMM15,
-            Register::XMM15 => Register::XMM14,
-            Register::XMM16 => Register::XMM17,
-            Register::XMM17 => Register::XMM16,
-            Register::XMM18 => Register::XMM19,
-            Register::XMM19 => Register::XMM18,
-            Register::XMM20 => Register::XMM21,
-            Register::XMM21 => Register::XMM20,
-            Register::XMM22 => Register::XMM23,
-            Register::XMM23 => Register::XMM22,
-            Register::XMM24 => Register::XMM25,
-            Register::XMM25 => Register::XMM24,
-            Register::XMM26 => Register::XMM27,
-            Register::XMM27 => Register::XMM26,
-            Register::XMM28 => Register::XMM29,
-            Register::XMM29 => Register::XMM28,
-            Register::XMM30 => Register::XMM31,
-            Register::XMM31 => Register::XMM30,
-
             r => panic!("Register {:?} is not implemented yet.", r),
         }
     }
@@ -1916,12 +1812,7 @@ impl Recompiler for X64Emitter<'_> {
             let tmp = get_gpr64(Self::temp_register64(dst)).unwrap();
 
             if self.is_executable(src) {
-                // Call function to execute code at source memory location
-                self.assembler.call(src).unwrap();
-                // Move the result to the destination register
-                self.assembler
-                    .vmovups(get_ymm(dst).unwrap(), ymmword_ptr(tmp))
-                    .unwrap();
+                panic!("VMOVUPS ymm1, ymm2/m256 with second operand from executable segment is not supported.");
             }
 
             // Transform to absolute address.
