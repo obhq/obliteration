@@ -47,12 +47,45 @@ bool updateSystemFiles(QWidget *parent)
 
     // Dump system image.
     auto output = readSystemDirectorySetting().toStdString();
-    error = pup_dump_system(pup, output.c_str());
+    error = pup_dump_system(pup, output.c_str(), [](const char *name, std::uint64_t total, std::uint64_t written, void *ud) {
+        auto toProgress = [total](std::uint64_t v) -> int {
+            if (total >= 1024UL*1024UL*1024UL*1024UL) { // >= 1TB
+                return v / (1024UL*1024UL*1024UL*10UL); // 10GB step.
+            } else if (total >= 1024UL*1024UL*1024UL*100UL) { // >= 100GB
+                return v / (1024UL*1024UL*1024UL); // 1GB step.
+            } else if (total >= 1024UL*1024UL*1024UL*10UL) { // >= 10GB
+                return v / (1024UL*1024UL*100UL); // 100MB step.
+            } else if (total >= 1024UL*1024UL*1024UL) { // >= 1GB
+                return v / (1024UL*1024UL*10UL); // 10MB step.
+            } else if (total >= 1024UL*1024UL*100UL) { // >= 100MB
+                return v / (1024UL*1024UL);// 1MB step.
+            } else {
+                return v;
+            }
+        };
+
+        auto progress = reinterpret_cast<ProgressDialog *>(ud);
+        auto max = toProgress(total);
+        auto value = toProgress(written);
+        auto label = QString("Installing %1...").arg(name);
+
+        if (progress->statusText() != label) {
+            progress->setStatusText(label);
+            progress->setValue(0);
+            progress->setMaximum(max);
+        } else {
+            progress->setValue(value == max && written != total ? value - 1 : value);
+        }
+    }, &progress);
+
+    progress.complete();
 
     if (error) {
-        QMessageBox::critical(&progress, "Error", QString("Failed to install %1 to %2: %3").arg(pupPath.c_str()).arg(output.c_str()).arg(error.message()));
+        QMessageBox::critical(parent, "Error", QString("Failed to install %1 to %2: %3").arg(pupPath.c_str()).arg(output.c_str()).arg(error.message()));
         return false;
     }
+
+    QMessageBox::information(parent, "Success", "Installation completed successfully.");
 
     return true;
 }

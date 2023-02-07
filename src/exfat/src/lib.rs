@@ -92,8 +92,8 @@ impl<I: Read + Seek> ExFat<I> {
         };
 
         // Create a entries reader for the root directory.
-        let root_cluster = params.first_cluster_of_root_directory;
-        let mut reader = match ClustersReader::new(&params, &fat, &mut image, root_cluster, None) {
+        let root = params.first_cluster_of_root_directory;
+        let mut reader = match ClustersReader::new(&params, &fat, &mut image, root, None, None) {
             Ok(v) => EntriesReader::new(v),
             Err(e) => return Err(OpenError::CreateClustersReaderFailed(e)),
         };

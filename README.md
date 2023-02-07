@@ -23,7 +23,7 @@ We have a Matrix Room Space `#obliteration:matrix.org` on [Matrix.to](https://ma
 
 ## Features
 
-- [ ] Built-in PUP file supports for decrypted PUP from [pup_decrypt](https://github.com/idc/ps4-pup_decrypt).
+- [x] Built-in PUP file supports for decrypted PUP from [pup_decrypt](https://github.com/idc/ps4-pup_decrypt).
 - [x] Built-in PKG file supports for Fake PKG.
 - [x] Game library.
 - [ ] Emulate system calls instead of user-space libraries.
