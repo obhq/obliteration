@@ -2,14 +2,15 @@ use self::entry::Entry;
 use self::reader::{BlockedReader, EntryReader, NonBlockedReader};
 use exfat::ExFat;
 use std::error::Error;
+use std::ffi::{c_void, CString};
 use std::fmt::{Display, Formatter};
 use std::fs::{create_dir, File};
-use std::io::{Read, Seek};
+use std::io::{Read, Seek, Write};
 use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
 use thiserror::Error;
-use util::mem::{read_array, read_u16_le};
+use util::mem::{new_buffer, read_array, read_u16_le};
 
 pub mod entry;
 pub mod reader;
@@ -29,10 +30,15 @@ pub unsafe extern "C" fn pup_open(file: *const c_char, err: *mut *mut error::Err
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn pup_dump_system(pup: &Pup, path: *const c_char) -> *mut error::Error {
+pub unsafe extern "C" fn pup_dump_system(
+    pup: &Pup,
+    path: *const c_char,
+    status: extern "C" fn(*const c_char, u64, u64, *mut c_void),
+    ud: *mut c_void,
+) -> *mut error::Error {
     let path = unsafe { util::str::from_c_unchecked(path) };
 
-    if let Err(e) = pup.dump_system_image(path) {
+    if let Err(e) = pup.dump_system_image(path, status, ud) {
         return error::Error::new(&e);
     }
 
@@ -91,7 +97,12 @@ impl Pup {
         Ok(Self { file, entries })
     }
 
-    pub fn dump_system_image<O: AsRef<Path>>(&self, output: O) -> Result<(), DumpSystemImageError> {
+    pub fn dump_system_image<O: AsRef<Path>>(
+        &self,
+        output: O,
+        status: extern "C" fn(*const c_char, u64, u64, *mut c_void),
+        ud: *mut c_void,
+    ) -> Result<(), DumpSystemImageError> {
         // Get entry.
         let (entry, index) = match self.get_data_entry(6) {
             Some(v) => v,
@@ -117,8 +128,8 @@ impl Pup {
             use exfat::directory::Item;
 
             match item {
-                Item::Directory(i) => Self::dump_system_dir(output, i)?,
-                Item::File(i) => Self::dump_system_file(output, i)?,
+                Item::Directory(i) => Self::dump_system_dir(output, i, status, ud)?,
+                Item::File(i) => Self::dump_system_file(output, i, status, ud)?,
             }
         }
 
@@ -128,6 +139,8 @@ impl Pup {
     fn dump_system_dir<P, I>(
         parent: P,
         dir: exfat::directory::Directory<I>,
+        status: extern "C" fn(*const c_char, u64, u64, *mut c_void),
+        ud: *mut c_void,
     ) -> Result<(), DumpSystemImageError>
     where
         P: AsRef<Path>,
@@ -145,12 +158,7 @@ impl Pup {
         // Open the exFAT directory.
         let items = match dir.open() {
             Ok(v) => v,
-            Err(e) => {
-                return Err(DumpSystemImageError::OpenDirectoryFailed(
-                    dir.name().into(),
-                    e,
-                ));
-            }
+            Err(e) => return Err(DumpSystemImageError::OpenDirectoryFailed(path, e)),
         };
 
         // Dump files.
@@ -158,20 +166,82 @@ impl Pup {
             use exfat::directory::Item;
 
             match item {
-                Item::Directory(i) => Self::dump_system_dir(&path, i)?,
-                Item::File(i) => Self::dump_system_file(&path, i)?,
+                Item::Directory(i) => Self::dump_system_dir(&path, i, status, ud)?,
+                Item::File(i) => Self::dump_system_file(&path, i, status, ud)?,
             }
         }
 
         Ok(())
     }
 
-    fn dump_system_file<P, I>(_: P, _: exfat::file::File<I>) -> Result<(), DumpSystemImageError>
+    fn dump_system_file<P, I>(
+        parent: P,
+        mut file: exfat::file::File<I>,
+        status: extern "C" fn(*const c_char, u64, u64, *mut c_void),
+        ud: *mut c_void,
+    ) -> Result<(), DumpSystemImageError>
     where
         P: AsRef<Path>,
         I: Read + Seek,
     {
-        // TODO: Write file.
+        let path = parent.as_ref().join(file.name());
+        let len = file.len();
+
+        // Open the exFAT file.
+        let reader = match file.open() {
+            Ok(v) => v,
+            Err(e) => return Err(DumpSystemImageError::OpenFileFailed(path, e)),
+        };
+
+        // Create a destination file.
+        let mut writer = match File::create(&path) {
+            Ok(v) => v,
+            Err(e) => return Err(DumpSystemImageError::CreateFileFailed(path, e)),
+        };
+
+        // Check if an empty file.
+        let mut reader = match reader {
+            Some(v) => v,
+            None => return Ok(()),
+        };
+
+        // Report initial status.
+        let display = CString::new(path.to_string_lossy().as_ref()).unwrap();
+
+        status(display.as_ptr(), len, 0, ud);
+
+        // Copy content.
+        let mut buf = unsafe { new_buffer(32768) };
+        let mut written = 0;
+
+        loop {
+            // Read the source.
+            let read = match reader.read(&mut buf) {
+                Ok(v) => v,
+                Err(e) => {
+                    if e.kind() == std::io::ErrorKind::Interrupted {
+                        continue;
+                    } else {
+                        return Err(DumpSystemImageError::ReadFileFailed(path, e));
+                    }
+                }
+            };
+
+            if read == 0 {
+                break;
+            }
+
+            // Write destination.
+            if let Err(e) = writer.write_all(&mut buf[..read]) {
+                return Err(DumpSystemImageError::WriteFileFailed(path, e));
+            }
+
+            written += read;
+
+            // Report status.
+            status(display.as_ptr(), len, written as u64, ud);
+        }
+
         Ok(())
     }
 
@@ -256,6 +326,18 @@ pub enum DumpSystemImageError {
     #[error("cannot create directory {0}")]
     CreateDirectoryFailed(PathBuf, #[source] std::io::Error),
 
-    #[error("cannot open directory {0} on the image")]
-    OpenDirectoryFailed(String, #[source] exfat::directory::OpenError),
+    #[error("cannot open a corresponding directory {0} on the image")]
+    OpenDirectoryFailed(PathBuf, #[source] exfat::directory::OpenError),
+
+    #[error("cannot open a corresponding file {0} on the image")]
+    OpenFileFailed(PathBuf, #[source] exfat::file::OpenError),
+
+    #[error("cannot create file {0}")]
+    CreateFileFailed(PathBuf, #[source] std::io::Error),
+
+    #[error("cannot read a corresponding file {0} on the image")]
+    ReadFileFailed(PathBuf, #[source] std::io::Error),
+
+    #[error("cannot write {0}")]
+    WriteFileFailed(PathBuf, #[source] std::io::Error),
 }

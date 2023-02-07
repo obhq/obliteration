@@ -4,9 +4,11 @@
 
 struct pup;
 
+typedef void (*pup_dump_status_t) (const char *name, std::uint64_t total, std::uint64_t written, void *ud);
+
 extern "C" {
     pup *pup_open(const char *file, error **err);
-    error *pup_dump_system(const pup *pup, const char *path);
+    error *pup_dump_system(const pup *pup, const char *path, pup_dump_status_t status, void *ud);
     void pup_free(pup *pup);
 }
 
