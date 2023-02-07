@@ -2,8 +2,8 @@ use super::{LabelType, NativeCode, Recompiler, RunError};
 use crate::process::module::Segment;
 use crate::process::Process;
 use iced_x86::code_asm::{
-    byte_ptr, dword_ptr, get_gpr32, get_gpr64, get_gpr8, qword_ptr, rax, rdi, rsi, CodeAssembler,
-    CodeLabel,
+    byte_ptr, dword_ptr, get_gpr32, get_gpr64, get_gpr8, get_ymm, qword_ptr, rax, rdi, rsi,
+    ymmword_ptr, CodeAssembler, CodeLabel,
 };
 use iced_x86::{BlockEncoderOptions, Code, Decoder, DecoderOptions, Instruction, OpKind, Register};
 
@@ -52,6 +52,111 @@ impl<'input> X64Emitter<'input> {
             Register::RBX | Register::EBX | Register::BX | Register::BL => Register::RAX,
             Register::RCX | Register::ECX | Register::CX | Register::CL => Register::RDX,
             Register::RDX | Register::EDX | Register::DX | Register::DL => Register::RCX,
+
+            // AVX REGISTERS
+
+            // ZMM Registers
+            Register::ZMM0 => Register::ZMM1,
+            Register::ZMM1 => Register::ZMM0,
+            Register::ZMM2 => Register::ZMM3,
+            Register::ZMM3 => Register::ZMM2,
+            Register::ZMM4 => Register::ZMM5,
+            Register::ZMM5 => Register::ZMM4,
+            Register::ZMM6 => Register::ZMM7,
+            Register::ZMM7 => Register::ZMM6,
+            Register::ZMM8 => Register::ZMM9,
+            Register::ZMM9 => Register::ZMM8,
+            Register::ZMM10 => Register::ZMM11,
+            Register::ZMM11 => Register::ZMM10,
+            Register::ZMM12 => Register::ZMM13,
+            Register::ZMM13 => Register::ZMM12,
+            Register::ZMM14 => Register::ZMM15,
+            Register::ZMM15 => Register::ZMM14,
+            Register::ZMM16 => Register::ZMM17,
+            Register::ZMM17 => Register::ZMM16,
+            Register::ZMM18 => Register::ZMM19,
+            Register::ZMM19 => Register::ZMM18,
+            Register::ZMM20 => Register::ZMM21,
+            Register::ZMM21 => Register::ZMM20,
+            Register::ZMM22 => Register::ZMM23,
+            Register::ZMM23 => Register::ZMM22,
+            Register::ZMM24 => Register::ZMM25,
+            Register::ZMM25 => Register::ZMM24,
+            Register::ZMM26 => Register::ZMM27,
+            Register::ZMM27 => Register::ZMM26,
+            Register::ZMM28 => Register::ZMM29,
+            Register::ZMM29 => Register::ZMM28,
+            Register::ZMM30 => Register::ZMM31,
+            Register::ZMM31 => Register::ZMM30,
+
+            // YMM Registers
+            Register::YMM0 => Register::YMM1,
+            Register::YMM1 => Register::YMM0,
+            Register::YMM2 => Register::YMM3,
+            Register::YMM3 => Register::YMM2,
+            Register::YMM4 => Register::YMM5,
+            Register::YMM5 => Register::YMM4,
+            Register::YMM6 => Register::YMM7,
+            Register::YMM7 => Register::YMM6,
+            Register::YMM8 => Register::YMM9,
+            Register::YMM9 => Register::YMM8,
+            Register::YMM10 => Register::YMM11,
+            Register::YMM11 => Register::YMM10,
+            Register::YMM12 => Register::YMM13,
+            Register::YMM13 => Register::YMM12,
+            Register::YMM14 => Register::YMM15,
+            Register::YMM15 => Register::YMM14,
+            Register::YMM16 => Register::YMM17,
+            Register::YMM17 => Register::YMM16,
+            Register::YMM18 => Register::YMM19,
+            Register::YMM19 => Register::YMM18,
+            Register::YMM20 => Register::YMM21,
+            Register::YMM21 => Register::YMM20,
+            Register::YMM22 => Register::YMM23,
+            Register::YMM23 => Register::YMM22,
+            Register::YMM24 => Register::YMM25,
+            Register::YMM25 => Register::YMM24,
+            Register::YMM26 => Register::YMM27,
+            Register::YMM27 => Register::YMM26,
+            Register::YMM28 => Register::YMM29,
+            Register::YMM29 => Register::YMM28,
+            Register::YMM30 => Register::YMM31,
+            Register::YMM31 => Register::YMM30,
+
+            // XMM Registers
+            Register::XMM0 => Register::XMM1,
+            Register::XMM1 => Register::XMM0,
+            Register::XMM2 => Register::XMM3,
+            Register::XMM3 => Register::XMM2,
+            Register::XMM4 => Register::XMM5,
+            Register::XMM5 => Register::XMM4,
+            Register::XMM6 => Register::XMM7,
+            Register::XMM7 => Register::XMM6,
+            Register::XMM8 => Register::XMM9,
+            Register::XMM9 => Register::XMM8,
+            Register::XMM10 => Register::XMM11,
+            Register::XMM11 => Register::XMM10,
+            Register::XMM12 => Register::XMM13,
+            Register::XMM13 => Register::XMM12,
+            Register::XMM14 => Register::XMM15,
+            Register::XMM15 => Register::XMM14,
+            Register::XMM16 => Register::XMM17,
+            Register::XMM17 => Register::XMM16,
+            Register::XMM18 => Register::XMM19,
+            Register::XMM19 => Register::XMM18,
+            Register::XMM20 => Register::XMM21,
+            Register::XMM21 => Register::XMM20,
+            Register::XMM22 => Register::XMM23,
+            Register::XMM23 => Register::XMM22,
+            Register::XMM24 => Register::XMM25,
+            Register::XMM25 => Register::XMM24,
+            Register::XMM26 => Register::XMM27,
+            Register::XMM27 => Register::XMM26,
+            Register::XMM28 => Register::XMM29,
+            Register::XMM29 => Register::XMM28,
+            Register::XMM30 => Register::XMM31,
+            Register::XMM31 => Register::XMM30,
+
             r => panic!("Register {:?} is not implemented yet.", r),
         }
     }
@@ -176,6 +281,7 @@ impl Recompiler for X64Emitter<'_> {
                 Code::And_rm64_imm32 => (self.transform_and_rm64_imm32(i), false),
                 Code::Call_rm64 => (self.transform_call_rm64(i), false),
                 Code::Call_rel32_64 => (self.transform_call_rel32(i), false),
+                Code::Cmove_r32_rm32 => (self.transform_cmove_r32_rm32(i), false),
                 Code::Cmove_r64_rm64 => (self.transform_cmove_r64_rm64(i), false),
                 Code::Cmovne_r64_rm64 => (self.transform_cmovne_r64_rm64(i), false),
                 Code::Cmp_RAX_imm32 => (self.preserve(i), false),
@@ -266,6 +372,8 @@ impl Recompiler for X64Emitter<'_> {
                 Code::VEX_Vmovdqu_ymm_ymmm256 => (self.transform_vmovdqu_ymm_ymmm256(i), false),
                 Code::VEX_Vmovdqu_ymmm256_ymm => (self.transform_vmovdqu_ymmm256_ymm(i), false),
                 Code::VEX_Vmovq_xmm_rm64 => (self.transform_vmovq_xmm_rm64(i), false),
+                Code::VEX_Vmovss_m32_xmm => (self.transform_vmovss_m32_xmm(i), false),
+                Code::VEX_Vmovss_xmm_m32 => (self.transform_vmovss_xmm_m32(i), false),
                 Code::VEX_Vmovups_xmm_xmmm128 => (self.transform_vmovups_xmm_xmmm128(i), false),
                 Code::VEX_Vmovups_xmmm128_xmm => (self.transform_vmovups_xmmm128_xmm(i), false),
                 Code::VEX_Vmovups_ymm_ymmm256 => (self.transform_vmovups_ymm_ymmm256(i), false),
@@ -465,6 +573,32 @@ impl Recompiler for X64Emitter<'_> {
         }
 
         15
+    }
+
+    fn transform_cmove_r32_rm32(&mut self, i: Instruction) -> usize {
+        // Check if second operand use RIP-relative.
+        if i.op1_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
+            let dst = i.op0_register();
+            let src = i.ip_rel_memory_address();
+            let tmp = get_gpr64(Self::temp_register64(dst)).unwrap();
+
+            if self.is_executable(src) {
+                panic!("CMOVE r32, r/m32 with second operand from executable segment is not supported.");
+            }
+
+            // Transform to absolute address.
+            self.assembler.push(tmp).unwrap();
+            self.assembler.mov(tmp, src).unwrap();
+            self.assembler
+                .cmove(get_gpr32(dst).unwrap(), dword_ptr(tmp))
+                .unwrap();
+            self.assembler.pop(tmp).unwrap();
+
+            15 * 4
+        } else {
+            self.assembler.add_instruction(i).unwrap();
+            i.len()
+        }
     }
 
     fn transform_cmove_r64_rm64(&mut self, i: Instruction) -> usize {
@@ -1730,6 +1864,26 @@ impl Recompiler for X64Emitter<'_> {
         }
     }
 
+    fn transform_vmovss_m32_xmm(&mut self, i: Instruction) -> usize {
+        // Check if first operand use RIP-relative.
+        if i.op0_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
+            panic!("VMOVSS m32, xmm1 with first operand as RIP-relative is not supported yet.");
+        } else {
+            self.assembler.add_instruction(i).unwrap();
+            i.len()
+        }
+    }
+
+    fn transform_vmovss_xmm_m32(&mut self, i: Instruction) -> usize {
+        // Check if second operand use RIP-relative.
+        if i.op1_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
+            panic!("VMOVSS xmm1, m32 with second operand as RIP-relative is not supported yet.");
+        } else {
+            self.assembler.add_instruction(i).unwrap();
+            i.len()
+        }
+    }
+
     fn transform_vmovups_xmm_xmmm128(&mut self, i: Instruction) -> usize {
         // Check if second operand use RIP-relative.
         if i.op1_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
@@ -1757,9 +1911,29 @@ impl Recompiler for X64Emitter<'_> {
     fn transform_vmovups_ymm_ymmm256(&mut self, i: Instruction) -> usize {
         // Check if second operand use RIP-relative.
         if i.op1_kind() == OpKind::Memory && i.is_ip_rel_memory_operand() {
-            panic!(
-                "VMOVUPS ymm1, ymm2/m256 with second operand as RIP-relative is not supported yet."
-            );
+            let dst = i.op0_register();
+            let src = i.ip_rel_memory_address();
+            let tmp = get_gpr64(Self::temp_register64(dst)).unwrap();
+
+            if self.is_executable(src) {
+                // Call function to execute code at source memory location
+                self.assembler.call(src).unwrap();
+                // Move the result to the destination register
+                self.assembler
+                    .vmovups(get_ymm(dst).unwrap(), ymmword_ptr(tmp))
+                    .unwrap();
+            }
+
+            // Transform to absolute address.
+            self.assembler.push(tmp).unwrap();
+            self.assembler.mov(tmp, src).unwrap();
+            self.assembler
+                .vmovups(get_ymm(dst).unwrap(), ymmword_ptr(tmp))
+                .unwrap();
+            self.assembler.pop(tmp).unwrap();
+
+            // The number of bytes generated by the transformation.
+            15 * 4
         } else {
             self.assembler.add_instruction(i).unwrap();
             i.len()

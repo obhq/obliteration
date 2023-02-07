@@ -90,6 +90,10 @@ impl Recompiler for Aarch64Emitter<'_> {
         unimplemented!();
     }
 
+    fn transform_cmove_r32_rm32(&mut self, i: Instruction) -> usize {
+        unimplemented!();
+    }
+
     fn transform_cmove_r64_rm64(&mut self, i: Instruction) -> usize {
         unimplemented!();
     }
@@ -399,6 +403,14 @@ impl Recompiler for Aarch64Emitter<'_> {
     }
 
     fn transform_vmovq_xmm_rm64(&mut self, i: Instruction) -> usize {
+        unimplemented!();
+    }
+
+    fn transform_vmovss_m32_xmm(&mut self, i: Instruction) -> usize {
+        unimplemented!();
+    }
+
+    fn transform_vmovss_xmm_m32(&mut self, i: Instruction) -> usize {
         unimplemented!();
     }
 

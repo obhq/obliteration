@@ -64,9 +64,13 @@ pub trait Recompiler {
     fn run(self, starts: &[usize]) -> Result<(NativeCode, Vec<*const u8>), RunError>;
 
     fn recompile(&mut self, offset: usize, label_type: LabelType) -> Result<u64, RunError>;
+
     fn transform_add_r32_rm32(&mut self, i: Instruction) -> usize;
+
     fn transform_add_r64_rm64(&mut self, i: Instruction) -> usize;
+
     fn transform_add_rm8_imm8(&mut self, i: Instruction) -> usize;
+
     fn transform_add_rm8_r8(&mut self, i: Instruction) -> usize;
 
     fn transform_add_rm32_r32(&mut self, i: Instruction) -> usize;
@@ -91,7 +95,10 @@ pub trait Recompiler {
 
     fn transform_call_rel32(&mut self, i: Instruction) -> usize;
 
+    fn transform_cmove_r32_rm32(&mut self, i: Instruction) -> usize;
+
     fn transform_cmove_r64_rm64(&mut self, i: Instruction) -> usize;
+
     fn transform_cmovne_r64_rm64(&mut self, i: Instruction) -> usize;
 
     fn transform_cmp_r8_rm8(&mut self, i: Instruction) -> usize;
@@ -115,6 +122,7 @@ pub trait Recompiler {
     fn transform_dec_rm32(&mut self, i: Instruction) -> usize;
 
     fn transform_dec_rm64(&mut self, i: Instruction) -> usize;
+
     fn transform_imul_r32_rm32_imm8(&mut self, i: Instruction) -> usize;
 
     fn transform_imul_r32_rm32_imm32(&mut self, i: Instruction) -> usize;
@@ -126,7 +134,9 @@ pub trait Recompiler {
     fn transform_ja_rel(&mut self, i: Instruction) -> usize;
 
     fn transform_jae_rel(&mut self, i: Instruction) -> usize;
+
     fn transform_jb_rel(&mut self, i: Instruction) -> usize;
+
     fn transform_jbe_rel(&mut self, i: Instruction) -> usize;
 
     fn transform_je_rel(&mut self, i: Instruction) -> usize;
@@ -146,6 +156,7 @@ pub trait Recompiler {
     fn transform_jne_rel(&mut self, i: Instruction) -> usize;
 
     fn transform_jns_rel(&mut self, i: Instruction) -> usize;
+
     fn transform_jo_rel(&mut self, i: Instruction) -> usize;
 
     fn transform_js_rel(&mut self, i: Instruction) -> usize;
@@ -175,6 +186,7 @@ pub trait Recompiler {
     fn transform_movaps_xmm_xmmm128(&mut self, i: Instruction) -> usize;
 
     fn transform_movd_xmm_rm32(&mut self, i: Instruction) -> usize;
+
     fn transform_movdqu_xmmm128_xmm(&mut self, i: Instruction) -> usize;
 
     fn transform_movsx_r32_rm8(&mut self, i: Instruction) -> usize;
@@ -182,19 +194,23 @@ pub trait Recompiler {
     fn transform_movsxd_r32_rm32(&mut self, i: Instruction) -> usize;
 
     fn transform_movsxd_r64_rm32(&mut self, i: Instruction) -> usize;
+
     fn transform_movzx_r32_rm8(&mut self, i: Instruction) -> usize;
 
     fn transform_neg_rm32(&mut self, i: Instruction) -> usize;
 
     fn transform_neg_rm64(&mut self, i: Instruction) -> usize;
+
     fn transform_or_rm64_imm8(&mut self, i: Instruction) -> usize;
 
     fn transform_or_rm64_r64(&mut self, i: Instruction) -> usize;
+
     fn transform_outsb_dx_m8(&mut self, i: Instruction) -> usize;
 
     fn transform_pshufd_xmm_xmmm128_imm8(&mut self, i: Instruction) -> usize;
 
     fn transform_push_rm32(&mut self, i: Instruction) -> usize;
+
     fn transform_push_rm64(&mut self, i: Instruction) -> usize;
 
     fn transform_sar_rm64_imm8(&mut self, i: Instruction) -> usize;
@@ -208,31 +224,43 @@ pub trait Recompiler {
     fn transform_shl_rm64_imm8(&mut self, i: Instruction) -> usize;
 
     fn transform_sub_rm32_r32(&mut self, i: Instruction) -> usize;
+
     fn transform_sub_rm64_imm8(&mut self, i: Instruction) -> usize;
 
     fn transform_sub_rm64_imm32(&mut self, i: Instruction) -> usize;
+
     fn transform_sub_rm64_r64(&mut self, i: Instruction) -> usize;
 
     fn transform_test_rm8_imm8(&mut self, i: Instruction) -> usize;
 
     fn transform_test_rm8_r8(&mut self, i: Instruction) -> usize;
+
     fn transform_test_rm32_r32(&mut self, i: Instruction) -> usize;
 
     fn transform_test_rm64_r64(&mut self, i: Instruction) -> usize;
+
     fn transform_ud2(&mut self, i: Instruction) -> usize;
 
     fn transform_vmovaps_ymmm256_ymm(&mut self, i: Instruction) -> usize;
+
     fn transform_vmovdqa_xmmm128_xmm(&mut self, i: Instruction) -> usize;
 
     fn transform_vmovdqu_xmmm128_xmm(&mut self, i: Instruction) -> usize;
 
     fn transform_vmovdqu_ymm_ymmm256(&mut self, i: Instruction) -> usize;
+
     fn transform_vmovdqu_ymmm256_ymm(&mut self, i: Instruction) -> usize;
 
     fn transform_vmovq_xmm_rm64(&mut self, i: Instruction) -> usize;
 
+    fn transform_vmovss_m32_xmm(&mut self, i: Instruction) -> usize;
+
+    fn transform_vmovss_xmm_m32(&mut self, i: Instruction) -> usize;
+
     fn transform_vmovups_xmm_xmmm128(&mut self, i: Instruction) -> usize;
+
     fn transform_vmovups_xmmm128_xmm(&mut self, i: Instruction) -> usize;
+
     fn transform_vmovups_ymm_ymmm256(&mut self, i: Instruction) -> usize;
 
     fn transform_vmovups_ymmm256_ymm(&mut self, i: Instruction) -> usize;
