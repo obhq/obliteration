@@ -1,7 +1,7 @@
 use crate::fat::Fat;
 use crate::param::Params;
 use std::cmp::min;
-use std::io::{ErrorKind, Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom};
 use thiserror::Error;
 
 /// A cluster reader to read all data in a cluster chain.
@@ -9,10 +9,8 @@ pub(crate) struct ClustersReader<'a, I: Read + Seek> {
     params: &'a Params,
     image: &'a mut I,
     chain: Vec<usize>,
-    cluster_size: u64, // In bytes.
-    tail_size: u64,    // In bytes.
-    cluster: usize,    // Index into chain.
-    offset: u64,       // Offset into the current cluster.
+    data_length: u64,
+    offset: u64,
 }
 
 impl<'a, I: Read + Seek> ClustersReader<'a, I> {
@@ -64,53 +62,54 @@ impl<'a, I: Read + Seek> ClustersReader<'a, I> {
         };
 
         // Seek to first cluster.
-        let tail_size = data_length % cluster_size;
-
         let mut reader = Self {
             params,
             image,
             chain,
-            cluster_size,
-            tail_size: if tail_size == 0 {
-                cluster_size
-            } else {
-                tail_size
-            },
-            cluster: 0,
+            data_length,
             offset: 0,
         };
 
-        if let Err(e) = reader.seek() {
-            return Err(NewError::IoFailed(e));
+        if let Err(e) = reader.seek_current_cluster() {
+            return Err(NewError::SeekToFirstClusterFailed(e));
         }
 
         Ok(reader)
     }
 
     pub fn cluster(&self) -> usize {
-        self.chain[self.cluster]
+        self.chain[(self.offset / self.params.cluster_size()) as usize]
     }
 
-    fn seek(&mut self) -> Result<(), std::io::Error> {
-        // Get offset into image.
-        let cluster = self.cluster();
+    fn seek_current_cluster(&mut self) -> Result<(), std::io::Error> {
+        use std::io::{Error, ErrorKind};
+
+        // Check if the offset is exactly at the cluster beginning.
+        let cluster_size = self.params.cluster_size();
+
+        if self.offset % cluster_size != 0 {
+            panic!("The current offset must be at the beginning of the cluster.");
+        }
+
+        // Calculate an offset for the cluster.
+        let cluster = self.chain[(self.offset / cluster_size) as usize];
         let offset = match self.params.cluster_offset(cluster) {
-            Some(v) => v + self.offset,
+            Some(v) => v,
             None => {
-                return Err(std::io::Error::new(
+                return Err(Error::new(
                     ErrorKind::Other,
-                    format!("cluster #{} is not available", cluster),
+                    format!("cluster #{cluster} does not exists in the image"),
                 ));
             }
         };
 
-        // Seek image reader.
+        // Seek image to the cluster.
         match self.image.seek(SeekFrom::Start(offset)) {
             Ok(v) => {
                 if v != offset {
-                    return Err(std::io::Error::new(
+                    return Err(Error::new(
                         ErrorKind::Other,
-                        format!("cluster #{} is not available", cluster),
+                        format!("cluster #{cluster} does not exists in the image"),
                     ));
                 }
             }
@@ -121,45 +120,130 @@ impl<'a, I: Read + Seek> ClustersReader<'a, I> {
     }
 }
 
-impl<'a, I: Read + Seek> Read for ClustersReader<'a, I> {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        // Check if the actual read is required.
-        if buf.is_empty() || self.cluster == self.chain.len() {
-            return Ok(0);
-        }
+impl<'a, I: Read + Seek> Seek for ClustersReader<'a, I> {
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        use std::io::{Error, ErrorKind};
 
-        // Get cluster size.
-        let cluster_size = if self.cluster == self.chain.len() - 1 {
-            self.tail_size
-        } else {
-            self.cluster_size
+        // Calculate target offset.
+        let offset = match pos {
+            SeekFrom::Start(v) => min(v, self.data_length),
+            SeekFrom::End(v) => {
+                if v >= 0 {
+                    self.data_length
+                } else if let Some(v) = self.data_length.checked_sub(v.unsigned_abs()) {
+                    v
+                } else {
+                    return Err(Error::from(ErrorKind::InvalidInput));
+                }
+            }
+            SeekFrom::Current(v) => {
+                if v >= 0 {
+                    min(self.offset + (v as u64), self.data_length)
+                } else if let Some(v) = self.offset.checked_sub(v.unsigned_abs()) {
+                    v
+                } else {
+                    return Err(Error::from(ErrorKind::InvalidInput));
+                }
+            }
         };
 
-        // Read image.
-        let remaining = cluster_size - self.offset;
-        let target = min(buf.len(), remaining as usize);
-        let read = self.image.read(&mut buf[..target])?;
+        // Check if we need to do the actual seek.
+        if offset != self.offset {
+            // Calculate the offset for the cluster where the target offset is belong.
+            let cluster_size = self.params.cluster_size();
+            let cluster = self.chain[(offset / cluster_size) as usize];
+            let cluster_offset = match self.params.cluster_offset(cluster) {
+                Some(v) => v,
+                None => {
+                    return Err(Error::new(
+                        ErrorKind::Other,
+                        format!("cluster #{cluster} is not available"),
+                    ));
+                }
+            };
 
-        if read == 0 {
-            return Err(ErrorKind::UnexpectedEof.into());
-        }
+            // Seek image to the target offset inside the cluster.
+            let image_offset = cluster_offset + offset % cluster_size;
 
-        self.offset += read as u64;
-
-        // Check if all data in the current cluster is read.
-        if self.offset == cluster_size {
-            self.cluster += 1;
-            self.offset = 0;
-
-            if self.cluster < self.chain.len() {
-                self.seek()?;
+            match self.image.seek(SeekFrom::Start(image_offset)) {
+                Ok(v) => {
+                    if v != image_offset {
+                        return Err(Error::new(
+                            ErrorKind::Other,
+                            format!("offset {v} does not exists in the image"),
+                        ));
+                    }
+                }
+                Err(e) => return Err(e),
             }
+
+            self.offset = offset;
         }
 
-        Ok(read)
+        Ok(offset)
+    }
+
+    fn rewind(&mut self) -> std::io::Result<()> {
+        if self.offset != 0 {
+            // Seek image to the first cluster.
+            // We don't need to check if the first cluster is valid because we already checked it
+            // inside new.
+            let first_cluster = self.params.cluster_offset(self.chain[0]).unwrap();
+
+            self.image.seek(SeekFrom::Start(first_cluster))?;
+
+            // Set the offset.
+            self.offset = 0;
+        }
+
+        Ok(())
+    }
+
+    fn stream_position(&mut self) -> std::io::Result<u64> {
+        Ok(self.offset)
     }
 }
 
+impl<'a, I: Read + Seek> Read for ClustersReader<'a, I> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        // Check if the actual read is required.
+        if buf.is_empty() || self.offset == self.data_length {
+            return Ok(0);
+        }
+
+        // Get remaining data in the current cluster.
+        let cluster_size = self.params.cluster_size();
+        let cluster_remaining = cluster_size - self.offset % cluster_size;
+        let remaining = min(cluster_remaining, self.data_length - self.offset);
+
+        // Read image.
+        let amount = min(buf.len(), remaining as usize);
+
+        self.image.read_exact(&mut buf[..amount])?;
+        self.offset += amount as u64;
+
+        // Check if we need to move to next cluster.
+        if self.offset != self.data_length && amount == (cluster_remaining as usize) {
+            if let Err(e) = self.seek_current_cluster() {
+                // Reset offset back to the previous position.
+                let previous_offset = self.offset - (amount as u64);
+
+                if let Err(e) = self.seek(SeekFrom::Start(previous_offset)) {
+                    panic!("Cannot seek back to the previous offset: {e}.");
+                }
+
+                // Don't do this before we invoke seek on the above.
+                self.offset -= amount as u64;
+
+                return Err(e);
+            }
+        }
+
+        Ok(amount)
+    }
+}
+
+/// Represents an error for [`new()`][ClustersReader::new()].
 #[derive(Debug, Error)]
 pub enum NewError {
     #[error("first cluster is not valid")]
@@ -168,6 +252,6 @@ pub enum NewError {
     #[error("data length is not valid")]
     InvalidDataLength,
 
-    #[error("I/O failed")]
-    IoFailed(#[source] std::io::Error),
+    #[error("cannot seek to the first cluster")]
+    SeekToFirstClusterFailed(#[source] std::io::Error),
 }

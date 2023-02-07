@@ -11,6 +11,7 @@ pub(crate) struct Params {
 }
 
 impl Params {
+    /// Calculates offset in the image of a specified cluster.
     pub fn cluster_offset(&self, index: usize) -> Option<u64> {
         if index < 2 {
             return None;
