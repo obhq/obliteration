@@ -1,4 +1,3 @@
-use crate::entries::ClusterAllocation;
 use crate::fat::Fat;
 use crate::param::Params;
 use std::cmp::min;
@@ -17,86 +16,56 @@ pub(crate) struct ClustersReader<'a, I: Read + Seek> {
 }
 
 impl<'a, I: Read + Seek> ClustersReader<'a, I> {
-    /// Construct a [`ClustersReader`] from the specified [`ClusterAllocation`].
-    pub fn from_alloc(
-        params: &'a Params,
-        fat: &Fat,
-        image: &'a mut I,
-        alloc: &ClusterAllocation,
-        no_fat_chain: Option<bool>,
-    ) -> Result<Self, FromAllocError> {
-        // Get cluster chain.
-        let first_cluster = alloc.first_cluster();
-        let data_length = alloc.data_length();
-        let cluster_size = params.cluster_size();
-        let chain: Vec<usize> = if no_fat_chain.unwrap_or(false) {
-            fat.get_cluster_chain(first_cluster).collect()
-        } else if data_length == 0 {
-            return Err(FromAllocError::InvalidDataLength);
-        } else {
-            // FIXME: Use div_ceil once https://github.com/rust-lang/rust/issues/88581 stabilized.
-            let count = (data_length + cluster_size - 1) / cluster_size;
-
-            (first_cluster..(first_cluster + count as usize)).collect()
-        };
-
-        // Seek to first cluster.
-        let tail_size = data_length % cluster_size;
-        let mut reader = Self {
-            params,
-            image,
-            chain,
-            cluster_size,
-            tail_size: if tail_size == 0 {
-                cluster_size
-            } else {
-                tail_size
-            },
-            cluster: 0,
-            offset: 0,
-        };
-
-        if let Err(e) = reader.seek() {
-            return Err(FromAllocError::IoFailed(e));
-        }
-
-        Ok(reader)
-    }
-
     pub fn new(
         params: &'a Params,
         fat: &Fat,
         image: &'a mut I,
         first_cluster: usize,
         data_length: Option<u64>,
+        no_fat_chain: Option<bool>,
     ) -> Result<Self, NewError> {
         if first_cluster < 2 {
             return Err(NewError::InvalidFirstCluster);
         }
 
         // Get cluster chain.
-        let chain: Vec<usize> = fat.get_cluster_chain(first_cluster).collect();
-
-        if chain.is_empty() {
-            return Err(NewError::InvalidFirstCluster);
-        }
-
-        // Get data length.
         let cluster_size = params.cluster_size();
-        let data_length = match data_length {
-            Some(v) => {
-                if v > cluster_size * chain.len() as u64 {
-                    return Err(NewError::InvalidDataLength);
-                } else {
-                    v
-                }
+        let (chain, data_length) = if no_fat_chain.unwrap_or(false) {
+            // If the NoFatChain bit is 1 then DataLength must not be zero.
+            let data_length = match data_length {
+                Some(v) if v > 0 => v,
+                _ => return Err(NewError::InvalidDataLength),
+            };
+
+            // FIXME: Use div_ceil once https://github.com/rust-lang/rust/issues/88581 stabilized.
+            let count = (data_length + cluster_size - 1) / cluster_size;
+            let chain: Vec<usize> = (first_cluster..(first_cluster + count as usize)).collect();
+
+            (chain, data_length)
+        } else {
+            let chain: Vec<usize> = fat.get_cluster_chain(first_cluster).collect();
+
+            if chain.is_empty() {
+                return Err(NewError::InvalidFirstCluster);
             }
-            None => params.bytes_per_sector * (params.sectors_per_cluster * chain.len() as u64),
+
+            let data_length = match data_length {
+                Some(v) => {
+                    if v > cluster_size * chain.len() as u64 {
+                        return Err(NewError::InvalidDataLength);
+                    } else {
+                        v
+                    }
+                }
+                None => params.bytes_per_sector * (params.sectors_per_cluster * chain.len() as u64),
+            };
+
+            (chain, data_length)
         };
 
+        // Seek to first cluster.
         let tail_size = data_length % cluster_size;
 
-        // Seek to first cluster.
         let mut reader = Self {
             params,
             image,
@@ -189,16 +158,6 @@ impl<'a, I: Read + Seek> Read for ClustersReader<'a, I> {
 
         Ok(read)
     }
-}
-
-/// Represents an error for [`from_alloc()`][ClustersReader::from_alloc].
-#[derive(Debug, Error)]
-pub enum FromAllocError {
-    #[error("data length is not valid")]
-    InvalidDataLength,
-
-    #[error("I/O failed")]
-    IoFailed(#[source] std::io::Error),
 }
 
 #[derive(Debug, Error)]

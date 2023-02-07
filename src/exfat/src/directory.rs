@@ -33,12 +33,17 @@ impl<I: Read + Seek> Directory<I> {
         let fat = self.image.fat();
         let mut image = self.image.reader();
         let alloc = self.stream.allocation();
-        let no_fat_chain = Some(self.stream.no_fat_chain());
-        let mut reader =
-            match ClustersReader::from_alloc(params, fat, image.deref_mut(), alloc, no_fat_chain) {
-                Ok(v) => EntriesReader::new(v),
-                Err(e) => return Err(OpenError::CreateClustersReaderFailed(alloc.clone(), e)),
-            };
+        let mut reader = match ClustersReader::new(
+            params,
+            fat,
+            image.deref_mut(),
+            alloc.first_cluster(),
+            Some(alloc.data_length()),
+            Some(self.stream.no_fat_chain()),
+        ) {
+            Ok(v) => EntriesReader::new(v),
+            Err(e) => return Err(OpenError::CreateClustersReaderFailed(alloc.clone(), e)),
+        };
 
         // Read file entries.
         let mut items: Vec<Item<I>> = Vec::new();
@@ -95,7 +100,7 @@ pub enum Item<I: Read + Seek> {
 #[derive(Debug, Error)]
 pub enum OpenError {
     #[error("cannot create a clusters reader for allocation {0}")]
-    CreateClustersReaderFailed(ClusterAllocation, #[source] crate::cluster::FromAllocError),
+    CreateClustersReaderFailed(ClusterAllocation, #[source] crate::cluster::NewError),
 
     #[error("cannot read an entry")]
     ReadEntryFailed(#[source] crate::entries::ReaderError),

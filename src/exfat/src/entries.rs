@@ -259,7 +259,6 @@ impl EntryType {
     pub const PRIMARY: u8 = 0;
     pub const SECONDARY: u8 = 1;
     pub const CRITICAL: u8 = 0;
-    pub const BENIGN: u8 = 1;
 
     pub fn is_regular(self) -> bool {
         self.0 >= 0x81
