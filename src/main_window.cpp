@@ -382,10 +382,16 @@ void MainWindow::startGame(const QModelIndex &index)
     args << "--debug-dump" << kernelDebugDump();
     args << "--clear-debug-dump";
 
+    // Setup environment variable.
+    auto env = QProcessEnvironment::systemEnvironment();
+
+    env.insert("TERM", "xterm");
+
     // Prepare kernel launching.
     m_kernel = new QProcess(this);
     m_kernel->setProgram(path);
     m_kernel->setArguments(args);
+    m_kernel->setProcessEnvironment(env);
     m_kernel->setProcessChannelMode(QProcess::MergedChannels);
 
     connect(m_kernel, &QProcess::errorOccurred, this, &MainWindow::kernelError);
@@ -426,10 +432,14 @@ void MainWindow::kernelOutput()
 {
     // It is possible for Qt to signal this slot after QProcess::errorOccurred or QProcess::finished
     // so we need to check if the those signals has been received.
-    while (m_kernel && m_kernel->canReadLine()) {
+    if (!m_kernel) {
+        return;
+    }
+
+    while (m_kernel->canReadLine()) {
         auto line = QString::fromUtf8(m_kernel->readLine());
 
-        m_log->appendMessage(line, InfoMessageFormat);
+        m_log->appendMessage(line);
     }
 }
 
