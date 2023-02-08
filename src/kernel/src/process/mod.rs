@@ -1,4 +1,4 @@
-use self::module::{Arg, EntryPoint, Module};
+use self::module::Module;
 use crate::elf::SignedElf;
 use crate::info;
 use std::error::Error;
@@ -6,8 +6,6 @@ use std::fmt::{Display, Formatter};
 use std::os::raw::c_int;
 use std::path::PathBuf;
 use std::pin::Pin;
-use std::ptr::null_mut;
-use util::mem::uninit;
 
 pub mod module;
 
@@ -15,7 +13,6 @@ pub mod module;
 /// editing any code here.**
 pub struct Process {
     id: c_int,
-    entry: EntryPoint,
 
     // This field should drop the last so every pointer to its content will always valid.
     #[allow(dead_code)]
@@ -26,7 +23,6 @@ impl Process {
     pub(super) fn load(elf: SignedElf, debug: DebugOpts) -> Result<Pin<Box<Self>>, LoadError> {
         let mut proc = Box::pin(Self {
             id: 1,
-            entry: unsafe { uninit() },
             modules: Vec::new(),
         });
 
@@ -42,43 +38,12 @@ impl Process {
 
         match Module::load(&mut *proc, elf, debug) {
             Ok(v) => {
-                proc.entry = v.entry();
                 proc.modules.push(v);
             }
             Err(e) => return Err(LoadError::LoadMainModuleFailed(e)),
         }
 
         Ok(proc)
-    }
-
-    pub fn run(&mut self) -> Result<i32, RunError> {
-        // TODO: Check how the actual binary read its argument.
-        // Setup arguments.
-        let mut argv: Vec<*mut u8> = Vec::new();
-        let mut arg1 = b"prog\0".to_vec();
-
-        argv.push(arg1.as_mut_ptr());
-        argv.push(null_mut());
-
-        // Invoke entry point.
-        let mut arg = Arg {
-            argc: (argv.len() as i32) - 1,
-            argv: argv.as_mut_ptr(),
-        };
-
-        (self.entry)(&mut arg, Self::exit);
-
-        Ok(0)
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    extern "sysv64" fn exit() {
-        // TODO: What should we do here?
-    }
-
-    #[cfg(not(target_arch = "x86_64"))]
-    extern "C" fn exit() {
-        // TODO: What should we do here?
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -128,16 +93,5 @@ impl Display for LoadError {
             }
             Self::LoadMainModuleFailed(_) => f.write_str("cannot load main module"),
         }
-    }
-}
-
-#[derive(Debug)]
-pub enum RunError {}
-
-impl Error for RunError {}
-
-impl Display for RunError {
-    fn fmt(&self, _f: &mut Formatter) -> std::fmt::Result {
-        Ok(())
     }
 }

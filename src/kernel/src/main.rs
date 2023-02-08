@@ -1,4 +1,5 @@
 use self::elf::SignedElf;
+use self::emulator::Emulator;
 use self::fs::Fs;
 use self::fs::MountPoint;
 use self::memory::MemoryManager;
@@ -10,6 +11,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 mod elf;
+mod emulator;
 mod errno;
 mod fs;
 mod log;
@@ -153,6 +155,9 @@ fn run() -> bool {
         info!("Aligment       : {:#018x}", p.aligment());
     }
 
+    // Initializes emulation engine.
+    let mut emu = Emulator::new();
+
     // Create a process for eboot.bin.
     info!("Creating a process for eboot.bin.");
 
@@ -171,13 +176,7 @@ fn run() -> bool {
     // Run eboot.bin.
     info!("Running eboot.bin.");
 
-    let exit_code = match process.run() {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Run failed");
-            return false;
-        }
-    };
+    let exit_code = emu.run();
 
     // Most program should never reach this state.
     info!("eboot.bin exited with code {}.", exit_code);
