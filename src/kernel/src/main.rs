@@ -42,7 +42,7 @@ fn run() -> bool {
         let file = match File::open(".kernel-debug") {
             Ok(v) => v,
             Err(e) => {
-                error!(0, e, "Failed to open .kernel-debug");
+                error!(e, "Failed to open .kernel-debug");
                 return false;
             }
         };
@@ -50,7 +50,7 @@ fn run() -> bool {
         match serde_yaml::from_reader(file) {
             Ok(v) => v,
             Err(e) => {
-                error!(0, e, "Failed to read .kernel-debug");
+                error!(e, "Failed to read .kernel-debug");
                 return false;
             }
         }
@@ -62,100 +62,99 @@ fn run() -> bool {
     if args.clear_debug_dump {
         if let Err(e) = std::fs::remove_dir_all(&args.debug_dump) {
             if e.kind() != std::io::ErrorKind::NotFound {
-                error!(0, e, "Failed to remove {}", args.debug_dump.display());
+                error!(e, "Failed to remove {}", args.debug_dump.display());
                 return false;
             }
         }
     }
 
     // Show basic infomation.
-    info!(0, "Starting Obliteration kernel.");
-    info!(0, "Debug dump directory is: {}.", args.debug_dump.display());
+    info!("Starting Obliteration kernel.");
+    info!("Debug dump directory is: {}.", args.debug_dump.display());
 
     // Initialize filesystem.
     let fs = Arc::new(Fs::new());
 
-    info!(0, "Mounting / to {}.", args.system.display());
+    info!("Mounting / to {}.", args.system.display());
 
     if let Err(e) = fs.mount("/", MountPoint::new(args.system.clone())) {
-        error!(0, e, "Mount failed");
+        error!(e, "Mount failed");
         return false;
     }
 
-    info!(0, "Mounting /mnt/app0 to {}.", args.game.display());
+    info!("Mounting /mnt/app0 to {}.", args.game.display());
 
     if let Err(e) = fs.mount("/mnt/app0", MountPoint::new(args.game.clone())) {
-        error!(0, e, "Mount failed");
+        error!(e, "Mount failed");
         return false;
     }
 
     // Initialize memory manager.
-    info!(0, "Initializing memory manager.");
+    info!("Initializing memory manager.");
 
     let mm = Arc::new(MemoryManager::new());
 
-    info!(0, "Page size is: {}.", mm.page_size());
+    info!("Page size is: {}.", mm.page_size());
     info!(
-        0,
         "Allocation granularity is: {}.",
         mm.allocation_granularity()
     );
 
     // Get eboot.bin.
-    info!(0, "Getting /mnt/app0/eboot.bin.");
+    info!("Getting /mnt/app0/eboot.bin.");
 
     let eboot = match fs.get("/mnt/app0/eboot.bin") {
         Ok(v) => match v {
             fs::Item::Directory(_) => {
-                error!(0, "Path to eboot.bin is a directory.");
+                error!("Path to eboot.bin is a directory.");
                 return false;
             }
             fs::Item::File(v) => v,
         },
         Err(e) => {
-            error!(0, e, "Getting failed");
+            error!(e, "Getting failed");
             return false;
         }
     };
 
     // Load eboot.bin.
-    info!(0, "Loading eboot.bin.");
+    info!("Loading eboot.bin.");
 
     let elf = match SignedElf::load(eboot) {
         Ok(v) => v,
         Err(e) => {
-            error!(0, e, "Load failed");
+            error!(e, "Load failed");
             return false;
         }
     };
 
-    info!(0, "Size from header  : {}", elf.file_size());
-    info!(0, "Entry address     : {:#018x}", elf.entry_addr());
-    info!(0, "Number of segments: {}", elf.segments().len());
-    info!(0, "Number of programs: {}", elf.programs().len());
+    info!("Size from header  : {}", elf.file_size());
+    info!("Entry address     : {:#018x}", elf.entry_addr());
+    info!("Number of segments: {}", elf.segments().len());
+    info!("Number of programs: {}", elf.programs().len());
 
     for (i, s) in elf.segments().iter().enumerate() {
-        info!(0, "============= Segment #{} =============", i);
-        info!(0, "Flags            : {}", s.flags());
-        info!(0, "Offset           : {}", s.offset());
-        info!(0, "Compressed size  : {}", s.compressed_size());
-        info!(0, "Decompressed size: {}", s.decompressed_size());
+        info!("============= Segment #{} =============", i);
+        info!("Flags            : {}", s.flags());
+        info!("Offset           : {}", s.offset());
+        info!("Compressed size  : {}", s.compressed_size());
+        info!("Decompressed size: {}", s.decompressed_size());
     }
 
     for (i, p) in elf.programs().iter().enumerate() {
-        info!(0, "============= Program #{} =============", i);
-        info!(0, "Type           : {}", p.ty());
-        info!(0, "Flags          : {}", p.flags());
-        info!(0, "Offset         : {:#018x}", p.offset());
-        info!(0, "Virtual address: {:#018x}", p.virtual_addr());
-        info!(0, "Size in file   : {:#018x}", p.file_size());
-        info!(0, "Size in memory : {:#018x}", p.memory_size());
-        info!(0, "Aligned size   : {:#018x}", p.aligned_size());
-        info!(0, "Aligment       : {:#018x}", p.aligment());
+        info!("============= Program #{} =============", i);
+        info!("Type           : {}", p.ty());
+        info!("Flags          : {}", p.flags());
+        info!("Offset         : {:#018x}", p.offset());
+        info!("Virtual address: {:#018x}", p.virtual_addr());
+        info!("Size in file   : {:#018x}", p.file_size());
+        info!("Size in memory : {:#018x}", p.memory_size());
+        info!("Aligned size   : {:#018x}", p.aligned_size());
+        info!("Aligment       : {:#018x}", p.aligment());
     }
 
     // Create a process for eboot.bin.
-    info!(0, "Creating a process for eboot.bin.");
+    info!("Creating a process for eboot.bin.");
 
     let debug = process::DebugOpts {
         dump_path: args.debug_dump.join("process"),
@@ -164,24 +163,24 @@ fn run() -> bool {
     let mut process = match Process::load(elf, debug) {
         Ok(v) => v,
         Err(e) => {
-            error!(0, e, "Create failed");
+            error!(e, "Create failed");
             return false;
         }
     };
 
     // Run eboot.bin.
-    info!(0, "Running eboot.bin.");
+    info!("Running eboot.bin.");
 
     let exit_code = match process.run() {
         Ok(v) => v,
         Err(e) => {
-            error!(0, e, "Run failed");
+            error!(e, "Run failed");
             return false;
         }
     };
 
     // Most program should never reach this state.
-    info!(0, "eboot.bin exited with code {}.", exit_code);
+    info!("eboot.bin exited with code {}.", exit_code);
 
     true
 }

@@ -83,10 +83,7 @@ impl Process {
 
     #[cfg(target_arch = "x86_64")]
     extern "sysv64" fn handle_ud2(&mut self, addr: usize) -> ! {
-        info!(
-            self.id,
-            "process exited with ud2 instruction from {:#018x}.", addr
-        );
+        info!("process exited with ud2 instruction from {:#018x}.", addr);
 
         // fixme: return to "run" without stack unwinding on windows.
         std::process::exit(0);
