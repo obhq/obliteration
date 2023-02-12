@@ -6,6 +6,7 @@ use super::Protections;
 pub(super) trait Storage {
     fn addr(&self) -> *mut u8;
     fn decommit(&self, addr: *mut u8, len: usize) -> Result<(), std::io::Error>;
+    fn protect(&self, addr: *mut u8, len: usize, prot: Protections) -> Result<(), std::io::Error>;
 }
 
 /// An implementation of [`Storage`] backed by the memory.
@@ -116,6 +117,30 @@ impl Storage for Memory {
         use windows_sys::Win32::System::Memory::{VirtualFree, MEM_DECOMMIT};
 
         if unsafe { VirtualFree(addr as _, len, MEM_DECOMMIT) } == 0 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+
+    #[cfg(unix)]
+    fn protect(&self, addr: *mut u8, len: usize, prot: Protections) -> Result<(), std::io::Error> {
+        use libc::mprotect;
+
+        if unsafe { mprotect(addr as _, len, prot.into_host()) } < 0 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+
+    #[cfg(windows)]
+    fn protect(&self, addr: *mut u8, len: usize, prot: Protections) -> Result<(), std::io::Error> {
+        use windows_sys::Win32::System::Memory::VirtualProtect;
+
+        let mut old = 0;
+
+        if unsafe { VirtualProtect(addr as _, len, prot.into_host(), &mut old) } == 0 {
             Err(std::io::Error::last_os_error())
         } else {
             Ok(())
