@@ -4,6 +4,7 @@ use crate::errno::{EINVAL, ENOMEM};
 use crate::syserr;
 use bitflags::bitflags;
 use std::collections::BTreeMap;
+use std::ptr::null_mut;
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
 
@@ -211,6 +212,146 @@ impl MemoryManager {
 
         for addr in removes {
             allocs.remove(&addr);
+        }
+
+        Ok(())
+    }
+
+    pub fn mprotect(
+        &self,
+        addr: *mut u8,
+        len: usize,
+        prot: Protections,
+    ) -> Result<(), MprotectError> {
+        // Check arguments. FreeBSD man page does not specify if addr should be page-aligned or len
+        // should not be zero but the Linux man page has this requirements. So let's follow the
+        // Linux man page until some games expect a different behavior.
+        let first = addr as usize;
+
+        if first % Self::VIRTUAL_PAGE_SIZE != 0 {
+            return Err(MprotectError::UnalignedAddr);
+        } else if len == 0 {
+            return Err(MprotectError::ZeroLen);
+        }
+
+        // Get allocations within the range.
+        let mut valid_addr = false;
+        let end = Self::align_virtual_page(unsafe { addr.add(len) });
+        let mut prev: *mut u8 = null_mut();
+        let mut targets: Vec<&mut Alloc> = Vec::new();
+        let mut allocs = self.allocations.write().unwrap();
+
+        for (_, info) in StartFromMut::new(&mut allocs, first) {
+            valid_addr = true;
+
+            // Stop if the allocation is out of range.
+            if end <= info.addr {
+                break;
+            }
+
+            // Check if the current allocation is contiguous with the previous one. FreeBSD man page
+            // did not specify this requirements but Linux is specified.
+            if !prev.is_null() && info.addr != prev {
+                return Err(MprotectError::UnmappedAddr(prev));
+            }
+
+            prev = info.end();
+
+            // If the current protection is the same we don't need to do anything.
+            if info.prot != prot {
+                targets.push(info);
+            }
+        }
+
+        if !valid_addr {
+            return Err(MprotectError::InvalidAddr);
+        }
+
+        // Change protection for allocations in the range.
+        let mut adds: Vec<Alloc> = Vec::new();
+
+        for info in targets {
+            let storage = &info.storage;
+
+            // Check if we need to split the first allocation.
+            if addr > info.addr {
+                // Split the allocation.
+                let remain = (info.end() as usize) - (addr as usize);
+                let len = if end < info.end() {
+                    (end as usize) - (addr as usize)
+                } else {
+                    remain
+                };
+
+                adds.push(Alloc {
+                    addr,
+                    len,
+                    prot,
+                    storage: storage.clone(),
+                });
+
+                // Change protection.
+                if let Err(e) = storage.protect(addr, len, prot) {
+                    panic!(
+                        "Failed to change protection on {:p}:{} to {:?}: {}",
+                        addr, len, prot, e
+                    );
+                }
+
+                // Check if the splitting was in the middle.
+                if len != remain {
+                    adds.push(Alloc {
+                        addr: end,
+                        len: (info.end() as usize) - (end as usize),
+                        prot: info.prot,
+                        storage: storage.clone(),
+                    });
+                }
+
+                info.len -= remain;
+            } else if end < info.end() {
+                // The current allocation is the last one in the range. What we do here is we split
+                // the allocation and change the protection on the head only.
+                let remain = (info.end() as usize) - (end as usize);
+                let change = info.len - remain;
+
+                if let Err(e) = storage.protect(info.addr, change, prot) {
+                    panic!(
+                        "Failed to change protection on {:p}:{} to {:?}: {}",
+                        info.addr, change, prot, e
+                    );
+                }
+
+                // Split the tail.
+                adds.push(Alloc {
+                    addr: end,
+                    len: remain,
+                    prot: info.prot,
+                    storage: storage.clone(),
+                });
+
+                info.len = change;
+                info.prot = prot;
+            } else {
+                // Change protection the whole allocation.
+                if let Err(e) = storage.protect(info.addr, info.len, prot) {
+                    panic!(
+                        "Failed to change protection on {:p}:{} to {:?}: {}",
+                        info.addr, info.len, prot, e
+                    );
+                }
+
+                info.prot = prot;
+            }
+        }
+
+        // Add new allocation to the set.
+        for alloc in adds {
+            let addr = alloc.addr;
+
+            if allocs.insert(addr as usize, alloc).is_some() {
+                panic!("Address {:p} is already allocated.", addr)
+            }
         }
 
         Ok(())
@@ -494,6 +635,34 @@ impl MunmapError {
     pub fn errno(&self) -> i32 {
         match self {
             Self::UnalignedAddr | Self::ZeroLen => EINVAL,
+        }
+    }
+}
+
+/// Represents an error for [`MemoryManager::mprotect()`].
+#[derive(Debug, Error)]
+pub enum MprotectError {
+    #[error("addr is not aligned")]
+    UnalignedAddr,
+
+    #[error("len is zero")]
+    ZeroLen,
+
+    #[error("invalid addr")]
+    InvalidAddr,
+
+    #[error("address {0:p} is not mapped")]
+    UnmappedAddr(*const u8),
+}
+
+impl MprotectError {
+    pub fn errno(&self) -> i32 {
+        match self {
+            // On Linux InvalidAddr and UnmappedAddr will be ENOMEM. Let's follow FreeBSD man page
+            // until there are some games is expect ENOMEM.
+            Self::UnalignedAddr | Self::ZeroLen | Self::InvalidAddr | Self::UnmappedAddr(_) => {
+                EINVAL
+            }
         }
     }
 }
