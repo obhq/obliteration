@@ -14,6 +14,7 @@ bool hasSystemFilesInstalled()
     auto libkernel = toPath(readSystemDirectorySetting());
 
     try {
+        libkernel /= STR("system");
         libkernel /= STR("common");
         libkernel /= STR("lib");
         libkernel /= STR("libkernel.sprx");
@@ -46,7 +47,7 @@ bool updateSystemFiles(QWidget *parent)
     }
 
     // Dump system image.
-    auto output = readSystemDirectorySetting().toStdString();
+    auto output = joinPath(readSystemDirectorySetting(), "system");
     error = pup_dump_system(pup, output.c_str(), [](const char *name, std::uint64_t total, std::uint64_t written, void *ud) {
         auto toProgress = [total](std::uint64_t v) -> int {
             if (total >= 1024UL*1024UL*1024UL*1024UL) { // >= 1TB

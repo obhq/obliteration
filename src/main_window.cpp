@@ -3,6 +3,7 @@
 #include "game_models.hpp"
 #include "game_settings_dialog.hpp"
 #include "log_formatter.hpp"
+#include "path.hpp"
 #include "pkg.hpp"
 #include "progress_dialog.hpp"
 #include "settings.hpp"

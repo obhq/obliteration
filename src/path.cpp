@@ -2,6 +2,21 @@
 
 using std::filesystem::path;
 
+std::string joinPath(const QString &base, const QString &name)
+{
+    try {
+        auto p = toPath(base);
+#ifdef _WIN32
+        p /= name.toStdWString();
+#else
+        p /= name.toStdString();
+#endif
+        return p.u8string();
+    } catch (...) {
+        return std::string();
+    }
+}
+
 path toPath(const QString &v)
 {
 #ifdef _WIN32

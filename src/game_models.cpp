@@ -1,6 +1,6 @@
 #include "game_models.hpp"
+#include "path.hpp"
 #include "pkg.hpp"
-#include "util.hpp"
 
 Game::Game(const QString &name, const QString &directory) :
     m_name(name),

@@ -4,7 +4,7 @@ use exfat::ExFat;
 use std::error::Error;
 use std::ffi::{c_void, CString};
 use std::fmt::{Display, Formatter};
-use std::fs::{create_dir, File};
+use std::fs::{create_dir, create_dir_all, File};
 use std::io::{Read, Seek, Write};
 use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
@@ -121,9 +121,17 @@ impl Pup {
             Err(e) => return Err(DumpSystemImageError::CreateImageReaderFailed(e)),
         };
 
-        // Dump files.
+        // Create a destination directory.
         let output = output.as_ref();
 
+        if let Err(e) = create_dir_all(output) {
+            return Err(DumpSystemImageError::CreateDirectoryFailed(
+                output.into(),
+                e,
+            ));
+        }
+
+        // Dump files.
         for item in fat {
             use exfat::directory::Item;
 
