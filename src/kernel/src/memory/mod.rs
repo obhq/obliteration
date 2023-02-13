@@ -574,7 +574,6 @@ impl MappingFlags {
     pub const BEHAVIOR_NONE: u32 = 0;
     pub const BEHAVIOR_SHARED: u32 = 1;
     pub const BEHAVIOR_PRIVATE: u32 = 2;
-    pub const BEHAVIOR_BOTH: u32 = 3;
 
     pub fn behavior(self) -> u32 {
         self.bits & 3
