@@ -2,6 +2,7 @@
 
 #include <QCloseEvent>
 #include <QCoreApplication>
+#include <QFontMetrics>
 #include <QLabel>
 #include <QProgressBar>
 #include <QTimer>
@@ -64,7 +65,10 @@ QString ProgressDialog::statusText() const
 
 void ProgressDialog::setStatusText(const QString &v)
 {
-    m_status->setText(v);
+    QFontMetrics metrics(m_status->font());
+
+    m_status->setText(metrics.elidedText(v, Qt::ElideRight, m_status->width()));
+
     QCoreApplication::processEvents();
 }
 
