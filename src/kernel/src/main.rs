@@ -2,7 +2,7 @@ use self::elf::SignedElf;
 use self::fs::Fs;
 use self::fs::MountPoint;
 use self::memory::MemoryManager;
-use self::process::Process;
+use self::module::Module;
 use clap::Parser;
 use serde::Deserialize;
 use std::fs::File;
@@ -14,6 +14,7 @@ mod errno;
 mod fs;
 mod log;
 mod memory;
+mod module;
 mod process;
 
 #[derive(Parser, Deserialize)]
@@ -153,34 +154,26 @@ fn run() -> bool {
         info!("Aligment       : {:#018x}", p.aligment());
     }
 
-    // Create a process for eboot.bin.
-    info!("Creating a process for eboot.bin.");
+    // Map eboot.bin to the memory.
+    info!("Mapping eboot.bin.");
 
-    let debug = process::DebugOpts {
-        dump_path: args.debug_dump.join("process"),
-    };
-
-    let mut process = match Process::load(elf, debug) {
+    let eboot = match Module::load(elf, mm) {
         Ok(v) => v,
         Err(e) => {
-            error!(e, "Create failed");
+            error!(e, "Map failed");
             return false;
         }
     };
 
-    // Run eboot.bin.
-    info!("Running eboot.bin.");
+    info!("Memory address: {:#018x}", eboot.memory().addr());
+    info!("Memory size   : {:#018x}", eboot.memory().len());
 
-    let exit_code = match process.run() {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Run failed");
-            return false;
-        }
-    };
-
-    // Most program should never reach this state.
-    info!("eboot.bin exited with code {}.", exit_code);
+    for (i, s) in eboot.memory().segments().iter().enumerate() {
+        info!("============= Segment #{} =============", i);
+        info!("Address: {:#018x}", eboot.memory().addr() + s.start());
+        info!("Size   : {:#018x}", s.len());
+        info!("Program: {}", s.program());
+    }
 
     true
 }
