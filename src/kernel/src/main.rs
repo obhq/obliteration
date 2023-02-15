@@ -1,3 +1,4 @@
+use self::elf::program::ProgramType;
 use self::elf::SignedElf;
 use self::fs::Fs;
 use self::fs::MountPoint;
@@ -85,7 +86,7 @@ fn run() -> bool {
 
     info!("Mounting /mnt/app0 to {}.", args.game.display());
 
-    if let Err(e) = fs.mount("/mnt/app0", MountPoint::new(args.game.clone())) {
+    if let Err(e) = fs.mount("/mnt/app0", MountPoint::new(args.game)) {
         error!(e, "Mount failed");
         return false;
     }
@@ -101,31 +102,98 @@ fn run() -> bool {
         mm.allocation_granularity()
     );
 
-    // Get eboot.bin.
-    info!("Getting /mnt/app0/eboot.bin.");
+    // Load eboot.bin.
+    let eboot = match load_module(&fs, mm.clone(), ModuleName::Absolute("/mnt/app0/eboot.bin")) {
+        Some(v) => v,
+        None => return false,
+    };
 
-    let eboot = match fs.get("/mnt/app0/eboot.bin") {
-        Ok(v) => match v {
-            fs::Item::Directory(_) => {
-                error!("Path to eboot.bin is a directory.");
-                return false;
+    // Check if we need to run libkernel instead of eboot.bin.
+    let libkernel = if eboot
+        .image()
+        .programs()
+        .iter()
+        .any(|p| p.ty() == ProgramType::PT_DYNAMIC)
+    {
+        match load_module(&fs, mm, ModuleName::Search("libkernel")) {
+            Some(v) => Some(v),
+            None => return false,
+        }
+    } else {
+        None
+    };
+
+    true
+}
+
+fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Module> {
+    // Get the module.
+    let file = match name {
+        ModuleName::Absolute(name) => {
+            info!("Getting {}.", name);
+
+            match fs.get(name) {
+                Ok(v) => match v {
+                    fs::Item::Directory(_) => {
+                        error!("Path to {} is a directory.", name);
+                        return None;
+                    }
+                    fs::Item::File(v) => v,
+                },
+                Err(e) => {
+                    error!(e, "Getting failed");
+                    return None;
+                }
             }
-            fs::Item::File(v) => v,
-        },
-        Err(e) => {
-            error!(e, "Getting failed");
-            return false;
+        }
+        ModuleName::Search(name) => {
+            info!("Looking for {name}.");
+
+            'search: {
+                // Try sce_module inside game directory first.
+                match fs.get(&format!("/mnt/app0/sce_module/{name}.prx")) {
+                    Ok(v) => match v {
+                        fs::Item::Directory(_) => {
+                            // FIXME: Right now FS will treat non-existent file as a directory.
+                        }
+                        fs::Item::File(v) => break 'search v,
+                    },
+                    Err(e) => {
+                        error!(e, "Looking failed");
+                        return None;
+                    }
+                }
+
+                // Next try system/common/lib.
+                match fs.get(&format!("/system/common/lib/{name}.sprx")) {
+                    Ok(v) => match v {
+                        fs::Item::Directory(_) => {
+                            // FIXME: Right now FS will treat non-existent file as a directory.
+                        }
+                        fs::Item::File(v) => break 'search v,
+                    },
+                    Err(e) => {
+                        error!(e, "Looking failed");
+                        return None;
+                    }
+                }
+
+                error!("Cannot find {name}.");
+                return None;
+            }
         }
     };
 
-    // Load eboot.bin.
-    info!("Loading eboot.bin.");
+    // Load the module.
+    let virtual_path = file.virtual_path().to_owned();
 
-    let elf = match SignedElf::load(eboot) {
+    info!("Loading {}.", virtual_path);
+
+    let elf = match SignedElf::load(file) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Load failed");
-            return false;
+            return None;
         }
     };
 
@@ -154,26 +222,31 @@ fn run() -> bool {
         info!("Aligment       : {:#018x}", p.aligment());
     }
 
-    // Map eboot.bin to the memory.
-    info!("Mapping eboot.bin.");
+    // Map the module to the memory.
+    info!("Mapping {}.", virtual_path);
 
-    let eboot = match Module::load(elf, mm) {
+    let module = match Module::load(elf, mm) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Map failed");
-            return false;
+            return None;
         }
     };
 
-    info!("Memory address: {:#018x}", eboot.memory().addr());
-    info!("Memory size   : {:#018x}", eboot.memory().len());
+    info!("Memory address: {:#018x}", module.memory().addr());
+    info!("Memory size   : {:#018x}", module.memory().len());
 
-    for (i, s) in eboot.memory().segments().iter().enumerate() {
+    for (i, s) in module.memory().segments().iter().enumerate() {
         info!("============= Segment #{} =============", i);
-        info!("Address: {:#018x}", eboot.memory().addr() + s.start());
+        info!("Address: {:#018x}", module.memory().addr() + s.start());
         info!("Size   : {:#018x}", s.len());
         info!("Program: {}", s.program());
     }
 
-    true
+    Some(module)
+}
+
+enum ModuleName<'a> {
+    Absolute(&'a str),
+    Search(&'a str),
 }

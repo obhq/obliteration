@@ -218,7 +218,7 @@ impl SignedElf {
                 match self.file.seek(SeekFrom::Start(offset)) {
                     Ok(v) => {
                         if v != offset {
-                            panic!("File is smaller than {} bytes.", offset);
+                            panic!("File is smaller than {offset} bytes.");
                         }
                     }
                     Err(e) => return Err(ReadProgramError::SeekFailed(offset, e)),

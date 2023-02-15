@@ -1,4 +1,4 @@
-pub(super) fn decompose<'a>(absolute: &'a str) -> PathComponents<'a> {
+pub(super) fn decompose(absolute: &str) -> PathComponents<'_> {
     PathComponents(absolute)
 }
 

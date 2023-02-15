@@ -38,6 +38,7 @@ impl Fs {
         // Open a root directory.
         let mut directory = Directory {
             path: mount.path.clone(),
+            virtual_path: String::new(),
         };
 
         // Walk on virtual path components.
@@ -48,6 +49,7 @@ impl Fs {
             if let Some(v) = mounts.get(&current) {
                 directory = Directory {
                     path: v.path.clone(),
+                    virtual_path: String::new(),
                 };
             } else {
                 // Build a real path.
@@ -57,16 +59,24 @@ impl Fs {
 
                 // Check if path is a file.
                 if path.is_file() {
-                    return Ok(Item::File(File { path }));
+                    return Ok(Item::File(File {
+                        path,
+                        virtual_path: current,
+                    }));
                 }
 
-                directory = Directory { path };
+                directory = Directory {
+                    path,
+                    virtual_path: String::new(),
+                };
             }
 
             current.push('/');
         }
 
         // If we reached here that mean the the last component is a directory.
+        directory.virtual_path = current;
+
         Ok(Item::Directory(directory))
     }
 
@@ -96,16 +106,22 @@ pub enum Item {
 /// A virtual directory.
 pub struct Directory {
     path: PathBuf,
+    virtual_path: String,
 }
 
 /// A virtual file.
 pub struct File {
     path: PathBuf,
+    virtual_path: String,
 }
 
 impl File {
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    pub fn virtual_path(&self) -> &str {
+        self.virtual_path.as_ref()
     }
 }
 

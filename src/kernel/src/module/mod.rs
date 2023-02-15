@@ -6,25 +6,30 @@ use thiserror::Error;
 
 /// Represents a loaded SELF.
 pub struct Module {
+    image: SignedElf,
     memory: Memory,
 }
 
 impl Module {
-    pub fn load(mut elf: SignedElf, mm: Arc<MemoryManager>) -> Result<Self, LoadError> {
+    pub fn load(mut image: SignedElf, mm: Arc<MemoryManager>) -> Result<Self, LoadError> {
         // Map SELF to the memory.
-        let mut memory = Memory::new(&elf, mm)?;
+        let mut memory = Memory::new(&image, mm)?;
 
         memory.load(|prog, buf| {
-            if let Err(e) = elf.read_program(prog, buf) {
+            if let Err(e) = image.read_program(prog, buf) {
                 Err(LoadError::ReadProgramFailed(prog, e))
             } else {
                 Ok(())
             }
         })?;
 
-        memory.protect(&elf)?;
+        memory.protect(&image)?;
 
-        Ok(Self { memory })
+        Ok(Self { image, memory })
+    }
+
+    pub fn image(&self) -> &SignedElf {
+        &self.image
     }
 
     pub fn memory(&self) -> &Memory {
@@ -49,8 +54,7 @@ impl Memory {
         // Create segments from programs.
         let mut segments: Vec<MemorySegment> = Vec::with_capacity(programs.len());
 
-        for i in 0..programs.len() {
-            let p = &programs[i];
+        for (i, p) in programs.iter().enumerate() {
             let t = p.ty();
 
             if t == ProgramType::PT_LOAD || t == ProgramType::PT_SCE_RELRO {
