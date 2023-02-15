@@ -160,10 +160,7 @@ impl MemoryManager {
 
                 // Decommit the memory.
                 if let Err(e) = info.storage.decommit(addr, decommit) {
-                    panic!(
-                        "Failed to decommit the memory {:p}:{}: {}.",
-                        addr, decommit, e
-                    );
+                    panic!("Failed to decommit the memory {addr:p}:{decommit}: {e}.");
                 }
 
                 info.len -= remain;
@@ -206,7 +203,7 @@ impl MemoryManager {
             let addr = alloc.addr;
 
             if allocs.insert(addr as usize, alloc).is_some() {
-                panic!("Address {:p} is already allocated.", addr);
+                panic!("Address {addr:p} is already allocated.");
             }
         }
 
@@ -292,10 +289,7 @@ impl MemoryManager {
 
                 // Change protection.
                 if let Err(e) = storage.protect(addr, len, prot) {
-                    panic!(
-                        "Failed to change protection on {:p}:{} to {:?}: {}",
-                        addr, len, prot, e
-                    );
+                    panic!("Failed to change protection on {addr:p}:{len} to {prot:?}: {e}");
                 }
 
                 // Check if the splitting was in the middle.
@@ -350,7 +344,7 @@ impl MemoryManager {
             let addr = alloc.addr;
 
             if allocs.insert(addr as usize, alloc).is_some() {
-                panic!("Address {:p} is already allocated.", addr)
+                panic!("Address {addr:p} is already allocated.")
             }
         }
 
@@ -453,7 +447,7 @@ impl MemoryManager {
 
         if v < 0 {
             let e = std::io::Error::last_os_error();
-            panic!("Failed to get page size: {}.", e);
+            panic!("Failed to get page size: {e}.");
         }
 
         (v as usize, v as usize)

@@ -86,7 +86,7 @@ fn run() -> bool {
 
     info!("Mounting /mnt/app0 to {}.", args.game.display());
 
-    if let Err(e) = fs.mount("/mnt/app0", MountPoint::new(args.game.clone())) {
+    if let Err(e) = fs.mount("/mnt/app0", MountPoint::new(args.game)) {
         error!(e, "Mount failed");
         return false;
     }
@@ -115,7 +115,7 @@ fn run() -> bool {
         .iter()
         .any(|p| p.ty() == ProgramType::PT_DYNAMIC)
     {
-        match load_module(&fs, mm.clone(), ModuleName::Search("libkernel")) {
+        match load_module(&fs, mm, ModuleName::Search("libkernel")) {
             Some(v) => Some(v),
             None => return false,
         }
@@ -149,14 +149,14 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
         ModuleName::Search(name) => {
             info!("Looking for {name}.");
 
-            loop {
+            'search: {
                 // Try sce_module inside game directory first.
                 match fs.get(&format!("/mnt/app0/sce_module/{name}.prx")) {
                     Ok(v) => match v {
                         fs::Item::Directory(_) => {
                             // FIXME: Right now FS will treat non-existent file as a directory.
                         }
-                        fs::Item::File(v) => break v,
+                        fs::Item::File(v) => break 'search v,
                     },
                     Err(e) => {
                         error!(e, "Looking failed");
@@ -170,7 +170,7 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
                         fs::Item::Directory(_) => {
                             // FIXME: Right now FS will treat non-existent file as a directory.
                         }
-                        fs::Item::File(v) => break v,
+                        fs::Item::File(v) => break 'search v,
                     },
                     Err(e) => {
                         error!(e, "Looking failed");

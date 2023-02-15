@@ -54,8 +54,7 @@ impl Memory {
         // Create segments from programs.
         let mut segments: Vec<MemorySegment> = Vec::with_capacity(programs.len());
 
-        for i in 0..programs.len() {
-            let p = &programs[i];
+        for (i, p) in programs.iter().enumerate() {
             let t = p.ty();
 
             if t == ProgramType::PT_LOAD || t == ProgramType::PT_SCE_RELRO {
