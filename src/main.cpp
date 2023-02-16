@@ -1,4 +1,4 @@
-#include "initialize_dialog.hpp"
+#include "initialize_wizard.hpp"
 #include "main_window.hpp"
 #include "settings.hpp"
 #include "system.hpp"
@@ -26,18 +26,11 @@ int main(int argc, char *argv[])
         set_darkmode();
     #endif
 
-    // Initialize user settings.
-    if (!hasRequiredUserSettings()) {
-        InitializeDialog init;
+    // Check if no any required settings.
+    if (!hasRequiredUserSettings() || !hasSystemFilesInstalled()) {
+        InitializeWizard init;
 
         if (!init.exec()) {
-            return 1;
-        }
-    }
-
-    // Install system files.
-    if (!hasSystemFilesInstalled()) {
-        if (!updateSystemFiles(nullptr)) {
             return 1;
         }
     }

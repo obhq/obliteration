@@ -4,9 +4,11 @@
 
 bool hasRequiredUserSettings();
 
+bool hasSystemDirectorySetting();
 QString readSystemDirectorySetting();
 void writeSystemDirectorySetting(const QString &v);
 
+bool hasGamesDirectorySetting();
 QString readGamesDirectorySetting();
 void writeGamesDirectorySetting(const QString &v);
 

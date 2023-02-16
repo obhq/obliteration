@@ -11,7 +11,12 @@
 
 bool hasSystemFilesInstalled()
 {
-    auto libkernel = toPath(readSystemDirectorySetting());
+    return hasSystemFilesInstalled(readSystemDirectorySetting());
+}
+
+bool hasSystemFilesInstalled(const QString &systemPath)
+{
+    auto libkernel = toPath(systemPath);
 
     try {
         libkernel /= STR("system");
@@ -26,6 +31,11 @@ bool hasSystemFilesInstalled()
 }
 
 bool updateSystemFiles(QWidget *parent)
+{
+    return updateSystemFiles(readSystemDirectorySetting(), parent);
+}
+
+bool updateSystemFiles(const QString &systemPath, QWidget *parent)
 {
     // Browse for PS4UPDATE1.PUP.dec.
     auto pupPath = QDir::toNativeSeparators(QFileDialog::getOpenFileName(parent, "Install PS4UPDATE1.PUP.dec", QString(), "PS4UPDATE1.PUP.dec")).toStdString();
@@ -47,7 +57,7 @@ bool updateSystemFiles(QWidget *parent)
     }
 
     // Dump system image.
-    auto output = joinPath(readSystemDirectorySetting(), "system");
+    auto output = joinPath(systemPath, "system");
     error = pup_dump_system(pup, output.c_str(), [](const char *name, std::uint64_t total, std::uint64_t written, void *ud) {
         auto toProgress = [total](std::uint64_t v) -> int {
             if (total >= 1024UL*1024UL*1024UL*1024UL) { // >= 1TB

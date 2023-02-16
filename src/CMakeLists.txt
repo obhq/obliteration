@@ -33,7 +33,7 @@ add_executable(obliteration WIN32
     game_models.cpp
     game_settings.cpp
     game_settings_dialog.cpp
-    initialize_dialog.cpp
+    initialize_wizard.cpp
     log_formatter.cpp
     main.cpp
     main_window.cpp

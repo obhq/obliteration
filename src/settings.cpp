@@ -12,9 +12,14 @@ namespace UserSettings {
 
 bool hasRequiredUserSettings()
 {
+    return hasSystemDirectorySetting() && hasGamesDirectorySetting();
+}
+
+bool hasSystemDirectorySetting()
+{
     scope(SettingGroups::user);
 
-    return s.contains(UserSettings::systemDirectory) && s.contains(UserSettings::gamesDirectory);
+    return s.contains(UserSettings::systemDirectory);
 }
 
 QString readSystemDirectorySetting()
@@ -31,6 +36,13 @@ void writeSystemDirectorySetting(const QString &v)
     scope(SettingGroups::user);
 
     s.setValue(UserSettings::systemDirectory, v);
+}
+
+bool hasGamesDirectorySetting()
+{
+    scope(SettingGroups::user);
+
+    return s.contains(UserSettings::gamesDirectory);
 }
 
 QString readGamesDirectorySetting()
