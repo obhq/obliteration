@@ -68,16 +68,21 @@ MainWindow::MainWindow() :
     helpMenu->addAction(aboutQt);
     helpMenu->addAction(about);
 
+#ifndef __APPLE__
     // File toolbar.
     auto fileBar = addToolBar("&File");
 
     fileBar->setMovable(false);
-
     fileBar->addAction(installPkg);
+#endif
 
     // Central widget.
     m_tab = new QTabWidget(this);
     m_tab->setDocumentMode(true);
+
+#ifdef __APPLE__
+    m_tab->tabBar()->setExpanding(true);
+#endif
 
     setCentralWidget(m_tab);
 
