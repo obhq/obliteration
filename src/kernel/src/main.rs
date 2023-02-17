@@ -1,22 +1,20 @@
-use self::elf::program::ProgramType;
-use self::elf::SignedElf;
 use self::fs::Fs;
 use self::fs::MountPoint;
 use self::memory::MemoryManager;
 use self::module::Module;
 use clap::Parser;
+use elf::Elf;
+use elf::ProgramType;
 use serde::Deserialize;
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-mod elf;
 mod errno;
 mod fs;
 mod log;
 mod memory;
 mod module;
-mod process;
 
 #[derive(Parser, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -126,7 +124,7 @@ fn run() -> bool {
     true
 }
 
-fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Module> {
+fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Module<File>> {
     // Get the module.
     let file = match name {
         ModuleName::Absolute(name) => {
@@ -184,12 +182,21 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
         }
     };
 
-    // Load the module.
+    // Open the module without allocating a virtual file descriptor.
     let virtual_path = file.virtual_path().to_owned();
 
-    info!("Loading {}.", virtual_path);
+    info!("Loading {virtual_path}.");
 
-    let elf = match SignedElf::load(file) {
+    let file = match File::open(file.path()) {
+        Ok(v) => v,
+        Err(e) => {
+            error!(e, "Open failed");
+            return None;
+        }
+    };
+
+    // Load the module.
+    let elf = match Elf::open(file) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Load failed");
@@ -197,25 +204,30 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
         }
     };
 
-    info!("Size from header  : {}", elf.file_size());
     info!("Entry address     : {:#018x}", elf.entry_addr());
-    info!("Number of segments: {}", elf.segments().len());
     info!("Number of programs: {}", elf.programs().len());
 
-    for (i, s) in elf.segments().iter().enumerate() {
-        info!("============= Segment #{} =============", i);
-        info!("Flags            : {}", s.flags());
-        info!("Offset           : {}", s.offset());
-        info!("Compressed size  : {}", s.compressed_size());
-        info!("Decompressed size: {}", s.decompressed_size());
+    if let Some(segments) = elf.self_segments() {
+        info!("Number of segments: {}", segments.len());
+        info!("Image type: SELF");
+
+        for (i, s) in segments.iter().enumerate() {
+            info!("============= Segment #{} =============", i);
+            info!("Flags            : {:?}", s.flags());
+            info!("Offset           : {}", s.offset());
+            info!("Compressed size  : {}", s.compressed_size());
+            info!("Decompressed size: {}", s.decompressed_size());
+        }
+    } else {
+        info!("Image type: ELF");
     }
 
     for (i, p) in elf.programs().iter().enumerate() {
         info!("============= Program #{} =============", i);
         info!("Type           : {}", p.ty());
-        info!("Flags          : {}", p.flags());
+        info!("Flags          : {:?}", p.flags());
         info!("Offset         : {:#018x}", p.offset());
-        info!("Virtual address: {:#018x}", p.virtual_addr());
+        info!("Virtual address: {:#018x}", p.addr());
         info!("Size in file   : {:#018x}", p.file_size());
         info!("Size in memory : {:#018x}", p.memory_size());
         info!("Aligned size   : {:#018x}", p.aligned_size());
