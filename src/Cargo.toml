@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "core",
+    "elf",
     "error",
     "exfat",
     "fs",

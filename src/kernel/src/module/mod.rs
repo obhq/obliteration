@@ -1,17 +1,17 @@
-use crate::elf::program::ProgramType;
-use crate::elf::SignedElf;
 use crate::memory::MemoryManager;
+use elf::{Elf, ProgramFlags, ProgramType};
+use std::io::{Read, Seek};
 use std::sync::Arc;
 use thiserror::Error;
 
 /// Represents a loaded SELF.
-pub struct Module {
-    image: SignedElf,
+pub struct Module<I: Read + Seek> {
+    image: Elf<I>,
     memory: Memory,
 }
 
-impl Module {
-    pub fn load(mut image: SignedElf, mm: Arc<MemoryManager>) -> Result<Self, LoadError> {
+impl<I: Read + Seek> Module<I> {
+    pub fn load(mut image: Elf<I>, mm: Arc<MemoryManager>) -> Result<Self, LoadError> {
         // Map SELF to the memory.
         let mut memory = Memory::new(&image, mm)?;
 
@@ -28,7 +28,7 @@ impl Module {
         Ok(Self { image, memory })
     }
 
-    pub fn image(&self) -> &SignedElf {
+    pub fn image(&self) -> &Elf<I> {
         &self.image
     }
 
@@ -46,7 +46,7 @@ pub struct Memory {
 }
 
 impl Memory {
-    fn new(elf: &SignedElf, mm: Arc<MemoryManager>) -> Result<Self, LoadError> {
+    fn new<I: Read + Seek>(elf: &Elf<I>, mm: Arc<MemoryManager>) -> Result<Self, LoadError> {
         use crate::memory::{MappingFlags, Protections};
 
         let programs = elf.programs();
@@ -59,7 +59,7 @@ impl Memory {
 
             if t == ProgramType::PT_LOAD || t == ProgramType::PT_SCE_RELRO {
                 let s = MemorySegment {
-                    start: p.virtual_addr(),
+                    start: p.addr(),
                     len: p.aligned_size(),
                     program: i,
                 };
@@ -126,7 +126,7 @@ impl Memory {
         Ok(())
     }
 
-    fn protect(&mut self, elf: &SignedElf) -> Result<(), LoadError> {
+    fn protect<I: Read + Seek>(&mut self, elf: &Elf<I>) -> Result<(), LoadError> {
         use crate::memory::Protections;
 
         let progs = elf.programs();
@@ -136,15 +136,15 @@ impl Memory {
             let flags = progs[seg.program].flags();
             let mut prot = Protections::NONE;
 
-            if flags.is_executable() {
+            if flags.contains(ProgramFlags::EXECUTE) {
                 prot |= Protections::CPU_EXEC;
             }
 
-            if flags.is_readable() {
+            if flags.contains(ProgramFlags::READ) {
                 prot |= Protections::CPU_READ;
             }
 
-            if flags.is_writable() {
+            if flags.contains(ProgramFlags::WRITE) {
                 prot |= Protections::CPU_WRITE;
             }
 
@@ -222,7 +222,7 @@ pub enum LoadError {
     MemoryAllocationFailed(usize, #[source] crate::memory::MmapError),
 
     #[error("cannot read program #{0}")]
-    ReadProgramFailed(usize, #[source] crate::elf::ReadProgramError),
+    ReadProgramFailed(usize, #[source] elf::ReadProgramError),
 
     #[error("cannot change protection for mapped program #{0}")]
     ChangeProtectionFailed(usize, #[source] crate::memory::MprotectError),
