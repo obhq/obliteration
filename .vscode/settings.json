@@ -5,5 +5,8 @@
   },
   "files.insertFinalNewline": true,
   "files.trimFinalNewlines": true,
-  "files.trimTrailingWhitespace": true
+  "files.trimTrailingWhitespace": true,
+  "files.associations": {
+    "complex": "cpp"
+  }
 }
