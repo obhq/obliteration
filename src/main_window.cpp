@@ -107,6 +107,8 @@ MainWindow::MainWindow() :
 
 #ifdef _WIN32
     log->document()->setDefaultFont(QFont("Courier New", 10));
+#elif __APPLE__
+    log->document()->setDefaultFont(QFont("menlo", 10));
 #else
     log->document()->setDefaultFont(QFont("monospace", 10));
 #endif
