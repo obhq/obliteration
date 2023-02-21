@@ -86,7 +86,7 @@ impl<'a> File<'a> {
     }
 
     pub fn is_empty(&self) -> bool {
-        return self.len() == 0;
+        self.len() == 0
     }
 
     fn inode(&self) -> &Inode {

@@ -10,8 +10,10 @@ use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
 use thiserror::Error;
 
+/// # Safety
+/// `from` and `to` must be pointed to a null-terminated C string.
 #[no_mangle]
-pub extern "C" fn system_download(
+pub unsafe extern "C" fn system_download(
     from: *const c_char,
     to: *const c_char,
     status: extern "C" fn(*const c_char, u64, u64, *mut c_void),
@@ -85,7 +87,7 @@ pub extern "C" fn system_download(
             // Execute the action specific to the item.
             match item.ty() {
                 ItemType::RegularFile => {
-                    if let Err(e) = download_file(&mut ftp, remote, local, item.len(), &status) {
+                    if let Err(e) = download_file(&mut ftp, remote, local, item.len(), status) {
                         return Error::new(&e);
                     }
                 }
