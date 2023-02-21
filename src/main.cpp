@@ -27,7 +27,7 @@ int main(int argc, char *argv[])
     #endif
 
     // Check if no any required settings.
-    if (!hasRequiredUserSettings() || !hasSystemFilesInstalled()) {
+    if (!hasRequiredUserSettings() || !isSystemInitialized()) {
         InitializeWizard init;
 
         if (!init.exec()) {

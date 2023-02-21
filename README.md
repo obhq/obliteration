@@ -23,21 +23,15 @@ We have a Matrix Room Space `#obliteration:matrix.org` on [Matrix.to](https://ma
 
 ## Features
 
-- [x] Built-in PUP file supports for decrypted PUP from [pup_decrypt](https://github.com/idc/ps4-pup_decrypt).
+- [x] Built-in FTP client to pull the decrypted firmware from jailbroken PS4.
 - [x] Built-in PKG file supports for Fake PKG.
 - [x] Game library.
 - [ ] Emulate system calls instead of user-space libraries.
 
 ## System requirements
 
-- Windows 10 x64, Linux x86-64, and macOS x86-64.
-- CPU that supports all of the instructions on the [PS4 CPU](https://en.wikipedia.org/wiki/Jaguar_(microarchitecture)#Instruction_set_support).
-  - AMD:
-    - Minimum (Based on Required Instruction Sets): Jaguar-Based CPUs or newer
-    - Recommended (Based on Performance): Zen-Based CPUs or newer
-  - Intel:
-    - Minimum (Based on Required Instruction Sets): Haswell-Based CPUs or newer
-    - Recommended (Based on Performance): 5th Gen CPUs or newer
+- Windows 10, Linux and macOS.
+- x86-64 or AArch64 CPU.
 
 ### Windows-specific requirements
 
@@ -46,10 +40,6 @@ We have a Matrix Room Space `#obliteration:matrix.org` on [Matrix.to](https://ma
 ### Linux-specific requirements
 
 Obliteration supports only 4KB/8KB/16KB pages. Most people should not have any problem with this because 4KB is the default for most distros.
-
-## Get the required PS4 system files
-
-Obliteration requires the `PS4UPDATE1.PUP.dec` firmware file in order to work. We can't provide these files due to legal reasons. You can use [pup_decrypt](https://github.com/idc/ps4-pup_decrypt) to get `PS4UPDATE1.PUP.dec` from `PS4UPDATE.PUP` using your PS4.
 
 ## Building from source
 
@@ -119,7 +109,7 @@ Choose `[YOUR-PLATFORM]-release` for optimized outputs. The `*-debug` is designe
 ### Build
 
 ```sh
-cmake --build --preset PRESET
+cmake --build build
 ```
 
 ## Development

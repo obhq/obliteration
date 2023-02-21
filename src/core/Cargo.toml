@@ -9,4 +9,4 @@ crate-type = ["staticlib"]
 [dependencies]
 error = { path = "../error" }
 pkg = { path = "../pkg" }
-pup = { path = "../pup" }
+system = { path = "../system" }

@@ -3,12 +3,12 @@ members = [
     "core",
     "elf",
     "error",
-    "exfat",
     "fs",
+    "ftp",
     "kernel",
     "pfs",
     "pkg",
-    "pup",
+    "system",
     "util"
 ]
 
