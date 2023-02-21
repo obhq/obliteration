@@ -1,13 +1,15 @@
 use std::fmt::{Display, Formatter};
 use std::os::raw::c_char;
 
+/// # Safety
+/// `err` must be come from [`Error::new()`].
 #[no_mangle]
 pub unsafe extern "C" fn error_free(err: *mut Error) {
     unsafe { Box::from_raw(err) };
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn error_message(err: &Error) -> *const c_char {
+pub extern "C" fn error_message(err: &Error) -> *const c_char {
     unsafe { util::str::to_c(&err.to_string()) }
 }
 

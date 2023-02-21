@@ -213,9 +213,12 @@ impl FtpClient {
         // Extract code.
         let code: [u8; 3] = line[..3].as_bytes().try_into().unwrap();
 
-        if !code[0].is_ascii_digit() || code[0] == b'0' || code[0] > b'5' {
-            return Err(ReadReplyError::InvalidData(line));
-        } else if !code[1].is_ascii_digit() || code[1] > b'5' {
+        if !code[0].is_ascii_digit()
+            || code[0] == b'0'
+            || code[0] > b'5'
+            || !code[1].is_ascii_digit()
+            || code[1] > b'5'
+        {
             return Err(ReadReplyError::InvalidData(line));
         }
 
@@ -391,6 +394,10 @@ impl FtpItem {
     pub fn len(&self) -> u64 {
         self.len
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
 }
 
 /// Type of [`FtpItem`].
@@ -409,11 +416,11 @@ pub struct Reply {
 
 impl Reply {
     pub fn is_positive_preliminary(&self) -> bool {
-        return self.code[0] == b'1';
+        self.code[0] == b'1'
     }
 
     pub fn is_positive_completion(&self) -> bool {
-        return self.code[0] == b'2';
+        self.code[0] == b'2'
     }
 
     pub fn text(&self) -> &str {

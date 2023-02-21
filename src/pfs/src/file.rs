@@ -85,6 +85,10 @@ impl<'a> File<'a> {
         self.inode().flags().is_compressed()
     }
 
+    pub fn is_empty(&self) -> bool {
+        return self.len() == 0;
+    }
+
     fn inode(&self) -> &Inode {
         &self.pfs.inodes[self.inode]
     }

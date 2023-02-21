@@ -75,6 +75,10 @@ impl<F: Read + Seek> Reader<F> {
         self.original_size
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.original_size == 0
+    }
+
     fn read_compressed_block(&mut self, num: u64) -> std::io::Result<()> {
         // Get end offset.
         let end = match self.compressed_blocks.get(num as usize + 1) {
@@ -97,31 +101,34 @@ impl<F: Read + Seek> Reader<F> {
         let buf = self.current_block.as_mut_slice();
 
         // Check if block compressed.
-        if size == self.original_block_size {
-            self.file.seek(SeekFrom::Start(offset))?;
-            self.file.read_exact(buf)?;
-        } else if size > self.original_block_size {
-            buf.fill(0);
-        } else {
-            // Read compressed.
-            let mut compressed = unsafe { new_buffer(size as usize) };
+        match size.cmp(&self.original_block_size) {
+            std::cmp::Ordering::Less => {
+                // Read compressed.
+                let mut compressed = unsafe { new_buffer(size as usize) };
 
-            self.file.seek(SeekFrom::Start(offset))?;
-            self.file.read_exact(&mut compressed)?;
+                self.file.seek(SeekFrom::Start(offset))?;
+                self.file.read_exact(&mut compressed)?;
 
-            // Decompress.
-            let mut deflate = flate2::Decompress::new(true);
-            let status = match deflate.decompress(&compressed, buf, FlushDecompress::Finish) {
-                Ok(v) => v,
-                Err(e) => return Err(std::io::Error::new(ErrorKind::Other, e)),
-            };
+                // Decompress.
+                let mut deflate = flate2::Decompress::new(true);
+                let status = match deflate.decompress(&compressed, buf, FlushDecompress::Finish) {
+                    Ok(v) => v,
+                    Err(e) => return Err(std::io::Error::new(ErrorKind::Other, e)),
+                };
 
-            if status != flate2::Status::StreamEnd || deflate.total_out() as usize != buf.len() {
-                return Err(std::io::Error::new(
-                    ErrorKind::Other,
-                    format!("invalid data on block #{}", num),
-                ));
+                if status != flate2::Status::StreamEnd || deflate.total_out() as usize != buf.len()
+                {
+                    return Err(std::io::Error::new(
+                        ErrorKind::Other,
+                        format!("invalid data on block #{}", num),
+                    ));
+                }
             }
+            std::cmp::Ordering::Equal => {
+                self.file.seek(SeekFrom::Start(offset))?;
+                self.file.read_exact(buf)?;
+            }
+            std::cmp::Ordering::Greater => buf.fill(0),
         }
 
         Ok(())
