@@ -6,8 +6,8 @@ use thiserror::Error;
 
 pub mod retrieve;
 
-/// The reason we need to implement our own FTP client is because all of other FTP client is not
-/// support custom command.
+/// The reason we need to implement our own FTP client is because no other FTP client supports the
+/// custom command.
 ///
 /// This implementation follows https://www.rfc-editor.org/rfc/rfc959.
 pub struct FtpClient {

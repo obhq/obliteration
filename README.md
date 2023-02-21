@@ -32,6 +32,7 @@ We have a Matrix Room Space `#obliteration:matrix.org` on [Matrix.to](https://ma
 
 - Windows 10, Linux and macOS.
 - x86-64 or AArch64 CPU.
+- A jailbroken PS4 with FTP server that support SELF decryption.
 
 ### Windows-specific requirements
 
