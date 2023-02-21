@@ -23,8 +23,8 @@ We have a Matrix Room Space `#obliteration:matrix.org` on [Matrix.to](https://ma
 
 ## Features
 
-- [x] Built-in PUP file supports for decrypted PUP from [pup_decrypt](https://github.com/idc/ps4-pup_decrypt).
-- [x] Built-in PKG file supports for Fake PKG.
+- [x] Built-in PUP file with support for decrypted PUP from [pup_decrypt](https://github.com/idc/ps4-pup_decrypt).
+- [x] Built-in PKG file with support for Fake PKG.
 - [x] Game library.
 - [ ] Emulate system calls instead of user-space libraries.
 
@@ -49,7 +49,12 @@ Obliteration supports only 4KB/8KB/16KB pages. Most people should not have any p
 
 ## Get the required PS4 system files
 
-Obliteration requires the `PS4UPDATE1.PUP.dec` firmware file in order to work. We can't provide these files due to legal reasons. You can use [pup_decrypt](https://github.com/idc/ps4-pup_decrypt) to get `PS4UPDATE1.PUP.dec` from `PS4UPDATE.PUP` using your PS4.
+Obliteration requires the `PS4UPDATE1.PUP.dec` firmware file in order to work. We can't provide these files due to legal reasons. These are the steps to get the firmware file:
+1. Download this homebrew app: https://github.com/ultimaweapon/ps4-update-decryptor/actions/runs/3603862629 and install it on a jailbroken PS4
+2. Download the PUP file from https://www.playstation.com/en-us/support/hardware/ps4/system-software
+3. Put `PS4UPDATE.PUP` on the root of your USB drive and plug it to the PS4
+4. Run the decryptor.
+5. If everything goes well it will produce `PS4UPDATE1.PUP.dec` and `PS4UPDATE2.PUP.dec` to the root of USB drive
 
 ## Building from source
 
