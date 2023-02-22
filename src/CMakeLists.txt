@@ -27,7 +27,7 @@ ExternalProject_Add(core
     TEST_EXCLUDE_FROM_MAIN ON)
 
 # Setup application target.
-add_executable(obliteration WIN32
+add_executable(obliteration WIN32 MACOSX_BUNDLE
     ansi_escape.cpp
     app_data.cpp
     game_models.cpp

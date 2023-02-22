@@ -8,12 +8,8 @@ jobs:
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
-    - name: Install Qt
-      uses: jurplel/install-qt-action@v3
-      with:
-        cache: true
-        cache-key-prefix: ${{ runner.os }}-install-qt-action
-        version: 6.2.*
+    - name: Install Homebrew packages
+      run: brew install qt@6
     - name: Cache CMake Build Files
       uses: actions/cache@v3.2.5
       id: cache-cmake
@@ -26,3 +22,12 @@ jobs:
       run: cmake --preset mac-release .
     - name: Build
       run: cmake --build --preset mac-release
+    - name: Prepare app bundle
+      run: |
+        mkdir -pv dist
+        mv -v obliteration.app dist
+    - name: Upload bundle
+      uses: actions/upload-artifact@v3
+      with:
+        name: obliteration-mac-amd64
+        path: dist

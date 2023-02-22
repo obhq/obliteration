@@ -23,6 +23,8 @@ We have a Matrix Room Space `#obliteration:matrix.org` on [Matrix.to](https://ma
 
 ## Features
 
+- [x] Cross-platform with native binary for each platform.
+- [x] Supports both x86-64 and AArch64 CPU.
 - [x] Built-in FTP client to pull the decrypted firmware from jailbroken PS4.
 - [x] Built-in PKG file supports for Fake PKG.
 - [x] Game library.
