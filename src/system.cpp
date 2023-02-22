@@ -36,7 +36,7 @@ bool isSystemInitialized(const QString &path)
     }
 }
 
-bool initSystem(const QString &path, const QString &from, QWidget *parent)
+bool initSystem(const QString &path, const QString &from, bool explicitDecryption, QWidget *parent)
 {
     // Setup progress dialog.
     ProgressDialog progress("Initializing system", QString("Connecting to %1").arg(from), parent);
@@ -56,7 +56,7 @@ bool initSystem(const QString &path, const QString &from, QWidget *parent)
     QObject context;
     QString error;
     auto finished = false;
-    auto downloader = new SystemDownloader(from, path);
+    auto downloader = new SystemDownloader(from, path, explicitDecryption);
 
     downloader->moveToThread(&background);
 

@@ -8,7 +8,7 @@
 class SystemDownloader : public QObject {
     Q_OBJECT
 public:
-    SystemDownloader(const QString &from, const QString &to);
+    SystemDownloader(const QString &from, const QString &to, bool explicitDecryption);
     ~SystemDownloader();
 
 public slots:
@@ -24,4 +24,5 @@ private:
 private:
     QString m_from;
     QString m_to;
+    bool m_explicitDecryption;
 };

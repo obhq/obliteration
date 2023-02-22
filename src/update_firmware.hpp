@@ -3,6 +3,7 @@
 #include <QString>
 #include <QWidget>
 
+class QCheckBox;
 class QGroupBox;
 class QLineEdit;
 
@@ -13,10 +14,12 @@ public:
 
 public:
     QString from() const;
+    bool explicitDecryption() const;
 
 private:
     QGroupBox *setupFromGroup();
 
 private:
     QLineEdit *m_from;
+    QCheckBox *m_explicitDecryption;
 };

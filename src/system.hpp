@@ -6,4 +6,4 @@ class QWidget;
 
 bool isSystemInitialized();
 bool isSystemInitialized(const QString &path);
-bool initSystem(const QString &path, const QString &from, QWidget *parent = nullptr);
+bool initSystem(const QString &path, const QString &from, bool explicitDecryption, QWidget *parent = nullptr);

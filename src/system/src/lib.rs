@@ -16,6 +16,7 @@ use thiserror::Error;
 pub unsafe extern "C" fn system_download(
     from: *const c_char,
     to: *const c_char,
+    explicit_decryption: bool,
     status: extern "C" fn(*const c_char, u64, u64, *mut c_void),
     ud: *mut c_void,
 ) -> *mut Error {
@@ -39,22 +40,24 @@ pub unsafe extern "C" fn system_download(
     };
 
     // Enable SELF decryption.
-    status("Enabling SELF decryption", 0, 0);
+    if explicit_decryption {
+        status("Enabling SELF decryption", 0, 0);
 
-    if let Err(e) = ftp.exec("DECRYPT", "") {
-        return Error::new(&DownloadError::SendCommandFailed(
-            Cow::Borrowed("DECRYPT"),
-            e,
-        ));
-    }
-
-    match ftp.read_reply() {
-        Ok(v) => {
-            if !v.is_positive_completion() {
-                return Error::new(&DownloadError::EnableDecryptionFailed(v));
-            }
+        if let Err(e) = ftp.exec("DECRYPT", "") {
+            return Error::new(&DownloadError::SendCommandFailed(
+                Cow::Borrowed("DECRYPT"),
+                e,
+            ));
         }
-        Err(e) => return Error::new(&DownloadError::ReadReplyFailed(e)),
+
+        match ftp.read_reply() {
+            Ok(v) => {
+                if !v.is_positive_completion() {
+                    return Error::new(&DownloadError::EnableDecryptionFailed(v));
+                }
+            }
+            Err(e) => return Error::new(&DownloadError::ReadReplyFailed(e)),
+        }
     }
 
     // Download the whole system directory.

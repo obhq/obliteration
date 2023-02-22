@@ -2,12 +2,18 @@
 #include "error.hpp"
 
 extern "C" {
-    error *system_download(const char *from, const char *to, void (*status) (const char *, std::uint64_t, std::uint64_t, void *), void *ud);
+    error *system_download(
+        const char *from,
+        const char *to,
+        bool explicit_decryption,
+        void (*status) (const char *, std::uint64_t, std::uint64_t, void *),
+        void *ud);
 }
 
-SystemDownloader::SystemDownloader(const QString &from, const QString &to) :
+SystemDownloader::SystemDownloader(const QString &from, const QString &to, bool explicitDecryption) :
     m_from(from),
-    m_to(to)
+    m_to(to),
+    m_explicitDecryption(explicitDecryption)
 {
 }
 
@@ -19,7 +25,7 @@ void SystemDownloader::exec()
 {
     auto from = m_from.toStdString();
     auto to = m_to.toStdString();
-    Error error = system_download(from.c_str(), to.c_str(), [](auto status, auto total, auto written, auto ud) {
+    Error error = system_download(from.c_str(), to.c_str(), m_explicitDecryption, [](auto status, auto total, auto written, auto ud) {
         reinterpret_cast<SystemDownloader *>(ud)->update(status, total, written);
     }, this);
 

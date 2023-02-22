@@ -218,7 +218,7 @@ public:
             ? field(FIELD_SYSTEM_LOCATION).toString()
             : readSystemDirectorySetting();
 
-        // Get FTP address.
+        // Load update form.
         auto from = m_form->from();
 
         if (from.isEmpty()) {
@@ -226,8 +226,10 @@ public:
             return false;
         }
 
+        auto explicitDecryption = m_form->explicitDecryption();
+
         // Install.
-        return initSystem(systemPath, from, this);
+        return initSystem(systemPath, from, explicitDecryption, this);
     }
 
 private:
