@@ -4,7 +4,6 @@
 
 class QWidget;
 
-bool hasSystemFilesInstalled();
-bool hasSystemFilesInstalled(const QString &systemPath);
-bool updateSystemFiles(QWidget *parent = nullptr);
-bool updateSystemFiles(const QString &systemPath, QWidget *parent = nullptr);
+bool isSystemInitialized();
+bool isSystemInitialized(const QString &path);
+bool initSystem(const QString &path, const QString &from, bool explicitDecryption, QWidget *parent = nullptr);

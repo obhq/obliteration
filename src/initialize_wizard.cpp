@@ -1,6 +1,7 @@
 #include "initialize_wizard.hpp"
 #include "settings.hpp"
 #include "system.hpp"
+#include "update_firmware.hpp"
 
 #include <QDir>
 #include <QFileDialog>
@@ -195,7 +196,7 @@ private:
 
 class FirmwarePage : public QWizardPage {
 public:
-    FirmwarePage() : m_completed(false)
+    FirmwarePage() : m_form(nullptr)
     {
         auto layout = new QVBoxLayout();
 
@@ -203,43 +204,36 @@ public:
         setTitle("Install firmware");
         setSubTitle("Obliteration required some firmware files from PS4 in order to work. You need to install those files before you can use Obliteration.");
 
-        // Install button.
-        auto install = new QPushButton("Install firmware...");
-
-        connect(install, &QPushButton::clicked, this, &FirmwarePage::install);
-
-        layout->addStretch();
-        layout->addWidget(install, 0, Qt::AlignHCenter);
-        layout->addStretch();
+        // Page widgets.
+        m_form = new UpdateFirmware();
+        layout->addWidget(m_form);
 
         setLayout(layout);
     }
 
-    bool isComplete() const {
-        return m_completed;
-    }
-
-private:
-    void install()
+    bool validatePage() override
     {
         // Get system path.
-        auto wizard = this->wizard();
-        auto systemPath = wizard->hasVisitedPage(PageSystem)
+        auto systemPath = wizard()->hasVisitedPage(PageSystem)
             ? field(FIELD_SYSTEM_LOCATION).toString()
             : readSystemDirectorySetting();
 
-        // Install.
-        m_completed = updateSystemFiles(systemPath, this);
-        emit completeChanged();
+        // Load update form.
+        auto from = m_form->from();
 
-        // Move to next page automatically if installation was completed successfully.
-        if (m_completed) {
-            wizard->next();
+        if (from.isEmpty()) {
+            QMessageBox::critical(this, "Error", "No FTP server has been specified.");
+            return false;
         }
+
+        auto explicitDecryption = m_form->explicitDecryption();
+
+        // Install.
+        return initSystem(systemPath, from, explicitDecryption, this);
     }
 
 private:
-    bool m_completed;
+    UpdateFirmware *m_form;
 };
 
 class ConclusionPage : public QWizardPage {
@@ -311,10 +305,10 @@ int InitializeWizard::nextId() const
     case PageGame:
         if (hasVisitedPage(PageSystem)) {
             // No system path has been configured before.
-            if (!hasSystemFilesInstalled(field(FIELD_SYSTEM_LOCATION).toString())) {
+            if (!isSystemInitialized(field(FIELD_SYSTEM_LOCATION).toString())) {
                 return PageFirmware;
             }
-        } else if (!hasSystemFilesInstalled()) {
+        } else if (!isSystemInitialized()) {
             return PageFirmware;
         }
 

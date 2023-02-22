@@ -42,6 +42,8 @@ add_executable(obliteration WIN32
     resources.qrc
     settings.cpp
     system.cpp
+    system_downloader.cpp
+    update_firmware.cpp
     util.cpp)
 
 if(WIN32)

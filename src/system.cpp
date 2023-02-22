@@ -1,22 +1,28 @@
 #include "system.hpp"
 #include "path.hpp"
 #include "progress_dialog.hpp"
-#include "pup.hpp"
 #include "settings.hpp"
 #include "string.hpp"
+#include "system_downloader.hpp"
 
+#include <QCoreApplication>
 #include <QDir>
-#include <QFileDialog>
 #include <QMessageBox>
+#include <QThread>
 
-bool hasSystemFilesInstalled()
+static const char *MkpathTarget[] = {
+    "dev",
+    "mnt/app0"
+};
+
+bool isSystemInitialized()
 {
-    return hasSystemFilesInstalled(readSystemDirectorySetting());
+    return isSystemInitialized(readSystemDirectorySetting());
 }
 
-bool hasSystemFilesInstalled(const QString &systemPath)
+bool isSystemInitialized(const QString &path)
 {
-    auto libkernel = toPath(systemPath);
+    auto libkernel = toPath(path);
 
     try {
         libkernel /= STR("system");
@@ -30,73 +36,67 @@ bool hasSystemFilesInstalled(const QString &systemPath)
     }
 }
 
-bool updateSystemFiles(QWidget *parent)
+bool initSystem(const QString &path, const QString &from, bool explicitDecryption, QWidget *parent)
 {
-    return updateSystemFiles(readSystemDirectorySetting(), parent);
-}
-
-bool updateSystemFiles(const QString &systemPath, QWidget *parent)
-{
-    // Browse for PS4UPDATE1.PUP.dec.
-    auto pupPath = QDir::toNativeSeparators(QFileDialog::getOpenFileName(parent, "Install PS4UPDATE1.PUP.dec", QString(), "PS4UPDATE1.PUP.dec")).toStdString();
-
-    if (pupPath.empty()) {
-        return false;
-    }
-
     // Setup progress dialog.
-    ProgressDialog progress("Installing PS4UPDATE1.PUP.dec", QString("Opening %1").arg(pupPath.c_str()), parent);
+    ProgressDialog progress("Initializing system", QString("Connecting to %1").arg(from), parent);
 
-    // Open PS4UPDATE1.PUP.dec.
-    Error error;
-    Pup pup(pup_open(pupPath.c_str(), &error));
+    // Create empty directories.
+    QDir base(path);
 
-    if (!pup) {
-        QMessageBox::critical(&progress, "Error", QString("Failed to open %1: %2").arg(pupPath.c_str()).arg(error.message()));
-        return false;
+    for (auto relative : MkpathTarget) {
+        if (!base.mkpath(relative)) {
+            QMessageBox::critical(parent, "Error", QString("Cannot create a directory inside %1").arg(path));
+            return false;
+        }
     }
 
-    // Dump system image.
-    auto output = joinPath(systemPath, "system");
-    error = pup_dump_system(pup, output.c_str(), [](const char *name, std::uint64_t total, std::uint64_t written, void *ud) {
-        auto toProgress = [total](std::uint64_t v) -> int {
-            if (total >= 1024UL*1024UL*1024UL*1024UL) { // >= 1TB
-                return v / (1024UL*1024UL*1024UL*10UL); // 10GB step.
-            } else if (total >= 1024UL*1024UL*1024UL*100UL) { // >= 100GB
-                return v / (1024UL*1024UL*1024UL); // 1GB step.
-            } else if (total >= 1024UL*1024UL*1024UL*10UL) { // >= 10GB
-                return v / (1024UL*1024UL*100UL); // 100MB step.
-            } else if (total >= 1024UL*1024UL*1024UL) { // >= 1GB
-                return v / (1024UL*1024UL*10UL); // 10MB step.
-            } else if (total >= 1024UL*1024UL*100UL) { // >= 100MB
-                return v / (1024UL*1024UL);// 1MB step.
-            } else {
-                return v;
-            }
-        };
+    // Setup the system downloader.
+    QThread background;
+    QObject context;
+    QString error;
+    auto finished = false;
+    auto downloader = new SystemDownloader(from, path, explicitDecryption);
 
-        auto progress = reinterpret_cast<ProgressDialog *>(ud);
-        auto max = toProgress(total);
-        auto value = toProgress(written);
-        auto label = QString("Installing %1...").arg(name);
+    downloader->moveToThread(&background);
 
-        if (progress->statusText() != label) {
-            progress->setStatusText(label);
-            progress->setValue(0);
-            progress->setMaximum(max);
+    QObject::connect(&background, &QThread::started, downloader, &SystemDownloader::exec);
+    QObject::connect(&background, &QThread::finished, downloader, &QObject::deleteLater);
+
+    QObject::connect(downloader, &SystemDownloader::statusChanged, &context, [&](auto status, auto total, auto written) {
+        if (progress.statusText() != status) {
+            progress.setStatusText(status);
+            progress.setValue(0);
+            progress.setMaximum(total);
         } else {
-            progress->setValue(value == max && written != total ? value - 1 : value);
+            progress.setValue(written);
         }
-    }, &progress);
+    });
 
+    QObject::connect(downloader, &SystemDownloader::finished, &context, [&](auto e) {
+        error = e;
+        finished = true;
+    });
+
+    // Start dumping.
+    background.start();
+
+    while (!finished) {
+        QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents);
+    }
+
+    // Clean up.
+    background.quit();
+    background.wait();
     progress.complete();
 
-    if (error) {
-        QMessageBox::critical(parent, "Error", QString("Failed to install %1 to %2: %3").arg(pupPath.c_str()).arg(output.c_str()).arg(error.message()));
+    // Check result.
+    if (!error.isEmpty()) {
+        QMessageBox::critical(parent, "Error", QString("Failed to download system files from %1 to %2: %3").arg(from).arg(path).arg(error));
         return false;
     }
 
-    QMessageBox::information(parent, "Success", "Installation completed successfully.");
+    QMessageBox::information(parent, "Success", "Initialization completed successfully.");
 
     return true;
 }
