@@ -4,7 +4,7 @@ use std::io::{Read, Seek};
 use std::sync::Arc;
 use thiserror::Error;
 
-/// Represents a loaded SELF.
+/// Represents a loaded SELF in an unmodified state (no code lifting, etc.).
 pub struct Module<I: Read + Seek> {
     image: Elf<I>,
     memory: Memory,
@@ -169,6 +169,12 @@ impl Memory {
 
     pub fn segments(&self) -> &[MemorySegment] {
         self.segments.as_ref()
+    }
+}
+
+impl AsRef<[u8]> for Memory {
+    fn as_ref(&self) -> &[u8] {
+        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
     }
 }
 

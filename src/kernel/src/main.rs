@@ -1,5 +1,6 @@
 use self::fs::Fs;
 use self::fs::MountPoint;
+use self::lifter::LiftedModule;
 use self::memory::MemoryManager;
 use self::module::Module;
 use clap::Parser;
@@ -12,6 +13,7 @@ use std::sync::Arc;
 
 mod errno;
 mod fs;
+mod lifter;
 mod log;
 mod memory;
 mod module;
@@ -102,7 +104,7 @@ fn run() -> bool {
 
     // Load eboot.bin.
     let eboot = match load_module(&fs, mm.clone(), ModuleName::Absolute("/mnt/app0/eboot.bin")) {
-        Some(v) => v,
+        Some(v) => v.0,
         None => return false,
     };
 
@@ -113,9 +115,21 @@ fn run() -> bool {
         .iter()
         .any(|p| p.ty() == ProgramType::PT_DYNAMIC)
     {
-        match load_module(&fs, mm, ModuleName::Search("libkernel")) {
-            Some(v) => Some(v),
+        // Load the module.
+        let (module, vpath) = match load_module(&fs, mm, ModuleName::Search("libkernel")) {
+            Some(v) => v,
             None => return false,
+        };
+
+        // Lift the module.
+        info!("Lifting {vpath}.");
+
+        match LiftedModule::lift(module) {
+            Ok(v) => Some(v),
+            Err(e) => {
+                error!(e, "Lifting failed");
+                return false;
+            }
         }
     } else {
         None
@@ -124,7 +138,11 @@ fn run() -> bool {
     true
 }
 
-fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Module<File>> {
+fn load_module(
+    fs: &Fs,
+    mm: Arc<MemoryManager>,
+    name: ModuleName,
+) -> Option<(Module<File>, String)> {
     // Get the module.
     let file = match name {
         ModuleName::Absolute(name) => {
@@ -209,7 +227,7 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
 
     if let Some(segments) = elf.self_segments() {
         info!("Number of segments: {}", segments.len());
-        info!("Image type: SELF");
+        info!("Image type        : SELF");
 
         for (i, s) in segments.iter().enumerate() {
             info!("============= Segment #{} =============", i);
@@ -219,7 +237,7 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
             info!("Decompressed size: {}", s.decompressed_size());
         }
     } else {
-        info!("Image type: ELF");
+        info!("Image type        : ELF");
     }
 
     for (i, p) in elf.programs().iter().enumerate() {
@@ -255,7 +273,7 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
         info!("Program: {}", s.program());
     }
 
-    Some(module)
+    Some((module, virtual_path))
 }
 
 enum ModuleName<'a> {
