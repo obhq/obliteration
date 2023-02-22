@@ -40,7 +40,9 @@ impl<'a> Disassembler<'a> {
         Ok(())
     }
 
-    pub fn fixup(&mut self) {}
+    pub fn fixup(&mut self) {
+        // TODO: Fixup all disassembled function.
+    }
 
     pub fn get(&self, offset: usize) -> Option<&Function> {
         None
