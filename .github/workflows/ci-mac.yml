@@ -25,7 +25,7 @@ jobs:
     - name: Prepare app bundle
       run: |
         mkdir -pv dist
-        mv -v obliteration.app dist
+        mv -v build/src/obliteration.app dist
     - name: Upload bundle
       uses: actions/upload-artifact@v3
       with:
