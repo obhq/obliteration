@@ -19,7 +19,7 @@ jobs:
           /home/runner/work/obliteration/obliteration/src/target
         key: ${{ runner.os }}-cmake-${{ hashFiles('**/CMakeLists.*', '**/Cargo.lock', '**/Cargo.toml', '.github/workflows/*.yml') }}
     - name: Run CMake
-      run: cmake --preset mac-release .
+      run: cmake --preset mac-release -DCMAKE_PREFIX_PATH=$(brew --prefix qt@6) .
     - name: Build
       run: cmake --build --preset mac-release
     - name: Prepare app bundle
