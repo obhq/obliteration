@@ -121,11 +121,17 @@ impl FtpClient {
 
             // Parse data.
             let line = line.trim_end();
-
-            match FtpItem::new(line) {
-                Some(v) => items.push(v),
+            let item = match FtpItem::new(line) {
+                Some(v) => v,
                 None => return Err(ListError::InvalidData(line.into())),
             };
+
+            // Skip if item represent current and parent directory.
+            if item.name == "." || item.name == ".." {
+                continue;
+            }
+
+            items.push(item);
         }
 
         drop(data);
@@ -339,24 +345,30 @@ impl FtpItem {
         let mut mode: Option<&str> = None;
         let mut len: Option<&str> = None;
         let mut name: Option<&str> = None;
+        let mut next = 0;
 
-        for (i, v) in data.splitn(9, ' ').enumerate() {
-            if v.is_empty() {
-                return None;
-            }
+        for i in 0..9 {
+            let remain = data[next..].trim_start();
+            let end = remain
+                .chars()
+                .position(|c| c.is_whitespace())
+                .unwrap_or(remain.len());
+            let value = &remain[..end];
 
             match i {
-                0 => mode = Some(v),
+                0 => mode = Some(value),
                 1 => {} // What is this?
                 2 => {} // Owner.
                 3 => {} // Group.
-                4 => len = Some(v),
+                4 => len = Some(value),
                 5 => {} // Month.
                 6 => {} // Day.
                 7 => {} // Year.
-                8 => name = Some(v),
+                8 => name = Some(value),
                 _ => unreachable!(),
             }
+
+            next = end;
         }
 
         let mode = mode?;
