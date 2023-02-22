@@ -12,7 +12,6 @@ pub mod retrieve;
 /// This implementation follows https://www.rfc-editor.org/rfc/rfc959.
 pub struct FtpClient {
     con: BufReader<TcpStream>,
-    passive_addr: String,
 }
 
 impl FtpClient {
@@ -25,7 +24,6 @@ impl FtpClient {
         // Construct the client.
         let mut client = Self {
             con: BufReader::new(con),
-            passive_addr: String::new(),
         };
 
         // Wait until the server is ready.
@@ -44,46 +42,16 @@ impl FtpClient {
             }
         }
 
-        // Enable passive mode.
-        if let Err(e) = client.exec("PASV", "") {
-            return Err(NewError::EnablePassiveFailed(e));
-        }
-
-        // Parse PASV reply.
-        client.passive_addr = match client.read_reply() {
-            Ok(v) => {
-                // Check if 2xx reply.
-                if !v.is_positive_completion() {
-                    return Err(NewError::UnexpectedPassiveReply(v));
-                }
-
-                // Extract host and port.
-                let t = v.text();
-                let i = match t.chars().position(|c| c.is_ascii_digit()) {
-                    Some(v) => v,
-                    None => return Err(NewError::UnexpectedPassiveReply(v)),
-                };
-
-                match Self::parse_port(&t[i..]) {
-                    Some(v) => v,
-                    None => return Err(NewError::UnexpectedPassiveReply(v)),
-                }
-            }
-            Err(e) => return Err(NewError::ReadPassiveFailed(e)),
-        };
-
         Ok(client)
     }
 
     pub fn list(&mut self, path: &str) -> Result<Vec<FtpItem>, ListError> {
         // Open data connection.
-        let mut data = match TcpStream::connect(&self.passive_addr) {
+        let data_addr = self.passive()?;
+        let mut data = match TcpStream::connect(&data_addr) {
             Ok(v) => BufReader::new(v),
             Err(e) => {
-                return Err(ListError::OpenDataConnectionFailed(
-                    self.passive_addr.clone(),
-                    e,
-                ));
+                return Err(ListError::OpenDataConnectionFailed(data_addr, e));
             }
         };
 
@@ -151,13 +119,11 @@ impl FtpClient {
 
     pub fn retrieve(&mut self, path: &str) -> Result<Retrieve, RetrieveError> {
         // Open data connection.
-        let data = match TcpStream::connect(&self.passive_addr) {
+        let data_addr = self.passive()?;
+        let data = match TcpStream::connect(&data_addr) {
             Ok(v) => v,
             Err(e) => {
-                return Err(RetrieveError::OpenDataConnectionFailed(
-                    self.passive_addr.clone(),
-                    e,
-                ));
+                return Err(RetrieveError::OpenDataConnectionFailed(data_addr, e));
             }
         };
 
@@ -273,6 +239,38 @@ impl FtpClient {
         };
 
         Ok(Reply { code, text })
+    }
+
+    fn passive(&mut self) -> Result<String, PassiveError> {
+        // Send the command.
+        if let Err(e) = self.exec("PASV", "") {
+            return Err(PassiveError::ExecFailed(e));
+        }
+
+        // Parse the reply.
+        let addr = match self.read_reply() {
+            Ok(v) => {
+                // Check if 2xx reply.
+                if !v.is_positive_completion() {
+                    return Err(PassiveError::UnexpectedReply(v));
+                }
+
+                // Extract host and port.
+                let t = v.text();
+                let i = match t.chars().position(|c| c.is_ascii_digit()) {
+                    Some(v) => v,
+                    None => return Err(PassiveError::UnexpectedReply(v)),
+                };
+
+                match Self::parse_port(&t[i..]) {
+                    Some(v) => v,
+                    None => return Err(PassiveError::UnexpectedReply(v)),
+                }
+            }
+            Err(e) => return Err(PassiveError::ReadReplyFailed(e)),
+        };
+
+        Ok(addr)
     }
 
     fn parse_port(v: &str) -> Option<String> {
@@ -451,6 +449,13 @@ impl Display for Reply {
     }
 }
 
+/// Represents an error for [`FtpClient::passive()`].
+enum PassiveError {
+    ExecFailed(ExecError),
+    ReadReplyFailed(ReadReplyError),
+    UnexpectedReply(Reply),
+}
+
 /// Represents an error for [`FtpClient::new()`].
 #[derive(Debug, Error)]
 pub enum NewError {
@@ -462,7 +467,11 @@ pub enum NewError {
 
     #[error("the server reply with an unexpected greeting ({0})")]
     UnexpectedGreeting(Reply),
+}
 
+/// Represents an error for [`FtpClient::list()`].
+#[derive(Debug, Error)]
+pub enum ListError {
     #[error("cannot enable passive mode")]
     EnablePassiveFailed(#[source] ExecError),
 
@@ -471,11 +480,7 @@ pub enum NewError {
 
     #[error("unexpected reply for PASV ({0})")]
     UnexpectedPassiveReply(Reply),
-}
 
-/// Represents an error for [`FtpClient::list()`].
-#[derive(Debug, Error)]
-pub enum ListError {
     #[error("cannot open a data connection to {0}")]
     OpenDataConnectionFailed(String, #[source] std::io::Error),
 
@@ -495,9 +500,28 @@ pub enum ListError {
     InvalidData(String),
 }
 
+impl From<PassiveError> for ListError {
+    fn from(value: PassiveError) -> Self {
+        match value {
+            PassiveError::ExecFailed(e) => Self::EnablePassiveFailed(e),
+            PassiveError::ReadReplyFailed(e) => Self::ReadPassiveFailed(e),
+            PassiveError::UnexpectedReply(r) => Self::UnexpectedPassiveReply(r),
+        }
+    }
+}
+
 /// Represents an error for [`FtpClient::retrieve()`].
 #[derive(Debug, Error)]
 pub enum RetrieveError {
+    #[error("cannot enable passive mode")]
+    EnablePassiveFailed(#[source] ExecError),
+
+    #[error("cannot read the reply of PASV")]
+    ReadPassiveFailed(#[source] ReadReplyError),
+
+    #[error("unexpected reply for PASV ({0})")]
+    UnexpectedPassiveReply(Reply),
+
     #[error("cannot open a data connection to {0}")]
     OpenDataConnectionFailed(String, #[source] std::io::Error),
 
@@ -509,6 +533,16 @@ pub enum RetrieveError {
 
     #[error("unexpected reply for 'RETR' command ({0})")]
     UnexpectedReply(Reply),
+}
+
+impl From<PassiveError> for RetrieveError {
+    fn from(value: PassiveError) -> Self {
+        match value {
+            PassiveError::ExecFailed(e) => Self::EnablePassiveFailed(e),
+            PassiveError::ReadReplyFailed(e) => Self::ReadPassiveFailed(e),
+            PassiveError::UnexpectedReply(r) => Self::UnexpectedPassiveReply(r),
+        }
+    }
 }
 
 /// Represents an error for [`FtpClient::exec()`].
