@@ -54,7 +54,7 @@ add_dependencies(obliteration core)
 
 set_target_properties(obliteration PROPERTIES AUTOMOC ON AUTORCC ON)
 
-if(WIN32 OR APPLE)
+if(WIN32)
     set_target_properties(obliteration PROPERTIES OUTPUT_NAME Obliteration)
 endif()
 
