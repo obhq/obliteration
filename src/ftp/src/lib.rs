@@ -345,10 +345,10 @@ impl FtpItem {
         let mut mode: Option<&str> = None;
         let mut len: Option<&str> = None;
         let mut name: Option<&str> = None;
-        let mut next = 0;
+        let mut next = data;
 
         for i in 0..9 {
-            let remain = data[next..].trim_start();
+            let remain = next.trim_start();
             let end = remain
                 .chars()
                 .position(|c| c.is_whitespace())
@@ -368,7 +368,7 @@ impl FtpItem {
                 _ => unreachable!(),
             }
 
-            next = end;
+            next = &remain[end..];
         }
 
         let mode = mode?;
