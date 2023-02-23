@@ -109,7 +109,7 @@ fn run() -> bool {
     };
 
     // Check if we need to run libkernel instead of eboot.bin.
-    let libkernel = if eboot
+    let _libkernel = if eboot
         .image()
         .programs()
         .iter()

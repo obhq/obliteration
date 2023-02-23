@@ -44,7 +44,7 @@ impl<'a> Disassembler<'a> {
         // TODO: Fixup all disassembled function.
     }
 
-    pub fn get(&self, offset: usize) -> Option<&Function> {
+    pub fn get(&self, _offset: usize) -> Option<&Function> {
         None
     }
 
@@ -75,18 +75,48 @@ impl<'a> Disassembler<'a> {
             }
 
             // Parse the instruction.
-            let offset = (i.ip() - base) as usize;
+            let _offset = (i.ip() - base) as usize;
 
             match i.code() {
-                Code::Xor_rm64_r64 => func.instructions.push(Instruction::Other(i)),
-                _ => {
-                    let opcode = &module[offset..(offset + i.len())];
+                // TODO: Handle Call and Jmp calls properly.
+                // CALL TEST START
+                Code::Call_m1616 | Code::Call_m1632 | Code::Call_m1664 => {
+                    func.instructions.push(Instruction::Other(i))
+                }
+                Code::Call_ptr1616 | Code::Call_ptr1632 => {
+                    func.instructions.push(Instruction::Other(i))
+                }
+                Code::Call_rel16 | Code::Call_rel32_32 | Code::Call_rel32_64 => {
+                    func.instructions.push(Instruction::Other(i))
+                }
+                Code::Call_rm16 | Code::Call_rm32 | Code::Call_rm64 => {
+                    func.instructions.push(Instruction::Other(i))
+                }
+                // CALL TEST END
 
-                    return Err(DisassembleError::UnknownInstruction(
-                        offset,
-                        opcode.into(),
-                        i,
-                    ));
+                // JMP TEST START
+                Code::Jmp_m1616 | Code::Jmp_m1632 | Code::Jmp_m1664 => {
+                    func.instructions.push(Instruction::Other(i))
+                }
+                Code::Jmp_ptr1616 | Code::Jmp_ptr1632 => {
+                    func.instructions.push(Instruction::Other(i))
+                }
+                Code::Jmp_rel8_16
+                | Code::Jmp_rel8_32
+                | Code::Jmp_rel8_64
+                | Code::Jmp_rel16
+                | Code::Jmp_rel32_32
+                | Code::Jmp_rel32_64 => func.instructions.push(Instruction::Other(i)),
+                Code::Jmp_rm16 | Code::Jmp_rm32 | Code::Jmp_rm64 => {
+                    func.instructions.push(Instruction::Other(i))
+                }
+                Code::Jmpe_disp16 | Code::Jmpe_disp32 => {
+                    func.instructions.push(Instruction::Other(i))
+                }
+                Code::Jmpe_rm16 | Code::Jmpe_rm32 => func.instructions.push(Instruction::Other(i)),
+                // JMP TEST END
+                _ => {
+                    func.instructions.push(Instruction::Other(i));
                 }
             }
         }
