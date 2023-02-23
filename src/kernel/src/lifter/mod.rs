@@ -25,7 +25,7 @@ impl<I: Read + Seek> LiftedModule<I> {
         disasm.fixup();
 
         // TODO: Lift the public function to Cranelift IR.
-        let func = disasm.get(entry).unwrap();
+        let _func = disasm.get(entry).unwrap();
 
         Ok(Self { original: module })
     }
