@@ -43,7 +43,7 @@ jobs:
       - name: Cache Vulkan SDK (Windows)
         if: matrix.release_suffix == 'windows'
         id: cache-vulkan
-        uses: actions/cache@v3.2.5
+        uses: actions/cache@v3.2.6
         with:
           path: C:\VulkanSDK
           key: ${{ runner.os }}-vulkanSDK
