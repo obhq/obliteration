@@ -44,8 +44,8 @@ impl<'a> Disassembler<'a> {
         // TODO: Fixup all disassembled function.
     }
 
-    pub fn get(&self, _offset: usize) -> Option<&Function> {
-        None
+    pub fn get(&self, offset: usize) -> Option<&Function> {
+        self.functions.get(&offset)
     }
 
     fn disassemble_single(&mut self, offset: usize) -> Result<Function, DisassembleError> {

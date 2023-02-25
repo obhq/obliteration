@@ -8,21 +8,26 @@ jobs:
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
-    - name: Install System Packages
+    - name: Install system packages
       run: |
         sudo apt-get update
         sudo apt-get install -y flatpak flatpak-builder
     - name: Add Flathub
       run: flatpak remote-add --user flathub https://flathub.org/repo/flathub.flatpakrepo
-    - name: Cache Flatpak Runtimes
-      id: cache-flatpak
+    - name: Cache Flatpak runtimes
       uses: actions/cache@v3.2.6
       with:
         path: ~/.local/share/flatpak/runtime
-        key: ${{ runner.os }}-flatpak-runtime-${{ hashFiles('.github/workflows/ci-linux.yml') }}
-    - if: ${{ steps.cache-flatpak.outputs.cache-hit != 'true' }}
-      name: Install Flatpak Runtimes
+        key: ${{ runner.os }}-flatpak-runtimes-${{ hashFiles('.github/workflows/ci-linux.yml') }}
+      id: flatpak-runtimes
+    - name: Install Flatpak runtimes
       run: flatpak install --noninteractive flathub org.kde.Platform//6.4 org.kde.Sdk//6.4 org.freedesktop.Sdk.Extension.rust-stable//22.08
+      if: ${{ steps.flatpak-runtimes.outputs.cache-hit != 'true' }}
+    - name: Cache build files
+      uses: actions/cache@v3.2.6
+      with:
+        path: .flatpak-builder
+        key: ${{ runner.os }}-build-files-${{ hashFiles('.github/workflows/ci-linux.yml', 'flatpak.yml') }}
     - name: Build Flatpak
       run: flatpak-builder --default-branch dev build flatpak.yml
     - name: Export Flatpak

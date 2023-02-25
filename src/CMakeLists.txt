@@ -5,6 +5,15 @@ include(ExternalProject)
 find_package(Qt6 COMPONENTS Widgets REQUIRED)
 find_package(Threads REQUIRED)
 
+ExternalProject_Add(llvm
+    URL https://github.com/llvm/llvm-project/releases/download/llvmorg-15.0.5/llvm-project-15.0.5.src.tar.xz
+    URL_HASH SHA256=9c4278a6b8884eb7f4ae7dfe3c8e5445019824885e47cfdf1392563c47316fd6
+    DOWNLOAD_EXTRACT_TIMESTAMP false
+    DOWNLOAD_NO_PROGRESS true
+    CMAKE_CACHE_ARGS -DCMAKE_BUILD_TYPE:STRING=Release -DCMAKE_INSTALL_PREFIX:STRING=<INSTALL_DIR>
+    SOURCE_SUBDIR llvm
+    INSTALL_DIR ${CMAKE_SOURCE_DIR}/lib/llvm)
+
 # Setup Rust target.
 set(RUST_OUTPUTS $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/debug,${CMAKE_CURRENT_SOURCE_DIR}/target/release>)
 set(KERNEL ${RUST_OUTPUTS}/obkrnl${CMAKE_EXECUTABLE_SUFFIX})

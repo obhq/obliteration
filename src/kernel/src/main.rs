@@ -1,6 +1,7 @@
 use self::fs::Fs;
 use self::fs::MountPoint;
 use self::lifter::LiftedModule;
+use self::llvm::Llvm;
 use self::memory::MemoryManager;
 use self::module::Module;
 use clap::Parser;
@@ -14,6 +15,7 @@ use std::sync::Arc;
 mod errno;
 mod fs;
 mod lifter;
+mod llvm;
 mod log;
 mod memory;
 mod module;
@@ -74,6 +76,9 @@ fn run() -> bool {
     info!("Starting Obliteration kernel.");
     info!("Debug dump directory is: {}.", args.debug_dump.display());
 
+    // Initialize LLVM.
+    let llvm = Llvm::new();
+
     // Initialize filesystem.
     let fs = Arc::new(Fs::new());
 
@@ -104,27 +109,27 @@ fn run() -> bool {
 
     // Load eboot.bin.
     let eboot = match load_module(&fs, mm.clone(), ModuleName::Absolute("/mnt/app0/eboot.bin")) {
-        Some(v) => v.0,
+        Some(v) => v,
         None => return false,
     };
 
     // Check if we need to run libkernel instead of eboot.bin.
-    let _libkernel = if eboot
+    let libkernel = if eboot
         .image()
         .programs()
         .iter()
         .any(|p| p.ty() == ProgramType::PT_DYNAMIC)
     {
         // Load the module.
-        let (module, vpath) = match load_module(&fs, mm, ModuleName::Search("libkernel")) {
+        let module = match load_module(&fs, mm, ModuleName::Search("libkernel")) {
             Some(v) => v,
             None => return false,
         };
 
         // Lift the module.
-        info!("Lifting {vpath}.");
+        info!("Lifting {}.", module.image().name());
 
-        match LiftedModule::lift(module) {
+        match LiftedModule::lift(&llvm, module) {
             Ok(v) => Some(v),
             Err(e) => {
                 error!(e, "Lifting failed");
@@ -138,11 +143,7 @@ fn run() -> bool {
     true
 }
 
-fn load_module(
-    fs: &Fs,
-    mm: Arc<MemoryManager>,
-    name: ModuleName,
-) -> Option<(Module<File>, String)> {
+fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Module<File>> {
     // Get the module.
     let file = match name {
         ModuleName::Absolute(name) => {
@@ -214,7 +215,7 @@ fn load_module(
     };
 
     // Load the module.
-    let elf = match Elf::open(file) {
+    let elf = match Elf::open(&virtual_path, file) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Load failed");
@@ -273,7 +274,7 @@ fn load_module(
         info!("Program: {}", s.program());
     }
 
-    Some((module, virtual_path))
+    Some(module)
 }
 
 enum ModuleName<'a> {

@@ -50,14 +50,14 @@ Obliteration supports only 4KB/8KB/16KB pages. Most people should not have any p
   - `Desktop development with C++` workload is required
   - You need to install the `MSVC v142 - VS 2019 C++ x64/x86 build tools` component
 - Rust on the latest stable channel
-- CMake 3.21+
+- CMake 3.24+
   - Make sure you have `Add CMake to the system PATH` selected when installing
 
 ### Linux prerequisites
 
 - GCC 9.4+
 - Rust on the latest stable channel
-- CMake 3.21+
+- CMake 3.24+
 
 ### macOS prerequisites
 
@@ -65,7 +65,7 @@ Obliteration supports only 4KB/8KB/16KB pages. Most people should not have any p
 - Homebrew
 - Clang 13+
 - Rust on the latest stable channel
-- CMake 3.21+
+- CMake 3.24+
 
 ### Install Qt 6
 

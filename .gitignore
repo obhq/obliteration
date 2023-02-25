@@ -1,5 +1,6 @@
 /.flatpak-builder/
 /.kernel-debug
 /build/
+/lib/
 /src/target/
 Cargo.lock

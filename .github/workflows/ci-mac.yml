@@ -14,14 +14,13 @@ jobs:
         cache: true
         cache-key-prefix: ${{ runner.os }}-install-qt-action
         version: 6.2.*
-    - name: Cache CMake Build Files
+    - name: Cache build files
       uses: actions/cache@v3.2.6
-      id: cache-cmake
       with:
         path: |
-          /home/runner/work/obliteration/obliteration/build
-          /home/runner/work/obliteration/obliteration/src/target
-        key: ${{ runner.os }}-cmake-${{ hashFiles('**/CMakeLists.*', '**/Cargo.lock', '**/Cargo.toml', '.github/workflows/*.yml') }}
+          build
+          src/target
+        key: ${{ runner.os }}-build-files-${{ hashFiles('.github/workflows/ci-mac.yml') }}
     - name: Run CMake
       run: cmake --preset mac-release .
     - name: Build

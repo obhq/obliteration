@@ -1,7 +1,2 @@
-[target.'cfg(target_arch="x86_64")']
-# We need at least instructions that supported by PS4 CPU.
-# Additional instructions should be safe to enabled if we want to use in our code as long as it does not conflict with PS4.
-# Each instructions need to explicitly enabled as stated here: https://rust-lang.github.io/packed_simd/perf-guide/target-feature/rustflags.html
-# See https://en.wikipedia.org/wiki/Jaguar_(microarchitecture) for the defail of PS4 CPU.
-
-rustflags = ["-Ctarget-feature=+aes,+avx,+bmi1,+f16c,+lzcnt,+movbe,+pclmulqdq,+popcnt,+sse,+sse2,+sse3,+ssse3,+sse4a,+sse4.1,+sse4.2,+xsave,+xsaveopt"]
+[env]
+LLVM_SYS_150_PREFIX = { value = "lib/llvm", relative = true }
