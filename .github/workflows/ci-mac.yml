@@ -5,6 +5,8 @@ jobs:
   build:
     name: Mac
     runs-on: macos-12
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: '3'
     steps:
     - name: Checkout source
       uses: actions/checkout@v3

@@ -5,6 +5,8 @@ jobs:
   build:
     name: Linux
     runs-on: ubuntu-22.04
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: '2'
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
