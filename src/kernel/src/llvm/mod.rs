@@ -62,7 +62,10 @@ impl Error {
     /// `message` must be pointed to a null-terminated string allocated with `malloc` or a
     /// compatible funtion because this method will free it with `free`.
     unsafe fn new(message: *mut c_char) -> Self {
-        let owned = String::from_utf8_lossy(CStr::from_ptr(message).to_bytes()).into_owned();
+        let owned = CStr::from_ptr(message)
+            .to_string_lossy()
+            .trim_end_matches('.')
+            .to_owned();
 
         libc::free(message as _);
 
