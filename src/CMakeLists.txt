@@ -35,6 +35,8 @@ ExternalProject_Add(core
     TEST_COMMAND cargo test
     TEST_EXCLUDE_FROM_MAIN ON)
 
+add_dependencies(core llvm)
+
 # Setup application target.
 add_executable(obliteration WIN32
     ansi_escape.cpp
