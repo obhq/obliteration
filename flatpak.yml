@@ -10,6 +10,8 @@ sdk-extensions:
 command: obliteration
 build-options:
   append-path: /usr/lib/sdk/rust-stable/bin
+  secret-env:
+  - CMAKE_BUILD_PARALLEL_LEVEL
   build-args:
   - --share=network
 finish-args:
