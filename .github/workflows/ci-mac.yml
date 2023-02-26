@@ -22,8 +22,8 @@ jobs:
         path: |
           build
           src/target
-        key: ${{ runner.os }}-build-files-${{ github.run_id }}
-        restore-keys: ${{ runner.os }}-build-files
+        key: ${{ runner.os }}-build-files-v1-${{ github.run_id }}
+        restore-keys: ${{ runner.os }}-build-files-v1
     - name: Run CMake
       run: cmake --preset mac-release .
     - name: Build
