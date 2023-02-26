@@ -5,24 +5,35 @@ jobs:
   build:
     name: Mac
     runs-on: macos-12
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: '3'
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
+    - name: Cache Cargo home
+      uses: actions/cache@v3
+      with:
+        path: ~/.cargo
+        key: ${{ runner.os }}-cargo-${{ github.run_id }}
+        restore-keys: ${{ runner.os }}-cargo
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
+        version: 6.*
         cache: true
-        cache-key-prefix: ${{ runner.os }}-install-qt-action
-        version: 6.2.*
-    - name: Cache CMake Build Files
-      uses: actions/cache@v3.2.6
-      id: cache-cmake
+        cache-key-prefix: ${{ runner.os }}-qt
+    - name: Cache build files
+      uses: actions/cache@v3
       with:
         path: |
-          /home/runner/work/obliteration/obliteration/build
-          /home/runner/work/obliteration/obliteration/src/target
-        key: ${{ runner.os }}-cmake-${{ hashFiles('**/CMakeLists.*', '**/Cargo.lock', '**/Cargo.toml', '.github/workflows/*.yml') }}
+          build
+          src/target
+        key: ${{ runner.os }}-build-files-v1-${{ github.run_id }}
+        restore-keys: ${{ runner.os }}-build-files-v1
     - name: Run CMake
       run: cmake --preset mac-release .
     - name: Build
       run: cmake --build --preset mac-release
+    - name: Run Clippy
+      run: cargo clippy --release
+      working-directory: src

@@ -5,6 +5,37 @@ include(ExternalProject)
 find_package(Qt6 COMPONENTS Widgets REQUIRED)
 find_package(Threads REQUIRED)
 
+# Setup LLVM target.
+set(LLVM_OPTS -DCMAKE_INSTALL_PREFIX:STRING=<INSTALL_DIR>)
+
+if(WIN32)
+    if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "AMD64")
+        list(APPEND LLVM_OPTS -DLLVM_TARGETS_TO_BUILD:STRING=X86)
+    else()
+        message(FATAL_ERROR "Target CPU is not supported")
+    endif()
+else()
+    if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
+        list(APPEND LLVM_OPTS -DLLVM_TARGETS_TO_BUILD:STRING=X86)
+    elseif(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "arm64")
+        list(APPEND LLVM_OPTS -DLLVM_TARGETS_TO_BUILD:STRING=AArch64)
+    else()
+        message(FATAL_ERROR "Target CPU is not supported")
+    endif()
+
+    list(APPEND LLVM_OPTS -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE})
+endif()
+
+ExternalProject_Add(llvm
+    URL https://github.com/llvm/llvm-project/releases/download/llvmorg-15.0.5/llvm-project-15.0.5.src.tar.xz
+    URL_HASH SHA256=9c4278a6b8884eb7f4ae7dfe3c8e5445019824885e47cfdf1392563c47316fd6
+    DOWNLOAD_EXTRACT_TIMESTAMP false
+    DOWNLOAD_NO_PROGRESS true
+    CMAKE_ARGS -Wno-dev
+    CMAKE_CACHE_ARGS ${LLVM_OPTS}
+    SOURCE_SUBDIR llvm
+    INSTALL_DIR ${CMAKE_SOURCE_DIR}/lib/llvm)
+
 # Setup Rust target.
 set(RUST_OUTPUTS $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/debug,${CMAKE_CURRENT_SOURCE_DIR}/target/release>)
 set(KERNEL ${RUST_OUTPUTS}/obkrnl${CMAKE_EXECUTABLE_SUFFIX})
@@ -25,6 +56,8 @@ ExternalProject_Add(core
     INSTALL_COMMAND ""
     TEST_COMMAND cargo test
     TEST_EXCLUDE_FROM_MAIN ON)
+
+add_dependencies(core llvm)
 
 # Setup application target.
 add_executable(obliteration WIN32

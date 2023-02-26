@@ -3,12 +3,10 @@ on:
   workflow_call:
 jobs:
   code-checks:
-    name: Code Checks (RustFMT and Clippy)
+    name: Code Checks
     runs-on: ubuntu-22.04
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
     - name: Run RustFMT Check
       run: cd src && cargo fmt --check
-    - name: Run Rust-Clippy Check
-      run: cd src && cargo clippy

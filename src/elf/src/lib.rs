@@ -12,6 +12,7 @@ pub const SELF_MAGIC: [u8; 8] = [0x4f, 0x15, 0x3d, 0x1d, 0x00, 0x01, 0x01, 0x12]
 /// The reason we need to support both SELF and ELF is because every SELF decryptors output ELF.
 /// See https://www.psdevwiki.com/ps4/SELF_File_Format for some basic information about SELF.
 pub struct Elf<I: Read + Seek> {
+    name: String,
     image: I,
     self_data: Option<SelfData>,
     entry_addr: usize,
@@ -19,7 +20,7 @@ pub struct Elf<I: Read + Seek> {
 }
 
 impl<I: Read + Seek> Elf<I> {
-    pub fn open(mut image: I) -> Result<Self, OpenError> {
+    pub fn open<N: Into<String>>(name: N, mut image: I) -> Result<Self, OpenError> {
         // Seek to file header.
         if let Err(e) = image.rewind() {
             return Err(OpenError::SeekFailed(0, e));
@@ -148,11 +149,16 @@ impl<I: Read + Seek> Elf<I> {
         }
 
         Ok(Self {
+            name: name.into(),
             image,
             self_data,
             entry_addr: e_entry as usize,
             programs,
         })
+    }
+
+    pub fn name(&self) -> &str {
+        self.name.as_ref()
     }
 
     pub fn self_segments(&self) -> Option<&[SelfSegment]> {
