@@ -10,35 +10,27 @@ jobs:
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
-    - name: Install system packages
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y flatpak flatpak-builder
-    - name: Add Flathub
-      run: flatpak remote-add --user flathub https://flathub.org/repo/flathub.flatpakrepo
-    - name: Cache Flatpak runtimes
-      uses: actions/cache@v3.2.6
+    - name: Cache Cargo home
+      uses: actions/cache@v3
       with:
-        path: ~/.local/share/flatpak/runtime
-        key: ${{ runner.os }}-flatpak-runtimes-${{ hashFiles('.github/workflows/ci-linux.yml') }}
-      id: flatpak-runtimes
-    - name: Install Flatpak runtimes
-      run: flatpak install --noninteractive flathub org.kde.Platform//6.4 org.kde.Sdk//6.4 org.freedesktop.Sdk.Extension.rust-stable//22.08
-      if: ${{ steps.flatpak-runtimes.outputs.cache-hit != 'true' }}
+        path: ~/.cargo
+        key: ${{ runner.os }}-cargo-${{ github.run_id }}
+        restore-keys: ${{ runner.os }}-cargo
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: 6.*
+        cache: true
+        cache-key-prefix: ${{ runner.os }}-qt
     - name: Cache build files
-      uses: actions/cache@v3.2.6
+      uses: actions/cache@v3
       with:
-        path: .flatpak-builder
+        path: |
+          build
+          src/target
         key: ${{ runner.os }}-build-files-${{ github.run_id }}
         restore-keys: ${{ runner.os }}-build-files
-    - name: Build Flatpak
-      run: flatpak-builder --default-branch dev build flatpak.yml
-    - name: Export Flatpak
-      run: flatpak build-export flatpak build
-    - name: Bundle Flatpak
-      run: flatpak build-bundle flatpak obliteration.flatpak io.github.obhq.Obliteration --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo
-    - name: Upload Flatpak
-      uses: actions/upload-artifact@v3
-      with:
-        name: obliteration-linux-amd64
-        path: obliteration.flatpak
+    - name: Run CMake
+      run: cmake --preset linux-release .
+    - name: Build
+      run: cmake --build --preset linux-release
