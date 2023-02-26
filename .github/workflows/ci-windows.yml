@@ -10,14 +10,20 @@ jobs:
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
+    - name: Cache Cargo home
+      uses: actions/cache@v3
+      with:
+        path: ~/.cargo
+        key: ${{ runner.os }}-cargo-${{ github.run_id }}
+        restore-keys: ${{ runner.os }}-cargo
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
         version: 6.*
         cache: true
-        cache-key-prefix: ${{ runner.os }}-qt-${{ hashFiles('.github/workflows/ci-windows.yml') }}
+        cache-key-prefix: ${{ runner.os }}-qt
     - name: Cache Vulkan SDK
-      uses: actions/cache@v3.2.6
+      uses: actions/cache@v3
       with:
         path: C:\VulkanSDK
         key: ${{ runner.os }}-vulkan-${{ hashFiles('.github/workflows/ci-windows.yml') }}
@@ -30,7 +36,7 @@ jobs:
     - name: Set Vulkan SDK path
       run:  echo "VULKAN_SDK=C:\VulkanSDK" >> $env:GITHUB_ENV
     - name: Cache build files
-      uses: actions/cache@v3.2.6
+      uses: actions/cache@v3
       with:
         path: |
           build
