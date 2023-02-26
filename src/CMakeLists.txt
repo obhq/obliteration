@@ -6,10 +6,24 @@ find_package(Qt6 COMPONENTS Widgets REQUIRED)
 find_package(Threads REQUIRED)
 
 # Setup LLVM target.
+set(LLVM_ARGS -DCMAKE_INSTALL_PREFIX:STRING=<INSTALL_DIR>)
+
 if(WIN32)
-    set(LLVM_ARGS -DCMAKE_INSTALL_PREFIX:STRING=<INSTALL_DIR>)
+    if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "AMD64")
+        list(APPEND LLVM_ARGS -DLLVM_TARGETS_TO_BUILD:STRING=X86)
+    else()
+        message(FATAL_ERROR "Target CPU is not supported")
+    endif()
 else()
-    set(LLVM_ARGS -DCMAKE_INSTALL_PREFIX:STRING=<INSTALL_DIR> -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE})
+    if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
+        list(APPEND LLVM_ARGS -DLLVM_TARGETS_TO_BUILD:STRING=X86)
+    elseif(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "arm64")
+        list(APPEND LLVM_ARGS -DLLVM_TARGETS_TO_BUILD:STRING=AArch64)
+    else()
+        message(FATAL_ERROR "Target CPU is not supported")
+    endif()
+
+    list(APPEND LLVM_ARGS -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE})
 endif()
 
 ExternalProject_Add(llvm
