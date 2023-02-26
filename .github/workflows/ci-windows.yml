@@ -35,7 +35,8 @@ jobs:
         path: |
           build
           src/target
-        key: ${{ runner.os }}-build-files-${{ hashFiles('.github/workflows/ci-windows.yml') }}
+        key: ${{ runner.os }}-build-files-${{ github.run_id }}
+        restore-keys: ${{ runner.os }}-build-files
     - name: Run CMake
       run: cmake --preset windows-release .
     - name: Build

@@ -29,7 +29,8 @@ jobs:
       uses: actions/cache@v3.2.6
       with:
         path: .flatpak-builder
-        key: ${{ runner.os }}-build-files-${{ hashFiles('.github/workflows/ci-linux.yml', 'flatpak.yml') }}
+        key: ${{ runner.os }}-build-files-${{ github.run_id }}
+        restore-keys: ${{ runner.os }}-build-files
     - name: Build Flatpak
       run: flatpak-builder --default-branch dev build flatpak.yml
     - name: Export Flatpak
