@@ -23,6 +23,8 @@ We have a Matrix Room Space `#obliteration:matrix.org` on [Matrix.to](https://ma
 
 ## Features
 
+- [x] Cross-platform with native binary for each platform.
+- [x] Supports both x86-64 and AArch64 CPU.
 - [x] Built-in FTP client to pull the decrypted firmware from jailbroken PS4.
 - [x] Built-in PKG file supports for Fake PKG.
 - [x] Game library.
@@ -46,9 +48,9 @@ Obliteration supports only 4KB/8KB/16KB pages. Most people should not have any p
 
 ### Windows prerequisites
 
-- Visual Studio 2022
+- Visual Studio 2019
   - `Desktop development with C++` workload is required
-  - You need to install the `MSVC v142 - VS 2019 C++ x64/x86 build tools` component
+  - Your system must not have 2022 installed
 - Rust on the latest stable channel
 - CMake 3.24+
   - Make sure you have `Add CMake to the system PATH` selected when installing
