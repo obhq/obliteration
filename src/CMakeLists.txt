@@ -19,6 +19,9 @@ else()
         list(APPEND LLVM_OPTS -DLLVM_TARGETS_TO_BUILD:STRING=X86)
     elseif(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "arm64")
         list(APPEND LLVM_OPTS -DLLVM_TARGETS_TO_BUILD:STRING=AArch64)
+
+        # arm64 LLVM default requires lzstd to be built dynamically.
+        list(APPEND LLVM_OPTS -DLLVM_ENABLE_ZSTD:BOOL=OFF)
     else()
         message(FATAL_ERROR "Target CPU is not supported")
     endif()
