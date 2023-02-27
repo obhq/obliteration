@@ -2,11 +2,17 @@ name: Prebuild Quality Checks
 on:
   workflow_call:
 jobs:
-  code-checks:
-    name: Code Checks
-    runs-on: ubuntu-22.04
-    steps:
-    - name: Checkout source
-      uses: actions/checkout@v3
-    - name: Run RustFMT Check
-      run: cd src && cargo fmt --check
+    code-checks:
+        name: Code Checks (RustFMT and Clippy)
+        runs-on: ${{ matrix.os }}
+        strategy:
+            matrix:
+                os: [windows-2019, macos-12, ubuntu-22.04]
+        steps:
+        - name: Checkout source
+          uses: actions/checkout@v3
+        - name: Run RustFMT Check
+          run: cd src && cargo fmt --check
+        - if: ${{ matrix.os != 'ubuntu-22.04' }}
+          name: Run Rust-Clippy Check
+          run: cd src && cargo clippy

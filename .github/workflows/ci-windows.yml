@@ -47,9 +47,6 @@ jobs:
       run: cmake --preset windows-release .
     - name: Build
       run: cmake --build --preset windows-release
-    - name: Run Clippy
-      run: cargo clippy --release
-      working-directory: src
     - name: Export artifacts
       run: cmake --install build --prefix dist
     - name: Upload artifacts
