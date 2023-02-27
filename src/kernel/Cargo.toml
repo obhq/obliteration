@@ -13,7 +13,7 @@ clap = { version = "4.1", features = ["derive"] }
 elf = { path = "../elf" }
 iced-x86 = "1.18"
 libc = "0.2"
-llvm-sys = { version = "150.0.5", features = ["strict-versioning"] }
+llvm-sys = { version = "160.0.2", features = ["strict-versioning"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 termcolor = "1.2.0"
