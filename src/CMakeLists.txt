@@ -34,6 +34,7 @@ ExternalProject_Add(llvm
     CMAKE_ARGS -Wno-dev
     CMAKE_CACHE_ARGS ${LLVM_OPTS}
     SOURCE_SUBDIR llvm
+    BUILD_ALWAYS ON
     INSTALL_DIR ${CMAKE_SOURCE_DIR}/lib/llvm)
 
 # Setup Rust target.
