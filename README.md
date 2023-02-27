@@ -38,7 +38,7 @@ We have a Matrix Room Space `#obliteration:matrix.org` on [Matrix.to](https://ma
 
 ### Windows-specific requirements
 
-- [Microsoft Visual C++ 2019 Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist). It's likely your system already has it, so try to run Obliteration first. If there is an error related to `msvcp140.dll`, `vcruntime140.dll`, or `vcruntime140_1.dll` that means you need to install this manually.
+- [Microsoft Visual C++ 2022 Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist). It's likely your system already has it, so try to run Obliteration first.
 
 ### Linux-specific requirements
 
@@ -48,7 +48,7 @@ Obliteration supports only 4KB/8KB/16KB pages. Most people should not have any p
 
 ### Windows prerequisites
 
-- Visual Studio 2019
+- Visual Studio 2022
   - `Desktop development with C++` workload is required
   - Your system must not have 2022 installed
 - Rust on the latest stable channel
