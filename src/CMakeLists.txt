@@ -11,13 +11,15 @@ set(LLVM_OPTS -DCMAKE_INSTALL_PREFIX:STRING=<INSTALL_DIR>)
 if(WIN32)
     if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "AMD64")
         list(APPEND LLVM_OPTS -DLLVM_TARGETS_TO_BUILD:STRING=X86)
+        # turn off zstd due to potential shared libray issue
+        list(APPEND LLVM_OPTS -DLLVM_ENABLE_ZSTD:BOOL=OFF)
+
     else()
         message(FATAL_ERROR "Target CPU is not supported")
     endif()
 else()
     if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
         list(APPEND LLVM_OPTS -DLLVM_TARGETS_TO_BUILD:STRING=X86)
-        # turn off zstd due to potential shared libray issue
         list(APPEND LLVM_OPTS -DLLVM_ENABLE_ZSTD:BOOL=OFF)
 
     elseif(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "arm64")
