@@ -17,10 +17,11 @@ if(WIN32)
 else()
     if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
         list(APPEND LLVM_OPTS -DLLVM_TARGETS_TO_BUILD:STRING=X86)
+        # turn off zstd due to potential shared libray issue
+        list(APPEND LLVM_OPTS -DLLVM_ENABLE_ZSTD:BOOL=OFF)
+
     elseif(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "arm64")
         list(APPEND LLVM_OPTS -DLLVM_TARGETS_TO_BUILD:STRING=AArch64)
-
-        # arm64 LLVM default requires lzstd to be built dynamically.
         list(APPEND LLVM_OPTS -DLLVM_ENABLE_ZSTD:BOOL=OFF)
     else()
         message(FATAL_ERROR "Target CPU is not supported")
