@@ -50,7 +50,6 @@ Obliteration supports only 4KB/8KB/16KB pages. Most people should not have any p
 
 - Visual Studio 2022
   - `Desktop development with C++` workload is required
-  - Your system must not have 2022 installed
 - Rust on the latest stable channel
 - CMake 3.24+
   - Make sure you have `Add CMake to the system PATH` selected when installing
