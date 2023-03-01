@@ -14,7 +14,7 @@ jobs:
       uses: actions/cache@v3
       with:
         path: ~/.cargo
-        key: ${{ runner.os }}-cargo-${{ github.run_id }}
+        key: ${{ runner.os }}-cargo${{ startsWith(github.ref, 'refs/heads/') && format('-{0}', github.run_id) || '' }}
         restore-keys: ${{ runner.os }}-cargo
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
@@ -39,10 +39,9 @@ jobs:
       uses: actions/cache@v3
       with:
         path: |
-          cmake*.*
           build
           src/target
-        key: ${{ runner.os }}-build-files-${{ github.run_id }}
+        key: ${{ runner.os }}-build-files${{ startsWith(github.ref, 'refs/heads/') && format('-{0}', github.run_id) || '' }}
         restore-keys: ${{ runner.os }}-build-files
     - name: Run CMake
       run: cmake --preset windows-release .
