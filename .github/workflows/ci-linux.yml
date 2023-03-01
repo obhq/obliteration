@@ -10,27 +10,48 @@ jobs:
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
-    - name: Cache Cargo home
-      uses: actions/cache@v3
+    - name: Generate cache keys
+      run: |
+        echo "cargo=${{ runner.os }}-cargo" >> $GITHUB_OUTPUT
+        echo "qt=${{ runner.os }}-qt" >> $GITHUB_OUTPUT
+        echo "build=${{ runner.os }}-build-files-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake', 'CMakePresets.json') }}" >> $GITHUB_OUTPUT
+      id: cache-keys
+    - name: Restore Cargo home
+      uses: actions/cache/restore@v3
       with:
         path: ~/.cargo
-        key: ${{ runner.os }}-cargo-${{ github.run_id }}
-        restore-keys: ${{ runner.os }}-cargo
+        key: ${{ steps.cache-keys.outputs.cargo }}
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
         version: 6.*
         cache: true
-        cache-key-prefix: ${{ runner.os }}-qt
-    - name: Cache build files
-      uses: actions/cache@v3
+        cache-key-prefix: ${{ steps.cache-keys.outputs.qt }}
+    - name: Restore build files
+      uses: actions/cache/restore@v3
       with:
         path: |
           build
           src/target
-        key: ${{ runner.os }}-build-files-${{ github.run_id }}
-        restore-keys: ${{ runner.os }}-build-files
+        key: ${{ steps.cache-keys.outputs.build }}
     - name: Run CMake
       run: cmake --preset linux-release .
     - name: Build
       run: cmake --build --preset linux-release
+    - name: Run Clippy
+      run: cargo clippy --release
+      working-directory: src
+    - name: Cache build files
+      uses: actions/cache/save@v3
+      with:
+        path: |
+          build
+          src/target
+        key: ${{ steps.cache-keys.outputs.build }}-${{ github.run_id }}
+      if: startsWith(github.ref, 'refs/heads/')
+    - name: Cache Cargo home
+      uses: actions/cache/save@v3
+      with:
+        path: ~/.cargo
+        key: ${{ steps.cache-keys.outputs.cargo }}-${{ github.run_id }}
+      if: startsWith(github.ref, 'refs/heads/')
