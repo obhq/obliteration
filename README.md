@@ -38,7 +38,7 @@ We have a Matrix Room Space `#obliteration:matrix.org` on [Matrix.to](https://ma
 
 ### Windows-specific requirements
 
-- [Microsoft Visual C++ 2022 Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist). It's likely your system already has it, so try to run Obliteration first.
+- [Microsoft Visual C++ 2022 Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist). If there is an error related to `msvcp140.dll`, `vcruntime140.dll`, or `vcruntime140_1.dll` that means you need to install this manually. It's likely your system already has it, so try to run Obliteration first.
 
 ### Linux-specific requirements
 
