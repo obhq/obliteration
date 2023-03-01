@@ -14,9 +14,9 @@ jobs:
     name: Build Releases
     strategy:
       matrix:
-        os: [windows-2019, ubuntu-22.04, macos-12]
+        os: [windows-2022, ubuntu-22.04, macos-12]
         include:
-          - os: windows-2019
+          - os: windows-2022
             release_suffix: windows
           - os: ubuntu-22.04
             release_suffix: linux
