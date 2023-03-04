@@ -106,7 +106,7 @@ The value of `PRESET` will depend on your platform and the build configuration y
 - mac-release
 - mac-debug
 
-Choose `[YOUR-PLATFORM]-release` for optimized outputs. The `*-debug` is designed for development only and the outputs will not be optimized.
+If all you want is using the emulator, choose `[YOUR-PLATFORM]-release` for optimized outputs. But if you want to edit the code, choose `*-debug`.
 
 ### Build
 
@@ -114,9 +114,11 @@ Choose `[YOUR-PLATFORM]-release` for optimized outputs. The `*-debug` is designe
 cmake --build build
 ```
 
+You can use `-j` to enable parallel build (e.g. `cmake --build build -j 2`). Each parallel build consume a lot of memory so don't specify the number of your CPU cores otherwise your system might be crashing due to out of memory.
+
 ## Development
 
-We recommended Visual Studio Code as a code editor with the following extensions:
+Before proceed, make sure the build preset you was using is `*-debug`. We recommended Visual Studio Code as a code editor with the following extensions:
 
 - [C/C++](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools)
 - [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
@@ -124,7 +126,7 @@ We recommended Visual Studio Code as a code editor with the following extensions
 - [CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools)
 - [CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb)
 
-Remove the `build` directory from the previous step and open this folder with VS Code. It will ask which CMake preset to use and you need to choose the debug version (e.g. `windows-debug`). Everything should work out of the box (e.g. code completion, debugging, etc).
+Then open this folder with VS Code. It will ask which CMake preset to use and you need to choose the same one that you was using when building. Everything should work out of the box (e.g. code completion, debugging, etc).
 
 ### Get a homebrew application for testing
 

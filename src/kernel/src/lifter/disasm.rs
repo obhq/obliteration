@@ -1,5 +1,5 @@
 use crate::module::Memory;
-use iced_x86::{Code, Decoder, DecoderOptions};
+use iced_x86::{Code, Decoder, DecoderOptions, OpKind};
 use std::collections::{HashMap, VecDeque};
 use thiserror::Error;
 
@@ -75,53 +75,46 @@ impl<'a> Disassembler<'a> {
             }
 
             // Parse the instruction.
-            let _offset = (i.ip() - base) as usize;
+            let offset = (i.ip() - base) as usize;
 
             match i.code() {
-                // TODO: Handle Call and Jmp calls properly.
-                // CALL TEST START
-                Code::Call_m1616 | Code::Call_m1632 | Code::Call_m1664 => {
-                    func.instructions.push(Instruction::Other(i))
-                }
-                Code::Call_ptr1616 | Code::Call_ptr1632 => {
-                    func.instructions.push(Instruction::Other(i))
-                }
-                Code::Call_rel16 | Code::Call_rel32_32 | Code::Call_rel32_64 => {
-                    func.instructions.push(Instruction::Other(i))
-                }
-                Code::Call_rm16 | Code::Call_rm32 | Code::Call_rm64 => {
-                    func.instructions.push(Instruction::Other(i))
-                }
-                // CALL TEST END
-
-                // JMP TEST START
-                Code::Jmp_m1616 | Code::Jmp_m1632 | Code::Jmp_m1664 => {
-                    func.instructions.push(Instruction::Other(i))
-                }
-                Code::Jmp_ptr1616 | Code::Jmp_ptr1632 => {
-                    func.instructions.push(Instruction::Other(i))
-                }
-                Code::Jmp_rel8_16
-                | Code::Jmp_rel8_32
-                | Code::Jmp_rel8_64
-                | Code::Jmp_rel16
-                | Code::Jmp_rel32_32
-                | Code::Jmp_rel32_64 => func.instructions.push(Instruction::Other(i)),
-                Code::Jmp_rm16 | Code::Jmp_rm32 | Code::Jmp_rm64 => {
-                    func.instructions.push(Instruction::Other(i))
-                }
-                Code::Jmpe_disp16 | Code::Jmpe_disp32 => {
-                    func.instructions.push(Instruction::Other(i))
-                }
-                Code::Jmpe_rm16 | Code::Jmpe_rm32 => func.instructions.push(Instruction::Other(i)),
-                // JMP TEST END
+                Code::Xor_rm64_r64 => self.disassemble_xor(&i, &mut func),
                 _ => {
-                    func.instructions.push(Instruction::Other(i));
+                    let opcode = &module[offset..(offset + i.len())];
+
+                    return Err(DisassembleError::UnknownInstruction(
+                        offset,
+                        opcode.into(),
+                        i,
+                    ));
                 }
             }
         }
 
         Ok(func)
+    }
+
+    fn disassemble_xor(&self, i: &iced_x86::Instruction, f: &mut Function) {
+        let i = if i.op0_kind() == OpKind::Memory {
+            if i.has_lock_prefix() {
+                panic!("XOR with LOCK prefix is not supported yet.");
+            } else {
+                panic!("XOR with the first operand is a memory is not supported yet.");
+            }
+        } else {
+            let dst: Operand = i.op0_register().into();
+            let src: Operand = match i.op1_kind() {
+                OpKind::Register => i.op1_register().into(),
+                _ => panic!(
+                    "XOR with the second operand is {:?} is not supported yet.",
+                    i.op1_kind()
+                ),
+            };
+
+            Instruction::Xor(dst, src)
+        };
+
+        f.instructions.push(i);
     }
 }
 
@@ -135,6 +128,10 @@ pub(super) struct Function {
 }
 
 impl Function {
+    pub fn instructions(&self) -> &[Instruction] {
+        self.instructions.as_ref()
+    }
+
     /// Gets a slice of the offset this function call to.
     pub fn calls(&self) -> &[usize] {
         self.calls.as_ref()
@@ -151,7 +148,23 @@ pub(super) enum Param {}
 
 /// Represents a CPU instruction.
 pub(super) enum Instruction {
-    Other(iced_x86::Instruction),
+    Xor(Operand, Operand),
+}
+
+/// Represents the operand of the instruction.
+pub(super) enum Operand {
+    Rbp(usize),
+}
+
+impl From<iced_x86::Register> for Operand {
+    fn from(value: iced_x86::Register) -> Self {
+        use iced_x86::Register;
+
+        match value {
+            Register::RBP => Self::Rbp(64),
+            _ => panic!("Register {value:?} is not supported yet."),
+        }
+    }
 }
 
 /// Represents an error for [`Disassembler::disassemble()`].
