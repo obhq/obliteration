@@ -106,7 +106,7 @@ The value of `PRESET` will depend on your platform and the build configuration y
 - mac-release
 - mac-debug
 
-If all you want is using the emulator, choose `[YOUR-PLATFORM]-release` for optimized outputs. But if you want to edit the code, choose `*-debug`.
+If all you want is to use the emulator, choose `[YOUR-PLATFORM]-release` for optimized outputs. But if you want to edit the code, choose `*-debug`.
 
 ### Build
 
@@ -118,7 +118,7 @@ You can use `-j` to enable parallel build (e.g. `cmake --build build -j 2`). Eac
 
 ## Development
 
-Before proceed, make sure the build preset you was using is `*-debug`. We recommended Visual Studio Code as a code editor with the following extensions:
+Before proceeding, make sure the build preset you are using is `*-debug`. We recommend Visual Studio Code as a code editor with the following extensions:
 
 - [C/C++](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools)
 - [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
@@ -126,7 +126,7 @@ Before proceed, make sure the build preset you was using is `*-debug`. We recomm
 - [CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools)
 - [CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb)
 
-Then open this folder with VS Code. It will ask which CMake preset to use and you need to choose the same one that you was using when building. Everything should work out of the box (e.g. code completion, debugging, etc).
+Then open this folder with VS Code. It will ask which CMake preset to use and you need to choose the same one that you were using when building. Everything should work out of the box (e.g. code completion, debugging, etc).
 
 ### Get a homebrew application for testing
 
