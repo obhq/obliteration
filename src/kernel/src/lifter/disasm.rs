@@ -1,5 +1,5 @@
 use crate::module::Memory;
-use iced_x86::{Code, Decoder, DecoderOptions, OpKind};
+use iced_x86::{Code, Decoder, DecoderOptions, OpKind, Register};
 use std::collections::{HashMap, VecDeque};
 use thiserror::Error;
 
@@ -78,6 +78,7 @@ impl<'a> Disassembler<'a> {
             let offset = (i.ip() - base) as usize;
 
             match i.code() {
+                Code::Sub_rm64_imm8 => self.disassemble_sub(&i),
                 Code::Xor_rm64_r64 => self.disassemble_xor(&i, &mut func),
                 _ => {
                     let opcode = &module[offset..(offset + i.len())];
@@ -92,6 +93,28 @@ impl<'a> Disassembler<'a> {
         }
 
         Ok(func)
+    }
+
+    fn disassemble_sub(&self, i: &iced_x86::Instruction) {
+        if i.op0_kind() == OpKind::Memory {
+            if i.has_lock_prefix() {
+                panic!("SUB with LOCK prefix is not supported yet.");
+            } else {
+                panic!("SUB with the first operand is a memory is not supported yet.");
+            }
+        } else if i.op0_register() == Register::RSP {
+            // This SUB is a stack allocation. We don't need to add any instructions to the function
+            // here because we don't control a stack allocation on the codegen side.
+            if i.op1_kind() != OpKind::Immediate8to64 {
+                panic!("SUB RSP with non-immediate value is not supported yet.");
+            }
+
+            return;
+        } else {
+            panic!(
+                "SUB with the first operand as the other regiser than RSP is not supported yet."
+            );
+        }
     }
 
     fn disassemble_xor(&self, i: &iced_x86::Instruction, f: &mut Function) {
