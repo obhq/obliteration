@@ -1,7 +1,10 @@
+use self::cpu::{CpuState, ValueState};
 use crate::module::Memory;
 use iced_x86::{Code, Decoder, DecoderOptions, OpKind, Register};
 use std::collections::{HashMap, VecDeque};
 use thiserror::Error;
+
+pub mod cpu;
 
 /// Contains state of module disassemble.
 pub(super) struct Disassembler<'a> {
@@ -60,6 +63,7 @@ impl<'a> Disassembler<'a> {
         );
 
         // Decode the whole function.
+        let mut cpu = CpuState::new();
         let mut func = Function {
             params: Vec::new(),
             returns: Vec::new(),
@@ -79,7 +83,7 @@ impl<'a> Disassembler<'a> {
 
             match i.code() {
                 Code::Sub_rm64_imm8 => self.disassemble_sub(&i),
-                Code::Xor_rm64_r64 => self.disassemble_xor(&i, &mut func),
+                Code::Xor_rm64_r64 => self.disassemble_xor(&i, &mut func, &mut cpu),
                 _ => {
                     let opcode = &module[offset..(offset + i.len())];
 
@@ -117,7 +121,7 @@ impl<'a> Disassembler<'a> {
         }
     }
 
-    fn disassemble_xor(&self, i: &iced_x86::Instruction, f: &mut Function) {
+    fn disassemble_xor(&self, i: &iced_x86::Instruction, f: &mut Function, c: &mut CpuState) {
         let i = if i.op0_kind() == OpKind::Memory {
             if i.has_lock_prefix() {
                 panic!("XOR with LOCK prefix is not supported yet.");
@@ -125,16 +129,23 @@ impl<'a> Disassembler<'a> {
                 panic!("XOR with the first operand is a memory is not supported yet.");
             }
         } else {
-            let dst: Operand = i.op0_register().into();
-            let src: Operand = match i.op1_kind() {
-                OpKind::Register => i.op1_register().into(),
-                _ => panic!(
-                    "XOR with the second operand is {:?} is not supported yet.",
-                    i.op1_kind()
-                ),
-            };
+            // The first operand is a register.
+            let dst = i.op0_register();
 
-            Instruction::Xor(dst, src)
+            match i.op1_kind() {
+                OpKind::Register => {
+                    // Check if source and destination is the same register.
+                    let src = i.op1_register();
+
+                    if dst == src {
+                        c.set_register(dst, ValueState::Zero);
+                        Instruction::Zero(dst.into())
+                    } else {
+                        panic!("XOR with different registers is not supported yet.");
+                    }
+                }
+                v => panic!("XOR with the second operand is {v:?} is not supported yet."),
+            }
         };
 
         f.instructions.push(i);
@@ -169,9 +180,9 @@ impl Function {
 /// Represents a function parameter.
 pub(super) enum Param {}
 
-/// Represents a CPU instruction.
+/// Represents a normalized CPU instruction.
 pub(super) enum Instruction {
-    Xor(Operand, Operand),
+    Zero(Operand),
 }
 
 /// Represents the operand of the instruction.
@@ -181,8 +192,6 @@ pub(super) enum Operand {
 
 impl From<iced_x86::Register> for Operand {
     fn from(value: iced_x86::Register) -> Self {
-        use iced_x86::Register;
-
         match value {
             Register::RBP => Self::Rbp(64),
             _ => panic!("Register {value:?} is not supported yet."),
