@@ -82,6 +82,7 @@ impl<'a> Disassembler<'a> {
             let offset = (i.ip() - base) as usize;
 
             match i.code() {
+                Code::Mov_rm64_r64 => self.disassemble_mov(&i, &mut func, &mut cpu),
                 Code::Sub_rm64_imm8 => self.disassemble_sub(&i),
                 Code::Xor_rm64_r64 => self.disassemble_xor(&i, &mut func, &mut cpu),
                 _ => {
@@ -97,6 +98,35 @@ impl<'a> Disassembler<'a> {
         }
 
         Ok(func)
+    }
+
+    fn disassemble_mov(&self, i: &iced_x86::Instruction, f: &mut Function, c: &mut CpuState) {
+        if i.op0_kind() == OpKind::Memory {
+            panic!("MOV with the first operand is a memory is not supported yet.");
+        } else if i.op1_kind() == OpKind::Memory {
+            panic!("MOV with the second operand is a memory is not supported yet.");
+        } else {
+            let dst = i.op0_register();
+            let src = i.op1_register();
+
+            // Check the second operand.
+            let src: Operand = match c.register(src) {
+                ValueState::FromCaller => {
+                    let i = f.params.len();
+
+                    f.params.push(src.into());
+                    c.set_register(src, ValueState::Param(i));
+
+                    Operand::Param(i)
+                }
+                ValueState::Param(i) => Operand::Param(*i),
+                ValueState::Local => src.into(),
+            };
+
+            // Set destination state.
+            c.set_register(dst, ValueState::Local);
+            f.instructions.push(Instruction::Mov(dst.into(), src));
+        }
     }
 
     fn disassemble_sub(&self, i: &iced_x86::Instruction) {
@@ -138,7 +168,7 @@ impl<'a> Disassembler<'a> {
                     let src = i.op1_register();
 
                     if dst == src {
-                        c.set_register(dst, ValueState::Zero);
+                        c.set_register(dst, ValueState::Local);
                         Instruction::Zero(dst.into())
                     } else {
                         panic!("XOR with different registers is not supported yet.");
@@ -178,23 +208,38 @@ impl Function {
 }
 
 /// Represents a function parameter.
-pub(super) enum Param {}
+pub(super) enum Param {
+    Int(usize),
+}
+
+impl From<iced_x86::Register> for Param {
+    fn from(value: Register) -> Self {
+        match value {
+            Register::RDI => Self::Int(64),
+            v => panic!("Register {v:?} is not supported yet."),
+        }
+    }
+}
 
 /// Represents a normalized CPU instruction.
 pub(super) enum Instruction {
+    Mov(Operand, Operand),
     Zero(Operand),
 }
 
 /// Represents the operand of the instruction.
 pub(super) enum Operand {
+    Param(usize),
     Rbp(usize),
+    R12(usize),
 }
 
 impl From<iced_x86::Register> for Operand {
-    fn from(value: iced_x86::Register) -> Self {
+    fn from(value: Register) -> Self {
         match value {
             Register::RBP => Self::Rbp(64),
-            _ => panic!("Register {value:?} is not supported yet."),
+            Register::R12 => Self::R12(64),
+            v => panic!("Register {v:?} is not supported yet."),
         }
     }
 }
