@@ -1,8 +1,8 @@
-use std::error::Error;
-use std::fmt::{Display, Formatter};
-use util::mem::{read_i64_le, read_u64_le};
+use byteorder::{ByteOrder, LE};
+use thiserror::Error;
 
-pub(super) struct DynamicLinking {
+/// Contains data required for dynamic linking.
+pub struct DynamicLinking {
     pltrelsz: u64,
     pltgot: u64,
     relasz: u64,
@@ -70,7 +70,7 @@ impl DynamicLinking {
     pub const DT_SCE_HASHSZ: i64 = 0x6100003d;
     pub const DT_SCE_SYMTABSZ: i64 = 0x6100003f;
 
-    pub fn parse(data: &[u8], _dynlib: &[u8]) -> Result<Self, ParseError> {
+    pub(super) fn parse(data: &[u8], dynlib: &[u8]) -> Result<Self, ParseError> {
         // Simple check to see if data valid.
         if data.len() % 16 != 0 {
             return Err(ParseError::InvalidDataSize);
@@ -98,9 +98,9 @@ impl DynamicLinking {
 
         while offset < data.len() {
             // Read fields.
-            let data = unsafe { data.as_ptr().add(offset) };
-            let tag = unsafe { read_i64_le(data, 0) };
-            let value = unsafe { read_u64_le(data, 8) };
+            let data = &data[offset..];
+            let tag = LE::read_i64(&data);
+            let value = LE::read_u64(&data[8..]);
 
             // Parse entry.
             match tag {
@@ -148,8 +148,7 @@ impl DynamicLinking {
             offset += 16;
         }
 
-        // Construct instance.
-        Ok(Self {
+        let parsed = Self {
             pltrelsz: pltrelsz.ok_or(ParseError::NoPltrelsz)?,
             pltgot: pltgot.ok_or(ParseError::NoPltgot)?,
             relasz: relasz.ok_or(ParseError::NoRelasz)?,
@@ -167,69 +166,89 @@ impl DynamicLinking {
             symtab: symtab.ok_or(ParseError::NoSymtab)?,
             hashsz: hashsz.ok_or(ParseError::NoHashsz)?,
             symtabsz: symtabsz.ok_or(ParseError::NoSymtabsz)?,
-        })
-    }
+        };
 
-    pub fn relaent(&self) -> u64 {
-        self.relaent
-    }
-
-    pub fn syment(&self) -> u64 {
-        self.syment
-    }
-
-    pub fn pltrel(&self) -> u64 {
-        self.pltrel
-    }
-}
-
-#[derive(Debug)]
-pub enum ParseError {
-    InvalidDataSize,
-    NoPltrelsz,
-    NoPltgot,
-    NoRelasz,
-    NoRelaent,
-    NoStrsz,
-    NoSyment,
-    NoPltrel,
-    NoFingerprint,
-    NoFilename,
-    NoModuleInfo,
-    NoHash,
-    NoJmprel,
-    NoRela,
-    NoStrtab,
-    NoSymtab,
-    NoHashsz,
-    NoSymtabsz,
-    UnknownTag(i64),
-}
-
-impl Error for ParseError {}
-
-impl Display for ParseError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Self::InvalidDataSize => f.write_str("invalid data size"),
-            Self::NoPltrelsz => f.write_str("entry DT_PLTRELSZ or DT_SCE_PLTRELSZ does not exists"),
-            Self::NoPltgot => f.write_str("entry DT_PLTGOT or DT_SCE_PLTGOT does not exists"),
-            Self::NoRelasz => f.write_str("entry DT_RELASZ or DT_SCE_RELASZ does not exists"),
-            Self::NoRelaent => f.write_str("entry DT_RELAENT or DT_SCE_RELAENT does not exists"),
-            Self::NoStrsz => f.write_str("entry DT_STRSZ or DT_SCE_STRSZ does not exists"),
-            Self::NoSyment => f.write_str("entry DT_SYMENT or DT_SCE_SYMENT does not exists"),
-            Self::NoPltrel => f.write_str("entry DT_PLTREL or DT_SCE_PLTREL does not exists"),
-            Self::NoFingerprint => f.write_str("entry DT_SCE_FINGERPRINT does not exists"),
-            Self::NoFilename => f.write_str("entry DT_SCE_FILENAME does not exists"),
-            Self::NoModuleInfo => f.write_str("entry DT_SCE_MODULE_INFO does not exists"),
-            Self::NoHash => f.write_str("entry DT_SCE_HASH does not exists"),
-            Self::NoJmprel => f.write_str("entry DT_SCE_JMPREL does not exists"),
-            Self::NoRela => f.write_str("entry DT_SCE_RELA does not exists"),
-            Self::NoStrtab => f.write_str("entry DT_SCE_STRTAB does not exists"),
-            Self::NoSymtab => f.write_str("entry DT_SCE_SYMTAB does not exists"),
-            Self::NoHashsz => f.write_str("entry DT_SCE_HASHSZ does not exists"),
-            Self::NoSymtabsz => f.write_str("entry DT_SCE_SYMTABSZ does not exists"),
-            Self::UnknownTag(t) => write!(f, "unknown tag {:#018x}", t),
+        // Check values.
+        if parsed.relaent != 24 {
+            // sizeof(Elf64_Rela)
+            return Err(ParseError::InvalidRelaent);
+        } else if parsed.syment != 24 {
+            // sizeof(Elf64_Sym)
+            return Err(ParseError::InvalidSyment);
+        } else if parsed.pltrel != DynamicLinking::DT_RELA as _ {
+            return Err(ParseError::InvalidPltrel);
         }
+
+        Ok(parsed)
     }
+}
+
+/// Represents an error for [`DynamicLinking::parse()`].
+#[derive(Debug, Error)]
+pub enum ParseError {
+    #[error("invalid data size")]
+    InvalidDataSize,
+
+    #[error("entry DT_PLTRELSZ or DT_SCE_PLTRELSZ does not exists")]
+    NoPltrelsz,
+
+    #[error("entry DT_PLTGOT or DT_SCE_PLTGOT does not exists")]
+    NoPltgot,
+
+    #[error("entry DT_RELASZ or DT_SCE_RELASZ does not exists")]
+    NoRelasz,
+
+    #[error("entry DT_RELAENT or DT_SCE_RELAENT does not exists")]
+    NoRelaent,
+
+    #[error("entry DT_STRSZ or DT_SCE_STRSZ does not exists")]
+    NoStrsz,
+
+    #[error("entry DT_SYMENT or DT_SCE_SYMENT does not exists")]
+    NoSyment,
+
+    #[error("entry DT_PLTREL or DT_SCE_PLTREL does not exists")]
+    NoPltrel,
+
+    #[error("entry DT_SCE_FINGERPRINT does not exists")]
+    NoFingerprint,
+
+    #[error("entry DT_SCE_FILENAME does not exists")]
+    NoFilename,
+
+    #[error("entry DT_SCE_MODULE_INFO does not exists")]
+    NoModuleInfo,
+
+    #[error("entry DT_SCE_HASH does not exists")]
+    NoHash,
+
+    #[error("entry DT_SCE_JMPREL does not exists")]
+    NoJmprel,
+
+    #[error("entry DT_SCE_RELA does not exists")]
+    NoRela,
+
+    #[error("entry DT_SCE_STRTAB does not exists")]
+    NoStrtab,
+
+    #[error("entry DT_SCE_SYMTAB does not exists")]
+    NoSymtab,
+
+    #[error("entry DT_SCE_HASHSZ does not exists")]
+    NoHashsz,
+
+    #[error("entry DT_SCE_SYMTABSZ does not exists")]
+    NoSymtabsz,
+
+    #[error("unknown tag {0:#018x}")]
+    UnknownTag(i64),
+
+    #[error("entry DT_RELAENT or DT_SCE_RELAENT has invalid value")]
+    InvalidRelaent,
+
+    #[error("entry DT_SYMENT or DT_SCE_SYMENT has invalid value")]
+    InvalidSyment,
+
+    #[error("entry DT_PLTREL or DT_SCE_PLTREL has value other than DT_RELA")]
+    InvalidPltrel,
 }
