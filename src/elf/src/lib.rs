@@ -1,8 +1,11 @@
+use self::dynamic::DynamicLinking;
 use bitflags::bitflags;
 use byteorder::{ByteOrder, LE};
 use std::fmt::{Display, Formatter};
 use std::io::{Read, Seek, SeekFrom};
 use thiserror::Error;
+
+pub mod dynamic;
 
 /// The first 8 bytes of SELF file.
 pub const SELF_MAGIC: [u8; 8] = [0x4f, 0x15, 0x3d, 0x1d, 0x00, 0x01, 0x01, 0x12];
@@ -17,6 +20,7 @@ pub struct Elf<I: Read + Seek> {
     self_data: Option<SelfData>,
     entry_addr: usize,
     programs: Vec<Program>,
+    dynamic_linking: Option<DynamicLinking>,
 }
 
 impl<I: Read + Seek> Elf<I> {
@@ -122,6 +126,8 @@ impl<I: Read + Seek> Elf<I> {
 
         // Load program headers.
         let mut programs: Vec<Program> = Vec::with_capacity(e_phnum);
+        let mut dynamic: Option<(usize, usize)> = None;
+        let mut dynlib: Option<(usize, usize)> = None;
 
         for i in 0..e_phnum {
             // Read header.
@@ -132,29 +138,68 @@ impl<I: Read + Seek> Elf<I> {
             }
 
             // Load fields.
-            let flags = match ProgramFlags::from_bits(LE::read_u32(&hdr[0x04..])) {
-                Some(v) => v,
-                None => return Err(OpenError::UnknownProgramFlags(i)),
-            };
-
-            programs.push(Program {
+            let prog = Program {
                 ty: ProgramType(LE::read_u32(&hdr)),
-                flags,
+                flags: match ProgramFlags::from_bits(LE::read_u32(&hdr[0x04..])) {
+                    Some(v) => v,
+                    None => return Err(OpenError::UnknownProgramFlags(i)),
+                },
                 offset: LE::read_u64(&hdr[0x08..]),
                 addr: LE::read_u64(&hdr[0x10..]) as usize,
                 file_size: LE::read_u64(&hdr[0x20..]),
                 memory_size: LE::read_u64(&hdr[0x28..]) as usize,
                 aligment: LE::read_u64(&hdr[0x30..]) as usize,
-            });
+            };
+
+            match prog.ty {
+                ProgramType::PT_DYNAMIC => dynamic = Some((i, prog.file_size as usize)),
+                ProgramType::PT_SCE_DYNLIBDATA => dynlib = Some((i, prog.file_size as usize)),
+                _ => {}
+            }
+
+            programs.push(prog);
         }
 
-        Ok(Self {
+        let mut elf = Self {
             name: name.into(),
             image,
             self_data,
             entry_addr: e_entry as usize,
             programs,
-        })
+            dynamic_linking: None,
+        };
+
+        // Load dynamic linking data.
+        if let Some((dynamic_index, dynamic_len)) = dynamic {
+            let (dynlib_index, dynlib_len) = match dynlib {
+                Some(v) => v,
+                None => return Err(OpenError::NoDynlibData),
+            };
+
+            // Read PT_DYNAMIC.
+            let mut dynamic = vec![0u8; dynamic_len];
+
+            if let Err(e) = elf.read_program(dynamic_index, &mut dynamic) {
+                return Err(OpenError::ReadDynamicFailed(e));
+            }
+
+            // Read PT_SCE_DYNLIBDATA.
+            let mut dynlib = vec![0u8; dynlib_len];
+
+            if let Err(e) = elf.read_program(dynlib_index, &mut dynlib) {
+                return Err(OpenError::ReadDynlibDataFailed(e));
+            }
+
+            // Parse PT_DYNAMIC & PT_SCE_DYNLIBDATA.
+            elf.dynamic_linking = match DynamicLinking::parse(&dynamic, &dynlib) {
+                Ok(v) => Some(v),
+                Err(e) => return Err(OpenError::ParseDynamicLinkingFailed(e)),
+            };
+        } else if dynlib.is_some() {
+            return Err(OpenError::NoDynamic);
+        }
+
+        Ok(elf)
     }
 
     pub fn name(&self) -> &str {
@@ -442,6 +487,21 @@ pub enum OpenError {
 
     #[error("program #{0} has an unknown flags")]
     UnknownProgramFlags(usize),
+
+    #[error("no PT_DYNAMIC")]
+    NoDynamic,
+
+    #[error("no PT_SCE_DYNLIBDATA")]
+    NoDynlibData,
+
+    #[error("cannot read PT_DYNAMIC")]
+    ReadDynamicFailed(#[source] ReadProgramError),
+
+    #[error("cannot read PT_SCE_DYNLIBDATA")]
+    ReadDynlibDataFailed(#[source] ReadProgramError),
+
+    #[error("cannot parse PT_DYNAMIC and PT_SCE_DYNLIBDATA")]
+    ParseDynamicLinkingFailed(#[source] self::dynamic::ParseError),
 }
 
 /// Represents an error for [`Elf::read_program()`].
