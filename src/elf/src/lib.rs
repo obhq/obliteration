@@ -218,6 +218,10 @@ impl<I: Read + Seek> Elf<I> {
         self.programs.as_slice()
     }
 
+    pub fn dynamic_linking(&self) -> Option<&DynamicLinking> {
+        self.dynamic_linking.as_ref()
+    }
+
     pub fn read_program(&mut self, index: usize, buf: &mut [u8]) -> Result<(), ReadProgramError> {
         // Get target program.
         let prog = match self.programs.get(index) {

@@ -7,16 +7,14 @@ pub struct DynamicLinking {
     pltgot: u64,
     relasz: u64,
     relaent: u64,
-    strsz: u64,
     syment: u64,
     pltrel: u64,
     fingerprint: u64,
     filename: u64,
-    module_info: u64,
+    module_info: ModuleInfo,
     hash: u64,
     jmprel: u64,
     rela: u64,
-    strtab: u64,
     symtab: u64,
     hashsz: u64,
     symtabsz: u64,
@@ -76,21 +74,64 @@ impl DynamicLinking {
             return Err(ParseError::InvalidDataSize);
         }
 
+        // Find the offset of data tables.
+        let mut strtab: Option<u64> = None;
+        let mut strsz: Option<u64> = None;
+        let mut offset = 0;
+
+        while offset < data.len() {
+            // Read fields.
+            let data = &data[offset..(offset + 16)];
+            let tag = LE::read_i64(&data);
+            let value = &data[8..];
+
+            // Parse entry.
+            match tag {
+                Self::DT_SCE_STRTAB => strtab = Some(LE::read_u64(value)),
+                Self::DT_STRSZ | Self::DT_SCE_STRSZ => strsz = Some(LE::read_u64(value)),
+                _ => {}
+            }
+
+            offset += 16;
+        }
+
+        let strtab = strtab.ok_or(ParseError::NoStrtab)? as usize;
+        let strsz = strsz.ok_or(ParseError::NoStrsz)? as usize;
+
+        // Get data tables.
+        let strtab = match dynlib.get(strtab..(strtab + strsz)) {
+            Some(v) => v,
+            None => return Err(ParseError::InvalidStrtab),
+        };
+
+        let get_str = |offset: usize| -> Option<String> {
+            let raw = match strtab.get(offset..) {
+                Some(v) => match v.iter().position(|&b| b == 0) {
+                    Some(i) => &v[..i],
+                    None => return None,
+                },
+                None => return None,
+            };
+
+            match std::str::from_utf8(raw) {
+                Ok(v) => Some(v.to_owned()),
+                Err(_) => None,
+            }
+        };
+
         // Parse all dynamic linking data.
         let mut pltrelsz: Option<u64> = None;
         let mut pltgot: Option<u64> = None;
         let mut relasz: Option<u64> = None;
         let mut relaent: Option<u64> = None;
-        let mut strsz: Option<u64> = None;
         let mut syment: Option<u64> = None;
         let mut pltrel: Option<u64> = None;
         let mut fingerprint: Option<u64> = None;
         let mut filename: Option<u64> = None;
-        let mut module_info: Option<u64> = None;
+        let mut module_info: Option<ModuleInfo> = None;
         let mut hash: Option<u64> = None;
         let mut jmprel: Option<u64> = None;
         let mut rela: Option<u64> = None;
-        let mut strtab: Option<u64> = None;
         let mut symtab: Option<u64> = None;
         let mut hashsz: Option<u64> = None;
         let mut symtabsz: Option<u64> = None;
@@ -98,25 +139,25 @@ impl DynamicLinking {
 
         while offset < data.len() {
             // Read fields.
-            let data = &data[offset..];
+            let data = &data[offset..(offset + 16)];
             let tag = LE::read_i64(&data);
-            let value = LE::read_u64(&data[8..]);
+            let value = &data[8..];
 
             // Parse entry.
             match tag {
                 Self::DT_NULL => break,
                 Self::DT_NEEDED => {}
-                Self::DT_PLTRELSZ | Self::DT_SCE_PLTRELSZ => pltrelsz = Some(value),
-                Self::DT_PLTGOT | Self::DT_SCE_PLTGOT => pltgot = Some(value),
-                Self::DT_RELASZ | Self::DT_SCE_RELASZ => relasz = Some(value),
-                Self::DT_RELAENT | Self::DT_SCE_RELAENT => relaent = Some(value),
-                Self::DT_STRSZ | Self::DT_SCE_STRSZ => strsz = Some(value),
-                Self::DT_SYMENT | Self::DT_SCE_SYMENT => syment = Some(value),
+                Self::DT_PLTRELSZ | Self::DT_SCE_PLTRELSZ => pltrelsz = Some(LE::read_u64(value)),
+                Self::DT_PLTGOT | Self::DT_SCE_PLTGOT => pltgot = Some(LE::read_u64(value)),
+                Self::DT_RELASZ | Self::DT_SCE_RELASZ => relasz = Some(LE::read_u64(value)),
+                Self::DT_RELAENT | Self::DT_SCE_RELAENT => relaent = Some(LE::read_u64(value)),
+                Self::DT_STRSZ | Self::DT_SCE_STRSZ => {}
+                Self::DT_SYMENT | Self::DT_SCE_SYMENT => syment = Some(LE::read_u64(value)),
                 Self::DT_INIT => {}
                 Self::DT_FINI => {}
                 Self::DT_SONAME => {}
                 Self::DT_SYMBOLIC => {}
-                Self::DT_PLTREL | Self::DT_SCE_PLTREL => pltrel = Some(value),
+                Self::DT_PLTREL | Self::DT_SCE_PLTREL => pltrel = Some(LE::read_u64(value)),
                 Self::DT_DEBUG => {}
                 Self::DT_TEXTREL => {}
                 Self::DT_INIT_ARRAY => {}
@@ -126,22 +167,34 @@ impl DynamicLinking {
                 Self::DT_FLAGS => {}
                 Self::DT_PREINIT_ARRAY => {}
                 Self::DT_PREINIT_ARRAYSZ => {}
-                Self::DT_SCE_FINGERPRINT => fingerprint = Some(value),
-                Self::DT_SCE_FILENAME => filename = Some(value),
-                Self::DT_SCE_MODULE_INFO => module_info = Some(value),
+                Self::DT_SCE_FINGERPRINT => fingerprint = Some(LE::read_u64(value)),
+                Self::DT_SCE_FILENAME => filename = Some(LE::read_u64(value)),
+                Self::DT_SCE_MODULE_INFO => {
+                    let name = LE::read_u32(&value) as usize;
+                    let version_minor = value[4];
+                    let version_major = value[5];
+                    let id = LE::read_u16(&value[6..]);
+
+                    module_info = Some(ModuleInfo {
+                        id,
+                        name: get_str(name).ok_or(ParseError::InvalidModuleInfo)?,
+                        version_major,
+                        version_minor,
+                    });
+                }
                 Self::DT_SCE_NEEDED_MODULE => {}
                 Self::DT_SCE_MODULE_ATTR => {}
                 Self::DT_SCE_EXPORT_LIB => {}
                 Self::DT_SCE_IMPORT_LIB => {}
                 Self::DT_SCE_EXPORT_LIB_ATTR => {}
                 Self::DT_SCE_IMPORT_LIB_ATTR => {}
-                Self::DT_SCE_HASH => hash = Some(value),
-                Self::DT_SCE_JMPREL => jmprel = Some(value),
-                Self::DT_SCE_RELA => rela = Some(value),
-                Self::DT_SCE_STRTAB => strtab = Some(value),
-                Self::DT_SCE_SYMTAB => symtab = Some(value),
-                Self::DT_SCE_HASHSZ => hashsz = Some(value),
-                Self::DT_SCE_SYMTABSZ => symtabsz = Some(value),
+                Self::DT_SCE_HASH => hash = Some(LE::read_u64(value)),
+                Self::DT_SCE_JMPREL => jmprel = Some(LE::read_u64(value)),
+                Self::DT_SCE_RELA => rela = Some(LE::read_u64(value)),
+                Self::DT_SCE_STRTAB => {}
+                Self::DT_SCE_SYMTAB => symtab = Some(LE::read_u64(value)),
+                Self::DT_SCE_HASHSZ => hashsz = Some(LE::read_u64(value)),
+                Self::DT_SCE_SYMTABSZ => symtabsz = Some(LE::read_u64(value)),
                 _ => return Err(ParseError::UnknownTag(tag)),
             }
 
@@ -153,7 +206,6 @@ impl DynamicLinking {
             pltgot: pltgot.ok_or(ParseError::NoPltgot)?,
             relasz: relasz.ok_or(ParseError::NoRelasz)?,
             relaent: relaent.ok_or(ParseError::NoRelaent)?,
-            strsz: strsz.ok_or(ParseError::NoStrsz)?,
             syment: syment.ok_or(ParseError::NoSyment)?,
             pltrel: pltrel.ok_or(ParseError::NoPltrel)?,
             fingerprint: fingerprint.ok_or(ParseError::NoFingerprint)?,
@@ -162,7 +214,6 @@ impl DynamicLinking {
             hash: hash.ok_or(ParseError::NoHash)?,
             jmprel: jmprel.ok_or(ParseError::NoJmprel)?,
             rela: rela.ok_or(ParseError::NoRela)?,
-            strtab: strtab.ok_or(ParseError::NoStrtab)?,
             symtab: symtab.ok_or(ParseError::NoSymtab)?,
             hashsz: hashsz.ok_or(ParseError::NoHashsz)?,
             symtabsz: symtabsz.ok_or(ParseError::NoSymtabsz)?,
@@ -180,6 +231,24 @@ impl DynamicLinking {
         }
 
         Ok(parsed)
+    }
+
+    pub fn module_info(&self) -> &ModuleInfo {
+        &self.module_info
+    }
+}
+
+/// Contains information about the module.
+pub struct ModuleInfo {
+    id: u16,
+    name: String,
+    version_major: u8,
+    version_minor: u8,
+}
+
+impl ModuleInfo {
+    pub fn name(&self) -> &str {
+        self.name.as_ref()
     }
 }
 
@@ -251,4 +320,10 @@ pub enum ParseError {
 
     #[error("entry DT_PLTREL or DT_SCE_PLTREL has value other than DT_RELA")]
     InvalidPltrel,
+
+    #[error("entry DT_SCE_STRTAB has invalid value")]
+    InvalidStrtab,
+
+    #[error("entry DT_SCE_MODULE_INFO has invalid value")]
+    InvalidModuleInfo,
 }
