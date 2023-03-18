@@ -257,6 +257,14 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
         info!("Aligment       : {:#018x}", p.aligment());
     }
 
+    if let Some(dynamic) = elf.dynamic_linking() {
+        for (i, m) in dynamic.needed_modules().iter().enumerate() {
+            info!("========== Needed module #{} ==========", i);
+            info!("ID  : {}", m.id());
+            info!("Name: {}", m.name());
+        }
+    }
+
     // Map the module to the memory.
     info!("Mapping {}.", virtual_path);
 
