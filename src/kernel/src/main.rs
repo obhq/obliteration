@@ -226,9 +226,13 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
     info!("Entry address     : {:#018x}", elf.entry_addr());
     info!("Number of programs: {}", elf.programs().len());
 
+    if let Some(dynamic) = elf.dynamic_linking() {
+        info!("Module name       : {}", dynamic.module_info().name());
+    }
+
     if let Some(segments) = elf.self_segments() {
-        info!("Number of segments: {}", segments.len());
         info!("Image type        : SELF");
+        info!("Number of segments: {}", segments.len());
 
         for (i, s) in segments.iter().enumerate() {
             info!("============= Segment #{} =============", i);
