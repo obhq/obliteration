@@ -13,6 +13,7 @@ pub struct DynamicLinking {
     filename: u64,
     module_info: ModuleInfo,
     needed_modules: Vec<ModuleInfo>,
+    exports: Vec<ModuleExport>,
     hash: u64,
     jmprel: u64,
     rela: u64,
@@ -145,6 +146,7 @@ impl DynamicLinking {
         let mut filename: Option<u64> = None;
         let mut module_info: Option<ModuleInfo> = None;
         let mut needed_modules: Vec<ModuleInfo> = Vec::new();
+        let mut exports: Vec<ModuleExport> = Vec::new();
         let mut hash: Option<u64> = None;
         let mut jmprel: Option<u64> = None;
         let mut rela: Option<u64> = None;
@@ -197,7 +199,17 @@ impl DynamicLinking {
                     _ => return Err(ParseError::InvalidNeededModule(index)),
                 },
                 Self::DT_SCE_MODULE_ATTR => {}
-                Self::DT_SCE_EXPORT_LIB => {}
+                Self::DT_SCE_EXPORT_LIB => {
+                    let name = LE::read_u32(value) as usize;
+                    let version = LE::read_u16(&value[4..]);
+                    let id = LE::read_u16(&value[6..]);
+
+                    exports.push(ModuleExport {
+                        id,
+                        name: get_str(name).ok_or_else(|| ParseError::InvalidExport(index))?,
+                        version,
+                    });
+                }
                 Self::DT_SCE_IMPORT_LIB => {}
                 Self::DT_SCE_EXPORT_LIB_ATTR => {}
                 Self::DT_SCE_IMPORT_LIB_ATTR => {}
@@ -226,6 +238,7 @@ impl DynamicLinking {
             filename: filename.ok_or(ParseError::NoFilename)?,
             module_info: module_info.ok_or(ParseError::NoModuleInfo)?,
             needed_modules,
+            exports,
             hash: hash.ok_or(ParseError::NoHash)?,
             jmprel: jmprel.ok_or(ParseError::NoJmprel)?,
             rela: rela.ok_or(ParseError::NoRela)?,
@@ -255,6 +268,10 @@ impl DynamicLinking {
     pub fn needed_modules(&self) -> &[ModuleInfo] {
         self.needed_modules.as_ref()
     }
+
+    pub fn exports(&self) -> &[ModuleExport] {
+        self.exports.as_ref()
+    }
 }
 
 /// Contains information about the module.
@@ -272,6 +289,37 @@ impl ModuleInfo {
 
     pub fn name(&self) -> &str {
         self.name.as_ref()
+    }
+
+    pub fn version_major(&self) -> u8 {
+        self.version_major
+    }
+
+    pub fn version_minor(&self) -> u8 {
+        self.version_minor
+    }
+}
+
+/// Contains information about the exported library (not the function) in the module.
+pub struct ModuleExport {
+    id: u16,
+    name: String,
+    version: u16,
+}
+
+impl ModuleExport {
+    /// Gets the ID of this library.
+    pub fn id(&self) -> u16 {
+        self.id
+    }
+
+    /// Gets the name of this library.
+    pub fn name(&self) -> &str {
+        self.name.as_ref()
+    }
+
+    pub fn version(&self) -> u16 {
+        self.version
     }
 }
 
@@ -352,4 +400,7 @@ pub enum ParseError {
 
     #[error("entry {0} is not a valid DT_SCE_NEEDED_MODULE")]
     InvalidNeededModule(usize),
+
+    #[error("entry {0} is not a valid DT_SCE_EXPORT_LIB")]
+    InvalidExport(usize),
 }

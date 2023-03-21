@@ -227,7 +227,11 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
     info!("Number of programs: {}", elf.programs().len());
 
     if let Some(dynamic) = elf.dynamic_linking() {
-        info!("Module name       : {}", dynamic.module_info().name());
+        let i = dynamic.module_info();
+
+        info!("Module name       : {}", i.name());
+        info!("Major version     : {}", i.version_major());
+        info!("Minor version     : {}", i.version_minor());
     }
 
     if let Some(segments) = elf.self_segments() {
@@ -260,8 +264,17 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
     if let Some(dynamic) = elf.dynamic_linking() {
         for (i, m) in dynamic.needed_modules().iter().enumerate() {
             info!("========== Needed module #{} ==========", i);
-            info!("ID  : {}", m.id());
-            info!("Name: {}", m.name());
+            info!("ID           : {}", m.id());
+            info!("Name         : {}", m.name());
+            info!("Major version: {}", m.version_major());
+            info!("Minor version: {}", m.version_minor());
+        }
+
+        for (i, e) in dynamic.exports().iter().enumerate() {
+            info!("========== Export library #{} =========", i);
+            info!("ID     : {}", e.id());
+            info!("Name   : {}", e.name());
+            info!("Version: {}", e.version());
         }
     }
 
