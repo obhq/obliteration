@@ -12,6 +12,7 @@ pub struct DynamicLinking {
     fingerprint: u64,
     filename: u64,
     module_info: ModuleInfo,
+    needed_modules: Vec<ModuleInfo>,
     hash: u64,
     jmprel: u64,
     rela: u64,
@@ -119,6 +120,20 @@ impl DynamicLinking {
             }
         };
 
+        let parse_module_info = |value: &[u8]| -> Option<ModuleInfo> {
+            let name = LE::read_u32(&value) as usize;
+            let version_minor = value[4];
+            let version_major = value[5];
+            let id = LE::read_u16(&value[6..]);
+
+            Some(ModuleInfo {
+                id,
+                name: get_str(name)?,
+                version_major,
+                version_minor,
+            })
+        };
+
         // Parse all dynamic linking data.
         let mut pltrelsz: Option<u64> = None;
         let mut pltgot: Option<u64> = None;
@@ -129,6 +144,7 @@ impl DynamicLinking {
         let mut fingerprint: Option<u64> = None;
         let mut filename: Option<u64> = None;
         let mut module_info: Option<ModuleInfo> = None;
+        let mut needed_modules: Vec<ModuleInfo> = Vec::new();
         let mut hash: Option<u64> = None;
         let mut jmprel: Option<u64> = None;
         let mut rela: Option<u64> = None;
@@ -136,6 +152,7 @@ impl DynamicLinking {
         let mut hashsz: Option<u64> = None;
         let mut symtabsz: Option<u64> = None;
         let mut offset = 0;
+        let mut index = 0;
 
         while offset < data.len() {
             // Read fields.
@@ -170,19 +187,15 @@ impl DynamicLinking {
                 Self::DT_SCE_FINGERPRINT => fingerprint = Some(LE::read_u64(value)),
                 Self::DT_SCE_FILENAME => filename = Some(LE::read_u64(value)),
                 Self::DT_SCE_MODULE_INFO => {
-                    let name = LE::read_u32(&value) as usize;
-                    let version_minor = value[4];
-                    let version_major = value[5];
-                    let id = LE::read_u16(&value[6..]);
-
-                    module_info = Some(ModuleInfo {
-                        id,
-                        name: get_str(name).ok_or(ParseError::InvalidModuleInfo)?,
-                        version_major,
-                        version_minor,
+                    module_info = Some(match parse_module_info(value) {
+                        Some(v) if v.id == 0 => v,
+                        _ => return Err(ParseError::InvalidModuleInfo),
                     });
                 }
-                Self::DT_SCE_NEEDED_MODULE => {}
+                Self::DT_SCE_NEEDED_MODULE => match parse_module_info(value) {
+                    Some(v) if v.id != 0 => needed_modules.push(v),
+                    _ => return Err(ParseError::InvalidNeededModule(index)),
+                },
                 Self::DT_SCE_MODULE_ATTR => {}
                 Self::DT_SCE_EXPORT_LIB => {}
                 Self::DT_SCE_IMPORT_LIB => {}
@@ -199,6 +212,7 @@ impl DynamicLinking {
             }
 
             offset += 16;
+            index += 1;
         }
 
         let parsed = Self {
@@ -211,6 +225,7 @@ impl DynamicLinking {
             fingerprint: fingerprint.ok_or(ParseError::NoFingerprint)?,
             filename: filename.ok_or(ParseError::NoFilename)?,
             module_info: module_info.ok_or(ParseError::NoModuleInfo)?,
+            needed_modules,
             hash: hash.ok_or(ParseError::NoHash)?,
             jmprel: jmprel.ok_or(ParseError::NoJmprel)?,
             rela: rela.ok_or(ParseError::NoRela)?,
@@ -236,6 +251,10 @@ impl DynamicLinking {
     pub fn module_info(&self) -> &ModuleInfo {
         &self.module_info
     }
+
+    pub fn needed_modules(&self) -> &[ModuleInfo] {
+        self.needed_modules.as_ref()
+    }
 }
 
 /// Contains information about the module.
@@ -247,6 +266,10 @@ pub struct ModuleInfo {
 }
 
 impl ModuleInfo {
+    pub fn id(&self) -> u16 {
+        self.id
+    }
+
     pub fn name(&self) -> &str {
         self.name.as_ref()
     }
@@ -326,4 +349,7 @@ pub enum ParseError {
 
     #[error("entry DT_SCE_MODULE_INFO has invalid value")]
     InvalidModuleInfo,
+
+    #[error("entry {0} is not a valid DT_SCE_NEEDED_MODULE")]
+    InvalidNeededModule(usize),
 }
