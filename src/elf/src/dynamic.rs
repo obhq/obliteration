@@ -13,7 +13,8 @@ pub struct DynamicLinking {
     filename: u64,
     module_info: ModuleInfo,
     needed_modules: Vec<ModuleInfo>,
-    exports: Vec<ModuleExport>,
+    exports: Vec<LibraryInfo>,
+    imports: Vec<LibraryInfo>,
     hash: u64,
     jmprel: u64,
     rela: u64,
@@ -135,6 +136,18 @@ impl DynamicLinking {
             })
         };
 
+        let parse_library_info = |value: &[u8]| -> Option<LibraryInfo> {
+            let name = LE::read_u32(value) as usize;
+            let version = LE::read_u16(&value[4..]);
+            let id = LE::read_u16(&value[6..]);
+
+            Some(LibraryInfo {
+                id,
+                name: get_str(name)?,
+                version,
+            })
+        };
+
         // Parse all dynamic linking data.
         let mut pltrelsz: Option<u64> = None;
         let mut pltgot: Option<u64> = None;
@@ -146,7 +159,8 @@ impl DynamicLinking {
         let mut filename: Option<u64> = None;
         let mut module_info: Option<ModuleInfo> = None;
         let mut needed_modules: Vec<ModuleInfo> = Vec::new();
-        let mut exports: Vec<ModuleExport> = Vec::new();
+        let mut exports: Vec<LibraryInfo> = Vec::new();
+        let mut imports: Vec<LibraryInfo> = Vec::new();
         let mut hash: Option<u64> = None;
         let mut jmprel: Option<u64> = None;
         let mut rela: Option<u64> = None;
@@ -199,18 +213,14 @@ impl DynamicLinking {
                     _ => return Err(ParseError::InvalidNeededModule(index)),
                 },
                 Self::DT_SCE_MODULE_ATTR => {}
-                Self::DT_SCE_EXPORT_LIB => {
-                    let name = LE::read_u32(value) as usize;
-                    let version = LE::read_u16(&value[4..]);
-                    let id = LE::read_u16(&value[6..]);
-
-                    exports.push(ModuleExport {
-                        id,
-                        name: get_str(name).ok_or_else(|| ParseError::InvalidExport(index))?,
-                        version,
-                    });
-                }
-                Self::DT_SCE_IMPORT_LIB => {}
+                Self::DT_SCE_EXPORT_LIB => match parse_library_info(value) {
+                    Some(v) => exports.push(v),
+                    None => return Err(ParseError::InvalidExport(index)),
+                },
+                Self::DT_SCE_IMPORT_LIB => match parse_library_info(value) {
+                    Some(v) => imports.push(v),
+                    None => return Err(ParseError::InvalidImport(index)),
+                },
                 Self::DT_SCE_EXPORT_LIB_ATTR => {}
                 Self::DT_SCE_IMPORT_LIB_ATTR => {}
                 Self::DT_SCE_HASH => hash = Some(LE::read_u64(value)),
@@ -239,6 +249,7 @@ impl DynamicLinking {
             module_info: module_info.ok_or(ParseError::NoModuleInfo)?,
             needed_modules,
             exports,
+            imports,
             hash: hash.ok_or(ParseError::NoHash)?,
             jmprel: jmprel.ok_or(ParseError::NoJmprel)?,
             rela: rela.ok_or(ParseError::NoRela)?,
@@ -269,8 +280,12 @@ impl DynamicLinking {
         self.needed_modules.as_ref()
     }
 
-    pub fn exports(&self) -> &[ModuleExport] {
+    pub fn exports(&self) -> &[LibraryInfo] {
         self.exports.as_ref()
+    }
+
+    pub fn imports(&self) -> &[LibraryInfo] {
+        self.imports.as_ref()
     }
 }
 
@@ -300,14 +315,14 @@ impl ModuleInfo {
     }
 }
 
-/// Contains information about the exported library (not the function) in the module.
-pub struct ModuleExport {
+/// Contains information about the library in the module.
+pub struct LibraryInfo {
     id: u16,
     name: String,
     version: u16,
 }
 
-impl ModuleExport {
+impl LibraryInfo {
     /// Gets the ID of this library.
     pub fn id(&self) -> u16 {
         self.id
@@ -403,4 +418,7 @@ pub enum ParseError {
 
     #[error("entry {0} is not a valid DT_SCE_EXPORT_LIB")]
     InvalidExport(usize),
+
+    #[error("entry {0} is not a valid DT_SCE_IMPORT_LIB")]
+    InvalidImport(usize),
 }
