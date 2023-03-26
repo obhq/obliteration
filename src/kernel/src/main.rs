@@ -276,6 +276,13 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
             info!("Name   : {}", e.name());
             info!("Version: {}", e.version());
         }
+
+        for (i, l) in dynamic.imports().iter().enumerate() {
+            info!("========== Import library #{} =========", i);
+            info!("ID     : {}", l.id());
+            info!("Name   : {}", l.name());
+            info!("Version: {}", l.version());
+        }
     }
 
     // Map the module to the memory.
