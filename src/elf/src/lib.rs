@@ -191,7 +191,7 @@ impl<I: Read + Seek> Elf<I> {
             }
 
             // Parse PT_DYNAMIC & PT_SCE_DYNLIBDATA.
-            elf.dynamic_linking = match DynamicLinking::parse(&dynamic, &dynlib) {
+            elf.dynamic_linking = match DynamicLinking::parse(dynamic, dynlib) {
                 Ok(v) => Some(v),
                 Err(e) => return Err(OpenError::ParseDynamicLinkingFailed(e)),
             };

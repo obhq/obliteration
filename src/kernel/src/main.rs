@@ -283,6 +283,12 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
             info!("Name   : {}", l.name());
             info!("Version: {}", l.version());
         }
+
+        for (i, s) in dynamic.export_symbols().enumerate() {
+            info!("========== Export symbol #{} ==========", i);
+            info!("Name   : {}", s.name());
+            info!("Address: {:#018x}", s.addr());
+        }
     }
 
     // Map the module to the memory.

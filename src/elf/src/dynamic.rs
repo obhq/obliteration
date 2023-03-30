@@ -1,4 +1,6 @@
 use byteorder::{ByteOrder, LE};
+use std::ops::Index;
+use std::slice::SliceIndex;
 use thiserror::Error;
 
 /// Contains data required for dynamic linking.
@@ -7,7 +9,7 @@ pub struct DynamicLinking {
     pltgot: u64,
     relasz: u64,
     relaent: u64,
-    syment: u64,
+    syment: usize,
     pltrel: u64,
     fingerprint: u64,
     filename: u64,
@@ -18,9 +20,10 @@ pub struct DynamicLinking {
     hash: u64,
     jmprel: u64,
     rela: u64,
-    symtab: u64,
+    symtab: usize,
     hashsz: u64,
-    symtabsz: u64,
+    symtabsz: usize,
+    data: DynlibData,
 }
 
 impl DynamicLinking {
@@ -71,7 +74,7 @@ impl DynamicLinking {
     pub const DT_SCE_HASHSZ: i64 = 0x6100003d;
     pub const DT_SCE_SYMTABSZ: i64 = 0x6100003f;
 
-    pub(super) fn parse(data: &[u8], dynlib: &[u8]) -> Result<Self, ParseError> {
+    pub(super) fn parse(data: Vec<u8>, dynlib: Vec<u8>) -> Result<Self, ParseError> {
         // Simple check to see if data valid.
         if data.len() % 16 != 0 {
             return Err(ParseError::InvalidDataSize);
@@ -98,30 +101,21 @@ impl DynamicLinking {
             offset += 16;
         }
 
+        // Check string table.
         let strtab = strtab.ok_or(ParseError::NoStrtab)? as usize;
         let strsz = strsz.ok_or(ParseError::NoStrsz)? as usize;
 
+        if strtab + strsz > dynlib.len() {
+            return Err(ParseError::InvalidStrtab);
+        }
+
+        let dynlib = DynlibData {
+            data: dynlib,
+            strtab,
+            strsz,
+        };
+
         // Get data tables.
-        let strtab = match dynlib.get(strtab..(strtab + strsz)) {
-            Some(v) => v,
-            None => return Err(ParseError::InvalidStrtab),
-        };
-
-        let get_str = |offset: usize| -> Option<String> {
-            let raw = match strtab.get(offset..) {
-                Some(v) => match v.iter().position(|&b| b == 0) {
-                    Some(i) => &v[..i],
-                    None => return None,
-                },
-                None => return None,
-            };
-
-            match std::str::from_utf8(raw) {
-                Ok(v) => Some(v.to_owned()),
-                Err(_) => None,
-            }
-        };
-
         let parse_module_info = |value: &[u8]| -> Option<ModuleInfo> {
             let name = LE::read_u32(&value) as usize;
             let version_minor = value[4];
@@ -130,7 +124,7 @@ impl DynamicLinking {
 
             Some(ModuleInfo {
                 id,
-                name: get_str(name)?,
+                name: dynlib.str(name)?,
                 version_major,
                 version_minor,
             })
@@ -143,7 +137,7 @@ impl DynamicLinking {
 
             Some(LibraryInfo {
                 id,
-                name: get_str(name)?,
+                name: dynlib.str(name)?,
                 version,
             })
         };
@@ -242,7 +236,7 @@ impl DynamicLinking {
             pltgot: pltgot.ok_or(ParseError::NoPltgot)?,
             relasz: relasz.ok_or(ParseError::NoRelasz)?,
             relaent: relaent.ok_or(ParseError::NoRelaent)?,
-            syment: syment.ok_or(ParseError::NoSyment)?,
+            syment: syment.ok_or(ParseError::NoSyment)? as usize,
             pltrel: pltrel.ok_or(ParseError::NoPltrel)?,
             fingerprint: fingerprint.ok_or(ParseError::NoFingerprint)?,
             filename: filename.ok_or(ParseError::NoFilename)?,
@@ -253,9 +247,10 @@ impl DynamicLinking {
             hash: hash.ok_or(ParseError::NoHash)?,
             jmprel: jmprel.ok_or(ParseError::NoJmprel)?,
             rela: rela.ok_or(ParseError::NoRela)?,
-            symtab: symtab.ok_or(ParseError::NoSymtab)?,
+            symtab: symtab.ok_or(ParseError::NoSymtab)? as usize,
             hashsz: hashsz.ok_or(ParseError::NoHashsz)?,
-            symtabsz: symtabsz.ok_or(ParseError::NoSymtabsz)?,
+            symtabsz: symtabsz.ok_or(ParseError::NoSymtabsz)? as usize,
+            data: dynlib,
         };
 
         // Check values.
@@ -286,6 +281,14 @@ impl DynamicLinking {
 
     pub fn imports(&self) -> &[LibraryInfo] {
         self.imports.as_ref()
+    }
+
+    pub fn export_symbols(&self) -> ExportSymbols<'_> {
+        ExportSymbols {
+            data: &self.data,
+            syment: self.syment,
+            next: &self.data[self.symtab..(self.symtab + self.symtabsz)],
+        }
     }
 }
 
@@ -335,6 +338,85 @@ impl LibraryInfo {
 
     pub fn version(&self) -> u16 {
         self.version
+    }
+}
+
+/// An iterator over the exported symbol of the SELF.
+pub struct ExportSymbols<'a> {
+    data: &'a DynlibData,
+    syment: usize,
+    next: &'a [u8],
+}
+
+impl<'a> Iterator for ExportSymbols<'a> {
+    type Item = ExportSymbol;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.next.is_empty() {
+            return None;
+        }
+
+        // FIXME: Handle invalid data instead of panic.
+        let name = LE::read_u32(self.next) as usize;
+        let addr = LE::read_u64(&self.next[8..]) as usize;
+
+        self.next = &self.next[self.syment..];
+
+        Some(ExportSymbol {
+            name: self.data.str(name).unwrap(),
+            addr,
+        })
+    }
+}
+
+/// Contains information about an exported symbol.
+pub struct ExportSymbol {
+    name: String,
+    addr: usize,
+}
+
+impl ExportSymbol {
+    pub fn name(&self) -> &str {
+        self.name.as_ref()
+    }
+
+    pub fn addr(&self) -> usize {
+        self.addr
+    }
+}
+
+/// Encapsulate a PT_SCE_DYNLIBDATA.
+struct DynlibData {
+    data: Vec<u8>,
+    strtab: usize,
+    strsz: usize,
+}
+
+impl DynlibData {
+    fn str(&self, offset: usize) -> Option<String> {
+        let raw = match self.data[self.strtab..(self.strtab + self.strsz)].get(offset..) {
+            Some(v) => match v.iter().position(|&b| b == 0) {
+                Some(i) => &v[..i],
+                None => return None,
+            },
+            None => return None,
+        };
+
+        match std::str::from_utf8(raw) {
+            Ok(v) => Some(v.to_owned()),
+            Err(_) => None,
+        }
+    }
+}
+
+impl<I> Index<I> for DynlibData
+where
+    I: SliceIndex<[u8]>,
+{
+    type Output = <I as SliceIndex<[u8]>>::Output;
+
+    fn index(&self, index: I) -> &Self::Output {
+        self.data.index(index)
     }
 }
 
