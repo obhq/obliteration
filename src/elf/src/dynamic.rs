@@ -5,6 +5,7 @@ use thiserror::Error;
 
 /// Contains data required for dynamic linking.
 pub struct DynamicLinking {
+    dependencies: Vec<String>,
     pltrelsz: u64,
     pltgot: u64,
     relasz: u64,
@@ -143,6 +144,7 @@ impl DynamicLinking {
         };
 
         // Parse all dynamic linking data.
+        let mut dependencies: Vec<String> = Vec::new();
         let mut pltrelsz: Option<u64> = None;
         let mut pltgot: Option<u64> = None;
         let mut relasz: Option<u64> = None;
@@ -173,7 +175,10 @@ impl DynamicLinking {
             // Parse entry.
             match tag {
                 Self::DT_NULL => break,
-                Self::DT_NEEDED => {}
+                Self::DT_NEEDED => match dynlib.str(LE::read_u64(value) as usize) {
+                    Some(v) => dependencies.push(v),
+                    None => return Err(ParseError::InvalidNeeded(index)),
+                },
                 Self::DT_PLTRELSZ | Self::DT_SCE_PLTRELSZ => pltrelsz = Some(LE::read_u64(value)),
                 Self::DT_PLTGOT | Self::DT_SCE_PLTGOT => pltgot = Some(LE::read_u64(value)),
                 Self::DT_RELASZ | Self::DT_SCE_RELASZ => relasz = Some(LE::read_u64(value)),
@@ -232,6 +237,7 @@ impl DynamicLinking {
         }
 
         let parsed = Self {
+            dependencies,
             pltrelsz: pltrelsz.ok_or(ParseError::NoPltrelsz)?,
             pltgot: pltgot.ok_or(ParseError::NoPltgot)?,
             relasz: relasz.ok_or(ParseError::NoRelasz)?,
@@ -265,6 +271,11 @@ impl DynamicLinking {
         }
 
         Ok(parsed)
+    }
+
+    /// List of a SELF file that this SELF is depend on.
+    pub fn dependencies(&self) -> &[String] {
+        self.dependencies.as_ref()
     }
 
     pub fn module_info(&self) -> &ModuleInfo {
@@ -425,6 +436,9 @@ where
 pub enum ParseError {
     #[error("invalid data size")]
     InvalidDataSize,
+
+    #[error("entry {0} is not a valid DT_NEEDED")]
+    InvalidNeeded(usize),
 
     #[error("entry DT_PLTRELSZ or DT_SCE_PLTRELSZ does not exists")]
     NoPltrelsz,

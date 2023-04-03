@@ -140,9 +140,8 @@ impl<I: Read + Seek> Elf<I> {
             // Load fields.
             let prog = Program {
                 ty: ProgramType(LE::read_u32(&hdr)),
-                flags: match ProgramFlags::from_bits(LE::read_u32(&hdr[0x04..])) {
-                    Some(v) => v,
-                    None => return Err(OpenError::UnknownProgramFlags(i)),
+                flags: ProgramFlags {
+                    bits: LE::read_u32(&hdr[0x04..]),
                 },
                 offset: LE::read_u64(&hdr[0x08..]),
                 addr: LE::read_u64(&hdr[0x10..]) as usize,
@@ -488,9 +487,6 @@ pub enum OpenError {
 
     #[error("cannot read program header #{0}")]
     ReadProgramHeaderFailed(usize, #[source] std::io::Error),
-
-    #[error("program #{0} has an unknown flags")]
-    UnknownProgramFlags(usize),
 
     #[error("no PT_DYNAMIC")]
     NoDynamic,

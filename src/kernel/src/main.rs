@@ -6,8 +6,9 @@ use self::memory::MemoryManager;
 use self::module::Module;
 use clap::Parser;
 use elf::Elf;
-use elf::ProgramType;
 use serde::Deserialize;
+use std::collections::HashMap;
+use std::collections::VecDeque;
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -113,32 +114,59 @@ fn run() -> bool {
         None => return false,
     };
 
-    // Check if we need to run libkernel instead of eboot.bin.
-    let libkernel = if eboot
-        .image()
-        .programs()
-        .iter()
-        .any(|p| p.ty() == ProgramType::PT_DYNAMIC)
-    {
-        // Load the module.
-        let module = match load_module(&fs, mm, ModuleName::Search("libkernel")) {
-            Some(v) => v,
-            None => return false,
-        };
+    // Load dependencies.
+    let mut modules = HashMap::from([(String::from(""), eboot)]);
 
+    if let Some(dynamic) = modules[""].image().dynamic_linking() {
+        let mut deps: VecDeque<String> = dynamic.dependencies().iter().map(|m| m.clone()).collect();
+
+        while let Some(dep) = deps.pop_front() {
+            use std::collections::hash_map::Entry;
+
+            // Remove file extension.
+            let name = match dep.rfind('.').map(|i| (&dep[..i]).to_owned()) {
+                Some(v) if !v.is_empty() => v,
+                _ => {
+                    error!("Invalid module file name: {dep}");
+                    return false;
+                }
+            };
+
+            // Check if already loaded.
+            let entry = match modules.entry(name) {
+                Entry::Occupied(_) => continue,
+                Entry::Vacant(e) => e,
+            };
+
+            // Load the module.
+            let module = match load_module(&fs, mm.clone(), ModuleName::Search(entry.key())) {
+                Some(v) => v,
+                None => return false,
+            };
+
+            if let Some(dynamic) = module.image().dynamic_linking() {
+                deps.extend(dynamic.dependencies().iter().map(|m| m.clone()));
+            }
+
+            entry.insert(module);
+        }
+    }
+
+    info!("{} module(s) has been loaded successfully.", modules.len());
+
+    // Lift the loaded modules.
+    for (_, module) in modules {
         // Lift the module.
         info!("Lifting {}.", module.image().name());
 
         match LiftedModule::lift(&llvm, module) {
-            Ok(v) => Some(v),
+            Ok(_) => {} // TODO: Store the lifted module somewhere.
             Err(e) => {
                 error!(e, "Lifting failed");
                 return false;
             }
         }
-    } else {
-        None
-    };
+    }
 
     true
 }
@@ -195,6 +223,20 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
                     }
                 }
 
+                // Next try system/priv/lib.
+                match fs.get(&format!("/system/priv/lib/{name}.sprx")) {
+                    Ok(v) => match v {
+                        fs::Item::Directory(_) => {
+                            // FIXME: Right now FS will treat non-existent file as a directory.
+                        }
+                        fs::Item::File(v) => break 'search v,
+                    },
+                    Err(e) => {
+                        error!(e, "Looking failed");
+                        return None;
+                    }
+                }
+
                 error!("Cannot find {name}.");
                 return None;
             }
@@ -224,7 +266,6 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
     };
 
     info!("Entry address     : {:#018x}", elf.entry_addr());
-    info!("Number of programs: {}", elf.programs().len());
 
     if let Some(dynamic) = elf.dynamic_linking() {
         let i = dynamic.module_info();
@@ -236,7 +277,6 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
 
     if let Some(segments) = elf.self_segments() {
         info!("Image type        : SELF");
-        info!("Number of segments: {}", segments.len());
 
         for (i, s) in segments.iter().enumerate() {
             info!("============= Segment #{} =============", i);
@@ -256,38 +296,16 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
         info!("Offset         : {:#018x}", p.offset());
         info!("Virtual address: {:#018x}", p.addr());
         info!("Size in file   : {:#018x}", p.file_size());
-        info!("Size in memory : {:#018x}", p.memory_size());
         info!("Aligned size   : {:#018x}", p.aligned_size());
         info!("Aligment       : {:#018x}", p.aligment());
     }
 
     if let Some(dynamic) = elf.dynamic_linking() {
-        for (i, m) in dynamic.needed_modules().iter().enumerate() {
-            info!("========== Needed module #{} ==========", i);
-            info!("ID           : {}", m.id());
-            info!("Name         : {}", m.name());
-            info!("Major version: {}", m.version_major());
-            info!("Minor version: {}", m.version_minor());
-        }
-
         for (i, e) in dynamic.exports().iter().enumerate() {
             info!("========== Export library #{} =========", i);
             info!("ID     : {}", e.id());
             info!("Name   : {}", e.name());
             info!("Version: {}", e.version());
-        }
-
-        for (i, l) in dynamic.imports().iter().enumerate() {
-            info!("========== Import library #{} =========", i);
-            info!("ID     : {}", l.id());
-            info!("Name   : {}", l.name());
-            info!("Version: {}", l.version());
-        }
-
-        for (i, s) in dynamic.export_symbols().enumerate() {
-            info!("========== Export symbol #{} ==========", i);
-            info!("Name   : {}", s.name());
-            info!("Address: {:#018x}", s.addr());
         }
     }
 
