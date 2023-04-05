@@ -5,6 +5,8 @@ use self::llvm::Llvm;
 use self::memory::MemoryManager;
 use self::module::Module;
 use clap::Parser;
+use elf::dynamic::RelocationInfo;
+use elf::dynamic::SymbolInfo;
 use elf::Elf;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -154,6 +156,58 @@ fn run() -> bool {
 
     info!("{} module(s) has been loaded successfully.", modules.len());
 
+    // Apply module relocations.
+    for (_, module) in &modules {
+        // Skip if the module is not dynamic linking.
+        let dynamic = match module.image().dynamic_linking() {
+            Some(v) => v,
+            None => continue,
+        };
+
+        // Apply relocations.
+        info!("Applying relocation entries on {}.", module.image().name());
+
+        for (i, reloc) in dynamic.relocation_entries().enumerate() {
+            // Resolve the value.
+            let value = match reloc.ty() {
+                RelocationInfo::R_X86_64_64
+                | RelocationInfo::R_X86_64_PC32
+                | RelocationInfo::R_X86_64_GLOB_DAT
+                | RelocationInfo::R_X86_64_DTPMOD64
+                | RelocationInfo::R_X86_64_DTPOFF64
+                | RelocationInfo::R_X86_64_TPOFF64
+                | RelocationInfo::R_X86_64_DTPOFF32
+                | RelocationInfo::R_X86_64_TPOFF32 => {
+                    // Get target symbol.
+                    let symbol = match dynamic.symbols().get(reloc.symbol()) {
+                        Some(v) => v,
+                        None => {
+                            error!("Invalid symbol index on entry {i}.");
+                            return false;
+                        }
+                    };
+
+                    // Check binding type.
+                    match symbol.binding() {
+                        SymbolInfo::STB_LOCAL => module.memory().addr() + symbol.value(),
+                        SymbolInfo::STB_GLOBAL | SymbolInfo::STB_WEAK => 0, // TODO: Resolve external symbol.
+                        v => {
+                            error!("Unknown symbol binding type {v} on entry {i}.");
+                            return false;
+                        }
+                    }
+                }
+                RelocationInfo::R_X86_64_RELATIVE => 0,
+                v => {
+                    error!("Unknown relocation type {v:#010x} on entry {i}.");
+                    return false;
+                }
+            };
+
+            // TODO: Apply the value.
+        }
+    }
+
     // Lift the loaded modules.
     for (_, module) in modules {
         // Lift the module.
@@ -289,23 +343,13 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
         info!("Image type        : ELF");
     }
 
-    for (i, p) in elf.programs().iter().enumerate() {
-        info!("============= Program #{} =============", i);
-        info!("Type           : {}", p.ty());
-        info!("Flags          : {:?}", p.flags());
-        info!("Offset         : {:#018x}", p.offset());
-        info!("Virtual address: {:#018x}", p.addr());
-        info!("Size in file   : {:#018x}", p.file_size());
-        info!("Aligned size   : {:#018x}", p.aligned_size());
-        info!("Aligment       : {:#018x}", p.aligment());
-    }
-
     if let Some(dynamic) = elf.dynamic_linking() {
-        for (i, e) in dynamic.exports().iter().enumerate() {
-            info!("========== Export library #{} =========", i);
-            info!("ID     : {}", e.id());
-            info!("Name   : {}", e.name());
-            info!("Version: {}", e.version());
+        for (i, m) in dynamic.needed_modules().iter().enumerate() {
+            info!("========== Needed module #{} ==========", i);
+            info!("ID           : {}", m.id());
+            info!("Name         : {}", m.name());
+            info!("Major version: {}", m.version_major());
+            info!("Minor version: {}", m.version_minor());
         }
     }
 
