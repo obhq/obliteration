@@ -8,9 +8,8 @@ pub struct DynamicLinking {
     dependencies: Vec<String>,
     pltrelsz: u64,
     pltgot: u64,
-    relasz: u64,
-    relaent: u64,
-    syment: usize,
+    relasz: usize,
+    relaent: usize,
     pltrel: u64,
     fingerprint: u64,
     filename: u64,
@@ -18,12 +17,11 @@ pub struct DynamicLinking {
     needed_modules: Vec<ModuleInfo>,
     exports: Vec<LibraryInfo>,
     imports: Vec<LibraryInfo>,
+    symbols: Vec<SymbolInfo>,
     hash: u64,
     jmprel: u64,
-    rela: u64,
-    symtab: usize,
+    rela: usize,
     hashsz: u64,
-    symtabsz: usize,
     data: DynlibData,
 }
 
@@ -143,7 +141,7 @@ impl DynamicLinking {
             })
         };
 
-        // Parse all dynamic linking data.
+        // Parse entries.
         let mut dependencies: Vec<String> = Vec::new();
         let mut pltrelsz: Option<u64> = None;
         let mut pltgot: Option<u64> = None;
@@ -236,13 +234,66 @@ impl DynamicLinking {
             index += 1;
         }
 
+        // Check size of symbol entry.
+        let syment = match syment {
+            Some(v) => {
+                if v != 24 {
+                    // sizeof(Elf64_Sym)
+                    return Err(ParseError::InvalidSyment);
+                }
+
+                v as usize
+            }
+            None => return Err(ParseError::NoSyment),
+        };
+
+        // Parse symbol table.
+        let symbols = match (symtab, symtabsz) {
+            (Some(offset), Some(size)) => {
+                let offset = offset as usize;
+                let size = size as usize;
+
+                // Check if size valid.
+                if size % syment != 0 {
+                    return Err(ParseError::InvalidSymtabsz);
+                }
+
+                // Get the table.
+                let table = match dynlib.get(offset..(offset + size)) {
+                    Some(v) => v,
+                    None => return Err(ParseError::InvalidSymtab),
+                };
+
+                // Parse the table.
+                let mut symbols: Vec<SymbolInfo> = Vec::with_capacity(size / syment);
+
+                for (i, e) in table.chunks(syment).enumerate() {
+                    let name = LE::read_u32(e) as usize;
+                    let info = e[4];
+                    let value = LE::read_u64(&e[8..]) as usize;
+
+                    symbols.push(SymbolInfo {
+                        name: match dynlib.str(name) {
+                            Some(v) => v,
+                            None => return Err(ParseError::InvalidSymbol(i)),
+                        },
+                        info,
+                        value,
+                    })
+                }
+
+                symbols
+            }
+            (None, _) => return Err(ParseError::NoSymtab),
+            (_, None) => return Err(ParseError::NoSymtabsz),
+        };
+
         let parsed = Self {
             dependencies,
             pltrelsz: pltrelsz.ok_or(ParseError::NoPltrelsz)?,
             pltgot: pltgot.ok_or(ParseError::NoPltgot)?,
-            relasz: relasz.ok_or(ParseError::NoRelasz)?,
-            relaent: relaent.ok_or(ParseError::NoRelaent)?,
-            syment: syment.ok_or(ParseError::NoSyment)? as usize,
+            relasz: relasz.ok_or(ParseError::NoRelasz)? as usize,
+            relaent: relaent.ok_or(ParseError::NoRelaent)? as usize,
             pltrel: pltrel.ok_or(ParseError::NoPltrel)?,
             fingerprint: fingerprint.ok_or(ParseError::NoFingerprint)?,
             filename: filename.ok_or(ParseError::NoFilename)?,
@@ -250,12 +301,11 @@ impl DynamicLinking {
             needed_modules,
             exports,
             imports,
+            symbols,
             hash: hash.ok_or(ParseError::NoHash)?,
             jmprel: jmprel.ok_or(ParseError::NoJmprel)?,
-            rela: rela.ok_or(ParseError::NoRela)?,
-            symtab: symtab.ok_or(ParseError::NoSymtab)? as usize,
+            rela: rela.ok_or(ParseError::NoRela)? as usize,
             hashsz: hashsz.ok_or(ParseError::NoHashsz)?,
-            symtabsz: symtabsz.ok_or(ParseError::NoSymtabsz)? as usize,
             data: dynlib,
         };
 
@@ -263,9 +313,6 @@ impl DynamicLinking {
         if parsed.relaent != 24 {
             // sizeof(Elf64_Rela)
             return Err(ParseError::InvalidRelaent);
-        } else if parsed.syment != 24 {
-            // sizeof(Elf64_Sym)
-            return Err(ParseError::InvalidSyment);
         } else if parsed.pltrel != DynamicLinking::DT_RELA as _ {
             return Err(ParseError::InvalidPltrel);
         }
@@ -294,11 +341,14 @@ impl DynamicLinking {
         self.imports.as_ref()
     }
 
-    pub fn export_symbols(&self) -> ExportSymbols<'_> {
-        ExportSymbols {
-            data: &self.data,
-            syment: self.syment,
-            next: &self.data[self.symtab..(self.symtab + self.symtabsz)],
+    pub fn symbols(&self) -> &[SymbolInfo] {
+        self.symbols.as_ref()
+    }
+
+    pub fn relocation_entries(&self) -> RelocationEntries<'_> {
+        RelocationEntries {
+            relaent: self.relaent,
+            next: &self.data[self.rela..(self.rela + self.relasz)],
         }
     }
 }
@@ -352,15 +402,44 @@ impl LibraryInfo {
     }
 }
 
-/// An iterator over the exported symbol of the SELF.
-pub struct ExportSymbols<'a> {
-    data: &'a DynlibData,
-    syment: usize,
+/// Contains information about a symbol in the SELF.
+pub struct SymbolInfo {
+    name: String,
+    info: u8,
+    value: usize,
+}
+
+impl SymbolInfo {
+    /// Local symbol, not visible outside obj file containing def.
+    pub const STB_LOCAL: u8 = 0;
+
+    /// Global symbol, visible to all object files being combined.
+    pub const STB_GLOBAL: u8 = 1;
+
+    /// Weak symbol, like global but lower-precedence.
+    pub const STB_WEAK: u8 = 2;
+
+    pub fn name(&self) -> &str {
+        self.name.as_ref()
+    }
+
+    pub fn binding(&self) -> u8 {
+        self.info >> 4
+    }
+
+    pub fn value(&self) -> usize {
+        self.value
+    }
+}
+
+/// An iterator over the relocation entry of the SELF.
+pub struct RelocationEntries<'a> {
+    relaent: usize,
     next: &'a [u8],
 }
 
-impl<'a> Iterator for ExportSymbols<'a> {
-    type Item = ExportSymbol;
+impl<'a> Iterator for RelocationEntries<'a> {
+    type Item = RelocationInfo;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.next.is_empty() {
@@ -368,31 +447,48 @@ impl<'a> Iterator for ExportSymbols<'a> {
         }
 
         // FIXME: Handle invalid data instead of panic.
-        let name = LE::read_u32(self.next) as usize;
-        let addr = LE::read_u64(&self.next[8..]) as usize;
+        let offset = LE::read_u64(self.next) as usize;
+        let info = LE::read_u64(&self.next[8..]);
+        let addend = LE::read_i64(&self.next[16..]);
 
-        self.next = &self.next[self.syment..];
+        self.next = &self.next[self.relaent..];
 
-        Some(ExportSymbol {
-            name: self.data.str(name).unwrap(),
-            addr,
+        Some(RelocationInfo {
+            offset,
+            info,
+            addend,
         })
     }
 }
 
-/// Contains information about an exported symbol.
-pub struct ExportSymbol {
-    name: String,
-    addr: usize,
+/// Contains information required to relocate a specific address.
+pub struct RelocationInfo {
+    offset: usize,
+    info: u64,
+    addend: i64,
 }
 
-impl ExportSymbol {
-    pub fn name(&self) -> &str {
-        self.name.as_ref()
+impl RelocationInfo {
+    pub const R_X86_64_64: u32 = 1;
+    pub const R_X86_64_PC32: u32 = 2;
+    pub const R_X86_64_GLOB_DAT: u32 = 6;
+    pub const R_X86_64_RELATIVE: u32 = 8;
+    pub const R_X86_64_DTPMOD64: u32 = 16;
+    pub const R_X86_64_DTPOFF64: u32 = 17;
+    pub const R_X86_64_TPOFF64: u32 = 18;
+    pub const R_X86_64_DTPOFF32: u32 = 21;
+    pub const R_X86_64_TPOFF32: u32 = 23;
+
+    pub fn ty(&self) -> u32 {
+        (self.info & 0x00000000ffffffff) as u32
     }
 
-    pub fn addr(&self) -> usize {
-        self.addr
+    pub fn symbol(&self) -> usize {
+        (self.info >> 32) as usize
+    }
+
+    pub fn offset(&self) -> usize {
+        self.offset
     }
 }
 
@@ -417,6 +513,10 @@ impl DynlibData {
             Ok(v) => Some(v.to_owned()),
             Err(_) => None,
         }
+    }
+
+    fn get<I: SliceIndex<[u8]>>(&self, index: I) -> Option<&I::Output> {
+        self.data.get(index)
     }
 }
 
@@ -485,11 +585,17 @@ pub enum ParseError {
     #[error("entry DT_SCE_SYMTAB does not exists")]
     NoSymtab,
 
+    #[error("entry DT_SCE_SYMTAB has invalid value")]
+    InvalidSymtab,
+
     #[error("entry DT_SCE_HASHSZ does not exists")]
     NoHashsz,
 
     #[error("entry DT_SCE_SYMTABSZ does not exists")]
     NoSymtabsz,
+
+    #[error("entry DT_SCE_SYMTABSZ has invalid value")]
+    InvalidSymtabsz,
 
     #[error("unknown tag {0:#018x}")]
     UnknownTag(i64),
@@ -517,4 +623,7 @@ pub enum ParseError {
 
     #[error("entry {0} is not a valid DT_SCE_IMPORT_LIB")]
     InvalidImport(usize),
+
+    #[error("Symbol entry {0} is not valid")]
+    InvalidSymbol(usize),
 }
