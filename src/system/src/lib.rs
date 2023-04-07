@@ -193,6 +193,18 @@ where
 fn get_module_info(local: PathBuf, remote: String) -> Result<Option<ModuleInfo>, DownloadError> {
     use elf::OpenError;
 
+    // Check file path.
+    if !remote.starts_with("/system/common/lib/") && !remote.starts_with("/system/priv/lib/") {
+        return Ok(None);
+    }
+
+    // Check file name.
+    if let Some(ext) = local.extension() {
+        if ext == "elf" || ext == "self" {
+            return Ok(None);
+        }
+    }
+
     // Open the file.
     let file = match File::open(&local) {
         Ok(v) => v,
