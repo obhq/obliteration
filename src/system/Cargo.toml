@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+elf = { path = "../elf" }
 error = { path = "../error" }
+fs = { path = "../fs" }
 ftp = { path = "../ftp" }
+serde_yaml = "0.9"
 thiserror = "1.0"
 util = { path = "../util" }
