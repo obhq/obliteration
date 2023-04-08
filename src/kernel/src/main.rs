@@ -190,7 +190,12 @@ fn run() -> bool {
                     // Check binding type.
                     match symbol.binding() {
                         SymbolInfo::STB_LOCAL => module.memory().addr() + symbol.value(),
-                        SymbolInfo::STB_GLOBAL | SymbolInfo::STB_WEAK => 0, // TODO: Resolve external symbol.
+                        SymbolInfo::STB_GLOBAL | SymbolInfo::STB_WEAK => {
+                            info!("Linking symbol: {}", symbol.name());
+
+                            // TODO: Resolve external symbol.
+                            0
+                        }
                         v => {
                             error!("Unknown symbol binding type {v} on entry {i}.");
                             return false;
@@ -200,6 +205,45 @@ fn run() -> bool {
                 RelocationInfo::R_X86_64_RELATIVE => 0,
                 v => {
                     error!("Unknown relocation type {v:#010x} on entry {i}.");
+                    return false;
+                }
+            };
+
+            // TODO: Apply the value.
+        }
+
+        // Apply Procedure Linkage Table relocation.
+        for (i, reloc) in dynamic.plt_relocation().enumerate() {
+            // Resolve the value.
+            let value = match reloc.ty() {
+                RelocationInfo::R_X86_64_JUMP_SLOT => {
+                    // Get target symbol.
+                    let symbol = match dynamic.symbols().get(reloc.symbol()) {
+                        Some(v) => v,
+                        None => {
+                            error!("Invalid symbol index on PLT entry {i}.");
+                            return false;
+                        }
+                    };
+
+                    // Check binding type.
+                    match symbol.binding() {
+                        SymbolInfo::STB_LOCAL => module.memory().addr() + symbol.value(),
+                        SymbolInfo::STB_GLOBAL | SymbolInfo::STB_WEAK => {
+                            info!("Linking PLT symbol: {}", symbol.name());
+
+                            // TODO: Resolve external symbol.
+                            0
+                        }
+                        v => {
+                            error!("Unknown symbol binding type {v} on PLT entry {i}.");
+                            return false;
+                        }
+                    }
+                }
+                RelocationInfo::R_X86_64_RELATIVE => 0,
+                v => {
+                    error!("Unknown PLT relocation type {v:#010x} on entry {i}.");
                     return false;
                 }
             };
