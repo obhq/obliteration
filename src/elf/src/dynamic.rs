@@ -6,7 +6,7 @@ use thiserror::Error;
 /// Contains data required for dynamic linking.
 pub struct DynamicLinking {
     dependencies: Vec<String>,
-    pltrelsz: u64,
+    pltrelsz: usize,
     pltgot: u64,
     relasz: usize,
     relaent: usize,
@@ -19,7 +19,7 @@ pub struct DynamicLinking {
     imports: Vec<LibraryInfo>,
     symbols: Vec<SymbolInfo>,
     hash: u64,
-    jmprel: u64,
+    jmprel: usize,
     rela: usize,
     hashsz: u64,
     data: DynlibData,
@@ -290,7 +290,7 @@ impl DynamicLinking {
 
         let parsed = Self {
             dependencies,
-            pltrelsz: pltrelsz.ok_or(ParseError::NoPltrelsz)?,
+            pltrelsz: pltrelsz.ok_or(ParseError::NoPltrelsz)? as usize,
             pltgot: pltgot.ok_or(ParseError::NoPltgot)?,
             relasz: relasz.ok_or(ParseError::NoRelasz)? as usize,
             relaent: relaent.ok_or(ParseError::NoRelaent)? as usize,
@@ -303,7 +303,7 @@ impl DynamicLinking {
             imports,
             symbols,
             hash: hash.ok_or(ParseError::NoHash)?,
-            jmprel: jmprel.ok_or(ParseError::NoJmprel)?,
+            jmprel: jmprel.ok_or(ParseError::NoJmprel)? as usize,
             rela: rela.ok_or(ParseError::NoRela)? as usize,
             hashsz: hashsz.ok_or(ParseError::NoHashsz)?,
             data: dynlib,
@@ -349,6 +349,13 @@ impl DynamicLinking {
         RelocationEntries {
             relaent: self.relaent,
             next: &self.data[self.rela..(self.rela + self.relasz)],
+        }
+    }
+
+    pub fn plt_relocation(&self) -> RelocationEntries<'_> {
+        RelocationEntries {
+            relaent: self.relaent,
+            next: &self.data[self.jmprel..(self.jmprel + self.pltrelsz)],
         }
     }
 }
@@ -472,6 +479,7 @@ impl RelocationInfo {
     pub const R_X86_64_64: u32 = 1;
     pub const R_X86_64_PC32: u32 = 2;
     pub const R_X86_64_GLOB_DAT: u32 = 6;
+    pub const R_X86_64_JUMP_SLOT: u32 = 7;
     pub const R_X86_64_RELATIVE: u32 = 8;
     pub const R_X86_64_DTPMOD64: u32 = 16;
     pub const R_X86_64_DTPOFF64: u32 = 17;
