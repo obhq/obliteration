@@ -10,7 +10,6 @@ use elf::dynamic::SymbolInfo;
 use elf::Elf;
 use serde::Deserialize;
 use std::collections::HashMap;
-use std::collections::VecDeque;
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -116,43 +115,8 @@ fn run() -> bool {
         None => return false,
     };
 
-    // Load dependencies.
+    // TODO: Load dependencies.
     let mut modules = HashMap::from([(String::from(""), eboot)]);
-
-    if let Some(dynamic) = modules[""].image().dynamic_linking() {
-        let mut deps: VecDeque<String> = dynamic.dependencies().iter().map(|m| m.clone()).collect();
-
-        while let Some(dep) = deps.pop_front() {
-            use std::collections::hash_map::Entry;
-
-            // Remove file extension.
-            let name = match dep.rfind('.').map(|i| (&dep[..i]).to_owned()) {
-                Some(v) if !v.is_empty() => v,
-                _ => {
-                    error!("Invalid module file name: {dep}");
-                    return false;
-                }
-            };
-
-            // Check if already loaded.
-            let entry = match modules.entry(name) {
-                Entry::Occupied(_) => continue,
-                Entry::Vacant(e) => e,
-            };
-
-            // Load the module.
-            let module = match load_module(&fs, mm.clone(), ModuleName::Search(entry.key())) {
-                Some(v) => v,
-                None => return false,
-            };
-
-            if let Some(dynamic) = module.image().dynamic_linking() {
-                deps.extend(dynamic.dependencies().iter().map(|m| m.clone()));
-            }
-
-            entry.insert(module);
-        }
-    }
 
     info!("{} module(s) has been loaded successfully.", modules.len());
 
@@ -388,7 +352,7 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
     }
 
     if let Some(dynamic) = elf.dynamic_linking() {
-        for (i, m) in dynamic.needed_modules().iter().enumerate() {
+        for (i, m) in dynamic.dependencies().values().enumerate() {
             info!("========== Needed module #{} ==========", i);
             info!("ID           : {}", m.id());
             info!("Name         : {}", m.name());

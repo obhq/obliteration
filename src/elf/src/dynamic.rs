@@ -1,11 +1,11 @@
 use byteorder::{ByteOrder, LE};
+use std::collections::HashMap;
 use std::ops::Index;
 use std::slice::SliceIndex;
 use thiserror::Error;
 
 /// Contains data required for dynamic linking.
 pub struct DynamicLinking {
-    dependencies: Vec<String>,
     pltrelsz: usize,
     pltgot: u64,
     relasz: usize,
@@ -14,14 +14,12 @@ pub struct DynamicLinking {
     fingerprint: u64,
     filename: u64,
     module_info: ModuleInfo,
-    needed_modules: Vec<ModuleInfo>,
-    exports: Vec<LibraryInfo>,
-    imports: Vec<LibraryInfo>,
+    dependencies: HashMap<u16, ModuleInfo>,
+    libraries: HashMap<u16, LibraryInfo>,
     symbols: Vec<SymbolInfo>,
-    hash: u64,
+    symbol_lookup_table: Vec<u32>,
     jmprel: usize,
     rela: usize,
-    hashsz: u64,
     data: DynlibData,
 }
 
@@ -129,20 +127,7 @@ impl DynamicLinking {
             })
         };
 
-        let parse_library_info = |value: &[u8]| -> Option<LibraryInfo> {
-            let name = LE::read_u32(value) as usize;
-            let version = LE::read_u16(&value[4..]);
-            let id = LE::read_u16(&value[6..]);
-
-            Some(LibraryInfo {
-                id,
-                name: dynlib.str(name)?,
-                version,
-            })
-        };
-
         // Parse entries.
-        let mut dependencies: Vec<String> = Vec::new();
         let mut pltrelsz: Option<u64> = None;
         let mut pltgot: Option<u64> = None;
         let mut relasz: Option<u64> = None;
@@ -152,31 +137,26 @@ impl DynamicLinking {
         let mut fingerprint: Option<u64> = None;
         let mut filename: Option<u64> = None;
         let mut module_info: Option<ModuleInfo> = None;
-        let mut needed_modules: Vec<ModuleInfo> = Vec::new();
-        let mut exports: Vec<LibraryInfo> = Vec::new();
-        let mut imports: Vec<LibraryInfo> = Vec::new();
+        let mut dependencies: HashMap<u16, ModuleInfo> = HashMap::new();
+        let mut libraries: HashMap<u16, LibraryInfo> = HashMap::new();
         let mut hash: Option<u64> = None;
         let mut jmprel: Option<u64> = None;
         let mut rela: Option<u64> = None;
         let mut symtab: Option<u64> = None;
         let mut hashsz: Option<u64> = None;
         let mut symtabsz: Option<u64> = None;
-        let mut offset = 0;
-        let mut index = 0;
 
-        while offset < data.len() {
+        for (index, data) in data.chunks(16).enumerate() {
+            use std::collections::hash_map::Entry;
+
             // Read fields.
-            let data = &data[offset..(offset + 16)];
             let tag = LE::read_i64(&data);
             let value = &data[8..];
 
             // Parse entry.
             match tag {
                 Self::DT_NULL => break,
-                Self::DT_NEEDED => match dynlib.str(LE::read_u64(value) as usize) {
-                    Some(v) => dependencies.push(v),
-                    None => return Err(ParseError::InvalidNeeded(index)),
-                },
+                Self::DT_NEEDED => {}
                 Self::DT_PLTRELSZ | Self::DT_SCE_PLTRELSZ => pltrelsz = Some(LE::read_u64(value)),
                 Self::DT_PLTGOT | Self::DT_SCE_PLTGOT => pltgot = Some(LE::read_u64(value)),
                 Self::DT_RELASZ | Self::DT_SCE_RELASZ => relasz = Some(LE::read_u64(value)),
@@ -206,18 +186,45 @@ impl DynamicLinking {
                     });
                 }
                 Self::DT_SCE_NEEDED_MODULE => match parse_module_info(value) {
-                    Some(v) if v.id != 0 => needed_modules.push(v),
+                    Some(v) if v.id != 0 => match dependencies.entry(v.id) {
+                        Entry::Occupied(_) => {
+                            return Err(ParseError::DuplicatedNeededModule(index));
+                        }
+                        Entry::Vacant(e) => {
+                            e.insert(v);
+                        }
+                    },
                     _ => return Err(ParseError::InvalidNeededModule(index)),
                 },
                 Self::DT_SCE_MODULE_ATTR => {}
-                Self::DT_SCE_EXPORT_LIB => match parse_library_info(value) {
-                    Some(v) => exports.push(v),
-                    None => return Err(ParseError::InvalidExport(index)),
-                },
-                Self::DT_SCE_IMPORT_LIB => match parse_library_info(value) {
-                    Some(v) => imports.push(v),
-                    None => return Err(ParseError::InvalidImport(index)),
-                },
+                Self::DT_SCE_EXPORT_LIB | Self::DT_SCE_IMPORT_LIB => {
+                    // Parse the value.
+                    let name = LE::read_u32(value) as usize;
+                    let version = LE::read_u16(&value[4..]);
+                    let id = LE::read_u16(&value[6..]);
+                    let is_export = tag == Self::DT_SCE_EXPORT_LIB;
+                    let info = LibraryInfo {
+                        id,
+                        name: match dynlib.str(name) {
+                            Some(v) => v,
+                            None => {
+                                return Err(if is_export {
+                                    ParseError::InvalidExport(index)
+                                } else {
+                                    ParseError::InvalidImport(index)
+                                })
+                            }
+                        },
+                        version,
+                        is_export,
+                    };
+
+                    // Store the info.
+                    match libraries.entry(id) {
+                        Entry::Occupied(_) => return Err(ParseError::DuplicatedLibrary(index)),
+                        Entry::Vacant(e) => e.insert(info),
+                    };
+                }
                 Self::DT_SCE_EXPORT_LIB_ATTR => {}
                 Self::DT_SCE_IMPORT_LIB_ATTR => {}
                 Self::DT_SCE_HASH => hash = Some(LE::read_u64(value)),
@@ -229,9 +236,22 @@ impl DynamicLinking {
                 Self::DT_SCE_SYMTABSZ => symtabsz = Some(LE::read_u64(value)),
                 _ => return Err(ParseError::UnknownTag(tag)),
             }
+        }
 
-            offset += 16;
-            index += 1;
+        // Check symbol hash table.
+        let hash = hash.ok_or(ParseError::NoHash)? as usize;
+        let hashsz = hashsz.ok_or(ParseError::NoHashsz)? as usize;
+
+        if hashsz < 8 || hashsz % 4 != 0 {
+            return Err(ParseError::InvalidHashsz);
+        }
+
+        // Parse symbol hash table.
+        let mut symbol_lookup_table: Vec<u32> = vec![0u32; hashsz / 4];
+
+        match dynlib.get(hash..(hash + hashsz)) {
+            Some(v) => LE::read_u32_into(v, &mut symbol_lookup_table),
+            None => return Err(ParseError::InvalidHash),
         }
 
         // Check size of symbol entry.
@@ -289,7 +309,6 @@ impl DynamicLinking {
         };
 
         let parsed = Self {
-            dependencies,
             pltrelsz: pltrelsz.ok_or(ParseError::NoPltrelsz)? as usize,
             pltgot: pltgot.ok_or(ParseError::NoPltgot)?,
             relasz: relasz.ok_or(ParseError::NoRelasz)? as usize,
@@ -298,14 +317,12 @@ impl DynamicLinking {
             fingerprint: fingerprint.ok_or(ParseError::NoFingerprint)?,
             filename: filename.ok_or(ParseError::NoFilename)?,
             module_info: module_info.ok_or(ParseError::NoModuleInfo)?,
-            needed_modules,
-            exports,
-            imports,
+            dependencies,
+            libraries,
             symbols,
-            hash: hash.ok_or(ParseError::NoHash)?,
+            symbol_lookup_table,
             jmprel: jmprel.ok_or(ParseError::NoJmprel)? as usize,
             rela: rela.ok_or(ParseError::NoRela)? as usize,
-            hashsz: hashsz.ok_or(ParseError::NoHashsz)?,
             data: dynlib,
         };
 
@@ -320,25 +337,12 @@ impl DynamicLinking {
         Ok(parsed)
     }
 
-    /// List of a SELF file that this SELF is depend on.
-    pub fn dependencies(&self) -> &[String] {
-        self.dependencies.as_ref()
-    }
-
     pub fn module_info(&self) -> &ModuleInfo {
         &self.module_info
     }
 
-    pub fn needed_modules(&self) -> &[ModuleInfo] {
-        self.needed_modules.as_ref()
-    }
-
-    pub fn exports(&self) -> &[LibraryInfo] {
-        self.exports.as_ref()
-    }
-
-    pub fn imports(&self) -> &[LibraryInfo] {
-        self.imports.as_ref()
+    pub fn dependencies(&self) -> &HashMap<u16, ModuleInfo> {
+        &self.dependencies
     }
 
     pub fn symbols(&self) -> &[SymbolInfo] {
@@ -356,6 +360,101 @@ impl DynamicLinking {
         RelocationEntries {
             relaent: self.relaent,
             next: &self.data[self.jmprel..(self.jmprel + self.pltrelsz)],
+        }
+    }
+
+    pub fn lookup_symbol(&self, hash: u32, name: &str) -> Option<&SymbolInfo> {
+        // Get hash table.
+        let bucket_count = self.symbol_lookup_table[0] as usize;
+        let chain_count = self.symbol_lookup_table[1] as usize;
+        let buckets = &self.symbol_lookup_table[2..];
+        let chains = &buckets[bucket_count..];
+
+        // Lookup.
+        let mut index = buckets[hash as usize % bucket_count] as usize;
+
+        while index != 0 {
+            if index >= chain_count {
+                return None;
+            }
+
+            // Parse symbol name.
+            let sym = &self.symbols[index];
+            let (sym_name, lib_id, mod_id) = match Self::parse_symbol_name(&sym.name) {
+                Some(v) => v,
+                None => panic!("Invalid symbol name: {}", sym.name), // FIXME: Do not panic.
+            };
+
+            if mod_id != 0 {
+                panic!("Unexpected module ID: {mod_id}");
+            }
+
+            // Get target library.
+            let lib = match self.libraries.get(&lib_id) {
+                Some(v) => v,
+                None => panic!("Unexpected library ID: {lib_id}"),
+            };
+
+            if !lib.is_export() {
+                panic!("The target library is not an exported library.");
+            }
+
+            // Check if matched.
+            if name == format!("{sym_name}#{}#{}", lib.name, self.module_info.name) {
+                return Some(sym);
+            }
+
+            index = chains[index] as usize;
+        }
+
+        None
+    }
+
+    fn parse_symbol_name(name: &str) -> Option<(&str, u16, u16)> {
+        // Extract local name.
+        let (name, remain) = match name.find('#') {
+            Some(v) => (&name[..v], &name[(v + 1)..]),
+            None => return None,
+        };
+
+        if name.is_empty() {
+            return None;
+        }
+
+        // Extract library ID and module ID.
+        let (lib_id, mod_id) = match remain.find('#') {
+            Some(v) => (&remain[..v], &remain[(v + 1)..]),
+            None => return None,
+        };
+
+        if lib_id.is_empty() || mod_id.is_empty() {
+            return None;
+        }
+
+        // Decode module ID and library ID.
+        let mod_id = Self::decode_id(mod_id)?;
+        let lib_id = Self::decode_id(lib_id)?;
+
+        Some((name, lib_id, mod_id))
+    }
+
+    fn decode_id(v: &str) -> Option<u16> {
+        if v.len() > 3 {
+            return None;
+        }
+
+        let s = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-";
+        let mut r = 0u32;
+
+        for c in v.chars() {
+            r <<= 6;
+            r |= s.find(c)? as u32;
+        }
+
+        if r > u16::MAX as _ {
+            None
+        } else {
+            Some(r as u16)
         }
     }
 }
@@ -391,6 +490,7 @@ pub struct LibraryInfo {
     id: u16,
     name: String,
     version: u16,
+    is_export: bool,
 }
 
 impl LibraryInfo {
@@ -406,6 +506,10 @@ impl LibraryInfo {
 
     pub fn version(&self) -> u16 {
         self.version
+    }
+
+    pub fn is_export(&self) -> bool {
+        self.is_export
     }
 }
 
@@ -545,9 +649,6 @@ pub enum ParseError {
     #[error("invalid data size")]
     InvalidDataSize,
 
-    #[error("entry {0} is not a valid DT_NEEDED")]
-    InvalidNeeded(usize),
-
     #[error("entry DT_PLTRELSZ or DT_SCE_PLTRELSZ does not exists")]
     NoPltrelsz,
 
@@ -581,6 +682,9 @@ pub enum ParseError {
     #[error("entry DT_SCE_HASH does not exists")]
     NoHash,
 
+    #[error("entry DT_SCE_HASH has invalid value")]
+    InvalidHash,
+
     #[error("entry DT_SCE_JMPREL does not exists")]
     NoJmprel,
 
@@ -598,6 +702,9 @@ pub enum ParseError {
 
     #[error("entry DT_SCE_HASHSZ does not exists")]
     NoHashsz,
+
+    #[error("entry DT_SCE_HASHSZ has invalid value")]
+    InvalidHashsz,
 
     #[error("entry DT_SCE_SYMTABSZ does not exists")]
     NoSymtabsz,
@@ -626,11 +733,17 @@ pub enum ParseError {
     #[error("entry {0} is not a valid DT_SCE_NEEDED_MODULE")]
     InvalidNeededModule(usize),
 
+    #[error("duplicated needed module on entry {0}")]
+    DuplicatedNeededModule(usize),
+
     #[error("entry {0} is not a valid DT_SCE_EXPORT_LIB")]
     InvalidExport(usize),
 
     #[error("entry {0} is not a valid DT_SCE_IMPORT_LIB")]
     InvalidImport(usize),
+
+    #[error("duplicated library on entry {0}")]
+    DuplicatedLibrary(usize),
 
     #[error("Symbol entry {0} is not valid")]
     InvalidSymbol(usize),
