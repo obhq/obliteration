@@ -1,9 +1,10 @@
-use self::fs::Fs;
-use self::fs::MountPoint;
-use self::lifter::LiftedModule;
-use self::llvm::Llvm;
-use self::memory::MemoryManager;
-use self::module::Module;
+use crate::fs::path::Vpath;
+use crate::fs::path::VpathBuf;
+use crate::fs::Fs;
+use crate::lifter::LiftedModule;
+use crate::llvm::Llvm;
+use crate::memory::MemoryManager;
+use crate::module::Module;
 use clap::Parser;
 use elf::dynamic::RelocationInfo;
 use elf::dynamic::SymbolInfo;
@@ -86,14 +87,14 @@ fn run() -> bool {
 
     info!("Mounting / to {}.", args.system.display());
 
-    if let Err(e) = fs.mount("/", MountPoint::new(args.system.clone())) {
+    if let Err(e) = fs.mount(VpathBuf::new(), args.system) {
         error!(e, "Mount failed");
         return false;
     }
 
     info!("Mounting /mnt/app0 to {}.", args.game.display());
 
-    if let Err(e) = fs.mount("/mnt/app0", MountPoint::new(args.game)) {
+    if let Err(e) = fs.mount(Vpath::new("/mnt/app0").unwrap(), args.game) {
         error!(e, "Mount failed");
         return false;
     }
@@ -239,74 +240,52 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
         ModuleName::Absolute(name) => {
             info!("Getting {}.", name);
 
-            match fs.get(name) {
-                Ok(v) => match v {
+            match fs.get(name.try_into().unwrap()) {
+                Some(v) => match v {
                     fs::Item::Directory(_) => {
                         error!("Path to {} is a directory.", name);
                         return None;
                     }
                     fs::Item::File(v) => v,
                 },
-                Err(e) => {
-                    error!(e, "Getting failed");
+                None => {
+                    error!("{name} does not exists.");
                     return None;
                 }
             }
         }
         ModuleName::Search(name) => {
+            let mut file = None;
+
             info!("Looking for {name}.");
 
-            'search: {
-                // Try sce_module inside game directory first.
-                match fs.get(&format!("/mnt/app0/sce_module/{name}.prx")) {
-                    Ok(v) => match v {
+            for path in (LibrarySearchPaths { name, next: 0 }) {
+                if let Some(v) = fs.get(&path) {
+                    match v {
                         fs::Item::Directory(_) => {
-                            // FIXME: Right now FS will treat non-existent file as a directory.
+                            error!("Path to {path} is a directory.");
+                            return None;
                         }
-                        fs::Item::File(v) => break 'search v,
-                    },
-                    Err(e) => {
-                        error!(e, "Looking failed");
-                        return None;
+                        fs::Item::File(v) => {
+                            file = Some(v);
+                            break;
+                        }
                     }
                 }
+            }
 
-                // Next try system/common/lib.
-                match fs.get(&format!("/system/common/lib/{name}.sprx")) {
-                    Ok(v) => match v {
-                        fs::Item::Directory(_) => {
-                            // FIXME: Right now FS will treat non-existent file as a directory.
-                        }
-                        fs::Item::File(v) => break 'search v,
-                    },
-                    Err(e) => {
-                        error!(e, "Looking failed");
-                        return None;
-                    }
+            match file {
+                Some(v) => v,
+                None => {
+                    error!("Cannot find {name}.");
+                    return None;
                 }
-
-                // Next try system/priv/lib.
-                match fs.get(&format!("/system/priv/lib/{name}.sprx")) {
-                    Ok(v) => match v {
-                        fs::Item::Directory(_) => {
-                            // FIXME: Right now FS will treat non-existent file as a directory.
-                        }
-                        fs::Item::File(v) => break 'search v,
-                    },
-                    Err(e) => {
-                        error!(e, "Looking failed");
-                        return None;
-                    }
-                }
-
-                error!("Cannot find {name}.");
-                return None;
             }
         }
     };
 
     // Open the module without allocating a virtual file descriptor.
-    let virtual_path = file.virtual_path().to_owned();
+    let virtual_path = file.virtual_path();
 
     info!("Loading {virtual_path}.");
 
@@ -319,7 +298,7 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
     };
 
     // Load the module.
-    let elf = match Elf::open(&virtual_path, file) {
+    let elf = match Elf::open(virtual_path, file) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Load failed");
@@ -352,12 +331,13 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
     }
 
     if let Some(dynamic) = elf.dynamic_linking() {
-        for (i, m) in dynamic.dependencies().values().enumerate() {
-            info!("========== Needed module #{} ==========", i);
-            info!("ID           : {}", m.id());
-            info!("Name         : {}", m.name());
-            info!("Major version: {}", m.version_major());
-            info!("Minor version: {}", m.version_minor());
+        for m in dynamic.dependencies().values() {
+            info!(
+                "Needed module: {} v{}.{}",
+                m.name(),
+                m.version_major(),
+                m.version_minor()
+            );
         }
     }
 
@@ -388,4 +368,26 @@ fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Modu
 enum ModuleName<'a> {
     Absolute(&'a str),
     Search(&'a str),
+}
+
+struct LibrarySearchPaths<'a> {
+    name: &'a str,
+    next: usize,
+}
+
+impl<'a> Iterator for LibrarySearchPaths<'a> {
+    type Item = VpathBuf;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let path = match self.next {
+            0 => format!("/mnt/app0/sce_module/{}.prx", self.name),
+            1 => format!("/system/common/lib/{}.sprx", self.name),
+            2 => format!("/system/priv/lib/{}.sprx", self.name),
+            _ => return None,
+        };
+
+        self.next += 1;
+
+        Some(path.try_into().unwrap())
+    }
 }

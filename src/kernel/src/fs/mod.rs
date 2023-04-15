@@ -1,14 +1,15 @@
+use self::path::{Vpath, VpathBuf};
 use std::collections::HashMap;
-use std::error::Error;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::Debug;
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
+use thiserror::Error;
 
 pub mod path;
 
 /// A virtual filesystem for emulating a PS4 filesystem.
 pub struct Fs {
-    mounts: RwLock<HashMap<String, MountPoint>>,
+    mounts: RwLock<HashMap<VpathBuf, PathBuf>>,
 }
 
 impl Fs {
@@ -18,38 +19,31 @@ impl Fs {
         }
     }
 
-    pub fn get(&self, path: &str) -> Result<Item, GetError> {
-        // Check if path absolute.
-        if !path.starts_with('/') {
-            return Err(GetError::InvalidPath);
-        }
-
+    pub fn get(&self, path: &Vpath) -> Option<Item> {
         // Get root mount point.
-        let mut current = String::with_capacity(path.len());
-
-        current.push('/');
+        let mut current = VpathBuf::new();
 
         let mounts = self.mounts.read().unwrap();
-        let mount = match mounts.get(&current) {
+        let root = match mounts.get(&current) {
             Some(v) => v,
-            None => return Err(GetError::NoRootFs),
+            None => panic!("No rootfs is mounted."),
         };
 
         // Open a root directory.
         let mut directory = Directory {
-            path: mount.path.clone(),
-            virtual_path: String::new(),
+            path: root.clone(),
+            virtual_path: VpathBuf::new(),
         };
 
         // Walk on virtual path components.
-        for component in path::decompose(&path[1..]) {
-            current.push_str(component);
+        for component in path.components() {
+            current.push(component).unwrap();
 
             // Check if a virtual path is a mount point.
-            if let Some(v) = mounts.get(&current) {
+            if let Some(path) = mounts.get(&current) {
                 directory = Directory {
-                    path: v.path.clone(),
-                    virtual_path: String::new(),
+                    path: path.clone(),
+                    virtual_path: VpathBuf::new(),
                 };
             } else {
                 // Build a real path.
@@ -57,9 +51,21 @@ impl Fs {
 
                 path.push(component);
 
-                // Check if path is a file.
-                if path.is_file() {
-                    return Ok(Item::File(File {
+                // Get file metadata.
+                let meta = match std::fs::metadata(&path) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        if e.kind() == std::io::ErrorKind::NotFound {
+                            return None;
+                        } else {
+                            panic!("Cannot get the metadata of {}: {e}.", path.display());
+                        }
+                    }
+                };
+
+                // Check file type.
+                if meta.is_file() {
+                    return Some(Item::File(File {
                         path,
                         virtual_path: current,
                     }));
@@ -67,22 +73,21 @@ impl Fs {
 
                 directory = Directory {
                     path,
-                    virtual_path: String::new(),
+                    virtual_path: VpathBuf::new(),
                 };
             }
-
-            current.push('/');
         }
 
         // If we reached here that mean the the last component is a directory.
         directory.virtual_path = current;
 
-        Ok(Item::Directory(directory))
+        Some(Item::Directory(directory))
     }
 
-    pub fn mount<T>(&self, target: T, data: MountPoint) -> Result<(), MountError>
+    pub fn mount<T, S>(&self, target: T, src: S) -> Result<(), MountError>
     where
-        T: Into<String>,
+        T: Into<VpathBuf>,
+        S: Into<PathBuf>,
     {
         use std::collections::hash_map::Entry;
 
@@ -90,7 +95,7 @@ impl Fs {
 
         match mounts.entry(target.into()) {
             Entry::Occupied(_) => return Err(MountError::AlreadyMounted),
-            Entry::Vacant(e) => e.insert(data),
+            Entry::Vacant(e) => e.insert(src.into()),
         };
 
         Ok(())
@@ -106,13 +111,23 @@ pub enum Item {
 /// A virtual directory.
 pub struct Directory {
     path: PathBuf,
-    virtual_path: String,
+    virtual_path: VpathBuf,
+}
+
+impl Directory {
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    pub fn virtual_path(&self) -> &Vpath {
+        &self.virtual_path
+    }
 }
 
 /// A virtual file.
 pub struct File {
     path: PathBuf,
-    virtual_path: String,
+    virtual_path: VpathBuf,
 }
 
 impl File {
@@ -120,50 +135,14 @@ impl File {
         &self.path
     }
 
-    pub fn virtual_path(&self) -> &str {
-        self.virtual_path.as_ref()
+    pub fn virtual_path(&self) -> &Vpath {
+        &self.virtual_path
     }
 }
 
-/// A mount point in the virtual filesystem.
-pub struct MountPoint {
-    path: PathBuf,
-}
-
-impl MountPoint {
-    pub fn new<P: Into<PathBuf>>(path: P) -> Self {
-        Self { path: path.into() }
-    }
-}
-
-#[derive(Debug)]
-pub enum GetError {
-    InvalidPath,
-    NoRootFs,
-}
-
-impl Error for GetError {}
-
-impl Display for GetError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Self::InvalidPath => f.write_str("invalid path"),
-            Self::NoRootFs => f.write_str("no rootfs mounted"),
-        }
-    }
-}
-
-#[derive(Debug)]
+/// Represents the errors for [`Fs::mount()`].
+#[derive(Debug, Error)]
 pub enum MountError {
+    #[error("target is already mounted")]
     AlreadyMounted,
-}
-
-impl Error for MountError {}
-
-impl Display for MountError {
-    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-        match self {
-            Self::AlreadyMounted => f.write_str("target is already mounted"),
-        }
-    }
 }

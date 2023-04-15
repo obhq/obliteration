@@ -27,6 +27,10 @@ int main(int argc, char *argv[])
         }
     }
 
+    if (!ensureSystemDirectories()) {
+        return 1;
+    }
+
     // Run main window.
     MainWindow win;
 
