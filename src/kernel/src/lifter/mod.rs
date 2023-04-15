@@ -3,22 +3,22 @@ use self::disasm::Disassembler;
 use crate::llvm::module::ExecutionEngine;
 use crate::llvm::Llvm;
 use crate::module::Module;
-use std::io::{Read, Seek};
+use std::sync::Arc;
 use thiserror::Error;
 
 pub mod codegen;
 pub mod disasm;
 
 /// Represents a lifted version of [`Module`].
-pub struct LiftedModule<'a, I: Read + Seek> {
-    original: Module<I>,
+pub struct LiftedModule<'a> {
+    original: Arc<Module<'a>>,
     lifted: ExecutionEngine<'a>,
 }
 
-impl<'a, I: Read + Seek> LiftedModule<'a, I> {
+impl<'a> LiftedModule<'a> {
     /// Dynamic linking and relocation of `module` must be already resolved before passing to this
     /// function.
-    pub fn lift(llvm: &'a Llvm, module: Module<I>) -> Result<Self, LiftError> {
+    pub fn lift(llvm: &'a Llvm, module: Arc<Module<'a>>) -> Result<Self, LiftError> {
         // Disassemble the module.
         let entry = module.image().entry_addr();
         let mut disasm = Disassembler::new(module.memory());

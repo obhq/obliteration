@@ -5,21 +5,21 @@ use thiserror::Error;
 
 /// A full path in the PS4 system.
 #[repr(transparent)]
-pub struct Vpath(str);
+pub struct VPath(str);
 
-impl Vpath {
+impl VPath {
     pub fn new(data: &str) -> Option<&Self> {
         if Self::is_valid(data) {
-            // SAFETY: This is ok because Vpath is #[repr(transparent)].
-            Some(unsafe { &*(data as *const str as *const Vpath) })
+            // SAFETY: This is ok because VPath is #[repr(transparent)].
+            Some(unsafe { &*(data as *const str as *const VPath) })
         } else {
             None
         }
     }
 
     pub unsafe fn new_unchecked(data: &str) -> &Self {
-        // SAFETY: This is ok because Vpath is #[repr(transparent)].
-        &*(data as *const str as *const Vpath)
+        // SAFETY: This is ok because VPath is #[repr(transparent)].
+        &*(data as *const str as *const VPath)
     }
 
     pub fn len(&self) -> usize {
@@ -75,64 +75,80 @@ impl Vpath {
     }
 }
 
-impl From<&Vpath> for String {
-    fn from(value: &Vpath) -> Self {
+impl From<&VPath> for String {
+    fn from(value: &VPath) -> Self {
         String::from(&value.0)
     }
 }
 
-impl<'a> TryFrom<&'a str> for &'a Vpath {
+impl<'a> TryFrom<&'a str> for &'a VPath {
     type Error = ();
 
-    fn try_from(value: &'a str) -> Result<&'a Vpath, Self::Error> {
-        Vpath::new(value).ok_or(())
+    fn try_from(value: &'a str) -> Result<&'a VPath, Self::Error> {
+        VPath::new(value).ok_or(())
     }
 }
 
-impl Display for Vpath {
+impl ToOwned for VPath {
+    type Owned = VPathBuf;
+
+    fn to_owned(&self) -> Self::Owned {
+        self.into()
+    }
+}
+
+impl Display for VPath {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
     }
 }
 
-/// The owned version of [`Vpath`].
+/// The owned version of [`VPath`].
 #[derive(PartialEq, Eq, Hash)]
-pub struct VpathBuf(Cow<'static, str>);
+pub struct VPathBuf(Cow<'static, str>);
 
-impl VpathBuf {
+impl VPathBuf {
     pub const fn new() -> Self {
         Self(Cow::Borrowed("/"))
     }
 
     pub fn push(&mut self, component: &str) -> Result<(), PushError> {
-        match component {
-            "" => Err(PushError::EmptyComponent),
-            "." | ".." => Err(PushError::ForbiddenComponent),
+        // Check if component valid.
+        let v = match component {
+            "" => return Err(PushError::Empty),
+            "." | ".." => return Err(PushError::Forbidden),
             v => {
-                let data = self.0.to_mut();
-
-                if data.len() != 1 {
-                    data.push('/');
+                if v.contains('/') {
+                    return Err(PushError::HasPathSeparator);
+                } else {
+                    v
                 }
-
-                data.push_str(v);
-                Ok(())
             }
+        };
+
+        // Append.
+        let data = self.0.to_mut();
+
+        if data.len() != 1 {
+            data.push('/');
         }
+
+        data.push_str(v);
+        Ok(())
     }
 }
 
-impl From<&Vpath> for VpathBuf {
-    fn from(value: &Vpath) -> Self {
+impl From<&VPath> for VPathBuf {
+    fn from(value: &VPath) -> Self {
         Self(Cow::Owned(value.into()))
     }
 }
 
-impl TryFrom<&'static str> for VpathBuf {
+impl TryFrom<&'static str> for VPathBuf {
     type Error = ();
 
     fn try_from(value: &'static str) -> Result<Self, Self::Error> {
-        if Vpath::is_valid(value) {
+        if VPath::is_valid(value) {
             Ok(Self(Cow::Borrowed(value)))
         } else {
             Err(())
@@ -140,11 +156,11 @@ impl TryFrom<&'static str> for VpathBuf {
     }
 }
 
-impl TryFrom<String> for VpathBuf {
+impl TryFrom<String> for VPathBuf {
     type Error = ();
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        if Vpath::is_valid(&value) {
+        if VPath::is_valid(&value) {
             Ok(Self(Cow::Owned(value)))
         } else {
             Err(())
@@ -152,21 +168,21 @@ impl TryFrom<String> for VpathBuf {
     }
 }
 
-impl Deref for VpathBuf {
-    type Target = Vpath;
+impl Deref for VPathBuf {
+    type Target = VPath;
 
-    fn deref(&self) -> &Vpath {
-        unsafe { Vpath::new_unchecked(self.0.borrow()) }
+    fn deref(&self) -> &VPath {
+        unsafe { VPath::new_unchecked(self.0.borrow()) }
     }
 }
 
-impl Borrow<Vpath> for VpathBuf {
-    fn borrow(&self) -> &Vpath {
+impl Borrow<VPath> for VPathBuf {
+    fn borrow(&self) -> &VPath {
         self.deref()
     }
 }
 
-impl Display for VpathBuf {
+impl Display for VPathBuf {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.0.borrow())
     }
@@ -199,12 +215,15 @@ impl<'a> Iterator for Components<'a> {
     }
 }
 
-/// Represents the errors for [`VpathBuf::push()`].
+/// Represents the errors for [`VPathBuf::push()`].
 #[derive(Debug, Error)]
 pub enum PushError {
     #[error("the component is empty")]
-    EmptyComponent,
+    Empty,
 
     #[error("the component is forbidden")]
-    ForbiddenComponent,
+    Forbidden,
+
+    #[error("the component contains path separator")]
+    HasPathSeparator,
 }

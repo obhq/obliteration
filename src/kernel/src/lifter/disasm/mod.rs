@@ -8,7 +8,7 @@ pub mod cpu;
 
 /// Contains state of module disassemble.
 pub(super) struct Disassembler<'a> {
-    module: &'a Memory,
+    module: &'a Memory<'a>,
     functions: HashMap<usize, Function>, // Key is the offset in the mapped memory.
 }
 

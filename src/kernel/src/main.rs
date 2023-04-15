@@ -1,19 +1,16 @@
-use crate::fs::path::Vpath;
-use crate::fs::path::VpathBuf;
+use crate::fs::path::VPath;
+use crate::fs::path::VPathBuf;
 use crate::fs::Fs;
 use crate::lifter::LiftedModule;
 use crate::llvm::Llvm;
 use crate::memory::MemoryManager;
-use crate::module::Module;
+use crate::module::ModuleManager;
 use clap::Parser;
 use elf::dynamic::RelocationInfo;
 use elf::dynamic::SymbolInfo;
-use elf::Elf;
 use serde::Deserialize;
-use std::collections::HashMap;
 use std::fs::File;
 use std::path::PathBuf;
-use std::sync::Arc;
 
 mod errno;
 mod fs;
@@ -83,18 +80,18 @@ fn run() -> bool {
     let llvm = Llvm::new();
 
     // Initialize filesystem.
-    let fs = Arc::new(Fs::new());
+    let fs = Fs::new();
 
     info!("Mounting / to {}.", args.system.display());
 
-    if let Err(e) = fs.mount(VpathBuf::new(), args.system) {
+    if let Err(e) = fs.mount(VPathBuf::new(), args.system) {
         error!(e, "Mount failed");
         return false;
     }
 
     info!("Mounting /mnt/app0 to {}.", args.game.display());
 
-    if let Err(e) = fs.mount(Vpath::new("/mnt/app0").unwrap(), args.game) {
+    if let Err(e) = fs.mount(VPath::new("/mnt/app0").unwrap(), args.game) {
         error!(e, "Mount failed");
         return false;
     }
@@ -102,7 +99,7 @@ fn run() -> bool {
     // Initialize memory manager.
     info!("Initializing memory manager.");
 
-    let mm = Arc::new(MemoryManager::new());
+    let mm = MemoryManager::new();
 
     info!("Page size is: {}.", mm.page_size());
     info!(
@@ -110,19 +107,78 @@ fn run() -> bool {
         mm.allocation_granularity()
     );
 
+    // Initialize the module manager.
+    info!("Initializing module manager.");
+
+    let modules = ModuleManager::new(&fs, &mm);
+
+    info!("{} modules is available.", modules.available_count());
+
     // Load eboot.bin.
-    let eboot = match load_module(&fs, mm.clone(), ModuleName::Absolute("/mnt/app0/eboot.bin")) {
-        Some(v) => v,
-        None => return false,
+    info!("Loading {}.", ModuleManager::EBOOT_PATH);
+
+    let eboot = match modules.load_eboot() {
+        Ok(v) => v,
+        Err(e) => {
+            error!(e, "Load failed");
+            return false;
+        }
     };
 
-    // TODO: Load dependencies.
-    let mut modules = HashMap::from([(String::from(""), eboot)]);
+    if eboot.image().self_segments().is_some() {
+        info!("Image type    : SELF");
+    } else {
+        info!("Image type    : ELF");
+    }
 
-    info!("{} module(s) has been loaded successfully.", modules.len());
+    if let Some(dynamic) = eboot.image().dynamic_linking() {
+        let i = dynamic.module_info();
+
+        info!("Module name   : {}", i.name());
+        info!("Major version : {}", i.version_major());
+        info!("Minor version : {}", i.version_minor());
+
+        for m in dynamic.dependencies().values() {
+            info!(
+                "Needed module : {} v{}.{}",
+                m.name(),
+                m.version_major(),
+                m.version_minor()
+            );
+        }
+    }
+
+    info!(
+        "Memory address: {:#018x}:{:#018x}",
+        eboot.memory().addr(),
+        eboot.memory().addr() + eboot.memory().len()
+    );
+
+    info!(
+        "Entry address : {:#018x}",
+        eboot.memory().addr() + eboot.image().entry_addr()
+    );
+
+    for s in eboot.memory().segments().iter() {
+        let addr = eboot.memory().addr() + s.start();
+
+        info!(
+            "Program {} mapped to {:#018x}:{:#018x} with {:?}.",
+            s.program(),
+            addr,
+            addr + s.len(),
+            eboot.image().programs()[s.program()].flags(),
+        );
+    }
+
+    // TODO: Load dependencies.
+    info!(
+        "{} module(s) has been loaded successfully.",
+        modules.loaded_count()
+    );
 
     // Apply module relocations.
-    for (_, module) in &modules {
+    for module in [&eboot] {
         // Skip if the module is not dynamic linking.
         let dynamic = match module.image().dynamic_linking() {
             Some(v) => v,
@@ -218,7 +274,7 @@ fn run() -> bool {
     }
 
     // Lift the loaded modules.
-    for (_, module) in modules {
+    for module in [eboot] {
         // Lift the module.
         info!("Lifting {}.", module.image().name());
 
@@ -232,162 +288,4 @@ fn run() -> bool {
     }
 
     true
-}
-
-fn load_module(fs: &Fs, mm: Arc<MemoryManager>, name: ModuleName) -> Option<Module<File>> {
-    // Get the module.
-    let file = match name {
-        ModuleName::Absolute(name) => {
-            info!("Getting {}.", name);
-
-            match fs.get(name.try_into().unwrap()) {
-                Some(v) => match v {
-                    fs::Item::Directory(_) => {
-                        error!("Path to {} is a directory.", name);
-                        return None;
-                    }
-                    fs::Item::File(v) => v,
-                },
-                None => {
-                    error!("{name} does not exists.");
-                    return None;
-                }
-            }
-        }
-        ModuleName::Search(name) => {
-            let mut file = None;
-
-            info!("Looking for {name}.");
-
-            for path in (LibrarySearchPaths { name, next: 0 }) {
-                if let Some(v) = fs.get(&path) {
-                    match v {
-                        fs::Item::Directory(_) => {
-                            error!("Path to {path} is a directory.");
-                            return None;
-                        }
-                        fs::Item::File(v) => {
-                            file = Some(v);
-                            break;
-                        }
-                    }
-                }
-            }
-
-            match file {
-                Some(v) => v,
-                None => {
-                    error!("Cannot find {name}.");
-                    return None;
-                }
-            }
-        }
-    };
-
-    // Open the module without allocating a virtual file descriptor.
-    let virtual_path = file.virtual_path();
-
-    info!("Loading {virtual_path}.");
-
-    let file = match File::open(file.path()) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Open failed");
-            return None;
-        }
-    };
-
-    // Load the module.
-    let elf = match Elf::open(virtual_path, file) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Load failed");
-            return None;
-        }
-    };
-
-    info!("Entry address     : {:#018x}", elf.entry_addr());
-
-    if let Some(dynamic) = elf.dynamic_linking() {
-        let i = dynamic.module_info();
-
-        info!("Module name       : {}", i.name());
-        info!("Major version     : {}", i.version_major());
-        info!("Minor version     : {}", i.version_minor());
-    }
-
-    if let Some(segments) = elf.self_segments() {
-        info!("Image type        : SELF");
-
-        for (i, s) in segments.iter().enumerate() {
-            info!("============= Segment #{} =============", i);
-            info!("Flags            : {:?}", s.flags());
-            info!("Offset           : {}", s.offset());
-            info!("Compressed size  : {}", s.compressed_size());
-            info!("Decompressed size: {}", s.decompressed_size());
-        }
-    } else {
-        info!("Image type        : ELF");
-    }
-
-    if let Some(dynamic) = elf.dynamic_linking() {
-        for m in dynamic.dependencies().values() {
-            info!(
-                "Needed module: {} v{}.{}",
-                m.name(),
-                m.version_major(),
-                m.version_minor()
-            );
-        }
-    }
-
-    // Map the module to the memory.
-    info!("Mapping {}.", virtual_path);
-
-    let module = match Module::load(elf, mm) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Map failed");
-            return None;
-        }
-    };
-
-    info!("Memory address: {:#018x}", module.memory().addr());
-    info!("Memory size   : {:#018x}", module.memory().len());
-
-    for (i, s) in module.memory().segments().iter().enumerate() {
-        info!("============= Segment #{} =============", i);
-        info!("Address: {:#018x}", module.memory().addr() + s.start());
-        info!("Size   : {:#018x}", s.len());
-        info!("Program: {}", s.program());
-    }
-
-    Some(module)
-}
-
-enum ModuleName<'a> {
-    Absolute(&'a str),
-    Search(&'a str),
-}
-
-struct LibrarySearchPaths<'a> {
-    name: &'a str,
-    next: usize,
-}
-
-impl<'a> Iterator for LibrarySearchPaths<'a> {
-    type Item = VpathBuf;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let path = match self.next {
-            0 => format!("/mnt/app0/sce_module/{}.prx", self.name),
-            1 => format!("/system/common/lib/{}.sprx", self.name),
-            2 => format!("/system/priv/lib/{}.sprx", self.name),
-            _ => return None,
-        };
-
-        self.next += 1;
-
-        Some(path.try_into().unwrap())
-    }
 }
