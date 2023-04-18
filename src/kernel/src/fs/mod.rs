@@ -1,4 +1,4 @@
-use self::path::{Vpath, VpathBuf};
+use self::path::{VPath, VPathBuf};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::path::{Path, PathBuf};
@@ -9,7 +9,7 @@ pub mod path;
 
 /// A virtual filesystem for emulating a PS4 filesystem.
 pub struct Fs {
-    mounts: RwLock<HashMap<VpathBuf, PathBuf>>,
+    mounts: RwLock<HashMap<VPathBuf, PathBuf>>,
 }
 
 impl Fs {
@@ -19,9 +19,9 @@ impl Fs {
         }
     }
 
-    pub fn get(&self, path: &Vpath) -> Option<Item> {
+    pub fn get(&self, path: &VPath) -> Option<FsItem> {
         // Get root mount point.
-        let mut current = VpathBuf::new();
+        let mut current = VPathBuf::new();
 
         let mounts = self.mounts.read().unwrap();
         let root = match mounts.get(&current) {
@@ -30,9 +30,9 @@ impl Fs {
         };
 
         // Open a root directory.
-        let mut directory = Directory {
+        let mut directory = VDir {
             path: root.clone(),
-            virtual_path: VpathBuf::new(),
+            virtual_path: VPathBuf::new(),
         };
 
         // Walk on virtual path components.
@@ -41,9 +41,9 @@ impl Fs {
 
             // Check if a virtual path is a mount point.
             if let Some(path) = mounts.get(&current) {
-                directory = Directory {
+                directory = VDir {
                     path: path.clone(),
-                    virtual_path: VpathBuf::new(),
+                    virtual_path: VPathBuf::new(),
                 };
             } else {
                 // Build a real path.
@@ -65,15 +65,15 @@ impl Fs {
 
                 // Check file type.
                 if meta.is_file() {
-                    return Some(Item::File(File {
+                    return Some(FsItem::File(VFile {
                         path,
                         virtual_path: current,
                     }));
                 }
 
-                directory = Directory {
+                directory = VDir {
                     path,
-                    virtual_path: VpathBuf::new(),
+                    virtual_path: VPathBuf::new(),
                 };
             }
         }
@@ -81,12 +81,12 @@ impl Fs {
         // If we reached here that mean the the last component is a directory.
         directory.virtual_path = current;
 
-        Some(Item::Directory(directory))
+        Some(FsItem::Directory(directory))
     }
 
     pub fn mount<T, S>(&self, target: T, src: S) -> Result<(), MountError>
     where
-        T: Into<VpathBuf>,
+        T: Into<VPathBuf>,
         S: Into<PathBuf>,
     {
         use std::collections::hash_map::Entry;
@@ -103,39 +103,39 @@ impl Fs {
 }
 
 /// An item in the virtual filesystem.
-pub enum Item {
-    Directory(Directory),
-    File(File),
+pub enum FsItem {
+    Directory(VDir),
+    File(VFile),
 }
 
 /// A virtual directory.
-pub struct Directory {
+pub struct VDir {
     path: PathBuf,
-    virtual_path: VpathBuf,
+    virtual_path: VPathBuf,
 }
 
-impl Directory {
+impl VDir {
     pub fn path(&self) -> &Path {
         &self.path
     }
 
-    pub fn virtual_path(&self) -> &Vpath {
+    pub fn virtual_path(&self) -> &VPath {
         &self.virtual_path
     }
 }
 
 /// A virtual file.
-pub struct File {
+pub struct VFile {
     path: PathBuf,
-    virtual_path: VpathBuf,
+    virtual_path: VPathBuf,
 }
 
-impl File {
+impl VFile {
     pub fn path(&self) -> &Path {
         &self.path
     }
 
-    pub fn virtual_path(&self) -> &Vpath {
+    pub fn virtual_path(&self) -> &VPath {
         &self.virtual_path
     }
 }
