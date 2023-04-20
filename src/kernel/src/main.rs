@@ -9,8 +9,11 @@ use clap::Parser;
 use elf::dynamic::RelocationInfo;
 use elf::dynamic::SymbolInfo;
 use serde::Deserialize;
+use std::collections::VecDeque;
 use std::fs::File;
 use std::path::PathBuf;
+
+use self::module::Module;
 
 mod errno;
 mod fs;
@@ -115,7 +118,7 @@ fn run() -> bool {
     info!("{} modules is available.", modules.available_count());
 
     // Load eboot.bin.
-    info!("Loading {}.", ModuleManager::EBOOT_PATH);
+    info!("Loading eboot.bin.");
 
     let eboot = match modules.load_eboot() {
         Ok(v) => v,
@@ -125,53 +128,47 @@ fn run() -> bool {
         }
     };
 
-    if eboot.image().self_segments().is_some() {
-        info!("Image type    : SELF");
-    } else {
-        info!("Image type    : ELF");
-    }
+    print_module(&eboot);
 
-    if let Some(dynamic) = eboot.image().dynamic_linking() {
-        let i = dynamic.module_info();
+    // Load dependencies.
+    info!("Loading eboot.bin dependencies.");
 
-        info!("Module name   : {}", i.name());
-        info!("Major version : {}", i.version_major());
-        info!("Minor version : {}", i.version_minor());
+    let mut deps = match eboot.image().dynamic_linking() {
+        Some(dynamic) => dynamic
+            .dependencies()
+            .values()
+            .map(|m| m.name().to_owned())
+            .collect(),
+        None => VecDeque::new(),
+    };
 
-        for m in dynamic.dependencies().values() {
-            info!(
-                "Needed module : {} v{}.{}",
-                m.name(),
-                m.version_major(),
-                m.version_minor()
-            );
+    while let Some(name) = deps.pop_front() {
+        // Load the module.
+        let mods = match modules.load_mod(&name) {
+            Ok(v) => v,
+            Err(e) => {
+                error!(e, "Cannot load {name}");
+                return false;
+            }
+        };
+
+        for m in mods {
+            // Print module information.
+            info!("Module {name} is mapped to {}.", m.image().name());
+            print_module(&m);
+
+            // Add dependencies.
+            let dynamic = match m.image().dynamic_linking() {
+                Some(v) => v,
+                None => continue,
+            };
+
+            for dep in dynamic.dependencies().values() {
+                deps.push_back(dep.name().to_owned());
+            }
         }
     }
 
-    info!(
-        "Memory address: {:#018x}:{:#018x}",
-        eboot.memory().addr(),
-        eboot.memory().addr() + eboot.memory().len()
-    );
-
-    info!(
-        "Entry address : {:#018x}",
-        eboot.memory().addr() + eboot.image().entry_addr()
-    );
-
-    for s in eboot.memory().segments().iter() {
-        let addr = eboot.memory().addr() + s.start();
-
-        info!(
-            "Program {} mapped to {:#018x}:{:#018x} with {:?}.",
-            s.program(),
-            addr,
-            addr + s.len(),
-            eboot.image().programs()[s.program()].flags(),
-        );
-    }
-
-    // TODO: Load dependencies.
     info!(
         "{} module(s) has been loaded successfully.",
         modules.loaded_count()
@@ -288,4 +285,52 @@ fn run() -> bool {
     }
 
     true
+}
+
+fn print_module(m: &Module) {
+    if m.image().self_segments().is_some() {
+        info!("Image type    : SELF");
+    } else {
+        info!("Image type    : ELF");
+    }
+
+    if let Some(dynamic) = m.image().dynamic_linking() {
+        let i = dynamic.module_info();
+
+        info!("Module name   : {}", i.name());
+        info!("Major version : {}", i.version_major());
+        info!("Minor version : {}", i.version_minor());
+
+        for m in dynamic.dependencies().values() {
+            info!(
+                "Needed module : {} v{}.{}",
+                m.name(),
+                m.version_major(),
+                m.version_minor()
+            );
+        }
+    }
+
+    info!(
+        "Memory address: {:#018x}:{:#018x}",
+        m.memory().addr(),
+        m.memory().addr() + m.memory().len()
+    );
+
+    info!(
+        "Entry address : {:#018x}",
+        m.memory().addr() + m.image().entry_addr()
+    );
+
+    for s in m.memory().segments().iter() {
+        let addr = m.memory().addr() + s.start();
+
+        info!(
+            "Program {} is mapped to {:#018x}:{:#018x} with {:?}.",
+            s.program(),
+            addr,
+            addr + s.len(),
+            m.image().programs()[s.program()].flags(),
+        );
+    }
 }

@@ -104,7 +104,7 @@ impl Display for VPath {
 }
 
 /// The owned version of [`VPath`].
-#[derive(PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct VPathBuf(Cow<'static, str>);
 
 impl VPathBuf {

@@ -61,6 +61,37 @@ impl<'a> ModuleManager<'a> {
         Ok(module)
     }
 
+    /// Load only the specified module without its dependencies into the memory, no relocation is
+    /// applied. Returns only the modules that was loaded by this call, which is zero if the module
+    /// is already loaded.
+    pub fn load_mod(&self, name: &str) -> Result<Vec<Arc<Module>>, LoadError> {
+        let mut modules = Vec::new();
+
+        // Map name to file.
+        let files = match self.available.get(name) {
+            Some(v) => v,
+            None => return Err(LoadError::NotFound),
+        };
+
+        // Load all files.
+        let mut loaded = self.loaded.write().unwrap();
+
+        for file in files {
+            // Check if already loaded.
+            if loaded.get(file).is_some() {
+                continue;
+            }
+
+            // Load the module.
+            let module = Arc::new(self.load(&file)?);
+
+            loaded.insert(file.clone(), module.clone());
+            modules.push(module);
+        }
+
+        Ok(modules)
+    }
+
     fn load(&self, path: &VPath) -> Result<Module<'a>, LoadError> {
         // Get the module.
         let file = match self.fs.get(path) {
@@ -384,9 +415,12 @@ impl MemorySegment {
     }
 }
 
-/// Represents the errors for [`ModuleManager::load_eboot()`].
+/// Represents the errors for [`ModuleManager::load_eboot()`] and [`ModuleManager::load_lib()`].
 #[derive(Debug, Error)]
 pub enum LoadError {
+    #[error("the specified module is not found")]
+    NotFound,
+
     #[error("program #{0} has zero size in the memory")]
     ZeroLenProgram(usize),
 
