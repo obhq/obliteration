@@ -4,16 +4,13 @@ use crate::fs::Fs;
 use crate::lifter::LiftedModule;
 use crate::llvm::Llvm;
 use crate::memory::MemoryManager;
+use crate::module::Module;
 use crate::module::ModuleManager;
 use clap::Parser;
-use elf::dynamic::RelocationInfo;
-use elf::dynamic::SymbolInfo;
 use serde::Deserialize;
 use std::collections::VecDeque;
 use std::fs::File;
 use std::path::PathBuf;
-
-use self::module::Module;
 
 mod errno;
 mod fs;
@@ -118,6 +115,8 @@ fn run() -> bool {
     info!("{} modules is available.", modules.available_count());
 
     // Load eboot.bin.
+    let mut loaded = Vec::new();
+
     info!("Loading eboot.bin.");
 
     let eboot = match modules.load_eboot() {
@@ -127,6 +126,8 @@ fn run() -> bool {
             return false;
         }
     };
+
+    loaded.push(eboot.clone());
 
     print_module(&eboot);
 
@@ -166,107 +167,20 @@ fn run() -> bool {
             for dep in dynamic.dependencies().values() {
                 deps.push_back(dep.name().to_owned());
             }
+
+            loaded.push(m);
         }
     }
 
-    info!(
-        "{} module(s) has been loaded successfully.",
-        modules.loaded_count()
-    );
+    info!("{} module(s) has been loaded successfully.", loaded.len());
 
     // Apply module relocations.
-    for module in [&eboot] {
-        // Skip if the module is not dynamic linking.
-        let dynamic = match module.image().dynamic_linking() {
-            Some(v) => v,
-            None => continue,
-        };
-
-        // Apply relocations.
+    for module in loaded {
         info!("Applying relocation entries on {}.", module.image().name());
 
-        for (i, reloc) in dynamic.relocation_entries().enumerate() {
-            // Resolve the value.
-            let value = match reloc.ty() {
-                RelocationInfo::R_X86_64_64
-                | RelocationInfo::R_X86_64_PC32
-                | RelocationInfo::R_X86_64_GLOB_DAT
-                | RelocationInfo::R_X86_64_DTPMOD64
-                | RelocationInfo::R_X86_64_DTPOFF64
-                | RelocationInfo::R_X86_64_TPOFF64
-                | RelocationInfo::R_X86_64_DTPOFF32
-                | RelocationInfo::R_X86_64_TPOFF32 => {
-                    // Get target symbol.
-                    let symbol = match dynamic.symbols().get(reloc.symbol()) {
-                        Some(v) => v,
-                        None => {
-                            error!("Invalid symbol index on entry {i}.");
-                            return false;
-                        }
-                    };
-
-                    // Check binding type.
-                    match symbol.binding() {
-                        SymbolInfo::STB_LOCAL => module.memory().addr() + symbol.value(),
-                        SymbolInfo::STB_GLOBAL | SymbolInfo::STB_WEAK => {
-                            info!("Linking symbol: {}", symbol.name());
-
-                            // TODO: Resolve external symbol.
-                            0
-                        }
-                        v => {
-                            error!("Unknown symbol binding type {v} on entry {i}.");
-                            return false;
-                        }
-                    }
-                }
-                RelocationInfo::R_X86_64_RELATIVE => 0,
-                v => {
-                    error!("Unknown relocation type {v:#010x} on entry {i}.");
-                    return false;
-                }
-            };
-
-            // TODO: Apply the value.
-        }
-
-        // Apply Procedure Linkage Table relocation.
-        for (i, reloc) in dynamic.plt_relocation().enumerate() {
-            // Resolve the value.
-            let value = match reloc.ty() {
-                RelocationInfo::R_X86_64_JUMP_SLOT => {
-                    // Get target symbol.
-                    let symbol = match dynamic.symbols().get(reloc.symbol()) {
-                        Some(v) => v,
-                        None => {
-                            error!("Invalid symbol index on PLT entry {i}.");
-                            return false;
-                        }
-                    };
-
-                    // Check binding type.
-                    match symbol.binding() {
-                        SymbolInfo::STB_LOCAL => module.memory().addr() + symbol.value(),
-                        SymbolInfo::STB_GLOBAL | SymbolInfo::STB_WEAK => {
-                            info!("Linking PLT symbol: {}", symbol.name());
-
-                            // TODO: Resolve external symbol.
-                            0
-                        }
-                        v => {
-                            error!("Unknown symbol binding type {v} on PLT entry {i}.");
-                            return false;
-                        }
-                    }
-                }
-                RelocationInfo::R_X86_64_RELATIVE => 0,
-                v => {
-                    error!("Unknown PLT relocation type {v:#010x} on entry {i}.");
-                    return false;
-                }
-            };
-
-            // TODO: Apply the value.
+        if let Err(e) = module.apply_relocs() {
+            error!(e, "Applying failed");
+            return false;
         }
     }
 
