@@ -1,6 +1,7 @@
 use crate::fs::path::{VPath, VPathBuf};
 use crate::fs::{Fs, FsItem};
 use crate::memory::MemoryManager;
+use elf::dynamic::{RelocationInfo, SymbolInfo};
 use elf::{Elf, ProgramFlags, ProgramType};
 use std::collections::HashMap;
 use std::fs::{read_dir, File};
@@ -36,10 +37,6 @@ impl<'a> ModuleManager<'a> {
 
     pub fn available_count(&self) -> usize {
         self.available.len()
-    }
-
-    pub fn loaded_count(&self) -> usize {
-        self.loaded.read().unwrap().len()
     }
 
     /// This function only load eboot.bin without its dependencies into the memory, no relocation is
@@ -237,6 +234,79 @@ impl<'a> Module<'a> {
 
     pub fn memory(&self) -> &Memory {
         &self.memory
+    }
+
+    pub fn apply_relocs(&self) -> Result<(), RelocError> {
+        // Do nothing if the module is not dynamic linking.
+        let dynamic = match self.image.dynamic_linking() {
+            Some(v) => v,
+            None => return Ok(()),
+        };
+
+        // Apply relocation.
+        for (i, reloc) in dynamic.relocation_entries().enumerate() {
+            // Resolve the value.
+            let value = match reloc.ty() {
+                RelocationInfo::R_X86_64_64
+                | RelocationInfo::R_X86_64_PC32
+                | RelocationInfo::R_X86_64_GLOB_DAT
+                | RelocationInfo::R_X86_64_DTPMOD64
+                | RelocationInfo::R_X86_64_DTPOFF64
+                | RelocationInfo::R_X86_64_TPOFF64
+                | RelocationInfo::R_X86_64_DTPOFF32
+                | RelocationInfo::R_X86_64_TPOFF32 => {
+                    // Get target symbol.
+                    let symbol = match dynamic.symbols().get(reloc.symbol()) {
+                        Some(v) => v,
+                        None => return Err(RelocError::InvalidSymbolIndex(i)),
+                    };
+
+                    // Check binding type.
+                    match symbol.binding() {
+                        SymbolInfo::STB_LOCAL => self.memory.addr() + symbol.value(),
+                        SymbolInfo::STB_GLOBAL | SymbolInfo::STB_WEAK => {
+                            // TODO: Resolve external symbol.
+                            0
+                        }
+                        v => return Err(RelocError::UnknownSymbolBinding(i, v)),
+                    }
+                }
+                RelocationInfo::R_X86_64_RELATIVE => 0,
+                v => return Err(RelocError::UnknownRelocationType(i, v)),
+            };
+
+            // TODO: Apply the value.
+        }
+
+        // Apply Procedure Linkage Table relocation.
+        for (i, reloc) in dynamic.plt_relocation().enumerate() {
+            // Resolve the value.
+            let value = match reloc.ty() {
+                RelocationInfo::R_X86_64_JUMP_SLOT => {
+                    // Get target symbol.
+                    let symbol = match dynamic.symbols().get(reloc.symbol()) {
+                        Some(v) => v,
+                        None => return Err(RelocError::InvalidPltSymIndex(i)),
+                    };
+
+                    // Check binding type.
+                    match symbol.binding() {
+                        SymbolInfo::STB_LOCAL => self.memory.addr() + symbol.value(),
+                        SymbolInfo::STB_GLOBAL | SymbolInfo::STB_WEAK => {
+                            // TODO: Resolve external symbol.
+                            0
+                        }
+                        v => return Err(RelocError::UnknownPltSymBinding(i, v)),
+                    }
+                }
+                RelocationInfo::R_X86_64_RELATIVE => 0,
+                v => return Err(RelocError::UnknownPltRelocType(i, v)),
+            };
+
+            // TODO: Apply the value.
+        }
+
+        Ok(())
     }
 }
 
@@ -438,4 +508,26 @@ pub enum LoadError {
 
     #[error("cannot change protection for mapped program #{0}")]
     ChangeProtectionFailed(usize, #[source] crate::memory::MprotectError),
+}
+
+/// Represents the errors for [`Module::apply_relocs()`].
+#[derive(Debug, Error)]
+pub enum RelocError {
+    #[error("unknown relocation type {1:#010x} on entry {0}")]
+    UnknownRelocationType(usize, u32),
+
+    #[error("invalid symbol index on entry {0}")]
+    InvalidSymbolIndex(usize),
+
+    #[error("unknown symbol binding type {1} on entry {0}")]
+    UnknownSymbolBinding(usize, u8),
+
+    #[error("unknown PLT relocation type {1:#010x} on entry {0}")]
+    UnknownPltRelocType(usize, u32),
+
+    #[error("invalid symbol index on PLT entry {0}")]
+    InvalidPltSymIndex(usize),
+
+    #[error("unknown symbol binding type {1} on PLT entry {0}")]
+    UnknownPltSymBinding(usize, u8),
 }
