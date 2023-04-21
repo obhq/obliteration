@@ -51,14 +51,14 @@ Obliteration supports only 4KB/8KB/16KB pages. Most people should not have any p
 - Visual Studio 2022
   - `Desktop development with C++` workload is required
 - Rust on the latest stable channel
-- CMake 3.24+
+- CMake 3.21+
   - Make sure you have `Add CMake to the system PATH` selected when installing
 
 ### Linux prerequisites
 
 - GCC 9.4+
 - Rust on the latest stable channel
-- CMake 3.24+
+- CMake 3.21+
 
 ### macOS prerequisites
 
@@ -66,7 +66,7 @@ Obliteration supports only 4KB/8KB/16KB pages. Most people should not have any p
 - Homebrew
 - Clang 13+
 - Rust on the latest stable channel
-- CMake 3.24+
+- CMake 3.21+
 
 ### Install Qt 6
 

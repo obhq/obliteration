@@ -35,7 +35,6 @@ endif()
 ExternalProject_Add(llvm
     URL https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.0/llvm-project-16.0.0.src.tar.xz
     URL_HASH SHA256=9A56D906A2C81F16F06EFC493A646D497C53C2F4F28F0CB1F3C8DA7F74350254
-    DOWNLOAD_EXTRACT_TIMESTAMP false
     DOWNLOAD_NO_PROGRESS true
     CMAKE_ARGS -Wno-dev
     CMAKE_CACHE_ARGS ${LLVM_OPTS}
