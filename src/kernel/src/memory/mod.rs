@@ -4,6 +4,7 @@ use crate::errno::{EINVAL, ENOMEM};
 use crate::syserr;
 use bitflags::bitflags;
 use std::collections::BTreeMap;
+use std::fmt::{Display, Formatter};
 use std::ptr::null_mut;
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
@@ -289,7 +290,7 @@ impl MemoryManager {
 
                 // Change protection.
                 if let Err(e) = storage.protect(addr, len, prot) {
-                    panic!("Failed to change protection on {addr:p}:{len} to {prot:?}: {e}");
+                    panic!("Failed to change protection on {addr:p}:{len} to {prot}: {e}");
                 }
 
                 // Check if the splitting was in the middle.
@@ -311,7 +312,7 @@ impl MemoryManager {
 
                 if let Err(e) = storage.protect(info.addr, change, prot) {
                     panic!(
-                        "Failed to change protection on {:p}:{} to {:?}: {}",
+                        "Failed to change protection on {:p}:{} to {}: {}",
                         info.addr, change, prot, e
                     );
                 }
@@ -330,7 +331,7 @@ impl MemoryManager {
                 // Change protection the whole allocation.
                 if let Err(e) = storage.protect(info.addr, info.len, prot) {
                     panic!(
-                        "Failed to change protection on {:p}:{} to {:?}: {}",
+                        "Failed to change protection on {:p}:{} to {}: {}",
                         info.addr, info.len, prot, e
                     );
                 }
@@ -480,7 +481,7 @@ impl Alloc {
 
 bitflags! {
     /// Flags to tell what access is possible for the virtual page.
-    #[repr(transparent)]
+    #[derive(Clone, Copy, PartialEq)]
     pub struct Protections: u32 {
         const NONE = 0x00000000;
         const CPU_READ = 0x00000001;
@@ -496,7 +497,7 @@ bitflags! {
 
 impl Protections {
     pub fn contains_unknown(self) -> bool {
-        (self.bits >> 6) != 0
+        (self.bits() >> 6) != 0
     }
 
     #[cfg(unix)]
@@ -546,9 +547,15 @@ impl Protections {
     }
 }
 
+impl Display for Protections {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 bitflags! {
     /// Flags for [`MemoryManager::mmap()`].
-    #[repr(transparent)]
+    #[derive(Clone, Copy)]
     pub struct MappingFlags: u32 {
         const MAP_SHARED = 0x00000001;
         const MAP_PRIVATE = 0x00000002;
@@ -570,12 +577,12 @@ impl MappingFlags {
     pub const BEHAVIOR_PRIVATE: u32 = 2;
 
     pub fn behavior(self) -> u32 {
-        self.bits & 3
+        self.bits() & 3
     }
 
     /// Gets the value that was supplied with MAP_ALIGNED.
     pub fn alignment(self) -> usize {
-        (self.bits >> 24) as usize
+        (self.bits() >> 24) as usize
     }
 }
 

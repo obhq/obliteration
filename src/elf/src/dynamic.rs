@@ -1,5 +1,7 @@
+use bitflags::bitflags;
 use byteorder::{ByteOrder, LE};
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 use std::ops::Index;
 use std::slice::SliceIndex;
 use thiserror::Error;
@@ -12,6 +14,7 @@ pub struct DynamicLinking {
     relaent: usize,
     pltrel: u64,
     fingerprint: u64,
+    flags: Option<ModuleFlags>,
     filename: u64,
     module_info: ModuleInfo,
     dependencies: HashMap<u16, ModuleInfo>,
@@ -135,6 +138,7 @@ impl DynamicLinking {
         let mut syment: Option<u64> = None;
         let mut pltrel: Option<u64> = None;
         let mut fingerprint: Option<u64> = None;
+        let mut flags: Option<ModuleFlags> = None;
         let mut filename: Option<u64> = None;
         let mut module_info: Option<ModuleInfo> = None;
         let mut dependencies: HashMap<u16, ModuleInfo> = HashMap::new();
@@ -174,7 +178,7 @@ impl DynamicLinking {
                 Self::DT_FINI_ARRAY => {}
                 Self::DT_INIT_ARRAYSZ => {}
                 Self::DT_FINI_ARRAYSZ => {}
-                Self::DT_FLAGS => {}
+                Self::DT_FLAGS => flags = Some(ModuleFlags::from_bits_retain(LE::read_u64(value))),
                 Self::DT_PREINIT_ARRAY => {}
                 Self::DT_PREINIT_ARRAYSZ => {}
                 Self::DT_SCE_FINGERPRINT => fingerprint = Some(LE::read_u64(value)),
@@ -315,6 +319,16 @@ impl DynamicLinking {
             relaent: relaent.ok_or(ParseError::NoRelaent)? as usize,
             pltrel: pltrel.ok_or(ParseError::NoPltrel)?,
             fingerprint: fingerprint.ok_or(ParseError::NoFingerprint)?,
+            flags: match flags {
+                Some(v) => {
+                    if v.is_empty() {
+                        None
+                    } else {
+                        Some(v)
+                    }
+                }
+                None => return Err(ParseError::NoFlags),
+            },
             filename: filename.ok_or(ParseError::NoFilename)?,
             module_info: module_info.ok_or(ParseError::NoModuleInfo)?,
             dependencies,
@@ -335,6 +349,10 @@ impl DynamicLinking {
         }
 
         Ok(parsed)
+    }
+
+    pub fn flags(&self) -> Option<ModuleFlags> {
+        self.flags
     }
 
     pub fn module_info(&self) -> &ModuleInfo {
@@ -456,6 +474,22 @@ impl DynamicLinking {
         } else {
             Some(r as u16)
         }
+    }
+}
+
+bitflags! {
+    /// Contains flags for a module.
+    #[derive(Clone, Copy)]
+    pub struct ModuleFlags: u64 {
+        const DF_SYMBOLIC = 0x02;
+        const DF_TEXTREL = 0x04;
+        const DF_BIND_NOW = 0x08;
+    }
+}
+
+impl Display for ModuleFlags {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
 
@@ -672,6 +706,9 @@ pub enum ParseError {
 
     #[error("entry DT_SCE_FINGERPRINT does not exists")]
     NoFingerprint,
+
+    #[error("entry DT_FLAGS does not exists")]
+    NoFlags,
 
     #[error("entry DT_SCE_FILENAME does not exists")]
     NoFilename,
