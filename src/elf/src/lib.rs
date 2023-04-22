@@ -66,9 +66,7 @@ impl<I: Read + Seek> Elf<I> {
 
                 // Load fields.
                 segments.push(SelfSegment {
-                    flags: SelfSegmentFlags {
-                        bits: LE::read_u64(&hdr),
-                    },
+                    flags: SelfSegmentFlags::from_bits_retain(LE::read_u64(&hdr)),
                     offset: LE::read_u64(&hdr[8..]),
                     compressed_size: LE::read_u64(&hdr[16..]),
                     decompressed_size: LE::read_u64(&hdr[24..]),
@@ -140,9 +138,7 @@ impl<I: Read + Seek> Elf<I> {
             // Load fields.
             let prog = Program {
                 ty: ProgramType(LE::read_u32(&hdr)),
-                flags: ProgramFlags {
-                    bits: LE::read_u32(&hdr[0x04..]),
-                },
+                flags: ProgramFlags::from_bits_retain(LE::read_u32(&hdr[0x04..])),
                 offset: LE::read_u64(&hdr[0x08..]),
                 addr: LE::read_u64(&hdr[0x10..]) as usize,
                 file_size: LE::read_u64(&hdr[0x20..]),
@@ -338,6 +334,7 @@ impl SelfSegment {
 
 bitflags! {
     /// Represents flags of SELF segment.
+    #[derive(Clone, Copy)]
     pub struct SelfSegmentFlags: u64 {
         const SF_ORDR = 0x0000000000000001;
         const SF_ENCR = 0x0000000000000002;
@@ -349,7 +346,7 @@ bitflags! {
 
 impl SelfSegmentFlags {
     pub fn program(self) -> usize {
-        ((self.bits >> 20) & 0xfff) as usize
+        ((self.bits() >> 20) & 0xfff) as usize
     }
 }
 
@@ -445,10 +442,17 @@ bitflags! {
     ///
     /// The values was taken from
     /// https://github.com/freebsd/freebsd-src/blob/main/sys/sys/elf_common.h.
+    #[derive(Clone, Copy)]
     pub struct ProgramFlags: u32 {
         const EXECUTE = 0x00000001;
         const WRITE = 0x00000002;
         const READ = 0x00000004;
+    }
+}
+
+impl Display for ProgramFlags {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
 

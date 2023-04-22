@@ -201,19 +201,27 @@ fn run() -> bool {
     true
 }
 
-fn print_module(m: &Module) {
-    if m.image().self_segments().is_some() {
+fn print_module(module: &Module) {
+    // Image type.
+    let image = module.image();
+
+    if image.self_segments().is_some() {
         info!("Image type    : SELF");
     } else {
         info!("Image type    : ELF");
     }
 
-    if let Some(dynamic) = m.image().dynamic_linking() {
+    // Dynamic linking.
+    if let Some(dynamic) = image.dynamic_linking() {
         let i = dynamic.module_info();
 
         info!("Module name   : {}", i.name());
         info!("Major version : {}", i.version_major());
         info!("Minor version : {}", i.version_minor());
+
+        if let Some(f) = dynamic.flags() {
+            info!("Module flags  : {f}");
+        }
 
         for m in dynamic.dependencies().values() {
             info!(
@@ -227,24 +235,24 @@ fn print_module(m: &Module) {
 
     info!(
         "Memory address: {:#018x}:{:#018x}",
-        m.memory().addr(),
-        m.memory().addr() + m.memory().len()
+        module.memory().addr(),
+        module.memory().addr() + module.memory().len()
     );
 
     info!(
         "Entry address : {:#018x}",
-        m.memory().addr() + m.image().entry_addr()
+        module.memory().addr() + module.image().entry_addr()
     );
 
-    for s in m.memory().segments().iter() {
-        let addr = m.memory().addr() + s.start();
+    for s in module.memory().segments().iter() {
+        let addr = module.memory().addr() + s.start();
 
         info!(
-            "Program {} is mapped to {:#018x}:{:#018x} with {:?}.",
+            "Program {} is mapped to {:#018x}:{:#018x} with {}.",
             s.program(),
             addr,
             addr + s.len(),
-            m.image().programs()[s.program()].flags(),
+            module.image().programs()[s.program()].flags(),
         );
     }
 }
