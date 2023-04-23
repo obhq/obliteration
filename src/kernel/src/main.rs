@@ -178,7 +178,7 @@ fn run() -> bool {
     for module in loaded {
         info!("Applying relocation entries on {}.", module.image().name());
 
-        if let Err(e) = module.apply_relocs() {
+        if let Err(e) = module.apply_relocs(|h, n| modules.resolve_symbol(h, n)) {
             error!(e, "Applying failed");
             return false;
         }
