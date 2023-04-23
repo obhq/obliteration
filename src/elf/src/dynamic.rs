@@ -363,6 +363,10 @@ impl DynamicLinking {
         &self.dependencies
     }
 
+    pub fn libraries(&self) -> &HashMap<u16, LibraryInfo> {
+        &self.libraries
+    }
+
     pub fn symbols(&self) -> &[SymbolInfo] {
         self.symbols.as_ref()
     }
@@ -398,13 +402,17 @@ impl DynamicLinking {
 
             // Parse symbol name.
             let sym = &self.symbols[index];
-            let (sym_name, lib_id, mod_id) = match Self::parse_symbol_name(&sym.name) {
+            let (sym_name, lib_id, mod_id) = match sym.decode_name() {
                 Some(v) => v,
-                None => panic!("Invalid symbol name: {}", sym.name), // FIXME: Do not panic.
+                None => {
+                    index = chains[index] as usize;
+                    continue;
+                }
             };
 
             if mod_id != 0 {
-                panic!("Unexpected module ID: {mod_id}");
+                index = chains[index] as usize;
+                continue;
             }
 
             // Get target library.
@@ -426,54 +434,6 @@ impl DynamicLinking {
         }
 
         None
-    }
-
-    fn parse_symbol_name(name: &str) -> Option<(&str, u16, u16)> {
-        // Extract local name.
-        let (name, remain) = match name.find('#') {
-            Some(v) => (&name[..v], &name[(v + 1)..]),
-            None => return None,
-        };
-
-        if name.is_empty() {
-            return None;
-        }
-
-        // Extract library ID and module ID.
-        let (lib_id, mod_id) = match remain.find('#') {
-            Some(v) => (&remain[..v], &remain[(v + 1)..]),
-            None => return None,
-        };
-
-        if lib_id.is_empty() || mod_id.is_empty() {
-            return None;
-        }
-
-        // Decode module ID and library ID.
-        let mod_id = Self::decode_id(mod_id)?;
-        let lib_id = Self::decode_id(lib_id)?;
-
-        Some((name, lib_id, mod_id))
-    }
-
-    fn decode_id(v: &str) -> Option<u16> {
-        if v.len() > 3 {
-            return None;
-        }
-
-        let s = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-";
-        let mut r = 0u32;
-
-        for c in v.chars() {
-            r <<= 6;
-            r |= s.find(c)? as u32;
-        }
-
-        if r > u16::MAX as _ {
-            None
-        } else {
-            Some(r as u16)
-        }
     }
 }
 
@@ -574,6 +534,54 @@ impl SymbolInfo {
 
     pub fn value(&self) -> usize {
         self.value
+    }
+
+    pub fn decode_name(&self) -> Option<(&str, u16, u16)> {
+        // Extract local name.
+        let (name, remain) = match self.name.find('#') {
+            Some(v) => (&self.name[..v], &self.name[(v + 1)..]),
+            None => return None,
+        };
+
+        if name.is_empty() {
+            return None;
+        }
+
+        // Extract library ID and module ID.
+        let (lib_id, mod_id) = match remain.find('#') {
+            Some(v) => (&remain[..v], &remain[(v + 1)..]),
+            None => return None,
+        };
+
+        if lib_id.is_empty() || mod_id.is_empty() {
+            return None;
+        }
+
+        // Decode module ID and library ID.
+        let mod_id = Self::decode_id(mod_id)?;
+        let lib_id = Self::decode_id(lib_id)?;
+
+        Some((name, lib_id, mod_id))
+    }
+
+    fn decode_id(v: &str) -> Option<u16> {
+        if v.len() > 3 {
+            return None;
+        }
+
+        let s = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-";
+        let mut r = 0u32;
+
+        for c in v.chars() {
+            r <<= 6;
+            r |= s.find(c)? as u32;
+        }
+
+        if r > u16::MAX as _ {
+            None
+        } else {
+            Some(r as u16)
+        }
     }
 }
 

@@ -1,9 +1,10 @@
 use crate::fs::path::{VPath, VPathBuf};
 use crate::fs::{Fs, FsItem};
 use crate::memory::MemoryManager;
-use elf::dynamic::{RelocationInfo, SymbolInfo};
+use elf::dynamic::{DynamicLinking, ModuleFlags, RelocationInfo, SymbolInfo};
 use elf::{Elf, ProgramFlags, ProgramType};
 use std::collections::HashMap;
+use std::error::Error;
 use std::fs::{read_dir, File};
 use std::io::{Read, Seek};
 use std::sync::{Arc, RwLock};
@@ -87,6 +88,45 @@ impl<'a> ModuleManager<'a> {
         }
 
         Ok(modules)
+    }
+
+    /// `name` is a normalized name (e.g. M0z6Dr6TNnM#libkernel#libkernel).
+    pub fn resolve_symbol(&self, hash: u32, name: &str) -> Result<usize, ResolveSymbolError> {
+        // Get module name.
+        let module = match name.splitn(3, '#').skip(2).next() {
+            Some(v) => v,
+            None => return Err(ResolveSymbolError::InvalidName),
+        };
+
+        // Get module file.
+        let files = match self.available.get(module) {
+            Some(v) => v,
+            None => return Err(ResolveSymbolError::InvalidModule),
+        };
+
+        // Lookup symbol from loaded modules.
+        let loaded = self.loaded.read().unwrap();
+
+        for file in files {
+            // Get module.
+            let module = match loaded.get(file) {
+                Some(v) => v,
+                None => return Err(ResolveSymbolError::NotLoaded),
+            };
+
+            // Skip if the module is not dynamic module.
+            let dynamic = match module.image().dynamic_linking() {
+                Some(v) => v,
+                None => continue,
+            };
+
+            // Lookup.
+            if let Some(sym) = dynamic.lookup_symbol(hash, name) {
+                return Ok(module.memory().addr() + sym.value());
+            }
+        }
+
+        Err(ResolveSymbolError::NotFound)
     }
 
     fn load(&self, path: &VPath) -> Result<Module<'a>, LoadError> {
@@ -236,7 +276,11 @@ impl<'a> Module<'a> {
         &self.memory
     }
 
-    pub fn apply_relocs(&self) -> Result<(), RelocError> {
+    pub fn apply_relocs<R, E>(&self, mut resolver: R) -> Result<(), RelocError<E>>
+    where
+        R: FnMut(u32, &str) -> Result<usize, E>,
+        E: Error,
+    {
         // Do nothing if the module is not dynamic linking.
         let dynamic = match self.image.dynamic_linking() {
             Some(v) => v,
@@ -265,10 +309,22 @@ impl<'a> Module<'a> {
                     match symbol.binding() {
                         SymbolInfo::STB_LOCAL => self.memory.addr() + symbol.value(),
                         SymbolInfo::STB_GLOBAL | SymbolInfo::STB_WEAK => {
-                            // TODO: Resolve external symbol.
-                            0
+                            match self.resolve_external_symbol(symbol, dynamic, &mut resolver) {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    return Err(RelocError::ResolveSymbolFailed(
+                                        symbol.name().to_owned(),
+                                        e,
+                                    ));
+                                }
+                            }
                         }
-                        v => return Err(RelocError::UnknownSymbolBinding(i, v)),
+                        v => {
+                            return Err(RelocError::UnknownSymbolBinding(
+                                symbol.name().to_owned(),
+                                v,
+                            ));
+                        }
                     }
                 }
                 RelocationInfo::R_X86_64_RELATIVE => 0,
@@ -293,10 +349,22 @@ impl<'a> Module<'a> {
                     match symbol.binding() {
                         SymbolInfo::STB_LOCAL => self.memory.addr() + symbol.value(),
                         SymbolInfo::STB_GLOBAL | SymbolInfo::STB_WEAK => {
-                            // TODO: Resolve external symbol.
-                            0
+                            match self.resolve_external_symbol(symbol, dynamic, &mut resolver) {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    return Err(RelocError::ResolvePltSymFailed(
+                                        symbol.name().to_owned(),
+                                        e,
+                                    ));
+                                }
+                            }
                         }
-                        v => return Err(RelocError::UnknownPltSymBinding(i, v)),
+                        v => {
+                            return Err(RelocError::UnknownPltSymBinding(
+                                symbol.name().to_owned(),
+                                v,
+                            ));
+                        }
                     }
                 }
                 RelocationInfo::R_X86_64_RELATIVE => 0,
@@ -307,6 +375,74 @@ impl<'a> Module<'a> {
         }
 
         Ok(())
+    }
+
+    fn resolve_external_symbol<R, E>(
+        &self,
+        sym: &SymbolInfo,
+        data: &DynamicLinking,
+        resolver: &mut R,
+    ) -> Result<usize, ExternalSymbolError<E>>
+    where
+        R: FnMut(u32, &str) -> Result<usize, E>,
+        E: Error,
+    {
+        // Decode symbol name.
+        let (name, library, module) = match sym.decode_name() {
+            Some(v) => v,
+            None => return Err(ExternalSymbolError::InvalidName),
+        };
+
+        // Get module where the symbol belong.
+        let module = if module == 0 {
+            data.module_info()
+        } else {
+            match data.dependencies().get(&module) {
+                Some(v) => v,
+                None => return Err(ExternalSymbolError::InvalidModule(module)),
+            }
+        };
+
+        // Get library where the symbol belong.
+        let library = match data.libraries().get(&library) {
+            Some(v) => v,
+            None => return Err(ExternalSymbolError::InvalidLibrary(library)),
+        };
+
+        // Get name hash.
+        let name = format!("{}#{}#{}", name, library.name(), module.name());
+        let hash = Self::hash_symbol(&name);
+
+        // Resolve from self first if it is symbolic.
+        if let Some(flags) = data.flags() {
+            if flags.contains(ModuleFlags::DF_SYMBOLIC) {
+                if let Some(sym) = data.lookup_symbol(hash, &name) {
+                    return Ok(self.memory.addr() + sym.value());
+                }
+            }
+        }
+
+        // Invoke resolver.
+        match resolver(hash, &name) {
+            Ok(v) => Ok(v),
+            Err(e) => Err(ExternalSymbolError::ResolveFailed(name, hash, e)),
+        }
+    }
+
+    fn hash_symbol(name: &str) -> u32 {
+        let mut h = 0u32;
+        let mut g = 0;
+
+        for b in name.bytes() {
+            h = (h << 4) + (b as u32);
+            g = h & 0xf0000000;
+            if g != 0 {
+                h ^= g >> 24;
+            }
+            h &= !g;
+        }
+
+        h
     }
 }
 
@@ -510,17 +646,36 @@ pub enum LoadError {
     ChangeProtectionFailed(usize, #[source] crate::memory::MprotectError),
 }
 
+/// Represents the error for symbol resolving.
+#[derive(Debug, Error)]
+pub enum ResolveSymbolError {
+    #[error("invalid name")]
+    InvalidName,
+
+    #[error("invalid module")]
+    InvalidModule,
+
+    #[error("module is not loaded")]
+    NotLoaded,
+
+    #[error("not found")]
+    NotFound,
+}
+
 /// Represents the errors for [`Module::apply_relocs()`].
 #[derive(Debug, Error)]
-pub enum RelocError {
+pub enum RelocError<R: Error> {
     #[error("unknown relocation type {1:#010x} on entry {0}")]
     UnknownRelocationType(usize, u32),
 
     #[error("invalid symbol index on entry {0}")]
     InvalidSymbolIndex(usize),
 
-    #[error("unknown symbol binding type {1} on entry {0}")]
-    UnknownSymbolBinding(usize, u8),
+    #[error("unknown symbol binding type {1} on symbol {0}")]
+    UnknownSymbolBinding(String, u8),
+
+    #[error("cannot resolve symbol {0}")]
+    ResolveSymbolFailed(String, #[source] ExternalSymbolError<R>),
 
     #[error("unknown PLT relocation type {1:#010x} on entry {0}")]
     UnknownPltRelocType(usize, u32),
@@ -528,6 +683,25 @@ pub enum RelocError {
     #[error("invalid symbol index on PLT entry {0}")]
     InvalidPltSymIndex(usize),
 
-    #[error("unknown symbol binding type {1} on PLT entry {0}")]
-    UnknownPltSymBinding(usize, u8),
+    #[error("unknown symbol binding type {1} on PLT symbol {0}")]
+    UnknownPltSymBinding(String, u8),
+
+    #[error("cannot resolve PLT symbol {0}")]
+    ResolvePltSymFailed(String, #[source] ExternalSymbolError<R>),
+}
+
+/// Represents the errors for external symbol.
+#[derive(Debug, Error)]
+pub enum ExternalSymbolError<R: Error> {
+    #[error("invalid name")]
+    InvalidName,
+
+    #[error("module #{0} does not exists")]
+    InvalidModule(u16),
+
+    #[error("library #{0} does not exists")]
+    InvalidLibrary(u16),
+
+    #[error("cannot resolve {0} ({1:#010x})")]
+    ResolveFailed(String, u32, #[source] R),
 }
