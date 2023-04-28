@@ -358,42 +358,41 @@ impl<'a> Module<'a> {
 
         // Apply Procedure Linkage Table relocation.
         for (i, reloc) in dynamic.plt_relocation().enumerate() {
-            // Resolve the value.
-            let value = match reloc.ty() {
-                RelocationInfo::R_X86_64_JUMP_SLOT => {
-                    // Get target symbol.
-                    let symbol = match dynamic.symbols().get(reloc.symbol()) {
-                        Some(v) => v,
-                        None => return Err(RelocError::InvalidPltSymIndex(i)),
-                    };
+            if reloc.ty() != RelocationInfo::R_X86_64_JUMP_SLOT {
+                return Err(RelocError::UnknownPltRelocType(i, reloc.ty()));
+            }
 
-                    // Check binding type.
-                    match symbol.binding() {
-                        SymbolInfo::STB_LOCAL => self.memory.addr() + symbol.value(),
-                        SymbolInfo::STB_GLOBAL | SymbolInfo::STB_WEAK => {
-                            match self.resolve_external_symbol(symbol, dynamic, &mut resolver) {
-                                Ok(v) => v,
-                                Err(e) => {
-                                    return Err(RelocError::ResolvePltSymFailed(
-                                        symbol.name().to_owned(),
-                                        e,
-                                    ));
-                                }
-                            }
-                        }
-                        v => {
-                            return Err(RelocError::UnknownPltSymBinding(
+            // Get target symbol.
+            let symbol = match dynamic.symbols().get(reloc.symbol()) {
+                Some(v) => v,
+                None => return Err(RelocError::InvalidPltSymIndex(i)),
+            };
+
+            // Check binding type.
+            let value = match symbol.binding() {
+                SymbolInfo::STB_GLOBAL => {
+                    match self.resolve_external_symbol(symbol, dynamic, &mut resolver) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            return Err(RelocError::ResolvePltSymFailed(
                                 symbol.name().to_owned(),
-                                v,
+                                e,
                             ));
                         }
                     }
                 }
-                RelocationInfo::R_X86_64_RELATIVE => 0,
-                v => return Err(RelocError::UnknownPltRelocType(i, v)),
+                v => {
+                    return Err(RelocError::UnknownPltSymBinding(
+                        symbol.name().to_owned(),
+                        v,
+                    ));
+                }
             };
 
-            // TODO: Apply the value.
+            // Write the target.
+            let target = &mut mem[reloc.offset()..];
+
+            NativeEndian::write_u64(target, value as _);
         }
 
         Ok(())
@@ -453,7 +452,7 @@ impl<'a> Module<'a> {
 
     fn hash_symbol(name: &str) -> u32 {
         let mut h = 0u32;
-        let mut g = 0;
+        let mut g;
 
         for b in name.bytes() {
             h = (h << 4) + (b as u32);
