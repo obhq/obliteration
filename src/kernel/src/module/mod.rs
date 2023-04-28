@@ -1,14 +1,19 @@
+use self::memory::UnprotectedMemory;
 use crate::fs::path::{VPath, VPathBuf};
 use crate::fs::{Fs, FsItem};
-use crate::memory::MemoryManager;
+use crate::memory::{MemoryManager, MprotectError, Protections};
+use byteorder::{ByteOrder, NativeEndian};
 use elf::dynamic::{DynamicLinking, ModuleFlags, RelocationInfo, SymbolInfo};
 use elf::{Elf, ProgramFlags, ProgramType};
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::{read_dir, File};
 use std::io::{Read, Seek};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
+
+pub mod memory;
 
 /// Manage all loaded modules.
 pub struct ModuleManager<'a> {
@@ -16,6 +21,7 @@ pub struct ModuleManager<'a> {
     mm: &'a MemoryManager,
     available: HashMap<String, Vec<VPathBuf>>, // Key is module name.
     loaded: RwLock<HashMap<VPathBuf, Arc<Module<'a>>>>,
+    next_id: AtomicU64,
 }
 
 impl<'a> ModuleManager<'a> {
@@ -27,6 +33,7 @@ impl<'a> ModuleManager<'a> {
             mm,
             available: HashMap::new(),
             loaded: RwLock::new(HashMap::new()),
+            next_id: AtomicU64::new(1),
         };
 
         m.update_available("/mnt/app0/sce_module".try_into().unwrap());
@@ -152,7 +159,7 @@ impl<'a> ModuleManager<'a> {
         };
 
         // Map the module to the memory.
-        Module::load(elf, self.mm)
+        Module::load(self.next_id.fetch_add(1, Ordering::Relaxed), elf, self.mm)
     }
 
     fn update_available(&mut self, from: &VPath) {
@@ -246,12 +253,13 @@ impl<'a> ModuleManager<'a> {
 /// Represents a loaded SELF in an unmodified state (no code lifting, etc.). That is, the same
 /// representation as on PS4.
 pub struct Module<'a> {
+    id: u64,
     image: Elf<File>,
     memory: Memory<'a>,
 }
 
 impl<'a> Module<'a> {
-    fn load(mut image: Elf<File>, mm: &'a MemoryManager) -> Result<Self, LoadError> {
+    fn load(id: u64, mut image: Elf<File>, mm: &'a MemoryManager) -> Result<Self, LoadError> {
         // Map SELF to the memory.
         let mut memory = Memory::new(&image, mm)?;
 
@@ -263,9 +271,11 @@ impl<'a> Module<'a> {
             }
         })?;
 
-        memory.protect(&image)?;
+        if let Err(e) = memory.protect() {
+            return Err(LoadError::ProtectionMemoryFailed(e));
+        }
 
-        Ok(Self { image, memory })
+        Ok(Self { id, image, memory })
     }
 
     pub fn image(&self) -> &Elf<File> {
@@ -276,7 +286,9 @@ impl<'a> Module<'a> {
         &self.memory
     }
 
-    pub fn apply_relocs<R, E>(&self, mut resolver: R) -> Result<(), RelocError<E>>
+    /// # Safety
+    /// No other threads may not read/write/execute the module memory.
+    pub unsafe fn apply_relocs<R, E>(&self, mut resolver: R) -> Result<(), RelocError<E>>
     where
         R: FnMut(u32, &str) -> Result<usize, E>,
         E: Error,
@@ -287,18 +299,21 @@ impl<'a> Module<'a> {
             None => return Ok(()),
         };
 
+        // Unprotect the memory.
+        let mut mem = match self.memory.unprotect() {
+            Ok(v) => v,
+            Err(e) => return Err(RelocError::UnprotectMemoryFailed(e)),
+        };
+
         // Apply relocation.
+        let base = mem.addr();
+
         for (i, reloc) in dynamic.relocation_entries().enumerate() {
-            // Resolve the value.
-            let value = match reloc.ty() {
-                RelocationInfo::R_X86_64_64
-                | RelocationInfo::R_X86_64_PC32
-                | RelocationInfo::R_X86_64_GLOB_DAT
-                | RelocationInfo::R_X86_64_DTPMOD64
-                | RelocationInfo::R_X86_64_DTPOFF64
-                | RelocationInfo::R_X86_64_TPOFF64
-                | RelocationInfo::R_X86_64_DTPOFF32
-                | RelocationInfo::R_X86_64_TPOFF32 => {
+            let target = &mut mem[reloc.offset()..];
+            let addend = reloc.addend();
+
+            match reloc.ty() {
+                RelocationInfo::R_X86_64_64 => {
                     // Get target symbol.
                     let symbol = match dynamic.symbols().get(reloc.symbol()) {
                         Some(v) => v,
@@ -306,8 +321,7 @@ impl<'a> Module<'a> {
                     };
 
                     // Check binding type.
-                    match symbol.binding() {
-                        SymbolInfo::STB_LOCAL => self.memory.addr() + symbol.value(),
+                    let value = match symbol.binding() {
                         SymbolInfo::STB_GLOBAL | SymbolInfo::STB_WEAK => {
                             match self.resolve_external_symbol(symbol, dynamic, &mut resolver) {
                                 Ok(v) => v,
@@ -325,13 +339,21 @@ impl<'a> Module<'a> {
                                 v,
                             ));
                         }
-                    }
-                }
-                RelocationInfo::R_X86_64_RELATIVE => 0,
-                v => return Err(RelocError::UnknownRelocationType(i, v)),
-            };
+                    };
 
-            // TODO: Apply the value.
+                    NativeEndian::write_u64(target, (value + addend) as u64);
+                }
+                RelocationInfo::R_X86_64_RELATIVE => {
+                    NativeEndian::write_u64(target, (base + addend) as u64);
+                }
+                RelocationInfo::R_X86_64_DTPMOD64 => {
+                    // Uplift add to the value instead of replacing it. According to
+                    // https://chao-tic.github.io/blog/2018/12/25/tls it should be replaced with the
+                    // module ID. Let's follow the standard way until something is broken.
+                    NativeEndian::write_u64(target, self.id);
+                }
+                v => return Err(RelocError::UnknownRelocationType(i, v)),
+            }
         }
 
         // Apply Procedure Linkage Table relocation.
@@ -456,7 +478,7 @@ pub struct Memory<'a> {
 
 impl<'a> Memory<'a> {
     fn new<I: Read + Seek>(elf: &Elf<I>, mm: &'a MemoryManager) -> Result<Self, LoadError> {
-        use crate::memory::{MappingFlags, Protections};
+        use crate::memory::MappingFlags;
 
         let programs = elf.programs();
 
@@ -467,17 +489,36 @@ impl<'a> Memory<'a> {
             let t = p.ty();
 
             if t == ProgramType::PT_LOAD || t == ProgramType::PT_SCE_RELRO {
-                let s = MemorySegment {
-                    start: p.addr(),
-                    len: p.aligned_size(),
-                    program: i,
-                };
+                // Check if size in memory valid.
+                let len = p.aligned_size();
 
-                if s.len == 0 {
+                if len == 0 {
                     return Err(LoadError::ZeroLenProgram(i));
                 }
 
-                segments.push(s);
+                // Get protection.
+                let flags = p.flags();
+                let mut prot = Protections::NONE;
+
+                if flags.contains(ProgramFlags::EXECUTE) {
+                    prot |= Protections::CPU_EXEC;
+                }
+
+                if flags.contains(ProgramFlags::READ) {
+                    prot |= Protections::CPU_READ;
+                }
+
+                if flags.contains(ProgramFlags::WRITE) {
+                    prot |= Protections::CPU_WRITE;
+                }
+
+                // Construct the segment info.
+                segments.push(MemorySegment {
+                    start: p.addr(),
+                    len,
+                    program: i,
+                    prot,
+                });
             }
         }
 
@@ -535,39 +576,6 @@ impl<'a> Memory<'a> {
         Ok(())
     }
 
-    fn protect<I: Read + Seek>(&mut self, elf: &Elf<I>) -> Result<(), LoadError> {
-        use crate::memory::Protections;
-
-        let progs = elf.programs();
-
-        for seg in &self.segments {
-            // Derive protections from program flags.
-            let flags = progs[seg.program].flags();
-            let mut prot = Protections::NONE;
-
-            if flags.contains(ProgramFlags::EXECUTE) {
-                prot |= Protections::CPU_EXEC;
-            }
-
-            if flags.contains(ProgramFlags::READ) {
-                prot |= Protections::CPU_READ;
-            }
-
-            if flags.contains(ProgramFlags::WRITE) {
-                prot |= Protections::CPU_WRITE;
-            }
-
-            // Change protection.
-            let addr = unsafe { self.ptr.add(seg.start) };
-
-            if let Err(e) = self.mm.mprotect(addr, seg.len, prot) {
-                return Err(LoadError::ChangeProtectionFailed(seg.program, e));
-            }
-        }
-
-        Ok(())
-    }
-
     pub fn addr(&self) -> usize {
         self.ptr as usize
     }
@@ -578,6 +586,28 @@ impl<'a> Memory<'a> {
 
     pub fn segments(&self) -> &[MemorySegment] {
         self.segments.as_ref()
+    }
+
+    fn protect(&self) -> Result<(), MprotectError> {
+        for seg in &self.segments {
+            let addr = unsafe { self.ptr.add(seg.start) };
+
+            self.mm.mprotect(addr, seg.len, seg.prot)?;
+        }
+
+        Ok(())
+    }
+
+    /// # Safety
+    /// Only a single thread can have access to the unprotected memory.
+    unsafe fn unprotect(&self) -> Result<UnprotectedMemory<'_>, MprotectError> {
+        self.mm.mprotect(
+            self.ptr,
+            self.len,
+            Protections::CPU_READ | Protections::CPU_WRITE,
+        )?;
+
+        Ok(UnprotectedMemory::new(self))
     }
 }
 
@@ -603,6 +633,7 @@ pub struct MemorySegment {
     start: usize,
     len: usize,
     program: usize,
+    prot: Protections,
 }
 
 impl MemorySegment {
@@ -642,8 +673,8 @@ pub enum LoadError {
     #[error("cannot read program #{0}")]
     ReadProgramFailed(usize, #[source] elf::ReadProgramError),
 
-    #[error("cannot change protection for mapped program #{0}")]
-    ChangeProtectionFailed(usize, #[source] crate::memory::MprotectError),
+    #[error("cannot protect the memory")]
+    ProtectionMemoryFailed(#[source] crate::memory::MprotectError),
 }
 
 /// Represents the error for symbol resolving.
@@ -665,6 +696,9 @@ pub enum ResolveSymbolError {
 /// Represents the errors for [`Module::apply_relocs()`].
 #[derive(Debug, Error)]
 pub enum RelocError<R: Error> {
+    #[error("cannot unprotect the memory")]
+    UnprotectMemoryFailed(#[source] MprotectError),
+
     #[error("unknown relocation type {1:#010x} on entry {0}")]
     UnknownRelocationType(usize, u32),
 

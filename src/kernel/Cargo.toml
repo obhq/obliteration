@@ -9,6 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 bitflags = "2.1"
+byteorder = "1.4"
 clap = { version = "4.1", features = ["derive"] }
 elf = { path = "../elf" }
 iced-x86 = "1.18"

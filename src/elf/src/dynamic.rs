@@ -602,7 +602,7 @@ impl<'a> Iterator for RelocationEntries<'a> {
         // FIXME: Handle invalid data instead of panic.
         let offset = LE::read_u64(self.next) as usize;
         let info = LE::read_u64(&self.next[8..]);
-        let addend = LE::read_i64(&self.next[16..]);
+        let addend = LE::read_u64(&self.next[16..]) as usize;
 
         self.next = &self.next[self.relaent..];
 
@@ -618,10 +618,11 @@ impl<'a> Iterator for RelocationEntries<'a> {
 pub struct RelocationInfo {
     offset: usize,
     info: u64,
-    addend: i64,
+    addend: usize,
 }
 
 impl RelocationInfo {
+    pub const R_X86_64_NONE: u32 = 0;
     pub const R_X86_64_64: u32 = 1;
     pub const R_X86_64_PC32: u32 = 2;
     pub const R_X86_64_GLOB_DAT: u32 = 6;
@@ -643,6 +644,10 @@ impl RelocationInfo {
 
     pub fn offset(&self) -> usize {
         self.offset
+    }
+
+    pub fn addend(&self) -> usize {
+        self.addend
     }
 }
 
