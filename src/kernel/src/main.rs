@@ -184,12 +184,23 @@ fn run() -> bool {
         }
     }
 
+    // Get dependency chain.
+    info!("Getting eboot.bin dependency chain.");
+
+    let deps = match modules.get_deps(&eboot) {
+        Ok(v) => v,
+        Err(e) => {
+            error!(e, "Getting failed");
+            return false;
+        }
+    };
+
     // Lift the loaded modules.
-    for module in [eboot] {
+    for module in [eboot].iter().chain(deps.iter()).rev() {
         // Lift the module.
         info!("Lifting {}.", module.image().name());
 
-        match LiftedModule::lift(&llvm, module) {
+        match LiftedModule::lift(&llvm, module.clone()) {
             Ok(_) => {} // TODO: Store the lifted module somewhere.
             Err(e) => {
                 error!(e, "Lifting failed");
