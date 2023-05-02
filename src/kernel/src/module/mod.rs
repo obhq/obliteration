@@ -5,7 +5,7 @@ use crate::memory::{MemoryManager, MprotectError, Protections};
 use byteorder::{ByteOrder, NativeEndian};
 use elf::dynamic::{DynamicLinking, ModuleFlags, RelocationInfo, SymbolInfo};
 use elf::{Elf, ProgramFlags, ProgramType};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fs::{read_dir, File};
 use std::io::{Read, Seek};
@@ -45,6 +45,76 @@ impl<'a> ModuleManager<'a> {
 
     pub fn available_count(&self) -> usize {
         self.available.len()
+    }
+
+    /// Recursive get the dependencies of `target`. The return value is ordered by the dependency
+    /// chain, which mean the most common module will be the last item.
+    pub fn get_deps(&self, target: &Module) -> Result<Vec<Arc<Module>>, DependencyChainError> {
+        // Check if the module is a dynamic module.
+        let dynamic = match target.image().dynamic_linking() {
+            Some(v) => v,
+            None => return Ok(Vec::new()),
+        };
+
+        // Collect dependencies.
+        let loaded = self.loaded.read().unwrap();
+        let mut deps: HashMap<&VPathBuf, (usize, Arc<Module>)> = HashMap::new();
+        let mut current: Vec<&str> = dynamic.dependencies().values().map(|m| m.name()).collect();
+        let mut next: HashSet<&str> = HashSet::new();
+
+        for level in 0.. {
+            if current.is_empty() {
+                break;
+            }
+
+            for dep in current.drain(..) {
+                // Get module path.
+                let paths = match self.available.get(dep) {
+                    Some(v) => v,
+                    None => return Err(DependencyChainError::NoModule(dep.to_owned())),
+                };
+
+                for path in paths {
+                    use std::collections::hash_map::Entry;
+
+                    // Check if module exists in the chain.
+                    let entry = match deps.entry(path) {
+                        Entry::Occupied(mut e) => {
+                            e.get_mut().0 = level;
+                            continue;
+                        }
+                        Entry::Vacant(e) => e,
+                    };
+
+                    // Get loaded module.
+                    let module = match loaded.get(path) {
+                        Some(v) => v,
+                        None => return Err(DependencyChainError::NotLoaded(path.clone())),
+                    };
+
+                    entry.insert((level, module.clone()));
+
+                    // Get module dependencies.
+                    let dynamic = match module.image().dynamic_linking() {
+                        Some(v) => v,
+                        None => continue,
+                    };
+
+                    for dep in dynamic.dependencies().values() {
+                        next.insert(dep.name());
+                    }
+                }
+            }
+
+            current.extend(next.drain());
+        }
+
+        // Create dependency chain.
+        let mut chain: Vec<(usize, Arc<Module>)> = deps.into_values().collect();
+
+        chain.sort_unstable_by_key(|i| i.0);
+
+        Ok(chain.into_iter().map(|i| i.1).collect())
     }
 
     /// This function only load eboot.bin without its dependencies into the memory, no relocation is
@@ -737,4 +807,14 @@ pub enum ExternalSymbolError<R: Error> {
 
     #[error("cannot resolve {0} ({1:#010x})")]
     ResolveFailed(String, u32, #[source] R),
+}
+
+/// Represens the errors for dependency chain.
+#[derive(Debug, Error)]
+pub enum DependencyChainError {
+    #[error("module {0} is not available")]
+    NoModule(String),
+
+    #[error("module {0} is not loaded")]
+    NotLoaded(VPathBuf),
 }
