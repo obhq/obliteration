@@ -18,7 +18,7 @@ pub struct Elf<I: Read + Seek> {
     name: String,
     image: I,
     self_data: Option<SelfData>,
-    entry_addr: usize,
+    entry_addr: Option<usize>,
     programs: Vec<Program>,
     dynamic_linking: Option<DynamicLinking>,
 }
@@ -159,7 +159,10 @@ impl<I: Read + Seek> Elf<I> {
             name: name.into(),
             image,
             self_data,
-            entry_addr: e_entry as usize,
+            entry_addr: match e_entry {
+                0 => None,
+                v => Some(v as usize),
+            },
             programs,
             dynamic_linking: None,
         };
@@ -205,7 +208,7 @@ impl<I: Read + Seek> Elf<I> {
         self.self_data.as_ref().map(|d| d.segments.as_slice())
     }
 
-    pub fn entry_addr(&self) -> usize {
+    pub fn entry_addr(&self) -> Option<usize> {
         self.entry_addr
     }
 
