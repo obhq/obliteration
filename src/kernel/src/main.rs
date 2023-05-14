@@ -244,26 +244,28 @@ fn print_module(module: &Module) {
         }
     }
 
+    // Memory.
+    let mem = module.memory();
+
     info!(
         "Memory address: {:#018x}:{:#018x}",
-        module.memory().addr(),
-        module.memory().addr() + module.memory().len()
+        mem.addr(),
+        mem.addr() + mem.len()
     );
 
-    info!(
-        "Entry address : {:#018x}",
-        module.memory().addr() + module.image().entry_addr()
-    );
+    if let Some(entry) = image.entry_addr() {
+        info!("Entry address : {:#018x}", mem.addr() + entry);
+    }
 
-    for s in module.memory().segments().iter() {
-        let addr = module.memory().addr() + s.start();
+    for s in mem.segments().iter() {
+        let addr = mem.addr() + s.start();
 
         info!(
             "Program {} is mapped to {:#018x}:{:#018x} with {}.",
             s.program(),
             addr,
             addr + s.len(),
-            module.image().programs()[s.program()].flags(),
+            image.programs()[s.program()].flags(),
         );
     }
 }

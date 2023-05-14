@@ -19,12 +19,19 @@ impl<'a> LiftedModule<'a> {
     /// Dynamic linking and relocation of `module` must be already resolved before passing to this
     /// function.
     pub fn lift(llvm: &'a Llvm, module: Arc<Module<'a>>) -> Result<Self, LiftError> {
+        // Get a list of public functions.
+        let mut targets = match module.image().entry_addr() {
+            Some(v) => vec![v],
+            None => Vec::new(),
+        };
+
         // Disassemble the module.
-        let entry = module.image().entry_addr();
         let mut disasm = Disassembler::new(module.memory());
 
-        if let Err(e) = disasm.disassemble(entry) {
-            return Err(LiftError::DisassembleFailed(entry, e));
+        for &addr in &targets {
+            if let Err(e) = disasm.disassemble(addr) {
+                return Err(LiftError::DisassembleFailed(addr, e));
+            }
         }
 
         disasm.fixup();
@@ -33,8 +40,10 @@ impl<'a> LiftedModule<'a> {
         let mut lifting = llvm.lock().create_module(module.image().name());
         let mut codegen = Codegen::new(&disasm, &mut lifting);
 
-        if let Err(e) = codegen.lift(entry) {
-            return Err(LiftError::LiftingFailed(entry, e));
+        for &addr in &targets {
+            if let Err(e) = codegen.lift(addr) {
+                return Err(LiftError::LiftingFailed(addr, e));
+            }
         }
 
         // Create LLVM execution engine.
