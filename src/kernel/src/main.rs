@@ -1,20 +1,19 @@
-use crate::fs::path::VPath;
-use crate::fs::path::VPathBuf;
+use crate::fs::path::{VPath, VPathBuf};
 use crate::fs::Fs;
-use crate::lifter::LiftedModule;
 use crate::llvm::Llvm;
 use crate::memory::MemoryManager;
-use crate::module::Module;
-use crate::module::ModuleManager;
-use clap::Parser;
+use crate::module::{Module, ModuleManager};
+use clap::{Parser, ValueEnum};
 use serde::Deserialize;
 use std::collections::VecDeque;
 use std::fs::File;
 use std::path::PathBuf;
+use std::process::ExitCode;
 
+mod disasm;
+mod ee;
 mod errno;
 mod fs;
-mod lifter;
 mod llvm;
 mod log;
 mod memory;
@@ -34,20 +33,25 @@ struct Args {
 
     #[arg(long)]
     clear_debug_dump: bool,
+
+    #[arg(long, short)]
+    execution_engine: Option<ExecutionEngine>,
 }
 
-fn main() {
-    std::process::exit(if run() { 0 } else { 1 });
+#[derive(Clone, ValueEnum, Deserialize)]
+enum ExecutionEngine {
+    Native,
+    Llvm,
 }
 
-fn run() -> bool {
+fn main() -> ExitCode {
     // Load arguments.
     let args = if std::env::args().any(|a| a == "--debug") {
         let file = match File::open(".kernel-debug") {
             Ok(v) => v,
             Err(e) => {
                 error!(e, "Failed to open .kernel-debug");
-                return false;
+                return ExitCode::FAILURE;
             }
         };
 
@@ -55,7 +59,7 @@ fn run() -> bool {
             Ok(v) => v,
             Err(e) => {
                 error!(e, "Failed to read .kernel-debug");
-                return false;
+                return ExitCode::FAILURE;
             }
         }
     } else {
@@ -67,7 +71,7 @@ fn run() -> bool {
         if let Err(e) = std::fs::remove_dir_all(&args.debug_dump) {
             if e.kind() != std::io::ErrorKind::NotFound {
                 error!(e, "Failed to remove {}", args.debug_dump.display());
-                return false;
+                return ExitCode::FAILURE;
             }
         }
     }
@@ -86,14 +90,14 @@ fn run() -> bool {
 
     if let Err(e) = fs.mount(VPathBuf::new(), args.system) {
         error!(e, "Mount failed");
-        return false;
+        return ExitCode::FAILURE;
     }
 
     info!("Mounting /mnt/app0 to {}.", args.game.display());
 
     if let Err(e) = fs.mount(VPath::new("/mnt/app0").unwrap(), args.game) {
         error!(e, "Mount failed");
-        return false;
+        return ExitCode::FAILURE;
     }
 
     // Initialize memory manager.
@@ -123,7 +127,7 @@ fn run() -> bool {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Load failed");
-            return false;
+            return ExitCode::FAILURE;
         }
     };
 
@@ -149,7 +153,7 @@ fn run() -> bool {
             Ok(v) => v,
             Err(e) => {
                 error!(e, "Cannot load {name}");
-                return false;
+                return ExitCode::FAILURE;
             }
         };
 
@@ -180,36 +184,53 @@ fn run() -> bool {
 
         if let Err(e) = unsafe { module.apply_relocs(|h, n| modules.resolve_symbol(h, n)) } {
             error!(e, "Applying failed");
-            return false;
+            return ExitCode::FAILURE;
         }
     }
 
-    // Get dependency chain.
-    info!("Getting eboot.bin dependency chain.");
+    // Get execution engine.
+    info!("Initializing execution engine.");
 
-    let deps = match modules.get_deps(&eboot) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Getting failed");
-            return false;
-        }
-    };
-
-    // Lift the loaded modules.
-    for module in [eboot].iter().chain(deps.iter()).rev() {
-        // Lift the module.
-        info!("Lifting {}.", module.image().name());
-
-        match LiftedModule::lift(&llvm, module.clone()) {
-            Ok(_) => {} // TODO: Store the lifted module somewhere.
-            Err(e) => {
-                error!(e, "Lifting failed");
+    match args.execution_engine {
+        Some(ee) => match ee {
+            #[cfg(target_arch = "x86_64")]
+            ExecutionEngine::Native => exec_with_native(&modules),
+            #[cfg(not(target_arch = "x86_64"))]
+            ExecutionEngine::Native => {
+                error!("Native execution engine cannot be used on your machine.");
                 return false;
             }
-        }
+            ExecutionEngine::Llvm => exec_with_llvm(&llvm, &modules),
+        },
+        #[cfg(target_arch = "x86_64")]
+        None => exec_with_native(&modules),
+        #[cfg(not(target_arch = "x86_64"))]
+        None => exec_with_llvm(&llvm, &modules),
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+fn exec_with_native(modules: &ModuleManager) -> ExitCode {
+    let ee = ee::native::NativeEngine::new(modules);
+
+    exec(ee)
+}
+
+fn exec_with_llvm(llvm: &Llvm, modules: &ModuleManager) -> ExitCode {
+    let mut ee = ee::llvm::LlvmEngine::new(llvm, modules);
+
+    info!("Lifting modules.");
+
+    if let Err(e) = ee.lift_modules() {
+        error!(e, "Lift failed");
+        return ExitCode::FAILURE;
     }
 
-    true
+    exec(ee)
+}
+
+fn exec<E: ee::ExecutionEngine>(ee: E) -> ExitCode {
+    ExitCode::SUCCESS
 }
 
 fn print_module(module: &Module) {

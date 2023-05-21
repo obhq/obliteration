@@ -1,4 +1,4 @@
-use super::disasm::Disassembler;
+use crate::disasm::Disassembler;
 use crate::llvm::module::LlvmModule;
 use thiserror::Error;
 

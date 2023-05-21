@@ -1,19 +1,19 @@
-use self::memory::UnprotectedMemory;
 use crate::fs::path::{VPath, VPathBuf};
 use crate::fs::{Fs, FsItem};
-use crate::memory::{MemoryManager, MprotectError, Protections};
+use crate::memory::{MemoryManager, MprotectError};
 use byteorder::{ByteOrder, NativeEndian};
 use elf::dynamic::{DynamicLinking, ModuleFlags, RelocationInfo, SymbolInfo};
-use elf::{Elf, ProgramFlags, ProgramType};
+use elf::Elf;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
 use std::fs::{read_dir, File};
-use std::io::{Read, Seek};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
 
-pub mod memory;
+pub use memory::*;
+
+mod memory;
 
 /// Manage all loaded modules.
 pub struct ModuleManager<'a> {
@@ -45,6 +45,16 @@ impl<'a> ModuleManager<'a> {
 
     pub fn available_count(&self) -> usize {
         self.available.len()
+    }
+
+    pub fn get_eboot(&self) -> Arc<Module<'a>> {
+        let key: &VPath = Self::EBOOT_PATH.try_into().unwrap();
+        let loaded = self.loaded.read().unwrap();
+
+        match loaded.get(key) {
+            Some(v) => v.clone(),
+            None => panic!("eboot.bin is not loaded."),
+        }
     }
 
     /// Recursive get the dependencies of `target`. The return value is ordered by the dependency
@@ -534,190 +544,6 @@ impl<'a> Module<'a> {
         }
 
         h
-    }
-}
-
-/// Represents a memory of the module.
-pub struct Memory<'a> {
-    mm: &'a MemoryManager,
-    ptr: *mut u8,
-    len: usize,
-    segments: Vec<MemorySegment>,
-}
-
-impl<'a> Memory<'a> {
-    fn new<I: Read + Seek>(elf: &Elf<I>, mm: &'a MemoryManager) -> Result<Self, LoadError> {
-        use crate::memory::MappingFlags;
-
-        let programs = elf.programs();
-
-        // Create segments from programs.
-        let mut segments: Vec<MemorySegment> = Vec::with_capacity(programs.len());
-
-        for (i, p) in programs.iter().enumerate() {
-            let t = p.ty();
-
-            if t == ProgramType::PT_LOAD || t == ProgramType::PT_SCE_RELRO {
-                // Check if size in memory valid.
-                let len = p.aligned_size();
-
-                if len == 0 {
-                    return Err(LoadError::ZeroLenProgram(i));
-                }
-
-                // Get protection.
-                let flags = p.flags();
-                let mut prot = Protections::NONE;
-
-                if flags.contains(ProgramFlags::EXECUTE) {
-                    prot |= Protections::CPU_EXEC;
-                }
-
-                if flags.contains(ProgramFlags::READ) {
-                    prot |= Protections::CPU_READ;
-                }
-
-                if flags.contains(ProgramFlags::WRITE) {
-                    prot |= Protections::CPU_WRITE;
-                }
-
-                // Construct the segment info.
-                segments.push(MemorySegment {
-                    start: p.addr(),
-                    len,
-                    program: i,
-                    prot,
-                });
-            }
-        }
-
-        if segments.is_empty() {
-            return Err(LoadError::NoMappablePrograms);
-        }
-
-        // Make sure no any segment is overlapped.
-        let mut len = 0;
-
-        segments.sort_unstable_by_key(|s| s.start);
-
-        for s in &segments {
-            if s.start < len {
-                return Err(LoadError::ProgramAddressOverlapped(s.program));
-            }
-
-            len += s.len;
-        }
-
-        // Allocate pages.
-        let ptr = match mm.mmap(
-            0,
-            len,
-            Protections::CPU_READ | Protections::CPU_WRITE,
-            MappingFlags::MAP_ANON | MappingFlags::MAP_PRIVATE,
-            -1,
-            0,
-        ) {
-            Ok(v) => v,
-            Err(e) => return Err(LoadError::MemoryAllocationFailed(len, e)),
-        };
-
-        Ok(Self {
-            mm,
-            ptr,
-            len,
-            segments,
-        })
-    }
-
-    fn load<L, E>(&mut self, mut loader: L) -> Result<(), E>
-    where
-        L: FnMut(usize, &mut [u8]) -> Result<(), E>,
-    {
-        for seg in &self.segments {
-            // Get destination buffer.
-            let ptr = unsafe { self.ptr.add(seg.start) };
-            let dst = unsafe { std::slice::from_raw_parts_mut(ptr, seg.len) };
-
-            // Invoke loader.
-            loader(seg.program, dst)?;
-        }
-
-        Ok(())
-    }
-
-    pub fn addr(&self) -> usize {
-        self.ptr as usize
-    }
-
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    pub fn segments(&self) -> &[MemorySegment] {
-        self.segments.as_ref()
-    }
-
-    fn protect(&self) -> Result<(), MprotectError> {
-        for seg in &self.segments {
-            let addr = unsafe { self.ptr.add(seg.start) };
-
-            self.mm.mprotect(addr, seg.len, seg.prot)?;
-        }
-
-        Ok(())
-    }
-
-    /// # Safety
-    /// Only a single thread can have access to the unprotected memory.
-    unsafe fn unprotect(&self) -> Result<UnprotectedMemory<'_>, MprotectError> {
-        self.mm.mprotect(
-            self.ptr,
-            self.len,
-            Protections::CPU_READ | Protections::CPU_WRITE,
-        )?;
-
-        Ok(UnprotectedMemory::new(self))
-    }
-}
-
-impl<'a> AsRef<[u8]> for Memory<'a> {
-    fn as_ref(&self) -> &[u8] {
-        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
-    }
-}
-
-impl<'a> Drop for Memory<'a> {
-    fn drop(&mut self) {
-        if let Err(e) = self.mm.munmap(self.ptr, self.len) {
-            panic!(
-                "Failed to unmap {} bytes starting at {:p}: {}.",
-                self.len, self.ptr, e
-            );
-        }
-    }
-}
-
-/// Contains information for a segment in [`Memory`].
-pub struct MemorySegment {
-    start: usize,
-    len: usize,
-    program: usize,
-    prot: Protections,
-}
-
-impl MemorySegment {
-    /// Gets the offset within the module memory of this segment.
-    pub fn start(&self) -> usize {
-        self.start
-    }
-
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    /// Gets the corresponding index of SELF program.
-    pub fn program(&self) -> usize {
-        self.program
     }
 }
 
