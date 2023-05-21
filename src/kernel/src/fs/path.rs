@@ -4,6 +4,7 @@ use std::ops::Deref;
 use thiserror::Error;
 
 /// A full path in the PS4 system.
+#[derive(PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct VPath(str);
 
@@ -144,12 +145,12 @@ impl From<&VPath> for VPathBuf {
     }
 }
 
-impl TryFrom<&'static str> for VPathBuf {
+impl TryFrom<&str> for VPathBuf {
     type Error = ();
 
-    fn try_from(value: &'static str) -> Result<Self, Self::Error> {
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
         if VPath::is_valid(value) {
-            Ok(Self(Cow::Borrowed(value)))
+            Ok(Self(Cow::Owned(value.to_owned())))
         } else {
             Err(())
         }
