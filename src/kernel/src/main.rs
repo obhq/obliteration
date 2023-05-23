@@ -229,7 +229,14 @@ fn exec_with_llvm(llvm: &Llvm, modules: &ModuleManager) -> ExitCode {
     exec(ee)
 }
 
-fn exec<E: ee::ExecutionEngine>(ee: E) -> ExitCode {
+fn exec<E: ee::ExecutionEngine>(mut ee: E) -> ExitCode {
+    info!("Starting application.");
+
+    if let Err(e) = ee.run() {
+        error!(e, "Starting failed");
+        return ExitCode::FAILURE;
+    }
+
     ExitCode::SUCCESS
 }
 

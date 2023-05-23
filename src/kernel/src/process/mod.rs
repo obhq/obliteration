@@ -51,36 +51,6 @@ impl Process {
         Ok(proc)
     }
 
-    pub fn run(&mut self) -> Result<i32, RunError> {
-        // TODO: Check how the actual binary read its argument.
-        // Setup arguments.
-        let mut argv: Vec<*mut u8> = Vec::new();
-        let mut arg1 = b"prog\0".to_vec();
-
-        argv.push(arg1.as_mut_ptr());
-        argv.push(null_mut());
-
-        // Invoke entry point.
-        let mut arg = Arg {
-            argc: (argv.len() as i32) - 1,
-            argv: argv.as_mut_ptr(),
-        };
-
-        (self.entry)(&mut arg, Self::exit);
-
-        Ok(0)
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    extern "sysv64" fn exit() {
-        // TODO: What should we do here?
-    }
-
-    #[cfg(not(target_arch = "x86_64"))]
-    extern "C" fn exit() {
-        // TODO: What should we do here?
-    }
-
     #[cfg(target_arch = "x86_64")]
     extern "sysv64" fn handle_ud2(&mut self, addr: usize) -> ! {
         info!("process exited with ud2 instruction from {:#018x}.", addr);

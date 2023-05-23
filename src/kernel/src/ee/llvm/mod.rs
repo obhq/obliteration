@@ -4,6 +4,7 @@ use crate::disasm::Disassembler;
 use crate::fs::path::VPathBuf;
 use crate::llvm::Llvm;
 use crate::module::{Module, ModuleManager};
+use std::error::Error;
 use thiserror::Error;
 
 mod codegen;
@@ -76,7 +77,11 @@ impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
     }
 }
 
-impl<'a, 'b: 'a> ExecutionEngine for LlvmEngine<'a, 'b> {}
+impl<'a, 'b: 'a> ExecutionEngine for LlvmEngine<'a, 'b> {
+    fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        todo!()
+    }
+}
 
 /// Represents errors for lifting module.
 #[derive(Debug, Error)]
