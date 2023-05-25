@@ -20,9 +20,10 @@ impl<'a> Module<'a> {
         id: u64,
         mut image: Elf<File>,
         mm: &'a MemoryManager,
+        workspace: usize,
     ) -> Result<Self, LoadError> {
         // Map SELF to the memory.
-        let mut memory = Memory::new(&image, mm)?;
+        let mut memory = Memory::new(&image, mm, workspace)?;
 
         memory.load(|prog, buf| {
             if let Err(e) = image.read_program(prog, buf) {

@@ -114,7 +114,7 @@ fn main() -> ExitCode {
     // Initialize the module manager.
     info!("Initializing module manager.");
 
-    let modules = ModuleManager::new(&fs, &mm);
+    let modules = ModuleManager::new(&fs, &mm, 1024 * 1024);
 
     info!("{} modules is available.", modules.available_count());
 
@@ -211,7 +211,14 @@ fn main() -> ExitCode {
 
 #[cfg(target_arch = "x86_64")]
 fn exec_with_native(modules: &ModuleManager) -> ExitCode {
-    let ee = ee::native::NativeEngine::new(modules);
+    let mut ee = ee::native::NativeEngine::new(modules);
+
+    info!("Patching syscalls.");
+
+    if let Err(e) = unsafe { ee.patch_syscalls() } {
+        error!(e, "Patch failed");
+        return ExitCode::FAILURE;
+    }
 
     exec(ee)
 }
