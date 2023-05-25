@@ -1,5 +1,6 @@
 pub use memory::*;
 pub use module::*;
+pub use workspace::*;
 
 use crate::fs::path::{VPath, VPathBuf};
 use crate::fs::{Fs, FsItem};
@@ -7,17 +8,20 @@ use crate::memory::MemoryManager;
 use elf::Elf;
 use std::collections::{HashMap, HashSet};
 use std::fs::{read_dir, File};
+use std::ops::Deref;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
 
 mod memory;
 mod module;
+mod workspace;
 
 /// Manage all loaded modules.
 pub struct ModuleManager<'a> {
     fs: &'a Fs,
     mm: &'a MemoryManager,
+    module_workspace: usize,
     available: HashMap<String, Vec<VPathBuf>>, // Key is module name.
     loaded: RwLock<HashMap<VPathBuf, Arc<Module<'a>>>>,
     next_id: AtomicU64,
@@ -26,10 +30,11 @@ pub struct ModuleManager<'a> {
 impl<'a> ModuleManager<'a> {
     pub const EBOOT_PATH: &str = "/mnt/app0/eboot.bin";
 
-    pub fn new(fs: &'a Fs, mm: &'a MemoryManager) -> Self {
+    pub fn new(fs: &'a Fs, mm: &'a MemoryManager, module_workspace: usize) -> Self {
         let mut m = Self {
             fs,
             mm,
+            module_workspace,
             available: HashMap::new(),
             loaded: RwLock::new(HashMap::new()),
             next_id: AtomicU64::new(1),
@@ -58,6 +63,19 @@ impl<'a> ModuleManager<'a> {
 
     pub fn get_mod(&self, path: &VPath) -> Option<Arc<Module<'a>>> {
         self.loaded.read().unwrap().get(path).map(|m| m.clone())
+    }
+
+    pub fn for_each<F, E>(&self, mut f: F) -> Result<(), E>
+    where
+        F: FnMut(&Arc<Module<'a>>) -> Result<(), E>,
+    {
+        let loaded = self.loaded.read().unwrap();
+
+        for (_, m) in loaded.deref() {
+            f(m)?;
+        }
+
+        Ok(())
     }
 
     /// Recursive get the dependencies of `target`. The return value is ordered by the dependency
@@ -142,7 +160,7 @@ impl<'a> ModuleManager<'a> {
         }
 
         // Load the module.
-        let module = Arc::new(self.load(&path)?);
+        let module = Arc::new(self.load(&path, self.module_workspace)?);
 
         loaded.insert(path, module.clone());
 
@@ -171,7 +189,7 @@ impl<'a> ModuleManager<'a> {
             }
 
             // Load the module.
-            let module = Arc::new(self.load(&file)?);
+            let module = Arc::new(self.load(&file, self.module_workspace)?);
 
             loaded.insert(file.clone(), module.clone());
             modules.push(module);
@@ -219,7 +237,7 @@ impl<'a> ModuleManager<'a> {
         Err(ResolveSymbolError::NotFound)
     }
 
-    fn load(&self, path: &VPath) -> Result<Module<'a>, LoadError> {
+    fn load(&self, path: &VPath, workspace: usize) -> Result<Module<'a>, LoadError> {
         // Get the module.
         let file = match self.fs.get(path) {
             Some(v) => match v {
@@ -242,7 +260,12 @@ impl<'a> ModuleManager<'a> {
         };
 
         // Map the module to the memory.
-        Module::load(self.next_id.fetch_add(1, Ordering::Relaxed), elf, self.mm)
+        Module::load(
+            self.next_id.fetch_add(1, Ordering::Relaxed),
+            elf,
+            self.mm,
+            workspace,
+        )
     }
 
     fn update_available(&mut self, from: &VPath) {

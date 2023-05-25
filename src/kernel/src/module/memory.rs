@@ -1,4 +1,4 @@
-use super::LoadError;
+use super::{LoadError, ModuleWorkspace};
 use crate::memory::{MemoryManager, MprotectError, Protections};
 use elf::{Elf, ProgramFlags, ProgramType};
 use std::fs::File;
@@ -11,10 +11,15 @@ pub struct Memory<'a> {
     ptr: *mut u8,
     len: usize,
     segments: Vec<MemorySegment>,
+    workspace: ModuleWorkspace,
 }
 
 impl<'a> Memory<'a> {
-    pub(super) fn new(elf: &Elf<File>, mm: &'a MemoryManager) -> Result<Self, LoadError> {
+    pub(super) fn new(
+        elf: &Elf<File>,
+        mm: &'a MemoryManager,
+        workspace: usize,
+    ) -> Result<Self, LoadError> {
         use crate::memory::MappingFlags;
 
         let programs = elf.programs();
@@ -79,20 +84,21 @@ impl<'a> Memory<'a> {
         // Allocate pages.
         let ptr = match mm.mmap(
             0,
-            len,
-            Protections::CPU_READ | Protections::CPU_WRITE,
+            len + workspace,
+            Protections::CPU_READ | Protections::CPU_WRITE | Protections::CPU_EXEC,
             MappingFlags::MAP_ANON | MappingFlags::MAP_PRIVATE,
             -1,
             0,
         ) {
             Ok(v) => v,
-            Err(e) => return Err(LoadError::MemoryAllocationFailed(len, e)),
+            Err(e) => return Err(LoadError::MemoryAllocationFailed(len + workspace, e)),
         };
 
         Ok(Self {
             mm,
             ptr,
             len,
+            workspace: ModuleWorkspace::new(unsafe { ptr.add(len) }, workspace),
             segments,
         })
     }
@@ -125,6 +131,10 @@ impl<'a> Memory<'a> {
         self.segments.as_ref()
     }
 
+    pub fn workspace(&self) -> &ModuleWorkspace {
+        &self.workspace
+    }
+
     pub(super) fn protect(&self) -> Result<(), MprotectError> {
         for seg in &self.segments {
             let addr = unsafe { self.ptr.add(seg.start) };
@@ -137,14 +147,14 @@ impl<'a> Memory<'a> {
 
     /// # Safety
     /// Only a single thread can have access to the unprotected memory.
-    pub(super) unsafe fn unprotect(&self) -> Result<UnprotectedMemory<'_>, MprotectError> {
+    pub unsafe fn unprotect(&self) -> Result<UnprotectedMemory<'_>, MprotectError> {
         self.mm.mprotect(
             self.ptr,
             self.len,
             Protections::CPU_READ | Protections::CPU_WRITE,
         )?;
 
-        Ok(UnprotectedMemory::new(self))
+        Ok(UnprotectedMemory(self))
     }
 }
 
@@ -156,10 +166,12 @@ impl<'a> AsRef<[u8]> for Memory<'a> {
 
 impl<'a> Drop for Memory<'a> {
     fn drop(&mut self) {
-        if let Err(e) = self.mm.munmap(self.ptr, self.len) {
+        let len = self.len + self.workspace.len();
+
+        if let Err(e) = self.mm.munmap(self.ptr, len) {
             panic!(
-                "Failed to unmap {} bytes starting at {:p}: {}.",
-                self.len, self.ptr, e
+                "Failed to unmap {len} bytes starting at {:p}: {}.",
+                self.ptr, e
             );
         }
     }
@@ -187,16 +199,16 @@ impl MemorySegment {
     pub fn program(&self) -> usize {
         self.program
     }
+
+    pub fn prot(&self) -> Protections {
+        self.prot
+    }
 }
 
 /// Represents the memory of the module in unprotected form.
-pub(super) struct UnprotectedMemory<'a>(&'a Memory<'a>);
+pub struct UnprotectedMemory<'a>(&'a Memory<'a>);
 
 impl<'a> UnprotectedMemory<'a> {
-    pub fn new(unprotected: &'a Memory<'a>) -> Self {
-        Self(unprotected)
-    }
-
     pub fn addr(&self) -> usize {
         self.0.addr()
     }
