@@ -3,6 +3,7 @@ use crate::fs::Fs;
 use crate::llvm::Llvm;
 use crate::memory::MemoryManager;
 use crate::module::{Module, ModuleManager};
+use crate::syscalls::Syscalls;
 use clap::{Parser, ValueEnum};
 use serde::Deserialize;
 use std::collections::VecDeque;
@@ -18,6 +19,7 @@ mod llvm;
 mod log;
 mod memory;
 mod module;
+mod syscalls;
 
 #[derive(Parser, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -118,6 +120,11 @@ fn main() -> ExitCode {
 
     info!("{} modules is available.", modules.available_count());
 
+    // Initialize syscall routines.
+    info!("Initializing system call routines.");
+
+    let syscalls = Syscalls::new();
+
     // Load eboot.bin.
     let mut loaded = Vec::new();
 
@@ -194,7 +201,7 @@ fn main() -> ExitCode {
     match args.execution_engine {
         Some(ee) => match ee {
             #[cfg(target_arch = "x86_64")]
-            ExecutionEngine::Native => exec_with_native(&modules),
+            ExecutionEngine::Native => exec_with_native(&modules, &syscalls),
             #[cfg(not(target_arch = "x86_64"))]
             ExecutionEngine::Native => {
                 error!("Native execution engine cannot be used on your machine.");
@@ -203,21 +210,35 @@ fn main() -> ExitCode {
             ExecutionEngine::Llvm => exec_with_llvm(&llvm, &modules),
         },
         #[cfg(target_arch = "x86_64")]
-        None => exec_with_native(&modules),
+        None => exec_with_native(&modules, &syscalls),
         #[cfg(not(target_arch = "x86_64"))]
         None => exec_with_llvm(&llvm, &modules),
     }
 }
 
 #[cfg(target_arch = "x86_64")]
-fn exec_with_native(modules: &ModuleManager) -> ExitCode {
-    let mut ee = ee::native::NativeEngine::new(modules);
+fn exec_with_native(modules: &ModuleManager, syscalls: &Syscalls) -> ExitCode {
+    let mut ee = ee::native::NativeEngine::new(modules, syscalls);
 
-    info!("Patching syscalls.");
+    info!("Patching modules.");
 
-    if let Err(e) = unsafe { ee.patch_syscalls() } {
-        error!(e, "Patch failed");
-        return ExitCode::FAILURE;
+    match unsafe { ee.patch_mods() } {
+        Ok(r) => {
+            let mut t = 0;
+
+            for (m, c) in r {
+                if c != 0 {
+                    info!("{c} patch(es) has been applied to {m}.");
+                    t += 1;
+                }
+            }
+
+            info!("{t} module(s) has been patched successfully.");
+        }
+        Err(e) => {
+            error!(e, "Patch failed");
+            return ExitCode::FAILURE;
+        }
     }
 
     exec(ee)

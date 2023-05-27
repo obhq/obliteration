@@ -6,6 +6,7 @@ members = [
     "fs",
     "ftp",
     "kernel",
+    "kernel-macros",
     "pfs",
     "pkg",
     "system",
