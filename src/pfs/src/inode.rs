@@ -262,7 +262,6 @@ impl Inode {
         Ok(buf)
     }
 
-
     fn read_common_fields(
         index: usize,
         raw: &[u8],
