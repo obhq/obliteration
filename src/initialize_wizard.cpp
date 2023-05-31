@@ -34,7 +34,7 @@ public:
         setTitle("Introduction");
 
         // Introduction.
-        auto intro = new QLabel("This wizard will help you setup Obliteration.");
+        auto intro = new QLabel("This wizard will help you setup Obliteration. To ensure you're ready, make sure you have a jailbroken PS4 with an enabled FTP server. You will also need your PS4's IP address and the port used for FTP connection.");
         layout->addWidget(intro);
 
         setLayout(layout);
@@ -49,7 +49,7 @@ public:
 
         // Page properties.
         setTitle("Location for system files");
-        setSubTitle("The selected directory will be using for any PS4 data like save game data and firmware files.");
+        setSubTitle("The selected directory will be used for any PS4 data. (Save Data and Firmware Files).");
 
         // Widgets.
         layout->addLayout(setupInputRow());
@@ -67,7 +67,7 @@ public:
         }
 
         if (!QDir(path).exists()) {
-            QMessageBox::critical(this, "Error", "The location does not exists.");
+            QMessageBox::critical(this, "Error", "The location does not exist.");
             return false;
         }
 
@@ -123,7 +123,7 @@ public:
 
         // Page properties.
         setTitle("Location to install games");
-        setSubTitle("The selected directory will be using for game installation. Cannot be the same as system files and must be an empty directory.");
+        setSubTitle("The selected directory will be used for game installation. The directory cannot be the same as the system directory and must be an empty directory.");
 
         // Widgets.
         layout->addLayout(setupInputRow());
@@ -141,12 +141,12 @@ public:
         }
 
         if (!QDir(path).exists()) {
-            QMessageBox::critical(this, "Error", "The specified location does not exists.");
+            QMessageBox::critical(this, "Error", "The specified location does not exist.");
             return false;
         }
 
         if (path == field(FIELD_SYSTEM_LOCATION).toString()) {
-            QMessageBox::critical(this, "Error", "The specified location cannot be the same location as system files.");
+            QMessageBox::critical(this, "Error", "The specified location cannot be the same as the system directory.");
             return false;
         }
 
@@ -202,7 +202,7 @@ public:
 
         // Page properties.
         setTitle("Install firmware");
-        setSubTitle("Obliteration required some firmware files from PS4 in order to work. You need to install those files before you can use Obliteration.");
+        setSubTitle("Obliteration requires some firmware files from your PS4 in order to work. You will need to transfer those files before you can use Obliteration.");
 
         // Page widgets.
         m_form = new UpdateFirmware();
@@ -222,7 +222,7 @@ public:
         auto from = m_form->from();
 
         if (from.isEmpty()) {
-            QMessageBox::critical(this, "Error", "No FTP server has been specified.");
+            QMessageBox::critical(this, "Error", "No FTP server was specified.");
             return false;
         }
 
@@ -243,10 +243,10 @@ public:
         auto layout = new QVBoxLayout();
 
         // Page properties.
-        setTitle("Setup completed");
+        setTitle("Setup complete.");
 
         // Introduction.
-        auto intro = new QLabel("You can now install your games and play it with Obliteration.");
+        auto intro = new QLabel("You can now install your games and play them using Obliteration.");
         layout->addWidget(intro);
 
         setLayout(layout);
@@ -273,7 +273,7 @@ public:
 InitializeWizard::InitializeWizard()
 {
     // Window properties.
-    setWindowTitle("Setup Obliteration");
+    setWindowTitle("Setup Obliteration.");
 
     // Pages.
     setPage(PageIntro, new IntroPage());

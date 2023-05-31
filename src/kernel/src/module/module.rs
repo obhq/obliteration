@@ -266,10 +266,10 @@ pub enum ExternalSymbolError<R: Error> {
     #[error("invalid name")]
     InvalidName,
 
-    #[error("module #{0} does not exists")]
+    #[error("module #{0} does not exist")]
     InvalidModule(u16),
 
-    #[error("library #{0} does not exists")]
+    #[error("library #{0} does not exist")]
     InvalidLibrary(u16),
 
     #[error("cannot resolve {0} ({1:#010x})")]

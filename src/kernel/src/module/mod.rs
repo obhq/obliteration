@@ -244,7 +244,7 @@ impl<'a> ModuleManager<'a> {
                 FsItem::Directory(_) => panic!("{path} is a directory."),
                 FsItem::File(v) => v,
             },
-            None => panic!("{path} does not exists."),
+            None => panic!("{path} does not exist."),
         };
 
         // Open the module.
@@ -275,7 +275,7 @@ impl<'a> ModuleManager<'a> {
         let dir = match self.fs.get(from) {
             Some(v) => match v {
                 FsItem::Directory(v) => v,
-                FsItem::File(_) => panic!("{from} is expected to be a directory but it is a file."),
+                FsItem::File(_) => panic!("{from} was expected to be a directory but it is a file."),
             },
             None => return,
         };
@@ -359,16 +359,16 @@ impl<'a> ModuleManager<'a> {
 /// Represents the errors for [`ModuleManager::load_eboot()`] and [`ModuleManager::load_lib()`].
 #[derive(Debug, Error)]
 pub enum LoadError {
-    #[error("the specified module is not found")]
+    #[error("the specified module was not found")]
     NotFound,
 
-    #[error("program #{0} has zero size in the memory")]
+    #[error("program #{0} has zero size in memory")]
     ZeroLenProgram(usize),
 
-    #[error("no any mappable programs")]
+    #[error("there are no mappable programs")]
     NoMappablePrograms,
 
-    #[error("program #{0} has address overlapped with the other program")]
+    #[error("program #{0} has address overlapped with another program")]
     ProgramAddressOverlapped(usize),
 
     #[error("cannot allocate {0} bytes")]
@@ -377,7 +377,7 @@ pub enum LoadError {
     #[error("cannot read program #{0}")]
     ReadProgramFailed(usize, #[source] elf::ReadProgramError),
 
-    #[error("cannot protect the memory")]
+    #[error("cannot protect memory")]
     ProtectionMemoryFailed(#[source] crate::memory::MprotectError),
 }
 

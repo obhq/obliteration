@@ -404,7 +404,7 @@ struct Arg {
 /// Errors for [`NativeEngine::patch_mods()`].
 #[derive(Debug, Error)]
 pub enum PatchModsError {
-    #[error("cannot unprotect the memory of {0}")]
+    #[error("cannot unprotect memory {0}")]
     UnprotectMemoryFailed(VPathBuf, #[source] MprotectError),
 
     #[error("cannot build a trampoline for {1:#018x} on {0}")]
