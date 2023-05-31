@@ -14,7 +14,6 @@ use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
 use thiserror::Error;
-use util::mem::{new_buffer, uninit};
 
 pub mod entry;
 pub mod header;
@@ -379,7 +378,7 @@ impl Pkg {
         };
 
         // Enumerate items.
-        let mut buffer: Vec<u8> = unsafe { new_buffer(32768) };
+        let mut buffer: Vec<u8> = vec![0; 32768];
 
         for (name, item) in items {
             use pfs::directory::Item;
@@ -571,7 +570,7 @@ impl Pkg {
 
         // Dump blocks.
         loop {
-            let mut block: [u8; 16] = unsafe { uninit() };
+            let mut block: [u8; 16] = [0u8; 16];
 
             encrypted = match util::array::read_from_slice(&mut block, encrypted) {
                 Some(v) => v,
@@ -606,8 +605,8 @@ impl Pkg {
         let secret = sha256.finalize();
 
         // Extract key and IV.
-        let mut key: [u8; 16] = unsafe { uninit() };
-        let mut iv: [u8; 16] = unsafe { uninit() };
+        let mut key: [u8; 16] = [0u8; 16];
+        let mut iv: [u8; 16] = [0u8; 16];
         let mut p = secret.as_ptr();
 
         p = unsafe { util::array::read_from_ptr(&mut iv, p) };
@@ -627,7 +626,7 @@ impl Pkg {
         };
 
         // Read seed.
-        let mut seed: [u8; 32] = unsafe { uninit() };
+        let mut seed: [u8; 32] = [0u8; 32];
 
         data = match util::array::read_from_slice(&mut seed, data) {
             Some(v) => v,
@@ -635,7 +634,7 @@ impl Pkg {
         };
 
         // Read digests.
-        let mut digests: [[u8; 32]; 7] = unsafe { uninit() };
+        let mut digests: [[u8; 32]; 7] = [[0u8; 32]; 7];
 
         for i in 0..7 {
             data = match util::array::read_from_slice(&mut digests[i], data) {
@@ -645,7 +644,7 @@ impl Pkg {
         }
 
         // Read keys.
-        let mut keys: [[u8; 256]; 7] = unsafe { uninit() };
+        let mut keys: [[u8; 256]; 7] = [[0u8; 256]; 7];
 
         for i in 0..7 {
             data = match util::array::read_from_slice(&mut keys[i], data) {

@@ -2,7 +2,6 @@ use byteorder::{ByteOrder, LE};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::Read;
-use util::mem::{new_buffer, uninit};
 
 pub(super) struct Dirent {
     ino: usize,
@@ -19,7 +18,7 @@ impl Dirent {
 
     pub fn read<F: Read>(from: &mut F) -> Result<Self, ReadError> {
         // Read static sized fields.
-        let mut data: [u8; 16] = unsafe { uninit() };
+        let mut data: [u8; 16] = [0u8; 16];
 
         from.read_exact(&mut data)?;
 
@@ -34,7 +33,7 @@ impl Dirent {
         let namelen = LE::read_u32(&data[0x08..]) as usize;
 
         // Read name.
-        let mut name = unsafe { new_buffer(namelen) };
+        let mut name = vec![0; namelen];
 
         from.read_exact(&mut name)?;
 
