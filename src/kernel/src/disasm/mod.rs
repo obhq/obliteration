@@ -216,6 +216,7 @@ impl From<iced_x86::Register> for Param {
     fn from(value: Register) -> Self {
         match value {
             Register::RDI => Self::Int(64),
+            Register::RSI => Self::Int(64),
             v => panic!("Register {v:?} is not supported yet."),
         }
     }
@@ -230,15 +231,41 @@ pub(super) enum Instruction {
 /// Represents the operand of the instruction.
 pub(super) enum Operand {
     Param(usize),
+    Rax(usize),
     Rbp(usize),
+    Rbx(usize),
+    Rcx(usize),
+    Rdi(usize),
+    Rdx(usize),
+    Rsi(usize),
+    R8(usize),
+    R9(usize),
+    R10(usize),
+    R11(usize),
     R12(usize),
+    R13(usize),
+    R14(usize),
+    R15(usize),
 }
 
 impl From<iced_x86::Register> for Operand {
     fn from(value: Register) -> Self {
         match value {
+            Register::RAX => Self::Rax(64),
             Register::RBP => Self::Rbp(64),
+            Register::RBX => Self::Rbx(64),
+            Register::RCX => Self::Rcx(64),
+            Register::RDI => Self::Rdi(64),
+            Register::RDX => Self::Rdx(64),
+            Register::RSI => Self::Rsi(64),
+            Register::R8 => Self::R8(64),
+            Register::R9 => Self::R9(64),
+            Register::R10 => Self::R10(64),
+            Register::R11 => Self::R11(64),
             Register::R12 => Self::R12(64),
+            Register::R13 => Self::R13(64),
+            Register::R14 => Self::R14(64),
+            Register::R15 => Self::R15(64),
             v => panic!("Register {v:?} is not supported yet."),
         }
     }
