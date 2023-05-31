@@ -37,7 +37,7 @@ impl Inode {
         R: Read,
     {
         // Read common fields.
-        let raw: [u8; 168] = [0; 168];
+        let raw: [u8; 168] = Self::read_raw(raw)?;
         let mut inode = Self::read_common_fields(index, &raw, Self::read_indirect32_unsigned);
 
         // Read block pointers.
@@ -60,7 +60,7 @@ impl Inode {
         R: Read,
     {
         // Read common fields.
-        let raw: [u8; 712] = [0; 712];
+        let raw: [u8; 712] = Self::read_raw(raw)?;
         let mut inode = Self::read_common_fields(index, &raw, Self::read_indirect32_signed);
 
         // Read block pointers.
@@ -247,6 +247,21 @@ impl Inode {
             self.index
         );
     }
+
+    fn read_raw<const L: usize, R: Read>(raw: &mut R) -> Result<[u8; L], FromRawError> {
+        let mut buf: [u8; L] = [0u8; L];
+
+        if let Err(e) = raw.read_exact(&mut buf) {
+            return Err(if e.kind() == std::io::ErrorKind::UnexpectedEof {
+                FromRawError::TooSmall
+            } else {
+                FromRawError::IoFailed(e)
+            });
+        }
+
+        Ok(buf)
+    }
+
 
     fn read_common_fields(
         index: usize,
