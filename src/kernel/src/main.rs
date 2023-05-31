@@ -91,14 +91,14 @@ fn main() -> ExitCode {
     info!("Mounting / to {}.", args.system.display());
 
     if let Err(e) = fs.mount(VPathBuf::new(), args.system) {
-        error!(e, "Mount failed!");
+        error!(e, "Mount failed");
         return ExitCode::FAILURE;
     }
 
     info!("Mounting /mnt/app0 to {}.", args.game.display());
 
     if let Err(e) = fs.mount(VPath::new("/mnt/app0").unwrap(), args.game) {
-        error!(e, "Mount failed!");
+        error!(e, "Mount failed");
         return ExitCode::FAILURE;
     }
 
@@ -133,7 +133,7 @@ fn main() -> ExitCode {
     let eboot = match modules.load_eboot() {
         Ok(v) => v,
         Err(e) => {
-            error!(e, "Load failed!");
+            error!(e, "Load failed");
             return ExitCode::FAILURE;
         }
     };
@@ -190,7 +190,7 @@ fn main() -> ExitCode {
         info!("Applying relocation entries on {}.", module.image().name());
 
         if let Err(e) = unsafe { module.apply_relocs(|h, n| modules.resolve_symbol(h, n)) } {
-            error!(e, "Apply failed!");
+            error!(e, "Apply failed");
             return ExitCode::FAILURE;
         }
     }
@@ -236,7 +236,7 @@ fn exec_with_native(modules: &ModuleManager, syscalls: &Syscalls) -> ExitCode {
             info!("{t} module(s) have been patched successfully.");
         }
         Err(e) => {
-            error!(e, "Patch failed!");
+            error!(e, "Patch failed");
             return ExitCode::FAILURE;
         }
     }
@@ -250,7 +250,7 @@ fn exec_with_llvm(llvm: &Llvm, modules: &ModuleManager) -> ExitCode {
     info!("Lifting modules.");
 
     if let Err(e) = ee.lift_modules() {
-        error!(e, "Lift failed!");
+        error!(e, "Lift failed");
         return ExitCode::FAILURE;
     }
 
@@ -261,7 +261,7 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E) -> ExitCode {
     info!("Starting application.");
 
     if let Err(e) = ee.run() {
-        error!(e, "Start failed!");
+        error!(e, "Start failed");
         return ExitCode::FAILURE;
     }
 
