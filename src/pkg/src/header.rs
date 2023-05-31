@@ -23,7 +23,7 @@ impl Header {
 
         // Read fields.
         let entry_count = BE::read_u32(&pkg[0x10..]);
-        let table_offset = BE::read_u32(&pkg[0x08..]);
+        let table_offset = BE::read_u32(&pkg[0x18..]);
         let pfs_offset = BE::read_u64(&pkg[0x410..]);
         let pfs_size = BE::read_u64(&pkg[0x418..]);
 

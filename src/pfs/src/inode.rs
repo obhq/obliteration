@@ -37,7 +37,7 @@ impl Inode {
         R: Read,
     {
         // Read common fields.
-        let raw: [u8; 168] = [0u8; 168];
+        let raw: [u8; 168] = [0; 168];
         let mut inode = Self::read_common_fields(index, &raw, Self::read_indirect32_unsigned);
 
         // Read block pointers.
@@ -60,11 +60,11 @@ impl Inode {
         R: Read,
     {
         // Read common fields.
-        let raw: [u8; 712] = [0u8; 712];
+        let raw: [u8; 712] = [0; 712];
         let mut inode = Self::read_common_fields(index, &raw, Self::read_indirect32_signed);
 
         // Read block pointers.
-        let mut offset = 0;
+        let mut offset = 0x64;
         for i in 0..12 {
             inode.direct_sigs[i] = Some(raw[offset..offset + 32].try_into().unwrap());
             inode.direct_blocks[i] = LE::read_u32(&raw[offset + 32..offset + 36]);
