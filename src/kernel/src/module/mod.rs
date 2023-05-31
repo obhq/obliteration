@@ -62,7 +62,7 @@ impl<'a> ModuleManager<'a> {
     }
 
     pub fn get_mod(&self, path: &VPath) -> Option<Arc<Module<'a>>> {
-        self.loaded.read().unwrap().get(path).map(|m| m.clone())
+        self.loaded.read().unwrap().get(path).cloned()
     }
 
     pub fn for_each<F, E>(&self, mut f: F) -> Result<(), E>
@@ -189,7 +189,7 @@ impl<'a> ModuleManager<'a> {
             }
 
             // Load the module.
-            let module = Arc::new(self.load(&file, self.module_workspace)?);
+            let module = Arc::new(self.load(file, self.module_workspace)?);
 
             loaded.insert(file.clone(), module.clone());
             modules.push(module);
@@ -201,7 +201,7 @@ impl<'a> ModuleManager<'a> {
     /// `name` is a normalized name (e.g. M0z6Dr6TNnM#libkernel#libkernel).
     pub fn resolve_symbol(&self, hash: u32, name: &str) -> Result<usize, ResolveSymbolError> {
         // Get module name.
-        let module = match name.splitn(3, '#').skip(2).next() {
+        let module = match name.splitn(3, '#').nth(2) {
             Some(v) => v,
             None => return Err(ResolveSymbolError::InvalidName),
         };
@@ -275,7 +275,9 @@ impl<'a> ModuleManager<'a> {
         let dir = match self.fs.get(from) {
             Some(v) => match v {
                 FsItem::Directory(v) => v,
-                FsItem::File(_) => panic!("{from} was expected to be a directory but it is a file."),
+                FsItem::File(_) => {
+                    panic!("{from} was expected to be a directory but it is a file.")
+                }
             },
             None => return,
         };
