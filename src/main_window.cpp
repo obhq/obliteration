@@ -231,9 +231,9 @@ void MainWindow::installPkg()
     auto gamesDirectory = readGamesDirectorySetting();
 
     if (!QDir(gamesDirectory).mkdir(gameId)) {
-        QString msg("Cannot create a directory %1 inside %2.");
+        QString msg("Cannot create directory %1 inside %2.");
 
-        msg += " If you have an unsuccessful installation from the previous attempt you need to remove this directory before install again.";
+        msg += " If you have a failed installation from a previous attempt, you will need to remove this directory before trying again.";
 
         QMessageBox::critical(&progress, "Error", msg.arg(gameId).arg(gamesDirectory));
         return;
@@ -287,14 +287,14 @@ void MainWindow::installPkg()
     auto success = loadGame(gameId);
 
     if (success) {
-        QMessageBox::information(this, "Success", "Installation completed successfully.");
+        QMessageBox::information(this, "Success", "Package installed successfully.");
     }
 }
 
 void MainWindow::reportIssue()
 {
     if (!QDesktopServices::openUrl(QUrl("https://github.com/ultimaweapon/obliteration/issues"))) {
-        QMessageBox::critical(this, "Error", "Failed to open https://github.com/ultimaweapon/obliteration/issues with your browser.");
+        QMessageBox::critical(this, "Error", "Failed to open https://github.com/ultimaweapon/obliteration/issues using your browser.");
     }
 }
 
@@ -423,7 +423,7 @@ void MainWindow::kernelError(QProcess::ProcessError error)
         msg = "The kernel crashed.";
         break;
     default:
-        msg = "An unknown error occurred on the kernel";
+        msg = "The kernel encountered an unknown error.";
     }
 
     QMessageBox::critical(this, "Error", msg);
@@ -460,7 +460,7 @@ void MainWindow::kernelTerminated(int, QProcess::ExitStatus)
 
     kernelOutput();
 
-    QMessageBox::critical(this, "Error", "The emulator kernel has been stopped unexpectedly. Please take a look on the log and report the issue.");
+    QMessageBox::critical(this, "Error", "The emulator kernel has stopped unexpectedly. Please take a look at the log and report this issue if possible.");
 
     m_kernel->deleteLater();
     m_kernel = nullptr;
@@ -524,7 +524,7 @@ void MainWindow::restoreGeometry()
 bool MainWindow::requireEmulatorStopped()
 {
     if (m_kernel) {
-        QMessageBox::critical(this, "Error", "This functionality is not available while a game is running.");
+        QMessageBox::critical(this, "Error", "This function is not available while a game is running.");
         return false;
     }
 

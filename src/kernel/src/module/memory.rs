@@ -226,7 +226,7 @@ impl<'a> Drop for UnprotectedMemory<'a> {
     fn drop(&mut self) {
         if let Err(e) = self.0.protect() {
             // This should never happen because it was succeeded when the memory is initialized.
-            panic!("Cannot protect the memory: {e}.");
+            panic!("Cannot protect memory: {e}.");
         }
     }
 }

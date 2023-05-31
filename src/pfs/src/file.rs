@@ -114,7 +114,7 @@ impl<'a> Seek for File<'a> {
             None => {
                 return Err(Error::new(
                     ErrorKind::Other,
-                    format!("inode #{} does not exists", self.inode),
+                    format!("inode #{} does not exist", self.inode),
                 ))
             }
         };
@@ -178,7 +178,7 @@ impl<'a> Read for File<'a> {
             None => {
                 return Err(Error::new(
                     ErrorKind::Other,
-                    format!("inode #{} does not exists", self.inode),
+                    format!("inode #{} does not exist", self.inode),
                 ))
             }
         };
@@ -243,7 +243,7 @@ impl<'a> Read for File<'a> {
                         if v != offset {
                             return Err(Error::new(
                                 ErrorKind::Other,
-                                format!("block #{} does not exists", block_num),
+                                format!("block #{} does not exist", block_num),
                             ));
                         }
                     }

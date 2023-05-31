@@ -156,7 +156,7 @@ impl<'a> Disassembler<'a> {
             if i.has_lock_prefix() {
                 panic!("XOR with LOCK prefix is not supported yet.");
             } else {
-                panic!("XOR with the first operand is a memory is not supported yet.");
+                panic!("XOR with the first operand as memory is not supported yet.");
             }
         } else {
             // The first operand is a register.

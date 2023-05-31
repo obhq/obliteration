@@ -50,7 +50,7 @@ QGroupBox *UpdateFirmware::setupFromGroup()
 
     // Address description.
     auto desc = new QLabel(
-        R"(Specify the address of FTP server that are running on your jailbroken PS4 (e.g. 192.168.1.123:1337). )"
+        R"(Specify the IP Address and Port of the FTP server running on your jailbroken PS4 (e.g. 192.168.1.123:2121). )"
         R"(The FTP server must be capable of firmware decryption.)");
 
     desc->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Minimum);
@@ -65,8 +65,8 @@ QGroupBox *UpdateFirmware::setupFromGroup()
 
     // Explicit decryption decription.
     desc = new QLabel(
-        R"(Enable this if the FTP server required a custom command DECRYPT to enable firmware decryption. )"
-        R"(If you are unsure try enable this first and if the FTP server response with unknown command then you need to disable this.)");
+        R"(Enable this if the FTP server requires the command 'DECRYPT' to enable firmware decryption. )"
+        R"(If you are unsure, try enabling this first. If the FTP server gives the error 'UNKNOWN COMMAND' then you will need to disable this.)");
 
     desc->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Minimum);
     desc->setWordWrap(true);

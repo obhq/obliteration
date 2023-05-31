@@ -161,7 +161,7 @@ impl MemoryManager {
 
                 // Decommit the memory.
                 if let Err(e) = info.storage.decommit(addr, decommit) {
-                    panic!("Failed to decommit the memory {addr:p}:{decommit}: {e}.");
+                    panic!("Failed to decommit memory {addr:p}:{decommit}: {e}.");
                 }
 
                 info.len -= remain;
@@ -172,7 +172,7 @@ impl MemoryManager {
 
                 if let Err(e) = info.storage.decommit(info.addr, decommit) {
                     panic!(
-                        "Failed to decommit the memory {:p}:{}: {}.",
+                        "Failed to decommit memory {:p}:{}: {}.",
                         info.addr, decommit, e
                     );
                 }
@@ -190,7 +190,7 @@ impl MemoryManager {
                 // Unmap the whole allocation.
                 if let Err(e) = info.storage.decommit(info.addr, info.len) {
                     panic!(
-                        "Failed to decommit the memory {:p}:{}: {}.",
+                        "Failed to decommit memory {:p}:{}: {}.",
                         info.addr, info.len, e
                     );
                 }

@@ -13,7 +13,7 @@ impl<'a, 'b: 'a> Codegen<'a, 'b> {
         Self { input, output }
     }
 
-    pub fn lift(&mut self, offset: usize) -> Result<(), LiftError> {
+    pub fn lift(&mut self, _offset: usize) -> Result<(), LiftError> {
         Ok(())
     }
 }

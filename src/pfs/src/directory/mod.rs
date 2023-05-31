@@ -204,7 +204,7 @@ pub enum OpenError {
     #[error("cannot seek to block #{0}")]
     SeekToBlockFailed(u32, #[source] std::io::Error),
 
-    #[error("block #{0} does not exists")]
+    #[error("block #{0} does not exist")]
     BlockNotExists(u32),
 
     #[error("cannot read block #{0}")]

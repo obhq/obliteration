@@ -96,7 +96,7 @@ bool initSystem(const QString &path, const QString &from, bool explicitDecryptio
         return false;
     }
 
-    QMessageBox::information(parent, "Success", "Initialization completed successfully.");
+    QMessageBox::information(parent, "Success", "Downloaded system files successfully.");
 
     return true;
 }

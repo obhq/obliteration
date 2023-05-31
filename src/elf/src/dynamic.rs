@@ -696,67 +696,67 @@ pub enum ParseError {
     #[error("invalid data size")]
     InvalidDataSize,
 
-    #[error("entry DT_PLTRELSZ or DT_SCE_PLTRELSZ does not exists")]
+    #[error("entry DT_PLTRELSZ or DT_SCE_PLTRELSZ does not exist")]
     NoPltrelsz,
 
-    #[error("entry DT_PLTGOT or DT_SCE_PLTGOT does not exists")]
+    #[error("entry DT_PLTGOT or DT_SCE_PLTGOT does not exist")]
     NoPltgot,
 
-    #[error("entry DT_RELASZ or DT_SCE_RELASZ does not exists")]
+    #[error("entry DT_RELASZ or DT_SCE_RELASZ does not exist")]
     NoRelasz,
 
-    #[error("entry DT_RELAENT or DT_SCE_RELAENT does not exists")]
+    #[error("entry DT_RELAENT or DT_SCE_RELAENT does not exist")]
     NoRelaent,
 
-    #[error("entry DT_STRSZ or DT_SCE_STRSZ does not exists")]
+    #[error("entry DT_STRSZ or DT_SCE_STRSZ does not exist")]
     NoStrsz,
 
-    #[error("entry DT_SYMENT or DT_SCE_SYMENT does not exists")]
+    #[error("entry DT_SYMENT or DT_SCE_SYMENT does not exist")]
     NoSyment,
 
-    #[error("entry DT_PLTREL or DT_SCE_PLTREL does not exists")]
+    #[error("entry DT_PLTREL or DT_SCE_PLTREL does not exist")]
     NoPltrel,
 
-    #[error("entry DT_SCE_FINGERPRINT does not exists")]
+    #[error("entry DT_SCE_FINGERPRINT does not exist")]
     NoFingerprint,
 
-    #[error("entry DT_FLAGS does not exists")]
+    #[error("entry DT_FLAGS does not exist")]
     NoFlags,
 
-    #[error("entry DT_SCE_FILENAME does not exists")]
+    #[error("entry DT_SCE_FILENAME does not exist")]
     NoFilename,
 
-    #[error("entry DT_SCE_MODULE_INFO does not exists")]
+    #[error("entry DT_SCE_MODULE_INFO does not exist")]
     NoModuleInfo,
 
-    #[error("entry DT_SCE_HASH does not exists")]
+    #[error("entry DT_SCE_HASH does not exist")]
     NoHash,
 
     #[error("entry DT_SCE_HASH has invalid value")]
     InvalidHash,
 
-    #[error("entry DT_SCE_JMPREL does not exists")]
+    #[error("entry DT_SCE_JMPREL does not exist")]
     NoJmprel,
 
-    #[error("entry DT_SCE_RELA does not exists")]
+    #[error("entry DT_SCE_RELA does not exist")]
     NoRela,
 
-    #[error("entry DT_SCE_STRTAB does not exists")]
+    #[error("entry DT_SCE_STRTAB does not exist")]
     NoStrtab,
 
-    #[error("entry DT_SCE_SYMTAB does not exists")]
+    #[error("entry DT_SCE_SYMTAB does not exist")]
     NoSymtab,
 
     #[error("entry DT_SCE_SYMTAB has invalid value")]
     InvalidSymtab,
 
-    #[error("entry DT_SCE_HASHSZ does not exists")]
+    #[error("entry DT_SCE_HASHSZ does not exist")]
     NoHashsz,
 
     #[error("entry DT_SCE_HASHSZ has invalid value")]
     InvalidHashsz,
 
-    #[error("entry DT_SCE_SYMTABSZ does not exists")]
+    #[error("entry DT_SCE_SYMTABSZ does not exist")]
     NoSymtabsz,
 
     #[error("entry DT_SCE_SYMTABSZ has invalid value")]

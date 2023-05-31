@@ -118,7 +118,7 @@ fn main() -> ExitCode {
 
     let modules = ModuleManager::new(&fs, &mm, 1024 * 1024);
 
-    info!("{} modules is available.", modules.available_count());
+    info!("{} modules are available.", modules.available_count());
 
     // Initialize syscall routines.
     info!("Initializing system call routines.");
@@ -183,14 +183,14 @@ fn main() -> ExitCode {
         }
     }
 
-    info!("{} module(s) has been loaded successfully.", loaded.len());
+    info!("{} module(s) have been loaded successfully.", loaded.len());
 
     // Apply module relocations.
     for module in loaded {
         info!("Applying relocation entries on {}.", module.image().name());
 
         if let Err(e) = unsafe { module.apply_relocs(|h, n| modules.resolve_symbol(h, n)) } {
-            error!(e, "Applying failed");
+            error!(e, "Apply failed");
             return ExitCode::FAILURE;
         }
     }
@@ -228,12 +228,12 @@ fn exec_with_native(modules: &ModuleManager, syscalls: &Syscalls) -> ExitCode {
 
             for (m, c) in r {
                 if c != 0 {
-                    info!("{c} patch(es) has been applied to {m}.");
+                    info!("{c} patch(es) have been applied to {m}.");
                     t += 1;
                 }
             }
 
-            info!("{t} module(s) has been patched successfully.");
+            info!("{t} module(s) have been patched successfully.");
         }
         Err(e) => {
             error!(e, "Patch failed");
@@ -261,7 +261,7 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E) -> ExitCode {
     info!("Starting application.");
 
     if let Err(e) = ee.run() {
-        error!(e, "Starting failed");
+        error!(e, "Start failed");
         return ExitCode::FAILURE;
     }
 
