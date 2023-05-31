@@ -1,9 +1,10 @@
+use byteorder::{ByteOrder, LE};
 use crate::Image;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::{Read, SeekFrom};
 use thiserror::Error;
-use util::mem::{new_buffer, read_array, read_u16_le, read_u32_le, read_u64_le, uninit};
+use util::mem::{new_buffer};
 
 /// Contains information for an inode.
 pub(crate) struct Inode {
@@ -36,21 +37,19 @@ impl Inode {
         R: Read,
     {
         // Read common fields.
-        let raw: [u8; 168] = Self::read_raw(raw)?;
-        let mut ptr = raw.as_ptr();
-        let mut inode = Self::read_common_fields(index, ptr, Self::read_indirect32_unsigned);
+        let raw: [u8; 168] = [0u8; 168];
+        let mut inode = Self::read_common_fields(index, &raw, Self::read_indirect32_unsigned);
 
         // Read block pointers.
-        ptr = unsafe { ptr.offset(0x64) };
-
+        let mut offset = 0x64;
         for i in 0..12 {
-            inode.direct_blocks[i] = unsafe { read_u32_le(ptr, 0) };
-            ptr = unsafe { ptr.offset(4) };
+            inode.direct_blocks[i] = LE::read_u32(&raw[offset..offset+4]);
+            offset += 4;
         }
 
         for i in 0..5 {
-            inode.indirect_blocks[i] = unsafe { read_u32_le(ptr, 0) };
-            ptr = unsafe { ptr.offset(4) };
+            inode.indirect_blocks[i] = LE::read_u32(&raw[offset..offset+4]);
+            offset += 4;
         }
 
         Ok(inode)
@@ -61,23 +60,21 @@ impl Inode {
         R: Read,
     {
         // Read common fields.
-        let raw: [u8; 712] = Self::read_raw(raw)?;
-        let mut ptr = raw.as_ptr();
-        let mut inode = Self::read_common_fields(index, ptr, Self::read_indirect32_signed);
+        let raw: [u8; 712] = [0u8; 712];
+        let mut inode = Self::read_common_fields(index, &raw, Self::read_indirect32_signed);
 
         // Read block pointers.
-        ptr = unsafe { ptr.offset(0x64) };
-
+        let mut offset = 0;
         for i in 0..12 {
-            inode.direct_sigs[i] = Some(unsafe { read_array(ptr, 0) });
-            inode.direct_blocks[i] = unsafe { read_u32_le(ptr, 32) };
-            ptr = unsafe { ptr.offset(36) };
+            inode.direct_sigs[i] = Some(raw[offset..offset+32].try_into().unwrap());
+            inode.direct_blocks[i] = LE::read_u32(&raw[offset+32..offset+36]);
+            offset += 36;
         }
 
         for i in 0..5 {
-            inode.indirect_signs[i] = Some(unsafe { read_array(ptr, 0) });
-            inode.indirect_blocks[i] = unsafe { read_u32_le(ptr, 32) };
-            ptr = unsafe { ptr.offset(36) };
+            inode.indirect_signs[i] = Some(raw[offset..offset+32].try_into().unwrap());
+            inode.indirect_blocks[i] = LE::read_u32(&raw[offset+32..offset+36]);
+            offset += 36;
         }
 
         Ok(inode)
@@ -251,40 +248,26 @@ impl Inode {
         );
     }
 
-    fn read_raw<const L: usize, R: Read>(raw: &mut R) -> Result<[u8; L], FromRawError> {
-        let mut buf: [u8; L] = unsafe { uninit() };
-
-        if let Err(e) = raw.read_exact(&mut buf) {
-            return Err(if e.kind() == std::io::ErrorKind::UnexpectedEof {
-                FromRawError::TooSmall
-            } else {
-                FromRawError::IoFailed(e)
-            });
-        }
-
-        Ok(buf)
-    }
-
     fn read_common_fields(
         index: usize,
-        raw: *const u8,
+        raw: &[u8],
         indirect_reader: fn(&mut &[u8]) -> Option<u32>,
     ) -> Self {
-        let mode = unsafe { read_u16_le(raw, 0x00) };
-        let flags = InodeFlags(unsafe { read_u32_le(raw, 0x04) });
-        let size = unsafe { read_u64_le(raw, 0x08) };
-        let decompressed_size = unsafe { read_u64_le(raw, 0x10) };
-        let atime = unsafe { read_u64_le(raw, 0x18) };
-        let mtime = unsafe { read_u64_le(raw, 0x20) };
-        let ctime = unsafe { read_u64_le(raw, 0x28) };
-        let birthtime = unsafe { read_u64_le(raw, 0x30) };
-        let mtimensec = unsafe { read_u32_le(raw, 0x38) };
-        let atimensec = unsafe { read_u32_le(raw, 0x3c) };
-        let ctimensec = unsafe { read_u32_le(raw, 0x40) };
-        let birthnsec = unsafe { read_u32_le(raw, 0x44) };
-        let uid = unsafe { read_u32_le(raw, 0x48) };
-        let gid = unsafe { read_u32_le(raw, 0x4c) };
-        let blocks = unsafe { read_u32_le(raw, 0x60) };
+        let mode = LE::read_u16(&raw[0x00..]);
+        let flags = InodeFlags( LE::read_u32(&raw[0x04..]) );
+        let size = LE::read_u64(&raw[0x08..]);
+        let decompressed_size = LE::read_u64(&raw[0x10..]);
+        let atime = LE::read_u64(&raw[0x18..]);
+        let mtime = LE::read_u64(&raw[0x20..]);
+        let ctime = LE::read_u64(&raw[0x28..]);
+        let birthtime = LE::read_u64(&raw[0x30..]);
+        let mtimensec = LE::read_u32(&raw[0x38..]);
+        let atimensec = LE::read_u32(&raw[0x3c..]);
+        let ctimensec = LE::read_u32(&raw[0x40..]);
+        let birthnsec = LE::read_u32(&raw[0x44..]);
+        let uid = LE::read_u32(&raw[0x48..]);
+        let gid = LE::read_u32(&raw[0x4c..]);
+        let blocks = LE::read_u32(&raw[0x60..]);
 
         Self {
             index,
@@ -313,7 +296,7 @@ impl Inode {
 
     fn read_indirect32_unsigned(raw: &mut &[u8]) -> Option<u32> {
         let value = match raw.get(..4) {
-            Some(v) => unsafe { read_u32_le(v.as_ptr(), 0) },
+            Some(v) => LE::read_u32(&v[0x00..]),
             None => return None,
         };
 
@@ -324,7 +307,7 @@ impl Inode {
 
     fn read_indirect32_signed(raw: &mut &[u8]) -> Option<u32> {
         let value = match raw.get(..36) {
-            Some(v) => unsafe { read_u32_le(v.as_ptr(), 32) },
+            Some(v) => LE::read_u32(&v[0x20..]),
             None => return None,
         };
 

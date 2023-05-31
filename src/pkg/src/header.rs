@@ -1,4 +1,4 @@
-use util::mem::{read_u32_be, read_u64_be};
+use byteorder::{ByteOrder, BE};
 
 pub struct Header {
     entry_count: u32,
@@ -14,20 +14,18 @@ impl Header {
             return Err(ReadError::TooSmall);
         }
 
-        let pkg = pkg.as_ptr();
-
         // Check magic.
-        let magic = unsafe { read_u32_be(pkg, 0) };
+        let magic = BE::read_u32(&pkg[0x00..]);
 
         if magic != 0x7f434e54 {
             return Err(ReadError::InvalidMagic);
         }
 
         // Read fields.
-        let entry_count = unsafe { read_u32_be(pkg, 0x10) };
-        let table_offset = unsafe { read_u32_be(pkg, 0x18) };
-        let pfs_offset = unsafe { read_u64_be(pkg, 0x410) };
-        let pfs_size = unsafe { read_u64_be(pkg, 0x418) };
+        let entry_count = BE::read_u32(&pkg[0x10..]);
+        let table_offset = BE::read_u32(&pkg[0x08..]);
+        let pfs_offset = BE::read_u64(&pkg[0x410..]);
+        let pfs_size = BE::read_u64(&pkg[0x418..]);
 
         Ok(Self {
             entry_count,

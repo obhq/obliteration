@@ -5,7 +5,6 @@ use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use std::cmp::min;
 use std::io::{IoSliceMut, Read, Seek, SeekFrom};
-use util::mem::uninit;
 use xts_mode::{get_tweak_default, Xts128};
 
 pub(super) const XTS_BLOCK_SIZE: usize = 0x1000;
@@ -23,8 +22,8 @@ pub(super) fn get_xts_keys(ekpfs: &[u8], seed: &[u8; 16]) -> ([u8; 16], [u8; 16]
 
     // Split key.
     let secret = hmac.finalize().into_bytes();
-    let mut data_key: [u8; 16] = unsafe { uninit() };
-    let mut tweak_key: [u8; 16] = unsafe { uninit() };
+    let mut data_key: [u8; 16] = Default::default();
+    let mut tweak_key: [u8; 16] = Default::default();
 
     tweak_key.copy_from_slice(&secret[..16]);
     data_key.copy_from_slice(&secret[16..]);

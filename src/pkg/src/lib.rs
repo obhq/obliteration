@@ -211,7 +211,7 @@ impl Pkg {
             // Check offset.
             let offset = self.header.table_offset() + num * Entry::RAW_SIZE;
             let raw = match self.raw.get(offset..(offset + Entry::RAW_SIZE)) {
-                Some(v) => v.as_ptr(),
+                Some(v) => v,
                 None => return Err(ExtractError::InvalidEntryOffset(num)),
             };
 
@@ -670,7 +670,7 @@ impl Pkg {
             // Check offset.
             let offset = self.header.table_offset() + num * Entry::RAW_SIZE;
             let raw = match self.raw.get(offset..(offset + Entry::RAW_SIZE)) {
-                Some(v) => v.as_ptr(),
+                Some(v) => v,
                 None => return Err(FindEntryError::InvalidEntryOffset(num)),
             };
 

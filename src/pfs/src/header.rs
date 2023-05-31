@@ -1,7 +1,7 @@
+use byteorder::{ByteOrder, LE};
 use std::fmt::{Display, Formatter};
 use std::io::Read;
 use thiserror::Error;
-use util::mem::{read_array, read_u16_le, read_u32_le, read_u64_le, uninit};
 
 /// Contains PFS header.
 ///
@@ -18,35 +18,33 @@ pub(crate) struct Header {
 impl Header {
     pub(super) fn read<I: Read>(image: &mut I) -> Result<Self, ReadError> {
         // Read the whole header into the buffer.
-        let mut hdr: [u8; 0x380] = unsafe { uninit() };
+        let mut hdr = [0u8; 0x380];
 
         if let Err(e) = image.read_exact(&mut hdr) {
             return Err(ReadError::IoFailed(e));
         }
 
-        let hdr = hdr.as_ptr();
-
         // Check version.
-        let version = unsafe { read_u64_le(hdr, 0x00) };
+        let version = LE::read_u64(&hdr[0x00..]);
 
         if version != 1 {
             return Err(ReadError::InvalidVersion);
         }
 
         // Check format.
-        let format = unsafe { read_u64_le(hdr, 0x08) };
+        let format = LE::read_u64(&hdr[0x08..]);
 
         if format != 20130315 {
             return Err(ReadError::InvalidFormat);
         }
 
         // Read fields.
-        let mode = Mode(unsafe { read_u16_le(hdr, 0x1c) });
-        let blocksz = unsafe { read_u32_le(hdr, 0x20) };
-        let ndinode = unsafe { read_u64_le(hdr, 0x30) };
-        let ndinodeblock = unsafe { read_u64_le(hdr, 0x40) };
-        let superroot_ino = unsafe { read_u64_le(hdr, 0x48) };
-        let key_seed = unsafe { read_array(hdr, 0x370) };
+        let mode = Mode(LE::read_u16(&hdr[0x1c..]));
+        let blocksz = LE::read_u32(&hdr[0x20..]);
+        let ndinode = LE::read_u64(&hdr[0x30..]);
+        let ndinodeblock = LE::read_u64(&hdr[0x40..]);
+        let superroot_ino = LE::read_u64(&hdr[0x48..]);
+        let key_seed = &hdr[0x370..(0x370 + 16)];
 
         // Usually block will be references by u32. Not sure why ndinodeblock is 64-bits. Design
         // flaws?
@@ -60,7 +58,7 @@ impl Header {
             ndinode,
             ndinodeblock: ndinodeblock as u32,
             superroot_ino,
-            key_seed,
+            key_seed: key_seed.try_into().unwrap(),
         })
     }
 
