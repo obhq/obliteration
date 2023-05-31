@@ -1,10 +1,10 @@
-use byteorder::{ByteOrder, LE};
 use crate::Image;
+use byteorder::{ByteOrder, LE};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::{Read, SeekFrom};
 use thiserror::Error;
-use util::mem::{new_buffer};
+use util::mem::new_buffer;
 
 /// Contains information for an inode.
 pub(crate) struct Inode {
@@ -43,12 +43,12 @@ impl Inode {
         // Read block pointers.
         let mut offset = 0x64;
         for i in 0..12 {
-            inode.direct_blocks[i] = LE::read_u32(&raw[offset..offset+4]);
+            inode.direct_blocks[i] = LE::read_u32(&raw[offset..offset + 4]);
             offset += 4;
         }
 
         for i in 0..5 {
-            inode.indirect_blocks[i] = LE::read_u32(&raw[offset..offset+4]);
+            inode.indirect_blocks[i] = LE::read_u32(&raw[offset..offset + 4]);
             offset += 4;
         }
 
@@ -66,14 +66,14 @@ impl Inode {
         // Read block pointers.
         let mut offset = 0;
         for i in 0..12 {
-            inode.direct_sigs[i] = Some(raw[offset..offset+32].try_into().unwrap());
-            inode.direct_blocks[i] = LE::read_u32(&raw[offset+32..offset+36]);
+            inode.direct_sigs[i] = Some(raw[offset..offset + 32].try_into().unwrap());
+            inode.direct_blocks[i] = LE::read_u32(&raw[offset + 32..offset + 36]);
             offset += 36;
         }
 
         for i in 0..5 {
-            inode.indirect_signs[i] = Some(raw[offset..offset+32].try_into().unwrap());
-            inode.indirect_blocks[i] = LE::read_u32(&raw[offset+32..offset+36]);
+            inode.indirect_signs[i] = Some(raw[offset..offset + 32].try_into().unwrap());
+            inode.indirect_blocks[i] = LE::read_u32(&raw[offset + 32..offset + 36]);
             offset += 36;
         }
 
@@ -254,7 +254,7 @@ impl Inode {
         indirect_reader: fn(&mut &[u8]) -> Option<u32>,
     ) -> Self {
         let mode = LE::read_u16(&raw[0x00..]);
-        let flags = InodeFlags( LE::read_u32(&raw[0x04..]) );
+        let flags = InodeFlags(LE::read_u32(&raw[0x04..]));
         let size = LE::read_u64(&raw[0x08..]);
         let decompressed_size = LE::read_u64(&raw[0x10..]);
         let atime = LE::read_u64(&raw[0x18..]);

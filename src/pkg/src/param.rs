@@ -1,4 +1,4 @@
-use byteorder::{BE, ByteOrder, LE};
+use byteorder::{ByteOrder, BE, LE};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 
