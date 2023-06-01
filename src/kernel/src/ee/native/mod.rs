@@ -1,7 +1,7 @@
 use super::ExecutionEngine;
 use crate::fs::path::{VPath, VPathBuf};
 use crate::memory::{MprotectError, Protections};
-use crate::module::{Module, ModuleManager, ModuleWorkspace, UnsealedWorkspace};
+use crate::module::{Module, ModuleManager, ModuleWorkspace};
 use crate::syscalls::Syscalls;
 use byteorder::{ByteOrder, LE};
 use iced_x86::code_asm::{rax, rbp, rcx, rdi, rdx, rsi, rsp, CodeAssembler};
@@ -134,7 +134,7 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
         // Build trampoline.
         let id = LE::read_u32(&mem[3..]);
         let ret = addr + 7 + 5;
-        let tp = match self.build_syscall_trampoline(wp.lock(), module, offset + 10, id, ret) {
+        let tp = match self.build_syscall_trampoline(wp, module, offset + 10, id, ret) {
             Ok(v) => v,
             Err(e) => {
                 return Err(PatchModsError::BuildTrampolineFailed(
@@ -179,7 +179,7 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
     ) -> Result<Option<usize>, PatchModsError> {
         // Build trampoline.
         let ret = addr + 2 + 5;
-        let tp = match self.build_int44_trampoline(wp.lock(), module, offset, ret) {
+        let tp = match self.build_int44_trampoline(wp, module, offset, ret) {
             Ok(v) => v,
             Err(e) => {
                 return Err(PatchModsError::BuildTrampolineFailed(
@@ -211,7 +211,7 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
 
     fn build_syscall_trampoline(
         &self,
-        wp: UnsealedWorkspace,
+        wp: &ModuleWorkspace,
         module: &VPath,
         offset: usize,
         id: u32,
@@ -225,9 +225,12 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
         asm.and(rsp, !15).unwrap(); // Make sure stack is align to 16 bytes boundary.
 
         // Invoke our routine.
-        let module = Box::new(module.to_owned());
+        let module = match wp.push(module.to_owned()) {
+            Some(v) => v,
+            None => return Err(TrampolineError::SpaceNotEnough),
+        };
 
-        asm.mov(rcx, Box::into_raw(module) as u64).unwrap();
+        asm.mov(rcx, module as u64).unwrap();
         asm.mov(rdx, offset as u64).unwrap();
         asm.mov(rsi, id as u64).unwrap();
         asm.mov(rdi, self.syscalls() as u64).unwrap();
@@ -237,25 +240,12 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
         // Restore registers.
         asm.leave().unwrap();
 
-        // Align base address to 16 byte boundary for performance.
-        let base = wp.addr();
-        let start = match base % 16 {
-            0 => 0,
-            v => 16 - v,
-        };
-
-        // Assemble.
-        let addr = base + start;
-        let assembled = asm.assemble(addr as u64).unwrap();
-
-        self.write_trampoline(wp, ret, assembled, start, addr)?;
-
-        Ok(addr)
+        self.write_trampoline(wp, ret, asm)
     }
 
     fn build_int44_trampoline(
         &self,
-        wp: UnsealedWorkspace,
+        wp: &ModuleWorkspace,
         module: &VPath,
         offset: usize,
         ret: usize,
@@ -272,9 +262,12 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
         asm.push(rsi).unwrap();
 
         // Invoke our routine.
-        let module = Box::new(module.to_owned());
+        let module = match wp.push(module.to_owned()) {
+            Some(v) => v,
+            None => return Err(TrampolineError::SpaceNotEnough),
+        };
 
-        asm.mov(rdx, Box::into_raw(module) as u64).unwrap();
+        asm.mov(rdx, module as u64).unwrap();
         asm.mov(rsi, offset as u64).unwrap();
         asm.mov(rdi, self.syscalls() as u64).unwrap();
         asm.mov(rax, Syscalls::int44 as u64).unwrap();
@@ -287,30 +280,28 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
         asm.pop(rdi).unwrap();
         asm.leave().unwrap();
 
+        self.write_trampoline(wp, ret, asm)
+    }
+
+    fn write_trampoline(
+        &self,
+        wp: &ModuleWorkspace,
+        ret: usize,
+        mut assembled: CodeAssembler,
+    ) -> Result<usize, TrampolineError> {
+        let mut mem = wp.memory();
+
         // Align base address to 16 byte boundary for performance.
-        let base = wp.addr();
-        let start = match base % 16 {
+        let base = mem.addr();
+        let offset = match base % 16 {
             0 => 0,
             v => 16 - v,
         };
 
         // Assemble.
-        let addr = base + start;
-        let assembled = asm.assemble(addr as u64).unwrap();
+        let addr = base + offset;
+        let mut assembled = assembled.assemble(addr as u64).unwrap();
 
-        self.write_trampoline(wp, ret, assembled, start, addr)?;
-
-        Ok(addr)
-    }
-
-    fn write_trampoline(
-        &self,
-        mut wp: UnsealedWorkspace,
-        ret: usize,
-        mut assembled: Vec<u8>,
-        offset: usize,
-        addr: usize,
-    ) -> Result<(), TrampolineError> {
         // Manually JMP rel32 back to patched location.
         assembled.extend({
             // Calculate relative offset.
@@ -331,7 +322,7 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
         });
 
         // Write the assembled code.
-        let output = match wp.as_mut_slice().get_mut(offset..) {
+        let output = match mem.as_mut_slice().get_mut(offset..) {
             Some(v) => v,
             None => return Err(TrampolineError::SpaceNotEnough),
         };
@@ -343,9 +334,9 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
         output[..assembled.len()].copy_from_slice(&assembled);
 
         // Seal the workspace.
-        wp.seal(offset + assembled.len());
+        mem.seal(offset + assembled.len());
 
-        Ok(())
+        Ok(addr)
     }
 
     fn get_relative_offset(from: usize, to: usize) -> Option<i32> {
