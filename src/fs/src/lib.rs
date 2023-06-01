@@ -74,9 +74,8 @@ impl<'de> serde::Deserialize<'de> for FileMode {
         D: serde::Deserializer<'de>,
     {
         let mode = u16::deserialize(deserializer)?;
-        Self::from_bits(mode).ok_or_else(|| {
-            serde::de::Error::custom("Invalid value for Deserialization.")
-        })
+        Self::from_bits(mode)
+            .ok_or_else(|| serde::de::Error::custom("Invalid value for Deserialization."))
     }
 }
 
