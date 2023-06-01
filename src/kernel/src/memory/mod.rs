@@ -456,10 +456,13 @@ impl MemoryManager {
 
     #[cfg(windows)]
     fn get_memory_model() -> (usize, usize) {
+        use std::mem::MaybeUninit;
         use windows_sys::Win32::System::SystemInformation::{GetSystemInfo, SYSTEM_INFO};
-        let mut i: SYSTEM_INFO = unsafe { util::mem::uninit() };
+        let mut i = MaybeUninit::<SYSTEM_INFO>::uninit();
 
-        unsafe { GetSystemInfo(&mut i) };
+        unsafe { GetSystemInfo(i.as_mut_ptr()) };
+
+        let i = unsafe { i.assume_init() };
 
         (i.dwPageSize as usize, i.dwAllocationGranularity as usize)
     }

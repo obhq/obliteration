@@ -7,7 +7,6 @@ use generic_array::GenericArray;
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
-use util::mem::new_buffer;
 use xts_mode::Xts128;
 
 pub mod directory;
@@ -72,7 +71,7 @@ where
     };
 
     // Read inode blocks.
-    let mut block_data = unsafe { new_buffer(block_size as usize) };
+    let mut block_data = vec![0; block_size as usize];
     let mut inodes: Vec<Inode> = Vec::with_capacity(image.header().inode_count());
 
     'load_block: for block_num in 0..image.header().inode_block_count() {

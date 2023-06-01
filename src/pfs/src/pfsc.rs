@@ -1,9 +1,9 @@
+use byteorder::{ByteOrder, LE};
 use flate2::FlushDecompress;
 use std::cmp::min;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::{ErrorKind, Read, Seek, SeekFrom};
-use util::mem::{new_buffer, read_array, read_u32_le, read_u64_le, uninit};
 use util::slice::as_mut_bytes;
 
 // FIXME: Refactor the whole implementation of this since a lot of logic does not make sense.
@@ -25,7 +25,7 @@ impl<F: Read + Seek> Reader<F> {
         }
 
         // Check header.
-        let mut hdr: [u8; 48] = unsafe { uninit() };
+        let mut hdr: [u8; 48] = [0u8; 48];
 
         if let Err(e) = file.read_exact(&mut hdr) {
             return Err(if e.kind() == ErrorKind::UnexpectedEof {
@@ -35,18 +35,17 @@ impl<F: Read + Seek> Reader<F> {
             });
         }
 
-        let hdr = hdr.as_ptr();
-        let magic: [u8; 4] = unsafe { read_array(hdr, 0) };
+        let magic = &hdr[0..4];
 
         if &magic != b"PFSC" {
             return Err(OpenError::InvalidMagic);
         }
 
         // Read header.
-        let block_size = unsafe { read_u32_le(hdr, 0x0c) }; // BlockSz
-        let original_block_size = unsafe { read_u64_le(hdr, 0x10) }; // BlockSz2
-        let block_offsets = unsafe { read_u64_le(hdr, 0x18) }; // BlockOffsets
-        let original_size = unsafe { read_u64_le(hdr, 0x28) }; // DataLength
+        let block_size = LE::read_u32(&hdr[0x0c..]); // BlockSz
+        let original_block_size = LE::read_u64(&hdr[0x10..]); // BlockSz2
+        let block_offsets = LE::read_u64(&hdr[0x18..]); // BlockOffsets
+        let original_size = LE::read_u64(&hdr[0x28..]); // DataLength
 
         // Read block offsets.
         if let Err(e) = file.seek(SeekFrom::Start(block_offsets)) {
@@ -54,7 +53,7 @@ impl<F: Read + Seek> Reader<F> {
         }
 
         let original_block_count = original_size / original_block_size + 1;
-        let mut compressed_blocks: Vec<u64> = unsafe { new_buffer(original_block_count as usize) };
+        let mut compressed_blocks: Vec<u64> = vec![0; original_block_count as usize];
 
         if let Err(e) = file.read_exact(as_mut_bytes(&mut compressed_blocks)) {
             return Err(OpenError::ReadBlockMappingFailed(e));
@@ -104,7 +103,7 @@ impl<F: Read + Seek> Reader<F> {
         match size.cmp(&self.original_block_size) {
             std::cmp::Ordering::Less => {
                 // Read compressed.
-                let mut compressed = unsafe { new_buffer(size as usize) };
+                let mut compressed = vec![0; size as usize];
 
                 self.file.seek(SeekFrom::Start(offset))?;
                 self.file.read_exact(&mut compressed)?;

@@ -1,6 +1,6 @@
+use byteorder::{ByteOrder, BE, LE};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use util::mem::{read_u16_be, read_u16_le, read_u32_be, read_u32_le};
 
 macro_rules! utf8 {
     ($num:ident, $value:ident, $format:ident) => {{
@@ -28,17 +28,16 @@ impl Param {
         }
 
         // Check magic.
-        let header = raw.as_ptr();
-        let magic = unsafe { read_u32_be(header, 0) };
+        let magic = BE::read_u32(&raw[0x00..]);
 
         if magic != 0x00505346 {
             return Err(ReadError::InvalidMagic);
         }
 
         // Read header.
-        let key_table = unsafe { read_u32_le(header, 8) } as usize;
-        let data_table = unsafe { read_u32_le(header, 12) } as usize;
-        let entries = unsafe { read_u32_le(header, 16) } as usize;
+        let key_table = LE::read_u32(&raw[0x08..]) as usize;
+        let data_table = LE::read_u32(&raw[0x0C..]) as usize;
+        let entries = LE::read_u32(&raw[0x10..]) as usize;
 
         // Read entries.
         let mut title: Option<String> = None;
@@ -48,14 +47,14 @@ impl Param {
             // Entry header.
             let offset = 20 + i * 16;
             let entry = match raw.get(offset..(offset + 16)) {
-                Some(v) => v.as_ptr(),
+                Some(v) => v,
                 None => return Err(ReadError::TooSmall),
             };
 
-            let key_offset = key_table + unsafe { read_u16_le(entry, 0) } as usize;
-            let format = unsafe { read_u16_be(entry, 2) };
-            let len = unsafe { read_u32_le(entry, 4) } as usize;
-            let data_offset = data_table + unsafe { read_u32_le(entry, 12) } as usize;
+            let key_offset = key_table + LE::read_u16(&entry[0x00..]) as usize;
+            let format = BE::read_u16(&entry[0x02..]);
+            let len = LE::read_u32(&entry[0x04..]) as usize;
+            let data_offset = data_table + LE::read_u32(&entry[0x0C..]) as usize;
 
             if len == 0 {
                 return Err(ReadError::InvalidEntryHeader(i));

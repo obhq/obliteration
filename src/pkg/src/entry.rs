@@ -1,5 +1,5 @@
+use byteorder::{ByteOrder, BE};
 use std::path::{Path, PathBuf};
-use util::mem::{read_u32_be, write_u32_be};
 
 pub struct Entry {
     id: u32,
@@ -41,13 +41,13 @@ impl Entry {
     pub const PIC0_DDS: u32 = 0x000012a0;
     pub const PIC1_DDS: u32 = 0x000012c0;
 
-    pub unsafe fn read(raw: *const u8) -> Self {
-        let id = unsafe { read_u32_be(raw, 0) };
-        let filename_offset = unsafe { read_u32_be(raw, 4) };
-        let flags1 = unsafe { read_u32_be(raw, 8) };
-        let flags2 = unsafe { read_u32_be(raw, 12) };
-        let data_offset = unsafe { read_u32_be(raw, 16) };
-        let data_size = unsafe { read_u32_be(raw, 20) };
+    pub unsafe fn read(raw: &[u8]) -> Self {
+        let id = BE::read_u32(&raw[0x00..]);
+        let filename_offset = BE::read_u32(&raw[0x04..]);
+        let flags1 = BE::read_u32(&raw[0x08..]);
+        let flags2 = BE::read_u32(&raw[0x0C..]);
+        let data_offset = BE::read_u32(&raw[0x10..]);
+        let data_size = BE::read_u32(&raw[0x14..]);
 
         Self {
             id,
@@ -81,14 +81,13 @@ impl Entry {
 
     pub fn to_bytes(&self) -> [u8; 32] {
         let mut buf = [0u8; 32];
-        let p = buf.as_mut_ptr();
 
-        unsafe { write_u32_be(p, 0, self.id) };
-        unsafe { write_u32_be(p, 4, self.filename_offset) };
-        unsafe { write_u32_be(p, 8, self.flags1) };
-        unsafe { write_u32_be(p, 12, self.flags2) };
-        unsafe { write_u32_be(p, 16, self.data_offset) };
-        unsafe { write_u32_be(p, 20, self.data_size) };
+        BE::write_u32(&mut buf[0x00..], self.id);
+        BE::write_u32(&mut buf[0x04..], self.filename_offset);
+        BE::write_u32(&mut buf[0x08..], self.flags1);
+        BE::write_u32(&mut buf[0x0C..], self.flags2);
+        BE::write_u32(&mut buf[0x10..], self.data_offset);
+        BE::write_u32(&mut buf[0x14..], self.data_size);
 
         buf
     }
