@@ -53,11 +53,7 @@ impl Metadata {
 }
 
 bitflags! {
-    /// Unix mode of a game file.
-    ///
-    /// The value of this is exactly the same as the value in the PFS.
-    #[derive(Serialize, Deserialize)]
-    #[serde(transparent)]
+    #[derive(Clone)]
     #[repr(transparent)]
     pub struct FileMode: u16 {
         const S_IXOTH = 0b0000000000000001;
@@ -72,9 +68,30 @@ bitflags! {
     }
 }
 
+impl<'de> serde::Deserialize<'de> for FileMode {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let mode = u16::deserialize(deserializer)?;
+        Self::from_bits(mode).ok_or_else(|| {
+            serde::de::Error::custom("Invalid value for Deserialization.")
+        })
+    }
+}
+
+impl serde::Serialize for FileMode {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_u16(self.bits())
+    }
+}
+
 impl From<u16> for FileMode {
-    fn from(value: u16) -> Self {
-        Self { bits: value }
+    fn from(item: u16) -> Self {
+        Self::from_bits_truncate(item)
     }
 }
 
