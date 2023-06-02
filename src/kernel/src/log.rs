@@ -64,18 +64,3 @@ macro_rules! error {
         writer.print(&buffer).unwrap();
     }}
 }
-
-/// Logging an error for the current system call then panic.
-///
-/// This macro will prepend the panic message with the name of current function.
-#[macro_export]
-macro_rules! syserr {
-    ($fmt:literal) => {{
-        let func = util::function_name!();
-        panic!(concat!("Fatal error occurred in system call '{}': ", $fmt, "."), func);
-    }};
-    ($fmt:literal, $($arg:tt)*) => {{
-        let func = util::function_name!();
-        panic!(concat!("Fatal error occurred in system call '{}': ", $fmt, "."), func, $($arg)*);
-    }};
-}

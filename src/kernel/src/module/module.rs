@@ -1,9 +1,8 @@
-use super::{LoadError, Memory};
+use super::{LoadError, Memory, ModuleManager, ResolveSymbolError};
 use crate::memory::{MemoryManager, MprotectError};
 use byteorder::{ByteOrder, NativeEndian};
 use elf::dynamic::{DynamicLinking, ModuleFlags, RelocationInfo, SymbolInfo};
 use elf::Elf;
-use std::error::Error;
 use std::fs::File;
 use thiserror::Error;
 
@@ -50,11 +49,7 @@ impl<'a> Module<'a> {
 
     /// # Safety
     /// No other threads may not read/write/execute the module memory.
-    pub unsafe fn apply_relocs<R, E>(&self, mut resolver: R) -> Result<(), RelocError<E>>
-    where
-        R: FnMut(u32, &str) -> Result<usize, E>,
-        E: Error,
-    {
+    pub unsafe fn apply_relocs(&self, modules: &ModuleManager<'a>) -> Result<(), RelocError> {
         // Do nothing if the module is not dynamic linking.
         let dynamic = match self.image.dynamic_linking() {
             Some(v) => v,
@@ -85,7 +80,7 @@ impl<'a> Module<'a> {
                     // Check binding type.
                     let value = match symbol.binding() {
                         SymbolInfo::STB_GLOBAL | SymbolInfo::STB_WEAK => {
-                            match self.resolve_external_symbol(symbol, dynamic, &mut resolver) {
+                            match self.resolve_external_symbol(symbol, dynamic, modules) {
                                 Ok(v) => v,
                                 Err(e) => {
                                     return Err(RelocError::ResolveSymbolFailed(
@@ -133,7 +128,7 @@ impl<'a> Module<'a> {
             // Check binding type.
             let value = match symbol.binding() {
                 SymbolInfo::STB_GLOBAL => {
-                    match self.resolve_external_symbol(symbol, dynamic, &mut resolver) {
+                    match self.resolve_external_symbol(symbol, dynamic, modules) {
                         Ok(v) => v,
                         Err(e) => {
                             return Err(RelocError::ResolvePltSymFailed(
@@ -160,16 +155,12 @@ impl<'a> Module<'a> {
         Ok(())
     }
 
-    fn resolve_external_symbol<R, E>(
+    fn resolve_external_symbol(
         &self,
         sym: &SymbolInfo,
         data: &DynamicLinking,
-        resolver: &mut R,
-    ) -> Result<usize, ExternalSymbolError<E>>
-    where
-        R: FnMut(u32, &str) -> Result<usize, E>,
-        E: Error,
-    {
+        modules: &ModuleManager<'a>,
+    ) -> Result<usize, ExternalSymbolError> {
         // Decode symbol name.
         let (name, library, module) = match sym.decode_name() {
             Some(v) => v,
@@ -205,10 +196,22 @@ impl<'a> Module<'a> {
             }
         }
 
-        // Invoke resolver.
-        match resolver(hash, &name) {
+        // Resolve from other modules.
+        match modules.resolve_symbol(hash, &name) {
+            Ok(v) => return Ok(v),
+            Err(e) => match e {
+                ResolveSymbolError::InvalidModule | ResolveSymbolError::NotFound => {}
+                e => return Err(ExternalSymbolError::ResolveFailed(name, hash, e)),
+            },
+        }
+
+        // Symbol not found, resolve to sceKernelReportUnpatchedFunctionCall instead.
+        let name = "M0z6Dr6TNnM#libkernel#libkernel";
+        let hash = Self::hash_symbol(name);
+
+        match modules.resolve_symbol(hash, &name) {
             Ok(v) => Ok(v),
-            Err(e) => Err(ExternalSymbolError::ResolveFailed(name, hash, e)),
+            Err(e) => Err(ExternalSymbolError::ResolveFailed(name.to_owned(), hash, e)),
         }
     }
 
@@ -231,7 +234,7 @@ impl<'a> Module<'a> {
 
 /// Represents the errors for [`Module::apply_relocs()`].
 #[derive(Debug, Error)]
-pub enum RelocError<R: Error> {
+pub enum RelocError {
     #[error("cannot unprotect the memory")]
     UnprotectMemoryFailed(#[source] MprotectError),
 
@@ -245,7 +248,7 @@ pub enum RelocError<R: Error> {
     UnknownSymbolBinding(String, u8),
 
     #[error("cannot resolve symbol {0}")]
-    ResolveSymbolFailed(String, #[source] ExternalSymbolError<R>),
+    ResolveSymbolFailed(String, #[source] ExternalSymbolError),
 
     #[error("unknown PLT relocation type {1:#010x} on entry {0}")]
     UnknownPltRelocType(usize, u32),
@@ -257,12 +260,12 @@ pub enum RelocError<R: Error> {
     UnknownPltSymBinding(String, u8),
 
     #[error("cannot resolve PLT symbol {0}")]
-    ResolvePltSymFailed(String, #[source] ExternalSymbolError<R>),
+    ResolvePltSymFailed(String, #[source] ExternalSymbolError),
 }
 
 /// Represents the errors for external symbol.
 #[derive(Debug, Error)]
-pub enum ExternalSymbolError<R: Error> {
+pub enum ExternalSymbolError {
     #[error("invalid name")]
     InvalidName,
 
@@ -273,5 +276,5 @@ pub enum ExternalSymbolError<R: Error> {
     InvalidLibrary(u16),
 
     #[error("cannot resolve {0} ({1:#010x})")]
-    ResolveFailed(String, u32, #[source] R),
+    ResolveFailed(String, u32, #[source] ResolveSymbolError),
 }
