@@ -10,16 +10,12 @@ impl Syscalls {
     }
 
     #[cpu_abi]
-    pub fn int44(&self, offset: usize, module: *mut VPathBuf) -> ! {
-        let module = unsafe { Box::from_raw(module) };
-
+    pub fn int44(&self, offset: usize, module: &VPathBuf) -> ! {
         panic!("Interrupt number 0x44 has been executed at {offset:#018x} on {module}.");
     }
 
     #[cpu_abi]
-    pub fn unimplemented(&self, id: u32, offset: usize, module: *mut VPathBuf) -> ! {
-        let module = unsafe { Box::from_raw(module) };
-
+    pub fn unimplemented(&self, id: u32, offset: usize, module: &VPathBuf) -> ! {
         panic!("Syscall {id} is not implemented at {offset:#018x} on {module}.");
     }
 }
