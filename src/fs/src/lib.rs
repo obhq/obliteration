@@ -53,7 +53,8 @@ impl Metadata {
 }
 
 bitflags! {
-    #[derive(Clone)]
+    #[derive(Clone, Serialize, Deserialize)]
+    #[serde(transparent)]
     #[repr(transparent)]
     pub struct FileMode: u16 {
         const S_IXOTH = 0b0000000000000001;
@@ -65,26 +66,6 @@ bitflags! {
         const S_IXUSR = 0b0000000001000000;
         const S_IWUSR = 0b0000000010000000;
         const S_IRUSR = 0b0000000100000000;
-    }
-}
-
-impl<'de> serde::Deserialize<'de> for FileMode {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let mode = u16::deserialize(deserializer)?;
-        Self::from_bits(mode)
-            .ok_or_else(|| serde::de::Error::custom("Invalid value for Deserialization."))
-    }
-}
-
-impl serde::Serialize for FileMode {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_u16(self.bits())
     }
 }
 
