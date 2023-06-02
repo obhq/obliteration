@@ -1,31 +1,65 @@
+use crate::memory::MemoryManager;
+use std::alloc::Layout;
 use std::ops::{Index, IndexMut};
 use std::slice::SliceIndex;
 use std::sync::{Mutex, MutexGuard};
 
 /// Additional memory that is contiguous to the module memory.
-pub struct ModuleWorkspace {
+pub struct ModuleWorkspace<'a> {
+    mm: &'a MemoryManager,
     ptr: *mut u8,
     len: usize,
     sealed: Mutex<usize>,
+    destructors: Mutex<Vec<Box<dyn FnOnce()>>>,
 }
 
-impl ModuleWorkspace {
-    pub(super) fn new(ptr: *mut u8, len: usize) -> Self {
+impl<'a> ModuleWorkspace<'a> {
+    pub(super) fn new(mm: &'a MemoryManager, ptr: *mut u8, len: usize) -> Self {
         Self {
+            mm,
             ptr,
             len,
             sealed: Mutex::new(0),
+            destructors: Mutex::default(),
         }
     }
 
-    pub fn len(&self) -> usize {
-        self.len
+    pub fn push<T: 'static>(&self, value: T) -> Option<*mut T> {
+        let mut sealed = self.sealed.lock().unwrap();
+        let ptr = unsafe { self.ptr.add(*sealed) };
+        let available = self.len - *sealed;
+
+        // Check if the remaining space is enough.
+        let layout = Layout::new::<T>();
+        let offset = match (ptr as usize) % layout.align() {
+            0 => 0,
+            v => layout.align() - v,
+        };
+
+        if offset + layout.size() > available {
+            return None;
+        }
+
+        // Move value to the workspace.
+        let ptr = unsafe { ptr.add(offset) } as *mut T;
+
+        unsafe { std::ptr::write(ptr, value) };
+
+        self.destructors
+            .lock()
+            .unwrap()
+            .push(Box::new(move || unsafe { std::ptr::drop_in_place(ptr) }));
+
+        // Seal the memory.
+        *sealed += offset + layout.size();
+
+        Some(ptr)
     }
 
-    pub fn lock(&self) -> UnsealedWorkspace<'_> {
+    pub fn memory(&self) -> WorkspaceMemory<'_> {
         let sealed = self.sealed.lock().unwrap();
 
-        UnsealedWorkspace {
+        WorkspaceMemory {
             ptr: unsafe { self.ptr.add(*sealed) },
             len: self.len - *sealed,
             lock: sealed,
@@ -33,14 +67,33 @@ impl ModuleWorkspace {
     }
 }
 
+impl<'a> Drop for ModuleWorkspace<'a> {
+    fn drop(&mut self) {
+        // Run destructors.
+        let destructors = self.destructors.get_mut().unwrap();
+
+        for d in destructors.drain(..).rev() {
+            d();
+        }
+
+        // Unmap the memory.
+        if let Err(e) = self.mm.munmap(self.ptr, self.len) {
+            panic!(
+                "Failed to unmap {} bytes starting at {:p}: {}.",
+                self.len, self.ptr, e
+            );
+        }
+    }
+}
+
 /// An exclusive access to unsealed memory of the workspace.
-pub struct UnsealedWorkspace<'a> {
+pub struct WorkspaceMemory<'a> {
     lock: MutexGuard<'a, usize>,
     ptr: *mut u8,
     len: usize,
 }
 
-impl<'a> UnsealedWorkspace<'a> {
+impl<'a> WorkspaceMemory<'a> {
     pub fn addr(&self) -> usize {
         self.ptr as _
     }
@@ -62,7 +115,7 @@ impl<'a> UnsealedWorkspace<'a> {
     }
 }
 
-impl<'a, I> Index<I> for UnsealedWorkspace<'a>
+impl<'a, I> Index<I> for WorkspaceMemory<'a>
 where
     I: SliceIndex<[u8]>,
 {
@@ -73,7 +126,7 @@ where
     }
 }
 
-impl<'a, I> IndexMut<I> for UnsealedWorkspace<'a>
+impl<'a, I> IndexMut<I> for WorkspaceMemory<'a>
 where
     I: SliceIndex<[u8]>,
 {
