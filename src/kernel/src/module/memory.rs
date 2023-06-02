@@ -11,7 +11,7 @@ pub struct Memory<'a> {
     ptr: *mut u8,
     len: usize,
     segments: Vec<MemorySegment>,
-    workspace: ModuleWorkspace,
+    workspace: ModuleWorkspace<'a>,
 }
 
 impl<'a> Memory<'a> {
@@ -98,7 +98,7 @@ impl<'a> Memory<'a> {
             mm,
             ptr,
             len,
-            workspace: ModuleWorkspace::new(unsafe { ptr.add(len) }, workspace),
+            workspace: ModuleWorkspace::new(mm, unsafe { ptr.add(len) }, workspace),
             segments,
         })
     }
@@ -166,12 +166,10 @@ impl<'a> AsRef<[u8]> for Memory<'a> {
 
 impl<'a> Drop for Memory<'a> {
     fn drop(&mut self) {
-        let len = self.len + self.workspace.len();
-
-        if let Err(e) = self.mm.munmap(self.ptr, len) {
+        if let Err(e) = self.mm.munmap(self.ptr, self.len) {
             panic!(
-                "Failed to unmap {len} bytes starting at {:p}: {}.",
-                self.ptr, e
+                "Failed to unmap {} bytes starting at {:p}: {}.",
+                self.len, self.ptr, e
             );
         }
     }
