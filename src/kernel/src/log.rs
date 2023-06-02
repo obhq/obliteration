@@ -7,8 +7,27 @@ macro_rules! info {
         let writer = BufferWriter::stdout(ColorChoice::Auto);
         let mut buffer = writer.buffer();
 
-        buffer.set_color(ColorSpec::new().set_fg(Some(Color::Green))).unwrap();
+        buffer.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)).set_bold(true)).unwrap();
         write!(&mut buffer, "[I] ").unwrap();
+
+        buffer.reset().unwrap();
+        writeln!(&mut buffer, $($arg)*).unwrap();
+
+        writer.print(&buffer).unwrap();
+    }}
+}
+
+#[macro_export]
+macro_rules! warn {
+    ($($arg:tt)*) => {{
+        use std::io::Write;
+        use termcolor::{BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
+
+        let writer = BufferWriter::stdout(ColorChoice::Auto);
+        let mut buffer = writer.buffer();
+
+        buffer.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)).set_bold(true)).unwrap();
+        write!(&mut buffer, "[W] ").unwrap();
 
         buffer.reset().unwrap();
         writeln!(&mut buffer, $($arg)*).unwrap();
@@ -28,7 +47,7 @@ macro_rules! error {
         let mut buffer = writer.buffer();
 
         // Print category and base error.
-        buffer.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
+        buffer.set_color(ColorSpec::new().set_fg(Some(Color::Red)).set_bold(true)).unwrap();
         write!(&mut buffer, "[E] ").unwrap();
 
         buffer.reset().unwrap();
@@ -55,7 +74,7 @@ macro_rules! error {
         let writer = BufferWriter::stderr(ColorChoice::Auto);
         let mut buffer = writer.buffer();
 
-        buffer.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
+        buffer.set_color(ColorSpec::new().set_fg(Some(Color::Red)).set_bold(true)).unwrap();
         write!(&mut buffer, "[E] ").unwrap();
 
         buffer.reset().unwrap();

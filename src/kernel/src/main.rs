@@ -158,6 +158,10 @@ fn main() -> ExitCode {
         // Load the module.
         let mods = match modules.load_mod(&name) {
             Ok(v) => v,
+            Err(module::LoadError::NotFound) => {
+                warn!("Module {name} not found, skipping.");
+                continue;
+            }
             Err(e) => {
                 error!(e, "Cannot load {name}");
                 return ExitCode::FAILURE;
