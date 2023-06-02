@@ -56,7 +56,7 @@ bitflags! {
     /// Unix mode of a game file.
     ///
     /// The value of this is exactly the same as the value in the PFS.
-    #[derive(Serialize, Deserialize)]
+    #[derive(Clone, Serialize, Deserialize)]
     #[serde(transparent)]
     #[repr(transparent)]
     pub struct FileMode: u16 {
@@ -73,8 +73,8 @@ bitflags! {
 }
 
 impl From<u16> for FileMode {
-    fn from(value: u16) -> Self {
-        Self { bits: value }
+    fn from(item: u16) -> Self {
+        Self::from_bits_retain(item)
     }
 }
 
