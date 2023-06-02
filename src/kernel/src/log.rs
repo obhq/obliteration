@@ -7,7 +7,7 @@ macro_rules! info {
         let writer = BufferWriter::stdout(ColorChoice::Auto);
         let mut buffer = writer.buffer();
 
-        buffer.set_color(ColorSpec::new().set_fg(Some(Color::Cyan))).unwrap();
+        buffer.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)).set_bold(true)).unwrap();
         write!(&mut buffer, "[I] ").unwrap();
 
         buffer.reset().unwrap();
@@ -26,7 +26,7 @@ macro_rules! warn {
         let writer = BufferWriter::stdout(ColorChoice::Auto);
         let mut buffer = writer.buffer();
 
-        buffer.set_color(ColorSpec::new().set_fg(Some(Color::Yellow))).unwrap();
+        buffer.set_color(ColorSpec::new().set_fg(Some(Color::Yellow)).set_bold(true)).unwrap();
         write!(&mut buffer, "[W] ").unwrap();
 
         buffer.reset().unwrap();
@@ -47,7 +47,7 @@ macro_rules! error {
         let mut buffer = writer.buffer();
 
         // Print category and base error.
-        buffer.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
+        buffer.set_color(ColorSpec::new().set_fg(Some(Color::Red)).set_bold(true)).unwrap();
         write!(&mut buffer, "[E] ").unwrap();
 
         buffer.reset().unwrap();
@@ -74,7 +74,7 @@ macro_rules! error {
         let writer = BufferWriter::stderr(ColorChoice::Auto);
         let mut buffer = writer.buffer();
 
-        buffer.set_color(ColorSpec::new().set_fg(Some(Color::Red))).unwrap();
+        buffer.set_color(ColorSpec::new().set_fg(Some(Color::Red)).set_bold(true)).unwrap();
         write!(&mut buffer, "[E] ").unwrap();
 
         buffer.reset().unwrap();
