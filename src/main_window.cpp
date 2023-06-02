@@ -26,6 +26,7 @@
 #include <QPlainTextEdit>
 #include <QProgressDialog>
 #include <QSettings>
+#include <QStyleHints>
 #include <QTabWidget>
 #include <QToolBar>
 #include <QUrl>
@@ -41,9 +42,18 @@ MainWindow::MainWindow() :
     setWindowTitle("Obliteration");
     restoreGeometry();
 
+    // Determine current theme.
+
+    QString svgPath;
+    if (QApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark) {
+        svgPath = ":/resources/darkmode/";
+    } else {
+        svgPath = ":/resources/lightmode/";
+    }
+
     // File menu.
     auto fileMenu = menuBar()->addMenu("&File");
-    auto installPkg = new QAction(QIcon(":/resources/archive-arrow-down-outline.svg"), "&Install PKG", this);
+    auto installPkg = new QAction(QIcon(svgPath + "archive-arrow-down-outline.svg"), "&Install PKG", this);
     auto quit = new QAction("&Quit", this);
 
     connect(installPkg, &QAction::triggered, this, &MainWindow::installPkg);
@@ -96,7 +106,7 @@ MainWindow::MainWindow() :
     connect(m_games, &QAbstractItemView::doubleClicked, this, &MainWindow::startGame);
     connect(m_games, &QWidget::customContextMenuRequested, this, &MainWindow::requestGamesContextMenu);
 
-    m_tab->addTab(m_games, QIcon(":/resources/view-comfy.svg"), "Games");
+    m_tab->addTab(m_games, QIcon(svgPath + "view-comfy.svg"), "Games");
 
     // Setup log view.
     auto log = new QPlainTextEdit();
@@ -115,7 +125,7 @@ MainWindow::MainWindow() :
 
     m_log = new LogFormatter(log, this);
 
-    m_tab->addTab(log, QIcon(":/resources/card-text-outline.svg"), "Log");
+    m_tab->addTab(log, QIcon(svgPath + "card-text-outline.svg"), "Log");
 
     // Setup status bar.
     statusBar();

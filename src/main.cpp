@@ -13,6 +13,7 @@ int main(int argc, char *argv[])
     // Setup application.
     QCoreApplication::setOrganizationName("Obliteration");
     QCoreApplication::setApplicationName("Obliteration");
+    QApplication::setStyle("Fusion");
 
     QApplication app(argc, argv);
 
