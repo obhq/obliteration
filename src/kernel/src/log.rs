@@ -7,8 +7,27 @@ macro_rules! info {
         let writer = BufferWriter::stdout(ColorChoice::Auto);
         let mut buffer = writer.buffer();
 
-        buffer.set_color(ColorSpec::new().set_fg(Some(Color::Green))).unwrap();
+        buffer.set_color(ColorSpec::new().set_fg(Some(Color::Cyan))).unwrap();
         write!(&mut buffer, "[I] ").unwrap();
+
+        buffer.reset().unwrap();
+        writeln!(&mut buffer, $($arg)*).unwrap();
+
+        writer.print(&buffer).unwrap();
+    }}
+}
+
+#[macro_export]
+macro_rules! warn {
+    ($($arg:tt)*) => {{
+        use std::io::Write;
+        use termcolor::{BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
+
+        let writer = BufferWriter::stdout(ColorChoice::Auto);
+        let mut buffer = writer.buffer();
+
+        buffer.set_color(ColorSpec::new().set_fg(Some(Color::Yellow))).unwrap();
+        write!(&mut buffer, "[W] ").unwrap();
 
         buffer.reset().unwrap();
         writeln!(&mut buffer, $($arg)*).unwrap();
