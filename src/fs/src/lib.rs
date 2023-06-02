@@ -53,6 +53,9 @@ impl Metadata {
 }
 
 bitflags! {
+    /// Unix mode of a game file.
+    ///
+    /// The value of this is exactly the same as the value in the PFS.
     #[derive(Clone, Serialize, Deserialize)]
     #[serde(transparent)]
     #[repr(transparent)]
@@ -71,7 +74,7 @@ bitflags! {
 
 impl From<u16> for FileMode {
     fn from(item: u16) -> Self {
-        Self::from_bits_truncate(item)
+        Self::from_bits_retain(item)
     }
 }
 
