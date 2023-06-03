@@ -14,6 +14,11 @@ int main(int argc, char *argv[])
     QCoreApplication::setOrganizationName("Obliteration");
     QCoreApplication::setApplicationName("Obliteration");
 
+    // Dark Mode for Windows
+    #ifdef _WIN32
+        QApplication::setStyle("Fusion");
+    #endif
+
     QApplication app(argc, argv);
 
     QGuiApplication::setWindowIcon(QIcon(":/resources/obliteration-icon.png"));

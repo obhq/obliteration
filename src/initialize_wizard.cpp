@@ -275,6 +275,11 @@ InitializeWizard::InitializeWizard()
     // Window properties.
     setWindowTitle("Setup Obliteration.");
 
+    // Dark Mode for Windows
+    #ifdef _WIN32
+        setWizardStyle(QWizard::ModernStyle);
+    #endif
+
     // Pages.
     setPage(PageIntro, new IntroPage());
     setPage(PageSystem, new SystemPage());
