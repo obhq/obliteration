@@ -1,7 +1,6 @@
 use self::iter::StartFromMut;
 use self::storage::Storage;
 use crate::errno::{EINVAL, ENOMEM};
-use crate::syserr;
 use bitflags::bitflags;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
@@ -65,14 +64,14 @@ impl MemoryManager {
     ) -> Result<*mut u8, MmapError> {
         // Chech addr and len.
         if addr != 0 {
-            syserr!("non-zero addr is not supported yet");
+            todo!("non-zero addr is not supported yet");
         } else if len == 0 {
             return Err(MmapError::ZeroLen);
         }
 
         // Check prot.
         if prot.contains_unknown() {
-            syserr!("unknown prot {:#010x}", prot);
+            todo!("unknown prot {:#010x}", prot);
         }
 
         // Check if either MAP_SHARED or MAP_PRIVATE is specified. not both.
@@ -86,21 +85,21 @@ impl MemoryManager {
 
         // Check for other flags if we are supported.
         if flags.alignment() != 0 {
-            syserr!("MAP_ALIGNED or MAP_ALIGNED_SUPER is not supported yet");
+            todo!("MAP_ALIGNED or MAP_ALIGNED_SUPER is not supported yet");
         } else if flags.contains(MappingFlags::MAP_FIXED) {
-            syserr!("MAP_FIXED is not supported yet");
+            todo!("MAP_FIXED is not supported yet");
         } else if flags.contains(MappingFlags::MAP_HASSEMAPHORE) {
-            syserr!("MAP_HASSEMAPHORE is not supported yet");
+            todo!("MAP_HASSEMAPHORE is not supported yet");
         } else if flags.contains(MappingFlags::MAP_NOCORE) {
-            syserr!("MAP_NOCORE is not supported yet");
+            todo!("MAP_NOCORE is not supported yet");
         } else if flags.contains(MappingFlags::MAP_NOSYNC) {
-            syserr!("MAP_NOSYNC is not support yet");
+            todo!("MAP_NOSYNC is not support yet");
         } else if flags.contains(MappingFlags::MAP_PREFAULT_READ) {
-            syserr!("MAP_PREFAULT_READ is not supported yet");
+            todo!("MAP_PREFAULT_READ is not supported yet");
         } else if !is_private {
-            syserr!("MAP_SHARED is not supported yet");
+            todo!("MAP_SHARED is not supported yet");
         } else if flags.contains(MappingFlags::MAP_STACK) {
-            syserr!("MAP_STACK is not supported yet");
+            todo!("MAP_STACK is not supported yet");
         }
 
         // Round len up to virtual page boundary.
@@ -113,7 +112,7 @@ impl MemoryManager {
         if flags.contains(MappingFlags::MAP_ANON) {
             self.mmap_anon(len, prot, fd, offset)
         } else {
-            syserr!("non-anonymous mapping is not supported yet");
+            todo!("non-anonymous mapping is not supported yet");
         }
     }
 
@@ -376,7 +375,7 @@ impl MemoryManager {
                     return Err(MmapError::NoMem(len));
                 } else {
                     // We should not hit other error except for out of memory.
-                    syserr!("{}", e);
+                    panic!("Failed to allocate {len}: {e}.");
                 }
             }
         };
@@ -385,7 +384,7 @@ impl MemoryManager {
         let mut allocs = self.allocations.write().unwrap();
 
         match allocs.entry(alloc.addr as usize) {
-            Entry::Occupied(e) => syserr!("address {:p} is already allocated", e.key()),
+            Entry::Occupied(e) => panic!("Address {:p} is already allocated.", e.key()),
             Entry::Vacant(e) => Ok(e.insert(alloc).addr),
         }
     }

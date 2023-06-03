@@ -193,7 +193,7 @@ fn main() -> ExitCode {
     for module in loaded {
         info!("Applying relocation entries on {}.", module.image().name());
 
-        if let Err(e) = unsafe { module.apply_relocs(|h, n| modules.resolve_symbol(h, n)) } {
+        if let Err(e) = unsafe { module.apply_relocs(&modules) } {
             error!(e, "Apply failed");
             return ExitCode::FAILURE;
         }

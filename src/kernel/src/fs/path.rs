@@ -183,6 +183,12 @@ impl Borrow<VPath> for VPathBuf {
     }
 }
 
+impl Borrow<str> for VPathBuf {
+    fn borrow(&self) -> &str {
+        self.0.borrow()
+    }
+}
+
 impl Display for VPathBuf {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.0.borrow())

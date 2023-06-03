@@ -143,7 +143,7 @@ impl<'a> ModuleManager<'a> {
 
     /// This function only load eboot.bin without its dependencies into the memory, no relocation is
     /// applied.
-    pub fn load_eboot(&self) -> Result<Arc<Module>, LoadError> {
+    pub fn load_eboot(&self) -> Result<Arc<Module<'a>>, LoadError> {
         // Check if already loaded.
         let path = VPathBuf::try_from(Self::EBOOT_PATH).unwrap();
         let mut loaded = self.loaded.write().unwrap();
@@ -163,7 +163,7 @@ impl<'a> ModuleManager<'a> {
     /// Load only the specified module without its dependencies into the memory, no relocation is
     /// applied. Returns only the modules that was loaded by this call, which is zero if the module
     /// is already loaded.
-    pub fn load_mod(&self, name: &str) -> Result<Vec<Arc<Module>>, LoadError> {
+    pub fn load_mod(&self, name: &str) -> Result<Vec<Arc<Module<'a>>>, LoadError> {
         let mut modules = Vec::new();
 
         // Map name to file.
@@ -206,6 +206,7 @@ impl<'a> ModuleManager<'a> {
         };
 
         // Lookup symbol from loaded modules.
+        let mut addrs: Vec<(&VPathBuf, usize)> = Vec::new();
         let loaded = self.loaded.read().unwrap();
 
         for file in files {
@@ -223,11 +224,18 @@ impl<'a> ModuleManager<'a> {
 
             // Lookup.
             if let Some(sym) = dynamic.lookup_symbol(hash, name) {
-                return Ok(module.memory().addr() + sym.value());
+                addrs.push((file, module.memory().addr() + sym.value()));
             }
         }
 
-        Err(ResolveSymbolError::NotFound)
+        // Check the result.
+        match addrs.len() {
+            0 => Err(ResolveSymbolError::NotFound),
+            1 => Ok(addrs[0].1),
+            _ => Err(ResolveSymbolError::Ambiguity(
+                addrs.into_iter().map(|i| i.0.clone()).collect(),
+            )),
+        }
     }
 
     fn load(&self, path: &VPath, workspace: usize) -> Result<Module<'a>, LoadError> {
@@ -309,6 +317,20 @@ impl<'a> ModuleManager<'a> {
                 None => continue,
             }
 
+            // Skip libkernel_sys, libkernel_web, libSceGnmDriverForNeoMode and libSceSsl2.
+            match path.file_stem() {
+                Some(v) => {
+                    if v == "libkernel_sys"
+                        || v == "libkernel_web"
+                        || v == "libSceGnmDriverForNeoMode"
+                        || v == "libSceSsl2"
+                    {
+                        continue;
+                    }
+                }
+                None => continue,
+            }
+
             // Open the file.
             let file = match File::open(&path) {
                 Ok(v) => v,
@@ -329,7 +351,11 @@ impl<'a> ModuleManager<'a> {
             // Get map entry.
             let info = dynamic.module_info();
             let list = match self.available.entry(info.name().to_owned()) {
-                Entry::Occupied(e) => e.into_mut(),
+                Entry::Occupied(e) => match e.key().as_str() {
+                    // Skip if the module is unique and already exists.
+                    "libc" | "libSceFios2" => continue,
+                    _ => e.into_mut(),
+                },
                 Entry::Vacant(e) => e.insert(Vec::new()),
             };
 
@@ -390,6 +416,9 @@ pub enum ResolveSymbolError {
 
     #[error("not found")]
     NotFound,
+
+    #[error("ambiguity between [{}]", .0.join(", "))]
+    Ambiguity(Vec<VPathBuf>),
 }
 
 /// Represens the errors for dependency chain.
