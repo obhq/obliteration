@@ -135,7 +135,9 @@ impl<'a> Memory<'a> {
         &self.workspace
     }
 
-    pub(super) fn protect(&self) -> Result<(), MprotectError> {
+    /// # Safety
+    /// No other threads may access the memory.
+    pub(super) unsafe fn protect(&self) -> Result<(), MprotectError> {
         for seg in &self.segments {
             let addr = unsafe { self.ptr.add(seg.start) };
 
@@ -146,7 +148,7 @@ impl<'a> Memory<'a> {
     }
 
     /// # Safety
-    /// Only a single thread can have access to the unprotected memory.
+    /// No other threads may access the memory until [`UnprotectedMemory`] has been dropped.
     pub unsafe fn unprotect(&self) -> Result<UnprotectedMemory<'_>, MprotectError> {
         self.mm.mprotect(
             self.ptr,
@@ -222,7 +224,7 @@ impl<'a> UnprotectedMemory<'a> {
 
 impl<'a> Drop for UnprotectedMemory<'a> {
     fn drop(&mut self) {
-        if let Err(e) = self.0.protect() {
+        if let Err(e) = unsafe { self.0.protect() } {
             // This should never happen because it was succeeded when the memory is initialized.
             panic!("Cannot protect memory: {e}.");
         }
