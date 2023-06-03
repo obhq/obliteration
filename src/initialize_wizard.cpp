@@ -274,6 +274,7 @@ InitializeWizard::InitializeWizard()
 {
     // Window properties.
     setWindowTitle("Setup Obliteration.");
+    setWizardStyle(QWizard::ModernStyle);
 
     // Pages.
     setPage(PageIntro, new IntroPage());
