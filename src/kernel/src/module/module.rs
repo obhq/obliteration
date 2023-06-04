@@ -139,7 +139,7 @@ impl<'a> Module<'a> {
 
             // Check binding type.
             let value = match symbol.binding() {
-                SymbolInfo::STB_GLOBAL => {
+                SymbolInfo::STB_GLOBAL | SymbolInfo::STB_WEAK => {
                     match self.resolve_external_symbol(symbol, dynamic, modules) {
                         Ok(v) => v,
                         Err(e) => {
