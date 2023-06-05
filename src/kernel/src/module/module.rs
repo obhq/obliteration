@@ -1,6 +1,5 @@
 use super::{LoadError, Memory, ModuleManager, ResolveSymbolError};
 use crate::memory::{MemoryManager, MprotectError};
-use byteorder::{ByteOrder, NativeEndian};
 use elf::dynamic::{DynamicLinking, ModuleFlags, RelocationInfo, SymbolInfo};
 use elf::Elf;
 use std::fs::File;
@@ -32,7 +31,7 @@ impl<'a> Module<'a> {
             }
         })?;
 
-        if let Err(e) = memory.protect() {
+        if let Err(e) = unsafe { memory.protect() } {
             return Err(LoadError::ProtectionMemoryFailed(e));
         }
 
@@ -63,14 +62,12 @@ impl<'a> Module<'a> {
         };
 
         // Apply relocation.
-        let base = mem.addr();
+        let base = mem.addr() as u64;
 
         for (i, reloc) in dynamic.relocation_entries().enumerate() {
-            let target = &mut mem[reloc.offset()..];
-            let addend = reloc.addend();
-
-            match reloc.ty() {
-                RelocationInfo::R_X86_64_64 => {
+            // Get the value.
+            let value = match reloc.ty() {
+                RelocationInfo::R_X86_64_64 | RelocationInfo::R_X86_64_GLOB_DAT => {
                     // Get target symbol.
                     let symbol = match dynamic.symbols().get(reloc.symbol()) {
                         Some(v) => v,
@@ -98,19 +95,34 @@ impl<'a> Module<'a> {
                         }
                     };
 
-                    NativeEndian::write_u64(target, (value + addend) as u64);
+                    value as u64
                 }
-                RelocationInfo::R_X86_64_RELATIVE => {
-                    NativeEndian::write_u64(target, (base + addend) as u64);
-                }
+                RelocationInfo::R_X86_64_RELATIVE => base,
                 RelocationInfo::R_X86_64_DTPMOD64 => {
                     // Uplift add to the value instead of replacing it. According to
                     // https://chao-tic.github.io/blog/2018/12/25/tls it should be replaced with the
                     // module ID. Let's follow the standard way until something is broken.
-                    NativeEndian::write_u64(target, self.id);
+                    self.id
                 }
                 v => return Err(RelocError::UnknownRelocationType(i, v)),
-            }
+            };
+
+            // Adjust the value.
+            let addend = reloc.addend() as u64;
+            let value = match reloc.ty() {
+                RelocationInfo::R_X86_64_64 | RelocationInfo::R_X86_64_RELATIVE => value + addend,
+                RelocationInfo::R_X86_64_GLOB_DAT | RelocationInfo::R_X86_64_DTPMOD64 => value,
+                v => panic!("No implementation for {v:#010x}."),
+            };
+
+            // Write the value.
+            let offset = reloc.offset();
+            let target = match mem.as_mut_slice().get_mut(offset..(offset + 8)) {
+                Some(v) => v.as_mut_ptr() as *mut u64,
+                None => return Err(RelocError::InvalidOffset(i)),
+            };
+
+            std::ptr::write_unaligned(target, value);
         }
 
         // Apply Procedure Linkage Table relocation.
@@ -127,7 +139,7 @@ impl<'a> Module<'a> {
 
             // Check binding type.
             let value = match symbol.binding() {
-                SymbolInfo::STB_GLOBAL => {
+                SymbolInfo::STB_GLOBAL | SymbolInfo::STB_WEAK => {
                     match self.resolve_external_symbol(symbol, dynamic, modules) {
                         Ok(v) => v,
                         Err(e) => {
@@ -147,9 +159,13 @@ impl<'a> Module<'a> {
             };
 
             // Write the target.
-            let target = &mut mem[reloc.offset()..];
+            let offset = reloc.offset();
+            let target = match mem.as_mut_slice().get_mut(offset..(offset + 8)) {
+                Some(v) => v.as_mut_ptr() as *mut u64,
+                None => return Err(RelocError::InvalidPltOffset(i)),
+            };
 
-            NativeEndian::write_u64(target, value as _);
+            std::ptr::write_unaligned(target, value as u64);
         }
 
         Ok(())
@@ -241,6 +257,9 @@ pub enum RelocError {
     #[error("unknown relocation type {1:#010x} on entry {0}")]
     UnknownRelocationType(usize, u32),
 
+    #[error("invalid offset on entry {0}")]
+    InvalidOffset(usize),
+
     #[error("invalid symbol index on entry {0}")]
     InvalidSymbolIndex(usize),
 
@@ -252,6 +271,9 @@ pub enum RelocError {
 
     #[error("unknown PLT relocation type {1:#010x} on entry {0}")]
     UnknownPltRelocType(usize, u32),
+
+    #[error("invalid offset on PLT entry {0}")]
+    InvalidPltOffset(usize),
 
     #[error("invalid symbol index on PLT entry {0}")]
     InvalidPltSymIndex(usize),
