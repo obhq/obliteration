@@ -5,11 +5,11 @@
 
 Obliteration is an experimental PS4 emulator using [Kyty](https://github.com/InoriRus/Kyty) and [Uplift](https://github.com/idc/uplift) as a reference. The project is under development and cannot run any games that Kyty is able to run yet.
 
-**The original author of Kyty is not involved in the development of Obliteration in any way.** Obliteration is a completely separate project. The reason you see the author of Kyty in the contributor list is that this project contains commits from Kyty.
+**The original author of Kyty is not involved in the development of Obliteration in any way.** Obliteration is a completely separate project. The reason you see the author of Kyty in the contributor list is because this project contains commits from Kyty.
 
 ## Get a daily build
 
-You can download binaries from the latest commits [here](https://github.com/obhq/obliteration/actions/workflows/main.yml). You **MUST** sign in to GitHub otherwise you will not be able to download the file.
+You can download binaries from the latest commits [here](https://github.com/obhq/obliteration/actions/workflows/main.yml). You **MUST** sign in to GitHub otherwise you will not be able to download files.
 
 ## Screenshots
 
@@ -70,20 +70,19 @@ Obliteration supports only 4KB/8KB/16KB pages. Most people should not have any p
 
 ### Install Qt 6
 
-You need to install Qt 6 on your system before you proceed. The minimum version is 6.2.
+You need to install Qt 6 on your system before you proceed. The minimum version is 6.5.
 
 #### Windows-specific requirements
 
 You need `Qt Online Installer` for open-source to install Qt, downloaded from https://www.qt.io. The installer will ask you to sign in with a Qt account, which you can create for free. You need to check `Custom installation` and do not check `Qt for desktop development` that is using the MinGW toolchain. Make sure you have checked the `MSVC 2019 64-bit` component in the `Select Components` page for the version you wish to install and uncheck all of the other components.
 
-Once installation is completed you need to set the `CMAKE_PREFIX_PATH` environment variable to the full path of the installed version (e.g. `C:\Qt\6.2.4\msvc2019_64`). To set an environment variable:
+Once installation is completed you need to set the `CMAKE_PREFIX_PATH` environment variable to the full path of the installed version (e.g. `C:\Qt\6.5.1\msvc2019_64`). To set an environment variable:
 
 1. Open a run dialog with <kbd>Win</kbd> + <kbd>R</kbd>.
 2. Enter `sysdm.cpl` then click `OK`.
 3. Go to the `Advanced` tab then click on `Environment Variables...`.
 4. Click `New...` to create a new environment variable. Just create for either `User variables` or `System variables`, not both.
-
-Then restart your computer to make it effective.
+5. Restart your terminal or IDE to load the new PATH.
 
 #### Install Qt with Homebrew (macOS only)
 
@@ -114,7 +113,7 @@ If all you want is to use the emulator, choose `[YOUR-PLATFORM]-release` for opt
 cmake --build build
 ```
 
-You can use `-j` to enable parallel build (e.g. `cmake --build build -j 2`). Each parallel build consume a lot of memory so don't specify the number of your CPU cores otherwise your system might be crashing due to out of memory.
+You can use `-j` to enable parallel building (e.g. `cmake --build build -j 2`). Each parallel build consumes a lot of memory so don't use the number of your CPU cores otherwise your system might crash due to out of memory.
 
 ## Development
 
@@ -149,13 +148,18 @@ The application consists of 2 binaries:
 1. Main application. This is what users will see when they launch Obliteration. Its entry point is inside `src/main.cpp`.
 2. Emulator kernel. This is where PS4 emulation takes place. Its entry point is inside `src/kernel/src/main.rs`.
 
-### Debugging kernel
+### Debugging the kernel
 
-Create `.kernel-debug` in the root of the repository. The content of this file is YAML and the kernel will deserialize it to the `Args` struct in `src/kernel/src/main.rs` when passing the `--debug` flag to the kernel. We already provided a launch configuration for VS Code so all you need to do is just choose `Kernel` as a configuration and start debugging.
+Create `.kernel-debug` in the root of the repository. The contents of this file is YAML and the kernel will deserialize it to the `Args` struct in `src/kernel/src/main.rs` when passing the `--debug` flag to the kernel.
+- game: (Folder Path) | Where is the game to load?
+- system: (Folder Path) | Where is the system firmware?
+- debug-dump: (Folder Path) | Where should the debug log be saved?
+- clear-debug-dump: (boolean) | Should we remove the old debug log?
+We already provide a launch configuration for VS Code so all you need to do is choose `Kernel` as the configuration and start debugging.
 
-### Action icons
+### UI Icons
 
-We use icons from https://materialdesignicons.com for action icons (e.g. on the menu and toolbar).
+We use icons from https://materialdesignicons.com for UI (e.g. on the menu and toolbar).
 
 ## License
 
