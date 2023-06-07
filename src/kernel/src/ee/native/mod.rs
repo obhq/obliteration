@@ -352,12 +352,16 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
 
 impl<'a, 'b> ExecutionEngine for NativeEngine<'a, 'b> {
     fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        // Get eboot.bin.
+        let eboot = self.modules.get_eboot();
+
+        if eboot.image().dynamic_linking().is_none() {
+            todo!("A statically linked eboot.bin is not supported yet.");
+        }
+
         // Get boot module.
         let path: &VPath = "/system/common/lib/libkernel.sprx".try_into().unwrap();
-        let boot = match self.modules.get_mod(path) {
-            Some(v) => v,
-            None => self.modules.get_eboot(),
-        };
+        let boot = self.modules.get_mod(path).unwrap();
 
         // Get entry point.
         let mem = boot.memory().as_ref();
