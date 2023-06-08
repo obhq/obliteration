@@ -6,7 +6,6 @@ use crate::module::{Module, ModuleManager};
 use crate::syscalls::Syscalls;
 use clap::{Parser, ValueEnum};
 use serde::Deserialize;
-use std::collections::VecDeque;
 use std::fs::File;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -118,16 +117,12 @@ fn main() -> ExitCode {
 
     let modules = ModuleManager::new(&fs, &mm, 1024 * 1024);
 
-    info!("{} modules are available.", modules.available_count());
-
     // Initialize syscall routines.
     info!("Initializing system call routines.");
 
     let syscalls = Syscalls::new();
 
     // Load eboot.bin.
-    let mut loaded = Vec::new();
-
     info!("Loading eboot.bin.");
 
     let eboot = match modules.load_eboot() {
@@ -138,66 +133,7 @@ fn main() -> ExitCode {
         }
     };
 
-    loaded.push(eboot.clone());
-
     print_module(&eboot);
-
-    // Load dependencies.
-    info!("Loading eboot.bin dependencies.");
-
-    let mut deps = match eboot.image().dynamic_linking() {
-        Some(dynamic) => dynamic
-            .dependencies()
-            .values()
-            .map(|m| m.name().to_owned())
-            .collect(),
-        None => VecDeque::new(),
-    };
-
-    while let Some(name) = deps.pop_front() {
-        // Load the module.
-        let mods = match modules.load_mod(&name) {
-            Ok(v) => v,
-            Err(module::LoadError::NotFound) => {
-                warn!("Module {name} not found, skipping.");
-                continue;
-            }
-            Err(e) => {
-                error!(e, "Cannot load {name}");
-                return ExitCode::FAILURE;
-            }
-        };
-
-        for m in mods {
-            // Print module information.
-            info!("Module {name} is mapped to {}.", m.image().name());
-            print_module(&m);
-
-            // Add dependencies.
-            let dynamic = match m.image().dynamic_linking() {
-                Some(v) => v,
-                None => continue,
-            };
-
-            for dep in dynamic.dependencies().values() {
-                deps.push_back(dep.name().to_owned());
-            }
-
-            loaded.push(m);
-        }
-    }
-
-    info!("{} module(s) have been loaded successfully.", loaded.len());
-
-    // Apply module relocations.
-    for module in loaded {
-        info!("Applying relocation entries on {}.", module.image().name());
-
-        if let Err(e) = unsafe { module.apply_relocs(&modules) } {
-            error!(e, "Apply failed");
-            return ExitCode::FAILURE;
-        }
-    }
 
     // Get execution engine.
     info!("Initializing execution engine.");
@@ -287,20 +223,9 @@ fn print_module(module: &Module) {
         let i = dynamic.module_info();
 
         info!("Module name   : {}", i.name());
-        info!("Major version : {}", i.version_major());
-        info!("Minor version : {}", i.version_minor());
 
         if let Some(f) = dynamic.flags() {
             info!("Module flags  : {f}");
-        }
-
-        for m in dynamic.dependencies().values() {
-            info!(
-                "Needed module : {} v{}.{}",
-                m.name(),
-                m.version_major(),
-                m.version_minor()
-            );
         }
     }
 
