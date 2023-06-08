@@ -160,6 +160,24 @@ impl<'a> ModuleManager<'a> {
         Ok(module)
     }
 
+    pub fn load_file<P: Into<VPathBuf>>(&self, path: P) -> Result<Arc<Module<'a>>, LoadError> {
+        use std::collections::hash_map::Entry;
+
+        // Get loaded entry.
+        let mut loaded = self.loaded.write().unwrap();
+        let entry = match loaded.entry(path.into()) {
+            Entry::Occupied(e) => return Ok(e.get().clone()),
+            Entry::Vacant(e) => e,
+        };
+
+        // Load the module.
+        let module = Arc::new(self.load(entry.key(), self.module_workspace)?);
+
+        entry.insert(module.clone());
+
+        Ok(module.clone())
+    }
+
     /// Load only the specified module without its dependencies into the memory, no relocation is
     /// applied. Returns only the modules that was loaded by this call, which is zero if the module
     /// is already loaded.

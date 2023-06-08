@@ -1,14 +1,10 @@
 #pragma once
 
-#include <QString>
-
-#include <cstdlib>
-
 struct error;
 
 extern "C" {
     void error_free(error *err);
-    char *error_message(const error *err);
+    const char *error_message(const error *err);
 }
 
 class Error final {
@@ -49,13 +45,7 @@ public:
 
 public:
     // The caller must check if this error has a value before calling this method.
-    QString message() const
-    {
-        auto msg = error_message(m_obj);
-        QString copied(msg);
-        std::free(msg);
-        return copied;
-    }
+    const char *message() const { return error_message(m_obj); }
 
 private:
     error *m_obj;
