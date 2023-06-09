@@ -15,7 +15,7 @@ You can download binaries from the latest commits [here](https://github.com/obhq
 
 ![Game list](screenshots/game-list.png)
 
-Thanks [Mou-Ikkai](https://github.com/Mou-Ikkai) for the awesome icon!
+Thanks to [Mou-Ikkai](https://github.com/Mou-Ikkai) for the awesome icon!
 
 ## Obliteration discussion
 
@@ -32,9 +32,9 @@ We have a Matrix Room Space `#obliteration:matrix.org` on [Matrix.to](https://ma
 
 ## System requirements
 
-- Windows 10, Linux and macOS.
-- x86-64 or AArch64 CPU.
-- A jailbroken PS4 with FTP server that support SELF decryption.
+- Windows 10, Linux or macOS.
+- x86-64 CPU.
+- A jailbroken PS4 with FTP server that supports SELF decryption.
 
 ### Windows-specific requirements
 
@@ -146,7 +146,7 @@ Just follow how Qt is written (e.g. coding style, etc.). Always prefers Qt class
 The application consists of 2 binaries:
 
 1. Main application. This is what users will see when they launch Obliteration. Its entry point is inside `src/main.cpp`.
-2. Emulator kernel. This is where PS4 emulation takes place. Its entry point is inside `src/kernel/src/main.rs`.
+2. Emulator kernel. This is where emulation takes place. Its entry point is inside `src/kernel/src/main.rs`.
 
 ### Debugging the kernel
 
