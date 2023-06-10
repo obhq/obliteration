@@ -125,15 +125,41 @@ fn main() -> ExitCode {
     // Load eboot.bin.
     info!("Loading eboot.bin.");
 
-    let eboot = match modules.load_eboot() {
-        Ok(v) => v,
+    match modules.load_eboot() {
+        Ok(m) => print_module(&m),
         Err(e) => {
             error!(e, "Load failed");
             return ExitCode::FAILURE;
         }
     };
 
-    print_module(&eboot);
+    // Preload libkernel.
+    let libkernel: &VPath = "/system/common/lib/libkernel.sprx".try_into().unwrap();
+
+    info!("Loading {libkernel}.");
+
+    match modules.load_file(libkernel) {
+        Ok(m) => print_module(&m),
+        Err(e) => {
+            error!(e, "Load failed");
+            return ExitCode::FAILURE;
+        }
+    }
+
+    // Preload internal libc.
+    let libc: &VPath = "/system/common/lib/libSceLibcInternal.sprx"
+        .try_into()
+        .unwrap();
+
+    info!("Loading {libc}.");
+
+    match modules.load_file(libc) {
+        Ok(m) => print_module(&m),
+        Err(e) => {
+            error!(e, "Load failed");
+            return ExitCode::FAILURE;
+        }
+    }
 
     // Get execution engine.
     info!("Initializing execution engine.");
