@@ -303,8 +303,8 @@ void MainWindow::installPkg()
 
 void MainWindow::reportIssue()
 {
-    if (!QDesktopServices::openUrl(QUrl("https://github.com/ultimaweapon/obliteration/issues"))) {
-        QMessageBox::critical(this, "Error", "Failed to open https://github.com/ultimaweapon/obliteration/issues using your browser.");
+    if (!QDesktopServices::openUrl(QUrl("https://github.com/obhq/obliteration/issues"))) {
+        QMessageBox::critical(this, "Error", "Failed to open https://github.com/obhq/obliteration/issues.");
     }
 }
 
@@ -422,7 +422,7 @@ void MainWindow::startGame(const QModelIndex &index)
 
 void MainWindow::kernelError(QProcess::ProcessError error)
 {
-    // Display error.
+    // Get error message.
     QString msg;
 
     switch (error) {
@@ -436,14 +436,15 @@ void MainWindow::kernelError(QProcess::ProcessError error)
         msg = "The kernel encountered an unknown error.";
     }
 
-    QMessageBox::critical(this, "Error", msg);
-
     // Flush the kenel log before we destroy its object.
     kernelOutput();
 
     // Destroy object.
     m_kernel->deleteLater();
     m_kernel = nullptr;
+
+    // Display error.
+    QMessageBox::critical(this, "Error", msg);
 }
 
 void MainWindow::kernelOutput()
