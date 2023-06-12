@@ -1,11 +1,12 @@
 #include "app_data.hpp"
 #include "path.hpp"
 
+#include <QDir>
 #include <QStandardPaths>
 
 static QString root()
 {
-    return QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    return QDir::toNativeSeparators(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation));
 }
 
 QString kernelDebugDump()

@@ -1,11 +1,13 @@
-use self::dynamic::DynamicLinking;
+pub use dynamic::*;
+pub use program::*;
+
 use bitflags::bitflags;
 use byteorder::{ByteOrder, LE};
-use std::fmt::{Display, Formatter};
 use std::io::{Read, Seek, SeekFrom};
 use thiserror::Error;
 
-pub mod dynamic;
+mod dynamic;
+mod program;
 
 /// The first 8 bytes of SELF file.
 pub const SELF_MAGIC: [u8; 8] = [0x4f, 0x15, 0x3d, 0x1d, 0x00, 0x01, 0x01, 0x12];
@@ -21,6 +23,7 @@ pub struct Elf<I: Read + Seek> {
     entry_addr: Option<usize>,
     programs: Vec<Program>,
     dynamic_linking: Option<DynamicLinking>,
+    twomb_mode: bool,
 }
 
 impl<I: Read + Seek> Elf<I> {
@@ -109,7 +112,7 @@ impl<I: Read + Seek> Elf<I> {
 
         // Load ELF header.
         let e_entry = LE::read_u64(&hdr[0x18..]);
-        let e_phoff = LE::read_u64(&hdr[0x20..]) + offset;
+        let e_phoff = offset + 0x40; // PS4 is hard-coded this value.
         let e_phnum = LE::read_u16(&hdr[0x38..]) as usize;
 
         // Seek to first program header.
@@ -124,6 +127,12 @@ impl<I: Read + Seek> Elf<I> {
 
         // Load program headers.
         let mut programs: Vec<Program> = Vec::with_capacity(e_phnum);
+        let mut mapbase = u64::MAX;
+        let mut mapend = 0;
+        let mut twomb_mode = false;
+        let mut relro = None;
+        let mut exec = None;
+        let mut data = None;
         let mut dynamic: Option<(usize, usize)> = None;
         let mut dynlib: Option<(usize, usize)> = None;
 
@@ -135,24 +144,106 @@ impl<I: Read + Seek> Elf<I> {
                 return Err(OpenError::ReadProgramHeaderFailed(i, e));
             }
 
-            // Load fields.
-            let prog = Program {
-                ty: ProgramType(LE::read_u32(&hdr)),
-                flags: ProgramFlags::from_bits_retain(LE::read_u32(&hdr[0x04..])),
-                offset: LE::read_u64(&hdr[0x08..]),
-                addr: LE::read_u64(&hdr[0x10..]) as usize,
-                file_size: LE::read_u64(&hdr[0x20..]),
-                memory_size: LE::read_u64(&hdr[0x28..]) as usize,
-                aligment: LE::read_u64(&hdr[0x30..]) as usize,
-            };
+            // Load the header.
+            let ty = ProgramType::new(LE::read_u32(&hdr));
+            let flags = ProgramFlags::from_bits_retain(LE::read_u32(&hdr[0x04..]));
+            let offset = LE::read_u64(&hdr[0x08..]);
+            let addr = LE::read_u64(&hdr[0x10..]);
+            let file_size = LE::read_u64(&hdr[0x20..]);
+            let memory_size = LE::read_u64(&hdr[0x28..]);
+            let align = LE::read_u64(&hdr[0x30..]);
 
-            match prog.ty {
-                ProgramType::PT_DYNAMIC => dynamic = Some((i, prog.file_size as usize)),
-                ProgramType::PT_SCE_DYNLIBDATA => dynlib = Some((i, prog.file_size as usize)),
+            // Process the header.
+            match ty {
+                ProgramType::PT_LOAD | ProgramType::PT_SCE_RELRO => {
+                    // Check offset.
+                    if offset > 0xffffffff || offset & 0x3fff != 0 {
+                        return Err(OpenError::InvalidOffset(i, ty));
+                    }
+
+                    // Check address.
+                    if addr & 0x3fff != 0 {
+                        return Err(OpenError::InvalidAddr(i, ty));
+                    } else if align & 0x3fff != 0 {
+                        return Err(OpenError::InvalidAligment(i, ty));
+                    }
+
+                    // Check size.
+                    if file_size > memory_size {
+                        return Err(OpenError::InvalidFileSize(i, ty));
+                    } else if memory_size > 0x7fffffff {
+                        return Err(OpenError::InvalidMemSize(i, ty));
+                    }
+
+                    // Update mapped base.
+                    if addr < mapbase {
+                        mapbase = addr;
+                    }
+
+                    if mapend < Program::align_page(addr + memory_size) {
+                        mapend = Program::align_page(addr + memory_size);
+                    }
+
+                    // Check if memory size is larger than 2 MB.
+                    if memory_size > 0x1fffff {
+                        twomb_mode = true;
+                    }
+
+                    // Keep index of the header.
+                    if ty == ProgramType::PT_SCE_RELRO {
+                        relro = Some(i);
+                    } else if flags.contains(ProgramFlags::EXECUTE) {
+                        exec = Some(i);
+                    } else if data.is_none() {
+                        data = Some(i);
+                    }
+                }
+                ProgramType::PT_DYNAMIC => dynamic = Some((i, file_size as usize)),
+                ProgramType::PT_SCE_DYNLIBDATA => dynlib = Some((i, file_size as usize)),
                 _ => {}
             }
 
-            programs.push(prog);
+            programs.push(Program::new(
+                ty,
+                flags,
+                offset,
+                addr as usize,
+                file_size,
+                memory_size as usize,
+            ));
+        }
+
+        // Check PT_SCE_RELRO.
+        if let Some(i) = relro {
+            let relro = &programs[i];
+
+            if relro.addr() == 0 {
+                return Err(OpenError::InvalidRelroAddr);
+            } else if relro.memory_size() == 0 {
+                return Err(OpenError::InvalidRelroSize);
+            }
+
+            // Check if PT_SCE_RELRO follows the executable program.
+            if let Some(i) = exec {
+                let exec = &programs[i];
+
+                if Program::align_2mb(exec.end() as u64) as usize != relro.addr()
+                    && Program::align_page(exec.end() as u64) as usize != relro.addr()
+                {
+                    return Err(OpenError::InvalidRelroAddr);
+                }
+            };
+
+            // Check if data follows the PT_SCE_RELRO.
+            if let Some(i) = data {
+                let data = &programs[i];
+
+                if Program::align_2mb(relro.end() as u64) as usize != data.addr()
+                    && Program::align_page(relro.end() as u64) as usize != data.addr()
+                {
+                    return Err(OpenError::InvalidDataAddr(i));
+                }
+            }
         }
 
         let mut elf = Self {
@@ -165,6 +256,7 @@ impl<I: Read + Seek> Elf<I> {
             },
             programs,
             dynamic_linking: None,
+            twomb_mode,
         };
 
         // Load dynamic linking data.
@@ -220,6 +312,10 @@ impl<I: Read + Seek> Elf<I> {
         self.dynamic_linking.as_ref()
     }
 
+    pub fn twomb_mode(&self) -> bool {
+        self.twomb_mode
+    }
+
     pub fn read_program(&mut self, index: usize, buf: &mut [u8]) -> Result<(), ReadProgramError> {
         // Get target program.
         let prog = match self.programs.get(index) {
@@ -228,7 +324,7 @@ impl<I: Read + Seek> Elf<I> {
         };
 
         // Check if buffer is large enough.
-        let len = prog.file_size as usize;
+        let len = prog.file_size() as usize;
 
         if buf.len() < len {
             return Err(ReadProgramError::InsufficientBuffer(len));
@@ -258,8 +354,8 @@ impl<I: Read + Seek> Elf<I> {
         match &self.self_data {
             Some(self_data) => {
                 // Find the target segment.
-                let offset = prog.offset;
-                let len = prog.file_size;
+                let offset = prog.offset();
+                let len = prog.file_size();
 
                 for (i, seg) in self_data.segments.iter().enumerate() {
                     // Skip if not blocked segment.
@@ -272,7 +368,7 @@ impl<I: Read + Seek> Elf<I> {
                     // Check if the target offset inside the associated program.
                     let prog = &self.programs[flags.program()];
 
-                    if offset >= prog.offset && offset < prog.offset + prog.file_size {
+                    if offset >= prog.offset() && offset < prog.offset() + prog.file_size() {
                         // Check if segment supported.
                         if flags.contains(SelfSegmentFlags::SF_ENCR) {
                             return Err(ReadProgramError::EncryptedSegment(i));
@@ -282,12 +378,12 @@ impl<I: Read + Seek> Elf<I> {
                             panic!("Compressed SELF segment is not supported yet.");
                         }
 
-                        if seg.decompressed_size != prog.file_size {
+                        if seg.decompressed_size != prog.file_size() {
                             panic!("SELF segment size different than associated program segment is not supported yet.");
                         }
 
                         // Get data offset.
-                        let offset = offset - prog.offset;
+                        let offset = offset - prog.offset();
 
                         if offset + len > seg.decompressed_size {
                             panic!("Segment block is smaller than the size specified in program header.");
@@ -299,7 +395,7 @@ impl<I: Read + Seek> Elf<I> {
 
                 panic!("SELF image is corrupted.");
             }
-            None => Ok(prog.offset),
+            None => Ok(prog.offset()),
         }
     }
 }
@@ -353,112 +449,6 @@ impl SelfSegmentFlags {
     }
 }
 
-/// Contains information for each ELF program.
-pub struct Program {
-    ty: ProgramType,
-    flags: ProgramFlags,
-    offset: u64,
-    addr: usize,
-    file_size: u64,
-    memory_size: usize,
-    aligment: usize,
-}
-
-impl Program {
-    pub fn ty(&self) -> ProgramType {
-        self.ty
-    }
-
-    pub fn flags(&self) -> ProgramFlags {
-        self.flags
-    }
-
-    pub fn offset(&self) -> u64 {
-        self.offset
-    }
-
-    pub fn addr(&self) -> usize {
-        self.addr
-    }
-
-    pub fn file_size(&self) -> u64 {
-        self.file_size
-    }
-
-    pub fn memory_size(&self) -> usize {
-        self.memory_size
-    }
-
-    pub fn aligment(&self) -> usize {
-        self.aligment
-    }
-
-    pub fn aligned_size(&self) -> usize {
-        if self.aligment != 0 {
-            // FIXME: Refactor this for readability.
-            (self.memory_size + (self.aligment - 1)) & !(self.aligment - 1)
-        } else {
-            self.memory_size
-        }
-    }
-}
-
-/// Represents type of an ELF program.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct ProgramType(u32);
-
-impl ProgramType {
-    pub const PT_LOAD: ProgramType = ProgramType(0x00000001);
-    pub const PT_DYNAMIC: ProgramType = ProgramType(0x00000002);
-    pub const PT_INTERP: ProgramType = ProgramType(0x00000003);
-    pub const PT_TLS: ProgramType = ProgramType(0x00000007);
-    pub const PT_SCE_DYNLIBDATA: ProgramType = ProgramType(0x61000000);
-    pub const PT_SCE_PROCPARAM: ProgramType = ProgramType(0x61000001);
-    pub const PT_SCE_MODULE_PARAM: ProgramType = ProgramType(0x61000002);
-    pub const PT_SCE_RELRO: ProgramType = ProgramType(0x61000010);
-    pub const PT_SCE_COMMENT: ProgramType = ProgramType(0x6fffff00);
-    pub const PT_SCE_VERSION: ProgramType = ProgramType(0x6fffff01);
-    pub const PT_GNU_EH_FRAME: ProgramType = ProgramType(0x6474e550);
-}
-
-impl Display for ProgramType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match *self {
-            Self::PT_LOAD => f.write_str("PT_LOAD"),
-            Self::PT_DYNAMIC => f.write_str("PT_DYNAMIC"),
-            Self::PT_INTERP => f.write_str("PT_INTERP"),
-            Self::PT_TLS => f.write_str("PT_TLS"),
-            Self::PT_SCE_DYNLIBDATA => f.write_str("PT_SCE_DYNLIBDATA"),
-            Self::PT_SCE_PROCPARAM => f.write_str("PT_SCE_PROCPARAM"),
-            Self::PT_SCE_MODULE_PARAM => f.write_str("PT_SCE_MODULE_PARAM"),
-            Self::PT_SCE_RELRO => f.write_str("PT_SCE_RELRO"),
-            Self::PT_SCE_COMMENT => f.write_str("PT_SCE_COMMENT"),
-            Self::PT_SCE_VERSION => f.write_str("PT_SCE_VERSION"),
-            Self::PT_GNU_EH_FRAME => f.write_str("PT_GNU_EH_FRAME"),
-            t => write!(f, "{:#010x}", t.0),
-        }
-    }
-}
-
-bitflags! {
-    /// Represents flags for an ELF program.
-    ///
-    /// The values was taken from
-    /// https://github.com/freebsd/freebsd-src/blob/main/sys/sys/elf_common.h.
-    #[derive(Clone, Copy)]
-    pub struct ProgramFlags: u32 {
-        const EXECUTE = 0x00000001;
-        const WRITE = 0x00000002;
-        const READ = 0x00000004;
-    }
-}
-
-impl Display for ProgramFlags {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
 /// Represents an error for [`Elf::open()`].
 #[derive(Debug, Error)]
 pub enum OpenError {
@@ -494,6 +484,30 @@ pub enum OpenError {
 
     #[error("cannot read program header #{0}")]
     ReadProgramHeaderFailed(usize, #[source] std::io::Error),
+
+    #[error("{1} at program {0} has invalid file offset")]
+    InvalidOffset(usize, ProgramType),
+
+    #[error("{1} at program {0} has invalid address")]
+    InvalidAddr(usize, ProgramType),
+
+    #[error("{1} at program {0} has invalid aligment")]
+    InvalidAligment(usize, ProgramType),
+
+    #[error("{1} at program {0} has invalid file size")]
+    InvalidFileSize(usize, ProgramType),
+
+    #[error("{1} at program {0} has invalid memory size")]
+    InvalidMemSize(usize, ProgramType),
+
+    #[error("PT_SCE_RELRO has invalid address")]
+    InvalidRelroAddr,
+
+    #[error("PT_SCE_RELRO has invalid size")]
+    InvalidRelroSize,
+
+    #[error("PT_LOAD at program {0} has invalid address")]
+    InvalidDataAddr(usize),
 
     #[error("no PT_DYNAMIC")]
     NoDynamic,

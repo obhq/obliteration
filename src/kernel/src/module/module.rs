@@ -1,7 +1,6 @@
 use super::{LoadError, Memory, ModuleManager, ResolveSymbolError};
 use crate::memory::{MemoryManager, MprotectError};
-use elf::dynamic::{DynamicLinking, ModuleFlags, RelocationInfo, SymbolInfo};
-use elf::Elf;
+use elf::{DynamicLinking, Elf, ModuleFlags, RelocationInfo, SymbolInfo};
 use std::fs::File;
 use thiserror::Error;
 
