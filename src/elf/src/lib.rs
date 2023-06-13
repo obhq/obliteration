@@ -199,6 +199,24 @@ impl<I: Read + Seek> Elf<I> {
                     }
                 }
                 ProgramType::PT_DYNAMIC => dynamic = Some((i, file_size as usize)),
+                ProgramType::PT_TLS => {
+                    // Check offset.
+                    if offset > 0xffffffff {
+                        return Err(OpenError::InvalidOffset(i, ty));
+                    }
+
+                    // Check size.
+                    if file_size > memory_size {
+                        return Err(OpenError::InvalidFileSize(i, ty));
+                    } else if memory_size > 0x7fffffff {
+                        return Err(OpenError::InvalidMemSize(i, ty));
+                    }
+
+                    // Check aligment.
+                    if align > 32 {
+                        return Err(OpenError::InvalidAligment(i, ty));
+                    }
+                }
                 ProgramType::PT_SCE_DYNLIBDATA => dynlib = Some((i, file_size as usize)),
                 _ => {}
             }
@@ -211,6 +229,11 @@ impl<I: Read + Seek> Elf<I> {
                 file_size,
                 memory_size as usize,
             ));
+        }
+
+        // Check mapable program.
+        if mapbase == u64::MAX || mapend == 0 {
+            return Err(OpenError::NoMappableProgram);
         }
 
         // Check PT_SCE_RELRO.
@@ -499,6 +522,9 @@ pub enum OpenError {
 
     #[error("{1} at program {0} has invalid memory size")]
     InvalidMemSize(usize, ProgramType),
+
+    #[error("no mappable program")]
+    NoMappableProgram,
 
     #[error("PT_SCE_RELRO has invalid address")]
     InvalidRelroAddr,
