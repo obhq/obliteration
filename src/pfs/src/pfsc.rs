@@ -4,7 +4,6 @@ use std::cmp::min;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::io::{ErrorKind, Read, Seek, SeekFrom};
-use util::slice::as_mut_bytes;
 
 // FIXME: Refactor the whole implementation of this since a lot of logic does not make sense.
 pub struct Reader<F: Read + Seek> {
@@ -54,8 +53,16 @@ impl<F: Read + Seek> Reader<F> {
 
         let original_block_count = original_size / original_block_size + 1;
         let mut compressed_blocks: Vec<u64> = vec![0; original_block_count as usize];
+        let buf = unsafe {
+            let (pre, mid, pos) = compressed_blocks.align_to_mut::<u8>();
 
-        if let Err(e) = file.read_exact(as_mut_bytes(&mut compressed_blocks)) {
+            assert!(pre.is_empty());
+            assert!(pos.is_empty());
+
+            mid
+        };
+
+        if let Err(e) = file.read_exact(buf) {
             return Err(OpenError::ReadBlockMappingFailed(e));
         }
 
