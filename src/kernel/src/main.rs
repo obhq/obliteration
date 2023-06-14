@@ -73,11 +73,7 @@ fn main() -> ExitCode {
             TerminalMode::Mixed,
             ColorChoice::Auto,
         ),
-        WriteLogger::new(
-            LevelFilter::Trace,
-            logconf,
-            File::create(log_path).unwrap(),
-        ),
+        WriteLogger::new(LevelFilter::Trace, logconf, File::create(log_path).unwrap()),
     ])
     .unwrap();
 
