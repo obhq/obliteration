@@ -5,10 +5,11 @@ use crate::memory::MemoryManager;
 use crate::module::{Module, ModuleManager};
 use crate::syscalls::Syscalls;
 use clap::{Parser, ValueEnum};
+use directories::ProjectDirs;
 use log::{debug, error, info};
 use serde::Deserialize;
 use simplelog::*;
-use std::fs::File;
+use std::fs::{create_dir_all, File};
 use std::panic;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -58,6 +59,12 @@ fn main() -> ExitCode {
         .unwrap()
         .build();
 
+    let project_dirs = ProjectDirs::from("", "OBHQ", "Obliteration").unwrap();
+    let data_dir = project_dirs.data_dir();
+    let log_dir = data_dir.join("log");
+    create_dir_all(&log_dir).expect("Failed to create Data directory!");
+    let log_path = log_dir.join("obliteration-kernel.log");
+
     // Start Logger
     CombinedLogger::init(vec![
         TermLogger::new(
@@ -69,7 +76,7 @@ fn main() -> ExitCode {
         WriteLogger::new(
             LevelFilter::Trace,
             logconf,
-            File::create("obliteration-kernel.log").unwrap(),
+            File::create(log_path).unwrap(),
         ),
     ])
     .unwrap();
