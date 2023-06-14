@@ -5,8 +5,11 @@ use crate::memory::MemoryManager;
 use crate::module::{Module, ModuleManager};
 use crate::syscalls::Syscalls;
 use clap::{Parser, ValueEnum};
+use log::{debug, error, info};
 use serde::Deserialize;
+use simplelog::*;
 use std::fs::File;
+use std::panic;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -15,7 +18,6 @@ mod ee;
 mod errno;
 mod fs;
 mod llvm;
-mod log;
 mod memory;
 mod module;
 mod syscalls;
@@ -46,12 +48,55 @@ enum ExecutionEngine {
 }
 
 fn main() -> ExitCode {
+    // Create Log config.
+    let logconf = ConfigBuilder::new()
+        .set_location_level(LevelFilter::Error)
+        .set_target_level(LevelFilter::Error)
+        .set_thread_mode(ThreadLogMode::Both)
+        .set_thread_level(LevelFilter::Error)
+        .set_time_offset_to_local()
+        .unwrap()
+        .build();
+
+    // Start Logger
+    CombinedLogger::init(vec![
+        TermLogger::new(
+            LevelFilter::Trace,
+            logconf.clone(),
+            TerminalMode::Mixed,
+            ColorChoice::Auto,
+        ),
+        WriteLogger::new(
+            LevelFilter::Trace,
+            logconf,
+            File::create("obliteration-kernel.log").unwrap(),
+        ),
+    ])
+    .unwrap();
+
+    // Catch Panics from the Kernel into errors.
+    panic::set_hook(Box::new(|panic_info| {
+        let payload = panic_info
+            .payload()
+            .downcast_ref::<String>()
+            .map(|s| s.as_str())
+            .unwrap_or("Failed to get Panic message!");
+
+        let location = if let Some(location) = panic_info.location() {
+            format!("{}:{}", location.file(), location.line())
+        } else {
+            "No_Location_Found".into()
+        };
+
+        error!("Panic hooked!\n[PANIC] [{}] {}", location, payload);
+    }));
+
     // Load arguments.
     let args = if std::env::args().any(|a| a == "--debug") {
         let file = match File::open(".kernel-debug") {
             Ok(v) => v,
             Err(e) => {
-                error!(e, "Failed to open .kernel-debug");
+                error!("Failed to open .kernel-debug: {}", e);
                 return ExitCode::FAILURE;
             }
         };
@@ -59,7 +104,7 @@ fn main() -> ExitCode {
         match serde_yaml::from_reader(file) {
             Ok(v) => v,
             Err(e) => {
-                error!(e, "Failed to read .kernel-debug");
+                error!("Failed to read .kernel-debug: {}", e);
                 return ExitCode::FAILURE;
             }
         }
@@ -71,7 +116,7 @@ fn main() -> ExitCode {
     if args.clear_debug_dump {
         if let Err(e) = std::fs::remove_dir_all(&args.debug_dump) {
             if e.kind() != std::io::ErrorKind::NotFound {
-                error!(e, "Failed to remove {}", args.debug_dump.display());
+                error!("Failed to remove {}: {}", args.debug_dump.display(), e);
                 return ExitCode::FAILURE;
             }
         }
@@ -79,7 +124,7 @@ fn main() -> ExitCode {
 
     // Show basic infomation.
     info!("Starting Obliteration kernel.");
-    info!("Debug dump directory is: {}.", args.debug_dump.display());
+    debug!("Debug dump directory is: {}.", args.debug_dump.display());
 
     // Initialize LLVM.
     let llvm = Llvm::new();
@@ -90,14 +135,14 @@ fn main() -> ExitCode {
     info!("Mounting / to {}.", args.system.display());
 
     if let Err(e) = fs.mount(VPathBuf::new(), args.system) {
-        error!(e, "Mount failed");
+        error!("Mount failed: {}", e);
         return ExitCode::FAILURE;
     }
 
     info!("Mounting /mnt/app0 to {}.", args.game.display());
 
     if let Err(e) = fs.mount(VPath::new("/mnt/app0").unwrap(), args.game) {
-        error!(e, "Mount failed");
+        error!("Mount failed: {}", e);
         return ExitCode::FAILURE;
     }
 
@@ -106,8 +151,8 @@ fn main() -> ExitCode {
 
     let mm = MemoryManager::new();
 
-    info!("Page size is: {}.", mm.page_size());
-    info!(
+    debug!("Page size is: {}.", mm.page_size());
+    debug!(
         "Allocation granularity is: {}.",
         mm.allocation_granularity()
     );
@@ -128,7 +173,7 @@ fn main() -> ExitCode {
     match modules.load_eboot() {
         Ok(m) => print_module(&m),
         Err(e) => {
-            error!(e, "Load failed");
+            error!("Load failed: {}", e);
             return ExitCode::FAILURE;
         }
     };
@@ -141,7 +186,7 @@ fn main() -> ExitCode {
     match modules.load_file(libkernel) {
         Ok(m) => print_module(&m),
         Err(e) => {
-            error!(e, "Load failed");
+            error!("Load failed: {}", e);
             return ExitCode::FAILURE;
         }
     }
@@ -156,7 +201,7 @@ fn main() -> ExitCode {
     match modules.load_file(libc) {
         Ok(m) => print_module(&m),
         Err(e) => {
-            error!(e, "Load failed");
+            error!("Load failed: {}", e);
             return ExitCode::FAILURE;
         }
     }
@@ -194,15 +239,15 @@ fn exec_with_native(modules: &ModuleManager, syscalls: &Syscalls) -> ExitCode {
 
             for (m, c) in r {
                 if c != 0 {
-                    info!("{c} patch(es) have been applied to {m}.");
+                    debug!("{c} patch(es) have been applied to {m}.");
                     t += 1;
                 }
             }
 
-            info!("{t} module(s) have been patched successfully.");
+            debug!("{t} module(s) have been patched successfully.");
         }
         Err(e) => {
-            error!(e, "Patch failed");
+            error!("Patch failed: {}", e);
             return ExitCode::FAILURE;
         }
     }
@@ -216,7 +261,7 @@ fn exec_with_llvm(llvm: &Llvm, modules: &ModuleManager) -> ExitCode {
     info!("Lifting modules.");
 
     if let Err(e) = ee.lift_modules() {
-        error!(e, "Lift failed");
+        error!("Lift failed: {}", e);
         return ExitCode::FAILURE;
     }
 
@@ -227,7 +272,7 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E) -> ExitCode {
     info!("Starting application.");
 
     if let Err(e) = ee.run() {
-        error!(e, "Start failed");
+        error!("Start failed: {}", e);
         return ExitCode::FAILURE;
     }
 
@@ -239,39 +284,39 @@ fn print_module(module: &Module) {
     let image = module.image();
 
     if image.self_segments().is_some() {
-        info!("Image type    : SELF");
+        debug!("Image type    : SELF");
     } else {
-        info!("Image type    : ELF");
+        debug!("Image type    : ELF");
     }
 
     // Dynamic linking.
     if let Some(dynamic) = image.dynamic_linking() {
         let i = dynamic.module_info();
 
-        info!("Module name   : {}", i.name());
+        debug!("Module name   : {}", i.name());
 
         if let Some(f) = dynamic.flags() {
-            info!("Module flags  : {f}");
+            debug!("Module flags  : {f}");
         }
     }
 
     // Memory.
     let mem = module.memory();
 
-    info!(
+    debug!(
         "Memory address: {:#018x}:{:#018x}",
         mem.addr(),
         mem.addr() + mem.len()
     );
 
     if let Some(entry) = image.entry_addr() {
-        info!("Entry address : {:#018x}", mem.addr() + entry);
+        debug!("Entry address : {:#018x}", mem.addr() + entry);
     }
 
     for s in mem.segments().iter() {
         let addr = mem.addr() + s.start();
 
-        info!(
+        debug!(
             "Program {} is mapped to {:#018x}:{:#018x} with {}.",
             s.program(),
             addr,

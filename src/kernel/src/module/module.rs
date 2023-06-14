@@ -224,7 +224,7 @@ impl<'a> Module<'a> {
         let name = "M0z6Dr6TNnM#libkernel#libkernel";
         let hash = Self::hash_symbol(name);
 
-        match modules.resolve_symbol(hash, &name) {
+        match modules.resolve_symbol(hash, name) {
             Ok(v) => Ok(v),
             Err(e) => Err(ExternalSymbolError::ResolveFailed(name.to_owned(), hash, e)),
         }
