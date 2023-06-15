@@ -154,7 +154,10 @@ impl<I: Read + Seek> Elf<I> {
                 v => Some(v as usize),
             },
             programs: Vec::with_capacity(e_phnum),
-            mapping: usize::MAX..0,
+            mapping: Range {
+                start: usize::MAX,
+                end: 0,
+            },
             code: None,
             relro: None,
             data: None,
@@ -172,7 +175,7 @@ impl<I: Read + Seek> Elf<I> {
         for (i, h) in data.chunks_exact(0x38).enumerate() {
             // Load the header.
             let p = Program::new(
-                ProgramType::new(LE::read_u32(&h)),
+                ProgramType::new(LE::read_u32(h)),
                 ProgramFlags::from_bits_retain(LE::read_u32(&h[0x04..])),
                 LE::read_u64(&h[0x08..]),
                 LE::read_u64(&h[0x10..]) as usize,
