@@ -52,9 +52,9 @@ fn main() -> ExitCode {
     // Create Log config.
     let logconf = ConfigBuilder::new()
         .set_location_level(LevelFilter::Error)
-        .set_target_level(LevelFilter::Error)
+        .set_target_level(LevelFilter::Off)
         .set_thread_mode(ThreadLogMode::Both)
-        .set_thread_level(LevelFilter::Error)
+        .set_thread_level(LevelFilter::Off)
         .set_time_offset_to_local()
         .unwrap()
         .build();
@@ -91,7 +91,7 @@ fn main() -> ExitCode {
             "No_Location_Found".into()
         };
 
-        error!("Panic hooked!\n[PANIC] [{}] {}", location, payload);
+        error!("Panic hooked!\n[PANIC] [{}] {:#}", location, payload);
     }));
 
     // Load arguments.
@@ -99,7 +99,7 @@ fn main() -> ExitCode {
         let file = match File::open(".kernel-debug") {
             Ok(v) => v,
             Err(e) => {
-                error!("Failed to open .kernel-debug: {}", e);
+                error!("Failed to open .kernel-debug: {:#}", e);
                 return ExitCode::FAILURE;
             }
         };
@@ -107,7 +107,7 @@ fn main() -> ExitCode {
         match serde_yaml::from_reader(file) {
             Ok(v) => v,
             Err(e) => {
-                error!("Failed to read .kernel-debug: {}", e);
+                error!("Failed to read .kernel-debug: {:#}", e);
                 return ExitCode::FAILURE;
             }
         }
@@ -119,7 +119,7 @@ fn main() -> ExitCode {
     if args.clear_debug_dump {
         if let Err(e) = std::fs::remove_dir_all(&args.debug_dump) {
             if e.kind() != std::io::ErrorKind::NotFound {
-                error!("Failed to remove {}: {}", args.debug_dump.display(), e);
+                error!("Failed to remove {}: {:#}", args.debug_dump.display(), e);
                 return ExitCode::FAILURE;
             }
         }
@@ -138,14 +138,14 @@ fn main() -> ExitCode {
     info!("Mounting / to {}.", args.system.display());
 
     if let Err(e) = fs.mount(VPathBuf::new(), args.system) {
-        error!("Mount failed: {}", e);
+        error!("Mount failed: {:#}", e);
         return ExitCode::FAILURE;
     }
 
     info!("Mounting /mnt/app0 to {}.", args.game.display());
 
     if let Err(e) = fs.mount(VPath::new("/mnt/app0").unwrap(), args.game) {
-        error!("Mount failed: {}", e);
+        error!("Mount failed: {:#}", e);
         return ExitCode::FAILURE;
     }
 
@@ -176,7 +176,7 @@ fn main() -> ExitCode {
     match modules.load_eboot() {
         Ok(m) => print_module(&m),
         Err(e) => {
-            error!("Load failed: {}", e);
+            error!("Load failed: {:#}", e);
             return ExitCode::FAILURE;
         }
     };
@@ -189,7 +189,7 @@ fn main() -> ExitCode {
     match modules.load_file(libkernel) {
         Ok(m) => print_module(&m),
         Err(e) => {
-            error!("Load failed: {}", e);
+            error!("Load failed: {:#}", e);
             return ExitCode::FAILURE;
         }
     }
@@ -204,7 +204,7 @@ fn main() -> ExitCode {
     match modules.load_file(libc) {
         Ok(m) => print_module(&m),
         Err(e) => {
-            error!("Load failed: {}", e);
+            error!("Load failed: {:#}", e);
             return ExitCode::FAILURE;
         }
     }
@@ -250,7 +250,7 @@ fn exec_with_native(modules: &ModuleManager, syscalls: &Syscalls) -> ExitCode {
             debug!("{t} module(s) have been patched successfully.");
         }
         Err(e) => {
-            error!("Patch failed: {}", e);
+            error!("Patch failed: {:#}", e);
             return ExitCode::FAILURE;
         }
     }
@@ -264,7 +264,7 @@ fn exec_with_llvm(llvm: &Llvm, modules: &ModuleManager) -> ExitCode {
     info!("Lifting modules.");
 
     if let Err(e) = ee.lift_modules() {
-        error!("Lift failed: {}", e);
+        error!("Lift failed: {:#}", e);
         return ExitCode::FAILURE;
     }
 
@@ -275,7 +275,7 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E) -> ExitCode {
     info!("Starting application.");
 
     if let Err(e) = ee.run() {
-        error!("Start failed: {}", e);
+        error!("Start failed: {:#}", e);
         return ExitCode::FAILURE;
     }
 
