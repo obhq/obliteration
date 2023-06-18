@@ -4,6 +4,7 @@ pub use program::*;
 use bitflags::bitflags;
 use byteorder::{ByteOrder, LE};
 use std::io::{Read, Seek, SeekFrom};
+use std::ops::Range;
 use thiserror::Error;
 
 mod dynamic;
@@ -22,7 +23,18 @@ pub struct Elf<I: Read + Seek> {
     self_data: Option<SelfData>,
     entry_addr: Option<usize>,
     programs: Vec<Program>,
+    mapping: Range<usize>,
+    code: Option<usize>,
+    relro: Option<usize>,
+    data: Option<usize>,
+    dynamic: Option<usize>,
+    dyndata: Option<usize>,
+    tls: Option<usize>,
     dynamic_linking: Option<DynamicLinking>,
+    proc_param: Option<usize>,
+    mod_param: Option<usize>,
+    comment: Option<usize>,
+    eh: Option<usize>,
     twomb_mode: bool,
 }
 
@@ -125,120 +137,77 @@ impl<I: Read + Seek> Elf<I> {
             Err(e) => return Err(OpenError::SeekFailed(e_phoff, e)),
         }
 
+        // Read program headers.
+        let mut data = vec![0u8; e_phnum * 0x38];
+
+        if let Err(e) = image.read_exact(&mut data) {
+            return Err(OpenError::ReadProgramHeadersFailed(e));
+        }
+
         // Load program headers.
-        let mut programs: Vec<Program> = Vec::with_capacity(e_phnum);
-        let mut mapbase = u64::MAX;
-        let mut mapend = 0;
-        let mut twomb_mode = false;
-        let mut relro = None;
-        let mut exec = None;
-        let mut data = None;
-        let mut dynamic: Option<(usize, usize)> = None;
-        let mut dynlib: Option<(usize, usize)> = None;
+        let mut elf = Self {
+            name: name.into(),
+            image,
+            self_data,
+            entry_addr: match e_entry {
+                0 => None,
+                v => Some(v as usize),
+            },
+            programs: Vec::with_capacity(e_phnum),
+            mapping: Range {
+                start: usize::MAX,
+                end: 0,
+            },
+            code: None,
+            relro: None,
+            data: None,
+            dynamic: None,
+            dyndata: None,
+            tls: None,
+            dynamic_linking: None,
+            proc_param: None,
+            mod_param: None,
+            comment: None,
+            eh: None,
+            twomb_mode: false,
+        };
 
-        for i in 0..e_phnum {
-            // Read header.
-            let mut hdr = [0u8; 0x38];
-
-            if let Err(e) = image.read_exact(&mut hdr) {
-                return Err(OpenError::ReadProgramHeaderFailed(i, e));
-            }
-
+        for (i, h) in data.chunks_exact(0x38).enumerate() {
             // Load the header.
-            let ty = ProgramType::new(LE::read_u32(&hdr));
-            let flags = ProgramFlags::from_bits_retain(LE::read_u32(&hdr[0x04..]));
-            let offset = LE::read_u64(&hdr[0x08..]);
-            let addr = LE::read_u64(&hdr[0x10..]);
-            let file_size = LE::read_u64(&hdr[0x20..]);
-            let memory_size = LE::read_u64(&hdr[0x28..]);
-            let align = LE::read_u64(&hdr[0x30..]);
+            let p = Program::new(
+                ProgramType::new(LE::read_u32(h)),
+                ProgramFlags::from_bits_retain(LE::read_u32(&h[0x04..])),
+                LE::read_u64(&h[0x08..]),
+                LE::read_u64(&h[0x10..]) as usize,
+                LE::read_u64(&h[0x20..]),
+                LE::read_u64(&h[0x28..]) as usize,
+                LE::read_u64(&h[0x30..]) as usize,
+            );
 
             // Process the header.
-            match ty {
-                ProgramType::PT_LOAD | ProgramType::PT_SCE_RELRO => {
-                    // Check offset.
-                    if offset > 0xffffffff || offset & 0x3fff != 0 {
-                        return Err(OpenError::InvalidOffset(i, ty));
-                    }
-
-                    // Check address.
-                    if addr & 0x3fff != 0 {
-                        return Err(OpenError::InvalidAddr(i, ty));
-                    } else if align & 0x3fff != 0 {
-                        return Err(OpenError::InvalidAligment(i, ty));
-                    }
-
-                    // Check size.
-                    if file_size > memory_size {
-                        return Err(OpenError::InvalidFileSize(i, ty));
-                    } else if memory_size > 0x7fffffff {
-                        return Err(OpenError::InvalidMemSize(i, ty));
-                    }
-
-                    // Update mapped base.
-                    if addr < mapbase {
-                        mapbase = addr;
-                    }
-
-                    if mapend < Program::align_page(addr + memory_size) {
-                        mapend = Program::align_page(addr + memory_size);
-                    }
-
-                    // Check if memory size is larger than 2 MB.
-                    if memory_size > 0x1fffff {
-                        twomb_mode = true;
-                    }
-
-                    // Keep index of the header.
-                    if ty == ProgramType::PT_SCE_RELRO {
-                        relro = Some(i);
-                    } else if flags.contains(ProgramFlags::EXECUTE) {
-                        exec = Some(i);
-                    } else if data.is_none() {
-                        data = Some(i);
-                    }
-                }
-                ProgramType::PT_DYNAMIC => dynamic = Some((i, file_size as usize)),
-                ProgramType::PT_TLS => {
-                    // Check offset.
-                    if offset > 0xffffffff {
-                        return Err(OpenError::InvalidOffset(i, ty));
-                    }
-
-                    // Check size.
-                    if file_size > memory_size {
-                        return Err(OpenError::InvalidFileSize(i, ty));
-                    } else if memory_size > 0x7fffffff {
-                        return Err(OpenError::InvalidMemSize(i, ty));
-                    }
-
-                    // Check aligment.
-                    if align > 32 {
-                        return Err(OpenError::InvalidAligment(i, ty));
-                    }
-                }
-                ProgramType::PT_SCE_DYNLIBDATA => dynlib = Some((i, file_size as usize)),
+            match p.ty() {
+                ProgramType::PT_LOAD | ProgramType::PT_SCE_RELRO => elf.process_mappable(i, &p)?,
+                ProgramType::PT_DYNAMIC => elf.dynamic = Some(i),
+                ProgramType::PT_TLS => elf.process_tls(i, &p)?,
+                ProgramType::PT_SCE_DYNLIBDATA => elf.dyndata = Some(i),
+                ProgramType::PT_SCE_PROCPARAM => elf.proc_param = Some(i),
+                ProgramType::PT_SCE_MODULE_PARAM => elf.mod_param = Some(i),
+                ProgramType::PT_SCE_COMMENT => elf.process_comment(i, &p)?,
+                ProgramType::PT_GNU_EH_FRAME => elf.process_eh(i, &p)?,
                 _ => {}
             }
 
-            programs.push(Program::new(
-                ty,
-                flags,
-                offset,
-                addr as usize,
-                file_size,
-                memory_size as usize,
-            ));
+            elf.programs.push(p);
         }
 
-        // Check mapable program.
-        if mapbase == u64::MAX || mapend == 0 {
+        // Check mapping range.
+        if elf.mapping.start == usize::MAX || elf.mapping.end == 0 {
             return Err(OpenError::NoMappableProgram);
         }
 
         // Check PT_SCE_RELRO.
-        if let Some(i) = relro {
-            let relro = &programs[i];
+        if let Some(i) = elf.relro {
+            let relro = &elf.programs[i];
 
             if relro.addr() == 0 {
                 return Err(OpenError::InvalidRelroAddr);
@@ -246,20 +215,20 @@ impl<I: Read + Seek> Elf<I> {
                 return Err(OpenError::InvalidRelroSize);
             }
 
-            // Check if PT_SCE_RELRO follows the executable program.
-            if let Some(i) = exec {
-                let exec = &programs[i];
+            // Check if PT_SCE_RELRO follows the code.
+            if let Some(i) = elf.code {
+                let code = &elf.programs[i];
 
-                if Program::align_2mb(exec.end() as u64) as usize != relro.addr()
-                    && Program::align_page(exec.end() as u64) as usize != relro.addr()
+                if Program::align_2mb(code.end() as u64) as usize != relro.addr()
+                    && Program::align_page(code.end() as u64) as usize != relro.addr()
                 {
                     return Err(OpenError::InvalidRelroAddr);
                 }
             };
 
             // Check if data follows the PT_SCE_RELRO.
-            if let Some(i) = data {
-                let data = &programs[i];
+            if let Some(i) = elf.data {
+                let data = &elf.programs[i];
 
                 if Program::align_2mb(relro.end() as u64) as usize != data.addr()
                     && Program::align_page(relro.end() as u64) as usize != data.addr()
@@ -269,37 +238,20 @@ impl<I: Read + Seek> Elf<I> {
             }
         }
 
-        let mut elf = Self {
-            name: name.into(),
-            image,
-            self_data,
-            entry_addr: match e_entry {
-                0 => None,
-                v => Some(v as usize),
-            },
-            programs,
-            dynamic_linking: None,
-            twomb_mode,
-        };
-
         // Load dynamic linking data.
-        if let Some((dynamic_index, dynamic_len)) = dynamic {
-            let (dynlib_index, dynlib_len) = match dynlib {
-                Some(v) => v,
-                None => return Err(OpenError::NoDynlibData),
-            };
-
+        if let Some(i) = elf.dynamic {
             // Read PT_DYNAMIC.
-            let mut dynamic = vec![0u8; dynamic_len];
+            let mut dynamic = vec![0u8; elf.programs[i].file_size() as usize];
 
-            if let Err(e) = elf.read_program(dynamic_index, &mut dynamic) {
+            if let Err(e) = elf.read_program(i, &mut dynamic) {
                 return Err(OpenError::ReadDynamicFailed(e));
             }
 
             // Read PT_SCE_DYNLIBDATA.
-            let mut dynlib = vec![0u8; dynlib_len];
+            let i = elf.dyndata.ok_or(OpenError::NoDynlibData)?;
+            let mut dynlib = vec![0u8; elf.programs[i].file_size() as usize];
 
-            if let Err(e) = elf.read_program(dynlib_index, &mut dynlib) {
+            if let Err(e) = elf.read_program(i, &mut dynlib) {
                 return Err(OpenError::ReadDynlibDataFailed(e));
             }
 
@@ -308,7 +260,7 @@ impl<I: Read + Seek> Elf<I> {
                 Ok(v) => Some(v),
                 Err(e) => return Err(OpenError::ParseDynamicLinkingFailed(e)),
             };
-        } else if dynlib.is_some() {
+        } else if elf.dyndata.is_some() {
             return Err(OpenError::NoDynamic);
         }
 
@@ -331,8 +283,28 @@ impl<I: Read + Seek> Elf<I> {
         self.programs.as_slice()
     }
 
+    pub fn tls(&self) -> Option<usize> {
+        self.tls
+    }
+
     pub fn dynamic_linking(&self) -> Option<&DynamicLinking> {
         self.dynamic_linking.as_ref()
+    }
+
+    pub fn proc_param(&self) -> Option<usize> {
+        self.proc_param
+    }
+
+    pub fn mod_param(&self) -> Option<usize> {
+        self.mod_param
+    }
+
+    pub fn comment(&self) -> Option<usize> {
+        self.comment
+    }
+
+    pub fn eh(&self) -> Option<usize> {
+        self.eh
     }
 
     pub fn twomb_mode(&self) -> bool {
@@ -353,9 +325,13 @@ impl<I: Read + Seek> Elf<I> {
             return Err(ReadProgramError::InsufficientBuffer(len));
         }
 
-        // Seek file to data offset.
-        let offset = self.get_program_offset(prog)?;
+        // Get program offset.
+        let offset = match &self.self_data {
+            Some(v) => self.get_self_program(v, prog)?,
+            None => prog.offset(),
+        };
 
+        // Seek file to data offset.
         match self.image.seek(SeekFrom::Start(offset)) {
             Ok(v) => {
                 if v != offset {
@@ -373,53 +349,175 @@ impl<I: Read + Seek> Elf<I> {
         Ok(())
     }
 
-    fn get_program_offset(&self, prog: &Program) -> Result<u64, ReadProgramError> {
-        match &self.self_data {
-            Some(self_data) => {
-                // Find the target segment.
-                let offset = prog.offset();
-                let len = prog.file_size();
+    fn process_mappable(&mut self, index: usize, prog: &Program) -> Result<(), OpenError> {
+        // Check offset.
+        let ty = prog.ty();
+        let offset = prog.offset();
 
-                for (i, seg) in self_data.segments.iter().enumerate() {
-                    // Skip if not blocked segment.
-                    let flags = seg.flags;
+        if offset > 0xffffffff || offset & 0x3fff != 0 {
+            return Err(OpenError::InvalidOffset(index, ty));
+        }
 
-                    if !flags.contains(SelfSegmentFlags::SF_BFLG) {
-                        continue;
-                    }
+        // Check address.
+        let addr = prog.addr();
 
-                    // Check if the target offset inside the associated program.
-                    let prog = &self.programs[flags.program()];
+        if addr & 0x3fff != 0 {
+            return Err(OpenError::InvalidAddr(index, ty));
+        } else if prog.alignment() & 0x3fff != 0 {
+            return Err(OpenError::InvalidAligment(index, ty));
+        }
 
-                    if offset >= prog.offset() && offset < prog.offset() + prog.file_size() {
-                        // Check if segment supported.
-                        if flags.contains(SelfSegmentFlags::SF_ENCR) {
-                            return Err(ReadProgramError::EncryptedSegment(i));
-                        }
+        // Check size.
+        let memory_size = prog.memory_size();
 
-                        if seg.compressed_size != seg.decompressed_size {
-                            panic!("Compressed SELF segment is not supported yet.");
-                        }
+        if (prog.file_size() as usize) > memory_size {
+            return Err(OpenError::InvalidFileSize(index, ty));
+        } else if memory_size > 0x7fffffff {
+            return Err(OpenError::InvalidMemSize(index, ty));
+        }
 
-                        if seg.decompressed_size != prog.file_size() {
-                            panic!("SELF segment size different than associated program segment is not supported yet.");
-                        }
+        // Update mapping range.
+        let end = Program::align_page((addr + memory_size) as u64) as usize;
 
-                        // Get data offset.
-                        let offset = offset - prog.offset();
+        if addr < self.mapping.start {
+            self.mapping.start = addr;
+        }
 
-                        if offset + len > seg.decompressed_size {
-                            panic!("Segment block is smaller than the size specified in program header.");
-                        }
+        if self.mapping.end < end {
+            self.mapping.end = end;
+        }
 
-                        return Ok(offset + seg.offset);
-                    }
+        // Check if memory size is larger than 2 MB.
+        if memory_size > 0x1fffff {
+            self.twomb_mode = true;
+        }
+
+        // Keep index of the header.
+        if ty == ProgramType::PT_SCE_RELRO {
+            self.relro = Some(index);
+        } else if prog.flags().contains(ProgramFlags::EXECUTE) {
+            self.code = Some(index);
+        } else if self.data.is_none() {
+            self.data = Some(index);
+        }
+
+        Ok(())
+    }
+
+    fn process_tls(&mut self, index: usize, prog: &Program) -> Result<(), OpenError> {
+        // Check offset.
+        let ty = prog.ty();
+        let offset = prog.offset();
+
+        if offset > 0xffffffff {
+            return Err(OpenError::InvalidOffset(index, ty));
+        }
+
+        // Check size.
+        let memory_size = prog.memory_size();
+
+        if (prog.file_size() as usize) > memory_size {
+            return Err(OpenError::InvalidFileSize(index, ty));
+        } else if memory_size > 0x7fffffff {
+            return Err(OpenError::InvalidMemSize(index, ty));
+        }
+
+        // Check aligment.
+        if prog.alignment() > 32 {
+            return Err(OpenError::InvalidAligment(index, ty));
+        }
+
+        self.tls = Some(index);
+
+        Ok(())
+    }
+
+    fn process_comment(&mut self, index: usize, prog: &Program) -> Result<(), OpenError> {
+        // Check offset.
+        let ty = prog.ty();
+        let offset = prog.offset();
+
+        if offset > 0xffffffff {
+            return Err(OpenError::InvalidOffset(index, ty));
+        }
+
+        // Check size.
+        if prog.file_size() > 0x7fffffff {
+            return Err(OpenError::InvalidFileSize(index, ty));
+        } else if prog.memory_size() != 0 {
+            return Err(OpenError::InvalidMemSize(index, ty));
+        }
+
+        self.comment = Some(index);
+
+        Ok(())
+    }
+
+    fn process_eh(&mut self, index: usize, prog: &Program) -> Result<(), OpenError> {
+        // Check offset.
+        let ty = prog.ty();
+        let offset = prog.offset();
+
+        if offset > 0xffffffff {
+            return Err(OpenError::InvalidOffset(index, ty));
+        }
+
+        // Check size.
+        let memory_size = prog.memory_size();
+
+        if (prog.file_size() as usize) > memory_size {
+            return Err(OpenError::InvalidFileSize(index, ty));
+        } else if memory_size > 0x7fffffff {
+            return Err(OpenError::InvalidMemSize(index, ty));
+        }
+
+        self.eh = Some(index);
+
+        Ok(())
+    }
+
+    fn get_self_program(&self, data: &SelfData, prog: &Program) -> Result<u64, ReadProgramError> {
+        // Find the target segment.
+        let offset = prog.offset();
+        let len = prog.file_size();
+
+        for (i, seg) in data.segments.iter().enumerate() {
+            // Skip if not blocked segment.
+            let flags = seg.flags;
+
+            if !flags.contains(SelfSegmentFlags::SF_BFLG) {
+                continue;
+            }
+
+            // Check if the target offset inside the associated program.
+            let prog = &self.programs[flags.program()];
+
+            if offset >= prog.offset() && offset < prog.offset() + prog.file_size() {
+                // Check if segment supported.
+                if flags.contains(SelfSegmentFlags::SF_ENCR) {
+                    return Err(ReadProgramError::EncryptedSegment(i));
                 }
 
-                panic!("SELF image is corrupted.");
+                if seg.compressed_size != seg.decompressed_size {
+                    panic!("Compressed SELF segment is not supported yet.");
+                }
+
+                if seg.decompressed_size != prog.file_size() {
+                    panic!("SELF segment size different than associated program segment is not supported yet.");
+                }
+
+                // Get data offset.
+                let offset = offset - prog.offset();
+
+                if offset + len > seg.decompressed_size {
+                    panic!("Segment block is smaller than the size specified in program header.");
+                }
+
+                return Ok(offset + seg.offset);
             }
-            None => Ok(prog.offset()),
         }
+
+        panic!("SELF image is corrupted.");
     }
 }
 
@@ -505,8 +603,8 @@ pub enum OpenError {
     #[error("e_phoff is not valid")]
     InvalidProgramOffset,
 
-    #[error("cannot read program header #{0}")]
-    ReadProgramHeaderFailed(usize, #[source] std::io::Error),
+    #[error("cannot read program headers")]
+    ReadProgramHeadersFailed(#[source] std::io::Error),
 
     #[error("{1} at program {0} has invalid file offset")]
     InvalidOffset(usize, ProgramType),
