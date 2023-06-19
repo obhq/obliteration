@@ -10,4 +10,3 @@ fs = { path = "../fs" }
 ftp = { path = "../ftp" }
 serde_yaml = "0.9"
 thiserror = "1.0"
-util = { path = "../util" }
