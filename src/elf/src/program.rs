@@ -9,6 +9,7 @@ pub struct Program {
     addr: usize,
     file_size: u64,
     memory_size: usize,
+    alignment: usize,
 }
 
 impl Program {
@@ -19,6 +20,7 @@ impl Program {
         addr: usize,
         file_size: u64,
         memory_size: usize,
+        alignment: usize,
     ) -> Self {
         Self {
             ty,
@@ -27,6 +29,7 @@ impl Program {
             addr,
             file_size,
             memory_size,
+            alignment,
         }
     }
 
@@ -56,6 +59,10 @@ impl Program {
 
     pub fn memory_size(&self) -> usize {
         self.memory_size
+    }
+
+    pub fn alignment(&self) -> usize {
+        self.alignment
     }
 
     pub fn aligned_size(&self) -> usize {
