@@ -2,11 +2,14 @@ use super::ExecutionEngine;
 use crate::fs::path::{VPath, VPathBuf};
 use crate::memory::{MprotectError, Protections};
 use crate::module::{Module, ModuleManager, ModuleWorkspace};
-use crate::syscalls::Syscalls;
+use crate::syscalls::{Input, Output, Syscalls};
 use byteorder::{ByteOrder, LE};
-use iced_x86::code_asm::{rax, rbp, rcx, rdi, rdx, rsi, rsp, CodeAssembler};
+use iced_x86::code_asm::{
+    dword_ptr, qword_ptr, r10, r11, r11d, r12, r8, r9, rax, rbp, rbx, rcx, rdi, rdx, rsi, rsp,
+    CodeAssembler,
+};
 use std::error::Error;
-use std::mem::transmute;
+use std::mem::{size_of, transmute};
 use std::ptr::null_mut;
 use thiserror::Error;
 
@@ -219,25 +222,93 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
     ) -> Result<usize, TrampolineError> {
         let mut asm = CodeAssembler::new(64).unwrap();
 
-        // Create stack frame.
+        assert_eq!(72, size_of::<Input>());
+        assert_eq!(16, size_of::<Output>());
+
+        // Create function prologue.
         asm.push(rbp).unwrap();
         asm.mov(rbp, rsp).unwrap();
+
+        // Clear CF and save rFLAGS.
+        asm.clc().unwrap();
+        asm.pushfq().unwrap();
+        asm.pop(r11).unwrap();
         asm.and(rsp, !15).unwrap(); // Make sure stack is align to 16 bytes boundary.
 
-        // Invoke our routine.
+        // Create stack frame.
+        asm.mov(rax, rsp).unwrap();
+        asm.sub(rsp, 0x50 + 0x10).unwrap();
+
+        // Save registers.
+        asm.push(rdi).unwrap();
+        asm.push(rsi).unwrap();
+        asm.push(rbx).unwrap();
+        asm.push(r12).unwrap();
+        asm.push(rdx).unwrap();
+        asm.push(r11).unwrap();
+
+        // Setup input.
         let module = match wp.push(module.to_owned()) {
             Some(v) => v,
             None => return Err(TrampolineError::SpaceNotEnough),
         };
 
-        asm.mov(rcx, module as u64).unwrap();
-        asm.mov(rdx, offset as u64).unwrap();
-        asm.mov(rsi, id as u64).unwrap();
+        asm.mov(rbx, rax).unwrap();
+        asm.mov(dword_ptr(rbx), id).unwrap();
+        asm.mov(rax, offset as u64).unwrap();
+        asm.mov(qword_ptr(rbx + 0x08), rax).unwrap();
+        asm.mov(rax, module as u64).unwrap();
+        asm.mov(qword_ptr(rbx + 0x10), rax).unwrap();
+        asm.mov(qword_ptr(rbx + 0x18), rdi).unwrap();
+        asm.mov(qword_ptr(rbx + 0x20), rsi).unwrap();
+        asm.mov(qword_ptr(rbx + 0x28), rdx).unwrap();
+        asm.mov(qword_ptr(rbx + 0x30), rcx).unwrap();
+        asm.mov(qword_ptr(rbx + 0x38), r8).unwrap();
+        asm.mov(qword_ptr(rbx + 0x40), r9).unwrap();
+
+        // Invoke our routine.
+        asm.mov(rax, rbx).unwrap();
+        asm.add(rax, 0x50).unwrap();
+        asm.mov(rdx, rax).unwrap();
+        asm.mov(rsi, rbx).unwrap();
         asm.mov(rdi, self.syscalls() as u64).unwrap();
-        asm.mov(rax, Syscalls::unimplemented as u64).unwrap();
+        asm.mov(rax, Syscalls::exec as u64).unwrap();
         asm.call(rax).unwrap();
 
+        // Check error. This mimic the behavior of
+        // https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/amd64/amd64/vm_machdep.c#L380.
+        let mut err = asm.create_label();
+        let mut restore = asm.create_label();
+
+        asm.pop(r11).unwrap();
+        asm.pop(rdx).unwrap();
+        asm.test(rax, rax).unwrap();
+        asm.jnz(err).unwrap();
+
+        // Set output.
+        asm.mov(rax, qword_ptr(rbx + 0x50)).unwrap();
+        asm.mov(rdx, qword_ptr(rbx + 0x58)).unwrap();
+        asm.jmp(restore).unwrap();
+
+        // Set CF.
+        asm.set_label(&mut err).unwrap();
+        asm.or(r11, 1).unwrap();
+
         // Restore registers.
+        asm.set_label(&mut restore).unwrap();
+        asm.pop(r12).unwrap();
+        asm.pop(rbx).unwrap();
+        asm.pop(rsi).unwrap();
+        asm.pop(rdi).unwrap();
+        asm.mov(rcx, ret as u64).unwrap();
+        asm.xor(r8, r8).unwrap();
+        asm.xor(r9, r9).unwrap();
+        asm.xor(r10, r10).unwrap();
+
+        // Restore rFLAGS.
+        asm.mov(r11d, r11d).unwrap(); // Clear the upper dword.
+        asm.push(r11).unwrap();
+        asm.popfq().unwrap();
         asm.leave().unwrap();
 
         self.write_trampoline(wp, ret, asm)
