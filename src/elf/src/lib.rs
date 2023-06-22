@@ -187,9 +187,9 @@ impl<I: Read + Seek> Elf<I> {
             // Process the header.
             match p.ty() {
                 ProgramType::PT_LOAD | ProgramType::PT_SCE_RELRO => elf.process_mappable(i, &p)?,
-                ProgramType::PT_DYNAMIC => elf.dynamic = Some(i),
+                ProgramType::PT_DYNAMIC => elf.process_dynamic(i, &p)?,
                 ProgramType::PT_TLS => elf.process_tls(i, &p)?,
-                ProgramType::PT_SCE_DYNLIBDATA => elf.dyndata = Some(i),
+                ProgramType::PT_SCE_DYNLIBDATA => elf.process_dyndata(i, &p)?,
                 ProgramType::PT_SCE_PROCPARAM => elf.proc_param = Some(i),
                 ProgramType::PT_SCE_MODULE_PARAM => elf.mod_param = Some(i),
                 ProgramType::PT_SCE_COMMENT => elf.process_comment(i, &p)?,
@@ -203,6 +203,43 @@ impl<I: Read + Seek> Elf<I> {
         // Check mapping range.
         if elf.mapping.start == usize::MAX || elf.mapping.end == 0 {
             return Err(OpenError::NoMappableProgram);
+        }
+
+        // Check dynamic linking.
+        if let Some(i) = elf.dynamic {
+            let dynamic = &elf.programs[i];
+
+            if dynamic.file_size() == 0 {
+                return Err(OpenError::InvalidDynamic);
+            }
+
+            // Read PT_DYNAMIC.
+            let mut dynamic = vec![0u8; dynamic.file_size() as usize];
+
+            if let Err(e) = elf.read_program(i, &mut dynamic) {
+                return Err(OpenError::ReadDynamicFailed(e));
+            }
+
+            // Check dynamic data.
+            let i = elf.dyndata.ok_or(OpenError::NoDynData)?;
+            let dyndata = &elf.programs[i];
+
+            if dyndata.file_size() == 0 {
+                return Err(OpenError::InvalidDynData);
+            }
+
+            // Read PT_SCE_DYNLIBDATA.
+            let mut dyndata = vec![0u8; dyndata.file_size() as usize];
+
+            if let Err(e) = elf.read_program(i, &mut dyndata) {
+                return Err(OpenError::ReadDynDataFailed(e));
+            }
+
+            // Parse PT_DYNAMIC & PT_SCE_DYNLIBDATA.
+            elf.dynamic_linking = match DynamicLinking::parse(dynamic, dyndata) {
+                Ok(v) => Some(v),
+                Err(e) => return Err(OpenError::ParseDynamicLinkingFailed(e)),
+            };
         }
 
         // Check PT_SCE_RELRO.
@@ -236,32 +273,6 @@ impl<I: Read + Seek> Elf<I> {
                     return Err(OpenError::InvalidDataAddr(i));
                 }
             }
-        }
-
-        // Load dynamic linking data.
-        if let Some(i) = elf.dynamic {
-            // Read PT_DYNAMIC.
-            let mut dynamic = vec![0u8; elf.programs[i].file_size() as usize];
-
-            if let Err(e) = elf.read_program(i, &mut dynamic) {
-                return Err(OpenError::ReadDynamicFailed(e));
-            }
-
-            // Read PT_SCE_DYNLIBDATA.
-            let i = elf.dyndata.ok_or(OpenError::NoDynlibData)?;
-            let mut dynlib = vec![0u8; elf.programs[i].file_size() as usize];
-
-            if let Err(e) = elf.read_program(i, &mut dynlib) {
-                return Err(OpenError::ReadDynlibDataFailed(e));
-            }
-
-            // Parse PT_DYNAMIC & PT_SCE_DYNLIBDATA.
-            elf.dynamic_linking = match DynamicLinking::parse(dynamic, dynlib) {
-                Ok(v) => Some(v),
-                Err(e) => return Err(OpenError::ParseDynamicLinkingFailed(e)),
-            };
-        } else if elf.dyndata.is_some() {
-            return Err(OpenError::NoDynamic);
         }
 
         Ok(elf)
@@ -404,6 +415,29 @@ impl<I: Read + Seek> Elf<I> {
         Ok(())
     }
 
+    fn process_dynamic(&mut self, index: usize, prog: &Program) -> Result<(), OpenError> {
+        // Check offset.
+        let ty = prog.ty();
+        let offset = prog.offset();
+
+        if offset > 0xffffffff {
+            return Err(OpenError::InvalidOffset(index, ty));
+        }
+
+        // Check size.
+        let memory_size = prog.memory_size();
+
+        if (prog.file_size() as usize) > memory_size {
+            return Err(OpenError::InvalidFileSize(index, ty));
+        } else if memory_size > 0x7fffffff {
+            return Err(OpenError::InvalidMemSize(index, ty));
+        }
+
+        self.dynamic = Some(index);
+
+        Ok(())
+    }
+
     fn process_tls(&mut self, index: usize, prog: &Program) -> Result<(), OpenError> {
         // Check offset.
         let ty = prog.ty();
@@ -428,6 +462,27 @@ impl<I: Read + Seek> Elf<I> {
         }
 
         self.tls = Some(index);
+
+        Ok(())
+    }
+
+    fn process_dyndata(&mut self, index: usize, prog: &Program) -> Result<(), OpenError> {
+        // Check offset.
+        let ty = prog.ty();
+        let offset = prog.offset();
+
+        if offset > 0xffffffff {
+            return Err(OpenError::InvalidOffset(index, ty));
+        }
+
+        // Check size.
+        if prog.file_size() > 0x7fffffff {
+            return Err(OpenError::InvalidFileSize(index, ty));
+        } else if prog.memory_size() != 0 {
+            return Err(OpenError::InvalidMemSize(index, ty));
+        }
+
+        self.dyndata = Some(index);
 
         Ok(())
     }
@@ -624,6 +679,24 @@ pub enum OpenError {
     #[error("no mappable program")]
     NoMappableProgram,
 
+    #[error("PT_DYNAMIC is not valid")]
+    InvalidDynamic,
+
+    #[error("cannot read PT_DYNAMIC")]
+    ReadDynamicFailed(#[source] ReadProgramError),
+
+    #[error("no PT_SCE_DYNLIBDATA")]
+    NoDynData,
+
+    #[error("PT_SCE_DYNLIBDATA is not valid")]
+    InvalidDynData,
+
+    #[error("cannot read PT_SCE_DYNLIBDATA")]
+    ReadDynDataFailed(#[source] ReadProgramError),
+
+    #[error("cannot parse PT_DYNAMIC and PT_SCE_DYNLIBDATA")]
+    ParseDynamicLinkingFailed(#[source] self::dynamic::ParseError),
+
     #[error("PT_SCE_RELRO has invalid address")]
     InvalidRelroAddr,
 
@@ -632,21 +705,6 @@ pub enum OpenError {
 
     #[error("PT_LOAD at program {0} has invalid address")]
     InvalidDataAddr(usize),
-
-    #[error("no PT_DYNAMIC")]
-    NoDynamic,
-
-    #[error("no PT_SCE_DYNLIBDATA")]
-    NoDynlibData,
-
-    #[error("cannot read PT_DYNAMIC")]
-    ReadDynamicFailed(#[source] ReadProgramError),
-
-    #[error("cannot read PT_SCE_DYNLIBDATA")]
-    ReadDynlibDataFailed(#[source] ReadProgramError),
-
-    #[error("cannot parse PT_DYNAMIC and PT_SCE_DYNLIBDATA")]
-    ParseDynamicLinkingFailed(#[source] self::dynamic::ParseError),
 }
 
 /// Represents an error for [`Elf::read_program()`].

@@ -4,7 +4,7 @@ use fs::ModuleInfo;
 use ftp::FtpClient;
 use std::borrow::Cow;
 use std::collections::VecDeque;
-use std::ffi::{c_char, c_void, CString};
+use std::ffi::{c_char, c_void, CStr, CString};
 use std::fs::{create_dir, File};
 use std::io::{Read, Write};
 use std::net::TcpStream;
@@ -29,8 +29,8 @@ pub unsafe extern "C" fn system_download(
     };
 
     // Connect to FTP server.
-    let from = unsafe { util::str::from_c_unchecked(from) };
-    let ftp = match TcpStream::connect(from) {
+    let from = CStr::from_ptr(from);
+    let ftp = match TcpStream::connect(from.to_str().unwrap()) {
         Ok(v) => v,
         Err(e) => return Error::new(&DownloadError::ConnectFailed(e)),
     };
@@ -63,7 +63,8 @@ pub unsafe extern "C" fn system_download(
     }
 
     // Download the whole system directory.
-    let to = Path::new(unsafe { util::str::from_c_unchecked(to) });
+    let to = CStr::from_ptr(to);
+    let to = Path::new(to.to_str().unwrap());
     let mut modules: Vec<ModuleInfo> = Vec::new();
     let mut dirs = VecDeque::from([(String::from("/system"), to.join("system"))]);
 
