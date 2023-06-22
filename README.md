@@ -1,7 +1,7 @@
 <p align="center"><img alt="Logo" src="logo.png"></p>
 
 ## About
-[![CI](https://github.com/obhq/obliteration/actions/workflows/main.yml/badge.svg)](https://github.com/obhq/obliteration/actions/workflows/main.yml) [![Matrix](https://img.shields.io/matrix/obliteration:matrix.org?color=740d03&label=Obliteration&logo=matrix)](https://matrix.to/#/#obliteration:matrix.org)
+[![CI](https://github.com/obhq/obliteration/actions/workflows/main.yml/badge.svg)](https://github.com/obhq/obliteration/actions/workflows/main.yml) [![Discord](https://img.shields.io/discord/1121284256816185444?color=740d03&label=Obliteration&logo=discord)](https://discord.gg/Qsdaxj6tnH)
 
 Obliteration is an experimental PS4 emulator using [Kyty](https://github.com/InoriRus/Kyty) and [Uplift](https://github.com/idc/uplift) as a reference. The project is under development and cannot run any games that Kyty is able to run yet.
 
@@ -19,7 +19,7 @@ Thanks to [Mou-Ikkai](https://github.com/Mou-Ikkai) for the awesome icon!
 
 ## Obliteration discussion
 
-We have a Matrix Room Space `#obliteration:matrix.org` on [Matrix.to](https://matrix.to/#/#obliteration:matrix.org) to discuss the project. Read each room's Topic for more information.
+We have a Discord server for discussion about Obliteration and its development. You can join the server [here](https://discord.gg/Qsdaxj6tnH).
 
 ## Features
 
