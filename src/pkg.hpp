@@ -1,12 +1,12 @@
 #pragma once
 
 #include "error.hpp"
+#include "param.hpp"
 
 #include <cinttypes>
 #include <cstddef>
 
 struct pkg;
-struct pkg_param;
 
 typedef void (*pkg_extract_status_t) (const char *name, std::uint64_t total, std::uint64_t written, void *ud);
 
@@ -14,13 +14,8 @@ extern "C" {
     pkg *pkg_open(const char *file, error **error);
     void pkg_close(pkg *pkg);
 
-    pkg_param *pkg_get_param(const pkg *pkg, char **error);
+    param *pkg_get_param(const pkg *pkg, char **error);
     error *pkg_extract(const pkg *pkg, const char *dir, pkg_extract_status_t status, void *ud);
-
-    pkg_param *pkg_param_open(const char *file, char **error);
-    char *pkg_param_title_id(const pkg_param *param);
-    char *pkg_param_title(const pkg_param *param);
-    void pkg_param_close(pkg_param *param);
 }
 
 class Pkg final {

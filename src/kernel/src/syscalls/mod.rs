@@ -11,9 +11,13 @@ impl Syscalls {
 
     #[cpu_abi]
     pub fn exec(&self, i: &Input, o: &mut Output) -> i64 {
+        // Reset output.
         o.rax = 0;
         o.rdx = 0;
 
+        // Execute the handler. See
+        // https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/kern/init_sysent.c#L36 for
+        // standard FreeBSD syscalls.
         match i.id {
             _ => panic!(
                 "Syscall {} is not implemented at {:#018x} on {}.",

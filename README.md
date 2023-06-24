@@ -113,7 +113,7 @@ If all you want is to use the emulator, choose `[YOUR-PLATFORM]-release` for opt
 cmake --build build
 ```
 
-You can use `-j` to enable parallel building (e.g. `cmake --build build -j 2`). Each parallel build consumes a lot of memory so don't use the number of your CPU cores otherwise your system might crash due to out of memory.
+You can use `-j` to enable parallel building (e.g. `cmake --build build -j 2`). Each parallel build on Linux consumes a lot of memory so don't use the number of your CPU cores otherwise your system might crash due to out of memory. On Windows it seems like it is safe to use the number of your CPU cores.
 
 ## Development
 
@@ -164,6 +164,6 @@ We use icons from https://materialdesignicons.com for UI (e.g. on the menu and t
 ## License
 
 - `src/ansi_escape.hpp`, `src/ansi_escape.cpp`, `src/log_formatter.hpp` and `src/log_formatter.cpp` are licensed under GPL-3.0 only.
-- `src/pfs` and `src/pkg` are licensed under LGPL-3.0 license.
+- `src/param`, `src/pfs` and `src/pkg` are licensed under LGPL-3.0 license.
 - All other source code is licensed under MIT license.
 - All release binaries are under GPL-3.0 license.
