@@ -1,9 +1,9 @@
 use self::entry::Entry;
 use self::header::Header;
 use self::keys::{fake_pfs_key, pkg_key3};
-use self::param::Param;
 use aes::cipher::generic_array::GenericArray;
 use aes::cipher::{BlockDecryptMut, KeyIvInit};
+use param::Param;
 use sha2::Digest;
 use std::error::Error;
 use std::ffi::{c_void, CString};
@@ -18,7 +18,6 @@ use thiserror::Error;
 pub mod entry;
 pub mod header;
 pub mod keys;
-pub mod param;
 
 #[no_mangle]
 pub unsafe extern "C" fn pkg_open(file: *const c_char, error: *mut *mut error::Error) -> *mut Pkg {
@@ -65,68 +64,6 @@ pub unsafe extern "C" fn pkg_extract(
         Ok(_) => null_mut(),
         Err(e) => error::Error::new(&e),
     }
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn pkg_param_open(
-    file: *const c_char,
-    error: *mut *mut c_char,
-) -> *mut Param {
-    // Open file.
-    let mut file = match File::open(unsafe { util::str::from_c_unchecked(file) }) {
-        Ok(v) => v,
-        Err(e) => {
-            unsafe { util::str::set_c(error, &e.to_string()) };
-            return null_mut();
-        }
-    };
-
-    // param.sfo is quite small so we can read all of it content into memory.
-    let mut data: Vec<u8> = Vec::new();
-
-    match file.metadata() {
-        Ok(v) => {
-            if v.len() <= 4096 {
-                if let Err(e) = file.read_to_end(&mut data) {
-                    unsafe { util::str::set_c(error, &e.to_string()) };
-                    return null_mut();
-                }
-            } else {
-                unsafe { util::str::set_c(error, "file too large") };
-                return null_mut();
-            }
-        }
-        Err(e) => {
-            unsafe { util::str::set_c(error, &e.to_string()) };
-            return null_mut();
-        }
-    };
-
-    // Parse.
-    let param = match Param::read(&data) {
-        Ok(v) => Box::new(v),
-        Err(e) => {
-            unsafe { util::str::set_c(error, &e.to_string()) };
-            return null_mut();
-        }
-    };
-
-    Box::into_raw(param)
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn pkg_param_title_id(param: &Param) -> *mut c_char {
-    unsafe { util::str::to_c(param.title_id()) }
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn pkg_param_title(param: &Param) -> *mut c_char {
-    unsafe { util::str::to_c(param.title()) }
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn pkg_param_close(param: *mut Param) {
-    unsafe { Box::from_raw(param) };
 }
 
 // https://www.psdevwiki.com/ps4/Package_Files
@@ -178,7 +115,7 @@ impl Pkg {
         };
 
         // Parse data.
-        let param = match Param::read(data) {
+        let param = match Param::read(Cursor::new(data)) {
             Ok(v) => v,
             Err(e) => return Err(GetParamError::ReadFailed(e)),
         };

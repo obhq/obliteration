@@ -43,9 +43,9 @@ MainWindow::MainWindow() :
     restoreGeometry();
 
     // Determine current theme.
-
     QString svgPath;
-    if (QApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark) {
+
+    if (QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark) {
         svgPath = ":/resources/darkmode/";
     } else {
         svgPath = ":/resources/lightmode/";
@@ -224,7 +224,7 @@ void MainWindow::installPkg()
     // Get game ID.
     char *error;
 
-    auto param = pkg_get_param(pkg, &error);
+    Param param(pkg_get_param(pkg, &error));
 
     if (!param) {
         QMessageBox::critical(&progress, "Error", QString("Failed to get param.sfo from %1: %2").arg(pkgPath.c_str()).arg(error));
@@ -232,27 +232,22 @@ void MainWindow::installPkg()
         return;
     }
 
-    auto gameId = fromMalloc(pkg_param_title_id(param));
-    auto gameTitle = fromMalloc(pkg_param_title(param));
-
-    pkg_param_close(param);
-
     // Create game directory.
     auto gamesDirectory = readGamesDirectorySetting();
 
-    if (!QDir(gamesDirectory).mkdir(gameId)) {
-        QString msg("Cannot create directory %1 inside %2.");
+    if (!QDir(gamesDirectory).mkdir(param.titleId())) {
+        QString msg(
+            "Cannot create directory %1 inside %2. "
+            "If you have a failed installation from a previous attempt, you will need to remove this directory before trying again.");
 
-        msg += " If you have a failed installation from a previous attempt, you will need to remove this directory before trying again.";
-
-        QMessageBox::critical(&progress, "Error", msg.arg(gameId).arg(gamesDirectory));
+        QMessageBox::critical(&progress, "Error", msg.arg(param.titleId()).arg(gamesDirectory));
         return;
     }
 
-    auto directory = joinPath(gamesDirectory, gameId);
+    auto directory = joinPath(gamesDirectory, param.titleId());
 
     // Extract items.
-    progress.setWindowTitle(gameTitle);
+    progress.setWindowTitle(param.title());
 
     newError = pkg_extract(pkg, directory.c_str(), [](const char *name, std::uint64_t total, std::uint64_t written, void *ud) {
         auto toProgress = [total](std::uint64_t v) -> int {
@@ -294,7 +289,7 @@ void MainWindow::installPkg()
     }
 
     // Add to game list.
-    auto success = loadGame(gameId);
+    auto success = loadGame(param.titleId());
 
     if (success) {
         QMessageBox::information(this, "Success", "Package installed successfully.");
@@ -486,23 +481,16 @@ bool MainWindow::loadGame(const QString &gameId)
     // Read game title from param.sfo.
     auto paramDir = joinPath(gamePath.c_str(), "sce_sys");
     auto paramPath = joinPath(paramDir.c_str(), "param.sfo");
-    pkg_param *param;
-    char *error;
-
-    param = pkg_param_open(paramPath.c_str(), &error);
+    Error error;
+    Param param(param_open(paramPath.c_str(), &error));
 
     if (!param) {
-        QMessageBox::critical(this, "Error", QString("Cannot open %1: %2").arg(paramPath.c_str()).arg(error));
-        std::free(error);
+        QMessageBox::critical(this, "Error", QString("Cannot open %1: %2").arg(paramPath.c_str()).arg(error.message()));
         return false;
     }
 
-    auto name = fromMalloc(pkg_param_title(param));
-
-    pkg_param_close(param);
-
     // Add to list.
-    gameList->add(new Game(name, gamePath.c_str()));
+    gameList->add(new Game(param.title(), gamePath.c_str()));
 
     return true;
 }

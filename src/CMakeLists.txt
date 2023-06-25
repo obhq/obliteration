@@ -6,25 +6,19 @@ find_package(Qt6 COMPONENTS Widgets REQUIRED)
 find_package(Threads REQUIRED)
 
 # Setup LLVM target.
-set(LLVM_OPTS -DCMAKE_INSTALL_PREFIX:STRING=<INSTALL_DIR>)
+set(LLVM_OPTS -DCMAKE_INSTALL_PREFIX:STRING=<INSTALL_DIR> -DLLVM_ENABLE_ZSTD:BOOL=OFF -DLLVM_APPEND_VC_REV:BOOL=OFF)
 
 if(WIN32)
     if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "AMD64")
         list(APPEND LLVM_OPTS -DLLVM_TARGETS_TO_BUILD:STRING=X86)
-        # turn off zstd due to potential shared libray issue
-        list(APPEND LLVM_OPTS -DLLVM_ENABLE_ZSTD:BOOL=OFF)
-
     else()
         message(FATAL_ERROR "Target CPU is not supported")
     endif()
 else()
     if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
         list(APPEND LLVM_OPTS -DLLVM_TARGETS_TO_BUILD:STRING=X86)
-        list(APPEND LLVM_OPTS -DLLVM_ENABLE_ZSTD:BOOL=OFF)
-
     elseif(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "arm64")
         list(APPEND LLVM_OPTS -DLLVM_TARGETS_TO_BUILD:STRING=AArch64)
-        list(APPEND LLVM_OPTS -DLLVM_ENABLE_ZSTD:BOOL=OFF)
     else()
         message(FATAL_ERROR "Target CPU is not supported")
     endif()
