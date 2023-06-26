@@ -15,9 +15,9 @@ int main(int argc, char *argv[])
     QCoreApplication::setApplicationName("Obliteration");
 
     // Dark Mode for Windows
-    #ifdef _WIN32
-        QApplication::setStyle("Fusion");
-    #endif
+#ifdef _WIN32
+    QApplication::setStyle("Fusion");
+#endif
 
     QApplication app(argc, argv);
 
@@ -30,10 +30,6 @@ int main(int argc, char *argv[])
         if (!init.exec()) {
             return 1;
         }
-    }
-
-    if (!ensureSystemDirectories()) {
-        return 1;
     }
 
     // Run main window.

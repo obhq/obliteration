@@ -18,13 +18,19 @@ impl VPath {
         }
     }
 
-    pub unsafe fn new_unchecked(data: &str) -> &Self {
+    pub const unsafe fn new_unchecked(data: &str) -> &Self {
         // SAFETY: This is ok because VPath is #[repr(transparent)].
         &*(data as *const str as *const VPath)
     }
 
     pub fn len(&self) -> usize {
         self.0.len()
+    }
+
+    pub fn join<C: AsRef<str>>(&self, component: C) -> Result<VPathBuf, ComponentError> {
+        let mut r = self.to_owned();
+        r.push(component)?;
+        Ok(r)
     }
 
     /// Gets the parent path.
@@ -113,14 +119,14 @@ impl VPathBuf {
         Self(Cow::Borrowed("/"))
     }
 
-    pub fn push(&mut self, component: &str) -> Result<(), PushError> {
+    pub fn push<C: AsRef<str>>(&mut self, component: C) -> Result<(), ComponentError> {
         // Check if component valid.
-        let v = match component {
-            "" => return Err(PushError::Empty),
-            "." | ".." => return Err(PushError::Forbidden),
+        let v = match component.as_ref() {
+            "" => return Err(ComponentError::Empty),
+            "." | ".." => return Err(ComponentError::Forbidden),
             v => {
                 if v.contains('/') {
-                    return Err(PushError::HasPathSeparator);
+                    return Err(ComponentError::HasPathSeparator);
                 } else {
                     v
                 }
@@ -135,6 +141,35 @@ impl VPathBuf {
         }
 
         data.push_str(v);
+        Ok(())
+    }
+
+    pub fn set_extension(&mut self, ext: &str) -> Result<(), SetExtensionError> {
+        // Check extension.
+        if ext.contains('/') {
+            return Err(SetExtensionError::Invalid);
+        }
+
+        // Check if root directory.
+        let s = self.0.to_mut();
+
+        if s.len() == 1 {
+            return Err(SetExtensionError::PathIsRoot);
+        }
+
+        // Find the last ".".
+        let i = match s.rfind('.') {
+            Some(v) if v > 0 => v,
+            _ => s.len(),
+        };
+
+        // Check if we need to remove extension instead.
+        if ext.is_empty() {
+            s.replace_range(i.., "");
+        } else {
+            s.replace_range(i.., &format!(".{ext}"));
+        }
+
         Ok(())
     }
 }
@@ -222,9 +257,9 @@ impl<'a> Iterator for Components<'a> {
     }
 }
 
-/// Represents the errors for [`VPathBuf::push()`].
+/// Represents an error for path component.
 #[derive(Debug, Error)]
-pub enum PushError {
+pub enum ComponentError {
     #[error("the component is empty")]
     Empty,
 
@@ -233,4 +268,14 @@ pub enum PushError {
 
     #[error("the component contains path separator")]
     HasPathSeparator,
+}
+
+/// Error of [`VPathBuf::set_extension()`].
+#[derive(Debug, Error)]
+pub enum SetExtensionError {
+    #[error("extension is not valid")]
+    Invalid,
+
+    #[error("path is a root directory")]
+    PathIsRoot,
 }
