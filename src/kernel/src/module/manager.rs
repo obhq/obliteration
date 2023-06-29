@@ -21,8 +21,6 @@ pub struct ModuleManager<'a> {
 }
 
 impl<'a> ModuleManager<'a> {
-    pub const EBOOT_PATH: &str = "/mnt/app0/eboot.bin";
-
     pub fn new(fs: &'a Fs, mm: &'a MemoryManager, module_workspace: usize) -> Self {
         let mut m = Self {
             fs,
@@ -45,10 +43,12 @@ impl<'a> ModuleManager<'a> {
     }
 
     pub fn get_eboot(&self) -> Arc<Module<'a>> {
-        let key: &VPath = Self::EBOOT_PATH.try_into().unwrap();
         let loaded = self.loaded.read().unwrap();
+        let mut key = self.fs.app().join("app0").unwrap();
 
-        match loaded.get(key) {
+        key.push("eboot.bin").unwrap();
+
+        match loaded.get(&key) {
             Some(v) => v.clone(),
             None => panic!("eboot.bin is not loaded."),
         }
@@ -145,8 +145,10 @@ impl<'a> ModuleManager<'a> {
     /// applied.
     pub fn load_eboot(&self) -> Result<Arc<Module<'a>>, LoadError> {
         // Check if already loaded.
-        let path = VPathBuf::try_from(Self::EBOOT_PATH).unwrap();
         let mut loaded = self.loaded.write().unwrap();
+        let mut path = self.fs.app().join("app0").unwrap();
+
+        path.push("eboot.bin").unwrap();
 
         if loaded.contains_key(&path) {
             panic!("{path} is already loaded.");

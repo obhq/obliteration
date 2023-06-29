@@ -100,15 +100,3 @@ bool initSystem(const QString &path, const QString &from, bool explicitDecryptio
 
     return true;
 }
-
-bool ensureSystemDirectories(QWidget *parent)
-{
-    QDir system(readSystemDirectorySetting());
-
-    if (!system.mkpath("mnt/app0")) {
-        QMessageBox::critical(parent, "Error", "Failed to create mnt/app0 directory.");
-        return false;
-    }
-
-    return true;
-}

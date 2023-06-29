@@ -1,4 +1,4 @@
-use crate::fs::path::{VPath, VPathBuf};
+use crate::fs::path::VPath;
 use crate::fs::Fs;
 use crate::llvm::Llvm;
 use crate::memory::MemoryManager;
@@ -79,38 +79,31 @@ fn main() -> ExitCode {
 
     // Show basic infomation.
     info!("Starting Obliteration kernel.");
-    info!("Debug dump directory is: {}.", args.debug_dump.display());
+    info!("System directory    : {}", args.system.display());
+    info!("Game directory      : {}", args.game.display());
+    info!("Debug dump directory: {}", args.debug_dump.display());
 
     // Initialize LLVM.
     let llvm = Llvm::new();
 
     // Initialize filesystem.
-    let fs = Fs::new();
+    info!("Initializing file system.");
 
-    info!("Mounting / to {}.", args.system.display());
-
-    if let Err(e) = fs.mount(VPathBuf::new(), args.system) {
-        error!(e, "Mount failed");
-        return ExitCode::FAILURE;
-    }
-
-    info!("Mounting /mnt/app0 to {}.", args.game.display());
-
-    if let Err(e) = fs.mount(VPath::new("/mnt/app0").unwrap(), args.game) {
-        error!(e, "Mount failed");
-        return ExitCode::FAILURE;
-    }
+    let fs = match Fs::new(args.system, args.game) {
+        Ok(v) => v,
+        Err(e) => {
+            error!(e, "Initialize failed");
+            return ExitCode::FAILURE;
+        }
+    };
 
     // Initialize memory manager.
     info!("Initializing memory manager.");
 
     let mm = MemoryManager::new();
 
-    info!("Page size is: {}.", mm.page_size());
-    info!(
-        "Allocation granularity is: {}.",
-        mm.allocation_granularity()
-    );
+    info!("Page size is             : {}", mm.page_size());
+    info!("Allocation granularity is: {}", mm.allocation_granularity());
 
     // Initialize the module manager.
     info!("Initializing module manager.");
