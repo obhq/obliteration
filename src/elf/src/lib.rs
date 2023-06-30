@@ -1,5 +1,6 @@
 pub use dynamic::*;
 pub use program::*;
+pub use ty::*;
 
 use bitflags::bitflags;
 use byteorder::{ByteOrder, LE};
@@ -9,6 +10,7 @@ use thiserror::Error;
 
 mod dynamic;
 mod program;
+mod ty;
 
 /// The first 8 bytes of SELF file.
 pub const SELF_MAGIC: [u8; 8] = [0x4f, 0x15, 0x3d, 0x1d, 0x00, 0x01, 0x01, 0x12];
@@ -21,6 +23,7 @@ pub struct Elf<I: Read + Seek> {
     name: String,
     image: I,
     self_data: Option<SelfData>,
+    ty: FileType,
     entry_addr: Option<usize>,
     programs: Vec<Program>,
     mapping: Range<usize>,
@@ -123,6 +126,7 @@ impl<I: Read + Seek> Elf<I> {
         }
 
         // Load ELF header.
+        let e_type = FileType::new(LE::read_u16(&hdr[0x10..]));
         let e_entry = LE::read_u64(&hdr[0x18..]);
         let e_phoff = offset + 0x40; // PS4 is hard-coded this value.
         let e_phnum = LE::read_u16(&hdr[0x38..]) as usize;
@@ -149,6 +153,7 @@ impl<I: Read + Seek> Elf<I> {
             name: name.into(),
             image,
             self_data,
+            ty: e_type,
             entry_addr: match e_entry {
                 0 => None,
                 v => Some(v as usize),
@@ -286,12 +291,20 @@ impl<I: Read + Seek> Elf<I> {
         self.self_data.as_ref().map(|d| d.segments.as_slice())
     }
 
+    pub fn ty(&self) -> FileType {
+        self.ty
+    }
+
     pub fn entry_addr(&self) -> Option<usize> {
         self.entry_addr
     }
 
     pub fn programs(&self) -> &[Program] {
         self.programs.as_slice()
+    }
+
+    pub fn dynamic(&self) -> Option<usize> {
+        self.dynamic
     }
 
     pub fn tls(&self) -> Option<usize> {

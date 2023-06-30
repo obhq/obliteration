@@ -1,8 +1,7 @@
-use crate::fs::path::VPath;
 use crate::fs::Fs;
 use crate::llvm::Llvm;
 use crate::memory::MemoryManager;
-use crate::module::{Module, ModuleManager};
+use crate::rtld::{Module, RuntimeLinker};
 use crate::syscalls::Syscalls;
 use clap::{Parser, ValueEnum};
 use serde::Deserialize;
@@ -17,33 +16,8 @@ mod fs;
 mod llvm;
 mod log;
 mod memory;
-mod module;
+mod rtld;
 mod syscalls;
-
-#[derive(Parser, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-struct Args {
-    #[arg(long)]
-    system: PathBuf,
-
-    #[arg(long)]
-    game: PathBuf,
-
-    #[arg(long)]
-    debug_dump: PathBuf,
-
-    #[arg(long)]
-    clear_debug_dump: bool,
-
-    #[arg(long, short)]
-    execution_engine: Option<ExecutionEngine>,
-}
-
-#[derive(Clone, ValueEnum, Deserialize)]
-enum ExecutionEngine {
-    Native,
-    Llvm,
-}
 
 fn main() -> ExitCode {
     // Load arguments.
@@ -105,54 +79,24 @@ fn main() -> ExitCode {
     info!("Page size is             : {}", mm.page_size());
     info!("Allocation granularity is: {}", mm.allocation_granularity());
 
-    // Initialize the module manager.
-    info!("Initializing module manager.");
+    // Initialize runtime linker.
+    info!("Initializing runtime linker.");
 
-    let modules = ModuleManager::new(&fs, &mm, 1024 * 1024);
+    let rtld = match RuntimeLinker::new(&fs, &mm) {
+        Ok(v) => v,
+        Err(e) => {
+            error!(e, "Initialize failed");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    info!("Application executable: {}", rtld.app().image().name());
+    print_module(rtld.app());
 
     // Initialize syscall routines.
     info!("Initializing system call routines.");
 
     let syscalls = Syscalls::new();
-
-    // Load eboot.bin.
-    info!("Loading eboot.bin.");
-
-    match modules.load_eboot() {
-        Ok(m) => print_module(&m),
-        Err(e) => {
-            error!(e, "Load failed");
-            return ExitCode::FAILURE;
-        }
-    };
-
-    // Preload libkernel.
-    let libkernel: &VPath = "/system/common/lib/libkernel.sprx".try_into().unwrap();
-
-    info!("Loading {libkernel}.");
-
-    match modules.load_file(libkernel) {
-        Ok(m) => print_module(&m),
-        Err(e) => {
-            error!(e, "Load failed");
-            return ExitCode::FAILURE;
-        }
-    }
-
-    // Preload internal libc.
-    let libc: &VPath = "/system/common/lib/libSceLibcInternal.sprx"
-        .try_into()
-        .unwrap();
-
-    info!("Loading {libc}.");
-
-    match modules.load_file(libc) {
-        Ok(m) => print_module(&m),
-        Err(e) => {
-            error!(e, "Load failed");
-            return ExitCode::FAILURE;
-        }
-    }
 
     // Get execution engine.
     info!("Initializing execution engine.");
@@ -160,24 +104,24 @@ fn main() -> ExitCode {
     match args.execution_engine {
         Some(ee) => match ee {
             #[cfg(target_arch = "x86_64")]
-            ExecutionEngine::Native => exec_with_native(&modules, &syscalls),
+            ExecutionEngine::Native => exec_with_native(&rtld, &syscalls),
             #[cfg(not(target_arch = "x86_64"))]
             ExecutionEngine::Native => {
                 error!("Native execution engine cannot be used on your machine.");
                 return false;
             }
-            ExecutionEngine::Llvm => exec_with_llvm(&llvm, &modules),
+            ExecutionEngine::Llvm => exec_with_llvm(&llvm, &rtld),
         },
         #[cfg(target_arch = "x86_64")]
-        None => exec_with_native(&modules, &syscalls),
+        None => exec_with_native(&rtld, &syscalls),
         #[cfg(not(target_arch = "x86_64"))]
-        None => exec_with_llvm(&llvm, &modules),
+        None => exec_with_llvm(&llvm, &rtld),
     }
 }
 
 #[cfg(target_arch = "x86_64")]
-fn exec_with_native(modules: &ModuleManager, syscalls: &Syscalls) -> ExitCode {
-    let mut ee = ee::native::NativeEngine::new(modules, syscalls);
+fn exec_with_native(rtld: &RuntimeLinker, syscalls: &Syscalls) -> ExitCode {
+    let mut ee = ee::native::NativeEngine::new(rtld, syscalls);
 
     info!("Patching modules.");
 
@@ -203,8 +147,8 @@ fn exec_with_native(modules: &ModuleManager, syscalls: &Syscalls) -> ExitCode {
     exec(ee)
 }
 
-fn exec_with_llvm(llvm: &Llvm, modules: &ModuleManager) -> ExitCode {
-    let mut ee = ee::llvm::LlvmEngine::new(llvm, modules);
+fn exec_with_llvm<'a, 'b: 'a>(llvm: &'b Llvm, rtld: &'a RuntimeLinker<'b>) -> ExitCode {
+    let mut ee = ee::llvm::LlvmEngine::new(llvm, rtld);
 
     info!("Lifting modules.");
 
@@ -262,14 +206,41 @@ fn print_module(module: &Module) {
     }
 
     for s in mem.segments().iter() {
-        let addr = mem.addr() + s.start();
+        if let Some(p) = s.program() {
+            let addr = mem.addr() + s.start();
 
-        info!(
-            "Program {} is mapped to {:#018x}:{:#018x} with {}.",
-            s.program(),
-            addr,
-            addr + s.len(),
-            image.programs()[s.program()].flags(),
-        );
+            info!(
+                "Program {} is mapped to {:#018x}:{:#018x} with {}.",
+                p,
+                addr,
+                addr + s.len(),
+                image.programs()[p].flags(),
+            );
+        }
     }
+}
+
+#[derive(Parser, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct Args {
+    #[arg(long)]
+    system: PathBuf,
+
+    #[arg(long)]
+    game: PathBuf,
+
+    #[arg(long)]
+    debug_dump: PathBuf,
+
+    #[arg(long)]
+    clear_debug_dump: bool,
+
+    #[arg(long, short)]
+    execution_engine: Option<ExecutionEngine>,
+}
+
+#[derive(Clone, ValueEnum, Deserialize)]
+enum ExecutionEngine {
+    Native,
+    Llvm,
 }
