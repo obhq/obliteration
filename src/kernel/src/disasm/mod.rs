@@ -1,5 +1,5 @@
 use self::cpu::{CpuState, ValueState};
-use crate::module::Memory;
+use crate::rtld::Memory;
 use iced_x86::{Code, Decoder, DecoderOptions, OpKind, Register};
 use std::collections::{HashMap, VecDeque};
 use thiserror::Error;
@@ -7,13 +7,13 @@ use thiserror::Error;
 pub mod cpu;
 
 /// Contains state of module disassemble.
-pub(super) struct Disassembler<'a> {
-    module: &'a Memory<'a>,
+pub(super) struct Disassembler<'a, 'b: 'a> {
+    module: &'a Memory<'b>,
     functions: HashMap<usize, Function>, // Key is the offset in the mapped memory.
 }
 
-impl<'a> Disassembler<'a> {
-    pub fn new(module: &'a Memory) -> Self {
+impl<'a, 'b: 'a> Disassembler<'a, 'b> {
+    pub fn new(module: &'a Memory<'b>) -> Self {
         Self {
             module,
             functions: HashMap::new(),

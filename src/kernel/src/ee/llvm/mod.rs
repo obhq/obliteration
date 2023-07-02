@@ -3,7 +3,7 @@ use super::ExecutionEngine;
 use crate::disasm::Disassembler;
 use crate::fs::path::VPathBuf;
 use crate::llvm::Llvm;
-use crate::module::{Module, ModuleManager};
+use crate::rtld::{Module, RuntimeLinker};
 use std::error::Error;
 use thiserror::Error;
 
@@ -11,33 +11,30 @@ mod codegen;
 
 /// An implementation of [`ExecutionEngine`] using JIT powered by LLVM IR.
 pub struct LlvmEngine<'a, 'b: 'a> {
-    llvm: &'a Llvm,
-    modules: &'a ModuleManager<'b>,
+    llvm: &'b Llvm,
+    rtld: &'a RuntimeLinker<'b>,
 }
 
 impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
-    pub fn new(llvm: &'a Llvm, modules: &'a ModuleManager<'b>) -> Self {
-        Self { llvm, modules }
+    pub fn new(llvm: &'b Llvm, rtld: &'a RuntimeLinker<'b>) -> Self {
+        Self { llvm, rtld }
     }
 
     pub fn lift_modules(&mut self) -> Result<(), LiftError> {
         // Get eboot.bin dependencies.
-        let eboot = self.modules.get_eboot();
-        let deps = match self.modules.get_deps(&eboot) {
-            Ok(v) => v,
-            Err(e) => return Err(LiftError::GetEbootDepsFailed(e)),
-        };
+        // TODO: Get eboot.bin dependencies.
+        let eboot = self.rtld.app();
 
         // Lift eboot.bin and its dependencies.
-        for module in [eboot].into_iter().chain(deps.into_iter()).rev() {
+        for module in [eboot].into_iter().rev() {
             // TODO: Store the lifted module somewhere.
-            self.lift(&module)?;
+            self.lift(module)?;
         }
 
         Ok(())
     }
 
-    fn lift(&self, module: &Module) -> Result<crate::llvm::module::ExecutionEngine, LiftError> {
+    fn lift(&self, module: &Module<'b>) -> Result<crate::llvm::module::ExecutionEngine, LiftError> {
         // Get a list of public functions.
         let image = module.image();
         let path: VPathBuf = image.name().try_into().unwrap();
@@ -58,7 +55,7 @@ impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
         disasm.fixup();
 
         // Lift the public functions.
-        let mut lifting = self.llvm.lock().create_module(image.name());
+        let mut lifting = self.llvm.create_module(image.name());
         let mut codegen = Codegen::new(&disasm, &mut lifting);
 
         for &addr in &targets {
@@ -86,9 +83,6 @@ impl<'a, 'b: 'a> ExecutionEngine for LlvmEngine<'a, 'b> {
 /// Represents errors for lifting module.
 #[derive(Debug, Error)]
 pub enum LiftError {
-    #[error("cannot get eboot.bin dependencies")]
-    GetEbootDepsFailed(#[source] crate::module::DependencyChainError),
-
     #[error("cannot disassemble function {1:#018x} on {0}")]
     DisassembleFailed(VPathBuf, usize, #[source] crate::disasm::DisassembleError),
 

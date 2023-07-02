@@ -3,7 +3,7 @@ use llvm_sys::core::{LLVMContextCreate, LLVMContextDispose, LLVMModuleCreateWith
 use llvm_sys::prelude::LLVMContextRef;
 use std::ffi::{c_char, CStr, CString};
 use std::fmt::Display;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::Mutex;
 
 pub mod module;
 
@@ -21,33 +21,25 @@ impl Llvm {
         }
     }
 
-    /// Lock the LLVM context until the [`ModuleBuilder::build()`] has been invoked.
-    pub fn lock(&self) -> LLvmContext {
-        LLvmContext {
-            context: &self.context,
-            raw: self.context.lock().unwrap(),
-        }
+    pub fn create_module(&self, name: &str) -> LlvmModule<'_> {
+        let context = self.context.lock().unwrap();
+        let name = CString::new(name).unwrap();
+        let module = unsafe { LLVMModuleCreateWithNameInContext(name.as_ptr(), *context) };
+
+        LlvmModule::new(self, module)
+    }
+
+    fn with_context<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(LLVMContextRef) -> R,
+    {
+        f(*self.context.lock().unwrap())
     }
 }
 
 impl Drop for Llvm {
     fn drop(&mut self) {
         unsafe { LLVMContextDispose(*self.context.get_mut().unwrap()) };
-    }
-}
-
-/// A wrapper on LLVM context for thread-safe.
-pub struct LLvmContext<'a> {
-    context: &'a Mutex<LLVMContextRef>,
-    raw: MutexGuard<'a, LLVMContextRef>,
-}
-
-impl<'a> LLvmContext<'a> {
-    pub fn create_module(self, name: &str) -> LlvmModule<'a> {
-        let name = CString::new(name).unwrap();
-        let module = unsafe { LLVMModuleCreateWithNameInContext(name.as_ptr(), *self.raw) };
-
-        LlvmModule::new(self.context, module, self.raw)
     }
 }
 

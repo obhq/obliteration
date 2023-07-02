@@ -216,6 +216,14 @@ impl VFile {
     pub fn virtual_path(&self) -> &VPath {
         &self.virtual_path
     }
+
+    pub fn into_path(self) -> PathBuf {
+        self.path
+    }
+
+    pub fn into_vpath(self) -> VPathBuf {
+        self.virtual_path
+    }
 }
 
 /// Represents the error for FS initialization.
