@@ -15,4 +15,3 @@ pfs = { path = "../pfs" }
 rsa = "0.9"
 sha2 = "0.10"
 thiserror = "1.0"
-util = { version = "0.1.0", path = "../util" }

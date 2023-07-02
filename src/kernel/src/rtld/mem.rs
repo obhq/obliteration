@@ -1,4 +1,4 @@
-use super::LoadError;
+use super::MapError;
 use crate::memory::{MappingFlags, MemoryManager, MprotectError, Protections};
 use elf::{Elf, ProgramFlags, ProgramType};
 use std::alloc::Layout;
@@ -23,7 +23,7 @@ impl<'a> Memory<'a> {
         mm: &'a MemoryManager,
         image: &Elf<File>,
         base: usize,
-    ) -> Result<Self, LoadError> {
+    ) -> Result<Self, MapError> {
         // Create segments from ELF programs.
         let programs = image.programs();
         let mut segments: Vec<MemorySegment> = Vec::with_capacity(programs.len() + 2);
@@ -118,7 +118,7 @@ impl<'a> Memory<'a> {
             0,
         ) {
             Ok(v) => v,
-            Err(e) => return Err(LoadError::MemoryAllocationFailed(len, e)),
+            Err(e) => return Err(MapError::MemoryAllocationFailed(len, e)),
         };
 
         Ok(Self {

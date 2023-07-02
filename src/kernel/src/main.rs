@@ -1,3 +1,4 @@
+use crate::fs::path::VPath;
 use crate::fs::Fs;
 use crate::llvm::Llvm;
 use crate::memory::MemoryManager;
@@ -82,7 +83,7 @@ fn main() -> ExitCode {
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
 
-    let rtld = match RuntimeLinker::new(&fs, &mm) {
+    let mut rtld = match RuntimeLinker::new(&fs, &mm) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Initialize failed");
@@ -92,6 +93,37 @@ fn main() -> ExitCode {
 
     info!("Application executable: {}", rtld.app().image().name());
     print_module(rtld.app());
+
+    // Preload libkernel.
+    let path: &VPath = "/system/common/lib/libkernel.sprx".try_into().unwrap();
+
+    info!("Loading {path}.");
+
+    let module = match rtld.load(path) {
+        Ok(v) => v,
+        Err(e) => {
+            error!(e, "Load failed");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    print_module(&module);
+    rtld.set_kernel(module);
+
+    // Preload libSceLibcInternal.
+    let path: &VPath = "/system/common/lib/libSceLibcInternal.sprx"
+        .try_into()
+        .unwrap();
+
+    info!("Loading {path}.");
+
+    match rtld.load(path) {
+        Ok(m) => print_module(&m),
+        Err(e) => {
+            error!(e, "Load failed");
+            return ExitCode::FAILURE;
+        }
+    }
 
     // Initialize syscall routines.
     info!("Initializing system call routines.");
@@ -172,16 +204,17 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E) -> ExitCode {
 }
 
 fn print_module(module: &Module) {
-    // Image type.
+    // Image details.
     let image = module.image();
 
     if image.self_segments().is_some() {
-        info!("Image type    : SELF");
+        info!("Image format  : SELF");
     } else {
-        info!("Image type    : ELF");
+        info!("Image format  : ELF");
     }
 
-    // Dynamic linking.
+    info!("Image type    : {}", image.ty());
+
     if let Some(dynamic) = image.dynamic_linking() {
         let i = dynamic.module_info();
 

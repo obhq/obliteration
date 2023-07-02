@@ -212,23 +212,20 @@ void MainWindow::installPkg()
 
     // Open a PKG.
     Pkg pkg;
-    Error newError;
+    Error error;
 
-    pkg = pkg_open(pkgPath.c_str(), &newError);
+    pkg = pkg_open(pkgPath.c_str(), &error);
 
     if (!pkg) {
-        QMessageBox::critical(&progress, "Error", QString("Cannot open %1: %2").arg(pkgPath.c_str()).arg(newError.message()));
+        QMessageBox::critical(&progress, "Error", QString("Cannot open %1: %2").arg(pkgPath.c_str()).arg(error.message()));
         return;
     }
 
     // Get game ID.
-    char *error;
-
     Param param(pkg_get_param(pkg, &error));
 
     if (!param) {
-        QMessageBox::critical(&progress, "Error", QString("Failed to get param.sfo from %1: %2").arg(pkgPath.c_str()).arg(error));
-        std::free(error);
+        QMessageBox::critical(&progress, "Error", QString("Failed to get param.sfo from %1: %2").arg(pkgPath.c_str()).arg(error.message()));
         return;
     }
 
@@ -249,7 +246,7 @@ void MainWindow::installPkg()
     // Extract items.
     progress.setWindowTitle(param.title());
 
-    newError = pkg_extract(pkg, directory.c_str(), [](const char *name, std::uint64_t total, std::uint64_t written, void *ud) {
+    error = pkg_extract(pkg, directory.c_str(), [](const char *name, std::uint64_t total, std::uint64_t written, void *ud) {
         auto toProgress = [total](std::uint64_t v) -> int {
             if (total >= 1024UL*1024UL*1024UL*1024UL) { // >= 1TB
                 return v / (1024UL*1024UL*1024UL*10UL); // 10GB step.
@@ -283,8 +280,8 @@ void MainWindow::installPkg()
     pkg.close();
     progress.complete();
 
-    if (newError) {
-        QMessageBox::critical(this, "Error", QString("Failed to extract %1: %2").arg(pkgPath.c_str()).arg(newError.message()));
+    if (error) {
+        QMessageBox::critical(this, "Error", QString("Failed to extract %1: %2").arg(pkgPath.c_str()).arg(error.message()));
         return;
     }
 
