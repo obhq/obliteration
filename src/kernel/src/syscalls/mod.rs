@@ -1,34 +1,58 @@
+pub use output::*;
+
+use self::error::Error;
 use crate::fs::path::VPathBuf;
+use crate::rtld::RuntimeLinker;
 use kernel_macros::cpu_abi;
 
-/// Provides PS4 kernel routines.
-pub struct Syscalls {}
+mod error;
+mod output;
 
-impl Syscalls {
-    pub fn new() -> Self {
-        Self {}
+/// Provides PS4 kernel routines.
+pub struct Syscalls<'a, 'b: 'a> {
+    ld: &'a RuntimeLinker<'b>,
+}
+
+impl<'a, 'b: 'a> Syscalls<'a, 'b> {
+    pub fn new(ld: &'a RuntimeLinker<'b>) -> Self {
+        Self { ld }
     }
 
     #[cpu_abi]
-    pub fn exec(&self, i: &Input, o: &mut Output) -> i64 {
-        // Reset output.
-        o.rax = 0;
-        o.rdx = 0;
-
+    pub fn invoke(&self, i: &Input, o: &mut Output) -> i64 {
         // Execute the handler. See
         // https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/kern/init_sysent.c#L36 for
         // standard FreeBSD syscalls.
-        match i.id {
+        let r = match i.id {
+            599 => self.relocate_process(),
             _ => panic!(
                 "Syscall {} is not implemented at {:#018x} on {}.",
                 i.id, i.offset, i.module,
             ),
+        };
+
+        // Convert the result.
+        match r {
+            Ok(v) => {
+                *o = v;
+                0
+            }
+            Err(e) => {
+                o.rax = 0;
+                o.rdx = 0;
+                e.errno().get().into()
+            }
         }
     }
 
     #[cpu_abi]
     pub fn int44(&self, offset: usize, module: &VPathBuf) -> ! {
         panic!("Interrupt number 0x44 has been executed at {offset:#018x} on {module}.");
+    }
+
+    fn relocate_process(&self) -> Result<Output, Error> {
+        self.ld.load_needed()?;
+        Ok(Output::ZERO)
     }
 }
 
@@ -39,11 +63,4 @@ pub struct Input<'a> {
     pub offset: usize,
     pub module: &'a VPathBuf,
     pub args: [usize; 6],
-}
-
-/// Outputs of the syscall entry point.
-#[repr(C)]
-pub struct Output {
-    pub rax: usize,
-    pub rdx: usize,
 }

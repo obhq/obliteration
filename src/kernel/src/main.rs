@@ -83,7 +83,7 @@ fn main() -> ExitCode {
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
 
-    let mut rtld = match RuntimeLinker::new(&fs, &mm) {
+    let mut ld = match RuntimeLinker::new(&fs, &mm) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Initialize failed");
@@ -91,15 +91,15 @@ fn main() -> ExitCode {
         }
     };
 
-    info!("Application executable: {}", rtld.app().image().name());
-    print_module(rtld.app());
+    info!("Application executable: {}", ld.app().image().name());
+    print_module(ld.app());
 
     // Preload libkernel.
     let path: &VPath = "/system/common/lib/libkernel.sprx".try_into().unwrap();
 
     info!("Loading {path}.");
 
-    let module = match rtld.load(path) {
+    let module = match ld.load(path) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Load failed");
@@ -108,7 +108,7 @@ fn main() -> ExitCode {
     };
 
     print_module(&module);
-    rtld.set_kernel(module);
+    ld.set_kernel(module);
 
     // Preload libSceLibcInternal.
     let path: &VPath = "/system/common/lib/libSceLibcInternal.sprx"
@@ -117,7 +117,7 @@ fn main() -> ExitCode {
 
     info!("Loading {path}.");
 
-    match rtld.load(path) {
+    match ld.load(path) {
         Ok(m) => print_module(&m),
         Err(e) => {
             error!(e, "Load failed");
@@ -128,68 +128,65 @@ fn main() -> ExitCode {
     // Initialize syscall routines.
     info!("Initializing system call routines.");
 
-    let syscalls = Syscalls::new();
+    let syscalls = Syscalls::new(&ld);
 
-    // Get execution engine.
+    // Bootstrap execution engine.
     info!("Initializing execution engine.");
 
-    match args.execution_engine {
-        Some(ee) => match ee {
-            #[cfg(target_arch = "x86_64")]
-            ExecutionEngine::Native => exec_with_native(&rtld, &syscalls),
-            #[cfg(not(target_arch = "x86_64"))]
-            ExecutionEngine::Native => {
-                error!("Native execution engine cannot be used on your machine.");
-                return false;
-            }
-            ExecutionEngine::Llvm => exec_with_llvm(&llvm, &rtld),
-        },
+    let ee = match args.execution_engine {
+        Some(v) => v,
         #[cfg(target_arch = "x86_64")]
-        None => exec_with_native(&rtld, &syscalls),
+        None => ExecutionEngine::Native,
         #[cfg(not(target_arch = "x86_64"))]
-        None => exec_with_llvm(&llvm, &rtld),
-    }
-}
+        None => ExecutionEngine::Llvm,
+    };
 
-#[cfg(target_arch = "x86_64")]
-fn exec_with_native(rtld: &RuntimeLinker, syscalls: &Syscalls) -> ExitCode {
-    let mut ee = ee::native::NativeEngine::new(rtld, syscalls);
+    match ee {
+        #[cfg(target_arch = "x86_64")]
+        ExecutionEngine::Native => {
+            let mut ee = ee::native::NativeEngine::new(&ld, &syscalls);
 
-    info!("Patching modules.");
+            info!("Patching modules.");
 
-    match unsafe { ee.patch_mods() } {
-        Ok(r) => {
-            let mut t = 0;
+            match unsafe { ee.patch_mods() } {
+                Ok(r) => {
+                    let mut t = 0;
 
-            for (m, c) in r {
-                if c != 0 {
-                    info!("{c} patch(es) have been applied to {m}.");
-                    t += 1;
+                    for (m, c) in r {
+                        if c != 0 {
+                            info!("{c} patch(es) have been applied to {m}.");
+                            t += 1;
+                        }
+                    }
+
+                    info!("{t} module(s) have been patched successfully.");
+                }
+                Err(e) => {
+                    error!(e, "Patch failed");
+                    return ExitCode::FAILURE;
                 }
             }
 
-            info!("{t} module(s) have been patched successfully.");
+            exec(ee)
         }
-        Err(e) => {
-            error!(e, "Patch failed");
+        #[cfg(not(target_arch = "x86_64"))]
+        ExecutionEngine::Native => {
+            error!("Native execution engine cannot be used on your machine.");
             return ExitCode::FAILURE;
         }
+        ExecutionEngine::Llvm => {
+            let mut ee = ee::llvm::LlvmEngine::new(&llvm, &ld);
+
+            info!("Lifting modules.");
+
+            if let Err(e) = ee.lift_modules() {
+                error!(e, "Lift failed");
+                return ExitCode::FAILURE;
+            }
+
+            exec(ee)
+        }
     }
-
-    exec(ee)
-}
-
-fn exec_with_llvm<'a, 'b: 'a>(llvm: &'b Llvm, rtld: &'a RuntimeLinker<'b>) -> ExitCode {
-    let mut ee = ee::llvm::LlvmEngine::new(llvm, rtld);
-
-    info!("Lifting modules.");
-
-    if let Err(e) = ee.lift_modules() {
-        error!(e, "Lift failed");
-        return ExitCode::FAILURE;
-    }
-
-    exec(ee)
 }
 
 fn exec<E: ee::ExecutionEngine>(mut ee: E) -> ExitCode {
