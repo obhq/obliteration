@@ -10,8 +10,7 @@ members = [
     "param",
     "pfs",
     "pkg",
-    "system",
-    "util"
+    "system"
 ]
 
 default-members = ["core", "kernel"]

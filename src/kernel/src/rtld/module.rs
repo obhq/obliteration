@@ -1,4 +1,4 @@
-use super::{LoadError, Memory};
+use super::{MapError, Memory};
 use crate::memory::MemoryManager;
 use elf::Elf;
 use std::fs::File;
@@ -12,22 +12,22 @@ pub struct Module<'a> {
 }
 
 impl<'a> Module<'a> {
-    pub(super) fn load(
+    pub(super) fn map(
         mm: &'a MemoryManager,
         mut image: Elf<File>,
         base: usize,
-    ) -> Result<Self, LoadError> {
+    ) -> Result<Self, MapError> {
         // Map the image to the memory.
         let mut memory = Memory::new(mm, &image, base)?;
 
         memory.load(|prog, buf| {
             image
                 .read_program(prog, buf)
-                .map_err(|e| LoadError::ReadProgramFailed(prog, e))
+                .map_err(|e| MapError::ReadProgramFailed(prog, e))
         })?;
 
         if let Err(e) = memory.protect() {
-            return Err(LoadError::ProtectMemoryFailed(e));
+            return Err(MapError::ProtectMemoryFailed(e));
         }
 
         Ok(Self {

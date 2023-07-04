@@ -14,7 +14,7 @@ extern "C" {
     pkg *pkg_open(const char *file, error **error);
     void pkg_close(pkg *pkg);
 
-    param *pkg_get_param(const pkg *pkg, char **error);
+    param *pkg_get_param(const pkg *pkg, error **error);
     error *pkg_extract(const pkg *pkg, const char *dir, pkg_extract_status_t status, void *ud);
 }
 
