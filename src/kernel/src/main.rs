@@ -222,6 +222,25 @@ fn print_module(module: &Module) {
         }
     }
 
+    for (i, p) in image.programs().iter().enumerate() {
+        let offset = p.offset();
+        let end = offset + p.file_size();
+
+        info!(
+            "Program {:<6}: {:#018x}:{:#018x}:{}",
+            i,
+            offset,
+            end,
+            p.ty()
+        );
+    }
+
+    if let Some(dynamic) = image.dynamic_linking() {
+        for n in dynamic.needed() {
+            info!("Needed        : {n}");
+        }
+    }
+
     // Memory.
     let mem = module.memory();
 

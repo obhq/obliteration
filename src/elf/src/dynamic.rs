@@ -8,6 +8,7 @@ use thiserror::Error;
 
 /// Contains data required for dynamic linking.
 pub struct DynamicLinking {
+    needed: Vec<String>,
     pltrelsz: usize,
     pltgot: u64,
     relasz: usize,
@@ -83,11 +84,9 @@ impl DynamicLinking {
         // Find the offset of data tables.
         let mut strtab: Option<u64> = None;
         let mut strsz: Option<u64> = None;
-        let mut offset = 0;
 
-        while offset < data.len() {
+        for data in data.chunks_exact(16) {
             // Read fields.
-            let data = &data[offset..(offset + 16)];
             let tag = LE::read_i64(&data);
             let value = &data[8..];
 
@@ -97,8 +96,6 @@ impl DynamicLinking {
                 Self::DT_STRSZ | Self::DT_SCE_STRSZ => strsz = Some(LE::read_u64(value)),
                 _ => {}
             }
-
-            offset += 16;
         }
 
         // Check string table.
@@ -131,6 +128,7 @@ impl DynamicLinking {
         };
 
         // Parse entries.
+        let mut needed: Vec<String> = Vec::new();
         let mut pltrelsz: Option<u64> = None;
         let mut pltgot: Option<u64> = None;
         let mut relasz: Option<u64> = None;
@@ -150,7 +148,7 @@ impl DynamicLinking {
         let mut hashsz: Option<u64> = None;
         let mut symtabsz: Option<u64> = None;
 
-        for (index, data) in data.chunks(16).enumerate() {
+        for (index, data) in data.chunks_exact(16).enumerate() {
             use std::collections::hash_map::Entry;
 
             // Read fields.
@@ -160,7 +158,10 @@ impl DynamicLinking {
             // Parse entry.
             match tag {
                 Self::DT_NULL => break,
-                Self::DT_NEEDED => {}
+                Self::DT_NEEDED => match dynlib.str(LE::read_u64(value) as usize) {
+                    Some(v) => needed.push(v),
+                    None => return Err(ParseError::InvalidNeeded(index)),
+                },
                 Self::DT_PLTRELSZ | Self::DT_SCE_PLTRELSZ => pltrelsz = Some(LE::read_u64(value)),
                 Self::DT_PLTGOT | Self::DT_SCE_PLTGOT => pltgot = Some(LE::read_u64(value)),
                 Self::DT_RELASZ | Self::DT_SCE_RELASZ => relasz = Some(LE::read_u64(value)),
@@ -313,6 +314,7 @@ impl DynamicLinking {
         };
 
         let parsed = Self {
+            needed,
             pltrelsz: pltrelsz.ok_or(ParseError::NoPltrelsz)? as usize,
             pltgot: pltgot.ok_or(ParseError::NoPltgot)?,
             relasz: relasz.ok_or(ParseError::NoRelasz)? as usize,
@@ -349,6 +351,10 @@ impl DynamicLinking {
         }
 
         Ok(parsed)
+    }
+
+    pub fn needed(&self) -> &[String] {
+        self.needed.as_ref()
     }
 
     pub fn flags(&self) -> Option<ModuleFlags> {
@@ -441,9 +447,9 @@ bitflags! {
     /// Contains flags for a module.
     #[derive(Clone, Copy)]
     pub struct ModuleFlags: u64 {
-        const DF_SYMBOLIC = 0x02;
+        const DF_SYMBOLIC = 0x02; // Not used in PS4.
         const DF_TEXTREL = 0x04;
-        const DF_BIND_NOW = 0x08;
+        const DF_BIND_NOW = 0x08; // Not used in PS4.
     }
 }
 
@@ -695,6 +701,9 @@ where
 pub enum ParseError {
     #[error("invalid data size")]
     InvalidDataSize,
+
+    #[error("entry {0} is not a valid DT_NEEDED")]
+    InvalidNeeded(usize),
 
     #[error("entry DT_PLTRELSZ or DT_SCE_PLTRELSZ does not exist")]
     NoPltrelsz,
