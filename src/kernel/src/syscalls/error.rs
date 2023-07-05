@@ -8,10 +8,6 @@ pub enum Error {
 }
 
 impl Error {
-    pub fn new(errno: NonZeroI32) -> Self {
-        Self::Raw(errno)
-    }
-
     pub fn errno(&self) -> NonZeroI32 {
         match self {
             Error::Raw(v) => *v,
