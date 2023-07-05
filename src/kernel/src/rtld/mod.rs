@@ -1,12 +1,14 @@
 pub use mem::*;
 pub use module::*;
 
+use crate::errno::{Errno, EINVAL};
 use crate::fs::path::{VPath, VPathBuf};
 use crate::fs::Fs;
 use crate::memory::{MemoryManager, MmapError, MprotectError};
 use elf::{Elf, FileType, ReadProgramError};
 use std::collections::VecDeque;
 use std::fs::File;
+use std::num::NonZeroI32;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
@@ -137,6 +139,18 @@ impl<'a> RuntimeLinker<'a> {
         Ok(module)
     }
 
+    pub fn load_needed(&self) -> Result<(), NeededError> {
+        // Check if application is dynamic linking.
+        let app = self.app.image();
+
+        if app.dynamic().is_none() {
+            return Err(NeededError::NotDynamic(app.name().try_into().unwrap()));
+        }
+
+        // TODO: Implement dynlib_load_needed_shared_objects.
+        Ok(())
+    }
+
     pub fn set_kernel(&mut self, m: Arc<Module<'a>>) {
         self.kernel = Some(m);
     }
@@ -191,4 +205,19 @@ pub enum LoadError {
 
     #[error("cannot map file")]
     MapFailed(#[source] MapError),
+}
+
+/// Represents an error for needed loading
+#[derive(Debug, Error)]
+pub enum NeededError {
+    #[error("{0} is not a dynamic linked program")]
+    NotDynamic(VPathBuf),
+}
+
+impl Errno for NeededError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            NeededError::NotDynamic(_) => EINVAL,
+        }
+    }
 }

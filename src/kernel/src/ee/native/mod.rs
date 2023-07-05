@@ -16,11 +16,11 @@ use thiserror::Error;
 /// An implementation of [`ExecutionEngine`] for running the PS4 binary natively.
 pub struct NativeEngine<'a, 'b: 'a> {
     rtld: &'a RuntimeLinker<'b>,
-    syscalls: &'a Syscalls,
+    syscalls: &'a Syscalls<'a, 'b>,
 }
 
 impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
-    pub fn new(rtld: &'a RuntimeLinker<'b>, syscalls: &'a Syscalls) -> Self {
+    pub fn new(rtld: &'a RuntimeLinker<'b>, syscalls: &'a Syscalls<'a, 'b>) -> Self {
         Self { rtld, syscalls }
     }
 
@@ -40,7 +40,7 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
         Ok(counts)
     }
 
-    fn syscalls(&self) -> *const Syscalls {
+    fn syscalls(&self) -> *const Syscalls<'a, 'b> {
         self.syscalls
     }
 
@@ -244,8 +244,8 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
         asm.and(rsp, !15).unwrap(); // Make sure stack is align to 16 bytes boundary.
 
         // Create stack frame.
-        asm.mov(rax, rsp).unwrap();
         asm.sub(rsp, 0x50 + 0x10).unwrap();
+        asm.mov(rax, rsp).unwrap();
 
         // Save registers.
         asm.push(rdi).unwrap();
@@ -280,7 +280,7 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
         asm.mov(rdx, rax).unwrap();
         asm.mov(rsi, rbx).unwrap();
         asm.mov(rdi, self.syscalls() as u64).unwrap();
-        asm.mov(rax, Syscalls::exec as u64).unwrap();
+        asm.mov(rax, Syscalls::invoke as u64).unwrap();
         asm.call(rax).unwrap();
 
         // Check error. This mimic the behavior of
