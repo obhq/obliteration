@@ -2,9 +2,9 @@ pub use input::*;
 pub use output::*;
 
 use self::error::Error;
-use crate::errno::EINVAL;
 use crate::fs::path::VPathBuf;
 use crate::rtld::RuntimeLinker;
+use crate::sysctl::Sysctl;
 use kernel_macros::cpu_abi;
 
 mod error;
@@ -13,12 +13,13 @@ mod output;
 
 /// Provides PS4 kernel routines.
 pub struct Syscalls<'a, 'b: 'a> {
+    sysctl: &'a Sysctl,
     ld: &'a RuntimeLinker<'b>,
 }
 
 impl<'a, 'b: 'a> Syscalls<'a, 'b> {
-    pub fn new(ld: &'a RuntimeLinker<'b>) -> Self {
-        Self { ld }
+    pub fn new(sysctl: &'a Sysctl, ld: &'a RuntimeLinker<'b>) -> Self {
+        Self { sysctl, ld }
     }
 
     /// # Safety
@@ -64,22 +65,41 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         &self,
         name: *const i32,
         namelen: u32,
-        old: *mut (),
+        old: *mut u8,
         oldlenp: *mut usize,
-        new: *const (),
+        new: *const u8,
         newlen: usize,
     ) -> Result<Output, Error> {
         // Convert name to a slice.
-        if namelen < 2 || namelen > 24 {
-            return Err(Error::Raw(EINVAL));
-        }
-
         let name = std::slice::from_raw_parts(name, namelen.try_into().unwrap());
 
-        // Check type.
-        match name[0] {
-            t => todo!("sysctl {t}"),
+        // Convert old to a slice.
+        let old = if oldlenp.is_null() {
+            None
+        } else if old.is_null() {
+            todo!("oldlenp is non-null but old is null")
+        } else {
+            Some(std::slice::from_raw_parts_mut(old, *oldlenp))
+        };
+
+        // Convert new to a slice.
+        let new = if newlen == 0 {
+            None
+        } else if new.is_null() {
+            todo!("newlen is non-zero but new is null")
+        } else {
+            Some(std::slice::from_raw_parts(new, newlen))
+        };
+
+        // Execute.
+        let written = self.sysctl.invoke(name, old, new)?;
+
+        if !oldlenp.is_null() {
+            assert!(written <= *oldlenp);
+            *oldlenp = written;
         }
+
+        Ok(Output::ZERO)
     }
 
     fn relocate_process(&self) -> Result<Output, Error> {
