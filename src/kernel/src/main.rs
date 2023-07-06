@@ -4,6 +4,7 @@ use crate::llvm::Llvm;
 use crate::memory::MemoryManager;
 use crate::rtld::{Module, RuntimeLinker};
 use crate::syscalls::Syscalls;
+use crate::sysctl::Sysctl;
 use clap::{Parser, ValueEnum};
 use serde::Deserialize;
 use std::fs::File;
@@ -19,6 +20,7 @@ mod log;
 mod memory;
 mod rtld;
 mod syscalls;
+mod sysctl;
 
 fn main() -> ExitCode {
     // Load arguments.
@@ -58,8 +60,9 @@ fn main() -> ExitCode {
     info!("Game directory      : {}", args.game.display());
     info!("Debug dump directory: {}", args.debug_dump.display());
 
-    // Initialize LLVM.
+    // Initialize foundations.
     let llvm = Llvm::new();
+    let sysctl = Sysctl::new();
 
     // Initialize filesystem.
     info!("Initializing file system.");
@@ -128,7 +131,7 @@ fn main() -> ExitCode {
     // Initialize syscall routines.
     info!("Initializing system call routines.");
 
-    let syscalls = Syscalls::new(&ld);
+    let syscalls = Syscalls::new(&sysctl, &ld);
 
     // Bootstrap execution engine.
     info!("Initializing execution engine.");
