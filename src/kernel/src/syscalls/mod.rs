@@ -13,12 +13,12 @@ mod output;
 
 /// Provides PS4 kernel routines.
 pub struct Syscalls<'a, 'b: 'a> {
-    sysctl: &'a Sysctl,
+    sysctl: &'a Sysctl<'b>,
     ld: &'a RuntimeLinker<'b>,
 }
 
 impl<'a, 'b: 'a> Syscalls<'a, 'b> {
-    pub fn new(sysctl: &'a Sysctl, ld: &'a RuntimeLinker<'b>) -> Self {
+    pub fn new(sysctl: &'a Sysctl<'b>, ld: &'a RuntimeLinker<'b>) -> Self {
         Self { sysctl, ld }
     }
 

@@ -1,4 +1,5 @@
 pub use dynamic::*;
+pub use info::*;
 pub use program::*;
 pub use ty::*;
 
@@ -9,6 +10,7 @@ use std::ops::Range;
 use thiserror::Error;
 
 mod dynamic;
+mod info;
 mod program;
 mod ty;
 
@@ -39,6 +41,7 @@ pub struct Elf<I: Read + Seek> {
     comment: Option<usize>,
     eh: Option<usize>,
     twomb_mode: bool,
+    info: Option<FileInfo>,
 }
 
 impl<I: Read + Seek> Elf<I> {
@@ -175,6 +178,7 @@ impl<I: Read + Seek> Elf<I> {
             comment: None,
             eh: None,
             twomb_mode: false,
+            info: None,
         };
 
         for (i, h) in data.chunks_exact(0x38).enumerate() {
@@ -218,6 +222,8 @@ impl<I: Read + Seek> Elf<I> {
                 return Err(OpenError::InvalidDynamic);
             }
 
+            let mut dynoff: usize = dynamic.offset().try_into().unwrap();
+
             // Read PT_DYNAMIC.
             let mut dynamic = vec![0u8; dynamic.file_size() as usize];
 
@@ -233,12 +239,36 @@ impl<I: Read + Seek> Elf<I> {
                 return Err(OpenError::InvalidDynData);
             }
 
+            // Adjust dynamic offset inside the dynamic data. It looks weird but this is how Sony
+            // actually did.
+            dynoff -= dyndata.offset() as usize;
+
             // Read PT_SCE_DYNLIBDATA.
             let mut dyndata = vec![0u8; dyndata.file_size() as usize];
 
             if let Err(e) = elf.read_program(i, &mut dyndata) {
                 return Err(OpenError::ReadDynDataFailed(e));
             }
+
+            // Read PT_SCE_COMMENT.
+            let comment = if let Some(i) = elf.comment {
+                let mut buf = vec![0u8; elf.programs[i].file_size() as usize];
+
+                if elf.read_program(i, &mut buf).is_err() {
+                    // This is not an error on the PS4.
+                    Vec::new()
+                } else {
+                    buf
+                }
+            } else {
+                Vec::new()
+            };
+
+            // Load info.
+            elf.info = match FileInfo::parse(dyndata.clone(), comment, dynoff) {
+                Ok(v) => Some(v),
+                Err(e) => return Err(OpenError::ParseFileInfoFailed(e)),
+            };
 
             // Parse PT_DYNAMIC & PT_SCE_DYNLIBDATA.
             elf.dynamic_linking = match DynamicLinking::parse(dynamic, dyndata) {
@@ -333,6 +363,13 @@ impl<I: Read + Seek> Elf<I> {
 
     pub fn twomb_mode(&self) -> bool {
         self.twomb_mode
+    }
+
+    /// Only available on a dynamic module.
+    ///
+    /// See `dynlib_proc_initialize_step1` and `self_load_shared_object` for a reference.
+    pub fn info(&self) -> Option<&FileInfo> {
+        self.info.as_ref()
     }
 
     pub fn read_program(&mut self, index: usize, buf: &mut [u8]) -> Result<(), ReadProgramError> {
@@ -706,6 +743,9 @@ pub enum OpenError {
 
     #[error("cannot read PT_SCE_DYNLIBDATA")]
     ReadDynDataFailed(#[source] ReadProgramError),
+
+    #[error("cannot parse file info")]
+    ParseFileInfoFailed(#[source] FileInfoError),
 
     #[error("cannot parse PT_DYNAMIC and PT_SCE_DYNLIBDATA")]
     ParseDynamicLinkingFailed(#[source] self::dynamic::ParseError),

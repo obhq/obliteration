@@ -1,3 +1,4 @@
+use crate::arc4::Arc4;
 use crate::fs::path::VPath;
 use crate::fs::Fs;
 use crate::llvm::Llvm;
@@ -11,6 +12,7 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+mod arc4;
 mod disasm;
 mod ee;
 mod errno;
@@ -61,8 +63,9 @@ fn main() -> ExitCode {
     info!("Debug dump directory: {}", args.debug_dump.display());
 
     // Initialize foundations.
+    let arc4 = Arc4::new();
     let llvm = Llvm::new();
-    let sysctl = Sysctl::new();
+    let sysctl = Sysctl::new(&arc4);
 
     // Initialize filesystem.
     info!("Initializing file system.");
