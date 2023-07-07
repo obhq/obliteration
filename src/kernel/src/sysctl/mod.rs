@@ -1,4 +1,6 @@
+use crate::arc4::Arc4;
 use crate::errno::{Errno, EINVAL};
+use std::cmp::min;
 use std::num::NonZeroI32;
 use thiserror::Error;
 
@@ -6,15 +8,19 @@ use thiserror::Error;
 ///
 /// This is an implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/kern/kern_sysctl.c.
-pub struct Sysctl {}
+pub struct Sysctl<'a> {
+    arc4: &'a Arc4,
+}
 
-impl Sysctl {
+impl<'a> Sysctl<'a> {
+    pub const CTL_KERN: i32 = 1;
     pub const CTL_VM: i32 = 2;
     pub const CTL_DEBUG: i32 = 5;
+    pub const KERN_ARND: i32 = 37;
     pub const VM_TOTAL: i32 = 1;
 
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(arc4: &'a Arc4) -> Self {
+        Self { arc4 }
     }
 
     pub fn invoke(
@@ -37,7 +43,34 @@ impl Sysctl {
             todo!("sysctl CTL_VM:VM_TOTAL")
         }
 
-        todo!("sysctl {top}");
+        // TODO: Check userland_sysctl to see what we have missed here.
+        match top {
+            Self::CTL_KERN => self.invoke_kern(&name[1..], old),
+            v => todo!("sysctl {v}"),
+        }
+    }
+
+    fn invoke_kern(&self, name: &[i32], old: Option<&mut [u8]>) -> Result<usize, InvokeError> {
+        match name[0] {
+            Self::KERN_ARND => self.kern_arnd(old),
+            v => todo!("sysctl CTL_KERN:{v}"),
+        }
+    }
+
+    fn kern_arnd(&self, old: Option<&mut [u8]>) -> Result<usize, InvokeError> {
+        // Get output buffer.
+        let buf = match old {
+            Some(v) => v,
+            None => {
+                // TODO: Check how PS4 handle this case.
+                return Ok(0);
+            }
+        };
+
+        // Fill the output.
+        let len = min(buf.len(), 256);
+        self.arc4.rand_bytes(&mut buf[..len]);
+        Ok(len)
     }
 }
 
