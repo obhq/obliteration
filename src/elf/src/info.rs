@@ -5,6 +5,16 @@ use thiserror::Error;
 pub struct FileInfo {
     data: Vec<u8>,
     comment: Vec<u8>,
+    pltrelsz: usize,
+    relasz: usize,
+    strsz: usize,
+    hash: usize,
+    jmprel: usize,
+    rela: usize,
+    strtab: usize,
+    symtab: usize,
+    hashsz: usize,
+    symtabsz: usize,
 }
 
 impl FileInfo {
@@ -109,6 +119,24 @@ impl FileInfo {
         dynoff: usize,
     ) -> Result<Self, FileInfoError> {
         // Parse dynamic.
+        let mut pltrelsz: Option<u64> = None;
+        let mut relasz: Option<u64> = None;
+        let mut relaent = false;
+        let mut strsz: Option<u64> = None;
+        let mut syment = false;
+        let mut pltrel = false;
+        let mut fingerprint = false;
+        let mut filename = false;
+        let mut module_info = false;
+        let mut hash: Option<u64> = None;
+        let mut pltgot = false;
+        let mut jmprel: Option<u64> = None;
+        let mut rela: Option<u64> = None;
+        let mut strtab: Option<u64> = None;
+        let mut symtab: Option<u64> = None;
+        let mut hashsz: Option<u64> = None;
+        let mut symtabsz: Option<u64> = None;
+
         for entry in data[dynoff..].chunks(16) {
             let tag = LE::read_i64(entry);
             let value = &entry[8..];
@@ -116,103 +144,161 @@ impl FileInfo {
             match tag {
                 Self::DT_NULL => break,
                 Self::DT_NEEDED => {}
-                Self::DT_PLTRELSZ => {}
-                Self::DT_PLTGOT => {}
-                Self::DT_HASH => {}
-                Self::DT_STRTAB => {}
-                Self::DT_SYMTAB => {}
-                Self::DT_RELA => {}
-                Self::DT_RELASZ => {}
-                Self::DT_RELAENT => {}
-                Self::DT_STRSZ => {}
-                Self::DT_SYMENT => {}
+                Self::DT_PLTRELSZ | Self::DT_SCE_PLTRELSZ => pltrelsz = Some(LE::read_u64(value)),
+                Self::DT_PLTGOT
+                | Self::DT_RPATH
+                | Self::DT_BIND_NOW
+                | Self::DT_RUNPATH
+                | Self::DT_ENCODING
+                | Self::DT_SCE_UNK2
+                | Self::DT_SCE_UNK3
+                | Self::DT_SCE_UNK4
+                | Self::DT_SCE_UNK5
+                | Self::DT_SCE_UNK6
+                | Self::DT_SCE_UNK7
+                | Self::DT_SCE_UNK8
+                | Self::DT_SCE_UNK9
+                | Self::DT_SCE_UNK10
+                | Self::DT_SCE_UNK11
+                | Self::DT_SCE_UNK12
+                | Self::DT_SCE_UNK13
+                | Self::DT_SCE_UNK14
+                | Self::DT_SCE_UNK15
+                | Self::DT_SCE_UNK16
+                | Self::DT_SCE_UNK17
+                | Self::DT_SCE_UNK18
+                | Self::DT_SCE_UNK19
+                | Self::DT_SCE_UNK20
+                | Self::DT_SCE_UNK21
+                | Self::DT_SCE_UNK22
+                | Self::DT_SCE_UNK23
+                | Self::DT_SCE_UNK24
+                | Self::DT_SCE_UNK25
+                | Self::DT_SCE_UNK26
+                | Self::DT_SCE_UNK27
+                | Self::DT_SCE_UNK28
+                | Self::DT_SCE_UNK29
+                | Self::DT_SCE_UNK30
+                | Self::DT_SCE_UNK31
+                | Self::DT_SCE_UNK32
+                | Self::DT_SCE_UNK33
+                | Self::DT_SCE_UNK34
+                | Self::DT_SCE_UNK35 => {
+                    return Err(FileInfoError::UnsupportedTag(tag));
+                }
+                Self::DT_HASH
+                | Self::DT_STRTAB
+                | Self::DT_SYMTAB
+                | Self::DT_RELA
+                | Self::DT_JMPREL
+                | Self::DT_REL
+                | Self::DT_RELSZ
+                | Self::DT_RELENT => {
+                    return Err(FileInfoError::OrbisUnsupported(tag));
+                }
+                Self::DT_RELASZ | Self::DT_SCE_RELASZ => relasz = Some(LE::read_u64(value)),
+                Self::DT_RELAENT | Self::DT_SCE_RELAENT => {
+                    relaent = if LE::read_u64(value) == 24 {
+                        true
+                    } else {
+                        return Err(FileInfoError::InvalidRelaent);
+                    }
+                }
+                Self::DT_STRSZ | Self::DT_SCE_STRSZ => strsz = Some(LE::read_u64(value)),
+                Self::DT_SYMENT | Self::DT_SCE_SYMENT => {
+                    syment = if LE::read_u64(value) == 24 {
+                        true
+                    } else {
+                        return Err(FileInfoError::InvalidSyment);
+                    }
+                }
                 Self::DT_INIT => {}
                 Self::DT_FINI => {}
                 Self::DT_SONAME => {}
-                Self::DT_RPATH => {}
                 Self::DT_SYMBOLIC => {}
-                Self::DT_REL => {}
-                Self::DT_RELSZ => {}
-                Self::DT_RELENT => {}
-                Self::DT_PLTREL => {}
+                Self::DT_PLTREL | Self::DT_SCE_PLTREL => {
+                    pltrel = if LE::read_u64(value) == 7 {
+                        true
+                    } else {
+                        return Err(FileInfoError::InvalidPltrel);
+                    }
+                }
                 Self::DT_DEBUG => {}
                 Self::DT_TEXTREL => {}
-                Self::DT_JMPREL => {}
-                Self::DT_BIND_NOW => {}
                 Self::DT_INIT_ARRAY => {}
                 Self::DT_FINI_ARRAY => {}
                 Self::DT_INIT_ARRAYSZ => {}
                 Self::DT_FINI_ARRAYSZ => {}
-                Self::DT_RUNPATH => {}
                 Self::DT_FLAGS => {}
-                Self::DT_ENCODING => {}
                 Self::DT_PREINIT_ARRAY => {}
                 Self::DT_PREINIT_ARRAYSZ => {}
                 Self::DT_SCE_UNK1 => {}
-                Self::DT_SCE_FINGERPRINT => {}
-                Self::DT_SCE_UNK2 => {}
-                Self::DT_SCE_UNK3 => {}
-                Self::DT_SCE_UNK4 => {}
-                Self::DT_SCE_UNK5 => {}
-                Self::DT_SCE_UNK6 => {}
-                Self::DT_SCE_FILENAME => {}
-                Self::DT_SCE_MODULE_INFO => {}
+                Self::DT_SCE_FINGERPRINT => fingerprint = true,
+                Self::DT_SCE_FILENAME => filename = true,
+                Self::DT_SCE_MODULE_INFO => module_info = true,
                 Self::DT_SCE_NEEDED_MODULE => {}
-                Self::DT_SCE_UNK7 => {}
                 Self::DT_SCE_MODULE_ATTR => {}
-                Self::DT_SCE_UNK8 => {}
                 Self::DT_SCE_EXPORT_LIB => {}
-                Self::DT_SCE_UNK9 => {}
                 Self::DT_SCE_IMPORT_LIB => {}
-                Self::DT_SCE_UNK10 => {}
                 Self::DT_SCE_EXPORT_LIB_ATTR => {}
-                Self::DT_SCE_UNK11 => {}
                 Self::DT_SCE_IMPORT_LIB_ATTR => {}
-                Self::DT_SCE_UNK12 => {}
-                Self::DT_SCE_UNK13 => {}
-                Self::DT_SCE_UNK14 => {}
-                Self::DT_SCE_UNK15 => {}
-                Self::DT_SCE_UNK16 => {}
-                Self::DT_SCE_UNK17 => {}
-                Self::DT_SCE_UNK18 => {}
-                Self::DT_SCE_UNK19 => {}
-                Self::DT_SCE_UNK20 => {}
-                Self::DT_SCE_UNK21 => {}
-                Self::DT_SCE_UNK22 => {}
-                Self::DT_SCE_HASH => {}
-                Self::DT_SCE_UNK23 => {}
-                Self::DT_SCE_PLTGOT => {}
-                Self::DT_SCE_UNK24 => {}
-                Self::DT_SCE_JMPREL => {}
-                Self::DT_SCE_UNK25 => {}
-                Self::DT_SCE_PLTREL => {}
-                Self::DT_SCE_UNK26 => {}
-                Self::DT_SCE_PLTRELSZ => {}
-                Self::DT_SCE_UNK27 => {}
-                Self::DT_SCE_RELA => {}
-                Self::DT_SCE_UNK28 => {}
-                Self::DT_SCE_RELASZ => {}
-                Self::DT_SCE_UNK29 => {}
-                Self::DT_SCE_RELAENT => {}
-                Self::DT_SCE_UNK30 => {}
-                Self::DT_SCE_STRTAB => {}
-                Self::DT_SCE_UNK31 => {}
-                Self::DT_SCE_STRSZ => {}
-                Self::DT_SCE_UNK32 => {}
-                Self::DT_SCE_SYMTAB => {}
-                Self::DT_SCE_UNK33 => {}
-                Self::DT_SCE_SYMENT => {}
-                Self::DT_SCE_UNK34 => {}
-                Self::DT_SCE_HASHSZ => {}
-                Self::DT_SCE_UNK35 => {}
-                Self::DT_SCE_SYMTABSZ => {}
+                Self::DT_SCE_HASH => hash = Some(LE::read_u64(value)),
+                Self::DT_SCE_PLTGOT => pltgot = true,
+                Self::DT_SCE_JMPREL => jmprel = Some(LE::read_u64(value)),
+                Self::DT_SCE_RELA => rela = Some(LE::read_u64(value)),
+                Self::DT_SCE_STRTAB => strtab = Some(LE::read_u64(value)),
+                Self::DT_SCE_SYMTAB => symtab = Some(LE::read_u64(value)),
+                Self::DT_SCE_HASHSZ => hashsz = Some(LE::read_u64(value)),
+                Self::DT_SCE_SYMTABSZ => symtabsz = Some(LE::read_u64(value)),
                 Self::DT_SCE_UNK36 => {}
                 Self::DT_SCE_UNK37 => {}
                 v => return Err(FileInfoError::UnknownTag(v)),
             }
         }
 
-        Ok(Self { data, comment })
+        // Check required tags.
+        let pltrelsz = pltrelsz.ok_or(FileInfoError::NoPltrelsz)?;
+        let relasz = relasz.ok_or(FileInfoError::NoRelasz)?;
+        let strsz = strsz.ok_or(FileInfoError::NoStrsz)?;
+        let hash = hash.ok_or(FileInfoError::NoHash)?;
+        let jmprel = jmprel.ok_or(FileInfoError::NoJmprel)?;
+        let rela = rela.ok_or(FileInfoError::NoRela)?;
+        let strtab = strtab.ok_or(FileInfoError::NoStrtab)?;
+        let symtab = symtab.ok_or(FileInfoError::NoSymtab)?;
+        let hashsz = hashsz.ok_or(FileInfoError::NoHashsz)?;
+        let symtabsz = symtabsz.ok_or(FileInfoError::NoSymtabsz)?;
+
+        if !relaent {
+            return Err(FileInfoError::NoRelaent);
+        } else if !syment {
+            return Err(FileInfoError::NoSyment);
+        } else if !pltrel {
+            return Err(FileInfoError::NoPltrel);
+        } else if !fingerprint {
+            return Err(FileInfoError::NoFingerprint);
+        } else if !filename {
+            return Err(FileInfoError::NoFilename);
+        } else if !module_info {
+            return Err(FileInfoError::NoModuleInfo);
+        } else if !pltgot {
+            return Err(FileInfoError::NoPltgot);
+        }
+
+        // TODO: Check acquire_per_file_info_obj to see what we have missing here.
+        Ok(Self {
+            data,
+            comment,
+            pltrelsz: pltrelsz.try_into().unwrap(),
+            relasz: relasz.try_into().unwrap(),
+            strsz: strsz.try_into().unwrap(),
+            hash: hash.try_into().unwrap(),
+            jmprel: jmprel.try_into().unwrap(),
+            rela: rela.try_into().unwrap(),
+            strtab: strtab.try_into().unwrap(),
+            symtab: symtab.try_into().unwrap(),
+            hashsz: hashsz.try_into().unwrap(),
+            symtabsz: symtabsz.try_into().unwrap(),
+        })
     }
 }
 
@@ -221,4 +307,70 @@ impl FileInfo {
 pub enum FileInfoError {
     #[error("unknown tag {0:#018x}")]
     UnknownTag(i64),
+
+    #[error("tag {0:#018x} is not supported")]
+    UnsupportedTag(i64),
+
+    #[error("Orbis object file does not support tag {0:#018x}")]
+    OrbisUnsupported(i64),
+
+    #[error("no DT_PLTRELSZ or DT_SCE_PLTRELSZ")]
+    NoPltrelsz,
+
+    #[error("no DT_RELASZ or DT_SCE_RELASZ")]
+    NoRelasz,
+
+    #[error("DT_RELAENT or DT_SCE_RELAENT has invalid value")]
+    InvalidRelaent,
+
+    #[error("no DT_RELAENT or DT_SCE_RELAENT")]
+    NoRelaent,
+
+    #[error("no DT_STRSZ or DT_SCE_STRSZ")]
+    NoStrsz,
+
+    #[error("DT_SYMENT or DT_SCE_SYMENT has invalid value")]
+    InvalidSyment,
+
+    #[error("no DT_SYMENT or DT_SCE_SYMENT")]
+    NoSyment,
+
+    #[error("DT_PLTREL or DT_SCE_PLTREL has invalid value")]
+    InvalidPltrel,
+
+    #[error("no DT_PLTREL or DT_SCE_PLTREL")]
+    NoPltrel,
+
+    #[error("no DT_SCE_FINGERPRINT")]
+    NoFingerprint,
+
+    #[error("no DT_SCE_FILENAME")]
+    NoFilename,
+
+    #[error("no DT_SCE_MODULE_INFO")]
+    NoModuleInfo,
+
+    #[error("no DT_SCE_HASH")]
+    NoHash,
+
+    #[error("no DT_SCE_PLTGOT")]
+    NoPltgot,
+
+    #[error("no DT_SCE_JMPREL")]
+    NoJmprel,
+
+    #[error("no DT_SCE_RELA")]
+    NoRela,
+
+    #[error("no DT_SCE_STRTAB")]
+    NoStrtab,
+
+    #[error("no DT_SCE_SYMTAB")]
+    NoSymtab,
+
+    #[error("no DT_SCE_HASHSZ")]
+    NoHashsz,
+
+    #[error("no DT_SCE_SYMTABSZ")]
+    NoSymtabsz,
 }

@@ -7,6 +7,7 @@ use std::fs::File;
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/libexec/rtld-elf/rtld.h#L147.
 pub struct Module<'a> {
     entry: Option<usize>,
+    proc_param: Option<(usize, usize)>,
     image: Elf<File>,
     memory: Memory<'a>,
 }
@@ -32,6 +33,10 @@ impl<'a> Module<'a> {
 
         Ok(Self {
             entry: image.entry_addr().map(|v| base + v),
+            proc_param: image.proc_param().map(|i| {
+                let p = image.programs().get(i).unwrap();
+                (base + p.addr(), p.file_size().try_into().unwrap())
+            }),
             image,
             memory,
         })
@@ -39,6 +44,10 @@ impl<'a> Module<'a> {
 
     pub fn entry(&self) -> Option<usize> {
         self.entry
+    }
+
+    pub fn proc_param(&self) -> Option<&(usize, usize)> {
+        self.proc_param.as_ref()
     }
 
     pub fn image(&self) -> &Elf<File> {

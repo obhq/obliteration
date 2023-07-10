@@ -161,6 +161,10 @@ We already provide a launch configuration for VS Code so all you need to do is c
 
 We use icons from https://materialdesignicons.com for UI (e.g. on the menu and toolbar).
 
+### Additional informations
+
+[PS4 Developer Wiki](https://www.psdevwiki.com/ps4) has a lot of useful information about the PS4 internal. We also have a PS4 reverse engineering [project](https://github.com/obhq/reverse-engineering).
+
 ## License
 
 - `src/ansi_escape.hpp`, `src/ansi_escape.cpp`, `src/log_formatter.hpp` and `src/log_formatter.cpp` are licensed under GPL-3.0 only.
