@@ -17,3 +17,19 @@ pub const ENAMETOOLONG: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(63) };
 pub trait Errno: Error {
     fn errno(&self) -> NonZeroI32;
 }
+
+/// Get human readable text.
+pub fn strerror(num: NonZeroI32) -> &'static str {
+    match num {
+        EPERM => "operation not permitted",
+        ENOENT => "no such file or directory",
+        E2BIG => "argument list too long",
+        ENOEXEC => "exec format error",
+        ENOMEM => "cannot allocate memory",
+        EFAULT => "bad address",
+        EINVAL => "invalid argument",
+        EAGAIN => "resource temporarily unavailable",
+        ENAMETOOLONG => "file name too long",
+        v => todo!("strerror {v}"),
+    }
+}

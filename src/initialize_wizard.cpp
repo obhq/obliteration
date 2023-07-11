@@ -34,7 +34,11 @@ public:
         setTitle("Introduction");
 
         // Introduction.
-        auto intro = new QLabel("This wizard will help you setup Obliteration. To ensure you're ready, make sure you have a jailbroken PS4 with an enabled FTP server. You will also need your PS4's IP address and the port used for FTP connection.");
+        auto intro = new QLabel(
+            "This wizard will help you setup Obliteration. To ensure you're ready, make sure you "
+            "have a jailbroken PS4 with an enabled FTP server. You will also need your PS4's IP "
+            "address and the port used for FTP connection.");
+        intro->setWordWrap(true);
         layout->addWidget(intro);
 
         setLayout(layout);

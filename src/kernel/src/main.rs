@@ -2,6 +2,7 @@ use crate::arc4::Arc4;
 use crate::fs::path::VPath;
 use crate::fs::Fs;
 use crate::llvm::Llvm;
+use crate::log::Logger;
 use crate::memory::MemoryManager;
 use crate::rtld::{Module, RuntimeLinker};
 use crate::syscalls::Syscalls;
@@ -25,12 +26,15 @@ mod syscalls;
 mod sysctl;
 
 fn main() -> ExitCode {
+    // Initialize logger.
+    let logger = Logger::new();
+
     // Load arguments.
     let args = if std::env::args().any(|a| a == "--debug") {
         let file = match File::open(".kernel-debug") {
             Ok(v) => v,
             Err(e) => {
-                error!(e, "Failed to open .kernel-debug");
+                error!(logger, e, "Failed to open .kernel-debug");
                 return ExitCode::FAILURE;
             }
         };
@@ -38,7 +42,7 @@ fn main() -> ExitCode {
         match serde_yaml::from_reader(file) {
             Ok(v) => v,
             Err(e) => {
-                error!(e, "Failed to read .kernel-debug");
+                error!(logger, e, "Failed to read .kernel-debug");
                 return ExitCode::FAILURE;
             }
         }
@@ -50,17 +54,21 @@ fn main() -> ExitCode {
     if args.clear_debug_dump {
         if let Err(e) = std::fs::remove_dir_all(&args.debug_dump) {
             if e.kind() != std::io::ErrorKind::NotFound {
-                error!(e, "Failed to remove {}", args.debug_dump.display());
+                error!(logger, e, "Failed to remove {}", args.debug_dump.display());
                 return ExitCode::FAILURE;
             }
         }
     }
 
     // Show basic infomation.
-    info!("Starting Obliteration kernel.");
-    info!("System directory    : {}", args.system.display());
-    info!("Game directory      : {}", args.game.display());
-    info!("Debug dump directory: {}", args.debug_dump.display());
+    info!(logger, "Starting Obliteration kernel.");
+    info!(logger, "System directory    : {}", args.system.display());
+    info!(logger, "Game directory      : {}", args.game.display());
+    info!(
+        logger,
+        "Debug dump directory: {}",
+        args.debug_dump.display()
+    );
 
     // Initialize foundations.
     let arc4 = Arc4::new();
@@ -68,52 +76,60 @@ fn main() -> ExitCode {
     let sysctl = Sysctl::new(&arc4);
 
     // Initialize filesystem.
-    info!("Initializing file system.");
+    info!(logger, "Initializing file system.");
 
     let fs = match Fs::new(args.system, args.game) {
         Ok(v) => v,
         Err(e) => {
-            error!(e, "Initialize failed");
+            error!(logger, e, "Initialize failed");
             return ExitCode::FAILURE;
         }
     };
 
     // Initialize memory manager.
-    info!("Initializing memory manager.");
+    info!(logger, "Initializing memory manager.");
 
     let mm = MemoryManager::new();
 
-    info!("Page size is             : {}", mm.page_size());
-    info!("Allocation granularity is: {}", mm.allocation_granularity());
+    info!(logger, "Page size is             : {}", mm.page_size());
+    info!(
+        logger,
+        "Allocation granularity is: {}",
+        mm.allocation_granularity()
+    );
 
     // Initialize runtime linker.
-    info!("Initializing runtime linker.");
+    info!(logger, "Initializing runtime linker.");
 
     let mut ld = match RuntimeLinker::new(&fs, &mm) {
         Ok(v) => v,
         Err(e) => {
-            error!(e, "Initialize failed");
+            error!(logger, e, "Initialize failed");
             return ExitCode::FAILURE;
         }
     };
 
-    info!("Application executable: {}", ld.app().image().name());
-    print_module(ld.app());
+    info!(
+        logger,
+        "Application executable: {}",
+        ld.app().image().name()
+    );
+    print_module(&logger, ld.app());
 
     // Preload libkernel.
     let path: &VPath = "/system/common/lib/libkernel.sprx".try_into().unwrap();
 
-    info!("Loading {path}.");
+    info!(logger, "Loading {path}.");
 
     let module = match ld.load(path) {
         Ok(v) => v,
         Err(e) => {
-            error!(e, "Load failed");
+            error!(logger, e, "Load failed");
             return ExitCode::FAILURE;
         }
     };
 
-    print_module(&module);
+    print_module(&logger, &module);
     ld.set_kernel(module);
 
     // Preload libSceLibcInternal.
@@ -121,23 +137,23 @@ fn main() -> ExitCode {
         .try_into()
         .unwrap();
 
-    info!("Loading {path}.");
+    info!(logger, "Loading {path}.");
 
     match ld.load(path) {
-        Ok(m) => print_module(&m),
+        Ok(m) => print_module(&logger, &m),
         Err(e) => {
-            error!(e, "Load failed");
+            error!(logger, e, "Load failed");
             return ExitCode::FAILURE;
         }
     }
 
     // Initialize syscall routines.
-    info!("Initializing system call routines.");
+    info!(logger, "Initializing system call routines.");
 
-    let syscalls = Syscalls::new(&sysctl, &ld);
+    let syscalls = Syscalls::new(&logger, &sysctl, &ld);
 
     // Bootstrap execution engine.
-    info!("Initializing execution engine.");
+    info!(logger, "Initializing execution engine.");
 
     let ee = match args.execution_engine {
         Some(v) => v,
@@ -152,7 +168,7 @@ fn main() -> ExitCode {
         ExecutionEngine::Native => {
             let mut ee = ee::native::NativeEngine::new(&ld, &syscalls);
 
-            info!("Patching modules.");
+            info!(logger, "Patching modules.");
 
             match unsafe { ee.patch_mods() } {
                 Ok(r) => {
@@ -160,20 +176,20 @@ fn main() -> ExitCode {
 
                     for (m, c) in r {
                         if c != 0 {
-                            info!("{c} patch(es) have been applied to {m}.");
+                            info!(logger, "{c} patch(es) have been applied to {m}.");
                             t += 1;
                         }
                     }
 
-                    info!("{t} module(s) have been patched successfully.");
+                    info!(logger, "{t} module(s) have been patched successfully.");
                 }
                 Err(e) => {
-                    error!(e, "Patch failed");
+                    error!(logger, e, "Patch failed");
                     return ExitCode::FAILURE;
                 }
             }
 
-            exec(ee)
+            exec(&logger, ee)
         }
         #[cfg(not(target_arch = "x86_64"))]
         ExecutionEngine::Native => {
@@ -183,48 +199,48 @@ fn main() -> ExitCode {
         ExecutionEngine::Llvm => {
             let mut ee = ee::llvm::LlvmEngine::new(&llvm, &ld);
 
-            info!("Lifting modules.");
+            info!(logger, "Lifting modules.");
 
             if let Err(e) = ee.lift_modules() {
-                error!(e, "Lift failed");
+                error!(logger, e, "Lift failed");
                 return ExitCode::FAILURE;
             }
 
-            exec(ee)
+            exec(&logger, ee)
         }
     }
 }
 
-fn exec<E: ee::ExecutionEngine>(mut ee: E) -> ExitCode {
-    info!("Starting application.");
+fn exec<E: ee::ExecutionEngine>(logger: &Logger, mut ee: E) -> ExitCode {
+    info!(logger, "Starting application.");
 
     if let Err(e) = ee.run() {
-        error!(e, "Start failed");
+        error!(logger, e, "Start failed");
         return ExitCode::FAILURE;
     }
 
     ExitCode::SUCCESS
 }
 
-fn print_module(module: &Module) {
+fn print_module(logger: &Logger, module: &Module) {
     // Image details.
     let image = module.image();
 
     if image.self_segments().is_some() {
-        info!("Image format  : SELF");
+        info!(logger, "Image format  : SELF");
     } else {
-        info!("Image format  : ELF");
+        info!(logger, "Image format  : ELF");
     }
 
-    info!("Image type    : {}", image.ty());
+    info!(logger, "Image type    : {}", image.ty());
 
     if let Some(dynamic) = image.dynamic_linking() {
         let i = dynamic.module_info();
 
-        info!("Module name   : {}", i.name());
+        info!(logger, "Module name   : {}", i.name());
 
         if let Some(f) = dynamic.flags() {
-            info!("Module flags  : {f}");
+            info!(logger, "Module flags  : {f}");
         }
     }
 
@@ -233,6 +249,7 @@ fn print_module(module: &Module) {
         let end = offset + p.file_size();
 
         info!(
+            logger,
             "Program {:<6}: {:#018x}:{:#018x}:{}",
             i,
             offset,
@@ -243,7 +260,7 @@ fn print_module(module: &Module) {
 
     if let Some(dynamic) = image.dynamic_linking() {
         for n in dynamic.needed() {
-            info!("Needed        : {n}");
+            info!(logger, "Needed        : {n}");
         }
     }
 
@@ -251,13 +268,14 @@ fn print_module(module: &Module) {
     let mem = module.memory();
 
     info!(
+        logger,
         "Memory address: {:#018x}:{:#018x}",
         mem.addr(),
         mem.addr() + mem.len()
     );
 
     if let Some(entry) = image.entry_addr() {
-        info!("Entry address : {:#018x}", mem.addr() + entry);
+        info!(logger, "Entry address : {:#018x}", mem.addr() + entry);
     }
 
     for s in mem.segments().iter() {
@@ -265,6 +283,7 @@ fn print_module(module: &Module) {
             let addr = mem.addr() + s.start();
 
             info!(
+                logger,
                 "Program {} is mapped to {:#018x}:{:#018x} with {}.",
                 p,
                 addr,

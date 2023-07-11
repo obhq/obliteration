@@ -10,6 +10,7 @@ pub struct Memory<'a> {
     mm: &'a MemoryManager,
     ptr: *mut u8,
     len: usize,
+    base: usize,
     segments: Vec<MemorySegment>,
     code_index: usize,
     code_sealed: Mutex<usize>,
@@ -125,6 +126,7 @@ impl<'a> Memory<'a> {
             mm,
             ptr,
             len,
+            base,
             segments,
             code_index,
             code_sealed: Mutex::new(0),
@@ -173,6 +175,10 @@ impl<'a> Memory<'a> {
         self.len
     }
 
+    pub fn base(&self) -> usize {
+        self.base
+    }
+
     pub fn segments(&self) -> &[MemorySegment] {
         self.segments.as_ref()
     }
@@ -182,7 +188,7 @@ impl<'a> Memory<'a> {
     /// has been dropped.
     pub unsafe fn code_workspace(&self) -> Result<CodeWorkspace<'_>, MprotectError> {
         let sealed = self.code_sealed.lock().unwrap();
-        let seg = self.unprotect(self.code_index)?;
+        let seg = self.unprotect_segment(self.code_index)?;
 
         Ok(CodeWorkspace {
             ptr: unsafe { seg.ptr.add(*sealed) },
@@ -231,7 +237,10 @@ impl<'a> Memory<'a> {
     ///
     /// # Panics
     /// `seg` is not a valid segment.
-    pub unsafe fn unprotect(&self, seg: usize) -> Result<UnprotectedSegment<'_>, MprotectError> {
+    pub unsafe fn unprotect_segment(
+        &self,
+        seg: usize,
+    ) -> Result<UnprotectedSegment<'_>, MprotectError> {
         let seg = &self.segments[seg];
         let ptr = self.ptr.add(seg.start);
         let len = seg.len;
@@ -246,11 +255,37 @@ impl<'a> Memory<'a> {
             prot: seg.prot,
         })
     }
-}
 
-impl<'a> AsRef<[u8]> for Memory<'a> {
-    fn as_ref(&self) -> &[u8] {
-        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
+    /// # Safety
+    /// No other threads may access the memory until the returned [`UnprotectedMemory`] has been
+    /// dropped.
+    pub unsafe fn unprotect(&self) -> Result<UnprotectedMemory<'_>, MprotectError> {
+        // Get the end offset of non-custom segments.
+        let mut end = 0;
+
+        for s in &self.segments {
+            // Check if segment is a custom segment.
+            if s.program().is_none() {
+                break;
+            }
+
+            // Update end offset.
+            end = s.end();
+        }
+
+        // Unprotect the memory.
+        self.mm.mprotect(
+            self.ptr,
+            end,
+            Protections::CPU_READ | Protections::CPU_WRITE,
+        )?;
+
+        Ok(UnprotectedMemory {
+            mm: self.mm,
+            ptr: self.ptr,
+            len: end,
+            segments: &self.segments,
+        })
     }
 }
 
@@ -273,6 +308,18 @@ impl<'a> Drop for Memory<'a> {
     }
 }
 
+impl<'a> AsRef<[u8]> for Memory<'a> {
+    fn as_ref(&self) -> &[u8] {
+        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
+    }
+}
+
+impl<'a> AsMut<[u8]> for Memory<'a> {
+    fn as_mut(&mut self) -> &mut [u8] {
+        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
+    }
+}
+
 /// A segment in the [`Memory`].
 pub struct MemorySegment {
     start: usize,
@@ -283,12 +330,18 @@ pub struct MemorySegment {
 
 impl MemorySegment {
     /// Gets the offset within the module memory of this segment.
+    ///
+    /// This offset already take base address into account.
     pub fn start(&self) -> usize {
         self.start
     }
 
     pub fn len(&self) -> usize {
         self.len
+    }
+
+    pub fn end(&self) -> usize {
+        self.start + self.len
     }
 
     /// Gets the corresponding index of (S)ELF program.
@@ -320,6 +373,36 @@ impl<'a> Drop for UnprotectedSegment<'a> {
         if let Err(e) = self.mm.mprotect(self.ptr, self.len, self.prot) {
             panic!("Cannot protect memory: {e}.");
         }
+    }
+}
+
+/// The unprotected form of [`Memory`], not including our custom segments.
+pub struct UnprotectedMemory<'a> {
+    mm: &'a MemoryManager,
+    ptr: *mut u8,
+    len: usize,
+    segments: &'a [MemorySegment],
+}
+
+impl<'a> Drop for UnprotectedMemory<'a> {
+    fn drop(&mut self) {
+        for s in self.segments {
+            if s.program().is_none() {
+                break;
+            }
+
+            let addr = unsafe { self.ptr.add(s.start()) };
+
+            if let Err(e) = self.mm.mprotect(addr, s.len(), s.prot()) {
+                panic!("Cannot protect memory: {e}.");
+            }
+        }
+    }
+}
+
+impl<'a> AsMut<[u8]> for UnprotectedMemory<'a> {
+    fn as_mut(&mut self) -> &mut [u8] {
+        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
     }
 }
 

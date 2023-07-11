@@ -1,11 +1,11 @@
 pub use mem::*;
 pub use module::*;
 
-use crate::errno::{Errno, EINVAL};
+use crate::errno::{Errno, ENOEXEC};
 use crate::fs::path::{VPath, VPathBuf};
 use crate::fs::Fs;
 use crate::memory::{MemoryManager, MmapError, MprotectError};
-use elf::{Elf, FileType, ReadProgramError};
+use elf::{Elf, FileInfo, FileType, ReadProgramError, Relocation};
 use std::collections::VecDeque;
 use std::fs::File;
 use std::num::NonZeroI32;
@@ -139,20 +139,81 @@ impl<'a> RuntimeLinker<'a> {
         Ok(module)
     }
 
-    pub fn load_needed(&self) -> Result<(), NeededError> {
-        // Check if application is dynamic linking.
-        let app = self.app.image();
+    /// # Safety
+    /// No other threads may access the memory of all loaded modules.
+    pub unsafe fn relocate(&self) -> Result<(), RelocateError> {
+        // TODO: Check what the PS4 actually doing.
+        let loaded = self.loaded.read().unwrap();
 
-        if app.dynamic().is_none() {
-            return Err(NeededError::NotDynamic(app.name().try_into().unwrap()));
+        for m in loaded.deref() {
+            self.relocate_single(m)?;
         }
 
-        // TODO: Implement dynlib_load_needed_shared_objects.
         Ok(())
     }
 
     pub fn set_kernel(&mut self, m: Arc<Module<'a>>) {
         self.kernel = Some(m);
+    }
+
+    /// See `relocate_one_object` on the PS4 kernel for a reference.
+    unsafe fn relocate_single(&self, module: &Module<'a>) -> Result<(), RelocateError> {
+        let image = module.image();
+        let path: &VPath = image.name().try_into().unwrap();
+        let info = image.info().unwrap(); // Let it panic because the PS4 assume it is available.
+
+        // Unprotect the memory.
+        let mut mem = match module.memory().unprotect() {
+            Ok(v) => v,
+            Err(e) => return Err(RelocateError::UnprotectFailed(path.to_owned(), e)),
+        };
+
+        // Apply relocations.
+        let base = module.memory().base();
+
+        self.relocate_rela(path, info, mem.as_mut(), base)?;
+
+        // TODO: Implement the remaining relocate_one_object.
+        Ok(())
+    }
+
+    /// See `reloc_non_plt` on the PS4 kernel for a reference.
+    fn relocate_rela(
+        &self,
+        path: &VPath,
+        info: &FileInfo,
+        mem: &mut [u8],
+        base: usize,
+    ) -> Result<(), RelocateError> {
+        let addr = mem.as_ptr() as usize;
+
+        for reloc in info.relocs() {
+            // Resolve value.
+            let offset = base + reloc.offset();
+            let addend: isize = reloc.addend().try_into().unwrap();
+            let target = &mut mem[offset..(offset + 8)];
+            let value = match reloc.ty() {
+                Relocation::R_X86_64_NONE => break,
+                Relocation::R_X86_64_64 => {
+                    // TODO: Resolve symbol.
+                    continue;
+                }
+                Relocation::R_X86_64_RELATIVE => {
+                    // TODO: Apply checks from reloc_non_plt.
+                    addr + base.wrapping_add_signed(addend)
+                }
+                Relocation::R_X86_64_DTPMOD64 => {
+                    // TODO: Resolve symbol.
+                    continue;
+                }
+                v => return Err(RelocateError::UnsupportedRela(path.to_owned(), v)),
+            };
+
+            // Write the value.
+            unsafe { std::ptr::write_unaligned(target.as_mut_ptr() as _, value) };
+        }
+
+        Ok(())
     }
 }
 
@@ -207,17 +268,21 @@ pub enum LoadError {
     MapFailed(#[source] MapError),
 }
 
-/// Represents an error for needed loading
+/// Represents an error for modules relocation.
 #[derive(Debug, Error)]
-pub enum NeededError {
-    #[error("{0} is not a dynamic linked program")]
-    NotDynamic(VPathBuf),
+pub enum RelocateError {
+    #[error("cannot unprotect the memory of {0}")]
+    UnprotectFailed(VPathBuf, #[source] MprotectError),
+
+    #[error("relocation type {1} on {0} is not supported")]
+    UnsupportedRela(VPathBuf, u32),
 }
 
-impl Errno for NeededError {
+impl Errno for RelocateError {
     fn errno(&self) -> NonZeroI32 {
         match self {
-            NeededError::NotDynamic(_) => EINVAL,
+            Self::UnprotectFailed(_, e) => e.errno(),
+            Self::UnsupportedRela(_, _) => ENOEXEC,
         }
     }
 }

@@ -60,7 +60,7 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
             }
 
             // Unprotect the segment.
-            let mut seg = match mem.unprotect(i) {
+            let mut seg = match mem.unprotect_segment(i) {
                 Ok(v) => v,
                 Err(e) => return Err(PatchModsError::UnprotectMemoryFailed(path, e)),
             };
