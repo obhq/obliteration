@@ -1,5 +1,5 @@
 use crate::arc4::Arc4;
-use crate::errno::{Errno, KERNEL_EINVAL};
+use crate::errno::{Errno, EINVAL};
 use std::cmp::min;
 use std::num::NonZeroI32;
 use thiserror::Error;
@@ -87,7 +87,7 @@ pub enum InvokeError {
 impl Errno for InvokeError {
     fn errno(&self) -> NonZeroI32 {
         match self {
-            Self::InvalidName | Self::NotSystem => KERNEL_EINVAL,
+            Self::InvalidName | Self::NotSystem => EINVAL,
         }
     }
 }
