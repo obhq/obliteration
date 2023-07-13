@@ -23,9 +23,10 @@ jobs:
         path: ~/.cargo
         key: ${{ steps.cache-keys.outputs.cargo }}
     - name: Install Qt
-      uses: jurplel/install-qt-action@latest
+      uses: jurplel/install-qt-action@v3
       with:
         version: 6.*
+        aqtversion: '==3.1.*'
         cache: true
         cache-key-prefix: ${{ steps.cache-keys.outputs.qt }}
     - name: Restore Vulkan SDK

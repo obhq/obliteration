@@ -27,7 +27,7 @@ impl<'a> Sysctl<'a> {
         &self,
         name: &[i32],
         old: Option<&mut [u8]>,
-        new: Option<&[u8]>,
+        _new: Option<&[u8]>,
     ) -> Result<usize, InvokeError> {
         // Check arguments.
         if name.len() < 2 || name.len() > 24 {
