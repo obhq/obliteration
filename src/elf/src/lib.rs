@@ -1,6 +1,7 @@
 pub use dynamic::*;
 pub use info::*;
 pub use program::*;
+pub use reloc::*;
 pub use ty::*;
 
 use bitflags::bitflags;
@@ -12,6 +13,7 @@ use thiserror::Error;
 mod dynamic;
 mod info;
 mod program;
+mod reloc;
 mod ty;
 
 /// The first 8 bytes of SELF file.
@@ -223,6 +225,7 @@ impl<I: Read + Seek> Elf<I> {
             }
 
             let mut dynoff: usize = dynamic.offset().try_into().unwrap();
+            let dynsize: usize = dynamic.file_size().try_into().unwrap();
 
             // Read PT_DYNAMIC.
             let mut dynamic = vec![0u8; dynamic.file_size() as usize];
@@ -265,7 +268,7 @@ impl<I: Read + Seek> Elf<I> {
             };
 
             // Load info.
-            elf.info = match FileInfo::parse(dyndata.clone(), comment, dynoff) {
+            elf.info = match FileInfo::parse(dyndata.clone(), comment, dynoff, dynsize) {
                 Ok(v) => Some(v),
                 Err(e) => return Err(OpenError::ParseFileInfoFailed(e)),
             };

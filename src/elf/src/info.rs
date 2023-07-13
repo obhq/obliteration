@@ -1,3 +1,4 @@
+use crate::Relocations;
 use byteorder::{ByteOrder, LE};
 use thiserror::Error;
 
@@ -117,6 +118,7 @@ impl FileInfo {
         data: Vec<u8>,
         comment: Vec<u8>,
         dynoff: usize,
+        dynsize: usize,
     ) -> Result<Self, FileInfoError> {
         // Parse dynamic.
         let mut pltrelsz: Option<u64> = None;
@@ -137,7 +139,9 @@ impl FileInfo {
         let mut hashsz: Option<u64> = None;
         let mut symtabsz: Option<u64> = None;
 
-        for entry in data[dynoff..].chunks(16) {
+        // Let it panic if the dynamic size is not correct because the PS4 also does not check for
+        // this.
+        for entry in data[dynoff..(dynoff + dynsize)].chunks(16) {
             let tag = LE::read_i64(entry);
             let value = &entry[8..];
 
@@ -299,6 +303,14 @@ impl FileInfo {
             hashsz: hashsz.try_into().unwrap(),
             symtabsz: symtabsz.try_into().unwrap(),
         })
+    }
+
+    pub fn relocs(&self) -> Relocations<'_> {
+        Relocations::new(&self.data[self.rela..(self.rela + self.relasz)])
+    }
+
+    pub fn plt_relocs(&self) -> Relocations<'_> {
+        Relocations::new(&self.data[self.jmprel..(self.jmprel + self.pltrelsz)])
     }
 }
 

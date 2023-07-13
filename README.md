@@ -151,10 +151,12 @@ The application consists of 2 binaries:
 ### Debugging the kernel
 
 Create `.kernel-debug` in the root of the repository. The contents of this file is YAML and the kernel will deserialize it to the `Args` struct in `src/kernel/src/main.rs` when passing the `--debug` flag to the kernel.
+
 - game: (Folder Path) | Where is the game to load?
 - system: (Folder Path) | Where is the system firmware?
 - debug-dump: (Folder Path) | Where should the debug log be saved?
 - clear-debug-dump: (boolean) | Should we remove the old debug log?
+
 We already provide a launch configuration for VS Code so all you need to do is choose `Kernel` as the configuration and start debugging.
 
 ### UI Icons
@@ -164,6 +166,10 @@ We use icons from https://materialdesignicons.com for UI (e.g. on the menu and t
 ### Additional informations
 
 [PS4 Developer Wiki](https://www.psdevwiki.com/ps4) has a lot of useful information about the PS4 internal. We also have a PS4 reverse engineering [project](https://github.com/obhq/reverse-engineering).
+
+## Code contribution
+
+If you want to make some contributions but don't know what to work on you can look for `TODO` comment or `todo!` macro invocation in the source code. You can also take a look on the unassigned issues.
 
 ## License
 
