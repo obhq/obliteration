@@ -1,6 +1,6 @@
 use self::iter::StartFromMut;
 use self::storage::Storage;
-use crate::errno::{Errno, EINVAL, ENOMEM};
+use crate::errno::{Errno, KERNEL_EINVAL, KERNEL_ENOMEM};
 use bitflags::bitflags;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
@@ -618,8 +618,8 @@ impl Errno for MmapError {
             | Self::NoBehavior
             | Self::InvalidBehavior
             | Self::NonNegativeFd
-            | Self::NonZeroOffset => EINVAL,
-            Self::NoMem(_) => ENOMEM,
+            | Self::NonZeroOffset => KERNEL_EINVAL,
+            Self::NoMem(_) => KERNEL_ENOMEM,
         }
     }
 }
@@ -637,7 +637,7 @@ pub enum MunmapError {
 impl Errno for MunmapError {
     fn errno(&self) -> NonZeroI32 {
         match self {
-            Self::UnalignedAddr | Self::ZeroLen => EINVAL,
+            Self::UnalignedAddr | Self::ZeroLen => KERNEL_EINVAL,
         }
     }
 }
@@ -664,7 +664,7 @@ impl Errno for MprotectError {
             // On Linux InvalidAddr and UnmappedAddr will be ENOMEM. Let's follow FreeBSD man page
             // until there are some games is expect ENOMEM.
             Self::UnalignedAddr | Self::ZeroLen | Self::InvalidAddr | Self::UnmappedAddr(_) => {
-                EINVAL
+                KERNEL_EINVAL
             }
         }
     }

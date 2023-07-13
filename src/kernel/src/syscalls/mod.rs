@@ -2,7 +2,7 @@ pub use input::*;
 pub use output::*;
 
 use self::error::Error;
-use crate::errno::{EINVAL, EPERM};
+use crate::errno::{KERNEL_EINVAL, KERNEL_EPERM};
 use crate::fs::path::VPathBuf;
 use crate::log::Logger;
 use crate::rtld::RuntimeLinker;
@@ -114,7 +114,7 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         let app = self.ld.app();
 
         if app.image().dynamic().is_none() {
-            return Err(Error::Raw(EPERM));
+            return Err(Error::Raw(KERNEL_EPERM));
         }
 
         // Get param.
@@ -135,7 +135,7 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         let app = self.ld.app().image();
 
         if app.info().is_none() {
-            return Err(Error::Raw(EINVAL));
+            return Err(Error::Raw(KERNEL_EINVAL));
         }
 
         // TODO: Implement dynlib_load_needed_shared_objects.

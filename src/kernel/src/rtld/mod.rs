@@ -1,7 +1,7 @@
 pub use mem::*;
 pub use module::*;
 
-use crate::errno::{Errno, ENOEXEC};
+use crate::errno::{Errno, KERNEL_ENOEXEC};
 use crate::fs::path::{VPath, VPathBuf};
 use crate::fs::Fs;
 use crate::memory::{MemoryManager, MmapError, MprotectError};
@@ -282,7 +282,7 @@ impl Errno for RelocateError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::UnprotectFailed(_, e) => e.errno(),
-            Self::UnsupportedRela(_, _) => ENOEXEC,
+            Self::UnsupportedRela(_, _) => KERNEL_ENOEXEC,
         }
     }
 }
