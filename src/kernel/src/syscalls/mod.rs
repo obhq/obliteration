@@ -5,29 +5,44 @@ use self::error::Error;
 use crate::errno::{EINVAL, EPERM};
 use crate::fs::path::VPathBuf;
 use crate::log::Logger;
+use crate::process::VProc;
 use crate::rtld::RuntimeLinker;
+use crate::signal::SignalSet;
 use crate::sysctl::Sysctl;
 use crate::warn;
 use kernel_macros::cpu_abi;
+use std::sync::RwLock;
 
 mod error;
 mod input;
 mod output;
 
-/// Provides PS4 kernel routines.
+/// Provides PS4 kernel routines for PS4 process.
 pub struct Syscalls<'a, 'b: 'a> {
     logger: &'a Logger,
+    proc: &'a RwLock<VProc>,
     sysctl: &'a Sysctl<'b>,
     ld: &'a RuntimeLinker<'b>,
 }
 
 impl<'a, 'b: 'a> Syscalls<'a, 'b> {
-    pub fn new(logger: &'a Logger, sysctl: &'a Sysctl<'b>, ld: &'a RuntimeLinker<'b>) -> Self {
-        Self { logger, sysctl, ld }
+    pub fn new(
+        logger: &'a Logger,
+        proc: &'a RwLock<VProc>,
+        sysctl: &'a Sysctl<'b>,
+        ld: &'a RuntimeLinker<'b>,
+    ) -> Self {
+        Self {
+            logger,
+            proc,
+            sysctl,
+            ld,
+        }
     }
 
     /// # Safety
-    /// This method may treat any [`Input::args`] as a pointer (depend on [`Input::id`]).
+    /// This method may treat any [`Input::args`] as a pointer (depend on [`Input::id`]). Also this
+    /// method must de directly invoked by the PS4 application.
     #[cpu_abi]
     pub unsafe fn invoke(&self, i: &Input, o: &mut Output) -> i64 {
         // Execute the handler. See
@@ -41,6 +56,11 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
                 i.args[3].into(),
                 i.args[4].into(),
                 i.args[5].into(),
+            ),
+            340 => self.sigprocmask(
+                i.args[0].try_into().unwrap(),
+                i.args[1].into(),
+                i.args[2].into(),
             ),
             598 => self.get_proc_param(i.args[0].into(), i.args[1].into()),
             599 => self.relocate_process(),
@@ -62,8 +82,10 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         0
     }
 
+    /// # Safety
+    /// This method must be directly invoked by the PS4 application.
     #[cpu_abi]
-    pub fn int44(&self, offset: usize, module: &VPathBuf) -> ! {
+    pub unsafe fn int44(&self, offset: usize, module: &VPathBuf) -> ! {
         // Seems like int 44 is a fatal error.
         panic!("Interrupt number 0x44 has been executed at {offset:#018x} on {module}.");
     }
@@ -104,6 +126,33 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         if !oldlenp.is_null() {
             assert!(written <= *oldlenp);
             *oldlenp = written;
+        }
+
+        Ok(Output::ZERO)
+    }
+
+    unsafe fn sigprocmask(
+        &self,
+        how: i32,
+        set: *const SignalSet,
+        oset: *mut SignalSet,
+    ) -> Result<Output, Error> {
+        // Convert set to an option.
+        let set = if set.is_null() { None } else { Some(*set) };
+
+        // Convert oset to an option.
+        let mut out = if oset.is_null() {
+            None
+        } else {
+            Some(SignalSet::default())
+        };
+
+        // Execute.
+        self.proc.write().unwrap().sigmask(how, set, out.as_mut())?;
+
+        // Copy output.
+        if let Some(v) = out {
+            *oset = v;
         }
 
         Ok(Output::ZERO)

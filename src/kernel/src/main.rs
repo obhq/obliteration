@@ -4,14 +4,17 @@ use crate::fs::Fs;
 use crate::llvm::Llvm;
 use crate::log::Logger;
 use crate::memory::MemoryManager;
+use crate::process::VProc;
 use crate::rtld::{Module, RuntimeLinker};
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
+use crate::thread::VThread;
 use clap::{Parser, ValueEnum};
 use serde::Deserialize;
 use std::fs::File;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::RwLock;
 
 mod arc4;
 mod disasm;
@@ -21,9 +24,12 @@ mod fs;
 mod llvm;
 mod log;
 mod memory;
+mod process;
 mod rtld;
+mod signal;
 mod syscalls;
 mod sysctl;
+mod thread;
 
 fn main() -> ExitCode {
     // Initialize logger.
@@ -98,6 +104,13 @@ fn main() -> ExitCode {
         mm.allocation_granularity()
     );
 
+    // Initialize virtual process.
+    info!(logger, "Initializing virtual process.");
+
+    let mut proc = VProc::new();
+
+    proc.push_thread(VThread::new(std::thread::current().id()));
+
     // Initialize runtime linker.
     info!(logger, "Initializing runtime linker.");
 
@@ -150,7 +163,8 @@ fn main() -> ExitCode {
     // Initialize syscall routines.
     info!(logger, "Initializing system call routines.");
 
-    let syscalls = Syscalls::new(&logger, &sysctl, &ld);
+    let proc = RwLock::new(proc);
+    let syscalls = Syscalls::new(&logger, &proc, &sysctl, &ld);
 
     // Bootstrap execution engine.
     info!(logger, "Initializing execution engine.");
