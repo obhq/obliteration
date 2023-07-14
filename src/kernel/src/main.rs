@@ -8,8 +8,9 @@ use crate::rtld::{Module, RuntimeLinker};
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
 use clap::{Parser, ValueEnum};
+use directories::ProjectDirs;
 use serde::Deserialize;
-use std::fs::File;
+use std::fs::{create_dir_all, File};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -27,7 +28,13 @@ mod sysctl;
 
 fn main() -> ExitCode {
     // Initialize logger.
-    let logger = Logger::new();
+    let project_dirs = ProjectDirs::from("", "OBHQ", "Obliteration").unwrap();
+    let data_dir = project_dirs.data_dir();
+    let log_dir = data_dir.join("log");
+    create_dir_all(&log_dir).expect("Failed to create Data directory!");
+    let log_path = log_dir.join("obliteration-kernel.log");
+
+    let logger = Logger::new(&log_path).expect("Failed to create Logger");
 
     // Load arguments.
     let args = if std::env::args().any(|a| a == "--debug") {

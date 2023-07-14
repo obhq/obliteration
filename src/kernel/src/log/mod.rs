@@ -1,4 +1,8 @@
+use std::cell::RefCell;
+use std::fs::OpenOptions;
 use std::io::Write;
+use std::path::Path;
+use strip_ansi_escapes::strip;
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
 /// Encapsulate the stdout.
@@ -8,13 +12,21 @@ use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor}
 /// the error before the info.
 pub struct Logger {
     writer: BufferWriter,
+    file: RefCell<std::fs::File>,
 }
 
 impl Logger {
-    pub fn new() -> Self {
-        Self {
+    pub fn new<P: AsRef<Path>>(log_path: P) -> std::io::Result<Self> {
+        let file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(log_path)?;
+
+        Ok(Self {
             writer: BufferWriter::stdout(ColorChoice::Auto),
-        }
+            file: RefCell::new(file),
+        })
     }
 
     pub fn info(&self) -> Buffer {
@@ -58,6 +70,14 @@ impl Logger {
 
     pub fn write(&self, b: Buffer) {
         self.writer.print(&b).unwrap();
+        // Remove Ansi Escapes for file logging
+        let ansi_with = String::from_utf8_lossy(b.as_slice());
+        let ansi_without = strip_ansi_escapes::strip(ansi_with.as_bytes()).unwrap();
+        // Mutable reference to file
+        let mut file = self.file.borrow_mut();
+        // File writer
+        file.write_all(&ansi_without).unwrap();
+        file.flush().unwrap(); // write immediately
     }
 }
 

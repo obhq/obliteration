@@ -11,6 +11,7 @@ path = "src/main.rs"
 bitflags = "2.1"
 byteorder = "1.4"
 clap = { version = "4.1", features = ["derive"] }
+directories = "5.0.1"
 elf = { path = "../elf" }
 iced-x86 = { version = "1.18", features = ["code_asm"] }
 kernel-macros = { path = "../kernel-macros" }
@@ -19,6 +20,7 @@ llvm-sys = { version = "160.0.2", features = ["strict-versioning"] }
 param = { path = "../param" }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
+strip-ansi-escapes = "0.1.1"
 termcolor = "1.2.0"
 thiserror = "1.0"
 
