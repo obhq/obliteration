@@ -8,9 +8,8 @@ use crate::rtld::{Module, RuntimeLinker};
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
 use clap::{Parser, ValueEnum};
-use directories::ProjectDirs;
 use serde::Deserialize;
-use std::fs::{create_dir_all, File};
+use std::fs::File;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
@@ -28,13 +27,7 @@ mod sysctl;
 
 fn main() -> ExitCode {
     // Initialize logger.
-    let project_dirs = ProjectDirs::from("", "OBHQ", "Obliteration").unwrap();
-    let data_dir = project_dirs.data_dir();
-    let log_dir = data_dir.join("log");
-    create_dir_all(&log_dir).expect("Failed to create Data directory!");
-    let log_path = log_dir.join("obliteration-kernel.log");
-
-    let logger = Logger::new(&log_path).expect("Failed to create Logger");
+    let mut logger = Logger::new();
 
     // Load arguments.
     let args = if std::env::args().any(|a| a == "--debug") {
@@ -65,6 +58,15 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
         }
+    }
+
+    // Begin File logging
+    let debug_dump_dir = PathBuf::from(&args.debug_dump);
+    let log_file_path = debug_dump_dir.join("obliteration-kernel.log");
+    if let Ok(_) = logger.set_log_file(&log_file_path) {
+        info!(logger, "File Logging enabled");
+    } else {
+        warn!(logger, "Failed to set log file at: {:?}", log_file_path);
     }
 
     // Show basic infomation.
