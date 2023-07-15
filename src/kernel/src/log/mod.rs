@@ -1,4 +1,8 @@
+use std::cell::RefCell;
+use std::fs::{create_dir_all, OpenOptions};
 use std::io::Write;
+use std::path::PathBuf;
+use strip_ansi_escapes::strip;
 use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
 /// Encapsulate the stdout.
@@ -8,13 +12,34 @@ use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor}
 /// the error before the info.
 pub struct Logger {
     writer: BufferWriter,
+    file: Option<RefCell<std::fs::File>>,
 }
 
 impl Logger {
     pub fn new() -> Self {
         Self {
             writer: BufferWriter::stdout(ColorChoice::Auto),
+            file: None,
         }
+    }
+
+    // File logging
+    pub fn set_log_file<P: Into<PathBuf>>(&mut self, path: P) -> std::io::Result<()> {
+        let path = path.into();
+
+        if let Some(parent) = path.parent() {
+            create_dir_all(parent)?; // Create parent directories if needed
+        }
+
+        let file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&path)?;
+
+        self.file = Some(RefCell::new(file));
+
+        Ok(())
     }
 
     pub fn info(&self) -> Buffer {
@@ -58,6 +83,17 @@ impl Logger {
 
     pub fn write(&self, b: Buffer) {
         self.writer.print(&b).unwrap();
+
+        // Only run when File is set
+        if let Some(file) = &self.file {
+            let ansi_with = String::from_utf8_lossy(b.as_slice());
+            let ansi_without = strip(ansi_with.as_bytes()).unwrap();
+            // Mutable reference to file
+            let mut file = file.borrow_mut();
+            // File writer
+            file.write_all(&ansi_without).unwrap();
+            file.flush().unwrap(); // write immediately\
+        }
     }
 }
 
