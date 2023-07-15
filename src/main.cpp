@@ -11,7 +11,7 @@
 int main(int argc, char *argv[])
 {
     // Setup application.
-    QCoreApplication::setOrganizationName("Obliteration");
+    QCoreApplication::setOrganizationName("OBHQ");
     QCoreApplication::setApplicationName("Obliteration");
 
     // Dark Mode for Windows
