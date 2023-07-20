@@ -152,7 +152,10 @@ fn main() -> ExitCode {
     };
 
     print_module(&logger, &module);
-    ld.set_kernel(module);
+
+    // Set libkernel ID.
+    let id = module.id();
+    ld.set_kernel(id);
 
     // Preload libSceLibcInternal.
     let path: &VPath = "/system/common/lib/libSceLibcInternal.sprx"
@@ -173,6 +176,7 @@ fn main() -> ExitCode {
     info!(logger, "Initializing system call routines.");
 
     let proc = RwLock::new(proc);
+    let ld = RwLock::new(ld);
     let syscalls = Syscalls::new(&logger, &proc, &sysctl, &ld);
 
     // Bootstrap execution engine.
@@ -224,7 +228,7 @@ fn main() -> ExitCode {
 
             info!(logger, "Lifting modules.");
 
-            if let Err(e) = ee.lift_modules() {
+            if let Err(e) = ee.lift_initial_modules() {
                 error!(logger, e, "Lift failed");
                 return ExitCode::FAILURE;
             }

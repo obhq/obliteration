@@ -6,6 +6,7 @@ use std::fs::File;
 /// An implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/libexec/rtld-elf/rtld.h#L147.
 pub struct Module<'a> {
+    id: u32,
     entry: Option<usize>,
     proc_param: Option<(usize, usize)>,
     image: Elf<File>,
@@ -17,6 +18,7 @@ impl<'a> Module<'a> {
         mm: &'a MemoryManager,
         mut image: Elf<File>,
         base: usize,
+        id: u32,
     ) -> Result<Self, MapError> {
         // Map the image to the memory.
         let mut memory = Memory::new(mm, &image, base)?;
@@ -27,11 +29,13 @@ impl<'a> Module<'a> {
                 .map_err(|e| MapError::ReadProgramFailed(prog, e))
         })?;
 
+        // Apply memory protection.
         if let Err(e) = memory.protect() {
             return Err(MapError::ProtectMemoryFailed(e));
         }
 
         Ok(Self {
+            id,
             entry: image.entry_addr().map(|v| base + v),
             proc_param: image.proc_param().map(|i| {
                 let p = image.programs().get(i).unwrap();
@@ -40,6 +44,10 @@ impl<'a> Module<'a> {
             image,
             memory,
         })
+    }
+
+    pub fn id(&self) -> u32 {
+        self.id
     }
 
     pub fn entry(&self) -> Option<usize> {
