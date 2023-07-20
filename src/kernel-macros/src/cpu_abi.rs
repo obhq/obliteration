@@ -21,7 +21,7 @@ pub fn transform(item: ItemFn) -> syn::Result<TokenStream> {
     #[cfg(target_arch = "x86_64")]
     let abi = "sysv64";
     #[cfg(target_arch = "aarch64")]
-    let abi = "aapcs";
+    let abi = "C";
     let attrs = item.attrs;
     let vis = item.vis;
     let safety = item.sig.unsafety;
