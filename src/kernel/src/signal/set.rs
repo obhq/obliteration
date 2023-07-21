@@ -3,7 +3,7 @@ use std::ops::{BitAndAssign, BitOrAssign, Not};
 
 /// An implementation of `sigset_t`.
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct SignalSet {
     bits: [u32; 4],
 }
@@ -27,12 +27,6 @@ impl SignalSet {
     /// An implementation of `_SIG_BIT`.
     fn bit(s: NonZeroI32) -> u32 {
         1 << (Self::idx(s) & 31)
-    }
-}
-
-impl Default for SignalSet {
-    fn default() -> Self {
-        Self { bits: [0u32; 4] }
     }
 }
 
