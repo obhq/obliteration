@@ -1,5 +1,5 @@
 use crate::errno::Errno;
-use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK};
+use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_UNBLOCK, SIG_SETMASK};
 use crate::thread::VThread;
 use std::collections::HashMap;
 use std::num::NonZeroI32;
@@ -66,6 +66,18 @@ impl VProc {
 
                 // Update mask.
                 *td.sigmask_mut() |= set;
+            }
+            SIG_UNBLOCK => {
+                // Update mask.
+                *td.sigmask_mut() &= !set;
+            }
+            SIG_SETMASK => {
+                // Remove uncatchable signals.
+                set.remove(SIGKILL);
+                set.remove(SIGSTOP);
+
+                // Replace mask.
+                *td.sigmask_mut() = set;
             }
             v => todo!("sigprocmask with how = {v}"),
         }
