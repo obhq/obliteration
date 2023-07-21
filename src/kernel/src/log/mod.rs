@@ -1,13 +1,9 @@
-pub use line::*;
-
 use std::cell::RefCell;
 use std::fs::{create_dir_all, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
-use termcolor::{BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
-
-mod line;
-mod macros;
+use strip_ansi_escapes::strip;
+use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
 
 /// Encapsulate the stdout.
 ///
@@ -46,61 +42,137 @@ impl Logger {
         Ok(())
     }
 
-    pub fn info(&self) -> Line {
-        let mut l = Line::new(self.writer.buffer());
+    pub fn info(&self) -> Buffer {
+        let mut b = self.writer.buffer();
         let mut c = ColorSpec::new();
 
         c.set_fg(Some(Color::Cyan)).set_bold(true);
-        l.set_color(Some(&c));
+        b.set_color(&c).unwrap();
 
-        write!(&mut l, "[I] ").unwrap();
-        l.set_color(None);
+        write!(&mut b, "[I] ").unwrap();
+        b.reset().unwrap();
 
-        l
+        b
     }
 
-    pub fn warn(&self) -> Line {
-        let mut l = Line::new(self.writer.buffer());
+    pub fn warn(&self) -> Buffer {
+        let mut b = self.writer.buffer();
         let mut c = ColorSpec::new();
 
         c.set_fg(Some(Color::Yellow)).set_bold(true);
-        l.set_color(Some(&c));
+        b.set_color(&c).unwrap();
 
-        write!(&mut l, "[W] ").unwrap();
-        l.set_color(None);
+        write!(&mut b, "[W] ").unwrap();
+        b.reset().unwrap();
 
-        l
+        b
     }
 
-    pub fn error(&self) -> Line {
-        let mut l = Line::new(self.writer.buffer());
+    pub fn error(&self) -> Buffer {
+        let mut b = self.writer.buffer();
         let mut c = ColorSpec::new();
 
         c.set_fg(Some(Color::Red)).set_bold(true);
-        l.set_color(Some(&c));
+        b.set_color(&c).unwrap();
 
-        write!(&mut l, "[E] ").unwrap();
-        l.set_color(None);
+        write!(&mut b, "[E] ").unwrap();
+        b.reset().unwrap();
 
-        l
+        b
     }
 
-    pub fn write(&self, l: Line) {
-        // Write stdout.
-        let (mut s, mut p) = l.into();
+    pub fn write(&self, b: Buffer) {
+        self.writer.print(&b).unwrap();
 
-        s.reset().unwrap();
-        s.write_all(b"\n").unwrap();
-
-        self.writer.print(&s).unwrap();
-
-        // Write file.
-        if let Some(f) = &self.file {
-            #[cfg(unix)]
-            p.push(b'\n');
-            #[cfg(windows)]
-            p.write_all(b"\r\n").unwrap();
-            f.borrow_mut().write_all(&p).unwrap();
+        // Only run when File is set
+        if let Some(file) = &self.file {
+            let ansi_with = String::from_utf8_lossy(b.as_slice());
+            let ansi_without = strip(ansi_with.as_bytes()).unwrap();
+            // Mutable reference to file
+            let mut file = file.borrow_mut();
+            // File writer
+            file.write_all(&ansi_without).unwrap();
+            file.flush().unwrap(); // write immediately\
         }
     }
+}
+
+/// Write the information log.
+#[macro_export]
+macro_rules! info {
+    ($logger:expr, $($arg:tt)*) => {{
+        use std::io::Write;
+
+        let mut buffer = $logger.info();
+        writeln!(&mut buffer, $($arg)*).unwrap();
+        $logger.write(buffer);
+    }}
+}
+
+/// Write the warning log.
+#[macro_export]
+macro_rules! warn {
+    ($logger:expr, $err:ident, $($arg:tt)*) => {{
+        use std::error::Error;
+        use std::io::Write;
+
+        // Write the message and the top-level error.
+        let mut buffer = $logger.warn();
+
+        write!(&mut buffer, $($arg)*).unwrap();
+        write!(&mut buffer, ": {}", $err).unwrap();
+
+        // Write the nested error.
+        let mut inner = $err.source();
+
+        while let Some(e) = inner {
+            write!(&mut buffer, " -> {}", e).unwrap();
+            inner = e.source();
+        }
+
+        // Print.
+        writeln!(&mut buffer, ".").unwrap();
+        $logger.write(buffer);
+    }};
+    ($logger:expr, $($arg:tt)*) => {{
+        use std::io::Write;
+
+        let mut buffer = $logger.warn();
+        writeln!(&mut buffer, $($arg)*).unwrap();
+        $logger.write(buffer);
+    }}
+}
+
+/// Write the error log.
+#[macro_export]
+macro_rules! error {
+    ($logger:expr, $err:ident, $($arg:tt)*) => {{
+        use std::error::Error;
+        use std::io::Write;
+
+        // Write the message and the top-level error.
+        let mut buffer = $logger.error();
+
+        write!(&mut buffer, $($arg)*).unwrap();
+        write!(&mut buffer, ": {}", $err).unwrap();
+
+        // Write the nested error.
+        let mut inner = $err.source();
+
+        while let Some(e) = inner {
+            write!(&mut buffer, " -> {}", e).unwrap();
+            inner = e.source();
+        }
+
+        // Print.
+        writeln!(&mut buffer, ".").unwrap();
+        $logger.write(buffer);
+    }};
+    ($logger:expr, $($arg:tt)*) => {{
+        use std::io::Write;
+
+        let mut buffer = $logger.error();
+        writeln!(&mut buffer, $($arg)*).unwrap();
+        $logger.write(buffer);
+    }}
 }
