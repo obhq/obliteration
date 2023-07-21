@@ -5,6 +5,7 @@ use crate::fs::path::VPathBuf;
 use crate::llvm::Llvm;
 use crate::rtld::{Module, RuntimeLinker};
 use std::error::Error;
+use std::sync::RwLock;
 use thiserror::Error;
 
 mod codegen;
@@ -12,21 +13,18 @@ mod codegen;
 /// An implementation of [`ExecutionEngine`] using JIT powered by LLVM IR.
 pub struct LlvmEngine<'a, 'b: 'a> {
     llvm: &'b Llvm,
-    rtld: &'a RuntimeLinker<'b>,
+    rtld: &'a RwLock<RuntimeLinker<'b>>,
 }
 
 impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
-    pub fn new(llvm: &'b Llvm, rtld: &'a RuntimeLinker<'b>) -> Self {
+    pub fn new(llvm: &'b Llvm, rtld: &'a RwLock<RuntimeLinker<'b>>) -> Self {
         Self { llvm, rtld }
     }
 
-    pub fn lift_modules(&mut self) -> Result<(), LiftError> {
-        // Get eboot.bin dependencies.
-        // TODO: Get eboot.bin dependencies.
-        let eboot = self.rtld.app();
+    pub fn lift_initial_modules(&mut self) -> Result<(), LiftError> {
+        let ld = self.rtld.read().unwrap();
 
-        // Lift eboot.bin and its dependencies.
-        for module in [eboot].into_iter().rev() {
+        for module in ld.list() {
             // TODO: Store the lifted module somewhere.
             self.lift(module)?;
         }

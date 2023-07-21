@@ -2,7 +2,7 @@ pub use input::*;
 pub use output::*;
 
 use self::error::Error;
-use crate::errno::{EINVAL, EPERM};
+use crate::errno::{EINVAL, ENOMEM, EPERM};
 use crate::fs::path::VPathBuf;
 use crate::log::Logger;
 use crate::process::VProc;
@@ -22,7 +22,7 @@ pub struct Syscalls<'a, 'b: 'a> {
     logger: &'a Logger,
     proc: &'a RwLock<VProc>,
     sysctl: &'a Sysctl<'b>,
-    ld: &'a RuntimeLinker<'b>,
+    ld: &'a RwLock<RuntimeLinker<'b>>,
 }
 
 impl<'a, 'b: 'a> Syscalls<'a, 'b> {
@@ -30,7 +30,7 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         logger: &'a Logger,
         proc: &'a RwLock<VProc>,
         sysctl: &'a Sysctl<'b>,
-        ld: &'a RuntimeLinker<'b>,
+        ld: &'a RwLock<RuntimeLinker<'b>>,
     ) -> Self {
         Self {
             logger,
@@ -62,6 +62,7 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
                 i.args[1].into(),
                 i.args[2].into(),
             ),
+            592 => self.dynlib_get_list(i.args[0].into(), i.args[1].into(), i.args[2].into()),
             598 => self.get_proc_param(i.args[0].into(), i.args[1].into()),
             599 => self.relocate_process(),
             _ => todo!("syscall {} at {:#018x} on {}", i.id, i.offset, i.module,),
@@ -158,9 +159,37 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         Ok(Output::ZERO)
     }
 
+    unsafe fn dynlib_get_list(
+        &self,
+        list: *mut u32,
+        max: usize,
+        copied: *mut usize,
+    ) -> Result<Output, Error> {
+        // Check if application is dynamic linking.
+        let ld = self.ld.read().unwrap();
+        let app = ld.app().image();
+
+        if app.info().is_none() {
+            return Err(Error::Raw(EPERM));
+        } else if ld.list().len() > max {
+            return Err(Error::Raw(ENOMEM));
+        }
+
+        // Copy module ID.
+        for (i, m) in ld.list().iter().enumerate() {
+            *list.add(i) = m.id();
+        }
+
+        // Set copied.
+        *copied = ld.list().len();
+
+        Ok(Output::ZERO)
+    }
+
     unsafe fn get_proc_param(&self, param: *mut usize, size: *mut usize) -> Result<Output, Error> {
         // Check if application is a dynamic SELF.
-        let app = self.ld.app();
+        let ld = self.ld.read().unwrap();
+        let app = ld.app();
 
         if app.image().dynamic().is_none() {
             return Err(Error::Raw(EPERM));
@@ -181,14 +210,16 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
 
     unsafe fn relocate_process(&self) -> Result<Output, Error> {
         // Check if application is dynamic linking.
-        let app = self.ld.app().image();
+        let ld = self.ld.read().unwrap();
+        let app = ld.app().image();
 
         if app.info().is_none() {
             return Err(Error::Raw(EINVAL));
         }
 
         // TODO: Implement dynlib_load_needed_shared_objects.
-        self.ld.relocate()?;
+        ld.relocate()?;
+
         Ok(Output::ZERO)
     }
 }
