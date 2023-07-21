@@ -4,6 +4,7 @@ use std::ops::{BitAndAssign, BitOrAssign, Not};
 /// An implementation of `sigset_t`.
 #[repr(C)]
 #[derive(Clone, Copy)]
+#[derive(Default)]
 pub struct SignalSet {
     bits: [u32; 4],
 }
@@ -30,11 +31,7 @@ impl SignalSet {
     }
 }
 
-impl Default for SignalSet {
-    fn default() -> Self {
-        Self { bits: [0u32; 4] }
-    }
-}
+
 
 impl BitAndAssign for SignalSet {
     fn bitand_assign(&mut self, rhs: Self) {

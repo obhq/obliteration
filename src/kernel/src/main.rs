@@ -151,7 +151,7 @@ fn main() -> ExitCode {
         }
     };
 
-    print_module(&logger, &module);
+    print_module(&logger, module);
 
     // Set libkernel ID.
     let id = module.id();
@@ -165,7 +165,7 @@ fn main() -> ExitCode {
     info!(logger, "Loading {path}.");
 
     match ld.load(path) {
-        Ok(m) => print_module(&logger, &m),
+        Ok(m) => print_module(&logger, m),
         Err(e) => {
             error!(logger, e, "Load failed");
             return ExitCode::FAILURE;

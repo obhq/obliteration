@@ -1,5 +1,5 @@
 use crate::errno::Errno;
-use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_UNBLOCK, SIG_SETMASK};
+use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK};
 use crate::thread::VThread;
 use std::collections::HashMap;
 use std::num::NonZeroI32;
