@@ -151,8 +151,11 @@ fn main() -> ExitCode {
         }
     };
 
-    print_module(&logger, &module);
-    ld.set_kernel(module);
+    print_module(&logger, module);
+
+    // Set libkernel ID.
+    let id = module.id();
+    ld.set_kernel(id);
 
     // Preload libSceLibcInternal.
     let path: &VPath = "/system/common/lib/libSceLibcInternal.sprx"
