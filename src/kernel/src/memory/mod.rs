@@ -468,6 +468,8 @@ impl MemoryManager {
     }
 }
 
+unsafe impl Sync for MemoryManager {}
+
 /// Contains information for an allocation of virtual pages.
 struct Alloc {
     addr: *mut u8,
