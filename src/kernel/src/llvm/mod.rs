@@ -43,6 +43,8 @@ impl Drop for Llvm {
     }
 }
 
+unsafe impl Sync for Llvm {}
+
 /// A wrapper on LLVM error.
 #[derive(Debug)]
 pub struct Error {

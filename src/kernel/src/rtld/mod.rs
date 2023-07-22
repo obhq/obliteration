@@ -20,7 +20,8 @@ pub struct RuntimeLinker<'a> {
     mm: &'a MemoryManager,
     list: Vec<Module<'a>>, // obj_list + obj_tail
     kernel: Option<u32>,   // obj_kernel
-    next_id: u32,
+    next_id: u32,          // idtable on proc
+    tls_max: u32,          // tls_max_index
 }
 
 impl<'a> RuntimeLinker<'a> {
@@ -65,7 +66,7 @@ impl<'a> RuntimeLinker<'a> {
 
         // TODO: Apply remaining checks from exec_self_imgact.
         // Map eboot.bin.
-        let app = match Module::map(mm, elf, base, 0) {
+        let app = match Module::map(mm, elf, base, 0, 1) {
             Ok(v) => v,
             Err(e) => return Err(RuntimeLinkerError::MapExeFailed(file.into_vpath(), e)),
         };
@@ -76,6 +77,7 @@ impl<'a> RuntimeLinker<'a> {
             list: Vec::from([app]),
             kernel: None,
             next_id: 1,
+            tls_max: 1,
         })
     }
 
@@ -116,8 +118,33 @@ impl<'a> RuntimeLinker<'a> {
         }
 
         // TODO: Apply remaining checks from self_load_shared_object.
+        // Search for TLS free slot.
+        let tls = elf.tls().map(|i| &elf.programs()[i]);
+        let tls = if tls.map(|p| p.memory_size()).unwrap_or(0) == 0 {
+            0
+        } else {
+            let mut r = 1;
+
+            loop {
+                // Check if the current value has been used.
+                if !self.list.iter().any(|m| m.tls_index() == r) {
+                    break;
+                }
+
+                // Someone already use the current value, increase the value and try again.
+                r += 1;
+
+                if r > self.tls_max {
+                    self.tls_max = r;
+                    break;
+                }
+            }
+
+            r
+        };
+
         // Map file.
-        let module = match Module::map(self.mm, elf, 0, self.next_id) {
+        let module = match Module::map(self.mm, elf, 0, self.next_id, tls) {
             Ok(v) => v,
             Err(e) => return Err(LoadError::MapFailed(e)),
         };

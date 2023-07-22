@@ -11,7 +11,7 @@ use crate::sysctl::Sysctl;
 use crate::thread::VThread;
 use clap::{Parser, ValueEnum};
 use serde::Deserialize;
-use std::fs::File;
+use std::fs::{create_dir_all, remove_dir_all, File};
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::RwLock;
@@ -56,34 +56,39 @@ fn main() -> ExitCode {
         Args::parse()
     };
 
-    // Remove previous debug dump.
-    if args.clear_debug_dump {
-        if let Err(e) = std::fs::remove_dir_all(&args.debug_dump) {
-            if e.kind() != std::io::ErrorKind::NotFound {
-                error!(logger, e, "Failed to remove {}", args.debug_dump.display());
-                return ExitCode::FAILURE;
+    // Initialize debug dump.
+    if let Some(path) = &args.debug_dump {
+        // Remove previous dump.
+        if args.clear_debug_dump.unwrap_or(false) {
+            if let Err(e) = remove_dir_all(path) {
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    warn!(logger, e, "Failed to remove {}", path.display());
+                }
             }
         }
-    }
 
-    // Begin File logging
-    let debug_dump_dir = PathBuf::from(&args.debug_dump);
-    let log_file_path = debug_dump_dir.join("obliteration-kernel.log");
-    if let Ok(_) = logger.set_log_file(&log_file_path) {
-        info!(logger, "File Logging enabled");
-    } else {
-        warn!(logger, "Failed to set log file at: {:?}", log_file_path);
+        // Create a directory.
+        if let Err(e) = create_dir_all(path) {
+            warn!(logger, e, "Failed to create {}", path.display());
+        }
+
+        // Create log file for us.
+        let log = path.join("obliteration.log");
+
+        match File::create(&log) {
+            Ok(v) => logger.set_file(v),
+            Err(e) => warn!(logger, e, "Failed to create {}", log.display()),
+        }
     }
 
     // Show basic infomation.
     info!(logger, "Starting Obliteration kernel.");
     info!(logger, "System directory    : {}", args.system.display());
     info!(logger, "Game directory      : {}", args.game.display());
-    info!(
-        logger,
-        "Debug dump directory: {}",
-        args.debug_dump.display()
-    );
+
+    if let Some(v) = &args.debug_dump {
+        info!(logger, "Debug dump directory: {}", v.display());
+    }
 
     // Initialize foundations.
     let arc4 = Arc4::new();
@@ -294,6 +299,9 @@ fn print_module(logger: &Logger, module: &Module) {
         }
     }
 
+    // Runtime info.
+    info!(logger, "TLS index     : {}", module.tls_index());
+
     // Memory.
     let mem = module.memory();
 
@@ -334,10 +342,10 @@ struct Args {
     game: PathBuf,
 
     #[arg(long)]
-    debug_dump: PathBuf,
+    debug_dump: Option<PathBuf>,
 
     #[arg(long)]
-    clear_debug_dump: bool,
+    clear_debug_dump: Option<bool>,
 
     #[arg(long, short)]
     execution_engine: Option<ExecutionEngine>,

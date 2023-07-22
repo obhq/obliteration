@@ -320,6 +320,9 @@ impl<'a> AsMut<[u8]> for Memory<'a> {
     }
 }
 
+unsafe impl<'a> Send for Memory<'a> {}
+unsafe impl<'a> Sync for Memory<'a> {}
+
 /// A segment in the [`Memory`].
 pub struct MemorySegment {
     start: usize,

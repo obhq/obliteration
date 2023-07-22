@@ -8,6 +8,7 @@ use std::fs::File;
 pub struct Module<'a> {
     id: u32,
     entry: Option<usize>,
+    tls_index: u32,
     proc_param: Option<(usize, usize)>,
     image: Elf<File>,
     memory: Memory<'a>,
@@ -19,6 +20,7 @@ impl<'a> Module<'a> {
         mut image: Elf<File>,
         base: usize,
         id: u32,
+        tls_index: u32,
     ) -> Result<Self, MapError> {
         // Map the image to the memory.
         let mut memory = Memory::new(mm, &image, base)?;
@@ -37,6 +39,7 @@ impl<'a> Module<'a> {
         Ok(Self {
             id,
             entry: image.entry_addr().map(|v| base + v),
+            tls_index,
             proc_param: image.proc_param().map(|i| {
                 let p = image.programs().get(i).unwrap();
                 (base + p.addr(), p.file_size().try_into().unwrap())
@@ -52,6 +55,10 @@ impl<'a> Module<'a> {
 
     pub fn entry(&self) -> Option<usize> {
         self.entry
+    }
+
+    pub fn tls_index(&self) -> u32 {
+        self.tls_index
     }
 
     pub fn proc_param(&self) -> Option<&(usize, usize)> {
