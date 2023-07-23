@@ -75,7 +75,14 @@ impl Logger {
 
     #[cfg(target_os = "macos")]
     fn current_thread() -> u64 {
-        unsafe { libc::__thread_selfid() }
+        use libc::pthread_threadid_np;
+        use std::ptr::null_mut;
+
+        let mut id = 0;
+
+        unsafe { assert_eq!(pthread_threadid_np(null_mut(), &mut id), 0) };
+
+        id
     }
 
     #[cfg(target_os = "windows")]
