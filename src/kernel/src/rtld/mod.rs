@@ -66,10 +66,12 @@ impl<'a> RuntimeLinker<'a> {
 
         // TODO: Apply remaining checks from exec_self_imgact.
         // Map eboot.bin.
-        let app = match Module::map(mm, elf, base, 0, 1) {
+        let mut app = match Module::map(mm, elf, base, 0, 1) {
             Ok(v) => v,
             Err(e) => return Err(RuntimeLinkerError::MapExeFailed(file.into_vpath(), e)),
         };
+
+        *app.flags_mut() |= ModuleFlags::MAIN_PROG;
 
         Ok(Self {
             fs,

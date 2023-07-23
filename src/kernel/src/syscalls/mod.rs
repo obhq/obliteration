@@ -4,7 +4,6 @@ pub use output::*;
 use self::error::Error;
 use crate::errno::{EINVAL, ENOMEM, EPERM};
 use crate::fs::path::VPathBuf;
-use crate::log::Logger;
 use crate::process::VProc;
 use crate::rtld::RuntimeLinker;
 use crate::signal::SignalSet;
@@ -19,7 +18,6 @@ mod output;
 
 /// Provides PS4 kernel routines for PS4 process.
 pub struct Syscalls<'a, 'b: 'a> {
-    logger: &'a Logger,
     proc: &'a RwLock<VProc>,
     sysctl: &'a Sysctl<'b>,
     ld: &'a RwLock<RuntimeLinker<'b>>,
@@ -27,17 +25,11 @@ pub struct Syscalls<'a, 'b: 'a> {
 
 impl<'a, 'b: 'a> Syscalls<'a, 'b> {
     pub fn new(
-        logger: &'a Logger,
         proc: &'a RwLock<VProc>,
         sysctl: &'a Sysctl<'b>,
         ld: &'a RwLock<RuntimeLinker<'b>>,
     ) -> Self {
-        Self {
-            logger,
-            proc,
-            sysctl,
-            ld,
-        }
+        Self { proc, sysctl, ld }
     }
 
     /// # Safety
@@ -65,14 +57,14 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
             592 => self.dynlib_get_list(i.args[0].into(), i.args[1].into(), i.args[2].into()),
             598 => self.get_proc_param(i.args[0].into(), i.args[1].into()),
             599 => self.relocate_process(),
-            _ => todo!("syscall {} at {:#018x} on {}", i.id, i.offset, i.module,),
+            _ => todo!("syscall {} at {:#018x} on {}", i.id, i.offset, i.module),
         };
 
         // Get the output.
         let v = match r {
             Ok(v) => v,
             Err(e) => {
-                warn!(self.logger, e, "Syscall {} failed", i.id);
+                warn!(e, "Syscall {} failed", i.id);
                 return e.errno().get().into();
             }
         };
