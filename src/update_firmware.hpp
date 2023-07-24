@@ -17,9 +17,6 @@ public:
     bool explicitDecryption() const;
 
 private:
-    QGroupBox *setupFromGroup();
-
-private:
     QLineEdit *m_from;
     QCheckBox *m_explicitDecryption;
 };
