@@ -1,5 +1,6 @@
 use super::{MapError, Memory};
 use crate::memory::MemoryManager;
+use bitflags::bitflags;
 use elf::Elf;
 use std::fs::File;
 
@@ -10,6 +11,7 @@ pub struct Module<'a> {
     entry: Option<usize>,
     tls_index: u32,
     proc_param: Option<(usize, usize)>,
+    flags: ModuleFlags,
     image: Elf<File>,
     memory: Memory<'a>,
 }
@@ -44,6 +46,7 @@ impl<'a> Module<'a> {
                 let p = image.programs().get(i).unwrap();
                 (base + p.addr(), p.file_size().try_into().unwrap())
             }),
+            flags: ModuleFlags::empty(),
             image,
             memory,
         })
@@ -65,11 +68,27 @@ impl<'a> Module<'a> {
         self.proc_param.as_ref()
     }
 
+    pub fn flags(&self) -> ModuleFlags {
+        self.flags
+    }
+
+    pub fn flags_mut(&mut self) -> &mut ModuleFlags {
+        &mut self.flags
+    }
+
     pub fn image(&self) -> &Elf<File> {
         &self.image
     }
 
     pub fn memory(&self) -> &Memory<'a> {
         &self.memory
+    }
+}
+
+bitflags! {
+    /// Flags for [`Module`].
+    #[derive(Clone, Copy, PartialEq)]
+    pub struct ModuleFlags: u16 {
+        const MAIN_PROG = 0x0001;
     }
 }
