@@ -1,4 +1,4 @@
-use crate::errno::Errno;
+use crate::errno::{Errno, EINVAL};
 use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK};
 use crate::thread::VThread;
 use std::collections::HashMap;
@@ -70,6 +70,8 @@ impl VProc {
             SIG_UNBLOCK => {
                 // Update mask.
                 *td.sigmask_mut() &= !set;
+
+                // TODO: Invoke signotify at the end.
             }
             SIG_SETMASK => {
                 // Remove uncatchable signals.
@@ -78,8 +80,10 @@ impl VProc {
 
                 // Replace mask.
                 *td.sigmask_mut() = set;
+
+                // TODO: Invoke signotify at the end.
             }
-            v => todo!("sigprocmask with how = {v}"),
+            v => return Err(SigmaskError::InvalidArgument(v)),
         }
 
         // TODO: Check if we need to invoke reschedule_signals.
@@ -89,10 +93,15 @@ impl VProc {
 
 /// Represents an error when [`VProc::sigmask()`] is failed.
 #[derive(Debug, Error)]
-pub enum SigmaskError {}
+pub enum SigmaskError {
+    #[error("Invalid argument in sigmask: {0}")]
+    InvalidArgument(i32),
+}
 
 impl Errno for SigmaskError {
     fn errno(&self) -> NonZeroI32 {
-        todo!()
+        match self {
+            Self::InvalidArgument(_) => EINVAL,
+        }
     }
 }
