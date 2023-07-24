@@ -19,9 +19,8 @@ llvm-sys = { version = "160.0.2", features = ["strict-versioning"] }
 param = { path = "../param" }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
-strip-ansi-escapes = "0.1.1"
 termcolor = "1.2.0"
 thiserror = "1.0"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.48", features = ["Win32_Foundation", "Win32_System_Diagnostics_Debug", "Win32_System_Memory", "Win32_System_SystemInformation"] }
+windows-sys = { version = "0.48", features = ["Win32_Foundation", "Win32_System_Diagnostics_Debug", "Win32_System_Memory", "Win32_System_SystemInformation", "Win32_System_Threading"] }

@@ -2,32 +2,39 @@ pub use input::*;
 pub use output::*;
 
 use self::error::Error;
-use crate::errno::{EINVAL, EPERM};
+use crate::errno::{EINVAL, ENOMEM, EPERM};
 use crate::fs::path::VPathBuf;
-use crate::log::Logger;
+use crate::process::VProc;
 use crate::rtld::RuntimeLinker;
+use crate::signal::SignalSet;
 use crate::sysctl::Sysctl;
 use crate::warn;
 use kernel_macros::cpu_abi;
+use std::sync::RwLock;
 
 mod error;
 mod input;
 mod output;
 
-/// Provides PS4 kernel routines.
+/// Provides PS4 kernel routines for PS4 process.
 pub struct Syscalls<'a, 'b: 'a> {
-    logger: &'a Logger,
+    proc: &'a RwLock<VProc>,
     sysctl: &'a Sysctl<'b>,
-    ld: &'a RuntimeLinker<'b>,
+    ld: &'a RwLock<RuntimeLinker<'b>>,
 }
 
 impl<'a, 'b: 'a> Syscalls<'a, 'b> {
-    pub fn new(logger: &'a Logger, sysctl: &'a Sysctl<'b>, ld: &'a RuntimeLinker<'b>) -> Self {
-        Self { logger, sysctl, ld }
+    pub fn new(
+        proc: &'a RwLock<VProc>,
+        sysctl: &'a Sysctl<'b>,
+        ld: &'a RwLock<RuntimeLinker<'b>>,
+    ) -> Self {
+        Self { proc, sysctl, ld }
     }
 
     /// # Safety
-    /// This method may treat any [`Input::args`] as a pointer (depend on [`Input::id`]).
+    /// This method may treat any [`Input::args`] as a pointer (depend on [`Input::id`]). Also this
+    /// method must de directly invoked by the PS4 application.
     #[cpu_abi]
     pub unsafe fn invoke(&self, i: &Input, o: &mut Output) -> i64 {
         // Execute the handler. See
@@ -42,16 +49,22 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
                 i.args[4].into(),
                 i.args[5].into(),
             ),
+            340 => self.sigprocmask(
+                i.args[0].try_into().unwrap(),
+                i.args[1].into(),
+                i.args[2].into(),
+            ),
+            592 => self.dynlib_get_list(i.args[0].into(), i.args[1].into(), i.args[2].into()),
             598 => self.get_proc_param(i.args[0].into(), i.args[1].into()),
             599 => self.relocate_process(),
-            _ => todo!("syscall {} at {:#018x} on {}", i.id, i.offset, i.module,),
+            _ => todo!("syscall {} at {:#018x} on {}", i.id, i.offset, i.module),
         };
 
         // Get the output.
         let v = match r {
             Ok(v) => v,
             Err(e) => {
-                warn!(self.logger, e, "Syscall {} failed", i.id);
+                warn!(e, "Syscall {} failed", i.id);
                 return e.errno().get().into();
             }
         };
@@ -62,8 +75,10 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         0
     }
 
+    /// # Safety
+    /// This method must be directly invoked by the PS4 application.
     #[cpu_abi]
-    pub fn int44(&self, offset: usize, module: &VPathBuf) -> ! {
+    pub unsafe fn int44(&self, offset: usize, module: &VPathBuf) -> ! {
         // Seems like int 44 is a fatal error.
         panic!("Interrupt number 0x44 has been executed at {offset:#018x} on {module}.");
     }
@@ -109,9 +124,64 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         Ok(Output::ZERO)
     }
 
+    unsafe fn sigprocmask(
+        &self,
+        how: i32,
+        set: *const SignalSet,
+        oset: *mut SignalSet,
+    ) -> Result<Output, Error> {
+        // Convert set to an option.
+        let set = if set.is_null() { None } else { Some(*set) };
+
+        // Convert oset to an option.
+        let mut out = if oset.is_null() {
+            None
+        } else {
+            Some(SignalSet::default())
+        };
+
+        // Execute.
+        self.proc.write().unwrap().sigmask(how, set, out.as_mut())?;
+
+        // Copy output.
+        if let Some(v) = out {
+            *oset = v;
+        }
+
+        Ok(Output::ZERO)
+    }
+
+    unsafe fn dynlib_get_list(
+        &self,
+        list: *mut u32,
+        max: usize,
+        copied: *mut usize,
+    ) -> Result<Output, Error> {
+        // Check if application is dynamic linking.
+        let ld = self.ld.read().unwrap();
+        let app = ld.app().image();
+
+        if app.info().is_none() {
+            return Err(Error::Raw(EPERM));
+        } else if ld.list().len() > max {
+            return Err(Error::Raw(ENOMEM));
+        }
+
+        // Copy module ID.
+        for (i, m) in ld.list().iter().enumerate() {
+            *list.add(i) = m.id();
+        }
+
+        // Set copied.
+        *copied = ld.list().len();
+
+        Ok(Output::ZERO)
+    }
+
     unsafe fn get_proc_param(&self, param: *mut usize, size: *mut usize) -> Result<Output, Error> {
         // Check if application is a dynamic SELF.
-        let app = self.ld.app();
+        let ld = self.ld.read().unwrap();
+        let app = ld.app();
 
         if app.image().dynamic().is_none() {
             return Err(Error::Raw(EPERM));
@@ -132,14 +202,16 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
 
     unsafe fn relocate_process(&self) -> Result<Output, Error> {
         // Check if application is dynamic linking.
-        let app = self.ld.app().image();
+        let ld = self.ld.read().unwrap();
+        let app = ld.app().image();
 
         if app.info().is_none() {
             return Err(Error::Raw(EINVAL));
         }
 
         // TODO: Implement dynlib_load_needed_shared_objects.
-        self.ld.relocate()?;
+        ld.relocate()?;
+
         Ok(Output::ZERO)
     }
 }

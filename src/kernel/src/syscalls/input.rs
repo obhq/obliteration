@@ -33,6 +33,14 @@ impl From<Arg> for usize {
     }
 }
 
+impl TryFrom<Arg> for i32 {
+    type Error = TryFromIntError;
+
+    fn try_from(v: Arg) -> Result<Self, Self::Error> {
+        v.0.try_into()
+    }
+}
+
 impl TryFrom<Arg> for u32 {
     type Error = TryFromIntError;
 

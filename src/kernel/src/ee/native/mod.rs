@@ -11,31 +11,32 @@ use iced_x86::code_asm::{
 use std::error::Error;
 use std::mem::{size_of, transmute};
 use std::ptr::null_mut;
+use std::sync::RwLock;
 use thiserror::Error;
 
 /// An implementation of [`ExecutionEngine`] for running the PS4 binary natively.
 pub struct NativeEngine<'a, 'b: 'a> {
-    rtld: &'a RuntimeLinker<'b>,
+    rtld: &'a RwLock<RuntimeLinker<'b>>,
     syscalls: &'a Syscalls<'a, 'b>,
 }
 
 impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
-    pub fn new(rtld: &'a RuntimeLinker<'b>, syscalls: &'a Syscalls<'a, 'b>) -> Self {
+    pub fn new(rtld: &'a RwLock<RuntimeLinker<'b>>, syscalls: &'a Syscalls<'a, 'b>) -> Self {
         Self { rtld, syscalls }
     }
 
     /// # SAFETY
     /// No other threads may read or write any module memory.
     pub unsafe fn patch_mods(&mut self) -> Result<Vec<(VPathBuf, usize)>, PatchModsError> {
+        let ld = self.rtld.read().unwrap();
         let mut counts: Vec<(VPathBuf, usize)> = Vec::new();
 
-        self.rtld.for_each(|module| {
+        for module in ld.list() {
             let count = self.patch_mod(module)?;
             let path: VPathBuf = module.image().name().try_into().unwrap();
 
             counts.push((path, count));
-            Ok(())
-        })?;
+        }
 
         Ok(counts)
     }
@@ -440,18 +441,21 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
 impl<'a, 'b> ExecutionEngine for NativeEngine<'a, 'b> {
     fn run(&mut self) -> Result<(), Box<dyn Error>> {
         // Get eboot.bin.
-        let eboot = self.rtld.app();
+        let ld = self.rtld.read().unwrap();
+        let eboot = ld.app();
 
         if eboot.image().dynamic_linking().is_none() {
             todo!("A statically linked eboot.bin is not supported yet.");
         }
 
         // Get boot module.
-        let boot = self.rtld.kernel().unwrap();
+        let boot = ld.kernel().unwrap();
 
         // Get entry point.
         let mem = boot.memory().as_ref();
         let entry: EntryPoint = unsafe { transmute(mem[boot.entry().unwrap()..].as_ptr()) };
+
+        drop(ld);
 
         // TODO: Check how the actual binary read its argument.
         // Setup arguments.

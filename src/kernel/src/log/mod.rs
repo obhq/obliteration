@@ -1,178 +1,87 @@
-use std::cell::RefCell;
-use std::fs::{create_dir_all, OpenOptions};
-use std::io::Write;
-use std::path::PathBuf;
-use strip_ansi_escapes::strip;
-use termcolor::{Buffer, BufferWriter, Color, ColorChoice, ColorSpec, WriteColor};
+pub use entry::*;
 
-/// Encapsulate the stdout.
+use std::fs::File;
+use std::io::Write;
+use std::ops::DerefMut;
+use std::sync::{Mutex, OnceLock};
+use std::time::Instant;
+use termcolor::{BufferWriter, ColorChoice};
+
+mod entry;
+mod macros;
+
+/// A logger used by the macros in the [`macros`] module.
+pub static LOGGER: OnceLock<Logger> = OnceLock::new();
+
+/// Write a [`LogEntry`] to [`LOGGER`].
+pub fn print(e: LogEntry) {
+    if let Some(l) = LOGGER.get() {
+        l.write(e);
+    }
+}
+
+/// Logger for Obliteration Kernel.
 ///
-/// The reason we don't log the error to stderr is because it may cause the final logging in a wrong
-/// order. Let's say we write the info then error the reader may read the stderr first, which output
-/// the error before the info.
+/// This logger will write to stdout and a file, stderr is for the PS4.
+#[derive(Debug)]
 pub struct Logger {
-    writer: BufferWriter,
-    file: Option<RefCell<std::fs::File>>,
+    stdout: BufferWriter,
+    file: Mutex<Option<File>>,
+    start_time: Instant,
 }
 
 impl Logger {
     pub fn new() -> Self {
         Self {
-            writer: BufferWriter::stdout(ColorChoice::Auto),
-            file: None,
+            stdout: BufferWriter::stdout(ColorChoice::Auto),
+            file: Mutex::new(None),
+            start_time: Instant::now(),
         }
     }
 
-    // File logging
-    pub fn set_log_file<P: Into<PathBuf>>(&mut self, path: P) -> std::io::Result<()> {
-        let path = path.into();
-
-        if let Some(parent) = path.parent() {
-            create_dir_all(parent)?; // Create parent directories if needed
-        }
-
-        let file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(&path)?;
-
-        self.file = Some(RefCell::new(file));
-
-        Ok(())
+    pub fn set_file(&self, file: File) {
+        *self.file.lock().unwrap() = Some(file);
     }
 
-    pub fn info(&self) -> Buffer {
-        let mut b = self.writer.buffer();
-        let mut c = ColorSpec::new();
+    pub fn entry(&self, meta: LogMeta) -> LogEntry {
+        let time = Instant::now() - self.start_time;
+        let tid = Self::current_thread();
 
-        c.set_fg(Some(Color::Cyan)).set_bold(true);
-        b.set_color(&c).unwrap();
-
-        write!(&mut b, "[I] ").unwrap();
-        b.reset().unwrap();
-
-        b
+        LogEntry::new(self.stdout.buffer(), meta, time, tid)
     }
 
-    pub fn warn(&self) -> Buffer {
-        let mut b = self.writer.buffer();
-        let mut c = ColorSpec::new();
+    pub fn write(&self, e: LogEntry) {
+        // Get data to log.
+        let (s, p) = match e.into_raw() {
+            Some(v) => v,
+            None => return,
+        };
 
-        c.set_fg(Some(Color::Yellow)).set_bold(true);
-        b.set_color(&c).unwrap();
+        // Write stdout.
+        self.stdout.print(&s).unwrap();
 
-        write!(&mut b, "[W] ").unwrap();
-        b.reset().unwrap();
+        // Write file.
+        let mut f = self.file.lock().unwrap();
 
-        b
-    }
-
-    pub fn error(&self) -> Buffer {
-        let mut b = self.writer.buffer();
-        let mut c = ColorSpec::new();
-
-        c.set_fg(Some(Color::Red)).set_bold(true);
-        b.set_color(&c).unwrap();
-
-        write!(&mut b, "[E] ").unwrap();
-        b.reset().unwrap();
-
-        b
-    }
-
-    pub fn write(&self, b: Buffer) {
-        self.writer.print(&b).unwrap();
-
-        // Only run when File is set
-        if let Some(file) = &self.file {
-            let ansi_with = String::from_utf8_lossy(b.as_slice());
-            let ansi_without = strip(ansi_with.as_bytes()).unwrap();
-            // Mutable reference to file
-            let mut file = file.borrow_mut();
-            // File writer
-            file.write_all(&ansi_without).unwrap();
-            file.flush().unwrap(); // write immediately\
+        if let Some(f) = f.deref_mut() {
+            f.write_all(&p).unwrap();
         }
     }
-}
 
-/// Write the information log.
-#[macro_export]
-macro_rules! info {
-    ($logger:expr, $($arg:tt)*) => {{
-        use std::io::Write;
+    #[cfg(target_os = "linux")]
+    fn current_thread() -> u64 {
+        unsafe { libc::gettid().try_into().unwrap() }
+    }
 
-        let mut buffer = $logger.info();
-        writeln!(&mut buffer, $($arg)*).unwrap();
-        $logger.write(buffer);
-    }}
-}
+    #[cfg(target_os = "macos")]
+    fn current_thread() -> u64 {
+        let mut id = 0;
+        assert_eq!(unsafe { libc::pthread_threadid_np(0, &mut id) }, 0);
+        id
+    }
 
-/// Write the warning log.
-#[macro_export]
-macro_rules! warn {
-    ($logger:expr, $err:ident, $($arg:tt)*) => {{
-        use std::error::Error;
-        use std::io::Write;
-
-        // Write the message and the top-level error.
-        let mut buffer = $logger.warn();
-
-        write!(&mut buffer, $($arg)*).unwrap();
-        write!(&mut buffer, ": {}", $err).unwrap();
-
-        // Write the nested error.
-        let mut inner = $err.source();
-
-        while let Some(e) = inner {
-            write!(&mut buffer, " -> {}", e).unwrap();
-            inner = e.source();
-        }
-
-        // Print.
-        writeln!(&mut buffer, ".").unwrap();
-        $logger.write(buffer);
-    }};
-    ($logger:expr, $($arg:tt)*) => {{
-        use std::io::Write;
-
-        let mut buffer = $logger.warn();
-        writeln!(&mut buffer, $($arg)*).unwrap();
-        $logger.write(buffer);
-    }}
-}
-
-/// Write the error log.
-#[macro_export]
-macro_rules! error {
-    ($logger:expr, $err:ident, $($arg:tt)*) => {{
-        use std::error::Error;
-        use std::io::Write;
-
-        // Write the message and the top-level error.
-        let mut buffer = $logger.error();
-
-        write!(&mut buffer, $($arg)*).unwrap();
-        write!(&mut buffer, ": {}", $err).unwrap();
-
-        // Write the nested error.
-        let mut inner = $err.source();
-
-        while let Some(e) = inner {
-            write!(&mut buffer, " -> {}", e).unwrap();
-            inner = e.source();
-        }
-
-        // Print.
-        writeln!(&mut buffer, ".").unwrap();
-        $logger.write(buffer);
-    }};
-    ($logger:expr, $($arg:tt)*) => {{
-        use std::io::Write;
-
-        let mut buffer = $logger.error();
-        writeln!(&mut buffer, $($arg)*).unwrap();
-        $logger.write(buffer);
-    }}
+    #[cfg(target_os = "windows")]
+    fn current_thread() -> u64 {
+        unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId().into() }
+    }
 }

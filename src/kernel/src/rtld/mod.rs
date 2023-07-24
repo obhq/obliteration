@@ -6,11 +6,8 @@ use crate::fs::path::{VPath, VPathBuf};
 use crate::fs::Fs;
 use crate::memory::{MemoryManager, MmapError, MprotectError};
 use elf::{Elf, FileInfo, FileType, ReadProgramError, Relocation};
-use std::collections::VecDeque;
 use std::fs::File;
 use std::num::NonZeroI32;
-use std::ops::Deref;
-use std::sync::{Arc, RwLock};
 use thiserror::Error;
 
 mod mem;
@@ -21,9 +18,10 @@ mod module;
 pub struct RuntimeLinker<'a> {
     fs: &'a Fs,
     mm: &'a MemoryManager,
-    loaded: RwLock<VecDeque<Arc<Module<'a>>>>, // obj_list + obj_tail
-    app: Arc<Module<'a>>,                      // obj_main
-    kernel: Option<Arc<Module<'a>>>,           // obj_kernel
+    list: Vec<Module<'a>>, // obj_list + obj_tail
+    kernel: Option<u32>,   // obj_kernel
+    next_id: u32,          // idtable on proc
+    tls_max: u32,          // tls_max_index
 }
 
 impl<'a> RuntimeLinker<'a> {
@@ -68,44 +66,39 @@ impl<'a> RuntimeLinker<'a> {
 
         // TODO: Apply remaining checks from exec_self_imgact.
         // Map eboot.bin.
-        let app = match Module::map(mm, elf, base) {
-            Ok(v) => Arc::new(v),
+        let mut app = match Module::map(mm, elf, base, 0, 1) {
+            Ok(v) => v,
             Err(e) => return Err(RuntimeLinkerError::MapExeFailed(file.into_vpath(), e)),
         };
+
+        *app.flags_mut() |= ModuleFlags::MAIN_PROG;
 
         Ok(Self {
             fs,
             mm,
-            loaded: RwLock::new([app.clone()].into()),
-            app,
+            list: Vec::from([app]),
             kernel: None,
+            next_id: 1,
+            tls_max: 1,
         })
     }
 
-    pub fn app(&self) -> &Arc<Module<'a>> {
-        &self.app
+    pub fn app(&self) -> &Module<'a> {
+        self.list.first().unwrap()
     }
 
-    pub fn kernel(&self) -> Option<&Arc<Module<'a>>> {
-        self.kernel.as_ref()
+    pub fn kernel(&self) -> Option<&Module<'a>> {
+        self.kernel
+            .and_then(|id| self.list.iter().find(|&m| m.id() == id))
     }
 
-    pub fn for_each<F, E>(&self, mut f: F) -> Result<(), E>
-    where
-        F: FnMut(&Arc<Module<'a>>) -> Result<(), E>,
-    {
-        let loaded = self.loaded.read().unwrap();
-
-        for m in loaded.deref() {
-            f(m)?;
-        }
-
-        Ok(())
+    pub fn list(&self) -> &[Module<'a>] {
+        self.list.as_ref()
     }
 
     /// This method **ALWAYS** load the specified module without checking if the same module is
     /// already loaded.
-    pub fn load(&self, path: &VPath) -> Result<Arc<Module<'a>>, LoadError> {
+    pub fn load(&mut self, path: &VPath) -> Result<&mut Module<'a>, LoadError> {
         // Get file.
         let file = match self.fs.get_file(path) {
             Some(v) => v,
@@ -127,33 +120,57 @@ impl<'a> RuntimeLinker<'a> {
         }
 
         // TODO: Apply remaining checks from self_load_shared_object.
+        // Search for TLS free slot.
+        let tls = elf.tls().map(|i| &elf.programs()[i]);
+        let tls = if tls.map(|p| p.memory_size()).unwrap_or(0) == 0 {
+            0
+        } else {
+            let mut r = 1;
+
+            loop {
+                // Check if the current value has been used.
+                if !self.list.iter().any(|m| m.tls_index() == r) {
+                    break;
+                }
+
+                // Someone already use the current value, increase the value and try again.
+                r += 1;
+
+                if r > self.tls_max {
+                    self.tls_max = r;
+                    break;
+                }
+            }
+
+            r
+        };
+
         // Map file.
-        let module = match Module::map(self.mm, elf, 0) {
-            Ok(v) => Arc::new(v),
+        let module = match Module::map(self.mm, elf, 0, self.next_id, tls) {
+            Ok(v) => v,
             Err(e) => return Err(LoadError::MapFailed(e)),
         };
 
         // Load to loaded list.
-        self.loaded.write().unwrap().push_back(module.clone());
+        self.list.push(module);
+        self.next_id += 1;
 
-        Ok(module)
+        Ok(self.list.last_mut().unwrap())
     }
 
     /// # Safety
     /// No other threads may access the memory of all loaded modules.
     pub unsafe fn relocate(&self) -> Result<(), RelocateError> {
         // TODO: Check what the PS4 actually doing.
-        let loaded = self.loaded.read().unwrap();
-
-        for m in loaded.deref() {
+        for m in &self.list {
             self.relocate_single(m)?;
         }
 
         Ok(())
     }
 
-    pub fn set_kernel(&mut self, m: Arc<Module<'a>>) {
-        self.kernel = Some(m);
+    pub fn set_kernel(&mut self, id: u32) {
+        self.kernel = Some(id);
     }
 
     /// See `relocate_one_object` on the PS4 kernel for a reference.
