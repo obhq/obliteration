@@ -199,7 +199,7 @@ fn main() -> ExitCode {
     // Print libkernel.
     let mut log = info!();
 
-    print_module(&mut log, &module);
+    print_module(&mut log, module);
     print(log);
 
     // Set libkernel ID.
@@ -216,7 +216,7 @@ fn main() -> ExitCode {
     match ld.load(path) {
         Ok(m) => {
             let mut l = info!();
-            print_module(&mut l, &m);
+            print_module(&mut l, m);
             print(l);
         }
         Err(e) => {
