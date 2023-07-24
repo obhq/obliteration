@@ -5,7 +5,7 @@ use crate::errno::{Errno, ENOEXEC};
 use crate::fs::path::{VPath, VPathBuf};
 use crate::fs::Fs;
 use crate::memory::{MemoryManager, MmapError, MprotectError};
-use elf::{Elf, FileInfo, FileType, ReadProgramError, Relocation};
+use elf::{DynamicFlags, Elf, FileInfo, FileType, ReadProgramError, Relocation};
 use std::fs::File;
 use std::num::NonZeroI32;
 use thiserror::Error;
@@ -49,11 +49,11 @@ impl<'a> RuntimeLinker<'a> {
         // Check image type.
         match elf.ty() {
             FileType::ET_EXEC | FileType::ET_SCE_EXEC | FileType::ET_SCE_REPLAY_EXEC => {
-                if elf.dynamic_linking().is_none() {
-                    todo!("A statically linked eboot.bin is not supported yet.");
+                if elf.info().is_none() {
+                    todo!("a statically linked eboot.bin is not supported yet.");
                 }
             }
-            FileType::ET_SCE_DYNEXEC if elf.dynamic_linking().is_some() => {}
+            FileType::ET_SCE_DYNEXEC if elf.dynamic().is_some() => {}
             _ => return Err(RuntimeLinkerError::InvalidExe(file.into_vpath())),
         }
 
@@ -264,6 +264,18 @@ pub enum MapError {
 
     #[error("cannot protect the memory")]
     ProtectMemoryFailed(#[source] MprotectError),
+
+    #[error("cannot read DT_NEEDED from dynamic entry {0}")]
+    ReadNeededFailed(usize, #[source] elf::StringTableError),
+
+    #[error("{0} is obsolete")]
+    ObsoleteFlags(DynamicFlags),
+
+    #[error("cannot read module info from dynamic entry {0}")]
+    ReadModuleInfoFailed(usize, #[source] elf::ReadModuleError),
+
+    #[error("cannot read libraru info from dynamic entry {0}")]
+    ReadLibraryInfoFailed(usize, #[source] elf::ReadLibraryError),
 }
 
 /// Represents an error for (S)ELF loading.

@@ -83,7 +83,7 @@ impl VProc {
 
                 // TODO: Invoke signotify at the end.
             }
-            v => return Err(SigmaskError::InvalidArgument(v)),
+            v => return Err(SigmaskError::InvalidHow(v)),
         }
 
         // TODO: Check if we need to invoke reschedule_signals.
@@ -94,14 +94,14 @@ impl VProc {
 /// Represents an error when [`VProc::sigmask()`] is failed.
 #[derive(Debug, Error)]
 pub enum SigmaskError {
-    #[error("Invalid argument in sigmask: {0}")]
-    InvalidArgument(i32),
+    #[error("{0} is not a valid how")]
+    InvalidHow(i32),
 }
 
 impl Errno for SigmaskError {
     fn errno(&self) -> NonZeroI32 {
         match self {
-            Self::InvalidArgument(_) => EINVAL,
+            Self::InvalidHow(_) => EINVAL,
         }
     }
 }

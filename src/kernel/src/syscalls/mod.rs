@@ -56,7 +56,7 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
             ),
             592 => self.dynlib_get_list(i.args[0].into(), i.args[1].into(), i.args[2].into()),
             598 => self.get_proc_param(i.args[0].into(), i.args[1].into()),
-            599 => self.relocate_process(),
+            599 => self.dynlib_process_needed_and_relocate(),
             _ => todo!("syscall {} at {:#018x} on {}", i.id, i.offset, i.module),
         };
 
@@ -200,7 +200,7 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         Ok(Output::ZERO)
     }
 
-    unsafe fn relocate_process(&self) -> Result<Output, Error> {
+    unsafe fn dynlib_process_needed_and_relocate(&self) -> Result<Output, Error> {
         // Check if application is dynamic linking.
         let ld = self.ld.read().unwrap();
         let app = ld.app().image();

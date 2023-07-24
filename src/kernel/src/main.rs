@@ -319,16 +319,6 @@ fn print_module(log: &mut LogEntry, module: &Module) {
 
     writeln!(log, "Image type    : {}", image.ty()).unwrap();
 
-    if let Some(dynamic) = image.dynamic_linking() {
-        let i = dynamic.module_info();
-
-        writeln!(log, "Module name   : {}", i.name()).unwrap();
-
-        if let Some(f) = dynamic.flags() {
-            writeln!(log, "Module flags  : {f}").unwrap();
-        }
-    }
-
     for (i, p) in image.programs().iter().enumerate() {
         let offset = p.offset();
         let end = offset + p.file_size();
@@ -344,13 +334,12 @@ fn print_module(log: &mut LogEntry, module: &Module) {
         .unwrap();
     }
 
-    if let Some(dynamic) = image.dynamic_linking() {
-        for n in dynamic.needed() {
-            writeln!(log, "Needed        : {n}").unwrap();
-        }
+    for n in module.needed() {
+        writeln!(log, "Needed        : {}", n.name()).unwrap();
     }
 
     // Runtime info.
+    writeln!(log, "Module flags  : {}", module.flags()).unwrap();
     writeln!(log, "TLS index     : {}", module.tls_index()).unwrap();
 
     // Memory.
