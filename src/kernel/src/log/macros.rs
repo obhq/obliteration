@@ -2,8 +2,8 @@
 #[macro_export]
 macro_rules! info {
     () => {
-        if let Some(l) = crate::log::LOGGER.get() {
-            let mut m = crate::log::LogMeta{
+        if let Some(l) = $crate::log::LOGGER.get() {
+            let mut m = $crate::log::LogMeta{
                 category: 'I',
                 color: termcolor::ColorSpec::new(),
                 file: Some(std::file!()),
@@ -42,12 +42,12 @@ macro_rules! info {
 #[macro_export]
 macro_rules! warn {
     ($err:ident, $($arg:tt)*) => {
-        if let Some(l) = crate::log::LOGGER.get() {
+        if let Some(l) = $crate::log::LOGGER.get() {
             use std::error::Error;
             use std::io::Write;
 
             // Setup meta.
-            let mut m = crate::log::LogMeta{
+            let mut m = $crate::log::LogMeta{
                 category: 'W',
                 color: termcolor::ColorSpec::new(),
                 file: Some(std::file!()),
@@ -101,13 +101,13 @@ macro_rules! warn {
 #[macro_export]
 macro_rules! error {
     ($err:ident, $($arg:tt)*) => {
-        if let Some(l) = crate::log::LOGGER.get() {
+        if let Some(l) = $crate::log::LOGGER.get() {
             #[allow(unused_imports)]
             use std::error::Error;
             use std::io::Write;
 
             // Setup meta.
-            let mut m = crate::log::LogMeta{
+            let mut m = $crate::log::LogMeta{
                 category: 'E',
                 color: termcolor::ColorSpec::new(),
                 file: Some(std::file!()),

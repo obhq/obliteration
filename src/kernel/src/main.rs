@@ -90,7 +90,7 @@ fn main() -> ExitCode {
     // Initialize debug dump.
     if let Some(path) = &args.debug_dump {
         // Remove previous dump.
-        if args.clear_debug_dump.unwrap_or(false) {
+        if args.clear_debug_dump {
             if let Err(e) = remove_dir_all(path) {
                 if e.kind() != std::io::ErrorKind::NotFound {
                     warn!(e, "Failed to remove {}", path.display());
@@ -199,7 +199,7 @@ fn main() -> ExitCode {
     // Print libkernel.
     let mut log = info!();
 
-    print_module(&mut log, &module);
+    print_module(&mut log, module);
     print(log);
 
     // Set libkernel ID.
@@ -216,7 +216,7 @@ fn main() -> ExitCode {
     match ld.load(path) {
         Ok(m) => {
             let mut l = info!();
-            print_module(&mut l, &m);
+            print_module(&mut l, m);
             print(l);
         }
         Err(e) => {
@@ -398,7 +398,8 @@ struct Args {
     debug_dump: Option<PathBuf>,
 
     #[arg(long)]
-    clear_debug_dump: Option<bool>,
+    #[serde(default)]
+    clear_debug_dump: bool,
 
     #[arg(long, short)]
     execution_engine: Option<ExecutionEngine>,

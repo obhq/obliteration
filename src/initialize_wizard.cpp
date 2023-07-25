@@ -127,7 +127,7 @@ public:
 
         // Page properties.
         setTitle("Location to install games");
-        setSubTitle("The selected directory will be used for game installation. The directory cannot be the same as the system directory and must be an empty directory.");
+        setSubTitle("The selected directory will be used for game installation. The directory cannot be the same as the system directory.");
 
         // Widgets.
         layout->addLayout(setupInputRow());
@@ -206,7 +206,7 @@ public:
 
         // Page properties.
         setTitle("Install firmware");
-        setSubTitle("Obliteration requires some firmware files from your PS4 in order to work. You will need to transfer those files before you can use Obliteration.");
+        setSubTitle("Obliteration requires some firmware files from your PS4 in order to work.");
 
         // Page widgets.
         m_form = new UpdateFirmware();
@@ -279,10 +279,10 @@ InitializeWizard::InitializeWizard()
     // Window properties.
     setWindowTitle("Setup Obliteration.");
 
-    // Dark Mode for Windows
-    #ifdef _WIN32
-        setWizardStyle(QWizard::ModernStyle);
-    #endif
+    // The aero style, which is the default on Windows; does not work well with dark theme.
+#ifdef _WIN32
+    setWizardStyle(QWizard::ModernStyle);
+#endif
 
     // Pages.
     setPage(PageIntro, new IntroPage());
