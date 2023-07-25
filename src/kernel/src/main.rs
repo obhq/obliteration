@@ -178,7 +178,7 @@ fn main() -> ExitCode {
     // Print application module.
     let mut log = info!();
 
-    writeln!(log, "Application   : {}", ld.app().image().name()).unwrap();
+    writeln!(log, "Application   : {}", ld.app().path()).unwrap();
     print_module(&mut log, ld.app());
 
     print(log);
@@ -308,18 +308,16 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E) -> ExitCode {
 }
 
 fn print_module(log: &mut LogEntry, module: &Module) {
-    // Image details.
-    let image = module.image();
-
-    if image.self_segments().is_some() {
+    // Image info.
+    if module.is_self() {
         writeln!(log, "Image format  : SELF").unwrap();
     } else {
         writeln!(log, "Image format  : ELF").unwrap();
     }
 
-    writeln!(log, "Image type    : {}", image.ty()).unwrap();
+    writeln!(log, "Image type    : {}", module.file_type()).unwrap();
 
-    for (i, p) in image.programs().iter().enumerate() {
+    for (i, p) in module.programs().iter().enumerate() {
         let offset = p.offset();
         let end = offset + p.file_size();
 
@@ -339,10 +337,13 @@ fn print_module(log: &mut LogEntry, module: &Module) {
     }
 
     // Runtime info.
-    writeln!(log, "Module flags  : {}", module.flags()).unwrap();
+    if !module.flags().is_empty() {
+        writeln!(log, "Module flags  : {}", module.flags()).unwrap();
+    }
+
     writeln!(log, "TLS index     : {}", module.tls_index()).unwrap();
 
-    // Memory.
+    // Memory info.
     let mem = module.memory();
 
     writeln!(
@@ -353,24 +354,35 @@ fn print_module(log: &mut LogEntry, module: &Module) {
     )
     .unwrap();
 
-    if let Some(entry) = image.entry_addr() {
-        writeln!(log, "Entry address : {:#018x}", mem.addr() + entry).unwrap();
+    if let Some(v) = module.init() {
+        writeln!(log, "Initialization: {:#018x}", mem.addr() + v).unwrap();
+    }
+
+    if let Some(v) = module.entry() {
+        writeln!(log, "Entry address : {:#018x}", mem.addr() + v).unwrap();
+    }
+
+    if let Some(v) = module.fini() {
+        writeln!(log, "Finalization  : {:#018x}", mem.addr() + v).unwrap();
     }
 
     for s in mem.segments().iter() {
-        if let Some(p) = s.program() {
-            let addr = mem.addr() + s.start();
+        let p = match s.program() {
+            Some(v) => v,
+            None => continue,
+        };
 
-            writeln!(
-                log,
-                "Program {} is mapped to {:#018x}:{:#018x} with {}.",
-                p,
-                addr,
-                addr + s.len(),
-                image.programs()[p].flags(),
-            )
-            .unwrap();
-        }
+        let addr = mem.addr() + s.start();
+
+        writeln!(
+            log,
+            "Program {} is mapped to {:#018x}:{:#018x} with {}.",
+            p,
+            addr,
+            addr + s.len(),
+            module.program(p).unwrap().flags(),
+        )
+        .unwrap();
     }
 }
 

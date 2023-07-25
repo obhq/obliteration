@@ -55,7 +55,7 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
                 i.args[2].into(),
             ),
             592 => self.dynlib_get_list(i.args[0].into(), i.args[1].into(), i.args[2].into()),
-            598 => self.get_proc_param(i.args[0].into(), i.args[1].into()),
+            598 => self.dynlib_get_proc_param(i.args[0].into(), i.args[1].into()),
             599 => self.dynlib_process_needed_and_relocate(),
             _ => todo!("syscall {} at {:#018x} on {}", i.id, i.offset, i.module),
         };
@@ -159,9 +159,9 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
     ) -> Result<Output, Error> {
         // Check if application is dynamic linking.
         let ld = self.ld.read().unwrap();
-        let app = ld.app().image();
+        let app = ld.app();
 
-        if app.info().is_none() {
+        if app.file_info().is_none() {
             return Err(Error::Raw(EPERM));
         } else if ld.list().len() > max {
             return Err(Error::Raw(ENOMEM));
@@ -178,12 +178,16 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         Ok(Output::ZERO)
     }
 
-    unsafe fn get_proc_param(&self, param: *mut usize, size: *mut usize) -> Result<Output, Error> {
+    unsafe fn dynlib_get_proc_param(
+        &self,
+        param: *mut usize,
+        size: *mut usize,
+    ) -> Result<Output, Error> {
         // Check if application is a dynamic SELF.
         let ld = self.ld.read().unwrap();
         let app = ld.app();
 
-        if app.image().dynamic().is_none() {
+        if app.file_info().is_none() {
             return Err(Error::Raw(EPERM));
         }
 
@@ -203,9 +207,9 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
     unsafe fn dynlib_process_needed_and_relocate(&self) -> Result<Output, Error> {
         // Check if application is dynamic linking.
         let ld = self.ld.read().unwrap();
-        let app = ld.app().image();
+        let app = ld.app();
 
-        if app.info().is_none() {
+        if app.file_info().is_none() {
             return Err(Error::Raw(EINVAL));
         }
 

@@ -614,6 +614,12 @@ impl<I: Read + Seek> Elf<I> {
     }
 }
 
+impl<I: Read + Seek> From<Elf<I>> for (String, Vec<Program>, Option<FileInfo>) {
+    fn from(v: Elf<I>) -> Self {
+        (v.name, v.programs, v.info)
+    }
+}
+
 /// Contains data specific for SELF.
 struct SelfData {
     segments: Vec<SelfSegment>,

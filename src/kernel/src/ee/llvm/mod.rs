@@ -34,9 +34,8 @@ impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
 
     fn lift(&self, module: &Module<'b>) -> Result<crate::llvm::module::ExecutionEngine, LiftError> {
         // Get a list of public functions.
-        let image = module.image();
-        let path: VPathBuf = image.name().try_into().unwrap();
-        let targets = match image.entry_addr() {
+        let path = module.path();
+        let targets = match module.entry() {
             Some(v) => vec![v],
             None => Vec::new(),
         };
@@ -46,26 +45,26 @@ impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
 
         for &addr in &targets {
             if let Err(e) = disasm.disassemble(addr) {
-                return Err(LiftError::DisassembleFailed(path, addr, e));
+                return Err(LiftError::DisassembleFailed(path.to_owned(), addr, e));
             }
         }
 
         disasm.fixup();
 
         // Lift the public functions.
-        let mut lifting = self.llvm.create_module(image.name());
+        let mut lifting = self.llvm.create_module(path.as_ref());
         let mut codegen = Codegen::new(&disasm, &mut lifting);
 
         for &addr in &targets {
             if let Err(e) = codegen.lift(addr) {
-                return Err(LiftError::LiftingFailed(path, addr, e));
+                return Err(LiftError::LiftingFailed(path.to_owned(), addr, e));
             }
         }
 
         // Create LLVM execution engine.
         let lifted = match lifting.create_execution_engine() {
             Ok(v) => v,
-            Err(e) => return Err(LiftError::CreateExecutionEngineFailed(path, e)),
+            Err(e) => return Err(LiftError::CreateExecutionEngineFailed(path.to_owned(), e)),
         };
 
         Ok(lifted)
