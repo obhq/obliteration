@@ -444,7 +444,7 @@ impl<'a, 'b> ExecutionEngine for NativeEngine<'a, 'b> {
         let ld = self.rtld.read().unwrap();
         let eboot = ld.app();
 
-        if eboot.image().dynamic_linking().is_none() {
+        if eboot.image().dynamic().is_none() {
             todo!("A statically linked eboot.bin is not supported yet.");
         }
 

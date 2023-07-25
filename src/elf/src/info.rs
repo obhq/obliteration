@@ -1,4 +1,4 @@
-use crate::Relocations;
+use crate::{DynamicEntries, DynamicTag, LibraryFlags, LibraryInfo, ModuleInfo, Relocations};
 use byteorder::{ByteOrder, LE};
 use thiserror::Error;
 
@@ -6,6 +6,8 @@ use thiserror::Error;
 pub struct FileInfo {
     data: Vec<u8>,
     comment: Vec<u8>,
+    dynoff: usize,
+    dynsize: usize,
     pltrelsz: usize,
     relasz: usize,
     strsz: usize,
@@ -19,101 +21,6 @@ pub struct FileInfo {
 }
 
 impl FileInfo {
-    pub const DT_NULL: i64 = 0;
-    pub const DT_NEEDED: i64 = 1;
-    pub const DT_PLTRELSZ: i64 = 2;
-    pub const DT_PLTGOT: i64 = 3;
-    pub const DT_HASH: i64 = 4;
-    pub const DT_STRTAB: i64 = 5;
-    pub const DT_SYMTAB: i64 = 6;
-    pub const DT_RELA: i64 = 7;
-    pub const DT_RELASZ: i64 = 8;
-    pub const DT_RELAENT: i64 = 9;
-    pub const DT_STRSZ: i64 = 10;
-    pub const DT_SYMENT: i64 = 11;
-    pub const DT_INIT: i64 = 12;
-    pub const DT_FINI: i64 = 13;
-    pub const DT_SONAME: i64 = 14;
-    pub const DT_RPATH: i64 = 15;
-    pub const DT_SYMBOLIC: i64 = 16;
-    pub const DT_REL: i64 = 17;
-    pub const DT_RELSZ: i64 = 18;
-    pub const DT_RELENT: i64 = 19;
-    pub const DT_PLTREL: i64 = 20;
-    pub const DT_DEBUG: i64 = 21;
-    pub const DT_TEXTREL: i64 = 22;
-    pub const DT_JMPREL: i64 = 23;
-    pub const DT_BIND_NOW: i64 = 24;
-    pub const DT_INIT_ARRAY: i64 = 25;
-    pub const DT_FINI_ARRAY: i64 = 26;
-    pub const DT_INIT_ARRAYSZ: i64 = 27;
-    pub const DT_FINI_ARRAYSZ: i64 = 28;
-    pub const DT_RUNPATH: i64 = 29;
-    pub const DT_FLAGS: i64 = 30;
-    pub const DT_ENCODING: i64 = 31;
-    pub const DT_PREINIT_ARRAY: i64 = 32;
-    pub const DT_PREINIT_ARRAYSZ: i64 = 33;
-    pub const DT_SCE_UNK1: i64 = 0x60000005;
-    pub const DT_SCE_FINGERPRINT: i64 = 0x61000007;
-    pub const DT_SCE_UNK2: i64 = 0x61000008;
-    pub const DT_SCE_UNK3: i64 = 0x6100000a;
-    pub const DT_SCE_UNK4: i64 = 0x6100000b;
-    pub const DT_SCE_UNK5: i64 = 0x6100000c;
-    pub const DT_SCE_UNK6: i64 = 0x6100000e;
-    pub const DT_SCE_FILENAME: i64 = 0x61000009;
-    pub const DT_SCE_MODULE_INFO: i64 = 0x6100000d;
-    pub const DT_SCE_NEEDED_MODULE: i64 = 0x6100000f;
-    pub const DT_SCE_UNK7: i64 = 0x61000010;
-    pub const DT_SCE_MODULE_ATTR: i64 = 0x61000011;
-    pub const DT_SCE_UNK8: i64 = 0x61000012;
-    pub const DT_SCE_EXPORT_LIB: i64 = 0x61000013;
-    pub const DT_SCE_UNK9: i64 = 0x61000014;
-    pub const DT_SCE_IMPORT_LIB: i64 = 0x61000015;
-    pub const DT_SCE_UNK10: i64 = 0x61000016;
-    pub const DT_SCE_EXPORT_LIB_ATTR: i64 = 0x61000017;
-    pub const DT_SCE_UNK11: i64 = 0x61000018;
-    pub const DT_SCE_IMPORT_LIB_ATTR: i64 = 0x61000019;
-    pub const DT_SCE_UNK12: i64 = 0x6100001a;
-    pub const DT_SCE_UNK13: i64 = 0x6100001b;
-    pub const DT_SCE_UNK14: i64 = 0x6100001c;
-    pub const DT_SCE_UNK15: i64 = 0x6100001d;
-    pub const DT_SCE_UNK16: i64 = 0x6100001e;
-    pub const DT_SCE_UNK17: i64 = 0x6100001f;
-    pub const DT_SCE_UNK18: i64 = 0x61000020;
-    pub const DT_SCE_UNK19: i64 = 0x61000021;
-    pub const DT_SCE_UNK20: i64 = 0x61000022;
-    pub const DT_SCE_UNK21: i64 = 0x61000023;
-    pub const DT_SCE_UNK22: i64 = 0x61000024;
-    pub const DT_SCE_HASH: i64 = 0x61000025;
-    pub const DT_SCE_UNK23: i64 = 0x61000026;
-    pub const DT_SCE_PLTGOT: i64 = 0x61000027;
-    pub const DT_SCE_UNK24: i64 = 0x61000028;
-    pub const DT_SCE_JMPREL: i64 = 0x61000029;
-    pub const DT_SCE_UNK25: i64 = 0x6100002a;
-    pub const DT_SCE_PLTREL: i64 = 0x6100002b;
-    pub const DT_SCE_UNK26: i64 = 0x6100002c;
-    pub const DT_SCE_PLTRELSZ: i64 = 0x6100002d;
-    pub const DT_SCE_UNK27: i64 = 0x6100002e;
-    pub const DT_SCE_RELA: i64 = 0x6100002f;
-    pub const DT_SCE_UNK28: i64 = 0x61000030;
-    pub const DT_SCE_RELASZ: i64 = 0x61000031;
-    pub const DT_SCE_UNK29: i64 = 0x61000032;
-    pub const DT_SCE_RELAENT: i64 = 0x61000033;
-    pub const DT_SCE_UNK30: i64 = 0x61000034;
-    pub const DT_SCE_STRTAB: i64 = 0x61000035;
-    pub const DT_SCE_UNK31: i64 = 0x61000036;
-    pub const DT_SCE_STRSZ: i64 = 0x61000037;
-    pub const DT_SCE_UNK32: i64 = 0x61000038;
-    pub const DT_SCE_SYMTAB: i64 = 0x61000039;
-    pub const DT_SCE_UNK33: i64 = 0x6100003a;
-    pub const DT_SCE_SYMENT: i64 = 0x6100003b;
-    pub const DT_SCE_UNK34: i64 = 0x6100003c;
-    pub const DT_SCE_HASHSZ: i64 = 0x6100003d;
-    pub const DT_SCE_UNK35: i64 = 0x6100003e;
-    pub const DT_SCE_SYMTABSZ: i64 = 0x6100003f;
-    pub const DT_SCE_UNK36: i64 = 0x6ffffff9;
-    pub const DT_SCE_UNK37: i64 = 0x6ffffffb;
-
     pub(super) fn parse(
         data: Vec<u8>,
         comment: Vec<u8>,
@@ -141,121 +48,124 @@ impl FileInfo {
 
         // Let it panic if the dynamic size is not correct because the PS4 also does not check for
         // this.
-        for entry in data[dynoff..(dynoff + dynsize)].chunks(16) {
-            let tag = LE::read_i64(entry);
-            let value = &entry[8..];
-
+        for (tag, value) in DynamicEntries::new(&data[dynoff..(dynoff + dynsize)]) {
             match tag {
-                Self::DT_NULL => break,
-                Self::DT_NEEDED => {}
-                Self::DT_PLTRELSZ | Self::DT_SCE_PLTRELSZ => pltrelsz = Some(LE::read_u64(value)),
-                Self::DT_PLTGOT
-                | Self::DT_RPATH
-                | Self::DT_BIND_NOW
-                | Self::DT_RUNPATH
-                | Self::DT_ENCODING
-                | Self::DT_SCE_UNK2
-                | Self::DT_SCE_UNK3
-                | Self::DT_SCE_UNK4
-                | Self::DT_SCE_UNK5
-                | Self::DT_SCE_UNK6
-                | Self::DT_SCE_UNK7
-                | Self::DT_SCE_UNK8
-                | Self::DT_SCE_UNK9
-                | Self::DT_SCE_UNK10
-                | Self::DT_SCE_UNK11
-                | Self::DT_SCE_UNK12
-                | Self::DT_SCE_UNK13
-                | Self::DT_SCE_UNK14
-                | Self::DT_SCE_UNK15
-                | Self::DT_SCE_UNK16
-                | Self::DT_SCE_UNK17
-                | Self::DT_SCE_UNK18
-                | Self::DT_SCE_UNK19
-                | Self::DT_SCE_UNK20
-                | Self::DT_SCE_UNK21
-                | Self::DT_SCE_UNK22
-                | Self::DT_SCE_UNK23
-                | Self::DT_SCE_UNK24
-                | Self::DT_SCE_UNK25
-                | Self::DT_SCE_UNK26
-                | Self::DT_SCE_UNK27
-                | Self::DT_SCE_UNK28
-                | Self::DT_SCE_UNK29
-                | Self::DT_SCE_UNK30
-                | Self::DT_SCE_UNK31
-                | Self::DT_SCE_UNK32
-                | Self::DT_SCE_UNK33
-                | Self::DT_SCE_UNK34
-                | Self::DT_SCE_UNK35 => {
+                DynamicTag::DT_NULL => break,
+                DynamicTag::DT_NEEDED => {}
+                DynamicTag::DT_PLTRELSZ | DynamicTag::DT_SCE_PLTRELSZ => {
+                    pltrelsz = Some(u64::from_le_bytes(value))
+                }
+                DynamicTag::DT_PLTGOT
+                | DynamicTag::DT_RPATH
+                | DynamicTag::DT_BIND_NOW
+                | DynamicTag::DT_RUNPATH
+                | DynamicTag::DT_ENCODING
+                | DynamicTag::DT_SCE_UNK2
+                | DynamicTag::DT_SCE_UNK3
+                | DynamicTag::DT_SCE_UNK4
+                | DynamicTag::DT_SCE_UNK5
+                | DynamicTag::DT_SCE_UNK6
+                | DynamicTag::DT_SCE_UNK7
+                | DynamicTag::DT_SCE_UNK8
+                | DynamicTag::DT_SCE_UNK9
+                | DynamicTag::DT_SCE_UNK10
+                | DynamicTag::DT_SCE_UNK11
+                | DynamicTag::DT_SCE_UNK12
+                | DynamicTag::DT_SCE_UNK13
+                | DynamicTag::DT_SCE_UNK14
+                | DynamicTag::DT_SCE_UNK15
+                | DynamicTag::DT_SCE_UNK16
+                | DynamicTag::DT_SCE_UNK17
+                | DynamicTag::DT_SCE_UNK18
+                | DynamicTag::DT_SCE_UNK19
+                | DynamicTag::DT_SCE_UNK20
+                | DynamicTag::DT_SCE_UNK21
+                | DynamicTag::DT_SCE_UNK22
+                | DynamicTag::DT_SCE_UNK23
+                | DynamicTag::DT_SCE_UNK24
+                | DynamicTag::DT_SCE_UNK25
+                | DynamicTag::DT_SCE_UNK26
+                | DynamicTag::DT_SCE_UNK27
+                | DynamicTag::DT_SCE_UNK28
+                | DynamicTag::DT_SCE_UNK29
+                | DynamicTag::DT_SCE_UNK30
+                | DynamicTag::DT_SCE_UNK31
+                | DynamicTag::DT_SCE_UNK32
+                | DynamicTag::DT_SCE_UNK33
+                | DynamicTag::DT_SCE_UNK34
+                | DynamicTag::DT_SCE_UNK35 => {
                     return Err(FileInfoError::UnsupportedTag(tag));
                 }
-                Self::DT_HASH
-                | Self::DT_STRTAB
-                | Self::DT_SYMTAB
-                | Self::DT_RELA
-                | Self::DT_JMPREL
-                | Self::DT_REL
-                | Self::DT_RELSZ
-                | Self::DT_RELENT => {
+                DynamicTag::DT_HASH
+                | DynamicTag::DT_STRTAB
+                | DynamicTag::DT_SYMTAB
+                | DynamicTag::DT_RELA
+                | DynamicTag::DT_JMPREL
+                | DynamicTag::DT_REL
+                | DynamicTag::DT_RELSZ
+                | DynamicTag::DT_RELENT => {
                     return Err(FileInfoError::OrbisUnsupported(tag));
                 }
-                Self::DT_RELASZ | Self::DT_SCE_RELASZ => relasz = Some(LE::read_u64(value)),
-                Self::DT_RELAENT | Self::DT_SCE_RELAENT => {
-                    relaent = if LE::read_u64(value) == 24 {
+                DynamicTag::DT_RELASZ | DynamicTag::DT_SCE_RELASZ => {
+                    relasz = Some(u64::from_le_bytes(value))
+                }
+                DynamicTag::DT_RELAENT | DynamicTag::DT_SCE_RELAENT => {
+                    relaent = if u64::from_le_bytes(value) == 24 {
                         true
                     } else {
                         return Err(FileInfoError::InvalidRelaent);
                     }
                 }
-                Self::DT_STRSZ | Self::DT_SCE_STRSZ => strsz = Some(LE::read_u64(value)),
-                Self::DT_SYMENT | Self::DT_SCE_SYMENT => {
-                    syment = if LE::read_u64(value) == 24 {
+                DynamicTag::DT_STRSZ | DynamicTag::DT_SCE_STRSZ => {
+                    strsz = Some(u64::from_le_bytes(value))
+                }
+                DynamicTag::DT_SYMENT | DynamicTag::DT_SCE_SYMENT => {
+                    syment = if u64::from_le_bytes(value) == 24 {
                         true
                     } else {
                         return Err(FileInfoError::InvalidSyment);
                     }
                 }
-                Self::DT_INIT => {}
-                Self::DT_FINI => {}
-                Self::DT_SONAME => {}
-                Self::DT_SYMBOLIC => {}
-                Self::DT_PLTREL | Self::DT_SCE_PLTREL => {
-                    pltrel = if LE::read_u64(value) == 7 {
+                DynamicTag::DT_INIT => {}
+                DynamicTag::DT_FINI => {}
+                DynamicTag::DT_SONAME => {}
+                DynamicTag::DT_SYMBOLIC => {}
+                DynamicTag::DT_PLTREL | DynamicTag::DT_SCE_PLTREL => {
+                    pltrel = if u64::from_le_bytes(value) == 7 {
                         true
                     } else {
                         return Err(FileInfoError::InvalidPltrel);
                     }
                 }
-                Self::DT_DEBUG => {}
-                Self::DT_TEXTREL => {}
-                Self::DT_INIT_ARRAY => {}
-                Self::DT_FINI_ARRAY => {}
-                Self::DT_INIT_ARRAYSZ => {}
-                Self::DT_FINI_ARRAYSZ => {}
-                Self::DT_FLAGS => {}
-                Self::DT_PREINIT_ARRAY => {}
-                Self::DT_PREINIT_ARRAYSZ => {}
-                Self::DT_SCE_UNK1 => {}
-                Self::DT_SCE_FINGERPRINT => fingerprint = true,
-                Self::DT_SCE_FILENAME => filename = true,
-                Self::DT_SCE_MODULE_INFO => module_info = true,
-                Self::DT_SCE_NEEDED_MODULE => {}
-                Self::DT_SCE_MODULE_ATTR => {}
-                Self::DT_SCE_EXPORT_LIB => {}
-                Self::DT_SCE_IMPORT_LIB => {}
-                Self::DT_SCE_EXPORT_LIB_ATTR => {}
-                Self::DT_SCE_IMPORT_LIB_ATTR => {}
-                Self::DT_SCE_HASH => hash = Some(LE::read_u64(value)),
-                Self::DT_SCE_PLTGOT => pltgot = true,
-                Self::DT_SCE_JMPREL => jmprel = Some(LE::read_u64(value)),
-                Self::DT_SCE_RELA => rela = Some(LE::read_u64(value)),
-                Self::DT_SCE_STRTAB => strtab = Some(LE::read_u64(value)),
-                Self::DT_SCE_SYMTAB => symtab = Some(LE::read_u64(value)),
-                Self::DT_SCE_HASHSZ => hashsz = Some(LE::read_u64(value)),
-                Self::DT_SCE_SYMTABSZ => symtabsz = Some(LE::read_u64(value)),
-                Self::DT_SCE_UNK36 => {}
-                Self::DT_SCE_UNK37 => {}
+                DynamicTag::DT_DEBUG => {}
+                DynamicTag::DT_TEXTREL => {}
+                DynamicTag::DT_INIT_ARRAY => {}
+                DynamicTag::DT_FINI_ARRAY => {}
+                DynamicTag::DT_INIT_ARRAYSZ => {}
+                DynamicTag::DT_FINI_ARRAYSZ => {}
+                DynamicTag::DT_FLAGS => {}
+                DynamicTag::DT_PREINIT_ARRAY => {}
+                DynamicTag::DT_PREINIT_ARRAYSZ => {}
+                DynamicTag::DT_SCE_UNK1 => {}
+                DynamicTag::DT_SCE_FINGERPRINT => fingerprint = true,
+                DynamicTag::DT_SCE_FILENAME => filename = true,
+                DynamicTag::DT_SCE_MODULE_INFO => module_info = true,
+                DynamicTag::DT_SCE_NEEDED_MODULE => {}
+                DynamicTag::DT_SCE_MODULE_ATTR => {}
+                DynamicTag::DT_SCE_EXPORT_LIB => {}
+                DynamicTag::DT_SCE_IMPORT_LIB => {}
+                DynamicTag::DT_SCE_EXPORT_LIB_ATTR => {}
+                DynamicTag::DT_SCE_IMPORT_LIB_ATTR => {}
+                DynamicTag::DT_SCE_HASH => hash = Some(u64::from_le_bytes(value)),
+                DynamicTag::DT_SCE_PLTGOT => pltgot = true,
+                DynamicTag::DT_SCE_JMPREL => jmprel = Some(u64::from_le_bytes(value)),
+                DynamicTag::DT_SCE_RELA => rela = Some(u64::from_le_bytes(value)),
+                DynamicTag::DT_SCE_STRTAB => strtab = Some(u64::from_le_bytes(value)),
+                DynamicTag::DT_SCE_SYMTAB => symtab = Some(u64::from_le_bytes(value)),
+                DynamicTag::DT_SCE_HASHSZ => hashsz = Some(u64::from_le_bytes(value)),
+                DynamicTag::DT_SCE_SYMTABSZ => symtabsz = Some(u64::from_le_bytes(value)),
+                DynamicTag::DT_SCE_UNK36 => {}
+                DynamicTag::DT_SCE_UNK37 => {}
                 v => return Err(FileInfoError::UnknownTag(v)),
             }
         }
@@ -292,6 +202,8 @@ impl FileInfo {
         Ok(Self {
             data,
             comment,
+            dynoff,
+            dynsize,
             pltrelsz: pltrelsz.try_into().unwrap(),
             relasz: relasz.try_into().unwrap(),
             strsz: strsz.try_into().unwrap(),
@@ -305,6 +217,14 @@ impl FileInfo {
         })
     }
 
+    pub fn comment(&self) -> &[u8] {
+        self.comment.as_ref()
+    }
+
+    pub fn dynamic(&self) -> DynamicEntries<'_> {
+        DynamicEntries::new(&self.data[self.dynoff..(self.dynoff + self.dynsize)])
+    }
+
     pub fn relocs(&self) -> Relocations<'_> {
         Relocations::new(&self.data[self.rela..(self.rela + self.relasz)])
     }
@@ -312,19 +232,65 @@ impl FileInfo {
     pub fn plt_relocs(&self) -> Relocations<'_> {
         Relocations::new(&self.data[self.jmprel..(self.jmprel + self.pltrelsz)])
     }
+
+    pub fn read_module(&self, data: [u8; 8]) -> Result<ModuleInfo, ReadModuleError> {
+        // Load data.
+        let name = LE::read_u32(&data);
+        let id = LE::read_u16(&data[6..]);
+
+        // Lookup name.
+        let name = match self.read_str(name.try_into().unwrap()) {
+            Ok(v) => v.to_owned(),
+            Err(e) => return Err(ReadModuleError::InvalidNameOffset(name, e)),
+        };
+
+        Ok(ModuleInfo::new(id, name))
+    }
+
+    pub fn read_library(&self, data: [u8; 8]) -> Result<LibraryInfo, ReadLibraryError> {
+        // Load data.
+        let name = LE::read_u32(&data);
+        let id = LE::read_u16(&data[6..]);
+
+        // Lookup name.
+        let name = match self.read_str(name.try_into().unwrap()) {
+            Ok(v) => v.to_owned(),
+            Err(e) => return Err(ReadLibraryError::InvalidNameOffset(name, e)),
+        };
+
+        Ok(LibraryInfo::new(id, name, LibraryFlags::empty()))
+    }
+
+    pub fn read_str(&self, offset: usize) -> Result<&str, StringTableError> {
+        // Get raw string.
+        let tab = &self.data[self.strtab..(self.strtab + self.strsz)];
+        let raw = match tab.get(offset..) {
+            Some(v) if !v.is_empty() => v,
+            _ => return Err(StringTableError::InvalidOffset),
+        };
+
+        // Find a NULL-terminated.
+        let raw = match raw.iter().position(|&b| b == 0) {
+            Some(i) => &raw[..i],
+            None => return Err(StringTableError::NotCString),
+        };
+
+        // Get Rust string.
+        std::str::from_utf8(raw).map_err(|_| StringTableError::NotUtf8)
+    }
 }
 
 /// Represents an error for file info parsing.
 #[derive(Debug, Error)]
 pub enum FileInfoError {
-    #[error("unknown tag {0:#018x}")]
-    UnknownTag(i64),
+    #[error("unknown tag {0}")]
+    UnknownTag(DynamicTag),
 
-    #[error("tag {0:#018x} is not supported")]
-    UnsupportedTag(i64),
+    #[error("tag {0} is not supported")]
+    UnsupportedTag(DynamicTag),
 
-    #[error("Orbis object file does not support tag {0:#018x}")]
-    OrbisUnsupported(i64),
+    #[error("Orbis object file does not support tag {0}")]
+    OrbisUnsupported(DynamicTag),
 
     #[error("no DT_PLTRELSZ or DT_SCE_PLTRELSZ")]
     NoPltrelsz,
@@ -385,4 +351,31 @@ pub enum FileInfoError {
 
     #[error("no DT_SCE_SYMTABSZ")]
     NoSymtabsz,
+}
+
+/// Represents an error when reading [`ModuleInfo`] is failed.
+#[derive(Debug, Error)]
+pub enum ReadModuleError {
+    #[error("name offset {0} is not valid")]
+    InvalidNameOffset(u32, #[source] StringTableError),
+}
+
+/// Represents an error when reading [`LibraryInfo`] is failed.
+#[derive(Debug, Error)]
+pub enum ReadLibraryError {
+    #[error("name offset {0} is not valid")]
+    InvalidNameOffset(u32, #[source] StringTableError),
+}
+
+/// Represents an error when string table lookup is failed.
+#[derive(Debug, Error)]
+pub enum StringTableError {
+    #[error("the offset is not a valid offset in the string table")]
+    InvalidOffset,
+
+    #[error("the offset is not a C string")]
+    NotCString,
+
+    #[error("the offset is not a UTF-8 string")]
+    NotUtf8,
 }

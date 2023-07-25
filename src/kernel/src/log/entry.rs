@@ -97,19 +97,14 @@ impl LogEntry {
             None => return,
         };
 
-        // Write file name.
+        // Do nothing if no file name to write.
         let file = match file {
-            Some(v) => {
-                // Strip 'kernel/src/'.
-                if v.starts_with("kernel/src/") || v.starts_with("kernel\\src\\") {
-                    &v[11..]
-                } else {
-                    v
-                }
-            }
+            Some(v) => v,
             None => return,
         };
 
+        // Do not strip "kernel/src/" due to we also set a panic hook. That mean the file path may
+        // be from another crate.
         write!(stdout, ":{file}").unwrap();
         write!(self.plain, ":{file}").unwrap();
 
