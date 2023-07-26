@@ -33,9 +33,9 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
 
         for module in ld.list() {
             let count = self.patch_mod(module)?;
-            let path: VPathBuf = module.image().name().try_into().unwrap();
+            let path = module.path();
 
-            counts.push((path, count));
+            counts.push((path.to_owned(), count));
         }
 
         Ok(counts)
@@ -48,7 +48,7 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
     /// # Safety
     /// No other threads may access the memory of `module`.
     unsafe fn patch_mod(&self, module: &Module) -> Result<usize, PatchModsError> {
-        let path: VPathBuf = module.image().name().try_into().unwrap();
+        let path = module.path();
 
         // Patch all executable sections.
         let mem = module.memory();
@@ -63,11 +63,11 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
             // Unprotect the segment.
             let mut seg = match mem.unprotect_segment(i) {
                 Ok(v) => v,
-                Err(e) => return Err(PatchModsError::UnprotectMemoryFailed(path, e)),
+                Err(e) => return Err(PatchModsError::UnprotectMemoryFailed(path.to_owned(), e)),
             };
 
             // Patch segment.
-            count += self.patch_segment(&path, base, mem, seg.as_mut())?;
+            count += self.patch_segment(path, base, mem, seg.as_mut())?;
         }
 
         Ok(count)
@@ -444,8 +444,8 @@ impl<'a, 'b> ExecutionEngine for NativeEngine<'a, 'b> {
         let ld = self.rtld.read().unwrap();
         let eboot = ld.app();
 
-        if eboot.image().dynamic().is_none() {
-            todo!("A statically linked eboot.bin is not supported yet.");
+        if eboot.file_info().is_none() {
+            todo!("a statically linked eboot.bin is not supported yet");
         }
 
         // Get boot module.

@@ -82,6 +82,12 @@ impl VPath {
     }
 }
 
+impl AsRef<str> for VPath {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
 impl From<&VPath> for String {
     fn from(value: &VPath) -> Self {
         String::from(&value.0)

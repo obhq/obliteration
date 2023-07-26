@@ -175,9 +175,8 @@ impl<'a> RuntimeLinker<'a> {
 
     /// See `relocate_one_object` on the PS4 kernel for a reference.
     unsafe fn relocate_single(&self, module: &Module<'a>) -> Result<(), RelocateError> {
-        let image = module.image();
-        let path: &VPath = image.name().try_into().unwrap();
-        let info = image.info().unwrap(); // Let it panic because the PS4 assume it is available.
+        let path = module.path();
+        let info = module.file_info().unwrap(); // Let it panic because the PS4 assume it is available.
 
         // Unprotect the memory.
         let mut mem = match module.memory().unprotect() {
