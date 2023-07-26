@@ -1,5 +1,5 @@
 use super::ExecutionEngine;
-use crate::fs::path::{VPath, VPathBuf};
+use crate::fs::{VPath, VPathBuf};
 use crate::memory::{MprotectError, Protections};
 use crate::rtld::{Memory, Module, RuntimeLinker};
 use crate::syscalls::{Input, Output, Syscalls};

@@ -1,11 +1,10 @@
 use crate::arc4::Arc4;
-use crate::fs::path::VPath;
-use crate::fs::Fs;
+use crate::fs::{Fs, VPath};
 use crate::llvm::Llvm;
-use crate::log::{print, LogEntry, LogMeta, Logger, LOGGER};
+use crate::log::{print, LogMeta, Logger, LOGGER};
 use crate::memory::MemoryManager;
 use crate::process::VProc;
-use crate::rtld::{Module, RuntimeLinker};
+use crate::rtld::{ModuleFlags, RuntimeLinker};
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
 use crate::thread::VThread;
@@ -179,9 +178,7 @@ fn main() -> ExitCode {
     let mut log = info!();
 
     writeln!(log, "Application   : {}", ld.app().path()).unwrap();
-    print_module(&mut log, ld.app());
-
-    print(log);
+    ld.app().print(log);
 
     // Preload libkernel.
     let path: &VPath = "/system/common/lib/libkernel.sprx".try_into().unwrap();
@@ -196,11 +193,8 @@ fn main() -> ExitCode {
         }
     };
 
-    // Print libkernel.
-    let mut log = info!();
-
-    print_module(&mut log, module);
-    print(log);
+    module.flags_mut().remove(ModuleFlags::UNK2);
+    module.print(info!());
 
     // Set libkernel ID.
     let id = module.id();
@@ -213,17 +207,16 @@ fn main() -> ExitCode {
 
     info!("Loading {path}.");
 
-    match ld.load(path) {
-        Ok(m) => {
-            let mut l = info!();
-            print_module(&mut l, m);
-            print(l);
-        }
+    let module = match ld.load(path) {
+        Ok(v) => v,
         Err(e) => {
             error!(e, "Load failed");
             return ExitCode::FAILURE;
         }
-    }
+    };
+
+    module.flags_mut().remove(ModuleFlags::UNK2);
+    module.print(info!());
 
     // Initialize syscall routines.
     info!("Initializing system call routines.");
@@ -305,85 +298,6 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E) -> ExitCode {
     }
 
     ExitCode::SUCCESS
-}
-
-fn print_module(log: &mut LogEntry, module: &Module) {
-    // Image info.
-    if module.is_self() {
-        writeln!(log, "Image format  : SELF").unwrap();
-    } else {
-        writeln!(log, "Image format  : ELF").unwrap();
-    }
-
-    writeln!(log, "Image type    : {}", module.file_type()).unwrap();
-
-    for (i, p) in module.programs().iter().enumerate() {
-        let offset = p.offset();
-        let end = offset + p.file_size();
-
-        writeln!(
-            log,
-            "Program {:<6}: {:#018x}:{:#018x}:{}",
-            i,
-            offset,
-            end,
-            p.ty()
-        )
-        .unwrap();
-    }
-
-    for n in module.needed() {
-        writeln!(log, "Needed        : {}", n.name()).unwrap();
-    }
-
-    // Runtime info.
-    if !module.flags().is_empty() {
-        writeln!(log, "Module flags  : {}", module.flags()).unwrap();
-    }
-
-    writeln!(log, "TLS index     : {}", module.tls_index()).unwrap();
-
-    // Memory info.
-    let mem = module.memory();
-
-    writeln!(
-        log,
-        "Memory address: {:#018x}:{:#018x}",
-        mem.addr(),
-        mem.addr() + mem.len()
-    )
-    .unwrap();
-
-    if let Some(v) = module.init() {
-        writeln!(log, "Initialization: {:#018x}", mem.addr() + v).unwrap();
-    }
-
-    if let Some(v) = module.entry() {
-        writeln!(log, "Entry address : {:#018x}", mem.addr() + v).unwrap();
-    }
-
-    if let Some(v) = module.fini() {
-        writeln!(log, "Finalization  : {:#018x}", mem.addr() + v).unwrap();
-    }
-
-    for s in mem.segments().iter() {
-        let p = match s.program() {
-            Some(v) => v,
-            None => continue,
-        };
-
-        let addr = mem.addr() + s.start();
-
-        writeln!(
-            log,
-            "Program {} is mapped to {:#018x}:{:#018x} with {}.",
-            p,
-            addr,
-            addr + s.len(),
-            module.program(p).unwrap().flags(),
-        )
-        .unwrap();
-    }
 }
 
 #[derive(Parser, Deserialize)]

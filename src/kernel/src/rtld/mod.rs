@@ -2,8 +2,7 @@ pub use mem::*;
 pub use module::*;
 
 use crate::errno::{Errno, ENOEXEC};
-use crate::fs::path::{VPath, VPathBuf};
-use crate::fs::Fs;
+use crate::fs::{Fs, VPath, VPathBuf};
 use crate::memory::{MemoryManager, MmapError, MprotectError};
 use elf::{DynamicFlags, Elf, FileInfo, FileType, ReadProgramError, Relocation};
 use std::fs::File;
@@ -39,7 +38,7 @@ impl<'a> RuntimeLinker<'a> {
 
         // Open eboot.bin.
         let elf = match File::open(file.path()) {
-            Ok(v) => match Elf::open(file.virtual_path(), v) {
+            Ok(v) => match Elf::open(file.vpath(), v) {
                 Ok(v) => v,
                 Err(e) => return Err(RuntimeLinkerError::OpenElfFailed(file.into_vpath(), e)),
             },
@@ -107,7 +106,7 @@ impl<'a> RuntimeLinker<'a> {
 
         // Open file.
         let elf = match File::open(file.path()) {
-            Ok(v) => match Elf::open(file.virtual_path(), v) {
+            Ok(v) => match Elf::open(file.into_vpath(), v) {
                 Ok(v) => v,
                 Err(e) => return Err(LoadError::OpenElfFailed(e)),
             },
@@ -146,10 +145,22 @@ impl<'a> RuntimeLinker<'a> {
         };
 
         // Map file.
-        let module = match Module::map(self.mm, elf, 0, self.next_id, tls) {
+        let mut module = match Module::map(self.mm, elf, 0, self.next_id, tls) {
             Ok(v) => v,
             Err(e) => return Err(LoadError::MapFailed(e)),
         };
+
+        if module.flags().contains(ModuleFlags::TEXT_REL) {
+            return Err(LoadError::ImpureText);
+        }
+
+        // TODO: Check the call to sceSblAuthMgrIsLoadable in the self_load_shared_object on the PS4
+        // to see how it is return the value.
+        let name = path.file_name().unwrap();
+
+        if name != "libc.sprx" && name != "libSceFios2.sprx" {
+            *module.flags_mut() |= ModuleFlags::UNK1;
+        }
 
         // Load to loaded list.
         self.list.push(module);
@@ -294,6 +305,9 @@ pub enum LoadError {
 
     #[error("cannot map file")]
     MapFailed(#[source] MapError),
+
+    #[error("the specified file has impure text")]
+    ImpureText,
 }
 
 /// Represents an error for modules relocation.
