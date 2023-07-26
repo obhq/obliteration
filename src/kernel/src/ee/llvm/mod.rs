@@ -1,7 +1,7 @@
 use self::codegen::Codegen;
 use super::ExecutionEngine;
 use crate::disasm::Disassembler;
-use crate::fs::path::VPathBuf;
+use crate::fs::VPathBuf;
 use crate::llvm::Llvm;
 use crate::rtld::{Module, RuntimeLinker};
 use std::error::Error;
@@ -52,7 +52,7 @@ impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
         disasm.fixup();
 
         // Lift the public functions.
-        let mut lifting = self.llvm.create_module(path.as_ref());
+        let mut lifting = self.llvm.create_module(path);
         let mut codegen = Codegen::new(&disasm, &mut lifting);
 
         for &addr in &targets {

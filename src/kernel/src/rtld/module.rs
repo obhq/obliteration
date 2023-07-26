@@ -1,5 +1,6 @@
 use super::{MapError, Memory};
-use crate::fs::path::{VPath, VPathBuf};
+use crate::fs::{VPath, VPathBuf};
+use crate::log::{print, LogEntry};
 use crate::memory::MemoryManager;
 use bitflags::bitflags;
 use elf::{
@@ -8,6 +9,7 @@ use elf::{
 };
 use std::fmt::{Display, Formatter};
 use std::fs::File;
+use std::io::Write;
 
 /// An implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/libexec/rtld-elf/rtld.h#L147.
@@ -75,7 +77,7 @@ impl<'a> Module<'a> {
             fini: None,
             tls_index,
             proc_param,
-            flags: ModuleFlags::empty(),
+            flags: ModuleFlags::UNK2,
             needed: Vec::new(),
             modules: Vec::new(),
             libraries: Vec::new(),
@@ -99,16 +101,8 @@ impl<'a> Module<'a> {
         self.id
     }
 
-    pub fn init(&self) -> Option<usize> {
-        self.init
-    }
-
     pub fn entry(&self) -> Option<usize> {
         self.entry
-    }
-
-    pub fn fini(&self) -> Option<usize> {
-        self.fini
     }
 
     pub fn tls_index(&self) -> u32 {
@@ -127,10 +121,6 @@ impl<'a> Module<'a> {
         &mut self.flags
     }
 
-    pub fn needed(&self) -> &[NeededModule] {
-        self.needed.as_ref()
-    }
-
     pub fn memory(&self) -> &Memory<'a> {
         &self.memory
     }
@@ -144,20 +134,85 @@ impl<'a> Module<'a> {
         &self.path
     }
 
-    pub fn is_self(&self) -> bool {
-        self.is_self
-    }
+    pub fn print(&self, mut entry: LogEntry) {
+        // Image info.
+        if self.is_self {
+            writeln!(entry, "Image format  : SELF").unwrap();
+        } else {
+            writeln!(entry, "Image format  : ELF").unwrap();
+        }
 
-    pub fn file_type(&self) -> FileType {
-        self.file_type
-    }
+        writeln!(entry, "Image type    : {}", self.file_type).unwrap();
 
-    pub fn program(&self, i: usize) -> Option<&Program> {
-        self.programs.get(i)
-    }
+        for (i, p) in self.programs.iter().enumerate() {
+            let offset = p.offset();
+            let end = offset + p.file_size();
 
-    pub fn programs(&self) -> &[Program] {
-        self.programs.as_ref()
+            writeln!(
+                entry,
+                "Program {:<6}: {:#018x}:{:#018x}:{}",
+                i,
+                offset,
+                end,
+                p.ty()
+            )
+            .unwrap();
+        }
+
+        for n in &self.needed {
+            writeln!(entry, "Needed        : {}", n.name).unwrap();
+        }
+
+        // Runtime info.
+        if !self.flags.is_empty() {
+            writeln!(entry, "Module flags  : {}", self.flags).unwrap();
+        }
+
+        writeln!(entry, "TLS index     : {}", self.tls_index).unwrap();
+
+        // Memory info.
+        let mem = self.memory();
+
+        writeln!(
+            entry,
+            "Memory address: {:#018x}:{:#018x}",
+            mem.addr(),
+            mem.addr() + mem.len()
+        )
+        .unwrap();
+
+        if let Some(v) = self.init {
+            writeln!(entry, "Initialization: {:#018x}", mem.addr() + v).unwrap();
+        }
+
+        if let Some(v) = self.entry {
+            writeln!(entry, "Entry address : {:#018x}", mem.addr() + v).unwrap();
+        }
+
+        if let Some(v) = self.fini {
+            writeln!(entry, "Finalization  : {:#018x}", mem.addr() + v).unwrap();
+        }
+
+        for s in mem.segments().iter() {
+            let p = match s.program() {
+                Some(v) => v,
+                None => continue,
+            };
+
+            let addr = mem.addr() + s.start();
+
+            writeln!(
+                entry,
+                "Program {} is mapped to {:#018x}:{:#018x} with {}.",
+                p,
+                addr,
+                addr + s.len(),
+                self.programs[p].flags(),
+            )
+            .unwrap();
+        }
+
+        print(entry);
     }
 
     /// See `dynlib_initialize_pltgot_each` on the PS4 for a reference.
@@ -206,6 +261,7 @@ impl<'a> Module<'a> {
                 }
                 DynamicTag::DT_INIT => self.digest_init(base, value)?,
                 DynamicTag::DT_FINI => self.digest_fini(base, value)?,
+                DynamicTag::DT_TEXTREL => self.flags |= ModuleFlags::TEXT_REL,
                 DynamicTag::DT_FLAGS => self.digest_flags(value)?,
                 DynamicTag::DT_SCE_MODULE_INFO | DynamicTag::DT_SCE_NEEDED_MODULE => {
                     self.digest_module_info(info, i, value)?;
@@ -313,6 +369,8 @@ bitflags! {
         const MAIN_PROG = 0x0001;
         const TEXT_REL = 0x0002;
         const INIT_SCANNED = 0x0010;
+        const UNK1 = 0x0100; // TODO: Rename this.
+        const UNK2 = 0x0200; // TODO: Rename this.
     }
 }
 
@@ -325,10 +383,4 @@ impl Display for ModuleFlags {
 /// An implementation of `Needed_Entry`.
 pub struct NeededModule {
     name: String,
-}
-
-impl NeededModule {
-    pub fn name(&self) -> &str {
-        self.name.as_ref()
-    }
 }

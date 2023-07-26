@@ -1,4 +1,4 @@
-use crate::fs::path::VPathBuf;
+use crate::fs::VPathBuf;
 use std::num::TryFromIntError;
 
 /// Input of the syscall entry point.

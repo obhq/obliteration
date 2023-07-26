@@ -3,7 +3,7 @@ pub use output::*;
 
 use self::error::Error;
 use crate::errno::{EINVAL, ENOMEM, EPERM};
-use crate::fs::path::VPathBuf;
+use crate::fs::VPathBuf;
 use crate::process::VProc;
 use crate::rtld::RuntimeLinker;
 use crate::signal::SignalSet;
