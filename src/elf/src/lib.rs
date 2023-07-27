@@ -321,6 +321,10 @@ impl<I: Read + Seek> Elf<I> {
         self.entry_addr
     }
 
+    pub fn program(&self, i: usize) -> Option<&Program> {
+        self.programs.get(i)
+    }
+
     pub fn programs(&self) -> &[Program] {
         self.programs.as_slice()
     }

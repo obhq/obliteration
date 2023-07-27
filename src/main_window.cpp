@@ -494,17 +494,20 @@ bool MainWindow::loadGame(const QString &gameId)
 
 void MainWindow::killKernel()
 {
-    // Make sure Kernel is a process before attempting to kill. (Prevents 0xc0000005 exception)
-    if(m_kernel != nullptr) {
-        // We need to disconnect all slots first otherwise the application will freeze.
-        disconnect(m_kernel, nullptr, nullptr, nullptr);
-
-        m_kernel->kill();
-        m_kernel->waitForFinished(-1);
-
-        delete m_kernel;
-        m_kernel = nullptr;
+    // Do nothing if the kernel already terminated. This prevent a crash if this method is putting
+    // behind the message box and the kernel itself was terminated while waiting for the user to confirm.
+    if (!m_kernel) {
+        return;
     }
+
+    // We need to disconnect all slots first otherwise the application will be freeze.
+    disconnect(m_kernel, nullptr, nullptr, nullptr);
+
+    m_kernel->kill();
+    m_kernel->waitForFinished(-1);
+
+    delete m_kernel;
+    m_kernel = nullptr;
 }
 
 void MainWindow::restoreGeometry()

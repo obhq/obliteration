@@ -19,6 +19,7 @@ pub struct Module<'a> {
     entry: Option<usize>,
     fini: Option<usize>,
     tls_index: u32,
+    tls_init: Option<usize>,
     proc_param: Option<(usize, usize)>,
     flags: ModuleFlags,
     needed: Vec<NeededModule>,
@@ -61,9 +62,15 @@ impl<'a> Module<'a> {
 
         // Extract image info.
         let entry = image.entry_addr().map(|v| base + v);
+
+        // TODO: Check if PT_TLS with zero value is valid or not. If not, set this to None instead.
+        let tls_init = image
+            .tls()
+            .map(|i| image.program(i).unwrap())
+            .map(|p| base + p.addr());
         let proc_param = image
             .proc_param()
-            .map(|i| &image.programs()[i])
+            .map(|i| image.program(i).unwrap())
             .map(|p| (base + p.addr(), p.file_size().try_into().unwrap()));
         let is_self = image.self_segments().is_some();
         let file_type = image.ty();
@@ -76,6 +83,7 @@ impl<'a> Module<'a> {
             entry,
             fini: None,
             tls_index,
+            tls_init,
             proc_param,
             flags: ModuleFlags::UNK2,
             needed: Vec::new(),
@@ -107,6 +115,10 @@ impl<'a> Module<'a> {
 
     pub fn tls_index(&self) -> u32 {
         self.tls_index
+    }
+
+    pub fn tls_init(&self) -> Option<usize> {
+        self.tls_init
     }
 
     pub fn proc_param(&self) -> Option<&(usize, usize)> {
@@ -145,15 +157,14 @@ impl<'a> Module<'a> {
         writeln!(entry, "Image type    : {}", self.file_type).unwrap();
 
         for (i, p) in self.programs.iter().enumerate() {
-            let offset = p.offset();
-            let end = offset + p.file_size();
-
             writeln!(
                 entry,
-                "Program {:<6}: {:#018x}:{:#018x}:{}",
+                "Program {:<6}: {:#018x}:{:#018x} => {:#018x}:{:#018x} {}",
                 i,
-                offset,
-                end,
+                p.offset(),
+                p.offset() + p.file_size(),
+                p.addr(),
+                p.addr() + p.memory_size(),
                 p.ty()
             )
             .unwrap();
@@ -191,6 +202,22 @@ impl<'a> Module<'a> {
 
         if let Some(v) = self.fini {
             writeln!(entry, "Finalization  : {:#018x}", mem.addr() + v).unwrap();
+        }
+
+        if let Some((off, size)) = &self.proc_param {
+            let addr = mem.addr() + off;
+
+            writeln!(
+                entry,
+                "Process param : {:#018x}:{:#018x}",
+                addr,
+                addr + size
+            )
+            .unwrap();
+        }
+
+        if let Some(v) = self.tls_init {
+            writeln!(entry, "TLS init      : {:#018x}", mem.addr() + v).unwrap();
         }
 
         for s in mem.segments().iter() {
@@ -368,9 +395,14 @@ bitflags! {
     pub struct ModuleFlags: u16 {
         const MAIN_PROG = 0x0001;
         const TEXT_REL = 0x0002;
+        const JMPSLOTS_DONE = 0x0004;
+        const TLS_DONE = 0x0008;
         const INIT_SCANNED = 0x0010;
+        const ON_FINI_LIST = 0x0020;
+        const DAG_INITED = 0x0040;
         const UNK1 = 0x0100; // TODO: Rename this.
         const UNK2 = 0x0200; // TODO: Rename this.
+        const UNK3 = 0x0400; // TODO: Rename this.
     }
 }
 
