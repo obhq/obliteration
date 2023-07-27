@@ -494,14 +494,17 @@ bool MainWindow::loadGame(const QString &gameId)
 
 void MainWindow::killKernel()
 {
-    // We need to disconnect all slots first otherwise the application will be freezing.
-    disconnect(m_kernel, nullptr, nullptr, nullptr);
+    // Make sure Kernel is a process before attempting to kill. (Prevents 0xc0000005 exception)
+    if(m_kernel != nullptr) {
+        // We need to disconnect all slots first otherwise the application will freeze.
+        disconnect(m_kernel, nullptr, nullptr, nullptr);
 
-    m_kernel->kill();
-    m_kernel->waitForFinished(-1);
+        m_kernel->kill();
+        m_kernel->waitForFinished(-1);
 
-    delete m_kernel;
-    m_kernel = nullptr;
+        delete m_kernel;
+        m_kernel = nullptr;
+    }
 }
 
 void MainWindow::restoreGeometry()
