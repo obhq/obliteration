@@ -5,6 +5,7 @@ use std::num::NonZeroI32;
 
 pub const EPERM: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(1) };
 pub const ENOENT: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(2) };
+pub const ESRCH: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(3) };
 pub const E2BIG: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(7) };
 pub const ENOEXEC: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(8) };
 pub const ENOMEM: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(12) };
@@ -23,6 +24,7 @@ pub fn strerror(num: NonZeroI32) -> &'static str {
     match num {
         EPERM => "operation not permitted",
         ENOENT => "no such file or directory",
+        ESRCH => "no such process",
         E2BIG => "argument list too long",
         ENOEXEC => "exec format error",
         ENOMEM => "cannot allocate memory",

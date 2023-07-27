@@ -2,14 +2,15 @@ pub use input::*;
 pub use output::*;
 
 use self::error::Error;
-use crate::errno::{EINVAL, ENOMEM, EPERM};
+use crate::errno::{EINVAL, ENOMEM, EPERM, ESRCH};
 use crate::fs::VPathBuf;
 use crate::process::VProc;
-use crate::rtld::RuntimeLinker;
+use crate::rtld::{ModuleFlags, RuntimeLinker};
 use crate::signal::SignalSet;
 use crate::sysctl::Sysctl;
 use crate::warn;
 use kernel_macros::cpu_abi;
+use std::mem::{size_of, zeroed};
 use std::sync::RwLock;
 
 mod error;
@@ -57,6 +58,11 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
             592 => self.dynlib_get_list(i.args[0].into(), i.args[1].into(), i.args[2].into()),
             598 => self.dynlib_get_proc_param(i.args[0].into(), i.args[1].into()),
             599 => self.dynlib_process_needed_and_relocate(),
+            608 => self.dynlib_get_info_ex(
+                i.args[0].try_into().unwrap(),
+                i.args[1].try_into().unwrap(),
+                i.args[2].into(),
+            ),
             _ => todo!("syscall {} at {:#018x} on {}", i.id, i.offset, i.module),
         };
 
@@ -79,8 +85,7 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
     /// This method must be directly invoked by the PS4 application.
     #[cpu_abi]
     pub unsafe fn int44(&self, offset: usize, module: &VPathBuf) -> ! {
-        // Seems like int 44 is a fatal error.
-        panic!("Interrupt number 0x44 has been executed at {offset:#018x} on {module}.");
+        todo!("int 0x44 at at {offset:#018x} on {module}");
     }
 
     unsafe fn sysctl(
@@ -217,5 +222,67 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         ld.relocate()?;
 
         Ok(Output::ZERO)
+    }
+
+    unsafe fn dynlib_get_info_ex(
+        &self,
+        handle: u32,
+        flags: u32,
+        info: *mut DynlibInfoEx,
+    ) -> Result<Output, Error> {
+        // Check if application is dynamic linking.
+        let ld = self.ld.read().unwrap();
+        let app = ld.app();
+
+        if app.file_info().is_none() {
+            return Err(Error::Raw(EPERM));
+        }
+
+        // Check buffer size.
+        let size: usize = (*info).size.try_into().unwrap();
+
+        if size != size_of::<DynlibInfoEx>() {
+            return Err(Error::Raw(EINVAL));
+        }
+
+        // Lookup the module.
+        let md = match ld.list().iter().find(|m| m.id() == handle) {
+            Some(v) => v,
+            None => return Err(Error::Raw(ESRCH)),
+        };
+
+        // Fill the info.
+        *info = zeroed();
+
+        (*info).handle = md.id();
+        (*info).tlsinit = md.memory().addr() + md.tls_init().unwrap_or(0);
+
+        // Copy module name.
+        if flags & 2 == 0 || !md.flags().contains(ModuleFlags::UNK1) {
+            let name = md.path().file_name().unwrap();
+
+            (*info).name[..name.len()].copy_from_slice(name.as_bytes());
+            (*info).name[0xff] = 0;
+        }
+
+        // Calculate TLS index.
+        (*info).tlsindex = if flags & 1 != 0 {
+            let flags = md.flags();
+            let mut upper = if flags.contains(ModuleFlags::UNK1) {
+                1
+            } else {
+                0
+            };
+
+            if flags.contains(ModuleFlags::MAIN_PROG) {
+                upper += 2;
+            }
+
+            (upper << 16) | (md.tls_index() & 0xffff)
+        } else {
+            md.tls_index() & 0xffff
+        };
+
+        todo!("fill the remaining info on syscall 608");
     }
 }

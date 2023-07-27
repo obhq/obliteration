@@ -48,3 +48,13 @@ impl TryFrom<Arg> for u32 {
         v.0.try_into()
     }
 }
+
+/// Contains information about the loaded SELF.
+#[repr(C)]
+pub struct DynlibInfoEx {
+    pub size: u64,
+    pub name: [u8; 256],
+    pub handle: u32,
+    pub tlsindex: u32,
+    pub tlsinit: usize,
+}
