@@ -15,7 +15,7 @@ You can download binaries from the latest commits [here](https://github.com/obhq
 
 ![Game list](screenshots/game-list.png)
 
-Thanks to [Mou-Ikkai](https://github.com/Mou-Ikkai) for the awesome icon!
+Thanks to [VocalFan](https://github.com/VocalFan) for the awesome icon!
 
 ## Obliteration discussion
 
