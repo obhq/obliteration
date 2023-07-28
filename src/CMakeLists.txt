@@ -26,9 +26,14 @@ else()
     list(APPEND LLVM_OPTS -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE})
 endif()
 
+# Fix Warning for DOWNLOAD_EXTRACT_TIMESTAMP
+if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
+    cmake_policy(SET CMP0135 NEW)
+endif()
+
 ExternalProject_Add(llvm
-    URL https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.0/llvm-project-16.0.0.src.tar.xz
-    URL_HASH SHA256=9A56D906A2C81F16F06EFC493A646D497C53C2F4F28F0CB1F3C8DA7F74350254
+    URL https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.6/llvm-project-16.0.6.src.tar.xz
+    URL_HASH SHA256=CE5E71081D17CE9E86D7CBCFA28C4B04B9300F8FB7E78422B1FEB6BC52C3028E
     DOWNLOAD_NO_PROGRESS true
     CMAKE_ARGS -Wno-dev
     CMAKE_CACHE_ARGS ${LLVM_OPTS}
