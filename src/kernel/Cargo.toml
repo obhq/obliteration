@@ -15,7 +15,7 @@ elf = { path = "../elf" }
 iced-x86 = { version = "1.18", features = ["code_asm"] }
 kernel-macros = { path = "../kernel-macros" }
 libc = "0.2"
-llvm-sys = { version = "160.0.2", features = ["strict-versioning"] }
+llvm-sys = { version = "160.1.3", features = ["strict-versioning"] }
 param = { path = "../param" }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
