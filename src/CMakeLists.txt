@@ -14,8 +14,6 @@ if(WIN32)
     else()
         message(FATAL_ERROR "Target CPU is not supported")
     endif()
-
-    set(LLVM_CONFIG "--config Release")
 else()
     if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
         list(APPEND LLVM_OPTS -DLLVM_TARGETS_TO_BUILD:STRING=X86)
@@ -25,7 +23,7 @@ else()
         message(FATAL_ERROR "Target CPU is not supported")
     endif()
 
-    list(APPEND LLVM_OPTS -DCMAKE_BUILD_TYPE:STRING=Release)
+    list(APPEND LLVM_OPTS -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE})
 endif()
 
 # Fix Warning for DOWNLOAD_EXTRACT_TIMESTAMP
@@ -40,9 +38,7 @@ ExternalProject_Add(llvm
     CMAKE_ARGS -Wno-dev
     CMAKE_CACHE_ARGS ${LLVM_OPTS}
     SOURCE_SUBDIR llvm
-    BUILD_COMMAND cmake --build . ${LLVM_CONFIG} --target llvm-libraries llvm-headers llvm-config
     BUILD_ALWAYS ON
-    INSTALL_COMMAND cmake --build . ${LLVM_CONFIG} --target install-llvm-libraries install-llvm-headers install-llvm-config
     INSTALL_DIR ${CMAKE_SOURCE_DIR}/lib/llvm)
 
 # Setup Rust target.
