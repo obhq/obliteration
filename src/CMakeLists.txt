@@ -7,7 +7,6 @@ find_package(Threads REQUIRED)
 
 # Setup LLVM target.
 set(LLVM_OPTS -DCMAKE_INSTALL_PREFIX:STRING=<INSTALL_DIR> -DLLVM_ENABLE_ZSTD:BOOL=OFF -DLLVM_APPEND_VC_REV:BOOL=OFF)
-set(LLVM_CONFIG "")
 
 if(WIN32)
     if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "AMD64")
@@ -16,7 +15,7 @@ if(WIN32)
         message(FATAL_ERROR "Target CPU is not supported")
     endif()
 
-    set(LLVM_CONFIG "--config ${CMAKE_BUILD_TYPE}")
+    set(LLVM_CONFIG "--config Release")
 else()
     if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
         list(APPEND LLVM_OPTS -DLLVM_TARGETS_TO_BUILD:STRING=X86)
@@ -26,7 +25,7 @@ else()
         message(FATAL_ERROR "Target CPU is not supported")
     endif()
 
-    list(APPEND LLVM_OPTS -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE})
+    list(APPEND LLVM_OPTS -DCMAKE_BUILD_TYPE:STRING=Release)
 endif()
 
 # Fix Warning for DOWNLOAD_EXTRACT_TIMESTAMP
