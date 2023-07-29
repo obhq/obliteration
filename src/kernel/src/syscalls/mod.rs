@@ -19,18 +19,13 @@ mod output;
 
 /// Provides PS4 kernel routines for PS4 process.
 pub struct Syscalls<'a, 'b: 'a> {
-    proc: &'a RwLock<VProc>,
     sysctl: &'a Sysctl<'b>,
     ld: &'a RwLock<RuntimeLinker<'b>>,
 }
 
 impl<'a, 'b: 'a> Syscalls<'a, 'b> {
-    pub fn new(
-        proc: &'a RwLock<VProc>,
-        sysctl: &'a Sysctl<'b>,
-        ld: &'a RwLock<RuntimeLinker<'b>>,
-    ) -> Self {
-        Self { proc, sysctl, ld }
+    pub fn new(sysctl: &'a Sysctl<'b>, ld: &'a RwLock<RuntimeLinker<'b>>) -> Self {
+        Self { sysctl, ld }
     }
 
     /// # Safety
@@ -146,7 +141,10 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         };
 
         // Execute.
-        self.proc.write().unwrap().sigmask(how, set, out.as_mut())?;
+        VProc::current()
+            .write()
+            .unwrap()
+            .sigmask(how, set, out.as_mut())?;
 
         // Copy output.
         if let Some(v) = out {
@@ -255,7 +253,6 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         *info = zeroed();
 
         (*info).handle = md.id();
-        (*info).tlsinit = md.memory().addr() + md.tls_init().unwrap_or(0);
 
         // Copy module name.
         if flags & 2 == 0 || !md.flags().contains(ModuleFlags::UNK1) {
@@ -282,6 +279,17 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         } else {
             md.tls_index() & 0xffff
         };
+
+        // Set TLS initialization. Not sure if the tlsinit can be zero when the tlsinitsize is zero.
+        // Let's keep the same behavior as the PS4 for now.
+        let base = md.memory().addr();
+
+        if let Some(&(off, len)) = md.tls_init() {
+            (*info).tlsinit = base + off;
+            (*info).tlsinitsize = len.try_into().unwrap();
+        } else {
+            (*info).tlsinit = base;
+        }
 
         todo!("fill the remaining info on syscall 608");
     }

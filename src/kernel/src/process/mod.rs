@@ -1,10 +1,8 @@
 use crate::errno::{Errno, EINVAL};
 use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK};
 use crate::thread::VThread;
-use std::collections::HashMap;
 use std::num::NonZeroI32;
-use std::sync::{Arc, RwLock};
-use std::thread::ThreadId;
+use std::sync::{Arc, OnceLock, RwLock};
 use thiserror::Error;
 
 /// An implementation of `proc` structure represent the main application process.
@@ -12,29 +10,41 @@ use thiserror::Error;
 /// Each process of the Obliteration Kernel encapsulate only one PS4 process. The reason we don't
 /// encapsulate multiple PS4 processes is because there is no way to emulate `fork` with 100%
 /// compatibility from the user-mode application.
+#[derive(Debug)]
 pub struct VProc {
-    threads: HashMap<ThreadId, Arc<RwLock<VThread>>>, // p_threads
+    threads: Vec<Arc<RwLock<VThread>>>, // p_threads
 }
 
 impl VProc {
-    pub fn new() -> Self {
-        Self {
-            threads: HashMap::default(),
-        }
+    /// # Panics
+    /// If this method has been called a second time.
+    pub fn new() -> &'static RwLock<Self> {
+        let vp = RwLock::new(Self {
+            threads: Vec::new(),
+        });
+
+        VPROC.set(vp).unwrap();
+
+        unsafe { VPROC.get().unwrap_unchecked() }
     }
 
-    pub fn current_thread(&self) -> Arc<RwLock<VThread>> {
-        let id = std::thread::current().id();
-        self.threads.get(&id).unwrap().clone()
+    /// # Panics
+    /// If [`new()`] has not been called before calling this method.
+    pub fn current() -> &'static RwLock<Self> {
+        VPROC.get().unwrap()
     }
 
-    pub fn push_thread(&mut self, td: VThread) {
-        let id = td.host_id();
-        let td = Arc::new(RwLock::new(td));
+    pub fn push_thread(&mut self, vt: Arc<RwLock<VThread>>) {
+        self.threads.push(vt);
+    }
 
-        if self.threads.insert(id, td).is_some() {
-            panic!("Thread {id:?} already have a virtual thread associated.");
-        }
+    pub fn remove_thread(&mut self, id: i32) -> Option<Arc<RwLock<VThread>>> {
+        let index = self
+            .threads
+            .iter()
+            .position(|vt| vt.read().unwrap().id() == id)?;
+
+        Some(self.threads.remove(index))
     }
 
     /// See `kern_sigprocmask` in the PS4 kernel for a reference.
@@ -44,8 +54,9 @@ impl VProc {
         set: Option<SignalSet>,
         oset: Option<&mut SignalSet>,
     ) -> Result<(), SigmaskError> {
-        // Copy current mask to oset.
-        let td = self.current_thread();
+        // Copy current mask to oset. We need to do this inside the mutable VProc because we want
+        // to maintain the same behavior on the PS4, which lock the process when doing sigprocmask.
+        let td = VThread::current();
         let mut td = td.write().unwrap();
 
         if let Some(v) = oset {
@@ -105,3 +116,5 @@ impl Errno for SigmaskError {
         }
     }
 }
+
+static VPROC: OnceLock<RwLock<VProc>> = OnceLock::new();

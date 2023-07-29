@@ -19,7 +19,7 @@ pub struct Module<'a> {
     entry: Option<usize>,
     fini: Option<usize>,
     tls_index: u32,
-    tls_init: Option<usize>,
+    tls_init: Option<(usize, usize)>,
     proc_param: Option<(usize, usize)>,
     flags: ModuleFlags,
     needed: Vec<NeededModule>,
@@ -67,7 +67,7 @@ impl<'a> Module<'a> {
         let tls_init = image
             .tls()
             .map(|i| image.program(i).unwrap())
-            .map(|p| base + p.addr());
+            .map(|p| (base + p.addr(), p.file_size().try_into().unwrap()));
         let proc_param = image
             .proc_param()
             .map(|i| image.program(i).unwrap())
@@ -117,8 +117,8 @@ impl<'a> Module<'a> {
         self.tls_index
     }
 
-    pub fn tls_init(&self) -> Option<usize> {
-        self.tls_init
+    pub fn tls_init(&self) -> Option<&(usize, usize)> {
+        self.tls_init.as_ref()
     }
 
     pub fn proc_param(&self) -> Option<&(usize, usize)> {
@@ -204,20 +204,16 @@ impl<'a> Module<'a> {
             writeln!(entry, "Finalization  : {:#018x}", mem.addr() + v).unwrap();
         }
 
-        if let Some((off, size)) = &self.proc_param {
+        if let Some((off, len)) = &self.proc_param {
             let addr = mem.addr() + off;
 
-            writeln!(
-                entry,
-                "Process param : {:#018x}:{:#018x}",
-                addr,
-                addr + size
-            )
-            .unwrap();
+            writeln!(entry, "Process param : {:#018x}:{:#018x}", addr, addr + len).unwrap();
         }
 
-        if let Some(v) = self.tls_init {
-            writeln!(entry, "TLS init      : {:#018x}", mem.addr() + v).unwrap();
+        if let Some((off, len)) = &self.tls_init {
+            let addr = mem.addr() + off;
+
+            writeln!(entry, "TLS init      : {:#018x}:{:#018x}", addr, addr + len).unwrap();
         }
 
         for s in mem.segments().iter() {

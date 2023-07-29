@@ -159,9 +159,10 @@ fn main() -> ExitCode {
     // Initialize virtual process.
     info!("Initializing virtual process.");
 
-    let mut proc = VProc::new();
+    let vt = VThread::new();
+    let vp = VProc::new();
 
-    proc.push_thread(VThread::new(std::thread::current().id()));
+    vp.write().unwrap().push_thread(vt.clone());
 
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
@@ -221,9 +222,8 @@ fn main() -> ExitCode {
     // Initialize syscall routines.
     info!("Initializing system call routines.");
 
-    let proc = RwLock::new(proc);
     let ld = RwLock::new(ld);
-    let syscalls = Syscalls::new(&proc, &sysctl, &ld);
+    let syscalls = Syscalls::new(&sysctl, &ld);
 
     // Bootstrap execution engine.
     info!("Initializing execution engine.");
@@ -236,7 +236,7 @@ fn main() -> ExitCode {
         None => ExecutionEngine::Llvm,
     };
 
-    match ee {
+    let status = match ee {
         #[cfg(target_arch = "x86_64")]
         ExecutionEngine::Native => {
             let mut ee = ee::native::NativeEngine::new(&ld, &syscalls);
@@ -286,7 +286,12 @@ fn main() -> ExitCode {
 
             exec(ee)
         }
-    }
+    };
+
+    // Clean up.
+    vp.write().unwrap().remove_thread(vt.read().unwrap().id());
+
+    status
 }
 
 fn exec<E: ee::ExecutionEngine>(mut ee: E) -> ExitCode {
