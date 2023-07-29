@@ -38,7 +38,9 @@ ExternalProject_Add(llvm
     CMAKE_ARGS -Wno-dev
     CMAKE_CACHE_ARGS ${LLVM_OPTS}
     SOURCE_SUBDIR llvm
+    BUILD_COMMAND cmake --build . --target llvm-libraries llvm-headers llvm-config
     BUILD_ALWAYS ON
+    INSTALL_COMMAND cmake --build . --target install-llvm-libraries install-llvm-headers install-llvm-config
     INSTALL_DIR ${CMAKE_SOURCE_DIR}/lib/llvm)
 
 # Setup Rust target.
@@ -81,8 +83,7 @@ add_executable(obliteration WIN32
     settings.cpp
     system.cpp
     system_downloader.cpp
-    update_firmware.cpp
-    util.cpp)
+    update_firmware.cpp)
 
 if(WIN32)
     target_sources(obliteration PRIVATE resources.rc)

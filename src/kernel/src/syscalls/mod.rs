@@ -4,10 +4,10 @@ pub use output::*;
 use self::error::Error;
 use crate::errno::{EINVAL, ENOMEM, EPERM, ESRCH};
 use crate::fs::VPathBuf;
-use crate::process::VProc;
 use crate::rtld::{ModuleFlags, RuntimeLinker};
-use crate::signal::SignalSet;
+use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK};
 use crate::sysctl::Sysctl;
+use crate::thread::VThread;
 use crate::warn;
 use kernel_macros::cpu_abi;
 use std::mem::{size_of, zeroed};
@@ -133,21 +133,47 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         // Convert set to an option.
         let set = if set.is_null() { None } else { Some(*set) };
 
-        // Convert oset to an option.
-        let mut out = if oset.is_null() {
-            None
-        } else {
-            Some(SignalSet::default())
-        };
+        // Keep the current mask for copying to the oset. We need to copy to the oset only when this
+        // function succees.
+        let vt = VThread::current();
+        let mut mask = vt.sigmask_mut();
+        let prev = if oset.is_null() { None } else { Some(*mask) };
 
-        // Execute.
-        VProc::current()
-            .write()
-            .unwrap()
-            .sigmask(how, set, out.as_mut())?;
+        // Update the mask.
+        if let Some(mut set) = set {
+            match how {
+                SIG_BLOCK => {
+                    // Remove uncatchable signals.
+                    set.remove(SIGKILL);
+                    set.remove(SIGSTOP);
+
+                    // Update mask.
+                    *mask |= set;
+                }
+                SIG_UNBLOCK => {
+                    // Update mask.
+                    *mask &= !set;
+
+                    // TODO: Invoke signotify at the end.
+                }
+                SIG_SETMASK => {
+                    // Remove uncatchable signals.
+                    set.remove(SIGKILL);
+                    set.remove(SIGSTOP);
+
+                    // Replace mask.
+                    *mask = set;
+
+                    // TODO: Invoke signotify at the end.
+                }
+                _ => return Err(Error::Raw(EINVAL)),
+            }
+
+            // TODO: Check if we need to invoke reschedule_signals.
+        }
 
         // Copy output.
-        if let Some(v) = out {
+        if let Some(v) = prev {
             *oset = v;
         }
 
@@ -280,13 +306,16 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
             md.tls_index() & 0xffff
         };
 
-        // Set TLS initialization. Not sure if the tlsinit can be zero when the tlsinitsize is zero.
+        // Set TLS information. Not sure if the tlsinit can be zero when the tlsinitsize is zero.
         // Let's keep the same behavior as the PS4 for now.
         let base = md.memory().addr();
 
-        if let Some(&(off, len)) = md.tls_init() {
-            (*info).tlsinit = base + off;
-            (*info).tlsinitsize = len.try_into().unwrap();
+        if let Some(i) = md.tls_info() {
+            // tlsoffset seems to always zero.
+            (*info).tlsinit = base + i.init();
+            (*info).tlsinitsize = i.init_size().try_into().unwrap();
+            (*info).tlssize = i.size().try_into().unwrap();
+            (*info).tlsalign = i.align().try_into().unwrap();
         } else {
             (*info).tlsinit = base;
         }

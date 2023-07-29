@@ -1,6 +1,6 @@
 use crate::signal::SignalSet;
 use std::sync::atomic::{AtomicI32, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use tls::{Local, Tls};
 
 /// An implementation of `thread` structure for the main application.
@@ -8,8 +8,8 @@ use tls::{Local, Tls};
 /// See [`crate::process::VProc`] for more information.
 #[derive(Debug)]
 pub struct VThread {
-    id: i32,            // td_tid
-    sigmask: SignalSet, // td_sigmask
+    id: i32,                    // td_tid
+    sigmask: RwLock<SignalSet>, // td_sigmask
 }
 
 impl VThread {
@@ -17,17 +17,17 @@ impl VThread {
     ///
     /// # Panics
     /// If the current thread already have a [`VThread`] associated.
-    pub fn new() -> Arc<RwLock<Self>> {
+    pub fn new() -> Arc<Self> {
         // TODO: Check how the PS4 actually allocate the thread ID.
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
 
         assert!(id >= 0);
 
         // Associate the VThread to the calling thread.
-        let vt = Arc::new(RwLock::new(Self {
+        let vt = Arc::new(Self {
             id,
-            sigmask: SignalSet::default(),
-        }));
+            sigmask: RwLock::new(SignalSet::default()),
+        });
 
         if VTHREAD.set(vt.clone()).is_some() {
             panic!("The calling thread already has a virtual thread associated.");
@@ -38,7 +38,7 @@ impl VThread {
 
     /// # Panics
     /// If the current thread does not have a [`VThread`] associated.
-    pub fn current() -> Local<'static, Arc<RwLock<Self>>> {
+    pub fn current() -> Local<'static, Arc<Self>> {
         VTHREAD.get().unwrap()
     }
 
@@ -46,14 +46,14 @@ impl VThread {
         self.id
     }
 
-    pub fn sigmask(&self) -> &SignalSet {
-        &self.sigmask
+    pub fn sigmask(&self) -> RwLockReadGuard<'_, SignalSet> {
+        self.sigmask.read().unwrap()
     }
 
-    pub fn sigmask_mut(&mut self) -> &mut SignalSet {
-        &mut self.sigmask
+    pub fn sigmask_mut(&self) -> RwLockWriteGuard<'_, SignalSet> {
+        self.sigmask.write().unwrap()
     }
 }
 
-static VTHREAD: Tls<Arc<RwLock<VThread>>> = Tls::new();
+static VTHREAD: Tls<Arc<VThread>> = Tls::new();
 static NEXT_ID: AtomicI32 = AtomicI32::new(0);

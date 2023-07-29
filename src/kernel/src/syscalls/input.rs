@@ -58,4 +58,7 @@ pub struct DynlibInfoEx {
     pub tlsindex: u32,
     pub tlsinit: usize,
     pub tlsinitsize: u32,
+    pub tlssize: u32,
+    pub tlsoffset: u32,
+    pub tlsalign: u32,
 }
