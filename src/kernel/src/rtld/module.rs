@@ -18,8 +18,8 @@ pub struct Module<'a> {
     init: Option<usize>,
     entry: Option<usize>,
     fini: Option<usize>,
-    tls_index: u32,
-    tls_init: Option<(usize, usize)>,
+    tls_index: u32,              // tlsindex
+    tls_info: Option<ModuleTls>, // tlsinit + tlsinitsize + tlssize + tlsalign
     proc_param: Option<(usize, usize)>,
     flags: ModuleFlags,
     needed: Vec<NeededModule>,
@@ -64,10 +64,15 @@ impl<'a> Module<'a> {
         let entry = image.entry_addr().map(|v| base + v);
 
         // TODO: Check if PT_TLS with zero value is valid or not. If not, set this to None instead.
-        let tls_init = image
+        let tls_info = image
             .tls()
             .map(|i| image.program(i).unwrap())
-            .map(|p| (base + p.addr(), p.file_size().try_into().unwrap()));
+            .map(|p| ModuleTls {
+                init: base + p.addr(),
+                init_size: p.file_size().try_into().unwrap(),
+                size: p.memory_size(),
+                align: p.alignment(),
+            });
         let proc_param = image
             .proc_param()
             .map(|i| image.program(i).unwrap())
@@ -83,7 +88,7 @@ impl<'a> Module<'a> {
             entry,
             fini: None,
             tls_index,
-            tls_init,
+            tls_info,
             proc_param,
             flags: ModuleFlags::UNK2,
             needed: Vec::new(),
@@ -117,8 +122,8 @@ impl<'a> Module<'a> {
         self.tls_index
     }
 
-    pub fn tls_init(&self) -> Option<&(usize, usize)> {
-        self.tls_init.as_ref()
+    pub fn tls_info(&self) -> Option<&ModuleTls> {
+        self.tls_info.as_ref()
     }
 
     pub fn proc_param(&self) -> Option<&(usize, usize)> {
@@ -210,10 +215,18 @@ impl<'a> Module<'a> {
             writeln!(entry, "Process param : {:#018x}:{:#018x}", addr, addr + len).unwrap();
         }
 
-        if let Some((off, len)) = &self.tls_init {
-            let addr = mem.addr() + off;
+        if let Some(i) = &self.tls_info {
+            let init = mem.addr() + i.init;
 
-            writeln!(entry, "TLS init      : {:#018x}:{:#018x}", addr, addr + len).unwrap();
+            writeln!(
+                entry,
+                "TLS init      : {:#018x}:{:#018x}",
+                init,
+                init + i.init_size
+            )
+            .unwrap();
+
+            writeln!(entry, "TLS size      : {}", i.size).unwrap();
         }
 
         for s in mem.segments().iter() {
@@ -382,6 +395,32 @@ impl<'a> Module<'a> {
 
         self.libraries.push(info);
         Ok(())
+    }
+}
+
+/// Contains TLS information the [`Module`].
+pub struct ModuleTls {
+    init: usize,
+    init_size: usize,
+    size: usize,
+    align: usize,
+}
+
+impl ModuleTls {
+    pub fn init(&self) -> usize {
+        self.init
+    }
+
+    pub fn init_size(&self) -> usize {
+        self.init_size
+    }
+
+    pub fn size(&self) -> usize {
+        self.size
+    }
+
+    pub fn align(&self) -> usize {
+        self.align
     }
 }
 

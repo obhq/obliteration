@@ -162,7 +162,7 @@ fn main() -> ExitCode {
     let vt = VThread::new();
     let vp = VProc::new();
 
-    vp.write().unwrap().push_thread(vt.clone());
+    vp.push_thread(vt.clone());
 
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
@@ -289,7 +289,7 @@ fn main() -> ExitCode {
     };
 
     // Clean up.
-    vp.write().unwrap().remove_thread(vt.read().unwrap().id());
+    vp.remove_thread(vt.id());
 
     status
 }
