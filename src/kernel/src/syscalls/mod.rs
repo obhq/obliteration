@@ -322,8 +322,8 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
 
         // Initialization and finalization functions.
         if !md.flags().contains(ModuleFlags::UNK5) {
-            (*info).init = md.init().unwrap_or(0);
-            (*info).fini = md.fini().unwrap_or(0);
+            (*info).init = md.init().map(|v| base + v).unwrap_or(0);
+            (*info).fini = md.fini().map(|v| base + v).unwrap_or(0);
         }
 
         // Exception handling.
