@@ -84,7 +84,7 @@ impl<T> Tls<T> {
 
         let index = windows_sys::Win32::System::Threading::FlsAlloc(Some(dtor::<T>));
 
-        if index == windows_sys::Win32::System::Threading::FLS_OUT_OF_INDEXES {
+        if index != windows_sys::Win32::System::Threading::FLS_OUT_OF_INDEXES {
             Ok(index)
         } else {
             Err(Error::last_os_error())

@@ -8,7 +8,6 @@
 #include "progress_dialog.hpp"
 #include "settings.hpp"
 #include "string.hpp"
-#include "util.hpp"
 
 #include <QAction>
 #include <QApplication>
