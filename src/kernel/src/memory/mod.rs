@@ -13,6 +13,7 @@ pub mod iter;
 pub mod storage;
 
 /// Manage all paged memory that can be seen by a PS4 app.
+#[derive(Debug)]
 pub struct MemoryManager {
     page_size: usize,
     allocation_granularity: usize,
@@ -471,6 +472,7 @@ impl MemoryManager {
 unsafe impl Sync for MemoryManager {}
 
 /// Contains information for an allocation of virtual pages.
+#[derive(Debug)]
 struct Alloc {
     addr: *mut u8,
     len: usize,
@@ -486,7 +488,7 @@ impl Alloc {
 
 bitflags! {
     /// Flags to tell what access is possible for the virtual page.
-    #[derive(Clone, Copy, PartialEq)]
+    #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct Protections: u32 {
         const NONE = 0x00000000;
         const CPU_READ = 0x00000001;

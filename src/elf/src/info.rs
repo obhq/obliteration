@@ -3,6 +3,7 @@ use byteorder::{ByteOrder, LE};
 use thiserror::Error;
 
 /// An object that is initialized by `acquire_per_file_info_obj`.
+#[derive(Debug)]
 pub struct FileInfo {
     data: Vec<u8>,
     comment: Vec<u8>,

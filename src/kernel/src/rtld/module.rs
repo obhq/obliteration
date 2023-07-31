@@ -13,6 +13,7 @@ use std::io::Write;
 
 /// An implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/libexec/rtld-elf/rtld.h#L147.
+#[derive(Debug)]
 pub struct Module<'a> {
     id: u32,
     init: Option<usize>,
@@ -20,6 +21,7 @@ pub struct Module<'a> {
     fini: Option<usize>,
     tls_index: u32,              // tlsindex
     tls_info: Option<ModuleTls>, // tlsinit + tlsinitsize + tlssize + tlsalign
+    eh_info: Option<ModuleEh>,
     proc_param: Option<(usize, usize)>,
     flags: ModuleFlags,
     needed: Vec<NeededModule>,
@@ -73,6 +75,13 @@ impl<'a> Module<'a> {
                 size: p.memory_size(),
                 align: p.alignment(),
             });
+        let eh_info = image
+            .eh()
+            .map(|i| image.program(i).unwrap())
+            .map(|p| ModuleEh {
+                header: base + p.addr(),
+                header_size: p.memory_size(),
+            });
         let proc_param = image
             .proc_param()
             .map(|i| image.program(i).unwrap())
@@ -89,6 +98,7 @@ impl<'a> Module<'a> {
             fini: None,
             tls_index,
             tls_info,
+            eh_info,
             proc_param,
             flags: ModuleFlags::UNK2,
             needed: Vec::new(),
@@ -114,8 +124,16 @@ impl<'a> Module<'a> {
         self.id
     }
 
+    pub fn init(&self) -> Option<usize> {
+        self.init
+    }
+
     pub fn entry(&self) -> Option<usize> {
         self.entry
+    }
+
+    pub fn fini(&self) -> Option<usize> {
+        self.fini
     }
 
     pub fn tls_index(&self) -> u32 {
@@ -124,6 +142,10 @@ impl<'a> Module<'a> {
 
     pub fn tls_info(&self) -> Option<&ModuleTls> {
         self.tls_info.as_ref()
+    }
+
+    pub fn eh_info(&self) -> Option<&ModuleEh> {
+        self.eh_info.as_ref()
     }
 
     pub fn proc_param(&self) -> Option<&(usize, usize)> {
@@ -209,12 +231,6 @@ impl<'a> Module<'a> {
             writeln!(entry, "Finalization  : {:#018x}", mem.addr() + v).unwrap();
         }
 
-        if let Some((off, len)) = &self.proc_param {
-            let addr = mem.addr() + off;
-
-            writeln!(entry, "Process param : {:#018x}:{:#018x}", addr, addr + len).unwrap();
-        }
-
         if let Some(i) = &self.tls_info {
             let init = mem.addr() + i.init;
 
@@ -227,6 +243,24 @@ impl<'a> Module<'a> {
             .unwrap();
 
             writeln!(entry, "TLS size      : {}", i.size).unwrap();
+        }
+
+        if let Some(i) = &self.eh_info {
+            let hdr = mem.addr() + i.header;
+
+            writeln!(
+                entry,
+                "EH header     : {:#018x}:{:#018x}",
+                hdr,
+                hdr + i.header_size
+            )
+            .unwrap();
+        }
+
+        if let Some((off, len)) = &self.proc_param {
+            let addr = mem.addr() + off;
+
+            writeln!(entry, "Process param : {:#018x}:{:#018x}", addr, addr + len).unwrap();
         }
 
         for s in mem.segments().iter() {
@@ -399,6 +433,7 @@ impl<'a> Module<'a> {
 }
 
 /// Contains TLS information the [`Module`].
+#[derive(Debug)]
 pub struct ModuleTls {
     init: usize,
     init_size: usize,
@@ -424,9 +459,26 @@ impl ModuleTls {
     }
 }
 
+/// Contains exception handling information for [`Module`].
+#[derive(Debug)]
+pub struct ModuleEh {
+    header: usize,
+    header_size: usize,
+}
+
+impl ModuleEh {
+    pub fn header(&self) -> usize {
+        self.header
+    }
+
+    pub fn header_size(&self) -> usize {
+        self.header_size
+    }
+}
+
 bitflags! {
     /// Flags for [`Module`].
-    #[derive(Clone, Copy, PartialEq)]
+    #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct ModuleFlags: u16 {
         const MAIN_PROG = 0x0001;
         const TEXT_REL = 0x0002;
@@ -438,6 +490,7 @@ bitflags! {
         const UNK1 = 0x0100; // TODO: Rename this.
         const UNK2 = 0x0200; // TODO: Rename this.
         const UNK3 = 0x0400; // TODO: Rename this.
+        const UNK5 = 0x1000; // TODO: Rename this.
     }
 }
 
@@ -448,6 +501,7 @@ impl Display for ModuleFlags {
 }
 
 /// An implementation of `Needed_Entry`.
+#[derive(Debug)]
 pub struct NeededModule {
     name: String,
 }

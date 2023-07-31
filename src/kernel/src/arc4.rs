@@ -1,23 +1,36 @@
 use std::ops::DerefMut;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 
 /// Random number generator based on
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/libkern/arc4random.c.
+#[derive(Debug)]
 pub struct Arc4 {
     state: Mutex<State>,
 }
 
 impl Arc4 {
-    pub fn new() -> Self {
+    /// # Panics
+    /// If this method called a second time.
+    pub fn new() -> &'static Self {
         let mut sbox = [0u8; 256];
 
-        for i in 0..256 {
-            sbox[i] = i as u8;
+        for (i, e) in sbox.iter_mut().enumerate() {
+            *e = i as u8;
         }
 
-        Self {
+        ARC4.set(Self {
             state: Mutex::new(State { i: 0, j: 0, sbox }),
-        }
+        })
+        .unwrap();
+
+        // SAFETY: This is safe because we just set its value on the above.
+        unsafe { ARC4.get().unwrap_unchecked() }
+    }
+
+    /// # Panics
+    /// If [`new()`] has not been invoked yet.
+    pub fn current() -> &'static Self {
+        ARC4.get().unwrap()
     }
 
     pub fn rand_bytes(&self, buf: &mut [u8]) {
@@ -38,8 +51,11 @@ impl Arc4 {
 }
 
 /// State of [`Arc4`].
+#[derive(Debug)]
 struct State {
     i: u8,
     j: u8,
     sbox: [u8; 256],
 }
+
+static ARC4: OnceLock<Arc4> = OnceLock::new();
