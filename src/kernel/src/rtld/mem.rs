@@ -2,6 +2,7 @@ use super::MapError;
 use crate::memory::{MappingFlags, MemoryManager, MprotectError, Protections};
 use elf::{Elf, ProgramFlags, ProgramType};
 use std::alloc::Layout;
+use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::sync::{Mutex, MutexGuard};
 
@@ -320,10 +321,28 @@ impl<'a> AsMut<[u8]> for Memory<'a> {
     }
 }
 
+impl<'a> Debug for Memory<'a> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Memory")
+            .field("mm", &self.mm)
+            .field("ptr", &self.ptr)
+            .field("len", &self.len)
+            .field("base", &self.base)
+            .field("segments", &self.segments)
+            .field("code_index", &self.code_index)
+            .field("code_sealed", &self.code_sealed)
+            .field("data_index", &self.data_index)
+            .field("data_sealed", &self.data_sealed)
+            .field("destructors", &self.destructors.lock().unwrap().len())
+            .finish()
+    }
+}
+
 unsafe impl<'a> Send for Memory<'a> {}
 unsafe impl<'a> Sync for Memory<'a> {}
 
 /// A segment in the [`Memory`].
+#[derive(Debug)]
 pub struct MemorySegment {
     start: usize,
     len: usize,

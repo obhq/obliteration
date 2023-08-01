@@ -12,6 +12,7 @@ use thiserror::Error;
 mod path;
 
 /// A virtual filesystem for emulating a PS4 filesystem.
+#[derive(Debug)]
 pub struct Fs {
     mounts: RwLock<HashMap<VPathBuf, MountSource>>,
     app: VPathBuf,
@@ -176,6 +177,7 @@ impl Fs {
 }
 
 /// Source of mount point.
+#[derive(Debug)]
 pub enum MountSource {
     Host(PathBuf),
     Bind(VPathBuf),

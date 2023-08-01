@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 
 /// Type of (S)ELF file.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FileType(u16);
 
 impl FileType {

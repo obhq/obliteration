@@ -1,6 +1,7 @@
 use bitflags::bitflags;
 
 /// Contains information about the library.
+#[derive(Debug)]
 pub struct LibraryInfo {
     id: u16,
     name: String,
@@ -31,7 +32,7 @@ impl LibraryInfo {
 
 bitflags! {
     /// Flags of [`LibraryInfo`].
-    #[derive(Clone, Copy)]
+    #[derive(Debug, Clone, Copy)]
     pub struct LibraryFlags: u64 {
         const EXPORT = 0x010000;
     }

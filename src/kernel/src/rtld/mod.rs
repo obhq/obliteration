@@ -14,6 +14,7 @@ mod module;
 
 /// An implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/libexec/rtld-elf/rtld.c.
+#[derive(Debug)]
 pub struct RuntimeLinker<'a> {
     fs: &'a Fs,
     mm: &'a MemoryManager,

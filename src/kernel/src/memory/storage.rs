@@ -1,15 +1,17 @@
 use super::Protections;
+use std::fmt::Debug;
 
 /// Represents a storage for [`super::Alloc`].
 ///
 /// Multiple [`super::Alloc`] can share a single storage.
-pub(super) trait Storage {
+pub(super) trait Storage: Debug {
     fn addr(&self) -> *mut u8;
     fn decommit(&self, addr: *mut u8, len: usize) -> Result<(), std::io::Error>;
     fn protect(&self, addr: *mut u8, len: usize, prot: Protections) -> Result<(), std::io::Error>;
 }
 
 /// An implementation of [`Storage`] backed by the memory.
+#[derive(Debug)]
 pub(super) struct Memory {
     addr: *mut u8,
     len: usize,

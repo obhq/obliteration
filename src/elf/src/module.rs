@@ -1,4 +1,5 @@
 /// Contains information about the module.
+#[derive(Debug)]
 pub struct ModuleInfo {
     id: u16,
     name: String,

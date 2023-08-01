@@ -19,12 +19,12 @@ mod output;
 
 /// Provides PS4 kernel routines for PS4 process.
 pub struct Syscalls<'a, 'b: 'a> {
-    sysctl: &'a Sysctl<'b>,
+    sysctl: &'a Sysctl,
     ld: &'a RwLock<RuntimeLinker<'b>>,
 }
 
 impl<'a, 'b: 'a> Syscalls<'a, 'b> {
-    pub fn new(sysctl: &'a Sysctl<'b>, ld: &'a RwLock<RuntimeLinker<'b>>) -> Self {
+    pub fn new(sysctl: &'a Sysctl, ld: &'a RwLock<RuntimeLinker<'b>>) -> Self {
         Self { sysctl, ld }
     }
 
@@ -318,6 +318,19 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
             (*info).tlsalign = i.align().try_into().unwrap();
         } else {
             (*info).tlsinit = base;
+        }
+
+        // Initialization and finalization functions.
+        if !md.flags().contains(ModuleFlags::UNK5) {
+            (*info).init = md.init().map(|v| base + v).unwrap_or(0);
+            (*info).fini = md.fini().map(|v| base + v).unwrap_or(0);
+        }
+
+        // Exception handling.
+        if let Some(i) = md.eh_info() {
+            (*info).eh_frame_hdr = base + i.header();
+        } else {
+            (*info).eh_frame_hdr = base;
         }
 
         todo!("fill the remaining info on syscall 608");

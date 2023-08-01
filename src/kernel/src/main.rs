@@ -124,10 +124,14 @@ fn main() -> ExitCode {
 
     print(log);
 
+    // Initialize Arc4.
+    info!("Initializing arc4random.");
+
+    Arc4::new();
+
     // Initialize foundations.
-    let arc4 = Arc4::new();
     let llvm = Llvm::new();
-    let sysctl = Sysctl::new(&arc4);
+    let sysctl = Sysctl::new();
 
     // Initialize filesystem.
     info!("Initializing file system.");
