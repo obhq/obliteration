@@ -1,7 +1,6 @@
 use super::{MapError, Memory};
 use crate::fs::{VPath, VPathBuf};
 use crate::log::{print, LogEntry};
-use crate::memory::MemoryManager;
 use bitflags::bitflags;
 use elf::{
     DynamicFlags, DynamicTag, Elf, FileInfo, FileType, LibraryFlags, LibraryInfo, ModuleInfo,
@@ -14,7 +13,7 @@ use std::io::Write;
 /// An implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/libexec/rtld-elf/rtld.h#L147.
 #[derive(Debug)]
-pub struct Module<'a> {
+pub struct Module {
     id: u32,
     init: Option<usize>,
     entry: Option<usize>,
@@ -27,7 +26,7 @@ pub struct Module<'a> {
     needed: Vec<NeededModule>,
     modules: Vec<ModuleInfo>,
     libraries: Vec<LibraryInfo>,
-    memory: Memory<'a>,
+    memory: Memory,
     file_info: Option<FileInfo>,
     path: VPathBuf,
     is_self: bool,
@@ -35,31 +34,38 @@ pub struct Module<'a> {
     programs: Vec<Program>,
 }
 
-impl<'a> Module<'a> {
+impl Module {
     pub(super) fn map(
-        mm: &'a MemoryManager,
         mut image: Elf<File>,
         base: usize,
         id: u32,
         tls_index: u32,
     ) -> Result<Self, MapError> {
         // Map the image to the memory.
-        let mut memory = Memory::new(mm, &image, base)?;
+        let memory = Memory::new(&image, base)?;
 
-        memory.load(|prog, buf| {
-            image
-                .read_program(prog, buf)
-                .map_err(|e| MapError::ReadProgramFailed(prog, e))
-        })?;
+        for (i, s) in memory.segments().iter().enumerate() {
+            // Get target program.
+            let p = match s.program() {
+                Some(v) => v,
+                None => continue,
+            };
+
+            // Unprotect the segment.
+            let mut s = match unsafe { memory.unprotect_segment(i) } {
+                Ok(v) => v,
+                Err(e) => return Err(MapError::UnprotectSegmentFailed(i, e)),
+            };
+
+            // Read ELF program.
+            if let Err(e) = image.read_program(p, s.as_mut()) {
+                return Err(MapError::ReadProgramFailed(p, e));
+            }
+        }
 
         // Initialize PLT relocation.
         if let Some(i) = image.info() {
-            Self::init_plt(&mut memory, base, i);
-        }
-
-        // Apply memory protection.
-        if let Err(e) = memory.protect() {
-            return Err(MapError::ProtectMemoryFailed(e));
+            unsafe { Self::init_plt(&memory, base, i)? };
         }
 
         // Extract image info.
@@ -160,7 +166,7 @@ impl<'a> Module<'a> {
         &mut self.flags
     }
 
-    pub fn memory(&self) -> &Memory<'a> {
+    pub fn memory(&self) -> &Memory {
         &self.memory
     }
 
@@ -286,7 +292,17 @@ impl<'a> Module<'a> {
     }
 
     /// See `dynlib_initialize_pltgot_each` on the PS4 for a reference.
-    fn init_plt(mem: &mut Memory, base: usize, info: &FileInfo) {
+    ///
+    /// # Safety
+    /// No other threads may access the memory.
+    unsafe fn init_plt(mem: &Memory, base: usize, info: &FileInfo) -> Result<(), MapError> {
+        // Unprotect the memory.
+        let mut mem = match mem.unprotect() {
+            Ok(v) => v,
+            Err(e) => return Err(MapError::UnprotectMemoryFailed(e)),
+        };
+
+        // Initialize all PLT entries.
         let mem = mem.as_mut();
 
         for (i, reloc) in info.plt_relocs().enumerate() {
@@ -297,9 +313,12 @@ impl<'a> Module<'a> {
             // SAFETY: This is safe because dst is forced to be valid by the above statement.
             let i: u64 = i.try_into().unwrap();
 
-            // Not sure why Sony initialize each PLT relocation to 0xeffffffe????????.
-            unsafe { std::ptr::write_unaligned(dst.as_mut_ptr() as _, i | 0xeffffffe00000000) };
+            // Not sure why Sony initialize each PLT relocation to 0xeffffffe????????. My guess is
+            // that they use this value to catch unpatched PLT entry.
+            std::ptr::write_unaligned(dst.as_mut_ptr() as _, i | 0xeffffffe00000000);
         }
+
+        Ok(())
     }
 
     /// See `digest_dynamic` on the PS4 for a reference.

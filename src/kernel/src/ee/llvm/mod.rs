@@ -32,7 +32,7 @@ impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
         Ok(())
     }
 
-    fn lift(&self, module: &Module<'b>) -> Result<crate::llvm::module::ExecutionEngine, LiftError> {
+    fn lift(&self, module: &Module) -> Result<crate::llvm::module::ExecutionEngine<'b>, LiftError> {
         // Get a list of public functions.
         let path = module.path();
         let targets = match module.entry() {
@@ -41,7 +41,7 @@ impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
         };
 
         // Disassemble the module.
-        let mut disasm = Disassembler::new(module.memory());
+        let mut disasm = Disassembler::new(unsafe { module.memory().unprotect().unwrap() });
 
         for &addr in &targets {
             if let Err(e) = disasm.disassemble(addr) {
@@ -53,13 +53,15 @@ impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
 
         // Lift the public functions.
         let mut lifting = self.llvm.create_module(path);
-        let mut codegen = Codegen::new(&disasm, &mut lifting);
+        let mut codegen = Codegen::new(disasm, &mut lifting);
 
         for &addr in &targets {
             if let Err(e) = codegen.lift(addr) {
                 return Err(LiftError::LiftingFailed(path.to_owned(), addr, e));
             }
         }
+
+        drop(codegen);
 
         // Create LLVM execution engine.
         let lifted = match lifting.create_execution_engine() {

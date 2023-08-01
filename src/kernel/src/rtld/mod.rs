@@ -3,7 +3,7 @@ pub use module::*;
 
 use crate::errno::{Errno, ENOEXEC};
 use crate::fs::{Fs, VPath, VPathBuf};
-use crate::memory::{MemoryManager, MmapError, MprotectError};
+use crate::memory::{MmapError, MprotectError, Protections};
 use elf::{DynamicFlags, Elf, FileInfo, FileType, ReadProgramError, Relocation};
 use std::fs::File;
 use std::num::NonZeroI32;
@@ -17,15 +17,14 @@ mod module;
 #[derive(Debug)]
 pub struct RuntimeLinker<'a> {
     fs: &'a Fs,
-    mm: &'a MemoryManager,
-    list: Vec<Module<'a>>, // obj_list + obj_tail
-    kernel: Option<u32>,   // obj_kernel
-    next_id: u32,          // idtable on proc
-    tls_max: u32,          // tls_max_index
+    list: Vec<Module>,   // obj_list + obj_tail
+    kernel: Option<u32>, // obj_kernel
+    next_id: u32,        // idtable on proc
+    tls_max: u32,        // tls_max_index
 }
 
 impl<'a> RuntimeLinker<'a> {
-    pub fn new(fs: &'a Fs, mm: &'a MemoryManager) -> Result<Self, RuntimeLinkerError> {
+    pub fn new(fs: &'a Fs) -> Result<Self, RuntimeLinkerError> {
         // Get path to eboot.bin.
         let mut path = fs.app().join("app0").unwrap();
 
@@ -66,7 +65,7 @@ impl<'a> RuntimeLinker<'a> {
 
         // TODO: Apply remaining checks from exec_self_imgact.
         // Map eboot.bin.
-        let mut app = match Module::map(mm, elf, base, 0, 1) {
+        let mut app = match Module::map(elf, base, 0, 1) {
             Ok(v) => v,
             Err(e) => return Err(RuntimeLinkerError::MapExeFailed(file.into_vpath(), e)),
         };
@@ -75,7 +74,6 @@ impl<'a> RuntimeLinker<'a> {
 
         Ok(Self {
             fs,
-            mm,
             list: Vec::from([app]),
             kernel: None,
             next_id: 1,
@@ -83,22 +81,22 @@ impl<'a> RuntimeLinker<'a> {
         })
     }
 
-    pub fn app(&self) -> &Module<'a> {
+    pub fn app(&self) -> &Module {
         self.list.first().unwrap()
     }
 
-    pub fn kernel(&self) -> Option<&Module<'a>> {
+    pub fn kernel(&self) -> Option<&Module> {
         self.kernel
             .and_then(|id| self.list.iter().find(|&m| m.id() == id))
     }
 
-    pub fn list(&self) -> &[Module<'a>] {
+    pub fn list(&self) -> &[Module] {
         self.list.as_ref()
     }
 
     /// This method **ALWAYS** load the specified module without checking if the same module is
     /// already loaded.
-    pub fn load(&mut self, path: &VPath) -> Result<&mut Module<'a>, LoadError> {
+    pub fn load(&mut self, path: &VPath) -> Result<&mut Module, LoadError> {
         // Get file.
         let file = match self.fs.get_file(path) {
             Some(v) => v,
@@ -146,7 +144,7 @@ impl<'a> RuntimeLinker<'a> {
         };
 
         // Map file.
-        let mut module = match Module::map(self.mm, elf, 0, self.next_id, tls) {
+        let mut module = match Module::map(elf, 0, self.next_id, tls) {
             Ok(v) => v,
             Err(e) => return Err(LoadError::MapFailed(e)),
         };
@@ -186,7 +184,7 @@ impl<'a> RuntimeLinker<'a> {
     }
 
     /// See `relocate_one_object` on the PS4 kernel for a reference.
-    unsafe fn relocate_single(&self, module: &Module<'a>) -> Result<(), RelocateError> {
+    unsafe fn relocate_single(&self, module: &Module) -> Result<(), RelocateError> {
         let path = module.path();
         let info = module.file_info().unwrap(); // Let it panic because the PS4 assume it is available.
 
@@ -270,11 +268,17 @@ pub enum MapError {
     #[error("cannot allocate {0} bytes")]
     MemoryAllocationFailed(usize, #[source] MmapError),
 
+    #[error("cannot protect {1:#018x} bytes starting at {0:p} with {2}")]
+    ProtectMemoryFailed(*const u8, usize, Protections, #[source] MprotectError),
+
+    #[error("cannot unprotect segment {0}")]
+    UnprotectSegmentFailed(usize, #[source] UnprotectSegmentError),
+
     #[error("cannot read program #{0}")]
     ReadProgramFailed(usize, #[source] ReadProgramError),
 
-    #[error("cannot protect the memory")]
-    ProtectMemoryFailed(#[source] MprotectError),
+    #[error("cannot unprotect the memory")]
+    UnprotectMemoryFailed(#[source] UnprotectError),
 
     #[error("cannot read DT_NEEDED from dynamic entry {0}")]
     ReadNeededFailed(usize, #[source] elf::StringTableError),
@@ -315,7 +319,7 @@ pub enum LoadError {
 #[derive(Debug, Error)]
 pub enum RelocateError {
     #[error("cannot unprotect the memory of {0}")]
-    UnprotectFailed(VPathBuf, #[source] MprotectError),
+    UnprotectFailed(VPathBuf, #[source] UnprotectError),
 
     #[error("relocation type {1} on {0} is not supported")]
     UnsupportedRela(VPathBuf, u32),
@@ -324,7 +328,9 @@ pub enum RelocateError {
 impl Errno for RelocateError {
     fn errno(&self) -> NonZeroI32 {
         match self {
-            Self::UnprotectFailed(_, e) => e.errno(),
+            Self::UnprotectFailed(_, e) => match e {
+                UnprotectError::MprotectFailed(_, _, _, e) => e.errno(),
+            },
             Self::UnsupportedRela(_, _) => ENOEXEC,
         }
     }
