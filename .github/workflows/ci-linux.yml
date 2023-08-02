@@ -25,6 +25,7 @@ jobs:
       uses: jurplel/install-qt-action@v3
       with:
         version: 6.*
+        aqtversion: '==3.1.*'
         cache: true
         cache-key-prefix: ${{ steps.cache-keys.outputs.qt }}
     - name: Restore build files
