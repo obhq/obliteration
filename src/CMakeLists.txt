@@ -26,9 +26,14 @@ else()
     list(APPEND LLVM_OPTS -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE})
 endif()
 
+# Fix Warning for DOWNLOAD_EXTRACT_TIMESTAMP
+if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
+    cmake_policy(SET CMP0135 NEW)
+endif()
+
 ExternalProject_Add(llvm
-    URL https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.0/llvm-project-16.0.0.src.tar.xz
-    URL_HASH SHA256=9A56D906A2C81F16F06EFC493A646D497C53C2F4F28F0CB1F3C8DA7F74350254
+    URL https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.6/llvm-project-16.0.6.src.tar.xz
+    URL_HASH SHA256=CE5E71081D17CE9E86D7CBCFA28C4B04B9300F8FB7E78422B1FEB6BC52C3028E
     DOWNLOAD_NO_PROGRESS true
     CMAKE_ARGS -Wno-dev
     CMAKE_CACHE_ARGS ${LLVM_OPTS}
@@ -60,7 +65,7 @@ ExternalProject_Add(core
 add_dependencies(core llvm)
 
 # Setup application target.
-add_executable(obliteration WIN32
+add_executable(obliteration WIN32 MACOSX_BUNDLE
     ansi_escape.cpp
     app_data.cpp
     game_models.cpp
@@ -76,8 +81,7 @@ add_executable(obliteration WIN32
     settings.cpp
     system.cpp
     system_downloader.cpp
-    update_firmware.cpp
-    util.cpp)
+    update_firmware.cpp)
 
 if(WIN32)
     target_sources(obliteration PRIVATE resources.rc)
@@ -87,8 +91,16 @@ add_dependencies(obliteration core)
 
 set_target_properties(obliteration PROPERTIES AUTOMOC ON AUTORCC ON)
 
-if(WIN32)
+if(WIN32 OR APPLE)
     set_target_properties(obliteration PROPERTIES OUTPUT_NAME Obliteration)
+endif()
+
+if(APPLE)
+    set_target_properties(obliteration PROPERTIES MACOSX_BUNDLE_GUI_IDENTIFIER io.github.obhq.obliteration)
+    set_target_properties(obliteration PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME Obliteration)
+    set_target_properties(obliteration PROPERTIES MACOSX_BUNDLE_BUNDLE_VERSION 0.1.0)
+    set_target_properties(obliteration PROPERTIES MACOSX_BUNDLE_SHORT_VERSION_STRING 0.1.0)
+    set_target_properties(obliteration PROPERTIES MACOSX_BUNDLE_COPYRIGHT "Copyright © 2023 Obliteration Contributors")
 endif()
 
 target_compile_features(obliteration PRIVATE cxx_std_17)

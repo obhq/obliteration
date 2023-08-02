@@ -78,13 +78,6 @@ impl From<u16> for FileMode {
     }
 }
 
-/// Contains some information for SPRX file.
-#[derive(Serialize, Deserialize)]
-pub struct ModuleInfo {
-    pub name: String,
-    pub path: String,
-}
-
 /// Errors for [`create_for()`][Metadata::create_for()].
 #[derive(Debug, Error)]
 pub enum CreateForError {

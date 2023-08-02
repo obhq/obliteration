@@ -8,7 +8,6 @@
 #include "progress_dialog.hpp"
 #include "settings.hpp"
 #include "string.hpp"
-#include "util.hpp"
 
 #include <QAction>
 #include <QApplication>
@@ -494,7 +493,13 @@ bool MainWindow::loadGame(const QString &gameId)
 
 void MainWindow::killKernel()
 {
-    // We need to disconnect all slots first otherwise the application will be freezing.
+    // Do nothing if the kernel already terminated. This prevent a crash if this method is putting
+    // behind the message box and the kernel itself was terminated while waiting for the user to confirm.
+    if (!m_kernel) {
+        return;
+    }
+
+    // We need to disconnect all slots first otherwise the application will be freeze.
     disconnect(m_kernel, nullptr, nullptr, nullptr);
 
     m_kernel->kill();

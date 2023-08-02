@@ -2,14 +2,15 @@ pub use input::*;
 pub use output::*;
 
 use self::error::Error;
-use crate::errno::{EINVAL, ENOMEM, EPERM};
-use crate::fs::path::VPathBuf;
-use crate::process::VProc;
-use crate::rtld::RuntimeLinker;
-use crate::signal::SignalSet;
+use crate::errno::{EINVAL, ENOMEM, EPERM, ESRCH};
+use crate::fs::VPathBuf;
+use crate::rtld::{ModuleFlags, RuntimeLinker};
+use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK};
 use crate::sysctl::Sysctl;
+use crate::thread::VThread;
 use crate::warn;
 use kernel_macros::cpu_abi;
+use std::mem::{size_of, zeroed};
 use std::sync::RwLock;
 
 mod error;
@@ -18,18 +19,13 @@ mod output;
 
 /// Provides PS4 kernel routines for PS4 process.
 pub struct Syscalls<'a, 'b: 'a> {
-    proc: &'a RwLock<VProc>,
-    sysctl: &'a Sysctl<'b>,
+    sysctl: &'a Sysctl,
     ld: &'a RwLock<RuntimeLinker<'b>>,
 }
 
 impl<'a, 'b: 'a> Syscalls<'a, 'b> {
-    pub fn new(
-        proc: &'a RwLock<VProc>,
-        sysctl: &'a Sysctl<'b>,
-        ld: &'a RwLock<RuntimeLinker<'b>>,
-    ) -> Self {
-        Self { proc, sysctl, ld }
+    pub fn new(sysctl: &'a Sysctl, ld: &'a RwLock<RuntimeLinker<'b>>) -> Self {
+        Self { sysctl, ld }
     }
 
     /// # Safety
@@ -55,8 +51,13 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
                 i.args[2].into(),
             ),
             592 => self.dynlib_get_list(i.args[0].into(), i.args[1].into(), i.args[2].into()),
-            598 => self.get_proc_param(i.args[0].into(), i.args[1].into()),
-            599 => self.relocate_process(),
+            598 => self.dynlib_get_proc_param(i.args[0].into(), i.args[1].into()),
+            599 => self.dynlib_process_needed_and_relocate(),
+            608 => self.dynlib_get_info_ex(
+                i.args[0].try_into().unwrap(),
+                i.args[1].try_into().unwrap(),
+                i.args[2].into(),
+            ),
             _ => todo!("syscall {} at {:#018x} on {}", i.id, i.offset, i.module),
         };
 
@@ -79,8 +80,7 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
     /// This method must be directly invoked by the PS4 application.
     #[cpu_abi]
     pub unsafe fn int44(&self, offset: usize, module: &VPathBuf) -> ! {
-        // Seems like int 44 is a fatal error.
-        panic!("Interrupt number 0x44 has been executed at {offset:#018x} on {module}.");
+        todo!("int 0x44 at at {offset:#018x} on {module}");
     }
 
     unsafe fn sysctl(
@@ -133,18 +133,47 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         // Convert set to an option.
         let set = if set.is_null() { None } else { Some(*set) };
 
-        // Convert oset to an option.
-        let mut out = if oset.is_null() {
-            None
-        } else {
-            Some(SignalSet::default())
-        };
+        // Keep the current mask for copying to the oset. We need to copy to the oset only when this
+        // function succees.
+        let vt = VThread::current();
+        let mut mask = vt.sigmask_mut();
+        let prev = if oset.is_null() { None } else { Some(*mask) };
 
-        // Execute.
-        self.proc.write().unwrap().sigmask(how, set, out.as_mut())?;
+        // Update the mask.
+        if let Some(mut set) = set {
+            match how {
+                SIG_BLOCK => {
+                    // Remove uncatchable signals.
+                    set.remove(SIGKILL);
+                    set.remove(SIGSTOP);
+
+                    // Update mask.
+                    *mask |= set;
+                }
+                SIG_UNBLOCK => {
+                    // Update mask.
+                    *mask &= !set;
+
+                    // TODO: Invoke signotify at the end.
+                }
+                SIG_SETMASK => {
+                    // Remove uncatchable signals.
+                    set.remove(SIGKILL);
+                    set.remove(SIGSTOP);
+
+                    // Replace mask.
+                    *mask = set;
+
+                    // TODO: Invoke signotify at the end.
+                }
+                _ => return Err(Error::Raw(EINVAL)),
+            }
+
+            // TODO: Check if we need to invoke reschedule_signals.
+        }
 
         // Copy output.
-        if let Some(v) = out {
+        if let Some(v) = prev {
             *oset = v;
         }
 
@@ -159,9 +188,9 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
     ) -> Result<Output, Error> {
         // Check if application is dynamic linking.
         let ld = self.ld.read().unwrap();
-        let app = ld.app().image();
+        let app = ld.app();
 
-        if app.info().is_none() {
+        if app.file_info().is_none() {
             return Err(Error::Raw(EPERM));
         } else if ld.list().len() > max {
             return Err(Error::Raw(ENOMEM));
@@ -178,12 +207,16 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         Ok(Output::ZERO)
     }
 
-    unsafe fn get_proc_param(&self, param: *mut usize, size: *mut usize) -> Result<Output, Error> {
+    unsafe fn dynlib_get_proc_param(
+        &self,
+        param: *mut usize,
+        size: *mut usize,
+    ) -> Result<Output, Error> {
         // Check if application is a dynamic SELF.
         let ld = self.ld.read().unwrap();
         let app = ld.app();
 
-        if app.image().dynamic().is_none() {
+        if app.file_info().is_none() {
             return Err(Error::Raw(EPERM));
         }
 
@@ -200,12 +233,12 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         Ok(Output::ZERO)
     }
 
-    unsafe fn relocate_process(&self) -> Result<Output, Error> {
+    unsafe fn dynlib_process_needed_and_relocate(&self) -> Result<Output, Error> {
         // Check if application is dynamic linking.
         let ld = self.ld.read().unwrap();
-        let app = ld.app().image();
+        let app = ld.app();
 
-        if app.info().is_none() {
+        if app.file_info().is_none() {
             return Err(Error::Raw(EINVAL));
         }
 
@@ -213,5 +246,93 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         ld.relocate()?;
 
         Ok(Output::ZERO)
+    }
+
+    unsafe fn dynlib_get_info_ex(
+        &self,
+        handle: u32,
+        flags: u32,
+        info: *mut DynlibInfoEx,
+    ) -> Result<Output, Error> {
+        // Check if application is dynamic linking.
+        let ld = self.ld.read().unwrap();
+        let app = ld.app();
+
+        if app.file_info().is_none() {
+            return Err(Error::Raw(EPERM));
+        }
+
+        // Check buffer size.
+        let size: usize = (*info).size.try_into().unwrap();
+
+        if size != size_of::<DynlibInfoEx>() {
+            return Err(Error::Raw(EINVAL));
+        }
+
+        // Lookup the module.
+        let md = match ld.list().iter().find(|m| m.id() == handle) {
+            Some(v) => v,
+            None => return Err(Error::Raw(ESRCH)),
+        };
+
+        // Fill the info.
+        *info = zeroed();
+
+        (*info).handle = md.id();
+
+        // Copy module name.
+        if flags & 2 == 0 || !md.flags().contains(ModuleFlags::UNK1) {
+            let name = md.path().file_name().unwrap();
+
+            (*info).name[..name.len()].copy_from_slice(name.as_bytes());
+            (*info).name[0xff] = 0;
+        }
+
+        // Calculate TLS index.
+        (*info).tlsindex = if flags & 1 != 0 {
+            let flags = md.flags();
+            let mut upper = if flags.contains(ModuleFlags::UNK1) {
+                1
+            } else {
+                0
+            };
+
+            if flags.contains(ModuleFlags::MAIN_PROG) {
+                upper += 2;
+            }
+
+            (upper << 16) | (md.tls_index() & 0xffff)
+        } else {
+            md.tls_index() & 0xffff
+        };
+
+        // Set TLS information. Not sure if the tlsinit can be zero when the tlsinitsize is zero.
+        // Let's keep the same behavior as the PS4 for now.
+        let base = md.memory().addr();
+
+        if let Some(i) = md.tls_info() {
+            // tlsoffset seems to always zero.
+            (*info).tlsinit = base + i.init();
+            (*info).tlsinitsize = i.init_size().try_into().unwrap();
+            (*info).tlssize = i.size().try_into().unwrap();
+            (*info).tlsalign = i.align().try_into().unwrap();
+        } else {
+            (*info).tlsinit = base;
+        }
+
+        // Initialization and finalization functions.
+        if !md.flags().contains(ModuleFlags::UNK5) {
+            (*info).init = md.init().map(|v| base + v).unwrap_or(0);
+            (*info).fini = md.fini().map(|v| base + v).unwrap_or(0);
+        }
+
+        // Exception handling.
+        if let Some(i) = md.eh_info() {
+            (*info).eh_frame_hdr = base + i.header();
+        } else {
+            (*info).eh_frame_hdr = base;
+        }
+
+        todo!("fill the remaining info on syscall 608");
     }
 }

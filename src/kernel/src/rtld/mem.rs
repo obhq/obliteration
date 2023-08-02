@@ -2,12 +2,14 @@ use super::MapError;
 use crate::memory::{MappingFlags, MemoryManager, MprotectError, Protections};
 use elf::{Elf, ProgramFlags, ProgramType};
 use std::alloc::Layout;
+use std::fmt::{Debug, Formatter};
 use std::fs::File;
+use std::marker::PhantomData;
 use std::sync::{Mutex, MutexGuard};
+use thiserror::Error;
 
 /// A memory of the loaded module.
-pub struct Memory<'a> {
-    mm: &'a MemoryManager,
+pub struct Memory {
     ptr: *mut u8,
     len: usize,
     base: usize,
@@ -16,15 +18,11 @@ pub struct Memory<'a> {
     code_sealed: Mutex<usize>,
     data_index: usize,
     data_sealed: Mutex<usize>,
-    destructors: Mutex<Vec<Box<dyn FnOnce() + 'a>>>,
+    destructors: Mutex<Vec<Box<dyn FnOnce()>>>,
 }
 
-impl<'a> Memory<'a> {
-    pub(super) fn new(
-        mm: &'a MemoryManager,
-        image: &Elf<File>,
-        base: usize,
-    ) -> Result<Self, MapError> {
+impl Memory {
+    pub(super) fn new(image: &Elf<File>, base: usize) -> Result<Self, MapError> {
         // Create segments from ELF programs.
         let programs = image.programs();
         let mut segments: Vec<MemorySegment> = Vec::with_capacity(programs.len() + 2);
@@ -44,7 +42,7 @@ impl<'a> Memory<'a> {
 
             // Get protection.
             let flags = prog.flags();
-            let mut prot = Protections::NONE;
+            let mut prot = Protections::empty();
 
             if flags.contains(ProgramFlags::EXECUTE) {
                 prot |= Protections::CPU_EXEC;
@@ -68,6 +66,7 @@ impl<'a> Memory<'a> {
         }
 
         if segments.is_empty() {
+            // We need to check the PS4 kernel to see how it is handled this case.
             todo!("(S)ELF with no mappable segments is not supported yet.");
         }
 
@@ -78,10 +77,11 @@ impl<'a> Memory<'a> {
 
         for s in &segments {
             if s.start < len {
+                // We need to check the PS4 kernel to see how it is handled this case.
                 todo!("(S)ELF with overlapped programs is not supported yet.");
             }
 
-            len += s.len;
+            len = s.start + s.len;
         }
 
         // Create workspace for code.
@@ -110,10 +110,11 @@ impl<'a> Memory<'a> {
         segments.push(segment);
 
         // Allocate pages.
-        let ptr = match mm.mmap(
+        let mm = MemoryManager::current();
+        let mut pages = match mm.mmap(
             0,
             len,
-            Protections::CPU_READ | Protections::CPU_WRITE,
+            Protections::empty(),
             MappingFlags::MAP_ANON | MappingFlags::MAP_PRIVATE,
             -1,
             0,
@@ -122,9 +123,19 @@ impl<'a> Memory<'a> {
             Err(e) => return Err(MapError::MemoryAllocationFailed(len, e)),
         };
 
+        // Apply memory protection.
+        for seg in &segments {
+            let addr = unsafe { pages.as_mut_ptr().add(seg.start) };
+            let len = seg.len;
+            let prot = seg.prot;
+
+            if let Err(e) = mm.mprotect(addr, len, prot) {
+                return Err(MapError::ProtectMemoryFailed(addr, len, prot, e));
+            }
+        }
+
         Ok(Self {
-            mm,
-            ptr,
+            ptr: pages.into_raw(),
             len,
             base,
             segments,
@@ -134,37 +145,6 @@ impl<'a> Memory<'a> {
             data_sealed: Mutex::new(0),
             destructors: Mutex::default(),
         })
-    }
-
-    pub(super) fn load<L, E>(&mut self, mut loader: L) -> Result<(), E>
-    where
-        L: FnMut(usize, &mut [u8]) -> Result<(), E>,
-    {
-        for seg in &self.segments {
-            // Get target program.
-            let prog = match seg.program {
-                Some(v) => v,
-                None => continue,
-            };
-
-            // Get destination buffer.
-            let ptr = unsafe { self.ptr.add(seg.start) };
-            let dst = unsafe { std::slice::from_raw_parts_mut(ptr, seg.len) };
-
-            // Invoke loader.
-            loader(prog, dst)?;
-        }
-
-        Ok(())
-    }
-
-    pub(super) fn protect(&mut self) -> Result<(), MprotectError> {
-        for seg in &self.segments {
-            let addr = unsafe { self.ptr.add(seg.start) };
-            self.mm.mprotect(addr, seg.len, seg.prot)?;
-        }
-
-        Ok(())
     }
 
     pub fn addr(&self) -> usize {
@@ -186,9 +166,17 @@ impl<'a> Memory<'a> {
     /// # Safety
     /// No other threads may execute the memory in the segment until the returned [`CodeWorkspace`]
     /// has been dropped.
-    pub unsafe fn code_workspace(&self) -> Result<CodeWorkspace<'_>, MprotectError> {
+    pub unsafe fn code_workspace(&self) -> Result<CodeWorkspace<'_>, CodeWorkspaceError> {
         let sealed = self.code_sealed.lock().unwrap();
-        let seg = self.unprotect_segment(self.code_index)?;
+        let seg = match self.unprotect_segment(self.code_index) {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(CodeWorkspaceError::UnprotectSegmentFailed(
+                    self.code_index,
+                    e,
+                ));
+            }
+        };
 
         Ok(CodeWorkspace {
             ptr: unsafe { seg.ptr.add(*sealed) },
@@ -198,7 +186,7 @@ impl<'a> Memory<'a> {
         })
     }
 
-    pub fn push_data<T: 'a>(&self, value: T) -> Option<*mut T> {
+    pub fn push_data<T: 'static>(&self, value: T) -> Option<*mut T> {
         let mut sealed = self.data_sealed.lock().unwrap();
         let seg = &self.segments[self.data_index];
         let ptr = unsafe { self.ptr.add(seg.start + *sealed) };
@@ -240,26 +228,28 @@ impl<'a> Memory<'a> {
     pub unsafe fn unprotect_segment(
         &self,
         seg: usize,
-    ) -> Result<UnprotectedSegment<'_>, MprotectError> {
+    ) -> Result<UnprotectedSegment<'_>, UnprotectSegmentError> {
         let seg = &self.segments[seg];
         let ptr = self.ptr.add(seg.start);
         let len = seg.len;
+        let prot = Protections::CPU_READ | Protections::CPU_WRITE;
 
-        self.mm
-            .mprotect(ptr, len, Protections::CPU_READ | Protections::CPU_WRITE)?;
+        if let Err(e) = MemoryManager::current().mprotect(ptr, len, prot) {
+            return Err(UnprotectSegmentError::MprotectFailed(ptr, len, prot, e));
+        }
 
         Ok(UnprotectedSegment {
-            mm: self.mm,
             ptr,
             len,
             prot: seg.prot,
+            phantom: PhantomData,
         })
     }
 
     /// # Safety
     /// No other threads may access the memory until the returned [`UnprotectedMemory`] has been
     /// dropped.
-    pub unsafe fn unprotect(&self) -> Result<UnprotectedMemory<'_>, MprotectError> {
+    pub unsafe fn unprotect(&self) -> Result<UnprotectedMemory<'_>, UnprotectError> {
         // Get the end offset of non-custom segments.
         let mut end = 0;
 
@@ -274,14 +264,13 @@ impl<'a> Memory<'a> {
         }
 
         // Unprotect the memory.
-        self.mm.mprotect(
-            self.ptr,
-            end,
-            Protections::CPU_READ | Protections::CPU_WRITE,
-        )?;
+        let prot = Protections::CPU_READ | Protections::CPU_WRITE;
+
+        if let Err(e) = MemoryManager::current().mprotect(self.ptr, end, prot) {
+            return Err(UnprotectError::MprotectFailed(self.ptr, end, prot, e));
+        }
 
         Ok(UnprotectedMemory {
-            mm: self.mm,
             ptr: self.ptr,
             len: end,
             segments: &self.segments,
@@ -289,7 +278,7 @@ impl<'a> Memory<'a> {
     }
 }
 
-impl<'a> Drop for Memory<'a> {
+impl Drop for Memory {
     fn drop(&mut self) {
         // Run destructors.
         let destructors = self.destructors.get_mut().unwrap();
@@ -299,31 +288,31 @@ impl<'a> Drop for Memory<'a> {
         }
 
         // Unmap the memory.
-        if let Err(e) = self.mm.munmap(self.ptr, self.len) {
-            panic!(
-                "Failed to unmap {} bytes starting at {:p}: {}.",
-                self.len, self.ptr, e
-            );
-        }
+        MemoryManager::current().munmap(self.ptr, self.len).unwrap();
     }
 }
 
-impl<'a> AsRef<[u8]> for Memory<'a> {
-    fn as_ref(&self) -> &[u8] {
-        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
+impl Debug for Memory {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Memory")
+            .field("ptr", &self.ptr)
+            .field("len", &self.len)
+            .field("base", &self.base)
+            .field("segments", &self.segments)
+            .field("code_index", &self.code_index)
+            .field("code_sealed", &self.code_sealed)
+            .field("data_index", &self.data_index)
+            .field("data_sealed", &self.data_sealed)
+            .field("destructors", &self.destructors.lock().unwrap().len())
+            .finish()
     }
 }
 
-impl<'a> AsMut<[u8]> for Memory<'a> {
-    fn as_mut(&mut self) -> &mut [u8] {
-        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
-    }
-}
-
-unsafe impl<'a> Send for Memory<'a> {}
-unsafe impl<'a> Sync for Memory<'a> {}
+unsafe impl Send for Memory {}
+unsafe impl Sync for Memory {}
 
 /// A segment in the [`Memory`].
+#[derive(Debug)]
 pub struct MemorySegment {
     start: usize,
     len: usize,
@@ -359,10 +348,10 @@ impl MemorySegment {
 
 /// A memory segment in an unprotected form.
 pub struct UnprotectedSegment<'a> {
-    mm: &'a MemoryManager,
     ptr: *mut u8,
     len: usize,
     prot: Protections,
+    phantom: PhantomData<&'a [u8]>,
 }
 
 impl<'a> AsMut<[u8]> for UnprotectedSegment<'a> {
@@ -373,15 +362,14 @@ impl<'a> AsMut<[u8]> for UnprotectedSegment<'a> {
 
 impl<'a> Drop for UnprotectedSegment<'a> {
     fn drop(&mut self) {
-        if let Err(e) = self.mm.mprotect(self.ptr, self.len, self.prot) {
-            panic!("Cannot protect memory: {e}.");
-        }
+        MemoryManager::current()
+            .mprotect(self.ptr, self.len, self.prot)
+            .unwrap();
     }
 }
 
 /// The unprotected form of [`Memory`], not including our custom segments.
 pub struct UnprotectedMemory<'a> {
-    mm: &'a MemoryManager,
     ptr: *mut u8,
     len: usize,
     segments: &'a [MemorySegment],
@@ -396,10 +384,16 @@ impl<'a> Drop for UnprotectedMemory<'a> {
 
             let addr = unsafe { self.ptr.add(s.start()) };
 
-            if let Err(e) = self.mm.mprotect(addr, s.len(), s.prot()) {
-                panic!("Cannot protect memory: {e}.");
-            }
+            MemoryManager::current()
+                .mprotect(addr, s.len(), s.prot())
+                .unwrap();
         }
+    }
+}
+
+impl<'a> AsRef<[u8]> for UnprotectedMemory<'a> {
+    fn as_ref(&self) -> &[u8] {
+        unsafe { std::slice::from_raw_parts(self.ptr, self.len) }
     }
 }
 
@@ -437,4 +431,25 @@ impl<'a> AsMut<[u8]> for CodeWorkspace<'a> {
     fn as_mut(&mut self) -> &mut [u8] {
         unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len) }
     }
+}
+
+/// Represents an error when [`Memory::code_workspace()`] is failed.
+#[derive(Debug, Error)]
+pub enum CodeWorkspaceError {
+    #[error("cannot unprotect segment {0}")]
+    UnprotectSegmentFailed(usize, #[source] UnprotectSegmentError),
+}
+
+/// Represents an error when [`Memory::unprotect_segment()`] is failed.
+#[derive(Debug, Error)]
+pub enum UnprotectSegmentError {
+    #[error("cannot protect {1:#018x} bytes starting at {0:p} with {2}")]
+    MprotectFailed(*const u8, usize, Protections, #[source] MprotectError),
+}
+
+/// Represents an error when [`Memory::unprotect()`] is failed.
+#[derive(Debug, Error)]
+pub enum UnprotectError {
+    #[error("cannot protect {1:#018x} bytes starting at {0:p} with {2}")]
+    MprotectFailed(*const u8, usize, Protections, #[source] MprotectError),
 }

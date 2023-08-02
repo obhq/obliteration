@@ -1,11 +1,10 @@
 use crate::arc4::Arc4;
-use crate::fs::path::VPath;
-use crate::fs::Fs;
+use crate::fs::{Fs, VPath};
 use crate::llvm::Llvm;
-use crate::log::{print, LogEntry, LogMeta, Logger, LOGGER};
+use crate::log::{print, LogMeta, Logger, LOGGER};
 use crate::memory::MemoryManager;
 use crate::process::VProc;
-use crate::rtld::{Module, RuntimeLinker};
+use crate::rtld::{ModuleFlags, RuntimeLinker};
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
 use crate::thread::VThread;
@@ -125,10 +124,14 @@ fn main() -> ExitCode {
 
     print(log);
 
+    // Initialize Arc4.
+    info!("Initializing arc4random.");
+
+    Arc4::new();
+
     // Initialize foundations.
-    let arc4 = Arc4::new();
     let llvm = Llvm::new();
-    let sysctl = Sysctl::new(&arc4);
+    let sysctl = Sysctl::new();
 
     // Initialize filesystem.
     info!("Initializing file system.");
@@ -160,14 +163,15 @@ fn main() -> ExitCode {
     // Initialize virtual process.
     info!("Initializing virtual process.");
 
-    let mut proc = VProc::new();
+    let vt = VThread::new();
+    let vp = VProc::new();
 
-    proc.push_thread(VThread::new(std::thread::current().id()));
+    vp.push_thread(vt.clone());
 
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
 
-    let mut ld = match RuntimeLinker::new(&fs, &mm) {
+    let mut ld = match RuntimeLinker::new(&fs) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Initialize failed");
@@ -178,10 +182,8 @@ fn main() -> ExitCode {
     // Print application module.
     let mut log = info!();
 
-    writeln!(log, "Application   : {}", ld.app().image().name()).unwrap();
-    print_module(&mut log, ld.app());
-
-    print(log);
+    writeln!(log, "Application   : {}", ld.app().path()).unwrap();
+    ld.app().print(log);
 
     // Preload libkernel.
     let path: &VPath = "/system/common/lib/libkernel.sprx".try_into().unwrap();
@@ -196,11 +198,8 @@ fn main() -> ExitCode {
         }
     };
 
-    // Print libkernel.
-    let mut log = info!();
-
-    print_module(&mut log, module);
-    print(log);
+    module.flags_mut().remove(ModuleFlags::UNK2);
+    module.print(info!());
 
     // Set libkernel ID.
     let id = module.id();
@@ -213,24 +212,22 @@ fn main() -> ExitCode {
 
     info!("Loading {path}.");
 
-    match ld.load(path) {
-        Ok(m) => {
-            let mut l = info!();
-            print_module(&mut l, m);
-            print(l);
-        }
+    let module = match ld.load(path) {
+        Ok(v) => v,
         Err(e) => {
             error!(e, "Load failed");
             return ExitCode::FAILURE;
         }
-    }
+    };
+
+    module.flags_mut().remove(ModuleFlags::UNK2);
+    module.print(info!());
 
     // Initialize syscall routines.
     info!("Initializing system call routines.");
 
-    let proc = RwLock::new(proc);
     let ld = RwLock::new(ld);
-    let syscalls = Syscalls::new(&proc, &sysctl, &ld);
+    let syscalls = Syscalls::new(&sysctl, &ld);
 
     // Bootstrap execution engine.
     info!("Initializing execution engine.");
@@ -243,7 +240,7 @@ fn main() -> ExitCode {
         None => ExecutionEngine::Llvm,
     };
 
-    match ee {
+    let status = match ee {
         #[cfg(target_arch = "x86_64")]
         ExecutionEngine::Native => {
             let mut ee = ee::native::NativeEngine::new(&ld, &syscalls);
@@ -293,7 +290,12 @@ fn main() -> ExitCode {
 
             exec(ee)
         }
-    }
+    };
+
+    // Clean up.
+    vp.remove_thread(vt.id());
+
+    status
 }
 
 fn exec<E: ee::ExecutionEngine>(mut ee: E) -> ExitCode {
@@ -305,84 +307,6 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E) -> ExitCode {
     }
 
     ExitCode::SUCCESS
-}
-
-fn print_module(log: &mut LogEntry, module: &Module) {
-    // Image details.
-    let image = module.image();
-
-    if image.self_segments().is_some() {
-        writeln!(log, "Image format  : SELF").unwrap();
-    } else {
-        writeln!(log, "Image format  : ELF").unwrap();
-    }
-
-    writeln!(log, "Image type    : {}", image.ty()).unwrap();
-
-    if let Some(dynamic) = image.dynamic_linking() {
-        let i = dynamic.module_info();
-
-        writeln!(log, "Module name   : {}", i.name()).unwrap();
-
-        if let Some(f) = dynamic.flags() {
-            writeln!(log, "Module flags  : {f}").unwrap();
-        }
-    }
-
-    for (i, p) in image.programs().iter().enumerate() {
-        let offset = p.offset();
-        let end = offset + p.file_size();
-
-        writeln!(
-            log,
-            "Program {:<6}: {:#018x}:{:#018x}:{}",
-            i,
-            offset,
-            end,
-            p.ty()
-        )
-        .unwrap();
-    }
-
-    if let Some(dynamic) = image.dynamic_linking() {
-        for n in dynamic.needed() {
-            writeln!(log, "Needed        : {n}").unwrap();
-        }
-    }
-
-    // Runtime info.
-    writeln!(log, "TLS index     : {}", module.tls_index()).unwrap();
-
-    // Memory.
-    let mem = module.memory();
-
-    writeln!(
-        log,
-        "Memory address: {:#018x}:{:#018x}",
-        mem.addr(),
-        mem.addr() + mem.len()
-    )
-    .unwrap();
-
-    if let Some(entry) = image.entry_addr() {
-        writeln!(log, "Entry address : {:#018x}", mem.addr() + entry).unwrap();
-    }
-
-    for s in mem.segments().iter() {
-        if let Some(p) = s.program() {
-            let addr = mem.addr() + s.start();
-
-            writeln!(
-                log,
-                "Program {} is mapped to {:#018x}:{:#018x} with {}.",
-                p,
-                addr,
-                addr + s.len(),
-                image.programs()[p].flags(),
-            )
-            .unwrap();
-        }
-    }
 }
 
 #[derive(Parser, Deserialize)]

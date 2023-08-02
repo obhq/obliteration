@@ -1,3 +1,5 @@
+pub use page::*;
+
 use self::iter::StartFromMut;
 use self::storage::Storage;
 use crate::errno::{Errno, EINVAL, ENOMEM};
@@ -6,13 +8,15 @@ use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::num::NonZeroI32;
 use std::ptr::null_mut;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, OnceLock, RwLock};
 use thiserror::Error;
 
-pub mod iter;
-pub mod storage;
+mod iter;
+mod page;
+mod storage;
 
 /// Manage all paged memory that can be seen by a PS4 app.
+#[derive(Debug)]
 pub struct MemoryManager {
     page_size: usize,
     allocation_granularity: usize,
@@ -23,7 +27,9 @@ impl MemoryManager {
     /// Size of a memory page on PS4.
     pub const VIRTUAL_PAGE_SIZE: usize = 0x4000;
 
-    pub(super) fn new() -> Self {
+    /// # Panics
+    /// If this method called a second time.
+    pub fn new() -> &'static Self {
         // Check if page size on the host is supported. We don't need to check allocation
         // granularity because it is always multiply of page size, which is a correct value.
         let (page_size, allocation_granularity) = Self::get_memory_model();
@@ -37,11 +43,22 @@ impl MemoryManager {
             panic!("Your system is using an unsupported page size.");
         }
 
-        Self {
-            page_size,
-            allocation_granularity,
-            allocations: RwLock::new(BTreeMap::new()),
-        }
+        MEMORY_MANAGER
+            .set(Self {
+                page_size,
+                allocation_granularity,
+                allocations: RwLock::new(BTreeMap::new()),
+            })
+            .unwrap();
+
+        // SAFETY: This is safe because we just set its value on the above.
+        unsafe { MEMORY_MANAGER.get().unwrap_unchecked() }
+    }
+
+    /// # Panics
+    /// If [`new()`] has not been called.
+    pub fn current() -> &'static MemoryManager {
+        MEMORY_MANAGER.get().unwrap()
     }
 
     /// Gets size of page on the host system.
@@ -62,17 +79,17 @@ impl MemoryManager {
         flags: MappingFlags,
         fd: i32,
         offset: i64,
-    ) -> Result<*mut u8, MmapError> {
+    ) -> Result<VPages<'_>, MmapError> {
         // Chech addr and len.
         if addr != 0 {
-            todo!("non-zero addr is not supported yet");
+            todo!("mmap with non-zero addr");
         } else if len == 0 {
             return Err(MmapError::ZeroLen);
         }
 
         // Check prot.
         if prot.contains_unknown() {
-            todo!("unknown prot {:#010x}", prot);
+            todo!("mmap with prot {prot:#010x}");
         }
 
         // Check if either MAP_SHARED or MAP_PRIVATE is specified. not both.
@@ -86,21 +103,21 @@ impl MemoryManager {
 
         // Check for other flags if we are supported.
         if flags.alignment() != 0 {
-            todo!("MAP_ALIGNED or MAP_ALIGNED_SUPER is not supported yet");
+            todo!("mmap with MAP_ALIGNED or MAP_ALIGNED_SUPER");
         } else if flags.contains(MappingFlags::MAP_FIXED) {
-            todo!("MAP_FIXED is not supported yet");
+            todo!("mmap with MAP_FIXED");
         } else if flags.contains(MappingFlags::MAP_HASSEMAPHORE) {
-            todo!("MAP_HASSEMAPHORE is not supported yet");
+            todo!("mmap with MAP_HASSEMAPHORE");
         } else if flags.contains(MappingFlags::MAP_NOCORE) {
-            todo!("MAP_NOCORE is not supported yet");
+            todo!("mmap with MAP_NOCORE");
         } else if flags.contains(MappingFlags::MAP_NOSYNC) {
-            todo!("MAP_NOSYNC is not support yet");
+            todo!("mmap with MAP_NOSYNC");
         } else if flags.contains(MappingFlags::MAP_PREFAULT_READ) {
-            todo!("MAP_PREFAULT_READ is not supported yet");
+            todo!("mmap with MAP_PREFAULT_READ");
         } else if !is_private {
-            todo!("MAP_SHARED is not supported yet");
+            todo!("mmap with MAP_SHARED");
         } else if flags.contains(MappingFlags::MAP_STACK) {
-            todo!("MAP_STACK is not supported yet");
+            todo!("mmap with MAP_STACK");
         }
 
         // Round len up to virtual page boundary.
@@ -113,7 +130,7 @@ impl MemoryManager {
         if flags.contains(MappingFlags::MAP_ANON) {
             self.mmap_anon(len, prot, fd, offset)
         } else {
-            todo!("non-anonymous mapping is not supported yet");
+            todo!("mmap with non-anonymous");
         }
     }
 
@@ -358,7 +375,7 @@ impl MemoryManager {
         prot: Protections,
         fd: i32,
         offset: i64,
-    ) -> Result<*mut u8, MmapError> {
+    ) -> Result<VPages<'_>, MmapError> {
         use std::collections::btree_map::Entry;
 
         // Check if arguments valid.
@@ -383,11 +400,12 @@ impl MemoryManager {
 
         // Store allocation info.
         let mut allocs = self.allocations.write().unwrap();
-
-        match allocs.entry(alloc.addr as usize) {
+        let alloc = match allocs.entry(alloc.addr as usize) {
             Entry::Occupied(e) => panic!("Address {:p} is already allocated.", e.key()),
-            Entry::Vacant(e) => Ok(e.insert(alloc).addr),
-        }
+            Entry::Vacant(e) => e.insert(alloc),
+        };
+
+        Ok(VPages::new(self, alloc.addr, alloc.len))
     }
 
     fn alloc(&self, len: usize, prot: Protections) -> Result<Alloc, std::io::Error> {
@@ -471,6 +489,7 @@ impl MemoryManager {
 unsafe impl Sync for MemoryManager {}
 
 /// Contains information for an allocation of virtual pages.
+#[derive(Debug)]
 struct Alloc {
     addr: *mut u8,
     len: usize,
@@ -484,19 +503,20 @@ impl Alloc {
     }
 }
 
+unsafe impl Send for Alloc {}
+
 bitflags! {
     /// Flags to tell what access is possible for the virtual page.
-    #[derive(Clone, Copy, PartialEq)]
+    #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct Protections: u32 {
-        const NONE = 0x00000000;
         const CPU_READ = 0x00000001;
         const CPU_WRITE = 0x00000002;
         const CPU_EXEC = 0x00000004;
-        const CPU_MASK = 0x00000007;
+        const CPU_MASK = Self::CPU_READ.bits() | Self::CPU_WRITE.bits() | Self::CPU_EXEC.bits();
         const GPU_EXEC = 0x00000008;
         const GPU_READ = 0x00000010;
         const GPU_WRITE = 0x00000020;
-        const GPU_MASK = 0x00000056;
+        const GPU_MASK = Self::GPU_EXEC.bits() | Self::GPU_READ.bits() | Self::GPU_WRITE.bits();
     }
 }
 
@@ -671,3 +691,5 @@ impl Errno for MprotectError {
         }
     }
 }
+
+static MEMORY_MANAGER: OnceLock<MemoryManager> = OnceLock::new();

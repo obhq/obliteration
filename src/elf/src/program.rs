@@ -2,6 +2,7 @@ use bitflags::bitflags;
 use std::fmt::{Display, Formatter};
 
 /// Contains information for each ELF program.
+#[derive(Debug)]
 pub struct Program {
     ty: ProgramType,
     flags: ProgramFlags,
@@ -121,7 +122,7 @@ impl Display for ProgramType {
 
 bitflags! {
     /// Represents flags for an ELF program.
-    #[derive(Clone, Copy)]
+    #[derive(Debug, Clone, Copy)]
     pub struct ProgramFlags: u32 {
         const EXECUTE = 0x00000001;
         const WRITE = 0x00000002;

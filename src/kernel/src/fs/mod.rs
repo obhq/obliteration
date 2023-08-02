@@ -1,4 +1,5 @@
-use self::path::{VPath, VPathBuf};
+pub use path::*;
+
 use param::Param;
 use std::borrow::Borrow;
 use std::collections::HashMap;
@@ -8,9 +9,10 @@ use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 use thiserror::Error;
 
-pub mod path;
+mod path;
 
 /// A virtual filesystem for emulating a PS4 filesystem.
+#[derive(Debug)]
 pub struct Fs {
     mounts: RwLock<HashMap<VPathBuf, MountSource>>,
     app: VPathBuf,
@@ -175,6 +177,7 @@ impl Fs {
 }
 
 /// Source of mount point.
+#[derive(Debug)]
 pub enum MountSource {
     Host(PathBuf),
     Bind(VPathBuf),
@@ -192,16 +195,6 @@ pub struct VDir {
     virtual_path: VPathBuf,
 }
 
-impl VDir {
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
-    pub fn virtual_path(&self) -> &VPath {
-        &self.virtual_path
-    }
-}
-
 /// A virtual file.
 pub struct VFile {
     path: PathBuf,
@@ -213,12 +206,8 @@ impl VFile {
         &self.path
     }
 
-    pub fn virtual_path(&self) -> &VPath {
+    pub fn vpath(&self) -> &VPath {
         &self.virtual_path
-    }
-
-    pub fn into_path(self) -> PathBuf {
-        self.path
     }
 
     pub fn into_vpath(self) -> VPathBuf {

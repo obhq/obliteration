@@ -1,4 +1,4 @@
-use crate::fs::path::VPathBuf;
+use crate::fs::VPathBuf;
 use std::num::TryFromIntError;
 
 /// Input of the syscall entry point.
@@ -47,4 +47,23 @@ impl TryFrom<Arg> for u32 {
     fn try_from(v: Arg) -> Result<Self, Self::Error> {
         v.0.try_into()
     }
+}
+
+/// Contains information about the loaded SELF.
+#[repr(C)]
+pub struct DynlibInfoEx {
+    pub size: u64,
+    pub name: [u8; 256],
+    pub handle: u32,
+    pub tlsindex: u32,
+    pub tlsinit: usize,
+    pub tlsinitsize: u32,
+    pub tlssize: u32,
+    pub tlsoffset: u32,
+    pub tlsalign: u32,
+    pub init: usize,
+    pub fini: usize,
+    pub unk1: u64, // Always zero.
+    pub unk2: u64, // Same here.
+    pub eh_frame_hdr: usize,
 }

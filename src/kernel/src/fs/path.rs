@@ -23,10 +23,6 @@ impl VPath {
         &*(data as *const str as *const VPath)
     }
 
-    pub fn len(&self) -> usize {
-        self.0.len()
-    }
-
     pub fn join<C: AsRef<str>>(&self, component: C) -> Result<VPathBuf, ComponentError> {
         let mut r = self.to_owned();
         r.push(component)?;
@@ -39,12 +35,22 @@ impl VPath {
             // This path is a root directory ("/").
             None
         } else {
-            // SAFETY: We already forced the path to be an absolute path so that mean it will have
-            // at least one / in the beginning.
-            let end = unsafe { self.0.rfind('/').unwrap_unchecked() };
+            let end = self.0.rfind('/').unwrap();
             let data = if end == 0 { "/" } else { &self.0[..end] };
 
+            // SAFETY: This is safe because the data is still a valid path when the last component
+            // is removed (e.g. "/abc/def" => "/abc").
             Some(unsafe { Self::new_unchecked(data) })
+        }
+    }
+
+    pub fn file_name(&self) -> Option<&str> {
+        if self.0.len() == 1 {
+            // This path is a root directory ("/").
+            None
+        } else {
+            let sep = self.0.rfind('/').unwrap();
+            Some(&self.0[(sep + 1)..])
         }
     }
 
@@ -82,9 +88,11 @@ impl VPath {
     }
 }
 
-impl From<&VPath> for String {
-    fn from(value: &VPath) -> Self {
-        String::from(&value.0)
+impl Deref for VPath {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -100,13 +108,19 @@ impl ToOwned for VPath {
     type Owned = VPathBuf;
 
     fn to_owned(&self) -> Self::Owned {
-        self.into()
+        VPathBuf(Cow::Owned(self.0.to_owned()))
     }
 }
 
 impl Display for VPath {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
+        self.0.fmt(f)
+    }
+}
+
+impl From<&VPath> for String {
+    fn from(v: &VPath) -> Self {
+        v.0.to_owned()
     }
 }
 
@@ -174,9 +188,11 @@ impl VPathBuf {
     }
 }
 
-impl From<&VPath> for VPathBuf {
-    fn from(value: &VPath) -> Self {
-        Self(Cow::Owned(value.into()))
+impl Deref for VPathBuf {
+    type Target = VPath;
+
+    fn deref(&self) -> &VPath {
+        self.borrow()
     }
 }
 
@@ -204,29 +220,22 @@ impl TryFrom<String> for VPathBuf {
     }
 }
 
-impl Deref for VPathBuf {
-    type Target = VPath;
-
-    fn deref(&self) -> &VPath {
-        unsafe { VPath::new_unchecked(self.0.borrow()) }
-    }
-}
-
 impl Borrow<VPath> for VPathBuf {
     fn borrow(&self) -> &VPath {
-        self.deref()
-    }
-}
-
-impl Borrow<str> for VPathBuf {
-    fn borrow(&self) -> &str {
-        self.0.borrow()
+        // SAFETY: This is safe because VPathBuf has the same check as VPath.
+        unsafe { VPath::new_unchecked(self.0.borrow()) }
     }
 }
 
 impl Display for VPathBuf {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.0.borrow())
+        self.0.fmt(f)
+    }
+}
+
+impl From<VPathBuf> for String {
+    fn from(v: VPathBuf) -> Self {
+        v.0.into_owned()
     }
 }
 

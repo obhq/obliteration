@@ -1,5 +1,7 @@
 pub use dynamic::*;
 pub use info::*;
+pub use library::*;
+pub use module::*;
 pub use program::*;
 pub use reloc::*;
 pub use ty::*;
@@ -12,6 +14,8 @@ use thiserror::Error;
 
 mod dynamic;
 mod info;
+mod library;
+mod module;
 mod program;
 mod reloc;
 mod ty;
@@ -37,7 +41,6 @@ pub struct Elf<I: Read + Seek> {
     dynamic: Option<usize>,
     dyndata: Option<usize>,
     tls: Option<usize>,
-    dynamic_linking: Option<DynamicLinking>,
     proc_param: Option<usize>,
     mod_param: Option<usize>,
     comment: Option<usize>,
@@ -174,7 +177,6 @@ impl<I: Read + Seek> Elf<I> {
             dynamic: None,
             dyndata: None,
             tls: None,
-            dynamic_linking: None,
             proc_param: None,
             mod_param: None,
             comment: None,
@@ -227,13 +229,6 @@ impl<I: Read + Seek> Elf<I> {
             let mut dynoff: usize = dynamic.offset().try_into().unwrap();
             let dynsize: usize = dynamic.file_size().try_into().unwrap();
 
-            // Read PT_DYNAMIC.
-            let mut dynamic = vec![0u8; dynamic.file_size() as usize];
-
-            if let Err(e) = elf.read_program(i, &mut dynamic) {
-                return Err(OpenError::ReadDynamicFailed(e));
-            }
-
             // Check dynamic data.
             let i = elf.dyndata.ok_or(OpenError::NoDynData)?;
             let dyndata = &elf.programs[i];
@@ -244,10 +239,10 @@ impl<I: Read + Seek> Elf<I> {
 
             // Adjust dynamic offset inside the dynamic data. It looks weird but this is how Sony
             // actually did.
-            dynoff -= dyndata.offset() as usize;
+            dynoff -= TryInto::<usize>::try_into(dyndata.offset()).unwrap();
 
             // Read PT_SCE_DYNLIBDATA.
-            let mut dyndata = vec![0u8; dyndata.file_size() as usize];
+            let mut dyndata = vec![0u8; dyndata.file_size().try_into().unwrap()];
 
             if let Err(e) = elf.read_program(i, &mut dyndata) {
                 return Err(OpenError::ReadDynDataFailed(e));
@@ -255,7 +250,7 @@ impl<I: Read + Seek> Elf<I> {
 
             // Read PT_SCE_COMMENT.
             let comment = if let Some(i) = elf.comment {
-                let mut buf = vec![0u8; elf.programs[i].file_size() as usize];
+                let mut buf = vec![0u8; elf.programs[i].file_size().try_into().unwrap()];
 
                 if elf.read_program(i, &mut buf).is_err() {
                     // This is not an error on the PS4.
@@ -268,15 +263,9 @@ impl<I: Read + Seek> Elf<I> {
             };
 
             // Load info.
-            elf.info = match FileInfo::parse(dyndata.clone(), comment, dynoff, dynsize) {
+            elf.info = match FileInfo::parse(dyndata, comment, dynoff, dynsize) {
                 Ok(v) => Some(v),
                 Err(e) => return Err(OpenError::ParseFileInfoFailed(e)),
-            };
-
-            // Parse PT_DYNAMIC & PT_SCE_DYNLIBDATA.
-            elf.dynamic_linking = match DynamicLinking::parse(dynamic, dyndata) {
-                Ok(v) => Some(v),
-                Err(e) => return Err(OpenError::ParseDynamicLinkingFailed(e)),
             };
         }
 
@@ -332,6 +321,10 @@ impl<I: Read + Seek> Elf<I> {
         self.entry_addr
     }
 
+    pub fn program(&self, i: usize) -> Option<&Program> {
+        self.programs.get(i)
+    }
+
     pub fn programs(&self) -> &[Program] {
         self.programs.as_slice()
     }
@@ -342,10 +335,6 @@ impl<I: Read + Seek> Elf<I> {
 
     pub fn tls(&self) -> Option<usize> {
         self.tls
-    }
-
-    pub fn dynamic_linking(&self) -> Option<&DynamicLinking> {
-        self.dynamic_linking.as_ref()
     }
 
     pub fn proc_param(&self) -> Option<usize> {
@@ -629,6 +618,12 @@ impl<I: Read + Seek> Elf<I> {
     }
 }
 
+impl<I: Read + Seek> From<Elf<I>> for (String, Vec<Program>, Option<FileInfo>) {
+    fn from(v: Elf<I>) -> Self {
+        (v.name, v.programs, v.info)
+    }
+}
+
 /// Contains data specific for SELF.
 struct SelfData {
     segments: Vec<SelfSegment>,
@@ -735,9 +730,6 @@ pub enum OpenError {
     #[error("PT_DYNAMIC is not valid")]
     InvalidDynamic,
 
-    #[error("cannot read PT_DYNAMIC")]
-    ReadDynamicFailed(#[source] ReadProgramError),
-
     #[error("no PT_SCE_DYNLIBDATA")]
     NoDynData,
 
@@ -749,9 +741,6 @@ pub enum OpenError {
 
     #[error("cannot parse file info")]
     ParseFileInfoFailed(#[source] FileInfoError),
-
-    #[error("cannot parse PT_DYNAMIC and PT_SCE_DYNLIBDATA")]
-    ParseDynamicLinkingFailed(#[source] self::dynamic::ParseError),
 
     #[error("PT_SCE_RELRO has invalid address")]
     InvalidRelroAddr,

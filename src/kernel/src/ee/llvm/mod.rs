@@ -1,7 +1,7 @@
 use self::codegen::Codegen;
 use super::ExecutionEngine;
 use crate::disasm::Disassembler;
-use crate::fs::path::VPathBuf;
+use crate::fs::VPathBuf;
 use crate::llvm::Llvm;
 use crate::rtld::{Module, RuntimeLinker};
 use std::error::Error;
@@ -32,40 +32,41 @@ impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
         Ok(())
     }
 
-    fn lift(&self, module: &Module<'b>) -> Result<crate::llvm::module::ExecutionEngine, LiftError> {
+    fn lift(&self, module: &Module) -> Result<crate::llvm::module::ExecutionEngine<'b>, LiftError> {
         // Get a list of public functions.
-        let image = module.image();
-        let path: VPathBuf = image.name().try_into().unwrap();
-        let targets = match image.entry_addr() {
+        let path = module.path();
+        let targets = match module.entry() {
             Some(v) => vec![v],
             None => Vec::new(),
         };
 
         // Disassemble the module.
-        let mut disasm = Disassembler::new(module.memory());
+        let mut disasm = Disassembler::new(unsafe { module.memory().unprotect().unwrap() });
 
         for &addr in &targets {
             if let Err(e) = disasm.disassemble(addr) {
-                return Err(LiftError::DisassembleFailed(path, addr, e));
+                return Err(LiftError::DisassembleFailed(path.to_owned(), addr, e));
             }
         }
 
         disasm.fixup();
 
         // Lift the public functions.
-        let mut lifting = self.llvm.create_module(image.name());
-        let mut codegen = Codegen::new(&disasm, &mut lifting);
+        let mut lifting = self.llvm.create_module(path);
+        let mut codegen = Codegen::new(disasm, &mut lifting);
 
         for &addr in &targets {
             if let Err(e) = codegen.lift(addr) {
-                return Err(LiftError::LiftingFailed(path, addr, e));
+                return Err(LiftError::LiftingFailed(path.to_owned(), addr, e));
             }
         }
+
+        drop(codegen);
 
         // Create LLVM execution engine.
         let lifted = match lifting.create_execution_engine() {
             Ok(v) => v,
-            Err(e) => return Err(LiftError::CreateExecutionEngineFailed(path, e)),
+            Err(e) => return Err(LiftError::CreateExecutionEngineFailed(path.to_owned(), e)),
         };
 
         Ok(lifted)

@@ -1,107 +1,45 @@
-use crate::errno::{Errno, EINVAL};
-use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK};
 use crate::thread::VThread;
-use std::collections::HashMap;
-use std::num::NonZeroI32;
-use std::sync::{Arc, RwLock};
-use std::thread::ThreadId;
-use thiserror::Error;
+use std::sync::{Arc, OnceLock, RwLock};
 
 /// An implementation of `proc` structure represent the main application process.
 ///
 /// Each process of the Obliteration Kernel encapsulate only one PS4 process. The reason we don't
 /// encapsulate multiple PS4 processes is because there is no way to emulate `fork` with 100%
 /// compatibility from the user-mode application.
+#[derive(Debug)]
 pub struct VProc {
-    threads: HashMap<ThreadId, Arc<RwLock<VThread>>>, // p_threads
+    threads: RwLock<Vec<Arc<VThread>>>, // p_threads
 }
 
 impl VProc {
-    pub fn new() -> Self {
-        Self {
-            threads: HashMap::default(),
-        }
-    }
-
-    pub fn current_thread(&self) -> Arc<RwLock<VThread>> {
-        let id = std::thread::current().id();
-        self.threads.get(&id).unwrap().clone()
-    }
-
-    pub fn push_thread(&mut self, td: VThread) {
-        let id = td.host_id();
-        let td = Arc::new(RwLock::new(td));
-
-        if self.threads.insert(id, td).is_some() {
-            panic!("Thread {id:?} already have a virtual thread associated.");
-        }
-    }
-
-    /// See `kern_sigprocmask` in the PS4 kernel for a reference.
-    pub fn sigmask(
-        &mut self,
-        how: i32,
-        set: Option<SignalSet>,
-        oset: Option<&mut SignalSet>,
-    ) -> Result<(), SigmaskError> {
-        // Copy current mask to oset.
-        let td = self.current_thread();
-        let mut td = td.write().unwrap();
-
-        if let Some(v) = oset {
-            *v = *td.sigmask();
-        }
-
-        // Update the mask.
-        let mut set = match set {
-            Some(v) => v,
-            None => return Ok(()),
+    /// # Panics
+    /// If this method has been called a second time.
+    pub fn new() -> &'static Self {
+        let vp = Self {
+            threads: RwLock::new(Vec::new()),
         };
 
-        match how {
-            SIG_BLOCK => {
-                // Remove uncatchable signals.
-                set.remove(SIGKILL);
-                set.remove(SIGSTOP);
+        VPROC.set(vp).unwrap();
 
-                // Update mask.
-                *td.sigmask_mut() |= set;
-            }
-            SIG_UNBLOCK => {
-                // Update mask.
-                *td.sigmask_mut() &= !set;
+        unsafe { VPROC.get().unwrap_unchecked() }
+    }
 
-                // TODO: Invoke signotify at the end.
-            }
-            SIG_SETMASK => {
-                // Remove uncatchable signals.
-                set.remove(SIGKILL);
-                set.remove(SIGSTOP);
+    /// # Panics
+    /// If [`new()`] has not been called before calling this method.
+    pub fn current() -> &'static Self {
+        VPROC.get().unwrap()
+    }
 
-                // Replace mask.
-                *td.sigmask_mut() = set;
+    pub fn push_thread(&self, vt: Arc<VThread>) {
+        self.threads.write().unwrap().push(vt);
+    }
 
-                // TODO: Invoke signotify at the end.
-            }
-            v => return Err(SigmaskError::InvalidArgument(v)),
-        }
+    pub fn remove_thread(&self, id: i32) -> Option<Arc<VThread>> {
+        let mut threads = self.threads.write().unwrap();
+        let index = threads.iter().position(|vt| vt.id() == id)?;
 
-        // TODO: Check if we need to invoke reschedule_signals.
-        Ok(())
+        Some(threads.remove(index))
     }
 }
 
-/// Represents an error when [`VProc::sigmask()`] is failed.
-#[derive(Debug, Error)]
-pub enum SigmaskError {
-    #[error("Invalid argument in sigmask: {0}")]
-    InvalidArgument(i32),
-}
-
-impl Errno for SigmaskError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::InvalidArgument(_) => EINVAL,
-        }
-    }
-}
+static VPROC: OnceLock<VProc> = OnceLock::new();

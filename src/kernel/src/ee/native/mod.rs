@@ -1,7 +1,7 @@
 use super::ExecutionEngine;
-use crate::fs::path::{VPath, VPathBuf};
-use crate::memory::{MprotectError, Protections};
-use crate::rtld::{Memory, Module, RuntimeLinker};
+use crate::fs::{VPath, VPathBuf};
+use crate::memory::Protections;
+use crate::rtld::{CodeWorkspaceError, Memory, Module, RuntimeLinker, UnprotectSegmentError};
 use crate::syscalls::{Input, Output, Syscalls};
 use byteorder::{ByteOrder, LE};
 use iced_x86::code_asm::{
@@ -33,9 +33,9 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
 
         for module in ld.list() {
             let count = self.patch_mod(module)?;
-            let path: VPathBuf = module.image().name().try_into().unwrap();
+            let path = module.path();
 
-            counts.push((path, count));
+            counts.push((path.to_owned(), count));
         }
 
         Ok(counts)
@@ -48,7 +48,7 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
     /// # Safety
     /// No other threads may access the memory of `module`.
     unsafe fn patch_mod(&self, module: &Module) -> Result<usize, PatchModsError> {
-        let path: VPathBuf = module.image().name().try_into().unwrap();
+        let path = module.path();
 
         // Patch all executable sections.
         let mem = module.memory();
@@ -63,11 +63,17 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
             // Unprotect the segment.
             let mut seg = match mem.unprotect_segment(i) {
                 Ok(v) => v,
-                Err(e) => return Err(PatchModsError::UnprotectMemoryFailed(path, e)),
+                Err(e) => {
+                    return Err(PatchModsError::UnprotectSegmentFailed(
+                        path.to_owned(),
+                        i,
+                        e,
+                    ));
+                }
             };
 
             // Patch segment.
-            count += self.patch_segment(&path, base, mem, seg.as_mut())?;
+            count += self.patch_segment(path, base, mem, seg.as_mut())?;
         }
 
         Ok(count)
@@ -376,7 +382,7 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
         // Get workspace.
         let mut mem = match mem.code_workspace() {
             Ok(v) => v,
-            Err(e) => return Err(TrampolineError::UnprotectWorkspaceFailed(e)),
+            Err(e) => return Err(TrampolineError::GetCodeWorkspaceFailed(e)),
         };
 
         // Align base address to 16 byte boundary for performance.
@@ -444,16 +450,16 @@ impl<'a, 'b> ExecutionEngine for NativeEngine<'a, 'b> {
         let ld = self.rtld.read().unwrap();
         let eboot = ld.app();
 
-        if eboot.image().dynamic_linking().is_none() {
-            todo!("A statically linked eboot.bin is not supported yet.");
+        if eboot.file_info().is_none() {
+            todo!("a statically linked eboot.bin is not supported yet");
         }
 
         // Get boot module.
         let boot = ld.kernel().unwrap();
 
         // Get entry point.
-        let mem = boot.memory().as_ref();
-        let entry: EntryPoint = unsafe { transmute(mem[boot.entry().unwrap()..].as_ptr()) };
+        let mem = boot.memory().addr();
+        let entry: EntryPoint = unsafe { transmute(mem + boot.entry().unwrap()) };
 
         drop(ld);
 
@@ -488,8 +494,8 @@ struct Arg {
 /// Errors for [`NativeEngine::patch_mods()`].
 #[derive(Debug, Error)]
 pub enum PatchModsError {
-    #[error("cannot unprotect memory {0}")]
-    UnprotectMemoryFailed(VPathBuf, #[source] MprotectError),
+    #[error("cannot unprotect segment {1} on {0}")]
+    UnprotectSegmentFailed(VPathBuf, usize, #[source] UnprotectSegmentError),
 
     #[error("cannot build a trampoline for {1:#018x} on {0}")]
     BuildTrampolineFailed(VPathBuf, usize, #[source] TrampolineError),
@@ -501,8 +507,8 @@ pub enum PatchModsError {
 /// Errors for trampoline building.
 #[derive(Debug, Error)]
 pub enum TrampolineError {
-    #[error("cannot unprotect code workspace")]
-    UnprotectWorkspaceFailed(#[source] MprotectError),
+    #[error("cannot get code workspace")]
+    GetCodeWorkspaceFailed(#[source] CodeWorkspaceError),
 
     #[error("the remaining workspace is not enough")]
     SpaceNotEnough,
