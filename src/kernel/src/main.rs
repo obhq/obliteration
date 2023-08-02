@@ -171,7 +171,7 @@ fn main() -> ExitCode {
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
 
-    let mut ld = match RuntimeLinker::new(&fs, &mm) {
+    let mut ld = match RuntimeLinker::new(&fs) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Initialize failed");
