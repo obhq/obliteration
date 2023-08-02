@@ -38,10 +38,17 @@ jobs:
     - name: Run CMake
       run: cmake --preset mac-release .
     - name: Build
-      run: cmake --build --preset mac-release
+      run: cmake --build build
     - name: Run Clippy
       run: cargo clippy --release
       working-directory: src
+    - name: Export artifacts
+      run: |
+        cmake --install build --prefix .
+        mkdir dist
+        mv obliteration.app dist/Obliteration.app
+    - name: Create Apple Disk Image
+      run: hdiutil create -volname Obliteration -srcfolder dist Obliteration.dmg
     - name: Cache build files
       uses: actions/cache/save@v3
       with:

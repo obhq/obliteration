@@ -91,7 +91,7 @@ add_dependencies(obliteration core)
 
 set_target_properties(obliteration PROPERTIES AUTOMOC ON AUTORCC ON)
 
-if(WIN32 OR APPLE)
+if(WIN32)
     set_target_properties(obliteration PROPERTIES OUTPUT_NAME Obliteration)
 endif()
 
@@ -116,11 +116,18 @@ else()
 endif()
 
 # Setup installation.
-if(WIN32)
-    install(TARGETS obliteration DESTINATION .)
-else()
-    install(TARGETS obliteration DESTINATION bin)
-endif()
+install(TARGETS obliteration BUNDLE DESTINATION . RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-install(PROGRAMS ${KERNEL} TYPE BIN)
-install(SCRIPT post-install.cmake)
+qt_generate_deploy_app_script(
+    TARGET obliteration
+    OUTPUT_SCRIPT QT_DEPLOY_SCRIPT
+    NO_TRANSLATIONS
+    NO_COMPILER_RUNTIME)
+
+install(SCRIPT ${QT_DEPLOY_SCRIPT})
+
+if(APPLE)
+    install(PROGRAMS ${KERNEL} DESTINATION obliteration.app/Contents/MacOS)
+else()
+    install(PROGRAMS ${KERNEL} TYPE BIN)
+endif()
