@@ -49,7 +49,7 @@ pub const EPROTOTYPE: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(41) };
 pub const ENOPROTOOPT: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(42) };
 pub const EPROTONOSUPPORT: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(43) };
 pub const ESOCKTNOSUPPORT: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(44) };
-pub const ENOTSUP: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(45) };
+pub const EOPNOTSUPP: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(45) };
 pub const EPFNOSUPPORT: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(46) };
 pub const EAFNOSUPPORT: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(47) };
 pub const EADDRINUSE: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(48) };
@@ -99,6 +99,11 @@ pub const ENOLINK: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(91) };
 pub const EPROTO: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(92) };
 pub const ENOTCAPABLE: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(93) };
 pub const ECAPMODE: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(94) };
+pub const ENOBLK: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(95) };
+pub const EICV: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(96) };
+pub const ENOPLAYGOENT: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(97) };
+pub const EREVOKE: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(98) };
+pub const ESDKVERSION: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(99) };
 
 /// An object that is mappable to PS4 errno.
 pub trait Errno: Error {
@@ -113,8 +118,8 @@ pub fn strerror(num: NonZeroI32) -> &'static str {
         ENOENT => "no such file or directory",
         ESRCH => "no such process",
         EINTR => "interrupted system call",
-        EIO => "input/output error, access to HDD/Disc failed",
-        ENXIO => "device not configured, access to data failed",
+        EIO => "input/output error",
+        ENXIO => "device not configured",
         E2BIG => "argument list too long",
         ENOEXEC => "exec format error",
         EBADF => "bad file descriptor",
@@ -136,7 +141,7 @@ pub fn strerror(num: NonZeroI32) -> &'static str {
         ENOTTY => "inappropriate ioctl for device",
         ETXTBSY => "text file busy",
         EFBIG => "file too large",
-        ENOSPC => "no space left on device / error reading system storage or saved data",
+        ENOSPC => "no space left on device",
         ESPIPE => "illegal seek",
         EROFS => "read-only filesystem",
         EMLINK => "too many links",
@@ -153,7 +158,7 @@ pub fn strerror(num: NonZeroI32) -> &'static str {
         ENOPROTOOPT => "protocol not available",
         EPROTONOSUPPORT => "protocol not supported",
         ESOCKTNOSUPPORT => "socket type not supported",
-        ENOTSUP => "operation not supported",
+        EOPNOTSUPP => "operation not supported",
         EPFNOSUPPORT => "protocol family not supported",
         EAFNOSUPPORT => "address family not supported by protocol family",
         EADDRINUSE => "address already in use",
@@ -203,6 +208,11 @@ pub fn strerror(num: NonZeroI32) -> &'static str {
         EPROTO => "protocol error",
         ENOTCAPABLE => "capabilities insufficient",
         ECAPMODE => "not permitted in capability mode",
+        ENOBLK => "block not ready",
+        EICV => "integrity check error",
+        ENOPLAYGOENT => "file not found in PlayGo chunk definition",
+        EREVOKE => "file is revoked",
+        ESDKVERSION => "SDK version of a binary file is invalid",
         v => todo!("strerror {v}"),
     }
 }

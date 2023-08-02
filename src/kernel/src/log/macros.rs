@@ -13,15 +13,15 @@ macro_rules! info {
             m.color.set_fg(Some(termcolor::Color::Cyan)).set_bold(true);
             l.entry(m)
         } else {
-            crate::log::LogEntry::sink()
+            $crate::log::LogEntry::sink()
         }
     };
     ($($arg:tt)*) => {
-        if let Some(l) = crate::log::LOGGER.get() {
+        if let Some(l) = $crate::log::LOGGER.get() {
             use std::io::Write;
 
             // Setup meta.
-            let mut m = crate::log::LogMeta{
+            let mut m = $crate::log::LogMeta{
                 category: 'I',
                 color: termcolor::ColorSpec::new(),
                 file: Some(std::file!()),
@@ -76,11 +76,11 @@ macro_rules! warn {
         }
     };
     ($($arg:tt)*) => {
-        if let Some(l) = crate::log::LOGGER.get() {
+        if let Some(l) = $crate::log::LOGGER.get() {
             use std::io::Write;
 
             // Setup meta.
-            let mut m = crate::log::LogMeta{
+            let mut m = $crate::log::LogMeta{
                 category: 'W',
                 color: termcolor::ColorSpec::new(),
                 file: Some(std::file!()),
@@ -136,11 +136,11 @@ macro_rules! error {
         }
     };
     ($($arg:tt)*) => {
-        if let Some(l) = crate::log::LOGGER.get() {
+        if let Some(l) = $crate::log::LOGGER.get() {
             use std::io::Write;
 
             // Setup meta.
-            let mut m = crate::log::LogMeta{
+            let mut m = $crate::log::LogMeta{
                 category: 'E',
                 color: termcolor::ColorSpec::new(),
                 file: Some(std::file!()),
