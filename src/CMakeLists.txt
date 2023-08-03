@@ -116,7 +116,11 @@ else()
 endif()
 
 # Setup installation.
-install(TARGETS obliteration BUNDLE DESTINATION . RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+if(WIN32)
+    install(TARGETS obliteration DESTINATION .)
+else()
+    install(TARGETS obliteration BUNDLE DESTINATION . RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
 
 qt_generate_deploy_app_script(
     TARGET obliteration
