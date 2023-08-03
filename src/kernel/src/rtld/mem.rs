@@ -164,6 +164,12 @@ impl Memory {
     }
 
     /// # Safety
+    /// Some part of the returned slice may not readable.
+    pub unsafe fn as_bytes(&self) -> &[u8] {
+        std::slice::from_raw_parts(self.ptr, self.len)
+    }
+
+    /// # Safety
     /// No other threads may execute the memory in the segment until the returned [`CodeWorkspace`]
     /// has been dropped.
     pub unsafe fn code_workspace(&self) -> Result<CodeWorkspace<'_>, CodeWorkspaceError> {

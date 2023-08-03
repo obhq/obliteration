@@ -66,4 +66,7 @@ pub struct DynlibInfoEx {
     pub unk1: u64, // Always zero.
     pub unk2: u64, // Same here.
     pub eh_frame_hdr: usize,
+    pub eh_frame: usize,
+    pub eh_frame_hdr_size: u32,
+    pub eh_frame_size: u32,
 }
