@@ -47,8 +47,12 @@ jobs:
         cmake --install build --prefix .
         mkdir dist
         mv obliteration.app dist/Obliteration.app
-    - name: Create Apple Disk Image
-      run: hdiutil create -volname Obliteration -srcfolder dist Obliteration.dmg
+        hdiutil create -volname Obliteration -srcfolder dist Obliteration.dmg
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: obliteration-mac-intel
+        path: Obliteration.dmg
     - name: Cache build files
       uses: actions/cache/save@v3
       with:
