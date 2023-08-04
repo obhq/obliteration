@@ -96,11 +96,14 @@ if(WIN32)
 endif()
 
 if(APPLE)
-    set_target_properties(obliteration PROPERTIES MACOSX_BUNDLE_GUI_IDENTIFIER io.github.obhq.obliteration)
-    set_target_properties(obliteration PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME Obliteration)
-    set_target_properties(obliteration PROPERTIES MACOSX_BUNDLE_BUNDLE_VERSION 0.1.0)
-    set_target_properties(obliteration PROPERTIES MACOSX_BUNDLE_SHORT_VERSION_STRING 0.1.0)
-    set_target_properties(obliteration PROPERTIES MACOSX_BUNDLE_COPYRIGHT "Copyright © 2023 Obliteration Contributors")
+    set_target_properties(obliteration PROPERTIES
+        MACOSX_BUNDLE_GUI_IDENTIFIER io.github.obhq.obliteration
+        MACOSX_BUNDLE_BUNDLE_NAME Obliteration
+        MACOSX_BUNDLE_BUNDLE_VERSION 0.1.0
+        MACOSX_BUNDLE_SHORT_VERSION_STRING 0.1.0
+        MACOSX_BUNDLE_COPYRIGHT "Copyright © 2023 Obliteration Contributors"
+        MACOSX_BUNDLE_ICON_FILE obliteration
+        RESOURCE resources/obliteration.icns)
 endif()
 
 target_compile_features(obliteration PRIVATE cxx_std_17)
