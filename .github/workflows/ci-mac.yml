@@ -42,12 +42,24 @@ jobs:
     - name: Run Clippy
       run: cargo clippy --release
       working-directory: src
-    - name: Export artifacts
+    - name: Create Application Bundle
       run: |
         cmake --install build --prefix .
         mkdir dist
         mv obliteration.app dist/Obliteration.app
-        hdiutil create -volname Obliteration -srcfolder dist Obliteration.dmg
+    - name: Fix library paths
+      run: |
+        app="dist/Obliteration.app/Contents/MacOS/obliteration"
+        krn="dist/Obliteration.app/Contents/MacOS/obkrnl"
+
+        install_name_tool -change '@rpath/QtWidgets.framework/Versions/A/QtWidgets' '@executable_path/../Frameworks/QtWidgets.framework/Versions/A/QtWidgets' "$app"
+        install_name_tool -change '@rpath/QtGui.framework/Versions/A/QtGui' '@executable_path/../Frameworks/QtGui.framework/Versions/A/QtGui' "$app"
+        install_name_tool -change '@rpath/QtCore.framework/Versions/A/QtCore' '@executable_path/../Frameworks/QtCore.framework/Versions/A/QtCore' "$app"
+
+        otool -L "$app"
+        otool -L "$krn"
+    - name: Create Apple Disk Image
+      run: hdiutil create -volname Obliteration -srcfolder dist Obliteration.dmg
     - name: Upload artifacts
       uses: actions/upload-artifact@v3
       with:
