@@ -1,7 +1,7 @@
 use crate::arc4::Arc4;
 use crate::fs::{Fs, VPath};
 use crate::llvm::Llvm;
-use crate::log::{print, LogMeta, Logger, LOGGER};
+use crate::log::{print, LOGGER};
 use crate::memory::MemoryManager;
 use crate::process::VProc;
 use crate::rtld::{ModuleFlags, RuntimeLinker};
@@ -15,7 +15,6 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::RwLock;
-use termcolor::{Color, ColorSpec};
 
 mod arc4;
 mod disasm;
@@ -33,37 +32,7 @@ mod sysctl;
 mod thread;
 
 fn main() -> ExitCode {
-    // Initialize logger.
-    LOGGER.set(Logger::new()).unwrap();
-
-    std::panic::set_hook(Box::new(|i| {
-        if let Some(l) = LOGGER.get() {
-            // Setup meta.
-            let mut m = LogMeta {
-                category: 'P',
-                color: ColorSpec::new(),
-                file: i.location().map(|l| l.file()),
-                line: i.location().map(|l| l.line()),
-            };
-
-            m.color.set_fg(Some(Color::Magenta)).set_bold(true);
-
-            // Write.
-            let mut e = l.entry(m);
-
-            if let Some(&p) = i.payload().downcast_ref::<&str>() {
-                writeln!(e, "{p}").unwrap();
-            } else if let Some(p) = i.payload().downcast_ref::<String>() {
-                writeln!(e, "{p}").unwrap();
-            } else {
-                writeln!(e, "Don't know how to print the panic payload.").unwrap();
-            }
-
-            l.write(e);
-        } else {
-            println!("{i}");
-        }
-    }));
+    log::init();
 
     // Load arguments.
     let args = if std::env::args().any(|a| a == "--debug") {

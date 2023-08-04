@@ -329,6 +329,9 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         // Exception handling.
         if let Some(i) = md.eh_info() {
             (*info).eh_frame_hdr = base + i.header();
+            (*info).eh_frame_hdr_size = i.header_size().try_into().unwrap();
+            (*info).eh_frame = base + i.frame();
+            (*info).eh_frame_size = i.frame_size().try_into().unwrap();
         } else {
             (*info).eh_frame_hdr = base;
         }

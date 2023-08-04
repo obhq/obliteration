@@ -5,7 +5,7 @@ use std::io::Write;
 use std::ops::DerefMut;
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
-use termcolor::{BufferWriter, ColorChoice};
+use termcolor::{BufferWriter, Color, ColorChoice, ColorSpec};
 
 mod entry;
 mod macros;
@@ -13,11 +13,52 @@ mod macros;
 /// A logger used by the macros in the [`macros`] module.
 pub static LOGGER: OnceLock<Logger> = OnceLock::new();
 
+/// # Panics
+/// If called a second time.
+pub fn init() -> &'static Logger {
+    // Setup global instance.
+    LOGGER
+        .set(Logger {
+            stdout: BufferWriter::stdout(ColorChoice::Auto),
+            file: Mutex::new(None),
+            start_time: Instant::now(),
+        })
+        .unwrap();
+
+    // Hook panic.
+    let l = unsafe { LOGGER.get().unwrap_unchecked() };
+
+    std::panic::set_hook(Box::new(|i| {
+        // Setup meta.
+        let mut m = LogMeta {
+            category: 'P',
+            color: ColorSpec::new(),
+            file: i.location().map(|l| l.file()),
+            line: i.location().map(|l| l.line()),
+        };
+
+        m.color.set_fg(Some(Color::Magenta)).set_bold(true);
+
+        // Write.
+        let mut e = l.entry(m);
+
+        if let Some(&p) = i.payload().downcast_ref::<&str>() {
+            writeln!(e, "{p}").unwrap();
+        } else if let Some(p) = i.payload().downcast_ref::<String>() {
+            writeln!(e, "{p}").unwrap();
+        } else {
+            writeln!(e, "Don't know how to print the panic payload.").unwrap();
+        }
+
+        l.write(e);
+    }));
+
+    l
+}
+
 /// Write a [`LogEntry`] to [`LOGGER`].
 pub fn print(e: LogEntry) {
-    if let Some(l) = LOGGER.get() {
-        l.write(e);
-    }
+    LOGGER.get().unwrap().write(e);
 }
 
 /// Logger for Obliteration Kernel.
@@ -31,14 +72,6 @@ pub struct Logger {
 }
 
 impl Logger {
-    pub fn new() -> Self {
-        Self {
-            stdout: BufferWriter::stdout(ColorChoice::Auto),
-            file: Mutex::new(None),
-            start_time: Instant::now(),
-        }
-    }
-
     pub fn set_file(&self, file: File) {
         *self.file.lock().unwrap() = Some(file);
     }

@@ -2,6 +2,7 @@ use super::{MapError, Memory};
 use crate::fs::{VPath, VPathBuf};
 use crate::log::{print, LogEntry};
 use bitflags::bitflags;
+use byteorder::{ByteOrder, LE};
 use elf::{
     DynamicFlags, DynamicTag, Elf, FileInfo, FileType, LibraryFlags, LibraryInfo, ModuleInfo,
     Program,
@@ -63,6 +64,26 @@ impl Module {
             }
         }
 
+        // Parse EH frame headers.
+        let eh_info = match image.eh().map(|i| image.program(i).unwrap()) {
+            Some(p) => {
+                assert_ne!(p.addr(), 0);
+                assert_ne!(p.memory_size(), 0);
+
+                let header = base + p.addr();
+                let header_size = p.memory_size();
+                let (frame, frame_size) = unsafe { Self::digest_eh(&memory, header, header_size) };
+
+                Some(ModuleEh {
+                    header,
+                    header_size,
+                    frame,
+                    frame_size,
+                })
+            }
+            None => None,
+        };
+
         // Initialize PLT relocation.
         if let Some(i) = image.info() {
             unsafe { Self::init_plt(&memory, base, i)? };
@@ -80,13 +101,6 @@ impl Module {
                 init_size: p.file_size().try_into().unwrap(),
                 size: p.memory_size(),
                 align: p.alignment(),
-            });
-        let eh_info = image
-            .eh()
-            .map(|i| image.program(i).unwrap())
-            .map(|p| ModuleEh {
-                header: base + p.addr(),
-                header_size: p.memory_size(),
             });
         let proc_param = image
             .proc_param()
@@ -253,12 +267,21 @@ impl Module {
 
         if let Some(i) = &self.eh_info {
             let hdr = mem.addr() + i.header;
+            let frame = mem.addr() + i.frame;
 
             writeln!(
                 entry,
                 "EH header     : {:#018x}:{:#018x}",
                 hdr,
                 hdr + i.header_size
+            )
+            .unwrap();
+
+            writeln!(
+                entry,
+                "EH frame      : {:#018x}:{:#018x}",
+                frame,
+                frame + i.frame_size
             )
             .unwrap();
         }
@@ -289,6 +312,50 @@ impl Module {
         }
 
         print(entry);
+    }
+
+    unsafe fn digest_eh(mem: &Memory, off: usize, len: usize) -> (usize, usize) {
+        // Get frame header.
+        let mem = mem.as_bytes();
+        let hdr = &mem[off..(off + len)];
+
+        // Let it panic because the PS4 assume the index is valid.
+        let frame: isize = LE::read_i32(&hdr[4..]).try_into().unwrap();
+
+        assert_ne!(frame, 0);
+
+        // Get first frame.
+        let frame: usize = match hdr[1] {
+            3 => todo!("EH frame header type 3"),
+            27 => (off + 4).checked_add_signed(frame).unwrap(),
+            _ => return (0, 0),
+        };
+
+        // Get frame size.
+        let mut next = frame;
+        let mut total = 0;
+
+        loop {
+            let mut size: usize = LE::read_u32(&mem[next..]).try_into().unwrap();
+
+            match size {
+                0 => {
+                    total += 4;
+                    break;
+                }
+                0xffffffff => {
+                    size = LE::read_u64(&mem[(next + 4)..]).try_into().unwrap();
+                    size += 12;
+                }
+                _ => size += 4,
+            }
+
+            // TODO: Check if total size does not out of text segment.
+            next += size;
+            total += size;
+        }
+
+        (frame, total)
     }
 
     /// See `dynlib_initialize_pltgot_each` on the PS4 for a reference.
@@ -483,6 +550,8 @@ impl ModuleTls {
 pub struct ModuleEh {
     header: usize,
     header_size: usize,
+    frame: usize,
+    frame_size: usize,
 }
 
 impl ModuleEh {
@@ -492,6 +561,14 @@ impl ModuleEh {
 
     pub fn header_size(&self) -> usize {
         self.header_size
+    }
+
+    pub fn frame(&self) -> usize {
+        self.frame
+    }
+
+    pub fn frame_size(&self) -> usize {
+        self.frame_size
     }
 }
 
