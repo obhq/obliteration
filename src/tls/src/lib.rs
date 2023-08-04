@@ -3,6 +3,7 @@ pub use value::*;
 use std::io::Error;
 use std::marker::PhantomData;
 use std::mem::transmute;
+use std::rc::Rc;
 use std::sync::OnceLock;
 
 mod value;
@@ -15,7 +16,7 @@ mod value;
 /// - `thread_local` crate does not destroy the object when the thread is exited.
 pub struct Tls<T> {
     storage: OnceLock<Storage>,
-    phantom: PhantomData<T>,
+    phantom: PhantomData<Rc<T>>,
 }
 
 impl<T> Tls<T> {
@@ -161,6 +162,8 @@ impl<T> Drop for Tls<T> {
         unsafe { Self::free_storage(storage) };
     }
 }
+
+unsafe impl<T> Sync for Tls<T> {}
 
 #[cfg(unix)]
 type Storage = libc::pthread_key_t;
