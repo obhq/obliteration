@@ -85,6 +85,8 @@ add_executable(obliteration WIN32 MACOSX_BUNDLE
 
 if(WIN32)
     target_sources(obliteration PRIVATE resources.rc)
+elseif(APPLE)
+    target_sources(obliteration PRIVATE resources/obliteration.icns)
 endif()
 
 add_dependencies(obliteration core)
