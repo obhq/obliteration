@@ -16,7 +16,7 @@
         "program": "${workspaceFolder}/build/src/obliteration"
       },
       "osx": {
-        "program": "${workspaceFolder}/build/src/Obliteration.app/Contents/MacOS/Obliteration"
+        "program": "${workspaceFolder}/build/src/obliteration.app/Contents/MacOS/obliteration"
       }
     },
     {

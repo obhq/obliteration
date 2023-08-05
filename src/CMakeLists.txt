@@ -85,22 +85,27 @@ add_executable(obliteration WIN32 MACOSX_BUNDLE
 
 if(WIN32)
     target_sources(obliteration PRIVATE resources.rc)
+elseif(APPLE)
+    target_sources(obliteration PRIVATE resources/obliteration.icns)
 endif()
 
 add_dependencies(obliteration core)
 
 set_target_properties(obliteration PROPERTIES AUTOMOC ON AUTORCC ON)
 
-if(WIN32 OR APPLE)
+if(WIN32)
     set_target_properties(obliteration PROPERTIES OUTPUT_NAME Obliteration)
 endif()
 
 if(APPLE)
-    set_target_properties(obliteration PROPERTIES MACOSX_BUNDLE_GUI_IDENTIFIER io.github.obhq.obliteration)
-    set_target_properties(obliteration PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME Obliteration)
-    set_target_properties(obliteration PROPERTIES MACOSX_BUNDLE_BUNDLE_VERSION 0.1.0)
-    set_target_properties(obliteration PROPERTIES MACOSX_BUNDLE_SHORT_VERSION_STRING 0.1.0)
-    set_target_properties(obliteration PROPERTIES MACOSX_BUNDLE_COPYRIGHT "Copyright © 2023 Obliteration Contributors")
+    set_target_properties(obliteration PROPERTIES
+        MACOSX_BUNDLE_GUI_IDENTIFIER io.github.obhq.obliteration
+        MACOSX_BUNDLE_BUNDLE_NAME Obliteration
+        MACOSX_BUNDLE_BUNDLE_VERSION 0.1.0
+        MACOSX_BUNDLE_SHORT_VERSION_STRING 0.1.0
+        MACOSX_BUNDLE_COPYRIGHT "Copyright © 2023 Obliteration Contributors"
+        MACOSX_BUNDLE_ICON_FILE obliteration
+        RESOURCE resources/obliteration.icns)
 endif()
 
 target_compile_features(obliteration PRIVATE cxx_std_17)
@@ -119,8 +124,23 @@ endif()
 if(WIN32)
     install(TARGETS obliteration DESTINATION .)
 else()
-    install(TARGETS obliteration DESTINATION bin)
+    install(TARGETS obliteration BUNDLE DESTINATION . RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
-install(PROGRAMS ${KERNEL} TYPE BIN)
-install(SCRIPT post-install.cmake)
+if(WIN32)
+    install(SCRIPT deploy-win32.cmake)
+elseif(APPLE)
+    qt_generate_deploy_app_script(
+        TARGET obliteration
+        OUTPUT_SCRIPT QT_DEPLOY_SCRIPT
+        NO_TRANSLATIONS
+        NO_COMPILER_RUNTIME)
+
+    install(SCRIPT ${QT_DEPLOY_SCRIPT})
+endif()
+
+if(APPLE)
+    install(PROGRAMS ${KERNEL} DESTINATION obliteration.app/Contents/MacOS)
+else()
+    install(PROGRAMS ${KERNEL} TYPE BIN)
+endif()

@@ -1,3 +1,4 @@
+.DS_Store
 /.flatpak-builder/
 /.kernel-debug
 /build/
