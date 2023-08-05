@@ -12,13 +12,12 @@ mod codegen;
 
 /// An implementation of [`ExecutionEngine`] using JIT powered by LLVM IR.
 pub struct LlvmEngine<'a, 'b: 'a> {
-    llvm: &'b Llvm,
     rtld: &'a RwLock<RuntimeLinker<'b>>,
 }
 
 impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
-    pub fn new(llvm: &'b Llvm, rtld: &'a RwLock<RuntimeLinker<'b>>) -> Self {
-        Self { llvm, rtld }
+    pub fn new(rtld: &'a RwLock<RuntimeLinker<'b>>) -> Self {
+        Self { rtld }
     }
 
     pub fn lift_initial_modules(&mut self) -> Result<(), LiftError> {
@@ -52,7 +51,7 @@ impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
         disasm.fixup();
 
         // Lift the public functions.
-        let mut lifting = self.llvm.create_module(path);
+        let mut lifting = Llvm::current().create_module(path);
         let mut codegen = Codegen::new(disasm, &mut lifting);
 
         for &addr in &targets {

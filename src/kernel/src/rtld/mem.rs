@@ -12,32 +12,62 @@ use thiserror::Error;
 pub struct Memory {
     ptr: *mut u8,
     len: usize,
-    base: usize,
     segments: Vec<MemorySegment>,
-    code_index: usize,
-    code_sealed: Mutex<usize>,
-    data_index: usize,
-    data_sealed: Mutex<usize>,
+    base: usize,
+    text: usize,
+    relro: usize,
+    data: usize,
+    obcode: usize,
+    obcode_sealed: Mutex<usize>,
+    obdata: usize,
+    obdata_sealed: Mutex<usize>,
     destructors: Mutex<Vec<Box<dyn FnOnce()>>>,
 }
 
 impl Memory {
     pub(super) fn new(image: &Elf<File>, base: usize) -> Result<Self, MapError> {
-        // Create segments from ELF programs.
-        let programs = image.programs();
-        let mut segments: Vec<MemorySegment> = Vec::with_capacity(programs.len() + 2);
+        // It seems like the PS4 expected to have only one for each text, data and relo program.
+        let mut segments: Vec<MemorySegment> = Vec::with_capacity(3 + 2);
+        let mut text: Option<usize> = None;
+        let mut relro: Option<usize> = None;
+        let mut data: Option<usize> = None;
 
-        for (i, prog) in programs.iter().enumerate() {
-            // Skip if unmappable program.
-            let ty = prog.ty();
-
-            if ty != ProgramType::PT_LOAD && ty != ProgramType::PT_SCE_RELRO {
-                continue;
-            }
-
+        for (i, prog) in image.programs().iter().enumerate() {
             // Skip if memory size is zero.
             if prog.memory_size() == 0 {
                 continue;
+            }
+
+            // Check type.
+            match prog.ty() {
+                ProgramType::PT_LOAD => {
+                    if prog.flags().contains(ProgramFlags::EXECUTE) {
+                        if text.is_some() {
+                            return Err(MapError::MultipleExecProgram);
+                        }
+                        text = Some(segments.len());
+                    } else if data.is_some() {
+                        return Err(MapError::MultipleDataProgram);
+                    } else {
+                        data = Some(segments.len());
+                    }
+                }
+                ProgramType::PT_SCE_RELRO => {
+                    if relro.is_some() {
+                        return Err(MapError::MultipleRelroProgram);
+                    } else {
+                        relro = Some(segments.len());
+                    }
+                }
+                _ => continue,
+            }
+
+            // Get offset and length.
+            let start = base + prog.addr();
+            let len = prog.aligned_size();
+
+            if start & 0x3fff != 0 {
+                return Err(MapError::InvalidProgramAlignment(i));
             }
 
             // Get protection.
@@ -58,17 +88,16 @@ impl Memory {
 
             // Construct the segment info.
             segments.push(MemorySegment {
-                start: prog.addr() + base,
-                len: prog.aligned_size(),
+                start,
+                len,
                 program: Some(i),
                 prot,
             });
         }
 
-        if segments.is_empty() {
-            // We need to check the PS4 kernel to see how it is handled this case.
-            todo!("(S)ELF with no mappable segments is not supported yet.");
-        }
+        let text = text.unwrap_or_else(|| todo!("(S)ELF with no executable program"));
+        let relro = relro.unwrap_or_else(|| todo!("(S)ELF with no PT_SCE_RELRO"));
+        let data = data.unwrap_or_else(|| todo!("(S)ELF with no data program"));
 
         // Make sure no any segment is overlapped.
         let mut len = base;
@@ -78,14 +107,14 @@ impl Memory {
         for s in &segments {
             if s.start < len {
                 // We need to check the PS4 kernel to see how it is handled this case.
-                todo!("(S)ELF with overlapped programs is not supported yet.");
+                todo!("(S)ELF with overlapped programs");
             }
 
             len = s.start + s.len;
         }
 
-        // Create workspace for code.
-        let code_index = segments.len();
+        // Create workspace for our code.
+        let obcode = segments.len();
         let segment = MemorySegment {
             start: len,
             len: 1024 * 1024,
@@ -96,9 +125,9 @@ impl Memory {
         len += segment.len;
         segments.push(segment);
 
-        // Create workspace for data. We cannot mix this the code because the executable-space
+        // Create workspace for our data. We cannot mix this the code because the executable-space
         // protection on some system don't allow execution on writable page.
-        let data_index = segments.len();
+        let obdata = segments.len();
         let segment = MemorySegment {
             start: len,
             len: 1024 * 1024,
@@ -137,12 +166,15 @@ impl Memory {
         Ok(Self {
             ptr: pages.into_raw(),
             len,
-            base,
             segments,
-            code_index,
-            code_sealed: Mutex::new(0),
-            data_index,
-            data_sealed: Mutex::new(0),
+            base,
+            text,
+            relro,
+            data,
+            obcode,
+            obcode_sealed: Mutex::new(0),
+            obdata,
+            obdata_sealed: Mutex::new(0),
             destructors: Mutex::default(),
         })
     }
@@ -155,12 +187,24 @@ impl Memory {
         self.len
     }
 
+    pub fn segments(&self) -> &[MemorySegment] {
+        self.segments.as_ref()
+    }
+
     pub fn base(&self) -> usize {
         self.base
     }
 
-    pub fn segments(&self) -> &[MemorySegment] {
-        self.segments.as_ref()
+    pub fn text_segment(&self) -> &MemorySegment {
+        &self.segments[self.text]
+    }
+
+    pub fn relro(&self) -> usize {
+        self.relro
+    }
+
+    pub fn data_segment(&self) -> &MemorySegment {
+        &self.segments[self.data]
     }
 
     /// # Safety
@@ -173,14 +217,11 @@ impl Memory {
     /// No other threads may execute the memory in the segment until the returned [`CodeWorkspace`]
     /// has been dropped.
     pub unsafe fn code_workspace(&self) -> Result<CodeWorkspace<'_>, CodeWorkspaceError> {
-        let sealed = self.code_sealed.lock().unwrap();
-        let seg = match self.unprotect_segment(self.code_index) {
+        let sealed = self.obcode_sealed.lock().unwrap();
+        let seg = match self.unprotect_segment(self.obcode) {
             Ok(v) => v,
             Err(e) => {
-                return Err(CodeWorkspaceError::UnprotectSegmentFailed(
-                    self.code_index,
-                    e,
-                ));
+                return Err(CodeWorkspaceError::UnprotectSegmentFailed(self.obcode, e));
             }
         };
 
@@ -193,8 +234,8 @@ impl Memory {
     }
 
     pub fn push_data<T: 'static>(&self, value: T) -> Option<*mut T> {
-        let mut sealed = self.data_sealed.lock().unwrap();
-        let seg = &self.segments[self.data_index];
+        let mut sealed = self.obdata_sealed.lock().unwrap();
+        let seg = &self.segments[self.obdata];
         let ptr = unsafe { self.ptr.add(seg.start + *sealed) };
         let available = seg.len - *sealed;
 
@@ -303,12 +344,15 @@ impl Debug for Memory {
         f.debug_struct("Memory")
             .field("ptr", &self.ptr)
             .field("len", &self.len)
-            .field("base", &self.base)
             .field("segments", &self.segments)
-            .field("code_index", &self.code_index)
-            .field("code_sealed", &self.code_sealed)
-            .field("data_index", &self.data_index)
-            .field("data_sealed", &self.data_sealed)
+            .field("base", &self.base)
+            .field("text", &self.text)
+            .field("relro", &self.relro)
+            .field("data", &self.data)
+            .field("obcode", &self.obcode)
+            .field("obcode_sealed", &self.obcode_sealed)
+            .field("obdata", &self.obdata)
+            .field("obdata_sealed", &self.obdata_sealed)
             .field("destructors", &self.destructors.lock().unwrap().len())
             .finish()
     }

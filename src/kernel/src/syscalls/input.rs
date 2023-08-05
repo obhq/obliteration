@@ -69,4 +69,9 @@ pub struct DynlibInfoEx {
     pub eh_frame: usize,
     pub eh_frame_hdr_size: u32,
     pub eh_frame_size: u32,
+    pub mapbase: usize,
+    pub textsize: u32,
+    pub unk3: u32, // Always 5.
+    pub database: usize,
+    pub datasize: u32,
 }
