@@ -127,13 +127,17 @@ else()
     install(TARGETS obliteration BUNDLE DESTINATION . RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
-qt_generate_deploy_app_script(
-    TARGET obliteration
-    OUTPUT_SCRIPT QT_DEPLOY_SCRIPT
-    NO_TRANSLATIONS
-    NO_COMPILER_RUNTIME)
+if(WIN32)
+    install(SCRIPT deploy-win32.cmake)
+elseif(APPLE)
+    qt_generate_deploy_app_script(
+        TARGET obliteration
+        OUTPUT_SCRIPT QT_DEPLOY_SCRIPT
+        NO_TRANSLATIONS
+        NO_COMPILER_RUNTIME)
 
-install(SCRIPT ${QT_DEPLOY_SCRIPT})
+    install(SCRIPT ${QT_DEPLOY_SCRIPT})
+endif()
 
 if(APPLE)
     install(PROGRAMS ${KERNEL} DESTINATION obliteration.app/Contents/MacOS)
