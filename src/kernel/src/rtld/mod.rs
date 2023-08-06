@@ -72,6 +72,11 @@ impl<'a> RuntimeLinker<'a> {
 
         *app.flags_mut() |= ModuleFlags::MAIN_PROG;
 
+        // TODO: Apply logic from dmem_handle_process_exec_begin.
+        // TODO: Apply logic from procexec_handler.
+        // TODO: Apply logic from umtx_exec_hook.
+        // TODO: Apply logic from aio_proc_rundown_exec.
+        // TODO: Apply logic from gs_is_event_handler_process_exec.
         Ok(Self {
             fs,
             list: Vec::from([app]),
@@ -265,6 +270,18 @@ pub enum RuntimeLinkerError {
 /// Represents an error for (S)ELF mapping.
 #[derive(Debug, Error)]
 pub enum MapError {
+    #[error("the image has multiple executable programs")]
+    MultipleExecProgram,
+
+    #[error("the image has multiple data programs")]
+    MultipleDataProgram,
+
+    #[error("the image has multiple PT_SCE_RELRO")]
+    MultipleRelroProgram,
+
+    #[error("ELF program {0} has invalid alignment")]
+    InvalidProgramAlignment(usize),
+
     #[error("cannot allocate {0} bytes")]
     MemoryAllocationFailed(usize, #[source] MmapError),
 

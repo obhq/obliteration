@@ -15,7 +15,7 @@ pub static LOGGER: OnceLock<Logger> = OnceLock::new();
 
 /// # Panics
 /// If called a second time.
-pub fn init() -> &'static Logger {
+pub fn init() {
     // Setup global instance.
     LOGGER
         .set(Logger {
@@ -25,7 +25,7 @@ pub fn init() -> &'static Logger {
         })
         .unwrap();
 
-    // Hook panic.
+    // SAFETY: This is safe because we just set the value on the above.
     let l = unsafe { LOGGER.get().unwrap_unchecked() };
 
     std::panic::set_hook(Box::new(|i| {
@@ -52,8 +52,6 @@ pub fn init() -> &'static Logger {
 
         l.write(e);
     }));
-
-    l
 }
 
 /// Write a [`LogEntry`] to [`LOGGER`].

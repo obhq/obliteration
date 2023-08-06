@@ -276,9 +276,17 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         };
 
         // Fill the info.
+        let mem = md.memory();
+        let addr = mem.addr();
+
         *info = zeroed();
 
         (*info).handle = md.id();
+        (*info).mapbase = addr + mem.base();
+        (*info).textsize = mem.text_segment().len().try_into().unwrap();
+        (*info).unk3 = 5;
+        (*info).database = addr + mem.data_segment().start();
+        (*info).datasize = mem.data_segment().len().try_into().unwrap();
 
         // Copy module name.
         if flags & 2 == 0 || !md.flags().contains(ModuleFlags::UNK1) {
@@ -308,34 +316,32 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
 
         // Set TLS information. Not sure if the tlsinit can be zero when the tlsinitsize is zero.
         // Let's keep the same behavior as the PS4 for now.
-        let base = md.memory().addr();
-
         if let Some(i) = md.tls_info() {
             // tlsoffset seems to always zero.
-            (*info).tlsinit = base + i.init();
+            (*info).tlsinit = addr + i.init();
             (*info).tlsinitsize = i.init_size().try_into().unwrap();
             (*info).tlssize = i.size().try_into().unwrap();
             (*info).tlsalign = i.align().try_into().unwrap();
         } else {
-            (*info).tlsinit = base;
+            (*info).tlsinit = addr;
         }
 
         // Initialization and finalization functions.
         if !md.flags().contains(ModuleFlags::UNK5) {
-            (*info).init = md.init().map(|v| base + v).unwrap_or(0);
-            (*info).fini = md.fini().map(|v| base + v).unwrap_or(0);
+            (*info).init = md.init().map(|v| addr + v).unwrap_or(0);
+            (*info).fini = md.fini().map(|v| addr + v).unwrap_or(0);
         }
 
         // Exception handling.
         if let Some(i) = md.eh_info() {
-            (*info).eh_frame_hdr = base + i.header();
+            (*info).eh_frame_hdr = addr + i.header();
             (*info).eh_frame_hdr_size = i.header_size().try_into().unwrap();
-            (*info).eh_frame = base + i.frame();
+            (*info).eh_frame = addr + i.frame();
             (*info).eh_frame_size = i.frame_size().try_into().unwrap();
         } else {
-            (*info).eh_frame_hdr = base;
+            (*info).eh_frame_hdr = addr;
         }
 
-        todo!("fill the remaining info on syscall 608");
+        Ok(Output::ZERO)
     }
 }

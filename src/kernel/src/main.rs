@@ -95,11 +95,12 @@ fn main() -> ExitCode {
 
     // Initialize Arc4.
     info!("Initializing arc4random.");
+    Arc4::init();
 
-    Arc4::new();
+    // Initialize LLVM.
+    info!("Initializing LLVM.");
+    Llvm::init();
 
-    // Initialize foundations.
-    let llvm = Llvm::new();
     let sysctl = Sysctl::new();
 
     // Initialize filesystem.
@@ -248,7 +249,7 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
         ExecutionEngine::Llvm => {
-            let mut ee = ee::llvm::LlvmEngine::new(&llvm, &ld);
+            let mut ee = ee::llvm::LlvmEngine::new(&ld);
 
             info!("Lifting modules.");
 

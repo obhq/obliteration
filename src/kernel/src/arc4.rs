@@ -11,7 +11,7 @@ pub struct Arc4 {
 impl Arc4 {
     /// # Panics
     /// If this method called a second time.
-    pub fn new() -> &'static Self {
+    pub fn init() {
         let mut sbox = [0u8; 256];
 
         for (i, e) in sbox.iter_mut().enumerate() {
@@ -22,9 +22,6 @@ impl Arc4 {
             state: Mutex::new(State { i: 0, j: 0, sbox }),
         })
         .unwrap();
-
-        // SAFETY: This is safe because we just set its value on the above.
-        unsafe { ARC4.get().unwrap_unchecked() }
     }
 
     /// # Panics
