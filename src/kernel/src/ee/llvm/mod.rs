@@ -1,8 +1,9 @@
 use self::codegen::Codegen;
-use super::ExecutionEngine;
+use super::{EntryArg, ExecutionEngine};
 use crate::disasm::Disassembler;
 use crate::fs::VPathBuf;
 use crate::llvm::Llvm;
+use crate::memory::VPages;
 use crate::rtld::{Module, RuntimeLinker};
 use std::error::Error;
 use std::sync::RwLock;
@@ -73,7 +74,7 @@ impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
 }
 
 impl<'a, 'b: 'a> ExecutionEngine for LlvmEngine<'a, 'b> {
-    fn run(&mut self) -> Result<(), Box<dyn Error>> {
+    unsafe fn run(&mut self, arg: EntryArg, stack: VPages) -> Result<(), Box<dyn Error>> {
         todo!()
     }
 }

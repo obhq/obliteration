@@ -1,8 +1,9 @@
 use crate::arc4::Arc4;
+use crate::ee::EntryArg;
 use crate::fs::{Fs, VPath};
 use crate::llvm::Llvm;
 use crate::log::{print, LOGGER};
-use crate::memory::MemoryManager;
+use crate::memory::{MappingFlags, MemoryManager, Protections};
 use crate::process::VProc;
 use crate::rtld::{ModuleFlags, RuntimeLinker};
 use crate::syscalls::Syscalls;
@@ -213,7 +214,13 @@ fn main() -> ExitCode {
     let status = match ee {
         #[cfg(target_arch = "x86_64")]
         ExecutionEngine::Native => {
-            let mut ee = ee::native::NativeEngine::new(&ld, &syscalls);
+            let mut ee = match ee::native::NativeEngine::new(&ld, &syscalls) {
+                Ok(v) => v,
+                Err(e) => {
+                    error!(e, "Initialize failed");
+                    return ExitCode::FAILURE;
+                }
+            };
 
             info!("Patching modules.");
 
@@ -269,9 +276,29 @@ fn main() -> ExitCode {
 }
 
 fn exec<E: ee::ExecutionEngine>(mut ee: E) -> ExitCode {
+    // TODO: Check how the PS4 allocate the stack.
+    // TODO: We should allocate a guard page to catch stack overflow.
+    info!("Allocating application stack.");
+
+    let stack = match MemoryManager::current().mmap(
+        0,
+        1024 * 1024 * 10, // 10MB should be large enough.
+        Protections::CPU_READ | Protections::CPU_WRITE,
+        MappingFlags::MAP_ANON | MappingFlags::MAP_PRIVATE,
+        -1,
+        0,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            error!(e, "Allocate failed");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    // Start the application.
     info!("Starting application.");
 
-    if let Err(e) = ee.run() {
+    if let Err(e) = unsafe { ee.run(EntryArg::new(), stack) } {
         error!(e, "Start failed");
         return ExitCode::FAILURE;
     }

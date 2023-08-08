@@ -1,15 +1,16 @@
-use super::ExecutionEngine;
+use super::{EntryArg, ExecutionEngine};
 use crate::fs::{VPath, VPathBuf};
-use crate::memory::Protections;
+use crate::memory::{Protections, VPages};
 use crate::rtld::{CodeWorkspaceError, Memory, Module, RuntimeLinker, UnprotectSegmentError};
 use crate::syscalls::{Input, Output, Syscalls};
 use byteorder::{ByteOrder, LE};
 use iced_x86::code_asm::{
-    dword_ptr, qword_ptr, r10, r11, r11d, r12, r8, r9, rax, rbp, rbx, rcx, rdi, rdx, rsi, rsp,
-    CodeAssembler,
+    dword_ptr, eax, edi, qword_ptr, r10, r11, r11d, r12, r12d, r8, r9, rax, rbp, rbx, rcx, rdi,
+    rdx, rsi, rsp, CodeAssembler,
 };
+use std::arch::asm;
 use std::error::Error;
-use std::mem::{size_of, transmute};
+use std::mem::size_of;
 use std::ptr::null_mut;
 use std::sync::RwLock;
 use thiserror::Error;
@@ -18,11 +19,24 @@ use thiserror::Error;
 pub struct NativeEngine<'a, 'b: 'a> {
     rtld: &'a RwLock<RuntimeLinker<'b>>,
     syscalls: &'a Syscalls<'a, 'b>,
+    stack: TlsKey, // A pointer to Stack struct.
 }
 
 impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
-    pub fn new(rtld: &'a RwLock<RuntimeLinker<'b>>, syscalls: &'a Syscalls<'a, 'b>) -> Self {
-        Self { rtld, syscalls }
+    pub fn new(
+        rtld: &'a RwLock<RuntimeLinker<'b>>,
+        syscalls: &'a Syscalls<'a, 'b>,
+    ) -> Result<Self, NativeEngineError> {
+        let stack = match Self::allocate_stack_key() {
+            Ok(v) => v,
+            Err(e) => return Err(NativeEngineError::AllocateStackTlsFailed(e)),
+        };
+
+        Ok(Self {
+            rtld,
+            syscalls,
+            stack,
+        })
     }
 
     /// # SAFETY
@@ -43,6 +57,45 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
 
     fn syscalls(&self) -> *const Syscalls<'a, 'b> {
         self.syscalls
+    }
+
+    /// # Safety
+    /// The caller is responsible for making sure no other alias to the returned [`Stack`].
+    #[cfg(unix)]
+    unsafe extern "sysv64" fn stack(&self) -> *mut Stack {
+        libc::pthread_getspecific(self.stack) as _
+    }
+
+    /// # Safety
+    /// The caller is responsible for making sure no other alias to the returned [`Stack`].
+    #[cfg(windows)]
+    unsafe extern "sysv64" fn stack(&self) -> *mut Stack {
+        windows_sys::Win32::System::Threading::FlsGetValue(self.stack) as _
+    }
+
+    /// # Safety
+    /// This may leak the memory if the stack information for the current thread already been set.
+    /// In Rust the memory leak is not unsafe but we don't want ignorance people to invoke this without knowing it consequence.
+    #[cfg(unix)]
+    unsafe fn set_stack(&self, v: Stack) -> *mut Stack {
+        let v = Box::into_raw(Box::new(v));
+        assert_eq!(libc::pthread_setspecific(self.stack, v as _), 0);
+        v
+    }
+
+    /// # Safety
+    /// This may leak the memory if the stack information for the current thread already been set.
+    /// In Rust the memory leak is not unsafe but we don't want ignorance people to invoke this without knowing it consequence.
+    #[cfg(windows)]
+    unsafe fn set_stack(&self, v: Stack) -> *mut Stack {
+        let v = Box::into_raw(Box::new(v));
+
+        assert_ne!(
+            windows_sys::Win32::System::Threading::FlsSetValue(self.stack, v as _),
+            0
+        );
+
+        v
     }
 
     /// # Safety
@@ -250,10 +303,6 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
         asm.pop(r11).unwrap();
         asm.and(rsp, !15).unwrap(); // Make sure stack is align to 16 bytes boundary.
 
-        // Create stack frame.
-        asm.sub(rsp, 0x50 + 0x10).unwrap();
-        asm.mov(rax, rsp).unwrap();
-
         // Save registers.
         asm.push(rdi).unwrap();
         asm.push(rsi).unwrap();
@@ -268,7 +317,9 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
             None => return Err(TrampolineError::SpaceNotEnough),
         };
 
-        asm.mov(rbx, rax).unwrap();
+        asm.sub(rsp, 0x50 + 0x10).unwrap();
+        asm.mov(rbx, rsp).unwrap();
+
         asm.mov(dword_ptr(rbx), id).unwrap();
         asm.mov(rax, offset as u64).unwrap();
         asm.mov(qword_ptr(rbx + 0x08), rax).unwrap();
@@ -281,6 +332,29 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
         asm.mov(qword_ptr(rbx + 0x38), r8).unwrap();
         asm.mov(qword_ptr(rbx + 0x40), r9).unwrap();
 
+        // Switch to host stack.
+        asm.mov(rdi, self as *const Self as u64).unwrap();
+        asm.mov(rax, Self::stack as u64).unwrap();
+        asm.call(rax).unwrap();
+
+        asm.mov(rsp, qword_ptr(rax)).unwrap();
+        asm.and(rsp, !15).unwrap();
+
+        // Set TIB to host stack.
+        if cfg!(windows) {
+            asm.mov(r12, 0xFFFFFFFFFFFFFFFFu64).unwrap();
+            asm.mov(qword_ptr(0x00).gs(), r12).unwrap();
+            asm.mov(r12, qword_ptr(rax + 0x10)).unwrap();
+            asm.mov(qword_ptr(0x08).gs(), r12).unwrap();
+            asm.mov(r12, qword_ptr(rax + 0x08)).unwrap();
+            asm.mov(qword_ptr(0x10).gs(), r12).unwrap();
+            asm.mov(r12, qword_ptr(rax + 0x28)).unwrap();
+            asm.mov(qword_ptr(0x1478).gs(), r12).unwrap();
+            asm.mov(r12d, dword_ptr(rax + 0x30)).unwrap();
+            asm.mov(dword_ptr(0x1748).gs(), r12d).unwrap();
+            asm.mov(r12, rax).unwrap();
+        }
+
         // Invoke our routine.
         asm.mov(rax, rbx).unwrap();
         asm.add(rax, 0x50).unwrap();
@@ -290,11 +364,36 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
         asm.mov(rax, Syscalls::invoke as u64).unwrap();
         asm.call(rax).unwrap();
 
+        // Switch to PS4 stack.
+        asm.mov(rsp, rbx).unwrap();
+
+        // Update stack information from TIB.
+        if cfg!(windows) {
+            asm.mov(rdi, qword_ptr(0x10).gs()).unwrap();
+            asm.mov(qword_ptr(r12 + 0x08), rdi).unwrap();
+            asm.mov(edi, dword_ptr(0x1748).gs()).unwrap();
+            asm.mov(dword_ptr(r12 + 0x30), edi).unwrap();
+        }
+
+        // Set TIB to PS4 stack.
+        if cfg!(windows) {
+            asm.mov(rdi, 0xFFFFFFFFFFFFFFFFu64).unwrap();
+            asm.mov(qword_ptr(0x00).gs(), rdi).unwrap();
+            asm.mov(rdi, qword_ptr(r12 + 0x20)).unwrap();
+            asm.mov(qword_ptr(0x08).gs(), rdi).unwrap();
+            asm.mov(rdi, qword_ptr(r12 + 0x18)).unwrap();
+            asm.mov(qword_ptr(0x10).gs(), rdi).unwrap();
+            asm.mov(qword_ptr(0x1478).gs(), rdi).unwrap();
+            asm.xor(edi, edi).unwrap();
+            asm.mov(dword_ptr(0x1748).gs(), edi).unwrap();
+        }
+
         // Check error. This mimic the behavior of
         // https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/amd64/amd64/vm_machdep.c#L380.
         let mut err = asm.create_label();
         let mut restore = asm.create_label();
 
+        asm.add(rsp, 0x50 + 0x10).unwrap();
         asm.pop(r11).unwrap();
         asm.pop(rdx).unwrap();
         asm.test(rax, rax).unwrap();
@@ -344,10 +443,37 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
         asm.push(rbp).unwrap();
         asm.mov(rbp, rsp).unwrap();
         asm.and(rsp, !15).unwrap(); // Make sure stack is align to 16 bytes boundary.
+
         asm.push(rdi).unwrap();
         asm.push(rax).unwrap();
         asm.push(rdx).unwrap();
         asm.push(rsi).unwrap();
+        asm.push(rbx).unwrap();
+        asm.push(r12).unwrap();
+
+        // Switch to host stack.
+        asm.mov(rdi, self as *const Self as u64).unwrap();
+        asm.mov(rax, Self::stack as u64).unwrap();
+        asm.call(rax).unwrap();
+
+        asm.mov(rbx, rsp).unwrap();
+        asm.mov(rsp, qword_ptr(rax)).unwrap();
+        asm.and(rsp, !15).unwrap();
+
+        // Set TIB to host stack.
+        if cfg!(windows) {
+            asm.mov(r12, 0xFFFFFFFFFFFFFFFFu64).unwrap();
+            asm.mov(qword_ptr(0x00).gs(), r12).unwrap();
+            asm.mov(r12, qword_ptr(rax + 0x10)).unwrap();
+            asm.mov(qword_ptr(0x08).gs(), r12).unwrap();
+            asm.mov(r12, qword_ptr(rax + 0x08)).unwrap();
+            asm.mov(qword_ptr(0x10).gs(), r12).unwrap();
+            asm.mov(r12, qword_ptr(rax + 0x28)).unwrap();
+            asm.mov(qword_ptr(0x1478).gs(), r12).unwrap();
+            asm.mov(r12d, dword_ptr(rax + 0x30)).unwrap();
+            asm.mov(dword_ptr(0x1748).gs(), r12d).unwrap();
+            asm.mov(r12, rax).unwrap();
+        }
 
         // Invoke our routine.
         let module = match mem.push_data(module.to_owned()) {
@@ -361,7 +487,33 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
         asm.mov(rax, Syscalls::int44 as u64).unwrap();
         asm.call(rax).unwrap();
 
+        // Switch to PS4 stack.
+        asm.mov(rsp, rbx).unwrap();
+
+        // Update stack information from TIB.
+        if cfg!(windows) {
+            asm.mov(rax, qword_ptr(0x10).gs()).unwrap();
+            asm.mov(qword_ptr(r12 + 0x08), rax).unwrap();
+            asm.mov(eax, dword_ptr(0x1748).gs()).unwrap();
+            asm.mov(dword_ptr(r12 + 0x30), eax).unwrap();
+        }
+
+        // Set TIB to PS4 stack.
+        if cfg!(windows) {
+            asm.mov(rax, 0xFFFFFFFFFFFFFFFFu64).unwrap();
+            asm.mov(qword_ptr(0x00).gs(), rax).unwrap();
+            asm.mov(rax, qword_ptr(r12 + 0x20)).unwrap();
+            asm.mov(qword_ptr(0x08).gs(), rax).unwrap();
+            asm.mov(rax, qword_ptr(r12 + 0x18)).unwrap();
+            asm.mov(qword_ptr(0x10).gs(), rax).unwrap();
+            asm.mov(qword_ptr(0x1478).gs(), rax).unwrap();
+            asm.xor(eax, eax).unwrap();
+            asm.mov(dword_ptr(0x1748).gs(), eax).unwrap();
+        }
+
         // Restore registers.
+        asm.pop(r12).unwrap();
+        asm.pop(rbx).unwrap();
         asm.pop(rsi).unwrap();
         asm.pop(rdx).unwrap();
         asm.pop(rax).unwrap();
@@ -439,56 +591,165 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
         offset.try_into().ok()
     }
 
-    extern "sysv64" fn exit() {
-        todo!()
+    #[cfg(unix)]
+    fn allocate_stack_key() -> Result<TlsKey, std::io::Error> {
+        use libc::{c_void, pthread_key_create, pthread_key_t};
+        use std::mem::MaybeUninit;
+
+        unsafe extern "C" fn dtor(data: *mut c_void) {
+            drop(Box::<Stack>::from_raw(data as _));
+        }
+
+        let mut key = MaybeUninit::<pthread_key_t>::uninit();
+        let err = unsafe { pthread_key_create(key.as_mut_ptr(), Some(dtor)) };
+
+        if err != 0 {
+            Err(std::io::Error::from_raw_os_error(err))
+        } else {
+            Ok(unsafe { key.assume_init() })
+        }
+    }
+
+    #[cfg(windows)]
+    fn allocate_stack_key() -> Result<TlsKey, std::io::Error> {
+        use std::ffi::c_void;
+        use std::mem::transmute;
+        use windows_sys::Win32::System::Threading::{FlsAlloc, FLS_OUT_OF_INDEXES};
+
+        unsafe extern "system" fn dtor(data: *const c_void) {
+            drop(Box::<Stack>::from_raw(transmute(data)));
+        }
+
+        let key = unsafe { FlsAlloc(Some(dtor)) };
+
+        if key == FLS_OUT_OF_INDEXES {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(key)
+        }
+    }
+}
+
+impl<'a, 'b: 'a> Drop for NativeEngine<'a, 'b> {
+    fn drop(&mut self) {
+        // Free the stack info for the current thread. When we are here that mean all other threads
+        // already been been terminated, which imply that the stack info for those threads has been
+        // freed by the TLS destructor.
+        #[cfg(unix)]
+        unsafe {
+            let stack = self.stack();
+
+            if !stack.is_null() {
+                // No need to set the value to null because the pthread is not going to call the
+                // destructor when the key is deleted.
+                drop(Box::from_raw(stack));
+            }
+
+            assert_eq!(libc::pthread_key_delete(self.stack), 0);
+        }
+
+        #[cfg(windows)]
+        unsafe {
+            // On Windows the FlsFree() will call the destructor so we don't need to free the
+            // data here.
+            assert_ne!(
+                windows_sys::Win32::System::Threading::FlsFree(self.stack),
+                0
+            );
+        }
     }
 }
 
 impl<'a, 'b> ExecutionEngine for NativeEngine<'a, 'b> {
-    fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        // Get eboot.bin.
+    unsafe fn run(&mut self, mut arg: EntryArg, mut stack: VPages) -> Result<(), Box<dyn Error>> {
+        // Check eboot type.
         let ld = self.rtld.read().unwrap();
-        let eboot = ld.app();
 
-        if eboot.file_info().is_none() {
-            todo!("a statically linked eboot.bin is not supported yet");
+        if ld.app().file_info().is_none() {
+            todo!("statically linked eboot.bin");
         }
 
-        // Get boot module.
-        let boot = ld.kernel().unwrap();
-
         // Get entry point.
-        let mem = boot.memory().addr();
-        let entry: EntryPoint = unsafe { transmute(mem + boot.entry().unwrap()) };
+        let boot = ld.kernel().unwrap();
+        let entry = boot.memory().addr() + boot.entry().unwrap();
 
         drop(ld);
 
-        // TODO: Check how the actual binary read its argument.
-        // Setup arguments.
-        let mut argv: Vec<*mut u8> = Vec::new();
-        let mut arg1 = b"prog\0".to_vec();
+        // Setup stack information.
+        let ps4_start = stack.as_mut_ptr();
+        let ps4_end = ps4_start.add(stack.len());
+        let si = self.set_stack(Stack {
+            host: null_mut(),
+            host_start: null_mut(),
+            host_end: null_mut(),
+            ps4_start,
+            ps4_end,
+            win32_deallocation: null_mut(),
+            win32_guaranteed: 0,
+        });
 
-        argv.push(arg1.as_mut_ptr());
-        argv.push(null_mut());
+        // Set TIB to PS4 stack.
+        #[cfg(windows)]
+        asm!(
+            "mov rax, gs:[0x10]", // Get TIB.StackLimit.
+            "mov [rdi+0x08], rax", // Save host_start.
+            "mov rax, gs:[0x08]", // Get TIB.StackBase.
+            "mov [rdi+0x10], rax", // Save host_end.
+            "mov rax, gs:[0x1478]", // Get TIB.DeallocationStack.
+            "mov [rdi+0x28], rax", // Save win32_deallocation.
+            "mov eax, gs:[0x1748]", // Get TIB.GuaranteedStackBytes.
+            "mov [rdi+0x30], eax", // Save win32_guaranteed.
+            "mov rax, 0xFFFFFFFFFFFFFFFF", // EXCEPTION_CHAIN_END
+            "mov gs:[0x00], rax", // Set TIB.ExceptionList.
+            "mov rax, [rdi+0x20]", // Get ps4_end.
+            "mov gs:[0x08], rax", // Set TIB.StackBase.
+            "mov rax, [rdi+0x18]", // Get ps4_start.
+            "mov gs:[0x10], rax", // Set TIB.StackLimit.
+            "mov gs:[0x1478], rax", // Set TIB.DeallocationStack.
+            "xor eax, eax",
+            "mov gs:[0x1748], eax", // Set TIB.GuaranteedStackBytes.
+            in("rdi") si,
+            out("rax") _,
+        );
 
-        // Invoke entry point.
-        let mut arg = Arg {
-            argc: (argv.len() as i32) - 1,
-            argv: argv.as_mut_ptr(),
-        };
+        // Jump to the entry point.
+        let arg = arg.as_vec();
 
-        entry(&mut arg, Self::exit);
-
-        Ok(())
+        asm!(
+            "mov rax, rsp",
+            "mov [rcx], rax", // Save host stack.
+            "mov rsp, [rcx+0x20]", // Get ps4_end.
+            "jmp rsi",
+            in("rcx") si,
+            in("rdi") arg.as_ptr(),
+            in("rsi") entry,
+            options(noreturn),
+        );
     }
 }
 
-type EntryPoint = extern "sysv64" fn(*mut Arg, extern "sysv64" fn());
+#[cfg(unix)]
+type TlsKey = libc::pthread_key_t;
+
+#[cfg(windows)]
+type TlsKey = u32;
 
 #[repr(C)]
-struct Arg {
-    pub argc: i32,
-    pub argv: *mut *mut u8,
+struct Stack {
+    host: *mut u8,
+    host_start: *mut u8, // Only available on Windows.
+    host_end: *mut u8,   // Same here.
+    ps4_start: *mut u8,
+    ps4_end: *mut u8,
+    win32_deallocation: *mut u8, // Only available on Windows.
+    win32_guaranteed: u32,       // Same here.
+}
+
+/// Represents an error when [`NativeEngine`] construction is failed.
+#[derive(Debug, Error)]
+pub enum NativeEngineError {
+    #[error("cannot allocate a TLS key for stack data")]
+    AllocateStackTlsFailed(#[source] std::io::Error),
 }
 
 /// Errors for [`NativeEngine::patch_mods()`].
