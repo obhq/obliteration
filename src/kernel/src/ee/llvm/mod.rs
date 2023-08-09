@@ -1,10 +1,10 @@
 use self::codegen::Codegen;
-use super::ExecutionEngine;
+use super::{EntryArg, ExecutionEngine};
 use crate::disasm::Disassembler;
 use crate::fs::VPathBuf;
 use crate::llvm::Llvm;
+use crate::memory::VPages;
 use crate::rtld::{Module, RuntimeLinker};
-use std::error::Error;
 use std::sync::RwLock;
 use thiserror::Error;
 
@@ -73,12 +73,18 @@ impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
 }
 
 impl<'a, 'b: 'a> ExecutionEngine for LlvmEngine<'a, 'b> {
-    fn run(&mut self) -> Result<(), Box<dyn Error>> {
+    type RunErr = RunError;
+
+    unsafe fn run(&mut self, arg: EntryArg, stack: VPages) -> Result<(), Self::RunErr> {
         todo!()
     }
 }
 
-/// Represents errors for lifting module.
+/// Represent an error when [`LlvmEngine::run()`] is failed.
+#[derive(Debug, Error)]
+pub enum RunError {}
+
+/// Represents an error when module lifting is failed.
 #[derive(Debug, Error)]
 pub enum LiftError {
     #[error("cannot disassemble function {1:#018x} on {0}")]

@@ -1,14 +1,15 @@
-use super::ExecutionEngine;
+use super::{EntryArg, ExecutionEngine};
 use crate::fs::{VPath, VPathBuf};
-use crate::memory::Protections;
+use crate::memory::{Protections, VPages};
 use crate::rtld::{CodeWorkspaceError, Memory, Module, RuntimeLinker, UnprotectSegmentError};
 use crate::syscalls::{Input, Output, Syscalls};
+use crate::thread::VThread;
 use byteorder::{ByteOrder, LE};
 use iced_x86::code_asm::{
     dword_ptr, qword_ptr, r10, r11, r11d, r12, r8, r9, rax, rbp, rbx, rcx, rdi, rdx, rsi, rsp,
     CodeAssembler,
 };
-use std::error::Error;
+use llt::Thread;
 use std::mem::{size_of, transmute};
 use std::ptr::null_mut;
 use std::sync::RwLock;
@@ -439,59 +440,78 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
         offset.try_into().ok()
     }
 
-    extern "sysv64" fn exit() {
-        todo!()
+    #[cfg(unix)]
+    fn join_thread(thr: Thread) -> Result<(), std::io::Error> {
+        let err = unsafe { libc::pthread_join(thr, null_mut()) };
+
+        if err != 0 {
+            Err(std::io::Error::from_raw_os_error(err))
+        } else {
+            Ok(())
+        }
     }
-}
 
-impl<'a, 'b> ExecutionEngine for NativeEngine<'a, 'b> {
-    fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        // Get eboot.bin.
-        let ld = self.rtld.read().unwrap();
-        let eboot = ld.app();
+    #[cfg(windows)]
+    fn join_thread(thr: Thread) -> Result<(), std::io::Error> {
+        use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+        use windows_sys::Win32::System::Threading::{WaitForSingleObject, INFINITE};
 
-        if eboot.file_info().is_none() {
-            todo!("a statically linked eboot.bin is not supported yet");
+        if unsafe { WaitForSingleObject(thr, INFINITE) } != WAIT_OBJECT_0 {
+            return Err(std::io::Error::last_os_error());
         }
 
-        // Get boot module.
-        let boot = ld.kernel().unwrap();
-
-        // Get entry point.
-        let mem = boot.memory().addr();
-        let entry: EntryPoint = unsafe { transmute(mem + boot.entry().unwrap()) };
-
-        drop(ld);
-
-        // TODO: Check how the actual binary read its argument.
-        // Setup arguments.
-        let mut argv: Vec<*mut u8> = Vec::new();
-        let mut arg1 = b"prog\0".to_vec();
-
-        argv.push(arg1.as_mut_ptr());
-        argv.push(null_mut());
-
-        // Invoke entry point.
-        let mut arg = Arg {
-            argc: (argv.len() as i32) - 1,
-            argv: argv.as_mut_ptr(),
-        };
-
-        entry(&mut arg, Self::exit);
+        assert_ne!(unsafe { CloseHandle(thr) }, 0);
 
         Ok(())
     }
 }
 
-type EntryPoint = extern "sysv64" fn(*mut Arg, extern "sysv64" fn());
+impl<'a, 'b> ExecutionEngine for NativeEngine<'a, 'b> {
+    type RunErr = RunError;
 
-#[repr(C)]
-struct Arg {
-    pub argc: i32,
-    pub argv: *mut *mut u8,
+    unsafe fn run(&mut self, mut arg: EntryArg, mut stack: VPages) -> Result<(), Self::RunErr> {
+        // Get eboot.bin.
+        let ld = self.rtld.read().unwrap();
+
+        if ld.app().file_info().is_none() {
+            todo!("statically linked eboot.bin");
+        }
+
+        // Get entry point.
+        let boot = ld.kernel().unwrap();
+        let mem = boot.memory().addr();
+        let entry: unsafe extern "sysv64" fn(*const usize) -> ! =
+            unsafe { transmute(mem + boot.entry().unwrap()) };
+
+        drop(ld);
+
+        // Spawn main thread.
+        let entry = move || unsafe { entry(arg.as_vec().as_ptr()) };
+        let runner = match VThread::spawn(stack.as_mut_ptr(), stack.len(), entry) {
+            Ok(v) => v,
+            Err(e) => return Err(RunError::CreateMainThreadFailed(e)),
+        };
+
+        // Wait for main thread to exit. This should never return.
+        if let Err(e) = Self::join_thread(runner) {
+            return Err(RunError::JoinMainThreadFailed(e));
+        }
+
+        Ok(())
+    }
 }
 
-/// Errors for [`NativeEngine::patch_mods()`].
+/// Represents an error when [`NativeEngine::run()`] is failed.
+#[derive(Debug, Error)]
+pub enum RunError {
+    #[error("cannot create main thread")]
+    CreateMainThreadFailed(#[source] llt::SpawnError),
+
+    #[error("cannot join with main thread")]
+    JoinMainThreadFailed(#[source] std::io::Error),
+}
+
+/// Represents an error when [`NativeEngine::patch_mods()`] is failed.
 #[derive(Debug, Error)]
 pub enum PatchModsError {
     #[error("cannot unprotect segment {1} on {0}")]
