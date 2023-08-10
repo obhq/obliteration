@@ -34,20 +34,6 @@ impl VThread {
             // This closure must not have any variables that need to be dropped on the stack. The
             // reason is because this thread will be exited without returning from the routine. That
             // mean all variables on the stack will not get dropped.
-            #[cfg(windows)]
-            unsafe {
-                use windows_sys::Win32::System::Threading::SetThreadStackGuarantee;
-
-                // Seems like Windows required some stack space when triggering __fastfail(), which
-                // is called by Rust when panic is set to abort. When the space is not enough it is
-                // going to cause STATUS_ACCESS_VIOLATION instead of STATUS_FAIL_FAST_EXCEPTION.
-                // This may interfere with page protection that was set by the PS4 but we have no
-                // choice. Let's hope the PS4 don't do something with this region of the stack.
-                let mut guarantee_bytes = 0x1000;
-
-                assert_ne!(SetThreadStackGuarantee(&mut guarantee_bytes), 0);
-            }
-
             // TODO: Check how the PS4 actually allocate the thread ID.
             let vt = Arc::new(Self {
                 id: NEXT_ID.fetch_add(1, Ordering::Relaxed),

@@ -235,7 +235,7 @@ fn main() -> ExitCode {
                 }
             }
 
-            exec(ee)
+            exec(ee, &ld)
         }
         #[cfg(not(target_arch = "x86_64"))]
         ExecutionEngine::Native => {
@@ -255,12 +255,15 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
 
-            exec(ee)
+            exec(ee, &ld)
         }
     }
 }
 
-fn exec<E: ee::ExecutionEngine>(mut ee: E) -> ExitCode {
+fn exec<E: ee::ExecutionEngine>(mut ee: E, ld: &RwLock<RuntimeLinker>) -> ExitCode {
+    // Setup entry argument.
+    let arg = EntryArg::new(ld.read().unwrap().app().path());
+
     // TODO: Check how the PS4 allocate the stack.
     // TODO: We should allocate a guard page to catch stack overflow.
     info!("Allocating application stack.");
@@ -283,7 +286,7 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E) -> ExitCode {
     // Start the application.
     info!("Starting application.");
 
-    if let Err(e) = unsafe { ee.run(EntryArg::new(), stack) } {
+    if let Err(e) = unsafe { ee.run(arg, stack) } {
         error!(e, "Start failed");
         return ExitCode::FAILURE;
     }

@@ -1,5 +1,8 @@
+use crate::fs::VPath;
 use crate::memory::VPages;
 use std::error::Error;
+use std::ffi::CString;
+use std::ops::Deref;
 
 pub mod llvm;
 #[cfg(target_arch = "x86_64")]
@@ -19,20 +22,33 @@ pub trait ExecutionEngine: Sync {
 
 /// Encapsulate an argument of the PS4 entry point.
 pub struct EntryArg {
+    app: CString,
     vec: Vec<usize>,
 }
 
 impl EntryArg {
-    pub fn new() -> Self {
-        Self { vec: Vec::new() }
+    pub fn new(app: &VPath) -> Self {
+        Self {
+            app: CString::new(app.deref()).unwrap(),
+            vec: Vec::new(),
+        }
     }
 
     pub fn as_vec(&mut self) -> &Vec<usize> {
+        let mut argc = 0;
+
+        // Build argv.
         self.vec.clear();
-        self.vec.push(0); // argc
+        self.vec.push(0);
+
+        self.vec.push(self.app.as_ptr() as _);
+        argc += 1;
+
+        self.vec[0] = argc;
         self.vec.push(0); // End of arguments.
         self.vec.push(0); // End of environment.
 
+        // TODO: Seems like there are something beyond the environment.
         &self.vec
     }
 }
