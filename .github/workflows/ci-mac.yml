@@ -41,6 +41,7 @@ jobs:
       run: cmake --build --preset mac-release
     - name: Run tests
       run: cargo test
+      working-directory: src
     - name: Run Clippy
       run: cargo clippy --release
       working-directory: src
