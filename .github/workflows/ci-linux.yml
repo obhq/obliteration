@@ -39,6 +39,8 @@ jobs:
       run: cmake --preset linux-release .
     - name: Build
       run: cmake --build --preset linux-release
+    - name: Run tests
+      run: cargo test
     - name: Run Clippy
       run: cargo clippy --release
       working-directory: src

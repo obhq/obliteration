@@ -55,6 +55,8 @@ jobs:
       run: cmake --preset windows-release .
     - name: Build
       run: cmake --build --preset windows-release
+    - name: Run tests
+      run: cargo test
     - name: Run Clippy
       run: cargo clippy --release
       working-directory: src
