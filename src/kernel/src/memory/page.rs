@@ -16,6 +16,10 @@ impl<'a> VPages<'a> {
         self.ptr
     }
 
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
     pub fn into_raw(self) -> *mut u8 {
         let ptr = self.ptr;
         std::mem::forget(self);

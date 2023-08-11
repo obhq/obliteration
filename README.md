@@ -53,6 +53,8 @@ Obliteration supports only 4KB/8KB/16KB pages. Most people should not have any p
 - Rust on the latest stable channel
 - CMake 3.21+
   - Make sure you have `Add CMake to the system PATH` selected when installing
+- Python 3.6+
+  - Make sure you have `Add python.exe to PATH` selected when installing
 
 ### Linux prerequisites
 
