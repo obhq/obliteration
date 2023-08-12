@@ -11,7 +11,6 @@ use crate::thread::VThread;
 use crate::warn;
 use kernel_macros::cpu_abi;
 use std::mem::{size_of, zeroed};
-use std::sync::RwLock;
 
 mod error;
 mod input;
@@ -20,11 +19,11 @@ mod output;
 /// Provides PS4 kernel routines for PS4 process.
 pub struct Syscalls<'a, 'b: 'a> {
     sysctl: &'a Sysctl,
-    ld: &'a RwLock<RuntimeLinker<'b>>,
+    ld: &'a RuntimeLinker<'b>,
 }
 
 impl<'a, 'b: 'a> Syscalls<'a, 'b> {
-    pub fn new(sysctl: &'a Sysctl, ld: &'a RwLock<RuntimeLinker<'b>>) -> Self {
+    pub fn new(sysctl: &'a Sysctl, ld: &'a RuntimeLinker<'b>) -> Self {
         Self { sysctl, ld }
     }
 
@@ -182,27 +181,30 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
 
     unsafe fn dynlib_get_list(
         &self,
-        list: *mut u32,
+        buf: *mut u32,
         max: usize,
         copied: *mut usize,
     ) -> Result<Output, Error> {
         // Check if application is dynamic linking.
-        let ld = self.ld.read().unwrap();
-        let app = ld.app();
+        let app = self.ld.app();
 
         if app.file_info().is_none() {
             return Err(Error::Raw(EPERM));
-        } else if ld.list().len() > max {
-            return Err(Error::Raw(ENOMEM));
         }
 
         // Copy module ID.
-        for (i, m) in ld.list().iter().enumerate() {
-            *list.add(i) = m.id();
+        let list = self.ld.list();
+
+        if list.len() > max {
+            return Err(Error::Raw(ENOMEM));
+        }
+
+        for (i, m) in list.iter().enumerate() {
+            *buf.add(i) = m.id();
         }
 
         // Set copied.
-        *copied = ld.list().len();
+        *copied = list.len();
 
         Ok(Output::ZERO)
     }
@@ -213,8 +215,7 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         size: *mut usize,
     ) -> Result<Output, Error> {
         // Check if application is a dynamic SELF.
-        let ld = self.ld.read().unwrap();
-        let app = ld.app();
+        let app = self.ld.app();
 
         if app.file_info().is_none() {
             return Err(Error::Raw(EPERM));
@@ -235,15 +236,12 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
 
     unsafe fn dynlib_process_needed_and_relocate(&self) -> Result<Output, Error> {
         // Check if application is dynamic linking.
-        let ld = self.ld.read().unwrap();
-        let app = ld.app();
-
-        if app.file_info().is_none() {
+        if self.ld.app().file_info().is_none() {
             return Err(Error::Raw(EINVAL));
         }
 
         // TODO: Implement dynlib_load_needed_shared_objects.
-        ld.relocate()?;
+        self.ld.relocate()?;
 
         Ok(Output::ZERO)
     }
@@ -255,8 +253,7 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         info: *mut DynlibInfoEx,
     ) -> Result<Output, Error> {
         // Check if application is dynamic linking.
-        let ld = self.ld.read().unwrap();
-        let app = ld.app();
+        let app = self.ld.app();
 
         if app.file_info().is_none() {
             return Err(Error::Raw(EPERM));
@@ -270,7 +267,8 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         }
 
         // Lookup the module.
-        let md = match ld.list().iter().find(|m| m.id() == handle) {
+        let modules = self.ld.list();
+        let md = match modules.iter().find(|m| m.id() == handle) {
             Some(v) => v,
             None => return Err(Error::Raw(ESRCH)),
         };

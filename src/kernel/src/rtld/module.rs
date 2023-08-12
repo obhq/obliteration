@@ -5,11 +5,12 @@ use bitflags::bitflags;
 use byteorder::{ByteOrder, LE};
 use elf::{
     DynamicFlags, DynamicTag, Elf, FileInfo, FileType, LibraryFlags, LibraryInfo, ModuleInfo,
-    Program,
+    Program, Symbol,
 };
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::Write;
+use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// An implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/libexec/rtld-elf/rtld.h#L147.
@@ -23,16 +24,19 @@ pub struct Module {
     tls_info: Option<ModuleTls>, // tlsinit + tlsinitsize + tlssize + tlsalign
     eh_info: Option<ModuleEh>,
     proc_param: Option<(usize, usize)>,
-    flags: ModuleFlags,
+    sdk_ver: u32,
+    flags: RwLock<ModuleFlags>,
     needed: Vec<NeededModule>,
     modules: Vec<ModuleInfo>,
     libraries: Vec<LibraryInfo>,
     memory: Memory,
+    relocated: Mutex<Vec<bool>>,
     file_info: Option<FileInfo>,
     path: VPathBuf,
     is_self: bool,
     file_type: FileType,
     programs: Vec<Program>,
+    symbols: Vec<Symbol>,
 }
 
 impl Module {
@@ -110,6 +114,28 @@ impl Module {
         let file_type = image.ty();
         let (path, programs, file_info) = image.into();
 
+        // Load symbols.
+        let symbols = if let Some(info) = &file_info {
+            let mut r = Vec::with_capacity(info.symbol_count());
+
+            for (i, s) in info.symbols().enumerate() {
+                match s {
+                    Ok(s) => r.push(s),
+                    Err(e) => return Err(MapError::ReadSymbolFailed(i, e)),
+                }
+            }
+
+            r
+        } else {
+            Vec::new()
+        };
+
+        // Get SDK version.
+        let sdk_ver = match &proc_param {
+            Some((off, _)) => unsafe { LE::read_u32(&memory.as_bytes()[(off + 0x10)..]) },
+            None => 0,
+        };
+
         // Parse dynamic info.
         let mut module = Self {
             id,
@@ -120,20 +146,24 @@ impl Module {
             tls_info,
             eh_info,
             proc_param,
-            flags: ModuleFlags::UNK2,
+            sdk_ver,
+            flags: RwLock::new(ModuleFlags::UNK2),
             needed: Vec::new(),
             modules: Vec::new(),
             libraries: Vec::new(),
             memory,
+            relocated: Mutex::default(),
             file_info: None,
             path: path.try_into().unwrap(),
             is_self,
             file_type,
             programs,
+            symbols,
         };
 
         if let Some(info) = file_info {
             module.digest_dynamic(base, &info)?;
+            module.relocated = Mutex::new(vec![false; info.reloc_count() + info.plt_count()]);
             module.file_info = Some(info);
         }
 
@@ -172,16 +202,32 @@ impl Module {
         self.proc_param.as_ref()
     }
 
-    pub fn flags(&self) -> ModuleFlags {
-        self.flags
+    pub fn sdk_ver(&self) -> u32 {
+        self.sdk_ver
     }
 
-    pub fn flags_mut(&mut self) -> &mut ModuleFlags {
-        &mut self.flags
+    pub fn flags(&self) -> RwLockReadGuard<'_, ModuleFlags> {
+        self.flags.read().unwrap()
+    }
+
+    pub fn flags_mut(&self) -> RwLockWriteGuard<'_, ModuleFlags> {
+        self.flags.write().unwrap()
+    }
+
+    pub fn modules(&self) -> &[ModuleInfo] {
+        self.modules.as_ref()
+    }
+
+    pub fn libraries(&self) -> &[LibraryInfo] {
+        self.libraries.as_ref()
     }
 
     pub fn memory(&self) -> &Memory {
         &self.memory
+    }
+
+    pub fn relocated(&self) -> MutexGuard<'_, Vec<bool>> {
+        self.relocated.lock().unwrap()
     }
 
     /// Only available if the module is a dynamic module.
@@ -193,7 +239,18 @@ impl Module {
         &self.path
     }
 
+    pub fn symbol(&self, i: usize) -> Option<&Symbol> {
+        self.symbols.get(i)
+    }
+
+    pub fn symbols(&self) -> &[Symbol] {
+        self.symbols.as_ref()
+    }
+
     pub fn print(&self, mut entry: LogEntry) {
+        // Lock all required fields first so the output is consistent.
+        let flags = self.flags.read().unwrap();
+
         // Image info.
         if self.is_self {
             writeln!(entry, "Image format  : SELF").unwrap();
@@ -221,15 +278,17 @@ impl Module {
             writeln!(entry, "Needed        : {}", n.name).unwrap();
         }
 
+        writeln!(entry, "Symbol count  : {}", self.symbols.len()).unwrap();
+
         // Runtime info.
-        if !self.flags.is_empty() {
-            writeln!(entry, "Module flags  : {}", self.flags).unwrap();
+        if !flags.is_empty() {
+            writeln!(entry, "Module flags  : {}", flags).unwrap();
         }
 
         writeln!(entry, "TLS index     : {}", self.tls_index).unwrap();
 
         // Memory info.
-        let mem = self.memory();
+        let mem = &self.memory;
 
         writeln!(
             entry,
@@ -290,6 +349,7 @@ impl Module {
             let addr = mem.addr() + off;
 
             writeln!(entry, "Process param : {:#018x}:{:#018x}", addr, addr + len).unwrap();
+            writeln!(entry, "SDK version   : {:#010x}", self.sdk_ver).unwrap();
         }
 
         for s in mem.segments().iter() {
@@ -417,7 +477,7 @@ impl Module {
                 }
                 DynamicTag::DT_INIT => self.digest_init(base, value)?,
                 DynamicTag::DT_FINI => self.digest_fini(base, value)?,
-                DynamicTag::DT_TEXTREL => self.flags |= ModuleFlags::TEXT_REL,
+                DynamicTag::DT_TEXTREL => *self.flags.get_mut().unwrap() |= ModuleFlags::TEXT_REL,
                 DynamicTag::DT_FLAGS => self.digest_flags(value)?,
                 DynamicTag::DT_SCE_MODULE_INFO | DynamicTag::DT_SCE_NEEDED_MODULE => {
                     self.digest_module_info(info, i, value)?;
@@ -476,7 +536,7 @@ impl Module {
         } else if flags.contains(DynamicFlags::DF_BIND_NOW) {
             return Err(MapError::ObsoleteFlags(DynamicFlags::DF_BIND_NOW));
         } else if flags.contains(DynamicFlags::DF_TEXTREL) {
-            self.flags |= ModuleFlags::TEXT_REL;
+            *self.flags.get_mut().unwrap() |= ModuleFlags::TEXT_REL;
         }
 
         Ok(())
@@ -578,7 +638,7 @@ bitflags! {
     pub struct ModuleFlags: u16 {
         const MAIN_PROG = 0x0001;
         const TEXT_REL = 0x0002;
-        const JMPSLOTS_DONE = 0x0004;
+        const JMPSLOTS_DONE = 0x0004; // TODO: This seems incorrect.
         const TLS_DONE = 0x0008;
         const INIT_SCANNED = 0x0010;
         const ON_FINI_LIST = 0x0020;
@@ -586,6 +646,7 @@ bitflags! {
         const UNK1 = 0x0100; // TODO: Rename this.
         const UNK2 = 0x0200; // TODO: Rename this.
         const UNK3 = 0x0400; // TODO: Rename this.
+        const UNK4 = 0x0800; // TODO: It seems like this is actually JMPSLOTS_DONE.
         const UNK5 = 0x1000; // TODO: Rename this.
     }
 }

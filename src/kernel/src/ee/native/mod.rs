@@ -11,28 +11,27 @@ use iced_x86::code_asm::{
 };
 use llt::Thread;
 use std::mem::{size_of, transmute};
+use std::ops::Deref;
 use std::ptr::null_mut;
-use std::sync::RwLock;
 use thiserror::Error;
 
 /// An implementation of [`ExecutionEngine`] for running the PS4 binary natively.
 pub struct NativeEngine<'a, 'b: 'a> {
-    rtld: &'a RwLock<RuntimeLinker<'b>>,
+    rtld: &'a RuntimeLinker<'b>,
     syscalls: &'a Syscalls<'a, 'b>,
 }
 
 impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
-    pub fn new(rtld: &'a RwLock<RuntimeLinker<'b>>, syscalls: &'a Syscalls<'a, 'b>) -> Self {
+    pub fn new(rtld: &'a RuntimeLinker<'b>, syscalls: &'a Syscalls<'a, 'b>) -> Self {
         Self { rtld, syscalls }
     }
 
     /// # SAFETY
     /// No other threads may read or write any module memory.
     pub unsafe fn patch_mods(&mut self) -> Result<Vec<(VPathBuf, usize)>, PatchModsError> {
-        let ld = self.rtld.read().unwrap();
         let mut counts: Vec<(VPathBuf, usize)> = Vec::new();
 
-        for module in ld.list() {
+        for module in self.rtld.list().deref() {
             let count = self.patch_mod(module)?;
             let path = module.path();
 
@@ -471,19 +470,15 @@ impl<'a, 'b> ExecutionEngine for NativeEngine<'a, 'b> {
 
     unsafe fn run(&mut self, mut arg: EntryArg, mut stack: VPages) -> Result<(), Self::RunErr> {
         // Get eboot.bin.
-        let ld = self.rtld.read().unwrap();
-
-        if ld.app().file_info().is_none() {
+        if self.rtld.app().file_info().is_none() {
             todo!("statically linked eboot.bin");
         }
 
         // Get entry point.
-        let boot = ld.kernel().unwrap();
+        let boot = self.rtld.kernel().unwrap();
         let mem = boot.memory().addr();
         let entry: unsafe extern "sysv64" fn(*const usize) -> ! =
             unsafe { transmute(mem + boot.entry().unwrap()) };
-
-        drop(ld);
 
         // Spawn main thread.
         let entry = move || unsafe { entry(arg.as_vec().as_ptr()) };

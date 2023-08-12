@@ -5,25 +5,23 @@ use crate::fs::VPathBuf;
 use crate::llvm::Llvm;
 use crate::memory::VPages;
 use crate::rtld::{Module, RuntimeLinker};
-use std::sync::RwLock;
+use std::ops::Deref;
 use thiserror::Error;
 
 mod codegen;
 
 /// An implementation of [`ExecutionEngine`] using JIT powered by LLVM IR.
 pub struct LlvmEngine<'a, 'b: 'a> {
-    rtld: &'a RwLock<RuntimeLinker<'b>>,
+    rtld: &'a RuntimeLinker<'b>,
 }
 
 impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
-    pub fn new(rtld: &'a RwLock<RuntimeLinker<'b>>) -> Self {
+    pub fn new(rtld: &'a RuntimeLinker<'b>) -> Self {
         Self { rtld }
     }
 
     pub fn lift_initial_modules(&mut self) -> Result<(), LiftError> {
-        let ld = self.rtld.read().unwrap();
-
-        for module in ld.list() {
+        for module in self.rtld.list().deref() {
             // TODO: Store the lifted module somewhere.
             self.lift(module)?;
         }

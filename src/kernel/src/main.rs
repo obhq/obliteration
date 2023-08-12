@@ -14,7 +14,6 @@ use std::fs::{create_dir_all, remove_dir_all, File};
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
-use std::sync::RwLock;
 
 mod arc4;
 mod disasm;
@@ -168,9 +167,7 @@ fn main() -> ExitCode {
     module.flags_mut().remove(ModuleFlags::UNK2);
     module.print(info!());
 
-    // Set libkernel ID.
-    let id = module.id();
-    ld.set_kernel(id);
+    ld.set_kernel(module);
 
     // Preload libSceLibcInternal.
     let path: &VPath = "/system/common/lib/libSceLibcInternal.sprx"
@@ -190,10 +187,11 @@ fn main() -> ExitCode {
     module.flags_mut().remove(ModuleFlags::UNK2);
     module.print(info!());
 
+    drop(module);
+
     // Initialize syscall routines.
     info!("Initializing system call routines.");
 
-    let ld = RwLock::new(ld);
     let syscalls = Syscalls::new(&sysctl, &ld);
 
     // Bootstrap execution engine.
@@ -260,9 +258,9 @@ fn main() -> ExitCode {
     }
 }
 
-fn exec<E: ee::ExecutionEngine>(mut ee: E, ld: &RwLock<RuntimeLinker>) -> ExitCode {
+fn exec<E: ee::ExecutionEngine>(mut ee: E, ld: &RuntimeLinker) -> ExitCode {
     // Setup entry argument.
-    let arg = EntryArg::new(ld.read().unwrap().app().path());
+    let arg = EntryArg::new(ld.app().path());
 
     // TODO: Check how the PS4 allocate the stack.
     // TODO: We should allocate a guard page to catch stack overflow.
