@@ -56,7 +56,7 @@ jobs:
     - name: Build
       run: cmake --build --preset windows-release
     - name: Run tests
-      run: cargo test
+      run: cargo test --workspace
       working-directory: src
     - name: Run Clippy
       run: cargo clippy --release

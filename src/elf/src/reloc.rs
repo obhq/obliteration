@@ -31,7 +31,7 @@ impl<'a> Iterator for Relocations<'a> {
         Some(Relocation {
             offset: offset.try_into().unwrap(),
             info,
-            addend,
+            addend: addend.try_into().unwrap(),
         })
     }
 }
@@ -40,7 +40,7 @@ impl<'a> Iterator for Relocations<'a> {
 pub struct Relocation {
     offset: usize,
     info: u64,
-    addend: i64,
+    addend: isize,
 }
 
 impl Relocation {
@@ -58,7 +58,11 @@ impl Relocation {
         (self.info & 0xffffffff).try_into().unwrap()
     }
 
-    pub fn addend(&self) -> i64 {
+    pub fn symbol(&self) -> usize {
+        (self.info >> 32).try_into().unwrap()
+    }
+
+    pub fn addend(&self) -> isize {
         self.addend
     }
 }

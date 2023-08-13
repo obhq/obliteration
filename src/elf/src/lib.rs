@@ -4,6 +4,7 @@ pub use library::*;
 pub use module::*;
 pub use program::*;
 pub use reloc::*;
+pub use symbol::*;
 pub use ty::*;
 
 use bitflags::bitflags;
@@ -18,6 +19,7 @@ mod library;
 mod module;
 mod program;
 mod reloc;
+mod symbol;
 mod ty;
 
 /// The first 8 bytes of SELF file.

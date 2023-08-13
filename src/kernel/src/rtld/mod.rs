@@ -1,12 +1,16 @@
 pub use mem::*;
 pub use module::*;
 
-use crate::errno::{Errno, ENOEXEC};
+use crate::errno::{Errno, EINVAL, ENOEXEC};
 use crate::fs::{Fs, VPath, VPathBuf};
 use crate::memory::{MmapError, MprotectError, Protections};
-use elf::{DynamicFlags, Elf, FileInfo, FileType, ReadProgramError, Relocation};
+use bitflags::bitflags;
+use elf::{DynamicFlags, Elf, FileInfo, FileType, ReadProgramError, Relocation, Symbol};
 use std::fs::File;
 use std::num::NonZeroI32;
+use std::ops::Deref;
+use std::ptr::write_unaligned;
+use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard};
 use thiserror::Error;
 
 mod mem;
@@ -17,10 +21,12 @@ mod module;
 #[derive(Debug)]
 pub struct RuntimeLinker<'a> {
     fs: &'a Fs,
-    list: Vec<Module>,   // obj_list + obj_tail
-    kernel: Option<u32>, // obj_kernel
-    next_id: u32,        // idtable on proc
-    tls_max: u32,        // tls_max_index
+    list: RwLock<Vec<Arc<Module>>>,      // obj_list + obj_tail
+    app: Arc<Module>,                    // obj_main
+    kernel: RwLock<Option<Arc<Module>>>, // obj_kernel
+    next_id: Mutex<u32>,                 // idtable on proc
+    tls_max: Mutex<u32>,                 // tls_max_index
+    flags: LinkerFlags,
 }
 
 impl<'a> RuntimeLinker<'a> {
@@ -65,12 +71,23 @@ impl<'a> RuntimeLinker<'a> {
 
         // TODO: Apply remaining checks from exec_self_imgact.
         // Map eboot.bin.
-        let mut app = match Module::map(elf, base, 0, 1) {
-            Ok(v) => v,
+        let app = match Module::map(elf, base, 0, 1) {
+            Ok(v) => Arc::new(v),
             Err(e) => return Err(RuntimeLinkerError::MapExeFailed(file.into_vpath(), e)),
         };
 
         *app.flags_mut() |= ModuleFlags::MAIN_PROG;
+
+        // Check if application need certain modules.
+        let mut flags = LinkerFlags::empty();
+
+        for m in app.modules() {
+            match m.name() {
+                "libSceDbgUndefinedBehaviorSanitizer" => flags |= LinkerFlags::UNK1,
+                "libSceDbgAddressSanitizer" => flags |= LinkerFlags::UNK2,
+                _ => continue,
+            }
+        }
 
         // TODO: Apply logic from dmem_handle_process_exec_begin.
         // TODO: Apply logic from procexec_handler.
@@ -79,29 +96,34 @@ impl<'a> RuntimeLinker<'a> {
         // TODO: Apply logic from gs_is_event_handler_process_exec.
         Ok(Self {
             fs,
-            list: Vec::from([app]),
-            kernel: None,
-            next_id: 1,
-            tls_max: 1,
+            list: RwLock::new(Vec::from([app.clone()])),
+            app,
+            kernel: RwLock::default(),
+            next_id: Mutex::new(1),
+            tls_max: Mutex::new(1),
+            flags,
         })
     }
 
-    pub fn app(&self) -> &Module {
-        self.list.first().unwrap()
+    pub fn list(&self) -> RwLockReadGuard<'_, Vec<Arc<Module>>> {
+        self.list.read().unwrap()
     }
 
-    pub fn kernel(&self) -> Option<&Module> {
-        self.kernel
-            .and_then(|id| self.list.iter().find(|&m| m.id() == id))
+    pub fn app(&self) -> &Arc<Module> {
+        &self.app
     }
 
-    pub fn list(&self) -> &[Module] {
-        self.list.as_ref()
+    pub fn kernel(&self) -> Option<Arc<Module>> {
+        self.kernel.read().unwrap().clone()
+    }
+
+    pub fn set_kernel(&self, md: Arc<Module>) {
+        *self.kernel.write().unwrap() = Some(md);
     }
 
     /// This method **ALWAYS** load the specified module without checking if the same module is
     /// already loaded.
-    pub fn load(&mut self, path: &VPath) -> Result<&mut Module, LoadError> {
+    pub fn load(&mut self, path: &VPath) -> Result<Arc<Module>, LoadError> {
         // Get file.
         let file = match self.fs.get_file(path) {
             Some(v) => v,
@@ -124,6 +146,8 @@ impl<'a> RuntimeLinker<'a> {
 
         // TODO: Apply remaining checks from self_load_shared_object.
         // Search for TLS free slot.
+        let mut list = self.list.write().unwrap();
+        let mut tls_max = self.tls_max.lock().unwrap();
         let tls = elf.tls().map(|i| &elf.programs()[i]);
         let tls = if tls.map(|p| p.memory_size()).unwrap_or(0) == 0 {
             0
@@ -132,15 +156,15 @@ impl<'a> RuntimeLinker<'a> {
 
             loop {
                 // Check if the current value has been used.
-                if !self.list.iter().any(|m| m.tls_index() == r) {
+                if !list.iter().any(|m| m.tls_index() == r) {
                     break;
                 }
 
                 // Someone already use the current value, increase the value and try again.
                 r += 1;
 
-                if r > self.tls_max {
-                    self.tls_max = r;
+                if r > *tls_max {
+                    *tls_max = r;
                     break;
                 }
             }
@@ -149,8 +173,9 @@ impl<'a> RuntimeLinker<'a> {
         };
 
         // Map file.
-        let mut module = match Module::map(elf, 0, self.next_id, tls) {
-            Ok(v) => v,
+        let mut next_id = self.next_id.lock().unwrap();
+        let module = match Module::map(elf, 0, *next_id, tls) {
+            Ok(v) => Arc::new(v),
             Err(e) => return Err(LoadError::MapFailed(e)),
         };
 
@@ -167,62 +192,67 @@ impl<'a> RuntimeLinker<'a> {
         }
 
         // Load to loaded list.
-        self.list.push(module);
-        self.next_id += 1;
+        list.push(module.clone());
+        *next_id += 1;
 
-        Ok(self.list.last_mut().unwrap())
+        Ok(module)
     }
 
     /// # Safety
     /// No other threads may access the memory of all loaded modules.
     pub unsafe fn relocate(&self) -> Result<(), RelocateError> {
         // TODO: Check what the PS4 actually doing.
-        for m in &self.list {
+        for m in self.list.read().unwrap().deref() {
             self.relocate_single(m)?;
         }
 
         Ok(())
     }
 
-    pub fn set_kernel(&mut self, id: u32) {
-        self.kernel = Some(id);
-    }
-
     /// See `relocate_one_object` on the PS4 kernel for a reference.
-    unsafe fn relocate_single(&self, module: &Module) -> Result<(), RelocateError> {
-        let path = module.path();
-        let info = module.file_info().unwrap(); // Let it panic because the PS4 assume it is available.
-
+    ///
+    /// # Safety
+    /// No other thread may access the module memory.
+    unsafe fn relocate_single(&self, md: &Arc<Module>) -> Result<(), RelocateError> {
         // Unprotect the memory.
-        let mut mem = match module.memory().unprotect() {
+        let mut mem = match md.memory().unprotect() {
             Ok(v) => v,
-            Err(e) => return Err(RelocateError::UnprotectFailed(path.to_owned(), e)),
+            Err(e) => return Err(RelocateError::UnprotectFailed(md.path().to_owned(), e)),
         };
 
         // Apply relocations.
-        let base = module.memory().base();
+        let mut relocated = md.relocated();
 
-        self.relocate_rela(path, info, mem.as_mut(), base)?;
+        self.relocate_rela(md, mem.as_mut(), &mut relocated)?;
 
-        // TODO: Implement the remaining relocate_one_object.
+        if !md.flags().contains(ModuleFlags::UNK4) {
+            self.relocate_plt(md, mem.as_mut(), &mut relocated)?;
+        }
+
         Ok(())
     }
 
     /// See `reloc_non_plt` on the PS4 kernel for a reference.
     fn relocate_rela(
         &self,
-        path: &VPath,
-        info: &FileInfo,
+        md: &Arc<Module>,
         mem: &mut [u8],
-        base: usize,
+        relocated: &mut [bool],
     ) -> Result<(), RelocateError> {
+        let info = md.file_info().unwrap(); // Let it panic because the PS4 assume it is available.
         let addr = mem.as_ptr() as usize;
+        let base = md.memory().base();
 
-        for reloc in info.relocs() {
+        for (i, reloc) in info.relocs().enumerate() {
+            // Check if the entry already relocated.
+            if relocated[i] {
+                continue;
+            }
+
             // Resolve value.
             let offset = base + reloc.offset();
-            let addend: isize = reloc.addend().try_into().unwrap();
             let target = &mut mem[offset..(offset + 8)];
+            let addend = reloc.addend();
             let value = match reloc.ty() {
                 Relocation::R_X86_64_NONE => break,
                 Relocation::R_X86_64_64 => {
@@ -231,20 +261,119 @@ impl<'a> RuntimeLinker<'a> {
                 }
                 Relocation::R_X86_64_RELATIVE => {
                     // TODO: Apply checks from reloc_non_plt.
-                    addr + base.wrapping_add_signed(addend)
+                    (addr + base).wrapping_add_signed(addend)
                 }
                 Relocation::R_X86_64_DTPMOD64 => {
                     // TODO: Resolve symbol.
                     continue;
                 }
-                v => return Err(RelocateError::UnsupportedRela(path.to_owned(), v)),
+                v => return Err(RelocateError::UnsupportedRela(md.path().to_owned(), v)),
             };
 
             // Write the value.
-            unsafe { std::ptr::write_unaligned(target.as_mut_ptr() as _, value) };
+            unsafe { write_unaligned(target.as_mut_ptr() as *mut usize, value) };
+
+            relocated[i] = true;
         }
 
         Ok(())
+    }
+
+    /// See `reloc_jmplots` on the PS4 for a reference.
+    fn relocate_plt(
+        &self,
+        md: &Arc<Module>,
+        mem: &mut [u8],
+        relocated: &mut [bool],
+    ) -> Result<(), RelocateError> {
+        // Do nothing if not a dynamic module.
+        let info = match md.file_info() {
+            Some(v) => v,
+            None => return Ok(()),
+        };
+
+        // Apply relocations.
+        let base = md.memory().base();
+
+        for (i, reloc) in info.plt_relocs().enumerate() {
+            // Check if the entry already relocated.
+            let index = info.reloc_count() + i;
+
+            if relocated[index] {
+                continue;
+            }
+
+            // Check relocation type.
+            if reloc.ty() != Relocation::R_X86_64_JUMP_SLOT {
+                return Err(RelocateError::UnsupportedPlt(
+                    md.path().to_owned(),
+                    reloc.ty(),
+                ));
+            }
+
+            // Resolve symbol.
+            let sym = match self.resolve_symbol(md, reloc.symbol(), info) {
+                Some((m, s)) => {
+                    m.memory().addr() + m.memory().base() + m.symbol(s).unwrap().value()
+                }
+                None => continue,
+            };
+
+            // Write the value.
+            let offset = base + reloc.offset();
+            let target = &mut mem[offset..(offset + 8)];
+            let value = sym.wrapping_add_signed(reloc.addend());
+
+            unsafe { write_unaligned(target.as_mut_ptr() as *mut usize, value) };
+
+            relocated[index] = true;
+        }
+
+        Ok(())
+    }
+
+    fn resolve_symbol(
+        &self,
+        md: &Arc<Module>,
+        index: usize,
+        info: &FileInfo,
+    ) -> Option<(Arc<Module>, usize)> {
+        // Check if symbol index is valid.
+        let sym = md.symbols().get(index)?;
+
+        if index >= info.nchains() {
+            return None;
+        }
+
+        if self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::UNK2) {
+            // Get library and module.
+            let (li, mi) = match sym.decode_name() {
+                Some(v) => (
+                    md.libraries().iter().find(|&l| l.id() == v.1),
+                    md.modules().iter().find(|&m| m.id() == v.2),
+                ),
+                None => (None, None),
+            };
+        } else {
+            todo!("resolve symbol with SDK version < 0x5000000");
+        }
+
+        // Return this symbol if the binding is local. The reason we don't check this in the
+        // first place is because we want to maintain the same behavior as the PS4.
+        if sym.binding() == Symbol::STB_LOCAL {
+            return Some((md.clone(), index));
+        }
+
+        None
+    }
+}
+
+bitflags! {
+    /// Flags for [`RuntimeLinker`].
+    #[derive(Debug)]
+    pub struct LinkerFlags: u8 {
+        const UNK1 = 0x01; // TODO: Rename this.
+        const UNK2 = 0x02; // TODO: Rename this.
     }
 }
 
@@ -297,6 +426,9 @@ pub enum MapError {
     #[error("cannot unprotect the memory")]
     UnprotectMemoryFailed(#[source] UnprotectError),
 
+    #[error("cannot read symbol entry {0}")]
+    ReadSymbolFailed(usize, #[source] elf::ReadSymbolError),
+
     #[error("cannot read DT_NEEDED from dynamic entry {0}")]
     ReadNeededFailed(usize, #[source] elf::StringTableError),
 
@@ -340,6 +472,9 @@ pub enum RelocateError {
 
     #[error("relocation type {1} on {0} is not supported")]
     UnsupportedRela(VPathBuf, u32),
+
+    #[error("PLT relocation type {1} on {0} is not supported")]
+    UnsupportedPlt(VPathBuf, u32),
 }
 
 impl Errno for RelocateError {
@@ -349,6 +484,7 @@ impl Errno for RelocateError {
                 UnprotectError::MprotectFailed(_, _, _, e) => e.errno(),
             },
             Self::UnsupportedRela(_, _) => ENOEXEC,
+            Self::UnsupportedPlt(_, _) => EINVAL,
         }
     }
 }

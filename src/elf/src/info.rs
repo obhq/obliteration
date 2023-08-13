@@ -1,4 +1,6 @@
-use crate::{DynamicEntries, DynamicTag, LibraryFlags, LibraryInfo, ModuleInfo, Relocations};
+use crate::{
+    DynamicEntries, DynamicTag, LibraryFlags, LibraryInfo, ModuleInfo, Relocations, Symbols,
+};
 use byteorder::{ByteOrder, LE};
 use thiserror::Error;
 
@@ -19,6 +21,7 @@ pub struct FileInfo {
     symtab: usize,
     hashsz: usize,
     symtabsz: usize,
+    nchains: usize,
 }
 
 impl FileInfo {
@@ -199,6 +202,10 @@ impl FileInfo {
             return Err(FileInfoError::NoPltgot);
         }
 
+        // Extract informations.
+        let hash: usize = hash.try_into().unwrap();
+        let nchains = LE::read_u32(&data[(hash + 4)..]);
+
         // TODO: Check acquire_per_file_info_obj to see what we have missing here.
         Ok(Self {
             data,
@@ -208,13 +215,14 @@ impl FileInfo {
             pltrelsz: pltrelsz.try_into().unwrap(),
             relasz: relasz.try_into().unwrap(),
             strsz: strsz.try_into().unwrap(),
-            hash: hash.try_into().unwrap(),
+            hash,
             jmprel: jmprel.try_into().unwrap(),
             rela: rela.try_into().unwrap(),
             strtab: strtab.try_into().unwrap(),
             symtab: symtab.try_into().unwrap(),
             hashsz: hashsz.try_into().unwrap(),
             symtabsz: symtabsz.try_into().unwrap(),
+            nchains: nchains.try_into().unwrap(),
         })
     }
 
@@ -226,12 +234,32 @@ impl FileInfo {
         DynamicEntries::new(&self.data[self.dynoff..(self.dynoff + self.dynsize)])
     }
 
+    pub fn reloc_count(&self) -> usize {
+        self.relasz / 24
+    }
+
     pub fn relocs(&self) -> Relocations<'_> {
         Relocations::new(&self.data[self.rela..(self.rela + self.relasz)])
     }
 
+    pub fn plt_count(&self) -> usize {
+        self.pltrelsz / 24
+    }
+
     pub fn plt_relocs(&self) -> Relocations<'_> {
         Relocations::new(&self.data[self.jmprel..(self.jmprel + self.pltrelsz)])
+    }
+
+    pub fn symbol_count(&self) -> usize {
+        self.symtabsz / 24
+    }
+
+    pub fn symbols(&self) -> Symbols<'_> {
+        Symbols::new(&self.data[self.symtab..(self.symtab + self.symtabsz)], self)
+    }
+
+    pub fn nchains(&self) -> usize {
+        self.nchains
     }
 
     pub fn read_module(&self, data: [u8; 8]) -> Result<ModuleInfo, ReadModuleError> {
