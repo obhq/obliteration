@@ -1,11 +1,12 @@
 pub use mem::*;
 pub use module::*;
 
+use self::resolver::{ResolveFlags, SymbolResolver};
 use crate::errno::{Errno, EINVAL, ENOEXEC};
 use crate::fs::{Fs, VPath, VPathBuf};
 use crate::memory::{MmapError, MprotectError, Protections};
 use bitflags::bitflags;
-use elf::{DynamicFlags, Elf, FileInfo, FileType, ReadProgramError, Relocation, Symbol};
+use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation};
 use std::fs::File;
 use std::num::NonZeroI32;
 use std::ops::Deref;
@@ -15,6 +16,7 @@ use thiserror::Error;
 
 mod mem;
 mod module;
+mod resolver;
 
 /// An implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/libexec/rtld-elf/rtld.c.
@@ -202,8 +204,14 @@ impl<'a> RuntimeLinker<'a> {
     /// No other threads may access the memory of all loaded modules.
     pub unsafe fn relocate(&self) -> Result<(), RelocateError> {
         // TODO: Check what the PS4 actually doing.
+        let list = self.list.read().unwrap();
+        let resolver = SymbolResolver::new(
+            &list,
+            self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::UNK2),
+        );
+
         for m in self.list.read().unwrap().deref() {
-            self.relocate_single(m)?;
+            self.relocate_single(m, &resolver)?;
         }
 
         Ok(())
@@ -213,7 +221,11 @@ impl<'a> RuntimeLinker<'a> {
     ///
     /// # Safety
     /// No other thread may access the module memory.
-    unsafe fn relocate_single(&self, md: &Arc<Module>) -> Result<(), RelocateError> {
+    unsafe fn relocate_single<'b>(
+        &self,
+        md: &'b Arc<Module>,
+        resolver: &SymbolResolver<'b>,
+    ) -> Result<(), RelocateError> {
         // Unprotect the memory.
         let mut mem = match md.memory().unprotect() {
             Ok(v) => v,
@@ -226,7 +238,7 @@ impl<'a> RuntimeLinker<'a> {
         self.relocate_rela(md, mem.as_mut(), &mut relocated)?;
 
         if !md.flags().contains(ModuleFlags::UNK4) {
-            self.relocate_plt(md, mem.as_mut(), &mut relocated)?;
+            self.relocate_plt(md, mem.as_mut(), &mut relocated, resolver)?;
         }
 
         Ok(())
@@ -280,11 +292,12 @@ impl<'a> RuntimeLinker<'a> {
     }
 
     /// See `reloc_jmplots` on the PS4 for a reference.
-    fn relocate_plt(
+    fn relocate_plt<'b>(
         &self,
-        md: &Arc<Module>,
+        md: &'b Arc<Module>,
         mem: &mut [u8],
         relocated: &mut [bool],
+        resolver: &SymbolResolver<'b>,
     ) -> Result<(), RelocateError> {
         // Do nothing if not a dynamic module.
         let info = match md.file_info() {
@@ -312,7 +325,7 @@ impl<'a> RuntimeLinker<'a> {
             }
 
             // Resolve symbol.
-            let sym = match self.resolve_symbol(md, reloc.symbol(), info) {
+            let sym = match resolver.resolve_with_local(md, reloc.symbol(), ResolveFlags::UNK1) {
                 Some((m, s)) => {
                     m.memory().addr() + m.memory().base() + m.symbol(s).unwrap().value()
                 }
@@ -330,41 +343,6 @@ impl<'a> RuntimeLinker<'a> {
         }
 
         Ok(())
-    }
-
-    fn resolve_symbol(
-        &self,
-        md: &Arc<Module>,
-        index: usize,
-        info: &FileInfo,
-    ) -> Option<(Arc<Module>, usize)> {
-        // Check if symbol index is valid.
-        let sym = md.symbols().get(index)?;
-
-        if index >= info.nchains() {
-            return None;
-        }
-
-        if self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::UNK2) {
-            // Get library and module.
-            let (li, mi) = match sym.decode_name() {
-                Some(v) => (
-                    md.libraries().iter().find(|&l| l.id() == v.1),
-                    md.modules().iter().find(|&m| m.id() == v.2),
-                ),
-                None => (None, None),
-            };
-        } else {
-            todo!("resolve symbol with SDK version < 0x5000000");
-        }
-
-        // Return this symbol if the binding is local. The reason we don't check this in the
-        // first place is because we want to maintain the same behavior as the PS4.
-        if sym.binding() == Symbol::STB_LOCAL {
-            return Some((md.clone(), index));
-        }
-
-        None
     }
 }
 
