@@ -1,11 +1,12 @@
 use super::MapError;
 use crate::memory::{MappingFlags, MemoryManager, MprotectError, Protections};
 use elf::{Elf, ProgramFlags, ProgramType};
+use gmtx::{GroupMutex, GroupMutexWriteGuard, MutexGroup};
 use std::alloc::Layout;
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::marker::PhantomData;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::Arc;
 use thiserror::Error;
 
 /// A memory of the loaded module.
@@ -18,10 +19,10 @@ pub struct Memory {
     relro: usize,
     data: usize,
     obcode: usize,
-    obcode_sealed: Mutex<usize>,
+    obcode_sealed: GroupMutex<usize>,
     obdata: usize,
-    obdata_sealed: Mutex<usize>,
-    destructors: Mutex<Vec<Box<dyn FnOnce()>>>,
+    obdata_sealed: GroupMutex<usize>,
+    destructors: GroupMutex<Vec<Box<dyn FnOnce()>>>,
 }
 
 impl Memory {
@@ -163,6 +164,8 @@ impl Memory {
             }
         }
 
+        let mtxg = Arc::new(MutexGroup::new());
+
         Ok(Self {
             ptr: pages.into_raw(),
             len,
@@ -172,10 +175,10 @@ impl Memory {
             relro,
             data,
             obcode,
-            obcode_sealed: Mutex::new(0),
+            obcode_sealed: GroupMutex::new(mtxg.clone(), 0),
             obdata,
-            obdata_sealed: Mutex::new(0),
-            destructors: Mutex::default(),
+            obdata_sealed: GroupMutex::new(mtxg.clone(), 0),
+            destructors: GroupMutex::new(mtxg, Vec::new()),
         })
     }
 
@@ -217,7 +220,7 @@ impl Memory {
     /// No other threads may execute the memory in the segment until the returned [`CodeWorkspace`]
     /// has been dropped.
     pub unsafe fn code_workspace(&self) -> Result<CodeWorkspace<'_>, CodeWorkspaceError> {
-        let sealed = self.obcode_sealed.lock().unwrap();
+        let sealed = self.obcode_sealed.write();
         let seg = match self.unprotect_segment(self.obcode) {
             Ok(v) => v,
             Err(e) => {
@@ -234,7 +237,7 @@ impl Memory {
     }
 
     pub fn push_data<T: 'static>(&self, value: T) -> Option<*mut T> {
-        let mut sealed = self.obdata_sealed.lock().unwrap();
+        let mut sealed = self.obdata_sealed.write();
         let seg = &self.segments[self.obdata];
         let ptr = unsafe { self.ptr.add(seg.start + *sealed) };
         let available = seg.len - *sealed;
@@ -256,8 +259,7 @@ impl Memory {
         unsafe { std::ptr::write(ptr, value) };
 
         self.destructors
-            .lock()
-            .unwrap()
+            .write()
             .push(Box::new(move || unsafe { std::ptr::drop_in_place(ptr) }));
 
         // Seal the memory.
@@ -328,7 +330,7 @@ impl Memory {
 impl Drop for Memory {
     fn drop(&mut self) {
         // Run destructors.
-        let destructors = self.destructors.get_mut().unwrap();
+        let destructors = self.destructors.get_mut();
 
         for d in destructors.drain(..).rev() {
             d();
@@ -353,7 +355,7 @@ impl Debug for Memory {
             .field("obcode_sealed", &self.obcode_sealed)
             .field("obdata", &self.obdata)
             .field("obdata_sealed", &self.obdata_sealed)
-            .field("destructors", &self.destructors.lock().unwrap().len())
+            .field("destructors", &self.destructors.read().len())
             .finish()
     }
 }
@@ -458,7 +460,7 @@ pub struct CodeWorkspace<'a> {
     ptr: *mut u8,
     len: usize,
     seg: UnprotectedSegment<'a>,
-    sealed: MutexGuard<'a, usize>,
+    sealed: GroupMutexWriteGuard<'a, usize>,
 }
 
 impl<'a> CodeWorkspace<'a> {

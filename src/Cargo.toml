@@ -5,6 +5,7 @@ members = [
     "error",
     "fs",
     "ftp",
+    "gmtx",
     "kernel",
     "kernel-macros",
     "llt",
