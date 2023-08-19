@@ -7,10 +7,11 @@ use elf::{
     DynamicFlags, DynamicTag, Elf, FileInfo, FileType, LibraryFlags, LibraryInfo, ModuleInfo,
     Program, Symbol,
 };
+use gmtx::{GroupMutex, GroupMutexReadGuard, GroupMutexWriteGuard, MutexGroup};
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::Write;
-use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::Arc;
 
 /// An implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/libexec/rtld-elf/rtld.h#L147.
@@ -25,12 +26,12 @@ pub struct Module {
     eh_info: Option<ModuleEh>,
     proc_param: Option<(usize, usize)>,
     sdk_ver: u32,
-    flags: RwLock<ModuleFlags>,
+    flags: GroupMutex<ModuleFlags>,
     needed: Vec<NeededModule>,
     modules: Vec<ModuleInfo>,
     libraries: Vec<LibraryInfo>,
     memory: Memory,
-    relocated: Mutex<Vec<bool>>,
+    relocated: GroupMutex<Vec<bool>>,
     file_info: Option<FileInfo>,
     path: VPathBuf,
     is_self: bool,
@@ -137,6 +138,8 @@ impl Module {
         };
 
         // Parse dynamic info.
+        let mtxg = Arc::new(MutexGroup::new());
+
         let mut module = Self {
             id,
             init: None,
@@ -147,12 +150,12 @@ impl Module {
             eh_info,
             proc_param,
             sdk_ver,
-            flags: RwLock::new(ModuleFlags::UNK2),
+            flags: GroupMutex::new(mtxg.clone(), ModuleFlags::UNK2),
             needed: Vec::new(),
             modules: Vec::new(),
             libraries: Vec::new(),
             memory,
-            relocated: Mutex::default(),
+            relocated: GroupMutex::new(mtxg.clone(), Vec::new()),
             file_info: None,
             path: path.try_into().unwrap(),
             is_self,
@@ -163,7 +166,10 @@ impl Module {
 
         if let Some(info) = file_info {
             module.digest_dynamic(base, &info)?;
-            module.relocated = Mutex::new(vec![false; info.reloc_count() + info.plt_count()]);
+            module.relocated = GroupMutex::new(
+                mtxg.clone(),
+                vec![false; info.reloc_count() + info.plt_count()],
+            );
             module.file_info = Some(info);
         }
 
@@ -206,12 +212,12 @@ impl Module {
         self.sdk_ver
     }
 
-    pub fn flags(&self) -> RwLockReadGuard<'_, ModuleFlags> {
-        self.flags.read().unwrap()
+    pub fn flags(&self) -> GroupMutexReadGuard<'_, ModuleFlags> {
+        self.flags.read()
     }
 
-    pub fn flags_mut(&self) -> RwLockWriteGuard<'_, ModuleFlags> {
-        self.flags.write().unwrap()
+    pub fn flags_mut(&self) -> GroupMutexWriteGuard<'_, ModuleFlags> {
+        self.flags.write()
     }
 
     pub fn modules(&self) -> &[ModuleInfo] {
@@ -226,8 +232,12 @@ impl Module {
         &self.memory
     }
 
-    pub fn relocated(&self) -> MutexGuard<'_, Vec<bool>> {
-        self.relocated.lock().unwrap()
+    pub fn relocated(&self) -> GroupMutexReadGuard<'_, Vec<bool>> {
+        self.relocated.read()
+    }
+
+    pub fn relocated_mut(&self) -> GroupMutexWriteGuard<'_, Vec<bool>> {
+        self.relocated.write()
     }
 
     /// Only available if the module is a dynamic module.
@@ -249,7 +259,7 @@ impl Module {
 
     pub fn print(&self, mut entry: LogEntry) {
         // Lock all required fields first so the output is consistent.
-        let flags = self.flags.read().unwrap();
+        let flags = self.flags.read();
 
         // Image info.
         if self.is_self {
@@ -477,7 +487,7 @@ impl Module {
                 }
                 DynamicTag::DT_INIT => self.digest_init(base, value)?,
                 DynamicTag::DT_FINI => self.digest_fini(base, value)?,
-                DynamicTag::DT_TEXTREL => *self.flags.get_mut().unwrap() |= ModuleFlags::TEXT_REL,
+                DynamicTag::DT_TEXTREL => *self.flags.get_mut() |= ModuleFlags::TEXT_REL,
                 DynamicTag::DT_FLAGS => self.digest_flags(value)?,
                 DynamicTag::DT_SCE_MODULE_INFO | DynamicTag::DT_SCE_NEEDED_MODULE => {
                     self.digest_module_info(info, i, value)?;
@@ -536,7 +546,7 @@ impl Module {
         } else if flags.contains(DynamicFlags::DF_BIND_NOW) {
             return Err(MapError::ObsoleteFlags(DynamicFlags::DF_BIND_NOW));
         } else if flags.contains(DynamicFlags::DF_TEXTREL) {
-            *self.flags.get_mut().unwrap() |= ModuleFlags::TEXT_REL;
+            *self.flags.get_mut() |= ModuleFlags::TEXT_REL;
         }
 
         Ok(())

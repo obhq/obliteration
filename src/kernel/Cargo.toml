@@ -12,6 +12,7 @@ bitflags = "2.1"
 byteorder = "1.4"
 clap = { version = "4.1", features = ["derive"] }
 elf = { path = "../elf" }
+gmtx = { path = "../gmtx" }
 iced-x86 = { version = "1.18", features = ["code_asm"] }
 kernel-macros = { path = "../kernel-macros" }
 libc = "0.2"

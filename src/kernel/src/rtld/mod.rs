@@ -1,5 +1,5 @@
-pub use mem::*;
-pub use module::*;
+pub use self::mem::*;
+pub use self::module::*;
 
 use self::resolver::{ResolveFlags, SymbolResolver};
 use crate::errno::{Errno, EINVAL, ENOEXEC};
@@ -7,11 +7,12 @@ use crate::fs::{Fs, VPath, VPathBuf};
 use crate::memory::{MmapError, MprotectError, Protections};
 use bitflags::bitflags;
 use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation};
+use gmtx::{GroupMutex, GroupMutexReadGuard, MutexGroup};
 use std::fs::File;
 use std::num::NonZeroI32;
 use std::ops::Deref;
 use std::ptr::write_unaligned;
-use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard};
+use std::sync::Arc;
 use thiserror::Error;
 
 mod mem;
@@ -23,11 +24,11 @@ mod resolver;
 #[derive(Debug)]
 pub struct RuntimeLinker<'a> {
     fs: &'a Fs,
-    list: RwLock<Vec<Arc<Module>>>,      // obj_list + obj_tail
-    app: Arc<Module>,                    // obj_main
-    kernel: RwLock<Option<Arc<Module>>>, // obj_kernel
-    next_id: Mutex<u32>,                 // idtable on proc
-    tls_max: Mutex<u32>,                 // tls_max_index
+    list: GroupMutex<Vec<Arc<Module>>>,      // obj_list + obj_tail
+    app: Arc<Module>,                        // obj_main
+    kernel: GroupMutex<Option<Arc<Module>>>, // obj_kernel
+    next_id: GroupMutex<u32>,                // idtable on proc
+    tls_max: GroupMutex<u32>,                // tls_max_index
     flags: LinkerFlags,
 }
 
@@ -96,19 +97,21 @@ impl<'a> RuntimeLinker<'a> {
         // TODO: Apply logic from umtx_exec_hook.
         // TODO: Apply logic from aio_proc_rundown_exec.
         // TODO: Apply logic from gs_is_event_handler_process_exec.
+        let mtxg = Arc::new(MutexGroup::new());
+
         Ok(Self {
             fs,
-            list: RwLock::new(Vec::from([app.clone()])),
+            list: GroupMutex::new(mtxg.clone(), Vec::from([app.clone()])),
             app,
-            kernel: RwLock::default(),
-            next_id: Mutex::new(1),
-            tls_max: Mutex::new(1),
+            kernel: GroupMutex::new(mtxg.clone(), None),
+            next_id: GroupMutex::new(mtxg.clone(), 1),
+            tls_max: GroupMutex::new(mtxg.clone(), 1),
             flags,
         })
     }
 
-    pub fn list(&self) -> RwLockReadGuard<'_, Vec<Arc<Module>>> {
-        self.list.read().unwrap()
+    pub fn list(&self) -> GroupMutexReadGuard<'_, Vec<Arc<Module>>> {
+        self.list.read()
     }
 
     pub fn app(&self) -> &Arc<Module> {
@@ -116,11 +119,11 @@ impl<'a> RuntimeLinker<'a> {
     }
 
     pub fn kernel(&self) -> Option<Arc<Module>> {
-        self.kernel.read().unwrap().clone()
+        self.kernel.read().clone()
     }
 
     pub fn set_kernel(&self, md: Arc<Module>) {
-        *self.kernel.write().unwrap() = Some(md);
+        *self.kernel.write() = Some(md);
     }
 
     /// This method **ALWAYS** load the specified module without checking if the same module is
@@ -148,8 +151,8 @@ impl<'a> RuntimeLinker<'a> {
 
         // TODO: Apply remaining checks from self_load_shared_object.
         // Search for TLS free slot.
-        let mut list = self.list.write().unwrap();
-        let mut tls_max = self.tls_max.lock().unwrap();
+        let mut list = self.list.write();
+        let mut tls_max = self.tls_max.write();
         let tls = elf.tls().map(|i| &elf.programs()[i]);
         let tls = if tls.map(|p| p.memory_size()).unwrap_or(0) == 0 {
             0
@@ -175,7 +178,7 @@ impl<'a> RuntimeLinker<'a> {
         };
 
         // Map file.
-        let mut next_id = self.next_id.lock().unwrap();
+        let mut next_id = self.next_id.write();
         let module = match Module::map(elf, 0, *next_id, tls) {
             Ok(v) => Arc::new(v),
             Err(e) => return Err(LoadError::MapFailed(e)),
@@ -204,13 +207,13 @@ impl<'a> RuntimeLinker<'a> {
     /// No other threads may access the memory of all loaded modules.
     pub unsafe fn relocate(&self) -> Result<(), RelocateError> {
         // TODO: Check what the PS4 actually doing.
-        let list = self.list.read().unwrap();
+        let list = self.list.read();
         let resolver = SymbolResolver::new(
             &list,
             self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::UNK2),
         );
 
-        for m in self.list.read().unwrap().deref() {
+        for m in list.deref() {
             self.relocate_single(m, &resolver)?;
         }
 
@@ -233,7 +236,7 @@ impl<'a> RuntimeLinker<'a> {
         };
 
         // Apply relocations.
-        let mut relocated = md.relocated();
+        let mut relocated = md.relocated_mut();
 
         self.relocate_rela(md, mem.as_mut(), &mut relocated)?;
 
