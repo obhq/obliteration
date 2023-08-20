@@ -294,7 +294,8 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
             (*info).name[0xff] = 0;
         }
 
-        // Calculate TLS index.
+        // Set TLS information. Not sure if the tlsinit can be zero when the tlsinitsize is zero.
+        // Let's keep the same behavior as the PS4 for now.
         (*info).tlsindex = if flags & 1 != 0 {
             let flags = md.flags();
             let mut upper = if flags.contains(ModuleFlags::UNK1) {
@@ -312,10 +313,7 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
             md.tls_index() & 0xffff
         };
 
-        // Set TLS information. Not sure if the tlsinit can be zero when the tlsinitsize is zero.
-        // Let's keep the same behavior as the PS4 for now.
         if let Some(i) = md.tls_info() {
-            // tlsoffset seems to always zero.
             (*info).tlsinit = addr + i.init();
             (*info).tlsinitsize = i.init_size().try_into().unwrap();
             (*info).tlssize = i.size().try_into().unwrap();
@@ -323,6 +321,8 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         } else {
             (*info).tlsinit = addr;
         }
+
+        (*info).tlsoffset = (*md.tls_offset()).try_into().unwrap();
 
         // Initialization and finalization functions.
         if !md.flags().contains(ModuleFlags::UNK5) {

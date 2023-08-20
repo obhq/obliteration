@@ -56,14 +56,6 @@ pub struct GroupMutex<T> {
 }
 
 impl<T> GroupMutex<T> {
-    pub const fn new(group: Arc<MutexGroup>, value: T) -> Self {
-        Self {
-            group,
-            active: UnsafeCell::new(0),
-            value: UnsafeCell::new(value),
-        }
-    }
-
     pub fn get_mut(&mut self) -> &mut T {
         self.value.get_mut()
     }
@@ -122,11 +114,19 @@ pub struct MutexGroup {
 }
 
 impl MutexGroup {
-    pub const fn new() -> Self {
-        Self {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
             owning: ThreadId::new(0),
             active: UnsafeCell::new(0),
             waiting: Mutex::new(VecDeque::new()),
+        })
+    }
+
+    pub fn new_member<T>(self: &Arc<Self>, value: T) -> GroupMutex<T> {
+        GroupMutex {
+            group: self.clone(),
+            active: UnsafeCell::new(0),
+            value: UnsafeCell::new(value),
         }
     }
 
@@ -225,7 +225,10 @@ impl<'a> Drop for GroupGuard<'a> {
         self.group.owning.store(0, Ordering::Release);
 
         // Wakeup one waiting thread.
-        let mut waiting = self.group.waiting.lock().unwrap();
+        let mut waiting = match self.group.waiting.try_lock() {
+            Ok(v) => v,
+            Err(_) => return,
+        };
 
         while let Some(t) = waiting.pop_front() {
             if let Some(t) = t.upgrade() {

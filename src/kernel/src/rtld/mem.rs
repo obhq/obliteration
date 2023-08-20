@@ -26,7 +26,11 @@ pub struct Memory {
 }
 
 impl Memory {
-    pub(super) fn new(image: &Elf<File>, base: usize) -> Result<Self, MapError> {
+    pub(super) fn new(
+        image: &Elf<File>,
+        base: usize,
+        mtxg: &Arc<MutexGroup>,
+    ) -> Result<Self, MapError> {
         // It seems like the PS4 expected to have only one for each text, data and relo program.
         let mut segments: Vec<MemorySegment> = Vec::with_capacity(3 + 2);
         let mut text: Option<usize> = None;
@@ -164,8 +168,6 @@ impl Memory {
             }
         }
 
-        let mtxg = Arc::new(MutexGroup::new());
-
         Ok(Self {
             ptr: pages.into_raw(),
             len,
@@ -175,10 +177,10 @@ impl Memory {
             relro,
             data,
             obcode,
-            obcode_sealed: GroupMutex::new(mtxg.clone(), 0),
+            obcode_sealed: mtxg.new_member(0),
             obdata,
-            obdata_sealed: GroupMutex::new(mtxg.clone(), 0),
-            destructors: GroupMutex::new(mtxg, Vec::new()),
+            obdata_sealed: mtxg.new_member(0),
+            destructors: mtxg.new_member(Vec::new()),
         })
     }
 
