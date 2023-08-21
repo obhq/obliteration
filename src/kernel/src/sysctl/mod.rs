@@ -8,7 +8,9 @@ use thiserror::Error;
 ///
 /// This is an implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/kern/kern_sysctl.c.
-pub struct Sysctl {}
+pub struct Sysctl {
+    arc4: &'static Arc4,
+}
 
 impl Sysctl {
     pub const CTL_KERN: i32 = 1;
@@ -17,8 +19,8 @@ impl Sysctl {
     pub const KERN_ARND: i32 = 37;
     pub const VM_TOTAL: i32 = 1;
 
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(arc4: &'static Arc4) -> Self {
+        Self { arc4 }
     }
 
     pub fn invoke(
@@ -67,7 +69,9 @@ impl Sysctl {
 
         // Fill the output.
         let len = min(buf.len(), 256);
-        Arc4::current().rand_bytes(&mut buf[..len]);
+
+        self.arc4.rand_bytes(&mut buf[..len]);
+
         Ok(len)
     }
 }

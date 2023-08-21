@@ -27,9 +27,11 @@ pub struct RuntimeLinker<'a> {
     list: GroupMutex<Vec<Arc<Module>>>,      // obj_list + obj_tail
     app: Arc<Module>,                        // obj_main
     kernel: GroupMutex<Option<Arc<Module>>>, // obj_kernel
+    mains: GroupMutex<Vec<Arc<Module>>>,     // list_main
     next_id: GroupMutex<u32>,                // idtable on proc
-    tls_max: GroupMutex<u32>,                // tls_max_index
+    tls: GroupMutex<TlsAlloc>,
     flags: LinkerFlags,
+    mtxg: Arc<MutexGroup>,
 }
 
 impl<'a> RuntimeLinker<'a> {
@@ -74,7 +76,8 @@ impl<'a> RuntimeLinker<'a> {
 
         // TODO: Apply remaining checks from exec_self_imgact.
         // Map eboot.bin.
-        let app = match Module::map(elf, base, 0, 1) {
+        let mtxg = MutexGroup::new();
+        let app = match Module::map(elf, base, 0, 1, &mtxg) {
             Ok(v) => Arc::new(v),
             Err(e) => return Err(RuntimeLinkerError::MapExeFailed(file.into_vpath(), e)),
         };
@@ -97,16 +100,21 @@ impl<'a> RuntimeLinker<'a> {
         // TODO: Apply logic from umtx_exec_hook.
         // TODO: Apply logic from aio_proc_rundown_exec.
         // TODO: Apply logic from gs_is_event_handler_process_exec.
-        let mtxg = Arc::new(MutexGroup::new());
-
         Ok(Self {
             fs,
-            list: GroupMutex::new(mtxg.clone(), Vec::from([app.clone()])),
-            app,
-            kernel: GroupMutex::new(mtxg.clone(), None),
-            next_id: GroupMutex::new(mtxg.clone(), 1),
-            tls_max: GroupMutex::new(mtxg.clone(), 1),
+            list: mtxg.new_member(vec![app.clone()]),
+            app: app.clone(),
+            kernel: mtxg.new_member(None),
+            mains: mtxg.new_member(vec![app]),
+            next_id: mtxg.new_member(1),
+            tls: mtxg.new_member(TlsAlloc {
+                max_index: 1,
+                last_offset: 0,
+                last_size: 0,
+                static_space: 0,
+            }),
             flags,
+            mtxg,
         })
     }
 
@@ -128,7 +136,7 @@ impl<'a> RuntimeLinker<'a> {
 
     /// This method **ALWAYS** load the specified module without checking if the same module is
     /// already loaded.
-    pub fn load(&mut self, path: &VPath) -> Result<Arc<Module>, LoadError> {
+    pub fn load(&mut self, path: &VPath, main: bool) -> Result<Arc<Module>, LoadError> {
         // Get file.
         let file = match self.fs.get_file(path) {
             Some(v) => v,
@@ -152,34 +160,34 @@ impl<'a> RuntimeLinker<'a> {
         // TODO: Apply remaining checks from self_load_shared_object.
         // Search for TLS free slot.
         let mut list = self.list.write();
-        let mut tls_max = self.tls_max.write();
         let tls = elf.tls().map(|i| &elf.programs()[i]);
         let tls = if tls.map(|p| p.memory_size()).unwrap_or(0) == 0 {
             0
         } else {
-            let mut r = 1;
+            let mut alloc = self.tls.write();
+            let mut index = 1;
 
             loop {
                 // Check if the current value has been used.
-                if !list.iter().any(|m| m.tls_index() == r) {
+                if !list.iter().any(|m| m.tls_index() == index) {
                     break;
                 }
 
                 // Someone already use the current value, increase the value and try again.
-                r += 1;
+                index += 1;
 
-                if r > *tls_max {
-                    *tls_max = r;
+                if index > alloc.max_index {
+                    alloc.max_index = index;
                     break;
                 }
             }
 
-            r
+            index
         };
 
         // Map file.
         let mut next_id = self.next_id.write();
-        let module = match Module::map(elf, 0, *next_id, tls) {
+        let module = match Module::map(elf, 0, *next_id, tls, &self.mtxg) {
             Ok(v) => Arc::new(v),
             Err(e) => return Err(LoadError::MapFailed(e)),
         };
@@ -196,8 +204,13 @@ impl<'a> RuntimeLinker<'a> {
             *module.flags_mut() |= ModuleFlags::UNK1;
         }
 
-        // Load to loaded list.
+        // Add to list.
         list.push(module.clone());
+
+        if main {
+            self.mains.write().push(module.clone());
+        }
+
         *next_id += 1;
 
         Ok(module)
@@ -206,6 +219,43 @@ impl<'a> RuntimeLinker<'a> {
     /// # Safety
     /// No other threads may access the memory of all loaded modules.
     pub unsafe fn relocate(&self) -> Result<(), RelocateError> {
+        // Initialize TLS.
+        let mains = self.mains.read();
+        let mut alloc = self.tls.write();
+
+        for md in mains.deref() {
+            // Skip if already initialized.
+            let mut flags = md.flags_mut();
+
+            if flags.contains(ModuleFlags::TLS_DONE) {
+                continue;
+            }
+
+            // Check if the module has TLS.
+            if let Some(t) = md.tls_info().filter(|i| i.size() != 0) {
+                // TODO: Refactor this for readability.
+                let off = if md.tls_index() == 1 {
+                    (t.size() + t.align() - 1) & !(t.align() - 1)
+                } else {
+                    ((alloc.last_offset + t.size()) + t.align() - 1) & !(t.align() - 1)
+                };
+
+                if alloc.static_space != 0 && off > alloc.static_space {
+                    continue;
+                }
+
+                *md.tls_offset_mut() = off;
+
+                alloc.last_offset = off;
+                alloc.last_size = t.size();
+            }
+
+            // Set TLS_DONE.
+            *flags |= ModuleFlags::TLS_DONE;
+        }
+
+        drop(alloc);
+
         // TODO: Check what the PS4 actually doing.
         let list = self.list.read();
         let resolver = SymbolResolver::new(
@@ -347,6 +397,15 @@ impl<'a> RuntimeLinker<'a> {
 
         Ok(())
     }
+}
+
+/// Contains how TLS was allocated so far.
+#[derive(Debug)]
+pub struct TlsAlloc {
+    max_index: u32,      // tls_max_index
+    last_offset: usize,  // tls_last_offset
+    last_size: usize,    // tls_last_size
+    static_space: usize, // tls_static_space
 }
 
 bitflags! {

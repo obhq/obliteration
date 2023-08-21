@@ -21,8 +21,9 @@ pub struct Module {
     init: Option<usize>,
     entry: Option<usize>,
     fini: Option<usize>,
-    tls_index: u32,              // tlsindex
-    tls_info: Option<ModuleTls>, // tlsinit + tlsinitsize + tlssize + tlsalign
+    tls_index: u32,                // tlsindex
+    tls_offset: GroupMutex<usize>, // tlsoffset
+    tls_info: Option<ModuleTls>,   // tlsinit + tlsinitsize + tlssize + tlsalign
     eh_info: Option<ModuleEh>,
     proc_param: Option<(usize, usize)>,
     sdk_ver: u32,
@@ -46,9 +47,10 @@ impl Module {
         base: usize,
         id: u32,
         tls_index: u32,
+        mtxg: &Arc<MutexGroup>,
     ) -> Result<Self, MapError> {
         // Map the image to the memory.
-        let memory = Memory::new(&image, base)?;
+        let memory = Memory::new(&image, base, mtxg)?;
 
         for (i, s) in memory.segments().iter().enumerate() {
             // Get target program.
@@ -138,24 +140,23 @@ impl Module {
         };
 
         // Parse dynamic info.
-        let mtxg = Arc::new(MutexGroup::new());
-
         let mut module = Self {
             id,
             init: None,
             entry,
             fini: None,
             tls_index,
+            tls_offset: mtxg.new_member(0),
             tls_info,
             eh_info,
             proc_param,
             sdk_ver,
-            flags: GroupMutex::new(mtxg.clone(), ModuleFlags::UNK2),
+            flags: mtxg.new_member(ModuleFlags::UNK2),
             needed: Vec::new(),
             modules: Vec::new(),
             libraries: Vec::new(),
             memory,
-            relocated: GroupMutex::new(mtxg.clone(), Vec::new()),
+            relocated: mtxg.new_member(Vec::new()),
             file_info: None,
             path: path.try_into().unwrap(),
             is_self,
@@ -166,10 +167,7 @@ impl Module {
 
         if let Some(info) = file_info {
             module.digest_dynamic(base, &info)?;
-            module.relocated = GroupMutex::new(
-                mtxg.clone(),
-                vec![false; info.reloc_count() + info.plt_count()],
-            );
+            module.relocated = mtxg.new_member(vec![false; info.reloc_count() + info.plt_count()]);
             module.file_info = Some(info);
         }
 
@@ -194,6 +192,14 @@ impl Module {
 
     pub fn tls_index(&self) -> u32 {
         self.tls_index
+    }
+
+    pub fn tls_offset(&self) -> GroupMutexReadGuard<'_, usize> {
+        self.tls_offset.read()
+    }
+
+    pub fn tls_offset_mut(&self) -> GroupMutexWriteGuard<'_, usize> {
+        self.tls_offset.write()
     }
 
     pub fn tls_info(&self) -> Option<&ModuleTls> {
@@ -230,10 +236,6 @@ impl Module {
 
     pub fn memory(&self) -> &Memory {
         &self.memory
-    }
-
-    pub fn relocated(&self) -> GroupMutexReadGuard<'_, Vec<bool>> {
-        self.relocated.read()
     }
 
     pub fn relocated_mut(&self) -> GroupMutexWriteGuard<'_, Vec<bool>> {

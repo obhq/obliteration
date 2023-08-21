@@ -94,13 +94,14 @@ fn main() -> ExitCode {
 
     // Initialize Arc4.
     info!("Initializing arc4random.");
-    Arc4::init();
+
+    let arc4: &'static Arc4 = Box::leak(Arc4::new().into());
 
     // Initialize LLVM.
     info!("Initializing LLVM.");
     Llvm::init();
 
-    let sysctl = Sysctl::new();
+    let sysctl = Sysctl::new(arc4);
 
     // Initialize filesystem.
     info!("Initializing file system.");
@@ -156,7 +157,7 @@ fn main() -> ExitCode {
 
     info!("Loading {path}.");
 
-    let module = match ld.load(path) {
+    let module = match ld.load(path, true) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Load failed");
@@ -176,7 +177,7 @@ fn main() -> ExitCode {
 
     info!("Loading {path}.");
 
-    let module = match ld.load(path) {
+    let module = match ld.load(path, true) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Load failed");
