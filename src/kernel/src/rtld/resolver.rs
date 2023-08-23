@@ -1,6 +1,6 @@
 use super::Module;
 use bitflags::bitflags;
-use elf::{LibraryInfo, Symbol};
+use elf::Symbol;
 use std::sync::Arc;
 
 /// An object to resolve a symbol from loaded (S)ELF.
@@ -28,7 +28,7 @@ impl<'a> SymbolResolver<'a> {
         let sym = md.symbols().get(index)?;
         let data = md.file_info().unwrap();
 
-        if index >= data.nchains() {
+        if index >= data.chains().len() {
             return None;
         }
 
@@ -48,7 +48,7 @@ impl<'a> SymbolResolver<'a> {
                 Some(sym.name()),
                 None,
                 mi.map(|i| i.name()),
-                li,
+                li.map(|i| i.name()),
                 Self::hash(Some(sym.name()), li.map(|i| i.name()), mi.map(|i| i.name())),
             )
         } else {
@@ -81,7 +81,7 @@ impl<'a> SymbolResolver<'a> {
         name: Option<&str>,
         decoded_name: Option<&str>,
         symmod: Option<&str>,
-        symlib: Option<&LibraryInfo>,
+        symlib: Option<&str>,
         hash: u64,
         flags: ResolveFlags,
     ) -> Option<(&'a Arc<Module>, usize)> {
@@ -96,7 +96,7 @@ impl<'a> SymbolResolver<'a> {
         name: Option<&str>,
         decoded_name: Option<&str>,
         symmod: Option<&str>,
-        symlib: Option<&LibraryInfo>,
+        symlib: Option<&str>,
         hash: u64,
         flags: ResolveFlags,
     ) -> Option<(&'a Arc<Module>, usize)> {
@@ -120,7 +120,7 @@ impl<'a> SymbolResolver<'a> {
         name: Option<&str>,
         decoded_name: Option<&str>,
         symmod: Option<&str>,
-        symlib: Option<&LibraryInfo>,
+        symlib: Option<&str>,
         hash: u64,
         flags: ResolveFlags,
         list: &'a [Arc<Module>],
@@ -185,19 +185,51 @@ impl<'a> SymbolResolver<'a> {
         name: Option<&str>,
         decoded_name: Option<&str>,
         symmod: Option<&str>,
-        symlib: Option<&LibraryInfo>,
+        symlib: Option<&str>,
         hash: u64,
         flags: ResolveFlags,
         md: &'a Arc<Module>,
     ) -> Option<(&'a Arc<Module>, usize)> {
-        // TODO: Implement symlook_obj.
+        let info = md.file_info().unwrap();
+        let buckets = info.buckets();
+        let hash: usize = hash.try_into().unwrap();
+
+        if !flags.contains(ResolveFlags::UNK2) {
+            let mut index: usize = buckets[hash % buckets.len()].try_into().unwrap();
+
+            while index != 0 {
+                // Get symbol.
+                let sym = match md.symbol(index) {
+                    Some(v) => v,
+                    None => break,
+                };
+
+                // Check symbol.
+                if self.is_match(name, symmod, symlib, sym, flags, md) {
+                    // TODO: Implement the remaining symlook_obj.
+                    return Some((md, index));
+                }
+
+                // Move to next chain.
+                match info.chains().get(index) {
+                    Some(&v) => {
+                        index = v.try_into().unwrap();
+                        continue;
+                    }
+                    None => break,
+                }
+            }
+        } else {
+            todo!("symlook_obj with flags & 0x100");
+        }
+
         None
     }
 
     pub fn hash(name: Option<&str>, libname: Option<&str>, modname: Option<&str>) -> u64 {
         let mut h: u64 = 0;
         let mut t: u64 = 0;
-        let mut l: i32 = -1;
+        let mut l: i32 = 0;
         let mut c = |b: u8| {
             t = (b as u64) + (h << 4);
             h = t & 0xf0000000;
@@ -213,8 +245,6 @@ impl<'a> SymbolResolver<'a> {
                     break;
                 }
             }
-
-            l = 0;
         }
 
         // Hash library name.
@@ -222,13 +252,6 @@ impl<'a> SymbolResolver<'a> {
             Some(v) => v,
             None => return h,
         };
-
-        if l == 0 {
-            // This seems like a bug in the PS4 because it hash on # two times.
-            c(b'#');
-        }
-
-        l = 0;
 
         for b in v.bytes() {
             c(b);
@@ -259,6 +282,98 @@ impl<'a> SymbolResolver<'a> {
 
         h
     }
+
+    fn is_match(
+        &self,
+        name: Option<&str>,
+        symmod: Option<&str>,
+        symlib: Option<&str>,
+        sym: &Symbol,
+        flags: ResolveFlags,
+        md: &'a Arc<Module>,
+    ) -> bool {
+        // Check type.
+        let ty = sym.ty();
+
+        match ty {
+            Symbol::STT_NOTYPE | Symbol::STT_OBJECT | Symbol::STT_FUNC | Symbol::STT_UNK1 => {
+                if sym.value() == 0 {
+                    return false;
+                }
+            }
+            Symbol::STT_TLS => {}
+            _ => return false,
+        }
+
+        if sym.shndx() == 0 && (ty != Symbol::STT_FUNC || flags.contains(ResolveFlags::UNK3)) {
+            return false;
+        }
+
+        // Do nothing if no target.
+        let name = match name {
+            Some(v) => v,
+            None => return false,
+        };
+
+        // TODO: This logic is not exactly matched with the PS4. The reason is because it is too
+        // complicated to mimic the same behavior. Our implementation here is a "best" guess on what
+        // the PS4 is actually doing.
+        let (li, mi) = match sym.decode_name() {
+            Some((_, lid, mid)) => {
+                let li = md.libraries().iter().find(|&i| i.id() == lid);
+                let mi = md.modules().iter().find(|&i| i.id() == mid);
+
+                (li, mi)
+            }
+            None => (None, None),
+        };
+
+        match name.find(|c| c == '#').map(|i| &name[..i]) {
+            Some(v) => {
+                if !sym.name().starts_with(v) {
+                    return false;
+                }
+            }
+            None => {
+                // TODO: This seems like a useless logic. The problem is the PS4 actually did this.
+                if sym.name() != name {
+                    return false;
+                }
+            }
+        }
+
+        // Compare library name.
+        let symlib = match symlib {
+            Some(v) => v,
+            None => return false,
+        };
+
+        let li = match li {
+            Some(v) => v,
+            None => return false,
+        };
+
+        if li.name() != symlib {
+            return false;
+        }
+
+        // Compare module name.
+        let symmod = match symmod {
+            Some(v) => v,
+            None => return false,
+        };
+
+        let mi = match mi {
+            Some(v) => v,
+            None => return false,
+        };
+
+        if mi.name() != symmod {
+            return false;
+        }
+
+        true
+    }
 }
 
 bitflags! {
@@ -266,6 +381,7 @@ bitflags! {
     #[derive(Clone, Copy)]
     pub struct ResolveFlags: u32 {
         const UNK1 = 0x00000001;
+        const UNK3 = 0x00000002;
         const UNK2 = 0x00000100;
     }
 }
