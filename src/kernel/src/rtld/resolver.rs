@@ -1,18 +1,18 @@
 use super::Module;
 use bitflags::bitflags;
-use elf::{LibraryInfo, ModuleInfo, Symbol};
+use elf::{LibraryInfo, Symbol};
 use std::sync::Arc;
 
 /// An object to resolve a symbol from loaded (S)ELF.
 pub struct SymbolResolver<'a> {
-    mods: &'a [Arc<Module>],
+    mains: &'a [Arc<Module>],
     new_algorithm: bool,
 }
 
 impl<'a> SymbolResolver<'a> {
-    pub fn new(mods: &'a [Arc<Module>], new_algorithm: bool) -> Self {
+    pub fn new(mains: &'a [Arc<Module>], new_algorithm: bool) -> Self {
         Self {
-            mods,
+            mains,
             new_algorithm,
         }
     }
@@ -47,7 +47,7 @@ impl<'a> SymbolResolver<'a> {
             (
                 Some(sym.name()),
                 None,
-                mi,
+                mi.map(|i| i.name()),
                 li,
                 Self::hash(Some(sym.name()), li.map(|i| i.name()), mi.map(|i| i.name())),
             )
@@ -80,13 +80,117 @@ impl<'a> SymbolResolver<'a> {
         refmod: &'a Arc<Module>,
         name: Option<&str>,
         decoded_name: Option<&str>,
-        symmod: Option<&ModuleInfo>,
+        symmod: Option<&str>,
         symlib: Option<&LibraryInfo>,
         hash: u64,
         flags: ResolveFlags,
     ) -> Option<(&'a Arc<Module>, usize)> {
-        // TODO: Resolve from global.
         // TODO: Resolve from DAGs.
+        self.resolve_from_global(refmod, name, decoded_name, symmod, symlib, hash, flags)
+    }
+
+    /// See `symlook_global` on the PS4 for a reference.
+    pub fn resolve_from_global(
+        &self,
+        refmod: &'a Arc<Module>,
+        name: Option<&str>,
+        decoded_name: Option<&str>,
+        symmod: Option<&str>,
+        symlib: Option<&LibraryInfo>,
+        hash: u64,
+        flags: ResolveFlags,
+    ) -> Option<(&'a Arc<Module>, usize)> {
+        // TODO: Resolve from list_global.
+        self.resolve_from_list(
+            refmod,
+            name,
+            decoded_name,
+            symmod,
+            symlib,
+            hash,
+            flags,
+            &self.mains,
+        )
+    }
+
+    /// See `symlook_list` on the PS4 for a reference.
+    pub fn resolve_from_list(
+        &self,
+        refmod: &'a Arc<Module>,
+        name: Option<&str>,
+        decoded_name: Option<&str>,
+        symmod: Option<&str>,
+        symlib: Option<&LibraryInfo>,
+        hash: u64,
+        flags: ResolveFlags,
+        list: &'a [Arc<Module>],
+    ) -> Option<(&'a Arc<Module>, usize)> {
+        // Get module name.
+        let symmod = if !flags.contains(ResolveFlags::UNK2) {
+            symmod
+        } else if let Some(v) = decoded_name {
+            v.rfind('#').map(|i| &v[(i + 1)..])
+        } else {
+            None
+        };
+
+        // TODO: Handle LinkerFlags::UNK2.
+        for md in list {
+            // TODO: Implement DoneList.
+            if let Some(name) = symmod {
+                // TODO: This will be much simpler if we can make sure the module ID is unique.
+                let mut found = false;
+
+                for info in md.modules() {
+                    if info.id() == 0 {
+                        if info.name() == name {
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+
+                if !found {
+                    continue;
+                }
+            }
+
+            // Lookup from the module.
+            let (md, index) = match self.resolve_from_module(
+                refmod,
+                name,
+                decoded_name,
+                symmod,
+                symlib,
+                hash,
+                flags,
+                md,
+            ) {
+                Some(v) => v,
+                None => continue,
+            };
+
+            if md.symbol(index).unwrap().binding() != Symbol::STB_WEAK {
+                return Some((md, index));
+            }
+        }
+
+        None
+    }
+
+    /// See `symlook_obj` on the PS4 for a reference.
+    pub fn resolve_from_module(
+        &self,
+        refmod: &'a Arc<Module>,
+        name: Option<&str>,
+        decoded_name: Option<&str>,
+        symmod: Option<&str>,
+        symlib: Option<&LibraryInfo>,
+        hash: u64,
+        flags: ResolveFlags,
+        md: &'a Arc<Module>,
+    ) -> Option<(&'a Arc<Module>, usize)> {
+        // TODO: Implement symlook_obj.
         None
     }
 
@@ -159,7 +263,9 @@ impl<'a> SymbolResolver<'a> {
 
 bitflags! {
     /// Flags to control behavior of [`SymbolResolver`].
+    #[derive(Clone, Copy)]
     pub struct ResolveFlags: u32 {
         const UNK1 = 0x00000001;
+        const UNK2 = 0x00000100;
     }
 }

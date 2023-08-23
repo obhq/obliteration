@@ -11,7 +11,7 @@ use gmtx::{GroupMutex, GroupMutexReadGuard, MutexGroup};
 use std::fs::File;
 use std::num::NonZeroI32;
 use std::ops::Deref;
-use std::ptr::write_unaligned;
+use std::ptr::{read_unaligned, write_unaligned};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -258,8 +258,9 @@ impl<'a> RuntimeLinker<'a> {
 
         // TODO: Check what the PS4 actually doing.
         let list = self.list.read();
+        let mains = self.mains.read();
         let resolver = SymbolResolver::new(
-            &list,
+            &mains,
             self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::UNK2),
         );
 
@@ -288,7 +289,7 @@ impl<'a> RuntimeLinker<'a> {
         // Apply relocations.
         let mut relocated = md.relocated_mut();
 
-        self.relocate_rela(md, mem.as_mut(), &mut relocated)?;
+        self.relocate_rela(md, mem.as_mut(), &mut relocated, resolver)?;
 
         if !md.flags().contains(ModuleFlags::UNK4) {
             self.relocate_plt(md, mem.as_mut(), &mut relocated, resolver)?;
@@ -298,11 +299,12 @@ impl<'a> RuntimeLinker<'a> {
     }
 
     /// See `reloc_non_plt` on the PS4 kernel for a reference.
-    fn relocate_rela(
+    fn relocate_rela<'b>(
         &self,
-        md: &Arc<Module>,
+        md: &'b Arc<Module>,
         mem: &mut [u8],
         relocated: &mut [bool],
+        resolver: &SymbolResolver<'b>,
     ) -> Result<(), RelocateError> {
         let info = md.file_info().unwrap(); // Let it panic because the PS4 assume it is available.
         let addr = mem.as_ptr() as usize;
@@ -318,24 +320,51 @@ impl<'a> RuntimeLinker<'a> {
             let offset = base + reloc.offset();
             let target = &mut mem[offset..(offset + 8)];
             let addend = reloc.addend();
+            let sym = reloc.symbol();
+            let symflags = ResolveFlags::empty();
             let value = match reloc.ty() {
                 Relocation::R_X86_64_NONE => break,
                 Relocation::R_X86_64_64 => {
-                    // TODO: Resolve symbol.
-                    continue;
+                    // TODO: Apply checks from reloc_non_plt.
+                    let (md, sym) = match resolver.resolve_with_local(md, sym, symflags) {
+                        Some((md, sym)) => (md, md.symbol(sym).unwrap()),
+                        None => continue,
+                    };
+
+                    // TODO: Apply checks from reloc_non_plt.
+                    let mem = md.memory();
+
+                    (mem.addr() + mem.base() + sym.value()).wrapping_add_signed(addend)
+                }
+                Relocation::R_X86_64_GLOB_DAT => {
+                    // TODO: Apply checks from reloc_non_plt.
+                    let (md, sym) = match resolver.resolve_with_local(md, sym, symflags) {
+                        Some((md, sym)) => (md, md.symbol(sym).unwrap()),
+                        None => continue,
+                    };
+
+                    // TODO: Apply checks from reloc_non_plt.
+                    let mem = md.memory();
+
+                    mem.addr() + mem.base() + sym.value()
                 }
                 Relocation::R_X86_64_RELATIVE => {
                     // TODO: Apply checks from reloc_non_plt.
                     (addr + base).wrapping_add_signed(addend)
                 }
                 Relocation::R_X86_64_DTPMOD64 => {
-                    // TODO: Resolve symbol.
-                    continue;
+                    // TODO: Apply checks from reloc_non_plt.
+                    let value: usize = match resolver.resolve_with_local(md, sym, symflags) {
+                        Some((md, _)) => md.tls_index().try_into().unwrap(),
+                        None => continue,
+                    };
+
+                    unsafe { read_unaligned(target.as_ptr() as *const usize) + value }
                 }
                 v => return Err(RelocateError::UnsupportedRela(md.path().to_owned(), v)),
             };
 
-            // Write the value.
+            // TODO: Check what relocate_text_or_data_segment on the PS4 is doing.
             unsafe { write_unaligned(target.as_mut_ptr() as *mut usize, value) };
 
             relocated[i] = true;
