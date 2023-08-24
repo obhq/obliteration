@@ -30,6 +30,7 @@ impl<'a> Iterator for Symbols<'a> {
         // Read the entry.
         let name = LE::read_u32(self.next);
         let info = self.next[4];
+        let shndx = LE::read_u16(&self.next[6..]);
         let value = LE::read_u64(&self.next[8..]);
 
         // Load name.
@@ -44,6 +45,7 @@ impl<'a> Iterator for Symbols<'a> {
         Some(Ok(Symbol {
             name,
             info,
+            shndx,
             value: value.try_into().unwrap(),
         }))
     }
@@ -54,6 +56,7 @@ impl<'a> Iterator for Symbols<'a> {
 pub struct Symbol {
     name: String,
     info: u8,
+    shndx: u16,
     value: usize,
 }
 
@@ -95,6 +98,10 @@ impl Symbol {
 
     pub fn binding(&self) -> u8 {
         self.info >> 4
+    }
+
+    pub fn shndx(&self) -> u16 {
+        self.shndx
     }
 
     pub fn value(&self) -> usize {
