@@ -11,6 +11,7 @@ use crate::thread::VThread;
 use crate::warn;
 use kernel_macros::cpu_abi;
 use std::mem::{size_of, zeroed};
+use std::sync::Arc;
 
 mod error;
 mod input;
@@ -285,6 +286,9 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
         (*info).unk3 = 5;
         (*info).database = addr + mem.data_segment().start();
         (*info).datasize = mem.data_segment().len().try_into().unwrap();
+        (*info).unk4 = 3;
+        (*info).unk6 = 2;
+        (*info).refcount = Arc::strong_count(md).try_into().unwrap();
 
         // Copy module name.
         if flags & 2 == 0 || !md.flags().contains(ModuleFlags::UNK1) {
