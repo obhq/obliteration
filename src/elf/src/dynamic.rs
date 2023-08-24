@@ -79,7 +79,7 @@ impl DynamicTag {
     pub const DT_SCE_UNK4: Self = Self(0x6100000b);
     pub const DT_SCE_UNK5: Self = Self(0x6100000c);
     pub const DT_SCE_UNK6: Self = Self(0x6100000e);
-    pub const DT_SCE_FILENAME: Self = Self(0x61000009);
+    pub const DT_SCE_ORIGINAL_FILENAME: Self = Self(0x61000009);
     pub const DT_SCE_MODULE_INFO: Self = Self(0x6100000d);
     pub const DT_SCE_NEEDED_MODULE: Self = Self(0x6100000f);
     pub const DT_SCE_UNK7: Self = Self(0x61000010);
@@ -95,13 +95,13 @@ impl DynamicTag {
     pub const DT_SCE_UNK12: Self = Self(0x6100001a);
     pub const DT_SCE_UNK13: Self = Self(0x6100001b);
     pub const DT_SCE_UNK14: Self = Self(0x6100001c);
-    pub const DT_SCE_UNK15: Self = Self(0x6100001d);
+    pub const DT_SCE_STUB_MODULE_NAME: Self = Self(0x6100001d);
     pub const DT_SCE_UNK16: Self = Self(0x6100001e);
-    pub const DT_SCE_UNK17: Self = Self(0x6100001f);
+    pub const DT_SCE_STUB_MODULE_VERSION: Self = Self(0x6100001f);
     pub const DT_SCE_UNK18: Self = Self(0x61000020);
-    pub const DT_SCE_UNK19: Self = Self(0x61000021);
+    pub const DT_SCE_STUB_LIBRARY_NAME: Self = Self(0x61000021);
     pub const DT_SCE_UNK20: Self = Self(0x61000022);
-    pub const DT_SCE_UNK21: Self = Self(0x61000023);
+    pub const DT_SCE_STUB_LIBRARY_VERSION: Self = Self(0x61000023);
     pub const DT_SCE_UNK22: Self = Self(0x61000024);
     pub const DT_SCE_HASH: Self = Self(0x61000025);
     pub const DT_SCE_UNK23: Self = Self(0x61000026);
@@ -172,7 +172,7 @@ impl Display for DynamicTag {
             Self::DT_PREINIT_ARRAY => f.write_str("DT_PREINIT_ARRAY"),
             Self::DT_PREINIT_ARRAYSZ => f.write_str("DT_PREINIT_ARRAYSZ"),
             Self::DT_SCE_FINGERPRINT => f.write_str("DT_SCE_FINGERPRINT"),
-            Self::DT_SCE_FILENAME => f.write_str("DT_SCE_FILENAME"),
+            Self::DT_SCE_ORIGINAL_FILENAME => f.write_str("DT_SCE_ORIGINAL_FILENAME"),
             Self::DT_SCE_MODULE_INFO => f.write_str("DT_SCE_MODULE_INFO"),
             Self::DT_SCE_NEEDED_MODULE => f.write_str("DT_SCE_NEEDED_MODULE"),
             Self::DT_SCE_MODULE_ATTR => f.write_str("DT_SCE_MODULE_ATTR"),

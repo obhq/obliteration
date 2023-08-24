@@ -77,13 +77,13 @@ impl FileInfo {
                 | DynamicTag::DT_SCE_UNK12
                 | DynamicTag::DT_SCE_UNK13
                 | DynamicTag::DT_SCE_UNK14
-                | DynamicTag::DT_SCE_UNK15
+                | DynamicTag::DT_SCE_STUB_MODULE_NAME
                 | DynamicTag::DT_SCE_UNK16
-                | DynamicTag::DT_SCE_UNK17
+                | DynamicTag::DT_SCE_STUB_MODULE_VERSION
                 | DynamicTag::DT_SCE_UNK18
-                | DynamicTag::DT_SCE_UNK19
+                | DynamicTag::DT_SCE_STUB_LIBRARY_NAME
                 | DynamicTag::DT_SCE_UNK20
-                | DynamicTag::DT_SCE_UNK21
+                | DynamicTag::DT_SCE_STUB_LIBRARY_VERSION
                 | DynamicTag::DT_SCE_UNK22
                 | DynamicTag::DT_SCE_UNK23
                 | DynamicTag::DT_SCE_UNK24
@@ -152,7 +152,7 @@ impl FileInfo {
                 DynamicTag::DT_PREINIT_ARRAYSZ => {}
                 DynamicTag::DT_SCE_UNK1 => {}
                 DynamicTag::DT_SCE_FINGERPRINT => fingerprint = true,
-                DynamicTag::DT_SCE_FILENAME => filename = true,
+                DynamicTag::DT_SCE_ORIGINAL_FILENAME => filename = true,
                 DynamicTag::DT_SCE_MODULE_INFO => module_info = true,
                 DynamicTag::DT_SCE_NEEDED_MODULE => {}
                 DynamicTag::DT_SCE_MODULE_ATTR => {}
@@ -351,7 +351,7 @@ pub enum FileInfoError {
     #[error("no DT_SCE_FINGERPRINT")]
     NoFingerprint,
 
-    #[error("no DT_SCE_FILENAME")]
+    #[error("no DT_SCE_ORIGINAL_FILENAME")]
     NoFilename,
 
     #[error("no DT_SCE_MODULE_INFO")]
