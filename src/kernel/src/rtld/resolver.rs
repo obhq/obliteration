@@ -296,7 +296,7 @@ impl<'a> SymbolResolver<'a> {
         let ty = sym.ty();
 
         match ty {
-            Symbol::STT_NOTYPE | Symbol::STT_OBJECT | Symbol::STT_FUNC | Symbol::STT_UNK1 => {
+            Symbol::STT_NOTYPE | Symbol::STT_OBJECT | Symbol::STT_FUNC | Symbol::STT_ENTRY => {
                 if sym.value() == 0 {
                     return false;
                 }

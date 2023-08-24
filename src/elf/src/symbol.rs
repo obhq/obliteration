@@ -77,7 +77,7 @@ impl Symbol {
     pub const STT_TLS: u8 = 6;
 
     /// PS4 specific.
-    pub const STT_UNK1: u8 = 11;
+    pub const STT_ENTRY: u8 = 11;
 
     /// Local symbol, not visible outside obj file containing def.
     pub const STB_LOCAL: u8 = 0;
