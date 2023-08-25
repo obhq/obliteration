@@ -101,7 +101,6 @@ fn main() -> ExitCode {
     info!("Initializing LLVM.");
 
     let llvm: &'static Llvm = Box::leak(Llvm::new().into());
-    let sysctl = Sysctl::new(arc4);
 
     // Initialize filesystem.
     info!("Initializing file system.");
@@ -193,6 +192,7 @@ fn main() -> ExitCode {
     // Initialize syscall routines.
     info!("Initializing system call routines.");
 
+    let sysctl: &'static Sysctl = Box::leak(Sysctl::new(arc4).into());
     let syscalls = Syscalls::new(&sysctl, &ld);
 
     // Bootstrap execution engine.
