@@ -99,8 +99,8 @@ fn main() -> ExitCode {
 
     // Initialize LLVM.
     info!("Initializing LLVM.");
-    Llvm::init();
 
+    let llvm: &'static Llvm = Box::leak(Llvm::new().into());
     let sysctl = Sysctl::new(arc4);
 
     // Initialize filesystem.
@@ -245,7 +245,7 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
         ExecutionEngine::Llvm => {
-            let mut ee = ee::llvm::LlvmEngine::new(&ld);
+            let mut ee = ee::llvm::LlvmEngine::new(llvm, &ld);
 
             info!("Lifting modules.");
 

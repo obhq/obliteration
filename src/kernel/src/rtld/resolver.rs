@@ -135,6 +135,8 @@ impl<'a> SymbolResolver<'a> {
         };
 
         // TODO: Handle LinkerFlags::UNK2.
+        let mut result = None;
+
         for md in list {
             // TODO: Implement DoneList.
             if let Some(name) = symmod {
@@ -170,12 +172,18 @@ impl<'a> SymbolResolver<'a> {
                 None => continue,
             };
 
-            if md.symbol(index).unwrap().binding() != Symbol::STB_WEAK {
+            // Return the symbol if it is not a weak binding.
+            let sym = md.symbol(index).unwrap();
+
+            if sym.binding() != Symbol::STB_WEAK {
                 return Some((md, index));
+            } else if result.is_none() {
+                // Use the first weak, not the last weak; if no non-weak.
+                result = Some((md, index));
             }
         }
 
-        None
+        result
     }
 
     /// See `symlook_obj` on the PS4 for a reference.
