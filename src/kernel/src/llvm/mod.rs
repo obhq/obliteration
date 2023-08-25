@@ -3,7 +3,7 @@ use llvm_sys::core::{LLVMContextCreate, LLVMContextDispose, LLVMModuleCreateWith
 use llvm_sys::prelude::LLVMContextRef;
 use std::ffi::{c_char, CStr, CString};
 use std::fmt::Display;
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 
 pub mod module;
 
@@ -14,21 +14,12 @@ pub struct Llvm {
 }
 
 impl Llvm {
-    /// # Panics
-    /// If this method called a second time.
-    pub fn init() {
+    pub fn new() -> Self {
         let context = unsafe { LLVMContextCreate() };
 
-        LLVM.set(Self {
+        Self {
             context: Mutex::new(context),
-        })
-        .unwrap();
-    }
-
-    /// # Panics
-    /// If [`init()`] has not invoked yet.
-    pub fn current() -> &'static Llvm {
-        LLVM.get().unwrap()
+        }
     }
 
     pub fn create_module(&self, name: &str) -> LlvmModule<'_> {
@@ -85,5 +76,3 @@ impl Display for Error {
 }
 
 impl std::error::Error for Error {}
-
-static LLVM: OnceLock<Llvm> = OnceLock::new();

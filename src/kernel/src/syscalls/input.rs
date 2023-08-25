@@ -74,4 +74,8 @@ pub struct DynlibInfoEx {
     pub unk3: u32, // Always 5.
     pub database: usize,
     pub datasize: u32,
+    pub unk4: u32,        // Always 3.
+    pub unk5: [u8; 0x20], // Always zeroes.
+    pub unk6: u32,        // Always 2.
+    pub refcount: u32,
 }
