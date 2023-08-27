@@ -1,6 +1,7 @@
 use super::Module;
 use bitflags::bitflags;
 use elf::Symbol;
+use std::borrow::Cow;
 use std::sync::Arc;
 
 /// An object to resolve a symbol from loaded (S)ELF.
@@ -22,7 +23,7 @@ impl<'a> SymbolResolver<'a> {
         &self,
         md: &'a Arc<Module>,
         index: usize,
-        flags: ResolveFlags,
+        mut flags: ResolveFlags,
     ) -> Option<(&'a Arc<Module>, usize)> {
         // Check if symbol index is valid.
         let sym = md.symbols().get(index)?;
@@ -34,25 +35,41 @@ impl<'a> SymbolResolver<'a> {
 
         // Get symbol information.
         let (name, decoded_name, symmod, symlib, hash) = if self.new_algorithm {
-            // Get library and module.
-            let (li, mi) = match sym.decode_name() {
-                Some(v) => (
-                    md.libraries().iter().find(|&l| l.id() == v.1),
-                    md.modules().iter().find(|&m| m.id() == v.2),
-                ),
-                None => (None, None),
+            let name = sym.name();
+            let mut p = name.split('#').skip(1);
+            let l = p
+                .next()
+                .and_then(|v| Self::decode_id(v))
+                .and_then(|v| md.libraries().iter().find(|&i| i.id() == v))
+                .map(|i| i.name());
+            let m = p
+                .next()
+                .and_then(|v| Self::decode_id(v))
+                .and_then(|v| md.modules().iter().find(|&i| i.id() == v))
+                .map(|i| i.name());
+
+            (Some(name), None, m, l, Self::hash(Some(name), l, m))
+        } else {
+            // The only different with the new algorithm is all components in the name must be valid
+            // otherwise fallback to the original name. The new algorithm will relax this rule.
+            let mut hash = 0u64;
+            let mut tmp: u64;
+            let name = match Self::decode_legacy(md, sym.name()) {
+                Some(v) => Cow::Owned(v),
+                None => Cow::Borrowed(sym.name()),
             };
 
-            // Calculate symbol hash.
-            (
-                Some(sym.name()),
-                None,
-                mi.map(|i| i.name()),
-                li.map(|i| i.name()),
-                Self::hash(Some(sym.name()), li.map(|i| i.name()), mi.map(|i| i.name())),
-            )
-        } else {
-            todo!("resolve symbol with SDK version < 0x5000000");
+            // TODO: This is identical to hash() function. The only different is hash() will stop
+            // when encountered an # in the module name while this one is not.
+            for b in name.bytes() {
+                tmp = (b as u64) + (hash << 4);
+                hash = tmp & 0xf0000000;
+                hash = ((hash >> 24) ^ tmp) & !hash;
+            }
+
+            flags |= ResolveFlags::UNK2;
+
+            (None, Some(name), None, None, hash)
         };
 
         // Return this symbol if the binding is local. The reason we don't check this in the
@@ -67,7 +84,7 @@ impl<'a> SymbolResolver<'a> {
         if let Some(v) = self.resolve(md, name, decoded_name, symmod, symlib, hash, flags) {
             return Some(v);
         } else if sym.binding() == Symbol::STB_WEAK {
-            // TODO: Return sym_zero on obj_main.
+            // TODO: Return sym_zero.
             todo!("resolving weak symbol");
         }
 
@@ -79,7 +96,7 @@ impl<'a> SymbolResolver<'a> {
         &self,
         refmod: &'a Arc<Module>,
         name: Option<&str>,
-        decoded_name: Option<&str>,
+        decoded_name: Option<Cow<str>>,
         symmod: Option<&str>,
         symlib: Option<&str>,
         hash: u64,
@@ -94,7 +111,7 @@ impl<'a> SymbolResolver<'a> {
         &self,
         refmod: &'a Arc<Module>,
         name: Option<&str>,
-        decoded_name: Option<&str>,
+        decoded_name: Option<Cow<str>>,
         symmod: Option<&str>,
         symlib: Option<&str>,
         hash: u64,
@@ -118,7 +135,7 @@ impl<'a> SymbolResolver<'a> {
         &self,
         refmod: &'a Arc<Module>,
         name: Option<&str>,
-        decoded_name: Option<&str>,
+        decoded_name: Option<Cow<str>>,
         symmod: Option<&str>,
         symlib: Option<&str>,
         hash: u64,
@@ -128,7 +145,7 @@ impl<'a> SymbolResolver<'a> {
         // Get module name.
         let symmod = if !flags.contains(ResolveFlags::UNK2) {
             symmod
-        } else if let Some(v) = decoded_name {
+        } else if let Some(v) = &decoded_name {
             v.rfind('#').map(|i| &v[(i + 1)..])
         } else {
             None
@@ -161,7 +178,7 @@ impl<'a> SymbolResolver<'a> {
             let (md, index) = match self.resolve_from_module(
                 refmod,
                 name,
-                decoded_name,
+                decoded_name.as_deref(),
                 symmod,
                 symlib,
                 hash,
@@ -227,8 +244,61 @@ impl<'a> SymbolResolver<'a> {
                     None => break,
                 }
             }
-        } else {
-            todo!("symlook_obj with flags & 0x100");
+        } else if let Some(name) = decoded_name {
+            let mut index: usize = buckets[(hash & 0xffffffff) % buckets.len()]
+                .try_into()
+                .unwrap();
+            let target = if name.contains('#') {
+                Cow::Borrowed(name)
+            } else if let Some(v) = Self::decode_legacy(md, &name) {
+                // TODO: This seems like a useless operation because if name does not contains # the
+                // convert_mangled_name_to_long() will return error.
+                Cow::Owned(v)
+            } else {
+                Cow::Borrowed(name)
+            };
+
+            while index != 0 {
+                // Get symbol.
+                let sym = match md.symbol(index) {
+                    Some(v) => v,
+                    None => break,
+                };
+
+                // TODO: Refactor this for readability.
+                let ty = sym.ty();
+
+                if ty == Symbol::STT_TLS
+                    || ((ty == Symbol::STT_NOTYPE
+                        || ty == Symbol::STT_OBJECT
+                        || ty == Symbol::STT_FUNC
+                        || ty == Symbol::STT_ENTRY)
+                        && sym.value() != 0)
+                {
+                    if sym.shndx() != 0
+                        || (ty == Symbol::STT_FUNC && !flags.contains(ResolveFlags::UNK3))
+                    {
+                        let name = match Self::decode_legacy(md, sym.name()) {
+                            Some(v) => Cow::Owned(v),
+                            None => Cow::Borrowed(sym.name()),
+                        };
+
+                        if name == target {
+                            // TODO: Implement the remaining symlook_obj.
+                            return Some((md, index));
+                        }
+                    }
+                }
+
+                // Move to next chain.
+                match info.chains().get(index) {
+                    Some(&v) => {
+                        index = v.try_into().unwrap();
+                        continue;
+                    }
+                    None => break,
+                }
+            }
         }
 
         None
@@ -326,15 +396,15 @@ impl<'a> SymbolResolver<'a> {
         // TODO: This logic is not exactly matched with the PS4. The reason is because it is too
         // complicated to mimic the same behavior. Our implementation here is a "best" guess on what
         // the PS4 is actually doing.
-        let (li, mi) = match sym.decode_name() {
-            Some((_, lid, mid)) => {
-                let li = md.libraries().iter().find(|&i| i.id() == lid);
-                let mi = md.modules().iter().find(|&i| i.id() == mid);
-
-                (li, mi)
-            }
-            None => (None, None),
-        };
+        let mut parts = sym.name().split('#').skip(1);
+        let li = parts
+            .next()
+            .and_then(|v| Self::decode_id(v))
+            .and_then(|v| md.libraries().iter().find(|&i| i.id() == v));
+        let mi = parts
+            .next()
+            .and_then(|v| Self::decode_id(v))
+            .and_then(|v| md.modules().iter().find(|&i| i.id() == v));
 
         match name.find(|c| c == '#').map(|i| &name[..i]) {
             Some(v) => {
@@ -381,6 +451,41 @@ impl<'a> SymbolResolver<'a> {
         }
 
         true
+    }
+
+    /// See `convert_mangled_name_to_long` on the PS4 for a reference.
+    fn decode_legacy(md: &Module, name: &str) -> Option<String> {
+        // Split the name.
+        let mut p = name.splitn(3, '#');
+        let n = p.next()?;
+        let l = p.next()?;
+        let m = p.next()?;
+
+        if l.len() > 3 || m.len() > 3 {
+            return None;
+        }
+
+        // Decode library ID and module ID.
+        let l = Self::decode_id(l)?;
+        let m = Self::decode_id(m)?;
+
+        // Get library name and module name.
+        let l = md.libraries().iter().find(|&i| i.id() == l)?;
+        let m = md.modules().iter().find(|&i| i.id() == m)?;
+
+        Some(format!("{}#{}#{}", n, l.name(), m.name()))
+    }
+
+    fn decode_id(v: &str) -> Option<u16> {
+        let s = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-";
+        let mut r = 0u64;
+
+        for c in v.bytes() {
+            r <<= 6;
+            r |= s.iter().position(|&v| v == c)? as u64;
+        }
+
+        Some(r as u16)
     }
 }
 
