@@ -16,7 +16,6 @@ pub struct Memory {
     segments: Vec<MemorySegment>,
     base: usize,
     text: usize,
-    relro: usize,
     data: usize,
     obcode: usize,
     obcode_sealed: GroupMutex<usize>,
@@ -101,7 +100,6 @@ impl Memory {
         }
 
         let text = text.unwrap_or_else(|| todo!("(S)ELF with no executable program"));
-        let relro = relro.unwrap_or_else(|| todo!("(S)ELF with no PT_SCE_RELRO"));
         let data = data.unwrap_or_else(|| todo!("(S)ELF with no data program"));
 
         // Make sure no any segment is overlapped.
@@ -174,7 +172,6 @@ impl Memory {
             segments,
             base,
             text,
-            relro,
             data,
             obcode,
             obcode_sealed: mtxg.new_member(0),
@@ -202,10 +199,6 @@ impl Memory {
 
     pub fn text_segment(&self) -> &MemorySegment {
         &self.segments[self.text]
-    }
-
-    pub fn relro(&self) -> usize {
-        self.relro
     }
 
     pub fn data_segment(&self) -> &MemorySegment {
@@ -351,7 +344,6 @@ impl Debug for Memory {
             .field("segments", &self.segments)
             .field("base", &self.base)
             .field("text", &self.text)
-            .field("relro", &self.relro)
             .field("data", &self.data)
             .field("obcode", &self.obcode)
             .field("obcode_sealed", &self.obcode_sealed)

@@ -1,3 +1,5 @@
+use std::num::NonZeroI32;
+
 /// Outputs of the syscall.
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -13,5 +15,14 @@ impl Output {
 impl From<usize> for Output {
     fn from(value: usize) -> Self {
         Self { rax: value, rdx: 0 }
+    }
+}
+
+impl From<NonZeroI32> for Output {
+    fn from(value: NonZeroI32) -> Self {
+        Self {
+            rax: value.get() as _,
+            rdx: 0,
+        }
     }
 }

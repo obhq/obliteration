@@ -30,7 +30,7 @@ pub fn transform(item: ItemFn) -> syn::Result<TokenStream> {
     let ret = item.sig.output;
     let block = item.block;
 
-    Ok(quote_spanned! { span =>
+    Ok(quote_spanned! {span=>
         #(#attrs)*
         #vis #safety extern #abi fn #name(#args) #ret {
             #block

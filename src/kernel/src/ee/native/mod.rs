@@ -1,9 +1,9 @@
 use super::{EntryArg, ExecutionEngine};
 use crate::fs::{VPath, VPathBuf};
 use crate::memory::{Protections, VPages};
+use crate::process::VProc;
 use crate::rtld::{CodeWorkspaceError, Memory, Module, RuntimeLinker, UnprotectSegmentError};
 use crate::syscalls::{Input, Output, Syscalls};
-use crate::thread::VThread;
 use byteorder::{ByteOrder, LE};
 use iced_x86::code_asm::{
     dword_ptr, qword_ptr, r10, r11, r11d, r12, r8, r9, rax, rbp, rbx, rcx, rdi, rdx, rsi, rsp,
@@ -19,11 +19,16 @@ use thiserror::Error;
 pub struct NativeEngine<'a, 'b: 'a> {
     rtld: &'a RuntimeLinker<'b>,
     syscalls: &'a Syscalls<'a, 'b>,
+    vp: &'static VProc,
 }
 
 impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
-    pub fn new(rtld: &'a RuntimeLinker<'b>, syscalls: &'a Syscalls<'a, 'b>) -> Self {
-        Self { rtld, syscalls }
+    pub fn new(
+        rtld: &'a RuntimeLinker<'b>,
+        syscalls: &'a Syscalls<'a, 'b>,
+        vp: &'static VProc,
+    ) -> Self {
+        Self { rtld, syscalls, vp }
     }
 
     /// # SAFETY
@@ -482,7 +487,7 @@ impl<'a, 'b> ExecutionEngine for NativeEngine<'a, 'b> {
 
         // Spawn main thread.
         let entry = move || unsafe { entry(arg.as_vec().as_ptr()) };
-        let runner = match VThread::spawn(stack.as_mut_ptr(), stack.len(), entry) {
+        let runner = match self.vp.new_thread(stack.as_mut_ptr(), stack.len(), entry) {
             Ok(v) => v,
             Err(e) => return Err(RunError::CreateMainThreadFailed(e)),
         };
