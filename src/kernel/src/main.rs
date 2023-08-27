@@ -28,7 +28,6 @@ mod rtld;
 mod signal;
 mod syscalls;
 mod sysctl;
-mod thread;
 
 fn main() -> ExitCode {
     log::init();
@@ -132,7 +131,7 @@ fn main() -> ExitCode {
     // Initialize virtual process.
     info!("Initializing virtual process.");
 
-    VProc::new();
+    let vp: &'static VProc = Box::leak(VProc::new().into());
 
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
@@ -193,7 +192,7 @@ fn main() -> ExitCode {
     info!("Initializing system call routines.");
 
     let sysctl: &'static Sysctl = Box::leak(Sysctl::new(arc4).into());
-    let syscalls = Syscalls::new(&sysctl, &ld);
+    let syscalls = Syscalls::new(&sysctl, &ld, vp);
 
     // Bootstrap execution engine.
     info!("Initializing execution engine.");
@@ -209,7 +208,7 @@ fn main() -> ExitCode {
     match ee {
         #[cfg(target_arch = "x86_64")]
         ExecutionEngine::Native => {
-            let mut ee = ee::native::NativeEngine::new(&ld, &syscalls);
+            let mut ee = ee::native::NativeEngine::new(&ld, &syscalls, vp);
 
             info!("Patching modules.");
 

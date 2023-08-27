@@ -4,10 +4,10 @@ pub use output::*;
 use self::error::Error;
 use crate::errno::{EINVAL, ENOMEM, EPERM, ESRCH};
 use crate::fs::VPathBuf;
+use crate::process::{VProc, VThread};
 use crate::rtld::{ModuleFlags, RuntimeLinker};
 use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK};
 use crate::sysctl::Sysctl;
-use crate::thread::VThread;
 use crate::warn;
 use kernel_macros::cpu_abi;
 use std::mem::{size_of, zeroed};
@@ -21,11 +21,12 @@ mod output;
 pub struct Syscalls<'a, 'b: 'a> {
     sysctl: &'a Sysctl,
     ld: &'a RuntimeLinker<'b>,
+    vp: &'static VProc,
 }
 
 impl<'a, 'b: 'a> Syscalls<'a, 'b> {
-    pub fn new(sysctl: &'a Sysctl, ld: &'a RuntimeLinker<'b>) -> Self {
-        Self { sysctl, ld }
+    pub fn new(sysctl: &'a Sysctl, ld: &'a RuntimeLinker<'b>, vp: &'static VProc) -> Self {
+        Self { sysctl, ld, vp }
     }
 
     /// # Safety
@@ -33,10 +34,14 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
     /// method must de directly invoked by the PS4 application.
     #[cpu_abi]
     pub unsafe fn invoke(&self, i: &Input, o: &mut Output) -> i64 {
-        // Execute the handler. See
-        // https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/kern/init_sysent.c#L36 for
-        // standard FreeBSD syscalls.
+        // Beware that we cannot have any variables that need to be dropped before invoke each
+        // syscall handler. The reason is because the handler might exit the calling thread without
+        // returning from the handler.
+        //
+        // See https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/kern/init_sysent.c#L36
+        // for standard FreeBSD syscalls.
         let r = match i.id {
+            20 => self.getpid(),
             202 => self.sysctl(
                 i.args[0].into(),
                 i.args[1].try_into().unwrap(),
@@ -81,6 +86,10 @@ impl<'a, 'b: 'a> Syscalls<'a, 'b> {
     #[cpu_abi]
     pub unsafe fn int44(&self, offset: usize, module: &VPathBuf) -> ! {
         todo!("int 0x44 at at {offset:#018x} on {module}");
+    }
+
+    unsafe fn getpid(&self) -> Result<Output, Error> {
+        Ok(self.vp.id().into())
     }
 
     unsafe fn sysctl(
