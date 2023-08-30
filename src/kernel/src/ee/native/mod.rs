@@ -12,7 +12,6 @@ use iced_x86::code_asm::{
 use llt::Thread;
 use std::mem::{size_of, transmute};
 use std::ops::Deref;
-use std::ptr::null_mut;
 use thiserror::Error;
 
 /// An implementation of [`ExecutionEngine`] for running the PS4 binary natively.
@@ -446,7 +445,7 @@ impl NativeEngine {
 
     #[cfg(unix)]
     fn join_thread(thr: Thread) -> Result<(), std::io::Error> {
-        let err = unsafe { libc::pthread_join(thr, null_mut()) };
+        let err = unsafe { libc::pthread_join(thr, std::ptr::null_mut()) };
 
         if err != 0 {
             Err(std::io::Error::from_raw_os_error(err))

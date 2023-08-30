@@ -65,9 +65,9 @@ impl ResourceLimit {
     #[cfg(windows)]
     fn host(ty: usize) -> Result<Self, Error> {
         let (cur, max) = match ty {
-            Self::CPU => (u64::MAX, u64::MAX), // TODO: Get the values from Windows.
-            Self::FSIZE => (u64::MAX, u64::MAX), // TODO: Get the values from Windows.
-            Self::DATA => (u64::MAX, u64::MAX), // TODO: Get the values from Windows.
+            Self::CPU => (usize::MAX, usize::MAX), // TODO: Get the values from Windows.
+            Self::FSIZE => (usize::MAX, usize::MAX), // TODO: Get the values from Windows.
+            Self::DATA => (usize::MAX, usize::MAX), // TODO: Get the values from Windows.
             v => todo!("ResourceLimit::new({v})"),
         };
 
