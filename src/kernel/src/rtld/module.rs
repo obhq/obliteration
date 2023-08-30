@@ -255,6 +255,10 @@ impl Module {
         self.symbols.get(i)
     }
 
+    pub fn programs(&self) -> &[Program] {
+        self.programs.as_ref()
+    }
+
     pub fn symbols(&self) -> &[Symbol] {
         self.symbols.as_ref()
     }

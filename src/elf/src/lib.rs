@@ -135,11 +135,16 @@ impl<I: Read + Seek> Elf<I> {
             return Err(OpenError::UnsupportedEndianness);
         }
 
+        if LE::read_u16(&hdr[0x36..]) != 0x38 {
+            // PS4 make assumption that the program entry is 0x38 bytes.
+            return Err(OpenError::InvalidProgramEntrySize);
+        }
+
         // Load ELF header.
         let e_type = FileType::new(LE::read_u16(&hdr[0x10..]));
         let e_entry = LE::read_u64(&hdr[0x18..]);
         let e_phoff = offset + 0x40; // PS4 is hard-coded this value.
-        let e_phnum = LE::read_u16(&hdr[0x38..]) as usize;
+        let e_phnum: usize = LE::read_u16(&hdr[0x38..]).into();
 
         // Seek to first program header.
         match image.seek(SeekFrom::Start(e_phoff)) {
@@ -704,6 +709,9 @@ pub enum OpenError {
 
     #[error("unsupported endianness")]
     UnsupportedEndianness,
+
+    #[error("e_phentsize is not valid")]
+    InvalidProgramEntrySize,
 
     #[error("e_phoff is not valid")]
     InvalidProgramOffset,

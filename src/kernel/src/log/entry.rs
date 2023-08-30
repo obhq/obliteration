@@ -26,13 +26,6 @@ impl LogEntry {
         e
     }
 
-    pub fn sink() -> Self {
-        Self {
-            stdout: None,
-            plain: Vec::new(),
-        }
-    }
-
     pub fn into_raw(self) -> Option<(Buffer, Vec<u8>)> {
         self.stdout.map(|b| (b, self.plain))
     }

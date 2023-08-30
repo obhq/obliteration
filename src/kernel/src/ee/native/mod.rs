@@ -16,16 +16,16 @@ use std::ptr::null_mut;
 use thiserror::Error;
 
 /// An implementation of [`ExecutionEngine`] for running the PS4 binary natively.
-pub struct NativeEngine<'a, 'b: 'a> {
-    rtld: &'a RuntimeLinker<'b>,
-    syscalls: &'a Syscalls<'a, 'b>,
+pub struct NativeEngine {
+    rtld: &'static RuntimeLinker,
+    syscalls: &'static Syscalls,
     vp: &'static VProc,
 }
 
-impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
+impl NativeEngine {
     pub fn new(
-        rtld: &'a RuntimeLinker<'b>,
-        syscalls: &'a Syscalls<'a, 'b>,
+        rtld: &'static RuntimeLinker,
+        syscalls: &'static Syscalls,
         vp: &'static VProc,
     ) -> Self {
         Self { rtld, syscalls, vp }
@@ -46,7 +46,7 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
         Ok(counts)
     }
 
-    fn syscalls(&self) -> *const Syscalls<'a, 'b> {
+    fn syscalls(&self) -> *const Syscalls {
         self.syscalls
     }
 
@@ -470,10 +470,10 @@ impl<'a, 'b: 'a> NativeEngine<'a, 'b> {
     }
 }
 
-impl<'a, 'b> ExecutionEngine for NativeEngine<'a, 'b> {
+impl ExecutionEngine for NativeEngine {
     type RunErr = RunError;
 
-    unsafe fn run(&mut self, mut arg: EntryArg, mut stack: VPages) -> Result<(), Self::RunErr> {
+    unsafe fn run(&mut self, arg: EntryArg, mut stack: VPages) -> Result<(), Self::RunErr> {
         // Get eboot.bin.
         if self.rtld.app().file_info().is_none() {
             todo!("statically linked eboot.bin");
@@ -486,7 +486,8 @@ impl<'a, 'b> ExecutionEngine for NativeEngine<'a, 'b> {
             unsafe { transmute(mem + boot.entry().unwrap()) };
 
         // Spawn main thread.
-        let entry = move || unsafe { entry(arg.as_vec().as_ptr()) };
+        let mut arg = Box::pin(arg);
+        let entry = move || unsafe { entry(arg.as_mut().as_vec().as_ptr()) };
         let runner = match self.vp.new_thread(stack.as_mut_ptr(), stack.len(), entry) {
             Ok(v) => v,
             Err(e) => return Err(RunError::CreateMainThreadFailed(e)),

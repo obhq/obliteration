@@ -22,20 +22,20 @@ mod resolver;
 /// An implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/libexec/rtld-elf/rtld.c.
 #[derive(Debug)]
-pub struct RuntimeLinker<'a> {
-    fs: &'a Fs,
+pub struct RuntimeLinker {
+    fs: &'static Fs,
     list: GroupMutex<Vec<Arc<Module>>>,      // obj_list + obj_tail
     app: Arc<Module>,                        // obj_main
     kernel: GroupMutex<Option<Arc<Module>>>, // obj_kernel
     mains: GroupMutex<Vec<Arc<Module>>>,     // list_main
-    next_id: GroupMutex<u32>,                // idtable on proc
+    next_id: GroupMutex<u32>,                // proc::idtable
     tls: GroupMutex<TlsAlloc>,
     flags: LinkerFlags,
     mtxg: Arc<MutexGroup>,
 }
 
-impl<'a> RuntimeLinker<'a> {
-    pub fn new(fs: &'a Fs) -> Result<Self, RuntimeLinkerError> {
+impl RuntimeLinker {
+    pub fn new(fs: &'static Fs) -> Result<Self, RuntimeLinkerError> {
         // Get path to eboot.bin.
         let mut path = fs.app().join("app0").unwrap();
 
