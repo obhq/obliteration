@@ -60,6 +60,10 @@ impl VPath {
         Components(unsafe { self.0.get_unchecked(1..) })
     }
 
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
     fn is_valid(data: &str) -> bool {
         // Do a simple check first.
         if data.is_empty() || !data.starts_with('/') || data.ends_with('/') {

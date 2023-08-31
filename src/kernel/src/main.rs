@@ -3,7 +3,7 @@ use crate::ee::EntryArg;
 use crate::fs::{Fs, VPath};
 use crate::llvm::Llvm;
 use crate::log::{print, LOGGER};
-use crate::memory::{MappingFlags, MemoryManager, Protections};
+use crate::memory::{MappingFlags, MemoryManager};
 use crate::process::VProc;
 use crate::rtld::{ModuleFlags, RuntimeLinker};
 use crate::syscalls::Syscalls;
@@ -104,8 +104,8 @@ fn main() -> ExitCode {
     // Initialize filesystem.
     info!("Initializing file system.");
 
-    let fs = match Fs::new(args.system, args.game) {
-        Ok(v) => v,
+    let fs: &'static Fs = match Fs::new(args.system, args.game) {
+        Ok(v) => Box::leak(v.into()),
         Err(e) => {
             error!(e, "Initialize failed");
             return ExitCode::FAILURE;
@@ -131,13 +131,19 @@ fn main() -> ExitCode {
     // Initialize virtual process.
     info!("Initializing virtual process.");
 
-    let vp: &'static VProc = Box::leak(VProc::new().into());
+    let vp: &'static VProc = match VProc::new() {
+        Ok(v) => Box::leak(v.into()),
+        Err(e) => {
+            error!(e, "Initialize failed");
+            return ExitCode::FAILURE;
+        }
+    };
 
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
 
-    let mut ld = match RuntimeLinker::new(&fs) {
-        Ok(v) => v,
+    let ld: &'static mut RuntimeLinker = match RuntimeLinker::new(fs) {
+        Ok(v) => Box::leak(v.into()),
         Err(e) => {
             error!(e, "Initialize failed");
             return ExitCode::FAILURE;
@@ -192,11 +198,12 @@ fn main() -> ExitCode {
     info!("Initializing system call routines.");
 
     let sysctl: &'static Sysctl = Box::leak(Sysctl::new(arc4).into());
-    let syscalls = Syscalls::new(&sysctl, &ld, vp);
+    let syscalls: &'static Syscalls = Box::leak(Syscalls::new(sysctl, ld, vp).into());
 
     // Bootstrap execution engine.
     info!("Initializing execution engine.");
 
+    let arg = EntryArg::new(arc4, vp, ld.app().clone());
     let ee = match args.execution_engine {
         Some(v) => v,
         #[cfg(target_arch = "x86_64")]
@@ -208,7 +215,7 @@ fn main() -> ExitCode {
     match ee {
         #[cfg(target_arch = "x86_64")]
         ExecutionEngine::Native => {
-            let mut ee = ee::native::NativeEngine::new(&ld, &syscalls, vp);
+            let mut ee = ee::native::NativeEngine::new(ld, syscalls, vp);
 
             info!("Patching modules.");
 
@@ -233,7 +240,7 @@ fn main() -> ExitCode {
                 }
             }
 
-            exec(ee, &ld)
+            exec(ee, arg)
         }
         #[cfg(not(target_arch = "x86_64"))]
         ExecutionEngine::Native => {
@@ -244,7 +251,7 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
         ExecutionEngine::Llvm => {
-            let mut ee = ee::llvm::LlvmEngine::new(llvm, &ld);
+            let mut ee = ee::llvm::LlvmEngine::new(llvm, ld);
 
             info!("Lifting modules.");
 
@@ -253,15 +260,12 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
 
-            exec(ee, &ld)
+            exec(ee, arg)
         }
     }
 }
 
-fn exec<E: ee::ExecutionEngine>(mut ee: E, ld: &RuntimeLinker) -> ExitCode {
-    // Setup entry argument.
-    let arg = EntryArg::new(ld.app().path());
-
+fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg) -> ExitCode {
     // TODO: Check how the PS4 allocate the stack.
     // TODO: We should allocate a guard page to catch stack overflow.
     info!("Allocating application stack.");
@@ -269,7 +273,7 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E, ld: &RuntimeLinker) -> ExitCode {
     let stack = match MemoryManager::current().mmap(
         0,
         1024 * 1024 * 10, // 10MB should be large enough.
-        Protections::CPU_READ | Protections::CPU_WRITE,
+        arg.stack_prot(),
         MappingFlags::MAP_ANON | MappingFlags::MAP_PRIVATE,
         -1,
         0,

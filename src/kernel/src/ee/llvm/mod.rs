@@ -11,13 +11,13 @@ use thiserror::Error;
 mod codegen;
 
 /// An implementation of [`ExecutionEngine`] using JIT powered by LLVM IR.
-pub struct LlvmEngine<'a, 'b: 'a> {
+pub struct LlvmEngine {
     llvm: &'static Llvm,
-    rtld: &'a RuntimeLinker<'b>,
+    rtld: &'static RuntimeLinker,
 }
 
-impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
-    pub fn new(llvm: &'static Llvm, rtld: &'a RuntimeLinker<'b>) -> Self {
+impl LlvmEngine {
+    pub fn new(llvm: &'static Llvm, rtld: &'static RuntimeLinker) -> Self {
         Self { llvm, rtld }
     }
 
@@ -30,7 +30,10 @@ impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
         Ok(())
     }
 
-    fn lift(&self, module: &Module) -> Result<crate::llvm::module::ExecutionEngine<'b>, LiftError> {
+    fn lift(
+        &self,
+        module: &Module,
+    ) -> Result<crate::llvm::module::ExecutionEngine<'static>, LiftError> {
         // Get a list of public functions.
         let path = module.path();
         let targets = match module.entry() {
@@ -71,7 +74,7 @@ impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
     }
 }
 
-impl<'a, 'b: 'a> ExecutionEngine for LlvmEngine<'a, 'b> {
+impl ExecutionEngine for LlvmEngine {
     type RunErr = RunError;
 
     unsafe fn run(&mut self, arg: EntryArg, stack: VPages) -> Result<(), Self::RunErr> {

@@ -18,14 +18,14 @@ mod input;
 mod output;
 
 /// Provides PS4 kernel routines for PS4 process.
-pub struct Syscalls<'a, 'b: 'a> {
-    sysctl: &'a Sysctl,
-    ld: &'a RuntimeLinker<'b>,
+pub struct Syscalls {
+    sysctl: &'static Sysctl,
+    ld: &'static RuntimeLinker,
     vp: &'static VProc,
 }
 
-impl<'a, 'b: 'a> Syscalls<'a, 'b> {
-    pub fn new(sysctl: &'a Sysctl, ld: &'a RuntimeLinker<'b>, vp: &'static VProc) -> Self {
+impl Syscalls {
+    pub fn new(sysctl: &'static Sysctl, ld: &'static RuntimeLinker, vp: &'static VProc) -> Self {
         Self { sysctl, ld, vp }
     }
 

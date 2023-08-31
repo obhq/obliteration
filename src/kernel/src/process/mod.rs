@@ -1,3 +1,4 @@
+pub use self::rlimit::*;
 pub use self::thread::*;
 
 use gmtx::{GroupMutex, MutexGroup};
@@ -5,7 +6,9 @@ use llt::{SpawnError, Thread};
 use std::num::NonZeroI32;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
+use thiserror::Error;
 
+mod rlimit;
 mod thread;
 
 /// An implementation of `proc` structure represent the main application process.
@@ -15,24 +18,31 @@ mod thread;
 /// compatibility from the user-mode application.
 #[derive(Debug)]
 pub struct VProc {
-    id: NonZeroI32,                         // p_pid
-    threads: GroupMutex<Vec<Arc<VThread>>>, // p_threads
+    id: NonZeroI32,                                  // p_pid
+    threads: GroupMutex<Vec<Arc<VThread>>>,          // p_threads
+    limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
     mtxg: Arc<MutexGroup>,
 }
 
 impl VProc {
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self, VProcError> {
         let mtxg = MutexGroup::new();
+        let limits = Self::load_limits()?;
 
-        Self {
+        Ok(Self {
             id: Self::new_id(),
             threads: mtxg.new_member(Vec::new()),
+            limits,
             mtxg,
-        }
+        })
     }
 
     pub fn id(&self) -> NonZeroI32 {
         self.id
+    }
+
+    pub fn limit(&self, ty: usize) -> Option<&ResourceLimit> {
+        self.limits.get(ty)
     }
 
     /// Spawn a new [`VThread`].
@@ -73,6 +83,17 @@ impl VProc {
         Ok(host)
     }
 
+    fn load_limits() -> Result<[ResourceLimit; ResourceLimit::NLIMITS], VProcError> {
+        type R = ResourceLimit;
+        type E = VProcError;
+
+        Ok([
+            R::new(R::CPU).map_err(|e| E::GetCpuLimitFailed(e))?,
+            R::new(R::FSIZE).map_err(|e| E::GetFileSizeLimitFailed(e))?,
+            R::new(R::DATA).map_err(|e| E::GetDataLimitFailed(e))?,
+        ])
+    }
+
     fn new_id() -> NonZeroI32 {
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
 
@@ -97,6 +118,19 @@ impl Drop for ActiveThread {
 
         threads.remove(index);
     }
+}
+
+/// Represents an error when [`VProc`] construction is failed.
+#[derive(Debug, Error)]
+pub enum VProcError {
+    #[error("cannot get CPU time limit")]
+    GetCpuLimitFailed(#[source] std::io::Error),
+
+    #[error("cannot get file size limit")]
+    GetFileSizeLimitFailed(#[source] std::io::Error),
+
+    #[error("cannot get data size limit")]
+    GetDataLimitFailed(#[source] std::io::Error),
 }
 
 static NEXT_ID: AtomicI32 = AtomicI32::new(1);
