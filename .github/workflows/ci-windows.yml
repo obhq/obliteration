@@ -5,7 +5,7 @@ env:
   CMAKE_BUILD_PARALLEL_LEVEL: '2'
 jobs:
   llvm:
-    name: LLVM
+    name: LLVM for Windows
     runs-on: windows-2022
     steps:
     - name: Checkout source
@@ -24,7 +24,7 @@ jobs:
         path: build
         key: ${{ steps.cache-keys.outputs.build }}
     - name: Run CMake
-      run: cmake --install-prefix dist -Wno-dev -DLLVM_ENABLE_ZSTD:BOOL=OFF -DLLVM_APPEND_VC_REV:BOOL=OFF -DLLVM_TARGETS_TO_BUILD:STRING=X86 -B build llvm
+      run: cmake --install-prefix ${{ github.workspace }}/dist -Wno-dev -DLLVM_ENABLE_ZSTD:BOOL=OFF -DLLVM_APPEND_VC_REV:BOOL=OFF -DLLVM_TARGETS_TO_BUILD:STRING=X86 -B build llvm
     - name: Build
       run: cmake --build build --config Release
     - name: Cache build files
