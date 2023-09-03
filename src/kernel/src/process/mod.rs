@@ -1,3 +1,4 @@
+pub use self::appinfo::*;
 pub use self::rlimit::*;
 pub use self::thread::*;
 
@@ -8,6 +9,7 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
 
+mod appinfo;
 mod rlimit;
 mod thread;
 
@@ -21,6 +23,7 @@ pub struct VProc {
     id: NonZeroI32,                                  // p_pid
     threads: GroupMutex<Vec<Arc<VThread>>>,          // p_threads
     limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
+    app_info: AppInfo,
     mtxg: Arc<MutexGroup>,
 }
 
@@ -33,6 +36,7 @@ impl VProc {
             id: Self::new_id(),
             threads: mtxg.new_member(Vec::new()),
             limits,
+            app_info: AppInfo::new(),
             mtxg,
         })
     }
@@ -43,6 +47,10 @@ impl VProc {
 
     pub fn limit(&self, ty: usize) -> Option<&ResourceLimit> {
         self.limits.get(ty)
+    }
+
+    pub fn app_info(&self) -> &AppInfo {
+        &self.app_info
     }
 
     /// Spawn a new [`VThread`].

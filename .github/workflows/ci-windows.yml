@@ -1,21 +1,62 @@
 name: CI (Windows)
 on:
   workflow_call:
+env:
+  CMAKE_BUILD_PARALLEL_LEVEL: '2'
 jobs:
-  build:
-    name: Windows
+  llvm:
+    name: LLVM for Windows
     runs-on: windows-2022
-    env:
-      CMAKE_BUILD_PARALLEL_LEVEL: '2'
     steps:
     - name: Checkout source
       uses: actions/checkout@v3
+      with:
+        repository: llvm/llvm-project
+        ref: llvmorg-16.0.6
+    - name: Generate cache keys
+      run: |
+        $commit = git rev-parse HEAD
+        echo "build=${{ runner.os }}-llvm-$commit" >> $env:GITHUB_OUTPUT
+      id: cache-keys
+    - name: Restore build files
+      uses: actions/cache/restore@v3
+      with:
+        path: build
+        key: ${{ steps.cache-keys.outputs.build }}
+    - name: Run CMake
+      run: cmake --install-prefix ${{ github.workspace }}/dist -Wno-dev -DLLVM_ENABLE_ZSTD:BOOL=OFF -DLLVM_APPEND_VC_REV:BOOL=OFF -DLLVM_TARGETS_TO_BUILD:STRING=X86 -B build llvm
+    - name: Build
+      run: cmake --build build --config Release
+    - name: Cache build files
+      uses: actions/cache/save@v3
+      with:
+        path: build
+        key: ${{ steps.cache-keys.outputs.build }}-${{ github.run_id }}
+      if: startsWith(github.ref, 'refs/heads/')
+    - name: Export artifacts
+      run: cmake --install build --config Release
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: llvm
+        path: dist
+  build:
+    name: Windows
+    runs-on: windows-2022
+    needs: llvm
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v3
+    - name: Download LLVM
+      uses: actions/download-artifact@v3
+      with:
+        name: llvm
+        path: lib/llvm
     - name: Generate cache keys
       run: |
         echo "cargo=${{ runner.os }}-cargo" >> $env:GITHUB_OUTPUT
         echo "qt=${{ runner.os }}-qt" >> $env:GITHUB_OUTPUT
         echo "vulkan=${{ runner.os }}-vulkan-1.3.239.0" >> $env:GITHUB_OUTPUT
-        echo "build=${{ runner.os }}-build-files-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake', 'CMakePresets.json') }}" >> $env:GITHUB_OUTPUT
       id: cache-keys
     - name: Restore Cargo home
       uses: actions/cache/restore@v3
@@ -44,15 +85,8 @@ jobs:
       if: ${{ steps.restore-vulkan.outputs.cache-hit != 'true' }}
     - name: Set Vulkan SDK path
       run:  echo "VULKAN_SDK=C:\VulkanSDK" >> $env:GITHUB_ENV
-    - name: Restore build files
-      uses: actions/cache/restore@v3
-      with:
-        path: |
-          build
-          src/target
-        key: ${{ steps.cache-keys.outputs.build }}
     - name: Run CMake
-      run: cmake --preset windows-release .
+      run: cmake -DOB_BUILD_LLVM:BOOL=OFF --preset windows-release .
     - name: Build
       run: cmake --build --preset windows-release
     - name: Run tests
@@ -68,14 +102,6 @@ jobs:
       with:
         name: obliteration-win-x64
         path: dist
-    - name: Cache build files
-      uses: actions/cache/save@v3
-      with:
-        path: |
-          build
-          src/target
-        key: ${{ steps.cache-keys.outputs.build }}-${{ github.run_id }}
-      if: startsWith(github.ref, 'refs/heads/')
     - name: Cache Vulkan SDK
       uses: actions/cache/save@v3
       with:

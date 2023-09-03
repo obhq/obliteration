@@ -197,7 +197,7 @@ fn main() -> ExitCode {
     // Initialize syscall routines.
     info!("Initializing system call routines.");
 
-    let sysctl: &'static Sysctl = Box::leak(Sysctl::new(arc4).into());
+    let sysctl: &'static Sysctl = Box::leak(Sysctl::new(arc4, vp).into());
     let syscalls: &'static Syscalls = Box::leak(Syscalls::new(sysctl, ld, vp).into());
 
     // Bootstrap execution engine.
