@@ -1,4 +1,4 @@
-use crate::arc4::Arc4;
+use crate::arnd::Arnd;
 use crate::errno::{Errno, EINVAL, ESRCH};
 use crate::process::{AppInfoReadError, VProc};
 use std::cmp::min;
@@ -10,7 +10,7 @@ use thiserror::Error;
 /// This is an implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/kern/kern_sysctl.c.
 pub struct Sysctl {
-    arc4: &'static Arc4,
+    arnd: &'static Arnd,
     vp: &'static VProc,
 }
 
@@ -23,8 +23,8 @@ impl Sysctl {
     pub const KERN_PROC_APPINFO: i32 = 35;
     pub const VM_TOTAL: i32 = 1;
 
-    pub fn new(arc4: &'static Arc4, vp: &'static VProc) -> Self {
-        Self { arc4, vp }
+    pub fn new(arnd: &'static Arnd, vp: &'static VProc) -> Self {
+        Self { arnd, vp }
     }
 
     pub fn invoke(
@@ -114,7 +114,7 @@ impl Sysctl {
         // Fill the output.
         let len = min(buf.len(), 256);
 
-        self.arc4.rand_bytes(&mut buf[..len]);
+        self.arnd.rand_bytes(&mut buf[..len]);
 
         Ok(len)
     }

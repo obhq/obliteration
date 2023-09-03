@@ -4,11 +4,11 @@ use std::sync::Mutex;
 /// Random number generator based on
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/libkern/arc4random.c.
 #[derive(Debug)]
-pub struct Arc4 {
+pub struct Arnd {
     state: Mutex<State>,
 }
 
-impl Arc4 {
+impl Arnd {
     pub fn new() -> Self {
         let mut sbox = [0u8; 256];
 

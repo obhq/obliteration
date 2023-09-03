@@ -37,7 +37,7 @@ impl TryFrom<Arg> for i32 {
     type Error = TryFromIntError;
 
     fn try_from(v: Arg) -> Result<Self, Self::Error> {
-        v.0.try_into()
+        TryInto::<u32>::try_into(v.0).map(|v| v as i32)
     }
 }
 
