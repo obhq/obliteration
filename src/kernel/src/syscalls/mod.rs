@@ -2,7 +2,7 @@ pub use input::*;
 pub use output::*;
 
 use self::error::Error;
-use crate::errno::{EINVAL, ENOMEM, EPERM, ESRCH};
+use crate::errno::{EINVAL, ENOENT, ENOMEM, ENOSYS, EPERM, ESRCH};
 use crate::fs::VPathBuf;
 use crate::process::{VProc, VThread};
 use crate::rtld::{ModuleFlags, RuntimeLinker};
@@ -63,6 +63,7 @@ impl Syscalls {
                 i.args[1].try_into().unwrap(),
                 i.args[2].into(),
             ),
+            610 => self.budget_get_ptype(i.args[0].try_into().unwrap()),
             _ => todo!("syscall {} at {:#018x} on {}", i.id, i.offset, i.module),
         };
 
@@ -354,5 +355,15 @@ impl Syscalls {
         }
 
         Ok(Output::ZERO)
+    }
+
+    unsafe fn budget_get_ptype(&self, pid: i32) -> Result<Output, Error> {
+        // Check if PID is our process.
+        if pid != -1 && pid != self.vp.id().get() {
+            return Err(Error::Raw(ENOSYS));
+        }
+
+        // TODO: Invoke id_rlock. Not sure why return ENOENT is working here.
+        Err(Error::Raw(ENOENT))
     }
 }
