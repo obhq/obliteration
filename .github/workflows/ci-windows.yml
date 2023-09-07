@@ -11,10 +11,10 @@ jobs:
     - name: Download LLVM
       run: |
         Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.6/llvm-project-16.0.6.src.tar.xz" -OutFile llvm.tar.xz
-        $hash = Get-FileHash llvm.tar.xz | Select-Object Hash
+        $hash = Get-FileHash llvm.tar.xz
         unxz llvm.tar.xz
         tar -x --strip-components=1 -f llvm.tar
-        echo "hash=$hash" >> $env:GITHUB_OUTPUT
+        echo "hash=$hash.Hash" >> $env:GITHUB_OUTPUT
       id: download
     - name: Generate cache keys
       run: echo "build=${{ runner.os }}-llvm-${{ steps.download.outputs.hash }}" >> $env:GITHUB_OUTPUT
