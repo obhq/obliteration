@@ -9,7 +9,7 @@ jobs:
     runs-on: windows-2022
     steps:
     - name: Checkout source
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: llvm/llvm-project
         ref: llvmorg-16.0.6
@@ -46,7 +46,7 @@ jobs:
     needs: llvm
     steps:
     - name: Checkout source
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Download LLVM
       uses: actions/download-artifact@v3
       with:
