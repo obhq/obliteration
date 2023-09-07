@@ -1,4 +1,4 @@
-use crate::arc4::Arc4;
+use crate::arnd::Arnd;
 use crate::memory::{Protections, VPages};
 use crate::process::{ResourceLimit, VProc};
 use crate::rtld::Module;
@@ -39,7 +39,7 @@ pub struct EntryArg {
 }
 
 impl EntryArg {
-    pub fn new(arnd: &Arc4, vp: &'static VProc, app: Arc<Module>) -> Self {
+    pub fn new(arnd: &Arnd, vp: &'static VProc, app: Arc<Module>) -> Self {
         let path = app.path();
         let name = CString::new(path.file_name().unwrap()).unwrap();
         let path = CString::new(path.as_str()).unwrap();

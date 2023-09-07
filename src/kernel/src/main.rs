@@ -1,4 +1,4 @@
-use crate::arc4::Arc4;
+use crate::arnd::Arnd;
 use crate::ee::EntryArg;
 use crate::fs::{Fs, VPath};
 use crate::llvm::Llvm;
@@ -15,7 +15,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-mod arc4;
+mod arnd;
 mod disasm;
 mod ee;
 mod errno;
@@ -94,7 +94,7 @@ fn main() -> ExitCode {
     // Initialize Arc4.
     info!("Initializing arc4random.");
 
-    let arc4: &'static Arc4 = Box::leak(Arc4::new().into());
+    let arnd: &'static Arnd = Box::leak(Arnd::new().into());
 
     // Initialize LLVM.
     info!("Initializing LLVM.");
@@ -197,13 +197,13 @@ fn main() -> ExitCode {
     // Initialize syscall routines.
     info!("Initializing system call routines.");
 
-    let sysctl: &'static Sysctl = Box::leak(Sysctl::new(arc4, vp).into());
+    let sysctl: &'static Sysctl = Box::leak(Sysctl::new(arnd, vp).into());
     let syscalls: &'static Syscalls = Box::leak(Syscalls::new(sysctl, ld, vp).into());
 
     // Bootstrap execution engine.
     info!("Initializing execution engine.");
 
-    let arg = EntryArg::new(arc4, vp, ld.app().clone());
+    let arg = EntryArg::new(arnd, vp, ld.app().clone());
     let ee = match args.execution_engine {
         Some(v) => v,
         #[cfg(target_arch = "x86_64")]
@@ -272,7 +272,7 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg) -> ExitCode {
 
     let stack = match MemoryManager::current().mmap(
         0,
-        1024 * 1024 * 10, // 10MB should be large enough.
+        0x200000,
         arg.stack_prot(),
         MappingFlags::MAP_ANON | MappingFlags::MAP_PRIVATE,
         -1,
