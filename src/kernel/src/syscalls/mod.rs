@@ -5,12 +5,14 @@ use self::error::Error;
 use crate::errno::{EINVAL, ENOENT, ENOMEM, ENOSYS, EPERM, ESRCH};
 use crate::fs::VPathBuf;
 use crate::process::{VProc, VThread};
+use crate::regmgr::RegMgr;
 use crate::rtld::{ModuleFlags, RuntimeLinker};
 use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK};
 use crate::sysctl::Sysctl;
 use crate::warn;
 use kernel_macros::cpu_abi;
 use std::mem::{size_of, zeroed};
+use std::ptr::read;
 use std::sync::Arc;
 
 mod error;
@@ -19,14 +21,25 @@ mod output;
 
 /// Provides PS4 kernel routines for PS4 process.
 pub struct Syscalls {
-    sysctl: &'static Sysctl,
-    ld: &'static RuntimeLinker,
     vp: &'static VProc,
+    ld: &'static RuntimeLinker,
+    sysctl: &'static Sysctl,
+    regmgr: &'static RegMgr,
 }
 
 impl Syscalls {
-    pub fn new(sysctl: &'static Sysctl, ld: &'static RuntimeLinker, vp: &'static VProc) -> Self {
-        Self { sysctl, ld, vp }
+    pub fn new(
+        vp: &'static VProc,
+        ld: &'static RuntimeLinker,
+        sysctl: &'static Sysctl,
+        regmgr: &'static RegMgr,
+    ) -> Self {
+        Self {
+            vp,
+            ld,
+            sysctl,
+            regmgr,
+        }
     }
 
     /// # Safety
@@ -54,6 +67,13 @@ impl Syscalls {
                 i.args[0].try_into().unwrap(),
                 i.args[1].into(),
                 i.args[2].into(),
+            ),
+            532 => self.regmgr_call(
+                i.args[0].try_into().unwrap(),
+                i.args[1].into(),
+                i.args[2].into(),
+                i.args[3].into(),
+                i.args[4].into(),
             ),
             592 => self.dynlib_get_list(i.args[0].into(), i.args[1].into(), i.args[2].into()),
             598 => self.dynlib_get_proc_param(i.args[0].into(), i.args[1].into()),
@@ -186,6 +206,45 @@ impl Syscalls {
         if let Some(v) = prev {
             *oset = v;
         }
+
+        Ok(Output::ZERO)
+    }
+
+    unsafe fn regmgr_call(
+        &self,
+        ty: u32,
+        _: usize,
+        buf: *mut i32,
+        req: *const u8,
+        reqlen: usize,
+    ) -> Result<Output, Error> {
+        if buf.is_null() {
+            todo!("regmgr_call with buf = null");
+        }
+
+        if req.is_null() {
+            todo!("regmgr_call with req = null");
+        }
+
+        if reqlen > 2048 {
+            todo!("regmgr_call with reqlen > 2048");
+        }
+
+        // Check type.
+        *buf = match ty {
+            0x19 => {
+                let v1 = read::<u64>(req as _);
+                let v2 = read::<u32>(req.add(8) as _);
+                let key = self.regmgr.decode_key(v1, v2);
+
+                if key < 1 {
+                    key
+                } else {
+                    todo!("regmgr_call with matched key = {key:#x}");
+                }
+            }
+            v => todo!("regmgr_call with type = {v}"),
+        };
 
         Ok(Output::ZERO)
     }
