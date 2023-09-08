@@ -267,12 +267,17 @@ fn main() -> ExitCode {
 
 fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg) -> ExitCode {
     // TODO: Check how the PS4 allocate the stack.
-    // TODO: We should allocate a guard page to catch stack overflow.
     info!("Allocating application stack.");
 
-    let stack = match MemoryManager::current().mmap(
+    // Assign stack size with an extra page for guard
+    let stack_size = 0x200000;
+    let guard_size = MemoryManager::current().page_size();
+    // Combine both sizes into one
+    let total_size = stack_size + guard_size;
+
+    let mut stack = match MemoryManager::current().mmap(
         0,
-        0x200000,
+        total_size,
         arg.stack_prot(),
         MappingFlags::MAP_ANON | MappingFlags::MAP_PRIVATE,
         -1,
@@ -280,10 +285,47 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg) -> ExitCode {
     ) {
         Ok(v) => v,
         Err(e) => {
-            error!(e, "Allocate failed");
+            error!(e, "Stack allocation failed");
             return ExitCode::FAILURE;
         }
     };
+
+    // Set the guard page to be non-accessible
+    #[cfg(unix)]
+    {
+        use crate::memory::Protections;
+        match MemoryManager::current().mprotect(stack.as_mut_ptr(), guard_size, PROT_NONE) {
+            Ok(_) => (),
+            Err(e) => {
+                error!(e, "Guard protection failed");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::Memory::{VirtualProtect, PAGE_NOACCESS};
+        let mut old_protect: u32 = 0;
+
+        let locked = unsafe {
+            VirtualProtect(
+                stack.as_mut_ptr() as *mut _,
+                guard_size,
+                PAGE_NOACCESS,
+                &mut old_protect as *mut u32,
+            )
+        };
+
+        if locked == 0 {
+            let e = std::io::Error::last_os_error();
+            error!(e, "Guard protection failed");
+            return ExitCode::FAILURE;
+        }
+    }
+
+    // Skip the guard page in the pointer
+    let stack = stack.add(guard_size);
 
     // Start the application.
     info!("Starting application.");

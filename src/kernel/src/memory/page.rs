@@ -12,6 +12,14 @@ impl<'a> VPages<'a> {
         Self { mm, ptr, len }
     }
 
+    pub fn add(&self, offset: usize) -> Self {
+        Self {
+            mm: self.mm,
+            ptr: unsafe { self.ptr.add(offset) },
+            len: self.len - offset,
+        }
+    }
+
     pub fn as_mut_ptr(&mut self) -> *mut u8 {
         self.ptr
     }

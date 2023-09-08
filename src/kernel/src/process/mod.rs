@@ -96,9 +96,9 @@ impl VProc {
         type E = VProcError;
 
         Ok([
-            R::new(R::CPU).map_err(|e| E::GetCpuLimitFailed(e))?,
-            R::new(R::FSIZE).map_err(|e| E::GetFileSizeLimitFailed(e))?,
-            R::new(R::DATA).map_err(|e| E::GetDataLimitFailed(e))?,
+            R::new(R::CPU).map_err(E::GetCpuLimitFailed)?,
+            R::new(R::FSIZE).map_err(E::GetFileSizeLimitFailed)?,
+            R::new(R::DATA).map_err(E::GetDataLimitFailed)?,
         ])
     }
 

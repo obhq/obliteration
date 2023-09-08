@@ -39,12 +39,12 @@ impl<'a> SymbolResolver<'a> {
             let mut p = name.split('#').skip(1);
             let l = p
                 .next()
-                .and_then(|v| Self::decode_id(v))
+                .and_then(Self::decode_id)
                 .and_then(|v| md.libraries().iter().find(|&i| i.id() == v))
                 .map(|i| i.name());
             let m = p
                 .next()
-                .and_then(|v| Self::decode_id(v))
+                .and_then(Self::decode_id)
                 .and_then(|v| md.modules().iter().find(|&i| i.id() == v))
                 .map(|i| i.name());
 
@@ -126,7 +126,7 @@ impl<'a> SymbolResolver<'a> {
             symlib,
             hash,
             flags,
-            &self.mains,
+            self.mains,
         )
     }
 
@@ -161,11 +161,9 @@ impl<'a> SymbolResolver<'a> {
                 let mut found = false;
 
                 for info in md.modules() {
-                    if info.id() == 0 {
-                        if info.name() == name {
-                            found = true;
-                            break;
-                        }
+                    if info.id() == 0 && info.name() == name {
+                        found = true;
+                        break;
                     }
                 }
 
@@ -206,7 +204,7 @@ impl<'a> SymbolResolver<'a> {
     /// See `symlook_obj` on the PS4 for a reference.
     pub fn resolve_from_module(
         &self,
-        refmod: &'a Arc<Module>,
+        _refmod: &'a Arc<Module>,
         name: Option<&str>,
         decoded_name: Option<&str>,
         symmod: Option<&str>,
@@ -250,7 +248,7 @@ impl<'a> SymbolResolver<'a> {
                 .unwrap();
             let target = if name.contains('#') {
                 Cow::Borrowed(name)
-            } else if let Some(v) = Self::decode_legacy(md, &name) {
+            } else if let Some(v) = Self::decode_legacy(md, name) {
                 // TODO: This seems like a useless operation because if name does not contains # the
                 // convert_mangled_name_to_long() will return error.
                 Cow::Owned(v)
@@ -268,25 +266,19 @@ impl<'a> SymbolResolver<'a> {
                 // TODO: Refactor this for readability.
                 let ty = sym.ty();
 
-                if ty == Symbol::STT_TLS
-                    || ((ty == Symbol::STT_NOTYPE
+                if (ty == Symbol::STT_TLS || ((ty == Symbol::STT_NOTYPE
                         || ty == Symbol::STT_OBJECT
                         || ty == Symbol::STT_FUNC
                         || ty == Symbol::STT_ENTRY)
-                        && sym.value() != 0)
-                {
-                    if sym.shndx() != 0
-                        || (ty == Symbol::STT_FUNC && !flags.contains(ResolveFlags::UNK3))
-                    {
-                        let name = match Self::decode_legacy(md, sym.name()) {
-                            Some(v) => Cow::Owned(v),
-                            None => Cow::Borrowed(sym.name()),
-                        };
+                        && sym.value() != 0)) && (sym.shndx() != 0 || (ty == Symbol::STT_FUNC && !flags.contains(ResolveFlags::UNK3))) {
+                    let name = match Self::decode_legacy(md, sym.name()) {
+                        Some(v) => Cow::Owned(v),
+                        None => Cow::Borrowed(sym.name()),
+                    };
 
-                        if name == target {
-                            // TODO: Implement the remaining symlook_obj.
-                            return Some((md, index));
-                        }
+                    if name == target {
+                        // TODO: Implement the remaining symlook_obj.
+                        return Some((md, index));
                     }
                 }
 
@@ -399,11 +391,11 @@ impl<'a> SymbolResolver<'a> {
         let mut parts = sym.name().split('#').skip(1);
         let li = parts
             .next()
-            .and_then(|v| Self::decode_id(v))
+            .and_then(Self::decode_id)
             .and_then(|v| md.libraries().iter().find(|&i| i.id() == v));
         let mi = parts
             .next()
-            .and_then(|v| Self::decode_id(v))
+            .and_then(Self::decode_id)
             .and_then(|v| md.modules().iter().find(|&i| i.id() == v));
 
         match name.find(|c| c == '#').map(|i| &name[..i]) {
