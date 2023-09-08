@@ -513,6 +513,7 @@ bitflags! {
     /// Flags to tell what access is possible for the virtual page.
     #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct Protections: u32 {
+        const NONE = 0x00000000;
         const CPU_READ = 0x00000001;
         const CPU_WRITE = 0x00000002;
         const CPU_EXEC = 0x00000004;
@@ -532,6 +533,10 @@ impl Protections {
     #[cfg(unix)]
     fn into_host(self) -> std::ffi::c_int {
         use libc::{PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE};
+
+        if self.contains(Self::NONE) {
+            return PROT_NONE; // IF None is assigned, then there will be no other protection flags
+        }
 
         let mut host = PROT_NONE;
 
