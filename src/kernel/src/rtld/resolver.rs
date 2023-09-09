@@ -266,15 +266,11 @@ impl<'a> SymbolResolver<'a> {
                 // TODO: Refactor this for readability.
                 let ty = sym.ty();
 
-                if (ty == Symbol::STT_TLS
-                    || ((ty == Symbol::STT_NOTYPE
+                if (ty == Symbol::STT_TLS || ((ty == Symbol::STT_NOTYPE
                         || ty == Symbol::STT_OBJECT
                         || ty == Symbol::STT_FUNC
                         || ty == Symbol::STT_ENTRY)
-                        && sym.value() != 0))
-                    && (sym.shndx() != 0
-                        || (ty == Symbol::STT_FUNC && !flags.contains(ResolveFlags::UNK3)))
-                {
+                        && sym.value() != 0)) && (sym.shndx() != 0 || (ty == Symbol::STT_FUNC && !flags.contains(ResolveFlags::UNK3))) {
                     let name = match Self::decode_legacy(md, sym.name()) {
                         Some(v) => Cow::Owned(v),
                         None => Cow::Borrowed(sym.name()),

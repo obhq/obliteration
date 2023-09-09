@@ -98,8 +98,7 @@ impl EntryArg {
             (mem.addr()
                 + mem.data_segment().start()
                 + pin.vp.limit(ResourceLimit::DATA).unwrap().max()
-                + 0x3fff)
-                & 0xffffffffffffc000,
+                + 0x3fff) & 0xffffffffffffc000,
         );
         pin.vec.push(15); // AT_EXECPATH
         pin.vec.push(pin.path.as_ptr() as _);
