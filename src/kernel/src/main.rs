@@ -294,7 +294,11 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg) -> ExitCode {
     #[cfg(unix)]
     {
         use crate::memory::Protections;
-        match MemoryManager::current().mprotect(stack.as_mut_ptr(), guard_size, Protections::empty()) {
+        match MemoryManager::current().mprotect(
+            stack.as_mut_ptr(),
+            guard_size,
+            Protections::empty(),
+        ) {
             Ok(_) => (),
             Err(e) => {
                 error!(e, "Guard protection failed");
