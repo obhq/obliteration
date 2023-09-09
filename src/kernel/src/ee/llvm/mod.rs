@@ -77,7 +77,7 @@ impl LlvmEngine {
 impl ExecutionEngine for LlvmEngine {
     type RunErr = RunError;
 
-    unsafe fn run(&mut self, _arg: EntryArg, _stack: VPages) -> Result<(), Self::RunErr> {
+    unsafe fn run(&mut self, arg: EntryArg, stack: VPages) -> Result<(), Self::RunErr> {
         todo!()
     }
 }
