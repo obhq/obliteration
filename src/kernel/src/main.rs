@@ -294,7 +294,7 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg) -> ExitCode {
     #[cfg(unix)]
     {
         use crate::memory::Protections;
-        match MemoryManager::current().mprotect(stack.as_mut_ptr(), guard_size, PROT_NONE) {
+        match MemoryManager::current().mprotect(stack.as_mut_ptr(), guard_size, Protections::empty()) {
             Ok(_) => (),
             Err(e) => {
                 error!(e, "Guard protection failed");
@@ -325,7 +325,7 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg) -> ExitCode {
     }
 
     // Skip the guard page in the pointer
-    let stack = stack.add(guard_size);
+    stack.add(guard_size);
 
     // Start the application.
     info!("Starting application.");
