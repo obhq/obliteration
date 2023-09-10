@@ -290,39 +290,15 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg) -> ExitCode {
         }
     };
 
+    // Calculate the aligned address for the guard page
+    let guard_start = (stack.as_mut_ptr() as usize + guard_size - 1) & !(guard_size - 1);
+
     // Set the guard page to be non-accessible
-    #[cfg(unix)]
+    use crate::memory::Protections;
+    match MemoryManager::current().mprotect(guard_start as *mut _, guard_size, Protections::empty())
     {
-        use crate::memory::Protections;
-        match MemoryManager::current().mprotect(
-            unsafe { stack.as_mut_ptr().add(stack_size - guard_size) } as *mut _,
-            guard_size,
-            Protections::empty(),
-        ) {
-            Ok(_) => (),
-            Err(e) => {
-                error!(e, "Guard protection failed");
-                return ExitCode::FAILURE;
-            }
-        }
-    }
-
-    #[cfg(windows)]
-    {
-        use windows_sys::Win32::System::Memory::{VirtualProtect, PAGE_NOACCESS};
-        let mut old_protect: u32 = 0;
-
-        let locked = unsafe {
-            VirtualProtect(
-                stack.as_mut_ptr().add(stack_size - guard_size) as *mut _,
-                guard_size,
-                PAGE_NOACCESS,
-                &mut old_protect as *mut u32,
-            )
-        };
-
-        if locked == 0 {
-            let e = std::io::Error::last_os_error();
+        Ok(_) => (),
+        Err(e) => {
             error!(e, "Guard protection failed");
             return ExitCode::FAILURE;
         }
