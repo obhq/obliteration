@@ -295,7 +295,7 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg) -> ExitCode {
     {
         use crate::memory::Protections;
         match MemoryManager::current().mprotect(
-            stack.as_mut_ptr(),
+            unsafe{stack.as_mut_ptr().add(stack_size - guard_size)} as *mut _,
             guard_size,
             Protections::empty(),
         ) {
@@ -314,7 +314,7 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg) -> ExitCode {
 
         let locked = unsafe {
             VirtualProtect(
-                stack.as_mut_ptr() as *mut _,
+                stack.as_mut_ptr().add(stack_size - guard_size) as *mut _,
                 guard_size,
                 PAGE_NOACCESS,
                 &mut old_protect as *mut u32,
@@ -327,9 +327,6 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg) -> ExitCode {
             return ExitCode::FAILURE;
         }
     }
-
-    // Skip the guard page in the pointer
-    stack.add(guard_size);
 
     // Start the application.
     info!("Starting application.");
