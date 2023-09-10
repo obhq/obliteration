@@ -12,8 +12,6 @@ impl<'a> VPages<'a> {
         Self { mm, ptr, len }
     }
 
-
-
     pub fn as_mut_ptr(&mut self) -> *mut u8 {
         self.ptr
     }

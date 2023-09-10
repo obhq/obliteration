@@ -295,7 +295,7 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg) -> ExitCode {
     {
         use crate::memory::Protections;
         match MemoryManager::current().mprotect(
-            unsafe{stack.as_mut_ptr().add(stack_size - guard_size)} as *mut _,
+            unsafe { stack.as_mut_ptr().add(stack_size - guard_size) } as *mut _,
             guard_size,
             Protections::empty(),
         ) {
