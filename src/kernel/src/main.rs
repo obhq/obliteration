@@ -3,7 +3,7 @@ use crate::ee::EntryArg;
 use crate::fs::{Fs, VPath};
 use crate::llvm::Llvm;
 use crate::log::{print, LOGGER};
-use crate::memory::{MappingFlags, MemoryManager};
+use crate::memory::{MappingFlags, MemoryManager, Protections};
 use crate::process::VProc;
 use crate::regmgr::RegMgr;
 use crate::rtld::{ModuleFlags, RuntimeLinker};
@@ -276,15 +276,9 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg) -> ExitCode {
     // TODO: Check how the PS4 allocate the stack.
     info!("Allocating application stack.");
 
-    // Assign stack size with an extra page for guard
-    let stack_size = 0x200000;
-    let guard_size = MemoryManager::current().page_size();
-    // Combine both sizes into one
-    let total_size = stack_size + guard_size;
-
     let mut stack = match MemoryManager::current().mmap(
         0,
-        total_size,
+        0x200000,
         arg.stack_prot(),
         MappingFlags::MAP_ANON | MappingFlags::MAP_PRIVATE,
         -1,
@@ -297,14 +291,14 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg) -> ExitCode {
         }
     };
 
-    // Set the guard page to be non-accessible
-    use crate::memory::Protections;
-    match MemoryManager::current().mprotect(stack.as_mut_ptr(), guard_size, Protections::empty()) {
-        Ok(_) => (),
-        Err(e) => {
-            error!(e, "Guard protection failed");
-            return ExitCode::FAILURE;
-        }
+    // Set the guard page to be non-accessible.
+    if let Err(e) = MemoryManager::current().mprotect(
+        stack.as_mut_ptr(),
+        MemoryManager::VIRTUAL_PAGE_SIZE,
+        Protections::empty(),
+    ) {
+        error!(e, "Guard protection failed");
+        return ExitCode::FAILURE;
     }
 
     // Start the application.
