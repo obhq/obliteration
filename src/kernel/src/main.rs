@@ -290,13 +290,9 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg) -> ExitCode {
         }
     };
 
-    // Calculate the aligned address for the guard page
-    let guard_start = (stack.as_mut_ptr() as usize + guard_size - 1) & !(guard_size - 1);
-
     // Set the guard page to be non-accessible
     use crate::memory::Protections;
-    match MemoryManager::current().mprotect(guard_start as *mut _, guard_size, Protections::empty())
-    {
+    match MemoryManager::current().mprotect(stack.as_mut_ptr(), guard_size, Protections::empty()) {
         Ok(_) => (),
         Err(e) => {
             error!(e, "Guard protection failed");
