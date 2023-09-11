@@ -8,15 +8,16 @@ jobs:
     name: LLVM for Windows
     runs-on: windows-2022
     steps:
-    - name: Checkout source
-      uses: actions/checkout@v4
-      with:
-        repository: llvm/llvm-project
-        ref: llvmorg-16.0.6
-    - name: Generate cache keys
+    - name: Download LLVM
       run: |
-        $commit = git rev-parse HEAD
-        echo "build=${{ runner.os }}-llvm-$commit" >> $env:GITHUB_OUTPUT
+        Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.6/llvm-project-16.0.6.src.tar.xz" -OutFile llvm.tar.xz
+        $hash = (Get-FileHash llvm.tar.xz).Hash
+        unxz llvm.tar.xz
+        tar -x --strip-components=1 -f llvm.tar
+        echo "hash=$hash" >> $env:GITHUB_OUTPUT
+      id: download
+    - name: Generate cache keys
+      run: echo "build=${{ runner.os }}-llvm-${{ steps.download.outputs.hash }}" >> $env:GITHUB_OUTPUT
       id: cache-keys
     - name: Restore build files
       uses: actions/cache/restore@v3

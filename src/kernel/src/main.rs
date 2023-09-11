@@ -5,6 +5,7 @@ use crate::llvm::Llvm;
 use crate::log::{print, LOGGER};
 use crate::memory::{MappingFlags, MemoryManager};
 use crate::process::VProc;
+use crate::regmgr::RegMgr;
 use crate::rtld::{ModuleFlags, RuntimeLinker};
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
@@ -24,6 +25,7 @@ mod llvm;
 mod log;
 mod memory;
 mod process;
+mod regmgr;
 mod rtld;
 mod signal;
 mod syscalls;
@@ -128,6 +130,11 @@ fn main() -> ExitCode {
 
     print(log);
 
+    // Initialize registry manager.
+    info!("Initializing registry manager.");
+
+    let regmgr: &'static RegMgr = Box::leak(RegMgr::new().into());
+
     // Initialize virtual process.
     info!("Initializing virtual process.");
 
@@ -198,7 +205,7 @@ fn main() -> ExitCode {
     info!("Initializing system call routines.");
 
     let sysctl: &'static Sysctl = Box::leak(Sysctl::new(arnd, vp).into());
-    let syscalls: &'static Syscalls = Box::leak(Syscalls::new(sysctl, ld, vp).into());
+    let syscalls: &'static Syscalls = Box::leak(Syscalls::new(vp, ld, sysctl, regmgr).into());
 
     // Bootstrap execution engine.
     info!("Initializing execution engine.");
