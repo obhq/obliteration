@@ -318,9 +318,11 @@ void MainWindow::requestGamesContextMenu(const QPoint &pos)
 
     // Setup menu.
     QMenu menu(this);
-    QAction settings("&Settings", this);
+    QAction settings("&Settings", this); // TODO LATER: Blank Settings
+    QAction openFolder("Open Game &Folder", this); // Opens game folder.
 
     menu.addAction(&settings);
+    menu.addAction(&openFolder);
 
     // Show menu.
     auto selected = menu.exec(m_games->viewport()->mapToGlobal(pos));
@@ -332,6 +334,9 @@ void MainWindow::requestGamesContextMenu(const QPoint &pos)
     if (selected == &settings) {
         GameSettingsDialog dialog(game, this);
         dialog.exec();
+    } else if (selected == &openFolder) {
+        QString folderPath = game->directory();
+        QDesktopServices::openUrl(QUrl::fromLocalFile(folderPath));
     }
 }
 
