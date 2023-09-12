@@ -75,6 +75,8 @@ impl Syscalls {
                 i.args[3].into(),
                 i.args[4].into(),
             ),
+            537 => self.devkit_syscall(), //sys_dl_notify_event
+            589 => self.devkit_syscall(), //sys_dynlib_dlopen
             592 => self.dynlib_get_list(i.args[0].into(), i.args[1].into(), i.args[2].into()),
             598 => self.dynlib_get_proc_param(i.args[0].into(), i.args[1].into()),
             599 => self.dynlib_process_needed_and_relocate(),
@@ -107,6 +109,12 @@ impl Syscalls {
     #[cpu_abi]
     pub unsafe fn int44(&self, offset: usize, module: &VPathBuf) -> ! {
         todo!("int 0x44 at at {offset:#018x} on {module}");
+    }
+
+    unsafe fn devkit_syscall(&self) -> Result<Output, Error> {
+        // Syscall sys_dynlib_dlopen and sys_dl_notify_event are DevKit only syscalls.
+        // These syscalls immediately exit with ENOSYS on DevKit firmware.
+        return Err(Error::Raw(ENOSYS));
     }
 
     unsafe fn getpid(&self) -> Result<Output, Error> {
