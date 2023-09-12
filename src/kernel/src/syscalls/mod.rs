@@ -243,6 +243,10 @@ impl Syscalls {
                     todo!("regmgr_call with matched key = {key:#x}");
                 }
             }
+            // Pass default value for any values that aren't given a unique case
+            0x27 | 0x37..=u32::MAX => {
+                -2146631143
+            }
             v => todo!("regmgr_call with type = {v}"),
         };
 
