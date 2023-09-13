@@ -251,9 +251,7 @@ fn main() -> ExitCode {
         }
         #[cfg(not(target_arch = "x86_64"))]
         ExecutionEngine::Native => {
-            error!(
-                "Native execution engine cannot be used on your machine."
-            );
+            error!("Native execution engine cannot be used on your machine.");
             return ExitCode::FAILURE;
         }
         ExecutionEngine::Llvm => {
