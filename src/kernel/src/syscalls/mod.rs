@@ -256,7 +256,7 @@ impl Syscalls {
                 }
             }
             // Pass default value for any values that aren't given a unique case
-            0x27 | 0x40..=u32::MAX => 0x800d0219,
+            0x27 | 0x40..=u32::MAX => -2146631143, // Decimal equivalent of 0x800d0219
             // Any missing cases TODO
             v => todo!("regmgr_call({v})"),
         };
