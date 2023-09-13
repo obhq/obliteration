@@ -218,6 +218,7 @@ impl Syscalls {
         req: *const u8,
         reqlen: usize,
     ) -> Result<Output, Error> {
+        // TODO: Check the result of priv_check(td, 682).
         if buf.is_null() {
             todo!("regmgr_call with buf = null");
         }
@@ -232,18 +233,29 @@ impl Syscalls {
 
         // Check type.
         *buf = match ty {
+            0x18 => {
+                let v1 = read::<u64>(req as _);
+                let v2 = read::<u32>(req.add(8) as _);
+                let key = self.regmgr.decode_key(v1, v2, 2);
+
+                if key > 0 {
+                    todo!("regmgr_call({ty}) with matched key = {key:#x}");
+                }
+
+                key
+            }
             0x19 => {
                 let v1 = read::<u64>(req as _);
                 let v2 = read::<u32>(req.add(8) as _);
-                let key = self.regmgr.decode_key(v1, v2);
+                let key = self.regmgr.decode_key(v1, v2, 1);
 
                 if key < 1 {
                     key
                 } else {
-                    todo!("regmgr_call with matched key = {key:#x}");
+                    todo!("regmgr_call({ty}) with matched key = {key:#x}");
                 }
             }
-            v => todo!("regmgr_call with type = {v}"),
+            v => todo!("regmgr_call({v})"),
         };
 
         Ok(Output::ZERO)

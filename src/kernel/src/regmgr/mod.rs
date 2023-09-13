@@ -6,7 +6,7 @@ impl RegMgr {
         Self {}
     }
 
-    pub fn decode_key(&self, v1: u64, _: u32) -> i32 {
+    pub fn decode_key(&self, v1: u64, _: u32, _: u32) -> i32 {
         // TODO: Verify if the algorithm used here is a standard algorithm.
         let a = (v1 & 0xff) as i32;
         let b = ((v1 >> 8) & 0xff) as i32;
