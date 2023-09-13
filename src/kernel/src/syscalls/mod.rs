@@ -232,11 +232,13 @@ impl Syscalls {
         }
 
         // Check type.
+        let td = VThread::current();
+
         *buf = match ty {
             0x18 => {
                 let v1 = read::<u64>(req as _);
                 let v2 = read::<u32>(req.add(8) as _);
-                let key = self.regmgr.decode_key(v1, v2, 2);
+                let key = self.regmgr.decode_key(v1, v2, td.cred(), 2);
 
                 if key > 0 {
                     todo!("regmgr_call({ty}) with matched key = {key:#x}");
@@ -247,7 +249,7 @@ impl Syscalls {
             0x19 => {
                 let v1 = read::<u64>(req as _);
                 let v2 = read::<u32>(req.add(8) as _);
-                let key = self.regmgr.decode_key(v1, v2, 1);
+                let key = self.regmgr.decode_key(v1, v2, td.cred(), 1);
 
                 if key < 1 {
                     key
@@ -255,9 +257,7 @@ impl Syscalls {
                     todo!("regmgr_call({ty}) with matched key = {key:#x}");
                 }
             }
-            // Pass default value for any values that aren't given a unique case
-            0x27 | 0x40..=u32::MAX => -2146631143, // Decimal equivalent of 0x800d0219
-            // Any missing cases TODO
+            0x27 | 0x40.. => 0x800d0219u32 as i32,
             v => todo!("regmgr_call({v})"),
         };
 
