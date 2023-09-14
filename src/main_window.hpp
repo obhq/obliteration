@@ -19,6 +19,7 @@ protected:
     void resizeEvent(QResizeEvent *event) override;
 
 private slots:
+    void tabChanged(int index);
     void installPkg();
     void openSystemFolder();
     void reportIssue();

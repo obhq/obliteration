@@ -111,6 +111,8 @@ MainWindow::MainWindow() :
 
     m_tab->addTab(m_games, QIcon(svgPath + "view-comfy.svg"), "Games");
 
+    connect(m_tab, &QTabWidget::currentChanged, this, &MainWindow::tabChanged);
+
     // Setup log view.
     auto log = new QPlainTextEdit();
 
@@ -204,10 +206,21 @@ void MainWindow::closeEvent(QCloseEvent *event)
 void MainWindow::resizeEvent(QResizeEvent *event)
 {
     // Allows the games list to resort if window is resized.
-    m_games->updateGeometry();
-    m_games->doItemsLayout();
+    if (m_games) {
+        m_games->updateGeometry();
+        m_games->doItemsLayout();
+    }
 
     QMainWindow::resizeEvent(event);
+}
+
+void MainWindow::tabChanged(int index)
+{
+    // Check if the Games tab is selected
+    if (index == 0 && m_games) {
+        m_games->updateGeometry();
+        m_games->doItemsLayout();
+    }
 }
 
 void MainWindow::installPkg()
