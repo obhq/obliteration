@@ -1,4 +1,5 @@
 use crate::signal::SignalSet;
+use crate::ucred::Ucred;
 use gmtx::{GroupMutex, GroupMutexWriteGuard, MutexGroup};
 use llt::{SpawnError, Thread};
 use std::num::NonZeroI32;
@@ -11,14 +12,16 @@ use tls::{Local, Tls};
 #[derive(Debug)]
 pub struct VThread {
     id: NonZeroI32,                 // td_tid
+    cred: Ucred,                    // td_ucred
     sigmask: GroupMutex<SignalSet>, // td_sigmask
 }
 
 impl VThread {
-    pub(super) fn new(id: NonZeroI32, mtxg: &Arc<MutexGroup>) -> Self {
+    pub(super) fn new(id: NonZeroI32, cred: Ucred, mtxg: &Arc<MutexGroup>) -> Self {
         // TODO: Check how the PS4 actually allocate the thread ID.
         Self {
             id,
+            cred,
             sigmask: mtxg.new_member(SignalSet::default()),
         }
     }
@@ -31,6 +34,10 @@ impl VThread {
 
     pub fn id(&self) -> NonZeroI32 {
         self.id
+    }
+
+    pub fn cred(&self) -> &Ucred {
+        &self.cred
     }
 
     pub fn sigmask_mut(&self) -> GroupMutexWriteGuard<'_, SignalSet> {
