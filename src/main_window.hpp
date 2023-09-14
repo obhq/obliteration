@@ -19,6 +19,7 @@ protected:
 
 private slots:
     void installPkg();
+    void openSystemFolder();
     void reportIssue();
     void aboutObliteration();
     void requestGamesContextMenu(const QPoint &pos);

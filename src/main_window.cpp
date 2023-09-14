@@ -53,12 +53,15 @@ MainWindow::MainWindow() :
     // File menu.
     auto fileMenu = menuBar()->addMenu("&File");
     auto installPkg = new QAction(QIcon(svgPath + "archive-arrow-down-outline.svg"), "&Install PKG", this);
+    auto openSystemFolder = new QAction("Open System &Folder", this);
     auto quit = new QAction("&Quit", this);
 
     connect(installPkg, &QAction::triggered, this, &MainWindow::installPkg);
+    connect(openSystemFolder, &QAction::triggered, this, &MainWindow::openSystemFolder);
     connect(quit, &QAction::triggered, this, &MainWindow::close);
 
     fileMenu->addAction(installPkg);
+    fileMenu->addAction(openSystemFolder);
     fileMenu->addSeparator();
     fileMenu->addAction(quit);
 
@@ -290,6 +293,12 @@ void MainWindow::installPkg()
     if (success) {
         QMessageBox::information(this, "Success", "Package installed successfully.");
     }
+}
+
+void MainWindow::openSystemFolder()
+{
+    QString folderPath = readSystemDirectorySetting();
+    QDesktopServices::openUrl(QUrl::fromLocalFile(folderPath));
 }
 
 void MainWindow::reportIssue()
