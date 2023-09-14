@@ -204,10 +204,8 @@ void MainWindow::closeEvent(QCloseEvent *event)
 void MainWindow::resizeEvent(QResizeEvent *event)
 {
     // Allows the games list to resort if window is resized.
-    if (m_games) {
-        m_games->updateGeometry();
-        m_games->doItemsLayout();
-    }
+    m_games->updateGeometry();
+    m_games->doItemsLayout();
 
     QMainWindow::resizeEvent(event);
 }
