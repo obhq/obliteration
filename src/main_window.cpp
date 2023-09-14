@@ -24,6 +24,7 @@
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QProgressDialog>
+#include <QResizeEvent>
 #include <QSettings>
 #include <QStyleHints>
 #include <QTabWidget>
@@ -200,6 +201,17 @@ void MainWindow::closeEvent(QCloseEvent *event)
     QMainWindow::closeEvent(event);
 }
 
+void MainWindow::resizeEvent(QResizeEvent *event)
+{
+    // Allows the games list to resort if window is resized.
+    if (m_games) {
+        m_games->updateGeometry();
+        m_games->doItemsLayout();
+    }
+
+    QMainWindow::resizeEvent(event);
+}
+
 void MainWindow::installPkg()
 {
     // Browse a PKG.
@@ -327,11 +339,11 @@ void MainWindow::requestGamesContextMenu(const QPoint &pos)
 
     // Setup menu.
     QMenu menu(this);
-    QAction settings("&Settings", this); // TODO LATER: Blank Settings
     QAction openFolder("Open Game &Folder", this); // Opens game folder.
+    QAction settings("&Settings", this); // TODO LATER: Blank Settings
 
-    menu.addAction(&settings);
     menu.addAction(&openFolder);
+    menu.addAction(&settings);
 
     // Show menu.
     auto selected = menu.exec(m_games->viewport()->mapToGlobal(pos));
@@ -340,12 +352,12 @@ void MainWindow::requestGamesContextMenu(const QPoint &pos)
         return;
     }
 
-    if (selected == &settings) {
-        GameSettingsDialog dialog(game, this);
-        dialog.exec();
-    } else if (selected == &openFolder) {
+    if (selected == &openFolder) {
         QString folderPath = game->directory();
         QDesktopServices::openUrl(QUrl::fromLocalFile(folderPath));
+    } else if (selected == &settings) {
+        GameSettingsDialog dialog(game, this);
+        dialog.exec();
     }
 }
 
