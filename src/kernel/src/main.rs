@@ -30,6 +30,7 @@ mod rtld;
 mod signal;
 mod syscalls;
 mod sysctl;
+mod ucred;
 
 fn main() -> ExitCode {
     log::init();
