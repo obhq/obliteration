@@ -2,6 +2,7 @@ pub use self::appinfo::*;
 pub use self::rlimit::*;
 pub use self::thread::*;
 
+use crate::ucred::Ucred;
 use gmtx::{GroupMutex, MutexGroup};
 use llt::{SpawnError, Thread};
 use std::num::NonZeroI32;
@@ -72,7 +73,7 @@ impl VProc {
         // Lock the list before spawn the thread to prevent race condition if the new thread run
         // too fast and found out they is not in our list.
         let mut threads = self.threads.write();
-        let td = Arc::new(VThread::new(Self::new_id(), &self.mtxg));
+        let td = Arc::new(VThread::new(Self::new_id(), Ucred::new(), &self.mtxg));
         let active = Box::new(ActiveThread {
             proc: self,
             id: td.id(),
