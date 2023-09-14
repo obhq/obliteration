@@ -69,7 +69,8 @@ impl RegMgr {
                                         result = 0x800d0206u32 as i32;
                                         break;
                                     } else {
-                                        todo!("decode regmgr_call request with v2 = 0");
+                                        result = key as i32;
+                                        break;
                                     }
                                 }
                             }
@@ -91,10 +92,6 @@ impl RegMgr {
         } else {
             0x800d0204u32 as i32
         };
-
-        if r < 0 && r != (0x800d0203u32 as i32) {
-            todo!("decode regmgr_call request failed with non 0x800d0203");
-        }
 
         r
     }
