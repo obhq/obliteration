@@ -24,6 +24,7 @@
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QProgressDialog>
+#include <QResizeEvent>
 #include <QSettings>
 #include <QStyleHints>
 #include <QTabWidget>
@@ -53,12 +54,15 @@ MainWindow::MainWindow() :
     // File menu.
     auto fileMenu = menuBar()->addMenu("&File");
     auto installPkg = new QAction(QIcon(svgPath + "archive-arrow-down-outline.svg"), "&Install PKG", this);
+    auto openSystemFolder = new QAction("Open System &Folder", this);
     auto quit = new QAction("&Quit", this);
 
     connect(installPkg, &QAction::triggered, this, &MainWindow::installPkg);
+    connect(openSystemFolder, &QAction::triggered, this, &MainWindow::openSystemFolder);
     connect(quit, &QAction::triggered, this, &MainWindow::close);
 
     fileMenu->addAction(installPkg);
+    fileMenu->addAction(openSystemFolder);
     fileMenu->addSeparator();
     fileMenu->addAction(quit);
 
@@ -106,6 +110,8 @@ MainWindow::MainWindow() :
     connect(m_games, &QWidget::customContextMenuRequested, this, &MainWindow::requestGamesContextMenu);
 
     m_tab->addTab(m_games, QIcon(svgPath + "view-comfy.svg"), "Games");
+
+    connect(m_tab, &QTabWidget::currentChanged, this, &MainWindow::tabChanged);
 
     // Setup log view.
     auto log = new QPlainTextEdit();
@@ -195,6 +201,26 @@ void MainWindow::closeEvent(QCloseEvent *event)
     }
 
     QMainWindow::closeEvent(event);
+}
+
+void MainWindow::resizeEvent(QResizeEvent *event)
+{
+    // Allows the games list to resort if window is resized.
+    if (m_games) {
+        m_games->updateGeometry();
+        m_games->doItemsLayout();
+    }
+
+    QMainWindow::resizeEvent(event);
+}
+
+void MainWindow::tabChanged(int index)
+{
+    // Check if the Games tab is selected
+    if (index == 0 && m_games) {
+        m_games->updateGeometry();
+        m_games->doItemsLayout();
+    }
 }
 
 void MainWindow::installPkg()
@@ -292,6 +318,12 @@ void MainWindow::installPkg()
     }
 }
 
+void MainWindow::openSystemFolder()
+{
+    QString folderPath = readSystemDirectorySetting();
+    QDesktopServices::openUrl(QUrl::fromLocalFile(folderPath));
+}
+
 void MainWindow::reportIssue()
 {
     if (!QDesktopServices::openUrl(QUrl("https://github.com/obhq/obliteration/issues"))) {
@@ -318,11 +350,11 @@ void MainWindow::requestGamesContextMenu(const QPoint &pos)
 
     // Setup menu.
     QMenu menu(this);
-    QAction settings("&Settings", this); // TODO LATER: Blank Settings
     QAction openFolder("Open Game &Folder", this); // Opens game folder.
+    QAction settings("&Settings", this); // TODO LATER: Blank Settings
 
-    menu.addAction(&settings);
     menu.addAction(&openFolder);
+    menu.addAction(&settings);
 
     // Show menu.
     auto selected = menu.exec(m_games->viewport()->mapToGlobal(pos));
@@ -331,12 +363,12 @@ void MainWindow::requestGamesContextMenu(const QPoint &pos)
         return;
     }
 
-    if (selected == &settings) {
-        GameSettingsDialog dialog(game, this);
-        dialog.exec();
-    } else if (selected == &openFolder) {
+    if (selected == &openFolder) {
         QString folderPath = game->directory();
         QDesktopServices::openUrl(QUrl::fromLocalFile(folderPath));
+    } else if (selected == &settings) {
+        GameSettingsDialog dialog(game, this);
+        dialog.exec();
     }
 }
 
