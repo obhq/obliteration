@@ -28,7 +28,6 @@ public:
     void add(Game *game);
     Game *get(int i) const { return m_items[i]; }
     void clear();
-    void sortNames();
 
 public:
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;

@@ -157,7 +157,6 @@ bool MainWindow::loadGames()
 
     // Load games
     progress.setLabelText("Loading games...");
-    auto gameList = reinterpret_cast<GameListModel *>(m_games->model());
 
     for (auto &gameId : games) {
         if (progress.wasCanceled() || !loadGame(gameId)) {
@@ -166,9 +165,6 @@ bool MainWindow::loadGames()
 
         progress.setValue(++step);
     }
-
-    // Sort the games by name
-    gameList->sortNames();
 
     return true;
 }
@@ -210,7 +206,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
 void MainWindow::resizeEvent(QResizeEvent *event)
 {
     // Allows the games list to resort if window is resized.
-    if (m_tab->currentIndex() == 0) {
+    if (m_games) {
         m_games->updateGeometry();
         m_games->doItemsLayout();
     }
@@ -218,10 +214,10 @@ void MainWindow::resizeEvent(QResizeEvent *event)
     QMainWindow::resizeEvent(event);
 }
 
-void MainWindow::tabChanged()
+void MainWindow::tabChanged(int index)
 {
-    // Update games list if window was resized on another tab.
-    if (m_tab->currentIndex() == 0) {
+    // Check if the Games tab is selected
+    if (index == 0 && m_games) {
         m_games->updateGeometry();
         m_games->doItemsLayout();
     }
