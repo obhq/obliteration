@@ -43,7 +43,7 @@ void GameListModel::add(Game *game)
     m_items.append(game);
     endInsertRows();
 
-    sortNames();
+    sort(0);
 }
 
 void GameListModel::clear()
@@ -76,13 +76,21 @@ QVariant GameListModel::data(const QModelIndex &index, int role) const
     }
 }
 
-void GameListModel::sortNames()
+void GameListModel::sort(int column, Qt::SortOrder order)
 {
-    beginResetModel();
+    if (column != 0)
+        return;
 
-    std::sort(m_items.begin(), m_items.end(), [](Game *a, Game *b) {
-        return a->name() < b->name();
-    });
+    emit layoutAboutToBeChanged();
 
-    endResetModel();
+    auto compare = [order](const Game* a, const Game* b) {
+        if (order == Qt::AscendingOrder)
+            return a->name() < b->name();
+        else
+            return a->name() > b->name();
+    };
+
+    std::sort(m_items.begin(), m_items.end(), compare);
+
+    emit layoutChanged();
 }

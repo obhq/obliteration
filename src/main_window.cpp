@@ -167,8 +167,7 @@ bool MainWindow::loadGames()
         progress.setValue(++step);
     }
 
-    // Sort the games by name
-    gameList->sortNames();
+    gameList->sort(0, Qt::AscendingOrder); // TODO add ability to select descending order (button?)
 
     return true;
 }

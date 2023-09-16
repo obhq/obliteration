@@ -28,7 +28,7 @@ public:
     void add(Game *game);
     Game *get(int i) const { return m_items[i]; }
     void clear();
-    void sortNames();
+    void sort(int column, Qt::SortOrder order = Qt::AscendingOrder) override;
 
 public:
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
