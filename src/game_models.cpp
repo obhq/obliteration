@@ -42,6 +42,8 @@ void GameListModel::add(Game *game)
     beginInsertRows(QModelIndex(), m_items.size(), m_items.size());
     m_items.append(game);
     endInsertRows();
+
+    sortNames();
 }
 
 void GameListModel::clear()
@@ -72,4 +74,15 @@ QVariant GameListModel::data(const QModelIndex &index, int role) const
     default:
         return QVariant();
     }
+}
+
+void GameListModel::sortNames()
+{
+    beginResetModel();
+
+    std::sort(m_items.begin(), m_items.end(), [](Game *a, Game *b) {
+        return a->name() < b->name();
+    });
+
+    endResetModel();
 }
