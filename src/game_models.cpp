@@ -21,6 +21,11 @@ QPixmap Game::icon() const
     // Construct icon object.
     QPixmap icon(path.c_str());
 
+    // For games with large icon sizes.
+    if (icon.width() != 512 || icon.height() != 512) {
+        icon = icon.scaled(512, 512, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    }
+
     icon.setDevicePixelRatio(2.0);
 
     return icon;
