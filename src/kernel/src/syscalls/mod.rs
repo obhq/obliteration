@@ -9,7 +9,7 @@ use crate::regmgr::RegMgr;
 use crate::rtld::{ModuleFlags, RuntimeLinker};
 use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK};
 use crate::sysctl::Sysctl;
-use crate::warn;
+use crate::{info, warn};
 use kernel_macros::cpu_abi;
 use std::mem::{size_of, zeroed};
 use std::ptr::read;
@@ -233,33 +233,39 @@ impl Syscalls {
 
         // Check type.
         let td = VThread::current();
-
-        *buf = match ty {
+        let r = match ty {
             0x18 => {
                 let v1 = read::<u64>(req as _);
                 let v2 = read::<u32>(req.add(8) as _);
-                let key = self.regmgr.decode_key(v1, v2, td.cred(), 2);
+                let value = read::<i32>(req.add(12) as _);
 
-                if key > 0 {
-                    todo!("regmgr_call({ty}) with matched key = {key:#x}");
+                match self.regmgr.decode_key(v1, v2, td.cred(), 2) {
+                    Ok(k) => {
+                        info!("Setting {k} to {value}.");
+                        self.regmgr.set_int(k, value)
+                    }
+                    Err(e) => e as i32,
                 }
-
-                key
             }
             0x19 => {
                 let v1 = read::<u64>(req as _);
                 let v2 = read::<u32>(req.add(8) as _);
-                let key = self.regmgr.decode_key(v1, v2, td.cred(), 1);
 
-                if key < 1 {
-                    key
-                } else {
-                    todo!("regmgr_call({ty}) with matched key = {key:#x}");
+                match self.regmgr.decode_key(v1, v2, td.cred(), 1) {
+                    Ok(k) => todo!("regmgr_call({ty}) with matched key = {k}"),
+                    Err(e) => e as i32,
                 }
             }
             0x27 | 0x40.. => 0x800d0219u32 as i32,
             v => todo!("regmgr_call({v})"),
         };
+
+        // Write the result.
+        if r < 1 {
+            warn!("regmgr_call({ty}) was failed with {r:#x}.");
+        }
+
+        *buf = r;
 
         Ok(Output::ZERO)
     }
