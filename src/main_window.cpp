@@ -157,6 +157,7 @@ bool MainWindow::loadGames()
 
     // Load games
     progress.setLabelText("Loading games...");
+    auto gameList = reinterpret_cast<GameListModel *>(m_games->model());
 
     for (auto &gameId : games) {
         if (progress.wasCanceled() || !loadGame(gameId)) {
@@ -165,6 +166,8 @@ bool MainWindow::loadGames()
 
         progress.setValue(++step);
     }
+
+    gameList->sort(0, Qt::AscendingOrder); // TODO add ability to select descending order (button?)
 
     return true;
 }
@@ -206,7 +209,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
 void MainWindow::resizeEvent(QResizeEvent *event)
 {
     // Allows the games list to resort if window is resized.
-    if (m_games) {
+    if (m_tab->currentIndex() == 0) {
         m_games->updateGeometry();
         m_games->doItemsLayout();
     }
@@ -214,10 +217,10 @@ void MainWindow::resizeEvent(QResizeEvent *event)
     QMainWindow::resizeEvent(event);
 }
 
-void MainWindow::tabChanged(int index)
+void MainWindow::tabChanged()
 {
-    // Check if the Games tab is selected
-    if (index == 0 && m_games) {
+    // Update games list if window was resized on another tab.
+    if (m_tab->currentIndex() == 0) {
         m_games->updateGeometry();
         m_games->doItemsLayout();
     }
