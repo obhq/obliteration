@@ -90,9 +90,9 @@ void GameListModel::sort(int column, Qt::SortOrder order)
 
     auto compare = [order](const Game* a, const Game* b) {
         if (order == Qt::AscendingOrder)
-            return a->name() < b->name();
+            return a->name().toLower() < b->name().toLower();
         else
-            return a->name() > b->name();
+            return a->name().toLower() > b->name().toLower();
     };
 
     std::sort(m_items.begin(), m_items.end(), compare);
