@@ -10,7 +10,7 @@ jobs:
     steps:
     - name: Download LLVM
       run: |
-        Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.6/llvm-project-16.0.6.src.tar.xz" -OutFile llvm.tar.xz
+        Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.1/llvm-project-17.0.1.src.tar.xz" -OutFile llvm.tar.xz
         $hash = (Get-FileHash llvm.tar.xz).Hash
         unxz llvm.tar.xz
         tar -x --strip-components=1 -f llvm.tar
