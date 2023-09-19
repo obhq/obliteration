@@ -32,8 +32,8 @@ if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
 endif()
 
 ExternalProject_Add(llvm
-    URL https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.0-rc2/llvm-project-17.0.0rc2.src.tar.xz
-    URL_HASH SHA256=71c018a6c0d3f7ccfe66a8ea7a68281a256fcd3bc35099e61616a92dcbbf0859
+    URL https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.1/llvm-project-17.0.1.src.tar.xz
+    URL_HASH SHA256=b0e42aafc01ece2ca2b42e3526f54bebc4b1f1dc8de6e34f46a0446a13e882b9
     DOWNLOAD_NO_PROGRESS true
     CMAKE_ARGS -Wno-dev
     CMAKE_CACHE_ARGS ${LLVM_OPTS}
