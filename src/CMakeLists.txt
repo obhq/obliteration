@@ -28,8 +28,8 @@ endif()
 
 if(OB_BUILD_LLVM)
     ExternalProject_Add(llvm
-        URL https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.6/llvm-project-16.0.6.src.tar.xz
-        URL_HASH SHA256=CE5E71081D17CE9E86D7CBCFA28C4B04B9300F8FB7E78422B1FEB6BC52C3028E
+        URL https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.1/llvm-project-17.0.1.src.tar.xz
+        URL_HASH SHA256=b0e42aafc01ece2ca2b42e3526f54bebc4b1f1dc8de6e34f46a0446a13e882b9
         DOWNLOAD_NO_PROGRESS true
         CMAKE_ARGS -Wno-dev
         CMAKE_CACHE_ARGS ${LLVM_OPTS}
