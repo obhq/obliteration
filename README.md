@@ -13,7 +13,7 @@ You can download binaries from the latest commits [here](https://github.com/obhq
 
 ## Screenshots
 
-![Game list](screenshots/game-list.png)
+![Screenshots](screenshots.png)
 
 Thanks to [VocalFan](https://github.com/VocalFan) for the awesome icon!
 

@@ -26,20 +26,17 @@ else()
     list(APPEND LLVM_OPTS -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE})
 endif()
 
-# Fix Warning for DOWNLOAD_EXTRACT_TIMESTAMP
-if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
-    cmake_policy(SET CMP0135 NEW)
+if(OB_BUILD_LLVM)
+    ExternalProject_Add(llvm
+        URL https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.1/llvm-project-17.0.1.src.tar.xz
+        URL_HASH SHA256=b0e42aafc01ece2ca2b42e3526f54bebc4b1f1dc8de6e34f46a0446a13e882b9
+        DOWNLOAD_NO_PROGRESS true
+        CMAKE_ARGS -Wno-dev
+        CMAKE_CACHE_ARGS ${LLVM_OPTS}
+        SOURCE_SUBDIR llvm
+        BUILD_ALWAYS ON
+        INSTALL_DIR ${CMAKE_SOURCE_DIR}/lib/llvm)
 endif()
-
-ExternalProject_Add(llvm
-    URL https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.1/llvm-project-17.0.1.src.tar.xz
-    URL_HASH SHA256=b0e42aafc01ece2ca2b42e3526f54bebc4b1f1dc8de6e34f46a0446a13e882b9
-    DOWNLOAD_NO_PROGRESS true
-    CMAKE_ARGS -Wno-dev
-    CMAKE_CACHE_ARGS ${LLVM_OPTS}
-    SOURCE_SUBDIR llvm
-    BUILD_ALWAYS ON
-    INSTALL_DIR ${CMAKE_SOURCE_DIR}/lib/llvm)
 
 # Setup Rust target.
 set(RUST_OUTPUTS $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/debug,${CMAKE_CURRENT_SOURCE_DIR}/target/release>)
@@ -62,7 +59,9 @@ ExternalProject_Add(core
     TEST_COMMAND cargo test
     TEST_EXCLUDE_FROM_MAIN ON)
 
-add_dependencies(core llvm)
+if(OB_BUILD_LLVM)
+    add_dependencies(core llvm)
+endif()
 
 # Setup application target.
 add_executable(obliteration WIN32 MACOSX_BUNDLE

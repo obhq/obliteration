@@ -104,20 +104,24 @@ impl MemoryManager {
         // Check for other flags if we are supported.
         if flags.alignment() != 0 {
             todo!("mmap with MAP_ALIGNED or MAP_ALIGNED_SUPER");
-        } else if flags.contains(MappingFlags::MAP_FIXED) {
-            todo!("mmap with MAP_FIXED");
-        } else if flags.contains(MappingFlags::MAP_HASSEMAPHORE) {
-            todo!("mmap with MAP_HASSEMAPHORE");
-        } else if flags.contains(MappingFlags::MAP_NOCORE) {
-            todo!("mmap with MAP_NOCORE");
-        } else if flags.contains(MappingFlags::MAP_NOSYNC) {
-            todo!("mmap with MAP_NOSYNC");
-        } else if flags.contains(MappingFlags::MAP_PREFAULT_READ) {
-            todo!("mmap with MAP_PREFAULT_READ");
         } else if !is_private {
             todo!("mmap with MAP_SHARED");
+        } else if flags.contains(MappingFlags::MAP_FIXED) {
+            todo!("mmap with MAP_FIXED");
+        } else if flags.contains(MappingFlags::MAP_INHERIT) {
+            todo!("mmap with MAP_INHERIT");
+        } else if flags.contains(MappingFlags::MAP_NOEXTEND) {
+            todo!("mmap with MAP_INHERIT");
+        } else if flags.contains(MappingFlags::MAP_HASSEMAPHORE) {
+            todo!("mmap with MAP_HASSEMAPHORE");
         } else if flags.contains(MappingFlags::MAP_STACK) {
             todo!("mmap with MAP_STACK");
+        } else if flags.contains(MappingFlags::MAP_NOSYNC) {
+            todo!("mmap with MAP_NOSYNC");
+        } else if flags.contains(MappingFlags::MAP_NOCORE) {
+            todo!("mmap with MAP_NOCORE");
+        } else if flags.contains(MappingFlags::MAP_PREFAULT_READ) {
+            todo!("mmap with MAP_PREFAULT_READ");
         }
 
         // Round len up to virtual page boundary.
@@ -586,6 +590,7 @@ bitflags! {
         const MAP_PRIVATE = 0x00000002;
         const MAP_FIXED = 0x00000010;
         const MAP_INHERIT = 0x00000080;
+        const MAP_NOEXTEND = 0x00000100;
         const MAP_HASSEMAPHORE = 0x00000200;
         const MAP_STACK = 0x00000400;
         const MAP_NOSYNC = 0x00000800;

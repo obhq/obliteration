@@ -21,6 +21,11 @@ QPixmap Game::icon() const
     // Construct icon object.
     QPixmap icon(path.c_str());
 
+    // For games with large icon sizes.
+    if (icon.width() != 512 || icon.height() != 512) {
+        icon = icon.scaled(512, 512, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    }
+
     icon.setDevicePixelRatio(2.0);
 
     return icon;
@@ -42,6 +47,8 @@ void GameListModel::add(Game *game)
     beginInsertRows(QModelIndex(), m_items.size(), m_items.size());
     m_items.append(game);
     endInsertRows();
+
+    sort(0);
 }
 
 void GameListModel::clear()
@@ -72,4 +79,23 @@ QVariant GameListModel::data(const QModelIndex &index, int role) const
     default:
         return QVariant();
     }
+}
+
+void GameListModel::sort(int column, Qt::SortOrder order)
+{
+    if (column != 0)
+        return;
+
+    emit layoutAboutToBeChanged();
+
+    auto compare = [order](const Game* a, const Game* b) {
+        if (order == Qt::AscendingOrder)
+            return a->name().toLower() < b->name().toLower();
+        else
+            return a->name().toLower() > b->name().toLower();
+    };
+
+    std::sort(m_items.begin(), m_items.end(), compare);
+
+    emit layoutChanged();
 }

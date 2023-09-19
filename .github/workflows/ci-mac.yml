@@ -9,7 +9,7 @@ jobs:
       CMAKE_BUILD_PARALLEL_LEVEL: '3'
     steps:
     - name: Checkout source
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Generate cache keys
       run: |
         echo "cargo=${{ runner.os }}-cargo" >> $GITHUB_OUTPUT

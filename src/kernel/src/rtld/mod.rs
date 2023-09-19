@@ -1,36 +1,41 @@
-pub use mem::*;
-pub use module::*;
+pub use self::mem::*;
+pub use self::module::*;
 
+use self::resolver::{ResolveFlags, SymbolResolver};
 use crate::errno::{Errno, EINVAL, ENOEXEC};
 use crate::fs::{Fs, VPath, VPathBuf};
 use crate::memory::{MmapError, MprotectError, Protections};
 use bitflags::bitflags;
-use elf::{DynamicFlags, Elf, FileInfo, FileType, ReadProgramError, Relocation, Symbol};
+use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation};
+use gmtx::{GroupMutex, GroupMutexReadGuard, MutexGroup};
 use std::fs::File;
 use std::num::NonZeroI32;
 use std::ops::Deref;
-use std::ptr::write_unaligned;
-use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard};
+use std::ptr::{read_unaligned, write_unaligned};
+use std::sync::Arc;
 use thiserror::Error;
 
 mod mem;
 mod module;
+mod resolver;
 
 /// An implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/libexec/rtld-elf/rtld.c.
 #[derive(Debug)]
-pub struct RuntimeLinker<'a> {
-    fs: &'a Fs,
-    list: RwLock<Vec<Arc<Module>>>,      // obj_list + obj_tail
-    app: Arc<Module>,                    // obj_main
-    kernel: RwLock<Option<Arc<Module>>>, // obj_kernel
-    next_id: Mutex<u32>,                 // idtable on proc
-    tls_max: Mutex<u32>,                 // tls_max_index
+pub struct RuntimeLinker {
+    fs: &'static Fs,
+    list: GroupMutex<Vec<Arc<Module>>>,      // obj_list + obj_tail
+    app: Arc<Module>,                        // obj_main
+    kernel: GroupMutex<Option<Arc<Module>>>, // obj_kernel
+    mains: GroupMutex<Vec<Arc<Module>>>,     // list_main
+    next_id: GroupMutex<u32>,                // proc::idtable
+    tls: GroupMutex<TlsAlloc>,
     flags: LinkerFlags,
+    mtxg: Arc<MutexGroup>,
 }
 
-impl<'a> RuntimeLinker<'a> {
-    pub fn new(fs: &'a Fs) -> Result<Self, RuntimeLinkerError> {
+impl RuntimeLinker {
+    pub fn new(fs: &'static Fs) -> Result<Self, RuntimeLinkerError> {
         // Get path to eboot.bin.
         let mut path = fs.app().join("app0").unwrap();
 
@@ -71,7 +76,8 @@ impl<'a> RuntimeLinker<'a> {
 
         // TODO: Apply remaining checks from exec_self_imgact.
         // Map eboot.bin.
-        let app = match Module::map(elf, base, 0, 1) {
+        let mtxg = MutexGroup::new();
+        let app = match Module::map(elf, base, 0, 1, &mtxg) {
             Ok(v) => Arc::new(v),
             Err(e) => return Err(RuntimeLinkerError::MapExeFailed(file.into_vpath(), e)),
         };
@@ -96,17 +102,24 @@ impl<'a> RuntimeLinker<'a> {
         // TODO: Apply logic from gs_is_event_handler_process_exec.
         Ok(Self {
             fs,
-            list: RwLock::new(Vec::from([app.clone()])),
-            app,
-            kernel: RwLock::default(),
-            next_id: Mutex::new(1),
-            tls_max: Mutex::new(1),
+            list: mtxg.new_member(vec![app.clone()]),
+            app: app.clone(),
+            kernel: mtxg.new_member(None),
+            mains: mtxg.new_member(vec![app]),
+            next_id: mtxg.new_member(1),
+            tls: mtxg.new_member(TlsAlloc {
+                max_index: 1,
+                last_offset: 0,
+                last_size: 0,
+                static_space: 0,
+            }),
             flags,
+            mtxg,
         })
     }
 
-    pub fn list(&self) -> RwLockReadGuard<'_, Vec<Arc<Module>>> {
-        self.list.read().unwrap()
+    pub fn list(&self) -> GroupMutexReadGuard<'_, Vec<Arc<Module>>> {
+        self.list.read()
     }
 
     pub fn app(&self) -> &Arc<Module> {
@@ -114,16 +127,16 @@ impl<'a> RuntimeLinker<'a> {
     }
 
     pub fn kernel(&self) -> Option<Arc<Module>> {
-        self.kernel.read().unwrap().clone()
+        self.kernel.read().clone()
     }
 
     pub fn set_kernel(&self, md: Arc<Module>) {
-        *self.kernel.write().unwrap() = Some(md);
+        *self.kernel.write() = Some(md);
     }
 
     /// This method **ALWAYS** load the specified module without checking if the same module is
     /// already loaded.
-    pub fn load(&mut self, path: &VPath) -> Result<Arc<Module>, LoadError> {
+    pub fn load(&mut self, path: &VPath, main: bool) -> Result<Arc<Module>, LoadError> {
         // Get file.
         let file = match self.fs.get_file(path) {
             Some(v) => v,
@@ -146,35 +159,35 @@ impl<'a> RuntimeLinker<'a> {
 
         // TODO: Apply remaining checks from self_load_shared_object.
         // Search for TLS free slot.
-        let mut list = self.list.write().unwrap();
-        let mut tls_max = self.tls_max.lock().unwrap();
+        let mut list = self.list.write();
         let tls = elf.tls().map(|i| &elf.programs()[i]);
         let tls = if tls.map(|p| p.memory_size()).unwrap_or(0) == 0 {
             0
         } else {
-            let mut r = 1;
+            let mut alloc = self.tls.write();
+            let mut index = 1;
 
             loop {
                 // Check if the current value has been used.
-                if !list.iter().any(|m| m.tls_index() == r) {
+                if !list.iter().any(|m| m.tls_index() == index) {
                     break;
                 }
 
                 // Someone already use the current value, increase the value and try again.
-                r += 1;
+                index += 1;
 
-                if r > *tls_max {
-                    *tls_max = r;
+                if index > alloc.max_index {
+                    alloc.max_index = index;
                     break;
                 }
             }
 
-            r
+            index
         };
 
         // Map file.
-        let mut next_id = self.next_id.lock().unwrap();
-        let module = match Module::map(elf, 0, *next_id, tls) {
+        let mut next_id = self.next_id.write();
+        let module = match Module::map(elf, 0, *next_id, tls, &self.mtxg) {
             Ok(v) => Arc::new(v),
             Err(e) => return Err(LoadError::MapFailed(e)),
         };
@@ -191,8 +204,13 @@ impl<'a> RuntimeLinker<'a> {
             *module.flags_mut() |= ModuleFlags::UNK1;
         }
 
-        // Load to loaded list.
+        // Add to list.
         list.push(module.clone());
+
+        if main {
+            self.mains.write().push(module.clone());
+        }
+
         *next_id += 1;
 
         Ok(module)
@@ -201,9 +219,53 @@ impl<'a> RuntimeLinker<'a> {
     /// # Safety
     /// No other threads may access the memory of all loaded modules.
     pub unsafe fn relocate(&self) -> Result<(), RelocateError> {
+        // Initialize TLS.
+        let mains = self.mains.read();
+        let mut alloc = self.tls.write();
+
+        for md in mains.deref() {
+            // Skip if already initialized.
+            let mut flags = md.flags_mut();
+
+            if flags.contains(ModuleFlags::TLS_DONE) {
+                continue;
+            }
+
+            // Check if the module has TLS.
+            if let Some(t) = md.tls_info().filter(|i| i.size() != 0) {
+                // TODO: Refactor this for readability.
+                let off = if md.tls_index() == 1 {
+                    (t.size() + t.align() - 1) & !(t.align() - 1)
+                } else {
+                    ((alloc.last_offset + t.size()) + t.align() - 1) & !(t.align() - 1)
+                };
+
+                if alloc.static_space != 0 && off > alloc.static_space {
+                    continue;
+                }
+
+                *md.tls_offset_mut() = off;
+
+                alloc.last_offset = off;
+                alloc.last_size = t.size();
+            }
+
+            // Set TLS_DONE.
+            *flags |= ModuleFlags::TLS_DONE;
+        }
+
+        drop(alloc);
+
         // TODO: Check what the PS4 actually doing.
-        for m in self.list.read().unwrap().deref() {
-            self.relocate_single(m)?;
+        let list = self.list.read();
+        let mains = self.mains.read();
+        let resolver = SymbolResolver::new(
+            &mains,
+            self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::UNK2),
+        );
+
+        for m in list.deref() {
+            self.relocate_single(m, &resolver)?;
         }
 
         Ok(())
@@ -213,7 +275,11 @@ impl<'a> RuntimeLinker<'a> {
     ///
     /// # Safety
     /// No other thread may access the module memory.
-    unsafe fn relocate_single(&self, md: &Arc<Module>) -> Result<(), RelocateError> {
+    unsafe fn relocate_single<'b>(
+        &self,
+        md: &'b Arc<Module>,
+        resolver: &SymbolResolver<'b>,
+    ) -> Result<(), RelocateError> {
         // Unprotect the memory.
         let mut mem = match md.memory().unprotect() {
             Ok(v) => v,
@@ -221,23 +287,24 @@ impl<'a> RuntimeLinker<'a> {
         };
 
         // Apply relocations.
-        let mut relocated = md.relocated();
+        let mut relocated = md.relocated_mut();
 
-        self.relocate_rela(md, mem.as_mut(), &mut relocated)?;
+        self.relocate_rela(md, mem.as_mut(), &mut relocated, resolver)?;
 
         if !md.flags().contains(ModuleFlags::UNK4) {
-            self.relocate_plt(md, mem.as_mut(), &mut relocated)?;
+            self.relocate_plt(md, mem.as_mut(), &mut relocated, resolver)?;
         }
 
         Ok(())
     }
 
     /// See `reloc_non_plt` on the PS4 kernel for a reference.
-    fn relocate_rela(
+    fn relocate_rela<'b>(
         &self,
-        md: &Arc<Module>,
+        md: &'b Arc<Module>,
         mem: &mut [u8],
         relocated: &mut [bool],
+        resolver: &SymbolResolver<'b>,
     ) -> Result<(), RelocateError> {
         let info = md.file_info().unwrap(); // Let it panic because the PS4 assume it is available.
         let addr = mem.as_ptr() as usize;
@@ -253,24 +320,51 @@ impl<'a> RuntimeLinker<'a> {
             let offset = base + reloc.offset();
             let target = &mut mem[offset..(offset + 8)];
             let addend = reloc.addend();
+            let sym = reloc.symbol();
+            let symflags = ResolveFlags::empty();
             let value = match reloc.ty() {
                 Relocation::R_X86_64_NONE => break,
                 Relocation::R_X86_64_64 => {
-                    // TODO: Resolve symbol.
-                    continue;
+                    // TODO: Apply checks from reloc_non_plt.
+                    let (md, sym) = match resolver.resolve_with_local(md, sym, symflags) {
+                        Some((md, sym)) => (md, md.symbol(sym).unwrap()),
+                        None => continue,
+                    };
+
+                    // TODO: Apply checks from reloc_non_plt.
+                    let mem = md.memory();
+
+                    (mem.addr() + mem.base() + sym.value()).wrapping_add_signed(addend)
+                }
+                Relocation::R_X86_64_GLOB_DAT => {
+                    // TODO: Apply checks from reloc_non_plt.
+                    let (md, sym) = match resolver.resolve_with_local(md, sym, symflags) {
+                        Some((md, sym)) => (md, md.symbol(sym).unwrap()),
+                        None => continue,
+                    };
+
+                    // TODO: Apply checks from reloc_non_plt.
+                    let mem = md.memory();
+
+                    mem.addr() + mem.base() + sym.value()
                 }
                 Relocation::R_X86_64_RELATIVE => {
                     // TODO: Apply checks from reloc_non_plt.
                     (addr + base).wrapping_add_signed(addend)
                 }
                 Relocation::R_X86_64_DTPMOD64 => {
-                    // TODO: Resolve symbol.
-                    continue;
+                    // TODO: Apply checks from reloc_non_plt.
+                    let value: usize = match resolver.resolve_with_local(md, sym, symflags) {
+                        Some((md, _)) => md.tls_index().try_into().unwrap(),
+                        None => continue,
+                    };
+
+                    unsafe { read_unaligned(target.as_ptr() as *const usize) + value }
                 }
                 v => return Err(RelocateError::UnsupportedRela(md.path().to_owned(), v)),
             };
 
-            // Write the value.
+            // TODO: Check what relocate_text_or_data_segment on the PS4 is doing.
             unsafe { write_unaligned(target.as_mut_ptr() as *mut usize, value) };
 
             relocated[i] = true;
@@ -280,11 +374,12 @@ impl<'a> RuntimeLinker<'a> {
     }
 
     /// See `reloc_jmplots` on the PS4 for a reference.
-    fn relocate_plt(
+    fn relocate_plt<'b>(
         &self,
-        md: &Arc<Module>,
+        md: &'b Arc<Module>,
         mem: &mut [u8],
         relocated: &mut [bool],
+        resolver: &SymbolResolver<'b>,
     ) -> Result<(), RelocateError> {
         // Do nothing if not a dynamic module.
         let info = match md.file_info() {
@@ -312,7 +407,7 @@ impl<'a> RuntimeLinker<'a> {
             }
 
             // Resolve symbol.
-            let sym = match self.resolve_symbol(md, reloc.symbol(), info) {
+            let sym = match resolver.resolve_with_local(md, reloc.symbol(), ResolveFlags::UNK1) {
                 Some((m, s)) => {
                     m.memory().addr() + m.memory().base() + m.symbol(s).unwrap().value()
                 }
@@ -331,41 +426,15 @@ impl<'a> RuntimeLinker<'a> {
 
         Ok(())
     }
+}
 
-    fn resolve_symbol(
-        &self,
-        md: &Arc<Module>,
-        index: usize,
-        info: &FileInfo,
-    ) -> Option<(Arc<Module>, usize)> {
-        // Check if symbol index is valid.
-        let sym = md.symbols().get(index)?;
-
-        if index >= info.nchains() {
-            return None;
-        }
-
-        if self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::UNK2) {
-            // Get library and module.
-            let (li, mi) = match sym.decode_name() {
-                Some(v) => (
-                    md.libraries().iter().find(|&l| l.id() == v.1),
-                    md.modules().iter().find(|&m| m.id() == v.2),
-                ),
-                None => (None, None),
-            };
-        } else {
-            todo!("resolve symbol with SDK version < 0x5000000");
-        }
-
-        // Return this symbol if the binding is local. The reason we don't check this in the
-        // first place is because we want to maintain the same behavior as the PS4.
-        if sym.binding() == Symbol::STB_LOCAL {
-            return Some((md.clone(), index));
-        }
-
-        None
-    }
+/// Contains how TLS was allocated so far.
+#[derive(Debug)]
+pub struct TlsAlloc {
+    max_index: u32,      // tls_max_index
+    last_offset: usize,  // tls_last_offset
+    last_size: usize,    // tls_last_size
+    static_space: usize, // tls_static_space
 }
 
 bitflags! {

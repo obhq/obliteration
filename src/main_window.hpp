@@ -16,9 +16,12 @@ public:
 
 protected:
     void closeEvent(QCloseEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
 
 private slots:
+    void tabChanged();
     void installPkg();
+    void openSystemFolder();
     void reportIssue();
     void aboutObliteration();
     void requestGamesContextMenu(const QPoint &pos);

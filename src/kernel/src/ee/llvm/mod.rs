@@ -11,13 +11,14 @@ use thiserror::Error;
 mod codegen;
 
 /// An implementation of [`ExecutionEngine`] using JIT powered by LLVM IR.
-pub struct LlvmEngine<'a, 'b: 'a> {
-    rtld: &'a RuntimeLinker<'b>,
+pub struct LlvmEngine {
+    llvm: &'static Llvm,
+    rtld: &'static RuntimeLinker,
 }
 
-impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
-    pub fn new(rtld: &'a RuntimeLinker<'b>) -> Self {
-        Self { rtld }
+impl LlvmEngine {
+    pub fn new(llvm: &'static Llvm, rtld: &'static RuntimeLinker) -> Self {
+        Self { llvm, rtld }
     }
 
     pub fn lift_initial_modules(&mut self) -> Result<(), LiftError> {
@@ -29,7 +30,10 @@ impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
         Ok(())
     }
 
-    fn lift(&self, module: &Module) -> Result<crate::llvm::module::ExecutionEngine<'b>, LiftError> {
+    fn lift(
+        &self,
+        module: &Module,
+    ) -> Result<crate::llvm::module::ExecutionEngine<'static>, LiftError> {
         // Get a list of public functions.
         let path = module.path();
         let targets = match module.entry() {
@@ -49,7 +53,7 @@ impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
         disasm.fixup();
 
         // Lift the public functions.
-        let mut lifting = Llvm::current().create_module(path);
+        let mut lifting = self.llvm.create_module(path);
         let mut codegen = Codegen::new(disasm, &mut lifting);
 
         for &addr in &targets {
@@ -70,7 +74,7 @@ impl<'a, 'b: 'a> LlvmEngine<'a, 'b> {
     }
 }
 
-impl<'a, 'b: 'a> ExecutionEngine for LlvmEngine<'a, 'b> {
+impl ExecutionEngine for LlvmEngine {
     type RunErr = RunError;
 
     unsafe fn run(&mut self, arg: EntryArg, stack: VPages) -> Result<(), Self::RunErr> {

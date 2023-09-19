@@ -1,11 +1,12 @@
 use super::MapError;
 use crate::memory::{MappingFlags, MemoryManager, MprotectError, Protections};
 use elf::{Elf, ProgramFlags, ProgramType};
+use gmtx::{GroupMutex, GroupMutexWriteGuard, MutexGroup};
 use std::alloc::Layout;
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
 use std::marker::PhantomData;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::Arc;
 use thiserror::Error;
 
 /// A memory of the loaded module.
@@ -15,17 +16,20 @@ pub struct Memory {
     segments: Vec<MemorySegment>,
     base: usize,
     text: usize,
-    relro: usize,
     data: usize,
     obcode: usize,
-    obcode_sealed: Mutex<usize>,
+    obcode_sealed: GroupMutex<usize>,
     obdata: usize,
-    obdata_sealed: Mutex<usize>,
-    destructors: Mutex<Vec<Box<dyn FnOnce()>>>,
+    obdata_sealed: GroupMutex<usize>,
+    destructors: GroupMutex<Vec<Box<dyn FnOnce()>>>,
 }
 
 impl Memory {
-    pub(super) fn new(image: &Elf<File>, base: usize) -> Result<Self, MapError> {
+    pub(super) fn new(
+        image: &Elf<File>,
+        base: usize,
+        mtxg: &Arc<MutexGroup>,
+    ) -> Result<Self, MapError> {
         // It seems like the PS4 expected to have only one for each text, data and relo program.
         let mut segments: Vec<MemorySegment> = Vec::with_capacity(3 + 2);
         let mut text: Option<usize> = None;
@@ -96,7 +100,6 @@ impl Memory {
         }
 
         let text = text.unwrap_or_else(|| todo!("(S)ELF with no executable program"));
-        let relro = relro.unwrap_or_else(|| todo!("(S)ELF with no PT_SCE_RELRO"));
         let data = data.unwrap_or_else(|| todo!("(S)ELF with no data program"));
 
         // Make sure no any segment is overlapped.
@@ -169,13 +172,12 @@ impl Memory {
             segments,
             base,
             text,
-            relro,
             data,
             obcode,
-            obcode_sealed: Mutex::new(0),
+            obcode_sealed: mtxg.new_member(0),
             obdata,
-            obdata_sealed: Mutex::new(0),
-            destructors: Mutex::default(),
+            obdata_sealed: mtxg.new_member(0),
+            destructors: mtxg.new_member(Vec::new()),
         })
     }
 
@@ -199,10 +201,6 @@ impl Memory {
         &self.segments[self.text]
     }
 
-    pub fn relro(&self) -> usize {
-        self.relro
-    }
-
     pub fn data_segment(&self) -> &MemorySegment {
         &self.segments[self.data]
     }
@@ -217,7 +215,7 @@ impl Memory {
     /// No other threads may execute the memory in the segment until the returned [`CodeWorkspace`]
     /// has been dropped.
     pub unsafe fn code_workspace(&self) -> Result<CodeWorkspace<'_>, CodeWorkspaceError> {
-        let sealed = self.obcode_sealed.lock().unwrap();
+        let sealed = self.obcode_sealed.write();
         let seg = match self.unprotect_segment(self.obcode) {
             Ok(v) => v,
             Err(e) => {
@@ -234,7 +232,7 @@ impl Memory {
     }
 
     pub fn push_data<T: 'static>(&self, value: T) -> Option<*mut T> {
-        let mut sealed = self.obdata_sealed.lock().unwrap();
+        let mut sealed = self.obdata_sealed.write();
         let seg = &self.segments[self.obdata];
         let ptr = unsafe { self.ptr.add(seg.start + *sealed) };
         let available = seg.len - *sealed;
@@ -256,8 +254,7 @@ impl Memory {
         unsafe { std::ptr::write(ptr, value) };
 
         self.destructors
-            .lock()
-            .unwrap()
+            .write()
             .push(Box::new(move || unsafe { std::ptr::drop_in_place(ptr) }));
 
         // Seal the memory.
@@ -328,7 +325,7 @@ impl Memory {
 impl Drop for Memory {
     fn drop(&mut self) {
         // Run destructors.
-        let destructors = self.destructors.get_mut().unwrap();
+        let destructors = self.destructors.get_mut();
 
         for d in destructors.drain(..).rev() {
             d();
@@ -347,13 +344,12 @@ impl Debug for Memory {
             .field("segments", &self.segments)
             .field("base", &self.base)
             .field("text", &self.text)
-            .field("relro", &self.relro)
             .field("data", &self.data)
             .field("obcode", &self.obcode)
             .field("obcode_sealed", &self.obcode_sealed)
             .field("obdata", &self.obdata)
             .field("obdata_sealed", &self.obdata_sealed)
-            .field("destructors", &self.destructors.lock().unwrap().len())
+            .field("destructors", &self.destructors.read().len())
             .finish()
     }
 }
@@ -458,7 +454,7 @@ pub struct CodeWorkspace<'a> {
     ptr: *mut u8,
     len: usize,
     seg: UnprotectedSegment<'a>,
-    sealed: MutexGuard<'a, usize>,
+    sealed: GroupMutexWriteGuard<'a, usize>,
 }
 
 impl<'a> CodeWorkspace<'a> {

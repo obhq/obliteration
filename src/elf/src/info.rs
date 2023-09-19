@@ -14,14 +14,13 @@ pub struct FileInfo {
     pltrelsz: usize,
     relasz: usize,
     strsz: usize,
-    hash: usize,
     jmprel: usize,
     rela: usize,
     strtab: usize,
     symtab: usize,
-    hashsz: usize,
     symtabsz: usize,
-    nchains: usize,
+    buckets: Vec<u32>,
+    chains: Vec<u32>,
 }
 
 impl FileInfo {
@@ -77,13 +76,13 @@ impl FileInfo {
                 | DynamicTag::DT_SCE_UNK12
                 | DynamicTag::DT_SCE_UNK13
                 | DynamicTag::DT_SCE_UNK14
-                | DynamicTag::DT_SCE_UNK15
+                | DynamicTag::DT_SCE_STUB_MODULE_NAME
                 | DynamicTag::DT_SCE_UNK16
-                | DynamicTag::DT_SCE_UNK17
+                | DynamicTag::DT_SCE_STUB_MODULE_VERSION
                 | DynamicTag::DT_SCE_UNK18
-                | DynamicTag::DT_SCE_UNK19
+                | DynamicTag::DT_SCE_STUB_LIBRARY_NAME
                 | DynamicTag::DT_SCE_UNK20
-                | DynamicTag::DT_SCE_UNK21
+                | DynamicTag::DT_SCE_STUB_LIBRARY_VERSION
                 | DynamicTag::DT_SCE_UNK22
                 | DynamicTag::DT_SCE_UNK23
                 | DynamicTag::DT_SCE_UNK24
@@ -152,7 +151,7 @@ impl FileInfo {
                 DynamicTag::DT_PREINIT_ARRAYSZ => {}
                 DynamicTag::DT_SCE_UNK1 => {}
                 DynamicTag::DT_SCE_FINGERPRINT => fingerprint = true,
-                DynamicTag::DT_SCE_FILENAME => filename = true,
+                DynamicTag::DT_SCE_ORIGINAL_FILENAME => filename = true,
                 DynamicTag::DT_SCE_MODULE_INFO => module_info = true,
                 DynamicTag::DT_SCE_NEEDED_MODULE => {}
                 DynamicTag::DT_SCE_MODULE_ATTR => {}
@@ -202,9 +201,18 @@ impl FileInfo {
             return Err(FileInfoError::NoPltgot);
         }
 
-        // Extract informations.
+        // Read hash table.
         let hash: usize = hash.try_into().unwrap();
-        let nchains = LE::read_u32(&data[(hash + 4)..]);
+        let hashsz: usize = hashsz.try_into().unwrap();
+        let hash = &data[hash..(hash + hashsz)];
+        let nbuckets: usize = LE::read_u32(&hash).try_into().unwrap();
+        let nchains: usize = LE::read_u32(&hash[4..]).try_into().unwrap();
+        let mut buckets = vec![0; nbuckets];
+        let mut chains = vec![0; nchains];
+        let (first, last) = hash.split_at(8 + nbuckets * 4);
+
+        LE::read_u32_into(&first[8..], &mut buckets);
+        LE::read_u32_into(last, &mut chains);
 
         // TODO: Check acquire_per_file_info_obj to see what we have missing here.
         Ok(Self {
@@ -215,14 +223,13 @@ impl FileInfo {
             pltrelsz: pltrelsz.try_into().unwrap(),
             relasz: relasz.try_into().unwrap(),
             strsz: strsz.try_into().unwrap(),
-            hash,
             jmprel: jmprel.try_into().unwrap(),
             rela: rela.try_into().unwrap(),
             strtab: strtab.try_into().unwrap(),
             symtab: symtab.try_into().unwrap(),
-            hashsz: hashsz.try_into().unwrap(),
             symtabsz: symtabsz.try_into().unwrap(),
-            nchains: nchains.try_into().unwrap(),
+            buckets,
+            chains,
         })
     }
 
@@ -258,8 +265,12 @@ impl FileInfo {
         Symbols::new(&self.data[self.symtab..(self.symtab + self.symtabsz)], self)
     }
 
-    pub fn nchains(&self) -> usize {
-        self.nchains
+    pub fn buckets(&self) -> &[u32] {
+        self.buckets.as_ref()
+    }
+
+    pub fn chains(&self) -> &[u32] {
+        self.chains.as_ref()
     }
 
     pub fn read_module(&self, data: [u8; 8]) -> Result<ModuleInfo, ReadModuleError> {
@@ -351,7 +362,7 @@ pub enum FileInfoError {
     #[error("no DT_SCE_FINGERPRINT")]
     NoFingerprint,
 
-    #[error("no DT_SCE_FILENAME")]
+    #[error("no DT_SCE_ORIGINAL_FILENAME")]
     NoFilename,
 
     #[error("no DT_SCE_MODULE_INFO")]

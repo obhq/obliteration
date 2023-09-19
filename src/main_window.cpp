@@ -24,6 +24,7 @@
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QProgressDialog>
+#include <QResizeEvent>
 #include <QSettings>
 #include <QStyleHints>
 #include <QTabWidget>
@@ -53,12 +54,15 @@ MainWindow::MainWindow() :
     // File menu.
     auto fileMenu = menuBar()->addMenu("&File");
     auto installPkg = new QAction(QIcon(svgPath + "archive-arrow-down-outline.svg"), "&Install PKG", this);
+    auto openSystemFolder = new QAction("Open System &Folder", this);
     auto quit = new QAction("&Quit", this);
 
     connect(installPkg, &QAction::triggered, this, &MainWindow::installPkg);
+    connect(openSystemFolder, &QAction::triggered, this, &MainWindow::openSystemFolder);
     connect(quit, &QAction::triggered, this, &MainWindow::close);
 
     fileMenu->addAction(installPkg);
+    fileMenu->addAction(openSystemFolder);
     fileMenu->addSeparator();
     fileMenu->addAction(quit);
 
@@ -107,6 +111,8 @@ MainWindow::MainWindow() :
 
     m_tab->addTab(m_games, QIcon(svgPath + "view-comfy.svg"), "Games");
 
+    connect(m_tab, &QTabWidget::currentChanged, this, &MainWindow::tabChanged);
+
     // Setup log view.
     auto log = new QPlainTextEdit();
 
@@ -151,6 +157,7 @@ bool MainWindow::loadGames()
 
     // Load games
     progress.setLabelText("Loading games...");
+    auto gameList = reinterpret_cast<GameListModel *>(m_games->model());
 
     for (auto &gameId : games) {
         if (progress.wasCanceled() || !loadGame(gameId)) {
@@ -159,6 +166,8 @@ bool MainWindow::loadGames()
 
         progress.setValue(++step);
     }
+
+    gameList->sort(0, Qt::AscendingOrder); // TODO add ability to select descending order (button?)
 
     return true;
 }
@@ -195,6 +204,26 @@ void MainWindow::closeEvent(QCloseEvent *event)
     }
 
     QMainWindow::closeEvent(event);
+}
+
+void MainWindow::resizeEvent(QResizeEvent *event)
+{
+    // Allows the games list to resort if window is resized.
+    if (m_tab->currentIndex() == 0) {
+        m_games->updateGeometry();
+        m_games->doItemsLayout();
+    }
+
+    QMainWindow::resizeEvent(event);
+}
+
+void MainWindow::tabChanged()
+{
+    // Update games list if window was resized on another tab.
+    if (m_tab->currentIndex() == 0) {
+        m_games->updateGeometry();
+        m_games->doItemsLayout();
+    }
 }
 
 void MainWindow::installPkg()
@@ -292,6 +321,12 @@ void MainWindow::installPkg()
     }
 }
 
+void MainWindow::openSystemFolder()
+{
+    QString folderPath = readSystemDirectorySetting();
+    QDesktopServices::openUrl(QUrl::fromLocalFile(folderPath));
+}
+
 void MainWindow::reportIssue()
 {
     if (!QDesktopServices::openUrl(QUrl("https://github.com/obhq/obliteration/issues"))) {
@@ -318,8 +353,10 @@ void MainWindow::requestGamesContextMenu(const QPoint &pos)
 
     // Setup menu.
     QMenu menu(this);
-    QAction settings("&Settings", this);
+    QAction openFolder("Open Game &Folder", this); // Opens game folder.
+    QAction settings("&Settings", this); // TODO LATER: Blank Settings
 
+    menu.addAction(&openFolder);
     menu.addAction(&settings);
 
     // Show menu.
@@ -329,7 +366,10 @@ void MainWindow::requestGamesContextMenu(const QPoint &pos)
         return;
     }
 
-    if (selected == &settings) {
+    if (selected == &openFolder) {
+        QString folderPath = game->directory();
+        QDesktopServices::openUrl(QUrl::fromLocalFile(folderPath));
+    } else if (selected == &settings) {
         GameSettingsDialog dialog(game, this);
         dialog.exec();
     }
