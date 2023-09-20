@@ -9,6 +9,7 @@ use crate::regmgr::RegMgr;
 use crate::rtld::{ModuleFlags, RuntimeLinker};
 use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK};
 use crate::sysctl::Sysctl;
+use crate::ucred::{AuthInfo, Privilege};
 use crate::{info, warn};
 use kernel_macros::cpu_abi;
 use std::mem::{size_of, zeroed};
@@ -75,6 +76,7 @@ impl Syscalls {
                 i.args[3].into(),
                 i.args[4].into(),
             ),
+            587 => self.get_authinfo(i.args[0].try_into().unwrap(), i.args[1].into()),
             592 => self.dynlib_get_list(i.args[0].into(), i.args[1].into(), i.args[2].into()),
             598 => self.dynlib_get_proc_param(i.args[0].into(), i.args[1].into()),
             599 => self.dynlib_process_needed_and_relocate(),
@@ -98,7 +100,6 @@ impl Syscalls {
 
         // Write the output.
         *o = v;
-
         0
     }
 
@@ -241,7 +242,7 @@ impl Syscalls {
 
                 match self.regmgr.decode_key(v1, v2, td.cred(), 2) {
                     Ok(k) => {
-                        info!("Setting {k} to {value}.");
+                        info!("Setting registry {k} to {value}.");
                         self.regmgr.set_int(k, value)
                     }
                     Err(e) => e as i32,
@@ -261,11 +262,45 @@ impl Syscalls {
         };
 
         // Write the result.
-        if r < 1 {
+        if r < 0 {
             warn!("regmgr_call({ty}) was failed with {r:#x}.");
         }
 
         *buf = r;
+
+        Ok(Output::ZERO)
+    }
+
+    unsafe fn get_authinfo(&self, pid: i32, buf: *mut AuthInfo) -> Result<Output, Error> {
+        // Check if PID is our process.
+        if pid != 0 && pid != self.vp.id().get() {
+            return Err(Error::Raw(ESRCH));
+        }
+
+        // Check privilege.
+        let mut info: AuthInfo = zeroed();
+        let td = VThread::current();
+        let cred = self.vp.cred();
+
+        if td.has_priv(Privilege::SCE686) {
+            todo!("get_authinfo with privilege 686");
+        } else {
+            // TODO: Refactor this for readability.
+            let paid = cred.auth().paid.wrapping_add(0xc7ffffffeffffffc);
+
+            if paid < 0xf && ((0x6001u32 >> (paid & 0x3f)) & 1) != 0 {
+                info.paid = cred.auth().paid;
+            }
+
+            info.caps[0] = cred.auth().caps[0] & 0x7000000000000000;
+        }
+
+        // Copy into.
+        if buf.is_null() {
+            todo!("get_authinfo with buf = null");
+        } else {
+            *buf = info;
+        }
 
         Ok(Output::ZERO)
     }

@@ -2,7 +2,7 @@ pub use self::appinfo::*;
 pub use self::rlimit::*;
 pub use self::thread::*;
 
-use crate::ucred::Ucred;
+use crate::ucred::{AuthInfo, Ucred};
 use gmtx::{GroupMutex, MutexGroup};
 use llt::{SpawnError, Thread};
 use std::num::NonZeroI32;
@@ -23,6 +23,7 @@ mod thread;
 pub struct VProc {
     id: NonZeroI32,                                  // p_pid
     threads: GroupMutex<Vec<Arc<VThread>>>,          // p_threads
+    cred: Ucred,                                     // p_ucred
     limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
     app_info: AppInfo,
     mtxg: Arc<MutexGroup>,
@@ -30,12 +31,14 @@ pub struct VProc {
 
 impl VProc {
     pub fn new() -> Result<Self, VProcError> {
+        // TODO: Check how ucred is constructed for a process.
         let mtxg = MutexGroup::new();
         let limits = Self::load_limits()?;
 
         Ok(Self {
             id: Self::new_id(),
             threads: mtxg.new_member(Vec::new()),
+            cred: Ucred::new(AuthInfo::EXE.clone()),
             limits,
             app_info: AppInfo::new(),
             mtxg,
@@ -44,6 +47,10 @@ impl VProc {
 
     pub fn id(&self) -> NonZeroI32 {
         self.id
+    }
+
+    pub fn cred(&self) -> &Ucred {
+        &self.cred
     }
 
     pub fn limit(&self, ty: usize) -> Option<&ResourceLimit> {
@@ -73,7 +80,10 @@ impl VProc {
         // Lock the list before spawn the thread to prevent race condition if the new thread run
         // too fast and found out they is not in our list.
         let mut threads = self.threads.write();
-        let td = Arc::new(VThread::new(Self::new_id(), Ucred::new(), &self.mtxg));
+
+        // TODO: Check how ucred is constructed for a thread.
+        let cred = Ucred::new(AuthInfo::EXE.clone());
+        let td = Arc::new(VThread::new(Self::new_id(), cred, &self.mtxg));
         let active = Box::new(ActiveThread {
             proc: self,
             id: td.id(),
