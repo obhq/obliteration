@@ -12,6 +12,8 @@ impl RegKey {
     pub const SYSTEM_SPECIFIC_IDU_MODE: Self = Self(0x02860100);
     pub const SYSTEM_SPECIFIC_SHOW_MODE: Self = Self(0x02860200);
     pub const SYSTEM_SPECIFIC_ARCADE_MODE: Self = Self(0x02860300);
+    pub const SYSTEM_LIBC_INTMEM_PEAK_SIZE: Self = Self(0x02C30100);
+    pub const SYSTEM_LIBC_INTMEM_SHORTAGE_COUNT: Self = Self(0x02C30200);
     pub const AUDIOOUT_CONNECTOR_TYPE: Self = Self(0x0B060000);
     pub const AUDIOOUT_CODEC: Self = Self(0x0B070000);
     pub const NET_WIFI_FREQ_BAND: Self = Self(0x141E0500);
@@ -42,6 +44,12 @@ impl Display for RegKey {
             }
             Self::SYSTEM_SPECIFIC_ARCADE_MODE => {
                 f.write_str("SCE_REGMGR_ENT_KEY_SYSTEM_SPECIFIC_arcade_mode")
+            }
+            Self::SYSTEM_LIBC_INTMEM_PEAK_SIZE => {
+                f.write_str("SCE_REGMGR_ENT_KEY_SYSTEM_LIBC_intmem_peak_size")
+            }
+            Self::SYSTEM_LIBC_INTMEM_SHORTAGE_COUNT => {
+                f.write_str("SCE_REGMGR_ENT_KEY_SYSTEM_LIBC_intmem_shortage_count")
             }
             Self::AUDIOOUT_CONNECTOR_TYPE => {
                 f.write_str("SCE_REGMGR_ENT_KEY_AUDIOOUT_connector_type")

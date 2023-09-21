@@ -1,5 +1,5 @@
 use crate::signal::SignalSet;
-use crate::ucred::Ucred;
+use crate::ucred::{Privilege, Ucred};
 use gmtx::{GroupMutex, GroupMutexWriteGuard, MutexGroup};
 use llt::{SpawnError, Thread};
 use std::num::NonZeroI32;
@@ -42,6 +42,11 @@ impl VThread {
 
     pub fn sigmask_mut(&self) -> GroupMutexWriteGuard<'_, SignalSet> {
         self.sigmask.write()
+    }
+
+    /// An implementation of `priv_check`.
+    pub fn has_priv(&self, p: Privilege) -> bool {
+        self.cred.has_priv(p)
     }
 
     pub(super) unsafe fn spawn<F>(
