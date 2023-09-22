@@ -21,6 +21,7 @@ mod disasm;
 mod ee;
 mod errno;
 mod fs;
+mod idt;
 mod llvm;
 mod log;
 mod memory;
@@ -150,7 +151,7 @@ fn main() -> ExitCode {
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
 
-    let ld: &'static mut RuntimeLinker = match RuntimeLinker::new(fs) {
+    let ld: &'static mut RuntimeLinker = match RuntimeLinker::new(fs, vp) {
         Ok(v) => Box::leak(v.into()),
         Err(e) => {
             error!(e, "Initialize failed");

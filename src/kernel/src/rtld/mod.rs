@@ -5,6 +5,7 @@ use self::resolver::{ResolveFlags, SymbolResolver};
 use crate::errno::{Errno, EINVAL, ENOEXEC};
 use crate::fs::{Fs, VPath, VPathBuf};
 use crate::memory::{MmapError, MprotectError, Protections};
+use crate::process::{ProcObj, VProc};
 use bitflags::bitflags;
 use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation};
 use gmtx::{GroupMutex, GroupMutexReadGuard, MutexGroup};
@@ -24,18 +25,18 @@ mod resolver;
 #[derive(Debug)]
 pub struct RuntimeLinker {
     fs: &'static Fs,
+    vp: &'static VProc,
     list: GroupMutex<Vec<Arc<Module>>>,      // obj_list + obj_tail
     app: Arc<Module>,                        // obj_main
     kernel: GroupMutex<Option<Arc<Module>>>, // obj_kernel
     mains: GroupMutex<Vec<Arc<Module>>>,     // list_main
-    next_id: GroupMutex<u32>,                // proc::idtable
     tls: GroupMutex<TlsAlloc>,
     flags: LinkerFlags,
     mtxg: Arc<MutexGroup>,
 }
 
 impl RuntimeLinker {
-    pub fn new(fs: &'static Fs) -> Result<Self, RuntimeLinkerError> {
+    pub fn new(fs: &'static Fs, vp: &'static VProc) -> Result<Self, RuntimeLinkerError> {
         // Get path to eboot.bin.
         let mut path = fs.app().join("app0").unwrap();
 
@@ -102,11 +103,11 @@ impl RuntimeLinker {
         // TODO: Apply logic from gs_is_event_handler_process_exec.
         Ok(Self {
             fs,
+            vp,
             list: mtxg.new_member(vec![app.clone()]),
             app: app.clone(),
             kernel: mtxg.new_member(None),
             mains: mtxg.new_member(vec![app]),
-            next_id: mtxg.new_member(1),
             tls: mtxg.new_member(TlsAlloc {
                 max_index: 1,
                 last_offset: 0,
@@ -186,19 +187,30 @@ impl RuntimeLinker {
         };
 
         // Map file.
-        let mut next_id = self.next_id.write();
-        let module = match Module::map(elf, 0, *next_id, tls, &self.mtxg) {
-            Ok(v) => Arc::new(v),
-            Err(e) => return Err(LoadError::MapFailed(e)),
-        };
+        let mut table = self.vp.objects_mut();
+        let (entry, _) = table.alloc(|id| {
+            let id: u32 = (id + 1).try_into().unwrap();
+            let md = match Module::map(elf, 0, id, tls, &self.mtxg) {
+                Ok(v) => v,
+                Err(e) => return Err(LoadError::MapFailed(e)),
+            };
 
-        if module.flags().contains(ModuleFlags::TEXT_REL) {
-            return Err(LoadError::ImpureText);
-        }
+            if md.flags().contains(ModuleFlags::TEXT_REL) {
+                return Err(LoadError::ImpureText);
+            }
+
+            Ok(ProcObj::Module(Arc::new(md)))
+        })?;
+
+        entry.set_flags(0x2000);
 
         // TODO: Check the call to sceSblAuthMgrIsLoadable in the self_load_shared_object on the PS4
         // to see how it is return the value.
         let name = path.file_name().unwrap();
+        let module = match entry.data() {
+            ProcObj::Module(v) => v,
+            _ => unreachable!(),
+        };
 
         if name != "libc.sprx" && name != "libSceFios2.sprx" {
             *module.flags_mut() |= ModuleFlags::UNK1;
@@ -211,9 +223,7 @@ impl RuntimeLinker {
             self.mains.write().push(module.clone());
         }
 
-        *next_id += 1;
-
-        Ok(module)
+        Ok(module.clone())
     }
 
     /// # Safety

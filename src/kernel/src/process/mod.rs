@@ -2,8 +2,10 @@ pub use self::appinfo::*;
 pub use self::rlimit::*;
 pub use self::thread::*;
 
+use crate::idt::IdTable;
+use crate::rtld::Module;
 use crate::ucred::{AuthInfo, Ucred};
-use gmtx::{GroupMutex, MutexGroup};
+use gmtx::{GroupMutex, GroupMutexWriteGuard, MutexGroup};
 use llt::{SpawnError, Thread};
 use std::num::NonZeroI32;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -25,6 +27,7 @@ pub struct VProc {
     threads: GroupMutex<Vec<Arc<VThread>>>,          // p_threads
     cred: Ucred,                                     // p_ucred
     limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
+    objects: GroupMutex<IdTable<ProcObj>>,
     app_info: AppInfo,
     mtxg: Arc<MutexGroup>,
 }
@@ -39,6 +42,7 @@ impl VProc {
             id: Self::new_id(),
             threads: mtxg.new_member(Vec::new()),
             cred: Ucred::new(AuthInfo::EXE.clone()),
+            objects: mtxg.new_member(IdTable::new(0x1000)),
             limits,
             app_info: AppInfo::new(),
             mtxg,
@@ -55,6 +59,10 @@ impl VProc {
 
     pub fn limit(&self, ty: usize) -> Option<&ResourceLimit> {
         self.limits.get(ty)
+    }
+
+    pub fn objects_mut(&self) -> GroupMutexWriteGuard<'_, IdTable<ProcObj>> {
+        self.objects.write()
     }
 
     pub fn app_info(&self) -> &AppInfo {
@@ -136,6 +144,25 @@ impl Drop for ActiveThread {
         let index = threads.iter().position(|td| td.id() == self.id).unwrap();
 
         threads.remove(index);
+    }
+}
+
+/// An object in the process object table.
+#[derive(Debug)]
+pub enum ProcObj {
+    Module(Arc<Module>),
+    Named(NamedObj),
+}
+
+#[derive(Debug)]
+pub struct NamedObj {
+    name: String,
+    data: usize,
+}
+
+impl NamedObj {
+    pub fn new(name: String, data: usize) -> Self {
+        Self { name, data }
     }
 }
 
