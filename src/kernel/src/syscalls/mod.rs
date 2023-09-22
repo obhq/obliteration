@@ -2,9 +2,9 @@ pub use input::*;
 pub use output::*;
 
 use self::error::Error;
-use crate::errno::{EINVAL, ENOENT, ENOMEM, ENOSYS, EPERM, ESRCH};
+use crate::errno::{EFAULT, EINVAL, ENOENT, ENOMEM, ENOSYS, EPERM, ESRCH};
 use crate::fs::VPathBuf;
-use crate::process::{VProc, VThread};
+use crate::process::{NamedObj, ProcObj, VProc, VThread};
 use crate::regmgr::RegMgr;
 use crate::rtld::{ModuleFlags, RuntimeLinker};
 use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK};
@@ -12,6 +12,7 @@ use crate::sysctl::Sysctl;
 use crate::ucred::{AuthInfo, Privilege};
 use crate::{info, warn};
 use kernel_macros::cpu_abi;
+use std::ffi::c_char;
 use std::mem::{size_of, zeroed};
 use std::ptr::read;
 use std::sync::Arc;
@@ -75,6 +76,11 @@ impl Syscalls {
                 i.args[2].into(),
                 i.args[3].into(),
                 i.args[4].into(),
+            ),
+            557 => self.namedobj_create(
+                i.args[0].into(),
+                i.args[1].into(),
+                i.args[2].try_into().unwrap(),
             ),
             587 => self.get_authinfo(i.args[0].try_into().unwrap(), i.args[1].into()),
             592 => self.dynlib_get_list(i.args[0].into(), i.args[1].into(), i.args[2].into()),
@@ -269,6 +275,43 @@ impl Syscalls {
         *buf = r;
 
         Ok(Output::ZERO)
+    }
+
+    unsafe fn namedobj_create(
+        &self,
+        name: *const c_char,
+        data: usize,
+        flags: u32,
+    ) -> Result<Output, Error> {
+        // Check name.
+        let mut len = None;
+
+        if name.is_null() {
+            return Err(Error::Raw(EINVAL));
+        }
+
+        for i in 0..32 {
+            if *name.add(i) == 0 {
+                len = Some(i);
+                break;
+            }
+        }
+
+        let name = match len {
+            Some(i) => std::str::from_utf8(std::slice::from_raw_parts(name as _, i)).unwrap(),
+            None => return Err(Error::Raw(EFAULT)),
+        };
+
+        // Allocate the entry.
+        let mut table = self.vp.objects_mut();
+        let (entry, id) = table
+            .alloc::<_, ()>(|_| Ok(ProcObj::Named(NamedObj::new(name.to_owned(), data))))
+            .unwrap();
+
+        entry.set_name(Some(name.to_owned()));
+        entry.set_flags((flags as u16) | 0x1000);
+
+        Ok(id.into())
     }
 
     unsafe fn get_authinfo(&self, pid: i32, buf: *mut AuthInfo) -> Result<Output, Error> {
