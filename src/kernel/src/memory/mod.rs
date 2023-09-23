@@ -3,12 +3,13 @@ pub use page::*;
 use self::iter::StartFromMut;
 use self::storage::Storage;
 use crate::errno::{Errno, EINVAL, ENOMEM};
+use crate::process::VProc;
 use bitflags::bitflags;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::num::NonZeroI32;
 use std::ptr::null_mut;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{Arc, RwLock};
 use thiserror::Error;
 
 mod iter;
@@ -18,6 +19,7 @@ mod storage;
 /// Manage all paged memory that can be seen by a PS4 app.
 #[derive(Debug)]
 pub struct MemoryManager {
+    vp: &'static VProc,
     page_size: usize,
     allocation_granularity: usize,
     allocations: RwLock<BTreeMap<usize, Alloc>>, // Key is Alloc::addr.
@@ -27,11 +29,9 @@ impl MemoryManager {
     /// Size of a memory page on PS4.
     pub const VIRTUAL_PAGE_SIZE: usize = 0x4000;
 
-    /// # Panics
-    /// If this method called a second time.
-    pub fn new() -> &'static Self {
+    pub fn new(vp: &'static VProc) -> Self {
         // Check if page size on the host is supported. We don't need to check allocation
-        // granularity because it is always multiply of page size, which is a correct value.
+        // granularity because it is always multiply by page size, which is a correct value.
         let (page_size, allocation_granularity) = Self::get_memory_model();
 
         if page_size > Self::VIRTUAL_PAGE_SIZE || (Self::VIRTUAL_PAGE_SIZE % page_size) != 0 {
@@ -43,22 +43,12 @@ impl MemoryManager {
             panic!("Your system is using an unsupported page size.");
         }
 
-        MEMORY_MANAGER
-            .set(Self {
-                page_size,
-                allocation_granularity,
-                allocations: RwLock::new(BTreeMap::new()),
-            })
-            .unwrap();
-
-        // SAFETY: This is safe because we just set its value on the above.
-        unsafe { MEMORY_MANAGER.get().unwrap_unchecked() }
-    }
-
-    /// # Panics
-    /// If [`new()`] has not been called.
-    pub fn current() -> &'static MemoryManager {
-        MEMORY_MANAGER.get().unwrap()
+        Self {
+            vp,
+            page_size,
+            allocation_granularity,
+            allocations: RwLock::default(),
+        }
     }
 
     /// Gets size of page on the host system.
@@ -76,52 +66,64 @@ impl MemoryManager {
         addr: usize,
         len: usize,
         prot: Protections,
-        flags: MappingFlags,
+        mut flags: MappingFlags,
         fd: i32,
-        offset: i64,
+        offset: usize,
     ) -> Result<VPages<'_>, MmapError> {
-        // Chech addr and len.
-        if addr != 0 {
-            todo!("mmap with non-zero addr");
-        } else if len == 0 {
-            return Err(MmapError::ZeroLen);
+        // Remove unknown protections.
+        let prot = prot.intersection(Protections::all());
+
+        // TODO: Check why the PS4 check RBP register.
+        if flags.contains(MappingFlags::UNK1) {
+            todo!("mmap with flags & 0x200000");
         }
 
-        // Check prot.
-        if prot.contains_unknown() {
-            todo!("mmap with prot {prot:#010x}");
+        if len == 0 {
+            todo!("mmap with len = 0");
         }
 
-        // Check if either MAP_SHARED or MAP_PRIVATE is specified. not both.
-        // See https://stackoverflow.com/a/39945292/1829232 for how each flag is working.
-        let is_private = match flags.behavior() {
-            MappingFlags::BEHAVIOR_NONE => return Err(MmapError::NoBehavior),
-            MappingFlags::BEHAVIOR_SHARED => false,
-            MappingFlags::BEHAVIOR_PRIVATE => true,
-            _ => return Err(MmapError::InvalidBehavior),
-        };
-
-        // Check for other flags if we are supported.
-        if flags.alignment() != 0 {
-            todo!("mmap with MAP_ALIGNED or MAP_ALIGNED_SUPER");
-        } else if !is_private {
-            todo!("mmap with MAP_SHARED");
-        } else if flags.contains(MappingFlags::MAP_FIXED) {
-            todo!("mmap with MAP_FIXED");
-        } else if flags.contains(MappingFlags::MAP_INHERIT) {
-            todo!("mmap with MAP_INHERIT");
-        } else if flags.contains(MappingFlags::MAP_NOEXTEND) {
-            todo!("mmap with MAP_INHERIT");
-        } else if flags.contains(MappingFlags::MAP_HASSEMAPHORE) {
-            todo!("mmap with MAP_HASSEMAPHORE");
+        if flags.intersects(MappingFlags::MAP_NOEXTEND | MappingFlags::MAP_ANON) {
+            if offset != 0 {
+                return Err(MmapError::NonZeroOffset);
+            } else if fd != -1 {
+                return Err(MmapError::NonNegativeFd);
+            }
         } else if flags.contains(MappingFlags::MAP_STACK) {
-            todo!("mmap with MAP_STACK");
-        } else if flags.contains(MappingFlags::MAP_NOSYNC) {
-            todo!("mmap with MAP_NOSYNC");
-        } else if flags.contains(MappingFlags::MAP_NOCORE) {
-            todo!("mmap with MAP_NOCORE");
-        } else if flags.contains(MappingFlags::MAP_PREFAULT_READ) {
-            todo!("mmap with MAP_PREFAULT_READ");
+            todo!("mmap with flags & 0x400");
+        }
+
+        flags.remove(MappingFlags::UNK2);
+        flags.remove(MappingFlags::UNK3);
+
+        // TODO: Refactor this for readability.
+        if ((offset & 0x3fff) ^ 0xffffffffffffbfff) < len {
+            return Err(MmapError::InvalidOffset);
+        }
+
+        if flags.contains(MappingFlags::MAP_FIXED) {
+            todo!("mmap with flags & 0x10");
+        } else if addr == 0 {
+            if (self.vp.app_info().unk1() & 2) != 0 {
+                todo!("mmap with addr = 0 and appinfo.unk1 & 2 != 0");
+            }
+        } else if (addr & 0xfffffffdffffffff) == 0 {
+            // TODO: Check what the is value at offset 0x140 on vm_map.
+        } else if addr == 0x880000000 {
+            todo!("mmap with addr = 0x880000000");
+        }
+
+        if flags.contains(MappingFlags::MAP_NOEXTEND) {
+            todo!("mmap with flags & 0x100");
+        } else if !flags.contains(MappingFlags::MAP_ANON) {
+            todo!("mmap with flags & 0x1000 = 0");
+        }
+
+        if flags.contains(MappingFlags::UNK1) {
+            todo!("mmap with flags & 0x200000 != 0");
+        }
+
+        if (self.vp.app_info().unk1() & 2) != 0 {
+            todo!("mmap with addr = 0 and appinfo.unk1 & 2 != 0");
         }
 
         // Round len up to virtual page boundary.
@@ -130,12 +132,7 @@ impl MemoryManager {
             r => len + (Self::VIRTUAL_PAGE_SIZE - r),
         };
 
-        // Check mapping source.
-        if flags.contains(MappingFlags::MAP_ANON) {
-            self.mmap_anon(len, prot, fd, offset)
-        } else {
-            todo!("mmap with non-anonymous");
-        }
+        self.map(addr, len, prot)
     }
 
     pub fn munmap(&self, addr: *mut u8, len: usize) -> Result<(), MunmapError> {
@@ -373,24 +370,13 @@ impl MemoryManager {
         Ok(())
     }
 
-    fn mmap_anon(
-        &self,
-        len: usize,
-        prot: Protections,
-        fd: i32,
-        offset: i64,
-    ) -> Result<VPages<'_>, MmapError> {
+    /// See `vm_mmap` on the PS4 for a reference.
+    fn map(&self, addr: usize, len: usize, prot: Protections) -> Result<VPages<'_>, MmapError> {
+        // TODO: Check what is PS4 doing here.
         use std::collections::btree_map::Entry;
 
-        // Check if arguments valid.
-        if fd >= 0 {
-            return Err(MmapError::NonNegativeFd);
-        } else if offset != 0 {
-            return Err(MmapError::NonZeroOffset);
-        }
-
         // Do allocation.
-        let alloc = match self.alloc(len, prot) {
+        let alloc = match self.alloc(addr, len, prot) {
             Ok(v) => v,
             Err(e) => {
                 if e.kind() == std::io::ErrorKind::OutOfMemory {
@@ -412,7 +398,7 @@ impl MemoryManager {
         Ok(VPages::new(self, alloc.addr, alloc.len))
     }
 
-    fn alloc(&self, len: usize, prot: Protections) -> Result<Alloc, std::io::Error> {
+    fn alloc(&self, addr: usize, len: usize, prot: Protections) -> Result<Alloc, std::io::Error> {
         use self::storage::Memory;
 
         // Determine how to allocate.
@@ -511,24 +497,20 @@ unsafe impl Send for Alloc {}
 
 bitflags! {
     /// Flags to tell what access is possible for the virtual page.
+    #[repr(transparent)]
     #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct Protections: u32 {
         const CPU_READ = 0x00000001;
         const CPU_WRITE = 0x00000002;
         const CPU_EXEC = 0x00000004;
         const CPU_MASK = Self::CPU_READ.bits() | Self::CPU_WRITE.bits() | Self::CPU_EXEC.bits();
-        const GPU_EXEC = 0x00000008;
         const GPU_READ = 0x00000010;
         const GPU_WRITE = 0x00000020;
-        const GPU_MASK = Self::GPU_EXEC.bits() | Self::GPU_READ.bits() | Self::GPU_WRITE.bits();
+        const GPU_MASK = Self::GPU_READ.bits() | Self::GPU_WRITE.bits();
     }
 }
 
 impl Protections {
-    pub fn contains_unknown(self) -> bool {
-        (self.bits() >> 6) != 0
-    }
-
     #[cfg(unix)]
     fn into_host(self) -> std::ffi::c_int {
         use libc::{PROT_EXEC, PROT_NONE, PROT_READ, PROT_WRITE};
@@ -584,55 +566,32 @@ impl Display for Protections {
 
 bitflags! {
     /// Flags for [`MemoryManager::mmap()`].
+    #[repr(transparent)]
     #[derive(Clone, Copy)]
     pub struct MappingFlags: u32 {
-        const MAP_SHARED = 0x00000001;
         const MAP_PRIVATE = 0x00000002;
         const MAP_FIXED = 0x00000010;
-        const MAP_INHERIT = 0x00000080;
         const MAP_NOEXTEND = 0x00000100;
-        const MAP_HASSEMAPHORE = 0x00000200;
         const MAP_STACK = 0x00000400;
-        const MAP_NOSYNC = 0x00000800;
         const MAP_ANON = 0x00001000;
-        const MAP_NOCORE = 0x00020000;
-        const MAP_PREFAULT_READ = 0x00040000;
-        const MAP_ALIGNED_SUPER = 0x01000000;
-    }
-}
-
-impl MappingFlags {
-    pub const BEHAVIOR_NONE: u32 = 0;
-    pub const BEHAVIOR_SHARED: u32 = 1;
-    pub const BEHAVIOR_PRIVATE: u32 = 2;
-
-    pub fn behavior(self) -> u32 {
-        self.bits() & 3
-    }
-
-    /// Gets the value that was supplied with MAP_ALIGNED.
-    pub fn alignment(self) -> usize {
-        (self.bits() >> 24) as usize
+        const MAP_GUARD = 0x00002000;
+        const UNK2 = 0x00010000;
+        const UNK3 = 0x00100000;
+        const UNK1 = 0x00200000;
     }
 }
 
 /// Errors for [`MemoryManager::mmap()`].
 #[derive(Debug, Error)]
 pub enum MmapError {
-    #[error("len is zero")]
-    ZeroLen,
-
-    #[error("either MAP_SHARED or MAP_PRIVATE is not specified")]
-    NoBehavior,
-
-    #[error("both MAP_SHARED and MAP_PRIVATE is specified")]
-    InvalidBehavior,
-
     #[error("MAP_ANON is specified with non-negative file descriptor")]
     NonNegativeFd,
 
     #[error("MAP_ANON is specified with non-zero offset")]
     NonZeroOffset,
+
+    #[error("invalid offset")]
+    InvalidOffset,
 
     #[error("no memory available for {0} bytes")]
     NoMem(usize),
@@ -641,11 +600,7 @@ pub enum MmapError {
 impl Errno for MmapError {
     fn errno(&self) -> NonZeroI32 {
         match self {
-            Self::ZeroLen
-            | Self::NoBehavior
-            | Self::InvalidBehavior
-            | Self::NonNegativeFd
-            | Self::NonZeroOffset => EINVAL,
+            Self::NonNegativeFd | Self::NonZeroOffset | Self::InvalidOffset => EINVAL,
             Self::NoMem(_) => ENOMEM,
         }
     }
@@ -696,5 +651,3 @@ impl Errno for MprotectError {
         }
     }
 }
-
-static MEMORY_MANAGER: OnceLock<MemoryManager> = OnceLock::new();

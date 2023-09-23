@@ -11,6 +11,7 @@ use thiserror::Error;
 
 /// A memory of the loaded module.
 pub struct Memory {
+    mm: &'static MemoryManager,
     ptr: *mut u8,
     len: usize,
     segments: Vec<MemorySegment>,
@@ -26,6 +27,7 @@ pub struct Memory {
 
 impl Memory {
     pub(super) fn new(
+        mm: &'static MemoryManager,
         image: &Elf<File>,
         base: usize,
         mtxg: &Arc<MutexGroup>,
@@ -142,7 +144,6 @@ impl Memory {
         segments.push(segment);
 
         // Allocate pages.
-        let mm = MemoryManager::current();
         let mut pages = match mm.mmap(
             0,
             len,
@@ -167,6 +168,7 @@ impl Memory {
         }
 
         Ok(Self {
+            mm,
             ptr: pages.into_raw(),
             len,
             segments,
@@ -278,11 +280,12 @@ impl Memory {
         let len = seg.len;
         let prot = Protections::CPU_READ | Protections::CPU_WRITE;
 
-        if let Err(e) = MemoryManager::current().mprotect(ptr, len, prot) {
+        if let Err(e) = self.mm.mprotect(ptr, len, prot) {
             return Err(UnprotectSegmentError::MprotectFailed(ptr, len, prot, e));
         }
 
         Ok(UnprotectedSegment {
+            mm: self.mm,
             ptr,
             len,
             prot: seg.prot,
@@ -310,11 +313,12 @@ impl Memory {
         // Unprotect the memory.
         let prot = Protections::CPU_READ | Protections::CPU_WRITE;
 
-        if let Err(e) = MemoryManager::current().mprotect(self.ptr, end, prot) {
+        if let Err(e) = self.mm.mprotect(self.ptr, end, prot) {
             return Err(UnprotectError::MprotectFailed(self.ptr, end, prot, e));
         }
 
         Ok(UnprotectedMemory {
+            mm: self.mm,
             ptr: self.ptr,
             len: end,
             segments: &self.segments,
@@ -332,7 +336,7 @@ impl Drop for Memory {
         }
 
         // Unmap the memory.
-        MemoryManager::current().munmap(self.ptr, self.len).unwrap();
+        self.mm.munmap(self.ptr, self.len).unwrap();
     }
 }
 
@@ -394,6 +398,7 @@ impl MemorySegment {
 
 /// A memory segment in an unprotected form.
 pub struct UnprotectedSegment<'a> {
+    mm: &'static MemoryManager,
     ptr: *mut u8,
     len: usize,
     prot: Protections,
@@ -408,14 +413,13 @@ impl<'a> AsMut<[u8]> for UnprotectedSegment<'a> {
 
 impl<'a> Drop for UnprotectedSegment<'a> {
     fn drop(&mut self) {
-        MemoryManager::current()
-            .mprotect(self.ptr, self.len, self.prot)
-            .unwrap();
+        self.mm.mprotect(self.ptr, self.len, self.prot).unwrap();
     }
 }
 
 /// The unprotected form of [`Memory`], not including our custom segments.
 pub struct UnprotectedMemory<'a> {
+    mm: &'static MemoryManager,
     ptr: *mut u8,
     len: usize,
     segments: &'a [MemorySegment],
@@ -430,9 +434,7 @@ impl<'a> Drop for UnprotectedMemory<'a> {
 
             let addr = unsafe { self.ptr.add(s.start()) };
 
-            MemoryManager::current()
-                .mprotect(addr, s.len(), s.prot())
-                .unwrap();
+            self.mm.mprotect(addr, s.len(), s.prot()).unwrap();
         }
     }
 }

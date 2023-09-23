@@ -12,6 +12,15 @@ impl Output {
     pub const ZERO: Output = Output { rax: 0, rdx: 0 };
 }
 
+impl<T> From<*mut T> for Output {
+    fn from(value: *mut T) -> Self {
+        Self {
+            rax: value as _,
+            rdx: 0,
+        }
+    }
+}
+
 impl From<usize> for Output {
     fn from(value: usize) -> Self {
         Self { rax: value, rdx: 0 }

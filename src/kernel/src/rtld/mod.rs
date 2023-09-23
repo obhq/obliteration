@@ -4,7 +4,7 @@ pub use self::module::*;
 use self::resolver::{ResolveFlags, SymbolResolver};
 use crate::errno::{Errno, EINVAL, ENOEXEC};
 use crate::fs::{Fs, VPath, VPathBuf};
-use crate::memory::{MmapError, MprotectError, Protections};
+use crate::memory::{MemoryManager, MmapError, MprotectError, Protections};
 use crate::process::{ProcObj, VProc};
 use bitflags::bitflags;
 use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation};
@@ -25,6 +25,7 @@ mod resolver;
 #[derive(Debug)]
 pub struct RuntimeLinker {
     fs: &'static Fs,
+    mm: &'static MemoryManager,
     vp: &'static VProc,
     list: GroupMutex<Vec<Arc<Module>>>,      // obj_list + obj_tail
     app: Arc<Module>,                        // obj_main
@@ -36,7 +37,11 @@ pub struct RuntimeLinker {
 }
 
 impl RuntimeLinker {
-    pub fn new(fs: &'static Fs, vp: &'static VProc) -> Result<Self, RuntimeLinkerError> {
+    pub fn new(
+        fs: &'static Fs,
+        mm: &'static MemoryManager,
+        vp: &'static VProc,
+    ) -> Result<Self, RuntimeLinkerError> {
         // Get path to eboot.bin.
         let mut path = fs.app().join("app0").unwrap();
 
@@ -78,7 +83,7 @@ impl RuntimeLinker {
         // TODO: Apply remaining checks from exec_self_imgact.
         // Map eboot.bin.
         let mtxg = MutexGroup::new();
-        let app = match Module::map(elf, base, 0, 1, &mtxg) {
+        let app = match Module::map(mm, elf, base, 0, 1, &mtxg) {
             Ok(v) => Arc::new(v),
             Err(e) => return Err(RuntimeLinkerError::MapExeFailed(file.into_vpath(), e)),
         };
@@ -103,6 +108,7 @@ impl RuntimeLinker {
         // TODO: Apply logic from gs_is_event_handler_process_exec.
         Ok(Self {
             fs,
+            mm,
             vp,
             list: mtxg.new_member(vec![app.clone()]),
             app: app.clone(),
@@ -190,7 +196,7 @@ impl RuntimeLinker {
         let mut table = self.vp.objects_mut();
         let (entry, _) = table.alloc(|id| {
             let id: u32 = (id + 1).try_into().unwrap();
-            let md = match Module::map(elf, 0, id, tls, &self.mtxg) {
+            let md = match Module::map(self.mm, elf, 0, id, tls, &self.mtxg) {
                 Ok(v) => v,
                 Err(e) => return Err(LoadError::MapFailed(e)),
             };
