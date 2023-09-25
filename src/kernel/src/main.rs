@@ -105,6 +105,17 @@ fn main() -> ExitCode {
 
     let llvm: &'static Llvm = Box::leak(Llvm::new().into());
 
+    // Initialize virtual process.
+    info!("Initializing virtual process.");
+
+    let vp: &'static VProc = match VProc::new() {
+        Ok(v) => Box::leak(v.into()),
+        Err(e) => {
+            error!(e, "Initialize failed");
+            return ExitCode::FAILURE;
+        }
+    };
+
     // Initialize filesystem.
     info!("Initializing file system.");
 
@@ -119,7 +130,7 @@ fn main() -> ExitCode {
     // Initialize memory manager.
     info!("Initializing memory manager.");
 
-    let mm = MemoryManager::new();
+    let mm: &'static MemoryManager = Box::leak(MemoryManager::new(vp).into());
     let mut log = info!();
 
     writeln!(log, "Page size is             : {}", mm.page_size()).unwrap();
@@ -137,21 +148,10 @@ fn main() -> ExitCode {
 
     let regmgr: &'static RegMgr = Box::leak(RegMgr::new().into());
 
-    // Initialize virtual process.
-    info!("Initializing virtual process.");
-
-    let vp: &'static VProc = match VProc::new() {
-        Ok(v) => Box::leak(v.into()),
-        Err(e) => {
-            error!(e, "Initialize failed");
-            return ExitCode::FAILURE;
-        }
-    };
-
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
 
-    let ld: &'static mut RuntimeLinker = match RuntimeLinker::new(fs, vp) {
+    let ld: &'static mut RuntimeLinker = match RuntimeLinker::new(fs, mm, vp) {
         Ok(v) => Box::leak(v.into()),
         Err(e) => {
             error!(e, "Initialize failed");
@@ -207,7 +207,7 @@ fn main() -> ExitCode {
     info!("Initializing system call routines.");
 
     let sysctl: &'static Sysctl = Box::leak(Sysctl::new(arnd, vp).into());
-    let syscalls: &'static Syscalls = Box::leak(Syscalls::new(vp, ld, sysctl, regmgr).into());
+    let syscalls: &'static Syscalls = Box::leak(Syscalls::new(vp, mm, ld, sysctl, regmgr).into());
 
     // Bootstrap execution engine.
     info!("Initializing execution engine.");
@@ -249,7 +249,7 @@ fn main() -> ExitCode {
                 }
             }
 
-            exec(ee, arg)
+            exec(ee, arg, mm)
         }
         #[cfg(not(target_arch = "x86_64"))]
         ExecutionEngine::Native => {
@@ -266,16 +266,16 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
 
-            exec(ee, arg)
+            exec(ee, arg, mm)
         }
     }
 }
 
-fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg) -> ExitCode {
+fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg, mm: &MemoryManager) -> ExitCode {
     // TODO: Check how the PS4 allocate the stack.
     info!("Allocating application stack.");
 
-    let mut stack = match MemoryManager::current().mmap(
+    let mut stack = match mm.mmap(
         0,
         0x200000,
         arg.stack_prot(),
@@ -291,7 +291,7 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg) -> ExitCode {
     };
 
     // Set the guard page to be non-accessible.
-    if let Err(e) = MemoryManager::current().mprotect(
+    if let Err(e) = mm.mprotect(
         stack.as_mut_ptr(),
         MemoryManager::VIRTUAL_PAGE_SIZE,
         Protections::empty(),

@@ -4,6 +4,7 @@ pub use output::*;
 use self::error::Error;
 use crate::errno::{EFAULT, EINVAL, ENOENT, ENOMEM, ENOSYS, EPERM, ESRCH};
 use crate::fs::VPathBuf;
+use crate::memory::{MappingFlags, MemoryManager, Protections};
 use crate::process::{NamedObj, ProcObj, VProc, VThread};
 use crate::regmgr::RegMgr;
 use crate::rtld::{ModuleFlags, RuntimeLinker};
@@ -24,6 +25,7 @@ mod output;
 /// Provides PS4 kernel routines for PS4 process.
 pub struct Syscalls {
     vp: &'static VProc,
+    mm: &'static MemoryManager,
     ld: &'static RuntimeLinker,
     sysctl: &'static Sysctl,
     regmgr: &'static RegMgr,
@@ -32,12 +34,14 @@ pub struct Syscalls {
 impl Syscalls {
     pub fn new(
         vp: &'static VProc,
+        mm: &'static MemoryManager,
         ld: &'static RuntimeLinker,
         sysctl: &'static Sysctl,
         regmgr: &'static RegMgr,
     ) -> Self {
         Self {
             vp,
+            mm,
             ld,
             sysctl,
             regmgr,
@@ -69,6 +73,14 @@ impl Syscalls {
                 i.args[0].try_into().unwrap(),
                 i.args[1].into(),
                 i.args[2].into(),
+            ),
+            477 => self.mmap(
+                i.args[0].into(),
+                i.args[1].into(),
+                i.args[2].try_into().unwrap(),
+                i.args[3].try_into().unwrap(),
+                i.args[4].try_into().unwrap(),
+                i.args[5].into(),
             ),
             532 => self.regmgr_call(
                 i.args[0].try_into().unwrap(),
@@ -215,6 +227,21 @@ impl Syscalls {
         }
 
         Ok(Output::ZERO)
+    }
+
+    unsafe fn mmap(
+        &self,
+        addr: usize,
+        len: usize,
+        prot: Protections,
+        flags: MappingFlags,
+        fd: i32,
+        pos: usize,
+    ) -> Result<Output, Error> {
+        match self.mm.mmap(addr, len, prot, flags, fd, pos) {
+            Ok(v) => Ok(v.into_raw().into()),
+            Err(e) => Err(Error::Object(Box::new(e))),
+        }
     }
 
     unsafe fn regmgr_call(

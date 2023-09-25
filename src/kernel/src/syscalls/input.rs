@@ -49,6 +49,22 @@ impl TryFrom<Arg> for u32 {
     }
 }
 
+impl TryFrom<Arg> for crate::memory::Protections {
+    type Error = TryFromIntError;
+
+    fn try_from(v: Arg) -> Result<Self, Self::Error> {
+        Ok(Self::from_bits_retain(v.0.try_into()?))
+    }
+}
+
+impl TryFrom<Arg> for crate::memory::MappingFlags {
+    type Error = TryFromIntError;
+
+    fn try_from(v: Arg) -> Result<Self, Self::Error> {
+        Ok(Self::from_bits_retain(v.0.try_into()?))
+    }
+}
+
 /// Contains information about the loaded SELF.
 #[repr(C)]
 pub struct DynlibInfoEx {

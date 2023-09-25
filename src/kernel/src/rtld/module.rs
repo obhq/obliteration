@@ -1,6 +1,7 @@
 use super::{MapError, Memory};
 use crate::fs::{VPath, VPathBuf};
 use crate::log::{print, LogEntry};
+use crate::memory::MemoryManager;
 use bitflags::bitflags;
 use byteorder::{ByteOrder, LE};
 use elf::{
@@ -43,6 +44,7 @@ pub struct Module {
 
 impl Module {
     pub(super) fn map(
+        mm: &'static MemoryManager,
         mut image: Elf<File>,
         base: usize,
         id: u32,
@@ -50,7 +52,7 @@ impl Module {
         mtxg: &Arc<MutexGroup>,
     ) -> Result<Self, MapError> {
         // Map the image to the memory.
-        let memory = Memory::new(&image, base, mtxg)?;
+        let memory = Memory::new(mm, &image, base, mtxg)?;
 
         for (i, s) in memory.segments().iter().enumerate() {
             // Get target program.
