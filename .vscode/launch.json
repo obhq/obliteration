@@ -1,7 +1,7 @@
 {
   "configurations": [
     {
-      "name": "Main",
+      "name": "Debug - Main",
       "type": "lldb",
       "request": "launch",
       "args": [],
@@ -20,10 +20,37 @@
       }
     },
     {
-      "name": "Kernel",
+      "name": "Debug - Kernel",
       "type": "lldb",
       "request": "launch",
       "program": "${workspaceFolder}/src/target/debug/obkrnl",
+      "args": ["--debug"],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Release - Main",
+      "type": "lldb",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "windows": {
+        "program": "${workspaceFolder}/build/src/Release/Obliteration.exe",
+        "env": {
+          "Path": "${env:Path};${env:CMAKE_PREFIX_PATH}\\bin"
+        }
+      },
+      "linux": {
+        "program": "${workspaceFolder}/build/src/obliteration"
+      },
+      "osx": {
+        "program": "${workspaceFolder}/build/src/obliteration.app/Contents/MacOS/obliteration"
+      }
+    },
+    {
+      "name": "Release - Kernel",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/target/release/obkrnl",
       "args": ["--debug"],
       "cwd": "${workspaceFolder}"
     }
