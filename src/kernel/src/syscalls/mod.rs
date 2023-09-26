@@ -95,6 +95,7 @@ impl Syscalls {
                 i.args[2].try_into().unwrap(),
             ),
             587 => self.get_authinfo(i.args[0].try_into().unwrap(), i.args[1].into()),
+            588 => self.mname(i.args[0].into(), i.args[1].into(), i.args[2].into()),
             592 => self.dynlib_get_list(i.args[0].into(), i.args[1].into(), i.args[2].into()),
             598 => self.dynlib_get_proc_param(i.args[0].into(), i.args[1].into()),
             599 => self.dynlib_process_needed_and_relocate(),
@@ -238,10 +239,24 @@ impl Syscalls {
         fd: i32,
         pos: usize,
     ) -> Result<Output, Error> {
-        match self.mm.mmap(addr, len, prot, flags, fd, pos) {
-            Ok(v) => Ok(v.into_raw().into()),
-            Err(e) => Err(Error::Object(Box::new(e))),
+        // TODO: Make a proper name.
+        let pages = self.mm.mmap(addr, len, prot, "", flags, fd, pos)?;
+
+        if addr != 0 && pages.addr() != addr {
+            warn!(
+                "mmap({:#x}, {:#x}, {}, {}, {}, {}) was success with {:#x} instead of {:#x}.",
+                addr,
+                len,
+                prot,
+                flags,
+                fd,
+                pos,
+                pages.addr(),
+                addr
+            );
         }
+
+        Ok(pages.into_raw().into())
     }
 
     unsafe fn regmgr_call(
@@ -311,25 +326,12 @@ impl Syscalls {
         flags: u32,
     ) -> Result<Output, Error> {
         // Check name.
-        let mut len = None;
-
         if name.is_null() {
             return Err(Error::Raw(EINVAL));
         }
 
-        for i in 0..32 {
-            if *name.add(i) == 0 {
-                len = Some(i);
-                break;
-            }
-        }
-
-        let name = match len {
-            Some(i) => std::str::from_utf8(std::slice::from_raw_parts(name as _, i)).unwrap(),
-            None => return Err(Error::Raw(EFAULT)),
-        };
-
         // Allocate the entry.
+        let name = Self::read_str(name, 32)?;
         let mut table = self.vp.objects_mut();
         let (entry, id) = table
             .alloc::<_, ()>(|_| Ok(ProcObj::Named(NamedObj::new(name.to_owned(), data))))
@@ -370,6 +372,19 @@ impl Syscalls {
             todo!("get_authinfo with buf = null");
         } else {
             *buf = info;
+        }
+
+        Ok(Output::ZERO)
+    }
+
+    unsafe fn mname(&self, addr: usize, len: usize, name: *const c_char) -> Result<Output, Error> {
+        let len = (addr & 0x3fff) + len + 0x3fff & 0xffffffffffffc000;
+        let addr = (addr & 0xffffffffffffc000) as *mut u8;
+        let name = Self::read_str(name, 32)?;
+
+        // PS4 does not check if vm_map_set_name is failed.
+        if let Err(e) = self.mm.mname(addr, len, name) {
+            warn!(e, "mname({addr:p}, {len:#x}, {name}) was failed");
         }
 
         Ok(Output::ZERO)
@@ -550,5 +565,22 @@ impl Syscalls {
 
         // TODO: Invoke id_rlock. Not sure why return ENOENT is working here.
         Err(Error::Raw(ENOENT))
+    }
+
+    /// See `copyinstr` on the PS4 for a reference.
+    unsafe fn read_str<'a>(ptr: *const c_char, max: usize) -> Result<&'a str, Error> {
+        let mut len = None;
+
+        for i in 0..max {
+            if *ptr.add(i) == 0 {
+                len = Some(i);
+                break;
+            }
+        }
+
+        match len {
+            Some(i) => Ok(std::str::from_utf8(std::slice::from_raw_parts(ptr as _, i)).unwrap()),
+            None => Err(Error::Raw(EFAULT)),
+        }
     }
 }

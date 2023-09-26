@@ -279,6 +279,7 @@ fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg, mm: &MemoryManager) ->
         0,
         0x200000,
         arg.stack_prot(),
+        "main stack",
         MappingFlags::MAP_ANON | MappingFlags::MAP_PRIVATE,
         -1,
         0,

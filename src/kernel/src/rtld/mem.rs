@@ -1,5 +1,5 @@
 use super::MapError;
-use crate::memory::{MappingFlags, MemoryManager, MprotectError, Protections};
+use crate::memory::{MappingFlags, MemoryManager, MemoryUpdateError, Protections};
 use elf::{Elf, ProgramFlags, ProgramType};
 use gmtx::{GroupMutex, GroupMutexWriteGuard, MutexGroup};
 use std::alloc::Layout;
@@ -26,11 +26,12 @@ pub struct Memory {
 }
 
 impl Memory {
-    pub(super) fn new(
+    pub(super) fn new<N: Into<String>>(
         mm: &'static MemoryManager,
         image: &Elf<File>,
         base: usize,
-        mtxg: &Arc<MutexGroup>,
+        name: N,
+        mg: &Arc<MutexGroup>,
     ) -> Result<Self, MapError> {
         // It seems like the PS4 expected to have only one for each text, data and relo program.
         let mut segments: Vec<MemorySegment> = Vec::with_capacity(3 + 2);
@@ -143,11 +144,12 @@ impl Memory {
         len += segment.len;
         segments.push(segment);
 
-        // Allocate pages.
+        // TODO: Use separate name for our code and data.
         let mut pages = match mm.mmap(
             0,
             len,
             Protections::empty(),
+            name,
             MappingFlags::MAP_ANON | MappingFlags::MAP_PRIVATE,
             -1,
             0,
@@ -176,10 +178,10 @@ impl Memory {
             text,
             data,
             obcode,
-            obcode_sealed: mtxg.new_member(0),
+            obcode_sealed: mg.new_member(0),
             obdata,
-            obdata_sealed: mtxg.new_member(0),
-            destructors: mtxg.new_member(Vec::new()),
+            obdata_sealed: mg.new_member(0),
+            destructors: mg.new_member(Vec::new()),
         })
     }
 
@@ -492,12 +494,12 @@ pub enum CodeWorkspaceError {
 #[derive(Debug, Error)]
 pub enum UnprotectSegmentError {
     #[error("cannot protect {1:#018x} bytes starting at {0:p} with {2}")]
-    MprotectFailed(*const u8, usize, Protections, #[source] MprotectError),
+    MprotectFailed(*const u8, usize, Protections, #[source] MemoryUpdateError),
 }
 
 /// Represents an error when [`Memory::unprotect()`] is failed.
 #[derive(Debug, Error)]
 pub enum UnprotectError {
     #[error("cannot protect {1:#018x} bytes starting at {0:p} with {2}")]
-    MprotectFailed(*const u8, usize, Protections, #[source] MprotectError),
+    MprotectFailed(*const u8, usize, Protections, #[source] MemoryUpdateError),
 }
