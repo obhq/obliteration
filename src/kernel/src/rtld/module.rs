@@ -43,16 +43,17 @@ pub struct Module {
 }
 
 impl Module {
-    pub(super) fn map(
+    pub(super) fn map<N: Into<String>>(
         mm: &'static MemoryManager,
         mut image: Elf<File>,
         base: usize,
+        mem_name: N,
         id: u32,
         tls_index: u32,
         mtxg: &Arc<MutexGroup>,
     ) -> Result<Self, MapError> {
         // Map the image to the memory.
-        let memory = Memory::new(mm, &image, base, mtxg)?;
+        let memory = Memory::new(mm, &image, base, mem_name, mtxg)?;
 
         for (i, s) in memory.segments().iter().enumerate() {
             // Get target program.

@@ -61,11 +61,12 @@ impl MemoryManager {
         self.allocation_granularity
     }
 
-    pub fn mmap(
+    pub fn mmap<N: Into<String>>(
         &self,
         addr: usize,
         len: usize,
         prot: Protections,
+        name: N,
         mut flags: MappingFlags,
         fd: i32,
         offset: usize,
@@ -132,7 +133,7 @@ impl MemoryManager {
             r => len + (Self::VIRTUAL_PAGE_SIZE - r),
         };
 
-        self.map(addr, len, prot)
+        self.map(addr, len, prot, name.into())
     }
 
     pub fn munmap(&self, addr: *mut u8, len: usize) -> Result<(), MunmapError> {
@@ -169,6 +170,7 @@ impl MemoryManager {
                         addr: end,
                         len: (info.end() as usize) - (end as usize),
                         prot: info.prot,
+                        name: info.name.clone(),
                         storage: info.storage.clone(),
                     });
 
@@ -202,6 +204,7 @@ impl MemoryManager {
                     addr: end,
                     len: info.len - decommit,
                     prot: info.prot,
+                    name: info.name.clone(),
                     storage: info.storage.clone(),
                 });
             } else {
@@ -238,145 +241,43 @@ impl MemoryManager {
         addr: *mut u8,
         len: usize,
         prot: Protections,
-    ) -> Result<(), MprotectError> {
-        // Check arguments. FreeBSD man page does not specify if addr should be page-aligned or len
-        // should not be zero but the Linux man page has this requirements. So let's follow the
-        // Linux man page until some games expect a different behavior.
-        let first = addr as usize;
+    ) -> Result<(), MemoryUpdateError> {
+        self.update(
+            addr,
+            len,
+            |i| i.prot != prot,
+            |i| {
+                i.storage.protect(i.addr, i.len, prot).unwrap();
+                i.prot = prot;
+            },
+        )
+    }
 
-        if first % Self::VIRTUAL_PAGE_SIZE != 0 {
-            return Err(MprotectError::UnalignedAddr);
-        } else if len == 0 {
-            return Err(MprotectError::ZeroLen);
-        }
+    /// See `vm_map_set_name` on the PS4 for a reference.
+    pub fn mname<N: AsRef<str>>(
+        &self,
+        addr: *mut u8,
+        len: usize,
+        name: N,
+    ) -> Result<(), MemoryUpdateError> {
+        let name = name.as_ref();
 
-        // Get allocations within the range.
-        let mut valid_addr = false;
-        let end = Self::align_virtual_page(unsafe { addr.add(len) });
-        let mut prev: *mut u8 = null_mut();
-        let mut targets: Vec<&mut Alloc> = Vec::new();
-        let mut allocs = self.allocations.write().unwrap();
-
-        for (_, info) in StartFromMut::new(&mut allocs, first) {
-            valid_addr = true;
-
-            // Stop if the allocation is out of range.
-            if end <= info.addr {
-                break;
-            }
-
-            // Check if the current allocation is contiguous with the previous one. FreeBSD man page
-            // did not specify this requirements but Linux is specified.
-            if !prev.is_null() && info.addr != prev {
-                return Err(MprotectError::UnmappedAddr(prev));
-            }
-
-            prev = info.end();
-
-            // If the current protection is the same we don't need to do anything.
-            if info.prot != prot {
-                targets.push(info);
-            }
-        }
-
-        if !valid_addr {
-            return Err(MprotectError::InvalidAddr);
-        }
-
-        // Change protection for allocations in the range.
-        let mut adds: Vec<Alloc> = Vec::new();
-
-        for info in targets {
-            let storage = &info.storage;
-
-            // Check if we need to split the first allocation.
-            if addr > info.addr {
-                // Split the allocation.
-                let remain = (info.end() as usize) - (addr as usize);
-                let len = if end < info.end() {
-                    (end as usize) - (addr as usize)
-                } else {
-                    remain
-                };
-
-                adds.push(Alloc {
-                    addr,
-                    len,
-                    prot,
-                    storage: storage.clone(),
-                });
-
-                // Change protection.
-                if let Err(e) = storage.protect(addr, len, prot) {
-                    panic!("Failed to change protection on {addr:p}:{len} to {prot}: {e}");
-                }
-
-                // Check if the splitting was in the middle.
-                if len != remain {
-                    adds.push(Alloc {
-                        addr: end,
-                        len: (info.end() as usize) - (end as usize),
-                        prot: info.prot,
-                        storage: storage.clone(),
-                    });
-                }
-
-                info.len -= remain;
-            } else if end < info.end() {
-                // The current allocation is the last one in the range. What we do here is we split
-                // the allocation and change the protection on the head only.
-                let remain = (info.end() as usize) - (end as usize);
-                let change = info.len - remain;
-
-                if let Err(e) = storage.protect(info.addr, change, prot) {
-                    panic!(
-                        "Failed to change protection on {:p}:{} to {}: {}",
-                        info.addr, change, prot, e
-                    );
-                }
-
-                // Split the tail.
-                adds.push(Alloc {
-                    addr: end,
-                    len: remain,
-                    prot: info.prot,
-                    storage: storage.clone(),
-                });
-
-                info.len = change;
-                info.prot = prot;
-            } else {
-                // Change protection the whole allocation.
-                if let Err(e) = storage.protect(info.addr, info.len, prot) {
-                    panic!(
-                        "Failed to change protection on {:p}:{} to {}: {}",
-                        info.addr, info.len, prot, e
-                    );
-                }
-
-                info.prot = prot;
-            }
-        }
-
-        // Add new allocation to the set.
-        for alloc in adds {
-            let addr = alloc.addr;
-
-            if allocs.insert(addr as usize, alloc).is_some() {
-                panic!("Address {addr:p} is already allocated.")
-            }
-        }
-
-        Ok(())
+        self.update(addr, len, |i| i.name != name, |i| i.name = name.to_owned())
     }
 
     /// See `vm_mmap` on the PS4 for a reference.
-    fn map(&self, addr: usize, len: usize, prot: Protections) -> Result<VPages<'_>, MmapError> {
+    fn map(
+        &self,
+        addr: usize,
+        len: usize,
+        prot: Protections,
+        name: String,
+    ) -> Result<VPages<'_>, MmapError> {
         // TODO: Check what is PS4 doing here.
         use std::collections::btree_map::Entry;
 
         // Do allocation.
-        let alloc = match self.alloc(addr, len, prot) {
+        let alloc = match self.alloc(addr, len, prot, name) {
             Ok(v) => v,
             Err(e) => {
                 if e.kind() == std::io::ErrorKind::OutOfMemory {
@@ -398,7 +299,134 @@ impl MemoryManager {
         Ok(VPages::new(self, alloc.addr, alloc.len))
     }
 
-    fn alloc(&self, addr: usize, len: usize, prot: Protections) -> Result<Alloc, std::io::Error> {
+    fn update<F, U>(
+        &self,
+        addr: *mut u8,
+        len: usize,
+        mut filter: F,
+        mut update: U,
+    ) -> Result<(), MemoryUpdateError>
+    where
+        F: FnMut(&Alloc) -> bool,
+        U: FnMut(&mut Alloc),
+    {
+        // Check arguments.
+        let first = addr as usize;
+
+        if first % Self::VIRTUAL_PAGE_SIZE != 0 {
+            return Err(MemoryUpdateError::UnalignedAddr);
+        } else if len == 0 {
+            return Err(MemoryUpdateError::ZeroLen);
+        }
+
+        // Get allocations within the range.
+        let mut valid_addr = false;
+        let end = Self::align_virtual_page(unsafe { addr.add(len) });
+        let mut prev: *mut u8 = null_mut();
+        let mut targets: Vec<&mut Alloc> = Vec::new();
+        let mut allocs = self.allocations.write().unwrap();
+
+        for (_, info) in StartFromMut::new(&mut allocs, first) {
+            valid_addr = true;
+
+            // Stop if the allocation is out of range.
+            if end <= info.addr {
+                break;
+            }
+
+            // TODO: Check if PS4 requires contiguous allocations.
+            if !prev.is_null() && info.addr != prev {
+                return Err(MemoryUpdateError::UnmappedAddr(prev));
+            }
+
+            prev = info.end();
+
+            if filter(info) {
+                targets.push(info);
+            }
+        }
+
+        if !valid_addr {
+            return Err(MemoryUpdateError::InvalidAddr);
+        }
+
+        // Update allocations within the range.
+        let mut adds: Vec<Alloc> = Vec::new();
+
+        for info in targets {
+            let storage = &info.storage;
+
+            // Check if we need to split the first allocation.
+            if addr > info.addr {
+                // Get how many bytes to split.
+                let remain = (info.end() as usize) - (addr as usize);
+                let len = if end < info.end() {
+                    (end as usize) - (addr as usize)
+                } else {
+                    remain
+                };
+
+                // Split the first allocation.
+                let mut alloc = Alloc {
+                    addr,
+                    len,
+                    prot: info.prot,
+                    name: info.name.clone(),
+                    storage: storage.clone(),
+                };
+
+                update(&mut alloc);
+                adds.push(alloc);
+
+                // Check if the splitting was in the middle.
+                if len != remain {
+                    adds.push(Alloc {
+                        addr: end,
+                        len: (info.end() as usize) - (end as usize),
+                        prot: info.prot,
+                        name: info.name.clone(),
+                        storage: storage.clone(),
+                    });
+                }
+
+                info.len -= remain;
+            } else if end < info.end() {
+                // The current allocation is the last one in the range. What we do here is we split
+                // the allocation and update the head.
+                let tail = (info.end() as usize) - (end as usize);
+
+                info.len -= tail;
+                adds.push(Alloc {
+                    addr: end,
+                    len: tail,
+                    prot: info.prot,
+                    name: info.name.clone(),
+                    storage: storage.clone(),
+                });
+
+                update(info);
+            } else {
+                // Update the whole allocation.
+                update(info);
+            }
+        }
+
+        // Add new allocation to the set.
+        for alloc in adds {
+            let addr = alloc.addr;
+            assert!(allocs.insert(addr as usize, alloc).is_none());
+        }
+
+        Ok(())
+    }
+
+    fn alloc(
+        &self,
+        addr: usize,
+        len: usize,
+        prot: Protections,
+        name: String,
+    ) -> Result<Alloc, std::io::Error> {
         use self::storage::Memory;
 
         // Determine how to allocate.
@@ -408,7 +436,7 @@ impl MemoryManager {
             // allocation will be large enough for a second allocation with fixed address.
             // The whole idea is coming from: https://stackoverflow.com/a/31411825/1829232
             let len = self.get_reserved_size(len);
-            let storage = Memory::new(len)?;
+            let storage = Memory::new(addr, len)?;
 
             // Do the second allocation.
             let addr = Self::align_virtual_page(storage.addr());
@@ -420,12 +448,13 @@ impl MemoryManager {
                 addr,
                 len,
                 prot,
+                name,
                 storage: Arc::new(storage),
             })
         } else {
             // If allocation granularity is equal or larger than the virtual page that mean the
             // result of mmap will always aligned correctly.
-            let storage = Memory::new(len)?;
+            let storage = Memory::new(addr, len)?;
             let addr = storage.addr();
 
             storage.commit(addr, len, prot)?;
@@ -434,6 +463,7 @@ impl MemoryManager {
                 addr,
                 len,
                 prot,
+                name,
                 storage: Arc::new(storage),
             })
         }
@@ -484,6 +514,7 @@ struct Alloc {
     addr: *mut u8,
     len: usize,
     prot: Protections,
+    name: String,
     storage: Arc<dyn Storage>,
 }
 
@@ -581,6 +612,12 @@ bitflags! {
     }
 }
 
+impl Display for MappingFlags {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// Errors for [`MemoryManager::mmap()`].
 #[derive(Debug, Error)]
 pub enum MmapError {
@@ -624,9 +661,9 @@ impl Errno for MunmapError {
     }
 }
 
-/// Represents an error for [`MemoryManager::mprotect()`].
+/// Represents an error when update operations on the memory is failed.
 #[derive(Debug, Error)]
-pub enum MprotectError {
+pub enum MemoryUpdateError {
     #[error("addr is not aligned")]
     UnalignedAddr,
 
@@ -638,16 +675,4 @@ pub enum MprotectError {
 
     #[error("address {0:p} is not mapped")]
     UnmappedAddr(*const u8),
-}
-
-impl Errno for MprotectError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            // On Linux InvalidAddr and UnmappedAddr will be ENOMEM. Let's follow FreeBSD man page
-            // until there are some games is expect ENOMEM.
-            Self::UnalignedAddr | Self::ZeroLen | Self::InvalidAddr | Self::UnmappedAddr(_) => {
-                EINVAL
-            }
-        }
-    }
 }

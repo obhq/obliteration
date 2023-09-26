@@ -4,7 +4,8 @@ pub use self::module::*;
 use self::resolver::{ResolveFlags, SymbolResolver};
 use crate::errno::{Errno, EINVAL, ENOEXEC};
 use crate::fs::{Fs, VPath, VPathBuf};
-use crate::memory::{MemoryManager, MmapError, MprotectError, Protections};
+use crate::memory::MemoryUpdateError;
+use crate::memory::{MemoryManager, MmapError, Protections};
 use crate::process::{ProcObj, VProc};
 use bitflags::bitflags;
 use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation};
@@ -82,8 +83,8 @@ impl RuntimeLinker {
 
         // TODO: Apply remaining checks from exec_self_imgact.
         // Map eboot.bin.
-        let mtxg = MutexGroup::new();
-        let app = match Module::map(mm, elf, base, 0, 1, &mtxg) {
+        let mg = MutexGroup::new();
+        let app = match Module::map(mm, elf, base, "executable", 0, 1, &mg) {
             Ok(v) => Arc::new(v),
             Err(e) => return Err(RuntimeLinkerError::MapExeFailed(file.into_vpath(), e)),
         };
@@ -110,18 +111,18 @@ impl RuntimeLinker {
             fs,
             mm,
             vp,
-            list: mtxg.new_member(vec![app.clone()]),
+            list: mg.new_member(vec![app.clone()]),
             app: app.clone(),
-            kernel: mtxg.new_member(None),
-            mains: mtxg.new_member(vec![app]),
-            tls: mtxg.new_member(TlsAlloc {
+            kernel: mg.new_member(None),
+            mains: mg.new_member(vec![app]),
+            tls: mg.new_member(TlsAlloc {
                 max_index: 1,
                 last_offset: 0,
                 last_size: 0,
                 static_space: 0,
             }),
             flags,
-            mtxg,
+            mtxg: mg,
         })
     }
 
@@ -196,7 +197,15 @@ impl RuntimeLinker {
         let mut table = self.vp.objects_mut();
         let (entry, _) = table.alloc(|id| {
             let id: u32 = (id + 1).try_into().unwrap();
-            let md = match Module::map(self.mm, elf, 0, id, tls, &self.mtxg) {
+            let md = match Module::map(
+                self.mm,
+                elf,
+                0,
+                path.file_name().unwrap(),
+                id,
+                tls,
+                &self.mtxg,
+            ) {
                 Ok(v) => v,
                 Err(e) => return Err(LoadError::MapFailed(e)),
             };
@@ -500,7 +509,7 @@ pub enum MapError {
     MemoryAllocationFailed(usize, #[source] MmapError),
 
     #[error("cannot protect {1:#018x} bytes starting at {0:p} with {2}")]
-    ProtectMemoryFailed(*const u8, usize, Protections, #[source] MprotectError),
+    ProtectMemoryFailed(*const u8, usize, Protections, #[source] MemoryUpdateError),
 
     #[error("cannot unprotect segment {0}")]
     UnprotectSegmentFailed(usize, #[source] UnprotectSegmentError),
@@ -566,7 +575,9 @@ impl Errno for RelocateError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::UnprotectFailed(_, e) => match e {
-                UnprotectError::MprotectFailed(_, _, _, e) => e.errno(),
+                UnprotectError::MprotectFailed(_, _, _, _) => {
+                    todo!("dynlib_process_needed_and_relocate with mprotect failed");
+                }
             },
             Self::UnsupportedRela(_, _) => ENOEXEC,
             Self::UnsupportedPlt(_, _) => EINVAL,
