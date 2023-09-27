@@ -2,6 +2,7 @@ pub use self::key::*;
 
 use crate::ucred::Ucred;
 use std::fmt::{Display, Formatter};
+use thiserror::Error;
 
 mod key;
 
@@ -25,7 +26,7 @@ impl RegMgr {
         let h = (v1 >> 48) as u16;
 
         if g != h {
-            return Err(RegError::ChecksumMismatched);
+            return Err(RegError::ChecksumMismatched(h, g));
         }
 
         // Decrypt the request.
@@ -51,7 +52,7 @@ impl RegMgr {
 
         // Lookup the entry.
         let key = RegKey::new(key);
-        let entry = self.lookup(key).ok_or(RegError::NotFound)?;
+        let entry = self.lookup(key).ok_or(RegError::NotFound(key))?;
         let web = if cred.is_webcore_process() || cred.is_diskplayerui_process() {
             1
         } else {
@@ -82,7 +83,7 @@ impl RegMgr {
     }
 
     /// See `sceRegMgrSetInt` on the PS4 for a reference.
-    pub fn set_int(&self, key: RegKey, value: i32) -> i32 {
+    pub fn set_int(&self, key: RegKey, value: i32) -> Result<i32, RegError> {
         let value = value.to_le_bytes();
 
         if let Err(e) = self.check_param(key, 0, value.len()) {
@@ -90,7 +91,7 @@ impl RegMgr {
         }
 
         match self.set_value(key, &value) {
-            Ok(v) => v,
+            Ok(v) => Ok(v),
             Err(e) => todo!("sceRegMgrSetInt({key}) with regMgrComSetReg() = {e}"),
         }
     }
@@ -110,7 +111,7 @@ impl RegMgr {
         }
 
         // Lookup a target entry.
-        let entry = self.lookup(key).ok_or(RegError::NotFound)?;
+        let entry = self.lookup(key).ok_or(RegError::NotFound(key))?;
 
         if value.len() > entry.len {
             return Err(RegError::V800d0208);
@@ -244,24 +245,41 @@ pub struct RegEntry {
 }
 
 /// Represents an error when the operation on a registry is failed.
-#[repr(i32)]
-#[derive(Clone, Copy)]
+#[derive(Debug, Error)]
 pub enum RegError {
-    NotFound = 0x800d0203u32 as i32,
-    ChecksumMismatched = 0x800d0204u32 as i32,
-    V800d0206 = 0x800d0206u32 as i32,
-    V800d0207 = 0x800d0207u32 as i32,
-    V800d0208 = 0x800d0208u32 as i32,
-    V800d0214 = 0x800d0214u32 as i32,
-    V800d021f = 0x800d021fu32 as i32,
+    NotFound(RegKey),
+    ChecksumMismatched(u16, u16),
+    V800d0206,
+    V800d0207,
+    V800d0208,
+    V800d0214,
+    V800d0219,
+    V800d021f,
+}
+
+impl RegError {
+    pub fn code(&self) -> i32 {
+        match self {
+            Self::NotFound(_) => 0x800d0203u32 as i32,
+            Self::ChecksumMismatched(_, _) => 0x800d0204u32 as i32,
+            Self::V800d0206 => 0x800d0206u32 as i32,
+            Self::V800d0207 => 0x800d0207u32 as i32,
+            Self::V800d0208 => 0x800d0208u32 as i32,
+            Self::V800d0214 => 0x800d0214u32 as i32,
+            Self::V800d0219 => 0x800d0219u32 as i32,
+            Self::V800d021f => 0x800d021fu32 as i32,
+        }
+    }
 }
 
 impl Display for RegError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match *self {
-            Self::NotFound => f.write_str("key not found"),
-            Self::ChecksumMismatched => f.write_str("checksum mismatched"),
-            v => write!(f, "{:#x}", v as i32),
+        match self {
+            Self::NotFound(k) => write!(f, "entry {k} not found"),
+            Self::ChecksumMismatched(e, g) => {
+                write!(f, "checksum mismatched (expect {e:#x}, got {g:#x})")
+            }
+            v => write!(f, "{:#x}", v.code()),
         }
     }
 }

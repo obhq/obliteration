@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 
 /// A unique identifier for a registry entry.
 #[repr(transparent)]
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RegKey(u32);
 
 impl RegKey {
@@ -18,6 +18,7 @@ impl RegKey {
     pub const AUDIOOUT_CODEC: Self = Self(0x0B070000);
     pub const NET_WIFI_FREQ_BAND: Self = Self(0x141E0500);
     pub const DEVENV_TOOL_BOOT_PARAM: Self = Self(0x78020300);
+    pub const DEVENV_TOOL_GAME_INTMEM_DBG: Self = Self(0x7802BF00);
 
     pub(super) const fn new(v: u32) -> Self {
         Self(v)
@@ -58,6 +59,9 @@ impl Display for RegKey {
             Self::NET_WIFI_FREQ_BAND => f.write_str("SCE_REGMGR_ENT_KEY_NET_WIFI_freq_band"),
             Self::DEVENV_TOOL_BOOT_PARAM => {
                 f.write_str("SCE_REGMGR_ENT_KEY_DEVENV_TOOL_boot_param")
+            }
+            Self::DEVENV_TOOL_GAME_INTMEM_DBG => {
+                f.write_str("SCE_REGMGR_ENT_KEY_DEVENV_TOOL_game_intmem_dbg")
             }
             v => write!(f, "{:#x}", v.0),
         }

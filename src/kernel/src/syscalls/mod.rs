@@ -6,7 +6,7 @@ use crate::errno::{EFAULT, EINVAL, ENOENT, ENOMEM, ENOSYS, EPERM, ESRCH};
 use crate::fs::VPathBuf;
 use crate::memory::{MappingFlags, MemoryManager, Protections};
 use crate::process::{NamedObj, ProcObj, VProc, VThread};
-use crate::regmgr::RegMgr;
+use crate::regmgr::{RegError, RegMgr};
 use crate::rtld::{ModuleFlags, RuntimeLinker};
 use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK};
 use crate::sysctl::Sysctl;
@@ -94,6 +94,7 @@ impl Syscalls {
                 i.args[1].into(),
                 i.args[2].try_into().unwrap(),
             ),
+            585 => self.is_in_sandbox(),
             587 => self.get_authinfo(i.args[0].try_into().unwrap(), i.args[1].into()),
             588 => self.mname(i.args[0].into(), i.args[1].into(), i.args[2].into()),
             592 => self.dynlib_get_list(i.args[0].into(), i.args[1].into(), i.args[2].into()),
@@ -126,7 +127,7 @@ impl Syscalls {
     /// This method must be directly invoked by the PS4 application.
     #[cpu_abi]
     pub unsafe fn int44(&self, offset: usize, module: &VPathBuf) -> ! {
-        todo!("int 0x44 at at {offset:#018x} on {module}");
+        panic!("Exiting with int 0x44 at {offset:#x} on {module}.");
     }
 
     unsafe fn getpid(&self) -> Result<Output, Error> {
@@ -171,6 +172,10 @@ impl Syscalls {
             *oldlenp = written;
         }
 
+        if let Some(new) = new {
+            info!("Setting sysctl {:?} to {:?}.", name, new);
+        }
+
         Ok(Output::ZERO)
     }
 
@@ -187,7 +192,7 @@ impl Syscalls {
         // function succees.
         let vt = VThread::current();
         let mut mask = vt.sigmask_mut();
-        let prev = if oset.is_null() { None } else { Some(*mask) };
+        let prev = mask.clone();
 
         // Update the mask.
         if let Some(mut set) = set {
@@ -220,11 +225,12 @@ impl Syscalls {
             }
 
             // TODO: Check if we need to invoke reschedule_signals.
+            info!("Signal mask was changed from {} to {}.", prev, mask);
         }
 
         // Copy output.
-        if let Some(v) = prev {
-            *oset = v;
+        if !oset.is_null() {
+            *oset = prev;
         }
 
         Ok(Output::ZERO)
@@ -254,6 +260,14 @@ impl Syscalls {
                 pages.addr(),
                 addr
             );
+        } else {
+            info!(
+                "{:#x}:{:p} is mapped as {} with {}.",
+                pages.addr(),
+                pages.end(),
+                prot,
+                flags,
+            );
         }
 
         Ok(pages.into_raw().into())
@@ -261,7 +275,7 @@ impl Syscalls {
 
     unsafe fn regmgr_call(
         &self,
-        ty: u32,
+        op: u32,
         _: usize,
         buf: *mut i32,
         req: *const u8,
@@ -280,41 +294,39 @@ impl Syscalls {
             todo!("regmgr_call with reqlen > 2048");
         }
 
-        // Check type.
+        // Execute the operation.
         let td = VThread::current();
-        let r = match ty {
+        let r = match op {
             0x18 => {
                 let v1 = read::<u64>(req as _);
                 let v2 = read::<u32>(req.add(8) as _);
                 let value = read::<i32>(req.add(12) as _);
 
-                match self.regmgr.decode_key(v1, v2, td.cred(), 2) {
-                    Ok(k) => {
-                        info!("Setting registry {k} to {value}.");
-                        self.regmgr.set_int(k, value)
-                    }
-                    Err(e) => e as i32,
-                }
+                self.regmgr.decode_key(v1, v2, td.cred(), 2).and_then(|k| {
+                    info!("Setting registry {k} to {value}.");
+                    self.regmgr.set_int(k, value)
+                })
             }
             0x19 => {
                 let v1 = read::<u64>(req as _);
                 let v2 = read::<u32>(req.add(8) as _);
 
-                match self.regmgr.decode_key(v1, v2, td.cred(), 1) {
-                    Ok(k) => todo!("regmgr_call({ty}) with matched key = {k}"),
-                    Err(e) => e as i32,
-                }
+                self.regmgr
+                    .decode_key(v1, v2, td.cred(), 1)
+                    .and_then(|k| todo!("regmgr_call({op}) with matched key = {k}"))
             }
-            0x27 | 0x40.. => 0x800d0219u32 as i32,
+            0x27 | 0x40.. => Err(RegError::V800d0219),
             v => todo!("regmgr_call({v})"),
         };
 
         // Write the result.
-        if r < 0 {
-            warn!("regmgr_call({ty}) was failed with {r:#x}.");
-        }
-
-        *buf = r;
+        *buf = match r {
+            Ok(v) => v,
+            Err(e) => {
+                warn!(e, "regmgr_call({op}) was failed");
+                e.code()
+            }
+        };
 
         Ok(Output::ZERO)
     }
@@ -340,7 +352,17 @@ impl Syscalls {
         entry.set_name(Some(name.to_owned()));
         entry.set_flags((flags as u16) | 0x1000);
 
+        info!(
+            "Named object '{}' (ID = {}) was created with data = {:#x} and flags = {:#x}.",
+            name, id, data, flags
+        );
+
         Ok(id.into())
+    }
+
+    unsafe fn is_in_sandbox(&self) -> Result<Output, Error> {
+        // TODO: Get the actual value from the PS4.
+        Ok(0.into())
     }
 
     unsafe fn get_authinfo(&self, pid: i32, buf: *mut AuthInfo) -> Result<Output, Error> {
@@ -378,11 +400,19 @@ impl Syscalls {
     }
 
     unsafe fn mname(&self, addr: usize, len: usize, name: *const c_char) -> Result<Output, Error> {
-        let len = (addr & 0x3fff) + len + 0x3fff & 0xffffffffffffc000;
-        let addr = (addr & 0xffffffffffffc000) as *mut u8;
         let name = Self::read_str(name, 32)?;
 
+        info!(
+            "Setting name for {:#x}:{:#x} to '{}'.",
+            addr,
+            addr + len,
+            name
+        );
+
         // PS4 does not check if vm_map_set_name is failed.
+        let len = (addr & 0x3fff) + len + 0x3fff & 0xffffffffffffc000;
+        let addr = (addr & 0xffffffffffffc000) as *mut u8;
+
         if let Err(e) = self.mm.mname(addr, len, name) {
             warn!(e, "mname({addr:p}, {len:#x}, {name}) was failed");
         }
@@ -452,6 +482,8 @@ impl Syscalls {
         }
 
         // TODO: Implement dynlib_load_needed_shared_objects.
+        info!("Relocating loaded modules.");
+
         self.ld.relocate()?;
 
         Ok(Output::ZERO)

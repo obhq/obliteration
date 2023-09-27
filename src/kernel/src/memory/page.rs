@@ -20,6 +20,10 @@ impl<'a> VPages<'a> {
         self.len
     }
 
+    pub fn end(&self) -> *const u8 {
+        unsafe { self.ptr.add(self.len) }
+    }
+
     pub fn as_mut_ptr(&mut self) -> *mut u8 {
         self.ptr
     }

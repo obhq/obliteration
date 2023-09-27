@@ -1,5 +1,6 @@
 pub use set::*;
 
+use std::borrow::Cow;
 use std::num::NonZeroI32;
 
 mod set;
@@ -12,3 +13,11 @@ pub const SIGSTOP: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(17) };
 pub const SIG_BLOCK: i32 = 1;
 pub const SIG_UNBLOCK: i32 = 2;
 pub const SIG_SETMASK: i32 = 3;
+
+pub fn strsignal(num: NonZeroI32) -> Cow<'static, str> {
+    match num {
+        SIGKILL => "SIGKILL".into(),
+        SIGSTOP => "SIGSTOP".into(),
+        v => format!("{v}").into(),
+    }
+}

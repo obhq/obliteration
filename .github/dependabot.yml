@@ -1,72 +1,12 @@
-# To get started with Dependabot version updates, you'll need to specify which
-# package ecosystems to update and where the package manifests are located.
-# Please see the documentation for all configuration options:
-# https://docs.github.com/github/administering-a-repository/configuration-options-for-dependency-updates
-
 version: 2
 updates:
+- package-ecosystem: github-actions
+  directory: "/"
+  schedule:
+    interval: daily
+  labels: []
 - package-ecosystem: cargo
   directory: "/src"
   schedule:
     interval: daily
-  open-pull-requests-limit: 999
-  
-- package-ecosystem: cargo
-  directory: "/src/context"
-  schedule:
-    interval: daily
-  open-pull-requests-limit: 999
-  
-- package-ecosystem: cargo
-  directory: "/src/core"
-  schedule:
-    interval: daily
-  open-pull-requests-limit: 999
-  
-- package-ecosystem: cargo
-  directory: "/src/error"
-  schedule:
-    interval: daily
-  open-pull-requests-limit: 999
-
-- package-ecosystem: cargo
-  directory: "/src/exfat"
-  schedule:
-    interval: daily
-  open-pull-requests-limit: 999
-  
-- package-ecosystem: cargo
-  directory: "/src/kernel"
-  schedule:
-    interval: daily
-  open-pull-requests-limit: 999
-
-- package-ecosystem: cargo
-  directory: "/src/pfs"
-  schedule:
-    interval: daily
-  open-pull-requests-limit: 999
-  
-- package-ecosystem: cargo
-  directory: "/src/pkg"
-  schedule:
-    interval: daily
-  open-pull-requests-limit: 999
-    
-- package-ecosystem: cargo
-  directory: "/src/pup"
-  schedule:
-    interval: daily
-  open-pull-requests-limit: 999
-
-- package-ecosystem: cargo
-  directory: "/src/util"
-  schedule:
-    interval: daily
-  open-pull-requests-limit: 999
-  
-- package-ecosystem: "github-actions"
-  directory: "/"
-  schedule:
-    # Check for updates to GitHub Actions every day
-    interval: "daily"
+  labels: []
