@@ -3,7 +3,6 @@ use self::header::Header;
 use self::inode::Inode;
 use aes::cipher::KeyInit;
 use aes::Aes128;
-use generic_array::GenericArray;
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
@@ -55,8 +54,8 @@ where
 
         let key_seed = header.key_seed();
         let (data_key, tweak_key) = image::get_xts_keys(ekpfs, key_seed);
-        let cipher_1 = Aes128::new(GenericArray::from_slice(&data_key));
-        let cipher_2 = Aes128::new(GenericArray::from_slice(&tweak_key));
+        let cipher_1 = Aes128::new((&data_key).into());
+        let cipher_2 = Aes128::new((&tweak_key).into());
 
         Box::new(image::Encrypted::new(
             image,

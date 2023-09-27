@@ -1,3 +1,5 @@
+use super::strsignal;
+use std::fmt::{Display, Formatter};
 use std::num::NonZeroI32;
 use std::ops::{BitAndAssign, BitOrAssign, Not};
 
@@ -9,6 +11,11 @@ pub struct SignalSet {
 }
 
 impl SignalSet {
+    /// An implementation of `SIGISMEMBER`.
+    pub fn contains(&self, sig: NonZeroI32) -> bool {
+        (self.bits[Self::word(sig)] & Self::bit(sig)) != 0
+    }
+
     /// An implementation of `SIGDELSET`.
     pub fn remove(&mut self, sig: NonZeroI32) {
         self.bits[Self::word(sig)] &= !Self::bit(sig);
@@ -54,5 +61,30 @@ impl Not for SignalSet {
             self.bits[i] = !self.bits[i];
         }
         self
+    }
+}
+
+impl Display for SignalSet {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut first = true;
+
+        for i in 1..=128 {
+            let num = unsafe { NonZeroI32::new_unchecked(i) };
+
+            if self.contains(num) {
+                if !first {
+                    f.write_str(" | ")?;
+                }
+
+                f.write_str(strsignal(num).as_ref())?;
+                first = false;
+            }
+        }
+
+        if first {
+            f.write_str("none")?;
+        }
+
+        Ok(())
     }
 }
