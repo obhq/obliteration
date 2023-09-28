@@ -168,7 +168,10 @@ impl Syscalls {
         };
 
         // Execute.
-        info!("sysctl invoked with name: {:?}, namelen: {}, oldlenp: {:?}, newlen: {}", name, namelen, oldlenp, newlen);
+        info!(
+            "sysctl invoked with name: {:?}, namelen: {}, oldlenp: {:?}, newlen: {}",
+            name, namelen, oldlenp, newlen
+        );
         let written = self.sysctl.invoke(name, old, new)?;
 
         if !oldlenp.is_null() {
@@ -406,7 +409,10 @@ impl Syscalls {
             }
 
             info.caps[0] = cred.auth().caps[0] & 0x7000000000000000;
-            info!("Retrieved authinfo PAID: {}, CAPS: {}", info.paid, info.caps[0]);
+            info!(
+                "Retrieved authinfo PAID: {}, CAPS: {}",
+                info.paid, info.caps[0]
+            );
         }
 
         // Copy into.
