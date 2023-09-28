@@ -323,8 +323,12 @@ impl Syscalls {
                 let v2 = read::<u32>(req.add(8) as _);
                 let value = read::<i32>(req.add(12) as _);
 
+                info!(
+                    "Attempting to set registry with v1: {}, v2: {}, value: {}.",
+                    v1, v2, value
+                );
                 self.regmgr.decode_key(v1, v2, td.cred(), 2).and_then(|k| {
-                    info!("Setting registry {k} to {value}.");
+                    info!("Setting registry key {} to value {}.", k, value);
                     self.regmgr.set_int(k, value)
                 })
             }
@@ -344,7 +348,7 @@ impl Syscalls {
         *buf = match r {
             Ok(v) => v,
             Err(e) => {
-                warn!(e, "regmgr_call({op}) was failed");
+                warn!(e, "regmgr_call({op}) failed");
                 e.code()
             }
         };
@@ -383,10 +387,12 @@ impl Syscalls {
 
     unsafe fn is_in_sandbox(&self) -> Result<Output, Error> {
         // TODO: Get the actual value from the PS4.
+        info!("Returning is_in_sandbox as 0.");
         Ok(0.into())
     }
 
     unsafe fn get_authinfo(&self, pid: i32, buf: *mut AuthInfo) -> Result<Output, Error> {
+        info!("Getting authinfo for PID: {}", pid);
         // Check if PID is our process.
         if pid != 0 && pid != self.vp.id().get() {
             return Err(Error::Raw(ESRCH));
@@ -408,6 +414,10 @@ impl Syscalls {
             }
 
             info.caps[0] = cred.auth().caps[0] & 0x7000000000000000;
+            info!(
+                "Retrieved authinfo PAID: {}, CAPS: {}",
+                info.paid, info.caps[0]
+            );
         }
 
         // Copy into.
@@ -467,6 +477,8 @@ impl Syscalls {
 
         // Set copied.
         *copied = list.len();
+
+        info!("Copied {} module IDs for dynamic linking.", list.len());
 
         Ok(Output::ZERO)
     }
@@ -607,10 +619,26 @@ impl Syscalls {
             (*info).eh_frame_hdr = addr;
         }
 
+        info!(
+            "Retrieved dynlib info for handle {}: mapbase = {:#x}, textsize = {:#x}, database = {:#x}, datasize = {:#x}, tlsindex = {}, tlsinit = {:#x}, tlsoffset = {:#x}, init = {:#x}, fini = {:#x}, eh_frame_hdr = {:#x}",
+            handle,
+            (*info).mapbase,
+            (*info).textsize,
+            (*info).database,
+            (*info).datasize,
+            (*info).tlsindex,
+            (*info).tlsinit,
+            (*info).tlsoffset,
+            (*info).init,
+            (*info).fini,
+            (*info).eh_frame_hdr
+        );
+
         Ok(Output::ZERO)
     }
 
     unsafe fn budget_get_ptype(&self, pid: i32) -> Result<Output, Error> {
+        info!("Getting ptype for PID: {}", pid);
         // Check if PID is our process.
         if pid != -1 && pid != self.vp.id().get() {
             return Err(Error::Raw(ENOSYS));
