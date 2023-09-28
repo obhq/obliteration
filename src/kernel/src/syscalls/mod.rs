@@ -5,7 +5,7 @@ use self::error::Error;
 use crate::errno::{EFAULT, EINVAL, ENOENT, ENOMEM, ENOSYS, EPERM, ESRCH};
 use crate::fs::VPathBuf;
 use crate::memory::{MappingFlags, MemoryManager, Protections};
-use crate::process::{NamedObj, ProcObj, VProc, VThread};
+use crate::process::{NamedObj, ProcObj, VProc, VProcGroup, VThread};
 use crate::regmgr::{RegError, RegMgr};
 use crate::rtld::{ModuleFlags, RuntimeLinker};
 use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK};
@@ -61,6 +61,7 @@ impl Syscalls {
         // for standard FreeBSD syscalls.
         let r = match i.id {
             20 => self.getpid(),
+            147 => self.setsid(),
             202 => self.sysctl(
                 i.args[0].into(),
                 i.args[1].try_into().unwrap(),
@@ -132,6 +133,26 @@ impl Syscalls {
 
     unsafe fn getpid(&self) -> Result<Output, Error> {
         Ok(self.vp.id().into())
+    }
+
+    unsafe fn setsid(&self) -> Result<Output, Error> {
+        // Check if current thread has privilege.
+        VThread::current().priv_check(Privilege::SCE680)?;
+
+        // Check if the process already become a group leader.
+        let mut group = self.vp.group_mut();
+
+        if group.is_some() {
+            return Err(Error::Raw(EPERM));
+        }
+
+        // Set the process to be a group leader.
+        let id = self.vp.id();
+
+        *group = Some(VProcGroup::new(id));
+        info!("The virtual process become a group leader.");
+
+        Ok(id.into())
     }
 
     unsafe fn sysctl(
@@ -376,7 +397,7 @@ impl Syscalls {
         let td = VThread::current();
         let cred = self.vp.cred();
 
-        if td.has_priv(Privilege::SCE686) {
+        if td.priv_check(Privilege::SCE686).is_ok() {
             todo!("get_authinfo with privilege 686");
         } else {
             // TODO: Refactor this for readability.
