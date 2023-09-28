@@ -3,10 +3,12 @@ pub use self::guard::*;
 use std::cell::UnsafeCell;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
+use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex, Weak};
 use std::thread::Thread;
+use tls::Tls;
 
 mod guard;
 
@@ -108,14 +110,16 @@ unsafe impl<T: Send> Sync for GroupMutex<T> {}
 /// Represents a group of [`GroupMutex`].
 #[derive(Debug)]
 pub struct MutexGroup {
+    name: Arc<String>,
     owning: ThreadId,
     active: UnsafeCell<usize>,
     waiting: Mutex<VecDeque<Weak<Thread>>>,
 }
 
 impl MutexGroup {
-    pub fn new() -> Arc<Self> {
+    pub fn new<N: Into<String>>(name: N) -> Arc<Self> {
         Arc::new(Self {
+            name: Arc::new(name.into()),
             owning: ThreadId::new(0),
             active: UnsafeCell::new(0),
             waiting: Mutex::new(VecDeque::new()),
@@ -139,6 +143,16 @@ impl MutexGroup {
             return unsafe { GroupGuard::new(self) };
         }
 
+        // Check if the calling thread already own a lock on another group to prevent a possible
+        // deadlock.
+        if let Some(active) = ACTIVE_GROUP.get() {
+            panic!(
+                "attempt to acquire '{}' mutex group while holding the lock on '{}' group",
+                self.name,
+                active.deref()
+            );
+        }
+
         // Put the current thread into the wait queue. This need to be done before
         // compare_exchange() so we don't end up parking the current thread when someone just
         // release the lock after compare_exchange().
@@ -160,6 +174,9 @@ impl MutexGroup {
         }
 
         drop(waiting);
+
+        // Set active group.
+        assert!(ACTIVE_GROUP.set(self.name.clone()).is_none());
 
         // SAFETY: This is safe because the current thread acquire the lock successfully by the
         // above compare_exchange().
@@ -222,6 +239,7 @@ impl<'a> Drop for GroupGuard<'a> {
         }
 
         // Release the lock.
+        ACTIVE_GROUP.clear();
         self.group.owning.store(0, Ordering::Release);
 
         // Wakeup one waiting thread.
@@ -247,3 +265,5 @@ type ThreadId = std::sync::atomic::AtomicU64;
 
 #[cfg(target_os = "windows")]
 type ThreadId = std::sync::atomic::AtomicU32;
+
+static ACTIVE_GROUP: Tls<Arc<String>> = Tls::new();

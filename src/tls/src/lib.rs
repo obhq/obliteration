@@ -3,6 +3,7 @@ pub use value::*;
 use std::io::Error;
 use std::marker::PhantomData;
 use std::mem::transmute;
+use std::ptr::null_mut;
 use std::rc::Rc;
 use std::sync::OnceLock;
 
@@ -46,6 +47,21 @@ impl<T> Tls<T> {
         // Set the value.
         let value = Box::new(value);
         unsafe { Self::set_raw(storage, Box::into_raw(value)) };
+
+        // Return the previous value.
+        if prev.is_null() {
+            None
+        } else {
+            Some(unsafe { *Box::from_raw(prev) })
+        }
+    }
+
+    pub fn clear(&self) -> Option<T> {
+        // Clear the value.
+        let storage = self.storage();
+        let prev = unsafe { Self::get_raw(storage) };
+
+        unsafe { Self::set_raw(storage, null_mut()) };
 
         // Return the previous value.
         if prev.is_null() {

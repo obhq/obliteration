@@ -1,4 +1,5 @@
 pub use self::appinfo::*;
+pub use self::group::*;
 pub use self::rlimit::*;
 pub use self::thread::*;
 
@@ -13,6 +14,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 mod appinfo;
+mod group;
 mod rlimit;
 mod thread;
 
@@ -26,6 +28,7 @@ pub struct VProc {
     id: NonZeroI32,                                  // p_pid
     threads: GroupMutex<Vec<Arc<VThread>>>,          // p_threads
     cred: Ucred,                                     // p_ucred
+    group: GroupMutex<Option<VProcGroup>>,           // p_pgrp
     limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
     objects: GroupMutex<IdTable<ProcObj>>,
     app_info: AppInfo,
@@ -35,17 +38,18 @@ pub struct VProc {
 impl VProc {
     pub fn new() -> Result<Self, VProcError> {
         // TODO: Check how ucred is constructed for a process.
-        let mtxg = MutexGroup::new();
+        let mg = MutexGroup::new("virtual process");
         let limits = Self::load_limits()?;
 
         Ok(Self {
             id: Self::new_id(),
-            threads: mtxg.new_member(Vec::new()),
+            threads: mg.new_member(Vec::new()),
             cred: Ucred::new(AuthInfo::EXE.clone()),
-            objects: mtxg.new_member(IdTable::new(0x1000)),
+            group: mg.new_member(None),
+            objects: mg.new_member(IdTable::new(0x1000)),
             limits,
             app_info: AppInfo::new(),
-            mtxg,
+            mtxg: mg,
         })
     }
 
@@ -55,6 +59,10 @@ impl VProc {
 
     pub fn cred(&self) -> &Ucred {
         &self.cred
+    }
+
+    pub fn group_mut(&self) -> GroupMutexWriteGuard<'_, Option<VProcGroup>> {
+        self.group.write()
     }
 
     pub fn limit(&self, ty: usize) -> Option<&ResourceLimit> {
@@ -67,6 +75,10 @@ impl VProc {
 
     pub fn app_info(&self) -> &AppInfo {
         &self.app_info
+    }
+
+    pub fn mutex_group(&self) -> &Arc<MutexGroup> {
+        &self.mtxg
     }
 
     /// Spawn a new [`VThread`].

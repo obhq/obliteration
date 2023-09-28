@@ -9,7 +9,7 @@ use crate::memory::{MemoryManager, MmapError, Protections};
 use crate::process::{ProcObj, VProc};
 use bitflags::bitflags;
 use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation};
-use gmtx::{GroupMutex, GroupMutexReadGuard, MutexGroup};
+use gmtx::{GroupMutex, GroupMutexReadGuard};
 use std::fs::File;
 use std::num::NonZeroI32;
 use std::ops::Deref;
@@ -34,7 +34,6 @@ pub struct RuntimeLinker {
     mains: GroupMutex<Vec<Arc<Module>>>,     // list_main
     tls: GroupMutex<TlsAlloc>,
     flags: LinkerFlags,
-    mtxg: Arc<MutexGroup>,
 }
 
 impl RuntimeLinker {
@@ -83,8 +82,7 @@ impl RuntimeLinker {
 
         // TODO: Apply remaining checks from exec_self_imgact.
         // Map eboot.bin.
-        let mg = MutexGroup::new();
-        let app = match Module::map(mm, elf, base, "executable", 0, 1, &mg) {
+        let app = match Module::map(mm, elf, base, "executable", 0, 1, vp.mutex_group()) {
             Ok(v) => Arc::new(v),
             Err(e) => return Err(RuntimeLinkerError::MapExeFailed(file.into_vpath(), e)),
         };
@@ -107,6 +105,8 @@ impl RuntimeLinker {
         // TODO: Apply logic from umtx_exec_hook.
         // TODO: Apply logic from aio_proc_rundown_exec.
         // TODO: Apply logic from gs_is_event_handler_process_exec.
+        let mg = vp.mutex_group();
+
         Ok(Self {
             fs,
             mm,
@@ -122,7 +122,6 @@ impl RuntimeLinker {
                 static_space: 0,
             }),
             flags,
-            mtxg: mg,
         })
     }
 
@@ -204,7 +203,7 @@ impl RuntimeLinker {
                 path.file_name().unwrap(),
                 id,
                 tls,
-                &self.mtxg,
+                self.vp.mutex_group(),
             ) {
                 Ok(v) => v,
                 Err(e) => return Err(LoadError::MapFailed(e)),
