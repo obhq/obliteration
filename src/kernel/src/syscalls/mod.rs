@@ -315,10 +315,6 @@ impl Syscalls {
                 let v1 = read::<u64>(req as _);
                 let v2 = read::<u32>(req.add(8) as _);
 
-                info!(
-                    "Attempting to decode registry key with v1: {}, v2: {}.",
-                    v1, v2
-                );
                 self.regmgr
                     .decode_key(v1, v2, td.cred(), 1)
                     .and_then(|k| todo!("regmgr_call({op}) with matched key = {k}"))
