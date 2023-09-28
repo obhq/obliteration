@@ -150,7 +150,7 @@ impl Syscalls {
         let id = self.vp.id();
 
         *group = Some(VProcGroup::new(id));
-        info!("The virtual process become a group leader.");
+        info!("Virtual process now set as group leader.");
 
         Ok(id.into())
     }
