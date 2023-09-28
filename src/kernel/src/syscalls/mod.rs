@@ -59,7 +59,6 @@ impl Syscalls {
         //
         // See https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/kern/init_sysent.c#L36
         // for standard FreeBSD syscalls.
-        info!("Syscall called: {}", i.id);
         let r = match i.id {
             20 => self.getpid(),
             202 => self.sysctl(
@@ -132,9 +131,7 @@ impl Syscalls {
     }
 
     unsafe fn getpid(&self) -> Result<Output, Error> {
-        let pid = self.vp.id();
-        info!("Retrieved process ID: {}", pid);
-        Ok(pid.into())
+        Ok(self.vp.id().into())
     }
 
     unsafe fn sysctl(
@@ -168,10 +165,6 @@ impl Syscalls {
         };
 
         // Execute.
-        info!(
-            "sysctl invoked with name: {:?}, namelen: {}, oldlenp: {:?}, newlen: {}",
-            name, namelen, oldlenp, newlen
-        );
         let written = self.sysctl.invoke(name, old, new)?;
 
         if !oldlenp.is_null() {
@@ -288,8 +281,6 @@ impl Syscalls {
         req: *const u8,
         reqlen: usize,
     ) -> Result<Output, Error> {
-        info!("Running regmgr_call with opcode: {}.", op);
-
         // TODO: Check the result of priv_check(td, 682).
         if buf.is_null() {
             todo!("regmgr_call with buf = null");
@@ -338,10 +329,7 @@ impl Syscalls {
 
         // Write the result.
         *buf = match r {
-            Ok(v) => {
-                info!("regmgr_call({}) completed with: {}.", op, v);
-                v
-            }
+            Ok(v) => v,
             Err(e) => {
                 warn!(e, "regmgr_call({op}) failed");
                 e.code()
@@ -496,11 +484,6 @@ impl Syscalls {
                 // TODO: Seems like ET_SCE_DYNEXEC is mapped at a fixed address.
                 *param = app.memory().addr() + v.0;
                 *size = v.1;
-
-                info!(
-                    "Retrieved process parameter at address {:#x} with size {:#x}.",
-                    *param, *size
-                );
             }
             None => todo!("app is dynamic but no PT_SCE_PROCPARAM"),
         }
