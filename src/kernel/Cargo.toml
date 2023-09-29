@@ -14,10 +14,10 @@ clap = { version = "4.1", features = ["derive"] }
 elf = { path = "../elf" }
 gmtx = { path = "../gmtx" }
 iced-x86 = { version = "1.18", features = ["code_asm"] }
-kernel-macros = { path = "../kernel-macros" }
 libc = "0.2"
 llt = { path = "../llt" }
 llvm-sys = { version = "170.0.0", features = ["strict-versioning"] }
+macros = { path = "../macros" }
 param = { path = "../param" }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"

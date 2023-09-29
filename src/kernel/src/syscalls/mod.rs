@@ -3,7 +3,8 @@ pub use output::*;
 
 use self::error::Error;
 use crate::errno::{EFAULT, EINVAL, ENOENT, ENOMEM, ENOSYS, EPERM, ESRCH};
-use crate::fs::VPathBuf;
+use crate::fs::{Fs, VPath, VPathBuf};
+use crate::log::print;
 use crate::memory::{MappingFlags, MemoryManager, Protections};
 use crate::process::{NamedObj, ProcObj, VProc, VProcGroup, VThread};
 use crate::regmgr::{RegError, RegMgr};
@@ -12,8 +13,9 @@ use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNB
 use crate::sysctl::Sysctl;
 use crate::ucred::{AuthInfo, Privilege};
 use crate::{info, warn};
-use kernel_macros::cpu_abi;
-use std::ffi::c_char;
+use macros::cpu_abi;
+use std::ffi::{c_char, CStr};
+use std::io::Write;
 use std::mem::{size_of, zeroed};
 use std::ptr::read;
 use std::sync::Arc;
@@ -25,6 +27,7 @@ mod output;
 /// Provides PS4 kernel routines for PS4 process.
 pub struct Syscalls {
     vp: &'static VProc,
+    fs: &'static Fs,
     mm: &'static MemoryManager,
     ld: &'static RuntimeLinker,
     sysctl: &'static Sysctl,
@@ -34,6 +37,7 @@ pub struct Syscalls {
 impl Syscalls {
     pub fn new(
         vp: &'static VProc,
+        fs: &'static Fs,
         mm: &'static MemoryManager,
         ld: &'static RuntimeLinker,
         sysctl: &'static Sysctl,
@@ -41,6 +45,7 @@ impl Syscalls {
     ) -> Self {
         Self {
             vp,
+            fs,
             mm,
             ld,
             sysctl,
@@ -61,6 +66,7 @@ impl Syscalls {
         // for standard FreeBSD syscalls.
         let r = match i.id {
             20 => self.getpid(),
+            56 => self.revoke(i.args[0].into()),
             147 => self.setsid(),
             202 => self.sysctl(
                 i.args[0].into(),
@@ -133,6 +139,36 @@ impl Syscalls {
 
     unsafe fn getpid(&self) -> Result<Output, Error> {
         Ok(self.vp.id().into())
+    }
+
+    unsafe fn revoke(&self, path: *const c_char) -> Result<Output, Error> {
+        // Check current thread privilege.
+        VThread::current().priv_check(Privilege::SCE683)?;
+
+        // TODO: Check maximum path length on the PS4.
+        let path = CStr::from_ptr(path);
+        let path = match path.to_str() {
+            Ok(v) => match VPath::new(v) {
+                Some(v) => v,
+                None => todo!("revoke with non-absolute path {v}"),
+            },
+            Err(_) => return Err(Error::Raw(ENOENT)),
+        };
+
+        info!("Revoking access to {path}.");
+
+        // TODO: Check vnode::v_rdev.
+        let file = self.fs.get(path)?;
+
+        if !file.is_character() {
+            return Err(Error::Raw(EINVAL));
+        }
+
+        // TODO: It seems like the initial ucred of the process is either root or has PRIV_VFS_ADMIN
+        // privilege.
+        self.fs.revoke(path);
+
+        Ok(Output::ZERO)
     }
 
     unsafe fn setsid(&self) -> Result<Output, Error> {
@@ -619,20 +655,27 @@ impl Syscalls {
             (*info).eh_frame_hdr = addr;
         }
 
-        info!(
-            "Retrieved dynlib info for handle {}: mapbase = {:#x}, textsize = {:#x}, database = {:#x}, datasize = {:#x}, tlsindex = {}, tlsinit = {:#x}, tlsoffset = {:#x}, init = {:#x}, fini = {:#x}, eh_frame_hdr = {:#x}",
-            handle,
-            (*info).mapbase,
-            (*info).textsize,
-            (*info).database,
-            (*info).datasize,
-            (*info).tlsindex,
-            (*info).tlsinit,
-            (*info).tlsoffset,
-            (*info).init,
-            (*info).fini,
-            (*info).eh_frame_hdr
-        );
+        let mut e = info!();
+
+        writeln!(
+            e,
+            "Retrieved info for module {} (ID = {}).",
+            md.path(),
+            handle
+        )
+        .unwrap();
+        writeln!(e, "mapbase     : {:#x}", (*info).mapbase).unwrap();
+        writeln!(e, "textsize    : {:#x}", (*info).textsize).unwrap();
+        writeln!(e, "database    : {:#x}", (*info).database).unwrap();
+        writeln!(e, "datasize    : {:#x}", (*info).datasize).unwrap();
+        writeln!(e, "tlsindex    : {}", (*info).tlsindex).unwrap();
+        writeln!(e, "tlsinit     : {:#x}", (*info).tlsinit).unwrap();
+        writeln!(e, "tlsoffset   : {:#x}", (*info).tlsoffset).unwrap();
+        writeln!(e, "init        : {:#x}", (*info).init).unwrap();
+        writeln!(e, "fini        : {:#x}", (*info).fini).unwrap();
+        writeln!(e, "eh_frame_hdr: {:#x}", (*info).eh_frame_hdr).unwrap();
+
+        print(e);
 
         Ok(Output::ZERO)
     }

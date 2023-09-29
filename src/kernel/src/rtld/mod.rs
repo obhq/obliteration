@@ -3,9 +3,8 @@ pub use self::module::*;
 
 use self::resolver::{ResolveFlags, SymbolResolver};
 use crate::errno::{Errno, EINVAL, ENOEXEC};
-use crate::fs::{Fs, VPath, VPathBuf};
-use crate::memory::MemoryUpdateError;
-use crate::memory::{MemoryManager, MmapError, Protections};
+use crate::fs::{Fs, FsError, FsItem, VPath, VPathBuf};
+use crate::memory::{MemoryManager, MemoryUpdateError, MmapError, Protections};
 use crate::process::{ProcObj, VProc};
 use bitflags::bitflags;
 use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation};
@@ -48,9 +47,12 @@ impl RuntimeLinker {
         path.push("eboot.bin").unwrap();
 
         // Get eboot.bin.
-        let file = match fs.get_file(&path) {
-            Some(v) => v,
-            None => return Err(RuntimeLinkerError::ExeNotFound(path)),
+        let file = match fs.get(&path) {
+            Ok(v) => match v {
+                FsItem::File(v) => v,
+                _ => return Err(RuntimeLinkerError::InvalidExe(path)),
+            },
+            Err(e) => return Err(RuntimeLinkerError::GetExeFailed(path, e)),
         };
 
         // Open eboot.bin.
@@ -145,9 +147,12 @@ impl RuntimeLinker {
     /// already loaded.
     pub fn load(&mut self, path: &VPath, main: bool) -> Result<Arc<Module>, LoadError> {
         // Get file.
-        let file = match self.fs.get_file(path) {
-            Some(v) => v,
-            None => return Err(LoadError::FileNotFound),
+        let file = match self.fs.get(path) {
+            Ok(v) => match v {
+                FsItem::File(v) => v,
+                _ => return Err(LoadError::InvalidElf),
+            },
+            Err(e) => return Err(LoadError::GetFileFailed(e)),
         };
 
         // Open file.
@@ -473,8 +478,8 @@ bitflags! {
 /// Represents the error for [`RuntimeLinker`] initialization.
 #[derive(Debug, Error)]
 pub enum RuntimeLinkerError {
-    #[error("{0} does not exists")]
-    ExeNotFound(VPathBuf),
+    #[error("cannot get {0}")]
+    GetExeFailed(VPathBuf, #[source] FsError),
 
     #[error("cannot open {0}")]
     OpenExeFailed(VPathBuf, #[source] std::io::Error),
@@ -538,8 +543,8 @@ pub enum MapError {
 /// Represents an error for (S)ELF loading.
 #[derive(Debug, Error)]
 pub enum LoadError {
-    #[error("the specified file does not exists")]
-    FileNotFound,
+    #[error("cannot get the specified file")]
+    GetFileFailed(#[source] FsError),
 
     #[error("cannot open file")]
     OpenFileFailed(#[source] std::io::Error),

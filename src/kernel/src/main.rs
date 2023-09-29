@@ -119,13 +119,7 @@ fn main() -> ExitCode {
     // Initialize filesystem.
     info!("Initializing file system.");
 
-    let fs: &'static Fs = match Fs::new(args.system, args.game) {
-        Ok(v) => Box::leak(v.into()),
-        Err(e) => {
-            error!(e, "Initialize failed");
-            return ExitCode::FAILURE;
-        }
-    };
+    let fs: &'static Fs = Box::leak(Fs::new(args.system, args.game).into());
 
     // Initialize memory manager.
     info!("Initializing memory manager.");
@@ -207,7 +201,8 @@ fn main() -> ExitCode {
     info!("Initializing system call routines.");
 
     let sysctl: &'static Sysctl = Box::leak(Sysctl::new(arnd, vp).into());
-    let syscalls: &'static Syscalls = Box::leak(Syscalls::new(vp, mm, ld, sysctl, regmgr).into());
+    let syscalls: &'static Syscalls =
+        Box::leak(Syscalls::new(vp, fs, mm, ld, sysctl, regmgr).into());
 
     // Bootstrap execution engine.
     info!("Initializing execution engine.");

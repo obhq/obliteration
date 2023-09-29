@@ -45,7 +45,7 @@ impl Ucred {
     pub fn priv_check(&self, p: Privilege) -> Result<(), PrivilegeError> {
         // TODO: Implement this.
         let r = match p {
-            Privilege::SCE680 => true,
+            Privilege::SCE680 | Privilege::SCE683 => true,
             Privilege::SCE686 => false,
             v => todo!("priv_check_cred(cred, {v})"),
         };
