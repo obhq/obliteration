@@ -200,6 +200,12 @@ impl Deref for VPathBuf {
     }
 }
 
+impl From<&VPath> for VPathBuf {
+    fn from(value: &VPath) -> Self {
+        value.to_owned()
+    }
+}
+
 impl TryFrom<&str> for VPathBuf {
     type Error = ();
 
