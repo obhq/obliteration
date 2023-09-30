@@ -1,4 +1,5 @@
 pub use self::appinfo::*;
+pub use self::file::*;
 pub use self::group::*;
 pub use self::rlimit::*;
 pub use self::thread::*;
@@ -14,6 +15,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 mod appinfo;
+mod file;
 mod group;
 mod rlimit;
 mod thread;
@@ -29,6 +31,7 @@ pub struct VProc {
     threads: GroupMutex<Vec<Arc<VThread>>>,          // p_threads
     cred: Ucred,                                     // p_ucred
     group: GroupMutex<Option<VProcGroup>>,           // p_pgrp
+    files: VProcFiles,                               // p_fd
     limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
     objects: GroupMutex<IdTable<ProcObj>>,
     app_info: AppInfo,
@@ -46,6 +49,7 @@ impl VProc {
             threads: mg.new_member(Vec::new()),
             cred: Ucred::new(AuthInfo::EXE.clone()),
             group: mg.new_member(None),
+            files: VProcFiles::new(&mg),
             objects: mg.new_member(IdTable::new(0x1000)),
             limits,
             app_info: AppInfo::new(),
@@ -63,6 +67,10 @@ impl VProc {
 
     pub fn group_mut(&self) -> GroupMutexWriteGuard<'_, Option<VProcGroup>> {
         self.group.write()
+    }
+
+    pub fn files(&self) -> &VProcFiles {
+        &self.files
     }
 
     pub fn limit(&self, ty: usize) -> Option<&ResourceLimit> {

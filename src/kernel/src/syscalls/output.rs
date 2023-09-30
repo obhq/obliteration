@@ -21,6 +21,15 @@ impl<T> From<*mut T> for Output {
     }
 }
 
+impl From<i32> for Output {
+    fn from(value: i32) -> Self {
+        Self {
+            rax: value as isize as usize,
+            rdx: 0,
+        }
+    }
+}
+
 impl From<usize> for Output {
     fn from(value: usize) -> Self {
         Self { rax: value, rdx: 0 }

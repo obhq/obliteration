@@ -46,7 +46,7 @@ impl Ucred {
         // TODO: Implement this.
         let r = match p {
             Privilege::SCE680 | Privilege::SCE683 => true,
-            Privilege::SCE686 => false,
+            Privilege::MAXFILES | Privilege::SCE686 => false,
             v => todo!("priv_check_cred(cred, {v})"),
         };
 

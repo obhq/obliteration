@@ -277,7 +277,7 @@ public:
 InitializeWizard::InitializeWizard()
 {
     // Window properties.
-    setWindowTitle("Setup Obliteration.");
+    setWindowTitle("Setup Obliteration");
 
     // The aero style, which is the default on Windows; does not work well with dark theme.
 #ifdef _WIN32

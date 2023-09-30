@@ -1,4 +1,6 @@
 use crate::fs::VPathBuf;
+use bitflags::bitflags;
+use std::fmt::{Display, Formatter};
 use std::num::TryFromIntError;
 
 /// Input of the syscall entry point.
@@ -62,6 +64,35 @@ impl TryFrom<Arg> for crate::memory::MappingFlags {
 
     fn try_from(v: Arg) -> Result<Self, Self::Error> {
         Ok(Self::from_bits_retain(v.0.try_into()?))
+    }
+}
+
+bitflags! {
+    /// Flags for open syscall.
+    pub struct OpenFlags: u32 {
+        const O_WRONLY = 0x00000001;
+        const O_RDWR = 0x00000002;
+        const O_ACCMODE = Self::O_WRONLY.bits() | Self::O_RDWR.bits();
+        const O_SHLOCK = 0x00000010;
+        const O_EXLOCK = 0x00000020;
+        const O_TRUNC = 0x00000400;
+        const O_EXEC = 0x00040000;
+        const O_CLOEXEC = 0x00100000;
+        const UNK1 = 0x00400000;
+    }
+}
+
+impl TryFrom<Arg> for OpenFlags {
+    type Error = TryFromIntError;
+
+    fn try_from(value: Arg) -> Result<Self, Self::Error> {
+        Ok(Self::from_bits_retain(value.0.try_into()?))
+    }
+}
+
+impl Display for OpenFlags {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
 

@@ -1,17 +1,20 @@
+pub use self::file::*;
 pub use self::item::*;
 pub use self::path::*;
 
-use crate::errno::{Errno, EACCES, ENOENT};
+use crate::errno::{Errno, ENOENT};
 use gmtx::{GroupMutex, MutexGroup};
 use param::Param;
 use std::borrow::Borrow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::Debug;
 use std::fs::File;
 use std::num::NonZeroI32;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicI32, Ordering};
 use thiserror::Error;
 
+mod file;
 mod item;
 mod path;
 
@@ -19,7 +22,7 @@ mod path;
 #[derive(Debug)]
 pub struct Fs {
     mounts: GroupMutex<HashMap<VPathBuf, MountSource>>,
-    revoked: GroupMutex<HashSet<VPathBuf>>,
+    opens: AtomicI32, // openfiles
     app: VPathBuf,
 }
 
@@ -86,7 +89,7 @@ impl Fs {
 
         Self {
             mounts: mg.new_member(mounts),
-            revoked: mg.new_member(HashSet::new()),
+            opens: AtomicI32::new(0),
             app,
         }
     }
@@ -95,27 +98,30 @@ impl Fs {
         self.app.borrow()
     }
 
-    pub fn get(&self, path: &VPath) -> Result<FsItem, FsError> {
-        // Resolve.
-        let mounts = self.mounts.read();
+    pub fn get(&self, path: &VPath) -> Result<FsItem<'_>, FsError> {
         let item = match path.as_str() {
-            "/dev/console" => FsItem::Device(VDev::Console),
-            _ => Self::resolve(&mounts, path).ok_or(FsError::NotFound)?,
+            "/dev/console" => FsItem::Device(VDev::Console(self)),
+            _ => self.resolve(path).ok_or(FsError::NotFound)?,
         };
-
-        // Check if file has been revoked.
-        if self.revoked.read().contains(item.vpath()) {
-            return Err(FsError::Revoked);
-        }
 
         Ok(item)
     }
 
-    pub fn revoke<P: Into<VPathBuf>>(&self, path: P) {
-        self.revoked.write().insert(path.into());
+    /// See `falloc_noinstall_budget` on the PS4 for a reference.
+    pub fn alloc(&self) -> VFile<'_> {
+        // TODO: Check if openfiles exceed rlimit.
+        // TODO: Implement budget_resource_use.
+        self.opens.fetch_add(1, Ordering::Relaxed);
+
+        VFile::new(self)
     }
 
-    fn resolve(mounts: &HashMap<VPathBuf, MountSource>, path: &VPath) -> Option<FsItem> {
+    pub fn revoke<P: Into<VPathBuf>>(&self, path: P) {
+        // TODO: Implement this.
+    }
+
+    fn resolve(&self, path: &VPath) -> Option<FsItem<'_>> {
+        let mounts = self.mounts.read();
         let mut current = VPathBuf::new();
         let root = match mounts.get(&current).unwrap() {
             MountSource::Host(v) => v,
@@ -123,7 +129,7 @@ impl Fs {
         };
 
         // Walk on virtual path components.
-        let mut directory = VDir::new(root.clone(), VPathBuf::new());
+        let mut directory = HostDir::new(root.clone(), VPathBuf::new());
 
         for component in path.components() {
             current.push(component).unwrap();
@@ -132,13 +138,13 @@ impl Fs {
             if let Some(mount) = mounts.get(&current) {
                 let path = match mount {
                     MountSource::Host(v) => v.to_owned(),
-                    MountSource::Bind(v) => match Self::resolve(mounts, v)? {
+                    MountSource::Bind(v) => match self.resolve(v)? {
                         FsItem::Directory(d) => d.into_path(),
                         _ => unreachable!(),
                     },
                 };
 
-                directory = VDir::new(path, VPathBuf::new());
+                directory = HostDir::new(path, VPathBuf::new());
             } else {
                 // Build a real path.
                 let mut path = directory.into_path();
@@ -159,15 +165,18 @@ impl Fs {
 
                 // Check file type.
                 if meta.is_file() {
-                    return Some(FsItem::File(VFile::new(path, current)));
+                    return Some(FsItem::File(HostFile::new(path, current)));
                 }
 
-                directory = VDir::new(path, VPathBuf::new());
+                directory = HostDir::new(path, VPathBuf::new());
             }
         }
 
         // If we reached here that mean the the last component is a directory.
-        Some(FsItem::Directory(VDir::new(directory.into_path(), current)))
+        Some(FsItem::Directory(HostDir::new(
+            directory.into_path(),
+            current,
+        )))
     }
 }
 
@@ -183,16 +192,12 @@ pub enum MountSource {
 pub enum FsError {
     #[error("no such file or directory")]
     NotFound,
-
-    #[error("the specified file has access revoked")]
-    Revoked,
 }
 
 impl Errno for FsError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::NotFound => ENOENT,
-            Self::Revoked => EACCES,
         }
     }
 }

@@ -65,6 +65,11 @@ impl Syscalls {
         // See https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/kern/init_sysent.c#L36
         // for standard FreeBSD syscalls.
         let r = match i.id {
+            5 => self.open(
+                i.args[0].into(),
+                i.args[1].try_into().unwrap(),
+                i.args[2].try_into().unwrap(),
+            ),
             20 => self.getpid(),
             56 => self.revoke(i.args[0].into()),
             147 => self.setsid(),
@@ -137,6 +142,52 @@ impl Syscalls {
         panic!("Exiting with int 0x44 at {offset:#x} on {module}.");
     }
 
+    unsafe fn open(
+        &self,
+        path: *const c_char,
+        flags: OpenFlags,
+        mode: u32,
+    ) -> Result<Output, Error> {
+        // Check flags.
+        if flags.intersects(OpenFlags::O_EXEC) {
+            if flags.intersects(OpenFlags::O_ACCMODE) {
+                return Err(Error::Raw(EINVAL));
+            }
+        } else if flags.contains(OpenFlags::O_ACCMODE) {
+            return Err(Error::Raw(EINVAL));
+        }
+
+        // Allocate file object.
+        let mut file = self.fs.alloc();
+
+        // Get full path.
+        let path = Self::read_path(path)?;
+
+        if flags.intersects(OpenFlags::UNK1) {
+            todo!("open({path}) with flags & 0x400000 != 0");
+        } else if flags.intersects(OpenFlags::O_SHLOCK) {
+            todo!("open({path}) with flags & O_SHLOCK");
+        } else if flags.intersects(OpenFlags::O_EXLOCK) {
+            todo!("open({path}) with flags & O_EXLOCK");
+        } else if flags.intersects(OpenFlags::O_TRUNC) {
+            todo!("open({path}) with flags & O_TRUNC");
+        } else if mode != 0 {
+            todo!("open({path}, {flags}) with mode = {mode}");
+        }
+
+        info!("Opening {path} with {flags}.");
+
+        // Lookup file.
+        file.set_ops(Some(self.fs.get(path)?.open()?));
+
+        // Install to descriptor table.
+        let fd = self.vp.files().alloc(file);
+
+        info!("File descriptor {fd} was allocated for {path}.");
+
+        Ok(fd.into())
+    }
+
     unsafe fn getpid(&self) -> Result<Output, Error> {
         Ok(self.vp.id().into())
     }
@@ -145,15 +196,8 @@ impl Syscalls {
         // Check current thread privilege.
         VThread::current().priv_check(Privilege::SCE683)?;
 
-        // TODO: Check maximum path length on the PS4.
-        let path = CStr::from_ptr(path);
-        let path = match path.to_str() {
-            Ok(v) => match VPath::new(v) {
-                Some(v) => v,
-                None => todo!("revoke with non-absolute path {v}"),
-            },
-            Err(_) => return Err(Error::Raw(ENOENT)),
-        };
+        // Get full path.
+        let path = Self::read_path(path)?;
 
         info!("Revoking access to {path}.");
 
@@ -689,6 +733,20 @@ impl Syscalls {
 
         // TODO: Invoke id_rlock. Not sure why return ENOENT is working here.
         Err(Error::Raw(ENOENT))
+    }
+
+    unsafe fn read_path<'a>(path: *const c_char) -> Result<&'a VPath, Error> {
+        // TODO: Check maximum path length on the PS4.
+        let path = CStr::from_ptr(path);
+        let path = match path.to_str() {
+            Ok(v) => match VPath::new(v) {
+                Some(v) => v,
+                None => todo!("syscall with non-absolute path {v}"),
+            },
+            Err(_) => return Err(Error::Raw(ENOENT)),
+        };
+
+        Ok(path)
     }
 
     /// See `copyinstr` on the PS4 for a reference.
