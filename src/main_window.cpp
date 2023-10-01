@@ -134,6 +134,15 @@ MainWindow::MainWindow() :
 
     // Setup status bar.
     statusBar();
+
+    // Qt likes to panic if maximized early (Sadly, using this code in RestoreGeometry panics.)
+    if (qGuiApp->platformName() != "wayland") {
+        QSettings settings;
+        settings.beginGroup(SettingGroups::mainWindow);
+        if (settings.value("maximized", false).toBool()) {
+            showMaximized();
+        }
+    }
 }
 
 MainWindow::~MainWindow()
@@ -192,7 +201,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
         killKernel();
     }
 
-    // Save gometry.
+    // Save geometry.
     QSettings settings;
 
     settings.beginGroup(SettingGroups::mainWindow);
@@ -201,6 +210,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
     if (qGuiApp->platformName() != "wayland") {
         // Wayland does not allow application to position itself.
         settings.setValue("pos", pos());
+        settings.setValue("maximized", isMaximized());
     }
 
     QMainWindow::closeEvent(event);
