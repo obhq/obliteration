@@ -40,7 +40,6 @@ MainWindow::MainWindow() :
     m_kernel(nullptr)
 {
     setWindowTitle("Obliteration");
-    restoreGeometry();
 
     // Determine current theme.
     QString svgPath;
@@ -135,14 +134,8 @@ MainWindow::MainWindow() :
     // Setup status bar.
     statusBar();
 
-    // Qt likes to panic if maximized early (Sadly, using this code in RestoreGeometry panics.)
-    if (qGuiApp->platformName() != "wayland") {
-        QSettings settings;
-        settings.beginGroup(SettingGroups::mainWindow);
-        if (settings.value("maximized", false).toBool()) {
-            showMaximized();
-        }
-    }
+    // Show the window.
+    restoreGeometry();
 }
 
 MainWindow::~MainWindow()
@@ -205,12 +198,13 @@ void MainWindow::closeEvent(QCloseEvent *event)
     QSettings settings;
 
     settings.beginGroup(SettingGroups::mainWindow);
+
     settings.setValue("size", size());
+    settings.setValue("maximized", isMaximized());
 
     if (qGuiApp->platformName() != "wayland") {
         // Wayland does not allow application to position itself.
         settings.setValue("pos", pos());
-        settings.setValue("maximized", isMaximized());
     }
 
     QMainWindow::closeEvent(event);
@@ -565,10 +559,16 @@ void MainWindow::restoreGeometry()
 
     settings.beginGroup(SettingGroups::mainWindow);
 
-    resize(settings.value("size", QSize(1000, 500)).toSize());
+    if (settings.value("maximized", false).toBool()) {
+        showMaximized();
+    } else {
+        resize(settings.value("size", QSize(1000, 500)).toSize());
 
-    if (qGuiApp->platformName() != "wayland") {
-        move(settings.value("pos", QPoint(200, 200)).toPoint());
+        if (qGuiApp->platformName() != "wayland") {
+            move(settings.value("pos", QPoint(200, 200)).toPoint());
+        }
+
+        show();
     }
 }
 

@@ -41,12 +41,23 @@ impl Ucred {
         false
     }
 
-    /// An implementation of `priv_check_cred`.
-    pub fn priv_check(&self, p: Privilege) -> Result<(), PrivilegeError> {
+    /// See `sceSblACMgrIsSystemUcred` on the PS4 for a reference.
+    pub fn is_system(&self) -> bool {
         // TODO: Implement this.
+        true
+    }
+
+    /// See `priv_check_cred` on the PS4 for a reference.
+    pub fn priv_check(&self, p: Privilege) -> Result<(), PrivilegeError> {
+        // TODO: Check suser_enabled.
+        self.prison_priv_check()?;
+
         let r = match p {
-            Privilege::SCE680 | Privilege::SCE683 => true,
-            Privilege::MAXFILES | Privilege::SCE686 => false,
+            Privilege::MAXFILES
+            | Privilege::PROC_SETLOGIN
+            | Privilege::SCE680
+            | Privilege::SCE683
+            | Privilege::SCE686 => self.is_system(),
             v => todo!("priv_check_cred(cred, {v})"),
         };
 
@@ -55,6 +66,12 @@ impl Ucred {
         } else {
             Err(PrivilegeError::NoPrivilege)
         }
+    }
+
+    /// See `prison_priv_check` on the PS4 for a reference.
+    fn prison_priv_check(&self) -> Result<(), PrivilegeError> {
+        // TODO: Implement this.
+        Ok(())
     }
 }
 

@@ -1,6 +1,6 @@
 use crate::arnd::Arnd;
 use crate::ee::EntryArg;
-use crate::fs::{Fs, VPath};
+use crate::fs::Fs;
 use crate::llvm::Llvm;
 use crate::log::{print, LOGGER};
 use crate::memory::{MappingFlags, MemoryManager, Protections};
@@ -10,6 +10,7 @@ use crate::rtld::{ModuleFlags, RuntimeLinker};
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
 use clap::{Parser, ValueEnum};
+use macros::vpath;
 use serde::Deserialize;
 use std::fs::{create_dir_all, remove_dir_all, File};
 use std::io::Write;
@@ -96,35 +97,20 @@ fn main() -> ExitCode {
 
     print(log);
 
-    // Initialize Arc4.
-    info!("Initializing arc4random.");
-
+    // Initialize base systems.
     let arnd: &'static Arnd = Box::leak(Arnd::new().into());
-
-    // Initialize LLVM.
-    info!("Initializing LLVM.");
-
     let llvm: &'static Llvm = Box::leak(Llvm::new().into());
-
-    // Initialize virtual process.
-    info!("Initializing virtual process.");
-
+    let regmgr: &'static RegMgr = Box::leak(RegMgr::new().into());
+    let fs: &'static Fs = Box::leak(Fs::new(args.system, args.game).into());
     let vp: &'static VProc = match VProc::new() {
         Ok(v) => Box::leak(v.into()),
         Err(e) => {
-            error!(e, "Initialize failed");
+            error!(e, "Virtual process initialization failed");
             return ExitCode::FAILURE;
         }
     };
 
-    // Initialize filesystem.
-    info!("Initializing file system.");
-
-    let fs: &'static Fs = Box::leak(Fs::new(args.system, args.game).into());
-
-    // Initialize memory manager.
-    info!("Initializing memory manager.");
-
+    // Initialize memory management.
     let mm: &'static MemoryManager = Box::leak(MemoryManager::new(vp).into());
     let mut log = info!();
 
@@ -137,11 +123,6 @@ fn main() -> ExitCode {
     .unwrap();
 
     print(log);
-
-    // Initialize registry manager.
-    info!("Initializing registry manager.");
-
-    let regmgr: &'static RegMgr = Box::leak(RegMgr::new().into());
 
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
@@ -161,7 +142,7 @@ fn main() -> ExitCode {
     ld.app().print(log);
 
     // Preload libkernel.
-    let path: &VPath = "/system/common/lib/libkernel.sprx".try_into().unwrap();
+    let path = vpath!("/system/common/lib/libkernel.sprx");
 
     info!("Loading {path}.");
 
@@ -179,9 +160,7 @@ fn main() -> ExitCode {
     ld.set_kernel(module);
 
     // Preload libSceLibcInternal.
-    let path: &VPath = "/system/common/lib/libSceLibcInternal.sprx"
-        .try_into()
-        .unwrap();
+    let path = vpath!("/system/common/lib/libSceLibcInternal.sprx");
 
     info!("Loading {path}.");
 
