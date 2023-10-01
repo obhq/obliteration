@@ -17,6 +17,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 mod arnd;
+mod console;
 mod disasm;
 mod ee;
 mod errno;

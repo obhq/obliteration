@@ -1,19 +1,20 @@
-use super::{VPath, VPathBuf};
+use super::{Fs, FsError, VFileOps, VPath, VPathBuf};
+use crate::console::Console;
 use macros::vpath;
 use std::path::{Path, PathBuf};
 
 /// An item in the virtual filesystem.
-pub enum FsItem {
-    Directory(VDir),
-    File(VFile),
-    Device(VDev),
+pub enum FsItem<'a> {
+    Directory(HostDir),
+    File(HostFile),
+    Device(VDev<'a>),
 }
 
-impl FsItem {
+impl<'a> FsItem<'a> {
     pub fn is_character(&self) -> bool {
         match self {
             Self::Device(d) => match d {
-                VDev::Console => true,
+                VDev::Console(_) => true,
             },
             _ => false,
         }
@@ -24,19 +25,27 @@ impl FsItem {
             Self::Directory(v) => &v.vpath,
             Self::File(v) => &v.vpath,
             Self::Device(d) => match d {
-                VDev::Console => vpath!("/dev/console"),
+                VDev::Console(_) => vpath!("/dev/console"),
             },
+        }
+    }
+
+    pub fn open(&self) -> Result<Box<dyn VFileOps + 'a>, FsError> {
+        match self {
+            Self::Directory(_) => todo!("VFileOps for host directory"),
+            Self::File(_) => todo!("VFileOps for host file"),
+            Self::Device(d) => d.open(),
         }
     }
 }
 
-/// A virtual directory.
-pub struct VDir {
+/// A virtual directory backed by a real directory on the host.
+pub struct HostDir {
     path: PathBuf,
     vpath: VPathBuf,
 }
 
-impl VDir {
+impl HostDir {
     pub(super) fn new(path: PathBuf, vpath: VPathBuf) -> Self {
         Self { path, vpath }
     }
@@ -46,13 +55,13 @@ impl VDir {
     }
 }
 
-/// A virtual file.
-pub struct VFile {
+/// A virtual file backed by a real file on the host.
+pub struct HostFile {
     path: PathBuf,
     vpath: VPathBuf,
 }
 
-impl VFile {
+impl HostFile {
     pub(super) fn new(path: PathBuf, vpath: VPathBuf) -> Self {
         Self { path, vpath }
     }
@@ -71,6 +80,16 @@ impl VFile {
 }
 
 /// A virtual device.
-pub enum VDev {
-    Console,
+pub enum VDev<'a> {
+    Console(&'a Fs),
+}
+
+impl<'a> VDev<'a> {
+    pub fn open(&self) -> Result<Box<dyn VFileOps + 'a>, FsError> {
+        let ops = match self {
+            Self::Console(_) => Box::new(Console::new()),
+        };
+
+        Ok(ops)
+    }
 }
