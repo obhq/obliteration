@@ -2,6 +2,7 @@ pub use self::appinfo::*;
 pub use self::file::*;
 pub use self::group::*;
 pub use self::rlimit::*;
+pub use self::session::*;
 pub use self::thread::*;
 
 use crate::idt::IdTable;
@@ -18,6 +19,7 @@ mod appinfo;
 mod file;
 mod group;
 mod rlimit;
+mod session;
 mod thread;
 
 /// An implementation of `proc` structure represent the main application process.
