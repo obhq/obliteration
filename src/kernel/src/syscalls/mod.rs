@@ -2,11 +2,11 @@ pub use input::*;
 pub use output::*;
 
 use self::error::Error;
-use crate::errno::{EFAULT, EINVAL, ENOENT, ENOMEM, ENOSYS, EPERM, ESRCH};
+use crate::errno::{EFAULT, EINVAL, ENAMETOOLONG, ENOENT, ENOMEM, ENOSYS, EPERM, ESRCH};
 use crate::fs::{Fs, VPath, VPathBuf};
 use crate::log::print;
 use crate::memory::{MappingFlags, MemoryManager, Protections};
-use crate::process::{NamedObj, ProcObj, VProc, VProcGroup, VThread};
+use crate::process::{NamedObj, ProcObj, VProc, VProcGroup, VSession, VThread};
 use crate::regmgr::{RegError, RegMgr};
 use crate::rtld::{ModuleFlags, RuntimeLinker};
 use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK};
@@ -71,6 +71,7 @@ impl Syscalls {
                 i.args[2].try_into().unwrap(),
             ),
             20 => self.getpid(),
+            50 => self.setlogin(i.args[0].into()),
             56 => self.revoke(i.args[0].into()),
             147 => self.setsid(),
             202 => self.sysctl(
@@ -192,6 +193,29 @@ impl Syscalls {
         Ok(self.vp.id().into())
     }
 
+    unsafe fn setlogin(&self, namebuf: *const c_char) -> Result<Output, Error> {
+        // Check current thread privilege.
+        VThread::current().priv_check(Privilege::PROC_SETLOGIN)?;
+
+        // Get login name.
+        let login = Self::read_str(namebuf, 17).map_err(|e| {
+            if e.errno() == ENAMETOOLONG {
+                Error::Raw(EINVAL)
+            } else {
+                e
+            }
+        })?;
+
+        // Set login name.
+        let mut group = self.vp.group_mut();
+        let session = group.as_mut().unwrap().session_mut();
+
+        session.set_login(login);
+        info!("Login name was changed to '{login}'.");
+
+        Ok(Output::ZERO)
+    }
+
     unsafe fn revoke(&self, path: *const c_char) -> Result<Output, Error> {
         // Check current thread privilege.
         VThread::current().priv_check(Privilege::SCE683)?;
@@ -226,10 +250,11 @@ impl Syscalls {
             return Err(Error::Raw(EPERM));
         }
 
-        // Set the process to be a group leader.
+        // TODO: Find out the correct login name for VSession.
         let id = self.vp.id();
+        let session = VSession::new(id, String::from("root"));
 
-        *group = Some(VProcGroup::new(id));
+        *group = Some(VProcGroup::new(id, session));
         info!("Virtual process now set as group leader.");
 
         Ok(id.into())
@@ -472,7 +497,8 @@ impl Syscalls {
     }
 
     unsafe fn get_authinfo(&self, pid: i32, buf: *mut AuthInfo) -> Result<Output, Error> {
-        info!("Getting authinfo for PID: {}", pid);
+        info!("Getting authinfo for PID: {pid}");
+
         // Check if PID is our process.
         if pid != 0 && pid != self.vp.id().get() {
             return Err(Error::Raw(ESRCH));
@@ -484,7 +510,7 @@ impl Syscalls {
         let cred = self.vp.cred();
 
         if td.priv_check(Privilege::SCE686).is_ok() {
-            todo!("get_authinfo with privilege 686");
+            info = cred.auth().clone();
         } else {
             // TODO: Refactor this for readability.
             let paid = cred.auth().paid.wrapping_add(0xc7ffffffeffffffc);
@@ -494,8 +520,9 @@ impl Syscalls {
             }
 
             info.caps[0] = cred.auth().caps[0] & 0x7000000000000000;
+
             info!(
-                "Retrieved authinfo PAID: {}, CAPS: {}",
+                "Retrieved authinfo for non-system credential (paid = {:#x}, caps[0] = {:#x}).",
                 info.paid, info.caps[0]
             );
         }
