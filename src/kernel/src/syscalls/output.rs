@@ -39,7 +39,7 @@ impl From<usize> for Output {
 impl From<NonZeroI32> for Output {
     fn from(value: NonZeroI32) -> Self {
         Self {
-            rax: value.get() as _,
+            rax: value.get() as isize as usize,
             rdx: 0,
         }
     }

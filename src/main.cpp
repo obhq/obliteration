@@ -35,8 +35,6 @@ int main(int argc, char *argv[])
     // Run main window.
     MainWindow win;
 
-    win.show();
-
     if (!win.loadGames()) {
         return 1;
     }
