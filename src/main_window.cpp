@@ -53,7 +53,7 @@ MainWindow::MainWindow() :
     // File menu.
     auto fileMenu = menuBar()->addMenu("&File");
     auto installPkg = new QAction(QIcon(svgPath + "archive-arrow-down-outline.svg"), "&Install PKG", this);
-    auto openSystemFolder = new QAction("Open System &Folder", this);
+    auto openSystemFolder = new QAction(QIcon(svgPath + "folder-open-outline.svg"), "Open System &Folder", this);
     auto quit = new QAction("&Quit", this);
 
     connect(installPkg, &QAction::triggered, this, &MainWindow::installPkg);
@@ -355,12 +355,21 @@ void MainWindow::requestGamesContextMenu(const QPoint &pos)
     auto model = reinterpret_cast<GameListModel *>(m_games->model());
     auto game = model->get(index.row());
 
+    // Determine current theme.
+    QString svgPath;
+
+    if (QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark) {
+        svgPath = ":/resources/darkmode/";
+    } else {
+        svgPath = ":/resources/lightmode/";
+    }
+
     // Setup menu.
     QMenu menu(this);
-    QAction openFolder("Open Game &Folder", this); // Opens game folder.
-    QAction settings("&Settings", this); // TODO LATER: Blank Settings
+    QAction openGameFolder(QIcon(svgPath + "folder-open-outline.svg"), "Open Game &Folder", this); // Opens game folder.
+    QAction settings(QIcon(svgPath + "cog-outline.svg"), "&Settings", this); // TODO LATER: Blank Settings
 
-    menu.addAction(&openFolder);
+    menu.addAction(&openGameFolder);
     menu.addAction(&settings);
 
     // Show menu.
@@ -370,7 +379,7 @@ void MainWindow::requestGamesContextMenu(const QPoint &pos)
         return;
     }
 
-    if (selected == &openFolder) {
+    if (selected == &openGameFolder) {
         QString folderPath = game->directory();
         QDesktopServices::openUrl(QUrl::fromLocalFile(folderPath));
     } else if (selected == &settings) {

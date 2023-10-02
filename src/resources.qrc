@@ -3,9 +3,13 @@
   <qresource>
     <file>resources/darkmode/archive-arrow-down-outline.svg</file>
     <file>resources/darkmode/card-text-outline.svg</file>
+    <file>resources/darkmode/cog-outline.svg</file>
+    <file>resources/darkmode/folder-open-outline.svg</file>
     <file>resources/darkmode/view-comfy.svg</file>
     <file>resources/lightmode/archive-arrow-down-outline.svg</file>
     <file>resources/lightmode/card-text-outline.svg</file>
+    <file>resources/lightmode/cog-outline.svg</file>
+    <file>resources/lightmode/folder-open-outline.svg</file>
     <file>resources/lightmode/view-comfy.svg</file>
     <file>resources/obliteration-icon.png</file>
   </qresource>
