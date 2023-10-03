@@ -99,6 +99,11 @@ pub const ENOLINK: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(91) };
 pub const EPROTO: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(92) };
 pub const ENOTCAPABLE: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(93) };
 pub const ECAPMODE: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(94) };
+pub const ENOBLK: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(95) };
+pub const EICV: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(96) };
+pub const ENOPLAYGOENT: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(97) };
+pub const EREVOKE: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(98) };
+pub const ESDKVERSION: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(99) };
 
 /// An object that is mappable to PS4 errno.
 pub trait Errno: Error {
@@ -203,6 +208,11 @@ pub fn strerror(num: NonZeroI32) -> &'static str {
         EPROTO => "protocol error",
         ENOTCAPABLE => "capabilities insufficient",
         ECAPMODE => "not permitted in capability mode",
+        ENOBLK => "Block not ready",
+        EICV => "Integrity Check Error",
+        ENOPLAYGOENT => "File not found in PlayGo chunk definition file",
+        EREVOKE => "File is revoked",
+        ESDKVERSION => "SDK version of a binary file is invalid",
         v => todo!("strerror {v}"),
     }
 }
