@@ -1,6 +1,5 @@
 use super::{Fs, FsError, VFileOps, VPath, VPathBuf};
 use crate::console::Console;
-use macros::vpath;
 use std::path::{Path, PathBuf};
 
 /// An item in the virtual filesystem.
@@ -25,7 +24,7 @@ impl<'a> FsItem<'a> {
             Self::Directory(v) => &v.vpath,
             Self::File(v) => &v.vpath,
             Self::Device(d) => match d {
-                VDev::Console(_) => vpath!("/dev/console"),
+                VDev::Console(_) => Console::PATH,
             },
         }
     }

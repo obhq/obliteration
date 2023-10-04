@@ -18,6 +18,12 @@ impl Error {
     }
 }
 
+impl From<Box<dyn Errno>> for Error {
+    fn from(value: Box<dyn Errno>) -> Self {
+        Self::Object(value)
+    }
+}
+
 impl<T: Errno + 'static> From<T> for Error {
     fn from(value: T) -> Self {
         Self::Object(Box::new(value))
