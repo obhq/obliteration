@@ -2,8 +2,10 @@ pub use input::*;
 pub use output::*;
 
 use self::error::Error;
-use crate::errno::{EFAULT, EINVAL, ENAMETOOLONG, ENOENT, ENOMEM, ENOSYS, EPERM, ESRCH};
-use crate::fs::{Fs, VPath, VPathBuf};
+use crate::errno::{
+    EBADF, EFAULT, EINVAL, ENAMETOOLONG, ENOENT, ENOMEM, ENOSYS, ENOTTY, EPERM, ESRCH,
+};
+use crate::fs::{Fs, VFileFlags, VPath, VPathBuf};
 use crate::log::print;
 use crate::memory::{MappingFlags, MemoryManager, Protections};
 use crate::process::{NamedObj, ProcObj, VProc, VProcGroup, VSession, VThread};
@@ -72,6 +74,11 @@ impl Syscalls {
             ),
             20 => self.getpid(),
             50 => self.setlogin(i.args[0].into()),
+            54 => self.ioctl(
+                i.args[0].try_into().unwrap(),
+                i.args[1].into(),
+                i.args[2].into(),
+            ),
             56 => self.revoke(i.args[0].into()),
             147 => self.setsid(),
             202 => self.sysctl(
@@ -179,10 +186,11 @@ impl Syscalls {
         info!("Opening {path} with {flags}.");
 
         // Lookup file.
+        *file.flags_mut() = flags.to_fflags();
         file.set_ops(Some(self.fs.get(path)?.open()?));
 
         // Install to descriptor table.
-        let fd = self.vp.files().alloc(file);
+        let fd = self.vp.files().alloc(Arc::new(file));
 
         info!("File descriptor {fd} was allocated for {path}.");
 
@@ -212,6 +220,71 @@ impl Syscalls {
 
         session.set_login(login);
         info!("Login name was changed to '{login}'.");
+
+        Ok(Output::ZERO)
+    }
+
+    unsafe fn ioctl(&self, fd: i32, mut com: u64, data: *const u8) -> Result<Output, Error> {
+        const IOC_VOID: u64 = 0x20000000;
+        const IOC_OUT: u64 = 0x40000000;
+        const IOC_IN: u64 = 0x80000000;
+        const IOCPARM_MASK: u64 = 0x1FFF;
+
+        if com > 0xffffffff {
+            com &= 0xffffffff;
+        }
+
+        let size = (com >> 16) & IOCPARM_MASK;
+
+        if com & (IOC_VOID | IOC_OUT | IOC_IN) == 0
+            || com & (IOC_OUT | IOC_IN) != 0 && size == 0
+            || com & IOC_VOID != 0 && size != 0 && size != 4
+        {
+            return Err(Error::Raw(ENOTTY));
+        }
+
+        // Get data.
+        let data = if size == 0 {
+            if com & IOC_IN != 0 {
+                todo!("ioctl with IOC_IN");
+            } else if com & IOC_OUT != 0 {
+                todo!("ioctl with IOC_OUT");
+            }
+
+            &[]
+        } else {
+            todo!("ioctl with size != 0");
+        };
+
+        // Get target file.
+        let file = self.vp.files().get(fd).ok_or(Error::Raw(EBADF))?;
+        let ops = file.ops().ok_or(Error::Raw(EBADF))?;
+
+        if !file
+            .flags()
+            .intersects(VFileFlags::FREAD | VFileFlags::FWRITE)
+        {
+            return Err(Error::Raw(EBADF));
+        }
+
+        // Execute the operation.
+        let td = VThread::current();
+
+        info!("Executing ioctl({com:#x}) on {file}.");
+
+        match com {
+            0x20006601 => todo!("ioctl with com = 0x20006601"),
+            0x20006602 => todo!("ioctl with com = 0x20006602"),
+            0x8004667d => todo!("ioctl with com = 0x8004667d"),
+            0x8004667e => todo!("ioctl with com = 0x8004667e"),
+            _ => {}
+        }
+
+        ops.ioctl(&file, com, data, td.cred(), &td)?;
+
+        if com & IOC_OUT != 0 {
+            todo!("ioctl with IOC_OUT");
+        }
 
         Ok(Output::ZERO)
     }

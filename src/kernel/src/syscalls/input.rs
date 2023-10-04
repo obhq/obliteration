@@ -1,4 +1,4 @@
-use crate::fs::VPathBuf;
+use crate::fs::{VFileFlags, VPathBuf};
 use bitflags::bitflags;
 use std::fmt::{Display, Formatter};
 use std::num::TryFromIntError;
@@ -24,6 +24,12 @@ impl<T> From<Arg> for *const T {
 }
 
 impl<T> From<Arg> for *mut T {
+    fn from(v: Arg) -> Self {
+        v.0 as _
+    }
+}
+
+impl From<Arg> for u64 {
     fn from(v: Arg) -> Self {
         v.0 as _
     }
@@ -79,6 +85,13 @@ bitflags! {
         const O_EXEC = 0x00040000;
         const O_CLOEXEC = 0x00100000;
         const UNK1 = 0x00400000;
+    }
+}
+
+impl OpenFlags {
+    /// An implementation of `FFLAGS` macro.
+    pub fn to_fflags(self) -> VFileFlags {
+        VFileFlags::from_bits_truncate(self.bits() + 1)
     }
 }
 
