@@ -9,7 +9,7 @@ byteorder = "1.4.3"
 cbc = "0.1"
 error = { path = "../error" }
 fs = { path = "../fs" }
-memmap2 = "0.8"
+memmap2 = "0.9"
 param = { path = "../param" }
 pfs = { path = "../pfs" }
 rsa = "0.9"
