@@ -3,7 +3,6 @@ use super::{EntryArg, ExecutionEngine};
 use crate::disasm::Disassembler;
 use crate::fs::VPathBuf;
 use crate::llvm::Llvm;
-use crate::memory::VPages;
 use crate::rtld::{Module, RuntimeLinker};
 use std::ops::Deref;
 use thiserror::Error;
@@ -77,7 +76,7 @@ impl LlvmEngine {
 impl ExecutionEngine for LlvmEngine {
     type RunErr = RunError;
 
-    unsafe fn run(&mut self, arg: EntryArg, stack: VPages) -> Result<(), Self::RunErr> {
+    unsafe fn run(&mut self, arg: EntryArg) -> Result<(), Self::RunErr> {
         todo!()
     }
 }

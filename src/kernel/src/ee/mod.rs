@@ -1,5 +1,5 @@
 use crate::arnd::Arnd;
-use crate::memory::{Protections, VPages};
+use crate::memory::MemoryManager;
 use crate::process::{ResourceLimit, VProc};
 use crate::rtld::Module;
 use std::error::Error;
@@ -22,24 +22,29 @@ pub trait ExecutionEngine: Sync {
     /// # Safety
     /// This method will transfer control to the PS4 application. If the PS4 application is not in
     /// the correct state calling this method will cause undefined behavior.
-    unsafe fn run(&mut self, arg: EntryArg, stack: VPages) -> Result<(), Self::RunErr>;
+    unsafe fn run(&mut self, arg: EntryArg) -> Result<(), Self::RunErr>;
 }
 
 /// Encapsulate an argument of the PS4 entry point.
 pub struct EntryArg {
     vp: &'static VProc,
+    mm: &'static MemoryManager,
     app: Arc<Module>,
     name: CString,
     path: CString,
     canary: [u8; 64],
     pagesizes: [usize; 3],
-    stack_prot: Protections,
     vec: Vec<usize>,
     _pin: PhantomPinned,
 }
 
 impl EntryArg {
-    pub fn new(arnd: &Arnd, vp: &'static VProc, app: Arc<Module>) -> Self {
+    pub fn new(
+        arnd: &Arnd,
+        vp: &'static VProc,
+        mm: &'static MemoryManager,
+        app: Arc<Module>,
+    ) -> Self {
         let path = app.path();
         let name = CString::new(path.file_name().unwrap()).unwrap();
         let path = CString::new(path.as_str()).unwrap();
@@ -49,19 +54,15 @@ impl EntryArg {
 
         Self {
             vp,
+            mm,
             app,
             name,
             path,
             canary,
             pagesizes: [0x4000, 0, 0],
-            stack_prot: Protections::CPU_READ | Protections::CPU_WRITE,
             vec: Vec::new(),
             _pin: PhantomPinned,
         }
-    }
-
-    pub fn stack_prot(&self) -> Protections {
-        self.stack_prot
     }
 
     pub fn as_vec(self: Pin<&mut Self>) -> &Vec<usize> {
@@ -116,7 +117,7 @@ impl EntryArg {
         pin.vec.push(21); // AT_PAGESIZESLEN
         pin.vec.push(size_of_val(&pin.pagesizes));
         pin.vec.push(23); // AT_STACKPROT
-        pin.vec.push(pin.stack_prot.bits().try_into().unwrap());
+        pin.vec.push(pin.mm.stack_prot().bits() as _);
         pin.vec.push(0); // AT_NULL
         pin.vec.push(0);
 

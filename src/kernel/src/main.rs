@@ -3,7 +3,7 @@ use crate::ee::EntryArg;
 use crate::fs::Fs;
 use crate::llvm::Llvm;
 use crate::log::{print, LOGGER};
-use crate::memory::{MappingFlags, MemoryManager, Protections};
+use crate::memory::MemoryManager;
 use crate::process::VProc;
 use crate::regmgr::RegMgr;
 use crate::rtld::{ModuleFlags, RuntimeLinker};
@@ -111,7 +111,14 @@ fn main() -> ExitCode {
     };
 
     // Initialize memory management.
-    let mm: &'static MemoryManager = Box::leak(MemoryManager::new(vp).into());
+    let mm: &'static MemoryManager = match MemoryManager::new(vp) {
+        Ok(v) => Box::leak(v.into()),
+        Err(e) => {
+            error!(e, "Memory manager initialization failed");
+            return ExitCode::FAILURE;
+        }
+    };
+
     let mut log = info!();
 
     writeln!(log, "Page size is             : {}", mm.page_size()).unwrap();
@@ -180,14 +187,14 @@ fn main() -> ExitCode {
     // Initialize syscall routines.
     info!("Initializing system call routines.");
 
-    let sysctl: &'static Sysctl = Box::leak(Sysctl::new(arnd, vp).into());
+    let sysctl: &'static Sysctl = Box::leak(Sysctl::new(arnd, vp, mm).into());
     let syscalls: &'static Syscalls =
         Box::leak(Syscalls::new(vp, fs, mm, ld, sysctl, regmgr).into());
 
     // Bootstrap execution engine.
     info!("Initializing execution engine.");
 
-    let arg = EntryArg::new(arnd, vp, ld.app().clone());
+    let arg = EntryArg::new(arnd, vp, mm, ld.app().clone());
     let ee = match args.execution_engine {
         Some(v) => v,
         #[cfg(target_arch = "x86_64")]
@@ -199,7 +206,7 @@ fn main() -> ExitCode {
     match ee {
         #[cfg(target_arch = "x86_64")]
         ExecutionEngine::Native => {
-            let mut ee = ee::native::NativeEngine::new(ld, syscalls, vp);
+            let mut ee = ee::native::NativeEngine::new(vp, mm, ld, syscalls);
 
             info!("Patching modules.");
 
@@ -224,7 +231,7 @@ fn main() -> ExitCode {
                 }
             }
 
-            exec(ee, arg, mm)
+            exec(ee, arg)
         }
         #[cfg(not(target_arch = "x86_64"))]
         ExecutionEngine::Native => {
@@ -241,45 +248,16 @@ fn main() -> ExitCode {
                 return ExitCode::FAILURE;
             }
 
-            exec(ee, arg, mm)
+            exec(ee, arg)
         }
     }
 }
 
-fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg, mm: &MemoryManager) -> ExitCode {
-    // TODO: Check how the PS4 allocate the stack.
-    info!("Allocating application stack.");
-
-    let mut stack = match mm.mmap(
-        0,
-        0x200000,
-        arg.stack_prot(),
-        "main stack",
-        MappingFlags::MAP_ANON | MappingFlags::MAP_PRIVATE,
-        -1,
-        0,
-    ) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Stack allocation failed");
-            return ExitCode::FAILURE;
-        }
-    };
-
-    // Set the guard page to be non-accessible.
-    if let Err(e) = mm.mprotect(
-        stack.as_mut_ptr(),
-        MemoryManager::VIRTUAL_PAGE_SIZE,
-        Protections::empty(),
-    ) {
-        error!(e, "Guard protection failed");
-        return ExitCode::FAILURE;
-    }
-
+fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg) -> ExitCode {
     // Start the application.
     info!("Starting application.");
 
-    if let Err(e) = unsafe { ee.run(arg, stack) } {
+    if let Err(e) = unsafe { ee.run(arg) } {
         error!(e, "Start failed");
         return ExitCode::FAILURE;
     }
