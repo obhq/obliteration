@@ -1,5 +1,6 @@
 use crate::arnd::Arnd;
 use crate::errno::{Errno, EINVAL, ESRCH};
+use crate::memory::MemoryManager;
 use crate::process::{AppInfoReadError, VProc};
 use std::cmp::min;
 use std::num::NonZeroI32;
@@ -12,6 +13,7 @@ use thiserror::Error;
 pub struct Sysctl {
     arnd: &'static Arnd,
     vp: &'static VProc,
+    mm: &'static MemoryManager,
 }
 
 impl Sysctl {
@@ -19,12 +21,13 @@ impl Sysctl {
     pub const CTL_VM: i32 = 2;
     pub const CTL_DEBUG: i32 = 5;
     pub const KERN_PROC: i32 = 14;
+    pub const KERN_USRSTACK: i32 = 33;
     pub const KERN_ARND: i32 = 37;
     pub const KERN_PROC_APPINFO: i32 = 35;
     pub const VM_TOTAL: i32 = 1;
 
-    pub fn new(arnd: &'static Arnd, vp: &'static VProc) -> Self {
-        Self { arnd, vp }
+    pub fn new(arnd: &'static Arnd, vp: &'static VProc, mm: &'static MemoryManager) -> Self {
+        Self { arnd, vp, mm }
     }
 
     pub fn invoke(
@@ -65,6 +68,7 @@ impl Sysctl {
                 Self::KERN_PROC_APPINFO => self.kern_proc_appinfo(&name[2..], old, new),
                 v => todo!("sysctl CTL_KERN:KERN_PROC:{v}"),
             },
+            Self::KERN_USRSTACK => self.kern_usrstack(old),
             Self::KERN_ARND => self.kern_arnd(old),
             v => todo!("sysctl CTL_KERN:{v}"),
         }
@@ -99,6 +103,15 @@ impl Sysctl {
         }
 
         Ok(old)
+    }
+
+    fn kern_usrstack(&self, old: Option<&mut [u8]>) -> Result<usize, InvokeError> {
+        let stack = unsafe { self.mm.stack().add(self.mm.stack_len()) as usize };
+        let value = stack.to_ne_bytes();
+
+        old.unwrap().copy_from_slice(&value);
+
+        Ok(value.len())
     }
 
     fn kern_arnd(&self, old: Option<&mut [u8]>) -> Result<usize, InvokeError> {

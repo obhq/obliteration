@@ -1,6 +1,6 @@
 use super::{EntryArg, ExecutionEngine};
 use crate::fs::{VPath, VPathBuf};
-use crate::memory::{Protections, VPages};
+use crate::memory::{MemoryManager, Protections};
 use crate::process::VProc;
 use crate::rtld::{CodeWorkspaceError, Memory, Module, RuntimeLinker, UnprotectSegmentError};
 use crate::syscalls::{Input, Output, Syscalls};
@@ -16,18 +16,25 @@ use thiserror::Error;
 
 /// An implementation of [`ExecutionEngine`] for running the PS4 binary natively.
 pub struct NativeEngine {
+    vp: &'static VProc,
+    mm: &'static MemoryManager,
     rtld: &'static RuntimeLinker,
     syscalls: &'static Syscalls,
-    vp: &'static VProc,
 }
 
 impl NativeEngine {
     pub fn new(
+        vp: &'static VProc,
+        mm: &'static MemoryManager,
         rtld: &'static RuntimeLinker,
         syscalls: &'static Syscalls,
-        vp: &'static VProc,
     ) -> Self {
-        Self { rtld, syscalls, vp }
+        Self {
+            vp,
+            mm,
+            rtld,
+            syscalls,
+        }
     }
 
     /// # SAFETY
@@ -472,7 +479,7 @@ impl NativeEngine {
 impl ExecutionEngine for NativeEngine {
     type RunErr = RunError;
 
-    unsafe fn run(&mut self, arg: EntryArg, mut stack: VPages) -> Result<(), Self::RunErr> {
+    unsafe fn run(&mut self, arg: EntryArg) -> Result<(), Self::RunErr> {
         // Get eboot.bin.
         if self.rtld.app().file_info().is_none() {
             todo!("statically linked eboot.bin");
@@ -487,7 +494,10 @@ impl ExecutionEngine for NativeEngine {
         // Spawn main thread.
         let mut arg = Box::pin(arg);
         let entry = move || unsafe { entry(arg.as_mut().as_vec().as_ptr()) };
-        let runner = match self.vp.new_thread(stack.as_mut_ptr(), stack.len(), entry) {
+        let runner = match self
+            .vp
+            .new_thread(self.mm.stack(), self.mm.stack_len(), entry)
+        {
             Ok(v) => v,
             Err(e) => return Err(RunError::CreateMainThreadFailed(e)),
         };

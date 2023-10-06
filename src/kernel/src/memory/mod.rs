@@ -23,32 +23,62 @@ pub struct MemoryManager {
     page_size: usize,
     allocation_granularity: usize,
     allocations: RwLock<BTreeMap<usize, Alloc>>, // Key is Alloc::addr.
+    stack: *mut u8,
+    stack_len: usize,
+    stack_prot: Protections,
 }
 
 impl MemoryManager {
     /// Size of a memory page on PS4.
     pub const VIRTUAL_PAGE_SIZE: usize = 0x4000;
 
-    pub fn new(vp: &'static VProc) -> Self {
+    pub fn new(vp: &'static VProc) -> Result<Self, MemoryManagerError> {
         // Check if page size on the host is supported. We don't need to check allocation
         // granularity because it is always multiply by page size, which is a correct value.
         let (page_size, allocation_granularity) = Self::get_memory_model();
 
-        if page_size > Self::VIRTUAL_PAGE_SIZE || (Self::VIRTUAL_PAGE_SIZE % page_size) != 0 {
+        if page_size > Self::VIRTUAL_PAGE_SIZE {
             // If page size is larger than PS4 we will have a problem with memory protection.
             // Let's say page size on the host is 32K and we have 2 adjacent virtual pages, which is
             // 16K per virtual page. The first virtual page want to use read/write while the second
             // virtual page want to use read-only. This scenario will not be possible because those
             // two virtual pages are on the same page.
-            panic!("Your system is using an unsupported page size.");
+            return Err(MemoryManagerError::UnsupportedPageSize);
         }
 
-        Self {
+        // TODO: Check exec_new_vmspace on the PS4 to see what we have missed here.
+        let mut mm = Self {
             vp,
             page_size,
             allocation_granularity,
             allocations: RwLock::default(),
+            stack: null_mut(),
+            stack_len: 0x200000,
+            stack_prot: Protections::CPU_READ | Protections::CPU_WRITE,
+        };
+
+        // Allocate main stack.
+        let stack = match mm.mmap(
+            0,
+            mm.stack_len,
+            mm.stack_prot,
+            "main stack",
+            MappingFlags::MAP_ANON | MappingFlags::MAP_PRIVATE,
+            -1,
+            0,
+        ) {
+            Ok(v) => v.into_raw(),
+            Err(e) => return Err(MemoryManagerError::StackAllocationFailed(e)),
+        };
+
+        mm.stack = stack;
+
+        // Set the guard page to be non-accessible.
+        if let Err(e) = mm.mprotect(mm.stack, Self::VIRTUAL_PAGE_SIZE, Protections::empty()) {
+            return Err(MemoryManagerError::GuardStackFailed(e));
         }
+
+        Ok(mm)
     }
 
     /// Gets size of page on the host system.
@@ -59,6 +89,18 @@ impl MemoryManager {
     /// Gets allocation granularity on the host system.
     pub fn allocation_granularity(&self) -> usize {
         self.allocation_granularity
+    }
+
+    pub fn stack(&self) -> *mut u8 {
+        self.stack
+    }
+
+    pub fn stack_len(&self) -> usize {
+        self.stack_len
+    }
+
+    pub fn stack_prot(&self) -> Protections {
+        self.stack_prot
     }
 
     pub fn mmap<N: Into<String>>(
@@ -618,7 +660,20 @@ impl Display for MappingFlags {
     }
 }
 
-/// Errors for [`MemoryManager::mmap()`].
+/// Represents an error when [`MemoryManager`] is failed to initialize.
+#[derive(Debug, Error)]
+pub enum MemoryManagerError {
+    #[error("host system is using an unsupported page size")]
+    UnsupportedPageSize,
+
+    #[error("cannot allocate main stack")]
+    StackAllocationFailed(#[source] MmapError),
+
+    #[error("cannot setup guard page for main stack")]
+    GuardStackFailed(#[source] MemoryUpdateError),
+}
+
+/// Represents an error when [`MemoryManager::mmap()`] is failed.
 #[derive(Debug, Error)]
 pub enum MmapError {
     #[error("MAP_ANON is specified with non-negative file descriptor")]
