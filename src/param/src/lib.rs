@@ -1,55 +1,13 @@
 use byteorder::{ByteOrder, BE, LE};
-use error::Error;
-use std::ffi::{c_char, CStr, CString};
-use std::fs::File;
 use std::io::{ErrorKind, Read, Seek, SeekFrom};
-use std::ptr::null_mut;
 use thiserror::Error;
-
-#[no_mangle]
-pub unsafe extern "C" fn param_open(file: *const c_char, error: *mut *mut Error) -> *mut Param {
-    // Open file.
-    let file = match File::open(CStr::from_ptr(file).to_str().unwrap()) {
-        Ok(v) => v,
-        Err(e) => {
-            *error = Error::new(&e);
-            return null_mut();
-        }
-    };
-
-    // Parse.
-    let param = match Param::read(file) {
-        Ok(v) => Box::new(v),
-        Err(e) => {
-            *error = Error::new(&e);
-            return null_mut();
-        }
-    };
-
-    Box::into_raw(param)
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn param_close(param: *mut Param) {
-    drop(Box::from_raw(param));
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn param_title(param: &Param) -> *const c_char {
-    param.title.as_ptr()
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn param_title_id(param: &Param) -> *const c_char {
-    param.title_id.as_ptr()
-}
 
 /// A loaded param.sfo.
 ///
 /// See https://www.psdevwiki.com/ps4/Param.sfo#Internal_Structure for more information.
 pub struct Param {
-    title: CString,
-    title_id: CString,
+    title: String,
+    title_id: String,
 }
 
 impl Param {
@@ -114,8 +72,8 @@ impl Param {
         keys.drain(i..);
 
         // Read entries.
-        let mut title: Option<CString> = None;
-        let mut title_id: Option<CString> = None;
+        let mut title: Option<String> = None;
+        let mut title_id: Option<String> = None;
 
         for i in 0..entries {
             // Seek to the entry.
@@ -183,15 +141,11 @@ impl Param {
     }
 
     pub fn title(&self) -> &str {
-        // SAFETY: This is safe because we already make sure the title is a valid UTF-8 in the
-        // read_utf8.
-        unsafe { std::str::from_utf8_unchecked(self.title.as_bytes()) }
+        &self.title
     }
 
     pub fn title_id(&self) -> &str {
-        // SAFETY: This is safe because we already make sure the title_id is a valid UTF-8 in the
-        // read_utf8.
-        unsafe { std::str::from_utf8_unchecked(self.title_id.as_bytes()) }
+        &self.title_id
     }
 
     fn read_utf8<R: Read>(
@@ -200,7 +154,7 @@ impl Param {
         format: u16,
         len: usize,
         max: usize,
-    ) -> Result<CString, ReadError> {
+    ) -> Result<String, ReadError> {
         // Check format and length.
         if format != 0x0402 || len > max {
             return Err(ReadError::InvalidEntry(i.try_into().unwrap()));
@@ -214,11 +168,11 @@ impl Param {
         }
 
         // Check the value.
-        if data.pop().unwrap() != 0 || std::str::from_utf8(&data).is_err() {
+        if data.pop().unwrap() != 0 {
             return Err(ReadError::InvalidValue(i.try_into().unwrap()));
         }
 
-        Ok(CString::new(data).unwrap())
+        String::from_utf8(data).map_err(|_| ReadError::InvalidValue(i.try_into().unwrap()))
     }
 }
 

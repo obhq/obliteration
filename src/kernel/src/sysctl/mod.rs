@@ -21,12 +21,18 @@ impl Sysctl {
     pub const CTL_KERN: i32 = 1;
     pub const CTL_VM: i32 = 2;
     pub const CTL_DEBUG: i32 = 5;
+    pub const CTL_HW: i32 = 6;
+
     pub const SYSCTL_NAME2OID: i32 = 3;
+
     pub const KERN_PROC: i32 = 14;
     pub const KERN_USRSTACK: i32 = 33;
     pub const KERN_ARND: i32 = 37;
     pub const KERN_PROC_APPINFO: i32 = 35;
+
     pub const VM_TOTAL: i32 = 1;
+
+    pub const HW_PAGESIZE: i32 = 7;
 
     const CTLTYPE: u32 = 0xf;
     const CTLTYPE_NODE: u32 = 1;
@@ -261,11 +267,25 @@ impl Sysctl {
     fn handle_int(
         &self,
         _: &'static Oid,
-        _: &Arg,
-        _: usize,
-        _: &mut SysctlReq,
+        arg1: &Arg,
+        arg2: usize,
+        req: &mut SysctlReq,
     ) -> Result<(), Error> {
-        todo!("sysctl_handle_int");
+        // Read old value.
+        let value: i32 = match arg1 {
+            Arg::Name(v) => v[0],
+            Arg::Static(Some(v)) => *v.downcast_ref::<i32>().unwrap(),
+            Arg::Static(None) => arg2 as _,
+        };
+
+        req.write(&value.to_ne_bytes())?;
+
+        // Write new value.
+        if req.new.is_some() {
+            todo!("sysctl_handle_int with new value");
+        }
+
+        Ok(())
     }
 }
 
@@ -390,7 +410,7 @@ static SYSCTL_NAME2OID: Oid = Oid {
 
 static KERN: Oid = Oid {
     parent: &CHILDREN,
-    link: None, // TODO: Implement this.
+    link: Some(&HW), // TODO: Change to a proper value.
     number: Sysctl::CTL_KERN,
     kind: 0xC0008001,
     arg1: Some(&KERN_CHILDREN),
@@ -495,6 +515,38 @@ static KERN_SMP_CPUS: Oid = Oid {
     handler: Some(Sysctl::handle_int),
     fmt: "I",
     descr: "Number of CPUs online",
+    enabled: true,
+};
+
+static HW: Oid = Oid {
+    parent: &CHILDREN,
+    link: None, // TODO: Implement this.
+    number: Sysctl::CTL_HW,
+    kind: 0xC0000001,
+    arg1: Some(&HW_CHILDREN),
+    arg2: 0,
+    name: "hw",
+    handler: None,
+    fmt: "N",
+    descr: "hardware",
+    enabled: false,
+};
+
+static HW_CHILDREN: OidList = OidList {
+    first: Some(&HW_PAGESIZE), // TODO: Change to a proper value.
+};
+
+static HW_PAGESIZE: Oid = Oid {
+    parent: &HW_CHILDREN,
+    link: None, // TODO: Implement this.
+    number: Sysctl::HW_PAGESIZE,
+    kind: 0x80048002,
+    arg1: None,
+    arg2: MemoryManager::VIRTUAL_PAGE_SIZE,
+    name: "pagesize",
+    handler: Some(Sysctl::handle_int),
+    fmt: "I",
+    descr: "System memory page size",
     enabled: true,
 };
 
