@@ -1,7 +1,7 @@
-pub use input::*;
-pub use output::*;
+pub use self::error::*;
+pub use self::input::*;
+pub use self::output::*;
 
-use self::error::Error;
 use crate::errno::{
     EBADF, EFAULT, EINVAL, ENAMETOOLONG, ENOENT, ENOMEM, ENOSYS, ENOTTY, EPERM, ESRCH,
 };
@@ -12,7 +12,7 @@ use crate::process::{NamedObj, ProcObj, VProc, VProcGroup, VSession, VThread};
 use crate::regmgr::{RegError, RegMgr};
 use crate::rtld::{ModuleFlags, RuntimeLinker};
 use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK};
-use crate::sysctl::Sysctl;
+use crate::sysctl::{Sysctl, SysctlReq};
 use crate::ucred::{AuthInfo, Privilege};
 use crate::{info, warn};
 use macros::cpu_abi;
@@ -343,36 +343,56 @@ impl Syscalls {
         newlen: usize,
     ) -> Result<Output, Error> {
         // Convert name to a slice.
-        let name = std::slice::from_raw_parts(name, namelen.try_into().unwrap());
+        let name = if namelen < 2 || namelen > 24 {
+            return Err(Error::Raw(EINVAL));
+        } else if name.is_null() {
+            return Err(Error::Raw(EFAULT));
+        } else {
+            std::slice::from_raw_parts(name, namelen as _)
+        };
 
-        // Convert old to a slice.
-        let old = if oldlenp.is_null() {
+        if name[0] == Sysctl::CTL_DEBUG && !self.vp.cred().is_system() {
+            return Err(Error::Raw(EINVAL));
+        }
+
+        if name[0] == Sysctl::CTL_VM && name[1] == Sysctl::VM_TOTAL {
+            todo!("sysctl CTL_VM:VM_TOTAL")
+        }
+
+        // Setup a request.
+        let mut req = SysctlReq::default();
+
+        if !oldlenp.is_null() {
+            req.validlen = *oldlenp;
+        }
+
+        req.old = if old.is_null() {
             None
-        } else if old.is_null() {
-            todo!("oldlenp is non-null but old is null")
+        } else if oldlenp.is_null() {
+            Some(std::slice::from_raw_parts_mut(old, 0))
         } else {
             Some(std::slice::from_raw_parts_mut(old, *oldlenp))
         };
 
-        // Convert new to a slice.
-        let new = if newlen == 0 {
+        req.new = if new.is_null() {
             None
-        } else if new.is_null() {
-            todo!("newlen is non-zero but new is null")
         } else {
             Some(std::slice::from_raw_parts(new, newlen))
         };
 
         // Execute.
-        let written = self.sysctl.invoke(name, old, new)?;
-
-        if !oldlenp.is_null() {
-            assert!(written <= *oldlenp);
-            *oldlenp = written;
+        if let Err(e) = self.sysctl.exec(name, &mut req) {
+            if e.errno() != ENOMEM {
+                return Err(e);
+            }
         }
 
-        if let Some(new) = new {
-            info!("Setting sysctl {:?} to {:?}.", name, new);
+        if !oldlenp.is_null() {
+            *oldlenp = if req.old.is_none() || req.oldidx <= req.validlen {
+                req.oldidx
+            } else {
+                req.validlen
+            };
         }
 
         Ok(Output::ZERO)
