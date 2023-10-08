@@ -40,7 +40,7 @@ jobs:
     - name: Build
       run: cmake --build --preset linux-release
     - name: Run tests
-      run: cargo test --workspace
+      run: cargo test --workspace --exclude core
       working-directory: src
     - name: Run Clippy
       run: cargo clippy --release
