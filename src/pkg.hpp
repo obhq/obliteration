@@ -1,7 +1,6 @@
 #pragma once
 
-#include "error.hpp"
-#include "param.hpp"
+#include "core.hpp"
 
 #include <cinttypes>
 #include <cstddef>

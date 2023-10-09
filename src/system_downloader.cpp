@@ -1,5 +1,5 @@
 #include "system_downloader.hpp"
-#include "error.hpp"
+#include "core.hpp"
 
 extern "C" {
     error *system_download(
