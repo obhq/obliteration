@@ -1,4 +1,5 @@
-pub use page::*;
+pub use self::page::*;
+pub use self::stack::*;
 
 use self::iter::StartFromMut;
 use self::storage::Storage;
@@ -14,6 +15,7 @@ use thiserror::Error;
 
 mod iter;
 mod page;
+mod stack;
 mod storage;
 
 /// Manage all paged memory that can be seen by a PS4 app.
@@ -23,9 +25,7 @@ pub struct MemoryManager {
     page_size: usize,
     allocation_granularity: usize,
     allocations: RwLock<BTreeMap<usize, Alloc>>, // Key is Alloc::addr.
-    stack: *mut u8,
-    stack_len: usize,
-    stack_prot: Protections,
+    stack: AppStack,
 }
 
 impl MemoryManager {
@@ -52,16 +52,14 @@ impl MemoryManager {
             page_size,
             allocation_granularity,
             allocations: RwLock::default(),
-            stack: null_mut(),
-            stack_len: 0x200000,
-            stack_prot: Protections::CPU_READ | Protections::CPU_WRITE,
+            stack: AppStack::new(),
         };
 
         // Allocate main stack.
-        let stack = match mm.mmap(
+        let guard = match mm.mmap(
             0,
-            mm.stack_len,
-            mm.stack_prot,
+            mm.stack.len() + Self::VIRTUAL_PAGE_SIZE,
+            mm.stack.prot(),
             "main stack",
             MappingFlags::MAP_ANON | MappingFlags::MAP_PRIVATE,
             -1,
@@ -71,12 +69,14 @@ impl MemoryManager {
             Err(e) => return Err(MemoryManagerError::StackAllocationFailed(e)),
         };
 
-        mm.stack = stack;
-
         // Set the guard page to be non-accessible.
-        if let Err(e) = mm.mprotect(mm.stack, Self::VIRTUAL_PAGE_SIZE, Protections::empty()) {
+        if let Err(e) = mm.mprotect(guard, Self::VIRTUAL_PAGE_SIZE, Protections::empty()) {
             return Err(MemoryManagerError::GuardStackFailed(e));
         }
+
+        mm.stack.set_guard(guard);
+        mm.stack
+            .set_stack(unsafe { guard.add(Self::VIRTUAL_PAGE_SIZE) });
 
         Ok(mm)
     }
@@ -91,16 +91,8 @@ impl MemoryManager {
         self.allocation_granularity
     }
 
-    pub fn stack(&self) -> *mut u8 {
-        self.stack
-    }
-
-    pub fn stack_len(&self) -> usize {
-        self.stack_len
-    }
-
-    pub fn stack_prot(&self) -> Protections {
-        self.stack_prot
+    pub fn stack(&self) -> &AppStack {
+        &self.stack
     }
 
     pub fn mmap<N: Into<String>>(
@@ -319,6 +311,7 @@ impl MemoryManager {
         use std::collections::btree_map::Entry;
 
         // Do allocation.
+        let addr = (addr + 0x3fff) & 0xffffffffffffc000;
         let alloc = match self.alloc(addr, len, prot, name) {
             Ok(v) => v,
             Err(e) => {
@@ -477,7 +470,7 @@ impl MemoryManager {
             // mmap may not aligned correctly. In this case we need to do 2 allocations. The first
             // allocation will be large enough for a second allocation with fixed address.
             // The whole idea is coming from: https://stackoverflow.com/a/31411825/1829232
-            let len = self.get_reserved_size(len);
+            let len = len + (Self::VIRTUAL_PAGE_SIZE - self.allocation_granularity);
             let storage = Memory::new(addr, len)?;
 
             // Do the second allocation.
@@ -509,10 +502,6 @@ impl MemoryManager {
                 storage: Arc::new(storage),
             })
         }
-    }
-
-    fn get_reserved_size(&self, need: usize) -> usize {
-        need + (Self::VIRTUAL_PAGE_SIZE - self.allocation_granularity)
     }
 
     fn align_virtual_page(ptr: *mut u8) -> *mut u8 {

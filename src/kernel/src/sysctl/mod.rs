@@ -242,7 +242,7 @@ impl Sysctl {
         _: usize,
         req: &mut SysctlReq,
     ) -> Result<(), Error> {
-        let stack = unsafe { self.mm.stack().add(self.mm.stack_len()) as usize };
+        let stack = self.mm.stack().end() as usize;
         let value = stack.to_ne_bytes();
 
         req.write(&value)

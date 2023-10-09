@@ -492,12 +492,10 @@ impl ExecutionEngine for NativeEngine {
             unsafe { transmute(mem + boot.entry().unwrap()) };
 
         // Spawn main thread.
+        let stack = self.mm.stack();
         let mut arg = Box::pin(arg);
         let entry = move || unsafe { entry(arg.as_mut().as_vec().as_ptr()) };
-        let runner = match self
-            .vp
-            .new_thread(self.mm.stack(), self.mm.stack_len(), entry)
-        {
+        let runner = match self.vp.new_thread(stack.start(), stack.len(), entry) {
             Ok(v) => v,
             Err(e) => return Err(RunError::CreateMainThreadFailed(e)),
         };

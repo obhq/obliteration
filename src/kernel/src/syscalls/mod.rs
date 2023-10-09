@@ -94,6 +94,7 @@ impl Syscalls {
                 i.args[1].into(),
                 i.args[2].into(),
             ),
+            432 => self.thr_self(i.args[0].into()),
             477 => self.mmap(
                 i.args[0].into(),
                 i.args[1].into(),
@@ -455,6 +456,11 @@ impl Syscalls {
         Ok(Output::ZERO)
     }
 
+    unsafe fn thr_self(&self, id: *mut i64) -> Result<Output, Error> {
+        *id = VThread::current().id().get().into();
+        Ok(Output::ZERO)
+    }
+
     unsafe fn mmap(
         &self,
         addr: usize,
@@ -464,6 +470,21 @@ impl Syscalls {
         fd: i32,
         pos: usize,
     ) -> Result<Output, Error> {
+        // Check if the request is a guard for main stack.
+        let ms = self.mm.stack();
+
+        if addr == ms.guard() {
+            assert_eq!(len, MemoryManager::VIRTUAL_PAGE_SIZE);
+            assert_eq!(prot.is_empty(), true);
+            assert_eq!(flags.intersects(MappingFlags::MAP_ANON), true);
+            assert_eq!(fd, -1);
+            assert_eq!(pos, 0);
+
+            info!("Guard page has been requested for main stack.");
+
+            return Ok(ms.guard().into());
+        }
+
         // TODO: Make a proper name.
         let pages = self.mm.mmap(addr, len, prot, "", flags, fd, pos)?;
 

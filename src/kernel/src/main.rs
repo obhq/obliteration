@@ -121,11 +121,18 @@ fn main() -> ExitCode {
 
     let mut log = info!();
 
-    writeln!(log, "Page size is             : {}", mm.page_size()).unwrap();
+    writeln!(log, "Page size             : {}", mm.page_size()).unwrap();
     writeln!(
         log,
-        "Allocation granularity is: {}",
+        "Allocation granularity: {}",
         mm.allocation_granularity()
+    )
+    .unwrap();
+    writeln!(
+        log,
+        "Main stack            : {:p}:{:p}",
+        mm.stack().start(),
+        mm.stack().end()
     )
     .unwrap();
 
@@ -184,16 +191,10 @@ fn main() -> ExitCode {
 
     drop(module);
 
-    // Initialize syscall routines.
-    info!("Initializing system call routines.");
-
+    // Bootstrap execution engine.
     let sysctl: &'static Sysctl = Box::leak(Sysctl::new(arnd, vp, mm).into());
     let syscalls: &'static Syscalls =
         Box::leak(Syscalls::new(vp, fs, mm, ld, sysctl, regmgr).into());
-
-    // Bootstrap execution engine.
-    info!("Initializing execution engine.");
-
     let arg = EntryArg::new(arnd, vp, mm, ld.app().clone());
     let ee = match args.execution_engine {
         Some(v) => v,
