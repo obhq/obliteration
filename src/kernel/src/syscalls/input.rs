@@ -109,6 +109,13 @@ impl Display for OpenFlags {
     }
 }
 
+/// Outout pf rtprio_thread.
+#[repr(C)]
+pub struct RtPrio {
+    pub ty: u16,
+    pub prio: u16,
+}
+
 /// Contains information about the loaded SELF.
 #[repr(C)]
 pub struct DynlibInfoEx {
