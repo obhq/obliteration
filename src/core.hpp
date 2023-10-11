@@ -15,6 +15,13 @@ extern "C" {
 
     void param_title_get(const param *param, QString &buf);
     void param_title_id_get(const param *param, QString &buf);
+
+    error *system_download(
+        const char *from,
+        const char *to,
+        bool explicit_decryption,
+        void (*status) (const char *, std::uint64_t, std::uint64_t, void *),
+        void *ud);
 }
 
 class Error final {

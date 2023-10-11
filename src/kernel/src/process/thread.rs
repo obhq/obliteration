@@ -14,6 +14,8 @@ pub struct VThread {
     id: NonZeroI32,                 // td_tid
     cred: Ucred,                    // td_ucred
     sigmask: GroupMutex<SignalSet>, // td_sigmask
+    pri_class: u16,                 // td_pri_class
+    base_user_pri: u16,             // td_base_user_pri
 }
 
 impl VThread {
@@ -23,6 +25,8 @@ impl VThread {
             id,
             cred,
             sigmask: mtxg.new_member(SignalSet::default()),
+            pri_class: 3, // TODO: Check the actual value on the PS4 when a thread is created.
+            base_user_pri: 120, // TODO: Same here.
         }
     }
 
@@ -42,6 +46,14 @@ impl VThread {
 
     pub fn sigmask_mut(&self) -> GroupMutexWriteGuard<'_, SignalSet> {
         self.sigmask.write()
+    }
+
+    pub fn pri_class(&self) -> u16 {
+        self.pri_class
+    }
+
+    pub fn base_user_pri(&self) -> u16 {
+        self.base_user_pri
     }
 
     /// An implementation of `priv_check`.

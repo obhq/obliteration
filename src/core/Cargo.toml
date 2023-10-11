@@ -8,6 +8,7 @@ crate-type = ["staticlib"]
 
 [dependencies]
 error = { path = "../error" }
+ftp = { path = "../ftp" }
 param = { path = "../param" }
 pkg = { path = "../pkg" }
-system = { path = "../system" }
+thiserror = "1.0"

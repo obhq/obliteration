@@ -1,15 +1,6 @@
 #include "system_downloader.hpp"
 #include "core.hpp"
 
-extern "C" {
-    error *system_download(
-        const char *from,
-        const char *to,
-        bool explicit_decryption,
-        void (*status) (const char *, std::uint64_t, std::uint64_t, void *),
-        void *ud);
-}
-
 SystemDownloader::SystemDownloader(const QString &from, const QString &to, bool explicitDecryption) :
     m_from(from),
     m_to(to),

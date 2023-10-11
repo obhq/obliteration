@@ -10,8 +10,6 @@ use std::path::{Path, PathBuf};
 use std::ptr::null_mut;
 use thiserror::Error;
 
-/// # Safety
-/// `from` and `to` must be pointed to a null-terminated C string.
 #[no_mangle]
 pub unsafe extern "C" fn system_download(
     from: *const c_char,

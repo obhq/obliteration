@@ -95,6 +95,11 @@ impl Syscalls {
                 i.args[2].into(),
             ),
             432 => self.thr_self(i.args[0].into()),
+            466 => self.rtprio_thread(
+                i.args[0].try_into().unwrap(),
+                i.args[1].try_into().unwrap(),
+                i.args[2].into(),
+            ),
             477 => self.mmap(
                 i.args[0].into(),
                 i.args[1].into(),
@@ -458,6 +463,39 @@ impl Syscalls {
 
     unsafe fn thr_self(&self, id: *mut i64) -> Result<Output, Error> {
         *id = VThread::current().id().get().into();
+        Ok(Output::ZERO)
+    }
+
+    unsafe fn rtprio_thread(
+        &self,
+        function: i32,
+        lwpid: i32,
+        rtp: *mut RtPrio,
+    ) -> Result<Output, Error> {
+        const RTP_LOOKUP: i32 = 0;
+        const RTP_SET: i32 = 1;
+        const RTP_UNK: i32 = 2;
+
+        let td = VThread::current();
+
+        if function == RTP_SET {
+            todo!("rtprio_thread with function = 1");
+        }
+
+        if function == RTP_UNK && td.cred().is_system() {
+            todo!("rtprio_thread with function = 2");
+        } else if lwpid != 0 && lwpid != td.id().get() {
+            return Err(Error::Raw(ESRCH));
+        } else if function == RTP_LOOKUP {
+            (*rtp).ty = td.pri_class();
+            (*rtp).prio = match td.pri_class() & 0xfff7 {
+                2 | 3 | 4 => td.base_user_pri(),
+                _ => 0,
+            };
+        } else {
+            todo!("rtprio_thread with function = {function}");
+        }
+
         Ok(Output::ZERO)
     }
 
