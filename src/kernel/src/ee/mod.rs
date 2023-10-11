@@ -14,7 +14,7 @@ pub mod llvm;
 pub mod native;
 
 /// An object to execute the PS4 binary.
-pub trait ExecutionEngine: Sync {
+pub trait ExecutionEngine: Sync + 'static {
     type RunErr: Error;
 
     /// This method will never return in case of success.
@@ -117,7 +117,7 @@ impl EntryArg {
         pin.vec.push(21); // AT_PAGESIZESLEN
         pin.vec.push(size_of_val(&pin.pagesizes));
         pin.vec.push(23); // AT_STACKPROT
-        pin.vec.push(pin.mm.stack_prot().bits() as _);
+        pin.vec.push(pin.mm.stack().prot().bits() as _);
         pin.vec.push(0); // AT_NULL
         pin.vec.push(0);
 
