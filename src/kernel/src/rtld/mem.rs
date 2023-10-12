@@ -11,7 +11,7 @@ use thiserror::Error;
 
 /// A memory of the loaded module.
 pub struct Memory {
-    mm: &'static MemoryManager,
+    mm: Arc<MemoryManager>,
     ptr: *mut u8,
     len: usize,
     segments: Vec<MemorySegment>,
@@ -27,7 +27,7 @@ pub struct Memory {
 
 impl Memory {
     pub(super) fn new<N: Into<String>>(
-        mm: &'static MemoryManager,
+        mm: &Arc<MemoryManager>,
         image: &Elf<File>,
         base: usize,
         name: N,
@@ -170,7 +170,7 @@ impl Memory {
         }
 
         Ok(Self {
-            mm,
+            mm: mm.clone(),
             ptr: pages.into_raw(),
             len,
             segments,
@@ -287,7 +287,7 @@ impl Memory {
         }
 
         Ok(UnprotectedSegment {
-            mm: self.mm,
+            mm: &self.mm,
             ptr,
             len,
             prot: seg.prot,
@@ -320,7 +320,7 @@ impl Memory {
         }
 
         Ok(UnprotectedMemory {
-            mm: self.mm,
+            mm: &self.mm,
             ptr: self.ptr,
             len: end,
             segments: &self.segments,
@@ -400,7 +400,7 @@ impl MemorySegment {
 
 /// A memory segment in an unprotected form.
 pub struct UnprotectedSegment<'a> {
-    mm: &'static MemoryManager,
+    mm: &'a MemoryManager,
     ptr: *mut u8,
     len: usize,
     prot: Protections,
@@ -421,7 +421,7 @@ impl<'a> Drop for UnprotectedSegment<'a> {
 
 /// The unprotected form of [`Memory`], not including our custom segments.
 pub struct UnprotectedMemory<'a> {
-    mm: &'static MemoryManager,
+    mm: &'a MemoryManager,
     ptr: *mut u8,
     len: usize,
     segments: &'a [MemorySegment],

@@ -1,38 +1,29 @@
 use self::codegen::Codegen;
-use super::{EntryArg, ExecutionEngine};
+use super::{ExecutionEngine, SysErr, SysIn, SysOut};
 use crate::disasm::Disassembler;
 use crate::fs::VPathBuf;
 use crate::llvm::Llvm;
-use crate::rtld::{Module, RuntimeLinker};
-use std::ops::Deref;
+use crate::rtld::Module;
+use std::sync::Arc;
 use thiserror::Error;
 
 mod codegen;
 
 /// An implementation of [`ExecutionEngine`] using JIT powered by LLVM IR.
+#[derive(Debug)]
 pub struct LlvmEngine {
-    llvm: &'static Llvm,
-    rtld: &'static RuntimeLinker,
+    llvm: Arc<Llvm>,
 }
 
 impl LlvmEngine {
-    pub fn new(llvm: &'static Llvm, rtld: &'static RuntimeLinker) -> Self {
-        Self { llvm, rtld }
-    }
-
-    pub fn lift_initial_modules(&mut self) -> Result<(), LiftError> {
-        for module in self.rtld.list().deref() {
-            // TODO: Store the lifted module somewhere.
-            self.lift(module)?;
-        }
-
-        Ok(())
+    pub fn new(llvm: &Arc<Llvm>) -> Arc<Self> {
+        Arc::new(Self { llvm: llvm.clone() })
     }
 
     fn lift(
         &self,
-        module: &Module,
-    ) -> Result<crate::llvm::module::ExecutionEngine<'static>, LiftError> {
+        module: &Module<Self>,
+    ) -> Result<crate::llvm::module::ExecutionEngine, LiftError> {
         // Get a list of public functions.
         let path = module.path();
         let targets = match module.entry() {
@@ -74,20 +65,62 @@ impl LlvmEngine {
 }
 
 impl ExecutionEngine for LlvmEngine {
-    type RunErr = RunError;
+    type RawFn = RawFn;
+    type SetupModuleErr = SetupModuleError;
+    type GetFunctionErr = GetFunctionError;
 
-    unsafe fn run(&mut self, arg: EntryArg) -> Result<(), Self::RunErr> {
+    fn register_syscall<O>(
+        &self,
+        id: u32,
+        o: &Arc<O>,
+        h: fn(&Arc<O>, &SysIn) -> Result<SysOut, SysErr>,
+    ) {
+        todo!()
+    }
+
+    fn setup_module<E>(&self, md: &mut Module<E>) -> Result<(), Self::SetupModuleErr>
+    where
+        E: ExecutionEngine,
+    {
+        todo!()
+    }
+
+    unsafe fn get_function<E>(
+        &self,
+        md: &Arc<Module<E>>,
+        addr: usize,
+    ) -> Result<Arc<Self::RawFn>, Self::GetFunctionErr>
+    where
+        E: ExecutionEngine,
+    {
         todo!()
     }
 }
 
-/// Represent an error when [`LlvmEngine::run()`] is failed.
+/// An implementation of [`ExecutionEngine::RawFn`].
+pub struct RawFn {}
+
+impl super::RawFn for RawFn {
+    fn addr(&self) -> usize {
+        todo!()
+    }
+
+    unsafe fn exec1<R, A>(&self, a: A) -> R {
+        todo!()
+    }
+}
+
+/// An implementation of [`ExecutionEngine::SetupModuleErr`].
 #[derive(Debug, Error)]
-pub enum RunError {}
+pub enum SetupModuleError {}
+
+/// An implementation of [`ExecutionEngine::GetFunctionErr`].
+#[derive(Debug, Error)]
+pub enum GetFunctionError {}
 
 /// Represents an error when module lifting is failed.
 #[derive(Debug, Error)]
-pub enum LiftError {
+enum LiftError {
     #[error("cannot disassemble function {1:#018x} on {0}")]
     DisassembleFailed(VPathBuf, usize, #[source] crate::disasm::DisassembleError),
 

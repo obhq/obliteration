@@ -3,7 +3,7 @@ use llvm_sys::core::{LLVMContextCreate, LLVMContextDispose, LLVMModuleCreateWith
 use llvm_sys::prelude::LLVMContextRef;
 use std::ffi::{c_char, CStr, CString};
 use std::fmt::Display;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 pub mod module;
 
@@ -14,15 +14,15 @@ pub struct Llvm {
 }
 
 impl Llvm {
-    pub fn new() -> Self {
+    pub fn new() -> Arc<Self> {
         let context = unsafe { LLVMContextCreate() };
 
-        Self {
+        Arc::new(Self {
             context: Mutex::new(context),
-        }
+        })
     }
 
-    pub fn create_module(&self, name: &str) -> LlvmModule<'_> {
+    pub fn create_module(self: &Arc<Self>, name: &str) -> LlvmModule {
         let context = self.context.lock().unwrap();
         let name = CString::new(name).unwrap();
         let module = unsafe { LLVMModuleCreateWithNameInContext(name.as_ptr(), *context) };

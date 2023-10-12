@@ -1,7 +1,12 @@
 pub use self::key::*;
 
+use crate::ee::{ExecutionEngine, SysErr, SysIn, SysOut};
+use crate::process::VThread;
 use crate::ucred::Ucred;
+use crate::{info, warn};
 use std::fmt::{Display, Formatter};
+use std::ptr::read;
+use std::sync::Arc;
 use thiserror::Error;
 
 mod key;
@@ -10,11 +15,78 @@ mod key;
 pub struct RegMgr {}
 
 impl RegMgr {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new<E: ExecutionEngine>(ee: &E) -> Arc<Self> {
+        let mgr = Arc::new(Self {});
+
+        ee.register_syscall(532, &mgr, Self::sys_regmgr_call);
+
+        mgr
     }
 
-    pub fn decode_key(&self, v1: u64, v2: u32, cred: &Ucred, v3: u32) -> Result<RegKey, RegError> {
+    fn sys_regmgr_call(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        // Get arguments.
+        let op: u32 = i.args[0].try_into().unwrap();
+        let buf: *mut i32 = i.args[2].into();
+        let req: *const u8 = i.args[3].into();
+        let reqlen: usize = i.args[4].into();
+
+        // TODO: Check the result of priv_check(td, 682).
+        if buf.is_null() {
+            todo!("regmgr_call with buf = null");
+        }
+
+        if req.is_null() {
+            todo!("regmgr_call with req = null");
+        }
+
+        if reqlen > 2048 {
+            todo!("regmgr_call with reqlen > 2048");
+        }
+
+        // Execute the operation.
+        let td = VThread::current();
+        let r = match op {
+            0x18 => {
+                let v1 = unsafe { read::<u64>(req as _) };
+                let v2 = unsafe { read::<u32>(req.add(8) as _) };
+                let value = unsafe { read::<i32>(req.add(12) as _) };
+
+                info!(
+                    "Attempting to set registry with v1: {}, v2: {}, value: {}.",
+                    v1, v2, value
+                );
+
+                self.decode_key(v1, v2, td.cred(), 2).and_then(|k| {
+                    info!("Setting registry key {} to value {}.", k, value);
+                    self.set_int(k, value)
+                })
+            }
+            0x19 => {
+                let v1 = unsafe { read::<u64>(req as _) };
+                let v2 = unsafe { read::<u32>(req.add(8) as _) };
+
+                self.decode_key(v1, v2, td.cred(), 1)
+                    .and_then(|k| todo!("regmgr_call({op}) with matched key = {k}"))
+            }
+            0x27 | 0x40.. => Err(RegError::V800d0219),
+            v => todo!("regmgr_call({v})"),
+        };
+
+        // Write the result.
+        unsafe {
+            *buf = match r {
+                Ok(v) => v,
+                Err(e) => {
+                    warn!(e, "regmgr_call({op}) failed");
+                    e.code()
+                }
+            }
+        };
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn decode_key(&self, v1: u64, v2: u32, cred: &Ucred, v3: u32) -> Result<RegKey, RegError> {
         // Check checksum.
         let a = (v1 & 0xff) as i32;
         let b = ((v1 >> 8) & 0xff) as i32;
@@ -83,7 +155,7 @@ impl RegMgr {
     }
 
     /// See `sceRegMgrSetInt` on the PS4 for a reference.
-    pub fn set_int(&self, key: RegKey, value: i32) -> Result<i32, RegError> {
+    fn set_int(&self, key: RegKey, value: i32) -> Result<i32, RegError> {
         let value = value.to_le_bytes();
 
         if let Err(e) = self.check_param(key, 0, value.len()) {

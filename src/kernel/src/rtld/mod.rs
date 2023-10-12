@@ -2,14 +2,19 @@ pub use self::mem::*;
 pub use self::module::*;
 
 use self::resolver::{ResolveFlags, SymbolResolver};
-use crate::errno::{Errno, EINVAL, ENOEXEC};
+use crate::ee::{ExecutionEngine, SysErr, SysIn, SysOut};
+use crate::errno::{Errno, EINVAL, ENOEXEC, ENOMEM, EPERM, ESRCH};
 use crate::fs::{Fs, FsError, FsItem, VPath, VPathBuf};
+use crate::info;
+use crate::log::print;
 use crate::memory::{MemoryManager, MemoryUpdateError, MmapError, Protections};
-use crate::process::{ProcObj, VProc};
+use crate::process::VProc;
 use bitflags::bitflags;
 use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation};
-use gmtx::{GroupMutex, GroupMutexReadGuard};
+use gmtx::GroupMutex;
 use std::fs::File;
+use std::io::Write;
+use std::mem::{size_of, zeroed};
 use std::num::NonZeroI32;
 use std::ops::Deref;
 use std::ptr::{read_unaligned, write_unaligned};
@@ -23,24 +28,26 @@ mod resolver;
 /// An implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/libexec/rtld-elf/rtld.c.
 #[derive(Debug)]
-pub struct RuntimeLinker {
-    fs: &'static Fs,
-    mm: &'static MemoryManager,
-    vp: &'static VProc,
-    list: GroupMutex<Vec<Arc<Module>>>,      // obj_list + obj_tail
-    app: Arc<Module>,                        // obj_main
-    kernel: GroupMutex<Option<Arc<Module>>>, // obj_kernel
-    mains: GroupMutex<Vec<Arc<Module>>>,     // list_main
+pub struct RuntimeLinker<E: ExecutionEngine> {
+    fs: Arc<Fs>,
+    mm: Arc<MemoryManager>,
+    ee: Arc<E>,
+    vp: Arc<VProc>,
+    list: GroupMutex<Vec<Arc<Module<E>>>>, // obj_list + obj_tail
+    app: Arc<Module<E>>,                   // obj_main
+    kernel: GroupMutex<Option<Arc<Module<E>>>>, // obj_kernel
+    mains: GroupMutex<Vec<Arc<Module<E>>>>, // list_main
     tls: GroupMutex<TlsAlloc>,
     flags: LinkerFlags,
 }
 
-impl RuntimeLinker {
+impl<E: ExecutionEngine> RuntimeLinker<E> {
     pub fn new(
-        fs: &'static Fs,
-        mm: &'static MemoryManager,
-        vp: &'static VProc,
-    ) -> Result<Self, RuntimeLinkerError> {
+        fs: &Arc<Fs>,
+        mm: &Arc<MemoryManager>,
+        ee: &Arc<E>,
+        vp: &Arc<VProc>,
+    ) -> Result<Arc<Self>, RuntimeLinkerError<E>> {
         // Get path to eboot.bin.
         let mut path = fs.app().join("app0").unwrap();
 
@@ -84,12 +91,16 @@ impl RuntimeLinker {
 
         // TODO: Apply remaining checks from exec_self_imgact.
         // Map eboot.bin.
-        let app = match Module::map(mm, elf, base, "executable", 0, 1, vp.mutex_group()) {
-            Ok(v) => Arc::new(v),
+        let mut app = match Module::map(mm, ee, elf, base, "executable", 0, 1, vp.mutex_group()) {
+            Ok(v) => v,
             Err(e) => return Err(RuntimeLinkerError::MapExeFailed(file.into_vpath(), e)),
         };
 
         *app.flags_mut() |= ModuleFlags::MAIN_PROG;
+
+        if let Err(e) = ee.setup_module(&mut app) {
+            return Err(RuntimeLinkerError::SetupExeFailed(file.into_vpath(), e));
+        }
 
         // Check if application need certain modules.
         let mut flags = LinkerFlags::empty();
@@ -108,11 +119,12 @@ impl RuntimeLinker {
         // TODO: Apply logic from aio_proc_rundown_exec.
         // TODO: Apply logic from gs_is_event_handler_process_exec.
         let mg = vp.mutex_group();
-
-        Ok(Self {
-            fs,
-            mm,
-            vp,
+        let app = Arc::new(app);
+        let ld = Arc::new(Self {
+            fs: fs.clone(),
+            mm: mm.clone(),
+            ee: ee.clone(),
+            vp: vp.clone(),
             list: mg.new_member(vec![app.clone()]),
             app: app.clone(),
             kernel: mg.new_member(None),
@@ -124,28 +136,31 @@ impl RuntimeLinker {
                 static_space: 0,
             }),
             flags,
-        })
+        });
+
+        ee.register_syscall(592, &ld, Self::sys_dynlib_get_list);
+        ee.register_syscall(598, &ld, Self::sys_dynlib_get_proc_param);
+        ee.register_syscall(599, &ld, Self::sys_dynlib_process_needed_and_relocate);
+        ee.register_syscall(608, &ld, Self::sys_dynlib_get_info_ex);
+
+        Ok(ld)
     }
 
-    pub fn list(&self) -> GroupMutexReadGuard<'_, Vec<Arc<Module>>> {
-        self.list.read()
-    }
-
-    pub fn app(&self) -> &Arc<Module> {
+    pub fn app(&self) -> &Arc<Module<E>> {
         &self.app
     }
 
-    pub fn kernel(&self) -> Option<Arc<Module>> {
+    pub fn kernel(&self) -> Option<Arc<Module<E>>> {
         self.kernel.read().clone()
     }
 
-    pub fn set_kernel(&self, md: Arc<Module>) {
+    pub fn set_kernel(&self, md: Arc<Module<E>>) {
         *self.kernel.write() = Some(md);
     }
 
     /// This method **ALWAYS** load the specified module without checking if the same module is
     /// already loaded.
-    pub fn load(&mut self, path: &VPath, main: bool) -> Result<Arc<Module>, LoadError> {
+    pub fn load(&self, path: &VPath, main: bool) -> Result<Arc<Module<E>>, LoadError<E>> {
         // Get file.
         let file = match self.fs.get(path) {
             Ok(v) => match v {
@@ -200,12 +215,14 @@ impl RuntimeLinker {
         // Map file.
         let mut table = self.vp.objects_mut();
         let (entry, _) = table.alloc(|id| {
+            let name = path.file_name().unwrap();
             let id: u32 = (id + 1).try_into().unwrap();
-            let md = match Module::map(
-                self.mm,
+            let mut md = match Module::map(
+                &self.mm,
+                &self.ee,
                 elf,
                 0,
-                path.file_name().unwrap(),
+                name,
                 id,
                 tls,
                 self.vp.mutex_group(),
@@ -218,36 +235,106 @@ impl RuntimeLinker {
                 return Err(LoadError::ImpureText);
             }
 
-            Ok(ProcObj::Module(Arc::new(md)))
+            // TODO: Check the call to sceSblAuthMgrIsLoadable in the self_load_shared_object on the PS4
+            // to see how it is return the value.
+            if name != "libc.sprx" && name != "libSceFios2.sprx" {
+                *md.flags_mut() |= ModuleFlags::UNK1;
+            }
+
+            if let Err(e) = self.ee.setup_module(&mut md) {
+                return Err(LoadError::SetupFailed(e));
+            }
+
+            Ok(Arc::new(md))
         })?;
 
         entry.set_flags(0x2000);
 
-        // TODO: Check the call to sceSblAuthMgrIsLoadable in the self_load_shared_object on the PS4
-        // to see how it is return the value.
-        let name = path.file_name().unwrap();
-        let module = match entry.data() {
-            ProcObj::Module(v) => v,
-            _ => unreachable!(),
-        };
-
-        if name != "libc.sprx" && name != "libSceFios2.sprx" {
-            *module.flags_mut() |= ModuleFlags::UNK1;
-        }
-
         // Add to list.
+        let module = entry.data().clone().downcast::<Module<E>>().unwrap();
+
         list.push(module.clone());
 
         if main {
             self.mains.write().push(module.clone());
         }
 
-        Ok(module.clone())
+        Ok(module)
+    }
+
+    fn sys_dynlib_get_list(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        // Get arguments.
+        let buf: *mut u32 = i.args[0].into();
+        let max: usize = i.args[1].into();
+        let copied: *mut usize = i.args[2].into();
+
+        // Check if application is dynamic linking.
+        if self.app.file_info().is_none() {
+            return Err(SysErr::Raw(EPERM));
+        }
+
+        // Copy module ID.
+        let list = self.list.read();
+
+        if list.len() > max {
+            return Err(SysErr::Raw(ENOMEM));
+        }
+
+        for (i, m) in list.iter().enumerate() {
+            unsafe { *buf.add(i) = m.id() };
+        }
+
+        // Set copied.
+        unsafe { *copied = list.len() };
+
+        info!("Copied {} module IDs for dynamic linking.", list.len());
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn sys_dynlib_get_proc_param(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        // Get arguments.
+        let param: *mut usize = i.args[0].into();
+        let size: *mut usize = i.args[1].into();
+
+        // Check if application is a dynamic SELF.
+        if self.app.file_info().is_none() {
+            return Err(SysErr::Raw(EPERM));
+        }
+
+        // Get param.
+        match self.app.proc_param() {
+            Some(v) => {
+                // TODO: Seems like ET_SCE_DYNEXEC is mapped at a fixed address.
+                unsafe { *param = self.app.memory().addr() + v.0 };
+                unsafe { *size = v.1 };
+            }
+            None => todo!("app is dynamic but no PT_SCE_PROCPARAM"),
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn sys_dynlib_process_needed_and_relocate(
+        self: &Arc<Self>,
+        _: &SysIn,
+    ) -> Result<SysOut, SysErr> {
+        // Check if application is dynamic linking.
+        if self.app.file_info().is_none() {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        // TODO: Implement dynlib_load_needed_shared_objects.
+        info!("Relocating loaded modules.");
+
+        unsafe { self.relocate() }?;
+
+        Ok(SysOut::ZERO)
     }
 
     /// # Safety
     /// No other threads may access the memory of all loaded modules.
-    pub unsafe fn relocate(&self) -> Result<(), RelocateError> {
+    unsafe fn relocate(&self) -> Result<(), RelocateError> {
         // Initialize TLS.
         let mains = self.mains.read();
         let mut alloc = self.tls.write();
@@ -306,8 +393,8 @@ impl RuntimeLinker {
     /// No other thread may access the module memory.
     unsafe fn relocate_single<'b>(
         &self,
-        md: &'b Arc<Module>,
-        resolver: &SymbolResolver<'b>,
+        md: &'b Arc<Module<E>>,
+        resolver: &SymbolResolver<'b, E>,
     ) -> Result<(), RelocateError> {
         // Unprotect the memory.
         let mut mem = match md.memory().unprotect() {
@@ -330,10 +417,10 @@ impl RuntimeLinker {
     /// See `reloc_non_plt` on the PS4 kernel for a reference.
     fn relocate_rela<'b>(
         &self,
-        md: &'b Arc<Module>,
+        md: &'b Arc<Module<E>>,
         mem: &mut [u8],
         relocated: &mut [bool],
-        resolver: &SymbolResolver<'b>,
+        resolver: &SymbolResolver<'b, E>,
     ) -> Result<(), RelocateError> {
         let info = md.file_info().unwrap(); // Let it panic because the PS4 assume it is available.
         let addr = mem.as_ptr() as usize;
@@ -405,10 +492,10 @@ impl RuntimeLinker {
     /// See `reloc_jmplots` on the PS4 for a reference.
     fn relocate_plt<'b>(
         &self,
-        md: &'b Arc<Module>,
+        md: &'b Arc<Module<E>>,
         mem: &mut [u8],
         relocated: &mut [bool],
-        resolver: &SymbolResolver<'b>,
+        resolver: &SymbolResolver<'b, E>,
     ) -> Result<(), RelocateError> {
         // Do nothing if not a dynamic module.
         let info = match md.file_info() {
@@ -455,6 +542,156 @@ impl RuntimeLinker {
 
         Ok(())
     }
+
+    fn sys_dynlib_get_info_ex(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        // Get arguments.
+        let handle: u32 = i.args[0].try_into().unwrap();
+        let flags: u32 = i.args[1].try_into().unwrap();
+        let info: *mut DynlibInfoEx = i.args[2].into();
+
+        // Check if application is dynamic linking.
+        if self.app.file_info().is_none() {
+            return Err(SysErr::Raw(EPERM));
+        }
+
+        // Check buffer size.
+        let size: usize = unsafe { (*info).size.try_into().unwrap() };
+
+        if size != size_of::<DynlibInfoEx>() {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        // Lookup the module.
+        let modules = self.list.read();
+        let md = match modules.iter().find(|m| m.id() == handle) {
+            Some(v) => v,
+            None => return Err(SysErr::Raw(ESRCH)),
+        };
+
+        // Fill the info.
+        let info = unsafe { &mut *info };
+        let mem = md.memory();
+        let addr = mem.addr();
+
+        *info = unsafe { zeroed() };
+        info.handle = md.id();
+        info.mapbase = addr + mem.base();
+        info.textsize = mem.text_segment().len().try_into().unwrap();
+        info.unk3 = 5;
+        info.database = addr + mem.data_segment().start();
+        info.datasize = mem.data_segment().len().try_into().unwrap();
+        info.unk4 = 3;
+        info.unk6 = 2;
+        info.refcount = Arc::strong_count(md).try_into().unwrap();
+
+        // Copy module name.
+        if flags & 2 == 0 || !md.flags().contains(ModuleFlags::UNK1) {
+            let name = md.path().file_name().unwrap();
+
+            (*info).name[..name.len()].copy_from_slice(name.as_bytes());
+            (*info).name[0xff] = 0;
+        }
+
+        // Set TLS information. Not sure if the tlsinit can be zero when the tlsinitsize is zero.
+        // Let's keep the same behavior as the PS4 for now.
+        (*info).tlsindex = if flags & 1 != 0 {
+            let flags = md.flags();
+            let mut upper = if flags.contains(ModuleFlags::UNK1) {
+                1
+            } else {
+                0
+            };
+
+            if flags.contains(ModuleFlags::MAIN_PROG) {
+                upper += 2;
+            }
+
+            (upper << 16) | (md.tls_index() & 0xffff)
+        } else {
+            md.tls_index() & 0xffff
+        };
+
+        if let Some(i) = md.tls_info() {
+            (*info).tlsinit = addr + i.init();
+            (*info).tlsinitsize = i.init_size().try_into().unwrap();
+            (*info).tlssize = i.size().try_into().unwrap();
+            (*info).tlsalign = i.align().try_into().unwrap();
+        } else {
+            (*info).tlsinit = addr;
+        }
+
+        (*info).tlsoffset = (*md.tls_offset()).try_into().unwrap();
+
+        // Initialization and finalization functions.
+        if !md.flags().contains(ModuleFlags::UNK5) {
+            (*info).init = md.init().map(|v| addr + v).unwrap_or(0);
+            (*info).fini = md.fini().map(|v| addr + v).unwrap_or(0);
+        }
+
+        // Exception handling.
+        if let Some(i) = md.eh_info() {
+            (*info).eh_frame_hdr = addr + i.header();
+            (*info).eh_frame_hdr_size = i.header_size().try_into().unwrap();
+            (*info).eh_frame = addr + i.frame();
+            (*info).eh_frame_size = i.frame_size().try_into().unwrap();
+        } else {
+            (*info).eh_frame_hdr = addr;
+        }
+
+        let mut e = info!();
+
+        writeln!(
+            e,
+            "Retrieved info for module {} (ID = {}).",
+            md.path(),
+            handle
+        )
+        .unwrap();
+        writeln!(e, "mapbase     : {:#x}", (*info).mapbase).unwrap();
+        writeln!(e, "textsize    : {:#x}", (*info).textsize).unwrap();
+        writeln!(e, "database    : {:#x}", (*info).database).unwrap();
+        writeln!(e, "datasize    : {:#x}", (*info).datasize).unwrap();
+        writeln!(e, "tlsindex    : {}", (*info).tlsindex).unwrap();
+        writeln!(e, "tlsinit     : {:#x}", (*info).tlsinit).unwrap();
+        writeln!(e, "tlsoffset   : {:#x}", (*info).tlsoffset).unwrap();
+        writeln!(e, "init        : {:#x}", (*info).init).unwrap();
+        writeln!(e, "fini        : {:#x}", (*info).fini).unwrap();
+        writeln!(e, "eh_frame_hdr: {:#x}", (*info).eh_frame_hdr).unwrap();
+
+        print(e);
+
+        Ok(SysOut::ZERO)
+    }
+}
+
+#[repr(C)]
+struct DynlibInfoEx {
+    size: u64,
+    name: [u8; 256],
+    handle: u32,
+    tlsindex: u32,
+    tlsinit: usize,
+    tlsinitsize: u32,
+    tlssize: u32,
+    tlsoffset: u32,
+    tlsalign: u32,
+    init: usize,
+    fini: usize,
+    unk1: u64, // Always zero.
+    unk2: u64, // Same here.
+    eh_frame_hdr: usize,
+    eh_frame: usize,
+    eh_frame_hdr_size: u32,
+    eh_frame_size: u32,
+    mapbase: usize,
+    textsize: u32,
+    unk3: u32, // Always 5.
+    database: usize,
+    datasize: u32,
+    unk4: u32,        // Always 3.
+    unk5: [u8; 0x20], // Always zeroes.
+    unk6: u32,        // Always 2.
+    refcount: u32,
 }
 
 /// Contains how TLS was allocated so far.
@@ -477,7 +714,7 @@ bitflags! {
 
 /// Represents the error for [`RuntimeLinker`] initialization.
 #[derive(Debug, Error)]
-pub enum RuntimeLinkerError {
+pub enum RuntimeLinkerError<E: ExecutionEngine> {
     #[error("cannot get {0}")]
     GetExeFailed(VPathBuf, #[source] FsError),
 
@@ -492,6 +729,9 @@ pub enum RuntimeLinkerError {
 
     #[error("cannot map {0}")]
     MapExeFailed(VPathBuf, #[source] MapError),
+
+    #[error("cannot setup {0}")]
+    SetupExeFailed(VPathBuf, #[source] E::SetupModuleErr),
 }
 
 /// Represents an error for (S)ELF mapping.
@@ -542,7 +782,7 @@ pub enum MapError {
 
 /// Represents an error for (S)ELF loading.
 #[derive(Debug, Error)]
-pub enum LoadError {
+pub enum LoadError<E: ExecutionEngine> {
     #[error("cannot get the specified file")]
     GetFileFailed(#[source] FsError),
 
@@ -560,6 +800,9 @@ pub enum LoadError {
 
     #[error("the specified file has impure text")]
     ImpureText,
+
+    #[error("cannot setup the module")]
+    SetupFailed(#[source] E::SetupModuleErr),
 }
 
 /// Represents an error for modules relocation.

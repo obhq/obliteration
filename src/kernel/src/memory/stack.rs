@@ -48,3 +48,5 @@ impl AppStack {
         self.stack = v;
     }
 }
+
+unsafe impl Send for AppStack {}

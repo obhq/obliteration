@@ -3,12 +3,14 @@ pub use self::stack::*;
 
 use self::iter::StartFromMut;
 use self::storage::Storage;
+use crate::ee::{ExecutionEngine, SysArg, SysErr, SysIn, SysOut};
 use crate::errno::{Errno, EINVAL, ENOMEM};
 use crate::process::VProc;
+use crate::{info, warn};
 use bitflags::bitflags;
 use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
-use std::num::NonZeroI32;
+use std::num::{NonZeroI32, TryFromIntError};
 use std::ptr::null_mut;
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
@@ -21,7 +23,7 @@ mod storage;
 /// Manage all paged memory that can be seen by a PS4 app.
 #[derive(Debug)]
 pub struct MemoryManager {
-    vp: &'static VProc,
+    vp: Arc<VProc>,
     page_size: usize,
     allocation_granularity: usize,
     allocations: RwLock<BTreeMap<usize, Alloc>>, // Key is Alloc::addr.
@@ -32,7 +34,7 @@ impl MemoryManager {
     /// Size of a memory page on PS4.
     pub const VIRTUAL_PAGE_SIZE: usize = 0x4000;
 
-    pub fn new(vp: &'static VProc) -> Result<Self, MemoryManagerError> {
+    pub fn new(vp: &Arc<VProc>) -> Result<Arc<Self>, MemoryManagerError> {
         // Check if page size on the host is supported. We don't need to check allocation
         // granularity because it is always multiply by page size, which is a correct value.
         let (page_size, allocation_granularity) = Self::get_memory_model();
@@ -48,7 +50,7 @@ impl MemoryManager {
 
         // TODO: Check exec_new_vmspace on the PS4 to see what we have missed here.
         let mut mm = Self {
-            vp,
+            vp: vp.clone(),
             page_size,
             allocation_granularity,
             allocations: RwLock::default(),
@@ -78,7 +80,7 @@ impl MemoryManager {
         mm.stack
             .set_stack(unsafe { guard.add(Self::VIRTUAL_PAGE_SIZE) });
 
-        Ok(mm)
+        Ok(Arc::new(mm))
     }
 
     /// Gets size of page on the host system.
@@ -93,6 +95,11 @@ impl MemoryManager {
 
     pub fn stack(&self) -> &AppStack {
         &self.stack
+    }
+
+    pub fn install_syscalls<E: ExecutionEngine>(self: &Arc<Self>, ee: &E) {
+        ee.register_syscall(477, self, Self::sys_mmap);
+        ee.register_syscall(588, self, Self::sys_mname);
     }
 
     pub fn mmap<N: Into<String>>(
@@ -319,7 +326,7 @@ impl MemoryManager {
                     return Err(MmapError::NoMem(len));
                 } else {
                     // We should not hit other error except for out of memory.
-                    panic!("Failed to allocate {len}: {e}.");
+                    panic!("Failed to allocate {len} bytes: {e}.");
                 }
             }
         };
@@ -504,6 +511,79 @@ impl MemoryManager {
         }
     }
 
+    fn sys_mmap(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        // Get arguments.
+        let addr: usize = i.args[0].into();
+        let len: usize = i.args[1].into();
+        let prot: Protections = i.args[2].try_into().unwrap();
+        let flags: MappingFlags = i.args[3].try_into().unwrap();
+        let fd: i32 = i.args[4].try_into().unwrap();
+        let pos: usize = i.args[5].into();
+
+        // Check if the request is a guard for main stack.
+        if addr == self.stack.guard() {
+            assert_eq!(len, MemoryManager::VIRTUAL_PAGE_SIZE);
+            assert_eq!(prot.is_empty(), true);
+            assert_eq!(flags.intersects(MappingFlags::MAP_ANON), true);
+            assert_eq!(fd, -1);
+            assert_eq!(pos, 0);
+
+            info!("Guard page has been requested for main stack.");
+
+            return Ok(self.stack.guard().into());
+        }
+
+        // TODO: Make a proper name.
+        let pages = self.mmap(addr, len, prot, "", flags, fd, pos)?;
+
+        if addr != 0 && pages.addr() != addr {
+            warn!(
+                "mmap({:#x}, {:#x}, {}, {}, {}, {}) was success with {:#x} instead of {:#x}.",
+                addr,
+                len,
+                prot,
+                flags,
+                fd,
+                pos,
+                pages.addr(),
+                addr
+            );
+        } else {
+            info!(
+                "{:#x}:{:p} is mapped as {} with {}.",
+                pages.addr(),
+                pages.end(),
+                prot,
+                flags,
+            );
+        }
+
+        Ok(pages.into_raw().into())
+    }
+
+    fn sys_mname(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let addr: usize = i.args[0].into();
+        let len: usize = i.args[1].into();
+        let name = unsafe { i.args[2].to_str(32)?.unwrap() };
+
+        info!(
+            "Setting name for {:#x}:{:#x} to '{}'.",
+            addr,
+            addr + len,
+            name
+        );
+
+        // PS4 does not check if vm_map_set_name is failed.
+        let len = (addr & 0x3fff) + len + 0x3fff & 0xffffffffffffc000;
+        let addr = (addr & 0xffffffffffffc000) as *mut u8;
+
+        if let Err(e) = self.mname(addr, len, name) {
+            warn!(e, "mname({addr:p}, {len:#x}, {name}) was failed");
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
     fn align_virtual_page(ptr: *mut u8) -> *mut u8 {
         match (ptr as usize) % Self::VIRTUAL_PAGE_SIZE {
             0 => ptr,
@@ -620,6 +700,14 @@ impl Protections {
     }
 }
 
+impl TryFrom<SysArg> for Protections {
+    type Error = TryFromIntError;
+
+    fn try_from(v: SysArg) -> Result<Self, Self::Error> {
+        Ok(Self::from_bits_retain(v.get().try_into()?))
+    }
+}
+
 impl Display for Protections {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
@@ -640,6 +728,14 @@ bitflags! {
         const UNK2 = 0x00010000;
         const UNK3 = 0x00100000;
         const UNK1 = 0x00200000;
+    }
+}
+
+impl TryFrom<SysArg> for MappingFlags {
+    type Error = TryFromIntError;
+
+    fn try_from(v: SysArg) -> Result<Self, Self::Error> {
+        Ok(Self::from_bits_retain(v.get().try_into()?))
     }
 }
 

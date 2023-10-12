@@ -37,18 +37,33 @@ impl Memory {
 
     #[cfg(windows)]
     pub fn new(addr: usize, len: usize) -> Result<Self, Error> {
+        use std::ptr::null;
+        use windows_sys::Win32::Foundation::{GetLastError, ERROR_INVALID_ADDRESS};
         use windows_sys::Win32::System::Memory::{VirtualAlloc, MEM_RESERVE, PAGE_NOACCESS};
 
-        let addr = unsafe { VirtualAlloc(addr as _, len, MEM_RESERVE, PAGE_NOACCESS) };
+        let ptr = unsafe { VirtualAlloc(addr as _, len, MEM_RESERVE, PAGE_NOACCESS) };
 
-        if addr.is_null() {
+        if !ptr.is_null() {
+            return Ok(Self {
+                addr: ptr as _,
+                len,
+            });
+        } else if addr == 0 || unsafe { GetLastError() } != ERROR_INVALID_ADDRESS {
             return Err(Error::last_os_error());
         }
 
-        Ok(Self {
-            addr: addr as _,
-            len,
-        })
+        // Windows will fail with ERROR_INVALID_ADDRESS instead of returning the allocated memory
+        // somewhere else if the requested address cannot be reserved.
+        let ptr = unsafe { VirtualAlloc(null(), len, MEM_RESERVE, PAGE_NOACCESS) };
+
+        if ptr.is_null() {
+            Err(Error::last_os_error())
+        } else {
+            return Ok(Self {
+                addr: ptr as _,
+                len,
+            });
+        }
     }
 
     #[cfg(unix)]

@@ -1,19 +1,20 @@
 use crate::arnd::Arnd;
-use crate::errno::{EINVAL, EISDIR, ENAMETOOLONG, ENOENT, ENOMEM, ENOTDIR, EPERM, ESRCH};
+use crate::ee::{ExecutionEngine, SysErr, SysIn, SysOut};
+use crate::errno::{EFAULT, EINVAL, EISDIR, ENAMETOOLONG, ENOENT, ENOMEM, ENOTDIR, EPERM, ESRCH};
 use crate::memory::MemoryManager;
 use crate::process::VProc;
-use crate::syscalls::Error;
 use std::any::Any;
 use std::cmp::min;
+use std::sync::Arc;
 
 /// A registry of system parameters.
 ///
 /// This is an implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/kern/kern_sysctl.c.
 pub struct Sysctl {
-    arnd: &'static Arnd,
-    vp: &'static VProc,
-    mm: &'static MemoryManager,
+    arnd: Arc<Arnd>,
+    vp: Arc<VProc>,
+    mm: Arc<MemoryManager>,
 }
 
 impl Sysctl {
@@ -40,12 +41,90 @@ impl Sysctl {
     const CTLFLAG_ANYBODY: u32 = 0x10000000;
     const CTLFLAG_WR: u32 = 0x40000000;
 
-    pub fn new(arnd: &'static Arnd, vp: &'static VProc, mm: &'static MemoryManager) -> Self {
-        Self { arnd, vp, mm }
+    pub fn new<E>(arnd: &Arc<Arnd>, vp: &Arc<VProc>, mm: &Arc<MemoryManager>, ee: &E) -> Arc<Self>
+    where
+        E: ExecutionEngine,
+    {
+        let ctl = Arc::new(Self {
+            arnd: arnd.clone(),
+            vp: vp.clone(),
+            mm: mm.clone(),
+        });
+
+        ee.register_syscall(202, &ctl, Self::sys_sysctl);
+
+        ctl
+    }
+
+    fn sys_sysctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        // Get arguments.
+        let name: *const i32 = i.args[0].into();
+        let namelen: u32 = i.args[1].try_into().unwrap();
+        let old: *mut u8 = i.args[2].into();
+        let oldlenp: *mut usize = i.args[3].into();
+        let new: *const u8 = i.args[4].into();
+        let newlen: usize = i.args[5].into();
+
+        // Convert name to a slice.
+        let name = if namelen < 2 || namelen > 24 {
+            return Err(SysErr::Raw(EINVAL));
+        } else if name.is_null() {
+            return Err(SysErr::Raw(EFAULT));
+        } else {
+            unsafe { std::slice::from_raw_parts(name, namelen as _) }
+        };
+
+        if name[0] == Self::CTL_DEBUG && !self.vp.cred().is_system() {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        if name[0] == Self::CTL_VM && name[1] == Self::VM_TOTAL {
+            todo!("sysctl CTL_VM:VM_TOTAL")
+        }
+
+        // Setup a request.
+        let mut req = SysctlReq::default();
+
+        if !oldlenp.is_null() {
+            req.validlen = unsafe { *oldlenp };
+        }
+
+        req.old = if old.is_null() {
+            None
+        } else if oldlenp.is_null() {
+            Some(unsafe { std::slice::from_raw_parts_mut(old, 0) })
+        } else {
+            Some(unsafe { std::slice::from_raw_parts_mut(old, *oldlenp) })
+        };
+
+        req.new = if new.is_null() {
+            None
+        } else {
+            Some(unsafe { std::slice::from_raw_parts(new, newlen) })
+        };
+
+        // Execute.
+        if let Err(e) = self.exec(name, &mut req) {
+            if e.errno() != ENOMEM {
+                return Err(e);
+            }
+        }
+
+        if !oldlenp.is_null() {
+            unsafe {
+                *oldlenp = if req.old.is_none() || req.oldidx <= req.validlen {
+                    req.oldidx
+                } else {
+                    req.validlen
+                }
+            };
+        }
+
+        Ok(SysOut::ZERO)
     }
 
     /// See `sysctl_root` on the PS4 for a reference.
-    pub fn exec(&self, name: &[i32], req: &mut SysctlReq) -> Result<(), Error> {
+    fn exec(&self, name: &[i32], req: &mut SysctlReq) -> Result<(), SysErr> {
         let mut indx = 0;
         let mut list = &CHILDREN;
 
@@ -63,7 +142,7 @@ impl Sysctl {
             // Check type.
             if (oid.kind & Self::CTLTYPE) != Self::CTLTYPE_NODE {
                 if indx != name.len() {
-                    return Err(Error::Raw(ENOTDIR));
+                    return Err(SysErr::Raw(ENOTDIR));
                 }
             } else if indx != name.len() && oid.handler.is_none() {
                 if indx == 24 {
@@ -76,15 +155,15 @@ impl Sysctl {
 
             // Check if enabled.
             if !oid.enabled {
-                return Err(Error::Raw(ENOENT));
+                return Err(SysErr::Raw(ENOENT));
             } else if (oid.kind & Self::CTLTYPE) == Self::CTLTYPE_NODE && oid.handler.is_none() {
-                return Err(Error::Raw(EISDIR));
+                return Err(SysErr::Raw(EISDIR));
             }
 
             // Check if write is allowed.
             if req.new.is_some() {
                 if (oid.kind & Self::CTLFLAG_WR) == 0 {
-                    return Err(Error::Raw(EPERM));
+                    return Err(SysErr::Raw(EPERM));
                 } else if (oid.kind & Self::CTLFLAG_SECURE) != 0 {
                     todo!("sysctl on kind & CTLFLAG_SECURE");
                 }
@@ -97,7 +176,7 @@ impl Sysctl {
             // Get the handler.
             let handler = match oid.handler {
                 Some(v) => v,
-                None => return Err(Error::Raw(EINVAL)),
+                None => return Err(SysErr::Raw(EINVAL)),
             };
 
             // Get handler arguments.
@@ -121,14 +200,14 @@ impl Sysctl {
         _: &Arg,
         _: usize,
         req: &mut SysctlReq,
-    ) -> Result<(), Error> {
+    ) -> Result<(), SysErr> {
         // Check input size.
         let newlen = req.new.as_ref().map(|b| b.len()).unwrap_or(0);
 
         if newlen == 0 {
-            return Err(Error::Raw(ENOENT));
+            return Err(SysErr::Raw(ENOENT));
         } else if newlen >= 0x400 {
-            return Err(Error::Raw(ENAMETOOLONG));
+            return Err(SysErr::Raw(ENAMETOOLONG));
         }
 
         // Read name.
@@ -142,7 +221,7 @@ impl Sysctl {
         };
 
         if name.is_empty() {
-            return Err(Error::Raw(ENOENT));
+            return Err(SysErr::Raw(ENOENT));
         }
 
         // Remove '.' at the end if present.
@@ -184,7 +263,7 @@ impl Sysctl {
             };
 
             if (oid.kind & Self::CTLTYPE) != Self::CTLTYPE_NODE || oid.handler.is_some() {
-                return Err(Error::Raw(ENOENT));
+                return Err(SysErr::Raw(ENOENT));
             }
 
             next = oid.arg1.unwrap().downcast_ref::<OidList>().unwrap().first;
@@ -203,12 +282,12 @@ impl Sysctl {
         arg1: &Arg,
         _: usize,
         req: &mut SysctlReq,
-    ) -> Result<(), Error> {
+    ) -> Result<(), SysErr> {
         // Check the buffer.
         let oldlen = req.old.as_ref().map(|b| b.len()).unwrap_or(0);
 
         if oldlen >= 73 {
-            return Err(Error::Raw(EINVAL));
+            return Err(SysErr::Raw(EINVAL));
         }
 
         // Check if the request is for our process.
@@ -218,7 +297,7 @@ impl Sysctl {
         };
 
         if arg1[0] != self.vp.id().get() {
-            return Err(Error::Raw(ESRCH));
+            return Err(SysErr::Raw(ESRCH));
         }
 
         // TODO: Implement sceSblACMgrIsSystemUcred.
@@ -241,7 +320,7 @@ impl Sysctl {
         _: &Arg,
         _: usize,
         req: &mut SysctlReq,
-    ) -> Result<(), Error> {
+    ) -> Result<(), SysErr> {
         let stack = self.mm.stack().end() as usize;
         let value = stack.to_ne_bytes();
 
@@ -254,7 +333,7 @@ impl Sysctl {
         _: &Arg,
         _: usize,
         req: &mut SysctlReq,
-    ) -> Result<(), Error> {
+    ) -> Result<(), SysErr> {
         let mut buf = [0; 256];
         let len = min(req.old.as_ref().map(|b| b.len()).unwrap_or(0), 256);
 
@@ -270,7 +349,7 @@ impl Sysctl {
         arg1: &Arg,
         arg2: usize,
         req: &mut SysctlReq,
-    ) -> Result<(), Error> {
+    ) -> Result<(), SysErr> {
         // Read old value.
         let value: i32 = match arg1 {
             Arg::Name(v) => v[0],
@@ -301,7 +380,7 @@ pub struct SysctlReq<'a> {
 
 impl<'a> SysctlReq<'a> {
     /// See `sysctl_new_user` on the PS4 for a reference.
-    pub fn read(&mut self, buf: &mut [u8]) -> Result<(), Error> {
+    pub fn read(&mut self, buf: &mut [u8]) -> Result<(), SysErr> {
         let new = match self.new.as_ref() {
             Some(v) => v,
             None => return Ok(()),
@@ -312,12 +391,12 @@ impl<'a> SysctlReq<'a> {
             self.newidx += buf.len();
             Ok(())
         } else {
-            Err(Error::Raw(EINVAL))
+            Err(SysErr::Raw(EINVAL))
         }
     }
 
     /// See `sysctl_old_user` on the PS4 for a reference.
-    pub fn write(&mut self, data: &[u8]) -> Result<(), Error> {
+    pub fn write(&mut self, data: &[u8]) -> Result<(), SysErr> {
         // Update the index.
         let origidx = self.oldidx;
         self.oldidx += data.len();
@@ -338,7 +417,7 @@ impl<'a> SysctlReq<'a> {
         };
 
         if data.len() > i {
-            Err(Error::Raw(ENOMEM))
+            Err(SysErr::Raw(ENOMEM))
         } else {
             Ok(())
         }
@@ -370,7 +449,7 @@ enum Arg<'a> {
     Static(Option<&'static (dyn Any + Send + Sync)>),
 }
 
-type Handler = fn(&Sysctl, &'static Oid, &Arg, usize, &mut SysctlReq) -> Result<(), Error>;
+type Handler = fn(&Sysctl, &'static Oid, &Arg, usize, &mut SysctlReq) -> Result<(), SysErr>;
 
 static CHILDREN: OidList = OidList {
     first: Some(&SYSCTL),

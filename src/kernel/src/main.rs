@@ -1,5 +1,5 @@
 use crate::arnd::Arnd;
-use crate::ee::EntryArg;
+use crate::ee::{EntryArg, RawFn};
 use crate::fs::Fs;
 use crate::llvm::Llvm;
 use crate::log::{print, LOGGER};
@@ -7,15 +7,16 @@ use crate::memory::MemoryManager;
 use crate::process::VProc;
 use crate::regmgr::RegMgr;
 use crate::rtld::{ModuleFlags, RuntimeLinker};
-use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
 use clap::{Parser, ValueEnum};
+use llt::Thread;
 use macros::vpath;
 use serde::Deserialize;
 use std::fs::{create_dir_all, remove_dir_all, File};
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::Arc;
 
 mod arnd;
 mod console;
@@ -31,7 +32,6 @@ mod process;
 mod regmgr;
 mod rtld;
 mod signal;
-mod syscalls;
 mod sysctl;
 mod ucred;
 
@@ -97,13 +97,11 @@ fn main() -> ExitCode {
 
     print(log);
 
-    // Initialize base systems.
-    let arnd: &'static Arnd = Box::leak(Arnd::new().into());
-    let llvm: &'static Llvm = Box::leak(Llvm::new().into());
-    let regmgr: &'static RegMgr = Box::leak(RegMgr::new().into());
-    let fs: &'static Fs = Box::leak(Fs::new(args.system, args.game).into());
-    let vp: &'static VProc = match VProc::new() {
-        Ok(v) => Box::leak(v.into()),
+    // Initialize foundations.
+    let arnd = Arnd::new();
+    let llvm = Llvm::new();
+    let vp = match VProc::new() {
+        Ok(v) => v,
         Err(e) => {
             error!(e, "Virtual process initialization failed");
             return ExitCode::FAILURE;
@@ -111,8 +109,8 @@ fn main() -> ExitCode {
     };
 
     // Initialize memory management.
-    let mm: &'static MemoryManager = match MemoryManager::new(vp) {
-        Ok(v) => Box::leak(v.into()),
+    let mm = match MemoryManager::new(&vp) {
+        Ok(v) => v,
         Err(e) => {
             error!(e, "Memory manager initialization failed");
             return ExitCode::FAILURE;
@@ -138,22 +136,68 @@ fn main() -> ExitCode {
 
     print(log);
 
+    // Select execution engine.
+    match args.execution_engine.unwrap_or_default() {
+        #[cfg(target_arch = "x86_64")]
+        ExecutionEngine::Native => run(
+            args.system,
+            args.game,
+            &arnd,
+            &vp,
+            &mm,
+            crate::ee::native::NativeEngine::new(&mm),
+        ),
+        #[cfg(not(target_arch = "x86_64"))]
+        ExecutionEngine::Native => {
+            error!("Native execution engine cannot be used on your machine.");
+            return ExitCode::FAILURE;
+        }
+        ExecutionEngine::Llvm => run(
+            args.system,
+            args.game,
+            &arnd,
+            &vp,
+            &mm,
+            crate::ee::llvm::LlvmEngine::new(&llvm),
+        ),
+    }
+}
+
+fn run<E: crate::ee::ExecutionEngine>(
+    root: PathBuf,
+    app: PathBuf,
+    arnd: &Arc<Arnd>,
+    vp: &Arc<VProc>,
+    mm: &Arc<MemoryManager>,
+    ee: Arc<E>,
+) -> ExitCode {
+    // Initialize kernel components.
+    vp.install_syscalls(ee.as_ref());
+    mm.install_syscalls(ee.as_ref());
+
+    let fs = Fs::new(vp, ee.as_ref(), root, app);
+    RegMgr::new(ee.as_ref());
+
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
 
-    let ld: &'static mut RuntimeLinker = match RuntimeLinker::new(fs, mm, vp) {
-        Ok(v) => Box::leak(v.into()),
+    let ld = match RuntimeLinker::new(&fs, mm, &ee, vp) {
+        Ok(v) => v,
         Err(e) => {
             error!(e, "Initialize failed");
             return ExitCode::FAILURE;
         }
     };
 
+    // Initialize sysctl.
+    Sysctl::new(arnd, vp, mm, ee.as_ref());
+
     // Print application module.
+    let app = ld.app();
     let mut log = info!();
 
-    writeln!(log, "Application   : {}", ld.app().path()).unwrap();
-    ld.app().print(log);
+    writeln!(log, "Application   : {}", app.path()).unwrap();
+    app.print(log);
 
     // Preload libkernel.
     let path = vpath!("/system/common/lib/libkernel.sprx");
@@ -191,79 +235,61 @@ fn main() -> ExitCode {
 
     drop(module);
 
-    // Bootstrap execution engine.
-    let sysctl: &'static Sysctl = Box::leak(Sysctl::new(arnd, vp, mm).into());
-    let syscalls: &'static Syscalls =
-        Box::leak(Syscalls::new(vp, fs, mm, ld, sysctl, regmgr).into());
-    let arg = EntryArg::new(arnd, vp, mm, ld.app().clone());
-    let ee = match args.execution_engine {
-        Some(v) => v,
-        #[cfg(target_arch = "x86_64")]
-        None => ExecutionEngine::Native,
-        #[cfg(not(target_arch = "x86_64"))]
-        None => ExecutionEngine::Llvm,
-    };
-
-    match ee {
-        #[cfg(target_arch = "x86_64")]
-        ExecutionEngine::Native => {
-            let mut ee = ee::native::NativeEngine::new(vp, mm, ld, syscalls);
-
-            info!("Patching modules.");
-
-            match unsafe { ee.patch_mods() } {
-                Ok(r) => {
-                    let mut l = info!();
-                    let mut t = 0;
-
-                    for (m, c) in r {
-                        if c != 0 {
-                            writeln!(l, "{c} patch(es) have been applied to {m}.").unwrap();
-                            t += 1;
-                        }
-                    }
-
-                    writeln!(l, "{t} module(s) have been patched successfully.").unwrap();
-                    print(l);
-                }
-                Err(e) => {
-                    error!(e, "Patch failed");
-                    return ExitCode::FAILURE;
-                }
-            }
-
-            exec(ee, arg)
-        }
-        #[cfg(not(target_arch = "x86_64"))]
-        ExecutionEngine::Native => {
-            error!("Native execution engine cannot be used on your machine.");
-            return ExitCode::FAILURE;
-        }
-        ExecutionEngine::Llvm => {
-            let mut ee = ee::llvm::LlvmEngine::new(llvm, ld);
-
-            info!("Lifting modules.");
-
-            if let Err(e) = ee.lift_initial_modules() {
-                error!(e, "Lift failed");
-                return ExitCode::FAILURE;
-            }
-
-            exec(ee, arg)
-        }
+    // Get eboot.bin.
+    if app.file_info().is_none() {
+        todo!("statically linked eboot.bin");
     }
-}
 
-fn exec<E: ee::ExecutionEngine>(mut ee: E, arg: EntryArg) -> ExitCode {
-    // Start the application.
+    // Get entry point.
+    let boot = ld.kernel().unwrap();
+    let mut arg = Box::pin(EntryArg::<E>::new(arnd, vp, mm, app.clone()));
+    let entry = unsafe { boot.get_function(boot.entry().unwrap()) };
+    let entry = move || unsafe { entry.exec1(arg.as_mut().as_vec().as_ptr()) };
+
+    // Spawn main thread.
     info!("Starting application.");
 
-    if let Err(e) = unsafe { ee.run(arg) } {
-        error!(e, "Start failed");
+    let stack = mm.stack();
+    let runner = match unsafe { vp.new_thread(stack.start(), stack.len(), entry) } {
+        Ok(v) => v,
+        Err(e) => {
+            error!(e, "Create main thread failed");
+            return ExitCode::FAILURE;
+        }
+    };
+
+    // Wait for main thread to exit. This should never return.
+    if let Err(e) = join_thread(runner) {
+        error!(e, "Failed join with main thread");
         return ExitCode::FAILURE;
     }
 
     ExitCode::SUCCESS
+}
+
+#[cfg(unix)]
+fn join_thread(thr: Thread) -> Result<(), std::io::Error> {
+    let err = unsafe { libc::pthread_join(thr, std::ptr::null_mut()) };
+
+    if err != 0 {
+        Err(std::io::Error::from_raw_os_error(err))
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(windows)]
+fn join_thread(thr: Thread) -> Result<(), std::io::Error> {
+    use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+    use windows_sys::Win32::System::Threading::{WaitForSingleObject, INFINITE};
+
+    if unsafe { WaitForSingleObject(thr, INFINITE) } != WAIT_OBJECT_0 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    assert_ne!(unsafe { CloseHandle(thr) }, 0);
+
+    Ok(())
 }
 
 #[derive(Parser, Deserialize)]
@@ -290,4 +316,16 @@ struct Args {
 enum ExecutionEngine {
     Native,
     Llvm,
+}
+
+impl Default for ExecutionEngine {
+    #[cfg(target_arch = "x86_64")]
+    fn default() -> Self {
+        ExecutionEngine::Native
+    }
+
+    #[cfg(not(target_arch = "x86_64"))]
+    fn default() -> Self {
+        ExecutionEngine::Llvm
+    }
 }

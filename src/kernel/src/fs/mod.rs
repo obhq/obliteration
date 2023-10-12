@@ -2,16 +2,22 @@ pub use self::file::*;
 pub use self::item::*;
 pub use self::path::*;
 
-use crate::errno::{Errno, ENOENT};
+use crate::ee::{ExecutionEngine, SysArg, SysErr, SysIn, SysOut};
+use crate::errno::{Errno, EBADF, EINVAL, ENOENT, ENOTTY};
+use crate::info;
+use crate::process::{VProc, VThread};
+use crate::ucred::Privilege;
+use bitflags::bitflags;
 use gmtx::{GroupMutex, MutexGroup};
 use param::Param;
 use std::borrow::Borrow;
 use std::collections::HashMap;
-use std::fmt::Debug;
+use std::fmt::{Display, Formatter};
 use std::fs::File;
-use std::num::NonZeroI32;
+use std::num::{NonZeroI32, TryFromIntError};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::Arc;
 use thiserror::Error;
 
 mod file;
@@ -21,13 +27,19 @@ mod path;
 /// A virtual filesystem for emulating a PS4 filesystem.
 #[derive(Debug)]
 pub struct Fs {
+    vp: Arc<VProc>,
     mounts: GroupMutex<HashMap<VPathBuf, MountSource>>,
     opens: AtomicI32, // openfiles
     app: VPathBuf,
 }
 
 impl Fs {
-    pub fn new<P: Into<PathBuf>>(system: P, game: P) -> Self {
+    pub fn new<E, S, G>(vp: &Arc<VProc>, ee: &E, system: S, game: G) -> Arc<Self>
+    where
+        E: ExecutionEngine,
+        S: Into<PathBuf>,
+        G: Into<PathBuf>,
+    {
         let system = system.into();
         let game = game.into();
         let mut mounts: HashMap<VPathBuf, MountSource> = HashMap::new();
@@ -87,20 +99,28 @@ impl Fs {
 
         mounts.insert(app.join("app0").unwrap(), MountSource::Bind(pfs));
 
-        Self {
+        // Install syscall handlers.
+        let fs = Arc::new(Self {
+            vp: vp.clone(),
             mounts: mg.new_member(mounts),
             opens: AtomicI32::new(0),
             app,
-        }
+        });
+
+        ee.register_syscall(5, &fs, Self::sys_open);
+        ee.register_syscall(54, &fs, Self::sys_ioctl);
+        ee.register_syscall(56, &fs, Self::sys_revoke);
+
+        fs
     }
 
     pub fn app(&self) -> &VPath {
         self.app.borrow()
     }
 
-    pub fn get(&self, path: &VPath) -> Result<FsItem<'_>, FsError> {
+    pub fn get(&self, path: &VPath) -> Result<FsItem, FsError> {
         let item = match path.as_str() {
-            "/dev/console" => FsItem::Device(VDev::Console(self)),
+            "/dev/console" => FsItem::Device(VDev::Console),
             _ => self.resolve(path).ok_or(FsError::NotFound)?,
         };
 
@@ -108,7 +128,7 @@ impl Fs {
     }
 
     /// See `falloc_noinstall_budget` on the PS4 for a reference.
-    pub fn alloc(&self) -> VFile<'_> {
+    pub fn alloc(self: &Arc<Self>) -> VFile {
         // TODO: Check if openfiles exceed rlimit.
         // TODO: Implement budget_resource_use.
         self.opens.fetch_add(1, Ordering::Relaxed);
@@ -120,7 +140,143 @@ impl Fs {
         // TODO: Implement this.
     }
 
-    fn resolve(&self, path: &VPath) -> Option<FsItem<'_>> {
+    fn sys_open(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        // Get arguments.
+        let path = unsafe { i.args[0].to_path()?.unwrap() };
+        let flags: OpenFlags = i.args[1].try_into().unwrap();
+        let mode: u32 = i.args[2].try_into().unwrap();
+
+        // Check flags.
+        if flags.intersects(OpenFlags::O_EXEC) {
+            if flags.intersects(OpenFlags::O_ACCMODE) {
+                return Err(SysErr::Raw(EINVAL));
+            }
+        } else if flags.contains(OpenFlags::O_ACCMODE) {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        // Allocate file object.
+        let mut file = self.alloc();
+
+        // Get full path.
+        if flags.intersects(OpenFlags::UNK1) {
+            todo!("open({path}) with flags & 0x400000 != 0");
+        } else if flags.intersects(OpenFlags::O_SHLOCK) {
+            todo!("open({path}) with flags & O_SHLOCK");
+        } else if flags.intersects(OpenFlags::O_EXLOCK) {
+            todo!("open({path}) with flags & O_EXLOCK");
+        } else if flags.intersects(OpenFlags::O_TRUNC) {
+            todo!("open({path}) with flags & O_TRUNC");
+        } else if mode != 0 {
+            todo!("open({path}, {flags}) with mode = {mode}");
+        }
+
+        info!("Opening {path} with {flags}.");
+
+        // Lookup file.
+        *file.flags_mut() = flags.to_fflags();
+        file.set_ops(Some(self.get(path)?.open()?));
+
+        // Install to descriptor table.
+        let fd = self.vp.files().alloc(Arc::new(file));
+
+        info!("File descriptor {fd} was allocated for {path}.");
+
+        Ok(fd.into())
+    }
+
+    fn sys_ioctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        const IOC_VOID: u64 = 0x20000000;
+        const IOC_OUT: u64 = 0x40000000;
+        const IOC_IN: u64 = 0x80000000;
+        const IOCPARM_MASK: u64 = 0x1FFF;
+
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let mut com: u64 = i.args[1].into();
+        let data: *const u8 = i.args[2].into();
+
+        if com > 0xffffffff {
+            com &= 0xffffffff;
+        }
+
+        let size = (com >> 16) & IOCPARM_MASK;
+
+        if com & (IOC_VOID | IOC_OUT | IOC_IN) == 0
+            || com & (IOC_OUT | IOC_IN) != 0 && size == 0
+            || com & IOC_VOID != 0 && size != 0 && size != 4
+        {
+            return Err(SysErr::Raw(ENOTTY));
+        }
+
+        // Get data.
+        let data = if size == 0 {
+            if com & IOC_IN != 0 {
+                todo!("ioctl with IOC_IN");
+            } else if com & IOC_OUT != 0 {
+                todo!("ioctl with IOC_OUT");
+            }
+
+            &[]
+        } else {
+            todo!("ioctl with size != 0");
+        };
+
+        // Get target file.
+        let file = self.vp.files().get(fd).ok_or(SysErr::Raw(EBADF))?;
+        let ops = file.ops().ok_or(SysErr::Raw(EBADF))?;
+
+        if !file
+            .flags()
+            .intersects(VFileFlags::FREAD | VFileFlags::FWRITE)
+        {
+            return Err(SysErr::Raw(EBADF));
+        }
+
+        // Execute the operation.
+        let td = VThread::current();
+
+        info!("Executing ioctl({com:#x}) on {file}.");
+
+        match com {
+            0x20006601 => todo!("ioctl with com = 0x20006601"),
+            0x20006602 => todo!("ioctl with com = 0x20006602"),
+            0x8004667d => todo!("ioctl with com = 0x8004667d"),
+            0x8004667e => todo!("ioctl with com = 0x8004667e"),
+            _ => {}
+        }
+
+        ops.ioctl(&file, com, data, td.cred(), &td)?;
+
+        if com & IOC_OUT != 0 {
+            todo!("ioctl with IOC_OUT");
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn sys_revoke(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let path = unsafe { i.args[0].to_path()?.unwrap() };
+
+        info!("Revoking access to {path}.");
+
+        // Check current thread privilege.
+        VThread::current().priv_check(Privilege::SCE683)?;
+
+        // TODO: Check vnode::v_rdev.
+        let file = self.get(path)?;
+
+        if !file.is_character() {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        // TODO: It seems like the initial ucred of the process is either root or has PRIV_VFS_ADMIN
+        // privilege.
+        self.revoke(path);
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn resolve(&self, path: &VPath) -> Option<FsItem> {
         let mounts = self.mounts.read();
         let mut current = VPathBuf::new();
         let root = match mounts.get(&current).unwrap() {
@@ -177,6 +333,42 @@ impl Fs {
             directory.into_path(),
             current,
         )))
+    }
+}
+
+bitflags! {
+    /// Flags for [`Fs::sys_open()`].
+    struct OpenFlags: u32 {
+        const O_WRONLY = 0x00000001;
+        const O_RDWR = 0x00000002;
+        const O_ACCMODE = Self::O_WRONLY.bits() | Self::O_RDWR.bits();
+        const O_SHLOCK = 0x00000010;
+        const O_EXLOCK = 0x00000020;
+        const O_TRUNC = 0x00000400;
+        const O_EXEC = 0x00040000;
+        const O_CLOEXEC = 0x00100000;
+        const UNK1 = 0x00400000;
+    }
+}
+
+impl OpenFlags {
+    /// An implementation of `FFLAGS` macro.
+    fn to_fflags(self) -> VFileFlags {
+        VFileFlags::from_bits_truncate(self.bits() + 1)
+    }
+}
+
+impl TryFrom<SysArg> for OpenFlags {
+    type Error = TryFromIntError;
+
+    fn try_from(value: SysArg) -> Result<Self, Self::Error> {
+        Ok(Self::from_bits_retain(value.get().try_into()?))
+    }
+}
+
+impl Display for OpenFlags {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
 

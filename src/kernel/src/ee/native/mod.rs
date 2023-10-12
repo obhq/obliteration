@@ -1,64 +1,39 @@
-use super::{EntryArg, ExecutionEngine};
+use super::{ExecutionEngine, SysErr, SysIn, SysOut};
 use crate::fs::{VPath, VPathBuf};
 use crate::memory::{MemoryManager, Protections};
-use crate::process::VProc;
-use crate::rtld::{CodeWorkspaceError, Memory, Module, RuntimeLinker, UnprotectSegmentError};
-use crate::syscalls::{Input, Output, Syscalls};
+use crate::rtld::{CodeWorkspaceError, Memory, Module, UnprotectSegmentError};
+use crate::warn;
 use byteorder::{ByteOrder, LE};
 use iced_x86::code_asm::{
     dword_ptr, qword_ptr, r10, r11, r11d, r12, r8, r9, rax, rbp, rbx, rcx, rdi, rdx, rsi, rsp,
     CodeAssembler,
 };
-use llt::Thread;
+use std::any::Any;
+use std::fmt::{Debug, Formatter};
 use std::mem::{size_of, transmute};
-use std::ops::Deref;
+use std::sync::{Arc, OnceLock};
 use thiserror::Error;
 
 /// An implementation of [`ExecutionEngine`] for running the PS4 binary natively.
 pub struct NativeEngine {
-    vp: &'static VProc,
-    mm: &'static MemoryManager,
-    rtld: &'static RuntimeLinker,
-    syscalls: &'static Syscalls,
+    mm: Arc<MemoryManager>,
+    syscalls: [OnceLock<Box<dyn Fn(&SysIn) -> Result<SysOut, SysErr> + Send + Sync>>; 678],
 }
 
 impl NativeEngine {
-    pub fn new(
-        vp: &'static VProc,
-        mm: &'static MemoryManager,
-        rtld: &'static RuntimeLinker,
-        syscalls: &'static Syscalls,
-    ) -> Self {
-        Self {
-            vp,
-            mm,
-            rtld,
-            syscalls,
-        }
-    }
-
-    /// # SAFETY
-    /// No other threads may read or write any module memory.
-    pub unsafe fn patch_mods(&mut self) -> Result<Vec<(VPathBuf, usize)>, PatchModsError> {
-        let mut counts: Vec<(VPathBuf, usize)> = Vec::new();
-
-        for module in self.rtld.list().deref() {
-            let count = self.patch_mod(module)?;
-            let path = module.path();
-
-            counts.push((path.to_owned(), count));
-        }
-
-        Ok(counts)
-    }
-
-    fn syscalls(&self) -> *const Syscalls {
-        self.syscalls
+    pub fn new(mm: &Arc<MemoryManager>) -> Arc<Self> {
+        Arc::new(Self {
+            mm: mm.clone(),
+            syscalls: std::array::from_fn(|_| OnceLock::new()),
+        })
     }
 
     /// # Safety
     /// No other threads may access the memory of `module`.
-    unsafe fn patch_mod(&self, module: &Module) -> Result<usize, PatchModsError> {
+    unsafe fn patch_mod<E>(&self, module: &Module<E>) -> Result<usize, SetupModuleError>
+    where
+        E: ExecutionEngine,
+    {
         let path = module.path();
 
         // Patch all executable sections.
@@ -74,13 +49,7 @@ impl NativeEngine {
             // Unprotect the segment.
             let mut seg = match mem.unprotect_segment(i) {
                 Ok(v) => v,
-                Err(e) => {
-                    return Err(PatchModsError::UnprotectSegmentFailed(
-                        path.to_owned(),
-                        i,
-                        e,
-                    ));
-                }
+                Err(e) => return Err(SetupModuleError::UnprotectSegmentFailed(i, e)),
             };
 
             // Patch segment.
@@ -98,7 +67,7 @@ impl NativeEngine {
         base: usize,
         mem: &Memory,
         seg: &mut [u8],
-    ) -> Result<usize, PatchModsError> {
+    ) -> Result<usize, SetupModuleError> {
         let addr = seg.as_ptr() as usize;
         let offset = addr - base;
         let mut count = 0;
@@ -143,7 +112,7 @@ impl NativeEngine {
         target: &mut [u8],
         offset: usize,
         addr: usize,
-    ) -> Result<Option<usize>, PatchModsError> {
+    ) -> Result<Option<usize>, SetupModuleError> {
         // Check if "mov rax, imm32".
         if target.len() < 7 {
             return Ok(None);
@@ -161,19 +130,13 @@ impl NativeEngine {
         let ret = addr + 7 + 5;
         let tp = match self.build_syscall_trampoline(mem, module, offset + 10, id, ret) {
             Ok(v) => v,
-            Err(e) => {
-                return Err(PatchModsError::BuildTrampolineFailed(
-                    module.to_owned(),
-                    offset,
-                    e,
-                ))
-            }
+            Err(e) => return Err(SetupModuleError::BuildTrampolineFailed(offset, e)),
         };
 
         // Patch "mov rax, imm32" with "jmp rel32".
         let tp = match Self::get_relative_offset(addr + 5, tp) {
             Some(v) => v.to_ne_bytes(),
-            None => return Err(PatchModsError::WorkspaceTooFar(module.to_owned())),
+            None => return Err(SetupModuleError::WorkspaceTooFar),
         };
 
         target[0] = 0xe9;
@@ -203,18 +166,12 @@ impl NativeEngine {
         target: &mut [u8],
         offset: usize,
         addr: usize,
-    ) -> Result<Option<usize>, PatchModsError> {
+    ) -> Result<Option<usize>, SetupModuleError> {
         // Build trampoline.
         let ret = addr + 2 + 5;
         let tp = match self.build_int44_trampoline(mem, module, offset, ret) {
             Ok(v) => v,
-            Err(e) => {
-                return Err(PatchModsError::BuildTrampolineFailed(
-                    module.to_owned(),
-                    offset,
-                    e,
-                ))
-            }
+            Err(e) => return Err(SetupModuleError::BuildTrampolineFailed(offset, e)),
         };
 
         // Patch "int 0x44" with "nop".
@@ -224,7 +181,7 @@ impl NativeEngine {
         // Patch "mov edx, 0xcccccccc" with "jmp rel32".
         let tp = match Self::get_relative_offset(addr + 7, tp) {
             Some(v) => v.to_ne_bytes(),
-            None => return Err(PatchModsError::WorkspaceTooFar(module.to_owned())),
+            None => return Err(SetupModuleError::WorkspaceTooFar),
         };
 
         target[2] = 0xe9;
@@ -248,8 +205,8 @@ impl NativeEngine {
     ) -> Result<usize, TrampolineError> {
         let mut asm = CodeAssembler::new(64).unwrap();
 
-        assert_eq!(72, size_of::<Input>());
-        assert_eq!(16, size_of::<Output>());
+        assert_eq!(72, size_of::<SysIn>());
+        assert_eq!(16, size_of::<SysOut>());
 
         // Create function prologue.
         asm.push(rbp).unwrap();
@@ -297,8 +254,8 @@ impl NativeEngine {
         asm.add(rax, 0x50).unwrap();
         asm.mov(rdx, rax).unwrap();
         asm.mov(rsi, rbx).unwrap();
-        asm.mov(rdi, self.syscalls() as u64).unwrap();
-        asm.mov(rax, Syscalls::invoke as u64).unwrap();
+        asm.mov(rdi, self as *const Self as u64).unwrap();
+        asm.mov(rax, Self::syscall as u64).unwrap();
         asm.call(rax).unwrap();
 
         // Check error. This mimic the behavior of
@@ -341,6 +298,30 @@ impl NativeEngine {
     }
 
     /// # Safety
+    /// This method cannot be called from Rust.
+    unsafe extern "sysv64" fn syscall(&self, i: &SysIn, o: &mut SysOut) -> i64 {
+        // Beware that we cannot have any variable that need to be dropped before calling the
+        // handler.
+        let h = match self.syscalls[i.id as usize].get() {
+            Some(v) => v,
+            None => todo!("syscall {} at {:#x} on {}", i.id, i.offset, i.module),
+        };
+
+        // Execute the handler.
+        let v = match h(i) {
+            Ok(v) => v,
+            Err(e) => {
+                warn!(e, "Syscall {} failed", i.id);
+                return e.errno().get().into();
+            }
+        };
+
+        // Write the output.
+        *o = v;
+        0
+    }
+
+    /// # Safety
     /// No other threads may execute the memory in the code workspace on `mem`.
     unsafe fn build_int44_trampoline(
         &self,
@@ -368,8 +349,8 @@ impl NativeEngine {
 
         asm.mov(rdx, module as u64).unwrap();
         asm.mov(rsi, offset as u64).unwrap();
-        asm.mov(rdi, self.syscalls() as u64).unwrap();
-        asm.mov(rax, Syscalls::int44 as u64).unwrap();
+        asm.mov(rdi, self as *const Self as u64).unwrap();
+        asm.mov(rax, Self::int44 as u64).unwrap();
         asm.call(rax).unwrap();
 
         // Restore registers.
@@ -380,6 +361,12 @@ impl NativeEngine {
         asm.leave().unwrap();
 
         self.write_trampoline(mem, ret, asm)
+    }
+
+    /// # Safety
+    /// This method cannot be called from Rust.
+    unsafe extern "sysv64" fn int44(&self, offset: usize, module: &VPathBuf) -> ! {
+        panic!("Exiting with int 0x44 at {offset:#x} on {module}.");
     }
 
     /// # Safety
@@ -449,87 +436,86 @@ impl NativeEngine {
 
         offset.try_into().ok()
     }
-
-    #[cfg(unix)]
-    fn join_thread(thr: Thread) -> Result<(), std::io::Error> {
-        let err = unsafe { libc::pthread_join(thr, std::ptr::null_mut()) };
-
-        if err != 0 {
-            Err(std::io::Error::from_raw_os_error(err))
-        } else {
-            Ok(())
-        }
-    }
-
-    #[cfg(windows)]
-    fn join_thread(thr: Thread) -> Result<(), std::io::Error> {
-        use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
-        use windows_sys::Win32::System::Threading::{WaitForSingleObject, INFINITE};
-
-        if unsafe { WaitForSingleObject(thr, INFINITE) } != WAIT_OBJECT_0 {
-            return Err(std::io::Error::last_os_error());
-        }
-
-        assert_ne!(unsafe { CloseHandle(thr) }, 0);
-
-        Ok(())
-    }
 }
 
 impl ExecutionEngine for NativeEngine {
-    type RunErr = RunError;
+    type RawFn = RawFn;
+    type SetupModuleErr = SetupModuleError;
+    type GetFunctionErr = GetFunctionError;
 
-    unsafe fn run(&mut self, arg: EntryArg) -> Result<(), Self::RunErr> {
-        // Get eboot.bin.
-        if self.rtld.app().file_info().is_none() {
-            todo!("statically linked eboot.bin");
-        }
+    fn register_syscall<O: Send + Sync + 'static>(
+        &self,
+        id: u32,
+        o: &Arc<O>,
+        h: fn(&Arc<O>, &SysIn) -> Result<SysOut, SysErr>,
+    ) {
+        let o = o.clone();
 
-        // Get entry point.
-        let boot = self.rtld.kernel().unwrap();
-        let mem = boot.memory().addr();
-        let entry: unsafe extern "sysv64" fn(*const usize) -> ! =
-            unsafe { transmute(mem + boot.entry().unwrap()) };
+        assert!(self.syscalls[id as usize]
+            .set(Box::new(move |i| h(&o, i)))
+            .is_ok());
+    }
 
-        // Spawn main thread.
-        let stack = self.mm.stack();
-        let mut arg = Box::pin(arg);
-        let entry = move || unsafe { entry(arg.as_mut().as_vec().as_ptr()) };
-        let runner = match self.vp.new_thread(stack.start(), stack.len(), entry) {
-            Ok(v) => v,
-            Err(e) => return Err(RunError::CreateMainThreadFailed(e)),
-        };
-
-        // Wait for main thread to exit. This should never return.
-        if let Err(e) = Self::join_thread(runner) {
-            return Err(RunError::JoinMainThreadFailed(e));
-        }
-
+    fn setup_module<E>(&self, md: &mut Module<E>) -> Result<(), Self::SetupModuleErr>
+    where
+        E: ExecutionEngine,
+    {
+        unsafe { self.patch_mod(md)? };
         Ok(())
+    }
+
+    unsafe fn get_function<E>(
+        &self,
+        md: &Arc<Module<E>>,
+        addr: usize,
+    ) -> Result<Arc<Self::RawFn>, Self::GetFunctionErr>
+    where
+        E: ExecutionEngine,
+    {
+        Ok(Arc::new(RawFn {
+            md: md.clone(),
+            addr,
+        }))
     }
 }
 
-/// Represents an error when [`NativeEngine::run()`] is failed.
-#[derive(Debug, Error)]
-pub enum RunError {
-    #[error("cannot create main thread")]
-    CreateMainThreadFailed(#[source] llt::SpawnError),
-
-    #[error("cannot join with main thread")]
-    JoinMainThreadFailed(#[source] std::io::Error),
+impl Debug for NativeEngine {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NativeEngine")
+            .field("mm", &self.mm)
+            .finish()
+    }
 }
 
-/// Represents an error when [`NativeEngine::patch_mods()`] is failed.
+/// An implementation of [`super::RawFn`].
+pub struct RawFn {
+    #[allow(unused)]
+    md: Arc<dyn Any + Send + Sync>, // Keep module alive.
+    addr: usize,
+}
+
+impl super::RawFn for RawFn {
+    fn addr(&self) -> usize {
+        self.addr
+    }
+
+    unsafe fn exec1<R, A>(&self, a: A) -> R {
+        let f: unsafe extern "sysv64" fn(A) -> R = transmute(self.addr);
+        f(a)
+    }
+}
+
+/// An implementation of [`ExecutionEngine::SetupModuleErr`].
 #[derive(Debug, Error)]
-pub enum PatchModsError {
-    #[error("cannot unprotect segment {1} on {0}")]
-    UnprotectSegmentFailed(VPathBuf, usize, #[source] UnprotectSegmentError),
+pub enum SetupModuleError {
+    #[error("cannot unprotect segment {0}")]
+    UnprotectSegmentFailed(usize, #[source] UnprotectSegmentError),
 
-    #[error("cannot build a trampoline for {1:#018x} on {0}")]
-    BuildTrampolineFailed(VPathBuf, usize, #[source] TrampolineError),
+    #[error("cannot build a trampoline for {0:#x}")]
+    BuildTrampolineFailed(usize, #[source] TrampolineError),
 
-    #[error("workspace of {0} is too far")]
-    WorkspaceTooFar(VPathBuf),
+    #[error("module workspace is too far")]
+    WorkspaceTooFar,
 }
 
 /// Errors for trampoline building.
@@ -544,3 +530,7 @@ pub enum TrampolineError {
     #[error("the address to return is too far")]
     ReturnTooFar,
 }
+
+/// An implementation of [`ExecutionEngine::GetFunctionErr`].
+#[derive(Debug, Error)]
+pub enum GetFunctionError {}
