@@ -1,5 +1,5 @@
 use std::ops::DerefMut;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 /// Random number generator based on
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/libkern/arc4random.c.
@@ -9,16 +9,16 @@ pub struct Arnd {
 }
 
 impl Arnd {
-    pub fn new() -> Self {
+    pub fn new() -> Arc<Self> {
         let mut sbox = [0u8; 256];
 
         for (i, e) in sbox.iter_mut().enumerate() {
             *e = i as u8;
         }
 
-        Self {
+        Arc::new(Self {
             state: Mutex::new(State { i: 0, j: 0, sbox }),
-        }
+        })
     }
 
     pub fn rand_bytes(&self, buf: &mut [u8]) {

@@ -5,7 +5,7 @@ use std::sync::Arc;
 /// An implementation of `filedesc` structure.
 #[derive(Debug)]
 pub struct VProcFiles {
-    files: GroupMutex<Vec<Option<Arc<VFile<'static>>>>>, // fd_ofiles
+    files: GroupMutex<Vec<Option<Arc<VFile>>>>, // fd_ofiles
 }
 
 impl VProcFiles {
@@ -16,7 +16,7 @@ impl VProcFiles {
     }
 
     /// See `finstall` on the PS4 for a reference.
-    pub fn alloc(&self, file: Arc<VFile<'static>>) -> i32 {
+    pub fn alloc(&self, file: Arc<VFile>) -> i32 {
         // TODO: Implement fdalloc.
         let mut files = self.files.write();
 
@@ -39,7 +39,7 @@ impl VProcFiles {
     }
 
     /// See `fget` on the PS4 for a reference.
-    pub fn get(&self, fd: i32) -> Option<Arc<VFile<'static>>> {
+    pub fn get(&self, fd: i32) -> Option<Arc<VFile>> {
         // TODO: Check what we have missed here.
         if fd < 0 {
             return None;

@@ -1,4 +1,4 @@
-pub use set::*;
+pub use self::set::*;
 
 use std::borrow::Cow;
 use std::num::NonZeroI32;

@@ -1,19 +1,19 @@
-use super::{Fs, FsError, VFileOps, VPath, VPathBuf};
+use super::{FsError, VFileOps, VPath, VPathBuf};
 use crate::console::Console;
 use std::path::{Path, PathBuf};
 
 /// An item in the virtual filesystem.
-pub enum FsItem<'a> {
+pub enum FsItem {
     Directory(HostDir),
     File(HostFile),
-    Device(VDev<'a>),
+    Device(VDev),
 }
 
-impl<'a> FsItem<'a> {
+impl FsItem {
     pub fn is_character(&self) -> bool {
         match self {
             Self::Device(d) => match d {
-                VDev::Console(_) => true,
+                VDev::Console => true,
             },
             _ => false,
         }
@@ -24,12 +24,12 @@ impl<'a> FsItem<'a> {
             Self::Directory(v) => &v.vpath,
             Self::File(v) => &v.vpath,
             Self::Device(d) => match d {
-                VDev::Console(_) => Console::PATH,
+                VDev::Console => Console::PATH,
             },
         }
     }
 
-    pub fn open(&self) -> Result<Box<dyn VFileOps + 'a>, FsError> {
+    pub fn open(&self) -> Result<Box<dyn VFileOps>, FsError> {
         match self {
             Self::Directory(_) => todo!("VFileOps for host directory"),
             Self::File(_) => todo!("VFileOps for host file"),
@@ -79,14 +79,14 @@ impl HostFile {
 }
 
 /// A virtual device.
-pub enum VDev<'a> {
-    Console(&'a Fs),
+pub enum VDev {
+    Console,
 }
 
-impl<'a> VDev<'a> {
-    pub fn open(&self) -> Result<Box<dyn VFileOps + 'a>, FsError> {
+impl VDev {
+    pub fn open(&self) -> Result<Box<dyn VFileOps>, FsError> {
         let ops = match self {
-            Self::Console(_) => Box::new(Console::new()),
+            Self::Console => Box::new(Console::new()),
         };
 
         Ok(ops)

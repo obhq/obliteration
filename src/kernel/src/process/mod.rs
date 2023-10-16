@@ -5,11 +5,16 @@ pub use self::rlimit::*;
 pub use self::session::*;
 pub use self::thread::*;
 
+use crate::ee::{ExecutionEngine, SysErr, SysIn, SysOut};
+use crate::errno::{EINVAL, ENAMETOOLONG, ENOENT, ENOSYS, EPERM, ESRCH};
 use crate::idt::IdTable;
-use crate::rtld::Module;
-use crate::ucred::{AuthInfo, Ucred};
+use crate::info;
+use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK};
+use crate::ucred::{AuthInfo, Privilege, Ucred};
 use gmtx::{GroupMutex, GroupMutexWriteGuard, MutexGroup};
 use llt::{SpawnError, Thread};
+use std::any::Any;
+use std::mem::zeroed;
 use std::num::NonZeroI32;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
@@ -35,18 +40,18 @@ pub struct VProc {
     group: GroupMutex<Option<VProcGroup>>,           // p_pgrp
     files: VProcFiles,                               // p_fd
     limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
-    objects: GroupMutex<IdTable<ProcObj>>,
+    objects: GroupMutex<IdTable<Arc<dyn Any + Send + Sync>>>,
     app_info: AppInfo,
     mtxg: Arc<MutexGroup>,
 }
 
 impl VProc {
-    pub fn new() -> Result<Self, VProcError> {
+    pub fn new() -> Result<Arc<Self>, VProcError> {
         // TODO: Check how ucred is constructed for a process.
         let mg = MutexGroup::new("virtual process");
         let limits = Self::load_limits()?;
 
-        Ok(Self {
+        Ok(Arc::new(Self {
             id: Self::new_id(),
             threads: mg.new_member(Vec::new()),
             cred: Ucred::new(AuthInfo::EXE.clone()),
@@ -56,7 +61,7 @@ impl VProc {
             limits,
             app_info: AppInfo::new(),
             mtxg: mg,
-        })
+        }))
     }
 
     pub fn id(&self) -> NonZeroI32 {
@@ -67,10 +72,6 @@ impl VProc {
         &self.cred
     }
 
-    pub fn group_mut(&self) -> GroupMutexWriteGuard<'_, Option<VProcGroup>> {
-        self.group.write()
-    }
-
     pub fn files(&self) -> &VProcFiles {
         &self.files
     }
@@ -79,7 +80,7 @@ impl VProc {
         self.limits.get(ty)
     }
 
-    pub fn objects_mut(&self) -> GroupMutexWriteGuard<'_, IdTable<ProcObj>> {
+    pub fn objects_mut(&self) -> GroupMutexWriteGuard<'_, IdTable<Arc<dyn Any + Send + Sync>>> {
         self.objects.write()
     }
 
@@ -91,6 +92,19 @@ impl VProc {
         &self.mtxg
     }
 
+    pub fn install_syscalls<E: ExecutionEngine>(self: &Arc<Self>, ee: &E) {
+        ee.register_syscall(20, self, |p, _| Ok(p.id().into()));
+        ee.register_syscall(50, self, Self::sys_setlogin);
+        ee.register_syscall(147, self, Self::sys_setsid);
+        ee.register_syscall(340, self, Self::sys_sigprocmask);
+        ee.register_syscall(432, self, Self::sys_thr_self);
+        ee.register_syscall(466, self, Self::sys_rtprio_thread);
+        ee.register_syscall(557, self, Self::sys_namedobj_create);
+        ee.register_syscall(585, self, Self::sys_is_in_sandbox);
+        ee.register_syscall(587, self, Self::sys_get_authinfo);
+        ee.register_syscall(610, self, Self::sys_budget_get_ptype);
+    }
+
     /// Spawn a new [`VThread`].
     ///
     /// The caller is responsible for `stack` deallocation.
@@ -99,7 +113,7 @@ impl VProc {
     /// The range of memory specified by `stack` and `stack_size` must be valid throughout lifetime
     /// of the thread. Specify an unaligned stack will cause undefined behavior.
     pub unsafe fn new_thread<F>(
-        &'static self,
+        self: &Arc<Self>,
         stack: *mut u8,
         stack_size: usize,
         mut routine: F,
@@ -115,7 +129,7 @@ impl VProc {
         let cred = Ucred::new(AuthInfo::EXE.clone());
         let td = Arc::new(VThread::new(Self::new_id(), cred, &self.mtxg));
         let active = Box::new(ActiveThread {
-            proc: self,
+            proc: self.clone(),
             id: td.id(),
         });
 
@@ -143,6 +157,235 @@ impl VProc {
         ])
     }
 
+    fn sys_setlogin(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        // Check current thread privilege.
+        VThread::current().priv_check(Privilege::PROC_SETLOGIN)?;
+
+        // Get login name.
+        let login = unsafe { i.args[0].to_str(17) }
+            .map_err(|e| {
+                if e.errno() == ENAMETOOLONG {
+                    SysErr::Raw(EINVAL)
+                } else {
+                    e
+                }
+            })?
+            .unwrap();
+
+        // Set login name.
+        let mut group = self.group.write();
+        let session = group.as_mut().unwrap().session_mut();
+
+        session.set_login(login);
+
+        info!("Login name was changed to '{login}'.");
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn sys_setsid(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
+        // Check if current thread has privilege.
+        VThread::current().priv_check(Privilege::SCE680)?;
+
+        // Check if the process already become a group leader.
+        let mut group = self.group.write();
+
+        if group.is_some() {
+            return Err(SysErr::Raw(EPERM));
+        }
+
+        // TODO: Find out the correct login name for VSession.
+        let session = VSession::new(self.id, String::from("root"));
+
+        *group = Some(VProcGroup::new(self.id, session));
+        info!("Virtual process now set as group leader.");
+
+        Ok(self.id.into())
+    }
+
+    fn sys_sigprocmask(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        // Get arguments.
+        let how: i32 = i.args[0].try_into().unwrap();
+        let set: *const SignalSet = i.args[1].into();
+        let oset: *mut SignalSet = i.args[2].into();
+
+        // Convert set to an option.
+        let set = if set.is_null() {
+            None
+        } else {
+            Some(unsafe { *set })
+        };
+
+        // Keep the current mask for copying to the oset. We need to copy to the oset only when this
+        // function succees.
+        let vt = VThread::current();
+        let mut mask = vt.sigmask_mut();
+        let prev = mask.clone();
+
+        // Update the mask.
+        if let Some(mut set) = set {
+            match how {
+                SIG_BLOCK => {
+                    // Remove uncatchable signals.
+                    set.remove(SIGKILL);
+                    set.remove(SIGSTOP);
+
+                    // Update mask.
+                    *mask |= set;
+                }
+                SIG_UNBLOCK => {
+                    // Update mask.
+                    *mask &= !set;
+
+                    // TODO: Invoke signotify at the end.
+                }
+                SIG_SETMASK => {
+                    // Remove uncatchable signals.
+                    set.remove(SIGKILL);
+                    set.remove(SIGSTOP);
+
+                    // Replace mask.
+                    *mask = set;
+
+                    // TODO: Invoke signotify at the end.
+                }
+                _ => return Err(SysErr::Raw(EINVAL)),
+            }
+
+            // TODO: Check if we need to invoke reschedule_signals.
+            info!("Signal mask was changed from {} to {}.", prev, mask);
+        }
+
+        // Copy output.
+        if !oset.is_null() {
+            unsafe { *oset = prev };
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn sys_thr_self(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let id: *mut i64 = i.args[0].into();
+        unsafe { *id = VThread::current().id().get().into() };
+        Ok(SysOut::ZERO)
+    }
+
+    fn sys_rtprio_thread(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        const RTP_LOOKUP: i32 = 0;
+        const RTP_SET: i32 = 1;
+        const RTP_UNK: i32 = 2;
+
+        let td = VThread::current();
+        let function: i32 = i.args[0].try_into().unwrap();
+        let lwpid: i32 = i.args[1].try_into().unwrap();
+        let rtp: *mut RtPrio = i.args[2].into();
+        let rtp = unsafe { &mut *rtp };
+
+        if function == RTP_SET {
+            todo!("rtprio_thread with function = 1");
+        }
+
+        if function == RTP_UNK && td.cred().is_system() {
+            todo!("rtprio_thread with function = 2");
+        } else if lwpid != 0 && lwpid != td.id().get() {
+            return Err(SysErr::Raw(ESRCH));
+        } else if function == RTP_LOOKUP {
+            (*rtp).ty = td.pri_class();
+            (*rtp).prio = match td.pri_class() & 0xfff7 {
+                2 | 3 | 4 => td.base_user_pri(),
+                _ => 0,
+            };
+        } else {
+            todo!("rtprio_thread with function = {function}");
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
+    // TODO: This should not be here.
+    fn sys_namedobj_create(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        // Get arguments.
+        let name = unsafe { i.args[0].to_str(32)?.ok_or(SysErr::Raw(EINVAL))? };
+        let data: usize = i.args[1].into();
+        let flags: u32 = i.args[2].try_into().unwrap();
+
+        // Allocate the entry.
+        let mut table = self.objects.write();
+        let (entry, id) = table
+            .alloc::<_, ()>(|_| Ok(Arc::new(NamedObj::new(name.to_owned(), data))))
+            .unwrap();
+
+        entry.set_name(Some(name.to_owned()));
+        entry.set_flags((flags as u16) | 0x1000);
+
+        info!(
+            "Named object '{}' (ID = {}) was created with data = {:#x} and flags = {:#x}.",
+            name, id, data, flags
+        );
+
+        Ok(id.into())
+    }
+
+    fn sys_is_in_sandbox(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
+        // TODO: Get the actual value from the PS4.
+        info!("Returning is_in_sandbox as 0.");
+        Ok(0.into())
+    }
+
+    fn sys_get_authinfo(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        // Get arguments.
+        let pid: i32 = i.args[0].try_into().unwrap();
+        let buf: *mut AuthInfo = i.args[1].into();
+
+        // Check if PID is our process.
+        if pid != 0 && pid != self.id.get() {
+            return Err(SysErr::Raw(ESRCH));
+        }
+
+        // Check privilege.
+        let mut info: AuthInfo = unsafe { zeroed() };
+        let td = VThread::current();
+
+        if td.priv_check(Privilege::SCE686).is_ok() {
+            info = self.cred.auth().clone();
+        } else {
+            // TODO: Refactor this for readability.
+            let paid = self.cred.auth().paid.wrapping_add(0xc7ffffffeffffffc);
+
+            if paid < 0xf && ((0x6001u32 >> (paid & 0x3f)) & 1) != 0 {
+                info.paid = self.cred.auth().paid;
+            }
+
+            info.caps[0] = self.cred.auth().caps[0] & 0x7000000000000000;
+
+            info!(
+                "Retrieved authinfo for non-system credential (paid = {:#x}, caps[0] = {:#x}).",
+                info.paid, info.caps[0]
+            );
+        }
+
+        // Copy into.
+        if buf.is_null() {
+            todo!("get_authinfo with buf = null");
+        } else {
+            unsafe { *buf = info };
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn sys_budget_get_ptype(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        // Check if PID is our process.
+        let pid: i32 = i.args[0].try_into().unwrap();
+
+        if pid != -1 && pid != self.id.get() {
+            return Err(SysErr::Raw(ENOSYS));
+        }
+
+        // TODO: Invoke id_rlock. Not sure why return ENOENT is working here.
+        Err(SysErr::Raw(ENOENT))
+    }
+
     fn new_id() -> NonZeroI32 {
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
 
@@ -156,7 +399,7 @@ impl VProc {
 
 // An object for removing the thread from the list when dropped.
 struct ActiveThread {
-    proc: &'static VProc,
+    proc: Arc<VProc>,
     id: NonZeroI32,
 }
 
@@ -169,13 +412,14 @@ impl Drop for ActiveThread {
     }
 }
 
-/// An object in the process object table.
-#[derive(Debug)]
-pub enum ProcObj {
-    Module(Arc<Module>),
-    Named(NamedObj),
+/// Outout of sys_rtprio_thread.
+#[repr(C)]
+struct RtPrio {
+    ty: u16,
+    prio: u16,
 }
 
+/// TODO: Move this to somewhere else.
 #[derive(Debug)]
 pub struct NamedObj {
     name: String,

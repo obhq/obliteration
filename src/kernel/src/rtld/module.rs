@@ -1,4 +1,5 @@
 use super::{MapError, Memory};
+use crate::ee::ExecutionEngine;
 use crate::fs::{VPath, VPathBuf};
 use crate::log::{print, LogEntry};
 use crate::memory::MemoryManager;
@@ -17,7 +18,8 @@ use std::sync::Arc;
 /// An implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/libexec/rtld-elf/rtld.h#L147.
 #[derive(Debug)]
-pub struct Module {
+pub struct Module<E: ExecutionEngine> {
+    ee: Arc<E>,
     id: u32,
     init: Option<usize>,
     entry: Option<usize>,
@@ -42,9 +44,10 @@ pub struct Module {
     symbols: Vec<Symbol>,
 }
 
-impl Module {
+impl<E: ExecutionEngine> Module<E> {
     pub(super) fn map<N: Into<String>>(
-        mm: &'static MemoryManager,
+        mm: &Arc<MemoryManager>,
+        ee: &Arc<E>,
         mut image: Elf<File>,
         base: usize,
         mem_name: N,
@@ -100,7 +103,7 @@ impl Module {
         }
 
         // Extract image info.
-        let entry = image.entry_addr().map(|v| base + v);
+        let entry = image.entry_addr();
 
         // TODO: Check if PT_TLS with zero value is valid or not. If not, set this to None instead.
         let tls_info = image
@@ -144,6 +147,7 @@ impl Module {
 
         // Parse dynamic info.
         let mut module = Self {
+            ee: ee.clone(),
             id,
             init: None,
             entry,
@@ -322,7 +326,12 @@ impl Module {
         }
 
         if let Some(v) = self.entry {
-            writeln!(entry, "Entry address : {:#018x}", mem.addr() + v).unwrap();
+            writeln!(
+                entry,
+                "Entry address : {:#018x}",
+                mem.addr() + mem.base() + v
+            )
+            .unwrap();
         }
 
         if let Some(v) = self.fini {
@@ -391,6 +400,15 @@ impl Module {
         }
 
         print(entry);
+    }
+
+    /// # Safety
+    /// `off` must be a valid offset without base adjustment of a function in the memory of this
+    /// module.
+    pub unsafe fn get_function(self: &Arc<Self>, off: usize) -> Arc<E::RawFn> {
+        self.ee
+            .get_function(self, self.memory.addr() + self.memory.base() + off)
+            .unwrap()
     }
 
     unsafe fn digest_eh(mem: &Memory, off: usize, len: usize) -> (usize, usize) {

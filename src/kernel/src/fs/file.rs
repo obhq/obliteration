@@ -6,19 +6,20 @@ use bitflags::bitflags;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 /// An implementation of `file` structure.
 #[derive(Debug)]
-pub struct VFile<'a> {
-    fs: &'a Fs,
-    ops: Option<Box<dyn VFileOps + 'a>>, // f_data + f_ops
-    flags: VFileFlags,                   // f_flag
+pub struct VFile {
+    fs: Arc<Fs>,
+    ops: Option<Box<dyn VFileOps>>, // f_data + f_ops
+    flags: VFileFlags,              // f_flag
 }
 
-impl<'a> VFile<'a> {
-    pub(super) fn new(fs: &'a Fs) -> Self {
+impl VFile {
+    pub(super) fn new(fs: &Arc<Fs>) -> Self {
         Self {
-            fs,
+            fs: fs.clone(),
             flags: VFileFlags::empty(),
             ops: None,
         }
@@ -28,7 +29,7 @@ impl<'a> VFile<'a> {
         self.ops.as_ref().map(|o| o.deref())
     }
 
-    pub fn set_ops(&mut self, v: Option<Box<dyn VFileOps + 'a>>) {
+    pub fn set_ops(&mut self, v: Option<Box<dyn VFileOps>>) {
         self.ops = v;
     }
 
@@ -41,13 +42,13 @@ impl<'a> VFile<'a> {
     }
 }
 
-impl<'a> Drop for VFile<'a> {
+impl Drop for VFile {
     fn drop(&mut self) {
         self.fs.opens.fetch_sub(1, Ordering::Relaxed);
     }
 }
 
-impl<'a> Display for VFile<'a> {
+impl Display for VFile {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Display::fmt(self.ops.as_ref().unwrap(), f)
     }

@@ -3,13 +3,13 @@ use crate::llvm::module::LlvmModule;
 use thiserror::Error;
 
 /// Contains states for lifting a module.
-pub(super) struct Codegen<'a, 'b: 'a> {
+pub(super) struct Codegen<'a> {
     input: Disassembler<'a>,
-    output: &'a mut LlvmModule<'b>,
+    output: &'a mut LlvmModule,
 }
 
-impl<'a, 'b: 'a> Codegen<'a, 'b> {
-    pub fn new(input: Disassembler<'a>, output: &'a mut LlvmModule<'b>) -> Self {
+impl<'a> Codegen<'a> {
+    pub fn new(input: Disassembler<'a>, output: &'a mut LlvmModule) -> Self {
         Self { input, output }
     }
 
