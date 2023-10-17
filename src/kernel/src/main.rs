@@ -1,3 +1,4 @@
+use crate::arch::MachDep;
 use crate::arnd::Arnd;
 use crate::ee::{EntryArg, RawFn};
 use crate::fs::Fs;
@@ -7,6 +8,7 @@ use crate::memory::MemoryManager;
 use crate::process::VProc;
 use crate::regmgr::RegMgr;
 use crate::rtld::{ModuleFlags, RuntimeLinker};
+use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
 use clap::{Parser, ValueEnum};
 use llt::Thread;
@@ -18,6 +20,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 
+mod arch;
 mod arnd;
 mod console;
 mod disasm;
@@ -32,6 +35,7 @@ mod process;
 mod regmgr;
 mod rtld;
 mod signal;
+mod syscalls;
 mod sysctl;
 mod ucred;
 
@@ -100,7 +104,8 @@ fn main() -> ExitCode {
     // Initialize foundations.
     let arnd = Arnd::new();
     let llvm = Llvm::new();
-    let vp = match VProc::new() {
+    let mut syscalls = Syscalls::new();
+    let vp = match VProc::new(&mut syscalls) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Virtual process initialization failed");
@@ -109,7 +114,7 @@ fn main() -> ExitCode {
     };
 
     // Initialize memory management.
-    let mm = match MemoryManager::new(&vp) {
+    let mm = match MemoryManager::new(&vp, &mut syscalls) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Memory manager initialization failed");
@@ -143,9 +148,10 @@ fn main() -> ExitCode {
             args.system,
             args.game,
             &arnd,
+            syscalls,
             &vp,
             &mm,
-            crate::ee::native::NativeEngine::new(&mm),
+            crate::ee::native::NativeEngine::new(),
         ),
         #[cfg(not(target_arch = "x86_64"))]
         ExecutionEngine::Native => {
@@ -156,6 +162,7 @@ fn main() -> ExitCode {
             args.system,
             args.game,
             &arnd,
+            syscalls,
             &vp,
             &mm,
             crate::ee::llvm::LlvmEngine::new(&llvm),
@@ -167,21 +174,20 @@ fn run<E: crate::ee::ExecutionEngine>(
     root: PathBuf,
     app: PathBuf,
     arnd: &Arc<Arnd>,
+    mut syscalls: Syscalls,
     vp: &Arc<VProc>,
     mm: &Arc<MemoryManager>,
     ee: Arc<E>,
 ) -> ExitCode {
     // Initialize kernel components.
-    vp.install_syscalls(ee.as_ref());
-    mm.install_syscalls(ee.as_ref());
-
-    let fs = Fs::new(vp, ee.as_ref(), root, app);
-    RegMgr::new(ee.as_ref());
+    let fs = Fs::new(root, app, vp, &mut syscalls);
+    RegMgr::new(&mut syscalls);
+    MachDep::new(&mut syscalls);
 
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
 
-    let ld = match RuntimeLinker::new(&fs, mm, &ee, vp) {
+    let ld = match RuntimeLinker::new(&fs, mm, &ee, vp, &mut syscalls) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Initialize failed");
@@ -189,15 +195,16 @@ fn run<E: crate::ee::ExecutionEngine>(
         }
     };
 
-    // Initialize sysctl.
-    Sysctl::new(arnd, vp, mm, ee.as_ref());
-
     // Print application module.
     let app = ld.app();
     let mut log = info!();
 
     writeln!(log, "Application   : {}", app.path()).unwrap();
     app.print(log);
+
+    // Initialize sysctl.
+    Sysctl::new(arnd, vp, mm, &mut syscalls);
+    ee.set_syscalls(syscalls);
 
     // Preload libkernel.
     let path = vpath!("/system/common/lib/libkernel.sprx");

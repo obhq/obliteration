@@ -2,13 +2,14 @@ pub use self::mem::*;
 pub use self::module::*;
 
 use self::resolver::{ResolveFlags, SymbolResolver};
-use crate::ee::{ExecutionEngine, SysErr, SysIn, SysOut};
+use crate::ee::ExecutionEngine;
 use crate::errno::{Errno, EINVAL, ENOEXEC, ENOMEM, EPERM, ESRCH};
 use crate::fs::{Fs, FsError, FsItem, VPath, VPathBuf};
 use crate::info;
 use crate::log::print;
 use crate::memory::{MemoryManager, MemoryUpdateError, MmapError, Protections};
 use crate::process::VProc;
+use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use bitflags::bitflags;
 use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation};
 use gmtx::GroupMutex;
@@ -47,6 +48,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         mm: &Arc<MemoryManager>,
         ee: &Arc<E>,
         vp: &Arc<VProc>,
+        sys: &mut Syscalls,
     ) -> Result<Arc<Self>, RuntimeLinkerError<E>> {
         // Get path to eboot.bin.
         let mut path = fs.app().join("app0").unwrap();
@@ -138,10 +140,10 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             flags,
         });
 
-        ee.register_syscall(592, &ld, Self::sys_dynlib_get_list);
-        ee.register_syscall(598, &ld, Self::sys_dynlib_get_proc_param);
-        ee.register_syscall(599, &ld, Self::sys_dynlib_process_needed_and_relocate);
-        ee.register_syscall(608, &ld, Self::sys_dynlib_get_info_ex);
+        sys.register(592, &ld, Self::sys_dynlib_get_list);
+        sys.register(598, &ld, Self::sys_dynlib_get_proc_param);
+        sys.register(599, &ld, Self::sys_dynlib_process_needed_and_relocate);
+        sys.register(608, &ld, Self::sys_dynlib_get_info_ex);
 
         Ok(ld)
     }

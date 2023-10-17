@@ -1,8 +1,8 @@
 use crate::arnd::Arnd;
-use crate::ee::{ExecutionEngine, SysErr, SysIn, SysOut};
 use crate::errno::{EFAULT, EINVAL, EISDIR, ENAMETOOLONG, ENOENT, ENOMEM, ENOTDIR, EPERM, ESRCH};
 use crate::memory::MemoryManager;
 use crate::process::VProc;
+use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use std::any::Any;
 use std::cmp::min;
 use std::sync::Arc;
@@ -41,17 +41,19 @@ impl Sysctl {
     const CTLFLAG_ANYBODY: u32 = 0x10000000;
     const CTLFLAG_WR: u32 = 0x40000000;
 
-    pub fn new<E>(arnd: &Arc<Arnd>, vp: &Arc<VProc>, mm: &Arc<MemoryManager>, ee: &E) -> Arc<Self>
-    where
-        E: ExecutionEngine,
-    {
+    pub fn new(
+        arnd: &Arc<Arnd>,
+        vp: &Arc<VProc>,
+        mm: &Arc<MemoryManager>,
+        sys: &mut Syscalls,
+    ) -> Arc<Self> {
         let ctl = Arc::new(Self {
             arnd: arnd.clone(),
             vp: vp.clone(),
             mm: mm.clone(),
         });
 
-        ee.register_syscall(202, &ctl, Self::sys_sysctl);
+        sys.register(202, &ctl, Self::sys_sysctl);
 
         ctl
     }

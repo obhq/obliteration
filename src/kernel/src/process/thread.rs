@@ -1,6 +1,7 @@
 use crate::signal::SignalSet;
 use crate::ucred::{Privilege, PrivilegeError, Ucred};
-use gmtx::{GroupMutex, GroupMutexWriteGuard, MutexGroup};
+use bitflags::bitflags;
+use gmtx::{GroupMutex, GroupMutexReadGuard, GroupMutexWriteGuard, MutexGroup};
 use llt::{SpawnError, Thread};
 use std::num::NonZeroI32;
 use std::sync::Arc;
@@ -16,6 +17,7 @@ pub struct VThread {
     sigmask: GroupMutex<SignalSet>, // td_sigmask
     pri_class: u16,                 // td_pri_class
     base_user_pri: u16,             // td_base_user_pri
+    pcb: GroupMutex<Pcb>,           // td_pcb
 }
 
 impl VThread {
@@ -27,6 +29,10 @@ impl VThread {
             sigmask: mtxg.new_member(SignalSet::default()),
             pri_class: 3, // TODO: Check the actual value on the PS4 when a thread is created.
             base_user_pri: 120, // TODO: Same here.
+            pcb: mtxg.new_member(Pcb {
+                fsbase: 0,
+                flags: PcbFlags::empty(),
+            }),
         }
     }
 
@@ -56,6 +62,14 @@ impl VThread {
         self.base_user_pri
     }
 
+    pub fn pcb(&self) -> GroupMutexReadGuard<'_, Pcb> {
+        self.pcb.read()
+    }
+
+    pub fn pcb_mut(&self) -> GroupMutexWriteGuard<'_, Pcb> {
+        self.pcb.write()
+    }
+
     /// An implementation of `priv_check`.
     pub fn priv_check(&self, p: Privilege) -> Result<(), PrivilegeError> {
         self.cred.priv_check(p)
@@ -79,6 +93,35 @@ impl VThread {
             assert!(VTHREAD.set(td.take().unwrap()).is_none());
             routine();
         })
+    }
+}
+
+/// An implementation of `pcb` structure.
+#[derive(Debug)]
+pub struct Pcb {
+    fsbase: usize,   // pcb_fsbase
+    flags: PcbFlags, // pcb_flags
+}
+
+impl Pcb {
+    pub fn fsbase(&self) -> usize {
+        self.fsbase
+    }
+
+    pub fn set_fsbase(&mut self, v: usize) {
+        self.fsbase = v;
+    }
+
+    pub fn flags_mut(&mut self) -> &mut PcbFlags {
+        &mut self.flags
+    }
+}
+
+bitflags! {
+    /// Flags of [`Pcb`].
+    #[derive(Debug)]
+    pub struct PcbFlags: u32 {
+        const PCB_FULL_IRET = 0x01;
     }
 }
 

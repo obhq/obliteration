@@ -5,11 +5,11 @@ pub use self::rlimit::*;
 pub use self::session::*;
 pub use self::thread::*;
 
-use crate::ee::{ExecutionEngine, SysErr, SysIn, SysOut};
 use crate::errno::{EINVAL, ENAMETOOLONG, ENOENT, ENOSYS, EPERM, ESRCH};
 use crate::idt::IdTable;
 use crate::info;
 use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK};
+use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{AuthInfo, Privilege, Ucred};
 use gmtx::{GroupMutex, GroupMutexWriteGuard, MutexGroup};
 use llt::{SpawnError, Thread};
@@ -46,12 +46,11 @@ pub struct VProc {
 }
 
 impl VProc {
-    pub fn new() -> Result<Arc<Self>, VProcError> {
+    pub fn new(syscalls: &mut Syscalls) -> Result<Arc<Self>, VProcError> {
         // TODO: Check how ucred is constructed for a process.
         let mg = MutexGroup::new("virtual process");
         let limits = Self::load_limits()?;
-
-        Ok(Arc::new(Self {
+        let vp = Arc::new(Self {
             id: Self::new_id(),
             threads: mg.new_member(Vec::new()),
             cred: Ucred::new(AuthInfo::EXE.clone()),
@@ -61,7 +60,20 @@ impl VProc {
             limits,
             app_info: AppInfo::new(),
             mtxg: mg,
-        }))
+        });
+
+        syscalls.register(20, &vp, |p, _| Ok(p.id().into()));
+        syscalls.register(50, &vp, Self::sys_setlogin);
+        syscalls.register(147, &vp, Self::sys_setsid);
+        syscalls.register(340, &vp, Self::sys_sigprocmask);
+        syscalls.register(432, &vp, Self::sys_thr_self);
+        syscalls.register(466, &vp, Self::sys_rtprio_thread);
+        syscalls.register(557, &vp, Self::sys_namedobj_create);
+        syscalls.register(585, &vp, Self::sys_is_in_sandbox);
+        syscalls.register(587, &vp, Self::sys_get_authinfo);
+        syscalls.register(610, &vp, Self::sys_budget_get_ptype);
+
+        Ok(vp)
     }
 
     pub fn id(&self) -> NonZeroI32 {
@@ -90,19 +102,6 @@ impl VProc {
 
     pub fn mutex_group(&self) -> &Arc<MutexGroup> {
         &self.mtxg
-    }
-
-    pub fn install_syscalls<E: ExecutionEngine>(self: &Arc<Self>, ee: &E) {
-        ee.register_syscall(20, self, |p, _| Ok(p.id().into()));
-        ee.register_syscall(50, self, Self::sys_setlogin);
-        ee.register_syscall(147, self, Self::sys_setsid);
-        ee.register_syscall(340, self, Self::sys_sigprocmask);
-        ee.register_syscall(432, self, Self::sys_thr_self);
-        ee.register_syscall(466, self, Self::sys_rtprio_thread);
-        ee.register_syscall(557, self, Self::sys_namedobj_create);
-        ee.register_syscall(585, self, Self::sys_is_in_sandbox);
-        ee.register_syscall(587, self, Self::sys_get_authinfo);
-        ee.register_syscall(610, self, Self::sys_budget_get_ptype);
     }
 
     /// Spawn a new [`VThread`].

@@ -1,18 +1,18 @@
 use std::num::NonZeroI32;
 
-/// Outputs of the syscall.
+/// Outputs of the syscall entry point.
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct Output {
-    pub rax: usize,
-    pub rdx: usize,
+pub struct SysOut {
+    rax: usize,
+    rdx: usize,
 }
 
-impl Output {
-    pub const ZERO: Output = Output { rax: 0, rdx: 0 };
+impl SysOut {
+    pub const ZERO: Self = Self { rax: 0, rdx: 0 };
 }
 
-impl<T> From<*mut T> for Output {
+impl<T> From<*mut T> for SysOut {
     fn from(value: *mut T) -> Self {
         Self {
             rax: value as _,
@@ -21,25 +21,25 @@ impl<T> From<*mut T> for Output {
     }
 }
 
-impl From<i32> for Output {
+impl From<i32> for SysOut {
     fn from(value: i32) -> Self {
         Self {
-            rax: value as isize as usize,
+            rax: value as isize as usize, // Sign extended.
             rdx: 0,
         }
     }
 }
 
-impl From<usize> for Output {
+impl From<usize> for SysOut {
     fn from(value: usize) -> Self {
         Self { rax: value, rdx: 0 }
     }
 }
 
-impl From<NonZeroI32> for Output {
+impl From<NonZeroI32> for SysOut {
     fn from(value: NonZeroI32) -> Self {
         Self {
-            rax: value.get() as isize as usize,
+            rax: value.get() as isize as usize, // Sign extended.
             rdx: 0,
         }
     }
