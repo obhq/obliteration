@@ -1,9 +1,10 @@
 use self::codegen::Codegen;
-use super::{ExecutionEngine, SysErr, SysIn, SysOut};
+use super::ExecutionEngine;
 use crate::disasm::Disassembler;
 use crate::fs::VPathBuf;
 use crate::llvm::Llvm;
 use crate::rtld::Module;
+use crate::syscalls::Syscalls;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -69,30 +70,19 @@ impl ExecutionEngine for LlvmEngine {
     type SetupModuleErr = SetupModuleError;
     type GetFunctionErr = GetFunctionError;
 
-    fn register_syscall<O>(
-        &self,
-        id: u32,
-        o: &Arc<O>,
-        h: fn(&Arc<O>, &SysIn) -> Result<SysOut, SysErr>,
-    ) {
+    fn set_syscalls(&self, v: Syscalls) {
         todo!()
     }
 
-    fn setup_module<E>(&self, md: &mut Module<E>) -> Result<(), Self::SetupModuleErr>
-    where
-        E: ExecutionEngine,
-    {
+    fn setup_module(self: &Arc<Self>, md: &mut Module<Self>) -> Result<(), Self::SetupModuleErr> {
         todo!()
     }
 
-    unsafe fn get_function<E>(
-        &self,
-        md: &Arc<Module<E>>,
+    unsafe fn get_function(
+        self: &Arc<Self>,
+        md: &Arc<Module<Self>>,
         addr: usize,
-    ) -> Result<Arc<Self::RawFn>, Self::GetFunctionErr>
-    where
-        E: ExecutionEngine,
-    {
+    ) -> Result<Arc<Self::RawFn>, Self::GetFunctionErr> {
         todo!()
     }
 }

@@ -3,9 +3,9 @@ pub use self::stack::*;
 
 use self::iter::StartFromMut;
 use self::storage::Storage;
-use crate::ee::{ExecutionEngine, SysArg, SysErr, SysIn, SysOut};
 use crate::errno::{Errno, EINVAL, ENOMEM};
 use crate::process::VProc;
+use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
 use crate::{info, warn};
 use bitflags::bitflags;
 use std::collections::BTreeMap;
@@ -34,7 +34,7 @@ impl MemoryManager {
     /// Size of a memory page on PS4.
     pub const VIRTUAL_PAGE_SIZE: usize = 0x4000;
 
-    pub fn new(vp: &Arc<VProc>) -> Result<Arc<Self>, MemoryManagerError> {
+    pub fn new(vp: &Arc<VProc>, syscalls: &mut Syscalls) -> Result<Arc<Self>, MemoryManagerError> {
         // Check if page size on the host is supported. We don't need to check allocation
         // granularity because it is always multiply by page size, which is a correct value.
         let (page_size, allocation_granularity) = Self::get_memory_model();
@@ -80,7 +80,13 @@ impl MemoryManager {
         mm.stack
             .set_stack(unsafe { guard.add(Self::VIRTUAL_PAGE_SIZE) });
 
-        Ok(Arc::new(mm))
+        // Register syscall handlers.
+        let mm = Arc::new(mm);
+
+        syscalls.register(477, &mm, Self::sys_mmap);
+        syscalls.register(588, &mm, Self::sys_mname);
+
+        Ok(mm)
     }
 
     /// Gets size of page on the host system.
@@ -95,11 +101,6 @@ impl MemoryManager {
 
     pub fn stack(&self) -> &AppStack {
         &self.stack
-    }
-
-    pub fn install_syscalls<E: ExecutionEngine>(self: &Arc<Self>, ee: &E) {
-        ee.register_syscall(477, self, Self::sys_mmap);
-        ee.register_syscall(588, self, Self::sys_mname);
     }
 
     pub fn mmap<N: Into<String>>(

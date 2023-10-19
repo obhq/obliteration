@@ -2,10 +2,10 @@ pub use self::file::*;
 pub use self::item::*;
 pub use self::path::*;
 
-use crate::ee::{ExecutionEngine, SysArg, SysErr, SysIn, SysOut};
 use crate::errno::{Errno, EBADF, EINVAL, ENOENT, ENOTTY};
 use crate::info;
 use crate::process::{VProc, VThread};
+use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::Privilege;
 use bitflags::bitflags;
 use gmtx::{GroupMutex, MutexGroup};
@@ -34,9 +34,8 @@ pub struct Fs {
 }
 
 impl Fs {
-    pub fn new<E, S, G>(vp: &Arc<VProc>, ee: &E, system: S, game: G) -> Arc<Self>
+    pub fn new<S, G>(system: S, game: G, vp: &Arc<VProc>, syscalls: &mut Syscalls) -> Arc<Self>
     where
-        E: ExecutionEngine,
         S: Into<PathBuf>,
         G: Into<PathBuf>,
     {
@@ -107,9 +106,9 @@ impl Fs {
             app,
         });
 
-        ee.register_syscall(5, &fs, Self::sys_open);
-        ee.register_syscall(54, &fs, Self::sys_ioctl);
-        ee.register_syscall(56, &fs, Self::sys_revoke);
+        syscalls.register(5, &fs, Self::sys_open);
+        syscalls.register(54, &fs, Self::sys_ioctl);
+        syscalls.register(56, &fs, Self::sys_revoke);
 
         fs
     }

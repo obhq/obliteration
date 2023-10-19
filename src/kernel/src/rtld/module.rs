@@ -18,7 +18,7 @@ use std::sync::Arc;
 /// An implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/libexec/rtld-elf/rtld.h#L147.
 #[derive(Debug)]
-pub struct Module<E: ExecutionEngine> {
+pub struct Module<E: ExecutionEngine + ?Sized> {
     ee: Arc<E>,
     id: u32,
     init: Option<usize>,

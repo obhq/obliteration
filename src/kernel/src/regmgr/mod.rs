@@ -1,7 +1,7 @@
 pub use self::key::*;
 
-use crate::ee::{ExecutionEngine, SysErr, SysIn, SysOut};
 use crate::process::VThread;
+use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::Ucred;
 use crate::{info, warn};
 use std::fmt::{Display, Formatter};
@@ -15,10 +15,10 @@ mod key;
 pub struct RegMgr {}
 
 impl RegMgr {
-    pub fn new<E: ExecutionEngine>(ee: &E) -> Arc<Self> {
+    pub fn new(sys: &mut Syscalls) -> Arc<Self> {
         let mgr = Arc::new(Self {});
 
-        ee.register_syscall(532, &mgr, Self::sys_regmgr_call);
+        sys.register(532, &mgr, Self::sys_regmgr_call);
 
         mgr
     }
