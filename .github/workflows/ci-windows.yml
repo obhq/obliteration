@@ -65,7 +65,7 @@ jobs:
         path: ~/.cargo
         key: ${{ steps.cache-keys.outputs.cargo }}
     - name: Install Qt
-      uses: jurplel/install-qt-action@v3
+      uses: jurplel/install-qt-action@v4
       with:
         version: 6.*
         aqtversion: '==3.1.*'
