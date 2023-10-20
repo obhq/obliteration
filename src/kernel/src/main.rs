@@ -147,6 +147,7 @@ fn main() -> ExitCode {
         ExecutionEngine::Native => run(
             args.system,
             args.game,
+            args.debug_dump,
             &arnd,
             syscalls,
             &vp,
@@ -161,6 +162,7 @@ fn main() -> ExitCode {
         ExecutionEngine::Llvm => run(
             args.system,
             args.game,
+            args.debug_dump,
             &arnd,
             syscalls,
             &vp,
@@ -173,6 +175,7 @@ fn main() -> ExitCode {
 fn run<E: crate::ee::ExecutionEngine>(
     root: PathBuf,
     app: PathBuf,
+    dump: Option<PathBuf>,
     arnd: &Arc<Arnd>,
     mut syscalls: Syscalls,
     vp: &Arc<VProc>,
@@ -187,7 +190,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
 
-    let ld = match RuntimeLinker::new(&fs, mm, &ee, vp, &mut syscalls) {
+    let ld = match RuntimeLinker::new(&fs, mm, &ee, vp, &mut syscalls, dump.as_deref()) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Initialize failed");

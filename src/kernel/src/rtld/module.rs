@@ -13,6 +13,7 @@ use gmtx::{GroupMutex, GroupMutexReadGuard, GroupMutexWriteGuard, MutexGroup};
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::Write;
+use std::path::Path;
 use std::sync::Arc;
 
 /// An implementation of
@@ -270,6 +271,22 @@ impl<E: ExecutionEngine> Module<E> {
         self.symbols.as_ref()
     }
 
+    /// # Safety
+    /// `off` must be a valid offset without base adjustment of a function in the memory of this
+    /// module.
+    pub unsafe fn get_function(self: &Arc<Self>, off: usize) -> Arc<E::RawFn> {
+        self.ee
+            .get_function(self, self.memory.addr() + self.memory.base() + off)
+            .unwrap()
+    }
+
+    pub fn dump<P: AsRef<Path>>(&mut self, path: P) -> Result<(), std::io::Error> {
+        let path = path.as_ref();
+        let mut file = File::create(path)?;
+
+        file.write_all(unsafe { self.memory.as_bytes() })
+    }
+
     pub fn print(&self, mut entry: LogEntry) {
         // Lock all required fields first so the output is consistent.
         let flags = self.flags.read();
@@ -400,15 +417,6 @@ impl<E: ExecutionEngine> Module<E> {
         }
 
         print(entry);
-    }
-
-    /// # Safety
-    /// `off` must be a valid offset without base adjustment of a function in the memory of this
-    /// module.
-    pub unsafe fn get_function(self: &Arc<Self>, off: usize) -> Arc<E::RawFn> {
-        self.ee
-            .get_function(self, self.memory.addr() + self.memory.base() + off)
-            .unwrap()
     }
 
     unsafe fn digest_eh(mem: &Memory, off: usize, len: usize) -> (usize, usize) {

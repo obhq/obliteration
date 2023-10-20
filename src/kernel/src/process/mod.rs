@@ -3,12 +3,16 @@ pub use self::file::*;
 pub use self::group::*;
 pub use self::rlimit::*;
 pub use self::session::*;
+pub use self::signal::*;
 pub use self::thread::*;
 
 use crate::errno::{EINVAL, ENAMETOOLONG, ENOENT, ENOSYS, EPERM, ESRCH};
 use crate::idt::IdTable;
 use crate::info;
-use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK};
+use crate::signal::{
+    strsignal, SignalAct, SignalFlags, SignalSet, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_DFL,
+    SIG_IGN, SIG_MAXSIG, SIG_SETMASK, SIG_UNBLOCK,
+};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{AuthInfo, Privilege, Ucred};
 use gmtx::{GroupMutex, GroupMutexWriteGuard, MutexGroup};
@@ -25,6 +29,7 @@ mod file;
 mod group;
 mod rlimit;
 mod session;
+mod signal;
 mod thread;
 
 /// An implementation of `proc` structure represent the main application process.
@@ -38,6 +43,7 @@ pub struct VProc {
     threads: GroupMutex<Vec<Arc<VThread>>>,          // p_threads
     cred: Ucred,                                     // p_ucred
     group: GroupMutex<Option<VProcGroup>>,           // p_pgrp
+    sigacts: GroupMutex<SignalActs>,                 // p_sigacts
     files: VProcFiles,                               // p_fd
     limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
     objects: GroupMutex<IdTable<Arc<dyn Any + Send + Sync>>>,
@@ -46,7 +52,7 @@ pub struct VProc {
 }
 
 impl VProc {
-    pub fn new(syscalls: &mut Syscalls) -> Result<Arc<Self>, VProcError> {
+    pub fn new(sys: &mut Syscalls) -> Result<Arc<Self>, VProcError> {
         // TODO: Check how ucred is constructed for a process.
         let mg = MutexGroup::new("virtual process");
         let limits = Self::load_limits()?;
@@ -55,6 +61,7 @@ impl VProc {
             threads: mg.new_member(Vec::new()),
             cred: Ucred::new(AuthInfo::EXE.clone()),
             group: mg.new_member(None),
+            sigacts: mg.new_member(SignalActs::new()),
             files: VProcFiles::new(&mg),
             objects: mg.new_member(IdTable::new(0x1000)),
             limits,
@@ -62,16 +69,17 @@ impl VProc {
             mtxg: mg,
         });
 
-        syscalls.register(20, &vp, |p, _| Ok(p.id().into()));
-        syscalls.register(50, &vp, Self::sys_setlogin);
-        syscalls.register(147, &vp, Self::sys_setsid);
-        syscalls.register(340, &vp, Self::sys_sigprocmask);
-        syscalls.register(432, &vp, Self::sys_thr_self);
-        syscalls.register(466, &vp, Self::sys_rtprio_thread);
-        syscalls.register(557, &vp, Self::sys_namedobj_create);
-        syscalls.register(585, &vp, Self::sys_is_in_sandbox);
-        syscalls.register(587, &vp, Self::sys_get_authinfo);
-        syscalls.register(610, &vp, Self::sys_budget_get_ptype);
+        sys.register(20, &vp, |p, _| Ok(p.id().into()));
+        sys.register(50, &vp, Self::sys_setlogin);
+        sys.register(147, &vp, Self::sys_setsid);
+        sys.register(340, &vp, Self::sys_sigprocmask);
+        sys.register(416, &vp, Self::sys_sigaction);
+        sys.register(432, &vp, Self::sys_thr_self);
+        sys.register(466, &vp, Self::sys_rtprio_thread);
+        sys.register(557, &vp, Self::sys_namedobj_create);
+        sys.register(585, &vp, Self::sys_is_in_sandbox);
+        sys.register(587, &vp, Self::sys_get_authinfo);
+        sys.register(610, &vp, Self::sys_budget_get_ptype);
 
         Ok(vp)
     }
@@ -252,12 +260,109 @@ impl VProc {
             }
 
             // TODO: Check if we need to invoke reschedule_signals.
-            info!("Signal mask was changed from {} to {}.", prev, mask);
         }
 
         // Copy output.
         if !oset.is_null() {
             unsafe { *oset = prev };
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn sys_sigaction(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        // Get arguments.
+        let sig: i32 = i.args[0].try_into().unwrap();
+        let act: *const SignalAct = i.args[1].into();
+        let oact: *mut SignalAct = i.args[2].into();
+
+        if sig == 0 || sig > SIG_MAXSIG {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        // Save the old actions.
+        let mut acts = self.sigacts.write();
+
+        if !oact.is_null() {
+            todo!("sys_sigaction with oact != null");
+        }
+
+        if act.is_null() {
+            return Ok(SysOut::ZERO);
+        }
+
+        // Set new actions.
+        let sig = NonZeroI32::new(sig).unwrap();
+        let handler = unsafe { (*act).handler };
+        let flags = unsafe { (*act).flags };
+        let mut mask = unsafe { (*act).mask };
+
+        info!(
+            "Setting {} handler to {:#x} with flags = {} and mask = {}.",
+            strsignal(sig),
+            handler,
+            flags,
+            mask
+        );
+
+        if (sig == SIGKILL || sig == SIGSTOP) && handler != 0 {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        mask.remove(SIGKILL);
+        mask.remove(SIGSTOP);
+        acts.set_catchmask(sig, mask);
+        acts.set_handler(sig, handler);
+
+        if flags.intersects(SignalFlags::SA_SIGINFO) {
+            acts.set_modern(sig);
+
+            if flags.intersects(SignalFlags::SA_RESTART) {
+                todo!("sys_sigaction with act.flags & 0x2 != 0");
+            } else {
+                acts.set_interupt(sig);
+            }
+
+            if flags.intersects(SignalFlags::SA_ONSTACK) {
+                todo!("sys_sigaction with act.flags & 0x1 != 0");
+            } else {
+                acts.remove_stack(sig);
+            }
+
+            if flags.intersects(SignalFlags::SA_RESETHAND) {
+                todo!("sys_sigaction with act.flags & 0x4 != 0");
+            } else {
+                acts.remove_reset(sig);
+            }
+
+            if flags.intersects(SignalFlags::SA_NODEFER) {
+                todo!("sys_sigaction with act.flags & 0x10 != 0");
+            } else {
+                acts.remove_nodefer(sig);
+            }
+        } else {
+            todo!("sys_sigaction with act.flags & 0x40 = 0");
+        }
+
+        if sig == SIGCHLD {
+            todo!("sys_sigaction with sig = SIGCHLD");
+        }
+
+        // TODO: Refactor this for readability.
+        if acts.handler(sig) == SIG_IGN
+            || (sig.get() < 32
+                && ((0x184c8000u32 >> sig.get()) & 1) != 0
+                && acts.handler(sig) == SIG_DFL)
+        {
+            todo!("sys_sigaction with SIG_IGN");
+        } else {
+            acts.remove_ignore(sig);
+
+            if acts.handler(sig) == SIG_DFL {
+                acts.remove_catch(sig);
+            } else {
+                acts.set_catch(sig);
+            }
         }
 
         Ok(SysOut::ZERO)
