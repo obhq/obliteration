@@ -23,7 +23,6 @@ use std::sync::Arc;
 mod arch;
 mod arnd;
 mod console;
-mod disasm;
 mod ee;
 mod errno;
 mod fs;

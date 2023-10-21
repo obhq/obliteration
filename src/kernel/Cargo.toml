@@ -21,6 +21,7 @@ macros = { path = "../macros" }
 param = { path = "../param" }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
+sha1 = "0.10"
 termcolor = "1.2.0"
 thiserror = "1.0"
 tls = { path = "../tls" }

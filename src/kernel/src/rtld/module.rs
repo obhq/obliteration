@@ -32,6 +32,8 @@ pub struct Module<E: ExecutionEngine + ?Sized> {
     proc_param: Option<(usize, usize)>,
     sdk_ver: u32,
     flags: GroupMutex<ModuleFlags>,
+    dag_static: GroupMutex<Vec<Arc<Self>>>,  // dagmembers
+    dag_dynamic: GroupMutex<Vec<Arc<Self>>>, // dldags
     needed: Vec<NeededModule>,
     modules: Vec<ModuleInfo>,
     libraries: Vec<LibraryInfo>,
@@ -160,6 +162,8 @@ impl<E: ExecutionEngine> Module<E> {
             proc_param,
             sdk_ver,
             flags: mtxg.new_member(ModuleFlags::UNK2),
+            dag_static: mtxg.new_member(Vec::new()),
+            dag_dynamic: mtxg.new_member(Vec::new()),
             needed: Vec::new(),
             modules: Vec::new(),
             libraries: Vec::new(),
@@ -232,6 +236,18 @@ impl<E: ExecutionEngine> Module<E> {
 
     pub fn flags_mut(&self) -> GroupMutexWriteGuard<'_, ModuleFlags> {
         self.flags.write()
+    }
+
+    pub fn dag_static(&self) -> GroupMutexReadGuard<'_, Vec<Arc<Self>>> {
+        self.dag_static.read()
+    }
+
+    pub fn dag_static_mut(&self) -> GroupMutexWriteGuard<'_, Vec<Arc<Self>>> {
+        self.dag_static.write()
+    }
+
+    pub fn dag_dynamic_mut(&self) -> GroupMutexWriteGuard<'_, Vec<Arc<Self>>> {
+        self.dag_dynamic.write()
     }
 
     pub fn modules(&self) -> &[ModuleInfo] {
@@ -554,22 +570,14 @@ impl<E: ExecutionEngine> Module<E> {
     fn digest_init(&mut self, base: usize, value: [u8; 8]) -> Result<(), MapError> {
         // TODO: Apply checks from digest_dynamic on the PS4.
         let addr: usize = u64::from_le_bytes(value).try_into().unwrap();
-
-        if addr != 0 {
-            self.init = Some(base + addr);
-        }
-
+        self.init = Some(base + addr);
         Ok(())
     }
 
     fn digest_fini(&mut self, base: usize, value: [u8; 8]) -> Result<(), MapError> {
         // TODO: Apply checks from digest_dynamic on the PS4.
         let addr: usize = u64::from_le_bytes(value).try_into().unwrap();
-
-        if addr != 0 {
-            self.fini = Some(base + addr);
-        }
-
+        self.fini = Some(base + addr);
         Ok(())
     }
 

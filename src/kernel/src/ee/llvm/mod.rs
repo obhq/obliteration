@@ -1,6 +1,5 @@
 use self::codegen::Codegen;
 use super::ExecutionEngine;
-use crate::disasm::Disassembler;
 use crate::fs::VPathBuf;
 use crate::llvm::Llvm;
 use crate::rtld::Module;
@@ -32,20 +31,9 @@ impl LlvmEngine {
             None => Vec::new(),
         };
 
-        // Disassemble the module.
-        let mut disasm = Disassembler::new(unsafe { module.memory().unprotect().unwrap() });
-
-        for &addr in &targets {
-            if let Err(e) = disasm.disassemble(addr) {
-                return Err(LiftError::DisassembleFailed(path.to_owned(), addr, e));
-            }
-        }
-
-        disasm.fixup();
-
         // Lift the public functions.
         let mut lifting = self.llvm.create_module(path);
-        let mut codegen = Codegen::new(disasm, &mut lifting);
+        let mut codegen = Codegen::new(&mut lifting);
 
         for &addr in &targets {
             if let Err(e) = codegen.lift(addr) {
@@ -111,9 +99,6 @@ pub enum GetFunctionError {}
 /// Represents an error when module lifting is failed.
 #[derive(Debug, Error)]
 enum LiftError {
-    #[error("cannot disassemble function {1:#018x} on {0}")]
-    DisassembleFailed(VPathBuf, usize, #[source] crate::disasm::DisassembleError),
-
     #[error("cannot lift function {1:#018x} on {0}")]
     LiftingFailed(VPathBuf, usize, #[source] self::codegen::LiftError),
 
