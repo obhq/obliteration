@@ -16,6 +16,11 @@ impl SignalSet {
         (self.bits[Self::word(sig)] & Self::bit(sig)) != 0
     }
 
+    /// An implementation of `SIGADDSET`.
+    pub fn add(&mut self, sig: NonZeroI32) {
+        self.bits[Self::word(sig)] |= Self::bit(sig);
+    }
+
     /// An implementation of `SIGDELSET`.
     pub fn remove(&mut self, sig: NonZeroI32) {
         self.bits[Self::word(sig)] &= !Self::bit(sig);

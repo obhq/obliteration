@@ -18,6 +18,7 @@ use std::io::Write;
 use std::mem::{size_of, zeroed};
 use std::num::NonZeroI32;
 use std::ops::Deref;
+use std::path::Path;
 use std::ptr::{read_unaligned, write_unaligned};
 use std::sync::Arc;
 use thiserror::Error;
@@ -49,6 +50,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         ee: &Arc<E>,
         vp: &Arc<VProc>,
         sys: &mut Syscalls,
+        dump: Option<&Path>,
     ) -> Result<Arc<Self>, RuntimeLinkerError<E>> {
         // Get path to eboot.bin.
         let mut path = fs.app().join("app0").unwrap();
@@ -97,6 +99,11 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             Ok(v) => v,
             Err(e) => return Err(RuntimeLinkerError::MapExeFailed(file.into_vpath(), e)),
         };
+
+        if let Some(p) = dump {
+            app.dump(p.join(format!("{}.dump", path.file_name().unwrap())))
+                .ok();
+        }
 
         *app.flags_mut() |= ModuleFlags::MAIN_PROG;
 

@@ -74,8 +74,14 @@ impl NativeEngine {
         module: &VPath,
         base: usize,
         mem: &Memory,
-        seg: &mut [u8],
+        mut seg: &mut [u8],
     ) -> Result<usize, SetupModuleError> {
+        // Get start address of the code.
+        if seg.starts_with(b"/libexec/ld-elf.so.1\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00") {
+            seg = &mut seg[0x20..];
+        }
+
+        // Patch.
         let addr = seg.as_ptr() as usize;
         let offset = addr - base;
         let mut count = 0;
@@ -261,10 +267,10 @@ impl NativeEngine {
             return Ok(None);
         }
 
-        // TODO: Check for specific displacement instead.
+        // AFAIK there are only QWORD PTR FS:[0x00] and QWORD PTR FS:[0x10].
         let disp = inst.memory_displacement64();
 
-        if disp >= 0x4000 {
+        if disp != 0x00 && disp != 0x10 {
             return Ok(None);
         }
 
@@ -295,9 +301,9 @@ impl NativeEngine {
                 target[3] = tp[2];
                 target[4] = tp[3];
 
-                // Path the remaining with "nop".
+                // Path the remaining with "int3".
                 for i in 5..inst.len() {
-                    target[i] = 0x90;
+                    target[i] = 0xcc;
                 }
             }
             _ => todo!(
@@ -569,7 +575,7 @@ impl NativeEngine {
     /// # Safety
     /// This method cannot be called from Rust.
     unsafe extern "sysv64" fn resolve_fs(&self, disp: usize) -> usize {
-        VThread::current().pcb().fsbase() + disp
+        std::ptr::read_unaligned((VThread::current().pcb().fsbase() + disp) as _)
     }
 
     /// # Safety
