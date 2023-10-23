@@ -13,6 +13,8 @@ use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use bitflags::bitflags;
 use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation};
 use gmtx::GroupMutex;
+use sha1::{Digest, Sha1};
+use std::borrow::Cow;
 use std::fs::File;
 use std::io::Write;
 use std::mem::{size_of, zeroed};
@@ -44,6 +46,12 @@ pub struct RuntimeLinker<E: ExecutionEngine> {
 }
 
 impl<E: ExecutionEngine> RuntimeLinker<E> {
+    const NID_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-";
+    const NID_SALT: [u8; 16] = [
+        0x51, 0x8d, 0x64, 0xa6, 0x35, 0xde, 0xd8, 0xc1, 0xe6, 0xb0, 0x39, 0xb1, 0xc3, 0xe5, 0x52,
+        0x30,
+    ];
+
     pub fn new(
         fs: &Arc<Fs>,
         mm: &Arc<MemoryManager>,
@@ -122,13 +130,18 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             }
         }
 
+        // Add the module itself as a first member of DAG.
+        let app = Arc::new(app);
+
+        app.dag_static_mut().push(app.clone());
+        app.dag_dynamic_mut().push(app.clone());
+
         // TODO: Apply logic from dmem_handle_process_exec_begin.
         // TODO: Apply logic from procexec_handler.
         // TODO: Apply logic from umtx_exec_hook.
         // TODO: Apply logic from aio_proc_rundown_exec.
         // TODO: Apply logic from gs_is_event_handler_process_exec.
         let mg = vp.mutex_group();
-        let app = Arc::new(app);
         let ld = Arc::new(Self {
             fs: fs.clone(),
             mm: mm.clone(),
@@ -147,6 +160,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             flags,
         });
 
+        sys.register(591, &ld, Self::sys_dynlib_dlsym);
         sys.register(592, &ld, Self::sys_dynlib_get_list);
         sys.register(598, &ld, Self::sys_dynlib_get_proc_param);
         sys.register(599, &ld, Self::sys_dynlib_process_needed_and_relocate);
@@ -268,7 +282,122 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             self.mains.write().push(module.clone());
         }
 
+        module.dag_static_mut().push(module.clone());
+        module.dag_dynamic_mut().push(module.clone());
+
         Ok(module)
+    }
+
+    /// See `do_dlsym` on the PS4 for a reference.
+    fn resolve_symbol<'a>(
+        &self,
+        md: &'a Arc<Module<E>>,
+        mut name: Cow<'a, str>,
+        mut lib: Option<&'a str>,
+        flags: ResolveFlags,
+    ) -> Option<usize> {
+        let mut mname = md.modules().iter().find(|i| i.id() == 0).map(|i| i.name());
+
+        if flags.intersects(ResolveFlags::UNK1) {
+            lib = None;
+            mname = None;
+        } else {
+            if lib.is_none() {
+                lib = mname;
+            }
+            name = Cow::Owned(Self::get_nid(name.as_ref()));
+        }
+
+        // Setup resolver.
+        let mains = self.mains.read();
+        let resolver = SymbolResolver::new(
+            &mains,
+            self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::UNK2),
+        );
+
+        // Resolve.
+        let dags = md.dag_static();
+
+        let sym = if md.flags().intersects(ModuleFlags::MAIN_PROG) {
+            todo!("do_dlsym on MAIN_PROG");
+        } else {
+            resolver.resolve_from_list(
+                md,
+                Some(name.as_ref()),
+                None,
+                mname,
+                lib,
+                SymbolResolver::<E>::hash(Some(name.as_ref()), lib, mname),
+                flags | ResolveFlags::UNK3 | ResolveFlags::UNK4,
+                &dags,
+            )
+        };
+
+        sym.map(|(m, s)| m.memory().addr() + m.memory().base() + m.symbol(s).unwrap().value())
+    }
+
+    fn get_nid(name: &str) -> String {
+        // Get hash.
+        let mut sha1 = Sha1::new();
+
+        sha1.update(name.as_bytes());
+        sha1.update(&Self::NID_SALT);
+
+        // Get NID.
+        let hash = u64::from_ne_bytes(sha1.finalize()[..8].try_into().unwrap());
+        let mut nid = vec![0; 11];
+
+        nid[0] = Self::NID_CHARS[(hash >> 58) as usize];
+        nid[1] = Self::NID_CHARS[(hash >> 52 & 0x3f) as usize];
+        nid[2] = Self::NID_CHARS[(hash >> 46 & 0x3f) as usize];
+        nid[3] = Self::NID_CHARS[(hash >> 40 & 0x3f) as usize];
+        nid[4] = Self::NID_CHARS[(hash >> 34 & 0x3f) as usize];
+        nid[5] = Self::NID_CHARS[(hash >> 28 & 0x3f) as usize];
+        nid[6] = Self::NID_CHARS[(hash >> 22 & 0x3f) as usize];
+        nid[7] = Self::NID_CHARS[(hash >> 16 & 0x3f) as usize];
+        nid[8] = Self::NID_CHARS[(hash >> 10 & 0x3f) as usize];
+        nid[9] = Self::NID_CHARS[(hash >> 4 & 0x3f) as usize];
+        nid[10] = Self::NID_CHARS[((hash & 0xf) * 4) as usize];
+
+        // SAFETY: This is safe because NID_CHARS is a valid UTF-8.
+        unsafe { String::from_utf8_unchecked(nid) }
+    }
+
+    fn sys_dynlib_dlsym(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        // Check if application is dynamic linking.
+        if self.app.file_info().is_none() {
+            return Err(SysErr::Raw(EPERM));
+        }
+
+        // Get arguments.
+        let handle: u32 = i.args[0].try_into().unwrap();
+        let name = unsafe { i.args[1].to_str(2560)?.unwrap() };
+        let out: *mut usize = i.args[2].into();
+
+        // Get target module.
+        let list = self.list.read();
+        let md = match list.iter().find(|m| m.id() == handle) {
+            Some(v) => v,
+            None => return Err(SysErr::Raw(ESRCH)),
+        };
+
+        info!("Getting symbol '{}' from {}.", name, md.path());
+
+        // Get resolving flags.
+        let mut flags = ResolveFlags::UNK1;
+
+        if name != "BaOKcng8g88" && name != "KpDMrPHvt3Q" {
+            flags = ResolveFlags::empty();
+        }
+
+        // Resolve the symbol.
+        let addr = match self.resolve_symbol(md, name.into(), None, flags) {
+            Some(v) => v,
+            None => return Err(SysErr::Raw(ESRCH)),
+        };
+
+        unsafe { *out = addr };
+        Ok(SysOut::ZERO)
     }
 
     fn sys_dynlib_get_list(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {

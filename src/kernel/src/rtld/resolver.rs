@@ -301,10 +301,11 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
         None
     }
 
+    // TODO: Refactor this for readability.
     pub fn hash(name: Option<&str>, libname: Option<&str>, modname: Option<&str>) -> u64 {
         let mut h: u64 = 0;
         let mut t: u64 = 0;
-        let mut l: i32 = 0;
+        let mut l: i32;
         let mut c = |b: u8| {
             t = (b as u64) + (h << 4);
             h = t & 0xf0000000;
@@ -312,11 +313,16 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
         };
 
         // Hash symbol name.
+        l = -1;
+
         if let Some(v) = name {
+            l = 0;
+
             for b in v.bytes() {
                 c(b);
 
                 if b == b'#' {
+                    l = -1;
                     break;
                 }
             }
@@ -327,6 +333,12 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
             Some(v) => v,
             None => return h,
         };
+
+        if l == 0 {
+            c(b'#');
+        }
+
+        l = 0;
 
         for b in v.bytes() {
             c(b);
@@ -402,18 +414,22 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
             .next()
             .and_then(Self::decode_id)
             .and_then(|v| md.modules().iter().find(|&i| i.id() == v));
+        let mut a = name.bytes();
+        let mut b = sym.name().bytes();
 
-        match name.find(|c| c == '#').map(|i| &name[..i]) {
-            Some(v) => {
-                if !sym.name().starts_with(v) {
-                    return false;
-                }
+        loop {
+            let a = match a.next() {
+                Some(v) => v,
+                None => break,
+            };
+
+            match b.next() {
+                Some(b) if a == b => {}
+                _ => return false,
             }
-            None => {
-                // TODO: This seems like a useless logic. The problem is the PS4 actually did this.
-                if sym.name() != name {
-                    return false;
-                }
+
+            if a == b'#' {
+                break;
             }
         }
 
@@ -492,6 +508,7 @@ bitflags! {
     pub struct ResolveFlags: u32 {
         const UNK1 = 0x00000001;
         const UNK3 = 0x00000002;
+        const UNK4 = 0x00000008;
         const UNK2 = 0x00000100;
     }
 }
