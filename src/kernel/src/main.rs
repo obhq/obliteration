@@ -1,5 +1,6 @@
 use crate::arch::MachDep;
 use crate::arnd::Arnd;
+use crate::budget::Budget;
 use crate::ee::{EntryArg, RawFn};
 use crate::fs::Fs;
 use crate::llvm::Llvm;
@@ -22,6 +23,7 @@ use std::sync::Arc;
 
 mod arch;
 mod arnd;
+mod budget;
 mod console;
 mod ee;
 mod errno;
@@ -123,10 +125,10 @@ fn main() -> ExitCode {
 
     let mut log = info!();
 
-    writeln!(log, "Page size             : {}", mm.page_size()).unwrap();
+    writeln!(log, "Page size             : {:#x}", mm.page_size()).unwrap();
     writeln!(
         log,
-        "Allocation granularity: {}",
+        "Allocation granularity: {:#x}",
         mm.allocation_granularity()
     )
     .unwrap();
@@ -185,6 +187,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     let fs = Fs::new(root, app, vp, &mut syscalls);
     RegMgr::new(&mut syscalls);
     MachDep::new(&mut syscalls);
+    Budget::new(vp, &mut syscalls);
 
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
