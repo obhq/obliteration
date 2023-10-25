@@ -16,10 +16,6 @@ impl<'a> VPages<'a> {
         self.ptr as _
     }
 
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
     pub fn end(&self) -> *const u8 {
         unsafe { self.ptr.add(self.len) }
     }

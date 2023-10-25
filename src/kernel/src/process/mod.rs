@@ -6,7 +6,7 @@ pub use self::session::*;
 pub use self::signal::*;
 pub use self::thread::*;
 
-use crate::errno::{EINVAL, ENAMETOOLONG, ENOENT, ENOSYS, EPERM, ESRCH};
+use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ESRCH};
 use crate::idt::IdTable;
 use crate::info;
 use crate::signal::{
@@ -20,6 +20,8 @@ use llt::{SpawnError, Thread};
 use std::any::Any;
 use std::mem::zeroed;
 use std::num::NonZeroI32;
+use std::ptr::null_mut;
+use std::sync::atomic::AtomicPtr;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
@@ -48,6 +50,8 @@ pub struct VProc {
     limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
     objects: GroupMutex<IdTable<Arc<dyn Any + Send + Sync>>>,
     app_info: AppInfo,
+    ptc: u64,
+    uptc: AtomicPtr<u8>, // Use a unit type for minimum alignment.
     mtxg: Arc<MutexGroup>,
 }
 
@@ -66,6 +70,8 @@ impl VProc {
             objects: mg.new_member(IdTable::new(0x1000)),
             limits,
             app_info: AppInfo::new(),
+            ptc: 0,
+            uptc: AtomicPtr::new(null_mut()),
             mtxg: mg,
         });
 
@@ -79,7 +85,6 @@ impl VProc {
         sys.register(557, &vp, Self::sys_namedobj_create);
         sys.register(585, &vp, Self::sys_is_in_sandbox);
         sys.register(587, &vp, Self::sys_get_authinfo);
-        sys.register(610, &vp, Self::sys_budget_get_ptype);
 
         Ok(vp)
     }
@@ -106,6 +111,14 @@ impl VProc {
 
     pub fn app_info(&self) -> &AppInfo {
         &self.app_info
+    }
+
+    pub fn ptc(&self) -> u64 {
+        self.ptc
+    }
+
+    pub fn uptc(&self) -> &AtomicPtr<u8> {
+        &self.uptc
     }
 
     pub fn mutex_group(&self) -> &Arc<MutexGroup> {
@@ -476,18 +489,6 @@ impl VProc {
         }
 
         Ok(SysOut::ZERO)
-    }
-
-    fn sys_budget_get_ptype(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        // Check if PID is our process.
-        let pid: i32 = i.args[0].try_into().unwrap();
-
-        if pid != -1 && pid != self.id.get() {
-            return Err(SysErr::Raw(ENOSYS));
-        }
-
-        // TODO: Invoke id_rlock. Not sure why return ENOENT is working here.
-        Err(SysErr::Raw(ENOENT))
     }
 
     fn new_id() -> NonZeroI32 {

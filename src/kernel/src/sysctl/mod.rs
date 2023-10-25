@@ -5,6 +5,8 @@ use crate::process::VProc;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use std::any::Any;
 use std::cmp::min;
+use std::ptr::null_mut;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 /// A registry of system parameters.
@@ -316,6 +318,26 @@ impl Sysctl {
         Ok(())
     }
 
+    fn kern_proc_ptc(
+        &self,
+        _: &'static Oid,
+        _: &Arg,
+        _: usize,
+        req: &mut SysctlReq,
+    ) -> Result<(), SysErr> {
+        req.write(&self.vp.ptc().to_ne_bytes())?;
+
+        self.vp.uptc().store(
+            req.old
+                .as_mut()
+                .map(|v| v.as_mut_ptr())
+                .unwrap_or(null_mut()),
+            Ordering::Relaxed,
+        );
+
+        Ok(())
+    }
+
     fn kern_usrstack(
         &self,
         _: &'static Oid,
@@ -527,7 +549,7 @@ static KERN_PROC_CHILDREN: OidList = OidList {
 
 static KERN_PROC_APPINFO: Oid = Oid {
     parent: &KERN_PROC_CHILDREN,
-    link: None, // TODO: Implement this.
+    link: Some(&KERN_PROC_PTC), // TODO: Use a proper value.
     number: Sysctl::KERN_PROC_APPINFO,
     kind: 0xC0040001,
     arg1: None, // TODO: This value on the PS4 is not null.
@@ -536,6 +558,20 @@ static KERN_PROC_APPINFO: Oid = Oid {
     handler: Some(Sysctl::kern_proc_appinfo),
     fmt: "N",
     descr: "Application information",
+    enabled: true,
+};
+
+static KERN_PROC_PTC: Oid = Oid {
+    parent: &KERN_PROC_CHILDREN,
+    link: None, // TODO: Implement this.
+    number: 0x2B,
+    kind: 0x90040009,
+    arg1: None,
+    arg2: 0,
+    name: "ptc",
+    handler: Some(Sysctl::kern_proc_ptc),
+    fmt: "LU",
+    descr: "Process time counter",
     enabled: true,
 };
 
@@ -555,7 +591,7 @@ static KERN_USRSTACK: Oid = Oid {
 
 static KERN_ARANDOM: Oid = Oid {
     parent: &KERN_CHILDREN,
-    link: Some(&KERN_SMP), // TODO: Use a proper value.
+    link: Some(&KERN_SCHED), // TODO: Use a proper value.
     number: Sysctl::KERN_ARND,
     kind: 0x80048005,
     arg1: None,
@@ -564,6 +600,38 @@ static KERN_ARANDOM: Oid = Oid {
     handler: Some(Sysctl::kern_arandom),
     fmt: "",
     descr: "arc4rand",
+    enabled: true,
+};
+
+static KERN_SCHED: Oid = Oid {
+    parent: &KERN_CHILDREN,
+    link: Some(&KERN_SMP), // TODO: Use a proper value.
+    number: 0x2A0,
+    kind: 0xC0000001,
+    arg1: Some(&KERN_SCHED_CHILDREN),
+    arg2: 0,
+    name: "sched",
+    handler: None,
+    fmt: "N",
+    descr: "Scheduler",
+    enabled: false,
+};
+
+static KERN_SCHED_CHILDREN: OidList = OidList {
+    first: Some(&KERN_SCHED_CPUSETSIZE), // TODO: Use a proper value.
+};
+
+static KERN_SCHED_CPUSETSIZE: Oid = Oid {
+    parent: &KERN_SCHED_CHILDREN,
+    link: None,
+    number: 0x4E4,
+    kind: 0x80040002,
+    arg1: None,
+    arg2: 8,
+    name: "cpusetsize",
+    handler: Some(Sysctl::handle_int),
+    fmt: "I",
+    descr: "sizeof(cpuset_t)",
     enabled: true,
 };
 
