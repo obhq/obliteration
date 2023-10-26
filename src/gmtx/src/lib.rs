@@ -143,7 +143,7 @@ impl MutexGroup {
             return unsafe { GroupGuard::new(self) };
         }
 
-        // Check if the calling thread already owsn a lock on another group to prevent a possible
+        // Check if the calling thread already owns a lock on another group to prevent a possible
         // deadlock.
         if let Some(active) = ACTIVE_GROUP.get() {
             panic!(
