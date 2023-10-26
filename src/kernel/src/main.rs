@@ -260,37 +260,37 @@ fn join_thread(thr: Thread) -> Result<(), std::io::Error> {
 
 #[derive(Error, Termination)]
 enum KernelError {
-    #[error("Failed to open .kernel-debug: {0}")]
+    #[error("Failed to open .kernel-debug -> {0}")]
     FailedToOpenKernelDebug(#[from] std::io::Error),
 
-    #[error("Failed to parse .kernel-debug: {0}")]
+    #[error("Failed to parse .kernel-debug -> {0}")]
     FailedToParseKernelDebug(#[from] serde_yaml::Error),
 
-    #[error("Cannot get CPU time limit: {0}")]
+    #[error("Cannot get CPU time limit -> {0}")]
     VirtualProcessInitialzationFailed(#[from] crate::process::VProcError),
 
-    #[error("Cannot get CPU time limit: {0}")]
+    #[error("Cannot get CPU time limit -> {0}")]
     MemoryManagerInitializationFailed(#[from] crate::memory::MemoryManagerError),
 
-    #[error("Execution failed: {0}")]
+    #[error("Execution failed -> {0}")]
     LlvmExecutionError(#[from] ExecutionError<LlvmEngine>),
 
-    #[error("Execution failed: {0}")]
+    #[error("Execution failed -> {0}")]
     NativeExecutionError(#[from] ExecutionError<NativeEngine>),
 }
 
 #[derive(Debug, Error)]
 enum ExecutionError<E: crate::ee::ExecutionEngine> {
-    #[error("Initialize failed: {0}")]
+    #[error("Initialize failed -> {0}")]
     InitializeFailed(#[from] crate::rtld::RuntimeLinkerError<E>),
 
-    #[error("Load failed: {0}")]
+    #[error("Load failed -> {0}")]
     LoadFailed(#[from] crate::rtld::LoadError<E>),
 
-    #[error("Create main thread failed: {0}")]
+    #[error("Create main thread failed -> {0}")]
     SpawnError(#[from] llt::SpawnError),
 
-    #[error("Failed join with main thread: {0}")]
+    #[error("Failed join with main thread -> {0}")]
     JoinError(#[from] std::io::Error),
 }
 

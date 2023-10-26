@@ -853,22 +853,22 @@ bitflags! {
 /// Represents the error for [`RuntimeLinker`] initialization.
 #[derive(Debug, Error)]
 pub enum RuntimeLinkerError<E: ExecutionEngine> {
-    #[error("cannot get {0}")]
+    #[error("cannot get {0} -> {1}")]
     GetExeFailed(VPathBuf, #[source] FsError),
 
-    #[error("cannot open {0}")]
+    #[error("cannot open {0} -> {1}")]
     OpenExeFailed(VPathBuf, #[source] std::io::Error),
 
-    #[error("cannot open {0}")]
+    #[error("cannot open {0} -> {1}")]
     OpenElfFailed(VPathBuf, #[source] elf::OpenError),
 
     #[error("{0} is not a valid executable")]
     InvalidExe(VPathBuf),
 
-    #[error("cannot map {0}")]
+    #[error("cannot map {0} -> {1}")]
     MapExeFailed(VPathBuf, #[source] MapError),
 
-    #[error("cannot setup {0}")]
+    #[error("cannot setup {0} -> {1}")]
     SetupExeFailed(VPathBuf, #[source] E::SetupModuleErr),
 }
 
@@ -887,59 +887,59 @@ pub enum MapError {
     #[error("ELF program {0} has invalid alignment")]
     InvalidProgramAlignment(usize),
 
-    #[error("cannot allocate {0} bytes")]
+    #[error("cannot allocate {0} bytes -> {1}")]
     MemoryAllocationFailed(usize, #[source] MmapError),
 
-    #[error("cannot protect {1:#018x} bytes starting at {0:p} with {2}")]
+    #[error("cannot protect {1:#018x} bytes starting at {0:p} with {2} -> {3}")]
     ProtectMemoryFailed(*const u8, usize, Protections, #[source] MemoryUpdateError),
 
-    #[error("cannot unprotect segment {0}")]
+    #[error("cannot unprotect segment {0} -> {1}")]
     UnprotectSegmentFailed(usize, #[source] UnprotectSegmentError),
 
-    #[error("cannot read program #{0}")]
+    #[error("cannot read program #{0} -> {1}")]
     ReadProgramFailed(usize, #[source] ReadProgramError),
 
-    #[error("cannot unprotect the memory")]
+    #[error("cannot unprotect the memory -> {0}")]
     UnprotectMemoryFailed(#[source] UnprotectError),
 
-    #[error("cannot read symbol entry {0}")]
+    #[error("cannot read symbol entry {0} -> {1}")]
     ReadSymbolFailed(usize, #[source] elf::ReadSymbolError),
 
-    #[error("cannot read DT_NEEDED from dynamic entry {0}")]
+    #[error("cannot read DT_NEEDED from dynamic entry {0} -> {1}")]
     ReadNeededFailed(usize, #[source] elf::StringTableError),
 
     #[error("{0} is obsolete")]
     ObsoleteFlags(DynamicFlags),
 
-    #[error("cannot read module info from dynamic entry {0}")]
+    #[error("cannot read module info from dynamic entry {0} -> {1}")]
     ReadModuleInfoFailed(usize, #[source] elf::ReadModuleError),
 
-    #[error("cannot read libraru info from dynamic entry {0}")]
+    #[error("cannot read libraru info from dynamic entry {0} -> {1}")]
     ReadLibraryInfoFailed(usize, #[source] elf::ReadLibraryError),
 }
 
 /// Represents an error for (S)ELF loading.
 #[derive(Debug, Error)]
 pub enum LoadError<E: ExecutionEngine> {
-    #[error("cannot get the specified file")]
+    #[error("cannot get the specified file -> {0}")]
     GetFileFailed(#[source] FsError),
 
-    #[error("cannot open file")]
+    #[error("cannot open file -> {0}")]
     OpenFileFailed(#[source] std::io::Error),
 
-    #[error("cannot open (S)ELF")]
+    #[error("cannot open (S)ELF -> {0}")]
     OpenElfFailed(#[source] elf::OpenError),
 
     #[error("the specified file is not valid module")]
     InvalidElf,
 
-    #[error("cannot map file")]
+    #[error("cannot map file -> {0}")]
     MapFailed(#[source] MapError),
 
     #[error("the specified file has impure text")]
     ImpureText,
 
-    #[error("cannot setup the module")]
+    #[error("cannot setup the module -> {0}")]
     SetupFailed(#[source] E::SetupModuleErr),
 }
 
