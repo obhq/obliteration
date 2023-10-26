@@ -17,12 +17,12 @@ use ee::native::NativeEngine;
 use llt::Thread;
 use macros::vpath;
 use serde::Deserialize;
-use thiserror::Error;
-use thistermination::Termination;
 use std::fs::{create_dir_all, remove_dir_all, File};
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Arc;
+use thiserror::Error;
+use thistermination::Termination;
 
 mod arch;
 mod arnd;
@@ -276,7 +276,7 @@ enum KernelError {
     LlvmExecutionError(#[from] ExecutionError<LlvmEngine>),
 
     #[error("Execution failed: {0}")]
-    NativeExecutionError(#[from] ExecutionError<NativeEngine>)
+    NativeExecutionError(#[from] ExecutionError<NativeEngine>),
 }
 
 #[derive(Debug, Error)]
