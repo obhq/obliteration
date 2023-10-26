@@ -694,10 +694,10 @@ impl super::RawFn for RawFn {
 /// An implementation of [`ExecutionEngine::SetupModuleErr`].
 #[derive(Debug, Error)]
 pub enum SetupModuleError {
-    #[error("cannot unprotect segment {0}")]
+    #[error("cannot unprotect segment {0} -> {1}")]
     UnprotectSegmentFailed(usize, #[source] UnprotectSegmentError),
 
-    #[error("cannot build a trampoline for {0:#x}")]
+    #[error("cannot build a trampoline for {0:#x} -> {1}")]
     BuildTrampolineFailed(usize, #[source] TrampolineError),
 
     #[error("module workspace is too far")]
@@ -707,7 +707,7 @@ pub enum SetupModuleError {
 /// Errors for trampoline building.
 #[derive(Debug, Error)]
 pub enum TrampolineError {
-    #[error("cannot get code workspace")]
+    #[error("cannot get code workspace -> {0}")]
     GetCodeWorkspaceFailed(#[source] CodeWorkspaceError),
 
     #[error("the remaining workspace is not enough")]
