@@ -63,18 +63,18 @@ impl<T> GroupMutex<T> {
     }
 
     /// # Panics
-    /// If there are an active writer.
+    /// If there is an active writer.
     pub fn read(&self) -> GroupMutexReadGuard<'_, T> {
-        // Check if there are an active writer.
+        // Check if there is an active writer.
         let lock = self.group.lock();
         let active = self.active.get();
 
         unsafe {
             if *active == usize::MAX {
-                panic!("attempt to acquire the read lock while there are an active write lock");
+                panic!("attempted to acquire the read lock while there is an active write lock");
             } else if *active == (usize::MAX - 1) {
                 // This should never happen because stack overflow should be triggering first.
-                panic!("maximum number of active readers has been reached");
+                panic!("the maximum number of active readers has been reached");
             }
 
             *active += 1;
@@ -84,16 +84,16 @@ impl<T> GroupMutex<T> {
     }
 
     /// # Panics
-    /// If there are an any active reader or writer.
+    /// If there is an any active reader or writer.
     pub fn write(&self) -> GroupMutexWriteGuard<'_, T> {
-        // Check if there are active reader or writer.
+        // Check if there is an active reader or writer.
         let lock = self.group.lock();
         let active = self.active.get();
 
         unsafe {
             if *active != 0 {
                 panic!(
-                    "attempt to acquire the write lock while there are an active reader or writer"
+                    "attempted to acquire the write lock while there is an active reader or writer"
                 );
             }
 
@@ -139,11 +139,11 @@ impl MutexGroup {
         let current = Self::current_thread();
 
         if current == self.owning.load(Ordering::Relaxed) {
-            // SAFETY: This is safe because the current thread own the lock.
+            // SAFETY: This is safe because the current thread owns the lock.
             return unsafe { GroupGuard::new(self) };
         }
 
-        // Check if the calling thread already own a lock on another group to prevent a possible
+        // Check if the calling thread already owsn a lock on another group to prevent a possible
         // deadlock.
         if let Some(active) = ACTIVE_GROUP.get() {
             panic!(
@@ -178,7 +178,7 @@ impl MutexGroup {
         // Set active group.
         assert!(ACTIVE_GROUP.set(self.name.clone()).is_none());
 
-        // SAFETY: This is safe because the current thread acquire the lock successfully by the
+        // SAFETY: This is safe because the current thread acquires the lock successfully by the
         // above compare_exchange().
         unsafe { GroupGuard::new(self) }
     }
@@ -204,8 +204,8 @@ impl MutexGroup {
 unsafe impl Send for MutexGroup {}
 unsafe impl Sync for MutexGroup {}
 
-/// An RAII object used to release the lock on [`MutexGroup`]. This type cannot be send because it
-/// will cause data race on the group when dropping if more than one [`GroupGuard`] are active.
+/// An RAII object used to release the lock on [`MutexGroup`]. This type cannot be [`Send`] because it
+/// will cause data race on the group when dropping if more than one [`GroupGuard`] is active.
 struct GroupGuard<'a> {
     group: &'a MutexGroup,
     phantom: PhantomData<Rc<i32>>, // For !Send and !Sync.
@@ -214,7 +214,7 @@ struct GroupGuard<'a> {
 impl<'a> GroupGuard<'a> {
     /// # Safety
     /// The group must be locked by the calling thread with no active references to any of its
-    /// field.
+    /// fields.
     unsafe fn new(group: &'a MutexGroup) -> Self {
         *group.active.get() += 1;
 
@@ -227,7 +227,7 @@ impl<'a> GroupGuard<'a> {
 
 impl<'a> Drop for GroupGuard<'a> {
     fn drop(&mut self) {
-        // Decrease the active lock.
+        // Decrement the active lock.
         unsafe {
             let active = self.group.active.get();
 

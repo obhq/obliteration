@@ -181,7 +181,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         *self.kernel.write() = Some(md);
     }
 
-    /// This method **ALWAYS** load the specified module without checking if the same module is
+    /// This method **ALWAYS** loads the specified module without checking if the same module is
     /// already loaded.
     pub fn load(&self, path: &VPath, main: bool) -> Result<Arc<Module<E>>, LoadError<E>> {
         // Get file.
@@ -223,7 +223,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
                     break;
                 }
 
-                // Someone already use the current value, increase the value and try again.
+                // Someone already use the current value, increment the value and try again.
                 index += 1;
 
                 if index > alloc.max_index {
@@ -259,7 +259,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             }
 
             // TODO: Check the call to sceSblAuthMgrIsLoadable in the self_load_shared_object on the PS4
-            // to see how it is return the value.
+            // to see how returns the value.
             if name != "libc.sprx" && name != "libSceFios2.sprx" {
                 *md.flags_mut() |= ModuleFlags::UNK1;
             }

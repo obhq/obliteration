@@ -75,7 +75,7 @@ impl Ucred {
     }
 }
 
-/// Represents an error when [`Ucred::priv_check()`] is failed.
+/// Represents an error when [`Ucred::priv_check()`] fails.
 #[derive(Debug, Error)]
 pub enum PrivilegeError {
     #[error("the current credential does not have the specified privilege")]

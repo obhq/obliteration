@@ -483,21 +483,21 @@ impl<'a> AsMut<[u8]> for CodeWorkspace<'a> {
     }
 }
 
-/// Represents an error when [`Memory::code_workspace()`] is failed.
+/// Represents an error when [`Memory::code_workspace()`] fails.
 #[derive(Debug, Error)]
 pub enum CodeWorkspaceError {
     #[error("cannot unprotect segment {0}")]
     UnprotectSegmentFailed(usize, #[source] UnprotectSegmentError),
 }
 
-/// Represents an error when [`Memory::unprotect_segment()`] is failed.
+/// Represents an error when [`Memory::unprotect_segment()`] fails.
 #[derive(Debug, Error)]
 pub enum UnprotectSegmentError {
     #[error("cannot protect {1:#018x} bytes starting at {0:p} with {2}")]
     MprotectFailed(*const u8, usize, Protections, #[source] MemoryUpdateError),
 }
 
-/// Represents an error when [`Memory::unprotect()`] is failed.
+/// Represents an error when [`Memory::unprotect()`] fails.
 #[derive(Debug, Error)]
 pub enum UnprotectError {
     #[error("cannot protect {1:#018x} bytes starting at {0:p} with {2}")]

@@ -4,7 +4,7 @@ use crate::process::{VProc, VThread};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use std::sync::Arc;
 
-/// An implementation of budget system on the PS4.
+/// An implementation of the budget system on the PS4.
 pub struct Budget {
     vp: Arc<VProc>,
 }

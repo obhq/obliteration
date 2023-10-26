@@ -194,7 +194,7 @@ impl MemoryManager {
         let mut removes: Vec<usize> = Vec::new();
         let mut allocs = self.allocations.write().unwrap();
 
-        // FIXME: In theory it is possible to make this more efficient by remove allocation
+        // FIXME: In theory it is possible to make this more efficient by removing allocation
         // info in-place. Unfortunately Rust does not provides API to achieve what we want.
         for (_, info) in StartFromMut::new(&mut allocs, first) {
             // Check if the current allocation is not in the range.
@@ -315,7 +315,7 @@ impl MemoryManager {
         prot: Protections,
         name: String,
     ) -> Result<VPages<'_>, MmapError> {
-        // TODO: Check what is PS4 doing here.
+        // TODO: Check what the PS4 is doing here.
         use std::collections::btree_map::Entry;
 
         // Do allocation.
@@ -326,7 +326,7 @@ impl MemoryManager {
                 if e.kind() == std::io::ErrorKind::OutOfMemory {
                     return Err(MmapError::NoMem(len));
                 } else {
-                    // We should not hit other error except for out of memory.
+                    // We should not hit an error other than out of memory.
                     panic!("Failed to allocate {len} bytes: {e}.");
                 }
             }
@@ -434,7 +434,7 @@ impl MemoryManager {
 
                 info.len -= remain;
             } else if end < info.end() {
-                // The current allocation is the last one in the range. What we do here is we split
+                // The current allocation is the last one in the range. What we do here is split
                 // the allocation and update the head.
                 let tail = (info.end() as usize) - (end as usize);
 

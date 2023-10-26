@@ -22,7 +22,7 @@ pub struct VThread {
 
 impl VThread {
     pub(super) fn new(id: NonZeroI32, cred: Ucred, mtxg: &Arc<MutexGroup>) -> Self {
-        // TODO: Check how the PS4 actually allocate the thread ID.
+        // TODO: Check how the PS4 actually allocates the thread ID.
         Self {
             id,
             cred,
@@ -89,7 +89,7 @@ impl VThread {
         llt::spawn(stack, stack_size, move || {
             // This closure must not have any variables that need to be dropped on the stack. The
             // reason is because this thread will be exited without returning from the routine. That
-            // mean all variables on the stack will not get dropped.
+            // means all variables on the stack will not get dropped.
             assert!(VTHREAD.set(td.take().unwrap()).is_none());
             routine();
         })

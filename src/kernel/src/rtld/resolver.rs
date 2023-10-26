@@ -250,8 +250,8 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
             let target = if name.contains('#') {
                 Cow::Borrowed(name)
             } else if let Some(v) = Self::decode_legacy(md, name) {
-                // TODO: This seems like a useless operation because if name does not contains # the
-                // convert_mangled_name_to_long() will return error.
+                // TODO: This seems like a useless operation because if name does not contain a '#' the
+                // convert_mangled_name_to_long() will return an error.
                 Cow::Owned(v)
             } else {
                 Cow::Borrowed(name)

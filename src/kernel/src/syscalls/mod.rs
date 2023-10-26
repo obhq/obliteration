@@ -40,7 +40,7 @@ impl Syscalls {
 
     /// # Safety
     /// This method may treat any [`SysIn::args`] as a pointer (depend on [`SysIn::id`]). There must
-    /// be no any variables that need to be dropped on the stack before calling this method.
+    /// be no variables that need to be dropped on the stack before calling this method.
     pub unsafe fn exec(&self, i: &SysIn, o: &mut SysOut) -> i64 {
         // Beware that we cannot have any variables that need to be dropped before invoke each
         // syscall handler. The reason is because the handler might exit the calling thread without

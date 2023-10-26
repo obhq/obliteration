@@ -12,13 +12,16 @@ use crate::rtld::{ModuleFlags, RuntimeLinker};
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
 use clap::{Parser, ValueEnum};
+use ee::llvm::LlvmEngine;
+use ee::native::NativeEngine;
 use llt::Thread;
 use macros::vpath;
 use serde::Deserialize;
+use thiserror::Error;
+use thistermination::Termination;
 use std::fs::{create_dir_all, remove_dir_all, File};
 use std::io::Write;
 use std::path::PathBuf;
-use std::process::ExitCode;
 use std::sync::Arc;
 
 mod arch;
@@ -40,26 +43,14 @@ mod syscalls;
 mod sysctl;
 mod ucred;
 
-fn main() -> ExitCode {
+fn main() -> Result<(), KernelError> {
     log::init();
 
     // Load arguments.
     let args = if std::env::args().any(|a| a == "--debug") {
-        let file = match File::open(".kernel-debug") {
-            Ok(v) => v,
-            Err(e) => {
-                error!(e, "Failed to open .kernel-debug");
-                return ExitCode::FAILURE;
-            }
-        };
+        let file =  File::open(".kernel-debug")?;
 
-        match serde_yaml::from_reader(file) {
-            Ok(v) => v,
-            Err(e) => {
-                error!(e, "Failed to read .kernel-debug");
-                return ExitCode::FAILURE;
-            }
-        }
+        serde_yaml::from_reader(file)?
     } else {
         Args::parse()
     };
@@ -106,22 +97,10 @@ fn main() -> ExitCode {
     let arnd = Arnd::new();
     let llvm = Llvm::new();
     let mut syscalls = Syscalls::new();
-    let vp = match VProc::new(&mut syscalls) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Virtual process initialization failed");
-            return ExitCode::FAILURE;
-        }
-    };
+    let vp = VProc::new(&mut syscalls)?;
 
     // Initialize memory management.
-    let mm = match MemoryManager::new(&vp, &mut syscalls) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Memory manager initialization failed");
-            return ExitCode::FAILURE;
-        }
-    };
+    let mm = MemoryManager::new(&vp, &mut syscalls)?;
 
     let mut log = info!();
 
@@ -154,7 +133,7 @@ fn main() -> ExitCode {
             &vp,
             &mm,
             crate::ee::native::NativeEngine::new(),
-        ),
+        )?,
         #[cfg(not(target_arch = "x86_64"))]
         ExecutionEngine::Native => {
             error!("Native execution engine cannot be used on your machine.");
@@ -169,8 +148,10 @@ fn main() -> ExitCode {
             &vp,
             &mm,
             crate::ee::llvm::LlvmEngine::new(&llvm),
-        ),
+        )?,
     }
+
+    Ok(())
 }
 
 fn run<E: crate::ee::ExecutionEngine>(
@@ -182,7 +163,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     vp: &Arc<VProc>,
     mm: &Arc<MemoryManager>,
     ee: Arc<E>,
-) -> ExitCode {
+) -> Result<(), ExecutionError<E>> {
     // Initialize kernel components.
     let fs = Fs::new(root, app, vp, &mut syscalls);
     RegMgr::new(&mut syscalls);
@@ -192,13 +173,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
 
-    let ld = match RuntimeLinker::new(&fs, mm, &ee, vp, &mut syscalls, dump.as_deref()) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Initialize failed");
-            return ExitCode::FAILURE;
-        }
-    };
+    let ld = RuntimeLinker::new(&fs, mm, &ee, vp, &mut syscalls, dump.as_deref())?;
 
     // Print application module.
     let app = ld.app();
@@ -216,13 +191,7 @@ fn run<E: crate::ee::ExecutionEngine>(
 
     info!("Loading {path}.");
 
-    let module = match ld.load(path, true) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Load failed");
-            return ExitCode::FAILURE;
-        }
-    };
+    let module = ld.load(path, true)?;
 
     module.flags_mut().remove(ModuleFlags::UNK2);
     module.print(info!());
@@ -234,13 +203,7 @@ fn run<E: crate::ee::ExecutionEngine>(
 
     info!("Loading {path}.");
 
-    let module = match ld.load(path, true) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Load failed");
-            return ExitCode::FAILURE;
-        }
-    };
+    let module = ld.load(path, true)?;
 
     module.flags_mut().remove(ModuleFlags::UNK2);
     module.print(info!());
@@ -262,21 +225,12 @@ fn run<E: crate::ee::ExecutionEngine>(
     info!("Starting application.");
 
     let stack = mm.stack();
-    let runner = match unsafe { vp.new_thread(stack.start(), stack.len(), entry) } {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Create main thread failed");
-            return ExitCode::FAILURE;
-        }
-    };
+    let runner = unsafe { vp.new_thread(stack.start(), stack.len(), entry)? };
 
     // Wait for main thread to exit. This should never return.
-    if let Err(e) = join_thread(runner) {
-        error!(e, "Failed join with main thread");
-        return ExitCode::FAILURE;
-    }
+    join_thread(runner)?;
 
-    ExitCode::SUCCESS
+    Ok(())
 }
 
 #[cfg(unix)]
@@ -302,6 +256,42 @@ fn join_thread(thr: Thread) -> Result<(), std::io::Error> {
     assert_ne!(unsafe { CloseHandle(thr) }, 0);
 
     Ok(())
+}
+
+#[derive(Error, Termination)]
+enum KernelError {
+    #[error("Failed to open .kernel-debug: {0}")]
+    FailedToOpenKernelDebug(#[from] std::io::Error),
+
+    #[error("Failed to parse .kernel-debug: {0}")]
+    FailedToParseKernelDebug(#[from] serde_yaml::Error),
+
+    #[error("Cannot get CPU time limit: {0}")]
+    VirtualProcessInitialzationFailed(#[from] crate::process::VProcError),
+
+    #[error("Cannot get CPU time limit: {0}")]
+    MemoryManagerInitializationFailed(#[from] crate::memory::MemoryManagerError),
+
+    #[error("Execution failed: {0}")]
+    LlvmExecutionError(#[from] ExecutionError<LlvmEngine>),
+
+    #[error("Execution failed: {0}")]
+    NativeExecutionError(#[from] ExecutionError<NativeEngine>)
+}
+
+#[derive(Debug, Error)]
+enum ExecutionError<E: crate::ee::ExecutionEngine> {
+    #[error("Initialize failed: {0}")]
+    InitializeFailed(#[from] crate::rtld::RuntimeLinkerError<E>),
+
+    #[error("Load failed: {0}")]
+    LoadFailed(#[from] crate::rtld::LoadError<E>),
+
+    #[error("Create main thread failed: {0}")]
+    SpawnError(#[from] llt::SpawnError),
+
+    #[error("Failed join with main thread: {0}")]
+    JoinError(#[from] std::io::Error),
 }
 
 #[derive(Parser, Deserialize)]

@@ -37,7 +37,7 @@ impl MachDep {
 
         match op {
             Self::AMD64_SET_FSBASE => {
-                // We can't check if the value within the user space because we are not a real
+                // We can't check if the value is within the user space because we are not a real
                 // kernel.
                 let v = unsafe { std::ptr::read_unaligned(parms as _) };
 

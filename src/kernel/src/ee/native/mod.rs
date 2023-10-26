@@ -301,7 +301,7 @@ impl NativeEngine {
                 target[3] = tp[2];
                 target[4] = tp[3];
 
-                // Path the remaining with "int3".
+                // Patch the remaining with "int3".
                 for i in 5..inst.len() {
                     target[i] = 0xcc;
                 }
@@ -341,7 +341,7 @@ impl NativeEngine {
         asm.clc().unwrap();
         asm.pushfq().unwrap();
         asm.pop(r11).unwrap();
-        asm.and(rsp, !15).unwrap(); // Make sure stack is align to 16 bytes boundary.
+        asm.and(rsp, !15).unwrap(); // Make sure stack is aligned to 16 bytes boundary.
 
         // Create stack frame.
         asm.sub(rsp, 0x50 + 0x10).unwrap();
@@ -388,7 +388,7 @@ impl NativeEngine {
         asm.mov(rax, Self::syscall as u64).unwrap();
         asm.call(rax).unwrap();
 
-        // Check error. This mimic the behavior of
+        // Check error. This mimics the behavior of
         // https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/amd64/amd64/vm_machdep.c#L380.
         let mut err = asm.create_label();
         let mut restore = asm.create_label();
@@ -447,7 +447,7 @@ impl NativeEngine {
         // Create stack frame.
         asm.push(rbp).unwrap();
         asm.mov(rbp, rsp).unwrap();
-        asm.and(rsp, !15).unwrap(); // Make sure stack is align to 16 bytes boundary.
+        asm.and(rsp, !15).unwrap(); // Make sure stack is aligned to 16 bytes boundary.
         asm.push(rdi).unwrap();
         asm.push(rax).unwrap();
         asm.push(rdx).unwrap();

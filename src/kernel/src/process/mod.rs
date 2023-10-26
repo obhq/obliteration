@@ -36,7 +36,7 @@ mod thread;
 
 /// An implementation of `proc` structure represent the main application process.
 ///
-/// Each process of the Obliteration Kernel encapsulate only one PS4 process. The reason we don't
+/// Each process of the Obliteration Kernel encapsulates only one PS4 process. The reason we don't
 /// encapsulate multiple PS4 processes is because there is no way to emulate `fork` with 100%
 /// compatibility from the user-mode application.
 #[derive(Debug)]
@@ -131,7 +131,7 @@ impl VProc {
     ///
     /// # Safety
     /// The range of memory specified by `stack` and `stack_size` must be valid throughout lifetime
-    /// of the thread. Specify an unaligned stack will cause undefined behavior.
+    /// of the thread. Specifying an unaligned stack will cause undefined behavior.
     pub unsafe fn new_thread<F>(
         self: &Arc<Self>,
         stack: *mut u8,
@@ -141,8 +141,8 @@ impl VProc {
     where
         F: FnMut() + Send + 'static,
     {
-        // Lock the list before spawn the thread to prevent race condition if the new thread run
-        // too fast and found out they is not in our list.
+        // Lock the list before spawn the thread to prevent race condition if the new thread runs
+        // too fast and finds out it's not on our list.
         let mut threads = self.threads.write();
 
         // TODO: Check how ucred is constructed for a thread.

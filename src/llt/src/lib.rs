@@ -6,7 +6,7 @@ use tls::Tls;
 #[cfg(unix)]
 mod unix;
 
-/// Create a new thread to run `entry` using `stack` as a stack. The value of `stack` always pointed
+/// Create a new thread to run `entry` using `stack` as a stack. The value of `stack` always points
 /// to the lowest address of the stack even on the architecture that use top-down stack (e.g. x86).
 ///
 /// The caller is responsible for how `stack` is allocated and free, including setup a guard page if

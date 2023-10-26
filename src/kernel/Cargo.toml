@@ -24,6 +24,7 @@ serde_yaml = "0.9"
 sha1 = "0.10"
 termcolor = "1.2.0"
 thiserror = "1.0"
+thistermination = "1.0"
 tls = { path = "../tls" }
 
 [target.'cfg(windows)'.dependencies]

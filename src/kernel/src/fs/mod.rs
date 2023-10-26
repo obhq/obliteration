@@ -39,8 +39,8 @@ impl Fs {
         S: Into<PathBuf>,
         G: Into<PathBuf>,
     {
-        let system = system.into();
-        let game = game.into();
+        let system: PathBuf = system.into();
+        let game: PathBuf = game.into();
         let mut mounts: HashMap<VPathBuf, MountSource> = HashMap::new();
 
         // Mount rootfs.
@@ -192,7 +192,7 @@ impl Fs {
 
         let fd: i32 = i.args[0].try_into().unwrap();
         let mut com: u64 = i.args[1].into();
-        let data: *const u8 = i.args[2].into();
+        let _data: *const u8 = i.args[2].into();
 
         if com > 0xffffffff {
             com &= 0xffffffff;
