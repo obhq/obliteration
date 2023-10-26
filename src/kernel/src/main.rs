@@ -48,7 +48,7 @@ fn main() -> Result<(), KernelError> {
 
     // Load arguments.
     let args = if std::env::args().any(|a| a == "--debug") {
-        let file =  File::open(".kernel-debug")?;
+        let file = File::open(".kernel-debug")?;
 
         serde_yaml::from_reader(file)?
     } else {
