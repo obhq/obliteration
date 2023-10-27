@@ -17,12 +17,14 @@ use ee::native::NativeEngine;
 use llt::Thread;
 use macros::vpath;
 use serde::Deserialize;
+use std::error::Error;
+use std::fmt::Debug;
 use std::fs::{create_dir_all, remove_dir_all, File};
 use std::io::Write;
 use std::path::PathBuf;
+use std::process::{Termination, ExitCode};
 use std::sync::Arc;
 use thiserror::Error;
-use thistermination::Termination;
 
 mod arch;
 mod arnd;
@@ -258,39 +260,56 @@ fn join_thread(thr: Thread) -> Result<(), std::io::Error> {
     Ok(())
 }
 
-#[derive(Error, Termination)]
+#[derive(Error)]
 enum KernelError {
-    #[error("Failed to open .kernel-debug -> {0}")]
+    #[error("Failed to open .kernel-debug")]
     FailedToOpenKernelDebug(#[from] std::io::Error),
 
-    #[error("Failed to parse .kernel-debug -> {0}")]
+    #[error("Failed to parse .kernel-debug")]
     FailedToParseKernelDebug(#[from] serde_yaml::Error),
 
-    #[error("Cannot get CPU time limit -> {0}")]
+    #[error("Cannot get CPU time limit")]
     VirtualProcessInitialzationFailed(#[from] crate::process::VProcError),
 
-    #[error("Cannot get CPU time limit -> {0}")]
+    #[error("Cannot get CPU time limit")]
     MemoryManagerInitializationFailed(#[from] crate::memory::MemoryManagerError),
 
-    #[error("Execution failed -> {0}")]
+    #[error("Execution failed")]
     LlvmExecutionError(#[from] ExecutionError<LlvmEngine>),
 
-    #[error("Execution failed -> {0}")]
+    #[error("Execution failed")]
     NativeExecutionError(#[from] ExecutionError<NativeEngine>),
+}
+
+impl Debug for KernelError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use std::error::Error;
+
+        write!(f, "{self}");
+
+        let mut i = self.source();
+
+        while let Some(v) = i {
+            write!(f, " -> {}", v).unwrap();
+            i = v.source();
+        }
+
+        write!(f, "")
+    }
 }
 
 #[derive(Debug, Error)]
 enum ExecutionError<E: crate::ee::ExecutionEngine> {
-    #[error("Initialize failed -> {0}")]
+    #[error("Initialize failed")]
     InitializeFailed(#[from] crate::rtld::RuntimeLinkerError<E>),
 
-    #[error("Load failed -> {0}")]
+    #[error("Load failed")]
     LoadFailed(#[from] crate::rtld::LoadError<E>),
 
-    #[error("Create main thread failed -> {0}")]
+    #[error("Create main thread failed")]
     SpawnError(#[from] llt::SpawnError),
 
-    #[error("Failed join with main thread -> {0}")]
+    #[error("Failed join with main thread")]
     JoinError(#[from] std::io::Error),
 }
 
