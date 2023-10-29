@@ -47,7 +47,9 @@ pub struct RuntimeLinker<E: ExecutionEngine> {
 }
 
 impl<E: ExecutionEngine> RuntimeLinker<E> {
-    const NID_CHARS: &'static [u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-";
+    const NID_CHARS: &'static [u8] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-";
+
     const NID_SALT: [u8; 16] = [
         0x51, 0x8d, 0x64, 0xa6, 0x35, 0xde, 0xd8, 0xc1, 0xe6, 0xb0, 0x39, 0xb1, 0xc3, 0xe5, 0x52,
         0x30,
