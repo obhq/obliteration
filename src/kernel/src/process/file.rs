@@ -35,7 +35,7 @@ impl VProcFiles {
         }
 
         // This should never happened.
-        panic!("Too many files has been opened.");
+        panic!("Too many files have been opened.");
     }
 
     /// See `fget` on the PS4 for a reference.
