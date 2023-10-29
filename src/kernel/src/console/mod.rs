@@ -10,7 +10,7 @@ use std::fmt::{Display, Formatter};
 pub struct Console {}
 
 impl Console {
-    pub const PATH: &VPath = vpath!("/dev/console");
+    pub const PATH: &'static VPath = vpath!("/dev/console");
 
     pub fn new() -> Self {
         Self {}

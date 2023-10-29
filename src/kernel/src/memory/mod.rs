@@ -58,23 +58,20 @@ impl MemoryManager {
         };
 
         // Allocate main stack.
-        let guard = match mm.mmap(
-            0,
-            mm.stack.len() + Self::VIRTUAL_PAGE_SIZE,
-            mm.stack.prot(),
-            "main stack",
-            MappingFlags::MAP_ANON | MappingFlags::MAP_PRIVATE,
-            -1,
-            0,
-        ) {
-            Ok(v) => v.into_raw(),
-            Err(e) => return Err(MemoryManagerError::StackAllocationFailed(e)),
-        };
+        let guard = mm
+            .mmap(
+                0,
+                mm.stack.len() + Self::VIRTUAL_PAGE_SIZE,
+                mm.stack.prot(),
+                "main stack",
+                MappingFlags::MAP_ANON | MappingFlags::MAP_PRIVATE,
+                -1,
+                0,
+            )?
+            .into_raw();
 
         // Set the guard page to be non-accessible.
-        if let Err(e) = mm.mprotect(guard, Self::VIRTUAL_PAGE_SIZE, Protections::empty()) {
-            return Err(MemoryManagerError::GuardStackFailed(e));
-        }
+        mm.mprotect(guard, Self::VIRTUAL_PAGE_SIZE, Protections::empty())?;
 
         mm.stack.set_guard(guard);
         mm.stack
@@ -753,10 +750,10 @@ pub enum MemoryManagerError {
     UnsupportedPageSize,
 
     #[error("cannot allocate main stack")]
-    StackAllocationFailed(#[source] MmapError),
+    StackAllocationFailed(#[from] MmapError),
 
     #[error("cannot setup guard page for main stack")]
-    GuardStackFailed(#[source] MemoryUpdateError),
+    GuardStackFailed(#[from] MemoryUpdateError),
 }
 
 /// Represents an error when [`MemoryManager::mmap()`] is failed.

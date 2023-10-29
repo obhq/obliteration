@@ -145,18 +145,17 @@ impl Memory {
         segments.push(segment);
 
         // TODO: Use separate name for our code and data.
-        let mut pages = match mm.mmap(
-            0,
-            len,
-            Protections::empty(),
-            name,
-            MappingFlags::MAP_ANON | MappingFlags::MAP_PRIVATE,
-            -1,
-            0,
-        ) {
-            Ok(v) => v,
-            Err(e) => return Err(MapError::MemoryAllocationFailed(len, e)),
-        };
+        let mut pages = mm
+            .mmap(
+                0,
+                len,
+                Protections::empty(),
+                name,
+                MappingFlags::MAP_ANON | MappingFlags::MAP_PRIVATE,
+                -1,
+                0,
+            )
+            .map_err(|e| MapError::MemoryAllocationFailed(len, e))?;
 
         // Apply memory protection.
         for seg in &segments {
@@ -220,12 +219,9 @@ impl Memory {
     /// has been dropped.
     pub unsafe fn code_workspace(&self) -> Result<CodeWorkspace<'_>, CodeWorkspaceError> {
         let sealed = self.obcode_sealed.write();
-        let seg = match self.unprotect_segment(self.obcode) {
-            Ok(v) => v,
-            Err(e) => {
-                return Err(CodeWorkspaceError::UnprotectSegmentFailed(self.obcode, e));
-            }
-        };
+        let seg = self
+            .unprotect_segment(self.obcode)
+            .map_err(|e| CodeWorkspaceError::UnprotectSegmentFailed(self.obcode, e))?;
 
         Ok(CodeWorkspace {
             ptr: unsafe { seg.ptr.add(*sealed) },

@@ -28,10 +28,7 @@ impl FtpClient {
 
         // Wait until the server is ready.
         loop {
-            let reply = match client.read_reply() {
-                Ok(v) => v,
-                Err(e) => return Err(NewError::ReadGreetingFailed(e)),
-            };
+            let reply = client.read_reply()?;
 
             if reply.is_positive_preliminary() {
                 continue;
@@ -89,10 +86,8 @@ impl FtpClient {
 
             // Parse data.
             let line = line.trim_end();
-            let item = match FtpItem::new(line) {
-                Some(v) => v,
-                None => return Err(ListError::InvalidData(line.into())),
-            };
+            let item = FtpItem::new(line)
+                .ok_or(ListError::InvalidData(line.into()))?;
 
             // Skip if item represent current and parent directory.
             if item.name == "." || item.name == ".." {
@@ -460,10 +455,10 @@ enum PassiveError {
 #[derive(Debug, Error)]
 pub enum NewError {
     #[error("cannot enable TCP no-delay")]
-    EnableNoDelayFailed(#[source] std::io::Error),
+    EnableNoDelayFailed(#[from] std::io::Error),
 
     #[error("cannot read greeting reply")]
-    ReadGreetingFailed(#[source] ReadReplyError),
+    ReadGreetingFailed(#[from] ReadReplyError),
 
     #[error("the server reply with an unexpected greeting ({0})")]
     UnexpectedGreeting(Reply),
@@ -476,7 +471,7 @@ pub enum ListError {
     EnablePassiveFailed(#[source] ExecError),
 
     #[error("cannot read the reply of PASV")]
-    ReadPassiveFailed(#[source] ReadReplyError),
+    ReadPassiveFailed(#[from] ReadReplyError),
 
     #[error("unexpected reply for PASV ({0})")]
     UnexpectedPassiveReply(Reply),

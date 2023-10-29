@@ -109,16 +109,10 @@ impl Pkg {
 
     pub fn get_param(&self) -> Result<Param, GetParamError> {
         // Find an entry for param.sfo.
-        let (_, _, data) = match self.find_entry(Entry::PARAM_SFO) {
-            Ok(v) => v,
-            Err(e) => return Err(GetParamError::FindEntryFailed(e)),
-        };
+        let (_, _, data) = self.find_entry(Entry::PARAM_SFO)?;
 
         // Parse data.
-        let param = match Param::read(Cursor::new(data)) {
-            Ok(v) => v,
-            Err(e) => return Err(GetParamError::ReadFailed(e)),
-        };
+        let param = Param::read(Cursor::new(data))?;
 
         Ok(param)
     }
@@ -229,13 +223,7 @@ impl Pkg {
         };
 
         // Open outer PFS.
-        let mut outer = match pfs::open(Cursor::new(outer), Some(&self.ekpfs)) {
-            Ok(v) => match v.open() {
-                Ok(v) => v,
-                Err(e) => return Err(ExtractError::OpenOuterSuperRootFailed(e)),
-            },
-            Err(e) => return Err(ExtractError::OpenOuterFailed(e)),
-        };
+        let mut outer = pfs::open(Cursor::new(outer), Some(&self.ekpfs))?.open()?;
 
         // Open outer uroot directory.
         let mut uroot = match outer.take(b"uroot") {
@@ -461,13 +449,7 @@ impl Pkg {
 
     fn load_ekpfs(&mut self) -> Result<(), OpenError> {
         // Locate image key entry.
-        let (entry, _, data) = match self.find_entry(Entry::PFS_IMAGE_KEY) {
-            Ok(v) => v,
-            Err(e) => match e {
-                FindEntryError::NotFound => return Err(OpenError::PfsImageKeyNotFound),
-                _ => return Err(OpenError::FindPfsImageKeyFailed(e)),
-            },
-        };
+        let (entry, _, data) = self.find_entry(Entry::PFS_IMAGE_KEY)?;
 
         // Decrypt the entry.
         let mut encrypted: Vec<u8> = Vec::with_capacity(data.len());
@@ -633,6 +615,15 @@ pub enum OpenError {
     DecryptEkpsfFailed(rsa::errors::Error),
 }
 
+impl From<FindEntryError> for OpenError {
+    fn from(e: FindEntryError) -> Self {
+        match e {
+            FindEntryError::NotFound => OpenError::PfsImageKeyNotFound,
+            _ => return OpenError::FindPfsImageKeyFailed(e)
+        }
+    }
+}
+
 impl Error for OpenError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
@@ -664,10 +655,10 @@ impl Display for OpenError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum GetParamError {
     FindEntryFailed(FindEntryError),
-    ReadFailed(param::ReadError),
+    ReadFailed(#[from] param::ReadError),
 }
 
 impl Error for GetParamError {
@@ -716,7 +707,7 @@ pub enum ExtractError {
     InvalidOuterOffset,
 
     #[error("cannot open outer PFS")]
-    OpenOuterFailed(#[source] pfs::OpenError),
+    OpenOuterFailed(#[from] pfs::OpenError),
 
     #[error("cannot open a super-root on outer PFS")]
     OpenOuterSuperRootFailed(#[source] pfs::directory::OpenError),

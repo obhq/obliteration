@@ -75,10 +75,7 @@ impl<'a> Directory<'a> {
         let mut image = self.pfs.image.lock().unwrap();
         let image = image.deref_mut();
         let inode = &self.pfs.inodes[self.inode];
-        let blocks = match inode.load_blocks(image.as_mut()) {
-            Ok(v) => v,
-            Err(e) => return Err(OpenError::LoadBlocksFailed(e)),
-        };
+        let blocks = inode.load_blocks(image.as_mut())?;
 
         // Read all dirents.
         let mut items: HashMap<Vec<u8>, Item<'a>> = HashMap::new();
@@ -198,7 +195,7 @@ pub enum OpenError {
     InvalidInode(usize),
 
     #[error("cannot load occupied blocks")]
-    LoadBlocksFailed(#[source] crate::inode::LoadBlocksError),
+    LoadBlocksFailed(#[from] crate::inode::LoadBlocksError),
 
     #[error("cannot seek to block #{0}")]
     SeekToBlockFailed(u32, #[source] std::io::Error),

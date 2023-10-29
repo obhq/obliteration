@@ -55,13 +55,13 @@ impl NativeEngine {
             }
 
             // Unprotect the segment.
-            let mut seg = match unsafe { mem.unprotect_segment(i) } {
-                Ok(v) => v,
-                Err(e) => return Err(SetupModuleError::UnprotectSegmentFailed(i, e)),
+            let mut seg = unsafe {
+                mem.unprotect_segment(i)
+                    .map_err(|e| SetupModuleError::UnprotectSegmentFailed(i, e))?
             };
 
             // Patch segment.
-            count += unsafe { self.patch_segment(path, base, mem, seg.as_mut()) }?;
+            count += unsafe { self.patch_segment(path, base, mem, seg.as_mut())? };
         }
 
         Ok(count)
@@ -174,16 +174,14 @@ impl NativeEngine {
         // Build trampoline.
         let id = LE::read_u32(&target[3..]);
         let ret = addr + 7 + 5;
-        let tp = match self.build_syscall_trampoline(mem, module, offset + 10, id, ret) {
-            Ok(v) => v,
-            Err(e) => return Err(SetupModuleError::BuildTrampolineFailed(offset, e)),
-        };
+        let tp = self
+            .build_syscall_trampoline(mem, module, offset + 10, id, ret)
+            .map_err(|e| SetupModuleError::BuildTrampolineFailed(offset, e))?;
 
         // Patch "mov rax, imm32" with "jmp rel32".
-        let tp = match Self::get_relative_offset(addr + 5, tp) {
-            Some(v) => v.to_ne_bytes(),
-            None => return Err(SetupModuleError::WorkspaceTooFar),
-        };
+        let tp = Self::get_relative_offset(addr + 5, tp)
+            .ok_or(SetupModuleError::WorkspaceTooFar)?
+            .to_ne_bytes();
 
         target[0] = 0xe9;
         target[1] = tp[0];
@@ -215,20 +213,18 @@ impl NativeEngine {
     ) -> Result<Option<usize>, SetupModuleError> {
         // Build trampoline.
         let ret = addr + 2 + 5;
-        let tp = match self.build_int44_trampoline(mem, module, offset, ret) {
-            Ok(v) => v,
-            Err(e) => return Err(SetupModuleError::BuildTrampolineFailed(offset, e)),
-        };
+        let tp = self
+            .build_int44_trampoline(mem, module, offset, ret)
+            .map_err(|e| SetupModuleError::BuildTrampolineFailed(offset, e))?;
 
         // Patch "int 0x44" with "nop".
         target[0] = 0x90;
         target[1] = 0x90;
 
         // Patch "mov edx, 0xcccccccc" with "jmp rel32".
-        let tp = match Self::get_relative_offset(addr + 7, tp) {
-            Some(v) => v.to_ne_bytes(),
-            None => return Err(SetupModuleError::WorkspaceTooFar),
-        };
+        let tp = Self::get_relative_offset(addr + 7, tp)
+            .ok_or(SetupModuleError::WorkspaceTooFar)?
+            .to_ne_bytes();
 
         target[2] = 0xe9;
         target[3] = tp[0];
@@ -284,16 +280,14 @@ impl NativeEngine {
                 // Some samples of possible instructions:
                 // mov rax,fs:[0] -> 64, 48, 8b, 04, 25, 00, 00, 00, 00
                 let out = get_gpr64(inst.op0_register()).unwrap();
-                let tp = match self.build_fs_trampoline(mem, disp, out, ret) {
-                    Ok(v) => v,
-                    Err(e) => return Err(SetupModuleError::BuildTrampolineFailed(offset, e)),
-                };
+                let tp = self
+                    .build_fs_trampoline(mem, disp, out, ret)
+                    .map_err(|e| SetupModuleError::BuildTrampolineFailed(offset, e))?;
 
                 // Patch the target with "jmp rel32".
-                let tp = match Self::get_relative_offset(addr + 5, tp) {
-                    Some(v) => v.to_ne_bytes(),
-                    None => return Err(SetupModuleError::WorkspaceTooFar),
-                };
+                let tp = Self::get_relative_offset(addr + 5, tp)
+                    .ok_or(SetupModuleError::WorkspaceTooFar)?
+                    .to_ne_bytes();
 
                 target[0] = 0xe9;
                 target[1] = tp[0];
@@ -356,10 +350,9 @@ impl NativeEngine {
         asm.push(r11).unwrap();
 
         // Setup input.
-        let module = match mem.push_data(module.to_owned()) {
-            Some(v) => v,
-            None => return Err(TrampolineError::SpaceNotEnough),
-        };
+        let module = mem
+            .push_data(module.to_owned())
+            .ok_or(TrampolineError::SpaceNotEnough)?;
 
         asm.mov(rbx, rax).unwrap();
         asm.mov(dword_ptr(rbx), id).unwrap();
@@ -375,10 +368,9 @@ impl NativeEngine {
         asm.mov(qword_ptr(rbx + 0x40), r9).unwrap();
 
         // Invoke our routine.
-        let ee = match mem.push_data(self.clone()) {
-            Some(v) => v,
-            None => return Err(TrampolineError::SpaceNotEnough),
-        };
+        let ee = mem
+            .push_data(self.clone())
+            .ok_or(TrampolineError::SpaceNotEnough)?;
 
         asm.mov(rax, rbx).unwrap();
         asm.add(rax, 0x50).unwrap();
@@ -454,15 +446,13 @@ impl NativeEngine {
         asm.push(rsi).unwrap();
 
         // Invoke our routine.
-        let module = match mem.push_data(module.to_owned()) {
-            Some(v) => v,
-            None => return Err(TrampolineError::SpaceNotEnough),
-        };
+        let module = mem
+            .push_data(module.to_owned())
+            .ok_or(TrampolineError::SpaceNotEnough)?;
 
-        let ee = match mem.push_data(self.clone()) {
-            Some(v) => v,
-            None => return Err(TrampolineError::SpaceNotEnough),
-        };
+        let ee = mem
+            .push_data(self.clone())
+            .ok_or(TrampolineError::SpaceNotEnough)?;
 
         asm.mov(rdx, module as u64).unwrap();
         asm.mov(rsi, offset as u64).unwrap();
@@ -533,10 +523,9 @@ impl NativeEngine {
         asm.xsave64(iced_x86::code_asm::ptr(rsp)).unwrap();
 
         // Invoke our routine.
-        let ee = match mem.push_data(self.clone()) {
-            Some(v) => v,
-            None => return Err(TrampolineError::SpaceNotEnough),
-        };
+        let ee = mem
+            .push_data(self.clone())
+            .ok_or(TrampolineError::SpaceNotEnough)?;
 
         asm.mov(rsi, disp).unwrap();
         asm.mov(rdi, Arc::as_ptr(&*ee) as u64).unwrap();
@@ -587,10 +576,7 @@ impl NativeEngine {
         mut assembled: CodeAssembler,
     ) -> Result<usize, TrampolineError> {
         // Get workspace.
-        let mut mem = match mem.code_workspace() {
-            Ok(v) => v,
-            Err(e) => return Err(TrampolineError::GetCodeWorkspaceFailed(e)),
-        };
+        let mut mem = mem.code_workspace()?;
 
         // Align base address to 16 byte boundary for performance.
         let base = mem.addr();
@@ -607,10 +593,9 @@ impl NativeEngine {
         assembled.extend({
             // Calculate relative offset.
             let mut code = [0u8; 5];
-            let v = match Self::get_relative_offset(addr + assembled.len() + code.len(), ret) {
-                Some(v) => v.to_ne_bytes(),
-                None => return Err(TrampolineError::ReturnTooFar),
-            };
+            let v = Self::get_relative_offset(addr + assembled.len() + code.len(), ret)
+                .ok_or(TrampolineError::ReturnTooFar)?
+                .to_ne_bytes();
 
             // Write the instruction.
             code[0] = 0xe9;
@@ -623,10 +608,10 @@ impl NativeEngine {
         });
 
         // Write the assembled code.
-        let output = match mem.as_mut().get_mut(offset..) {
-            Some(v) => v,
-            None => return Err(TrampolineError::SpaceNotEnough),
-        };
+        let output = mem
+            .as_mut()
+            .get_mut(offset..)
+            .ok_or(TrampolineError::SpaceNotEnough)?;
 
         if assembled.len() > output.len() {
             return Err(TrampolineError::SpaceNotEnough);
@@ -708,7 +693,7 @@ pub enum SetupModuleError {
 #[derive(Debug, Error)]
 pub enum TrampolineError {
     #[error("cannot get code workspace")]
-    GetCodeWorkspaceFailed(#[source] CodeWorkspaceError),
+    GetCodeWorkspaceFailed(#[from] CodeWorkspaceError),
 
     #[error("the remaining workspace is not enough")]
     SpaceNotEnough,

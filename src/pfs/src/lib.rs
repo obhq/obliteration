@@ -20,10 +20,7 @@ where
     I: Read + Seek + 'a,
 {
     // Read header.
-    let header = match Header::read(&mut image) {
-        Ok(v) => v,
-        Err(e) => return Err(OpenError::ReadHeaderFailed(e)),
-    };
+    let header = Header::read(&mut image)?;
 
     // Check if image is supported.
     let mode = header.mode();
@@ -47,10 +44,7 @@ where
         };
 
         // Setup decryptor.
-        let ekpfs = match ekpfs {
-            Some(v) => v,
-            None => panic!("The image is encrypted but no EKPFS is provided"),
-        };
+        let ekpfs = ekpfs.expect("The image is encrypted but no EKPFS is provided");
 
         let key_seed = header.key_seed();
         let (data_key, tweak_key) = image::get_xts_keys(ekpfs, key_seed);
@@ -149,7 +143,7 @@ pub(crate) trait Image: Read + Seek {
 #[derive(Debug, Error)]
 pub enum OpenError {
     #[error("cannot read header")]
-    ReadHeaderFailed(#[source] header::ReadError),
+    ReadHeaderFailed(#[from] header::ReadError),
 
     #[error("invalid block size")]
     InvalidBlockSize,

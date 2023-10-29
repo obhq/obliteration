@@ -195,16 +195,13 @@ impl<I: Read + Seek> Read for Encrypted<I> {
                 let offset = (block * XTS_BLOCK_SIZE) as u64;
 
                 // Seek image file to the target offset.
-                match self.image.seek(SeekFrom::Start(offset)) {
-                    Ok(v) => {
-                        if v != offset {
-                            return Err(Error::new(
-                                ErrorKind::Other,
-                                format!("unable to seek to offset {}", offset),
-                            ));
-                        }
-                    }
-                    Err(e) => return Err(e),
+                let v = self.image.seek(SeekFrom::Start(offset))?;
+
+                if v != offset {
+                    return Err(Error::new(
+                        ErrorKind::Other,
+                        format!("unable to seek to offset {}", offset),
+                    ));
                 }
 
                 // Read the current block.

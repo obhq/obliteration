@@ -22,7 +22,6 @@ use std::fmt::Debug;
 use std::fs::{create_dir_all, remove_dir_all, File};
 use std::io::Write;
 use std::path::PathBuf;
-use std::process::{Termination, ExitCode};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -283,18 +282,16 @@ enum KernelError {
 
 impl Debug for KernelError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use std::error::Error;
-
-        write!(f, "{self}");
+        write!(f, "{self}")?;
 
         let mut i = self.source();
 
         while let Some(v) = i {
-            write!(f, " -> {}", v).unwrap();
+            write!(f, " -> {}", v)?;
             i = v.source();
         }
 
-        write!(f, "")
+        Ok(())
     }
 }
 

@@ -44,10 +44,9 @@ impl LlvmEngine {
         drop(codegen);
 
         // Create LLVM execution engine.
-        let lifted = match lifting.create_execution_engine() {
-            Ok(v) => v,
-            Err(e) => return Err(LiftError::CreateExecutionEngineFailed(path.to_owned(), e)),
-        };
+        let lifted = lifting
+            .create_execution_engine()
+            .map_err(|e| LiftError::CreateExecutionEngineFailed(path.to_owned(), e))?;
 
         Ok(lifted)
     }

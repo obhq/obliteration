@@ -2,6 +2,7 @@ pub use self::mem::*;
 pub use self::module::*;
 
 use self::resolver::{ResolveFlags, SymbolResolver};
+use crate::ee;
 use crate::ee::ExecutionEngine;
 use crate::errno::{Errno, EINVAL, ENOEXEC, ENOMEM, EPERM, ESRCH};
 use crate::fs::{Fs, FsError, FsItem, VPath, VPathBuf};
@@ -46,7 +47,7 @@ pub struct RuntimeLinker<E: ExecutionEngine> {
 }
 
 impl<E: ExecutionEngine> RuntimeLinker<E> {
-    const NID_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-";
+    const NID_CHARS: &'static [u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-";
     const NID_SALT: [u8; 16] = [
         0x51, 0x8d, 0x64, 0xa6, 0x35, 0xde, 0xd8, 0xc1, 0xe6, 0xb0, 0x39, 0xb1, 0xc3, 0xe5, 0x52,
         0x30,
@@ -185,22 +186,14 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
     /// already loaded.
     pub fn load(&self, path: &VPath, main: bool) -> Result<Arc<Module<E>>, LoadError<E>> {
         // Get file.
-        let file = match self.fs.get(path) {
-            Ok(v) => match v {
-                FsItem::File(v) => v,
-                _ => return Err(LoadError::InvalidElf),
-            },
-            Err(e) => return Err(LoadError::GetFileFailed(e)),
+        let file = match self.fs.get(path)? {
+            FsItem::File(v) => v,
+            _ => return Err(LoadError::InvalidElf),
         };
 
         // Open file.
-        let elf = match File::open(file.path()) {
-            Ok(v) => match Elf::open(file.into_vpath(), v) {
-                Ok(v) => v,
-                Err(e) => return Err(LoadError::OpenElfFailed(e)),
-            },
-            Err(e) => return Err(LoadError::OpenFileFailed(e)),
-        };
+        let v = File::open(file.path())?;
+        let elf = Elf::open(file.into_vpath(), v)?;
 
         // Check image type.
         if elf.ty() != FileType::ET_SCE_DYNAMIC {
@@ -240,7 +233,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         let (entry, _) = table.alloc(|id| {
             let name = path.file_name().unwrap();
             let id: u32 = (id + 1).try_into().unwrap();
-            let mut md = match Module::map(
+            let mut md = Module::map(
                 &self.mm,
                 &self.ee,
                 elf,
@@ -249,10 +242,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
                 id,
                 tls,
                 self.vp.mutex_group(),
-            ) {
-                Ok(v) => v,
-                Err(e) => return Err(LoadError::MapFailed(e)),
-            };
+            )?;
 
             if md.flags().contains(ModuleFlags::TEXT_REL) {
                 return Err(LoadError::ImpureText);
@@ -376,10 +366,10 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         // Get target module.
         let list = self.list.read();
-        let md = match list.iter().find(|m| m.id() == handle) {
-            Some(v) => v,
-            None => return Err(SysErr::Raw(ESRCH)),
-        };
+        let md = list
+            .iter()
+            .find(|m| m.id() == handle)
+            .ok_or(SysErr::Raw(ESRCH))?;
 
         info!("Getting symbol '{}' from {}.", name, md.path());
 
@@ -391,10 +381,9 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         }
 
         // Resolve the symbol.
-        let addr = match self.resolve_symbol(md, name.into(), None, flags) {
-            Some(v) => v,
-            None => return Err(SysErr::Raw(ESRCH)),
-        };
+        let addr = self
+            .resolve_symbol(md, name.into(), None, flags)
+            .ok_or(SysErr::Raw(ESRCH))?;
 
         unsafe { *out = addr };
         Ok(SysOut::ZERO)
@@ -922,19 +911,19 @@ pub enum MapError {
 #[derive(Debug, Error)]
 pub enum LoadError<E: ExecutionEngine> {
     #[error("cannot get the specified file")]
-    GetFileFailed(#[source] FsError),
+    GetFileFailed(#[from] FsError),
 
     #[error("cannot open file")]
-    OpenFileFailed(#[source] std::io::Error),
+    OpenFileFailed(#[from] std::io::Error),
 
     #[error("cannot open (S)ELF")]
-    OpenElfFailed(#[source] elf::OpenError),
+    OpenElfFailed(#[from] elf::OpenError),
 
     #[error("the specified file is not valid module")]
     InvalidElf,
 
     #[error("cannot map file")]
-    MapFailed(#[source] MapError),
+    MapFailed(#[from] MapError),
 
     #[error("the specified file has impure text")]
     ImpureText,
