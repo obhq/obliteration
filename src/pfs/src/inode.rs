@@ -308,9 +308,7 @@ impl Inode {
     }
 
     fn read_indirect32_unsigned(raw: &mut &[u8]) -> Option<u32> {
-        let value = raw
-            .get(..4)
-            .map(|v| LE::read_u32(&v[0x00..]))?;
+        let value = raw.get(..4).map(|v| LE::read_u32(&v[0x00..]))?;
 
         *raw = &raw[4..];
 
@@ -318,9 +316,7 @@ impl Inode {
     }
 
     fn read_indirect32_signed(raw: &mut &[u8]) -> Option<u32> {
-        let value = raw
-            .get(..36)
-            .map(|v| LE::read_u32(&v[0x00..]))?;
+        let value = raw.get(..36).map(|v| LE::read_u32(&v[0x00..]))?;
 
         *raw = &raw[36..];
 

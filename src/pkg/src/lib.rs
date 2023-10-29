@@ -619,7 +619,7 @@ impl From<FindEntryError> for OpenError {
     fn from(e: FindEntryError) -> Self {
         match e {
             FindEntryError::NotFound => OpenError::PfsImageKeyNotFound,
-            _ => return OpenError::FindPfsImageKeyFailed(e)
+            _ => return OpenError::FindPfsImageKeyFailed(e),
         }
     }
 }

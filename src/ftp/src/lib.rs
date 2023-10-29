@@ -86,8 +86,7 @@ impl FtpClient {
 
             // Parse data.
             let line = line.trim_end();
-            let item = FtpItem::new(line)
-                .ok_or(ListError::InvalidData(line.into()))?;
+            let item = FtpItem::new(line).ok_or(ListError::InvalidData(line.into()))?;
 
             // Skip if item represent current and parent directory.
             if item.name == "." || item.name == ".." {
