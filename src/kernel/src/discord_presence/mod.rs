@@ -10,13 +10,13 @@ pub fn rich_presence(game_path: &Path) -> Result<DiscordIpcClient, Box<dyn std::
     let mut client = match DiscordIpcClient::new("1168617561244565584") {
         Ok(client) => client,
         Err(e) => {
-            warn!("Failed to create Discord IPC: {:?}", e);
+            warn!(e, "Failed to create Discord IPC");
             return Err(e.into());
         }
     };
 
     if let Err(e) = client.connect() {
-        warn!("Failed to connect to Discord client: {:?}", e);
+        warn!(e, "Failed to connect to Discord client");
         return Err(e.into());
     }
 
@@ -25,7 +25,8 @@ pub fn rich_presence(game_path: &Path) -> Result<DiscordIpcClient, Box<dyn std::
         .as_secs()
         .try_into()
         .unwrap();
-    let param_path = game_path.join("sce_sys/param.sfo");
+    let mut param_path = game_path.join("sce_sys");
+    param_path.push("param.sfo");
     let mut title = String::from("Unknown Title");
     let mut title_id = String::from("Unknown Title ID");
 
@@ -35,9 +36,9 @@ pub fn rich_presence(game_path: &Path) -> Result<DiscordIpcClient, Box<dyn std::
                 title = param.title().to_string();
                 title_id = param.title_id().to_string();
             }
-            Err(e) => warn!("Failed to read param.sfo, using placeholders: {:?}", e),
+            Err(e) => warn!(e, "Failed to read param.sfo, using placeholders"),
         },
-        Err(e) => warn!("Failed to open param.sfo, using placeholders: {:?}", e),
+        Err(e) => warn!(e, "Failed to open param.sfo, using placeholders"),
     }
 
     let details_text = &format!("Playing {} - {}", title, title_id);
@@ -50,7 +51,7 @@ pub fn rich_presence(game_path: &Path) -> Result<DiscordIpcClient, Box<dyn std::
         )
         .timestamps(activity::Timestamps::new().start(start_time));
     if let Err(e) = client.set_activity(payload) {
-        warn!("Failed to update Discord presence: {:?}", e);
+        warn!(e, "Failed to update Discord presence");
         return Err(e.into());
     }
     Ok(client)

@@ -92,10 +92,8 @@ fn main() -> ExitCode {
     }
 
     // Begin Discord Rich Presence after successful basic init.
-    let game_display = args.game.display().to_string();
-    let game_path = std::path::Path::new(&game_display);
     // Keep client active by storing in variable.
-    let _client = discord_presence::rich_presence(&game_path);
+    let _client = discord_presence::rich_presence(&args.game.clone());
 
     // Show basic infomation.
     let mut log = info!();
