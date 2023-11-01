@@ -25,6 +25,7 @@ mod arch;
 mod arnd;
 mod budget;
 mod console;
+mod discord_presence;
 mod ee;
 mod errno;
 mod fs;
@@ -41,6 +42,7 @@ mod sysctl;
 mod ucred;
 
 fn main() -> ExitCode {
+    // Begin logger
     log::init();
 
     // Load arguments.
@@ -88,6 +90,10 @@ fn main() -> ExitCode {
             Err(e) => warn!(e, "Failed to create {}", log.display()),
         }
     }
+
+    // Begin Discord Rich Presence after successful basic init.
+    // Keep client active by storing in variable.
+    let _client = discord_presence::rich_presence(&args.game.clone());
 
     // Show basic infomation.
     let mut log = info!();
