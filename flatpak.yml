@@ -1,0 +1,35 @@
+app-id: io.github.obhq.Obliteration
+default-branch: stable
+runtime: org.kde.Platform
+runtime-version: '6.6'
+platform-extensions:
+- org.freedesktop.Platform.GL.default
+sdk: org.kde.Sdk
+sdk-extensions:
+- org.freedesktop.Sdk.Extension.llvm17
+- org.freedesktop.Sdk.Extension.rust-stable
+command: obliteration
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+  build-args:
+  - --share=network
+finish-args:
+  - --filesystem=home
+  - --share=network
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  - --socket=pulseaudio
+modules:
+- name: obliteration
+  buildsystem: simple # cmake does not work somehow
+  build-commands:
+  - cmake -DOB_BUILD_LLVM:BOOL=OFF --preset linux-release .
+  - cmake --build --preset linux-release
+  - cargo test --manifest-path src/Cargo.toml --workspace --exclude core
+  - cargo clippy --manifest-path src/Cargo.toml --release
+  - cmake --install build --prefix "$FLATPAK_DEST"
+  sources:
+  - type: dir
+    path: .
