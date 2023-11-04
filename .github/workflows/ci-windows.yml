@@ -4,73 +4,27 @@ on:
 env:
   CMAKE_BUILD_PARALLEL_LEVEL: '2'
 jobs:
-  llvm:
-    name: LLVM for Windows
-    runs-on: windows-2022
-    steps:
-    - name: Download LLVM
-      run: |
-        Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.2/llvm-project-17.0.2.src.tar.xz" -OutFile llvm.tar.xz
-        $hash = (Get-FileHash llvm.tar.xz).Hash
-        unxz llvm.tar.xz
-        tar -x --strip-components=1 -f llvm.tar
-        echo "hash=$hash" >> $env:GITHUB_OUTPUT
-      id: download
-    - name: Generate cache keys
-      run: echo "build=${{ runner.os }}-llvm-${{ steps.download.outputs.hash }}" >> $env:GITHUB_OUTPUT
-      id: cache-keys
-    - name: Restore build files
-      uses: actions/cache/restore@v3
-      with:
-        path: build
-        key: ${{ steps.cache-keys.outputs.build }}
-    - name: Run CMake
-      run: cmake --install-prefix ${{ github.workspace }}/dist -Wno-dev -DLLVM_ENABLE_ZSTD:BOOL=OFF -DLLVM_APPEND_VC_REV:BOOL=OFF -DLLVM_TARGETS_TO_BUILD:STRING=X86 -B build llvm
-    - name: Build
-      run: cmake --build build --config Release
-    - name: Cache build files
-      uses: actions/cache/save@v3
-      with:
-        path: build
-        key: ${{ steps.cache-keys.outputs.build }}-${{ github.run_id }}
-      if: startsWith(github.ref, 'refs/heads/')
-    - name: Export artifacts
-      run: cmake --install build --config Release
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: llvm
-        path: dist
   build:
     name: Windows
     runs-on: windows-2022
-    needs: llvm
     steps:
     - name: Checkout source
       uses: actions/checkout@v4
-    - name: Download LLVM
-      uses: actions/download-artifact@v3
-      with:
-        name: llvm
-        path: lib/llvm
     - name: Generate cache keys
       run: |
         echo "cargo=${{ runner.os }}-cargo" >> $env:GITHUB_OUTPUT
-        echo "qt=${{ runner.os }}-qt" >> $env:GITHUB_OUTPUT
         echo "vulkan=${{ runner.os }}-vulkan-1.3.239.0" >> $env:GITHUB_OUTPUT
       id: cache-keys
+    - name: Install LLVM
+      run: |
+        Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.4/LLVM-17.0.4-win64.exe" -OutFile llvm.exe
+        .\llvm.exe /S
+        echo "LLVM_SYS_170_PREFIX=C:\Program Files\LLVM" >> $env:GITHUB_ENV
     - name: Restore Cargo home
       uses: actions/cache/restore@v3
       with:
         path: ~/.cargo
         key: ${{ steps.cache-keys.outputs.cargo }}
-    - name: Install Qt
-      uses: jurplel/install-qt-action@v4
-      with:
-        version: 6.*
-        aqtversion: '==3.1.*'
-        cache: true
-        cache-key-prefix: ${{ steps.cache-keys.outputs.qt }}
     - name: Restore Vulkan SDK
       uses: actions/cache/restore@v3
       with:
@@ -97,7 +51,9 @@ jobs:
       run: cargo clippy --release
       working-directory: src
     - name: Export artifacts
-      run: cmake --install build --prefix dist
+      run: |
+        cmake --install build --prefix dist
+        Copy-Item "$env:LLVM_SYS_170_PREFIX\lib\LLVM.dll" -Destination dist
     - name: Upload artifacts
       uses: actions/upload-artifact@v3
       with:
