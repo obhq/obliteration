@@ -312,9 +312,12 @@ impl RegMgr {
     }
 
     fn sys_workaround8849(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let key: usize = i.args[0].into();
-        let key: u32 = key.try_into().unwrap();
-        let key = RegKey::new(key);
+        let key = {
+            let arg: usize = i.args[0].into();
+            let key: u32 = arg.try_into().unwrap();
+
+            RegKey::new(key);
+        };
 
         match key {
             RegKey::NP_DEBUG
