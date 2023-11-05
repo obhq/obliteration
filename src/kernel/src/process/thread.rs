@@ -1,3 +1,4 @@
+use super::{CpuMask, CpuSet};
 use crate::signal::SignalSet;
 use crate::ucred::{Privilege, PrivilegeError, Ucred};
 use bitflags::bitflags;
@@ -18,6 +19,7 @@ pub struct VThread {
     pri_class: u16,                 // td_pri_class
     base_user_pri: u16,             // td_base_user_pri
     pcb: GroupMutex<Pcb>,           // td_pcb
+    cpuset: CpuSet,                 // td_cpuset
 }
 
 impl VThread {
@@ -33,6 +35,7 @@ impl VThread {
                 fsbase: 0,
                 flags: PcbFlags::empty(),
             }),
+            cpuset: CpuSet::new(CpuMask::default()), // TODO: Same here.
         }
     }
 
@@ -68,6 +71,10 @@ impl VThread {
 
     pub fn pcb_mut(&self) -> GroupMutexWriteGuard<'_, Pcb> {
         self.pcb.write()
+    }
+
+    pub fn cpuset(&self) -> &CpuSet {
+        &self.cpuset
     }
 
     /// An implementation of `priv_check`.
