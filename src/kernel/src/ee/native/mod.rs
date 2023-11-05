@@ -511,7 +511,7 @@ impl NativeEngine {
         asm.add(rbx, 14 * 8).unwrap(); // Output placeholder.
 
         // Save x87, SSE and AVX states.
-        let xsave = (self.xsave_area + 15) & !15;
+        let xsave = (self.xsave_area + 63) & !63;
 
         asm.sub(rsp, xsave).unwrap();
         asm.mov(ecx, xsave).unwrap();
