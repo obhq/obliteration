@@ -316,8 +316,11 @@ impl RegMgr {
         let key: u32 = key.try_into().unwrap();
 
         match key {
-            //TODO: figure out what these are
-            1019741952 | 2013432320 | 2013422592 | 2013430528 | 427884544 => {
+            RegKey::NP_DEBUG |
+            RegKey::BROWSER_DEBUG_NOTIFICATION |
+            RegKey::DEVENV_TOOL_TRC_NOTIFY |
+            RegKey::DEVENT_TOOL_USE_DEFAULT_LIB |
+            RegKey::DEVENV_TOOL_SYS_PRX_PRELOAD => {
                 let val = self.get_int(RegKey::new(key)).unwrap();
 
                 Ok(val.into())
