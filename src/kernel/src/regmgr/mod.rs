@@ -322,7 +322,7 @@ impl RegMgr {
 
                 Ok(val.into())
             }
-            _ => Err(SysErr::Raw(EINVAL))
+            _ => Err(SysErr::Raw(EINVAL)),
         }
     }
 }
