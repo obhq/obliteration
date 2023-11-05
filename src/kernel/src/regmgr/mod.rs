@@ -1,5 +1,6 @@
 pub use self::key::*;
 
+use crate::errno::EINVAL;
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::Ucred;
@@ -19,6 +20,7 @@ impl RegMgr {
         let mgr = Arc::new(Self {});
 
         sys.register(532, &mgr, Self::sys_regmgr_call);
+        sys.register(605, &mgr, Self::sys_workaround8849);
 
         mgr
     }
@@ -152,6 +154,15 @@ impl RegMgr {
                 }
             }
         }
+    }
+
+    /// See `sceRegMgrGetInt` on the PS4 for a reference.
+    fn get_int(&self, key: RegKey) -> Result<i32, RegError> {
+        let mut buf = [0u8; 4];
+
+        self.get_value(key, &mut buf)?;
+
+        Ok(i32::from_le_bytes(buf))
     }
 
     /// See `sceRegMgrSetInt` on the PS4 for a reference.
@@ -298,6 +309,21 @@ impl RegMgr {
         }
 
         None
+    }
+
+    fn sys_workaround8849(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let key: usize = i.args[0].into();
+        let key: u32 = key.try_into().unwrap();
+
+        match key {
+            //TODO: figure out what these are
+            1019741952 | 2013432320 | 2013422592 | 2013430528 | 427884544 => {
+                let val = self.get_int(RegKey::new(key)).unwrap();
+
+                Ok(val.into())
+            }
+            _ => Err(SysErr::Raw(EINVAL))
+        }
     }
 }
 
