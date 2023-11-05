@@ -30,8 +30,10 @@ jobs:
     - name: Install Qt
       run: |
         brew install p7zip
-        curl -Lo qt.7z https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_660/qt.qt6.660.clang_64/6.6.0-0-202310040910qtbase-MacOS-MacOS_12-Clang-MacOS-MacOS_12-X86_64-ARM64.7z
-        7za x qt.7z -oqt
+        curl -Lo qt-base.7z https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_660/qt.qt6.660.clang_64/6.6.0-0-202310040910qtbase-MacOS-MacOS_12-Clang-MacOS-MacOS_12-X86_64-ARM64.7z
+        curl -Lo qt-svg.7z https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_660/qt.qt6.660.clang_64/6.6.0-0-202310040910qtsvg-MacOS-MacOS_12-Clang-MacOS-MacOS_12-X86_64-ARM64.7z
+        7za x qt-base.7z -oqt
+        7za x qt-svg.7z -oqt
         echo "CMAKE_PREFIX_PATH=qt/6.6.0/macos" >> $GITHUB_ENV
     - name: Run CMake
       run: cmake --preset mac-release .

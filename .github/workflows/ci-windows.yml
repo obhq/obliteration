@@ -62,8 +62,12 @@ jobs:
       run: |
         Invoke-WebRequest `
           -Uri "https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_660/qt.qt6.660.win64_msvc2019_64/6.6.0-0-202310040911qtbase-Windows-Windows_10_22H2-MSVC2019-Windows-Windows_10_22H2-X86_64.7z" `
-          -OutFile qt.7z
-        7z x qt.7z -oqt
+          -OutFile qt-base.7z
+        Invoke-WebRequest `
+          -Uri "https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_660/qt.qt6.660.win64_msvc2019_64/6.6.0-0-202310040911qtsvg-Windows-Windows_10_22H2-MSVC2019-Windows-Windows_10_22H2-X86_64.7z" `
+          -OutFile qt-svg.7z
+        7z x qt-base.7z -oqt
+        7z x qt-svg.7z -oqt
         echo "CMAKE_PREFIX_PATH=qt\6.6.0\msvc2019_64" >> $env:GITHUB_ENV
     - name: Restore Cargo home
       uses: actions/cache/restore@v3
