@@ -316,7 +316,7 @@ impl RegMgr {
             let arg: usize = i.args[0].into();
             let key: u32 = arg.try_into().unwrap();
 
-            RegKey::new(key);
+            RegKey::new(key)
         };
 
         match key {
