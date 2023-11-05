@@ -314,14 +314,15 @@ impl RegMgr {
     fn sys_workaround8849(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let key: usize = i.args[0].into();
         let key: u32 = key.try_into().unwrap();
+        let key = RegKey::new(key);
 
         match key {
-            RegKey::NP_DEBUG |
-            RegKey::BROWSER_DEBUG_NOTIFICATION |
-            RegKey::DEVENV_TOOL_TRC_NOTIFY |
-            RegKey::DEVENT_TOOL_USE_DEFAULT_LIB |
-            RegKey::DEVENV_TOOL_SYS_PRX_PRELOAD => {
-                let val = self.get_int(RegKey::new(key)).unwrap();
+            RegKey::NP_DEBUG
+            | RegKey::BROWSER_DEBUG_NOTIFICATION
+            | RegKey::DEVENV_TOOL_TRC_NOTIFY
+            | RegKey::DEVENT_TOOL_USE_DEFAULT_LIB
+            | RegKey::DEVENV_TOOL_SYS_PRX_PRELOAD => {
+                let val = self.get_int(key).unwrap();
 
                 Ok(val.into())
             }
