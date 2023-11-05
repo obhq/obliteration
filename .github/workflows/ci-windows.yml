@@ -7,6 +7,8 @@ jobs:
   llvm:
     name: LLVM for Windows
     runs-on: windows-2022
+    outputs:
+      dist-key: ${{ steps.cache-keys.outputs.dist }}
     steps:
     - name: Download LLVM
       run: |
@@ -17,30 +19,30 @@ jobs:
         echo "hash=$hash" >> $env:GITHUB_OUTPUT
       id: download
     - name: Generate cache keys
-      run: echo "build=${{ runner.os }}-llvm-${{ steps.download.outputs.hash }}" >> $env:GITHUB_OUTPUT
+      run: echo "dist=${{ runner.os }}-llvm-${{ steps.download.outputs.hash }}" >> $env:GITHUB_OUTPUT
       id: cache-keys
-    - name: Restore build files
+    - name: Check cached artifacts
       uses: actions/cache/restore@v3
       with:
-        path: build
-        key: ${{ steps.cache-keys.outputs.build }}
+        path: lib/llvm
+        key: ${{ steps.cache-keys.outputs.dist }}
+        lookup-only: true
+      id: cache
     - name: Run CMake
-      run: cmake --install-prefix ${{ github.workspace }}/dist -Wno-dev -DLLVM_ENABLE_ZSTD:BOOL=OFF -DLLVM_APPEND_VC_REV:BOOL=OFF -DLLVM_TARGETS_TO_BUILD:STRING=X86 -B build llvm
+      run: cmake --install-prefix ${{ github.workspace }}/lib/llvm -Wno-dev -DLLVM_ENABLE_ZSTD:BOOL=OFF -DLLVM_APPEND_VC_REV:BOOL=OFF -DLLVM_TARGETS_TO_BUILD:STRING=X86 -B build llvm
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
     - name: Build
       run: cmake --build build --config Release
-    - name: Cache build files
-      uses: actions/cache/save@v3
-      with:
-        path: build
-        key: ${{ steps.cache-keys.outputs.build }}-${{ github.run_id }}
-      if: startsWith(github.ref, 'refs/heads/')
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
     - name: Export artifacts
       run: cmake --install build --config Release
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v3
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+    - name: Cache artifacts
+      uses: actions/cache/save@v3
       with:
-        name: llvm
-        path: dist
+        path: lib/llvm
+        key: ${{ steps.cache-keys.outputs.dist }}
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
   build:
     name: Windows
     runs-on: windows-2022
@@ -49,28 +51,32 @@ jobs:
     - name: Checkout source
       uses: actions/checkout@v4
     - name: Download LLVM
-      uses: actions/download-artifact@v3
+      uses: actions/cache/restore@v3
       with:
-        name: llvm
         path: lib/llvm
+        key: ${{ needs.llvm.outputs.dist-key }}
+        fail-on-cache-miss: true
     - name: Generate cache keys
       run: |
         echo "cargo=${{ runner.os }}-cargo" >> $env:GITHUB_OUTPUT
-        echo "qt=${{ runner.os }}-qt" >> $env:GITHUB_OUTPUT
         echo "vulkan=${{ runner.os }}-vulkan-1.3.239.0" >> $env:GITHUB_OUTPUT
       id: cache-keys
+    - name: Install Qt
+      run: |
+        Invoke-WebRequest `
+          -Uri "https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_660/qt.qt6.660.win64_msvc2019_64/6.6.0-0-202310040911qtbase-Windows-Windows_10_22H2-MSVC2019-Windows-Windows_10_22H2-X86_64.7z" `
+          -OutFile qt-base.7z
+        Invoke-WebRequest `
+          -Uri "https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_660/qt.qt6.660.win64_msvc2019_64/6.6.0-0-202310040911qtsvg-Windows-Windows_10_22H2-MSVC2019-Windows-Windows_10_22H2-X86_64.7z" `
+          -OutFile qt-svg.7z
+        7z x qt-base.7z -oqt
+        7z x qt-svg.7z -oqt
+        echo "CMAKE_PREFIX_PATH=qt\6.6.0\msvc2019_64" >> $env:GITHUB_ENV
     - name: Restore Cargo home
       uses: actions/cache/restore@v3
       with:
         path: ~/.cargo
         key: ${{ steps.cache-keys.outputs.cargo }}
-    - name: Install Qt
-      uses: jurplel/install-qt-action@v4
-      with:
-        version: 6.*
-        aqtversion: '==3.1.*'
-        cache: true
-        cache-key-prefix: ${{ steps.cache-keys.outputs.qt }}
     - name: Restore Vulkan SDK
       uses: actions/cache/restore@v3
       with:
