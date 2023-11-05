@@ -13,7 +13,6 @@ jobs:
     - name: Generate cache keys
       run: |
         echo "cargo=${{ runner.os }}-cargo" >> $GITHUB_OUTPUT
-        echo "qt=${{ runner.os }}-qt" >> $GITHUB_OUTPUT
         echo "build=${{ runner.os }}-build-files-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake', 'CMakePresets.json') }}" >> $GITHUB_OUTPUT
       id: cache-keys
     - name: Restore Cargo home
@@ -21,13 +20,6 @@ jobs:
       with:
         path: ~/.cargo
         key: ${{ steps.cache-keys.outputs.cargo }}
-    - name: Install Qt
-      uses: jurplel/install-qt-action@v4
-      with:
-        version: 6.*
-        aqtversion: '==3.1.*'
-        cache: true
-        cache-key-prefix: ${{ steps.cache-keys.outputs.qt }}
     - name: Restore build files
       uses: actions/cache/restore@v3
       with:
@@ -35,6 +27,14 @@ jobs:
           build
           src/target
         key: ${{ steps.cache-keys.outputs.build }}
+    - name: Install Qt
+      run: |
+        brew install p7zip
+        curl -Lo qt-base.7z https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_660/qt.qt6.660.clang_64/6.6.0-0-202310040910qtbase-MacOS-MacOS_12-Clang-MacOS-MacOS_12-X86_64-ARM64.7z
+        curl -Lo qt-svg.7z https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_660/qt.qt6.660.clang_64/6.6.0-0-202310040910qtsvg-MacOS-MacOS_12-Clang-MacOS-MacOS_12-X86_64-ARM64.7z
+        7za x qt-base.7z -oqt
+        7za x qt-svg.7z -oqt
+        echo "CMAKE_PREFIX_PATH=qt/6.6.0/macos" >> $GITHUB_ENV
     - name: Run CMake
       run: cmake --preset mac-release .
     - name: Build
