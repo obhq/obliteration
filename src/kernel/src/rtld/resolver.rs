@@ -271,6 +271,7 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
                     || ((ty == Symbol::STT_NOTYPE
                         || ty == Symbol::STT_OBJECT
                         || ty == Symbol::STT_FUNC
+                        || ty == Symbol::STT_COMMON
                         || ty == Symbol::STT_ENTRY)
                         && sym.value() != 0))
                     && (sym.shndx() != 0
@@ -383,7 +384,7 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
         let ty = sym.ty();
 
         match ty {
-            Symbol::STT_NOTYPE | Symbol::STT_OBJECT | Symbol::STT_FUNC | Symbol::STT_ENTRY => {
+            Symbol::STT_NOTYPE | Symbol::STT_OBJECT | Symbol::STT_FUNC | Symbol::STT_COMMON | Symbol::STT_ENTRY => {
                 if sym.value() == 0 {
                     return false;
                 }
