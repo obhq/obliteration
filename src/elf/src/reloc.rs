@@ -46,10 +46,16 @@ pub struct Relocation {
 impl Relocation {
     pub const R_X86_64_NONE: u32 = 0;
     pub const R_X86_64_64: u32 = 1;
+    pub const R_X86_64_PC32: u32 = 2;
+    pub const R_X86_64_COPY: u32 = 5;
     pub const R_X86_64_GLOB_DAT: u32 = 6;
     pub const R_X86_64_JUMP_SLOT: u32 = 7;
     pub const R_X86_64_RELATIVE: u32 = 8;
     pub const R_X86_64_DTPMOD64: u32 = 16;
+    pub const R_X86_64_DTPOFF64: u32 = 17;
+    pub const R_X86_64_TPOFF64: u32 = 18;
+    pub const R_X86_64_DTPOFF32: u32 = 21;
+    pub const R_X86_64_TPOFF32: u32 = 23;
 
     pub fn offset(&self) -> usize {
         self.offset
