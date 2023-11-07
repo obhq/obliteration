@@ -78,6 +78,12 @@ impl<T> From<SysArg> for *mut T {
     }
 }
 
+impl From<SysArg> for i64 {
+    fn from(v: SysArg) -> Self {
+        v.0 as _
+    }
+}
+
 impl From<SysArg> for u64 {
     fn from(v: SysArg) -> Self {
         v.0 as _
