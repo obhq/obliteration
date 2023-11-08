@@ -211,7 +211,7 @@ impl<I: Read + Seek> Elf<I> {
                 ProgramType::PT_TLS => elf.process_tls(i, &p)?,
                 ProgramType::PT_SCE_DYNLIBDATA => elf.process_dyndata(i, &p)?,
                 ProgramType::PT_SCE_PROCPARAM => elf.proc_param = Some(i),
-                ProgramType::PT_SCE_MODULE_PARAM => elf.mod_param = Some(i),
+                ProgramType::PT_SCE_MODULEPARAM => elf.mod_param = Some(i),
                 ProgramType::PT_SCE_COMMENT => elf.process_comment(i, &p)?,
                 ProgramType::PT_GNU_EH_FRAME => elf.process_eh(i, &p)?,
                 _ => {}

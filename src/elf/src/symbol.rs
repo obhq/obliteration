@@ -71,11 +71,23 @@ impl Symbol {
     /// Symbol refers to a section.
     pub const STT_SECTION: u8 = 3;
 
+    /// Symbol gives the name of the source file associated with the object file.
+    pub const STT_FILE: u8 = 4;
+
+    /// Symbol lavels an uninitialized common block (Treated same as STT_OBJECT)
+    pub const STT_COMMON: u8 = 5;
+
     /// Thread local data object.
     pub const STT_TLS: u8 = 6;
 
+    /// Lowest operating system-specific symbol type
+    pub const STT_LOOS: u8 = 10;
+
     /// PS4 specific.
     pub const STT_ENTRY: u8 = 11;
+
+    /// Highest operating system-specific symbol type
+    pub const STT_HIOS: u8 = 12;
 
     /// Local symbol, not visible outside obj file containing def.
     pub const STB_LOCAL: u8 = 0;
