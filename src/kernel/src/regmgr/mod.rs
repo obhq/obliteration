@@ -157,12 +157,20 @@ impl RegMgr {
     }
 
     /// See `sceRegMgrGetInt` on the PS4 for a reference.
-    fn get_int(&self, key: RegKey) -> Result<i32, RegError> {
-        let mut buf = [0u8; 4];
+    fn get_int(&self, key: RegKey, out: &mut i32) -> Result<i32, RegError> {
+        let mut buf = [0u8; 4];;
 
-        self.get_value(key, &mut buf)?;
+        if let Err(e) = self.check_param(key, 0, buf.len()) {
+            todo!("sceRegMgrGetInt with regMgrComCheckParam({key}, 0, 4) = Err({e})");
+        }
 
-        Ok(i32::from_le_bytes(buf))
+        match self.get_value(key, &mut buf)? {
+            Ok(v) => {
+                *out = i32::from_le_bytes(buf);
+                Ok(v)
+            },
+            Err(e) => todo!("sceRegMgrGetInt({key}) with regMgrComSetReg() = {e}"),
+        }
     }
 
     /// See `sceRegMgrSetInt` on the PS4 for a reference.
@@ -325,9 +333,14 @@ impl RegMgr {
             | RegKey::DEVENV_TOOL_TRC_NOTIFY
             | RegKey::DEVENT_TOOL_USE_DEFAULT_LIB
             | RegKey::DEVENV_TOOL_SYS_PRX_PRELOAD => {
-                let val = self.get_int(key).unwrap();
+                let mut out = 0;
+                let ret = self.get_int(key, &mut out)?;
 
-                Ok(val.into())
+                if ret == 0 {
+                    Ok(val.into())
+                } else {
+                    Err(SysErr::Raw(ret))
+                }
             }
             _ => Err(SysErr::Raw(EINVAL)),
         }
