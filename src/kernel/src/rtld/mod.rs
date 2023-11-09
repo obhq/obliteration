@@ -162,6 +162,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         sys.register(591, &ld, Self::sys_dynlib_dlsym);
         sys.register(592, &ld, Self::sys_dynlib_get_list);
+        sys.register(596, &ld, Self::sys_dynlib_do_copy_relocations);
         sys.register(598, &ld, Self::sys_dynlib_get_proc_param);
         sys.register(599, &ld, Self::sys_dynlib_process_needed_and_relocate);
         sys.register(608, &ld, Self::sys_dynlib_get_info_ex);
@@ -428,6 +429,20 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         info!("Copied {} module IDs for dynamic linking.", list.len());
 
         Ok(SysOut::ZERO)
+    }
+
+    fn sys_dynlib_do_copy_relocations(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        if let Some(info) = self.app.file_info() {
+            for reloc in info.relocs() {
+                if reloc.ty() == Relocation::R_X86_64_COPY {
+                    return Err(SysErr::Raw(EINVAL));
+                }
+            }
+
+            Ok(SysOut::ZERO)
+        } else {
+            Err(SysErr::Raw(EPERM))
+        }
     }
 
     fn sys_dynlib_get_proc_param(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
