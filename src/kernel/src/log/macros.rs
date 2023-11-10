@@ -42,6 +42,7 @@ macro_rules! info {
 #[macro_export]
 macro_rules! warn {
     ($err:ident, $($arg:tt)*) => {{
+        #[allow(unused_imports)]
         use std::error::Error;
         use std::io::Write;
         use termcolor::{Color, ColorSpec};
