@@ -158,7 +158,7 @@ impl RegMgr {
 
     /// See `sceRegMgrGetInt` on the PS4 for a reference.
     fn get_int(&self, key: RegKey, out: &mut i32) -> Result<i32, RegError> {
-        let mut buf = [0u8; 4];;
+        let mut buf = [0u8; 4];
 
         if let Err(e) = self.check_param(key, 0, buf.len()) {
             todo!("sceRegMgrGetInt with regMgrComCheckParam({key}, 0, 4) = Err({e})");
@@ -168,7 +168,7 @@ impl RegMgr {
             Ok(v) => {
                 *out = i32::from_le_bytes(buf);
                 Ok(v)
-            },
+            }
             Err(e) => todo!("sceRegMgrGetInt({key}) with regMgrComSetReg() = {e}"),
         }
     }
