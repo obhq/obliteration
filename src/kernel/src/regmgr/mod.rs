@@ -1,10 +1,12 @@
 pub use self::key::*;
 
+use crate::errno::EINVAL;
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::Ucred;
 use crate::{info, warn};
 use std::fmt::{Display, Formatter};
+use std::num::NonZeroI32;
 use std::ptr::read;
 use std::sync::Arc;
 use thiserror::Error;
@@ -19,6 +21,7 @@ impl RegMgr {
         let mgr = Arc::new(Self {});
 
         sys.register(532, &mgr, Self::sys_regmgr_call);
+        sys.register(605, &mgr, Self::sys_workaround8849);
 
         mgr
     }
@@ -151,6 +154,23 @@ impl RegMgr {
                     }
                 }
             }
+        }
+    }
+
+    /// See `sceRegMgrGetInt` on the PS4 for a reference.
+    fn get_int(&self, key: RegKey, out: &mut i32) -> Result<i32, RegError> {
+        let mut buf = [0u8; 4];
+
+        if let Err(e) = self.check_param(key, 0, buf.len()) {
+            todo!("sceRegMgrGetInt with regMgrComCheckParam({key}, 0, 4) = Err({e})");
+        }
+
+        match self.get_value(key, &mut buf) {
+            Ok(v) => {
+                *out = i32::from_le_bytes(buf);
+                Ok(v)
+            }
+            Err(e) => todo!("sceRegMgrGetInt({key}) with regMgrComSetReg() = {e}"),
         }
     }
 
@@ -298,6 +318,33 @@ impl RegMgr {
         }
 
         None
+    }
+
+    fn sys_workaround8849(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let key = {
+            let arg: usize = i.args[0].into();
+            let key: u32 = arg.try_into().unwrap();
+
+            RegKey::new(key)
+        };
+
+        match key {
+            RegKey::NP_DEBUG
+            | RegKey::BROWSER_DEBUG_NOTIFICATION
+            | RegKey::DEVENV_TOOL_TRC_NOTIFY
+            | RegKey::DEVENT_TOOL_USE_DEFAULT_LIB
+            | RegKey::DEVENV_TOOL_SYS_PRX_PRELOAD => {
+                let mut out = 0;
+                let ret = self.get_int(key, &mut out).unwrap();
+
+                if ret == 0 {
+                    Ok(out.into())
+                } else {
+                    Err(SysErr::Raw(unsafe { NonZeroI32::new_unchecked(ret) }))
+                }
+            }
+            _ => Err(SysErr::Raw(EINVAL)),
+        }
     }
 }
 

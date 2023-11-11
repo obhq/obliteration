@@ -17,7 +17,12 @@ impl RegKey {
     pub const AUDIOOUT_CONNECTOR_TYPE: Self = Self(0x0B060000);
     pub const AUDIOOUT_CODEC: Self = Self(0x0B070000);
     pub const NET_WIFI_FREQ_BAND: Self = Self(0x141E0500);
+    pub const NP_DEBUG: Self = Self(0x19810000);
+    pub const BROWSER_DEBUG_NOTIFICATION: Self = Self(0x3CC80700);
     pub const DEVENV_TOOL_BOOT_PARAM: Self = Self(0x78020300);
+    pub const DEVENV_TOOL_TRC_NOTIFY: Self = Self(0x78026400);
+    pub const DEVENT_TOOL_USE_DEFAULT_LIB: Self = Self(0x78028300);
+    pub const DEVENV_TOOL_SYS_PRX_PRELOAD: Self = Self(0x78028A00);
     pub const DEVENV_TOOL_GAME_INTMEM_DBG: Self = Self(0x7802BF00);
 
     pub(super) const fn new(v: u32) -> Self {
