@@ -340,7 +340,7 @@ impl RegMgr {
                 if ret == 0 {
                     Ok(out.into())
                 } else {
-                    Err(SysErr::Raw(unsafe { NonZeroI32::new_unchecked(ret)} ))
+                    Err(SysErr::Raw(unsafe { NonZeroI32::new_unchecked(ret) }))
                 }
             }
             _ => Err(SysErr::Raw(EINVAL)),
