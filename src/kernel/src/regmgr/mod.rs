@@ -6,6 +6,7 @@ use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::Ucred;
 use crate::{info, warn};
 use std::fmt::{Display, Formatter};
+use std::num::NonZeroI32;
 use std::ptr::read;
 use std::sync::Arc;
 use thiserror::Error;
@@ -164,7 +165,7 @@ impl RegMgr {
             todo!("sceRegMgrGetInt with regMgrComCheckParam({key}, 0, 4) = Err({e})");
         }
 
-        match self.get_value(key, &mut buf)? {
+        match self.get_value(key, &mut buf) {
             Ok(v) => {
                 *out = i32::from_le_bytes(buf);
                 Ok(v)
@@ -334,12 +335,12 @@ impl RegMgr {
             | RegKey::DEVENT_TOOL_USE_DEFAULT_LIB
             | RegKey::DEVENV_TOOL_SYS_PRX_PRELOAD => {
                 let mut out = 0;
-                let ret = self.get_int(key, &mut out)?;
+                let ret = self.get_int(key, &mut out).unwrap();
 
                 if ret == 0 {
-                    Ok(val.into())
+                    Ok(out.into())
                 } else {
-                    Err(SysErr::Raw(ret))
+                    Err(SysErr::Raw(unsafe { NonZeroI32::new_unchecked(ret)} ))
                 }
             }
             _ => Err(SysErr::Raw(EINVAL)),
