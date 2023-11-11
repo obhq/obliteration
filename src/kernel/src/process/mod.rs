@@ -1,4 +1,5 @@
 pub use self::appinfo::*;
+pub use self::cpuset::*;
 pub use self::file::*;
 pub use self::group::*;
 pub use self::rlimit::*;
@@ -6,7 +7,7 @@ pub use self::session::*;
 pub use self::signal::*;
 pub use self::thread::*;
 
-use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ESRCH};
+use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ERANGE, ESRCH};
 use crate::idt::IdTable;
 use crate::info;
 use crate::signal::{
@@ -27,6 +28,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 mod appinfo;
+mod cpuset;
 mod file;
 mod group;
 mod rlimit;
@@ -51,7 +53,7 @@ pub struct VProc {
     objects: GroupMutex<IdTable<Arc<dyn Any + Send + Sync>>>,
     app_info: AppInfo,
     ptc: u64,
-    uptc: AtomicPtr<u8>, // Use a unit type for minimum alignment.
+    uptc: AtomicPtr<u8>,
     mtxg: Arc<MutexGroup>,
 }
 
@@ -63,7 +65,7 @@ impl VProc {
         let vp = Arc::new(Self {
             id: Self::new_id(),
             threads: mg.new_member(Vec::new()),
-            cred: Ucred::new(AuthInfo::EXE.clone()),
+            cred: Ucred::new(AuthInfo::SYS_CORE.clone()),
             group: mg.new_member(None),
             sigacts: mg.new_member(SignalActs::new()),
             files: VProcFiles::new(&mg),
@@ -82,6 +84,7 @@ impl VProc {
         sys.register(416, &vp, Self::sys_sigaction);
         sys.register(432, &vp, Self::sys_thr_self);
         sys.register(466, &vp, Self::sys_rtprio_thread);
+        sys.register(487, &vp, Self::sys_cpuset_getaffinity);
         sys.register(557, &vp, Self::sys_namedobj_create);
         sys.register(585, &vp, Self::sys_is_in_sandbox);
         sys.register(587, &vp, Self::sys_get_authinfo);
@@ -146,7 +149,7 @@ impl VProc {
         let mut threads = self.threads.write();
 
         // TODO: Check how ucred is constructed for a thread.
-        let cred = Ucred::new(AuthInfo::EXE.clone());
+        let cred = Ucred::new(AuthInfo::SYS_CORE.clone());
         let td = Arc::new(VThread::new(Self::new_id(), cred, &self.mtxg));
         let active = Box::new(ActiveThread {
             proc: self.clone(),
@@ -417,6 +420,76 @@ impl VProc {
         }
 
         Ok(SysOut::ZERO)
+    }
+
+    fn sys_cpuset_getaffinity(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        // Get arguments.
+        let level: i32 = i.args[0].try_into().unwrap();
+        let which: i32 = i.args[1].try_into().unwrap();
+        let id: i64 = i.args[2].into();
+        let cpusetsize: usize = i.args[3].into();
+        let mask: *mut u8 = i.args[4].into();
+
+        // TODO: Refactor this for readability.
+        if cpusetsize.wrapping_sub(8) > 8 {
+            return Err(SysErr::Raw(ERANGE));
+        }
+
+        let ttd = self.cpuset_which(which, id)?;
+        let mut buf = vec![0u8; cpusetsize];
+
+        match level {
+            CPU_LEVEL_WHICH => match which {
+                CPU_WHICH_TID => {
+                    let v = ttd.cpuset().mask().bits[0].to_ne_bytes();
+                    buf[..v.len()].copy_from_slice(&v);
+                }
+                v => todo!("sys_cpuset_getaffinity with which = {v}"),
+            },
+            v => todo!("sys_cpuset_getaffinity with level = {v}"),
+        }
+
+        // TODO: What is this?
+        let x = u32::from_ne_bytes(buf[..4].try_into().unwrap());
+        let y = (x >> 1 & 0x55) + (x & 0x55) * 2;
+        let z = (y >> 2 & 0xfffffff3) + (y & 0x33) * 4;
+
+        unsafe {
+            std::ptr::write_unaligned::<u64>(
+                buf.as_mut_ptr() as _,
+                (z >> 4 | (z & 0xf) << 4) as u64,
+            );
+
+            std::ptr::copy_nonoverlapping(buf.as_ptr(), mask, cpusetsize);
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
+    /// See `cpuset_which` on the PS4 for a reference.
+    fn cpuset_which(&self, which: i32, id: i64) -> Result<Arc<VThread>, SysErr> {
+        let td = match which {
+            CPU_WHICH_TID => {
+                if id == -1 {
+                    todo!("cpuset_which with id = -1");
+                } else {
+                    let threads = self.threads.read();
+                    let td = threads.iter().find(|t| t.id().get() == id as i32).cloned();
+
+                    if td.is_none() {
+                        return Err(SysErr::Raw(ESRCH));
+                    }
+
+                    td
+                }
+            }
+            v => todo!("cpuset_which with which = {v}"),
+        };
+
+        match td {
+            Some(v) => Ok(v),
+            None => todo!("cpuset_which with td = NULL"),
+        }
     }
 
     // TODO: This should not be here.
