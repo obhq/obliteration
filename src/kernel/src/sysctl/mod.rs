@@ -23,8 +23,13 @@ impl Sysctl {
     pub const CTL_SYSCTL: i32 = 0;
     pub const CTL_KERN: i32 = 1;
     pub const CTL_VM: i32 = 2;
+    pub const CTL_VFS: i32 = 3;
+    pub const CTL_NET: i32 = 4;
     pub const CTL_DEBUG: i32 = 5;
     pub const CTL_HW: i32 = 6;
+    pub const CTL_MACHDEP: i32 = 7;
+    pub const CTL_USER: i32 = 8;
+    pub const CTL_P1003_1B: i32 = 9;
 
     pub const SYSCTL_NAME2OID: i32 = 3;
 
@@ -32,6 +37,7 @@ impl Sysctl {
     pub const KERN_USRSTACK: i32 = 33;
     pub const KERN_ARND: i32 = 37;
     pub const KERN_PROC_APPINFO: i32 = 35;
+    pub const KERN_PROC_SANITIZER: i32 = 41;
 
     pub const VM_TOTAL: i32 = 1;
 
@@ -318,6 +324,17 @@ impl Sysctl {
         Ok(())
     }
 
+    fn kern_proc_sanitizer(
+        &self,
+        _: &'static Oid,
+        _: &Arg,
+        _: usize,
+        _: &mut SysctlReq,
+    ) -> Result<(), SysErr> {
+        //TODO: actually implement this
+        Err(SysErr::Raw(ENOENT))
+    }
+
     fn kern_proc_ptc(
         &self,
         _: &'static Oid,
@@ -393,7 +410,7 @@ impl Sysctl {
 }
 
 /// An implementation of `sysctl_req` structure.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SysctlReq<'a> {
     pub old: Option<&'a mut [u8]>,
     pub oldidx: usize,
@@ -468,6 +485,7 @@ struct Oid {
     enabled: bool,
 }
 
+#[derive(Debug)]
 enum Arg<'a> {
     Name(&'a [i32]),
     Static(Option<&'static (dyn Any + Send + Sync)>),
@@ -478,6 +496,41 @@ type Handler = fn(&Sysctl, &'static Oid, &Arg, usize, &mut SysctlReq) -> Result<
 static CHILDREN: OidList = OidList {
     first: Some(&SYSCTL),
 };
+
+/// CHILDREN
+/// └─── (0) SYSCTL
+///     └─── (0.3) SYSCTL_NAME2OID
+///     └─── ...
+/// └─── (1) KERN
+///     └─── (1.14) KERN_PROC
+///         └─── (1.14.35) KERN_PROC_APPINFO
+///         └─── (1.13.43) KERN_PROC_PTC
+///         └─── ...
+///     └─── (1.33) KERN_USRSTACK
+///     └─── (1.37) KERN_ARANDOM
+///     └─── (1.42) KERN_SCHED
+///         └─── (1.42.0x4E4) KERN_SCHED_CPUSETSIZE
+///     └─── (1.0x485) KERN_SMP
+///         └─── (1.0x485.0x48A) KERN_SMP_CPUS
+///     └─── ...
+/// └─── (2) VM
+///     └─── ...
+/// └─── (3) VFS
+///     └─── ...
+/// └─── (4) NET
+///     └─── ...
+/// └─── (5) DEBUG
+///     └─── ...
+/// └─── (6) HW
+///     └─── ...
+///     └─── (1.6.7) HW_PAGESIZE
+///     └─── ...
+/// └─── (7) MACHDEP
+///     └─── ...
+/// └─── (8) USER
+///     └─── ...
+/// └─── (9) P1003_1B
+///     └─── ...
 
 static SYSCTL: Oid = Oid {
     parent: &CHILDREN,
@@ -549,7 +602,7 @@ static KERN_PROC_CHILDREN: OidList = OidList {
 
 static KERN_PROC_APPINFO: Oid = Oid {
     parent: &KERN_PROC_CHILDREN,
-    link: Some(&KERN_PROC_PTC), // TODO: Use a proper value.
+    link: Some(&KERN_PROC_SANITIZER), // TODO: Use a proper value.
     number: Sysctl::KERN_PROC_APPINFO,
     kind: 0xC0040001,
     arg1: None, // TODO: This value on the PS4 is not null.
@@ -558,6 +611,20 @@ static KERN_PROC_APPINFO: Oid = Oid {
     handler: Some(Sysctl::kern_proc_appinfo),
     fmt: "N",
     descr: "Application information",
+    enabled: true,
+};
+
+static KERN_PROC_SANITIZER: Oid = Oid {
+    parent: &KERN_PROC_CHILDREN,
+    link: Some(&KERN_PROC_PTC), // TODO: Use a proper value.
+    number: Sysctl::KERN_PROC_SANITIZER,
+    kind: 0x80040001,
+    arg1: None, // TODO: This value on the PS4 is not null.
+    arg2: 0,
+    name: "sanitizer",
+    handler: Some(Sysctl::kern_proc_sanitizer),
+    fmt: "N",
+    descr: "Sanitizing mode",
     enabled: true,
 };
 
