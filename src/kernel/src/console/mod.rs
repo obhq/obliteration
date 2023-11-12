@@ -20,11 +20,11 @@ impl Console {
 impl VFileOps for Console {
     fn ioctl(
         &self,
-        file: &VFile,
-        com: u64,
-        data: &[u8],
-        cred: &Ucred,
-        td: &VThread,
+        _file: &VFile,
+        _com: u64,
+        _data: &[u8],
+        _cred: &Ucred,
+        _td: &VThread,
     ) -> Result<(), Box<dyn Errno>> {
         // TODO: Implement this.
         Ok(())

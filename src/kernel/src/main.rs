@@ -93,7 +93,7 @@ fn main() -> ExitCode {
 
     // Begin Discord Rich Presence after successful basic init.
     // Keep client active by storing in variable.
-    let _client = discord_presence::rich_presence(&args.game.clone());
+    let _client = discord_presence::rich_presence(&args.game);
 
     // Show basic infomation.
     let mut log = info!();
@@ -330,20 +330,9 @@ struct Args {
     execution_engine: Option<ExecutionEngine>,
 }
 
-#[derive(Clone, ValueEnum, Deserialize)]
+#[derive(Clone, ValueEnum, Deserialize, Default)]
 enum ExecutionEngine {
+    #[default]
     Native,
     Llvm,
-}
-
-impl Default for ExecutionEngine {
-    #[cfg(target_arch = "x86_64")]
-    fn default() -> Self {
-        ExecutionEngine::Native
-    }
-
-    #[cfg(not(target_arch = "x86_64"))]
-    fn default() -> Self {
-        ExecutionEngine::Llvm
-    }
 }

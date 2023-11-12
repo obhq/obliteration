@@ -252,7 +252,7 @@ impl RegMgr {
         };
 
         if entry.len > buf.len() {
-            return Err(RegError::V800d0208);
+            Err(RegError::V800d0208)
         } else if entry.unk5 == 2 {
             match entry.unk6 {
                 16 | 2 => todo!("regMgrComGetReg({key}) with unk6 = 16 | 2"),
@@ -332,7 +332,7 @@ impl RegMgr {
             RegKey::NP_DEBUG
             | RegKey::BROWSER_DEBUG_NOTIFICATION
             | RegKey::DEVENV_TOOL_TRC_NOTIFY
-            | RegKey::DEVENT_TOOL_USE_DEFAULT_LIB
+            | RegKey::DEVENV_TOOL_USE_DEFAULT_LIB
             | RegKey::DEVENV_TOOL_SYS_PRX_PRELOAD => {
                 let mut out = 0;
                 let ret = self.get_int(key, &mut out).unwrap();

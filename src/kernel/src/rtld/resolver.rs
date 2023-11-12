@@ -205,7 +205,7 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
     /// See `symlook_obj` on the PS4 for a reference.
     pub fn resolve_from_module(
         &self,
-        refmod: &'a Arc<Module<E>>,
+        _refmod: &'a Arc<Module<E>>,
         name: Option<&str>,
         decoded_name: Option<&str>,
         symmod: Option<&str>,
