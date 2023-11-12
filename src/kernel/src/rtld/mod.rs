@@ -3,6 +3,7 @@ pub use self::module::*;
 
 use self::resolver::{ResolveFlags, SymbolResolver};
 use crate::ee::ExecutionEngine;
+use crate::errno::ENOSYS;
 use crate::errno::{Errno, EINVAL, ENOEXEC, ENOMEM, EPERM, ESRCH};
 use crate::fs::{Fs, FsError, FsItem, VPath, VPathBuf};
 use crate::info;
@@ -162,10 +163,13 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         sys.register(591, &ld, Self::sys_dynlib_dlsym);
         sys.register(592, &ld, Self::sys_dynlib_get_list);
+        sys.register(594, &ld, Self::sys_dynlib_load_prx);
+        sys.register(595, &ld, Self::sys_dynlib_unload_prx);
         sys.register(596, &ld, Self::sys_dynlib_do_copy_relocations);
         sys.register(598, &ld, Self::sys_dynlib_get_proc_param);
         sys.register(599, &ld, Self::sys_dynlib_process_needed_and_relocate);
         sys.register(608, &ld, Self::sys_dynlib_get_info_ex);
+        sys.register(649, &ld, Self::sys_dynlib_get_obj_member);
 
         Ok(ld)
     }
@@ -429,6 +433,32 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         info!("Copied {} module IDs for dynamic linking.", list.len());
 
         Ok(SysOut::ZERO)
+    }
+
+    fn sys_dynlib_load_prx(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let libname = unsafe { i.args[0].to_str(1024) }?.unwrap();
+        let args: usize = i.args[1].into();
+        let p_id: *mut u32 = i.args[2].into();
+
+        if self.app.file_info().is_none() {
+            return Err(SysErr::Raw(EPERM));
+        }
+
+        //TODO implement the rest of this function
+
+        let vpath = VPath::new(libname).unwrap();
+        let module = self
+            .load(&vpath, false)
+            //TODO properly handle this error
+            .expect("Couldn't load module");
+
+        unsafe { *p_id = module.id() };
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn sys_dynlib_unload_prx(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        todo!()
     }
 
     fn sys_dynlib_do_copy_relocations(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -814,6 +844,11 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         print(e);
 
         Ok(SysOut::ZERO)
+    }
+
+    fn sys_dynlib_get_obj_member(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        //TODO actually implement this
+        Err(SysErr::Raw(ENOSYS))
     }
 }
 
