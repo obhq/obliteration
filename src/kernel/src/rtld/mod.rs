@@ -866,7 +866,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             //The PS4 doesn't seem to check if the ptr is null
             //TODO implement branches
             *p_out = match ty {
-                _ => return Err(SysErr::Raw(EINVAL))
+                _ => return Err(SysErr::Raw(EINVAL)),
             }
         };
 
