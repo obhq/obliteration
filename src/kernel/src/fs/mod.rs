@@ -33,6 +33,9 @@ pub struct Fs {
     app: VPathBuf,
 }
 
+//Represents a file descriptor
+pub type Fd = i32;
+
 impl Fs {
     pub fn new<S, G>(system: S, game: G, vp: &Arc<VProc>, syscalls: &mut Syscalls) -> Arc<Self>
     where
@@ -106,6 +109,7 @@ impl Fs {
             app,
         });
 
+        syscalls.register(4, &fs, Self::sys_write);
         syscalls.register(5, &fs, Self::sys_open);
         syscalls.register(54, &fs, Self::sys_ioctl);
         syscalls.register(56, &fs, Self::sys_revoke);
@@ -137,6 +141,16 @@ impl Fs {
 
     pub fn revoke<P: Into<VPathBuf>>(&self, path: P) {
         // TODO: Implement this.
+    }
+
+    fn sys_write(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let _fd: Fd = i.args[0].try_into().unwrap();
+        let _data: *const u8 = i.args[1].into();
+        let _len: usize = i.args[2].try_into().unwrap();
+
+        //TODO: implement this
+
+        Ok(SysOut::ZERO)
     }
 
     fn sys_open(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -190,7 +204,7 @@ impl Fs {
         const IOC_IN: u64 = 0x80000000;
         const IOCPARM_MASK: u64 = 0x1FFF;
 
-        let fd: i32 = i.args[0].try_into().unwrap();
+        let fd: Fd = i.args[0].try_into().unwrap();
         let mut com: u64 = i.args[1].into();
         let data: *const u8 = i.args[2].into();
 
