@@ -15,7 +15,7 @@ pub struct SysIn<'a> {
 
 /// An argument of the syscall.
 #[repr(transparent)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct SysArg(usize);
 
 impl SysArg {
@@ -105,6 +105,14 @@ impl TryFrom<SysArg> for i32 {
 }
 
 impl TryFrom<SysArg> for u32 {
+    type Error = TryFromIntError;
+
+    fn try_from(v: SysArg) -> Result<Self, Self::Error> {
+        v.0.try_into()
+    }
+}
+
+impl TryFrom<SysArg> for u8 {
     type Error = TryFromIntError;
 
     fn try_from(v: SysArg) -> Result<Self, Self::Error> {
