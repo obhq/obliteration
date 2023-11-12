@@ -58,18 +58,18 @@ impl ExecutionEngine for LlvmEngine {
     type SetupModuleErr = SetupModuleError;
     type GetFunctionErr = GetFunctionError;
 
-    fn set_syscalls(&self, _v: Syscalls) {
+    fn set_syscalls(&self, v: Syscalls) {
         todo!()
     }
 
-    fn setup_module(self: &Arc<Self>, _md: &mut Module<Self>) -> Result<(), Self::SetupModuleErr> {
+    fn setup_module(self: &Arc<Self>, md: &mut Module<Self>) -> Result<(), Self::SetupModuleErr> {
         todo!()
     }
 
     unsafe fn get_function(
         self: &Arc<Self>,
-        _md: &Arc<Module<Self>>,
-        _addr: usize,
+        md: &Arc<Module<Self>>,
+        addr: usize,
     ) -> Result<Arc<Self::RawFn>, Self::GetFunctionErr> {
         todo!()
     }
@@ -83,7 +83,7 @@ impl super::RawFn for RawFn {
         todo!()
     }
 
-    unsafe fn exec1<R, A>(&self, _a: A) -> R {
+    unsafe fn exec1<R, A>(&self, a: A) -> R {
         todo!()
     }
 }

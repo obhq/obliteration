@@ -330,9 +330,19 @@ struct Args {
     execution_engine: Option<ExecutionEngine>,
 }
 
-#[derive(Clone, ValueEnum, Deserialize, Default)]
+#[derive(Clone, ValueEnum, Deserialize)]
 enum ExecutionEngine {
-    #[default]
     Native,
     Llvm,
+}
+
+impl Default for ExecutionEngine {
+    #[cfg(target_arch = "x86_64")]
+    fn default() -> Self {
+        ExecutionEngine::Native
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    fn default() -> Self {
+        ExecutionEngine::Llvm
+    }
 }
