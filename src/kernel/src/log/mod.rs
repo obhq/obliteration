@@ -51,6 +51,8 @@ pub fn init() {
         }
 
         l.write(e);
+
+        loop {}
     }));
 }
 
