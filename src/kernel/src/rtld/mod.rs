@@ -375,7 +375,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         }
 
         // Get arguments.
-        let handle: u32 = i.args[0].try_into().unwrap();
+        let handle: ModuleHandle = i.args[0].try_into().unwrap();
         let name = unsafe { i.args[1].to_str(2560)?.unwrap() };
         let out: *mut usize = i.args[2].into();
 
@@ -728,7 +728,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
     fn sys_dynlib_get_info_ex(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
-        let handle: u32 = i.args[0].try_into().unwrap();
+        let handle: ModuleHandle = i.args[0].try_into().unwrap();
         let flags: u32 = i.args[1].try_into().unwrap();
         let info: *mut DynlibInfoEx = i.args[2].into();
 
@@ -847,8 +847,30 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
     }
 
     fn sys_dynlib_get_obj_member(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        //TODO actually implement this
-        Err(SysErr::Raw(ENOSYS))
+        let handle: ModuleHandle = i.args[0].try_into().unwrap();
+        let ty: u8 = i.args[1].try_into().unwrap();
+        let p_out: *mut usize = i.args[2].into();
+
+        if self.app.file_info().is_none() {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        let module = self
+            .list
+            .read()
+            .iter()
+            .find(|m| m.id() == handle)
+            .ok_or(SysErr::Raw(ESRCH))?;
+
+        unsafe {
+            //The PS4 doesn't seem to check if the ptr is null
+            //TODO implement branches
+            *p_out = match ty {
+                _ => return Err(SysErr::Raw(EINVAL))
+            }
+        };
+
+        Ok(SysOut::ZERO)
     }
 }
 
@@ -856,7 +878,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 struct DynlibInfoEx {
     size: u64,
     name: [u8; 256],
-    handle: u32,
+    handle: ModuleHandle,
     tlsindex: u32,
     tlsinit: usize,
     tlsinitsize: u32,

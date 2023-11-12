@@ -21,7 +21,7 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub struct Module<E: ExecutionEngine + ?Sized> {
     ee: Arc<E>,
-    id: u32,
+    id: ModuleHandle,
     init: Option<usize>,
     entry: Option<usize>,
     fini: Option<usize>,
@@ -47,6 +47,8 @@ pub struct Module<E: ExecutionEngine + ?Sized> {
     symbols: Vec<Symbol>,
 }
 
+pub type ModuleHandle = u32;
+
 impl<E: ExecutionEngine> Module<E> {
     pub(super) fn map<N: Into<String>>(
         mm: &Arc<MemoryManager>,
@@ -54,7 +56,7 @@ impl<E: ExecutionEngine> Module<E> {
         mut image: Elf<File>,
         base: usize,
         mem_name: N,
-        id: u32,
+        id: ModuleHandle,
         tls_index: u32,
         mtxg: &Arc<MutexGroup>,
     ) -> Result<Self, MapError> {
@@ -118,10 +120,12 @@ impl<E: ExecutionEngine> Module<E> {
                 size: p.memory_size(),
                 align: p.alignment(),
             });
+
         let proc_param = image
             .proc_param()
             .map(|i| image.program(i).unwrap())
             .map(|p| (base + p.addr(), p.file_size().try_into().unwrap()));
+
         let is_self = image.self_segments().is_some();
         let file_type = image.ty();
         let (path, programs, file_info) = image.into();
@@ -186,7 +190,7 @@ impl<E: ExecutionEngine> Module<E> {
         Ok(module)
     }
 
-    pub fn id(&self) -> u32 {
+    pub fn id(&self) -> ModuleHandle {
         self.id
     }
 
