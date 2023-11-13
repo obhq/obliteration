@@ -70,7 +70,7 @@ impl Sysctl {
         let newlen: usize = i.args[5].into();
 
         // Convert name to a slice.
-        let name = if namelen < 2 || namelen > 24 {
+        let name = if !(2..=24).contains(&namelen) {
             return Err(SysErr::Raw(EINVAL));
         } else if name.is_null() {
             return Err(SysErr::Raw(EFAULT));
@@ -229,7 +229,7 @@ impl Sysctl {
         }
 
         // Remove '.' at the end if present.
-        if name.chars().last().unwrap() == '.' {
+        if name.ends_with('.') {
             name.pop();
         }
 

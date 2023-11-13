@@ -39,14 +39,14 @@ pub fn rich_presence(game_path: &Path) -> Result<DiscordIpcClient, Box<dyn std::
         Ok(client) => client,
         Err(e) => {
             warn!(e, "Failed to create Discord IPC");
-            return Err(e.into());
+            return Err(e);
         }
     };
 
     // Attempt to have IPC connect to user's Discord, will fail if user doesn't have Discord running.
     if let Err(e) = client.connect() {
         warn!(e, "Failed to connect to Discord client");
-        return Err(e.into());
+        return Err(e);
     }
 
     // Get Timestamp of Kernel starting for Discord's "elapsed" counter.
@@ -70,7 +70,7 @@ pub fn rich_presence(game_path: &Path) -> Result<DiscordIpcClient, Box<dyn std::
     // If failing here, user's Discord most likely crashed or is offline.
     if let Err(e) = client.set_activity(payload) {
         warn!(e, "Failed to update Discord presence");
-        return Err(e.into());
+        return Err(e);
     }
     Ok(client)
 }
