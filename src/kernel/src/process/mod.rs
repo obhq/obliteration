@@ -243,7 +243,7 @@ impl VProc {
         // function succees.
         let vt = VThread::current();
         let mut mask = vt.sigmask_mut();
-        let prev = mask.clone();
+        let prev = *mask;
 
         // Update the mask.
         if let Some(mut set) = set {
@@ -410,8 +410,8 @@ impl VProc {
         } else if lwpid != 0 && lwpid != td.id().get() {
             return Err(SysErr::Raw(ESRCH));
         } else if function == RTP_LOOKUP {
-            (*rtp).ty = td.pri_class();
-            (*rtp).prio = match td.pri_class() & 0xfff7 {
+            rtp.ty = td.pri_class();
+            rtp.prio = match td.pri_class() & 0xfff7 {
                 2 | 3 | 4 => td.base_user_pri(),
                 _ => 0,
             };
