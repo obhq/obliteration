@@ -4,7 +4,7 @@ use crate::process::VThread;
 use crate::ucred::Ucred;
 use bitflags::bitflags;
 use std::fmt::{Debug, Display, Formatter};
-use std::ops::Deref;
+
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
@@ -26,7 +26,7 @@ impl VFile {
     }
 
     pub fn ops(&self) -> Option<&dyn VFileOps> {
-        self.ops.as_ref().map(|o| o.deref())
+        self.ops.as_deref()
     }
 
     pub fn set_ops(&mut self, v: Option<Box<dyn VFileOps>>) {

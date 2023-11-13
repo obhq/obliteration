@@ -3,6 +3,7 @@ pub use self::stack::*;
 
 use self::iter::StartFromMut;
 use self::storage::Storage;
+use crate::errno::EOPNOTSUPP;
 use crate::errno::{Errno, EINVAL, ENOMEM};
 use crate::process::VProc;
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
@@ -83,6 +84,8 @@ impl MemoryManager {
         // Register syscall handlers.
         let mm = Arc::new(mm);
 
+        syscalls.register(69, &mm, Self::sys_sbrk);
+        syscalls.register(70, &mm, Self::sys_sstk);
         syscalls.register(477, &mm, Self::sys_mmap);
         syscalls.register(588, &mm, Self::sys_mname);
 
@@ -512,6 +515,16 @@ impl MemoryManager {
         }
     }
 
+    fn sys_sbrk(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
+        // Return EOPNOTSUPP (Not yet implemented syscall)
+        Err(SysErr::Raw(EOPNOTSUPP))
+    }
+
+    fn sys_sstk(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
+        // Return EOPNOTSUPP (Not yet implemented syscall)
+        Err(SysErr::Raw(EOPNOTSUPP))
+    }
+
     fn sys_mmap(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let addr: usize = i.args[0].into();
@@ -524,8 +537,8 @@ impl MemoryManager {
         // Check if the request is a guard for main stack.
         if addr == self.stack.guard() {
             assert_eq!(len, MemoryManager::VIRTUAL_PAGE_SIZE);
-            assert_eq!(prot.is_empty(), true);
-            assert_eq!(flags.intersects(MappingFlags::MAP_ANON), true);
+            assert!(prot.is_empty());
+            assert!(flags.intersects(MappingFlags::MAP_ANON));
             assert_eq!(fd, -1);
             assert_eq!(pos, 0);
 
@@ -575,7 +588,7 @@ impl MemoryManager {
         );
 
         // PS4 does not check if vm_map_set_name is failed.
-        let len = (addr & 0x3fff) + len + 0x3fff & 0xffffffffffffc000;
+        let len = ((addr & 0x3fff) + len + 0x3fff) & 0xffffffffffffc000;
         let addr = (addr & 0xffffffffffffc000) as *mut u8;
 
         if let Err(e) = self.mname(addr, len, name) {

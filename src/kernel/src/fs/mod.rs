@@ -123,7 +123,7 @@ impl Fs {
         VFile::new(self)
     }
 
-    pub fn revoke<P: Into<VPathBuf>>(&self, path: P) {
+    pub fn revoke<P: Into<VPathBuf>>(&self, _path: P) {
         // TODO: Implement this.
     }
 
@@ -180,7 +180,7 @@ impl Fs {
 
         let fd: i32 = i.args[0].try_into().unwrap();
         let mut com: u64 = i.args[1].into();
-        let data: *const u8 = i.args[2].into();
+        let _data: *const u8 = i.args[2].into();
 
         if com > 0xffffffff {
             com &= 0xffffffff;

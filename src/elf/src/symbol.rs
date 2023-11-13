@@ -74,7 +74,7 @@ impl Symbol {
     /// Symbol gives the name of the source file associated with the object file.
     pub const STT_FILE: u8 = 4;
 
-    /// Symbol lavels an uninitialized common block (Treated same as STT_OBJECT)
+    /// Symbol labels an uninitialized common block (Treated same as STT_OBJECT)
     pub const STT_COMMON: u8 = 5;
 
     /// Thread local data object.
