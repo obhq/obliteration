@@ -11,7 +11,7 @@ path = "src/main.rs"
 bitflags = "2.1"
 byteorder = "1.4"
 clap = { version = "4.1", features = ["derive"] }
-discord-rich-presence = { git = "https://github.com/ultimaweapon/discord-rich-presence.git" }
+discord-rich-presence = "0.2"
 elf = { path = "../elf" }
 gmtx = { path = "../gmtx" }
 iced-x86 = { version = "1.18", features = ["code_asm"] }
