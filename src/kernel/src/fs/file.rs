@@ -62,7 +62,7 @@ pub trait VFileOps: Debug + Send + Sync + Display {
         data: &[u8],
         cred: &Ucred,
         td: &VThread,
-    ) -> Result<(), Box<dyn Errno>>;
+    ) -> Result<usize, Box<dyn Errno>>;
 
     fn ioctl(
         &self,

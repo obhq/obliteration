@@ -25,13 +25,13 @@ impl VFileOps for Stdout {
         data: &[u8],
         _cred: &Ucred,
         _td: &VThread,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn Errno>> {
         let stderr = io::stderr();
         let mut handle = stderr.lock();
 
-        handle.write_all(data).expect("Couldn't write to stderr.");
+        let ret = handle.write(data).expect("Couldn't write to stderr.");
 
-        Ok(())
+        Ok(ret)
     }
 
     fn ioctl(

@@ -149,9 +149,9 @@ impl Fs {
         let ops = file.ops().ok_or(SysErr::Raw(EBADF))?;
 
         let td = VThread::current();
-        ops.write(file.as_ref(), buf, td.cred(), td.as_ref())?;
+        let bytes_written = ops.write(file.as_ref(), buf, td.cred(), td.as_ref())?;
 
-        Ok(SysOut::ZERO)
+        Ok(bytes_written.into())
     }
 
     fn sys_open(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
