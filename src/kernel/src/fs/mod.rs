@@ -148,9 +148,7 @@ impl Fs {
         let _data: *const u8 = i.args[1].into();
         let _len: usize = i.args[2].try_into().unwrap();
 
-        //TODO: implement this
-
-        Ok(SysOut::ZERO)
+        todo!()
     }
 
     fn sys_open(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
