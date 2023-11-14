@@ -42,8 +42,7 @@ impl VFileOps for Stdout {
         _cred: &Ucred,
         _td: &VThread,
     ) -> Result<(), Box<dyn Errno>> {
-        // TODO: Implement this.
-        Ok(())
+        todo!()
     }
 }
 
