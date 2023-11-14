@@ -331,8 +331,7 @@ impl Sysctl {
         _: usize,
         _: &mut SysctlReq,
     ) -> Result<(), SysErr> {
-        //TODO: actually implement this
-        Err(SysErr::Raw(ENOENT))
+        todo!()
     }
 
     fn kern_proc_ptc(
