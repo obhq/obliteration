@@ -839,7 +839,6 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         Ok(SysOut::ZERO)
     }
-
 }
 
 #[repr(C)]
