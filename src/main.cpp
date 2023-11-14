@@ -8,13 +8,17 @@
 
 #include <cstdlib>
 
+#ifndef _WIN32
+#include <sys/resource.h>
+#endif
+
 int main(int argc, char *argv[])
 {
     // Setup application.
     QCoreApplication::setOrganizationName("OBHQ");
     QCoreApplication::setApplicationName("Obliteration");
 
-    // Dark Mode for Windows
+    // Dark Mode for Windows.
 #ifdef _WIN32
     QApplication::setStyle("Fusion");
 #endif
@@ -22,6 +26,26 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
 
     QGuiApplication::setWindowIcon(QIcon(":/resources/obliteration-icon.png"));
+
+    // Increase number of file descriptors to maximum allowed.
+#ifndef _WIN32
+    rlimit limit;
+
+    if (getrlimit(RLIMIT_NOFILE, &limit) == 0) {
+        if (limit.rlim_cur < limit.rlim_max) {
+            limit.rlim_cur = limit.rlim_max;
+
+            if (setrlimit(RLIMIT_NOFILE, &limit) < 0) {
+                QMessageBox::warning(
+                    nullptr,
+                    "Warning",
+                    "Failed to set file descriptor limit to maximum allowed.");
+            }
+        }
+    } else {
+        QMessageBox::warning(nullptr, "Warning", "Failed to get file descriptor limit.");
+    }
+#endif
 
     // Check if no any required settings.
     if (!hasRequiredUserSettings() || !isSystemInitialized()) {
