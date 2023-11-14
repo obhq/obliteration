@@ -14,18 +14,19 @@ use crate::sysctl::Sysctl;
 use clap::{Parser, ValueEnum};
 use llt::Thread;
 use macros::vpath;
+use param::Param;
 use serde::Deserialize;
 use std::fs::{create_dir_all, remove_dir_all, File};
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
+use std::time::SystemTime;
 
 mod arch;
 mod arnd;
 mod budget;
 mod console;
-mod discord_presence;
 mod ee;
 mod errno;
 mod fs;
@@ -91,9 +92,28 @@ fn main() -> ExitCode {
         }
     }
 
-    // Begin Discord Rich Presence after successful basic init.
-    // Keep client active by storing in variable.
-    let _client = discord_presence::rich_presence(&args.game);
+    // Get path to param.sfo.
+    let mut path = args.game.join("sce_sys");
+
+    path.push("param.sfo");
+
+    // Open param.sfo.
+    let param = match File::open(&path) {
+        Ok(v) => v,
+        Err(e) => {
+            error!(e, "Cannot open {}", path.display());
+            return ExitCode::FAILURE;
+        }
+    };
+
+    // Load param.sfo.
+    let param = match Param::read(param) {
+        Ok(v) => v,
+        Err(e) => {
+            error!(e, "Cannot read {}", path.display());
+            return ExitCode::FAILURE;
+        }
+    };
 
     // Show basic infomation.
     let mut log = info!();
@@ -105,6 +125,9 @@ fn main() -> ExitCode {
     if let Some(v) = &args.debug_dump {
         writeln!(log, "Debug dump directory: {}", v.display()).unwrap();
     }
+
+    writeln!(log, "Application Title   : {}", param.title()).unwrap();
+    writeln!(log, "Application ID      : {}", param.title_id()).unwrap();
 
     print(log);
 
@@ -155,6 +178,7 @@ fn main() -> ExitCode {
             args.system,
             args.game,
             args.debug_dump,
+            &param,
             &arnd,
             syscalls,
             &vp,
@@ -170,6 +194,7 @@ fn main() -> ExitCode {
             args.system,
             args.game,
             args.debug_dump,
+            &param,
             &arnd,
             syscalls,
             &vp,
@@ -183,6 +208,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     root: PathBuf,
     app: PathBuf,
     dump: Option<PathBuf>,
+    param: &Param,
     arnd: &Arc<Arnd>,
     mut syscalls: Syscalls,
     vp: &Arc<VProc>,
@@ -190,7 +216,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     ee: Arc<E>,
 ) -> ExitCode {
     // Initialize kernel components.
-    let fs = Fs::new(root, app, vp, &mut syscalls);
+    let fs = Fs::new(root, app, param, vp, &mut syscalls);
     RegMgr::new(&mut syscalls);
     MachDep::new(&mut syscalls);
     Budget::new(vp, &mut syscalls);
@@ -276,6 +302,9 @@ fn run<E: crate::ee::ExecutionEngine>(
         }
     };
 
+    // Begin Discord Rich Presence before blocking current thread.
+    discord_presence(param);
+
     // Wait for main thread to exit. This should never return.
     if let Err(e) = join_thread(runner) {
         error!(e, "Failed join with main thread");
@@ -283,6 +312,54 @@ fn run<E: crate::ee::ExecutionEngine>(
     }
 
     ExitCode::SUCCESS
+}
+
+fn discord_presence(param: &Param) {
+    use discord_rich_presence::activity::{Activity, Assets, Timestamps};
+    use discord_rich_presence::{DiscordIpc, DiscordIpcClient};
+
+    // Initialize new Discord IPC with our ID.
+    info!("Initializing Discord rich presence.");
+
+    let mut client = match DiscordIpcClient::new("1168617561244565584") {
+        Ok(v) => v,
+        Err(e) => {
+            warn!(e, "Failed to create Discord IPC");
+            return;
+        }
+    };
+
+    // Attempt to have IPC connect to user's Discord, will fail if user doesn't have Discord running.
+    if client.connect().is_err() {
+        // No Discord running should not be a warning.
+        return;
+    }
+
+    // Create details about game.
+    let details = format!("Playing {} - {}", param.title(), param.title_id());
+    let start = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+
+    // Send activity to Discord.
+    let payload = Activity::new()
+        .details(&details)
+        .assets(
+            Assets::new()
+                .large_image("obliteration-icon")
+                .large_text("Obliteration"),
+        )
+        .timestamps(Timestamps::new().start(start.try_into().unwrap()));
+
+    if let Err(e) = client.set_activity(payload) {
+        // If failing here, user's Discord most likely crashed or is offline.
+        warn!(e, "Failed to update Discord presence");
+        return;
+    }
+
+    // Keep client alive forever.
+    Box::leak(client.into());
 }
 
 #[cfg(unix)]
@@ -341,6 +418,7 @@ impl Default for ExecutionEngine {
     fn default() -> Self {
         ExecutionEngine::Native
     }
+
     #[cfg(not(target_arch = "x86_64"))]
     fn default() -> Self {
         ExecutionEngine::Llvm
