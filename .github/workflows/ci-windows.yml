@@ -12,11 +12,11 @@ jobs:
     steps:
     - name: Download LLVM
       run: |
-        Invoke-WebRequest -Uri "https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.2/llvm-project-17.0.2.src.tar.xz" -OutFile llvm.tar.xz
-        $hash = (Get-FileHash llvm.tar.xz).Hash
+        $llvmurl = "https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.5/llvm-project-17.0.5.src.tar.xz"
+        Invoke-WebRequest -Uri $llvmurl -OutFile llvm.tar.xz
         unxz llvm.tar.xz
         tar -x --strip-components=1 -f llvm.tar
-        echo "hash=$hash" >> $env:GITHUB_OUTPUT
+        echo "hash=$llvmurl" >> $env:GITHUB_OUTPUT
       id: download
     - name: Generate cache keys
       run: echo "dist=${{ runner.os }}-llvm-${{ steps.download.outputs.hash }}" >> $env:GITHUB_OUTPUT

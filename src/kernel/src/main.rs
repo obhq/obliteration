@@ -22,6 +22,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::SystemTime;
+use sysinfo::{CpuExt, System, SystemExt};
 
 mod arch;
 mod arnd;
@@ -117,7 +118,9 @@ fn main() -> ExitCode {
 
     // Show basic infomation.
     let mut log = info!();
+    let hwinfo = System::new_all();
 
+    // Init information
     writeln!(log, "Starting Obliteration Kernel.").unwrap();
     writeln!(log, "System directory    : {}", args.system.display()).unwrap();
     writeln!(log, "Game directory      : {}", args.game.display()).unwrap();
@@ -126,8 +129,14 @@ fn main() -> ExitCode {
         writeln!(log, "Debug dump directory: {}", v.display()).unwrap();
     }
 
+    // Param information
     writeln!(log, "Application Title   : {}", param.title()).unwrap();
     writeln!(log, "Application ID      : {}", param.title_id()).unwrap();
+
+    // Hardware information
+    writeln!(log, "Operating System    : {} {}", hwinfo.long_os_version().unwrap_or_else(|| "Unknown OS".to_string()), hwinfo.kernel_version().unwrap_or_else(|| "Unknown Kernel".to_string())).unwrap();
+    writeln!(log, "CPU Information     : {}", hwinfo.cpus()[0].brand()).unwrap();
+    writeln!(log, "Memory Available    : {}/{} MB", hwinfo.available_memory()/1048576, hwinfo.total_memory()/1048576).unwrap(); // Convert Bytes to MB
 
     print(log);
 
