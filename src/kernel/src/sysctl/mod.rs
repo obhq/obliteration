@@ -329,9 +329,11 @@ impl Sysctl {
         _: &'static Oid,
         _: &Arg,
         _: usize,
-        _: &mut SysctlReq,
+        req: &mut SysctlReq,
     ) -> Result<(), SysErr> {
-        todo!()
+        req.write(0u32.to_le_bytes().as_ref())?;
+
+        Ok(())
     }
 
     fn kern_proc_ptc(
