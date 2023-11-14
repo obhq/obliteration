@@ -149,6 +149,9 @@ impl Fs {
         let ops = file.ops().ok_or(SysErr::Raw(EBADF))?;
 
         let td = VThread::current();
+
+        info!("Writing {len} bytes to fd {fd}.");
+
         let bytes_written = ops.write(file.as_ref(), buf, td.cred(), td.as_ref())?;
 
         Ok(bytes_written.into())
