@@ -19,6 +19,7 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
 
+pub mod dev;
 mod file;
 mod item;
 mod path;
@@ -112,6 +113,8 @@ impl Fs {
     pub fn get(&self, path: &VPath) -> Result<FsItem, FsError> {
         let item = match path.as_str() {
             "/dev/console" => FsItem::Device(VDev::Console),
+            "/dev/stdout" => FsItem::Device(VDev::Stdout),
+            "/dev/dipsw" => FsItem::Device(VDev::Dipsw),
             _ => self.resolve(path).ok_or(FsError::NotFound)?,
         };
 
@@ -132,11 +135,23 @@ impl Fs {
     }
 
     fn sys_write(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let _fd: Fd = i.args[0].try_into().unwrap();
-        let _data: *const u8 = i.args[1].into();
-        let _len: usize = i.args[2].try_into().unwrap();
+        let fd: Fd = i.args[0].try_into().unwrap();
+        let ptr: *const u8 = i.args[1].into();
+        let len: usize = i.args[2].try_into().unwrap();
 
-        todo!()
+        if len > 0x7fffffff {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        let buf = unsafe { std::slice::from_raw_parts(ptr, len) };
+
+        let file = self.vp.files().get(fd).ok_or(SysErr::Raw(EBADF))?;
+        let ops = file.ops().ok_or(SysErr::Raw(EBADF))?;
+
+        let td = VThread::current();
+        ops.write(file.as_ref(), buf, td.cred(), td.as_ref())?;
+
+        Ok(SysOut::ZERO)
     }
 
     fn sys_open(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {

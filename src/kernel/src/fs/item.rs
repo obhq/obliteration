@@ -1,5 +1,5 @@
+use super::dev::{console::Console, dipsw::Dipsw, stdout::Stdout};
 use super::{FsError, VFileOps, VPath, VPathBuf};
-use crate::console::Console;
 use std::path::{Path, PathBuf};
 
 /// An item in the virtual filesystem.
@@ -14,6 +14,8 @@ impl FsItem {
         match self {
             Self::Device(d) => match d {
                 VDev::Console => true,
+                VDev::Stdout => true,
+                VDev::Dipsw => true,
             },
             _ => false,
         }
@@ -25,6 +27,8 @@ impl FsItem {
             Self::File(v) => &v.vpath,
             Self::Device(d) => match d {
                 VDev::Console => Console::PATH,
+                VDev::Stdout => Stdout::PATH,
+                VDev::Dipsw => Dipsw::PATH,
             },
         }
     }
@@ -81,12 +85,16 @@ impl HostFile {
 /// A virtual device.
 pub enum VDev {
     Console,
+    Stdout,
+    Dipsw,
 }
 
 impl VDev {
     pub fn open(&self) -> Result<Box<dyn VFileOps>, FsError> {
-        let ops = match self {
+        let ops: Box<dyn VFileOps> = match self {
             Self::Console => Box::new(Console::new()),
+            Self::Stdout => Box::new(Stdout::new()),
+            Self::Dipsw => Box::new(Dipsw::new()),
         };
 
         Ok(ops)

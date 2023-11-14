@@ -5,19 +5,29 @@ use crate::ucred::Ucred;
 use macros::vpath;
 use std::fmt::{Display, Formatter};
 
-/// An implementation of `/dev/console`.
+/// An implementation of `/dev/dipsw`.
 #[derive(Debug)]
-pub struct Console {}
+pub struct Dipsw {}
 
-impl Console {
-    pub const PATH: &VPath = vpath!("/dev/console");
+impl Dipsw {
+    pub const PATH: &VPath = vpath!("/dev/dipsw");
 
     pub fn new() -> Self {
         Self {}
     }
 }
 
-impl VFileOps for Console {
+impl VFileOps for Dipsw {
+    fn write(
+        &self,
+        _file: &VFile,
+        _data: &[u8],
+        _cred: &Ucred,
+        _td: &VThread,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+
     fn ioctl(
         &self,
         _file: &VFile,
@@ -26,12 +36,11 @@ impl VFileOps for Console {
         _cred: &Ucred,
         _td: &VThread,
     ) -> Result<(), Box<dyn Errno>> {
-        // TODO: Implement this.
-        Ok(())
+        todo!()
     }
 }
 
-impl Display for Console {
+impl Display for Dipsw {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Self::PATH.fmt(f)
     }
