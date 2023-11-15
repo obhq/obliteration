@@ -4,20 +4,27 @@ use crate::process::VThread;
 use crate::ucred::Ucred;
 use macros::vpath;
 use std::fmt::{Display, Formatter};
-
 /// An implementation of `/dev/console`.
 #[derive(Debug)]
 pub struct Console {}
-
 impl Console {
     pub const PATH: &VPath = vpath!("/dev/console");
-
     pub fn new() -> Self {
         Self {}
     }
 }
 
 impl VFileOps for Console {
+    fn write(
+        &self,
+        _file: &VFile,
+        _data: &[u8],
+        _cred: &Ucred,
+        _td: &VThread,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!()
+    }
+
     fn ioctl(
         &self,
         _file: &VFile,
@@ -30,7 +37,6 @@ impl VFileOps for Console {
         Ok(())
     }
 }
-
 impl Display for Console {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Self::PATH.fmt(f)

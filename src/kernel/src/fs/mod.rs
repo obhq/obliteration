@@ -20,8 +20,12 @@ use std::sync::Arc;
 use thiserror::Error;
 
 mod file;
+mod dev;
 mod item;
 mod path;
+
+//Represents a file descriptor
+pub type Fd = i32;
 
 /// A virtual filesystem for emulating a PS4 filesystem.
 #[derive(Debug)]
@@ -94,7 +98,9 @@ impl Fs {
             app,
         });
 
+        syscalls.register(4, &fs, Self::sys_write);
         syscalls.register(5, &fs, Self::sys_open);
+        syscalls.register(6, &fs, Self::sys_close);
         syscalls.register(54, &fs, Self::sys_ioctl);
         syscalls.register(56, &fs, Self::sys_revoke);
 
@@ -108,6 +114,8 @@ impl Fs {
     pub fn get(&self, path: &VPath) -> Result<FsItem, FsError> {
         let item = match path.as_str() {
             "/dev/console" => FsItem::Device(VDev::Console),
+            "/dev/dipsw" => FsItem::Device(VDev::Dipsw),
+            "/dev/stdout" => FsItem::Device(VDev::Stdout),
             _ => self.resolve(path).ok_or(FsError::NotFound)?,
         };
 
@@ -125,6 +133,29 @@ impl Fs {
 
     pub fn revoke<P: Into<VPathBuf>>(&self, _path: P) {
         // TODO: Implement this.
+    }
+
+    fn sys_write(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: Fd = i.args[0].try_into().unwrap();
+        let ptr: *const u8 = i.args[1].into();
+        let len: usize = i.args[2].try_into().unwrap();
+
+        if len > 0x7fffffff {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        let buf = unsafe { std::slice::from_raw_parts(ptr, len) };
+
+        let file = self.vp.files().get(fd).ok_or(SysErr::Raw(EBADF))?;
+        let ops = file.ops().ok_or(SysErr::Raw(EBADF))?;
+
+        let td = VThread::current();
+
+        info!("Writing {len} bytes to fd {fd}.");
+
+        let bytes_written = ops.write(file.as_ref(), buf, td.cred(), td.as_ref())?;
+
+        Ok(bytes_written.into())
     }
 
     fn sys_open(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -172,13 +203,23 @@ impl Fs {
         Ok(fd.into())
     }
 
+    fn sys_close(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: Fd = i.args[0].try_into().unwrap();
+
+        info!("Closing fd {fd}.");
+
+        self.vp.files().free(fd)?;
+
+        Ok(SysOut::ZERO)
+    }
+
     fn sys_ioctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         const IOC_VOID: u64 = 0x20000000;
         const IOC_OUT: u64 = 0x40000000;
         const IOC_IN: u64 = 0x80000000;
         const IOCPARM_MASK: u64 = 0x1FFF;
 
-        let fd: i32 = i.args[0].try_into().unwrap();
+        let fd: Fd = i.args[0].try_into().unwrap();
         let mut com: u64 = i.args[1].into();
         let _data: *const u8 = i.args[2].into();
 

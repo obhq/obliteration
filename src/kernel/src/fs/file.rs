@@ -56,6 +56,14 @@ impl Display for VFile {
 
 /// An implementation of `fileops` structure.
 pub trait VFileOps: Debug + Send + Sync + Display {
+    fn write(
+        &self,
+        file: &VFile,
+        data: &[u8],
+        cred: &Ucred,
+        td: &VThread,
+    ) -> Result<usize, Box<dyn Errno>>;
+
     fn ioctl(
         &self,
         file: &VFile,

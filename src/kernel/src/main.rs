@@ -26,7 +26,6 @@ use std::time::SystemTime;
 mod arch;
 mod arnd;
 mod budget;
-mod console;
 mod ee;
 mod errno;
 mod fs;

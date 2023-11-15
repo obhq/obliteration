@@ -1,4 +1,4 @@
-use crate::fs::VFile;
+use crate::{fs::{VFile, Fd}, syscalls::SysErr, errno::EBADF};
 use gmtx::{GroupMutex, MutexGroup};
 use std::sync::Arc;
 
@@ -16,11 +16,11 @@ impl VProcFiles {
     }
 
     /// See `finstall` on the PS4 for a reference.
-    pub fn alloc(&self, file: Arc<VFile>) -> i32 {
+    pub fn alloc(&self, file: Arc<VFile>) -> Fd {
         // TODO: Implement fdalloc.
         let mut files = self.files.write();
 
-        for i in 3..=i32::MAX {
+        for i in 3..=Fd::MAX {
             let i: usize = i.try_into().unwrap();
 
             if i == files.len() {
@@ -31,7 +31,7 @@ impl VProcFiles {
                 continue;
             }
 
-            return i as i32;
+            return i as Fd;
         }
 
         // This should never happened.
@@ -39,7 +39,7 @@ impl VProcFiles {
     }
 
     /// See `fget` on the PS4 for a reference.
-    pub fn get(&self, fd: i32) -> Option<Arc<VFile>> {
+    pub fn get(&self, fd: Fd) -> Option<Arc<VFile>> {
         // TODO: Check what we have missed here.
         if fd < 0 {
             return None;
@@ -49,5 +49,23 @@ impl VProcFiles {
         let files = self.files.read();
 
         files.get(fd)?.clone()
+    }
+
+    pub fn free(&self, fd: Fd) -> Result<(), SysErr> {
+        if fd < 0 {
+            return Err(SysErr::Raw(EBADF));
+        }
+
+        let fd: usize = fd.try_into().unwrap();
+
+        let mut files = self.files.write();
+
+        if let Some(file) = files.get_mut(fd) {
+            *file = None;
+
+            Ok(())
+        } else {
+            Err(SysErr::Raw(EBADF))
+        }
     }
 }
