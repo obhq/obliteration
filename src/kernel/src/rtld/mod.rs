@@ -343,7 +343,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         let mut sha1 = Sha1::new();
 
         sha1.update(name.as_bytes());
-        sha1.update(&Self::NID_SALT);
+        sha1.update(Self::NID_SALT);
 
         // Get NID.
         let hash = u64::from_ne_bytes(sha1.finalize()[..8].try_into().unwrap());
@@ -764,13 +764,13 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         if flags & 2 == 0 || !md.flags().contains(ModuleFlags::UNK1) {
             let name = md.path().file_name().unwrap();
 
-            (*info).name[..name.len()].copy_from_slice(name.as_bytes());
-            (*info).name[0xff] = 0;
+            info.name[..name.len()].copy_from_slice(name.as_bytes());
+            info.name[0xff] = 0;
         }
 
         // Set TLS information. Not sure if the tlsinit can be zero when the tlsinitsize is zero.
         // Let's keep the same behavior as the PS4 for now.
-        (*info).tlsindex = if flags & 1 != 0 {
+        info.tlsindex = if flags & 1 != 0 {
             let flags = md.flags();
             let mut upper = if flags.contains(ModuleFlags::UNK1) {
                 1
@@ -788,30 +788,30 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         };
 
         if let Some(i) = md.tls_info() {
-            (*info).tlsinit = addr + i.init();
-            (*info).tlsinitsize = i.init_size().try_into().unwrap();
-            (*info).tlssize = i.size().try_into().unwrap();
-            (*info).tlsalign = i.align().try_into().unwrap();
+            info.tlsinit = addr + i.init();
+            info.tlsinitsize = i.init_size().try_into().unwrap();
+            info.tlssize = i.size().try_into().unwrap();
+            info.tlsalign = i.align().try_into().unwrap();
         } else {
-            (*info).tlsinit = addr;
+            info.tlsinit = addr;
         }
 
-        (*info).tlsoffset = (*md.tls_offset()).try_into().unwrap();
+        info.tlsoffset = (*md.tls_offset()).try_into().unwrap();
 
         // Initialization and finalization functions.
         if !md.flags().contains(ModuleFlags::UNK5) {
-            (*info).init = md.init().map(|v| addr + v).unwrap_or(0);
-            (*info).fini = md.fini().map(|v| addr + v).unwrap_or(0);
+            info.init = md.init().map(|v| addr + v).unwrap_or(0);
+            info.fini = md.fini().map(|v| addr + v).unwrap_or(0);
         }
 
         // Exception handling.
         if let Some(i) = md.eh_info() {
-            (*info).eh_frame_hdr = addr + i.header();
-            (*info).eh_frame_hdr_size = i.header_size().try_into().unwrap();
-            (*info).eh_frame = addr + i.frame();
-            (*info).eh_frame_size = i.frame_size().try_into().unwrap();
+            info.eh_frame_hdr = addr + i.header();
+            info.eh_frame_hdr_size = i.header_size().try_into().unwrap();
+            info.eh_frame = addr + i.frame();
+            info.eh_frame_size = i.frame_size().try_into().unwrap();
         } else {
-            (*info).eh_frame_hdr = addr;
+            info.eh_frame_hdr = addr;
         }
 
         let mut e = info!();
@@ -823,16 +823,16 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             handle
         )
         .unwrap();
-        writeln!(e, "mapbase     : {:#x}", (*info).mapbase).unwrap();
-        writeln!(e, "textsize    : {:#x}", (*info).textsize).unwrap();
-        writeln!(e, "database    : {:#x}", (*info).database).unwrap();
-        writeln!(e, "datasize    : {:#x}", (*info).datasize).unwrap();
-        writeln!(e, "tlsindex    : {}", (*info).tlsindex).unwrap();
-        writeln!(e, "tlsinit     : {:#x}", (*info).tlsinit).unwrap();
-        writeln!(e, "tlsoffset   : {:#x}", (*info).tlsoffset).unwrap();
-        writeln!(e, "init        : {:#x}", (*info).init).unwrap();
-        writeln!(e, "fini        : {:#x}", (*info).fini).unwrap();
-        writeln!(e, "eh_frame_hdr: {:#x}", (*info).eh_frame_hdr).unwrap();
+        writeln!(e, "mapbase     : {:#x}", info.mapbase).unwrap();
+        writeln!(e, "textsize    : {:#x}", info.textsize).unwrap();
+        writeln!(e, "database    : {:#x}", info.database).unwrap();
+        writeln!(e, "datasize    : {:#x}", info.datasize).unwrap();
+        writeln!(e, "tlsindex    : {}", info.tlsindex).unwrap();
+        writeln!(e, "tlsinit     : {:#x}", info.tlsinit).unwrap();
+        writeln!(e, "tlsoffset   : {:#x}", info.tlsoffset).unwrap();
+        writeln!(e, "init        : {:#x}", info.init).unwrap();
+        writeln!(e, "fini        : {:#x}", info.fini).unwrap();
+        writeln!(e, "eh_frame_hdr: {:#x}", info.eh_frame_hdr).unwrap();
 
         print(e);
 
