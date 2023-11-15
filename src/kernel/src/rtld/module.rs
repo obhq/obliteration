@@ -16,12 +16,14 @@ use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
 
+pub type ModuleHandle = u32;
+
 /// An implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/libexec/rtld-elf/rtld.h#L147.
 #[derive(Debug)]
 pub struct Module<E: ExecutionEngine + ?Sized> {
     ee: Arc<E>,
-    id: u32,
+    id: ModuleHandle,
     init: Option<usize>,
     entry: Option<usize>,
     fini: Option<usize>,
@@ -54,7 +56,7 @@ impl<E: ExecutionEngine> Module<E> {
         mut image: Elf<File>,
         base: usize,
         mem_name: N,
-        id: u32,
+        id: ModuleHandle,
         tls_index: u32,
         mtxg: &Arc<MutexGroup>,
     ) -> Result<Self, MapError> {
@@ -186,7 +188,7 @@ impl<E: ExecutionEngine> Module<E> {
         Ok(module)
     }
 
-    pub fn id(&self) -> u32 {
+    pub fn id(&self) -> ModuleHandle {
         self.id
     }
 

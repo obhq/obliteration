@@ -162,6 +162,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         sys.register(591, &ld, Self::sys_dynlib_dlsym);
         sys.register(592, &ld, Self::sys_dynlib_get_list);
+        sys.register(594, &ld, Self::sys_dynlib_load_prx);
         sys.register(596, &ld, Self::sys_dynlib_do_copy_relocations);
         sys.register(598, &ld, Self::sys_dynlib_get_proc_param);
         sys.register(599, &ld, Self::sys_dynlib_process_needed_and_relocate);
@@ -371,7 +372,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         }
 
         // Get arguments.
-        let handle: u32 = i.args[0].try_into().unwrap();
+        let handle: ModuleHandle = i.args[0].try_into().unwrap();
         let name = unsafe { i.args[1].to_str(2560)?.unwrap() };
         let out: *mut usize = i.args[2].into();
 
@@ -427,6 +428,28 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         unsafe { *copied = list.len() };
 
         info!("Copied {} module IDs for dynamic linking.", list.len());
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn sys_dynlib_load_prx(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let libname = unsafe { i.args[0].to_str(1024) }?.unwrap();
+        let _args: usize = i.args[1].into();
+        let p_id: *mut u32 = i.args[2].into();
+
+        if self.app.file_info().is_none() {
+            return Err(SysErr::Raw(EPERM));
+        }
+
+        //TODO implement the rest of this function
+
+        let vpath = VPath::new(libname).unwrap();
+        let module = self
+            .load(&vpath, false)
+            //TODO properly handle this error
+            .expect("Couldn't load module");
+
+        unsafe { *p_id = module.id() };
 
         Ok(SysOut::ZERO)
     }
@@ -821,7 +844,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 struct DynlibInfoEx {
     size: u64,
     name: [u8; 256],
-    handle: u32,
+    handle: ModuleHandle,
     tlsindex: u32,
     tlsinit: usize,
     tlsinitsize: u32,
