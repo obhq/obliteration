@@ -146,7 +146,7 @@ impl<E: ExecutionEngine> Module<E> {
 
         // Get SDK version.
         let sdk_ver = match &proc_param {
-            Some((off, _)) => unsafe { LE::read_u32(&memory.as_bytes()[(off + 0x10)..]) },
+            Some((of    f, _)) => unsafe { LE::read_u32(&memory.as_bytes()[(off + 0x10)..]) },
             None => 0,
         };
 

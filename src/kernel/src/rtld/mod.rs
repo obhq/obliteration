@@ -721,7 +721,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
     fn sys_dynlib_get_info_ex(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
-        let handle: u32 = i.args[0].try_into().unwrap();
+        let handle: ModuleHandle = i.args[0].try_into().unwrap();
         let flags: u32 = i.args[1].try_into().unwrap();
         let info: *mut DynlibInfoEx = i.args[2].into();
 
