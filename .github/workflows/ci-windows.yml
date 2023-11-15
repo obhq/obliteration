@@ -10,16 +10,13 @@ jobs:
     outputs:
       dist-key: ${{ steps.cache-keys.outputs.dist }}
     steps:
-    - name: Download LLVM
+    - name: Hash LLVM
       run: |
-        $llvmurl = "https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.5/llvm-project-17.0.5.src.tar.xz"
-        Invoke-WebRequest -Uri $llvmurl -OutFile llvm.tar.xz
-        unxz llvm.tar.xz
-        tar -x --strip-components=1 -f llvm.tar
-        echo "hash=$llvmurl" >> $env:GITHUB_OUTPUT
+        $url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.5/llvm-project-17.0.5.src.tar.xz"
+        echo "llvmurl=$url" >> $env:GITHUB_OUTPUT
       id: download
     - name: Generate cache keys
-      run: echo "dist=${{ runner.os }}-llvm-${{ steps.download.outputs.hash }}" >> $env:GITHUB_OUTPUT
+      run: echo "dist=${{ runner.os }}-llvm-${{ steps.download.outputs.llvmurl }}" >> $env:GITHUB_OUTPUT
       id: cache-keys
     - name: Check cached artifacts
       uses: actions/cache/restore@v3
@@ -28,6 +25,12 @@ jobs:
         key: ${{ steps.cache-keys.outputs.dist }}
         lookup-only: true
       id: cache
+    - name: Download LLVM
+      run: |
+        Invoke-WebRequest -Uri ${{ steps.download.outputs.llvmurl }} -OutFile llvm.tar.xz
+        unxz llvm.tar.xz
+        tar -x --strip-components=1 -f llvm.tar
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
     - name: Run CMake
       run: cmake --install-prefix ${{ github.workspace }}/lib/llvm -Wno-dev -DLLVM_ENABLE_ZSTD:BOOL=OFF -DLLVM_APPEND_VC_REV:BOOL=OFF -DLLVM_TARGETS_TO_BUILD:STRING=X86 -B build llvm
       if: ${{ steps.cache.outputs.cache-hit != 'true' }}
