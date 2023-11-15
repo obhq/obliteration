@@ -13,10 +13,12 @@ jobs:
     - name: Hash LLVM
       run: |
         $url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.5/llvm-project-17.0.5.src.tar.xz"
+        $urlhash = [System.BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($url))).Replace("-", "").ToLower()
         echo "llvmurl=$url" >> $env:GITHUB_OUTPUT
+        echo "hash=$urlhash" >> $env:GITHUB_OUTPUT
       id: download
     - name: Generate cache keys
-      run: echo "dist=${{ runner.os }}-llvm-${{ steps.download.outputs.llvmurl }}" >> $env:GITHUB_OUTPUT
+      run: echo "dist=${{ runner.os }}-llvm-${{ steps.download.outputs.hash }}" >> $env:GITHUB_OUTPUT
       id: cache-keys
     - name: Check cached artifacts
       uses: actions/cache/restore@v3
