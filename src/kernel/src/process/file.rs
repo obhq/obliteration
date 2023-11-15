@@ -1,4 +1,8 @@
-use crate::{fs::{VFile, Fd}, syscalls::SysErr, errno::EBADF};
+use crate::{
+    errno::EBADF,
+    fs::{Fd, VFile},
+    syscalls::SysErr,
+};
 use gmtx::{GroupMutex, MutexGroup};
 use std::sync::Arc;
 

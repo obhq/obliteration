@@ -1,3 +1,3 @@
-pub mod console;
-pub mod dipsw;
-pub mod stdout;
+pub(super) mod console;
+pub(super) mod dipsw;
+pub(super) mod stdout;

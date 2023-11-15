@@ -19,8 +19,8 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
 
-mod file;
 mod dev;
+mod file;
 mod item;
 mod path;
 

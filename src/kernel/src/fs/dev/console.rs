@@ -4,11 +4,14 @@ use crate::process::VThread;
 use crate::ucred::Ucred;
 use macros::vpath;
 use std::fmt::{Display, Formatter};
+
 /// An implementation of `/dev/console`.
 #[derive(Debug)]
 pub struct Console {}
+
 impl Console {
     pub const PATH: &VPath = vpath!("/dev/console");
+
     pub fn new() -> Self {
         Self {}
     }

@@ -1,4 +1,7 @@
-use super::{FsError, VFileOps, VPath, VPathBuf, dev::{dipsw::Dipsw, stdout::Stdout}};
+use super::{
+    dev::{dipsw::Dipsw, stdout::Stdout},
+    FsError, VFileOps, VPath, VPathBuf,
+};
 use crate::fs::dev::console::Console;
 use std::path::{Path, PathBuf};
 
@@ -86,7 +89,7 @@ impl HostFile {
 pub enum VDev {
     Console,
     Dipsw,
-    Stdout
+    Stdout,
 }
 
 impl VDev {
