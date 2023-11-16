@@ -13,10 +13,33 @@ use gmtx::{GroupMutex, GroupMutexReadGuard, GroupMutexWriteGuard, MutexGroup};
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::io::Write;
+use std::num::TryFromIntError;
 use std::path::Path;
 use std::sync::Arc;
 
-pub type ModuleHandle = u32;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(transparent)]
+pub struct ModuleHandle(u32);
+
+impl ModuleHandle {
+    pub fn new(id: u32) -> Self {
+        Self(id)
+    }
+}
+
+impl Display for ModuleHandle {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl TryFrom<usize> for ModuleHandle {
+    type Error = TryFromIntError;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        Ok(Self(value.try_into()?))
+    }
+}
 
 /// An implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/libexec/rtld-elf/rtld.h#L147.

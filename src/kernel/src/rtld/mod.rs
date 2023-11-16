@@ -103,7 +103,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         // TODO: Apply remaining checks from exec_self_imgact.
         // Map eboot.bin.
-        let mut app = match Module::map(mm, ee, elf, base, "executable", 0, 1, vp.mutex_group()) {
+        let mut app = match Module::map(mm, ee, elf, base, "executable", ModuleHandle::new(0), 1, vp.mutex_group()) {
             Ok(v) => v,
             Err(e) => return Err(RuntimeLinkerError::MapExeFailed(file.into_vpath(), e)),
         };
@@ -241,7 +241,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         let mut table = self.vp.objects_mut();
         let (entry, _) = table.alloc(|id| {
             let name = path.file_name().unwrap();
-            let id: u32 = (id + 1).try_into().unwrap();
+            let id: ModuleHandle = (id + 1).try_into().unwrap();
             let mut md = match Module::map(
                 &self.mm,
                 &self.ee,
@@ -404,7 +404,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
     fn sys_dynlib_get_list(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
-        let buf: *mut u32 = i.args[0].into();
+        let buf: *mut ModuleHandle = i.args[0].into();
         let max: usize = i.args[1].into();
         let copied: *mut usize = i.args[2].into();
 
@@ -435,7 +435,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
     fn sys_dynlib_load_prx(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let libname = unsafe { i.args[0].to_str(1024) }?.unwrap();
         let _args: usize = i.args[1].into();
-        let p_id: *mut u32 = i.args[2].into();
+        let p_id: *mut ModuleHandle = i.args[2].into();
 
         if self.app.file_info().is_none() {
             return Err(SysErr::Raw(EPERM));

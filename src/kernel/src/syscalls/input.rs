@@ -1,6 +1,7 @@
 use super::SysErr;
 use crate::errno::{ENAMETOOLONG, ENOENT};
 use crate::fs::{VPath, VPathBuf};
+use crate::rtld::ModuleHandle;
 use std::ffi::{c_char, CStr};
 use std::num::TryFromIntError;
 
@@ -109,5 +110,13 @@ impl TryFrom<SysArg> for u32 {
 
     fn try_from(v: SysArg) -> Result<Self, Self::Error> {
         v.0.try_into()
+    }
+}
+
+impl TryFrom<SysArg> for ModuleHandle {
+    type Error = TryFromIntError;
+
+    fn try_from(v: SysArg) -> Result<Self, Self::Error> {
+        Ok(ModuleHandle::new(v.try_into()?))
     }
 }
