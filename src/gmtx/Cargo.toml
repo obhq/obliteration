@@ -10,4 +10,4 @@ tls = { path = "../tls" }
 libc = "0.2"
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.48", features = ["Win32_System_Threading"] }
+windows-sys = { version = "0.52", features = ["Win32_System_Threading"] }
