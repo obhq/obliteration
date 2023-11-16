@@ -22,7 +22,7 @@ use std::sync::Arc;
 pub struct ModuleHandle(u32);
 
 impl ModuleHandle {
-    pub fn new(id: u32) -> Self {
+    pub const fn new(id: u32) -> Self {
         Self(id)
     }
 }

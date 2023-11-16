@@ -103,7 +103,16 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         // TODO: Apply remaining checks from exec_self_imgact.
         // Map eboot.bin.
-        let mut app = match Module::map(mm, ee, elf, base, "executable", ModuleHandle::new(0), 1, vp.mutex_group()) {
+        let mut app = match Module::map(
+            mm,
+            ee,
+            elf,
+            base,
+            "executable",
+            ModuleHandle::new(0),
+            1,
+            vp.mutex_group(),
+        ) {
             Ok(v) => v,
             Err(e) => return Err(RuntimeLinkerError::MapExeFailed(file.into_vpath(), e)),
         };
