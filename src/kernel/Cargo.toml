@@ -11,7 +11,7 @@ path = "src/main.rs"
 bitflags = "2.1"
 byteorder = "1.4"
 clap = { version = "4.1", features = ["derive"] }
-discord-rich-presence = "0.2.3"
+discord-rich-presence = "0.2"
 elf = { path = "../elf" }
 gmtx = { path = "../gmtx" }
 iced-x86 = { version = "1.18", features = ["code_asm"] }
@@ -23,9 +23,10 @@ param = { path = "../param" }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 sha1 = "0.10"
+sysinfo = "0.29.10"
 termcolor = "1.2.0"
 thiserror = "1.0"
 tls = { path = "../tls" }
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.48", features = ["Win32_Foundation", "Win32_System_Diagnostics_Debug", "Win32_System_Memory", "Win32_System_SystemInformation", "Win32_System_Threading"] }
+windows-sys = { version = "0.52", features = ["Win32_Foundation", "Win32_System_Diagnostics_Debug", "Win32_System_Memory", "Win32_System_SystemInformation", "Win32_System_Threading"] }

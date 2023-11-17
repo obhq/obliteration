@@ -59,10 +59,10 @@ impl Memory {
         if ptr.is_null() {
             Err(Error::last_os_error())
         } else {
-            return Ok(Self {
+            Ok(Self {
                 addr: ptr as _,
                 len,
-            });
+            })
         }
     }
 

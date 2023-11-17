@@ -273,7 +273,7 @@ impl Sysctl {
         }
 
         // Remove '.' at the end if present.
-        if name.chars().last().unwrap() == '.' {
+        if name.ends_with('.') {
             name.pop();
         }
 

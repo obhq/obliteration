@@ -13,7 +13,6 @@ use param::Param;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-use std::fs::File;
 use std::num::{NonZeroI32, TryFromIntError};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -34,7 +33,13 @@ pub struct Fs {
 }
 
 impl Fs {
-    pub fn new<S, G>(system: S, game: G, vp: &Arc<VProc>, syscalls: &mut Syscalls) -> Arc<Self>
+    pub fn new<S, G>(
+        system: S,
+        game: G,
+        param: &Param,
+        vp: &Arc<VProc>,
+        syscalls: &mut Syscalls,
+    ) -> Arc<Self>
     where
         S: Into<PathBuf>,
         G: Into<PathBuf>,
@@ -45,23 +50,6 @@ impl Fs {
 
         // Mount rootfs.
         mounts.insert(VPathBuf::new(), MountSource::Host(system.clone()));
-
-        // Get path to param.sfo.
-        let mut path = game.join("sce_sys");
-
-        path.push("param.sfo");
-
-        // Open param.sfo.
-        let param = match File::open(&path) {
-            Ok(v) => v,
-            Err(e) => panic!("Cannot open {}: {}.", path.display(), e),
-        };
-
-        // Load param.sfo.
-        let param = match Param::read(param) {
-            Ok(v) => v,
-            Err(e) => panic!("Cannot read {}: {}.", path.display(), e),
-        };
 
         // Create a directory for mounting PFS.
         let mut pfs = system.join("mnt");
@@ -135,7 +123,7 @@ impl Fs {
         VFile::new(self)
     }
 
-    pub fn revoke<P: Into<VPathBuf>>(&self, path: P) {
+    pub fn revoke<P: Into<VPathBuf>>(&self, _path: P) {
         // TODO: Implement this.
     }
 
@@ -192,7 +180,7 @@ impl Fs {
 
         let fd: i32 = i.args[0].try_into().unwrap();
         let mut com: u64 = i.args[1].into();
-        let data: *const u8 = i.args[2].into();
+        let _data: *const u8 = i.args[2].into();
 
         if com > 0xffffffff {
             com &= 0xffffffff;
