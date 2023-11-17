@@ -3,7 +3,7 @@ pub use self::module::*;
 
 use self::resolver::{ResolveFlags, SymbolResolver};
 use crate::ee::ExecutionEngine;
-use crate::errno::{EINVAL, ENOEXEC, ENOMEM, EPERM, ESRCH};
+use crate::errno::{Errno, EINVAL, ENOEXEC, ENOMEM, EPERM, ESRCH};
 use crate::fs::{Fs, FsError, FsItem, VPath, VPathBuf};
 use crate::info;
 use crate::log::print;
@@ -443,7 +443,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
     fn sys_dynlib_load_prx(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let libname = unsafe { i.args[0].to_str(1024) }?.unwrap();
-        let flags: u16 = i.args[1].into();
+        let flags: u32 = i.args[1].try_into().unwrap();
         let p_id: *mut ModuleHandle = i.args[2].into();
 
         if self.app.file_info().is_none() {

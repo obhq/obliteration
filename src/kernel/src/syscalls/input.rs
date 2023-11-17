@@ -113,6 +113,14 @@ impl TryFrom<SysArg> for u32 {
     }
 }
 
+impl TryFrom<SysArg> for u16 {
+    type Error = TryFromIntError;
+
+    fn try_from(v: SysArg) -> Result<Self, Self::Error> {
+        TryInto::<u16>::try_into(v.0).map(|v| v as u16)
+    }
+}
+
 impl TryFrom<SysArg> for ModuleHandle {
     type Error = TryFromIntError;
 
