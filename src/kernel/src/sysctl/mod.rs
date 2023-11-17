@@ -114,11 +114,7 @@ impl Sysctl {
         let newlen: usize = i.args[5].into();
 
         // Convert name to a slice.
-<<<<<<< Updated upstream
-        let name = if namelen < 2 || namelen > 24 {
-=======
         let name = if !(2..=(Self::CTL_MAXNAME as u32)).contains(&namelen) {
->>>>>>> Stashed changes
             return Err(SysErr::Raw(EINVAL));
         } else if name.is_null() {
             return Err(SysErr::Raw(EFAULT));
