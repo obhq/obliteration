@@ -671,7 +671,7 @@ static KERN_PROC_SANITIZER: Oid = Oid {
     kind: Sysctl::CTLFLAG_RD | Sysctl::CTLFLAG_MPSAFE | Sysctl::CTLTYPE_NODE,
     arg1: None, // TODO: This value on the PS4 is not null.
     arg2: 0,
-    name: "sanitizer",
+    name: "kern_sanitizer",
     handler: Some(Sysctl::kern_proc_sanitizer),
     fmt: "N",
     descr: "Sanitizing mode",
