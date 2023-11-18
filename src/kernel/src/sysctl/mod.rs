@@ -19,12 +19,60 @@ pub struct Sysctl {
     mm: Arc<MemoryManager>,
 }
 
+#[allow(dead_code)]
 impl Sysctl {
+    pub const CTL_MAXNAME: usize = 24;
+
+    pub const CTLTYPE: u32 = 0xf;
+    pub const CTLTYPE_NODE: u32 = 1;
+    pub const CTLTYPE_INT: u32 = 2;
+    pub const CTLTYPE_STRING: u32 = 3;
+    pub const CTLTYPE_S64: u32 = 4;
+    pub const CTLTYPE_OPAQUE: u32 = 5;
+    pub const CTLTYPE_STRUCT: u32 = Self::CTLTYPE_OPAQUE;
+    pub const CTLTYPE_UINT: u32 = 6;
+    pub const CTLTYPE_LONG: u32 = 7;
+    pub const CTLTYPE_ULONG: u32 = 8;
+    pub const CTLTYPE_U64: u32 = 9;
+    pub const CTLTYPE_U8: u32 = 0xa;
+    pub const CTLTYPE_U16: u32 = 0xb;
+    pub const CTLTYPE_S8: u32 = 0xc;
+    pub const CTLTYPE_S16: u32 = 0xd;
+    pub const CTLTYPE_S32: u32 = 0xe;
+    pub const CTLTYPE_U32: u32 = 0xf;
+
+    pub const CTLFLAG_RD: u32 = 0x80000000;
+    pub const CTLFLAG_WR: u32 = 0x40000000;
+    pub const CTLFLAG_RW: u32 = Self::CTLFLAG_RD | Self::CTLFLAG_WR;
+    pub const CTLFLAG_DORMANT: u32 = 0x20000000;
+    pub const CTLFLAG_ANYBODY: u32 = 0x10000000;
+    pub const CTLFLAG_SECURE: u32 = 0x08000000;
+    pub const CTLFLAG_PRISON: u32 = 0x04000000;
+    pub const CTLFLAG_DYN: u32 = 0x02000000;
+    pub const CTLFLAG_SKIP: u32 = 0x01000000;
+    pub const CTLMASK_SECURE: u32 = 0x00F00000;
+    pub const CTLFLAG_TUN: u32 = 0x00080000;
+    pub const CTLFLAG_RDTUN: u32 = Self::CTLFLAG_RD | Self::CTLFLAG_TUN;
+    pub const CTLFLAG_RWTUN: u32 = Self::CTLFLAG_RW | Self::CTLFLAG_TUN;
+    pub const CTLFLAG_MPSAFE: u32 = 0x00040000;
+    pub const CTLFLAG_VNET: u32 = 0x00020000;
+    pub const CTLFLAG_DYING: u32 = 0x00010000;
+    pub const CTLFLAG_CAPRD: u32 = 0x00008000;
+    pub const CTLFLAG_CAPWR: u32 = 0x00004000;
+    pub const CTLFLAG_STATS: u32 = 0x00002000;
+    pub const CTLFLAG_NOFETCH: u32 = 0x00001000;
+    pub const CTLFLAG_CAPRW: u32 = Self::CTLFLAG_CAPRD | Self::CTLFLAG_CAPWR;
+
     pub const CTL_SYSCTL: i32 = 0;
     pub const CTL_KERN: i32 = 1;
     pub const CTL_VM: i32 = 2;
+    pub const CTL_VFS: i32 = 3;
+    pub const CTL_NET: i32 = 4;
     pub const CTL_DEBUG: i32 = 5;
     pub const CTL_HW: i32 = 6;
+    pub const CTL_MACHDEP: i32 = 7;
+    pub const CTL_USER: i32 = 8;
+    pub const CTL_P1003_1B: i32 = 9;
 
     pub const SYSCTL_NAME2OID: i32 = 3;
 
@@ -32,16 +80,12 @@ impl Sysctl {
     pub const KERN_USRSTACK: i32 = 33;
     pub const KERN_ARND: i32 = 37;
     pub const KERN_PROC_APPINFO: i32 = 35;
+    pub const KERN_PROC_SANITIZER: i32 = 41;
+    pub const KERN_PROC_PTC: i32 = 43;
 
     pub const VM_TOTAL: i32 = 1;
 
     pub const HW_PAGESIZE: i32 = 7;
-
-    const CTLTYPE: u32 = 0xf;
-    const CTLTYPE_NODE: u32 = 1;
-    const CTLFLAG_SECURE: u32 = 0x08000000;
-    const CTLFLAG_ANYBODY: u32 = 0x10000000;
-    const CTLFLAG_WR: u32 = 0x40000000;
 
     pub fn new(
         arnd: &Arc<Arnd>,
@@ -70,7 +114,7 @@ impl Sysctl {
         let newlen: usize = i.args[5].into();
 
         // Convert name to a slice.
-        let name = if !(2..=24).contains(&namelen) {
+        let name = if !(2..=(Self::CTL_MAXNAME as u32)).contains(&namelen) {
             return Err(SysErr::Raw(EINVAL));
         } else if name.is_null() {
             return Err(SysErr::Raw(EFAULT));
@@ -149,7 +193,7 @@ impl Sysctl {
                     return Err(SysErr::Raw(ENOTDIR));
                 }
             } else if indx != name.len() && oid.handler.is_none() {
-                if indx == 24 {
+                if indx == Self::CTL_MAXNAME {
                     break;
                 }
 
@@ -236,7 +280,7 @@ impl Sysctl {
         // Map name to OIDs.
         let mut path = name.split('.');
         let mut target = path.next().unwrap();
-        let mut buf = [0i32; 24];
+        let mut buf = [0i32; Self::CTL_MAXNAME];
         let mut len = 0;
         let mut next = CHILDREN.first;
 
@@ -315,6 +359,19 @@ impl Sysctl {
             todo!("sysctl CTL_KERN:KERN_PROC:KERN_PROC_APPINFO with non-null new");
         }
 
+        Ok(())
+    }
+
+    fn kern_proc_sanitizer(
+        &self,
+        _: &'static Oid,
+        _: &Arg,
+        _: usize,
+        req: &mut SysctlReq,
+    ) -> Result<(), SysErr> {
+        //TODO write RuntimeLinker flags if unknown_function() = true
+
+        req.write(&0u32.to_le_bytes())?;
         Ok(())
     }
 
@@ -454,6 +511,7 @@ struct OidList {
 }
 
 /// An implementation of `sysctl_oid` structure.
+#[allow(dead_code)]
 struct Oid {
     parent: &'static OidList,                       // oid_parent
     link: Option<&'static Self>,                    // oid_link
@@ -475,6 +533,47 @@ enum Arg<'a> {
 
 type Handler = fn(&Sysctl, &'static Oid, &Arg, usize, &mut SysctlReq) -> Result<(), SysErr>;
 
+/// CHILDREN
+/// └─── (0) SYSCTL
+///     └─── (0.3) SYSCTL_NAME2OID
+///     └─── ...
+/// └─── (1) KERN
+///     └─── (1.14) KERN_PROC
+///         └─── (1.14.35) KERN_PROC_APPINFO
+///          ...
+///         └─── (1.14.41) KERN_PROC_SANITIZER
+///          ...
+///         └─── (1.13.43) KERN_PROC_PTC
+///         └─── ...
+///     └─── (1.33) KERN_USRSTACK
+///          ...
+///     └─── (1.37) KERN_ARANDOM
+///          ...
+///     └─── (1.42) KERN_SCHED
+///         └─── (1.42.1252) KERN_SCHED_CPUSETSIZE
+///     └─── (1.1157) KERN_SMP
+///         └─── (1.1157.1162) KERN_SMP_CPUS
+///          ...
+///     └─── ...
+/// └─── (2) VM
+///     └─── ...
+/// └─── (3) VFS
+///     └─── ...
+/// └─── (4) NET
+///     └─── ...
+/// └─── (5) DEBUG
+///     └─── ...
+/// └─── (6) HW
+///     └─── ...
+///     └─── (1.6.7) HW_PAGESIZE
+///     └─── ...
+/// └─── (7) MACHDEP
+///     └─── ...
+/// └─── (8) USER
+///     └─── ...
+/// └─── (9) P1003_1B
+///     └─── ...
+
 static CHILDREN: OidList = OidList {
     first: Some(&SYSCTL),
 };
@@ -483,7 +582,7 @@ static SYSCTL: Oid = Oid {
     parent: &CHILDREN,
     link: Some(&KERN),
     number: Sysctl::CTL_SYSCTL,
-    kind: 0xC0000001,
+    kind: Sysctl::CTLFLAG_RW | Sysctl::CTLTYPE_NODE,
     arg1: Some(&SYSCTL_CHILDREN),
     arg2: 0,
     name: "sysctl",
@@ -501,7 +600,11 @@ static SYSCTL_NAME2OID: Oid = Oid {
     parent: &SYSCTL_CHILDREN,
     link: None, // TODO: Implement this.
     number: Sysctl::SYSCTL_NAME2OID,
-    kind: 0xD004C002,
+    kind: Sysctl::CTLFLAG_RW
+        | Sysctl::CTLFLAG_ANYBODY
+        | Sysctl::CTLFLAG_MPSAFE
+        | Sysctl::CTLFLAG_CAPRW
+        | Sysctl::CTLTYPE_INT,
     arg1: None,
     arg2: 0,
     name: "name2oid",
@@ -515,7 +618,7 @@ static KERN: Oid = Oid {
     parent: &CHILDREN,
     link: Some(&HW), // TODO: Change to a proper value.
     number: Sysctl::CTL_KERN,
-    kind: 0xC0008001,
+    kind: Sysctl::CTLFLAG_RW | Sysctl::CTLFLAG_CAPRD | Sysctl::CTLTYPE_NODE,
     arg1: Some(&KERN_CHILDREN),
     arg2: 0,
     name: "kern",
@@ -533,7 +636,7 @@ static KERN_PROC: Oid = Oid {
     parent: &KERN_CHILDREN,
     link: Some(&KERN_USRSTACK), // TODO: Use a proper value.
     number: Sysctl::KERN_PROC,
-    kind: 0x80000001,
+    kind: Sysctl::CTLFLAG_RD | Sysctl::CTLTYPE_NODE,
     arg1: Some(&KERN_PROC_CHILDREN),
     arg2: 0,
     name: "proc",
@@ -549,9 +652,9 @@ static KERN_PROC_CHILDREN: OidList = OidList {
 
 static KERN_PROC_APPINFO: Oid = Oid {
     parent: &KERN_PROC_CHILDREN,
-    link: Some(&KERN_PROC_PTC), // TODO: Use a proper value.
+    link: Some(&KERN_PROC_SANITIZER), // TODO: Use a proper value.
     number: Sysctl::KERN_PROC_APPINFO,
-    kind: 0xC0040001,
+    kind: Sysctl::CTLFLAG_RW | Sysctl::CTLFLAG_MPSAFE | Sysctl::CTLTYPE_NODE,
     arg1: None, // TODO: This value on the PS4 is not null.
     arg2: 0,
     name: "appinfo",
@@ -561,11 +664,28 @@ static KERN_PROC_APPINFO: Oid = Oid {
     enabled: true,
 };
 
+static KERN_PROC_SANITIZER: Oid = Oid {
+    parent: &KERN_PROC_CHILDREN,
+    link: Some(&KERN_PROC_PTC), // TODO: Use a proper value.
+    number: Sysctl::KERN_PROC_SANITIZER,
+    kind: Sysctl::CTLFLAG_RD | Sysctl::CTLFLAG_MPSAFE | Sysctl::CTLTYPE_NODE,
+    arg1: None, // TODO: This value on the PS4 is not null.
+    arg2: 0,
+    name: "kern_sanitizer",
+    handler: Some(Sysctl::kern_proc_sanitizer),
+    fmt: "N",
+    descr: "Sanitizing mode",
+    enabled: true,
+};
+
 static KERN_PROC_PTC: Oid = Oid {
     parent: &KERN_PROC_CHILDREN,
     link: None, // TODO: Implement this.
-    number: 0x2B,
-    kind: 0x90040009,
+    number: Sysctl::KERN_PROC_PTC,
+    kind: Sysctl::CTLFLAG_RD
+        | Sysctl::CTLFLAG_ANYBODY
+        | Sysctl::CTLFLAG_MPSAFE
+        | Sysctl::CTLTYPE_U64,
     arg1: None,
     arg2: 0,
     name: "ptc",
@@ -579,7 +699,7 @@ static KERN_USRSTACK: Oid = Oid {
     parent: &KERN_CHILDREN,
     link: Some(&KERN_ARANDOM), // TODO: Use a proper value.
     number: Sysctl::KERN_USRSTACK,
-    kind: 0x80008008,
+    kind: Sysctl::CTLFLAG_RD | Sysctl::CTLFLAG_CAPRD | Sysctl::CTLTYPE_ULONG,
     arg1: None,
     arg2: 0,
     name: "usrstack",
@@ -593,7 +713,10 @@ static KERN_ARANDOM: Oid = Oid {
     parent: &KERN_CHILDREN,
     link: Some(&KERN_SCHED), // TODO: Use a proper value.
     number: Sysctl::KERN_ARND,
-    kind: 0x80048005,
+    kind: Sysctl::CTLFLAG_RD
+        | Sysctl::CTLFLAG_MPSAFE
+        | Sysctl::CTLFLAG_CAPRD
+        | Sysctl::CTLTYPE_OPAQUE,
     arg1: None,
     arg2: 0,
     name: "arandom",
@@ -607,7 +730,7 @@ static KERN_SCHED: Oid = Oid {
     parent: &KERN_CHILDREN,
     link: Some(&KERN_SMP), // TODO: Use a proper value.
     number: 0x2A0,
-    kind: 0xC0000001,
+    kind: Sysctl::CTLFLAG_RW | Sysctl::CTLTYPE_NODE,
     arg1: Some(&KERN_SCHED_CHILDREN),
     arg2: 0,
     name: "sched",
@@ -625,7 +748,7 @@ static KERN_SCHED_CPUSETSIZE: Oid = Oid {
     parent: &KERN_SCHED_CHILDREN,
     link: None,
     number: 0x4E4,
-    kind: 0x80040002,
+    kind: Sysctl::CTLFLAG_RD | Sysctl::CTLFLAG_MPSAFE | Sysctl::CTLTYPE_INT,
     arg1: None,
     arg2: 8,
     name: "cpusetsize",
@@ -639,7 +762,7 @@ static KERN_SMP: Oid = Oid {
     parent: &KERN_CHILDREN,
     link: None, // TODO: Implement this.
     number: 0x485,
-    kind: 0x80008001,
+    kind: Sysctl::CTLFLAG_RD | Sysctl::CTLFLAG_CAPRD | Sysctl::CTLTYPE_NODE,
     arg1: Some(&KERN_SMP_CHILDREN),
     arg2: 0,
     name: "smp",
@@ -657,7 +780,7 @@ static KERN_SMP_CPUS: Oid = Oid {
     parent: &KERN_SMP_CHILDREN,
     link: None, // TODO: Implement this.
     number: 0x48A,
-    kind: 0x80048002,
+    kind: Sysctl::CTLFLAG_RD | Sysctl::CTLFLAG_MPSAFE | Sysctl::CTLFLAG_CAPRD | Sysctl::CTLTYPE_INT,
     arg1: Some(&INT_8),
     arg2: 0,
     name: "cpus",
@@ -671,7 +794,7 @@ static HW: Oid = Oid {
     parent: &CHILDREN,
     link: None, // TODO: Implement this.
     number: Sysctl::CTL_HW,
-    kind: 0xC0000001,
+    kind: Sysctl::CTLFLAG_RW | Sysctl::CTLTYPE_NODE,
     arg1: Some(&HW_CHILDREN),
     arg2: 0,
     name: "hw",
@@ -689,7 +812,7 @@ static HW_PAGESIZE: Oid = Oid {
     parent: &HW_CHILDREN,
     link: None, // TODO: Implement this.
     number: Sysctl::HW_PAGESIZE,
-    kind: 0x80048002,
+    kind: Sysctl::CTLFLAG_RD | Sysctl::CTLFLAG_MPSAFE | Sysctl::CTLFLAG_CAPRD | Sysctl::CTLTYPE_INT,
     arg1: None,
     arg2: MemoryManager::VIRTUAL_PAGE_SIZE,
     name: "pagesize",
