@@ -134,7 +134,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         for m in app.modules() {
             match m.name() {
                 "libSceDbgUndefinedBehaviorSanitizer" => flags |= LinkerFlags::UNK1,
-                "libSceDbgAddressSanitizer" => flags |= LinkerFlags::UNK2,
+                "libSceDbgAddressSanitizer" => flags |= LinkerFlags::HAS_SANITIZER,
                 _ => continue,
             }
         }
@@ -323,7 +323,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         let mains = self.mains.read();
         let resolver = SymbolResolver::new(
             &mains,
-            self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::UNK2),
+            self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::HAS_SANITIZER),
         );
 
         // Resolve.
@@ -566,7 +566,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         let mains = self.mains.read();
         let resolver = SymbolResolver::new(
             &mains,
-            self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::UNK2),
+            self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::HAS_SANITIZER),
         );
 
         for m in list.deref() {
@@ -895,9 +895,9 @@ pub struct TlsAlloc {
 bitflags! {
     /// Flags for [`RuntimeLinker`].
     #[derive(Debug)]
-    pub struct LinkerFlags: u8 {
+    pub struct LinkerFlags: u32 {
         const UNK1 = 0x01; // TODO: Rename this.
-        const UNK2 = 0x02; // TODO: Rename this.
+        const HAS_SANITIZER = 0x02;
     }
 }
 
