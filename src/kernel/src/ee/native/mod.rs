@@ -499,9 +499,6 @@ impl NativeEngine {
         asm.push(rbp).unwrap();
         asm.mov(rbp, rsp).unwrap();
         asm.pushfq().unwrap();
-        asm.pop(out).unwrap();
-        asm.and(rsp, !63).unwrap();
-        asm.push(out).unwrap(); // rFLAGS.
         asm.push(out).unwrap(); // Output placeholder.
         asm.push(rax).unwrap();
         asm.push(rbx).unwrap();
