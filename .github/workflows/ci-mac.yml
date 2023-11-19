@@ -1,42 +1,80 @@
 name: CI (Mac)
 on:
   workflow_call:
+env:
+  CMAKE_BUILD_PARALLEL_LEVEL: '3'
 jobs:
+  llvm:
+    name: LLVM for Mac
+    runs-on: macos-12
+    outputs:
+      dist-key: ${{ steps.cache-keys.outputs.dist }}
+    env:
+      LLVM_URL: https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.5/llvm-project-17.0.5.src.tar.xz
+    steps:
+    - name: Generate cache keys
+      run: |
+        hash=$(md5 -qs "$LLVM_URL")
+        echo "dist=${{ runner.os }}-llvm-$hash" >> $GITHUB_OUTPUT
+      id: cache-keys
+    - name: Check cached artifacts
+      uses: actions/cache/restore@v3
+      with:
+        path: lib/llvm
+        key: ${{ steps.cache-keys.outputs.dist }}
+        lookup-only: true
+      id: cache
+    - name: Download LLVM
+      run: |
+        curl -Lo llvm.tar.xz "$LLVM_URL"
+        tar -xJ --strip-components=1 -f llvm.tar.xz
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+    - name: Run CMake
+      run: cmake --install-prefix ${{ github.workspace }}/lib/llvm -Wno-dev -DCMAKE_BUILD_TYPE:STRING=Release -DLLVM_ENABLE_ZSTD:BOOL=OFF -DLLVM_APPEND_VC_REV:BOOL=OFF -DLLVM_TARGETS_TO_BUILD:STRING=X86 -B build llvm
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+    - name: Build
+      run: cmake --build build --config Release
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+    - name: Export artifacts
+      run: cmake --install build --config Release
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+    - name: Cache artifacts
+      uses: actions/cache/save@v3
+      with:
+        path: lib/llvm
+        key: ${{ steps.cache-keys.outputs.dist }}
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
   build:
     name: Mac
     runs-on: macos-12
-    env:
-      CMAKE_BUILD_PARALLEL_LEVEL: '3'
+    needs: llvm
     steps:
     - name: Checkout source
       uses: actions/checkout@v4
+    - name: Download LLVM
+      uses: actions/cache/restore@v3
+      with:
+        path: lib/llvm
+        key: ${{ needs.llvm.outputs.dist-key }}
+        fail-on-cache-miss: true
     - name: Generate cache keys
       run: |
         echo "cargo=${{ runner.os }}-cargo" >> $GITHUB_OUTPUT
-        echo "build=${{ runner.os }}-build-files-${{ hashFiles('**/CMakeLists.txt', '**/*.cmake', 'CMakePresets.json') }}" >> $GITHUB_OUTPUT
       id: cache-keys
     - name: Restore Cargo home
       uses: actions/cache/restore@v3
       with:
         path: ~/.cargo
         key: ${{ steps.cache-keys.outputs.cargo }}
-    - name: Restore build files
-      uses: actions/cache/restore@v3
-      with:
-        path: |
-          build
-          src/target
-        key: ${{ steps.cache-keys.outputs.build }}
     - name: Install Qt
       run: |
-        brew install p7zip
         curl -Lo qt-base.7z https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_660/qt.qt6.660.clang_64/6.6.0-0-202310040910qtbase-MacOS-MacOS_12-Clang-MacOS-MacOS_12-X86_64-ARM64.7z
         curl -Lo qt-svg.7z https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_660/qt.qt6.660.clang_64/6.6.0-0-202310040910qtsvg-MacOS-MacOS_12-Clang-MacOS-MacOS_12-X86_64-ARM64.7z
         7za x qt-base.7z -oqt
         7za x qt-svg.7z -oqt
         echo "CMAKE_PREFIX_PATH=qt/6.6.0/macos" >> $GITHUB_ENV
     - name: Run CMake
-      run: cmake --preset mac-release .
+      run: cmake -DOB_BUILD_LLVM:BOOL=OFF --preset mac-release .
     - name: Build
       run: cmake --build --preset mac-release
     - name: Run tests
@@ -68,14 +106,6 @@ jobs:
       with:
         name: obliteration-mac-intel
         path: Obliteration.dmg
-    - name: Cache build files
-      uses: actions/cache/save@v3
-      with:
-        path: |
-          build
-          src/target
-        key: ${{ steps.cache-keys.outputs.build }}-${{ github.run_id }}
-      if: startsWith(github.ref, 'refs/heads/')
     - name: Cache Cargo home
       uses: actions/cache/save@v3
       with:
