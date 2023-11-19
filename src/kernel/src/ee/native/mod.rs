@@ -499,6 +499,10 @@ impl NativeEngine {
         asm.push(rbp).unwrap();
         asm.mov(rbp, rsp).unwrap();
         asm.pushfq().unwrap();
+        asm.pop(out).unwrap();
+        asm.sub(rsp, self.xsave_area).unwrap();
+        asm.and(rsp, !63).unwrap();
+        asm.push(out).unwrap(); // rFLAGS.
         asm.push(out).unwrap(); // Output placeholder.
         asm.push(rax).unwrap();
         asm.push(rbx).unwrap();
@@ -516,18 +520,17 @@ impl NativeEngine {
         asm.push(r15).unwrap();
         asm.mov(rbx, rsp).unwrap();
         asm.add(rbx, 14 * 8).unwrap(); // Output placeholder.
+        asm.mov(r12, rsp).unwrap();
+        asm.add(r12, 16 * 8).unwrap();
 
         // Save x87, SSE and AVX states.
-        let xsave = (self.xsave_area + 63) & !63;
-
-        asm.sub(rsp, xsave).unwrap();
-        asm.mov(ecx, xsave).unwrap();
+        asm.mov(ecx, self.xsave_area).unwrap();
         asm.xor(al, al).unwrap();
-        asm.mov(rdi, rsp).unwrap();
+        asm.mov(rdi, r12).unwrap();
         asm.rep().stosb().unwrap();
         asm.mov(rdx, 0xFFFFFFFFFFFFFFFFu64).unwrap();
         asm.mov(rax, 0xFFFFFFFFFFFFFFFFu64).unwrap();
-        asm.xsave64(iced_x86::code_asm::ptr(rsp)).unwrap();
+        asm.xsave64(iced_x86::code_asm::ptr(r12)).unwrap();
 
         // Invoke our routine.
         let ee = match mem.push_data(self.clone()) {
@@ -544,8 +547,7 @@ impl NativeEngine {
         // Restore x87, SSE and AVX states.
         asm.mov(rdx, 0xFFFFFFFFFFFFFFFFu64).unwrap();
         asm.mov(rax, 0xFFFFFFFFFFFFFFFFu64).unwrap();
-        asm.xrstor64(iced_x86::code_asm::ptr(rsp)).unwrap();
-        asm.add(rsp, xsave).unwrap();
+        asm.xrstor64(iced_x86::code_asm::ptr(r12)).unwrap();
 
         // Restore registers.
         asm.pop(r15).unwrap();
