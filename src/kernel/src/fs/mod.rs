@@ -366,6 +366,18 @@ pub enum MountSource {
     Bind(VPathBuf),
 }
 
+/// An implementation of `vfsconf` structure.
+struct FsConfig {
+    version: u32,                    // vfc_version
+    name: &'static str,              // vfc_name
+    ops: &'static FsOps,             // vfc_vfsops
+    ty: i32,                         // vfc_typenum
+    next: Option<&'static FsConfig>, // vfc_list_next
+}
+
+/// An implementation of `vfsops` structure.
+struct FsOps {}
+
 /// Represents an error when the operation of virtual filesystem is failed.
 #[derive(Debug, Error)]
 pub enum FsError {
@@ -380,3 +392,115 @@ impl Errno for FsError {
         }
     }
 }
+
+static CONFIGS: &'static FsConfig = &EXFAT;
+
+static EXFAT: FsConfig = FsConfig {
+    version: 0x19660120,
+    name: "exfatfs",
+    ops: &EXFAT_OPS,
+    ty: 0x2C,
+    next: Some(&MLFS),
+};
+
+static EXFAT_OPS: FsOps = FsOps {};
+
+static MLFS: FsConfig = FsConfig {
+    version: 0x19660120,
+    name: "mlfs",
+    ops: &MLFS_OPS,
+    ty: 0xF1,
+    next: Some(&UDF2),
+};
+
+static MLFS_OPS: FsOps = FsOps {};
+
+static UDF2: FsConfig = FsConfig {
+    version: 0x19660120,
+    name: "udf2",
+    ops: &UDF2_OPS,
+    ty: 0,
+    next: Some(&DEVFS),
+};
+
+static UDF2_OPS: FsOps = FsOps {};
+
+static DEVFS: FsConfig = FsConfig {
+    version: 0x19660120,
+    name: "devfs",
+    ops: &DEVFS_OPS,
+    ty: 0x71,
+    next: Some(&TMPFS),
+};
+
+static DEVFS_OPS: FsOps = FsOps {};
+
+static TMPFS: FsConfig = FsConfig {
+    version: 0x19660120,
+    name: "tmpfs",
+    ops: &TMPFS_OPS,
+    ty: 0x87,
+    next: Some(&UNIONFS),
+};
+
+static TMPFS_OPS: FsOps = FsOps {};
+
+static UNIONFS: FsConfig = FsConfig {
+    version: 0x19660120,
+    name: "unionfs",
+    ops: &UNIONFS_OPS,
+    ty: 0x41,
+    next: Some(&PROCFS),
+};
+
+static UNIONFS_OPS: FsOps = FsOps {};
+
+static PROCFS: FsConfig = FsConfig {
+    version: 0x19660120,
+    name: "procfs",
+    ops: &PROCFS_OPS,
+    ty: 0x2,
+    next: Some(&CD9660),
+};
+
+static PROCFS_OPS: FsOps = FsOps {};
+
+static CD9660: FsConfig = FsConfig {
+    version: 0x19660120,
+    name: "cd9660",
+    ops: &CD9660_OPS,
+    ty: 0xBD,
+    next: Some(&UFS),
+};
+
+static CD9660_OPS: FsOps = FsOps {};
+
+static UFS: FsConfig = FsConfig {
+    version: 0x19660120,
+    name: "ufs",
+    ops: &UFS_OPS,
+    ty: 0x35,
+    next: Some(&NULLFS),
+};
+
+static UFS_OPS: FsOps = FsOps {};
+
+static NULLFS: FsConfig = FsConfig {
+    version: 0x19660120,
+    name: "nullfs",
+    ops: &NULLFS_OPS,
+    ty: 0x29,
+    next: Some(&PFS),
+};
+
+static NULLFS_OPS: FsOps = FsOps {};
+
+static PFS: FsConfig = FsConfig {
+    version: 0x19660120,
+    name: "pfs",
+    ops: &PFS_OPS,
+    ty: 0xA4,
+    next: None,
+};
+
+static PFS_OPS: FsOps = FsOps {};
