@@ -117,7 +117,11 @@ fn main() -> ExitCode {
 
     // Show basic infomation.
     let mut log = info!();
-    let hwinfo = System::new_all();
+    let hwinfo = System::new_with_specifics(
+        sysinfo::RefreshKind::new()
+            .with_memory()
+            .with_cpu(sysinfo::CpuRefreshKind::new()),
+    );
 
     // Init information
     writeln!(log, "Starting Obliteration Kernel.").unwrap();
