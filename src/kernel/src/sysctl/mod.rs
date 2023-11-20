@@ -1,5 +1,7 @@
 use crate::arnd::Arnd;
-use crate::errno::{EFAULT, EINVAL, EISDIR, ENAMETOOLONG, ENOENT, ENOMEM, ENOTDIR, EPERM, ESRCH};
+use crate::errno::{
+    EFAULT, EINVAL, EISDIR, ENAMETOOLONG, ENOENT, ENOMEM, ENOTDIR, EOPNOTSUPP, EPERM, ESRCH,
+};
 use crate::memory::MemoryManager;
 use crate::process::VProc;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
@@ -318,6 +320,18 @@ impl Sysctl {
         Ok(())
     }
 
+    fn kern_proc_sanitizer(
+        &self,
+        _: &'static Oid,
+        _: &Arg,
+        _: usize,
+        req: &mut SysctlReq,
+    ) -> Result<(), SysErr> {
+        req.write(0u32.to_le_bytes().as_ref())?;
+
+        Ok(())
+    }
+
     fn kern_proc_ptc(
         &self,
         _: &'static Oid,
@@ -364,6 +378,16 @@ impl Sysctl {
         self.arnd.rand_bytes(&mut buf[..len]);
 
         req.write(&buf[..len])
+    }
+
+    fn machdep_tsc_freq(
+        &self,
+        _: &'static Oid,
+        _: &Arg,
+        _: usize,
+        req: &mut SysctlReq,
+    ) -> Result<(), SysErr> {
+        Err(SysErr::Raw(EOPNOTSUPP))
     }
 
     /// See `sysctl_handle_int` on the PS4 for a reference.
@@ -549,7 +573,7 @@ static KERN_PROC_CHILDREN: OidList = OidList {
 
 static KERN_PROC_APPINFO: Oid = Oid {
     parent: &KERN_PROC_CHILDREN,
-    link: Some(&KERN_PROC_PTC), // TODO: Use a proper value.
+    link: Some(&KERN_PROC_SANITIZER), // TODO: Use a proper value.
     number: Sysctl::KERN_PROC_APPINFO,
     kind: 0xC0040001,
     arg1: None, // TODO: This value on the PS4 is not null.
@@ -558,6 +582,20 @@ static KERN_PROC_APPINFO: Oid = Oid {
     handler: Some(Sysctl::kern_proc_appinfo),
     fmt: "N",
     descr: "Application information",
+    enabled: true,
+};
+
+static KERN_PROC_SANITIZER: Oid = Oid {
+    parent: &KERN_PROC_CHILDREN,
+    link: Some(&KERN_PROC_PTC), // TODO: Use a proper value.
+    number: 41,
+    kind: 0x80040001,
+    arg1: None, // TODO: This value on the PS4 is not null.
+    arg2: 0,
+    name: "kern sanitizer",
+    handler: Some(Sysctl::kern_proc_sanitizer),
+    fmt: "N",
+    descr: "Sanitizing mode",
     enabled: true,
 };
 
@@ -669,7 +707,7 @@ static KERN_SMP_CPUS: Oid = Oid {
 
 static HW: Oid = Oid {
     parent: &CHILDREN,
-    link: None, // TODO: Implement this.
+    link: Some(&MACHDEP), // TODO: Implement this.
     number: Sysctl::CTL_HW,
     kind: 0xC0000001,
     arg1: Some(&HW_CHILDREN),
@@ -700,3 +738,35 @@ static HW_PAGESIZE: Oid = Oid {
 };
 
 static INT_8: i32 = 8;
+
+static MACHDEP: Oid = Oid {
+    parent: &CHILDREN,
+    link: None, // TODO: Implement this.
+    number: 7,
+    kind: 0xC0000001,
+    arg1: Some(&MACHDEP_CHILDREN),
+    arg2: 0,
+    name: "machdep",
+    handler: None,
+    fmt: "N",
+    descr: "TODO",
+    enabled: false,
+};
+
+static MACHDEP_CHILDREN: OidList = OidList {
+    first: Some(&MACHDEP_TSC_FREQ), // TODO: Change to a proper value.
+};
+
+static MACHDEP_TSC_FREQ: Oid = Oid {
+    parent: &HW_CHILDREN,
+    link: None, // TODO: Implement this.
+    number: 0x1EC,
+    kind: 0xC0000001,
+    arg1: None,
+    arg2: 0,
+    name: "tsc_freq",
+    handler: Some(Sysctl::machdep_tsc_freq),
+    fmt: "QU",
+    descr: "TIme Stamp Counter frequence",
+    enabled: true,
+};
