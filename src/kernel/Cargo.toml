@@ -9,6 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 bitflags = "2.1"
+bytemuck = "1.14.0"
 byteorder = "1.4"
 clap = { version = "4.1", features = ["derive"] }
 discord-rich-presence = "0.2"
@@ -23,7 +24,7 @@ param = { path = "../param" }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
 sha1 = "0.10"
-sysinfo = "0.29.10"
+sysinfo = { version = "0.29.10", default-features = false }
 termcolor = "1.2.0"
 thiserror = "1.0"
 tls = { path = "../tls" }

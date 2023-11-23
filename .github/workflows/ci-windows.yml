@@ -10,7 +10,7 @@ jobs:
     outputs:
       dist-key: ${{ steps.cache-keys.outputs.dist }}
     steps:
-    - name: Hash LLVM
+    - name: Hash LLVM URL
       run: |
         $url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.5/llvm-project-17.0.5.src.tar.xz"
         $urlhash = [System.BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($url))).Replace("-", "").ToLower()
