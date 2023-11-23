@@ -9,6 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 bitflags = "2.1"
+bytemuck = "1.14.0"
 byteorder = "1.4"
 clap = { version = "4.1", features = ["derive"] }
 discord-rich-presence = "0.2"
