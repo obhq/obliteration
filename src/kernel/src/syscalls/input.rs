@@ -15,7 +15,7 @@ pub struct SysIn<'a> {
 
 /// An argument of the syscall.
 #[repr(transparent)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct SysArg(usize);
 
 impl SysArg {

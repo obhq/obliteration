@@ -3,7 +3,6 @@ pub use self::input::*;
 pub use self::output::*;
 
 use crate::errno::ENOSYS;
-use crate::info;
 use crate::warn;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
@@ -49,11 +48,6 @@ impl Syscalls {
         //
         // See https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/kern/init_sysent.c#L36
         // for standard FreeBSD syscalls.
-        info!(
-            "Calling syscall {} at {:#x} on {} with {:?}",
-            i.id, i.offset, i.module, i.args
-        );
-
         let h = match self.handlers.get(i.id as usize) {
             Some(v) => match v {
                 Some(v) => v,

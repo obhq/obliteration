@@ -94,19 +94,6 @@ impl Fs {
             app,
         });
 
-        syscalls.register(4, &fs, |_, i| {
-            let fd: i32 = i.args[0].try_into().unwrap();
-            let ptr: *mut u8 = i.args[1].into();
-            let len: usize = i.args[2].try_into().unwrap();
-
-            let str_slice = unsafe { std::slice::from_raw_parts_mut(ptr, len) };
-
-            let string = unsafe { String::from_utf8_unchecked(str_slice.to_vec()) };
-
-            info!("{string}");
-
-            Err(SysErr::Raw(ENOENT))
-        });
         syscalls.register(5, &fs, Self::sys_open);
         syscalls.register(54, &fs, Self::sys_ioctl);
         syscalls.register(56, &fs, Self::sys_revoke);

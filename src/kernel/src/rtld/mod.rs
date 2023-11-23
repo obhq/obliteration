@@ -162,7 +162,6 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         sys.register(591, &ld, Self::sys_dynlib_dlsym);
         sys.register(592, &ld, Self::sys_dynlib_get_list);
-        sys.register(594, &ld, Self::sys_dynlib_load_prx);
         sys.register(596, &ld, Self::sys_dynlib_do_copy_relocations);
         sys.register(598, &ld, Self::sys_dynlib_get_proc_param);
         sys.register(599, &ld, Self::sys_dynlib_process_needed_and_relocate);
@@ -429,35 +428,6 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         unsafe { *copied = list.len() };
 
         info!("Copied {} module IDs for dynamic linking.", list.len());
-
-        Ok(SysOut::ZERO)
-    }
-
-    fn sys_dynlib_load_prx(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let libname = unsafe { i.args[0].to_str(1024) }?.unwrap();
-        let flags: u32 = i.args[1].try_into().unwrap();
-        let p_id: *mut u32 = i.args[2].into();
-
-        if self.app.file_info().is_none() {
-            return Err(SysErr::Raw(EPERM));
-        }
-
-        if flags & 0xfff8ffff != 0 {
-            return Err(SysErr::Raw(EPERM));
-        }
-
-        //TODO implement the rest of this function
-
-        let vpath = VPath::new(libname).unwrap();
-        let module = self
-            .load(&vpath, false)
-            //TODO properly handle this error
-            .expect("Couldn't load module");
-
-        unsafe {
-            self.relocate()?;
-            *p_id = module.id();
-        };
 
         Ok(SysOut::ZERO)
     }
@@ -866,7 +836,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         unsafe {
             *out = match ty {
                 1..=4 | 7 => todo!("sys_dynlib_get_obj_member: with ty = {ty}"),
-                8 => module.proc_param().map(|(p, _)| *p + module.memory().addr()).unwrap_or(0),
+                8 => module.proc_param().map(|(p, _)| *p).unwrap_or(0),
                 _ => return Err(SysErr::Raw(EINVAL)),
             }
         }
