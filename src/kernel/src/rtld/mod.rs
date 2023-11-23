@@ -837,9 +837,9 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             *out = match ty {
                 1..=4 | 7 => todo!("sys_dynlib_get_obj_member: with ty = {ty}"),
                 8 => module
-                    .proc_param()
-                    .map(|(offset, _)| module.memory().addr() + offset)
-                    .unwrap_or(0),
+                    .mod_param()
+                    .map(|param| module.memory().addr() + param)
+                    .expect("No mod param"),
                 _ => return Err(SysErr::Raw(EINVAL)),
             }
         }

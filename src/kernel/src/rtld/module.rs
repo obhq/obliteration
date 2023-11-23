@@ -30,6 +30,7 @@ pub struct Module<E: ExecutionEngine + ?Sized> {
     tls_info: Option<ModuleTls>,   // tlsinit + tlsinitsize + tlssize + tlsalign
     eh_info: Option<ModuleEh>,
     proc_param: Option<(usize, usize)>,
+    mod_param: Option<usize>,
     sdk_ver: u32,
     flags: GroupMutex<ModuleFlags>,
     dag_static: GroupMutex<Vec<Arc<Self>>>,  // dagmembers
@@ -118,10 +119,17 @@ impl<E: ExecutionEngine> Module<E> {
                 size: p.memory_size(),
                 align: p.alignment(),
             });
+
         let proc_param = image
             .proc_param()
             .map(|i| image.program(i).unwrap())
             .map(|p| (base + p.addr(), p.file_size().try_into().unwrap()));
+
+        let mod_param = image
+            .mod_param()
+            .map(|i| image.program(i).unwrap())
+            .map(|p| base + p.addr());
+
         let is_self = image.self_segments().is_some();
         let file_type = image.ty();
         let (path, programs, file_info) = image.into();
@@ -160,6 +168,7 @@ impl<E: ExecutionEngine> Module<E> {
             tls_info,
             eh_info,
             proc_param,
+            mod_param,
             sdk_ver,
             flags: mtxg.new_member(ModuleFlags::UNK2),
             dag_static: mtxg.new_member(Vec::new()),
@@ -224,6 +233,10 @@ impl<E: ExecutionEngine> Module<E> {
 
     pub fn proc_param(&self) -> Option<&(usize, usize)> {
         self.proc_param.as_ref()
+    }
+
+    pub fn mod_param(&self) -> Option<usize> {
+        self.mod_param
     }
 
     pub fn sdk_ver(&self) -> u32 {
