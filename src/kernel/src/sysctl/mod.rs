@@ -317,9 +317,8 @@ impl Sysctl {
             next = oid.arg1.unwrap().downcast_ref::<OidList>().unwrap().first;
         }
 
-        // TODO: Is it possible to use safe alternative here?
         let buf = &buf[..len];
-        let data: &[u8] = unsafe { std::slice::from_raw_parts(buf.as_ptr() as _, buf.len() * 4) };
+        let data: &[u8] = bytemuck::cast_slice(buf);
 
         req.write(data)
     }
