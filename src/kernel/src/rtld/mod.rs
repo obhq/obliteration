@@ -458,10 +458,10 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         // Get param.
         match self.app.proc_param() {
-            Some(v) => {
+            Some((param_offset, param_size)) => {
                 // TODO: Seems like ET_SCE_DYNEXEC is mapped at a fixed address.
-                unsafe { *param = self.app.memory().addr() + v.0 };
-                unsafe { *size = v.1 };
+                unsafe { *param = self.app.memory().addr() + *param_offset };
+                unsafe { *size = *param_size };
             }
             None => todo!("app is dynamic but no PT_SCE_PROCPARAM"),
         }
