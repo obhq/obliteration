@@ -4,6 +4,7 @@ use crate::process::VThread;
 use crate::ucred::Ucred;
 use macros::vpath;
 use std::fmt::{Display, Formatter};
+use std::io::{self, Write};
 
 /// An implementation of `/dev/console`.
 #[derive(Debug)]
@@ -21,11 +22,17 @@ impl VFileOps for Console {
     fn write(
         &self,
         _file: &VFile,
-        _data: &[u8],
+        data: &[u8],
         _cred: &Ucred,
         _td: &VThread,
     ) -> Result<usize, Box<dyn Errno>> {
-        todo!()
+        let stderr = io::stderr();
+        let mut handle = stderr.lock();
+
+        match handle.write(data) {
+            Ok(ret) => ret,
+            Err(e) => todo!("Encountered error {e} while writing to stderr."),
+        }
     }
 
     fn ioctl(

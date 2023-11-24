@@ -29,9 +29,10 @@ impl VFileOps for Stdout {
         let stderr = io::stderr();
         let mut handle = stderr.lock();
 
-        let ret = handle.write(data).expect("Couldn't write to stderr.");
-
-        Ok(ret)
+        match handle.write(data) {
+            Ok(ret) => ret,
+            Err(e) => todo!("Encountered error {e} while writing to stderr."),
+        }
     }
 
     fn ioctl(
