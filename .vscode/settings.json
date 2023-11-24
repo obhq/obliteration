@@ -9,5 +9,9 @@
   "files.trimTrailingWhitespace": true,
   "lldb.launch.initCommands": [
     "settings set target.x86-disassembly-flavor intel"
-  ]
+  ],
+  "[rust]": {
+    "editor.defaultFormatter": "rust-lang.rust-analyzer",
+    "editor.formatOnSave": true
+  }
 }
