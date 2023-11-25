@@ -47,7 +47,7 @@ impl RegMgr {
         }
 
         // Execute the operation.
-        let td = VThread::current();
+        let td = VThread::current().unwrap();
         let r = match op {
             0x18 => {
                 let v1 = unsafe { read::<u64>(req as _) };

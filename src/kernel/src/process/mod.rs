@@ -164,7 +164,7 @@ impl VProc {
         // Spawn the thread.
         let host = td.spawn(stack, stack_size, move || {
             // We cannot have any variables that need to be dropped before invoke the routine.
-            assert_eq!(VThread::current().id(), active.id); // We want to drop active when exited.
+            assert_eq!(VThread::current().unwrap().id(), active.id); // We want to drop active when exited.
             routine();
         })?;
 
@@ -187,7 +187,9 @@ impl VProc {
 
     fn sys_setlogin(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         // Check current thread privilege.
-        VThread::current().priv_check(Privilege::PROC_SETLOGIN)?;
+        VThread::current()
+            .unwrap()
+            .priv_check(Privilege::PROC_SETLOGIN)?;
 
         // Get login name.
         let login = unsafe { i.args[0].to_str(17) }
@@ -213,7 +215,7 @@ impl VProc {
 
     fn sys_setsid(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
         // Check if current thread has privilege.
-        VThread::current().priv_check(Privilege::SCE680)?;
+        VThread::current().unwrap().priv_check(Privilege::SCE680)?;
 
         // Check if the process already become a group leader.
         let mut group = self.group.write();
@@ -246,7 +248,7 @@ impl VProc {
 
         // Keep the current mask for copying to the oset. We need to copy to the oset only when this
         // function succees.
-        let vt = VThread::current();
+        let vt = VThread::current().unwrap();
         let mut mask = vt.sigmask_mut();
         let prev = *mask;
 
@@ -391,7 +393,7 @@ impl VProc {
 
     fn sys_thr_self(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let id: *mut i64 = i.args[0].into();
-        unsafe { *id = VThread::current().id().get().into() };
+        unsafe { *id = VThread::current().unwrap().id().get().into() };
         Ok(SysOut::ZERO)
     }
 
@@ -400,7 +402,7 @@ impl VProc {
         const RTP_SET: i32 = 1;
         const RTP_UNK: i32 = 2;
 
-        let td = VThread::current();
+        let td = VThread::current().unwrap();
         let function: i32 = i.args[0].try_into().unwrap();
         let lwpid: i32 = i.args[1].try_into().unwrap();
         let rtp: *mut RtPrio = i.args[2].into();
@@ -539,7 +541,7 @@ impl VProc {
 
         // Check privilege.
         let mut info: AuthInfo = unsafe { zeroed() };
-        let td = VThread::current();
+        let td = VThread::current().unwrap();
 
         if td.priv_check(Privilege::SCE686).is_ok() {
             info = self.cred.auth().clone();
