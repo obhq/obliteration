@@ -167,7 +167,7 @@ impl Fs {
         let file = self.vp.files().get(fd).ok_or(SysErr::Raw(EBADF))?;
         let ops = file.ops().ok_or(SysErr::Raw(EBADF))?;
 
-        let td = VThread::current();
+        let td = VThread::current().unwrap();
 
         info!("Writing {len} bytes to fd {fd}.");
 
