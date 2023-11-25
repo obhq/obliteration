@@ -2,13 +2,12 @@ pub use self::mem::*;
 pub use self::module::*;
 use self::resolver::{ResolveFlags, SymbolResolver};
 use crate::ee::ExecutionEngine;
-use crate::errno::ENOENT;
-use crate::errno::{Errno, EINVAL, ENOEXEC, ENOMEM, EPERM, ESRCH};
-use crate::fs::{Fs, FsError, FsItem, VPath, VPathBuf};
+use crate::errno::{Errno, EINVAL, ENOENT, ENOEXEC, ENOMEM, EPERM, ESRCH};
+use crate::fs::{ComponentName, Fs, FsError, FsItem, NameiData, NameiFlags, VPath, VPathBuf};
 use crate::info;
 use crate::log::print;
 use crate::memory::{MemoryManager, MemoryUpdateError, MmapError, Protections};
-use crate::process::VProc;
+use crate::process::{VProc, VThread};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use bitflags::bitflags;
 use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation};
@@ -68,7 +67,18 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         path.push("eboot.bin").unwrap();
 
         // Get eboot.bin.
-        let file = match fs.get(&path) {
+        let mut nd = NameiData {
+            dirp: &path,
+            loopcnt: 0,
+            cnd: ComponentName {
+                flags: NameiFlags::from_bits_retain(0x5200844),
+                thread: None,
+                cred: None,
+                pnbuf: Vec::new(),
+            },
+        };
+
+        let file = match fs.namei(&mut nd) {
             Ok(v) => match v {
                 FsItem::File(v) => v,
                 _ => return Err(RuntimeLinkerError::InvalidExe(path)),
@@ -223,7 +233,19 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         }
 
         // Get file.
-        let file = match self.fs.get(path) {
+        let td = VThread::current();
+        let mut nd = NameiData {
+            dirp: path,
+            loopcnt: 0,
+            cnd: ComponentName {
+                flags: NameiFlags::from_bits_retain(0x5200044),
+                thread: td.as_ref().map(|v| v.deref().as_ref()),
+                cred: None,
+                pnbuf: Vec::new(),
+            },
+        };
+
+        let file = match self.fs.namei(&mut nd) {
             Ok(v) => match v {
                 FsItem::File(v) => v,
                 _ => return Err(LoadError::InvalidElf),
