@@ -32,6 +32,7 @@ pub struct Module<E: ExecutionEngine + ?Sized> {
     proc_param: Option<(usize, usize)>,
     sdk_ver: u32,
     flags: GroupMutex<ModuleFlags>,
+    names: Vec<String>,
     dag_static: GroupMutex<Vec<Arc<Self>>>,  // dagmembers
     dag_dynamic: GroupMutex<Vec<Arc<Self>>>, // dldags
     needed: Vec<NeededModule>,
@@ -55,6 +56,7 @@ impl<E: ExecutionEngine> Module<E> {
         base: usize,
         mem_name: N,
         id: u32,
+        names: Vec<String>,
         tls_index: u32,
         mtxg: &Arc<MutexGroup>,
     ) -> Result<Self, MapError> {
@@ -162,6 +164,7 @@ impl<E: ExecutionEngine> Module<E> {
             proc_param,
             sdk_ver,
             flags: mtxg.new_member(ModuleFlags::UNK2),
+            names,
             dag_static: mtxg.new_member(Vec::new()),
             dag_dynamic: mtxg.new_member(Vec::new()),
             needed: Vec::new(),
@@ -236,6 +239,10 @@ impl<E: ExecutionEngine> Module<E> {
 
     pub fn flags_mut(&self) -> GroupMutexWriteGuard<'_, ModuleFlags> {
         self.flags.write()
+    }
+
+    pub fn names(&self) -> &[String] {
+        self.names.as_ref()
     }
 
     pub fn dag_static(&self) -> GroupMutexReadGuard<'_, Vec<Arc<Self>>> {
@@ -538,6 +545,7 @@ impl<E: ExecutionEngine> Module<E> {
                 }
                 DynamicTag::DT_INIT => self.digest_init(base, value)?,
                 DynamicTag::DT_FINI => self.digest_fini(base, value)?,
+                DynamicTag::DT_SONAME => self.digest_soname(info, i, value)?,
                 DynamicTag::DT_TEXTREL => *self.flags.get_mut() |= ModuleFlags::TEXT_REL,
                 DynamicTag::DT_FLAGS => self.digest_flags(value)?,
                 DynamicTag::DT_SCE_MODULE_INFO | DynamicTag::DT_SCE_NEEDED_MODULE => {
@@ -578,6 +586,17 @@ impl<E: ExecutionEngine> Module<E> {
         // TODO: Apply checks from digest_dynamic on the PS4.
         let addr: usize = u64::from_le_bytes(value).try_into().unwrap();
         self.fini = Some(base + addr);
+        Ok(())
+    }
+
+    fn digest_soname(&mut self, info: &FileInfo, i: usize, value: [u8; 8]) -> Result<(), MapError> {
+        let name = u64::from_le_bytes(value);
+        let name = match info.read_str(name.try_into().unwrap()) {
+            Ok(v) => v,
+            Err(e) => return Err(MapError::ReadNameFailed(i, e)),
+        };
+
+        self.names.push(name.to_owned());
         Ok(())
     }
 

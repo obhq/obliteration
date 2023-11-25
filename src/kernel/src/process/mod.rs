@@ -6,7 +6,6 @@ pub use self::rlimit::*;
 pub use self::session::*;
 pub use self::signal::*;
 pub use self::thread::*;
-
 use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ERANGE, ESRCH};
 use crate::idt::IdTable;
 use crate::info;
@@ -51,6 +50,7 @@ pub struct VProc {
     files: VProcFiles,                               // p_fd
     limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
     objects: GroupMutex<IdTable<Arc<dyn Any + Send + Sync>>>,
+    ty: i32, // -1 = proc0, 0 = big app, 1 = mini-app, 2 = system?
     app_info: AppInfo,
     ptc: u64,
     uptc: AtomicPtr<u8>,
@@ -70,6 +70,7 @@ impl VProc {
             sigacts: mg.new_member(SignalActs::new()),
             files: VProcFiles::new(&mg),
             objects: mg.new_member(IdTable::new(0x1000)),
+            ty: 0, // TODO: Ths PS4 set this value on syscall 571.
             limits,
             app_info: AppInfo::new(),
             ptc: 0,
@@ -110,6 +111,10 @@ impl VProc {
 
     pub fn objects_mut(&self) -> GroupMutexWriteGuard<'_, IdTable<Arc<dyn Any + Send + Sync>>> {
         self.objects.write()
+    }
+
+    pub fn ty(&self) -> i32 {
+        self.ty
     }
 
     pub fn app_info(&self) -> &AppInfo {
