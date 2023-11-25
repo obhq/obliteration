@@ -251,7 +251,7 @@ impl Fs {
 
         let fd: Fd = i.args[0].try_into().unwrap();
         let mut com: u64 = i.args[1].into();
-        let _data: *const u8 = i.args[2].into();
+        let data_out: *mut u8 = i.args[2].into();
 
         if com > 0xffffffff {
             com &= 0xffffffff;
@@ -267,7 +267,7 @@ impl Fs {
         }
 
         // Get data.
-        let data = if size == 0 {
+        let data_in = if size == 0 {
             if com & IOC_IN != 0 {
                 todo!("ioctl with IOC_IN");
             } else if com & IOC_OUT != 0 {
@@ -303,10 +303,14 @@ impl Fs {
             _ => {}
         }
 
-        ops.ioctl(&file, com, data, td.cred(), &td)?;
+        let data = ops.ioctl(&file, com, data_in, td.cred(), &td)?;
 
         if com & IOC_OUT != 0 {
-            todo!("ioctl with IOC_OUT");
+            unsafe {
+                let data = data.expect("No data returned from ioctl");
+
+                std::ptr::copy_nonoverlapping(data.as_ptr(), data_out, data.len());
+            }
         }
 
         Ok(SysOut::ZERO)
