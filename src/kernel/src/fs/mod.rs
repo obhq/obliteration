@@ -306,9 +306,9 @@ impl Fs {
         let data = ops.ioctl(&file, com, data_in, td.cred(), &td)?;
 
         if com & IOC_OUT != 0 {
-            unsafe {
-                let data = data.expect("No data returned from ioctl");
+            let data = data.expect("No data returned from ioctl");
 
+            unsafe {
                 std::ptr::copy_nonoverlapping(data.as_ptr(), data_out, data.len());
             }
         }
