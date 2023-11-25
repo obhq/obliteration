@@ -35,7 +35,7 @@ impl VFileOps for Dipsw {
         _data: &[u8],
         _cred: &Ucred,
         _td: &VThread,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<Option<&[u8]>, Box<dyn Errno>> {
         todo!()
     }
 }

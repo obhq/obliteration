@@ -132,7 +132,6 @@ impl Fs {
         let item = match nd.dirp {
             "/dev/console" => FsItem::Device(VDev::Console),
             "/dev/dipsw" => FsItem::Device(VDev::Dipsw),
-            "/dev/stdout" => FsItem::Device(VDev::Stdout),
             _ => self
                 .resolve(VPath::new(nd.dirp).unwrap())
                 .ok_or(FsError::NotFound)?,

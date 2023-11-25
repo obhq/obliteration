@@ -1,7 +1,4 @@
-use super::{
-    dev::{dipsw::Dipsw, stdout::Stdout},
-    FsError, VFileOps, VPath, VPathBuf,
-};
+use super::{dev::dipsw::Dipsw, FsError, VFileOps, VPath, VPathBuf};
 use crate::fs::dev::console::Console;
 use std::path::{Path, PathBuf};
 
@@ -18,7 +15,6 @@ impl FsItem {
             Self::Device(d) => match d {
                 VDev::Console => true,
                 VDev::Dipsw => true,
-                VDev::Stdout => true,
             },
             _ => false,
         }
@@ -31,7 +27,6 @@ impl FsItem {
             Self::Device(d) => match d {
                 VDev::Console => Console::PATH,
                 VDev::Dipsw => Dipsw::PATH,
-                VDev::Stdout => Stdout::PATH,
             },
         }
     }
@@ -89,7 +84,6 @@ impl HostFile {
 pub enum VDev {
     Console,
     Dipsw,
-    Stdout,
 }
 
 impl VDev {
@@ -97,7 +91,6 @@ impl VDev {
         let ops: Box<dyn VFileOps> = match self {
             Self::Console => Box::new(Console::new()),
             Self::Dipsw => Box::new(Dipsw::new()),
-            Self::Stdout => Box::new(Stdout::new()),
         };
 
         Ok(ops)

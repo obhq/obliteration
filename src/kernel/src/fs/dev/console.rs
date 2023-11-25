@@ -42,9 +42,9 @@ impl VFileOps for Console {
         _data: &[u8],
         _cred: &Ucred,
         _td: &VThread,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<Option<&[u8]>, Box<dyn Errno>> {
         // TODO: Implement this.
-        Ok(())
+        Ok(None)
     }
 }
 impl Display for Console {

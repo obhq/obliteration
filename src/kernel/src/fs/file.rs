@@ -71,7 +71,7 @@ pub trait VFileOps: Debug + Send + Sync + Display {
         data: &[u8],
         cred: &Ucred,
         td: &VThread,
-    ) -> Result<(), Box<dyn Errno>>;
+    ) -> Result<Option<&[u8]>, Box<dyn Errno>>;
 }
 
 bitflags! {
