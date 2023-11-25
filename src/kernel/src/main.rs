@@ -8,7 +8,7 @@ use crate::log::{print, LOGGER};
 use crate::memory::MemoryManager;
 use crate::process::VProc;
 use crate::regmgr::RegMgr;
-use crate::rtld::{ModuleFlags, RuntimeLinker};
+use crate::rtld::{LoadFlags, ModuleFlags, RuntimeLinker};
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
 use clap::{Parser, ValueEnum};
@@ -273,11 +273,16 @@ fn run<E: crate::ee::ExecutionEngine>(
     ee.set_syscalls(syscalls);
 
     // Preload libkernel.
+    let mut flags = LoadFlags::UNK1;
     let path = vpath!("/system/common/lib/libkernel.sprx");
+
+    if vp.ty() == 0 {
+        flags |= LoadFlags::BIG_APP;
+    }
 
     info!("Loading {path}.");
 
-    let module = match ld.load(path, true) {
+    let module = match ld.load(path, flags, false, true) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Load failed");
@@ -295,7 +300,7 @@ fn run<E: crate::ee::ExecutionEngine>(
 
     info!("Loading {path}.");
 
-    let module = match ld.load(path, true) {
+    let module = match ld.load(path, flags, false, true) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Load failed");
