@@ -48,6 +48,9 @@ jobs:
     name: Mac
     runs-on: macos-12
     needs: llvm
+    env:
+      QT_URL_BASE: https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_660/qt.qt6.660.clang_64/6.6.0-0-202310040910qtbase-MacOS-MacOS_12-Clang-MacOS-MacOS_12-X86_64-ARM64.7z
+      QT_URL_SVG: https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_660/qt.qt6.660.clang_64/6.6.0-0-202310040910qtsvg-MacOS-MacOS_12-Clang-MacOS-MacOS_12-X86_64-ARM64.7z
     steps:
     - name: Checkout source
       uses: actions/checkout@v4
@@ -59,20 +62,46 @@ jobs:
         fail-on-cache-miss: true
     - name: Generate cache keys
       run: |
-        echo "cargo=${{ runner.os }}-cargo" >> $GITHUB_OUTPUT
+        require Digest::MD5;
+
+        my $qt = Digest::MD5->new();
+
+        while (my ($name, $value) = each %ENV) {
+          if ($name =~ /^QT_URL_/) {
+            $qt->add($value);
+          }
+        }
+
+        open(my $output, '>>', $ENV{GITHUB_OUTPUT}) || die "Cannot open GITHUB_OUTPUT: $!";
+        print $output "cargo=${{ runner.os }}-cargo\n";
+        print $output "qt=${{ runner.os }}-qt-".$qt->hexdigest."\n";
+      shell: perl {0}
       id: cache-keys
     - name: Restore Cargo home
       uses: actions/cache/restore@v3
       with:
         path: ~/.cargo
         key: ${{ steps.cache-keys.outputs.cargo }}
+    - name: Restore Qt
+      uses: actions/cache/restore@v3
+      with:
+        path: qt
+        key: ${{ steps.cache-keys.outputs.qt }}
+      id: qt-cache
     - name: Install Qt
       run: |
-        curl -Lo qt-base.7z https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_660/qt.qt6.660.clang_64/6.6.0-0-202310040910qtbase-MacOS-MacOS_12-Clang-MacOS-MacOS_12-X86_64-ARM64.7z
-        curl -Lo qt-svg.7z https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_660/qt.qt6.660.clang_64/6.6.0-0-202310040910qtsvg-MacOS-MacOS_12-Clang-MacOS-MacOS_12-X86_64-ARM64.7z
-        7za x qt-base.7z -oqt
-        7za x qt-svg.7z -oqt
+        env | while IFS= read -r line; do
+          name=${line%%=*}
+          value=${line#*=}
+
+          if [[ $name == QT_URL_* ]]; then
+            curl -Lo qt.7z "$value"
+            7za x qt.7z -oqt
+          fi
+        done
+
         echo "CMAKE_PREFIX_PATH=qt/6.6.0/macos" >> $GITHUB_ENV
+      if: ${{ steps.qt-cache.outputs.cache-hit != 'true' }}
     - name: Run CMake
       run: cmake -DOB_BUILD_LLVM:BOOL=OFF --preset mac-release .
     - name: Build
@@ -111,4 +140,10 @@ jobs:
       with:
         path: ~/.cargo
         key: ${{ steps.cache-keys.outputs.cargo }}-${{ github.run_id }}
+      if: startsWith(github.ref, 'refs/heads/')
+    - name: Cache Qt
+      uses: actions/cache/save@v3
+      with:
+        path: qt
+        key: ${{ steps.cache-keys.outputs.qt }}-${{ github.run_id }}
       if: startsWith(github.ref, 'refs/heads/')
