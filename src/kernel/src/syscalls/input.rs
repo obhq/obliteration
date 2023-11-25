@@ -111,3 +111,11 @@ impl TryFrom<SysArg> for u32 {
         v.0.try_into()
     }
 }
+
+impl TryFrom<SysArg> for u8 {
+    type Error = TryFromIntError;
+
+    fn try_from(v: SysArg) -> Result<Self, Self::Error> {
+        v.0.try_into()
+    }
+}
