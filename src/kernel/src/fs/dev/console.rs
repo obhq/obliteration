@@ -30,7 +30,7 @@ impl VFileOps for Console {
         let mut handle = stderr.lock();
 
         match handle.write(data) {
-            Ok(ret) => ret,
+            Ok(ret) => Ok(ret),
             Err(e) => todo!("Encountered error {e} while writing to stderr."),
         }
     }
