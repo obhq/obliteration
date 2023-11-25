@@ -1,14 +1,12 @@
 pub use self::file::*;
 pub use self::item::*;
 pub use self::path::*;
-
 use crate::errno::{Errno, EBADF, EINVAL, ENOENT, ENOTTY};
 use crate::info;
 use crate::process::{VProc, VThread};
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::Privilege;
 use bitflags::bitflags;
-use gmtx::{GroupMutex, MutexGroup};
 use param::Param;
 use std::borrow::Borrow;
 use std::collections::HashMap;
@@ -31,7 +29,7 @@ pub type Fd = i32;
 #[derive(Debug)]
 pub struct Fs {
     vp: Arc<VProc>,
-    mounts: GroupMutex<HashMap<VPathBuf, MountSource>>,
+    mounts: HashMap<VPathBuf, MountSource>,
     opens: AtomicI32, // openfiles
     app: VPathBuf,
 }
@@ -83,7 +81,6 @@ impl Fs {
         }
 
         // Mount /mnt/sandbox/{id}_000/app0 to /mnt/sandbox/pfsmnt/{id}-app0-patch0-union.
-        let mg = MutexGroup::new("fs");
         let app: VPathBuf = format!("/mnt/sandbox/{}_000", param.title_id())
             .try_into()
             .unwrap();
@@ -93,7 +90,7 @@ impl Fs {
         // Install syscall handlers.
         let fs = Arc::new(Self {
             vp: vp.clone(),
-            mounts: mg.new_member(mounts),
+            mounts,
             opens: AtomicI32::new(0),
             app,
         });
@@ -305,9 +302,8 @@ impl Fs {
     }
 
     fn resolve(&self, path: &VPath) -> Option<FsItem> {
-        let mounts = self.mounts.read();
         let mut current = VPathBuf::new();
-        let root = match mounts.get(&current).unwrap() {
+        let root = match self.mounts.get(&current).unwrap() {
             MountSource::Host(v) => v,
             MountSource::Bind(_) => unreachable!(),
         };
@@ -319,7 +315,7 @@ impl Fs {
             current.push(component).unwrap();
 
             // Check if a virtual path is a mount point.
-            if let Some(mount) = mounts.get(&current) {
+            if let Some(mount) = self.mounts.get(&current) {
                 let path = match mount {
                     MountSource::Host(v) => v.to_owned(),
                     MountSource::Bind(v) => match self.resolve(v)? {
