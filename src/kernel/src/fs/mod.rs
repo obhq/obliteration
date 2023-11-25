@@ -5,7 +5,7 @@ use crate::errno::{Errno, EBADF, EINVAL, ENOENT, ENOTTY};
 use crate::info;
 use crate::process::{VProc, VThread};
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
-use crate::ucred::Privilege;
+use crate::ucred::{Privilege, Ucred};
 use bitflags::bitflags;
 use param::Param;
 use std::borrow::Borrow;
@@ -102,17 +102,39 @@ impl Fs {
         self.app.borrow()
     }
 
-    pub fn get(&self, path: &VPath) -> Result<FsItem, FsError> {
-        let item = match path.as_str() {
+    /// See `namei` on the PS4 for a reference.
+    pub fn namei(&self, nd: &mut NameiData) -> Result<FsItem, FsError> {
+        nd.cnd.cred = nd.cnd.thread.map(|v| v.cred());
+        nd.cnd.flags.remove(NameiFlags::TRAILINGSLASH);
+        nd.cnd.pnbuf = nd.dirp.as_bytes().to_vec();
+
+        if nd.cnd.flags.intersects(NameiFlags::AUDITVNODE1) {
+            // TODO: Implement this.
+        }
+
+        if nd.cnd.flags.intersects(NameiFlags::AUDITVNODE2) {
+            todo!("namei with AUDITVNODE2");
+        }
+
+        if nd.cnd.pnbuf.is_empty() {
+            return Err(FsError::NotFound);
+        }
+
+        nd.loopcnt = 0;
+
+        // TODO: Implement the remaining logics from the PS4.
+        let item = match nd.dirp {
             "/dev/console" => FsItem::Device(VDev::Console),
-            _ => self.resolve(path).ok_or(FsError::NotFound)?,
+            _ => self
+                .resolve(VPath::new(nd.dirp).unwrap())
+                .ok_or(FsError::NotFound)?,
         };
 
         Ok(item)
     }
 
     /// See `falloc_noinstall_budget` on the PS4 for a reference.
-    pub fn alloc(self: &Arc<Self>) -> VFile {
+    fn alloc(self: &Arc<Self>) -> VFile {
         // TODO: Check if openfiles exceed rlimit.
         // TODO: Implement budget_resource_use.
         self.opens.fetch_add(1, Ordering::Relaxed);
@@ -120,7 +142,7 @@ impl Fs {
         VFile::new(self)
     }
 
-    pub fn revoke<P: Into<VPathBuf>>(&self, _path: P) {
+    fn revoke<P: Into<VPathBuf>>(&self, _path: P) {
         // TODO: Implement this.
     }
 
@@ -158,8 +180,20 @@ impl Fs {
         info!("Opening {path} with {flags}.");
 
         // Lookup file.
+        let td = VThread::current().unwrap();
+        let mut nd = NameiData {
+            dirp: path,
+            loopcnt: 0,
+            cnd: ComponentName {
+                flags: NameiFlags::from_bits_retain(0x5000040),
+                thread: Some(&td),
+                cred: None,
+                pnbuf: Vec::new(),
+            },
+        };
+
         *file.flags_mut() = flags.to_fflags();
-        file.set_ops(Some(self.get(path)?.open()?));
+        file.set_ops(Some(self.namei(&mut nd)?.open()?));
 
         // Install to descriptor table.
         let fd = self.vp.files().alloc(Arc::new(file));
@@ -217,7 +251,7 @@ impl Fs {
         }
 
         // Execute the operation.
-        let td = VThread::current();
+        let td = VThread::current().unwrap();
 
         info!("Executing ioctl({com:#x}) on {file}.");
 
@@ -244,10 +278,23 @@ impl Fs {
         info!("Revoking access to {path}.");
 
         // Check current thread privilege.
-        VThread::current().priv_check(Privilege::SCE683)?;
+        let td = VThread::current().unwrap();
+
+        td.priv_check(Privilege::SCE683)?;
 
         // TODO: Check vnode::v_rdev.
-        let file = self.get(path)?;
+        let mut nd = NameiData {
+            dirp: path,
+            loopcnt: 0,
+            cnd: ComponentName {
+                flags: NameiFlags::from_bits_retain(0x5000044),
+                thread: Some(&td),
+                cred: None,
+                pnbuf: Vec::new(),
+            },
+        };
+
+        let file = self.namei(&mut nd)?;
 
         if !file.is_character() {
             return Err(SysErr::Raw(EINVAL));
@@ -319,6 +366,31 @@ impl Fs {
     }
 }
 
+/// An implementation of `nameidata`.
+pub struct NameiData<'a> {
+    pub dirp: &'a str,          // ni_dirp
+    pub loopcnt: u32,           // ni_loopcnt
+    pub cnd: ComponentName<'a>, // ni_cnd
+}
+
+/// An implementation of `componentname`.
+pub struct ComponentName<'a> {
+    pub flags: NameiFlags,           // cn_flags
+    pub thread: Option<&'a VThread>, // cn_thread
+    pub cred: Option<&'a Ucred>,     // cn_cred
+    pub pnbuf: Vec<u8>,              // cn_pnbuf
+}
+
+bitflags! {
+    #[derive(Clone, Copy)]
+    pub struct NameiFlags: u64 {
+        const HASBUF = 0x00000400;
+        const AUDITVNODE1 = 0x04000000;
+        const AUDITVNODE2 = 0x08000000;
+        const TRAILINGSLASH = 0x10000000;
+    }
+}
+
 bitflags! {
     /// Flags for [`Fs::sys_open()`].
     struct OpenFlags: u32 {
@@ -357,7 +429,7 @@ impl Display for OpenFlags {
 
 /// Source of mount point.
 #[derive(Debug)]
-pub enum MountSource {
+enum MountSource {
     Host(PathBuf),
     Bind(VPathBuf),
 }

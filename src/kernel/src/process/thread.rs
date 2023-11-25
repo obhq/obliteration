@@ -39,10 +39,9 @@ impl VThread {
         }
     }
 
-    /// # Panics
-    /// If the current thread does not have a [`VThread`] associated.
-    pub fn current() -> Local<'static, Arc<Self>> {
-        VTHREAD.get().unwrap()
+    /// Return [`None`] if the calling thread is not a PS4 thread.
+    pub fn current() -> Option<Local<'static, Arc<Self>>> {
+        VTHREAD.get()
     }
 
     pub fn id(&self) -> NonZeroI32 {
