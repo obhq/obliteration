@@ -8,13 +8,19 @@ use std::sync::Arc;
 /// An object to resolve a symbol from loaded (S)ELF.
 pub struct SymbolResolver<'a, E: ExecutionEngine> {
     mains: &'a [Arc<Module<E>>],
+    globals: &'a [Arc<Module<E>>],
     new_algorithm: bool,
 }
 
 impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
-    pub fn new(mains: &'a [Arc<Module<E>>], new_algorithm: bool) -> Self {
+    pub fn new(
+        mains: &'a [Arc<Module<E>>],
+        globals: &'a [Arc<Module<E>>],
+        new_algorithm: bool,
+    ) -> Self {
         Self {
             mains,
+            globals,
             new_algorithm,
         }
     }
@@ -22,10 +28,10 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
     /// See `find_symdef` on the PS4 for a reference.
     pub fn resolve_with_local(
         &self,
-        md: &'a Arc<Module<E>>,
+        md: &Arc<Module<E>>,
         index: usize,
         mut flags: ResolveFlags,
-    ) -> Option<(&'a Arc<Module<E>>, usize)> {
+    ) -> Option<(Arc<Module<E>>, usize)> {
         // Check if symbol index is valid.
         let sym = md.symbols().get(index)?;
         let data = md.file_info().unwrap();
@@ -76,13 +82,14 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
         // Return this symbol if the binding is local. The reason we don't check this in the
         // first place is because we want to maintain the same behavior as the PS4.
         if sym.binding() == Symbol::STB_LOCAL {
-            return Some((md, index));
+            return Some((md.clone(), index));
         } else if sym.ty() == Symbol::STT_SECTION {
             return None;
         }
 
         // Lookup from global list if the symbol is not local.
-        if let Some(v) = self.resolve(md, name, decoded_name, symmod, symlib, hash, flags) {
+        if let Some(v) = self.resolve(md, name, decoded_name.as_ref(), symmod, symlib, hash, flags)
+        {
             return Some(v);
         } else if sym.binding() == Symbol::STB_WEAK {
             // TODO: Return sym_zero.
@@ -97,12 +104,12 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
         &self,
         refmod: &'a Arc<Module<E>>,
         name: Option<&str>,
-        decoded_name: Option<Cow<str>>,
+        decoded_name: Option<&Cow<str>>,
         symmod: Option<&str>,
         symlib: Option<&str>,
         hash: u64,
         flags: ResolveFlags,
-    ) -> Option<(&'a Arc<Module<E>>, usize)> {
+    ) -> Option<(Arc<Module<E>>, usize)> {
         // TODO: Resolve from DAGs.
         self.resolve_from_global(refmod, name, decoded_name, symmod, symlib, hash, flags)
     }
@@ -112,14 +119,16 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
         &self,
         refmod: &'a Arc<Module<E>>,
         name: Option<&str>,
-        decoded_name: Option<Cow<str>>,
+        decoded_name: Option<&Cow<str>>,
         symmod: Option<&str>,
         symlib: Option<&str>,
         hash: u64,
         flags: ResolveFlags,
-    ) -> Option<(&'a Arc<Module<E>>, usize)> {
-        // TODO: Resolve from list_global.
-        self.resolve_from_list(
+    ) -> Option<(Arc<Module<E>>, usize)> {
+        // Resolve from list_main.
+        let mut result = None;
+
+        if let Some(v) = self.resolve_from_list(
             refmod,
             name,
             decoded_name,
@@ -128,7 +137,35 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
             hash,
             flags,
             self.mains,
-        )
+        ) {
+            result = Some(v);
+        }
+
+        // Resolve from list_global.
+        for md in self.globals {
+            if let Some((ref md, sym)) = result {
+                if md.symbol(sym).unwrap().binding() != Symbol::STB_WEAK {
+                    break;
+                }
+            }
+
+            if let Some((md, sym)) = self.resolve_from_list(
+                refmod,
+                name,
+                decoded_name,
+                symmod,
+                symlib,
+                hash,
+                flags,
+                &md.dag_static(),
+            ) {
+                if result.is_none() || md.symbol(sym).unwrap().binding() != Symbol::STB_WEAK {
+                    result = Some((md, sym));
+                }
+            }
+        }
+
+        result
     }
 
     /// See `symlook_list` on the PS4 for a reference.
@@ -136,17 +173,17 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
         &self,
         refmod: &'a Arc<Module<E>>,
         name: Option<&str>,
-        decoded_name: Option<Cow<str>>,
+        decoded_name: Option<&Cow<str>>,
         symmod: Option<&str>,
         symlib: Option<&str>,
         hash: u64,
         flags: ResolveFlags,
         list: &'a [Arc<Module<E>>],
-    ) -> Option<(&'a Arc<Module<E>>, usize)> {
+    ) -> Option<(Arc<Module<E>>, usize)> {
         // Get module name.
         let symmod = if !flags.contains(ResolveFlags::UNK2) {
             symmod
-        } else if let Some(v) = &decoded_name {
+        } else if let Some(v) = decoded_name {
             v.rfind('#').map(|i| &v[(i + 1)..])
         } else {
             None
@@ -177,7 +214,7 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
             let (md, index) = match self.resolve_from_module(
                 refmod,
                 name,
-                decoded_name.as_deref(),
+                decoded_name.map(|v| v.as_ref()),
                 symmod,
                 symlib,
                 hash,
@@ -205,15 +242,15 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
     /// See `symlook_obj` on the PS4 for a reference.
     pub fn resolve_from_module(
         &self,
-        _refmod: &'a Arc<Module<E>>,
+        _: &'a Arc<Module<E>>,
         name: Option<&str>,
         decoded_name: Option<&str>,
         symmod: Option<&str>,
         symlib: Option<&str>,
         hash: u64,
         flags: ResolveFlags,
-        md: &'a Arc<Module<E>>,
-    ) -> Option<(&'a Arc<Module<E>>, usize)> {
+        md: &Arc<Module<E>>,
+    ) -> Option<(Arc<Module<E>>, usize)> {
         let info = md.file_info().unwrap();
         let buckets = info.buckets();
         let hash: usize = hash.try_into().unwrap();
@@ -231,7 +268,7 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
                 // Check symbol.
                 if self.is_match(name, symmod, symlib, sym, flags, md) {
                     // TODO: Implement the remaining symlook_obj.
-                    return Some((md, index));
+                    return Some((md.clone(), index));
                 }
 
                 // Move to next chain.
@@ -283,7 +320,7 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
 
                     if name == target {
                         // TODO: Implement the remaining symlook_obj.
-                        return Some((md, index));
+                        return Some((md.clone(), index));
                     }
                 }
 

@@ -1,8 +1,8 @@
 pub use self::mem::*;
 pub use self::module::*;
-
 use self::resolver::{ResolveFlags, SymbolResolver};
 use crate::ee::ExecutionEngine;
+use crate::errno::ENOENT;
 use crate::errno::{Errno, EINVAL, ENOEXEC, ENOMEM, EPERM, ESRCH};
 use crate::fs::{Fs, FsError, FsItem, VPath, VPathBuf};
 use crate::info;
@@ -41,12 +41,14 @@ pub struct RuntimeLinker<E: ExecutionEngine> {
     app: Arc<Module<E>>,                   // obj_main
     kernel: GroupMutex<Option<Arc<Module<E>>>>, // obj_kernel
     mains: GroupMutex<Vec<Arc<Module<E>>>>, // list_main
+    globals: GroupMutex<Vec<Arc<Module<E>>>>, // list_global
     tls: GroupMutex<TlsAlloc>,
     flags: LinkerFlags,
 }
 
 impl<E: ExecutionEngine> RuntimeLinker<E> {
-    const NID_CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-";
+    const NID_CHARS: &'static [u8] =
+        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-";
     const NID_SALT: [u8; 16] = [
         0x51, 0x8d, 0x64, 0xa6, 0x35, 0xde, 0xd8, 0xc1, 0xe6, 0xb0, 0x39, 0xb1, 0xc3, 0xe5, 0x52,
         0x30,
@@ -103,7 +105,17 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         // TODO: Apply remaining checks from exec_self_imgact.
         // Map eboot.bin.
-        let mut app = match Module::map(mm, ee, elf, base, "executable", 0, 1, vp.mutex_group()) {
+        let mut app = match Module::map(
+            mm,
+            ee,
+            elf,
+            base,
+            "executable",
+            0,
+            Vec::new(),
+            1,
+            vp.mutex_group(),
+        ) {
             Ok(v) => v,
             Err(e) => return Err(RuntimeLinkerError::MapExeFailed(file.into_vpath(), e)),
         };
@@ -130,17 +142,12 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             }
         }
 
-        // Add the module itself as a first member of DAG.
-        let app = Arc::new(app);
-
-        app.dag_static_mut().push(app.clone());
-        app.dag_dynamic_mut().push(app.clone());
-
         // TODO: Apply logic from dmem_handle_process_exec_begin.
         // TODO: Apply logic from procexec_handler.
         // TODO: Apply logic from umtx_exec_hook.
         // TODO: Apply logic from aio_proc_rundown_exec.
         // TODO: Apply logic from gs_is_event_handler_process_exec.
+        let app = Arc::new(app);
         let mg = vp.mutex_group();
         let ld = Arc::new(Self {
             fs: fs.clone(),
@@ -151,6 +158,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             app: app.clone(),
             kernel: mg.new_member(None),
             mains: mg.new_member(vec![app]),
+            globals: mg.new_member(Vec::new()),
             tls: mg.new_member(TlsAlloc {
                 max_index: 1,
                 last_offset: 0,
@@ -162,6 +170,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         sys.register(591, &ld, Self::sys_dynlib_dlsym);
         sys.register(592, &ld, Self::sys_dynlib_get_list);
+        sys.register(594, &ld, Self::sys_dynlib_load_prx);
         sys.register(596, &ld, Self::sys_dynlib_do_copy_relocations);
         sys.register(598, &ld, Self::sys_dynlib_get_proc_param);
         sys.register(599, &ld, Self::sys_dynlib_process_needed_and_relocate);
@@ -183,9 +192,36 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         *self.kernel.write() = Some(md);
     }
 
-    /// This method **ALWAYS** load the specified module without checking if the same module is
-    /// already loaded.
-    pub fn load(&self, path: &VPath, main: bool) -> Result<Arc<Module<E>>, LoadError<E>> {
+    /// See `load_object`, `do_load_object` and `self_load_shared_object` on the PS4 for a
+    /// reference.
+    pub fn load(
+        &self,
+        path: &VPath,
+        _: LoadFlags,
+        force: bool,
+        main: bool,
+    ) -> Result<Arc<Module<E>>, LoadError<E>> {
+        // Check if already loaded.
+        let name = path.file_name().unwrap().to_owned();
+        let mut list = self.list.write();
+
+        if !force {
+            if let Some(m) = list.iter().skip(1).find(|m| m.names().contains(&name)) {
+                return Ok(m.clone());
+            }
+        }
+
+        // Check if application is decid.(s)elf.
+        let app = self.app.path().file_name().unwrap();
+
+        if app != "decid.elf" && app != "decid.self" {
+            // TODO: Check what the PS4 is doing here.
+        }
+
+        if self.flags.intersects(LinkerFlags::HAS_SANITIZER) {
+            todo!("do_load_object with sanitizer & 2");
+        }
+
         // Get file.
         let file = match self.fs.get(path) {
             Ok(v) => match v {
@@ -195,7 +231,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             Err(e) => return Err(LoadError::GetFileFailed(e)),
         };
 
-        // Open file.
+        // Load (S)ELF.
         let elf = match File::open(file.path()) {
             Ok(v) => match Elf::open(file.into_vpath(), v) {
                 Ok(v) => v,
@@ -211,7 +247,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         // TODO: Apply remaining checks from self_load_shared_object.
         // Search for TLS free slot.
-        let mut list = self.list.write();
+        let names = vec![name];
         let tls = elf.tls().map(|i| &elf.programs()[i]);
         let tls = if tls.map(|p| p.memory_size()).unwrap_or(0) == 0 {
             0
@@ -249,6 +285,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
                 0,
                 name,
                 id,
+                names,
                 tls,
                 self.vp.mutex_group(),
             ) {
@@ -284,10 +321,24 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             self.mains.write().push(module.clone());
         }
 
-        module.dag_static_mut().push(module.clone());
-        module.dag_dynamic_mut().push(module.clone());
-
         Ok(module)
+    }
+
+    /// See `init_dag` on the PS4 for a reference.
+    fn init_dag(&self, md: &Arc<Module<E>>) {
+        // Do nothing if already initializes.
+        let mut flags = md.flags_mut();
+
+        if flags.intersects(ModuleFlags::DAG_INITED) {
+            return;
+        }
+
+        // Add the module itself as a first member of DAG.
+        md.dag_static_mut().push(md.clone());
+        md.dag_dynamic_mut().push(md.clone());
+
+        // TODO: Apply the remaining logics from init_dag.
+        *flags |= ModuleFlags::DAG_INITED;
     }
 
     /// See `do_dlsym` on the PS4 for a reference.
@@ -312,8 +363,10 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         // Setup resolver.
         let mains = self.mains.read();
+        let globals = self.globals.read();
         let resolver = SymbolResolver::new(
             &mains,
+            &globals,
             self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::HAS_SANITIZER),
         );
 
@@ -432,7 +485,105 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_dynlib_do_copy_relocations(self: &Arc<Self>, _i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_dynlib_load_prx(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        // Check if application is a dynamic SELF.
+        if self.app.file_info().is_none() {
+            return Err(SysErr::Raw(EPERM));
+        }
+
+        // Not sure what is this. Maybe kernel only flags?
+        let mut flags: u32 = i.args[1].try_into().unwrap();
+
+        if (flags & 0xfff8ffff) != 0 {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        // TODO: It looks like the PS4 check if this get called from a browser. The problem is this
+        // check has been patched when jailbreaking so we need to see the original code before
+        // implement this.
+        let name = match VPath::new(unsafe { i.args[0].to_str(1024)?.unwrap() }) {
+            Some(v) => v,
+            None => todo!("sys_dynlib_load_prx with relative path"),
+        };
+
+        if self.vp.ty() == 0 {
+            flags |= 0x01;
+        }
+
+        info!("Loading {name} with {flags:#x}.");
+
+        // Start locking from here and keep the lock until we finished.
+        let mut globals = self.globals.write();
+
+        // Check if already loaded.
+        let list = self.list.read();
+        let md = match list.iter().skip(1).find(|m| m.path() == name) {
+            Some(v) => v.clone(),
+            None => {
+                // Drop list lock first because load is going to acquire the write lock on it.
+                drop(list);
+
+                // TODO: Refactor this for readability.
+                self.load(
+                    name,
+                    LoadFlags::from_bits_retain(((flags & 1) << 5) + ((flags >> 10) & 0x40) + 2),
+                    true, // TODO: This hard-coded because we don't support relative path yet.
+                    false,
+                )?
+            }
+        };
+
+        // Add to global list if it is not in the list yet.
+        if globals.iter().find(|m| Arc::ptr_eq(m, &md)).is_none() {
+            globals.push(md.clone());
+        }
+
+        // The PS4 checking on the refcount to see if it need to do relocation. We can't do the same
+        // here because we get this value from Arc, which is not the same as PS4.
+        let mut mf = md.flags_mut();
+
+        if !mf.intersects(ModuleFlags::DAG_INITED) {
+            // TODO: Refactor this for readability.
+            let mut v1 = mf.bits();
+            let mut v2 = v1 | 0x800;
+
+            if (flags & 0x20000) == 0 {
+                v2 = v1 & 0xf7ff;
+            }
+
+            v1 = v2 | 0x1000;
+
+            if (flags & 0x40000) == 0 {
+                v1 = v2 & 0xefff;
+            }
+
+            *mf = ModuleFlags::from_bits_retain(v1);
+            drop(mf); // init_dag need to lock this.
+
+            // Initialize DAG and relocate the module.
+            let list = self.list.read();
+            let mains = self.mains.read();
+            let resolver = SymbolResolver::new(
+                &mains,
+                &globals,
+                self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::HAS_SANITIZER),
+            );
+
+            self.init_dag(&md);
+
+            if unsafe { self.relocate(&md, &list, &resolver).is_err() } {
+                todo!("sys_dynlib_load_prx with location failed");
+            }
+        }
+
+        // Set module ID.
+        unsafe { *Into::<*mut u32>::into(i.args[2]) = md.id() };
+
+        // TODO: Apply the remaining logics from the PS4.
+        Ok(SysOut::ZERO)
+    }
+
+    fn sys_dynlib_do_copy_relocations(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
         if let Some(info) = self.app.file_info() {
             for reloc in info.relocs() {
                 if reloc.ty() == Relocation::R_X86_64_COPY {
@@ -478,20 +629,17 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        // TODO: Implement dynlib_load_needed_shared_objects.
-        info!("Relocating loaded modules.");
+        // Starting locking from here until relocation is completed to prevent the other thread
+        // hijack our current states.
+        let list = self.list.read();
 
-        unsafe { self.relocate() }?;
+        for md in list.deref() {
+            self.init_dag(md);
+        }
 
-        Ok(SysOut::ZERO)
-    }
-
-    /// # Safety
-    /// No other threads may access the memory of all loaded modules.
-    unsafe fn relocate(&self) -> Result<(), RelocateError> {
         // Initialize TLS.
         let mains = self.mains.read();
-        let mut alloc = self.tls.write();
+        let mut tls = self.tls.write();
 
         for md in mains.deref() {
             // Skip if already initialized.
@@ -507,34 +655,60 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
                 let off = if md.tls_index() == 1 {
                     (t.size() + t.align() - 1) & !(t.align() - 1)
                 } else {
-                    ((alloc.last_offset + t.size()) + t.align() - 1) & !(t.align() - 1)
+                    ((tls.last_offset + t.size()) + t.align() - 1) & !(t.align() - 1)
                 };
 
-                if alloc.static_space != 0 && off > alloc.static_space {
+                if tls.static_space != 0 && off > tls.static_space {
                     continue;
                 }
 
                 *md.tls_offset_mut() = off;
 
-                alloc.last_offset = off;
-                alloc.last_size = t.size();
+                tls.last_offset = off;
+                tls.last_size = t.size();
             }
 
             // Set TLS_DONE.
             *flags |= ModuleFlags::TLS_DONE;
         }
 
-        drop(alloc);
+        drop(tls);
 
-        // TODO: Check what the PS4 actually doing.
-        let list = self.list.read();
-        let mains = self.mains.read();
+        // Do relocation.
+        let globals = self.globals.read();
         let resolver = SymbolResolver::new(
             &mains,
+            &globals,
             self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::HAS_SANITIZER),
         );
 
-        for m in list.deref() {
+        info!("Relocating initial modules.");
+
+        unsafe { self.relocate(&self.app, &list, &resolver) }?;
+
+        // TODO: Apply the remaining logics from the PS4.
+        Ok(SysOut::ZERO)
+    }
+
+    /// See `relocate_objects` on the PS4 for a reference.
+    ///
+    /// # Safety
+    /// No other threads may access the memory of all loaded modules.
+    unsafe fn relocate(
+        &self,
+        md: &Arc<Module<E>>,
+        list: &[Arc<Module<E>>],
+        resolver: &SymbolResolver<E>,
+    ) -> Result<(), RelocateError> {
+        // TODO: Implement flags & 0x800.
+        self.relocate_single(md, &resolver)?;
+
+        // Relocate other modules.
+        for m in list {
+            if Arc::ptr_eq(m, md) {
+                continue;
+            }
+
             self.relocate_single(m, &resolver)?;
         }
 
@@ -597,24 +771,26 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
                 Relocation::R_X86_64_64 => {
                     // TODO: Apply checks from reloc_non_plt.
                     let (md, sym) = match resolver.resolve_with_local(md, sym, symflags) {
-                        Some((md, sym)) => (md, md.symbol(sym).unwrap()),
+                        Some(v) => v,
                         None => continue,
                     };
 
                     // TODO: Apply checks from reloc_non_plt.
                     let mem = md.memory();
+                    let sym = md.symbol(sym).unwrap();
 
                     (mem.addr() + mem.base() + sym.value()).wrapping_add_signed(addend)
                 }
                 Relocation::R_X86_64_GLOB_DAT => {
                     // TODO: Apply checks from reloc_non_plt.
                     let (md, sym) = match resolver.resolve_with_local(md, sym, symflags) {
-                        Some((md, sym)) => (md, md.symbol(sym).unwrap()),
+                        Some(v) => v,
                         None => continue,
                     };
 
                     // TODO: Apply checks from reloc_non_plt.
                     let mem = md.memory();
+                    let sym = md.symbol(sym).unwrap();
 
                     mem.addr() + mem.base() + sym.value()
                 }
@@ -896,6 +1072,16 @@ bitflags! {
     }
 }
 
+bitflags! {
+    /// Flags for [`RuntimeLinker::load()`].
+    #[derive(Clone, Copy)]
+    pub struct LoadFlags: u32 {
+        const UNK2 = 0x01;
+        const BIG_APP = 0x20;
+        const UNK1 = 0x40;
+    }
+}
+
 /// Represents the error for [`RuntimeLinker`] initialization.
 #[derive(Debug, Error)]
 pub enum RuntimeLinkerError<E: ExecutionEngine> {
@@ -954,6 +1140,9 @@ pub enum MapError {
     #[error("cannot read DT_NEEDED from dynamic entry {0}")]
     ReadNeededFailed(usize, #[source] elf::StringTableError),
 
+    #[error("cannot read DT_SONAME from dynamic entry {0}")]
+    ReadNameFailed(usize, #[source] elf::StringTableError),
+
     #[error("{0} is obsolete")]
     ObsoleteFlags(DynamicFlags),
 
@@ -987,6 +1176,20 @@ pub enum LoadError<E: ExecutionEngine> {
 
     #[error("cannot setup the module")]
     SetupFailed(#[source] E::SetupModuleErr),
+}
+
+impl<E: ExecutionEngine> Errno for LoadError<E> {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::GetFileFailed(e) => e.errno(),
+            Self::OpenFileFailed(_) => ENOENT,
+            Self::OpenElfFailed(_)
+            | Self::InvalidElf
+            | Self::MapFailed(_)
+            | Self::SetupFailed(_) => ENOEXEC,
+            Self::ImpureText => EINVAL,
+        }
+    }
 }
 
 /// Represents an error for modules relocation.
