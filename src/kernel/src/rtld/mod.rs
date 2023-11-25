@@ -175,6 +175,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         sys.register(598, &ld, Self::sys_dynlib_get_proc_param);
         sys.register(599, &ld, Self::sys_dynlib_process_needed_and_relocate);
         sys.register(608, &ld, Self::sys_dynlib_get_info_ex);
+        sys.register(649, &ld, Self::sys_dynlib_get_obj_member);
 
         Ok(ld)
     }
@@ -608,10 +609,10 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         // Get param.
         match self.app.proc_param() {
-            Some(v) => {
+            Some((param_offset, param_size)) => {
                 // TODO: Seems like ET_SCE_DYNEXEC is mapped at a fixed address.
-                unsafe { *param = self.app.memory().addr() + v.0 };
-                unsafe { *size = v.1 };
+                unsafe { *param = self.app.memory().addr() + *param_offset };
+                unsafe { *size = *param_size };
             }
             None => todo!("app is dynamic but no PT_SCE_PROCPARAM"),
         }
@@ -988,6 +989,36 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         writeln!(e, "eh_frame_hdr: {:#x}", info.eh_frame_hdr).unwrap();
 
         print(e);
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn sys_dynlib_get_obj_member(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let handle: u32 = i.args[0].try_into().unwrap();
+        let ty: u8 = i.args[1].try_into().unwrap();
+        let out: *mut usize = i.args[2].into();
+
+        if self.app.file_info().is_none() {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        let list = self.list.read();
+
+        let module = list
+            .iter()
+            .find(|m| m.id() == handle)
+            .ok_or(SysErr::Raw(ESRCH))?;
+
+        unsafe {
+            *out = match ty {
+                1..=4 | 7 => todo!("sys_dynlib_get_obj_member: with ty = {ty}"),
+                8 => module
+                    .mod_param()
+                    .map(|param| module.memory().addr() + param)
+                    .expect("No mod param"),
+                _ => return Err(SysErr::Raw(EINVAL)),
+            }
+        }
 
         Ok(SysOut::ZERO)
     }
