@@ -1,5 +1,8 @@
+use crate::arch::MachDep;
 use crate::arnd::Arnd;
-use crate::errno::{EFAULT, EINVAL, EISDIR, ENAMETOOLONG, ENOENT, ENOMEM, ENOTDIR, EPERM, ESRCH};
+use crate::errno::{
+    EFAULT, EINVAL, EISDIR, ENAMETOOLONG, ENOENT, ENOMEM, ENOTDIR, EOPNOTSUPP, EPERM, ESRCH,
+};
 use crate::memory::MemoryManager;
 use crate::process::VProc;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
@@ -17,6 +20,7 @@ pub struct Sysctl {
     arnd: Arc<Arnd>,
     vp: Arc<VProc>,
     mm: Arc<MemoryManager>,
+    machdep: Arc<MachDep>,
 }
 
 #[allow(dead_code)]
@@ -91,12 +95,14 @@ impl Sysctl {
         arnd: &Arc<Arnd>,
         vp: &Arc<VProc>,
         mm: &Arc<MemoryManager>,
+        machdep: &Arc<MachDep>,
         sys: &mut Syscalls,
     ) -> Arc<Self> {
         let ctl = Arc::new(Self {
             arnd: arnd.clone(),
             vp: vp.clone(),
             mm: mm.clone(),
+            machdep: machdep.clone(),
         });
 
         sys.register(202, &ctl, Self::sys_sysctl);
@@ -422,6 +428,29 @@ impl Sysctl {
         req.write(&buf[..len])
     }
 
+    fn machdep_tsc_freq(
+        &self,
+        oid: &'static Oid,
+        _: &Arg,
+        _: usize,
+        req: &mut SysctlReq,
+    ) -> Result<(), SysErr> {
+        let freq = self.machdep.tsc_freq().load(Ordering::Relaxed);
+
+        match freq {
+            0 => Err(SysErr::Raw(EOPNOTSUPP)),
+            _ => {
+                self.handle_64(oid, &Arg::Static(Some(&freq)), 0, req)?;
+
+                if req.new.is_some() {
+                    todo!("sysctl machdep_tsc_freq with non-null new");
+                }
+
+                Ok(())
+            }
+        }
+    }
+
     /// See `sysctl_handle_int` on the PS4 for a reference.
     fn handle_int(
         &self,
@@ -442,6 +471,31 @@ impl Sysctl {
         // Write new value.
         if req.new.is_some() {
             todo!("sysctl_handle_int with new value");
+        }
+
+        Ok(())
+    }
+
+    /// See `sysctl_handle_64` on the PS4 for a reference.
+    fn handle_64(
+        &self,
+        _: &'static Oid,
+        arg1: &Arg,
+        _: usize,
+        req: &mut SysctlReq,
+    ) -> Result<(), SysErr> {
+        // Read old value.
+        let value = match arg1 {
+            Arg::Name(v) => todo!("sysctl_handle_64 with arg1 = Arg::Name"),
+            Arg::Static(Some(v)) => *v.downcast_ref::<u64>().unwrap(),
+            Arg::Static(None) => todo!(),
+        };
+
+        req.write(&value.to_ne_bytes())?;
+
+        // Write new value.
+        if req.new.is_some() {
+            todo!("sysctl_handle_64 with new value");
         }
 
         Ok(())
@@ -527,7 +581,7 @@ struct Oid {
 
 enum Arg<'a> {
     Name(&'a [i32]),
-    Static(Option<&'static (dyn Any + Send + Sync)>),
+    Static(Option<&'a (dyn Any + Send + Sync)>),
 }
 
 type Handler = fn(&Sysctl, &'static Oid, &Arg, usize, &mut SysctlReq) -> Result<(), SysErr>;
@@ -849,8 +903,8 @@ static MACHDEP_TSC_FREQ: Oid = Oid {
     arg1: None,
     arg2: 0,
     name: "tsc_freq",
-    handler: None,
-    fmt: "Q",
+    handler: Some(Sysctl::machdep_tsc_freq),
+    fmt: "QU",
     descr: "Time Stamp Counter frequency",
     enabled: true,
 };
