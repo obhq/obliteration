@@ -1,6 +1,7 @@
 pub use self::mem::*;
 pub use self::module::*;
 use self::resolver::{ResolveFlags, SymbolResolver};
+use crate::budget::ProcType;
 use crate::ee::ExecutionEngine;
 use crate::errno::{Errno, EINVAL, ENOENT, ENOEXEC, ENOMEM, EPERM, ESRCH};
 use crate::fs::{ComponentName, Fs, FsError, FsItem, NameiData, NameiFlags, VPath, VPathBuf};
@@ -534,7 +535,12 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             None => todo!("sys_dynlib_load_prx with relative path"),
         };
 
-        if self.vp.ty() == 0 {
+        if self
+            .vp
+            .budget()
+            .filter(|v| v.1 == ProcType::BigApp)
+            .is_some()
+        {
             flags |= 0x01;
         }
 

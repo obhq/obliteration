@@ -1,6 +1,6 @@
 use crate::arch::MachDep;
 use crate::arnd::Arnd;
-use crate::budget::Budget;
+use crate::budget::{Budget, BudgetManager, ProcType};
 use crate::ee::{EntryArg, RawFn};
 use crate::fs::Fs;
 use crate::llvm::Llvm;
@@ -247,7 +247,13 @@ fn run<E: crate::ee::ExecutionEngine>(
     let fs = Fs::new(root, app, param, vp, &mut syscalls);
     RegMgr::new(&mut syscalls);
     MachDep::new(&mut syscalls);
-    Budget::new(vp, &mut syscalls);
+    let budget = BudgetManager::new(vp, &mut syscalls);
+
+    // TODO: Get correct name from the PS4.
+    *vp.budget_mut() = Some((
+        budget.create(Budget::new("big app", ProcType::BigApp)),
+        ProcType::BigApp,
+    ));
 
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
@@ -275,7 +281,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     let mut flags = LoadFlags::UNK1;
     let path = vpath!("/system/common/lib/libkernel.sprx");
 
-    if vp.ty() == 0 {
+    if vp.budget().filter(|v| v.1 == ProcType::BigApp).is_some() {
         flags |= LoadFlags::BIG_APP;
     }
 

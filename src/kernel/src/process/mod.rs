@@ -6,6 +6,7 @@ pub use self::rlimit::*;
 pub use self::session::*;
 pub use self::signal::*;
 pub use self::thread::*;
+use crate::budget::ProcType;
 use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ERANGE, ESRCH};
 use crate::idt::IdTable;
 use crate::info;
@@ -15,7 +16,7 @@ use crate::signal::{
 };
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{AuthInfo, Privilege, Ucred};
-use gmtx::{GroupMutex, GroupMutexWriteGuard, MutexGroup};
+use gmtx::{GroupMutex, GroupMutexReadGuard, GroupMutexWriteGuard, MutexGroup};
 use llt::{SpawnError, Thread};
 use std::any::Any;
 use std::mem::zeroed;
@@ -49,7 +50,7 @@ pub struct VProc {
     files: FileDesc,                                 // p_fd
     limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
     objects: GroupMutex<IdTable<Arc<dyn Any + Send + Sync>>>,
-    ty: i32, // -1 = proc0, 0 = big app, 1 = mini-app, 2 = system?
+    budget: GroupMutex<Option<(usize, ProcType)>>,
     app_info: AppInfo,
     ptc: u64,
     uptc: AtomicPtr<u8>,
@@ -69,7 +70,7 @@ impl VProc {
             sigacts: mg.new_member(SignalActs::new()),
             files: FileDesc::new(&mg),
             objects: mg.new_member(IdTable::new(0x1000)),
-            ty: 0, // TODO: Ths PS4 set this value on syscall 571.
+            budget: mg.new_member(None),
             limits,
             app_info: AppInfo::new(),
             ptc: 0,
@@ -112,8 +113,12 @@ impl VProc {
         self.objects.write()
     }
 
-    pub fn ty(&self) -> i32 {
-        self.ty
+    pub fn budget(&self) -> GroupMutexReadGuard<'_, Option<(usize, ProcType)>> {
+        self.budget.read()
+    }
+
+    pub fn budget_mut(&self) -> GroupMutexWriteGuard<'_, Option<(usize, ProcType)>> {
+        self.budget.write()
     }
 
     pub fn app_info(&self) -> &AppInfo {

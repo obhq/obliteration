@@ -1,6 +1,5 @@
 pub use self::auth::*;
 pub use self::privilege::*;
-
 use crate::errno::{Errno, EPERM};
 use std::num::NonZeroI32;
 use thiserror::Error;
@@ -43,8 +42,7 @@ impl Ucred {
 
     /// See `sceSblACMgrIsSystemUcred` on the PS4 for a reference.
     pub fn is_system(&self) -> bool {
-        // TODO: Implement this.
-        true
+        ((self.auth.caps[0] >> 62) & 1) != 0
     }
 
     /// See `priv_check_cred` on the PS4 for a reference.
