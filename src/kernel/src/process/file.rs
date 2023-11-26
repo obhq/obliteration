@@ -1,18 +1,36 @@
-use crate::fs::VFile;
+use crate::fs::{VFile, Vnode};
 use gmtx::{GroupMutex, MutexGroup};
 use std::sync::Arc;
 
 /// An implementation of `filedesc` structure.
 #[derive(Debug)]
-pub struct VProcFiles {
+pub struct FileDesc {
     files: GroupMutex<Vec<Option<Arc<VFile>>>>, // fd_ofiles
+    cwd: Arc<Vnode>,                            // fd_cdir
+    root: Arc<Vnode>,                           // fd_rdir
+    jail: Arc<Vnode>,                           // fd_jdir
 }
 
-impl VProcFiles {
+impl FileDesc {
     pub(super) fn new(mg: &Arc<MutexGroup>) -> Self {
         Self {
             files: mg.new_member(vec![None, None, None]),
+            cwd: Arc::new(Vnode::new()), // TODO: Check how the PS4 set this field.
+            root: Arc::new(Vnode::new()), // TODO: Same here.
+            jail: Arc::new(Vnode::new()), // TODO: Same here.
         }
+    }
+
+    pub fn cwd(&self) -> &Arc<Vnode> {
+        &self.cwd
+    }
+
+    pub fn root(&self) -> &Arc<Vnode> {
+        &self.root
+    }
+
+    pub fn jail(&self) -> &Arc<Vnode> {
+        &self.jail
     }
 
     /// See `finstall` on the PS4 for a reference.
