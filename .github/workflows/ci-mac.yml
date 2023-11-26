@@ -66,9 +66,9 @@ jobs:
 
         my $qt = Digest::MD5->new();
 
-        while (my ($name, $value) = each %ENV) {
+        foreach my $name (sort keys %ENV) {
           if ($name =~ /^QT_URL_/) {
-            $qt->add($value);
+            $qt->add($ENV{$name});
           }
         }
 
@@ -145,5 +145,5 @@ jobs:
       uses: actions/cache/save@v3
       with:
         path: qt
-        key: ${{ steps.cache-keys.outputs.qt }}-${{ github.run_id }}
-      if: startsWith(github.ref, 'refs/heads/')
+        key: ${{ steps.cache-keys.outputs.qt }}
+      if: startsWith(github.ref, 'refs/heads/') && steps.qt-cache.outputs.cache-hit != 'true'
