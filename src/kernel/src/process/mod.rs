@@ -21,8 +21,7 @@ use std::any::Any;
 use std::mem::zeroed;
 use std::num::NonZeroI32;
 use std::ptr::null_mut;
-use std::sync::atomic::AtomicPtr;
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicPtr, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -47,7 +46,7 @@ pub struct VProc {
     cred: Ucred,                                     // p_ucred
     group: GroupMutex<Option<VProcGroup>>,           // p_pgrp
     sigacts: GroupMutex<SignalActs>,                 // p_sigacts
-    files: VProcFiles,                               // p_fd
+    files: FileDesc,                                 // p_fd
     limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
     objects: GroupMutex<IdTable<Arc<dyn Any + Send + Sync>>>,
     ty: i32, // -1 = proc0, 0 = big app, 1 = mini-app, 2 = system?
@@ -68,7 +67,7 @@ impl VProc {
             cred: Ucred::new(AuthInfo::SYS_CORE.clone()),
             group: mg.new_member(None),
             sigacts: mg.new_member(SignalActs::new()),
-            files: VProcFiles::new(&mg),
+            files: FileDesc::new(&mg),
             objects: mg.new_member(IdTable::new(0x1000)),
             ty: 0, // TODO: Ths PS4 set this value on syscall 571.
             limits,
@@ -101,7 +100,7 @@ impl VProc {
         &self.cred
     }
 
-    pub fn files(&self) -> &VProcFiles {
+    pub fn files(&self) -> &FileDesc {
         &self.files
     }
 
