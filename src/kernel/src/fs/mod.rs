@@ -375,7 +375,7 @@ impl Fs {
 
         if com & IOC_OUT != 0 {
             unsafe {
-                std::ptr::copy_nonoverlapping(data.cast(), data_arg, size.try_into().unwrap());
+                std::ptr::copy_nonoverlapping(data.cast(), data_arg, size);
             }
         }
 
