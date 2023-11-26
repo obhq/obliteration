@@ -76,12 +76,33 @@ impl MachDep {
         let end_tsc = unsafe { std::arch::x86_64::_rdtsc() };
         let elapsed = end_tsc - start_tsc;
 
-        // Multiply to get full second estimate.
         AtomicU64::new(elapsed * 1000)
     }
 
     #[cfg(target_arch = "aarch64")]
     fn init_tsc() -> AtomicU64 {
-        AtomicU64::new(0)
+        use core::arch::asm;
+
+        let duration = Duration::from_millis(1);
+        let start = Instant::now();
+
+        let start_tsc: u64;
+        let end_tsc: u64;
+        unsafe {
+            asm!("mrs {0}, cntvct_el0", out(reg) start_tsc);
+        }
+
+        while Instant::now().duration_since(start) < duration {
+            // Busy-wait
+        }
+
+        unsafe {
+            asm!("mrs {0}, cntvct_el0", out(reg) end_tsc);
+        }
+
+        // Calculate the elapsed time
+        let elapsed = end_tsc - start_tsc;
+
+        AtomicU64::new(elapsed * 1000)
     }
 }
