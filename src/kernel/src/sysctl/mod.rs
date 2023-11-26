@@ -791,7 +791,7 @@ static KERN_SMP_CPUS: Oid = Oid {
 
 static HW: Oid = Oid {
     parent: &CHILDREN,
-    link: None, // TODO: Implement this.
+    link: Some(&MACHDEP),
     number: Sysctl::CTL_HW,
     kind: Sysctl::CTLFLAG_RW | Sysctl::CTLTYPE_NODE,
     arg1: Some(&HW_CHILDREN),
@@ -822,3 +822,35 @@ static HW_PAGESIZE: Oid = Oid {
 };
 
 static INT_8: i32 = 8;
+
+static MACHDEP: Oid = Oid {
+    parent: &CHILDREN,
+    link: None, // TODO: Implement this.
+    number: Sysctl::CTL_MACHDEP,
+    kind: Sysctl::CTLFLAG_RW | Sysctl::CTLTYPE_NODE,
+    arg1: Some(&MACHDEP_CHILDREN),
+    arg2: 0,
+    name: "machdep",
+    handler: None,
+    fmt: "N",
+    descr: "machine dependent",
+    enabled: true,
+};
+
+static MACHDEP_CHILDREN: OidList = OidList {
+    first: Some(&MACHDEP_TSC_FREQ), // TODO: Use a proper value.
+};
+
+static MACHDEP_TSC_FREQ: Oid = Oid {
+    parent: &MACHDEP_CHILDREN,
+    link: None, // TODO: Implement this.
+    number: 0x1F4,
+    kind: Sysctl::CTLFLAG_RD | Sysctl::CTLTYPE_U64,
+    arg1: None,
+    arg2: 0,
+    name: "tsc_freq",
+    handler: None,
+    fmt: "Q",
+    descr: "Time Stamp Counter frequency",
+    enabled: true,
+};
