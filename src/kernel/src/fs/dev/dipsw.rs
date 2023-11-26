@@ -56,7 +56,7 @@ impl VFileOps for Dipsw {
             0x80108805 => todo!("dipsw ioctl 0x80108805"),
             0x8010880a => todo!("dipsw ioctl 0x8010880a"),
             0xc0088803 => todo!("dipsw ioctl 0xc0088803"),
-            _ => return Err(Box::new(IoctlErr::Invalid)),
+            _ => return Err(Box::new(IoctlErr::InvalidCommand)),
         }
 
         Ok(())
@@ -71,21 +71,14 @@ impl Display for Dipsw {
 
 #[derive(Error, Debug)]
 enum IoctlErr {
-    Invalid,
-}
-
-impl Display for IoctlErr {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            IoctlErr::Invalid => write!(f, "Invalid ioctl"),
-        }
-    }
+    #[error("Invalid command")]
+    InvalidCommand,
 }
 
 impl Errno for IoctlErr {
     fn errno(&self) -> NonZeroI32 {
         match self {
-            IoctlErr::Invalid => EINVAL,
+            IoctlErr::InvalidCommand => EINVAL,
         }
     }
 }
