@@ -46,9 +46,3 @@ impl From<NonZeroI32> for SysOut {
         }
     }
 }
-
-impl From<Fd> for SysOut {
-    fn from(value: Fd) -> Self {
-        value.get().into()
-    }
-}

@@ -61,6 +61,12 @@ impl TryFrom<Fd> for usize {
     }
 }
 
+impl From<Fd> for SysOut {
+    fn from(value: Fd) -> Self {
+        value.get().into()
+    }
+}
+
 /// A virtual filesystem for emulating a PS4 filesystem.
 #[derive(Debug)]
 pub struct Fs {
