@@ -86,6 +86,7 @@ impl Sysctl {
     pub const KERN_PROC_APPINFO: i32 = 35;
     pub const KERN_PROC_SANITIZER: i32 = 41;
     pub const KERN_PROC_PTC: i32 = 43;
+    pub const MACHDEP_TSC_FREQ: i32 = 492;
 
     pub const VM_TOTAL: i32 = 1;
 
@@ -898,7 +899,7 @@ static MACHDEP_CHILDREN: OidList = OidList {
 static MACHDEP_TSC_FREQ: Oid = Oid {
     parent: &MACHDEP_CHILDREN,
     link: None, // TODO: Implement this.
-    number: 0x1F4,
+    number: Sysctl::MACHDEP_TSC_FREQ,
     kind: Sysctl::CTLFLAG_RD | Sysctl::CTLTYPE_U64,
     arg1: None,
     arg2: 0,
