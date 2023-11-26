@@ -42,7 +42,7 @@ impl FileDesc {
         // TODO: Implement fdalloc.
         let mut files = self.files.write();
 
-        for i in 3..=Fd::MAX {
+        for i in 3..=i32::MAX {
             let i: usize = i.try_into().unwrap();
 
             if i == files.len() {
@@ -53,7 +53,7 @@ impl FileDesc {
                 continue;
             }
 
-            return i as Fd;
+            return Fd::new(i.try_into().unwrap());
         }
 
         // This should never happened.
@@ -63,7 +63,7 @@ impl FileDesc {
     /// See `fget` on the PS4 for a reference.
     pub fn get(&self, fd: Fd) -> Option<Arc<VFile>> {
         // TODO: Check what we have missed here.
-        if fd < 0 {
+        if fd.get() < 0 {
             return None;
         }
 
@@ -74,7 +74,7 @@ impl FileDesc {
     }
 
     pub fn free(&self, fd: Fd) -> Result<(), SysErr> {
-        if fd < 0 {
+        if fd.get() < 0 {
             return Err(SysErr::Raw(EBADF));
         }
 

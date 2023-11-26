@@ -1,7 +1,6 @@
-use crate::errno::{Errno, EINVAL, ENOENT};
+use crate::errno::{Errno, EINVAL};
 use crate::fs::{VFile, VFileOps, VPath};
 use crate::process::VThread;
-use crate::syscalls::SysErr;
 use crate::ucred::Ucred;
 use macros::vpath;
 use std::fmt::{Display, Formatter};
