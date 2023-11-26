@@ -49,6 +49,7 @@ jobs:
     runs-on: macos-12
     needs: llvm
     env:
+      CMAKE_PREFIX_PATH: qt/6.6.0/macos
       QT_URL_BASE: https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_660/qt.qt6.660.clang_64/6.6.0-0-202310040910qtbase-MacOS-MacOS_12-Clang-MacOS-MacOS_12-X86_64-ARM64.7z
       QT_URL_SVG: https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_660/qt.qt6.660.clang_64/6.6.0-0-202310040910qtsvg-MacOS-MacOS_12-Clang-MacOS-MacOS_12-X86_64-ARM64.7z
     steps:
@@ -66,9 +67,9 @@ jobs:
 
         my $qt = Digest::MD5->new();
 
-        while (my ($name, $value) = each %ENV) {
+        foreach my $name (sort keys %ENV) {
           if ($name =~ /^QT_URL_/) {
-            $qt->add($value);
+            $qt->add($ENV{$name});
           }
         }
 
@@ -99,8 +100,6 @@ jobs:
             7za x qt.7z -oqt
           fi
         done
-
-        echo "CMAKE_PREFIX_PATH=qt/6.6.0/macos" >> $GITHUB_ENV
       if: ${{ steps.qt-cache.outputs.cache-hit != 'true' }}
     - name: Run CMake
       run: cmake -DOB_BUILD_LLVM:BOOL=OFF --preset mac-release .
@@ -145,5 +144,5 @@ jobs:
       uses: actions/cache/save@v3
       with:
         path: qt
-        key: ${{ steps.cache-keys.outputs.qt }}-${{ github.run_id }}
-      if: startsWith(github.ref, 'refs/heads/')
+        key: ${{ steps.cache-keys.outputs.qt }}
+      if: startsWith(github.ref, 'refs/heads/') && steps.qt-cache.outputs.cache-hit != 'true'
