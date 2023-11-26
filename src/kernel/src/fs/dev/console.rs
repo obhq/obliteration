@@ -39,12 +39,12 @@ impl VFileOps for Console {
         &self,
         _file: &VFile,
         _com: u64,
-        _data: &[u8],
+        _data: *mut (),
         _cred: &Ucred,
         _td: &VThread,
-    ) -> Result<Option<&[u8]>, Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn Errno>> {
         // TODO: Implement this.
-        Ok(None)
+        Ok(())
     }
 }
 impl Display for Console {

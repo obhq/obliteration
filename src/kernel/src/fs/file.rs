@@ -68,10 +68,10 @@ pub trait VFileOps: Debug + Send + Sync + Display {
         &self,
         file: &VFile,
         com: u64,
-        data: &[u8],
+        data: *mut (),
         cred: &Ucred,
         td: &VThread,
-    ) -> Result<Option<&[u8]>, Box<dyn Errno>>;
+    ) -> Result<(), Box<dyn Errno>>;
 }
 
 bitflags! {

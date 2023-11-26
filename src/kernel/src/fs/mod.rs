@@ -12,6 +12,7 @@ use param::Param;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::mem::size_of;
 use std::num::{NonZeroI32, TryFromIntError};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -267,16 +268,20 @@ impl Fs {
         const IOC_OUT: u64 = 0x40000000;
         const IOC_IN: u64 = 0x80000000;
         const IOCPARM_MASK: u64 = 0x1FFF;
+        const SYS_IOCTL_SMALL_SIZE: usize = 128;
 
         let fd: Fd = i.args[0].try_into().unwrap();
         let mut com: u64 = i.args[1].into();
-        let data_out: *mut u8 = i.args[2].into();
+        let data_arg: *mut u8 = i.args[2].into();
+
+        // same as [u8; 128], but 8-byte aligned
+        let mut smalldata = [0u64; SYS_IOCTL_SMALL_SIZE / size_of::<u64>()];
 
         if com > 0xffffffff {
             com &= 0xffffffff;
         }
 
-        let size = (com >> 16) & IOCPARM_MASK;
+        let size: usize = ((com >> 16) & IOCPARM_MASK) as usize;
 
         if com & (IOC_VOID | IOC_OUT | IOC_IN) == 0
             || com & (IOC_OUT | IOC_IN) != 0 && size == 0
@@ -286,17 +291,28 @@ impl Fs {
         }
 
         // Get data.
-        let data_in = if size == 0 {
-            if com & IOC_IN != 0 {
-                todo!("ioctl with IOC_IN");
-            } else if com & IOC_OUT != 0 {
-                todo!("ioctl with IOC_OUT");
-            }
-
-            &[]
+        let data: *mut () = if size == 0 {
+            data_arg.cast()
         } else {
-            todo!("ioctl with size != 0");
+            if com & IOC_VOID != 0 {
+                todo!("ioctl with com & IOC_VOID != 0");
+            } else {
+                if size > SYS_IOCTL_SMALL_SIZE {
+                    //malloc here
+                    todo!("ioctl with size != 0 and com & IOC_VOID == 0 and size > SYS_IOCTL_SMALL_SIZE")
+                } else {
+                    smalldata.as_mut_ptr().cast()
+                }
+            }
         };
+
+        if com & IOC_IN != 0 {
+            todo!("ioctl with IOC_IN");
+        } else if com & IOC_OUT != 0 {
+            unsafe {
+                std::ptr::write_bytes(data as *mut u8, 0, size);
+            }
+        }
 
         // Get target file.
         let file = self.vp.files().get(fd).ok_or(SysErr::Raw(EBADF))?;
@@ -322,13 +338,11 @@ impl Fs {
             _ => {}
         }
 
-        let data = ops.ioctl(&file, com, data_in, td.cred(), &td)?;
+        ops.ioctl(&file, com, data, td.cred(), &td)?;
 
         if com & IOC_OUT != 0 {
-            let data = data.expect("No data returned from ioctl");
-
             unsafe {
-                std::ptr::copy_nonoverlapping(data.as_ptr(), data_out, data.len());
+                std::ptr::copy_nonoverlapping(data.cast(), data_arg, size.try_into().unwrap());
             }
         }
 
