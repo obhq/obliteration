@@ -1,6 +1,7 @@
 pub use self::file::*;
 pub use self::item::*;
 pub use self::path::*;
+pub use self::vnode::*;
 use crate::errno::{Errno, EBADF, EINVAL, ENOENT, ENOTTY};
 use crate::info;
 use crate::process::{VProc, VThread};
@@ -21,6 +22,7 @@ mod dev;
 mod file;
 mod item;
 mod path;
+mod vnode;
 
 //Represents a file descriptor
 pub type Fd = i32;
@@ -128,6 +130,20 @@ impl Fs {
 
         nd.loopcnt = 0;
 
+        // TODO: Implement ktrnamei.
+        nd.rootdir = Some(self.vp.files().root().clone());
+        nd.topdir = Some(self.vp.files().jail().clone());
+
+        let dp = if nd.cnd.pnbuf[0] != b'/' {
+            todo!("namei with relative path");
+        } else {
+            self.vp.files().cwd().clone()
+        };
+
+        if nd.startdir.is_some() {
+            todo!("namei with ni_startdir");
+        }
+
         // TODO: Implement the remaining logics from the PS4.
         let item = match nd.dirp {
             "/dev/console" => FsItem::Device(VDev::Console),
@@ -213,6 +229,9 @@ impl Fs {
         let td = VThread::current().unwrap();
         let mut nd = NameiData {
             dirp: path,
+            startdir: None,
+            rootdir: None,
+            topdir: None,
             loopcnt: 0,
             cnd: ComponentName {
                 flags: NameiFlags::from_bits_retain(0x5000040),
@@ -329,6 +348,9 @@ impl Fs {
         // TODO: Check vnode::v_rdev.
         let mut nd = NameiData {
             dirp: path,
+            startdir: None,
+            rootdir: None,
+            topdir: None,
             loopcnt: 0,
             cnd: ComponentName {
                 flags: NameiFlags::from_bits_retain(0x5000044),
@@ -412,9 +434,12 @@ impl Fs {
 
 /// An implementation of `nameidata`.
 pub struct NameiData<'a> {
-    pub dirp: &'a str,          // ni_dirp
-    pub loopcnt: u32,           // ni_loopcnt
-    pub cnd: ComponentName<'a>, // ni_cnd
+    pub dirp: &'a str,               // ni_dirp
+    pub startdir: Option<&'a Vnode>, // ni_startdir
+    pub rootdir: Option<Arc<Vnode>>, // ni_rootdir
+    pub topdir: Option<Arc<Vnode>>,  // ni_topdir
+    pub loopcnt: u32,                // ni_loopcnt
+    pub cnd: ComponentName<'a>,      // ni_cnd
 }
 
 /// An implementation of `componentname`.

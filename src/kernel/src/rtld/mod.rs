@@ -69,6 +69,9 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         // Get eboot.bin.
         let mut nd = NameiData {
             dirp: &path,
+            startdir: None,
+            rootdir: None,
+            topdir: None,
             loopcnt: 0,
             cnd: ComponentName {
                 flags: NameiFlags::from_bits_retain(0x5200844),
@@ -236,6 +239,9 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         let td = VThread::current();
         let mut nd = NameiData {
             dirp: path,
+            startdir: None,
+            rootdir: None,
+            topdir: None,
             loopcnt: 0,
             cnd: ComponentName {
                 flags: NameiFlags::from_bits_retain(0x5200044),
