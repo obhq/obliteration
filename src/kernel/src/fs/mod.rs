@@ -25,15 +25,6 @@ mod item;
 mod path;
 mod vnode;
 
-//Represents a file descriptor
-pub type Fd = i32;
-
-impl From<Fd> for SysOut {
-    fn from(value: Fd) -> Self {
-        value.get().into()
-    }
-}
-
 /// A virtual filesystem for emulating a PS4 filesystem.
 #[derive(Debug)]
 pub struct Fs {
@@ -177,7 +168,7 @@ impl Fs {
     }
 
     fn sys_write(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let fd: Fd = i.args[0].try_into().unwrap();
+        let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *const u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
 
@@ -260,7 +251,7 @@ impl Fs {
     }
 
     fn sys_close(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let fd: Fd = i.args[0].try_into().unwrap();
+        let fd: i32 = i.args[0].try_into().unwrap();
 
         info!("Closing fd {fd}.");
 
@@ -276,7 +267,7 @@ impl Fs {
         const IOCPARM_MASK: u64 = 0x1FFF;
         const SYS_IOCTL_SMALL_SIZE: usize = 128;
 
-        let fd: Fd = i.args[0].try_into().unwrap();
+        let fd: i32 = i.args[0].try_into().unwrap();
         let mut com: u64 = i.args[1].into();
         let data_arg: *mut u8 = i.args[2].into();
 
