@@ -1,7 +1,5 @@
 use std::num::NonZeroI32;
 
-use crate::fs::Fd;
-
 /// Outputs of the syscall entry point.
 #[repr(C)]
 #[derive(Clone, Copy)]

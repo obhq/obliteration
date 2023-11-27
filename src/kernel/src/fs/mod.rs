@@ -26,40 +26,7 @@ mod path;
 mod vnode;
 
 //Represents a file descriptor
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Fd(i32);
-
-impl Fd {
-    pub fn new(fd: i32) -> Self {
-        Self(fd)
-    }
-
-    pub fn get(self) -> i32 {
-        self.0
-    }
-}
-
-impl Display for Fd {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl TryFrom<SysArg> for Fd {
-    type Error = TryFromIntError;
-
-    fn try_from(value: SysArg) -> Result<Self, Self::Error> {
-        Ok(Self(value.try_into()?))
-    }
-}
-
-impl TryFrom<Fd> for usize {
-    type Error = TryFromIntError;
-
-    fn try_from(value: Fd) -> Result<Self, Self::Error> {
-        Ok(value.0.try_into()?)
-    }
-}
+pub type Fd = i32;
 
 impl From<Fd> for SysOut {
     fn from(value: Fd) -> Self {
