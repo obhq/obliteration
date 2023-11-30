@@ -11,7 +11,7 @@ use elf::{
 };
 use gmtx::{GroupMutex, GroupMutexReadGuard, GroupMutexWriteGuard, MutexGroup};
 use std::fmt::{Display, Formatter};
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
@@ -318,7 +318,11 @@ impl<E: ExecutionEngine> Module<E> {
 
     pub fn dump<P: AsRef<Path>>(&mut self, path: P) -> Result<(), std::io::Error> {
         let path = path.as_ref();
-        let mut file = File::create(path)?;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .truncate(true)
+            .create(true)
+            .open(path)?;
 
         file.write_all(unsafe { self.memory.as_bytes() })
     }

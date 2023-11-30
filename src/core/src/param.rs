@@ -34,6 +34,11 @@ pub unsafe extern "C" fn param_close(param: *mut Param) {
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn param_category_get(param: &Param, buf: &mut QString) {
+    buf.set(param.category());
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn param_title_get(param: &Param, buf: &mut QString) {
     buf.set(param.title());
 }

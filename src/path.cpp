@@ -17,6 +17,13 @@ std::string joinPath(const QString &base, const QString &name)
     }
 }
 
+// For doing joins to a preexisting path.
+std::string joinPathStr(const std::string &base, const std::string &name) {
+    QString qBase = QString::fromStdString(base);
+    QString qName = QString::fromStdString(name);
+    return joinPath(qBase, qName);
+}
+
 path toPath(const QString &v)
 {
 #ifdef _WIN32

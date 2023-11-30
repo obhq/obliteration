@@ -162,7 +162,7 @@ bool MainWindow::loadGames()
     auto gameList = reinterpret_cast<GameListModel *>(m_games->model());
 
     for (auto &gameId : games) {
-        if (progress.wasCanceled() || !loadGame(gameId)) {
+        if (progress.wasCanceled() || !loadGame(gameId, false)) {
             return false;
         }
 
@@ -264,19 +264,43 @@ void MainWindow::installPkg()
     // Create game directory.
     auto gamesDirectory = readGamesDirectorySetting();
 
-    if (!QDir(gamesDirectory).mkdir(param.titleId())) {
-        QString msg(
-            "Cannot create directory %1 inside %2. "
-            "If you have a failed installation from a previous attempt, you will need to remove this directory before trying again.");
+    // Get Param information
+    auto category = param.category();
+    auto title = param.title();
+    auto titleID = param.titleId();
 
-        QMessageBox::critical(&progress, "Error", msg.arg(param.titleId()).arg(gamesDirectory));
+    // Check if PKG is a usable PKG.
+    if (titleID == "No TitleID" || title == "No Title") {
+        QString msg("PKG file cannot be installed as there is either the Title or TitleID is not defined.");
+
+        QMessageBox::critical(&progress, "Invalid PKG file. (Undefined Title or TitleID)", msg.arg(titleID).arg(gamesDirectory));
         return;
     }
 
-    auto directory = joinPath(gamesDirectory, param.titleId());
+    // Check if file is Patch/DLC or not for preexisting game.
+    bool PatchOrDLC = false;
+    if (!QDir(gamesDirectory).mkdir(titleID)) {
+        if (!category.startsWith("gp") && !category.contains("ac")) {
+            QString msg("PKG file cannot be installed as it is not a patch or DLC for preexisting application %1 at %2.");
+
+            QMessageBox::critical(&progress, "Invalid PKG file. (Not Patch/DLC for Existing Game)", msg.arg(titleID).arg(gamesDirectory));
+            return;
+        } else {
+            PatchOrDLC = true;
+        }
+    }
+    auto directory = joinPath(gamesDirectory, titleID);
+
+    if (PatchOrDLC == true) {
+        if (category.contains("ac")) {
+            directory = joinPathStr(directory, "ADDCONT");
+        } else if (category.startsWith("gp")) {
+            directory = joinPathStr(directory, "PATCH");
+        }
+    }
 
     // Extract items.
-    progress.setWindowTitle(param.title());
+    progress.setWindowTitle(title);
 
     error = pkg_extract(pkg, directory.c_str(), [](const char *name, std::uint64_t total, std::uint64_t written, void *ud) {
         auto toProgress = [total](std::uint64_t v) -> int {
@@ -318,7 +342,7 @@ void MainWindow::installPkg()
     }
 
     // Add to game list.
-    auto success = loadGame(param.titleId());
+    auto success = loadGame(titleID, PatchOrDLC);
 
     if (success) {
         QMessageBox::information(this, "Success", "Package installed successfully.");
@@ -521,11 +545,10 @@ void MainWindow::kernelTerminated(int, QProcess::ExitStatus)
     m_kernel = nullptr;
 }
 
-bool MainWindow::loadGame(const QString &gameId)
+bool MainWindow::loadGame(const QString &gameId, bool patchLoad)
 {
     auto gamesDirectory = readGamesDirectorySetting();
     auto gamePath = joinPath(gamesDirectory, gameId);
-    auto gameList = reinterpret_cast<GameListModel *>(m_games->model());
 
     // Read game title from param.sfo.
     auto paramDir = joinPath(gamePath.c_str(), "sce_sys");
@@ -538,9 +561,11 @@ bool MainWindow::loadGame(const QString &gameId)
         return false;
     }
 
-    // Add to list.
-    gameList->add(new Game(param.title(), gamePath.c_str()));
-
+    // Add to list if not a DLC/Patch refresh.
+    if (!patchLoad) {
+        auto gameList = reinterpret_cast<GameListModel *>(m_games->model());
+        gameList->add(new Game(param.title(), gamePath.c_str()));
+    }
     return true;
 }
 

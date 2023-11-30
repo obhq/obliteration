@@ -8,7 +8,7 @@ use sha2::Digest;
 use std::error::Error;
 use std::ffi::{c_void, CStr, CString};
 use std::fmt::{Display, Formatter};
-use std::fs::{create_dir_all, File};
+use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::{Cursor, Read, Write};
 use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
@@ -191,8 +191,13 @@ impl Pkg {
             }
 
             // Open destination file.
-            let mut file = match File::create(&path) {
-                Ok(v) => v,
+            let mut file = match OpenOptions::new()
+                .write(true)
+                .truncate(true)
+                .create(true)
+                .open(&path)
+            {
+                Ok(file) => file,
                 Err(e) => return Err(ExtractError::CreateEntryFailed(path, e)),
             };
 
@@ -389,12 +394,12 @@ impl Pkg {
                     status(status_name.as_ptr(), size, 0, ud);
 
                     // Open destination file.
-                    let mut dest = std::fs::OpenOptions::new();
-
-                    dest.create_new(true);
-                    dest.write(true);
-
-                    let mut dest = match dest.open(&output) {
+                    let mut dest = match OpenOptions::new()
+                        .write(true)
+                        .truncate(true)
+                        .create(true)
+                        .open(&output)
+                    {
                         Ok(v) => v,
                         Err(e) => return Err(ExtractError::CreateFileFailed(output, e)),
                     };

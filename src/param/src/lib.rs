@@ -6,8 +6,11 @@ use thiserror::Error;
 ///
 /// See https://www.psdevwiki.com/ps4/Param.sfo#Internal_Structure for more information.
 pub struct Param {
+    app_ver: String,
+    category: String,
     title: String,
     title_id: String,
+    version: String,
 }
 
 impl Param {
@@ -72,8 +75,11 @@ impl Param {
         keys.drain(i..);
 
         // Read entries.
+        let mut app_ver: Option<String> = None;
+        let mut category: Option<String> = None;
         let mut title: Option<String> = None;
         let mut title_id: Option<String> = None;
+        let mut version: Option<String> = None;
 
         for i in 0..entries {
             // Seek to the entry.
@@ -128,24 +134,75 @@ impl Param {
 
             // Parse value.
             match key {
-                b"TITLE" => title = Some(Self::read_utf8(&mut raw, i, format, len, 128)?),
-                b"TITLE_ID" => title_id = Some(Self::read_utf8(&mut raw, i, format, len, 12)?),
+                b"APP_VER" => {
+                    app_ver = Some(Self::read_utf8(&mut raw, i, format, len, 8)?);
+                }
+                b"CATEGORY" => {
+                    let category_param = Self::read_utf8(&mut raw, i, format, 4, 4)?;
+                    category = Some(category_param.clone());
+                    if !category_param.contains("bd") && !category_param.contains("ac")  // Blu-Ray Game, DLC.
+                        // Check if this is a patch
+                        && !category_param.starts_with("gp")
+                        // Check if this is an application
+                        && !category_param.starts_with("gd")
+                    {
+                        // For types such as gc, sd, la, and wda, there is no Title or TitleID.
+                        title = Some(format!("No Title {}", category_param).to_string());
+                        title_id = Some("No TitleID".to_string());
+                    }
+                }
+                b"TITLE" => {
+                    if title.is_none() {
+                        title = Some(Self::read_utf8(&mut raw, i, format, len, 128)?);
+                    }
+                }
+                b"TITLE_ID" => {
+                    if title_id.is_none() {
+                        title_id = Some(Self::read_utf8(&mut raw, i, format, len, 12)?);
+                    }
+                }
+                b"VERSION" => {
+                    version = Some(Self::read_utf8(&mut raw, i, format, len, 8)?);
+                }
                 _ => continue,
             }
         }
 
         Ok(Self {
+            // App_Ver for Games and Patches, for DLC, use version. Anything else is abnormal.
+            app_ver: app_ver
+                .or(version.clone())
+                .ok_or(ReadError::MissingVersion)?,
+            category: category.ok_or(ReadError::MissingCategory)?,
             title: title.ok_or(ReadError::MissingTitle)?,
             title_id: title_id.ok_or(ReadError::MissingTitleId)?,
+            version: version.ok_or(ReadError::MissingVersion)?,
         })
     }
 
+    /// Fetches the value APP_VER from given Param.SFO
+    pub fn app_ver(&self) -> &str {
+        &self.app_ver
+    }
+
+    /// Fetches the value CATEGORY from given Param.SFO
+    pub fn category(&self) -> &str {
+        &self.category
+    }
+
+    /// Fetches the value TITLE from given Param.SFO
     pub fn title(&self) -> &str {
         &self.title
     }
 
+    /// Fetches the value TITLE_ID from given Param.SFO
     pub fn title_id(&self) -> &str {
         &self.title_id
+    }
+
+    /// Fetches the value VERSION from given Param.SFO
+    pub fn version(&self) -> &str {
+        &self.version
     }
 
     fn read_utf8<R: Read>(
@@ -206,9 +263,18 @@ pub enum ReadError {
     #[error("entry #{0} has invalid value")]
     InvalidValue(usize),
 
-    #[error("TITLE is not found")]
+    #[error("APP_VER parameter not found")]
+    MissingAppVer,
+
+    #[error("CATEGORY parameter not found")]
+    MissingCategory,
+
+    #[error("TITLE parameter not found")]
     MissingTitle,
 
-    #[error("TITLE_ID is not found")]
+    #[error("TITLE_ID parameter not found")]
     MissingTitleId,
+
+    #[error("APP_VER and CONTENT_VER parameter not found")]
+    MissingVersion,
 }
