@@ -294,9 +294,9 @@ void MainWindow::installPkg()
 
     if (PatchOrDLC == true) {
         if (category.contains("ac")) {
-            directory += "-ADDCONT";
+            directory += string("-ADDCONT");
         } else if (category.startsWith("gp")) {
-            directory += "PATCH" + version;
+            directory += string("PATCH") + string(version);
         }
     }
 
