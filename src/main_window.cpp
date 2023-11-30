@@ -268,6 +268,7 @@ void MainWindow::installPkg()
     auto category = param.category();
     auto title = param.title();
     auto titleID = param.titleId();
+    auto version = param.version();
 
     // Check if PKG is a usable PKG.
     if (titleID == "No TitleID" || title == "No Title") {
@@ -293,9 +294,9 @@ void MainWindow::installPkg()
 
     if (PatchOrDLC == true) {
         if (category.contains("ac")) {
-            directory = joinPathStr(directory, "ADDCONT");
+            directory += "-ADDCONT";
         } else if (category.startsWith("gp")) {
-            directory = joinPathStr(directory, "PATCH");
+            directory += "PATCH" + version;
         }
     }
 

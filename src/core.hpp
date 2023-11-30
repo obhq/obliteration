@@ -16,6 +16,7 @@ extern "C" {
     void param_category_get(const param *param, QString &buf);
     void param_title_get(const param *param, QString &buf);
     void param_title_id_get(const param *param, QString &buf);
+    void param_version_get(const param *param, QString &buf);
 
     error *system_download(
         const char *from,
@@ -109,6 +110,13 @@ public:
     {
         QString s;
         param_title_id_get(m_obj, s);
+        return s;
+    }
+
+    QString version() const
+    {
+        QString s;
+        param_version_get(m_obj, s);
         return s;
     }
 
