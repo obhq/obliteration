@@ -13,7 +13,10 @@ extern "C" {
     param *param_open(const char *file, error **error);
     void param_close(param *param);
 
+    void param_app_ver_get(const param *param, QString &buf);
     void param_category_get(const param *param, QString &buf);
+    void param_contentId_get(const param *param, QString &buf);
+    void param_shortContentId_get(const param *param, QString &buf);
     void param_title_get(const param *param, QString &buf);
     void param_title_id_get(const param *param, QString &buf);
     void param_version_get(const param *param, QString &buf);
@@ -92,10 +95,31 @@ public:
     operator param *() const { return m_obj; }
 
 public:
+    QString appver() const
+    {
+        QString s;
+        param_app_ver_get(m_obj, s);
+        return s;
+    }
+
     QString category() const
     {
         QString s;
         param_category_get(m_obj, s);
+        return s;
+    }
+
+    QString contentId() const
+    {
+        QString s;
+        param_contentId_get(m_obj, s);
+        return s;
+    }
+
+    QString shortContentId() const
+    {
+        QString s;
+        param_shortContentId_get(m_obj, s);
         return s;
     }
 

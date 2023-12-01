@@ -31,7 +31,7 @@ private slots:
     void kernelTerminated(int exitCode, QProcess::ExitStatus exitStatus);
 
 private:
-    bool loadGame(const QString &gameId, bool patchLoad);
+    bool loadGame(const QString &gameId);
     void killKernel();
     void restoreGeometry();
     bool requireEmulatorStopped();

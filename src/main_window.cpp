@@ -162,7 +162,7 @@ bool MainWindow::loadGames()
     auto gameList = reinterpret_cast<GameListModel *>(m_games->model());
 
     for (auto &gameId : games) {
-        if (progress.wasCanceled() || !loadGame(gameId, false)) {
+        if (progress.wasCanceled() || !loadGame(gameId)) {
             return false;
         }
 
@@ -265,10 +265,11 @@ void MainWindow::installPkg()
     auto gamesDirectory = readGamesDirectorySetting();
 
     // Get Param information
+    auto appver = param.appver();
     auto category = param.category();
+    auto shortContentId = param.shortContentId();
     auto title = param.title();
     auto titleID = param.titleId();
-    auto version = param.version();
 
     // Check if PKG is a usable PKG.
     if (titleID == "No TitleID" || title == "No Title") {
@@ -292,11 +293,15 @@ void MainWindow::installPkg()
     }
     auto directory = joinPath(gamesDirectory, titleID);
 
+    // Setup folders for DLC and Patch PKGs
     if (PatchOrDLC == true) {
         if (category.contains("ac")) {
-            directory += string("-ADDCONT");
+            // If our PKG is for DLC, add -ADDCONT to the end of the foldername, then use the last part of CONTENT_ID to match PS4 behavior.
+            directory += "-ADDCONT";
+            directory = joinPathStr(directory, shortContentId.toStdString());
         } else if (category.startsWith("gp")) {
-            directory += string("PATCH") + string(version);
+            // If our PKG is for Patching, add -PATCH-v to the end of the foldername along with the patch APPVER. (-PATCH-01.01)
+            directory += "-PATCH-" + appver.toStdString();
         }
     }
 
@@ -343,7 +348,7 @@ void MainWindow::installPkg()
     }
 
     // Add to game list.
-    auto success = loadGame(titleID, PatchOrDLC);
+    auto success = loadGame(titleID);
 
     if (success) {
         QMessageBox::information(this, "Success", "Package installed successfully.");
@@ -546,24 +551,31 @@ void MainWindow::kernelTerminated(int, QProcess::ExitStatus)
     m_kernel = nullptr;
 }
 
-bool MainWindow::loadGame(const QString &gameId, bool patchLoad)
+bool MainWindow::loadGame(const QString &gameId)
 {
     auto gamesDirectory = readGamesDirectorySetting();
     auto gamePath = joinPath(gamesDirectory, gameId);
 
-    // Read game title from param.sfo.
-    auto paramDir = joinPath(gamePath.c_str(), "sce_sys");
-    auto paramPath = joinPath(paramDir.c_str(), "param.sfo");
-    Error error;
-    Param param(param_open(paramPath.c_str(), &error));
+    // Ignore entry if it is DLC or Patch.
+    auto lastSlashPos = gamePath.find_last_of("/\\");
+    auto lastFolder = (lastSlashPos != std::string::npos) ? gamePath.substr(lastSlashPos + 1) : gamePath;
+    bool isPatch = lastFolder.find("-PATCH-") != std::string::npos;
+    bool isAddCont = lastFolder.size() >= 8 && lastFolder.substr(lastFolder.size() - 8) == "-ADDCONT";
 
-    if (!param) {
-        QMessageBox::critical(this, "Error", QString("Cannot open %1: %2").arg(paramPath.c_str()).arg(error.message()));
-        return false;
-    }
+    if (!isPatch && !isAddCont) {
 
-    // Add to list if not a DLC/Patch refresh.
-    if (!patchLoad) {
+        // Read game title from param.sfo.
+        auto paramDir = joinPath(gamePath.c_str(), "sce_sys");
+        auto paramPath = joinPath(paramDir.c_str(), "param.sfo");
+        Error error;
+        Param param(param_open(paramPath.c_str(), &error));
+
+        if (!param) {
+            QMessageBox::critical(this, "Error", QString("Cannot open %1: %2").arg(paramPath.c_str()).arg(error.message()));
+            return false;
+        }
+
+        // Add to list if not a DLC/Patch refresh.
         auto gameList = reinterpret_cast<GameListModel *>(m_games->model());
         gameList->add(new Game(param.title(), gamePath.c_str()));
     }

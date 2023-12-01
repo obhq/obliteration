@@ -8,6 +8,7 @@ use thiserror::Error;
 pub struct Param {
     app_ver: String,
     category: String,
+    content_id: String,
     title: String,
     title_id: String,
     version: String,
@@ -77,6 +78,7 @@ impl Param {
         // Read entries.
         let mut app_ver: Option<String> = None;
         let mut category: Option<String> = None;
+        let mut content_id: Option<String> = None;
         let mut title: Option<String> = None;
         let mut title_id: Option<String> = None;
         let mut version: Option<String> = None;
@@ -151,6 +153,9 @@ impl Param {
                         title_id = Some("No TitleID".to_string());
                     }
                 }
+                b"CONTENT_ID" => {
+                    content_id = Some(Self::read_utf8(&mut raw, i, format, len, 48)?);
+                }
                 b"TITLE" => {
                     if title.is_none() {
                         title = Some(Self::read_utf8(&mut raw, i, format, len, 128)?);
@@ -174,6 +179,7 @@ impl Param {
                 .or(version.clone())
                 .ok_or(ReadError::MissingVersion)?,
             category: category.ok_or(ReadError::MissingCategory)?,
+            content_id: content_id.ok_or(ReadError::MissingContentId)?,
             title: title.ok_or(ReadError::MissingTitle)?,
             title_id: title_id.ok_or(ReadError::MissingTitleId)?,
             version: version.ok_or(ReadError::MissingVersion)?,
@@ -188,6 +194,19 @@ impl Param {
     /// Fetches the value CATEGORY from given Param.SFO
     pub fn category(&self) -> &str {
         &self.category
+    }
+
+    /// Fetches the value CONTENT_ID from given Param.SFO
+    pub fn content_id(&self) -> &str {
+        &self.content_id
+    }
+
+    /// Fetches a shortened variant of value CONTENT_ID from given Param.SFO
+    pub fn shortcontent_id(&self) -> &str {
+        self.content_id
+            .split('-')
+            .last()
+            .unwrap_or(&self.content_id)
     }
 
     /// Fetches the value TITLE from given Param.SFO
@@ -268,6 +287,9 @@ pub enum ReadError {
 
     #[error("CATEGORY parameter not found")]
     MissingCategory,
+
+    #[error("CONTENT_ID parameter not found")]
+    MissingContentId,
 
     #[error("TITLE parameter not found")]
     MissingTitle,
