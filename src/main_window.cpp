@@ -298,8 +298,14 @@ void MainWindow::installPkg()
     if (PatchOrDLC == true) {
         if (category.contains("ac")) {
             // If our PKG is for DLC, add -ADDCONT to the end of the foldername, then use the last part of CONTENT_ID to match PS4 behavior.
-            directory += "-ADDCONT";
-            directory = joinPathStr(directory, shortContentId.toStdString());
+            //directory += "-ADDCONT";
+            //directory = joinPathStr(directory, shortContentId.toStdString());
+
+            // As of now, return an error as we are unsure if this implementation of DLC works.
+            QString msg("DLC PKG files are currently WIP and as such, are not supported at this time.");
+
+            QMessageBox::critical(&progress, "Invalid PKG file. (WIP DLC Implementation)", msg.arg(titleID).arg(gamesDirectory));
+            return;
         } else {
             // If our PKG is for Patching, add -PATCH-v to the end of the foldername along with the patch APPVER. (-PATCH-01.01)
             directory += "-PATCH-" + appver.toStdString();
