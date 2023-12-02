@@ -288,8 +288,8 @@ impl Fs {
         }
 
         // Get data.
-        let data: *mut () = if size == 0 {
-            data_arg.cast()
+        let mut data = if size == 0 {
+            &mut []
         } else {
             if com & IOC_VOID != 0 {
                 todo!("ioctl with com & IOC_VOID != 0");
@@ -298,7 +298,7 @@ impl Fs {
                     //malloc here
                     todo!("ioctl with size != 0 and com & IOC_VOID == 0 and size > SYS_IOCTL_SMALL_SIZE")
                 } else {
-                    smalldata.as_mut_ptr().cast()
+                    bytemuck::cast_slice_mut(&mut smalldata)
                 }
             }
         };
@@ -306,9 +306,9 @@ impl Fs {
         if com & IOC_IN != 0 {
             todo!("ioctl with IOC_IN");
         } else if com & IOC_OUT != 0 {
-            unsafe {
-                std::ptr::write_bytes(data as *mut u8, 0, size);
-            }
+            use std::io::Write;
+
+            data.write(&vec![0u8; size]).unwrap();
         }
 
         // Get target file.
@@ -339,7 +339,7 @@ impl Fs {
 
         if com & IOC_OUT != 0 {
             unsafe {
-                std::ptr::copy_nonoverlapping(data.cast(), data_arg, size);
+                std::ptr::copy_nonoverlapping(data.as_ptr(), data_arg, size);
             }
         }
 

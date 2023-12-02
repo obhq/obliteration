@@ -68,7 +68,7 @@ pub trait VFileOps: Debug + Send + Sync + Display {
         &self,
         file: &VFile,
         com: u64,
-        data: *mut (),
+        data: &mut [u8],
         cred: &Ucred,
         td: &VThread,
     ) -> Result<(), Box<dyn Errno>>;

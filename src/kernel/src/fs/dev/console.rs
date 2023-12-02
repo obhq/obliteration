@@ -39,7 +39,7 @@ impl VFileOps for Console {
         &self,
         _file: &VFile,
         _com: u64,
-        _data: *mut (),
+        _data: &mut [u8],
         _cred: &Ucred,
         _td: &VThread,
     ) -> Result<(), Box<dyn Errno>> {
