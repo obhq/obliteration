@@ -16,6 +16,8 @@ impl MachDep {
     const I386_SET_IOPERM: u32 = 4;
     const AMD64_SET_FSBASE: u32 = 129;
 
+    const TSC_FREQ: u64 = 16000000000;
+
     pub fn new(sys: &mut Syscalls) -> Arc<Self> {
         let mach = Arc::new(Self {
             tsc_freq: Self::init_tsc(),
@@ -62,25 +64,7 @@ impl MachDep {
         &self.tsc_freq
     }
 
-    #[cfg(target_arch = "x86_64")]
     fn init_tsc() -> AtomicU64 {
-        let duration = Duration::from_millis(1);
-        let start = Instant::now();
-
-        let start_tsc = unsafe { std::arch::x86_64::_rdtsc() };
-
-        while Instant::now().duration_since(start) < duration {
-            // Busy-wait
-        }
-
-        let end_tsc = unsafe { std::arch::x86_64::_rdtsc() };
-        let elapsed = end_tsc - start_tsc;
-
-        AtomicU64::new(elapsed * 1000)
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    fn init_tsc() -> AtomicU64 {
-        todo!()
+        AtomicU64::new(Self::TSC_FREQ)
     }
 }
