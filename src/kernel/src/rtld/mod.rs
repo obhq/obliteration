@@ -343,7 +343,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             Ok(Arc::new(md))
         })?;
 
-        entry.set_flags(0x2000);
+        entry.set_ty(0x2000);
 
         // Add to list.
         let module = entry.data().clone().downcast::<Module<E>>().unwrap();
