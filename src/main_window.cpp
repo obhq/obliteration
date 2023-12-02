@@ -279,17 +279,18 @@ void MainWindow::installPkg()
         return;
     }
 
-    // Check if file is Patch/DLC or not for preexisting game.
+    // Check if file is Patch/DLC.
     bool PatchOrDLC = false;
-    if (!QDir(gamesDirectory).mkdir(titleID)) {
-        if (!category.startsWith("gp") && !category.contains("ac")) {
+    if (category.startsWith("gp") || category.contains("ac")) {
+        PatchOrDLC = true;
+    }
+
+    // If the game exists and the file isn't a Patch/DLC, don't allow.
+    if (!QDir(gamesDirectory).mkdir(titleID) && !PatchOrDLC) {
             QString msg("PKG file cannot be installed as it is not a patch or DLC for preexisting application %1 at %2.");
 
             QMessageBox::critical(&progress, "Invalid PKG file. (Not Patch/DLC for Existing Game)", msg.arg(titleID).arg(gamesDirectory));
             return;
-        } else {
-            PatchOrDLC = true;
-        }
     }
     auto directory = joinPath(gamesDirectory, titleID);
 
@@ -299,7 +300,7 @@ void MainWindow::installPkg()
             // If our PKG is for DLC, add -ADDCONT to the end of the foldername, then use the last part of CONTENT_ID to match PS4 behavior.
             directory += "-ADDCONT";
             directory = joinPathStr(directory, shortContentId.toStdString());
-        } else if (category.startsWith("gp")) {
+        } else {
             // If our PKG is for Patching, add -PATCH-v to the end of the foldername along with the patch APPVER. (-PATCH-01.01)
             directory += "-PATCH-" + appver.toStdString();
         }
@@ -347,8 +348,13 @@ void MainWindow::installPkg()
         return;
     }
 
-    // Add to game list.
-    auto success = loadGame(titleID);
+    // Add to game list if new game.
+    bool success = false;
+    if (!PatchOrDLC) {
+        success = loadGame(titleID);
+    } else {
+        success = true;
+    }
 
     if (success) {
         QMessageBox::information(this, "Success", "Package installed successfully.");
