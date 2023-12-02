@@ -309,9 +309,6 @@ impl Fs {
         let mut com: u64 = i.args[1].into();
         let data_arg: *mut u8 = i.args[2].into();
 
-        // same as [u8; 128], but 8-byte aligned
-        let mut smalldata = [0u64; SYS_IOCTL_SMALL_SIZE / size_of::<u64>()];
-
         if com > 0xffffffff {
             com &= 0xffffffff;
         }
@@ -325,28 +322,23 @@ impl Fs {
             return Err(SysErr::Raw(ENOTTY));
         }
 
+        let mut vec = vec![0u8; size];
+
         // Get data.
-        let mut data = if size == 0 {
+        let data = if size == 0 {
             &mut []
         } else {
             if com & IOC_VOID != 0 {
                 todo!("ioctl with com & IOC_VOID != 0");
             } else {
-                if size > SYS_IOCTL_SMALL_SIZE {
-                    //malloc here
-                    todo!("ioctl with size != 0 and com & IOC_VOID == 0 and size > SYS_IOCTL_SMALL_SIZE")
-                } else {
-                    bytemuck::cast_slice_mut(&mut smalldata)
-                }
+                &mut vec[..]
             }
         };
 
         if com & IOC_IN != 0 {
             todo!("ioctl with IOC_IN");
         } else if com & IOC_OUT != 0 {
-            use std::io::Write;
-
-            let _ = data.write(&vec![0u8; size]).unwrap();
+            data.fill(0);
         }
 
         // Get target file.
