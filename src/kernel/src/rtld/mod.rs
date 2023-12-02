@@ -73,12 +73,14 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             startdir: None,
             rootdir: None,
             topdir: None,
+            strictrelative: 0,
             loopcnt: 0,
             cnd: ComponentName {
                 flags: NameiFlags::from_bits_retain(0x5200844),
                 thread: None,
                 cred: None,
                 pnbuf: Vec::new(),
+                nameptr: 0,
             },
         };
 
@@ -243,12 +245,14 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             startdir: None,
             rootdir: None,
             topdir: None,
+            strictrelative: 0,
             loopcnt: 0,
             cnd: ComponentName {
                 flags: NameiFlags::from_bits_retain(0x5200044),
                 thread: td.as_ref().map(|v| v.deref().as_ref()),
                 cred: None,
                 pnbuf: Vec::new(),
+                nameptr: 0,
             },
         };
 
