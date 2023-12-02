@@ -902,12 +902,12 @@ static MACHDEP_TSC_FREQ: Oid = Oid {
     parent: &MACHDEP_CHILDREN,
     link: None, // TODO: Implement this.
     number: Sysctl::MACHDEP_TSC_FREQ,
-    kind: Sysctl::CTLFLAG_RD | Sysctl::CTLTYPE_U64,
+    kind: Sysctl::CTLFLAG_RW | Sysctl::CTLTYPE_U64,
     arg1: None,
     arg2: 0,
     name: "tsc_freq",
     handler: Some(Sysctl::machdep_tsc_freq),
     fmt: "QU",
     descr: "Time Stamp Counter frequency",
-    enabled: true,
+    enabled: false,
 };
