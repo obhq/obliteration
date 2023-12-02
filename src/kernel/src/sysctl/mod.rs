@@ -891,7 +891,7 @@ static MACHDEP: Oid = Oid {
     handler: None,
     fmt: "N",
     descr: "machine dependent",
-    enabled: true,
+    enabled: false,
 };
 
 static MACHDEP_CHILDREN: OidList = OidList {
@@ -909,5 +909,5 @@ static MACHDEP_TSC_FREQ: Oid = Oid {
     handler: Some(Sysctl::machdep_tsc_freq),
     fmt: "QU",
     descr: "Time Stamp Counter frequency",
-    enabled: false,
+    enabled: true,
 };
