@@ -27,7 +27,6 @@ use sysinfo::{CpuExt, System, SystemExt};
 mod arch;
 mod arnd;
 mod budget;
-mod console;
 mod ee;
 mod errno;
 mod fs;
