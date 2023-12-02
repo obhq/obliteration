@@ -1,17 +1,17 @@
 /// An entry in the ID table.
 #[derive(Debug)]
-pub struct IdEntry<T> {
+pub struct Entry<T> {
     name: Option<String>,
     data: T,
-    flags: u16,
+    ty: u16,
 }
 
-impl<T> IdEntry<T> {
+impl<T> Entry<T> {
     pub(super) fn new(data: T) -> Self {
         Self {
             name: None,
             data,
-            flags: 0,
+            ty: 0,
         }
     }
 
@@ -19,11 +19,15 @@ impl<T> IdEntry<T> {
         &self.data
     }
 
+    pub fn ty(&self) -> u16 {
+        self.ty
+    }
+
     pub fn set_name(&mut self, v: Option<String>) {
         self.name = v;
     }
 
-    pub fn set_flags(&mut self, v: u16) {
-        self.flags = v;
+    pub fn set_ty(&mut self, v: u16) {
+        self.ty = v;
     }
 }
