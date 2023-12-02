@@ -346,7 +346,7 @@ impl Fs {
         } else if com & IOC_OUT != 0 {
             use std::io::Write;
 
-            data.write(&vec![0u8; size]).unwrap();
+            let _ = data.write(&vec![0u8; size]).unwrap();
         }
 
         // Get target file.
