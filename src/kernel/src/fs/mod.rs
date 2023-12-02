@@ -139,6 +139,7 @@ impl Fs {
         }
 
         // TODO: Implement SDT_PROBE.
+        #[allow(clippy::never_loop)] // TODO: Remove this once this loop is fully implemented.
         loop {
             nd.cnd.nameptr = 0;
 
