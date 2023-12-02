@@ -303,7 +303,6 @@ impl Fs {
         const IOC_OUT: u64 = 0x40000000;
         const IOC_IN: u64 = 0x80000000;
         const IOCPARM_MASK: u64 = 0x1FFF;
-        const SYS_IOCTL_SMALL_SIZE: usize = 128;
 
         let fd: i32 = i.args[0].try_into().unwrap();
         let mut com: u64 = i.args[1].into();
