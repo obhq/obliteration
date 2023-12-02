@@ -12,12 +12,14 @@ use param::Param;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::mem::size_of;
 use std::num::{NonZeroI32, TryFromIntError};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
 
+mod dev;
 mod file;
 mod item;
 mod path;
@@ -93,7 +95,9 @@ impl Fs {
             app,
         });
 
+        syscalls.register(4, &fs, Self::sys_write);
         syscalls.register(5, &fs, Self::sys_open);
+        syscalls.register(6, &fs, Self::sys_close);
         syscalls.register(54, &fs, Self::sys_ioctl);
         syscalls.register(56, &fs, Self::sys_revoke);
 
@@ -177,6 +181,7 @@ impl Fs {
         // TODO: Implement logics from the PS4.
         let item = match nd.dirp {
             "/dev/console" => FsItem::Device(VDev::Console),
+            "/dev/dipsw" => FsItem::Device(VDev::Dipsw),
             _ => self
                 .resolve(VPath::new(nd.dirp).unwrap())
                 .ok_or(FsError::NotFound)?,
@@ -196,6 +201,29 @@ impl Fs {
 
     fn revoke<P: Into<VPathBuf>>(&self, _path: P) {
         // TODO: Implement this.
+    }
+
+    fn sys_write(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let ptr: *const u8 = i.args[1].into();
+        let len: usize = i.args[2].try_into().unwrap();
+
+        if len > 0x7fffffff {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        let buf = unsafe { std::slice::from_raw_parts(ptr, len) };
+
+        let file = self.vp.files().get(fd).ok_or(SysErr::Raw(EBADF))?;
+        let ops = file.ops().ok_or(SysErr::Raw(EBADF))?;
+
+        let td = VThread::current().unwrap();
+
+        info!("Writing {len} bytes to fd {fd}.");
+
+        let bytes_written = ops.write(file.as_ref(), buf, td.cred(), td.as_ref())?;
+
+        Ok(bytes_written.into())
     }
 
     fn sys_open(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -260,6 +288,16 @@ impl Fs {
         Ok(fd.into())
     }
 
+    fn sys_close(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+
+        info!("Closing fd {fd}.");
+
+        self.vp.files().free(fd)?;
+
+        Ok(SysOut::ZERO)
+    }
+
     fn sys_ioctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         const IOC_VOID: u64 = 0x20000000;
         const IOC_OUT: u64 = 0x40000000;
@@ -268,13 +306,13 @@ impl Fs {
 
         let fd: i32 = i.args[0].try_into().unwrap();
         let mut com: u64 = i.args[1].into();
-        let _data: *const u8 = i.args[2].into();
+        let data_arg: *mut u8 = i.args[2].into();
 
         if com > 0xffffffff {
             com &= 0xffffffff;
         }
 
-        let size = (com >> 16) & IOCPARM_MASK;
+        let size: usize = ((com >> 16) & IOCPARM_MASK) as usize;
 
         if com & (IOC_VOID | IOC_OUT | IOC_IN) == 0
             || com & (IOC_OUT | IOC_IN) != 0 && size == 0
@@ -283,18 +321,24 @@ impl Fs {
             return Err(SysErr::Raw(ENOTTY));
         }
 
+        let mut vec = vec![0u8; size];
+
         // Get data.
         let data = if size == 0 {
-            if com & IOC_IN != 0 {
-                todo!("ioctl with IOC_IN");
-            } else if com & IOC_OUT != 0 {
-                todo!("ioctl with IOC_OUT");
-            }
-
-            &[]
+            &mut []
         } else {
-            todo!("ioctl with size != 0");
+            if com & IOC_VOID != 0 {
+                todo!("ioctl with com & IOC_VOID != 0");
+            } else {
+                &mut vec[..]
+            }
         };
+
+        if com & IOC_IN != 0 {
+            todo!("ioctl with IOC_IN");
+        } else if com & IOC_OUT != 0 {
+            data.fill(0);
+        }
 
         // Get target file.
         let file = self.vp.files().get(fd).ok_or(SysErr::Raw(EBADF))?;
@@ -323,7 +367,9 @@ impl Fs {
         ops.ioctl(&file, com, data, td.cred(), &td)?;
 
         if com & IOC_OUT != 0 {
-            todo!("ioctl with IOC_OUT");
+            unsafe {
+                std::ptr::copy_nonoverlapping(data.as_ptr(), data_arg, size);
+            }
         }
 
         Ok(SysOut::ZERO)
