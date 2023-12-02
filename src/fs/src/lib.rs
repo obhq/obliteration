@@ -35,8 +35,7 @@ impl Metadata {
         // Create metadata file.
         let mut file = std::fs::OpenOptions::new();
 
-        file.create(true);
-        file.truncate(true);
+        file.create_new(true);
         file.write(true);
 
         let file = match file.open(&path) {

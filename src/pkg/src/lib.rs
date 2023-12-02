@@ -191,12 +191,7 @@ impl Pkg {
             }
 
             // Open destination file.
-            let mut file = match OpenOptions::new()
-                .write(true)
-                .truncate(true)
-                .create(true)
-                .open(&path)
-            {
+            let mut file = match OpenOptions::new().write(true).create_new(true).open(&path) {
                 Ok(file) => file,
                 Err(e) => return Err(ExtractError::CreateEntryFailed(path, e)),
             };
