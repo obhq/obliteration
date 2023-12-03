@@ -2,18 +2,26 @@ use crate::errno::EINVAL;
 use crate::info;
 use crate::process::{PcbFlags, VThread};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
+use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 /// An implementation of machine-dependent services.
-pub struct MachDep {}
+pub struct MachDep {
+    tsc_freq: AtomicU64,
+}
 
 impl MachDep {
     const I386_GET_IOPERM: u32 = 3;
     const I386_SET_IOPERM: u32 = 4;
     const AMD64_SET_FSBASE: u32 = 129;
 
+    const TSC_FREQ: u64 = 16000000000;
+
     pub fn new(sys: &mut Syscalls) -> Arc<Self> {
-        let mach = Arc::new(Self {});
+        let mach = Arc::new(Self {
+            tsc_freq: Self::init_tsc(),
+        });
 
         sys.register(165, &mach, Self::sysarch);
 
@@ -50,5 +58,13 @@ impl MachDep {
         }
 
         Ok(SysOut::ZERO)
+    }
+
+    pub fn tsc_freq(&self) -> &AtomicU64 {
+        &self.tsc_freq
+    }
+
+    fn init_tsc() -> AtomicU64 {
+        AtomicU64::new(Self::TSC_FREQ)
     }
 }

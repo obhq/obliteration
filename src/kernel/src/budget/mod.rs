@@ -1,22 +1,22 @@
 use crate::errno::{ENOENT, ENOSYS, ESRCH};
-use crate::idt::IdTable;
+use crate::idt::Idt;
 use crate::info;
 use crate::process::{VProc, VThread};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use std::ops::Deref;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex};
 
 /// An implementation of budget system on the PS4.
 pub struct BudgetManager {
     vp: Arc<VProc>,
-    budgets: RwLock<IdTable<Arc<Budget>>>,
+    budgets: Mutex<Idt<Arc<Budget>>>,
 }
 
 impl BudgetManager {
     pub fn new(vp: &Arc<VProc>, sys: &mut Syscalls) -> Arc<Self> {
         let mgr = Arc::new(Self {
             vp: vp.clone(),
-            budgets: RwLock::new(IdTable::new(0x1000)),
+            budgets: Mutex::new(Idt::new(0x1000)),
         });
 
         sys.register(610, &mgr, Self::sys_budget_get_ptype);
@@ -25,12 +25,14 @@ impl BudgetManager {
     }
 
     pub fn create(&self, budget: Budget) -> usize {
-        self.budgets
-            .write()
-            .unwrap()
-            .alloc::<_, ()>(|_| Ok(Arc::new(budget)))
-            .unwrap()
-            .1
+        let name = budget.name.clone();
+        let mut budgets = self.budgets.lock().unwrap();
+        let (entry, id) = budgets.alloc::<_, ()>(|_| Ok(Arc::new(budget))).unwrap();
+
+        entry.set_name(Some(name));
+        entry.set_ty(0x2000);
+
+        id
     }
 
     fn sys_budget_get_ptype(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -42,9 +44,15 @@ impl BudgetManager {
 
         if td.cred().is_system() || pid == -1 || pid == self.vp.id().get() {
             if pid == -1 || pid == self.vp.id().get() {
-                // TODO: Invoke id_rlock.
-                match self.vp.budget().deref() {
-                    Some((_, ty)) => Ok((*ty as i32).into()),
+                // Get budget ID.
+                let id = match self.vp.budget().deref() {
+                    Some(v) => v.0,
+                    None => return Err(SysErr::Raw(ENOENT)),
+                };
+
+                // Lookup budget.
+                match self.budgets.lock().unwrap().get_mut(id, Some(0x2000)) {
+                    Some(v) => Ok((v.data().ptype as i32).into()),
                     None => Err(SysErr::Raw(ENOENT)),
                 }
             } else {

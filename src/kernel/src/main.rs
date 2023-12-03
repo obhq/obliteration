@@ -27,7 +27,6 @@ use sysinfo::{CpuExt, System, SystemExt};
 mod arch;
 mod arnd;
 mod budget;
-mod console;
 mod ee;
 mod errno;
 mod fs;
@@ -249,7 +248,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     // Initialize kernel components.
     let fs = Fs::new(root, app, param, vp, &mut syscalls);
     RegMgr::new(&mut syscalls);
-    MachDep::new(&mut syscalls);
+    let machdep = MachDep::new(&mut syscalls);
     let budget = BudgetManager::new(vp, &mut syscalls);
 
     // TODO: Get correct name from the PS4.
@@ -277,7 +276,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     app.print(log);
 
     // Initialize sysctl.
-    Sysctl::new(arnd, vp, mm, &mut syscalls);
+    Sysctl::new(arnd, vp, mm, &machdep, &mut syscalls);
     ee.set_syscalls(syscalls);
 
     // Preload libkernel.

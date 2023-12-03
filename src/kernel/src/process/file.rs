@@ -1,4 +1,8 @@
-use crate::fs::{VFile, Vnode};
+use crate::{
+    errno::EBADF,
+    fs::{VFile, Vnode},
+    syscalls::SysErr,
+};
 use gmtx::{GroupMutex, MutexGroup};
 use std::sync::Arc;
 
@@ -67,5 +71,23 @@ impl FileDesc {
         let files = self.files.read();
 
         files.get(fd)?.clone()
+    }
+
+    pub fn free(&self, fd: i32) -> Result<(), SysErr> {
+        if fd < 0 {
+            return Err(SysErr::Raw(EBADF));
+        }
+
+        let fd: usize = fd.try_into().unwrap();
+
+        let mut files = self.files.write();
+
+        if let Some(file) = files.get_mut(fd) {
+            *file = None;
+
+            Ok(())
+        } else {
+            Err(SysErr::Raw(EBADF))
+        }
     }
 }
