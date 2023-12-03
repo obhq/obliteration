@@ -89,6 +89,8 @@ impl Sysctl {
     pub const MACHDEP_TSC_FREQ: i32 = 492;
 
     pub const VM_TOTAL: i32 = 1;
+    pub const VM_PS4DEV: i32 = 1;
+    pub const VM_PS4DEV_TRCMEM_TOTAL: i32 = 571;
 
     pub const HW_PAGESIZE: i32 = 7;
 
@@ -867,9 +869,9 @@ static VM_CHILDREN: OidList = OidList {
 static VM_PS4DEV: Oid = Oid {
     parent: &VM_CHILDREN,
     link: None, // TODO: Change to a proper value.
-    number: 1,
+    number: Sysctl::VM_PS4DEV,
     kind: Sysctl::CTLFLAG_RD | Sysctl::CTLTYPE_NODE,
-    arg1: None, // TODO: This value on the PS4 is not null.
+    arg1: Some(&VM_PS4DEV_CHILDREN),
     arg2: 0,
     name: "ps4dev",
     handler: None,
@@ -878,11 +880,29 @@ static VM_PS4DEV: Oid = Oid {
     enabled: false,
 };
 
+static VM_PS4DEV_CHILDREN: OidList = OidList {
+    first: Some(&VM_PS4DEV_TRCMEM_TOTAL), // TODO: Use a proper value.
+};
+
+static VM_PS4DEV_TRCMEM_TOTAL: Oid = Oid {
+    parent: &VM_PS4DEV_CHILDREN,
+    link: None, // TODO: Change to a proper value.
+    number: Sysctl::VM_PS4DEV_TRCMEM_TOTAL,
+    kind: Sysctl::CTLFLAG_RD | Sysctl::CTLFLAG_MPSAFE | Sysctl::CTLTYPE_UINT,
+    arg1: None, //TODO: This value on the PS4 is not null.
+    arg2: 0,
+    name: "trcmem_total",
+    handler: Some(Sysctl::handle_int),
+    fmt: "IU",
+    descr: "trace memory total",
+    enabled: false,
+};
+
 static HW: Oid = Oid {
     parent: &CHILDREN,
     link: Some(&MACHDEP),
     number: Sysctl::CTL_HW,
-    kind: Sysctl::CTLFLAG_RW | Sysctl::CTLTYPE_NODE,
+    kind: Sysctl::CTLFLAG_RD | Sysctl::CTLTYPE_S16,
     arg1: Some(&HW_CHILDREN),
     arg2: 0,
     name: "hw",
