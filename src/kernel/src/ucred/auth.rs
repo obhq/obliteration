@@ -26,8 +26,8 @@ impl AuthInfo {
         unk: [0; 0x40],
     };
 
-    pub const EXE: Self = Self {
-        paid: 0x3100000000000001,
+    pub const GAME: Self = Self {
+        paid: 0x3800000000000011, // https://github.com/flatz/pkg_pfs_tool/blob/main/src/self.h#L36
         caps: [
             0x2000038000000000,
             0x000000000000FF00,

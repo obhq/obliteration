@@ -65,7 +65,7 @@ impl VProc {
         let vp = Arc::new(Self {
             id: Self::new_id(),
             threads: mg.new_member(Vec::new()),
-            cred: Ucred::new(AuthInfo::SYS_CORE.clone()),
+            cred: Ucred::new(AuthInfo::GAME.clone()),
             group: mg.new_member(None),
             sigacts: mg.new_member(SignalActs::new()),
             files: FileDesc::new(&mg),
@@ -146,6 +146,7 @@ impl VProc {
     /// of the thread. Specify an unaligned stack will cause undefined behavior.
     pub unsafe fn new_thread<F>(
         self: &Arc<Self>,
+        cred: Ucred,
         stack: *mut u8,
         stack_size: usize,
         mut routine: F,
@@ -156,9 +157,6 @@ impl VProc {
         // Lock the list before spawn the thread to prevent race condition if the new thread run
         // too fast and found out they is not in our list.
         let mut threads = self.threads.write();
-
-        // TODO: Check how ucred is constructed for a thread.
-        let cred = Ucred::new(AuthInfo::SYS_CORE.clone());
         let td = Arc::new(VThread::new(Self::new_id(), cred, &self.mtxg));
         let active = Box::new(ActiveThread {
             proc: self.clone(),
