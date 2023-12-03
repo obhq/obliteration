@@ -244,8 +244,12 @@ fn run<E: crate::ee::ExecutionEngine>(
     mm: &Arc<MemoryManager>,
     ee: Arc<E>,
 ) -> ExitCode {
-    // Initialize kernel components.
+    // initializes filesystem.
     let fs = Fs::new(root, app, param, vp, &mut syscalls);
+
+    *vp.files().root_mut() = Some(fs.root().clone()); // TODO: Check how the PS4 set this field.
+
+    // Initialize kernel components.
     RegMgr::new(&mut syscalls);
     let machdep = MachDep::new(&mut syscalls);
     let budget = BudgetManager::new(vp, &mut syscalls);
