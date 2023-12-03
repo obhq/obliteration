@@ -35,7 +35,10 @@ pub unsafe extern "C" fn param_close(param: *mut Param) {
 
 #[no_mangle]
 pub unsafe extern "C" fn param_app_ver_get(param: &Param, buf: &mut QString) {
-    buf.set(param.app_ver());
+    match &param.app_ver() {
+        Some(app_ver) => buf.set(app_ver),
+        None => buf.set("No App_Ver"),
+    }
 }
 
 #[no_mangle]
@@ -55,12 +58,18 @@ pub unsafe extern "C" fn param_shortContentId_get(param: &Param, buf: &mut QStri
 
 #[no_mangle]
 pub unsafe extern "C" fn param_title_get(param: &Param, buf: &mut QString) {
-    buf.set(param.title());
+    match &param.title() {
+        Some(title) => buf.set(title),
+        None => buf.set("No Title"),
+    }
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn param_title_id_get(param: &Param, buf: &mut QString) {
-    buf.set(param.title_id());
+    match &param.title_id() {
+        Some(title_id) => buf.set(title_id),
+        None => buf.set("No TitleID"),
+    }
 }
 
 #[no_mangle]

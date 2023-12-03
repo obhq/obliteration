@@ -133,10 +133,10 @@ fn main() -> ExitCode {
     }
 
     // Param information
-    writeln!(log, "Application Title   : {}", param.title()).unwrap();
-    writeln!(log, "Application ID      : {}", param.title_id()).unwrap();
+    writeln!(log, "Application Title   : {:?}", param.title()).unwrap();
+    writeln!(log, "Application ID      : {:?}", param.title_id()).unwrap();
     writeln!(log, "Application Category: {}", param.category()).unwrap();
-    writeln!(log, "Application Version : {}", param.app_ver()).unwrap();
+    writeln!(log, "Application Version : {:?}", param.app_ver()).unwrap();
 
     // Hardware information
     writeln!(
@@ -377,7 +377,7 @@ fn discord_presence(param: &Param) {
     }
 
     // Create details about game.
-    let details = format!("Playing {} - {}", param.title(), param.title_id());
+    let details = format!("Playing {:?} - {:?}", param.title(), param.title_id());
     let start = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()

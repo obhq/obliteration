@@ -6,11 +6,11 @@ use thiserror::Error;
 ///
 /// See https://www.psdevwiki.com/ps4/Param.sfo#Internal_Structure for more information.
 pub struct Param {
-    app_ver: String,
+    app_ver: Option<String>,
     category: String,
     content_id: String,
-    title: String,
-    title_id: String,
+    title: Option<String>,
+    title_id: Option<String>,
     version: String,
 }
 
@@ -147,24 +147,16 @@ impl Param {
                         && !category_param.starts_with("gp")
                         // Check if this is an application
                         && !category_param.starts_with("gd")
-                    {
-                        // For types such as gc, sd, la, and wda, there is no Title or TitleID.
-                        title = Some(format!("No Title {}", category_param).to_string());
-                        title_id = Some("No TitleID".to_string());
-                    }
+                    {}
                 }
                 b"CONTENT_ID" => {
                     content_id = Some(Self::read_utf8(&mut raw, i, format, len, 48)?);
                 }
                 b"TITLE" => {
-                    if title.is_none() {
-                        title = Some(Self::read_utf8(&mut raw, i, format, len, 128)?);
-                    }
+                    title = Some(Self::read_utf8(&mut raw, i, format, len, 128)?);
                 }
                 b"TITLE_ID" => {
-                    if title_id.is_none() {
-                        title_id = Some(Self::read_utf8(&mut raw, i, format, len, 12)?);
-                    }
+                    title_id = Some(Self::read_utf8(&mut raw, i, format, len, 12)?);
                 }
                 b"VERSION" => {
                     version = Some(Self::read_utf8(&mut raw, i, format, len, 8)?);
@@ -175,19 +167,17 @@ impl Param {
 
         Ok(Self {
             // App_Ver for Games and Patches, for DLC, use version. Anything else is abnormal.
-            app_ver: app_ver
-                .or(version.clone())
-                .ok_or(ReadError::MissingVersion)?,
+            app_ver: app_ver,
             category: category.ok_or(ReadError::MissingCategory)?,
             content_id: content_id.ok_or(ReadError::MissingContentId)?,
-            title: title.ok_or(ReadError::MissingTitle)?,
-            title_id: title_id.ok_or(ReadError::MissingTitleId)?,
+            title: title,
+            title_id: title_id,
             version: version.ok_or(ReadError::MissingVersion)?,
         })
     }
 
     /// Fetches the value APP_VER from given Param.SFO
-    pub fn app_ver(&self) -> &str {
+    pub fn app_ver(&self) -> &Option<String> {
         &self.app_ver
     }
 
@@ -210,12 +200,12 @@ impl Param {
     }
 
     /// Fetches the value TITLE from given Param.SFO
-    pub fn title(&self) -> &str {
+    pub fn title(&self) -> &Option<String> {
         &self.title
     }
 
     /// Fetches the value TITLE_ID from given Param.SFO
-    pub fn title_id(&self) -> &str {
+    pub fn title_id(&self) -> &Option<String> {
         &self.title_id
     }
 

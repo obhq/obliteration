@@ -63,9 +63,12 @@ impl Fs {
         }
 
         // Mount game directory.
-        let pfs: VPathBuf = format!("/mnt/sandbox/pfsmnt/{}-app0-patch0-union", param.title_id())
-            .try_into()
-            .unwrap();
+        let pfs: VPathBuf = format!(
+            "/mnt/sandbox/pfsmnt/{:?}-app0-patch0-union",
+            param.title_id()
+        )
+        .try_into()
+        .unwrap();
 
         mounts.insert(pfs.clone(), MountSource::Host(game));
 
@@ -73,14 +76,14 @@ impl Fs {
         let mut app = system.join("mnt");
 
         app.push("sandbox");
-        app.push(format!("{}_000", param.title_id()));
+        app.push(format!("{:?}_000", param.title_id()));
 
         if let Err(e) = std::fs::create_dir_all(&app) {
             panic!("Cannot create {}: {}.", app.display(), e);
         }
 
         // Mount /mnt/sandbox/{id}_000/app0 to /mnt/sandbox/pfsmnt/{id}-app0-patch0-union.
-        let app: VPathBuf = format!("/mnt/sandbox/{}_000", param.title_id())
+        let app: VPathBuf = format!("/mnt/sandbox/{:?}_000", param.title_id())
             .try_into()
             .unwrap();
 
