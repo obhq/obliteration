@@ -49,6 +49,7 @@ pub struct VProc {
     sigacts: Gutex<SignalActs>,                      // p_sigacts
     files: FileDesc,                                 // p_fd
     limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
+    comm: Gutex<String>,                             // p_comm
     objects: Gutex<Idt<Arc<dyn Any + Send + Sync>>>,
     budget: Gutex<Option<(usize, ProcType)>>,
     app_info: AppInfo,
@@ -72,6 +73,7 @@ impl VProc {
             objects: gg.spawn(Idt::new(0x1000)),
             budget: gg.spawn(None),
             limits,
+            comm: gg.spawn(String::new()),
             app_info: AppInfo::new(),
             ptc: 0,
             uptc: AtomicPtr::new(null_mut()),
@@ -84,6 +86,7 @@ impl VProc {
         sys.register(340, &vp, Self::sys_sigprocmask);
         sys.register(416, &vp, Self::sys_sigaction);
         sys.register(432, &vp, Self::sys_thr_self);
+        sys.register(464, &vp, Self::sys_thr_set_name);
         sys.register(466, &vp, Self::sys_rtprio_thread);
         sys.register(487, &vp, Self::sys_cpuset_getaffinity);
         sys.register(557, &vp, Self::sys_namedobj_create);
@@ -107,6 +110,10 @@ impl VProc {
 
     pub fn limit(&self, ty: usize) -> Option<&ResourceLimit> {
         self.limits.get(ty)
+    }
+
+    pub fn set_name(&self, name: &str) {
+        *self.comm.write() = name.to_string();
     }
 
     pub fn objects_mut(&self) -> GutexWriteGuard<'_, Idt<Arc<dyn Any + Send + Sync>>> {
@@ -396,6 +403,26 @@ impl VProc {
     fn sys_thr_self(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let id: *mut i64 = i.args[0].into();
         unsafe { *id = VThread::current().unwrap().id().get().into() };
+        Ok(SysOut::ZERO)
+    }
+
+    fn sys_thr_set_name(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let name: &str = unsafe { i.args[0].to_str(32) }?.unwrap();
+        let id: i32 = i.args[1].try_into().unwrap();
+
+        if id == -1 {
+            self.set_name(name);
+        } else {
+            let threads = self.threads.read();
+
+            let thr = threads
+                .iter()
+                .find(|t| t.id().get() == id)
+                .ok_or(SysErr::Raw(ESRCH))?;
+
+            thr.set_name(name);
+        }
+
         Ok(SysOut::ZERO)
     }
 
