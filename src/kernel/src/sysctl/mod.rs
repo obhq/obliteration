@@ -674,7 +674,7 @@ static SYSCTL_NAME2OID: Oid = Oid {
 
 static KERN: Oid = Oid {
     parent: &CHILDREN,
-    link: Some(&VM), 
+    link: Some(&VM),
     number: Sysctl::CTL_KERN,
     kind: Sysctl::CTLFLAG_RW | Sysctl::CTLFLAG_CAPRD | Sysctl::CTLTYPE_NODE,
     arg1: Some(&KERN_CHILDREN),
@@ -902,7 +902,7 @@ static HW: Oid = Oid {
     parent: &CHILDREN,
     link: Some(&MACHDEP),
     number: Sysctl::CTL_HW,
-    kind: Sysctl::CTLFLAG_RD | Sysctl::CTLTYPE_S16,
+    kind: Sysctl::CTLFLAG_RW | Sysctl::CTLTYPE_NODE,
     arg1: Some(&HW_CHILDREN),
     arg2: 0,
     name: "hw",
