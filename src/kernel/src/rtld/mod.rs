@@ -614,6 +614,11 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             }
         }
 
+        // Print the module.
+        let mut log = info!();
+        writeln!(log, "Module {} is loaded with ID = {}.", name, md.id()).unwrap();
+        md.print(log);
+
         // Set module ID.
         unsafe { *Into::<*mut u32>::into(i.args[2]) = md.id() };
 

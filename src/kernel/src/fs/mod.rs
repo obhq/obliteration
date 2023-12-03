@@ -12,7 +12,6 @@ use param::Param;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-use std::mem::size_of;
 use std::num::{NonZeroI32, TryFromIntError};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -40,7 +39,7 @@ impl Fs {
         game: G,
         param: &Param,
         vp: &Arc<VProc>,
-        syscalls: &mut Syscalls,
+        sys: &mut Syscalls,
     ) -> Arc<Self>
     where
         S: Into<PathBuf>,
@@ -95,11 +94,11 @@ impl Fs {
             app,
         });
 
-        syscalls.register(4, &fs, Self::sys_write);
-        syscalls.register(5, &fs, Self::sys_open);
-        syscalls.register(6, &fs, Self::sys_close);
-        syscalls.register(54, &fs, Self::sys_ioctl);
-        syscalls.register(56, &fs, Self::sys_revoke);
+        sys.register(4, &fs, Self::sys_write);
+        sys.register(5, &fs, Self::sys_open);
+        sys.register(6, &fs, Self::sys_close);
+        sys.register(54, &fs, Self::sys_ioctl);
+        sys.register(56, &fs, Self::sys_revoke);
 
         fs
     }
@@ -258,7 +257,7 @@ impl Fs {
             todo!("open({path}, {flags}) with mode = {mode}");
         }
 
-        info!("Opening {path} with {flags}.");
+        info!("Opening {path} with flags = {flags}.");
 
         // Lookup file.
         let td = VThread::current().unwrap();
@@ -537,7 +536,11 @@ impl TryFrom<SysArg> for OpenFlags {
 
 impl Display for OpenFlags {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
+        if self.0.is_empty() {
+            f.write_str("empty")
+        } else {
+            self.0.fmt(f)
+        }
     }
 }
 
