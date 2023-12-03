@@ -16,7 +16,7 @@ use crate::signal::{
 };
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{AuthInfo, Privilege, Ucred};
-use gmtx::{GroupMutex, GroupMutexReadGuard, GroupMutexWriteGuard, MutexGroup};
+use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use llt::{SpawnError, Thread};
 use std::any::Any;
 use std::mem::zeroed;
@@ -43,39 +43,39 @@ mod thread;
 #[derive(Debug)]
 pub struct VProc {
     id: NonZeroI32,                                  // p_pid
-    threads: GroupMutex<Vec<Arc<VThread>>>,          // p_threads
+    threads: Gutex<Vec<Arc<VThread>>>,               // p_threads
     cred: Ucred,                                     // p_ucred
-    group: GroupMutex<Option<VProcGroup>>,           // p_pgrp
-    sigacts: GroupMutex<SignalActs>,                 // p_sigacts
+    group: Gutex<Option<VProcGroup>>,                // p_pgrp
+    sigacts: Gutex<SignalActs>,                      // p_sigacts
     files: FileDesc,                                 // p_fd
     limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
-    objects: GroupMutex<Idt<Arc<dyn Any + Send + Sync>>>,
-    budget: GroupMutex<Option<(usize, ProcType)>>,
+    objects: Gutex<Idt<Arc<dyn Any + Send + Sync>>>,
+    budget: Gutex<Option<(usize, ProcType)>>,
     app_info: AppInfo,
     ptc: u64,
     uptc: AtomicPtr<u8>,
-    mtxg: Arc<MutexGroup>,
+    gg: Arc<GutexGroup>,
 }
 
 impl VProc {
     pub fn new(sys: &mut Syscalls) -> Result<Arc<Self>, VProcError> {
         // TODO: Check how ucred is constructed for a process.
-        let mg = MutexGroup::new("virtual process");
+        let gg = GutexGroup::new("virtual process");
         let limits = Self::load_limits()?;
         let vp = Arc::new(Self {
             id: Self::new_id(),
-            threads: mg.new_member(Vec::new()),
+            threads: gg.spawn(Vec::new()),
             cred: Ucred::new(AuthInfo::GAME.clone()),
-            group: mg.new_member(None),
-            sigacts: mg.new_member(SignalActs::new()),
-            files: FileDesc::new(&mg),
-            objects: mg.new_member(Idt::new(0x1000)),
-            budget: mg.new_member(None),
+            group: gg.spawn(None),
+            sigacts: gg.spawn(SignalActs::new()),
+            files: FileDesc::new(&gg),
+            objects: gg.spawn(Idt::new(0x1000)),
+            budget: gg.spawn(None),
             limits,
             app_info: AppInfo::new(),
             ptc: 0,
             uptc: AtomicPtr::new(null_mut()),
-            mtxg: mg,
+            gg,
         });
 
         sys.register(20, &vp, |p, _| Ok(p.id().into()));
@@ -109,15 +109,15 @@ impl VProc {
         self.limits.get(ty)
     }
 
-    pub fn objects_mut(&self) -> GroupMutexWriteGuard<'_, Idt<Arc<dyn Any + Send + Sync>>> {
+    pub fn objects_mut(&self) -> GutexWriteGuard<'_, Idt<Arc<dyn Any + Send + Sync>>> {
         self.objects.write()
     }
 
-    pub fn budget(&self) -> GroupMutexReadGuard<'_, Option<(usize, ProcType)>> {
+    pub fn budget(&self) -> GutexReadGuard<'_, Option<(usize, ProcType)>> {
         self.budget.read()
     }
 
-    pub fn budget_mut(&self) -> GroupMutexWriteGuard<'_, Option<(usize, ProcType)>> {
+    pub fn budget_mut(&self) -> GutexWriteGuard<'_, Option<(usize, ProcType)>> {
         self.budget.write()
     }
 
@@ -133,8 +133,8 @@ impl VProc {
         &self.uptc
     }
 
-    pub fn mutex_group(&self) -> &Arc<MutexGroup> {
-        &self.mtxg
+    pub fn gutex_group(&self) -> &Arc<GutexGroup> {
+        &self.gg
     }
 
     /// Spawn a new [`VThread`].
@@ -157,7 +157,7 @@ impl VProc {
         // Lock the list before spawn the thread to prevent race condition if the new thread run
         // too fast and found out they is not in our list.
         let mut threads = self.threads.write();
-        let td = Arc::new(VThread::new(Self::new_id(), cred, &self.mtxg));
+        let td = Arc::new(VThread::new(Self::new_id(), cred, &self.gg));
         let active = Box::new(ActiveThread {
             proc: self.clone(),
             id: td.id(),
