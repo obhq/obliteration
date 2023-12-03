@@ -318,11 +318,7 @@ impl<E: ExecutionEngine> Module<E> {
 
     pub fn dump<P: AsRef<Path>>(&mut self, path: P) -> Result<(), std::io::Error> {
         let path = path.as_ref();
-        let mut file = OpenOptions::new()
-            .write(true)
-            .truncate(true)
-            .create(true)
-            .open(path)?;
+        let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
 
         file.write_all(unsafe { self.memory.as_bytes() })
     }
