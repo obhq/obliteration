@@ -5,33 +5,35 @@ use crate::ucred::Ucred;
 use macros::vpath;
 use std::fmt::{Display, Formatter};
 
-/// An implementation of `/dev/console`.
 #[derive(Debug)]
-pub struct Console {}
+pub struct DeciTty6 {}
 
-impl Console {
-    pub const PATH: &VPath = vpath!("/dev/console");
+impl DeciTty6 {
+    pub const PATH: &VPath = vpath!("/dev/deci_tty6");
 
     pub fn new() -> Self {
         Self {}
     }
 }
 
-impl VFileOps for Console {
+impl VFileOps for DeciTty6 {
+    fn write(&self, _: &VFile, _: &[u8], _: &Ucred, _: &VThread) -> Result<usize, Box<dyn Errno>> {
+        todo!()
+    }
+
     fn ioctl(
         &self,
-        _file: &VFile,
-        _com: u64,
-        _data: &[u8],
-        _cred: &Ucred,
-        _td: &VThread,
+        _: &crate::fs::VFile,
+        _: u64,
+        _: &mut [u8],
+        _: &Ucred,
+        _: &VThread,
     ) -> Result<(), Box<dyn Errno>> {
-        // TODO: Implement this.
-        Ok(())
+        todo!()
     }
 }
 
-impl Display for Console {
+impl Display for DeciTty6 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         Self::PATH.fmt(f)
     }

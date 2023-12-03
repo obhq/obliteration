@@ -8,7 +8,7 @@ pub use self::signal::*;
 pub use self::thread::*;
 use crate::budget::ProcType;
 use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ERANGE, ESRCH};
-use crate::idt::IdTable;
+use crate::idt::Idt;
 use crate::info;
 use crate::signal::{
     strsignal, SignalAct, SignalFlags, SignalSet, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_DFL,
@@ -49,7 +49,7 @@ pub struct VProc {
     sigacts: GroupMutex<SignalActs>,                 // p_sigacts
     files: FileDesc,                                 // p_fd
     limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
-    objects: GroupMutex<IdTable<Arc<dyn Any + Send + Sync>>>,
+    objects: GroupMutex<Idt<Arc<dyn Any + Send + Sync>>>,
     budget: GroupMutex<Option<(usize, ProcType)>>,
     app_info: AppInfo,
     ptc: u64,
@@ -69,7 +69,7 @@ impl VProc {
             group: mg.new_member(None),
             sigacts: mg.new_member(SignalActs::new()),
             files: FileDesc::new(&mg),
-            objects: mg.new_member(IdTable::new(0x1000)),
+            objects: mg.new_member(Idt::new(0x1000)),
             budget: mg.new_member(None),
             limits,
             app_info: AppInfo::new(),
@@ -109,7 +109,7 @@ impl VProc {
         self.limits.get(ty)
     }
 
-    pub fn objects_mut(&self) -> GroupMutexWriteGuard<'_, IdTable<Arc<dyn Any + Send + Sync>>> {
+    pub fn objects_mut(&self) -> GroupMutexWriteGuard<'_, Idt<Arc<dyn Any + Send + Sync>>> {
         self.objects.write()
     }
 
@@ -517,7 +517,7 @@ impl VProc {
             .unwrap();
 
         entry.set_name(Some(name.to_owned()));
-        entry.set_flags((flags as u16) | 0x1000);
+        entry.set_ty((flags as u16) | 0x1000);
 
         info!(
             "Named object '{}' (ID = {}) was created with data = {:#x} and flags = {:#x}.",

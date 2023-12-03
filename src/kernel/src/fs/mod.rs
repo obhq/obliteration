@@ -2,7 +2,7 @@ pub use self::file::*;
 pub use self::item::*;
 pub use self::path::*;
 pub use self::vnode::*;
-use crate::errno::{Errno, EBADF, EINVAL, ENOENT, ENOTTY};
+use crate::errno::{Errno, EBADF, EINVAL, ENOENT, ENOTCAPABLE, ENOTTY};
 use crate::info;
 use crate::process::{VProc, VThread};
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
@@ -12,12 +12,14 @@ use param::Param;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use std::mem::size_of;
 use std::num::{NonZeroI32, TryFromIntError};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
 
+mod dev;
 mod file;
 mod item;
 mod path;
@@ -93,7 +95,9 @@ impl Fs {
             app,
         });
 
+        syscalls.register(4, &fs, Self::sys_write);
         syscalls.register(5, &fs, Self::sys_open);
+        syscalls.register(6, &fs, Self::sys_close);
         syscalls.register(54, &fs, Self::sys_ioctl);
         syscalls.register(56, &fs, Self::sys_revoke);
 
@@ -128,7 +132,7 @@ impl Fs {
         nd.rootdir = Some(self.vp.files().root().clone());
         nd.topdir = Some(self.vp.files().jail().clone());
 
-        let dp = if nd.cnd.pnbuf[0] != b'/' {
+        let mut dp = if nd.cnd.pnbuf[0] != b'/' {
             todo!("namei with relative path");
         } else {
             self.vp.files().cwd().clone()
@@ -138,9 +142,47 @@ impl Fs {
             todo!("namei with ni_startdir");
         }
 
-        // TODO: Implement the remaining logics from the PS4.
+        // TODO: Implement SDT_PROBE.
+        #[allow(clippy::never_loop)] // TODO: Remove this once this loop is fully implemented.
+        loop {
+            nd.cnd.nameptr = 0;
+
+            if nd.cnd.pnbuf[nd.cnd.nameptr] == b'/' {
+                if nd.strictrelative != 0 {
+                    return Err(FsError::AbsolutePath);
+                }
+
+                loop {
+                    nd.cnd.nameptr += 1;
+
+                    if nd
+                        .cnd
+                        .pnbuf
+                        .get(nd.cnd.nameptr)
+                        .filter(|&v| *v == b'/')
+                        .is_none()
+                    {
+                        break;
+                    }
+                }
+
+                dp = nd.rootdir.as_ref().unwrap().clone();
+            }
+
+            nd.startdir = Some(dp);
+
+            // TODO: Implement the remaining logics from the PS4 when lookup is success.
+            // TODO: Implement SDT_PROBE when lookup is failed.
+            break self.lookup(nd);
+        }
+    }
+
+    fn lookup(&self, nd: &mut NameiData) -> Result<FsItem, FsError> {
+        // TODO: Implement logics from the PS4.
         let item = match nd.dirp {
             "/dev/console" => FsItem::Device(VDev::Console),
+            "/dev/dipsw" => FsItem::Device(VDev::Dipsw),
+            "/dev/deci_tty6" => FsItem::Device(VDev::DeciTty6),
             _ => self
                 .resolve(VPath::new(nd.dirp).unwrap())
                 .ok_or(FsError::NotFound)?,
@@ -160,6 +202,29 @@ impl Fs {
 
     fn revoke<P: Into<VPathBuf>>(&self, _path: P) {
         // TODO: Implement this.
+    }
+
+    fn sys_write(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let ptr: *const u8 = i.args[1].into();
+        let len: usize = i.args[2].try_into().unwrap();
+
+        if len > 0x7fffffff {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        let buf = unsafe { std::slice::from_raw_parts(ptr, len) };
+
+        let file = self.vp.files().get(fd).ok_or(SysErr::Raw(EBADF))?;
+        let ops = file.ops().ok_or(SysErr::Raw(EBADF))?;
+
+        let td = VThread::current().unwrap();
+
+        info!("Writing {len} bytes to fd {fd}.");
+
+        let bytes_written = ops.write(file.as_ref(), buf, td.cred(), td.as_ref())?;
+
+        Ok(bytes_written.into())
     }
 
     fn sys_open(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -202,12 +267,14 @@ impl Fs {
             startdir: None,
             rootdir: None,
             topdir: None,
+            strictrelative: 0,
             loopcnt: 0,
             cnd: ComponentName {
                 flags: NameiFlags::from_bits_retain(0x5000040),
                 thread: Some(&td),
                 cred: None,
                 pnbuf: Vec::new(),
+                nameptr: 0,
             },
         };
 
@@ -222,6 +289,16 @@ impl Fs {
         Ok(fd.into())
     }
 
+    fn sys_close(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+
+        info!("Closing fd {fd}.");
+
+        self.vp.files().free(fd)?;
+
+        Ok(SysOut::ZERO)
+    }
+
     fn sys_ioctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         const IOC_VOID: u64 = 0x20000000;
         const IOC_OUT: u64 = 0x40000000;
@@ -230,13 +307,13 @@ impl Fs {
 
         let fd: i32 = i.args[0].try_into().unwrap();
         let mut com: u64 = i.args[1].into();
-        let _data: *const u8 = i.args[2].into();
+        let data_arg: *mut u8 = i.args[2].into();
 
         if com > 0xffffffff {
             com &= 0xffffffff;
         }
 
-        let size = (com >> 16) & IOCPARM_MASK;
+        let size: usize = ((com >> 16) & IOCPARM_MASK) as usize;
 
         if com & (IOC_VOID | IOC_OUT | IOC_IN) == 0
             || com & (IOC_OUT | IOC_IN) != 0 && size == 0
@@ -245,18 +322,24 @@ impl Fs {
             return Err(SysErr::Raw(ENOTTY));
         }
 
+        let mut vec = vec![0u8; size];
+
         // Get data.
         let data = if size == 0 {
-            if com & IOC_IN != 0 {
-                todo!("ioctl with IOC_IN");
-            } else if com & IOC_OUT != 0 {
-                todo!("ioctl with IOC_OUT");
-            }
-
-            &[]
+            &mut []
         } else {
-            todo!("ioctl with size != 0");
+            if com & IOC_VOID != 0 {
+                todo!("ioctl with com & IOC_VOID != 0");
+            } else {
+                &mut vec[..]
+            }
         };
+
+        if com & IOC_IN != 0 {
+            todo!("ioctl with IOC_IN");
+        } else if com & IOC_OUT != 0 {
+            data.fill(0);
+        }
 
         // Get target file.
         let file = self.vp.files().get(fd).ok_or(SysErr::Raw(EBADF))?;
@@ -285,7 +368,9 @@ impl Fs {
         ops.ioctl(&file, com, data, td.cred(), &td)?;
 
         if com & IOC_OUT != 0 {
-            todo!("ioctl with IOC_OUT");
+            unsafe {
+                std::ptr::copy_nonoverlapping(data.as_ptr(), data_arg, size);
+            }
         }
 
         Ok(SysOut::ZERO)
@@ -307,12 +392,14 @@ impl Fs {
             startdir: None,
             rootdir: None,
             topdir: None,
+            strictrelative: 0,
             loopcnt: 0,
             cnd: ComponentName {
                 flags: NameiFlags::from_bits_retain(0x5000044),
                 thread: Some(&td),
                 cred: None,
                 pnbuf: Vec::new(),
+                nameptr: 0,
             },
         };
 
@@ -390,12 +477,13 @@ impl Fs {
 
 /// An implementation of `nameidata`.
 pub struct NameiData<'a> {
-    pub dirp: &'a str,               // ni_dirp
-    pub startdir: Option<&'a Vnode>, // ni_startdir
-    pub rootdir: Option<Arc<Vnode>>, // ni_rootdir
-    pub topdir: Option<Arc<Vnode>>,  // ni_topdir
-    pub loopcnt: u32,                // ni_loopcnt
-    pub cnd: ComponentName<'a>,      // ni_cnd
+    pub dirp: &'a str,                // ni_dirp
+    pub startdir: Option<Arc<Vnode>>, // ni_startdir
+    pub rootdir: Option<Arc<Vnode>>,  // ni_rootdir
+    pub topdir: Option<Arc<Vnode>>,   // ni_topdir
+    pub strictrelative: i32,          // ni_strictrelative
+    pub loopcnt: u32,                 // ni_loopcnt
+    pub cnd: ComponentName<'a>,       // ni_cnd
 }
 
 /// An implementation of `componentname`.
@@ -404,6 +492,7 @@ pub struct ComponentName<'a> {
     pub thread: Option<&'a VThread>, // cn_thread
     pub cred: Option<&'a Ucred>,     // cn_cred
     pub pnbuf: Vec<u8>,              // cn_pnbuf
+    pub nameptr: usize,              // cn_nameptr
 }
 
 bitflags! {
@@ -476,12 +565,16 @@ struct FsOps {}
 pub enum FsError {
     #[error("no such file or directory")]
     NotFound,
+
+    #[error("path is absolute")]
+    AbsolutePath,
 }
 
 impl Errno for FsError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::NotFound => ENOENT,
+            Self::AbsolutePath => ENOTCAPABLE,
         }
     }
 }
