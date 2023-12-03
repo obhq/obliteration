@@ -51,7 +51,18 @@ impl Syscalls {
         let h = match self.handlers.get(i.id as usize) {
             Some(v) => match v {
                 Some(v) => v,
-                None => todo!("syscall {} at {:#x} on {}", i.id, i.offset, i.module),
+                None => todo!(
+                    "syscall {} at {:#x} on {} with args = ({}, {}, {}, {}, {}, {})",
+                    i.id,
+                    i.offset,
+                    i.module,
+                    i.args[0],
+                    i.args[1],
+                    i.args[2],
+                    i.args[3],
+                    i.args[4],
+                    i.args[5],
+                ),
             },
             None => return ENOSYS.get().into(),
         };
