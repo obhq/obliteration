@@ -672,7 +672,7 @@ static SYSCTL_NAME2OID: Oid = Oid {
 
 static KERN: Oid = Oid {
     parent: &CHILDREN,
-    link: Some(&HW), // TODO: Change to a proper value.
+    link: Some(&VM), // TODO: Change to a proper value.
     number: Sysctl::CTL_KERN,
     kind: Sysctl::CTLFLAG_RW | Sysctl::CTLFLAG_CAPRD | Sysctl::CTLTYPE_NODE,
     arg1: Some(&KERN_CHILDREN),
@@ -844,6 +844,38 @@ static KERN_SMP_CPUS: Oid = Oid {
     fmt: "I",
     descr: "Number of CPUs online",
     enabled: true,
+};
+
+static VM: Oid = Oid {
+    parent: &CHILDREN,
+    link: Some(&HW), // TODO: Change to a proper value.
+    number: Sysctl::CTL_VM,
+    kind: Sysctl::CTLFLAG_RW | Sysctl::CTLTYPE_NODE,
+    arg1: Some(&VM_CHILDREN),
+    arg2: 0,
+    name: "vm",
+    handler: None,
+    fmt: "N",
+    descr: "Virtual memory",
+    enabled: false,
+};
+
+static VM_CHILDREN: OidList = OidList {
+    first: Some(&VM_PS4DEV), // TODO: Use a proper value.
+};
+
+static VM_PS4DEV: Oid = Oid {
+    parent: &VM_CHILDREN,
+    link: None, // TODO: Change to a proper value.
+    number: 1,
+    kind: Sysctl::CTLFLAG_RD | Sysctl::CTLTYPE_NODE,
+    arg1: None, // TODO: This value on the PS4 is not null.
+    arg2: 0,
+    name: "ps4dev",
+    handler: None,
+    fmt: "N",
+    descr: "vm parameters for PS4(DevKit only)",
+    enabled: false,
 };
 
 static HW: Oid = Oid {
