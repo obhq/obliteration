@@ -674,7 +674,7 @@ static SYSCTL_NAME2OID: Oid = Oid {
 
 static KERN: Oid = Oid {
     parent: &CHILDREN,
-    link: Some(&VM), // TODO: Change to a proper value.
+    link: Some(&VM), 
     number: Sysctl::CTL_KERN,
     kind: Sysctl::CTLFLAG_RW | Sysctl::CTLFLAG_CAPRD | Sysctl::CTLTYPE_NODE,
     arg1: Some(&KERN_CHILDREN),
@@ -850,7 +850,7 @@ static KERN_SMP_CPUS: Oid = Oid {
 
 static VM: Oid = Oid {
     parent: &CHILDREN,
-    link: Some(&HW), // TODO: Change to a proper value.
+    link: Some(&HW),
     number: Sysctl::CTL_VM,
     kind: Sysctl::CTLFLAG_RW | Sysctl::CTLTYPE_NODE,
     arg1: Some(&VM_CHILDREN),
