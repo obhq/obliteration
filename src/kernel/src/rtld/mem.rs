@@ -1,7 +1,7 @@
 use super::MapError;
 use crate::memory::{MappingFlags, MemoryManager, MemoryUpdateError, Protections};
 use elf::{Elf, ProgramFlags, ProgramType};
-use gmtx::{GroupMutex, GroupMutexWriteGuard, MutexGroup};
+use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::alloc::Layout;
 use std::fmt::{Debug, Formatter};
 use std::fs::File;
@@ -19,10 +19,10 @@ pub struct Memory {
     text: usize,
     data: usize,
     obcode: usize,
-    obcode_sealed: GroupMutex<usize>,
+    obcode_sealed: Gutex<usize>,
     obdata: usize,
-    obdata_sealed: GroupMutex<usize>,
-    destructors: GroupMutex<Vec<Box<dyn FnOnce()>>>,
+    obdata_sealed: Gutex<usize>,
+    destructors: Gutex<Vec<Box<dyn FnOnce()>>>,
 }
 
 impl Memory {
@@ -31,7 +31,7 @@ impl Memory {
         image: &Elf<File>,
         base: usize,
         name: N,
-        mg: &Arc<MutexGroup>,
+        gg: &Arc<GutexGroup>,
     ) -> Result<Self, MapError> {
         // It seems like the PS4 expected to have only one for each text, data and relo program.
         let mut segments: Vec<MemorySegment> = Vec::with_capacity(3 + 2);
@@ -178,10 +178,10 @@ impl Memory {
             text,
             data,
             obcode,
-            obcode_sealed: mg.new_member(0),
+            obcode_sealed: gg.spawn(0),
             obdata,
-            obdata_sealed: mg.new_member(0),
-            destructors: mg.new_member(Vec::new()),
+            obdata_sealed: gg.spawn(0),
+            destructors: gg.spawn(Vec::new()),
         })
     }
 
@@ -458,7 +458,7 @@ pub struct CodeWorkspace<'a> {
     ptr: *mut u8,
     len: usize,
     seg: UnprotectedSegment<'a>,
-    sealed: GroupMutexWriteGuard<'a, usize>,
+    sealed: GutexWriteGuard<'a, usize>,
 }
 
 impl<'a> CodeWorkspace<'a> {

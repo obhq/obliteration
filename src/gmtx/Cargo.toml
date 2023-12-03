@@ -3,9 +3,6 @@ name = "gmtx"
 version = "0.1.0"
 edition = "2021"
 
-[dependencies]
-tls = { path = "../tls" }
-
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
 

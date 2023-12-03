@@ -12,7 +12,7 @@ use crate::process::{VProc, VThread};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use bitflags::bitflags;
 use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation};
-use gmtx::GroupMutex;
+use gmtx::Gutex;
 use sha1::{Digest, Sha1};
 use std::borrow::Cow;
 use std::fs::File;
@@ -37,12 +37,12 @@ pub struct RuntimeLinker<E: ExecutionEngine> {
     mm: Arc<MemoryManager>,
     ee: Arc<E>,
     vp: Arc<VProc>,
-    list: GroupMutex<Vec<Arc<Module<E>>>>, // obj_list + obj_tail
+    list: Gutex<Vec<Arc<Module<E>>>>,      // obj_list + obj_tail
     app: Arc<Module<E>>,                   // obj_main
-    kernel: GroupMutex<Option<Arc<Module<E>>>>, // obj_kernel
-    mains: GroupMutex<Vec<Arc<Module<E>>>>, // list_main
-    globals: GroupMutex<Vec<Arc<Module<E>>>>, // list_global
-    tls: GroupMutex<TlsAlloc>,
+    kernel: Gutex<Option<Arc<Module<E>>>>, // obj_kernel
+    mains: Gutex<Vec<Arc<Module<E>>>>,     // list_main
+    globals: Gutex<Vec<Arc<Module<E>>>>,   // list_global
+    tls: Gutex<TlsAlloc>,
     flags: LinkerFlags,
 }
 
@@ -130,7 +130,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             0,
             Vec::new(),
             1,
-            vp.mutex_group(),
+            vp.gutex_group(),
         ) {
             Ok(v) => v,
             Err(e) => return Err(RuntimeLinkerError::MapExeFailed(file.into_vpath(), e)),
@@ -164,18 +164,18 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         // TODO: Apply logic from aio_proc_rundown_exec.
         // TODO: Apply logic from gs_is_event_handler_process_exec.
         let app = Arc::new(app);
-        let mg = vp.mutex_group();
+        let gg = vp.gutex_group();
         let ld = Arc::new(Self {
             fs: fs.clone(),
             mm: mm.clone(),
             ee: ee.clone(),
             vp: vp.clone(),
-            list: mg.new_member(vec![app.clone()]),
+            list: gg.spawn(vec![app.clone()]),
             app: app.clone(),
-            kernel: mg.new_member(None),
-            mains: mg.new_member(vec![app]),
-            globals: mg.new_member(Vec::new()),
-            tls: mg.new_member(TlsAlloc {
+            kernel: gg.spawn(None),
+            mains: gg.spawn(vec![app]),
+            globals: gg.spawn(Vec::new()),
+            tls: gg.spawn(TlsAlloc {
                 max_index: 1,
                 last_offset: 0,
                 last_size: 0,
@@ -320,7 +320,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
                 id,
                 names,
                 tls,
-                self.vp.mutex_group(),
+                self.vp.gutex_group(),
             ) {
                 Ok(v) => v,
                 Err(e) => return Err(LoadError::MapFailed(e)),
