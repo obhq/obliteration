@@ -31,6 +31,7 @@ pub struct Fs {
     mounts: HashMap<VPathBuf, MountSource>,
     opens: AtomicI32, // openfiles
     app: VPathBuf,
+    root: Arc<Vnode>, // rootvnode
 }
 
 impl Fs {
@@ -92,6 +93,7 @@ impl Fs {
             mounts,
             opens: AtomicI32::new(0),
             app,
+            root: Arc::new(Vnode::new()), // TODO: Check how this constructed on the PS4.
         });
 
         sys.register(4, &fs, Self::sys_write);
@@ -105,6 +107,10 @@ impl Fs {
 
     pub fn app(&self) -> &VPath {
         self.app.borrow()
+    }
+
+    pub fn root(&self) -> &Arc<Vnode> {
+        &self.root
     }
 
     /// See `namei` on the PS4 for a reference.
@@ -128,7 +134,7 @@ impl Fs {
         nd.loopcnt = 0;
 
         // TODO: Implement ktrnamei.
-        nd.rootdir = Some(self.vp.files().root().clone());
+        nd.rootdir = self.vp.files().root().clone();
         nd.topdir = Some(self.vp.files().jail().clone());
 
         let mut dp = if nd.cnd.pnbuf[0] != b'/' {
@@ -177,7 +183,10 @@ impl Fs {
     }
 
     fn lookup(&self, nd: &mut NameiData) -> Result<FsItem, FsError> {
-        // TODO: Implement logics from the PS4.
+        nd.cnd.flags.remove(NameiFlags::GIANTHELD);
+        nd.cnd.flags.remove(NameiFlags::ISSYMLINK);
+
+        // TODO: Implement the remaining logics from the PS4.
         let item = match nd.dirp {
             "/dev/console" => FsItem::Device(VDev::Console),
             "/dev/dipsw" => FsItem::Device(VDev::Dipsw),
@@ -498,6 +507,8 @@ bitflags! {
     #[derive(Clone, Copy)]
     pub struct NameiFlags: u64 {
         const HASBUF = 0x00000400;
+        const ISSYMLINK = 0x00010000;
+        const GIANTHELD = 0x02000000;
         const AUDITVNODE1 = 0x04000000;
         const AUDITVNODE2 = 0x08000000;
         const TRAILINGSLASH = 0x10000000;

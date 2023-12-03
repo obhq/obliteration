@@ -1,9 +1,7 @@
-use crate::{
-    errno::EBADF,
-    fs::{VFile, Vnode},
-    syscalls::SysErr,
-};
-use gmtx::{GroupMutex, MutexGroup};
+use crate::errno::EBADF;
+use crate::fs::{VFile, Vnode};
+use crate::syscalls::SysErr;
+use gmtx::{GroupMutex, GroupMutexReadGuard, GroupMutexWriteGuard, MutexGroup};
 use std::sync::Arc;
 
 /// An implementation of `filedesc` structure.
@@ -11,7 +9,7 @@ use std::sync::Arc;
 pub struct FileDesc {
     files: GroupMutex<Vec<Option<Arc<VFile>>>>, // fd_ofiles
     cwd: Arc<Vnode>,                            // fd_cdir
-    root: Arc<Vnode>,                           // fd_rdir
+    root: GroupMutex<Option<Arc<Vnode>>>,       // fd_rdir
     jail: Arc<Vnode>,                           // fd_jdir
 }
 
@@ -20,7 +18,7 @@ impl FileDesc {
         Self {
             files: mg.new_member(vec![None, None, None]),
             cwd: Arc::new(Vnode::new()), // TODO: Check how the PS4 set this field.
-            root: Arc::new(Vnode::new()), // TODO: Same here.
+            root: mg.new_member(None),   // TODO: Same here.
             jail: Arc::new(Vnode::new()), // TODO: Same here.
         }
     }
@@ -29,8 +27,12 @@ impl FileDesc {
         &self.cwd
     }
 
-    pub fn root(&self) -> &Arc<Vnode> {
-        &self.root
+    pub fn root(&self) -> GroupMutexReadGuard<'_, Option<Arc<Vnode>>> {
+        self.root.read()
+    }
+
+    pub fn root_mut(&self) -> GroupMutexWriteGuard<'_, Option<Arc<Vnode>>> {
+        self.root.write()
     }
 
     pub fn jail(&self) -> &Arc<Vnode> {
