@@ -389,12 +389,7 @@ impl Pkg {
                     status(status_name.as_ptr(), size, 0, ud);
 
                     // Open destination file.
-                    let mut dest = match OpenOptions::new()
-                        .write(true)
-                        .truncate(true)
-                        .create(true)
-                        .open(&output)
-                    {
+                    let mut dest = match OpenOptions::new().write(true).create(true).open(&output) {
                         Ok(v) => v,
                         Err(e) => return Err(ExtractError::CreateFileFailed(output, e)),
                     };
