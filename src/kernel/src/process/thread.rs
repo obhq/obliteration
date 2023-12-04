@@ -2,7 +2,7 @@ use super::{CpuMask, CpuSet};
 use crate::signal::SignalSet;
 use crate::ucred::{Privilege, PrivilegeError, Ucred};
 use bitflags::bitflags;
-use gmtx::{GroupMutex, GroupMutexReadGuard, GroupMutexWriteGuard, MutexGroup};
+use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use llt::{SpawnError, Thread};
 use std::num::NonZeroI32;
 use std::sync::Arc;
@@ -13,25 +13,25 @@ use tls::{Local, Tls};
 /// See [`super::VProc`] for more information.
 #[derive(Debug)]
 pub struct VThread {
-    id: NonZeroI32,                 // td_tid
-    cred: Ucred,                    // td_ucred
-    sigmask: GroupMutex<SignalSet>, // td_sigmask
-    pri_class: u16,                 // td_pri_class
-    base_user_pri: u16,             // td_base_user_pri
-    pcb: GroupMutex<Pcb>,           // td_pcb
-    cpuset: CpuSet,                 // td_cpuset
+    id: NonZeroI32,            // td_tid
+    cred: Ucred,               // td_ucred
+    sigmask: Gutex<SignalSet>, // td_sigmask
+    pri_class: u16,            // td_pri_class
+    base_user_pri: u16,        // td_base_user_pri
+    pcb: Gutex<Pcb>,           // td_pcb
+    cpuset: CpuSet,            // td_cpuset
 }
 
 impl VThread {
-    pub(super) fn new(id: NonZeroI32, cred: Ucred, mtxg: &Arc<MutexGroup>) -> Self {
+    pub(super) fn new(id: NonZeroI32, cred: Ucred, gg: &Arc<GutexGroup>) -> Self {
         // TODO: Check how the PS4 actually allocate the thread ID.
         Self {
             id,
             cred,
-            sigmask: mtxg.new_member(SignalSet::default()),
+            sigmask: gg.spawn(SignalSet::default()),
             pri_class: 3, // TODO: Check the actual value on the PS4 when a thread is created.
             base_user_pri: 120, // TODO: Same here.
-            pcb: mtxg.new_member(Pcb {
+            pcb: gg.spawn(Pcb {
                 fsbase: 0,
                 flags: PcbFlags::empty(),
             }),
@@ -52,7 +52,7 @@ impl VThread {
         &self.cred
     }
 
-    pub fn sigmask_mut(&self) -> GroupMutexWriteGuard<'_, SignalSet> {
+    pub fn sigmask_mut(&self) -> GutexWriteGuard<'_, SignalSet> {
         self.sigmask.write()
     }
 
@@ -64,11 +64,11 @@ impl VThread {
         self.base_user_pri
     }
 
-    pub fn pcb(&self) -> GroupMutexReadGuard<'_, Pcb> {
+    pub fn pcb(&self) -> GutexReadGuard<'_, Pcb> {
         self.pcb.read()
     }
 
-    pub fn pcb_mut(&self) -> GroupMutexWriteGuard<'_, Pcb> {
+    pub fn pcb_mut(&self) -> GutexWriteGuard<'_, Pcb> {
         self.pcb.write()
     }
 

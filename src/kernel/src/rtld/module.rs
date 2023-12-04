@@ -9,7 +9,7 @@ use elf::{
     DynamicFlags, DynamicTag, Elf, FileInfo, FileType, LibraryFlags, LibraryInfo, ModuleInfo,
     Program, Symbol,
 };
-use gmtx::{GroupMutex, GroupMutexReadGuard, GroupMutexWriteGuard, MutexGroup};
+use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use std::fmt::{Display, Formatter};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
@@ -25,22 +25,22 @@ pub struct Module<E: ExecutionEngine + ?Sized> {
     init: Option<usize>,
     entry: Option<usize>,
     fini: Option<usize>,
-    tls_index: u32,                // tlsindex
-    tls_offset: GroupMutex<usize>, // tlsoffset
-    tls_info: Option<ModuleTls>,   // tlsinit + tlsinitsize + tlssize + tlsalign
+    tls_index: u32,              // tlsindex
+    tls_offset: Gutex<usize>,    // tlsoffset
+    tls_info: Option<ModuleTls>, // tlsinit + tlsinitsize + tlssize + tlsalign
     eh_info: Option<ModuleEh>,
     proc_param: Option<(usize, usize)>,
     mod_param: Option<usize>,
     sdk_ver: u32,
-    flags: GroupMutex<ModuleFlags>,
+    flags: Gutex<ModuleFlags>,
     names: Vec<String>,
-    dag_static: GroupMutex<Vec<Arc<Self>>>,  // dagmembers
-    dag_dynamic: GroupMutex<Vec<Arc<Self>>>, // dldags
+    dag_static: Gutex<Vec<Arc<Self>>>,  // dagmembers
+    dag_dynamic: Gutex<Vec<Arc<Self>>>, // dldags
     needed: Vec<NeededModule>,
     modules: Vec<ModuleInfo>,
     libraries: Vec<LibraryInfo>,
     memory: Memory,
-    relocated: GroupMutex<Vec<bool>>,
+    relocated: Gutex<Vec<bool>>,
     file_info: Option<FileInfo>,
     path: VPathBuf,
     is_self: bool,
@@ -59,10 +59,10 @@ impl<E: ExecutionEngine> Module<E> {
         id: u32,
         names: Vec<String>,
         tls_index: u32,
-        mtxg: &Arc<MutexGroup>,
+        gg: &Arc<GutexGroup>,
     ) -> Result<Self, MapError> {
         // Map the image to the memory.
-        let memory = Memory::new(mm, &image, base, mem_name, mtxg)?;
+        let memory = Memory::new(mm, &image, base, mem_name, gg)?;
 
         for (i, s) in memory.segments().iter().enumerate() {
             // Get target program.
@@ -166,21 +166,21 @@ impl<E: ExecutionEngine> Module<E> {
             entry,
             fini: None,
             tls_index,
-            tls_offset: mtxg.new_member(0),
+            tls_offset: gg.spawn(0),
             tls_info,
             eh_info,
             proc_param,
             mod_param,
             sdk_ver,
-            flags: mtxg.new_member(ModuleFlags::UNK2),
+            flags: gg.spawn(ModuleFlags::UNK2),
             names,
-            dag_static: mtxg.new_member(Vec::new()),
-            dag_dynamic: mtxg.new_member(Vec::new()),
+            dag_static: gg.spawn(Vec::new()),
+            dag_dynamic: gg.spawn(Vec::new()),
             needed: Vec::new(),
             modules: Vec::new(),
             libraries: Vec::new(),
             memory,
-            relocated: mtxg.new_member(Vec::new()),
+            relocated: gg.spawn(Vec::new()),
             file_info: None,
             path: path.try_into().unwrap(),
             is_self,
@@ -191,7 +191,7 @@ impl<E: ExecutionEngine> Module<E> {
 
         if let Some(info) = file_info {
             module.digest_dynamic(base, &info)?;
-            module.relocated = mtxg.new_member(vec![false; info.reloc_count() + info.plt_count()]);
+            module.relocated = gg.spawn(vec![false; info.reloc_count() + info.plt_count()]);
             module.file_info = Some(info);
         }
 
@@ -218,11 +218,11 @@ impl<E: ExecutionEngine> Module<E> {
         self.tls_index
     }
 
-    pub fn tls_offset(&self) -> GroupMutexReadGuard<'_, usize> {
+    pub fn tls_offset(&self) -> GutexReadGuard<'_, usize> {
         self.tls_offset.read()
     }
 
-    pub fn tls_offset_mut(&self) -> GroupMutexWriteGuard<'_, usize> {
+    pub fn tls_offset_mut(&self) -> GutexWriteGuard<'_, usize> {
         self.tls_offset.write()
     }
 
@@ -246,11 +246,11 @@ impl<E: ExecutionEngine> Module<E> {
         self.sdk_ver
     }
 
-    pub fn flags(&self) -> GroupMutexReadGuard<'_, ModuleFlags> {
+    pub fn flags(&self) -> GutexReadGuard<'_, ModuleFlags> {
         self.flags.read()
     }
 
-    pub fn flags_mut(&self) -> GroupMutexWriteGuard<'_, ModuleFlags> {
+    pub fn flags_mut(&self) -> GutexWriteGuard<'_, ModuleFlags> {
         self.flags.write()
     }
 
@@ -258,15 +258,15 @@ impl<E: ExecutionEngine> Module<E> {
         self.names.as_ref()
     }
 
-    pub fn dag_static(&self) -> GroupMutexReadGuard<'_, Vec<Arc<Self>>> {
+    pub fn dag_static(&self) -> GutexReadGuard<'_, Vec<Arc<Self>>> {
         self.dag_static.read()
     }
 
-    pub fn dag_static_mut(&self) -> GroupMutexWriteGuard<'_, Vec<Arc<Self>>> {
+    pub fn dag_static_mut(&self) -> GutexWriteGuard<'_, Vec<Arc<Self>>> {
         self.dag_static.write()
     }
 
-    pub fn dag_dynamic_mut(&self) -> GroupMutexWriteGuard<'_, Vec<Arc<Self>>> {
+    pub fn dag_dynamic_mut(&self) -> GutexWriteGuard<'_, Vec<Arc<Self>>> {
         self.dag_dynamic.write()
     }
 
@@ -282,7 +282,7 @@ impl<E: ExecutionEngine> Module<E> {
         &self.memory
     }
 
-    pub fn relocated_mut(&self) -> GroupMutexWriteGuard<'_, Vec<bool>> {
+    pub fn relocated_mut(&self) -> GutexWriteGuard<'_, Vec<bool>> {
         self.relocated.write()
     }
 

@@ -1,14 +1,11 @@
 pub use self::guard::*;
-
-use std::cell::UnsafeCell;
+use std::cell::{Cell, UnsafeCell};
 use std::collections::VecDeque;
 use std::marker::PhantomData;
-use std::ops::Deref;
 use std::rc::Rc;
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex, Weak};
 use std::thread::Thread;
-use tls::Tls;
 
 mod guard;
 
@@ -51,20 +48,21 @@ mod guard;
 /// never end up deadlock yourself. It will panic if you try to acquire write access while the
 /// readers are still active the same as [`std::cell::RefCell`].
 #[derive(Debug)]
-pub struct GroupMutex<T> {
-    group: Arc<MutexGroup>,
+pub struct Gutex<T> {
+    group: Arc<GutexGroup>,
     active: UnsafeCell<usize>,
     value: UnsafeCell<T>,
 }
 
-impl<T> GroupMutex<T> {
+impl<T> Gutex<T> {
     pub fn get_mut(&mut self) -> &mut T {
         self.value.get_mut()
     }
 
     /// # Panics
-    /// If there are an active writer.
-    pub fn read(&self) -> GroupMutexReadGuard<'_, T> {
+    /// - If there are an active writer.
+    /// - If the calling thread already hold the lock on another group.
+    pub fn read(&self) -> GutexReadGuard<'_, T> {
         // Check if there are an active writer.
         let lock = self.group.lock();
         let active = self.active.get();
@@ -80,12 +78,13 @@ impl<T> GroupMutex<T> {
             *active += 1;
         }
 
-        GroupMutexReadGuard::new(lock, self)
+        GutexReadGuard::new(lock, self)
     }
 
     /// # Panics
-    /// If there are an any active reader or writer.
-    pub fn write(&self) -> GroupMutexWriteGuard<'_, T> {
+    /// - If there are any active reader or writer.
+    /// - If the calling thread already hold the lock on another group.
+    pub fn write(&self) -> GutexWriteGuard<'_, T> {
         // Check if there are active reader or writer.
         let lock = self.group.lock();
         let active = self.active.get();
@@ -100,23 +99,23 @@ impl<T> GroupMutex<T> {
             *active = usize::MAX;
         }
 
-        GroupMutexWriteGuard::new(lock, self)
+        GutexWriteGuard::new(lock, self)
     }
 }
 
-unsafe impl<T: Send> Send for GroupMutex<T> {}
-unsafe impl<T: Send> Sync for GroupMutex<T> {}
+unsafe impl<T: Send> Send for Gutex<T> {}
+unsafe impl<T: Send> Sync for Gutex<T> {}
 
-/// Represents a group of [`GroupMutex`].
+/// Represents a group of [`Gutex`].
 #[derive(Debug)]
-pub struct MutexGroup {
+pub struct GutexGroup {
     name: Arc<String>,
     owning: ThreadId,
     active: UnsafeCell<usize>,
     waiting: Mutex<VecDeque<Weak<Thread>>>,
 }
 
-impl MutexGroup {
+impl GutexGroup {
     pub fn new<N: Into<String>>(name: N) -> Arc<Self> {
         Arc::new(Self {
             name: Arc::new(name.into()),
@@ -126,8 +125,8 @@ impl MutexGroup {
         })
     }
 
-    pub fn new_member<T>(self: &Arc<Self>, value: T) -> GroupMutex<T> {
-        GroupMutex {
+    pub fn spawn<T>(self: &Arc<Self>, value: T) -> Gutex<T> {
+        Gutex {
             group: self.clone(),
             active: UnsafeCell::new(0),
             value: UnsafeCell::new(value),
@@ -145,11 +144,10 @@ impl MutexGroup {
 
         // Check if the calling thread already own a lock on another group to prevent a possible
         // deadlock.
-        if let Some(active) = ACTIVE_GROUP.get() {
+        if let Some(active) = ACTIVE_GROUP.take() {
             panic!(
                 "attempt to acquire '{}' mutex group while holding the lock on '{}' group",
-                self.name,
-                active.deref()
+                self.name, active
             );
         }
 
@@ -176,7 +174,7 @@ impl MutexGroup {
         drop(waiting);
 
         // Set active group.
-        assert!(ACTIVE_GROUP.set(self.name.clone()).is_none());
+        ACTIVE_GROUP.set(Some(self.name.clone()));
 
         // SAFETY: This is safe because the current thread acquire the lock successfully by the
         // above compare_exchange().
@@ -201,13 +199,13 @@ impl MutexGroup {
     }
 }
 
-unsafe impl Send for MutexGroup {}
-unsafe impl Sync for MutexGroup {}
+unsafe impl Send for GutexGroup {}
+unsafe impl Sync for GutexGroup {}
 
-/// An RAII object used to release the lock on [`MutexGroup`]. This type cannot be send because it
+/// An RAII object used to release the lock on [`GutexGroup`]. This type cannot be send because it
 /// will cause data race on the group when dropping if more than one [`GroupGuard`] are active.
 struct GroupGuard<'a> {
-    group: &'a MutexGroup,
+    group: &'a GutexGroup,
     phantom: PhantomData<Rc<i32>>, // For !Send and !Sync.
 }
 
@@ -215,7 +213,7 @@ impl<'a> GroupGuard<'a> {
     /// # Safety
     /// The group must be locked by the calling thread with no active references to any of its
     /// field.
-    unsafe fn new(group: &'a MutexGroup) -> Self {
+    unsafe fn new(group: &'a GutexGroup) -> Self {
         *group.active.get() += 1;
 
         Self {
@@ -239,7 +237,7 @@ impl<'a> Drop for GroupGuard<'a> {
         }
 
         // Release the lock.
-        ACTIVE_GROUP.clear();
+        ACTIVE_GROUP.take().unwrap();
         self.group.owning.store(0, Ordering::Release);
 
         // Wakeup one waiting thread.
@@ -266,4 +264,6 @@ type ThreadId = std::sync::atomic::AtomicU64;
 #[cfg(target_os = "windows")]
 type ThreadId = std::sync::atomic::AtomicU32;
 
-static ACTIVE_GROUP: Tls<Arc<String>> = Tls::new();
+thread_local! {
+    static ACTIVE_GROUP: Cell<Option<Arc<String>>> = const { Cell::new(None) };
+}

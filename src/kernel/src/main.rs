@@ -11,6 +11,7 @@ use crate::regmgr::RegMgr;
 use crate::rtld::{LoadFlags, ModuleFlags, RuntimeLinker};
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
+use crate::ucred::{AuthInfo, Ucred};
 use clap::{Parser, ValueEnum};
 use llt::Thread;
 use macros::vpath;
@@ -245,8 +246,12 @@ fn run<E: crate::ee::ExecutionEngine>(
     mm: &Arc<MemoryManager>,
     ee: Arc<E>,
 ) -> ExitCode {
-    // Initialize kernel components.
+    // initializes filesystem.
     let fs = Fs::new(root, app, param, vp, &mut syscalls);
+
+    *vp.files().root_mut() = Some(fs.root().clone()); // TODO: Check how the PS4 set this field.
+
+    // Initialize kernel components.
     RegMgr::new(&mut syscalls);
     let machdep = MachDep::new(&mut syscalls);
     let budget = BudgetManager::new(vp, &mut syscalls);
@@ -334,8 +339,9 @@ fn run<E: crate::ee::ExecutionEngine>(
     // Spawn main thread.
     info!("Starting application.");
 
+    let cred = Ucred::new(AuthInfo::SYS_CORE.clone());
     let stack = mm.stack();
-    let runner = match unsafe { vp.new_thread(stack.start(), stack.len(), entry) } {
+    let runner = match unsafe { vp.new_thread(cred, stack.start(), stack.len(), entry) } {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Create main thread failed");
