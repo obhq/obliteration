@@ -673,6 +673,7 @@ impl ExecutionEngine for NativeEngine {
 }
 
 /// An implementation of [`super::RawFn`].
+#[derive(Debug)]
 pub struct RawFn {
     #[allow(unused)]
     md: Arc<dyn Any + Send + Sync>, // Keep module alive.
