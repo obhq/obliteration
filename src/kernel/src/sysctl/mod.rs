@@ -875,7 +875,7 @@ static VM_PS4DEV: Oid = Oid {
     name: "ps4dev",
     handler: None,
     fmt: "N",
-    descr: "vm parameters for PS4(DevKit only)",
+    descr: "vm parameters for PS4 (DevKit only)",
     enabled: false,
 };
 
