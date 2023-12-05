@@ -140,14 +140,7 @@ impl Param {
                     app_ver = Some(Self::read_utf8(&mut raw, i, format, len, 8)?);
                 }
                 b"CATEGORY" => {
-                    let category_param = Self::read_utf8(&mut raw, i, format, 4, 4)?;
-                    category = Some(category_param.clone());
-                    if !category_param.contains("bd") && !category_param.contains("ac")  // Blu-Ray Game, DLC.
-                        // Check if this is a patch
-                        && !category_param.starts_with("gp")
-                        // Check if this is an application
-                        && !category_param.starts_with("gd")
-                    {}
+                    category = Some(Self::read_utf8(&mut raw, i, format, 4, 4)?);
                 }
                 b"CONTENT_ID" => {
                     content_id = Some(Self::read_utf8(&mut raw, i, format, len, 48)?);
