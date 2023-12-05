@@ -88,7 +88,6 @@ impl Sysctl {
     pub const KERN_PROC_PTC: i32 = 43;
     pub const MACHDEP_TSC_FREQ: i32 = 492;
 
-    pub const VM_TOTAL: i32 = 1;
     pub const VM_PS4DEV: i32 = 1;
     pub const VM_PS4DEV_TRCMEM_TOTAL: i32 = 571;
 
