@@ -10,7 +10,7 @@ pub struct Param {
     category: String,
     content_id: String,
     title: Option<String>,
-    title_id: Option<String>,
+    title_id: String,
     version: String,
 }
 
@@ -164,7 +164,7 @@ impl Param {
             category: category.ok_or(ReadError::MissingCategory)?,
             content_id: content_id.ok_or(ReadError::MissingContentId)?,
             title: title,
-            title_id: title_id,
+            title_id: title_id.ok_or(ReadError::MissingTitleId)?,
             version: version.ok_or(ReadError::MissingVersion)?,
         })
     }
@@ -198,7 +198,7 @@ impl Param {
     }
 
     /// Fetches the value TITLE_ID from given Param.SFO
-    pub fn title_id(&self) -> &Option<String> {
+    pub fn title_id(&self) -> &str {
         &self.title_id
     }
 
@@ -273,9 +273,6 @@ pub enum ReadError {
 
     #[error("CONTENT_ID parameter not found")]
     MissingContentId,
-
-    #[error("TITLE parameter not found")]
-    MissingTitle,
 
     #[error("TITLE_ID parameter not found")]
     MissingTitleId,

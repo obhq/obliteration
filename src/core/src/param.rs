@@ -66,10 +66,7 @@ pub unsafe extern "C" fn param_title_get(param: &Param, buf: &mut QString) {
 
 #[no_mangle]
 pub unsafe extern "C" fn param_title_id_get(param: &Param, buf: &mut QString) {
-    match &param.title_id() {
-        Some(title_id) => buf.set(title_id),
-        None => buf.set("No TitleID"),
-    }
+    buf.set(param.title_id())
 }
 
 #[no_mangle]

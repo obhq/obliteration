@@ -271,14 +271,6 @@ void MainWindow::installPkg()
     auto title = param.title();
     auto titleID = param.titleId();
 
-    // Check if PKG is a usable PKG.
-    if (titleID == "No TitleID" || title == "No Title") {
-        QString msg("PKG file cannot be installed as there is either the Title or TitleID is not defined.");
-
-        QMessageBox::critical(&progress, "Invalid PKG file. (Undefined Title or TitleID)", msg.arg(titleID).arg(gamesDirectory));
-        return;
-    }
-
     // Check if file is Patch/DLC.
     bool PatchOrDLC = false;
     if (category.startsWith("gp") || category.contains("ac")) {
