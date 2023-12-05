@@ -88,7 +88,8 @@ impl Sysctl {
     pub const KERN_PROC_PTC: i32 = 43;
     pub const MACHDEP_TSC_FREQ: i32 = 492;
 
-    pub const VM_TOTAL: i32 = 1;
+    pub const VM_PS4DEV: i32 = 1;
+    pub const VM_PS4DEV_TRCMEM_TOTAL: i32 = 571;
 
     pub const HW_PAGESIZE: i32 = 7;
 
@@ -133,8 +134,8 @@ impl Sysctl {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        if name[0] == Self::CTL_VM && name[1] == Self::VM_TOTAL {
-            todo!("sysctl CTL_VM:VM_TOTAL")
+        if name[0] == Self::CTL_VM && name[1] == Self::VM_PS4DEV {
+            todo!("sysctl CTL_VM:VM_PS4DEV")
         }
 
         // Setup a request.
@@ -592,24 +593,32 @@ type Handler = fn(&Sysctl, &'static Oid, &Arg, usize, &mut SysctlReq) -> Result<
 ///     └─── (0.3) SYSCTL_NAME2OID
 ///     └─── ...
 /// └─── (1) KERN
+///     └─── ...
 ///     └─── (1.14) KERN_PROC
+///         └─── ...
 ///         └─── (1.14.35) KERN_PROC_APPINFO
-///          ...
+///         └─── ...
 ///         └─── (1.14.41) KERN_PROC_SANITIZER
-///          ...
+///         └─── ...
 ///         └─── (1.13.43) KERN_PROC_PTC
 ///         └─── ...
 ///     └─── (1.33) KERN_USRSTACK
-///          ...
+///     └─── ...
 ///     └─── (1.37) KERN_ARANDOM
-///          ...
+///     └─── ...
 ///     └─── (1.42) KERN_SCHED
+///         └─── ...
 ///         └─── (1.42.1252) KERN_SCHED_CPUSETSIZE
-///     └─── (1.1157) KERN_SMP
+///     └─── (1.1157)
+///         └─── ...
 ///         └─── (1.1157.1162) KERN_SMP_CPUS
-///          ...
+///         └─── ...
 ///     └─── ...
 /// └─── (2) VM
+///     └─── (2.1) VM_PS4DEV
+///         └─── ...
+///         └─── (2.1.571) VM_PS4DEV_TRCMEM_TOTAL
+///         └─── ...
 ///     └─── ...
 /// └─── (3) VFS
 ///     └─── ...
@@ -672,7 +681,7 @@ static SYSCTL_NAME2OID: Oid = Oid {
 
 static KERN: Oid = Oid {
     parent: &CHILDREN,
-    link: Some(&HW), // TODO: Change to a proper value.
+    link: Some(&VM),
     number: Sysctl::CTL_KERN,
     kind: Sysctl::CTLFLAG_RW | Sysctl::CTLFLAG_CAPRD | Sysctl::CTLTYPE_NODE,
     arg1: Some(&KERN_CHILDREN),
@@ -845,6 +854,58 @@ static KERN_SMP_CPUS: Oid = Oid {
     descr: "Number of CPUs online",
     enabled: true,
 };
+
+static VM: Oid = Oid {
+    parent: &CHILDREN,
+    link: Some(&HW), //TODO change to the proper value, which should be VFS.
+    number: Sysctl::CTL_VM,
+    kind: Sysctl::CTLFLAG_RW | Sysctl::CTLTYPE_NODE,
+    arg1: Some(&VM_CHILDREN),
+    arg2: 0,
+    name: "vm",
+    handler: None,
+    fmt: "N",
+    descr: "Virtual memory",
+    enabled: false,
+};
+
+static VM_CHILDREN: OidList = OidList {
+    first: Some(&VM_PS4DEV),
+};
+
+static VM_PS4DEV: Oid = Oid {
+    parent: &VM_CHILDREN,
+    link: None, // TODO: Change to a proper value.
+    number: Sysctl::VM_PS4DEV,
+    kind: Sysctl::CTLFLAG_RD | Sysctl::CTLTYPE_NODE,
+    arg1: Some(&VM_PS4DEV_CHILDREN),
+    arg2: 0,
+    name: "ps4dev",
+    handler: None,
+    fmt: "N",
+    descr: "vm parameters for PS4 (DevKit only)",
+    enabled: false,
+};
+
+static VM_PS4DEV_CHILDREN: OidList = OidList {
+    first: Some(&VM_PS4DEV_TRCMEM_TOTAL), // TODO: Use a proper value.
+};
+
+static VM_PS4DEV_TRCMEM_TOTAL: Oid = Oid {
+    parent: &VM_PS4DEV_CHILDREN,
+    link: None, // TODO: Change to a proper value.
+    number: Sysctl::VM_PS4DEV_TRCMEM_TOTAL,
+    kind: Sysctl::CTLFLAG_RD | Sysctl::CTLFLAG_MPSAFE | Sysctl::CTLTYPE_UINT,
+    arg1: Some(&TRCMEM_TOTAL),
+    arg2: 0,
+    name: "trcmem_total",
+    handler: Some(Sysctl::handle_int),
+    fmt: "IU",
+    descr: "trace memory total",
+    enabled: true,
+};
+
+static TRCMEM_TOTAL: u32 = 0;
 
 static HW: Oid = Oid {
     parent: &CHILDREN,
