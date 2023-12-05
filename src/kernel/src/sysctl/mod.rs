@@ -90,6 +90,7 @@ impl Sysctl {
 
     pub const VM_PS4DEV: i32 = 1;
     pub const VM_PS4DEV_TRCMEM_TOTAL: i32 = 571;
+    pub const VM_PS4DEV_TRCMEM_AVAIL: i32 = 572;
 
     pub const HW_PAGESIZE: i32 = 7;
 
@@ -488,7 +489,7 @@ impl Sysctl {
     ) -> Result<(), SysErr> {
         // Read old value.
         let value = match arg1 {
-            Arg::Name(v) => todo!("sysctl_handle_64 with arg1 = Arg::Name"),
+            Arg::Name(_) => todo!("sysctl_handle_64 with arg1 = Arg::Name"),
             Arg::Static(Some(v)) => *v.downcast_ref::<u64>().unwrap(),
             Arg::Static(None) => todo!(),
         };
@@ -588,57 +589,56 @@ enum Arg<'a> {
 
 type Handler = fn(&Sysctl, &'static Oid, &Arg, usize, &mut SysctlReq) -> Result<(), SysErr>;
 
-/// CHILDREN
-/// └─── (0) SYSCTL
-///     └─── (0.3) SYSCTL_NAME2OID
-///     └─── ...
-/// └─── (1) KERN
-///     └─── ...
-///     └─── (1.14) KERN_PROC
-///         └─── ...
-///         └─── (1.14.35) KERN_PROC_APPINFO
-///         └─── ...
-///         └─── (1.14.41) KERN_PROC_SANITIZER
-///         └─── ...
-///         └─── (1.13.43) KERN_PROC_PTC
-///         └─── ...
-///     └─── (1.33) KERN_USRSTACK
-///     └─── ...
-///     └─── (1.37) KERN_ARANDOM
-///     └─── ...
-///     └─── (1.42) KERN_SCHED
-///         └─── ...
-///         └─── (1.42.1252) KERN_SCHED_CPUSETSIZE
-///     └─── (1.1157)
-///         └─── ...
-///         └─── (1.1157.1162) KERN_SMP_CPUS
-///         └─── ...
-///     └─── ...
-/// └─── (2) VM
-///     └─── (2.1) VM_PS4DEV
-///         └─── ...
-///         └─── (2.1.571) VM_PS4DEV_TRCMEM_TOTAL
-///         └─── ...
-///     └─── ...
-/// └─── (3) VFS
-///     └─── ...
-/// └─── (4) NET
-///     └─── ...
-/// └─── (5) DEBUG
-///     └─── ...
-/// └─── (6) HW
-///     └─── ...
-///     └─── (1.6.7) HW_PAGESIZE
-///     └─── ...
-/// └─── (7) MACHDEP
-///     └─── ...
-///     └─── (7.492) MACHDEP_TSC_FREQ
-///     └─── ...
-/// └─── (8) USER
-///     └─── ...
-/// └─── (9) P1003_1B
-///     └─── ...
-
+// CHILDREN
+// └─── (0) SYSCTL
+//     └─── (0.3) SYSCTL_NAME2OID
+//     └─── ...
+// └─── (1) KERN
+//     └─── ...
+//     └─── (1.14) KERN_PROC
+//         └─── ...
+//         └─── (1.14.35) KERN_PROC_APPINFO
+//         └─── ...
+//         └─── (1.14.41) KERN_PROC_SANITIZER
+//         └─── ...
+//         └─── (1.13.43) KERN_PROC_PTC
+//         └─── ...
+//     └─── (1.33) KERN_USRSTACK
+//     └─── ...
+//     └─── (1.37) KERN_ARANDOM
+//     └─── ...
+//     └─── (1.42) KERN_SCHED
+//         └─── ...
+//         └─── (1.42.1252) KERN_SCHED_CPUSETSIZE
+//     └─── (1.1157)
+//         └─── ...
+//         └─── (1.1157.1162) KERN_SMP_CPUS
+//         └─── ...
+//     └─── ...
+// └─── (2) VM
+//     └─── (2.1) VM_PS4DEV
+//         └─── ...
+//         └─── (2.1.571) VM_PS4DEV_TRCMEM_TOTAL
+//         └─── (2.1.572) VM_PS4DEV_TRCMEM_AVAIL
+//     └─── ...
+// └─── (3) VFS
+//     └─── ...
+// └─── (4) NET
+//     └─── ...
+// └─── (5) DEBUG
+//     └─── ...
+// └─── (6) HW
+//     └─── ...
+//     └─── (1.6.7) HW_PAGESIZE
+//     └─── ...
+// └─── (7) MACHDEP
+//     └─── ...
+//     └─── (7.492) MACHDEP_TSC_FREQ
+//     └─── ...
+// └─── (8) USER
+//     └─── ...
+// └─── (9) P1003_1B
+//     └─── ...
 static CHILDREN: OidList = OidList {
     first: Some(&SYSCTL),
 };
@@ -893,10 +893,10 @@ static VM_PS4DEV_CHILDREN: OidList = OidList {
 
 static VM_PS4DEV_TRCMEM_TOTAL: Oid = Oid {
     parent: &VM_PS4DEV_CHILDREN,
-    link: None, // TODO: Change to a proper value.
+    link: Some(&VM_PS4DEV_TRCMEM_AVAIL),
     number: Sysctl::VM_PS4DEV_TRCMEM_TOTAL,
     kind: Sysctl::CTLFLAG_RD | Sysctl::CTLFLAG_MPSAFE | Sysctl::CTLTYPE_UINT,
-    arg1: Some(&TRCMEM_TOTAL),
+    arg1: Some(&INT_0),
     arg2: 0,
     name: "trcmem_total",
     handler: Some(Sysctl::handle_int),
@@ -905,7 +905,19 @@ static VM_PS4DEV_TRCMEM_TOTAL: Oid = Oid {
     enabled: true,
 };
 
-static TRCMEM_TOTAL: u32 = 0;
+static VM_PS4DEV_TRCMEM_AVAIL: Oid = Oid {
+    parent: &VM_PS4DEV_CHILDREN,
+    link: None,
+    number: Sysctl::VM_PS4DEV_TRCMEM_AVAIL,
+    kind: Sysctl::CTLFLAG_RD | Sysctl::CTLFLAG_MPSAFE | Sysctl::CTLTYPE_UINT,
+    arg1: Some(&INT_0),
+    arg2: 0,
+    name: "trcmem_avail",
+    handler: Some(Sysctl::handle_int),
+    fmt: "IU",
+    descr: "trace memory available",
+    enabled: true,
+};
 
 static HW: Oid = Oid {
     parent: &CHILDREN,
@@ -939,8 +951,6 @@ static HW_PAGESIZE: Oid = Oid {
     enabled: true,
 };
 
-static INT_8: i32 = 8;
-
 static MACHDEP: Oid = Oid {
     parent: &CHILDREN,
     link: None, // TODO: Implement this.
@@ -972,3 +982,6 @@ static MACHDEP_TSC_FREQ: Oid = Oid {
     descr: "Time Stamp Counter frequency",
     enabled: true,
 };
+
+static INT_0: i32 = 0;
+static INT_8: i32 = 8;
