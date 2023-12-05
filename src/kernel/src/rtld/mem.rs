@@ -373,9 +373,9 @@ pub struct MemorySegment {
 }
 
 impl MemorySegment {
-    /// Gets the offset within the module memory of this segment.
+    /// Gets the **offset (not address)** within the module memory.
     ///
-    /// This offset already take base address into account.
+    /// This offset already included module base.
     pub fn start(&self) -> usize {
         self.start
     }

@@ -33,7 +33,8 @@ pub trait ExecutionEngine: Debug + Send + Sync + 'static {
 }
 
 /// A function that was produced by [`ExecutionEngine`].
-pub trait RawFn: Send + Sync + 'static {
+pub trait RawFn: Debug + Send + Sync + 'static {
+    /// Returns address of this function in the memory.
     fn addr(&self) -> usize;
 
     /// # Safety
