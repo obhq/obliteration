@@ -20,7 +20,6 @@ pub struct VThread {
     base_user_pri: u16,        // td_base_user_pri
     pcb: Gutex<Pcb>,           // td_pcb
     cpuset: CpuSet,            // td_cpuset
-    name: Gutex<String>,       // td_name
 }
 
 impl VThread {
@@ -37,7 +36,6 @@ impl VThread {
                 flags: PcbFlags::empty(),
             }),
             cpuset: CpuSet::new(CpuMask::default()), // TODO: Same here.
-            name: gg.spawn(String::new()),           // TODO: Same here
         }
     }
 
@@ -76,10 +74,6 @@ impl VThread {
 
     pub fn cpuset(&self) -> &CpuSet {
         &self.cpuset
-    }
-
-    pub fn set_name(&self, name: &str) {
-        *self.name.write() = name.to_string();
     }
 
     /// An implementation of `priv_check`.
