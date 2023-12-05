@@ -2,21 +2,21 @@
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct AuthInfo {
-    pub paid: u64,
-    pub caps: [u64; 4],
+    pub paid: AuthPaid,
+    pub caps: AuthCaps,
     pub attrs: [u64; 4],
     pub unk: [u8; 0x40],
 }
 
 impl AuthInfo {
     pub const SYS_CORE: Self = Self {
-        paid: 0x3800000000000007,
-        caps: [
+        paid: AuthPaid::SYS_CORE,
+        caps: AuthCaps([
             0x40001C0000000000,
             0x800000000000FF00,
             0x0000000000000000,
             0x0000000000000000,
-        ],
+        ]),
         attrs: [
             0x4000400080000000,
             0x8000000000000000,
@@ -27,13 +27,13 @@ impl AuthInfo {
     };
 
     pub const GAME: Self = Self {
-        paid: 0x3800000000000011, // https://github.com/flatz/pkg_pfs_tool/blob/main/src/self.h#L36
-        caps: [
+        paid: AuthPaid::GAME,
+        caps: AuthCaps([
             0x2000038000000000,
             0x000000000000FF00,
             0x0000000000000000,
             0x0000000000000000,
-        ],
+        ]),
         attrs: [
             0x4000400040000000,
             0x4000000000000000,
@@ -42,4 +42,47 @@ impl AuthInfo {
         ],
         unk: [0; 0x40],
     };
+}
+
+/// A wrapper type for `paid` field of [`AuthInfo`].
+///
+/// PAID is an abbreviation of something like "Process Authorization ID", not the game has been
+/// paid!
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy)]
+pub struct AuthPaid(u64);
+
+impl AuthPaid {
+    pub const SYS_CORE: Self = Self(0x3800000000000007);
+    pub const GAME: Self = Self(0x3800000000000011);
+
+    pub fn get(self) -> u64 {
+        self.0
+    }
+}
+
+/// A wrapper type for `caps` field of [`AuthInfo`].
+#[repr(transparent)]
+#[derive(Debug, Clone)]
+pub struct AuthCaps([u64; 4]);
+
+impl AuthCaps {
+    pub fn is_nongame(&self) -> bool {
+        (self.0[0] & 0x1000000000000000) != 0
+    }
+
+    pub fn is_user(&self) -> bool {
+        (self.0[0] & 0x2000000000000000) != 0
+    }
+
+    pub fn is_system(&self) -> bool {
+        (self.0[0] & 0x4000000000000000) != 0
+    }
+
+    pub fn clear_non_type(&mut self) {
+        self.0[0] &= 0x7000000000000000;
+        self.0[1] = 0;
+        self.0[2] = 0;
+        self.0[3] = 0;
+    }
 }

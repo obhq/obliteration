@@ -549,18 +549,14 @@ impl VProc {
             info = self.cred.auth().clone();
         } else {
             // TODO: Refactor this for readability.
-            let paid = self.cred.auth().paid.wrapping_add(0xc7ffffffeffffffc);
+            let paid = self.cred.auth().paid.get().wrapping_add(0xc7ffffffeffffffc);
 
             if paid < 0xf && ((0x6001u32 >> (paid & 0x3f)) & 1) != 0 {
                 info.paid = self.cred.auth().paid;
             }
 
-            info.caps[0] = self.cred.auth().caps[0] & 0x7000000000000000;
-
-            info!(
-                "Retrieved authinfo for non-system credential (paid = {:#x}, caps[0] = {:#x}).",
-                info.paid, info.caps[0]
-            );
+            info.caps = self.cred.auth().caps.clone();
+            info.caps.clear_non_type();
         }
 
         // Copy into.

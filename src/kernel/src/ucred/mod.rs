@@ -25,23 +25,23 @@ impl Ucred {
     /// See `sceSblACMgrIsWebcoreProcess` on the PS4 for a reference.
     pub fn is_webcore_process(&self) -> bool {
         // TODO: Refactor this for readability.
-        let id = self.auth.paid.wrapping_add(0xc7ffffffeffffffc);
+        let id = self.auth.paid.get().wrapping_add(0xc7ffffffeffffffc);
         (id < 0xf) && ((0x6001 >> (id & 0x3f) & 1) != 0)
     }
 
     /// See `sceSblACMgrIsDiskplayeruiProcess` on the PS4 for a reference.
     pub fn is_diskplayerui_process(&self) -> bool {
-        self.auth.paid == 0x380000001000000f || self.auth.paid == 0x3800000010000013
+        self.auth.paid.get() == 0x380000001000000f || self.auth.paid.get() == 0x3800000010000013
     }
 
     /// See `sceSblACMgrIsNongameUcred` on the PS4 for a reference.
     pub fn is_nongame(&self) -> bool {
-        ((self.auth.caps[0] >> 60) & 1) != 0
+        self.auth.caps.is_nongame()
     }
 
     /// See `sceSblACMgrIsSystemUcred` on the PS4 for a reference.
     pub fn is_system(&self) -> bool {
-        ((self.auth.caps[0] >> 62) & 1) != 0
+        self.auth.caps.is_system()
     }
 
     /// See `priv_check_cred` on the PS4 for a reference.
