@@ -50,6 +50,7 @@ pub struct VProc {
     files: FileDesc,                                 // p_fd
     limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
     objects: Gutex<Idt<Arc<dyn Any + Send + Sync>>>,
+    dmem_container: Gutex<i32>,
     budget: Gutex<Option<(usize, ProcType)>>,
     app_info: AppInfo,
     ptc: u64,
@@ -70,6 +71,7 @@ impl VProc {
             sigacts: gg.spawn(SignalActs::new()),
             files: FileDesc::new(&gg),
             objects: gg.spawn(Idt::new(0x1000)),
+            dmem_container: gg.spawn(0), // TODO: Check the initial value on the PS4.
             budget: gg.spawn(None),
             limits,
             app_info: AppInfo::new(),
@@ -111,6 +113,14 @@ impl VProc {
 
     pub fn objects_mut(&self) -> GutexWriteGuard<'_, Idt<Arc<dyn Any + Send + Sync>>> {
         self.objects.write()
+    }
+
+    pub fn dmem_container(&self) -> GutexReadGuard<'_, i32> {
+        self.dmem_container.read()
+    }
+
+    pub fn dmem_container_mut(&self) -> GutexWriteGuard<'_, i32> {
+        self.dmem_container.write()
     }
 
     pub fn budget(&self) -> GutexReadGuard<'_, Option<(usize, ProcType)>> {
