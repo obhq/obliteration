@@ -895,7 +895,7 @@ static VM_PS4DEV_TRCMEM_TOTAL: Oid = Oid {
     handler: Some(Sysctl::handle_int),
     fmt: "IU",
     descr: "trace memory total",
-    enabled: false,
+    enabled: true,
 };
 
 static HW: Oid = Oid {
