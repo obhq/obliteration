@@ -134,8 +134,8 @@ impl Sysctl {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        if name[0] == Self::CTL_VM && name[1] == Self::VM_TOTAL {
-            todo!("sysctl CTL_VM:VM_TOTAL")
+        if name[0] == Self::CTL_VM && name[1] == Self::VM_PS4DEV {
+            todo!("sysctl CTL_VM:VM_PS4DEV")
         }
 
         // Setup a request.
@@ -849,7 +849,7 @@ static KERN_SMP_CPUS: Oid = Oid {
 
 static VM: Oid = Oid {
     parent: &CHILDREN,
-    link: Some(&HW),
+    link: Some(&HW), //TODO change to the proper value, which should be VFS.
     number: Sysctl::CTL_VM,
     kind: Sysctl::CTLFLAG_RW | Sysctl::CTLTYPE_NODE,
     arg1: Some(&VM_CHILDREN),
@@ -888,7 +888,7 @@ static VM_PS4DEV_TRCMEM_TOTAL: Oid = Oid {
     link: None, // TODO: Change to a proper value.
     number: Sysctl::VM_PS4DEV_TRCMEM_TOTAL,
     kind: Sysctl::CTLFLAG_RD | Sysctl::CTLFLAG_MPSAFE | Sysctl::CTLTYPE_UINT,
-    arg1: None, //TODO: This value on the PS4 is not null.
+    arg1: Some(&TRCMEM_TOTAL),
     arg2: 0,
     name: "trcmem_total",
     handler: Some(Sysctl::handle_int),
@@ -896,6 +896,8 @@ static VM_PS4DEV_TRCMEM_TOTAL: Oid = Oid {
     descr: "trace memory total",
     enabled: true,
 };
+
+static TRCMEM_TOTAL: u32 = 0;
 
 static HW: Oid = Oid {
     parent: &CHILDREN,
