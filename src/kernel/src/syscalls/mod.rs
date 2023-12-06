@@ -52,7 +52,7 @@ impl Syscalls {
             Some(v) => match v {
                 Some(v) => v,
                 None => todo!(
-                    "syscall {} at {:#x} on {} with args = ({}, {}, {}, {}, {}, {})",
+                    "syscall {} at {:#x} on {} with args = ({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
                     i.id,
                     i.offset,
                     i.module,
