@@ -1,5 +1,5 @@
 use super::{
-    dev::{deci_tty6::DeciTty6, dipsw::Dipsw},
+    dev::{deci_tty6::DeciTty6, dipsw::Dipsw, dmem0::Dmem0, dmem1::Dmem1, dmem2::Dmem2},
     FsError, VFileOps, VPath, VPathBuf,
 };
 use crate::fs::dev::console::Console;
@@ -19,6 +19,9 @@ impl FsItem {
                 VDev::Console => true,
                 VDev::Dipsw => true,
                 VDev::DeciTty6 => true,
+                VDev::Dmem0 => true,
+                VDev::Dmem1 => true,
+                VDev::Dmem2 => true,
             },
             _ => false,
         }
@@ -32,6 +35,9 @@ impl FsItem {
                 VDev::Console => Console::PATH,
                 VDev::Dipsw => Dipsw::PATH,
                 VDev::DeciTty6 => DeciTty6::PATH,
+                VDev::Dmem0 => Dmem0::PATH,
+                VDev::Dmem1 => Dmem1::PATH,
+                VDev::Dmem2 => Dmem2::PATH,
             },
         }
     }
@@ -90,6 +96,9 @@ pub enum VDev {
     Console,
     Dipsw,
     DeciTty6,
+    Dmem0,
+    Dmem1,
+    Dmem2,
 }
 
 impl VDev {
@@ -98,6 +107,9 @@ impl VDev {
             Self::Console => Box::new(Console::new()),
             Self::Dipsw => Box::new(Dipsw::new()),
             Self::DeciTty6 => Box::new(DeciTty6::new()),
+            Self::Dmem0 => Box::new(Dmem0::new()),
+            Self::Dmem1 => Box::new(Dmem1::new()),
+            Self::Dmem2 => Box::new(Dmem2::new()),
         };
 
         Ok(ops)

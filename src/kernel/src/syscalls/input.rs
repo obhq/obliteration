@@ -2,6 +2,7 @@ use super::SysErr;
 use crate::errno::{ENAMETOOLONG, ENOENT};
 use crate::fs::{VPath, VPathBuf};
 use std::ffi::{c_char, CStr};
+use std::fmt::{Formatter, LowerHex};
 use std::num::TryFromIntError;
 
 /// Input of the syscall entry point.
@@ -17,6 +18,12 @@ pub struct SysIn<'a> {
 #[repr(transparent)]
 #[derive(Clone, Copy)]
 pub struct SysArg(usize);
+
+impl LowerHex for SysArg {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:#x}", self.0)
+    }
+}
 
 impl SysArg {
     pub unsafe fn to_path<'a>(self) -> Result<Option<&'a VPath>, SysErr> {

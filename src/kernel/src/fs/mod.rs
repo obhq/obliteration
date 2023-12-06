@@ -191,6 +191,9 @@ impl Fs {
             "/dev/console" => FsItem::Device(VDev::Console),
             "/dev/dipsw" => FsItem::Device(VDev::Dipsw),
             "/dev/deci_tty6" => FsItem::Device(VDev::DeciTty6),
+            "/dev/dmem0" => FsItem::Device(VDev::Dmem0),
+            "/dev/dmem1" => FsItem::Device(VDev::Dmem1),
+            "/dev/dmem2" => FsItem::Device(VDev::Dmem2),
             _ => self
                 .resolve(VPath::new(nd.dirp).unwrap())
                 .ok_or(FsError::NotFound)?,
