@@ -265,9 +265,6 @@ pub enum ReadError {
     #[error("entry #{0} has invalid value")]
     InvalidValue(usize),
 
-    #[error("APP_VER parameter not found")]
-    MissingAppVer,
-
     #[error("CATEGORY parameter not found")]
     MissingCategory,
 
@@ -277,6 +274,6 @@ pub enum ReadError {
     #[error("TITLE_ID parameter not found")]
     MissingTitleId,
 
-    #[error("APP_VER and CONTENT_VER parameter not found")]
+    #[error("VERSION parameter not found")]
     MissingVersion,
 }
