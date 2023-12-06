@@ -4,7 +4,6 @@ use crate::process::{PcbFlags, VThread};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 /// An implementation of machine-dependent services.
 pub struct MachDep {

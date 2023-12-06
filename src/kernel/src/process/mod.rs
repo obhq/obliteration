@@ -50,6 +50,7 @@ pub struct VProc {
     files: FileDesc,                                 // p_fd
     limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
     objects: Gutex<Idt<Arc<dyn Any + Send + Sync>>>,
+    dmem_container: Gutex<i32>,
     budget: Gutex<Option<(usize, ProcType)>>,
     app_info: AppInfo,
     ptc: u64,
@@ -70,6 +71,7 @@ impl VProc {
             sigacts: gg.spawn(SignalActs::new()),
             files: FileDesc::new(&gg),
             objects: gg.spawn(Idt::new(0x1000)),
+            dmem_container: gg.spawn(0), // TODO: Check the initial value on the PS4.
             budget: gg.spawn(None),
             limits,
             app_info: AppInfo::new(),
@@ -111,6 +113,14 @@ impl VProc {
 
     pub fn objects_mut(&self) -> GutexWriteGuard<'_, Idt<Arc<dyn Any + Send + Sync>>> {
         self.objects.write()
+    }
+
+    pub fn dmem_container(&self) -> GutexReadGuard<'_, i32> {
+        self.dmem_container.read()
+    }
+
+    pub fn dmem_container_mut(&self) -> GutexWriteGuard<'_, i32> {
+        self.dmem_container.write()
     }
 
     pub fn budget(&self) -> GutexReadGuard<'_, Option<(usize, ProcType)>> {
@@ -549,18 +559,14 @@ impl VProc {
             info = self.cred.auth().clone();
         } else {
             // TODO: Refactor this for readability.
-            let paid = self.cred.auth().paid.wrapping_add(0xc7ffffffeffffffc);
+            let paid = self.cred.auth().paid.get().wrapping_add(0xc7ffffffeffffffc);
 
             if paid < 0xf && ((0x6001u32 >> (paid & 0x3f)) & 1) != 0 {
                 info.paid = self.cred.auth().paid;
             }
 
-            info.caps[0] = self.cred.auth().caps[0] & 0x7000000000000000;
-
-            info!(
-                "Retrieved authinfo for non-system credential (paid = {:#x}, caps[0] = {:#x}).",
-                info.paid, info.caps[0]
-            );
+            info.caps = self.cred.auth().caps.clone();
+            info.caps.clear_non_type();
         }
 
         // Copy into.

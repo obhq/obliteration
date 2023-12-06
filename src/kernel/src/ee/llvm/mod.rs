@@ -76,6 +76,7 @@ impl ExecutionEngine for LlvmEngine {
 }
 
 /// An implementation of [`ExecutionEngine::RawFn`].
+#[derive(Debug)]
 pub struct RawFn {}
 
 impl super::RawFn for RawFn {

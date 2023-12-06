@@ -40,7 +40,7 @@ pub struct Module<E: ExecutionEngine + ?Sized> {
     modules: Vec<ModuleInfo>,
     libraries: Vec<LibraryInfo>,
     memory: Memory,
-    relocated: Gutex<Vec<bool>>,
+    relocated: Gutex<Vec<Option<Relocated<E>>>>,
     file_info: Option<FileInfo>,
     path: VPathBuf,
     is_self: bool,
@@ -191,7 +191,11 @@ impl<E: ExecutionEngine> Module<E> {
 
         if let Some(info) = file_info {
             module.digest_dynamic(base, &info)?;
-            module.relocated = gg.spawn(vec![false; info.reloc_count() + info.plt_count()]);
+            module.relocated = gg.spawn(
+                std::iter::repeat_with(|| None)
+                    .take(info.reloc_count() + info.plt_count())
+                    .collect(),
+            );
             module.file_info = Some(info);
         }
 
@@ -282,7 +286,7 @@ impl<E: ExecutionEngine> Module<E> {
         &self.memory
     }
 
-    pub fn relocated_mut(&self) -> GutexWriteGuard<'_, Vec<bool>> {
+    pub fn relocated_mut(&self) -> GutexWriteGuard<'_, Vec<Option<Relocated<E>>>> {
         self.relocated.write()
     }
 
@@ -750,4 +754,12 @@ impl Display for ModuleFlags {
 #[derive(Debug)]
 pub struct NeededModule {
     name: String,
+}
+
+/// Indicated a type of value in the relocation entry.
+#[derive(Debug)]
+pub enum Relocated<E: ExecutionEngine + ?Sized> {
+    Executable(Arc<E::RawFn>),
+    Data((Arc<Module<E>>, usize)),
+    Tls((Arc<Module<E>>, usize)),
 }

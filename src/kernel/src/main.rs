@@ -1,6 +1,7 @@
 use crate::arch::MachDep;
 use crate::arnd::Arnd;
 use crate::budget::{Budget, BudgetManager, ProcType};
+use crate::dmem::DmemManager;
 use crate::ee::{EntryArg, RawFn};
 use crate::fs::Fs;
 use crate::llvm::Llvm;
@@ -28,6 +29,7 @@ use sysinfo::{CpuExt, System, SystemExt};
 mod arch;
 mod arnd;
 mod budget;
+mod dmem;
 mod ee;
 mod errno;
 mod fs;
@@ -256,7 +258,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     mm: &Arc<MemoryManager>,
     ee: Arc<E>,
 ) -> ExitCode {
-    // initializes filesystem.
+    // Initializes filesystem.
     let fs = Fs::new(root, app, param, vp, &mut syscalls);
 
     *vp.files().root_mut() = Some(fs.root().clone()); // TODO: Check how the PS4 set this field.
@@ -265,12 +267,14 @@ fn run<E: crate::ee::ExecutionEngine>(
     RegMgr::new(&mut syscalls);
     let machdep = MachDep::new(&mut syscalls);
     let budget = BudgetManager::new(vp, &mut syscalls);
+    DmemManager::new(vp, &mut syscalls);
 
     // TODO: Get correct name from the PS4.
     *vp.budget_mut() = Some((
         budget.create(Budget::new("big app", ProcType::BigApp)),
         ProcType::BigApp,
     ));
+    *vp.dmem_container_mut() = 1; // See sys_budget_set on the PS4.
 
     // Initialize runtime linker.
     info!("Initializing runtime linker.");

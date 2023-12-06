@@ -2,7 +2,7 @@ pub use self::mem::*;
 pub use self::module::*;
 use self::resolver::{ResolveFlags, SymbolResolver};
 use crate::budget::ProcType;
-use crate::ee::ExecutionEngine;
+use crate::ee::{ExecutionEngine, RawFn};
 use crate::errno::{Errno, EINVAL, ENOENT, ENOEXEC, ENOMEM, EPERM, ESRCH};
 use crate::fs::{ComponentName, Fs, FsError, FsItem, NameiData, NameiFlags, VPath, VPathBuf};
 use crate::info;
@@ -11,7 +11,7 @@ use crate::memory::{MemoryManager, MemoryUpdateError, MmapError, Protections};
 use crate::process::{VProc, VThread};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use bitflags::bitflags;
-use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation};
+use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation, Symbol};
 use gmtx::Gutex;
 use sha1::{Digest, Sha1};
 use std::borrow::Cow;
@@ -790,7 +790,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         &self,
         md: &'b Arc<Module<E>>,
         mem: &mut [u8],
-        relocated: &mut [bool],
+        relocated: &mut [Option<Relocated<E>>],
         resolver: &SymbolResolver<'b, E>,
     ) -> Result<(), RelocateError> {
         let info = md.file_info().unwrap(); // Let it panic because the PS4 assume it is available.
@@ -799,7 +799,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         for (i, reloc) in info.relocs().enumerate() {
             // Check if the entry already relocated.
-            if relocated[i] {
+            if relocated[i].is_some() {
                 continue;
             }
 
@@ -809,7 +809,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             let addend = reloc.addend();
             let sym = reloc.symbol();
             let symflags = ResolveFlags::empty();
-            let value = match reloc.ty() {
+            let (how, value) = match reloc.ty() {
                 Relocation::R_X86_64_NONE => break,
                 Relocation::R_X86_64_64 => {
                     // TODO: Apply checks from reloc_non_plt.
@@ -819,10 +819,9 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
                     };
 
                     // TODO: Apply checks from reloc_non_plt.
-                    let mem = md.memory();
-                    let sym = md.symbol(sym).unwrap();
+                    let (how, value) = Self::get_relocated(md, sym);
 
-                    (mem.addr() + mem.base() + sym.value()).wrapping_add_signed(addend)
+                    (how, value.wrapping_add_signed(addend))
                 }
                 Relocation::R_X86_64_GLOB_DAT => {
                     // TODO: Apply checks from reloc_non_plt.
@@ -832,31 +831,47 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
                     };
 
                     // TODO: Apply checks from reloc_non_plt.
-                    let mem = md.memory();
-                    let sym = md.symbol(sym).unwrap();
-
-                    mem.addr() + mem.base() + sym.value()
+                    Self::get_relocated(md, sym)
                 }
                 Relocation::R_X86_64_RELATIVE => {
                     // TODO: Apply checks from reloc_non_plt.
-                    (addr + base).wrapping_add_signed(addend)
+                    let addend: usize = addend.try_into().unwrap();
+                    let offset = base + addend;
+                    let seg = md
+                        .memory()
+                        .segments()
+                        .iter()
+                        .find(|&s| s.program().is_some() && offset >= s.start() && offset < s.end())
+                        .unwrap();
+
+                    if seg.prot().intersects(Protections::CPU_EXEC) {
+                        let func = unsafe { md.get_function(addend) };
+                        let value = func.addr();
+                        (Relocated::Executable(func), value)
+                    } else {
+                        let value = addr + offset;
+                        (Relocated::Data((md.clone(), value)), value)
+                    }
                 }
                 Relocation::R_X86_64_DTPMOD64 => {
                     // TODO: Apply checks from reloc_non_plt.
-                    let value: usize = match resolver.resolve_with_local(md, sym, symflags) {
-                        Some((md, _)) => md.tls_index().try_into().unwrap(),
+                    let md = match resolver.resolve_with_local(md, sym, symflags) {
+                        Some((md, _)) => md,
                         None => continue,
                     };
 
-                    unsafe { read_unaligned(target.as_ptr() as *const usize) + value }
+                    let index: usize = md.tls_index().try_into().unwrap();
+                    let value = unsafe { read_unaligned::<usize>(target.as_ptr().cast()) + index };
+
+                    (Relocated::Tls((md, index)), value)
                 }
                 v => return Err(RelocateError::UnsupportedRela(md.path().to_owned(), v)),
             };
 
             // TODO: Check what relocate_text_or_data_segment on the PS4 is doing.
-            unsafe { write_unaligned(target.as_mut_ptr() as *mut usize, value) };
+            unsafe { write_unaligned(target.as_mut_ptr().cast(), value) };
 
-            relocated[i] = true;
+            relocated[i] = Some(how);
         }
 
         Ok(())
@@ -867,7 +882,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         &self,
         md: &'b Arc<Module<E>>,
         mem: &mut [u8],
-        relocated: &mut [bool],
+        relocated: &mut [Option<Relocated<E>>],
         resolver: &SymbolResolver<'b, E>,
     ) -> Result<(), RelocateError> {
         // Do nothing if not a dynamic module.
@@ -883,7 +898,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             // Check if the entry already relocated.
             let index = info.reloc_count() + i;
 
-            if relocated[index] {
+            if relocated[index].is_some() {
                 continue;
             }
 
@@ -896,24 +911,41 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             }
 
             // Resolve symbol.
-            let sym = match resolver.resolve_with_local(md, reloc.symbol(), ResolveFlags::UNK1) {
-                Some((m, s)) => {
-                    m.memory().addr() + m.memory().base() + m.symbol(s).unwrap().value()
-                }
-                None => continue,
-            };
+            let (md, sym) =
+                match resolver.resolve_with_local(md, reloc.symbol(), ResolveFlags::UNK1) {
+                    Some(v) => v,
+                    None => continue,
+                };
 
             // Write the value.
+            let (how, value) = Self::get_relocated(md, sym);
             let offset = base + reloc.offset();
             let target = &mut mem[offset..(offset + 8)];
-            let value = sym.wrapping_add_signed(reloc.addend());
+            let value = value.wrapping_add_signed(reloc.addend());
 
-            unsafe { write_unaligned(target.as_mut_ptr() as *mut usize, value) };
+            unsafe { write_unaligned(target.as_mut_ptr().cast(), value) };
 
-            relocated[index] = true;
+            relocated[index] = Some(how);
         }
 
         Ok(())
+    }
+
+    fn get_relocated(md: Arc<Module<E>>, sym: usize) -> (Relocated<E>, usize) {
+        let sym = md.symbol(sym).unwrap();
+
+        match sym.ty() {
+            Symbol::STT_FUNC | Symbol::STT_ENTRY => {
+                let func = unsafe { md.get_function(sym.value()) };
+                let addr = func.addr();
+                (Relocated::Executable(func), addr)
+            }
+            _ => {
+                let mem = md.memory();
+                let addr = mem.addr() + mem.base() + sym.value();
+                (Relocated::Data((md, addr)), addr)
+            }
+        }
     }
 
     fn sys_dynlib_get_info_ex(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
