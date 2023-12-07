@@ -49,7 +49,7 @@ pub struct VProc {
     sigacts: Gutex<SignalActs>,                      // p_sigacts
     files: FileDesc,                                 // p_fd
     limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
-    comm: Gutex<[u8; 32]>,                           // p_comm
+    comm: Gutex<String>,                             // p_comm
     objects: Gutex<Idt<Arc<dyn Any + Send + Sync>>>,
     dmem_container: Gutex<i32>,
     budget: Gutex<Option<(usize, ProcType)>>,
@@ -75,7 +75,7 @@ impl VProc {
             dmem_container: gg.spawn(0), // TODO: Check the initial value on the PS4.
             budget: gg.spawn(None),
             limits,
-            comm: gg.spawn([0u8; 32]), //Find out how this is actually set
+            comm: gg.spawn(String::new()), //Find out how this is actually set
             app_info: AppInfo::new(),
             ptc: 0,
             uptc: AtomicPtr::new(null_mut()),
@@ -115,7 +115,7 @@ impl VProc {
     }
 
     pub fn set_name(&self, name: &str) {
-        self.comm.write()[..name.len()].copy_from_slice(name.as_bytes());
+        *self.comm.write() = name.to_owned();
     }
 
     pub fn objects_mut(&self) -> GutexWriteGuard<'_, Idt<Arc<dyn Any + Send + Sync>>> {
