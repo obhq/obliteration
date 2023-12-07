@@ -16,10 +16,10 @@ impl MachDep {
     const AMD64_SET_FSBASE: u32 = 129;
 
     // PS4 / PS4 Slim
-    const TSC_FREQ: u64 = 1600000000;
+    const TSC_FREQ: u64 = 1_600_000_000;
 
     // PS4 PRO (Neo) TODO
-    // const TSC_FREQ: u64 = 2130000000;
+    // const TSC_FREQ: u64 = 2_130_000_000;
 
     pub fn new(sys: &mut Syscalls) -> Arc<Self> {
         let mach = Arc::new(Self {
