@@ -15,8 +15,8 @@ extern "C" {
 
     void param_app_ver_get(const param *param, QString &buf);
     void param_category_get(const param *param, QString &buf);
-    void param_contentId_get(const param *param, QString &buf);
-    void param_shortContentId_get(const param *param, QString &buf);
+    void param_content_id_get(const param *param, QString &buf);
+    void param_short_content_id_get(const param *param, QString &buf);
     void param_title_get(const param *param, QString &buf);
     void param_title_id_get(const param *param, QString &buf);
     void param_version_get(const param *param, QString &buf);
@@ -112,14 +112,14 @@ public:
     QString contentId() const
     {
         QString s;
-        param_contentId_get(m_obj, s);
+        param_content_id_get(m_obj, s);
         return s;
     }
 
     QString shortContentId() const
     {
         QString s;
-        param_shortContentId_get(m_obj, s);
+        param_short_content_id_get(m_obj, s);
         return s;
     }
 
