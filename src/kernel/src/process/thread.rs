@@ -79,7 +79,7 @@ impl VThread {
     }
 
     pub fn set_name(&self, name: &str) {
-        self.name.write().copy_from_slice(name.as_bytes());
+        self.name.write()[..name.len()].copy_from_slice(name.as_bytes());
     }
 
     /// An implementation of `priv_check`.

@@ -115,7 +115,7 @@ impl VProc {
     }
 
     pub fn set_name(&self, name: &str) {
-        self.comm.write().copy_from_slice(name.as_bytes());
+        self.comm.write()[..name.len()].copy_from_slice(name.as_bytes());
     }
 
     pub fn objects_mut(&self) -> GutexWriteGuard<'_, Idt<Arc<dyn Any + Send + Sync>>> {
