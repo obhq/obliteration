@@ -269,37 +269,40 @@ void MainWindow::installPkg()
     auto category = param.category();
     auto shortContentId = param.shortContentId();
     auto title = param.title();
-    auto titleID = param.titleId();
+    auto titleId = param.titleId();
 
     // Check if file is Patch/DLC.
-    bool PatchOrDLC = false;
+    bool patchOrDlc = false;
     if (category.startsWith("gp") || category.contains("ac")) {
-        PatchOrDLC = true;
+        patchOrDlc = true;
     }
 
     // If the game exists and the file isn't a Patch/DLC, don't allow.
-    if (!QDir(gamesDirectory).mkdir(titleID) && !PatchOrDLC) {
-            QString msg("PKG file cannot be installed as it is not a patch or DLC for preexisting application %1 at %2.");
+    if (!QDir(gamesDirectory).mkdir(titleId)) {
+        if (patchOrDlc || category.startsWith("gp")) {
+            QString msg("Install directory for %1 could not be created at %2.");
 
-            QMessageBox::critical(&progress, "Invalid PKG file. (Not Patch/DLC for Existing Game)", msg.arg(titleID).arg(gamesDirectory));
-            return;
-    }
-    auto directory = joinPath(gamesDirectory, titleID);
-
-    // Setup folders for DLC and Patch PKGs
-    if (PatchOrDLC == true) {
-        if (category.contains("ac")) {
-            // If our PKG is for DLC, add -ADDCONT to the end of the foldername, then use the last part of CONTENT_ID to match PS4 behavior.
-            //directory += "-ADDCONT";
-            //directory = joinPathStr(directory, shortContentId.toStdString());
-
-            // As of now, return an error as we are unsure if this implementation of DLC works.
-            QString msg("DLC PKG files are currently WIP and as such, are not supported at this time.");
-
-            QMessageBox::critical(&progress, "Invalid PKG file. (WIP DLC Implementation)", msg.arg(titleID).arg(gamesDirectory));
+            QMessageBox::critical(&progress, "Cannot create install directory", msg.arg(titleId).arg(gamesDirectory));
             return;
         } else {
-            // If our PKG is for Patching, add -PATCH-v to the end of the foldername along with the patch APPVER. (-PATCH-01.01)
+            QString msg("PKG file cannot be installed as it is not a patch or DLC for preexisting application %1 at %2.");
+
+            QMessageBox::critical(&progress, "Invalid PKG file. (Not Patch/DLC for Existing Game)", msg.arg(titleId).arg(gamesDirectory));
+            return;
+        }
+    }
+    auto directory = joinPath(gamesDirectory, titleId);
+
+    // Setup folders for DLC and Patch PKGs
+    if (patchOrDlc == true) {
+        if (category.contains("ac")) {
+            // TODO: Add DLC support, short_content_id is most likely.
+            QString msg("DLC PKG support is not yet implemented.");
+
+            QMessageBox::critical(&progress, "Invalid PKG file. (DLC Not Yet Implemented)", msg.arg(titleId).arg(gamesDirectory));
+            return;
+        } else {
+            // If our PKG is for Patching, add -PATCH- to the end of the foldername along with the patch APPVER. (-PATCH-01.01)
             directory += "-PATCH-" + appver.toStdString();
         }
     }
@@ -348,8 +351,8 @@ void MainWindow::installPkg()
 
     // Add to game list if new game.
     bool success = false;
-    if (!PatchOrDLC) {
-        success = loadGame(titleID);
+    if (!patchOrDlc) {
+        success = loadGame(titleId);
     } else {
         success = true;
     }
