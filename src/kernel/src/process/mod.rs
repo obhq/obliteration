@@ -417,17 +417,17 @@ impl VProc {
     }
 
     fn sys_thr_set_name(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let name: Option<&str> = unsafe { i.args[0].to_str(32) }?;
-        let id: i32 = i.args[1].try_into().unwrap();
+        let tid: i32 = i.args[0].try_into().unwrap();
+        let name: Option<&str> = unsafe { i.args[1].to_str(32) }?;
 
-        if id == -1 {
+        if tid == -1 {
             self.set_name(name);
         } else {
             let threads = self.threads.read();
 
             let thr = threads
                 .iter()
-                .find(|t| t.id().get() == id)
+                .find(|t| t.id().get() == tid)
                 .ok_or(SysErr::Raw(ESRCH))?;
 
             thr.set_name(name);
