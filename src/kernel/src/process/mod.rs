@@ -60,14 +60,14 @@ pub struct VProc {
 }
 
 impl VProc {
-    pub fn new(sys: &mut Syscalls) -> Result<Arc<Self>, VProcError> {
+    pub fn new(auth: AuthInfo, sys: &mut Syscalls) -> Result<Arc<Self>, VProcError> {
         // TODO: Check how ucred is constructed for a process.
         let gg = GutexGroup::new("virtual process");
         let limits = Self::load_limits()?;
         let vp = Arc::new(Self {
             id: Self::new_id(),
             threads: gg.spawn(Vec::new()),
-            cred: Ucred::new(AuthInfo::GAME.clone()),
+            cred: Ucred::new(auth),
             group: gg.spawn(None),
             sigacts: gg.spawn(SignalActs::new()),
             files: FileDesc::new(&gg),
