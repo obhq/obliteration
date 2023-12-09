@@ -24,13 +24,13 @@ impl Dipsw {
 const COM1: IoctlCom = _IOW!(0x88, 1, i16); //TODO: figure out actual type
 const COM2: IoctlCom = _IOW!(0x88, 2, i16); //TODO: figure out actual type
 const COM3: IoctlCom = _IOWR!(0x88, 3, i64); //TODO: figure out actual type
-const COM4: IoctlCom = _IOW!(0x88, 4, [u8; 0x10]); //TODO: figure out actual type, probably a struct
-const COM5: IoctlCom = _IOW!(0x88, 5, [u8; 0x10]); //TODO: figure out actual type, probably a struct
+const COM4: IoctlCom = _IOW!(0x88, 4, (i64, i64)); //TODO: figure out actual type, probably a struct
+const COM5: IoctlCom = _IOW!(0x88, 5, (i64, i64)); //TODO: figure out actual type, probably a struct
 const COM6: IoctlCom = _IOR!(0x88, 6, i32);
 const COM7: IoctlCom = _IOR!(0x88, 7, i32); //TODO: figure out actual type
 const COM8: IoctlCom = _IOR!(0x88, 8, i64); //TODO: figure out actual type
 const COM9: IoctlCom = _IOR!(0x88, 9, i64); //TODO: figure out actual type
-const COM10: IoctlCom = _IOW!(0x88, 10, [u8; 0x10]); //TODO: figure out actual type, probably a struct
+const COM10: IoctlCom = _IOW!(0x88, 10, (i64, i64)); //TODO: figure out actual type, probably a struct
 
 impl VFileOps for Dipsw {
     fn write(
