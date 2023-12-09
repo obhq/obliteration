@@ -281,16 +281,10 @@ void MainWindow::installPkg()
     if (!patchOrDlc && !category.startsWith("gd")) {
             QString msg("PKG file is not a Patch, DLC, or a Game. Possibly a corrupted PKG?");
 
-            QMessageBox::critical(&progress, "Error (Not Game, Patch, or DLC)", msg);
+            QMessageBox::critical(&progress, "Error", msg);
             return;
     }
 
-    if (!QDir(gamesDirectory).mkdir(titleId)) {
-        QString msg("Install directory for %1 could not be created at %2.");
-
-        QMessageBox::critical(&progress, "Error (Cannot create install directory)", msg.arg(titleId).arg(gamesDirectory));
-        return;
-    }
     auto directory = joinPath(gamesDirectory, titleId);
 
     // Setup folders for DLC and Patch PKGs
@@ -299,12 +293,19 @@ void MainWindow::installPkg()
             // TODO: Add DLC support, short_content_id is most likely to be used.
             QString msg("DLC PKG support is not yet implemented.");
 
-            QMessageBox::critical(&progress, "Error (DLC Not Yet Implemented)", msg.arg(titleId).arg(gamesDirectory));
+            QMessageBox::critical(&progress, "Error", msg);
             return;
         } else {
             // If our PKG is for Patching, add -PATCH- to the end of the foldername along with the patch APPVER. (-PATCH-01.01)
             directory += "-PATCH-" + appver.toStdString();
         }
+    }
+
+    if (!QDir().mkdir(QString::fromStdString(directory))) {
+        QString msg("Install directory could not be created at\n%1");
+
+        QMessageBox::critical(&progress, "Error", msg.arg(QString::fromStdString(directory)));
+        return;
     }
 
     // Extract items.
@@ -427,7 +428,7 @@ void MainWindow::requestGamesContextMenu(const QPoint &pos)
 
 void MainWindow::startGame(const QModelIndex &index)
 {
-    if (!requireEmulatorStopped()) {
+    if (requireEmulatorStopped()) {
         return;
     }
 
@@ -629,9 +630,20 @@ void MainWindow::restoreGeometry()
 bool MainWindow::requireEmulatorStopped()
 {
     if (m_kernel) {
-        QMessageBox::critical(this, "Error", "This function is not available while a game is running.");
-        return false;
+        QMessageBox killPrompt(this);
+
+        killPrompt.setText("Action requires kernel to be stopped to continue.");
+        killPrompt.setInformativeText("Do you want to kill the kernel?");
+        killPrompt.setStandardButtons(QMessageBox::Cancel | QMessageBox::Yes);
+        killPrompt.setDefaultButton(QMessageBox::Cancel);
+        killPrompt.setIcon(QMessageBox::Warning);
+        if (killPrompt.exec() == QMessageBox::Yes) {
+            killKernel();
+            return false; // Kernel was killed
+        }
+
+        return true; // Kernel left running
     }
 
-    return true;
+    return false; // Kernel isn't running
 }
