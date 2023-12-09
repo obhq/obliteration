@@ -9,7 +9,7 @@ use std::fmt::{Display, Formatter};
 pub struct Dmem2 {}
 
 impl Dmem2 {
-    pub const PATH: &VPath = vpath!("/dev/dmem2");
+    pub const PATH: &'static VPath = vpath!("/dev/dmem2");
 
     pub fn new() -> Self {
         Self {}

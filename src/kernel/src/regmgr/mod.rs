@@ -69,7 +69,7 @@ impl RegMgr {
                 let v2 = unsafe { read::<u32>(req.add(8) as _) };
 
                 self.decode_key(v1, v2, td.cred(), 1)
-                    .and_then(|k| todo!("regmgr_call({op}) with matched key = {k}"))
+                    .map(|k| todo!("regmgr_call({op}) with matched key = {k}"))
             }
             0x27 | 0x40.. => Err(RegError::V800d0219),
             v => todo!("regmgr_call({v})"),

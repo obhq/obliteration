@@ -338,12 +338,10 @@ impl Fs {
         // Get data.
         let data = if size == 0 {
             &mut []
+        } else if com & IOC_VOID != 0 {
+            todo!("ioctl with com & IOC_VOID != 0");
         } else {
-            if com & IOC_VOID != 0 {
-                todo!("ioctl with com & IOC_VOID != 0");
-            } else {
-                &mut vec[..]
-            }
+            &mut vec[..]
         };
 
         if com & IOC_IN != 0 {
@@ -596,7 +594,7 @@ impl Errno for FsError {
     }
 }
 
-static CONFIGS: &'static FsConfig = &EXFAT;
+static CONFIGS: &FsConfig = &EXFAT;
 
 static EXFAT: FsConfig = FsConfig {
     version: 0x19660120,

@@ -9,7 +9,7 @@ use std::fmt::{Display, Formatter};
 pub struct DeciTty6 {}
 
 impl DeciTty6 {
-    pub const PATH: &VPath = vpath!("/dev/deci_tty6");
+    pub const PATH: &'static VPath = vpath!("/dev/deci_tty6");
 
     pub fn new() -> Self {
         Self {}

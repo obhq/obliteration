@@ -13,7 +13,7 @@ use thiserror::Error;
 pub struct Dipsw {}
 
 impl Dipsw {
-    pub const PATH: &VPath = vpath!("/dev/dipsw");
+    pub const PATH: &'static VPath = vpath!("/dev/dipsw");
 
     pub fn new() -> Self {
         Self {}
