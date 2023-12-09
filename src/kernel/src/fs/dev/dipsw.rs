@@ -1,7 +1,8 @@
 use crate::errno::{Errno, EINVAL};
-use crate::fs::{VFile, VFileOps, VPath};
+use crate::fs::{IoctlCom, VFile, VFileOps, VPath};
 use crate::process::VThread;
 use crate::ucred::Ucred;
+use crate::{_IOC, _IOR, _IOW, _IOWR};
 use byteorder::{LittleEndian, WriteBytesExt};
 use macros::vpath;
 use std::fmt::{Display, Formatter};
@@ -20,6 +21,17 @@ impl Dipsw {
     }
 }
 
+const COM1: IoctlCom = _IOW!(0x88, 1, i16); //TODO: figure out actual type
+const COM2: IoctlCom = _IOW!(0x88, 2, i16); //TODO: figure out actual type
+const COM3: IoctlCom = _IOWR!(0x88, 3, i64); //TODO: figure out actual type
+const COM4: IoctlCom = _IOW!(0x88, 4, [u8; 0x10]); //TODO: figure out actual type, probably a struct
+const COM5: IoctlCom = _IOW!(0x88, 5, [u8; 0x10]); //TODO: figure out actual type, probably a struct
+const COM6: IoctlCom = _IOR!(0x88, 6, i32);
+const COM7: IoctlCom = _IOR!(0x88, 7, i32); //TODO: figure out actual type
+const COM8: IoctlCom = _IOR!(0x88, 8, i64); //TODO: figure out actual type
+const COM9: IoctlCom = _IOR!(0x88, 9, i64); //TODO: figure out actual type
+const COM10: IoctlCom = _IOW!(0x88, 10, [u8; 0x10]); //TODO: figure out actual type, probably a struct
+
 impl VFileOps for Dipsw {
     fn write(
         &self,
@@ -34,26 +46,26 @@ impl VFileOps for Dipsw {
     fn ioctl(
         &self,
         _: &VFile,
-        com: u64,
+        com: IoctlCom,
         mut data: &mut [u8],
         _: &Ucred,
         _: &VThread,
     ) -> Result<(), Box<dyn Errno>> {
         match com {
-            0x40048806 => {
+            COM1 => todo!("dipsw ioctl 0x80028801"),
+            COM2 => todo!("dipsw ioctl 0x80028802"),
+            COM3 => todo!("dipsw ioctl 0xc0088803"),
+            COM4 => todo!("dipsw ioctl 0x80108804"),
+            COM5 => todo!("dipsw ioctl 0x80108805"),
+            COM6 => {
                 //todo write the correct value if unk_func1() = false and
                 // unk_func2() = true
                 data.write_i32::<LittleEndian>(false as i32).unwrap();
             }
-            0x40048807 => todo!("dipsw ioctl 0x40048807"),
-            0x40088808 => todo!("dipsw ioctl 0x40088808"),
-            0x40088809 => todo!("dipsw ioctl 0x40088809"),
-            0x80028801 => todo!("dipsw ioctl 0x80028801"),
-            0x80028802 => todo!("dipsw ioctl 0x80028802"),
-            0x80108804 => todo!("dipsw ioctl 0x80108804"),
-            0x80108805 => todo!("dipsw ioctl 0x80108805"),
-            0x8010880a => todo!("dipsw ioctl 0x8010880a"),
-            0xc0088803 => todo!("dipsw ioctl 0xc0088803"),
+            COM7 => todo!("dipsw ioctl 0x40048807"),
+            COM8 => todo!("dipsw ioctl 0x40088808"),
+            COM9 => todo!("dipsw ioctl 0x40088809"),
+            COM10 => todo!("dipsw ioctl 0x8010880a"),
             _ => return Err(Box::new(IoctlErr::InvalidCommand)),
         }
 

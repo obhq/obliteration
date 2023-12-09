@@ -1,6 +1,6 @@
 use super::SysErr;
 use crate::errno::{ENAMETOOLONG, ENOENT};
-use crate::fs::{VPath, VPathBuf};
+use crate::fs::{IoctlCom, VPath, VPathBuf};
 use std::ffi::{c_char, CStr};
 use std::fmt::{Formatter, LowerHex};
 use std::num::TryFromIntError;
@@ -124,5 +124,11 @@ impl TryFrom<SysArg> for u8 {
 
     fn try_from(v: SysArg) -> Result<Self, Self::Error> {
         v.0.try_into()
+    }
+}
+
+impl From<SysArg> for IoctlCom {
+    fn from(v: SysArg) -> Self {
+        IoctlCom::new_truncated(v.try_into().unwrap())
     }
 }

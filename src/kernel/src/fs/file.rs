@@ -67,11 +67,124 @@ pub trait VFileOps: Debug + Send + Sync + Display {
     fn ioctl(
         &self,
         file: &VFile,
-        com: u64,
+        com: IoctlCom,
         data: &mut [u8],
         cred: &Ucred,
         td: &VThread,
     ) -> Result<(), Box<dyn Errno>>;
+}
+
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub struct IoctlCom(u32);
+
+impl Display for IoctlCom {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "0x{:x}", self.0)
+    }
+}
+
+impl IoctlCom {
+    pub const IOCPARM_SHIFT: u32 = 13;
+    pub const IOCPARM_MASK: u32 = (1 << Self::IOCPARM_SHIFT) - 1;
+    pub const IOC_VOID: u32 = 0x20000000;
+    pub const IOC_OUT: u32 = 0x40000000;
+    pub const IOC_IN: u32 = 0x80000000;
+    pub const IOC_INOUT: u32 = Self::IOC_IN | Self::IOC_OUT;
+
+    pub const fn new_truncated(com: u64) -> Self {
+        Self(com as u32)
+    }
+
+    pub const fn new_exact(com: u32) -> Self {
+        Self(com)
+    }
+
+    pub fn size(&self) -> usize {
+        ((self.0 >> 16) & Self::IOCPARM_MASK) as usize
+    }
+
+    pub fn is_void(&self) -> bool {
+        self.0 & Self::IOC_VOID != 0
+    }
+
+    pub fn is_out(&self) -> bool {
+        self.0 & Self::IOC_OUT != 0
+    }
+
+    pub fn is_in(&self) -> bool {
+        self.0 & Self::IOC_IN != 0
+    }
+
+    pub fn is_invalid(&self) -> bool {
+        (self.0 & (Self::IOC_VOID | Self::IOC_IN | Self::IOC_OUT) == 0)
+            || ((self.is_in() || self.is_out()) && self.size() == 0)
+            || (self.is_void() && self.size() != 0 && self.size() != 4)
+    }
+}
+
+#[macro_export]
+macro_rules! _IOC {
+    ($inout:path, $group:literal, $num:literal, $len:expr) => {
+        IoctlCom::new_exact(
+            $inout | ((($len) & IoctlCom::IOCPARM_MASK) << 16) | (($group as u32) << 8) | ($num),
+        )
+    };
+}
+
+#[macro_export]
+macro_rules! _IO {
+    ($group:literal, $num:literal) => {
+        _IOC!(IoctlCom::IOC_VOID, $group, $num, 0u32)
+    };
+}
+
+#[macro_export]
+macro_rules! _IOWINT {
+    ($group:literal, $num:literal) => {
+        _IOC!(
+            IoctlCom::IOC_IN,
+            $group,
+            $num,
+            std::mem::size_of::<i32>() as u32
+        )
+    };
+}
+
+#[macro_export]
+macro_rules! _IOR {
+    ($group:literal, $num:literal, $type:ty) => {
+        _IOC!(
+            IoctlCom::IOC_OUT,
+            $group,
+            $num,
+            std::mem::size_of::<$type>() as u32
+        )
+    };
+}
+
+#[macro_export]
+macro_rules! _IOW {
+    ($group:literal, $num:literal, $type:ty) => {
+        _IOC!(
+            IoctlCom::IOC_IN,
+            $group,
+            $num,
+            std::mem::size_of::<$type>() as u32
+        )
+    };
+}
+
+#[macro_export]
+macro_rules! _IOWR {
+    ($group:literal, $num:literal, $type:ty) => {
+        _IOC!(
+            IoctlCom::IOC_INOUT,
+            $group,
+            $num,
+            std::mem::size_of::<$type>() as u32
+        )
+    };
 }
 
 bitflags! {
