@@ -111,7 +111,7 @@ fn main() -> ExitCode {
 
     // Load param.sfo.
     let param = match Param::read(param) {
-        Ok(v) => v,
+        Ok(v) => Arc::new(v),
         Err(e) => {
             error!(e, "Cannot read {}", path.display());
             return ExitCode::FAILURE;
@@ -248,7 +248,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     root: PathBuf,
     app: PathBuf,
     dump: Option<PathBuf>,
-    param: &Param,
+    param: &Arc<Param>,
     arnd: &Arc<Arnd>,
     mut syscalls: Syscalls,
     vp: &Arc<VProc>,
@@ -256,7 +256,14 @@ fn run<E: crate::ee::ExecutionEngine>(
     ee: Arc<E>,
 ) -> ExitCode {
     // Initializes filesystem.
-    let fs = Fs::new(root, app, param, vp, &mut syscalls);
+    let fs = Fs::new(
+        root,
+        app,
+        param,
+        &Ucred::new(AuthInfo::SYS_CORE), // TODO: Check how PS4 construct this.
+        vp,
+        &mut syscalls,
+    );
 
     *vp.files().root_mut() = Some(fs.root().clone()); // TODO: Check how the PS4 set this field.
 

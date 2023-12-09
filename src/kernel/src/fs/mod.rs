@@ -1,5 +1,7 @@
 pub use self::file::*;
+pub use self::host::*;
 pub use self::item::*;
+pub use self::mount::*;
 pub use self::path::*;
 pub use self::vnode::*;
 use crate::errno::{Errno, EBADF, EINVAL, ENOENT, ENOTCAPABLE, ENOTTY};
@@ -9,18 +11,21 @@ use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{Privilege, Ucred};
 use bitflags::bitflags;
 use param::Param;
-use std::borrow::Borrow;
+use std::any::Any;
 use std::collections::HashMap;
+use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::num::{NonZeroI32, TryFromIntError};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicI32, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use thiserror::Error;
 
 mod dev;
 mod file;
+mod host;
 mod item;
+mod mount;
 mod path;
 mod vnode;
 
@@ -28,17 +33,17 @@ mod vnode;
 #[derive(Debug)]
 pub struct Fs {
     vp: Arc<VProc>,
-    mounts: HashMap<VPathBuf, MountSource>,
-    opens: AtomicI32, // openfiles
-    app: VPathBuf,
-    root: Arc<Vnode>, // rootvnode
+    mounts: RwLock<Vec<Mount>>, // mountlist
+    opens: AtomicI32,           // openfiles
+    root: Arc<Vnode>,           // rootvnode
 }
 
 impl Fs {
     pub fn new<S, G>(
         system: S,
         game: G,
-        param: &Param,
+        param: &Arc<Param>,
+        cred: &Ucred,
         vp: &Arc<VProc>,
         sys: &mut Syscalls,
     ) -> Arc<Self>
@@ -46,53 +51,28 @@ impl Fs {
         S: Into<PathBuf>,
         G: Into<PathBuf>,
     {
-        let system = system.into();
-        let game = game.into();
-        let mut mounts: HashMap<VPathBuf, MountSource> = HashMap::new();
+        let mut mounts = Vec::new();
 
-        // Mount rootfs.
-        mounts.insert(VPathBuf::new(), MountSource::Host(system.clone()));
+        // TODO: It seems like the PS4 will mount devfs as an initial rootfs. See vfs_mountroot for
+        // more details.
+        let mut root = Mount::new(&HOST, cred.clone());
+        let mut opts: HashMap<String, Box<dyn Any>> = HashMap::new();
 
-        // Create a directory for mounting PFS.
-        let mut pfs = system.join("mnt");
+        opts.insert("system".into(), Box::new(system.into()));
+        opts.insert("game".into(), Box::new(game.into()));
+        opts.insert("param".into(), Box::new(param.clone()));
 
-        pfs.push("sandbox");
-        pfs.push("pfsmnt");
-
-        if let Err(e) = std::fs::create_dir_all(&pfs) {
-            panic!("Cannot create {}: {}.", pfs.display(), e);
+        if let Err(e) = (root.vfs().ops.mount)(&mut root, opts) {
+            panic!("Cannot mount rootfs: {e}.");
         }
 
-        // Mount game directory.
-        let pfs: VPathBuf = format!("/mnt/sandbox/pfsmnt/{}-app0-patch0-union", param.title_id())
-            .try_into()
-            .unwrap();
-
-        mounts.insert(pfs.clone(), MountSource::Host(game));
-
-        // Create a directory for mounting app0.
-        let mut app = system.join("mnt");
-
-        app.push("sandbox");
-        app.push(format!("{}_000", param.title_id()));
-
-        if let Err(e) = std::fs::create_dir_all(&app) {
-            panic!("Cannot create {}: {}.", app.display(), e);
-        }
-
-        // Mount /mnt/sandbox/{id}_000/app0 to /mnt/sandbox/pfsmnt/{id}-app0-patch0-union.
-        let app: VPathBuf = format!("/mnt/sandbox/{}_000", param.title_id())
-            .try_into()
-            .unwrap();
-
-        mounts.insert(app.join("app0").unwrap(), MountSource::Bind(pfs));
+        mounts.push(root);
 
         // Install syscall handlers.
         let fs = Arc::new(Self {
             vp: vp.clone(),
-            mounts,
+            mounts: RwLock::new(mounts),
             opens: AtomicI32::new(0),
-            app,
             root: Arc::new(Vnode::new()), // TODO: Check how this constructed on the PS4.
         });
 
@@ -105,8 +85,12 @@ impl Fs {
         fs
     }
 
-    pub fn app(&self) -> &VPath {
-        self.app.borrow()
+    pub fn app(&self) -> Arc<VPathBuf> {
+        let mounts = self.mounts.read().unwrap();
+        let root = mounts.first().unwrap();
+        let host = root.data().unwrap().downcast_ref::<HostFs>().unwrap();
+
+        host.app().clone()
     }
 
     pub fn root(&self) -> &Arc<Vnode> {
@@ -194,9 +178,14 @@ impl Fs {
             "/dev/dmem0" => FsItem::Device(VDev::Dmem0),
             "/dev/dmem1" => FsItem::Device(VDev::Dmem1),
             "/dev/dmem2" => FsItem::Device(VDev::Dmem2),
-            _ => self
-                .resolve(VPath::new(nd.dirp).unwrap())
-                .ok_or(FsError::NotFound)?,
+            _ => {
+                let mounts = self.mounts.read().unwrap();
+                let root = mounts.first().unwrap();
+                let host = root.data().unwrap().downcast_ref::<HostFs>().unwrap();
+
+                host.resolve(VPath::new(nd.dirp).unwrap())
+                    .ok_or(FsError::NotFound)?
+            }
         };
 
         Ok(item)
@@ -426,64 +415,6 @@ impl Fs {
 
         Ok(SysOut::ZERO)
     }
-
-    fn resolve(&self, path: &VPath) -> Option<FsItem> {
-        let mut current = VPathBuf::new();
-        let root = match self.mounts.get(&current).unwrap() {
-            MountSource::Host(v) => v,
-            MountSource::Bind(_) => unreachable!(),
-        };
-
-        // Walk on virtual path components.
-        let mut directory = HostDir::new(root.clone(), VPathBuf::new());
-
-        for component in path.components() {
-            current.push(component).unwrap();
-
-            // Check if a virtual path is a mount point.
-            if let Some(mount) = self.mounts.get(&current) {
-                let path = match mount {
-                    MountSource::Host(v) => v.to_owned(),
-                    MountSource::Bind(v) => match self.resolve(v)? {
-                        FsItem::Directory(d) => d.into_path(),
-                        _ => unreachable!(),
-                    },
-                };
-
-                directory = HostDir::new(path, VPathBuf::new());
-            } else {
-                // Build a real path.
-                let mut path = directory.into_path();
-
-                path.push(component);
-
-                // Get file metadata.
-                let meta = match std::fs::metadata(&path) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        if e.kind() == std::io::ErrorKind::NotFound {
-                            return None;
-                        } else {
-                            panic!("Cannot get the metadata of {}: {e}.", path.display());
-                        }
-                    }
-                };
-
-                // Check file type.
-                if meta.is_file() {
-                    return Some(FsItem::File(HostFile::new(path, current)));
-                }
-
-                directory = HostDir::new(path, VPathBuf::new());
-            }
-        }
-
-        // If we reached here that mean the the last component is a directory.
-        Some(FsItem::Directory(HostDir::new(
-            directory.into_path(),
-            current,
-        )))
-    }
 }
 
 /// An implementation of `nameidata`.
@@ -558,24 +489,22 @@ impl Display for OpenFlags {
     }
 }
 
-/// Source of mount point.
-#[derive(Debug)]
-enum MountSource {
-    Host(PathBuf),
-    Bind(VPathBuf),
-}
-
 /// An implementation of `vfsconf` structure.
-struct FsConfig {
+#[derive(Debug)]
+pub struct FsConfig {
     version: u32,                    // vfc_version
     name: &'static str,              // vfc_name
     ops: &'static FsOps,             // vfc_vfsops
     ty: i32,                         // vfc_typenum
-    next: Option<&'static FsConfig>, // vfc_list_next
+    refcount: AtomicI32,             // vfc_refcount
+    next: Option<&'static FsConfig>, // vfc_list.next
 }
 
 /// An implementation of `vfsops` structure.
-struct FsOps {}
+#[derive(Debug)]
+struct FsOps {
+    mount: fn(&mut Mount, HashMap<String, Box<dyn Any>>) -> Result<(), Box<dyn Error>>,
+}
 
 /// Represents an error when the operation of virtual filesystem is failed.
 #[derive(Debug, Error)]
@@ -596,114 +525,141 @@ impl Errno for FsError {
     }
 }
 
-static CONFIGS: &'static FsConfig = &EXFAT;
-
-static EXFAT: FsConfig = FsConfig {
+static HOST: FsConfig = FsConfig {
     version: 0x19660120,
-    name: "exfatfs",
-    ops: &EXFAT_OPS,
+    name: "exfatfs", // TODO: Seems like the PS4 use exfat as a root FS.
+    ops: &self::host::HOST_OPS,
     ty: 0x2C,
+    refcount: AtomicI32::new(0),
     next: Some(&MLFS),
 };
-
-static EXFAT_OPS: FsOps = FsOps {};
 
 static MLFS: FsConfig = FsConfig {
     version: 0x19660120,
     name: "mlfs",
     ops: &MLFS_OPS,
     ty: 0xF1,
+    refcount: AtomicI32::new(0),
     next: Some(&UDF2),
 };
 
-static MLFS_OPS: FsOps = FsOps {};
+static MLFS_OPS: FsOps = FsOps {
+    mount: |_, _| todo!("mount for mlfs"),
+};
 
 static UDF2: FsConfig = FsConfig {
     version: 0x19660120,
     name: "udf2",
     ops: &UDF2_OPS,
     ty: 0,
+    refcount: AtomicI32::new(0),
     next: Some(&DEVFS),
 };
 
-static UDF2_OPS: FsOps = FsOps {};
+static UDF2_OPS: FsOps = FsOps {
+    mount: |_, _| todo!("mount for udf2"),
+};
 
 static DEVFS: FsConfig = FsConfig {
     version: 0x19660120,
     name: "devfs",
     ops: &DEVFS_OPS,
     ty: 0x71,
+    refcount: AtomicI32::new(0),
     next: Some(&TMPFS),
 };
 
-static DEVFS_OPS: FsOps = FsOps {};
+static DEVFS_OPS: FsOps = FsOps {
+    mount: |_, _| todo!("mount for devfs"),
+};
 
 static TMPFS: FsConfig = FsConfig {
     version: 0x19660120,
     name: "tmpfs",
     ops: &TMPFS_OPS,
     ty: 0x87,
+    refcount: AtomicI32::new(0),
     next: Some(&UNIONFS),
 };
 
-static TMPFS_OPS: FsOps = FsOps {};
+static TMPFS_OPS: FsOps = FsOps {
+    mount: |_, _| todo!("mount for tmpfs"),
+};
 
 static UNIONFS: FsConfig = FsConfig {
     version: 0x19660120,
     name: "unionfs",
     ops: &UNIONFS_OPS,
     ty: 0x41,
+    refcount: AtomicI32::new(0),
     next: Some(&PROCFS),
 };
 
-static UNIONFS_OPS: FsOps = FsOps {};
+static UNIONFS_OPS: FsOps = FsOps {
+    mount: |_, _| todo!("mount for unionfs"),
+};
 
 static PROCFS: FsConfig = FsConfig {
     version: 0x19660120,
     name: "procfs",
     ops: &PROCFS_OPS,
     ty: 0x2,
+    refcount: AtomicI32::new(0),
     next: Some(&CD9660),
 };
 
-static PROCFS_OPS: FsOps = FsOps {};
+static PROCFS_OPS: FsOps = FsOps {
+    mount: |_, _| todo!("mount for procfs"),
+};
 
 static CD9660: FsConfig = FsConfig {
     version: 0x19660120,
     name: "cd9660",
     ops: &CD9660_OPS,
     ty: 0xBD,
+    refcount: AtomicI32::new(0),
     next: Some(&UFS),
 };
 
-static CD9660_OPS: FsOps = FsOps {};
+static CD9660_OPS: FsOps = FsOps {
+    mount: |_, _| todo!("mount for cd9660"),
+};
 
 static UFS: FsConfig = FsConfig {
     version: 0x19660120,
     name: "ufs",
     ops: &UFS_OPS,
     ty: 0x35,
+    refcount: AtomicI32::new(0),
     next: Some(&NULLFS),
 };
 
-static UFS_OPS: FsOps = FsOps {};
+static UFS_OPS: FsOps = FsOps {
+    mount: |_, _| todo!("mount for ufs"),
+};
 
 static NULLFS: FsConfig = FsConfig {
     version: 0x19660120,
     name: "nullfs",
     ops: &NULLFS_OPS,
     ty: 0x29,
+    refcount: AtomicI32::new(0),
     next: Some(&PFS),
 };
 
-static NULLFS_OPS: FsOps = FsOps {};
+static NULLFS_OPS: FsOps = FsOps {
+    mount: |_, _| todo!("mount for nullfs"),
+};
 
 static PFS: FsConfig = FsConfig {
     version: 0x19660120,
     name: "pfs",
     ops: &PFS_OPS,
     ty: 0xA4,
+    refcount: AtomicI32::new(0),
     next: None,
 };
 
-static PFS_OPS: FsOps = FsOps {};
+static PFS_OPS: FsOps = FsOps {
+    mount: |_, _| todo!("mount for pfs"),
+};
