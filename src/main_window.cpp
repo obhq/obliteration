@@ -277,29 +277,29 @@ void MainWindow::installPkg()
         patchOrDlc = true;
     }
 
-    // If the game exists and the file isn't a Patch/DLC, don't allow.
+    // If PKG isn't a game, DLC, or Patch, don't allow.
+    if (!patchOrDlc && !category.startsWith("gd")) {
+            QString msg("PKG file is not a Patch, DLC, or a Game. Possibly a corrupted PKG?");
+
+            QMessageBox::critical(&progress, "Error (Not Game, Patch, or DLC)", msg);
+            return;
+    }
+
     if (!QDir(gamesDirectory).mkdir(titleId)) {
-        if (patchOrDlc || category.startsWith("gp")) {
-            QString msg("Install directory for %1 could not be created at %2.");
+        QString msg("Install directory for %1 could not be created at %2.");
 
-            QMessageBox::critical(&progress, "Cannot create install directory", msg.arg(titleId).arg(gamesDirectory));
-            return;
-        } else {
-            QString msg("PKG file cannot be installed as it is not a patch or DLC for preexisting application %1 at %2.");
-
-            QMessageBox::critical(&progress, "Invalid PKG file. (Not Patch/DLC for Existing Game)", msg.arg(titleId).arg(gamesDirectory));
-            return;
-        }
+        QMessageBox::critical(&progress, "Error (Cannot create install directory)", msg.arg(titleId).arg(gamesDirectory));
+        return;
     }
     auto directory = joinPath(gamesDirectory, titleId);
 
     // Setup folders for DLC and Patch PKGs
     if (patchOrDlc == true) {
         if (category.contains("ac")) {
-            // TODO: Add DLC support, short_content_id is most likely.
+            // TODO: Add DLC support, short_content_id is most likely to be used.
             QString msg("DLC PKG support is not yet implemented.");
 
-            QMessageBox::critical(&progress, "Invalid PKG file. (DLC Not Yet Implemented)", msg.arg(titleId).arg(gamesDirectory));
+            QMessageBox::critical(&progress, "Error (DLC Not Yet Implemented)", msg.arg(titleId).arg(gamesDirectory));
             return;
         } else {
             // If our PKG is for Patching, add -PATCH- to the end of the foldername along with the patch APPVER. (-PATCH-01.01)
