@@ -97,6 +97,8 @@ jobs:
       if: ${{ steps.restore-vulkan.outputs.cache-hit != 'true' }}
     - name: Set Vulkan SDK path
       run:  echo "VULKAN_SDK=C:\VulkanSDK" >> $env:GITHUB_ENV
+    - name: Update Rust-Lang
+      run: rustup update stable
     - name: Run CMake
       run: cmake -DOB_BUILD_LLVM:BOOL=OFF --preset windows-release .
     - name: Build
