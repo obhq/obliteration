@@ -8,7 +8,7 @@ mod auth;
 mod privilege;
 
 /// An implementation of `ucred` structure.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Ucred {
     auth: AuthInfo,
 }
