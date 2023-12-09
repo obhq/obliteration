@@ -13,13 +13,14 @@ use tls::{Local, Tls};
 /// See [`super::VProc`] for more information.
 #[derive(Debug)]
 pub struct VThread {
-    id: NonZeroI32,            // td_tid
-    cred: Ucred,               // td_ucred
-    sigmask: Gutex<SignalSet>, // td_sigmask
-    pri_class: u16,            // td_pri_class
-    base_user_pri: u16,        // td_base_user_pri
-    pcb: Gutex<Pcb>,           // td_pcb
-    cpuset: CpuSet,            // td_cpuset
+    id: NonZeroI32,              // td_tid
+    cred: Ucred,                 // td_ucred
+    sigmask: Gutex<SignalSet>,   // td_sigmask
+    pri_class: u16,              // td_pri_class
+    base_user_pri: u16,          // td_base_user_pri
+    pcb: Gutex<Pcb>,             // td_pcb
+    cpuset: CpuSet,              // td_cpuset
+    name: Gutex<Option<String>>, // td_name
 }
 
 impl VThread {
@@ -36,6 +37,7 @@ impl VThread {
                 flags: PcbFlags::empty(),
             }),
             cpuset: CpuSet::new(CpuMask::default()), // TODO: Same here.
+            name: gg.spawn(None),                    // TODO: Same here
         }
     }
 
@@ -74,6 +76,10 @@ impl VThread {
 
     pub fn cpuset(&self) -> &CpuSet {
         &self.cpuset
+    }
+
+    pub fn set_name(&self, name: Option<&str>) {
+        *self.name.write() = name.map(|n| n.to_owned());
     }
 
     /// An implementation of `priv_check`.
