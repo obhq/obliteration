@@ -75,7 +75,7 @@ impl VProc {
             dmem_container: gg.spawn(0), // TODO: Check the initial value on the PS4.
             budget: gg.spawn(None),
             limits,
-            comm: gg.spawn(None), //Find out how this is actually set
+            comm: gg.spawn(None), //TODO: Find out how this is actually set
             app_info: AppInfo::new(),
             ptc: 0,
             uptc: AtomicPtr::new(null_mut()),
