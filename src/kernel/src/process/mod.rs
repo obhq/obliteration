@@ -49,7 +49,7 @@ pub struct VProc {
     sigacts: Gutex<SignalActs>,                      // p_sigacts
     files: FileDesc,                                 // p_fd
     limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
-    comm: Gutex<String>,                             // p_comm
+    comm: Gutex<Option<String>>,                     // p_comm
     objects: Gutex<Idt<Arc<dyn Any + Send + Sync>>>,
     dmem_container: Gutex<i32>,
     budget: Gutex<Option<(usize, ProcType)>>,
@@ -75,7 +75,7 @@ impl VProc {
             dmem_container: gg.spawn(0), // TODO: Check the initial value on the PS4.
             budget: gg.spawn(None),
             limits,
-            comm: gg.spawn(String::new()), //Find out how this is actually set
+            comm: gg.spawn(None), //Find out how this is actually set
             app_info: AppInfo::new(),
             ptc: 0,
             uptc: AtomicPtr::new(null_mut()),
@@ -114,8 +114,8 @@ impl VProc {
         self.limits.get(ty)
     }
 
-    pub fn set_name(&self, name: &str) {
-        *self.comm.write() = name.to_owned();
+    pub fn set_name(&self, name: Option<&str>) {
+        *self.comm.write() = name.map(|n| n.to_owned());
     }
 
     pub fn objects_mut(&self) -> GutexWriteGuard<'_, Idt<Arc<dyn Any + Send + Sync>>> {
@@ -417,7 +417,7 @@ impl VProc {
     }
 
     fn sys_thr_set_name(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let name: &str = unsafe { i.args[0].to_str(32) }?.unwrap();
+        let name: Option<&str> = unsafe { i.args[0].to_str(32) }?;
         let id: i32 = i.args[1].try_into().unwrap();
 
         if id == -1 {
