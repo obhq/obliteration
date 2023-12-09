@@ -103,8 +103,14 @@ impl IoctlCom {
         Ok(Self(com))
     }
 
-    pub const fn new(com: u32) -> Self {
-        Self(com)
+    pub const fn new(inout: u32, group: u8, num: u8, len: usize) -> Self {
+        let len: u32 = if len > (u32::MAX) as usize {
+            panic!("IOCPARM_LEN is too large");
+        } else {
+            len as u32
+        };
+
+        Self(inout | ((len & Self::IOCPARM_MASK) << 16) | ((group as u32) << 8) | (num as u32))
     }
 
     pub fn size(&self) -> usize {
@@ -142,28 +148,21 @@ macro_rules! IOCPARM_LEN {
 #[macro_export]
 macro_rules! _IOC {
     ($inout:path, $group:literal, $num:literal, $len:expr) => {
-        IoctlCom::new(
-            $inout | ((($len) & IoctlCom::IOCPARM_MASK) << 16) | (($group as u32) << 8) | ($num),
-        )
+        IoctlCom::new($inout, $group, $num, $len)
     };
 }
 
 #[macro_export]
 macro_rules! _IO {
     ($group:literal, $num:literal) => {
-        _IOC!(IoctlCom::IOC_VOID, $group, $num, 0u32)
+        _IOC!(IoctlCom::IOC_VOID, $group, $num, 0)
     };
 }
 
 #[macro_export]
 macro_rules! _IOWINT {
     ($group:literal, $num:literal) => {
-        _IOC!(
-            IoctlCom::IOC_IN,
-            $group,
-            $num,
-            std::mem::size_of::<i32>() as u32
-        )
+        _IOC!(IoctlCom::IOC_IN, $group, $num, std::mem::size_of::<i32>())
     };
 }
 
@@ -174,7 +173,7 @@ macro_rules! _IOR {
             IoctlCom::IOC_OUT,
             $group,
             $num,
-            std::mem::size_of::<$type>() as u32
+            std::mem::size_of::<$type>()
         )
     };
 }
@@ -182,12 +181,7 @@ macro_rules! _IOR {
 #[macro_export]
 macro_rules! _IOW {
     ($group:literal, $num:literal, $type:ty) => {
-        _IOC!(
-            IoctlCom::IOC_IN,
-            $group,
-            $num,
-            std::mem::size_of::<$type>() as u32
-        )
+        _IOC!(IoctlCom::IOC_IN, $group, $num, std::mem::size_of::<$type>())
     };
 }
 
@@ -198,7 +192,7 @@ macro_rules! _IOWR {
             IoctlCom::IOC_INOUT,
             $group,
             $num,
-            std::mem::size_of::<$type>() as u32
+            std::mem::size_of::<$type>()
         )
     };
 }
