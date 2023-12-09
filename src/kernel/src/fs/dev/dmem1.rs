@@ -13,7 +13,7 @@ impl Dmem1 {
     pub const PATH: &VPath = vpath!("/dev/dmem1");
 
     pub const COM10: u64 = 0x4008800a;
-    pub const TOTAL_SIZE: usize = 6 * 1024 * 1024 * 1024; // 6 GiB
+    pub const TOTAL_SIZE: usize = 0x180_000_000; // 6 GB
 
     pub fn new() -> Self {
         Self {}
