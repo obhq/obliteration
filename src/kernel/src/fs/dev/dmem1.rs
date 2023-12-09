@@ -2,6 +2,7 @@ use crate::errno::Errno;
 use crate::fs::{VFile, VFileOps, VPath};
 use crate::process::VThread;
 use crate::ucred::Ucred;
+use byteorder::{LittleEndian, WriteBytesExt};
 use macros::vpath;
 use std::fmt::{Display, Formatter};
 
@@ -10,6 +11,9 @@ pub struct Dmem1 {}
 
 impl Dmem1 {
     pub const PATH: &VPath = vpath!("/dev/dmem1");
+
+    pub const COM10: u64 = 0x4008800a;
+    pub const TOTAL_SIZE: usize = 6 * 1024 * 1024 * 1024; // 6 GiB
 
     pub fn new() -> Self {
         Self {}
@@ -24,12 +28,20 @@ impl VFileOps for Dmem1 {
     fn ioctl(
         &self,
         _: &crate::fs::VFile,
-        _: u64,
-        _: &mut [u8],
+        com: u64,
+        mut data: &mut [u8],
         _: &Ucred,
         _: &VThread,
     ) -> Result<(), Box<dyn Errno>> {
-        todo!()
+        match com {
+            Self::COM10 => {
+                data.write_u64::<LittleEndian>(Self::TOTAL_SIZE as u64)
+                    .unwrap();
+            }
+            _ => todo!(),
+        }
+
+        Ok(())
     }
 }
 
