@@ -311,10 +311,10 @@ impl Fs {
         Ok(SysOut::ZERO)
     }
 
-    const UNK_COM1: IoctlCom = _IO!(0x66, 1);
-    const UNK_COM2: IoctlCom = _IO!(0x66, 2);
-    const UNK_COM3: IoctlCom = _IOWINT!(0x66, 0x7e);
-    const UNK_COM4: IoctlCom = _IOWINT!(0x66, 0x7d);
+    const UNK_COM1: IoctlCom = _IO!(b'f', 1);
+    const UNK_COM2: IoctlCom = _IO!(b'f', 2);
+    const UNK_COM3: IoctlCom = _IOWINT!(b'f', 0x7e);
+    const UNK_COM4: IoctlCom = _IOWINT!(b'f', 0x7d);
 
     fn sys_ioctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
