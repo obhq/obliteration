@@ -26,22 +26,34 @@ impl AuthInfo {
         unk: [0; 0x40],
     };
 
-    pub const GAME: Self = Self {
-        paid: AuthPaid::GAME,
-        caps: AuthCaps([
-            0x2000038000000000,
-            0x000000000000FF00,
-            0x0000000000000000,
-            0x0000000000000000,
-        ]),
-        attrs: [
-            0x4000400040000000,
-            0x4000000000000000,
-            0x0080000000000002,
-            0xF0000000FFFF4000,
-        ],
-        unk: [0; 0x40],
-    };
+    pub fn from_title_id<T: AsRef<str>>(title_id: T) -> Option<Self> {
+        // Skip CUSA.
+        let id = title_id.as_ref().get(4..)?;
+
+        // Skip leading zeroes.
+        let i = id.find(|c| c != '0')?;
+        let id: u16 = match id[i..].parse() {
+            Ok(v) => v,
+            Err(_) => return None,
+        };
+
+        Some(Self {
+            paid: AuthPaid((0x34000003ACC2 << 16) | Into::<u64>::into(id)),
+            caps: AuthCaps([
+                0x2000038000000000,
+                0x000000000000FF00,
+                0x0000000000000000,
+                0x0000000000000000,
+            ]),
+            attrs: [
+                0x4000400040000000,
+                0x4000000000000000,
+                0x0080000000000002,
+                0xF0000000FFFF4000,
+            ],
+            unk: [0; 0x40],
+        })
+    }
 }
 
 /// A wrapper type for `paid` field of [`AuthInfo`].
@@ -54,7 +66,6 @@ pub struct AuthPaid(u64);
 
 impl AuthPaid {
     pub const SYS_CORE: Self = Self(0x3800000000000007);
-    pub const GAME: Self = Self(0x3800000000000011);
 
     pub fn get(self) -> u64 {
         self.0

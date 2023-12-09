@@ -46,7 +46,7 @@ mod sysctl;
 mod ucred;
 
 fn main() -> ExitCode {
-    // Begin logger
+    // Begin logger.
     log::init();
 
     // Load arguments.
@@ -118,6 +118,15 @@ fn main() -> ExitCode {
         }
     };
 
+    // Get auth info for the process.
+    let auth = match AuthInfo::from_title_id(param.title_id()) {
+        Some(v) => v,
+        None => {
+            error!("{} has invalid title identifier.", path.display());
+            return ExitCode::FAILURE;
+        }
+    };
+
     // Show basic infomation.
     let mut log = info!();
     let hwinfo = System::new_with_specifics(
@@ -178,7 +187,7 @@ fn main() -> ExitCode {
     let arnd = Arnd::new();
     let llvm = Llvm::new();
     let mut syscalls = Syscalls::new();
-    let vp = match VProc::new(&mut syscalls) {
+    let vp = match VProc::new(auth, &mut syscalls) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Virtual process initialization failed");
