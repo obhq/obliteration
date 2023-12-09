@@ -24,7 +24,7 @@ impl VFileOps for Dmem1 {
     fn ioctl(
         &self,
         _: &crate::fs::VFile,
-        _: IoctlCom,
+        _com: IoctlCom,
         _: &mut [u8],
         _: &Ucred,
         _: &VThread,

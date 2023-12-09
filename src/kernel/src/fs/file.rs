@@ -1,6 +1,7 @@
 use super::Fs;
-use crate::errno::Errno;
+use crate::errno::{Errno, ENOTTY};
 use crate::process::VThread;
+use crate::syscalls::SysErr;
 use crate::ucred::Ucred;
 use bitflags::bitflags;
 use std::fmt::{Debug, Display, Formatter};
@@ -92,16 +93,22 @@ impl IoctlCom {
     pub const IOC_IN: u32 = 0x80000000;
     pub const IOC_INOUT: u32 = Self::IOC_IN | Self::IOC_OUT;
 
-    pub const fn new_truncated(com: u64) -> Self {
-        Self(com as u32)
+    pub const fn from_raw(com: u64) -> Result<Self, SysErr> {
+        let com = com as u32;
+
+        if Self::is_invalid(com) {
+            return Err(SysErr::Raw(ENOTTY));
+        }
+
+        Ok(Self(com))
     }
 
-    pub const fn new_exact(com: u32) -> Self {
+    pub const fn new(com: u32) -> Self {
         Self(com)
     }
 
     pub fn size(&self) -> usize {
-        ((self.0 >> 16) & Self::IOCPARM_MASK) as usize
+        crate::IOCPARM_LEN!(self.0)
     }
 
     pub fn is_void(&self) -> bool {
@@ -116,17 +123,26 @@ impl IoctlCom {
         self.0 & Self::IOC_IN != 0
     }
 
-    pub fn is_invalid(&self) -> bool {
-        (self.0 & (Self::IOC_VOID | Self::IOC_IN | Self::IOC_OUT) == 0)
-            || ((self.is_in() || self.is_out()) && self.size() == 0)
-            || (self.is_void() && self.size() != 0 && self.size() != 4)
+    pub const fn is_invalid(com: u32) -> bool {
+        use crate::IOCPARM_LEN;
+
+        (com & (Self::IOC_VOID | Self::IOC_IN | Self::IOC_OUT) == 0)
+            || (com & (Self::IOC_IN | Self::IOC_OUT)) != 0 && IOCPARM_LEN!(com) == 0
+            || (com & Self::IOC_VOID != 0 && IOCPARM_LEN!(com) != 0 && IOCPARM_LEN!(com) != 4)
     }
+}
+
+#[macro_export]
+macro_rules! IOCPARM_LEN {
+    ($com:expr) => {
+        (($com >> 16) & IoctlCom::IOCPARM_MASK) as usize
+    };
 }
 
 #[macro_export]
 macro_rules! _IOC {
     ($inout:path, $group:literal, $num:literal, $len:expr) => {
-        IoctlCom::new_exact(
+        IoctlCom::new(
             $inout | ((($len) & IoctlCom::IOCPARM_MASK) << 16) | (($group as u32) << 8) | ($num),
         )
     };

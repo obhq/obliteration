@@ -127,8 +127,10 @@ impl TryFrom<SysArg> for u8 {
     }
 }
 
-impl From<SysArg> for IoctlCom {
-    fn from(v: SysArg) -> Self {
-        IoctlCom::new_truncated(v.try_into().unwrap())
+impl TryFrom<SysArg> for IoctlCom {
+    type Error = SysErr;
+
+    fn try_from(v: SysArg) -> Result<IoctlCom, Self::Error> {
+        IoctlCom::from_raw(v.try_into().unwrap())
     }
 }

@@ -318,14 +318,10 @@ impl Fs {
 
     fn sys_ioctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
-        let com: IoctlCom = i.args[1].into();
+        let com: IoctlCom = i.args[1].try_into()?;
         let data_arg: *mut u8 = i.args[2].into();
 
         let size: usize = com.size();
-
-        if com.is_invalid() {
-            return Err(SysErr::Raw(ENOTTY));
-        }
 
         let mut vec = vec![0u8; size];
 
