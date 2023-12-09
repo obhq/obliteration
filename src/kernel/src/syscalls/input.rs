@@ -131,6 +131,6 @@ impl TryFrom<SysArg> for IoctlCom {
     type Error = SysErr;
 
     fn try_from(v: SysArg) -> Result<IoctlCom, Self::Error> {
-        IoctlCom::from_raw(v.try_into().unwrap())
+        IoctlCom::try_from_raw(v.try_into().unwrap())
     }
 }

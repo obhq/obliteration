@@ -93,7 +93,7 @@ impl IoctlCom {
     pub const IOC_IN: u32 = 0x80000000;
     pub const IOC_INOUT: u32 = Self::IOC_IN | Self::IOC_OUT;
 
-    pub const fn from_raw(com: u64) -> Result<Self, SysErr> {
+    pub const fn try_from_raw(com: u64) -> Result<Self, SysErr> {
         let com = com as u32;
 
         if Self::is_invalid(com) {
