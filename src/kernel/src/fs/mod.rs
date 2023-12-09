@@ -491,7 +491,7 @@ impl Display for OpenFlags {
 
 /// An implementation of `vfsconf` structure.
 #[derive(Debug)]
-struct FsConfig {
+pub struct FsConfig {
     version: u32,                    // vfc_version
     name: &'static str,              // vfc_name
     ops: &'static FsOps,             // vfc_vfsops
