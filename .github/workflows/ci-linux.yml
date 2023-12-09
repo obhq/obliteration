@@ -51,6 +51,8 @@ jobs:
         print $fh "flatpak-branch=$name\n";
       shell: perl {0}
       id: flatpak-branch
+    - name: Update Rust-Lang
+      run: rustup update stable
     - name: Build Flatpak
       run: flatpak-builder --default-branch ${{ steps.flatpak-branch.outputs.flatpak-branch }} build flatpak.yml
     - name: Export Flatpak
