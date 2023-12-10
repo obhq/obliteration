@@ -13,8 +13,13 @@ extern "C" {
     param *param_open(const char *file, error **error);
     void param_close(param *param);
 
+    void param_app_ver_get(const param *param, QString &buf);
+    void param_category_get(const param *param, QString &buf);
+    void param_content_id_get(const param *param, QString &buf);
+    void param_short_content_id_get(const param *param, QString &buf);
     void param_title_get(const param *param, QString &buf);
     void param_title_id_get(const param *param, QString &buf);
+    void param_version_get(const param *param, QString &buf);
 
     error *system_download(
         const char *from,
@@ -90,6 +95,34 @@ public:
     operator param *() const { return m_obj; }
 
 public:
+    QString appver() const
+    {
+        QString s;
+        param_app_ver_get(m_obj, s);
+        return s;
+    }
+
+    QString category() const
+    {
+        QString s;
+        param_category_get(m_obj, s);
+        return s;
+    }
+
+    QString contentId() const
+    {
+        QString s;
+        param_content_id_get(m_obj, s);
+        return s;
+    }
+
+    QString shortContentId() const
+    {
+        QString s;
+        param_short_content_id_get(m_obj, s);
+        return s;
+    }
+
     QString title() const
     {
         QString s;
@@ -101,6 +134,13 @@ public:
     {
         QString s;
         param_title_id_get(m_obj, s);
+        return s;
+    }
+
+    QString version() const
+    {
+        QString s;
+        param_version_get(m_obj, s);
         return s;
     }
 

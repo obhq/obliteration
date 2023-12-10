@@ -264,19 +264,52 @@ void MainWindow::installPkg()
     // Create game directory.
     auto gamesDirectory = readGamesDirectorySetting();
 
-    if (!QDir(gamesDirectory).mkdir(param.titleId())) {
-        QString msg(
-            "Cannot create directory %1 inside %2. "
-            "If you have a failed installation from a previous attempt, you will need to remove this directory before trying again.");
+    // Get Param information
+    auto appver = param.appver();
+    auto category = param.category();
+    auto shortContentId = param.shortContentId();
+    auto title = param.title();
+    auto titleId = param.titleId();
 
-        QMessageBox::critical(&progress, "Error", msg.arg(param.titleId()).arg(gamesDirectory));
+    // Check if file is Patch/DLC.
+    bool patchOrDlc = false;
+    if (category.startsWith("gp") || category.contains("ac")) {
+        patchOrDlc = true;
+    }
+
+    // If PKG isn't a game, DLC, or Patch, don't allow.
+    if (!patchOrDlc && !category.startsWith("gd")) {
+            QString msg("PKG file is not a Patch, DLC, or a Game. Possibly a corrupted PKG?");
+
+            QMessageBox::critical(&progress, "Error", msg);
+            return;
+    }
+
+    auto directory = joinPath(gamesDirectory, titleId);
+
+    // Setup folders for DLC and Patch PKGs
+    if (patchOrDlc == true) {
+        if (category.contains("ac")) {
+            // TODO: Add DLC support, short_content_id is most likely to be used.
+            QString msg("DLC PKG support is not yet implemented.");
+
+            QMessageBox::critical(&progress, "Error", msg);
+            return;
+        } else {
+            // If our PKG is for Patching, add -PATCH- to the end of the foldername along with the patch APPVER. (-PATCH-01.01)
+            directory += "-PATCH-" + appver.toStdString();
+        }
+    }
+
+    if (!QDir().mkdir(QString::fromStdString(directory))) {
+        QString msg("Install directory could not be created at\n%1");
+
+        QMessageBox::critical(&progress, "Error", msg.arg(QString::fromStdString(directory)));
         return;
     }
 
-    auto directory = joinPath(gamesDirectory, param.titleId());
-
     // Extract items.
-    progress.setWindowTitle(param.title());
+    progress.setWindowTitle(title);
 
     error = pkg_extract(pkg, directory.c_str(), [](const char *name, std::uint64_t total, std::uint64_t written, void *ud) {
         auto toProgress = [total](std::uint64_t v) -> int {
@@ -317,8 +350,13 @@ void MainWindow::installPkg()
         return;
     }
 
-    // Add to game list.
-    auto success = loadGame(param.titleId());
+    // Add to game list if new game.
+    bool success = false;
+    if (!patchOrDlc) {
+        success = loadGame(titleId);
+    } else {
+        success = true;
+    }
 
     if (success) {
         QMessageBox::information(this, "Success", "Package installed successfully.");
@@ -390,7 +428,7 @@ void MainWindow::requestGamesContextMenu(const QPoint &pos)
 
 void MainWindow::startGame(const QModelIndex &index)
 {
-    if (!requireEmulatorStopped()) {
+    if (requireEmulatorStopped()) {
         return;
     }
 
@@ -525,22 +563,30 @@ bool MainWindow::loadGame(const QString &gameId)
 {
     auto gamesDirectory = readGamesDirectorySetting();
     auto gamePath = joinPath(gamesDirectory, gameId);
-    auto gameList = reinterpret_cast<GameListModel *>(m_games->model());
 
-    // Read game title from param.sfo.
-    auto paramDir = joinPath(gamePath.c_str(), "sce_sys");
-    auto paramPath = joinPath(paramDir.c_str(), "param.sfo");
-    Error error;
-    Param param(param_open(paramPath.c_str(), &error));
+    // Ignore entry if it is DLC or Patch.
+    auto lastSlashPos = gamePath.find_last_of("/\\");
+    auto lastFolder = (lastSlashPos != std::string::npos) ? gamePath.substr(lastSlashPos + 1) : gamePath;
+    bool isPatch = lastFolder.find("-PATCH-") != std::string::npos;
+    bool isAddCont = lastFolder.size() >= 8 && lastFolder.substr(lastFolder.size() - 8) == "-ADDCONT";
 
-    if (!param) {
-        QMessageBox::critical(this, "Error", QString("Cannot open %1: %2").arg(paramPath.c_str()).arg(error.message()));
-        return false;
+    if (!isPatch && !isAddCont) {
+
+        // Read game title from param.sfo.
+        auto paramDir = joinPath(gamePath.c_str(), "sce_sys");
+        auto paramPath = joinPath(paramDir.c_str(), "param.sfo");
+        Error error;
+        Param param(param_open(paramPath.c_str(), &error));
+
+        if (!param) {
+            QMessageBox::critical(this, "Error", QString("Cannot open %1: %2").arg(paramPath.c_str()).arg(error.message()));
+            return false;
+        }
+
+        // Add to list if not a DLC/Patch refresh.
+        auto gameList = reinterpret_cast<GameListModel *>(m_games->model());
+        gameList->add(new Game(param.title(), gamePath.c_str()));
     }
-
-    // Add to list.
-    gameList->add(new Game(param.title(), gamePath.c_str()));
-
     return true;
 }
 
@@ -584,9 +630,20 @@ void MainWindow::restoreGeometry()
 bool MainWindow::requireEmulatorStopped()
 {
     if (m_kernel) {
-        QMessageBox::critical(this, "Error", "This function is not available while a game is running.");
-        return false;
+        QMessageBox killPrompt(this);
+
+        killPrompt.setText("Action requires kernel to be stopped to continue.");
+        killPrompt.setInformativeText("Do you want to kill the kernel?");
+        killPrompt.setStandardButtons(QMessageBox::Cancel | QMessageBox::Yes);
+        killPrompt.setDefaultButton(QMessageBox::Cancel);
+        killPrompt.setIcon(QMessageBox::Warning);
+        if (killPrompt.exec() == QMessageBox::Yes) {
+            killKernel();
+            return false; // Kernel was killed
+        }
+
+        return true; // Kernel left running
     }
 
-    return true;
+    return false; // Kernel isn't running
 }

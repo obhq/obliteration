@@ -34,11 +34,42 @@ pub unsafe extern "C" fn param_close(param: *mut Param) {
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn param_app_ver_get(param: &Param, buf: &mut QString) {
+    match &param.app_ver() {
+        Some(app_ver) => buf.set(app_ver),
+        None => buf.set(""),
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn param_category_get(param: &Param, buf: &mut QString) {
+    buf.set(param.category());
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn param_content_id_get(param: &Param, buf: &mut QString) {
+    buf.set(param.content_id());
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn param_short_content_id_get(param: &Param, buf: &mut QString) {
+    buf.set(param.shortcontent_id());
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn param_title_get(param: &Param, buf: &mut QString) {
-    buf.set(param.title());
+    match &param.title() {
+        Some(title) => buf.set(title),
+        None => buf.set(""),
+    }
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn param_title_id_get(param: &Param, buf: &mut QString) {
-    buf.set(param.title_id());
+    buf.set(param.title_id())
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn param_version_get(param: &Param, buf: &mut QString) {
+    buf.set(param.version());
 }
