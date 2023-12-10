@@ -67,7 +67,7 @@ impl VProc {
         let vp = Arc::new(Self {
             id: Self::new_id(),
             threads: gg.spawn(Vec::new()),
-            cred: Ucred::new(auth),
+            cred: Ucred::new(0, auth), // TODO: Check how the PS4 set this field.
             group: gg.spawn(None),
             sigacts: gg.spawn(SignalActs::new()),
             files: FileDesc::new(&gg),
