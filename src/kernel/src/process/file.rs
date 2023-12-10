@@ -1,14 +1,14 @@
 use crate::errno::EBADF;
 use crate::fs::{VFile, Vnode};
 use crate::syscalls::SysErr;
-use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
+use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::sync::Arc;
 
 /// An implementation of `filedesc` structure.
 #[derive(Debug)]
 pub struct FileDesc {
     files: Gutex<Vec<Option<Arc<VFile>>>>, // fd_ofiles
-    cwd: Arc<Vnode>,                       // fd_cdir
+    cwd: Gutex<Option<Arc<Vnode>>>,        // fd_cdir
     root: Gutex<Option<Arc<Vnode>>>,       // fd_rdir
     jail: Arc<Vnode>,                      // fd_jdir
 }
@@ -17,18 +17,22 @@ impl FileDesc {
     pub(super) fn new(gg: &Arc<GutexGroup>) -> Self {
         Self {
             files: gg.spawn(vec![None, None, None]),
-            cwd: Arc::new(Vnode::new()), // TODO: Check how the PS4 set this field.
-            root: gg.spawn(None),        // TODO: Same here.
-            jail: Arc::new(Vnode::new()), // TODO: Same here.
+            cwd: gg.spawn(None),
+            root: gg.spawn(None),
+            jail: Arc::new(Vnode::new(None)), // TODO: Check how the PS4 set this field.
         }
     }
 
-    pub fn cwd(&self) -> &Arc<Vnode> {
-        &self.cwd
+    pub fn cwd(&self) -> Arc<Vnode> {
+        self.cwd.read().clone().unwrap()
     }
 
-    pub fn root(&self) -> GutexReadGuard<'_, Option<Arc<Vnode>>> {
-        self.root.read()
+    pub fn set_cwd(&self, v: Arc<Vnode>) {
+        *self.cwd.write() = Some(v);
+    }
+
+    pub fn root(&self) -> Option<Arc<Vnode>> {
+        self.root.read().clone()
     }
 
     pub fn root_mut(&self) -> GutexWriteGuard<'_, Option<Arc<Vnode>>> {

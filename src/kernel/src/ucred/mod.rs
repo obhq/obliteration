@@ -10,12 +10,20 @@ mod privilege;
 /// An implementation of `ucred` structure.
 #[derive(Debug, Clone)]
 pub struct Ucred {
+    effective_uid: i32,
     auth: AuthInfo,
 }
 
 impl Ucred {
-    pub fn new(auth: AuthInfo) -> Self {
-        Self { auth }
+    pub fn new(effective_uid: i32, auth: AuthInfo) -> Self {
+        Self {
+            effective_uid,
+            auth,
+        }
+    }
+
+    pub fn effective_uid(&self) -> i32 {
+        self.effective_uid
     }
 
     pub fn auth(&self) -> &AuthInfo {
