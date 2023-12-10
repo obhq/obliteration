@@ -130,11 +130,19 @@ impl IoctlCom {
     }
 
     pub const fn is_invalid(com: u32) -> bool {
-        (com & (Self::IOC_VOID | Self::IOC_IN | Self::IOC_OUT) == 0)
-            || (com & (Self::IOC_IN | Self::IOC_OUT)) != 0 && Self::iocparm_len(com) == 0
-            || (com & Self::IOC_VOID != 0
-                && Self::iocparm_len(com) != 0
-                && Self::iocparm_len(com) != 4)
+        if com & (Self::IOC_VOID | Self::IOC_IN | Self::IOC_OUT) == 0 {
+            return false;
+        }
+
+        if com & (Self::IOC_IN | Self::IOC_OUT) != 0 && Self::iocparm_len(com) == 0 {
+            return false;
+        }
+
+        if com & Self::IOC_VOID != 0 && Self::iocparm_len(com) != 0 && Self::iocparm_len(com) != 4 {
+            return false;
+        }
+
+        true
     }
 
     pub const fn iocparm_len(com: u32) -> usize {
