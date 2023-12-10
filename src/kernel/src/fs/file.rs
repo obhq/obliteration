@@ -1,7 +1,6 @@
 use super::Fs;
-use crate::errno::{Errno, ENOTTY};
+use crate::errno::Errno;
 use crate::process::VThread;
-use crate::syscalls::SysErr;
 use crate::ucred::Ucred;
 use bitflags::bitflags;
 use std::fmt::{Debug, Display, Formatter};
