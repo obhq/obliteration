@@ -1,6 +1,7 @@
 use super::Fs;
-use crate::errno::Errno;
+use crate::errno::{Errno, ENOTTY};
 use crate::process::VThread;
+use crate::syscalls::{SysArg, SysErr};
 use crate::ucred::Ucred;
 use bitflags::bitflags;
 use std::fmt::{Debug, Display, Formatter};
@@ -166,6 +167,14 @@ impl IoctlCom {
 
     pub const fn iowr<T>(group: u8, num: u8) -> Self {
         Self::new(Self::IOC_INOUT, group, num, std::mem::size_of::<T>())
+    }
+}
+
+impl TryFrom<SysArg> for IoctlCom {
+    type Error = SysErr;
+
+    fn try_from(v: SysArg) -> Result<IoctlCom, Self::Error> {
+        IoctlCom::try_from_raw(v.into()).ok_or(SysErr::Raw(ENOTTY))
     }
 }
 
