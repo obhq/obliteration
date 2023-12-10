@@ -1,8 +1,7 @@
-use crate::errno::Errno;
+use crate::errno::{Errno, EPERM};
 use crate::fs::{IoctlCom, VFile, VFileOps, VPath};
 use crate::process::VThread;
 use crate::ucred::Ucred;
-use byteorder::{NativeEndian, WriteBytesExt};
 use macros::vpath;
 use std::fmt::{Display, Formatter};
 use std::num::NonZeroI32;
@@ -16,12 +15,11 @@ pub struct Dmem1 {
 impl Dmem1 {
     pub const PATH: &VPath = vpath!("/dev/dmem1");
 
-    pub const COM10: u64 = 0x4008800a;
-    pub const TOTAL_SIZE: usize = 0x180_000_000; // 6 GB
+    pub const COM10: IoctlCom = IoctlCom::ior::<usize>(88, 0xa);
 
     pub fn new() -> Self {
         Self {
-            total_size: Self::TOTAL_SIZE,
+            total_size: 0x180_000_000, // 6 GB
         }
     }
 }
@@ -34,9 +32,9 @@ impl VFileOps for Dmem1 {
     fn ioctl(
         &self,
         _: &crate::fs::VFile,
-        _com: IoctlCom,
-        _: &mut [u8],
-        _: &Ucred,
+        com: IoctlCom,
+        data: &mut [u8],
+        cred: &Ucred,
         _: &VThread,
     ) -> Result<(), Box<dyn Errno>> {
         if cred.is_unk1() || cred.is_unk2() {
@@ -45,10 +43,9 @@ impl VFileOps for Dmem1 {
 
         match com {
             Self::COM10 => {
-                data.write_u64::<NativeEndian>(self.total_size as u64)
-                    .unwrap();
+                data.copy_from_slice(&self.total_size.to_ne_bytes());
             }
-            _ => todo!(),
+            _ => todo!("dmem1 ioctl with com = ({com})"),
         }
 
         Ok(())

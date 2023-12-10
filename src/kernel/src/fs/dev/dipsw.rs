@@ -2,7 +2,6 @@ use crate::errno::{Errno, EINVAL};
 use crate::fs::{IoctlCom, VFile, VFileOps, VPath};
 use crate::process::VThread;
 use crate::ucred::Ucred;
-use byteorder::{LittleEndian, WriteBytesExt};
 use macros::vpath;
 use std::fmt::{Display, Formatter};
 use std::num::NonZeroI32;
@@ -46,7 +45,7 @@ impl VFileOps for Dipsw {
         &self,
         _: &VFile,
         com: IoctlCom,
-        mut data: &mut [u8],
+        data: &mut [u8],
         _: &Ucred,
         _: &VThread,
     ) -> Result<(), Box<dyn Errno>> {
@@ -59,7 +58,7 @@ impl VFileOps for Dipsw {
             COM6 => {
                 //todo write the correct value if unk_func1() = false and
                 // unk_func2() = true
-                data.write_i32::<LittleEndian>(false as i32).unwrap();
+                data.copy_from_slice(&(false as i32).to_le_bytes());
             }
             COM7 => todo!("dipsw ioctl 0x40048807"),
             COM8 => todo!("dipsw ioctl 0x40088808"),
