@@ -17,9 +17,9 @@ impl DmemManager {
     }
 
     fn sys_dmem_container(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let update: i32 = i.args[0].try_into().unwrap();
+        let uptate: i32 = i.args[0].try_into().unwrap();
 
-        if update != -1 {
+        if uptate != -1 {
             todo!("sys_dmem_container with update != -1");
         }
 

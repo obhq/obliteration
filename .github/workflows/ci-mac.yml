@@ -101,8 +101,6 @@ jobs:
           fi
         done
       if: ${{ steps.qt-cache.outputs.cache-hit != 'true' }}
-    - name: Update Rust-Lang
-      run: rustup update stable
     - name: Run CMake
       run: cmake -DOB_BUILD_LLVM:BOOL=OFF --preset mac-release .
     - name: Build

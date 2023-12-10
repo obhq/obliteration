@@ -1,5 +1,5 @@
 use crate::errno::Errno;
-use crate::fs::{IoctlCom, VFile, VFileOps, VPath};
+use crate::fs::{VFile, VFileOps, VPath};
 use crate::process::VThread;
 use crate::ucred::Ucred;
 use macros::vpath;
@@ -38,7 +38,7 @@ impl VFileOps for Console {
     fn ioctl(
         &self,
         _file: &VFile,
-        _com: IoctlCom,
+        _com: u64,
         _data: &mut [u8],
         _cred: &Ucred,
         _td: &VThread,
