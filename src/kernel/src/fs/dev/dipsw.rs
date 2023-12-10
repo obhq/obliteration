@@ -14,21 +14,21 @@ pub struct Dipsw {}
 impl Dipsw {
     pub const PATH: &VPath = vpath!("/dev/dipsw");
 
+    const COM1: IoctlCom = IoctlCom::iow::<i16>(0x88, 1); //TODO: figure out actual type
+    const COM2: IoctlCom = IoctlCom::iow::<i16>(0x88, 2); //TODO: figure out actual type
+    const COM3: IoctlCom = IoctlCom::iowr::<i64>(0x88, 3); //TODO: figure out actual type
+    const COM4: IoctlCom = IoctlCom::iow::<(i64, i64)>(0x88, 4); //TODO: figure out actual type, probably a struct
+    const COM5: IoctlCom = IoctlCom::iow::<(i64, i64)>(0x88, 5); //TODO: figure out actual type, probably a struct
+    const COM6: IoctlCom = IoctlCom::ior::<i32>(0x88, 6);
+    const COM7: IoctlCom = IoctlCom::ior::<i32>(0x88, 7); //TODO: figure out actual type
+    const COM8: IoctlCom = IoctlCom::ior::<i64>(0x88, 8); //TODO: figure out actual type
+    const COM9: IoctlCom = IoctlCom::ior::<i64>(0x88, 9); //TODO: figure out actual type
+    const COM10: IoctlCom = IoctlCom::iow::<(i64, i64)>(0x88, 10); //TODO: figure out actual type, probably a struct
+
     pub fn new() -> Self {
         Self {}
     }
 }
-
-const COM1: IoctlCom = IoctlCom::iow::<i16>(0x88, 1); //TODO: figure out actual type
-const COM2: IoctlCom = IoctlCom::iow::<i16>(0x88, 2); //TODO: figure out actual type
-const COM3: IoctlCom = IoctlCom::iowr::<i64>(0x88, 3); //TODO: figure out actual type
-const COM4: IoctlCom = IoctlCom::iow::<(i64, i64)>(0x88, 4); //TODO: figure out actual type, probably a struct
-const COM5: IoctlCom = IoctlCom::iow::<(i64, i64)>(0x88, 5); //TODO: figure out actual type, probably a struct
-const COM6: IoctlCom = IoctlCom::ior::<i32>(0x88, 6);
-const COM7: IoctlCom = IoctlCom::ior::<i32>(0x88, 7); //TODO: figure out actual type
-const COM8: IoctlCom = IoctlCom::ior::<i64>(0x88, 8); //TODO: figure out actual type
-const COM9: IoctlCom = IoctlCom::ior::<i64>(0x88, 9); //TODO: figure out actual type
-const COM10: IoctlCom = IoctlCom::iow::<(i64, i64)>(0x88, 10); //TODO: figure out actual type, probably a struct
 
 impl VFileOps for Dipsw {
     fn write(
