@@ -91,7 +91,7 @@ impl AuthCaps {
     }
 
     pub fn is_unk1(&self) -> bool {
-        (self.0[1] & 0x40) == 0
+        (self.0[1] & 0x40) != 0
     }
 
     pub fn clear_non_type(&mut self) {
