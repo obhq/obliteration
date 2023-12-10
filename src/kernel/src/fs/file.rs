@@ -114,7 +114,7 @@ impl IoctlCom {
     }
 
     pub fn size(&self) -> usize {
-        Self::iocparm_len(self.0)
+        ((self.0 >> 16) & Self::IOCPARM_MASK) as usize
     }
 
     pub fn is_void(&self) -> bool {
@@ -129,7 +129,7 @@ impl IoctlCom {
         self.0 & Self::IOC_IN != 0
     }
 
-    pub const fn is_invalid(com: u32) -> bool {
+    const fn is_invalid(com: u32) -> bool {
         if com & (Self::IOC_VOID | Self::IOC_IN | Self::IOC_OUT) == 0 {
             return false;
         }
@@ -145,7 +145,7 @@ impl IoctlCom {
         true
     }
 
-    pub const fn iocparm_len(com: u32) -> usize {
+    const fn iocparm_len(com: u32) -> usize {
         ((com >> 16) & Self::IOCPARM_MASK) as usize
     }
 
