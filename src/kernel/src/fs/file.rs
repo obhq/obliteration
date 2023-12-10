@@ -103,6 +103,16 @@ impl IoctlCom {
         Some(Self(com))
     }
 
+    const fn new(inout: u32, group: u8, num: u8, len: usize) -> Self {
+        let len: u32 = if len > (u32::MAX) as usize {
+            panic!("IOCPARM_LEN is too large");
+        } else {
+            len as u32
+        };
+
+        Self(inout | ((len & Self::IOCPARM_MASK) << 16) | ((group as u32) << 8) | (num as u32))
+    }
+
     pub fn size(&self) -> usize {
         Self::iocparm_len(self.0)
     }
@@ -131,34 +141,24 @@ impl IoctlCom {
         ((com >> 16) & Self::IOCPARM_MASK) as usize
     }
 
-    pub const fn ioc(inout: u32, group: u8, num: u8, len: usize) -> Self {
-        let len: u32 = if len > (u32::MAX) as usize {
-            panic!("IOCPARM_LEN is too large");
-        } else {
-            len as u32
-        };
-
-        Self(inout | ((len & Self::IOCPARM_MASK) << 16) | ((group as u32) << 8) | (num as u32))
-    }
-
     pub const fn io(group: u8, num: u8) -> Self {
-        Self::ioc(Self::IOC_VOID, group, num, 0)
+        Self::new(Self::IOC_VOID, group, num, 0)
     }
 
     pub const fn iowint(group: u8, num: u8) -> Self {
-        Self::ioc(Self::IOC_VOID, group, num, std::mem::size_of::<i32>())
+        Self::new(Self::IOC_VOID, group, num, std::mem::size_of::<i32>())
     }
 
     pub const fn ior<T>(group: u8, num: u8) -> Self {
-        Self::ioc(Self::IOC_OUT, group, num, std::mem::size_of::<T>())
+        Self::new(Self::IOC_OUT, group, num, std::mem::size_of::<T>())
     }
 
     pub const fn iow<T>(group: u8, num: u8) -> Self {
-        Self::ioc(Self::IOC_IN, group, num, std::mem::size_of::<T>())
+        Self::new(Self::IOC_IN, group, num, std::mem::size_of::<T>())
     }
 
     pub const fn iowr<T>(group: u8, num: u8) -> Self {
-        Self::ioc(Self::IOC_INOUT, group, num, std::mem::size_of::<T>())
+        Self::new(Self::IOC_INOUT, group, num, std::mem::size_of::<T>())
     }
 }
 
