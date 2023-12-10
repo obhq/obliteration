@@ -299,28 +299,17 @@ impl Fs {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_ioctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        const IOC_VOID: u64 = 0x20000000;
-        const IOC_OUT: u64 = 0x40000000;
-        const IOC_IN: u64 = 0x80000000;
-        const IOCPARM_MASK: u64 = 0x1FFF;
+    const UNK_COM1: IoctlCom = IoctlCom::io(b'f', 1);
+    const UNK_COM2: IoctlCom = IoctlCom::io(b'f', 2);
+    const UNK_COM3: IoctlCom = IoctlCom::iowint(b'f', 0x7e);
+    const UNK_COM4: IoctlCom = IoctlCom::iowint(b'f', 0x7d);
 
+    fn sys_ioctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
-        let mut com: u64 = i.args[1].into();
+        let com: IoctlCom = i.args[1].try_into()?;
         let data_arg: *mut u8 = i.args[2].into();
 
-        if com > 0xffffffff {
-            com &= 0xffffffff;
-        }
-
-        let size: usize = ((com >> 16) & IOCPARM_MASK) as usize;
-
-        if com & (IOC_VOID | IOC_OUT | IOC_IN) == 0
-            || com & (IOC_OUT | IOC_IN) != 0 && size == 0
-            || com & IOC_VOID != 0 && size != 0 && size != 4
-        {
-            return Err(SysErr::Raw(ENOTTY));
-        }
+        let size: usize = com.size();
 
         let mut vec = vec![0u8; size];
 
@@ -330,12 +319,16 @@ impl Fs {
         } else if com & IOC_VOID != 0 {
             todo!("ioctl with com & IOC_VOID != 0");
         } else {
-            &mut vec[..]
+            if com.is_void() {
+                todo!("ioctl with com & IOC_VOID != 0");
+            } else {
+                &mut vec[..]
+            }
         };
 
-        if com & IOC_IN != 0 {
-            todo!("ioctl with IOC_IN");
-        } else if com & IOC_OUT != 0 {
+        if com.is_in() {
+            todo!("ioctl with IOC_IN & != 0");
+        } else if com.is_out() {
             data.fill(0);
         }
 
@@ -353,19 +346,19 @@ impl Fs {
         // Execute the operation.
         let td = VThread::current().unwrap();
 
-        info!("Executing ioctl({com:#x}) on {file}.");
+        info!("Executing ioctl({com}) on {file}.");
 
         match com {
-            0x20006601 => todo!("ioctl with com = 0x20006601"),
-            0x20006602 => todo!("ioctl with com = 0x20006602"),
-            0x8004667d => todo!("ioctl with com = 0x8004667d"),
-            0x8004667e => todo!("ioctl with com = 0x8004667e"),
+            Self::UNK_COM1 => todo!("ioctl with com = 0x20006601"),
+            Self::UNK_COM2 => todo!("ioctl with com = 0x20006602"),
+            Self::UNK_COM3 => todo!("ioctl with com = 0x8004667d"),
+            Self::UNK_COM4 => todo!("ioctl with com = 0x8004667e"),
             _ => {}
         }
 
         ops.ioctl(&file, com, data, td.cred(), &td)?;
 
-        if com & IOC_OUT != 0 {
+        if com.is_void() {
             unsafe {
                 std::ptr::copy_nonoverlapping(data.as_ptr(), data_arg, size);
             }
