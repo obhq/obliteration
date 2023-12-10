@@ -1,10 +1,8 @@
-// This file contains error codes used in a PS4 system. The value of each error must be the same as
-// the PS4.
+// This file contains errno used in a PS4 system. The value of each errno must be the same as the
+// PS4.
 use std::error::Error;
 use std::num::NonZeroI32;
 
-// List of Error Codes with Names.
-// Kernel based Error Codes
 pub const EPERM: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(1) };
 pub const ENOENT: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(2) };
 pub const ESRCH: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(3) };
@@ -110,10 +108,11 @@ pub trait Errno: Error {
     fn errno(&self) -> NonZeroI32;
 }
 
+impl Error for Box<dyn Errno> {}
+
 /// Get human readable text.
 pub fn strerror(num: NonZeroI32) -> &'static str {
     match num {
-        // Kernel based Error Messages
         EPERM => "operation not permitted",
         ENOENT => "no such file or directory",
         ESRCH => "no such process",
@@ -148,7 +147,7 @@ pub fn strerror(num: NonZeroI32) -> &'static str {
         EPIPE => "broken pipe",
         EDOM => "numerical argument out of domain",
         ERANGE => "result too large",
-        EAGAIN => "resource temporarily unavailable / operation would block",
+        EAGAIN => "resource temporarily unavailable",
         EINPROGRESS => "operation now in progress",
         EALREADY => "operation already in progress",
         ENOTSOCK => "socket operation on non-socket",

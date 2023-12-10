@@ -1,8 +1,8 @@
-use super::{FsItem, FsOps, HostDir, HostFile, Mount, VPath, VPathBuf};
+use super::{FsItem, FsOps, HostDir, HostFile, Mount, VPath, VPathBuf, Vnode, VnodeType};
+use crate::errno::Errno;
 use param::Param;
 use std::any::Any;
 use std::collections::HashMap;
-use std::error::Error;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -76,7 +76,7 @@ impl HostFs {
     }
 }
 
-fn mount(mount: &mut Mount, mut opts: HashMap<String, Box<dyn Any>>) -> Result<(), Box<dyn Error>> {
+fn mount(mount: &mut Mount, mut opts: HashMap<String, Box<dyn Any>>) -> Result<(), Box<dyn Errno>> {
     let system = opts
         .remove("system")
         .unwrap()
@@ -128,12 +128,17 @@ fn mount(mount: &mut Mount, mut opts: HashMap<String, Box<dyn Any>>) -> Result<(
     mounts.insert(app.join("app0").unwrap(), MountSource::Bind(pfs));
 
     // Set mount data.
-    mount.set_data(Box::new(HostFs {
+    mount.set_data(Arc::new(HostFs {
         mounts,
         app: Arc::new(app),
     }));
 
     Ok(())
+}
+
+fn root(_: &Mount) -> Arc<Vnode> {
+    // TODO: What should we do here?
+    Arc::new(Vnode::new(Some(VnodeType::Directory { mount: None })))
 }
 
 /// Source of mount point.
@@ -143,4 +148,4 @@ enum MountSource {
     Bind(VPathBuf),
 }
 
-pub(super) static HOST_OPS: FsOps = FsOps { mount };
+pub(super) static HOST_OPS: FsOps = FsOps { mount, root };

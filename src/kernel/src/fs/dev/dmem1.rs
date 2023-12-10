@@ -1,5 +1,5 @@
-use crate::errno::{Errno, EPERM};
-use crate::fs::{VFile, VFileOps, VPath};
+use crate::errno::Errno;
+use crate::fs::{IoctlCom, VFile, VFileOps, VPath};
 use crate::process::VThread;
 use crate::ucred::Ucred;
 use byteorder::{NativeEndian, WriteBytesExt};
@@ -34,9 +34,9 @@ impl VFileOps for Dmem1 {
     fn ioctl(
         &self,
         _: &crate::fs::VFile,
-        com: u64,
-        mut data: &mut [u8],
-        cred: &Ucred,
+        _com: IoctlCom,
+        _: &mut [u8],
+        _: &Ucred,
         _: &VThread,
     ) -> Result<(), Box<dyn Errno>> {
         if cred.is_unk1() || cred.is_unk2() {

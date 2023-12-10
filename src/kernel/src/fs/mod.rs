@@ -4,21 +4,22 @@ pub use self::item::*;
 pub use self::mount::*;
 pub use self::path::*;
 pub use self::vnode::*;
-use crate::errno::{Errno, EBADF, EINVAL, ENOENT, ENOTCAPABLE, ENOTTY};
+use crate::errno::{Errno, EBADF, EINVAL, ENAMETOOLONG, ENODEV, ENOENT, ENOTCAPABLE, ENOTTY};
 use crate::info;
 use crate::process::{VProc, VThread};
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{Privilege, Ucred};
 use bitflags::bitflags;
+use gmtx::{Gutex, GutexGroup};
 use param::Param;
 use std::any::Any;
 use std::collections::HashMap;
-use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::num::{NonZeroI32, TryFromIntError};
+use std::ops::DerefMut;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicI32, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use thiserror::Error;
 
 mod dev;
@@ -33,9 +34,9 @@ mod vnode;
 #[derive(Debug)]
 pub struct Fs {
     vp: Arc<VProc>,
-    mounts: RwLock<Vec<Mount>>, // mountlist
-    opens: AtomicI32,           // openfiles
-    root: Arc<Vnode>,           // rootvnode
+    mounts: Gutex<Vec<Arc<Mount>>>, // mountlist
+    opens: AtomicI32,               // openfiles
+    root: Gutex<Arc<Vnode>>,        // rootvnode
 }
 
 impl Fs {
@@ -51,31 +52,89 @@ impl Fs {
         S: Into<PathBuf>,
         G: Into<PathBuf>,
     {
+        // Mount devfs as an initial root.
         let mut mounts = Vec::new();
+        let conf = Self::find_config("devfs").unwrap();
+        let mut init = Mount::new(None, conf, "/dev", cred.clone());
 
-        // TODO: It seems like the PS4 will mount devfs as an initial rootfs. See vfs_mountroot for
-        // more details.
-        let mut root = Mount::new(&HOST, cred.clone());
+        if let Err(e) = (init.fs().ops.mount)(&mut init, HashMap::new()) {
+            panic!("Failed to mount devfs: {e}.");
+        }
+
+        // Get an initial root vnode.
+        let root = (init.fs().ops.root)(&init);
+
+        vp.files().set_cwd(root.clone());
+        *vp.files().root_mut() = Some(root.clone());
+
+        mounts.push(Arc::new(init));
+
+        // Setup mount options for root FS.
         let mut opts: HashMap<String, Box<dyn Any>> = HashMap::new();
 
+        opts.insert("fstype".into(), Box::new(String::from("exfatfs")));
+        opts.insert("fspath".into(), Box::new(String::from("/")));
+        opts.insert("from".into(), Box::new(String::from("md0")));
+        opts.insert("ro".into(), Box::new(true));
         opts.insert("system".into(), Box::new(system.into()));
         opts.insert("game".into(), Box::new(game.into()));
         opts.insert("param".into(), Box::new(param.clone()));
 
-        if let Err(e) = (root.vfs().ops.mount)(&mut root, opts) {
-            panic!("Cannot mount rootfs: {e}.");
-        }
-
-        mounts.push(root);
-
-        // Install syscall handlers.
+        // Mount root FS.
+        let gg = GutexGroup::new("fs");
         let fs = Arc::new(Self {
             vp: vp.clone(),
-            mounts: RwLock::new(mounts),
+            mounts: gg.spawn(mounts),
             opens: AtomicI32::new(0),
-            root: Arc::new(Vnode::new()), // TODO: Check how this constructed on the PS4.
+            root: gg.spawn(root),
         });
 
+        let root = match fs.mount(opts, MountFlags::MNT_ROOTFS, cred) {
+            Ok(v) => v,
+            Err(e) => panic!("Failed to mount root FS: {e}."),
+        };
+
+        // Remove devfs so the root FS become an actual root.
+        let om = {
+            let mut mounts = fs.mounts.write();
+            let old = mounts.remove(0);
+
+            *fs.root.write() = root.clone();
+
+            old
+        };
+
+        // Update process location.
+        vp.files().set_cwd(root.clone());
+        *vp.files().root_mut() = Some(root);
+
+        // Disconnect devfs from the old root.
+        let ov = (om.fs().ops.root)(&om);
+        let mut flags = ov.flags_mut();
+        let mut ty = ov.ty_mut();
+
+        flags.remove(VnodeFlags::VI_MOUNT);
+
+        match ty.deref_mut() {
+            Some(VnodeType::Directory { mount }) => *mount = None,
+            _ => unreachable!(),
+        }
+
+        drop(ty);
+        drop(flags);
+
+        // Update devfs.
+        let mut flags = om.flags_mut();
+        let mut parent = om.parent_mut();
+
+        flags.remove(MountFlags::MNT_ROOTFS);
+        *parent = None;
+
+        drop(parent);
+        drop(flags);
+
+        // TODO: Set devfs parent to /dev on the root FS.
+        // Install syscall handlers.
         sys.register(4, &fs, Self::sys_write);
         sys.register(5, &fs, Self::sys_open);
         sys.register(6, &fs, Self::sys_close);
@@ -86,15 +145,15 @@ impl Fs {
     }
 
     pub fn app(&self) -> Arc<VPathBuf> {
-        let mounts = self.mounts.read().unwrap();
-        let root = mounts.first().unwrap();
-        let host = root.data().unwrap().downcast_ref::<HostFs>().unwrap();
+        let root = self.mounts.read().first().unwrap().clone();
+        let data = root.data().cloned();
+        let host = data.unwrap().downcast::<HostFs>().unwrap();
 
         host.app().clone()
     }
 
-    pub fn root(&self) -> &Arc<Vnode> {
-        &self.root
+    pub fn root(&self) -> Arc<Vnode> {
+        self.root.read().clone()
     }
 
     /// See `namei` on the PS4 for a reference.
@@ -179,9 +238,9 @@ impl Fs {
             "/dev/dmem1" => FsItem::Device(VDev::Dmem1),
             "/dev/dmem2" => FsItem::Device(VDev::Dmem2),
             _ => {
-                let mounts = self.mounts.read().unwrap();
-                let root = mounts.first().unwrap();
-                let host = root.data().unwrap().downcast_ref::<HostFs>().unwrap();
+                let root = self.mounts.read().first().unwrap().clone();
+                let data = root.data().cloned();
+                let host = data.unwrap().downcast::<HostFs>().unwrap();
 
                 host.resolve(VPath::new(nd.dirp).unwrap())
                     .ok_or(FsError::NotFound)?
@@ -299,28 +358,17 @@ impl Fs {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_ioctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        const IOC_VOID: u64 = 0x20000000;
-        const IOC_OUT: u64 = 0x40000000;
-        const IOC_IN: u64 = 0x80000000;
-        const IOCPARM_MASK: u64 = 0x1FFF;
+    const UNK_COM1: IoctlCom = IoctlCom::io(b'f', 1);
+    const UNK_COM2: IoctlCom = IoctlCom::io(b'f', 2);
+    const UNK_COM3: IoctlCom = IoctlCom::iowint(b'f', 0x7e);
+    const UNK_COM4: IoctlCom = IoctlCom::iowint(b'f', 0x7d);
 
+    fn sys_ioctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
-        let mut com: u64 = i.args[1].into();
+        let com: IoctlCom = i.args[1].try_into()?;
         let data_arg: *mut u8 = i.args[2].into();
 
-        if com > 0xffffffff {
-            com &= 0xffffffff;
-        }
-
-        let size: usize = ((com >> 16) & IOCPARM_MASK) as usize;
-
-        if com & (IOC_VOID | IOC_OUT | IOC_IN) == 0
-            || com & (IOC_OUT | IOC_IN) != 0 && size == 0
-            || com & IOC_VOID != 0 && size != 0 && size != 4
-        {
-            return Err(SysErr::Raw(ENOTTY));
-        }
+        let size: usize = com.size();
 
         let mut vec = vec![0u8; size];
 
@@ -328,16 +376,16 @@ impl Fs {
         let data = if size == 0 {
             &mut []
         } else {
-            if com & IOC_VOID != 0 {
+            if com.is_void() {
                 todo!("ioctl with com & IOC_VOID != 0");
             } else {
                 &mut vec[..]
             }
         };
 
-        if com & IOC_IN != 0 {
-            todo!("ioctl with IOC_IN");
-        } else if com & IOC_OUT != 0 {
+        if com.is_in() {
+            todo!("ioctl with IOC_IN & != 0");
+        } else if com.is_out() {
             data.fill(0);
         }
 
@@ -355,19 +403,19 @@ impl Fs {
         // Execute the operation.
         let td = VThread::current().unwrap();
 
-        info!("Executing ioctl({com:#x}) on {file}.");
+        info!("Executing ioctl({com}) on {file}.");
 
         match com {
-            0x20006601 => todo!("ioctl with com = 0x20006601"),
-            0x20006602 => todo!("ioctl with com = 0x20006602"),
-            0x8004667d => todo!("ioctl with com = 0x8004667d"),
-            0x8004667e => todo!("ioctl with com = 0x8004667e"),
+            Self::UNK_COM1 => todo!("ioctl with com = 0x20006601"),
+            Self::UNK_COM2 => todo!("ioctl with com = 0x20006602"),
+            Self::UNK_COM3 => todo!("ioctl with com = 0x8004667d"),
+            Self::UNK_COM4 => todo!("ioctl with com = 0x8004667e"),
             _ => {}
         }
 
         ops.ioctl(&file, com, data, td.cred(), &td)?;
 
-        if com & IOC_OUT != 0 {
+        if com.is_void() {
             unsafe {
                 std::ptr::copy_nonoverlapping(data.as_ptr(), data_arg, size);
             }
@@ -414,6 +462,73 @@ impl Fs {
         self.revoke(path);
 
         Ok(SysOut::ZERO)
+    }
+
+    /// See `vfs_donmount` on the PS4 for a reference.
+    fn mount(
+        &self,
+        mut opts: HashMap<String, Box<dyn Any>>,
+        flags: MountFlags,
+        cred: &Ucred,
+    ) -> Result<Arc<Vnode>, MountError> {
+        // TODO: Process the remaining options.
+        let fs = opts.remove("fstype").unwrap().downcast::<String>().unwrap();
+        let path = opts.remove("fspath").unwrap().downcast::<String>().unwrap();
+
+        if fs.len() >= 15 {
+            return Err(MountError::FsTooLong);
+        } else if path.len() >= 87 {
+            return Err(MountError::PathTooLong);
+        }
+
+        // TODO: Apply the remaining checks from the PS4.
+        if flags.intersects(MountFlags::MNT_UPDATE) {
+            todo!("vfs_donmount with MNT_UPDATE");
+        } else {
+            let conf = if flags.intersects(MountFlags::MNT_ROOTFS) {
+                Self::find_config(fs.as_str()).ok_or(MountError::InvalidFs)?
+            } else {
+                todo!("vfs_donmount with !MNT_ROOTFS");
+            };
+
+            // TODO: Check if jailed.
+            // TODO: Lookup parent vnode.
+            let mut mount = Mount::new(None, conf, *path, cred.clone());
+
+            mount
+                .flags_mut()
+                .remove(MountFlags::from_bits_retain(0xFFFFFFFF272F3F80));
+
+            // TODO: Implement budgetid.
+            (mount.fs().ops.mount)(&mut mount, opts).map_err(|e| MountError::MountFailed(e))?;
+
+            // TODO: Implement the remaining logics from the PS4.
+            let root = (mount.fs().ops.root)(&mount);
+
+            self.mounts.write().push(Arc::new(mount));
+
+            Ok(root)
+        }
+    }
+
+    /// See `vfs_byname` on the PS4 for a reference.
+    fn find_config<N: AsRef<str>>(name: N) -> Option<&'static FsConfig> {
+        let mut name = name.as_ref();
+        let mut conf = Some(&HOST);
+
+        if name == "ffs" {
+            name = "ufs";
+        }
+
+        while let Some(v) = conf {
+            if v.name == name {
+                return Some(v);
+            }
+
+            conf = v.next;
+        }
+
+        None
     }
 }
 
@@ -503,7 +618,34 @@ pub struct FsConfig {
 /// An implementation of `vfsops` structure.
 #[derive(Debug)]
 struct FsOps {
-    mount: fn(&mut Mount, HashMap<String, Box<dyn Any>>) -> Result<(), Box<dyn Error>>,
+    mount: fn(&mut Mount, HashMap<String, Box<dyn Any>>) -> Result<(), Box<dyn Errno>>,
+    root: fn(&Mount) -> Arc<Vnode>,
+}
+
+/// Represents an error when FS mounting is failed.
+#[derive(Debug, Error)]
+pub enum MountError {
+    #[error("fstype is too long")]
+    FsTooLong,
+
+    #[error("fspath is too long")]
+    PathTooLong,
+
+    #[error("fstype is not valid")]
+    InvalidFs,
+
+    #[error("cannot mount the filesystem")]
+    MountFailed(#[source] Box<dyn Errno>),
+}
+
+impl Errno for MountError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::FsTooLong | Self::PathTooLong => ENAMETOOLONG,
+            Self::InvalidFs => ENODEV,
+            Self::MountFailed(e) => e.errno(),
+        }
+    }
 }
 
 /// Represents an error when the operation of virtual filesystem is failed.
@@ -545,6 +687,7 @@ static MLFS: FsConfig = FsConfig {
 
 static MLFS_OPS: FsOps = FsOps {
     mount: |_, _| todo!("mount for mlfs"),
+    root: |_| todo!("root for mlfs"),
 };
 
 static UDF2: FsConfig = FsConfig {
@@ -558,19 +701,16 @@ static UDF2: FsConfig = FsConfig {
 
 static UDF2_OPS: FsOps = FsOps {
     mount: |_, _| todo!("mount for udf2"),
+    root: |_| todo!("root for udf2"),
 };
 
 static DEVFS: FsConfig = FsConfig {
     version: 0x19660120,
     name: "devfs",
-    ops: &DEVFS_OPS,
+    ops: &self::dev::DEVFS_OPS,
     ty: 0x71,
     refcount: AtomicI32::new(0),
     next: Some(&TMPFS),
-};
-
-static DEVFS_OPS: FsOps = FsOps {
-    mount: |_, _| todo!("mount for devfs"),
 };
 
 static TMPFS: FsConfig = FsConfig {
@@ -584,6 +724,7 @@ static TMPFS: FsConfig = FsConfig {
 
 static TMPFS_OPS: FsOps = FsOps {
     mount: |_, _| todo!("mount for tmpfs"),
+    root: |_| todo!("root for tmpfs"),
 };
 
 static UNIONFS: FsConfig = FsConfig {
@@ -597,6 +738,7 @@ static UNIONFS: FsConfig = FsConfig {
 
 static UNIONFS_OPS: FsOps = FsOps {
     mount: |_, _| todo!("mount for unionfs"),
+    root: |_| todo!("root for unionfs"),
 };
 
 static PROCFS: FsConfig = FsConfig {
@@ -610,6 +752,7 @@ static PROCFS: FsConfig = FsConfig {
 
 static PROCFS_OPS: FsOps = FsOps {
     mount: |_, _| todo!("mount for procfs"),
+    root: |_| todo!("root for procfs"),
 };
 
 static CD9660: FsConfig = FsConfig {
@@ -623,6 +766,7 @@ static CD9660: FsConfig = FsConfig {
 
 static CD9660_OPS: FsOps = FsOps {
     mount: |_, _| todo!("mount for cd9660"),
+    root: |_| todo!("root for cd9660"),
 };
 
 static UFS: FsConfig = FsConfig {
@@ -636,6 +780,7 @@ static UFS: FsConfig = FsConfig {
 
 static UFS_OPS: FsOps = FsOps {
     mount: |_, _| todo!("mount for ufs"),
+    root: |_| todo!("root for ufs"),
 };
 
 static NULLFS: FsConfig = FsConfig {
@@ -649,6 +794,7 @@ static NULLFS: FsConfig = FsConfig {
 
 static NULLFS_OPS: FsOps = FsOps {
     mount: |_, _| todo!("mount for nullfs"),
+    root: |_| todo!("root for nullfs"),
 };
 
 static PFS: FsConfig = FsConfig {
@@ -662,4 +808,5 @@ static PFS: FsConfig = FsConfig {
 
 static PFS_OPS: FsOps = FsOps {
     mount: |_, _| todo!("mount for pfs"),
+    root: |_| todo!("root for pfs"),
 };

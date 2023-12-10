@@ -6,8 +6,12 @@ use thiserror::Error;
 ///
 /// See https://www.psdevwiki.com/ps4/Param.sfo#Internal_Structure for more information.
 pub struct Param {
-    title: String,
+    app_ver: Option<String>,
+    category: String,
+    content_id: String,
+    title: Option<String>,
     title_id: String,
+    version: String,
 }
 
 impl Param {
@@ -72,8 +76,12 @@ impl Param {
         keys.drain(i..);
 
         // Read entries.
+        let mut app_ver: Option<String> = None;
+        let mut category: Option<String> = None;
+        let mut content_id: Option<String> = None;
         let mut title: Option<String> = None;
         let mut title_id: Option<String> = None;
+        let mut version: Option<String> = None;
 
         for i in 0..entries {
             // Seek to the entry.
@@ -128,24 +136,75 @@ impl Param {
 
             // Parse value.
             match key {
-                b"TITLE" => title = Some(Self::read_utf8(&mut raw, i, format, len, 128)?),
-                b"TITLE_ID" => title_id = Some(Self::read_utf8(&mut raw, i, format, len, 12)?),
+                b"APP_VER" => {
+                    app_ver = Some(Self::read_utf8(&mut raw, i, format, len, 8)?);
+                }
+                b"CATEGORY" => {
+                    category = Some(Self::read_utf8(&mut raw, i, format, 4, 4)?);
+                }
+                b"CONTENT_ID" => {
+                    content_id = Some(Self::read_utf8(&mut raw, i, format, len, 48)?);
+                }
+                b"TITLE" => {
+                    title = Some(Self::read_utf8(&mut raw, i, format, len, 128)?);
+                }
+                b"TITLE_ID" => {
+                    title_id = Some(Self::read_utf8(&mut raw, i, format, len, 12)?);
+                }
+                b"VERSION" => {
+                    version = Some(Self::read_utf8(&mut raw, i, format, len, 8)?);
+                }
                 _ => continue,
             }
         }
 
         Ok(Self {
-            title: title.ok_or(ReadError::MissingTitle)?,
+            // App_Ver for Games and Patches, for DLC, use version. Anything else is abnormal.
+            app_ver: app_ver,
+            category: category.ok_or(ReadError::MissingCategory)?,
+            content_id: content_id.ok_or(ReadError::MissingContentId)?,
+            title: title,
             title_id: title_id.ok_or(ReadError::MissingTitleId)?,
+            version: version.ok_or(ReadError::MissingVersion)?,
         })
     }
 
-    pub fn title(&self) -> &str {
+    /// Fetches the value APP_VER from given Param.SFO
+    pub fn app_ver(&self) -> &Option<String> {
+        &self.app_ver
+    }
+
+    /// Fetches the value CATEGORY from given Param.SFO
+    pub fn category(&self) -> &str {
+        &self.category
+    }
+
+    /// Fetches the value CONTENT_ID from given Param.SFO
+    pub fn content_id(&self) -> &str {
+        &self.content_id
+    }
+
+    /// Fetches a shortened variant of value CONTENT_ID from given Param.SFO
+    pub fn shortcontent_id(&self) -> &str {
+        self.content_id
+            .split('-')
+            .last()
+            .unwrap_or(&self.content_id)
+    }
+
+    /// Fetches the value TITLE from given Param.SFO
+    pub fn title(&self) -> &Option<String> {
         &self.title
     }
 
+    /// Fetches the value TITLE_ID from given Param.SFO
     pub fn title_id(&self) -> &str {
         &self.title_id
+    }
+
+    /// Fetches the value VERSION from given Param.SFO
+    pub fn version(&self) -> &str {
+        &self.version
     }
 
     fn read_utf8<R: Read>(
@@ -206,9 +265,15 @@ pub enum ReadError {
     #[error("entry #{0} has invalid value")]
     InvalidValue(usize),
 
-    #[error("TITLE is not found")]
-    MissingTitle,
+    #[error("CATEGORY parameter not found")]
+    MissingCategory,
 
-    #[error("TITLE_ID is not found")]
+    #[error("CONTENT_ID parameter not found")]
+    MissingContentId,
+
+    #[error("TITLE_ID parameter not found")]
     MissingTitleId,
+
+    #[error("VERSION parameter not found")]
+    MissingVersion,
 }

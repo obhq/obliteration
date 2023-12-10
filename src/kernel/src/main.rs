@@ -145,8 +145,20 @@ fn main() -> ExitCode {
     }
 
     // Param information
-    writeln!(log, "Application Title   : {}", param.title()).unwrap();
+    writeln!(
+        log,
+        "Application Title   : {}",
+        param.title().as_ref().unwrap()
+    )
+    .unwrap();
     writeln!(log, "Application ID      : {}", param.title_id()).unwrap();
+    writeln!(log, "Application Category: {}", param.category()).unwrap();
+    writeln!(
+        log,
+        "Application Version : {}",
+        param.app_ver().as_ref().unwrap()
+    )
+    .unwrap();
 
     // Hardware information
     writeln!(
@@ -260,7 +272,7 @@ fn run<E: crate::ee::ExecutionEngine>(
         root,
         app,
         param,
-        &Ucred::new(AuthInfo::SYS_CORE), // TODO: Check how PS4 construct this.
+        &Ucred::new(0, AuthInfo::SYS_CORE), // TODO: Check how PS4 construct this.
         vp,
         &mut syscalls,
     );
@@ -357,7 +369,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     // Spawn main thread.
     info!("Starting application.");
 
-    let cred = Ucred::new(AuthInfo::SYS_CORE.clone());
+    let cred = Ucred::new(0, AuthInfo::SYS_CORE.clone());
     let stack = mm.stack();
     let runner = match unsafe { vp.new_thread(cred, stack.start(), stack.len(), entry) } {
         Ok(v) => v,
@@ -401,7 +413,11 @@ fn discord_presence(param: &Param) {
     }
 
     // Create details about game.
-    let details = format!("Playing {} - {}", param.title(), param.title_id());
+    let details = format!(
+        "Playing {} - {}",
+        param.title().as_ref().unwrap(),
+        param.title_id()
+    );
     let start = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()

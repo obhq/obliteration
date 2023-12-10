@@ -1,5 +1,5 @@
 use crate::errno::Errno;
-use crate::fs::{VFile, VFileOps, VPath};
+use crate::fs::{IoctlCom, VFile, VFileOps, VPath};
 use crate::process::VThread;
 use crate::ucred::Ucred;
 use macros::vpath;
@@ -24,7 +24,7 @@ impl VFileOps for DeciTty6 {
     fn ioctl(
         &self,
         _: &crate::fs::VFile,
-        _: u64,
+        _: IoctlCom,
         _: &mut [u8],
         _: &Ucred,
         _: &VThread,
