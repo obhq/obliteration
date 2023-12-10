@@ -137,7 +137,7 @@ impl IoctlCom {
                 && Self::iocparm_len(com) != 4)
     }
 
-    pub fn iocparm_len(com: u32) -> usize {
+    pub const fn iocparm_len(com: u32) -> usize {
         ((com >> 16) & Self::IOCPARM_MASK) as usize
     }
 
