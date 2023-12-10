@@ -69,7 +69,7 @@ impl Display for Dipsw {
 
 #[derive(Error, Debug)]
 enum IoctlErr {
-    #[error("invalid command passed to Dipsw::ioctl")]
+    #[error("invalid command passed to dipsw ioctl")]
     InvalidCommand,
 }
 
