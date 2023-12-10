@@ -22,7 +22,7 @@ impl Dipsw {
 
 const COM1: IoctlCom = IoctlCom::iow::<i16>(0x88, 1); //TODO: figure out actual type
 const COM2: IoctlCom = IoctlCom::iow::<i16>(0x88, 2); //TODO: figure out actual type
-const COM3: IoctlCom = IoctlCom::iowr::<i16>(0x88, 3); //TODO: figure out actual type
+const COM3: IoctlCom = IoctlCom::iowr::<i64>(0x88, 3); //TODO: figure out actual type
 const COM4: IoctlCom = IoctlCom::iow::<(i64, i64)>(0x88, 4); //TODO: figure out actual type, probably a struct
 const COM5: IoctlCom = IoctlCom::iow::<(i64, i64)>(0x88, 5); //TODO: figure out actual type, probably a struct
 const COM6: IoctlCom = IoctlCom::ior::<i32>(0x88, 6);
