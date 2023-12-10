@@ -22,7 +22,6 @@ use std::sync::{Arc, RwLock};
 use thiserror::Error;
 
 mod dev;
-#[macro_use]
 mod file;
 mod host;
 mod item;
