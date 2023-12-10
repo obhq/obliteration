@@ -103,16 +103,6 @@ impl IoctlCom {
         Some(Self(com))
     }
 
-    const fn new(inout: u32, group: u8, num: u8, len: usize) -> Self {
-        let len: u32 = if len > (u32::MAX) as usize {
-            panic!("IOCPARM_LEN is too large");
-        } else {
-            len as u32
-        };
-
-        Self(inout | ((len & Self::IOCPARM_MASK) << 16) | ((group as u32) << 8) | (num as u32))
-    }
-
     pub fn size(&self) -> usize {
         Self::iocparm_len(self.0)
     }
@@ -142,7 +132,13 @@ impl IoctlCom {
     }
 
     pub const fn ioc(inout: u32, group: u8, num: u8, len: usize) -> Self {
-        Self::new(inout, group, num, len)
+        let len: u32 = if len > (u32::MAX) as usize {
+            panic!("IOCPARM_LEN is too large");
+        } else {
+            len as u32
+        };
+
+        Self(inout | ((len & Self::IOCPARM_MASK) << 16) | ((group as u32) << 8) | (num as u32))
     }
 
     pub const fn io(group: u8, num: u8) -> Self {
