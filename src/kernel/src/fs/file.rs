@@ -114,7 +114,7 @@ impl IoctlCom {
     }
 
     pub fn size(&self) -> usize {
-        ((self.0 >> 16) & Self::IOCPARM_MASK) as usize
+        Self::iocparm_len(self.0) as usize
     }
 
     pub fn is_void(&self) -> bool {
