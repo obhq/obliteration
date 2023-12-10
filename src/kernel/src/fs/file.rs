@@ -114,7 +114,7 @@ impl IoctlCom {
     }
 
     pub fn size(&self) -> usize {
-        crate::IOCPARM_LEN!(self.0)
+        Self::iocparm_len(self.0)
     }
 
     pub fn is_void(&self) -> bool {
@@ -130,71 +130,40 @@ impl IoctlCom {
     }
 
     pub const fn is_invalid(com: u32) -> bool {
-        use crate::IOCPARM_LEN;
-
         (com & (Self::IOC_VOID | Self::IOC_IN | Self::IOC_OUT) == 0)
-            || (com & (Self::IOC_IN | Self::IOC_OUT)) != 0 && IOCPARM_LEN!(com) == 0
-            || (com & Self::IOC_VOID != 0 && IOCPARM_LEN!(com) != 0 && IOCPARM_LEN!(com) != 4)
+            || (com & (Self::IOC_IN | Self::IOC_OUT)) != 0 && Self::iocparm_len(com) == 0
+            || (com & Self::IOC_VOID != 0
+                && Self::iocparm_len(com) != 0
+                && Self::iocparm_len(com) != 4)
     }
-}
 
-#[macro_export]
-macro_rules! IOCPARM_LEN {
-    ($com:expr) => {
-        (($com >> 16) & IoctlCom::IOCPARM_MASK) as usize
-    };
-}
+    pub fn iocparm_len(com: u32) -> usize {
+        ((com >> 16) & Self::IOCPARM_MASK) as usize
+    }
 
-#[macro_export]
-macro_rules! _IOC {
-    ($inout:path, $group:literal, $num:literal, $len:expr) => {
-        IoctlCom::new($inout, $group, $num, $len)
-    };
-}
+    pub const fn ioc(inout: u32, group: u8, num: u8, len: usize) -> Self {
+        Self::new(inout, group, num, len)
+    }
 
-#[macro_export]
-macro_rules! _IO {
-    ($group:literal, $num:literal) => {
-        _IOC!(IoctlCom::IOC_VOID, $group, $num, 0)
-    };
-}
+    pub const fn io(group: u8, num: u8) -> Self {
+        Self::ioc(Self::IOC_VOID, group, num, 0)
+    }
 
-#[macro_export]
-macro_rules! _IOWINT {
-    ($group:literal, $num:literal) => {
-        _IOC!(IoctlCom::IOC_IN, $group, $num, std::mem::size_of::<i32>())
-    };
-}
+    pub const fn iowint(group: u8, num: u8) -> Self {
+        Self::ioc(Self::IOC_IN, group, num, std::mem::size_of::<i32>())
+    }
 
-#[macro_export]
-macro_rules! _IOR {
-    ($group:literal, $num:literal, $type:ty) => {
-        _IOC!(
-            IoctlCom::IOC_OUT,
-            $group,
-            $num,
-            std::mem::size_of::<$type>()
-        )
-    };
-}
+    pub const fn ior<T>(group: u8, num: u8) -> Self {
+        Self::ioc(Self::IOC_OUT, group, num, std::mem::size_of::<T>())
+    }
 
-#[macro_export]
-macro_rules! _IOW {
-    ($group:literal, $num:literal, $type:ty) => {
-        _IOC!(IoctlCom::IOC_IN, $group, $num, std::mem::size_of::<$type>())
-    };
-}
+    pub const fn iow<T>(group: u8, num: u8) -> Self {
+        Self::ioc(Self::IOC_IN, group, num, std::mem::size_of::<T>())
+    }
 
-#[macro_export]
-macro_rules! _IOWR {
-    ($group:literal, $num:literal, $type:ty) => {
-        _IOC!(
-            IoctlCom::IOC_INOUT,
-            $group,
-            $num,
-            std::mem::size_of::<$type>()
-        )
-    };
+    pub const fn iowr<T>(group: u8, num: u8) -> Self {
+        Self::ioc(Self::IOC_INOUT, group, num, std::mem::size_of::<T>())
+    }
 }
 
 bitflags! {

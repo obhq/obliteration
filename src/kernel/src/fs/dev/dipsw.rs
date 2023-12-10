@@ -2,7 +2,6 @@ use crate::errno::{Errno, EINVAL};
 use crate::fs::{IoctlCom, VFile, VFileOps, VPath};
 use crate::process::VThread;
 use crate::ucred::Ucred;
-use crate::{_IOC, _IOR, _IOW, _IOWR};
 use byteorder::{LittleEndian, WriteBytesExt};
 use macros::vpath;
 use std::fmt::{Display, Formatter};
@@ -21,16 +20,16 @@ impl Dipsw {
     }
 }
 
-const COM1: IoctlCom = _IOW!(0x88, 1, i16); //TODO: figure out actual type
-const COM2: IoctlCom = _IOW!(0x88, 2, i16); //TODO: figure out actual type
-const COM3: IoctlCom = _IOWR!(0x88, 3, i64); //TODO: figure out actual type
-const COM4: IoctlCom = _IOW!(0x88, 4, (i64, i64)); //TODO: figure out actual type, probably a struct
-const COM5: IoctlCom = _IOW!(0x88, 5, (i64, i64)); //TODO: figure out actual type, probably a struct
-const COM6: IoctlCom = _IOR!(0x88, 6, i32);
-const COM7: IoctlCom = _IOR!(0x88, 7, i32); //TODO: figure out actual type
-const COM8: IoctlCom = _IOR!(0x88, 8, i64); //TODO: figure out actual type
-const COM9: IoctlCom = _IOR!(0x88, 9, i64); //TODO: figure out actual type
-const COM10: IoctlCom = _IOW!(0x88, 10, (i64, i64)); //TODO: figure out actual type, probably a struct
+const COM1: IoctlCom = IoctlCom::iow::<i16>(0x88, 1); //TODO: figure out actual type
+const COM2: IoctlCom = IoctlCom::iow::<i16>(0x88, 2); //TODO: figure out actual type
+const COM3: IoctlCom = IoctlCom::iowr::<i16>(0x88, 3); //TODO: figure out actual type
+const COM4: IoctlCom = IoctlCom::iow::<(i64, i64)>(0x88, 4); //TODO: figure out actual type, probably a struct
+const COM5: IoctlCom = IoctlCom::iow::<(i64, i64)>(0x88, 5); //TODO: figure out actual type, probably a struct
+const COM6: IoctlCom = IoctlCom::ior::<i32>(0x88, 6);
+const COM7: IoctlCom = IoctlCom::ior::<i32>(0x88, 7); //TODO: figure out actual type
+const COM8: IoctlCom = IoctlCom::ior::<i64>(0x88, 8); //TODO: figure out actual type
+const COM9: IoctlCom = IoctlCom::ior::<i64>(0x88, 9); //TODO: figure out actual type
+const COM10: IoctlCom = IoctlCom::iow::<(i64, i64)>(0x88, 10); //TODO: figure out actual type, probably a struct
 
 impl VFileOps for Dipsw {
     fn write(
