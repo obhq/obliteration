@@ -93,17 +93,17 @@ impl IoctlCom {
     pub const IOC_IN: u32 = 0x80000000;
     pub const IOC_INOUT: u32 = Self::IOC_IN | Self::IOC_OUT;
 
-    pub const fn try_from_raw(com: u64) -> Result<Self, SysErr> {
+    pub const fn try_from_raw(com: u64) -> Option<Self> {
         let com = com as u32;
 
         if Self::is_invalid(com) {
-            return Err(SysErr::Raw(ENOTTY));
+            return None;
         }
 
-        Ok(Self(com))
+        Some(Self(com))
     }
 
-    pub const fn new(inout: u32, group: u8, num: u8, len: usize) -> Self {
+    const fn new(inout: u32, group: u8, num: u8, len: usize) -> Self {
         let len: u32 = if len > (u32::MAX) as usize {
             panic!("IOCPARM_LEN is too large");
         } else {
@@ -150,7 +150,7 @@ impl IoctlCom {
     }
 
     pub const fn iowint(group: u8, num: u8) -> Self {
-        Self::ioc(Self::IOC_IN, group, num, std::mem::size_of::<i32>())
+        Self::ioc(Self::IOC_VOID, group, num, std::mem::size_of::<i32>())
     }
 
     pub const fn ior<T>(group: u8, num: u8) -> Self {

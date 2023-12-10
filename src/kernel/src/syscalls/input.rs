@@ -1,5 +1,5 @@
 use super::SysErr;
-use crate::errno::{ENAMETOOLONG, ENOENT};
+use crate::errno::{ENAMETOOLONG, ENOENT, ENOTTY};
 use crate::fs::{IoctlCom, VPath, VPathBuf};
 use std::ffi::{c_char, CStr};
 use std::fmt::{Formatter, LowerHex};
@@ -131,6 +131,6 @@ impl TryFrom<SysArg> for IoctlCom {
     type Error = SysErr;
 
     fn try_from(v: SysArg) -> Result<IoctlCom, Self::Error> {
-        IoctlCom::try_from_raw(v.try_into().unwrap())
+        IoctlCom::try_from_raw(v.into()).ok_or(SysErr::Raw(ENOTTY))
     }
 }
