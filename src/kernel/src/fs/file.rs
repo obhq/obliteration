@@ -5,7 +5,6 @@ use crate::syscalls::{SysArg, SysErr};
 use crate::ucred::Ucred;
 use bitflags::bitflags;
 use std::fmt::{Debug, Display, Formatter};
-
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
@@ -131,18 +130,18 @@ impl IoctlCom {
 
     const fn is_invalid(com: u32) -> bool {
         if com & (Self::IOC_VOID | Self::IOC_IN | Self::IOC_OUT) == 0 {
-            return false;
+            return true;
         }
 
         if com & (Self::IOC_IN | Self::IOC_OUT) != 0 && Self::iocparm_len(com) == 0 {
-            return false;
+            return true;
         }
 
         if com & Self::IOC_VOID != 0 && Self::iocparm_len(com) != 0 && Self::iocparm_len(com) != 4 {
-            return false;
+            return true;
         }
 
-        true
+        false
     }
 
     const fn iocparm_len(com: u32) -> usize {
