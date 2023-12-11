@@ -91,7 +91,7 @@ impl AuthCaps {
     }
 
     pub fn is_unk1(&self) -> bool {
-        (self.0[1] & 0x40) != 0
+        (self.0[1] & 0x4000000000000000) != 0
     }
 
     pub fn clear_non_type(&mut self) {
@@ -109,10 +109,10 @@ pub struct AuthAttrs([u64; 4]);
 
 impl AuthAttrs {
     pub fn is_unk1(&self) -> bool {
-        (self.0[0] & 0x800000000000) != 0
+        (self.0[0] & 0x800000) != 0
     }
 
     pub fn is_unk2(&self) -> bool {
-        (self.0[0] & 0x400000000000) != 0
+        (self.0[0] & 0x400000) != 0
     }
 }
