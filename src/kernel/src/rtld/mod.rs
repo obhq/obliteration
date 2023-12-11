@@ -217,7 +217,28 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         force: bool,
         main: bool,
     ) -> Result<Arc<Module<E>>, LoadError<E>> {
-        // Get file before locking our gutex.
+        // Check if already loaded.
+        let name = path.file_name().unwrap().to_owned();
+        let mut list = self.list.write();
+
+        if !force {
+            if let Some(m) = list.iter().skip(1).find(|m| m.names().contains(&name)) {
+                return Ok(m.clone());
+            }
+        }
+
+        // Check if application is decid.(s)elf.
+        let app = self.app.path().file_name().unwrap();
+
+        if app != "decid.elf" && app != "decid.self" {
+            // TODO: Check what the PS4 is doing here.
+        }
+
+        if self.flags.intersects(LinkerFlags::HAS_SANITIZER) {
+            todo!("do_load_object with sanitizer & 2");
+        }
+
+        // Get file.
         let td = VThread::current();
         let mut nd = NameiData {
             dirp: path,
@@ -242,27 +263,6 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             },
             Err(e) => return Err(LoadError::GetFileFailed(e)),
         };
-
-        // Check if already loaded.
-        let name = path.file_name().unwrap().to_owned();
-        let mut list = self.list.write();
-
-        if !force {
-            if let Some(m) = list.iter().skip(1).find(|m| m.names().contains(&name)) {
-                return Ok(m.clone());
-            }
-        }
-
-        // Check if application is decid.(s)elf.
-        let app = self.app.path().file_name().unwrap();
-
-        if app != "decid.elf" && app != "decid.self" {
-            // TODO: Check what the PS4 is doing here.
-        }
-
-        if self.flags.intersects(LinkerFlags::HAS_SANITIZER) {
-            todo!("do_load_object with sanitizer & 2");
-        }
 
         // Load (S)ELF.
         let elf = match File::open(file.path()) {
@@ -550,7 +550,9 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         info!("Loading {name} with {flags:#x}.");
 
-        // TODO: Prevent race condition here.
+        // Start locking from here and keep the lock until we finished.
+        let mut globals = self.globals.write();
+
         // Check if already loaded.
         let list = self.list.read();
         let md = match list.iter().skip(1).find(|m| m.path() == name) {
@@ -570,8 +572,6 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         };
 
         // Add to global list if it is not in the list yet.
-        let mut globals = self.globals.write();
-
         if globals.iter().find(|m| Arc::ptr_eq(m, &md)).is_none() {
             globals.push(md.clone());
         }

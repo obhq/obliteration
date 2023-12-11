@@ -12,7 +12,7 @@ pub struct Vnode {
 
 impl Vnode {
     pub fn new(ty: Option<VnodeType>) -> Self {
-        let gg = GutexGroup::new("vnode");
+        let gg = GutexGroup::new();
 
         Self {
             ty: gg.spawn(ty),

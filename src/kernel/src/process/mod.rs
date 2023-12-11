@@ -39,7 +39,8 @@ mod thread;
 ///
 /// Each process of the Obliteration Kernel encapsulate only one PS4 process. The reason we don't
 /// encapsulate multiple PS4 processes is because there is no way to emulate `fork` with 100%
-/// compatibility from the user-mode application.
+/// compatibility from the user-mode application. The PS4 also forbid the game process from creating
+/// a child process so no reason for us to support this.
 #[derive(Debug)]
 pub struct VProc {
     id: NonZeroI32,                                  // p_pid
@@ -62,7 +63,7 @@ pub struct VProc {
 impl VProc {
     pub fn new(auth: AuthInfo, sys: &mut Syscalls) -> Result<Arc<Self>, VProcError> {
         // TODO: Check how ucred is constructed for a process.
-        let gg = GutexGroup::new("virtual process");
+        let gg = GutexGroup::new();
         let limits = Self::load_limits()?;
         let vp = Arc::new(Self {
             id: Self::new_id(),
