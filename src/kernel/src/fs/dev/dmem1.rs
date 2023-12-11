@@ -1,15 +1,18 @@
 use crate::errno::{Errno, EPERM};
 use crate::fs::{IoctlCom, VFile, VFileOps, VPath};
-use crate::process::VThread;
+use crate::process::{VProc, VThread};
 use crate::ucred::Ucred;
 use macros::vpath;
 use std::fmt::{Display, Formatter};
 use std::num::NonZeroI32;
+use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Debug)]
 pub struct Dmem1 {
+    vp: Arc<VProc>,
     total_size: usize,
+    number: i32,
 }
 
 impl Dmem1 {
@@ -17,9 +20,11 @@ impl Dmem1 {
 
     pub const COM10: IoctlCom = IoctlCom::ior::<usize>(0x88, 0xa);
 
-    pub fn new() -> Self {
+    pub fn new(vp: &Arc<VProc>) -> Self {
         Self {
+            vp: vp.clone(),
             total_size: 0x180_000_000, // 6 GB
+            number: 1,
         }
     }
 }
@@ -38,6 +43,10 @@ impl VFileOps for Dmem1 {
         _: &VThread,
     ) -> Result<(), Box<dyn Errno>> {
         if cred.is_unk1() || cred.is_unk2() {
+            return Err(Box::new(IoctlErr::BadCredentials));
+        }
+
+        if self.number != 2 && self.number != *self.vp.dmem_container() && !cred.is_system() {
             return Err(Box::new(IoctlErr::BadCredentials));
         }
 
