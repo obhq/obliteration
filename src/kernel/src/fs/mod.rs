@@ -34,9 +34,9 @@ mod vnode;
 #[derive(Debug)]
 pub struct Fs {
     vp: Arc<VProc>,
-    mounts: Gutex<Vec<Arc<Mount>>>, // mountlist
-    opens: AtomicI32,               // openfiles
-    root: Gutex<Arc<Vnode>>,        // rootvnode
+    mounts: Gutex<Mounts>,   // mountlist
+    opens: AtomicI32,        // openfiles
+    root: Gutex<Arc<Vnode>>, // rootvnode
 }
 
 impl Fs {
@@ -53,11 +53,11 @@ impl Fs {
         G: Into<PathBuf>,
     {
         // Mount devfs as an initial root.
-        let mut mounts = Vec::new();
+        let mut mounts = Mounts::new();
         let conf = Self::find_config("devfs").unwrap();
         let mut init = Mount::new(None, conf, "/dev", cred.clone());
 
-        if let Err(e) = (init.fs().ops.mount)(&mut init, HashMap::new()) {
+        if let Err(e) = (init.fs().ops.mount)(&mounts, &mut init, HashMap::new()) {
             panic!("Failed to mount devfs: {e}.");
         }
 
@@ -67,7 +67,7 @@ impl Fs {
         vp.files().set_cwd(root.clone());
         *vp.files().root_mut() = Some(root.clone());
 
-        mounts.push(Arc::new(init));
+        mounts.push(init);
 
         // Setup mount options for root FS.
         let mut opts: HashMap<String, Box<dyn Any>> = HashMap::new();
@@ -76,9 +76,9 @@ impl Fs {
         opts.insert("fspath".into(), Box::new(String::from("/")));
         opts.insert("from".into(), Box::new(String::from("md0")));
         opts.insert("ro".into(), Box::new(true));
-        opts.insert("system".into(), Box::new(system.into()));
-        opts.insert("game".into(), Box::new(game.into()));
-        opts.insert("param".into(), Box::new(param.clone()));
+        opts.insert("ob:system".into(), Box::new(system.into()));
+        opts.insert("ob:game".into(), Box::new(game.into()));
+        opts.insert("ob:param".into(), Box::new(param.clone()));
 
         // Mount root FS.
         let gg = GutexGroup::new();
@@ -145,7 +145,7 @@ impl Fs {
     }
 
     pub fn app(&self) -> Arc<VPathBuf> {
-        let root = self.mounts.read().first().unwrap().clone();
+        let root = self.mounts.read().root().clone();
         let data = root.data().cloned();
         let host = data.unwrap().downcast::<HostFs>().unwrap();
 
@@ -238,7 +238,7 @@ impl Fs {
             "/dev/dmem1" => FsItem::Device(VDev::Dmem1),
             "/dev/dmem2" => FsItem::Device(VDev::Dmem2),
             _ => {
-                let root = self.mounts.read().first().unwrap().clone();
+                let root = self.mounts.read().root().clone();
                 let data = root.data().cloned();
                 let host = data.unwrap().downcast::<HostFs>().unwrap();
 
@@ -468,12 +468,45 @@ impl Fs {
     fn mount(
         &self,
         mut opts: HashMap<String, Box<dyn Any>>,
-        flags: MountFlags,
+        mut flags: MountFlags,
         cred: &Ucred,
     ) -> Result<Arc<Vnode>, MountError> {
-        // TODO: Process the remaining options.
+        // Process the options.
         let fs = opts.remove("fstype").unwrap().downcast::<String>().unwrap();
         let path = opts.remove("fspath").unwrap().downcast::<String>().unwrap();
+
+        opts.retain(|k, v| {
+            match k.as_str() {
+                "async" => todo!(),
+                "atime" => todo!(),
+                "clusterr" => todo!(),
+                "clusterw" => todo!(),
+                "exec" => todo!(),
+                "force" => todo!(),
+                "multilabel" => todo!(),
+                "noasync" => todo!(),
+                "noatime" => todo!(),
+                "noclusterr" => todo!(),
+                "noclusterw" => todo!(),
+                "noexec" => todo!(),
+                "noro" => todo!(),
+                "nosuid" => todo!(),
+                "nosymfollow" => todo!(),
+                "rdonly" => todo!(),
+                "reload" => todo!(),
+                "ro" => flags.set(MountFlags::MNT_RDONLY, *v.downcast_ref::<bool>().unwrap()),
+                "rw" => todo!(),
+                "suid" => todo!(),
+                "suiddir" => todo!(),
+                "symfollow" => todo!(),
+                "sync" => todo!(),
+                "union" => todo!(),
+                "update" => todo!(),
+                _ => return true,
+            }
+
+            return false;
+        });
 
         if fs.len() >= 15 {
             return Err(MountError::FsTooLong);
@@ -495,17 +528,20 @@ impl Fs {
             // TODO: Lookup parent vnode.
             let mut mount = Mount::new(None, conf, *path, cred.clone());
 
-            mount
-                .flags_mut()
-                .remove(MountFlags::from_bits_retain(0xFFFFFFFF272F3F80));
+            flags.remove(MountFlags::from_bits_retain(0xFFFFFFFF272F3F80));
+            *mount.flags_mut() = flags;
 
             // TODO: Implement budgetid.
-            (mount.fs().ops.mount)(&mut mount, opts).map_err(|e| MountError::MountFailed(e))?;
+            let mut mounts = self.mounts.write();
+
+            if let Err(e) = (mount.fs().ops.mount)(&mounts, &mut mount, opts) {
+                return Err(MountError::MountFailed(e));
+            }
 
             // TODO: Implement the remaining logics from the PS4.
             let root = (mount.fs().ops.root)(&mount);
 
-            self.mounts.write().push(Arc::new(mount));
+            mounts.push(mount);
 
             Ok(root)
         }
@@ -610,7 +646,7 @@ pub struct FsConfig {
     version: u32,                    // vfc_version
     name: &'static str,              // vfc_name
     ops: &'static FsOps,             // vfc_vfsops
-    ty: i32,                         // vfc_typenum
+    ty: u32,                         // vfc_typenum
     refcount: AtomicI32,             // vfc_refcount
     next: Option<&'static FsConfig>, // vfc_list.next
 }
@@ -618,7 +654,7 @@ pub struct FsConfig {
 /// An implementation of `vfsops` structure.
 #[derive(Debug)]
 struct FsOps {
-    mount: fn(&mut Mount, HashMap<String, Box<dyn Any>>) -> Result<(), Box<dyn Errno>>,
+    mount: fn(&Mounts, &mut Mount, HashMap<String, Box<dyn Any>>) -> Result<(), Box<dyn Errno>>,
     root: fn(&Mount) -> Arc<Vnode>,
 }
 
@@ -669,7 +705,7 @@ impl Errno for FsError {
 
 static HOST: FsConfig = FsConfig {
     version: 0x19660120,
-    name: "exfatfs", // TODO: Seems like the PS4 use exfat as a root FS.
+    name: "exfatfs",
     ops: &self::host::HOST_OPS,
     ty: 0x2C,
     refcount: AtomicI32::new(0),
@@ -686,7 +722,7 @@ static MLFS: FsConfig = FsConfig {
 };
 
 static MLFS_OPS: FsOps = FsOps {
-    mount: |_, _| todo!("mount for mlfs"),
+    mount: |_, _, _| todo!("mount for mlfs"),
     root: |_| todo!("root for mlfs"),
 };
 
@@ -700,7 +736,7 @@ static UDF2: FsConfig = FsConfig {
 };
 
 static UDF2_OPS: FsOps = FsOps {
-    mount: |_, _| todo!("mount for udf2"),
+    mount: |_, _, _| todo!("mount for udf2"),
     root: |_| todo!("root for udf2"),
 };
 
@@ -723,7 +759,7 @@ static TMPFS: FsConfig = FsConfig {
 };
 
 static TMPFS_OPS: FsOps = FsOps {
-    mount: |_, _| todo!("mount for tmpfs"),
+    mount: |_, _, _| todo!("mount for tmpfs"),
     root: |_| todo!("root for tmpfs"),
 };
 
@@ -737,7 +773,7 @@ static UNIONFS: FsConfig = FsConfig {
 };
 
 static UNIONFS_OPS: FsOps = FsOps {
-    mount: |_, _| todo!("mount for unionfs"),
+    mount: |_, _, _| todo!("mount for unionfs"),
     root: |_| todo!("root for unionfs"),
 };
 
@@ -751,7 +787,7 @@ static PROCFS: FsConfig = FsConfig {
 };
 
 static PROCFS_OPS: FsOps = FsOps {
-    mount: |_, _| todo!("mount for procfs"),
+    mount: |_, _, _| todo!("mount for procfs"),
     root: |_| todo!("root for procfs"),
 };
 
@@ -765,7 +801,7 @@ static CD9660: FsConfig = FsConfig {
 };
 
 static CD9660_OPS: FsOps = FsOps {
-    mount: |_, _| todo!("mount for cd9660"),
+    mount: |_, _, _| todo!("mount for cd9660"),
     root: |_| todo!("root for cd9660"),
 };
 
@@ -779,7 +815,7 @@ static UFS: FsConfig = FsConfig {
 };
 
 static UFS_OPS: FsOps = FsOps {
-    mount: |_, _| todo!("mount for ufs"),
+    mount: |_, _, _| todo!("mount for ufs"),
     root: |_| todo!("root for ufs"),
 };
 
@@ -793,7 +829,7 @@ static NULLFS: FsConfig = FsConfig {
 };
 
 static NULLFS_OPS: FsOps = FsOps {
-    mount: |_, _| todo!("mount for nullfs"),
+    mount: |_, _, _| todo!("mount for nullfs"),
     root: |_| todo!("root for nullfs"),
 };
 
@@ -807,6 +843,6 @@ static PFS: FsConfig = FsConfig {
 };
 
 static PFS_OPS: FsOps = FsOps {
-    mount: |_, _| todo!("mount for pfs"),
+    mount: |_, _, _| todo!("mount for pfs"),
     root: |_| todo!("root for pfs"),
 };
