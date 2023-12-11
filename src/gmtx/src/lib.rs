@@ -1,5 +1,5 @@
 pub use self::guard::*;
-use std::cell::{Cell, UnsafeCell};
+use std::cell::UnsafeCell;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -60,8 +60,7 @@ impl<T> Gutex<T> {
     }
 
     /// # Panics
-    /// - If there are an active writer.
-    /// - If the calling thread already hold the lock on another group.
+    /// If there are an active writer.
     pub fn read(&self) -> GutexReadGuard<'_, T> {
         // Check if there are an active writer.
         let lock = self.group.lock();
@@ -82,8 +81,7 @@ impl<T> Gutex<T> {
     }
 
     /// # Panics
-    /// - If there are any active reader or writer.
-    /// - If the calling thread already hold the lock on another group.
+    /// If there are any active reader or writer.
     pub fn write(&self) -> GutexWriteGuard<'_, T> {
         // Check if there are active reader or writer.
         let lock = self.group.lock();
@@ -109,16 +107,14 @@ unsafe impl<T: Send> Sync for Gutex<T> {}
 /// Represents a group of [`Gutex`].
 #[derive(Debug)]
 pub struct GutexGroup {
-    name: Arc<String>,
     owning: ThreadId,
     active: UnsafeCell<usize>,
     waiting: Mutex<VecDeque<Weak<Thread>>>,
 }
 
 impl GutexGroup {
-    pub fn new<N: Into<String>>(name: N) -> Arc<Self> {
+    pub fn new() -> Arc<Self> {
         Arc::new(Self {
-            name: Arc::new(name.into()),
             owning: ThreadId::new(0),
             active: UnsafeCell::new(0),
             waiting: Mutex::new(VecDeque::new()),
@@ -133,6 +129,7 @@ impl GutexGroup {
         }
     }
 
+    #[inline(always)]
     fn lock(&self) -> GroupGuard<'_> {
         // Check if the calling thread already own the lock.
         let current = Self::current_thread();
@@ -142,15 +139,25 @@ impl GutexGroup {
             return unsafe { GroupGuard::new(self) };
         }
 
-        // Check if the calling thread already own a lock on another group to prevent a possible
-        // deadlock.
-        if let Some(active) = ACTIVE_GROUP.take() {
-            panic!(
-                "attempt to acquire '{}' mutex group while holding the lock on '{}' group",
-                self.name, active
-            );
+        // Try locking without putting the current thread into the wait queue first. This will be
+        // much faster if the lock can be acquired immediately.
+        if self
+            .owning
+            .compare_exchange(0, current, Ordering::Acquire, Ordering::Relaxed)
+            .is_ok()
+        {
+            // SAFETY: This is safe because the current thread just acquired the lock successfully
+            // by the above compare_exchange().
+            return unsafe { GroupGuard::new(self) };
         }
 
+        // Split the slow path into a separated function so this function will be likely to be
+        // inlined.
+        self.lock_with_wait_queue(current)
+    }
+
+    #[inline(never)]
+    fn lock_with_wait_queue(&self, current: RawThreadId) -> GroupGuard<'_> {
         // Put the current thread into the wait queue. This need to be done before
         // compare_exchange() so we don't end up parking the current thread when someone just
         // release the lock after compare_exchange().
@@ -171,10 +178,9 @@ impl GutexGroup {
             std::thread::park();
         }
 
+        // Remove the current thread from the waiting queue before we construct a GroupGuard because
+        // the destructor of GroupGuard will unpark one thread, which can be this thread.
         drop(waiting);
-
-        // Set active group.
-        ACTIVE_GROUP.set(Some(self.name.clone()));
 
         // SAFETY: This is safe because the current thread acquire the lock successfully by the
         // above compare_exchange().
@@ -213,6 +219,7 @@ impl<'a> GroupGuard<'a> {
     /// # Safety
     /// The group must be locked by the calling thread with no active references to any of its
     /// field.
+    #[inline(always)]
     unsafe fn new(group: &'a GutexGroup) -> Self {
         *group.active.get() += 1;
 
@@ -237,13 +244,24 @@ impl<'a> Drop for GroupGuard<'a> {
         }
 
         // Release the lock.
-        ACTIVE_GROUP.take().unwrap();
         self.group.owning.store(0, Ordering::Release);
 
         // Wakeup one waiting thread.
         let mut waiting = match self.group.waiting.try_lock() {
             Ok(v) => v,
-            Err(_) => return,
+            Err(_) => {
+                // There are 2 possible cases here:
+                //
+                // 1. The other thread being doing a wakeup on the bottom.
+                // 2. The other thread being acquiring the lock using wait queue.
+                //
+                // For the first case we don't need to do a wakeup because someone already working
+                // on this. For the second case that thread (or someone else that are not parking
+                // yet) can acquire the lock because we just release it on the above.
+                // That mean there is at least one thread that not yet parking, which imply that one
+                // of them will be successfully acquire the lock.
+                return;
+            }
         };
 
         while let Some(t) = waiting.pop_front() {
@@ -257,13 +275,15 @@ impl<'a> Drop for GroupGuard<'a> {
 
 #[cfg(target_os = "linux")]
 type ThreadId = std::sync::atomic::AtomicI32;
+#[cfg(target_os = "linux")]
+type RawThreadId = i32;
 
 #[cfg(target_os = "macos")]
 type ThreadId = std::sync::atomic::AtomicU64;
+#[cfg(target_os = "macos")]
+type RawThreadId = u64;
 
 #[cfg(target_os = "windows")]
 type ThreadId = std::sync::atomic::AtomicU32;
-
-thread_local! {
-    static ACTIVE_GROUP: Cell<Option<Arc<String>>> = const { Cell::new(None) };
-}
+#[cfg(target_os = "windows")]
+type RawThreadId = u32;

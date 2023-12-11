@@ -4,7 +4,7 @@ pub use self::item::*;
 pub use self::mount::*;
 pub use self::path::*;
 pub use self::vnode::*;
-use crate::errno::{Errno, EBADF, EINVAL, ENAMETOOLONG, ENODEV, ENOENT, ENOTCAPABLE, ENOTTY};
+use crate::errno::{Errno, EBADF, EINVAL, ENAMETOOLONG, ENODEV, ENOENT, ENOTCAPABLE};
 use crate::info;
 use crate::process::{VProc, VThread};
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
@@ -81,7 +81,7 @@ impl Fs {
         opts.insert("param".into(), Box::new(param.clone()));
 
         // Mount root FS.
-        let gg = GutexGroup::new("fs");
+        let gg = GutexGroup::new();
         let fs = Arc::new(Self {
             vp: vp.clone(),
             mounts: gg.spawn(mounts),

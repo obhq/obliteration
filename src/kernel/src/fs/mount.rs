@@ -25,7 +25,7 @@ impl Mount {
     where
         P: Into<String>,
     {
-        let gg = GutexGroup::new("mount");
+        let gg = GutexGroup::new();
         let owner = cred.effective_uid();
         let mount = Self {
             fs,
