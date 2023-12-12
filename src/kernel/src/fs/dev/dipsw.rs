@@ -50,20 +50,20 @@ impl VFileOps for Dipsw {
         _: &VThread,
     ) -> Result<(), Box<dyn Errno>> {
         match com {
-            COM1 => todo!("dipsw ioctl 0x80028801"),
-            COM2 => todo!("dipsw ioctl 0x80028802"),
-            COM3 => todo!("dipsw ioctl 0xc0088803"),
-            COM4 => todo!("dipsw ioctl 0x80108804"),
-            COM5 => todo!("dipsw ioctl 0x80108805"),
-            COM6 => {
+            Self::COM1 => todo!("dipsw ioctl 0x80028801"),
+            Self::COM2 => todo!("dipsw ioctl 0x80028802"),
+            Self::COM3 => todo!("dipsw ioctl 0xc0088803"),
+            Self::COM4 => todo!("dipsw ioctl 0x80108804"),
+            Self::COM5 => todo!("dipsw ioctl 0x80108805"),
+            Self::COM6 => {
                 //todo write the correct value if unk_func1() = false and
                 // unk_func2() = true
                 data.copy_from_slice(&(false as i32).to_le_bytes());
             }
-            COM7 => todo!("dipsw ioctl 0x40048807"),
-            COM8 => todo!("dipsw ioctl 0x40088808"),
-            COM9 => todo!("dipsw ioctl 0x40088809"),
-            COM10 => todo!("dipsw ioctl 0x8010880a"),
+            Self::COM7 => todo!("dipsw ioctl 0x40048807"),
+            Self::COM8 => todo!("dipsw ioctl 0x40088808"),
+            Self::COM9 => todo!("dipsw ioctl 0x40088809"),
+            Self::COM10 => todo!("dipsw ioctl 0x8010880a"),
             _ => return Err(Box::new(IoctlErr::InvalidCommand)),
         }
 

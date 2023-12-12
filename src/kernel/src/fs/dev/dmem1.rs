@@ -18,7 +18,7 @@ pub struct Dmem1 {
 impl Dmem1 {
     pub const PATH: &VPath = vpath!("/dev/dmem1");
 
-    pub const COM10: IoctlCom = IoctlCom::ior::<usize>(0x88, 0xa);
+    pub const COM10: IoctlCom = IoctlCom::ior::<usize>(0x80, 0xa);
 
     pub fn new(vp: &Arc<VProc>) -> Self {
         Self {
