@@ -1,3 +1,4 @@
+pub use self::dirent::*;
 pub use self::file::*;
 pub use self::host::*;
 pub use self::item::*;
@@ -23,6 +24,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 mod dev;
+mod dirent;
 mod file;
 mod host;
 mod item;
@@ -338,7 +340,7 @@ impl Fs {
         };
 
         *file.flags_mut() = flags.to_fflags();
-        file.set_ops(Some(self.namei(&mut nd)?.open()?));
+        file.set_ops(Some(self.namei(&mut nd)?.open(&self.vp)?));
 
         // Install to descriptor table.
         let fd = self.vp.files().alloc(Arc::new(file));

@@ -112,7 +112,7 @@ jobs:
     - name: Export artifacts
       run: cmake --install build --prefix dist
     - name: Upload artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: obliteration-win-x64
         path: dist

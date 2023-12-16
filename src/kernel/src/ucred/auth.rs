@@ -4,7 +4,7 @@
 pub struct AuthInfo {
     pub paid: AuthPaid,
     pub caps: AuthCaps,
-    pub attrs: [u64; 4],
+    pub attrs: AuthAttrs,
     pub unk: [u8; 0x40],
 }
 
@@ -17,12 +17,12 @@ impl AuthInfo {
             0x0000000000000000,
             0x0000000000000000,
         ]),
-        attrs: [
+        attrs: AuthAttrs([
             0x4000400080000000,
             0x8000000000000000,
             0x0800000000000000,
             0xF0000000FFFF4000,
-        ],
+        ]),
         unk: [0; 0x40],
     };
 
@@ -45,12 +45,12 @@ impl AuthInfo {
                 0x0000000000000000,
                 0x0000000000000000,
             ]),
-            attrs: [
+            attrs: AuthAttrs([
                 0x4000400040000000,
                 0x4000000000000000,
                 0x0080000000000002,
                 0xF0000000FFFF4000,
-            ],
+            ]),
             unk: [0; 0x40],
         })
     }
@@ -90,10 +90,29 @@ impl AuthCaps {
         (self.0[0] & 0x4000000000000000) != 0
     }
 
+    pub fn is_unk1(&self) -> bool {
+        (self.0[1] & 0x4000000000000000) != 0
+    }
+
     pub fn clear_non_type(&mut self) {
         self.0[0] &= 0x7000000000000000;
         self.0[1] = 0;
         self.0[2] = 0;
         self.0[3] = 0;
+    }
+}
+
+/// A wrapper type for `caps` field of [`AuthAttrs`].
+#[repr(transparent)]
+#[derive(Debug, Clone)]
+pub struct AuthAttrs([u64; 4]);
+
+impl AuthAttrs {
+    pub fn is_unk1(&self) -> bool {
+        (self.0[0] & 0x800000) != 0
+    }
+
+    pub fn is_unk2(&self) -> bool {
+        (self.0[0] & 0x400000) != 0
     }
 }
