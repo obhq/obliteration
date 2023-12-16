@@ -422,6 +422,8 @@ impl VProc {
         let name: Option<&str> = unsafe { i.args[1].to_str(32) }?;
 
         if tid == -1 {
+            info!("Setting process name to '{}'.", name.unwrap_or("NULL"));
+
             self.set_name(name);
         } else {
             let threads = self.threads.read();
@@ -430,6 +432,12 @@ impl VProc {
                 .iter()
                 .find(|t| t.id().get() == tid)
                 .ok_or(SysErr::Raw(ESRCH))?;
+
+            info!(
+                "Setting name of thread {} to '{}'.",
+                thr.id(),
+                name.unwrap_or("NULL")
+            );
 
             thr.set_name(name);
         }

@@ -340,7 +340,7 @@ impl Fs {
         };
 
         *file.flags_mut() = flags.to_fflags();
-        file.set_ops(Some(self.namei(&mut nd)?.open()?));
+        file.set_ops(Some(self.namei(&mut nd)?.open(&self.vp)?));
 
         // Install to descriptor table.
         let fd = self.vp.files().alloc(Arc::new(file));

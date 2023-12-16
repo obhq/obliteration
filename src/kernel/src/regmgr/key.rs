@@ -47,6 +47,7 @@ impl RegKey {
     pub const NET_WIFI_FREQ_BAND: Self = Self(0x141E0500);
     pub const NP_DEBUG: Self = Self(0x19810000);
     pub const BROWSER_DEBUG_NOTIFICATION: Self = Self(0x3CC80700);
+    pub const MORPHEUS_DEBUG_VR_CAPTURE: Self = Self(0x58800C00);
     pub const DEVENV_TOOL_BOOT_PARAM: Self = Self(0x78020300);
     pub const DEVENV_TOOL_TRC_NOTIFY: Self = Self(0x78026400);
     pub const DEVENV_TOOL_USE_DEFAULT_LIB: Self = Self(0x78028300);
@@ -134,6 +135,9 @@ impl Display for RegKey {
             Self::NP_DEBUG => f.write_str("SCE_REGMGR_ENT_KEY_NP_debug"),
             Self::BROWSER_DEBUG_NOTIFICATION => {
                 f.write_str("SCE_REGMGR_ENT_KEY_BROWSER_DEBUG_notification")
+            }
+            Self::MORPHEUS_DEBUG_VR_CAPTURE => {
+                f.write_str("SCE_REGMGR_ENT_KEY_MORPHEUS_DEBUG_vr_capture")
             }
             Self::DEVENV_TOOL_BOOT_PARAM => {
                 f.write_str("SCE_REGMGR_ENT_KEY_DEVENV_TOOL_boot_param")

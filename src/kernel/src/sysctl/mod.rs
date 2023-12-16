@@ -379,7 +379,7 @@ impl Sysctl {
     ) -> Result<(), SysErr> {
         //TODO write RuntimeLinker flags if unknown_function() = true
 
-        req.write(&(0u32).to_le_bytes())?;
+        req.write(&(0u32).to_ne_bytes())?;
         Ok(())
     }
 
