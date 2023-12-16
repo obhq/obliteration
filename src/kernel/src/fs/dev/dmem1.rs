@@ -25,7 +25,7 @@ impl Dmem1 {
     pub fn new(vp: &Arc<VProc>) -> Self {
         Self {
             vp: vp.clone(),
-            total_size: 0x180_000_000, // 6 GB
+            total_size: 0x13C_000_000, // TODO figure out the real value
             number: 1,
         }
     }
