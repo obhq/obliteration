@@ -1,6 +1,5 @@
 use crate::arch::MachDep;
 use crate::arnd::Arnd;
-use crate::blkpl::BlockPoolManager;
 use crate::budget::{Budget, BudgetManager, ProcType};
 use crate::dmem::DmemManager;
 use crate::ee::{EntryArg, RawFn};
@@ -29,7 +28,6 @@ use sysinfo::{CpuExt, System, SystemExt};
 
 mod arch;
 mod arnd;
-mod blkpl;
 mod budget;
 mod dmem;
 mod ee;
@@ -279,15 +277,13 @@ fn run<E: crate::ee::ExecutionEngine>(
         &mut syscalls,
     );
 
-    BlockPoolManager::new(&fs, &vp, &mut syscalls);
-
     *vp.files().root_mut() = Some(fs.root().clone()); // TODO: Check how the PS4 set this field.
 
     // Initialize kernel components.
     RegMgr::new(&mut syscalls);
     let machdep = MachDep::new(&mut syscalls);
     let budget = BudgetManager::new(vp, &mut syscalls);
-    DmemManager::new(vp, &mut syscalls);
+    DmemManager::new(vp, &fs, &mut syscalls);
 
     // TODO: Get correct name from the PS4.
     *vp.budget_mut() = Some((
