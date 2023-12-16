@@ -1,5 +1,6 @@
 use crate::arch::MachDep;
 use crate::arnd::Arnd;
+use crate::blkpl::BlockPoolManager;
 use crate::budget::{Budget, BudgetManager, ProcType};
 use crate::dmem::DmemManager;
 use crate::ee::{EntryArg, RawFn};
@@ -28,6 +29,7 @@ use sysinfo::{CpuExt, System, SystemExt};
 
 mod arch;
 mod arnd;
+mod blkpl;
 mod budget;
 mod dmem;
 mod ee;
@@ -276,6 +278,8 @@ fn run<E: crate::ee::ExecutionEngine>(
         vp,
         &mut syscalls,
     );
+
+    BlockPoolManager::new(&fs, &vp, &mut syscalls);
 
     *vp.files().root_mut() = Some(fs.root().clone()); // TODO: Check how the PS4 set this field.
 

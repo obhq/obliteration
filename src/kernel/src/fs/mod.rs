@@ -251,7 +251,7 @@ impl Fs {
     }
 
     /// See `falloc_noinstall_budget` on the PS4 for a reference.
-    fn alloc(self: &Arc<Self>) -> VFile {
+    pub fn alloc(self: &Arc<Self>) -> VFile {
         // TODO: Check if openfiles exceed rlimit.
         // TODO: Implement budget_resource_use.
         self.opens.fetch_add(1, Ordering::Relaxed);
