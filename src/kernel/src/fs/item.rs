@@ -107,7 +107,7 @@ pub enum VDev {
 impl VDev {
     pub fn open(&self, vp: &Arc<VProc>) -> Result<Box<dyn VFileOps>, FsError> {
         let ops: Box<dyn VFileOps> = match self {
-            Self::Console => Box::new(Console::new()),
+            Self::Console => Box::new(Console::new(vp)),
             Self::Dipsw => Box::new(Dipsw::new()),
             Self::DeciTty6 => Box::new(DeciTty6::new()),
             Self::Dmem0 => Box::new(Dmem0::new()),

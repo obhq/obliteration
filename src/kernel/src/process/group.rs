@@ -13,6 +13,10 @@ impl VProcGroup {
         Self { id, session }
     }
 
+    pub fn session(&self) -> &VSession {
+        &self.session
+    }
+
     pub fn session_mut(&mut self) -> &mut VSession {
         &mut self.session
     }

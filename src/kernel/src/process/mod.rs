@@ -116,6 +116,10 @@ impl VProc {
         &self.cred
     }
 
+    pub fn group(&self) -> GutexReadGuard<'_, Option<VProcGroup>> {
+        &self.group.read()
+    }
+
     pub fn files(&self) -> &FileDesc {
         &self.files
     }
