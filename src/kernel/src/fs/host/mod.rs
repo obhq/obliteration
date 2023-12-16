@@ -1,5 +1,6 @@
 use super::{
     FsItem, FsOps, HostDir, HostFile, Mount, MountFlags, Mounts, VPath, VPathBuf, Vnode, VnodeType,
+    VopVector,
 };
 use crate::errno::Errno;
 use param::Param;
@@ -166,9 +167,13 @@ fn mount(
     Ok(())
 }
 
-fn root(_: &Mount) -> Arc<Vnode> {
-    // TODO: What should we do here?
-    Arc::new(Vnode::new(Some(VnodeType::Directory { mount: None })))
+fn root(mnt: &Mount) -> Arc<Vnode> {
+    Arc::new(Vnode::new(
+        VnodeType::Directory(true),
+        "exfatfs",
+        &VNODE_OPS,
+        Arc::new(VPathBuf::new()),
+    ))
 }
 
 /// Source of mount point.
@@ -179,3 +184,4 @@ enum MountSource {
 }
 
 pub(super) static HOST_OPS: FsOps = FsOps { mount, root };
+static VNODE_OPS: VopVector = VopVector {};

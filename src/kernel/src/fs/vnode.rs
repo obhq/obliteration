@@ -1,45 +1,58 @@
-use super::Mount;
-use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
+use std::any::Any;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 /// An implementation of `vnode`.
 #[derive(Debug)]
 pub struct Vnode {
-    ty: Gutex<Option<VnodeType>>, // v_type
-    flags: Gutex<VnodeFlags>,     // v_iflag + v_vflag
+    ty: VnodeType,                                   // v_type
+    tag: &'static str,                               // v_tag
+    op: &'static VopVector,                          // v_op
+    data: Arc<dyn Any + Send + Sync>,                // v_data
+    item: Gutex<Option<Arc<dyn Any + Send + Sync>>>, // v_un
 }
 
 impl Vnode {
-    pub fn new(ty: Option<VnodeType>) -> Self {
+    /// See `getnewvnode` on the PS4 for a reference.
+    pub fn new(
+        ty: VnodeType,
+        tag: &'static str,
+        op: &'static VopVector,
+        data: Arc<dyn Any + Send + Sync>,
+    ) -> Self {
         let gg = GutexGroup::new();
 
+        ACTIVE.fetch_add(1, Ordering::Relaxed);
+
         Self {
-            ty: gg.spawn(ty),
-            flags: gg.spawn(VnodeFlags::empty()),
+            ty,
+            tag,
+            op,
+            data,
+            item: gg.spawn(None),
         }
     }
 
-    pub fn ty_mut(&self) -> GutexWriteGuard<'_, Option<VnodeType>> {
-        self.ty.write()
+    pub fn item_mut(&self) -> GutexWriteGuard<Option<Arc<dyn Any + Send + Sync>>> {
+        self.item.write()
     }
+}
 
-    pub fn flags_mut(&self) -> GutexWriteGuard<'_, VnodeFlags> {
-        self.flags.write()
+impl Drop for Vnode {
+    fn drop(&mut self) {
+        ACTIVE.fetch_sub(1, Ordering::Relaxed);
     }
 }
 
 /// An implementation of `vtype`.
 #[derive(Debug)]
 pub enum VnodeType {
-    Directory { mount: Option<Arc<Mount>> },
+    Directory(bool),
 }
 
-bitflags! {
-    /// This combined both `VI_XXX` and `VV_XXX` flags together. The VI will be on the lower 32-bits
-    /// and VV will be on the higher 32-bits.
-    #[derive(Debug, Clone, Copy)]
-    pub struct VnodeFlags: u64 {
-        const VI_MOUNT = 0x0020;
-    }
-}
+/// An implementation of `vop_vector` structure.
+#[derive(Debug)]
+pub struct VopVector {}
+
+static ACTIVE: AtomicUsize = AtomicUsize::new(0); // numvnodes

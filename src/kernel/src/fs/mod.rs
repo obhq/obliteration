@@ -17,7 +17,6 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::num::{NonZeroI32, TryFromIntError};
-use std::ops::DerefMut;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
@@ -111,19 +110,7 @@ impl Fs {
         *vp.files().root_mut() = Some(root);
 
         // Disconnect devfs from the old root.
-        let ov = (om.fs().ops.root)(&om);
-        let mut flags = ov.flags_mut();
-        let mut ty = ov.ty_mut();
-
-        flags.remove(VnodeFlags::VI_MOUNT);
-
-        match ty.deref_mut() {
-            Some(VnodeType::Directory { mount }) => *mount = None,
-            _ => unreachable!(),
-        }
-
-        drop(ty);
-        drop(flags);
+        *(om.fs().ops.root)(&om).item_mut() = None;
 
         // Update devfs.
         let mut flags = om.flags_mut();
@@ -180,7 +167,7 @@ impl Fs {
 
         // TODO: Implement ktrnamei.
         nd.rootdir = self.vp.files().root().clone();
-        nd.topdir = Some(self.vp.files().jail().clone());
+        nd.topdir = self.vp.files().jail().clone();
 
         let mut dp = if nd.cnd.pnbuf[0] != b'/' {
             todo!("namei with relative path");

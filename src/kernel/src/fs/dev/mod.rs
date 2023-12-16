@@ -1,5 +1,5 @@
 use self::dirent::DirentFlags;
-use super::{DirentType, FsOps, Mount, MountFlags, Mounts, Vnode, VnodeType};
+use super::{DirentType, FsOps, Mount, MountFlags, Mounts, Vnode, VnodeType, VopVector};
 use crate::errno::{Errno, EOPNOTSUPP};
 use std::any::Any;
 use std::collections::HashMap;
@@ -20,7 +20,6 @@ pub(super) mod dmem2;
 pub struct DevFs {
     idx: u32,                        // dm_idx
     root: Arc<self::dirent::Dirent>, // dm_rootdir
-    hold: i32,                       // dm_holdcnt
 }
 
 impl DevFs {
@@ -53,7 +52,7 @@ impl DevFs {
             DirentType::Directory,
             0,
             0,
-            Some(dir.clone()),
+            Some(Arc::downgrade(&dir)),
             DirentFlags::DE_DOT,
             ".",
         );
@@ -65,7 +64,7 @@ impl DevFs {
             DirentType::Directory,
             0,
             0,
-            Some(parent.clone().unwrap_or_else(|| dir.clone())),
+            Some(Arc::downgrade(parent.as_ref().unwrap_or(&dir))),
             DirentFlags::DE_DOTDOT,
             "..",
         );
@@ -78,6 +77,29 @@ impl DevFs {
         }
 
         dir
+    }
+
+    /// See `devfs_allocv` on the PS4 for a reference.
+    fn alloc_vnode(ent: &Arc<self::dirent::Dirent>) -> Arc<Vnode> {
+        // Get type.
+        let ty = match ent.dirent().ty() {
+            DirentType::Character => todo!("devfs_allocv with DT_CHR"),
+            DirentType::Directory => VnodeType::Directory(ent.inode() == Self::DEVFS_ROOTINO),
+        };
+
+        // Create vnode.
+        let vn = Arc::new(Vnode::new(ty, "devfs", &VNODE_OPS, ent.clone()));
+        let mut current = ent.vnode_mut();
+
+        if let Some(_) = current.as_ref().and_then(|v| v.upgrade()) {
+            todo!("devfs_allocv with non-null vnode");
+        }
+
+        *current = Some(Arc::downgrade(&vn));
+        drop(current);
+
+        // TODO: Implement insmntque1.
+        vn
     }
 }
 
@@ -105,17 +127,18 @@ fn mount(
     mount.set_data(Arc::new(DevFs {
         idx: idx.try_into().unwrap(),
         root: DevFs::mkdir("", DevFs::DEVFS_ROOTINO, None),
-        hold: 1,
     }));
 
     mounts.set_id(mount);
 
+    // TODO: Implement vfs_mountedfrom.
     Ok(())
 }
 
-fn root(_: &Mount) -> Arc<Vnode> {
-    // TODO: Check what the PS4 is doing here.
-    Arc::new(Vnode::new(Some(VnodeType::Directory { mount: None })))
+fn root(mnt: &Mount) -> Arc<Vnode> {
+    let fs = mnt.data().unwrap().downcast_ref::<DevFs>().unwrap();
+
+    DevFs::alloc_vnode(&fs.root)
 }
 
 /// Represents an error when [`mount`] is failed.
@@ -139,3 +162,4 @@ impl Errno for MountError {
 pub(super) static DEVFS_OPS: FsOps = FsOps { mount, root };
 static DEVFS: AtomicI32 = AtomicI32::new(0); // TODO: Use a proper implementation.
 static INODE: AtomicU32 = AtomicU32::new(3); // TODO: Same here.
+static VNODE_OPS: VopVector = VopVector {};
