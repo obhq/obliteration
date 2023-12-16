@@ -152,8 +152,8 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         for m in app.modules() {
             match m.name() {
-                "libSceDbgUndefinedBehaviorSanitizer" => flags |= LinkerFlags::UNK1,
-                "libSceDbgAddressSanitizer" => flags |= LinkerFlags::HAS_SANITIZER,
+                "libSceDbgUndefinedBehaviorSanitizer" => flags |= LinkerFlags::HAS_UBSAN,
+                "libSceDbgAddressSanitizer" => flags |= LinkerFlags::HAS_ASAN,
                 _ => continue,
             }
         }
@@ -234,7 +234,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             // TODO: Check what the PS4 is doing here.
         }
 
-        if self.flags.intersects(LinkerFlags::HAS_SANITIZER) {
+        if self.flags.intersects(LinkerFlags::HAS_ASAN) {
             todo!("do_load_object with sanitizer & 2");
         }
 
@@ -400,7 +400,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         let resolver = SymbolResolver::new(
             &mains,
             &globals,
-            self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::HAS_SANITIZER),
+            self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::HAS_ASAN),
         );
 
         // Resolve.
@@ -604,7 +604,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             let resolver = SymbolResolver::new(
                 &mains,
                 &globals,
-                self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::HAS_SANITIZER),
+                self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::HAS_ASAN),
             );
 
             self.init_dag(&md);
@@ -722,7 +722,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         let resolver = SymbolResolver::new(
             &mains,
             &globals,
-            self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::HAS_SANITIZER),
+            self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::HAS_ASAN),
         );
 
         info!("Relocating initial modules.");
@@ -1142,8 +1142,8 @@ bitflags! {
     /// Flags for [`RuntimeLinker`].
     #[derive(Debug)]
     pub struct LinkerFlags: u32 {
-        const UNK1 = 0x01; // TODO: Rename this.
-        const HAS_SANITIZER = 0x02;
+        const HAS_UBSAN = 0x01;
+        const HAS_ASAN = 0x02;
     }
 }
 
