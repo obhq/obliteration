@@ -53,7 +53,7 @@ impl Ucred {
     }
 
     pub fn is_unk1(&self) -> bool {
-        self.auth.caps.is_unk1() || self.auth.attrs.is_unk1()
+        self.auth.caps.is_unk1() && self.auth.attrs.is_unk1()
     }
 
     pub fn is_unk2(&self) -> bool {
