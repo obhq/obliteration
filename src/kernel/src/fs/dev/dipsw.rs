@@ -60,7 +60,7 @@ impl VFileOps for Dipsw {
             Self::COM6 => {
                 //todo write the correct value if unk_func1() = false and
                 // unk_func2() = true
-                data.copy_from_slice(&(false as i32).to_le_bytes());
+                data.copy_from_slice(&(false as i32).to_ne_bytes());
             }
             Self::COM7 => todo!("dipsw ioctl 0x40048807"),
             Self::COM8 => todo!("dipsw ioctl 0x40088808"),
