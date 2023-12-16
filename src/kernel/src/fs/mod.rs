@@ -1,3 +1,4 @@
+pub use self::dirent::*;
 pub use self::file::*;
 pub use self::host::*;
 pub use self::item::*;
@@ -23,6 +24,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 mod dev;
+mod dirent;
 mod file;
 mod host;
 mod item;
