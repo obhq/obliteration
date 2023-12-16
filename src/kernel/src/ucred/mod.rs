@@ -57,7 +57,7 @@ impl Ucred {
     }
 
     pub fn is_unk2(&self) -> bool {
-        self.auth.caps.is_unk1() || self.auth.attrs.is_unk2()
+        self.auth.caps.is_unk1() && self.auth.attrs.is_unk2()
     }
 
     /// See `priv_check_cred` on the PS4 for a reference.
