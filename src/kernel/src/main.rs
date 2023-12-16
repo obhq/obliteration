@@ -283,7 +283,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     RegMgr::new(&mut syscalls);
     let machdep = MachDep::new(&mut syscalls);
     let budget = BudgetManager::new(vp, &mut syscalls);
-    DmemManager::new(vp, &mut syscalls);
+    DmemManager::new(vp, &fs, &mut syscalls);
 
     // TODO: Get correct name from the PS4.
     *vp.budget_mut() = Some((

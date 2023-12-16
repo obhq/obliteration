@@ -13,6 +13,9 @@ pub struct Console {}
 impl Console {
     pub const PATH: &VPath = vpath!("/dev/console");
 
+    #[allow(dead_code)]
+    pub const TIOCSCTTY: IoctlCom = IoctlCom::io(b't', 97);
+
     pub fn new() -> Self {
         Self {}
     }
