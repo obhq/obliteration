@@ -1,7 +1,7 @@
 use crate::errno::EBADF;
 use crate::fs::{VFile, Vnode};
 use crate::syscalls::SysErr;
-use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
+use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use std::sync::Arc;
 
 /// An implementation of `filedesc` structure.
@@ -10,7 +10,7 @@ pub struct FileDesc {
     files: Gutex<Vec<Option<Arc<VFile>>>>, // fd_ofiles
     cwd: Gutex<Option<Arc<Vnode>>>,        // fd_cdir
     root: Gutex<Option<Arc<Vnode>>>,       // fd_rdir
-    jail: Arc<Vnode>,                      // fd_jdir
+    jail: Gutex<Option<Arc<Vnode>>>,       // fd_jdir
 }
 
 impl FileDesc {
@@ -19,7 +19,7 @@ impl FileDesc {
             files: gg.spawn(vec![None, None, None]),
             cwd: gg.spawn(None),
             root: gg.spawn(None),
-            jail: Arc::new(Vnode::new(None)), // TODO: Check how the PS4 set this field.
+            jail: gg.spawn(None), // TODO: Check how the PS4 set this field.
         }
     }
 
@@ -39,8 +39,8 @@ impl FileDesc {
         self.root.write()
     }
 
-    pub fn jail(&self) -> &Arc<Vnode> {
-        &self.jail
+    pub fn jail(&self) -> GutexReadGuard<Option<Arc<Vnode>>> {
+        self.jail.read()
     }
 
     /// See `finstall` on the PS4 for a reference.

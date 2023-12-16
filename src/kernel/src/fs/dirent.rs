@@ -11,16 +11,23 @@ impl Dirent {
             name: name.into(),
         }
     }
+
+    pub fn ty(&self) -> DirentType {
+        self.ty
+    }
 }
 
 /// Type of [`Dirent`].
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum DirentType {
+    Character, // DT_CHR
     Directory, // DT_DIR
 }
 
 impl DirentType {
     pub fn to_ps4(&self) -> u8 {
         match self {
+            Self::Character => 2,
             Self::Directory => 4,
         }
     }
