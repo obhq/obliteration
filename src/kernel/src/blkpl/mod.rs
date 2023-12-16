@@ -35,7 +35,7 @@ impl BlockPoolManager {
 
         let fd = self.vp.files().alloc(Arc::new(file));
 
-        info!("File descriptor {fd} was assigned to a new blockpool");
+        info!("File descriptor {fd} was allocated for a new blockpool");
 
         Ok(fd.into())
     }
