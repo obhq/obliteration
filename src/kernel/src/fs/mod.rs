@@ -58,17 +58,15 @@ impl Fs {
         let conf = Self::find_config("devfs").unwrap();
         let mut init = Mount::new(None, conf, "/dev", cred.clone());
 
-        if let Err(e) = (init.fs().ops.mount)(&mounts, &mut init, HashMap::new()) {
+        if let Err(e) = (init.fs().ops.mount)(&mut init, HashMap::new()) {
             panic!("Failed to mount devfs: {e}.");
         }
 
         // Get an initial root vnode.
-        let root = (init.fs().ops.root)(&init);
+        let root = (init.fs().ops.root)(&mounts.push(init));
 
         vp.files().set_cwd(root.clone());
         *vp.files().root_mut() = Some(root.clone());
-
-        mounts.push(init);
 
         // Setup mount options for root FS.
         let mut opts: HashMap<String, Box<dyn Any>> = HashMap::new();
@@ -521,18 +519,12 @@ impl Fs {
             *mount.flags_mut() = flags;
 
             // TODO: Implement budgetid.
-            let mut mounts = self.mounts.write();
-
-            if let Err(e) = (mount.fs().ops.mount)(&mounts, &mut mount, opts) {
+            if let Err(e) = (mount.fs().ops.mount)(&mut mount, opts) {
                 return Err(MountError::MountFailed(e));
             }
 
             // TODO: Implement the remaining logics from the PS4.
-            let root = (mount.fs().ops.root)(&mount);
-
-            mounts.push(mount);
-
-            Ok(root)
+            Ok((mount.fs().ops.root)(&self.mounts.write().push(mount)))
         }
     }
 
@@ -636,15 +628,14 @@ pub struct FsConfig {
     name: &'static str,              // vfc_name
     ops: &'static FsOps,             // vfc_vfsops
     ty: u32,                         // vfc_typenum
-    refcount: AtomicI32,             // vfc_refcount
     next: Option<&'static FsConfig>, // vfc_list.next
 }
 
 /// An implementation of `vfsops` structure.
 #[derive(Debug)]
 struct FsOps {
-    mount: fn(&Mounts, &mut Mount, HashMap<String, Box<dyn Any>>) -> Result<(), Box<dyn Errno>>,
-    root: fn(&Mount) -> Arc<Vnode>,
+    mount: fn(&mut Mount, HashMap<String, Box<dyn Any>>) -> Result<(), Box<dyn Errno>>,
+    root: fn(&Arc<Mount>) -> Arc<Vnode>,
 }
 
 /// Represents an error when FS mounting is failed.
@@ -697,7 +688,6 @@ static HOST: FsConfig = FsConfig {
     name: "exfatfs",
     ops: &self::host::HOST_OPS,
     ty: 0x2C,
-    refcount: AtomicI32::new(0),
     next: Some(&MLFS),
 };
 
@@ -706,12 +696,11 @@ static MLFS: FsConfig = FsConfig {
     name: "mlfs",
     ops: &MLFS_OPS,
     ty: 0xF1,
-    refcount: AtomicI32::new(0),
     next: Some(&UDF2),
 };
 
 static MLFS_OPS: FsOps = FsOps {
-    mount: |_, _, _| todo!("mount for mlfs"),
+    mount: |_, _| todo!("mount for mlfs"),
     root: |_| todo!("root for mlfs"),
 };
 
@@ -720,12 +709,11 @@ static UDF2: FsConfig = FsConfig {
     name: "udf2",
     ops: &UDF2_OPS,
     ty: 0,
-    refcount: AtomicI32::new(0),
     next: Some(&DEVFS),
 };
 
 static UDF2_OPS: FsOps = FsOps {
-    mount: |_, _, _| todo!("mount for udf2"),
+    mount: |_, _| todo!("mount for udf2"),
     root: |_| todo!("root for udf2"),
 };
 
@@ -734,7 +722,6 @@ static DEVFS: FsConfig = FsConfig {
     name: "devfs",
     ops: &self::dev::DEVFS_OPS,
     ty: 0x71,
-    refcount: AtomicI32::new(0),
     next: Some(&TMPFS),
 };
 
@@ -743,12 +730,11 @@ static TMPFS: FsConfig = FsConfig {
     name: "tmpfs",
     ops: &TMPFS_OPS,
     ty: 0x87,
-    refcount: AtomicI32::new(0),
     next: Some(&UNIONFS),
 };
 
 static TMPFS_OPS: FsOps = FsOps {
-    mount: |_, _, _| todo!("mount for tmpfs"),
+    mount: |_, _| todo!("mount for tmpfs"),
     root: |_| todo!("root for tmpfs"),
 };
 
@@ -757,12 +743,11 @@ static UNIONFS: FsConfig = FsConfig {
     name: "unionfs",
     ops: &UNIONFS_OPS,
     ty: 0x41,
-    refcount: AtomicI32::new(0),
     next: Some(&PROCFS),
 };
 
 static UNIONFS_OPS: FsOps = FsOps {
-    mount: |_, _, _| todo!("mount for unionfs"),
+    mount: |_, _| todo!("mount for unionfs"),
     root: |_| todo!("root for unionfs"),
 };
 
@@ -771,12 +756,11 @@ static PROCFS: FsConfig = FsConfig {
     name: "procfs",
     ops: &PROCFS_OPS,
     ty: 0x2,
-    refcount: AtomicI32::new(0),
     next: Some(&CD9660),
 };
 
 static PROCFS_OPS: FsOps = FsOps {
-    mount: |_, _, _| todo!("mount for procfs"),
+    mount: |_, _| todo!("mount for procfs"),
     root: |_| todo!("root for procfs"),
 };
 
@@ -785,12 +769,11 @@ static CD9660: FsConfig = FsConfig {
     name: "cd9660",
     ops: &CD9660_OPS,
     ty: 0xBD,
-    refcount: AtomicI32::new(0),
     next: Some(&UFS),
 };
 
 static CD9660_OPS: FsOps = FsOps {
-    mount: |_, _, _| todo!("mount for cd9660"),
+    mount: |_, _| todo!("mount for cd9660"),
     root: |_| todo!("root for cd9660"),
 };
 
@@ -799,12 +782,11 @@ static UFS: FsConfig = FsConfig {
     name: "ufs",
     ops: &UFS_OPS,
     ty: 0x35,
-    refcount: AtomicI32::new(0),
     next: Some(&NULLFS),
 };
 
 static UFS_OPS: FsOps = FsOps {
-    mount: |_, _, _| todo!("mount for ufs"),
+    mount: |_, _| todo!("mount for ufs"),
     root: |_| todo!("root for ufs"),
 };
 
@@ -813,12 +795,11 @@ static NULLFS: FsConfig = FsConfig {
     name: "nullfs",
     ops: &NULLFS_OPS,
     ty: 0x29,
-    refcount: AtomicI32::new(0),
     next: Some(&PFS),
 };
 
 static NULLFS_OPS: FsOps = FsOps {
-    mount: |_, _, _| todo!("mount for nullfs"),
+    mount: |_, _| todo!("mount for nullfs"),
     root: |_| todo!("root for nullfs"),
 };
 
@@ -827,11 +808,10 @@ static PFS: FsConfig = FsConfig {
     name: "pfs",
     ops: &PFS_OPS,
     ty: 0xA4,
-    refcount: AtomicI32::new(0),
     next: None,
 };
 
 static PFS_OPS: FsOps = FsOps {
-    mount: |_, _, _| todo!("mount for pfs"),
+    mount: |_, _| todo!("mount for pfs"),
     root: |_| todo!("root for pfs"),
 };

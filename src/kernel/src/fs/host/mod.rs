@@ -1,5 +1,5 @@
 use super::{
-    FsItem, FsOps, HostDir, HostFile, Mount, MountFlags, Mounts, VPath, VPathBuf, Vnode, VnodeType,
+    FsItem, FsOps, HostDir, HostFile, Mount, MountFlags, VPath, VPathBuf, Vnode, VnodeType,
     VopVector,
 };
 use crate::errno::Errno;
@@ -82,11 +82,7 @@ impl HostFs {
     }
 }
 
-fn mount(
-    mounts: &Mounts,
-    mount: &mut Mount,
-    mut opts: HashMap<String, Box<dyn Any>>,
-) -> Result<(), Box<dyn Errno>> {
+fn mount(mount: &mut Mount, mut opts: HashMap<String, Box<dyn Any>>) -> Result<(), Box<dyn Errno>> {
     // Check mount flags.
     let mut flags = mount.flags_mut();
 
@@ -162,13 +158,12 @@ fn mount(
         app: Arc::new(app),
     }));
 
-    mounts.set_id(mount);
-
     Ok(())
 }
 
-fn root(mnt: &Mount) -> Arc<Vnode> {
+fn root(mnt: &Arc<Mount>) -> Arc<Vnode> {
     Arc::new(Vnode::new(
+        mnt,
         VnodeType::Directory(true),
         "exfatfs",
         &VNODE_OPS,

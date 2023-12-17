@@ -1,5 +1,5 @@
 use self::dirent::DirentFlags;
-use super::{DirentType, FsOps, Mount, MountFlags, Mounts, Vnode, VnodeType, VopVector};
+use super::{DirentType, FsOps, Mount, MountFlags, Vnode, VnodeType, VopVector};
 use crate::errno::{Errno, EOPNOTSUPP};
 use std::any::Any;
 use std::collections::HashMap;
@@ -80,7 +80,7 @@ impl DevFs {
     }
 
     /// See `devfs_allocv` on the PS4 for a reference.
-    fn alloc_vnode(ent: &Arc<self::dirent::Dirent>) -> Arc<Vnode> {
+    fn alloc_vnode(mnt: &Arc<Mount>, ent: &Arc<self::dirent::Dirent>) -> Arc<Vnode> {
         // Get type.
         let ty = match ent.dirent().ty() {
             DirentType::Character => todo!("devfs_allocv with DT_CHR"),
@@ -88,7 +88,7 @@ impl DevFs {
         };
 
         // Create vnode.
-        let vn = Arc::new(Vnode::new(ty, "devfs", &VNODE_OPS, ent.clone()));
+        let vn = Arc::new(Vnode::new(mnt, ty, "devfs", &VNODE_OPS, ent.clone()));
         let mut current = ent.vnode_mut();
 
         if let Some(_) = current.as_ref().and_then(|v| v.upgrade()) {
@@ -103,11 +103,7 @@ impl DevFs {
     }
 }
 
-fn mount(
-    mounts: &Mounts,
-    mount: &mut Mount,
-    _: HashMap<String, Box<dyn Any>>,
-) -> Result<(), Box<dyn Errno>> {
+fn mount(mount: &mut Mount, _: HashMap<String, Box<dyn Any>>) -> Result<(), Box<dyn Errno>> {
     // Check mount flags.
     let mut flags = mount.flags_mut();
 
@@ -129,16 +125,13 @@ fn mount(
         root: DevFs::mkdir("", DevFs::DEVFS_ROOTINO, None),
     }));
 
-    mounts.set_id(mount);
-
-    // TODO: Implement vfs_mountedfrom.
     Ok(())
 }
 
-fn root(mnt: &Mount) -> Arc<Vnode> {
+fn root(mnt: &Arc<Mount>) -> Arc<Vnode> {
     let fs = mnt.data().unwrap().downcast_ref::<DevFs>().unwrap();
 
-    DevFs::alloc_vnode(&fs.root)
+    DevFs::alloc_vnode(mnt, &fs.root)
 }
 
 /// Represents an error when [`mount`] is failed.
