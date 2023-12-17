@@ -1,3 +1,5 @@
+pub use self::cdev::*;
+pub use self::dev::*;
 pub use self::dirent::*;
 pub use self::file::*;
 pub use self::host::*;
@@ -22,6 +24,7 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
 
+mod cdev;
 mod dev;
 mod dirent;
 mod file;
@@ -36,8 +39,8 @@ mod vnode;
 pub struct Fs {
     vp: Arc<VProc>,
     mounts: Gutex<Mounts>,   // mountlist
-    opens: AtomicI32,        // openfiles
     root: Gutex<Arc<Vnode>>, // rootvnode
+    opens: AtomicI32,        // openfiles
 }
 
 impl Fs {
@@ -84,8 +87,8 @@ impl Fs {
         let fs = Arc::new(Self {
             vp: vp.clone(),
             mounts: gg.spawn(mounts),
-            opens: AtomicI32::new(0),
             root: gg.spawn(root),
+            opens: AtomicI32::new(0),
         });
 
         let root = match fs.mount(opts, MountFlags::MNT_ROOTFS, cred) {
@@ -624,7 +627,6 @@ impl Display for OpenFlags {
 /// An implementation of `vfsconf` structure.
 #[derive(Debug)]
 pub struct FsConfig {
-    version: u32,                    // vfc_version
     name: &'static str,              // vfc_name
     ops: &'static FsOps,             // vfc_vfsops
     ty: u32,                         // vfc_typenum
@@ -684,7 +686,6 @@ impl Errno for FsError {
 }
 
 static HOST: FsConfig = FsConfig {
-    version: 0x19660120,
     name: "exfatfs",
     ops: &self::host::HOST_OPS,
     ty: 0x2C,
@@ -692,7 +693,6 @@ static HOST: FsConfig = FsConfig {
 };
 
 static MLFS: FsConfig = FsConfig {
-    version: 0x19660120,
     name: "mlfs",
     ops: &MLFS_OPS,
     ty: 0xF1,
@@ -705,7 +705,6 @@ static MLFS_OPS: FsOps = FsOps {
 };
 
 static UDF2: FsConfig = FsConfig {
-    version: 0x19660120,
     name: "udf2",
     ops: &UDF2_OPS,
     ty: 0,
@@ -718,7 +717,6 @@ static UDF2_OPS: FsOps = FsOps {
 };
 
 static DEVFS: FsConfig = FsConfig {
-    version: 0x19660120,
     name: "devfs",
     ops: &self::dev::DEVFS_OPS,
     ty: 0x71,
@@ -726,7 +724,6 @@ static DEVFS: FsConfig = FsConfig {
 };
 
 static TMPFS: FsConfig = FsConfig {
-    version: 0x19660120,
     name: "tmpfs",
     ops: &TMPFS_OPS,
     ty: 0x87,
@@ -739,7 +736,6 @@ static TMPFS_OPS: FsOps = FsOps {
 };
 
 static UNIONFS: FsConfig = FsConfig {
-    version: 0x19660120,
     name: "unionfs",
     ops: &UNIONFS_OPS,
     ty: 0x41,
@@ -752,7 +748,6 @@ static UNIONFS_OPS: FsOps = FsOps {
 };
 
 static PROCFS: FsConfig = FsConfig {
-    version: 0x19660120,
     name: "procfs",
     ops: &PROCFS_OPS,
     ty: 0x2,
@@ -765,7 +760,6 @@ static PROCFS_OPS: FsOps = FsOps {
 };
 
 static CD9660: FsConfig = FsConfig {
-    version: 0x19660120,
     name: "cd9660",
     ops: &CD9660_OPS,
     ty: 0xBD,
@@ -778,7 +772,6 @@ static CD9660_OPS: FsOps = FsOps {
 };
 
 static UFS: FsConfig = FsConfig {
-    version: 0x19660120,
     name: "ufs",
     ops: &UFS_OPS,
     ty: 0x35,
@@ -791,7 +784,6 @@ static UFS_OPS: FsOps = FsOps {
 };
 
 static NULLFS: FsConfig = FsConfig {
-    version: 0x19660120,
     name: "nullfs",
     ops: &NULLFS_OPS,
     ty: 0x29,
@@ -804,7 +796,6 @@ static NULLFS_OPS: FsOps = FsOps {
 };
 
 static PFS: FsConfig = FsConfig {
-    version: 0x19660120,
     name: "pfs",
     ops: &PFS_OPS,
     ty: 0xA4,

@@ -1,11 +1,17 @@
 use self::dirent::DirentFlags;
-use super::{DirentType, FsOps, Mount, MountFlags, Vnode, VnodeType, VopVector};
-use crate::errno::{Errno, EOPNOTSUPP};
+use super::{
+    path_contains, Cdev, CdevSw, DeviceFlags, DirentType, DriverFlags, FsOps, Mount, MountFlags,
+    Vnode, VnodeType, VopVector,
+};
+use crate::errno::{Errno, EEXIST, EOPNOTSUPP};
+use crate::ucred::Ucred;
+use bitflags::bitflags;
 use std::any::Any;
 use std::collections::HashMap;
 use std::num::NonZeroI32;
+use std::ops::Deref;
 use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use thiserror::Error;
 
 pub(super) mod console;
@@ -15,6 +21,69 @@ mod dirent;
 pub(super) mod dmem0;
 pub(super) mod dmem1;
 pub(super) mod dmem2;
+
+/// See `make_dev_credv` on the PS4 for a reference.
+pub fn make_dev<N: Into<String>>(
+    sw: &Arc<CdevSw>,
+    unit: i32,
+    name: N,
+    uid: i32,
+    gid: i32,
+    mode: u16,
+    cred: Option<Arc<Ucred>>,
+    flags: MakeDev,
+) -> Result<Arc<Cdev>, MakeDevError> {
+    if sw.flags().intersects(DriverFlags::D_NEEDMINOR) {
+        todo!("make_dev_credv with D_NEEDMINOR");
+    }
+
+    // TODO: Implement prep_devname.
+    let name = name.into();
+
+    if dev_exists(&name) {
+        return Err(MakeDevError::AlreadyExist(name));
+    }
+
+    // Get device flags.
+    let mut df = DeviceFlags::empty();
+
+    if flags.intersects(MakeDev::MAKEDEV_ETERNAL) {
+        df |= DeviceFlags::SI_ETERNAL;
+    }
+
+    // Create cdev.
+    let dev = Arc::new(Cdev::new(
+        sw,
+        INODE.fetch_add(1, Ordering::Relaxed),
+        unit,
+        name,
+        uid,
+        gid,
+        mode,
+        cred,
+        df,
+    ));
+
+    DEVICES.write().unwrap().push(dev.clone());
+    GENERATION.fetch_add(1, Ordering::Release);
+
+    // TODO: Implement the remaining logic from the PS4.
+    Ok(dev)
+}
+
+/// See `devfs_dev_exists` on the PS4 for a reference.
+pub fn dev_exists<N: AsRef<str>>(name: N) -> bool {
+    let name = name.as_ref();
+
+    for dev in DEVICES.read().unwrap().deref() {
+        if path_contains(dev.name(), name) || path_contains(name, dev.name()) {
+            return true;
+        }
+    }
+
+    // TODO: Implement devfs_dir_find.
+    false
+}
 
 /// An implementation of `devfs_mount` structure.
 pub struct DevFs {
@@ -103,6 +172,29 @@ impl DevFs {
     }
 }
 
+bitflags! {
+    /// Flags for [`make_dev()`].
+    #[derive(Clone, Copy)]
+    pub struct MakeDev: u32 {
+        const MAKEDEV_ETERNAL = 0x10;
+    }
+}
+
+/// Represents an error when [`make_dev()`] is failed.
+#[derive(Debug, Error)]
+pub enum MakeDevError {
+    #[error("the device with the same name already exist")]
+    AlreadyExist(String),
+}
+
+impl Errno for MakeDevError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::AlreadyExist(_) => EEXIST,
+        }
+    }
+}
+
 fn mount(mount: &mut Mount, _: HashMap<String, Box<dyn Any>>) -> Result<(), Box<dyn Errno>> {
     // Check mount flags.
     let mut flags = mount.flags_mut();
@@ -155,4 +247,6 @@ impl Errno for MountError {
 pub(super) static DEVFS_OPS: FsOps = FsOps { mount, root };
 static DEVFS: AtomicI32 = AtomicI32::new(0); // TODO: Use a proper implementation.
 static INODE: AtomicU32 = AtomicU32::new(3); // TODO: Same here.
+static DEVICES: RwLock<Vec<Arc<Cdev>>> = RwLock::new(Vec::new()); // cdevp_list
+static GENERATION: AtomicU32 = AtomicU32::new(0); // devfs_generation
 static VNODE_OPS: VopVector = VopVector {};
