@@ -3,6 +3,27 @@ use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use thiserror::Error;
 
+/// See `devfs_pathpath` on the PS4 for a reference.
+pub fn path_contains(p1: &str, p2: &str) -> bool {
+    let mut p1 = p1.bytes();
+    let mut p2 = p2.bytes();
+
+    loop {
+        match (p1.next(), p2.next()) {
+            (None, None) => break true,
+            (None, Some(_)) => break false,
+            (Some(p1), None) => break p1 == b'/',
+            (Some(p1), Some(p2)) => {
+                if p1 == p2 {
+                    continue;
+                } else {
+                    break false;
+                }
+            }
+        }
+    }
+}
+
 /// A full path in the PS4 system.
 #[derive(PartialEq, Eq, Hash)]
 #[repr(transparent)]
