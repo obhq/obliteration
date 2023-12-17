@@ -1,3 +1,4 @@
+use super::Mount;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -6,6 +7,7 @@ use std::sync::Arc;
 /// An implementation of `vnode`.
 #[derive(Debug)]
 pub struct Vnode {
+    fs: Arc<Mount>,                                  // v_mount
     ty: VnodeType,                                   // v_type
     tag: &'static str,                               // v_tag
     op: &'static VopVector,                          // v_op
@@ -16,6 +18,7 @@ pub struct Vnode {
 impl Vnode {
     /// See `getnewvnode` on the PS4 for a reference.
     pub fn new(
+        fs: &Arc<Mount>,
         ty: VnodeType,
         tag: &'static str,
         op: &'static VopVector,
@@ -26,6 +29,7 @@ impl Vnode {
         ACTIVE.fetch_add(1, Ordering::Relaxed);
 
         Self {
+            fs: fs.clone(),
             ty,
             tag,
             op,

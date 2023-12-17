@@ -3,7 +3,6 @@ use crate::ucred::Ucred;
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
-use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 /// A collection of [`Mount`].
@@ -15,8 +14,12 @@ impl Mounts {
         Self(Vec::new())
     }
 
-    pub fn push(&mut self, m: Mount) {
-        self.0.push(Arc::new(m));
+    pub fn push(&mut self, mut m: Mount) -> Arc<Mount> {
+        self.set_id(&mut m);
+
+        let m = Arc::new(m);
+        self.0.push(m.clone());
+        m
     }
 
     pub fn remove(&mut self, i: usize) -> Arc<Mount> {
@@ -28,7 +31,7 @@ impl Mounts {
     }
 
     /// See `vfs_getnewfsid` on the PS4 for a reference.
-    pub fn set_id(&self, m: &mut Mount) {
+    fn set_id(&self, m: &mut Mount) {
         let mut base = MOUNT_ID.lock().unwrap();
         let v2 = m.fs.ty;
         let mut v1 = ((*base as u32) << 8) | (*base as u32) | ((v2 << 24) | 0xff00);
@@ -60,7 +63,6 @@ pub struct Mount {
     data: Option<Arc<dyn Any + Send + Sync>>, // mnt_data
     cred: Ucred,                              // mnt_cred
     parent: Gutex<Option<Arc<Vnode>>>,        // mnt_vnodecovered
-    actives: Vec<Arc<Vnode>>,                 // mnt_activevnodelist
     flags: Gutex<MountFlags>,                 // mnt_flag
     stats: FsStats,                           // mnt_stat
 }
@@ -79,7 +81,6 @@ impl Mount {
             data: None,
             cred,
             parent: gg.spawn(parent),
-            actives: Vec::new(),
             flags: gg.spawn(MountFlags::empty()),
             stats: FsStats {
                 ty: fs.ty,
@@ -88,8 +89,6 @@ impl Mount {
                 path: path.into(),
             },
         };
-
-        fs.refcount.fetch_add(1, Ordering::Relaxed);
 
         mount
     }
