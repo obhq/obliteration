@@ -24,7 +24,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::SystemTime;
-use sysinfo::{CpuExt, System, SystemExt};
+use sysinfo::System;
 
 mod arch;
 mod arnd;
@@ -131,7 +131,7 @@ fn main() -> ExitCode {
     let mut log = info!();
     let hwinfo = System::new_with_specifics(
         sysinfo::RefreshKind::new()
-            .with_memory()
+            .with_memory(sysinfo::MemoryRefreshKind::new())
             .with_cpu(sysinfo::CpuRefreshKind::new()),
     );
 
@@ -164,12 +164,8 @@ fn main() -> ExitCode {
     writeln!(
         log,
         "Operating System    : {} {}",
-        hwinfo
-            .long_os_version()
-            .unwrap_or_else(|| "Unknown OS".to_string()),
-        hwinfo
-            .kernel_version()
-            .unwrap_or_else(|| "Unknown Kernel".to_string())
+        System::long_os_version().unwrap_or_else(|| "Unknown OS".to_string()),
+        System::kernel_version().unwrap_or_else(|| "Unknown Kernel".to_string())
     )
     .unwrap();
     writeln!(log, "CPU Information     : {}", hwinfo.cpus()[0].brand()).unwrap();
