@@ -1,4 +1,4 @@
-use crate::errno::{Errno, ENXIO, EPERM};
+use crate::errno::{Errno, ENXIO};
 use crate::fs::{IoctlCom, VFile, VFileOps, VPath};
 use crate::process::{VProc, VThread};
 use crate::tty::Tty;
@@ -13,7 +13,7 @@ use thiserror::Error;
 /// An implementation of `/dev/console`.
 #[derive(Debug)]
 pub struct Console {
-    tty: Tty,
+    tty: Arc<Tty>,
 }
 
 impl Console {

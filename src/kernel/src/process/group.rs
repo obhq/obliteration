@@ -22,10 +22,6 @@ impl VProcGroup {
         self.session.as_ref()
     }
 
-    pub fn session_mut(&mut self) -> Option<&mut Arc<VSession>> {
-        self.session.as_mut()
-    }
-
     pub fn leader(&self) -> &Arc<VProc> {
         &self.leader
     }

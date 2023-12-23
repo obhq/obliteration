@@ -41,6 +41,10 @@ impl Vnode {
     pub fn item_mut(&self) -> GutexWriteGuard<Option<Arc<dyn Any + Send + Sync>>> {
         self.item.write()
     }
+
+    pub fn is_bad(&self) -> bool {
+        matches!(self.ty, VnodeType::Bad)
+    }
 }
 
 impl Drop for Vnode {
@@ -53,6 +57,7 @@ impl Drop for Vnode {
 #[derive(Debug)]
 pub enum VnodeType {
     Directory(bool),
+    Bad,
 }
 
 /// An implementation of `vop_vector` structure.

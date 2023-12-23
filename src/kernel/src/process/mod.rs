@@ -16,6 +16,7 @@ use crate::signal::{
 };
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{AuthInfo, Privilege, Ucred};
+use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use llt::{SpawnError, Thread};
 use std::any::Any;
@@ -54,6 +55,7 @@ pub struct VProc {
     system_path: String,                             // p_randomized_path
     limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
     comm: Gutex<Option<String>>,                     // p_comm
+    flags: Gutex<VProcFlags>,                        // p_flag
     objects: Gutex<Idt<Arc<dyn Any + Send + Sync>>>,
     dmem_container: Gutex<i32>,
     budget: Gutex<Option<(usize, ProcType)>>,
@@ -85,6 +87,7 @@ impl VProc {
             budget: gg.spawn(None),
             limits,
             comm: gg.spawn(None), //TODO: Find out how this is actually set
+            flags: gg.spawn(VProcFlags::empty()),
             app_info: AppInfo::new(),
             ptc: 0,
             uptc: AtomicPtr::new(null_mut()),
@@ -126,6 +129,10 @@ impl VProc {
 
     pub fn limit(&self, ty: usize) -> Option<&ResourceLimit> {
         self.limits.get(ty)
+    }
+
+    pub fn flags_mut(&self) -> GutexWriteGuard<'_, VProcFlags> {
+        self.flags.write()
     }
 
     pub fn set_name(&self, name: Option<&str>) {
@@ -237,9 +244,11 @@ impl VProc {
 
         // Set login name.
         let mut group = self.group.write();
-        let session = group.as_mut().unwrap().session_mut().unwrap();
+        let session = group.as_ref().and_then(|grp| grp.session()).unwrap();
 
-        session.set_login(login);
+        let mut slogin = session.login_mut();
+
+        *slogin = login.to_owned();
 
         info!("Login name was changed to '{login}'.");
 
@@ -716,3 +725,10 @@ pub enum VProcError {
 }
 
 static NEXT_ID: AtomicI32 = AtomicI32::new(1);
+
+bitflags! {
+    #[derive(Debug)]
+    pub struct VProcFlags: i32 {
+        const P_CONTROLT = 0x00002;
+    }
+}

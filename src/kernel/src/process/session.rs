@@ -1,29 +1,43 @@
-use std::{num::NonZeroI32, sync::Arc};
-
 use crate::{fs::Vnode, tty::Tty};
+use gmtx::*;
+use std::{num::NonZeroI32, sync::Arc};
 
 /// An implementation of `session` structure.
 #[derive(Debug)]
 pub struct VSession {
-    id: NonZeroI32,        // s_sid
-    login: String,         // s_login
-    vnode: Option<Vnode>,  // s_ttyvp
-    tty: Option<Arc<Tty>>, // s_ttyp
-    refcount: u32,         // s_count
+    id: NonZeroI32,               // s_sid
+    login: Gutex<String>,         // s_login
+    vnode: Option<Vnode>,         // s_ttyvp
+    tty: Gutex<Option<Arc<Tty>>>, // s_ttyp
+    gg: Arc<GutexGroup>,
 }
 
 impl VSession {
     pub fn new(id: NonZeroI32, login: String) -> Self {
+        let gg = GutexGroup::new();
+
         Self {
             id,
-            login,
+            login: gg.spawn(login),
             vnode: None,
-            tty: None,
-            refcount: 1,
+            tty: gg.spawn(None),
+            gg,
         }
     }
 
-    pub fn set_login<V: Into<String>>(&mut self, v: V) {
-        self.login = v.into();
+    pub fn login_mut(&self) -> GutexWriteGuard<'_, String> {
+        self.login.write()
+    }
+
+    pub fn vnode(&self) -> Option<&Vnode> {
+        self.vnode.as_ref()
+    }
+
+    pub fn tty(&self) -> GutexReadGuard<'_, Option<Arc<Tty>>> {
+        self.tty.read()
+    }
+
+    pub fn tty_mut(&self) -> GutexWriteGuard<'_, Option<Arc<Tty>>> {
+        self.tty.write()
     }
 }

@@ -82,6 +82,7 @@ impl AuthCaps {
         (self.0[0] & 0x1000000000000000) != 0
     }
 
+    #[allow(dead_code)]
     pub fn is_user(&self) -> bool {
         (self.0[0] & 0x2000000000000000) != 0
     }
