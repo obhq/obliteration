@@ -315,7 +315,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     let mut flags = LoadFlags::UNK1;
     let path = vpath!("/system/common/lib/libkernel.sprx");
 
-    if vp.budget().filter(|v| v.1 == ProcType::BigApp).is_some() {
+    if vp.budget().is_some_and(|v| v.1 == ProcType::BigApp) {
         flags |= LoadFlags::BIG_APP;
     }
 

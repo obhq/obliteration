@@ -539,12 +539,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             None => todo!("sys_dynlib_load_prx with relative path"),
         };
 
-        if self
-            .vp
-            .budget()
-            .filter(|v| v.1 == ProcType::BigApp)
-            .is_some()
-        {
+        if self.vp.budget().is_some_and(|v| v.1 == ProcType::BigApp) {
             flags |= 0x01;
         }
 
