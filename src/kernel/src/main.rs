@@ -43,6 +43,7 @@ mod rtld;
 mod signal;
 mod syscalls;
 mod sysctl;
+mod tty;
 mod ucred;
 
 fn main() -> ExitCode {

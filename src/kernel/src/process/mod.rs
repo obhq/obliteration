@@ -48,7 +48,7 @@ pub struct VProc {
     id: NonZeroI32,                                  // p_pid
     threads: Gutex<Vec<Arc<VThread>>>,               // p_threads
     cred: Ucred,                                     // p_ucred
-    group: Gutex<Option<VProcGroup>>,                // p_pgrp
+    group: Gutex<Option<Arc<VProcGroup>>>,           // p_pgrp
     sigacts: Gutex<SignalActs>,                      // p_sigacts
     files: FileDesc,                                 // p_fd
     system_path: String,                             // p_randomized_path
@@ -116,8 +116,8 @@ impl VProc {
         &self.cred
     }
 
-    pub fn group(&self) -> GutexReadGuard<'_, Option<VProcGroup>> {
-        &self.group.read()
+    pub fn group(&self) -> GutexReadGuard<'_, Option<Arc<VProcGroup>>> {
+        self.group.read()
     }
 
     pub fn files(&self) -> &FileDesc {
@@ -237,7 +237,7 @@ impl VProc {
 
         // Set login name.
         let mut group = self.group.write();
-        let session = group.as_mut().unwrap().session_mut();
+        let session = group.as_mut().unwrap().session_mut().unwrap();
 
         session.set_login(login);
 
@@ -260,7 +260,7 @@ impl VProc {
         // TODO: Find out the correct login name for VSession.
         let session = VSession::new(self.id, String::from("root"));
 
-        *group = Some(VProcGroup::new(self.id, session));
+        *group = Some(Arc::new(VProcGroup::new(self.id, session, &self)));
         info!("Virtual process now set as group leader.");
 
         Ok(self.id.into())
