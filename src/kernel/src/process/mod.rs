@@ -19,6 +19,8 @@ use crate::ucred::{AuthInfo, Privilege, Ucred};
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use llt::{SpawnError, Thread};
 use std::any::Any;
+use std::cmp::min;
+use std::ffi::c_char;
 use std::mem::zeroed;
 use std::num::NonZeroI32;
 use std::ptr::null_mut;
@@ -49,6 +51,7 @@ pub struct VProc {
     group: Gutex<Option<VProcGroup>>,                // p_pgrp
     sigacts: Gutex<SignalActs>,                      // p_sigacts
     files: FileDesc,                                 // p_fd
+    system_path: String,                             // p_randomized_path
     limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
     comm: Gutex<Option<String>>,                     // p_comm
     objects: Gutex<Idt<Arc<dyn Any + Send + Sync>>>,
@@ -61,7 +64,11 @@ pub struct VProc {
 }
 
 impl VProc {
-    pub fn new(auth: AuthInfo, sys: &mut Syscalls) -> Result<Arc<Self>, VProcError> {
+    pub fn new<S: Into<String>>(
+        auth: AuthInfo,
+        system_path: S,
+        sys: &mut Syscalls,
+    ) -> Result<Arc<Self>, VProcError> {
         // TODO: Check how ucred is constructed for a process.
         let gg = GutexGroup::new();
         let limits = Self::load_limits()?;
@@ -72,6 +79,7 @@ impl VProc {
             group: gg.spawn(None),
             sigacts: gg.spawn(SignalActs::new()),
             files: FileDesc::new(&gg),
+            system_path: system_path.into(),
             objects: gg.spawn(Idt::new(0x1000)),
             dmem_container: gg.spawn(0), // TODO: Check the initial value on the PS4.
             budget: gg.spawn(None),
@@ -95,6 +103,7 @@ impl VProc {
         sys.register(557, &vp, Self::sys_namedobj_create);
         sys.register(585, &vp, Self::sys_is_in_sandbox);
         sys.register(587, &vp, Self::sys_get_authinfo);
+        sys.register(602, &vp, Self::sys_randomized_path);
 
         Ok(vp)
     }
@@ -572,9 +581,8 @@ impl VProc {
     }
 
     fn sys_is_in_sandbox(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
-        // TODO: Get the actual value from the PS4.
-        info!("Returning is_in_sandbox as 0.");
-        Ok(0.into())
+        // TODO: Implement this once FS rework has been usable.
+        Ok(1.into())
     }
 
     fn sys_get_authinfo(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -610,6 +618,35 @@ impl VProc {
             todo!("get_authinfo with buf = null");
         } else {
             unsafe { *buf = info };
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn sys_randomized_path(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let set = i.args[0];
+        let get: *mut c_char = i.args[1].into();
+        let len: *mut usize = i.args[2].into();
+
+        // Get the value.
+        let len = if get.is_null() || len.is_null() {
+            0
+        } else {
+            let v = unsafe { *len };
+            unsafe { *len = self.system_path.len() };
+            v
+        };
+
+        if len > 0 && !self.system_path.is_empty() {
+            let len = min(len - 1, self.system_path.len());
+
+            unsafe { get.copy_from_nonoverlapping(self.system_path.as_ptr().cast(), len) };
+            unsafe { *get.add(len) = 0 };
+        }
+
+        // Set the value.
+        if set != 0 {
+            todo!("sys_randomized_path with non-null set");
         }
 
         Ok(SysOut::ZERO)

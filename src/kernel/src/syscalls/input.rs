@@ -19,12 +19,6 @@ pub struct SysIn<'a> {
 #[derive(Clone, Copy)]
 pub struct SysArg(usize);
 
-impl LowerHex for SysArg {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:#x}", self.0)
-    }
-}
-
 impl SysArg {
     pub unsafe fn to_path<'a>(self) -> Result<Option<&'a VPath>, SysErr> {
         if self.0 == 0 {
@@ -124,5 +118,17 @@ impl TryFrom<SysArg> for u8 {
 
     fn try_from(v: SysArg) -> Result<Self, Self::Error> {
         v.0.try_into()
+    }
+}
+
+impl PartialEq<usize> for SysArg {
+    fn eq(&self, other: &usize) -> bool {
+        self.0 == *other
+    }
+}
+
+impl LowerHex for SysArg {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        LowerHex::fmt(&self.0, f)
     }
 }

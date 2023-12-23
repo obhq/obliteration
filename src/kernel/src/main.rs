@@ -183,7 +183,7 @@ fn main() -> ExitCode {
     let arnd = Arnd::new();
     let llvm = Llvm::new();
     let mut syscalls = Syscalls::new();
-    let vp = match VProc::new(auth, &mut syscalls) {
+    let vp = match VProc::new(auth, "QXuNNl0Zhn", &mut syscalls) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Virtual process initialization failed");
