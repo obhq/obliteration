@@ -55,6 +55,8 @@ impl VFileOps for Console {
             return Err(Box::new(IoctlErr::TtyNotAvailable));
         }
 
+        //TODO: implement tty_wait_background and the rest of the checks here.
+
         self.tty.ioctl(com, _data, td)?;
 
         Ok(())
