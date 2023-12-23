@@ -55,7 +55,7 @@ impl Tty {
         match com {
             Self::TIOCSCTTY => {
                 let grp_guard = self.vp.group();
-                let proc_grp = grp_guard.deref().as_ref().unwrap();
+                let proc_grp = grp_guard.as_ref().unwrap();
 
                 if !Arc::ptr_eq(&self.vp, proc_grp.leader()) {
                     return Err(Box::new(TtyErr::NotSessionLeader));
