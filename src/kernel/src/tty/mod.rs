@@ -85,7 +85,7 @@ impl Tty {
 
                 let mut cnt = self.session_count.write();
 
-                *cnt = *cnt + 1;
+                *cnt += 1;
 
                 self.group.write().replace(proc_grp.clone());
 
