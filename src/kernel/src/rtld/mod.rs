@@ -282,7 +282,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         // Search for TLS free slot.
         let names = vec![name];
         let tls = elf.tls().map(|i| &elf.programs()[i]);
-        let tls = if tls.map(|p| p.memory_size()).unwrap_or(0) == 0 {
+        let tls = if tls.map_or(0, |p| p.memory_size()) == 0 {
             0
         } else {
             let mut alloc = self.tls.write();
@@ -1024,8 +1024,8 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         // Initialization and finalization functions.
         if !md.flags().contains(ModuleFlags::UNK5) {
-            info.init = md.init().map(|v| addr + v).unwrap_or(0);
-            info.fini = md.fini().map(|v| addr + v).unwrap_or(0);
+            info.init = md.init().map_or(0, |v| addr + v);
+            info.fini = md.fini().map_or(0, |v| addr + v);
         }
 
         // Exception handling.
