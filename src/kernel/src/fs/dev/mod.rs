@@ -31,7 +31,7 @@ pub fn make_dev<N: Into<String>>(
     gid: i32,
     mode: u16,
     cred: Option<Arc<Ucred>>,
-    flags: MakeDev,
+    flags: MakeDevFlags,
 ) -> Result<Arc<Cdev>, MakeDevError> {
     if sw.flags().intersects(DriverFlags::D_NEEDMINOR) {
         todo!("make_dev_credv with D_NEEDMINOR");
@@ -47,7 +47,7 @@ pub fn make_dev<N: Into<String>>(
     // Get device flags.
     let mut df = DeviceFlags::empty();
 
-    if flags.intersects(MakeDev::MAKEDEV_ETERNAL) {
+    if flags.intersects(MakeDevFlags::MAKEDEV_ETERNAL) {
         df |= DeviceFlags::SI_ETERNAL;
     }
 
@@ -175,7 +175,7 @@ impl DevFs {
 bitflags! {
     /// Flags for [`make_dev()`].
     #[derive(Clone, Copy)]
-    pub struct MakeDev: u32 {
+    pub struct MakeDevFlags: u32 {
         const MAKEDEV_ETERNAL = 0x10;
     }
 }
