@@ -1,5 +1,6 @@
 use crate::errno::{Errno, EPERM};
 use crate::fs::IoctlCom;
+use crate::info;
 use crate::process::{VProc, VProcFlags, VProcGroup, VSession, VThread};
 use bitflags::bitflags;
 use gmtx::*;
@@ -51,6 +52,8 @@ impl Tty {
     ) -> Result<(), Box<dyn Errno>> {
         match com {
             Self::TIOCSCTTY => {
+                info!("Setting tty to controlling tty");
+
                 let grp_guard = self.vp.group();
                 let proc_grp = grp_guard.as_ref().unwrap();
 
