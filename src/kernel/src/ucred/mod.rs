@@ -10,14 +10,24 @@ mod privilege;
 /// An implementation of `ucred` structure.
 #[derive(Debug, Clone)]
 pub struct Ucred {
-    effective_uid: i32,
+    effective_uid: i32, // cr_uid
+    real_uid: i32,      // cr_ruid
+    groups: Vec<i32>,   // cr_groups + cr_ngroups
     auth: AuthInfo,
 }
 
 impl Ucred {
-    pub fn new(effective_uid: i32, auth: AuthInfo) -> Self {
+    pub fn new(effective_uid: i32, real_uid: i32, mut groups: Vec<i32>, auth: AuthInfo) -> Self {
+        assert!(effective_uid >= 0);
+        assert!(real_uid >= 0);
+        assert!(!groups.is_empty()); // Must have primary group.
+
+        groups[1..].sort_unstable(); // The first one must be primary group.
+
         Self {
             effective_uid,
+            real_uid,
+            groups,
             auth,
         }
     }
@@ -28,6 +38,15 @@ impl Ucred {
 
     pub fn auth(&self) -> &AuthInfo {
         &self.auth
+    }
+
+    /// See `groupmember` on the PS4 for a reference.
+    pub fn is_member(&self, gid: i32) -> bool {
+        if self.groups[0] == gid {
+            return true;
+        }
+
+        self.groups[1..].binary_search(&gid).is_ok()
     }
 
     /// See `sceSblACMgrIsWebcoreProcess` on the PS4 for a reference.

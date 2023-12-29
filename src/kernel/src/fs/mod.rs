@@ -5,6 +5,7 @@ pub use self::host::*;
 pub use self::item::*;
 pub use self::mount::*;
 pub use self::path::*;
+pub use self::perm::*;
 pub use self::vnode::*;
 use crate::errno::{Errno, EBADF, EINVAL, ENAMETOOLONG, ENODEV, ENOENT, ENOTCAPABLE};
 use crate::info;
@@ -30,6 +31,7 @@ mod host;
 mod item;
 mod mount;
 mod path;
+mod perm;
 mod vnode;
 
 /// A virtual filesystem for emulating a PS4 filesystem.
