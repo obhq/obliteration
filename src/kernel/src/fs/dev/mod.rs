@@ -1,12 +1,11 @@
 pub use self::cdev::*;
 use self::dirent::{Dirent, DirentFlags};
-use super::{
-    path_contains, Cdev, CdevSw, DeviceFlags, DirentType, DriverFlags, FsOps, Mount, MountFlags,
-    Vnode, VnodeType, VopVector,
-};
+use self::vnode::VNODE_OPS;
+use super::{path_contains, DirentType, FsOps, Mount, MountFlags, Vnode, VnodeType};
 use crate::errno::{Errno, EEXIST, EINVAL, ENAMETOOLONG, EOPNOTSUPP};
 use crate::ucred::Ucred;
 use bitflags::bitflags;
+use cdev::{Cdev, CdevSw, DeviceFlags, DriverFlags};
 use std::any::Any;
 use std::collections::HashMap;
 use std::num::NonZeroI32;
@@ -184,8 +183,7 @@ impl DevFs {
 
             if children
                 .iter()
-                .find(|&c| c.dirent().ty() == DirentType::Link && c.dirent().name() == name)
-                .is_some()
+                .any(|&c| c.dirent().ty() == DirentType::Link && c.dirent().name() == name)
             {
                 todo!("devfs_populate with DT_LNK children");
             }
