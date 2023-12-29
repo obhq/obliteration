@@ -9,7 +9,6 @@ pub struct VSession {
     login: Gutex<String>,         // s_login
     vnode: Option<Vnode>,         // s_ttyvp
     tty: Gutex<Option<Arc<Tty>>>, // s_ttyp
-    gg: Arc<GutexGroup>,
 }
 
 impl VSession {
@@ -21,7 +20,6 @@ impl VSession {
             login: gg.spawn(login),
             vnode: None,
             tty: gg.spawn(None),
-            gg,
         }
     }
 

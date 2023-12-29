@@ -3,7 +3,7 @@ use super::{
     path_contains, Cdev, CdevSw, DeviceFlags, DirentType, DriverFlags, FsOps, Mount, MountFlags,
     Vnode, VnodeType, VopVector,
 };
-use crate::errno::{Errno, EEXIST, EOPNOTSUPP};
+use crate::errno::{Errno, EEXIST, EINVAL, ENAMETOOLONG, EOPNOTSUPP};
 use crate::ucred::Ucred;
 use bitflags::bitflags;
 use std::any::Any;
@@ -37,8 +37,7 @@ pub fn make_dev<N: Into<String>>(
         todo!("make_dev_credv with D_NEEDMINOR");
     }
 
-    // TODO: Implement prep_devname.
-    let name = name.into();
+    let name = prepare_name(name.into())?;
 
     if dev_exists(&name) {
         return Err(MakeDevError::AlreadyExist(name));
@@ -69,6 +68,34 @@ pub fn make_dev<N: Into<String>>(
 
     // TODO: Implement the remaining logic from the PS4.
     Ok(dev)
+}
+
+/// See `prep_devname` on the PS4 for a reference.
+fn prepare_name(name: String) -> Result<String, MakeDevError> {
+    if name.len() > 63 {
+        return Err(MakeDevError::NameTooLong);
+    }
+
+    let name = name.trim_start_matches('/').to_string();
+
+    //TODO: Deduplicate consecutive slashes.
+
+    if name.is_empty() {
+        return Err(MakeDevError::NameInvalid);
+    }
+
+    for char in name.split('/') {
+        match char {
+            "." | ".." => return Err(MakeDevError::NameInvalid),
+            _ => {}
+        }
+    }
+
+    if dev_exists(&name) {
+        return Err(MakeDevError::AlreadyExist(name));
+    }
+
+    Ok(name)
 }
 
 /// See `devfs_dev_exists` on the PS4 for a reference.
@@ -185,12 +212,18 @@ bitflags! {
 pub enum MakeDevError {
     #[error("the device with the same name already exist")]
     AlreadyExist(String),
+    #[error("the device name is too long")]
+    NameTooLong,
+    #[error("the device name is invalid")]
+    NameInvalid,
 }
 
 impl Errno for MakeDevError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::AlreadyExist(_) => EEXIST,
+            Self::NameTooLong => ENAMETOOLONG,
+            Self::NameInvalid => EINVAL,
         }
     }
 }

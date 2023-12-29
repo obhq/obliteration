@@ -193,7 +193,7 @@ impl Fs {
                 loop {
                     nd.cnd.nameptr += 1;
 
-                    if nd.cnd.pnbuf.get(nd.cnd.nameptr).is_some_and(|&v| v == b'/') {
+                    if nd.cnd.pnbuf.get(nd.cnd.nameptr).is_some_and(|&v| v != b'/') {
                         break;
                     }
                 }

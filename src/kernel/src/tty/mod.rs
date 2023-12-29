@@ -4,7 +4,6 @@ use crate::process::{VProc, VProcFlags, VProcGroup, VSession, VThread};
 use bitflags::bitflags;
 use gmtx::*;
 use std::num::NonZeroI32;
-use std::ops::Deref;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -16,7 +15,6 @@ pub struct Tty {
     session: Gutex<Option<Arc<VSession>>>, //t_session
     session_count: Gutex<u32>,             //t_sessioncnt
     flags: TtyFlags,                       //t_flags
-    gg: Arc<GutexGroup>,                   //t_mtx
 }
 
 impl Tty {
@@ -33,7 +31,6 @@ impl Tty {
             session: gg.spawn(None),
             session_count: gg.spawn(0),
             flags: TtyFlags::TF_OPENED_CONS, // TODO: figure out the actual value
-            gg,
         })
     }
 

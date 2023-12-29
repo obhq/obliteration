@@ -47,17 +47,17 @@ impl VFileOps for Console {
         &self,
         _file: &VFile,
         com: IoctlCom,
-        _data: &mut [u8],
+        data: &mut [u8],
         _cred: &Ucred,
         td: &VThread,
     ) -> Result<(), Box<dyn Errno>> {
         if self.tty.is_gone() || !self.tty.is_open() {
-            return Err(Box::new(IoctlErr::TtyNotAvailable));
+            return Err(Box::new(IoctlError::TtyNotAvailable));
         }
 
         //TODO: implement tty_wait_background and the rest of the checks here.
 
-        self.tty.ioctl(com, _data, td)?;
+        self.tty.ioctl(com, data, td)?;
 
         Ok(())
     }
@@ -69,12 +69,12 @@ impl Display for Console {
 }
 
 #[derive(Debug, Error)]
-enum IoctlErr {
+enum IoctlError {
     #[error("tty is not available")]
     TtyNotAvailable,
 }
 
-impl Errno for IoctlErr {
+impl Errno for IoctlError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::TtyNotAvailable => ENXIO,
