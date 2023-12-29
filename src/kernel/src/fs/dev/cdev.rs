@@ -1,30 +1,32 @@
+use super::dirent::Dirent;
 use crate::ucred::Ucred;
 use bitflags::bitflags;
-use std::sync::Arc;
+use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
+use std::sync::{Arc, Weak};
 use std::time::SystemTime;
 
 /// An implementation of `cdev` and `cdev_priv` structures.
 #[derive(Debug)]
 pub struct Cdev {
-    sw: Arc<CdevSw>,          // si_devsw
-    inode: u32,               // cdp_inode
-    unit: i32,                // si_drv0
-    name: String,             // si_name
-    uid: i32,                 // si_uid
-    gid: i32,                 // si_gid
-    mode: u16,                // si_mode
-    ctime: SystemTime,        // si_ctime
-    atime: SystemTime,        // si_atime
-    mtime: SystemTime,        // si_mtime
-    cred: Option<Arc<Ucred>>, // si_cred
-    flags: DeviceFlags,       // si_flags
+    sw: Arc<CdevSw>,                           // si_devsw
+    unit: i32,                                 // si_drv0
+    name: String,                              // si_name
+    uid: i32,                                  // si_uid
+    gid: i32,                                  // si_gid
+    mode: u16,                                 // si_mode
+    ctime: SystemTime,                         // si_ctime
+    atime: SystemTime,                         // si_atime
+    mtime: SystemTime,                         // si_mtime
+    cred: Option<Arc<Ucred>>,                  // si_cred
+    flags: DeviceFlags,                        // si_flags
+    inode: i32,                                // cdp_inode
+    dirents: Gutex<Vec<Option<Weak<Dirent>>>>, // cdp_dirents + cdp_maxdirent
 }
 
 impl Cdev {
     /// See `devfs_alloc` on the PS4 for a reference.
     pub(super) fn new<N: Into<String>>(
         sw: &Arc<CdevSw>,
-        inode: u32,
         unit: i32,
         name: N,
         uid: i32,
@@ -32,7 +34,9 @@ impl Cdev {
         mode: u16,
         cred: Option<Arc<Ucred>>,
         flags: DeviceFlags,
+        inode: i32,
     ) -> Self {
+        let gg = GutexGroup::new();
         let now = SystemTime::now();
 
         Self {
@@ -48,6 +52,7 @@ impl Cdev {
             mtime: now,
             cred,
             flags,
+            dirents: gg.spawn(vec![None]),
         }
     }
 
@@ -55,8 +60,32 @@ impl Cdev {
         self.name.as_ref()
     }
 
+    pub fn uid(&self) -> i32 {
+        self.uid
+    }
+
+    pub fn gid(&self) -> i32 {
+        self.gid
+    }
+
+    pub fn mode(&self) -> u16 {
+        self.mode
+    }
+
     pub fn flags(&self) -> DeviceFlags {
         self.flags
+    }
+
+    pub(super) fn inode(&self) -> i32 {
+        self.inode
+    }
+
+    pub(super) fn dirents(&self) -> GutexReadGuard<Vec<Option<Weak<Dirent>>>> {
+        self.dirents.read()
+    }
+
+    pub(super) fn dirents_mut(&self) -> GutexWriteGuard<Vec<Option<Weak<Dirent>>>> {
+        self.dirents.write()
     }
 }
 
@@ -64,7 +93,8 @@ bitflags! {
     /// Flags for [`Cdev`].
     #[derive(Debug, Clone, Copy)]
     pub struct DeviceFlags: u32 {
-        const SI_ETERNAL = 0x0001;
+        const SI_ETERNAL = 0x01;
+        const SI_ALIAS = 0x02;
     }
 }
 

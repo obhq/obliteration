@@ -1,6 +1,10 @@
 use super::Mount;
+use crate::errno::{Errno, ENOTDIR};
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
+use std::error::Error;
+use std::fmt::{Display, Formatter};
+use std::num::NonZeroI32;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
@@ -38,6 +42,10 @@ impl Vnode {
         }
     }
 
+    pub fn fs(&self) -> &Arc<Mount> {
+        &self.fs
+    }
+
     pub fn item_mut(&self) -> GutexWriteGuard<Option<Arc<dyn Any + Send + Sync>>> {
         self.item.write()
     }
@@ -57,6 +65,33 @@ pub enum VnodeType {
 
 /// An implementation of `vop_vector` structure.
 #[derive(Debug)]
-pub struct VopVector {}
+pub struct VopVector {
+    pub default: Option<&'static Self>, // vop_default
+    pub lookup: Option<fn(&Arc<Vnode>) -> Result<Arc<Vnode>, Box<dyn Errno>>>, // vop_lookup
+}
+
+/// Represents an error when [`DEFAULT_VNODEOPS`] is failed.
+#[derive(Debug)]
+struct DefaultError(NonZeroI32);
+
+impl Error for DefaultError {}
+
+impl Errno for DefaultError {
+    fn errno(&self) -> NonZeroI32 {
+        self.0
+    }
+}
+
+impl Display for DefaultError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str("not implemented")
+    }
+}
+
+/// An implementation of `default_vnodeops`.
+pub static DEFAULT_VNODEOPS: VopVector = VopVector {
+    default: None,
+    lookup: Some(|_| Err(Box::new(DefaultError(ENOTDIR)))),
+};
 
 static ACTIVE: AtomicUsize = AtomicUsize::new(0); // numvnodes

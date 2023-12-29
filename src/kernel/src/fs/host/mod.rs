@@ -1,6 +1,6 @@
+use self::vnode::VNODE_OPS;
 use super::{
     FsItem, FsOps, HostDir, HostFile, Mount, MountFlags, VPath, VPathBuf, Vnode, VnodeType,
-    VopVector,
 };
 use crate::errno::Errno;
 use param::Param;
@@ -8,6 +8,8 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+mod vnode;
 
 /// Mount data for host FS.
 ///
@@ -179,4 +181,3 @@ enum MountSource {
 }
 
 pub(super) static HOST_OPS: FsOps = FsOps { mount, root };
-static VNODE_OPS: VopVector = VopVector {};

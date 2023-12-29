@@ -1,4 +1,3 @@
-pub use self::cdev::*;
 pub use self::dev::*;
 pub use self::dirent::*;
 pub use self::file::*;
@@ -24,7 +23,6 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
 
-mod cdev;
 mod dev;
 mod dirent;
 mod file;
