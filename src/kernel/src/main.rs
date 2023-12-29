@@ -268,7 +268,7 @@ fn run<E: crate::ee::ExecutionEngine>(
         root,
         app,
         param,
-        &Ucred::new(0, AuthInfo::SYS_CORE), // TODO: Check how PS4 construct this.
+        &Ucred::new(0, 0, vec![0], AuthInfo::SYS_CORE), // TODO: Check how PS4 construct this.
         vp,
         &mut syscalls,
     );
@@ -365,7 +365,8 @@ fn run<E: crate::ee::ExecutionEngine>(
     // Spawn main thread.
     info!("Starting application.");
 
-    let cred = Ucred::new(0, AuthInfo::SYS_CORE.clone());
+    // TODO: Check how this constructed.
+    let cred = Ucred::new(0, 0, vec![0], AuthInfo::SYS_CORE.clone());
     let stack = mm.stack();
     let runner = match unsafe { vp.new_thread(cred, stack.start(), stack.len(), entry) } {
         Ok(v) => v,

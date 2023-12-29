@@ -69,13 +69,19 @@ impl VProc {
         system_path: S,
         sys: &mut Syscalls,
     ) -> Result<Arc<Self>, VProcError> {
-        // TODO: Check how ucred is constructed for a process.
+        let cred = if auth.caps.is_system() {
+            // TODO: The groups will be copied from the parent process, which is SceSysCore.
+            Ucred::new(0, 0, vec![0], auth)
+        } else {
+            Ucred::new(1, 1, vec![1], auth)
+        };
+
         let gg = GutexGroup::new();
         let limits = Self::load_limits()?;
         let vp = Arc::new(Self {
             id: Self::new_id(),
             threads: gg.spawn(Vec::new()),
-            cred: Ucred::new(0, auth), // TODO: Check how the PS4 set this field.
+            cred,
             group: gg.spawn(None),
             sigacts: gg.spawn(SignalActs::new()),
             files: FileDesc::new(&gg),
