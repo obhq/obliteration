@@ -69,8 +69,7 @@ impl Tty {
                 if proc_grp.session().is_some_and(|s| s.tty().is_some()) || {
                     let sess = self.session.read();
 
-                    sess.as_ref()
-                        .is_some_and(|sess| sess.vnode().is_some_and(|vp| !vp.is_bad()))
+                    sess.as_ref().is_some_and(|sess| sess.vnode().is_some())
                 } {
                     return Err(Box::new(TtyErr::BadState));
                 }
