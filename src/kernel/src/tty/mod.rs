@@ -58,7 +58,7 @@ impl Tty {
                 let proc_grp = grp_guard.as_ref().unwrap();
 
                 if !Arc::ptr_eq(&self.vp, proc_grp.leader()) {
-                    return Err(Box::new(TtyErr::NotSessionLeader));
+                    return Err(Box::new(TtyError::NotSessionLeader));
                 }
 
                 match (self.session.read().as_ref(), proc_grp.session()) {
@@ -74,7 +74,7 @@ impl Tty {
 
                     sess.as_ref().is_some_and(|sess| sess.vnode().is_some())
                 } {
-                    return Err(Box::new(TtyErr::BadState));
+                    return Err(Box::new(TtyError::BadState));
                 }
 
                 let sess = proc_grp.session().unwrap();
@@ -109,14 +109,14 @@ bitflags! {
 }
 
 #[derive(Debug, Error)]
-enum TtyErr {
+enum TtyError {
     #[error("not session leader")]
     NotSessionLeader,
     #[error("bad tty state")]
     BadState,
 }
 
-impl Errno for TtyErr {
+impl Errno for TtyError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::NotSessionLeader => EPERM,
