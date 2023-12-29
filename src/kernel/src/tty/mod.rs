@@ -52,7 +52,7 @@ impl Tty {
     ) -> Result<(), Box<dyn Errno>> {
         match com {
             Self::TIOCSCTTY => {
-                info!("Setting tty to controlling tty");
+                info!("Setting tty as controlling tty");
 
                 let grp_guard = self.vp.group();
                 let proc_grp = grp_guard.as_ref().unwrap();
