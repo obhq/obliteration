@@ -1,4 +1,5 @@
-use self::dirent::DirentFlags;
+pub use self::cdev::*;
+use self::dirent::{Dirent, DirentFlags};
 use super::{
     path_contains, Cdev, CdevSw, DeviceFlags, DirentType, DriverFlags, FsOps, Mount, MountFlags,
     Vnode, VnodeType, VopVector,
@@ -9,11 +10,11 @@ use bitflags::bitflags;
 use std::any::Any;
 use std::collections::HashMap;
 use std::num::NonZeroI32;
-use std::ops::Deref;
-use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
 use thiserror::Error;
 
+mod cdev;
 pub(super) mod console;
 pub(super) mod deci_tty6;
 pub(super) mod dipsw;
@@ -21,6 +22,7 @@ mod dirent;
 pub(super) mod dmem0;
 pub(super) mod dmem1;
 pub(super) mod dmem2;
+mod vnode;
 
 /// See `make_dev_credv` on the PS4 for a reference.
 pub fn make_dev<N: Into<String>>(
@@ -53,7 +55,6 @@ pub fn make_dev<N: Into<String>>(
     // Create cdev.
     let dev = Arc::new(Cdev::new(
         sw,
-        INODE.fetch_add(1, Ordering::Relaxed),
         unit,
         name,
         uid,
@@ -61,10 +62,10 @@ pub fn make_dev<N: Into<String>>(
         mode,
         cred,
         df,
+        INODE.fetch_add(1, Ordering::Relaxed).try_into().unwrap(),
     ));
 
     DEVICES.write().unwrap().push(dev.clone());
-    GENERATION.fetch_add(1, Ordering::Release);
 
     // TODO: Implement the remaining logic from the PS4.
     Ok(dev)
@@ -102,7 +103,7 @@ fn prepare_name(name: String) -> Result<String, MakeDevError> {
 pub fn dev_exists<N: AsRef<str>>(name: N) -> bool {
     let name = name.as_ref();
 
-    for dev in DEVICES.read().unwrap().deref() {
+    for dev in &DEVICES.read().unwrap().list {
         if path_contains(dev.name(), name) || path_contains(name, dev.name()) {
             return true;
         }
@@ -114,21 +115,119 @@ pub fn dev_exists<N: AsRef<str>>(name: N) -> bool {
 
 /// An implementation of `devfs_mount` structure.
 pub struct DevFs {
-    idx: u32,                        // dm_idx
-    root: Arc<self::dirent::Dirent>, // dm_rootdir
+    index: usize,           // dm_idx
+    root: Arc<Dirent>,      // dm_rootdir
+    generation: Mutex<u32>, // dm_generation
 }
 
 impl DevFs {
     const DEVFS_ROOTINO: i32 = 2;
 
-    /// See `devfs_vmkdir` on the PS4 for a reference.
-    fn mkdir<N: Into<String>>(
-        name: N,
-        inode: i32,
-        parent: Option<Arc<self::dirent::Dirent>>,
-    ) -> Arc<self::dirent::Dirent> {
-        use self::dirent::Dirent;
+    /// See `devfs_populate` on the PS4 for a reference.
+    fn populate(&self) {
+        // Check if our data already latest.
+        let mut gen = self.generation.lock().unwrap();
+        let devices = DEVICES.read().unwrap();
 
+        if *gen == devices.generation {
+            return;
+        }
+
+        // Populate our data.
+        for dev in &devices.list {
+            // Check if we already populated this device.
+            let dirents = dev.dirents();
+
+            if let Some(dirent) = dirents.get(self.index).and_then(|e| e.as_ref()) {
+                // If there is a strong reference that mean it is our dirent.
+                if dirent.strong_count() != 0 {
+                    continue;
+                }
+            }
+
+            drop(dirents);
+
+            // Create directories along the path.
+            let mut dir = self.root.clone();
+            let mut name = dev.name();
+
+            while let Some(i) = name.find('/') {
+                // Check if already exists.
+                let n = &name[..i];
+                let mut c = dir.children_mut();
+                let d = match c.iter().find(|&c| c.dirent().name() == n) {
+                    Some(c) => {
+                        if c.dirent().ty() == DirentType::Link {
+                            todo!("devfs_populate with DT_LNK children");
+                        }
+
+                        // Not sure why FreeBSD does not check if a directory?
+                        c.clone()
+                    }
+                    None => {
+                        // TODO: Implement devfs_rules_apply.
+                        let d = Self::mkdir(n, 0, Some(&dir));
+                        c.push(d.clone());
+                        d
+                    }
+                };
+
+                drop(c);
+
+                // Move to next component.
+                dir = d;
+                name = &name[(i + 1)..];
+            }
+
+            // Check if a link.
+            let mut children = dir.children_mut();
+
+            if children
+                .iter()
+                .find(|&c| c.dirent().ty() == DirentType::Link && c.dirent().name() == name)
+                .is_some()
+            {
+                todo!("devfs_populate with DT_LNK children");
+            }
+
+            // Check if alias.
+            let (ty, uid, gid, mode) = if dev.flags().intersects(DeviceFlags::SI_ALIAS) {
+                todo!("devfs_populate with SI_ALIAS");
+            } else {
+                (DirentType::Character, dev.uid(), dev.gid(), dev.mode())
+            };
+
+            // Create a new entry.
+            let dirent = Arc::new(Dirent::new(
+                ty,
+                dev.inode(),
+                uid,
+                gid,
+                mode,
+                Some(Arc::downgrade(&dir)),
+                DirentFlags::empty(),
+                name,
+            ));
+
+            children.push(dirent.clone());
+            drop(children);
+
+            // TODO: Implement devfs_rules_apply.
+            let mut dirents = dev.dirents_mut();
+
+            if self.index >= dirents.len() {
+                dirents.resize(self.index + 1, None);
+            }
+
+            dirents[self.index] = Some(Arc::downgrade(&dirent));
+        }
+
+        *gen = devices.generation;
+    }
+
+    /// Partial implementation of `devfs_vmkdir`. The main different is this function does not add
+    /// the created directory to `parent` and does not run `devfs_rules_apply`.
+    fn mkdir<N: Into<String>>(name: N, inode: i32, parent: Option<&Arc<Dirent>>) -> Arc<Dirent> {
         // Create the directory.
         let dir = Arc::new(Dirent::new(
             DirentType::Directory,
@@ -137,6 +236,8 @@ impl DevFs {
             } else {
                 inode
             },
+            0,
+            0,
             0555,
             None,
             DirentFlags::empty(),
@@ -146,6 +247,8 @@ impl DevFs {
         // Add "." directory.
         let dot = Dirent::new(
             DirentType::Directory,
+            0,
+            0,
             0,
             0,
             Some(Arc::downgrade(&dir)),
@@ -160,27 +263,24 @@ impl DevFs {
             DirentType::Directory,
             0,
             0,
-            Some(Arc::downgrade(parent.as_ref().unwrap_or(&dir))),
+            0,
+            0,
+            Some(Arc::downgrade(parent.unwrap_or(&dir))),
             DirentFlags::DE_DOTDOT,
             "..",
         );
 
         dir.children_mut().push(Arc::new(dd));
-
-        if let Some(p) = parent {
-            // TODO: Implement devfs_rules_apply.
-            p.children_mut().push(dir.clone());
-        }
-
         dir
     }
 
     /// See `devfs_allocv` on the PS4 for a reference.
-    fn alloc_vnode(mnt: &Arc<Mount>, ent: &Arc<self::dirent::Dirent>) -> Arc<Vnode> {
+    fn alloc_vnode(mnt: &Arc<Mount>, ent: &Arc<Dirent>) -> Arc<Vnode> {
         // Get type.
         let ty = match ent.dirent().ty() {
             DirentType::Character => todo!("devfs_allocv with DT_CHR"),
             DirentType::Directory => VnodeType::Directory(ent.inode() == Self::DEVFS_ROOTINO),
+            DirentType::Link => todo!("devfs_allocv with DT_LNK"),
         };
 
         // Create vnode.
@@ -204,6 +304,19 @@ bitflags! {
     #[derive(Clone, Copy)]
     pub struct MakeDevFlags: u32 {
         const MAKEDEV_ETERNAL = 0x10;
+    }
+}
+
+/// List of devices in the system.
+struct Devices {
+    list: Vec<Arc<Cdev>>, // cdevp_list
+    generation: u32,      // devfs_generation
+}
+
+impl Devices {
+    fn push(&mut self, d: Arc<Cdev>) {
+        self.list.push(d);
+        self.generation += 1;
     }
 }
 
@@ -243,11 +356,12 @@ fn mount(mount: &mut Mount, _: HashMap<String, Box<dyn Any>>) -> Result<(), Box<
     drop(flags);
 
     // Set mount data.
-    let idx = DEVFS.fetch_add(1, Ordering::Relaxed);
+    let index = DEVFS_INDEX.fetch_add(1, Ordering::Relaxed);
 
     mount.set_data(Arc::new(DevFs {
-        idx: idx.try_into().unwrap(),
+        index,
         root: DevFs::mkdir("", DevFs::DEVFS_ROOTINO, None),
+        generation: Mutex::new(0),
     }));
 
     Ok(())
@@ -278,8 +392,9 @@ impl Errno for MountError {
 }
 
 pub(super) static DEVFS_OPS: FsOps = FsOps { mount, root };
-static DEVFS: AtomicI32 = AtomicI32::new(0); // TODO: Use a proper implementation.
+static DEVFS_INDEX: AtomicUsize = AtomicUsize::new(0); // TODO: Use a proper implementation.
 static INODE: AtomicU32 = AtomicU32::new(3); // TODO: Same here.
-static DEVICES: RwLock<Vec<Arc<Cdev>>> = RwLock::new(Vec::new()); // cdevp_list
-static GENERATION: AtomicU32 = AtomicU32::new(0); // devfs_generation
-static VNODE_OPS: VopVector = VopVector {};
+static DEVICES: RwLock<Devices> = RwLock::new(Devices {
+    list: Vec::new(),
+    generation: 0,
+});

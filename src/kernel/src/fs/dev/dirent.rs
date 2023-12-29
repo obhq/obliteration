@@ -1,12 +1,15 @@
 use crate::fs::{DirentType, Vnode};
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
+use std::ops::Deref;
 use std::sync::{Arc, Weak};
 use std::time::SystemTime;
 
 /// An implementation of `devfs_dirent` structure.
 pub struct Dirent {
     inode: i32,                        // de_inode
+    uid: Gutex<i32>,                   // de_uid
+    gid: Gutex<i32>,                   // de_gid
     mode: Gutex<u16>,                  // de_mode
     dir: Option<Weak<Self>>,           // de_dir
     children: Gutex<Vec<Arc<Self>>>,   // de_dlist
@@ -22,6 +25,8 @@ impl Dirent {
     pub fn new<N>(
         ty: DirentType,
         inode: i32,
+        uid: i32,
+        gid: i32,
         mode: u16,
         dir: Option<Weak<Self>>,
         flags: DirentFlags,
@@ -35,6 +40,8 @@ impl Dirent {
 
         Self {
             inode,
+            uid: gg.spawn(uid),
+            gid: gg.spawn(gid),
             mode: gg.spawn(mode),
             dir,
             children: gg.spawn(Vec::new()),
@@ -65,6 +72,29 @@ impl Dirent {
 
     pub fn dirent(&self) -> &crate::fs::Dirent {
         &self.dirent
+    }
+
+    /// See `devfs_find` on the PS4 for a reference.
+    pub fn find<N: AsRef<str>>(&self, name: N, ty: Option<DirentType>) -> Option<Arc<Self>> {
+        let name = name.as_ref();
+
+        for child in self.children.read().deref() {
+            // Check name.
+            if child.dirent.name() != name {
+                continue;
+            }
+
+            // Check type.
+            if let Some(ty) = ty {
+                if child.dirent.ty() != ty {
+                    continue;
+                }
+            }
+
+            return Some(child.clone());
+        }
+
+        None
     }
 }
 
