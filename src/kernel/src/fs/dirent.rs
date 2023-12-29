@@ -15,6 +15,10 @@ impl Dirent {
     pub fn ty(&self) -> DirentType {
         self.ty
     }
+
+    pub fn name(&self) -> &str {
+        self.name.as_ref()
+    }
 }
 
 /// Type of [`Dirent`].
@@ -22,6 +26,7 @@ impl Dirent {
 pub enum DirentType {
     Character, // DT_CHR
     Directory, // DT_DIR
+    Link,      // DT_LNK
 }
 
 impl DirentType {
@@ -29,6 +34,7 @@ impl DirentType {
         match self {
             Self::Character => 2,
             Self::Directory => 4,
+            Self::Link => 10,
         }
     }
 }

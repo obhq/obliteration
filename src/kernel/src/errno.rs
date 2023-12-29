@@ -108,7 +108,11 @@ pub trait Errno: Error {
     fn errno(&self) -> NonZeroI32;
 }
 
-impl Error for Box<dyn Errno> {}
+impl Error for Box<dyn Errno> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.as_ref().source()
+    }
+}
 
 /// Get human readable text.
 pub fn strerror(num: NonZeroI32) -> &'static str {
