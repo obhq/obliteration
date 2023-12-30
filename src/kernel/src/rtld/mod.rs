@@ -14,7 +14,7 @@ use crate::process::{VProc, VThread};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use bitflags::bitflags;
 use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation, Symbol};
-use gmtx::Gutex;
+use gmtx::{Gutex, GutexGroup};
 use sha1::{Digest, Sha1};
 use std::borrow::Cow;
 use std::fs::File;
@@ -38,7 +38,7 @@ pub struct RuntimeLinker<E: ExecutionEngine> {
     fs: Arc<Fs>,
     mm: Arc<MemoryManager>,
     ee: Arc<E>,
-    vp: Arc<VProc>,
+    // TODO: Move all fields after this to proc.
     list: Gutex<Vec<Arc<Module<E>>>>,      // obj_list + obj_tail
     app: Arc<Module<E>>,                   // obj_main
     kernel: Gutex<Option<Arc<Module<E>>>>, // obj_kernel
@@ -60,7 +60,6 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         fs: &Arc<Fs>,
         mm: &Arc<MemoryManager>,
         ee: &Arc<E>,
-        vp: &Arc<VProc>,
         sys: &mut Syscalls,
         dump: Option<&Path>,
     ) -> Result<Arc<Self>, RuntimeLinkerError<E>> {
@@ -74,7 +73,6 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             dirp: &path,
             startdir: None,
             rootdir: None,
-            topdir: None,
             strictrelative: 0,
             loopcnt: 0,
             cnd: ComponentName {
@@ -123,17 +121,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         // TODO: Apply remaining checks from exec_self_imgact.
         // Map eboot.bin.
-        let mut app = match Module::map(
-            mm,
-            ee,
-            elf,
-            base,
-            "executable",
-            0,
-            Vec::new(),
-            1,
-            vp.gutex_group(),
-        ) {
+        let mut app = match Module::map(mm, ee, elf, base, "executable", 0, Vec::new(), 1) {
             Ok(v) => v,
             Err(e) => return Err(RuntimeLinkerError::MapExeFailed(file.into_vpath(), e)),
         };
@@ -166,12 +154,11 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         // TODO: Apply logic from aio_proc_rundown_exec.
         // TODO: Apply logic from gs_is_event_handler_process_exec.
         let app = Arc::new(app);
-        let gg = vp.gutex_group();
+        let gg = GutexGroup::new();
         let ld = Arc::new(Self {
             fs: fs.clone(),
             mm: mm.clone(),
             ee: ee.clone(),
-            vp: vp.clone(),
             list: gg.spawn(vec![app.clone()]),
             app: app.clone(),
             kernel: gg.spawn(None),
@@ -214,6 +201,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
     /// reference.
     pub fn load(
         &self,
+        proc: &VProc,
         path: &VPath,
         _: LoadFlags,
         force: bool,
@@ -246,7 +234,6 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             dirp: path,
             startdir: None,
             rootdir: None,
-            topdir: None,
             strictrelative: 0,
             loopcnt: 0,
             cnd: ComponentName {
@@ -309,21 +296,11 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         };
 
         // Map file.
-        let mut table = self.vp.objects_mut();
+        let mut table = proc.objects_mut();
         let (entry, _) = table.alloc(|id| {
             let name = path.file_name().unwrap();
             let id: u32 = (id + 1).try_into().unwrap();
-            let mut md = match Module::map(
-                &self.mm,
-                &self.ee,
-                elf,
-                0,
-                name,
-                id,
-                names,
-                tls,
-                self.vp.gutex_group(),
-            ) {
+            let mut md = match Module::map(&self.mm, &self.ee, elf, 0, name, id, names, tls) {
                 Ok(v) => v,
                 Err(e) => return Err(LoadError::MapFailed(e)),
             };
@@ -522,6 +499,8 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
     fn sys_dynlib_load_prx(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         // Check if application is a dynamic SELF.
+        let td = VThread::current().unwrap();
+
         if self.app.file_info().is_none() {
             return Err(SysErr::Raw(EPERM));
         }
@@ -541,7 +520,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             None => todo!("sys_dynlib_load_prx with relative path"),
         };
 
-        if self.vp.budget().is_some_and(|v| v.1 == ProcType::BigApp) {
+        if td.proc().budget_ptype() == ProcType::BigApp {
             flags |= 0x01;
         }
 
@@ -560,6 +539,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
                 // TODO: Refactor this for readability.
                 self.load(
+                    td.proc(),
                     name,
                     LoadFlags::from_bits_retain(((flags & 1) << 5) + ((flags >> 10) & 0x40) + 2),
                     true, // TODO: This hard-coded because we don't support relative path yet.

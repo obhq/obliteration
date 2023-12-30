@@ -12,11 +12,11 @@ use thiserror::Error;
 pub struct Dmem1 {
     vp: Arc<VProc>,
     total_size: usize,
-    number: i32,
+    number: usize,
 }
 
 impl Dmem1 {
-    pub const PATH: &VPath = vpath!("/dev/dmem1");
+    pub const PATH: &'static VPath = vpath!("/dev/dmem1");
 
     pub const DMEM_GRP: u8 = 0x80;
 
@@ -48,7 +48,7 @@ impl VFileOps for Dmem1 {
             return Err(Box::new(IoctlErr::BadCredentials));
         }
 
-        if self.number != 2 && self.number != *self.vp.dmem_container() && !cred.is_system() {
+        if self.number != 2 && self.number != self.vp.dmem_container() && !cred.is_system() {
             return Err(Box::new(IoctlErr::BadCredentials));
         }
 

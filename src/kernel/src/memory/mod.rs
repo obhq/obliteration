@@ -3,9 +3,8 @@ pub use self::stack::*;
 
 use self::iter::StartFromMut;
 use self::storage::Storage;
-use crate::errno::EOPNOTSUPP;
-use crate::errno::{Errno, EINVAL, ENOMEM};
-use crate::process::VProc;
+use crate::errno::{Errno, EINVAL, ENOMEM, EOPNOTSUPP};
+use crate::process::VThread;
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
 use crate::{info, warn};
 use bitflags::bitflags;
@@ -24,7 +23,6 @@ mod storage;
 /// Manage all paged memory that can be seen by a PS4 app.
 #[derive(Debug)]
 pub struct MemoryManager {
-    vp: Arc<VProc>,
     page_size: usize,
     allocation_granularity: usize,
     allocations: RwLock<BTreeMap<usize, Alloc>>, // Key is Alloc::addr.
@@ -35,7 +33,7 @@ impl MemoryManager {
     /// Size of a memory page on PS4.
     pub const VIRTUAL_PAGE_SIZE: usize = 0x4000;
 
-    pub fn new(vp: &Arc<VProc>, syscalls: &mut Syscalls) -> Result<Arc<Self>, MemoryManagerError> {
+    pub fn new(sys: &mut Syscalls) -> Result<Arc<Self>, MemoryManagerError> {
         // Check if page size on the host is supported. We don't need to check allocation
         // granularity because it is always multiply by page size, which is a correct value.
         let (page_size, allocation_granularity) = Self::get_memory_model();
@@ -51,7 +49,6 @@ impl MemoryManager {
 
         // TODO: Check exec_new_vmspace on the PS4 to see what we have missed here.
         let mut mm = Self {
-            vp: vp.clone(),
             page_size,
             allocation_granularity,
             allocations: RwLock::default(),
@@ -84,10 +81,10 @@ impl MemoryManager {
         // Register syscall handlers.
         let mm = Arc::new(mm);
 
-        syscalls.register(69, &mm, Self::sys_sbrk);
-        syscalls.register(70, &mm, Self::sys_sstk);
-        syscalls.register(477, &mm, Self::sys_mmap);
-        syscalls.register(588, &mm, Self::sys_mname);
+        sys.register(69, &mm, Self::sys_sbrk);
+        sys.register(70, &mm, Self::sys_sstk);
+        sys.register(477, &mm, Self::sys_mmap);
+        sys.register(588, &mm, Self::sys_mname);
 
         Ok(mm)
     }
@@ -142,6 +139,8 @@ impl MemoryManager {
         flags.remove(MappingFlags::UNK3);
 
         // TODO: Refactor this for readability.
+        let td = VThread::current();
+
         if ((offset & 0x3fff) ^ 0xffffffffffffbfff) < len {
             return Err(MmapError::InvalidOffset);
         }
@@ -149,7 +148,10 @@ impl MemoryManager {
         if flags.contains(MappingFlags::MAP_FIXED) {
             todo!("mmap with flags & 0x10");
         } else if addr == 0 {
-            if (self.vp.app_info().unk1() & 2) != 0 {
+            if td
+                .as_ref()
+                .is_some_and(|t| (t.proc().app_info().unk1() & 2) != 0)
+            {
                 todo!("mmap with addr = 0 and appinfo.unk1 & 2 != 0");
             }
         } else if (addr & 0xfffffffdffffffff) == 0 {
@@ -168,7 +170,7 @@ impl MemoryManager {
             todo!("mmap with flags & 0x200000 != 0");
         }
 
-        if (self.vp.app_info().unk1() & 2) != 0 {
+        if td.is_some_and(|t| (t.proc().app_info().unk1() & 2) != 0) {
             todo!("mmap with addr = 0 and appinfo.unk1 & 2 != 0");
         }
 

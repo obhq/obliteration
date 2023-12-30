@@ -4,7 +4,7 @@ use crate::errno::{
     EFAULT, EINVAL, EISDIR, ENAMETOOLONG, ENOENT, ENOMEM, ENOTDIR, EOPNOTSUPP, EPERM, ESRCH,
 };
 use crate::memory::MemoryManager;
-use crate::process::VProc;
+use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use std::any::Any;
 use std::cmp::min;
@@ -18,7 +18,6 @@ use std::sync::Arc;
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/kern/kern_sysctl.c.
 pub struct Sysctl {
     arnd: Arc<Arnd>,
-    vp: Arc<VProc>,
     mm: Arc<MemoryManager>,
     machdep: Arc<MachDep>,
 }
@@ -96,14 +95,12 @@ impl Sysctl {
 
     pub fn new(
         arnd: &Arc<Arnd>,
-        vp: &Arc<VProc>,
         mm: &Arc<MemoryManager>,
         machdep: &Arc<MachDep>,
         sys: &mut Syscalls,
     ) -> Arc<Self> {
         let ctl = Arc::new(Self {
             arnd: arnd.clone(),
-            vp: vp.clone(),
             mm: mm.clone(),
             machdep: machdep.clone(),
         });
@@ -131,7 +128,9 @@ impl Sysctl {
             unsafe { std::slice::from_raw_parts(name, namelen as _) }
         };
 
-        if name[0] == Self::CTL_DEBUG && !self.vp.cred().is_system() {
+        let td = VThread::current().unwrap();
+
+        if name[0] == Self::CTL_DEBUG && !td.proc().cred().is_system() {
             return Err(SysErr::Raw(EINVAL));
         }
 
@@ -352,13 +351,15 @@ impl Sysctl {
             _ => unreachable!(),
         };
 
-        if arg1[0] != self.vp.id().get() {
+        let td = VThread::current().unwrap();
+
+        if arg1[0] != td.proc().id().get() {
             return Err(SysErr::Raw(ESRCH));
         }
 
         // TODO: Implement sceSblACMgrIsSystemUcred.
         // TODO: Check proc->p_flag.
-        let info = self.vp.app_info().serialize();
+        let info = td.proc().app_info().serialize();
 
         req.write(&info[..oldlen])?;
 
@@ -390,10 +391,15 @@ impl Sysctl {
         _: usize,
         req: &mut SysctlReq,
     ) -> Result<(), SysErr> {
-        req.write(&self.vp.ptc().to_ne_bytes())?;
+        let td = VThread::current().unwrap();
 
-        self.vp.uptc().store(
-            req.old.as_mut().map_or(null_mut(), |v| v.as_mut_ptr()),
+        req.write(&td.proc().ptc().to_ne_bytes())?;
+
+        td.proc().uptc().store(
+            req.old
+                .as_mut()
+                .map(|v| v.as_mut_ptr())
+                .unwrap_or(null_mut()),
             Ordering::Relaxed,
         );
 

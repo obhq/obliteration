@@ -1,21 +1,18 @@
 use crate::errno::{ENOENT, ENOSYS, ESRCH};
 use crate::idt::Idt;
 use crate::info;
-use crate::process::{VProc, VThread};
+use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
-use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 
 /// An implementation of budget system on the PS4.
 pub struct BudgetManager {
-    vp: Arc<VProc>,
     budgets: Mutex<Idt<Arc<Budget>>>,
 }
 
 impl BudgetManager {
-    pub fn new(vp: &Arc<VProc>, sys: &mut Syscalls) -> Arc<Self> {
+    pub fn new(sys: &mut Syscalls) -> Arc<Self> {
         let mgr = Arc::new(Self {
-            vp: vp.clone(),
             budgets: Mutex::new(Idt::new(0x1000)),
         });
 
@@ -42,15 +39,11 @@ impl BudgetManager {
 
         info!("Getting budget process type for process {pid}.");
 
-        if td.cred().is_system() || pid == -1 || pid == self.vp.id().get() {
-            if pid == -1 || pid == self.vp.id().get() {
-                // Get budget ID.
-                let id = match self.vp.budget().deref() {
-                    Some(v) => v.0,
-                    None => return Err(SysErr::Raw(ENOENT)),
-                };
-
+        if td.cred().is_system() || pid == -1 || pid == td.proc().id().get() {
+            if pid == -1 || pid == td.proc().id().get() {
                 // Lookup budget.
+                let id = td.proc().budget_id();
+
                 match self.budgets.lock().unwrap().get_mut(id, Some(0x2000)) {
                     Some(v) => Ok((v.data().ptype as i32).into()),
                     None => Err(SysErr::Raw(ENOENT)),
