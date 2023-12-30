@@ -23,11 +23,11 @@ impl Tty {
 
     pub const TIOCSCTTY: IoctlCom = IoctlCom::io(Self::TTY_GRP, 97);
 
-    pub fn new(vp: Arc<VProc>) -> Arc<Self> {
+    pub fn new(vp: &Arc<VProc>) -> Arc<Self> {
         let gg = GutexGroup::new();
 
         Arc::new(Self {
-            vp,
+            vp.clone(),
             group: gg.spawn(None),
             session: gg.spawn(None),
             session_count: gg.spawn(0),

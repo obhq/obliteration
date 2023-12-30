@@ -20,9 +20,7 @@ impl Console {
     pub const PATH: &VPath = vpath!("/dev/console");
 
     pub fn new(vp: &Arc<VProc>) -> Self {
-        Self {
-            tty: Tty::new(vp.clone()),
-        }
+        Self { tty: Tty::new(vp) }
     }
 }
 
