@@ -5,7 +5,6 @@ use crate::fs::{
     DEFAULT_VNODEOPS,
 };
 use crate::process::VThread;
-use crate::ucred::Ucred;
 use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
@@ -17,7 +16,7 @@ pub static VNODE_OPS: VopVector = VopVector {
     lookup: Some(lookup),
 };
 
-fn access(vn: &Arc<Vnode>, _: &VThread, cred: &Ucred, access: u32) -> Result<(), Box<dyn Errno>> {
+fn access(vn: &Arc<Vnode>, td: Option<&VThread>, access: u32) -> Result<(), Box<dyn Errno>> {
     // Get dirent.
     let mut dirent = vn.data().clone().downcast::<Dirent>().unwrap();
     let is_dir = match vn.ty() {
@@ -30,6 +29,12 @@ fn access(vn: &Arc<Vnode>, _: &VThread, cred: &Ucred, access: u32) -> Result<(),
             true
         }
         _ => false,
+    };
+
+    // Get credential.
+    let cred = match td {
+        Some(v) => v.cred(),
+        None => return Ok(()),
     };
 
     // Get file permissions as atomic.
@@ -79,6 +84,13 @@ fn lookup(vn: &Arc<Vnode>, cn: &ComponentName) -> Result<Arc<Vnode>, Box<dyn Err
         _ => return Err(Box::new(LookupError::NotDirectory)),
     }
 
+    // Check if directory is accessible.
+    let td = cn.thread;
+
+    if let Err(e) = vn.access(td, 0100) {
+        return Err(Box::new(LookupError::AccessDenied(e)));
+    }
+
     // TODO: Implement the remaining lookup.
     todo!()
 }
@@ -94,6 +106,9 @@ enum LookupError {
 
     #[error("cannot resolve '..' on the root directory")]
     DotdotOnRoot,
+
+    #[error("access denied")]
+    AccessDenied(#[source] Box<dyn Errno>),
 }
 
 impl Errno for LookupError {
@@ -102,6 +117,7 @@ impl Errno for LookupError {
             Self::RenameWithLastComponent => EOPNOTSUPP,
             Self::NotDirectory => ENOTDIR,
             Self::DotdotOnRoot => EIO,
+            Self::AccessDenied(e) => e.errno(),
         }
     }
 }
