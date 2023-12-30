@@ -10,7 +10,7 @@ pub use self::perm::*;
 pub use self::vnode::*;
 use crate::errno::{Errno, EBADF, EINVAL, ENAMETOOLONG, ENODEV, ENOENT, ENOTCAPABLE};
 use crate::info;
-use crate::process::{VProc, VThread};
+use crate::process::VThread;
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{Privilege, Ucred};
 use bitflags::bitflags;
@@ -39,7 +39,6 @@ mod vnode;
 /// A virtual filesystem for emulating a PS4 filesystem.
 #[derive(Debug)]
 pub struct Fs {
-    vp: Arc<VProc>,
     mounts: Gutex<Mounts>,   // mountlist
     root: Gutex<Arc<Vnode>>, // rootvnode
     opens: AtomicI32,        // openfiles
@@ -51,7 +50,6 @@ impl Fs {
         game: G,
         param: &Arc<Param>,
         cred: &Ucred,
-        vp: &Arc<VProc>,
         sys: &mut Syscalls,
     ) -> Arc<Self>
     where
@@ -70,9 +68,6 @@ impl Fs {
         // Get an initial root vnode.
         let root = (init.fs().ops.root)(&mounts.push(init));
 
-        vp.files().set_cwd(root.clone());
-        *vp.files().root_mut() = Some(root.clone());
-
         // Setup mount options for root FS.
         let mut opts: HashMap<String, Box<dyn Any>> = HashMap::new();
 
@@ -87,7 +82,6 @@ impl Fs {
         // Mount root FS.
         let gg = GutexGroup::new();
         let fs = Arc::new(Self {
-            vp: vp.clone(),
             mounts: gg.spawn(mounts),
             root: gg.spawn(root),
             opens: AtomicI32::new(0),
@@ -107,10 +101,6 @@ impl Fs {
 
             old
         };
-
-        // Update process location.
-        vp.files().set_cwd(root.clone());
-        *vp.files().root_mut() = Some(root);
 
         // Disconnect devfs from the old root.
         *(om.fs().ops.root)(&om).item_mut() = None;
@@ -160,13 +150,18 @@ impl Fs {
         nd.loopcnt = 0;
 
         // TODO: Implement ktrnamei.
-        nd.rootdir = self.vp.files().root().clone();
-        nd.topdir = self.vp.files().jail().clone();
+        nd.rootdir = Some(
+            nd.cnd
+                .thread
+                .map_or_else(|| self.root(), |t| t.proc().files().root()),
+        );
 
         let mut dp = if nd.cnd.pnbuf[0] != b'/' {
             todo!("namei with relative path");
         } else {
-            self.vp.files().cwd().clone()
+            nd.cnd
+                .thread
+                .map_or_else(|| self.root(), |t| t.proc().files().cwd())
         };
 
         if nd.startdir.is_some() {
@@ -254,18 +249,16 @@ impl Fs {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        let buf = unsafe { std::slice::from_raw_parts(ptr, len) };
-
-        let file = self.vp.files().get(fd).ok_or(SysErr::Raw(EBADF))?;
-        let ops = file.ops().ok_or(SysErr::Raw(EBADF))?;
-
         let td = VThread::current().unwrap();
+        let file = td.proc().files().get(fd).ok_or(SysErr::Raw(EBADF))?;
+        let ops = file.ops().ok_or(SysErr::Raw(EBADF))?;
 
         info!("Writing {len} bytes to fd {fd}.");
 
-        let bytes_written = ops.write(file.as_ref(), buf, td.cred(), td.as_ref())?;
+        let buf = unsafe { std::slice::from_raw_parts(ptr, len) };
+        let written = ops.write(file.as_ref(), buf, td.cred(), td.as_ref())?;
 
-        Ok(bytes_written.into())
+        Ok(written.into())
     }
 
     fn sys_open(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -307,7 +300,6 @@ impl Fs {
             dirp: path,
             startdir: None,
             rootdir: None,
-            topdir: None,
             strictrelative: 0,
             loopcnt: 0,
             cnd: ComponentName {
@@ -320,10 +312,10 @@ impl Fs {
         };
 
         *file.flags_mut() = flags.to_fflags();
-        file.set_ops(Some(self.namei(&mut nd)?.open(&self.vp)?));
+        file.set_ops(Some(self.namei(&mut nd)?.open(td.proc())?));
 
         // Install to descriptor table.
-        let fd = self.vp.files().alloc(Arc::new(file));
+        let fd = td.proc().files().alloc(Arc::new(file));
 
         info!("File descriptor {fd} was allocated for {path}.");
 
@@ -331,11 +323,12 @@ impl Fs {
     }
 
     fn sys_close(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let td = VThread::current().unwrap();
         let fd: i32 = i.args[0].try_into().unwrap();
 
         info!("Closing fd {fd}.");
 
-        self.vp.files().free(fd)?;
+        td.proc().files().free(fd)?;
 
         Ok(SysOut::ZERO)
     }
@@ -372,7 +365,8 @@ impl Fs {
         }
 
         // Get target file.
-        let file = self.vp.files().get(fd).ok_or(SysErr::Raw(EBADF))?;
+        let td = VThread::current().unwrap();
+        let file = td.proc().files().get(fd).ok_or(SysErr::Raw(EBADF))?;
         let ops = file.ops().ok_or(SysErr::Raw(EBADF))?;
 
         if !file
@@ -383,8 +377,6 @@ impl Fs {
         }
 
         // Execute the operation.
-        let td = VThread::current().unwrap();
-
         info!("Executing ioctl({com}) on {file}.");
 
         match com {
@@ -421,7 +413,6 @@ impl Fs {
             dirp: path,
             startdir: None,
             rootdir: None,
-            topdir: None,
             strictrelative: 0,
             loopcnt: 0,
             cnd: ComponentName {

@@ -8,6 +8,7 @@ pub use self::signal::*;
 pub use self::thread::*;
 use crate::budget::ProcType;
 use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ERANGE, ESRCH};
+use crate::fs::Vnode;
 use crate::idt::Idt;
 use crate::info;
 use crate::signal::{
@@ -16,7 +17,7 @@ use crate::signal::{
 };
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{AuthInfo, Privilege, Ucred};
-use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
+use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
 use std::cmp::min;
 use std::ffi::c_char;
@@ -54,8 +55,9 @@ pub struct VProc {
     limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
     comm: Gutex<Option<String>>,                     // p_comm
     objects: Gutex<Idt<Arc<dyn Any + Send + Sync>>>,
-    dmem_container: Gutex<i32>,
-    budget: Gutex<Option<(usize, ProcType)>>,
+    budget_id: usize,
+    budget_ptype: ProcType,
+    dmem_container: usize,
     app_info: AppInfo,
     ptc: u64,
     uptc: AtomicPtr<u8>,
@@ -65,6 +67,10 @@ pub struct VProc {
 impl VProc {
     pub fn new<S: Into<String>>(
         auth: AuthInfo,
+        budget_id: usize,
+        budget_ptype: ProcType,
+        dmem_container: usize,
+        root: Arc<Vnode>,
         system_path: S,
         sys: &mut Syscalls,
     ) -> Result<Arc<Self>, VProcError> {
@@ -83,11 +89,12 @@ impl VProc {
             cred,
             group: gg.spawn(None),
             sigacts: gg.spawn(SignalActs::new()),
-            files: FileDesc::new(&gg),
+            files: FileDesc::new(root),
             system_path: system_path.into(),
             objects: gg.spawn(Idt::new(0x1000)),
-            dmem_container: gg.spawn(0), // TODO: Check the initial value on the PS4.
-            budget: gg.spawn(None),
+            budget_id,
+            budget_ptype,
+            dmem_container,
             limits,
             comm: gg.spawn(None), //TODO: Find out how this is actually set
             app_info: AppInfo::new(),
@@ -137,20 +144,16 @@ impl VProc {
         self.objects.write()
     }
 
-    pub fn dmem_container(&self) -> GutexReadGuard<'_, i32> {
-        self.dmem_container.read()
+    pub fn budget_id(&self) -> usize {
+        self.budget_id
     }
 
-    pub fn dmem_container_mut(&self) -> GutexWriteGuard<'_, i32> {
-        self.dmem_container.write()
+    pub fn budget_ptype(&self) -> ProcType {
+        self.budget_ptype
     }
 
-    pub fn budget(&self) -> GutexReadGuard<'_, Option<(usize, ProcType)>> {
-        self.budget.read()
-    }
-
-    pub fn budget_mut(&self) -> GutexWriteGuard<'_, Option<(usize, ProcType)>> {
-        self.budget.write()
+    pub fn dmem_container(&self) -> usize {
+        self.dmem_container
     }
 
     pub fn app_info(&self) -> &AppInfo {

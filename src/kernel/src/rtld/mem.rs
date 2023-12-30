@@ -31,7 +31,6 @@ impl Memory {
         image: &Elf<File>,
         base: usize,
         name: N,
-        gg: &Arc<GutexGroup>,
     ) -> Result<Self, MapError> {
         // It seems like the PS4 expected to have only one for each text, data and relo program.
         let mut segments: Vec<MemorySegment> = Vec::with_capacity(3 + 2);
@@ -169,6 +168,8 @@ impl Memory {
             }
         }
 
+        let gg = GutexGroup::new();
+
         Ok(Self {
             mm: mm.clone(),
             ptr: pages.into_raw(),
@@ -215,6 +216,9 @@ impl Memory {
         std::slice::from_raw_parts(self.ptr, self.len)
     }
 
+    /// Beware of deadlock because this method will hold on the mutex until
+    /// [`CodeWorkspace::seal()`] is called.
+    ///
     /// # Safety
     /// No other threads may execute the memory in the segment until the returned [`CodeWorkspace`]
     /// has been dropped.

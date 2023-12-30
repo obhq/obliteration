@@ -183,16 +183,9 @@ fn main() -> ExitCode {
     let arnd = Arnd::new();
     let llvm = Llvm::new();
     let mut syscalls = Syscalls::new();
-    let vp = match VProc::new(auth, "QXuNNl0Zhn", &mut syscalls) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Virtual process initialization failed");
-            return ExitCode::FAILURE;
-        }
-    };
 
     // Initialize memory management.
-    let mm = match MemoryManager::new(&vp, &mut syscalls) {
+    let mm = match MemoryManager::new(&mut syscalls) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Memory manager initialization failed");
@@ -227,9 +220,9 @@ fn main() -> ExitCode {
             args.game,
             args.debug_dump,
             &param,
+            auth,
             &arnd,
             syscalls,
-            &vp,
             &mm,
             crate::ee::native::NativeEngine::new(),
         ),
@@ -243,9 +236,9 @@ fn main() -> ExitCode {
             args.game,
             args.debug_dump,
             &param,
+            auth,
             &arnd,
             syscalls,
-            &vp,
             &mm,
             crate::ee::llvm::LlvmEngine::new(&llvm),
         ),
@@ -257,9 +250,9 @@ fn run<E: crate::ee::ExecutionEngine>(
     app: PathBuf,
     dump: Option<PathBuf>,
     param: &Arc<Param>,
+    auth: AuthInfo,
     arnd: &Arc<Arnd>,
     mut syscalls: Syscalls,
-    vp: &Arc<VProc>,
     mm: &Arc<MemoryManager>,
     ee: Arc<E>,
 ) -> ExitCode {
@@ -269,35 +262,46 @@ fn run<E: crate::ee::ExecutionEngine>(
         app,
         param,
         &Ucred::new(0, 0, vec![0], AuthInfo::SYS_CORE), // TODO: Check how PS4 construct this.
-        vp,
         &mut syscalls,
     );
-
-    *vp.files().root_mut() = Some(fs.root().clone()); // TODO: Check how the PS4 set this field.
 
     // Initialize kernel components.
     RegMgr::new(&mut syscalls);
     let machdep = MachDep::new(&mut syscalls);
-    let budget = BudgetManager::new(vp, &mut syscalls);
-    DmemManager::new(vp, &fs, &mut syscalls);
+    let budget = BudgetManager::new(&mut syscalls);
+    DmemManager::new(&fs, &mut syscalls);
+    Sysctl::new(arnd, mm, &machdep, &mut syscalls);
 
-    // TODO: Get correct name from the PS4.
-    *vp.budget_mut() = Some((
-        budget.create(Budget::new("big app", ProcType::BigApp)),
+    // TODO: Get correct budget name from the PS4.
+    let budget_id = budget.create(Budget::new("big app", ProcType::BigApp));
+    let proc = match VProc::new(
+        auth,
+        budget_id,
         ProcType::BigApp,
-    ));
-    *vp.dmem_container_mut() = 1; // See sys_budget_set on the PS4.
+        1,         // See sys_budget_set on the PS4.
+        fs.root(), // TODO: Change to a proper value once FS rework is done.
+        "QXuNNl0Zhn",
+        &mut syscalls,
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            error!(e, "Virtual process initialization failed");
+            return ExitCode::FAILURE;
+        }
+    };
 
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
 
-    let ld = match RuntimeLinker::new(&fs, mm, &ee, vp, &mut syscalls, dump.as_deref()) {
+    let ld = match RuntimeLinker::new(&fs, mm, &ee, &mut syscalls, dump.as_deref()) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Initialize failed");
             return ExitCode::FAILURE;
         }
     };
+
+    ee.set_syscalls(syscalls);
 
     // Print application module.
     let app = ld.app();
@@ -306,21 +310,17 @@ fn run<E: crate::ee::ExecutionEngine>(
     writeln!(log, "Application   : {}", app.path()).unwrap();
     app.print(log);
 
-    // Initialize sysctl.
-    Sysctl::new(arnd, vp, mm, &machdep, &mut syscalls);
-    ee.set_syscalls(syscalls);
-
     // Preload libkernel.
     let mut flags = LoadFlags::UNK1;
     let path = vpath!("/system/common/lib/libkernel.sprx");
 
-    if vp.budget().filter(|v| v.1 == ProcType::BigApp).is_some() {
+    if proc.budget_ptype() == ProcType::BigApp {
         flags |= LoadFlags::BIG_APP;
     }
 
     info!("Loading {path}.");
 
-    let module = match ld.load(path, flags, false, true) {
+    let module = match ld.load(&proc, path, flags, false, true) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Load failed");
@@ -338,7 +338,7 @@ fn run<E: crate::ee::ExecutionEngine>(
 
     info!("Loading {path}.");
 
-    let module = match ld.load(path, flags, false, true) {
+    let module = match ld.load(&proc, path, flags, false, true) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Load failed");
@@ -358,7 +358,7 @@ fn run<E: crate::ee::ExecutionEngine>(
 
     // Get entry point.
     let boot = ld.kernel().unwrap();
-    let mut arg = Box::pin(EntryArg::<E>::new(arnd, vp, mm, app.clone()));
+    let mut arg = Box::pin(EntryArg::<E>::new(arnd, &proc, mm, app.clone()));
     let entry = unsafe { boot.get_function(boot.entry().unwrap()) };
     let entry = move || unsafe { entry.exec1(arg.as_mut().as_vec().as_ptr()) };
 
@@ -366,9 +366,9 @@ fn run<E: crate::ee::ExecutionEngine>(
     info!("Starting application.");
 
     // TODO: Check how this constructed.
-    let main = VThread::new(Ucred::new(0, 0, vec![0], AuthInfo::SYS_CORE.clone()));
+    let main = VThread::new(proc, Ucred::new(0, 0, vec![0], AuthInfo::SYS_CORE.clone()));
     let stack = mm.stack();
-    let main = match unsafe { main.start(vp, stack.start(), stack.len(), entry) } {
+    let main = match unsafe { main.start(stack.start(), stack.len(), entry) } {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Create main thread failed");

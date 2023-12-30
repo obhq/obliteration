@@ -59,10 +59,9 @@ impl<E: ExecutionEngine> Module<E> {
         id: u32,
         names: Vec<String>,
         tls_index: u32,
-        gg: &Arc<GutexGroup>,
     ) -> Result<Self, MapError> {
         // Map the image to the memory.
-        let memory = Memory::new(mm, &image, base, mem_name, gg)?;
+        let memory = Memory::new(mm, &image, base, mem_name)?;
 
         for (i, s) in memory.segments().iter().enumerate() {
             // Get target program.
@@ -159,6 +158,7 @@ impl<E: ExecutionEngine> Module<E> {
         };
 
         // Parse dynamic info.
+        let gg = GutexGroup::new();
         let mut module = Self {
             ee: ee.clone(),
             id,

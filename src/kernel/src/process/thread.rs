@@ -14,6 +14,7 @@ use tls::{Local, Tls};
 /// See [`super::VProc`] for more information.
 #[derive(Debug)]
 pub struct VThread {
+    proc: Arc<VProc>,            // td_proc
     id: NonZeroI32,              // td_tid
     cred: Ucred,                 // td_ucred
     sigmask: Gutex<SignalSet>,   // td_sigmask
@@ -25,11 +26,12 @@ pub struct VThread {
 }
 
 impl VThread {
-    pub fn new(cred: Ucred) -> Self {
+    pub fn new(proc: Arc<VProc>, cred: Ucred) -> Self {
         // TODO: Check how the PS4 actually allocate the thread ID.
         let gg = GutexGroup::new();
 
         Self {
+            proc,
             id: NonZeroI32::new(NEXT_ID.fetch_add(1, Ordering::Relaxed)).unwrap(),
             cred,
             sigmask: gg.spawn(SignalSet::default()),
@@ -47,6 +49,10 @@ impl VThread {
     /// Return [`None`] if the calling thread is not a PS4 thread.
     pub fn current() -> Option<Local<'static, Arc<Self>>> {
         VTHREAD.get()
+    }
+
+    pub fn proc(&self) -> &Arc<VProc> {
+        &self.proc
     }
 
     pub fn id(&self) -> NonZeroI32 {
@@ -99,7 +105,6 @@ impl VThread {
     /// of the thread. Specify an unaligned stack will cause undefined behavior.
     pub unsafe fn start<F>(
         self,
-        owner: &Arc<VProc>,
         stack: *mut u8,
         stack_size: usize,
         mut routine: F,
@@ -107,20 +112,18 @@ impl VThread {
     where
         F: FnMut() + Send + 'static,
     {
+        let proc = self.proc.clone();
         let td = Arc::new(self);
-        let running = Running {
-            proc: owner.clone(),
-            td: td.clone(),
-        };
+        let running = Running(td.clone());
 
         // Lock the list before spawn the thread to prevent race condition if the new thread run
         // too fast and found out they is not in our list.
-        let mut threads = owner.threads.write();
+        let mut threads = proc.threads.write();
         let raw = llt::spawn(stack, stack_size, move || {
             // This closure must not have any variables that need to be dropped on the stack. The
             // reason is because this thread will be exited without returning from the routine. That
             // mean all variables on the stack will not get dropped.
-            assert!(VTHREAD.set(running.td.clone()).is_none());
+            assert!(VTHREAD.set(running.0.clone()).is_none());
             routine();
         })?;
 
@@ -161,15 +164,12 @@ bitflags! {
 }
 
 // An object for removing the thread from the list when dropped.
-struct Running {
-    proc: Arc<VProc>,
-    td: Arc<VThread>,
-}
+struct Running(Arc<VThread>);
 
 impl Drop for Running {
     fn drop(&mut self) {
-        let mut threads = self.proc.threads.write();
-        let index = threads.iter().position(|td| td.id == self.td.id).unwrap();
+        let mut threads = self.0.proc.threads.write();
+        let index = threads.iter().position(|td| td.id == self.0.id).unwrap();
 
         threads.remove(index);
     }
