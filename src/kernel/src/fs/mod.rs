@@ -4,6 +4,7 @@ pub use self::file::*;
 pub use self::host::*;
 pub use self::item::*;
 pub use self::mount::*;
+pub use self::namei::*;
 pub use self::path::*;
 pub use self::perm::*;
 pub use self::vnode::*;
@@ -30,6 +31,7 @@ mod file;
 mod host;
 mod item;
 mod mount;
+mod namei;
 mod path;
 mod perm;
 mod vnode;
@@ -148,17 +150,8 @@ impl Fs {
 
     /// See `namei` on the PS4 for a reference.
     pub fn namei(&self, nd: &mut NameiData) -> Result<FsItem, FsError> {
-        nd.cnd.cred = nd.cnd.thread.map(|v| v.cred());
         nd.cnd.flags.remove(NameiFlags::TRAILINGSLASH);
         nd.cnd.pnbuf = nd.dirp.as_bytes().to_vec();
-
-        if nd.cnd.flags.intersects(NameiFlags::AUDITVNODE1) {
-            // TODO: Implement this.
-        }
-
-        if nd.cnd.flags.intersects(NameiFlags::AUDITVNODE2) {
-            todo!("namei with AUDITVNODE2");
-        }
 
         if nd.cnd.pnbuf.is_empty() {
             return Err(FsError::NotFound);
@@ -210,7 +203,6 @@ impl Fs {
     }
 
     fn lookup(&self, nd: &mut NameiData) -> Result<FsItem, FsError> {
-        nd.cnd.flags.remove(NameiFlags::GIANTHELD);
         nd.cnd.flags.remove(NameiFlags::ISSYMLINK);
 
         // TODO: Implement the remaining logics from the PS4.
@@ -313,9 +305,9 @@ impl Fs {
             strictrelative: 0,
             loopcnt: 0,
             cnd: ComponentName {
+                op: NameiOp::Lookup,
                 flags: NameiFlags::from_bits_retain(0x5000040),
                 thread: Some(&td),
-                cred: None,
                 pnbuf: Vec::new(),
                 nameptr: 0,
             },
@@ -427,9 +419,9 @@ impl Fs {
             strictrelative: 0,
             loopcnt: 0,
             cnd: ComponentName {
+                op: NameiOp::Lookup,
                 flags: NameiFlags::from_bits_retain(0x5000044),
                 thread: Some(&td),
-                cred: None,
                 pnbuf: Vec::new(),
                 nameptr: 0,
             },
@@ -543,38 +535,6 @@ impl Fs {
         }
 
         None
-    }
-}
-
-/// An implementation of `nameidata`.
-pub struct NameiData<'a> {
-    pub dirp: &'a str,                // ni_dirp
-    pub startdir: Option<Arc<Vnode>>, // ni_startdir
-    pub rootdir: Option<Arc<Vnode>>,  // ni_rootdir
-    pub topdir: Option<Arc<Vnode>>,   // ni_topdir
-    pub strictrelative: i32,          // ni_strictrelative
-    pub loopcnt: u32,                 // ni_loopcnt
-    pub cnd: ComponentName<'a>,       // ni_cnd
-}
-
-/// An implementation of `componentname`.
-pub struct ComponentName<'a> {
-    pub flags: NameiFlags,           // cn_flags
-    pub thread: Option<&'a VThread>, // cn_thread
-    pub cred: Option<&'a Ucred>,     // cn_cred
-    pub pnbuf: Vec<u8>,              // cn_pnbuf
-    pub nameptr: usize,              // cn_nameptr
-}
-
-bitflags! {
-    #[derive(Clone, Copy)]
-    pub struct NameiFlags: u64 {
-        const HASBUF = 0x00000400;
-        const ISSYMLINK = 0x00010000;
-        const GIANTHELD = 0x02000000;
-        const AUDITVNODE1 = 0x04000000;
-        const AUDITVNODE2 = 0x08000000;
-        const TRAILINGSLASH = 0x10000000;
     }
 }
 
