@@ -1,4 +1,4 @@
-use super::{unixify_access, Mount};
+use super::{unixify_access, ComponentName, Mount};
 use crate::errno::{Errno, ENOTDIR, EPERM};
 use crate::process::VThread;
 use crate::ucred::Ucred;
@@ -121,7 +121,7 @@ pub struct VopVector {
     pub default: Option<&'static Self>, // vop_default
     pub access: Option<fn(&Arc<Vnode>, &VThread, &Ucred, u32) -> Result<(), Box<dyn Errno>>>, // vop_access
     pub accessx: Option<fn(&Arc<Vnode>, &VThread, &Ucred, u32) -> Result<(), Box<dyn Errno>>>, // vop_accessx
-    pub lookup: Option<fn(&Arc<Vnode>) -> Result<Arc<Vnode>, Box<dyn Errno>>>, // vop_lookup
+    pub lookup: Option<fn(&Arc<Vnode>, &ComponentName) -> Result<Arc<Vnode>, Box<dyn Errno>>>, // vop_lookup
 }
 
 /// Represents an error when [`DEFAULT_VNODEOPS`] is failed.
@@ -148,7 +148,7 @@ pub static DEFAULT_VNODEOPS: VopVector = VopVector {
     default: None,
     access: Some(|vn, td, cred, access| vn.accessx(td, cred, access)),
     accessx: Some(accessx),
-    lookup: Some(|_| Err(Box::new(DefaultError::NotDirectory))),
+    lookup: Some(|_, _| Err(Box::new(DefaultError::NotDirectory))),
 };
 
 fn accessx(vn: &Arc<Vnode>, td: &VThread, cred: &Ucred, access: u32) -> Result<(), Box<dyn Errno>> {

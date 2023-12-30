@@ -4,7 +4,9 @@ use self::resolver::{ResolveFlags, SymbolResolver};
 use crate::budget::ProcType;
 use crate::ee::{ExecutionEngine, RawFn};
 use crate::errno::{Errno, EINVAL, ENOENT, ENOEXEC, ENOMEM, EPERM, ESRCH};
-use crate::fs::{ComponentName, Fs, FsError, FsItem, NameiData, NameiFlags, VPath, VPathBuf};
+use crate::fs::{
+    ComponentName, Fs, FsError, FsItem, NameiData, NameiFlags, NameiOp, VPath, VPathBuf,
+};
 use crate::info;
 use crate::log::print;
 use crate::memory::{MemoryManager, MemoryUpdateError, MmapError, Protections};
@@ -76,9 +78,9 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             strictrelative: 0,
             loopcnt: 0,
             cnd: ComponentName {
+                op: NameiOp::Lookup,
                 flags: NameiFlags::from_bits_retain(0x5200844),
                 thread: None,
-                cred: None,
                 pnbuf: Vec::new(),
                 nameptr: 0,
             },
@@ -248,9 +250,9 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             strictrelative: 0,
             loopcnt: 0,
             cnd: ComponentName {
+                op: NameiOp::Lookup,
                 flags: NameiFlags::from_bits_retain(0x5200044),
                 thread: td.as_ref().map(|v| v.deref().as_ref()),
-                cred: None,
                 pnbuf: Vec::new(),
                 nameptr: 0,
             },
