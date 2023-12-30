@@ -7,7 +7,7 @@ use crate::fs::Fs;
 use crate::llvm::Llvm;
 use crate::log::{print, LOGGER};
 use crate::memory::MemoryManager;
-use crate::process::VProc;
+use crate::process::{VProc, VThread};
 use crate::regmgr::RegMgr;
 use crate::rtld::{LoadFlags, ModuleFlags, RuntimeLinker};
 use crate::syscalls::Syscalls;
@@ -366,9 +366,9 @@ fn run<E: crate::ee::ExecutionEngine>(
     info!("Starting application.");
 
     // TODO: Check how this constructed.
-    let cred = Ucred::new(0, 0, vec![0], AuthInfo::SYS_CORE.clone());
+    let main = VThread::new(Ucred::new(0, 0, vec![0], AuthInfo::SYS_CORE.clone()));
     let stack = mm.stack();
-    let runner = match unsafe { vp.new_thread(cred, stack.start(), stack.len(), entry) } {
+    let main = match unsafe { main.start(vp, stack.start(), stack.len(), entry) } {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Create main thread failed");
@@ -380,7 +380,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     discord_presence(param);
 
     // Wait for main thread to exit. This should never return.
-    if let Err(e) = join_thread(runner) {
+    if let Err(e) = join_thread(main) {
         error!(e, "Failed join with main thread");
         return ExitCode::FAILURE;
     }

@@ -17,7 +17,6 @@ use crate::signal::{
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{AuthInfo, Privilege, Ucred};
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
-use llt::{SpawnError, Thread};
 use std::any::Any;
 use std::cmp::min;
 use std::ffi::c_char;
@@ -168,45 +167,6 @@ impl VProc {
 
     pub fn gutex_group(&self) -> &Arc<GutexGroup> {
         &self.gg
-    }
-
-    /// Spawn a new [`VThread`].
-    ///
-    /// The caller is responsible for `stack` deallocation.
-    ///
-    /// # Safety
-    /// The range of memory specified by `stack` and `stack_size` must be valid throughout lifetime
-    /// of the thread. Specify an unaligned stack will cause undefined behavior.
-    pub unsafe fn new_thread<F>(
-        self: &Arc<Self>,
-        cred: Ucred,
-        stack: *mut u8,
-        stack_size: usize,
-        mut routine: F,
-    ) -> Result<Thread, SpawnError>
-    where
-        F: FnMut() + Send + 'static,
-    {
-        // Lock the list before spawn the thread to prevent race condition if the new thread run
-        // too fast and found out they is not in our list.
-        let mut threads = self.threads.write();
-        let td = Arc::new(VThread::new(Self::new_id(), cred, &self.gg));
-        let active = Box::new(ActiveThread {
-            proc: self.clone(),
-            id: td.id(),
-        });
-
-        // Spawn the thread.
-        let host = td.spawn(stack, stack_size, move || {
-            // We cannot have any variables that need to be dropped before invoke the routine.
-            assert_eq!(VThread::current().unwrap().id(), active.id); // We want to drop active when exited.
-            routine();
-        })?;
-
-        // Add to the list.
-        threads.push(td);
-
-        Ok(host)
     }
 
     fn load_limits() -> Result<[ResourceLimit; ResourceLimit::NLIMITS], VProcError> {
@@ -666,21 +626,6 @@ impl VProc {
         assert!(id > 0);
 
         NonZeroI32::new(id).unwrap()
-    }
-}
-
-// An object for removing the thread from the list when dropped.
-struct ActiveThread {
-    proc: Arc<VProc>,
-    id: NonZeroI32,
-}
-
-impl Drop for ActiveThread {
-    fn drop(&mut self) {
-        let mut threads = self.proc.threads.write();
-        let index = threads.iter().position(|td| td.id() == self.id).unwrap();
-
-        threads.remove(index);
     }
 }
 
