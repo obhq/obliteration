@@ -3,6 +3,22 @@ use crate::ucred::{Privilege, Ucred};
 use std::num::NonZeroI32;
 use thiserror::Error;
 
+/// You can map [`None`] to `EPERM` to match with the PS4 behavior.
+///
+/// See `vfs_unixify_accmode` on the PS4 for a reference.
+pub fn unixify_access(mut access: u32) -> Option<u32> {
+    // TODO: Refactor this for readability.
+    if (access & 0100000) != 0 {
+        return Some(0);
+    } else if (access & 011000000) != 0 {
+        return None;
+    } else if (access & 0144010000) != 0 {
+        access = (access & 0xfe6fefff) | 010000;
+    }
+
+    Some(access & 0xfdb7ffff)
+}
+
 /// Returns [`Ok`] if access was granted. The boolean value indicated whether privilege was used to
 /// satisfy the request.
 ///
