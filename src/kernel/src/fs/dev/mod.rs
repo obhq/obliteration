@@ -40,10 +40,6 @@ pub fn make_dev<N: Into<String>>(
 
     let name = prepare_name(name.into())?;
 
-    if dev_exists(&name) {
-        return Err(MakeDevError::AlreadyExist(name));
-    }
-
     // Get device flags.
     let mut df = DeviceFlags::empty();
 
