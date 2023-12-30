@@ -1,6 +1,6 @@
 use crate::fs::{DirentType, Vnode};
 use bitflags::bitflags;
-use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
+use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use std::ops::Deref;
 use std::sync::{Arc, Weak};
 use std::time::SystemTime;
@@ -56,6 +56,23 @@ impl Dirent {
 
     pub fn inode(&self) -> i32 {
         self.inode
+    }
+
+    pub fn uid(&self) -> GutexReadGuard<i32> {
+        self.uid.read()
+    }
+
+    pub fn gid(&self) -> GutexReadGuard<i32> {
+        self.gid.read()
+    }
+
+    pub fn mode(&self) -> GutexReadGuard<u16> {
+        self.mode.read()
+    }
+
+    /// [`None`] represents self as a value.
+    pub fn dir(&self) -> Option<&Weak<Self>> {
+        self.dir.as_ref()
     }
 
     pub fn children_mut(&self) -> GutexWriteGuard<Vec<Arc<Self>>> {

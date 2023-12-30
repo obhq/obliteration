@@ -1,12 +1,13 @@
-use super::Mount;
-use crate::errno::{Errno, ENOTDIR};
+use super::{unixify_access, Mount};
+use crate::errno::{Errno, ENOTDIR, EPERM};
+use crate::process::VThread;
+use crate::ucred::Ucred;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
-use std::error::Error;
-use std::fmt::{Display, Formatter};
 use std::num::NonZeroI32;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use thiserror::Error;
 
 /// An implementation of `vnode`.
 #[derive(Debug)]
@@ -47,8 +48,59 @@ impl Vnode {
         &self.fs
     }
 
+    pub fn ty(&self) -> &VnodeType {
+        &self.ty
+    }
+
+    pub fn data(&self) -> &Arc<dyn Any + Send + Sync> {
+        &self.data
+    }
+
     pub fn item_mut(&self) -> GutexWriteGuard<Option<Arc<dyn Any + Send + Sync>>> {
         self.item.write()
+    }
+
+    pub fn access(
+        self: &Arc<Vnode>,
+        td: &VThread,
+        cred: &Ucred,
+        access: u32,
+    ) -> Result<(), Box<dyn Errno>> {
+        let op = self.get_op(|v| v.access).unwrap();
+
+        match op.access {
+            Some(f) => f(self, td, cred, access),
+            None => todo!(),
+        }
+    }
+
+    pub fn accessx(
+        self: &Arc<Self>,
+        td: &VThread,
+        cred: &Ucred,
+        access: u32,
+    ) -> Result<(), Box<dyn Errno>> {
+        let op = self.get_op(|v| v.accessx).unwrap();
+
+        match op.accessx {
+            Some(f) => f(self, td, cred, access),
+            None => todo!(),
+        }
+    }
+
+    fn get_op<F>(&self, f: fn(&'static VopVector) -> Option<F>) -> Option<&'static VopVector> {
+        let mut vec = Some(self.op);
+
+        while let Some(v) = vec {
+            // TODO: Check if the field at 0x08 is not null too.
+            if f(v).is_some() {
+                return Some(v);
+            }
+
+            vec = v.default;
+        }
+
+        None
     }
 }
 
@@ -68,31 +120,50 @@ pub enum VnodeType {
 #[derive(Debug)]
 pub struct VopVector {
     pub default: Option<&'static Self>, // vop_default
+    pub access: Option<fn(&Arc<Vnode>, &VThread, &Ucred, u32) -> Result<(), Box<dyn Errno>>>, // vop_access
+    pub accessx: Option<fn(&Arc<Vnode>, &VThread, &Ucred, u32) -> Result<(), Box<dyn Errno>>>, // vop_accessx
     pub lookup: Option<fn(&Arc<Vnode>) -> Result<Arc<Vnode>, Box<dyn Errno>>>, // vop_lookup
 }
 
 /// Represents an error when [`DEFAULT_VNODEOPS`] is failed.
-#[derive(Debug)]
-struct DefaultError(NonZeroI32);
+#[derive(Debug, Error)]
+enum DefaultError {
+    #[error("operation not permitted")]
+    NotPermitted,
 
-impl Error for DefaultError {}
+    #[error("the vnode is not a directory")]
+    NotDirectory,
+}
 
 impl Errno for DefaultError {
     fn errno(&self) -> NonZeroI32 {
-        self.0
-    }
-}
-
-impl Display for DefaultError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str("not implemented")
+        match self {
+            Self::NotPermitted => EPERM,
+            Self::NotDirectory => ENOTDIR,
+        }
     }
 }
 
 /// An implementation of `default_vnodeops`.
 pub static DEFAULT_VNODEOPS: VopVector = VopVector {
     default: None,
-    lookup: Some(|_| Err(Box::new(DefaultError(ENOTDIR)))),
+    access: Some(|vn, td, cred, access| vn.accessx(td, cred, access)),
+    accessx: Some(accessx),
+    lookup: Some(|_| Err(Box::new(DefaultError::NotDirectory))),
 };
+
+fn accessx(vn: &Arc<Vnode>, td: &VThread, cred: &Ucred, access: u32) -> Result<(), Box<dyn Errno>> {
+    let access = match unixify_access(access) {
+        Some(v) => v,
+        None => return Err(Box::new(DefaultError::NotPermitted)),
+    };
+
+    if access == 0 {
+        return Ok(());
+    }
+
+    // This can create an infinity loop. Not sure why FreeBSD implement like this.
+    vn.access(td, cred, access)
+}
 
 static ACTIVE: AtomicUsize = AtomicUsize::new(0); // numvnodes
