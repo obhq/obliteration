@@ -1,7 +1,6 @@
 use crate::errno::Errno;
 use crate::fs::{ComponentName, Vnode, VopVector, DEFAULT_VNODEOPS};
 use crate::process::VThread;
-use crate::ucred::Ucred;
 use std::sync::Arc;
 
 pub static VNODE_OPS: VopVector = VopVector {
@@ -11,7 +10,7 @@ pub static VNODE_OPS: VopVector = VopVector {
     lookup: Some(lookup),
 };
 
-fn access(_: &Arc<Vnode>, _: &VThread, _: &Ucred, _: u32) -> Result<(), Box<dyn Errno>> {
+fn access(_: &Arc<Vnode>, _: Option<&VThread>, _: u32) -> Result<(), Box<dyn Errno>> {
     todo!()
 }
 

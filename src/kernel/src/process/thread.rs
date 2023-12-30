@@ -1,10 +1,11 @@
-use super::{CpuMask, CpuSet};
+use super::{CpuMask, CpuSet, VProc, NEXT_ID};
 use crate::signal::SignalSet;
 use crate::ucred::{Privilege, PrivilegeError, Ucred};
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use llt::{SpawnError, Thread};
 use std::num::NonZeroI32;
+use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tls::{Local, Tls};
 
@@ -24,14 +25,16 @@ pub struct VThread {
 }
 
 impl VThread {
-    pub(super) fn new(id: NonZeroI32, cred: Ucred, gg: &Arc<GutexGroup>) -> Self {
+    pub fn new(cred: Ucred) -> Self {
         // TODO: Check how the PS4 actually allocate the thread ID.
+        let gg = GutexGroup::new();
+
         Self {
-            id,
+            id: NonZeroI32::new(NEXT_ID.fetch_add(1, Ordering::Relaxed)).unwrap(),
             cred,
             sigmask: gg.spawn(SignalSet::default()),
             pri_class: 3, // TODO: Check the actual value on the PS4 when a thread is created.
-            base_user_pri: 120, // TODO: Same here.
+            base_user_pri: 700, // TODO: Same here.
             pcb: gg.spawn(Pcb {
                 fsbase: 0,
                 flags: PcbFlags::empty(),
@@ -87,8 +90,16 @@ impl VThread {
         self.cred.priv_check(p)
     }
 
-    pub(super) unsafe fn spawn<F>(
-        self: &Arc<Self>,
+    /// Start the thread.
+    ///
+    /// The caller is responsible for `stack` deallocation.
+    ///
+    /// # Safety
+    /// The range of memory specified by `stack` and `stack_size` must be valid throughout lifetime
+    /// of the thread. Specify an unaligned stack will cause undefined behavior.
+    pub unsafe fn start<F>(
+        self,
+        owner: &Arc<VProc>,
         stack: *mut u8,
         stack_size: usize,
         mut routine: F,
@@ -96,15 +107,27 @@ impl VThread {
     where
         F: FnMut() + Send + 'static,
     {
-        let mut td = Some(self.clone());
+        let td = Arc::new(self);
+        let running = Running {
+            proc: owner.clone(),
+            td: td.clone(),
+        };
 
-        llt::spawn(stack, stack_size, move || {
+        // Lock the list before spawn the thread to prevent race condition if the new thread run
+        // too fast and found out they is not in our list.
+        let mut threads = owner.threads.write();
+        let raw = llt::spawn(stack, stack_size, move || {
             // This closure must not have any variables that need to be dropped on the stack. The
             // reason is because this thread will be exited without returning from the routine. That
             // mean all variables on the stack will not get dropped.
-            assert!(VTHREAD.set(td.take().unwrap()).is_none());
+            assert!(VTHREAD.set(running.td.clone()).is_none());
             routine();
-        })
+        })?;
+
+        // Add to the list.
+        threads.push(td);
+
+        Ok(raw)
     }
 }
 
@@ -134,6 +157,21 @@ bitflags! {
     #[derive(Debug)]
     pub struct PcbFlags: u32 {
         const PCB_FULL_IRET = 0x01;
+    }
+}
+
+// An object for removing the thread from the list when dropped.
+struct Running {
+    proc: Arc<VProc>,
+    td: Arc<VThread>,
+}
+
+impl Drop for Running {
+    fn drop(&mut self) {
+        let mut threads = self.proc.threads.write();
+        let index = threads.iter().position(|td| td.id == self.td.id).unwrap();
+
+        threads.remove(index);
     }
 }
 

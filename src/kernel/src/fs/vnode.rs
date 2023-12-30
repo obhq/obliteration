@@ -1,7 +1,6 @@
 use super::{unixify_access, ComponentName, Mount};
 use crate::errno::{Errno, ENOTDIR, EPERM};
 use crate::process::VThread;
-use crate::ucred::Ucred;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
 use std::num::NonZeroI32;
@@ -61,28 +60,26 @@ impl Vnode {
 
     pub fn access(
         self: &Arc<Vnode>,
-        td: &VThread,
-        cred: &Ucred,
+        td: Option<&VThread>,
         access: u32,
     ) -> Result<(), Box<dyn Errno>> {
         let op = self.get_op(|v| v.access).unwrap();
 
         match op.access {
-            Some(f) => f(self, td, cred, access),
+            Some(f) => f(self, td, access),
             None => todo!(),
         }
     }
 
     pub fn accessx(
         self: &Arc<Self>,
-        td: &VThread,
-        cred: &Ucred,
+        td: Option<&VThread>,
         access: u32,
     ) -> Result<(), Box<dyn Errno>> {
         let op = self.get_op(|v| v.accessx).unwrap();
 
         match op.accessx {
-            Some(f) => f(self, td, cred, access),
+            Some(f) => f(self, td, access),
             None => todo!(),
         }
     }
@@ -119,8 +116,8 @@ pub enum VnodeType {
 #[derive(Debug)]
 pub struct VopVector {
     pub default: Option<&'static Self>, // vop_default
-    pub access: Option<fn(&Arc<Vnode>, &VThread, &Ucred, u32) -> Result<(), Box<dyn Errno>>>, // vop_access
-    pub accessx: Option<fn(&Arc<Vnode>, &VThread, &Ucred, u32) -> Result<(), Box<dyn Errno>>>, // vop_accessx
+    pub access: Option<fn(&Arc<Vnode>, Option<&VThread>, u32) -> Result<(), Box<dyn Errno>>>, // vop_access
+    pub accessx: Option<fn(&Arc<Vnode>, Option<&VThread>, u32) -> Result<(), Box<dyn Errno>>>, // vop_accessx
     pub lookup: Option<fn(&Arc<Vnode>, &ComponentName) -> Result<Arc<Vnode>, Box<dyn Errno>>>, // vop_lookup
 }
 
@@ -146,12 +143,12 @@ impl Errno for DefaultError {
 /// An implementation of `default_vnodeops`.
 pub static DEFAULT_VNODEOPS: VopVector = VopVector {
     default: None,
-    access: Some(|vn, td, cred, access| vn.accessx(td, cred, access)),
+    access: Some(|vn, td, access| vn.accessx(td, access)),
     accessx: Some(accessx),
     lookup: Some(|_, _| Err(Box::new(DefaultError::NotDirectory))),
 };
 
-fn accessx(vn: &Arc<Vnode>, td: &VThread, cred: &Ucred, access: u32) -> Result<(), Box<dyn Errno>> {
+fn accessx(vn: &Arc<Vnode>, td: Option<&VThread>, access: u32) -> Result<(), Box<dyn Errno>> {
     let access = match unixify_access(access) {
         Some(v) => v,
         None => return Err(Box::new(DefaultError::NotPermitted)),
@@ -162,7 +159,7 @@ fn accessx(vn: &Arc<Vnode>, td: &VThread, cred: &Ucred, access: u32) -> Result<(
     }
 
     // This can create an infinity loop. Not sure why FreeBSD implement like this.
-    vn.access(td, cred, access)
+    vn.access(td, access)
 }
 
 static ACTIVE: AtomicUsize = AtomicUsize::new(0); // numvnodes
