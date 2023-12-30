@@ -18,7 +18,7 @@ impl VSession {
         Self {
             id,
             login: gg.spawn(login),
-            vnode: None,
+            vnode: None, // TODO figure out how this is actually set
             tty: gg.spawn(None),
         }
     }
