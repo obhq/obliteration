@@ -1,9 +1,14 @@
 use super::dirent::Dirent;
-use crate::errno::Errno;
-use crate::fs::{check_access, DevFs, Vnode, VnodeType, VopVector, DEFAULT_VNODEOPS};
+use crate::errno::{Errno, EIO, ENOTDIR, EOPNOTSUPP};
+use crate::fs::{
+    check_access, ComponentName, DevFs, NameiFlags, NameiOp, Vnode, VnodeType, VopVector,
+    DEFAULT_VNODEOPS,
+};
 use crate::process::VThread;
 use crate::ucred::Ucred;
+use std::num::NonZeroI32;
 use std::sync::Arc;
+use thiserror::Error;
 
 pub static VNODE_OPS: VopVector = VopVector {
     default: Some(&DEFAULT_VNODEOPS),
@@ -46,9 +51,9 @@ fn access(vn: &Arc<Vnode>, _: &VThread, cred: &Ucred, access: u32) -> Result<(),
     return Err(Box::new(err));
 }
 
-fn lookup(dir: &Arc<Vnode>) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+fn lookup(vn: &Arc<Vnode>, cn: &ComponentName) -> Result<Arc<Vnode>, Box<dyn Errno>> {
     // Populate devices.
-    let fs = dir
+    let fs = vn
         .fs()
         .data()
         .and_then(|v| v.downcast_ref::<DevFs>())
@@ -56,6 +61,47 @@ fn lookup(dir: &Arc<Vnode>) -> Result<Arc<Vnode>, Box<dyn Errno>> {
 
     fs.populate();
 
+    // Check if last component.
+    let op = cn.op;
+    let flags = cn.flags;
+
+    if flags.intersects(NameiFlags::ISLASTCN) && op == NameiOp::Rename {
+        return Err(Box::new(LookupError::RenameWithLastComponent));
+    }
+
+    // Check if directory.
+    match vn.ty() {
+        VnodeType::Directory(root) => {
+            if flags.intersects(NameiFlags::ISDOTDOT) && *root {
+                return Err(Box::new(LookupError::DotdotOnRoot));
+            }
+        }
+        _ => return Err(Box::new(LookupError::NotDirectory)),
+    }
+
     // TODO: Implement the remaining lookup.
     todo!()
+}
+
+/// Represents an error when [`lookup()`] is failed.
+#[derive(Debug, Error)]
+enum LookupError {
+    #[error("rename with last component is not supported")]
+    RenameWithLastComponent,
+
+    #[error("file is not a directory")]
+    NotDirectory,
+
+    #[error("cannot resolve '..' on the root directory")]
+    DotdotOnRoot,
+}
+
+impl Errno for LookupError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::RenameWithLastComponent => EOPNOTSUPP,
+            Self::NotDirectory => ENOTDIR,
+            Self::DotdotOnRoot => EIO,
+        }
+    }
 }
