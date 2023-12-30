@@ -8,7 +8,6 @@ pub struct NameiData<'a> {
     pub dirp: &'a str,                // ni_dirp
     pub startdir: Option<Arc<Vnode>>, // ni_startdir
     pub rootdir: Option<Arc<Vnode>>,  // ni_rootdir
-    pub topdir: Option<Arc<Vnode>>,   // ni_topdir
     pub strictrelative: i32,          // ni_strictrelative
     pub loopcnt: u32,                 // ni_loopcnt
     pub cnd: ComponentName<'a>,       // ni_cnd

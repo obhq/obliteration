@@ -1,22 +1,18 @@
 use crate::errno::EINVAL;
 use crate::fs::Fs;
 use crate::info;
-use crate::process::VProc;
+use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use std::sync::Arc;
 
 /// An implementation of direct memory system on the PS4.
 pub struct DmemManager {
-    vp: Arc<VProc>,
     fs: Arc<Fs>,
 }
 
 impl DmemManager {
-    pub fn new(vp: &Arc<VProc>, fs: &Arc<Fs>, sys: &mut Syscalls) -> Arc<Self> {
-        let dmem = Arc::new(Self {
-            vp: vp.clone(),
-            fs: fs.clone(),
-        });
+    pub fn new(fs: &Arc<Fs>, sys: &mut Syscalls) -> Arc<Self> {
+        let dmem = Arc::new(Self { fs: fs.clone() });
 
         sys.register(586, &dmem, Self::sys_dmem_container);
         sys.register(653, &dmem, Self::sys_blockpool_open);
@@ -25,13 +21,15 @@ impl DmemManager {
     }
 
     fn sys_dmem_container(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let update: i32 = i.args[0].try_into().unwrap();
+        let td = VThread::current().unwrap();
+        let set: i32 = i.args[0].try_into().unwrap();
+        let get: i32 = td.proc().dmem_container().try_into().unwrap();
 
-        if update != -1 {
+        if set != -1 {
             todo!("sys_dmem_container with update != -1");
         }
 
-        Ok((*self.vp.dmem_container()).into())
+        Ok(get.into())
     }
 
     fn sys_blockpool_open(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -41,11 +39,10 @@ impl DmemManager {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        //TODO: actually allocate a blockpool. set filops, etc.
-
+        // TODO: actually allocate a blockpool. set filops, etc.
         let file = self.fs.alloc();
-
-        let fd = self.vp.files().alloc(Arc::new(file));
+        let td = VThread::current().unwrap();
+        let fd = td.proc().files().alloc(Arc::new(file));
 
         info!("File descriptor {fd} was allocated for a new blockpool");
 
