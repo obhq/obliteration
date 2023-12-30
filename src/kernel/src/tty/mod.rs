@@ -27,7 +27,7 @@ impl Tty {
         let gg = GutexGroup::new();
 
         Arc::new(Self {
-            vp.clone(),
+            vp: vp.clone(),
             group: gg.spawn(None),
             session: gg.spawn(None),
             session_count: gg.spawn(0),
