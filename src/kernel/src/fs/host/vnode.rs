@@ -1,5 +1,5 @@
 use crate::errno::Errno;
-use crate::fs::{ComponentName, Vnode, VopVector, DEFAULT_VNODEOPS};
+use crate::fs::{Vnode, VopVector, DEFAULT_VNODEOPS};
 use crate::process::VThread;
 use std::sync::Arc;
 
@@ -14,6 +14,6 @@ fn access(_: &Arc<Vnode>, _: Option<&VThread>, _: u32) -> Result<(), Box<dyn Err
     todo!()
 }
 
-fn lookup(_: &Arc<Vnode>, _: &ComponentName) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+fn lookup(_: &Arc<Vnode>, _: Option<&VThread>, _: &str) -> Result<Arc<Vnode>, Box<dyn Errno>> {
     todo!()
 }

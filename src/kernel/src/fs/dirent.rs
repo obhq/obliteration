@@ -16,6 +16,10 @@ impl Dirent {
         self.ty
     }
 
+    pub fn is_directory(&self) -> bool {
+        matches!(self.ty, DirentType::Directory)
+    }
+
     pub fn name(&self) -> &str {
         self.name.as_ref()
     }
@@ -24,17 +28,7 @@ impl Dirent {
 /// Type of [`Dirent`].
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum DirentType {
-    Character, // DT_CHR
-    Directory, // DT_DIR
-    Link,      // DT_LNK
-}
-
-impl DirentType {
-    pub fn to_ps4(&self) -> u8 {
-        match self {
-            Self::Character => 2,
-            Self::Directory => 4,
-            Self::Link => 10,
-        }
-    }
+    Character = 2, // DT_CHR
+    Directory = 4, // DT_DIR
+    Link = 10,     // DT_LNK
 }
