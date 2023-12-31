@@ -1,6 +1,6 @@
 use super::{MapError, Memory};
 use crate::ee::ExecutionEngine;
-use crate::fs::{VPath, VPathBuf};
+use crate::fs::{VFile, VPath, VPathBuf};
 use crate::log::{print, LogEntry};
 use crate::memory::MemoryManager;
 use bitflags::bitflags;
@@ -11,7 +11,7 @@ use elf::{
 };
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use std::fmt::{Display, Formatter};
-use std::fs::{File, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
 use std::sync::Arc;
@@ -53,7 +53,7 @@ impl<E: ExecutionEngine> Module<E> {
     pub(super) fn map<N: Into<String>>(
         mm: &Arc<MemoryManager>,
         ee: &Arc<E>,
-        mut image: Elf<File>,
+        mut image: Elf<VFile>,
         base: usize,
         mem_name: N,
         id: u32,

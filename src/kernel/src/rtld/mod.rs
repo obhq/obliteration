@@ -4,9 +4,7 @@ use self::resolver::{ResolveFlags, SymbolResolver};
 use crate::budget::ProcType;
 use crate::ee::{ExecutionEngine, RawFn};
 use crate::errno::{Errno, EINVAL, ENOENT, ENOEXEC, ENOMEM, EPERM, ESRCH};
-use crate::fs::{
-    ComponentName, Fs, FsError, FsItem, NameiData, NameiFlags, NameiOp, VPath, VPathBuf,
-};
+use crate::fs::{Fs, OpenError, VPath, VPathBuf};
 use crate::info;
 use crate::log::print;
 use crate::memory::{MemoryManager, MemoryUpdateError, MmapError, Protections};
@@ -17,7 +15,6 @@ use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation, Symbol};
 use gmtx::{Gutex, GutexGroup};
 use sha1::{Digest, Sha1};
 use std::borrow::Cow;
-use std::fs::File;
 use std::io::Write;
 use std::mem::{size_of, zeroed};
 use std::num::NonZeroI32;
@@ -69,36 +66,15 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         path.push("eboot.bin").unwrap();
 
         // Get eboot.bin.
-        let mut nd = NameiData {
-            dirp: &path,
-            startdir: None,
-            rootdir: None,
-            strictrelative: 0,
-            loopcnt: 0,
-            cnd: ComponentName {
-                op: NameiOp::Lookup,
-                flags: NameiFlags::from_bits_retain(0x5200844),
-                thread: None,
-                pnbuf: Vec::new(),
-                nameptr: 0,
-            },
-        };
-
-        let file = match fs.namei(&mut nd) {
-            Ok(v) => match v {
-                FsItem::File(v) => v,
-                _ => return Err(RuntimeLinkerError::InvalidExe(path)),
-            },
-            Err(e) => return Err(RuntimeLinkerError::GetExeFailed(path, e)),
+        let file = match fs.open(&path, None) {
+            Ok(v) => v,
+            Err(e) => return Err(RuntimeLinkerError::OpenExeFailed(path, e)),
         };
 
         // Open eboot.bin.
-        let elf = match File::open(file.path()) {
-            Ok(v) => match Elf::open(file.vpath(), v) {
-                Ok(v) => v,
-                Err(e) => return Err(RuntimeLinkerError::OpenElfFailed(file.into_vpath(), e)),
-            },
-            Err(e) => return Err(RuntimeLinkerError::OpenExeFailed(file.into_vpath(), e)),
+        let elf = match Elf::open(path.as_str(), file) {
+            Ok(v) => v,
+            Err(e) => return Err(RuntimeLinkerError::OpenElfFailed(path, e)),
         };
 
         // Check image type.
@@ -109,7 +85,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
                 }
             }
             FileType::ET_SCE_DYNEXEC if elf.dynamic().is_some() => {}
-            _ => return Err(RuntimeLinkerError::InvalidExe(file.into_vpath())),
+            _ => return Err(RuntimeLinkerError::InvalidExe(path)),
         }
 
         // Get base address.
@@ -123,7 +99,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         // Map eboot.bin.
         let mut app = match Module::map(mm, ee, elf, base, "executable", 0, Vec::new(), 1) {
             Ok(v) => v,
-            Err(e) => return Err(RuntimeLinkerError::MapExeFailed(file.into_vpath(), e)),
+            Err(e) => return Err(RuntimeLinkerError::MapExeFailed(path, e)),
         };
 
         if let Some(p) = dump {
@@ -134,7 +110,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         *app.flags_mut() |= ModuleFlags::MAIN_PROG;
 
         if let Err(e) = ee.setup_module(&mut app) {
-            return Err(RuntimeLinkerError::SetupExeFailed(file.into_vpath(), e));
+            return Err(RuntimeLinkerError::SetupExeFailed(path, e));
         }
 
         // Check if application need certain modules.
@@ -230,36 +206,15 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         // Get file.
         let td = VThread::current();
-        let mut nd = NameiData {
-            dirp: path,
-            startdir: None,
-            rootdir: None,
-            strictrelative: 0,
-            loopcnt: 0,
-            cnd: ComponentName {
-                op: NameiOp::Lookup,
-                flags: NameiFlags::from_bits_retain(0x5200044),
-                thread: td.as_ref().map(|v| v.deref().as_ref()),
-                pnbuf: Vec::new(),
-                nameptr: 0,
-            },
-        };
-
-        let file = match self.fs.namei(&mut nd) {
-            Ok(v) => match v {
-                FsItem::File(v) => v,
-                _ => return Err(LoadError::InvalidElf),
-            },
-            Err(e) => return Err(LoadError::GetFileFailed(e)),
+        let file = match self.fs.open(path, td.as_ref().map(|v| v.deref().as_ref())) {
+            Ok(v) => v,
+            Err(e) => return Err(LoadError::OpenFileFailed(e)),
         };
 
         // Load (S)ELF.
-        let elf = match File::open(file.path()) {
-            Ok(v) => match Elf::open(file.into_vpath(), v) {
-                Ok(v) => v,
-                Err(e) => return Err(LoadError::OpenElfFailed(e)),
-            },
-            Err(e) => return Err(LoadError::OpenFileFailed(e)),
+        let elf = match Elf::open(path, file) {
+            Ok(v) => v,
+            Err(e) => return Err(LoadError::OpenElfFailed(e)),
         };
 
         // Check image type.
@@ -1137,11 +1092,8 @@ bitflags! {
 /// Represents the error for [`RuntimeLinker`] initialization.
 #[derive(Debug, Error)]
 pub enum RuntimeLinkerError<E: ExecutionEngine> {
-    #[error("cannot get {0}")]
-    GetExeFailed(VPathBuf, #[source] FsError),
-
     #[error("cannot open {0}")]
-    OpenExeFailed(VPathBuf, #[source] std::io::Error),
+    OpenExeFailed(VPathBuf, #[source] OpenError),
 
     #[error("cannot open {0}")]
     OpenElfFailed(VPathBuf, #[source] elf::OpenError),
@@ -1208,11 +1160,8 @@ pub enum MapError {
 /// Represents an error for (S)ELF loading.
 #[derive(Debug, Error)]
 pub enum LoadError<E: ExecutionEngine> {
-    #[error("cannot get the specified file")]
-    GetFileFailed(#[source] FsError),
-
-    #[error("cannot open file")]
-    OpenFileFailed(#[source] std::io::Error),
+    #[error("cannot open the specified file")]
+    OpenFileFailed(#[source] OpenError),
 
     #[error("cannot open (S)ELF")]
     OpenElfFailed(#[source] elf::OpenError),
@@ -1233,7 +1182,6 @@ pub enum LoadError<E: ExecutionEngine> {
 impl<E: ExecutionEngine> Errno for LoadError<E> {
     fn errno(&self) -> NonZeroI32 {
         match self {
-            Self::GetFileFailed(e) => e.errno(),
             Self::OpenFileFailed(_) => ENOENT,
             Self::OpenElfFailed(_)
             | Self::InvalidElf

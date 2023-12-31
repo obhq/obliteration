@@ -1,5 +1,5 @@
 use crate::errno::Errno;
-use crate::fs::{Vnode, VopVector, DEFAULT_VNODEOPS};
+use crate::fs::{VFile, VFileFlags, Vnode, VopVector, DEFAULT_VNODEOPS};
 use crate::process::VThread;
 use std::sync::Arc;
 
@@ -8,6 +8,7 @@ pub static VNODE_OPS: VopVector = VopVector {
     access: Some(access),
     accessx: None,
     lookup: Some(lookup),
+    open: Some(open),
 };
 
 fn access(_: &Arc<Vnode>, _: Option<&VThread>, _: u32) -> Result<(), Box<dyn Errno>> {
@@ -15,5 +16,14 @@ fn access(_: &Arc<Vnode>, _: Option<&VThread>, _: u32) -> Result<(), Box<dyn Err
 }
 
 fn lookup(_: &Arc<Vnode>, _: Option<&VThread>, _: &str) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+    todo!()
+}
+
+fn open(
+    _: &Arc<Vnode>,
+    _: Option<&VThread>,
+    _: VFileFlags,
+    _: Option<&mut VFile>,
+) -> Result<(), Box<dyn Errno>> {
     todo!()
 }

@@ -1,4 +1,4 @@
-use super::{unixify_access, Mount};
+use super::{unixify_access, Mount, VFile, VFileFlags};
 use crate::errno::{Errno, ENOTDIR, EPERM};
 use crate::process::VThread;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
@@ -50,8 +50,16 @@ impl Vnode {
         &self.ty
     }
 
+    pub fn is_character(&self) -> bool {
+        matches!(self.ty, VnodeType::Character)
+    }
+
     pub fn data(&self) -> &Arc<dyn Any + Send + Sync> {
         &self.data
+    }
+
+    pub fn item(&self) -> Option<Arc<dyn Any + Send + Sync>> {
+        self.item.read().clone()
     }
 
     pub fn item_mut(&self) -> GutexWriteGuard<Option<Arc<dyn Any + Send + Sync>>> {
@@ -121,6 +129,14 @@ pub struct VopVector {
     pub accessx: Option<fn(&Arc<Vnode>, Option<&VThread>, u32) -> Result<(), Box<dyn Errno>>>, // vop_accessx
     pub lookup:
         Option<fn(&Arc<Vnode>, Option<&VThread>, &str) -> Result<Arc<Vnode>, Box<dyn Errno>>>, // vop_lookup
+    pub open: Option<
+        fn(
+            &Arc<Vnode>,
+            Option<&VThread>,
+            VFileFlags,
+            Option<&mut VFile>,
+        ) -> Result<(), Box<dyn Errno>>,
+    >, // vop_open
 }
 
 /// Represents an error when [`DEFAULT_VNODEOPS`] is failed.
@@ -148,6 +164,7 @@ pub static DEFAULT_VNODEOPS: VopVector = VopVector {
     access: Some(|vn, td, access| vn.accessx(td, access)),
     accessx: Some(accessx),
     lookup: Some(|_, _, _| Err(Box::new(DefaultError::NotDirectory))),
+    open: Some(|_, _, _, _| Ok(())),
 };
 
 fn accessx(vn: &Arc<Vnode>, td: Option<&VThread>, access: u32) -> Result<(), Box<dyn Errno>> {
