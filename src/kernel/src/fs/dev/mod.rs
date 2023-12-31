@@ -203,7 +203,7 @@ impl DevFs {
 
             if children
                 .iter()
-                .any(|c| c.dirent().ty() == DirentType::Link && c.dirent().name() == name)
+                .any(|c| c.ty() == DirentType::Link && c.name() == name)
             {
                 todo!("devfs_populate with DT_LNK children");
             }
