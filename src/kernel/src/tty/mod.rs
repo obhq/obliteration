@@ -11,7 +11,6 @@ use thiserror::Error;
 #[derive(Debug)]
 /// An implementation of `tty` structure.
 pub struct Tty {
-    vp: Arc<VProc>,
     group: Gutex<Option<Arc<VProcGroup>>>, //t_pgrp
     session: Gutex<Option<Arc<VSession>>>, //t_session
     session_count: Gutex<u32>,             //t_sessioncnt
@@ -23,11 +22,10 @@ impl Tty {
 
     pub const TIOCSCTTY: IoctlCom = IoctlCom::io(Self::TTY_GRP, 97);
 
-    pub fn new(vp: &Arc<VProc>) -> Arc<Self> {
+    pub fn new() -> Arc<Self> {
         let gg = GutexGroup::new();
 
         Arc::new(Self {
-            vp: vp.clone(),
             group: gg.spawn(None),
             session: gg.spawn(None),
             session_count: gg.spawn(0),
@@ -48,16 +46,16 @@ impl Tty {
         self: &Arc<Self>,
         com: IoctlCom,
         _data: &mut [u8],
-        _td: &VThread,
+        td: &VThread,
     ) -> Result<(), Box<dyn Errno>> {
         match com {
             Self::TIOCSCTTY => {
                 info!("Setting tty as controlling tty");
 
-                let grp_guard = self.vp.group();
+                let grp_guard = td.proc().group();
                 let proc_grp = grp_guard.as_ref().unwrap();
 
-                if !Arc::ptr_eq(&self.vp, proc_grp.leader()) {
+                if !Arc::ptr_eq(td.proc(), proc_grp.leader()) {
                     return Err(Box::new(TtyError::NotSessionLeader));
                 }
 
@@ -88,7 +86,7 @@ impl Tty {
 
                 self.group.write().replace(proc_grp.clone());
 
-                self.vp.flags_mut().insert(VProcFlags::P_CONTROLT);
+                td.proc().flags_mut().insert(VProcFlags::P_CONTROLT);
             }
             _ => todo!("ioctl com {:?} is not implemented", com),
         }

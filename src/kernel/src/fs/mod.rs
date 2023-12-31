@@ -312,7 +312,10 @@ impl Fs {
         };
 
         *file.flags_mut() = flags.to_fflags();
-        file.set_ops(Some(self.namei(&mut nd)?.open(td.proc())?));
+
+        let item = self.namei(&mut nd)?;
+        let ops = item.open()?;
+        file.set_ops(Some(ops));
 
         // Install to descriptor table.
         let fd = td.proc().files().alloc(Arc::new(file));

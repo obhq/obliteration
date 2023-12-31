@@ -10,7 +10,6 @@ use thiserror::Error;
 
 #[derive(Debug)]
 pub struct Dmem1 {
-    vp: Arc<VProc>,
     total_size: usize,
     number: usize,
 }
@@ -22,9 +21,8 @@ impl Dmem1 {
 
     pub const COM10: IoctlCom = IoctlCom::ior::<usize>(Self::DMEM_GRP, 0xa);
 
-    pub fn new(vp: &Arc<VProc>) -> Self {
+    pub fn new() -> Self {
         Self {
-            vp: vp.clone(),
             total_size: 0x13C_000_000, // TODO figure out the real value
             number: 1,
         }
@@ -42,13 +40,13 @@ impl VFileOps for Dmem1 {
         com: IoctlCom,
         data: &mut [u8],
         cred: &Ucred,
-        _: &VThread,
+        td: &VThread,
     ) -> Result<(), Box<dyn Errno>> {
         if cred.is_unk1() || cred.is_unk2() {
             return Err(Box::new(IoctlErr::BadCredentials));
         }
 
-        if self.number != 2 && self.number != self.vp.dmem_container() && !cred.is_system() {
+        if self.number != 2 && self.number != td.proc().dmem_container() && !cred.is_system() {
             return Err(Box::new(IoctlErr::BadCredentials));
         }
 
