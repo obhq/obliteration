@@ -1,8 +1,8 @@
 pub use self::cdev::*;
 use self::dirent::Dirent;
-use self::vnode::VNODE_OPS;
+use self::vnode::{CHARACTER_OPS, VNODE_OPS};
 use super::{path_contains, DirentType, FsOps, Mount, MountFlags, Vnode, VnodeType};
-use crate::errno::{Errno, EEXIST, EOPNOTSUPP};
+use crate::errno::{Errno, EEXIST, ENOENT, EOPNOTSUPP};
 use crate::ucred::Ucred;
 use bitflags::bitflags;
 use std::any::Any;
@@ -85,27 +85,46 @@ pub fn dev_exists<N: AsRef<str>>(name: N) -> bool {
 }
 
 /// See `devfs_allocv` on the PS4 for a reference.
-fn alloc_vnode(mnt: &Arc<Mount>, ent: &Arc<Dirent>) -> Arc<Vnode> {
-    // Get type.
-    let ty = match ent.ty() {
-        DirentType::Character => todo!("devfs_allocv with DT_CHR"),
-        DirentType::Directory => VnodeType::Directory(ent.inode() == DevFs::DEVFS_ROOTINO),
+fn alloc_vnode(mnt: &Arc<Mount>, ent: &Arc<Dirent>) -> Result<Arc<Vnode>, AllocVnodeError> {
+    // Check for active vnode.
+    let mut current = ent.vnode_mut();
+
+    if let Some(v) = current.as_ref().and_then(|v| v.upgrade()) {
+        return Ok(v);
+    }
+
+    // Create vnode. Beware of deadlock because we are currently holding on dirent lock.
+    let tag = "devfs";
+    let vn = match ent.ty() {
+        DirentType::Character => {
+            let dev = ent
+                .cdev()
+                .unwrap()
+                .upgrade()
+                .ok_or(AllocVnodeError::DeviceGone)?;
+            let vn = Vnode::new(mnt, VnodeType::Character, tag, &CHARACTER_OPS, ent.clone());
+
+            *vn.item_mut() = Some(dev);
+            vn
+        }
+        DirentType::Directory => Vnode::new(
+            mnt,
+            VnodeType::Directory(ent.inode() == DevFs::DEVFS_ROOTINO),
+            tag,
+            &VNODE_OPS,
+            ent.clone(),
+        ),
         DirentType::Link => todo!("devfs_allocv with DT_LNK"),
     };
 
-    // Create vnode.
-    let vn = Arc::new(Vnode::new(mnt, ty, "devfs", &VNODE_OPS, ent.clone()));
-    let mut current = ent.vnode_mut();
-
-    if let Some(_) = current.as_ref().and_then(|v| v.upgrade()) {
-        todo!("devfs_allocv with non-null vnode");
-    }
+    // Set current vnode.
+    let vn = Arc::new(vn);
 
     *current = Some(Arc::downgrade(&vn));
     drop(current);
 
     // TODO: Implement insmntque1.
-    vn
+    Ok(vn)
 }
 
 /// An implementation of `devfs_mount` structure.
@@ -200,6 +219,7 @@ impl DevFs {
                 gid,
                 mode,
                 Some(Arc::downgrade(&dir)),
+                Some(Arc::downgrade(&dev)),
                 name,
             ));
 
@@ -234,6 +254,7 @@ impl DevFs {
             0,
             0555,
             None,
+            None,
             name,
         ));
 
@@ -245,6 +266,7 @@ impl DevFs {
             0,
             0,
             Some(Arc::downgrade(&dir)),
+            None,
             ".",
         );
 
@@ -258,6 +280,7 @@ impl DevFs {
             0,
             0,
             Some(Arc::downgrade(parent.unwrap_or(&dir))),
+            None,
             "..",
         );
 
@@ -331,10 +354,10 @@ fn mount(mount: &mut Mount, _: HashMap<String, Box<dyn Any>>) -> Result<(), Box<
 fn root(mnt: &Arc<Mount>) -> Arc<Vnode> {
     let fs = mnt.data().unwrap().downcast_ref::<DevFs>().unwrap();
 
-    alloc_vnode(mnt, &fs.root)
+    alloc_vnode(mnt, &fs.root).unwrap()
 }
 
-/// Represents an error when [`mount`] is failed.
+/// Represents an error when [`mount()`] is failed.
 #[derive(Debug, Error)]
 enum MountError {
     #[error("mounting as root FS is not supported")]
@@ -348,6 +371,21 @@ impl Errno for MountError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::RootFs | Self::Update => EOPNOTSUPP,
+        }
+    }
+}
+
+/// Represents an error when [`alloc_vnode()`] is failed.
+#[derive(Debug, Error)]
+enum AllocVnodeError {
+    #[error("the device already gone")]
+    DeviceGone,
+}
+
+impl Errno for AllocVnodeError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::DeviceGone => ENOENT,
         }
     }
 }

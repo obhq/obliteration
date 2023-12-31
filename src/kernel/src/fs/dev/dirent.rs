@@ -1,3 +1,4 @@
+use super::Cdev;
 use crate::fs::{DirentType, Vnode};
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use std::ops::Deref;
@@ -15,6 +16,7 @@ pub struct Dirent {
     ctime: SystemTime,                 // de_ctime
     atime: Gutex<SystemTime>,          // de_atime
     mtime: Gutex<SystemTime>,          // de_mtime
+    cdev: Option<Weak<Cdev>>,          // de_cdp
     vnode: Gutex<Option<Weak<Vnode>>>, // de_vnode
     dirent: crate::fs::Dirent,         // de_dirent
 }
@@ -27,6 +29,7 @@ impl Dirent {
         gid: i32,
         mode: u16,
         dir: Option<Weak<Self>>,
+        cdev: Option<Weak<Cdev>>,
         name: N,
     ) -> Self
     where
@@ -45,6 +48,7 @@ impl Dirent {
             ctime: now,
             atime: gg.spawn(now),
             mtime: gg.spawn(now),
+            cdev,
             vnode: gg.spawn(None),
             dirent: crate::fs::Dirent::new(ty, name),
         }
@@ -73,6 +77,10 @@ impl Dirent {
 
     pub fn children_mut(&self) -> GutexWriteGuard<Vec<Arc<Self>>> {
         self.children.write()
+    }
+
+    pub fn cdev(&self) -> Option<&Weak<Cdev>> {
+        self.cdev.as_ref()
     }
 
     pub fn vnode_mut(&self) -> GutexWriteGuard<Option<Weak<Vnode>>> {
