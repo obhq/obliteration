@@ -1,5 +1,4 @@
 use crate::fs::{DirentType, Vnode};
-use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use std::ops::Deref;
 use std::sync::{Arc, Weak};
@@ -17,7 +16,6 @@ pub struct Dirent {
     atime: Gutex<SystemTime>,          // de_atime
     mtime: Gutex<SystemTime>,          // de_mtime
     vnode: Gutex<Option<Weak<Vnode>>>, // de_vnode
-    flags: DirentFlags,                // de_flags
     dirent: crate::fs::Dirent,         // de_dirent
 }
 
@@ -29,7 +27,6 @@ impl Dirent {
         gid: i32,
         mode: u16,
         dir: Option<Weak<Self>>,
-        flags: DirentFlags,
         name: N,
     ) -> Self
     where
@@ -49,7 +46,6 @@ impl Dirent {
             atime: gg.spawn(now),
             mtime: gg.spawn(now),
             vnode: gg.spawn(None),
-            flags,
             dirent: crate::fs::Dirent::new(ty, name),
         }
     }
@@ -83,14 +79,6 @@ impl Dirent {
         self.vnode.write()
     }
 
-    pub fn flags(&self) -> DirentFlags {
-        self.flags
-    }
-
-    pub fn dirent(&self) -> &crate::fs::Dirent {
-        &self.dirent
-    }
-
     /// See `devfs_find` on the PS4 for a reference.
     pub fn find<N: AsRef<str>>(&self, name: N, ty: Option<DirentType>) -> Option<Arc<Self>> {
         let name = name.as_ref();
@@ -113,13 +101,29 @@ impl Dirent {
 
         None
     }
+
+    /// See `devfs_parent_dirent` on the PS4 for a reference.
+    pub fn parent(&self) -> Option<Arc<Self>> {
+        let parent = if !self.is_directory() {
+            self.dir.as_ref().unwrap().clone()
+        } else if matches!(self.name(), "." | "..") {
+            return None;
+        } else {
+            // Get de_dir from "..".
+            let children = self.children.read();
+            let dotdot = &children[1];
+
+            dotdot.dir.as_ref().unwrap().clone()
+        };
+
+        parent.upgrade()
+    }
 }
 
-bitflags! {
-    /// Flags for [`Dirent`].
-    #[derive(Clone, Copy)]
-    pub struct DirentFlags: u32 {
-        const DE_DOT = 0x02;
-        const DE_DOTDOT = 0x04;
+impl Deref for Dirent {
+    type Target = crate::fs::Dirent;
+
+    fn deref(&self) -> &Self::Target {
+        &self.dirent
     }
 }

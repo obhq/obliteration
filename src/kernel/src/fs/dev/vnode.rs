@@ -1,9 +1,7 @@
+use super::alloc_vnode;
 use super::dirent::Dirent;
-use crate::errno::{Errno, EIO, ENOTDIR, EOPNOTSUPP};
-use crate::fs::{
-    check_access, ComponentName, DevFs, NameiFlags, NameiOp, Vnode, VnodeType, VopVector,
-    DEFAULT_VNODEOPS,
-};
+use crate::errno::{Errno, EIO, ENOENT, ENOTDIR};
+use crate::fs::{check_access, DevFs, Vnode, VnodeType, VopVector, DEFAULT_VNODEOPS};
 use crate::process::VThread;
 use std::num::NonZeroI32;
 use std::sync::Arc;
@@ -56,7 +54,7 @@ fn access(vn: &Arc<Vnode>, td: Option<&VThread>, access: u32) -> Result<(), Box<
     return Err(Box::new(err));
 }
 
-fn lookup(vn: &Arc<Vnode>, cn: &ComponentName) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode>, Box<dyn Errno>> {
     // Populate devices.
     let fs = vn
         .fs()
@@ -66,18 +64,10 @@ fn lookup(vn: &Arc<Vnode>, cn: &ComponentName) -> Result<Arc<Vnode>, Box<dyn Err
 
     fs.populate();
 
-    // Check if last component.
-    let op = cn.op;
-    let flags = cn.flags;
-
-    if flags.intersects(NameiFlags::ISLASTCN) && op == NameiOp::Rename {
-        return Err(Box::new(LookupError::RenameWithLastComponent));
-    }
-
     // Check if directory.
     match vn.ty() {
         VnodeType::Directory(root) => {
-            if flags.intersects(NameiFlags::ISDOTDOT) && *root {
+            if name == ".." && *root {
                 return Err(Box::new(LookupError::DotdotOnRoot));
             }
         }
@@ -85,22 +75,32 @@ fn lookup(vn: &Arc<Vnode>, cn: &ComponentName) -> Result<Arc<Vnode>, Box<dyn Err
     }
 
     // Check if directory is accessible.
-    let td = cn.thread;
-
     if let Err(e) = vn.access(td, 0100) {
         return Err(Box::new(LookupError::AccessDenied(e)));
     }
 
-    // TODO: Implement the remaining lookup.
+    // Check name.
+    if name == "." {
+        return Ok(vn.clone());
+    }
+
+    let dirent = vn.data().downcast_ref::<Dirent>().unwrap();
+
+    if name == ".." {
+        let parent = match dirent.parent() {
+            Some(v) => v,
+            None => return Err(Box::new(LookupError::NoParent)),
+        };
+
+        return Ok(alloc_vnode(vn.fs(), &parent));
+    }
+
     todo!()
 }
 
 /// Represents an error when [`lookup()`] is failed.
 #[derive(Debug, Error)]
 enum LookupError {
-    #[error("rename with last component is not supported")]
-    RenameWithLastComponent,
-
     #[error("file is not a directory")]
     NotDirectory,
 
@@ -109,15 +109,18 @@ enum LookupError {
 
     #[error("access denied")]
     AccessDenied(#[source] Box<dyn Errno>),
+
+    #[error("file have no parent")]
+    NoParent,
 }
 
 impl Errno for LookupError {
     fn errno(&self) -> NonZeroI32 {
         match self {
-            Self::RenameWithLastComponent => EOPNOTSUPP,
             Self::NotDirectory => ENOTDIR,
             Self::DotdotOnRoot => EIO,
             Self::AccessDenied(e) => e.errno(),
+            Self::NoParent => ENOENT,
         }
     }
 }
