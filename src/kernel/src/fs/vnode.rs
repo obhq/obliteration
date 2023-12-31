@@ -109,7 +109,8 @@ impl Drop for Vnode {
 /// An implementation of `vtype`.
 #[derive(Debug)]
 pub enum VnodeType {
-    Directory(bool),
+    Directory(bool), // VDIR
+    Character,       // VCHR
 }
 
 /// An implementation of `vop_vector` structure.

@@ -1,5 +1,5 @@
-use super::alloc_vnode;
 use super::dirent::Dirent;
+use super::{alloc_vnode, AllocVnodeError};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR};
 use crate::fs::{check_access, DevFs, Vnode, VnodeType, VopVector, DEFAULT_VNODEOPS};
 use crate::process::VThread;
@@ -12,6 +12,13 @@ pub static VNODE_OPS: VopVector = VopVector {
     access: Some(access),
     accessx: None,
     lookup: Some(lookup),
+};
+
+pub static CHARACTER_OPS: VopVector = VopVector {
+    default: Some(&DEFAULT_VNODEOPS),
+    access: Some(access),
+    accessx: None,
+    lookup: None,
 };
 
 fn access(vn: &Arc<Vnode>, td: Option<&VThread>, access: u32) -> Result<(), Box<dyn Errno>> {
@@ -92,10 +99,25 @@ fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode
             None => return Err(Box::new(LookupError::NoParent)),
         };
 
-        return Ok(alloc_vnode(vn.fs(), &parent));
+        return match alloc_vnode(vn.fs(), &parent) {
+            Ok(v) => Ok(v),
+            Err(e) => Err(Box::new(LookupError::AllocVnodeFailed(e))),
+        };
     }
 
-    todo!()
+    // Lookup.
+    let item = match dirent.find(name, None) {
+        Some(v) => {
+            // TODO: Implement devfs_prison_check.
+            v
+        }
+        None => todo!("devfs lookup with non-existent file"),
+    };
+
+    match alloc_vnode(vn.fs(), &item) {
+        Ok(v) => Ok(v),
+        Err(e) => Err(Box::new(LookupError::AllocVnodeFailed(e))),
+    }
 }
 
 /// Represents an error when [`lookup()`] is failed.
@@ -112,6 +134,9 @@ enum LookupError {
 
     #[error("file have no parent")]
     NoParent,
+
+    #[error("cannot allocate a vnode")]
+    AllocVnodeFailed(#[source] AllocVnodeError),
 }
 
 impl Errno for LookupError {
@@ -121,6 +146,7 @@ impl Errno for LookupError {
             Self::DotdotOnRoot => EIO,
             Self::AccessDenied(e) => e.errno(),
             Self::NoParent => ENOENT,
+            Self::AllocVnodeFailed(e) => e.errno(),
         }
     }
 }
