@@ -7,8 +7,8 @@ use thiserror::Error;
 /// An object that is initialized by `acquire_per_file_info_obj`.
 #[derive(Debug)]
 pub struct FileInfo {
-    data: Vec<u8>,
-    comment: Vec<u8>,
+    data: Box<[u8]>,
+    comment: Box<[u8]>,
     dynoff: usize,
     dynsize: usize,
     pltrelsz: usize,
@@ -25,8 +25,8 @@ pub struct FileInfo {
 
 impl FileInfo {
     pub(super) fn parse(
-        data: Vec<u8>,
-        comment: Vec<u8>,
+        data: Box<[u8]>,
+        comment: Box<[u8]>,
         dynoff: usize,
         dynsize: usize,
     ) -> Result<Self, FileInfoError> {

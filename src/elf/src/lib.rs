@@ -270,7 +270,12 @@ impl<I: Read + Seek> Elf<I> {
             };
 
             // Load info.
-            elf.info = match FileInfo::parse(dyndata, comment, dynoff, dynsize) {
+            elf.info = match FileInfo::parse(
+                dyndata.into_boxed_slice(),
+                comment.into_boxed_slice(),
+                dynoff,
+                dynsize,
+            ) {
                 Ok(v) => Some(v),
                 Err(e) => return Err(OpenError::ParseFileInfoFailed(e)),
             };
