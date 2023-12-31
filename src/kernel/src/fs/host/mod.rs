@@ -1,7 +1,5 @@
 use self::vnode::VNODE_OPS;
-use super::{
-    FsItem, FsOps, HostDir, HostFile, Mount, MountFlags, VPath, VPathBuf, Vnode, VnodeType,
-};
+use super::{FsOps, Mount, MountFlags, VPath, VPathBuf, Vnode, VnodeType};
 use crate::errno::Errno;
 use param::Param;
 use std::any::Any;
@@ -25,7 +23,7 @@ impl HostFs {
         &self.app
     }
 
-    pub(super) fn resolve(&self, path: &VPath) -> Option<FsItem> {
+    fn resolve(&self, path: &VPath) -> Option<FsItem> {
         let mut current = VPathBuf::new();
         let root = match self.map.get(&current).unwrap() {
             MountSource::Host(v) => v,
@@ -33,7 +31,10 @@ impl HostFs {
         };
 
         // Walk on virtual path components.
-        let mut directory = HostDir::new(root.clone(), VPathBuf::new());
+        let mut directory = HostDir {
+            path: root.clone(),
+            vpath: VPathBuf::new(),
+        };
 
         for component in path.components() {
             current.push(component).unwrap();
@@ -43,15 +44,18 @@ impl HostFs {
                 let path = match mount {
                     MountSource::Host(v) => v.to_owned(),
                     MountSource::Bind(v) => match self.resolve(v)? {
-                        FsItem::Directory(d) => d.into_path(),
+                        FsItem::Directory(d) => d.path,
                         _ => unreachable!(),
                     },
                 };
 
-                directory = HostDir::new(path, VPathBuf::new());
+                directory = HostDir {
+                    path,
+                    vpath: VPathBuf::new(),
+                };
             } else {
                 // Build a real path.
-                let mut path = directory.into_path();
+                let mut path = directory.path;
 
                 path.push(component);
 
@@ -69,18 +73,24 @@ impl HostFs {
 
                 // Check file type.
                 if meta.is_file() {
-                    return Some(FsItem::File(HostFile::new(path, current)));
+                    return Some(FsItem::File(HostFile {
+                        path,
+                        vpath: current,
+                    }));
                 }
 
-                directory = HostDir::new(path, VPathBuf::new());
+                directory = HostDir {
+                    path,
+                    vpath: VPathBuf::new(),
+                };
             }
         }
 
         // If we reached here that mean the the last component is a directory.
-        Some(FsItem::Directory(HostDir::new(
-            directory.into_path(),
-            current,
-        )))
+        Some(FsItem::Directory(HostDir {
+            path: directory.path,
+            vpath: current,
+        }))
     }
 }
 
@@ -178,6 +188,21 @@ fn root(mnt: &Arc<Mount>) -> Arc<Vnode> {
 enum MountSource {
     Host(PathBuf),
     Bind(VPathBuf),
+}
+
+enum FsItem {
+    Directory(HostDir),
+    File(HostFile),
+}
+
+pub struct HostDir {
+    path: PathBuf,
+    vpath: VPathBuf,
+}
+
+pub struct HostFile {
+    path: PathBuf,
+    vpath: VPathBuf,
 }
 
 pub(super) static HOST_OPS: FsOps = FsOps { mount, root };

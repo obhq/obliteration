@@ -1,10 +1,10 @@
 use super::MapError;
+use crate::fs::VFile;
 use crate::memory::{MappingFlags, MemoryManager, MemoryUpdateError, Protections};
 use elf::{Elf, ProgramFlags, ProgramType};
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::alloc::Layout;
 use std::fmt::{Debug, Formatter};
-use std::fs::File;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use thiserror::Error;
@@ -28,7 +28,7 @@ pub struct Memory {
 impl Memory {
     pub(super) fn new<N: Into<String>>(
         mm: &Arc<MemoryManager>,
-        image: &Elf<File>,
+        image: &Elf<VFile>,
         base: usize,
         name: N,
     ) -> Result<Self, MapError> {

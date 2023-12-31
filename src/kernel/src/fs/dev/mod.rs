@@ -13,13 +13,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use thiserror::Error;
 
 mod cdev;
-pub(super) mod console;
-pub(super) mod deci_tty6;
-pub(super) mod dipsw;
 mod dirent;
-pub(super) mod dmem0;
-pub(super) mod dmem1;
-pub(super) mod dmem2;
 mod vnode;
 
 /// See `make_dev_credv` on the PS4 for a reference.

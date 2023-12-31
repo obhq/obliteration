@@ -1,4 +1,7 @@
 use super::dirent::Dirent;
+use crate::errno::Errno;
+use crate::fs::{VFile, VFileFlags};
+use crate::process::VThread;
 use crate::ucred::Ucred;
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
@@ -18,6 +21,7 @@ pub struct Cdev {
     atime: SystemTime,                         // si_atime
     mtime: SystemTime,                         // si_mtime
     cred: Option<Arc<Ucred>>,                  // si_cred
+    max_io: usize,                             // si_iosize_max
     flags: DeviceFlags,                        // si_flags
     inode: i32,                                // cdp_inode
     dirents: Gutex<Vec<Option<Weak<Dirent>>>>, // cdp_dirents + cdp_maxdirent
@@ -51,9 +55,14 @@ impl Cdev {
             atime: now,
             mtime: now,
             cred,
+            max_io: 0x10000,
             flags,
             dirents: gg.spawn(vec![None]),
         }
+    }
+
+    pub fn sw(&self) -> &CdevSw {
+        self.sw.as_ref()
     }
 
     pub fn name(&self) -> &str {
@@ -101,17 +110,31 @@ bitflags! {
 /// An implementation of `cdevsw` structure.
 #[derive(Debug)]
 pub struct CdevSw {
-    flags: DriverFlags, // d_flags
+    flags: DriverFlags,     // d_flags
+    open: Option<CdevOpen>, // d_open
+    fdopen: Option<CdevFd>, // d_fdopen
 }
 
 impl CdevSw {
     /// See `prep_cdevsw` on the PS4 for a reference.
-    pub fn new(flags: DriverFlags) -> Self {
-        Self { flags }
+    pub fn new(flags: DriverFlags, open: Option<CdevOpen>, fdopen: Option<CdevFd>) -> Self {
+        Self {
+            flags,
+            open,
+            fdopen,
+        }
     }
 
     pub fn flags(&self) -> DriverFlags {
         self.flags
+    }
+
+    pub fn open(&self) -> Option<CdevOpen> {
+        self.open
+    }
+
+    pub fn fdopen(&self) -> Option<CdevFd> {
+        self.fdopen
     }
 }
 
@@ -122,3 +145,7 @@ bitflags! {
         const D_NEEDMINOR = 0x00800000;
     }
 }
+
+pub type CdevOpen = fn(&Arc<Cdev>, VFileFlags, i32, Option<&VThread>) -> Result<(), Box<dyn Errno>>;
+pub type CdevFd =
+    fn(&Arc<Cdev>, VFileFlags, Option<&VThread>, Option<&mut VFile>) -> Result<(), Box<dyn Errno>>;

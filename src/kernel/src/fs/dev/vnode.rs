@@ -1,7 +1,9 @@
 use super::dirent::Dirent;
-use super::{alloc_vnode, AllocVnodeError};
-use crate::errno::{Errno, EIO, ENOENT, ENOTDIR};
-use crate::fs::{check_access, DevFs, Vnode, VnodeType, VopVector, DEFAULT_VNODEOPS};
+use super::{alloc_vnode, AllocVnodeError, Cdev};
+use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
+use crate::fs::{
+    check_access, DevFs, VFile, VFileFlags, Vnode, VnodeType, VopVector, DEFAULT_VNODEOPS,
+};
 use crate::process::VThread;
 use std::num::NonZeroI32;
 use std::sync::Arc;
@@ -12,6 +14,7 @@ pub static VNODE_OPS: VopVector = VopVector {
     access: Some(access),
     accessx: None,
     lookup: Some(lookup),
+    open: None,
 };
 
 pub static CHARACTER_OPS: VopVector = VopVector {
@@ -19,6 +22,7 @@ pub static CHARACTER_OPS: VopVector = VopVector {
     access: Some(access),
     accessx: None,
     lookup: None,
+    open: Some(open),
 };
 
 fn access(vn: &Arc<Vnode>, td: Option<&VThread>, access: u32) -> Result<(), Box<dyn Errno>> {
@@ -120,6 +124,38 @@ fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode
     }
 }
 
+fn open(
+    vn: &Arc<Vnode>,
+    td: Option<&VThread>,
+    mode: VFileFlags,
+    mut file: Option<&mut VFile>,
+) -> Result<(), Box<dyn Errno>> {
+    // Not sure why FreeBSD check if vnode is VBLK because all of vnode here always be VCHR.
+    let dev = vn.item().unwrap().downcast::<Cdev>().unwrap();
+    let sw = dev.sw();
+
+    assert!(vn.is_character());
+
+    if file.is_none() && sw.fdopen().is_some() {
+        return Err(Box::new(OpenError::NeedFile));
+    }
+
+    // Execute switch handler.
+    match sw.fdopen() {
+        Some(f) => f(&dev, mode, td, file.as_mut().map(|f| &mut **f))?,
+        None => sw.open().unwrap()(&dev, mode, 0x2000, td)?,
+    };
+
+    // Set file OP.
+    let file = match file {
+        Some(v) => v,
+        None => return Ok(()),
+    };
+
+    // TODO: Implement remaining logics from the PS4.
+    Ok(())
+}
+
 /// Represents an error when [`lookup()`] is failed.
 #[derive(Debug, Error)]
 enum LookupError {
@@ -147,6 +183,21 @@ impl Errno for LookupError {
             Self::AccessDenied(e) => e.errno(),
             Self::NoParent => ENOENT,
             Self::AllocVnodeFailed(e) => e.errno(),
+        }
+    }
+}
+
+/// Represents an error when [`open()`] is failed.
+#[derive(Debug, Error)]
+enum OpenError {
+    #[error("destination file is required")]
+    NeedFile,
+}
+
+impl Errno for OpenError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::NeedFile => ENXIO,
         }
     }
 }

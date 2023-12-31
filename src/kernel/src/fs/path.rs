@@ -121,6 +121,12 @@ impl Deref for VPath {
     }
 }
 
+impl AsRef<VPath> for VPath {
+    fn as_ref(&self) -> &VPath {
+        self
+    }
+}
+
 impl<'a> TryFrom<&'a str> for &'a VPath {
     type Error = ();
 
@@ -248,6 +254,12 @@ impl TryFrom<String> for VPathBuf {
         } else {
             Err(())
         }
+    }
+}
+
+impl AsRef<VPath> for VPathBuf {
+    fn as_ref(&self) -> &VPath {
+        self.borrow()
     }
 }
 

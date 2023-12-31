@@ -2,13 +2,12 @@ pub use self::dev::*;
 pub use self::dirent::*;
 pub use self::file::*;
 pub use self::host::*;
-pub use self::item::*;
+pub use self::ioctl::*;
 pub use self::mount::*;
-pub use self::namei::*;
 pub use self::path::*;
 pub use self::perm::*;
 pub use self::vnode::*;
-use crate::errno::{Errno, EBADF, EINVAL, ENAMETOOLONG, ENODEV, ENOENT, ENOTCAPABLE};
+use crate::errno::{Errno, EBADF, EINVAL, ENAMETOOLONG, ENODEV};
 use crate::info;
 use crate::process::VThread;
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
@@ -21,7 +20,6 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::num::{NonZeroI32, TryFromIntError};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -29,9 +27,8 @@ mod dev;
 mod dirent;
 mod file;
 mod host;
-mod item;
+mod ioctl;
 mod mount;
-mod namei;
 mod path;
 mod perm;
 mod vnode;
@@ -41,7 +38,6 @@ mod vnode;
 pub struct Fs {
     mounts: Gutex<Mounts>,   // mountlist
     root: Gutex<Arc<Vnode>>, // rootvnode
-    opens: AtomicI32,        // openfiles
 }
 
 impl Fs {
@@ -84,7 +80,6 @@ impl Fs {
         let fs = Arc::new(Self {
             mounts: gg.spawn(mounts),
             root: gg.spawn(root),
-            opens: AtomicI32::new(0),
         });
 
         let root = match fs.mount(opts, MountFlags::MNT_ROOTFS, cred) {
@@ -138,102 +133,16 @@ impl Fs {
         self.root.read().clone()
     }
 
-    /// See `namei` on the PS4 for a reference.
-    pub fn namei(&self, nd: &mut NameiData) -> Result<FsItem, FsError> {
-        nd.cnd.flags.remove(NameiFlags::TRAILINGSLASH);
-        nd.cnd.pnbuf = nd.dirp.as_bytes().to_vec();
-
-        if nd.cnd.pnbuf.is_empty() {
-            return Err(FsError::NotFound);
-        }
-
-        nd.loopcnt = 0;
-
-        // TODO: Implement ktrnamei.
-        nd.rootdir = Some(
-            nd.cnd
-                .thread
-                .map_or_else(|| self.root(), |t| t.proc().files().root()),
-        );
-
-        let mut dp = if nd.cnd.pnbuf[0] != b'/' {
-            todo!("namei with relative path");
-        } else {
-            nd.cnd
-                .thread
-                .map_or_else(|| self.root(), |t| t.proc().files().cwd())
-        };
-
-        if nd.startdir.is_some() {
-            todo!("namei with ni_startdir");
-        }
-
-        // TODO: Implement SDT_PROBE.
-        #[allow(clippy::never_loop)] // TODO: Remove this once this loop is fully implemented.
-        loop {
-            nd.cnd.nameptr = 0;
-
-            if nd.cnd.pnbuf[nd.cnd.nameptr] == b'/' {
-                if nd.strictrelative != 0 {
-                    return Err(FsError::AbsolutePath);
-                }
-
-                loop {
-                    nd.cnd.nameptr += 1;
-
-                    if nd
-                        .cnd
-                        .pnbuf
-                        .get(nd.cnd.nameptr)
-                        .filter(|&v| *v == b'/')
-                        .is_none()
-                    {
-                        break;
-                    }
-                }
-
-                dp = nd.rootdir.as_ref().unwrap().clone();
-            }
-
-            nd.startdir = Some(dp);
-
-            // TODO: Implement the remaining logics from the PS4 when lookup is success.
-            // TODO: Implement SDT_PROBE when lookup is failed.
-            break self.lookup(nd);
-        }
+    pub fn open<P: AsRef<VPath>>(&self, path: P, td: Option<&VThread>) -> Result<VFile, OpenError> {
+        todo!()
     }
 
-    fn lookup(&self, nd: &mut NameiData) -> Result<FsItem, FsError> {
-        nd.cnd.flags.remove(NameiFlags::ISSYMLINK);
-
-        // TODO: Implement the remaining logics from the PS4.
-        let item = match nd.dirp {
-            "/dev/console" => FsItem::Device(VDev::Console),
-            "/dev/dipsw" => FsItem::Device(VDev::Dipsw),
-            "/dev/deci_tty6" => FsItem::Device(VDev::DeciTty6),
-            "/dev/dmem0" => FsItem::Device(VDev::Dmem0),
-            "/dev/dmem1" => FsItem::Device(VDev::Dmem1),
-            "/dev/dmem2" => FsItem::Device(VDev::Dmem2),
-            _ => {
-                let root = self.mounts.read().root().clone();
-                let data = root.data().cloned();
-                let host = data.unwrap().downcast::<HostFs>().unwrap();
-
-                host.resolve(VPath::new(nd.dirp).unwrap())
-                    .ok_or(FsError::NotFound)?
-            }
-        };
-
-        Ok(item)
-    }
-
-    /// See `falloc_noinstall_budget` on the PS4 for a reference.
-    pub fn alloc(self: &Arc<Self>) -> VFile {
-        // TODO: Check if openfiles exceed rlimit.
-        // TODO: Implement budget_resource_use.
-        self.opens.fetch_add(1, Ordering::Relaxed);
-
-        VFile::new(self)
+    pub fn lookup<P: AsRef<VPath>>(
+        &self,
+        path: P,
+        td: Option<&VThread>,
+    ) -> Result<Arc<Vnode>, LookupError> {
+        todo!()
     }
 
     fn revoke<P: Into<VPathBuf>>(&self, _path: P) {
@@ -251,12 +160,8 @@ impl Fs {
 
         let td = VThread::current().unwrap();
         let file = td.proc().files().get(fd).ok_or(SysErr::Raw(EBADF))?;
-        let ops = file.ops().ok_or(SysErr::Raw(EBADF))?;
-
-        info!("Writing {len} bytes to fd {fd}.");
-
         let buf = unsafe { std::slice::from_raw_parts(ptr, len) };
-        let written = ops.write(file.as_ref(), buf, td.cred(), td.as_ref())?;
+        let written = file.write(buf, Some(&td))?;
 
         Ok(written.into())
     }
@@ -276,9 +181,6 @@ impl Fs {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        // Allocate file object.
-        let mut file = self.alloc();
-
         // Get full path.
         if flags.intersects(OpenFlags::UNK1) {
             todo!("open({path}) with flags & 0x400000 != 0");
@@ -296,23 +198,9 @@ impl Fs {
 
         // Lookup file.
         let td = VThread::current().unwrap();
-        let mut nd = NameiData {
-            dirp: path,
-            startdir: None,
-            rootdir: None,
-            strictrelative: 0,
-            loopcnt: 0,
-            cnd: ComponentName {
-                op: NameiOp::Lookup,
-                flags: NameiFlags::from_bits_retain(0x5000040),
-                thread: Some(&td),
-                pnbuf: Vec::new(),
-                nameptr: 0,
-            },
-        };
+        let mut file = self.open(path, Some(&td))?;
 
         *file.flags_mut() = flags.to_fflags();
-        file.set_ops(Some(self.namei(&mut nd)?.open(td.proc())?));
 
         // Install to descriptor table.
         let fd = td.proc().files().alloc(Arc::new(file));
@@ -333,18 +221,17 @@ impl Fs {
         Ok(SysOut::ZERO)
     }
 
-    const UNK_COM1: IoctlCom = IoctlCom::io(b'f', 1);
-    const UNK_COM2: IoctlCom = IoctlCom::io(b'f', 2);
-    const UNK_COM3: IoctlCom = IoctlCom::iowint(b'f', 0x7e);
-    const UNK_COM4: IoctlCom = IoctlCom::iowint(b'f', 0x7d);
-
     fn sys_ioctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        const UNK_COM1: IoCmd = IoCmd::io(b'f', 1);
+        const UNK_COM2: IoCmd = IoCmd::io(b'f', 2);
+        const UNK_COM3: IoCmd = IoCmd::iowint(b'f', 0x7e);
+        const UNK_COM4: IoCmd = IoCmd::iowint(b'f', 0x7d);
+
         let fd: i32 = i.args[0].try_into().unwrap();
-        let com: IoctlCom = i.args[1].try_into()?;
+        let com: IoCmd = i.args[1].try_into()?;
         let data_arg: *mut u8 = i.args[2].into();
 
         let size: usize = com.size();
-
         let mut vec = vec![0u8; size];
 
         // Get data.
@@ -367,7 +254,6 @@ impl Fs {
         // Get target file.
         let td = VThread::current().unwrap();
         let file = td.proc().files().get(fd).ok_or(SysErr::Raw(EBADF))?;
-        let ops = file.ops().ok_or(SysErr::Raw(EBADF))?;
 
         if !file
             .flags()
@@ -377,17 +263,17 @@ impl Fs {
         }
 
         // Execute the operation.
-        info!("Executing ioctl({com}) on {file}.");
+        info!("Executing ioctl({com}) on file descriptor {fd}.");
 
         match com {
-            Self::UNK_COM1 => todo!("ioctl with com = 0x20006601"),
-            Self::UNK_COM2 => todo!("ioctl with com = 0x20006602"),
-            Self::UNK_COM3 => todo!("ioctl with com = 0x8004667d"),
-            Self::UNK_COM4 => todo!("ioctl with com = 0x8004667e"),
+            UNK_COM1 => todo!("ioctl with com = 0x20006601"),
+            UNK_COM2 => todo!("ioctl with com = 0x20006602"),
+            UNK_COM3 => todo!("ioctl with com = 0x8004667d"),
+            UNK_COM4 => todo!("ioctl with com = 0x8004667e"),
             _ => {}
         }
 
-        ops.ioctl(&file, com, data, td.cred(), &td)?;
+        file.ioctl(com, data, Some(&td))?;
 
         if com.is_void() {
             unsafe {
@@ -409,24 +295,9 @@ impl Fs {
         td.priv_check(Privilege::SCE683)?;
 
         // TODO: Check vnode::v_rdev.
-        let mut nd = NameiData {
-            dirp: path,
-            startdir: None,
-            rootdir: None,
-            strictrelative: 0,
-            loopcnt: 0,
-            cnd: ComponentName {
-                op: NameiOp::Lookup,
-                flags: NameiFlags::from_bits_retain(0x5000044),
-                thread: Some(&td),
-                pnbuf: Vec::new(),
-                nameptr: 0,
-            },
-        };
+        let vn = self.lookup(path, Some(&td))?;
 
-        let file = self.namei(&mut nd)?;
-
-        if !file.is_character() {
+        if !vn.is_character() {
             return Err(SysErr::Raw(EINVAL));
         }
 
@@ -617,22 +488,23 @@ impl Errno for MountError {
     }
 }
 
-/// Represents an error when the operation of virtual filesystem is failed.
+/// Represents an error when [`Fs::open()`] was failed.
 #[derive(Debug, Error)]
-pub enum FsError {
-    #[error("no such file or directory")]
-    NotFound,
+pub enum OpenError {}
 
-    #[error("path is absolute")]
-    AbsolutePath,
+impl Errno for OpenError {
+    fn errno(&self) -> NonZeroI32 {
+        todo!()
+    }
 }
 
-impl Errno for FsError {
+/// Represents an error when [`Fs::lookup()`] was failed.
+#[derive(Debug, Error)]
+pub enum LookupError {}
+
+impl Errno for LookupError {
     fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::NotFound => ENOENT,
-            Self::AbsolutePath => ENOTCAPABLE,
-        }
+        todo!()
     }
 }
 

@@ -1,6 +1,5 @@
 use crate::errno::EINVAL;
 use crate::fs::Fs;
-use crate::info;
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use std::sync::Arc;
@@ -39,13 +38,6 @@ impl DmemManager {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        // TODO: actually allocate a blockpool. set filops, etc.
-        let file = self.fs.alloc();
-        let td = VThread::current().unwrap();
-        let fd = td.proc().files().alloc(Arc::new(file));
-
-        info!("File descriptor {fd} was allocated for a new blockpool");
-
-        Ok(fd.into())
+        todo!("sys_blockpool_open on new FS")
     }
 }
