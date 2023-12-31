@@ -73,10 +73,9 @@ impl Budget {
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum ProcType {
     BigApp,
-    #[allow(dead_code)]
     MiniApp,
-    #[allow(dead_code)]
     System, // TODO: Verify this.
 }
