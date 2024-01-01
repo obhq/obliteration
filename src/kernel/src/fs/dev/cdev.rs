@@ -1,6 +1,6 @@
 use super::dirent::Dirent;
 use crate::errno::Errno;
-use crate::fs::{VFile, VFileFlags};
+use crate::fs::{OpenFlags, VFile};
 use crate::process::VThread;
 use crate::ucred::Ucred;
 use bitflags::bitflags;
@@ -146,6 +146,6 @@ bitflags! {
     }
 }
 
-pub type CdevOpen = fn(&Arc<Cdev>, VFileFlags, i32, Option<&VThread>) -> Result<(), Box<dyn Errno>>;
+pub type CdevOpen = fn(&Arc<Cdev>, OpenFlags, i32, Option<&VThread>) -> Result<(), Box<dyn Errno>>;
 pub type CdevFd =
-    fn(&Arc<Cdev>, VFileFlags, Option<&VThread>, Option<&mut VFile>) -> Result<(), Box<dyn Errno>>;
+    fn(&Arc<Cdev>, OpenFlags, Option<&VThread>, Option<&mut VFile>) -> Result<(), Box<dyn Errno>>;
