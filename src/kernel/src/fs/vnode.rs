@@ -92,6 +92,19 @@ impl Vnode {
         }
     }
 
+    pub fn lookup(
+        self: &Arc<Self>,
+        td: Option<&VThread>,
+        name: &str,
+    ) -> Result<Arc<Self>, Box<dyn Errno>> {
+        let op = self.get_op(|v| v.lookup).unwrap();
+
+        match op.lookup {
+            Some(f) => f(self, td, name),
+            None => todo!(),
+        }
+    }
+
     fn get_op<F>(&self, f: fn(&'static VopVector) -> Option<F>) -> Option<&'static VopVector> {
         let mut vec = Some(self.op);
 

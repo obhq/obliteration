@@ -44,6 +44,10 @@ impl VPath {
         &*(data as *const str as *const VPath)
     }
 
+    pub fn is_absolute(&self) -> bool {
+        self.0.starts_with('/')
+    }
+
     pub fn join<C: AsRef<str>>(&self, component: C) -> Result<VPathBuf, ComponentError> {
         let mut r = self.to_owned();
         r.push(component)?;

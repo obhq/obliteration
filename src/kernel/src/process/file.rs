@@ -1,7 +1,7 @@
 use crate::errno::EBADF;
 use crate::fs::{VFile, Vnode};
 use crate::syscalls::SysErr;
-use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
+use gmtx::{Gutex, GutexGroup};
 use std::sync::Arc;
 
 /// An implementation of `filedesc` structure.
@@ -27,16 +27,8 @@ impl FileDesc {
         self.cwd.read().clone()
     }
 
-    pub fn set_cwd(&self, v: Arc<Vnode>) {
-        *self.cwd.write() = v;
-    }
-
     pub fn root(&self) -> Arc<Vnode> {
         self.root.read().clone()
-    }
-
-    pub fn root_mut(&self) -> GutexWriteGuard<'_, Arc<Vnode>> {
-        self.root.write()
     }
 
     /// See `finstall` on the PS4 for a reference.
