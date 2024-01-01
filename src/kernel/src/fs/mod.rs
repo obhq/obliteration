@@ -45,9 +45,9 @@ impl Fs {
         system: S,
         game: G,
         param: &Arc<Param>,
-        cred: &Ucred,
+        cred: &Arc<Ucred>,
         sys: &mut Syscalls,
-    ) -> Arc<Self>
+    ) -> Result<Arc<Self>, FsError>
     where
         S: Into<PathBuf>,
         G: Into<PathBuf>,
@@ -55,10 +55,10 @@ impl Fs {
         // Mount devfs as an initial root.
         let mut mounts = Mounts::new();
         let conf = Self::find_config("devfs").unwrap();
-        let mut init = Mount::new(None, conf, "/dev", cred.clone());
+        let mut init = Mount::new(None, conf, "/dev", cred);
 
         if let Err(e) = (init.fs().ops.mount)(&mut init, HashMap::new()) {
-            panic!("Failed to mount devfs: {e}.");
+            return Err(FsError::MountDevFailed(e));
         }
 
         // Get an initial root vnode.
@@ -84,11 +84,11 @@ impl Fs {
 
         let root = match fs.mount(opts, MountFlags::MNT_ROOTFS, cred) {
             Ok(v) => v,
-            Err(e) => panic!("Failed to mount root FS: {e}."),
+            Err(e) => return Err(FsError::MountRootFailed(e)),
         };
 
         // Remove devfs so the root FS become an actual root.
-        let om = {
+        let old = {
             let mut mounts = fs.mounts.write();
             let old = mounts.remove(0);
 
@@ -98,11 +98,11 @@ impl Fs {
         };
 
         // Disconnect devfs from the old root.
-        *(om.fs().ops.root)(&om).item_mut() = None;
+        *(old.fs().ops.root)(&old).item_mut() = None;
 
         // Update devfs.
-        let mut flags = om.flags_mut();
-        let mut parent = om.parent_mut();
+        let mut flags = old.flags_mut();
+        let mut parent = old.parent_mut();
 
         flags.remove(MountFlags::MNT_ROOTFS);
         *parent = None;
@@ -118,7 +118,7 @@ impl Fs {
         sys.register(54, &fs, Self::sys_ioctl);
         sys.register(56, &fs, Self::sys_revoke);
 
-        fs
+        Ok(fs)
     }
 
     pub fn app(&self) -> Arc<VPathBuf> {
@@ -313,7 +313,7 @@ impl Fs {
         &self,
         mut opts: HashMap<String, Box<dyn Any>>,
         mut flags: MountFlags,
-        cred: &Ucred,
+        cred: &Arc<Ucred>,
     ) -> Result<Arc<Vnode>, MountError> {
         // Process the options.
         let fs = opts.remove("fstype").unwrap().downcast::<String>().unwrap();
@@ -370,7 +370,7 @@ impl Fs {
 
             // TODO: Check if jailed.
             // TODO: Lookup parent vnode.
-            let mut mount = Mount::new(None, conf, *path, cred.clone());
+            let mut mount = Mount::new(None, conf, *path, cred);
 
             flags.remove(MountFlags::from_bits_retain(0xFFFFFFFF272F3F80));
             *mount.flags_mut() = flags;
@@ -408,7 +408,7 @@ impl Fs {
 
 bitflags! {
     /// Flags for [`Fs::sys_open()`].
-    struct OpenFlags: u32 {
+    pub struct OpenFlags: u32 {
         const O_WRONLY = 0x00000001;
         const O_RDWR = 0x00000002;
         const O_ACCMODE = Self::O_WRONLY.bits() | Self::O_RDWR.bits();
@@ -460,6 +460,16 @@ pub struct FsConfig {
 struct FsOps {
     mount: fn(&mut Mount, HashMap<String, Box<dyn Any>>) -> Result<(), Box<dyn Errno>>,
     root: fn(&Arc<Mount>) -> Arc<Vnode>,
+}
+
+/// Represents an error when FS was failed to initialized.
+#[derive(Debug, Error)]
+pub enum FsError {
+    #[error("cannot mount devfs")]
+    MountDevFailed(#[source] Box<dyn Errno>),
+
+    #[error("cannot mount rootfs")]
+    MountRootFailed(#[source] MountError),
 }
 
 /// Represents an error when FS mounting is failed.

@@ -12,7 +12,8 @@ use crate::regmgr::RegMgr;
 use crate::rtld::{LoadFlags, ModuleFlags, RuntimeLinker};
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
-use crate::ucred::{AuthInfo, Ucred};
+use crate::tty::TtyManager;
+use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Ucred};
 use clap::{Parser, ValueEnum};
 use llt::Thread;
 use macros::vpath;
@@ -43,6 +44,7 @@ mod rtld;
 mod signal;
 mod syscalls;
 mod sysctl;
+mod tty;
 mod ucred;
 
 fn main() -> ExitCode {
@@ -179,10 +181,32 @@ fn main() -> ExitCode {
 
     print(log);
 
+    // Setup kernel credential.
+    let cred = Arc::new(Ucred::new(
+        0,
+        0,
+        vec![0],
+        AuthInfo {
+            paid: AuthPaid::KERNEL,
+            caps: AuthCaps::new([0x4000000000000000, 0, 0, 0]),
+            attrs: AuthAttrs::new([0, 0, 0, 0]),
+            unk: [0; 64],
+        },
+    ));
+
     // Initialize foundations.
     let arnd = Arnd::new();
     let llvm = Llvm::new();
     let mut syscalls = Syscalls::new();
+
+    // Initializes filesystem.
+    let fs = match Fs::new(args.system, args.game, &param, &cred, &mut syscalls) {
+        Ok(v) => v,
+        Err(e) => {
+            error!(e, "Filesystem initialization failed");
+            return ExitCode::FAILURE;
+        }
+    };
 
     // Initialize memory management.
     let mm = match MemoryManager::new(&mut syscalls) {
@@ -216,13 +240,12 @@ fn main() -> ExitCode {
     match args.execution_engine.unwrap_or_default() {
         #[cfg(target_arch = "x86_64")]
         ExecutionEngine::Native => run(
-            args.system,
-            args.game,
             args.debug_dump,
             &param,
             auth,
             &arnd,
             syscalls,
+            &fs,
             &mm,
             crate::ee::native::NativeEngine::new(),
         ),
@@ -232,13 +255,12 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
         ExecutionEngine::Llvm => run(
-            args.system,
-            args.game,
             args.debug_dump,
             &param,
             auth,
             &arnd,
             syscalls,
+            &fs,
             &mm,
             crate::ee::llvm::LlvmEngine::new(&llvm),
         ),
@@ -246,24 +268,23 @@ fn main() -> ExitCode {
 }
 
 fn run<E: crate::ee::ExecutionEngine>(
-    root: PathBuf,
-    app: PathBuf,
     dump: Option<PathBuf>,
     param: &Arc<Param>,
     auth: AuthInfo,
     arnd: &Arc<Arnd>,
     mut syscalls: Syscalls,
+    fs: &Arc<Fs>,
     mm: &Arc<MemoryManager>,
     ee: Arc<E>,
 ) -> ExitCode {
-    // Initializes filesystem.
-    let fs = Fs::new(
-        root,
-        app,
-        param,
-        &Ucred::new(0, 0, vec![0], AuthInfo::SYS_CORE), // TODO: Check how PS4 construct this.
-        &mut syscalls,
-    );
+    // Initialize TTY system.
+    let tty = match TtyManager::new(fs) {
+        Ok(v) => v,
+        Err(e) => {
+            error!(e, "TTY initialization failed");
+            return ExitCode::FAILURE;
+        }
+    };
 
     // Initialize kernel components.
     RegMgr::new(&mut syscalls);

@@ -1,4 +1,4 @@
-use super::{unixify_access, Mount, VFile, VFileFlags};
+use super::{unixify_access, Mount, OpenFlags, VFile};
 use crate::errno::{Errno, ENOTDIR, EPERM};
 use crate::process::VThread;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
@@ -133,7 +133,7 @@ pub struct VopVector {
         fn(
             &Arc<Vnode>,
             Option<&VThread>,
-            VFileFlags,
+            OpenFlags,
             Option<&mut VFile>,
         ) -> Result<(), Box<dyn Errno>>,
     >, // vop_open

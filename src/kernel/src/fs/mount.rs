@@ -61,7 +61,7 @@ pub struct Mount {
     fs: &'static FsConfig,                    // mnt_vfc
     gen: i32,                                 // mnt_gen
     data: Option<Arc<dyn Any + Send + Sync>>, // mnt_data
-    cred: Ucred,                              // mnt_cred
+    cred: Arc<Ucred>,                         // mnt_cred
     parent: Gutex<Option<Arc<Vnode>>>,        // mnt_vnodecovered
     flags: Gutex<MountFlags>,                 // mnt_flag
     stats: FsStats,                           // mnt_stat
@@ -69,7 +69,12 @@ pub struct Mount {
 
 impl Mount {
     /// See `vfs_mount_alloc` on the PS4 for a reference.
-    pub fn new<P>(parent: Option<Arc<Vnode>>, fs: &'static FsConfig, path: P, cred: Ucred) -> Self
+    pub fn new<P>(
+        parent: Option<Arc<Vnode>>,
+        fs: &'static FsConfig,
+        path: P,
+        cred: &Arc<Ucred>,
+    ) -> Self
     where
         P: Into<String>,
     {
@@ -79,7 +84,7 @@ impl Mount {
             fs,
             gen: 1,
             data: None,
-            cred,
+            cred: cred.clone(),
             parent: gg.spawn(parent),
             flags: gg.spawn(MountFlags::empty()),
             stats: FsStats {

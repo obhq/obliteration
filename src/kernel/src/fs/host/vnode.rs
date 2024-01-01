@@ -1,5 +1,5 @@
 use crate::errno::Errno;
-use crate::fs::{VFile, VFileFlags, Vnode, VopVector, DEFAULT_VNODEOPS};
+use crate::fs::{OpenFlags, VFile, Vnode, VopVector, DEFAULT_VNODEOPS};
 use crate::process::VThread;
 use std::sync::Arc;
 
@@ -22,7 +22,7 @@ fn lookup(_: &Arc<Vnode>, _: Option<&VThread>, _: &str) -> Result<Arc<Vnode>, Bo
 fn open(
     _: &Arc<Vnode>,
     _: Option<&VThread>,
-    _: VFileFlags,
+    _: OpenFlags,
     _: Option<&mut VFile>,
 ) -> Result<(), Box<dyn Errno>> {
     todo!()

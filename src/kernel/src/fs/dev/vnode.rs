@@ -2,7 +2,7 @@ use super::dirent::Dirent;
 use super::{alloc_vnode, AllocVnodeError, Cdev};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
-    check_access, DevFs, VFile, VFileFlags, Vnode, VnodeType, VopVector, DEFAULT_VNODEOPS,
+    check_access, DevFs, OpenFlags, VFile, Vnode, VnodeType, VopVector, DEFAULT_VNODEOPS,
 };
 use crate::process::VThread;
 use std::num::NonZeroI32;
@@ -127,7 +127,7 @@ fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode
 fn open(
     vn: &Arc<Vnode>,
     td: Option<&VThread>,
-    mode: VFileFlags,
+    mode: OpenFlags,
     mut file: Option<&mut VFile>,
 ) -> Result<(), Box<dyn Errno>> {
     // Not sure why FreeBSD check if vnode is VBLK because all of vnode here always be VCHR.

@@ -58,13 +58,13 @@ impl AuthInfo {
 
 /// A wrapper type for `paid` field of [`AuthInfo`].
 ///
-/// PAID is an abbreviation of something like "Process Authorization ID", not the game has been
-/// paid!
+/// PAID is an abbreviation of "Program Authority ID", not the game has been paid!
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy)]
 pub struct AuthPaid(u64);
 
 impl AuthPaid {
+    pub const KERNEL: Self = Self(0);
     pub const SYS_CORE: Self = Self(0x3800000000000007);
 
     pub fn get(self) -> u64 {
@@ -78,6 +78,10 @@ impl AuthPaid {
 pub struct AuthCaps([u64; 4]);
 
 impl AuthCaps {
+    pub fn new(raw: [u64; 4]) -> Self {
+        Self(raw)
+    }
+
     pub fn is_nongame(&self) -> bool {
         (self.0[0] & 0x1000000000000000) != 0
     }
@@ -108,6 +112,10 @@ impl AuthCaps {
 pub struct AuthAttrs([u64; 4]);
 
 impl AuthAttrs {
+    pub fn new(raw: [u64; 4]) -> Self {
+        Self(raw)
+    }
+
     pub fn is_unk1(&self) -> bool {
         (self.0[0] & 0x800000) != 0
     }
