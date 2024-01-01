@@ -387,7 +387,8 @@ fn run<E: crate::ee::ExecutionEngine>(
     info!("Starting application.");
 
     // TODO: Check how this constructed.
-    let main = VThread::new(proc, Ucred::new(0, 0, vec![0], AuthInfo::SYS_CORE.clone()));
+    let cred = Arc::new(Ucred::new(0, 0, vec![0], AuthInfo::SYS_CORE.clone()));
+    let main = VThread::new(proc, &cred);
     let stack = mm.stack();
     let main = match unsafe { main.start(stack.start(), stack.len(), entry) } {
         Ok(v) => v,

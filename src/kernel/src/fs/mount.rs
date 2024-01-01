@@ -22,8 +22,13 @@ impl Mounts {
         m
     }
 
-    pub fn remove(&mut self, i: usize) -> Arc<Mount> {
+    pub fn remove_at(&mut self, i: usize) -> Arc<Mount> {
         self.0.remove(i)
+    }
+
+    pub fn remove(&mut self, m: &Arc<Mount>) {
+        let i = self.0.iter().position(|i| Arc::ptr_eq(i, m)).unwrap();
+        self.0.remove(i);
     }
 
     pub fn root(&self) -> &Arc<Mount> {
@@ -116,6 +121,10 @@ impl Mount {
 
     pub fn flags_mut(&self) -> GutexWriteGuard<MountFlags> {
         self.flags.write()
+    }
+
+    pub fn root(self: &Arc<Self>) -> Arc<Vnode> {
+        (self.fs.ops.root)(self)
     }
 }
 

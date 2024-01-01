@@ -7,7 +7,7 @@ pub use self::mount::*;
 pub use self::path::*;
 pub use self::perm::*;
 pub use self::vnode::*;
-use crate::errno::{Errno, EBADF, EINVAL, ENAMETOOLONG, ENODEV};
+use crate::errno::{Errno, EBADF, EBUSY, EINVAL, ENAMETOOLONG, ENODEV, ENOENT};
 use crate::info;
 use crate::process::VThread;
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::num::{NonZeroI32, TryFromIntError};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use thiserror::Error;
 
 mod dev;
@@ -38,6 +38,7 @@ mod vnode;
 pub struct Fs {
     mounts: Gutex<Mounts>,   // mountlist
     root: Gutex<Arc<Vnode>>, // rootvnode
+    kern: Arc<Ucred>,
 }
 
 impl Fs {
@@ -45,7 +46,7 @@ impl Fs {
         system: S,
         game: G,
         param: &Arc<Param>,
-        cred: &Arc<Ucred>,
+        kern: &Arc<Ucred>,
         sys: &mut Syscalls,
     ) -> Result<Arc<Self>, FsError>
     where
@@ -55,7 +56,7 @@ impl Fs {
         // Mount devfs as an initial root.
         let mut mounts = Mounts::new();
         let conf = Self::find_config("devfs").unwrap();
-        let mut init = Mount::new(None, conf, "/dev", cred);
+        let mut init = Mount::new(None, conf, "/dev", kern);
 
         if let Err(e) = (init.fs().ops.mount)(&mut init, HashMap::new()) {
             return Err(FsError::MountDevFailed(e));
@@ -68,7 +69,7 @@ impl Fs {
         let mut opts: HashMap<String, Box<dyn Any>> = HashMap::new();
 
         opts.insert("fstype".into(), Box::new(String::from("exfatfs")));
-        opts.insert("fspath".into(), Box::new(String::from("/")));
+        opts.insert("fspath".into(), Box::new(VPathBuf::new()));
         opts.insert("from".into(), Box::new(String::from("md0")));
         opts.insert("ro".into(), Box::new(true));
         opts.insert("ob:system".into(), Box::new(system.into()));
@@ -80,9 +81,10 @@ impl Fs {
         let fs = Arc::new(Self {
             mounts: gg.spawn(mounts),
             root: gg.spawn(root),
+            kern: kern.clone(),
         });
 
-        let root = match fs.mount(opts, MountFlags::MNT_ROOTFS, cred) {
+        let root = match fs.mount(opts, MountFlags::MNT_ROOTFS, None) {
             Ok(v) => v,
             Err(e) => return Err(FsError::MountRootFailed(e)),
         };
@@ -90,25 +92,16 @@ impl Fs {
         // Remove devfs so the root FS become an actual root.
         let old = {
             let mut mounts = fs.mounts.write();
-            let old = mounts.remove(0);
+            let old = mounts.remove_at(0);
 
             *fs.root.write() = root.clone();
 
             old
         };
 
-        // Disconnect devfs from the old root.
-        *(old.fs().ops.root)(&old).item_mut() = None;
-
-        // Update devfs.
-        let mut flags = old.flags_mut();
-        let mut parent = old.parent_mut();
-
-        flags.remove(MountFlags::MNT_ROOTFS);
-        *parent = None;
-
-        drop(parent);
-        drop(flags);
+        // Disconnect rootfs from the root of devfs.
+        *old.root().item_mut() = None;
+        *fs.mounts.read().root().parent_mut() = None;
 
         // TODO: Set devfs parent to /dev on the root FS.
         // Install syscall handlers.
@@ -137,12 +130,99 @@ impl Fs {
         todo!()
     }
 
+    /// This method will **not** follow the last component if it is a mount point or a link.
     pub fn lookup<P: AsRef<VPath>>(
         &self,
         path: P,
         td: Option<&VThread>,
     ) -> Result<Arc<Vnode>, LookupError> {
-        todo!()
+        // Why we don't follow how namei was implemented? The reason is because:
+        //
+        // 1. namei is too complicated.
+        // 2. namei rely on mutating the nameidata structure, which contribute to its complication.
+        //
+        // So we decided to implement our own lookup algorithm.
+        let path = path.as_ref();
+        let mut root = match td {
+            Some(td) => td.proc().files().root(),
+            None => self.root(),
+        };
+
+        // Get starting point.
+        let mut vn = if path.is_absolute() {
+            root.clone()
+        } else if let Some(td) = td {
+            td.proc().files().cwd()
+        } else {
+            root.clone()
+        };
+
+        // TODO: Handle link.
+        let mut item = root.item_mut();
+
+        match item
+            .as_ref()
+            .map(|i| i.downcast_ref::<Weak<Mount>>().unwrap())
+        {
+            Some(m) => match m.upgrade() {
+                Some(m) => {
+                    drop(item);
+                    root = m.root();
+                }
+                None => {
+                    *item = None;
+                    drop(item);
+                }
+            },
+            None => drop(item),
+        }
+
+        // Walk on path component.
+        for (i, com) in path.components().enumerate() {
+            // TODO: Handle link.
+            match vn.ty() {
+                VnodeType::Directory(_) => {
+                    let mut item = vn.item_mut();
+
+                    match item
+                        .as_ref()
+                        .map(|i| i.downcast_ref::<Weak<Mount>>().unwrap())
+                    {
+                        Some(m) => match m.upgrade() {
+                            Some(m) => {
+                                drop(item);
+                                vn = m.root();
+                            }
+                            None => {
+                                *item = None;
+                                drop(item);
+                            }
+                        },
+                        None => drop(item),
+                    }
+                }
+                VnodeType::Character => return Err(LookupError::NotFound),
+            }
+
+            // Prevent ".." on root.
+            if com == ".." && Arc::ptr_eq(&vn, &root) {
+                return Err(LookupError::NotFound);
+            }
+
+            // Lookup next component.
+            vn = match vn.lookup(td, com) {
+                Ok(v) => v,
+                Err(e) => {
+                    if e.errno() == ENOENT {
+                        return Err(LookupError::NotFound);
+                    } else {
+                        return Err(LookupError::LookupFailed(i, com.to_owned(), e));
+                    }
+                }
+            };
+        }
+
+        Ok(vn)
     }
 
     fn revoke<P: Into<VPathBuf>>(&self, _path: P) {
@@ -313,11 +393,15 @@ impl Fs {
         &self,
         mut opts: HashMap<String, Box<dyn Any>>,
         mut flags: MountFlags,
-        cred: &Arc<Ucred>,
+        td: Option<&VThread>,
     ) -> Result<Arc<Vnode>, MountError> {
         // Process the options.
         let fs = opts.remove("fstype").unwrap().downcast::<String>().unwrap();
-        let path = opts.remove("fspath").unwrap().downcast::<String>().unwrap();
+        let path = opts
+            .remove("fspath")
+            .unwrap()
+            .downcast::<VPathBuf>()
+            .unwrap();
 
         opts.retain(|k, v| {
             match k.as_str() {
@@ -368,9 +452,19 @@ impl Fs {
                 todo!("vfs_donmount with !MNT_ROOTFS");
             };
 
+            // Lookup parent vnode.
+            let vn = match self.lookup(path.as_ref(), td) {
+                Ok(v) => v,
+                Err(e) => return Err(MountError::LookupPathFailed(e)),
+            };
+
             // TODO: Check if jailed.
-            // TODO: Lookup parent vnode.
-            let mut mount = Mount::new(None, conf, *path, cred);
+            let mut mount = Mount::new(
+                Some(vn.clone()),
+                conf,
+                *path,
+                td.map_or_else(|| &self.kern, |t| t.cred()),
+            );
 
             flags.remove(MountFlags::from_bits_retain(0xFFFFFFFF272F3F80));
             *mount.flags_mut() = flags;
@@ -380,8 +474,21 @@ impl Fs {
                 return Err(MountError::MountFailed(e));
             }
 
+            // Set vnode to mounted. Beware of deadlock here.
+            let mount = self.mounts.write().push(mount);
+            let mut item = vn.item_mut();
+
+            if item.is_some() {
+                drop(item);
+                self.mounts.write().remove(&mount);
+                return Err(MountError::PathAlreadyMounted);
+            }
+
+            *item = Some(Arc::new(Arc::downgrade(&mount)));
+            drop(item);
+
             // TODO: Implement the remaining logics from the PS4.
-            Ok((mount.fs().ops.root)(&self.mounts.write().push(mount)))
+            Ok(mount.root())
         }
     }
 
@@ -484,8 +591,14 @@ pub enum MountError {
     #[error("fstype is not valid")]
     InvalidFs,
 
+    #[error("fspath is not found")]
+    LookupPathFailed(#[source] LookupError),
+
     #[error("cannot mount the filesystem")]
     MountFailed(#[source] Box<dyn Errno>),
+
+    #[error("fspath is already mounted")]
+    PathAlreadyMounted,
 }
 
 impl Errno for MountError {
@@ -493,7 +606,9 @@ impl Errno for MountError {
         match self {
             Self::FsTooLong | Self::PathTooLong => ENAMETOOLONG,
             Self::InvalidFs => ENODEV,
+            Self::LookupPathFailed(e) => e.errno(),
             Self::MountFailed(e) => e.errno(),
+            Self::PathAlreadyMounted => EBUSY,
         }
     }
 }
@@ -510,11 +625,20 @@ impl Errno for OpenError {
 
 /// Represents an error when [`Fs::lookup()`] was failed.
 #[derive(Debug, Error)]
-pub enum LookupError {}
+pub enum LookupError {
+    #[error("no such file or directory")]
+    NotFound,
+
+    #[error("cannot lookup '{1}' from component #{0}")]
+    LookupFailed(usize, String, #[source] Box<dyn Errno>),
+}
 
 impl Errno for LookupError {
     fn errno(&self) -> NonZeroI32 {
-        todo!()
+        match self {
+            Self::NotFound => ENOENT,
+            Self::LookupFailed(_, _, e) => e.errno(),
+        }
     }
 }
 

@@ -16,7 +16,7 @@ use tls::{Local, Tls};
 pub struct VThread {
     proc: Arc<VProc>,            // td_proc
     id: NonZeroI32,              // td_tid
-    cred: Ucred,                 // td_ucred
+    cred: Arc<Ucred>,            // td_ucred
     sigmask: Gutex<SignalSet>,   // td_sigmask
     pri_class: u16,              // td_pri_class
     base_user_pri: u16,          // td_base_user_pri
@@ -26,14 +26,14 @@ pub struct VThread {
 }
 
 impl VThread {
-    pub fn new(proc: Arc<VProc>, cred: Ucred) -> Self {
+    pub fn new(proc: Arc<VProc>, cred: &Arc<Ucred>) -> Self {
         // TODO: Check how the PS4 actually allocate the thread ID.
         let gg = GutexGroup::new();
 
         Self {
             proc,
             id: NonZeroI32::new(NEXT_ID.fetch_add(1, Ordering::Relaxed)).unwrap(),
-            cred,
+            cred: cred.clone(),
             sigmask: gg.spawn(SignalSet::default()),
             pri_class: 3, // TODO: Check the actual value on the PS4 when a thread is created.
             base_user_pri: 700, // TODO: Same here.
@@ -59,7 +59,7 @@ impl VThread {
         self.id
     }
 
-    pub fn cred(&self) -> &Ucred {
+    pub fn cred(&self) -> &Arc<Ucred> {
         &self.cred
     }
 
