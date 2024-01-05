@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 /// Encapsulate a raw file or directory on the host.
 pub struct HostFile {
     path: PathBuf,
-    raw: Raw,
+    raw: RawFile,
 }
 
 impl HostFile {
@@ -45,7 +45,7 @@ impl HostFile {
     }
 
     #[cfg(unix)]
-    fn raw_open(path: &Path) -> Result<Raw, Error> {
+    fn raw_open(path: &Path) -> Result<RawFile, Error> {
         use libc::{O_NOCTTY, O_RDONLY};
         use std::ffi::CString;
         use std::os::unix::ffi::OsStrExt;
@@ -61,7 +61,7 @@ impl HostFile {
     }
 
     #[cfg(windows)]
-    fn raw_open(path: &Path) -> Result<Raw, Error> {
+    fn raw_open(path: &Path) -> Result<RawFile, Error> {
         use std::os::windows::ffi::OsStrExt;
         use std::ptr::null;
         use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
@@ -116,7 +116,7 @@ impl Drop for HostFile {
 }
 
 #[cfg(unix)]
-type Raw = std::ffi::c_int;
+type RawFile = std::ffi::c_int;
 
 #[cfg(windows)]
-type Raw = windows_sys::Win32::Foundation::HANDLE;
+type RawFile = windows_sys::Win32::Foundation::HANDLE;
