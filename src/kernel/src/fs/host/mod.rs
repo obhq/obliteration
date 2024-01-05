@@ -1,12 +1,16 @@
+use self::file::HostFile;
 use self::vnode::VNODE_OPS;
-use super::{FsOps, Mount, MountFlags, VPath, VPathBuf, Vnode, VnodeType};
+use super::{FsOps, Mount, MountFlags, VPathBuf, Vnode, VnodeType};
 use crate::errno::Errno;
+use gmtx::{Gutex, GutexGroup};
 use param::Param;
 use std::any::Any;
 use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Weak};
+use thiserror::Error;
 
+mod file;
 mod vnode;
 
 /// Mount data for host FS.
@@ -14,83 +18,15 @@ mod vnode;
 /// We subtitute `exfatfs` with this because the root FS on the PS4 is exFAT. That mean we must
 /// report this as `exfatfs` otherwise it might be unexpected by the PS4.
 pub struct HostFs {
+    root: PathBuf,
     map: HashMap<VPathBuf, MountSource>,
     app: Arc<VPathBuf>,
+    actives: Gutex<HashMap<PathBuf, Weak<Vnode>>>,
 }
 
 impl HostFs {
     pub fn app(&self) -> &Arc<VPathBuf> {
         &self.app
-    }
-
-    fn resolve(&self, path: &VPath) -> Option<FsItem> {
-        let mut current = VPathBuf::new();
-        let root = match self.map.get(&current).unwrap() {
-            MountSource::Host(v) => v,
-            MountSource::Bind(_) => unreachable!(),
-        };
-
-        // Walk on virtual path components.
-        let mut directory = HostDir {
-            path: root.clone(),
-            vpath: VPathBuf::new(),
-        };
-
-        for component in path.components() {
-            current.push(component).unwrap();
-
-            // Check if a virtual path is a mount point.
-            if let Some(mount) = self.map.get(&current) {
-                let path = match mount {
-                    MountSource::Host(v) => v.to_owned(),
-                    MountSource::Bind(v) => match self.resolve(v)? {
-                        FsItem::Directory(d) => d.path,
-                        _ => unreachable!(),
-                    },
-                };
-
-                directory = HostDir {
-                    path,
-                    vpath: VPathBuf::new(),
-                };
-            } else {
-                // Build a real path.
-                let mut path = directory.path;
-
-                path.push(component);
-
-                // Get file metadata.
-                let meta = match std::fs::metadata(&path) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        if e.kind() == std::io::ErrorKind::NotFound {
-                            return None;
-                        } else {
-                            panic!("Cannot get the metadata of {}: {e}.", path.display());
-                        }
-                    }
-                };
-
-                // Check file type.
-                if meta.is_file() {
-                    return Some(FsItem::File(HostFile {
-                        path,
-                        vpath: current,
-                    }));
-                }
-
-                directory = HostDir {
-                    path,
-                    vpath: VPathBuf::new(),
-                };
-            }
-        }
-
-        // If we reached here that mean the the last component is a directory.
-        Some(FsItem::Directory(HostDir {
-            path: directory.path,
-            vpath: current,
-        }))
     }
 }
 
@@ -165,22 +101,59 @@ fn mount(mount: &mut Mount, mut opts: HashMap<String, Box<dyn Any>>) -> Result<(
     map.insert(app.join("app0").unwrap(), MountSource::Bind(pfs));
 
     // Set mount data.
+    let gg = GutexGroup::new();
+
     mount.set_data(Arc::new(HostFs {
+        root: *system,
         map,
         app: Arc::new(app),
+        actives: gg.spawn(HashMap::new()),
     }));
 
     Ok(())
 }
 
 fn root(mnt: &Arc<Mount>) -> Arc<Vnode> {
-    Arc::new(Vnode::new(
-        mnt,
-        VnodeType::Directory(true),
-        "exfatfs",
-        &VNODE_OPS,
-        Arc::new(VPathBuf::new()),
-    ))
+    get_vnode(mnt, None).unwrap()
+}
+
+fn get_vnode(mnt: &Arc<Mount>, path: Option<&Path>) -> Result<Arc<Vnode>, GetVnodeError> {
+    // Get target path.
+    let fs = mnt.data().unwrap().downcast_ref::<HostFs>().unwrap();
+    let path = match path {
+        Some(v) => v,
+        None => &fs.root,
+    };
+
+    // Check if active.
+    let mut actives = fs.actives.write();
+
+    if let Some(v) = actives.get(path).and_then(|v| v.upgrade()) {
+        return Ok(v);
+    }
+
+    // Open the file. Beware of deadlock here.
+    let file = match HostFile::open(path) {
+        Ok(v) => v,
+        Err(e) => return Err(GetVnodeError::OpenFileFailed(e)),
+    };
+
+    // Get vnode type.
+    let ty = match file.is_directory() {
+        Ok(v) => match v {
+            true => VnodeType::Directory(path == fs.root),
+            false => todo!(),
+        },
+        Err(e) => return Err(GetVnodeError::GetFileTypeFailed(e)),
+    };
+
+    // Allocate a new vnode.
+    let vn = Arc::new(Vnode::new(mnt, ty, "exfatfs", &VNODE_OPS, Arc::new(file)));
+
+    actives.insert(path.to_owned(), Arc::downgrade(&vn));
+    drop(actives);
+
+    Ok(vn)
 }
 
 /// Source of mount point.
@@ -190,19 +163,14 @@ enum MountSource {
     Bind(VPathBuf),
 }
 
-enum FsItem {
-    Directory(HostDir),
-    File(HostFile),
-}
+/// Represents an error when [`get_vnode()`] was failed.
+#[derive(Debug, Error)]
+enum GetVnodeError {
+    #[error("cannot open the specified file")]
+    OpenFileFailed(#[source] std::io::Error),
 
-pub struct HostDir {
-    path: PathBuf,
-    vpath: VPathBuf,
-}
-
-pub struct HostFile {
-    path: PathBuf,
-    vpath: VPathBuf,
+    #[error("cannot determine file type")]
+    GetFileTypeFailed(#[source] std::io::Error),
 }
 
 pub(super) static HOST_OPS: FsOps = FsOps { mount, root };
