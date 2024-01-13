@@ -39,7 +39,7 @@ mod vnode;
 pub struct Fs {
     mounts: Gutex<Mounts>,   // mountlist
     root: Gutex<Arc<Vnode>>, // rootvnode
-    kern: Arc<Ucred>,
+    kern_cred: Arc<Ucred>,
 }
 
 impl Fs {
@@ -47,13 +47,13 @@ impl Fs {
         system: impl Into<PathBuf>,
         game: impl Into<PathBuf>,
         param: &Arc<Param>,
-        kern: &Arc<Ucred>,
+        kern_cred: &Arc<Ucred>,
         sys: &mut Syscalls,
     ) -> Result<Arc<Self>, FsError> {
         // Mount devfs as an initial root.
         let mut mounts = Mounts::new();
         let conf = Self::find_config("devfs").unwrap();
-        let mut init = Mount::new(None, conf, "/dev", kern);
+        let mut init = Mount::new(None, conf, "/dev", kern_cred);
 
         if let Err(e) = (init.fs().ops.mount)(&mut init, MountOpts::new()) {
             return Err(FsError::MountDevFailed(e));
@@ -78,7 +78,7 @@ impl Fs {
         let fs = Arc::new(Self {
             mounts: gg.spawn(mounts),
             root: gg.spawn(root),
-            kern: kern.clone(),
+            kern_cred: kern_cred.clone(),
         });
 
         let root = match fs.mount(opts, MountFlags::MNT_ROOTFS, None) {
@@ -486,7 +486,7 @@ impl Fs {
                 Some(vn.clone()),
                 conf,
                 path,
-                td.map_or_else(|| &self.kern, |t| t.cred()),
+                td.map_or_else(|| &self.kern_cred, |t| t.cred()),
             );
 
             flags.remove(MountFlags::from_bits_retain(0xFFFFFFFF272F3F80));
