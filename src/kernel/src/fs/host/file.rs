@@ -49,6 +49,32 @@ impl HostFile {
     }
 
     #[cfg(unix)]
+    pub fn len(&self) -> Result<u64, Error> {
+        use libc::fstat;
+
+        let mut stat = unsafe { zeroed() };
+
+        if unsafe { fstat(self.raw, &mut stat) } < 0 {
+            return Err(Error::last_os_error());
+        }
+
+        Ok(stat.st_size.try_into().unwrap())
+    }
+
+    #[cfg(windows)]
+    pub fn len(&self) -> Result<u64, Error> {
+        use windows_sys::Win32::Storage::FileSystem::GetFileSizeEx;
+
+        let mut size = 0;
+
+        if unsafe { GetFileSizeEx(self.raw, &mut size) } == 0 {
+            return Err(Error::last_os_error());
+        }
+
+        Ok(size.try_into().unwrap())
+    }
+
+    #[cfg(unix)]
     fn raw_open(path: &Path) -> Result<RawFile, Error> {
         use libc::{O_NOCTTY, O_RDONLY};
         use std::ffi::CString;
