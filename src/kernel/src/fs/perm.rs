@@ -1,22 +1,25 @@
 use crate::errno::{Errno, EACCES, EPERM};
 use crate::ucred::{Privilege, Ucred};
+use bitflags::bitflags;
 use std::num::NonZeroI32;
 use thiserror::Error;
 
 /// You can map [`None`] to `EPERM` to match with the PS4 behavior.
 ///
 /// See `vfs_unixify_accmode` on the PS4 for a reference.
-pub fn unixify_access(mut access: u32) -> Option<u32> {
+pub fn unixify_access(access: Access) -> Option<Access> {
     // TODO: Refactor this for readability.
+    let mut access = access.bits();
+
     if (access & 0100000) != 0 {
-        return Some(0);
+        return Some(Access::empty());
     } else if (access & 011000000) != 0 {
         return None;
     } else if (access & 0144010000) != 0 {
         access = (access & 0xfe6fefff) | 010000;
     }
 
-    Some(access & 0xfdb7ffff)
+    Some(Access::from_bits_retain(access & 0xfdb7ffff))
 }
 
 /// Returns [`Ok`] if access was granted. The boolean value indicated whether privilege was used to
@@ -28,10 +31,11 @@ pub fn check_access(
     file_uid: i32,
     file_gid: i32,
     file_mode: u32,
-    access: u32,
+    access: Access,
     is_dir: bool,
 ) -> Result<bool, AccessError> {
     // TODO: Refactor this for readability.
+    let access = access.bits();
     let dac_granted = if cred.effective_uid() == file_uid {
         ((file_mode & 0x140) | 0x1000) + if file_mode as i8 > -1 { 0 } else { 0x4080 }
     } else {
@@ -101,6 +105,13 @@ pub fn check_access(
         Err(AccessError::NotPermitted)
     } else {
         Err(AccessError::PermissionDenied)
+    }
+}
+
+bitflags! {
+    /// An implementation of `accmode_t`.
+    pub struct Access: u32 {
+        const EXEC = 000000000100; // VEXEC
     }
 }
 

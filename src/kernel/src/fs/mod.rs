@@ -14,6 +14,7 @@ use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{Privilege, Ucred};
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup};
+use macros::vpath;
 use param::Param;
 use std::any::Any;
 use std::collections::HashMap;
@@ -89,11 +90,12 @@ impl Fs {
             Err(e) => return Err(FsError::MountRootFailed(e)),
         };
 
-        // Remove devfs so the root FS become an actual root.
+        // Swap devfs with rootfs so rootfs become an actual root.
         let old = {
             let mut mounts = fs.mounts.write();
-            let old = mounts.remove_at(0);
+            let old = mounts.root().clone();
 
+            mounts.swap(0, 1);
             *fs.root.write() = root.clone();
 
             old
@@ -103,7 +105,25 @@ impl Fs {
         *old.root().item_mut() = None;
         *fs.mounts.read().root().parent_mut() = None;
 
-        // TODO: Set devfs parent to /dev on the root FS.
+        // Set devfs parent to /dev on the root FS.
+        let dev = fs
+            .lookup(vpath!("/dev"), None)
+            .map_err(|e| FsError::LookupDevFailed(e))?;
+
+        assert!(dev.is_directory());
+
+        {
+            let mut p = old.parent_mut();
+            assert!(p.is_none());
+            *p = Some(dev.clone());
+        }
+
+        {
+            let mut i = dev.item_mut();
+            assert!(i.is_none());
+            *i = Some(Arc::new(Arc::downgrade(&old)));
+        }
+
         // Install syscall handlers.
         sys.register(4, &fs, Self::sys_write);
         sys.register(5, &fs, Self::sys_open);
@@ -577,6 +597,9 @@ pub enum FsError {
 
     #[error("cannot mount rootfs")]
     MountRootFailed(#[source] MountError),
+
+    #[error("cannot lookup /dev")]
+    LookupDevFailed(#[source] LookupError),
 }
 
 /// Represents an error when FS mounting is failed.
