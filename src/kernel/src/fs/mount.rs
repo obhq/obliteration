@@ -1,7 +1,7 @@
 use super::{FsConfig, Vnode};
 use crate::ucred::Ucred;
 use bitflags::bitflags;
-use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
+use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use std::any::Any;
 use std::sync::{Arc, Mutex};
 
@@ -117,6 +117,10 @@ impl Mount {
 
     pub fn parent_mut(&self) -> GutexWriteGuard<Option<Arc<Vnode>>> {
         self.parent.write()
+    }
+
+    pub fn flags(&self) -> GutexReadGuard<MountFlags> {
+        self.flags.read()
     }
 
     pub fn flags_mut(&self) -> GutexWriteGuard<MountFlags> {
