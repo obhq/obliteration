@@ -74,7 +74,6 @@ pub struct Mount {
     parent: Gutex<Option<Arc<Vnode>>>,        // mnt_vnodecovered
     flags: Gutex<MountFlags>,                 // mnt_flag
     stats: FsStats,                           // mnt_stat
-    fs: Option<Arc<Fs>>,
 }
 
 impl Mount {
@@ -84,7 +83,6 @@ impl Mount {
         fsconf: &'static FsConfig,
         path: impl Into<String>,
         cred: &Arc<Ucred>,
-        fs: Option<&Arc<Fs>>,
     ) -> Self {
         let gg = GutexGroup::new();
         let owner = cred.effective_uid();
@@ -101,13 +99,12 @@ impl Mount {
                 owner,
                 path: path.into(),
             },
-            fs: fs.cloned(),
         };
 
         mount
     }
 
-    pub fn fsconf(&self) -> &'static FsConfig {
+    pub fn fs(&self) -> &'static FsConfig {
         self.fsconf
     }
 
@@ -137,10 +134,6 @@ impl Mount {
 
     pub fn root(self: &Arc<Self>) -> Arc<Vnode> {
         (self.fsconf.ops.root)(self)
-    }
-
-    pub fn fs(&self) -> Option<&Arc<Fs>> {
-        self.fs.as_ref()
     }
 }
 

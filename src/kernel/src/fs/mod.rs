@@ -53,14 +53,14 @@ impl Fs {
         // Mount devfs as an initial root.
         let mut mounts = Mounts::new();
         let conf = Self::find_config("devfs").unwrap();
-        let mut init = Mount::new(None, conf, "/dev", kern, None);
+        let mut init = Mount::new(None, conf, "/dev", kern);
 
-        if let Err(e) = (init.fsconf().ops.mount)(&mut init, MountOpts::new()) {
+        if let Err(e) = (init.fs().ops.mount)(&mut init, MountOpts::new()) {
             return Err(FsError::MountDevFailed(e));
         }
 
         // Get an initial root vnode.
-        let root = (init.fsconf().ops.root)(&mounts.push(init));
+        let root = (init.fs().ops.root)(&mounts.push(init));
 
         // Setup mount options for root FS.
         let mut opts = MountOpts::new();
@@ -487,14 +487,13 @@ impl Fs {
                 conf,
                 path,
                 td.map_or_else(|| &self.kern, |t| t.cred()),
-                Some(self),
             );
 
             flags.remove(MountFlags::from_bits_retain(0xFFFFFFFF272F3F80));
             *mount.flags_mut() = flags;
 
             // TODO: Implement budgetid.
-            if let Err(e) = (mount.fsconf().ops.mount)(&mut mount, opts) {
+            if let Err(e) = (mount.fs().ops.mount)(&mut mount, opts) {
                 return Err(MountError::MountFailed(e));
             }
 
