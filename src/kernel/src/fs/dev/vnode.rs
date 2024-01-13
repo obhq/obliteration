@@ -2,7 +2,8 @@ use super::dirent::Dirent;
 use super::{alloc_vnode, AllocVnodeError, Cdev};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
-    check_access, Access, DevFs, OpenFlags, VFile, Vnode, VnodeType, VopVector, DEFAULT_VNODEOPS,
+    check_access, Access, DevFs, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType, VopVector,
+    DEFAULT_VNODEOPS,
 };
 use crate::process::VThread;
 use std::num::NonZeroI32;
@@ -13,6 +14,7 @@ pub static VNODE_OPS: VopVector = VopVector {
     default: Some(&DEFAULT_VNODEOPS),
     access: Some(access),
     accessx: None,
+    getattr: Some(getattr),
     lookup: Some(lookup),
     open: None,
 };
@@ -21,6 +23,7 @@ pub static CHARACTER_OPS: VopVector = VopVector {
     default: Some(&DEFAULT_VNODEOPS),
     access: Some(access),
     accessx: None,
+    getattr: Some(getattr),
     lookup: None,
     open: Some(open),
 };
@@ -63,6 +66,38 @@ fn access(vn: &Arc<Vnode>, td: Option<&VThread>, access: Access) -> Result<(), B
 
     // TODO: Check if file is a controlling terminal.
     return Err(Box::new(err));
+}
+
+fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
+    // Populate devices.
+    let fs = vn
+        .fs()
+        .data()
+        .and_then(|v| v.downcast_ref::<DevFs>())
+        .unwrap();
+
+    fs.populate();
+
+    // Get dirent.
+    let mut dirent = vn.data().clone().downcast::<Dirent>().unwrap();
+
+    if vn.is_directory() {
+        if let Some(v) = dirent.dir() {
+            // Is it possible the parent will be gone here?
+            dirent = v.upgrade().unwrap();
+        }
+    }
+
+    // Atomic get attributes.
+    let uid = dirent.uid();
+    let gid = dirent.gid();
+    let mode = dirent.mode();
+    let size = match vn.ty() {
+        VnodeType::Directory(_) => 512,
+        VnodeType::Character => 0,
+    };
+
+    Ok(VnodeAttrs::new(*uid, *gid, *mode, size))
 }
 
 fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode>, Box<dyn Errno>> {

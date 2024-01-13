@@ -21,7 +21,6 @@ mod vnode;
 /// report this as `exfatfs` otherwise it might be unexpected by the PS4.
 pub struct HostFs {
     root: PathBuf,
-    map: HashMap<VPathBuf, MountSource>,
     app: Arc<VPathBuf>,
     actives: Gutex<HashMap<PathBuf, Weak<Vnode>>>,
 }
@@ -104,7 +103,6 @@ fn mount(mount: &mut Mount, mut opts: MountOpts) -> Result<(), Box<dyn Errno>> {
 
     mount.set_data(Arc::new(HostFs {
         root: system,
-        map,
         app: Arc::new(app),
         actives: gg.spawn(HashMap::new()),
     }));

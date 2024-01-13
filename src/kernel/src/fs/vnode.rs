@@ -1,5 +1,5 @@
 use super::{unixify_access, Access, Mount, OpenFlags, VFile};
-use crate::errno::{Errno, ENOTDIR, EPERM};
+use crate::errno::{Errno, ENOTDIR, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
@@ -109,12 +109,7 @@ impl Vnode {
         td: Option<&VThread>,
         access: Access,
     ) -> Result<(), Box<dyn Errno>> {
-        let op = self.get_op(|v| v.access).unwrap();
-
-        match op.access {
-            Some(f) => f(self, td, access),
-            None => todo!(),
-        }
+        self.get_op(|v| v.access)(self, td, access)
     }
 
     pub fn accessx(
@@ -122,12 +117,7 @@ impl Vnode {
         td: Option<&VThread>,
         access: Access,
     ) -> Result<(), Box<dyn Errno>> {
-        let op = self.get_op(|v| v.accessx).unwrap();
-
-        match op.accessx {
-            Some(f) => f(self, td, access),
-            None => todo!(),
-        }
+        self.get_op(|v| v.accessx)(self, td, access)
     }
 
     pub fn lookup(
@@ -135,27 +125,24 @@ impl Vnode {
         td: Option<&VThread>,
         name: &str,
     ) -> Result<Arc<Self>, Box<dyn Errno>> {
-        let op = self.get_op(|v| v.lookup).unwrap();
-
-        match op.lookup {
-            Some(f) => f(self, td, name),
-            None => todo!(),
-        }
+        self.get_op(|v| v.lookup)(self, td, name)
     }
 
-    fn get_op<F>(&self, f: fn(&'static VopVector) -> Option<F>) -> Option<&'static VopVector> {
+    fn get_op<F>(&self, f: fn(&'static VopVector) -> Option<F>) -> F {
         let mut vec = Some(self.op);
 
         while let Some(v) = vec {
-            // TODO: Check if the field at 0x08 is not null too.
-            if f(v).is_some() {
-                return Some(v);
+            if let Some(f) = f(v) {
+                return f;
             }
 
             vec = v.default;
         }
 
-        None
+        panic!(
+            "Invalid vop_vector for vnode from '{}' filesystem.",
+            self.tag
+        );
     }
 }
 
@@ -173,26 +160,51 @@ pub enum VnodeType {
 }
 
 /// An implementation of `vop_vector` structure.
+///
+/// We don't support `vop_bypass` because it required the return type for all operations to be the
+/// same.
 #[derive(Debug)]
 pub struct VopVector {
     pub default: Option<&'static Self>, // vop_default
-    pub access: Option<fn(&Arc<Vnode>, Option<&VThread>, Access) -> Result<(), Box<dyn Errno>>>, // vop_access
-    pub accessx: Option<fn(&Arc<Vnode>, Option<&VThread>, Access) -> Result<(), Box<dyn Errno>>>, // vop_accessx
-    pub lookup:
-        Option<fn(&Arc<Vnode>, Option<&VThread>, &str) -> Result<Arc<Vnode>, Box<dyn Errno>>>, // vop_lookup
-    pub open: Option<
-        fn(
-            &Arc<Vnode>,
-            Option<&VThread>,
-            OpenFlags,
-            Option<&mut VFile>,
-        ) -> Result<(), Box<dyn Errno>>,
-    >, // vop_open
+    pub access: Option<VopAccess>,      // vop_access
+    pub accessx: Option<VopAccessX>,    // vop_accessx
+    pub getattr: Option<VopGetAttr>,    // vop_getattr
+    pub lookup: Option<VopLookup>,      // vop_lookup
+    pub open: Option<VopOpen>,          // vop_open
+}
+
+pub type VopAccess = fn(&Arc<Vnode>, Option<&VThread>, Access) -> Result<(), Box<dyn Errno>>;
+pub type VopAccessX = fn(&Arc<Vnode>, Option<&VThread>, Access) -> Result<(), Box<dyn Errno>>;
+pub type VopGetAttr = fn(&Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>>;
+pub type VopLookup = fn(&Arc<Vnode>, Option<&VThread>, &str) -> Result<Arc<Vnode>, Box<dyn Errno>>;
+pub type VopOpen =
+    fn(&Arc<Vnode>, Option<&VThread>, OpenFlags, Option<&mut VFile>) -> Result<(), Box<dyn Errno>>;
+
+/// An implementation of `vattr` struct.
+pub struct VnodeAttrs {
+    uid: i32,  // va_uid
+    gid: i32,  // va_gid
+    mode: u16, // va_mode
+    size: u64, // va_size
+}
+
+impl VnodeAttrs {
+    pub fn new(uid: i32, gid: i32, mode: u16, size: u64) -> Self {
+        Self {
+            uid,
+            gid,
+            mode,
+            size,
+        }
+    }
 }
 
 /// Represents an error when [`DEFAULT_VNODEOPS`] is failed.
 #[derive(Debug, Error)]
 enum DefaultError {
+    #[error("operation not supported")]
+    NotSupported,
+
     #[error("operation not permitted")]
     NotPermitted,
 
@@ -203,6 +215,7 @@ enum DefaultError {
 impl Errno for DefaultError {
     fn errno(&self) -> NonZeroI32 {
         match self {
+            Self::NotSupported => EOPNOTSUPP,
             Self::NotPermitted => EPERM,
             Self::NotDirectory => ENOTDIR,
         }
@@ -214,6 +227,7 @@ pub static DEFAULT_VNODEOPS: VopVector = VopVector {
     default: None,
     access: Some(|vn, td, access| vn.accessx(td, access)),
     accessx: Some(accessx),
+    getattr: Some(|_| Err(Box::new(DefaultError::NotSupported))), // Inline vop_bypass.
     lookup: Some(|_, _, _| Err(Box::new(DefaultError::NotDirectory))),
     open: Some(|_, _, _, _| Ok(())),
 };
