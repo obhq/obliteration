@@ -1,7 +1,9 @@
 use super::file::HostFile;
 use super::{get_vnode, GetVnodeError};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR};
-use crate::fs::{Access, OpenFlags, VFile, Vnode, VnodeType, VopVector, DEFAULT_VNODEOPS};
+use crate::fs::{
+    Access, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType, VopVector, DEFAULT_VNODEOPS,
+};
 use crate::process::VThread;
 use std::borrow::Cow;
 use std::num::NonZeroI32;
@@ -12,6 +14,7 @@ pub static VNODE_OPS: VopVector = VopVector {
     default: Some(&DEFAULT_VNODEOPS),
     access: Some(access),
     accessx: None,
+    getattr: Some(getattr),
     lookup: Some(lookup),
     open: Some(open),
 };
@@ -19,6 +22,23 @@ pub static VNODE_OPS: VopVector = VopVector {
 fn access(_: &Arc<Vnode>, _: Option<&VThread>, _: Access) -> Result<(), Box<dyn Errno>> {
     // TODO: Check how the PS4 check file permission for exfatfs.
     Ok(())
+}
+
+fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
+    // Get file size.
+    let host = vn.data().downcast_ref::<HostFile>().unwrap();
+    let size = match host.len() {
+        Ok(v) => v,
+        Err(e) => return Err(Box::new(GetAttrError::GetSizeFailed(e))),
+    };
+
+    // TODO: Check how the PS4 assign file permissions for exfatfs.
+    let mode = match vn.ty() {
+        VnodeType::Directory(_) => 0555,
+        VnodeType::Character => unreachable!(), // The character device should only be in the devfs.
+    };
+
+    Ok(VnodeAttrs::new(0, 0, mode, size))
 }
 
 fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode>, Box<dyn Errno>> {
@@ -72,7 +92,22 @@ fn open(
     todo!()
 }
 
-/// Represents an error when [`lookup()`] is failed.
+/// Represents an error when [`getattr()`] was failed.
+#[derive(Debug, Error)]
+enum GetAttrError {
+    #[error("cannot get file size")]
+    GetSizeFailed(#[source] std::io::Error),
+}
+
+impl Errno for GetAttrError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::GetSizeFailed(_) => EIO,
+        }
+    }
+}
+
+/// Represents an error when [`lookup()`] was failed.
 #[derive(Debug, Error)]
 enum LookupError {
     #[error("current file is not a directory")]
