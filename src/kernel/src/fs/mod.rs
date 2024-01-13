@@ -31,6 +31,7 @@ mod mount;
 mod null;
 mod path;
 mod perm;
+mod tmp;
 mod vnode;
 
 /// A virtual filesystem for emulating a PS4 filesystem.
@@ -705,14 +706,9 @@ static DEVFS: FsConfig = FsConfig {
 
 static TMPFS: FsConfig = FsConfig {
     name: "tmpfs",
-    ops: &TMPFS_OPS,
+    ops: &self::tmp::TMPFS_OPS,
     ty: 0x87,
     next: Some(&UNIONFS),
-};
-
-static TMPFS_OPS: FsOps = FsOps {
-    mount: |_, _| todo!("mount for tmpfs"),
-    root: |_| todo!("root for tmpfs"),
 };
 
 static UNIONFS: FsConfig = FsConfig {
