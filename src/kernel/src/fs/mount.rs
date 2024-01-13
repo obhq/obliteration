@@ -299,6 +299,7 @@ impl TryFrom<MountOpt> for Arc<Param> {
 
 /// An implementation of `statfs` structure.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct FsStats {
     ty: u32,      // f_type
     id: [u32; 2], // f_fsid
