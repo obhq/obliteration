@@ -114,6 +114,12 @@ impl Error for Box<dyn Errno> {
     }
 }
 
+impl<T: Errno + 'static> From<T> for Box<dyn Errno> {
+    fn from(v: T) -> Self {
+        Box::new(v)
+    }
+}
+
 /// Get human readable text.
 pub fn strerror(num: NonZeroI32) -> &'static str {
     match num {

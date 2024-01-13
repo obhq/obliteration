@@ -16,8 +16,6 @@ use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup};
 use macros::vpath;
 use param::Param;
-use std::any::Any;
-use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::num::{NonZeroI32, TryFromIntError};
 use std::path::PathBuf;
@@ -30,6 +28,7 @@ mod file;
 mod host;
 mod ioctl;
 mod mount;
+mod null;
 mod path;
 mod perm;
 mod vnode;
@@ -43,39 +42,35 @@ pub struct Fs {
 }
 
 impl Fs {
-    pub fn new<S, G>(
-        system: S,
-        game: G,
+    pub fn new(
+        system: impl Into<PathBuf>,
+        game: impl Into<PathBuf>,
         param: &Arc<Param>,
         kern: &Arc<Ucred>,
         sys: &mut Syscalls,
-    ) -> Result<Arc<Self>, FsError>
-    where
-        S: Into<PathBuf>,
-        G: Into<PathBuf>,
-    {
+    ) -> Result<Arc<Self>, FsError> {
         // Mount devfs as an initial root.
         let mut mounts = Mounts::new();
         let conf = Self::find_config("devfs").unwrap();
-        let mut init = Mount::new(None, conf, "/dev", kern);
+        let mut init = Mount::new(None, conf, "/dev", kern, None);
 
-        if let Err(e) = (init.fs().ops.mount)(&mut init, HashMap::new()) {
+        if let Err(e) = (init.fsconf().ops.mount)(&mut init, MountOpts::new()) {
             return Err(FsError::MountDevFailed(e));
         }
 
         // Get an initial root vnode.
-        let root = (init.fs().ops.root)(&mounts.push(init));
+        let root = (init.fsconf().ops.root)(&mounts.push(init));
 
         // Setup mount options for root FS.
-        let mut opts: HashMap<String, Box<dyn Any>> = HashMap::new();
+        let mut opts = MountOpts::new();
 
-        opts.insert("fstype".into(), Box::new(String::from("exfatfs")));
-        opts.insert("fspath".into(), Box::new(VPathBuf::new()));
-        opts.insert("from".into(), Box::new(String::from("md0")));
-        opts.insert("ro".into(), Box::new(true));
-        opts.insert("ob:system".into(), Box::new(system.into()));
-        opts.insert("ob:game".into(), Box::new(game.into()));
-        opts.insert("ob:param".into(), Box::new(param.clone()));
+        opts.insert("fstype", "exfatfs");
+        opts.insert("fspath", VPathBuf::new());
+        opts.insert("from", "md0");
+        opts.insert("ro", true);
+        opts.insert("ob:system", system.into());
+        opts.insert("ob:game", game.into());
+        opts.insert("ob:param", param.clone());
 
         // Mount root FS.
         let gg = GutexGroup::new();
@@ -146,14 +141,18 @@ impl Fs {
         self.root.read().clone()
     }
 
-    pub fn open<P: AsRef<VPath>>(&self, path: P, td: Option<&VThread>) -> Result<VFile, OpenError> {
-        todo!()
+    pub fn open(
+        &self,
+        _path: impl AsRef<VPath>,
+        _td: Option<&VThread>,
+    ) -> Result<VFile, OpenError> {
+        todo!();
     }
 
     /// This method will **not** follow the last component if it is a mount point or a link.
-    pub fn lookup<P: AsRef<VPath>>(
+    pub fn lookup(
         &self,
-        path: P,
+        path: impl AsRef<VPath>,
         td: Option<&VThread>,
     ) -> Result<Arc<Vnode>, LookupError> {
         // Why we don't follow how namei was implemented? The reason is because:
@@ -236,7 +235,11 @@ impl Fs {
                     if e.errno() == ENOENT {
                         return Err(LookupError::NotFound);
                     } else {
-                        return Err(LookupError::LookupFailed(i, com.to_owned(), e));
+                        return Err(LookupError::LookupFailed(
+                            i,
+                            com.to_owned().into_boxed_str(),
+                            e,
+                        ));
                     }
                 }
             };
@@ -410,21 +413,17 @@ impl Fs {
 
     /// See `vfs_donmount` on the PS4 for a reference.
     fn mount(
-        &self,
-        mut opts: HashMap<String, Box<dyn Any>>,
+        self: &Arc<Self>,
+        mut opts: MountOpts,
         mut flags: MountFlags,
         td: Option<&VThread>,
     ) -> Result<Arc<Vnode>, MountError> {
         // Process the options.
-        let fs = opts.remove("fstype").unwrap().downcast::<String>().unwrap();
-        let path = opts
-            .remove("fspath")
-            .unwrap()
-            .downcast::<VPathBuf>()
-            .unwrap();
+        let fs: Box<str> = opts.remove("fstype").unwrap().try_into().unwrap();
+        let path: VPathBuf = opts.remove("fspath").unwrap().try_into().unwrap();
 
         opts.retain(|k, v| {
-            match k.as_str() {
+            match *k {
                 "async" => todo!(),
                 "atime" => todo!(),
                 "clusterr" => todo!(),
@@ -442,7 +441,7 @@ impl Fs {
                 "nosymfollow" => todo!(),
                 "rdonly" => todo!(),
                 "reload" => todo!(),
-                "ro" => flags.set(MountFlags::MNT_RDONLY, *v.downcast_ref::<bool>().unwrap()),
+                "ro" => flags.set(MountFlags::MNT_RDONLY, v.as_bool().unwrap()),
                 "rw" => todo!(),
                 "suid" => todo!(),
                 "suiddir" => todo!(),
@@ -467,7 +466,7 @@ impl Fs {
             todo!("vfs_donmount with MNT_UPDATE");
         } else {
             let conf = if flags.intersects(MountFlags::MNT_ROOTFS) {
-                Self::find_config(fs.as_str()).ok_or(MountError::InvalidFs)?
+                Self::find_config(fs).ok_or(MountError::InvalidFs)?
             } else {
                 todo!("vfs_donmount with !MNT_ROOTFS");
             };
@@ -482,15 +481,16 @@ impl Fs {
             let mut mount = Mount::new(
                 Some(vn.clone()),
                 conf,
-                *path,
+                path,
                 td.map_or_else(|| &self.kern, |t| t.cred()),
+                Some(self),
             );
 
             flags.remove(MountFlags::from_bits_retain(0xFFFFFFFF272F3F80));
             *mount.flags_mut() = flags;
 
             // TODO: Implement budgetid.
-            if let Err(e) = (mount.fs().ops.mount)(&mut mount, opts) {
+            if let Err(e) = (mount.fsconf().ops.mount)(&mut mount, opts) {
                 return Err(MountError::MountFailed(e));
             }
 
@@ -585,7 +585,7 @@ pub struct FsConfig {
 /// An implementation of `vfsops` structure.
 #[derive(Debug)]
 struct FsOps {
-    mount: fn(&mut Mount, HashMap<String, Box<dyn Any>>) -> Result<(), Box<dyn Errno>>,
+    mount: fn(&mut Mount, MountOpts) -> Result<(), Box<dyn Errno>>,
     root: fn(&Arc<Mount>) -> Arc<Vnode>,
 }
 
@@ -653,7 +653,7 @@ pub enum LookupError {
     NotFound,
 
     #[error("cannot lookup '{1}' from component #{0}")]
-    LookupFailed(usize, String, #[source] Box<dyn Errno>),
+    LookupFailed(usize, Box<str>, #[source] Box<dyn Errno>),
 }
 
 impl Errno for LookupError {
@@ -765,14 +765,9 @@ static UFS_OPS: FsOps = FsOps {
 
 static NULLFS: FsConfig = FsConfig {
     name: "nullfs",
-    ops: &NULLFS_OPS,
+    ops: &self::null::NULLFS_OPS,
     ty: 0x29,
     next: Some(&PFS),
-};
-
-static NULLFS_OPS: FsOps = FsOps {
-    mount: |_, _| todo!("mount for nullfs"),
-    root: |_| todo!("root for nullfs"),
 };
 
 static PFS: FsConfig = FsConfig {

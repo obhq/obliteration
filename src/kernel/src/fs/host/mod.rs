@@ -1,10 +1,9 @@
 use self::file::HostFile;
 use self::vnode::VNODE_OPS;
-use super::{FsOps, Mount, MountFlags, VPathBuf, Vnode, VnodeType};
+use super::{FsOps, Mount, MountFlags, MountOpts, VPathBuf, Vnode, VnodeType};
 use crate::errno::{Errno, EIO};
 use gmtx::{Gutex, GutexGroup};
 use param::Param;
-use std::any::Any;
 use std::collections::HashMap;
 use std::fs::create_dir;
 use std::io::ErrorKind;
@@ -33,7 +32,7 @@ impl HostFs {
     }
 }
 
-fn mount(mount: &mut Mount, mut opts: HashMap<String, Box<dyn Any>>) -> Result<(), Box<dyn Errno>> {
+fn mount(mount: &mut Mount, mut opts: MountOpts) -> Result<(), Box<dyn Errno>> {
     // Check mount flags.
     let mut flags = mount.flags_mut();
 
@@ -48,21 +47,9 @@ fn mount(mount: &mut Mount, mut opts: HashMap<String, Box<dyn Any>>) -> Result<(
     drop(flags);
 
     // Get options.
-    let system = *opts
-        .remove("ob:system")
-        .unwrap()
-        .downcast::<PathBuf>()
-        .unwrap();
-    let game = opts
-        .remove("ob:game")
-        .unwrap()
-        .downcast::<PathBuf>()
-        .unwrap();
-    let param = opts
-        .remove("ob:param")
-        .unwrap()
-        .downcast::<Arc<Param>>()
-        .unwrap();
+    let system: PathBuf = opts.remove("ob:system").unwrap().try_into().unwrap();
+    let game: PathBuf = opts.remove("ob:game").unwrap().try_into().unwrap();
+    let param: Arc<Param> = opts.remove("ob:param").unwrap().try_into().unwrap();
 
     // Create dev mount point.
     let path = system.join("dev");
@@ -93,7 +80,7 @@ fn mount(mount: &mut Mount, mut opts: HashMap<String, Box<dyn Any>>) -> Result<(
         .try_into()
         .unwrap();
 
-    map.insert(pfs.clone(), MountSource::Host(*game));
+    map.insert(pfs.clone(), MountSource::Host(game));
 
     // Create a directory for app0.
     let mut app = system.join("mnt");

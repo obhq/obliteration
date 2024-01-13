@@ -52,13 +52,13 @@ impl VFile {
 }
 
 impl Seek for VFile {
-    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+    fn seek(&mut self, _pos: SeekFrom) -> std::io::Result<u64> {
         todo!()
     }
 }
 
 impl Read for VFile {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+    fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
         todo!()
     }
 }

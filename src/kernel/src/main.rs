@@ -1,4 +1,5 @@
 use crate::arch::MachDep;
+
 use crate::arnd::Arnd;
 use crate::budget::{Budget, BudgetManager, ProcType};
 use crate::dmem::DmemManager;
@@ -278,7 +279,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     ee: Arc<E>,
 ) -> ExitCode {
     // Initialize TTY system.
-    let tty = match TtyManager::new(fs) {
+    let _tty = match TtyManager::new(fs) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "TTY initialization failed");

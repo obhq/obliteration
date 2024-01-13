@@ -3,6 +3,7 @@ use crate::errno::{Errno, ENOTDIR, EPERM};
 use crate::process::VThread;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
+use std::mem::MaybeUninit;
 use std::num::NonZeroI32;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -46,6 +47,31 @@ impl Vnode {
         }
     }
 
+    // Safety: `data_func` must not touch vnode.data
+    pub unsafe fn new_with<T: Send + Sync + 'static>(
+        fs: &Arc<Mount>,
+        ty: VnodeType,
+        tag: &'static str,
+        op: &'static VopVector,
+        constructor: impl FnOnce(&Arc<Self>) -> Arc<T>,
+    ) -> Arc<Self> {
+        #[allow(invalid_value)]
+        let mut vnode = Arc::new(Self::new(
+            fs,
+            ty,
+            tag,
+            op,
+            MaybeUninit::uninit().assume_init(),
+        ));
+
+        let data = constructor(&vnode);
+
+        //TODO use get_mut_unchecked_mut when it's stable
+        Arc::get_mut(&mut vnode).unwrap().data = data;
+
+        vnode
+    }
+
     pub fn fs(&self) -> &Arc<Mount> {
         &self.fs
     }
@@ -60,6 +86,10 @@ impl Vnode {
 
     pub fn is_character(&self) -> bool {
         matches!(self.ty, VnodeType::Character)
+    }
+
+    pub fn op(&self) -> &'static VopVector {
+        self.op
     }
 
     pub fn data(&self) -> &Arc<dyn Any + Send + Sync> {
@@ -136,7 +166,7 @@ impl Drop for Vnode {
 }
 
 /// An implementation of `vtype`.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum VnodeType {
     Directory(bool), // VDIR
     Character,       // VCHR

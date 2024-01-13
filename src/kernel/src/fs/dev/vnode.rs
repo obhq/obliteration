@@ -147,7 +147,7 @@ fn open(
     };
 
     // Set file OP.
-    let file = match file {
+    let _file = match file {
         Some(v) => v,
         None => return Ok(()),
     };

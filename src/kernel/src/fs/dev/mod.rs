@@ -1,12 +1,10 @@
 pub use self::cdev::*;
 use self::dirent::Dirent;
 use self::vnode::{CHARACTER_OPS, VNODE_OPS};
-use super::{path_contains, DirentType, FsOps, Mount, MountFlags, Vnode, VnodeType};
+use super::{path_contains, DirentType, FsOps, Mount, MountFlags, MountOpts, Vnode, VnodeType};
 use crate::errno::{Errno, EEXIST, ENOENT, EOPNOTSUPP};
 use crate::ucred::Ucred;
 use bitflags::bitflags;
-use std::any::Any;
-use std::collections::HashMap;
 use std::num::NonZeroI32;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
@@ -17,10 +15,10 @@ mod dirent;
 mod vnode;
 
 /// See `make_dev_credv` on the PS4 for a reference.
-pub fn make_dev<N: Into<String>>(
+pub fn make_dev(
     sw: &Arc<CdevSw>,
     unit: i32,
-    name: N,
+    name: impl Into<String>,
     uid: i32,
     gid: i32,
     mode: u16,
@@ -233,9 +231,9 @@ impl DevFs {
         *gen = devices.generation;
     }
 
-    /// Partial implementation of `devfs_vmkdir`. The main different is this function does not add
+    /// Partial implementation of `devfs_vmkdir`. The main difference is this function does not add
     /// the created directory to `parent` and does not run `devfs_rules_apply`.
-    fn mkdir<N: Into<String>>(name: N, inode: i32, parent: Option<&Arc<Dirent>>) -> Arc<Dirent> {
+    fn mkdir(name: impl Into<String>, inode: i32, parent: Option<&Arc<Dirent>>) -> Arc<Dirent> {
         // Create the directory.
         let dir = Arc::new(Dirent::new(
             DirentType::Directory,
@@ -319,7 +317,7 @@ impl Errno for MakeDevError {
     }
 }
 
-fn mount(mount: &mut Mount, _: HashMap<String, Box<dyn Any>>) -> Result<(), Box<dyn Errno>> {
+fn mount(mount: &mut Mount, _: MountOpts) -> Result<(), Box<dyn Errno>> {
     // Check mount flags.
     let mut flags = mount.flags_mut();
 
