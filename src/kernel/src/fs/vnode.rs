@@ -1,4 +1,4 @@
-use super::{unixify_access, Mount, OpenFlags, VFile};
+use super::{unixify_access, Access, Mount, OpenFlags, VFile};
 use crate::errno::{Errno, ENOTDIR, EPERM};
 use crate::process::VThread;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
@@ -9,6 +9,10 @@ use std::sync::Arc;
 use thiserror::Error;
 
 /// An implementation of `vnode`.
+///
+/// Each file/directory in the filesystem have a unique vnode. In other words, each file/directory
+/// must have only one active vnode. The filesystem must use some mechanism to make sure a
+/// file/directory have only one vnode.
 #[derive(Debug)]
 pub struct Vnode {
     fs: Arc<Mount>,                                  // v_mount
@@ -50,6 +54,10 @@ impl Vnode {
         &self.ty
     }
 
+    pub fn is_directory(&self) -> bool {
+        matches!(self.ty, VnodeType::Directory(_))
+    }
+
     pub fn is_character(&self) -> bool {
         matches!(self.ty, VnodeType::Character)
     }
@@ -69,7 +77,7 @@ impl Vnode {
     pub fn access(
         self: &Arc<Vnode>,
         td: Option<&VThread>,
-        access: u32,
+        access: Access,
     ) -> Result<(), Box<dyn Errno>> {
         let op = self.get_op(|v| v.access).unwrap();
 
@@ -82,7 +90,7 @@ impl Vnode {
     pub fn accessx(
         self: &Arc<Self>,
         td: Option<&VThread>,
-        access: u32,
+        access: Access,
     ) -> Result<(), Box<dyn Errno>> {
         let op = self.get_op(|v| v.accessx).unwrap();
 
@@ -138,8 +146,8 @@ pub enum VnodeType {
 #[derive(Debug)]
 pub struct VopVector {
     pub default: Option<&'static Self>, // vop_default
-    pub access: Option<fn(&Arc<Vnode>, Option<&VThread>, u32) -> Result<(), Box<dyn Errno>>>, // vop_access
-    pub accessx: Option<fn(&Arc<Vnode>, Option<&VThread>, u32) -> Result<(), Box<dyn Errno>>>, // vop_accessx
+    pub access: Option<fn(&Arc<Vnode>, Option<&VThread>, Access) -> Result<(), Box<dyn Errno>>>, // vop_access
+    pub accessx: Option<fn(&Arc<Vnode>, Option<&VThread>, Access) -> Result<(), Box<dyn Errno>>>, // vop_accessx
     pub lookup:
         Option<fn(&Arc<Vnode>, Option<&VThread>, &str) -> Result<Arc<Vnode>, Box<dyn Errno>>>, // vop_lookup
     pub open: Option<
@@ -180,13 +188,13 @@ pub static DEFAULT_VNODEOPS: VopVector = VopVector {
     open: Some(|_, _, _, _| Ok(())),
 };
 
-fn accessx(vn: &Arc<Vnode>, td: Option<&VThread>, access: u32) -> Result<(), Box<dyn Errno>> {
+fn accessx(vn: &Arc<Vnode>, td: Option<&VThread>, access: Access) -> Result<(), Box<dyn Errno>> {
     let access = match unixify_access(access) {
         Some(v) => v,
         None => return Err(Box::new(DefaultError::NotPermitted)),
     };
 
-    if access == 0 {
+    if access.is_empty() {
         return Ok(());
     }
 

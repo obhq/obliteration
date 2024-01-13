@@ -22,13 +22,13 @@ impl Mounts {
         m
     }
 
-    pub fn remove_at(&mut self, i: usize) -> Arc<Mount> {
-        self.0.remove(i)
-    }
-
     pub fn remove(&mut self, m: &Arc<Mount>) {
         let i = self.0.iter().position(|i| Arc::ptr_eq(i, m)).unwrap();
         self.0.remove(i);
+    }
+
+    pub fn swap(&mut self, a: usize, b: usize) {
+        self.0.swap(a, b);
     }
 
     pub fn root(&self) -> &Arc<Mount> {

@@ -16,6 +16,10 @@ impl HostFile {
         Ok(Self { path, raw })
     }
 
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
     #[cfg(unix)]
     pub fn is_directory(&self) -> Result<bool, Error> {
         use libc::{fstat, S_IFDIR, S_IFMT};

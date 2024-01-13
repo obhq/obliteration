@@ -1,11 +1,14 @@
 use self::file::HostFile;
 use self::vnode::VNODE_OPS;
 use super::{FsOps, Mount, MountFlags, VPathBuf, Vnode, VnodeType};
-use crate::errno::Errno;
+use crate::errno::{Errno, EIO};
 use gmtx::{Gutex, GutexGroup};
 use param::Param;
 use std::any::Any;
 use std::collections::HashMap;
+use std::fs::create_dir;
+use std::io::ErrorKind;
+use std::num::NonZeroI32;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 use thiserror::Error;
@@ -45,7 +48,7 @@ fn mount(mount: &mut Mount, mut opts: HashMap<String, Box<dyn Any>>) -> Result<(
     drop(flags);
 
     // Get options.
-    let system = opts
+    let system = *opts
         .remove("ob:system")
         .unwrap()
         .downcast::<PathBuf>()
@@ -61,10 +64,19 @@ fn mount(mount: &mut Mount, mut opts: HashMap<String, Box<dyn Any>>) -> Result<(
         .downcast::<Arc<Param>>()
         .unwrap();
 
+    // Create dev mount point.
+    let path = system.join("dev");
+
+    if let Err(e) = create_dir(&path) {
+        if e.kind() != ErrorKind::AlreadyExists {
+            return Err(Box::new(MountError::CreateDirectoryFailed(path, e)));
+        }
+    }
+
     // Map root.
     let mut map: HashMap<VPathBuf, MountSource> = HashMap::new();
 
-    map.insert(VPathBuf::new(), MountSource::Host(*system.clone()));
+    map.insert(VPathBuf::new(), MountSource::Host(system.clone()));
 
     // Create a directory for game PFS.
     let mut pfs = system.join("mnt");
@@ -104,7 +116,7 @@ fn mount(mount: &mut Mount, mut opts: HashMap<String, Box<dyn Any>>) -> Result<(
     let gg = GutexGroup::new();
 
     mount.set_data(Arc::new(HostFs {
-        root: *system,
+        root: system,
         map,
         app: Arc::new(app),
         actives: gg.spawn(HashMap::new()),
@@ -161,6 +173,21 @@ fn get_vnode(mnt: &Arc<Mount>, path: Option<&Path>) -> Result<Arc<Vnode>, GetVno
 enum MountSource {
     Host(PathBuf),
     Bind(VPathBuf),
+}
+
+/// Represents an error when [`mount()`] was failed.
+#[derive(Debug, Error)]
+enum MountError {
+    #[error("cannot create {0}")]
+    CreateDirectoryFailed(PathBuf, #[source] std::io::Error),
+}
+
+impl Errno for MountError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::CreateDirectoryFailed(_, _) => EIO,
+        }
+    }
 }
 
 /// Represents an error when [`get_vnode()`] was failed.

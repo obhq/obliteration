@@ -2,7 +2,7 @@ use super::dirent::Dirent;
 use super::{alloc_vnode, AllocVnodeError, Cdev};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
-    check_access, DevFs, OpenFlags, VFile, Vnode, VnodeType, VopVector, DEFAULT_VNODEOPS,
+    check_access, Access, DevFs, OpenFlags, VFile, Vnode, VnodeType, VopVector, DEFAULT_VNODEOPS,
 };
 use crate::process::VThread;
 use std::num::NonZeroI32;
@@ -25,7 +25,7 @@ pub static CHARACTER_OPS: VopVector = VopVector {
     open: Some(open),
 };
 
-fn access(vn: &Arc<Vnode>, td: Option<&VThread>, access: u32) -> Result<(), Box<dyn Errno>> {
+fn access(vn: &Arc<Vnode>, td: Option<&VThread>, access: Access) -> Result<(), Box<dyn Errno>> {
     // Get dirent.
     let mut dirent = vn.data().clone().downcast::<Dirent>().unwrap();
     let is_dir = match vn.ty() {
@@ -86,7 +86,7 @@ fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode
     }
 
     // Check if directory is accessible.
-    if let Err(e) = vn.access(td, 0100) {
+    if let Err(e) = vn.access(td, Access::EXEC) {
         return Err(Box::new(LookupError::AccessDenied(e)));
     }
 
