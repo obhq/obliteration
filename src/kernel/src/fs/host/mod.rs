@@ -137,10 +137,8 @@ fn get_vnode(mnt: &Arc<Mount>, path: Option<&Path>) -> Result<Arc<Vnode>, GetVno
 
     // Get vnode type.
     let ty = match file.is_directory() {
-        Ok(v) => match v {
-            true => VnodeType::Directory(path == fs.root),
-            false => todo!(),
-        },
+        Ok(true) => VnodeType::Directory(path == fs.root),
+        Ok(false) => todo!(),
         Err(e) => return Err(GetVnodeError::GetFileTypeFailed(e)),
     };
 

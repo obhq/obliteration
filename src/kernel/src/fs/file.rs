@@ -72,9 +72,14 @@ pub enum VFileType {
 /// An implementation of `fileops` structure.
 #[derive(Debug)]
 pub struct VFileOps {
-    pub write: fn(&VFile, &[u8], Option<&VThread>) -> Result<usize, Box<dyn Errno>>,
-    pub ioctl: fn(&VFile, IoCmd, &mut [u8], Option<&VThread>) -> Result<(), Box<dyn Errno>>,
+    pub read: VFileRead,
+    pub write: VFileWrite,
+    pub ioctl: VFileIoctl,
 }
+
+pub type VFileRead = fn(&VFile, &mut [u8], Option<&VThread>) -> Result<usize, Box<dyn Errno>>;
+pub type VFileWrite = fn(&VFile, &[u8], Option<&VThread>) -> Result<usize, Box<dyn Errno>>;
+pub type VFileIoctl = fn(&VFile, IoCmd, &mut [u8], Option<&VThread>) -> Result<(), Box<dyn Errno>>;
 
 bitflags! {
     /// Flags for [`VFile`].

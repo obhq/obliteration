@@ -40,19 +40,10 @@ fn mount(mnt: &mut Mount, mut opts: MountOpts) -> Result<(), Box<dyn Errno>> {
         Err(MountError::EmptyTarget)?;
     }
 
-    let target: &VPath = target.as_ref().try_into().unwrap();
+    let _target: &VPath = target.as_ref().try_into().unwrap();
 
     let parent = mnt.parent();
-    let parent_ref = parent.as_ref().expect("No parent");
-
-    let isvnunlocked = if std::ptr::eq(parent_ref.op(), &vnode::VNODE_OPS) {
-        todo!();
-
-        #[allow(unreachable_code)]
-        true
-    } else {
-        false
-    };
+    let _parent_ref = parent.as_ref().expect("No parent");
 
     todo!()
 }
@@ -64,6 +55,7 @@ fn root(mnt: &Arc<Mount>) -> Arc<Vnode> {
 pub(super) static NULLFS_OPS: FsOps = FsOps { mount, root };
 
 #[derive(Debug, Error)]
+#[allow(dead_code)]
 enum MountError {
     #[error("mounting as root FS is not supported")]
     RootFs,
@@ -98,59 +90,41 @@ impl Errno for MountError {
 }
 
 /// An implementation of `null_mount` structure.
-struct NullMount {
+#[allow(dead_code)]
+struct NullFs {
     root: Arc<Vnode>,          // nullm_rootvp
     lower: Option<Arc<Vnode>>, // nullm_lowervp
-    flags: NullMountFlags,     // null_flags
+    flags: NullFsFlags,        // null_flags
 }
 
-impl NullMount {
-    fn new(lower: Option<&Arc<Vnode>>, root: &Arc<Vnode>) -> Self {
-        Self {
-            root: root.clone(),
-            lower: lower.cloned(),
-            flags: NullMountFlags::empty(),
-        }
+#[allow(dead_code)]
+impl NullFs {
+    pub fn root(&self) -> &Arc<Vnode> {
+        &self.root
     }
 
     pub fn lower(&self) -> Option<&Arc<Vnode>> {
         self.lower.as_ref()
     }
+
+    pub fn flags(&self) -> NullFsFlags {
+        self.flags
+    }
 }
 
 bitflags! {
-    struct NullMountFlags: u64 {}
+    #[derive(Clone, Copy)]
+    struct NullFsFlags: u64 {}
 }
 
+#[allow(dead_code)]
 struct NullNode {
     lower: Arc<Vnode>,
 }
 
+#[allow(dead_code)]
 impl NullNode {
     fn lower(&self) -> &Arc<Vnode> {
         &self.lower
-    }
-
-    /// See `null_nodeget` on the PS4 for reference.
-    fn get(mnt: &Arc<Mount>, lower: &Arc<Vnode>) -> Arc<Vnode> {
-        let data_constructor = |_: &Arc<Vnode>| {
-            Arc::new(NullNode {
-                lower: lower.clone(),
-            })
-        };
-
-        let vnode = unsafe {
-            Vnode::new_with(
-                mnt,
-                *lower.ty(),
-                "null",
-                &vnode::VNODE_OPS,
-                data_constructor,
-            )
-        };
-
-        // TODO: Implement insmntque1.
-
-        vnode
     }
 }

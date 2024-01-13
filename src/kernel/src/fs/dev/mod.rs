@@ -244,7 +244,7 @@ impl DevFs {
             },
             0,
             0,
-            0555,
+            0o555,
             None,
             None,
             name,

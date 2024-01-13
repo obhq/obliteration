@@ -1,12 +1,13 @@
-use super::NullMount;
+use super::NullFs;
 use crate::{
-    errno::{Errno, EROFS, EINVAL},
-    fs::{null::NullNode, perm::Access, MountFlags, OpenFlags, VFile, Vnode, VnodeType, VopVector, VnodeOpDesc},
+    errno::{Errno, EROFS},
+    fs::{perm::Access, MountFlags, OpenFlags, VFile, Vnode, VnodeOpDesc, VnodeType, VopVector},
     process::VThread,
 };
 use std::{num::NonZeroI32, sync::Arc};
 use thiserror::Error;
 
+#[allow(dead_code)]
 pub(super) static VNODE_OPS: VopVector = VopVector {
     default: None,
     access: Some(access),
@@ -18,10 +19,10 @@ pub(super) static VNODE_OPS: VopVector = VopVector {
 };
 
 //Serves as both `access` and `accessx`.
-fn access(vn: &Arc<Vnode>, td: Option<&VThread>, access: Access) -> Result<(), Box<dyn Errno>> {
+fn access(vn: &Arc<Vnode>, _td: Option<&VThread>, access: Access) -> Result<(), Box<dyn Errno>> {
     if access.contains(Access::WRITE) {
         match vn.ty() {
-            VnodeType::Directory(_) | VnodeType::Link | VnodeType::Reg => {
+            VnodeType::Directory(_) | VnodeType::Link | VnodeType::File => {
                 if vn.fs().flags().contains(MountFlags::MNT_RDONLY) {
                     Err(AccessError::Readonly)?
                 }
@@ -31,7 +32,6 @@ fn access(vn: &Arc<Vnode>, td: Option<&VThread>, access: Access) -> Result<(), B
     }
 
     todo!();
-    //bypass(desc)
 }
 
 #[derive(Debug, Error)]
@@ -48,65 +48,38 @@ impl Errno for AccessError {
     }
 }
 
-fn bypass(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
-    let mut flags = desc.flags();
-
-    let vnodes: [Option<&Arc<Vnode>>; VnodeOpDesc::VDESC_MAX_VPS] = [None; VnodeOpDesc::VDESC_MAX_VPS];
-
-    for (i, offset) in desc.offsets().iter().enumerate() {
-        flags >>= unsafe {i.try_into().unwrap_unchecked() } ;
-
-        if *offset == -1 {
-            break;
-        }
-
-        vnodes[i] =
-    }
-
-    let result = if let Some(vnode) = vnodes[0] {
-        desc.vcall()
-    } else {
-        Err(BypassError::NoMap(desc.name()).into())
-    };
-
+fn bypass(_desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
     todo!();
-
-    result
 }
 
 #[derive(Debug, Error)]
-pub enum BypassError {
-    #[error("no map for {0}")]
-    NoMap(&'static str)
-}
+pub enum BypassError {}
 
 impl Errno for BypassError {
     fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::NoMap(_) => EINVAL,
-        }
+        todo!()
     }
 }
 
 fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode>, Box<dyn Errno>> {
-    let null_mount: &NullMount = vn.data().downcast_ref().unwrap();
+    let null_mount: &NullFs = vn.data().downcast_ref().unwrap();
 
     let lower = null_mount.lower().unwrap().lookup(td, name)?;
 
     let vnode = if Arc::ptr_eq(&lower, vn) {
         vn.clone()
     } else {
-        NullNode::get(vn.fs(), &lower)
+        todo!();
     };
 
     Ok(vnode)
 }
 
 fn open(
-    vn: &Arc<Vnode>,
-    td: Option<&VThread>,
-    mode: OpenFlags,
-    mut file: Option<&mut VFile>,
+    _vn: &Arc<Vnode>,
+    _td: Option<&VThread>,
+    _mode: OpenFlags,
+    mut _file: Option<&mut VFile>,
 ) -> Result<(), Box<dyn Errno>> {
     todo!()
 }

@@ -1,12 +1,10 @@
-use super::{FsOps, Mount, MountFlags, Vnode};
+use super::{FsOps, Mount, MountFlags, MountOpts, Vnode};
 use crate::errno::{Errno, EINVAL};
-use std::any::Any;
-use std::collections::HashMap;
 use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
 
-fn mount(mnt: &mut Mount, _: HashMap<String, Box<dyn Any>>) -> Result<(), Box<dyn Errno>> {
+fn mount(mnt: &mut Mount, _: MountOpts) -> Result<(), Box<dyn Errno>> {
     if mnt.flags().intersects(MountFlags::MNT_UPDATE) {
         return Err(Box::new(MountError::UpdateNotSupported));
     }

@@ -147,6 +147,8 @@ impl Fs {
         _path: impl AsRef<VPath>,
         _td: Option<&VThread>,
     ) -> Result<VFile, OpenError> {
+        let _vnode = self.lookup(_path, _td).map_err(OpenError::LookupFailed)?;
+
         todo!();
     }
 
@@ -640,11 +642,16 @@ impl Errno for MountError {
 
 /// Represents an error when [`Fs::open()`] was failed.
 #[derive(Debug, Error)]
-pub enum OpenError {}
+pub enum OpenError {
+    #[error("cannot lookup the file")]
+    LookupFailed(#[source] LookupError),
+}
 
 impl Errno for OpenError {
     fn errno(&self) -> NonZeroI32 {
-        todo!()
+        match self {
+            Self::LookupFailed(e) => e.errno(),
+        }
     }
 }
 
