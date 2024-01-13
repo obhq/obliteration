@@ -3,6 +3,11 @@
 use std::error::Error;
 use std::num::NonZeroI32;
 
+pub const EDIRIOCTL: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(-4) };
+pub const ENOIOCTL: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(-3) };
+pub const EJUSTRETURN: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(-2) };
+pub const ERESTART: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(-1) };
+
 pub const EPERM: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(1) };
 pub const ENOENT: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(2) };
 pub const ESRCH: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(3) };

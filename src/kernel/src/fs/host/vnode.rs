@@ -14,6 +14,7 @@ pub static VNODE_OPS: VopVector = VopVector {
     default: Some(&DEFAULT_VNODEOPS),
     access: Some(access),
     accessx: None,
+    bypass: None,
     getattr: Some(getattr),
     lookup: Some(lookup),
     open: Some(open),

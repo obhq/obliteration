@@ -8,60 +8,6 @@ use thiserror::Error;
 
 mod vnode;
 
-/// An implementation of `null_mount` structure.
-struct NullMount {
-    root: Arc<Vnode>,          // nullm_rootvp
-    lower: Option<Arc<Vnode>>, // nullm_lowervp
-    flags: NullMountFlags,     // null_flags
-}
-
-impl NullMount {
-    fn new(lower: Option<&Arc<Vnode>>, root: &Arc<Vnode>) -> Self {
-        Self {
-            root: root.clone(),
-            lower: lower.cloned(),
-            flags: NullMountFlags::empty(),
-        }
-    }
-}
-
-bitflags! {
-    struct NullMountFlags: u64 {}
-}
-
-struct NullNode {
-    lower: Arc<Vnode>,
-}
-
-impl NullNode {
-    fn lower(&self) -> &Arc<Vnode> {
-        &self.lower
-    }
-
-    /// See `null_nodeget` on the PS4 for reference.
-    fn get(mnt: &Arc<Mount>, lower: &Arc<Vnode>) -> Arc<Vnode> {
-        let data_constructor = |vn: &Arc<Vnode>| {
-            Arc::new(NullNode {
-                lower: lower.clone(),
-            })
-        };
-
-        let vnode = unsafe {
-            Vnode::new_with(
-                mnt,
-                *lower.ty(),
-                "null",
-                &vnode::VNODE_OPS,
-                data_constructor,
-            )
-        };
-
-        // TODO: Implement insmntque1.
-
-        vnode
-    }
-}
-
 fn mount(mnt: &mut Mount, mut opts: MountOpts) -> Result<(), Box<dyn Errno>> {
     let flags = mnt.flags();
 
@@ -108,53 +54,11 @@ fn mount(mnt: &mut Mount, mut opts: MountOpts) -> Result<(), Box<dyn Errno>> {
         false
     };
 
-    let fs = mnt.fs().unwrap();
-
-    let vnode = fs.lookup(target, None).map_err(MountError::LookupFailed)?;
-
-    if isvnunlocked {
-        todo!("nullfs_mount with isvnunlocked = true")
-    }
-
-    let node = parent_ref.data().downcast_ref::<NullNode>().unwrap();
-
-    if Arc::ptr_eq(&vnode, &node.lower()) {
-        Err(MountError::AvoidingDeadlock)?
-    }
-
-    drop(parent);
-
-    let null_mount = NullMount::new(None, &vnode);
-
-    let node = NullNode::get(mnt, &vnode);
-
-    let role: Option<Box<str>> = opts.remove("role").map(|role| role.try_into().unwrap());
-
-    if let Some("data") = role.as_deref() {
-        todo!("nullfs_mount with role = data")
-    }
-
-    let null_mount = vnode.data().downcast_ref::<NullMount>().unwrap();
-
-    if null_mount
-        .lower
-        .unwrap()
-        .fs()
-        .flags()
-        .intersects(MountFlags::MNT_LOCAL)
-    {
-        *mnt.flags_mut() |= MountFlags::MNT_LOCAL;
-    }
-
-    mnt.set_data(Arc::new(null_mount));
-
     todo!()
 }
 
 fn root(mnt: &Arc<Mount>) -> Arc<Vnode> {
-    let nullfs = mnt.data().unwrap().downcast_ref::<NullMount>().unwrap();
-
-    nullfs.root.clone()
+    todo!()
 }
 
 pub(super) static NULLFS_OPS: FsOps = FsOps { mount, root };
@@ -190,5 +94,63 @@ impl Errno for MountError {
             MountError::LookupFailed(e) => e.errno(),
             MountError::AvoidingDeadlock => EDEADLK,
         }
+    }
+}
+
+/// An implementation of `null_mount` structure.
+struct NullMount {
+    root: Arc<Vnode>,          // nullm_rootvp
+    lower: Option<Arc<Vnode>>, // nullm_lowervp
+    flags: NullMountFlags,     // null_flags
+}
+
+impl NullMount {
+    fn new(lower: Option<&Arc<Vnode>>, root: &Arc<Vnode>) -> Self {
+        Self {
+            root: root.clone(),
+            lower: lower.cloned(),
+            flags: NullMountFlags::empty(),
+        }
+    }
+
+    pub fn lower(&self) -> Option<&Arc<Vnode>> {
+        self.lower.as_ref()
+    }
+}
+
+bitflags! {
+    struct NullMountFlags: u64 {}
+}
+
+struct NullNode {
+    lower: Arc<Vnode>,
+}
+
+impl NullNode {
+    fn lower(&self) -> &Arc<Vnode> {
+        &self.lower
+    }
+
+    /// See `null_nodeget` on the PS4 for reference.
+    fn get(mnt: &Arc<Mount>, lower: &Arc<Vnode>) -> Arc<Vnode> {
+        let data_constructor = |_: &Arc<Vnode>| {
+            Arc::new(NullNode {
+                lower: lower.clone(),
+            })
+        };
+
+        let vnode = unsafe {
+            Vnode::new_with(
+                mnt,
+                *lower.ty(),
+                "null",
+                &vnode::VNODE_OPS,
+                data_constructor,
+            )
+        };
+
+        // TODO: Implement insmntque1.
+
+        vnode
     }
 }

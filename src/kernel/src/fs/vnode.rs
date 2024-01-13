@@ -1,6 +1,7 @@
 use super::{unixify_access, Access, Mount, OpenFlags, VFile};
 use crate::errno::{Errno, ENOTDIR, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
+use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
 use std::mem::MaybeUninit;
@@ -157,6 +158,8 @@ impl Drop for Vnode {
 pub enum VnodeType {
     Directory(bool), // VDIR
     Character,       // VCHR
+    Link,            // VLNK
+    Reg,             // VREG
 }
 
 /// An implementation of `vop_vector` structure.
@@ -166,37 +169,20 @@ pub enum VnodeType {
 #[derive(Debug)]
 pub struct VopVector {
     pub default: Option<&'static Self>, // vop_default
-    pub access: Option<VopAccess>,      // vop_access
-    pub accessx: Option<VopAccessX>,    // vop_accessx
-    pub getattr: Option<VopGetAttr>,    // vop_getattr
-    pub lookup: Option<VopLookup>,      // vop_lookup
-    pub open: Option<VopOpen>,          // vop_open
-}
-
-pub type VopAccess = fn(&Arc<Vnode>, Option<&VThread>, Access) -> Result<(), Box<dyn Errno>>;
-pub type VopAccessX = fn(&Arc<Vnode>, Option<&VThread>, Access) -> Result<(), Box<dyn Errno>>;
-pub type VopGetAttr = fn(&Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>>;
-pub type VopLookup = fn(&Arc<Vnode>, Option<&VThread>, &str) -> Result<Arc<Vnode>, Box<dyn Errno>>;
-pub type VopOpen =
-    fn(&Arc<Vnode>, Option<&VThread>, OpenFlags, Option<&mut VFile>) -> Result<(), Box<dyn Errno>>;
-
-/// An implementation of `vattr` struct.
-pub struct VnodeAttrs {
-    uid: i32,  // va_uid
-    gid: i32,  // va_gid
-    mode: u16, // va_mode
-    size: u64, // va_size
-}
-
-impl VnodeAttrs {
-    pub fn new(uid: i32, gid: i32, mode: u16, size: u64) -> Self {
-        Self {
-            uid,
-            gid,
-            mode,
-            size,
-        }
-    }
+    pub access: Option<fn(&Arc<Vnode>, Option<&VThread>, Access) -> Result<(), Box<dyn Errno>>>, // vop_access
+    pub accessx: Option<fn(&Arc<Vnode>, Option<&VThread>, Access) -> Result<(), Box<dyn Errno>>>, // vop_accessx
+    pub bypass: Option<fn(&VnodeOpDesc) -> Result<(), Box<dyn Errno>>>, // vop_bypass
+    pub getattr: Option<VopGetAttr>,                                    // vop_getattr
+    pub lookup:
+        Option<fn(&Arc<Vnode>, Option<&VThread>, &str) -> Result<Arc<Vnode>, Box<dyn Errno>>>, // vop_lookup
+    pub open: Option<
+        fn(
+            &Arc<Vnode>,
+            Option<&VThread>,
+            OpenFlags,
+            Option<&mut VFile>,
+        ) -> Result<(), Box<dyn Errno>>,
+    >, // vop_open
 }
 
 /// Represents an error when [`DEFAULT_VNODEOPS`] is failed.
@@ -210,6 +196,9 @@ enum DefaultError {
 
     #[error("the vnode is not a directory")]
     NotDirectory,
+
+    #[error("operation not supported")]
+    NotSupported,
 }
 
 impl Errno for DefaultError {
@@ -218,6 +207,7 @@ impl Errno for DefaultError {
             Self::NotSupported => EOPNOTSUPP,
             Self::NotPermitted => EPERM,
             Self::NotDirectory => ENOTDIR,
+            Self::NotSupported => EOPNOTSUPP,
         }
     }
 }
@@ -227,7 +217,9 @@ pub static DEFAULT_VNODEOPS: VopVector = VopVector {
     default: None,
     access: Some(|vn, td, access| vn.accessx(td, access)),
     accessx: Some(accessx),
+    bypass: Some(|_| Err(Box::new(DefaultError::NotSupported))),
     getattr: Some(|_| Err(Box::new(DefaultError::NotSupported))), // Inline vop_bypass.
+
     lookup: Some(|_, _, _| Err(Box::new(DefaultError::NotDirectory))),
     open: Some(|_, _, _, _| Ok(())),
 };
@@ -247,3 +239,452 @@ fn accessx(vn: &Arc<Vnode>, td: Option<&VThread>, access: Access) -> Result<(), 
 }
 
 static ACTIVE: AtomicUsize = AtomicUsize::new(0); // numvnodes
+
+pub struct VnodeOpDesc {
+    name: &'static str,                                                   //vdesc_name
+    flags: VnodeOpDescFlags,                                              //vdesc_flags
+    call: Option<fn(&'static VnodeOpDesc) -> Result<(), Box<dyn Errno>>>, //vdesc_call
+    offsets: Option<&'static [u8]>,                                       //vdesc_vp_offsets
+    vnode_offset: i32,                                                    //vdesc_vpp_offset
+    cred_offset: i32,                                                     //vdesc_cred_offset
+    thread_offset: i32,                                                   //vdesc_thread_offset
+    name_offset: i32, //vdesc_componentname_offset
+}
+
+impl VnodeOpDesc {
+    pub const VDESC_MAX_VPS: usize = 64;
+    pub const VDESC_NO_OFFSET: i32 = -1;
+
+    pub fn name(&self) -> &'static str {
+        self.name
+    }
+
+    pub fn flags(&self) -> VnodeOpDescFlags {
+        self.flags
+    }
+
+    pub fn offsets(&self) -> Option<&'static [u8]> {
+        self.offsets
+    }
+
+    pub fn vcall(&'static self) -> Result<(), Box<dyn Errno>> {
+        (self.call.expect("No call function set for desc"))(self)
+    }
+}
+
+bitflags! {
+    pub struct VnodeOpDescFlags: i32 {}
+}
+
+impl TryFrom<usize> for VnodeOpDescFlags {
+    type Error = ();
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        Self::from_bits(value as i32).ok_or(())
+    }
+}
+
+pub const VOP_DEFAULT_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_default",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_panic),
+    offsets: None,
+    vnode_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    cred_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    thread_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    name_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+};
+
+fn vop_panic(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    panic!("filesystem goof: vop_panic[{}]", desc.name())
+}
+
+pub const VOP_ISLOCKED_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_islocked",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_islocked),
+    offsets: None, // TODO: this is not none
+    vnode_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    cred_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    thread_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    name_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+};
+
+fn vop_islocked(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_LOOKUP_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_lookup",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_lookup),
+    offsets: None, // TODO: this is not none
+    vnode_offset: 0x10,
+    cred_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    thread_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    name_offset: 0x16,
+};
+
+fn vop_lookup(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_CACHEDLOOKUP_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_lookup",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_cachedlookup),
+    offsets: None, // TODO: this is not none
+    vnode_offset: 0x10,
+    cred_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    thread_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    name_offset: 0x16,
+};
+
+fn vop_cachedlookup(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_CREATE_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_create",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_create),
+    offsets: None, // TODO: this is not none
+    vnode_offset: 0x10,
+    cred_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    thread_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    name_offset: 0x18,
+};
+
+fn vop_create(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_WHITEOUT_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_whiteout",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_whiteout),
+    offsets: None, // TODO: this is not none
+    vnode_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    cred_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    thread_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    name_offset: 0x10,
+};
+
+fn vop_whiteout(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_MKNOD_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_mknod",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_mknod_desc),
+    offsets: None, // TODO: this is not none
+    vnode_offset: 0x10,
+    cred_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    thread_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    name_offset: 0x18,
+};
+
+fn vop_mknod_desc(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_OPEN_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_open",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_open),
+    offsets: None, // TODO: this is not none
+    vnode_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    cred_offset: 0x18,
+    thread_offset: 0x20,
+    name_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+};
+
+fn vop_open(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_CLOSE_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_close",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_close),
+    offsets: None, // TODO: this is not none
+    vnode_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    cred_offset: 0x18,
+    thread_offset: 0x20,
+    name_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+};
+
+fn vop_close(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_ACCESSX_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_accessx",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_accessx),
+    offsets: None, // TODO: this is not none
+    vnode_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    cred_offset: 0x18,
+    thread_offset: 0x20,
+    name_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+};
+
+fn vop_accessx(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_GETATTR_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_getattr",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_getattr),
+    offsets: None, // TODO: this is not none
+    vnode_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    cred_offset: 0x18,
+    thread_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    name_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+};
+
+fn vop_getattr(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_SETATTR_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_setattr",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_setattr),
+    offsets: None, // TODO: this is not none
+    vnode_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    cred_offset: 0x18,
+    thread_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    name_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+};
+
+fn vop_setattr(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_MARKATIME_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_markatime",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_markatime),
+    offsets: None, // TODO: this is not none
+    vnode_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    cred_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    thread_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    name_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+};
+
+fn vop_markatime(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_READ_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_read",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_read),
+    offsets: None, // TODO: this is not none
+    vnode_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    cred_offset: 0x20,
+    thread_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    name_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+};
+
+fn vop_read(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_WRITE_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_write",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_write),
+    offsets: None, // TODO: this is not none
+    vnode_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    cred_offset: 0x20,
+    thread_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    name_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+};
+
+fn vop_write(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_IOCTL_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_ioctl",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_ioctl),
+    offsets: None, // TODO: this is not none
+    vnode_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    cred_offset: 0x28,
+    thread_offset: 0x30,
+    name_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+};
+
+fn vop_ioctl(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_POLL_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_poll",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_poll),
+    offsets: None, // TODO: this is not none
+    vnode_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    cred_offset: 0x18,
+    thread_offset: 0x20,
+    name_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+};
+
+fn vop_poll(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_KQFILTER_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_kqfilter",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_kqfilter),
+    offsets: None, // TODO: this is not none
+    vnode_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    cred_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    thread_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    name_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+};
+
+fn vop_kqfilter(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_FSYNC_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_fsync",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_fsync),
+    offsets: None, // TODO: this is not none
+    vnode_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    cred_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    thread_offset: 0x18,
+    name_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+};
+
+fn vop_fsync(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_REMOVE_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_remove",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_remove),
+    offsets: None, // TODO: this is not none
+    vnode_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    cred_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    thread_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    name_offset: 0x18,
+};
+
+fn vop_remove(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_RENAME_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_rename",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_rename),
+    offsets: None, // TODO: this is not none
+    vnode_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    cred_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    thread_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    name_offset: 0x18,
+};
+
+fn vop_rename(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_MKDIR_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_mkdir",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_mkdir),
+    offsets: None, // TODO: this is not none
+    vnode_offset: 0x10,
+    cred_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    thread_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    name_offset: 0x18,
+};
+
+fn vop_mkdir(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_RMDIR_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_rmdir",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_rmdir),
+    offsets: None, // TODO: this is not none
+    vnode_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    cred_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    thread_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    name_offset: 0x18,
+};
+
+fn vop_rmdir(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_SYMLINK_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_symlink",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_symlink),
+    offsets: None, // TODO: this is not none
+    vnode_offset: 0x10,
+    cred_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    thread_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    name_offset: 0x18,
+};
+
+fn vop_symlink(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_READDIR_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_readdir",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_readdir),
+    offsets: None, // TODO: this is not none
+    vnode_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    cred_offset: 0x18,
+    thread_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    name_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+};
+
+fn vop_readdir(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_READLINK_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_readlink",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_readlink),
+    offsets: None, // TODO: this is not none
+    vnode_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    cred_offset: 0x18,
+    thread_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    name_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+};
+
+fn vop_readlink(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
+pub const VOP_INACTIVE_DESC: VnodeOpDesc = VnodeOpDesc {
+    name: "vop_inactive",
+    flags: VnodeOpDescFlags::empty(),
+    call: Some(vop_inactive),
+    offsets: None, // TODO: this is not none
+    vnode_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    cred_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+    thread_offset: 0x10,
+    name_offset: VnodeOpDesc::VDESC_NO_OFFSET,
+};
+
+fn vop_inactive(desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}

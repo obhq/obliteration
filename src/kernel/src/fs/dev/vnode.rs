@@ -14,6 +14,8 @@ pub static VNODE_OPS: VopVector = VopVector {
     default: Some(&DEFAULT_VNODEOPS),
     access: Some(access),
     accessx: None,
+
+    bypass: None,
     getattr: Some(getattr),
     lookup: Some(lookup),
     open: None,
@@ -23,6 +25,7 @@ pub static CHARACTER_OPS: VopVector = VopVector {
     default: Some(&DEFAULT_VNODEOPS),
     access: Some(access),
     accessx: None,
+    bypass: None,
     getattr: Some(getattr),
     lookup: None,
     open: Some(open),
@@ -95,6 +98,7 @@ fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
     let size = match vn.ty() {
         VnodeType::Directory(_) => 512,
         VnodeType::Character => 0,
+        _ => todo!(),
     };
 
     Ok(VnodeAttrs::new(*uid, *gid, *mode, size))

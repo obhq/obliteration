@@ -222,6 +222,7 @@ impl Fs {
                     }
                 }
                 VnodeType::Character => return Err(LookupError::NotFound),
+                _ => todo!(),
             }
 
             // Prevent ".." on root.

@@ -111,7 +111,8 @@ pub fn check_access(
 bitflags! {
     /// An implementation of `accmode_t`.
     pub struct Access: u32 {
-        const EXEC = 000000000100; // VEXEC
+        const EXEC  = 000000000100; // VEXEC
+        const WRITE = 000000000200; // VWRITE
     }
 }
 

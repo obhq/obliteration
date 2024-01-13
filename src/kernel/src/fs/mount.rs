@@ -173,10 +173,7 @@ impl MountOpts {
         self.0.remove(k)
     }
 
-    pub fn retain<F>(&mut self, mut f: F)
-    where
-        F: FnMut(&&'static str, &mut MountOpt) -> bool,
-    {
+    pub fn retain(&mut self, mut f: impl FnMut(&&'static str, &mut MountOpt) -> bool) {
         self.0.retain(|k, v| f(k, v));
     }
 }
