@@ -4,9 +4,8 @@ use std::os::raw::c_char;
 /// # Safety
 /// `err` must be come from [`Error::new()`].
 #[no_mangle]
-#[allow(unused_must_use)]
 pub unsafe extern "C" fn error_free(err: *mut Error) {
-    unsafe { Box::from_raw(err) };
+    drop(Box::from_raw(err));
 }
 
 #[no_mangle]
