@@ -15,17 +15,23 @@ use crate::sysctl::Sysctl;
 use crate::tty::TtyManager;
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use clap::{Parser, ValueEnum};
-use llt::Thread;
+use fs::FsError;
+use llt::{SpawnError, ThreadHandle};
 use macros::vpath;
+use memory::MemoryManagerError;
 use param::Param;
+use process::VProcError;
 use serde::Deserialize;
+use std::error::Error;
 use std::fs::{create_dir_all, remove_dir_all, File};
 use std::io::Write;
 use std::path::PathBuf;
-use std::process::ExitCode;
+use std::process::{ExitCode, Termination};
 use std::sync::Arc;
 use std::time::SystemTime;
 use sysinfo::{MemoryRefreshKind, System};
+use thiserror::Error;
+use tty::TtyError;
 
 mod arch;
 mod arnd;
@@ -47,29 +53,22 @@ mod sysctl;
 mod tty;
 mod ucred;
 
-fn main() -> ExitCode {
+fn main() -> Exit {
+    //TODO: refactor this when try_trait is stabilized
+    main_wrapped().into()
+}
+
+fn main_wrapped() -> Result<(), KernelError> {
     // Begin logger.
     log::init();
 
     // Load arguments.
     let args = if std::env::args().any(|a| a == "--debug") {
-        let file = match File::open(".kernel-debug") {
-            Ok(v) => v,
-            Err(e) => {
-                error!(e, "Failed to open .kernel-debug");
-                return ExitCode::FAILURE;
-            }
-        };
+        let file = File::open(".kernel-debug").map_err(KernelError::FailedToOpenDebug)?;
 
-        match serde_yaml::from_reader(file) {
-            Ok(v) => v,
-            Err(e) => {
-                error!(e, "Failed to read .kernel-debug");
-                return ExitCode::FAILURE;
-            }
-        }
+        serde_yaml::from_reader(file)?
     } else {
-        Args::parse()
+        Args::try_parse()?
     };
 
     // Initialize debug dump.
@@ -103,31 +102,14 @@ fn main() -> ExitCode {
     path.push("param.sfo");
 
     // Open param.sfo.
-    let param = match File::open(&path) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Cannot open {}", path.display());
-            return ExitCode::FAILURE;
-        }
-    };
+    let param = File::open(&path).map_err(KernelError::FailedToOpenParam)?;
 
     // Load param.sfo.
-    let param = match Param::read(param) {
-        Ok(v) => Arc::new(v),
-        Err(e) => {
-            error!(e, "Cannot read {}", path.display());
-            return ExitCode::FAILURE;
-        }
-    };
+    let param = Param::read(param).map(Arc::new)?;
 
     // Get auth info for the process.
-    let auth = match AuthInfo::from_title_id(param.title_id()) {
-        Some(v) => v,
-        None => {
-            error!("{} has invalid title identifier.", path.display());
-            return ExitCode::FAILURE;
-        }
-    };
+    let auth = AuthInfo::from_title_id(param.title_id())
+        .ok_or_else(|| KernelError::InvalidTitleId(path))?;
 
     // Show basic information.
     let mut log = info!();
@@ -142,6 +124,7 @@ fn main() -> ExitCode {
     writeln!(log, "Starting Obliteration Kernel.").unwrap();
     writeln!(log, "System directory    : {}", args.system.display()).unwrap();
     writeln!(log, "Game directory      : {}", args.game.display()).unwrap();
+    writeln!(log, "Pro mode            : {}", args.pro).unwrap();
 
     if let Some(v) = &args.debug_dump {
         writeln!(log, "Debug dump directory: {}", v.display()).unwrap();
@@ -205,22 +188,10 @@ fn main() -> ExitCode {
     let mut syscalls = Syscalls::new();
 
     // Initializes filesystem.
-    let fs = match Fs::new(args.system, args.game, &param, &cred, &mut syscalls) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Filesystem initialization failed");
-            return ExitCode::FAILURE;
-        }
-    };
+    let fs = Fs::new(args.system, args.game, &param, &cred, &mut syscalls)?;
 
     // Initialize memory management.
-    let mm = match MemoryManager::new(&mut syscalls) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Memory manager initialization failed");
-            return ExitCode::FAILURE;
-        }
-    };
+    let mm = MemoryManager::new(&mut syscalls)?;
 
     let mut log = info!();
 
@@ -272,6 +243,7 @@ fn main() -> ExitCode {
     }
 }
 
+#[allow(non_snake_case)]
 fn run<E: crate::ee::ExecutionEngine>(
     dump: Option<PathBuf>,
     param: &Arc<Param>,
@@ -281,15 +253,9 @@ fn run<E: crate::ee::ExecutionEngine>(
     fs: &Arc<Fs>,
     mm: &Arc<MemoryManager>,
     ee: Arc<E>,
-) -> ExitCode {
+) -> Result<(), KernelError> {
     // Initialize TTY system.
-    let tty = match TtyManager::new(fs) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "TTY initialization failed");
-            return ExitCode::FAILURE;
-        }
-    };
+    let tty = TtyManager::new(fs)?;
 
     // Initialize kernel components.
     RegMgr::new(&mut syscalls);
@@ -300,7 +266,7 @@ fn run<E: crate::ee::ExecutionEngine>(
 
     // TODO: Get correct budget name from the PS4.
     let budget_id = budget.create(Budget::new("big app", ProcType::BigApp));
-    let proc = match VProc::new(
+    let proc = VProc::new(
         auth,
         budget_id,
         ProcType::BigApp,
@@ -308,24 +274,13 @@ fn run<E: crate::ee::ExecutionEngine>(
         fs.root(), // TODO: Change to a proper value once FS rework is done.
         "QXuNNl0Zhn",
         &mut syscalls,
-    ) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Virtual process initialization failed");
-            return ExitCode::FAILURE;
-        }
-    };
+    )?;
 
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
 
-    let ld = match RuntimeLinker::new(&fs, mm, &ee, &mut syscalls, dump.as_deref()) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Initialize failed");
-            return ExitCode::FAILURE;
-        }
-    };
+    let ld = RuntimeLinker::new(&fs, mm, &ee, &mut syscalls, dump.as_deref())
+        .map_err(|e| KernelError::RuntimeLinkerInitFailed(e.into()))?;
 
     ee.set_syscalls(syscalls);
 
@@ -346,36 +301,28 @@ fn run<E: crate::ee::ExecutionEngine>(
 
     info!("Loading {path}.");
 
-    let module = match ld.load(&proc, path, flags, false, true) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Load failed");
-            return ExitCode::FAILURE;
-        }
-    };
+    let libkernel = ld
+        .load(&proc, path, flags, false, true)
+        .map_err(|e| KernelError::FailedToLoadLibkernel(e.into()))?;
 
-    module.flags_mut().remove(ModuleFlags::UNK2);
-    module.print(info!());
+    libkernel.flags_mut().remove(ModuleFlags::UNK2);
+    libkernel.print(info!());
 
-    ld.set_kernel(module);
+    ld.set_kernel(libkernel);
 
     // Preload libSceLibcInternal.
     let path = vpath!("/system/common/lib/libSceLibcInternal.sprx");
 
     info!("Loading {path}.");
 
-    let module = match ld.load(&proc, path, flags, false, true) {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Load failed");
-            return ExitCode::FAILURE;
-        }
-    };
+    let libSceLibcInternal = ld
+        .load(&proc, path, flags, false, true)
+        .map_err(|e| KernelError::FailedToLoadLibSceLibcInternal(e.into()))?;
 
-    module.flags_mut().remove(ModuleFlags::UNK2);
-    module.print(info!());
+    libSceLibcInternal.flags_mut().remove(ModuleFlags::UNK2);
+    libSceLibcInternal.print(info!());
 
-    drop(module);
+    drop(libSceLibcInternal);
 
     // Get eboot.bin.
     if app.file_info().is_none() {
@@ -401,45 +348,33 @@ fn run<E: crate::ee::ExecutionEngine>(
 
     let main = VThread::new(proc, &cred);
     let stack = mm.stack();
-    let main = match unsafe { main.start(stack.start(), stack.len(), entry) } {
-        Ok(v) => v,
-        Err(e) => {
-            error!(e, "Create main thread failed");
-            return ExitCode::FAILURE;
-        }
-    };
+    let main: ThreadHandle = unsafe { main.start(stack.start(), stack.len(), entry) }?;
 
     // Begin Discord Rich Presence before blocking current thread.
-    discord_presence(param);
-
-    // Wait for main thread to exit. This should never return.
-    if let Err(e) = join_thread(main) {
-        error!(e, "Failed join with main thread");
-        return ExitCode::FAILURE;
+    if let Err(e) = discord_presence(param) {
+        warn!(e, "Failed to setup Discord rich presence");
     }
 
-    ExitCode::SUCCESS
+    // Wait for main thread to exit. This should never return.
+    join_thread(main).map_err(KernelError::FailedToJoinMainThread)?;
+
+    Ok(())
 }
 
-fn discord_presence(param: &Param) {
+fn discord_presence(param: &Param) -> Result<(), DiscordPresenceError> {
     use discord_rich_presence::activity::{Activity, Assets, Timestamps};
     use discord_rich_presence::{DiscordIpc, DiscordIpcClient};
 
     // Initialize new Discord IPC with our ID.
     info!("Initializing Discord rich presence.");
 
-    let mut client = match DiscordIpcClient::new("1168617561244565584") {
-        Ok(v) => v,
-        Err(e) => {
-            warn!(e, "Failed to create Discord IPC");
-            return;
-        }
-    };
+    let mut client = DiscordIpcClient::new("1168617561244565584")
+        .map_err(|e| DiscordPresenceError::FailedToCreateIpc(e.into()))?;
 
     // Attempt to have IPC connect to user's Discord, will fail if user doesn't have Discord running.
     if client.connect().is_err() {
         // No Discord running should not be a warning.
-        return;
+        return Ok(());
     }
 
     // Create details about game.
@@ -463,19 +398,19 @@ fn discord_presence(param: &Param) {
         )
         .timestamps(Timestamps::new().start(start.try_into().unwrap()));
 
-    if let Err(e) = client.set_activity(payload) {
-        // If failing here, user's Discord most likely crashed or is offline.
-        warn!(e, "Failed to update Discord presence");
-        return;
-    }
+    client
+        .set_activity(payload)
+        .map_err(|e| DiscordPresenceError::FailedToUpdatePresence(e.into()))?;
 
     // Keep client alive forever.
     Box::leak(client.into());
+
+    Ok(())
 }
 
 #[cfg(unix)]
-fn join_thread(thr: Thread) -> Result<(), std::io::Error> {
-    let err = unsafe { libc::pthread_join(thr, std::ptr::null_mut()) };
+fn join_thread(handle: ThreadHandle) -> Result<(), std::io::Error> {
+    let err = unsafe { libc::pthread_join(handle, std::ptr::null_mut()) };
 
     if err != 0 {
         Err(std::io::Error::from_raw_os_error(err))
@@ -485,15 +420,15 @@ fn join_thread(thr: Thread) -> Result<(), std::io::Error> {
 }
 
 #[cfg(windows)]
-fn join_thread(thr: Thread) -> Result<(), std::io::Error> {
+fn join_thread(handle: ThreadHandle) -> Result<(), std::io::Error> {
     use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
     use windows_sys::Win32::System::Threading::{WaitForSingleObject, INFINITE};
 
-    if unsafe { WaitForSingleObject(thr, INFINITE) } != WAIT_OBJECT_0 {
+    if unsafe { WaitForSingleObject(handle, INFINITE) } != WAIT_OBJECT_0 {
         return Err(std::io::Error::last_os_error());
     }
 
-    assert_ne!(unsafe { CloseHandle(thr) }, 0);
+    assert_ne!(unsafe { CloseHandle(handle) }, 0);
 
     Ok(())
 }
@@ -514,6 +449,10 @@ struct Args {
     #[serde(default)]
     clear_debug_dump: bool,
 
+    #[arg(long)]
+    #[serde(default)]
+    pro: bool,
+
     #[arg(long, short)]
     execution_engine: Option<ExecutionEngine>,
 }
@@ -533,5 +472,92 @@ impl Default for ExecutionEngine {
     #[cfg(not(target_arch = "x86_64"))]
     fn default() -> Self {
         ExecutionEngine::Llvm
+    }
+}
+
+#[derive(Debug, Error)]
+enum DiscordPresenceError {
+    #[error("Failed to create Discord IPC")]
+    FailedToCreateIpc(#[source] Box<dyn Error>),
+
+    #[error("Failed to update Discord presence")]
+    FailedToUpdatePresence(#[source] Box<dyn Error>),
+}
+
+#[derive(Debug, Error)]
+enum KernelError {
+    #[error("Failed to open .kernel-debug")]
+    FailedToOpenDebug(#[source] std::io::Error),
+
+    #[error("Failed to parse .kernel-debug")]
+    FailedToParseDebug(#[from] serde_yaml::Error),
+
+    #[error("Failed to parse arguments")]
+    FailedToParseArgs(#[from] clap::Error),
+
+    #[error("Failed to open param.sfo")]
+    FailedToOpenParam(#[source] std::io::Error),
+
+    #[error("Failed to read param.sfo")]
+    FailedToReadParam(#[from] param::ReadError),
+
+    #[error("{0} has invalid title identifier.")]
+    InvalidTitleId(PathBuf),
+
+    #[error("Filesystem initialization failed")]
+    FilesystemInitFailed(#[from] FsError),
+
+    #[error("Memory manager initialization failed")]
+    MemoryManagerInitFailed(#[from] MemoryManagerError),
+
+    #[error("Failed to initialize TtyManager")]
+    TtyInitFailed(#[from] TtyError),
+
+    #[error("Virtual process initialization failed")]
+    VProcInitFailed(#[from] VProcError),
+
+    #[error("Runtime linker initialization failed")]
+    RuntimeLinkerInitFailed(#[source] Box<dyn Error>),
+
+    #[error("Failed to load libkernl")]
+    FailedToLoadLibkernel(#[source] Box<dyn Error>),
+
+    #[error("Failed to load libSceLibcInternal")]
+    FailedToLoadLibSceLibcInternal(#[source] Box<dyn Error>),
+
+    #[error("Failed to create main thread")]
+    FailedToCreateMainThread(#[from] SpawnError),
+
+    #[error("Failed to join with main thread")]
+    FailedToJoinMainThread(#[source] std::io::Error),
+}
+
+// We have to use this for a custom implementation of the Termination trait, because
+// we need to log the error using our own error! macro instead of std::fmt::Debug::fmt,
+// which is what the default implementation of Termination uses for Result<T: Termination, E: Debug>.
+enum Exit {
+    Ok,
+    Err(KernelError),
+}
+
+//TODO: implement Errno for all the required errors and return Errno::errno() instead of 1 for every error
+impl Termination for Exit {
+    fn report(self) -> ExitCode {
+        match self {
+            Exit::Ok => ExitCode::SUCCESS,
+            Exit::Err(e) => {
+                error!(e, "Error while running kernel");
+                ExitCode::FAILURE
+            }
+        }
+    }
+}
+
+impl From<Result<(), KernelError>> for Exit {
+    fn from(r: Result<(), KernelError>) -> Self {
+        match r {
+            Ok(_) => Exit::Ok,
+            Err(e) => Exit::Err(e),
+        }
     }
 }

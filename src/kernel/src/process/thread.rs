@@ -3,7 +3,7 @@ use crate::signal::SignalSet;
 use crate::ucred::{Privilege, PrivilegeError, Ucred};
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
-use llt::{SpawnError, Thread};
+use llt::{SpawnError, ThreadHandle};
 use std::num::NonZeroI32;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -108,7 +108,7 @@ impl VThread {
         stack: *mut u8,
         stack_size: usize,
         mut routine: F,
-    ) -> Result<Thread, SpawnError>
+    ) -> Result<ThreadHandle, SpawnError>
     where
         F: FnMut() + Send + 'static,
     {
