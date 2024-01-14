@@ -1,8 +1,8 @@
 use super::dirent::Dirent;
 use crate::errno::Errno;
-use crate::fs::{OpenFlags, VFile};
+use crate::fs::{Mode, OpenFlags, VFile};
 use crate::process::VThread;
-use crate::ucred::Ucred;
+use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use std::sync::{Arc, Weak};
@@ -14,9 +14,9 @@ pub struct Cdev {
     sw: Arc<CdevSw>,                           // si_devsw
     unit: i32,                                 // si_drv0
     name: String,                              // si_name
-    uid: i32,                                  // si_uid
-    gid: i32,                                  // si_gid
-    mode: u16,                                 // si_mode
+    uid: Uid,                                  // si_uid
+    gid: Gid,                                  // si_gid
+    mode: Mode,                                // si_mode
     ctime: SystemTime,                         // si_ctime
     atime: SystemTime,                         // si_atime
     mtime: SystemTime,                         // si_mtime
@@ -33,9 +33,9 @@ impl Cdev {
         sw: &Arc<CdevSw>,
         unit: i32,
         name: N,
-        uid: i32,
-        gid: i32,
-        mode: u16,
+        uid: Uid,
+        gid: Gid,
+        mode: Mode,
         cred: Option<Arc<Ucred>>,
         flags: DeviceFlags,
         inode: i32,
@@ -69,15 +69,15 @@ impl Cdev {
         self.name.as_ref()
     }
 
-    pub fn uid(&self) -> i32 {
+    pub fn uid(&self) -> Uid {
         self.uid
     }
 
-    pub fn gid(&self) -> i32 {
+    pub fn gid(&self) -> Gid {
         self.gid
     }
 
-    pub fn mode(&self) -> u16 {
+    pub fn mode(&self) -> Mode {
         self.mode
     }
 

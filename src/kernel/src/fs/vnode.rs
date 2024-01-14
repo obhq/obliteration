@@ -1,6 +1,7 @@
-use super::{unixify_access, Access, Mount, OpenFlags, VFile};
+use super::{unixify_access, Access, Mode, Mount, OpenFlags, VFile};
 use crate::errno::{Errno, ENOTDIR, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
+use crate::ucred::{Gid, Uid};
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
 use std::num::NonZeroI32;
@@ -90,6 +91,10 @@ impl Vnode {
         self.get_op(|v| v.accessx)(self, td, access)
     }
 
+    pub fn getattr(self: &Arc<Self>) -> Result<VnodeAttrs, Box<dyn Errno>> {
+        self.get_op(|v| v.getattr)(self)
+    }
+
     pub fn lookup(
         self: &Arc<Self>,
         td: Option<&VThread>,
@@ -152,20 +157,32 @@ pub type VopOpen =
 
 /// An implementation of `vattr` struct.
 pub struct VnodeAttrs {
-    uid: i32,  // va_uid
-    gid: i32,  // va_gid
-    mode: u16, // va_mode
-    size: u64, // va_size
+    uid: Uid,   // va_uid
+    gid: Gid,   // va_gid
+    mode: Mode, // va_mode
+    size: u64,  // va_size
 }
 
 impl VnodeAttrs {
-    pub fn new(uid: i32, gid: i32, mode: u16, size: u64) -> Self {
+    pub fn new(uid: Uid, gid: Gid, mode: Mode, size: u64) -> Self {
         Self {
             uid,
             gid,
             mode,
             size,
         }
+    }
+
+    pub fn uid(&self) -> Uid {
+        self.uid
+    }
+
+    pub fn gid(&self) -> Gid {
+        self.gid
+    }
+
+    pub fn mode(&self) -> Mode {
+        self.mode
     }
 }
 

@@ -1,5 +1,5 @@
 use super::{FsConfig, Vnode};
-use crate::ucred::Ucred;
+use crate::ucred::{Ucred, Uid};
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use std::any::Any;
@@ -115,6 +115,14 @@ impl Mount {
         self.data = Some(v);
     }
 
+    pub fn cred(&self) -> &Arc<Ucred> {
+        &self.cred
+    }
+
+    pub fn parent(&self) -> Option<Arc<Vnode>> {
+        self.parent.read().clone()
+    }
+
     pub fn parent_mut(&self) -> GutexWriteGuard<Option<Arc<Vnode>>> {
         self.parent.write()
     }
@@ -150,7 +158,7 @@ bitflags! {
 pub struct FsStats {
     ty: u32,      // f_type
     id: [u32; 2], // f_fsid
-    owner: i32,   // f_owner
+    owner: Uid,   // f_owner
     path: String, // f_mntonname
 }
 

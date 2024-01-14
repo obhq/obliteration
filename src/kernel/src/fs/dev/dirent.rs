@@ -1,5 +1,6 @@
 use super::Cdev;
-use crate::fs::{DirentType, Vnode};
+use crate::fs::{DirentType, Mode, Vnode};
+use crate::ucred::{Gid, Uid};
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use std::ops::Deref;
 use std::sync::{Arc, Weak};
@@ -8,9 +9,9 @@ use std::time::SystemTime;
 /// An implementation of `devfs_dirent` structure.
 pub struct Dirent {
     inode: i32,                        // de_inode
-    uid: Gutex<i32>,                   // de_uid
-    gid: Gutex<i32>,                   // de_gid
-    mode: Gutex<u16>,                  // de_mode
+    uid: Gutex<Uid>,                   // de_uid
+    gid: Gutex<Gid>,                   // de_gid
+    mode: Gutex<Mode>,                 // de_mode
     dir: Option<Weak<Self>>,           // de_dir
     children: Gutex<Vec<Arc<Self>>>,   // de_dlist
     ctime: SystemTime,                 // de_ctime
@@ -25,9 +26,9 @@ impl Dirent {
     pub fn new<N>(
         ty: DirentType,
         inode: i32,
-        uid: i32,
-        gid: i32,
-        mode: u16,
+        uid: Uid,
+        gid: Gid,
+        mode: Mode,
         dir: Option<Weak<Self>>,
         cdev: Option<Weak<Cdev>>,
         name: N,
@@ -58,15 +59,15 @@ impl Dirent {
         self.inode
     }
 
-    pub fn uid(&self) -> GutexReadGuard<i32> {
+    pub fn uid(&self) -> GutexReadGuard<Uid> {
         self.uid.read()
     }
 
-    pub fn gid(&self) -> GutexReadGuard<i32> {
+    pub fn gid(&self) -> GutexReadGuard<Gid> {
         self.gid.read()
     }
 
-    pub fn mode(&self) -> GutexReadGuard<u16> {
+    pub fn mode(&self) -> GutexReadGuard<Mode> {
         self.mode.read()
     }
 
