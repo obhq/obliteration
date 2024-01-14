@@ -16,7 +16,7 @@ use crate::signal::{
     SIG_IGN, SIG_MAXSIG, SIG_SETMASK, SIG_UNBLOCK,
 };
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
-use crate::ucred::{AuthInfo, Privilege, Ucred};
+use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
 use std::cmp::min;
@@ -76,9 +76,10 @@ impl VProc {
     ) -> Result<Arc<Self>, VProcError> {
         let cred = if auth.caps.is_system() {
             // TODO: The groups will be copied from the parent process, which is SceSysCore.
-            Ucred::new(0, 0, vec![0], auth)
+            Ucred::new(Uid::ROOT, Uid::ROOT, vec![Gid::ROOT], auth)
         } else {
-            Ucred::new(1, 1, vec![1], auth)
+            let uid = Uid::new(1).unwrap();
+            Ucred::new(uid, uid, vec![Gid::new(1).unwrap()], auth)
         };
 
         let gg = GutexGroup::new();

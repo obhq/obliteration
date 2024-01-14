@@ -1,9 +1,9 @@
 pub use self::cdev::*;
 use self::dirent::Dirent;
 use self::vnode::{CHARACTER_OPS, VNODE_OPS};
-use super::{path_contains, DirentType, FsOps, Mount, MountFlags, Vnode, VnodeType};
+use super::{path_contains, DirentType, FsOps, Mode, Mount, MountFlags, Vnode, VnodeType};
 use crate::errno::{Errno, EEXIST, ENOENT, EOPNOTSUPP};
-use crate::ucred::Ucred;
+use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
 use std::any::Any;
 use std::collections::HashMap;
@@ -21,9 +21,9 @@ pub fn make_dev<N: Into<String>>(
     sw: &Arc<CdevSw>,
     unit: i32,
     name: N,
-    uid: i32,
-    gid: i32,
-    mode: u16,
+    uid: Uid,
+    gid: Gid,
+    mode: Mode,
     cred: Option<Arc<Ucred>>,
     flags: MakeDev,
 ) -> Result<Arc<Cdev>, MakeDevError> {
@@ -244,9 +244,9 @@ impl DevFs {
             } else {
                 inode
             },
-            0,
-            0,
-            0555,
+            Uid::ROOT,
+            Gid::ROOT,
+            Mode::new(0555).unwrap(),
             None,
             None,
             name,
@@ -256,9 +256,9 @@ impl DevFs {
         let dot = Dirent::new(
             DirentType::Directory,
             0,
-            0,
-            0,
-            0,
+            Uid::ROOT,
+            Gid::ROOT,
+            Mode::new(0).unwrap(),
             Some(Arc::downgrade(&dir)),
             None,
             ".",
@@ -270,9 +270,9 @@ impl DevFs {
         let dd = Dirent::new(
             DirentType::Directory,
             0,
-            0,
-            0,
-            0,
+            Uid::ROOT,
+            Gid::ROOT,
+            Mode::new(0).unwrap(),
             Some(Arc::downgrade(parent.unwrap_or(&dir))),
             None,
             "..",

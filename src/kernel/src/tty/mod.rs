@@ -1,6 +1,9 @@
 use crate::errno::Errno;
-use crate::fs::{make_dev, Cdev, CdevSw, DriverFlags, Fs, IoCmd, MakeDev, MakeDevError, OpenFlags};
+use crate::fs::{
+    make_dev, Cdev, CdevSw, DriverFlags, Fs, IoCmd, MakeDev, MakeDevError, Mode, OpenFlags,
+};
 use crate::process::VThread;
+use crate::ucred::{Gid, Uid};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -25,9 +28,9 @@ impl TtyManager {
             &console,
             0,
             "console",
-            0,
-            0,
-            0600,
+            Uid::ROOT,
+            Gid::ROOT,
+            Mode::new(0600).unwrap(),
             None,
             MakeDev::MAKEDEV_ETERNAL,
         ) {
