@@ -63,10 +63,6 @@ impl Vnode {
         matches!(self.ty, VnodeType::Character)
     }
 
-    pub fn op(&self) -> &'static VopVector {
-        self.op
-    }
-
     pub fn data(&self) -> &Arc<dyn Any + Send + Sync> {
         &self.data
     }
