@@ -80,21 +80,21 @@ impl Mount {
     /// See `vfs_mount_alloc` on the PS4 for a reference.
     pub fn new(
         parent: Option<Arc<Vnode>>,
-        fsconf: &'static FsConfig,
+        fs: &'static FsConfig,
         path: impl Into<String>,
         cred: &Arc<Ucred>,
     ) -> Self {
         let gg = GutexGroup::new();
         let owner = cred.effective_uid();
         let mount = Self {
-            fs: fsconf,
+            fs,
             gen: 1,
             data: None,
             cred: cred.clone(),
             parent: gg.spawn(parent),
             flags: gg.spawn(MountFlags::empty()),
             stats: FsStats {
-                ty: fsconf.ty,
+                ty: fs.ty,
                 id: [0; 2],
                 owner,
                 path: path.into(),
