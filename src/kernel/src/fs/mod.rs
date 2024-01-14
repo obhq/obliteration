@@ -11,6 +11,7 @@ use crate::errno::{Errno, EBADF, EBUSY, EINVAL, ENAMETOOLONG, ENODEV, ENOENT};
 use crate::info;
 use crate::process::VThread;
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
+use crate::ucred::PrivilegeError;
 use crate::ucred::{Privilege, Ucred};
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup};
@@ -18,6 +19,7 @@ use macros::vpath;
 use param::Param;
 use std::fmt::{Display, Formatter};
 use std::num::{NonZeroI32, TryFromIntError};
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use thiserror::Error;
@@ -252,8 +254,14 @@ impl Fs {
         Ok(vn)
     }
 
-    fn revoke(&self, _vn: Arc<Vnode>) -> Result<(), RevokeError> {
-        todo!()
+    fn revoke(&self, vn: Arc<Vnode>, td: &VThread) -> Result<(), RevokeError> {
+        let vattr = vn.getattr().map_err(RevokeError::GetAttrError)?;
+
+        if td.cred().effective_uid() != vattr.uid() {
+            td.priv_check(Privilege::VFS_ADMIN)?;
+        }
+
+        todo!();
     }
 
     fn sys_write(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -410,7 +418,7 @@ impl Fs {
 
         // TODO: It seems like the initial ucred of the process is either root or has PRIV_VFS_ADMIN
         // privilege.
-        self.revoke(vn)?;
+        self.revoke(vn, td.deref())?;
 
         Ok(SysOut::ZERO)
     }
@@ -678,12 +686,16 @@ impl Errno for LookupError {
 pub enum RevokeError {
     #[error("failed to get file attr")]
     GetAttrError(#[source] Box<dyn Errno>),
+
+    #[error("insufficient privilege")]
+    PrivelegeError(#[from] PrivilegeError),
 }
 
 impl Errno for RevokeError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::GetAttrError(e) => e.errno(),
+            Self::PrivelegeError(e) => e.errno(),
         }
     }
 }

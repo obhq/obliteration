@@ -91,6 +91,10 @@ impl Vnode {
         self.get_op(|v| v.accessx)(self, td, access)
     }
 
+    pub fn getattr(self: &Arc<Self>) -> Result<VnodeAttrs, Box<dyn Errno>> {
+        self.get_op(|v| v.getattr)(self)
+    }
+
     pub fn lookup(
         self: &Arc<Self>,
         td: Option<&VThread>,
@@ -173,6 +177,10 @@ impl VnodeAttrs {
             mode,
             size,
         }
+    }
+
+    pub fn uid(&self) -> i32 {
+        self.uid
     }
 }
 
