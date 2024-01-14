@@ -13,6 +13,7 @@ pub struct Llvm {
     context: Mutex<LLVMContextRef>,
 }
 
+#[allow(dead_code)]
 impl Llvm {
     pub fn new() -> Arc<Self> {
         let context = unsafe { LLVMContextCreate() };
@@ -50,9 +51,10 @@ unsafe impl Sync for Llvm {}
 /// A wrapper on LLVM error.
 #[derive(Debug)]
 pub struct Error {
-    message: String,
+    message: Box<str>,
 }
 
+#[allow(dead_code)]
 impl Error {
     /// # Safety
     /// `message` must be pointed to a null-terminated string allocated with `malloc` or a
@@ -61,7 +63,7 @@ impl Error {
         let owned = CStr::from_ptr(message)
             .to_string_lossy()
             .trim_end_matches('.')
-            .to_owned();
+            .into();
 
         libc::free(message as _);
 

@@ -14,6 +14,7 @@ pub struct LlvmModule {
     module: LLVMModuleRef,
 }
 
+#[allow(dead_code)]
 impl LlvmModule {
     pub(super) fn new(llvm: &Arc<Llvm>, module: LLVMModuleRef) -> Self {
         Self {

@@ -11,10 +11,12 @@ mod codegen;
 
 /// An implementation of [`ExecutionEngine`] using JIT powered by LLVM IR.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct LlvmEngine {
     llvm: Arc<Llvm>,
 }
 
+#[allow(dead_code)]
 impl LlvmEngine {
     pub fn new(llvm: &Arc<Llvm>) -> Arc<Self> {
         Arc::new(Self { llvm: llvm.clone() })
@@ -53,6 +55,7 @@ impl LlvmEngine {
     }
 }
 
+#[allow(unused_variables)]
 impl ExecutionEngine for LlvmEngine {
     type RawFn = RawFn;
     type SetupModuleErr = SetupModuleError;
@@ -79,6 +82,7 @@ impl ExecutionEngine for LlvmEngine {
 #[derive(Debug)]
 pub struct RawFn {}
 
+#[allow(unused_variables)]
 impl super::RawFn for RawFn {
     fn addr(&self) -> usize {
         todo!()

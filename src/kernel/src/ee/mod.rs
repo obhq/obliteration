@@ -24,7 +24,9 @@ pub trait ExecutionEngine: Debug + Send + Sync + 'static {
     /// # Panics
     /// If this method called a second time.
     fn set_syscalls(&self, v: Syscalls);
+
     fn setup_module(self: &Arc<Self>, md: &mut Module<Self>) -> Result<(), Self::SetupModuleErr>;
+
     unsafe fn get_function(
         self: &Arc<Self>,
         md: &Arc<Module<Self>>,
