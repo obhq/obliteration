@@ -146,7 +146,6 @@ pub struct VopVector {
     pub default: Option<&'static Self>, // vop_default
     pub access: Option<VopAccess>,      // vop_access
     pub accessx: Option<VopAccessX>,    // vop_accessx
-    pub bypass: Option<VopBypass>,      // vop_bypass
     pub getattr: Option<VopGetAttr>,    // vop_getattr
     pub lookup: Option<VopLookup>,      // vop_lookup
     pub open: Option<VopOpen>,          // vop_open
@@ -154,7 +153,6 @@ pub struct VopVector {
 
 pub type VopAccess = fn(&Arc<Vnode>, Option<&VThread>, Access) -> Result<(), Box<dyn Errno>>;
 pub type VopAccessX = fn(&Arc<Vnode>, Option<&VThread>, Access) -> Result<(), Box<dyn Errno>>;
-pub type VopBypass = fn(&'static VnodeOpDesc) -> Result<(), Box<dyn Errno>>;
 pub type VopGetAttr = fn(&Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>>;
 pub type VopLookup = fn(&Arc<Vnode>, Option<&VThread>, &str) -> Result<Arc<Vnode>, Box<dyn Errno>>;
 pub type VopOpen =
@@ -212,7 +210,6 @@ pub static DEFAULT_VNODEOPS: VopVector = VopVector {
     default: None,
     access: Some(|vn, td, access| vn.accessx(td, access)),
     accessx: Some(accessx),
-    bypass: Some(|_| Err(Box::new(DefaultError::NotSupported))),
     getattr: Some(|_| Err(Box::new(DefaultError::NotSupported))), // Inline vop_bypass.
     lookup: Some(|_, _, _| Err(Box::new(DefaultError::NotDirectory))),
     open: Some(|_, _, _, _| Ok(())),
@@ -230,30 +227,3 @@ fn accessx(vn: &Arc<Vnode>, td: Option<&VThread>, access: Access) -> Result<(), 
 }
 
 static ACTIVE: AtomicUsize = AtomicUsize::new(0); // numvnodes
-
-#[allow(dead_code)]
-pub struct VnodeOpDesc {
-    name: &'static str,                                           //vdesc_name
-    flags: VnodeOpDescFlags,                                      //vdesc_flags
-    call: fn(&'static VnodeOpDesc) -> Result<(), Box<dyn Errno>>, //vdesc_call
-}
-
-#[allow(dead_code)]
-impl VnodeOpDesc {
-    pub fn name(&self) -> &'static str {
-        self.name
-    }
-
-    pub fn flags(&self) -> VnodeOpDescFlags {
-        self.flags
-    }
-
-    pub fn vcall(&'static self) -> Result<(), Box<dyn Errno>> {
-        (self.call)(self)
-    }
-}
-
-bitflags! {
-    #[derive(Clone, Copy)]
-    pub struct VnodeOpDescFlags: i32 {}
-}

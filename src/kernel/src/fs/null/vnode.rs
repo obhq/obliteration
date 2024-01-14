@@ -12,7 +12,6 @@ pub(super) static VNODE_OPS: VopVector = VopVector {
     default: None,
     access: Some(access),
     accessx: Some(access),
-    bypass: Some(bypass),
     getattr: None,
     lookup: Some(lookup),
     open: Some(open),
@@ -46,10 +45,6 @@ impl Errno for AccessError {
             Self::Readonly => EROFS,
         }
     }
-}
-
-fn bypass(_desc: &'static VnodeOpDesc) -> Result<(), Box<dyn Errno>> {
-    todo!();
 }
 
 #[derive(Debug, Error)]
