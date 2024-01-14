@@ -1,7 +1,5 @@
 use super::{FsOps, Mount, MountFlags, MountOpts, Vnode};
 use crate::errno::{Errno, EINVAL};
-use std::any::Any;
-use std::collections::HashMap;
 use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
