@@ -119,7 +119,7 @@ pub fn check_access(
 pub struct Mode(u16);
 
 impl Mode {
-    pub fn new(v: u16) -> Option<Self> {
+    pub const fn new(v: u16) -> Option<Self> {
         if v > 0777 {
             None
         } else {

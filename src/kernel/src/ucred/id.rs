@@ -6,7 +6,7 @@ pub struct Uid(i32);
 impl Uid {
     pub const ROOT: Self = Self(0);
 
-    pub fn new(v: i32) -> Option<Self> {
+    pub const fn new(v: i32) -> Option<Self> {
         if v >= 0 {
             Some(Self(v))
         } else {
@@ -23,7 +23,7 @@ pub struct Gid(i32);
 impl Gid {
     pub const ROOT: Self = Self(0);
 
-    pub fn new(v: i32) -> Option<Self> {
+    pub const fn new(v: i32) -> Option<Self> {
         if v >= 0 {
             Some(Self(v))
         } else {
