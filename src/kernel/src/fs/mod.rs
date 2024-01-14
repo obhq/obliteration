@@ -435,7 +435,7 @@ impl Fs {
         let path: VPathBuf = opts.remove("fspath").unwrap().try_into().unwrap();
 
         opts.retain(|k, v| {
-            match *k {
+            match k {
                 "async" => todo!(),
                 "atime" => todo!(),
                 "clusterr" => todo!(),
