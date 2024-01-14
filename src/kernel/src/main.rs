@@ -25,7 +25,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::SystemTime;
-use sysinfo::System;
+use sysinfo::{MemoryRefreshKind, System};
 
 mod arch;
 mod arnd;
@@ -129,13 +129,14 @@ fn main() -> ExitCode {
         }
     };
 
-    // Show basic infomation.
+    // Show basic information.
     let mut log = info!();
-    let hwinfo = System::new_with_specifics(
+    let mut hwinfo = System::new_with_specifics(
         sysinfo::RefreshKind::new()
             .with_memory(sysinfo::MemoryRefreshKind::new())
             .with_cpu(sysinfo::CpuRefreshKind::new()),
     );
+    hwinfo.refresh_memory_specifics(MemoryRefreshKind::new().with_ram());
 
     // Init information
     writeln!(log, "Starting Obliteration Kernel.").unwrap();
@@ -167,7 +168,11 @@ fn main() -> ExitCode {
         log,
         "Operating System    : {} {}",
         System::long_os_version().unwrap_or_else(|| "Unknown OS".to_string()),
-        System::kernel_version().unwrap_or_else(|| "Unknown Kernel".to_string())
+        if cfg!(target_os = "windows") {
+            System::kernel_version().unwrap_or_else(|| "Unknown Kernel".to_string())
+        } else {
+            "".to_string()
+        }
     )
     .unwrap();
     writeln!(log, "CPU Information     : {}", hwinfo.cpus()[0].brand()).unwrap();
