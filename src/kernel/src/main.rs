@@ -54,7 +54,6 @@ mod tty;
 mod ucred;
 
 fn main() -> Exit {
-    //TODO: refactor this when try_trait is stabilized
     main_wrapped().into()
 }
 
