@@ -4,7 +4,6 @@ use crate::process::VThread;
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
-use std::mem::MaybeUninit;
 use std::num::NonZeroI32;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -130,6 +129,7 @@ impl Drop for Vnode {
 
 /// An implementation of `vtype`.
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub enum VnodeType {
     File,            // VREG
     Directory(bool), // VDIR

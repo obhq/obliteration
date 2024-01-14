@@ -252,8 +252,8 @@ impl Fs {
         Ok(vn)
     }
 
-    fn revoke(&self, _path: impl Into<VPathBuf>) {
-        // TODO: Implement this.
+    fn revoke(&self, _vn: Arc<Vnode>) -> Result<(), RevokeError> {
+        todo!()
     }
 
     fn sys_write(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -410,7 +410,7 @@ impl Fs {
 
         // TODO: It seems like the initial ucred of the process is either root or has PRIV_VFS_ADMIN
         // privilege.
-        self.revoke(path);
+        self.revoke(vn)?;
 
         Ok(SysOut::ZERO)
     }
@@ -669,6 +669,21 @@ impl Errno for LookupError {
         match self {
             Self::NotFound => ENOENT,
             Self::LookupFailed(_, _, e) => e.errno(),
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+#[allow(dead_code)]
+pub enum RevokeError {
+    #[error("failed to get file attr")]
+    GetAttrError(#[source] Box<dyn Errno>),
+}
+
+impl Errno for RevokeError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::GetAttrError(e) => e.errno(),
         }
     }
 }
