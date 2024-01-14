@@ -1,8 +1,8 @@
 use super::{unixify_access, Access, Mode, Mount, OpenFlags, VFile};
 use crate::errno::{Errno, ENOTDIR, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
-use bitflags::bitflags;
 use crate::ucred::{Gid, Uid};
+use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
 use std::num::NonZeroI32;
