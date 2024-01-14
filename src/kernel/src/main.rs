@@ -168,7 +168,11 @@ fn main() -> ExitCode {
         log,
         "Operating System    : {} {}",
         System::long_os_version().unwrap_or_else(|| "Unknown OS".to_string()),
-        System::kernel_version().unwrap_or_else(|| "Unknown Kernel".to_string())
+        if cfg!(target_os = "windows") {
+            System::kernel_version().unwrap_or_else(|| "Unknown Kernel".to_string())
+        } else {
+            "".to_string()
+        }
     )
     .unwrap();
     writeln!(log, "CPU Information     : {}", hwinfo.cpus()[0].brand()).unwrap();
