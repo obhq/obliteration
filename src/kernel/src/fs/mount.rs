@@ -175,8 +175,8 @@ pub(super) enum MountOpt {
     Bool(bool),
     Int(i32),
     Str(Box<str>),
-    VPathBuf(VPathBuf),
-    PathBuf(PathBuf),
+    VPath(VPathBuf),
+    Path(PathBuf),
     Param(Arc<Param>),
 }
 
@@ -215,13 +215,13 @@ impl From<String> for MountOpt {
 
 impl From<VPathBuf> for MountOpt {
     fn from(v: VPathBuf) -> Self {
-        Self::VPathBuf(v)
+        Self::VPath(v)
     }
 }
 
 impl From<PathBuf> for MountOpt {
     fn from(v: PathBuf) -> Self {
-        Self::PathBuf(v)
+        Self::Path(v)
     }
 }
 
@@ -269,7 +269,7 @@ impl TryFrom<MountOpt> for VPathBuf {
 
     fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
         match v {
-            MountOpt::VPathBuf(v) => Ok(v),
+            MountOpt::VPath(v) => Ok(v),
             _ => Err(()),
         }
     }
@@ -280,7 +280,7 @@ impl TryFrom<MountOpt> for PathBuf {
 
     fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
         match v {
-            MountOpt::PathBuf(v) => Ok(v),
+            MountOpt::Path(v) => Ok(v),
             _ => Err(()),
         }
     }
