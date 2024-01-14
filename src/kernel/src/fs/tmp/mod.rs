@@ -2,13 +2,12 @@ use super::{FsOps, Mount, MountFlags, MountOpts, Vnode};
 use crate::errno::{Errno, EINVAL};
 use crate::fs::Mode;
 use crate::ucred::{Gid, Uid};
-use std::any::Any;
-use std::collections::HashMap;
 use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
 
-fn mount(mnt: &mut Mount, _: MountOpts) -> Result<(), Box<dyn Errno>> {
+#[allow(unused_variables)]
+fn mount(mnt: &mut Mount, mut opts: MountOpts) -> Result<(), Box<dyn Errno>> {
     if mnt.flags().intersects(MountFlags::MNT_UPDATE) {
         return Err(Box::new(MountError::UpdateNotSupported));
     }
@@ -21,9 +20,9 @@ fn mount(mnt: &mut Mount, _: MountOpts) -> Result<(), Box<dyn Errno>> {
     };
 
     // Get GID.
-    let gid = if mnt.cred().real_uid() == Uid::ROOT {
+    let gid: Gid = if mnt.cred().real_uid() == Uid::ROOT {
         match opts.remove("gid") {
-            Some(v) => *v.downcast::<Gid>().unwrap(),
+            Some(v) => v.try_into().unwrap(),
             None => attrs.gid(),
         }
     } else {
@@ -31,9 +30,9 @@ fn mount(mnt: &mut Mount, _: MountOpts) -> Result<(), Box<dyn Errno>> {
     };
 
     // Get UID.
-    let uid = if mnt.cred().real_uid() == Uid::ROOT {
+    let uid: Uid = if mnt.cred().real_uid() == Uid::ROOT {
         match opts.remove("uid") {
-            Some(v) => *v.downcast::<Uid>().unwrap(),
+            Some(v) => v.try_into().unwrap(),
             None => attrs.uid(),
         }
     } else {
@@ -41,9 +40,9 @@ fn mount(mnt: &mut Mount, _: MountOpts) -> Result<(), Box<dyn Errno>> {
     };
 
     // Get mode.
-    let mode = if mnt.cred().real_uid() == Uid::ROOT {
+    let mode: Mode = if mnt.cred().real_uid() == Uid::ROOT {
         match opts.remove("mode") {
-            Some(v) => *v.downcast::<Mode>().unwrap(),
+            Some(v) => v.try_into().unwrap(),
             None => attrs.mode(),
         }
     } else {
@@ -51,22 +50,15 @@ fn mount(mnt: &mut Mount, _: MountOpts) -> Result<(), Box<dyn Errno>> {
     };
 
     // Get maximum inodes.
-    let inodes = match opts.remove("inodes") {
-        Some(v) => *v.downcast::<usize>().unwrap(),
-        None => 0,
-    };
+    let inodes: usize = opts.remove("inodes").map_or(0, |v| v.try_into().unwrap());
 
     // Get size.
-    let size = match opts.remove("size") {
-        Some(v) => *v.downcast::<usize>().unwrap(),
-        None => 0,
-    };
+    let size: usize = opts.remove("size").map_or(0, |v| v.try_into().unwrap());
 
     // Get maximum file size.
-    let file_size = match opts.remove("maxfilesize") {
-        Some(v) => *v.downcast::<usize>().unwrap(),
-        None => 0,
-    };
+    let file_size: usize = opts
+        .remove("maxfilesize")
+        .map_or(0, |v| v.try_into().unwrap());
 
     todo!()
 }

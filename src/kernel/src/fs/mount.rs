@@ -1,5 +1,5 @@
-use super::{Fs, FsConfig, VPathBuf, Vnode};
-use crate::ucred::{Ucred, Uid};
+use super::{FsConfig, Mode, VPathBuf, Vnode};
+use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use param::Param;
@@ -177,10 +177,14 @@ impl MountOpts {
 pub(super) enum MountOpt {
     Bool(bool),
     Int(i32),
+    Usize(usize),
     Str(Box<str>),
     VPath(VPathBuf),
     Path(PathBuf),
     Param(Arc<Param>),
+    Gid(Gid),
+    Uid(Uid),
+    Mode(Mode),
 }
 
 impl MountOpt {
@@ -201,6 +205,12 @@ impl From<bool> for MountOpt {
 impl From<i32> for MountOpt {
     fn from(v: i32) -> Self {
         Self::Int(v)
+    }
+}
+
+impl From<usize> for MountOpt {
+    fn from(v: usize) -> Self {
+        Self::Usize(v)
     }
 }
 
@@ -231,6 +241,24 @@ impl From<PathBuf> for MountOpt {
 impl From<Arc<Param>> for MountOpt {
     fn from(v: Arc<Param>) -> Self {
         Self::Param(v)
+    }
+}
+
+impl From<Gid> for MountOpt {
+    fn from(v: Gid) -> Self {
+        Self::Gid(v)
+    }
+}
+
+impl From<Uid> for MountOpt {
+    fn from(v: Uid) -> Self {
+        Self::Uid(v)
+    }
+}
+
+impl From<Mode> for MountOpt {
+    fn from(v: Mode) -> Self {
+        Self::Mode(v)
     }
 }
 
@@ -295,6 +323,50 @@ impl TryFrom<MountOpt> for Arc<Param> {
     fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
         match v {
             MountOpt::Param(v) => Ok(v),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<MountOpt> for Gid {
+    type Error = ();
+
+    fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
+        match v {
+            MountOpt::Gid(v) => Ok(v),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<MountOpt> for Uid {
+    type Error = ();
+
+    fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
+        match v {
+            MountOpt::Uid(v) => Ok(v),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<MountOpt> for Mode {
+    type Error = ();
+
+    fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
+        match v {
+            MountOpt::Mode(v) => Ok(v),
+            _ => Err(()),
+        }
+    }
+}
+
+impl TryFrom<MountOpt> for usize {
+    type Error = ();
+
+    fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
+        match v {
+            MountOpt::Usize(v) => Ok(v),
             _ => Err(()),
         }
     }

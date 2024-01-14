@@ -1,7 +1,9 @@
 pub use self::cdev::*;
 use self::dirent::Dirent;
 use self::vnode::{CHARACTER_OPS, VNODE_OPS};
-use super::{path_contains, DirentType, FsOps, Mode, Mount, MountFlags, Vnode, MountOpts, VnodeType};
+use super::{
+    path_contains, DirentType, FsOps, Mode, Mount, MountFlags, MountOpts, Vnode, VnodeType,
+};
 use crate::errno::{Errno, EEXIST, ENOENT, EOPNOTSUPP};
 use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;

@@ -7,6 +7,7 @@ use std::sync::{Arc, Weak};
 use std::time::SystemTime;
 
 /// An implementation of `devfs_dirent` structure.
+#[allow(dead_code)]
 pub struct Dirent {
     inode: i32,                        // de_inode
     uid: Gutex<Uid>,                   // de_uid
@@ -23,7 +24,7 @@ pub struct Dirent {
 }
 
 impl Dirent {
-    pub fn new<N>(
+    pub fn new(
         ty: DirentType,
         inode: i32,
         uid: Uid,
@@ -31,11 +32,8 @@ impl Dirent {
         mode: Mode,
         dir: Option<Weak<Self>>,
         cdev: Option<Weak<Cdev>>,
-        name: N,
-    ) -> Self
-    where
-        N: Into<String>,
-    {
+        name: impl Into<String>,
+    ) -> Self {
         let gg = GutexGroup::new();
         let now = SystemTime::now();
 

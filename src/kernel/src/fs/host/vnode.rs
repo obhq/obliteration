@@ -35,7 +35,7 @@ fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
 
     // TODO: Check how the PS4 assign file permissions for exfatfs.
     let mode = match vn.ty() {
-        VnodeType::Directory(_) => 0o555,
+        VnodeType::Directory(_) => Mode::new(0o555).unwrap(),
         VnodeType::Link | VnodeType::File => todo!(),
         VnodeType::Character => unreachable!(), // The character device should only be in the devfs.
     };
