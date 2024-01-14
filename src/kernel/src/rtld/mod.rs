@@ -560,10 +560,8 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
     fn sys_dynlib_do_copy_relocations(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
         if let Some(info) = self.app.file_info() {
-            for reloc in info.relocs() {
-                if reloc.ty() == Relocation::R_X86_64_COPY {
-                    return Err(SysErr::Raw(EINVAL));
-                }
+            if info.relocs().any(|r| r.ty() == Relocation::R_X86_64_COPY) {
+                return Err(SysErr::Raw(EINVAL));
             }
 
             Ok(SysOut::ZERO)
