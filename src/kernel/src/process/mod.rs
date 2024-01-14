@@ -16,6 +16,7 @@ use crate::signal::{
     SIG_IGN, SIG_MAXSIG, SIG_SETMASK, SIG_UNBLOCK,
 };
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
+use crate::ucred::prison::PRISON0;
 use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
@@ -65,21 +66,23 @@ pub struct VProc {
 }
 
 impl VProc {
-    pub fn new<S: Into<String>>(
+    pub fn new(
         auth: AuthInfo,
         budget_id: usize,
         budget_ptype: ProcType,
         dmem_container: usize,
         root: Arc<Vnode>,
-        system_path: S,
+        system_path: impl Into<String>,
         sys: &mut Syscalls,
     ) -> Result<Arc<Self>, VProcError> {
         let cred = if auth.caps.is_system() {
             // TODO: The groups will be copied from the parent process, which is SceSysCore.
-            Ucred::new(Uid::ROOT, Uid::ROOT, vec![Gid::ROOT], auth)
+            // TODO: figure out the actual prison value
+            Ucred::new(Uid::ROOT, Uid::ROOT, vec![Gid::ROOT], &PRISON0, auth)
         } else {
             let uid = Uid::new(1).unwrap();
-            Ucred::new(uid, uid, vec![Gid::new(1).unwrap()], auth)
+            //TODO: figure out the actual prison value
+            Ucred::new(uid, uid, vec![Gid::new(1).unwrap()], &PRISON0, auth)
         };
 
         let gg = GutexGroup::new();
@@ -104,7 +107,7 @@ impl VProc {
             gg,
         });
 
-        sys.register(20, &vp, |p, _| Ok(p.id().into()));
+        sys.register(20, &vp, Self::sys_getid);
         sys.register(50, &vp, Self::sys_setlogin);
         sys.register(147, &vp, Self::sys_setsid);
         sys.register(340, &vp, Self::sys_sigprocmask);
@@ -182,6 +185,10 @@ impl VProc {
             R::new(R::FSIZE).map_err(E::GetFileSizeLimitFailed)?,
             R::new(R::DATA).map_err(E::GetDataLimitFailed)?,
         ])
+    }
+
+    fn sys_getid(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
+        Ok(self.id.into())
     }
 
     fn sys_setlogin(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {

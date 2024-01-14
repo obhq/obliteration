@@ -13,6 +13,7 @@ use crate::rtld::{LoadFlags, ModuleFlags, RuntimeLinker};
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
 use crate::tty::TtyManager;
+use crate::ucred::prison::PRISON0;
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use clap::{Parser, ValueEnum};
 use llt::Thread;
@@ -187,10 +188,11 @@ fn main() -> ExitCode {
     print(log);
 
     // Setup kernel credential.
-    let cred = Arc::new(Ucred::new(
+    let kern_cred = Arc::new(Ucred::new(
         Uid::ROOT,
         Uid::ROOT,
         vec![Gid::ROOT],
+        &PRISON0, //TODO: figure out the actual value
         AuthInfo {
             paid: AuthPaid::KERNEL,
             caps: AuthCaps::new([0x4000000000000000, 0, 0, 0]),
@@ -205,7 +207,7 @@ fn main() -> ExitCode {
     let mut syscalls = Syscalls::new();
 
     // Initializes filesystem.
-    let fs = match Fs::new(args.system, args.game, &param, &cred, &mut syscalls) {
+    let fs = match Fs::new(args.system, args.game, &param, &kern_cred, &mut syscalls) {
         Ok(v) => v,
         Err(e) => {
             error!(e, "Filesystem initialization failed");
@@ -396,6 +398,7 @@ fn run<E: crate::ee::ExecutionEngine>(
         Uid::ROOT,
         Uid::ROOT,
         vec![Gid::ROOT],
+        &PRISON0, //TODO: figure out the actual value
         AuthInfo::SYS_CORE.clone(),
     ));
 

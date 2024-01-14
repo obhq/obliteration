@@ -1,5 +1,7 @@
 pub use self::auth::*;
 pub use self::id::*;
+use self::prison::Prison;
+use self::prison::PRISON0;
 pub use self::privilege::*;
 use crate::errno::{Errno, EPERM};
 use std::num::NonZeroI32;
@@ -7,19 +9,27 @@ use thiserror::Error;
 
 mod auth;
 mod id;
+pub mod prison;
 mod privilege;
 
 /// An implementation of `ucred` structure.
 #[derive(Debug, Clone)]
 pub struct Ucred {
-    effective_uid: Uid, // cr_uid
-    real_uid: Uid,      // cr_ruid
-    groups: Vec<Gid>,   // cr_groups + cr_ngroups
+    effective_uid: Uid,      // cr_uid
+    real_uid: Uid,           // cr_ruid
+    groups: Vec<Gid>,        // cr_groups + cr_ngroups
+    prison: &'static Prison, // cr_prison
     auth: AuthInfo,
 }
 
 impl Ucred {
-    pub fn new(effective_uid: Uid, real_uid: Uid, mut groups: Vec<Gid>, auth: AuthInfo) -> Self {
+    pub fn new(
+        effective_uid: Uid,
+        real_uid: Uid,
+        mut groups: Vec<Gid>,
+        prison: &'static Prison,
+        auth: AuthInfo,
+    ) -> Self {
         assert!(!groups.is_empty()); // Must have primary group.
 
         groups[1..].sort_unstable(); // The first one must be primary group.
@@ -28,6 +38,7 @@ impl Ucred {
             effective_uid,
             real_uid,
             groups,
+            prison,
             auth,
         }
     }
@@ -83,10 +94,14 @@ impl Ucred {
         self.auth.caps.is_unk1() && self.auth.attrs.is_unk2()
     }
 
+    pub fn is_jailed(&self) -> bool {
+        !std::ptr::eq(self.prison, &PRISON0)
+    }
+
     /// See `priv_check_cred` on the PS4 for a reference.
     pub fn priv_check(&self, p: Privilege) -> Result<(), PrivilegeError> {
         // TODO: Check suser_enabled.
-        self.prison_priv_check()?;
+        self.prison_priv_check(p)?;
 
         let r = match p {
             Privilege::MAXFILES
@@ -94,7 +109,7 @@ impl Ucred {
             | Privilege::SCE680
             | Privilege::SCE683
             | Privilege::SCE686 => self.is_system(),
-            v => todo!("priv_check_cred(cred, {v})"),
+            v => todo!("priv_check_cred({v})"),
         };
 
         if r {
@@ -105,9 +120,14 @@ impl Ucred {
     }
 
     /// See `prison_priv_check` on the PS4 for a reference.
-    fn prison_priv_check(&self) -> Result<(), PrivilegeError> {
-        // TODO: Implement this.
-        Ok(())
+    fn prison_priv_check(&self, p: Privilege) -> Result<(), PrivilegeError> {
+        if !self.is_jailed() {
+            return Ok(());
+        }
+
+        match p {
+            _ => todo!("prison_priv_check({p})"),
+        }
     }
 }
 
