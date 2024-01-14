@@ -143,7 +143,6 @@ bitflags! {
     pub struct MountFlags: u64 {
         const MNT_RDONLY = 0x0000000000000001;
         const MNT_NOSUID = 0x0000000000000008;
-        const MNTK_LOOKUP_EXCL_DOTDOT = 0x0000000000000800;
         const MNT_LOCAL = 0x0000000000001000;
         const MNT_ROOTFS = 0x0000000000004000;
         const MNT_USER = 0x0000000000008000;
