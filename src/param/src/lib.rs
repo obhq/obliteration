@@ -6,12 +6,12 @@ use thiserror::Error;
 ///
 /// See https://www.psdevwiki.com/ps4/Param.sfo#Internal_Structure for more information.
 pub struct Param {
-    app_ver: Option<String>,
-    category: String,
-    content_id: String,
-    title: Option<String>,
-    title_id: String,
-    version: String,
+    app_ver: Option<Box<str>>,
+    category: Box<str>,
+    content_id: Box<str>,
+    title: Option<Box<str>>,
+    title_id: Box<str>,
+    version: Box<str>,
 }
 
 impl Param {
@@ -76,12 +76,12 @@ impl Param {
         keys.drain(i..);
 
         // Read entries.
-        let mut app_ver: Option<String> = None;
-        let mut category: Option<String> = None;
-        let mut content_id: Option<String> = None;
-        let mut title: Option<String> = None;
-        let mut title_id: Option<String> = None;
-        let mut version: Option<String> = None;
+        let mut app_ver: Option<Box<str>> = None;
+        let mut category: Option<Box<str>> = None;
+        let mut content_id: Option<Box<str>> = None;
+        let mut title: Option<Box<str>> = None;
+        let mut title_id: Option<Box<str>> = None;
+        let mut version: Option<Box<str>> = None;
 
         for i in 0..entries {
             // Seek to the entry.
@@ -170,8 +170,8 @@ impl Param {
     }
 
     /// Fetches the value APP_VER from given Param.SFO
-    pub fn app_ver(&self) -> &Option<String> {
-        &self.app_ver
+    pub fn app_ver(&self) -> Option<&str> {
+        self.app_ver.as_deref()
     }
 
     /// Fetches the value CATEGORY from given Param.SFO
@@ -193,8 +193,8 @@ impl Param {
     }
 
     /// Fetches the value TITLE from given Param.SFO
-    pub fn title(&self) -> &Option<String> {
-        &self.title
+    pub fn title(&self) -> Option<&str> {
+        self.title.as_deref()
     }
 
     /// Fetches the value TITLE_ID from given Param.SFO
@@ -213,7 +213,7 @@ impl Param {
         format: u16,
         len: usize,
         max: usize,
-    ) -> Result<String, ReadError> {
+    ) -> Result<Box<str>, ReadError> {
         // Check format and length.
         if format != 0x0402 || len > max {
             return Err(ReadError::InvalidEntry(i.try_into().unwrap()));
@@ -231,7 +231,9 @@ impl Param {
             return Err(ReadError::InvalidValue(i.try_into().unwrap()));
         }
 
-        String::from_utf8(data).map_err(|_| ReadError::InvalidValue(i.try_into().unwrap()))
+        String::from_utf8(data)
+            .map(String::into_boxed_str)
+            .map_err(|_| ReadError::InvalidValue(i.try_into().unwrap()))
     }
 }
 
