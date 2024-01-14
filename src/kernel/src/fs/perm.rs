@@ -1,5 +1,5 @@
 use crate::errno::{Errno, EACCES, EPERM};
-use crate::ucred::{Privilege, Ucred};
+use crate::ucred::{Gid, Privilege, Ucred, Uid};
 use bitflags::bitflags;
 use std::num::NonZeroI32;
 use thiserror::Error;
@@ -28,13 +28,14 @@ pub fn unixify_access(access: Access) -> Option<Access> {
 /// See `vaccess` on the PS4 for a reference.
 pub fn check_access(
     cred: &Ucred,
-    file_uid: i32,
-    file_gid: i32,
-    file_mode: u32,
+    file_uid: Uid,
+    file_gid: Gid,
+    file_mode: Mode,
     access: Access,
     is_dir: bool,
 ) -> Result<bool, AccessError> {
     // TODO: Refactor this for readability.
+    let file_mode: u32 = file_mode.into();
     let access = access.bits();
     let dac_granted = if cred.effective_uid() == file_uid {
         ((file_mode & 0x140) | 0x1000) + if file_mode as i8 > -1 { 0 } else { 0x4080 }
@@ -105,6 +106,31 @@ pub fn check_access(
         Err(AccessError::NotPermitted)
     } else {
         Err(AccessError::PermissionDenied)
+    }
+}
+
+/// An implementation of `mode_t`. **Do not accept or pass this struct from/to the PS4 directly**.
+///
+/// On the PS4 this is `u32`. But some functions in the PS4 use `u16` to represent file mode. The
+/// maximum value for file mode, which is `0777` take only 9 bits. So let's use `u16` and don't make
+/// this struct representation as a transparent. That mean we can't use this type directly on the
+/// function parameter or its return type if that function will be called by the PS4.
+#[derive(Debug, Clone, Copy)]
+pub struct Mode(u16);
+
+impl Mode {
+    pub const fn new(v: u16) -> Option<Self> {
+        if v > 0o777 {
+            None
+        } else {
+            Some(Self(v))
+        }
+    }
+}
+
+impl From<Mode> for u32 {
+    fn from(value: Mode) -> Self {
+        value.0.into()
     }
 }
 

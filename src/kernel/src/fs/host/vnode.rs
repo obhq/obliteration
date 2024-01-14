@@ -2,9 +2,10 @@ use super::file::HostFile;
 use super::{get_vnode, GetVnodeError};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR};
 use crate::fs::{
-    Access, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType, VopVector, DEFAULT_VNODEOPS,
+    Access, Mode, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType, VopVector, DEFAULT_VNODEOPS,
 };
 use crate::process::VThread;
+use crate::ucred::{Gid, Uid};
 use std::borrow::Cow;
 use std::num::NonZeroI32;
 use std::sync::Arc;
@@ -39,7 +40,7 @@ fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
         VnodeType::Character => unreachable!(), // The character device should only be in the devfs.
     };
 
-    Ok(VnodeAttrs::new(0, 0, mode, size))
+    Ok(VnodeAttrs::new(Uid::ROOT, Gid::ROOT, mode, size))
 }
 
 fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode>, Box<dyn Errno>> {

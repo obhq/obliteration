@@ -1,9 +1,9 @@
 pub use self::cdev::*;
 use self::dirent::Dirent;
 use self::vnode::{CHARACTER_OPS, VNODE_OPS};
-use super::{path_contains, DirentType, FsOps, Mount, MountFlags, MountOpts, Vnode, VnodeType};
+use super::{path_contains, DirentType, FsOps, Mode, Mount, MountFlags, Vnode, MountOpts, VnodeType};
 use crate::errno::{Errno, EEXIST, ENOENT, EOPNOTSUPP};
-use crate::ucred::Ucred;
+use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
 use std::num::NonZeroI32;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
@@ -19,9 +19,9 @@ pub fn make_dev(
     sw: &Arc<CdevSw>,
     unit: i32,
     name: impl Into<String>,
-    uid: i32,
-    gid: i32,
-    mode: u16,
+    uid: Uid,
+    gid: Gid,
+    mode: Mode,
     cred: Option<Arc<Ucred>>,
     flags: MakeDev,
 ) -> Result<Arc<Cdev>, MakeDevError> {
@@ -241,9 +241,9 @@ impl DevFs {
             } else {
                 inode
             },
-            0,
-            0,
-            0o555,
+            Uid::ROOT,
+            Gid::ROOT,
+            Mode::new(0o555).unwrap(),
             None,
             None,
             name,
@@ -253,9 +253,9 @@ impl DevFs {
         let dot = Dirent::new(
             DirentType::Directory,
             0,
-            0,
-            0,
-            0,
+            Uid::ROOT,
+            Gid::ROOT,
+            Mode::new(0).unwrap(),
             Some(Arc::downgrade(&dir)),
             None,
             ".",
@@ -267,9 +267,9 @@ impl DevFs {
         let dd = Dirent::new(
             DirentType::Directory,
             0,
-            0,
-            0,
-            0,
+            Uid::ROOT,
+            Gid::ROOT,
+            Mode::new(0).unwrap(),
             Some(Arc::downgrade(parent.unwrap_or(&dir))),
             None,
             "..",

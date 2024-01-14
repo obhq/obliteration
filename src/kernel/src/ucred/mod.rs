@@ -1,25 +1,25 @@
 pub use self::auth::*;
+pub use self::id::*;
 pub use self::privilege::*;
 use crate::errno::{Errno, EPERM};
 use std::num::NonZeroI32;
 use thiserror::Error;
 
 mod auth;
+mod id;
 mod privilege;
 
 /// An implementation of `ucred` structure.
 #[derive(Debug, Clone)]
 pub struct Ucred {
-    effective_uid: i32, // cr_uid
-    real_uid: i32,      // cr_ruid
-    groups: Vec<i32>,   // cr_groups + cr_ngroups
+    effective_uid: Uid, // cr_uid
+    real_uid: Uid,      // cr_ruid
+    groups: Vec<Gid>,   // cr_groups + cr_ngroups
     auth: AuthInfo,
 }
 
 impl Ucred {
-    pub fn new(effective_uid: i32, real_uid: i32, mut groups: Vec<i32>, auth: AuthInfo) -> Self {
-        assert!(effective_uid >= 0);
-        assert!(real_uid >= 0);
+    pub fn new(effective_uid: Uid, real_uid: Uid, mut groups: Vec<Gid>, auth: AuthInfo) -> Self {
         assert!(!groups.is_empty()); // Must have primary group.
 
         groups[1..].sort_unstable(); // The first one must be primary group.
@@ -32,8 +32,12 @@ impl Ucred {
         }
     }
 
-    pub fn effective_uid(&self) -> i32 {
+    pub fn effective_uid(&self) -> Uid {
         self.effective_uid
+    }
+
+    pub fn real_uid(&self) -> Uid {
+        self.real_uid
     }
 
     pub fn auth(&self) -> &AuthInfo {
@@ -41,7 +45,7 @@ impl Ucred {
     }
 
     /// See `groupmember` on the PS4 for a reference.
-    pub fn is_member(&self, gid: i32) -> bool {
+    pub fn is_member(&self, gid: Gid) -> bool {
         if self.groups[0] == gid {
             return true;
         }

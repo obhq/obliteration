@@ -1,7 +1,8 @@
-use super::{unixify_access, Access, Mount, OpenFlags, VFile};
+use super::{unixify_access, Access, Mode, Mount, OpenFlags, VFile};
 use crate::errno::{Errno, ENOTDIR, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
 use bitflags::bitflags;
+use crate::ucred::{Gid, Uid};
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
 use std::num::NonZeroI32;
@@ -161,14 +162,14 @@ pub type VopOpen =
 /// An implementation of `vattr` struct.
 #[allow(dead_code)]
 pub struct VnodeAttrs {
-    uid: i32,  // va_uid
-    gid: i32,  // va_gid
-    mode: u16, // va_mode
-    size: u64, // va_size
+    uid: Uid,   // va_uid
+    gid: Gid,   // va_gid
+    mode: Mode, // va_mode
+    size: u64,  // va_size
 }
 
 impl VnodeAttrs {
-    pub fn new(uid: i32, gid: i32, mode: u16, size: u64) -> Self {
+    pub fn new(uid: Uid, gid: Gid, mode: Mode, size: u64) -> Self {
         Self {
             uid,
             gid,
@@ -177,8 +178,16 @@ impl VnodeAttrs {
         }
     }
 
-    pub fn uid(&self) -> i32 {
+    pub fn uid(&self) -> Uid {
         self.uid
+    }
+
+    pub fn gid(&self) -> Gid {
+        self.gid
+    }
+
+    pub fn mode(&self) -> Mode {
+        self.mode
     }
 }
 

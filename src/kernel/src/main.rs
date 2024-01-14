@@ -14,7 +14,7 @@ use crate::rtld::{LoadFlags, ModuleFlags, RuntimeLinker};
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
 use crate::tty::TtyManager;
-use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Ucred};
+use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use clap::{Parser, ValueEnum};
 use llt::Thread;
 use macros::vpath;
@@ -179,9 +179,9 @@ fn main() -> ExitCode {
 
     // Setup kernel credential.
     let cred = Arc::new(Ucred::new(
-        0,
-        0,
-        vec![0],
+        Uid::ROOT,
+        Uid::ROOT,
+        vec![Gid::ROOT],
         AuthInfo {
             paid: AuthPaid::KERNEL,
             caps: AuthCaps::new([0x4000000000000000, 0, 0, 0]),
@@ -383,7 +383,13 @@ fn run<E: crate::ee::ExecutionEngine>(
     info!("Starting application.");
 
     // TODO: Check how this constructed.
-    let cred = Arc::new(Ucred::new(0, 0, vec![0], AuthInfo::SYS_CORE.clone()));
+    let cred = Arc::new(Ucred::new(
+        Uid::ROOT,
+        Uid::ROOT,
+        vec![Gid::ROOT],
+        AuthInfo::SYS_CORE.clone(),
+    ));
+
     let main = VThread::new(proc, &cred);
     let stack = mm.stack();
     let main = match unsafe { main.start(stack.start(), stack.len(), entry) } {
