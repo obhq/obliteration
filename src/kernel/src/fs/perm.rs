@@ -120,7 +120,7 @@ pub struct Mode(u16);
 
 impl Mode {
     pub const fn new(v: u16) -> Option<Self> {
-        if v > 0777 {
+        if v > 0o777 {
             None
         } else {
             Some(Self(v))

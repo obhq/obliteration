@@ -246,7 +246,7 @@ impl DevFs {
             },
             Uid::ROOT,
             Gid::ROOT,
-            Mode::new(0555).unwrap(),
+            Mode::new(0o555).unwrap(),
             None,
             None,
             name,

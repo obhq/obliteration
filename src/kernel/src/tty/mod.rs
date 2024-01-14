@@ -30,7 +30,7 @@ impl TtyManager {
             "console",
             Uid::ROOT,
             Gid::ROOT,
-            Mode::new(0600).unwrap(),
+            Mode::new(0o600).unwrap(),
             None,
             MakeDev::MAKEDEV_ETERNAL,
         ) {
