@@ -41,7 +41,7 @@ impl Mounts {
     /// See `vfs_getnewfsid` on the PS4 for a reference.
     fn set_id(&self, m: &mut Mount) {
         let mut base = MOUNT_ID.lock().unwrap();
-        let v2 = m.fsconf.ty;
+        let v2 = m.fs.ty;
         let mut v1 = ((*base as u32) << 8) | (*base as u32) | ((v2 << 24) | 0xff00);
 
         loop {
@@ -67,7 +67,7 @@ impl Mounts {
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct Mount {
-    fsconf: &'static FsConfig,                // mnt_vfc
+    fs: &'static FsConfig,                    // mnt_vfc
     gen: i32,                                 // mnt_gen
     data: Option<Arc<dyn Any + Send + Sync>>, // mnt_data
     cred: Arc<Ucred>,                         // mnt_cred
@@ -87,7 +87,7 @@ impl Mount {
         let gg = GutexGroup::new();
         let owner = cred.effective_uid();
         let mount = Self {
-            fsconf,
+            fs: fsconf,
             gen: 1,
             data: None,
             cred: cred.clone(),
@@ -105,7 +105,7 @@ impl Mount {
     }
 
     pub fn fs(&self) -> &'static FsConfig {
-        self.fsconf
+        self.fs
     }
 
     pub fn data(&self) -> Option<&Arc<dyn Any + Send + Sync>> {
@@ -133,7 +133,7 @@ impl Mount {
     }
 
     pub fn root(self: &Arc<Self>) -> Arc<Vnode> {
-        (self.fsconf.ops.root)(self)
+        (self.fs.ops.root)(self)
     }
 }
 
