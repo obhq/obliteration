@@ -524,7 +524,7 @@ impl Fs {
     }
 
     /// See `vfs_byname` on the PS4 for a reference.
-    fn find_config<N: AsRef<str>>(name: N) -> Option<&'static FsConfig> {
+    fn find_config(name: impl AsRef<str>) -> Option<&'static FsConfig> {
         let mut name = name.as_ref();
         let mut conf = Some(&HOST);
 
