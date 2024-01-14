@@ -539,7 +539,6 @@ enum Exit {
     Err(KernelError),
 }
 
-//TODO: implement Errno for all the required errors and return Errno::errno() instead of 1 for every error
 impl Termination for Exit {
     fn report(self) -> ExitCode {
         match self {
