@@ -1,7 +1,7 @@
 use super::NullFs;
 use crate::{
     errno::{Errno, EROFS},
-    fs::{perm::Access, MountFlags, OpenFlags, VFile, Vnode, VnodeOpDesc, VnodeType, VopVector},
+    fs::{perm::Access, MountFlags, OpenFlags, VFile, Vnode, VnodeType, VopVector},
     process::VThread,
 };
 use std::{num::NonZeroI32, sync::Arc};
