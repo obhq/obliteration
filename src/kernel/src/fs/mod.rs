@@ -252,7 +252,7 @@ impl Fs {
         Ok(vn)
     }
 
-    fn revoke<P: Into<VPathBuf>>(&self, _path: P) {
+    fn revoke(&self, _path: impl Into<VPathBuf>) {
         // TODO: Implement this.
     }
 
