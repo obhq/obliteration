@@ -107,7 +107,7 @@ impl VProc {
             gg,
         });
 
-        sys.register(20, &vp, Self::sys_getid);
+        sys.register(20, &vp, Self::sys_getpid);
         sys.register(50, &vp, Self::sys_setlogin);
         sys.register(147, &vp, Self::sys_setsid);
         sys.register(340, &vp, Self::sys_sigprocmask);
@@ -187,7 +187,7 @@ impl VProc {
         ])
     }
 
-    fn sys_getid(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_getpid(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
         Ok(self.id.into())
     }
 
