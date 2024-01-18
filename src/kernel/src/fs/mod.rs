@@ -32,6 +32,7 @@ mod ioctl;
 mod mount;
 mod path;
 mod perm;
+mod socket;
 mod tmp;
 mod vnode;
 
@@ -131,6 +132,8 @@ impl Fs {
         sys.register(6, &fs, Self::sys_close);
         sys.register(54, &fs, Self::sys_ioctl);
         sys.register(56, &fs, Self::sys_revoke);
+        sys.register(97, &fs, Self::sys_socket);
+        sys.register(113, &fs, Self::sys_socketex);
 
         Ok(fs)
     }
@@ -407,6 +410,14 @@ impl Fs {
         self.revoke(path);
 
         Ok(SysOut::ZERO)
+    }
+
+    fn sys_socket(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        todo!()
+    }
+
+    fn sys_socketex(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        todo!()
     }
 
     /// See `vfs_donmount` on the PS4 for a reference.

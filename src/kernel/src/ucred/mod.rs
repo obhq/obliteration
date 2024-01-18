@@ -129,6 +129,11 @@ impl Ucred {
             _ => todo!("prison_priv_check({p})"),
         }
     }
+
+    /// See `prison_check_af` on the PS4 for a reference.
+    pub fn prison_check_address_family(&self, family: i32) -> Result<(), PrisonCheckAfError> {
+        todo!()
+    }
 }
 
 /// Represents an error when [`Ucred::priv_check()`] is failed.
@@ -143,5 +148,14 @@ impl Errno for PrivilegeError {
         match self {
             Self::NoPrivilege => EPERM,
         }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum PrisonCheckAfError {}
+
+impl Errno for PrisonCheckAfError {
+    fn errno(&self) -> NonZeroI32 {
+        todo!()
     }
 }

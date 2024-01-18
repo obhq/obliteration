@@ -1,3 +1,4 @@
+use super::socket::Socket;
 use super::{IoCmd, Vnode};
 use crate::errno::Errno;
 use crate::process::VThread;
@@ -67,6 +68,7 @@ impl Read for VFile {
 #[derive(Debug)]
 pub enum VFileType {
     Vnode(Arc<Vnode>), // DTYPE_VNODE
+    Socket(Socket),    // DTYPE_SOCKET
 }
 
 /// An implementation of `fileops` structure.
