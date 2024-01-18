@@ -13,7 +13,7 @@ const BLOCKPOOL_FILEOPS: VFileOps = VFileOps {
 };
 
 pub const UNK_CMD1: IoCmd = IoCmd::iowr::<(u64, u64, u64, u64)>(0xa8, 1);
-pub const UNK_CMD2: IoCmd = IoCmd::ior::<(u64, u64)>(0xa8, 2);
+pub const UNK_CMD2: IoCmd = IoCmd::ior::<(u32, u32, u32, u32)>(0xa8, 2);
 
 fn blockpool_ioctl(
     file: &VFile,
