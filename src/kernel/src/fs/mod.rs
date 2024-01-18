@@ -337,10 +337,10 @@ impl Fs {
     }
 
     fn sys_ioctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        const UNK_COM1: IoCmd = IoCmd::io(b'f', 1);
-        const UNK_COM2: IoCmd = IoCmd::io(b'f', 2);
-        const UNK_COM3: IoCmd = IoCmd::iowint(b'f', 0x7e);
-        const UNK_COM4: IoCmd = IoCmd::iowint(b'f', 0x7d);
+        const FIOCLEX: IoCmd = IoCmd::io(b'f', 1);
+        const FIONCLEX: IoCmd = IoCmd::io(b'f', 2);
+        const FIONBIO: IoCmd = IoCmd::iowint(b'f', 0x7e);
+        const FIOASYNC: IoCmd = IoCmd::iowint(b'f', 0x7d);
 
         let fd: i32 = i.args[0].try_into().unwrap();
         let com: IoCmd = i.args[1].try_into()?;
@@ -381,10 +381,10 @@ impl Fs {
         info!("Executing ioctl({com}) on file descriptor {fd}.");
 
         match com {
-            UNK_COM1 => todo!("ioctl with com = 0x20006601"),
-            UNK_COM2 => todo!("ioctl with com = 0x20006602"),
-            UNK_COM3 => todo!("ioctl with com = 0x8004667d"),
-            UNK_COM4 => todo!("ioctl with com = 0x8004667e"),
+            FIOCLEX => todo!("ioctl with com = 0x20006601"),
+            FIONCLEX => todo!("ioctl with com = 0x20006602"),
+            FIONBIO => todo!("ioctl with com = 0x8004667d"),
+            FIOASYNC => todo!("ioctl with com = 0x8004667e"),
             _ => {}
         }
 
