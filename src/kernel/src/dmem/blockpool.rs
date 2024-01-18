@@ -1,6 +1,6 @@
 #![allow(dead_code, unused_variables)]
 
-use crate::errno::{Errno, ENXIO};
+use crate::errno::{Errno, ENOTTY, ENXIO};
 use crate::fs::{IoCmd, VFile, VFileOps};
 use crate::process::VThread;
 use std::num::NonZeroI32;
@@ -21,7 +21,11 @@ fn blockpool_ioctl(
     buf: &mut [u8],
     td: Option<&VThread>,
 ) -> Result<(), Box<dyn Errno>> {
-    todo!("blockpool_ioctl")
+    match cmd {
+        UNK_CMD1 => todo!("blockpool ioctl cmd 1"),
+        UNK_CMD2 => todo!("blockpool ioctl cmd 2"),
+        _ => Err(IoctlError::InvalidCommand(cmd).into()),
+    }
 }
 
 #[derive(Debug, Error)]
@@ -39,10 +43,15 @@ impl Errno for GenericError {
 }
 
 #[derive(Debug, Error)]
-pub enum IoctlError {}
+pub enum IoctlError {
+    #[error("Invalid command {0}")]
+    InvalidCommand(IoCmd),
+}
 
 impl Errno for IoctlError {
     fn errno(&self) -> NonZeroI32 {
-        todo!()
+        match self {
+            IoctlError::InvalidCommand(_) => ENOTTY,
+        }
     }
 }
