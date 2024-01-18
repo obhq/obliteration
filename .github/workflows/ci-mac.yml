@@ -18,7 +18,7 @@ jobs:
         echo "dist=${{ runner.os }}-llvm-$hash" >> $GITHUB_OUTPUT
       id: cache-keys
     - name: Check cached artifacts
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@v4
       with:
         path: lib/llvm
         key: ${{ steps.cache-keys.outputs.dist }}
@@ -39,7 +39,7 @@ jobs:
       run: cmake --install build --config Release
       if: ${{ steps.cache.outputs.cache-hit != 'true' }}
     - name: Cache artifacts
-      uses: actions/cache/save@v3
+      uses: actions/cache/save@v4
       with:
         path: lib/llvm
         key: ${{ steps.cache-keys.outputs.dist }}
@@ -56,7 +56,7 @@ jobs:
     - name: Checkout source
       uses: actions/checkout@v4
     - name: Download LLVM
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@v4
       with:
         path: lib/llvm
         key: ${{ needs.llvm.outputs.dist-key }}
@@ -79,12 +79,12 @@ jobs:
       shell: perl {0}
       id: cache-keys
     - name: Restore Cargo home
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@v4
       with:
         path: ~/.cargo
         key: ${{ steps.cache-keys.outputs.cargo }}
     - name: Restore Qt
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@v4
       with:
         path: qt
         key: ${{ steps.cache-keys.outputs.qt }}
@@ -137,13 +137,13 @@ jobs:
         name: obliteration-mac-intel
         path: Obliteration.dmg
     - name: Cache Cargo home
-      uses: actions/cache/save@v3
+      uses: actions/cache/save@v4
       with:
         path: ~/.cargo
         key: ${{ steps.cache-keys.outputs.cargo }}-${{ github.run_id }}
       if: startsWith(github.ref, 'refs/heads/')
     - name: Cache Qt
-      uses: actions/cache/save@v3
+      uses: actions/cache/save@v4
       with:
         path: qt
         key: ${{ steps.cache-keys.outputs.qt }}
