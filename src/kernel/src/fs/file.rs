@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_variables)]
 use super::socket::Socket;
 use super::{IoCmd, Vnode};
 use crate::errno::Errno;
@@ -107,9 +108,10 @@ pub const FIOGETOWN: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 0x7b);
 pub const FIODTYPE: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 0x7a);
 pub const FIOGETLBA: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 0x79);
 
+#[repr(C)]
 struct FioDgNameArg {
     len: i32,
-    buf: *mut (),
+    buf: *mut u8,
 }
 
 pub const FIODGNAME: IoCmd = IoCmd::ior::<FioDgNameArg>(FILE_GROUP, 0x78);
