@@ -31,7 +31,7 @@ impl VFile {
         &mut self.flags
     }
 
-    pub fn data_as_socket(&self) -> Option<&Socket> {
+    pub fn data_as_socket(&self) -> Option<&Arc<Socket>> {
         match &self.ty {
             VFileType::Socket(so) | VFileType::Socket2(so) => Some(so),
             _ => None,
