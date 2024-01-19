@@ -1,7 +1,7 @@
 #![allow(dead_code, unused_variables)]
 use crate::{
     errno::{Errno, EPERM, EPIPE, EPROTONOSUPPORT, EPROTOTYPE},
-    net::{AddressFamily, Protosw},
+    net::{attach_notsupp, AddressFamily, Protosw},
     process::VThread,
     ucred::{PrisonCheckAfError, Ucred},
 };
@@ -20,7 +20,7 @@ pub struct Socket {
     proto: &'static Protosw, // so_proto
     fibnum: i32,             // so_fibnum
     cred: Arc<Ucred>,        // so_cred
-    pid: NonZeroI32,         // so_pid
+    pid: NonZeroI32,
     name: [u8; 32],
 }
 
@@ -53,6 +53,14 @@ impl Socket {
 
         let prp = prp.ok_or(SocketCreateError::NoProtocolSwitch)?;
 
+        let attach = match prp.user_reqs().attach {
+            None => return Err(SocketCreateError::NoAttachHandler),
+            Some(f) if (f as usize) == (attach_notsupp as usize) => {
+                return Err(SocketCreateError::BadAttachHandler);
+            }
+            Some(f) => f,
+        };
+
         cred.prison_check_address_family(prp.domain().family())?;
 
         if prp.ty() != ty {
@@ -73,6 +81,8 @@ impl Socket {
             pid: td.proc().id(),
             name: [0; 32],
         };
+
+        attach(&so, proto, td)?;
 
         Ok(Arc::new(so))
     }
@@ -113,11 +123,20 @@ pub(super) enum SocketCreateError {
     #[error("Couldn't find protocol switch")]
     NoProtocolSwitch,
 
+    #[error("No attach handler")]
+    NoAttachHandler,
+
+    #[error("Bad attach handler")]
+    BadAttachHandler,
+
     #[error("Address family not allowed by prison")]
     PrisonCheckAfError(#[from] PrisonCheckAfError),
 
     #[error("Wrong protocol type for socket")]
     WrongProtocolTypeForSocket,
+
+    #[error("Attach failed")]
+    AttachError(#[from] Box<dyn Errno>),
 }
 
 impl Errno for SocketCreateError {
@@ -127,8 +146,11 @@ impl Errno for SocketCreateError {
             Self::InsufficientCredentials => EPERM,
             Self::UnsupportedType => EPROTONOSUPPORT,
             Self::NoProtocolSwitch => EPROTONOSUPPORT,
+            Self::NoAttachHandler => EPROTONOSUPPORT,
+            Self::BadAttachHandler => EPROTONOSUPPORT,
             Self::PrisonCheckAfError(e) => EPROTONOSUPPORT,
             Self::WrongProtocolTypeForSocket => EPROTOTYPE,
+            Self::AttachError(e) => e.errno(),
         }
     }
 }
