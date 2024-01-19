@@ -104,11 +104,11 @@ fn main_wrapped() -> Result<(), KernelError> {
     let param = File::open(&path).map_err(KernelError::FailedToOpenParam)?;
 
     // Load param.sfo.
-    let param = Param::read(param).map(Arc::new)?;
+    let param = Arc::new(Param::read(param)?);
 
     // Get auth info for the process.
-    let auth = AuthInfo::from_title_id(param.title_id())
-        .ok_or_else(|| KernelError::InvalidTitleId(path))?;
+    let auth =
+        AuthInfo::from_title_id(param.title_id()).ok_or(KernelError::InvalidTitleId(path))?;
 
     // Show basic information.
     let mut log = info!();
@@ -254,7 +254,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     ee: Arc<E>,
 ) -> Result<(), KernelError> {
     // Initialize TTY system.
-    let tty = TtyManager::new(fs)?;
+    let _tty = TtyManager::new(fs)?;
 
     // Initialize kernel components.
     RegMgr::new(&mut syscalls);
@@ -368,7 +368,7 @@ fn discord_presence(param: &Param) -> Result<(), DiscordPresenceError> {
     info!("Initializing Discord rich presence.");
 
     let mut client = DiscordIpcClient::new("1168617561244565584")
-        .map_err(|e| DiscordPresenceError::FailedToCreateIpc(e.into()))?;
+        .map_err(DiscordPresenceError::FailedToCreateIpc)?;
 
     // Attempt to have IPC connect to user's Discord, will fail if user doesn't have Discord running.
     if client.connect().is_err() {
@@ -399,7 +399,7 @@ fn discord_presence(param: &Param) -> Result<(), DiscordPresenceError> {
 
     client
         .set_activity(payload)
-        .map_err(|e| DiscordPresenceError::FailedToUpdatePresence(e.into()))?;
+        .map_err(DiscordPresenceError::FailedToUpdatePresence)?;
 
     // Keep client alive forever.
     Box::leak(client.into());
