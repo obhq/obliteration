@@ -1,11 +1,16 @@
 #![allow(dead_code, unused_variables)]
 use super::socket::Socket;
 use super::{IoCmd, Vnode};
-use crate::errno::Errno;
+use crate::errno::{Errno, EINVAL, ENOTTY};
+use crate::fs::VnodeType;
 use crate::process::VThread;
+use crate::ucred::Privilege;
 use bitflags::bitflags;
+use bytemuck::{Pod, Zeroable};
 use std::io::{Read, Seek, SeekFrom};
+use std::num::NonZeroI32;
 use std::sync::Arc;
+use thiserror::Error;
 
 /// An implementation of `file` structure.
 #[derive(Debug)]
@@ -13,6 +18,7 @@ pub struct VFile {
     ty: VFileType,          // f_type + f_data
     ops: &'static VFileOps, // f_ops
     flags: VFileFlags,      // f_flag
+    offset: u64,            // f_offset
 }
 
 impl VFile {
@@ -21,6 +27,7 @@ impl VFile {
             ty,
             ops,
             flags: VFileFlags::empty(),
+            offset: 0,
         }
     }
 
@@ -30,6 +37,10 @@ impl VFile {
 
     pub fn flags_mut(&mut self) -> &mut VFileFlags {
         &mut self.flags
+    }
+
+    pub fn offset(&self) -> u64 {
+        self.offset
     }
 
     pub fn data_as_socket(&self) -> Option<&Arc<Socket>> {
@@ -96,17 +107,59 @@ bitflags! {
     }
 }
 
+pub static VNOPS: VFileOps = VFileOps {
+    write: vn_write,
+    ioctl: vn_ioctl,
+};
+
+fn vn_write(file: &VFile, buf: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+    todo!()
+}
+
+fn vn_ioctl(
+    file: &VFile,
+    cmd: IoCmd,
+    buf: &mut [u8],
+    td: Option<&VThread>,
+) -> Result<(), Box<dyn Errno>> {
+    let vn = file.data_as_vnode().unwrap();
+
+    match vn.ty() {
+        VnodeType::File | VnodeType::Directory(_) => match cmd {
+            FIONREAD => {
+                let attr = vn.getattr()?;
+
+                let len: &mut i32 = bytemuck::from_bytes_mut(buf);
+
+                *len = (attr.size() - file.offset()).try_into().unwrap();
+            }
+            FIOCHECKANDMODIFY => {
+                td.unwrap().priv_check(Privilege::SCE683)?;
+
+                let arg: &FioCheckAndModifyArg = bytemuck::from_bytes(buf);
+
+                todo!()
+            }
+            FIONBIO | FIOASYNC => {}
+            _ => vn.ioctl(cmd, buf, td)?,
+        },
+        _ => return Err(IoctlError::WrongFileType.into()),
+    }
+
+    Ok(())
+}
+
 pub const FILE_GROUP: u8 = b'f';
 
 pub const FIOCLEX: IoCmd = IoCmd::io(FILE_GROUP, 1);
 pub const FIONCLEX: IoCmd = IoCmd::io(FILE_GROUP, 2);
-pub const FIONREAD: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 0x7f);
-pub const FIONBIO: IoCmd = IoCmd::iow::<i32>(FILE_GROUP, 0x7e);
-pub const FIOASYNC: IoCmd = IoCmd::iow::<i32>(FILE_GROUP, 0x7d);
-pub const FIOSETOWN: IoCmd = IoCmd::iow::<i32>(FILE_GROUP, 0x7c);
-pub const FIOGETOWN: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 0x7b);
-pub const FIODTYPE: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 0x7a);
-pub const FIOGETLBA: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 0x79);
+pub const FIONREAD: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 127);
+pub const FIONBIO: IoCmd = IoCmd::iow::<i32>(FILE_GROUP, 126);
+pub const FIOASYNC: IoCmd = IoCmd::iow::<i32>(FILE_GROUP, 125);
+pub const FIOSETOWN: IoCmd = IoCmd::iow::<i32>(FILE_GROUP, 124);
+pub const FIOGETOWN: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 123);
+pub const FIODTYPE: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 122);
+pub const FIOGETLBA: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 121);
 
 #[repr(C)]
 struct FioDgNameArg {
@@ -114,9 +167,40 @@ struct FioDgNameArg {
     buf: *mut u8,
 }
 
-pub const FIODGNAME: IoCmd = IoCmd::ior::<FioDgNameArg>(FILE_GROUP, 0x78);
-pub const FIONWRITE: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 0x77);
-pub const FIONSPACE: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 0x76);
+pub const FIODGNAME: IoCmd = IoCmd::ior::<FioDgNameArg>(FILE_GROUP, 120);
+pub const FIONWRITE: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 119);
+pub const FIONSPACE: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 118);
 
-pub const FIOSEEKDATA: IoCmd = IoCmd::ior::<usize>(FILE_GROUP, 0x61);
-pub const FIOSEEKHOLE: IoCmd = IoCmd::ior::<usize>(FILE_GROUP, 0x62);
+pub const FIOSEEKDATA: IoCmd = IoCmd::ior::<usize>(FILE_GROUP, 97);
+pub const FIOSEEKHOLE: IoCmd = IoCmd::ior::<usize>(FILE_GROUP, 98);
+
+#[repr(C)]
+#[derive(Clone, Copy, Zeroable, Pod)]
+struct FioCheckAndModifyArg {
+    flag: i32,
+    _padding: i32,
+    unk2: usize,
+    unk3: usize,
+    path: usize,
+    unk5: usize,
+}
+
+pub const FIOCHECKANDMODIFY: IoCmd = IoCmd::iow::<FioCheckAndModifyArg>(FILE_GROUP, 189);
+
+#[derive(Debug, Error)]
+pub enum IoctlError {
+    #[error("wrong file type")]
+    WrongFileType,
+
+    #[error("invalid flag for FIOCHECKANDMODIFY ({0:#x})")]
+    InvalidFlag(i32),
+}
+
+impl Errno for IoctlError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            IoctlError::WrongFileType => ENOTTY,
+            IoctlError::InvalidFlag(_) => EINVAL,
+        }
+    }
+}

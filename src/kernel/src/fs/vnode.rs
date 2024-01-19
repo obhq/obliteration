@@ -1,4 +1,4 @@
-use super::{unixify_access, Access, Mode, Mount, OpenFlags, VFile};
+use super::{unixify_access, Access, IoCmd, Mode, Mount, OpenFlags, VFile};
 use crate::errno::{Errno, ENOTDIR, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
@@ -95,6 +95,15 @@ impl Vnode {
         self.get_op(|v| v.getattr)(self)
     }
 
+    pub fn ioctl(
+        self: &Arc<Self>,
+        cmd: IoCmd,
+        data: &mut [u8],
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+
     pub fn lookup(
         self: &Arc<Self>,
         td: Option<&VThread>,
@@ -130,6 +139,7 @@ impl Drop for Vnode {
 /// An implementation of `vtype`.
 #[derive(Debug)]
 pub enum VnodeType {
+    File,            // VREG
     Directory(bool), // VDIR
     Character,       // VCHR
 }
@@ -183,6 +193,10 @@ impl VnodeAttrs {
 
     pub fn mode(&self) -> Mode {
         self.mode
+    }
+
+    pub fn size(&self) -> u64 {
+        self.size
     }
 }
 
