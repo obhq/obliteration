@@ -1,17 +1,25 @@
-use std::{num::NonZeroI32, sync::Arc};
-
+#![allow(dead_code, unused_variables)]
 use crate::{
     errno::{Errno, EPERM, EPROTONOSUPPORT, EPROTOTYPE},
+    net::{AddressFamily, Protosw},
     process::VThread,
     ucred::{PrisonCheckAfError, Ucred},
 };
+use std::{num::NonZeroI32, sync::Arc};
 use thiserror::Error;
+
+use super::{
+    IoCmd, VFile, VFileOps, FIOASYNC, FIOGETOWN, FIONBIO, FIONREAD, FIONSPACE, FIONWRITE, FIOSETOWN,
+};
 
 #[derive(Debug)]
 pub struct Socket {
-    proto: &'static Protosw,
-    ty: i32,
-    cred: Arc<Ucred>,
+    ty: i32,                 // so_type
+    proto: &'static Protosw, // so_proto
+    fibnum: i32,             // so_fibnum
+    cred: Arc<Ucred>,        // so_cred
+    pid: NonZeroI32,         // so_pid
+    name: [u8; 32],
 }
 
 impl Socket {
@@ -22,8 +30,7 @@ impl Socket {
         proto: i32,
         cred: &Arc<Ucred>,
         td: &VThread,
-    ) -> Result<Self, SocketCreateError> {
-        //ipv6
+    ) -> Result<Arc<Self>, SocketCreateError> {
         if domain == 28 {
             return Err(SocketCreateError::IPv6NotSupported);
         }
@@ -44,34 +51,27 @@ impl Socket {
 
         let prp = prp.ok_or(SocketCreateError::NoProtocolSwitch)?;
 
-        if prp.ty != ty {}
+        cred.prison_check_address_family(prp.domain().family())?;
 
-        //TODO
+        if prp.ty() != ty {
+            return Err(SocketCreateError::WrongProtocolTypeForSocket);
+        }
 
-        cred.prison_check_address_family(0)?;
+        let fibnum = match prp.domain().family() {
+            AddressFamily::INET | AddressFamily::INET6 | AddressFamily::ROUTE => td.proc().fibnum(),
+            _ => 0,
+        };
 
-        Ok(Self {
-            proto: prp,
+        let so = Self {
             ty,
-            cred: cred.clone(),
-        })
+            proto: prp,
+            fibnum,
+            cred: Arc::clone(cred),
+            pid: td.proc().id(),
+            name: [0; 32],
+        };
 
-        todo!()
-    }
-}
-
-#[derive(Debug)]
-pub(super) struct Protosw {
-    ty: i32,
-}
-
-impl Protosw {
-    pub(super) fn find_by_proto(domain: i32, protocol: i32, ty: i32) -> Option<&'static Self> {
-        todo!()
-    }
-
-    pub(super) fn find_by_type(domain: i32, ty: i32) -> Option<&'static Self> {
-        todo!()
+        Ok(Arc::new(so))
     }
 }
 
@@ -108,3 +108,51 @@ impl Errno for SocketCreateError {
         }
     }
 }
+
+pub const SOCKET_FILEOPS: VFileOps = VFileOps {
+    write: socket_write,
+    ioctl: socket_ioctl,
+};
+
+fn socket_write(file: &VFile, buf: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+    let so = file.data_as_socket().unwrap();
+
+    todo!()
+}
+
+fn socket_ioctl(
+    file: &VFile,
+    cmd: IoCmd,
+    data: &mut [u8],
+    td: Option<&VThread>,
+) -> Result<(), Box<dyn Errno>> {
+    let so = file.data_as_socket().unwrap();
+
+    match cmd {
+        FIONBIO => todo!(),
+        FIOASYNC => todo!(),
+        FIONREAD => todo!(),
+        FIONWRITE => todo!(),
+        FIONSPACE => todo!(),
+        FIOSETOWN => todo!(),
+        FIOGETOWN => todo!(),
+        SIOCSPGRP => todo!(),
+        SIOCGPGRP => todo!(),
+        SIOCATMARK => todo!(),
+        cmd => match cmd.group() {
+            b'i' => todo!(),
+            b'r' => todo!(),
+            _ => todo!(),
+        },
+    }
+}
+
+const SOCKET_GROUP: u8 = b's';
+
+const SIOCSHIWAT: IoCmd = IoCmd::iow::<i32>(SOCKET_GROUP, 0);
+const SIOCGHIWAT: IoCmd = IoCmd::ior::<i32>(SOCKET_GROUP, 1);
+const SIOCSLOWAT: IoCmd = IoCmd::iow::<i32>(SOCKET_GROUP, 2);
+const SIOCGLOWAT: IoCmd = IoCmd::ior::<i32>(SOCKET_GROUP, 3);
+const SIOCATMARK: IoCmd = IoCmd::ior::<i32>(SOCKET_GROUP, 7);
+const SIOCSPGRP: IoCmd = IoCmd::iow::<i32>(SOCKET_GROUP, 8);
+const SIOCGPGRP: IoCmd = IoCmd::ior::<i32>(SOCKET_GROUP, 9);

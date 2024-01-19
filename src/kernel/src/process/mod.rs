@@ -172,6 +172,10 @@ impl VProc {
         &self.uptc
     }
 
+    pub fn fibnum(&self) -> i32 {
+        todo!()
+    }
+
     pub fn gutex_group(&self) -> &Arc<GutexGroup> {
         &self.gg
     }

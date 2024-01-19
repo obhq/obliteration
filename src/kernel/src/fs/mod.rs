@@ -8,6 +8,8 @@ pub use self::path::*;
 pub use self::perm::*;
 pub use self::vnode::*;
 use crate::errno::{Errno, EBADF, EBUSY, EINVAL, ENAMETOOLONG, ENODEV, ENOENT};
+use crate::fs::socket::Socket;
+use crate::fs::socket::SOCKET_FILEOPS;
 use crate::info;
 use crate::process::VThread;
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
@@ -32,7 +34,7 @@ mod ioctl;
 mod mount;
 mod path;
 mod perm;
-mod socket;
+pub mod socket;
 mod tmp;
 mod vnode;
 
@@ -326,11 +328,6 @@ impl Fs {
     }
 
     fn sys_ioctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        const UNK_COM1: IoCmd = IoCmd::io(b'f', 1);
-        const UNK_COM2: IoCmd = IoCmd::io(b'f', 2);
-        const UNK_COM3: IoCmd = IoCmd::iowint(b'f', 0x7e);
-        const UNK_COM4: IoCmd = IoCmd::iowint(b'f', 0x7d);
-
         let fd: i32 = i.args[0].try_into().unwrap();
         let com: IoCmd = i.args[1].try_into()?;
         let data_arg: *mut u8 = i.args[2].into();
@@ -370,10 +367,10 @@ impl Fs {
         info!("Executing ioctl({com}) on file descriptor {fd}.");
 
         match com {
-            UNK_COM1 => todo!("ioctl with com = 0x20006601"),
-            UNK_COM2 => todo!("ioctl with com = 0x20006602"),
-            UNK_COM3 => todo!("ioctl with com = 0x8004667d"),
-            UNK_COM4 => todo!("ioctl with com = 0x8004667e"),
+            FIOCLEX => todo!("ioctl with com = FIOCLEX"),
+            FIONCLEX => todo!("ioctl with com = FIONCLEX"),
+            FIONBIO => todo!("ioctl with com = FIONBIO"),
+            FIOASYNC => todo!("ioctl with com = FIOASYNC"),
             _ => {}
         }
 
@@ -412,11 +409,49 @@ impl Fs {
         Ok(SysOut::ZERO)
     }
 
+    #[allow(unused_variables, unreachable_code)]
     fn sys_socket(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let domain: i32 = i.args[0].try_into().unwrap();
+        let ty: i32 = i.args[1].try_into().unwrap();
+        let proto: i32 = i.args[2].try_into().unwrap();
+
+        let td = VThread::current().unwrap();
+
+        //TODO falloc_budget
+
+        let so = Socket::new(domain, ty, proto, td.as_ref().cred(), td.as_ref())?;
+
+        let ty = if domain == 1 {
+            VFileType::Socket(so)
+        } else {
+            VFileType::Socket2(so)
+        };
+
+        let file = VFile::new(ty, &SOCKET_FILEOPS);
+
         todo!()
     }
 
+    #[allow(unused_variables, unreachable_code)]
     fn sys_socketex(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let domain: i32 = i.args[1].try_into().unwrap();
+        let ty: i32 = i.args[0].try_into().unwrap();
+        let proto: i32 = i.args[3].try_into().unwrap();
+
+        let td = VThread::current().unwrap();
+
+        //TODO falloc_budget
+
+        let so = Socket::new(domain, ty, proto, td.as_ref().cred(), td.as_ref())?;
+
+        let ty = if domain == 1 {
+            VFileType::Socket(so)
+        } else {
+            VFileType::Socket2(so)
+        };
+
+        let file = VFile::new(ty, &SOCKET_FILEOPS);
+
         todo!()
     }
 

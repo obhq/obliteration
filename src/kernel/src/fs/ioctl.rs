@@ -90,6 +90,11 @@ impl IoCmd {
     pub const fn iowr<T>(group: u8, num: u8) -> Self {
         Self::new(Self::IOC_INOUT, group, num, std::mem::size_of::<T>())
     }
+
+    /// An implementation of the FreeBSD CMDGROUP macro.
+    pub fn group(&self) -> u8 {
+        ((self.0 >> 8) & 0xff) as u8
+    }
 }
 
 impl TryFrom<SysArg> for IoCmd {

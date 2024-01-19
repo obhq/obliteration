@@ -39,6 +39,7 @@ mod idt;
 mod llvm;
 mod log;
 mod memory;
+mod net;
 mod process;
 mod regmgr;
 mod rtld;

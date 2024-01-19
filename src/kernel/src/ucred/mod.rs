@@ -3,7 +3,11 @@ pub use self::id::*;
 use self::prison::Prison;
 use self::prison::PRISON0;
 pub use self::privilege::*;
+use crate::errno::EAFNOSUPPORT;
 use crate::errno::{Errno, EPERM};
+use crate::net::AddressFamily;
+use crate::ucred::prison::PrisonAllow;
+use crate::ucred::prison::PrisonFlags;
 use std::num::NonZeroI32;
 use thiserror::Error;
 
@@ -131,12 +135,32 @@ impl Ucred {
     }
 
     /// See `prison_check_af` on the PS4 for a reference.
-    pub fn prison_check_address_family(&self, family: i32) -> Result<(), PrisonCheckAfError> {
-        todo!()
+    pub fn prison_check_address_family(
+        &self,
+        family: AddressFamily,
+    ) -> Result<(), PrisonCheckAfError> {
+        let pr = self.prison;
+
+        match family {
+            AddressFamily::UNIX | AddressFamily::ROUTE => {}
+            AddressFamily::INET => todo!(),
+            AddressFamily::INET6 => {
+                if pr.flags().intersects(PrisonFlags::IP6) {
+                    todo!()
+                }
+            }
+            _ => {
+                if !pr.allow().intersects(PrisonAllow::ALLOW_SOCKET_AF) {
+                    return Err(PrisonCheckAfError::SocketAddressFamilyNotAllowed(family));
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
-/// Represents an error when [`Ucred::priv_check()`] is failed.
+/// Represents an error when [`Ucred::priv_check()`] fails.
 #[derive(Debug, Error)]
 pub enum PrivilegeError {
     #[error("the current credential does not have the specified privilege")]
@@ -152,10 +176,15 @@ impl Errno for PrivilegeError {
 }
 
 #[derive(Debug, Error)]
-pub enum PrisonCheckAfError {}
+pub enum PrisonCheckAfError {
+    #[error("the address family {0} is not allowed by prison")]
+    SocketAddressFamilyNotAllowed(AddressFamily),
+}
 
 impl Errno for PrisonCheckAfError {
     fn errno(&self) -> NonZeroI32 {
-        todo!()
+        match self {
+            Self::SocketAddressFamilyNotAllowed(_) => EAFNOSUPPORT,
+        }
     }
 }
