@@ -1,10 +1,11 @@
 #![allow(dead_code, unused_variables)]
 use crate::{
-    errno::{Errno, EPERM, EPROTONOSUPPORT, EPROTOTYPE},
+    errno::{Errno, EPERM, EPIPE, EPROTONOSUPPORT, EPROTOTYPE},
     net::{AddressFamily, Protosw},
     process::VThread,
     ucred::{PrisonCheckAfError, Ucred},
 };
+use bitflags::bitflags;
 use std::{num::NonZeroI32, sync::Arc};
 use thiserror::Error;
 
@@ -15,6 +16,7 @@ use super::{
 #[derive(Debug)]
 pub struct Socket {
     ty: i32,                 // so_type
+    options: SocketOptions,  // so_options
     proto: &'static Protosw, // so_proto
     fibnum: i32,             // so_fibnum
     cred: Arc<Ucred>,        // so_cred
@@ -64,6 +66,7 @@ impl Socket {
 
         let so = Self {
             ty,
+            options: SocketOptions::empty(),
             proto: prp,
             fibnum,
             cred: Arc::clone(cred),
@@ -72,6 +75,27 @@ impl Socket {
         };
 
         Ok(Arc::new(so))
+    }
+
+    fn options(&self) -> SocketOptions {
+        self.options
+    }
+
+    /// See `sosend` on the PS4 for a reference.
+    fn send(&self, buf: &[u8], td: Option<&VThread>) -> Result<usize, SendError> {
+        todo!()
+    }
+
+    /// See `soreceive` on the PS4 for a reference.
+    fn receive(&self, buf: &mut [u8], td: Option<&VThread>) -> Result<usize, ReceiveError> {
+        todo!()
+    }
+}
+
+bitflags! {
+    #[derive(Debug, Clone, Copy)]
+    struct SocketOptions: i16 {
+        const NOSIGPIPE = 0x0800;
     }
 }
 
@@ -109,15 +133,57 @@ impl Errno for SocketCreateError {
     }
 }
 
+#[derive(Debug, Error)]
+enum ReceiveError {}
+
+impl Errno for ReceiveError {
+    fn errno(&self) -> NonZeroI32 {
+        todo!()
+    }
+}
+
+#[derive(Debug, Error)]
+enum SendError {
+    #[error("Broken pipe")]
+    BrokenPipe,
+}
+
+impl Errno for SendError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::BrokenPipe => EPIPE,
+        }
+    }
+}
+
 pub const SOCKET_FILEOPS: VFileOps = VFileOps {
+    //read: socket_read,
     write: socket_write,
     ioctl: socket_ioctl,
 };
 
+fn socket_read(
+    file: &VFile,
+    buf: &mut [u8],
+    td: Option<&VThread>,
+) -> Result<usize, Box<dyn Errno>> {
+    let so = file.data_as_socket().unwrap();
+
+    let read = so.receive(buf, td)?;
+
+    Ok(read)
+}
+
 fn socket_write(file: &VFile, buf: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
     let so = file.data_as_socket().unwrap();
 
-    todo!()
+    let written = match so.send(buf, td) {
+        Ok(written) => written,
+        Err(SendError::BrokenPipe) if so.options().intersects(SocketOptions::NOSIGPIPE) => todo!(),
+        Err(e) => return Err(e.into()),
+    };
+
+    Ok(written)
 }
 
 fn socket_ioctl(

@@ -33,7 +33,7 @@ impl VFile {
 
     pub fn data_as_socket(&self) -> Option<&Socket> {
         match &self.ty {
-            VFileType::Socket(s) => Some(s),
+            VFileType::Socket(so) | VFileType::Socket2(so) => Some(so),
             _ => None,
         }
     }
