@@ -227,6 +227,7 @@ impl Fs {
                         None => drop(item),
                     }
                 }
+                VnodeType::File => todo!(),
                 VnodeType::Character => return Err(LookupError::NotFound),
             }
 
