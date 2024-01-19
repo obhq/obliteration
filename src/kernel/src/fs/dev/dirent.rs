@@ -1,6 +1,7 @@
 use super::Cdev;
 use crate::fs::{DirentType, Mode, Vnode};
-use crate::ucred::{Gid, Uid};
+use crate::process::VThread;
+use crate::ucred::{Gid, PrisonCheckError, Uid};
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use std::ops::Deref;
 use std::sync::{Arc, Weak};
@@ -126,6 +127,21 @@ impl Dirent {
         };
 
         parent.upgrade()
+    }
+
+    /// See `devfs_prison_check` on the PS4 for a reference.
+    pub fn prison_check(&self, td: &VThread) -> Result<(), PrisonCheckError> {
+        let dev = match self.cdev().and_then(|dev| dev.upgrade()) {
+            Some(dev) => dev,
+            None => return Ok(()),
+        };
+
+        let _err = match td.cred().prison_check(dev.cred().unwrap()) {
+            Ok(_) => return Ok(()),
+            Err(e) => e,
+        };
+
+        todo!()
     }
 }
 

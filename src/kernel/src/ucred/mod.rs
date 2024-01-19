@@ -4,6 +4,7 @@ use self::prison::Prison;
 use self::prison::PRISON0;
 pub use self::privilege::*;
 use crate::errno::EAFNOSUPPORT;
+use crate::errno::ESRCH;
 use crate::errno::{Errno, EPERM};
 use crate::net::AddressFamily;
 use crate::ucred::prison::PrisonAllow;
@@ -98,8 +99,16 @@ impl Ucred {
         self.auth.caps.is_unk1() && self.auth.attrs.is_unk2()
     }
 
+    pub fn prison_check(&self, other: &Self) -> Result<(), PrisonCheckError> {
+        if self.prison == other.prison || self.prison.is_child(other.prison) {
+            return Ok(());
+        }
+
+        Err(PrisonCheckError::CheckFailed)
+    }
+
     pub fn is_jailed(&self) -> bool {
-        !std::ptr::eq(self.prison, &PRISON0)
+        self.prison != &PRISON0
     }
 
     /// See `priv_check_cred` on the PS4 for a reference.
@@ -171,6 +180,20 @@ impl Errno for PrivilegeError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::NoPrivilege => EPERM,
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum PrisonCheckError {
+    #[error("Prison check failed")]
+    CheckFailed,
+}
+
+impl Errno for PrisonCheckError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::CheckFailed => ESRCH,
         }
     }
 }

@@ -81,6 +81,10 @@ impl Cdev {
         self.mode
     }
 
+    pub fn cred(&self) -> Option<&Arc<Ucred>> {
+        self.cred.as_ref()
+    }
+
     pub fn flags(&self) -> DeviceFlags {
         self.flags
     }

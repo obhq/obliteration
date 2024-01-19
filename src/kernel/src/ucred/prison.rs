@@ -2,6 +2,7 @@ use bitflags::bitflags;
 
 #[derive(Debug)]
 pub struct Prison {
+    parent: Option<&'static Prison>,
     flags: PrisonFlags,
     allow: PrisonAllow,
 }
@@ -14,9 +15,32 @@ impl Prison {
     pub fn allow(&self) -> PrisonAllow {
         self.allow
     }
+
+    pub fn is_child(&self, other: &Self) -> bool {
+        let mut p = other.parent;
+
+        while let Some(pr) = p {
+            if pr == other {
+                return true;
+            }
+
+            p = pr.parent;
+        }
+
+        false
+    }
 }
 
+impl PartialEq for Prison {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self, other)
+    }
+}
+
+impl Eq for Prison {}
+
 pub static PRISON0: Prison = Prison {
+    parent: None,
     flags: PrisonFlags::DEFAULT,
     allow: PrisonAllow::ALLOW_ALL,
 };
