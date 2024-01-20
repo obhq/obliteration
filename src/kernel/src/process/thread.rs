@@ -1,6 +1,5 @@
 use super::{CpuMask, CpuSet, VProc, NEXT_ID};
 use crate::errno::Errno;
-use crate::fs::VFile;
 use crate::signal::SignalSet;
 use crate::ucred::{Privilege, PrivilegeError, Ucred};
 use bitflags::bitflags;
@@ -92,18 +91,6 @@ impl VThread {
 
     pub fn set_name(&self, name: Option<&str>) {
         *self.name.write() = name.map(|n| n.to_owned());
-    }
-
-    pub fn falloc_budget(&self, budget: i32) -> Result<i32, FileAllocError> {
-        let file = self.falloc_noinstall_budget(budget)?;
-
-        let fd = self.proc().files().alloc(Arc::new(file));
-
-        todo!();
-    }
-
-    fn falloc_noinstall_budget(&self, budget: i32) -> Result<VFile, FileAllocError> {
-        todo!()
     }
 
     /// An implementation of `priv_check`.

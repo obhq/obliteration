@@ -1,19 +1,16 @@
 #![allow(unused_variables)]
 
+use crate::{
+    errno::{Errno, EOPNOTSUPP},
+    fs::socket::Socket,
+    process::VThread,
+};
 use core::fmt;
 use std::{
     fmt::{Display, Formatter},
     num::NonZeroI32,
 };
-
 use thiserror::Error;
-
-use crate::{
-    errno::{Errno, EOPNOTSUPP},
-    fs::socket::Socket,
-    process::VThread,
-    syscalls::SysErr,
-};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AddressFamily(i32);

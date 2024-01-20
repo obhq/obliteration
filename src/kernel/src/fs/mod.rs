@@ -418,9 +418,8 @@ impl Fs {
 
         let td = VThread::current().unwrap();
 
-        let files = td.proc().files();
-
-        let budget = if domain == 1 { 11 } else { 6 };
+        let _files = td.proc().files();
+        let _budget = if domain == 1 { 11 } else { 6 };
 
         let so = Socket::new(domain, ty, proto, td.as_ref().cred(), td.as_ref())?;
 
@@ -429,8 +428,6 @@ impl Fs {
         } else {
             VFileType::Socket2(so)
         };
-
-        let file = VFile::new(ty, &SOCKET_FILEOPS);
 
         todo!()
     }
@@ -443,11 +440,8 @@ impl Fs {
 
         let td = VThread::current().unwrap();
 
-        let files = td.proc().files();
-
-        let budget = if domain == 1 { 11 } else { 6 };
-
-        let fd = td.falloc_budget(budget)?;
+        let _files = td.proc().files();
+        let _budget = if domain == 1 { 11 } else { 6 };
 
         let so = Socket::new(domain, ty, proto, td.as_ref().cred(), td.as_ref())?;
 
@@ -457,9 +451,7 @@ impl Fs {
             VFileType::Socket2(so)
         };
 
-        let file = VFile::new(ty, &SOCKET_FILEOPS);
-
-        Ok(fd.into())
+        todo!()
     }
 
     /// See `vfs_donmount` on the PS4 for a reference.

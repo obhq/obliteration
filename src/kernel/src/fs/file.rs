@@ -1,4 +1,3 @@
-#![allow(dead_code, unused_variables)]
 use super::socket::Socket;
 use super::{IoCmd, Vnode};
 use crate::errno::{Errno, EINVAL, ENOTTY};
@@ -136,7 +135,7 @@ fn vn_ioctl(
             FIOCHECKANDMODIFY => {
                 td.unwrap().priv_check(Privilege::SCE683)?;
 
-                let arg: &FioCheckAndModifyArg = bytemuck::from_bytes(buf);
+                let _arg: &FioCheckAndModifyArg = bytemuck::from_bytes(buf);
 
                 todo!()
             }
