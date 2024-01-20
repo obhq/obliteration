@@ -242,7 +242,6 @@ fn main_wrapped() -> Result<(), KernelError> {
     }
 }
 
-#[allow(non_snake_case)]
 fn run<E: crate::ee::ExecutionEngine>(
     dump: Option<PathBuf>,
     param: &Arc<Param>,
@@ -314,6 +313,7 @@ fn run<E: crate::ee::ExecutionEngine>(
 
     info!("Loading {path}.");
 
+    #[allow(non_snake_case)]
     let libSceLibcInternal = ld
         .load(&proc, path, flags, false, true)
         .map_err(|e| KernelError::FailedToLoadLibSceLibcInternal(e.into()))?;
@@ -408,8 +408,8 @@ fn discord_presence(param: &Param) -> Result<(), DiscordPresenceError> {
 }
 
 #[cfg(unix)]
-fn join_thread(handle: OsThread) -> Result<(), std::io::Error> {
-    let err = unsafe { libc::pthread_join(handle, std::ptr::null_mut()) };
+fn join_thread(thr: OsThread) -> Result<(), std::io::Error> {
+    let err = unsafe { libc::pthread_join(thr, std::ptr::null_mut()) };
 
     if err != 0 {
         Err(std::io::Error::from_raw_os_error(err))
@@ -419,15 +419,15 @@ fn join_thread(handle: OsThread) -> Result<(), std::io::Error> {
 }
 
 #[cfg(windows)]
-fn join_thread(handle: OsThread) -> Result<(), std::io::Error> {
+fn join_thread(thr: OsThread) -> Result<(), std::io::Error> {
     use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
     use windows_sys::Win32::System::Threading::{WaitForSingleObject, INFINITE};
 
-    if unsafe { WaitForSingleObject(handle, INFINITE) } != WAIT_OBJECT_0 {
+    if unsafe { WaitForSingleObject(thr, INFINITE) } != WAIT_OBJECT_0 {
         return Err(std::io::Error::last_os_error());
     }
 
-    assert_ne!(unsafe { CloseHandle(handle) }, 0);
+    assert_ne!(unsafe { CloseHandle(thr) }, 0);
 
     Ok(())
 }
@@ -518,7 +518,7 @@ enum KernelError {
     #[error("runtime linker initialization failed")]
     RuntimeLinkerInitFailed(#[source] Box<dyn Error>),
 
-    #[error("l couldn't be loaded")]
+    #[error("libkernel couldn't be loaded")]
     FailedToLoadLibkernel(#[source] Box<dyn Error>),
 
     #[error("libSceLibcInternal couldn't be loaded")]
