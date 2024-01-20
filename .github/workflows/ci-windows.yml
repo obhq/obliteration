@@ -21,7 +21,7 @@ jobs:
       run: echo "dist=${{ runner.os }}-llvm-${{ steps.download.outputs.hash }}" >> $env:GITHUB_OUTPUT
       id: cache-keys
     - name: Check cached artifacts
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@v4
       with:
         path: lib/llvm
         key: ${{ steps.cache-keys.outputs.dist }}
@@ -43,7 +43,7 @@ jobs:
       run: cmake --install build --config Release
       if: ${{ steps.cache.outputs.cache-hit != 'true' }}
     - name: Cache artifacts
-      uses: actions/cache/save@v3
+      uses: actions/cache/save@v4
       with:
         path: lib/llvm
         key: ${{ steps.cache-keys.outputs.dist }}
@@ -56,7 +56,7 @@ jobs:
     - name: Checkout source
       uses: actions/checkout@v4
     - name: Download LLVM
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@v4
       with:
         path: lib/llvm
         key: ${{ needs.llvm.outputs.dist-key }}
@@ -78,12 +78,12 @@ jobs:
         7z x qt-svg.7z -oqt
         echo "CMAKE_PREFIX_PATH=qt\6.6.0\msvc2019_64" >> $env:GITHUB_ENV
     - name: Restore Cargo home
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@v4
       with:
         path: ~/.cargo
         key: ${{ steps.cache-keys.outputs.cargo }}
     - name: Restore Vulkan SDK
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@v4
       with:
         path: C:\VulkanSDK
         key: ${{ steps.cache-keys.outputs.vulkan }}
@@ -117,13 +117,13 @@ jobs:
         name: obliteration-win-x64
         path: dist
     - name: Cache Vulkan SDK
-      uses: actions/cache/save@v3
+      uses: actions/cache/save@v4
       with:
         path: C:\VulkanSDK
         key: ${{ steps.cache-keys.outputs.vulkan }}
       if: startsWith(github.ref, 'refs/heads/') && steps.install-vulkan.outputs.new-install == 'true'
     - name: Cache Cargo home
-      uses: actions/cache/save@v3
+      uses: actions/cache/save@v4
       with:
         path: ~/.cargo
         key: ${{ steps.cache-keys.outputs.cargo }}-${{ github.run_id }}
