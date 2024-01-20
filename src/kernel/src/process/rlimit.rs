@@ -10,7 +10,7 @@ pub enum ResourceType {
 }
 
 impl ResourceType {
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     pub fn into_unix(self) -> libc::__rlimit_resource_t {
         match self {
             Self::Cpu => libc::RLIMIT_CPU,
