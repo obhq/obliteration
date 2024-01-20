@@ -1,4 +1,4 @@
-use std::{io::Error, ops::Index};
+use std::{intrinsics::variant_count, io::Error, ops::Index};
 use thiserror::Error;
 
 //TODO: add remaining limits
@@ -10,14 +10,14 @@ pub enum ResourceType {
 }
 
 #[cfg(target_os = "linux")]
-type RawResourceType = libc::__rlimit_resource_t;
+type HostResourceType = libc::__rlimit_resource_t;
 
 #[cfg(target_os = "macos")]
-type RawResourceType = libc::c_int;
+type HostResourceType = libc::c_int;
 
 impl ResourceType {
     #[cfg(unix)]
-    pub fn into_host(self) -> RawResourceType {
+    pub fn into_host(self) -> HostResourceType {
         match self {
             Self::Cpu => libc::RLIMIT_CPU,
             Self::Fsize => libc::RLIMIT_FSIZE,
@@ -52,7 +52,7 @@ impl Index<ResourceType> for Limits {
     type Output = ResourceLimit;
 
     fn index(&self, ty: ResourceType) -> &Self::Output {
-        unsafe { self.inner.get_unchecked(ty as usize) }
+        unsafe { self.inner.get(ty as usize).unwrap() }
     }
 }
 
