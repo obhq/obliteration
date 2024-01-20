@@ -63,9 +63,9 @@ fn main_wrapped() -> Result<(), KernelError> {
 
     // Load arguments.
     let args = if std::env::args().any(|a| a == "--debug") {
-        let file = File::open(".kernel-debug").map_err(KernelError::FailedToOpenDebug)?;
+        let file = File::open(".kernel-debug").map_err(KernelError::FailedToOpenDebugConfig)?;
 
-        serde_yaml::from_reader(file)?
+        serde_yaml::from_reader(file).map_err(KernelError::FailedToParseDebugConfig)?
     } else {
         Args::try_parse()?
     };
@@ -476,64 +476,64 @@ impl Default for ExecutionEngine {
 
 #[derive(Debug, Error)]
 enum DiscordPresenceError {
-    #[error("Failed to create Discord IPC")]
+    #[error("failed to create Discord IPC")]
     FailedToCreateIpc(#[source] Box<dyn Error>),
 
-    #[error("Failed to update Discord presence")]
+    #[error("failed to update Discord presence")]
     FailedToUpdatePresence(#[source] Box<dyn Error>),
 }
 
 #[derive(Debug, Error)]
 enum KernelError {
-    #[error("Failed to open .kernel-debug")]
-    FailedToOpenDebug(#[source] std::io::Error),
+    #[error("failed to open .kernel-debug")]
+    FailedToOpenDebugConfig(#[source] std::io::Error),
 
-    #[error("Failed to parse .kernel-debug")]
-    FailedToParseDebug(#[from] serde_yaml::Error),
+    #[error("failed to parse .kernel-debug")]
+    FailedToParseDebugConfig(#[source] serde_yaml::Error),
 
-    #[error("Failed to parse arguments")]
+    #[error("failed to parse arguments")]
     FailedToParseArgs(#[from] clap::Error),
 
-    #[error("Failed to open param.sfo")]
-    FailedToOpenParam(#[source] std::io::Error),
+    #[error("failed to open param.sfo")]
+    FailedToOpenGameParam(#[source] std::io::Error),
 
-    #[error("Failed to read param.sfo")]
-    FailedToReadParam(#[from] param::ReadError),
+    #[error("failed to read param.sfo")]
+    FailedToReadGameParam(#[from] param::ReadError),
 
     #[error("{0} has invalid title identifier.")]
     InvalidTitleId(PathBuf),
 
-    #[error("Filesystem initialization failed")]
+    #[error("filesystem initialization failed")]
     FilesystemInitFailed(#[from] FsError),
 
-    #[error("Memory manager initialization failed")]
+    #[error("memory manager initialization failed")]
     MemoryManagerInitFailed(#[from] MemoryManagerError),
 
-    #[error("Failed to initialize TtyManager")]
+    #[error("failed to initialize TtyManager")]
     TtyInitFailed(#[from] TtyError),
 
-    #[error("Virtual process initialization failed")]
+    #[error("virtual process initialization failed")]
     VProcInitFailed(#[from] VProcError),
 
-    #[error("Runtime linker initialization failed")]
+    #[error("runtime linker initialization failed")]
     RuntimeLinkerInitFailed(#[source] Box<dyn Error>),
 
-    #[error("Failed to load libkernl")]
+    #[error("failed to load libkernl")]
     FailedToLoadLibkernel(#[source] Box<dyn Error>),
 
-    #[error("Failed to load libSceLibcInternal")]
+    #[error("failed to load libSceLibcInternal")]
     FailedToLoadLibSceLibcInternal(#[source] Box<dyn Error>),
 
-    #[error("Failed to create main thread")]
+    #[error("failed to create main thread")]
     FailedToCreateMainThread(#[from] SpawnError),
 
-    #[error("Failed to join with main thread")]
+    #[error("failed to join with main thread")]
     FailedToJoinMainThread(#[source] std::io::Error),
 }
 
-// We have to use this for a custom implementation of the Termination trait, because
-// we need to log the error using our own error! macro instead of std::fmt::Debug::fmt,
-// which is what the default implementation of Termination uses for Result<T: Termination, E: Debug>.
+/// We have to use this for a custom implementation of the [`Termination`] trait, because
+/// we need to log the error using our own error! macro instead of [`std::fmt::Debug::fmt`],
+/// which is what the default implementation of Termination uses for [`Result<T: Termination, E: Debug>`].
 enum Exit {
     Ok,
     Err(KernelError),
