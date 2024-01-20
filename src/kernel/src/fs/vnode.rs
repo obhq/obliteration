@@ -129,7 +129,7 @@ impl Drop for Vnode {
 }
 
 /// An implementation of `vtype`.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub enum VnodeType {
     File,            // VREG

@@ -490,7 +490,7 @@ impl Fs {
                 Some(vn.clone()),
                 conf,
                 path,
-                td.map_or_else(|| &self.kern_cred, |t| t.cred()),
+                td.map_or(&self.kern_cred, |t| t.cred()),
             );
 
             flags.remove(MountFlags::from_bits_retain(0xFFFFFFFF272F3F80));
