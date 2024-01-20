@@ -84,6 +84,7 @@ impl VProc {
 
         let gg = GutexGroup::new();
         let limits = Limits::load()?;
+
         let vp = Arc::new(Self {
             id: Self::new_id(),
             threads: gg.spawn(Vec::new()),
