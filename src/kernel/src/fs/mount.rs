@@ -218,20 +218,20 @@ impl From<String> for MountOpt {
 
 #[derive(Debug, Error)]
 pub enum MountOptError {
-    #[error("mount opt \"{name}\" is of wrong type: expected {expected}, got: {opt:?}")]
-    InvalidType {
-        name: &'static str,
+    #[error("mount opt \"{optname}\" is of wrong type: expected {expected}, got: {got:?}")]
+    UnexpectedOptType {
+        optname: &'static str,
         expected: &'static str,
-        opt: MountOpt,
+        got: MountOpt,
     },
 }
 
 impl MountOptError {
-    pub fn new<T>(name: &'static str, opt: MountOpt) -> Self {
-        Self::InvalidType {
-            name,
+    pub fn new<T>(optname: &'static str, got: MountOpt) -> Self {
+        Self::UnexpectedOptType {
+            optname,
             expected: std::any::type_name::<T>(),
-            opt,
+            got,
         }
     }
 }
