@@ -20,7 +20,7 @@ impl ResourceType {
     }
 
     #[cfg(target_os = "macos")]
-    pub fn into_unix(self) -> libc::__darwin_rlimit_resource_t {
+    pub fn into_unix(self) -> libc::c_int {
         match self {
             Self::Cpu => libc::RLIMIT_CPU,
             Self::Fsize => libc::RLIMIT_FSIZE,
