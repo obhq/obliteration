@@ -156,8 +156,8 @@ impl TryFrom<MountOpt> for Mode {
 bitflags! {
     /// An implementation of `accmode_t`.
     pub struct Access: u32 {
-        const EXEC  = 000000000100; // VEXEC
-        const WRITE = 000000000200; // VWRITE
+        const EXEC  = 0x000000000100; // VEXEC
+        const WRITE = 0x000000000200; // VWRITE
     }
 }
 
