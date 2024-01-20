@@ -313,15 +313,14 @@ fn run<E: crate::ee::ExecutionEngine>(
 
     info!("Loading {path}.");
 
-    #[allow(non_snake_case)]
-    let libSceLibcInternal = ld
+    let libc = ld
         .load(&proc, path, flags, false, true)
         .map_err(|e| KernelError::FailedToLoadLibSceLibcInternal(e.into()))?;
 
-    libSceLibcInternal.flags_mut().remove(ModuleFlags::UNK2);
-    libSceLibcInternal.print(info!());
+    libc.flags_mut().remove(ModuleFlags::UNK2);
+    libc.print(info!());
 
-    drop(libSceLibcInternal);
+    drop(libc);
 
     // Get eboot.bin.
     if app.file_info().is_none() {
