@@ -62,6 +62,7 @@ pub struct VProc {
     app_info: AppInfo,
     ptc: u64,
     uptc: AtomicPtr<u8>,
+    fibnum: i32,
     gg: Arc<GutexGroup>,
 }
 
@@ -100,10 +101,11 @@ impl VProc {
             budget_ptype,
             dmem_container,
             limits,
-            comm: gg.spawn(None), //TODO: Find out how this is actually set
+            comm: gg.spawn(None), // TODO: Find out how this is set
             app_info: AppInfo::new(),
             ptc: 0,
             uptc: AtomicPtr::new(null_mut()),
+            fibnum: 0, // TODO: Find out how this is set
             gg,
         });
 
@@ -173,7 +175,7 @@ impl VProc {
     }
 
     pub fn fibnum(&self) -> i32 {
-        todo!()
+        self.fibnum
     }
 
     pub fn gutex_group(&self) -> &Arc<GutexGroup> {
