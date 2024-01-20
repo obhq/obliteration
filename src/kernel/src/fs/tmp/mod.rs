@@ -1,8 +1,8 @@
 use self::node::{AllocNodeError, Node, Nodes};
-use super::{FsOps, Mount, MountFlags, Vnode};
+use super::{FsConfig, FsOps, Mount, MountFlags, VPathBuf, Vnode};
 use crate::errno::{Errno, EINVAL};
 use crate::fs::Mode;
-use crate::ucred::{Gid, Uid};
+use crate::ucred::{Gid, Ucred, Uid};
 use std::any::Any;
 use std::collections::HashMap;
 use std::num::NonZeroI32;
@@ -12,27 +12,27 @@ use thiserror::Error;
 
 mod node;
 
-fn mount(mnt: &mut Mount, mut opts: HashMap<String, Box<dyn Any>>) -> Result<(), Box<dyn Errno>> {
+pub fn mount(
+    conf: &'static FsConfig,
+    cred: &Arc<Ucred>,
+    path: VPathBuf,
+    parent: Option<Arc<Vnode>>,
+    mut opts: HashMap<String, Box<dyn Any>>,
+    flags: MountFlags,
+) -> Result<Mount, Box<dyn Errno>> {
     // Check flags.
-    let mut flags = mnt.flags_mut();
-
     if flags.intersects(MountFlags::MNT_UPDATE) {
         return Err(Box::new(MountError::UpdateNotSupported));
     }
 
-    flags.insert(MountFlags::MNT_LOCAL);
-
-    drop(flags);
-
     // Get mount point attributes.
-    let parent = mnt.parent().unwrap();
-    let attrs = match parent.getattr() {
+    let attrs = match parent.as_ref().unwrap().getattr() {
         Ok(v) => v,
         Err(e) => return Err(Box::new(MountError::GetParentAttrsFailed(e))),
     };
 
     // Get GID.
-    let gid = if mnt.cred().real_uid() == Uid::ROOT {
+    let gid = if cred.real_uid() == Uid::ROOT {
         match opts.remove("gid") {
             Some(v) => *v.downcast::<Gid>().unwrap(),
             None => attrs.gid(),
@@ -42,7 +42,7 @@ fn mount(mnt: &mut Mount, mut opts: HashMap<String, Box<dyn Any>>) -> Result<(),
     };
 
     // Get UID.
-    let uid = if mnt.cred().real_uid() == Uid::ROOT {
+    let uid = if cred.real_uid() == Uid::ROOT {
         match opts.remove("uid") {
             Some(v) => *v.downcast::<Uid>().unwrap(),
             None => attrs.uid(),
@@ -52,7 +52,7 @@ fn mount(mnt: &mut Mount, mut opts: HashMap<String, Box<dyn Any>>) -> Result<(),
     };
 
     // Get mode.
-    let mode = if mnt.cred().real_uid() == Uid::ROOT {
+    let mode = if cred.real_uid() == Uid::ROOT {
         match opts.remove("mode") {
             Some(v) => *v.downcast::<Mode>().unwrap(),
             None => attrs.mode(),
@@ -103,16 +103,21 @@ fn mount(mnt: &mut Mount, mut opts: HashMap<String, Box<dyn Any>>) -> Result<(),
         Err(e) => return Err(Box::new(MountError::AllocRootFailed(e))),
     };
 
-    // Set mount data.
-    mnt.set_data(Arc::new(TempFs {
-        max_pages: pages,
-        max_file_size: if file_size == 0 { u64::MAX } else { file_size },
-        next_inode: AtomicI32::new(2), // TODO: Use a proper implementation.
-        nodes,
-        root,
-    }));
-
-    Ok(())
+    Ok(Mount::new(
+        conf,
+        &TMPFS_OPS,
+        cred,
+        path,
+        parent,
+        flags | MountFlags::MNT_LOCAL,
+        TempFs {
+            max_pages: pages,
+            max_file_size: if file_size == 0 { u64::MAX } else { file_size },
+            next_inode: AtomicI32::new(2), // TODO: Use a proper implementation.
+            nodes,
+            root,
+        },
+    ))
 }
 
 fn root(_: &Arc<Mount>) -> Arc<Vnode> {
@@ -151,4 +156,4 @@ impl Errno for MountError {
     }
 }
 
-pub(super) static TMPFS_OPS: FsOps = FsOps { mount, root };
+static TMPFS_OPS: FsOps = FsOps { root };

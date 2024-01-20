@@ -1,12 +1,13 @@
-pub use self::dev::*;
+pub use self::dev::{make_dev, Cdev, CdevSw, DriverFlags, MakeDev, MakeDevError};
 pub use self::dirent::*;
 pub use self::file::*;
-pub use self::host::*;
 pub use self::ioctl::*;
 pub use self::mount::*;
 pub use self::path::*;
 pub use self::perm::*;
 pub use self::vnode::*;
+
+use self::host::HostFs;
 use crate::errno::{Errno, EBADF, EBUSY, EINVAL, ENAMETOOLONG, ENODEV, ENOENT};
 use crate::fs::socket::Socket;
 use crate::fs::socket::SOCKET_FILEOPS;
@@ -61,14 +62,19 @@ impl Fs {
         // Mount devfs as an initial root.
         let mut mounts = Mounts::new();
         let conf = Self::find_config("devfs").unwrap();
-        let mut init = Mount::new(None, conf, "/dev", kern);
-
-        if let Err(e) = (init.fs().ops.mount)(&mut init, HashMap::new()) {
-            return Err(FsError::MountDevFailed(e));
-        }
+        let init = (conf.mount)(
+            conf,
+            kern,
+            vpath!("/dev").to_owned(),
+            None,
+            HashMap::new(),
+            MountFlags::empty(),
+        )
+        .map_err(FsError::MountDevFailed)?;
 
         // Get an initial root vnode.
-        let root = (init.fs().ops.root)(&mounts.push(init));
+        let init = mounts.push(init);
+        let root = init.root();
 
         // Setup mount options for root FS.
         let mut opts: HashMap<String, Box<dyn Any>> = HashMap::new();
@@ -142,8 +148,7 @@ impl Fs {
 
     pub fn app(&self) -> Arc<VPathBuf> {
         let root = self.mounts.read().root().clone();
-        let data = root.data().cloned();
-        let host = data.unwrap().downcast::<HostFs>().unwrap();
+        let host = root.data().downcast_ref::<HostFs>().unwrap();
 
         host.app().clone()
     }
@@ -525,20 +530,18 @@ impl Fs {
             };
 
             // TODO: Check if jailed.
-            let mut mount = Mount::new(
-                Some(vn.clone()),
-                conf,
-                *path,
-                td.map_or_else(|| &self.kern, |t| t.cred()),
-            );
-
             flags.remove(MountFlags::from_bits_retain(0xFFFFFFFF272F3F80));
-            *mount.flags_mut() = flags;
 
             // TODO: Implement budgetid.
-            if let Err(e) = (mount.fs().ops.mount)(&mut mount, opts) {
-                return Err(MountError::MountFailed(e));
-            }
+            let mount = (conf.mount)(
+                conf,
+                td.map_or_else(|| &self.kern, |t| t.cred()),
+                *path,
+                Some(vn.clone()),
+                opts,
+                flags,
+            )
+            .map_err(MountError::MountFailed)?;
 
             // Set vnode to mounted. Beware of deadlock here.
             let mount = self.mounts.write().push(mount);
@@ -623,16 +626,16 @@ impl Display for OpenFlags {
 #[derive(Debug)]
 pub struct FsConfig {
     name: &'static str,              // vfc_name
-    ops: &'static FsOps,             // vfc_vfsops
     ty: u32,                         // vfc_typenum
     next: Option<&'static FsConfig>, // vfc_list.next
-}
-
-/// An implementation of `vfsops` structure.
-#[derive(Debug)]
-struct FsOps {
-    mount: fn(&mut Mount, HashMap<String, Box<dyn Any>>) -> Result<(), Box<dyn Errno>>,
-    root: fn(&Arc<Mount>) -> Arc<Vnode>,
+    mount: fn(
+        conf: &'static Self,
+        cred: &Arc<Ucred>,
+        path: VPathBuf,
+        parent: Option<Arc<Vnode>>,
+        opts: HashMap<String, Box<dyn Any>>,
+        flags: MountFlags,
+    ) -> Result<Mount, Box<dyn Errno>>,
 }
 
 /// Represents an error when FS was failed to initialized.
@@ -713,117 +716,77 @@ impl Errno for LookupError {
 
 static HOST: FsConfig = FsConfig {
     name: "exfatfs",
-    ops: &self::host::HOST_OPS,
     ty: 0x2C,
     next: Some(&MLFS),
+    mount: self::host::mount,
 };
 
 static MLFS: FsConfig = FsConfig {
     name: "mlfs",
-    ops: &MLFS_OPS,
     ty: 0xF1,
     next: Some(&UDF2),
-};
-
-static MLFS_OPS: FsOps = FsOps {
-    mount: |_, _| todo!("mount for mlfs"),
-    root: |_| todo!("root for mlfs"),
+    mount: |_, _, _, _, _, _| todo!("mount for mlfs"),
 };
 
 static UDF2: FsConfig = FsConfig {
     name: "udf2",
-    ops: &UDF2_OPS,
     ty: 0,
     next: Some(&DEVFS),
-};
-
-static UDF2_OPS: FsOps = FsOps {
-    mount: |_, _| todo!("mount for udf2"),
-    root: |_| todo!("root for udf2"),
+    mount: |_, _, _, _, _, _| todo!("mount for udf2"),
 };
 
 static DEVFS: FsConfig = FsConfig {
     name: "devfs",
-    ops: &self::dev::DEVFS_OPS,
     ty: 0x71,
     next: Some(&TMPFS),
+    mount: self::dev::mount,
 };
 
 static TMPFS: FsConfig = FsConfig {
     name: "tmpfs",
-    ops: &self::tmp::TMPFS_OPS,
     ty: 0x87,
     next: Some(&UNIONFS),
+    mount: self::tmp::mount,
 };
 
 static UNIONFS: FsConfig = FsConfig {
     name: "unionfs",
-    ops: &UNIONFS_OPS,
     ty: 0x41,
     next: Some(&PROCFS),
-};
-
-static UNIONFS_OPS: FsOps = FsOps {
-    mount: |_, _| todo!("mount for unionfs"),
-    root: |_| todo!("root for unionfs"),
+    mount: |_, _, _, _, _, _| todo!("mount for unionfs"),
 };
 
 static PROCFS: FsConfig = FsConfig {
     name: "procfs",
-    ops: &PROCFS_OPS,
     ty: 0x2,
     next: Some(&CD9660),
-};
-
-static PROCFS_OPS: FsOps = FsOps {
-    mount: |_, _| todo!("mount for procfs"),
-    root: |_| todo!("root for procfs"),
+    mount: |_, _, _, _, _, _| todo!("mount for procfs"),
 };
 
 static CD9660: FsConfig = FsConfig {
     name: "cd9660",
-    ops: &CD9660_OPS,
     ty: 0xBD,
     next: Some(&UFS),
-};
-
-static CD9660_OPS: FsOps = FsOps {
-    mount: |_, _| todo!("mount for cd9660"),
-    root: |_| todo!("root for cd9660"),
+    mount: |_, _, _, _, _, _| todo!("mount for cd9660"),
 };
 
 static UFS: FsConfig = FsConfig {
     name: "ufs",
-    ops: &UFS_OPS,
     ty: 0x35,
     next: Some(&NULLFS),
-};
-
-static UFS_OPS: FsOps = FsOps {
-    mount: |_, _| todo!("mount for ufs"),
-    root: |_| todo!("root for ufs"),
+    mount: |_, _, _, _, _, _| todo!("mount for ufs"),
 };
 
 static NULLFS: FsConfig = FsConfig {
     name: "nullfs",
-    ops: &NULLFS_OPS,
     ty: 0x29,
     next: Some(&PFS),
-};
-
-static NULLFS_OPS: FsOps = FsOps {
-    mount: |_, _| todo!("mount for nullfs"),
-    root: |_| todo!("root for nullfs"),
+    mount: |_, _, _, _, _, _| todo!("mount for nullfs"),
 };
 
 static PFS: FsConfig = FsConfig {
     name: "pfs",
-    ops: &PFS_OPS,
     ty: 0xA4,
     next: None,
-};
-
-static PFS_OPS: FsOps = FsOps {
-    mount: |_, _| todo!("mount for pfs"),
-    root: |_| todo!("root for pfs"),
+    mount: |_, _, _, _, _, _| todo!("mount for pfs"),
 };

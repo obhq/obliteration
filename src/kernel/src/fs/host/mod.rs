@@ -1,7 +1,8 @@
 use self::file::HostFile;
 use self::vnode::VNODE_OPS;
-use super::{FsOps, Mount, MountFlags, VPathBuf, Vnode, VnodeType};
+use super::{FsConfig, FsOps, Mount, MountFlags, VPathBuf, Vnode, VnodeType};
 use crate::errno::{Errno, EIO};
+use crate::ucred::Ucred;
 use gmtx::{Gutex, GutexGroup};
 use param::Param;
 use std::any::Any;
@@ -32,19 +33,20 @@ impl HostFs {
     }
 }
 
-fn mount(mount: &mut Mount, mut opts: HashMap<String, Box<dyn Any>>) -> Result<(), Box<dyn Errno>> {
+pub fn mount(
+    conf: &'static FsConfig,
+    cred: &Arc<Ucred>,
+    path: VPathBuf,
+    parent: Option<Arc<Vnode>>,
+    mut opts: HashMap<String, Box<dyn Any>>,
+    flags: MountFlags,
+) -> Result<Mount, Box<dyn Errno>> {
     // Check mount flags.
-    let mut flags = mount.flags_mut();
-
     if !flags.intersects(MountFlags::MNT_ROOTFS) {
         todo!("mounting host FS on non-root");
     } else if flags.intersects(MountFlags::MNT_UPDATE) {
         todo!("update root FS mounting");
     }
-
-    flags.insert(MountFlags::MNT_LOCAL);
-
-    drop(flags);
 
     // Get options.
     let system = *opts
@@ -64,11 +66,11 @@ fn mount(mount: &mut Mount, mut opts: HashMap<String, Box<dyn Any>>) -> Result<(
         .unwrap();
 
     // Create dev mount point.
-    let path = system.join("dev");
+    let dev = system.join("dev");
 
-    if let Err(e) = create_dir(&path) {
+    if let Err(e) = create_dir(&dev) {
         if e.kind() != ErrorKind::AlreadyExists {
-            return Err(Box::new(MountError::CreateDirectoryFailed(path, e)));
+            return Err(Box::new(MountError::CreateDirectoryFailed(dev, e)));
         }
     }
 
@@ -114,13 +116,19 @@ fn mount(mount: &mut Mount, mut opts: HashMap<String, Box<dyn Any>>) -> Result<(
     // Set mount data.
     let gg = GutexGroup::new();
 
-    mount.set_data(Arc::new(HostFs {
-        root: system,
-        app: Arc::new(app),
-        actives: gg.spawn(HashMap::new()),
-    }));
-
-    Ok(())
+    Ok(Mount::new(
+        conf,
+        &HOST_OPS,
+        cred,
+        path,
+        parent,
+        flags | MountFlags::MNT_LOCAL,
+        HostFs {
+            root: system,
+            app: Arc::new(app),
+            actives: gg.spawn(HashMap::new()),
+        },
+    ))
 }
 
 fn root(mnt: &Arc<Mount>) -> Arc<Vnode> {
@@ -129,7 +137,7 @@ fn root(mnt: &Arc<Mount>) -> Arc<Vnode> {
 
 fn get_vnode(mnt: &Arc<Mount>, path: Option<&Path>) -> Result<Arc<Vnode>, GetVnodeError> {
     // Get target path.
-    let fs = mnt.data().unwrap().downcast_ref::<HostFs>().unwrap();
+    let fs = mnt.data().downcast_ref::<HostFs>().unwrap();
     let path = match path {
         Some(v) => v,
         None => &fs.root,
@@ -198,4 +206,4 @@ enum GetVnodeError {
     GetFileTypeFailed(#[source] std::io::Error),
 }
 
-pub(super) static HOST_OPS: FsOps = FsOps { mount, root };
+static HOST_OPS: FsOps = FsOps { root };
