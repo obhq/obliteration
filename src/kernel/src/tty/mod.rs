@@ -16,7 +16,7 @@ pub struct TtyManager {
 impl TtyManager {
     const TIOCSCTTY: IoCmd = IoCmd::io(b't', 97);
 
-    pub fn new(_fs: &Arc<Fs>) -> Result<Arc<Self>, TtyError> {
+    pub fn new() -> Result<Arc<Self>, TtyError> {
         // Create /dev/console.
         let console = Arc::new(CdevSw::new(
             DriverFlags::from_bits_retain(0x80000004),

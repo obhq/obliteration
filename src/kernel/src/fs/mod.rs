@@ -144,12 +144,8 @@ impl Fs {
         self.root.read().clone()
     }
 
-    pub fn open(
-        &self,
-        _path: impl AsRef<VPath>,
-        _td: Option<&VThread>,
-    ) -> Result<VFile, OpenError> {
-        let _vnode = self.lookup(_path, _td).map_err(OpenError::LookupFailed)?;
+    pub fn open(&self, path: impl AsRef<VPath>, td: Option<&VThread>) -> Result<VFile, OpenError> {
+        let _vnode = self.lookup(path, td).map_err(OpenError::LookupFailed)?;
 
         todo!();
     }

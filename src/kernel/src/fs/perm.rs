@@ -4,6 +4,8 @@ use bitflags::bitflags;
 use std::num::NonZeroI32;
 use thiserror::Error;
 
+use super::MountOpt;
+
 /// You can map [`None`] to `EPERM` to match with the PS4 behavior.
 ///
 /// See `vfs_unixify_accmode` on the PS4 for a reference.
@@ -131,6 +133,23 @@ impl Mode {
 impl From<Mode> for u32 {
     fn from(value: Mode) -> Self {
         value.0.into()
+    }
+}
+
+impl From<Mode> for MountOpt {
+    fn from(v: Mode) -> Self {
+        Self::Mode(v)
+    }
+}
+
+impl TryFrom<MountOpt> for Mode {
+    type Error = ();
+
+    fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
+        match v {
+            MountOpt::Mode(v) => Ok(v),
+            _ => Err(()),
+        }
     }
 }
 

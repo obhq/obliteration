@@ -174,7 +174,7 @@ impl MountOpts {
     }
 }
 
-pub(super) enum MountOpt {
+pub enum MountOpt {
     Bool(bool),
     Int(i32),
     Usize(usize),
@@ -226,12 +226,6 @@ impl From<String> for MountOpt {
     }
 }
 
-impl From<VPathBuf> for MountOpt {
-    fn from(v: VPathBuf) -> Self {
-        Self::VPath(v)
-    }
-}
-
 impl From<PathBuf> for MountOpt {
     fn from(v: PathBuf) -> Self {
         Self::Path(v)
@@ -241,24 +235,6 @@ impl From<PathBuf> for MountOpt {
 impl From<Arc<Param>> for MountOpt {
     fn from(v: Arc<Param>) -> Self {
         Self::Param(v)
-    }
-}
-
-impl From<Gid> for MountOpt {
-    fn from(v: Gid) -> Self {
-        Self::Gid(v)
-    }
-}
-
-impl From<Uid> for MountOpt {
-    fn from(v: Uid) -> Self {
-        Self::Uid(v)
-    }
-}
-
-impl From<Mode> for MountOpt {
-    fn from(v: Mode) -> Self {
-        Self::Mode(v)
     }
 }
 
@@ -295,17 +271,6 @@ impl TryFrom<MountOpt> for Box<str> {
     }
 }
 
-impl TryFrom<MountOpt> for VPathBuf {
-    type Error = ();
-
-    fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
-        match v {
-            MountOpt::VPath(v) => Ok(v),
-            _ => Err(()),
-        }
-    }
-}
-
 impl TryFrom<MountOpt> for PathBuf {
     type Error = ();
 
@@ -323,39 +288,6 @@ impl TryFrom<MountOpt> for Arc<Param> {
     fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
         match v {
             MountOpt::Param(v) => Ok(v),
-            _ => Err(()),
-        }
-    }
-}
-
-impl TryFrom<MountOpt> for Gid {
-    type Error = ();
-
-    fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
-        match v {
-            MountOpt::Gid(v) => Ok(v),
-            _ => Err(()),
-        }
-    }
-}
-
-impl TryFrom<MountOpt> for Uid {
-    type Error = ();
-
-    fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
-        match v {
-            MountOpt::Uid(v) => Ok(v),
-            _ => Err(()),
-        }
-    }
-}
-
-impl TryFrom<MountOpt> for Mode {
-    type Error = ();
-
-    fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
-        match v {
-            MountOpt::Mode(v) => Ok(v),
             _ => Err(()),
         }
     }

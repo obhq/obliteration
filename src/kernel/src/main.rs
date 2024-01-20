@@ -274,7 +274,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     ee: Arc<E>,
 ) -> ExitCode {
     // Initialize TTY system.
-    let _tty = match TtyManager::new(fs) {
+    let _tty = match TtyManager::new() {
         Ok(v) => v,
         Err(e) => {
             error!(e, "TTY initialization failed");

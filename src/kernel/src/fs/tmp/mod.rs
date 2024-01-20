@@ -6,7 +6,6 @@ use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
 
-#[allow(unused_variables)]
 fn mount(mnt: &mut Mount, mut opts: MountOpts) -> Result<(), Box<dyn Errno>> {
     if mnt.flags().intersects(MountFlags::MNT_UPDATE) {
         return Err(Box::new(MountError::UpdateNotSupported));
@@ -15,14 +14,14 @@ fn mount(mnt: &mut Mount, mut opts: MountOpts) -> Result<(), Box<dyn Errno>> {
     // Get mount point attributes.
     let parent = mnt.parent().unwrap();
     let attrs = match parent.getattr() {
-        Ok(v) => v,
+        Ok(opt) => opt,
         Err(e) => return Err(Box::new(MountError::GetParentAttrsFailed(e))),
     };
 
     // Get GID.
     let gid: Gid = if mnt.cred().real_uid() == Uid::ROOT {
         match opts.remove("gid") {
-            Some(v) => v.try_into().unwrap(),
+            Some(opt) => opt.try_into().unwrap(),
             None => attrs.gid(),
         }
     } else {
@@ -32,7 +31,7 @@ fn mount(mnt: &mut Mount, mut opts: MountOpts) -> Result<(), Box<dyn Errno>> {
     // Get UID.
     let uid: Uid = if mnt.cred().real_uid() == Uid::ROOT {
         match opts.remove("uid") {
-            Some(v) => v.try_into().unwrap(),
+            Some(opt) => opt.try_into().unwrap(),
             None => attrs.uid(),
         }
     } else {

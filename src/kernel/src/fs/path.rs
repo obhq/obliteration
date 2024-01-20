@@ -3,6 +3,8 @@ use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use thiserror::Error;
 
+use super::MountOpt;
+
 /// See `devfs_pathpath` on the PS4 for a reference.
 pub fn path_contains(p1: &str, p2: &str) -> bool {
     let mut p1 = p1.bytes();
@@ -283,6 +285,23 @@ impl Display for VPathBuf {
 impl From<VPathBuf> for String {
     fn from(v: VPathBuf) -> Self {
         v.0.into_owned()
+    }
+}
+
+impl From<VPathBuf> for MountOpt {
+    fn from(v: VPathBuf) -> Self {
+        Self::VPath(v)
+    }
+}
+
+impl TryFrom<MountOpt> for VPathBuf {
+    type Error = ();
+
+    fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
+        match v {
+            MountOpt::VPath(v) => Ok(v),
+            _ => Err(()),
+        }
     }
 }
 
