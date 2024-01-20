@@ -244,7 +244,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     ee: Arc<E>,
 ) -> Result<(), KernelError> {
     // Initialize TTY system.
-    let _tty = TtyManager::new(fs)?;
+    let _tty = TtyManager::new()?;
 
     // Initialize kernel components.
     RegMgr::new(&mut syscalls);

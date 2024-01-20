@@ -396,7 +396,7 @@ impl Display for RegError {
         match self {
             Self::NotFound(k) => write!(f, "entry {k} not found"),
             Self::ChecksumMismatched(e, g) => {
-                write!(f, "checksum mismatched (expect {e:#x}, got {g:#x})")
+                write!(f, "checksum mismatched (expected {e:#x}, got {g:#x})")
             }
             v => write!(f, "{:#x}", v.code()),
         }
