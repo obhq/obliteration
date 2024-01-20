@@ -4,8 +4,6 @@ use bitflags::bitflags;
 use std::num::NonZeroI32;
 use thiserror::Error;
 
-use super::MountOpt;
-
 /// You can map [`None`] to `EPERM` to match with the PS4 behavior.
 ///
 /// See `vfs_unixify_accmode` on the PS4 for a reference.

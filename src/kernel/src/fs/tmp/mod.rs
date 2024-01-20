@@ -1,10 +1,7 @@
 use self::node::{AllocNodeError, Node, Nodes};
-use super::{FsConfig, FsOps, Mount, MountFlags, VPathBuf, Vnode};
+use super::{FsConfig, FsOps, Mount, MountFlags, MountOpts, VPathBuf, Vnode};
 use crate::errno::{Errno, EINVAL};
-use crate::fs::Mode;
-use crate::ucred::{Gid, Ucred, Uid};
-use std::any::Any;
-use std::collections::HashMap;
+use crate::ucred::{Ucred, Uid};
 use std::num::NonZeroI32;
 use std::sync::atomic::AtomicI32;
 use std::sync::Arc;
@@ -34,7 +31,7 @@ pub fn mount(
     // Get GID.
     let gid = if cred.real_uid() == Uid::ROOT {
         match opts.remove("gid") {
-            Some(opt) => opt.try_into().unwrap(),
+            Some(opt) => opt.unwrap(),
             None => attrs.gid(),
         }
     } else {
@@ -43,38 +40,26 @@ pub fn mount(
 
     // Get UID.
     let uid = if cred.real_uid() == Uid::ROOT {
-        match opts.remove("uid") {
-            Some(opt) => opt.try_into().unwrap(),
-            None => attrs.uid(),
-        }
+        opts.remove("uid").map_or(attrs.uid(), |v| v.unwrap())
     } else {
         attrs.uid()
     };
 
     // Get mode.
     let mode = if cred.real_uid() == Uid::ROOT {
-        match opts.remove("mode") {
-            Some(v) => v.try_into().unwrap(),
-            None => attrs.mode(),
-        }
+        opts.remove("mode").map_or(attrs.mode(), |v| v.unwrap())
     } else {
         attrs.mode()
     };
 
     // Get maximum inodes.
-    let inodes = match opts.remove("inodes") {
-        Some(v) => *v.downcast::<u32>().unwrap(),
-        None => 0,
-    };
+    let inodes: i32 = opts.remove("inodes").map_or(0, |v| v.unwrap());
 
     // Get size.
-    let size: usize = opts.remove("size").map_or(0, |v| v.try_into().unwrap());
+    let size: usize = opts.remove("size").map_or(0, |v| v.unwrap());
 
     // Get maximum file size.
-    let file_size = match opts.remove("maxfilesize") {
-        Some(v) => *v.downcast::<u64>().unwrap(),
-        None => 0,
-    };
+    let file_size = opts.remove("file_size").map_or(0, |v| v.unwrap());
 
     // TODO: Refactor this for readability.
     let pages = if size.wrapping_sub(0x4000) < 0xffffffffffff8000 {

@@ -58,7 +58,7 @@ impl Fs {
         let conf = Self::find_config("devfs").unwrap();
         let init = (conf.mount)(
             conf,
-            kern,
+            kern_cred,
             vpath!("/dev").to_owned(),
             None,
             MountOpts::new(),
@@ -432,8 +432,8 @@ impl Fs {
         td: Option<&VThread>,
     ) -> Result<Arc<Vnode>, MountError> {
         // Process the options.
-        let fs: Box<str> = opts.remove("fstype").unwrap().try_into().unwrap();
-        let path: VPathBuf = opts.remove("fspath").unwrap().try_into().unwrap();
+        let fs: Box<str> = opts.remove("fstype").unwrap().unwrap();
+        let path: VPathBuf = opts.remove("fspath").unwrap().unwrap();
 
         opts.retain(|k, v| {
             match k {
@@ -497,8 +497,8 @@ impl Fs {
             // TODO: Implement budgetid.
             let mount = (conf.mount)(
                 conf,
-                td.map_or_else(|| &self.kern, |t| t.cred()),
-                *path,
+                td.map_or(&self.kern_cred, |t| t.cred()),
+                path,
                 Some(vn.clone()),
                 opts,
                 flags,
@@ -765,9 +765,9 @@ static UFS: FsConfig = FsConfig {
 
 static NULLFS: FsConfig = FsConfig {
     name: "nullfs",
-    ops: &self::null::NULLFS_OPS,
     ty: 0x29,
     next: Some(&PFS),
+    mount: self::null::mount,
 };
 
 static PFS: FsConfig = FsConfig {

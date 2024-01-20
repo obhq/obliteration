@@ -1,10 +1,14 @@
-use super::{FsConfig, VPathBuf, Vnode};
-use crate::ucred::{Ucred, Uid};
+use super::{FsConfig, Mode, VPathBuf, Vnode};
+use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
 use macros::implement_conversions;
+use param::Param;
 use std::any::Any;
+use std::collections::HashMap;
 use std::fmt::Debug;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock, RwLockWriteGuard};
+use thiserror::Error;
 
 /// A collection of [`Mount`].
 #[derive(Debug)]
@@ -105,6 +109,10 @@ impl Mount {
         }
     }
 
+    pub fn flags(&self) -> MountFlags {
+        self.flags
+    }
+
     pub fn data(&self) -> &Arc<dyn Any + Send + Sync> {
         &self.data
     }
@@ -142,7 +150,7 @@ bitflags! {
     }
 }
 
-pub(super) struct MountOpts(HashMap<&'static str, MountOpt>);
+pub struct MountOpts(HashMap<&'static str, MountOpt>);
 
 impl MountOpts {
     pub fn new() -> Self {
@@ -153,8 +161,17 @@ impl MountOpts {
         self.0.insert(k, v.into());
     }
 
-    pub fn remove(&mut self, k: &'static str) -> Option<MountOpt> {
-        self.0.remove(k)
+    pub fn remove<T>(&mut self, name: &'static str) -> Option<Result<T, MountOptError>>
+    where
+        T: TryFrom<MountOpt, Error = MountOpt>,
+    {
+        let opt = self.0.remove(name)?;
+
+        let res = opt
+            .try_into()
+            .map_err(|opt| MountOptError::new::<T>(name, opt));
+
+        Some(res)
     }
 
     pub fn retain(&mut self, mut f: impl FnMut(&str, &mut MountOpt) -> bool) {
@@ -166,7 +183,8 @@ impl MountOpts {
 #[derive(Debug)]
 pub enum MountOpt {
     Bool(bool),
-    Int(i32),
+    I32(i32),
+    U64(u64),
     Usize(usize),
     Str(Box<str>),
     VPath(VPathBuf),
@@ -195,6 +213,26 @@ impl From<&str> for MountOpt {
 impl From<String> for MountOpt {
     fn from(v: String) -> Self {
         Self::Str(v.into_boxed_str())
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum MountOptError {
+    #[error("mount opt \"{name}\" is of wrong type: expected {expected}, got: {opt:?}")]
+    InvalidType {
+        name: &'static str,
+        expected: &'static str,
+        opt: MountOpt,
+    },
+}
+
+impl MountOptError {
+    pub fn new<T>(name: &'static str, opt: MountOpt) -> Self {
+        Self::InvalidType {
+            name,
+            expected: std::any::type_name::<T>(),
+            opt,
+        }
     }
 }
 

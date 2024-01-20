@@ -1,5 +1,3 @@
-use crate::fs::MountOpt;
-
 /// An implementation of `uid_t`.
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]

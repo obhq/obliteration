@@ -2,7 +2,8 @@ pub use self::cdev::*;
 use self::dirent::Dirent;
 use self::vnode::{CHARACTER_OPS, VNODE_OPS};
 use super::{
-    path_contains, DirentType, FsConfig, FsOps, Mode, Mount, MountFlags, VPathBuf, Vnode, VnodeType,
+    path_contains, DirentType, FsConfig, FsOps, Mode, Mount, MountFlags, MountOpts, VPathBuf,
+    Vnode, VnodeType,
 };
 use crate::errno::{Errno, EEXIST, ENOENT, EOPNOTSUPP};
 use crate::ucred::{Gid, Ucred, Uid};
@@ -323,7 +324,7 @@ pub fn mount(
     cred: &Arc<Ucred>,
     path: VPathBuf,
     parent: Option<Arc<Vnode>>,
-    opts: MountOpts,
+    _opts: MountOpts,
     flags: MountFlags,
 ) -> Result<Mount, Box<dyn Errno>> {
     // Check mount flags.

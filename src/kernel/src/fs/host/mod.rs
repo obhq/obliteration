@@ -48,9 +48,9 @@ pub fn mount(
     }
 
     // Get options.
-    let system: PathBuf = opts.remove("ob:system").unwrap().try_into().unwrap();
-    let game: PathBuf = opts.remove("ob:game").unwrap().try_into().unwrap();
-    let param: Arc<Param> = opts.remove("ob:param").unwrap().try_into().unwrap();
+    let system: PathBuf = opts.remove("ob:system").unwrap().unwrap();
+    let game: PathBuf = opts.remove("ob:game").unwrap().unwrap();
+    let param: Arc<Param> = opts.remove("ob:param").unwrap().unwrap();
 
     // Create dev mount point.
     let dev = system.join("dev");

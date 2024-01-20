@@ -3,8 +3,6 @@ use std::fmt::{Display, Formatter};
 use std::ops::Deref;
 use thiserror::Error;
 
-use super::MountOpt;
-
 /// See `devfs_pathpath` on the PS4 for a reference.
 pub fn path_contains(p1: &str, p2: &str) -> bool {
     let mut p1 = p1.bytes();
