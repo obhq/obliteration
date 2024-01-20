@@ -1,13 +1,10 @@
-use super::{FsConfig, Mode, VPathBuf, Vnode};
-use crate::ucred::{Gid, Ucred, Uid};
+use super::{FsConfig, VPathBuf, Vnode};
+use crate::ucred::{Ucred, Uid};
 use bitflags::bitflags;
-use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use macros::implement_conversions;
-use param::Param;
 use std::any::Any;
-use std::collections::HashMap;
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::fmt::Debug;
+use std::sync::{Arc, Mutex, RwLock, RwLockWriteGuard};
 
 /// A collection of [`Mount`].
 #[derive(Debug)]
@@ -68,78 +65,65 @@ impl Mounts {
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct Mount {
-    fs: &'static FsConfig,                    // mnt_vfc
-    gen: i32,                                 // mnt_gen
-    data: Option<Arc<dyn Any + Send + Sync>>, // mnt_data
-    cred: Arc<Ucred>,                         // mnt_cred
-    parent: Gutex<Option<Arc<Vnode>>>,        // mnt_vnodecovered
-    flags: Gutex<MountFlags>,                 // mnt_flag
-    stats: FsStats,                           // mnt_stat
+    fs: &'static FsConfig, // mnt_vfc
+    ops: &'static FsOps,
+    gen: i32,                           // mnt_gen
+    data: Arc<dyn Any + Send + Sync>,   // mnt_data
+    cred: Arc<Ucred>,                   // mnt_cred
+    parent: RwLock<Option<Arc<Vnode>>>, // mnt_vnodecovered
+    flags: MountFlags,                  // mnt_flag
+    stats: FsStats,                     // mnt_stat
 }
 
 impl Mount {
     /// See `vfs_mount_alloc` on the PS4 for a reference.
-    pub fn new(
-        parent: Option<Arc<Vnode>>,
+    pub(super) fn new<D: Send + Sync + 'static>(
         fs: &'static FsConfig,
-        path: impl Into<String>,
+        ops: &'static FsOps,
         cred: &Arc<Ucred>,
+        path: VPathBuf,
+        parent: Option<Arc<Vnode>>,
+        flags: MountFlags,
+        data: D,
     ) -> Self {
-        let gg = GutexGroup::new();
         let owner = cred.effective_uid();
-        let mount = Self {
+
+        Self {
             fs,
+            ops,
             gen: 1,
-            data: None,
+            data: Arc::new(data),
             cred: cred.clone(),
-            parent: gg.spawn(parent),
-            flags: gg.spawn(MountFlags::empty()),
+            parent: RwLock::new(parent),
+            flags,
             stats: FsStats {
                 ty: fs.ty,
                 id: [0; 2],
                 owner,
-                path: path.into(),
+                path,
             },
-        };
-
-        mount
+        }
     }
 
-    pub fn fs(&self) -> &'static FsConfig {
-        self.fs
+    pub fn data(&self) -> &Arc<dyn Any + Send + Sync> {
+        &self.data
     }
 
-    pub fn data(&self) -> Option<&Arc<dyn Any + Send + Sync>> {
-        self.data.as_ref()
-    }
-
-    pub fn set_data(&mut self, v: Arc<dyn Any + Send + Sync>) {
-        self.data = Some(v);
-    }
-
-    pub fn cred(&self) -> &Arc<Ucred> {
-        &self.cred
-    }
-
-    pub fn parent(&self) -> Option<Arc<Vnode>> {
-        self.parent.read().clone()
-    }
-
-    pub fn parent_mut(&self) -> GutexWriteGuard<Option<Arc<Vnode>>> {
-        self.parent.write()
-    }
-
-    pub fn flags(&self) -> GutexReadGuard<MountFlags> {
-        self.flags.read()
-    }
-
-    pub fn flags_mut(&self) -> GutexWriteGuard<MountFlags> {
-        self.flags.write()
+    pub fn parent_mut(&self) -> RwLockWriteGuard<Option<Arc<Vnode>>> {
+        self.parent.write().unwrap()
     }
 
     pub fn root(self: &Arc<Self>) -> Arc<Vnode> {
-        (self.fs.ops.root)(self)
+        (self.ops.root)(self)
     }
+}
+
+/// An implementation of `vfsops` structure.
+///
+/// Our version is a bit different from FreeBSD. We moved `vfs_mount` into `vfsconf`.
+#[derive(Debug)]
+pub(super) struct FsOps {
+    pub root: fn(&Arc<Mount>) -> Arc<Vnode>, // vfs_root
 }
 
 bitflags! {
@@ -148,7 +132,10 @@ bitflags! {
     pub struct MountFlags: u64 {
         const MNT_RDONLY = 0x0000000000000001;
         const MNT_NOSUID = 0x0000000000000008;
+
+        /// Mount is local (e.g. not a remote FS like NFS).
         const MNT_LOCAL = 0x0000000000001000;
+
         const MNT_ROOTFS = 0x0000000000004000;
         const MNT_USER = 0x0000000000008000;
         const MNT_UPDATE = 0x0000000000010000;
@@ -215,10 +202,10 @@ impl From<String> for MountOpt {
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct FsStats {
-    ty: u32,      // f_type
-    id: [u32; 2], // f_fsid
-    owner: Uid,   // f_owner
-    path: String, // f_mntonname
+    ty: u32,        // f_type
+    id: [u32; 2],   // f_fsid
+    owner: Uid,     // f_owner
+    path: VPathBuf, // f_mntonname
 }
 
 static MOUNT_ID: Mutex<u16> = Mutex::new(0); // mntid_base + mntid_mtx

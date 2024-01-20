@@ -1,8 +1,8 @@
 use super::dirent::Dirent;
-use super::{alloc_vnode, AllocVnodeError, Cdev};
+use super::{alloc_vnode, AllocVnodeError, Cdev, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
-    check_access, Access, DevFs, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType, VopVector,
+    check_access, Access, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType, VopVector,
     DEFAULT_VNODEOPS,
 };
 use crate::process::VThread;
@@ -70,11 +70,7 @@ fn access(vn: &Arc<Vnode>, td: Option<&VThread>, access: Access) -> Result<(), B
 
 fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
     // Populate devices.
-    let fs = vn
-        .fs()
-        .data()
-        .and_then(|v| v.downcast_ref::<DevFs>())
-        .unwrap();
+    let fs = vn.fs().data().downcast_ref::<DevFs>().unwrap();
 
     fs.populate();
 
@@ -103,11 +99,7 @@ fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
 
 fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode>, Box<dyn Errno>> {
     // Populate devices.
-    let fs = vn
-        .fs()
-        .data()
-        .and_then(|v| v.downcast_ref::<DevFs>())
-        .unwrap();
+    let fs = vn.fs().data().downcast_ref::<DevFs>().unwrap();
 
     fs.populate();
 

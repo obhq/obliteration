@@ -2,7 +2,7 @@ pub use self::cdev::*;
 use self::dirent::Dirent;
 use self::vnode::{CHARACTER_OPS, VNODE_OPS};
 use super::{
-    path_contains, DirentType, FsOps, Mode, Mount, MountFlags, MountOpts, Vnode, VnodeType,
+    path_contains, DirentType, FsConfig, FsOps, Mode, Mount, MountFlags, VPathBuf, Vnode, VnodeType,
 };
 use crate::errno::{Errno, EEXIST, ENOENT, EOPNOTSUPP};
 use crate::ucred::{Gid, Ucred, Uid};
@@ -318,34 +318,41 @@ impl Errno for MakeDevError {
     }
 }
 
-fn mount(mount: &mut Mount, _: MountOpts) -> Result<(), Box<dyn Errno>> {
+pub fn mount(
+    conf: &'static FsConfig,
+    cred: &Arc<Ucred>,
+    path: VPathBuf,
+    parent: Option<Arc<Vnode>>,
+    opts: MountOpts,
+    flags: MountFlags,
+) -> Result<Mount, Box<dyn Errno>> {
     // Check mount flags.
-    let mut flags = mount.flags_mut();
-
     if flags.intersects(MountFlags::MNT_ROOTFS) {
         return Err(Box::new(MountError::RootFs));
     } else if flags.intersects(MountFlags::MNT_UPDATE) {
         return Err(Box::new(MountError::Update));
     }
 
-    flags.set(MountFlags::MNT_LOCAL, true);
-
-    drop(flags);
-
     // Set mount data.
     let index = DEVFS_INDEX.fetch_add(1, Ordering::Relaxed);
 
-    mount.set_data(Arc::new(DevFs {
-        index,
-        root: DevFs::mkdir("", DevFs::DEVFS_ROOTINO, None),
-        generation: Mutex::new(0),
-    }));
-
-    Ok(())
+    Ok(Mount::new(
+        conf,
+        &DEVFS_OPS,
+        cred,
+        path,
+        parent,
+        flags | MountFlags::MNT_LOCAL,
+        DevFs {
+            index,
+            root: DevFs::mkdir("", DevFs::DEVFS_ROOTINO, None),
+            generation: Mutex::new(0),
+        },
+    ))
 }
 
 fn root(mnt: &Arc<Mount>) -> Arc<Vnode> {
-    let fs = mnt.data().unwrap().downcast_ref::<DevFs>().unwrap();
+    let fs = mnt.data().downcast_ref::<DevFs>().unwrap();
 
     alloc_vnode(mnt, &fs.root).unwrap()
 }
@@ -383,7 +390,7 @@ impl Errno for AllocVnodeError {
     }
 }
 
-pub(super) static DEVFS_OPS: FsOps = FsOps { mount, root };
+static DEVFS_OPS: FsOps = FsOps { root };
 static DEVFS_INDEX: AtomicUsize = AtomicUsize::new(0); // TODO: Use a proper implementation.
 static INODE: AtomicU32 = AtomicU32::new(3); // TODO: Same here.
 static DEVICES: RwLock<Devices> = RwLock::new(Devices {
