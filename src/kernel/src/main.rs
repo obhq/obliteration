@@ -500,7 +500,7 @@ enum KernelError {
     #[error("couldn't read param.sfo ")]
     FailedToReadGameParam(#[from] param::ReadError),
 
-    #[error("the game in {0} has an invalid title identifier.")]
+    #[error("{0} has an invalid title identifier")]
     InvalidTitleId(PathBuf),
 
     #[error("filesystem initialization failed")]
