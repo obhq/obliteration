@@ -146,7 +146,10 @@ bitflags! {
     pub struct MountFlags: u64 {
         const MNT_RDONLY = 0x0000000000000001;
         const MNT_NOSUID = 0x0000000000000008;
+
+        /// Mount is local (e.g. not a remote FS like NFS).
         const MNT_LOCAL = 0x0000000000001000;
+
         const MNT_ROOTFS = 0x0000000000004000;
         const MNT_USER = 0x0000000000008000;
         const MNT_UPDATE = 0x0000000000010000;

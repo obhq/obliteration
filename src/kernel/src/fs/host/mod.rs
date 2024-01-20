@@ -42,7 +42,7 @@ fn mount(mount: &mut Mount, mut opts: HashMap<String, Box<dyn Any>>) -> Result<(
         todo!("update root FS mounting");
     }
 
-    flags.set(MountFlags::MNT_LOCAL, true); // TODO: Check if this flag has been set for exfatfs.
+    flags.set(MountFlags::MNT_LOCAL, true);
 
     drop(flags);
 
