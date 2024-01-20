@@ -20,7 +20,7 @@ fn mount(mnt: &mut Mount, mut opts: HashMap<String, Box<dyn Any>>) -> Result<(),
         return Err(Box::new(MountError::UpdateNotSupported));
     }
 
-    flags.set(MountFlags::MNT_LOCAL, true);
+    flags.insert(MountFlags::MNT_LOCAL);
 
     drop(flags);
 
