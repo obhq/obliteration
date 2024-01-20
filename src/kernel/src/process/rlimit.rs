@@ -16,6 +16,7 @@ type RawResourceType = libc::__rlimit_resource_t;
 type RawResourceType = libc::c_int;
 
 impl ResourceType {
+    #[cfg(unix)]
     pub fn into_host(self) -> RawResourceType {
         match self {
             Self::Cpu => libc::RLIMIT_CPU,
