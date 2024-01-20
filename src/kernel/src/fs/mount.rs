@@ -162,7 +162,7 @@ impl MountOpts {
     }
 
     pub fn insert(&mut self, k: &'static str, v: impl Into<MountOpt>) {
-        self.0.insert(k.into(), v.into());
+        self.0.insert(k, v.into());
     }
 
     pub fn remove(&mut self, k: &'static str) -> Option<MountOpt> {
