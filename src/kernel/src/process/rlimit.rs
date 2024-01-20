@@ -11,7 +11,7 @@ pub enum ResourceType {
 
 impl ResourceType {
     #[cfg(unix)]
-    pub fn into_unix(self) -> u32 {
+    pub fn into_unix(self) -> libc::__rlimit_resource_t {
         match self {
             Self::Cpu => libc::RLIMIT_CPU,
             Self::Fsize => libc::RLIMIT_FSIZE,
@@ -29,12 +29,13 @@ impl Limits {
     pub const NLIMITS: usize = 3;
 
     pub fn load() -> Result<Self, LoadLimitError> {
+        use LoadLimitError::*;
         use ResourceType::*;
 
-        let mut inner = [
-            ResourceLimit::try_load(Cpu).map_err(LoadLimitError::FailedToLoadCpuLimit)?,
-            ResourceLimit::try_load(Fsize).map_err(LoadLimitError::FailedToLoadFsizeLimit)?,
-            ResourceLimit::try_load(Data).map_err(LoadLimitError::FailedToLoadDataLimit)?,
+        let inner = [
+            ResourceLimit::try_load(Cpu).map_err(FailedToLoadCpuLimit)?,
+            ResourceLimit::try_load(Fsize).map_err(FailedToLoadFsizeLimit)?,
+            ResourceLimit::try_load(Data).map_err(FailedToLoadDataLimit)?,
         ];
 
         Ok(Self { inner })
