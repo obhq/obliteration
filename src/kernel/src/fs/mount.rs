@@ -2,6 +2,7 @@ use super::{FsConfig, Mode, VPathBuf, Vnode};
 use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
+use macros::implement_conversions;
 use param::Param;
 use std::any::Any;
 use std::collections::HashMap;
@@ -174,7 +175,8 @@ impl MountOpts {
     }
 }
 
-#[enum_delegate::implement_conversions]
+#[implement_conversions]
+#[derive(Debug)]
 pub enum MountOpt {
     Bool(bool),
     Int(i32),

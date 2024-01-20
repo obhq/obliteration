@@ -5,6 +5,7 @@ use thiserror::Error;
 /// A loaded param.sfo.
 ///
 /// See https://www.psdevwiki.com/ps4/Param.sfo#Internal_Structure for more information.
+#[derive(Debug)]
 pub struct Param {
     app_ver: Option<Box<str>>,
     category: Box<str>,
