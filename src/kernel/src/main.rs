@@ -485,22 +485,22 @@ enum DiscordPresenceError {
 
 #[derive(Debug, Error)]
 enum KernelError {
-    #[error("failed to open .kernel-debug")]
+    #[error("couldn't open .kernel-debug")]
     FailedToOpenDebugConfig(#[source] std::io::Error),
 
-    #[error("failed to parse .kernel-debug")]
+    #[error("couldn't parse .kernel-debug")]
     FailedToParseDebugConfig(#[source] serde_yaml::Error),
 
-    #[error("failed to parse arguments")]
+    #[error("couldn't parse arguments")]
     FailedToParseArgs(#[from] clap::Error),
 
-    #[error("failed to open param.sfo")]
+    #[error("couldn't open param.sfo")]
     FailedToOpenGameParam(#[source] std::io::Error),
 
-    #[error("failed to read param.sfo")]
+    #[error("couldn't read param.sfo ")]
     FailedToReadGameParam(#[from] param::ReadError),
 
-    #[error("{0} has invalid title identifier.")]
+    #[error("the game in {0} has an invalid title identifier.")]
     InvalidTitleId(PathBuf),
 
     #[error("filesystem initialization failed")]
@@ -509,7 +509,7 @@ enum KernelError {
     #[error("memory manager initialization failed")]
     MemoryManagerInitFailed(#[from] MemoryManagerError),
 
-    #[error("failed to initialize TtyManager")]
+    #[error("tty initialization failed")]
     TtyInitFailed(#[from] TtyError),
 
     #[error("virtual process initialization failed")]
@@ -518,13 +518,13 @@ enum KernelError {
     #[error("runtime linker initialization failed")]
     RuntimeLinkerInitFailed(#[source] Box<dyn Error>),
 
-    #[error("failed to load libkernl")]
+    #[error("l couldn't be loaded")]
     FailedToLoadLibkernel(#[source] Box<dyn Error>),
 
-    #[error("failed to load libSceLibcInternal")]
+    #[error("libSceLibcInternal couldn't be loaded")]
     FailedToLoadLibSceLibcInternal(#[source] Box<dyn Error>),
 
-    #[error("failed to create main thread")]
+    #[error("main thread couldn't be created")]
     FailedToCreateMainThread(#[from] SpawnError),
 
     #[error("failed to join with main thread")]
