@@ -16,7 +16,7 @@ use crate::tty::TtyManager;
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use clap::{Parser, ValueEnum};
 use fs::FsError;
-use llt::{SpawnError, ThreadHandle};
+use llt::{OsThread, SpawnError};
 use macros::vpath;
 use memory::MemoryManagerError;
 use param::Param;
@@ -347,7 +347,7 @@ fn run<E: crate::ee::ExecutionEngine>(
 
     let main = VThread::new(proc, &cred);
     let stack = mm.stack();
-    let main: ThreadHandle = unsafe { main.start(stack.start(), stack.len(), entry) }?;
+    let main: OsThread = unsafe { main.start(stack.start(), stack.len(), entry) }?;
 
     // Begin Discord Rich Presence before blocking current thread.
     if let Err(e) = discord_presence(param) {
@@ -408,7 +408,7 @@ fn discord_presence(param: &Param) -> Result<(), DiscordPresenceError> {
 }
 
 #[cfg(unix)]
-fn join_thread(handle: ThreadHandle) -> Result<(), std::io::Error> {
+fn join_thread(handle: OsThread) -> Result<(), std::io::Error> {
     let err = unsafe { libc::pthread_join(handle, std::ptr::null_mut()) };
 
     if err != 0 {
@@ -419,7 +419,7 @@ fn join_thread(handle: ThreadHandle) -> Result<(), std::io::Error> {
 }
 
 #[cfg(windows)]
-fn join_thread(handle: ThreadHandle) -> Result<(), std::io::Error> {
+fn join_thread(handle: OsThread) -> Result<(), std::io::Error> {
     use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
     use windows_sys::Win32::System::Threading::{WaitForSingleObject, INFINITE};
 

@@ -24,11 +24,7 @@ mod unix;
 /// The region specified by `stack` and `stack_size` must readable and writable. This region must
 /// be valid until the thread is terminated and must not be accessed by the other threads. The
 /// caller is responsible for stack alignment.
-pub unsafe fn spawn<F>(
-    stack: *mut u8,
-    stack_size: usize,
-    entry: F,
-) -> Result<ThreadHandle, SpawnError>
+pub unsafe fn spawn<F>(stack: *mut u8, stack_size: usize, entry: F) -> Result<OsThread, SpawnError>
 where
     F: FnMut() + Send + 'static,
 {
@@ -167,10 +163,10 @@ impl Drop for Entry {
 }
 
 #[cfg(unix)]
-pub type ThreadHandle = libc::pthread_t;
+pub type OsThread = libc::pthread_t;
 
 #[cfg(windows)]
-pub type ThreadHandle = windows_sys::Win32::Foundation::HANDLE;
+pub type OsThread = windows_sys::Win32::Foundation::HANDLE;
 
 #[derive(Debug, Error)]
 pub enum SpawnError {
