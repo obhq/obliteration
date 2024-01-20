@@ -174,6 +174,7 @@ impl MountOpts {
     }
 }
 
+#[enum_delegate::implement_conversions]
 pub enum MountOpt {
     Bool(bool),
     Int(i32),
@@ -196,24 +197,6 @@ impl MountOpt {
     }
 }
 
-impl From<bool> for MountOpt {
-    fn from(v: bool) -> Self {
-        Self::Bool(v)
-    }
-}
-
-impl From<i32> for MountOpt {
-    fn from(v: i32) -> Self {
-        Self::Int(v)
-    }
-}
-
-impl From<usize> for MountOpt {
-    fn from(v: usize) -> Self {
-        Self::Usize(v)
-    }
-}
-
 impl From<&str> for MountOpt {
     fn from(v: &str) -> Self {
         Self::Str(v.into())
@@ -223,84 +206,6 @@ impl From<&str> for MountOpt {
 impl From<String> for MountOpt {
     fn from(v: String) -> Self {
         Self::Str(v.into_boxed_str())
-    }
-}
-
-impl From<PathBuf> for MountOpt {
-    fn from(v: PathBuf) -> Self {
-        Self::Path(v)
-    }
-}
-
-impl From<Arc<Param>> for MountOpt {
-    fn from(v: Arc<Param>) -> Self {
-        Self::Param(v)
-    }
-}
-
-impl TryFrom<MountOpt> for bool {
-    type Error = ();
-
-    fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
-        match v {
-            MountOpt::Bool(v) => Ok(v),
-            _ => Err(()),
-        }
-    }
-}
-
-impl TryFrom<MountOpt> for i32 {
-    type Error = ();
-
-    fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
-        match v {
-            MountOpt::Int(v) => Ok(v),
-            _ => Err(()),
-        }
-    }
-}
-
-impl TryFrom<MountOpt> for Box<str> {
-    type Error = ();
-
-    fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
-        match v {
-            MountOpt::Str(v) => Ok(v),
-            _ => Err(()),
-        }
-    }
-}
-
-impl TryFrom<MountOpt> for PathBuf {
-    type Error = ();
-
-    fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
-        match v {
-            MountOpt::Path(v) => Ok(v),
-            _ => Err(()),
-        }
-    }
-}
-
-impl TryFrom<MountOpt> for Arc<Param> {
-    type Error = ();
-
-    fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
-        match v {
-            MountOpt::Param(v) => Ok(v),
-            _ => Err(()),
-        }
-    }
-}
-
-impl TryFrom<MountOpt> for usize {
-    type Error = ();
-
-    fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
-        match v {
-            MountOpt::Usize(v) => Ok(v),
-            _ => Err(()),
-        }
     }
 }
 

@@ -14,6 +14,7 @@ byteorder = "1.4"
 clap = { version = "4.1", features = ["derive"] }
 discord-rich-presence = "0.2"
 elf = { path = "../elf" }
+enum_delegate = "0.2.0"
 gmtx = { path = "../gmtx" }
 iced-x86 = { version = "1.18", features = ["code_asm"] }
 libc = "0.2"

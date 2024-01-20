@@ -136,23 +136,6 @@ impl From<Mode> for u32 {
     }
 }
 
-impl From<Mode> for MountOpt {
-    fn from(v: Mode) -> Self {
-        Self::Mode(v)
-    }
-}
-
-impl TryFrom<MountOpt> for Mode {
-    type Error = ();
-
-    fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
-        match v {
-            MountOpt::Mode(v) => Ok(v),
-            _ => Err(()),
-        }
-    }
-}
-
 bitflags! {
     /// An implementation of `accmode_t`.
     pub struct Access: u32 {

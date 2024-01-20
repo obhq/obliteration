@@ -288,23 +288,6 @@ impl From<VPathBuf> for String {
     }
 }
 
-impl From<VPathBuf> for MountOpt {
-    fn from(v: VPathBuf) -> Self {
-        Self::VPath(v)
-    }
-}
-
-impl TryFrom<MountOpt> for VPathBuf {
-    type Error = ();
-
-    fn try_from(v: MountOpt) -> Result<Self, Self::Error> {
-        match v {
-            MountOpt::VPath(v) => Ok(v),
-            _ => Err(()),
-        }
-    }
-}
-
 /// An iterator over the path components.
 pub struct Components<'a>(&'a str);
 
