@@ -101,7 +101,7 @@ fn main_wrapped() -> Result<(), KernelError> {
     path.push("param.sfo");
 
     // Open param.sfo.
-    let param = File::open(&path).map_err(KernelError::FailedToOpenParam)?;
+    let param = File::open(&path).map_err(KernelError::FailedToOpenGameParam)?;
 
     // Load param.sfo.
     let param = Arc::new(Param::read(param)?);
