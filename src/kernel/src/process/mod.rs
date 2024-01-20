@@ -73,7 +73,7 @@ impl VProc {
         root: Arc<Vnode>,
         system_path: S,
         sys: &mut Syscalls,
-    ) -> Result<Arc<Self>, VProcError> {
+    ) -> Result<Arc<Self>, VProcInitError> {
         let cred = if auth.caps.is_system() {
             // TODO: The groups will be copied from the parent process, which is SceSysCore.
             Ucred::new(Uid::ROOT, Uid::ROOT, vec![Gid::ROOT], auth)
@@ -645,7 +645,7 @@ impl NamedObj {
 
 /// Represents an error when [`VProc`] construction is failed.
 #[derive(Debug, Error)]
-pub enum VProcError {
+pub enum VProcInitError {
     #[error("failed to load limits")]
     FailedToLoadLimits(#[from] LoadLimitError),
 }

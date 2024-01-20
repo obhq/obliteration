@@ -9,18 +9,14 @@ pub enum ResourceType {
     Data = 2,
 }
 
-impl ResourceType {
-    #[cfg(target_os = "linux")]
-    pub fn into_unix(self) -> libc::__rlimit_resource_t {
-        match self {
-            Self::Cpu => libc::RLIMIT_CPU,
-            Self::Fsize => libc::RLIMIT_FSIZE,
-            Self::Data => libc::RLIMIT_DATA,
-        }
-    }
+#[cfg(target_os = "linux")]
+type RawResourceType = libc::__rlimit_resource_t;
 
-    #[cfg(target_os = "macos")]
-    pub fn into_unix(self) -> libc::c_int {
+#[cfg(target_os = "macos")]
+type RawResourceType = libc::c_int;
+
+impl ResourceType {
+    pub fn into_host(self) -> RawResourceType {
         match self {
             Self::Cpu => libc::RLIMIT_CPU,
             Self::Fsize => libc::RLIMIT_FSIZE,
@@ -110,7 +106,7 @@ impl ResourceLimit {
 
         let mut l = MaybeUninit::uninit();
 
-        if unsafe { libc::getrlimit(ty.into_unix(), l.as_mut_ptr()) } < 0 {
+        if unsafe { libc::getrlimit(ty.into_host(), l.as_mut_ptr()) } < 0 {
             return Err(Error::last_os_error());
         }
 
