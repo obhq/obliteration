@@ -55,10 +55,10 @@ mod tty;
 mod ucred;
 
 fn main() -> Exit {
-    main_wrapped().into()
+    start().into()
 }
 
-fn main_wrapped() -> Result<(), KernelError> {
+fn start() -> Result<(), KernelError> {
     // Begin logger.
     log::init();
 
@@ -124,7 +124,6 @@ fn main_wrapped() -> Result<(), KernelError> {
     writeln!(log, "Starting Obliteration Kernel.").unwrap();
     writeln!(log, "System directory    : {}", args.system.display()).unwrap();
     writeln!(log, "Game directory      : {}", args.game.display()).unwrap();
-    writeln!(log, "Pro mode            : {}", args.pro).unwrap();
 
     if let Some(v) = &args.debug_dump {
         writeln!(log, "Debug dump directory: {}", v.display()).unwrap();
@@ -155,7 +154,8 @@ fn main_wrapped() -> Result<(), KernelError> {
         hwinfo.available_memory() / 1048576,
         hwinfo.total_memory() / 1048576
     )
-    .unwrap(); // Convert Bytes to MB
+    .unwrap();
+    writeln!(log, "Pro mode            : {}", args.pro).unwrap();
 
     print(log);
 
