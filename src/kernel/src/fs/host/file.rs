@@ -37,7 +37,7 @@ impl HostFile {
     #[cfg(windows)]
     pub fn is_directory(&self) -> Result<bool, Error> {
         use windows_sys::Win32::Storage::FileSystem::{
-            GetFileInformationByHandle, BY_HANDLE_FILE_INFORMATION, FILE_ATTRIBUTE_DIRECTORY,
+            GetFileInformationByHandle, FILE_ATTRIBUTE_DIRECTORY,
         };
 
         let mut info = unsafe { zeroed() };
