@@ -1,18 +1,17 @@
-use super::NullFs;
+use super::NullNode;
 use crate::{
     errno::{Errno, EROFS},
-    fs::{perm::Access, MountFlags, OpenFlags, VFile, Vnode, VnodeType, VopVector},
+    fs::{perm::Access, MountFlags, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType, VopVector},
     process::VThread,
 };
 use std::{num::NonZeroI32, sync::Arc};
 use thiserror::Error;
 
-#[allow(dead_code)]
 pub(super) static VNODE_OPS: VopVector = VopVector {
     default: None,
     access: Some(access),
     accessx: Some(access),
-    getattr: None,
+    getattr: Some(getattr),
     lookup: Some(lookup),
     open: Some(open),
 };
@@ -31,6 +30,10 @@ fn access(vn: &Arc<Vnode>, _td: Option<&VThread>, access: Access) -> Result<(), 
     }
 
     todo!();
+}
+
+fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
+    todo!()
 }
 
 #[derive(Debug, Error)]
@@ -57,9 +60,9 @@ impl Errno for BypassError {
 }
 
 fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode>, Box<dyn Errno>> {
-    let null_mount: &NullFs = vn.data().downcast_ref().unwrap();
+    let null_mount: &NullNode = vn.data().downcast_ref().unwrap();
 
-    let lower = null_mount.lower().unwrap().lookup(td, name)?;
+    let lower = null_mount.lower().lookup(td, name)?;
 
     let vnode = if Arc::ptr_eq(&lower, vn) {
         vn.clone()
