@@ -1,4 +1,4 @@
-use super::NullNode;
+use super::{GetNullNodeError, NullNode};
 use crate::{
     errno::{Errno, EROFS},
     fs::{perm::Access, MountFlags, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType, VopVector},
@@ -47,7 +47,7 @@ fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode
     let vnode = if Arc::ptr_eq(&lower, vn) {
         vn.clone()
     } else {
-        todo!();
+        NullNode::new(vn.fs(), lower)?
     };
 
     Ok(vnode)
@@ -80,12 +80,16 @@ impl Errno for AccessError {
 pub enum LookupError {
     #[error("lookup failed")]
     LookupFromLowerFailed(#[source] Box<dyn Errno>),
+
+    #[error("failed to get nullnode")]
+    GetNullNodeFailed(#[from] GetNullNodeError),
 }
 
 impl Errno for LookupError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::LookupFromLowerFailed(e) => e.errno(),
+            Self::GetNullNodeFailed(e) => e.errno(),
         }
     }
 }

@@ -12,7 +12,7 @@ pub fn mount(
     _conf: &'static FsConfig,
     _cred: &Arc<Ucred>,
     _path: VPathBuf,
-    _parent: Option<Arc<Vnode>>,
+    parent: Option<Arc<Vnode>>,
     mut opts: MountOpts,
     flags: MountFlags,
 ) -> Result<Mount, Box<dyn Errno>> {
@@ -45,6 +45,47 @@ fn root(mnt: &Arc<Mount>) -> Arc<Vnode> {
 
 pub(super) static NULLFS_OPS: FsOps = FsOps { root };
 
+/// An implementation of `null_mount` structure.
+struct NullFs {
+    root: Arc<Vnode>,          // nullm_rootvp
+    lower: Option<Arc<Vnode>>, // nullm_lowervp
+    flags: NullFsFlags,        // null_flags
+}
+
+impl NullFs {
+    pub fn root(&self) -> &Arc<Vnode> {
+        &self.root
+    }
+
+    pub fn lower(&self) -> Option<&Arc<Vnode>> {
+        self.lower.as_ref()
+    }
+
+    pub fn flags(&self) -> NullFsFlags {
+        self.flags
+    }
+}
+
+bitflags! {
+    #[derive(Clone, Copy)]
+    struct NullFsFlags: u64 {}
+}
+
+struct NullNode {
+    lower: Arc<Vnode>,
+}
+
+impl NullNode {
+    /// See `nullnode_get` on the PS4 for a reference.
+    pub fn new(mnt: &Arc<Mount>, lower: Arc<Vnode>) -> Result<Arc<Vnode>, GetNullNodeError> {
+        todo!()
+    }
+
+    fn lower(&self) -> &Arc<Vnode> {
+        &self.lower
+    }
+}
+
 #[derive(Debug, Error)]
 enum MountError {
     #[error("mounting as root FS is not supported")]
@@ -75,44 +116,11 @@ impl Errno for MountError {
     }
 }
 
-/// An implementation of `null_mount` structure.
-struct NullFs {
-    root: Arc<Vnode>,          // nullm_rootvp
-    lower: Option<Arc<Vnode>>, // nullm_lowervp
-    flags: NullFsFlags,        // null_flags
-}
+#[derive(Debug, Error)]
+enum GetNullNodeError {}
 
-impl NullFs {
-    pub fn root(&self) -> &Arc<Vnode> {
-        &self.root
-    }
-
-    pub fn lower(&self) -> Option<&Arc<Vnode>> {
-        self.lower.as_ref()
-    }
-
-    pub fn flags(&self) -> NullFsFlags {
-        self.flags
-    }
-}
-
-bitflags! {
-    #[derive(Clone, Copy)]
-    struct NullFsFlags: u64 {}
-}
-
-#[allow(dead_code)]
-struct NullNode {
-    lower: Arc<Vnode>,
-}
-
-#[allow(dead_code)]
-impl NullNode {
-    pub fn new(lower: Arc<Vnode>) -> Self {
-        Self { lower }
-    }
-
-    fn lower(&self) -> &Arc<Vnode> {
-        &self.lower
+impl Errno for GetNullNodeError {
+    fn errno(&self) -> NonZeroI32 {
+        todo!()
     }
 }
