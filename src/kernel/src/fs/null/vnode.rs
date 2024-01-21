@@ -36,6 +36,32 @@ fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
     todo!()
 }
 
+fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+    let null_mount: &NullNode = vn.data().downcast_ref().unwrap();
+
+    let lower = null_mount
+        .lower()
+        .lookup(td, name)
+        .map_err(LookupError::LookupFailed)?;
+
+    let vnode = if Arc::ptr_eq(&lower, vn) {
+        vn.clone()
+    } else {
+        todo!();
+    };
+
+    Ok(vnode)
+}
+
+fn open(
+    _vn: &Arc<Vnode>,
+    _td: Option<&VThread>,
+    _mode: OpenFlags,
+    mut _file: Option<&mut VFile>,
+) -> Result<(), Box<dyn Errno>> {
+    todo!()
+}
+
 #[derive(Debug, Error)]
 pub enum AccessError {
     #[error("mounted as readonly+")]
@@ -59,25 +85,14 @@ impl Errno for BypassError {
     }
 }
 
-fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode>, Box<dyn Errno>> {
-    let null_mount: &NullNode = vn.data().downcast_ref().unwrap();
-
-    let lower = null_mount.lower().lookup(td, name)?;
-
-    let vnode = if Arc::ptr_eq(&lower, vn) {
-        vn.clone()
-    } else {
-        todo!();
-    };
-
-    Ok(vnode)
+#[derive(Debug, Error)]
+pub enum LookupError {
+    #[error("lookup failed")]
+    LookupFailed(#[source] Box<dyn Errno>),
 }
 
-fn open(
-    _vn: &Arc<Vnode>,
-    _td: Option<&VThread>,
-    _mode: OpenFlags,
-    mut _file: Option<&mut VFile>,
-) -> Result<(), Box<dyn Errno>> {
-    todo!()
+impl Errno for LookupError {
+    fn errno(&self) -> NonZeroI32 {
+        todo!()
+    }
 }
