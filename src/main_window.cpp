@@ -52,9 +52,14 @@ MainWindow::MainWindow() :
 
     // File menu.
     auto fileMenu = menuBar()->addMenu("&File");
-    auto installPkg = new QAction(QIcon(svgPath + "archive-arrow-down-outline.svg"), "&Install PKG", this);
-    auto openSystemFolder = new QAction(QIcon(svgPath + "folder-open-outline.svg"), "Open System &Folder", this);
+    auto installPkg = new QAction("&Install PKG", this);
+    auto openSystemFolder = new QAction("Open System &Folder", this);
     auto quit = new QAction("&Quit", this);
+
+#ifndef __APPLE__
+    installPkg->setIcon(QIcon(svgPath + "archive-arrow-down-outline.svg"));
+    openSystemFolder->setIcon(QIcon(svgPath + "folder-open-outline.svg"));
+#endif
 
     connect(installPkg, &QAction::triggered, this, &MainWindow::installPkg);
     connect(openSystemFolder, &QAction::triggered, this, &MainWindow::openSystemFolder);
@@ -393,7 +398,12 @@ void MainWindow::requestGamesContextMenu(const QPoint &pos)
     auto model = reinterpret_cast<GameListModel *>(m_games->model());
     auto game = model->get(index.row());
 
-    // Determine current theme.
+    // Setup menu.
+    QMenu menu(this);
+    QAction openFolder("Open &Folder", this);
+    QAction settings("&Settings", this);
+
+#ifndef __APPLE__
     QString svgPath;
 
     if (QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark) {
@@ -402,12 +412,11 @@ void MainWindow::requestGamesContextMenu(const QPoint &pos)
         svgPath = ":/resources/lightmode/";
     }
 
-    // Setup menu.
-    QMenu menu(this);
-    QAction openGameFolder(QIcon(svgPath + "folder-open-outline.svg"), "Open Game &Folder", this); // Opens game folder.
-    QAction settings(QIcon(svgPath + "cog-outline.svg"), "&Settings", this); // TODO LATER: Blank Settings
+    openFolder.setIcon(QIcon(svgPath + "folder-open-outline.svg"));
+    settings.setIcon(QIcon(svgPath + "cog-outline.svg"));
+#endif
 
-    menu.addAction(&openGameFolder);
+    menu.addAction(&openFolder);
     menu.addAction(&settings);
 
     // Show menu.
@@ -417,7 +426,7 @@ void MainWindow::requestGamesContextMenu(const QPoint &pos)
         return;
     }
 
-    if (selected == &openGameFolder) {
+    if (selected == &openFolder) {
         QString folderPath = game->directory();
         QDesktopServices::openUrl(QUrl::fromLocalFile(folderPath));
     } else if (selected == &settings) {
