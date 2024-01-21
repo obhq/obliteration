@@ -129,6 +129,10 @@ Before proceeding, make sure the build preset you are using is `*-debug`. We rec
 
 Then open this folder with VS Code. It will ask which CMake preset to use and you need to choose the same one that you were using when building. Everything should work out of the box (e.g. code completion, debugging, etc).
 
+### macOS debugging issues
+
+If you can't launch or debug Obliteration from VS Code, try [this](https://github.com/vadimcn/codelldb/discussions/456#discussioncomment-874122) solution.
+
 ### Get a homebrew application for testing
 
 If you don't have a PS4 application for testing you can download PS Scene Quiz for free [here](https://pkg-zone.com/details/LAPY10010).
@@ -152,14 +156,9 @@ The application consists of 2 binaries:
 
 ### Debugging the kernel
 
-Create `.kernel-debug` in the root of the repository. The contents of this file is YAML and the kernel will deserialize it to the `Args` struct in `src/kernel/src/main.rs` when passing the `--debug` flag to the kernel.
+Create `.kernel-debug` in the root of the repository. The contents of this file is YAML and the kernel will deserialize it to the `Args` struct in `src/kernel/src/main.rs` when passing the `--debug` flag to the kernel. See `Args` struct for available options.
 
-- game: (Folder Path) | Where is the game to load?
-- system: (Folder Path) | Where is the system firmware?
-- debug-dump: (Folder Path) | Where should the debug log be saved?
-- clear-debug-dump: (boolean) | Should we remove the old debug log?
-
-We already provide a launch configuration for VS Code so all you need to do is choose `Kernel` as the configuration and start debugging.
+We already provide a launch configuration for VS Code so all you need to do is choose `Debug - Kernel` as the configuration and start debugging.
 
 ### UI Icons
 
