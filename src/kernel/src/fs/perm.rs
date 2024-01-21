@@ -137,8 +137,8 @@ impl From<Mode> for u32 {
 bitflags! {
     /// An implementation of `accmode_t`.
     pub struct Access: u32 {
-        const EXEC  = 0x000000000100; // VEXEC
-        const WRITE = 0x000000000200; // VWRITE
+        const EXEC  = 0o000000000100; // VEXEC
+        const WRITE = 0o000000000200; // VWRITE
     }
 }
 

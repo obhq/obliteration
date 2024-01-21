@@ -1,7 +1,7 @@
 use super::{FsConfig, Mode, VPathBuf, Vnode};
 use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
-use macros::implement_conversions;
+use macros::EnumConversions;
 use param::Param;
 use std::any::Any;
 use std::collections::HashMap;
@@ -179,8 +179,7 @@ impl MountOpts {
     }
 }
 
-#[implement_conversions]
-#[derive(Debug)]
+#[derive(EnumConversions, Debug)]
 pub enum MountOpt {
     Bool(bool),
     I32(i32),

@@ -15,8 +15,8 @@ pub fn cpu_abi(_: TokenStream, item: TokenStream) -> TokenStream {
         .into()
 }
 
-#[proc_macro_attribute]
-pub fn implement_conversions(_: TokenStream, item: TokenStream) -> TokenStream {
+#[proc_macro_derive(EnumConversions)]
+pub fn implement_conversions(item: TokenStream) -> TokenStream {
     let item = parse_macro_input!(item as ItemEnum);
 
     enum_conversions::transform(item)

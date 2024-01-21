@@ -65,8 +65,6 @@ pub fn transform(arg: ItemEnum) -> syn::Result<TokenStream> {
     }
 
     let expanded = quote! {
-        #arg
-
         #stream
     };
 
