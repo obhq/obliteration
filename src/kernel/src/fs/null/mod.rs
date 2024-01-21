@@ -1,6 +1,5 @@
 use super::{FsConfig, FsOps, LookupError, Mount, MountFlags, MountOpts, VPathBuf, Vnode};
 use crate::errno::{Errno, EDEADLK, EINVAL, EOPNOTSUPP};
-use crate::fs::VPath;
 use crate::ucred::Ucred;
 use bitflags::bitflags;
 use std::num::NonZeroI32;
@@ -29,17 +28,11 @@ pub fn mount(
         }
     }
 
-    let target: Box<str> = opts
+    let _target: VPathBuf = opts
         .remove("target")
         .or_else(|| opts.remove("from"))
         .ok_or(MountError::NoTarget)?
         .unwrap();
-
-    if target.is_empty() {
-        Err(MountError::EmptyTarget)?;
-    }
-
-    let _target: &VPath = target.as_ref().try_into().unwrap();
 
     todo!()
 }
@@ -51,7 +44,6 @@ fn root(_mnt: &Arc<Mount>) -> Arc<Vnode> {
 pub(super) static NULLFS_OPS: FsOps = FsOps { root };
 
 #[derive(Debug, Error)]
-#[allow(dead_code)]
 enum MountError {
     #[error("mounting as root FS is not supported")]
     RootFs,
@@ -61,9 +53,6 @@ enum MountError {
 
     #[error("target path is not specified")]
     NoTarget,
-
-    #[error("target path is empty")]
-    EmptyTarget,
 
     #[error("lookup failed")]
     LookupFailed(#[source] LookupError),
@@ -78,7 +67,6 @@ impl Errno for MountError {
             MountError::RootFs => EOPNOTSUPP,
             MountError::NoExport => EOPNOTSUPP,
             MountError::NoTarget => EINVAL,
-            MountError::EmptyTarget => EINVAL,
             MountError::LookupFailed(e) => e.errno(),
             MountError::AvoidingDeadlock => EDEADLK,
         }
@@ -86,14 +74,12 @@ impl Errno for MountError {
 }
 
 /// An implementation of `null_mount` structure.
-#[allow(dead_code)]
 struct NullFs {
     root: Arc<Vnode>,          // nullm_rootvp
     lower: Option<Arc<Vnode>>, // nullm_lowervp
     flags: NullFsFlags,        // null_flags
 }
 
-#[allow(dead_code)]
 impl NullFs {
     pub fn root(&self) -> &Arc<Vnode> {
         &self.root
