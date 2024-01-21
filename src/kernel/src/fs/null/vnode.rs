@@ -42,7 +42,7 @@ fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode
     let lower = node
         .lower()
         .lookup(td, name)
-        .map_err(LookupFromLowerFailed::LookupFailed)?;
+        .map_err(LookupError::LookupFromLowerFailed)?;
 
     let vnode = if Arc::ptr_eq(&lower, vn) {
         vn.clone()
@@ -77,12 +77,12 @@ impl Errno for AccessError {
 }
 
 #[derive(Debug, Error)]
-pub enum LookupFromLowerFailed {
+pub enum LookupError {
     #[error("lookup failed")]
-    LookupFailed(#[source] Box<dyn Errno>),
+    LookupFromLowerFailed(#[source] Box<dyn Errno>),
 }
 
-impl Errno for LookupFromLowerFailed {
+impl Errno for LookupError {
     fn errno(&self) -> NonZeroI32 {
         todo!()
     }

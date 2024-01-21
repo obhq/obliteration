@@ -37,8 +37,10 @@ pub fn mount(
     todo!()
 }
 
-fn root(_mnt: &Arc<Mount>) -> Arc<Vnode> {
-    todo!()
+fn root(mnt: &Arc<Mount>) -> Arc<Vnode> {
+    let null_mount: &NullFs = mnt.data().downcast_ref().unwrap();
+
+    return null_mount.root().clone();
 }
 
 pub(super) static NULLFS_OPS: FsOps = FsOps { root };
@@ -106,6 +108,10 @@ struct NullNode {
 
 #[allow(dead_code)]
 impl NullNode {
+    pub fn new(lower: Arc<Vnode>) -> Self {
+        Self { lower }
+    }
+
     fn lower(&self) -> &Arc<Vnode> {
         &self.lower
     }
