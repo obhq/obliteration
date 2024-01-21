@@ -27,9 +27,7 @@ impl ResourceType {
 }
 
 #[derive(Debug)]
-pub(super) struct Limits {
-    inner: [ResourceLimit; Self::NLIMITS],
-}
+pub(super) struct Limits([ResourceLimit; Self::NLIMITS]);
 
 impl Limits {
     pub const NLIMITS: usize = 3;
@@ -44,7 +42,7 @@ impl Limits {
             ResourceLimit::try_load(Data).map_err(FailedToLoadDataLimit)?,
         ];
 
-        Ok(Self { inner })
+        Ok(Self(inner))
     }
 }
 
@@ -52,7 +50,7 @@ impl Index<ResourceType> for Limits {
     type Output = ResourceLimit;
 
     fn index(&self, ty: ResourceType) -> &Self::Output {
-        unsafe { self.inner.get(ty as usize).unwrap() }
+        self.0.get(ty as usize).unwrap()
     }
 }
 
