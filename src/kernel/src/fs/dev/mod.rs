@@ -1,6 +1,6 @@
 pub use self::cdev::*;
 use self::dirent::Dirent;
-use self::vnode::{CHARACTER_OPS, VNODE_OPS};
+use self::vnode::VnodeBackend;
 use super::{
     path_contains, DirentType, FsConfig, FsOps, Mode, Mount, MountFlags, VPathBuf, Vnode, VnodeType,
 };
@@ -90,7 +90,9 @@ fn alloc_vnode(mnt: &Arc<Mount>, ent: &Arc<Dirent>) -> Result<Arc<Vnode>, AllocV
     }
 
     // Create vnode. Beware of deadlock because we are currently holding on dirent lock.
+    let fs = mnt.data().clone().downcast::<DevFs>().unwrap();
     let tag = "devfs";
+    let backend = Arc::new(VnodeBackend::new(fs, ent.clone()));
     let vn = match ent.ty() {
         DirentType::Character => {
             let dev = ent
@@ -98,7 +100,7 @@ fn alloc_vnode(mnt: &Arc<Mount>, ent: &Arc<Dirent>) -> Result<Arc<Vnode>, AllocV
                 .unwrap()
                 .upgrade()
                 .ok_or(AllocVnodeError::DeviceGone)?;
-            let vn = Vnode::new(mnt, VnodeType::Character, tag, &CHARACTER_OPS, ent.clone());
+            let vn = Vnode::new(mnt, VnodeType::Character, tag, backend);
 
             *vn.item_mut() = Some(dev);
             vn
@@ -107,8 +109,7 @@ fn alloc_vnode(mnt: &Arc<Mount>, ent: &Arc<Dirent>) -> Result<Arc<Vnode>, AllocV
             mnt,
             VnodeType::Directory(ent.inode() == DevFs::DEVFS_ROOTINO),
             tag,
-            &VNODE_OPS,
-            ent.clone(),
+            backend,
         ),
         DirentType::Link => todo!("devfs_allocv with DT_LNK"),
     };
@@ -124,6 +125,7 @@ fn alloc_vnode(mnt: &Arc<Mount>, ent: &Arc<Dirent>) -> Result<Arc<Vnode>, AllocV
 }
 
 /// An implementation of `devfs_mount` structure.
+#[derive(Debug)]
 pub struct DevFs {
     index: usize,           // dm_idx
     root: Arc<Dirent>,      // dm_rootdir
