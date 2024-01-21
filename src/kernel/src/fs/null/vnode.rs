@@ -84,6 +84,8 @@ pub enum LookupError {
 
 impl Errno for LookupError {
     fn errno(&self) -> NonZeroI32 {
-        todo!()
+        match self {
+            Self::LookupFromLowerFailed(e) => e.errno(),
+        }
     }
 }
