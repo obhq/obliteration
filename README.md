@@ -112,10 +112,10 @@ If all you want is to use the emulator, choose `[YOUR-PLATFORM]-release` for opt
 ### Build
 
 ```sh
-cmake --build build
+cmake --build --preset PRESET
 ```
 
-You can use `-j` to enable parallel building (e.g. `cmake --build build -j 2`). Each parallel build on Linux consumes a lot of memory so don't use the number of your CPU cores otherwise your system might crash due to out of memory. On Windows it seems like it is safe to use the number of your CPU cores.
+You can use `-j` to enable parallel building (e.g. `cmake --build --preset PRESET -j 2`). Each parallel build on Linux consumes a lot of memory so don't use the number of your CPU cores otherwise your system might crash due to out of memory. On Windows and macOS it seems like it is safe to use the number of your CPU cores.
 
 ## Development
 

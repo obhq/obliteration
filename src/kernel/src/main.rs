@@ -21,7 +21,7 @@ use llt::{OsThread, SpawnError};
 use macros::vpath;
 use memory::MemoryManagerError;
 use param::Param;
-use process::VProcError;
+use process::VProcInitError;
 use serde::Deserialize;
 use std::error::Error;
 use std::fs::{create_dir_all, remove_dir_all, File};
@@ -499,7 +499,7 @@ enum KernelError {
     TtyInitFailed(#[from] TtyError),
 
     #[error("virtual process initialization failed")]
-    VProcInitFailed(#[from] VProcError),
+    VProcInitFailed(#[from] VProcInitError),
 
     #[error("runtime linker initialization failed")]
     RuntimeLinkerInitFailed(#[source] Box<dyn Error>),

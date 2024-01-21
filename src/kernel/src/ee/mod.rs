@@ -1,6 +1,7 @@
 use crate::arnd::Arnd;
 use crate::memory::MemoryManager;
-use crate::process::{ResourceLimit, VProc};
+use crate::process::ResourceType;
+use crate::process::VProc;
 use crate::rtld::Module;
 use crate::syscalls::Syscalls;
 use std::error::Error;
@@ -24,7 +25,9 @@ pub trait ExecutionEngine: Debug + Send + Sync + 'static {
     /// # Panics
     /// If this method called a second time.
     fn set_syscalls(&self, v: Syscalls);
+
     fn setup_module(self: &Arc<Self>, md: &mut Module<Self>) -> Result<(), Self::SetupModuleErr>;
+
     unsafe fn get_function(
         self: &Arc<Self>,
         md: &Arc<Module<Self>>,
@@ -111,7 +114,7 @@ impl<E: ExecutionEngine> EntryArg<E> {
         pin.vec.push(
             (mem.addr()
                 + mem.data_segment().start()
-                + pin.vp.limit(ResourceLimit::DATA).unwrap().max()
+                + pin.vp.limit(ResourceType::Data).max()
                 + 0x3fff)
                 & 0xffffffffffffc000,
         );
