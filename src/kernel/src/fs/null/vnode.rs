@@ -77,15 +77,6 @@ impl Errno for AccessError {
 }
 
 #[derive(Debug, Error)]
-pub enum BypassError {}
-
-impl Errno for BypassError {
-    fn errno(&self) -> NonZeroI32 {
-        todo!()
-    }
-}
-
-#[derive(Debug, Error)]
 pub enum LookupFromLowerFailed {
     #[error("lookup failed")]
     LookupFailed(#[source] Box<dyn Errno>),
