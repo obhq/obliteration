@@ -37,12 +37,12 @@ fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
 }
 
 fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode>, Box<dyn Errno>> {
-    let null_mount: &NullNode = vn.data().downcast_ref().unwrap();
+    let node: &NullNode = vn.data().downcast_ref().unwrap();
 
-    let lower = null_mount
+    let lower = node
         .lower()
         .lookup(td, name)
-        .map_err(LookupError::LookupFailed)?;
+        .map_err(LookupFromLowerFailed::LookupFailed)?;
 
     let vnode = if Arc::ptr_eq(&lower, vn) {
         vn.clone()
@@ -86,12 +86,12 @@ impl Errno for BypassError {
 }
 
 #[derive(Debug, Error)]
-pub enum LookupError {
+pub enum LookupFromLowerFailed {
     #[error("lookup failed")]
     LookupFailed(#[source] Box<dyn Errno>),
 }
 
-impl Errno for LookupError {
+impl Errno for LookupFromLowerFailed {
     fn errno(&self) -> NonZeroI32 {
         todo!()
     }
