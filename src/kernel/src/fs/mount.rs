@@ -5,7 +5,7 @@ use macros::EnumConversions;
 use param::Param;
 use std::any::Any;
 use std::collections::HashMap;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display, Error};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock, RwLockWriteGuard};
 use thiserror::Error;
@@ -216,18 +216,25 @@ impl From<String> for MountOpt {
 }
 
 #[derive(Debug, Error)]
-pub enum MountOptError {
-    #[error("mount opt \"{optname}\" is of wrong type: expected {expected}, got: {got:?}")]
-    UnexpectedOptType {
-        optname: &'static str,
-        expected: &'static str,
-        got: MountOpt,
-    },
+pub struct MountOptError {
+    optname: &'static str,
+    expected: &'static str,
+    got: MountOpt,
+}
+
+impl Display for MountOptError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), Error> {
+        write!(
+            f,
+            "mount opt \"{}\" is of wrong type: expected {}, got: {:?}",
+            self.optname, self.expected, self.got
+        )
+    }
 }
 
 impl MountOptError {
     pub fn new<T>(optname: &'static str, got: MountOpt) -> Self {
-        Self::UnexpectedOptType {
+        Self {
             optname,
             expected: std::any::type_name::<T>(),
             got,

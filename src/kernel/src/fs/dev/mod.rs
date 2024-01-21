@@ -324,7 +324,7 @@ pub fn mount(
     cred: &Arc<Ucred>,
     path: VPathBuf,
     parent: Option<Arc<Vnode>>,
-    _opts: MountOpts,
+    _: MountOpts,
     flags: MountFlags,
 ) -> Result<Mount, Box<dyn Errno>> {
     // Check mount flags.
