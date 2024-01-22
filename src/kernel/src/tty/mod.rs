@@ -17,7 +17,7 @@ pub struct TtyManager {
 impl TtyManager {
     const TIOCSCTTY: IoCmd = IoCmd::io(b't', 97);
 
-    pub fn new(fs: &Arc<Fs>) -> Result<Arc<Self>, TtyError> {
+    pub fn new(fs: &Arc<Fs>) -> Result<Arc<Self>, TtyInitError> {
         // Create /dev/console.
         let console = Arc::new(CdevSw::new(
             DriverFlags::from_bits_retain(0x80000004),
@@ -36,7 +36,7 @@ impl TtyManager {
             MakeDev::MAKEDEV_ETERNAL,
         ) {
             Ok(v) => v,
-            Err(e) => return Err(TtyError::CreateConsoleFailed(e)),
+            Err(e) => return Err(TtyInitError::CreateConsoleFailed(e)),
         };
 
         let decitty = Arc::new(CdevSw::new(
@@ -100,9 +100,9 @@ impl TtyManager {
     }
 }
 
-/// Represents an error when [`TtyManager`] was failed to initialized.
+/// Represents an error when [`TtyManager`] fails to initialize.
 #[derive(Debug, Error)]
-pub enum TtyError {
+pub enum TtyInitError {
     #[error("cannot create console device")]
     CreateConsoleFailed(#[source] MakeDevError),
 }
