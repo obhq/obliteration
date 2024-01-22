@@ -32,7 +32,7 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use sysinfo::{MemoryRefreshKind, System};
 use thiserror::Error;
-use tty::TtyError;
+use tty::TtyInitError;
 
 mod arch;
 mod arnd;
@@ -218,7 +218,7 @@ fn start() -> Result<(), KernelError> {
         #[cfg(not(target_arch = "x86_64"))]
         ExecutionEngine::Native => {
             error!("Native execution engine cannot be used on your machine.");
-            return ExitCode::FAILURE;
+            Err(KernelError::NativeExecutionEngineNotSupported)
         }
         ExecutionEngine::Llvm => run(
             args.debug_dump,
@@ -495,8 +495,12 @@ enum KernelError {
     #[error("memory manager initialization failed")]
     MemoryManagerInitFailed(#[from] MemoryManagerError),
 
+    #[cfg(not(target_arch = "x86_64"))]
+    #[error("the native execution engine is only supported on x86_64")]
+    NativeExecutionEngineNotSupported,
+
     #[error("tty initialization failed")]
-    TtyInitFailed(#[from] TtyError),
+    TtyInitFailed(#[from] TtyInitError),
 
     #[error("virtual process initialization failed")]
     VProcInitFailed(#[from] VProcInitError),

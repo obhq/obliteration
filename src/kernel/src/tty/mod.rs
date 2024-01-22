@@ -36,7 +36,7 @@ impl TtyManager {
             MakeDev::MAKEDEV_ETERNAL,
         ) {
             Ok(v) => v,
-            Err(e) => return Err(TtyError::CreateConsoleFailed(e)),
+            Err(e) => return Err(TtyInitError::CreateConsoleFailed(e)),
         };
 
         Ok(Arc::new(Self { console }))
@@ -53,9 +53,9 @@ impl TtyManager {
     }
 }
 
-/// Represents an error when [`TtyManager`] was failed to initialized.
+/// Represents an error when [`TtyManager`] fails to initialize.
 #[derive(Debug, Error)]
-pub enum TtyError {
+pub enum TtyInitError {
     #[error("cannot create console device")]
     CreateConsoleFailed(#[source] MakeDevError),
 }
