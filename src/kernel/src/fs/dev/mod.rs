@@ -66,7 +66,7 @@ pub fn make_dev(
 }
 
 /// See `devfs_dev_exists` on the PS4 for a reference.
-pub fn dev_exists<N: AsRef<str>>(name: N) -> bool {
+pub fn dev_exists(name: impl AsRef<str>) -> bool {
     let name = name.as_ref();
 
     for dev in &DEVICES.read().unwrap().list {

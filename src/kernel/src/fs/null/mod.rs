@@ -76,7 +76,7 @@ struct NullNode {
 }
 
 impl NullNode {
-    /// See `nullnode_get` on the PS4 for a reference.
+    /// See `null_nodeget` on the PS4 for a reference.
     pub fn new(mnt: &Arc<Mount>, lower: Arc<Vnode>) -> Result<Arc<Vnode>, GetNullNodeError> {
         todo!()
     }
@@ -117,7 +117,7 @@ impl Errno for MountError {
 }
 
 #[derive(Debug, Error)]
-enum GetNullNodeError {}
+pub enum GetNullNodeError {}
 
 impl Errno for GetNullNodeError {
     fn errno(&self) -> NonZeroI32 {

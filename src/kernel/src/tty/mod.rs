@@ -17,7 +17,7 @@ impl TtyManager {
     #[allow(dead_code)]
     const TIOCSCTTY: IoCmd = IoCmd::io(b't', 97);
 
-    pub fn new() -> Result<Arc<Self>, TtyError> {
+    pub fn new() -> Result<Arc<Self>, TtyInitError> {
         // Create /dev/console.
         let console = Arc::new(CdevSw::new(
             DriverFlags::from_bits_retain(0x80000004),
@@ -25,7 +25,7 @@ impl TtyManager {
             None,
         ));
 
-        let console = match make_dev(
+        let console = make_dev(
             &console,
             0,
             "console",
@@ -34,10 +34,8 @@ impl TtyManager {
             Mode::new(0o600).unwrap(),
             None,
             MakeDev::MAKEDEV_ETERNAL,
-        ) {
-            Ok(v) => v,
-            Err(e) => return Err(TtyInitError::CreateConsoleFailed(e)),
-        };
+        )
+        .map_err(TtyInitError::CreateConsoleFailed)?;
 
         Ok(Arc::new(Self { console }))
     }
