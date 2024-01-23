@@ -190,7 +190,7 @@ fn start() -> Result<(), KernelError> {
     let mut syscalls = Syscalls::new();
 
     // Initializes filesystem.
-    let fs = Fs::new(args.system, args.game, &param, &cred, &mut syscalls)?;
+    let fs = Fs::new(args.system, args.game, &param, &kern_cred, &mut syscalls)?;
 
     // Initialize memory management.
     let mm = MemoryManager::new(&mut syscalls)?;
