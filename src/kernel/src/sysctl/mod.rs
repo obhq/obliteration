@@ -365,7 +365,7 @@ impl Sysctl {
 
         // Update the info.
         if req.new.is_some() {
-            todo!("sysctl CTL_KERN:KERN_PROC:KERN_PROC_APPINFO with non-null new");
+            todo!("sysctl kern.proc.appinfo with non-null new");
         }
 
         Ok(())

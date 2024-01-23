@@ -139,6 +139,12 @@ impl Ucred {
         }
 
         match p {
+            Privilege::PROC_SETLOGIN
+            | Privilege::VFS_READ
+            | Privilege::VFS_WRITE
+            | Privilege::VFS_ADMIN
+            | Privilege::VFS_EXEC
+            | Privilege::VFS_LOOKUP => Ok(()),
             _ => todo!("prison_priv_check({p})"),
         }
     }

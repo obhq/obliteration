@@ -219,7 +219,7 @@ fn socket_ioctl(
     data: &mut [u8],
     td: Option<&VThread>,
 ) -> Result<(), Box<dyn Errno>> {
-    let so = file.data_as_socket().unwrap();
+    let _so = file.data_as_socket().unwrap();
 
     match cmd {
         FIONBIO => todo!(),

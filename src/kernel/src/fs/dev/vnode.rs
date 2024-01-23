@@ -113,9 +113,8 @@ fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode
     }
 
     // Check if directory is accessible.
-    if let Err(e) = vn.access(td, Access::EXEC) {
-        return Err(Box::new(LookupError::AccessDenied(e)));
-    }
+    vn.access(td, Access::EXEC)
+        .map_err(LookupError::AccessDenied)?;
 
     // Check name.
     if name == "." {
@@ -125,15 +124,11 @@ fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode
     let dirent = vn.data().downcast_ref::<Dirent>().unwrap();
 
     if name == ".." {
-        let parent = match dirent.parent() {
-            Some(v) => v,
-            None => return Err(Box::new(LookupError::NoParent)),
-        };
+        let parent = dirent.parent().ok_or(LookupError::NoParent)?;
 
-        return match alloc_vnode(vn.fs(), &parent) {
-            Ok(v) => Ok(v),
-            Err(e) => Err(Box::new(LookupError::AllocVnodeFailed(e))),
-        };
+        let vnode = alloc_vnode(vn.fs(), &parent).map_err(LookupError::AllocVnodeFailed)?;
+
+        return Ok(vnode);
     }
 
     // Lookup.
@@ -145,10 +140,9 @@ fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode
         None => todo!("devfs lookup with non-existent file"),
     };
 
-    match alloc_vnode(vn.fs(), &item) {
-        Ok(v) => Ok(v),
-        Err(e) => Err(Box::new(LookupError::AllocVnodeFailed(e))),
-    }
+    let vnode = alloc_vnode(vn.fs(), &item).map_err(LookupError::AllocVnodeFailed)?;
+
+    return Ok(vnode);
 }
 
 fn open(
@@ -169,14 +163,13 @@ fn open(
 
     // Execute switch handler.
     match sw.fdopen() {
-        Some(f) => f(&dev, mode, td, file.as_mut().map(|f| &mut **f))?,
+        Some(fdopen) => fdopen(&dev, mode, td, file.as_mut().map(|f| &mut **f))?,
         None => sw.open().unwrap()(&dev, mode, 0x2000, td)?,
     };
 
     // Set file OP.
-    let file = match file {
-        Some(v) => v,
-        None => return Ok(()),
+    let Some(file) = file else {
+        return Ok(());
     };
 
     // TODO: Implement remaining logics from the PS4.

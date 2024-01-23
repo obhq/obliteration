@@ -32,11 +32,8 @@ impl Dirent {
         mode: Mode,
         dir: Option<Weak<Self>>,
         cdev: Option<Weak<Cdev>>,
-        name: N,
-    ) -> Self
-    where
-        N: Into<String>,
-    {
+        name: impl Into<String>,
+    ) -> Self {
         let gg = GutexGroup::new();
         let now = SystemTime::now();
 
@@ -90,7 +87,7 @@ impl Dirent {
     }
 
     /// See `devfs_find` on the PS4 for a reference.
-    pub fn find<N: AsRef<str>>(&self, name: N, ty: Option<DirentType>) -> Option<Arc<Self>> {
+    pub fn find(&self, name: impl AsRef<str>, ty: Option<DirentType>) -> Option<Arc<Self>> {
         let name = name.as_ref();
 
         for child in self.children.read().deref() {
@@ -131,14 +128,12 @@ impl Dirent {
 
     /// See `devfs_prison_check` on the PS4 for a reference.
     pub fn prison_check(&self, td: &VThread) -> Result<(), PrisonCheckError> {
-        let dev = match self.cdev().and_then(|dev| dev.upgrade()) {
-            Some(dev) => dev,
-            None => return Ok(()),
+        let Some(dev) = self.cdev().and_then(|dev| dev.upgrade()) else {
+            return Ok(());
         };
 
-        let _err = match td.cred().prison_check(dev.cred().unwrap()) {
-            Ok(_) => return Ok(()),
-            Err(e) => e,
+        let Err(e) = td.cred().prison_check(dev.cred().unwrap()) else {
+            return Ok(());
         };
 
         todo!()
