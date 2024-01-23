@@ -21,7 +21,7 @@ use llt::{OsThread, SpawnError};
 use macros::vpath;
 use memory::MemoryManagerError;
 use param::Param;
-use process::VProcError;
+use process::VProcInitError;
 use serde::Deserialize;
 use std::error::Error;
 use std::fs::{create_dir_all, remove_dir_all, File};
@@ -32,7 +32,7 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use sysinfo::{MemoryRefreshKind, System};
 use thiserror::Error;
-use tty::TtyError;
+use tty::TtyInitError;
 
 mod arch;
 mod arnd;
@@ -56,10 +56,10 @@ mod tty;
 mod ucred;
 
 fn main() -> Exit {
-    main_wrapped().into()
+    start().into()
 }
 
-fn main_wrapped() -> Result<(), KernelError> {
+fn start() -> Result<(), KernelError> {
     // Begin logger.
     log::init();
 
@@ -125,7 +125,6 @@ fn main_wrapped() -> Result<(), KernelError> {
     writeln!(log, "Starting Obliteration Kernel.").unwrap();
     writeln!(log, "System directory    : {}", args.system.display()).unwrap();
     writeln!(log, "Game directory      : {}", args.game.display()).unwrap();
-    writeln!(log, "Pro mode            : {}", args.pro).unwrap();
 
     if let Some(v) = &args.debug_dump {
         writeln!(log, "Debug dump directory: {}", v.display()).unwrap();
@@ -166,7 +165,8 @@ fn main_wrapped() -> Result<(), KernelError> {
         hwinfo.available_memory() / 1048576,
         hwinfo.total_memory() / 1048576
     )
-    .unwrap(); // Convert Bytes to MB
+    .unwrap();
+    writeln!(log, "Pro mode            : {}", args.pro).unwrap();
 
     print(log);
 
@@ -230,7 +230,7 @@ fn main_wrapped() -> Result<(), KernelError> {
         #[cfg(not(target_arch = "x86_64"))]
         ExecutionEngine::Native => {
             error!("Native execution engine cannot be used on your machine.");
-            return ExitCode::FAILURE;
+            Err(KernelError::NativeExecutionEngineNotSupported)
         }
         ExecutionEngine::Llvm => run(
             args.debug_dump,
@@ -512,11 +512,15 @@ enum KernelError {
     #[error("memory manager initialization failed")]
     MemoryManagerInitFailed(#[from] MemoryManagerError),
 
+    #[cfg(not(target_arch = "x86_64"))]
+    #[error("the native execution engine is only supported on x86_64")]
+    NativeExecutionEngineNotSupported,
+
     #[error("tty initialization failed")]
-    TtyInitFailed(#[from] TtyError),
+    TtyInitFailed(#[from] TtyInitError),
 
     #[error("virtual process initialization failed")]
-    VProcInitFailed(#[from] VProcError),
+    VProcInitFailed(#[from] VProcInitError),
 
     #[error("runtime linker initialization failed")]
     RuntimeLinkerInitFailed(#[source] Box<dyn Error>),

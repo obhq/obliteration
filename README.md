@@ -112,10 +112,10 @@ If all you want is to use the emulator, choose `[YOUR-PLATFORM]-release` for opt
 ### Build
 
 ```sh
-cmake --build build
+cmake --build --preset PRESET
 ```
 
-You can use `-j` to enable parallel building (e.g. `cmake --build build -j 2`). Each parallel build on Linux consumes a lot of memory so don't use the number of your CPU cores otherwise your system might crash due to out of memory. On Windows it seems like it is safe to use the number of your CPU cores.
+You can use `-j` to enable parallel building (e.g. `cmake --build --preset PRESET -j 2`). Each parallel build on Linux consumes a lot of memory so don't use the number of your CPU cores otherwise your system might crash due to out of memory. On Windows and macOS it seems like it is safe to use the number of your CPU cores.
 
 ## Development
 
@@ -128,6 +128,10 @@ Before proceeding, make sure the build preset you are using is `*-debug`. We rec
 - [CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb)
 
 Then open this folder with VS Code. It will ask which CMake preset to use and you need to choose the same one that you were using when building. Everything should work out of the box (e.g. code completion, debugging, etc).
+
+### macOS debugging issues
+
+If you can't launch or debug Obliteration from VS Code, try [this](https://github.com/vadimcn/codelldb/discussions/456#discussioncomment-874122) solution.
 
 ### Get a homebrew application for testing
 
@@ -152,14 +156,9 @@ The application consists of 2 binaries:
 
 ### Debugging the kernel
 
-Create `.kernel-debug` in the root of the repository. The contents of this file is YAML and the kernel will deserialize it to the `Args` struct in `src/kernel/src/main.rs` when passing the `--debug` flag to the kernel.
+Create `.kernel-debug` in the root of the repository. The contents of this file is YAML and the kernel will deserialize it to the `Args` struct in `src/kernel/src/main.rs` when passing the `--debug` flag to the kernel. See `Args` struct for available options.
 
-- game: (Folder Path) | Where is the game to load?
-- system: (Folder Path) | Where is the system firmware?
-- debug-dump: (Folder Path) | Where should the debug log be saved?
-- clear-debug-dump: (boolean) | Should we remove the old debug log?
-
-We already provide a launch configuration for VS Code so all you need to do is choose `Kernel` as the configuration and start debugging.
+We already provide a launch configuration for VS Code so all you need to do is choose `Debug - Kernel` as the configuration and start debugging.
 
 ### UI Icons
 

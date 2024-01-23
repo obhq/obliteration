@@ -46,15 +46,15 @@ mod thread;
 /// a child process so no reason for us to support this.
 #[derive(Debug)]
 pub struct VProc {
-    id: NonZeroI32,                                  // p_pid
-    threads: Gutex<Vec<Arc<VThread>>>,               // p_threads
-    cred: Ucred,                                     // p_ucred
-    group: Gutex<Option<VProcGroup>>,                // p_pgrp
-    sigacts: Gutex<SignalActs>,                      // p_sigacts
-    files: FileDesc,                                 // p_fd
-    system_path: String,                             // p_randomized_path
-    limits: [ResourceLimit; ResourceLimit::NLIMITS], // p_limit
-    comm: Gutex<Option<String>>,                     // p_comm
+    id: NonZeroI32,                    // p_pid
+    threads: Gutex<Vec<Arc<VThread>>>, // p_threads
+    cred: Ucred,                       // p_ucred
+    group: Gutex<Option<VProcGroup>>,  // p_pgrp
+    sigacts: Gutex<SignalActs>,        // p_sigacts
+    files: FileDesc,                   // p_fd
+    system_path: String,               // p_randomized_path
+    limits: Limits,                    // p_limit
+    comm: Gutex<Option<String>>,       // p_comm
     objects: Gutex<Idt<Arc<dyn Any + Send + Sync>>>,
     budget_id: usize,
     budget_ptype: ProcType,
@@ -75,7 +75,7 @@ impl VProc {
         root: Arc<Vnode>,
         system_path: impl Into<String>,
         sys: &mut Syscalls,
-    ) -> Result<Arc<Self>, VProcError> {
+    ) -> Result<Arc<Self>, VProcInitError> {
         let cred = if auth.caps.is_system() {
             // TODO: The groups will be copied from the parent process, which is SceSysCore.
             // TODO: figure out the actual prison value
@@ -87,7 +87,8 @@ impl VProc {
         };
 
         let gg = GutexGroup::new();
-        let limits = Self::load_limits()?;
+        let limits = Limits::load()?;
+
         let vp = Arc::new(Self {
             id: Self::new_id(),
             threads: gg.spawn(Vec::new()),
@@ -138,8 +139,8 @@ impl VProc {
         &self.files
     }
 
-    pub fn limit(&self, ty: usize) -> Option<&ResourceLimit> {
-        self.limits.get(ty)
+    pub fn limit(&self, ty: ResourceType) -> &ResourceLimit {
+        &self.limits[ty]
     }
 
     pub fn set_name(&self, name: Option<&str>) {
@@ -182,21 +183,10 @@ impl VProc {
         &self.gg
     }
 
-    fn load_limits() -> Result<[ResourceLimit; ResourceLimit::NLIMITS], VProcError> {
-        type R = ResourceLimit;
-        type E = VProcError;
-
-        Ok([
-            R::new(R::CPU).map_err(E::GetCpuLimitFailed)?,
-            R::new(R::FSIZE).map_err(E::GetFileSizeLimitFailed)?,
-            R::new(R::DATA).map_err(E::GetDataLimitFailed)?,
-        ])
-    }
-
     fn sys_getpid(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
         Ok(self.id.into())
     }
-
+  
     fn sys_setlogin(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         // Check current thread privilege.
         VThread::current()
@@ -668,15 +658,9 @@ impl NamedObj {
 
 /// Represents an error when [`VProc`] construction is failed.
 #[derive(Debug, Error)]
-pub enum VProcError {
-    #[error("cannot get CPU time limit")]
-    GetCpuLimitFailed(#[source] std::io::Error),
-
-    #[error("cannot get file size limit")]
-    GetFileSizeLimitFailed(#[source] std::io::Error),
-
-    #[error("cannot get data size limit")]
-    GetDataLimitFailed(#[source] std::io::Error),
+pub enum VProcInitError {
+    #[error("failed to load limits")]
+    FailedToLoadLimits(#[from] LoadLimitError),
 }
 
 static NEXT_ID: AtomicI32 = AtomicI32::new(1);

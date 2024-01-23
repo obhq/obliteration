@@ -1,6 +1,7 @@
 use crate::arnd::Arnd;
 use crate::memory::MemoryManager;
-use crate::process::{ResourceLimit, VProc};
+use crate::process::ResourceType;
+use crate::process::VProc;
 use crate::rtld::Module;
 use crate::syscalls::Syscalls;
 use std::error::Error;
@@ -113,7 +114,7 @@ impl<E: ExecutionEngine> EntryArg<E> {
         pin.vec.push(
             (mem.addr()
                 + mem.data_segment().start()
-                + pin.vp.limit(ResourceLimit::DATA).unwrap().max()
+                + pin.vp.limit(ResourceType::Data).max()
                 + 0x3fff)
                 & 0xffffffffffffc000,
         );
