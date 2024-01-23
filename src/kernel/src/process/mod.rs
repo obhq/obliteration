@@ -186,7 +186,7 @@ impl VProc {
     fn sys_getpid(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
         Ok(self.id.into())
     }
-  
+
     fn sys_setlogin(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         // Check current thread privilege.
         VThread::current()
