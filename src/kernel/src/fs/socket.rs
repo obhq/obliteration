@@ -20,8 +20,9 @@ pub struct Socket {
     proto: &'static Protosw, // so_proto
     fibnum: i32,             // so_fibnum
     cred: Arc<Ucred>,        // so_cred
+    fd: i32,
     pid: NonZeroI32,
-    name: [u8; 32],
+    name: Option<Box<str>>,
 }
 
 impl Socket {
@@ -32,6 +33,9 @@ impl Socket {
         proto: i32,
         cred: &Arc<Ucred>,
         td: &VThread,
+        name: Option<&str>,
+        fd: i32,
+        pid: NonZeroI32,
     ) -> Result<Arc<Self>, SocketCreateError> {
         if domain == 28 {
             return Err(SocketCreateError::IPv6NotSupported);
@@ -53,7 +57,7 @@ impl Socket {
 
         let prp = prp.ok_or(SocketCreateError::NoProtocolSwitch)?;
 
-        let attach = match prp.user_reqs().attach {
+        let attach_fn = match prp.user_reqs().attach {
             None => return Err(SocketCreateError::NoAttachHandler),
             Some(f) if (f as usize) == (attach_notsupp as usize) => {
                 return Err(SocketCreateError::BadAttachHandler);
@@ -78,11 +82,12 @@ impl Socket {
             proto: prp,
             fibnum,
             cred: Arc::clone(cred),
-            pid: td.proc().id(),
-            name: [0; 32],
+            fd,
+            pid,
+            name: name.map(|s| s.into()),
         };
 
-        attach(&so, proto, td)?;
+        attach_fn(&so, proto, td)?;
 
         Ok(Arc::new(so))
     }

@@ -415,7 +415,6 @@ impl Fs {
         Ok(SysOut::ZERO)
     }
 
-    #[allow(unused_variables, unreachable_code)]
     fn sys_socket(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let domain: i32 = i.args[0].try_into().unwrap();
         let ty: i32 = i.args[1].try_into().unwrap();
@@ -423,40 +422,74 @@ impl Fs {
 
         let td = VThread::current().unwrap();
 
-        let _files = td.proc().files();
-        let _budget = if domain == 1 { 11 } else { 6 };
+        let budget = if domain == 1 { 11 } else { 6 };
 
-        let so = Socket::new(domain, ty, proto, td.as_ref().cred(), td.as_ref())?;
+        let fd = td.falloc_budget(
+            |fd| {
+                let so = Socket::new(
+                    domain,
+                    ty,
+                    proto,
+                    td.as_ref().cred(),
+                    td.as_ref(),
+                    None,
+                    fd,
+                    td.proc().id(),
+                )?;
 
-        let ty = if domain == 1 {
-            VFileType::Socket(so)
-        } else {
-            VFileType::Socket2(so)
-        };
+                let ty = if domain == 1 {
+                    VFileType::Socket(so)
+                } else {
+                    VFileType::Socket2(so)
+                };
 
-        todo!()
+                Ok(ty)
+            },
+            VFileFlags::FWRITE | VFileFlags::FREAD,
+            &SOCKET_FILEOPS,
+            budget,
+        )?;
+
+        Ok(fd.into())
     }
 
-    #[allow(unused_variables, unreachable_code)]
     fn sys_socketex(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let name = unsafe { i.args[0].to_str(32)? };
         let domain: i32 = i.args[1].try_into().unwrap();
-        let ty: i32 = i.args[0].try_into().unwrap();
+        let ty: i32 = i.args[2].try_into().unwrap();
         let proto: i32 = i.args[3].try_into().unwrap();
 
         let td = VThread::current().unwrap();
 
-        let _files = td.proc().files();
-        let _budget = if domain == 1 { 11 } else { 6 };
+        let budget = if domain == 1 { 11 } else { 6 };
 
-        let so = Socket::new(domain, ty, proto, td.as_ref().cred(), td.as_ref())?;
+        let fd = td.falloc_budget(
+            |fd| {
+                let so = Socket::new(
+                    domain,
+                    ty,
+                    proto,
+                    td.as_ref().cred(),
+                    td.as_ref(),
+                    name,
+                    fd,
+                    td.proc().id(),
+                )?;
 
-        let ty = if domain == 1 {
-            VFileType::Socket(so)
-        } else {
-            VFileType::Socket2(so)
-        };
+                let ty = if domain == 1 {
+                    VFileType::Socket(so)
+                } else {
+                    VFileType::Socket2(so)
+                };
 
-        todo!()
+                Ok(ty)
+            },
+            VFileFlags::FWRITE | VFileFlags::FREAD,
+            &SOCKET_FILEOPS,
+            budget,
+        )?;
+
+        Ok(fd.into())
     }
 
     /// See `vfs_donmount` on the PS4 for a reference.

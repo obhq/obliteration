@@ -21,11 +21,11 @@ pub struct VFile {
 }
 
 impl VFile {
-    pub(super) fn new(ty: VFileType, ops: &'static VFileOps) -> Self {
+    pub(super) fn new(ty: VFileType, ops: &'static VFileOps, flags: VFileFlags) -> Self {
         Self {
             ty,
             ops,
-            flags: VFileFlags::empty(),
+            flags,
             offset: 0,
         }
     }
@@ -87,7 +87,7 @@ impl Read for VFile {
 pub enum VFileType {
     Vnode(Arc<Vnode>),    // DTYPE_VNODE
     Socket(Arc<Socket>),  // DTYPE_SOCKET
-    Socket2(Arc<Socket>), // TODO: figure out what this is
+    Socket2(Arc<Socket>), // TODO: figure out what exactly this is
 }
 
 /// An implementation of `fileops` structure.
