@@ -57,7 +57,7 @@ impl Socket {
 
         let prp = prp.ok_or(SocketCreateError::NoProtocolSwitch)?;
 
-        let attach_fn = match prp.user_reqs().attach {
+        let _attach_fn = match prp.user_reqs().attach {
             None => return Err(SocketCreateError::NoAttachHandler),
             Some(f) if (f as usize) == (attach_notsupp as usize) => {
                 return Err(SocketCreateError::BadAttachHandler);
@@ -71,25 +71,14 @@ impl Socket {
             return Err(SocketCreateError::WrongProtocolTypeForSocket);
         }
 
+        //TODO: init so_incomp and so_comp
+
         let fibnum = match prp.domain().family() {
             AddressFamily::INET | AddressFamily::INET6 | AddressFamily::ROUTE => td.proc().fibnum(),
             _ => 0,
         };
 
-        let so = Self {
-            ty,
-            options: SocketOptions::empty(),
-            proto: prp,
-            fibnum,
-            cred: Arc::clone(cred),
-            fd,
-            pid,
-            name: name.map(|s| s.into()),
-        };
-
-        attach_fn(&so, proto, td)?;
-
-        Ok(Arc::new(so))
+        todo!()
     }
 
     fn options(&self) -> SocketOptions {
