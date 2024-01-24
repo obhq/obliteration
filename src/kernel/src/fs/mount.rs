@@ -124,6 +124,10 @@ impl Mount {
     pub fn root(self: &Arc<Self>) -> Arc<Vnode> {
         (self.ops.root)(self)
     }
+
+    pub fn stats(&self) -> &FsStats {
+        &self.stats
+    }
 }
 
 /// An implementation of `vfsops` structure.
@@ -250,6 +254,12 @@ pub struct FsStats {
     id: [u32; 2],   // f_fsid
     owner: Uid,     // f_owner
     path: VPathBuf, // f_mntonname
+}
+
+impl FsStats {
+    pub fn id(&self) -> [u32; 2] {
+        self.id
+    }
 }
 
 static MOUNT_ID: Mutex<u16> = Mutex::new(0); // mntid_base + mntid_mtx

@@ -115,10 +115,12 @@ pub fn check_access(
 /// maximum value for file mode, which is `0777` take only 9 bits. So let's use `u16` and don't make
 /// this struct representation as a transparent. That mean we can't use this type directly on the
 /// function parameter or its return type if that function will be called by the PS4.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Mode(u16);
 
 impl Mode {
+    pub const VNOVAL: Self = Self(u16::MAX);
+
     pub const fn new(v: u16) -> Option<Self> {
         if v > 0o777 {
             None
