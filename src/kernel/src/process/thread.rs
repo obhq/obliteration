@@ -102,10 +102,10 @@ impl VThread {
     /// This function is `falloc_budget` and `finit` together.
     pub fn falloc_budget(
         &self,
-        f: impl FnOnce(i32) -> Result<VFileType, Box<dyn Errno>>,
-        flags: VFileFlags,
-        ops: &'static VFileOps,
-        budget: i32,
+        _f: impl FnOnce(i32) -> Result<VFileType, Box<dyn Errno>>,
+        _flags: VFileFlags,
+        _ops: &'static VFileOps,
+        _budget: i32,
     ) -> Result<i32, FileAllocError> {
         todo!()
     }
