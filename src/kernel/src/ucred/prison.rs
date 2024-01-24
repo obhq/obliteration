@@ -37,8 +37,6 @@ impl PartialEq for Prison {
     }
 }
 
-impl Eq for Prison {}
-
 pub static PRISON0: Prison = Prison {
     parent: None,
     flags: PrisonFlags::DEFAULT,
@@ -53,8 +51,7 @@ bitflags! {
         const IP4_SADDRSEL = 0x00000080;
         const IP6 = 0x04000000;
 
-        //SelF::HOST | Self::VNET | Self::IP4_SADDRSEL wouldn't be allowed in a const context
-        const DEFAULT = 0x00000002 | 0x00000010 | 0x00000080;
+        const DEFAULT = Self::HOST.bits() | Self::VNET.bits() | Self::IP4_SADDRSEL.bits();
     }
 }
 
@@ -63,6 +60,5 @@ bitflags! {
     pub struct PrisonAllow: u32 {
         const ALLOW_SOCKET_AF = 0x00000040;
         const ALLOW_ALL = 0x07ff;
-
     }
 }

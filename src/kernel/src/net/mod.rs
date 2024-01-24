@@ -68,10 +68,10 @@ impl Protosw {
 
 #[derive(Debug)]
 pub struct UserReqs {
-    pub attach: Option<Attach>, // pru_attach
+    pub attach: Option<AttachFn>, // pru_attach
 }
 
-type Attach = fn(&Socket, i32, &VThread) -> Result<(), Box<dyn Errno>>;
+type AttachFn = fn(&Socket, i32, &VThread) -> Result<(), Box<dyn Errno>>;
 
 pub fn attach_notsupp(_: &Socket, _: i32, _: &VThread) -> Result<(), Box<dyn Errno>> {
     Err(Box::new(AttachError::NotSupported))

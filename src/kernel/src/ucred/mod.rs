@@ -99,6 +99,7 @@ impl Ucred {
         self.auth.caps.is_unk1() && self.auth.attrs.is_unk2()
     }
 
+    /// See `prison_check` on the PS4 for a reference.
     pub fn prison_check(&self, other: &Self) -> Result<(), PrisonCheckError> {
         if self.prison == other.prison || self.prison.is_child(other.prison) {
             return Ok(());
