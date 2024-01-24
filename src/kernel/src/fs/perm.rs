@@ -7,19 +7,19 @@ use thiserror::Error;
 /// You can map [`None`] to `EPERM` to match with the PS4 behavior.
 ///
 /// See `vfs_unixify_accmode` on the PS4 for a reference.
-pub fn unixify_access(access: Access) -> Option<Access> {
-    // TODO: Refactor this for readability.
-    let mut access = access.bits();
-
-    if (access & 0100000) != 0 {
+pub fn unixify_access(mut access: Access) -> Option<Access> {
+    if access.intersects(Access::EXPLICIT_DENY) {
         return Some(Access::empty());
-    } else if (access & 011000000) != 0 {
+    } else if access.intersects(Access::DELETE_CHILD | Access::DELETE) {
         return None;
-    } else if (access & 0144010000) != 0 {
-        access = (access & 0xfe6fefff) | 010000;
+    } else if access.intersects(Access::ADMIN_PERMS) {
+        access &= !Access::ADMIN_PERMS;
+        access |= Access::ADMIN;
     }
 
-    Some(Access::from_bits_retain(access & 0xfdb7ffff))
+    access &= !(Access::STAT_PERMS | Access::SYNCHRONIZE);
+
+    Some(access)
 }
 
 /// Returns [`Ok`] if access was granted. The boolean value indicated whether privilege was used to
@@ -119,8 +119,6 @@ pub fn check_access(
 pub struct Mode(u16);
 
 impl Mode {
-    pub const VNOVAL: Self = Self(u16::MAX);
-
     pub const fn new(v: u16) -> Option<Self> {
         if v > 0o777 {
             None
@@ -138,9 +136,26 @@ impl From<Mode> for u32 {
 
 bitflags! {
     /// An implementation of `accmode_t`.
+    /// Some of the constants are unused, but we include them for completeness.
     pub struct Access: u32 {
-        const EXEC  = 0o000000000100; // VEXEC
-        const WRITE = 0o000000000200; // VWRITE
+        const EXEC             = 0o00000000100; // VEXEC
+        const WRITE            = 0o00000000200; // VWRITE
+        const READ             = 0o00000000400; // VREAD
+        const ADMIN            = 0o00000010000; // VADMIN
+        const APPEND           = 0o00000020000; // VAPPEND
+        const EXPLICIT_DENY    = 0o00000100000; // VEXPLICIT_DENY
+        const READ_NAMES_ATTR  = 0o00000200000; // VREAD_NAMES_ATTR
+        const DELETE_CHILD     = 0o00001000000; // VDELETE_CHILD
+        const READ_ATTRIBUTES  = 0o00002000000; // VREAD_ATTRIBUTES
+        const WRITE_ATTRIBUTES = 0o00004000000; // VWRITE_ATTRIBUTES
+        const DELETE           = 0o00010000000; // VDELETE_CHILD
+        const READ_ACL         = 0o00020000000; // VREAD_ACL
+        const WRITE_ACL        = 0o00040000000; // VWRITE_ACL
+        const WRITE_OWNER      = 0o00100000000; // VWRITE_OWNER
+        const SYNCHRONIZE      = 0o00200000000; // VSYNCHRONIZE
+
+        const ADMIN_PERMS = Self::ADMIN.bits() | Self::WRITE_ATTRIBUTES.bits() | Self::WRITE_ACL.bits() | Self::WRITE_OWNER.bits();
+        const STAT_PERMS = Self::READ_ATTRIBUTES.bits() | Self::READ_ACL.bits();
     }
 }
 

@@ -165,28 +165,15 @@ pub struct VnodeAttrs {
     gid: Gid,   // va_gid
     mode: Mode, // va_mode
     size: u64,  // va_size
-    fsid: u32,  // va_fsid
 }
 
 impl VnodeAttrs {
-    pub fn new(uid: Uid, gid: Gid, mode: Mode, size: u64, fsid: u32) -> Self {
+    pub fn new(uid: Uid, gid: Gid, mode: Mode, size: u64) -> Self {
         Self {
             uid,
             gid,
             mode,
             size,
-            fsid,
-        }
-    }
-
-    /// An implementation of vattr_null.
-    pub fn empty() -> Self {
-        Self {
-            uid: Uid::VNOVAL,
-            gid: Gid::VNOVAL,
-            mode: Mode::VNOVAL,
-            size: u64::MAX,
-            fsid: u32::MAX,
         }
     }
 
@@ -200,11 +187,6 @@ impl VnodeAttrs {
 
     pub fn mode(&self) -> Mode {
         self.mode
-    }
-
-    pub fn with_fsid(mut self, fsid: u32) -> Self {
-        self.fsid = fsid;
-        self
     }
 }
 

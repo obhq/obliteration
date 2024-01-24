@@ -1,11 +1,8 @@
 use super::{GetNullNodeError, NullNode};
 use crate::{
     errno::{Errno, EISDIR, EROFS},
-    fs::{
-        perm::Access, Mode, MountFlags, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType, VopVector,
-    },
+    fs::{perm::Access, MountFlags, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType, VopVector},
     process::VThread,
-    ucred::{Gid, Uid},
 };
 use std::{num::NonZeroI32, sync::Arc};
 use thiserror::Error;
@@ -35,25 +32,8 @@ fn access(vn: &Arc<Vnode>, _td: Option<&VThread>, access: Access) -> Result<(), 
     todo!();
 }
 
-fn setattr(vn: &Arc<Vnode>, vattr: VnodeAttrs) -> Result<VnodeAttrs, Box<dyn Errno>> {
-    if vattr.uid() != Uid::VNOVAL || vattr.gid() != Gid::VNOVAL || vattr.mode() != Mode::VNOVAL {
-        if vn.fs().flags().contains(MountFlags::MNT_RDONLY) {
-            Err(SetAttrError::Readonly)?
-        }
-    }
-
-    match vn.ty() {
-        VnodeType::Directory(_) => todo!(),
-        VnodeType::Character => return Err(SetAttrError::Readonly)?,
-        VnodeType::File | VnodeType::Link => todo!(),
-    }
-}
-
 fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
-    //TODO: call null_bypass
-    let fsid = vn.fs().stats().id()[0];
-
-    Ok(VnodeAttrs::empty().with_fsid(fsid))
+    todo!();
 }
 
 fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode>, Box<dyn Errno>> {

@@ -382,10 +382,10 @@ impl Fs {
         info!("Executing ioctl({com}) on file descriptor {fd}.");
 
         match com {
-            FIOCLEX => todo!("ioctl with com = 0x20006601"),
-            FIONCLEX => todo!("ioctl with com = 0x20006602"),
-            FIONBIO => todo!("ioctl with com = 0x8004667d"),
-            FIOASYNC => todo!("ioctl with com = 0x8004667e"),
+            FIOCLEX => todo!("ioctl with com = FIOCLEX"),
+            FIONCLEX => todo!("ioctl with com = FIONCLEX"),
+            FIONBIO => todo!("ioctl with com = FIONBIO"),
+            FIOASYNC => todo!("ioctl with com = FIOASYNC"),
             _ => {}
         }
 
