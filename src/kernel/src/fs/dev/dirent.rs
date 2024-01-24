@@ -24,7 +24,7 @@ pub struct Dirent {
 }
 
 impl Dirent {
-    pub fn new<N>(
+    pub fn new(
         ty: DirentType,
         inode: i32,
         uid: Uid,

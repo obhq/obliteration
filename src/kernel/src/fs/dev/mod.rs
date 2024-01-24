@@ -237,7 +237,7 @@ impl DevFs {
 
     /// Partial implementation of `devfs_vmkdir`. The main different is this function does not add
     /// the created directory to `parent` and does not run `devfs_rules_apply`.
-    fn mkdir<N: Into<String>>(name: N, inode: i32, parent: Option<&Arc<Dirent>>) -> Arc<Dirent> {
+    fn mkdir(name: impl Into<String>, inode: i32, parent: Option<&Arc<Dirent>>) -> Arc<Dirent> {
         // Create the directory.
         let dir = Arc::new(Dirent::new(
             DirentType::Directory,
