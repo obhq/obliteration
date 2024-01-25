@@ -16,8 +16,9 @@ pub(super) static VNODE_OPS: VopVector = VopVector {
     open: Some(open),
 };
 
-//Serves as both `access` and `accessx`.
-fn access(vn: &Arc<Vnode>, _td: Option<&VThread>, access: Access) -> Result<(), Box<dyn Errno>> {
+/// Serves as both `access` and `accessx`.
+/// This function tries to mimic what calling `null_bypass` would do.
+fn access(vn: &Arc<Vnode>, td: Option<&VThread>, access: Access) -> Result<(), Box<dyn Errno>> {
     if access.contains(Access::WRITE) {
         match vn.ty() {
             VnodeType::Directory(_) | VnodeType::Link | VnodeType::File => {
@@ -29,20 +30,29 @@ fn access(vn: &Arc<Vnode>, _td: Option<&VThread>, access: Access) -> Result<(), 
         }
     }
 
-    todo!();
+    let null_node: &NullNode = vn.data().downcast_ref().unwrap();
+
+    null_node.lower().access(td, access)?;
+
+    Ok(())
 }
 
+/// This function tries to mimic what calling `null_bypass` would do.
 fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
-    todo!();
+    let null_node: &NullNode = vn.data().downcast_ref().unwrap();
+
+    let mut attr = null_node.lower().getattr()?;
+
+    attr.set_fsid(vn.fs().stats().id()[0]);
+
+    Ok(attr)
 }
 
+/// This function tries to mimic what calling `null_bypass` would do.
 fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode>, Box<dyn Errno>> {
-    let node: &NullNode = vn.data().downcast_ref().unwrap();
+    let null_node: &NullNode = vn.data().downcast_ref().unwrap();
 
-    let lower = node
-        .lower()
-        .lookup(td, name)
-        .map_err(LookupError::LookupFromLowerFailed)?;
+    let lower = null_node.lower().lookup(td, name)?;
 
     let vnode = if Arc::ptr_eq(&lower, vn) {
         vn.clone()
@@ -53,15 +63,23 @@ fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode
     Ok(vnode)
 }
 
+/// This function tries to mimic what calling `null_bypass` would do.
 fn open(
     vn: &Arc<Vnode>,
-    _td: Option<&VThread>,
-    _mode: OpenFlags,
-    mut _file: Option<&mut VFile>,
+    td: Option<&VThread>,
+    mode: OpenFlags,
+    mut file: Option<&mut VFile>,
 ) -> Result<(), Box<dyn Errno>> {
-    let _mnt = vn.fs();
+    let null_node: &NullNode = vn.data().downcast_ref().unwrap();
 
-    todo!()
+    // TODO: implement VOP_PROPAGATE
+
+    null_node
+        .lower()
+        .open(td, mode, file)
+        .map_err(OpenError::OpenFromLowerFailed)?;
+
+    Ok(())
 }
 
 #[derive(Debug, Error)]
@@ -71,6 +89,9 @@ pub enum AccessError {
 
     #[error("vnode is directory")]
     IsDirectory,
+
+    #[error("access from lower vnode failed")]
+    AccessFromLowerFailed(#[from] Box<dyn Errno>),
 }
 
 impl Errno for AccessError {
@@ -78,20 +99,21 @@ impl Errno for AccessError {
         match self {
             Self::Readonly => EROFS,
             Self::IsDirectory => EISDIR,
+            Self::AccessFromLowerFailed(e) => e.errno(),
         }
     }
 }
 
 #[derive(Debug, Error)]
-pub enum SetAttrError {
-    #[error("mounted as readonly+")]
-    Readonly,
+pub enum GetAttrError {
+    #[error("getattr from lower vnode failed")]
+    GetAttrFromLowerFailed(#[from] Box<dyn Errno>),
 }
 
-impl Errno for SetAttrError {
+impl Errno for GetAttrError {
     fn errno(&self) -> NonZeroI32 {
         match self {
-            Self::Readonly => EROFS,
+            Self::GetAttrFromLowerFailed(e) => e.errno(),
         }
     }
 }
@@ -99,7 +121,7 @@ impl Errno for SetAttrError {
 #[derive(Debug, Error)]
 pub enum LookupError {
     #[error("lookup failed")]
-    LookupFromLowerFailed(#[source] Box<dyn Errno>),
+    LookupFromLowerFailed(#[from] Box<dyn Errno>),
 
     #[error("failed to get nullnode")]
     GetNullNodeFailed(#[from] GetNullNodeError),
@@ -109,6 +131,24 @@ impl Errno for LookupError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::LookupFromLowerFailed(e) => e.errno(),
+            Self::GetNullNodeFailed(e) => e.errno(),
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum OpenError {
+    #[error("open from lower vnode failed")]
+    OpenFromLowerFailed(#[source] Box<dyn Errno>),
+
+    #[error("failed to get nullnode")]
+    GetNullNodeFailed(#[from] GetNullNodeError),
+}
+
+impl Errno for OpenError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::OpenFromLowerFailed(e) => e.errno(),
             Self::GetNullNodeFailed(e) => e.errno(),
         }
     }

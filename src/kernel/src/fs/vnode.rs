@@ -103,6 +103,15 @@ impl Vnode {
         self.get_op(|v| v.lookup)(self, td, name)
     }
 
+    pub fn open(
+        self: &Arc<Self>,
+        td: Option<&VThread>,
+        mode: OpenFlags,
+        file: Option<&mut VFile>,
+    ) -> Result<(), Box<dyn Errno>> {
+        self.get_op(|v| v.open)(self, td, mode, file)
+    }
+
     fn get_op<F>(&self, f: fn(&'static VopVector) -> Option<F>) -> F {
         let mut vec = Some(self.op);
 
@@ -129,7 +138,6 @@ impl Drop for Vnode {
 
 /// An implementation of `vtype`.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub enum VnodeType {
     File,            // VREG
     Directory(bool), // VDIR
@@ -165,15 +173,17 @@ pub struct VnodeAttrs {
     gid: Gid,   // va_gid
     mode: Mode, // va_mode
     size: u64,  // va_size
+    fsid: u32,  // va_fsid
 }
 
 impl VnodeAttrs {
-    pub fn new(uid: Uid, gid: Gid, mode: Mode, size: u64) -> Self {
+    pub fn new(uid: Uid, gid: Gid, mode: Mode, size: u64, fsid: u32) -> Self {
         Self {
             uid,
             gid,
             mode,
             size,
+            fsid,
         }
     }
 
@@ -187,6 +197,10 @@ impl VnodeAttrs {
 
     pub fn mode(&self) -> Mode {
         self.mode
+    }
+
+    pub fn set_fsid(&mut self, fsid: u32) {
+        self.fsid = fsid;
     }
 }
 
