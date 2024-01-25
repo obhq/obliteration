@@ -33,7 +33,7 @@ pub fn mount(
         }
     }
 
-    let mnt = Arc::new(Mount::new_with_data_constructor(
+    let mnt = Arc::new(Mount::new_with_data_fn(
         conf,
         &NULLFS_OPS,
         cred,

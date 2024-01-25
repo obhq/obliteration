@@ -118,7 +118,7 @@ impl Mount {
         }
     }
 
-    pub(super) fn new_with_data_constructor<D: Send + Sync + 'static>(
+    pub(super) fn new_with_data_fn<D: Send + Sync + 'static>(
         fs: &'static FsConfig,
         ops: &'static FsOps,
         cred: &Arc<Ucred>,
