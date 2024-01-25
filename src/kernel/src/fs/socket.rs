@@ -149,29 +149,6 @@ impl Errno for SocketCreateError {
     }
 }
 
-#[derive(Debug, Error)]
-enum ReceiveError {}
-
-impl Errno for ReceiveError {
-    fn errno(&self) -> NonZeroI32 {
-        todo!()
-    }
-}
-
-#[derive(Debug, Error)]
-enum SendError {
-    #[error("Broken pipe")]
-    BrokenPipe,
-}
-
-impl Errno for SendError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::BrokenPipe => EPIPE,
-        }
-    }
-}
-
 pub const SOCKET_FILEOPS: VFileOps = VFileOps {
     //read: socket_read,
     write: socket_write,
@@ -210,23 +187,7 @@ fn socket_ioctl(
 ) -> Result<(), Box<dyn Errno>> {
     let _so = file.data_as_socket().unwrap();
 
-    match cmd {
-        FIONBIO => todo!(),
-        FIOASYNC => todo!(),
-        FIONREAD => todo!(),
-        FIONWRITE => todo!(),
-        FIONSPACE => todo!(),
-        FIOSETOWN => todo!(),
-        FIOGETOWN => todo!(),
-        SIOCSPGRP => todo!(),
-        SIOCGPGRP => todo!(),
-        SIOCATMARK => todo!(),
-        cmd => match cmd.group() {
-            b'i' => todo!(),
-            b'r' => todo!(),
-            _ => todo!(),
-        },
-    }
+    todo!()
 }
 
 const SOCKET_GROUP: u8 = b's';
@@ -238,3 +199,26 @@ const SIOCGLOWAT: IoCmd = IoCmd::ior::<i32>(SOCKET_GROUP, 3);
 const SIOCATMARK: IoCmd = IoCmd::ior::<i32>(SOCKET_GROUP, 7);
 const SIOCSPGRP: IoCmd = IoCmd::iow::<i32>(SOCKET_GROUP, 8);
 const SIOCGPGRP: IoCmd = IoCmd::ior::<i32>(SOCKET_GROUP, 9);
+
+#[derive(Debug, Error)]
+enum ReceiveError {}
+
+impl Errno for ReceiveError {
+    fn errno(&self) -> NonZeroI32 {
+        todo!()
+    }
+}
+
+#[derive(Debug, Error)]
+enum SendError {
+    #[error("Broken pipe")]
+    BrokenPipe,
+}
+
+impl Errno for SendError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::BrokenPipe => EPIPE,
+        }
+    }
+}
