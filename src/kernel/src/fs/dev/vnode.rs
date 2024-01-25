@@ -90,7 +90,7 @@ fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
     let mode = dirent.mode();
     let size = match vn.ty() {
         VnodeType::Directory(_) => 512,
-        VnodeType::Link => todo!(), /* TODO! strlen(dirent.de_symlink) */
+        VnodeType::Link => todo!(), /* TODO: strlen(dirent.de_symlink) */
         VnodeType::Character => 0,
         _ => todo!(),
     };
