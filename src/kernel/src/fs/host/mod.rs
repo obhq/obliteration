@@ -125,10 +125,7 @@ fn root(mnt: &Arc<Mount>) -> Arc<Vnode> {
 fn get_vnode(mnt: &Arc<Mount>, path: Option<&Path>) -> Result<Arc<Vnode>, GetVnodeError> {
     // Get target path.
     let fs = mnt.data().downcast_ref::<HostFs>().unwrap();
-    let path = match path {
-        Some(v) => v,
-        None => &fs.root,
-    };
+    let path = path.unwrap_or(&fs.root);
 
     // Check if active.
     let mut actives = fs.actives.write();
@@ -151,7 +148,7 @@ fn get_vnode(mnt: &Arc<Mount>, path: Option<&Path>) -> Result<Arc<Vnode>, GetVno
     };
 
     // Allocate a new vnode.
-    let vn = Arc::new(Vnode::new(mnt, ty, "exfatfs", &VNODE_OPS, Arc::new(file)));
+    let vn = Vnode::new(mnt, ty, "exfatfs", &VNODE_OPS, Arc::new(file));
 
     actives.insert(path.to_owned(), Arc::downgrade(&vn));
     drop(actives);

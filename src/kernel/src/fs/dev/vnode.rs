@@ -94,7 +94,7 @@ fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
         _ => todo!(),
     };
 
-    Ok(VnodeAttrs::new(*uid, *gid, *mode, size))
+    Ok(VnodeAttrs::new(*uid, *gid, *mode, size, 0))
 }
 
 fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode>, Box<dyn Errno>> {

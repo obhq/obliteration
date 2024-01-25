@@ -29,7 +29,7 @@ pub fn mount(
     };
 
     // Get GID.
-    let gid = if cred.real_uid() == Uid::ROOT {
+    let _gid = if cred.real_uid() == Uid::ROOT {
         match opts.remove("gid") {
             Some(opt) => opt.unwrap(),
             None => attrs.gid(),
@@ -39,14 +39,14 @@ pub fn mount(
     };
 
     // Get UID.
-    let uid = if cred.real_uid() == Uid::ROOT {
+    let _uid = if cred.real_uid() == Uid::ROOT {
         opts.remove("uid").map_or(attrs.uid(), |v| v.unwrap())
     } else {
         attrs.uid()
     };
 
     // Get mode.
-    let mode = if cred.real_uid() == Uid::ROOT {
+    let _mode = if cred.real_uid() == Uid::ROOT {
         opts.remove("mode").map_or(attrs.mode(), |v| v.unwrap())
     } else {
         attrs.mode()

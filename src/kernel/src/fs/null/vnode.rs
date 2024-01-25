@@ -1,4 +1,4 @@
-use super::{GetNullNodeError, NullNode};
+use super::NullNode;
 use crate::{
     errno::{Errno, EISDIR, EROFS},
     fs::{perm::Access, MountFlags, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType, VopVector},
@@ -7,7 +7,7 @@ use crate::{
 use std::{num::NonZeroI32, sync::Arc};
 use thiserror::Error;
 
-pub(super) static VNODE_OPS: VopVector = VopVector {
+pub(super) static NULL_VNODE_OPS: VopVector = VopVector {
     default: None,
     access: Some(access),
     accessx: Some(access),
@@ -57,7 +57,7 @@ fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode
     let vnode = if Arc::ptr_eq(&lower, vn) {
         vn.clone()
     } else {
-        NullNode::new(vn.fs(), lower)?
+        NullNode::new(vn.fs(), lower)
     };
 
     Ok(vnode)
@@ -122,16 +122,12 @@ impl Errno for GetAttrError {
 pub enum LookupError {
     #[error("lookup failed")]
     LookupFromLowerFailed(#[from] Box<dyn Errno>),
-
-    #[error("failed to get nullnode")]
-    GetNullNodeFailed(#[from] GetNullNodeError),
 }
 
 impl Errno for LookupError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::LookupFromLowerFailed(e) => e.errno(),
-            Self::GetNullNodeFailed(e) => e.errno(),
         }
     }
 }
@@ -140,16 +136,12 @@ impl Errno for LookupError {
 pub enum OpenError {
     #[error("open from lower vnode failed")]
     OpenFromLowerFailed(#[source] Box<dyn Errno>),
-
-    #[error("failed to get nullnode")]
-    GetNullNodeFailed(#[from] GetNullNodeError),
 }
 
 impl Errno for OpenError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::OpenFromLowerFailed(e) => e.errno(),
-            Self::GetNullNodeFailed(e) => e.errno(),
         }
     }
 }

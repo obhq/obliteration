@@ -1,21 +1,26 @@
+use self::hash::NullHashTable;
 use super::{FsConfig, FsOps, LookupError, Mount, MountFlags, MountOpts, VPathBuf, Vnode};
 use crate::errno::{Errno, EDEADLK, EINVAL, EOPNOTSUPP};
+use crate::fs::null::vnode::NULL_VNODE_OPS;
 use crate::ucred::Ucred;
-use bitflags::bitflags;
+use std::mem::MaybeUninit;
 use std::num::NonZeroI32;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use thiserror::Error;
 
+mod hash;
 mod vnode;
 
 pub fn mount(
-    _conf: &'static FsConfig,
-    _cred: &Arc<Ucred>,
-    _path: VPathBuf,
+    conf: &'static FsConfig,
+    cred: &Arc<Ucred>,
+    path: VPathBuf,
     parent: Option<Arc<Vnode>>,
     mut opts: MountOpts,
     flags: MountFlags,
 ) -> Result<Mount, Box<dyn Errno>> {
+    let parent = parent.expect("No parent vnode provided to nullfs");
+
     if flags.intersects(MountFlags::MNT_ROOTFS) {
         Err(MountError::RootFs)?;
     }
@@ -28,57 +33,79 @@ pub fn mount(
         }
     }
 
-    let _target: VPathBuf = opts
-        .remove("target")
-        .or_else(|| opts.remove("from"))
-        .ok_or(MountError::NoTarget)?
-        .unwrap();
+    let mnt = Arc::new(Mount::new_with_data_constructor(
+        conf,
+        &NULLFS_OPS,
+        cred,
+        path,
+        Some(parent.clone()),
+        flags,
+        |mnt| {
+            let vn = NullNode::new(&mnt, parent);
+
+            NullFs::new(&vn)
+        },
+    ));
 
     todo!()
 }
 
 fn root(mnt: &Arc<Mount>) -> Arc<Vnode> {
-    let null_mount: &NullFs = mnt.data().downcast_ref().unwrap();
+    let nullfs: &NullFs = mnt.data().downcast_ref().unwrap();
 
-    return null_mount.root().clone();
+    return nullfs.root().clone();
 }
 
 pub(super) static NULLFS_OPS: FsOps = FsOps { root };
 
 /// An implementation of `null_mount` structure.
 struct NullFs {
-    root: Arc<Vnode>,          // nullm_rootvp
-    lower: Option<Arc<Vnode>>, // nullm_lowervp
-    flags: NullFsFlags,        // null_flags
+    root: Arc<Vnode>, // nullm_rootvp
 }
 
 impl NullFs {
+    pub fn new(root: &Arc<Vnode>) -> Arc<Self> {
+        Arc::new(Self { root: root.clone() })
+    }
+
     pub fn root(&self) -> &Arc<Vnode> {
         &self.root
     }
-
-    pub fn lower(&self) -> Option<&Arc<Vnode>> {
-        self.lower.as_ref()
-    }
-
-    pub fn flags(&self) -> NullFsFlags {
-        self.flags
-    }
-}
-
-bitflags! {
-    #[derive(Clone, Copy)]
-    struct NullFsFlags: u64 {}
 }
 
 struct NullNode {
+    null_vnode: Weak<Vnode>,
     lower: Arc<Vnode>,
 }
 
 impl NullNode {
     /// See `null_nodeget` on the PS4 for a reference.
-    pub fn new(mnt: &Arc<Mount>, lower: Arc<Vnode>) -> Result<Arc<Vnode>, GetNullNodeError> {
-        todo!()
+    pub fn new(mnt: &Arc<Mount>, lower: Arc<Vnode>) -> Arc<Vnode> {
+        if let Some(vn) = NullHashTable::get(mnt, &lower) {
+            return vn;
+        }
+
+        // TODO: maybe implement VOP_ISLOCKED and vn_lock
+
+        let vnode = Vnode::new(
+            mnt,
+            lower.ty().clone(),
+            "null",
+            &NULL_VNODE_OPS,
+            Arc::new(MaybeUninit::<NullNode>::uninit()),
+        );
+
+        // TODO_ set flags
+        let mut null_node = Arc::new(Self {
+            lower,
+            null_vnode: Arc::downgrade(&vnode),
+        });
+
+        //TODO implement insmntque1;
+
+        NullHashTable::insert(mnt, &null_node);
+
+        vnode
     }
 
     fn lower(&self) -> &Arc<Vnode> {
@@ -94,12 +121,6 @@ enum MountError {
     #[error("update mount is not supported without export option")]
     NoExport,
 
-    #[error("target path is not specified")]
-    NoTarget,
-
-    #[error("lookup failed")]
-    LookupFailed(#[source] LookupError),
-
     #[error("avoiding deadlock")]
     AvoidingDeadlock,
 }
@@ -109,18 +130,7 @@ impl Errno for MountError {
         match self {
             MountError::RootFs => EOPNOTSUPP,
             MountError::NoExport => EOPNOTSUPP,
-            MountError::NoTarget => EINVAL,
-            MountError::LookupFailed(e) => e.errno(),
             MountError::AvoidingDeadlock => EDEADLK,
         }
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum GetNullNodeError {}
-
-impl Errno for GetNullNodeError {
-    fn errno(&self) -> NonZeroI32 {
-        todo!()
     }
 }

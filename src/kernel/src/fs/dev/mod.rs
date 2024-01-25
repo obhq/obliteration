@@ -113,7 +113,6 @@ fn alloc_vnode(mnt: &Arc<Mount>, ent: &Arc<Dirent>) -> Result<Arc<Vnode>, AllocV
     };
 
     // Set current vnode.
-    let vn = Arc::new(vn);
 
     *current = Some(Arc::downgrade(&vn));
     drop(current);

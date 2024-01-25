@@ -40,7 +40,7 @@ fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
         VnodeType::Character => unreachable!(), // The character device should only be in the devfs.
     };
 
-    Ok(VnodeAttrs::new(Uid::ROOT, Gid::ROOT, mode, size))
+    Ok(VnodeAttrs::new(Uid::ROOT, Gid::ROOT, mode, size, u32::MAX))
 }
 
 fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode>, Box<dyn Errno>> {

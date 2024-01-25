@@ -1,4 +1,5 @@
 use super::{unixify_access, Access, Mode, Mount, OpenFlags, VFile};
+use crate::arnd::Arnd;
 use crate::errno::{Errno, ENOTDIR, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
@@ -22,6 +23,7 @@ pub struct Vnode {
     op: &'static VopVector,                          // v_op
     data: Arc<dyn Any + Send + Sync>,                // v_data
     item: Gutex<Option<Arc<dyn Any + Send + Sync>>>, // v_un
+    hash: u32,                                       // v_hash
 }
 
 impl Vnode {
@@ -32,19 +34,25 @@ impl Vnode {
         tag: &'static str,
         op: &'static VopVector,
         data: Arc<dyn Any + Send + Sync>,
-    ) -> Self {
+    ) -> Arc<Self> {
         let gg = GutexGroup::new();
 
         ACTIVE.fetch_add(1, Ordering::Relaxed);
 
-        Self {
+        Arc::new(Self {
             fs: fs.clone(),
             ty,
             tag,
             op,
             data,
             item: gg.spawn(None),
-        }
+            hash: {
+                let mut buf = [0u8; 4];
+                Arnd::rand_bytes(&mut buf);
+
+                u32::from_le_bytes(buf)
+            },
+        })
     }
 
     pub fn fs(&self) -> &Arc<Mount> {
@@ -73,6 +81,10 @@ impl Vnode {
 
     pub fn item_mut(&self) -> GutexWriteGuard<Option<Arc<dyn Any + Send + Sync>>> {
         self.item.write()
+    }
+
+    pub fn hash(&self) -> u32 {
+        self.fs().hashseed() + self.hash
     }
 
     pub fn access(

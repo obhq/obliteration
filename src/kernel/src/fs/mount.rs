@@ -1,4 +1,5 @@
 use super::{FsConfig, Mode, VPathBuf, Vnode};
+use crate::arnd::Arnd;
 use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
 use macros::EnumConversions;
@@ -6,6 +7,7 @@ use param::Param;
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Error};
+use std::mem::MaybeUninit;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock, RwLockWriteGuard};
 use thiserror::Error;
@@ -77,18 +79,19 @@ pub struct Mount {
     parent: RwLock<Option<Arc<Vnode>>>, // mnt_vnodecovered
     flags: MountFlags,                  // mnt_flag
     stats: FsStats,                     // mnt_stat
+    hashseed: u32,                      // mnt_hashseed
 }
 
 impl Mount {
     /// See `vfs_mount_alloc` on the PS4 for a reference.
-    pub(super) fn new<D: Send + Sync + 'static>(
+    pub(super) fn new(
         fs: &'static FsConfig,
         ops: &'static FsOps,
         cred: &Arc<Ucred>,
         path: VPathBuf,
         parent: Option<Arc<Vnode>>,
         flags: MountFlags,
-        data: D,
+        data: impl Send + Sync + 'static,
     ) -> Self {
         let owner = cred.effective_uid();
 
@@ -106,7 +109,56 @@ impl Mount {
                 owner,
                 path,
             },
+            hashseed: {
+                let mut buf = [0; 4];
+                Arnd::rand_bytes(&mut buf);
+
+                u32::from_le_bytes(buf)
+            },
         }
+    }
+
+    pub(super) fn new_with_data_constructor<D: Send + Sync + 'static>(
+        fs: &'static FsConfig,
+        ops: &'static FsOps,
+        cred: &Arc<Ucred>,
+        path: VPathBuf,
+        parent: Option<Arc<Vnode>>,
+        flags: MountFlags,
+        data_fn: impl FnOnce(&Arc<Self>) -> Arc<D>,
+    ) -> Arc<Self> {
+        let owner = cred.effective_uid();
+
+        let mnt = Self {
+            fs,
+            ops,
+            gen: 1,
+            data: Arc::new(unsafe { MaybeUninit::<D>::uninit().assume_init() }),
+            cred: cred.clone(),
+            parent: RwLock::new(parent),
+            flags,
+            stats: FsStats {
+                ty: fs.ty,
+                id: [0; 2],
+                owner,
+                path,
+            },
+            hashseed: {
+                let mut buf = [0; 4];
+                Arnd::rand_bytes(&mut buf);
+
+                u32::from_le_bytes(buf)
+            },
+        };
+
+        let mut mnt = Arc::new(mnt);
+        let data = data_fn(&mnt);
+
+        let data_ref = Arc::get_mut(&mut mnt).unwrap();
+
+        data_ref.data = data;
+
+        mnt
     }
 
     pub fn flags(&self) -> MountFlags {
@@ -127,6 +179,10 @@ impl Mount {
 
     pub fn stats(&self) -> &FsStats {
         &self.stats
+    }
+
+    pub fn hashseed(&self) -> u32 {
+        self.hashseed
     }
 }
 

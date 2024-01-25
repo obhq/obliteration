@@ -59,13 +59,13 @@ pub struct EntryArg<E: ExecutionEngine> {
 }
 
 impl<E: ExecutionEngine> EntryArg<E> {
-    pub fn new(arnd: &Arnd, vp: &Arc<VProc>, mm: &Arc<MemoryManager>, app: Arc<Module<E>>) -> Self {
+    pub fn new(vp: &Arc<VProc>, mm: &Arc<MemoryManager>, app: Arc<Module<E>>) -> Self {
         let path = app.path();
         let name = CString::new(path.file_name().unwrap()).unwrap();
         let path = CString::new(path.as_str()).unwrap();
         let mut canary = [0; 64];
 
-        arnd.rand_bytes(&mut canary);
+        Arnd::rand_bytes(&mut canary);
 
         Self {
             vp: vp.clone(),

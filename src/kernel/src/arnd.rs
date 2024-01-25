@@ -1,5 +1,5 @@
 use std::ops::DerefMut;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 /// Random number generator based on
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/libkern/arc4random.c.
@@ -8,21 +8,18 @@ pub struct Arnd {
     state: Mutex<State>,
 }
 
+static ARND: Arnd = Arnd::new();
+
 impl Arnd {
-    pub fn new() -> Arc<Self> {
-        let mut sbox = [0u8; 256];
+    const fn new() -> Self {
+        let sbox = sbox_init();
 
-        for (i, e) in sbox.iter_mut().enumerate() {
-            *e = i as u8;
-        }
-
-        Arc::new(Self {
+        Self {
             state: Mutex::new(State { i: 0, j: 0, sbox }),
-        })
+        }
     }
 
-    pub fn rand_bytes(&self, buf: &mut [u8]) {
-        // TODO: Implement reseed.
+    fn rand_bytes_internal(&self, buf: &mut [u8]) {
         let mut s = self.state.lock().unwrap();
 
         for b in buf {
@@ -36,6 +33,12 @@ impl Arnd {
         s.sbox.swap(s.i as usize, s.j as usize);
         s.sbox[s.sbox[s.i as usize].wrapping_add(s.sbox[s.j as usize]) as usize]
     }
+
+    /// An implementation of `arc4random` on the PS4.
+    /// TODO: Implement reseed.
+    pub fn rand_bytes(buf: &mut [u8]) {
+        ARND.rand_bytes_internal(buf)
+    }
 }
 
 /// State of [`Arc4`].
@@ -44,4 +47,17 @@ struct State {
     i: u8,
     j: u8,
     sbox: [u8; 256],
+}
+
+const fn sbox_init() -> [u8; 256] {
+    let mut sbox: [u8; 256] = [0; 256];
+
+    let mut i = 0;
+
+    while i < 256 {
+        sbox[i] = i as u8;
+        i += 1;
+    }
+
+    sbox
 }

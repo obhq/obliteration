@@ -1,6 +1,4 @@
 use crate::arch::MachDep;
-
-use crate::arnd::Arnd;
 use crate::budget::{Budget, BudgetManager, ProcType};
 use crate::dmem::DmemManager;
 use crate::ee::{EntryArg, RawFn};
@@ -173,7 +171,6 @@ fn start() -> Result<(), KernelError> {
     ));
 
     // Initialize foundations.
-    let arnd = Arnd::new();
     let llvm = Llvm::new();
     let mut syscalls = Syscalls::new();
 
@@ -209,7 +206,6 @@ fn start() -> Result<(), KernelError> {
             args.debug_dump,
             &param,
             auth,
-            &arnd,
             syscalls,
             &fs,
             &mm,
@@ -224,7 +220,6 @@ fn start() -> Result<(), KernelError> {
             args.debug_dump,
             &param,
             auth,
-            &arnd,
             syscalls,
             &fs,
             &mm,
@@ -237,7 +232,6 @@ fn run<E: crate::ee::ExecutionEngine>(
     dump: Option<PathBuf>,
     param: &Arc<Param>,
     auth: AuthInfo,
-    arnd: &Arc<Arnd>,
     mut syscalls: Syscalls,
     fs: &Arc<Fs>,
     mm: &Arc<MemoryManager>,
@@ -251,7 +245,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     let machdep = MachDep::new(&mut syscalls);
     let budget = BudgetManager::new(&mut syscalls);
     DmemManager::new(&fs, &mut syscalls);
-    Sysctl::new(arnd, mm, &machdep, &mut syscalls);
+    Sysctl::new(mm, &machdep, &mut syscalls);
 
     // TODO: Get correct budget name from the PS4.
     let budget_id = budget.create(Budget::new("big app", ProcType::BigApp));
@@ -320,7 +314,7 @@ fn run<E: crate::ee::ExecutionEngine>(
 
     // Get entry point.
     let boot = ld.kernel().unwrap();
-    let mut arg = Box::pin(EntryArg::<E>::new(arnd, &proc, mm, app.clone()));
+    let mut arg = Box::pin(EntryArg::<E>::new(&proc, mm, app.clone()));
     let entry = unsafe { boot.get_function(boot.entry().unwrap()) };
     let entry = move || unsafe { entry.exec1(arg.as_mut().as_vec().as_ptr()) };
 
