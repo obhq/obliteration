@@ -9,9 +9,7 @@ use bitflags::bitflags;
 use std::{num::NonZeroI32, sync::Arc};
 use thiserror::Error;
 
-use super::{
-    IoCmd, VFile, VFileOps, FIOASYNC, FIOGETOWN, FIONBIO, FIONREAD, FIONSPACE, FIONWRITE, FIOSETOWN,
-};
+use super::{IoCmd, VFile, VFileOps};
 
 #[derive(Debug)]
 pub struct Socket {
@@ -77,6 +75,8 @@ impl Socket {
             AddressFamily::INET | AddressFamily::INET6 | AddressFamily::ROUTE => td.proc().fibnum(),
             _ => 0,
         };
+
+        //TODO: create a backing socket on the host and forward all operations to it
 
         todo!()
     }
