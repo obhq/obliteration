@@ -491,6 +491,7 @@ impl MemoryManager {
             let len = len - ((addr as usize) - (storage.addr() as usize));
 
             storage.commit(addr, len, prot)?;
+            storage.name(&name);
 
             Ok(Alloc {
                 addr,
@@ -506,6 +507,7 @@ impl MemoryManager {
             let addr = storage.addr();
 
             storage.commit(addr, len, prot)?;
+            storage.name(&name);
 
             Ok(Alloc {
                 addr,
