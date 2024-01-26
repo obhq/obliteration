@@ -1,7 +1,7 @@
 use self::hash::NullHashTable;
 use super::{FsConfig, FsOps, LookupError, Mount, MountFlags, MountOpts, VPathBuf, Vnode};
 use crate::errno::{Errno, EDEADLK, EINVAL, EOPNOTSUPP};
-use crate::fs::null::vnode::NULL_VNODE_OPS;
+use crate::fs::null::vnode::VNODE_OPS;
 use crate::ucred::Ucred;
 use std::mem::MaybeUninit;
 use std::num::NonZeroI32;
@@ -91,7 +91,7 @@ impl NullNode {
             mnt,
             lower.ty().clone(),
             "null",
-            &NULL_VNODE_OPS,
+            &VNODE_OPS,
             Arc::new(MaybeUninit::<NullNode>::uninit()),
         );
 

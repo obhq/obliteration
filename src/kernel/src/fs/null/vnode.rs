@@ -7,7 +7,7 @@ use crate::{
 use std::{num::NonZeroI32, sync::Arc};
 use thiserror::Error;
 
-pub(super) static NULL_VNODE_OPS: VopVector = VopVector {
+pub(super) static VNODE_OPS: VopVector = VopVector {
     default: None,
     access: Some(access),
     accessx: Some(access),
