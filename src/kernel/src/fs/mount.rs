@@ -1,5 +1,4 @@
 use super::{FsConfig, Mode, VPathBuf, Vnode};
-use crate::arnd::Arnd;
 use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
 use macros::EnumConversions;
