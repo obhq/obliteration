@@ -161,10 +161,10 @@ impl Param {
 
         Ok(Self {
             // App_Ver for Games and Patches, for DLC, use version. Anything else is abnormal.
-            app_ver: app_ver,
+            app_ver,
             category: category.ok_or(ReadError::MissingCategory)?,
             content_id: content_id.ok_or(ReadError::MissingContentId)?,
-            title: title,
+            title,
             title_id: title_id.ok_or(ReadError::MissingTitleId)?,
             version: version.ok_or(ReadError::MissingVersion)?,
         })

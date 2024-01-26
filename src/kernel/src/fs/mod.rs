@@ -112,7 +112,7 @@ impl Fs {
         // Set devfs parent to /dev on the root FS.
         let dev = fs
             .lookup(vpath!("/dev"), None)
-            .map_err(|e| FsError::LookupDevFailed(e))?;
+            .map_err(FsError::LookupDevFailed)?;
 
         assert!(dev.is_directory());
 
@@ -268,7 +268,7 @@ impl Fs {
     fn sys_write(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *const u8 = i.args[1].into();
-        let len: usize = i.args[2].try_into().unwrap();
+        let len: usize = i.args[2].into();
 
         if len > 0x7fffffff {
             return Err(SysErr::Raw(EINVAL));
@@ -316,7 +316,7 @@ impl Fs {
         let td = VThread::current().unwrap();
         let mut file = self.open(path, Some(&td))?;
 
-        *file.flags_mut() = flags.to_fflags();
+        *file.flags_mut() = flags.into_fflags();
 
         // Install to descriptor table.
         let fd = td.proc().files().alloc(Arc::new(file));
@@ -561,7 +561,7 @@ bitflags! {
 
 impl OpenFlags {
     /// An implementation of `FFLAGS` macro.
-    fn to_fflags(self) -> VFileFlags {
+    fn into_fflags(self) -> VFileFlags {
         VFileFlags::from_bits_truncate(self.bits() + 1)
     }
 }

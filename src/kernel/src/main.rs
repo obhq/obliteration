@@ -244,7 +244,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     RegMgr::new(&mut syscalls);
     let machdep = MachDep::new(&mut syscalls);
     let budget = BudgetManager::new(&mut syscalls);
-    DmemManager::new(&fs, &mut syscalls);
+    DmemManager::new(fs, &mut syscalls);
     Sysctl::new(mm, &machdep, &mut syscalls);
 
     // TODO: Get correct budget name from the PS4.
@@ -262,7 +262,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
 
-    let ld = RuntimeLinker::new(&fs, mm, &ee, &mut syscalls, dump.as_deref())
+    let ld = RuntimeLinker::new(fs, mm, &ee, &mut syscalls, dump.as_deref())
         .map_err(|e| KernelError::RuntimeLinkerInitFailed(e.into()))?;
 
     ee.set_syscalls(syscalls);

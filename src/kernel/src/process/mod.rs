@@ -436,7 +436,7 @@ impl VProc {
         } else if function == RTP_LOOKUP {
             rtp.ty = td.pri_class();
             rtp.prio = match td.pri_class() & 0xfff7 {
-                2 | 3 | 4 => td.base_user_pri(),
+                2..=4 => td.base_user_pri(),
                 _ => 0,
             };
         } else {

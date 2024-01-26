@@ -59,13 +59,13 @@ fn access(vn: &Arc<Vnode>, td: Option<&VThread>, access: Access) -> Result<(), B
     };
 
     // Check access.
-    let err = match check_access(cred, uid, gid, mode.into(), access, is_dir) {
+    let err = match check_access(cred, uid, gid, mode, access, is_dir) {
         Ok(_) => return Ok(()),
         Err(e) => e,
     };
 
     // TODO: Check if file is a controlling terminal.
-    return Err(Box::new(err));
+    Err(Box::new(err))
 }
 
 fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
@@ -170,7 +170,7 @@ fn open(
 
     // Execute switch handler.
     match sw.fdopen() {
-        Some(f) => f(&dev, mode, td, file.as_mut().map(|f| &mut **f))?,
+        Some(f) => f(&dev, mode, td, file.as_deref_mut())?,
         None => sw.open().unwrap()(&dev, mode, 0x2000, td)?,
     };
 

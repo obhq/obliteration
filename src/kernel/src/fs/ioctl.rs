@@ -36,7 +36,7 @@ impl IoCmd {
     }
 
     pub fn size(&self) -> usize {
-        Self::iocparm_len(self.0) as usize
+        Self::iocparm_len(self.0)
     }
 
     pub fn is_void(&self) -> bool {

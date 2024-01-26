@@ -212,7 +212,7 @@ impl DevFs {
                 gid,
                 mode,
                 Some(Arc::downgrade(&dir)),
-                Some(Arc::downgrade(&dev)),
+                Some(Arc::downgrade(dev)),
                 name,
             ));
 

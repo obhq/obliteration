@@ -451,15 +451,10 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
             .next()
             .and_then(Self::decode_id)
             .and_then(|v| md.modules().iter().find(|&i| i.id() == v));
-        let mut a = name.bytes();
+        let a = name.bytes();
         let mut b = sym.name().bytes();
 
-        loop {
-            let a = match a.next() {
-                Some(v) => v,
-                None => break,
-            };
-
+        for a in a {
             match b.next() {
                 Some(b) if a == b => {}
                 _ => return false,

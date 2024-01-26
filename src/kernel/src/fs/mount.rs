@@ -51,11 +51,10 @@ impl Mounts {
         loop {
             *base = base.wrapping_add(1);
 
-            if self
+            if !self
                 .0
                 .iter()
-                .find(|&m| m.stats.id[0] == v1 && m.stats.id[1] == v2)
-                .is_none()
+                .any(|m| m.stats.id[0] == v1 && m.stats.id[1] == v2)
             {
                 m.stats.id[0] = v1;
                 m.stats.id[1] = v2;
@@ -235,7 +234,7 @@ impl MountOpts {
     }
 
     pub fn retain(&mut self, mut f: impl FnMut(&str, &mut MountOpt) -> bool) {
-        self.0.retain(|k, v| f(*k, v));
+        self.0.retain(|k, v| f(k, v));
     }
 }
 

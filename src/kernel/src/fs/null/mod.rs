@@ -1,6 +1,6 @@
 use self::hash::NullHashTable;
-use super::{FsConfig, FsOps, LookupError, Mount, MountFlags, MountOpts, VPathBuf, Vnode};
-use crate::errno::{Errno, EDEADLK, EINVAL, EOPNOTSUPP};
+use super::{FsConfig, FsOps, Mount, MountFlags, MountOpts, VPathBuf, Vnode};
+use crate::errno::{Errno, EDEADLK, EOPNOTSUPP};
 use crate::fs::null::vnode::VNODE_OPS;
 use crate::ucred::Ucred;
 use std::mem::MaybeUninit;
@@ -41,7 +41,7 @@ pub fn mount(
         Some(parent.clone()),
         flags,
         |mnt| {
-            let vn = NullNode::new(&mnt, parent);
+            let vn = NullNode::new(mnt, parent);
 
             NullFs::new(&vn)
         },

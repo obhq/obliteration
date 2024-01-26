@@ -13,13 +13,18 @@ mod output;
 
 /// Provides PS4 kernel routines for PS4 application and system libraries.
 pub struct Syscalls {
-    handlers: [Option<Box<dyn Fn(&SysIn) -> Result<SysOut, SysErr> + Send + Sync>>; 678],
+    handlers: [Option<Handler>; 678],
 }
+
+type Handler = Box<dyn Fn(&SysIn) -> Result<SysOut, SysErr> + Send + Sync>;
 
 impl Syscalls {
     pub fn new() -> Self {
+        // Allows us to initialize the array with `None` without having to resort to non-const operations.
+        const NONE: Option<Handler> = None;
+
         Self {
-            handlers: std::array::from_fn(|_| None),
+            handlers: [NONE; 678],
         }
     }
 

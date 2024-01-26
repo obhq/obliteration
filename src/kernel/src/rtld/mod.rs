@@ -504,7 +504,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         };
 
         // Add to global list if it is not in the list yet.
-        if globals.iter().find(|m| Arc::ptr_eq(m, &md)).is_none() {
+        if !globals.iter().any(|m| Arc::ptr_eq(m, &md)) {
             globals.push(md.clone());
         }
 
@@ -674,7 +674,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         resolver: &SymbolResolver<E>,
     ) -> Result<(), RelocateError> {
         // TODO: Implement flags & 0x800.
-        self.relocate_single(md, &resolver)?;
+        self.relocate_single(md, resolver)?;
 
         // Relocate other modules.
         for m in list {
@@ -682,7 +682,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
                 continue;
             }
 
-            self.relocate_single(m, &resolver)?;
+            self.relocate_single(m, resolver)?;
         }
 
         Ok(())

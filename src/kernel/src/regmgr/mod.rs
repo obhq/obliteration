@@ -262,9 +262,7 @@ impl RegMgr {
                     } else {
                         let data = entry.value.to_le_bytes();
 
-                        for i in 0..entry.len {
-                            buf[i] = data[i];
-                        }
+                        buf[..entry.len].copy_from_slice(&data[..entry.len]);
 
                         return Ok(0);
                     }
