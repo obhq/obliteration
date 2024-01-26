@@ -180,7 +180,7 @@ struct FioCheckAndModifyArg {
     _padding: i32,
     unk2: usize,
     unk3: usize,
-    path: usize,
+    path: usize, // Can't be *const u8 because Pod couldn't be implemented
     unk5: usize,
 }
 
