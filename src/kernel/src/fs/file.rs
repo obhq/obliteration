@@ -3,7 +3,7 @@ use crate::errno::Errno;
 use crate::process::VThread;
 use bitflags::bitflags;
 use std::any::Any;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::Arc;
 
 /// An implementation of `file` structure.
