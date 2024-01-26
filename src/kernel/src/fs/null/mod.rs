@@ -49,7 +49,7 @@ pub fn mount(
 fn root(mnt: &Arc<Mount>) -> Arc<Vnode> {
     let nullfs: &NullFs = mnt.data().downcast_ref().unwrap();
 
-    return nullfs.root().clone();
+    nullfs.root().clone()
 }
 
 pub(super) static NULLFS_OPS: FsOps = FsOps { root };
