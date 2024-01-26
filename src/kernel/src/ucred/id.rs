@@ -4,7 +4,6 @@
 pub struct Uid(i32);
 
 impl Uid {
-    pub const VNOVAL: Self = Self(-1);
     pub const ROOT: Self = Self(0);
 
     pub const fn new(v: i32) -> Option<Self> {
@@ -22,7 +21,6 @@ impl Uid {
 pub struct Gid(i32);
 
 impl Gid {
-    pub const VNOVAL: Self = Self(-1);
     pub const ROOT: Self = Self(0);
 
     pub const fn new(v: i32) -> Option<Self> {

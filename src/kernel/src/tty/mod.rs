@@ -14,7 +14,6 @@ pub struct TtyManager {
 }
 
 impl TtyManager {
-    #[allow(dead_code)]
     const TIOCSCTTY: IoCmd = IoCmd::io(b't', 97);
 
     pub fn new() -> Result<Arc<Self>, TtyInitError> {
