@@ -174,15 +174,18 @@ pub const FIOSEEKDATA: IoCmd = IoCmd::ior::<usize>(FILE_GROUP, 97);
 pub const FIOSEEKHOLE: IoCmd = IoCmd::ior::<usize>(FILE_GROUP, 98);
 
 #[repr(C)]
-#[derive(Clone, Copy, Zeroable, Pod)]
+#[derive(Clone, Copy, Zeroable)]
 struct FioCheckAndModifyArg {
     flag: i32,
     _padding: i32,
     unk2: usize,
     unk3: usize,
-    path: usize, // Can't be *const u8 because Pod couldn't be implemented
+    path: *const u8,
     unk5: usize,
 }
+
+// This should be fine for our usecase.
+unsafe impl Pod for FioCheckAndModifyArg {}
 
 pub const FIOCHECKANDMODIFY: IoCmd = IoCmd::iow::<FioCheckAndModifyArg>(FILE_GROUP, 189);
 
