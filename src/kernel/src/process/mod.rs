@@ -65,13 +65,13 @@ pub struct VProc {
 }
 
 impl VProc {
-    pub fn new<S: Into<String>>(
+    pub fn new(
         auth: AuthInfo,
         budget_id: usize,
         budget_ptype: ProcType,
         dmem_container: usize,
         root: Arc<Vnode>,
-        system_path: S,
+        system_path: impl Into<String>,
         sys: &mut Syscalls,
     ) -> Result<Arc<Self>, VProcInitError> {
         let cred = if auth.caps.is_system() {
