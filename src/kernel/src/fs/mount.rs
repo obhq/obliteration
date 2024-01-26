@@ -5,6 +5,7 @@ use macros::EnumConversions;
 use param::Param;
 use std::any::Any;
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::fmt::{Debug, Display, Error};
 use std::mem::MaybeUninit;
 use std::path::PathBuf;
@@ -118,13 +119,15 @@ impl Mount {
         flags: MountFlags,
         data_fn: impl FnOnce(&Arc<Self>) -> Arc<D>,
     ) -> Arc<Self> {
+        struct NoData;
+
         let owner = cred.effective_uid();
 
         let mnt = Self {
             fs,
             ops,
             gen: 1,
-            data: Arc::new(unsafe { MaybeUninit::<D>::uninit().assume_init() }),
+            data: Arc::new(NoData),
             cred: cred.clone(),
             parent: RwLock::new(parent),
             flags,
