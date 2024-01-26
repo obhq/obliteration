@@ -39,10 +39,6 @@ impl VFile {
         &mut self.flags
     }
 
-    pub fn read(&self, buf: &mut [u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
-        (self.ops.read)(self, buf, td)
-    }
-
     pub fn write(&self, data: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
         (self.ops.write)(self, data, td)
     }
