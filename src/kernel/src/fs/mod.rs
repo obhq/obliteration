@@ -152,14 +152,25 @@ impl Fs {
         self.root.read().clone()
     }
 
-    pub fn open<P: AsRef<VPath>>(&self, path: P, td: Option<&VThread>) -> Result<VFile, OpenError> {
+    pub fn open(&self, path: impl AsRef<VPath>, td: Option<&VThread>) -> Result<VFile, OpenError> {
+        let _vn = self.lookup(path, td)?;
+
         todo!()
     }
 
-    /// This method will **not** follow the last component if it is a mount point or a link.
-    pub fn lookup<P: AsRef<VPath>>(
+    pub fn lookup(
         &self,
-        path: P,
+        path: impl AsRef<VPath>,
+        td: Option<&VThread>,
+    ) -> Result<Arc<Vnode>, LookupError> {
+        self.namei(path, LookupOp::Lookup, td)
+    }
+
+    /// This method will **not** follow the last component if it is a mount point or a link.
+    pub fn namei(
+        &self,
+        path: impl AsRef<VPath>,
+        op: LookupOp,
         td: Option<&VThread>,
     ) -> Result<Arc<Vnode>, LookupError> {
         // Why we don't follow how namei was implemented? The reason is because:
@@ -204,7 +215,7 @@ impl Fs {
         }
 
         // Walk on path component.
-        for (i, com) in path.components().enumerate() {
+        for (i, cn) in path.components().enumerate() {
             // TODO: Handle link.
             match vn.ty() {
                 VnodeType::Directory(_) => {
@@ -231,18 +242,18 @@ impl Fs {
             }
 
             // Prevent ".." on root.
-            if com == ".." && Arc::ptr_eq(&vn, &root) {
+            if cn == ComponentName::DotDot && Arc::ptr_eq(&vn, &root) {
                 return Err(LookupError::NotFound);
             }
 
             // Lookup next component.
-            vn = match vn.lookup(td, com) {
+            vn = match vn.lookup(cn, op, td) {
                 Ok(v) => v,
                 Err(e) => {
                     if e.errno() == ENOENT {
                         return Err(LookupError::NotFound);
                     } else {
-                        return Err(LookupError::LookupFailed(i, com.to_owned(), e));
+                        return Err(LookupError::LookupFailed(i, cn.to_string(), e));
                     }
                 }
             };
@@ -642,11 +653,16 @@ impl Errno for MountError {
 
 /// Represents an error when [`Fs::open()`] was failed.
 #[derive(Debug, Error)]
-pub enum OpenError {}
+pub enum OpenError {
+    #[error("Lookup failed")]
+    LookupFailed(#[from] LookupError),
+}
 
 impl Errno for OpenError {
     fn errno(&self) -> NonZeroI32 {
-        todo!()
+        match self {
+            Self::LookupFailed(e) => e.errno(),
+        }
     }
 }
 

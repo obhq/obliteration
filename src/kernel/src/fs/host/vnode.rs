@@ -2,7 +2,8 @@ use super::file::HostFile;
 use super::{get_vnode, GetVnodeError};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR};
 use crate::fs::{
-    Access, Mode, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType, VopVector, DEFAULT_VNODEOPS,
+    Access, ComponentName, LookupOp, Mode, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType,
+    VopVector, DEFAULT_VNODEOPS,
 };
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
@@ -42,12 +43,17 @@ fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
     Ok(VnodeAttrs::new(Uid::ROOT, Gid::ROOT, mode, size))
 }
 
-fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+fn lookup(
+    vn: &Arc<Vnode>,
+    name: ComponentName,
+    op: LookupOp,
+    td: Option<&VThread>,
+) -> Result<Arc<Vnode>, Box<dyn Errno>> {
     // Check if directory.
     match vn.ty() {
         VnodeType::Directory(root) => {
-            if name == ".." && *root {
-                return Err(Box::new(LookupError::DotdotOnRoot));
+            if name == ComponentName::DotDot && *root {
+                return Err(Box::new(LookupError::DotDotOnRoot));
             }
         }
         _ => return Err(Box::new(LookupError::NotDirectory)),
@@ -59,15 +65,15 @@ fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode
     }
 
     // Check name.
-    if name == "." {
+    if name == ComponentName::Dot {
         return Ok(vn.clone());
     }
 
     let host = vn.data().downcast_ref::<HostFile>().unwrap();
     let path = match name {
-        ".." => Cow::Borrowed(host.path().parent().unwrap()),
+        ComponentName::DotDot => Cow::Borrowed(host.path().parent().unwrap()),
         _ => {
-            if name.contains(|c| c == '/' || c == '\\') {
+            if name.is_normal_and(|c| c == '/' || c == '\\') {
                 return Err(Box::new(LookupError::InvalidName));
             }
 
@@ -115,7 +121,7 @@ enum LookupError {
     NotDirectory,
 
     #[error("cannot resolve '..' on the root directory")]
-    DotdotOnRoot,
+    DotDotOnRoot,
 
     #[error("access denied")]
     AccessDenied(#[source] Box<dyn Errno>),
@@ -131,7 +137,7 @@ impl Errno for LookupError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::NotDirectory => ENOTDIR,
-            Self::DotdotOnRoot | Self::GetVnodeFailed(_) => EIO,
+            Self::DotDotOnRoot | Self::GetVnodeFailed(_) => EIO,
             Self::AccessDenied(e) => e.errno(),
             Self::InvalidName => ENOENT,
         }

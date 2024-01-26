@@ -89,7 +89,7 @@ impl Dirent {
     }
 
     /// See `devfs_find` on the PS4 for a reference.
-    pub fn find<N: AsRef<str>>(&self, name: N, ty: Option<DirentType>) -> Option<Arc<Self>> {
+    pub fn find(&self, name: impl AsRef<str>, ty: Option<DirentType>) -> Option<Arc<Self>> {
         let name = name.as_ref();
 
         for child in self.children.read().deref() {

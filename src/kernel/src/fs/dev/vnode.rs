@@ -2,8 +2,8 @@ use super::dirent::Dirent;
 use super::{alloc_vnode, AllocVnodeError, Cdev, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
-    check_access, Access, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType, VopVector,
-    DEFAULT_VNODEOPS,
+    check_access, Access, ComponentName, LookupOp, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType,
+    VopVector, DEFAULT_VNODEOPS,
 };
 use crate::process::VThread;
 use std::num::NonZeroI32;
@@ -96,7 +96,12 @@ fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
     Ok(VnodeAttrs::new(*uid, *gid, *mode, size))
 }
 
-fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+fn lookup(
+    vn: &Arc<Vnode>,
+    name: ComponentName,
+    op: LookupOp,
+    td: Option<&VThread>,
+) -> Result<Arc<Vnode>, Box<dyn Errno>> {
     // Populate devices.
     let fs = vn.fs().data().downcast_ref::<DevFs>().unwrap();
 
@@ -105,7 +110,7 @@ fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode
     // Check if directory.
     match vn.ty() {
         VnodeType::Directory(root) => {
-            if name == ".." && *root {
+            if name == ComponentName::DotDot && *root {
                 return Err(Box::new(LookupError::DotdotOnRoot));
             }
         }
@@ -118,13 +123,13 @@ fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode
     }
 
     // Check name.
-    if name == "." {
+    if name == ComponentName::Dot {
         return Ok(vn.clone());
     }
 
     let dirent = vn.data().downcast_ref::<Dirent>().unwrap();
 
-    if name == ".." {
+    if name == ComponentName::DotDot {
         let parent = match dirent.parent() {
             Some(v) => v,
             None => return Err(Box::new(LookupError::NoParent)),
@@ -169,15 +174,12 @@ fn open(
 
     // Execute switch handler.
     match sw.fdopen() {
-        Some(f) => f(&dev, mode, td, file.as_mut().map(|f| &mut **f))?,
+        Some(fdopen) => fdopen(&dev, mode, td, file.as_deref_mut())?,
         None => sw.open().unwrap()(&dev, mode, 0x2000, td)?,
     };
 
     // Set file OP.
-    let file = match file {
-        Some(v) => v,
-        None => return Ok(()),
-    };
+    let Some(file) = file else { return Ok(()) };
 
     // TODO: Implement remaining logics from the PS4.
     Ok(())
