@@ -78,7 +78,6 @@ pub struct Mount {
     parent: RwLock<Option<Arc<Vnode>>>, // mnt_vnodecovered
     flags: MountFlags,                  // mnt_flag
     stats: FsStats,                     // mnt_stat
-    hashseed: u32,                      // mnt_hashseed
 }
 
 impl Mount {
@@ -108,12 +107,6 @@ impl Mount {
                 owner,
                 path,
             },
-            hashseed: {
-                let mut buf = [0; 4];
-                Arnd::rand_bytes(&mut buf);
-
-                u32::from_le_bytes(buf)
-            },
         }
     }
 
@@ -141,12 +134,6 @@ impl Mount {
                 id: [0; 2],
                 owner,
                 path,
-            },
-            hashseed: {
-                let mut buf = [0; 4];
-                Arnd::rand_bytes(&mut buf);
-
-                u32::from_le_bytes(buf)
             },
         };
 
@@ -178,10 +165,6 @@ impl Mount {
 
     pub fn stats(&self) -> &FsStats {
         &self.stats
-    }
-
-    pub fn hashseed(&self) -> u32 {
-        self.hashseed
     }
 }
 

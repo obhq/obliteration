@@ -7,7 +7,6 @@ use std::sync::{Arc, Weak};
 use std::time::SystemTime;
 
 /// An implementation of `devfs_dirent` structure.
-#[allow(dead_code)]
 pub struct Dirent {
     inode: i32,                        // de_inode
     uid: Gutex<Uid>,                   // de_uid
@@ -87,7 +86,7 @@ impl Dirent {
     }
 
     /// See `devfs_find` on the PS4 for a reference.
-    pub fn find<N: AsRef<str>>(&self, name: N, ty: Option<DirentType>) -> Option<Arc<Self>> {
+    pub fn find(&self, name: impl AsRef<str>, ty: Option<DirentType>) -> Option<Arc<Self>> {
         let name = name.as_ref();
 
         for child in self.children.read().deref() {

@@ -1,14 +1,10 @@
-use self::hash::NullHashTable;
 use super::{FsConfig, FsOps, Mount, MountFlags, MountOpts, VPathBuf, Vnode};
 use crate::errno::{Errno, EDEADLK, EOPNOTSUPP};
-use crate::fs::null::vnode::VNODE_OPS;
 use crate::ucred::Ucred;
-use std::mem::MaybeUninit;
 use std::num::NonZeroI32;
 use std::sync::{Arc, Weak};
 use thiserror::Error;
 
-mod hash;
 mod vnode;
 
 pub fn mount(
@@ -81,31 +77,7 @@ struct NullNode {
 impl NullNode {
     /// See `null_nodeget` on the PS4 for a reference.
     pub fn new(mnt: &Arc<Mount>, lower: Arc<Vnode>) -> Arc<Vnode> {
-        if let Some(vn) = NullHashTable::get(mnt, &lower) {
-            return vn;
-        }
-
-        // TODO: maybe implement VOP_ISLOCKED and vn_lock
-
-        let vnode = Vnode::new(
-            mnt,
-            lower.ty().clone(),
-            "null",
-            &VNODE_OPS,
-            Arc::new(MaybeUninit::<NullNode>::uninit()),
-        );
-
-        // TODO_ set flags
-        let mut null_node = Arc::new(Self {
-            lower,
-            null_vnode: Arc::downgrade(&vnode),
-        });
-
-        //TODO implement insmntque1;
-
-        NullHashTable::insert(mnt, &null_node);
-
-        vnode
+        todo!()
     }
 
     fn lower(&self) -> &Arc<Vnode> {
