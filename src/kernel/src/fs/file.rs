@@ -3,7 +3,7 @@ use crate::errno::Errno;
 use crate::process::VThread;
 use bitflags::bitflags;
 use std::any::Any;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::Arc;
 
 /// An implementation of `file` structure.
@@ -65,6 +65,16 @@ impl Seek for VFile {
 
 impl Read for VFile {
     fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+        todo!()
+    }
+}
+
+impl Write for VFile {
+    fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+        todo!()
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
         todo!()
     }
 }
