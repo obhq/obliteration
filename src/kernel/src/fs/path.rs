@@ -288,7 +288,7 @@ impl From<VPathBuf> for String {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LookupOp {
+pub enum NameiOp {
     Lookup,
     Create,
     Delete,
@@ -306,9 +306,9 @@ pub enum ComponentName<'a> {
 }
 
 impl<'a> ComponentName<'a> {
-    pub fn is_normal_and(&self, mut f: impl FnMut(char) -> bool) -> bool {
+    pub fn is_normal_and_contains(&self, mut f: impl FnMut(char) -> bool) -> bool {
         match self {
-            Self::Normal { name } => name.chars().all(|c| f(c)),
+            Self::Normal { name } => name.contains(|c| f(c)),
             _ => false,
         }
     }

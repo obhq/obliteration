@@ -2,7 +2,7 @@ use super::file::HostFile;
 use super::{get_vnode, GetVnodeError};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR};
 use crate::fs::{
-    Access, ComponentName, LookupOp, Mode, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType,
+    Access, ComponentName, Mode, NameiOp, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType,
     VopVector, DEFAULT_VNODEOPS,
 };
 use crate::process::VThread;
@@ -46,7 +46,7 @@ fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
 fn lookup(
     vn: &Arc<Vnode>,
     name: ComponentName,
-    op: LookupOp,
+    op: NameiOp,
     td: Option<&VThread>,
 ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
     // Check if directory.
@@ -73,7 +73,7 @@ fn lookup(
     let path = match name {
         ComponentName::DotDot => Cow::Borrowed(host.path().parent().unwrap()),
         _ => {
-            if name.is_normal_and(|c| c == '/' || c == '\\') {
+            if name.is_normal_and_contains(|c| c == '/' || c == '\\') {
                 return Err(Box::new(LookupError::InvalidName));
             }
 

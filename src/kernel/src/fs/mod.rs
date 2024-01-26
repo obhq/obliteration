@@ -163,14 +163,14 @@ impl Fs {
         path: impl AsRef<VPath>,
         td: Option<&VThread>,
     ) -> Result<Arc<Vnode>, LookupError> {
-        self.namei(path, LookupOp::Lookup, td)
+        self.namei(path, NameiOp::Lookup, td)
     }
 
     /// This method will **not** follow the last component if it is a mount point or a link.
-    pub fn namei(
+    fn namei(
         &self,
         path: impl AsRef<VPath>,
-        op: LookupOp,
+        op: NameiOp,
         td: Option<&VThread>,
     ) -> Result<Arc<Vnode>, LookupError> {
         // Why we don't follow how namei was implemented? The reason is because:
