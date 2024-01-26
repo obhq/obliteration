@@ -146,6 +146,10 @@ impl Mount {
         mnt
     }
 
+    pub fn flags(&self) -> MountFlags {
+        self.flags
+    }
+
     pub fn data(&self) -> &Arc<dyn Any + Send + Sync> {
         &self.data
     }
@@ -156,6 +160,10 @@ impl Mount {
 
     pub fn root(self: &Arc<Self>) -> Arc<Vnode> {
         (self.ops.root)(self)
+    }
+
+    pub fn stats(&self) -> &FsStats {
+        &self.stats
     }
 }
 
