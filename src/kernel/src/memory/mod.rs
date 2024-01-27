@@ -9,6 +9,7 @@ use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
 use crate::{info, warn};
 use bitflags::bitflags;
 use std::collections::BTreeMap;
+use std::ffi::CString;
 use std::fmt::{Display, Formatter};
 use std::num::{NonZeroI32, TryFromIntError};
 use std::ptr::null_mut;
@@ -308,8 +309,20 @@ impl MemoryManager {
         name: N,
     ) -> Result<(), MemoryUpdateError> {
         let name = name.as_ref();
+        let sname = CString::new(name);
 
-        self.update(addr, len, |i| i.name != name, |i| i.name = name.to_owned())
+        self.update(
+            addr,
+            len,
+            |i| i.name != name,
+            |i| {
+                if let Ok(name) = &sname {
+                    i.storage.set_name(i.addr, i.len, name).ok();
+                }
+
+                i.name = name.to_owned();
+            },
+        )
     }
 
     /// See `vm_mmap` on the PS4 for a reference.
@@ -478,7 +491,7 @@ impl MemoryManager {
         use self::storage::Memory;
 
         // Determine how to allocate.
-        if self.allocation_granularity < Self::VIRTUAL_PAGE_SIZE {
+        let (addr, len, storage) = if self.allocation_granularity < Self::VIRTUAL_PAGE_SIZE {
             // If allocation granularity is smaller than the virtual page that mean the result of
             // mmap may not aligned correctly. In this case we need to do 2 allocations. The first
             // allocation will be large enough for a second allocation with fixed address.
@@ -490,33 +503,30 @@ impl MemoryManager {
             let addr = Self::align_virtual_page(storage.addr());
             let len = len - ((addr as usize) - (storage.addr() as usize));
 
-            storage.commit(addr, len, prot)?;
-            storage.name(&name);
-
-            Ok(Alloc {
-                addr,
-                len,
-                prot,
-                name,
-                storage: Arc::new(storage),
-            })
+            (addr, len, storage)
         } else {
             // If allocation granularity is equal or larger than the virtual page that mean the
             // result of mmap will always aligned correctly.
             let storage = Memory::new(addr, len)?;
             let addr = storage.addr();
 
-            storage.commit(addr, len, prot)?;
-            storage.name(&name);
+            (addr, len, storage)
+        };
 
-            Ok(Alloc {
-                addr,
-                len,
-                prot,
-                name,
-                storage: Arc::new(storage),
-            })
+        storage.commit(addr, len, prot)?;
+
+        // Set storage name if supported.
+        if let Ok(name) = CString::new(name.as_str()) {
+            storage.set_name(addr, len, &name).ok();
         }
+
+        Ok(Alloc {
+            addr,
+            len,
+            prot,
+            name,
+            storage: Arc::new(storage),
+        })
     }
 
     fn sys_sbrk(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
