@@ -3,6 +3,7 @@ use std::mem::zeroed;
 use std::path::{Path, PathBuf};
 
 /// Encapsulate a raw file or directory on the host.
+#[derive(Debug)]
 pub struct HostFile {
     path: PathBuf,
     raw: RawFile,
