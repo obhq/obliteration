@@ -115,8 +115,8 @@ impl Error for Box<dyn Errno> {
 }
 
 impl<T: Errno + 'static> From<T> for Box<dyn Errno> {
-    fn from(v: T) -> Self {
-        Box::new(v)
+    fn from(e: T) -> Self {
+        Box::new(e)
     }
 }
 
