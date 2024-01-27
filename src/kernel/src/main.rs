@@ -186,7 +186,6 @@ fn start() -> Result<(), KernelError> {
 
     // Initialize foundations.
     let arnd = Arnd::new();
-    let llvm = Llvm::new();
     let mut syscalls = Syscalls::new();
 
     // Initializes filesystem.
@@ -240,7 +239,7 @@ fn start() -> Result<(), KernelError> {
             syscalls,
             &fs,
             &mm,
-            crate::ee::llvm::LlvmEngine::new(&llvm),
+            crate::ee::llvm::LlvmEngine::new(),
         ),
     }
 }

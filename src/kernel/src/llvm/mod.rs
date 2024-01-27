@@ -1,11 +1,8 @@
-use self::module::LlvmModule;
-use llvm_sys::core::{LLVMContextCreate, LLVMContextDispose, LLVMModuleCreateWithNameInContext};
+use llvm_sys::core::{LLVMContextCreate, LLVMContextDispose};
 use llvm_sys::prelude::LLVMContextRef;
-use std::ffi::{c_char, CStr, CString};
+use std::ffi::{c_char, CStr};
 use std::fmt::Display;
 use std::sync::{Arc, Mutex};
-
-pub mod module;
 
 /// A LLVM wrapper for thread-safe.
 #[derive(Debug)]
@@ -13,7 +10,6 @@ pub struct Llvm {
     context: Mutex<LLVMContextRef>,
 }
 
-#[allow(dead_code)]
 impl Llvm {
     pub fn new() -> Arc<Self> {
         let context = unsafe { LLVMContextCreate() };
@@ -21,14 +17,6 @@ impl Llvm {
         Arc::new(Self {
             context: Mutex::new(context),
         })
-    }
-
-    pub fn create_module(self: &Arc<Self>, name: &str) -> LlvmModule {
-        let context = self.context.lock().unwrap();
-        let name = CString::new(name).unwrap();
-        let module = unsafe { LLVMModuleCreateWithNameInContext(name.as_ptr(), *context) };
-
-        LlvmModule::new(self, module)
     }
 
     fn with_context<F, R>(&self, f: F) -> R
