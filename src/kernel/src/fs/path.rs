@@ -288,7 +288,7 @@ impl From<VPathBuf> for String {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NameiOp {
+pub enum LookupOp {
     Lookup,
     Create,
     Delete,
@@ -296,16 +296,15 @@ pub enum NameiOp {
 }
 
 /// Inspired by [`std::path::Component`].
-/// Is not an equivalent of the FreeBSD type `componentname`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ComponentName<'a> {
+pub enum VPathComponent<'a> {
     Root,
     Dot,
     DotDot,
     Normal { name: &'a str },
 }
 
-impl<'a> ComponentName<'a> {
+impl<'a> VPathComponent<'a> {
     pub fn is_normal_and_contains(&self, mut f: impl FnMut(char) -> bool) -> bool {
         match self {
             Self::Normal { name } => name.contains(|c| f(c)),
@@ -314,7 +313,7 @@ impl<'a> ComponentName<'a> {
     }
 }
 
-impl AsRef<str> for ComponentName<'_> {
+impl AsRef<str> for VPathComponent<'_> {
     fn as_ref(&self) -> &str {
         match self {
             Self::Root => "/",
@@ -325,13 +324,13 @@ impl AsRef<str> for ComponentName<'_> {
     }
 }
 
-impl ToString for ComponentName<'_> {
+impl ToString for VPathComponent<'_> {
     fn to_string(&self) -> String {
         AsRef::<str>::as_ref(self).to_owned()
     }
 }
 
-impl AsRef<Path> for ComponentName<'_> {
+impl AsRef<Path> for VPathComponent<'_> {
     fn as_ref(&self) -> &Path {
         AsRef::<str>::as_ref(self).as_ref()
     }
@@ -341,7 +340,7 @@ impl AsRef<Path> for ComponentName<'_> {
 pub struct Components<'a>(&'a str);
 
 impl<'a> Iterator for Components<'a> {
-    type Item = ComponentName<'a>;
+    type Item = VPathComponent<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // Check if no more components available.
@@ -361,10 +360,10 @@ impl<'a> Iterator for Components<'a> {
         };
 
         Some(match component {
-            "" => ComponentName::Root,
-            "." => ComponentName::Dot,
-            ".." => ComponentName::DotDot,
-            v => ComponentName::Normal { name: v },
+            "" => VPathComponent::Root,
+            "." => VPathComponent::Dot,
+            ".." => VPathComponent::DotDot,
+            v => VPathComponent::Normal { name: v },
         })
     }
 }

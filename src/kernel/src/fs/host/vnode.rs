@@ -2,7 +2,7 @@ use super::file::HostFile;
 use super::{get_vnode, GetVnodeError};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR};
 use crate::fs::{
-    Access, ComponentName, Mode, NameiOp, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType,
+    Access, LookupOp, Mode, OpenFlags, VFile, VPathComponent, Vnode, VnodeAttrs, VnodeType,
     VopVector, DEFAULT_VNODEOPS,
 };
 use crate::process::VThread;
@@ -45,14 +45,14 @@ fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
 
 fn lookup(
     vn: &Arc<Vnode>,
-    name: ComponentName,
-    op: NameiOp,
+    name: VPathComponent,
+    op: LookupOp,
     td: Option<&VThread>,
 ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
     // Check if directory.
     match vn.ty() {
         VnodeType::Directory(root) => {
-            if name == ComponentName::DotDot && *root {
+            if name == VPathComponent::DotDot && *root {
                 return Err(Box::new(LookupError::DotDotOnRoot));
             }
         }
@@ -65,13 +65,13 @@ fn lookup(
     }
 
     // Check name.
-    if name == ComponentName::Dot {
+    if name == VPathComponent::Dot {
         return Ok(vn.clone());
     }
 
     let host = vn.data().downcast_ref::<HostFile>().unwrap();
     let path = match name {
-        ComponentName::DotDot => Cow::Borrowed(host.path().parent().unwrap()),
+        VPathComponent::DotDot => Cow::Borrowed(host.path().parent().unwrap()),
         _ => {
             if name.is_normal_and_contains(|c| c == '/' || c == '\\') {
                 return Err(Box::new(LookupError::InvalidName));

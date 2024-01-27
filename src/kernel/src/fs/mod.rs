@@ -114,7 +114,7 @@ impl Fs {
 
         // Set devfs parent to /dev on the root FS.
         let dev = fs
-            .lookup(vpath!("/dev"), None)
+            .lookup(vpath!("/dev"), LookupOp::Lookup, None)
             .map_err(|e| FsError::LookupDevFailed(e))?;
 
         assert!(dev.is_directory());
@@ -153,24 +153,16 @@ impl Fs {
     }
 
     pub fn open(&self, path: impl AsRef<VPath>, td: Option<&VThread>) -> Result<VFile, OpenError> {
-        let _vn = self.lookup(path, td)?;
+        let _vn = self.lookup(path, LookupOp::Lookup, td)?;
 
         todo!()
     }
 
-    pub fn lookup(
-        &self,
-        path: impl AsRef<VPath>,
-        td: Option<&VThread>,
-    ) -> Result<Arc<Vnode>, LookupError> {
-        self.namei(path, NameiOp::Lookup, td)
-    }
-
     /// This method will **not** follow the last component if it is a mount point or a link.
-    fn namei(
+    fn lookup(
         &self,
         path: impl AsRef<VPath>,
-        op: NameiOp,
+        op: LookupOp,
         td: Option<&VThread>,
     ) -> Result<Arc<Vnode>, LookupError> {
         // Why we don't follow how namei was implemented? The reason is because:
@@ -242,7 +234,7 @@ impl Fs {
             }
 
             // Prevent ".." on root.
-            if cn == ComponentName::DotDot && Arc::ptr_eq(&vn, &root) {
+            if cn == VPathComponent::DotDot && Arc::ptr_eq(&vn, &root) {
                 return Err(LookupError::NotFound);
             }
 
@@ -412,7 +404,7 @@ impl Fs {
         td.priv_check(Privilege::SCE683)?;
 
         // TODO: Check vnode::v_rdev.
-        let vn = self.lookup(path, Some(&td))?;
+        let vn = self.lookup(path, LookupOp::Lookup, Some(&td))?;
 
         if !vn.is_character() {
             return Err(SysErr::Raw(EINVAL));
@@ -490,7 +482,7 @@ impl Fs {
             };
 
             // Lookup parent vnode.
-            let vn = match self.lookup(path.as_ref(), td) {
+            let vn = match self.lookup(path.as_ref(), LookupOp::Lookup, td) {
                 Ok(v) => v,
                 Err(e) => return Err(MountError::LookupPathFailed(e)),
             };

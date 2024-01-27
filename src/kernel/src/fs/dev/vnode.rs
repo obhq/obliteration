@@ -2,7 +2,7 @@ use super::dirent::Dirent;
 use super::{alloc_vnode, AllocVnodeError, Cdev, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
-    check_access, Access, ComponentName, NameiOp, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType,
+    check_access, Access, LookupOp, OpenFlags, VFile, VPathComponent, Vnode, VnodeAttrs, VnodeType,
     VopVector, DEFAULT_VNODEOPS,
 };
 use crate::process::VThread;
@@ -98,8 +98,8 @@ fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
 
 fn lookup(
     vn: &Arc<Vnode>,
-    name: ComponentName,
-    op: NameiOp,
+    name: VPathComponent,
+    op: LookupOp,
     td: Option<&VThread>,
 ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
     // Populate devices.
@@ -110,7 +110,7 @@ fn lookup(
     // Check if directory.
     match vn.ty() {
         VnodeType::Directory(root) => {
-            if name == ComponentName::DotDot && *root {
+            if name == VPathComponent::DotDot && *root {
                 return Err(Box::new(LookupError::DotdotOnRoot));
             }
         }
@@ -123,13 +123,13 @@ fn lookup(
     }
 
     // Check name.
-    if name == ComponentName::Dot {
+    if name == VPathComponent::Dot {
         return Ok(vn.clone());
     }
 
     let dirent = vn.data().downcast_ref::<Dirent>().unwrap();
 
-    if name == ComponentName::DotDot {
+    if name == VPathComponent::DotDot {
         let parent = match dirent.parent() {
             Some(v) => v,
             None => return Err(Box::new(LookupError::NoParent)),
