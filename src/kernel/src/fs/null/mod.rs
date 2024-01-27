@@ -46,7 +46,8 @@ pub(super) static NULLFS_OPS: FsOps = FsOps { root };
 
 /// An implementation of `null_mount` structure.
 struct NullFs {
-    root: Arc<Vnode>, // nullm_rootvp
+    root: Arc<Vnode>,      // nullm_rootvp
+    lowerroot: Arc<Vnode>, // nullm_lowervp
 }
 
 impl NullFs {
