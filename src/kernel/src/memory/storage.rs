@@ -1,4 +1,5 @@
 use super::Protections;
+use std::ffi::CStr;
 use std::fmt::Debug;
 use std::io::Error;
 
@@ -9,6 +10,7 @@ pub(super) trait Storage: Debug {
     fn addr(&self) -> *mut u8;
     fn decommit(&self, addr: *mut u8, len: usize) -> Result<(), Error>;
     fn protect(&self, addr: *mut u8, len: usize, prot: Protections) -> Result<(), Error>;
+    fn set_name(&self, addr: *mut u8, len: usize, name: &CStr) -> Result<(), Error>;
 }
 
 /// An implementation of [`Storage`] backed by the memory.
@@ -100,34 +102,6 @@ impl Memory {
             Ok(())
         }
     }
-
-    #[cfg(target_os = "linux")]
-    pub fn name(self: &Self, name: &str) -> () {
-        use libc::prctl;
-        use std::ffi::CString;
-
-        if self.addr == std::ptr::null_mut() || name.is_empty() {
-            return;
-        }
-
-        use crate::warn;
-        unsafe {
-            let ret = prctl(
-                libc::PR_SET_VMA,
-                libc::PR_SET_VMA_ANON_NAME,
-                self.addr as u64,
-                self.len,
-                CString::new(name).unwrap().as_bytes_with_nul(),
-            );
-
-            if ret != 0 {
-                warn!("prctl failed {}", Error::last_os_error());
-            }
-        }
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    pub fn name(self: &Self, name: &str) -> () {}
 }
 
 impl Storage for Memory {
@@ -179,6 +153,22 @@ impl Storage for Memory {
         } else {
             Ok(())
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn set_name(&self, addr: *mut u8, len: usize, name: &CStr) -> Result<(), Error> {
+        use libc::{prctl, PR_SET_VMA, PR_SET_VMA_ANON_NAME};
+
+        if unsafe { prctl(PR_SET_VMA, PR_SET_VMA_ANON_NAME, addr, len, name.as_ptr()) } < 0 {
+            Err(Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn set_name(&self, _: *mut u8, _: usize, _: &CStr) -> Result<(), Error> {
+        Ok(())
     }
 }
 
