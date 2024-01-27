@@ -1,7 +1,7 @@
 use bitflags::bitflags;
 use std::borrow::Cow;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Prison {
     parent: Option<Cow<'static, Self>>,
     flags: PrisonFlags,
@@ -37,6 +37,19 @@ impl PartialEq for Prison {
         std::ptr::eq(self, other)
     }
 }
+
+impl ToOwned for Prison {
+    type Owned = Box<Self>;
+
+    fn to_owned(&self) -> Self::Owned {
+        Box::new(Prison {
+            parent: self.parent.as_ref().map(|p| p.to_owned()),
+            flags: self.flags,
+            allow: self.allow,
+        })
+    }
+}
+
 pub static PRISON0: Prison = Prison {
     parent: None,
     flags: PrisonFlags::DEFAULT,
