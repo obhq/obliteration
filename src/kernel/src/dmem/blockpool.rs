@@ -25,7 +25,7 @@ fn blockpool_ioctl(
 
 #[derive(Debug, Error)]
 pub enum GenericError {
-    #[error("Invalid operation")]
+    #[error("invalid operation")]
     InvalidOperation,
 }
 
@@ -39,7 +39,7 @@ impl Errno for GenericError {
 
 #[derive(Debug, Error)]
 pub enum IoctlError {
-    #[error("Invalid command {0}")]
+    #[error("invalid command {0}")]
     InvalidCommand(IoCmd),
 }
 
