@@ -1,7 +1,7 @@
 use crate::arch::MachDep;
 use crate::arnd::Arnd;
 use crate::budget::{Budget, BudgetManager, ProcType};
-use crate::debug::{DebugManager, DebugManagerError};
+use crate::debug::{DebugManager, DebugManagerInitError};
 use crate::dmem::DmemManager;
 use crate::ee::{EntryArg, RawFn};
 use crate::fs::{Fs, FsError};
@@ -517,7 +517,7 @@ enum KernelError {
     TtyInitFailed(#[from] TtyInitError),
 
     #[error("debug manager initialization failed")]
-    DebugManagerInitFailed(#[from] DebugManagerError),
+    DebugManagerInitFailed(#[from] DebugManagerInitError),
 
     #[error("virtual process initialization failed")]
     VProcInitFailed(#[from] VProcInitError),

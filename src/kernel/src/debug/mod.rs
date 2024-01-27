@@ -17,7 +17,7 @@ pub struct DebugManager {
 }
 
 impl DebugManager {
-    pub fn new() -> Result<Arc<Self>, DebugManagerError> {
+    pub fn new() -> Result<Arc<Self>, DebugManagerInitError> {
         // Create deci devices.
         let mut deci_devs = Vec::with_capacity(DeciDev::NAMES.len());
         let sw = Arc::new(CdevSw::new(
@@ -38,7 +38,7 @@ impl DebugManager {
                 MakeDev::empty(),
             ) {
                 Ok(v) => deci_devs.push(DeciDev::new(name, v)),
-                Err(e) => return Err(DebugManagerError::CreateDeciFailed(name, e)),
+                Err(e) => return Err(DebugManagerInitError::CreateDeciFailed(name, e)),
             }
         }
 
@@ -57,7 +57,7 @@ impl DebugManager {
 
 /// Represents an error when [`DebugManager`] is failed to initialize.
 #[derive(Debug, Error)]
-pub enum DebugManagerError {
+pub enum DebugManagerInitError {
     #[error("couldn't create {0}")]
     CreateDeciFailed(&'static str, #[source] MakeDevError),
 }
