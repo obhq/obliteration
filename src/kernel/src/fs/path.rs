@@ -301,13 +301,13 @@ pub enum VPathComponent<'a> {
     Root,
     Dot,
     DotDot,
-    Normal { name: &'a str },
+    Name(&'a str),
 }
 
 impl<'a> VPathComponent<'a> {
     pub fn is_normal_and_contains(&self, mut f: impl FnMut(char) -> bool) -> bool {
         match self {
-            Self::Normal { name } => name.contains(|c| f(c)),
+            Self::Name(name) => name.contains(|c| f(c)),
             _ => false,
         }
     }
@@ -319,7 +319,7 @@ impl AsRef<str> for VPathComponent<'_> {
             Self::Root => "/",
             Self::Dot => ".",
             Self::DotDot => "..",
-            Self::Normal { name } => name,
+            Self::Name(name) => name,
         }
     }
 }
@@ -363,7 +363,7 @@ impl<'a> Iterator for Components<'a> {
             "" => VPathComponent::Root,
             "." => VPathComponent::Dot,
             ".." => VPathComponent::DotDot,
-            v => VPathComponent::Normal { name: v },
+            v => VPathComponent::Name(name),
         })
     }
 }

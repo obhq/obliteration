@@ -135,7 +135,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
                     Err(e) => Err(Box::new(LookupError::AllocVnodeFailed(e))),
                 }
             }
-            VPathComponent::Normal { name } => {
+            VPathComponent::Name(name) => {
                 // Lookup.
                 let item = match self.dirent.find(name, None) {
                     Some(v) => {
