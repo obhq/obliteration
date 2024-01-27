@@ -32,8 +32,6 @@ use sysinfo::{MemoryRefreshKind, System};
 use thiserror::Error;
 use tty::TtyInitError;
 
-pub use self::arnd::rand_bytes;
-
 mod arch;
 mod arnd;
 mod budget;

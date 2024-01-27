@@ -1,7 +1,7 @@
+use crate::arnd::rand_bytes;
 use crate::memory::MemoryManager;
 use crate::process::ResourceType;
 use crate::process::VProc;
-use crate::rand_bytes;
 use crate::rtld::Module;
 use crate::syscalls::Syscalls;
 use std::error::Error;

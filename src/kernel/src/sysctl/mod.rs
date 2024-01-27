@@ -1,10 +1,10 @@
 use crate::arch::MachDep;
+use crate::arnd::rand_bytes;
 use crate::errno::{
     EFAULT, EINVAL, EISDIR, ENAMETOOLONG, ENOENT, ENOMEM, ENOTDIR, EOPNOTSUPP, EPERM, ESRCH,
 };
 use crate::memory::MemoryManager;
 use crate::process::VThread;
-use crate::rand_bytes;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use std::any::Any;
 use std::cmp::min;
