@@ -68,6 +68,7 @@ add_executable(obliteration WIN32 MACOSX_BUNDLE
     ansi_escape.cpp
     app_data.cpp
     core.cpp
+    game_graphic_settings.cpp
     game_models.cpp
     game_settings.cpp
     game_settings_dialog.cpp
