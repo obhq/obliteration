@@ -3,6 +3,9 @@
 #include <QDialog>
 
 class Game;
+class GameGraphicSettings;
+class QDialogButtonBox;
+class QTabWidget;
 
 class GameSettingsDialog final : public QDialog {
 public:
@@ -10,5 +13,7 @@ public:
     ~GameSettingsDialog();
 
 private:
-    Game *m_game;
+    QTabWidget *m_tab;
+    QDialogButtonBox *m_actions;
+    GameGraphicSettings *m_graphic;
 };
