@@ -89,10 +89,9 @@ impl Fs {
             kern_cred: kern_cred.clone(),
         });
 
-        let root = match fs.mount(opts, MountFlags::MNT_ROOTFS, None) {
-            Ok(v) => v,
-            Err(e) => return Err(FsError::MountRootFailed(e)),
-        };
+        let root = fs
+            .mount(opts, MountFlags::MNT_ROOTFS, None)
+            .map_err(FsError::MountRootFailed)?;
 
         // Swap devfs with rootfs so rootfs become an actual root.
         let old = {

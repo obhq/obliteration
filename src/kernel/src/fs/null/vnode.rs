@@ -38,11 +38,8 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     }
 
     /// This function tries to mimic what calling `null_bypass` would do.
-    fn getattr(
-        self: Arc<Self>,
-        #[allow(unused_variables)] vn: &Arc<Vnode>,
-    ) -> Result<VnodeAttrs, Box<dyn Errno>> {
-        let mut attr = self
+    fn getattr(self: Arc<Self>, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
+        let attr = self
             .lower
             .getattr()
             .map_err(GetAttrError::GetAttrFromLowerFailed)?;
@@ -55,11 +52,14 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     /// This function tries to mimic what calling `null_bypass` would do.
     fn lookup(
         self: Arc<Self>,
-        #[allow(unused_variables)] vn: &Arc<Vnode>,
-        #[allow(unused_variables)] td: Option<&VThread>,
-        #[allow(unused_variables)] name: &str,
+        vn: &Arc<Vnode>,
+        td: Option<&VThread>,
+        name: &str,
     ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
-        let lower = self.lower.lookup(td, name)?;
+        let lower = self
+            .lower
+            .lookup(td, name)
+            .map_err(LookupError::LookupFromLowerFailed)?;
 
         let vnode = if Arc::ptr_eq(&lower, vn) {
             vn.clone()
@@ -73,10 +73,10 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     /// This function tries to mimic what calling `null_bypass` would do.
     fn open(
         self: Arc<Self>,
-        #[allow(unused_variables)] vn: &Arc<Vnode>,
-        #[allow(unused_variables)] td: Option<&VThread>,
-        #[allow(unused_variables)] mode: OpenFlags,
-        #[allow(unused_variables)] file: Option<&mut VFile>,
+        vn: &Arc<Vnode>,
+        td: Option<&VThread>,
+        mode: OpenFlags,
+        file: Option<&mut VFile>,
     ) -> Result<(), Box<dyn Errno>> {
         self.lower
             .open(td, mode, file)
@@ -125,7 +125,7 @@ impl Errno for GetAttrError {
 #[derive(Debug, Error)]
 pub enum LookupError {
     #[error("lookup failed")]
-    LookupFromLowerFailed(#[from] Box<dyn Errno>),
+    LookupFromLowerFailed(#[source] Box<dyn Errno>),
 }
 
 impl Errno for LookupError {

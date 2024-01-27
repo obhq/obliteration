@@ -77,7 +77,6 @@ impl Write for VFile {
 
 /// Type of [`VFile`].
 #[derive(Debug)]
-#[allow(dead_code)]
 pub enum VFileType {
     Vnode(Arc<Vnode>), // DTYPE_VNODE
 }

@@ -29,7 +29,11 @@ pub fn mount(
         }
     }
 
-    todo!()
+    let nullfs = NullFs::new(parent.clone());
+
+    let mnt = Mount::new(conf, &NULLFS_OPS, cred, path, Some(parent), flags, nullfs);
+
+    Ok(mnt)
 }
 
 fn root(mnt: &Arc<Mount>) -> Arc<Vnode> {
@@ -46,8 +50,8 @@ struct NullFs {
 }
 
 impl NullFs {
-    pub fn new(root: &Arc<Vnode>) -> Arc<Self> {
-        Arc::new(Self { root: root.clone() })
+    pub fn new(root: Arc<Vnode>) -> Arc<Self> {
+        Arc::new(Self { root })
     }
 
     pub fn root(&self) -> &Arc<Vnode> {
