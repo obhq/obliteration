@@ -304,8 +304,8 @@ impl NativeEngine {
                 // Path the remaining with "int3".
                 target
                     .iter_mut()
-                    .skip(5)
                     .take(inst.len())
+                    .skip(5)
                     .for_each(|t| *t = 0xcc);
             }
             _ => todo!(
