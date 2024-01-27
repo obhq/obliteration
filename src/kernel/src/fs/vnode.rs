@@ -1,4 +1,4 @@
-use super::{unixify_access, Access, ComponentName, LookupOp, Mode, Mount, OpenFlags, VFile};
+use super::{unixify_access, Access, ComponentName, Mode, Mount, NameiOp, OpenFlags, VFile};
 use crate::errno::{Errno, ENOTDIR, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
@@ -98,7 +98,7 @@ impl Vnode {
     pub fn lookup(
         self: &Arc<Self>,
         cn: ComponentName,
-        op: LookupOp,
+        op: NameiOp,
         td: Option<&VThread>,
     ) -> Result<Arc<Self>, Box<dyn Errno>> {
         self.get_op(|v| v.lookup)(self, cn, op, td)
@@ -152,12 +152,8 @@ pub struct VopVector {
 pub type VopAccess = fn(&Arc<Vnode>, Option<&VThread>, Access) -> Result<(), Box<dyn Errno>>;
 pub type VopAccessX = fn(&Arc<Vnode>, Option<&VThread>, Access) -> Result<(), Box<dyn Errno>>;
 pub type VopGetAttr = fn(&Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>>;
-pub type VopLookup = fn(
-    &Arc<Vnode>,
-    ComponentName,
-    LookupOp,
-    Option<&VThread>,
-) -> Result<Arc<Vnode>, Box<dyn Errno>>;
+pub type VopLookup =
+    fn(&Arc<Vnode>, ComponentName, NameiOp, Option<&VThread>) -> Result<Arc<Vnode>, Box<dyn Errno>>;
 pub type VopOpen =
     fn(&Arc<Vnode>, Option<&VThread>, OpenFlags, Option<&mut VFile>) -> Result<(), Box<dyn Errno>>;
 

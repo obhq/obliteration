@@ -2,7 +2,7 @@ use super::dirent::Dirent;
 use super::{alloc_vnode, AllocVnodeError, Cdev, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
-    check_access, Access, ComponentName, LookupOp, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType,
+    check_access, Access, ComponentName, NameiOp, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType,
     VopVector, DEFAULT_VNODEOPS,
 };
 use crate::process::VThread;
@@ -99,7 +99,7 @@ fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
 fn lookup(
     vn: &Arc<Vnode>,
     name: ComponentName,
-    op: LookupOp,
+    op: NameiOp,
     td: Option<&VThread>,
 ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
     // Populate devices.
