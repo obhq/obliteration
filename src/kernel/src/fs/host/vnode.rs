@@ -1,9 +1,7 @@
 use super::file::HostFile;
 use super::{get_vnode, GetVnodeError};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR};
-use crate::fs::{
-    Access, Mode, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType, VopVector, DEFAULT_VNODEOPS,
-};
+use crate::fs::{Access, Mode, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use std::borrow::Cow;
@@ -11,86 +9,100 @@ use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
 
-pub static VNODE_OPS: VopVector = VopVector {
-    default: Some(&DEFAULT_VNODEOPS),
-    access: Some(access),
-    accessx: None,
-    getattr: Some(getattr),
-    lookup: Some(lookup),
-    open: Some(open),
-};
-
-fn access(_: &Arc<Vnode>, _: Option<&VThread>, _: Access) -> Result<(), Box<dyn Errno>> {
-    // TODO: Check how the PS4 check file permission for exfatfs.
-    Ok(())
+/// An implementation of [`crate::fs::VnodeBackend`].
+#[derive(Debug)]
+pub struct VnodeBackend {
+    file: HostFile,
 }
 
-fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
-    // Get file size.
-    let host = vn.data().downcast_ref::<HostFile>().unwrap();
-    let size = match host.len() {
-        Ok(v) => v,
-        Err(e) => return Err(Box::new(GetAttrError::GetSizeFailed(e))),
-    };
-
-    // TODO: Check how the PS4 assign file permissions for exfatfs.
-    let mode = match vn.ty() {
-        VnodeType::Directory(_) => Mode::new(0o555).unwrap(),
-        VnodeType::Character => unreachable!(), // The character device should only be in the devfs.
-    };
-
-    Ok(VnodeAttrs::new(Uid::ROOT, Gid::ROOT, mode, size))
+impl VnodeBackend {
+    pub fn new(file: HostFile) -> Self {
+        Self { file }
+    }
 }
 
-fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode>, Box<dyn Errno>> {
-    // Check if directory.
-    match vn.ty() {
-        VnodeType::Directory(root) => {
-            if name == ".." && *root {
-                return Err(Box::new(LookupError::DotdotOnRoot));
+impl crate::fs::VnodeBackend for VnodeBackend {
+    fn access(
+        self: Arc<Self>,
+        vn: &Arc<Vnode>,
+        td: Option<&VThread>,
+        mode: Access,
+    ) -> Result<(), Box<dyn Errno>> {
+        // TODO: Check how the PS4 check file permission for exfatfs.
+        Ok(())
+    }
+
+    fn getattr(self: Arc<Self>, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
+        // Get file size.
+        let size = match self.file.len() {
+            Ok(v) => v,
+            Err(e) => return Err(Box::new(GetAttrError::GetSizeFailed(e))),
+        };
+
+        // TODO: Check how the PS4 assign file permissions for exfatfs.
+        let mode = match vn.ty() {
+            VnodeType::Directory(_) => Mode::new(0o555).unwrap(),
+            VnodeType::Character => unreachable!(), // The character device should only be in the devfs.
+        };
+
+        Ok(VnodeAttrs::new(Uid::ROOT, Gid::ROOT, mode, size))
+    }
+
+    fn lookup(
+        self: Arc<Self>,
+        vn: &Arc<Vnode>,
+        td: Option<&VThread>,
+        name: &str,
+    ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+        // Check if directory.
+        match vn.ty() {
+            VnodeType::Directory(root) => {
+                if name == ".." && *root {
+                    return Err(Box::new(LookupError::DotdotOnRoot));
+                }
             }
+            _ => return Err(Box::new(LookupError::NotDirectory)),
         }
-        _ => return Err(Box::new(LookupError::NotDirectory)),
-    }
 
-    // Check if directory is accessible.
-    if let Err(e) = vn.access(td, Access::EXEC) {
-        return Err(Box::new(LookupError::AccessDenied(e)));
-    }
+        // Check if directory is accessible.
+        if let Err(e) = vn.access(td, Access::EXEC) {
+            return Err(Box::new(LookupError::AccessDenied(e)));
+        }
 
-    // Check name.
-    if name == "." {
-        return Ok(vn.clone());
-    }
+        // Check name.
+        if name == "." {
+            return Ok(vn.clone());
+        }
 
-    let host = vn.data().downcast_ref::<HostFile>().unwrap();
-    let path = match name {
-        ".." => Cow::Borrowed(host.path().parent().unwrap()),
-        _ => {
-            if name.contains(|c| c == '/' || c == '\\') {
-                return Err(Box::new(LookupError::InvalidName));
+        let path = match name {
+            ".." => Cow::Borrowed(self.file.path().parent().unwrap()),
+            _ => {
+                if name.contains(|c| c == '/' || c == '\\') {
+                    return Err(Box::new(LookupError::InvalidName));
+                }
+
+                Cow::Owned(self.file.path().join(name))
             }
+        };
 
-            Cow::Owned(host.path().join(name))
-        }
-    };
+        // Get vnode.
+        let vn = match get_vnode(vn.fs(), Some(&path)) {
+            Ok(v) => v,
+            Err(e) => return Err(Box::new(LookupError::GetVnodeFailed(e))),
+        };
 
-    // Get vnode.
-    let vn = match get_vnode(vn.fs(), Some(&path)) {
-        Ok(v) => v,
-        Err(e) => return Err(Box::new(LookupError::GetVnodeFailed(e))),
-    };
+        Ok(vn)
+    }
 
-    Ok(vn)
-}
-
-fn open(
-    _: &Arc<Vnode>,
-    _: Option<&VThread>,
-    _: OpenFlags,
-    _: Option<&mut VFile>,
-) -> Result<(), Box<dyn Errno>> {
-    todo!()
+    fn open(
+        self: Arc<Self>,
+        vn: &Arc<Vnode>,
+        td: Option<&VThread>,
+        mode: OpenFlags,
+        file: Option<&mut VFile>,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
 }
 
 /// Represents an error when [`getattr()`] was failed.
