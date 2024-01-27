@@ -309,7 +309,7 @@ impl Fs {
         let td = VThread::current().unwrap();
         let mut file = self.open(path, Some(&td))?;
 
-        *file.flags_mut() = flags.to_fflags();
+        *file.flags_mut() = flags.into_fflags();
 
         // Install to descriptor table.
         let fd = td.proc().files().alloc(Arc::new(file));
@@ -557,7 +557,7 @@ bitflags! {
 
 impl OpenFlags {
     /// An implementation of `FFLAGS` macro.
-    fn to_fflags(self) -> VFileFlags {
+    fn into_fflags(self) -> VFileFlags {
         VFileFlags::from_bits_truncate(self.bits() + 1)
     }
 }

@@ -3,7 +3,7 @@ use crate::errno::Errno;
 use crate::process::VThread;
 use bitflags::bitflags;
 use std::any::Any;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::Arc;
 
 /// An implementation of `file` structure.
@@ -63,6 +63,16 @@ impl Read for VFile {
     }
 }
 
+impl Write for VFile {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        todo!()
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        todo!()
+    }
+}
+
 /// Type of [`VFile`].
 #[derive(Debug)]
 pub enum VFileType {
@@ -72,9 +82,14 @@ pub enum VFileType {
 /// An implementation of `fileops` structure.
 #[derive(Debug)]
 pub struct VFileOps {
-    pub write: fn(&VFile, &[u8], Option<&VThread>) -> Result<usize, Box<dyn Errno>>,
-    pub ioctl: fn(&VFile, IoCmd, &mut [u8], Option<&VThread>) -> Result<(), Box<dyn Errno>>,
+    pub read: VFileRead,
+    pub write: VFileWrite,
+    pub ioctl: VFileIoctl,
 }
+
+type VFileRead = fn(&VFile, &mut [u8], Option<&VThread>) -> Result<usize, Box<dyn Errno>>;
+type VFileWrite = fn(&VFile, &[u8], Option<&VThread>) -> Result<usize, Box<dyn Errno>>;
+type VFileIoctl = fn(&VFile, IoCmd, &mut [u8], Option<&VThread>) -> Result<(), Box<dyn Errno>>;
 
 bitflags! {
     /// Flags for [`VFile`].
