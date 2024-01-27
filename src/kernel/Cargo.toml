@@ -16,6 +16,7 @@ discord-rich-presence = "0.2"
 elf = { path = "../elf" }
 gmtx = { path = "../gmtx" }
 iced-x86 = { version = "1.18", features = ["code_asm"] }
+lazy_static = "1.4.0"
 libc = "0.2"
 llt = { path = "../llt" }
 llvm-sys = { version = "170.0.0", features = ["strict-versioning", "prefer-static"] }
