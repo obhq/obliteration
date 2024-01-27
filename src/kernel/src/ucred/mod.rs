@@ -1,8 +1,3 @@
-pub use self::auth::*;
-pub use self::id::*;
-use self::prison::Prison;
-use self::prison::PRISON0;
-pub use self::privilege::*;
 use crate::errno::EAFNOSUPPORT;
 use crate::errno::ESRCH;
 use crate::errno::{Errno, EPERM};
@@ -12,9 +7,14 @@ use crate::ucred::prison::PrisonFlags;
 use std::num::NonZeroI32;
 use thiserror::Error;
 
+pub use self::auth::*;
+pub use self::id::*;
+pub use self::prison::*;
+pub use self::privilege::*;
+
 mod auth;
 mod id;
-pub mod prison;
+mod prison;
 mod privilege;
 
 /// An implementation of `ucred` structure.

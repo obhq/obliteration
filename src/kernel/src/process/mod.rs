@@ -16,8 +16,8 @@ use crate::signal::{
     SIG_IGN, SIG_MAXSIG, SIG_SETMASK, SIG_UNBLOCK,
 };
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
-use crate::ucred::prison::PRISON0;
 use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
+use crate::PRISON0;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
 use std::cmp::min;

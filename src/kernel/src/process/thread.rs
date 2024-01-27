@@ -1,6 +1,6 @@
 use super::{CpuMask, CpuSet, VProc, NEXT_ID};
 use crate::errno::Errno;
-use crate::fs::{VFile, VFileFlags, VFileOps, VFileType};
+use crate::fs::{VFileFlags, VFileOps, VFileType};
 use crate::signal::SignalSet;
 use crate::ucred::{Privilege, PrivilegeError, Ucred};
 use bitflags::bitflags;
