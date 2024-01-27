@@ -1,10 +1,9 @@
 use bitflags::bitflags;
-use lazy_static::lazy_static;
-use std::sync::Arc;
+use std::borrow::Cow;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Prison {
-    parent: Option<Arc<Self>>,
+    parent: Option<Cow<'static, Self>>,
     flags: PrisonFlags,
     allow: PrisonAllow,
 }
@@ -18,11 +17,11 @@ impl Prison {
         self.allow
     }
 
-    pub fn is_child(self: &Arc<Self>, other: &Arc<Self>) -> bool {
+    pub fn is_child(&self, other: &Self) -> bool {
         let mut p = other.parent.as_ref();
 
         while let Some(pr) = p {
-            if Arc::ptr_eq(pr, self) {
+            if self == other {
                 return true;
             }
 
@@ -38,14 +37,11 @@ impl PartialEq for Prison {
         std::ptr::eq(self, other)
     }
 }
-
-lazy_static! {
-    pub static ref PRISON0: Arc<Prison> = Arc::new(Prison {
-        parent: None,
-        flags: PrisonFlags::DEFAULT,
-        allow: PrisonAllow::ALLOW_ALL,
-    });
-}
+pub static PRISON0: Prison = Prison {
+    parent: None,
+    flags: PrisonFlags::DEFAULT,
+    allow: PrisonAllow::ALLOW_ALL,
+};
 
 bitflags! {
     #[derive(Debug, Clone, Copy)]

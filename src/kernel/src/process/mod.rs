@@ -20,6 +20,7 @@ use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
 use crate::PRISON0;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
+use std::borrow::Cow;
 use std::cmp::min;
 use std::ffi::c_char;
 use std::mem::zeroed;
@@ -79,11 +80,23 @@ impl VProc {
         let cred = if auth.caps.is_system() {
             // TODO: The groups will be copied from the parent process, which is SceSysCore.
             // TODO: figure out the actual prison value
-            Ucred::new(Uid::ROOT, Uid::ROOT, vec![Gid::ROOT], &PRISON0, auth)
+            Ucred::new(
+                Uid::ROOT,
+                Uid::ROOT,
+                vec![Gid::ROOT],
+                Cow::Borrowed(&PRISON0),
+                auth,
+            )
         } else {
             let uid = Uid::new(1).unwrap();
             //TODO: figure out the actual prison value
-            Ucred::new(uid, uid, vec![Gid::new(1).unwrap()], &PRISON0, auth)
+            Ucred::new(
+                uid,
+                uid,
+                vec![Gid::new(1).unwrap()],
+                Cow::Borrowed(&PRISON0),
+                auth,
+            )
         };
 
         let gg = GutexGroup::new();

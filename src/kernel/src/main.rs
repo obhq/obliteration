@@ -22,6 +22,7 @@ use memory::MemoryManagerError;
 use param::Param;
 use process::VProcInitError;
 use serde::Deserialize;
+use std::borrow::Cow;
 use std::error::Error;
 use std::fs::{create_dir_all, remove_dir_all, File};
 use std::io::Write;
@@ -174,7 +175,7 @@ fn start() -> Result<(), KernelError> {
         Uid::ROOT,
         Uid::ROOT,
         vec![Gid::ROOT],
-        &PRISON0, //TODO: figure out the actual value
+        Cow::Borrowed(&PRISON0), //TODO: figure out the actual value
         AuthInfo {
             paid: AuthPaid::KERNEL,
             caps: AuthCaps::new([0x4000000000000000, 0, 0, 0]),
@@ -342,7 +343,7 @@ fn run<E: crate::ee::ExecutionEngine>(
         Uid::ROOT,
         Uid::ROOT,
         vec![Gid::ROOT],
-        &PRISON0, //TODO: figure out the actual value
+        Cow::Borrowed(&PRISON0), //TODO: figure out the actual value
         AuthInfo::SYS_CORE.clone(),
     ));
 

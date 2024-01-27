@@ -4,8 +4,8 @@ use crate::errno::{Errno, EPERM};
 use crate::net::AddressFamily;
 use crate::ucred::prison::PrisonAllow;
 use crate::ucred::prison::PrisonFlags;
+use std::borrow::Cow;
 use std::num::NonZeroI32;
-use std::sync::Arc;
 use thiserror::Error;
 
 pub use self::auth::*;
@@ -21,10 +21,10 @@ mod privilege;
 /// An implementation of `ucred` structure.
 #[derive(Debug, Clone)]
 pub struct Ucred {
-    effective_uid: Uid,  // cr_uid
-    real_uid: Uid,       // cr_ruid
-    groups: Vec<Gid>,    // cr_groups + cr_ngroups
-    prison: Arc<Prison>, // cr_prison
+    effective_uid: Uid,           // cr_uid
+    real_uid: Uid,                // cr_ruid
+    groups: Vec<Gid>,             // cr_groups + cr_ngroups
+    prison: Cow<'static, Prison>, // cr_prison
     auth: AuthInfo,
 }
 
@@ -33,7 +33,7 @@ impl Ucred {
         effective_uid: Uid,
         real_uid: Uid,
         mut groups: Vec<Gid>,
-        prison: &Arc<Prison>,
+        prison: Cow<'static, Prison>,
         auth: AuthInfo,
     ) -> Self {
         assert!(!groups.is_empty()); // Must have primary group.
@@ -44,7 +44,7 @@ impl Ucred {
             effective_uid,
             real_uid,
             groups,
-            prison: prison.clone(),
+            prison,
             auth,
         }
     }
@@ -102,7 +102,7 @@ impl Ucred {
 
     /// See `prison_check` on the PS4 for a reference.
     pub fn prison_check(&self, other: &Self) -> Result<(), PrisonCheckError> {
-        if Arc::ptr_eq(&self.prison, &other.prison) || self.prison.is_child(&other.prison) {
+        if &self.prison == &other.prison || self.prison.is_child(&other.prison) {
             return Ok(());
         }
 
@@ -110,7 +110,7 @@ impl Ucred {
     }
 
     pub fn is_jailed(&self) -> bool {
-        Arc::ptr_eq(&self.prison, &PRISON0)
+        self.prison == Cow::Borrowed(&PRISON0)
     }
 
     /// See `priv_check_cred` on the PS4 for a reference.
