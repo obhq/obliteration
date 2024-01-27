@@ -8,6 +8,7 @@ use std::sync::{Arc, Weak};
 use std::time::SystemTime;
 
 /// An implementation of `devfs_dirent` structure.
+#[derive(Debug)]
 pub struct Dirent {
     inode: i32,                        // de_inode
     uid: Gutex<Uid>,                   // de_uid

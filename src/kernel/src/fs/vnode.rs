@@ -4,6 +4,7 @@ use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
+use std::fmt::Debug;
 use std::num::NonZeroI32;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -19,19 +20,17 @@ pub struct Vnode {
     fs: Arc<Mount>,                                  // v_mount
     ty: VnodeType,                                   // v_type
     tag: &'static str,                               // v_tag
-    op: &'static VopVector,                          // v_op
-    data: Arc<dyn Any + Send + Sync>,                // v_data
+    backend: Arc<dyn VnodeBackend>,                  // v_op + v_data
     item: Gutex<Option<Arc<dyn Any + Send + Sync>>>, // v_un
 }
 
 impl Vnode {
     /// See `getnewvnode` on the PS4 for a reference.
-    pub fn new(
+    pub(super) fn new(
         fs: &Arc<Mount>,
         ty: VnodeType,
         tag: &'static str,
-        op: &'static VopVector,
-        data: Arc<dyn Any + Send + Sync>,
+        backend: Arc<dyn VnodeBackend>,
     ) -> Self {
         let gg = GutexGroup::new();
 
@@ -41,8 +40,7 @@ impl Vnode {
             fs: fs.clone(),
             ty,
             tag,
-            op,
-            data,
+            backend,
             item: gg.spawn(None),
         }
     }
@@ -63,10 +61,6 @@ impl Vnode {
         matches!(self.ty, VnodeType::Character)
     }
 
-    pub fn data(&self) -> &Arc<dyn Any + Send + Sync> {
-        &self.data
-    }
-
     pub fn item(&self) -> Option<Arc<dyn Any + Send + Sync>> {
         self.item.read().clone()
     }
@@ -78,21 +72,21 @@ impl Vnode {
     pub fn access(
         self: &Arc<Vnode>,
         td: Option<&VThread>,
-        access: Access,
+        mode: Access,
     ) -> Result<(), Box<dyn Errno>> {
-        self.get_op(|v| v.access)(self, td, access)
+        self.backend.clone().access(self, td, mode)
     }
 
     pub fn accessx(
         self: &Arc<Self>,
         td: Option<&VThread>,
-        access: Access,
+        mode: Access,
     ) -> Result<(), Box<dyn Errno>> {
-        self.get_op(|v| v.accessx)(self, td, access)
+        self.backend.clone().accessx(self, td, mode)
     }
 
     pub fn getattr(self: &Arc<Self>) -> Result<VnodeAttrs, Box<dyn Errno>> {
-        self.get_op(|v| v.getattr)(self)
+        self.backend.clone().getattr(self)
     }
 
     pub fn ioctl(
@@ -109,24 +103,7 @@ impl Vnode {
         td: Option<&VThread>,
         name: &str,
     ) -> Result<Arc<Self>, Box<dyn Errno>> {
-        self.get_op(|v| v.lookup)(self, td, name)
-    }
-
-    fn get_op<F>(&self, f: fn(&'static VopVector) -> Option<F>) -> F {
-        let mut vec = Some(self.op);
-
-        while let Some(v) = vec {
-            if let Some(f) = f(v) {
-                return f;
-            }
-
-            vec = v.default;
-        }
-
-        panic!(
-            "Invalid vop_vector for vnode from '{}' filesystem.",
-            self.tag
-        );
+        self.backend.clone().lookup(self, td, name)
     }
 }
 
@@ -146,24 +123,71 @@ pub enum VnodeType {
 
 /// An implementation of `vop_vector` structure.
 ///
-/// We don't support `vop_bypass` because it required the return type for all operations to be the
-/// same.
-#[derive(Debug)]
-pub struct VopVector {
-    pub default: Option<&'static Self>, // vop_default
-    pub access: Option<VopAccess>,      // vop_access
-    pub accessx: Option<VopAccessX>,    // vop_accessx
-    pub getattr: Option<VopGetAttr>,    // vop_getattr
-    pub lookup: Option<VopLookup>,      // vop_lookup
-    pub open: Option<VopOpen>,          // vop_open
-}
+/// We used slightly different mechanism here so it is idiomatic to Rust. We also don't support
+/// `vop_bypass` because it required the return type for all operations to be the same.
+///
+/// All default implementation here are the implementation of `default_vnodeops`.
+pub(super) trait VnodeBackend: Debug + Send + Sync {
+    /// An implementation of `vop_access`.
+    fn access(
+        self: Arc<Self>,
+        vn: &Arc<Vnode>,
+        td: Option<&VThread>,
+        mode: Access,
+    ) -> Result<(), Box<dyn Errno>> {
+        vn.accessx(td, mode)
+    }
 
-pub type VopAccess = fn(&Arc<Vnode>, Option<&VThread>, Access) -> Result<(), Box<dyn Errno>>;
-pub type VopAccessX = fn(&Arc<Vnode>, Option<&VThread>, Access) -> Result<(), Box<dyn Errno>>;
-pub type VopGetAttr = fn(&Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>>;
-pub type VopLookup = fn(&Arc<Vnode>, Option<&VThread>, &str) -> Result<Arc<Vnode>, Box<dyn Errno>>;
-pub type VopOpen =
-    fn(&Arc<Vnode>, Option<&VThread>, OpenFlags, Option<&mut VFile>) -> Result<(), Box<dyn Errno>>;
+    /// An implementation of `vop_accessx`.
+    fn accessx(
+        self: Arc<Self>,
+        vn: &Arc<Vnode>,
+        td: Option<&VThread>,
+        mode: Access,
+    ) -> Result<(), Box<dyn Errno>> {
+        let mode = match unixify_access(mode) {
+            Some(v) => v,
+            None => return Err(Box::new(DefaultError::NotPermitted)),
+        };
+
+        if mode.is_empty() {
+            return Ok(());
+        }
+
+        // This can create an infinity loop. Not sure why FreeBSD implement like this.
+        vn.access(td, mode)
+    }
+
+    /// An implementation of `vop_getattr`.
+    fn getattr(
+        self: Arc<Self>,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+    ) -> Result<VnodeAttrs, Box<dyn Errno>> {
+        // Inline vop_bypass.
+        Err(Box::new(DefaultError::NotSupported))
+    }
+
+    /// An implementation of `vop_lookup`.
+    fn lookup(
+        self: Arc<Self>,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] td: Option<&VThread>,
+        #[allow(unused_variables)] name: &str,
+    ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+        Err(Box::new(DefaultError::NotDirectory))
+    }
+
+    /// An implementation of `vop_open`.
+    fn open(
+        self: Arc<Self>,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] td: Option<&VThread>,
+        #[allow(unused_variables)] mode: OpenFlags,
+        #[allow(unused_variables)] file: Option<&mut VFile>,
+    ) -> Result<(), Box<dyn Errno>> {
+        Ok(())
+    }
+}
 
 /// An implementation of `vattr` struct.
 pub struct VnodeAttrs {
@@ -221,30 +245,6 @@ impl Errno for DefaultError {
             Self::NotDirectory => ENOTDIR,
         }
     }
-}
-
-/// An implementation of `default_vnodeops`.
-pub static DEFAULT_VNODEOPS: VopVector = VopVector {
-    default: None,
-    access: Some(|vn, td, access| vn.accessx(td, access)),
-    accessx: Some(accessx),
-    getattr: Some(|_| Err(Box::new(DefaultError::NotSupported))), // Inline vop_bypass.
-    lookup: Some(|_, _, _| Err(Box::new(DefaultError::NotDirectory))),
-    open: Some(|_, _, _, _| Ok(())),
-};
-
-fn accessx(vn: &Arc<Vnode>, td: Option<&VThread>, access: Access) -> Result<(), Box<dyn Errno>> {
-    let access = match unixify_access(access) {
-        Some(v) => v,
-        None => return Err(Box::new(DefaultError::NotPermitted)),
-    };
-
-    if access.is_empty() {
-        return Ok(());
-    }
-
-    // This can create an infinity loop. Not sure why FreeBSD implement like this.
-    vn.access(td, access)
 }
 
 static ACTIVE: AtomicUsize = AtomicUsize::new(0); // numvnodes
