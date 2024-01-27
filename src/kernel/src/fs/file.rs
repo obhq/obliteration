@@ -84,12 +84,12 @@ pub enum VFileType {
 pub struct VFileOps {
     pub read: VFileRead,
     pub write: VFileWrite,
-    pub ioctl: VFileOpsIoctl,
+    pub ioctl: VFileIoctl,
 }
 
 type VFileRead = fn(&VFile, &mut [u8], Option<&VThread>) -> Result<usize, Box<dyn Errno>>;
 type VFileWrite = fn(&VFile, &[u8], Option<&VThread>) -> Result<usize, Box<dyn Errno>>;
-type VFileOpsIoctl = fn(&VFile, IoCmd, &mut [u8], Option<&VThread>) -> Result<(), Box<dyn Errno>>;
+type VFileIoctl = fn(&VFile, IoCmd, &mut [u8], Option<&VThread>) -> Result<(), Box<dyn Errno>>;
 
 bitflags! {
     /// Flags for [`VFile`].
