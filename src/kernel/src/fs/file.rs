@@ -207,6 +207,7 @@ struct FioCheckAndModifyArg {
 // This should be fine for our usecase.
 unsafe impl Pod for FioCheckAndModifyArg {}
 
+/// PS4-specific
 pub const FIOCHECKANDMODIFY: IoCmd = IoCmd::iow::<FioCheckAndModifyArg>(FILE_GROUP, 189);
 
 #[derive(Debug, Error)]
