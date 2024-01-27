@@ -104,6 +104,10 @@ impl MemoryManager {
         &self.stack
     }
 
+    fn round_page(addr: usize) -> usize {
+        (addr + 0x3fff) & !(0x3fff)
+    }
+
     pub fn mmap<N: Into<String>>(
         &self,
         addr: usize,
@@ -147,7 +151,18 @@ impl MemoryManager {
         }
 
         if flags.contains(MappingFlags::MAP_FIXED) {
-            todo!("mmap with flags & 0x10");
+            let pageoff = offset & 0x3fff;
+            let adjusted_addr = addr - pageoff;
+            let adjusted_len = len + pageoff;
+            let rounded_len = Self::round_page(adjusted_len);
+
+            if (adjusted_addr & 0x3fff) != 0 {
+                return Err(MmapError::InvalidOffset);
+            }
+            // TODO: check if addr is within min and max mappings for this proc
+            if adjusted_addr + rounded_len < adjusted_addr {
+                return Err(MmapError::InvalidOffset);
+            }
         } else if addr == 0 {
             if td
                 .as_ref()
