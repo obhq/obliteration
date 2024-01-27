@@ -82,14 +82,14 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             }
         }
 
-    // Atomic get attributes.
-    let uid = dirent.uid();
-    let gid = dirent.gid();
-    let mode = dirent.mode();
-    let size = match vn.ty() {
-        VnodeType::Directory(_) => 512,
-        VnodeType::Character | VnodeType::File => 0,
-    };
+        // Atomic get attributes.
+        let uid = dirent.uid();
+        let gid = dirent.gid();
+        let mode = dirent.mode();
+        let size = match vn.ty() {
+            VnodeType::Directory(_) => 512,
+            VnodeType::Character | VnodeType::File => 0,
+        };
 
         Ok(VnodeAttrs::new(*uid, *gid, *mode, size))
     }
