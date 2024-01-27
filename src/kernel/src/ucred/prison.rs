@@ -3,6 +3,7 @@ use std::borrow::Cow;
 
 #[derive(Debug)]
 pub struct Prison {
+    id: u32, // An internal id to use for comparisons;
     parent: Option<Cow<'static, Self>>,
     flags: PrisonFlags,
     allow: PrisonAllow,
@@ -34,7 +35,7 @@ impl Prison {
 
 impl PartialEq for Prison {
     fn eq(&self, other: &Self) -> bool {
-        std::ptr::eq(self, other)
+        self.id == other.id
     }
 }
 
@@ -43,6 +44,7 @@ impl ToOwned for Prison {
 
     fn to_owned(&self) -> Self::Owned {
         Box::new(Prison {
+            id: self.id,
             parent: self.parent.as_ref().map(|p| p.to_owned()),
             flags: self.flags,
             allow: self.allow,
@@ -51,6 +53,7 @@ impl ToOwned for Prison {
 }
 
 pub static PRISON0: Prison = Prison {
+    id: 0,
     parent: None,
     flags: PrisonFlags::DEFAULT,
     allow: PrisonAllow::ALLOW_ALL,
