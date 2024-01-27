@@ -1,26 +1,25 @@
 use crate::arch::MachDep;
 use crate::arnd::Arnd;
 use crate::budget::{Budget, BudgetManager, ProcType};
+use crate::debug::{DebugManager, DebugManagerInitError};
 use crate::dmem::DmemManager;
 use crate::ee::{EntryArg, RawFn};
-use crate::fs::Fs;
+use crate::fs::{Fs, FsError};
+use crate::llvm::Llvm;
 use crate::log::{print, LOGGER};
-use crate::memory::MemoryManager;
-use crate::process::{VProc, VThread};
+use crate::memory::{MemoryManager, MemoryManagerError};
+use crate::process::{VProc, VProcInitError, VThread};
 use crate::regmgr::RegMgr;
 use crate::rtld::{LoadFlags, ModuleFlags, RuntimeLinker};
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
-use crate::tty::TtyManager;
+use crate::tty::{TtyManager, TtyManager};
 use crate::ucred::PRISON0;
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use clap::{Parser, ValueEnum};
-use fs::FsError;
 use llt::{OsThread, SpawnError};
 use macros::vpath;
-use memory::MemoryManagerError;
 use param::Param;
-use process::VProcInitError;
 use serde::Deserialize;
 use std::borrow::Cow;
 use std::error::Error;
@@ -32,11 +31,11 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use sysinfo::{MemoryRefreshKind, System};
 use thiserror::Error;
-use tty::TtyInitError;
 
 mod arch;
 mod arnd;
 mod budget;
+mod debug;
 mod dmem;
 mod ee;
 mod errno;
@@ -255,9 +254,12 @@ fn run<E: crate::ee::ExecutionEngine>(
     ee: Arc<E>,
 ) -> Result<(), KernelError> {
     // Initialize TTY system.
-    let _tty = TtyManager::new(fs)?;
+    #[allow(unused_variables)] // TODO: Remove this when someone use tty.
+    let tty = TtyManager::new()?;
 
     // Initialize kernel components.
+    #[allow(unused_variables)] // TODO: Remove this when someone use debug.
+    let debug = DebugManager::new()?;
     RegMgr::new(&mut syscalls);
     let machdep = MachDep::new(&mut syscalls);
     let budget = BudgetManager::new(&mut syscalls);
@@ -517,6 +519,9 @@ enum KernelError {
 
     #[error("tty initialization failed")]
     TtyInitFailed(#[from] TtyInitError),
+
+    #[error("debug manager initialization failed")]
+    DebugManagerInitFailed(#[from] DebugManagerInitError),
 
     #[error("virtual process initialization failed")]
     VProcInitFailed(#[from] VProcInitError),
