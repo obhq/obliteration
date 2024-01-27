@@ -108,45 +108,6 @@ impl Mount {
         }
     }
 
-    pub(super) fn new_with_data_fn<D: Send + Sync + 'static>(
-        fs: &'static FsConfig,
-        ops: &'static FsOps,
-        cred: &Arc<Ucred>,
-        path: VPathBuf,
-        parent: Option<Arc<Vnode>>,
-        flags: MountFlags,
-        data_fn: impl FnOnce(&Arc<Self>) -> Arc<D>,
-    ) -> Arc<Self> {
-        struct NoData;
-
-        let owner = cred.effective_uid();
-
-        let mnt = Self {
-            fs,
-            ops,
-            gen: 1,
-            data: Arc::new(NoData),
-            cred: cred.clone(),
-            parent: RwLock::new(parent),
-            flags,
-            stats: FsStats {
-                ty: fs.ty,
-                id: [0; 2],
-                owner,
-                path,
-            },
-        };
-
-        let mut mnt = Arc::new(mnt);
-        let data = data_fn(&mnt);
-
-        let data_ref = Arc::get_mut(&mut mnt).unwrap();
-
-        data_ref.data = data;
-
-        mnt
-    }
-
     pub fn flags(&self) -> MountFlags {
         self.flags
     }

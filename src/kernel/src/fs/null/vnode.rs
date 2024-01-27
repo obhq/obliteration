@@ -57,7 +57,7 @@ fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode
     let vnode = if Arc::ptr_eq(&lower, vn) {
         vn.clone()
     } else {
-        NullNode::new(vn.fs(), lower)
+        NullNode::get(vn.fs(), lower)
     };
 
     Ok(vnode)

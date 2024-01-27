@@ -29,20 +29,6 @@ pub fn mount(
         }
     }
 
-    let mnt = Mount::new_with_data_fn(
-        conf,
-        &NULLFS_OPS,
-        cred,
-        path,
-        Some(parent.clone()),
-        flags,
-        |mnt| {
-            let vn = NullNode::new(mnt, parent);
-
-            NullFs::new(&vn)
-        },
-    );
-
     todo!()
 }
 
@@ -76,7 +62,7 @@ struct NullNode {
 
 impl NullNode {
     /// See `null_nodeget` on the PS4 for a reference.
-    pub fn new(mnt: &Arc<Mount>, lower: Arc<Vnode>) -> Arc<Vnode> {
+    pub fn get(mnt: &Arc<Mount>, lower: Arc<Vnode>) -> Arc<Vnode> {
         todo!()
     }
 
