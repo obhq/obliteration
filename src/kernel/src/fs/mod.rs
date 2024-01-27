@@ -137,6 +137,7 @@ impl Fs {
         sys.register(6, &fs, Self::sys_close);
         sys.register(54, &fs, Self::sys_ioctl);
         sys.register(56, &fs, Self::sys_revoke);
+        sys.register(121, &fs, Self::sys_writev);
 
         Ok(fs)
     }
@@ -268,6 +269,27 @@ impl Fs {
         let file = td.proc().files().get(fd).ok_or(SysErr::Raw(EBADF))?;
         let buf = unsafe { std::slice::from_raw_parts(ptr, len) };
         let written = file.write(buf, Some(&td))?;
+
+        Ok(written.into())
+    }
+
+    fn sys_writev(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let ptr: *const libc::iovec = i.args[1].into();
+        let len: usize = i.args[2].try_into().unwrap();
+
+        let td = VThread::current().unwrap();
+        let file = td.proc().files().get(fd).ok_or(SysErr::Raw(EBADF))?;
+        let mut written = 0;
+        for i in 0..len - 1 {
+            let buf: &[u8] = unsafe {
+                std::slice::from_raw_parts(
+                    ptr.offset(i.try_into().unwrap()).read().iov_base as *const u8,
+                    ptr.offset(i.try_into().unwrap()).read().iov_len,
+                )
+            };
+            written = written + file.write(buf as _, Some(&td))?;
+        }
 
         Ok(written.into())
     }
