@@ -150,7 +150,7 @@ impl Errno for SocketCreateError {
 }
 
 pub const SOCKET_FILEOPS: VFileOps = VFileOps {
-    //read: socket_read,
+    read: socket_read,
     write: socket_write,
     ioctl: socket_ioctl,
 };

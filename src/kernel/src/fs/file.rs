@@ -8,7 +8,6 @@ use bitflags::bitflags;
 use bytemuck::{Pod, Zeroable};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::num::NonZeroI32;
-use std::any::Any;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -123,9 +122,14 @@ bitflags! {
 }
 
 pub static VNOPS: VFileOps = VFileOps {
+    read: vn_read,
     write: vn_write,
     ioctl: vn_ioctl,
 };
+
+fn vn_read(file: &VFile, buf: &mut [u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+    todo!()
+}
 
 fn vn_write(file: &VFile, buf: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
     todo!()
