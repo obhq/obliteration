@@ -1,4 +1,5 @@
 /// An implementation of `dirent` structure.
+#[derive(Debug)]
 pub struct Dirent {
     ty: DirentType, // d_type
     name: String,   // d_name
@@ -26,7 +27,7 @@ impl Dirent {
 }
 
 /// Type of [`Dirent`].
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DirentType {
     Character = 2, // DT_CHR
     Directory = 4, // DT_DIR
