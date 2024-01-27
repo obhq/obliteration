@@ -1,6 +1,6 @@
 use self::file::HostFile;
-use self::vnode::VNODE_OPS;
-use super::{FsConfig, FsOps, Mount, MountFlags, MountOpts, VPathBuf, Vnode, VnodeType};
+use self::vnode::VnodeBackend;
+use super::{FsConfig, FsOps, Mount, MountFlags, VPathBuf, Vnode, VnodeType};
 use crate::errno::{Errno, EIO};
 use crate::ucred::Ucred;
 use gmtx::{Gutex, GutexGroup};
@@ -148,7 +148,12 @@ fn get_vnode(mnt: &Arc<Mount>, path: Option<&Path>) -> Result<Arc<Vnode>, GetVno
     };
 
     // Allocate a new vnode.
-    let vn = Vnode::new(mnt, ty, "exfatfs", &VNODE_OPS, Arc::new(file));
+    let vn = Arc::new(Vnode::new(
+        mnt,
+        ty,
+        "exfatfs",
+        Arc::new(VnodeBackend::new(file)),
+    ));
 
     actives.insert(path.to_owned(), Arc::downgrade(&vn));
     drop(actives);
