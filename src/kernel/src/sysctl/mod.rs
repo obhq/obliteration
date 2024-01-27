@@ -1,10 +1,10 @@
 use crate::arch::MachDep;
-use crate::arnd::Arnd;
 use crate::errno::{
     EFAULT, EINVAL, EISDIR, ENAMETOOLONG, ENOENT, ENOMEM, ENOTDIR, EOPNOTSUPP, EPERM, ESRCH,
 };
 use crate::memory::MemoryManager;
 use crate::process::VThread;
+use crate::rand_bytes;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use std::any::Any;
 use std::cmp::min;
@@ -422,7 +422,7 @@ impl Sysctl {
         let mut buf = [0; 256];
         let len = min(req.old.as_ref().map(|b| b.len()).unwrap_or(0), 256);
 
-        Arnd::rand_bytes(&mut buf[..len]);
+        rand_bytes(&mut buf[..len]);
 
         req.write(&buf[..len])
     }

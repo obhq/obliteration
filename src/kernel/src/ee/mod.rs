@@ -1,7 +1,7 @@
-use crate::arnd::Arnd;
 use crate::memory::MemoryManager;
 use crate::process::ResourceType;
 use crate::process::VProc;
+use crate::rand_bytes;
 use crate::rtld::Module;
 use crate::syscalls::Syscalls;
 use std::error::Error;
@@ -65,7 +65,7 @@ impl<E: ExecutionEngine> EntryArg<E> {
         let path = CString::new(path.as_str()).unwrap();
         let mut canary = [0; 64];
 
-        Arnd::rand_bytes(&mut canary);
+        rand_bytes(&mut canary);
 
         Self {
             vp: vp.clone(),
