@@ -95,7 +95,7 @@ impl Vnode {
         op: LookupOp,
         td: Option<&VThread>,
     ) -> Result<Arc<Self>, Box<dyn Errno>> {
-        self.backend.clone().lookup(self, td, name)
+        self.backend.clone().lookup(self, cn, op, td)
     }
 }
 
@@ -162,8 +162,9 @@ pub(super) trait VnodeBackend: Debug + Send + Sync {
     fn lookup(
         self: Arc<Self>,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] name: VPathComponent,
+        #[allow(unused_variables)] op: LookupOp,
         #[allow(unused_variables)] td: Option<&VThread>,
-        #[allow(unused_variables)] name: &str,
     ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
         Err(Box::new(DefaultError::NotDirectory))
     }

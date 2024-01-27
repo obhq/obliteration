@@ -3,7 +3,6 @@ use super::{alloc_vnode, AllocVnodeError, Cdev, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
     check_access, Access, LookupOp, OpenFlags, VFile, VPathComponent, Vnode, VnodeAttrs, VnodeType,
-    VopVector, DEFAULT_VNODEOPS,
 };
 use crate::process::VThread;
 use std::num::NonZeroI32;
@@ -100,8 +99,9 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     fn lookup(
         self: Arc<Self>,
         vn: &Arc<Vnode>,
+        cn: VPathComponent,
+        op: LookupOp,
         td: Option<&VThread>,
-        name: &str,
     ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
         // Populate devices.
         self.fs.populate();
@@ -109,7 +109,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         // Check if directory.
         match vn.ty() {
             VnodeType::Directory(root) => {
-                if name == ".." && *root {
+                if cn == VPathComponent::DotDot && *root {
                     return Err(Box::new(LookupError::DotdotOnRoot));
                 }
             }
@@ -122,9 +122,9 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         }
 
         // Check name.
-        match name {
-            "." => Ok(vn.clone()),
-            ".." => {
+        match cn {
+            VPathComponent::Dot => Ok(vn.clone()),
+            VPathComponent::DotDot => {
                 let parent = match self.dirent.parent() {
                     Some(v) => v,
                     None => return Err(Box::new(LookupError::NoParent)),
@@ -135,7 +135,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
                     Err(e) => Err(Box::new(LookupError::AllocVnodeFailed(e))),
                 }
             }
-            _ => {
+            VPathComponent::Normal { name } => {
                 // Lookup.
                 let item = match self.dirent.find(name, None) {
                     Some(v) => {
@@ -150,6 +150,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
                     Err(e) => Err(Box::new(LookupError::AllocVnodeFailed(e))),
                 }
             }
+            VPathComponent::Root => unreachable!(),
         }
     }
 
@@ -173,7 +174,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 
         // Execute switch handler.
         match sw.fdopen() {
-            Some(f) => f(&dev, mode, td, file.as_mut().map(|f| &mut **f))?,
+            Some(fdopen) => fdopen(&dev, mode, td, file.as_mut().map(|f| &mut **f))?,
             None => sw.open().unwrap()(&dev, mode, 0x2000, td)?,
         };
 

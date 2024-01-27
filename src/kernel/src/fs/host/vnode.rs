@@ -3,7 +3,6 @@ use super::{get_vnode, GetVnodeError};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR};
 use crate::fs::{
     Access, LookupOp, Mode, OpenFlags, VFile, VPathComponent, Vnode, VnodeAttrs, VnodeType,
-    VopVector, DEFAULT_VNODEOPS,
 };
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
@@ -54,14 +53,15 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     fn lookup(
         self: Arc<Self>,
         vn: &Arc<Vnode>,
+        cn: VPathComponent,
+        op: LookupOp,
         td: Option<&VThread>,
-        name: &str,
     ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
         // Check if directory.
         match vn.ty() {
             VnodeType::Directory(root) => {
-                if name == ".." && *root {
-                    return Err(Box::new(LookupError::DotdotOnRoot));
+                if cn == VPathComponent::DotDot && *root {
+                    return Err(Box::new(LookupError::DotDotOnRoot));
                 }
             }
             _ => return Err(Box::new(LookupError::NotDirectory)),
@@ -73,18 +73,18 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         }
 
         // Check name.
-        if name == "." {
+        if cn == VPathComponent::Dot {
             return Ok(vn.clone());
         }
 
-        let path = match name {
-            ".." => Cow::Borrowed(self.file.path().parent().unwrap()),
+        let path = match cn {
+            VPathComponent::DotDot => Cow::Borrowed(self.file.path().parent().unwrap()),
             _ => {
-                if name.contains(|c| c == '/' || c == '\\') {
+                if cn.is_normal_and_contains(|c| c == '/' || c == '\\') {
                     return Err(Box::new(LookupError::InvalidName));
                 }
 
-                Cow::Owned(self.file.path().join(name))
+                Cow::Owned(self.file.path().join(cn))
             }
         };
 
