@@ -42,10 +42,11 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         // TODO: Check how the PS4 assign file permissions for exfatfs.
         let mode = match vn.ty() {
             VnodeType::Directory(_) => Mode::new(0o555).unwrap(),
+            VnodeType::File | VnodeType::Link => todo!(),
             VnodeType::Character => unreachable!(), // The character device should only be in the devfs.
         };
 
-        Ok(VnodeAttrs::new(Uid::ROOT, Gid::ROOT, mode, size))
+        Ok(VnodeAttrs::new(Uid::ROOT, Gid::ROOT, mode, size, 0))
     }
 
     fn lookup(

@@ -1,85 +1,89 @@
 use super::NullNode;
 use crate::{
     errno::{Errno, EISDIR, EROFS},
-    fs::{perm::Access, MountFlags, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType, VopVector},
+    fs::{perm::Access, MountFlags, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType},
     process::VThread,
 };
 use std::{num::NonZeroI32, sync::Arc};
 use thiserror::Error;
 
-pub(super) static VNODE_OPS: VopVector = VopVector {
-    default: None,
-    access: Some(access),
-    accessx: Some(access),
-    getattr: Some(getattr),
-    lookup: Some(lookup),
-    open: Some(open),
-};
+#[derive(Debug)]
+struct VnodeBackend {
+    lower: Arc<Vnode>,
+}
 
-/// Serves as both `access` and `accessx`.
-/// This function tries to mimic what calling `null_bypass` would do.
-fn access(vn: &Arc<Vnode>, td: Option<&VThread>, access: Access) -> Result<(), Box<dyn Errno>> {
-    if access.contains(Access::WRITE) {
-        match vn.ty() {
-            VnodeType::Directory(_) | VnodeType::Link | VnodeType::File => {
-                if vn.fs().flags().contains(MountFlags::MNT_RDONLY) {
-                    Err(AccessError::Readonly)?
+impl crate::fs::VnodeBackend for VnodeBackend {
+    fn accessx(
+        self: Arc<Self>,
+        vn: &Arc<Vnode>,
+        td: Option<&VThread>,
+        mode: Access,
+    ) -> Result<(), Box<dyn Errno>> {
+        if mode.contains(Access::WRITE) {
+            match vn.ty() {
+                VnodeType::Directory(_) | VnodeType::Link | VnodeType::File => {
+                    if vn.fs().flags().contains(MountFlags::MNT_RDONLY) {
+                        Err(AccessError::Readonly)?
+                    }
                 }
+                _ => {}
             }
-            _ => {}
         }
+
+        self.lower
+            .access(td, mode)
+            .map_err(AccessError::AccessFromLowerFailed)?;
+
+        Ok(())
     }
 
-    let null_node: &NullNode = vn.data().downcast_ref().unwrap();
+    /// This function tries to mimic what calling `null_bypass` would do.
+    fn getattr(
+        self: Arc<Self>,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+    ) -> Result<VnodeAttrs, Box<dyn Errno>> {
+        let mut attr = self
+            .lower
+            .getattr()
+            .map_err(GetAttrError::GetAttrFromLowerFailed)?;
 
-    null_node.lower().access(td, access)?;
+        let fsid = vn.fs().stats().id()[0];
 
-    Ok(())
-}
+        Ok(attr.with_fsid(fsid))
+    }
 
-/// This function tries to mimic what calling `null_bypass` would do.
-fn getattr(vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
-    let null_node: &NullNode = vn.data().downcast_ref().unwrap();
+    /// This function tries to mimic what calling `null_bypass` would do.
+    fn lookup(
+        self: Arc<Self>,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] td: Option<&VThread>,
+        #[allow(unused_variables)] name: &str,
+    ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+        let lower = self.lower.lookup(td, name)?;
 
-    let mut attr = null_node.lower().getattr()?;
+        let vnode = if Arc::ptr_eq(&lower, vn) {
+            vn.clone()
+        } else {
+            NullNode::get(vn.fs(), lower)
+        };
 
-    attr.set_fsid(vn.fs().stats().id()[0]);
+        Ok(vnode)
+    }
 
-    Ok(attr)
-}
+    /// This function tries to mimic what calling `null_bypass` would do.
+    fn open(
+        self: Arc<Self>,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] td: Option<&VThread>,
+        #[allow(unused_variables)] mode: OpenFlags,
+        #[allow(unused_variables)] file: Option<&mut VFile>,
+    ) -> Result<(), Box<dyn Errno>> {
+        self.lower
+            .open(td, mode, file)
+            .map_err(OpenError::OpenFromLowerFailed)?;
 
-/// This function tries to mimic what calling `null_bypass` would do.
-fn lookup(vn: &Arc<Vnode>, td: Option<&VThread>, name: &str) -> Result<Arc<Vnode>, Box<dyn Errno>> {
-    let null_node: &NullNode = vn.data().downcast_ref().unwrap();
-
-    let lower = null_node.lower().lookup(td, name)?;
-
-    let vnode = if Arc::ptr_eq(&lower, vn) {
-        vn.clone()
-    } else {
-        NullNode::get(vn.fs(), lower)
-    };
-
-    Ok(vnode)
-}
-
-/// This function tries to mimic what calling `null_bypass` would do.
-fn open(
-    vn: &Arc<Vnode>,
-    td: Option<&VThread>,
-    mode: OpenFlags,
-    mut file: Option<&mut VFile>,
-) -> Result<(), Box<dyn Errno>> {
-    let null_node: &NullNode = vn.data().downcast_ref().unwrap();
-
-    // TODO: implement VOP_PROPAGATE
-
-    null_node
-        .lower()
-        .open(td, mode, file)
-        .map_err(OpenError::OpenFromLowerFailed)?;
-
-    Ok(())
+        Ok(())
+    }
 }
 
 #[derive(Debug, Error)]

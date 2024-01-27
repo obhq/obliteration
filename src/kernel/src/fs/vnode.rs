@@ -31,7 +31,7 @@ impl Vnode {
         ty: VnodeType,
         tag: &'static str,
         backend: Arc<dyn VnodeBackend>,
-    ) -> Self {
+    ) -> Arc<Self> {
         let gg = GutexGroup::new();
 
         ACTIVE.fetch_add(1, Ordering::Relaxed);
@@ -95,6 +95,15 @@ impl Vnode {
         name: &str,
     ) -> Result<Arc<Self>, Box<dyn Errno>> {
         self.backend.clone().lookup(self, td, name)
+    }
+
+    pub fn open(
+        self: &Arc<Self>,
+        td: Option<&VThread>,
+        mode: OpenFlags,
+        file: Option<&mut VFile>,
+    ) -> Result<(), Box<dyn Errno>> {
+        self.backend.clone().open(self, td, mode, file)
     }
 }
 
@@ -214,8 +223,10 @@ impl VnodeAttrs {
         self.mode
     }
 
-    pub fn set_fsid(&mut self, fsid: u32) {
+    pub fn with_fsid(mut self, fsid: u32) -> Self {
         self.fsid = fsid;
+
+        self
     }
 }
 
