@@ -363,7 +363,7 @@ impl<'a> Iterator for Components<'a> {
             "" => VPathComponent::Root,
             "." => VPathComponent::Dot,
             ".." => VPathComponent::DotDot,
-            v => VPathComponent::Name(name),
+            name => VPathComponent::Name(name),
         })
     }
 }
