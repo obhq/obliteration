@@ -78,18 +78,15 @@ impl ResourceLimit {
         // TODO: Make sure the value is not exceed the value on the PS4.
         let mut l = Self::host(ty)?;
 
-        match ty {
-            ResourceType::Data => {
-                let mb = 1024 * 1024;
-                let gb = 1024 * mb;
-                let max = 5 * gb;
+        if let ResourceType::Data = ty {
+            let mb = 1024 * 1024;
+            let gb = 1024 * mb;
+            let max = 5 * gb;
 
-                if l.max > max {
-                    l.max = max;
-                    l.cur = max;
-                }
+            if l.max > max {
+                l.max = max;
+                l.cur = max;
             }
-            _ => {}
         }
 
         Ok(l)

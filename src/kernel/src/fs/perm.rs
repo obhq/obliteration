@@ -7,19 +7,19 @@ use thiserror::Error;
 /// You can map [`None`] to `EPERM` to match with the PS4 behavior.
 ///
 /// See `vfs_unixify_accmode` on the PS4 for a reference.
-pub fn unixify_access(access: Access) -> Option<Access> {
-    // TODO: Refactor this for readability.
-    let mut access = access.bits();
-
-    if (access & 0100000) != 0 {
+pub fn unixify_access(mut access: Access) -> Option<Access> {
+    if access.intersects(Access::EXPLICIT_DENY) {
         return Some(Access::empty());
-    } else if (access & 011000000) != 0 {
+    } else if access.intersects(Access::DELETE_CHILD | Access::DELETE) {
         return None;
-    } else if (access & 0144010000) != 0 {
-        access = (access & 0xfe6fefff) | 010000;
+    } else if access.intersects(Access::ADMIN_PERMS) {
+        access &= !Access::ADMIN_PERMS;
+        access |= Access::ADMIN;
     }
 
-    Some(Access::from_bits_retain(access & 0xfdb7ffff))
+    access &= !(Access::STAT_PERMS | Access::SYNCHRONIZE);
+
+    Some(access)
 }
 
 /// Returns [`Ok`] if access was granted. The boolean value indicated whether privilege was used to
@@ -59,7 +59,7 @@ pub fn check_access(
 
     // Check exec previlege.
     let mut priv_granted = 0;
-    let exec = ((dac_granted & 0100) == 0) as u8 & ((access as u8) >> 6);
+    let exec = ((dac_granted & 0o100) == 0) as u8 & ((access as u8) >> 6);
     let pid = if is_dir {
         if exec == 0 {
             None
@@ -73,36 +73,36 @@ pub fn check_access(
     };
 
     if pid.is_some_and(|p| cred.priv_check(p).is_ok()) {
-        priv_granted |= 0100;
+        priv_granted |= 0o100;
     }
 
     // Check read privilege.
-    if (access & 0400) != 0
-        && (dac_granted & 0400) == 0
+    if (access & 0o400) != 0
+        && (dac_granted & 0o400) == 0
         && cred.priv_check(Privilege::VFS_READ).is_ok()
     {
-        priv_granted |= 0400;
+        priv_granted |= 0o400;
     }
 
     // Check write privilege.
-    if (access & 0200) != 0
-        && (dac_granted & 0200) == 0
+    if (access & 0o200) != 0
+        && (dac_granted & 0o200) == 0
         && cred.priv_check(Privilege::VFS_WRITE).is_ok()
     {
-        priv_granted |= 040000 | 0200;
+        priv_granted |= 0o40000 | 0o200;
     }
 
     // Check admin privilege.
-    if (access & 010000) != 0
-        && (dac_granted & 010000) == 0
+    if (access & 0o10000) != 0
+        && (dac_granted & 0o10000) == 0
         && cred.priv_check(Privilege::VFS_ADMIN).is_ok()
     {
-        priv_granted |= 010000;
+        priv_granted |= 0o10000;
     }
 
     if (!(priv_granted | dac_granted) & access) == 0 {
         Ok(true)
-    } else if (access & 010000) != 0 {
+    } else if (access & 0o10000) != 0 {
         Err(AccessError::NotPermitted)
     } else {
         Err(AccessError::PermissionDenied)
@@ -115,7 +115,7 @@ pub fn check_access(
 /// maximum value for file mode, which is `0777` take only 9 bits. So let's use `u16` and don't make
 /// this struct representation as a transparent. That mean we can't use this type directly on the
 /// function parameter or its return type if that function will be called by the PS4.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Mode(u16);
 
 impl Mode {
@@ -136,8 +136,23 @@ impl From<Mode> for u32 {
 
 bitflags! {
     /// An implementation of `accmode_t`.
+    /// Some of the constants are unused, but we include them for completeness.
     pub struct Access: u32 {
-        const EXEC = 000000000100; // VEXEC
+        const EXEC             = 0o00000000100; // VEXEC
+        const WRITE            = 0o00000000200; // VWRITE
+        const ADMIN            = 0o00000010000; // VADMIN
+        const EXPLICIT_DENY    = 0o00000100000; // VEXPLICIT_DENY
+        const DELETE_CHILD     = 0o00001000000; // VDELETE_CHILD
+        const READ_ATTRIBUTES  = 0o00002000000; // VREAD_ATTRIBUTES
+        const WRITE_ATTRIBUTES = 0o00004000000; // VWRITE_ATTRIBUTES
+        const DELETE           = 0o00010000000; // VDELETE_CHILD
+        const READ_ACL         = 0o00020000000; // VREAD_ACL
+        const WRITE_ACL        = 0o00040000000; // VWRITE_ACL
+        const WRITE_OWNER      = 0o00100000000; // VWRITE_OWNER
+        const SYNCHRONIZE      = 0o00200000000; // VSYNCHRONIZE
+
+        const ADMIN_PERMS = Self::ADMIN.bits() | Self::WRITE_ATTRIBUTES.bits() | Self::WRITE_ACL.bits() | Self::WRITE_OWNER.bits();
+        const STAT_PERMS = Self::READ_ATTRIBUTES.bits() | Self::READ_ACL.bits();
     }
 }
 

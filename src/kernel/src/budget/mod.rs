@@ -63,7 +63,7 @@ pub struct Budget {
 }
 
 impl Budget {
-    pub fn new<N: Into<String>>(name: N, ptype: ProcType) -> Self {
+    pub fn new(name: impl Into<String>, ptype: ProcType) -> Self {
         Self {
             name: name.into(),
             ptype,

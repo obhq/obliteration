@@ -501,7 +501,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         };
 
         // Add to global list if it is not in the list yet.
-        if globals.iter().find(|m| Arc::ptr_eq(m, &md)).is_none() {
+        if !globals.iter().any(|m| Arc::ptr_eq(m, &md)) {
             globals.push(md.clone());
         }
 
@@ -557,10 +557,8 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
     fn sys_dynlib_do_copy_relocations(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
         if let Some(info) = self.app.file_info() {
-            for reloc in info.relocs() {
-                if reloc.ty() == Relocation::R_X86_64_COPY {
-                    return Err(SysErr::Raw(EINVAL));
-                }
+            if info.relocs().any(|r| r.ty() == Relocation::R_X86_64_COPY) {
+                return Err(SysErr::Raw(EINVAL));
             }
 
             Ok(SysOut::ZERO)
@@ -673,7 +671,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         resolver: &SymbolResolver<E>,
     ) -> Result<(), RelocateError> {
         // TODO: Implement flags & 0x800.
-        self.relocate_single(md, &resolver)?;
+        self.relocate_single(md, resolver)?;
 
         // Relocate other modules.
         for m in list {
@@ -681,7 +679,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
                 continue;
             }
 
-            self.relocate_single(m, &resolver)?;
+            self.relocate_single(m, resolver)?;
         }
 
         Ok(())

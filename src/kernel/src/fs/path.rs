@@ -168,7 +168,7 @@ impl VPathBuf {
         Self(Cow::Borrowed("/"))
     }
 
-    pub fn push<C: AsRef<str>>(&mut self, component: C) -> Result<(), ComponentError> {
+    pub fn push(&mut self, component: impl AsRef<str>) -> Result<(), ComponentError> {
         // Check if component valid.
         let v = match component.as_ref() {
             "" => return Err(ComponentError::Empty),

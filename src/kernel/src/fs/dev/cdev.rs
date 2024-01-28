@@ -29,10 +29,10 @@ pub struct Cdev {
 
 impl Cdev {
     /// See `devfs_alloc` on the PS4 for a reference.
-    pub(super) fn new<N: Into<String>>(
+    pub(super) fn new(
         sw: &Arc<CdevSw>,
         unit: i32,
-        name: N,
+        name: impl Into<String>,
         uid: Uid,
         gid: Gid,
         mode: Mode,

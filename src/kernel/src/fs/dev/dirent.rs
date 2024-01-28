@@ -24,7 +24,7 @@ pub struct Dirent {
 }
 
 impl Dirent {
-    pub fn new<N>(
+    pub fn new(
         ty: DirentType,
         inode: i32,
         uid: Uid,
@@ -32,11 +32,8 @@ impl Dirent {
         mode: Mode,
         dir: Option<Weak<Self>>,
         cdev: Option<Weak<Cdev>>,
-        name: N,
-    ) -> Self
-    where
-        N: Into<String>,
-    {
+        name: impl Into<String>,
+    ) -> Self {
         let gg = GutexGroup::new();
         let now = SystemTime::now();
 
@@ -90,7 +87,7 @@ impl Dirent {
     }
 
     /// See `devfs_find` on the PS4 for a reference.
-    pub fn find<N: AsRef<str>>(&self, name: N, ty: Option<DirentType>) -> Option<Arc<Self>> {
+    pub fn find(&self, name: impl AsRef<str>, ty: Option<DirentType>) -> Option<Arc<Self>> {
         let name = name.as_ref();
 
         for child in self.children.read().deref() {

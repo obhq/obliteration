@@ -302,9 +302,11 @@ impl NativeEngine {
                 target[4] = tp[3];
 
                 // Path the remaining with "int3".
-                for i in 5..inst.len() {
-                    target[i] = 0xcc;
-                }
+                target
+                    .iter_mut()
+                    .take(inst.len())
+                    .skip(5)
+                    .for_each(|t| *t = 0xcc);
             }
             _ => todo!(
                 "'{}' ({:02x?}) at {:#x} on {}.",
