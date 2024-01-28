@@ -101,7 +101,9 @@ impl Ucred {
     }
 
     /// See `prison_check` on the PS4 for a reference.
-    pub fn prison_check(&self, other: &Self) -> Result<(), PrisonCheckError> {
+    /// This function returns Ok(()) if the current credentials allow the holder to
+    /// access objects associated with the credentials specified by `other`.
+    pub fn can_see(&self, other: &Self) -> Result<(), PrisonCheckError> {
         if &self.prison == &other.prison || self.prison.is_child(&other.prison) {
             return Ok(());
         }

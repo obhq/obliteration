@@ -42,7 +42,6 @@ pub struct Error {
     message: Box<str>,
 }
 
-#[allow(dead_code)]
 impl Error {
     /// # Safety
     /// `message` must be pointed to a null-terminated string allocated with `malloc` or a
