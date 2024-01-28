@@ -41,7 +41,7 @@ impl Nodes {
 #[derive(Debug)]
 pub struct Node {}
 
-/// Represents an error when [`Nodes::alloc()`] was failed.
+/// Represents an error when [`Nodes::alloc()`] fails.
 #[derive(Debug, Error)]
 pub enum AllocNodeError {
     #[error("maximum number of nodes has been reached")]

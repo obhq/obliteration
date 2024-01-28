@@ -170,7 +170,7 @@ enum MountSource {
     Bind(VPathBuf),
 }
 
-/// Represents an error when [`mount()`] was failed.
+/// Represents an error when [`mount()`] fails.
 #[derive(Debug, Error)]
 enum MountError {
     #[error("cannot create {0}")]
@@ -185,7 +185,7 @@ impl Errno for MountError {
     }
 }
 
-/// Represents an error when [`get_vnode()`] was failed.
+/// Represents an error when [`get_vnode()`] fails.
 #[derive(Debug, Error)]
 enum GetVnodeError {
     #[error("cannot open the specified file")]

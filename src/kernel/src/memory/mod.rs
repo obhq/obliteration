@@ -610,7 +610,7 @@ impl MemoryManager {
         let addr = (addr & 0xffffffffffffc000) as *mut u8;
 
         if let Err(e) = self.mname(addr, len, name) {
-            warn!(e, "mname({addr:p}, {len:#x}, {name}) was failed");
+            warn!(e, "mname({addr:p}, {len:#x}, {name}) failed");
         }
 
         Ok(SysOut::ZERO)

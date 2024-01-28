@@ -100,7 +100,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     }
 }
 
-/// Represents an error when [`getattr()`] was failed.
+/// Represents an error when [`getattr()`] fails.
 #[derive(Debug, Error)]
 enum GetAttrError {
     #[error("cannot get file size")]
@@ -115,7 +115,7 @@ impl Errno for GetAttrError {
     }
 }
 
-/// Represents an error when [`lookup()`] was failed.
+/// Represents an error when [`lookup()`] fails.
 #[derive(Debug, Error)]
 enum LookupError {
     #[error("current file is not a directory")]

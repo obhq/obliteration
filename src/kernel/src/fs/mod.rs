@@ -5,7 +5,9 @@ pub use self::ioctl::*;
 pub use self::mount::*;
 pub use self::path::*;
 pub use self::perm::*;
+pub use self::stat::*;
 pub use self::vnode::*;
+
 use crate::errno::{Errno, EBADF, EBUSY, EINVAL, ENAMETOOLONG, ENODEV, ENOENT};
 use crate::info;
 use crate::process::{GetFileError, VThread};
@@ -18,7 +20,6 @@ use macros::vpath;
 use param::Param;
 use std::fmt::{Display, Formatter};
 use std::num::{NonZeroI32, TryFromIntError};
-use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use thiserror::Error;
@@ -32,6 +33,7 @@ mod mount;
 mod null;
 mod path;
 mod perm;
+mod stat;
 mod tmp;
 mod vnode;
 
@@ -132,6 +134,10 @@ impl Fs {
         sys.register(6, &fs, Self::sys_close);
         sys.register(54, &fs, Self::sys_ioctl);
         sys.register(56, &fs, Self::sys_revoke);
+        sys.register(188, &fs, Self::sys_stat);
+        sys.register(189, &fs, Self::sys_fstat);
+        sys.register(190, &fs, Self::sys_lstat);
+        sys.register(493, &fs, Self::sys_fstatat);
 
         Ok(fs)
     }
@@ -369,7 +375,7 @@ impl Fs {
         // Get target file.
         let td = VThread::current().unwrap();
 
-        self.ioctl(fd, com, data, td.deref())?;
+        self.ioctl(fd, com, data, &td)?;
 
         Ok(SysOut::ZERO)
     }
@@ -432,9 +438,101 @@ impl Fs {
 
         // TODO: It seems like the initial ucred of the process is either root or has PRIV_VFS_ADMIN
         // privilege.
-        self.revoke(vn, td.deref())?;
+        self.revoke(vn, &td)?;
 
         Ok(SysOut::ZERO)
+    }
+
+    fn sys_stat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let path = unsafe { i.args[0].to_path() }?.unwrap();
+        let stat_out: *mut Stat = i.args[1].into();
+
+        let td = VThread::current().unwrap();
+
+        let stat = self.stat(path, &td)?;
+
+        unsafe {
+            *stat_out = stat;
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
+    /// This function is inlined on the PS4, but corresponds to `kern_stat` in FreeBSD.
+    fn stat(self: &Arc<Self>, path: impl AsRef<VPath>, td: &VThread) -> Result<Stat, StatError> {
+        self.statat(AtFlags::empty(), At::Cwd, path, td)
+    }
+
+    fn sys_fstat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let stat_out: *mut Stat = i.args[1].into();
+
+        let td = VThread::current().unwrap();
+
+        let stat = self.fstat(fd, &td)?;
+
+        unsafe {
+            *stat_out = stat;
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
+    /// See `kern_fstat` on the PS4 for a reference.
+    fn fstat(self: &Arc<Self>, fd: i32, td: &VThread) -> Result<Stat, StatError> {
+        todo!()
+    }
+
+    fn sys_lstat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let path = unsafe { i.args[0].to_path() }?.unwrap();
+        let stat_out: *mut Stat = i.args[1].into();
+
+        let td = VThread::current().unwrap();
+
+        td.priv_check(Privilege::SCE683)?;
+
+        let stat = self.lstat(path, &td)?;
+
+        unsafe {
+            *stat_out = stat;
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
+    /// See `kern_lstat` in FreeBSD for a reference. (This function is inlined on the PS4)
+    fn lstat(self: &Arc<Self>, path: impl AsRef<VPath>, td: &VThread) -> Result<Stat, StatError> {
+        self.statat(AtFlags::SYMLINK_NOFOLLOW, At::Cwd, path, td)
+    }
+
+    fn sys_fstatat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let dirfd: i32 = i.args[0].try_into().unwrap();
+        let path = unsafe { i.args[1].to_path() }?.unwrap();
+        let stat_out: *mut Stat = i.args[2].into();
+        let flags: AtFlags = i.args[3].try_into().unwrap();
+
+        let td = VThread::current().unwrap();
+
+        td.priv_check(Privilege::SCE683)?;
+
+        let stat = self.statat(flags, At::Fd(dirfd), path, &td)?;
+
+        unsafe {
+            *stat_out = stat;
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
+    /// See `kern_statat_vnhook` on the PS4 for a reference.
+    fn statat(
+        self: &Arc<Self>,
+        flags: AtFlags,
+        dirat: At,
+        path: impl AsRef<VPath>,
+        td: &VThread,
+    ) -> Result<Stat, StatError> {
+        todo!()
     }
 
     /// See `vfs_donmount` on the PS4 for a reference.
@@ -613,7 +711,29 @@ pub struct FsConfig {
     ) -> Result<Mount, Box<dyn Errno>>,
 }
 
-/// Represents an error when FS was failed to initialized.
+#[derive(Debug)]
+/// Represents the fd arg for
+enum At {
+    Cwd,
+    Fd(i32),
+}
+
+bitflags! {
+    /// Flags for *at() syscalls.
+    struct AtFlags: i32 {
+        const SYMLINK_NOFOLLOW = 0x200;
+    }
+}
+
+impl TryFrom<SysArg> for AtFlags {
+    type Error = TryFromIntError;
+
+    fn try_from(value: SysArg) -> Result<Self, Self::Error> {
+        Ok(Self::from_bits_retain(value.get().try_into()?))
+    }
+}
+
+/// Represents an error when FS fails to initialize.
 #[derive(Debug, Error)]
 pub enum FsError {
     #[error("cannot mount devfs")]
@@ -660,7 +780,7 @@ impl Errno for MountError {
     }
 }
 
-/// Represents an error when [`Fs::open()`] was failed.
+/// Represents an error when [`Fs::open()`] fails.
 #[derive(Debug, Error)]
 pub enum OpenError {
     #[error("cannot lookup the file")]
@@ -706,7 +826,7 @@ impl Errno for IoctlError {
     }
 }
 
-/// Represents an error when [`Fs::lookup()`] was failed.
+/// Represents an error when [`Fs::lookup()`] fails.
 #[derive(Debug, Error)]
 pub enum LookupError {
     #[error("no such file or directory")]
@@ -739,6 +859,24 @@ impl Errno for RevokeError {
         match self {
             Self::GetAttrError(e) => e.errno(),
             Self::PrivelegeError(e) => e.errno(),
+        }
+    }
+}
+/// Represents an error when one of the stat syscalls fails
+#[derive(Debug, Error)]
+pub enum StatError {
+    #[error("failed to get file")]
+    FailedToGetFile(#[from] GetFileError),
+
+    #[error("failed to get file attr")]
+    GetAttrError(#[from] Box<dyn Errno>),
+}
+
+impl Errno for StatError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::FailedToGetFile(e) => e.errno(),
+            Self::GetAttrError(e) => e.errno(),
         }
     }
 }

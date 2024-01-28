@@ -1,15 +1,17 @@
 use crate::errno::{Errno, ENOTTY, ENXIO};
-use crate::fs::{IoCmd, VFile, VFileOps};
+use crate::fs::{IoCmd, Stat, VFile, VFileOps};
 use crate::process::VThread;
 use std::num::NonZeroI32;
 use thiserror::Error;
 
 const BLOCKPOOL_FILEOPS: VFileOps = VFileOps {
-    read: |_, _, _| Err(GenericError::InvalidOperation.into()),
-    write: |_, _, _| Err(GenericError::InvalidOperation.into()),
+    read: |_, _, _| Err(GenericError::InvalidOperation)?,
+    write: |_, _, _| Err(GenericError::InvalidOperation)?,
     ioctl: blockpool_ioctl,
+    stat: blockpool_stat,
 };
 
+#[allow(dead_code)] // Remove this when blockpools are being implemented
 fn blockpool_ioctl(
     file: &VFile,
     cmd: IoCmd,
@@ -21,6 +23,11 @@ fn blockpool_ioctl(
         BLOCKPOOL_CMD2 => todo!("blockpool ioctl cmd 2"),
         _ => Err(IoctlError::InvalidCommand(cmd).into()),
     }
+}
+
+#[allow(dead_code)] // Remove this when blockpools are being implemented
+fn blockpool_stat(file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
+    todo!()
 }
 
 #[derive(Debug, Error)]
