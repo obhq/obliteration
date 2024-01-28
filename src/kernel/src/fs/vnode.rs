@@ -235,7 +235,7 @@ impl VnodeAttrs {
     pub fn size(&self) -> u64 {
         self.size
     }
-  
+
     pub fn set_fsid(&mut self, fsid: u32) {
         self.fsid = fsid;
     }
