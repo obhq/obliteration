@@ -18,7 +18,6 @@ use macros::vpath;
 use param::Param;
 use std::fmt::{Display, Formatter};
 use std::num::{NonZeroI32, TryFromIntError};
-use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use thiserror::Error;
@@ -245,16 +244,6 @@ impl Fs {
         Ok(vn)
     }
 
-    fn revoke(&self, vn: Arc<Vnode>, td: &VThread) -> Result<(), RevokeError> {
-        let vattr = vn.getattr().map_err(RevokeError::GetAttrError)?;
-
-        if td.cred().effective_uid() != vattr.uid() {
-            td.priv_check(Privilege::VFS_ADMIN)?;
-        }
-
-        todo!();
-    }
-
     fn sys_write(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *const u8 = i.args[1].into();
@@ -409,9 +398,22 @@ impl Fs {
 
         // TODO: It seems like the initial ucred of the process is either root or has PRIV_VFS_ADMIN
         // privilege.
-        self.revoke(vn, td.deref())?;
+        self.revoke(vn, &td)?;
 
         Ok(SysOut::ZERO)
+    }
+
+    fn revoke(&self, vn: Arc<Vnode>, td: &VThread) -> Result<(), RevokeError> {
+        let vattr = vn.getattr().map_err(RevokeError::GetAttrError)?;
+
+        if td.cred().effective_uid() != vattr.uid() {
+            td.priv_check(Privilege::VFS_ADMIN)?;
+        }
+
+        vn.revoke(RevokeFlags::REVOKE_ALL)
+            .map_err(RevokeError::RevokeFailed)?;
+
+        Ok(())
     }
 
     /// See `vfs_donmount` on the PS4 for a reference.
@@ -590,6 +592,12 @@ pub struct FsConfig {
     ) -> Result<Mount, Box<dyn Errno>>,
 }
 
+bitflags! {
+    pub struct RevokeFlags: i32 {
+        const REVOKE_ALL = 0x0001;
+    }
+}
+
 /// Represents an error when FS was failed to initialized.
 #[derive(Debug, Error)]
 pub enum FsError {
@@ -678,6 +686,9 @@ pub enum RevokeError {
 
     #[error("insufficient privilege")]
     PrivelegeError(#[from] PrivilegeError),
+
+    #[error("failed to revoke access")]
+    RevokeFailed(#[source] Box<dyn Errno>),
 }
 
 impl Errno for RevokeError {
@@ -685,6 +696,7 @@ impl Errno for RevokeError {
         match self {
             Self::GetAttrError(e) => e.errno(),
             Self::PrivelegeError(e) => e.errno(),
+            Self::RevokeFailed(e) => e.errno(),
         }
     }
 }

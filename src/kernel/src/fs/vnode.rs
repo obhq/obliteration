@@ -1,4 +1,4 @@
-use super::{unixify_access, Access, Mode, Mount, OpenFlags, VFile};
+use super::{unixify_access, Access, Mode, Mount, OpenFlags, RevokeFlags, VFile};
 use crate::errno::{Errno, ENOTDIR, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
@@ -105,6 +105,10 @@ impl Vnode {
     ) -> Result<(), Box<dyn Errno>> {
         self.backend.clone().open(self, td, mode, file)
     }
+
+    pub fn revoke(self: &Arc<Self>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
+        self.backend.clone().revoke(self, flags)
+    }
 }
 
 impl Drop for Vnode {
@@ -187,6 +191,15 @@ pub(super) trait VnodeBackend: Debug + Send + Sync {
         #[allow(unused_variables)] file: Option<&mut VFile>,
     ) -> Result<(), Box<dyn Errno>> {
         Ok(())
+    }
+
+    /// An implementation of `vop_revoke`.
+    fn revoke(
+        self: Arc<Self>,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] flags: RevokeFlags,
+    ) -> Result<(), Box<dyn Errno>> {
+        panic!("vop_revoke called");
     }
 }
 
