@@ -34,7 +34,7 @@ impl FileBackend for BlockPool {
     }
 }
 
-#[derive(Debug, Error, Errno)]
+#[derive(Debug, Error)]
 pub enum IoctlError {
     #[error("invalid command {0}")]
     #[errno(ENOTTY)]
