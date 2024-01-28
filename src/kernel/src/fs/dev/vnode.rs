@@ -127,7 +127,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
                     None => return Err(Box::new(LookupError::NoParent)),
                 };
 
-                match alloc_vnode(vn.fs(), &parent) {
+                match alloc_vnode(self.fs.clone(), vn.fs(), parent) {
                     Ok(v) => Ok(v),
                     Err(e) => Err(Box::new(LookupError::AllocVnodeFailed(e))),
                 }
@@ -142,7 +142,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
                     None => todo!("devfs lookup with non-existent file"),
                 };
 
-                match alloc_vnode(vn.fs(), &item) {
+                match alloc_vnode(self.fs.clone(), vn.fs(), item) {
                     Ok(v) => Ok(v),
                     Err(e) => Err(Box::new(LookupError::AllocVnodeFailed(e))),
                 }
