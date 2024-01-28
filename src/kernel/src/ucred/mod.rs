@@ -112,7 +112,7 @@ impl Ucred {
     }
 
     pub fn is_jailed(&self) -> bool {
-        self.prison == Cow::Borrowed(&PRISON0)
+        self.prison != Cow::Borrowed(&PRISON0)
     }
 
     /// See `priv_check_cred` on the PS4 for a reference.
