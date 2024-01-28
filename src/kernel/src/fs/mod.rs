@@ -6,21 +6,19 @@ pub use self::mount::*;
 pub use self::path::*;
 pub use self::perm::*;
 pub use self::vnode::*;
-
-use self::host::HostFs;
 use crate::errno::{Errno, EBADF, EBUSY, EINVAL, ENAMETOOLONG, ENODEV, ENOENT};
 use crate::info;
 use crate::process::VThread;
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
+use crate::ucred::PrivilegeError;
 use crate::ucred::{Privilege, Ucred};
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup};
 use macros::vpath;
 use param::Param;
-use std::any::Any;
-use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::num::{NonZeroI32, TryFromIntError};
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use thiserror::Error;
@@ -31,6 +29,7 @@ mod file;
 mod host;
 mod ioctl;
 mod mount;
+mod null;
 mod path;
 mod perm;
 mod tmp;
@@ -41,30 +40,26 @@ mod vnode;
 pub struct Fs {
     mounts: Gutex<Mounts>,   // mountlist
     root: Gutex<Arc<Vnode>>, // rootvnode
-    kern: Arc<Ucred>,
+    kern_cred: Arc<Ucred>,
 }
 
 impl Fs {
-    pub fn new<S, G>(
-        system: S,
-        game: G,
+    pub fn new(
+        system: impl Into<PathBuf>,
+        game: impl Into<PathBuf>,
         param: &Arc<Param>,
-        kern: &Arc<Ucred>,
+        kern_cred: &Arc<Ucred>,
         sys: &mut Syscalls,
-    ) -> Result<Arc<Self>, FsError>
-    where
-        S: Into<PathBuf>,
-        G: Into<PathBuf>,
-    {
+    ) -> Result<Arc<Self>, FsError> {
         // Mount devfs as an initial root.
         let mut mounts = Mounts::new();
         let conf = Self::find_config("devfs").unwrap();
         let init = (conf.mount)(
             conf,
-            kern,
+            kern_cred,
             vpath!("/dev").to_owned(),
             None,
-            HashMap::new(),
+            MountOpts::new(),
             MountFlags::empty(),
         )
         .map_err(FsError::MountDevFailed)?;
@@ -74,28 +69,27 @@ impl Fs {
         let root = init.root();
 
         // Setup mount options for root FS.
-        let mut opts: HashMap<String, Box<dyn Any>> = HashMap::new();
+        let mut opts = MountOpts::new();
 
-        opts.insert("fstype".into(), Box::new(String::from("exfatfs")));
-        opts.insert("fspath".into(), Box::new(VPathBuf::new()));
-        opts.insert("from".into(), Box::new(String::from("md0")));
-        opts.insert("ro".into(), Box::new(true));
-        opts.insert("ob:system".into(), Box::new(system.into()));
-        opts.insert("ob:game".into(), Box::new(game.into()));
-        opts.insert("ob:param".into(), Box::new(param.clone()));
+        opts.insert("fstype", "exfatfs");
+        opts.insert("fspath", VPathBuf::new());
+        opts.insert("from", "md0");
+        opts.insert("ro", true);
+        opts.insert("ob:system", system.into());
+        opts.insert("ob:game", game.into());
+        opts.insert("ob:param", param.clone());
 
         // Mount root FS.
         let gg = GutexGroup::new();
         let fs = Arc::new(Self {
             mounts: gg.spawn(mounts),
             root: gg.spawn(root),
-            kern: kern.clone(),
+            kern_cred: kern_cred.clone(),
         });
 
-        let root = match fs.mount(opts, MountFlags::MNT_ROOTFS, None) {
-            Ok(v) => v,
-            Err(e) => return Err(FsError::MountRootFailed(e)),
-        };
+        let root = fs
+            .mount(opts, MountFlags::MNT_ROOTFS, None)
+            .map_err(FsError::MountRootFailed)?;
 
         // Swap devfs with rootfs so rootfs become an actual root.
         let old = {
@@ -141,19 +135,12 @@ impl Fs {
         Ok(fs)
     }
 
-    pub fn app(&self) -> Arc<VPathBuf> {
-        let root = self.mounts.read().root().clone();
-        let host = root.data().downcast_ref::<HostFs>().unwrap();
-
-        host.app().clone()
-    }
-
     pub fn root(&self) -> Arc<Vnode> {
         self.root.read().clone()
     }
 
     pub fn open(&self, path: impl AsRef<VPath>, td: Option<&VThread>) -> Result<VFile, OpenError> {
-        let _vn = self.lookup(path, LookupOp::Lookup, td)?;
+        let _vn = self.lookup(path, LookupOp::Lookup, td).map_err(OpenError::LookupFailed)?;
 
         todo!()
     }
@@ -231,6 +218,7 @@ impl Fs {
                     }
                 }
                 VnodeType::Character => return Err(LookupError::NotFound),
+                _ => todo!(),
             }
 
             // Prevent ".." on root.
@@ -245,7 +233,11 @@ impl Fs {
                     if e.errno() == ENOENT {
                         return Err(LookupError::NotFound);
                     } else {
-                        return Err(LookupError::LookupFailed(i, cn.to_string(), e));
+                        return Err(LookupError::LookupFailed(
+                            i,
+                            cn.to_string().into_boxed_str(),
+                            e,
+                        ));
                     }
                 }
             };
@@ -254,14 +246,20 @@ impl Fs {
         Ok(vn)
     }
 
-    fn revoke<P: Into<VPathBuf>>(&self, _path: P) {
-        // TODO: Implement this.
+    fn revoke(&self, vn: Arc<Vnode>, td: &VThread) -> Result<(), RevokeError> {
+        let vattr = vn.getattr().map_err(RevokeError::GetAttrError)?;
+
+        if td.cred().effective_uid() != vattr.uid() {
+            td.priv_check(Privilege::VFS_ADMIN)?;
+        }
+
+        todo!();
     }
 
     fn sys_write(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *const u8 = i.args[1].into();
-        let len: usize = i.args[2].try_into().unwrap();
+        let len: usize = i.args[2].into();
 
         if len > 0x7fffffff {
             return Err(SysErr::Raw(EINVAL));
@@ -331,10 +329,10 @@ impl Fs {
     }
 
     fn sys_ioctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        const UNK_COM1: IoCmd = IoCmd::io(b'f', 1);
-        const UNK_COM2: IoCmd = IoCmd::io(b'f', 2);
-        const UNK_COM3: IoCmd = IoCmd::iowint(b'f', 0x7e);
-        const UNK_COM4: IoCmd = IoCmd::iowint(b'f', 0x7d);
+        const FIOCLEX: IoCmd = IoCmd::io(b'f', 1);
+        const FIONCLEX: IoCmd = IoCmd::io(b'f', 2);
+        const FIONBIO: IoCmd = IoCmd::iowint(b'f', 0x7e);
+        const FIOASYNC: IoCmd = IoCmd::iowint(b'f', 0x7d);
 
         let fd: i32 = i.args[0].try_into().unwrap();
         let com: IoCmd = i.args[1].try_into()?;
@@ -375,10 +373,10 @@ impl Fs {
         info!("Executing ioctl({com}) on file descriptor {fd}.");
 
         match com {
-            UNK_COM1 => todo!("ioctl with com = 0x20006601"),
-            UNK_COM2 => todo!("ioctl with com = 0x20006602"),
-            UNK_COM3 => todo!("ioctl with com = 0x8004667d"),
-            UNK_COM4 => todo!("ioctl with com = 0x8004667e"),
+            FIOCLEX => todo!("ioctl with com = FIOCLEX"),
+            FIONCLEX => todo!("ioctl with com = FIONCLEX"),
+            FIONBIO => todo!("ioctl with com = FIONBIO"),
+            FIOASYNC => todo!("ioctl with com = FIOASYNC"),
             _ => {}
         }
 
@@ -412,28 +410,24 @@ impl Fs {
 
         // TODO: It seems like the initial ucred of the process is either root or has PRIV_VFS_ADMIN
         // privilege.
-        self.revoke(path);
+        self.revoke(vn, td.deref())?;
 
         Ok(SysOut::ZERO)
     }
 
     /// See `vfs_donmount` on the PS4 for a reference.
     fn mount(
-        &self,
-        mut opts: HashMap<String, Box<dyn Any>>,
+        self: &Arc<Self>,
+        mut opts: MountOpts,
         mut flags: MountFlags,
         td: Option<&VThread>,
     ) -> Result<Arc<Vnode>, MountError> {
         // Process the options.
-        let fs = opts.remove("fstype").unwrap().downcast::<String>().unwrap();
-        let path = opts
-            .remove("fspath")
-            .unwrap()
-            .downcast::<VPathBuf>()
-            .unwrap();
+        let fs: Box<str> = opts.remove("fstype").unwrap().unwrap();
+        let path: VPathBuf = opts.remove("fspath").unwrap().unwrap();
 
         opts.retain(|k, v| {
-            match k.as_str() {
+            match k {
                 "async" => todo!(),
                 "atime" => todo!(),
                 "clusterr" => todo!(),
@@ -451,7 +445,7 @@ impl Fs {
                 "nosymfollow" => todo!(),
                 "rdonly" => todo!(),
                 "reload" => todo!(),
-                "ro" => flags.set(MountFlags::MNT_RDONLY, *v.downcast_ref::<bool>().unwrap()),
+                "ro" => flags.set(MountFlags::MNT_RDONLY, v.as_bool().unwrap()),
                 "rw" => todo!(),
                 "suid" => todo!(),
                 "suiddir" => todo!(),
@@ -476,7 +470,7 @@ impl Fs {
             todo!("vfs_donmount with MNT_UPDATE");
         } else {
             let conf = if flags.intersects(MountFlags::MNT_ROOTFS) {
-                Self::find_config(fs.as_str()).ok_or(MountError::InvalidFs)?
+                Self::find_config(fs).ok_or(MountError::InvalidFs)?
             } else {
                 todo!("vfs_donmount with !MNT_ROOTFS");
             };
@@ -488,13 +482,14 @@ impl Fs {
             };
 
             // TODO: Check if jailed.
+
             flags.remove(MountFlags::from_bits_retain(0xFFFFFFFF272F3F80));
 
             // TODO: Implement budgetid.
             let mount = (conf.mount)(
                 conf,
-                td.map_or_else(|| &self.kern, |t| t.cred()),
-                *path,
+                td.map_or(&self.kern_cred, |t| t.cred()),
+                path,
                 Some(vn.clone()),
                 opts,
                 flags,
@@ -520,7 +515,7 @@ impl Fs {
     }
 
     /// See `vfs_byname` on the PS4 for a reference.
-    fn find_config<N: AsRef<str>>(name: N) -> Option<&'static FsConfig> {
+    fn find_config(name: impl AsRef<str>) -> Option<&'static FsConfig> {
         let mut name = name.as_ref();
         let mut conf = Some(&HOST);
 
@@ -591,7 +586,7 @@ pub struct FsConfig {
         cred: &Arc<Ucred>,
         path: VPathBuf,
         parent: Option<Arc<Vnode>>,
-        opts: HashMap<String, Box<dyn Any>>,
+        opts: MountOpts,
         flags: MountFlags,
     ) -> Result<Mount, Box<dyn Errno>>,
 }
@@ -646,8 +641,8 @@ impl Errno for MountError {
 /// Represents an error when [`Fs::open()`] was failed.
 #[derive(Debug, Error)]
 pub enum OpenError {
-    #[error("Lookup failed")]
-    LookupFailed(#[from] LookupError),
+    #[error("cannot lookup the file")]
+    LookupFailed(#[source] LookupError),
 }
 
 impl Errno for OpenError {
@@ -665,7 +660,7 @@ pub enum LookupError {
     NotFound,
 
     #[error("cannot lookup '{1}' from component #{0}")]
-    LookupFailed(usize, String, #[source] Box<dyn Errno>),
+    LookupFailed(usize, Box<str>, #[source] Box<dyn Errno>),
 }
 
 impl Errno for LookupError {
@@ -673,6 +668,24 @@ impl Errno for LookupError {
         match self {
             Self::NotFound => ENOENT,
             Self::LookupFailed(_, _, e) => e.errno(),
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum RevokeError {
+    #[error("failed to get file attr")]
+    GetAttrError(#[source] Box<dyn Errno>),
+
+    #[error("insufficient privilege")]
+    PrivelegeError(#[from] PrivilegeError),
+}
+
+impl Errno for RevokeError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::GetAttrError(e) => e.errno(),
+            Self::PrivelegeError(e) => e.errno(),
         }
     }
 }
@@ -744,7 +757,7 @@ static NULLFS: FsConfig = FsConfig {
     name: "nullfs",
     ty: 0x29,
     next: Some(&PFS),
-    mount: |_, _, _, _, _, _| todo!("mount for nullfs"),
+    mount: self::null::mount,
 };
 
 static PFS: FsConfig = FsConfig {

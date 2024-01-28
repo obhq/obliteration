@@ -2,13 +2,12 @@ pub use self::cdev::*;
 use self::dirent::Dirent;
 use self::vnode::VnodeBackend;
 use super::{
-    path_contains, DirentType, FsConfig, FsOps, Mode, Mount, MountFlags, VPathBuf, Vnode, VnodeType,
+    path_contains, DirentType, Filesystem, FsConfig, Mode, Mount, MountFlags, MountOpts, VPathBuf,
+    Vnode, VnodeType,
 };
 use crate::errno::{Errno, EEXIST, ENOENT, EOPNOTSUPP};
 use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
-use std::any::Any;
-use std::collections::HashMap;
 use std::num::NonZeroI32;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
@@ -19,10 +18,10 @@ mod dirent;
 mod vnode;
 
 /// See `make_dev_credv` on the PS4 for a reference.
-pub fn make_dev<N: Into<String>>(
+pub fn make_dev(
     sw: &Arc<CdevSw>,
     unit: i32,
-    name: N,
+    name: impl Into<String>,
     uid: Uid,
     gid: Gid,
     mode: Mode,
@@ -67,7 +66,7 @@ pub fn make_dev<N: Into<String>>(
 }
 
 /// See `devfs_dev_exists` on the PS4 for a reference.
-pub fn dev_exists<N: AsRef<str>>(name: N) -> bool {
+pub fn dev_exists(name: impl AsRef<str>) -> bool {
     let name = name.as_ref();
 
     for dev in &DEVICES.read().unwrap().list {
@@ -81,7 +80,11 @@ pub fn dev_exists<N: AsRef<str>>(name: N) -> bool {
 }
 
 /// See `devfs_allocv` on the PS4 for a reference.
-fn alloc_vnode(mnt: &Arc<Mount>, ent: &Arc<Dirent>) -> Result<Arc<Vnode>, AllocVnodeError> {
+fn alloc_vnode(
+    fs: Arc<DevFs>,
+    mnt: &Arc<Mount>,
+    ent: Arc<Dirent>,
+) -> Result<Arc<Vnode>, AllocVnodeError> {
     // Check for active vnode.
     let mut current = ent.vnode_mut();
 
@@ -90,7 +93,6 @@ fn alloc_vnode(mnt: &Arc<Mount>, ent: &Arc<Dirent>) -> Result<Arc<Vnode>, AllocV
     }
 
     // Create vnode. Beware of deadlock because we are currently holding on dirent lock.
-    let fs = mnt.data().clone().downcast::<DevFs>().unwrap();
     let tag = "devfs";
     let backend = Arc::new(VnodeBackend::new(fs, ent.clone()));
     let vn = match ent.ty() {
@@ -115,7 +117,6 @@ fn alloc_vnode(mnt: &Arc<Mount>, ent: &Arc<Dirent>) -> Result<Arc<Vnode>, AllocV
     };
 
     // Set current vnode.
-    let vn = Arc::new(vn);
 
     *current = Some(Arc::downgrade(&vn));
     drop(current);
@@ -196,8 +197,7 @@ impl DevFs {
 
             if children
                 .iter()
-                .find(|&c| c.ty() == DirentType::Link && c.name() == name)
-                .is_some()
+                .any(|c| c.ty() == DirentType::Link && c.name() == name)
             {
                 todo!("devfs_populate with DT_LNK children");
             }
@@ -217,7 +217,7 @@ impl DevFs {
                 gid,
                 mode,
                 Some(Arc::downgrade(&dir)),
-                Some(Arc::downgrade(&dev)),
+                Some(Arc::downgrade(dev)),
                 name,
             ));
 
@@ -237,9 +237,9 @@ impl DevFs {
         *gen = devices.generation;
     }
 
-    /// Partial implementation of `devfs_vmkdir`. The main different is this function does not add
+    /// Partial implementation of `devfs_vmkdir`. The main difference is this function does not add
     /// the created directory to `parent` and does not run `devfs_rules_apply`.
-    fn mkdir<N: Into<String>>(name: N, inode: i32, parent: Option<&Arc<Dirent>>) -> Arc<Dirent> {
+    fn mkdir(name: impl Into<String>, inode: i32, parent: Option<&Arc<Dirent>>) -> Arc<Dirent> {
         // Create the directory.
         let dir = Arc::new(Dirent::new(
             DirentType::Directory,
@@ -328,7 +328,7 @@ pub fn mount(
     cred: &Arc<Ucred>,
     path: VPathBuf,
     parent: Option<Arc<Vnode>>,
-    opts: HashMap<String, Box<dyn Any>>,
+    _: MountOpts,
     flags: MountFlags,
 ) -> Result<Mount, Box<dyn Errno>> {
     // Check mount flags.
@@ -343,7 +343,6 @@ pub fn mount(
 
     Ok(Mount::new(
         conf,
-        &DEVFS_OPS,
         cred,
         path,
         parent,
@@ -356,10 +355,12 @@ pub fn mount(
     ))
 }
 
-fn root(mnt: &Arc<Mount>) -> Arc<Vnode> {
-    let fs = mnt.data().downcast_ref::<DevFs>().unwrap();
+impl Filesystem for DevFs {
+    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Arc<Vnode> {
+        let ent = self.root.clone();
 
-    alloc_vnode(mnt, &fs.root).unwrap()
+        alloc_vnode(self, mnt, ent).unwrap()
+    }
 }
 
 /// Represents an error when [`mount()`] is failed.
@@ -395,7 +396,6 @@ impl Errno for AllocVnodeError {
     }
 }
 
-static DEVFS_OPS: FsOps = FsOps { root };
 static DEVFS_INDEX: AtomicUsize = AtomicUsize::new(0); // TODO: Use a proper implementation.
 static INODE: AtomicU32 = AtomicU32::new(3); // TODO: Same here.
 static DEVICES: RwLock<Devices> = RwLock::new(Devices {

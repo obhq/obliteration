@@ -205,7 +205,7 @@ impl FileInfo {
         let hash: usize = hash.try_into().unwrap();
         let hashsz: usize = hashsz.try_into().unwrap();
         let hash = &data[hash..(hash + hashsz)];
-        let nbuckets: usize = LE::read_u32(&hash).try_into().unwrap();
+        let nbuckets: usize = LE::read_u32(hash).try_into().unwrap();
         let nchains: usize = LE::read_u32(&hash[4..]).try_into().unwrap();
         let mut buckets = vec![0; nbuckets];
         let mut chains = vec![0; nchains];

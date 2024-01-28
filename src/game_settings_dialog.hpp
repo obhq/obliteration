@@ -4,16 +4,17 @@
 
 class Game;
 class GameGraphicSettings;
-class QDialogButtonBox;
-class QTabWidget;
+class GameSettings;
 
 class GameSettingsDialog final : public QDialog {
 public:
-    GameSettingsDialog(Game *game, QWidget *parent = nullptr);
+    GameSettingsDialog(Game *game, GameSettings *settings, QWidget *parent = nullptr);
     ~GameSettingsDialog();
 
+private slots:
+    void save();
+
 private:
-    QTabWidget *m_tab;
-    QDialogButtonBox *m_actions;
+    GameSettings *m_settings;
     GameGraphicSettings *m_graphic;
 };

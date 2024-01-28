@@ -13,6 +13,7 @@ use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use bitflags::bitflags;
 use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation, Symbol};
 use gmtx::{Gutex, GutexGroup};
+use macros::vpath;
 use sha1::{Digest, Sha1};
 use std::borrow::Cow;
 use std::io::Write;
@@ -60,21 +61,17 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         sys: &mut Syscalls,
         dump: Option<&Path>,
     ) -> Result<Arc<Self>, RuntimeLinkerError<E>> {
-        // Get path to eboot.bin.
-        let mut path = fs.app().join("app0").unwrap();
-
-        path.push("eboot.bin").unwrap();
-
         // Get eboot.bin.
-        let file = match fs.open(&path, None) {
+        let path = vpath!("/app0/eboot.bin");
+        let file = match fs.open(path, None) {
             Ok(v) => v,
-            Err(e) => return Err(RuntimeLinkerError::OpenExeFailed(path, e)),
+            Err(e) => return Err(RuntimeLinkerError::OpenExeFailed(path.to_owned(), e)),
         };
 
         // Open eboot.bin.
         let elf = match Elf::open(path.as_str(), file) {
             Ok(v) => v,
-            Err(e) => return Err(RuntimeLinkerError::OpenElfFailed(path, e)),
+            Err(e) => return Err(RuntimeLinkerError::OpenElfFailed(path.to_owned(), e)),
         };
 
         // Check image type.
@@ -85,7 +82,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
                 }
             }
             FileType::ET_SCE_DYNEXEC if elf.dynamic().is_some() => {}
-            _ => return Err(RuntimeLinkerError::InvalidExe(path)),
+            _ => return Err(RuntimeLinkerError::InvalidExe(path.to_owned())),
         }
 
         // Get base address.
@@ -99,7 +96,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         // Map eboot.bin.
         let mut app = match Module::map(mm, ee, elf, base, "executable", 0, Vec::new(), 1) {
             Ok(v) => v,
-            Err(e) => return Err(RuntimeLinkerError::MapExeFailed(path, e)),
+            Err(e) => return Err(RuntimeLinkerError::MapExeFailed(path.to_owned(), e)),
         };
 
         if let Some(p) = dump {
@@ -110,7 +107,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         *app.flags_mut() |= ModuleFlags::MAIN_PROG;
 
         if let Err(e) = ee.setup_module(&mut app) {
-            return Err(RuntimeLinkerError::SetupExeFailed(path, e));
+            return Err(RuntimeLinkerError::SetupExeFailed(path.to_owned(), e));
         }
 
         // Check if application need certain modules.
@@ -504,7 +501,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         };
 
         // Add to global list if it is not in the list yet.
-        if globals.iter().find(|m| Arc::ptr_eq(m, &md)).is_none() {
+        if !globals.iter().any(|m| Arc::ptr_eq(m, &md)) {
             globals.push(md.clone());
         }
 
@@ -560,10 +557,8 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
     fn sys_dynlib_do_copy_relocations(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
         if let Some(info) = self.app.file_info() {
-            for reloc in info.relocs() {
-                if reloc.ty() == Relocation::R_X86_64_COPY {
-                    return Err(SysErr::Raw(EINVAL));
-                }
+            if info.relocs().any(|r| r.ty() == Relocation::R_X86_64_COPY) {
+                return Err(SysErr::Raw(EINVAL));
             }
 
             Ok(SysOut::ZERO)
@@ -676,7 +671,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         resolver: &SymbolResolver<E>,
     ) -> Result<(), RelocateError> {
         // TODO: Implement flags & 0x800.
-        self.relocate_single(md, &resolver)?;
+        self.relocate_single(md, resolver)?;
 
         // Relocate other modules.
         for m in list {
@@ -684,7 +679,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
                 continue;
             }
 
-            self.relocate_single(m, &resolver)?;
+            self.relocate_single(m, resolver)?;
         }
 
         Ok(())

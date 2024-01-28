@@ -1,6 +1,7 @@
 #include "main_window.hpp"
 #include "app_data.hpp"
 #include "game_models.hpp"
+#include "game_settings.hpp"
 #include "game_settings_dialog.hpp"
 #include "log_formatter.hpp"
 #include "path.hpp"
@@ -430,7 +431,10 @@ void MainWindow::requestGamesContextMenu(const QPoint &pos)
         QString folderPath = game->directory();
         QDesktopServices::openUrl(QUrl::fromLocalFile(folderPath));
     } else if (selected == &settings) {
-        GameSettingsDialog dialog(game, this);
+        // Load settings then show a dialog to edit.
+        auto settings = GameSettings::load(game);
+        GameSettingsDialog dialog(game, settings.get(), this);
+
         dialog.exec();
     }
 }
@@ -581,7 +585,7 @@ bool MainWindow::loadGame(const QString &gameId)
 
     if (!isPatch && !isAddCont) {
 
-        // Read game title from param.sfo.
+        // Read game information from param.sfo.
         auto paramDir = joinPath(gamePath.c_str(), "sce_sys");
         auto paramPath = joinPath(paramDir.c_str(), "param.sfo");
         Error error;
@@ -592,10 +596,12 @@ bool MainWindow::loadGame(const QString &gameId)
             return false;
         }
 
-        // Add to list if not a DLC/Patch refresh.
-        auto gameList = reinterpret_cast<GameListModel *>(m_games->model());
-        gameList->add(new Game(param.title(), gamePath.c_str()));
+        // Add to list.
+        auto list = reinterpret_cast<GameListModel *>(m_games->model());
+
+        list->add(new Game(param.titleId(), param.title(), gamePath.c_str()));
     }
+
     return true;
 }
 

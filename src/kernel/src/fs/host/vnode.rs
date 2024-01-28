@@ -1,5 +1,5 @@
 use super::file::HostFile;
-use super::{get_vnode, GetVnodeError};
+use super::{get_vnode, GetVnodeError, HostFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR};
 use crate::fs::{
     Access, LookupOp, Mode, OpenFlags, VFile, VPathComponent, Vnode, VnodeAttrs, VnodeType,
@@ -14,12 +14,13 @@ use thiserror::Error;
 /// An implementation of [`crate::fs::VnodeBackend`].
 #[derive(Debug)]
 pub struct VnodeBackend {
+    fs: Arc<HostFs>,
     file: HostFile,
 }
 
 impl VnodeBackend {
-    pub fn new(file: HostFile) -> Self {
-        Self { file }
+    pub fn new(fs: Arc<HostFs>, file: HostFile) -> Self {
+        Self { fs, file }
     }
 }
 
@@ -36,18 +37,16 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 
     fn getattr(self: Arc<Self>, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
         // Get file size.
-        let size = match self.file.len() {
-            Ok(v) => v,
-            Err(e) => return Err(Box::new(GetAttrError::GetSizeFailed(e))),
-        };
+        let size = self.file.len().map_err(GetAttrError::GetSizeFailed)?;
 
         // TODO: Check how the PS4 assign file permissions for exfatfs.
         let mode = match vn.ty() {
             VnodeType::Directory(_) => Mode::new(0o555).unwrap(),
-            VnodeType::Character => unreachable!(), // The character device should only be in the devfs.
+            VnodeType::File | VnodeType::Link => todo!(),
+            VnodeType::Character => unreachable!(), // Character devices should only be in devfs.
         };
 
-        Ok(VnodeAttrs::new(Uid::ROOT, Gid::ROOT, mode, size))
+        Ok(VnodeAttrs::new(Uid::ROOT, Gid::ROOT, mode, size, u32::MAX))
     }
 
     fn lookup(
@@ -68,9 +67,8 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         }
 
         // Check if directory is accessible.
-        if let Err(e) = vn.access(td, Access::EXEC) {
-            return Err(Box::new(LookupError::AccessDenied(e)));
-        }
+        vn.access(td, Access::EXEC)
+            .map_err(LookupError::AccessDenied)?;
 
         // Check name.
         if cn == VPathComponent::Dot {
@@ -89,10 +87,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         };
 
         // Get vnode.
-        let vn = match get_vnode(vn.fs(), Some(&path)) {
-            Ok(v) => v,
-            Err(e) => return Err(Box::new(LookupError::GetVnodeFailed(e))),
-        };
+        let vn = get_vnode(&self.fs, vn.fs(), Some(&path)).map_err(LookupError::GetVnodeFailed)?;
 
         Ok(vn)
     }

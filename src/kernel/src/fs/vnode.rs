@@ -31,18 +31,18 @@ impl Vnode {
         ty: VnodeType,
         tag: &'static str,
         backend: Arc<dyn VnodeBackend>,
-    ) -> Self {
+    ) -> Arc<Self> {
         let gg = GutexGroup::new();
 
         ACTIVE.fetch_add(1, Ordering::Relaxed);
 
-        Self {
+        Arc::new(Self {
             fs: fs.clone(),
             ty,
             tag,
             backend,
             item: gg.spawn(None),
-        }
+        })
     }
 
     pub fn fs(&self) -> &Arc<Mount> {
@@ -97,6 +97,15 @@ impl Vnode {
     ) -> Result<Arc<Self>, Box<dyn Errno>> {
         self.backend.clone().lookup(self, cn, op, td)
     }
+
+    pub fn open(
+        self: &Arc<Self>,
+        td: Option<&VThread>,
+        mode: OpenFlags,
+        file: Option<&mut VFile>,
+    ) -> Result<(), Box<dyn Errno>> {
+        self.backend.clone().open(self, td, mode, file)
+    }
 }
 
 impl Drop for Vnode {
@@ -106,10 +115,12 @@ impl Drop for Vnode {
 }
 
 /// An implementation of `vtype`.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum VnodeType {
+    File,            // VREG
     Directory(bool), // VDIR
     Character,       // VCHR
+    Link,            // VLNK
 }
 
 /// An implementation of `vop_vector` structure.
@@ -182,20 +193,23 @@ pub(super) trait VnodeBackend: Debug + Send + Sync {
 }
 
 /// An implementation of `vattr` struct.
+#[allow(dead_code)]
 pub struct VnodeAttrs {
     uid: Uid,   // va_uid
     gid: Gid,   // va_gid
     mode: Mode, // va_mode
     size: u64,  // va_size
+    fsid: u32,  // va_fsid
 }
 
 impl VnodeAttrs {
-    pub fn new(uid: Uid, gid: Gid, mode: Mode, size: u64) -> Self {
+    pub fn new(uid: Uid, gid: Gid, mode: Mode, size: u64, fsid: u32) -> Self {
         Self {
             uid,
             gid,
             mode,
             size,
+            fsid,
         }
     }
 
@@ -209,6 +223,10 @@ impl VnodeAttrs {
 
     pub fn mode(&self) -> Mode {
         self.mode
+    }
+
+    pub fn set_fsid(&mut self, fsid: u32) {
+        self.fsid = fsid;
     }
 }
 

@@ -24,7 +24,7 @@ pub struct Dirent {
 }
 
 impl Dirent {
-    pub fn new<N>(
+    pub fn new(
         ty: DirentType,
         inode: i32,
         uid: Uid,
@@ -32,11 +32,8 @@ impl Dirent {
         mode: Mode,
         dir: Option<Weak<Self>>,
         cdev: Option<Weak<Cdev>>,
-        name: N,
-    ) -> Self
-    where
-        N: Into<String>,
-    {
+        name: impl Into<String>,
+    ) -> Self {
         let gg = GutexGroup::new();
         let now = SystemTime::now();
 
