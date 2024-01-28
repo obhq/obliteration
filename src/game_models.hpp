@@ -6,15 +6,17 @@
 
 class Game final : public QObject {
 public:
-    Game(const QString &name, const QString &directory);
+    Game(const QString &id, const QString &name, const QString &directory);
     ~Game() override;
 
 public:
+    const QString &id() const { return m_id; }
     const QString &name() const { return m_name; }
     const QString &directory() const { return m_directory; }
     QPixmap icon() const;
 
 private:
+    QString m_id;
     QString m_name;
     QString m_directory;
 };

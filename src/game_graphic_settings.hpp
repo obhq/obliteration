@@ -2,16 +2,17 @@
 
 #include <QWidget>
 
+class GameSettings;
 class QComboBox;
 class QGroupBox;
 
 class GameGraphicSettings final : public QWidget {
 public:
-    GameGraphicSettings(QWidget *parent = nullptr);
+    GameGraphicSettings(GameSettings *settings, QWidget *parent = nullptr);
     ~GameGraphicSettings();
 
 private:
-    QGroupBox *setupModeWidget();
+    QGroupBox *setupModeWidget(GameSettings *settings);
 
 private:
     QComboBox *m_mode;
