@@ -8,7 +8,7 @@ pub use self::perm::*;
 pub use self::vnode::*;
 use crate::errno::{Errno, EBADF, EBUSY, EINVAL, ENAMETOOLONG, ENODEV, ENOENT};
 use crate::info;
-use crate::process::VThread;
+use crate::process::{GetFileError, VThread};
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{Privilege, Ucred};
 use bitflags::bitflags;
@@ -131,6 +131,7 @@ impl Fs {
         }
 
         // Install syscall handlers.
+        sys.register(3, &fs, Self::sys_read);
         sys.register(4, &fs, Self::sys_write);
         sys.register(5, &fs, Self::sys_open);
         sys.register(6, &fs, Self::sys_close);
@@ -247,6 +248,18 @@ impl Fs {
         // TODO: Implement this.
     }
 
+    fn sys_read(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let ptr: *mut u8 = i.args[1].into();
+        let len: usize = i.args[2].try_into().unwrap();
+
+        if len > 0x7fffffff {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        todo!()
+    }
+
     fn sys_write(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *const u8 = i.args[1].into();
@@ -256,12 +269,7 @@ impl Fs {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        let td = VThread::current().unwrap();
-        let file = td.proc().files().get(fd).ok_or(SysErr::Raw(EBADF))?;
-        let buf = unsafe { std::slice::from_raw_parts(ptr, len) };
-        let written = file.write(buf, Some(&td))?;
-
-        Ok(written.into())
+        todo!()
     }
 
     fn sys_open(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -320,11 +328,6 @@ impl Fs {
     }
 
     fn sys_ioctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        const UNK_COM1: IoCmd = IoCmd::io(b'f', 1);
-        const UNK_COM2: IoCmd = IoCmd::io(b'f', 2);
-        const UNK_COM3: IoCmd = IoCmd::iowint(b'f', 0x7e);
-        const UNK_COM4: IoCmd = IoCmd::iowint(b'f', 0x7d);
-
         let fd: i32 = i.args[0].try_into().unwrap();
         let com: IoCmd = i.args[1].try_into()?;
         let data_arg: *mut u8 = i.args[2].into();
@@ -374,17 +377,18 @@ impl Fs {
         data: &mut [u8],
         td: &VThread,
     ) -> Result<SysOut, IoctlError> {
-        let file = td
-            .proc()
-            .files()
-            .get(fd, VFileFlags::empty())
-            .map_err(|e| IoctlError::FailedToGetFile(fd, e))?;
+        const UNK_COM1: IoCmd = IoCmd::io(b'f', 1);
+        const UNK_COM2: IoCmd = IoCmd::io(b'f', 2);
+        const UNK_COM3: IoCmd = IoCmd::iowint(b'f', 0x7e);
+        const UNK_COM4: IoCmd = IoCmd::iowint(b'f', 0x7d);
+
+        let file = td.proc().files().get(fd)?;
 
         if !file
             .flags()
             .intersects(VFileFlags::FREAD | VFileFlags::FWRITE)
         {
-            Err(IoctlError::BadFileFlags(file.flags()))?;
+            return Err(IoctlError::BadFileFlags(file.flags()));
         }
 
         match cmd {
@@ -662,9 +666,18 @@ impl Errno for OpenError {
 }
 
 #[derive(Debug, Error)]
+pub enum WriteError {}
+
+impl Errno for WriteError {
+    fn errno(&self) -> NonZeroI32 {
+        todo!()
+    }
+}
+
+#[derive(Debug, Error)]
 pub enum IoctlError {
     #[error("Couldn't get file")]
-    FailedToGetFile(id, #[source] GetFileError),
+    FailedToGetFile(#[from] GetFileError),
 
     #[error("Bad file flags {0:?}")]
     BadFileFlags(VFileFlags),
@@ -676,7 +689,7 @@ pub enum IoctlError {
 impl Errno for IoctlError {
     fn errno(&self) -> NonZeroI32 {
         match self {
-            Self::FailedToGetFile(_, e) => e.errno(),
+            Self::FailedToGetFile(e) => e.errno(),
             Self::BadFileFlags(_) => EBADF,
             Self::FileIoctlFailed(e) => e.errno(),
         }
