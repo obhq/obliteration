@@ -672,7 +672,6 @@ impl Errno for LookupError {
 }
 
 #[derive(Debug, Error)]
-#[allow(dead_code)]
 pub enum RevokeError {
     #[error("failed to get file attr")]
     GetAttrError(#[source] Box<dyn Errno>),

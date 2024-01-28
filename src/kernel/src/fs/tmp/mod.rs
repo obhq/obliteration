@@ -29,7 +29,7 @@ pub fn mount(
     };
 
     // Get GID.
-    let _gid = if cred.real_uid() == Uid::ROOT {
+    let gid = if cred.real_uid() == Uid::ROOT {
         match opts.remove("gid") {
             Some(opt) => opt.unwrap(),
             None => attrs.gid(),
@@ -39,14 +39,14 @@ pub fn mount(
     };
 
     // Get UID.
-    let _uid = if cred.real_uid() == Uid::ROOT {
+    let uid = if cred.real_uid() == Uid::ROOT {
         opts.remove("uid").map_or(attrs.uid(), |v| v.unwrap())
     } else {
         attrs.uid()
     };
 
     // Get mode.
-    let _mode = if cred.real_uid() == Uid::ROOT {
+    let mode = if cred.real_uid() == Uid::ROOT {
         opts.remove("mode").map_or(attrs.mode(), |v| v.unwrap())
     } else {
         attrs.mode()
@@ -59,7 +59,7 @@ pub fn mount(
     let size: usize = opts.remove("size").map_or(0, |v| v.unwrap());
 
     // Get maximum file size.
-    let file_size = opts.remove("file_size").map_or(0, |v| v.unwrap());
+    let file_size = opts.remove("maxfilesize").map_or(0, |v| v.unwrap());
 
     // TODO: Refactor this for readability.
     let pages = if size.wrapping_sub(0x4000) < 0xffffffffffff8000 {

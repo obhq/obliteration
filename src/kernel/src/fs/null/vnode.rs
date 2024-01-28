@@ -126,7 +126,7 @@ impl Errno for GetAttrError {
 
 #[derive(Debug, Error)]
 pub enum LookupError {
-    #[error("lookup failed")]
+    #[error("lookup from lower vnode failed")]
     LookupFromLowerFailed(#[source] Box<dyn Errno>),
 }
 
