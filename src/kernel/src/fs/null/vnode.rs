@@ -1,4 +1,4 @@
-use super::NullNode;
+use super::{null_nodeget, NullNode};
 use crate::{
     errno::{Errno, EISDIR, EROFS},
     fs::{perm::Access, MountFlags, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType},
@@ -64,7 +64,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         let vnode = if Arc::ptr_eq(&lower, vn) {
             vn.clone()
         } else {
-            NullNode::get(vn.fs(), lower)
+            null_nodeget(lower)
         };
 
         Ok(vnode)

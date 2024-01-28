@@ -23,13 +23,15 @@ pub fn mount(
 
     if flags.intersects(MountFlags::MNT_UPDATE) {
         if opts.remove("export").is_some_and(|opt| opt.unwrap()) {
-            todo!("null_mount with MNT_UPDATE and export = true")
+            todo!("nullfs_mount with MNT_UPDATE and export = true")
         } else {
             Err(MountError::NoExport)?
         }
     }
 
-    let nullfs = NullFs::new(parent.clone());
+    let root = null_nodeget(parent.clone());
+
+    let nullfs = NullFs::new(root);
 
     let mnt = Mount::new(conf, &NULLFS_OPS, cred, path, Some(parent), flags, nullfs);
 
@@ -46,8 +48,7 @@ pub(super) static NULLFS_OPS: FsOps = FsOps { root };
 
 /// An implementation of `null_mount` structure.
 struct NullFs {
-    root: Arc<Vnode>,      // nullm_rootvp
-    lowerroot: Arc<Vnode>, // nullm_lowervp
+    root: Arc<Vnode>, // nullm_rootvp
 }
 
 impl NullFs {
@@ -61,19 +62,19 @@ impl NullFs {
 }
 
 struct NullNode {
-    null_vnode: Weak<Vnode>,
+    null_node: Weak<Vnode>,
     lower: Arc<Vnode>,
 }
 
 impl NullNode {
-    /// See `null_nodeget` on the PS4 for a reference.
-    pub fn get(mnt: &Arc<Mount>, lower: Arc<Vnode>) -> Arc<Vnode> {
-        todo!()
-    }
-
     fn lower(&self) -> &Arc<Vnode> {
         &self.lower
     }
+}
+
+/// See `null_nodeget` on the PS4 for a reference.
+pub(self) fn null_nodeget(lower: Arc<Vnode>) -> Arc<Vnode> {
+    todo!()
 }
 
 #[derive(Debug, Error)]
