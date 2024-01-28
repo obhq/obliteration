@@ -2,7 +2,8 @@ pub use self::cdev::*;
 use self::dirent::Dirent;
 use self::vnode::VnodeBackend;
 use super::{
-    path_contains, DirentType, FsConfig, FsOps, Mode, Mount, MountFlags, VPathBuf, Vnode, VnodeType,
+    path_contains, DirentType, Filesystem, FsConfig, Mode, Mount, MountFlags, VPathBuf, Vnode,
+    VnodeType,
 };
 use crate::errno::{Errno, EEXIST, ENOENT, EOPNOTSUPP};
 use crate::ucred::{Gid, Ucred, Uid};
@@ -81,7 +82,11 @@ pub fn dev_exists<N: AsRef<str>>(name: N) -> bool {
 }
 
 /// See `devfs_allocv` on the PS4 for a reference.
-fn alloc_vnode(mnt: &Arc<Mount>, ent: &Arc<Dirent>) -> Result<Arc<Vnode>, AllocVnodeError> {
+fn alloc_vnode(
+    fs: Arc<DevFs>,
+    mnt: &Arc<Mount>,
+    ent: Arc<Dirent>,
+) -> Result<Arc<Vnode>, AllocVnodeError> {
     // Check for active vnode.
     let mut current = ent.vnode_mut();
 
@@ -90,7 +95,6 @@ fn alloc_vnode(mnt: &Arc<Mount>, ent: &Arc<Dirent>) -> Result<Arc<Vnode>, AllocV
     }
 
     // Create vnode. Beware of deadlock because we are currently holding on dirent lock.
-    let fs = mnt.data().clone().downcast::<DevFs>().unwrap();
     let tag = "devfs";
     let backend = Arc::new(VnodeBackend::new(fs, ent.clone()));
     let vn = match ent.ty() {
@@ -328,7 +332,7 @@ pub fn mount(
     cred: &Arc<Ucred>,
     path: VPathBuf,
     parent: Option<Arc<Vnode>>,
-    opts: HashMap<String, Box<dyn Any>>,
+    _: HashMap<String, Box<dyn Any>>,
     flags: MountFlags,
 ) -> Result<Mount, Box<dyn Errno>> {
     // Check mount flags.
@@ -343,7 +347,6 @@ pub fn mount(
 
     Ok(Mount::new(
         conf,
-        &DEVFS_OPS,
         cred,
         path,
         parent,
@@ -356,10 +359,12 @@ pub fn mount(
     ))
 }
 
-fn root(mnt: &Arc<Mount>) -> Arc<Vnode> {
-    let fs = mnt.data().downcast_ref::<DevFs>().unwrap();
+impl Filesystem for DevFs {
+    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Arc<Vnode> {
+        let ent = self.root.clone();
 
-    alloc_vnode(mnt, &fs.root).unwrap()
+        alloc_vnode(self, mnt, ent).unwrap()
+    }
 }
 
 /// Represents an error when [`mount()`] is failed.
@@ -395,7 +400,6 @@ impl Errno for AllocVnodeError {
     }
 }
 
-static DEVFS_OPS: FsOps = FsOps { root };
 static DEVFS_INDEX: AtomicUsize = AtomicUsize::new(0); // TODO: Use a proper implementation.
 static INODE: AtomicU32 = AtomicU32::new(3); // TODO: Same here.
 static DEVICES: RwLock<Devices> = RwLock::new(Devices {

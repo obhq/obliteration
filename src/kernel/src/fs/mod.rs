@@ -6,8 +6,6 @@ pub use self::mount::*;
 pub use self::path::*;
 pub use self::perm::*;
 pub use self::vnode::*;
-
-use self::host::HostFs;
 use crate::errno::{Errno, EBADF, EBUSY, EINVAL, ENAMETOOLONG, ENODEV, ENOENT};
 use crate::info;
 use crate::net::{Socket, SOCKET_FILEOPS};
@@ -142,13 +140,6 @@ impl Fs {
         sys.register(113, &fs, Self::sys_socketex);
 
         Ok(fs)
-    }
-
-    pub fn app(&self) -> Arc<VPathBuf> {
-        let root = self.mounts.read().root().clone();
-        let host = root.data().downcast_ref::<HostFs>().unwrap();
-
-        host.app().clone()
     }
 
     pub fn root(&self) -> Arc<Vnode> {

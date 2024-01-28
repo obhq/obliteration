@@ -1,5 +1,5 @@
 use super::file::HostFile;
-use super::{get_vnode, GetVnodeError};
+use super::{get_vnode, GetVnodeError, HostFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR};
 use crate::fs::{Access, Mode, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
@@ -12,12 +12,13 @@ use thiserror::Error;
 /// An implementation of [`crate::fs::VnodeBackend`].
 #[derive(Debug)]
 pub struct VnodeBackend {
+    fs: Arc<HostFs>,
     file: HostFile,
 }
 
 impl VnodeBackend {
-    pub fn new(file: HostFile) -> Self {
-        Self { file }
+    pub fn new(fs: Arc<HostFs>, file: HostFile) -> Self {
+        Self { fs, file }
     }
 }
 
@@ -87,7 +88,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         };
 
         // Get vnode.
-        let vn = match get_vnode(vn.fs(), Some(&path)) {
+        let vn = match get_vnode(&self.fs, vn.fs(), Some(&path)) {
             Ok(v) => v,
             Err(e) => return Err(Box::new(LookupError::GetVnodeFailed(e))),
         };

@@ -1,6 +1,6 @@
 use self::file::HostFile;
 use self::vnode::VnodeBackend;
-use super::{FsConfig, FsOps, Mount, MountFlags, VPathBuf, Vnode, VnodeType};
+use super::{Filesystem, FsConfig, Mount, MountFlags, VPathBuf, Vnode, VnodeType};
 use crate::errno::{Errno, EIO};
 use crate::ucred::Ucred;
 use gmtx::{Gutex, GutexGroup};
@@ -21,16 +21,11 @@ mod vnode;
 ///
 /// We subtitute `exfatfs` with this because the root FS on the PS4 is exFAT. That mean we must
 /// report this as `exfatfs` otherwise it might be unexpected by the PS4.
+#[derive(Debug)]
 pub struct HostFs {
     root: PathBuf,
     app: Arc<VPathBuf>,
     actives: Gutex<HashMap<PathBuf, Weak<Vnode>>>,
-}
-
-impl HostFs {
-    pub fn app(&self) -> &Arc<VPathBuf> {
-        &self.app
-    }
 }
 
 pub fn mount(
@@ -118,7 +113,6 @@ pub fn mount(
 
     Ok(Mount::new(
         conf,
-        &HOST_OPS,
         cred,
         path,
         parent,
@@ -131,13 +125,18 @@ pub fn mount(
     ))
 }
 
-fn root(mnt: &Arc<Mount>) -> Arc<Vnode> {
-    get_vnode(mnt, None).unwrap()
+impl Filesystem for HostFs {
+    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Arc<Vnode> {
+        get_vnode(&self, mnt, None).unwrap()
+    }
 }
 
-fn get_vnode(mnt: &Arc<Mount>, path: Option<&Path>) -> Result<Arc<Vnode>, GetVnodeError> {
+fn get_vnode(
+    fs: &Arc<HostFs>,
+    mnt: &Arc<Mount>,
+    path: Option<&Path>,
+) -> Result<Arc<Vnode>, GetVnodeError> {
     // Get target path.
-    let fs = mnt.data().downcast_ref::<HostFs>().unwrap();
     let path = match path {
         Some(v) => v,
         None => &fs.root,
@@ -170,7 +169,7 @@ fn get_vnode(mnt: &Arc<Mount>, path: Option<&Path>) -> Result<Arc<Vnode>, GetVno
         mnt,
         ty,
         "exfatfs",
-        Arc::new(VnodeBackend::new(file)),
+        Arc::new(VnodeBackend::new(fs.clone(), file)),
     ));
 
     actives.insert(path.to_owned(), Arc::downgrade(&vn));
@@ -210,5 +209,3 @@ enum GetVnodeError {
     #[error("cannot determine file type")]
     GetFileTypeFailed(#[source] std::io::Error),
 }
-
-static HOST_OPS: FsOps = FsOps { root };
