@@ -162,7 +162,11 @@ impl MemoryManager {
         }
 
         if flags.contains(MappingFlags::MAP_NOEXTEND) {
-            todo!("mmap with flags & 0x100");
+            flags = flags | MappingFlags::MAP_ANON;
+            td.as_ref().and_then(|t| {
+                t.set_fpop(None);
+                Some(t)
+            });
         } else if !flags.contains(MappingFlags::MAP_ANON) {
             todo!("mmap with flags & 0x1000 = 0");
         }
