@@ -2,7 +2,8 @@
 #include "path.hpp"
 #include "pkg.hpp"
 
-Game::Game(const QString &name, const QString &directory) :
+Game::Game(const QString &id, const QString &name, const QString &directory) :
+    m_id(id),
     m_name(name),
     m_directory(directory)
 {

@@ -7,29 +7,36 @@
 #include <QTabWidget>
 #include <QVBoxLayout>
 
-GameSettingsDialog::GameSettingsDialog(Game *game, QWidget *parent) :
+GameSettingsDialog::GameSettingsDialog(Game *game, GameSettings *settings, QWidget *parent) :
     QDialog(parent),
-    m_tab(nullptr),
-    m_actions(nullptr),
+    m_settings(settings),
     m_graphic(nullptr)
 {
     auto layout = new QVBoxLayout(this);
 
     // Main tab.
-    m_tab = new QTabWidget();
-    layout->addWidget(m_tab);
+    auto tab = new QTabWidget();
+    layout->addWidget(tab);
 
     // Actions bar.
-    m_actions = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel);
-    layout->addWidget(m_actions);
+    auto actions = new QDialogButtonBox(QDialogButtonBox::Save | QDialogButtonBox::Cancel);
+
+    connect(actions, &QDialogButtonBox::accepted, this, &GameSettingsDialog::save);
+    connect(actions, &QDialogButtonBox::rejected, this, &QDialog::reject);
+
+    layout->addWidget(actions);
 
     // Graphic tab.
-    m_graphic = new GameGraphicSettings();
-    m_tab->addTab(m_graphic, "Graphic");
+    m_graphic = new GameGraphicSettings(settings);
+    tab->addTab(m_graphic, "Graphic");
 
     setWindowTitle(game->name());
 }
 
 GameSettingsDialog::~GameSettingsDialog()
+{
+}
+
+void GameSettingsDialog::save()
 {
 }
