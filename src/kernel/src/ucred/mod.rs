@@ -108,7 +108,7 @@ impl Ucred {
             return Ok(());
         }
 
-        Err(PrisonCheckError::CheckFailed)
+        Err(PrisonCheckError::InsuffiecientCredentials)
     }
 
     pub fn is_jailed(&self) -> bool {
@@ -171,14 +171,14 @@ impl Errno for PrivilegeError {
 
 #[derive(Debug, Error)]
 pub enum PrisonCheckError {
-    #[error("Pprison check failed")]
-    CheckFailed,
+    #[error("insufficient credentials")]
+    InsuffiecientCredentials,
 }
 
 impl Errno for PrisonCheckError {
     fn errno(&self) -> NonZeroI32 {
         match self {
-            Self::CheckFailed => ESRCH,
+            Self::InsuffiecientCredentials => ESRCH,
         }
     }
 }
