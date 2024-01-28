@@ -57,7 +57,7 @@ impl FileDesc {
         panic!("Too many files has been opened.");
     }
 
-    // TODO: implements capabilities
+    // TODO: implement capabilities
 
     /// See `fget` on the PS4 for a reference.
     pub fn get(&self, fd: i32) -> Result<Arc<VFile>, GetFileError> {
@@ -66,12 +66,12 @@ impl FileDesc {
 
     /// See `fget_write` on the PS4 for a reference.
     pub fn get_for_write(&self, fd: i32) -> Result<Arc<VFile>, GetFileError> {
-        self.get_internal(fd, VFileFlags::FWRITE)
+        self.get_internal(fd, VFileFlags::WRITE)
     }
 
     /// See `fget_read` on the PS4 for a reference.
     pub fn get_for_read(&self, fd: i32) -> Result<Arc<VFile>, GetFileError> {
-        self.get_internal(fd, VFileFlags::FREAD)
+        self.get_internal(fd, VFileFlags::READ)
     }
 
     /// See `_fget` and `fget_unlocked` on the PS4 for a reference.

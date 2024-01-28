@@ -314,7 +314,7 @@ impl Fs {
         let td = VThread::current().unwrap();
         let mut file = self.open(path, Some(&td))?;
 
-        *file.flags_mut() = flags.into_vfile_flags();
+        *file.flags_mut() = flags.into_fflags();
 
         // Install to descriptor table.
         let fd = td.proc().files().alloc(Arc::new(file));
@@ -394,7 +394,7 @@ impl Fs {
 
         if !file
             .flags()
-            .intersects(VFileFlags::FREAD | VFileFlags::FWRITE)
+            .intersects(VFileFlags::READ | VFileFlags::WRITE)
         {
             return Err(IoctlError::BadFileFlags(file.flags()));
         }
@@ -574,7 +574,7 @@ bitflags! {
 
 impl OpenFlags {
     /// An implementation of `FFLAGS` macro.
-    fn into_vfile_flags(self) -> VFileFlags {
+    fn into_fflags(self) -> VFileFlags {
         VFileFlags::from_bits_truncate(self.bits() + 1)
     }
 }

@@ -95,7 +95,7 @@ bitflags! {
     /// Flags for [`VFile`].
     #[derive(Debug, Clone, Copy)]
     pub struct VFileFlags: u32 {
-        const FREAD = 0x00000001;
-        const FWRITE = 0x00000002;
+        const READ = 0x00000001; // FREAD
+        const WRITE = 0x00000002; // FWRITE
     }
 }
