@@ -48,16 +48,9 @@ else()
     set(LIBCORE ${RUST_OUTPUTS}/libcore.a)
 endif()
 
-ExternalProject_Add(core
-    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}
-    CONFIGURE_COMMAND ""
-    BUILD_COMMAND cargo build $<IF:$<CONFIG:Debug>,--profile=dev,--release>
-    BUILD_IN_SOURCE ON
-    BUILD_ALWAYS ON
-    BUILD_BYPRODUCTS ${KERNEL} ${LIBCORE}
-    INSTALL_COMMAND ""
-    TEST_COMMAND cargo test
-    TEST_EXCLUDE_FROM_MAIN ON)
+add_custom_target(core
+    COMMAND cargo build $<IF:$<CONFIG:Debug>,--profile=dev,--release>
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
 
 if(OB_BUILD_LLVM)
     add_dependencies(core llvm)
@@ -104,7 +97,7 @@ if(APPLE)
         MACOSX_BUNDLE_BUNDLE_NAME Obliteration
         MACOSX_BUNDLE_BUNDLE_VERSION 0.1.0
         MACOSX_BUNDLE_SHORT_VERSION_STRING 0.1.0
-        MACOSX_BUNDLE_COPYRIGHT "Copyright © 2023 Obliteration Contributors"
+        MACOSX_BUNDLE_COPYRIGHT "Copyright © Obliteration Contributors"
         MACOSX_BUNDLE_ICON_FILE obliteration
         RESOURCE resources/obliteration.icns)
 endif()
