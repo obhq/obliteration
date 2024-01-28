@@ -4,6 +4,7 @@
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QLabel>
+#include <QSizePolicy>
 #include <QVBoxLayout>
 
 GameGraphicSettings::GameGraphicSettings(QWidget *parent) :
@@ -13,6 +14,7 @@ GameGraphicSettings::GameGraphicSettings(QWidget *parent) :
     auto layout = new QVBoxLayout();
 
     layout->addWidget(setupModeWidget());
+    layout->addStretch(1);
 
     setLayout(layout);
 }
@@ -37,6 +39,7 @@ QGroupBox *GameGraphicSettings::setupModeWidget()
 
     label->setBuddy(m_mode);
     layout->addWidget(m_mode, 0, 1);
+    layout->setColumnStretch(1, 1);
 
     // Description.
     auto desc = new QLabel(
@@ -46,6 +49,8 @@ QGroupBox *GameGraphicSettings::setupModeWidget()
     desc->setWordWrap(true);
 
     layout->addWidget(desc, 1, 0, 1, 2);
+
+    group->setSizePolicy(QSizePolicy::MinimumExpanding, QSizePolicy::Minimum);
     group->setLayout(layout);
 
     return group;
