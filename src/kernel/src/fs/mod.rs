@@ -262,6 +262,7 @@ impl Fs {
         todo!();
     }
 
+    #[allow(unused_variables)] // Remove this when it is being implemented
     fn sys_read(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
@@ -274,6 +275,7 @@ impl Fs {
         todo!()
     }
 
+    #[allow(unused_variables)] // Remove this when it is being implemented
     fn sys_write(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *const u8 = i.args[1].into();
@@ -479,6 +481,7 @@ impl Fs {
     }
 
     /// See `kern_fstat` on the PS4 for a reference.
+    #[allow(unused_variables)] // Remove this when it is being implemented
     fn fstat(self: &Arc<Self>, fd: i32, td: &VThread) -> Result<Stat, StatError> {
         todo!()
     }
@@ -525,6 +528,7 @@ impl Fs {
     }
 
     /// See `kern_statat_vnhook` on the PS4 for a reference.
+    #[allow(unused_variables)] // Remove this when statat is being implemented
     fn statat(
         self: &Arc<Self>,
         flags: AtFlags,
@@ -532,6 +536,7 @@ impl Fs {
         path: impl AsRef<VPath>,
         td: &VThread,
     ) -> Result<Stat, StatError> {
+        // TODO: this will need lookup from a start dir
         todo!()
     }
 
