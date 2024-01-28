@@ -11,7 +11,7 @@ const BLOCKPOOL_FILEOPS: VFileOps = VFileOps {
     stat: blockpool_stat,
 };
 
-#[allow(dead_code)] // Remove this when blockpools are being implemented
+#[allow(unused_variables, dead_code)] // Remove this when blockpools are being implemented
 fn blockpool_ioctl(
     file: &VFile,
     cmd: IoCmd,
@@ -25,8 +25,13 @@ fn blockpool_ioctl(
     }
 }
 
-#[allow(dead_code)] // Remove this when blockpools are being implemented
+#[allow(unused_variables, dead_code)] // Remove this when blockpools are being implemented
 fn blockpool_stat(file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
+    let mut stat = Stat::zeroed();
+
+    stat.block_size = 0x1000;
+    stat.mode = 0o130000;
+
     todo!()
 }
 
