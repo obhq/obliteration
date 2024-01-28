@@ -2,14 +2,12 @@ pub use self::cdev::*;
 use self::dirent::Dirent;
 use self::vnode::VnodeBackend;
 use super::{
-    path_contains, DirentType, Filesystem, FsConfig, Mode, Mount, MountFlags, VPathBuf, Vnode,
-    VnodeType,
+    path_contains, DirentType, Filesystem, FsConfig, Mode, Mount, MountFlags, MountOpts, VPathBuf,
+    Vnode, VnodeType,
 };
 use crate::errno::{Errno, EEXIST, ENOENT, EOPNOTSUPP};
 use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
-use std::any::Any;
-use std::collections::HashMap;
 use std::num::NonZeroI32;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
@@ -20,10 +18,10 @@ mod dirent;
 mod vnode;
 
 /// See `make_dev_credv` on the PS4 for a reference.
-pub fn make_dev<N: Into<String>>(
+pub fn make_dev(
     sw: &Arc<CdevSw>,
     unit: i32,
-    name: N,
+    name: impl Into<String>,
     uid: Uid,
     gid: Gid,
     mode: Mode,
@@ -68,7 +66,7 @@ pub fn make_dev<N: Into<String>>(
 }
 
 /// See `devfs_dev_exists` on the PS4 for a reference.
-pub fn dev_exists<N: AsRef<str>>(name: N) -> bool {
+pub fn dev_exists(name: impl AsRef<str>) -> bool {
     let name = name.as_ref();
 
     for dev in &DEVICES.read().unwrap().list {
@@ -119,7 +117,6 @@ fn alloc_vnode(
     };
 
     // Set current vnode.
-    let vn = Arc::new(vn);
 
     *current = Some(Arc::downgrade(&vn));
     drop(current);
@@ -200,8 +197,7 @@ impl DevFs {
 
             if children
                 .iter()
-                .find(|&c| c.ty() == DirentType::Link && c.name() == name)
-                .is_some()
+                .any(|c| c.ty() == DirentType::Link && c.name() == name)
             {
                 todo!("devfs_populate with DT_LNK children");
             }
@@ -221,7 +217,7 @@ impl DevFs {
                 gid,
                 mode,
                 Some(Arc::downgrade(&dir)),
-                Some(Arc::downgrade(&dev)),
+                Some(Arc::downgrade(dev)),
                 name,
             ));
 
@@ -241,9 +237,9 @@ impl DevFs {
         *gen = devices.generation;
     }
 
-    /// Partial implementation of `devfs_vmkdir`. The main different is this function does not add
+    /// Partial implementation of `devfs_vmkdir`. The main difference is this function does not add
     /// the created directory to `parent` and does not run `devfs_rules_apply`.
-    fn mkdir<N: Into<String>>(name: N, inode: i32, parent: Option<&Arc<Dirent>>) -> Arc<Dirent> {
+    fn mkdir(name: impl Into<String>, inode: i32, parent: Option<&Arc<Dirent>>) -> Arc<Dirent> {
         // Create the directory.
         let dir = Arc::new(Dirent::new(
             DirentType::Directory,
@@ -332,7 +328,7 @@ pub fn mount(
     cred: &Arc<Ucred>,
     path: VPathBuf,
     parent: Option<Arc<Vnode>>,
-    _: HashMap<String, Box<dyn Any>>,
+    _: MountOpts,
     flags: MountFlags,
 ) -> Result<Mount, Box<dyn Errno>> {
     // Check mount flags.

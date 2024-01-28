@@ -2,7 +2,7 @@
 pub struct QString(());
 
 impl QString {
-    pub fn set<V: AsRef<str>>(&mut self, v: V) {
+    pub fn set(&mut self, v: impl AsRef<str>) {
         let v = v.as_ref();
         unsafe { qstring_set(self, v.as_ptr(), v.len()) };
     }

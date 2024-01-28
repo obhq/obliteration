@@ -35,7 +35,7 @@ pub unsafe extern "C" fn pkg_open(file: *const c_char, error: *mut *mut error::E
 
 #[no_mangle]
 pub unsafe extern "C" fn pkg_close(pkg: *mut Pkg) {
-    unsafe { Box::from_raw(pkg) };
+    drop(Box::from_raw(pkg));
 }
 
 #[no_mangle]

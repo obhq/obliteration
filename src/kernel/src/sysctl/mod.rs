@@ -1,5 +1,5 @@
 use crate::arch::MachDep;
-use crate::arnd::Arnd;
+use crate::arnd::rand_bytes;
 use crate::errno::{
     EFAULT, EINVAL, EISDIR, ENAMETOOLONG, ENOENT, ENOMEM, ENOTDIR, EOPNOTSUPP, EPERM, ESRCH,
 };
@@ -17,7 +17,6 @@ use std::sync::Arc;
 /// This is an implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/kern/kern_sysctl.c.
 pub struct Sysctl {
-    arnd: Arc<Arnd>,
     mm: Arc<MemoryManager>,
     machdep: Arc<MachDep>,
 }
@@ -93,14 +92,8 @@ impl Sysctl {
 
     pub const HW_PAGESIZE: i32 = 7;
 
-    pub fn new(
-        arnd: &Arc<Arnd>,
-        mm: &Arc<MemoryManager>,
-        machdep: &Arc<MachDep>,
-        sys: &mut Syscalls,
-    ) -> Arc<Self> {
+    pub fn new(mm: &Arc<MemoryManager>, machdep: &Arc<MachDep>, sys: &mut Syscalls) -> Arc<Self> {
         let ctl = Arc::new(Self {
-            arnd: arnd.clone(),
             mm: mm.clone(),
             machdep: machdep.clone(),
         });
@@ -429,7 +422,7 @@ impl Sysctl {
         let mut buf = [0; 256];
         let len = min(req.old.as_ref().map(|b| b.len()).unwrap_or(0), 256);
 
-        self.arnd.rand_bytes(&mut buf[..len]);
+        rand_bytes(&mut buf[..len]);
 
         req.write(&buf[..len])
     }
