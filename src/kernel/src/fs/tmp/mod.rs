@@ -1,5 +1,5 @@
 use self::node::{AllocNodeError, Node, Nodes};
-use super::{FsConfig, Filesystem, Mount, MountFlags, MountOpts, VPathBuf, Vnode};
+use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, VPathBuf, Vnode};
 use crate::errno::{Errno, EINVAL};
 use crate::ucred::{Ucred, Uid};
 use std::num::NonZeroI32;

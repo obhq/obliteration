@@ -2,7 +2,7 @@ pub use self::cdev::*;
 use self::dirent::Dirent;
 use self::vnode::VnodeBackend;
 use super::{
-    path_contains, DirentType, FsConfig, FsOps, Mode, Mount, MountFlags, MountOpts, VPathBuf,
+    path_contains, DirentType, Filesystem, FsConfig, Mode, Mount, MountFlags, MountOpts, VPathBuf,
     Vnode, VnodeType,
 };
 use crate::errno::{Errno, EEXIST, ENOENT, EOPNOTSUPP};

@@ -1,4 +1,4 @@
-use super::{null_nodeget, NullNode};
+use super::null_nodeget;
 use crate::{
     errno::{Errno, EISDIR, EROFS},
     fs::{perm::Access, MountFlags, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType},
@@ -39,14 +39,16 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 
     /// This function tries to mimic what calling `null_bypass` would do.
     fn getattr(self: Arc<Self>, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
-        let attr = self
+        let mut attr = self
             .lower
             .getattr()
             .map_err(GetAttrError::GetAttrFromLowerFailed)?;
 
         let fsid = vn.fs().stats().id()[0];
 
-        Ok(attr.with_fsid(fsid))
+        attr.set_fsid(fsid);
+
+        Ok(attr)
     }
 
     /// This function tries to mimic what calling `null_bypass` would do.

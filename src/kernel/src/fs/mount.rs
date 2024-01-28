@@ -3,11 +3,9 @@ use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
 use macros::EnumConversions;
 use param::Param;
-use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Error};
 use std::path::PathBuf;
-use std::fmt::Debug;
 use std::sync::{Arc, Mutex, RwLock, RwLockWriteGuard};
 use thiserror::Error;
 
@@ -108,10 +106,6 @@ impl Mount {
 
     pub fn flags(&self) -> MountFlags {
         self.flags
-    }
-
-    pub fn data(&self) -> &Arc<dyn Any + Send + Sync> {
-        &self.data
     }
 
     pub fn parent_mut(&self) -> RwLockWriteGuard<Option<Arc<Vnode>>> {

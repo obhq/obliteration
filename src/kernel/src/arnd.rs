@@ -6,16 +6,10 @@ pub fn rand_bytes(buf: &mut [u8]) {
     ARND.lock().unwrap().rand_bytes(buf)
 }
 
-/// Random number generator based on
-/// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/libkern/arc4random.c.
-#[derive(Debug)]
-struct Arnd {
-    state: Mutex<State>,
-}
-
 static ARND: Mutex<State> = Mutex::new(State::new());
 
-/// State of [`Arc4`].
+/// Random number generator based on
+/// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/libkern/arc4random.c.
 #[derive(Debug)]
 struct State {
     i: u8,

@@ -92,7 +92,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             _ => 0,
         };
 
-        Ok(VnodeAttrs::new(*uid, *gid, *mode, size, 0))
+        todo!()
     }
 
     fn lookup(
@@ -172,7 +172,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 
         // Execute switch handler.
         match sw.fdopen() {
-            Some(f) => f(&dev, mode, td, file.as_mut().map(|f| &mut **f))?,
+            Some(f) => f(&dev, mode, td, file.as_deref_mut())?,
             None => sw.open().unwrap()(&dev, mode, 0x2000, td)?,
         };
 

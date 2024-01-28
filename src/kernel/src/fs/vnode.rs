@@ -223,10 +223,8 @@ impl VnodeAttrs {
         self.mode
     }
 
-    pub fn with_fsid(mut self, fsid: u32) -> Self {
+    pub fn set_fsid(&mut self, fsid: u32) {
         self.fsid = fsid;
-
-        self
     }
 }
 

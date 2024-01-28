@@ -1,4 +1,4 @@
-use super::{FsConfig, FsOps, Mount, MountFlags, MountOpts, VPathBuf, Vnode};
+use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, VPathBuf, Vnode};
 use crate::errno::{Errno, EDEADLK, EOPNOTSUPP};
 use crate::ucred::Ucred;
 use std::num::NonZeroI32;
@@ -6,6 +6,28 @@ use std::sync::{Arc, Weak};
 use thiserror::Error;
 
 mod vnode;
+
+/// An implementation of `null_mount` structure.
+#[derive(Debug)]
+struct NullFs {
+    root: Arc<Vnode>, // nullm_rootvp
+}
+
+impl NullFs {
+    pub fn new(root: Arc<Vnode>) -> Self {
+        Self { root }
+    }
+
+    pub fn root(&self) -> &Arc<Vnode> {
+        &self.root
+    }
+}
+
+impl Filesystem for NullFs {
+    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Arc<Vnode> {
+        self.root.clone()
+    }
+}
 
 pub fn mount(
     conf: &'static FsConfig,
@@ -33,32 +55,9 @@ pub fn mount(
 
     let nullfs = NullFs::new(root);
 
-    let mnt = Mount::new(conf, &NULLFS_OPS, cred, path, Some(parent), flags, nullfs);
+    let mnt = Mount::new(conf, cred, path, Some(parent), flags, nullfs);
 
     Ok(mnt)
-}
-
-fn root(mnt: &Arc<Mount>) -> Arc<Vnode> {
-    let nullfs: &NullFs = mnt.data().downcast_ref().unwrap();
-
-    nullfs.root().clone()
-}
-
-pub(super) static NULLFS_OPS: FsOps = FsOps { root };
-
-/// An implementation of `null_mount` structure.
-struct NullFs {
-    root: Arc<Vnode>, // nullm_rootvp
-}
-
-impl NullFs {
-    pub fn new(root: Arc<Vnode>) -> Arc<Self> {
-        Arc::new(Self { root })
-    }
-
-    pub fn root(&self) -> &Arc<Vnode> {
-        &self.root
-    }
 }
 
 struct NullNode {
