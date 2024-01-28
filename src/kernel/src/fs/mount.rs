@@ -7,6 +7,7 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Error};
 use std::path::PathBuf;
+use std::fmt::Debug;
 use std::sync::{Arc, Mutex, RwLock, RwLockWriteGuard};
 use thiserror::Error;
 
@@ -43,7 +44,7 @@ impl Mounts {
     /// See `vfs_getnewfsid` on the PS4 for a reference.
     fn set_id(&self, m: &mut Mount) {
         let mut base = MOUNT_ID.lock().unwrap();
-        let v2 = m.fs.ty;
+        let v2 = m.config.ty;
         let mut v1 = ((*base as u32) << 8) | (*base as u32) | ((v2 << 24) | 0xff00);
 
         loop {
@@ -68,10 +69,9 @@ impl Mounts {
 #[derive(Debug)]
 #[allow(dead_code)]
 pub struct Mount {
-    fs: &'static FsConfig, // mnt_vfc
-    ops: &'static FsOps,
+    config: &'static FsConfig,          // mnt_vfc
     gen: i32,                           // mnt_gen
-    data: Arc<dyn Any + Send + Sync>,   // mnt_data
+    fs: Arc<dyn Filesystem>,            // mnt_data
     cred: Arc<Ucred>,                   // mnt_cred
     parent: RwLock<Option<Arc<Vnode>>>, // mnt_vnodecovered
     flags: MountFlags,                  // mnt_flag
@@ -81,26 +81,24 @@ pub struct Mount {
 impl Mount {
     /// See `vfs_mount_alloc` on the PS4 for a reference.
     pub(super) fn new(
-        fs: &'static FsConfig,
-        ops: &'static FsOps,
+        config: &'static FsConfig,
         cred: &Arc<Ucred>,
         path: VPathBuf,
         parent: Option<Arc<Vnode>>,
         flags: MountFlags,
-        data: impl Send + Sync + 'static,
+        fs: impl Filesystem + 'static,
     ) -> Self {
         let owner = cred.effective_uid();
 
         Self {
-            fs,
-            ops,
+            config,
             gen: 1,
-            data: Arc::new(data),
+            fs: Arc::new(fs),
             cred: cred.clone(),
             parent: RwLock::new(parent),
             flags,
             stats: FsStats {
-                ty: fs.ty,
+                ty: config.ty,
                 id: [0; 2],
                 owner,
                 path,
@@ -121,7 +119,7 @@ impl Mount {
     }
 
     pub fn root(self: &Arc<Self>) -> Arc<Vnode> {
-        (self.ops.root)(self)
+        self.fs.clone().root(self)
     }
 
     pub fn stats(&self) -> &FsStats {
@@ -131,10 +129,10 @@ impl Mount {
 
 /// An implementation of `vfsops` structure.
 ///
-/// Our version is a bit different from FreeBSD. We moved `vfs_mount` into `vfsconf`.
-#[derive(Debug)]
-pub(super) struct FsOps {
-    pub root: fn(&Arc<Mount>) -> Arc<Vnode>, // vfs_root
+/// Our version is a bit different from FreeBSD. We moved `vfs_mount` into `vfsconf` and we merge it
+/// with `mnt_data`.
+pub(super) trait Filesystem: Debug + Send + Sync {
+    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Arc<Vnode>; // vfs_root
 }
 
 bitflags! {

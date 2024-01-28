@@ -1,5 +1,5 @@
 use self::node::{AllocNodeError, Node, Nodes};
-use super::{FsConfig, FsOps, Mount, MountFlags, MountOpts, VPathBuf, Vnode};
+use super::{FsConfig, Filesystem, Mount, MountFlags, MountOpts, VPathBuf, Vnode};
 use crate::errno::{Errno, EINVAL};
 use crate::ucred::{Ucred, Uid};
 use std::num::NonZeroI32;
@@ -87,7 +87,6 @@ pub fn mount(
 
     Ok(Mount::new(
         conf,
-        &TMPFS_OPS,
         cred,
         path,
         parent,
@@ -102,17 +101,20 @@ pub fn mount(
     ))
 }
 
-fn root(_: &Arc<Mount>) -> Arc<Vnode> {
-    todo!()
-}
-
 /// An implementation of `tmpfs_mount` structure.
+#[derive(Debug)]
 struct TempFs {
     max_pages: usize,      // tm_pages_max
     max_file_size: u64,    // tm_maxfilesize
     next_inode: AtomicI32, // tm_ino_unr
     nodes: Nodes,
     root: Arc<Node>, // tm_root
+}
+
+impl Filesystem for TempFs {
+    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Arc<Vnode> {
+        todo!()
+    }
 }
 
 /// Represents an error when [`mount()`] was failed.
@@ -137,5 +139,3 @@ impl Errno for MountError {
         }
     }
 }
-
-static TMPFS_OPS: FsOps = FsOps { root };
