@@ -142,6 +142,7 @@ If you don't have a PS4 application for testing you can download PS Scene Quiz f
 - Use unsafe code only when you know what you are doing. When you do try to wrap it in a safe function so other people who are not familiar with unsafe code can have a safe life.
 - Don't chain method calls without an intermediate variable if the result code is hard to follow. We encourage code readability as a pleasure when writing so try to make it easy to read and understand for other people.
 - Do not blindly cast an integer. Make sure the value can fit in a destination type. We don't have any plans to support non-64-bit systems so the pointer size and its related types like `usize` are always 64-bits.
+- Beware of deadlock and memory leak. Rust can protect us from most mistakes, except those two. Deadlock can be happen easily in Rust because Rust requires us to wrap the data we want to protect with a mutex and get a mutable reference through it. The problem with this is it become natural for you to lock the mutex to operate on the inner data, which can easily cause a deadlock if you are not aware when there are another locks being active. The only cases for memory leak you need to aware is when working with `Arc`. Just make sure you don't create a reference cycle that will never be dropped.
 
 ### Rules for C++ sources
 
