@@ -2,7 +2,8 @@ use crate::errno::ENOTTY;
 use crate::syscalls::{SysArg, SysErr};
 use std::fmt::{Display, Formatter};
 
-/// A wrapper type for IOCTL command.
+/// A wrapper type for and IOCTL command.
+/// FreeBSD uses an u_long, but masks off the top 4 bytes in kern_ioctl, so we can use an u32.
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct IoCmd(u32);
@@ -36,7 +37,7 @@ impl IoCmd {
     }
 
     pub fn size(&self) -> usize {
-        Self::iocparm_len(self.0) as usize
+        Self::iocparm_len(self.0)
     }
 
     pub fn is_void(&self) -> bool {

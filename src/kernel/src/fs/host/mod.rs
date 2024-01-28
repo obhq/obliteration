@@ -1,11 +1,10 @@
 use self::file::HostFile;
 use self::vnode::VnodeBackend;
-use super::{Filesystem, FsConfig, Mount, MountFlags, VPathBuf, Vnode, VnodeType};
+use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, VPathBuf, Vnode, VnodeType};
 use crate::errno::{Errno, EIO};
 use crate::ucred::Ucred;
 use gmtx::{Gutex, GutexGroup};
 use param::Param;
-use std::any::Any;
 use std::collections::HashMap;
 use std::fs::create_dir;
 use std::io::ErrorKind;
@@ -33,7 +32,7 @@ pub fn mount(
     cred: &Arc<Ucred>,
     path: VPathBuf,
     parent: Option<Arc<Vnode>>,
-    mut opts: HashMap<String, Box<dyn Any>>,
+    mut opts: MountOpts,
     flags: MountFlags,
 ) -> Result<Mount, Box<dyn Errno>> {
     // Check mount flags.
@@ -44,21 +43,9 @@ pub fn mount(
     }
 
     // Get options.
-    let system = *opts
-        .remove("ob:system")
-        .unwrap()
-        .downcast::<PathBuf>()
-        .unwrap();
-    let game = opts
-        .remove("ob:game")
-        .unwrap()
-        .downcast::<PathBuf>()
-        .unwrap();
-    let param = opts
-        .remove("ob:param")
-        .unwrap()
-        .downcast::<Arc<Param>>()
-        .unwrap();
+    let system: PathBuf = opts.remove("ob:system").unwrap().unwrap();
+    let game: PathBuf = opts.remove("ob:game").unwrap().unwrap();
+    let param: Arc<Param> = opts.remove("ob:param").unwrap().unwrap();
 
     // Create dev mount point.
     let dev = system.join("dev");
@@ -89,7 +76,7 @@ pub fn mount(
         .try_into()
         .unwrap();
 
-    map.insert(pfs.clone(), MountSource::Host(*game));
+    map.insert(pfs.clone(), MountSource::Host(game));
 
     // Create a directory for app0.
     let mut app = system.join("mnt");
@@ -157,20 +144,18 @@ fn get_vnode(
 
     // Get vnode type.
     let ty = match file.is_directory() {
-        Ok(v) => match v {
-            true => VnodeType::Directory(path == fs.root),
-            false => todo!(),
-        },
+        Ok(true) => VnodeType::Directory(path == fs.root),
+        Ok(false) => todo!(),
         Err(e) => return Err(GetVnodeError::GetFileTypeFailed(e)),
     };
 
     // Allocate a new vnode.
-    let vn = Arc::new(Vnode::new(
+    let vn = Vnode::new(
         mnt,
         ty,
         "exfatfs",
         Arc::new(VnodeBackend::new(fs.clone(), file)),
-    ));
+    );
 
     actives.insert(path.to_owned(), Arc::downgrade(&vn));
     drop(actives);

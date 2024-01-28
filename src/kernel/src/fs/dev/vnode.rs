@@ -88,10 +88,11 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         let mode = dirent.mode();
         let size = match vn.ty() {
             VnodeType::Directory(_) => 512,
-            VnodeType::Character | VnodeType::File => 0,
+            VnodeType::Link => todo!(), /* TODO: strlen(dirent.de_symlink) */
+            _ => 0,
         };
 
-        Ok(VnodeAttrs::new(*uid, *gid, *mode, size))
+        todo!()
     }
 
     fn lookup(
@@ -171,7 +172,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 
         // Execute switch handler.
         match sw.fdopen() {
-            Some(f) => f(&dev, mode, td, file.as_mut().map(|f| &mut **f))?,
+            Some(f) => f(&dev, mode, td, file.as_deref_mut())?,
             None => sw.open().unwrap()(&dev, mode, 0x2000, td)?,
         };
 

@@ -26,7 +26,7 @@ impl TtyManager {
             None,
         ));
 
-        let console = match make_dev(
+        let console = make_dev(
             &console,
             0,
             "console",
@@ -35,10 +35,8 @@ impl TtyManager {
             Mode::new(0o600).unwrap(),
             None,
             MakeDev::MAKEDEV_ETERNAL,
-        ) {
-            Ok(v) => v,
-            Err(e) => return Err(TtyInitError::CreateConsoleFailed(e)),
-        };
+        )
+        .map_err(TtyInitError::CreateConsoleFailed)?;
 
         Ok(Arc::new(Self { console }))
     }

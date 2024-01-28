@@ -11,14 +11,14 @@ pub struct Idt<T> {
 }
 
 impl<T> Idt<T> {
+    const NONE: Option<Entry<T>> = None;
+
     /// See `_id_table_create` on the PS4 for a reference.
     pub fn new(limit: usize) -> Self {
         assert_ne!(limit, 0);
 
         // Allocate the first set.
-        let mut sets = Vec::with_capacity(1);
-
-        sets.push(std::array::from_fn(|_| None));
+        let sets = vec![[Self::NONE; 0x80]];
 
         Self {
             sets,

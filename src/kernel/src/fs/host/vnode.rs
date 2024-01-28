@@ -35,19 +35,16 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 
     fn getattr(self: Arc<Self>, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
         // Get file size.
-        let size = match self.file.len() {
-            Ok(v) => v,
-            Err(e) => return Err(Box::new(GetAttrError::GetSizeFailed(e))),
-        };
+        let size = self.file.len().map_err(GetAttrError::GetSizeFailed)?;
 
         // TODO: Check how the PS4 assign file permissions for exfatfs.
         let mode = match vn.ty() {
             VnodeType::Directory(_) => Mode::new(0o555).unwrap(),
-            VnodeType::File => todo!(),
-            VnodeType::Character => unreachable!(), // The character device should only be in the devfs.
+            VnodeType::File | VnodeType::Link => todo!(),
+            VnodeType::Character => unreachable!(), // Character devices should only be in devfs.
         };
 
-        Ok(VnodeAttrs::new(Uid::ROOT, Gid::ROOT, mode, size))
+        Ok(VnodeAttrs::new(Uid::ROOT, Gid::ROOT, mode, size, u32::MAX))
     }
 
     fn lookup(
@@ -67,9 +64,8 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         }
 
         // Check if directory is accessible.
-        if let Err(e) = vn.access(td, Access::EXEC) {
-            return Err(Box::new(LookupError::AccessDenied(e)));
-        }
+        vn.access(td, Access::EXEC)
+            .map_err(LookupError::AccessDenied)?;
 
         // Check name.
         if name == "." {
@@ -88,10 +84,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         };
 
         // Get vnode.
-        let vn = match get_vnode(&self.fs, vn.fs(), Some(&path)) {
-            Ok(v) => v,
-            Err(e) => return Err(Box::new(LookupError::GetVnodeFailed(e))),
-        };
+        let vn = get_vnode(&self.fs, vn.fs(), Some(&path)).map_err(LookupError::GetVnodeFailed)?;
 
         Ok(vn)
     }

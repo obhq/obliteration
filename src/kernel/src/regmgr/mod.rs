@@ -262,9 +262,7 @@ impl RegMgr {
                     } else {
                         let data = entry.value.to_le_bytes();
 
-                        for i in 0..entry.len {
-                            buf[i] = data[i];
-                        }
+                        buf[..entry.len].copy_from_slice(&data[..entry.len]);
 
                         return Ok(0);
                     }
@@ -396,7 +394,7 @@ impl Display for RegError {
         match self {
             Self::NotFound(k) => write!(f, "entry {k} not found"),
             Self::ChecksumMismatched(e, g) => {
-                write!(f, "checksum mismatched (expect {e:#x}, got {g:#x})")
+                write!(f, "checksum mismatched (expected {e:#x}, got {g:#x})")
             }
             v => write!(f, "{:#x}", v.code()),
         }

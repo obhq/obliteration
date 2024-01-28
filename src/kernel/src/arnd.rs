@@ -1,36 +1,38 @@
-use std::ops::DerefMut;
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
+
+/// An implementation of `arc4rand` on the PS4.
+/// TODO: Implement reseed.
+pub fn rand_bytes(buf: &mut [u8]) {
+    ARND.lock().unwrap().rand_bytes(buf)
+}
+
+static ARND: Mutex<State> = Mutex::new(State::new());
 
 /// Random number generator based on
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/libkern/arc4random.c.
 #[derive(Debug)]
-pub struct Arnd {
-    state: Mutex<State>,
+struct State {
+    i: u8,
+    j: u8,
+    sbox: [u8; 256],
 }
 
-impl Arnd {
-    pub fn new() -> Arc<Self> {
-        let mut sbox = [0u8; 256];
-
-        for (i, e) in sbox.iter_mut().enumerate() {
-            *e = i as u8;
-        }
-
-        Arc::new(Self {
-            state: Mutex::new(State { i: 0, j: 0, sbox }),
-        })
-    }
-
-    pub fn rand_bytes(&self, buf: &mut [u8]) {
-        // TODO: Implement reseed.
-        let mut s = self.state.lock().unwrap();
-
-        for b in buf {
-            *b = Self::rand_byte(s.deref_mut());
+impl State {
+    const fn new() -> Self {
+        Self {
+            i: 0,
+            j: 0,
+            sbox: sbox_init(),
         }
     }
 
-    fn rand_byte(s: &mut State) -> u8 {
+    fn rand_bytes(&mut self, buf: &mut [u8]) {
+        buf.iter_mut().for_each(|b| *b = self.rand_byte());
+    }
+
+    fn rand_byte(&mut self) -> u8 {
+        let s = self;
+
         s.i = s.i.wrapping_add(1);
         s.j = s.j.wrapping_add(s.sbox[s.i as usize]);
         s.sbox.swap(s.i as usize, s.j as usize);
@@ -38,10 +40,15 @@ impl Arnd {
     }
 }
 
-/// State of [`Arc4`].
-#[derive(Debug)]
-struct State {
-    i: u8,
-    j: u8,
-    sbox: [u8; 256],
+const fn sbox_init() -> [u8; 256] {
+    let mut sbox: [u8; 256] = [0; 256];
+
+    let mut i = 0;
+
+    while i < 256 {
+        sbox[i] = i as u8;
+        i += 1;
+    }
+
+    sbox
 }

@@ -1,8 +1,13 @@
-use super::{FsConfig, VPathBuf, Vnode};
-use crate::ucred::{Ucred, Uid};
+use super::{FsConfig, Mode, VPathBuf, Vnode};
+use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
-use std::fmt::Debug;
+use macros::EnumConversions;
+use param::Param;
+use std::collections::HashMap;
+use std::fmt::{Debug, Display, Error};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock, RwLockWriteGuard};
+use thiserror::Error;
 
 /// A collection of [`Mount`].
 #[derive(Debug)]
@@ -43,11 +48,10 @@ impl Mounts {
         loop {
             *base = base.wrapping_add(1);
 
-            if self
+            if !self
                 .0
                 .iter()
-                .find(|&m| m.stats.id[0] == v1 && m.stats.id[1] == v2)
-                .is_none()
+                .any(|m| m.stats.id[0] == v1 && m.stats.id[1] == v2)
             {
                 m.stats.id[0] = v1;
                 m.stats.id[1] = v2;
@@ -61,6 +65,7 @@ impl Mounts {
 
 /// An implementation of `mount` structure on the PS4.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct Mount {
     config: &'static FsConfig,          // mnt_vfc
     gen: i32,                           // mnt_gen
@@ -99,12 +104,20 @@ impl Mount {
         }
     }
 
+    pub fn flags(&self) -> MountFlags {
+        self.flags
+    }
+
     pub fn parent_mut(&self) -> RwLockWriteGuard<Option<Arc<Vnode>>> {
         self.parent.write().unwrap()
     }
 
     pub fn root(self: &Arc<Self>) -> Arc<Vnode> {
         self.fs.clone().root(self)
+    }
+
+    pub fn stats(&self) -> &FsStats {
+        &self.stats
     }
 }
 
@@ -132,6 +145,98 @@ bitflags! {
     }
 }
 
+pub struct MountOpts(HashMap<&'static str, MountOpt>);
+
+impl MountOpts {
+    pub fn new() -> Self {
+        Self(HashMap::new())
+    }
+
+    pub fn insert(&mut self, k: &'static str, v: impl Into<MountOpt>) {
+        self.0.insert(k, v.into());
+    }
+
+    pub fn remove<T>(&mut self, name: &'static str) -> Option<Result<T, MountOptError>>
+    where
+        T: TryFrom<MountOpt, Error = MountOpt>,
+    {
+        let opt = self.0.remove(name)?;
+
+        let res = opt
+            .try_into()
+            .map_err(|opt| MountOptError::new::<T>(name, opt));
+
+        Some(res)
+    }
+
+    pub fn retain(&mut self, mut f: impl FnMut(&str, &mut MountOpt) -> bool) {
+        self.0.retain(|k, v| f(k, v));
+    }
+}
+
+#[derive(EnumConversions, Debug)]
+pub enum MountOpt {
+    Bool(bool),
+    I32(i32),
+    U64(u64),
+    Usize(usize),
+    Str(Box<str>),
+    VPath(VPathBuf),
+    Path(PathBuf),
+    Param(Arc<Param>),
+    Gid(Gid),
+    Uid(Uid),
+    Mode(Mode),
+}
+
+impl MountOpt {
+    pub fn as_bool(&self) -> Option<bool> {
+        match self {
+            Self::Bool(v) => Some(*v),
+            _ => None,
+        }
+    }
+}
+
+impl From<&str> for MountOpt {
+    fn from(v: &str) -> Self {
+        Self::Str(v.into())
+    }
+}
+
+impl From<String> for MountOpt {
+    fn from(v: String) -> Self {
+        Self::Str(v.into_boxed_str())
+    }
+}
+
+#[derive(Debug, Error)]
+pub struct MountOptError {
+    optname: &'static str,
+    expected: &'static str,
+    got: MountOpt,
+}
+
+impl Display for MountOptError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), Error> {
+        write!(
+            f,
+            "mount opt \"{}\" is of wrong type: expected {}, got: {:?}",
+            self.optname, self.expected, self.got
+        )
+    }
+}
+
+impl MountOptError {
+    pub fn new<T>(optname: &'static str, got: MountOpt) -> Self {
+        Self {
+            optname,
+            expected: std::any::type_name::<T>(),
+            got,
+        }
+    }
+}
+
 /// An implementation of `statfs` structure.
 #[derive(Debug)]
 pub struct FsStats {
@@ -139,6 +244,12 @@ pub struct FsStats {
     id: [u32; 2],   // f_fsid
     owner: Uid,     // f_owner
     path: VPathBuf, // f_mntonname
+}
+
+impl FsStats {
+    pub fn id(&self) -> [u32; 2] {
+        self.id
+    }
 }
 
 static MOUNT_ID: Mutex<u16> = Mutex::new(0); // mntid_base + mntid_mtx

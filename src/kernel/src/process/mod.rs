@@ -41,10 +41,10 @@ mod thread;
 
 /// An implementation of `proc` structure represent the main application process.
 ///
-/// Each process of the Obliteration Kernel encapsulate only one PS4 process. The reason we don't
+/// Each process of the Obliteration Kernel encapsulates only one PS4 process. The reason we don't
 /// encapsulate multiple PS4 processes is because there is no way to emulate `fork` with 100%
-/// compatibility from the user-mode application. The PS4 also forbid the game process from creating
-/// a child process so no reason for us to support this.
+/// compatibility from the user-mode application. The PS4 also forbids the game process from creating
+/// a child process, so there's no reason for us to support this.
 #[derive(Debug)]
 pub struct VProc {
     id: NonZeroI32,                    // p_pid
@@ -462,7 +462,7 @@ impl VProc {
         } else if function == RTP_LOOKUP {
             rtp.ty = td.pri_class();
             rtp.prio = match td.pri_class() & 0xfff7 {
-                2 | 3 | 4 => td.base_user_pri(),
+                2..=4 => td.base_user_pri(),
                 _ => 0,
             };
         } else {
