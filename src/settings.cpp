@@ -64,4 +64,5 @@ void writeGamesDirectorySetting(const QString &v)
 namespace SettingGroups {
     const QString user("user");
     const QString mainWindow("mainWindow");
+    const QString games("games");
 }
