@@ -1,7 +1,7 @@
-use super::socket::Socket;
 use super::{IoCmd, Vnode};
 use crate::errno::{Errno, EINVAL, ENOTTY};
 use crate::fs::VnodeType;
+use crate::net::Socket;
 use crate::process::VThread;
 use crate::ucred::Privilege;
 use bitflags::bitflags;

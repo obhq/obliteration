@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_variables)]
+use crate::fs::{IoCmd, VFile, VFileOps};
 use crate::{
     errno::{Errno, EPERM, EPIPE, EPROTONOSUPPORT, EPROTOTYPE},
     net::{attach_notsupp, AddressFamily, Protosw},
@@ -8,8 +8,6 @@ use crate::{
 use bitflags::bitflags;
 use std::{num::NonZeroI32, sync::Arc};
 use thiserror::Error;
-
-use super::{IoCmd, VFile, VFileOps};
 
 #[derive(Debug)]
 pub struct Socket {
@@ -25,7 +23,7 @@ pub struct Socket {
 
 impl Socket {
     /// See `socreate` on the PS4 for a reference.
-    pub(super) fn new(
+    pub fn new(
         domain: i32,
         ty: i32,
         proto: i32,
@@ -104,7 +102,7 @@ bitflags! {
 }
 
 #[derive(Debug, Error)]
-pub(super) enum SocketCreateError {
+pub enum SocketCreateError {
     #[error("IPv6 is not supported")]
     IPv6NotSupported,
 

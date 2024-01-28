@@ -1,8 +1,7 @@
-#![allow(unused_variables)]
+pub use self::socket::*;
 
 use crate::{
     errno::{Errno, EOPNOTSUPP},
-    fs::socket::Socket,
     process::VThread,
 };
 use core::fmt;
@@ -11,6 +10,8 @@ use std::{
     num::NonZeroI32,
 };
 use thiserror::Error;
+
+mod socket;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AddressFamily(i32);

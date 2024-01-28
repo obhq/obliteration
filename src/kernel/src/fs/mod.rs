@@ -9,9 +9,8 @@ pub use self::vnode::*;
 
 use self::host::HostFs;
 use crate::errno::{Errno, EBADF, EBUSY, EINVAL, ENAMETOOLONG, ENODEV, ENOENT};
-use crate::fs::socket::Socket;
-use crate::fs::socket::SOCKET_FILEOPS;
 use crate::info;
+use crate::net::{Socket, SOCKET_FILEOPS};
 use crate::process::VThread;
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{Privilege, Ucred};
@@ -35,7 +34,6 @@ mod ioctl;
 mod mount;
 mod path;
 mod perm;
-pub mod socket;
 mod tmp;
 mod vnode;
 
