@@ -75,8 +75,25 @@ impl Write for VFile {
 
 /// Type of [`VFile`].
 #[derive(Debug)]
+#[rustfmt::skip]
 pub enum VFileType {
-    Vnode(Arc<Vnode>), // DTYPE_VNODE
+    Vnode(Arc<Vnode>), // DTYPE_VNODE = 1
+//  Socket,            // DTYPE_SOCKET = 2
+//  Pipe,              // DTYPE_PIPE = 3
+//  Fifo,              // DTYPE_FIFO = 4
+//  Kqueue,            // DTYPE_KQUEUE = 5
+//  Crypto,            // DTYPE_CRYPTO = 6
+//  Mqueue,            // DTYPE_MQUEUE = 7 (POSIX message queues)
+//  Shm,               // DTYPE_SHM = 8 (POSIX shared memory)
+//  Sem,               // DTYPE_SEM = 9 (POSIX semaphores)
+//  Pts,               // DTYPE_PTS = 10
+//  Dev,               // DTYPE_DEV = 11
+//  Cap,               // DTYPE_CAPABILITY = 12
+//  ProcDesc,          // DTYPE_PROCDESC = 13
+//  JitShm,            // (presumably) DTYPE_JITSHM = 14
+//  Socket2,           // unknown = 15 // figure out what exactly this is
+//  Physhm,            // (presumably) DTYPE_PHYSHM = 16
+//  Blockpool,         // (presumably) DTYPE_BLOCKPOOL = 17
 }
 
 /// An implementation of `fileops` structure.
