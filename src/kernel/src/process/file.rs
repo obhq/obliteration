@@ -56,8 +56,15 @@ impl FileDesc {
         panic!("Too many files has been opened.");
     }
 
-    /// See `fget` on the PS4 for a reference.
-    pub fn get(&self, fd: i32, flags: VFileFlags) -> Result<Arc<VFile>, GetFileError> {
+    pub fn get(&self, fd: i32) -> Result<Arc<VFile>, GetFileError> {
+        todo!()
+    }
+
+    pub fn get_for_write(&self, fd: i32) -> Result<Arc<VFile>, GetFileError> {
+        todo!()
+    }
+
+    pub fn get_for_read(&self, fd: i32) -> Result<Arc<VFile>, GetFileError> {
         todo!()
     }
 
