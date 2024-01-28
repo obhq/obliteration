@@ -267,6 +267,7 @@ impl Fs {
         // TODO: Implement this.
     }
 
+    #[allow(unused_variables)] // Remove this when it is being implemented
     fn sys_read(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
@@ -279,6 +280,7 @@ impl Fs {
         todo!()
     }
 
+    #[allow(unused_variables)] // Remove this when it is being implemented
     fn sys_write(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *const u8 = i.args[1].into();
