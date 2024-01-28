@@ -1,8 +1,10 @@
-use crate::errno::EBADF;
-use crate::fs::{VFile, Vnode};
+use crate::errno::{Errno, EBADF};
+use crate::fs::{VFile, VFileFlags, Vnode};
 use crate::syscalls::SysErr;
 use gmtx::{Gutex, GutexGroup};
+use std::num::NonZeroI32;
 use std::sync::Arc;
+use thiserror::Error;
 
 /// An implementation of `filedesc` structure.
 #[derive(Debug)]
@@ -55,16 +57,8 @@ impl FileDesc {
     }
 
     /// See `fget` on the PS4 for a reference.
-    pub fn get(&self, fd: i32) -> Option<Arc<VFile>> {
-        // TODO: Check what we have missed here.
-        if fd < 0 {
-            return None;
-        }
-
-        let fd: usize = fd.try_into().unwrap();
-        let files = self.files.read();
-
-        files.get(fd)?.clone()
+    pub fn get(&self, fd: i32, flags: VFileFlags) -> Result<Arc<VFile>, GetFileError> {
+        todo!()
     }
 
     pub fn free(&self, fd: i32) -> Result<(), SysErr> {
@@ -83,5 +77,14 @@ impl FileDesc {
         } else {
             Err(SysErr::Raw(EBADF))
         }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum GetFileError {}
+
+impl Errno for GetFileError {
+    fn errno(&self) -> NonZeroI32 {
+        todo!()
     }
 }

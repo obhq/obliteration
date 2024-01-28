@@ -19,6 +19,7 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::num::{NonZeroI32, TryFromIntError};
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use thiserror::Error;
@@ -348,21 +349,45 @@ impl Fs {
             data.fill(0);
         }
 
+        if com.is_void() {
+            unsafe {
+                std::ptr::copy_nonoverlapping(data.as_ptr(), data_arg, size);
+            }
+        }
+
         // Get target file.
         let td = VThread::current().unwrap();
-        let file = td.proc().files().get(fd).ok_or(SysErr::Raw(EBADF))?;
+
+        // Execute the operation.
+        info!("Executing ioctl({com}) on file descriptor {fd}.");
+
+        self.ioctl(fd, com, data, td.deref())?;
+
+        Ok(SysOut::ZERO)
+    }
+
+    /// See `kern_ioctl` on the PS4 for a reference.
+    fn ioctl(
+        self: &Arc<Self>,
+        fd: i32,
+        cmd: IoCmd,
+        data: &mut [u8],
+        td: &VThread,
+    ) -> Result<SysOut, IoctlError> {
+        let file = td
+            .proc()
+            .files()
+            .get(fd, VFileFlags::empty())
+            .map_err(|e| IoctlError::FailedToGetFile(fd, e))?;
 
         if !file
             .flags()
             .intersects(VFileFlags::FREAD | VFileFlags::FWRITE)
         {
-            return Err(SysErr::Raw(EBADF));
+            Err(IoctlError::BadFileFlags(file.flags()))?;
         }
 
-        // Execute the operation.
-        info!("Executing ioctl({com}) on file descriptor {fd}.");
-
-        match com {
+        match cmd {
             UNK_COM1 => todo!("ioctl with com = 0x20006601"),
             UNK_COM2 => todo!("ioctl with com = 0x20006602"),
             UNK_COM3 => todo!("ioctl with com = 0x8004667d"),
@@ -370,13 +395,8 @@ impl Fs {
             _ => {}
         }
 
-        file.ioctl(com, data, Some(&td))?;
-
-        if com.is_void() {
-            unsafe {
-                std::ptr::copy_nonoverlapping(data.as_ptr(), data_arg, size);
-            }
-        }
+        file.ioctl(cmd, data, Some(&td))
+            .map_err(IoctlError::FileIoctlFailed)?;
 
         Ok(SysOut::ZERO)
     }
@@ -638,6 +658,28 @@ pub enum OpenError {}
 impl Errno for OpenError {
     fn errno(&self) -> NonZeroI32 {
         todo!()
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum IoctlError {
+    #[error("Couldn't get file")]
+    FailedToGetFile(id, #[source] GetFileError),
+
+    #[error("Bad file flags {0:?}")]
+    BadFileFlags(VFileFlags),
+
+    #[error(transparent)]
+    FileIoctlFailed(Box<dyn Errno>),
+}
+
+impl Errno for IoctlError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::FailedToGetFile(_, e) => e.errno(),
+            Self::BadFileFlags(_) => EBADF,
+            Self::FileIoctlFailed(e) => e.errno(),
+        }
     }
 }
 
