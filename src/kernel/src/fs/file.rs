@@ -8,7 +8,6 @@ use std::sync::Arc;
 
 /// An implementation of `file` structure.
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct VFile {
     ty: VFileType,                    // f_type
     data: Arc<dyn Any + Send + Sync>, // f_data
@@ -16,7 +15,6 @@ pub struct VFile {
     flags: VFileFlags,                // f_flag
 }
 
-#[allow(dead_code)]
 impl VFile {
     pub(super) fn new(
         ty: VFileType,
