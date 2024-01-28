@@ -369,9 +369,6 @@ impl Fs {
         // Get target file.
         let td = VThread::current().unwrap();
 
-        // Execute the operation.
-        info!("Executing ioctl({com}) on file descriptor {fd}.");
-
         self.ioctl(fd, com, data, td.deref())?;
 
         Ok(SysOut::ZERO)
@@ -406,6 +403,9 @@ impl Fs {
             FIOASYNC => todo!("ioctl with cmd = FIOASYNC"),
             _ => {}
         }
+
+        // Execute the operation.
+        info!("Executing ioctl({cmd}) on file descriptor {fd}.");
 
         file.ioctl(cmd, data, Some(&td))
             .map_err(IoctlError::FileIoctlFailed)?;
