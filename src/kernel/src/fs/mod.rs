@@ -12,7 +12,6 @@ use macros::Errno;
 use param::Param;
 use std::fmt::{Display, Formatter};
 use std::num::{NonZeroI32, TryFromIntError};
-use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use thiserror::Error;
@@ -452,6 +451,7 @@ impl Fs {
         // TODO: It seems like the initial ucred of the process is either root or has PRIV_VFS_ADMIN
         // privilege.
         self.revoke(vn, &td)?;
+        self.revoke(vn, &td)?;
 
         Ok(SysOut::ZERO)
     }
@@ -809,6 +809,13 @@ pub struct FsConfig {
     ) -> Result<Mount, Box<dyn Errno>>,
 }
 
+#[derive(Debug)]
+/// Represents the fd arg for
+enum At {
+    Cwd,
+    Fd(i32),
+}
+
 pub struct IoVec {
     base: *const u8,
     len: usize,
@@ -1024,7 +1031,7 @@ impl Errno for IoctlError {
     }
 }
 
-/// Represents an error when [`Fs::lookup()`] was failed.
+/// Represents an error when [`Fs::lookup()`] fails.
 #[derive(Debug, Error)]
 pub enum LookupError {
     #[error("no such file or directory")]
