@@ -11,6 +11,7 @@ use macros::Errno;
 use param::Param;
 use std::fmt::{Display, Formatter};
 use std::num::{NonZeroI32, TryFromIntError};
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use thiserror::Error;
@@ -471,10 +472,19 @@ impl Fs {
             }
         }
 
+        if com.is_void() {
+            unsafe {
+                std::ptr::copy_nonoverlapping(data.as_ptr(), data_arg, size);
+            }
+        }
+
         // Get target file.
         let td = VThread::current().unwrap();
 
-        self.ioctl(fd, com, data, &td)?;
+        // Execute the operation.
+        info!("Executing ioctl({com}) on file descriptor {fd}.");
+
+        self.ioctl(fd, com, data, td.deref())?;
 
         Ok(SysOut::ZERO)
     }
@@ -487,32 +497,31 @@ impl Fs {
         data: &mut [u8],
         td: &VThread,
     ) -> Result<SysOut, IoctlError> {
-        const FIOCLEX: IoCmd = IoCmd::io(b'f', 1);
-        const FIONCLEX: IoCmd = IoCmd::io(b'f', 2);
-        const FIONBIO: IoCmd = IoCmd::iowint(b'f', 0x7e);
-        const FIOASYNC: IoCmd = IoCmd::iowint(b'f', 0x7d);
-
-        let file = td.proc().files().get(fd)?;
+        let file = td
+            .proc()
+            .files()
+            .get(fd, VFileFlags::empty())
+            .map_err(|e| IoctlError::FailedToGetFile(fd, e))?;
 
         if !file
             .flags()
             .intersects(VFileFlags::READ | VFileFlags::WRITE)
         {
-            return Err(IoctlError::BadFileFlags(file.flags()));
-        }
-
-        match cmd {
-            FIOCLEX => todo!("ioctl with cmd = FIOCLEX"),
-            FIONCLEX => todo!("ioctl with cmd = FIONCLEX"),
-            FIONBIO => todo!("ioctl with cmd = FIONBIO"),
-            FIOASYNC => todo!("ioctl with cmd = FIOASYNC"),
-            _ => {}
+            Err(IoctlError::BadFileFlags(file.flags()))?;
         }
 
         // Execute the operation.
-        info!("Executing ioctl({cmd}) on file descriptor {fd}.");
+        info!("Executing ioctl({com}) on file descriptor {fd}.");
 
-        file.ioctl(cmd, data, Some(td))
+        match com {
+            FIOCLEX => todo!("ioctl with com = FIOCLEX"),
+            FIONCLEX => todo!("ioctl with com = FIONCLEX"),
+            FIONBIO => todo!("ioctl with com = FIONBIO"),
+            FIOASYNC => todo!("ioctl with com = FIOASYNC"),
+            _ => {}
+        }
+
+        file.ioctl(cmd, data, Some(&td))
             .map_err(IoctlError::FileIoctlFailed)?;
 
         Ok(SysOut::ZERO)
@@ -1080,18 +1089,9 @@ impl Errno for OpenError {
 }
 
 #[derive(Debug, Error)]
-pub enum WriteError {}
-
-impl Errno for WriteError {
-    fn errno(&self) -> NonZeroI32 {
-        todo!()
-    }
-}
-
-#[derive(Debug, Error)]
 pub enum IoctlError {
     #[error("Couldn't get file")]
-    FailedToGetFile(#[from] GetFileError),
+    FailedToGetFile(id, #[source] GetFileError),
 
     #[error("Bad file flags {0:?}")]
     BadFileFlags(VFileFlags),
@@ -1103,14 +1103,14 @@ pub enum IoctlError {
 impl Errno for IoctlError {
     fn errno(&self) -> NonZeroI32 {
         match self {
-            Self::FailedToGetFile(e) => e.errno(),
+            Self::FailedToGetFile(_, e) => e.errno(),
             Self::BadFileFlags(_) => EBADF,
             Self::FileIoctlFailed(e) => e.errno(),
         }
     }
 }
 
-/// Represents an error when [`Fs::lookup()`] fails.
+/// Represents an error when [`Fs::lookup()`] was failed.
 #[derive(Debug, Error)]
 pub enum LookupError {
     #[error("no such file or directory")]
