@@ -22,7 +22,7 @@ impl Prison {
         let mut p = other.parent.as_ref();
 
         while let Some(pr) = p {
-            if self == other {
+            if self == pr.as_ref() {
                 return true;
             }
 
