@@ -1,6 +1,6 @@
 use super::{CpuMask, CpuSet, VProc, NEXT_ID};
 use crate::errno::Errno;
-use crate::fs::{VFileFlags, VFileOps, VFileType};
+use crate::fs::{VFile, VFileFlags, VFileOps, VFileType};
 use crate::signal::SignalSet;
 use crate::ucred::{Privilege, PrivilegeError, Ucred};
 use bitflags::bitflags;
@@ -26,6 +26,7 @@ pub struct VThread {
     pcb: Gutex<Pcb>,             // td_pcb
     cpuset: CpuSet,              // td_cpuset
     name: Gutex<Option<String>>, // td_name
+    fpop: Gutex<Option<VFile>>,  // td_fpop
 }
 
 impl VThread {
@@ -46,6 +47,7 @@ impl VThread {
             }),
             cpuset: CpuSet::new(CpuMask::default()), // TODO: Same here.
             name: gg.spawn(None),                    // TODO: Same here
+            fpop: gg.spawn(None),
         }
     }
 
@@ -94,6 +96,10 @@ impl VThread {
         *self.name.write() = name.map(|n| n.to_owned());
     }
 
+    pub fn set_fpop(&self, file: Option<VFile>) {
+        *self.fpop.write() = file
+    }
+
     /// An implementation of `priv_check`.
     pub fn priv_check(&self, p: Privilege) -> Result<(), PrivilegeError> {
         self.cred.priv_check(p)
@@ -129,7 +135,6 @@ impl VThread {
         let proc = self.proc.clone();
         let td = Arc::new(self);
         let running = Running(td.clone());
-
         // Lock the list before spawn the thread to prevent race condition if the new thread run
         // too fast and found out they is not in our list.
         let mut threads = proc.threads.write();
