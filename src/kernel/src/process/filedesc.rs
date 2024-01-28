@@ -9,7 +9,7 @@ use thiserror::Error;
 /// An implementation of `filedesc` structure.
 #[derive(Debug)]
 pub struct FileDesc {
-    files: Gutex<Vec<Option<Arc<VFile>>>>, // fd_ofiles
+    files: Gutex<Vec<Option<Arc<VFile>>>>, // fd_ofiles + fd_nfiles
     cwd: Gutex<Arc<Vnode>>,                // fd_cdir
     root: Gutex<Arc<Vnode>>,               // fd_rdir
 }
@@ -19,6 +19,7 @@ impl FileDesc {
         let gg = GutexGroup::new();
 
         Self {
+            /// TODO: these aren't none on the PS4
             files: gg.spawn(vec![None, None, None]),
             cwd: gg.spawn(root.clone()),
             root: gg.spawn(root),
@@ -56,16 +57,42 @@ impl FileDesc {
         panic!("Too many files has been opened.");
     }
 
+    // TODO: implements capabilities
+
+    /// See `fget` on the PS4 for a reference.
     pub fn get(&self, fd: i32) -> Result<Arc<VFile>, GetFileError> {
-        todo!()
+        self.get_internal(fd, VFileFlags::empty())
     }
 
+    /// See `fget_write` on the PS4 for a reference.
     pub fn get_for_write(&self, fd: i32) -> Result<Arc<VFile>, GetFileError> {
-        todo!()
+        self.get_internal(fd, VFileFlags::FWRITE)
     }
 
+    /// See `fget_read` on the PS4 for a reference.
     pub fn get_for_read(&self, fd: i32) -> Result<Arc<VFile>, GetFileError> {
-        todo!()
+        self.get_internal(fd, VFileFlags::FREAD)
+    }
+
+    /// See `_fget` and `fget_unlocked` on the PS4 for a reference.
+    fn get_internal(&self, fd: i32, flags: VFileFlags) -> Result<Arc<VFile>, GetFileError> {
+        if fd < 0 {
+            return Err(GetFileError::NegativeFd(fd));
+        }
+
+        let files = self.files.write();
+
+        if fd as usize >= files.len() {
+            return Err(GetFileError::FdOutOfRange(fd));
+        }
+
+        loop {
+            if let None = files.get(fd as usize) {
+                return Err(GetFileError::NoFile(fd));
+            }
+
+            todo!()
+        }
     }
 
     pub fn free(&self, fd: i32) -> Result<(), SysErr> {
@@ -88,10 +115,23 @@ impl FileDesc {
 }
 
 #[derive(Debug, Error)]
-pub enum GetFileError {}
+pub enum GetFileError {
+    #[error("got negative file descriptor {0}")]
+    NegativeFd(i32),
+
+    #[error("file descriptor {0} out of range")]
+    FdOutOfRange(i32),
+
+    #[error("no file assoiated with file descriptor {0}")]
+    NoFile(i32),
+}
 
 impl Errno for GetFileError {
     fn errno(&self) -> NonZeroI32 {
-        todo!()
+        match self {
+            Self::NegativeFd(_) => EBADF,
+            Self::FdOutOfRange(_) => EBADF,
+            Self::NoFile(_) => EBADF,
+        }
     }
 }
