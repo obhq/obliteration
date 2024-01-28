@@ -5,8 +5,8 @@ use std::num::NonZeroI32;
 use thiserror::Error;
 
 const BLOCKPOOL_FILEOPS: VFileOps = VFileOps {
-    read: |_, _, _| Err(GenericError::InvalidOperation)?,
-    write: |_, _, _| Err(GenericError::InvalidOperation)?,
+    read: |_, _, _| Err(GenericError::OperationNotSupported)?,
+    write: |_, _, _| Err(GenericError::OperationNotSupported)?,
     ioctl: blockpool_ioctl,
     stat: blockpool_stat,
 };
@@ -32,14 +32,14 @@ fn blockpool_stat(file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Er
 
 #[derive(Debug, Error)]
 pub enum GenericError {
-    #[error("invalid operation")]
-    InvalidOperation,
+    #[error("operation not supported")]
+    OperationNotSupported,
 }
 
 impl Errno for GenericError {
     fn errno(&self) -> NonZeroI32 {
         match self {
-            GenericError::InvalidOperation => ENXIO,
+            GenericError::OperationNotSupported => ENXIO,
         }
     }
 }
