@@ -1,9 +1,5 @@
-use crate::errno::EAFNOSUPPORT;
 use crate::errno::ESRCH;
 use crate::errno::{Errno, EPERM};
-use crate::net::AddressFamily;
-use crate::ucred::prison::PrisonAllow;
-use crate::ucred::prison::PrisonFlags;
 use std::borrow::Cow;
 use std::num::NonZeroI32;
 use thiserror::Error;
@@ -55,6 +51,10 @@ impl Ucred {
 
     pub fn real_uid(&self) -> Uid {
         self.real_uid
+    }
+
+    pub fn prison(&self) -> &Prison {
+        &self.prison
     }
 
     pub fn auth(&self) -> &AuthInfo {
@@ -152,31 +152,6 @@ impl Ucred {
             _ => todo!("prison_priv_check({p})"),
         }
     }
-
-    /// See `prison_check_af` on the PS4 for a reference.
-    pub fn prison_check_address_family(
-        &self,
-        family: AddressFamily,
-    ) -> Result<(), PrisonCheckAfError> {
-        let pr = &self.prison;
-
-        match family {
-            AddressFamily::UNIX | AddressFamily::ROUTE => {}
-            AddressFamily::INET => todo!(),
-            AddressFamily::INET6 => {
-                if pr.flags().intersects(PrisonFlags::IP6) {
-                    todo!()
-                }
-            }
-            _ => {
-                if !pr.allow().intersects(PrisonAllow::ALLOW_SOCKET_AF) {
-                    return Err(PrisonCheckAfError::SocketAddressFamilyNotAllowed(family));
-                }
-            }
-        }
-
-        Ok(())
-    }
 }
 
 /// Represents an error when [`Ucred::priv_check()`] fails.
@@ -196,7 +171,7 @@ impl Errno for PrivilegeError {
 
 #[derive(Debug, Error)]
 pub enum PrisonCheckError {
-    #[error("Prison check failed")]
+    #[error("Pprison check failed")]
     CheckFailed,
 }
 
@@ -204,20 +179,6 @@ impl Errno for PrisonCheckError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::CheckFailed => ESRCH,
-        }
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum PrisonCheckAfError {
-    #[error("the address family {0} is not allowed by prison")]
-    SocketAddressFamilyNotAllowed(AddressFamily),
-}
-
-impl Errno for PrisonCheckAfError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::SocketAddressFamilyNotAllowed(_) => EAFNOSUPPORT,
         }
     }
 }

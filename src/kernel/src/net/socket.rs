@@ -1,9 +1,10 @@
+use crate::errno::EAFNOSUPPORT;
 use crate::fs::{IoCmd, VFile, VFileOps};
+use crate::ucred::{PrisonAllow, PrisonFlags, Ucred};
 use crate::{
     errno::{Errno, EPERM, EPIPE, EPROTONOSUPPORT, EPROTOTYPE},
     net::{attach_notsupp, AddressFamily, Protosw},
     process::VThread,
-    ucred::{PrisonCheckAfError, Ucred},
 };
 use bitflags::bitflags;
 use std::{num::NonZeroI32, sync::Arc};
@@ -153,6 +154,7 @@ pub const SOCKET_FILEOPS: VFileOps = VFileOps {
     ioctl: socket_ioctl,
 };
 
+/// See soo_read on the PS4 for a reference.
 fn socket_read(
     file: &VFile,
     buf: &mut [u8],
@@ -165,6 +167,7 @@ fn socket_read(
     Ok(read)
 }
 
+/// See soo_write on the PS4 for a reference.
 fn socket_write(file: &VFile, buf: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
     let so = file.data_as_socket().unwrap();
 
@@ -177,6 +180,7 @@ fn socket_write(file: &VFile, buf: &[u8], td: Option<&VThread>) -> Result<usize,
     Ok(written)
 }
 
+/// See soo_ioctl on the PS4 for a reference.
 fn socket_ioctl(
     file: &VFile,
     cmd: IoCmd,
@@ -217,6 +221,47 @@ impl Errno for SendError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::BrokenPipe => EPIPE,
+        }
+    }
+}
+
+impl Ucred {
+    /// See `prison_check_af` on the PS4 for a reference.
+    pub fn prison_check_address_family(
+        &self,
+        family: AddressFamily,
+    ) -> Result<(), PrisonCheckAfError> {
+        let pr = self.prison();
+
+        match family {
+            AddressFamily::UNIX | AddressFamily::ROUTE => {}
+            AddressFamily::INET => todo!(),
+            AddressFamily::INET6 => {
+                if pr.flags().intersects(PrisonFlags::IP6) {
+                    todo!()
+                }
+            }
+            _ => {
+                if !pr.allow().intersects(PrisonAllow::ALLOW_SOCKET_AF) {
+                    return Err(PrisonCheckAfError::SocketAddressFamilyNotAllowed(family));
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum PrisonCheckAfError {
+    #[error("the address family {0} is not allowed by prison")]
+    SocketAddressFamilyNotAllowed(AddressFamily),
+}
+
+impl Errno for PrisonCheckAfError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::SocketAddressFamilyNotAllowed(_) => EAFNOSUPPORT,
         }
     }
 }
