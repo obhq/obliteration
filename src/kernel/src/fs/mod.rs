@@ -354,12 +354,10 @@ impl Fs {
         // Get data.
         let data = if size == 0 {
             &mut []
+        } else if com.is_void() {
+            todo!("ioctl with com & IOC_VOID != 0");
         } else {
-            if com.is_void() {
-                todo!("ioctl with com & IOC_VOID != 0");
-            } else {
-                &mut vec[..]
-            }
+            &mut vec[..]
         };
 
         if com.is_in() {
@@ -415,7 +413,7 @@ impl Fs {
         // Execute the operation.
         info!("Executing ioctl({cmd}) on file descriptor {fd}.");
 
-        file.ioctl(cmd, data, Some(&td))
+        file.ioctl(cmd, data, Some(td))
             .map_err(IoctlError::FileIoctlFailed)?;
 
         Ok(SysOut::ZERO)

@@ -59,7 +59,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         };
 
         // Check access.
-        let err = match check_access(cred, fuid, fgid, fmode.into(), mode, is_dir) {
+        let err = match check_access(cred, fuid, fgid, fmode, mode, is_dir) {
             Ok(_) => return Ok(()),
             Err(e) => e,
         };
