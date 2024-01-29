@@ -717,7 +717,7 @@ pub struct FsConfig {
 }
 
 #[derive(Debug)]
-/// Represents the fd arg for
+/// Represents the fd arg for *at syscalls.
 enum At {
     Cwd,
     Fd(i32),
@@ -751,7 +751,7 @@ pub enum FsError {
     LookupDevFailed(#[source] LookupError),
 }
 
-/// Represents an error when FS mounting is failed.
+/// Represents an error when FS mounting fails.
 #[derive(Debug, Error)]
 pub enum MountError {
     #[error("fstype is too long")]
