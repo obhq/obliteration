@@ -37,6 +37,10 @@ impl VFile {
         &mut self.flags
     }
 
+    pub fn read(&self, data: &mut [u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+        (self.ops.read)(self, data, td)
+    }
+
     pub fn write(&self, data: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
         (self.ops.write)(self, data, td)
     }
@@ -85,19 +89,19 @@ pub enum VFileType {
 //  Socket,            // DTYPE_SOCKET = 2
 //  Pipe,              // DTYPE_PIPE = 3
 //  Fifo,              // DTYPE_FIFO = 4
-//  Kqueue,            // DTYPE_KQUEUE = 5
-//  Crypto,            // DTYPE_CRYPTO = 6
+//  Kqueue,            // DTYPE_KQUEUE = 5s
+//  Crypto,            // DTYPE_CRYPTO = 6 (crypto device)
 //  Mqueue,            // DTYPE_MQUEUE = 7 (POSIX message queues)
 //  Shm,               // DTYPE_SHM = 8 (POSIX shared memory)
 //  Sem,               // DTYPE_SEM = 9 (POSIX semaphores)
-//  Pts,               // DTYPE_PTS = 10
+//  Pts,               // DTYPE_PTS = 10 (pseudo teletype master device)
 //  Dev,               // DTYPE_DEV = 11
-//  Cap,               // DTYPE_CAPABILITY = 12
-//  ProcDesc,          // DTYPE_PROCDESC = 13
-//  JitShm,            // (presumably) DTYPE_JITSHM = 14
-//  Socket2,           // unknown = 15 // figure out what exactly this is
-//  Physhm,            // (presumably) DTYPE_PHYSHM = 16
-//  Blockpool,         // (presumably) DTYPE_BLOCKPOOL = 17
+//  Cap,               // DTYPE_CAPABILITY = 12 (capability)
+//  ProcDesc,          // DTYPE_PROCDESC = 13 (process descriptor)
+//  JitShm,            // DTYPE_JITSHM = 14 (JIT shared memory)
+//  IpcSocket,         // DTYPE_IPCSOCKET = 15
+//  Physhm,            // DTYPE_PHYSHM = 16 (physical shared memory)
+//  Blockpool,         // DTYPE_BLOCKPOOL = 17
 }
 
 /// An implementation of `fileops` structure.
