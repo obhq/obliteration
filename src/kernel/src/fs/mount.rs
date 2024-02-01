@@ -4,6 +4,7 @@ use bitflags::bitflags;
 use macros::EnumConversions;
 use param::Param;
 use std::collections::HashMap;
+use std::fmt::Formatter;
 use std::fmt::{Debug, Display, Error};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock, RwLockWriteGuard};
@@ -174,7 +175,7 @@ impl MountOpts {
     }
 }
 
-#[derive(EnumConversions, Debug)]
+#[derive(Debug, EnumConversions)]
 pub enum MountOpt {
     Bool(bool),
     I32(i32),
@@ -218,7 +219,7 @@ pub struct MountOptError {
 }
 
 impl Display for MountOptError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), Error> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(
             f,
             "mount opt \"{}\" is of wrong type: expected {}, got: {:?}",

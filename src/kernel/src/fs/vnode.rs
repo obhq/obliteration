@@ -3,9 +3,9 @@ use crate::errno::{Errno, ENOTDIR, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
+use macros::Errno;
 use std::any::Any;
 use std::fmt::Debug;
-use std::num::NonZeroI32;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
@@ -229,26 +229,19 @@ impl VnodeAttrs {
 }
 
 /// Represents an error when [`DEFAULT_VNODEOPS`] is failed.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 enum DefaultError {
     #[error("operation not supported")]
+    #[errno(EOPNOTSUPP)]
     NotSupported,
 
     #[error("operation not permitted")]
+    #[errno(EPERM)]
     NotPermitted,
 
     #[error("the vnode is not a directory")]
+    #[errno(ENOTDIR)]
     NotDirectory,
-}
-
-impl Errno for DefaultError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::NotSupported => EOPNOTSUPP,
-            Self::NotPermitted => EPERM,
-            Self::NotDirectory => ENOTDIR,
-        }
-    }
 }
 
 static ACTIVE: AtomicUsize = AtomicUsize::new(0); // numvnodes
