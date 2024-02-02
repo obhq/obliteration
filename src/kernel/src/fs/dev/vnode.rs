@@ -2,7 +2,7 @@ use super::dirent::Dirent;
 use super::{alloc_vnode, AllocVnodeError, Cdev, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
-    check_access, Access, OpenFlags, RevokeFlags, VFile, Vnode, VnodeAttrs, VnodeType,
+    check_access, Access, IoCmd, OpenFlags, RevokeFlags, VFile, Vnode, VnodeAttrs, VnodeType,
 };
 use crate::process::VThread;
 use std::num::NonZeroI32;
@@ -94,6 +94,16 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             _ => 0,
         };
 
+        todo!()
+    }
+
+    fn ioctl(
+        self: Arc<Self>,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] cmd: IoCmd,
+        #[allow(unused_variables)] data: &mut [u8],
+        #[allow(unused_variables)] td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
         todo!()
     }
 
