@@ -150,12 +150,7 @@ fn get_vnode(
     };
 
     // Allocate a new vnode.
-    let vn = Vnode::new(
-        mnt,
-        ty,
-        "exfatfs",
-        Arc::new(VnodeBackend::new(fs.clone(), file)),
-    );
+    let vn = Vnode::new(mnt, ty, "exfatfs", VnodeBackend::new(fs.clone(), file));
 
     actives.insert(path.to_owned(), Arc::downgrade(&vn));
     drop(actives);
