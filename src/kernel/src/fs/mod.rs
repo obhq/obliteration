@@ -134,9 +134,15 @@ impl Fs {
         sys.register(6, &fs, Self::sys_close);
         sys.register(54, &fs, Self::sys_ioctl);
         sys.register(56, &fs, Self::sys_revoke);
+        sys.register(120, &fs, Self::sys_readv);
+        sys.register(121, &fs, Self::sys_writev);
         sys.register(188, &fs, Self::sys_stat);
         sys.register(189, &fs, Self::sys_fstat);
         sys.register(190, &fs, Self::sys_lstat);
+        sys.register(191, &fs, Self::sys_pread);
+        sys.register(289, &fs, Self::sys_preadv);
+        sys.register(290, &fs, Self::sys_pwritev);
+        sys.register(476, &fs, Self::sys_pwrite);
         sys.register(493, &fs, Self::sys_fstatat);
 
         Ok(fs)
@@ -443,6 +449,16 @@ impl Fs {
         Ok(SysOut::ZERO)
     }
 
+    #[allow(unused_variables)] // Remove this when it is being implemented
+    fn sys_readv(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // Remove this when it is being implemented
+    fn sys_writev(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        todo!()
+    }
+
     fn sys_stat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let stat_out: *mut Stat = i.args[1].into();
@@ -504,6 +520,36 @@ impl Fs {
     /// See `kern_lstat` in FreeBSD for a reference. (This function is inlined on the PS4)
     fn lstat(self: &Arc<Self>, path: impl AsRef<VPath>, td: &VThread) -> Result<Stat, StatError> {
         self.statat(AtFlags::SYMLINK_NOFOLLOW, At::Cwd, path, td)
+    }
+
+    fn sys_pread(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let len: usize = i.args[2].try_into().unwrap();
+
+        if len > 0x7fffffff {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        todo!();
+    }
+
+    fn sys_pwrite(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let len: usize = i.args[2].try_into().unwrap();
+
+        if len > 0x7fffffff {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        todo!();
+    }
+
+    #[allow(unused_variables)] // Remove this when it is being implemented
+    fn sys_preadv(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        todo!();
+    }
+
+    #[allow(unused_variables)] // Remove this when it is being implemented
+    fn sys_pwritev(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        todo!();
     }
 
     fn sys_fstatat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
