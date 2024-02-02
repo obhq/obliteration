@@ -133,7 +133,7 @@ impl Dirent {
             return Ok(());
         };
 
-        let Err(e) = td.cred().can_see(dev.cred().unwrap()) else {
+        let Err(e) = td.cred().can_access(dev.cred().unwrap()) else {
             return Ok(());
         };
 

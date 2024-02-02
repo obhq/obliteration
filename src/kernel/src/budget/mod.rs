@@ -3,6 +3,8 @@ use crate::idt::Idt;
 use crate::info;
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
+use std::fmt::Display;
+use std::fmt::Formatter;
 use std::sync::{Arc, Mutex};
 
 /// An implementation of budget system on the PS4.
@@ -55,6 +57,21 @@ impl BudgetManager {
             Err(SysErr::Raw(ENOSYS))
         }
     }
+}
+
+#[derive(Debug)]
+pub enum BudgetType {
+    DirectMemory = 1,
+    VirtualMemory = 2,
+    LockedMemory = 3,
+    CpuSet = 4,
+    FdFile = 5,
+    FdSocket = 6,
+    FdEqueue = 7,
+    FdPipe = 8,
+    FdDevice = 9,
+    Threads = 10,
+    FdIpcSocket = 11,
 }
 
 pub struct Budget {

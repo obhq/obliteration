@@ -6,6 +6,7 @@ pub use self::mount::*;
 pub use self::path::*;
 pub use self::perm::*;
 pub use self::vnode::*;
+use crate::budget::BudgetType;
 use crate::errno::{Errno, EBADF, EBUSY, EINVAL, ENAMETOOLONG, ENODEV, ENOENT};
 use crate::info;
 use crate::net::{Socket, SOCKET_FILEOPS};
@@ -425,7 +426,11 @@ impl Fs {
 
         let td = VThread::current().unwrap();
 
-        let budget = if domain == 1 { 11 } else { 6 };
+        let budget = if domain == 1 {
+            BudgetType::FdIpcSocket
+        } else {
+            BudgetType::FdSocket
+        };
 
         let fd = td.falloc_budget(
             |fd| {
@@ -464,7 +469,11 @@ impl Fs {
 
         let td = VThread::current().unwrap();
 
-        let budget = if domain == 1 { 11 } else { 6 };
+        let budget = if domain == 1 {
+            BudgetType::FdIpcSocket
+        } else {
+            BudgetType::FdSocket
+        };
 
         let fd = td.falloc_budget(
             |fd| {

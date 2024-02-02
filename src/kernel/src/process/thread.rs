@@ -1,4 +1,5 @@
 use super::{CpuMask, CpuSet, VProc, NEXT_ID};
+use crate::budget::BudgetType;
 use crate::errno::Errno;
 use crate::fs::{VFile, VFileFlags, VFileOps, VFileType};
 use crate::signal::SignalSet;
@@ -111,7 +112,7 @@ impl VThread {
         _f: impl FnOnce(i32) -> Result<VFileType, Box<dyn Errno>>,
         _flags: VFileFlags,
         _ops: &'static VFileOps,
-        _budget: i32,
+        _budget: BudgetType,
     ) -> Result<i32, FileAllocError> {
         todo!()
     }
