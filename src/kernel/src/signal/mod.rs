@@ -41,7 +41,8 @@ macro_rules! signals {
             });
         )*
 
-        pub fn strsignal(sig: Signal) -> Cow<'static, str> {
+        #[inline(always)]
+        pub fn strsignal_impl(sig: Signal) -> Cow<'static, str> {
             match sig.0.get() {
                 $( $num => Cow::Borrowed(stringify!($name)), )*
                 _ => format!("{sig}", sig = sig.get()).into(),
@@ -51,7 +52,6 @@ macro_rules! signals {
 }
 
 // List of PS4 signals. The value must be the same as PS4 kernel.
-// Not that this macro call also generates the strsignal function.
 signals!(
     SIGHUP => 1,
     SIGINT => 2,
@@ -87,6 +87,11 @@ signals!(
     SIGTHR => 32,
     SIGNONE => 128,
 );
+
+pub fn strsignal(sig: Signal) -> Cow<'static, str> {
+    // This function is generated inside the macro `signals!`.
+    strsignal_impl(sig)
+}
 
 pub const SIG_MAXSIG: i32 = 128;
 // List of sigprocmask operations. The value must be the same as PS4 kernel.
