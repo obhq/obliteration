@@ -25,7 +25,7 @@ pub use self::perm::*;
 pub use self::stat::*;
 pub use self::vnode::*;
 
-mod dev;
+pub mod dev;
 mod dirent;
 mod file;
 mod host;
