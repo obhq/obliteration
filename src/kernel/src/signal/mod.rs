@@ -36,7 +36,7 @@ impl TryFrom<SysArg> for Signal {
 }
 
 macro_rules! signals {
-    ($($name:ident => $num:expr,)*) => {
+    ($($name:ident($num:expr),)*) => {
         $(
             #[allow(dead_code)]
             pub const $name: Signal = Signal(unsafe {
@@ -56,40 +56,41 @@ macro_rules! signals {
 }
 
 // List of PS4 signals. The value must be the same as PS4 kernel.
+#[rustfmt::skip]
 signals!(
-    SIGHUP => 1,
-    SIGINT => 2,
-    SIGQUIT => 3,
-    SIGILL => 4,
-    SIGTRAP => 5,
-    SIGABRT => 6,
-    SIGEMT => 7,
-    SIGFPE => 8,
-    SIGKILL => 9,
-    SIGBUS => 10,
-    SIGSEGV => 11,
-    SIGSYS => 12,
-    SIGPIPE => 13,
-    SIGALRM => 14,
-    SIGTERM => 15,
-    SIGURG => 16,
-    SIGSTOP => 17,
-    SIGTSTP => 18,
-    SIGCONT => 19,
-    SIGCHLD => 20,
-    SIGTTIN => 21,
-    SIGTTOU => 22,
-    SIGIO => 23,
-    SIGXCPU => 24,
-    SIGXFSZ => 25,
-    SIGVTALRM => 26,
-    SIGPROF => 27,
-    SIGWINCH => 28,
-    SIGINFO => 29,
-    SIGUSR1 => 30,
-    SIGUSR2 => 31,
-    SIGTHR => 32,
-    SIGNONE => 128,
+    SIGHUP(1),
+    SIGINT(2),
+    SIGQUIT(3),
+    SIGILL(4),
+    SIGTRAP(5),
+    SIGABRT(6),
+    SIGEMT(7),
+    SIGFPE(8),
+    SIGKILL(9),
+    SIGBUS(10),
+    SIGSEGV(11),
+    SIGSYS(12),
+    SIGPIPE(13),
+    SIGALRM(14),
+    SIGTERM(15),
+    SIGURG(16),
+    SIGSTOP(17),
+    SIGTSTP(18),
+    SIGCONT(19),
+    SIGCHLD(20),
+    SIGTTIN(21),
+    SIGTTOU(22),
+    SIGIO(23),
+    SIGXCPU(24),
+    SIGXFSZ(25),
+    SIGVTALRM(26),
+    SIGPROF(27),
+    SIGWINCH(28),
+    SIGINFO(29),
+    SIGUSR1(30),
+    SIGUSR2(31),
+    SIGTHR(32),
+    SIGNONE(128),
 );
 
 pub fn strsignal(sig: Signal) -> Cow<'static, str> {
