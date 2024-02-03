@@ -13,6 +13,13 @@ mod set;
 pub struct Signal(NonZeroI32);
 
 impl Signal {
+    pub fn new(raw: i32) -> Option<Self> {
+        match raw {
+            1..=SIG_MAXSIG => Some(Signal(unsafe { NonZeroI32::new_unchecked(raw) })),
+            _ => None,
+        }
+    }
+
     pub fn get(&self) -> i32 {
         self.0.get()
     }
@@ -24,10 +31,7 @@ impl TryFrom<SysArg> for Signal {
     fn try_from(value: SysArg) -> Result<Self, Self::Error> {
         let value: i32 = value.try_into().map_err(|_| SysErr::Raw(EINVAL))?;
 
-        match value {
-            1..=SIG_MAXSIG => Ok(Signal(unsafe { NonZeroI32::new_unchecked(value) })),
-            _ => Err(SysErr::Raw(EINVAL)),
-        }
+        Signal::new(value).ok_or(SysErr::Raw(EINVAL))
     }
 }
 
