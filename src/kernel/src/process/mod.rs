@@ -11,9 +11,10 @@ use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ERANGE, ESRCH};
 use crate::fs::Vnode;
 use crate::idt::Idt;
 use crate::info;
+use crate::signal::Signal;
 use crate::signal::{
     strsignal, SignalAct, SignalFlags, SignalSet, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_DFL,
-    SIG_IGN, SIG_MAXSIG, SIG_SETMASK, SIG_UNBLOCK,
+    SIG_IGN, SIG_SETMASK, SIG_UNBLOCK,
 };
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
@@ -284,13 +285,9 @@ impl VProc {
 
     fn sys_sigaction(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
-        let sig: i32 = i.args[0].try_into().unwrap();
+        let sig: Signal = i.args[0].try_into()?;
         let act: *const SignalAct = i.args[1].into();
         let oact: *mut SignalAct = i.args[2].into();
-
-        if sig == 0 || sig > SIG_MAXSIG {
-            return Err(SysErr::Raw(EINVAL));
-        }
 
         // Save the old actions.
         let mut acts = self.sigacts.write();
@@ -304,7 +301,6 @@ impl VProc {
         }
 
         // Set new actions.
-        let sig = NonZeroI32::new(sig).unwrap();
         let handler = unsafe { (*act).handler };
         let flags = unsafe { (*act).flags };
         let mut mask = unsafe { (*act).mask };
