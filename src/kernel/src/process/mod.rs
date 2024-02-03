@@ -285,7 +285,10 @@ impl VProc {
 
     fn sys_sigaction(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
-        let sig: Signal = i.args[0].try_into()?;
+        let sig = {
+            let sig: i32 = i.args[0].try_into().unwrap();
+            Signal::new(sig).ok_or(SysErr::Raw(EINVAL))?
+        };
         let act: *const SignalAct = i.args[1].into();
         let oact: *mut SignalAct = i.args[2].into();
 

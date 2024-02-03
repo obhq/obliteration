@@ -1,7 +1,5 @@
 pub use self::set::*;
 
-use crate::errno::EINVAL;
-use crate::syscalls::{SysArg, SysErr};
 use bitflags::bitflags;
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
@@ -22,16 +20,6 @@ impl Signal {
 
     pub fn get(&self) -> i32 {
         self.0.get()
-    }
-}
-
-impl TryFrom<SysArg> for Signal {
-    type Error = SysErr;
-
-    fn try_from(value: SysArg) -> Result<Self, Self::Error> {
-        let value: i32 = value.try_into().map_err(|_| SysErr::Raw(EINVAL))?;
-
-        Signal::new(value).ok_or(SysErr::Raw(EINVAL))
     }
 }
 

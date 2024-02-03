@@ -1,5 +1,4 @@
 use crate::signal::{Signal, SignalSet, SIG_MAXSIG};
-use std::num::NonZeroI32;
 
 /// An implementation of `sigacts` structure.
 #[derive(Debug)]
