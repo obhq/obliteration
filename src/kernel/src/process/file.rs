@@ -10,6 +10,7 @@ pub struct FileDesc {
     files: Gutex<Vec<Option<Arc<VFile>>>>, // fd_ofiles
     cwd: Gutex<Arc<Vnode>>,                // fd_cdir
     root: Gutex<Arc<Vnode>>,               // fd_rdir
+    cmask: u32,                            // fd_cmask
 }
 
 impl FileDesc {
@@ -20,6 +21,7 @@ impl FileDesc {
             files: gg.spawn(vec![None, None, None]),
             cwd: gg.spawn(root.clone()),
             root: gg.spawn(root),
+            cmask: 0o22, // TODO: verify this
         }
     }
 
@@ -29,6 +31,10 @@ impl FileDesc {
 
     pub fn root(&self) -> Arc<Vnode> {
         self.root.read().clone()
+    }
+
+    pub fn cmask(&self) -> u32 {
+        self.cmask
     }
 
     /// See `finstall` on the PS4 for a reference.

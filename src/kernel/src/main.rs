@@ -10,6 +10,7 @@ use crate::memory::{MemoryManager, MemoryManagerError};
 use crate::process::{VProc, VProcInitError, VThread};
 use crate::regmgr::RegMgr;
 use crate::rtld::{LoadFlags, ModuleFlags, RuntimeLinker};
+use crate::shm::SharedMemoryManager;
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
 use crate::tty::{TtyInitError, TtyManager};
@@ -44,6 +45,7 @@ mod memory;
 mod process;
 mod regmgr;
 mod rtld;
+mod shm;
 mod signal;
 mod syscalls;
 mod sysctl;
@@ -238,6 +240,8 @@ fn run<E: crate::ee::ExecutionEngine>(
     // Initialize TTY system.
     #[allow(unused_variables)] // TODO: Remove this when someone use tty.
     let tty = TtyManager::new()?;
+    #[allow(unused_variables)] // TODO: Remove this when someone use shm.
+    let shm = SharedMemoryManager::new(mm, &mut syscalls);
 
     // Initialize kernel components.
     #[allow(unused_variables)] // TODO: Remove this when someone use debug.
