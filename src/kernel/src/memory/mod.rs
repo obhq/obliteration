@@ -163,10 +163,10 @@ impl MemoryManager {
 
         if flags.contains(MappingFlags::MAP_NOEXTEND) {
             flags |= MappingFlags::MAP_ANON;
-            td.as_ref().map(|t| {
-                t.set_fpop(None);
-                t
-            });
+
+            if let Some(ref td) = td {
+                td.set_fpop(None);
+            }
         } else if !flags.contains(MappingFlags::MAP_ANON) {
             todo!("mmap with flags & 0x1000 = 0");
         }
