@@ -1,5 +1,5 @@
-use super::{unixify_access, Access, Mode, Mount, OpenFlags, VFile};
-use crate::errno::{Errno, ENOTDIR, EOPNOTSUPP, EPERM};
+use super::{unixify_access, Access, IoCmd, Mode, Mount, OpenFlags, RevokeFlags, VFile};
+use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
@@ -89,6 +89,15 @@ impl Vnode {
         self.backend.clone().getattr(self)
     }
 
+    pub fn ioctl(
+        self: &Arc<Self>,
+        cmd: IoCmd,
+        data: &mut [u8],
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        self.backend.clone().ioctl(self, cmd, data, td)
+    }
+
     pub fn lookup(
         self: &Arc<Self>,
         td: Option<&VThread>,
@@ -104,6 +113,10 @@ impl Vnode {
         file: Option<&mut VFile>,
     ) -> Result<(), Box<dyn Errno>> {
         self.backend.clone().open(self, td, mode, file)
+    }
+
+    pub fn revoke(self: &Arc<Self>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
+        self.backend.clone().revoke(self, flags)
     }
 }
 
@@ -168,6 +181,16 @@ pub(super) trait VnodeBackend: Debug + Send + Sync {
         Err(Box::new(DefaultError::NotSupported))
     }
 
+    fn ioctl(
+        self: Arc<Self>,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] cmd: IoCmd,
+        #[allow(unused_variables)] data: &mut [u8],
+        #[allow(unused_variables)] td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        Err(Box::new(DefaultError::IoctlNotSupported))
+    }
+
     /// An implementation of `vop_lookup`.
     fn lookup(
         self: Arc<Self>,
@@ -187,6 +210,15 @@ pub(super) trait VnodeBackend: Debug + Send + Sync {
         #[allow(unused_variables)] file: Option<&mut VFile>,
     ) -> Result<(), Box<dyn Errno>> {
         Ok(())
+    }
+
+    /// An implementation of `vop_revoke`.
+    fn revoke(
+        self: Arc<Self>,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] flags: RevokeFlags,
+    ) -> Result<(), Box<dyn Errno>> {
+        panic!("vop_revoke called");
     }
 }
 
@@ -242,6 +274,10 @@ enum DefaultError {
     #[error("the vnode is not a directory")]
     #[errno(ENOTDIR)]
     NotDirectory,
+
+    #[error("ioctl not supported")]
+    #[errno(ENOTTY)]
+    IoctlNotSupported,
 }
 
 static ACTIVE: AtomicUsize = AtomicUsize::new(0); // numvnodes
