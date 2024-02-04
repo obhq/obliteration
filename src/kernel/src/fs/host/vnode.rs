@@ -1,7 +1,7 @@
 use super::file::HostFile;
 use super::{get_vnode, GetVnodeError, HostFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR};
-use crate::fs::{Access, Mode, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType};
+use crate::fs::{Access, IoCmd, Mode, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use macros::Errno;
@@ -46,6 +46,16 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         };
 
         Ok(VnodeAttrs::new(Uid::ROOT, Gid::ROOT, mode, size, u32::MAX))
+    }
+
+    fn ioctl(
+        self: Arc<Self>,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] cmd: IoCmd,
+        #[allow(unused_variables)] data: &mut [u8],
+        #[allow(unused_variables)] td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
     }
 
     fn lookup(

@@ -1,5 +1,5 @@
 use self::vnode::null_nodeget;
-use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, VPathBuf, Vnode};
+use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, MountSource, VPathBuf, Vnode};
 use crate::errno::{Errno, EDEADLK, EOPNOTSUPP};
 use crate::ucred::Ucred;
 use macros::Errno;
@@ -48,16 +48,21 @@ pub fn mount(
         }
     }
 
-    let mnt = Mount::new(
+    // Get target path.
+    let target = match opts.remove("target") {
+        Some(v) => v.unwrap(),
+        None => todo!("nullfs_mount without target option"),
+    };
+
+    Ok(Mount::new(
         conf,
         cred,
+        MountSource::Path(target),
         path,
         Some(lower.clone()),
         flags,
         NullFs { lower },
-    );
-
-    Ok(mnt)
+    ))
 }
 
 #[derive(Debug, Error, Errno)]

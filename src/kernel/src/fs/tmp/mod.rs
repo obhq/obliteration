@@ -1,5 +1,5 @@
 use self::node::{AllocNodeError, Node, Nodes};
-use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, VPathBuf, Vnode};
+use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, MountSource, VPathBuf, Vnode};
 use crate::errno::{Errno, EINVAL};
 use crate::ucred::{Ucred, Uid};
 use std::num::NonZeroI32;
@@ -88,6 +88,7 @@ pub fn mount(
     Ok(Mount::new(
         conf,
         cred,
+        MountSource::Driver("tmpfs"),
         path,
         parent,
         flags | MountFlags::MNT_LOCAL,
