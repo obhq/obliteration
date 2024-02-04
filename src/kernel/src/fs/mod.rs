@@ -259,16 +259,6 @@ impl Fs {
         Ok(vn)
     }
 
-    fn revoke(&self, vn: Arc<Vnode>, td: &VThread) -> Result<(), RevokeError> {
-        let vattr = vn.getattr().map_err(RevokeError::GetAttrError)?;
-
-        if td.cred().effective_uid() != vattr.uid() {
-            td.priv_check(Privilege::VFS_ADMIN)?;
-        }
-
-        todo!();
-    }
-
     fn sys_read(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
@@ -281,15 +271,9 @@ impl Fs {
             bytes_left: len,
         };
 
-        let td = VThread::current().unwrap();
-
-        let file = td.proc().files().get_for_read(fd)?;
-
-        let read = file.do_read(uio, Offset::Current, Some(&td))?;
-
-        Ok(read.into())
+        self.readv(fd, uio)
     }
-  
+
     fn sys_write(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *const u8 = i.args[1].into();
@@ -302,13 +286,7 @@ impl Fs {
             bytes_left: len,
         };
 
-        let td = VThread::current().unwrap();
-
-        let file = td.proc().files().get_for_write(fd)?;
-
-        let written = file.do_write(uio, Offset::Current, Some(&td))?;
-
-        Ok(written.into())
+        self.writev(fd, uio)
     }
 
     fn sys_open(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -473,6 +451,10 @@ impl Fs {
 
         let uio = unsafe { UioMut::copyin(iovec, count) }?;
 
+        self.readv(fd, uio)
+    }
+
+    fn readv(&self, fd: i32, uio: UioMut) -> Result<SysOut, SysErr> {
         let td = VThread::current().unwrap();
 
         let file = td.proc().files().get_for_read(fd)?;
@@ -489,6 +471,10 @@ impl Fs {
 
         let uio = unsafe { Uio::copyin(iovec, iovcnt) }?;
 
+        self.writev(fd, uio)
+    }
+
+    fn writev(&self, fd: i32, uio: Uio) -> Result<SysOut, SysErr> {
         let td = VThread::current().unwrap();
 
         let file = td.proc().files().get_for_write(fd)?;
@@ -529,7 +515,7 @@ impl Fs {
         unsafe {
             *stat_out = stat;
         }
-      
+
         Ok(SysOut::ZERO)
     }
 
@@ -590,13 +576,7 @@ impl Fs {
             bytes_left: len,
         };
 
-        let td = VThread::current().unwrap();
-
-        let file = td.proc().files().get_for_write(fd)?;
-
-        let written = file.do_write(uio, Offset::Provided(offset), Some(&td))?;
-
-        Ok(written.into())
+        self.pwritev(fd, uio, offset)
     }
 
     fn sys_preadv(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -634,11 +614,21 @@ impl Fs {
 
         let uio = unsafe { Uio::copyin(iovec, count) }?;
 
+        self.pwritev(fd, uio, offset)
+    }
+
+    fn pwritev(&self, fd: i32, uio: Uio, off: i64) -> Result<SysOut, SysErr> {
         let td = VThread::current().unwrap();
 
         let file = td.proc().files().get_for_write(fd)?;
 
-        let written = file.do_write(uio, Offset::Provided(offset), Some(&td))?;
+        if !file.ops().flags().intersects(VFileOpsFlags::SEEKABLE) {
+            return Err(SysErr::Raw(ESPIPE));
+        }
+
+        // TODO: check vnode type
+
+        let written = file.do_write(uio, Offset::Provided(off), Some(&td))?;
 
         Ok(written.into())
     }
@@ -674,7 +664,7 @@ impl Fs {
         // TODO: this will need lookup from a start dir
         todo!()
     }
-  
+
     fn revoke(&self, vn: Arc<Vnode>, td: &VThread) -> Result<(), RevokeError> {
         let vattr = vn.getattr().map_err(RevokeError::GetAttrError)?;
 
