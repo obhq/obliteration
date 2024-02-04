@@ -4,6 +4,7 @@ use crate::errno::{Errno, EIO, ENOENT, ENOTDIR};
 use crate::fs::{Access, Mode, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
+use macros::Errno;
 use std::borrow::Cow;
 use std::num::NonZeroI32;
 use std::sync::Arc;
@@ -101,18 +102,11 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 }
 
 /// Represents an error when [`getattr()`] was failed.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 enum GetAttrError {
     #[error("cannot get file size")]
+    #[errno(EIO)]
     GetSizeFailed(#[source] std::io::Error),
-}
-
-impl Errno for GetAttrError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::GetSizeFailed(_) => EIO,
-        }
-    }
 }
 
 /// Represents an error when [`lookup()`] was failed.

@@ -8,6 +8,7 @@ use super::{
 use crate::errno::{Errno, EEXIST, ENOENT, EOPNOTSUPP};
 use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
+use macros::Errno;
 use std::num::NonZeroI32;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
@@ -364,36 +365,23 @@ impl Filesystem for DevFs {
 }
 
 /// Represents an error when [`mount()`] is failed.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 enum MountError {
     #[error("mounting as root FS is not supported")]
+    #[errno(EOPNOTSUPP)]
     RootFs,
 
     #[error("update mounting is not supported")]
+    #[errno(EOPNOTSUPP)]
     Update,
 }
 
-impl Errno for MountError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::RootFs | Self::Update => EOPNOTSUPP,
-        }
-    }
-}
-
 /// Represents an error when [`alloc_vnode()`] is failed.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 enum AllocVnodeError {
     #[error("the device already gone")]
+    #[errno(ENOENT)]
     DeviceGone,
-}
-
-impl Errno for AllocVnodeError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::DeviceGone => ENOENT,
-        }
-    }
 }
 
 static DEVFS_INDEX: AtomicUsize = AtomicUsize::new(0); // TODO: Use a proper implementation.

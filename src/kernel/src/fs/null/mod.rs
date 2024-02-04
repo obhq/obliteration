@@ -2,7 +2,7 @@ use self::vnode::null_nodeget;
 use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, VPathBuf, Vnode};
 use crate::errno::{Errno, EDEADLK, EOPNOTSUPP};
 use crate::ucred::Ucred;
-use std::num::NonZeroI32;
+use macros::Errno;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -60,24 +60,17 @@ pub fn mount(
     Ok(mnt)
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 enum MountError {
     #[error("mounting as root FS is not supported")]
+    #[errno(EOPNOTSUPP)]
     RootFs,
 
     #[error("update mount is not supported without export option")]
+    #[errno(EOPNOTSUPP)]
     NoExport,
 
     #[error("avoiding deadlock")]
+    #[errno(EDEADLK)]
     AvoidingDeadlock,
-}
-
-impl Errno for MountError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            MountError::RootFs => EOPNOTSUPP,
-            MountError::NoExport => EOPNOTSUPP,
-            MountError::AvoidingDeadlock => EDEADLK,
-        }
-    }
 }

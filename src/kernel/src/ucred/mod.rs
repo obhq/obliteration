@@ -2,7 +2,7 @@ pub use self::auth::*;
 pub use self::id::*;
 pub use self::privilege::*;
 use crate::errno::{Errno, EPERM};
-use std::num::NonZeroI32;
+use macros::Errno;
 use thiserror::Error;
 
 mod auth;
@@ -116,16 +116,9 @@ impl Ucred {
 }
 
 /// Represents an error when [`Ucred::priv_check()`] is failed.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum PrivilegeError {
     #[error("the current credential does not have the specified privilege")]
+    #[errno(EPERM)]
     NoPrivilege,
-}
-
-impl Errno for PrivilegeError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::NoPrivilege => EPERM,
-        }
-    }
 }

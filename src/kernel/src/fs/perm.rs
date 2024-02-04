@@ -1,7 +1,7 @@
 use crate::errno::{Errno, EACCES, EPERM};
 use crate::ucred::{Gid, Privilege, Ucred, Uid};
 use bitflags::bitflags;
-use std::num::NonZeroI32;
+use macros::Errno;
 use thiserror::Error;
 
 /// You can map [`None`] to `EPERM` to match with the PS4 behavior.
@@ -158,20 +158,13 @@ bitflags! {
 }
 
 /// Represents an error when [`check_access()`] is failed.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum AccessError {
     #[error("operation not permitted")]
+    #[errno(EPERM)]
     NotPermitted,
 
     #[error("permission denied")]
+    #[errno(EACCES)]
     PermissionDenied,
-}
-
-impl Errno for AccessError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::NotPermitted => EPERM,
-            Self::PermissionDenied => EACCES,
-        }
-    }
 }
