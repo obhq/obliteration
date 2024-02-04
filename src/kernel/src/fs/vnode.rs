@@ -3,9 +3,9 @@ use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
+use macros::Errno;
 use std::any::Any;
 use std::fmt::Debug;
-use std::num::NonZeroI32;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
@@ -30,7 +30,7 @@ impl Vnode {
         fs: &Arc<Mount>,
         ty: VnodeType,
         tag: &'static str,
-        backend: Arc<dyn VnodeBackend>,
+        backend: impl VnodeBackend + 'static,
     ) -> Arc<Self> {
         let gg = GutexGroup::new();
 
@@ -40,7 +40,7 @@ impl Vnode {
             fs: fs.clone(),
             ty,
             tag,
-            backend,
+            backend: Arc::new(backend),
             item: gg.spawn(None),
         })
     }
@@ -261,30 +261,23 @@ impl VnodeAttrs {
 }
 
 /// Represents an error when [`DEFAULT_VNODEOPS`] is failed.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 enum DefaultError {
     #[error("operation not supported")]
+    #[errno(EOPNOTSUPP)]
     NotSupported,
 
     #[error("operation not permitted")]
+    #[errno(EPERM)]
     NotPermitted,
 
     #[error("the vnode is not a directory")]
+    #[errno(ENOTDIR)]
     NotDirectory,
 
     #[error("ioctl not supported")]
+    #[errno(ENOTTY)]
     IoctlNotSupported,
-}
-
-impl Errno for DefaultError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::NotSupported => EOPNOTSUPP,
-            Self::NotPermitted => EPERM,
-            Self::NotDirectory => ENOTDIR,
-            Self::IoctlNotSupported => ENOTTY,
-        }
-    }
 }
 
 static ACTIVE: AtomicUsize = AtomicUsize::new(0); // numvnodes
