@@ -307,7 +307,7 @@ impl DevFs {
 
         let td = td.unwrap();
 
-        td.priv_check(Privilege::PRIV_DEVFS_RULE)?;
+        td.priv_check(Privilege::DEVFS_RULE)?;
 
         match cmd {
             DEVFSIO_RADD => todo!(),
