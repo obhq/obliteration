@@ -91,6 +91,7 @@ impl VFile {
         }
     }
 
+    /// See `fo_ioctl` on the PS4 for a reference.
     pub fn ioctl(
         &self,
         cmd: IoCmd,

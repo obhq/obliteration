@@ -267,30 +267,46 @@ impl Fs {
         // TODO: Implement this.
     }
 
-    #[allow(unused_variables)] // Remove this when it is being implemented
     fn sys_read(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
 
-        if len > Uio::IOSIZE_MAX {
-            return Err(SysErr::Raw(EINVAL));
-        }
+        let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
-        todo!()
+        let uio = UioMut {
+            vecs: &mut [iovec],
+            bytes_left: len,
+        };
+
+        let td = VThread::current().unwrap();
+
+        let file = td.proc().files().get_for_read(fd)?;
+
+        let read = file.do_read(uio, Offset::Current, Some(&td))?;
+
+        Ok(read.into())
     }
 
-    #[allow(unused_variables)] // Remove this when it is being implemented
     fn sys_write(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *const u8 = i.args[1].into();
         let len: usize = i.args[2].into();
 
-        if len > Uio::IOSIZE_MAX {
-            return Err(SysErr::Raw(EINVAL));
-        }
+        let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
-        todo!()
+        let uio = Uio {
+            vecs: &[iovec],
+            bytes_left: len,
+        };
+
+        let td = VThread::current().unwrap();
+
+        let file = td.proc().files().get_for_write(fd)?;
+
+        let written = file.do_write(uio, Offset::Current, Some(&td))?;
+
+        Ok(written.into())
     }
 
     fn sys_open(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -811,18 +827,21 @@ pub struct FsConfig {
     ) -> Result<Mount, Box<dyn Errno>>,
 }
 
-struct IoVec {
+pub struct IoVec {
     base: *const u8,
     len: usize,
 }
 
 impl IoVec {
-    pub unsafe fn from_raw_parts(base: *const u8, len: usize) -> Self {
-        Self { base, len }
+    pub unsafe fn try_from_raw_parts(base: *const u8, len: usize) -> Result<Self, IoVecError> {
+        Ok(Self { base, len })
     }
 }
 
-struct Uio<'a> {
+const UIO_MAXIOV: u32 = 1024;
+const IOSIZE_MAX: usize = 0x7fffffff;
+
+pub struct Uio<'a> {
     vecs: &'a [IoVec], // uio_iov + uio_iovcnt
     bytes_left: usize, // uio_resid
 }
@@ -833,13 +852,38 @@ impl<'a> Uio<'a> {
 
     /// See `copyinuio` on the PS4 for a reference.
     pub unsafe fn copyin(first: *const IoVec, count: u32) -> Result<Self, CopyInUioError> {
-        if count > Self::UIO_MAXIOV {
+        if count > UIO_MAXIOV {
             return Err(CopyInUioError::TooManyVecs);
         }
 
         let vecs = std::slice::from_raw_parts(first, count as usize);
         let bytes_left = vecs.iter().map(|v| v.len).try_fold(0, |acc, len| {
-            if acc > Self::IOSIZE_MAX - len {
+            if acc > IOSIZE_MAX - len {
+                Err(CopyInUioError::MaxLenExceeded)
+            } else {
+                Ok(acc + len)
+            }
+        })?;
+
+        Ok(Self { vecs, bytes_left })
+    }
+}
+
+pub struct UioMut<'a> {
+    vecs: &'a mut [IoVec], // uio_iov + uio_iovcnt
+    bytes_left: usize,     // uio_resid
+}
+
+impl<'a> UioMut<'a> {
+    /// See `copyinuio` on the PS4 for a reference.
+    pub unsafe fn copyin(first: *mut IoVec, count: u32) -> Result<Self, CopyInUioError> {
+        if count > UIO_MAXIOV {
+            return Err(CopyInUioError::TooManyVecs);
+        }
+
+        let vecs = std::slice::from_raw_parts_mut(first, count as usize);
+        let bytes_left = vecs.iter().map(|v| v.len).try_fold(0, |acc, len| {
+            if acc > IOSIZE_MAX - len {
                 Err(CopyInUioError::MaxLenExceeded)
             } else {
                 Ok(acc + len)
