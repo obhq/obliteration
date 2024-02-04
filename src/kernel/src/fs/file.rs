@@ -1,15 +1,10 @@
 use super::{IoCmd, Vnode};
-use crate::errno::{Errno, EINVAL, ENOTTY};
-use crate::fs::VnodeType;
+use crate::errno::Errno;
 use crate::net::Socket;
 use crate::process::VThread;
-use crate::ucred::Privilege;
 use bitflags::bitflags;
-use bytemuck::{Pod, Zeroable};
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::num::NonZeroI32;
 use std::sync::Arc;
-use thiserror::Error;
 
 /// An implementation of `file` structure.
 #[derive(Debug)]
@@ -118,112 +113,5 @@ bitflags! {
     pub struct VFileFlags: u32 {
         const FREAD = 0x00000001;
         const FWRITE = 0x00000002;
-    }
-}
-
-pub static VNOPS: VFileOps = VFileOps {
-    read: vn_read,
-    write: vn_write,
-    ioctl: vn_ioctl,
-};
-
-fn vn_read(file: &VFile, buf: &mut [u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
-    todo!()
-}
-
-fn vn_write(file: &VFile, buf: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
-    todo!()
-}
-
-fn vn_ioctl(
-    file: &VFile,
-    cmd: IoCmd,
-    buf: &mut [u8],
-    td: Option<&VThread>,
-) -> Result<(), Box<dyn Errno>> {
-    let vn = file.data_as_vnode().unwrap();
-
-    match vn.ty() {
-        VnodeType::File | VnodeType::Directory(_) => match cmd {
-            FIONREAD => {
-                let attr = vn.getattr()?;
-
-                let len: &mut i32 = bytemuck::from_bytes_mut(buf);
-
-                *len = (attr.size() - file.offset()).try_into().unwrap();
-            }
-            FIOCHECKANDMODIFY => {
-                td.unwrap().priv_check(Privilege::SCE683)?;
-
-                let _arg: &FioCheckAndModifyArg = bytemuck::from_bytes(buf);
-
-                todo!()
-            }
-            FIONBIO | FIOASYNC => {}
-            _ => vn.ioctl(cmd, buf, td)?,
-        },
-        _ => return Err(IoctlError::WrongFileType.into()),
-    }
-
-    Ok(())
-}
-
-pub const FILE_GROUP: u8 = b'f';
-
-pub const FIOCLEX: IoCmd = IoCmd::io(FILE_GROUP, 1);
-pub const FIONCLEX: IoCmd = IoCmd::io(FILE_GROUP, 2);
-pub const FIONREAD: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 127);
-pub const FIONBIO: IoCmd = IoCmd::iow::<i32>(FILE_GROUP, 126);
-pub const FIOASYNC: IoCmd = IoCmd::iow::<i32>(FILE_GROUP, 125);
-pub const FIOSETOWN: IoCmd = IoCmd::iow::<i32>(FILE_GROUP, 124);
-pub const FIOGETOWN: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 123);
-pub const FIODTYPE: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 122);
-pub const FIOGETLBA: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 121);
-
-#[repr(C)]
-struct FioDgNameArg {
-    len: i32,
-    buf: *mut u8,
-}
-
-pub const FIODGNAME: IoCmd = IoCmd::ior::<FioDgNameArg>(FILE_GROUP, 120);
-pub const FIONWRITE: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 119);
-pub const FIONSPACE: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 118);
-
-pub const FIOSEEKDATA: IoCmd = IoCmd::ior::<usize>(FILE_GROUP, 97);
-pub const FIOSEEKHOLE: IoCmd = IoCmd::ior::<usize>(FILE_GROUP, 98);
-
-#[repr(C)]
-#[derive(Clone, Copy, Zeroable)]
-struct FioCheckAndModifyArg {
-    flag: i32,
-    _padding: i32,
-    unk2: usize,
-    unk3: usize,
-    path: *const u8,
-    unk5: usize,
-}
-
-// This should be fine for our usecase.
-unsafe impl Pod for FioCheckAndModifyArg {}
-
-/// PS4-specific
-pub const FIOCHECKANDMODIFY: IoCmd = IoCmd::iow::<FioCheckAndModifyArg>(FILE_GROUP, 189);
-
-#[derive(Debug, Error)]
-pub enum IoctlError {
-    #[error("wrong file type")]
-    WrongFileType,
-
-    #[error("invalid flag for FIOCHECKANDMODIFY ({0:#x})")]
-    InvalidFlag(i32),
-}
-
-impl Errno for IoctlError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            IoctlError::WrongFileType => ENOTTY,
-            IoctlError::InvalidFlag(_) => EINVAL,
-        }
     }
 }

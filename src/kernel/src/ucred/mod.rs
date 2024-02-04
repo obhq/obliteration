@@ -1,8 +1,8 @@
 use crate::errno::ESRCH;
 use crate::errno::{Errno, EPERM};
+use macros::Errno;
 use std::borrow::Cow;
 use std::num::NonZeroI32;
-use macros::Errno;
 use thiserror::Error;
 
 pub use self::auth::*;
@@ -163,7 +163,7 @@ pub enum PrivilegeError {
     NoPrivilege,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum PrisonCheckError {
     #[error("insufficient credentials")]
     #[errno(ESRCH)]

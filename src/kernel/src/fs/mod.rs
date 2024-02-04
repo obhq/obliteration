@@ -491,8 +491,9 @@ impl Fs {
         )?;
 
         Ok(fd.into())
+    }
 
-     fn revoke(&self, vn: Arc<Vnode>, td: &VThread) -> Result<(), RevokeError> {
+    fn revoke(&self, vn: Arc<Vnode>, td: &VThread) -> Result<(), RevokeError> {
         let vattr = vn.getattr().map_err(RevokeError::GetAttrError)?;
 
         if td.cred().effective_uid() != vattr.uid() {
