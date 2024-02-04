@@ -4,11 +4,11 @@ use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, VPathBuf, Vnode,
 use crate::errno::{Errno, EIO};
 use crate::ucred::Ucred;
 use gmtx::{Gutex, GutexGroup};
+use macros::Errno;
 use param::Param;
 use std::collections::HashMap;
 use std::fs::create_dir;
 use std::io::ErrorKind;
-use std::num::NonZeroI32;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 use thiserror::Error;
@@ -150,12 +150,7 @@ fn get_vnode(
     };
 
     // Allocate a new vnode.
-    let vn = Vnode::new(
-        mnt,
-        ty,
-        "exfatfs",
-        Arc::new(VnodeBackend::new(fs.clone(), file)),
-    );
+    let vn = Vnode::new(mnt, ty, "exfatfs", VnodeBackend::new(fs.clone(), file));
 
     actives.insert(path.to_owned(), Arc::downgrade(&vn));
     drop(actives);
@@ -171,18 +166,11 @@ enum MountSource {
 }
 
 /// Represents an error when [`mount()`] was failed.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 enum MountError {
     #[error("cannot create {0}")]
+    #[errno(EIO)]
     CreateDirectoryFailed(PathBuf, #[source] std::io::Error),
-}
-
-impl Errno for MountError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::CreateDirectoryFailed(_, _) => EIO,
-        }
-    }
 }
 
 /// Represents an error when [`get_vnode()`] was failed.

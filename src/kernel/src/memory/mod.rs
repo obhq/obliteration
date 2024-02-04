@@ -8,10 +8,11 @@ use crate::process::VThread;
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
 use crate::{info, warn};
 use bitflags::bitflags;
+use macros::Errno;
 use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::fmt::{Display, Formatter};
-use std::num::{NonZeroI32, TryFromIntError};
+use std::num::TryFromIntError;
 use std::ptr::null_mut;
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
@@ -791,46 +792,35 @@ pub enum MemoryManagerError {
 }
 
 /// Represents an error when [`MemoryManager::mmap()`] is failed.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum MmapError {
     #[error("MAP_ANON is specified with non-negative file descriptor")]
+    #[errno(EINVAL)]
     NonNegativeFd,
 
     #[error("MAP_ANON is specified with non-zero offset")]
+    #[errno(EINVAL)]
     NonZeroOffset,
 
     #[error("invalid offset")]
+    #[errno(EINVAL)]
     InvalidOffset,
 
     #[error("no memory available for {0} bytes")]
+    #[errno(ENOMEM)]
     NoMem(usize),
 }
 
-impl Errno for MmapError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::NonNegativeFd | Self::NonZeroOffset | Self::InvalidOffset => EINVAL,
-            Self::NoMem(_) => ENOMEM,
-        }
-    }
-}
-
 /// Errors for [`MemoryManager::munmap()`].
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum MunmapError {
     #[error("addr is not aligned")]
+    #[errno(EINVAL)]
     UnalignedAddr,
 
     #[error("len is zero")]
+    #[errno(EINVAL)]
     ZeroLen,
-}
-
-impl Errno for MunmapError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::UnalignedAddr | Self::ZeroLen => EINVAL,
-        }
-    }
 }
 
 /// Represents an error when update operations on the memory is failed.

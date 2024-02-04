@@ -1,8 +1,9 @@
+use self::vnode::null_nodeget;
 use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, VPathBuf, Vnode};
 use crate::errno::{Errno, EDEADLK, EOPNOTSUPP};
 use crate::ucred::Ucred;
-use std::num::NonZeroI32;
-use std::sync::{Arc, Weak};
+use macros::Errno;
+use std::sync::Arc;
 use thiserror::Error;
 
 mod vnode;
@@ -10,22 +11,18 @@ mod vnode;
 /// An implementation of `null_mount` structure.
 #[derive(Debug)]
 struct NullFs {
-    root: Arc<Vnode>, // nullm_rootvp
+    lower: Arc<Vnode>,
 }
 
 impl NullFs {
-    pub fn new(root: Arc<Vnode>) -> Self {
-        Self { root }
-    }
-
-    pub fn root(&self) -> &Arc<Vnode> {
-        &self.root
+    pub fn lower(&self) -> &Arc<Vnode> {
+        &self.lower
     }
 }
 
 impl Filesystem for NullFs {
     fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Arc<Vnode> {
-        self.root.clone()
+        null_nodeget(mnt, self.lower.clone())
     }
 }
 
@@ -37,7 +34,7 @@ pub fn mount(
     mut opts: MountOpts,
     flags: MountFlags,
 ) -> Result<Mount, Box<dyn Errno>> {
-    let parent = parent.expect("No parent vnode provided to nullfs");
+    let lower = parent.expect("No parent vnode provided to nullfs");
 
     if flags.intersects(MountFlags::MNT_ROOTFS) {
         Err(MountError::RootFs)?;
@@ -51,49 +48,29 @@ pub fn mount(
         }
     }
 
-    let root = null_nodeget(parent.clone());
-
-    let nullfs = NullFs::new(root);
-
-    let mnt = Mount::new(conf, cred, path, Some(parent), flags, nullfs);
+    let mnt = Mount::new(
+        conf,
+        cred,
+        path,
+        Some(lower.clone()),
+        flags,
+        NullFs { lower },
+    );
 
     Ok(mnt)
 }
 
-struct NullNode {
-    null_node: Weak<Vnode>,
-    lower: Arc<Vnode>,
-}
-
-impl NullNode {
-    fn lower(&self) -> &Arc<Vnode> {
-        &self.lower
-    }
-}
-
-/// See `null_nodeget` on the PS4 for a reference.
-pub(self) fn null_nodeget(lower: Arc<Vnode>) -> Arc<Vnode> {
-    todo!()
-}
-
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 enum MountError {
     #[error("mounting as root FS is not supported")]
+    #[errno(EOPNOTSUPP)]
     RootFs,
 
     #[error("update mount is not supported without export option")]
+    #[errno(EOPNOTSUPP)]
     NoExport,
 
     #[error("avoiding deadlock")]
+    #[errno(EDEADLK)]
     AvoidingDeadlock,
-}
-
-impl Errno for MountError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            MountError::RootFs => EOPNOTSUPP,
-            MountError::NoExport => EOPNOTSUPP,
-            MountError::AvoidingDeadlock => EDEADLK,
-        }
-    }
 }

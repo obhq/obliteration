@@ -69,16 +69,9 @@ impl Display for Dmem1 {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Errno)]
 enum IoctlErr {
     #[error("bad credentials")]
+    #[errno(EPERM)]
     BadCredentials,
-}
-
-impl Errno for IoctlErr {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::BadCredentials => EPERM,
-        }
-    }
 }
