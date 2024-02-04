@@ -29,12 +29,20 @@ impl VFile {
         }
     }
 
+    pub fn data(&self) -> &Arc<dyn Any + Send + Sync> {
+        &self.data
+    }
+
     pub fn flags(&self) -> VFileFlags {
         self.flags
     }
 
     pub fn flags_mut(&mut self) -> &mut VFileFlags {
         &mut self.flags
+    }
+
+    pub fn vnode(&self) -> &Arc<Vnode> {
+        todo!()
     }
 
     pub fn write(&self, data: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {

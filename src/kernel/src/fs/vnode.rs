@@ -1,7 +1,8 @@
-use super::{unixify_access, Access, IoCmd, Mode, Mount, OpenFlags, RevokeFlags, VFile};
-use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
+use super::{unixify_access, Access, IoCmd, Mode, Mount, OpenFlags, RevokeFlags, VFile, VFileOps};
+use crate::errno::{Errno, EINVAL, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
-use crate::ucred::{Gid, Uid};
+use crate::ucred::{Gid, Privilege, Uid};
+use bytemuck::{Pod, Zeroable};
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use macros::Errno;
 use std::any::Any;
@@ -225,11 +226,11 @@ pub(super) trait VnodeBackend: Debug + Send + Sync {
 /// An implementation of `vattr` struct.
 #[allow(dead_code)]
 pub struct VnodeAttrs {
-    uid: Uid,   // va_uid
-    gid: Gid,   // va_gid
-    mode: Mode, // va_mode
-    size: u64,  // va_size
-    fsid: u32,  // va_fsid
+    pub uid: Uid,   // va_uid
+    pub gid: Gid,   // va_gid
+    pub mode: Mode, // va_mode
+    pub size: u64,  // va_size
+    pub fsid: u32,  // va_fsid
 }
 
 impl VnodeAttrs {
@@ -241,22 +242,6 @@ impl VnodeAttrs {
             size,
             fsid,
         }
-    }
-
-    pub fn uid(&self) -> Uid {
-        self.uid
-    }
-
-    pub fn gid(&self) -> Gid {
-        self.gid
-    }
-
-    pub fn mode(&self) -> Mode {
-        self.mode
-    }
-
-    pub fn set_fsid(&mut self, fsid: u32) {
-        self.fsid = fsid;
     }
 }
 
@@ -281,3 +266,83 @@ enum DefaultError {
 }
 
 static ACTIVE: AtomicUsize = AtomicUsize::new(0); // numvnodes
+
+pub static VNOPS: VFileOps = VFileOps {
+    read: vn_read,
+    write: vn_write,
+    ioctl: vn_ioctl,
+};
+
+fn vn_read(file: &VFile, buf: &mut [u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+    todo!()
+}
+
+fn vn_write(file: &VFile, buf: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+    todo!()
+}
+
+#[allow(unreachable_code, unused_variables)] // TODO: remove when this is used
+fn vn_ioctl(
+    file: &VFile,
+    cmd: IoCmd,
+    buf: &mut [u8],
+    td: Option<&VThread>,
+) -> Result<(), Box<dyn Errno>> {
+    let vn = file.vnode();
+
+    match vn.ty() {
+        VnodeType::File | VnodeType::Directory(_) => match cmd {
+            FIONREAD => {
+                todo!()
+            }
+            FIOCHECKANDMODIFY => {
+                td.unwrap().priv_check(Privilege::SCE683)?;
+
+                let _arg: &FioCheckAndModifyArg = bytemuck::from_bytes(buf);
+
+                todo!()
+            }
+            FIONBIO | FIOASYNC => {}
+            _ => vn.ioctl(cmd, buf, td)?,
+        },
+        _ => return Err(IoctlError::WrongFileType.into()),
+    }
+
+    Ok(())
+}
+
+pub const FILE_GROUP: u8 = b'f';
+
+pub const FIOCLEX: IoCmd = IoCmd::io(FILE_GROUP, 1);
+pub const FIONCLEX: IoCmd = IoCmd::io(FILE_GROUP, 2);
+pub const FIONREAD: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 127);
+pub const FIONBIO: IoCmd = IoCmd::iow::<i32>(FILE_GROUP, 126);
+pub const FIOASYNC: IoCmd = IoCmd::iow::<i32>(FILE_GROUP, 125);
+
+#[repr(C)]
+#[derive(Clone, Copy, Zeroable)]
+struct FioCheckAndModifyArg {
+    flag: i32,
+    _padding: i32,
+    unk2: usize,
+    unk3: usize,
+    path: *const u8,
+    unk5: usize,
+}
+
+// This should be fine for our usecase.
+unsafe impl Pod for FioCheckAndModifyArg {}
+
+/// PS4-specific
+pub const FIOCHECKANDMODIFY: IoCmd = IoCmd::iow::<FioCheckAndModifyArg>(FILE_GROUP, 189);
+
+#[derive(Debug, Error, Errno)]
+pub enum IoctlError {
+    #[error("wrong file type")]
+    #[errno(ENOTTY)]
+    WrongFileType,
+
+    #[error("invalid flag for FIOCHECKANDMODIFY ({0:#x})")]
+    #[errno(EINVAL)]
+    InvalidFlag(i32),
+}

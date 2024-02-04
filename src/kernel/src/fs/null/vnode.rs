@@ -45,7 +45,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 
         let fsid = vn.fs().stats().id()[0];
 
-        attr.set_fsid(fsid);
+        attr.fsid = fsid;
 
         Ok(attr)
     }

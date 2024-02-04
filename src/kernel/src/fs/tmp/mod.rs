@@ -32,24 +32,24 @@ pub fn mount(
     let gid = if cred.real_uid() == Uid::ROOT {
         match opts.remove("gid") {
             Some(opt) => opt.unwrap(),
-            None => attrs.gid(),
+            None => attrs.gid,
         }
     } else {
-        attrs.gid()
+        attrs.gid
     };
 
     // Get UID.
     let uid = if cred.real_uid() == Uid::ROOT {
-        opts.remove("uid").map_or(attrs.uid(), |v| v.unwrap())
+        opts.remove("uid").map_or(attrs.uid, |v| v.unwrap())
     } else {
-        attrs.uid()
+        attrs.uid
     };
 
     // Get mode.
     let mode = if cred.real_uid() == Uid::ROOT {
-        opts.remove("mode").map_or(attrs.mode(), |v| v.unwrap())
+        opts.remove("mode").map_or(attrs.mode, |v| v.unwrap())
     } else {
-        attrs.mode()
+        attrs.mode
     };
 
     // Get maximum inodes.

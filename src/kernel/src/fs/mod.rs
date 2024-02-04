@@ -406,7 +406,7 @@ impl Fs {
     fn revoke(&self, vn: Arc<Vnode>, td: &VThread) -> Result<(), RevokeError> {
         let vattr = vn.getattr().map_err(RevokeError::GetAttrError)?;
 
-        if td.cred().effective_uid() != vattr.uid() {
+        if td.cred().effective_uid() != vattr.uid {
             td.priv_check(Privilege::VFS_ADMIN)?;
         }
 
