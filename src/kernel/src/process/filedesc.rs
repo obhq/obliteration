@@ -19,7 +19,7 @@ impl FileDesc {
         let gg = GutexGroup::new();
 
         Self {
-            /// TODO: these aren't none on the PS4
+            // TODO: these aren't none on the PS4
             files: gg.spawn(vec![None, None, None]),
             cwd: gg.spawn(root.clone()),
             root: gg.spawn(root),

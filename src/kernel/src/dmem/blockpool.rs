@@ -39,9 +39,10 @@ fn blockpool_stat(file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Er
 pub enum GenericError {
     #[error("invalid operation")]
     #[errno(ENXIO)]
-    InvalidOperation,
+    OperationNotSupported,
 }
 
+#[derive(Debug, Error, Errno)]
 pub enum IoctlError {
     #[error("invalid command {0}")]
     #[errno(ENOTTY)]
