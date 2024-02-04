@@ -3,7 +3,7 @@ use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, VPathBuf, Vnode}
 use crate::errno::{Errno, EDEADLK, EOPNOTSUPP};
 use crate::ucred::Ucred;
 use macros::Errno;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use thiserror::Error;
 
 mod vnode;
@@ -60,7 +60,7 @@ pub fn mount(
     Ok(mnt)
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 enum MountError {
     #[error("mounting as root FS is not supported")]
     #[errno(EOPNOTSUPP)]
