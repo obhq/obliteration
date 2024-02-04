@@ -263,8 +263,14 @@ impl Fs {
         Ok(vn)
     }
 
-    fn revoke<P: Into<VPathBuf>>(&self, _path: P) {
-        // TODO: Implement this.
+    fn revoke(&self, vn: Arc<Vnode>, td: &VThread) -> Result<(), RevokeError> {
+        let vattr = vn.getattr().map_err(RevokeError::GetAttrError)?;
+
+        if td.cred().effective_uid() != vattr.uid() {
+            td.priv_check(Privilege::VFS_ADMIN)?;
+        }
+
+        todo!();
     }
 
     fn sys_read(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -279,13 +285,7 @@ impl Fs {
             bytes_left: len,
         };
 
-        let td = VThread::current().unwrap();
-
-        let file = td.proc().files().get_for_read(fd)?;
-
-        let read = file.do_read(uio, Offset::Current, Some(&td))?;
-
-        Ok(read.into())
+        self.readv(fd, uio)
     }
 
     fn sys_write(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -300,13 +300,7 @@ impl Fs {
             bytes_left: len,
         };
 
-        let td = VThread::current().unwrap();
-
-        let file = td.proc().files().get_for_write(fd)?;
-
-        let written = file.do_write(uio, Offset::Current, Some(&td))?;
-
-        Ok(written.into())
+        self.writev(fd, uio)
     }
 
     fn sys_open(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
