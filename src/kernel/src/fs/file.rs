@@ -1,4 +1,4 @@
-use super::{IoCmd, Stat, Vnode};
+use super::{IoCmd, Offset, Stat, Uio, UioMut, Vnode};
 use crate::errno::Errno;
 use crate::process::VThread;
 use bitflags::bitflags;
@@ -37,14 +37,70 @@ impl VFile {
         &mut self.flags
     }
 
-    pub fn read(&self, data: &mut [u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
-        (self.ops.read)(self, data, td)
+    pub fn ops(&self) -> &'static VFileOps {
+        self.ops
     }
 
-    pub fn write(&self, data: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
-        (self.ops.write)(self, data, td)
+    /// See `dofileread` on the PS4 for a reference.
+    pub fn do_read(
+        &self,
+        uio: UioMut,
+        off: Offset,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        if uio.bytes_left == 0 {
+            return Ok(0);
+        }
+
+        let res = self.read(uio, off, td);
+
+        if let Err(ref e) = res {
+            todo!()
+        }
+
+        res
     }
 
+    /// See `fo_read` on the PS4 for a reference.
+    pub fn read(
+        &self,
+        uio: UioMut,
+        off: Offset,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        (self.ops.read)(self, uio, off, td)
+    }
+
+    /// See `dofilewrite` on the PS4 for a reference.
+    pub fn do_write(
+        &self,
+        mut uio: Uio,
+        off: Offset,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        // TODO: consider implementing ktrace.
+        // TODO: implement bwillwrite.
+
+        let res = self.write(&mut uio, off, td);
+
+        if let Err(ref e) = res {
+            todo!()
+        }
+
+        res
+    }
+
+    /// See `fo_write` on the PS4 for a reference.
+    pub fn write(
+        &self,
+        uio: &mut Uio,
+        off: Offset,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        (self.ops.write)(self, uio, off, td)
+    }
+
+    /// See `fo_ioctl` on the PS4 for a reference.
     pub fn ioctl(
         &self,
         cmd: IoCmd,
@@ -66,7 +122,7 @@ impl Seek for VFile {
 }
 
 impl Read for VFile {
-    fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         todo!()
     }
 }
@@ -111,10 +167,25 @@ pub struct VFileOps {
     pub write: VFileWrite,
     pub ioctl: VFileIoctl,
     pub stat: VFileStat,
+    pub flags: VFileOpsFlags,
 }
 
-type VFileRead = fn(&VFile, &mut [u8], Option<&VThread>) -> Result<usize, Box<dyn Errno>>;
-type VFileWrite = fn(&VFile, &[u8], Option<&VThread>) -> Result<usize, Box<dyn Errno>>;
+impl VFileOps {
+    pub fn flags(&self) -> VFileOpsFlags {
+        self.flags
+    }
+}
+
+bitflags! {
+    #[derive(Debug, Clone, Copy)]
+    pub struct VFileOpsFlags: u32 {
+        const PASSABLE = 0x00000001; // DFLAG_PASSABLE
+        const SEEKABLE = 0x00000002; // DFLAG_SEEKABLE
+    }
+}
+
+type VFileRead = fn(&VFile, UioMut, Offset, Option<&VThread>) -> Result<usize, Box<dyn Errno>>;
+type VFileWrite = fn(&VFile, &mut Uio, Offset, Option<&VThread>) -> Result<usize, Box<dyn Errno>>;
 type VFileIoctl = fn(&VFile, IoCmd, &mut [u8], Option<&VThread>) -> Result<(), Box<dyn Errno>>;
 type VFileStat = fn(&VFile, Option<&VThread>) -> Result<Stat, Box<dyn Errno>>;
 

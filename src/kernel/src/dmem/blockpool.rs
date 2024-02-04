@@ -1,14 +1,16 @@
 use crate::errno::{Errno, ENOTTY, ENXIO};
-use crate::fs::{IoCmd, Stat, VFile, VFileOps};
+use crate::fs::{IoCmd, Stat, VFile, VFileOps, VFileOpsFlags};
 use crate::process::VThread;
 use macros::Errno;
 use thiserror::Error;
 
+#[allow(unused_variables, dead_code)] // Remove this when this is used
 const BLOCKPOOL_FILEOPS: VFileOps = VFileOps {
-    read: |_, _, _| Err(GenericError::OperationNotSupported)?,
-    write: |_, _, _| Err(GenericError::OperationNotSupported)?,
+    read: |_, _, _, _| Err(GenericError::OperationNotSupported)?,
+    write: |_, _, _, _| Err(GenericError::OperationNotSupported)?,
     ioctl: blockpool_ioctl,
     stat: blockpool_stat,
+    flags: VFileOpsFlags::empty(),
 };
 
 #[allow(unused_variables, dead_code)] // Remove this when blockpools are being implemented
