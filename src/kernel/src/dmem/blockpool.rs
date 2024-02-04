@@ -1,7 +1,7 @@
 use crate::errno::{Errno, ENOTTY, ENXIO};
 use crate::fs::{IoCmd, Stat, VFile, VFileOps};
 use crate::process::VThread;
-use std::num::NonZeroI32;
+use macros::Errno;
 use thiserror::Error;
 
 const BLOCKPOOL_FILEOPS: VFileOps = VFileOps {
@@ -35,32 +35,17 @@ fn blockpool_stat(file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Er
     todo!()
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum GenericError {
-    #[error("operation not supported")]
-    OperationNotSupported,
+    #[error("invalid operation")]
+    #[errno(ENXIO)]
+    InvalidOperation,
 }
 
-impl Errno for GenericError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            GenericError::OperationNotSupported => ENXIO,
-        }
-    }
-}
-
-#[derive(Debug, Error)]
 pub enum IoctlError {
     #[error("invalid command {0}")]
+    #[errno(ENOTTY)]
     InvalidCommand(IoCmd),
-}
-
-impl Errno for IoctlError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            IoctlError::InvalidCommand(_) => ENOTTY,
-        }
-    }
 }
 
 pub const BLOCKPOOL_CMD1: IoCmd = IoCmd::iowr::<BlockpoolCmd1Arg>(0xa8, 1);

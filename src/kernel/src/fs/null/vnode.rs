@@ -1,7 +1,6 @@
-use super::null_nodeget;
 use crate::{
     errno::{Errno, EISDIR, EROFS},
-    fs::{perm::Access, MountFlags, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType},
+    fs::{perm::Access, Mount, MountFlags, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType},
     process::VThread,
 };
 use std::{num::NonZeroI32, sync::Arc};
@@ -66,7 +65,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         let vnode = if Arc::ptr_eq(&lower, vn) {
             vn.clone()
         } else {
-            null_nodeget(lower)
+            null_nodeget(vn.fs(), lower)
         };
 
         Ok(vnode)
@@ -75,7 +74,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     /// This function tries to mimic what calling `null_bypass` would do.
     fn open(
         self: Arc<Self>,
-        vn: &Arc<Vnode>,
+        _: &Arc<Vnode>,
         td: Option<&VThread>,
         mode: OpenFlags,
         file: Option<&mut VFile>,
@@ -90,7 +89,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 
 #[derive(Debug, Error)]
 pub enum AccessError {
-    #[error("mounted as readonly+")]
+    #[error("mounted as readonly")]
     Readonly,
 
     #[error("vnode is directory")]
@@ -150,4 +149,10 @@ impl Errno for OpenError {
             Self::OpenFromLowerFailed(e) => e.errno(),
         }
     }
+}
+
+/// See `null_nodeget` on the PS4 for a reference.
+pub(super) fn null_nodeget(mnt: &Arc<Mount>, lower: Arc<Vnode>) -> Arc<Vnode> {
+    // TODO: consider implement the hash table for caching.
+    Vnode::new(mnt, lower.ty().clone(), "null", VnodeBackend { lower })
 }

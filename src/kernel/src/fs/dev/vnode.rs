@@ -3,6 +3,7 @@ use super::{alloc_vnode, AllocVnodeError, Cdev, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{check_access, Access, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
+use macros::Errno;
 use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
@@ -219,16 +220,9 @@ impl Errno for LookupError {
 }
 
 /// Represents an error when [`open()`] is failed.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 enum OpenError {
     #[error("destination file is required")]
+    #[errno(ENXIO)]
     NeedFile,
-}
-
-impl Errno for OpenError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::NeedFile => ENXIO,
-        }
-    }
 }

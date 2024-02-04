@@ -1,6 +1,6 @@
 use crate::errno::{Errno, ENOSPC};
+use macros::Errno;
 use std::collections::VecDeque;
-use std::num::NonZeroI32;
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
 
@@ -42,16 +42,9 @@ impl Nodes {
 pub struct Node {}
 
 /// Represents an error when [`Nodes::alloc()`] fails.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum AllocNodeError {
     #[error("maximum number of nodes has been reached")]
+    #[errno(ENOSPC)]
     LimitReached,
-}
-
-impl Errno for AllocNodeError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::LimitReached => ENOSPC,
-        }
-    }
 }
