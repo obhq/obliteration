@@ -153,6 +153,5 @@ impl Errno for OpenError {
 
 /// See `null_nodeget` on the PS4 for a reference.
 pub(super) fn null_nodeget(mnt: &Arc<Mount>, lower: Arc<Vnode>) -> Arc<Vnode> {
-    // TODO: consider implement the hash table for caching.
-    Vnode::new(mnt, lower.ty().clone(), "null", VnodeBackend { lower })
+    todo!()
 }
