@@ -52,6 +52,8 @@ impl VFile {
             return Ok(0);
         }
 
+        // TODO: consider implementing ktrace.
+
         let res = self.read(uio, off, td);
 
         if let Err(ref e) = res {
@@ -62,7 +64,7 @@ impl VFile {
     }
 
     /// See `fo_read` on the PS4 for a reference.
-    pub fn read(
+    fn read(
         &self,
         uio: UioMut,
         off: Offset,
@@ -91,7 +93,7 @@ impl VFile {
     }
 
     /// See `fo_write` on the PS4 for a reference.
-    pub fn write(
+    fn write(
         &self,
         uio: &mut Uio,
         off: Offset,
