@@ -2,8 +2,8 @@ pub use self::cdev::*;
 use self::dirent::Dirent;
 use self::vnode::VnodeBackend;
 use super::{
-    path_contains, DirentType, Filesystem, FsConfig, Mode, Mount, MountFlags, MountOpts, VPathBuf,
-    Vnode, VnodeType,
+    path_contains, DirentType, Filesystem, FsConfig, Mode, Mount, MountFlags, MountOpts,
+    MountSource, VPathBuf, Vnode, VnodeType,
 };
 use crate::errno::{Errno, EEXIST, ENOENT, EOPNOTSUPP};
 use crate::ucred::{Gid, Ucred, Uid};
@@ -345,6 +345,7 @@ pub fn mount(
     Ok(Mount::new(
         conf,
         cred,
+        MountSource::Driver("devfs"),
         path,
         parent,
         flags | MountFlags::MNT_LOCAL,

@@ -289,7 +289,7 @@ impl Fs {
 
         Ok(read.into())
     }
-
+  
     fn sys_write(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *const u8 = i.args[1].into();
@@ -529,7 +529,7 @@ impl Fs {
         unsafe {
             *stat_out = stat;
         }
-
+      
         Ok(SysOut::ZERO)
     }
 
@@ -673,6 +673,19 @@ impl Fs {
     ) -> Result<Stat, StatError> {
         // TODO: this will need lookup from a start dir
         todo!()
+    }
+  
+    fn revoke(&self, vn: Arc<Vnode>, td: &VThread) -> Result<(), RevokeError> {
+        let vattr = vn.getattr().map_err(RevokeError::GetAttrError)?;
+
+        if td.cred().effective_uid() != vattr.uid() {
+            td.priv_check(Privilege::VFS_ADMIN)?;
+        }
+
+        vn.revoke(RevokeFlags::REVOKE_ALL)
+            .map_err(RevokeError::RevokeFailed)?;
+
+        Ok(())
     }
 
     /// See `vfs_donmount` on the PS4 for a reference.
@@ -961,6 +974,12 @@ pub enum CopyInUioError {
     MaxLenExceeded,
 }
 
+bitflags! {
+    pub struct RevokeFlags: i32 {
+        const REVOKE_ALL = 0x0001;
+    }
+}
+
 /// Represents an error when FS fails to initialize.
 #[derive(Debug, Error)]
 pub enum FsError {
@@ -1080,6 +1099,9 @@ pub enum RevokeError {
 
     #[error("insufficient privilege")]
     PrivelegeError(#[from] PrivilegeError),
+
+    #[error("failed to revoke access")]
+    RevokeFailed(#[source] Box<dyn Errno>),
 }
 
 impl Errno for RevokeError {
@@ -1087,6 +1109,7 @@ impl Errno for RevokeError {
         match self {
             Self::GetAttrError(e) => e.errno(),
             Self::PrivelegeError(e) => e.errno(),
+            Self::RevokeFailed(e) => e.errno(),
         }
     }
 }

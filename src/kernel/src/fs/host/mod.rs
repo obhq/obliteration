@@ -101,6 +101,7 @@ pub fn mount(
     Ok(Mount::new(
         conf,
         cred,
+        super::MountSource::Driver("md0"), // TODO: Actually it is /dev/md0 but the PS4 show as md0.
         path,
         parent,
         flags | MountFlags::MNT_LOCAL,
