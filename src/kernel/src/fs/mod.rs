@@ -273,7 +273,7 @@ impl Fs {
         let ptr: *mut u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
 
-        if len > 0x7fffffff {
+        if len > Uio::IOSIZE_MAX {
             return Err(SysErr::Raw(EINVAL));
         }
 
@@ -286,7 +286,7 @@ impl Fs {
         let ptr: *const u8 = i.args[1].into();
         let len: usize = i.args[2].into();
 
-        if len > 0x7fffffff {
+        if len > Uio::IOSIZE_MAX {
             return Err(SysErr::Raw(EINVAL));
         }
 
@@ -809,6 +809,45 @@ pub struct FsConfig {
         opts: MountOpts,
         flags: MountFlags,
     ) -> Result<Mount, Box<dyn Errno>>,
+}
+
+struct IoVec {
+    base: *const u8,
+    len: usize,
+}
+
+impl IoVec {
+    pub unsafe fn from_raw_parts(base: *const u8, len: usize) -> Self {
+        Self { base, len }
+    }
+}
+
+struct Uio<'a> {
+    vecs: &'a [IoVec], // uio_iov + uio_iovcnt
+    bytes_left: usize, // uio_resid
+}
+
+impl<'a> Uio<'a> {
+    const UIO_MAXIOV: u32 = 1024;
+    const IOSIZE_MAX: usize = 0x7fffffff;
+
+    /// See `copyinuio` on the PS4 for a reference.
+    pub unsafe fn copyin(first: *const IoVec, count: u32) -> Result<Self, CopyInUioError> {
+        if count > Self::UIO_MAXIOV {
+            return Err(CopyInUioError::TooManyVecs);
+        }
+
+        let vecs = std::slice::from_raw_parts(first, count as usize);
+        let bytes_left = vecs.iter().map(|v| v.len).try_fold(0, |acc, len| {
+            if acc > Self::IOSIZE_MAX - len {
+                Err(CopyInUioError::MaxLenExceeded)
+            } else {
+                Ok(acc + len)
+            }
+        })?;
+
+        Ok(Self { vecs, bytes_left })
+    }
 }
 
 #[derive(Debug)]
