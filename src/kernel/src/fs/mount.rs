@@ -4,6 +4,7 @@ use bitflags::bitflags;
 use macros::EnumConversions;
 use param::Param;
 use std::collections::HashMap;
+use std::fmt::Formatter;
 use std::fmt::{Debug, Display, Error};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock, RwLockWriteGuard};
@@ -81,6 +82,7 @@ impl Mount {
     pub(super) fn new(
         config: &'static FsConfig,
         cred: &Arc<Ucred>,
+        source: MountSource,
         path: VPathBuf,
         parent: Option<Arc<Vnode>>,
         flags: MountFlags,
@@ -99,6 +101,7 @@ impl Mount {
                 ty: config.ty,
                 id: [0; 2],
                 owner,
+                source,
                 path,
             },
         }
@@ -174,7 +177,7 @@ impl MountOpts {
     }
 }
 
-#[derive(EnumConversions, Debug)]
+#[derive(Debug, EnumConversions)]
 pub enum MountOpt {
     Bool(bool),
     I32(i32),
@@ -218,7 +221,7 @@ pub struct MountOptError {
 }
 
 impl Display for MountOptError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), Error> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         write!(
             f,
             "mount opt \"{}\" is of wrong type: expected {}, got: {:?}",
@@ -240,16 +243,24 @@ impl MountOptError {
 /// An implementation of `statfs` structure.
 #[derive(Debug)]
 pub struct FsStats {
-    ty: u32,        // f_type
-    id: [u32; 2],   // f_fsid
-    owner: Uid,     // f_owner
-    path: VPathBuf, // f_mntonname
+    ty: u32,             // f_type
+    id: [u32; 2],        // f_fsid
+    owner: Uid,          // f_owner
+    source: MountSource, // f_mntfromname
+    path: VPathBuf,      // f_mntonname
 }
 
 impl FsStats {
     pub fn id(&self) -> [u32; 2] {
         self.id
     }
+}
+
+/// Source of each mount.
+#[derive(Debug)]
+pub enum MountSource {
+    Driver(&'static str),
+    Path(VPathBuf),
 }
 
 static MOUNT_ID: Mutex<u16> = Mutex::new(0); // mntid_base + mntid_mtx

@@ -2,6 +2,7 @@ use crate::errno::ESRCH;
 use crate::errno::{Errno, EPERM};
 use std::borrow::Cow;
 use std::num::NonZeroI32;
+use macros::Errno;
 use thiserror::Error;
 
 pub use self::auth::*;
@@ -154,31 +155,17 @@ impl Ucred {
     }
 }
 
-/// Represents an error when [`Ucred::priv_check()`] fails.
-#[derive(Debug, Error)]
+/// Represents an error when [`Ucred::priv_check()`] is fails.
+#[derive(Debug, Error, Errno)]
 pub enum PrivilegeError {
     #[error("the current credential does not have the specified privilege")]
+    #[errno(EPERM)]
     NoPrivilege,
-}
-
-impl Errno for PrivilegeError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::NoPrivilege => EPERM,
-        }
-    }
 }
 
 #[derive(Debug, Error)]
 pub enum PrisonCheckError {
     #[error("insufficient credentials")]
+    #[errno(ESRCH)]
     InsuffiecientCredentials,
-}
-
-impl Errno for PrisonCheckError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::InsuffiecientCredentials => ESRCH,
-        }
-    }
 }

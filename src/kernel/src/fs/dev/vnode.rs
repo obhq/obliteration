@@ -1,8 +1,11 @@
 use super::dirent::Dirent;
 use super::{alloc_vnode, AllocVnodeError, Cdev, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
-use crate::fs::{check_access, Access, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType};
+use crate::fs::{
+    check_access, Access, IoCmd, OpenFlags, RevokeFlags, VFile, Vnode, VnodeAttrs, VnodeType,
+};
 use crate::process::VThread;
+use macros::Errno;
 use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
@@ -95,6 +98,16 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         todo!()
     }
 
+    fn ioctl(
+        self: Arc<Self>,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] cmd: IoCmd,
+        #[allow(unused_variables)] data: &mut [u8],
+        #[allow(unused_variables)] td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+
     fn lookup(
         self: Arc<Self>,
         vn: &Arc<Vnode>,
@@ -172,7 +185,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 
         // Execute switch handler.
         match sw.fdopen() {
-            Some(f) => f(&dev, mode, td, file.as_deref_mut())?,
+            Some(fdopen) => fdopen(&dev, mode, td, file.as_deref_mut())?,
             None => sw.open().unwrap()(&dev, mode, 0x2000, td)?,
         };
 
@@ -183,6 +196,11 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         };
 
         // TODO: Implement remaining logics from the PS4.
+        Ok(())
+    }
+
+    fn revoke(self: Arc<Self>, vn: &Arc<Vnode>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
+        // TODO: Implement this.
         Ok(())
     }
 }
@@ -219,16 +237,9 @@ impl Errno for LookupError {
 }
 
 /// Represents an error when [`open()`] is failed.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 enum OpenError {
     #[error("destination file is required")]
+    #[errno(ENXIO)]
     NeedFile,
-}
-
-impl Errno for OpenError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::NeedFile => ENXIO,
-        }
-    }
 }
