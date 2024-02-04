@@ -63,10 +63,5 @@ pub fn transform(arg: ItemEnum) -> syn::Result<TokenStream> {
 
         stream.extend(impls);
     }
-
-    let expanded = quote! {
-        #stream
-    };
-
-    Ok(expanded)
+    Ok(stream)
 }
