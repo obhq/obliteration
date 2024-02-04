@@ -82,6 +82,7 @@ impl Mount {
     pub(super) fn new(
         config: &'static FsConfig,
         cred: &Arc<Ucred>,
+        source: MountSource,
         path: VPathBuf,
         parent: Option<Arc<Vnode>>,
         flags: MountFlags,
@@ -100,6 +101,7 @@ impl Mount {
                 ty: config.ty,
                 id: [0; 2],
                 owner,
+                source,
                 path,
             },
         }
@@ -241,16 +243,24 @@ impl MountOptError {
 /// An implementation of `statfs` structure.
 #[derive(Debug)]
 pub struct FsStats {
-    ty: u32,        // f_type
-    id: [u32; 2],   // f_fsid
-    owner: Uid,     // f_owner
-    path: VPathBuf, // f_mntonname
+    ty: u32,             // f_type
+    id: [u32; 2],        // f_fsid
+    owner: Uid,          // f_owner
+    source: MountSource, // f_mntfromname
+    path: VPathBuf,      // f_mntonname
 }
 
 impl FsStats {
     pub fn id(&self) -> [u32; 2] {
         self.id
     }
+}
+
+/// Source of each mount.
+#[derive(Debug)]
+pub enum MountSource {
+    Driver(&'static str),
+    Path(VPathBuf),
 }
 
 static MOUNT_ID: Mutex<u16> = Mutex::new(0); // mntid_base + mntid_mtx
