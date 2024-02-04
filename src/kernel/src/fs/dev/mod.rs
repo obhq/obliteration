@@ -94,7 +94,7 @@ fn alloc_vnode(
 
     // Create vnode. Beware of deadlock because we are currently holding on dirent lock.
     let tag = "devfs";
-    let backend = Arc::new(VnodeBackend::new(fs, ent.clone()));
+    let backend = VnodeBackend::new(fs, ent.clone());
     let vn = match ent.ty() {
         DirentType::Character => {
             let dev = ent
