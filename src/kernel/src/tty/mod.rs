@@ -24,6 +24,7 @@ impl TtyManager {
             DriverFlags::from_bits_retain(0x80000004),
             Some(Self::console_open),
             None,
+            Self::console_ioctl,
         ));
 
         let console = make_dev(
@@ -49,6 +50,15 @@ impl TtyManager {
         _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         todo!()
+    }
+
+    fn console_ioctl(
+        _: &Arc<Cdev>,
+        _: IoCmd,
+        _: &mut [u8],
+        _: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!();
     }
 }
 

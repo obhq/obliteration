@@ -2,11 +2,12 @@ pub use self::cdev::*;
 use self::dirent::Dirent;
 use self::vnode::VnodeBackend;
 use super::{
-    path_contains, DirentType, Filesystem, FsConfig, Mode, Mount, MountFlags, MountOpts,
+    path_contains, DirentType, Filesystem, FsConfig, IoCmd, Mode, Mount, MountFlags, MountOpts,
     MountSource, VPathBuf, Vnode, VnodeType,
 };
 use crate::errno::{Errno, EEXIST, ENOENT, EOPNOTSUPP};
-use crate::ucred::{Gid, Ucred, Uid};
+use crate::process::VThread;
+use crate::ucred::{Gid, Privilege, PrivilegeError, Ucred, Uid};
 use bitflags::bitflags;
 use macros::Errno;
 use std::num::NonZeroI32;
@@ -286,6 +287,54 @@ impl DevFs {
         dir.children_mut().push(Arc::new(dd));
         dir
     }
+
+    fn rules_ioctl(
+        &self,
+        cmd: IoCmd,
+        data: &mut [u8],
+        td: Option<&VThread>,
+    ) -> Result<(), RulesIoctlError> {
+        const DEVFS_RULE_GRP: u8 = b'D';
+        const DEVFSIO_RADD: IoCmd = IoCmd::iowr::<DevfsRule>(DEVFS_RULE_GRP, 0);
+        const DEVFSIO_RDEL: IoCmd = IoCmd::iow::<u32>(DEVFS_RULE_GRP, 1);
+        const DEVFSIO_RAPPLY: IoCmd = IoCmd::iow::<DevfsRule>(DEVFS_RULE_GRP, 2);
+        const DEVFSIO_RAPPLYID: IoCmd = IoCmd::iow::<u32>(DEVFS_RULE_GRP, 3);
+        const DEVFSIO_RGETNEXT: IoCmd = IoCmd::iowr::<DevfsRule>(DEVFS_RULE_GRP, 4);
+
+        const DEVFSIO_SUSE: IoCmd = IoCmd::iow::<u16>(DEVFS_RULE_GRP, 10);
+        const DEVFSIO_SAPPLY: IoCmd = IoCmd::iow::<u16>(DEVFS_RULE_GRP, 11);
+        const DEVFSIO_SGETNEXT: IoCmd = IoCmd::iowr::<u16>(DEVFS_RULE_GRP, 12);
+
+        let td = td.unwrap();
+
+        td.priv_check(Privilege::PRIV_DEVFS_RULE)?;
+
+        match cmd {
+            DEVFSIO_RADD => todo!(),
+            DEVFSIO_RDEL => todo!(),
+            DEVFSIO_RAPPLY => todo!(),
+            DEVFSIO_RAPPLYID => todo!(),
+            DEVFSIO_RGETNEXT => todo!(),
+            DEVFSIO_SUSE => todo!(),
+            DEVFSIO_SAPPLY => todo!(),
+            DEVFSIO_SGETNEXT => todo!(),
+            _ => todo!(), // ENOIOCTL is returned here
+        }
+    }
+}
+
+#[repr(C)]
+struct DevfsRule {
+    magic: u32,          // dr_magic
+    id: u32,             // dr_id
+    icond: i32,          // dr_icond
+    pathptrn: [u8; 200], // dr_pathptrn
+    iacts: i32,          // dr_iacts
+    bacts: i32,          // dr_bacts
+    uid: Uid,            // dr_uid
+    gid: Gid,            // dr_gid
+    mode: Mode,          // dr_mode
+    incset: u16,         // dr_incset
 }
 
 bitflags! {
@@ -383,6 +432,20 @@ enum AllocVnodeError {
     #[error("the device already gone")]
     #[errno(ENOENT)]
     DeviceGone,
+}
+
+#[derive(Debug, Error)]
+pub enum RulesIoctlError {
+    #[error("access denied")]
+    AccessDenied(#[from] PrivilegeError),
+}
+
+impl Errno for RulesIoctlError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::AccessDenied(e) => e.errno(),
+        }
+    }
 }
 
 static DEVFS_INDEX: AtomicUsize = AtomicUsize::new(0); // TODO: Use a proper implementation.

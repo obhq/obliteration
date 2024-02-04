@@ -16,6 +16,7 @@ impl Privilege {
     pub const VFS_ADMIN: Self = Self(312);
     pub const VFS_EXEC: Self = Self(313);
     pub const VFS_LOOKUP: Self = Self(314);
+    pub const PRIV_DEVFS_RULE: Self = Self(370);
     pub const SCE680: Self = Self(680);
     pub const SCE683: Self = Self(683);
     pub const SCE686: Self = Self(686);

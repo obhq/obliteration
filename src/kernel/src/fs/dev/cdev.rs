@@ -1,6 +1,6 @@
 use super::dirent::Dirent;
 use crate::errno::Errno;
-use crate::fs::{Mode, OpenFlags, VFile};
+use crate::fs::{IoCmd, Mode, OpenFlags, VFile};
 use crate::process::VThread;
 use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
@@ -113,15 +113,22 @@ pub struct CdevSw {
     flags: DriverFlags,     // d_flags
     open: Option<CdevOpen>, // d_open
     fdopen: Option<CdevFd>, // d_fdopen
+    ioctl: CdevIoctl,       // d_ioctl
 }
 
 impl CdevSw {
     /// See `prep_cdevsw` on the PS4 for a reference.
-    pub fn new(flags: DriverFlags, open: Option<CdevOpen>, fdopen: Option<CdevFd>) -> Self {
+    pub fn new(
+        flags: DriverFlags,
+        open: Option<CdevOpen>,
+        fdopen: Option<CdevFd>,
+        ioctl: CdevIoctl,
+    ) -> Self {
         Self {
             flags,
             open,
             fdopen,
+            ioctl,
         }
     }
 
@@ -149,3 +156,5 @@ bitflags! {
 pub type CdevOpen = fn(&Arc<Cdev>, OpenFlags, i32, Option<&VThread>) -> Result<(), Box<dyn Errno>>;
 pub type CdevFd =
     fn(&Arc<Cdev>, OpenFlags, Option<&VThread>, Option<&mut VFile>) -> Result<(), Box<dyn Errno>>;
+pub type CdevIoctl =
+    fn(&Arc<Cdev>, IoCmd, &mut [u8], Option<&VThread>) -> Result<(), Box<dyn Errno>>;

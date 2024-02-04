@@ -319,6 +319,15 @@ pub const FIONREAD: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 127);
 pub const FIONBIO: IoCmd = IoCmd::iow::<i32>(FILE_GROUP, 126);
 pub const FIOASYNC: IoCmd = IoCmd::iow::<i32>(FILE_GROUP, 125);
 
+pub const FIODTYPE: IoCmd = IoCmd::ior::<i32>(FILE_GROUP, 122);
+pub const FIODGNAME: IoCmd = IoCmd::iow::<FioDgNameArg>(FILE_GROUP, 120);
+
+#[repr(C)]
+struct FioDgNameArg {
+    len: i32,
+    buf: *mut u8,
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Zeroable)]
 struct FioCheckAndModifyArg {

@@ -2,7 +2,8 @@ use super::dirent::Dirent;
 use super::{alloc_vnode, AllocVnodeError, Cdev, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
-    check_access, Access, IoCmd, OpenFlags, RevokeFlags, VFile, Vnode, VnodeAttrs, VnodeType,
+    check_access, Access, IoCmd, OpenFlags, RevokeFlags, VFile, VFileOps, Vnode, VnodeAttrs,
+    VnodeType, FIODGNAME,
 };
 use crate::process::VThread;
 use macros::Errno;
@@ -101,11 +102,17 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     fn ioctl(
         self: Arc<Self>,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
-        #[allow(unused_variables)] cmd: IoCmd,
-        #[allow(unused_variables)] data: &mut [u8],
-        #[allow(unused_variables)] td: Option<&VThread>,
+        cmd: IoCmd,
+        data: &mut [u8],
+        td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        todo!()
+        let ref fs = self.fs;
+
+        fs.populate();
+
+        fs.rules_ioctl(cmd, data, td)?;
+
+        todo!();
     }
 
     fn lookup(
@@ -203,6 +210,39 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         // TODO: Implement this.
         Ok(())
     }
+}
+
+static DEVFS_OPS: VFileOps = VFileOps {
+    read: devfs_read,
+    write: devfs_write,
+    ioctl: devfs_ioctl,
+};
+
+fn devfs_read(file: &VFile, buf: &mut [u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+    todo!()
+}
+
+fn devfs_write(file: &VFile, buf: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+    todo!()
+}
+
+fn devfs_ioctl(
+    file: &VFile,
+    cmd: IoCmd,
+    data: &mut [u8],
+    td: Option<&VThread>,
+) -> Result<(), Box<dyn Errno>> {
+    let td = td.unwrap();
+
+    let fpop = td.fpop();
+
+    match cmd {
+        FIODTYPE => todo!(),
+        FIODGNAME => todo!(),
+        _ => {}
+    }
+
+    todo!()
 }
 
 /// Represents an error when [`lookup()`] is failed.

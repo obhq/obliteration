@@ -94,6 +94,10 @@ impl VThread {
         *self.name.write() = name.map(|n| n.to_owned());
     }
 
+    pub fn fpop(&self) -> GutexReadGuard<'_, Option<VFile>> {
+        self.fpop.read()
+    }
+
     pub fn set_fpop(&self, file: Option<VFile>) {
         *self.fpop.write() = file
     }
