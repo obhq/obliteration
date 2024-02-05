@@ -131,6 +131,7 @@ impl Fs {
         sys.register(54, &fs, Self::sys_ioctl);
         sys.register(56, &fs, Self::sys_revoke);
         sys.register(136, &fs, Self::sys_mkdir);
+        sys.register(496, &fs, Self::sys_mkdirat);
 
         Ok(fs)
     }
