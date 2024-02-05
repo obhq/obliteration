@@ -13,7 +13,6 @@ macro_rules! error_numbers {
             };
         )*
 
-        #[inline(always)]
         pub fn strerror_impl(num: NonZeroI32) -> &'static str {
             match num {
                 $( $name => $desc, )*

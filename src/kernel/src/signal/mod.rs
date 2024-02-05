@@ -33,7 +33,6 @@ macro_rules! signals {
             });
         )*
 
-        #[inline(always)]
         pub fn strsignal_impl(sig: Signal) -> Cow<'static, str> {
             match sig.0.get() {
                 $( $num => Cow::Borrowed(stringify!($name)), )*
