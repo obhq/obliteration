@@ -47,6 +47,7 @@ mod rtld;
 mod signal;
 mod syscalls;
 mod sysctl;
+mod time;
 mod tty;
 mod ucred;
 
