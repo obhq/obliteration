@@ -100,6 +100,16 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         Ok(vn)
     }
 
+    fn mkdir(
+        self: Arc<Self>,
+        parent: &Arc<Vnode>,
+        name: &str,
+        mode: u32,
+        td: Option<&VThread>,
+    ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+        todo!()
+    }
+
     fn open(
         self: Arc<Self>,
         vn: &Arc<Vnode>,
