@@ -107,6 +107,15 @@ impl Vnode {
         self.backend.clone().lookup(self, td, name)
     }
 
+    pub fn mkdir(
+        self: &Arc<Self>,
+        name: &str,
+        mode: u32,
+        td: Option<&VThread>,
+    ) -> Result<Arc<Self>, Box<dyn Errno>> {
+        self.backend.clone().mkdir(self, name, mode, td)
+    }
+
     pub fn open(
         self: &Arc<Self>,
         td: Option<&VThread>,
@@ -200,6 +209,19 @@ pub(super) trait VnodeBackend: Debug + Send + Sync {
         #[allow(unused_variables)] name: &str,
     ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
         Err(Box::new(DefaultError::NotDirectory))
+    }
+
+    /// An implementation of `vop_mkdir`.
+    /// There should be a VnodeAttrs argument instead of mode,
+    /// but it seems that the only argument that actually gets used is mode.
+    fn mkdir(
+        self: Arc<Self>,
+        #[allow(unused_variables)] parent: &Arc<Vnode>,
+        #[allow(unused_variables)] name: &str,
+        #[allow(unused_variables)] mode: u32,
+        #[allow(unused_variables)] td: Option<&VThread>,
+    ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+        Err(Box::new(DefaultError::NotSupported))
     }
 
     /// An implementation of `vop_open`.

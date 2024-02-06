@@ -130,6 +130,8 @@ impl Fs {
         sys.register(6, &fs, Self::sys_close);
         sys.register(54, &fs, Self::sys_ioctl);
         sys.register(56, &fs, Self::sys_revoke);
+        sys.register(136, &fs, Self::sys_mkdir);
+        sys.register(496, &fs, Self::sys_mkdirat);
 
         Ok(fs)
     }
@@ -416,6 +418,39 @@ impl Fs {
         Ok(())
     }
 
+    fn sys_mkdir(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let path = unsafe { i.args[0].to_path() }?.unwrap();
+        let mode: u32 = i.args[1].try_into().unwrap();
+
+        let td = VThread::current().unwrap();
+
+        self.mkdirat(At::Cwd, path, mode, Some(&td))
+    }
+
+    fn sys_mkdirat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let td = VThread::current().unwrap();
+
+        td.priv_check(Privilege::SCE683)?;
+
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let path = unsafe { i.args[1].to_path() }?.unwrap();
+        let mode: u32 = i.args[2].try_into().unwrap();
+
+        self.mkdirat(At::Fd(fd), path, mode, Some(&td))
+    }
+
+    /// See `kern_mkdirat` on the PS4 for a reference.
+    fn mkdirat(
+        &self,
+        at: At,
+        path: &VPath,
+        mode: u32, //TODO: probably create a wrapper type for this
+        td: Option<&VThread>,
+    ) -> Result<SysOut, SysErr> {
+        // This will require relative lookups
+        todo!()
+    }
+
     /// See `vfs_donmount` on the PS4 for a reference.
     fn mount(
         self: &Arc<Self>,
@@ -596,6 +631,12 @@ bitflags! {
     pub struct RevokeFlags: i32 {
         const REVOKE_ALL = 0x0001;
     }
+}
+
+#[derive(Debug)]
+pub enum At {
+    Cwd,
+    Fd(i32),
 }
 
 /// Represents an error when FS was failed to initialized.
