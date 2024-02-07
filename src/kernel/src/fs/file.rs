@@ -66,11 +66,11 @@ impl VFile {
     /// See `fo_read` on the PS4 for a reference.
     fn read(
         &self,
-        uio: UioMut,
+        mut uio: UioMut,
         off: Offset,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        (self.ops.read)(self, uio, off, td)
+        (self.ops.read)(self, &mut uio, off, td)
     }
 
     /// See `dofilewrite` on the PS4 for a reference.
@@ -186,7 +186,7 @@ bitflags! {
     }
 }
 
-type VFileRead = fn(&VFile, UioMut, Offset, Option<&VThread>) -> Result<usize, Box<dyn Errno>>;
+type VFileRead = fn(&VFile, &mut UioMut, Offset, Option<&VThread>) -> Result<usize, Box<dyn Errno>>;
 type VFileWrite = fn(&VFile, &mut Uio, Offset, Option<&VThread>) -> Result<usize, Box<dyn Errno>>;
 type VFileIoctl = fn(&VFile, IoCmd, &mut [u8], Option<&VThread>) -> Result<(), Box<dyn Errno>>;
 type VFileStat = fn(&VFile, Option<&VThread>) -> Result<Stat, Box<dyn Errno>>;
