@@ -703,6 +703,7 @@ impl Fs {
     }
 
     /// See `kern_mkdirat` on the PS4 for a reference.
+    #[allow(unused_variables)] // Remove this when mkdirat is being implemented.
     fn mkdirat(
         &self,
         at: At,
@@ -961,8 +962,8 @@ pub enum Offset {
 }
 
 #[derive(Debug)]
-/// Represents the fd arg for *at syscalls.
-enum At {
+/// Represents the `fd` argument for *at syscalls.
+pub enum At {
     Cwd,
     Fd(i32),
 }
@@ -1004,12 +1005,6 @@ bitflags! {
     pub struct RevokeFlags: i32 {
         const REVOKE_ALL = 0x0001;
     }
-}
-
-#[derive(Debug)]
-pub enum At {
-    Cwd,
-    Fd(i32),
 }
 
 /// Represents an error when FS fails to initialize.
