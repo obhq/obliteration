@@ -288,53 +288,15 @@ impl DevFs {
         dir
     }
 
+    #[allow(unused_variables)] // TODO: remove when implementing.
     fn rules_ioctl(
         &self,
         cmd: IoCmd,
         data: &mut [u8],
         td: Option<&VThread>,
     ) -> Result<(), RulesIoctlError> {
-        const DEVFS_RULE_GRP: u8 = b'D';
-        const DEVFSIO_RADD: IoCmd = IoCmd::iowr::<DevfsRule>(DEVFS_RULE_GRP, 0);
-        const DEVFSIO_RDEL: IoCmd = IoCmd::iow::<u32>(DEVFS_RULE_GRP, 1);
-        const DEVFSIO_RAPPLY: IoCmd = IoCmd::iow::<DevfsRule>(DEVFS_RULE_GRP, 2);
-        const DEVFSIO_RAPPLYID: IoCmd = IoCmd::iow::<u32>(DEVFS_RULE_GRP, 3);
-        const DEVFSIO_RGETNEXT: IoCmd = IoCmd::iowr::<DevfsRule>(DEVFS_RULE_GRP, 4);
-
-        const DEVFSIO_SUSE: IoCmd = IoCmd::iow::<u16>(DEVFS_RULE_GRP, 10);
-        const DEVFSIO_SAPPLY: IoCmd = IoCmd::iow::<u16>(DEVFS_RULE_GRP, 11);
-        const DEVFSIO_SGETNEXT: IoCmd = IoCmd::iowr::<u16>(DEVFS_RULE_GRP, 12);
-
-        let td = td.unwrap();
-
-        td.priv_check(Privilege::DEVFS_RULE)?;
-
-        match cmd {
-            DEVFSIO_RADD => todo!(),
-            DEVFSIO_RDEL => todo!(),
-            DEVFSIO_RAPPLY => todo!(),
-            DEVFSIO_RAPPLYID => todo!(),
-            DEVFSIO_RGETNEXT => todo!(),
-            DEVFSIO_SUSE => todo!(),
-            DEVFSIO_SAPPLY => todo!(),
-            DEVFSIO_SGETNEXT => todo!(),
-            _ => todo!(), // ENOIOCTL is returned here
-        }
+        todo!()
     }
-}
-
-#[repr(C)]
-struct DevfsRule {
-    magic: u32,          // dr_magic
-    id: u32,             // dr_id
-    icond: i32,          // dr_icond
-    pathptrn: [u8; 200], // dr_pathptrn
-    iacts: i32,          // dr_iacts
-    bacts: i32,          // dr_bacts
-    uid: Uid,            // dr_uid
-    gid: Gid,            // dr_gid
-    mode: Mode,          // dr_mode
-    incset: u16,         // dr_incset
 }
 
 bitflags! {
