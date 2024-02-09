@@ -119,7 +119,7 @@ impl Iterator for SignalIter {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let len = (SIG_MAXSIG - self.current + 1) as usize;
+        let len = self.len();
         (len, Some(len))
     }
 }
