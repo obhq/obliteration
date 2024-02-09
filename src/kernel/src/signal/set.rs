@@ -72,15 +72,13 @@ impl Display for SignalSet {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let mut first = true;
 
-        for sig in SignalIter::new() {
-            if self.contains(sig) {
-                if !first {
-                    f.write_str(" | ")?;
-                }
-
-                f.write_str(strsignal(sig).as_ref())?;
-                first = false;
+        for sig in SignalIter::new().filter(|sig| self.contains(*sig)) {
+            if !first {
+                f.write_str(" | ")?;
             }
+
+            f.write_str(strsignal(sig).as_ref())?;
+            first = false;
         }
 
         if first {
