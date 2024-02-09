@@ -7,6 +7,7 @@ use crate::fs::{Fs, FsError};
 use crate::llvm::Llvm;
 use crate::log::{print, LOGGER};
 use crate::memory::{MemoryManager, MemoryManagerError};
+use crate::osem::OsemManager;
 use crate::process::{VProc, VProcInitError, VThread};
 use crate::regmgr::RegMgr;
 use crate::rtld::{LoadFlags, ModuleFlags, RuntimeLinker};
@@ -41,6 +42,7 @@ mod idt;
 mod llvm;
 mod log;
 mod memory;
+mod osem;
 mod process;
 mod regmgr;
 mod rtld;
@@ -264,6 +266,8 @@ fn run<E: crate::ee::ExecutionEngine>(
         "QXuNNl0Zhn",
         &mut syscalls,
     )?;
+
+    OsemManager::new(&mut syscalls, &proc);
 
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
