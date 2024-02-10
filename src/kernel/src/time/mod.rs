@@ -56,6 +56,7 @@ impl TimeVal {
 
     #[cfg(windows)]
     fn microtime() -> Result<Self, MicroTimeError> {
+        use std::mem::MaybeUninit;
         use windows_sys::Win32::{
             Foundation::SYSTEMTIME,
             System::{SystemInformation::GetSystemTime, Time::SystemTimeToFileTime},
@@ -91,7 +92,7 @@ impl From<libc::timeval> for TimeVal {
     fn from(tv: libc::timeval) -> Self {
         Self {
             sec: tv.tv_sec,
-            usec: tv.tv_usec,
+            usec: tv.tv_usec as i64, // The cast is here because of MacOS
         }
     }
 }
