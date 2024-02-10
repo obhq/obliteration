@@ -274,6 +274,12 @@ impl Borrow<VPath> for VPathBuf {
     }
 }
 
+impl PartialEq<VPath> for VPathBuf {
+    fn eq(&self, other: &VPath) -> bool {
+        self.0 == other.0
+    }
+}
+
 impl Display for VPathBuf {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)

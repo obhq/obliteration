@@ -1,5 +1,5 @@
 use crate::{
-    errno::{Errno, EEXIST, EINVAL, ENOTTY, EOPNOTSUPP},
+    errno::{Errno, EEXIST, EINVAL, ENOENT, ENOTTY, EOPNOTSUPP},
     fs::{check_access, Access, IoCmd, Mode, OpenFlags, VFile, VFileFlags, VFileOps, VPathBuf},
     memory::MemoryManager,
     process::VThread,
@@ -71,14 +71,13 @@ impl SharedMemoryManager {
                     Ok(self.alloc_shm(td.cred(), mode))
                 }
                 ShmPath::Path(path) => {
-                    let path = path.deref();
                     if path != vpath!("/SceWebCore") {
-                        return Err(SysErr::Raw(EINVAL));
+                        return Err(SysErr::Raw(ENOENT));
                     }
 
                     let mut map = self.map.write().expect("lock poisoned");
 
-                    if let Some(shm) = map.get(path) {
+                    if let Some(shm) = map.get(&path) {
                         if flags
                             .difference(OpenFlags::O_CREAT | OpenFlags::O_EXCL)
                             .is_empty()
