@@ -1,4 +1,5 @@
 use super::{IoCmd, Vnode};
+use crate::dmem::BlockPool;
 use crate::errno::Errno;
 use crate::errno::{ENOTTY, ENXIO};
 use crate::kqueue::KernelQueue;
@@ -32,10 +33,19 @@ impl VFile {
         &mut self.flags
     }
 
+    pub fn read(&self, data: &mut [u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+        match self.ty {
+            VFileType::Vnode(ref vn) => vn.read(self, data, td),
+            VFileType::KQueue(ref kq) => kq.read(self, data, td),
+            VFileType::Blockpool(ref bp) => bp.read(self, data, td),
+        }
+    }
+
     pub fn write(&self, data: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
         match self.ty {
-            VFileType::Vnode(ref vn) => todo!(),
-            VFileType::KQueue(ref kq) => kq.write(self, data),
+            VFileType::Vnode(ref vn) => vn.write(self, data, td),
+            VFileType::KQueue(ref kq) => kq.write(self, data, td),
+            VFileType::Blockpool(ref bp) => bp.write(self, data, td),
         }
     }
 
@@ -46,8 +56,9 @@ impl VFile {
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         match self.ty {
-            VFileType::Vnode(ref vn) => todo!(),
+            VFileType::Vnode(ref vn) => vn.ioctl(self, cmd, data),
             VFileType::KQueue(ref kq) => kq.ioctl(self, cmd, data),
+            VFileType::Blockpool(ref bp) => bp.ioctl(self, cmd, data),
         }
     }
 }
@@ -77,8 +88,9 @@ impl Write for VFile {
 /// Type of [`VFile`].
 #[derive(Debug)]
 pub enum VFileType {
-    Vnode(Arc<Vnode>),        // DTYPE_VNODE = 1
-    KQueue(Arc<KernelQueue>), // DTYPE_KQUEUE = 5
+    Vnode(Arc<Vnode>),         // DTYPE_VNODE = 1
+    KQueue(Arc<KernelQueue>),  // DTYPE_KQUEUE = 5,
+    Blockpool(Arc<BlockPool>), // DTYPE_BPOOL = 17,
 }
 
 bitflags! {
@@ -93,12 +105,22 @@ bitflags! {
 /// An implementation of `fileops` structure.
 pub trait FileBackend: Send + Sync + 'static {
     #[allow(unused_variables)]
-    fn read(self: &Arc<Self>, file: &VFile, buf: &mut [u8]) -> Result<usize, Box<dyn Errno>> {
+    fn read(
+        self: &Arc<Self>,
+        file: &VFile,
+        buf: &mut [u8],
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
         Err(Box::new(DefaultError::ReadNotSupported))
     }
 
     #[allow(unused_variables)]
-    fn write(self: &Arc<Self>, file: &VFile, buf: &[u8]) -> Result<usize, Box<dyn Errno>> {
+    fn write(
+        self: &Arc<Self>,
+        file: &VFile,
+        buf: &[u8],
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
         Err(Box::new(DefaultError::WriteNotSupported))
     }
 

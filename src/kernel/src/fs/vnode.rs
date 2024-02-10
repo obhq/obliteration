@@ -91,15 +91,6 @@ impl Vnode {
         self.backend.clone().getattr(self)
     }
 
-    pub fn ioctl(
-        self: &Arc<Self>,
-        cmd: IoCmd,
-        data: &mut [u8],
-        td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
-        self.backend.clone().ioctl(self, cmd, data, td)
-    }
-
     pub fn lookup(
         self: &Arc<Self>,
         td: Option<&VThread>,
@@ -132,11 +123,21 @@ impl Vnode {
 }
 
 impl FileBackend for Vnode {
-    fn read(self: &Arc<Self>, file: &VFile, buf: &mut [u8]) -> Result<usize, Box<dyn Errno>> {
+    fn read(
+        self: &Arc<Self>,
+        file: &VFile,
+        buf: &mut [u8],
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
         todo!()
     }
 
-    fn write(self: &Arc<Self>, file: &VFile, buf: &[u8]) -> Result<usize, Box<dyn Errno>> {
+    fn write(
+        self: &Arc<Self>,
+        file: &VFile,
+        buf: &[u8],
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
         todo!()
     }
 

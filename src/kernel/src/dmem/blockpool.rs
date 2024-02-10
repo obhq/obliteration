@@ -4,7 +4,8 @@ use macros::Errno;
 use std::sync::Arc;
 use thiserror::Error;
 
-struct BlockPool {}
+#[derive(Debug)]
+pub struct BlockPool {}
 
 impl FileBackend for BlockPool {
     fn ioctl(
