@@ -57,9 +57,8 @@ impl TimeVal {
     #[cfg(windows)]
     fn microtime() -> Result<Self, MicroTimeError> {
         use std::mem::MaybeUninit;
-        use windows_sys::Win32::{
-            Foundation::SYSTEMTIME,
-            System::{SystemInformation::GetSystemTime, Time::SystemTimeToFileTime},
+        use windows_sys::Win32::System::{
+            SystemInformation::GetSystemTime, Time::SystemTimeToFileTime,
         };
 
         // The number of hundreds of nanoseconds between the Windows epoch (1601-01-01T00:00:00Z)
