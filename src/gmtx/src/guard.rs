@@ -1,6 +1,5 @@
 use crate::{GroupGuard, Gutex};
 use std::fmt::{Display, Formatter};
-use std::mem::transmute;
 use std::ops::{Deref, DerefMut};
 
 /// RAII structure used to release the shared read access of a lock when dropped.

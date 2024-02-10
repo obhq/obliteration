@@ -4,6 +4,9 @@ use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
 
+#[cfg(windows)]
+use std::convert::Infallible;
+
 pub struct TimeManager {}
 
 impl TimeManager {
@@ -56,7 +59,7 @@ impl TimeVal {
 
     #[cfg(windows)]
     fn microtime() -> Result<Self, Infallible> {
-        use std::{convert::Infallible, mem::MaybeUninit};
+        use std::mem::MaybeUninit;
         use windows_sys::Win32::System::{
             SystemInformation::GetSystemTime, Time::SystemTimeToFileTime,
         };
