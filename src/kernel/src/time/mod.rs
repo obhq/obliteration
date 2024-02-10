@@ -55,8 +55,8 @@ impl TimeVal {
     }
 
     #[cfg(windows)]
-    fn microtime() -> Result<Self, MicroTimeError> {
-        use std::mem::MaybeUninit;
+    fn microtime() -> Result<Self, Infallible> {
+        use std::{convert::Infallible, mem::MaybeUninit};
         use windows_sys::Win32::System::{
             SystemInformation::GetSystemTime, Time::SystemTimeToFileTime,
         };
@@ -102,6 +102,7 @@ struct TimeZone {
     dsttime: i32,     // tz_dsttime
 }
 
+#[cfg(unix)]
 #[derive(Debug, Error)]
 pub enum MicroTimeError {
     #[cfg(unix)]
@@ -109,8 +110,11 @@ pub enum MicroTimeError {
     Io(#[from] std::io::Error),
 }
 
+#[cfg(unix)]
 impl Errno for MicroTimeError {
     fn errno(&self) -> NonZeroI32 {
-        todo!()
+        match self {
+            Self::Io(_) => todo!(),
+        }
     }
 }
