@@ -1,4 +1,6 @@
-use super::{unixify_access, Access, IoCmd, Mode, Mount, OpenFlags, RevokeFlags, VFile};
+use super::{
+    unixify_access, Access, FileBackend, IoCmd, Mode, Mount, OpenFlags, RevokeFlags, VFile,
+};
 use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
@@ -126,6 +128,25 @@ impl Vnode {
 
     pub fn revoke(self: &Arc<Self>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
         self.backend.clone().revoke(self, flags)
+    }
+}
+
+impl FileBackend for Vnode {
+    fn read(self: &Arc<Self>, file: &VFile, buf: &mut [u8]) -> Result<usize, Box<dyn Errno>> {
+        todo!()
+    }
+
+    fn write(self: &Arc<Self>, file: &VFile, buf: &[u8]) -> Result<usize, Box<dyn Errno>> {
+        todo!()
+    }
+
+    fn ioctl(
+        self: &Arc<Self>,
+        file: &VFile,
+        cmd: IoCmd,
+        data: &mut [u8],
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
     }
 }
 
