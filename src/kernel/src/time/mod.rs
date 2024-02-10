@@ -1,5 +1,4 @@
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
-use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -8,6 +7,8 @@ use std::convert::Infallible;
 
 #[cfg(unix)]
 use crate::errno::Errno;
+#[cfg(unix)]
+use std::num::NonZeroI32;
 
 pub struct TimeManager {}
 
