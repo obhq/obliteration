@@ -1,14 +1,7 @@
-use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
-use std::sync::Arc;
-
-#[cfg(windows)]
-use std::convert::Infallible;
-
-#[cfg(unix)]
 use crate::errno::Errno;
-#[cfg(unix)]
+use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use std::num::NonZeroI32;
-#[cfg(unix)]
+use std::sync::Arc;
 use thiserror::Error;
 
 pub struct TimeManager {}
@@ -62,7 +55,7 @@ impl TimeVal {
     }
 
     #[cfg(windows)]
-    fn microtime() -> Result<Self, Infallible> {
+    fn microtime() -> Result<Self, MicroTimeError> {
         use std::mem::MaybeUninit;
         use windows_sys::Win32::System::{
             SystemInformation::GetSystemTime, Time::SystemTimeToFileTime,
@@ -77,7 +70,12 @@ impl TimeVal {
 
         let (system_time, filetime) = unsafe {
             GetSystemTime(system_time.as_mut_ptr());
-            SystemTimeToFileTime(system_time.as_ptr(), filetime.as_mut_ptr());
+            let res = SystemTimeToFileTime(system_time.as_ptr(), filetime.as_mut_ptr());
+
+            if res == 0 {
+                Err(std::io::Error::last_os_error())?
+            }
+
             (system_time.assume_init(), filetime.assume_init())
         };
 
@@ -109,15 +107,12 @@ struct TimeZone {
     dsttime: i32,     // tz_dsttime
 }
 
-#[cfg(unix)]
 #[derive(Debug, Error)]
 pub enum MicroTimeError {
-    #[cfg(unix)]
     #[error("Failed to get time")]
     Io(#[from] std::io::Error),
 }
 
-#[cfg(unix)]
 impl Errno for MicroTimeError {
     fn errno(&self) -> NonZeroI32 {
         match self {
