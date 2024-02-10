@@ -556,8 +556,8 @@ impl Pkg {
         // Read digests.
         let mut digests: [[u8; 32]; 7] = [[0u8; 32]; 7];
 
-        for i in 0..7 {
-            if data.read_exact(&mut digests[i]).is_err() {
+        for digest in &mut digests {
+            if data.read_exact(digest).is_err() {
                 return Err(OpenError::InvalidEntryOffset(index));
             };
         }
@@ -565,12 +565,11 @@ impl Pkg {
         // Read keys.
         let mut keys: [[u8; 256]; 7] = [[0u8; 256]; 7];
 
-        for i in 0..7 {
-            if data.read_exact(&mut keys[i]).is_err() {
+        for key in &mut keys {
+            if data.read_exact(key).is_err() {
                 return Err(OpenError::InvalidEntryOffset(index));
             };
         }
-
         // Decrypt key 3.
         let key3 = pkg_key3();
 
@@ -582,7 +581,7 @@ impl Pkg {
         Ok(())
     }
 
-    fn find_entry<'a>(&'a self, id: u32) -> Result<(Entry, usize, &'a [u8]), FindEntryError> {
+    fn find_entry(&self, id: u32) -> Result<(Entry, usize, &[u8]), FindEntryError> {
         for num in 0..self.header.entry_count() {
             // Check offset.
             let offset = self.header.table_offset() + num * Entry::RAW_SIZE;
