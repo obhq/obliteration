@@ -69,10 +69,10 @@ impl TimeVal {
         let mut system_time = MaybeUninit::uninit();
         let filetime = MaybeUninit::uninit();
 
-        unsafe {
+        let filetime = unsafe {
             GetSystemTime(system_time.as_mut_ptr());
             SystemTimeToFileTime(&system_time.assume_init(), filetime.as_mut_ptr());
-            let filetime = filetime.assume_init();
+            filetime.assume_init()
         };
 
         let mut time = 0;
