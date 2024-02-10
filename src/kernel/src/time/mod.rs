@@ -1,12 +1,8 @@
-use crate::errno::EIO;
-use macros::Errno;
+use crate::errno::Errno;
+use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
+use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
-
-use crate::{
-    errno::Errno,
-    syscalls::{SysErr, SysIn, SysOut, Syscalls},
-};
 
 pub struct TimeManager {}
 
@@ -20,16 +16,16 @@ impl TimeManager {
     }
 
     pub fn sys_gettimeofday(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let tv_out: *mut TimeVal = i.args[0].into();
-        let tz_out: *mut TimeZone = i.args[1].into();
+        let tv: *mut TimeVal = i.args[0].into();
+        let tz: *mut TimeZone = i.args[1].into();
 
-        if !tv_out.is_null() {
+        if !tv.is_null() {
             unsafe {
-                *tv_out = TimeVal::microtime()?;
+                *tv = TimeVal::microtime()?;
             }
         }
 
-        if !tz_out.is_null() {
+        if !tz.is_null() {
             todo!()
         }
 
@@ -45,7 +41,7 @@ struct TimeVal {
 
 impl TimeVal {
     #[cfg(unix)]
-    fn microtime() -> Result<Self, GetTimeOfDayError> {
+    fn microtime() -> Result<Self, MicroTimeError> {
         use std::{mem::MaybeUninit, ptr::null_mut};
 
         let mut tv = MaybeUninit::uninit();
@@ -56,6 +52,37 @@ impl TimeVal {
         }
 
         Ok(unsafe { tv.assume_init() }.into())
+    }
+
+    #[cfg(windows)]
+    fn microtime() -> Result<Self, MicroTimeError> {
+        use windows_sys::Win32::{
+            Foundation::SYSTEMTIME,
+            System::{SystemInformation::GetSystemTime, Time::SystemTimeToFileTime},
+        };
+
+        // The number of hundreds of nanoseconds between the Windows epoch (1601-01-01T00:00:00Z)
+        // and the Unix epoch (1970-01-01T00:00:00Z)
+        const EPOCH: u64 = 116444736000000000;
+
+        let mut system_time = MaybeUninit::uninit();
+        let filetime = MaybeUninit::uninit();
+
+        unsafe {
+            GetSystemTime(system_time.as_mut_ptr());
+            SystemTimeToFileTime(&system_time.assume_init(), filetime.as_mut_ptr());
+            let filetime = filetime.assume_init();
+        };
+
+        let mut time = 0;
+
+        time += filetime.dwLowDateTime as u64;
+        time += (filetime.dwHighDateTime as u64) << 32;
+
+        Ok(Self {
+            sec: ((time - EPOCH) / 10_000_000) as i64,
+            usec: (system_time.wMilliseconds * 1000) as i64,
+        })
     }
 }
 
@@ -75,9 +102,15 @@ struct TimeZone {
     dsttime: i32,     // tz_dsttime
 }
 
-#[derive(Debug, Error, Errno)]
-pub enum GetTimeOfDayError {
-    #[error("failed to get time info from libc")]
-    #[errno(EIO)]
-    LibcFailed(#[from] std::io::Error),
+#[derive(Debug, Error)]
+pub enum MicroTimeError {
+    #[cfg(unix)]
+    #[error("Failed to get time")]
+    Io(#[from] std::io::Error),
+}
+
+impl Errno for MicroTimeError {
+    fn errno(&self) -> NonZeroI32 {
+        todo!()
+    }
 }
