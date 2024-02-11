@@ -5,6 +5,7 @@ use aes::cipher::generic_array::GenericArray;
 use aes::cipher::{BlockDecryptMut, KeyIvInit};
 use param::Param;
 use sha2::Digest;
+use std::convert::Infallible;
 use std::error::Error;
 use std::ffi::{c_void, CStr, CString};
 use std::fmt::{Display, Formatter};
@@ -75,7 +76,7 @@ pub struct Pkg {
 }
 
 impl Pkg {
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, OpenError> {
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, OpenError> {
         // Open file and map it to memory.
         let file = match File::open(path) {
             Ok(v) => v,
@@ -123,9 +124,9 @@ impl Pkg {
         Ok(param)
     }
 
-    pub fn extract<D: AsRef<Path>>(
+    pub fn extract(
         &self,
-        dir: D,
+        dir: impl AsRef<Path>,
         status: extern "C" fn(*const c_char, u64, u64, ud: *mut c_void),
         ud: *mut c_void,
     ) -> Result<(), ExtractError> {
@@ -137,9 +138,9 @@ impl Pkg {
         Ok(())
     }
 
-    fn extract_entries<D: AsRef<Path>>(
+    fn extract_entries(
         &self,
-        dir: D,
+        dir: impl AsRef<Path>,
         status: extern "C" fn(*const c_char, u64, u64, ud: *mut c_void),
         ud: *mut c_void,
     ) -> Result<(), ExtractError> {
@@ -212,9 +213,9 @@ impl Pkg {
         Ok(())
     }
 
-    fn extract_pfs<D: AsRef<Path>>(
+    fn extract_pfs(
         &self,
-        dir: D,
+        dir: impl AsRef<Path>,
         status: extern "C" fn(*const c_char, u64, u64, ud: *mut c_void),
         ud: *mut c_void,
     ) -> Result<(), ExtractError> {
@@ -239,22 +240,18 @@ impl Pkg {
 
         // Open outer uroot directory.
         let mut uroot = match outer.take(b"uroot") {
-            Some(v) => match v {
-                Item::Directory(v) => match v.open() {
-                    Ok(v) => v,
-                    Err(e) => return Err(ExtractError::OpenOuterUrootFailed(e)),
-                },
-                Item::File(_) => return Err(ExtractError::NoOuterUroot),
+            Some(Item::Directory(v)) => match v.open() {
+                Ok(v) => v,
+                Err(e) => return Err(ExtractError::OpenOuterUrootFailed(e)),
             },
+            Some(Item::File(_)) => return Err(ExtractError::NoOuterUroot),
             None => return Err(ExtractError::NoOuterUroot),
         };
 
         // Get inner PFS.
         let inner = match uroot.take(b"pfs_image.dat") {
-            Some(v) => match v {
-                Item::Directory(_) => return Err(ExtractError::NoInnerImage),
-                Item::File(v) => v,
-            },
+            Some(Item::File(v)) => v,
+            Some(Item::Directory(_)) => return Err(ExtractError::NoInnerImage),
             None => return Err(ExtractError::NoInnerImage),
         };
 
@@ -284,10 +281,8 @@ impl Pkg {
 
         // Open inner uroot directory.
         let uroot = match inner.take(b"uroot") {
-            Some(v) => match v {
-                Item::Directory(v) => v,
-                Item::File(_) => return Err(ExtractError::NoInnerUroot),
-            },
+            Some(Item::Directory(v)) => v,
+            Some(Item::File(_)) => return Err(ExtractError::NoInnerUroot),
             None => return Err(ExtractError::NoInnerUroot),
         };
 
@@ -295,11 +290,11 @@ impl Pkg {
         self.extract_directory(Vec::new(), uroot, dir, status, ud)
     }
 
-    fn extract_directory<O: AsRef<Path>>(
+    fn extract_directory(
         &self,
         path: Vec<&[u8]>,
         dir: pfs::directory::Directory,
-        output: O,
+        output: impl AsRef<Path>,
         status: extern "C" fn(*const c_char, u64, u64, ud: *mut c_void),
         ud: *mut c_void,
     ) -> Result<(), ExtractError> {
@@ -471,7 +466,7 @@ impl Pkg {
         // Decrypt the entry.
         let mut encrypted: Vec<u8> = Vec::with_capacity(data.len());
 
-        let _ = self.decrypt_entry_data(&entry, data, |b| -> Result<(), ()> {
+        let _ = self.decrypt_entry_data(&entry, data, |b| -> Result<(), Infallible> {
             encrypted.extend(b);
             Ok(())
         });
