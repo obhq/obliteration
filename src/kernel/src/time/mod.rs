@@ -66,7 +66,7 @@ impl TimeVal {
         const EPOCH: u64 = 116444736000000000;
 
         let mut system_time = MaybeUninit::uninit();
-        let filetime = MaybeUninit::uninit();
+        let mut filetime = MaybeUninit::uninit();
 
         let (system_time, filetime) = unsafe {
             GetSystemTime(system_time.as_mut_ptr());
