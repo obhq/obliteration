@@ -1,3 +1,5 @@
+use crate::time::TimeSpec;
+
 /// An implementation of the `stat` structure.
 #[repr(C)]
 pub struct Stat {
@@ -25,11 +27,4 @@ impl Stat {
     pub fn zeroed() -> Self {
         unsafe { std::mem::zeroed() }
     }
-}
-
-/// An implementation of the `timespec` structure.
-#[repr(C)]
-pub struct TimeSpec {
-    sec: i64,
-    nsec: i64,
 }
