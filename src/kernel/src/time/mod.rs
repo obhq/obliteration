@@ -110,13 +110,13 @@ struct TimeZone {
 #[derive(Debug, Error)]
 pub enum MicroTimeError {
     #[error("Failed to get time")]
-    Io(#[from] std::io::Error),
+    IoError(#[from] std::io::Error),
 }
 
 impl Errno for MicroTimeError {
     fn errno(&self) -> NonZeroI32 {
         match self {
-            Self::Io(_) => todo!(),
+            Self::IoError(_) => todo!(),
         }
     }
 }
