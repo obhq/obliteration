@@ -275,8 +275,8 @@ impl Fs {
         };
 
         self.readv(fd, uio)
-     }
-  
+    }
+
     /// See `vfs_donmount` on the PS4 for a reference.
     pub fn mount(
         self: &Arc<Self>,
