@@ -25,7 +25,7 @@ pub fn path_contains(p1: &str, p2: &str) -> bool {
 }
 
 /// A full path in the PS4 system.
-#[derive(PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct VPath(str);
 
