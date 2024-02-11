@@ -248,6 +248,101 @@ impl Fs {
         Ok(vn)
     }
 
+    /// See `vfs_donmount` on the PS4 for a reference.
+    pub fn mount(
+        self: &Arc<Self>,
+        mut opts: MountOpts,
+        mut flags: MountFlags,
+        td: Option<&VThread>,
+    ) -> Result<Arc<Vnode>, MountError> {
+        // Process the options.
+        let fs: Box<str> = opts.remove("fstype").unwrap().unwrap();
+        let path: VPathBuf = opts.remove("fspath").unwrap().unwrap();
+
+        opts.retain(|k, v| {
+            match k {
+                "async" => todo!(),
+                "atime" => todo!(),
+                "clusterr" => todo!(),
+                "clusterw" => todo!(),
+                "exec" => todo!(),
+                "force" => todo!(),
+                "multilabel" => todo!(),
+                "noasync" => todo!(),
+                "noatime" => todo!(),
+                "noclusterr" => todo!(),
+                "noclusterw" => todo!(),
+                "noexec" => todo!(),
+                "noro" => todo!(),
+                "nosuid" => todo!(),
+                "nosymfollow" => todo!(),
+                "rdonly" => todo!(),
+                "reload" => todo!(),
+                "ro" => flags.set(MountFlags::MNT_RDONLY, v.as_bool().unwrap()),
+                "rw" => todo!(),
+                "suid" => todo!(),
+                "suiddir" => todo!(),
+                "symfollow" => todo!(),
+                "sync" => todo!(),
+                "union" => todo!(),
+                "update" => todo!(),
+                _ => return true,
+            }
+
+            return false;
+        });
+
+        if fs.len() >= 15 {
+            return Err(MountError::FsTooLong);
+        } else if path.len() >= 87 {
+            return Err(MountError::PathTooLong);
+        }
+
+        // TODO: Apply the remaining checks from the PS4.
+        if flags.intersects(MountFlags::MNT_UPDATE) {
+            todo!("vfs_donmount with MNT_UPDATE");
+        } else {
+            let conf = Self::find_config(fs).ok_or(MountError::InvalidFs)?;
+
+            // Lookup parent vnode.
+            let vn = match self.lookup(path.as_ref(), td) {
+                Ok(v) => v,
+                Err(e) => return Err(MountError::LookupPathFailed(e)),
+            };
+
+            // TODO: Check if jailed.
+
+            flags.remove(MountFlags::from_bits_retain(0xFFFFFFFF272F3F80));
+
+            // TODO: Implement budgetid.
+            let mount = (conf.mount)(
+                conf,
+                td.map_or(&self.kern_cred, |t| t.cred()),
+                path,
+                Some(vn.clone()),
+                opts,
+                flags,
+            )
+            .map_err(MountError::MountFailed)?;
+
+            // Set vnode to mounted. Beware of deadlock here.
+            let mount = self.mounts.write().push(mount);
+            let mut item = vn.item_mut();
+
+            if item.is_some() {
+                drop(item);
+                self.mounts.write().remove(&mount);
+                return Err(MountError::PathAlreadyMounted);
+            }
+
+            *item = Some(Arc::new(Arc::downgrade(&mount)));
+            drop(item);
+
+            // TODO: Implement the remaining logics from the PS4.
+            Ok(mount.root())
+        }
+    }
+
     fn sys_write(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *const u8 = i.args[1].into();
@@ -461,106 +556,7 @@ impl Fs {
         todo!()
     }
 
-    /// See `vfs_donmount` on the PS4 for a reference.
-    fn mount(
-        self: &Arc<Self>,
-        mut opts: MountOpts,
-        mut flags: MountFlags,
-        td: Option<&VThread>,
-    ) -> Result<Arc<Vnode>, MountError> {
-        // Process the options.
-        let fs: Box<str> = opts.remove("fstype").unwrap().unwrap();
-        let path: VPathBuf = opts.remove("fspath").unwrap().unwrap();
-
-        opts.retain(|k, v| {
-            match k {
-                "async" => todo!(),
-                "atime" => todo!(),
-                "clusterr" => todo!(),
-                "clusterw" => todo!(),
-                "exec" => todo!(),
-                "force" => todo!(),
-                "multilabel" => todo!(),
-                "noasync" => todo!(),
-                "noatime" => todo!(),
-                "noclusterr" => todo!(),
-                "noclusterw" => todo!(),
-                "noexec" => todo!(),
-                "noro" => todo!(),
-                "nosuid" => todo!(),
-                "nosymfollow" => todo!(),
-                "rdonly" => todo!(),
-                "reload" => todo!(),
-                "ro" => flags.set(MountFlags::MNT_RDONLY, v.as_bool().unwrap()),
-                "rw" => todo!(),
-                "suid" => todo!(),
-                "suiddir" => todo!(),
-                "symfollow" => todo!(),
-                "sync" => todo!(),
-                "union" => todo!(),
-                "update" => todo!(),
-                _ => return true,
-            }
-
-            return false;
-        });
-
-        if fs.len() >= 15 {
-            return Err(MountError::FsTooLong);
-        } else if path.len() >= 87 {
-            return Err(MountError::PathTooLong);
-        }
-
-        // TODO: Apply the remaining checks from the PS4.
-        if flags.intersects(MountFlags::MNT_UPDATE) {
-            todo!("vfs_donmount with MNT_UPDATE");
-        } else {
-            let conf = if flags.intersects(MountFlags::MNT_ROOTFS) {
-                Self::find_config(fs).ok_or(MountError::InvalidFs)?
-            } else {
-                todo!("vfs_donmount with !MNT_ROOTFS");
-            };
-
-            // Lookup parent vnode.
-            let vn = match self.lookup(path.as_ref(), td) {
-                Ok(v) => v,
-                Err(e) => return Err(MountError::LookupPathFailed(e)),
-            };
-
-            // TODO: Check if jailed.
-
-            flags.remove(MountFlags::from_bits_retain(0xFFFFFFFF272F3F80));
-
-            // TODO: Implement budgetid.
-            let mount = (conf.mount)(
-                conf,
-                td.map_or(&self.kern_cred, |t| t.cred()),
-                path,
-                Some(vn.clone()),
-                opts,
-                flags,
-            )
-            .map_err(MountError::MountFailed)?;
-
-            // Set vnode to mounted. Beware of deadlock here.
-            let mount = self.mounts.write().push(mount);
-            let mut item = vn.item_mut();
-
-            if item.is_some() {
-                drop(item);
-                self.mounts.write().remove(&mount);
-                return Err(MountError::PathAlreadyMounted);
-            }
-
-            *item = Some(Arc::new(Arc::downgrade(&mount)));
-            drop(item);
-
-            // TODO: Implement the remaining logics from the PS4.
-            Ok(mount.root())
-        }
-    }
-
-    /// See `vfs_byname` on the PS4 for a reference.
+    /// See `vfs_byname` and `vfs_byname_kld` on the PS4 for a reference.
     fn find_config(name: impl AsRef<str>) -> Option<&'static FsConfig> {
         let mut name = name.as_ref();
         let mut conf = Some(&HOST);

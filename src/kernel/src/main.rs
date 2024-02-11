@@ -3,7 +3,8 @@ use crate::budget::{Budget, BudgetManager, ProcType};
 use crate::debug::{DebugManager, DebugManagerInitError};
 use crate::dmem::DmemManager;
 use crate::ee::{EntryArg, RawFn};
-use crate::fs::{Fs, FsError};
+use crate::fs::{Fs, FsError, MountError, MountFlags, MountOpts, VPath};
+use crate::fs::{Fs, FsError, MountError, MountFlags, MountOpts, VPath};
 use crate::log::{print, LOGGER};
 use crate::memory::{MemoryManager, MemoryManagerError};
 use crate::net::NetManager;
@@ -183,6 +184,17 @@ fn start() -> Result<(), KernelError> {
 
     // Initializes filesystem.
     let fs = Fs::new(args.system, args.game, &param, &kern_cred, &mut syscalls)?;
+
+    // TODO: Get mount options from the PS4.
+    let mut opts = MountOpts::new();
+    let path = vpath!("/mnt");
+
+    opts.insert("fstype", "tmpfs");
+    opts.insert("fspath", path.to_owned());
+
+    if let Err(e) = fs.mount(opts, MountFlags::empty(), None) {
+        return Err(KernelError::MountFailed(path, e));
+    }
 
     // Initialize memory management.
     let mm = MemoryManager::new(&mut syscalls)?;
@@ -497,6 +509,9 @@ enum KernelError {
 
     #[error("filesystem initialization failed")]
     FilesystemInitFailed(#[from] FsError),
+
+    #[error("couldn't mount {0}")]
+    MountFailed(&'static VPath, #[source] MountError),
 
     #[error("memory manager initialization failed")]
     MemoryManagerInitFailed(#[from] MemoryManagerError),
