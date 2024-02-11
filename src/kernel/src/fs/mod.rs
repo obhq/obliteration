@@ -492,7 +492,7 @@ impl Fs {
                 _ => return true,
             }
 
-            return false;
+            false
         });
 
         if fs.len() >= 15 {
