@@ -556,20 +556,18 @@ impl Pkg {
         // Read digests.
         let mut digests: [[u8; 32]; 7] = [[0u8; 32]; 7];
 
-        for digest in &mut digests {
-            if data.read_exact(digest).is_err() {
-                return Err(OpenError::InvalidEntryOffset(index));
-            };
-        }
+        digests
+            .iter_mut()
+            .try_for_each(|digest| data.read_exact(digest))
+            .map_err(|_| OpenError::InvalidEntryOffset(index))?;
 
         // Read keys.
         let mut keys: [[u8; 256]; 7] = [[0u8; 256]; 7];
 
-        for key in &mut keys {
-            if data.read_exact(key).is_err() {
-                return Err(OpenError::InvalidEntryOffset(index));
-            };
-        }
+        keys.iter_mut()
+            .try_for_each(|key| data.read_exact(key))
+            .map_err(|_| OpenError::InvalidEntryOffset(index))?;
+
         // Decrypt key 3.
         let key3 = pkg_key3();
 
