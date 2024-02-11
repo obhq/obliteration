@@ -41,7 +41,7 @@ impl VFile {
         &mut self.flags
     }
 
-    pub fn vnode(&self) -> &Arc<Vnode> {
+    pub fn vnode(&self) -> Option<&Arc<Vnode>> {
         todo!()
     }
 

@@ -310,7 +310,7 @@ fn vn_ioctl(
     buf: &mut [u8],
     td: Option<&VThread>,
 ) -> Result<(), Box<dyn Errno>> {
-    let vn = file.vnode();
+    let vn = file.vnode().unwrap();
 
     match vn.ty() {
         VnodeType::File | VnodeType::Directory(_) => match cmd {
