@@ -3,8 +3,6 @@ use crate::idt::Idt;
 use crate::info;
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
-use std::fmt::Display;
-use std::fmt::Formatter;
 use std::sync::{Arc, Mutex};
 
 /// An implementation of budget system on the PS4.

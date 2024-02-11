@@ -2,7 +2,6 @@ use crate::errno::ESRCH;
 use crate::errno::{Errno, EPERM};
 use macros::Errno;
 use std::borrow::Cow;
-use std::num::NonZeroI32;
 use thiserror::Error;
 
 pub use self::auth::*;

@@ -1,17 +1,119 @@
-pub use self::socket::*;
-
+use crate::budget::BudgetType;
+use crate::fs::{VFileFlags, VFileType};
 use crate::{
     errno::{Errno, EOPNOTSUPP},
     process::VThread,
+    syscalls::{SysErr, SysIn, SysOut, Syscalls},
 };
 use core::fmt;
 use std::{
     fmt::{Display, Formatter},
     num::NonZeroI32,
+    sync::Arc,
 };
 use thiserror::Error;
 
+pub use self::socket::*;
+
 mod socket;
+
+pub struct NetManager {}
+
+impl NetManager {
+    pub fn new(sys: &mut Syscalls) -> Arc<Self> {
+        let net = Arc::new(Self {});
+
+        sys.register(97, &net, Self::sys_socket);
+        sys.register(113, &net, Self::sys_socketex);
+
+        net
+    }
+
+    fn sys_socket(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let domain: i32 = i.args[0].try_into().unwrap();
+        let ty: i32 = i.args[1].try_into().unwrap();
+        let proto: i32 = i.args[2].try_into().unwrap();
+
+        let td = VThread::current().unwrap();
+
+        let budget = if domain == 1 {
+            BudgetType::FdIpcSocket
+        } else {
+            BudgetType::FdSocket
+        };
+
+        let fd = td.falloc_budget(
+            |fd| {
+                let so = Socket::new(
+                    domain,
+                    ty,
+                    proto,
+                    td.as_ref().cred(),
+                    td.as_ref(),
+                    None,
+                    fd,
+                    td.proc().id(),
+                )?;
+
+                let ty = if domain == 1 {
+                    VFileType::Socket(so)
+                } else {
+                    VFileType::Socket2(so)
+                };
+
+                Ok(ty)
+            },
+            VFileFlags::FWRITE | VFileFlags::FREAD,
+            &SOCKET_FILEOPS,
+            budget,
+        )?;
+
+        Ok(fd.into())
+    }
+
+    fn sys_socketex(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let name = unsafe { i.args[0].to_str(32)? };
+        let domain: i32 = i.args[1].try_into().unwrap();
+        let ty: i32 = i.args[2].try_into().unwrap();
+        let proto: i32 = i.args[3].try_into().unwrap();
+
+        let td = VThread::current().unwrap();
+
+        let budget = if domain == 1 {
+            BudgetType::FdIpcSocket
+        } else {
+            BudgetType::FdSocket
+        };
+
+        let fd = td.falloc_budget(
+            |fd| {
+                let so = Socket::new(
+                    domain,
+                    ty,
+                    proto,
+                    td.as_ref().cred(),
+                    td.as_ref(),
+                    name,
+                    fd,
+                    td.proc().id(),
+                )?;
+
+                let ty = if domain == 1 {
+                    VFileType::Socket(so)
+                } else {
+                    VFileType::Socket2(so)
+                };
+
+                Ok(ty)
+            },
+            VFileFlags::FWRITE | VFileFlags::FREAD,
+            &SOCKET_FILEOPS,
+            budget,
+        )?;
+
+        Ok(fd.into())
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AddressFamily(i32);

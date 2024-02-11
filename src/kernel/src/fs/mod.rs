@@ -6,10 +6,8 @@ pub use self::mount::*;
 pub use self::path::*;
 pub use self::perm::*;
 pub use self::vnode::*;
-use crate::budget::BudgetType;
 use crate::errno::{Errno, EBADF, EBUSY, EINVAL, ENAMETOOLONG, ENODEV, ENOENT};
 use crate::info;
-use crate::net::{Socket, SOCKET_FILEOPS};
 use crate::process::VThread;
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::PrivilegeError;
@@ -132,8 +130,6 @@ impl Fs {
         sys.register(6, &fs, Self::sys_close);
         sys.register(54, &fs, Self::sys_ioctl);
         sys.register(56, &fs, Self::sys_revoke);
-        sys.register(97, &fs, Self::sys_socket);
-        sys.register(113, &fs, Self::sys_socketex);
         sys.register(136, &fs, Self::sys_mkdir);
         sys.register(209, &fs, Self::sys_poll);
         sys.register(496, &fs, Self::sys_mkdirat);
@@ -409,91 +405,6 @@ impl Fs {
         self.revoke(vn, &td)?;
 
         Ok(SysOut::ZERO)
-    }
-
-    fn sys_socket(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let domain: i32 = i.args[0].try_into().unwrap();
-        let ty: i32 = i.args[1].try_into().unwrap();
-        let proto: i32 = i.args[2].try_into().unwrap();
-
-        let td = VThread::current().unwrap();
-
-        let budget = if domain == 1 {
-            BudgetType::FdIpcSocket
-        } else {
-            BudgetType::FdSocket
-        };
-
-        let fd = td.falloc_budget(
-            |fd| {
-                let so = Socket::new(
-                    domain,
-                    ty,
-                    proto,
-                    td.as_ref().cred(),
-                    td.as_ref(),
-                    None,
-                    fd,
-                    td.proc().id(),
-                )?;
-
-                let ty = if domain == 1 {
-                    VFileType::Socket(so)
-                } else {
-                    VFileType::Socket2(so)
-                };
-
-                Ok(ty)
-            },
-            VFileFlags::FWRITE | VFileFlags::FREAD,
-            &SOCKET_FILEOPS,
-            budget,
-        )?;
-
-        Ok(fd.into())
-    }
-
-    fn sys_socketex(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let name = unsafe { i.args[0].to_str(32)? };
-        let domain: i32 = i.args[1].try_into().unwrap();
-        let ty: i32 = i.args[2].try_into().unwrap();
-        let proto: i32 = i.args[3].try_into().unwrap();
-
-        let td = VThread::current().unwrap();
-
-        let budget = if domain == 1 {
-            BudgetType::FdIpcSocket
-        } else {
-            BudgetType::FdSocket
-        };
-
-        let fd = td.falloc_budget(
-            |fd| {
-                let so = Socket::new(
-                    domain,
-                    ty,
-                    proto,
-                    td.as_ref().cred(),
-                    td.as_ref(),
-                    name,
-                    fd,
-                    td.proc().id(),
-                )?;
-
-                let ty = if domain == 1 {
-                    VFileType::Socket(so)
-                } else {
-                    VFileType::Socket2(so)
-                };
-
-                Ok(ty)
-            },
-            VFileFlags::FWRITE | VFileFlags::FREAD,
-            &SOCKET_FILEOPS,
-            budget,
-        )?;
-
-        Ok(fd.into())
     }
 
     fn revoke(&self, vn: Arc<Vnode>, td: &VThread) -> Result<(), RevokeError> {
