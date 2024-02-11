@@ -263,6 +263,21 @@ impl Fs {
         Ok(vn)
     }
 
+    fn sys_read(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let ptr: *mut u8 = i.args[1].into();
+        let len: usize = i.args[2].try_into().unwrap();
+
+        let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
+
+        let uio = UioMut {
+            vecs: &mut [iovec],
+            bytes_left: len,
+        };
+
+        self.readv(fd, uio)
+    }
+
     /// See `vfs_donmount` on the PS4 for a reference.
     pub fn mount(
         self: &Arc<Self>,
