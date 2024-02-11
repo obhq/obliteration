@@ -11,6 +11,7 @@ impl TimeManager {
         let time = Arc::new(Self {});
 
         sys.register(116, &time, Self::sys_gettimeofday);
+        sys.register(232, &time, Self::sys_clock_gettime);
 
         time
     }
@@ -30,6 +31,12 @@ impl TimeManager {
         }
 
         Ok(SysOut::ZERO)
+    }
+
+    pub fn sys_clock_gettime(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let clock: i32 = i.args[0].try_into().unwrap();
+
+        todo!("clock_gettime with clock = {clock}")
     }
 }
 
