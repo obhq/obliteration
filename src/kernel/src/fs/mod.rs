@@ -131,6 +131,7 @@ impl Fs {
         sys.register(54, &fs, Self::sys_ioctl);
         sys.register(56, &fs, Self::sys_revoke);
         sys.register(136, &fs, Self::sys_mkdir);
+        sys.register(209, &fs, Self::sys_poll);
         sys.register(496, &fs, Self::sys_mkdirat);
 
         Ok(fs)
@@ -427,6 +428,14 @@ impl Fs {
         self.mkdirat(At::Cwd, path, mode, Some(&td))
     }
 
+    fn sys_poll(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fds: *mut PollFd = i.args[0].into();
+        let nfds: u32 = i.args[1].try_into().unwrap();
+        let timeout: i32 = i.args[2].try_into().unwrap();
+
+        todo!()
+    }
+
     fn sys_mkdirat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let td = VThread::current().unwrap();
 
@@ -641,6 +650,12 @@ bitflags! {
 pub enum At {
     Cwd,
     Fd(i32),
+}
+
+struct PollFd {
+    fd: i32,
+    events: i16,  // TODO: this probably deserves its own type
+    revents: i16, // likewise
 }
 
 /// Represents an error when FS was failed to initialized.
