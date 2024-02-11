@@ -915,6 +915,9 @@ pub struct Uio<'a> {
 }
 
 impl<'a> Uio<'a> {
+    const UIO_MAXIOV: u32 = 1024;
+    const IOSIZE_MAX: usize = 0x7fffffff;
+
     /// See `copyinuio` on the PS4 for a reference.
     pub unsafe fn copyin(first: *const IoVec, count: u32) -> Result<Self, CopyInUioError> {
         if count > UIO_MAXIOV {
@@ -960,14 +963,8 @@ impl<'a> UioMut<'a> {
 }
 
 #[derive(Debug)]
-pub enum Offset {
-    Current,
-    Provided(i64),
-}
-
-#[derive(Debug)]
-/// Represents the `fd` argument for *at syscalls.
-pub enum At {
+/// Represents the fd arg for
+enum At {
     Cwd,
     Fd(i32),
 }
@@ -1017,7 +1014,7 @@ struct PollFd {
     revents: i16, // likewise
 }
 
-/// Represents an error when FS fails to initialize.
+/// Represents an error when FS was failed to initialized.
 #[derive(Debug, Error)]
 pub enum FsError {
     #[error("cannot mount devfs")]
