@@ -28,13 +28,13 @@ pub unsafe extern "C" fn system_download(
     let from = CStr::from_ptr(from);
     let ftp = match TcpStream::connect(from.to_str().unwrap()) {
         Ok(v) => v,
-        Err(e) => return Error::new(&DownloadError::ConnectFailed(e)),
+        Err(e) => return Error::new(DownloadError::ConnectFailed(e)),
     };
 
     // Setup an FTP client.
     let mut ftp = match FtpClient::new(ftp) {
         Ok(v) => v,
-        Err(e) => return Error::new(&DownloadError::CreateClientFailed(e)),
+        Err(e) => return Error::new(DownloadError::CreateClientFailed(e)),
     };
 
     // Enable SELF decryption.
@@ -42,7 +42,7 @@ pub unsafe extern "C" fn system_download(
         status("Enabling SELF decryption", 0, 0);
 
         if let Err(e) = ftp.exec("DECRYPT", "") {
-            return Error::new(&DownloadError::SendCommandFailed(
+            return Error::new(DownloadError::SendCommandFailed(
                 Cow::Borrowed("DECRYPT"),
                 e,
             ));
@@ -51,10 +51,10 @@ pub unsafe extern "C" fn system_download(
         match ftp.read_reply() {
             Ok(v) => {
                 if !v.is_positive_completion() {
-                    return Error::new(&DownloadError::EnableDecryptionFailed(v));
+                    return Error::new(DownloadError::EnableDecryptionFailed(v));
                 }
             }
-            Err(e) => return Error::new(&DownloadError::ReadReplyFailed(e)),
+            Err(e) => return Error::new(DownloadError::ReadReplyFailed(e)),
         }
     }
 
@@ -67,7 +67,7 @@ pub unsafe extern "C" fn system_download(
         // Create a local directory.
         if let Err(e) = create_dir(&local) {
             if e.kind() != std::io::ErrorKind::AlreadyExists {
-                return Error::new(&DownloadError::CreateDirectoryFailed(local, e));
+                return Error::new(DownloadError::CreateDirectoryFailed(local, e));
             }
         }
 
@@ -76,7 +76,7 @@ pub unsafe extern "C" fn system_download(
 
         let items = match ftp.list(&remote) {
             Ok(v) => v,
-            Err(e) => return Error::new(&DownloadError::ListDirectoryFailed(remote, e)),
+            Err(e) => return Error::new(DownloadError::ListDirectoryFailed(remote, e)),
         };
 
         // Enumerate directory items.
@@ -91,7 +91,7 @@ pub unsafe extern "C" fn system_download(
                 ItemType::RegularFile => {
                     // Download the file.
                     if let Err(e) = download_file(&mut ftp, &remote, &local, item.len(), status) {
-                        return Error::new(&e);
+                        return Error::new(e);
                     }
                 }
                 ItemType::Directory => dirs.push_back((remote, local)),
@@ -102,16 +102,13 @@ pub unsafe extern "C" fn system_download(
     null_mut()
 }
 
-fn download_file<L: AsRef<Path>, R>(
+fn download_file(
     ftp: &mut FtpClient,
     remote: &str,
-    local: L,
+    local: impl AsRef<Path>,
     len: u64,
-    report: R,
-) -> Result<(), DownloadError>
-where
-    R: Fn(&str, u64, u64),
-{
+    report: impl Fn(&str, u64, u64),
+) -> Result<(), DownloadError> {
     let local = local.as_ref();
 
     // Report initial status.

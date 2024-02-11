@@ -26,7 +26,7 @@ pub unsafe extern "C" fn pkg_open(file: *const c_char, error: *mut *mut error::E
     let pkg = match Pkg::open(path.to_str().unwrap()) {
         Ok(v) => Box::new(v),
         Err(e) => {
-            *error = error::Error::new(&e);
+            *error = error::Error::new(e);
             return null_mut();
         }
     };
@@ -44,7 +44,7 @@ pub unsafe extern "C" fn pkg_get_param(pkg: &Pkg, error: *mut *mut error::Error)
     let param = match pkg.get_param() {
         Ok(v) => Box::new(v),
         Err(e) => {
-            *error = error::Error::new(&e);
+            *error = error::Error::new(e);
             return null_mut();
         }
     };
@@ -63,7 +63,7 @@ pub unsafe extern "C" fn pkg_extract(
 
     match pkg.extract(dir.to_str().unwrap(), status, ud) {
         Ok(_) => null_mut(),
-        Err(e) => error::Error::new(&e),
+        Err(e) => error::Error::new(e),
     }
 }
 
