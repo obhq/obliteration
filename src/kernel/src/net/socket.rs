@@ -1,9 +1,7 @@
-use crate::errno::EAFNOSUPPORT;
 use crate::fs::{FileBackend, IoCmd, VFile};
-use crate::ucred::{PrisonAllow, PrisonFlags, Ucred};
+use crate::ucred::Ucred;
 use crate::{
     errno::{Errno, EPIPE},
-    net::AddressFamily,
     process::VThread,
 };
 use bitflags::bitflags;
@@ -19,6 +17,7 @@ pub struct Socket {
 }
 
 impl Socket {
+    #[allow(unused_variables)] // TODO: remove when implementing
     /// See `socreate` on the PS4 for a reference.
     pub fn new(
         domain: i32,
@@ -123,47 +122,6 @@ impl Errno for SendError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::BrokenPipe => EPIPE,
-        }
-    }
-}
-
-impl Ucred {
-    /// See `prison_check_af` on the PS4 for a reference.
-    pub fn prison_check_address_family(
-        &self,
-        family: AddressFamily,
-    ) -> Result<(), PrisonCheckAfError> {
-        let pr = self.prison();
-
-        match family {
-            AddressFamily::UNIX | AddressFamily::ROUTE => {}
-            AddressFamily::INET => todo!(),
-            AddressFamily::INET6 => {
-                if pr.flags().intersects(PrisonFlags::IP6) {
-                    todo!()
-                }
-            }
-            _ => {
-                if !pr.allow().intersects(PrisonAllow::ALLOW_SOCKET_AF) {
-                    return Err(PrisonCheckAfError::SocketAddressFamilyNotAllowed(family));
-                }
-            }
-        }
-
-        Ok(())
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum PrisonCheckAfError {
-    #[error("the address family {0} is not allowed by prison")]
-    SocketAddressFamilyNotAllowed(AddressFamily),
-}
-
-impl Errno for PrisonCheckAfError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::SocketAddressFamilyNotAllowed(_) => EAFNOSUPPORT,
         }
     }
 }
