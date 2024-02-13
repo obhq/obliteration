@@ -3,11 +3,11 @@ use crate::Pfs;
 use std::cmp::min;
 use std::io::{Error, ErrorKind, Read, Seek, SeekFrom};
 use std::ops::DerefMut;
-use std::sync::Arc;
+use std::rc::Rc;
 
 /// Represents a file in the PFS.
 pub struct File<'a> {
-    pfs: Arc<Pfs<'a>>,
+    pfs: Rc<Pfs<'a>>,
     inode: usize,
     occupied_blocks: Vec<u32>,
     current_offset: u64,
@@ -15,7 +15,7 @@ pub struct File<'a> {
 }
 
 impl<'a> File<'a> {
-    pub(crate) fn new(pfs: Arc<Pfs<'a>>, inode: usize) -> Self {
+    pub(crate) fn new(pfs: Rc<Pfs<'a>>, inode: usize) -> Self {
         Self {
             pfs,
             inode,
