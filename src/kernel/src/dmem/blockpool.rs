@@ -1,47 +1,28 @@
-use crate::errno::{Errno, ENOTTY, ENXIO};
-use crate::fs::{IoCmd, Stat, VFile, VFileOps, VFileOpsFlags};
+use crate::errno::{Errno, ENOTTY};
+use crate::fs::{FileBackend, IoCmd, VFile};
 use crate::process::VThread;
 use macros::Errno;
+use std::sync::Arc;
 use thiserror::Error;
 
-#[allow(unused_variables, dead_code)] // Remove this when this is used
-const BLOCKPOOL_FILEOPS: VFileOps = VFileOps {
-    read: |_, _, _, _| Err(GenericError::OperationNotSupported)?,
-    write: |_, _, _, _| Err(GenericError::OperationNotSupported)?,
-    ioctl: blockpool_ioctl,
-    stat: blockpool_stat,
-    flags: VFileOpsFlags::empty(),
-};
+#[derive(Debug)]
+pub struct BlockPool {}
 
-#[allow(unused_variables, dead_code)] // Remove this when blockpools are being implemented
-fn blockpool_ioctl(
-    file: &VFile,
-    cmd: IoCmd,
-    buf: &mut [u8],
-    td: Option<&VThread>,
-) -> Result<(), Box<dyn Errno>> {
-    match cmd {
-        BLOCKPOOL_CMD1 => todo!("blockpool ioctl cmd 1"),
-        BLOCKPOOL_CMD2 => todo!("blockpool ioctl cmd 2"),
-        _ => Err(IoctlError::InvalidCommand(cmd).into()),
+impl FileBackend for BlockPool {
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn ioctl(
+        self: &Arc<Self>,
+        file: &VFile,
+        cmd: IoCmd,
+        data: &mut [u8],
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        match cmd {
+            BLOCKPOOL_CMD1 => todo!("blockpool ioctl cmd 1"),
+            BLOCKPOOL_CMD2 => todo!("blockpool ioctl cmd 2"),
+            _ => Err(IoctlError::InvalidCommand(cmd).into()),
+        }
     }
-}
-
-#[allow(unused_variables, dead_code)] // Remove this when blockpools are being implemented
-fn blockpool_stat(file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
-    let mut stat = Stat::zeroed();
-
-    stat.block_size = 0x1000;
-    stat.mode = 0o130000;
-
-    todo!()
-}
-
-#[derive(Debug, Error, Errno)]
-pub enum GenericError {
-    #[error("invalid operation")]
-    #[errno(ENXIO)]
-    OperationNotSupported,
 }
 
 #[derive(Debug, Error, Errno)]

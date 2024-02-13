@@ -1,30 +1,27 @@
 use super::{IoCmd, Offset, Stat, Uio, UioMut, Vnode};
+use crate::dmem::BlockPool;
 use crate::errno::Errno;
+use crate::errno::{ENOTTY, ENXIO};
+use crate::kqueue::KernelQueue;
 use crate::process::VThread;
 use bitflags::bitflags;
-use std::any::Any;
+use macros::Errno;
+use std::fmt::Debug;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::Arc;
+use thiserror::Error;
 
 /// An implementation of `file` structure.
 #[derive(Debug)]
 pub struct VFile {
-    ty: VFileType,                    // f_type
-    data: Arc<dyn Any + Send + Sync>, // f_data
-    ops: &'static VFileOps,           // f_ops
-    flags: VFileFlags,                // f_flag
+    backend: VFileType, // f_type
+    flags: VFileFlags,  // f_flag
 }
 
 impl VFile {
-    pub(super) fn new(
-        ty: VFileType,
-        data: Arc<dyn Any + Send + Sync>,
-        ops: &'static VFileOps,
-    ) -> Self {
+    pub(super) fn new(backend: VFileType) -> Self {
         Self {
-            ty,
-            data,
-            ops,
+            backend,
             flags: VFileFlags::empty(),
         }
     }
@@ -37,79 +34,25 @@ impl VFile {
         &mut self.flags
     }
 
-    pub fn ops(&self) -> &'static VFileOps {
-        self.ops
-    }
-
-    /// See `dofileread` on the PS4 for a reference.
-    pub fn do_read(
-        &self,
-        uio: UioMut,
-        off: Offset,
-        td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
-        if uio.bytes_left == 0 {
-            return Ok(0);
+    pub fn read(&self, data: &mut [u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+        match self.backend {
+            VFileType::Vnode(ref vn) => vn.read(self, data, td),
+            VFileType::KernelQueue(ref kq) => kq.read(self, data, td),
+            VFileType::Blockpool(ref bp) => bp.read(self, data, td),
         }
-
-        // TODO: consider implementing ktrace.
-
-        let res = self.read(uio, off, td);
-
-        if let Err(ref e) = res {
-            todo!()
-        }
-
-        res
     }
 
-    /// See `fo_read` on the PS4 for a reference.
-    fn read(
-        &self,
-        mut uio: UioMut,
-        off: Offset,
-        td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
-        (self.ops.read)(self, &mut uio, off, td)
-    }
-
-    /// See `dofilewrite` on the PS4 for a reference.
-    pub fn do_write(
-        &self,
-        mut uio: Uio,
-        off: Offset,
-        td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
-        // TODO: consider implementing ktrace.
-        // TODO: implement bwillwrite.
-
-        let res = self.write(&mut uio, off, td);
-
-        if let Err(ref e) = res {
-            todo!()
-        }
-
-        res
-    }
-
-    /// See `fo_write` on the PS4 for a reference.
-    fn write(
-        &self,
-        uio: &mut Uio,
-        off: Offset,
-        td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
-        (self.ops.write)(self, uio, off, td)
-    }
-
-    /// See `fo_ioctl` on the PS4 for a reference.
     pub fn ioctl(
         &self,
         cmd: IoCmd,
         data: &mut [u8],
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        (self.ops.ioctl)(self, cmd, data, td)
+        match self.backend {
+            VFileType::Vnode(ref vn) => vn.ioctl(self, cmd, data, td),
+            VFileType::KernelQueue(ref kq) => kq.ioctl(self, cmd, data, td),
+            VFileType::Blockpool(ref bp) => bp.ioctl(self, cmd, data, td),
+        }
     }
 
     pub fn stat(&self, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
@@ -143,23 +86,9 @@ impl Write for VFile {
 #[derive(Debug)]
 #[rustfmt::skip]
 pub enum VFileType {
-    Vnode(Arc<Vnode>), // DTYPE_VNODE = 1
-//  Socket,            // DTYPE_SOCKET = 2
-//  Pipe,              // DTYPE_PIPE = 3
-//  Fifo,              // DTYPE_FIFO = 4
-//  Kqueue,            // DTYPE_KQUEUE = 5s
-//  Crypto,            // DTYPE_CRYPTO = 6 (crypto device)
-//  Mqueue,            // DTYPE_MQUEUE = 7 (POSIX message queues)
-//  Shm,               // DTYPE_SHM = 8 (POSIX shared memory)
-//  Sem,               // DTYPE_SEM = 9 (POSIX semaphores)
-//  Pts,               // DTYPE_PTS = 10 (pseudo teletype master device)
-//  Dev,               // DTYPE_DEV = 11
-//  Cap,               // DTYPE_CAPABILITY = 12 (capability)
-//  ProcDesc,          // DTYPE_PROCDESC = 13 (process descriptor)
-//  JitShm,            // DTYPE_JITSHM = 14 (JIT shared memory)
-//  IpcSocket,         // DTYPE_IPCSOCKET = 15
-//  Physhm,            // DTYPE_PHYSHM = 16 (physical shared memory)
-//  Blockpool,         // DTYPE_BLOCKPOOL = 17
+    Vnode(Arc<Vnode>),             // DTYPE_VNODE = 1
+    KernelQueue(Arc<KernelQueue>), // DTYPE_KQUEUE = 5,
+    Blockpool(Arc<BlockPool>),     // DTYPE_BPOOL = 17,
 }
 
 /// An implementation of `fileops` structure.
@@ -168,28 +97,11 @@ pub struct VFileOps {
     pub read: VFileRead,
     pub write: VFileWrite,
     pub ioctl: VFileIoctl,
-    pub stat: VFileStat,
-    pub flags: VFileOpsFlags,
 }
 
-impl VFileOps {
-    pub fn flags(&self) -> VFileOpsFlags {
-        self.flags
-    }
-}
-
-bitflags! {
-    #[derive(Debug, Clone, Copy)]
-    pub struct VFileOpsFlags: u32 {
-        const PASSABLE = 0x00000001; // DFLAG_PASSABLE
-        const SEEKABLE = 0x00000002; // DFLAG_SEEKABLE
-    }
-}
-
-type VFileRead = fn(&VFile, &mut UioMut, Offset, Option<&VThread>) -> Result<usize, Box<dyn Errno>>;
-type VFileWrite = fn(&VFile, &mut Uio, Offset, Option<&VThread>) -> Result<usize, Box<dyn Errno>>;
+type VFileRead = fn(&VFile, &mut [u8], Option<&VThread>) -> Result<usize, Box<dyn Errno>>;
+type VFileWrite = fn(&VFile, &[u8], Option<&VThread>) -> Result<usize, Box<dyn Errno>>;
 type VFileIoctl = fn(&VFile, IoCmd, &mut [u8], Option<&VThread>) -> Result<(), Box<dyn Errno>>;
-type VFileStat = fn(&VFile, Option<&VThread>) -> Result<Stat, Box<dyn Errno>>;
 
 bitflags! {
     /// Flags for [`VFile`].
@@ -198,4 +110,53 @@ bitflags! {
         const READ = 0x00000001; // FREAD
         const WRITE = 0x00000002; // FWRITE
     }
+}
+
+/// An implementation of `fileops` structure.
+pub trait FileBackend: Debug + Send + Sync + 'static {
+    #[allow(unused_variables)]
+    fn read(
+        self: &Arc<Self>,
+        file: &VFile,
+        buf: &mut [u8],
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        Err(Box::new(DefaultError::ReadNotSupported))
+    }
+
+    #[allow(unused_variables)]
+    fn write(
+        self: &Arc<Self>,
+        file: &VFile,
+        buf: &[u8],
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        Err(Box::new(DefaultError::WriteNotSupported))
+    }
+
+    #[allow(unused_variables)]
+    fn ioctl(
+        self: &Arc<Self>,
+        file: &VFile,
+        cmd: IoCmd,
+        data: &mut [u8],
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        Err(Box::new(DefaultError::IoctlNotSupported))
+    }
+}
+
+#[derive(Debug, Error, Errno)]
+pub enum DefaultError {
+    #[error("reading is not supported")]
+    #[errno(ENXIO)]
+    ReadNotSupported,
+
+    #[error("writing is not supported")]
+    #[errno(ENXIO)]
+    WriteNotSupported,
+
+    #[error("iocll is not supported")]
+    #[errno(ENOTTY)]
+    IoctlNotSupported,
 }
