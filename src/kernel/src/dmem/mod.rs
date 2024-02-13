@@ -4,6 +4,8 @@ use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use std::sync::Arc;
 
+pub use self::blockpool::*;
+
 mod blockpool;
 
 /// An implementation of direct memory system on the PS4.
