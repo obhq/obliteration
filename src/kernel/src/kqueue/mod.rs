@@ -1,4 +1,5 @@
 use crate::{
+    budget::BudgetType,
     fs::{FileBackend, VFileFlags, VFileType},
     process::{FileDesc, VThread},
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
@@ -26,7 +27,7 @@ impl KernelQueueManager {
 
         let filedesc = td.proc().files();
 
-        let fd = filedesc.alloc_nobudget::<Infallible>(
+        let fd = filedesc.alloc_with_budget::<Infallible>(
             |_| {
                 let kq = KernelQueue::new(&filedesc);
 
@@ -35,6 +36,7 @@ impl KernelQueueManager {
                 Ok(VFileType::KernelQueue(kq))
             },
             VFileFlags::FREAD | VFileFlags::FWRITE,
+            BudgetType::FdEqueue,
         )?;
 
         Ok(fd.into())
