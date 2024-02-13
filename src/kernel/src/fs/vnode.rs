@@ -1,4 +1,6 @@
-use super::{unixify_access, Access, IoCmd, Mode, Mount, OpenFlags, RevokeFlags, VFile, VFileOps};
+use super::{
+    unixify_access, Access, FileBackend, IoCmd, Mode, Mount, OpenFlags, RevokeFlags, VFile,
+};
 use crate::errno::{Errno, EINVAL, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
 use crate::ucred::{Gid, Privilege, Uid};
@@ -90,15 +92,6 @@ impl Vnode {
         self.backend.clone().getattr(self)
     }
 
-    pub fn ioctl(
-        self: &Arc<Self>,
-        cmd: IoCmd,
-        data: &mut [u8],
-        td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
-        self.backend.clone().ioctl(self, cmd, data, td)
-    }
-
     pub fn lookup(
         self: &Arc<Self>,
         td: Option<&VThread>,
@@ -127,6 +120,39 @@ impl Vnode {
 
     pub fn revoke(self: &Arc<Self>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
         self.backend.clone().revoke(self, flags)
+    }
+}
+
+impl FileBackend for Vnode {
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn read(
+        self: &Arc<Self>,
+        file: &VFile,
+        buf: &mut [u8],
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn write(
+        self: &Arc<Self>,
+        file: &VFile,
+        buf: &[u8],
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn ioctl(
+        self: &Arc<Self>,
+        file: &VFile,
+        cmd: IoCmd,
+        data: &mut [u8],
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
     }
 }
 
