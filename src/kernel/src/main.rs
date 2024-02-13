@@ -4,6 +4,7 @@ use crate::debug::{DebugManager, DebugManagerInitError};
 use crate::dmem::DmemManager;
 use crate::ee::{EntryArg, RawFn};
 use crate::fs::{Fs, FsError, MountError, MountFlags, MountOpts, VPath};
+use crate::kqueue::KernelQueueManager;
 use crate::llvm::Llvm;
 use crate::log::{print, LOGGER};
 use crate::memory::{MemoryManager, MemoryManagerError};
@@ -39,6 +40,7 @@ mod ee;
 mod errno;
 mod fs;
 mod idt;
+mod kqueue;
 mod llvm;
 mod log;
 mod memory;
@@ -264,7 +266,6 @@ fn run<E: crate::ee::ExecutionEngine>(
     DmemManager::new(fs, &mut syscalls);
     Sysctl::new(mm, &machdep, &mut syscalls);
     TimeManager::new(&mut syscalls);
-
     // TODO: Get correct budget name from the PS4.
     let budget_id = budget.create(Budget::new("big app", ProcType::BigApp));
     let proc = VProc::new(
@@ -276,6 +277,8 @@ fn run<E: crate::ee::ExecutionEngine>(
         "QXuNNl0Zhn",
         &mut syscalls,
     )?;
+
+    KernelQueueManager::new(&mut syscalls);
 
     // Initialize runtime linker.
     info!("Initializing runtime linker.");

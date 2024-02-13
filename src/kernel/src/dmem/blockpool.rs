@@ -1,33 +1,28 @@
-use crate::errno::{Errno, ENOTTY, ENXIO};
-use crate::fs::{IoCmd, VFile, VFileOps};
+use crate::errno::{Errno, ENOTTY};
+use crate::fs::{FileBackend, IoCmd, VFile};
 use crate::process::VThread;
 use macros::Errno;
+use std::sync::Arc;
 use thiserror::Error;
 
-const BLOCKPOOL_FILEOPS: VFileOps = VFileOps {
-    read: |_, _, _| Err(GenericError::InvalidOperation.into()),
-    write: |_, _, _| Err(GenericError::InvalidOperation.into()),
-    ioctl: blockpool_ioctl,
-};
+#[derive(Debug)]
+pub struct BlockPool {}
 
-fn blockpool_ioctl(
-    file: &VFile,
-    cmd: IoCmd,
-    buf: &mut [u8],
-    td: Option<&VThread>,
-) -> Result<(), Box<dyn Errno>> {
-    match cmd {
-        BLOCKPOOL_CMD1 => todo!("blockpool ioctl cmd 1"),
-        BLOCKPOOL_CMD2 => todo!("blockpool ioctl cmd 2"),
-        _ => Err(IoctlError::InvalidCommand(cmd).into()),
+impl FileBackend for BlockPool {
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn ioctl(
+        self: &Arc<Self>,
+        file: &VFile,
+        cmd: IoCmd,
+        data: &mut [u8],
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        match cmd {
+            BLOCKPOOL_CMD1 => todo!("blockpool ioctl cmd 1"),
+            BLOCKPOOL_CMD2 => todo!("blockpool ioctl cmd 2"),
+            _ => Err(IoctlError::InvalidCommand(cmd).into()),
+        }
     }
-}
-
-#[derive(Debug, Error, Errno)]
-pub enum GenericError {
-    #[error("invalid operation")]
-    #[errno(ENXIO)]
-    InvalidOperation,
 }
 
 #[derive(Debug, Error, Errno)]
