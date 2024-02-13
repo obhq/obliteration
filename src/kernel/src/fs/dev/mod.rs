@@ -7,7 +7,7 @@ use super::{
 };
 use crate::errno::{Errno, EEXIST, ENOENT, EOPNOTSUPP};
 use crate::process::VThread;
-use crate::ucred::{Gid, Privilege, PrivilegeError, Ucred, Uid};
+use crate::ucred::{Gid, PrivilegeError, Ucred, Uid};
 use bitflags::bitflags;
 use macros::Errno;
 use std::num::NonZeroI32;

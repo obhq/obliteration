@@ -2,8 +2,7 @@ use super::dirent::Dirent;
 use super::{alloc_vnode, AllocVnodeError, Cdev, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
-    check_access, Access, IoCmd, OpenFlags, RevokeFlags, VFile, VFileOps, Vnode, VnodeAttrs,
-    VnodeType, FIODGNAME,
+    check_access, Access, IoCmd, OpenFlags, RevokeFlags, VFile, Vnode, VnodeAttrs, VnodeType,
 };
 use crate::process::VThread;
 use macros::Errno;
@@ -210,39 +209,6 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         // TODO: Implement this.
         Ok(())
     }
-}
-
-static DEVFS_OPS: VFileOps = VFileOps {
-    read: devfs_read,
-    write: devfs_write,
-    ioctl: devfs_ioctl,
-};
-
-fn devfs_read(file: &VFile, buf: &mut [u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
-    todo!()
-}
-
-fn devfs_write(file: &VFile, buf: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
-    todo!()
-}
-
-fn devfs_ioctl(
-    file: &VFile,
-    cmd: IoCmd,
-    data: &mut [u8],
-    td: Option<&VThread>,
-) -> Result<(), Box<dyn Errno>> {
-    let td = td.unwrap();
-
-    let fpop = td.fpop();
-
-    match cmd {
-        FIODTYPE => todo!(),
-        FIODGNAME => todo!(),
-        _ => {}
-    }
-
-    todo!()
 }
 
 /// Represents an error when [`lookup()`] is failed.

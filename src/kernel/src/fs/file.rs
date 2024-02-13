@@ -14,20 +14,16 @@ use thiserror::Error;
 /// An implementation of `file` structure.
 #[derive(Debug)]
 pub struct VFile {
-    backend: VFileType, // f_type
-    flags: VFileFlags,  // f_flag
+    ty: VFileType,     // f_type + f_data + f_ops
+    flags: VFileFlags, // f_flag
 }
 
 impl VFile {
-    pub(super) fn new(backend: VFileType) -> Self {
+    pub(super) fn new(ty: VFileType) -> Self {
         Self {
-            backend,
+            ty,
             flags: VFileFlags::empty(),
         }
-    }
-
-    pub fn data(&self) -> &Arc<dyn Any + Send + Sync> {
-        &self.data
     }
 
     pub fn flags(&self) -> VFileFlags {
@@ -41,9 +37,9 @@ impl VFile {
     pub fn vnode(&self) -> Option<&Arc<Vnode>> {
         todo!()
     }
-  
+
     pub fn read(&self, data: &mut [u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
-        match self.backend {
+        match self.ty {
             VFileType::Vnode(ref vn) => vn.read(self, data, td),
             VFileType::KernelQueue(ref kq) => kq.read(self, data, td),
             VFileType::Blockpool(ref bp) => bp.read(self, data, td),
@@ -51,7 +47,7 @@ impl VFile {
     }
 
     pub fn write(&self, data: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
-        match self.backend {
+        match self.ty {
             VFileType::Vnode(ref vn) => vn.write(self, data, td),
             VFileType::KernelQueue(ref kq) => kq.write(self, data, td),
             VFileType::Blockpool(ref bp) => bp.write(self, data, td),
@@ -64,7 +60,7 @@ impl VFile {
         data: &mut [u8],
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        match self.backend {
+        match self.ty {
             VFileType::Vnode(ref vn) => vn.ioctl(self, cmd, data, td),
             VFileType::KernelQueue(ref kq) => kq.ioctl(self, cmd, data, td),
             VFileType::Blockpool(ref bp) => bp.ioctl(self, cmd, data, td),
