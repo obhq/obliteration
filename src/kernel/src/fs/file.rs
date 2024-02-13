@@ -6,6 +6,7 @@ use crate::kqueue::KernelQueue;
 use crate::process::VThread;
 use bitflags::bitflags;
 use macros::Errno;
+use std::fmt::Debug;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::Arc;
 use thiserror::Error;
@@ -103,7 +104,7 @@ bitflags! {
 }
 
 /// An implementation of `fileops` structure.
-pub trait FileBackend: Send + Sync + 'static {
+pub trait FileBackend: Debug + Send + Sync + 'static {
     #[allow(unused_variables)]
     fn read(
         self: &Arc<Self>,

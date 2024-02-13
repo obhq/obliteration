@@ -9,6 +9,7 @@ use thiserror::Error;
 pub struct BlockPool {}
 
 impl FileBackend for BlockPool {
+    #[allow(unused_variables)] // TODO: remove when implementing
     fn ioctl(
         self: &Arc<Self>,
         file: &VFile,

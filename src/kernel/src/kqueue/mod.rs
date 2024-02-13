@@ -1,17 +1,15 @@
 use crate::{
     fs::{FileBackend, VFileFlags, VFileType},
-    process::{FileDesc, VProc, VThread},
+    process::{FileDesc, VThread},
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
 };
 use std::{convert::Infallible, sync::Arc};
 
-pub struct KernelQueueManager {
-    proc: Arc<VProc>,
-}
+pub struct KernelQueueManager {}
 
 impl KernelQueueManager {
-    pub fn new(sys: &mut Syscalls, proc: &Arc<VProc>) -> Arc<Self> {
-        let kq = Arc::new(Self { proc: proc.clone() });
+    pub fn new(sys: &mut Syscalls) -> Arc<Self> {
+        let kq = Arc::new(Self {});
 
         sys.register(141, &kq, Self::sys_kqueueex);
         sys.register(362, &kq, Self::sys_kqueue);

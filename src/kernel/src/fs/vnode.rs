@@ -123,6 +123,7 @@ impl Vnode {
 }
 
 impl FileBackend for Vnode {
+    #[allow(unused_variables)] // TODO: remove when implementing
     fn read(
         self: &Arc<Self>,
         file: &VFile,
@@ -132,6 +133,7 @@ impl FileBackend for Vnode {
         todo!()
     }
 
+    #[allow(unused_variables)] // TODO: remove when implementing
     fn write(
         self: &Arc<Self>,
         file: &VFile,
@@ -141,6 +143,7 @@ impl FileBackend for Vnode {
         todo!()
     }
 
+    #[allow(unused_variables)] // TODO: remove when implementing
     fn ioctl(
         self: &Arc<Self>,
         file: &VFile,

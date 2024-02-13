@@ -278,7 +278,7 @@ fn run<E: crate::ee::ExecutionEngine>(
         &mut syscalls,
     )?;
 
-    KernelQueueManager::new(&mut syscalls, &proc);
+    KernelQueueManager::new(&mut syscalls);
 
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
