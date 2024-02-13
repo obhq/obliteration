@@ -1,6 +1,5 @@
 use crate::{GroupGuard, Gutex};
 use std::fmt::{Display, Formatter};
-use std::mem::transmute;
 use std::ops::{Deref, DerefMut};
 
 /// RAII structure used to release the shared read access of a lock when dropped.
@@ -26,7 +25,7 @@ impl<'a, T> Deref for GutexReadGuard<'a, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        unsafe { transmute(self.mtx.value.get()) }
+        unsafe { &*self.mtx.value.get() }
     }
 }
 
@@ -61,13 +60,13 @@ impl<'a, T> Deref for GutexWriteGuard<'a, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
-        unsafe { transmute(self.mtx.value.get()) }
+        unsafe { &*self.mtx.value.get() }
     }
 }
 
 impl<'a, T> DerefMut for GutexWriteGuard<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { transmute(self.mtx.value.get()) }
+        unsafe { &mut *self.mtx.value.get() }
     }
 }
 

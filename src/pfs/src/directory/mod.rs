@@ -5,7 +5,7 @@ use crate::Pfs;
 use std::collections::HashMap;
 use std::io::SeekFrom;
 use std::ops::DerefMut;
-use std::sync::Arc;
+use std::rc::Rc;
 use thiserror::Error;
 
 pub mod dirent;
@@ -13,12 +13,12 @@ pub mod dirent;
 /// Represents a directory in the PFS.
 #[derive(Clone)]
 pub struct Directory<'a> {
-    pfs: Arc<Pfs<'a>>,
+    pfs: Rc<Pfs<'a>>,
     inode: usize,
 }
 
 impl<'a> Directory<'a> {
-    pub(super) fn new(pfs: Arc<Pfs<'a>>, inode: usize) -> Self {
+    pub(super) fn new(pfs: Rc<Pfs<'a>>, inode: usize) -> Self {
         Self { pfs, inode }
     }
 
