@@ -20,7 +20,7 @@ pub struct Error {
 }
 
 impl Error {
-    pub fn new(src: &dyn std::error::Error) -> *mut Error {
+    pub fn new<E: std::error::Error>(src: E) -> *mut Error {
         let mut causes = vec![src.to_string()];
         let mut child = src.source();
 
