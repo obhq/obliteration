@@ -1,7 +1,8 @@
-// This file contains errno used in a PS4 system. The value of each errno must be the same as the
-// PS4.
+use std::convert::Infallible;
 use std::error::Error;
 use std::num::NonZeroI32;
+// This file contains errno used in a PS4 system. The value of each errno must be the same as the
+// PS4.
 
 macro_rules! error_numbers {
     ($($name:ident($num:expr) => $desc:literal,)*) => {
@@ -145,4 +146,10 @@ impl<T: Errno + 'static> From<T> for Box<dyn Errno> {
 pub fn strerror(num: NonZeroI32) -> &'static str {
     // This function is generated inside the macro `error_numbers!`.
     strerror_impl(num)
+}
+
+impl Errno for Infallible {
+    fn errno(&self) -> NonZeroI32 {
+        match *self {}
+    }
 }
