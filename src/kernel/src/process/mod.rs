@@ -1,6 +1,6 @@
 pub use self::appinfo::*;
 pub use self::cpuset::*;
-pub use self::file::*;
+pub use self::filedesc::*;
 pub use self::group::*;
 pub use self::rlimit::*;
 pub use self::session::*;
@@ -33,7 +33,7 @@ use thiserror::Error;
 
 mod appinfo;
 mod cpuset;
-mod file;
+mod filedesc;
 mod group;
 mod rlimit;
 mod session;
