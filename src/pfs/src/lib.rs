@@ -4,7 +4,8 @@ use self::inode::Inode;
 use aes::cipher::KeyInit;
 use aes::Aes128;
 use std::io::{Read, Seek, SeekFrom};
-use std::sync::{Arc, Mutex};
+use std::rc::Rc;
+use std::sync::Mutex;
 use thiserror::Error;
 use xts_mode::Xts128;
 
@@ -131,7 +132,7 @@ where
         inodes,
     };
 
-    Ok(Directory::new(Arc::new(pfs), super_root))
+    Ok(Directory::new(Rc::new(pfs), super_root))
 }
 
 /// Represents a loaded PFS.
