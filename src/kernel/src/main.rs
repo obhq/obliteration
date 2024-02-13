@@ -12,9 +12,9 @@ use crate::regmgr::RegMgr;
 use crate::rtld::{LoadFlags, ModuleFlags, RuntimeLinker};
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
-use crate::ucred::PRISON0;
 use crate::time::TimeManager;
 use crate::tty::{TtyInitError, TtyManager};
+use crate::ucred::PRISON0;
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use clap::{Parser, ValueEnum};
 use llt::{OsThread, SpawnError};
@@ -31,7 +31,6 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use sysinfo::{MemoryRefreshKind, System};
 use thiserror::Error;
-use tty::TtyInitError;
 
 mod arch;
 mod arnd;

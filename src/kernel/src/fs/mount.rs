@@ -86,7 +86,7 @@ impl Mount {
         path: VPathBuf,
         parent: Option<Arc<Vnode>>,
         flags: MountFlags,
-        fs: impl Filesystem + 'static,
+        fs: impl Filesystem,
     ) -> Self {
         let owner = cred.effective_uid();
 
@@ -128,7 +128,7 @@ impl Mount {
 ///
 /// Our version is a bit different from FreeBSD. We moved `vfs_mount` into `vfsconf` and we merge it
 /// with `mnt_data`.
-pub(super) trait Filesystem: Debug + Send + Sync {
+pub(super) trait Filesystem: Debug + Send + Sync + 'static {
     fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Arc<Vnode>; // vfs_root
 }
 

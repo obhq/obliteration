@@ -30,10 +30,7 @@ pub fn mount(
 
     // Get GID.
     let gid = if cred.real_uid() == Uid::ROOT {
-        match opts.remove("gid") {
-            Some(opt) => opt.unwrap(),
-            None => attrs.gid(),
-        }
+        opts.remove("gid").map_or(attrs.gid(), |v| v.unwrap())
     } else {
         attrs.gid()
     };
