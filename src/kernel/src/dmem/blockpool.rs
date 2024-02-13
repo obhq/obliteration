@@ -1,5 +1,6 @@
 use crate::errno::{Errno, ENOTTY};
 use crate::fs::{FileBackend, IoCmd, VFile};
+use crate::process::VThread;
 use macros::Errno;
 use std::sync::Arc;
 use thiserror::Error;
@@ -13,6 +14,7 @@ impl FileBackend for BlockPool {
         file: &VFile,
         cmd: IoCmd,
         data: &mut [u8],
+        td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         match cmd {
             BLOCKPOOL_CMD1 => todo!("blockpool ioctl cmd 1"),

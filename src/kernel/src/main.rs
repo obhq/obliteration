@@ -4,7 +4,7 @@ use crate::debug::{DebugManager, DebugManagerInitError};
 use crate::dmem::DmemManager;
 use crate::ee::{EntryArg, RawFn};
 use crate::fs::{Fs, FsError, MountError, MountFlags, MountOpts, VPath};
-use crate::kqueue::KqueueManager;
+use crate::kqueue::KernelQueueManager;
 use crate::llvm::Llvm;
 use crate::log::{print, LOGGER};
 use crate::memory::{MemoryManager, MemoryManagerError};
@@ -278,7 +278,7 @@ fn run<E: crate::ee::ExecutionEngine>(
         &mut syscalls,
     )?;
 
-    KqueueManager::new(&mut syscalls, &proc);
+    KernelQueueManager::new(&mut syscalls, &proc);
 
     // Initialize runtime linker.
     info!("Initializing runtime linker.");

@@ -5,13 +5,13 @@ use crate::{
 };
 use std::{convert::Infallible, sync::Arc};
 
-pub struct KqueueManager {
+pub struct KernelQueueManager {
     proc: Arc<VProc>,
 }
 
-impl KqueueManager {
+impl KernelQueueManager {
     pub fn new(sys: &mut Syscalls, proc: &Arc<VProc>) -> Arc<Self> {
-        let kq = Arc::new(KqueueManager { proc: proc.clone() });
+        let kq = Arc::new(Self { proc: proc.clone() });
 
         sys.register(141, &kq, Self::sys_kqueueex);
         sys.register(362, &kq, Self::sys_kqueue);
@@ -34,7 +34,7 @@ impl KqueueManager {
 
                 filedesc.insert_kqueue(kq.clone());
 
-                Ok(VFileType::KQueue(kq))
+                Ok(VFileType::KernelQueue(kq))
             },
             VFileFlags::FREAD | VFileFlags::FWRITE,
         )?;

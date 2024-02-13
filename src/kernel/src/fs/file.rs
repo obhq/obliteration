@@ -13,14 +13,14 @@ use thiserror::Error;
 /// An implementation of `file` structure.
 #[derive(Debug)]
 pub struct VFile {
-    ty: VFileType,     // f_type
-    flags: VFileFlags, // f_flag
+    backend: VFileType, // f_type
+    flags: VFileFlags,  // f_flag
 }
 
 impl VFile {
-    pub(super) fn new(ty: VFileType) -> Self {
+    pub(super) fn new(backend: VFileType) -> Self {
         Self {
-            ty,
+            backend,
             flags: VFileFlags::empty(),
         }
     }
@@ -34,17 +34,17 @@ impl VFile {
     }
 
     pub fn read(&self, data: &mut [u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
-        match self.ty {
+        match self.backend {
             VFileType::Vnode(ref vn) => vn.read(self, data, td),
-            VFileType::KQueue(ref kq) => kq.read(self, data, td),
+            VFileType::KernelQueue(ref kq) => kq.read(self, data, td),
             VFileType::Blockpool(ref bp) => bp.read(self, data, td),
         }
     }
 
     pub fn write(&self, data: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
-        match self.ty {
+        match self.backend {
             VFileType::Vnode(ref vn) => vn.write(self, data, td),
-            VFileType::KQueue(ref kq) => kq.write(self, data, td),
+            VFileType::KernelQueue(ref kq) => kq.write(self, data, td),
             VFileType::Blockpool(ref bp) => bp.write(self, data, td),
         }
     }
@@ -55,10 +55,10 @@ impl VFile {
         data: &mut [u8],
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        match self.ty {
-            VFileType::Vnode(ref vn) => vn.ioctl(self, cmd, data),
-            VFileType::KQueue(ref kq) => kq.ioctl(self, cmd, data),
-            VFileType::Blockpool(ref bp) => bp.ioctl(self, cmd, data),
+        match self.backend {
+            VFileType::Vnode(ref vn) => vn.ioctl(self, cmd, data, td),
+            VFileType::KernelQueue(ref kq) => kq.ioctl(self, cmd, data, td),
+            VFileType::Blockpool(ref bp) => bp.ioctl(self, cmd, data, td),
         }
     }
 }
@@ -88,9 +88,9 @@ impl Write for VFile {
 /// Type of [`VFile`].
 #[derive(Debug)]
 pub enum VFileType {
-    Vnode(Arc<Vnode>),         // DTYPE_VNODE = 1
-    KQueue(Arc<KernelQueue>),  // DTYPE_KQUEUE = 5,
-    Blockpool(Arc<BlockPool>), // DTYPE_BPOOL = 17,
+    Vnode(Arc<Vnode>),             // DTYPE_VNODE = 1
+    KernelQueue(Arc<KernelQueue>), // DTYPE_KQUEUE = 5,
+    Blockpool(Arc<BlockPool>),     // DTYPE_BPOOL = 17,
 }
 
 bitflags! {
@@ -130,6 +130,7 @@ pub trait FileBackend: Send + Sync + 'static {
         file: &VFile,
         cmd: IoCmd,
         data: &mut [u8],
+        td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultError::IoctlNotSupported))
     }
