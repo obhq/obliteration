@@ -1,7 +1,8 @@
-// This file contains errno used in a PS4 system. The value of each errno must be the same as the
-// PS4.
+use std::convert::Infallible;
 use std::error::Error;
 use std::num::NonZeroI32;
+// This file contains errno used in a PS4 system. The value of each errno must be the same as the
+// PS4.
 
 pub const EPERM: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(1) };
 pub const ENOENT: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(2) };
@@ -223,5 +224,11 @@ pub fn strerror(num: NonZeroI32) -> &'static str {
         EREVOKE => "file is revoked",
         ESDKVERSION => "SDK version of a binary file is invalid",
         v => todo!("strerror {v}"),
+    }
+}
+
+impl Errno for Infallible {
+    fn errno(&self) -> NonZeroI32 {
+        match *self {}
     }
 }
