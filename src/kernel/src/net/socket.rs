@@ -1,9 +1,9 @@
 use crate::errno::EAFNOSUPPORT;
-use crate::fs::{IoCmd, VFile, VFileOps};
+use crate::fs::{FileBackend, IoCmd, VFile};
 use crate::ucred::{PrisonAllow, PrisonFlags, Ucred};
 use crate::{
-    errno::{Errno, EPERM, EPIPE, EPROTONOSUPPORT, EPROTOTYPE},
-    net::{attach_notsupp, AddressFamily, Protosw},
+    errno::{Errno, EPIPE},
+    net::AddressFamily,
     process::VThread,
 };
 use bitflags::bitflags;
@@ -12,13 +12,9 @@ use thiserror::Error;
 
 #[derive(Debug)]
 pub struct Socket {
-    ty: i32,                 // so_type
-    options: SocketOptions,  // so_options
-    proto: &'static Protosw, // so_proto
-    fibnum: i32,             // so_fibnum
-    cred: Arc<Ucred>,        // so_cred
-    fd: i32,
-    pid: NonZeroI32,
+    ty: i32,                // so_type
+    options: SocketOptions, // so_options
+    cred: Arc<Ucred>,       // so_cred
     name: Option<Box<str>>,
 }
 
@@ -31,52 +27,7 @@ impl Socket {
         cred: &Arc<Ucred>,
         td: &VThread,
         name: Option<&str>,
-        fd: i32,
-        pid: NonZeroI32,
     ) -> Result<Arc<Self>, SocketCreateError> {
-        if domain == 28 {
-            return Err(SocketCreateError::IPv6NotSupported);
-        }
-
-        if !td.cred().is_system() {
-            return Err(SocketCreateError::InsufficientCredentials);
-        }
-
-        if ty == 6 || ty == 10 {
-            return Err(SocketCreateError::UnsupportedType);
-        }
-
-        let prp = if proto == 0 {
-            Protosw::find_by_type(domain, ty)
-        } else {
-            Protosw::find_by_proto(domain, proto, ty)
-        };
-
-        let prp = prp.ok_or(SocketCreateError::NoProtocolSwitch)?;
-
-        let _attach_fn = match prp.user_reqs().attach {
-            None => return Err(SocketCreateError::NoAttachHandler),
-            Some(f) if (f as usize) == (attach_notsupp as usize) => {
-                return Err(SocketCreateError::BadAttachHandler);
-            }
-            Some(f) => f,
-        };
-
-        cred.prison_check_address_family(prp.domain().family())?;
-
-        if prp.ty() != ty {
-            return Err(SocketCreateError::WrongProtocolTypeForSocket);
-        }
-
-        //TODO: init so_incomp and so_comp
-
-        let fibnum = match prp.domain().family() {
-            AddressFamily::INET | AddressFamily::INET6 | AddressFamily::ROUTE => td.proc().fibnum(),
-            _ => 0,
-        };
-
-        //TODO: create a backing socket on the host system and forward all operations to it
-
         todo!()
     }
 
@@ -103,104 +54,55 @@ bitflags! {
 }
 
 #[derive(Debug, Error)]
-pub enum SocketCreateError {
-    #[error("IPv6 is not supported")]
-    IPv6NotSupported,
-
-    #[error("Insufficient credentials")]
-    InsufficientCredentials,
-
-    #[error("Unsupported type")]
-    UnsupportedType,
-
-    #[error("Couldn't find protocol switch")]
-    NoProtocolSwitch,
-
-    #[error("No attach handler")]
-    NoAttachHandler,
-
-    #[error("Bad attach handler")]
-    BadAttachHandler,
-
-    #[error("Address family not allowed by prison")]
-    PrisonCheckAfError(#[from] PrisonCheckAfError),
-
-    #[error("Wrong protocol type for socket")]
-    WrongProtocolTypeForSocket,
-
-    #[error("Attach failed")]
-    AttachError(#[from] Box<dyn Errno>),
-}
+pub enum SocketCreateError {}
 
 impl Errno for SocketCreateError {
     fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::IPv6NotSupported => todo!(),
-            Self::InsufficientCredentials => EPERM,
-            Self::UnsupportedType => EPROTONOSUPPORT,
-            Self::NoProtocolSwitch => EPROTONOSUPPORT,
-            Self::NoAttachHandler => EPROTONOSUPPORT,
-            Self::BadAttachHandler => EPROTONOSUPPORT,
-            Self::PrisonCheckAfError(e) => EPROTONOSUPPORT,
-            Self::WrongProtocolTypeForSocket => EPROTOTYPE,
-            Self::AttachError(e) => e.errno(),
-        }
+        match *self {}
     }
 }
 
-pub const SOCKET_FILEOPS: VFileOps = VFileOps {
-    read: socket_read,
-    write: socket_write,
-    ioctl: socket_ioctl,
-};
+impl FileBackend for Socket {
+    /// See soo_read on the PS4 for a reference.
+    fn read(
+        self: &Arc<Self>,
+        _: &VFile,
+        buf: &mut [u8],
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        let read = self.receive(buf, td)?;
 
-/// See soo_read on the PS4 for a reference.
-fn socket_read(
-    file: &VFile,
-    buf: &mut [u8],
-    td: Option<&VThread>,
-) -> Result<usize, Box<dyn Errno>> {
-    let so = file.data_as_socket().unwrap();
+        Ok(read)
+    }
 
-    let read = so.receive(buf, td)?;
+    fn write(
+        self: &Arc<Self>,
+        _: &VFile,
+        buf: &[u8],
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        let written = match self.send(buf, td) {
+            Ok(written) => written,
+            Err(SendError::BrokenPipe) if self.options().intersects(SocketOptions::NOSIGPIPE) => {
+                todo!()
+            }
+            Err(e) => return Err(e.into()),
+        };
 
-    Ok(read)
+        Ok(written)
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn ioctl(
+        self: &Arc<Self>,
+        file: &VFile,
+        cmd: IoCmd,
+        data: &mut [u8],
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
 }
-
-/// See soo_write on the PS4 for a reference.
-fn socket_write(file: &VFile, buf: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
-    let so = file.data_as_socket().unwrap();
-
-    let written = match so.send(buf, td) {
-        Ok(written) => written,
-        Err(SendError::BrokenPipe) if so.options().intersects(SocketOptions::NOSIGPIPE) => todo!(),
-        Err(e) => return Err(e.into()),
-    };
-
-    Ok(written)
-}
-
-/// See soo_ioctl on the PS4 for a reference.
-fn socket_ioctl(
-    file: &VFile,
-    cmd: IoCmd,
-    data: &mut [u8],
-    td: Option<&VThread>,
-) -> Result<(), Box<dyn Errno>> {
-    let _so = file.data_as_socket().unwrap();
-
-    todo!()
-}
-
-const SOCKET_GROUP: u8 = b's';
-
-const SIOCSHIWAT: IoCmd = IoCmd::iow::<i32>(SOCKET_GROUP, 0);
-const SIOCGHIWAT: IoCmd = IoCmd::ior::<i32>(SOCKET_GROUP, 1);
-const SIOCSLOWAT: IoCmd = IoCmd::iow::<i32>(SOCKET_GROUP, 2);
-const SIOCGLOWAT: IoCmd = IoCmd::ior::<i32>(SOCKET_GROUP, 3);
-const SIOCATMARK: IoCmd = IoCmd::ior::<i32>(SOCKET_GROUP, 7);
-const SIOCSPGRP: IoCmd = IoCmd::iow::<i32>(SOCKET_GROUP, 8);
-const SIOCGPGRP: IoCmd = IoCmd::ior::<i32>(SOCKET_GROUP, 9);
 
 #[derive(Debug, Error)]
 enum ReceiveError {}

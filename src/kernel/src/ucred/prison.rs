@@ -1,10 +1,9 @@
 use bitflags::bitflags;
-use std::borrow::Cow;
+use std::{ops::Deref, sync::Arc};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Prison {
-    id: u32, // An internal id to use for comparisons;
-    parent: Option<Cow<'static, Self>>,
+    parent: Option<StaticOrArc<Self>>,
     flags: PrisonFlags,
     allow: PrisonAllow,
 }
@@ -17,12 +16,55 @@ impl Prison {
     pub fn allow(&self) -> PrisonAllow {
         self.allow
     }
+}
 
+// TODO: move this somewhere else
+#[derive(Debug, Clone)]
+pub enum StaticOrArc<T: 'static> {
+    Static(&'static T),
+    Arc(Arc<T>),
+}
+
+impl<T> PartialEq<StaticOrArc<T>> for StaticOrArc<T> {
+    fn eq(&self, other: &StaticOrArc<T>) -> bool {
+        match (self, other) {
+            (Self::Static(p1), Self::Static(p2)) => *p1 as *const T == *p2 as *const T,
+            (Self::Arc(p1), Self::Arc(p2)) => Arc::ptr_eq(p1, p2),
+            _ => false,
+        }
+    }
+}
+
+impl Eq for StaticOrArc<Prison> {}
+
+impl<T> Deref for StaticOrArc<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        match self {
+            Self::Static(p) => p,
+            Self::Arc(p) => p,
+        }
+    }
+}
+
+impl<T> AsRef<T> for StaticOrArc<T> {
+    fn as_ref(&self) -> &T {
+        match self {
+            Self::Static(p) => p,
+            Self::Arc(p) => p,
+        }
+    }
+}
+
+pub type PrisonImpl = StaticOrArc<Prison>;
+
+impl PrisonImpl {
     pub fn is_child(&self, other: &Self) -> bool {
         let mut p = other.parent.as_ref();
 
         while let Some(pr) = p {
-            if self == pr.as_ref() {
+            if self == pr {
                 return true;
             }
 
@@ -33,27 +75,7 @@ impl Prison {
     }
 }
 
-impl PartialEq for Prison {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
-impl ToOwned for Prison {
-    type Owned = Box<Self>;
-
-    fn to_owned(&self) -> Self::Owned {
-        Box::new(Prison {
-            id: self.id,
-            parent: self.parent.as_ref().map(|p| p.to_owned()),
-            flags: self.flags,
-            allow: self.allow,
-        })
-    }
-}
-
 pub static PRISON0: Prison = Prison {
-    id: 0,
     parent: None,
     flags: PrisonFlags::DEFAULT,
     allow: PrisonAllow::ALLOW_ALL,

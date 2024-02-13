@@ -26,7 +26,7 @@ impl KernelQueueManager {
 
         let filedesc = td.proc().files();
 
-        let fd = filedesc.alloc_with_budget::<Infallible>(
+        let fd = filedesc.alloc_nobudget::<Infallible>(
             |_| {
                 let kq = KernelQueue::new(&filedesc);
 

@@ -1,9 +1,9 @@
 use super::{IoCmd, Vnode};
 use crate::dmem::BlockPool;
 use crate::errno::Errno;
-use crate::net::Socket;
 use crate::errno::{ENOTTY, ENXIO};
 use crate::kqueue::KernelQueue;
+use crate::net::Socket;
 use crate::process::VThread;
 use bitflags::bitflags;
 use macros::Errno;
@@ -15,16 +15,14 @@ use thiserror::Error;
 /// An implementation of `file` structure.
 #[derive(Debug)]
 pub struct VFile {
-    ty: VFileType,          // f_type + f_data
-    ops: &'static VFileOps, // f_ops
-    flags: VFileFlags,      // f_flag
-    offset: u64,            // f_offset
+    ty: VFileType,     // f_type + f_data + f_ops
+    flags: VFileFlags, // f_flag
 }
 
 impl VFile {
-    pub(super) fn new(backend: VFileType) -> Self {
+    pub(super) fn new(ty: VFileType) -> Self {
         Self {
-            backend,
+            ty,
             flags: VFileFlags::empty(),
         }
     }
@@ -37,23 +35,21 @@ impl VFile {
         &mut self.flags
     }
 
-    pub fn offset(&self) -> u64 {
-        self.offset
-    }
-
     pub fn read(&self, data: &mut [u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
-        match self.backend {
+        match self.ty {
             VFileType::Vnode(ref vn) => vn.read(self, data, td),
             VFileType::KernelQueue(ref kq) => kq.read(self, data, td),
             VFileType::Blockpool(ref bp) => bp.read(self, data, td),
+            VFileType::Socket(ref so) | VFileType::IpcSocket(ref so) => so.read(self, data, td),
         }
     }
 
     pub fn write(&self, data: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
-        match self.backend {
+        match self.ty {
             VFileType::Vnode(ref vn) => vn.write(self, data, td),
             VFileType::KernelQueue(ref kq) => kq.write(self, data, td),
             VFileType::Blockpool(ref bp) => bp.write(self, data, td),
+            VFileType::Socket(ref so) | VFileType::IpcSocket(ref so) => so.write(self, data, td),
         }
     }
 
@@ -63,10 +59,13 @@ impl VFile {
         data: &mut [u8],
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        match self.backend {
+        match self.ty {
             VFileType::Vnode(ref vn) => vn.ioctl(self, cmd, data, td),
             VFileType::KernelQueue(ref kq) => kq.ioctl(self, cmd, data, td),
             VFileType::Blockpool(ref bp) => bp.ioctl(self, cmd, data, td),
+            VFileType::Socket(ref so) | VFileType::IpcSocket(ref so) => {
+                so.ioctl(self, cmd, data, td)
+            }
         }
     }
 }
@@ -97,7 +96,9 @@ impl Write for VFile {
 #[derive(Debug)]
 pub enum VFileType {
     Vnode(Arc<Vnode>),             // DTYPE_VNODE = 1
+    Socket(Arc<Socket>),           // DTYPE_SOCKET = 2,
     KernelQueue(Arc<KernelQueue>), // DTYPE_KQUEUE = 5,
+    IpcSocket(Arc<Socket>),        // DTYPE_IPCSOCKET = 15,
     Blockpool(Arc<BlockPool>),     // DTYPE_BPOOL = 17,
 }
 

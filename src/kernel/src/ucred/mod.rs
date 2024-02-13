@@ -1,7 +1,6 @@
 use crate::errno::ESRCH;
 use crate::errno::{Errno, EPERM};
 use macros::Errno;
-use std::borrow::Cow;
 use thiserror::Error;
 
 pub use self::auth::*;
@@ -17,10 +16,10 @@ mod privilege;
 /// An implementation of `ucred` structure.
 #[derive(Debug, Clone)]
 pub struct Ucred {
-    effective_uid: Uid,           // cr_uid
-    real_uid: Uid,                // cr_ruid
-    groups: Vec<Gid>,             // cr_groups + cr_ngroups
-    prison: Cow<'static, Prison>, // cr_prison
+    effective_uid: Uid, // cr_uid
+    real_uid: Uid,      // cr_ruid
+    groups: Vec<Gid>,   // cr_groups + cr_ngroups
+    prison: PrisonImpl, // cr_prison
     auth: AuthInfo,
 }
 
@@ -29,7 +28,7 @@ impl Ucred {
         effective_uid: Uid,
         real_uid: Uid,
         mut groups: Vec<Gid>,
-        prison: Cow<'static, Prison>,
+        prison: PrisonImpl,
         auth: AuthInfo,
     ) -> Self {
         assert!(!groups.is_empty()); // Must have primary group.
@@ -112,7 +111,7 @@ impl Ucred {
     }
 
     pub fn is_jailed(&self) -> bool {
-        self.prison != Cow::Borrowed(&PRISON0)
+        self.prison != PrisonImpl::Static(&PRISON0)
     }
 
     /// See `priv_check_cred` on the PS4 for a reference.

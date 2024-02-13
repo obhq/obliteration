@@ -22,7 +22,6 @@ use llt::{OsThread, SpawnError};
 use macros::vpath;
 use param::Param;
 use serde::Deserialize;
-use std::borrow::Cow;
 use std::error::Error;
 use std::fs::{create_dir_all, remove_dir_all, File};
 use std::io::Write;
@@ -32,6 +31,7 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use sysinfo::{MemoryRefreshKind, System};
 use thiserror::Error;
+use ucred::PrisonImpl;
 
 mod arch;
 mod arnd;
@@ -172,7 +172,7 @@ fn start() -> Result<(), KernelError> {
         Uid::ROOT,
         Uid::ROOT,
         vec![Gid::ROOT],
-        Cow::Borrowed(&PRISON0), //TODO: figure out the actual value
+        PrisonImpl::Static(&PRISON0), //TODO: figure out the actual value
         AuthInfo {
             paid: AuthPaid::KERNEL,
             caps: AuthCaps::new([0x4000000000000000, 0, 0, 0]),
@@ -353,7 +353,7 @@ fn run<E: crate::ee::ExecutionEngine>(
         Uid::ROOT,
         Uid::ROOT,
         vec![Gid::ROOT],
-        Cow::Borrowed(&PRISON0), //TODO: figure out the actual value
+        PrisonImpl::Static(&PRISON0), //TODO: figure out the actual value
         AuthInfo::SYS_CORE.clone(),
     ));
 

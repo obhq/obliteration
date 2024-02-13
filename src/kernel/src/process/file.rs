@@ -1,3 +1,4 @@
+use crate::budget::BudgetType;
 use crate::errno::{Errno, EBADF};
 use crate::fs::{VFile, VFileFlags, VFileType, Vnode};
 use crate::kqueue::KernelQueue;
@@ -41,11 +42,21 @@ impl FileDesc {
         self.kqueue_list.write().push_front(kq);
     }
 
-    #[allow(unused_variables)] // TODO: remove when implementing; add budget argument
+    #[allow(unused_variables)] // TODO: remove when implementing
+    pub fn alloc_nobudget<E: Errno>(
+        &self,
+        constructor: impl FnOnce(i32) -> Result<VFileType, E>,
+        flags: VFileFlags,
+    ) -> Result<i32, FileAllocError<E>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
     pub fn alloc_with_budget<E: Errno>(
         &self,
         constructor: impl FnOnce(i32) -> Result<VFileType, E>,
         flags: VFileFlags,
+        budget_type: BudgetType,
     ) -> Result<i32, FileAllocError<E>> {
         todo!()
     }

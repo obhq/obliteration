@@ -16,11 +16,11 @@ use crate::signal::{
     SIG_IGN, SIG_MAXSIG, SIG_SETMASK, SIG_UNBLOCK,
 };
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
+use crate::ucred::PrisonImpl;
 use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
 use crate::PRISON0;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
-use std::borrow::Cow;
 use std::cmp::min;
 use std::convert::Infallible;
 use std::ffi::c_char;
@@ -85,7 +85,7 @@ impl VProc {
                 Uid::ROOT,
                 Uid::ROOT,
                 vec![Gid::ROOT],
-                Cow::Borrowed(&PRISON0),
+                PrisonImpl::Static(&PRISON0),
                 auth,
             )
         } else {
@@ -95,7 +95,7 @@ impl VProc {
                 uid,
                 uid,
                 vec![Gid::new(1).unwrap()],
-                Cow::Borrowed(&PRISON0),
+                PrisonImpl::Static(&PRISON0),
                 auth,
             )
         };

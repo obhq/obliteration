@@ -1,17 +1,14 @@
 use crate::budget::BudgetType;
 use crate::fs::{VFileFlags, VFileType};
 use crate::{
-    errno::{Errno, EOPNOTSUPP},
     process::VThread,
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
 };
 use core::fmt;
 use std::{
     fmt::{Display, Formatter},
-    num::NonZeroI32,
     sync::Arc,
 };
-use thiserror::Error;
 
 pub use self::socket::*;
 
@@ -42,29 +39,19 @@ impl NetManager {
             BudgetType::FdSocket
         };
 
-        let fd = td.falloc_budget(
-            |fd| {
-                let so = Socket::new(
-                    domain,
-                    ty,
-                    proto,
-                    td.as_ref().cred(),
-                    td.as_ref(),
-                    None,
-                    fd,
-                    td.proc().id(),
-                )?;
+        let fd = td.proc().files().alloc_with_budget::<SocketCreateError>(
+            |_| {
+                let so = Socket::new(domain, ty, proto, td.as_ref().cred(), td.as_ref(), None)?;
 
                 let ty = if domain == 1 {
-                    VFileType::Socket(so)
+                    VFileType::IpcSocket(so)
                 } else {
-                    VFileType::Socket2(so)
+                    VFileType::Socket(so)
                 };
 
                 Ok(ty)
             },
             VFileFlags::FWRITE | VFileFlags::FREAD,
-            &SOCKET_FILEOPS,
             budget,
         )?;
 
@@ -85,29 +72,19 @@ impl NetManager {
             BudgetType::FdSocket
         };
 
-        let fd = td.falloc_budget(
-            |fd| {
-                let so = Socket::new(
-                    domain,
-                    ty,
-                    proto,
-                    td.as_ref().cred(),
-                    td.as_ref(),
-                    name,
-                    fd,
-                    td.proc().id(),
-                )?;
+        let fd = td.proc().files().alloc_with_budget::<SocketCreateError>(
+            |_| {
+                let so = Socket::new(domain, ty, proto, td.as_ref().cred(), td.as_ref(), name)?;
 
                 let ty = if domain == 1 {
-                    VFileType::Socket(so)
+                    VFileType::IpcSocket(so)
                 } else {
-                    VFileType::Socket2(so)
+                    VFileType::Socket(so)
                 };
 
                 Ok(ty)
             },
             VFileFlags::FWRITE | VFileFlags::FREAD,
-            &SOCKET_FILEOPS,
             budget,
         )?;
 
@@ -137,68 +114,5 @@ impl Display for AddressFamily {
             Self::INET6 => write!(f, "INET6"),
             _ => todo!(),
         }
-    }
-}
-
-#[derive(Debug)]
-pub struct Protosw {
-    ty: i32,
-    domain: &'static Domain,
-    user_reqs: &'static UserReqs,
-}
-
-impl Protosw {
-    pub fn ty(&self) -> i32 {
-        self.ty
-    }
-
-    pub fn domain(&self) -> &'static Domain {
-        self.domain
-    }
-
-    pub fn user_reqs(&self) -> &'static UserReqs {
-        self.user_reqs
-    }
-
-    pub(super) fn find_by_proto(domain: i32, protocol: i32, ty: i32) -> Option<&'static Self> {
-        todo!()
-    }
-
-    pub(super) fn find_by_type(domain: i32, ty: i32) -> Option<&'static Self> {
-        todo!()
-    }
-}
-
-#[derive(Debug)]
-pub struct UserReqs {
-    pub attach: Option<AttachFn>, // pru_attach
-}
-
-type AttachFn = fn(&Socket, i32, &VThread) -> Result<(), Box<dyn Errno>>;
-
-pub fn attach_notsupp(_: &Socket, _: i32, _: &VThread) -> Result<(), Box<dyn Errno>> {
-    Err(Box::new(AttachError::NotSupported))
-}
-
-#[derive(Debug)]
-pub struct Domain {
-    family: AddressFamily,
-}
-
-impl Domain {
-    pub fn family(&self) -> AddressFamily {
-        self.family
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum AttachError {
-    #[error("operation not supported")]
-    NotSupported,
-}
-
-impl Errno for AttachError {
-    fn errno(&self) -> NonZeroI32 {
-        EOPNOTSUPP
     }
 }
