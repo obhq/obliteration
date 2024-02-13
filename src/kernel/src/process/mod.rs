@@ -22,6 +22,7 @@ use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
 use std::borrow::Cow;
 use std::cmp::min;
+use std::convert::Infallible;
 use std::ffi::c_char;
 use std::mem::zeroed;
 use std::num::NonZeroI32;
@@ -52,7 +53,7 @@ pub struct VProc {
     cred: Ucred,                       // p_ucred
     group: Gutex<Option<VProcGroup>>,  // p_pgrp
     sigacts: Gutex<SignalActs>,        // p_sigacts
-    files: FileDesc,                   // p_fd
+    files: Arc<FileDesc>,              // p_fd
     system_path: String,               // p_randomized_path
     limits: Limits,                    // p_limit
     comm: Gutex<Option<String>>,       // p_comm
@@ -148,7 +149,7 @@ impl VProc {
         &self.cred
     }
 
-    pub fn files(&self) -> &FileDesc {
+    pub fn files(&self) -> &Arc<FileDesc> {
         &self.files
     }
 
@@ -552,7 +553,7 @@ impl VProc {
         // Allocate the entry.
         let mut table = self.objects.write();
         let (entry, id) = table
-            .alloc::<_, ()>(|_| Ok(Arc::new(NamedObj::new(name.to_owned(), data))))
+            .alloc::<_, Infallible>(|_| Ok(Arc::new(NamedObj::new(name.to_owned(), data))))
             .unwrap();
 
         entry.set_name(Some(name.to_owned()));

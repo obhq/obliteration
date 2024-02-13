@@ -3,6 +3,7 @@ use crate::idt::Idt;
 use crate::info;
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
+use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
 
 /// An implementation of budget system on the PS4.
@@ -24,7 +25,9 @@ impl BudgetManager {
     pub fn create(&self, budget: Budget) -> usize {
         let name = budget.name.clone();
         let mut budgets = self.budgets.lock().unwrap();
-        let (entry, id) = budgets.alloc::<_, ()>(|_| Ok(Arc::new(budget))).unwrap();
+        let (entry, id) = budgets
+            .alloc::<_, Infallible>(|_| Ok(Arc::new(budget)))
+            .unwrap();
 
         entry.set_name(Some(name));
         entry.set_ty(0x2000);
