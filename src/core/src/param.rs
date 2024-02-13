@@ -11,7 +11,7 @@ pub unsafe extern "C" fn param_open(file: *const c_char, error: *mut *mut Error)
     let file = match File::open(CStr::from_ptr(file).to_str().unwrap()) {
         Ok(v) => v,
         Err(e) => {
-            *error = Error::new(&e);
+            *error = Error::new(e);
             return null_mut();
         }
     };
@@ -20,7 +20,7 @@ pub unsafe extern "C" fn param_open(file: *const c_char, error: *mut *mut Error)
     let param = match Param::read(file) {
         Ok(v) => v,
         Err(e) => {
-            *error = Error::new(&e);
+            *error = Error::new(e);
             return null_mut();
         }
     };

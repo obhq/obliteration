@@ -12,8 +12,9 @@ use crate::regmgr::RegMgr;
 use crate::rtld::{LoadFlags, ModuleFlags, RuntimeLinker};
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
-use crate::tty::TtyManager;
 use crate::ucred::PRISON0;
+use crate::time::TimeManager;
+use crate::tty::{TtyInitError, TtyManager};
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use clap::{Parser, ValueEnum};
 use llt::{OsThread, SpawnError};
@@ -51,6 +52,7 @@ mod rtld;
 mod signal;
 mod syscalls;
 mod sysctl;
+mod time;
 mod tty;
 mod ucred;
 
@@ -268,6 +270,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     DmemManager::new(fs, &mut syscalls);
     Sysctl::new(mm, &machdep, &mut syscalls);
     NetManager::new(&mut syscalls);
+    TimeManager::new(&mut syscalls);
 
     // TODO: Get correct budget name from the PS4.
     let budget_id = budget.create(Budget::new("big app", ProcType::BigApp));
