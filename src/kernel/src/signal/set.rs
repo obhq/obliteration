@@ -32,7 +32,8 @@ impl SignalSet {
 
     /// An implementation of `_SIG_WORD`.
     fn word(s: Signal) -> usize {
-        (Self::idx(s) >> 5).try_into().unwrap()
+        // This is safe because `Signal` is guaranteed to be non-negative.
+        unsafe { (Self::idx(s) >> 5).try_into().unwrap_unchecked() }
     }
 
     /// An implementation of `_SIG_BIT`.
