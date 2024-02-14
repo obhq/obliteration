@@ -81,6 +81,8 @@ impl Sysctl {
     pub const KERN_PROC: i32 = 14;
     pub const KERN_USRSTACK: i32 = 33;
     pub const KERN_ARND: i32 = 37;
+    pub const KERN_SDKVERSION: i32 = 38;
+    pub const KERN_CPUMODE: i32 = 41;
     pub const KERN_PROC_APPINFO: i32 = 35;
     pub const KERN_PROC_SANITIZER: i32 = 41;
     pub const KERN_PROC_PTC: i32 = 43;
@@ -427,6 +429,16 @@ impl Sysctl {
         req.write(&buf[..len])
     }
 
+    fn kern_cpumode(
+        &self,
+        _: &'static Oid,
+        _: &Arg,
+        _: usize,
+        _req: &mut SysctlReq,
+    ) -> Result<(), SysErr> {
+        todo!()
+    }
+
     fn machdep_tsc_freq(
         &self,
         oid: &'static Oid,
@@ -602,7 +614,9 @@ type Handler = fn(&Sysctl, &'static Oid, &Arg, usize, &mut SysctlReq) -> Result<
 //     └─── (1.33) KERN_USRSTACK
 //     └─── ...
 //     └─── (1.37) KERN_ARANDOM
+//     └─── (1.38) KERN_SDKVERSION
 //     └─── ...
+//     └─── (1.41) KERN_CPUMODE
 //     └─── (1.42) KERN_SCHED
 //         └─── ...
 //         └─── (1.42.1252) KERN_SCHED_CPUSETSIZE
@@ -772,7 +786,7 @@ static KERN_USRSTACK: Oid = Oid {
 
 static KERN_ARANDOM: Oid = Oid {
     parent: &KERN_CHILDREN,
-    link: Some(&KERN_SCHED), // TODO: Use a proper value.
+    link: Some(&KERN_SDKVERSION), // TODO: Use a proper value.
     number: Sysctl::KERN_ARND,
     kind: Sysctl::CTLFLAG_RD
         | Sysctl::CTLFLAG_MPSAFE
@@ -784,6 +798,37 @@ static KERN_ARANDOM: Oid = Oid {
     handler: Some(Sysctl::kern_arandom),
     fmt: "",
     descr: "arc4rand",
+    enabled: true,
+};
+
+static KERN_SDKVERSION: Oid = Oid {
+    parent: &KERN_CHILDREN,
+    link: Some(&KERN_CPUMODE), // TODO: Use a proper value.
+    number: Sysctl::KERN_SDKVERSION,
+    kind: Sysctl::CTLFLAG_RD
+        | Sysctl::CTLFLAG_MPSAFE
+        | Sysctl::CTLFLAG_CAPRD
+        | Sysctl::CTLTYPE_UINT,
+    arg1: None,
+    arg2: 0x09008031, // TODO: check what that means
+    name: "sdk_version",
+    handler: Some(Sysctl::handle_int),
+    fmt: "IU",
+    descr: "SDK version",
+    enabled: true,
+};
+
+static KERN_CPUMODE: Oid = Oid {
+    parent: &KERN_CHILDREN,
+    link: Some(&KERN_SCHED), // TODO: Use a proper value.
+    number: Sysctl::KERN_CPUMODE,
+    kind: Sysctl::CTLFLAG_RD | Sysctl::CTLFLAG_MPSAFE | Sysctl::CTLTYPE_INT,
+    arg1: None,
+    arg2: 0,
+    name: "cpumode",
+    handler: Some(Sysctl::kern_cpumode),
+    fmt: "I",
+    descr: "CPU mode",
     enabled: true,
 };
 
