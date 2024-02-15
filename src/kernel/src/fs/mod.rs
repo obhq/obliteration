@@ -764,12 +764,37 @@ impl Fs {
         self.mkdirat(At::Cwd, path, mode, Some(&td))
     }
 
+    #[allow(unused_variables)]
     fn sys_poll(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fds: *mut PollFd = i.args[0].into();
         let nfds: u32 = i.args[1].try_into().unwrap();
         let timeout: i32 = i.args[2].try_into().unwrap();
 
         todo!()
+    }
+
+    fn sys_lseek(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let mut offset: i64 = i.args[1].try_into().unwrap();
+        let whence: Whence = {
+            let whence: i32 = i.args[2].try_into().unwrap();
+
+            whence.try_into()?
+        };
+
+        let td = VThread::current().unwrap();
+
+        let file = td.proc().files().get(fd)?;
+
+        match whence {
+            Whence::Set => {}
+            Whence::Cur => todo!("lseek with whence = SEEK_CUR"),
+            Whence::End => todo!("lseek with whence = SEEK_END"),
+            Whence::Data => todo!("lseek with whence = SEEK_DATA"),
+            Whence::Hole => todo!("lseek with whence = SEEK_HOLE"),
+        }
+
+        Ok(offset.into())
     }
 
     fn sys_mkdirat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -886,6 +911,29 @@ enum Offset {
 enum At {
     Cwd,
     Fd(i32),
+}
+
+pub enum Whence {
+    Set,  // SEEK_SET
+    Cur,  // SEEK_CUR
+    End,  // SEEK_END
+    Data, // SEEK_DATA
+    Hole, // SEEK_HOLE
+}
+
+impl TryFrom<i32> for Whence {
+    type Error = SysErr;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::Set),
+            1 => Ok(Self::Cur),
+            2 => Ok(Self::End),
+            3 => Ok(Self::Data),
+            4 => Ok(Self::Hole),
+            _ => Err(SysErr::Raw(EINVAL)),
+        }
+    }
 }
 
 pub struct IoVec {
