@@ -444,19 +444,19 @@ impl Fs {
 
     fn sys_ioctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
-        let com: IoCmd = i.args[1].try_into()?;
+        let cmd: IoCmd = i.args[1].try_into()?;
         let data_arg: *mut u8 = i.args[2].into();
 
         // Get data.
-        let data = unsafe { std::slice::from_raw_parts_mut(data_arg, com.size()) };
+        let data = unsafe { std::slice::from_raw_parts_mut(data_arg, cmd.size()) };
 
         // Get target file.
         let td = VThread::current().unwrap();
 
         // Execute the operation.
-        info!("Executing ioctl({com}) on file descriptor {fd}.");
+        info!("Executing ioctl({cmd}) on file descriptor {fd}.");
 
-        self.ioctl(fd, com, data, &td)?;
+        self.ioctl(fd, cmd, data, &td)?;
 
         Ok(SysOut::ZERO)
     }
