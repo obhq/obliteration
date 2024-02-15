@@ -790,11 +790,11 @@ impl Fs {
             return Err(SysErr::Raw(ESPIPE));
         }
 
-        let vnode = file.vnode().expect("File is not backed by a vnode");
+        let _vnode = file.vnode().expect("File is not backed by a vnode");
 
         // check vnode type
 
-        let offset = match whence {
+        let _offset = match whence {
             Whence::Set => offset,
             Whence::Cur => todo!("lseek with whence = SEEK_CUR"),
             Whence::End => todo!(),
