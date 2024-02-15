@@ -190,6 +190,14 @@ impl MountOpts {
         self.remove(name).unwrap_or(fallback)
     }
 
+    pub fn remove_or_else<T, F>(&mut self, name: &'static str, fallback: F) -> T
+    where
+        T: TryFrom<MountOpt, Error = MountOpt>,
+        F: FnOnce() -> T,
+    {
+        self.remove(name).unwrap_or_else(fallback)
+    }
+
     pub fn retain(&mut self, mut f: impl FnMut(&str, &mut MountOpt) -> bool) {
         self.0.retain(|k, v| f(k, v));
     }

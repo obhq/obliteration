@@ -49,9 +49,8 @@ pub fn mount(
     }
 
     // Get target path.
-    let target: VPathBuf = opts
-        .remove("target")
-        .unwrap_or_else(|| todo!("nullfs_mount without target option"));
+    let target: VPathBuf =
+        opts.remove_or_else("target", || todo!("nullfs_mount without target option"));
 
     Ok(Mount::new(
         conf,
