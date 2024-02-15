@@ -41,7 +41,7 @@ pub fn mount(
     }
 
     if flags.intersects(MountFlags::MNT_UPDATE) {
-        if opts.remove("export").is_some_and(|opt| opt.unwrap()) {
+        if let Some(true) = opts.remove("export") {
             todo!("nullfs_mount with MNT_UPDATE and export = true")
         } else {
             Err(MountError::NoExport)?
@@ -49,10 +49,8 @@ pub fn mount(
     }
 
     // Get target path.
-    let target = match opts.remove("target") {
-        Some(v) => v.unwrap(),
-        None => todo!("nullfs_mount without target option"),
-    };
+    let target: VPathBuf =
+        opts.remove_or_else("target", || todo!("nullfs_mount without target option"));
 
     Ok(Mount::new(
         conf,
