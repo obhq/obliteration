@@ -1,11 +1,12 @@
 pub use self::appinfo::*;
 pub use self::cpuset::*;
-pub use self::file::*;
+pub use self::filedesc::*;
 pub use self::group::*;
 pub use self::rlimit::*;
 pub use self::session::*;
 pub use self::signal::*;
 pub use self::thread::*;
+
 use crate::budget::ProcType;
 use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ERANGE, ESRCH};
 use crate::fs::Vnode;
@@ -32,7 +33,7 @@ use thiserror::Error;
 
 mod appinfo;
 mod cpuset;
-mod file;
+mod filedesc;
 mod group;
 mod rlimit;
 mod session;

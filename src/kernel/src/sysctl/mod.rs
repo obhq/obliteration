@@ -422,7 +422,7 @@ impl Sysctl {
         req: &mut SysctlReq,
     ) -> Result<(), SysErr> {
         let mut buf = [0; 256];
-        let len = min(req.old.as_ref().map(|b| b.len()).unwrap_or(0), 256);
+        let len = min(256, req.old.as_ref().map_or(0, |b| b.len()));
 
         rand_bytes(&mut buf[..len]);
 

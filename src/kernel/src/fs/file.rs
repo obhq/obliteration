@@ -1,4 +1,4 @@
-use super::{IoCmd, Vnode};
+use super::{IoCmd, Offset, Stat, Uio, UioMut, Vnode};
 use crate::dmem::BlockPool;
 use crate::errno::Errno;
 use crate::errno::{ENOTTY, ENXIO};
@@ -34,22 +34,64 @@ impl VFile {
         &mut self.flags
     }
 
-    pub fn read(&self, data: &mut [u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+    /// See `dofileread` on the PS4 for a reference.
+    pub fn do_read(
+        &self,
+        mut uio: UioMut,
+        off: Offset,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        if uio.bytes_left == 0 {
+            return Ok(0);
+        }
+
+        // TODO: consider implementing ktrace.
+
+        let res = self.read(&mut uio, td);
+
+        if let Err(ref e) = res {
+            todo!()
+        }
+
+        res
+    }
+
+    /// See `dofilewrite` on the PS4 for a reference.
+    pub fn do_write(
+        &self,
+        mut uio: Uio,
+        off: Offset,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        // TODO: consider implementing ktrace.
+        // TODO: implement bwillwrite.
+
+        let res = self.write(&mut uio, td);
+
+        if let Err(ref e) = res {
+            todo!()
+        }
+
+        res
+    }
+
+    fn read(&self, buf: &mut UioMut, td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
         match self.backend {
-            VFileType::Vnode(ref vn) => vn.read(self, data, td),
-            VFileType::KernelQueue(ref kq) => kq.read(self, data, td),
-            VFileType::Blockpool(ref bp) => bp.read(self, data, td),
+            VFileType::Vnode(ref vn) => vn.read(self, buf, td),
+            VFileType::KernelQueue(ref kq) => kq.read(self, buf, td),
+            VFileType::Blockpool(ref bp) => bp.read(self, buf, td),
         }
     }
 
-    pub fn write(&self, data: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+    fn write(&self, buf: &mut Uio, td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
         match self.backend {
-            VFileType::Vnode(ref vn) => vn.write(self, data, td),
-            VFileType::KernelQueue(ref kq) => kq.write(self, data, td),
-            VFileType::Blockpool(ref bp) => bp.write(self, data, td),
+            VFileType::Vnode(ref vn) => vn.write(self, buf, td),
+            VFileType::KernelQueue(ref kq) => kq.write(self, buf, td),
+            VFileType::Blockpool(ref bp) => bp.write(self, buf, td),
         }
     }
 
+    /// See `fo_ioctl` on the PS4 for a reference.
     pub fn ioctl(
         &self,
         cmd: IoCmd,
@@ -62,6 +104,22 @@ impl VFile {
             VFileType::Blockpool(ref bp) => bp.ioctl(self, cmd, data, td),
         }
     }
+
+    pub fn stat(&self, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
+        match self.backend {
+            VFileType::Vnode(ref vn) => vn.stat(self, td),
+            VFileType::KernelQueue(ref kq) => kq.stat(self, td),
+            VFileType::Blockpool(ref bp) => bp.stat(self, td),
+        }
+    }
+
+    pub fn op_flags(&self) -> VFileOpsFlags {
+        match self.backend {
+            VFileType::Vnode(ref vn) => vn.flags(),
+            VFileType::KernelQueue(ref kq) => kq.flags(),
+            VFileType::Blockpool(ref bp) => bp.flags(),
+        }
+    }
 }
 
 impl Seek for VFile {
@@ -71,7 +129,7 @@ impl Seek for VFile {
 }
 
 impl Read for VFile {
-    fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         todo!()
     }
 }
@@ -88,6 +146,7 @@ impl Write for VFile {
 
 /// Type of [`VFile`].
 #[derive(Debug)]
+#[rustfmt::skip]
 pub enum VFileType {
     Vnode(Arc<Vnode>),             // DTYPE_VNODE = 1
     KernelQueue(Arc<KernelQueue>), // DTYPE_KQUEUE = 5,
@@ -98,8 +157,16 @@ bitflags! {
     /// Flags for [`VFile`].
     #[derive(Debug, Clone, Copy)]
     pub struct VFileFlags: u32 {
-        const FREAD = 0x00000001;
-        const FWRITE = 0x00000002;
+        const READ = 0x00000001; // FREAD
+        const WRITE = 0x00000002; // FWRITE
+    }
+}
+
+bitflags! {
+    #[derive(Debug, Clone, Copy)]
+    pub struct VFileOpsFlags: u32 {
+        const PASSABLE = 0x00000001; // DFLAG_PASSABLE
+        const SEEKABLE = 0x00000002; // DFLAG_SEEKABLE
     }
 }
 
@@ -109,7 +176,7 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
     fn read(
         self: &Arc<Self>,
         file: &VFile,
-        buf: &mut [u8],
+        buf: &mut UioMut,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         Err(Box::new(DefaultError::ReadNotSupported))
@@ -119,7 +186,7 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
     fn write(
         self: &Arc<Self>,
         file: &VFile,
-        buf: &[u8],
+        buf: &mut Uio,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         Err(Box::new(DefaultError::WriteNotSupported))
@@ -134,6 +201,13 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultError::IoctlNotSupported))
+    }
+
+    #[allow(unused_variables)]
+    fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>>;
+
+    fn flags(&self) -> VFileOpsFlags {
+        VFileOpsFlags::empty()
     }
 }
 
