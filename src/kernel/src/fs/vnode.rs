@@ -1,5 +1,6 @@
 use super::{
-    unixify_access, Access, FileBackend, IoCmd, Mode, Mount, OpenFlags, RevokeFlags, VFile,
+    unixify_access, Access, FileBackend, IoCmd, Mode, Mount, OpenFlags, RevokeFlags, Stat, Uio,
+    UioMut, VFile, VFileOpsFlags,
 };
 use crate::errno::{Errno, EINVAL, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
@@ -128,7 +129,7 @@ impl FileBackend for Vnode {
     fn read(
         self: &Arc<Self>,
         file: &VFile,
-        buf: &mut [u8],
+        buf: &mut UioMut,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         todo!()
@@ -138,7 +139,7 @@ impl FileBackend for Vnode {
     fn write(
         self: &Arc<Self>,
         file: &VFile,
-        buf: &[u8],
+        buf: &mut Uio,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         todo!()
@@ -153,6 +154,14 @@ impl FileBackend for Vnode {
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         todo!()
+    }
+
+    fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
+        todo!()
+    }
+
+    fn flags(&self) -> VFileOpsFlags {
+        VFileOpsFlags::SEEKABLE | VFileOpsFlags::PASSABLE
     }
 }
 
