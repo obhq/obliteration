@@ -4,6 +4,7 @@ use crate::kqueue::KernelQueue;
 use gmtx::{Gutex, GutexGroup};
 use macros::Errno;
 use std::collections::VecDeque;
+use std::convert::Infallible;
 use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
@@ -11,24 +12,25 @@ use thiserror::Error;
 /// An implementation of `filedesc` structure.
 #[derive(Debug)]
 pub struct FileDesc {
-    files: Gutex<Vec<Option<Arc<VFile>>>>,          // fd_ofiles
-    cwd: Gutex<Arc<Vnode>>,                         // fd_cdir
-    root: Gutex<Arc<Vnode>>,                        // fd_rdir
+    files: Gutex<Vec<Option<Arc<VFile>>>>, // fd_ofiles + fd_nfiles
+    cwd: Gutex<Arc<Vnode>>,                // fd_cdir
+    root: Gutex<Arc<Vnode>>,               // fd_rdir
     kqueue_list: Gutex<VecDeque<Arc<KernelQueue>>>, // fd_kqlist
-    cmask: u32,                                     // fd_cmask
 }
 
 impl FileDesc {
     pub(super) fn new(root: Arc<Vnode>) -> Arc<Self> {
         let gg = GutexGroup::new();
 
-        Arc::new(Self {
+        let filedesc = Self {
+            // TODO: these aren't none on the PS4
             files: gg.spawn(vec![None, None, None]),
             cwd: gg.spawn(root.clone()),
             root: gg.spawn(root),
             kqueue_list: gg.spawn(VecDeque::new()),
-            cmask: 0o22, // TODO: verify this
-        })
+        };
+
+        Arc::new(filedesc)
     }
 
     pub fn cwd(&self) -> Arc<Vnode> {
@@ -50,10 +52,6 @@ impl FileDesc {
         flags: VFileFlags,
     ) -> Result<i32, FileAllocError<E>> {
         todo!()
-    }
-
-    pub fn cmask(&self) -> u32 {
-        self.cmask
     }
 
     /// See `finstall` on the PS4 for a reference.
@@ -79,16 +77,42 @@ impl FileDesc {
         panic!("Too many files has been opened.");
     }
 
+    // TODO: implement capabilities
+
+    /// See `fget` on the PS4 for a reference.
     pub fn get(&self, fd: i32) -> Result<Arc<VFile>, GetFileError> {
-        todo!()
+        self.get_internal(fd, VFileFlags::empty())
     }
 
+    /// See `fget_write` on the PS4 for a reference.
     pub fn get_for_write(&self, fd: i32) -> Result<Arc<VFile>, GetFileError> {
-        todo!()
+        self.get_internal(fd, VFileFlags::WRITE)
     }
 
+    /// See `fget_read` on the PS4 for a reference.
     pub fn get_for_read(&self, fd: i32) -> Result<Arc<VFile>, GetFileError> {
-        todo!()
+        self.get_internal(fd, VFileFlags::READ)
+    }
+
+    /// See `_fget` and `fget_unlocked` on the PS4 for a reference.
+    fn get_internal(&self, fd: i32, flags: VFileFlags) -> Result<Arc<VFile>, GetFileError> {
+        if fd < 0 {
+            return Err(GetFileError::NegativeFd(fd));
+        }
+
+        let files = self.files.write();
+
+        if fd as usize >= files.len() {
+            return Err(GetFileError::FdOutOfRange(fd));
+        }
+
+        loop {
+            if let None = files.get(fd as usize) {
+                return Err(GetFileError::NoFile(fd));
+            }
+
+            todo!()
+        }
     }
 
     pub fn free(&self, fd: i32) -> Result<(), FreeError> {
@@ -107,16 +131,29 @@ impl FileDesc {
 }
 
 #[derive(Debug, Error)]
-pub enum GetFileError {}
+pub enum GetFileError {
+    #[error("got negative file descriptor {0}")]
+    NegativeFd(i32),
+
+    #[error("file descriptor {0} out of range")]
+    FdOutOfRange(i32),
+
+    #[error("no file assoiated with file descriptor {0}")]
+    NoFile(i32),
+}
 
 impl Errno for GetFileError {
     fn errno(&self) -> NonZeroI32 {
-        todo!()
+        match self {
+            Self::NegativeFd(_) => EBADF,
+            Self::FdOutOfRange(_) => EBADF,
+            Self::NoFile(_) => EBADF,
+        }
     }
 }
 
 #[derive(Debug, Error)]
-pub enum FileAllocError<E: Errno> {
+pub enum FileAllocError<E: Errno = Infallible> {
     #[error(transparent)]
     Inner(E),
 }

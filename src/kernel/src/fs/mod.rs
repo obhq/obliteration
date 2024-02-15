@@ -1,3 +1,20 @@
+use crate::errno::{Errno, EBADF, EBUSY, EINVAL, ENAMETOOLONG, ENODEV, ENOENT, ESPIPE};
+use crate::info;
+use crate::process::{GetFileError, VThread};
+use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
+use crate::ucred::PrivilegeError;
+use crate::ucred::{Privilege, Ucred};
+use bitflags::bitflags;
+use gmtx::{Gutex, GutexGroup};
+use macros::vpath;
+use macros::Errno;
+use param::Param;
+use std::fmt::{Display, Formatter};
+use std::num::{NonZeroI32, TryFromIntError};
+use std::path::PathBuf;
+use std::sync::{Arc, Weak};
+use thiserror::Error;
+
 pub use self::dev::{make_dev, Cdev, CdevSw, DriverFlags, MakeDev, MakeDevError};
 pub use self::dirent::*;
 pub use self::file::*;
@@ -5,22 +22,8 @@ pub use self::ioctl::*;
 pub use self::mount::*;
 pub use self::path::*;
 pub use self::perm::*;
+pub use self::stat::*;
 pub use self::vnode::*;
-use crate::errno::{Errno, EBADF, EBUSY, EINVAL, ENAMETOOLONG, ENODEV, ENOENT};
-use crate::info;
-use crate::process::VThread;
-use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
-use crate::ucred::PrivilegeError;
-use crate::ucred::{Privilege, Ucred};
-use bitflags::bitflags;
-use gmtx::{Gutex, GutexGroup};
-use macros::vpath;
-use param::Param;
-use std::fmt::{Display, Formatter};
-use std::num::{NonZeroI32, TryFromIntError};
-use std::path::PathBuf;
-use std::sync::{Arc, Weak};
-use thiserror::Error;
 
 mod dev;
 mod dirent;
@@ -31,6 +34,7 @@ mod mount;
 mod null;
 mod path;
 mod perm;
+mod stat;
 mod tmp;
 mod vnode;
 
@@ -125,13 +129,24 @@ impl Fs {
         }
 
         // Install syscall handlers.
+        sys.register(3, &fs, Self::sys_read);
         sys.register(4, &fs, Self::sys_write);
         sys.register(5, &fs, Self::sys_open);
         sys.register(6, &fs, Self::sys_close);
         sys.register(54, &fs, Self::sys_ioctl);
         sys.register(56, &fs, Self::sys_revoke);
+        sys.register(120, &fs, Self::sys_readv);
+        sys.register(121, &fs, Self::sys_writev);
         sys.register(136, &fs, Self::sys_mkdir);
+        sys.register(188, &fs, Self::sys_stat);
+        sys.register(189, &fs, Self::sys_fstat);
+        sys.register(190, &fs, Self::sys_lstat);
+        sys.register(191, &fs, Self::sys_pread);
         sys.register(209, &fs, Self::sys_poll);
+        sys.register(289, &fs, Self::sys_preadv);
+        sys.register(290, &fs, Self::sys_pwritev);
+        sys.register(476, &fs, Self::sys_pwrite);
+        sys.register(493, &fs, Self::sys_fstatat);
         sys.register(496, &fs, Self::sys_mkdirat);
 
         Ok(fs)
@@ -247,6 +262,21 @@ impl Fs {
         Ok(vn)
     }
 
+    fn sys_read(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let ptr: *mut u8 = i.args[1].into();
+        let len: usize = i.args[2].try_into().unwrap();
+
+        let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
+
+        let uio = UioMut {
+            vecs: &mut [iovec],
+            bytes_left: len,
+        };
+
+        self.readv(fd, uio)
+    }
+
     /// See `vfs_donmount` on the PS4 for a reference.
     pub fn mount(
         self: &Arc<Self>,
@@ -347,16 +377,14 @@ impl Fs {
         let ptr: *const u8 = i.args[1].into();
         let len: usize = i.args[2].into();
 
-        if len > 0x7fffffff {
-            return Err(SysErr::Raw(EINVAL));
-        }
+        let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
-        let td = VThread::current().unwrap();
-        let file = td.proc().files().get(fd).ok_or(SysErr::Raw(EBADF))?;
-        let buf = unsafe { std::slice::from_raw_parts(ptr, len) };
-        let written = file.write(buf, Some(&td))?;
+        let uio = Uio {
+            vecs: &[iovec],
+            bytes_left: len,
+        };
 
-        Ok(written.into())
+        self.writev(fd, uio)
     }
 
     fn sys_open(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -415,64 +443,56 @@ impl Fs {
     }
 
     fn sys_ioctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let cmd: IoCmd = i.args[1].try_into()?;
+        let data_arg: *mut u8 = i.args[2].into();
+
+        // Get data.
+        let data = unsafe { std::slice::from_raw_parts_mut(data_arg, cmd.size()) };
+
+        // Get target file.
+        let td = VThread::current().unwrap();
+
+        // Execute the operation.
+        info!("Executing ioctl({cmd}) on file descriptor {fd}.");
+
+        self.ioctl(fd, cmd, data, &td)?;
+
+        Ok(SysOut::ZERO)
+    }
+
+    /// See `kern_ioctl` on the PS4 for a reference.
+    fn ioctl(
+        self: &Arc<Self>,
+        fd: i32,
+        cmd: IoCmd,
+        data: &mut [u8],
+        td: &VThread,
+    ) -> Result<SysOut, IoctlError> {
         const FIOCLEX: IoCmd = IoCmd::io(b'f', 1);
         const FIONCLEX: IoCmd = IoCmd::io(b'f', 2);
         const FIONBIO: IoCmd = IoCmd::iowint(b'f', 0x7e);
         const FIOASYNC: IoCmd = IoCmd::iowint(b'f', 0x7d);
 
-        let fd: i32 = i.args[0].try_into().unwrap();
-        let com: IoCmd = i.args[1].try_into()?;
-        let data_arg: *mut u8 = i.args[2].into();
-
-        let size: usize = com.size();
-        let mut vec = vec![0u8; size];
-
-        // Get data.
-        let data = if size == 0 {
-            &mut []
-        } else {
-            if com.is_void() {
-                todo!("ioctl with com & IOC_VOID != 0");
-            } else {
-                &mut vec[..]
-            }
-        };
-
-        if com.is_in() {
-            todo!("ioctl with IOC_IN & != 0");
-        } else if com.is_out() {
-            data.fill(0);
-        }
-
-        // Get target file.
-        let td = VThread::current().unwrap();
-        let file = td.proc().files().get(fd).ok_or(SysErr::Raw(EBADF))?;
+        let file = td.proc().files().get(fd)?;
 
         if !file
             .flags()
-            .intersects(VFileFlags::FREAD | VFileFlags::FWRITE)
+            .intersects(VFileFlags::READ | VFileFlags::WRITE)
         {
-            return Err(SysErr::Raw(EBADF));
+            return Err(IoctlError::BadFileFlags(file.flags()));
         }
 
-        // Execute the operation.
-        info!("Executing ioctl({com}) on file descriptor {fd}.");
-
-        match com {
-            FIOCLEX => todo!("ioctl with com = FIOCLEX"),
-            FIONCLEX => todo!("ioctl with com = FIONCLEX"),
-            FIONBIO => todo!("ioctl with com = FIONBIO"),
-            FIOASYNC => todo!("ioctl with com = FIOASYNC"),
+        match cmd {
+            FIOCLEX => todo!("ioctl with cmd = FIOCLEX"),
+            FIONCLEX => todo!("ioctl with cmd = FIONCLEX"),
+            FIONBIO => todo!("ioctl with cmd = FIONBIO"),
+            FIOASYNC => todo!("ioctl with cmd = FIOASYNC"),
             _ => {}
         }
 
-        file.ioctl(com, data, Some(&td))?;
-
-        if com.is_void() {
-            unsafe {
-                std::ptr::copy_nonoverlapping(data.as_ptr(), data_arg, size);
-            }
-        }
+        file.ioctl(cmd, data, Some(&td))
+            .map_err(IoctlError::FileIoctlFailed)?;
 
         Ok(SysOut::ZERO)
     }
@@ -499,6 +519,227 @@ impl Fs {
         self.revoke(vn, &td)?;
 
         Ok(SysOut::ZERO)
+    }
+
+    fn sys_readv(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let iovec: *mut IoVec = i.args[1].into();
+        let count: u32 = i.args[2].try_into().unwrap();
+
+        let uio = unsafe { UioMut::copyin(iovec, count) }?;
+
+        self.readv(fd, uio)
+    }
+
+    fn readv(&self, fd: i32, uio: UioMut) -> Result<SysOut, SysErr> {
+        let td = VThread::current().unwrap();
+
+        let file = td.proc().files().get_for_read(fd)?;
+
+        let read = file.do_read(uio, Offset::Current, Some(&td))?;
+
+        Ok(read.into())
+    }
+
+    fn sys_writev(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let iovec: *const IoVec = i.args[1].into();
+        let iovcnt: u32 = i.args[2].try_into().unwrap();
+
+        let uio = unsafe { Uio::copyin(iovec, iovcnt) }?;
+
+        self.writev(fd, uio)
+    }
+
+    fn writev(&self, fd: i32, uio: Uio) -> Result<SysOut, SysErr> {
+        let td = VThread::current().unwrap();
+
+        let file = td.proc().files().get_for_write(fd)?;
+
+        let written = file.do_write(uio, Offset::Current, Some(&td))?;
+
+        Ok(written.into())
+    }
+
+    fn sys_stat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let path = unsafe { i.args[0].to_path() }?.unwrap();
+        let stat_out: *mut Stat = i.args[1].into();
+
+        let td = VThread::current().unwrap();
+
+        let stat = self.stat(path, &td)?;
+
+        unsafe {
+            *stat_out = stat;
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
+    /// This function is inlined on the PS4, but corresponds to `kern_stat` in FreeBSD.
+    fn stat(self: &Arc<Self>, path: impl AsRef<VPath>, td: &VThread) -> Result<Stat, StatError> {
+        self.statat(AtFlags::empty(), At::Cwd, path, td)
+    }
+
+    fn sys_fstat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let stat_out: *mut Stat = i.args[1].into();
+
+        let td = VThread::current().unwrap();
+
+        let stat = self.fstat(fd, &td)?;
+
+        unsafe {
+            *stat_out = stat;
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
+    /// See `kern_fstat` on the PS4 for a reference.
+    #[allow(unused_variables)] // Remove this when it is being implemented
+    fn fstat(self: &Arc<Self>, fd: i32, td: &VThread) -> Result<Stat, StatError> {
+        todo!()
+    }
+
+    fn sys_lstat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let path = unsafe { i.args[0].to_path() }?.unwrap();
+        let stat_out: *mut Stat = i.args[1].into();
+
+        let td = VThread::current().unwrap();
+
+        td.priv_check(Privilege::SCE683)?;
+
+        let stat = self.lstat(path, &td)?;
+
+        unsafe {
+            *stat_out = stat;
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
+    /// See `kern_lstat` in FreeBSD for a reference. (This function is inlined on the PS4)
+    fn lstat(self: &Arc<Self>, path: impl AsRef<VPath>, td: &VThread) -> Result<Stat, StatError> {
+        self.statat(AtFlags::SYMLINK_NOFOLLOW, At::Cwd, path, td)
+    }
+
+    fn sys_pread(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let ptr: *mut u8 = i.args[1].into();
+        let len: usize = i.args[2].try_into().unwrap();
+        let offset: u64 = i.args[3].try_into().unwrap();
+
+        let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
+
+        let uio = UioMut {
+            vecs: &mut [iovec],
+            bytes_left: len,
+        };
+
+        self.preadv(fd, uio, offset)
+    }
+
+    fn sys_pwrite(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let ptr: *mut u8 = i.args[1].into();
+        let len: usize = i.args[2].try_into().unwrap();
+        let offset: u64 = i.args[3].try_into().unwrap();
+
+        let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
+
+        let uio = Uio {
+            vecs: &[iovec],
+            bytes_left: len,
+        };
+
+        self.pwritev(fd, uio, offset)
+    }
+
+    fn sys_preadv(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let iovec: *mut IoVec = i.args[1].into();
+        let count: u32 = i.args[2].try_into().unwrap();
+        let offset: u64 = i.args[3].try_into().unwrap();
+
+        let uio = unsafe { UioMut::copyin(iovec, count) }?;
+
+        self.preadv(fd, uio, offset)
+    }
+
+    fn preadv(&self, fd: i32, uio: UioMut, off: u64) -> Result<SysOut, SysErr> {
+        let td = VThread::current().unwrap();
+
+        let file = td.proc().files().get_for_read(fd)?;
+
+        if !file.op_flags().intersects(VFileOpsFlags::SEEKABLE) {
+            return Err(SysErr::Raw(ESPIPE));
+        }
+
+        // TODO: check vnode type
+
+        let read = file.do_read(uio, Offset::Provided(off), Some(&td))?;
+
+        Ok(read.into())
+    }
+
+    fn sys_pwritev(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let iovec: *const IoVec = i.args[1].into();
+        let count: u32 = i.args[2].try_into().unwrap();
+        let offset: u64 = i.args[3].try_into().unwrap();
+
+        let uio = unsafe { Uio::copyin(iovec, count) }?;
+
+        self.pwritev(fd, uio, offset)
+    }
+
+    fn pwritev(&self, fd: i32, uio: Uio, off: u64) -> Result<SysOut, SysErr> {
+        let td = VThread::current().unwrap();
+
+        let file = td.proc().files().get_for_write(fd)?;
+
+        if !file.op_flags().intersects(VFileOpsFlags::SEEKABLE) {
+            return Err(SysErr::Raw(ESPIPE));
+        }
+
+        // TODO: check vnode type
+
+        let written = file.do_write(uio, Offset::Provided(off), Some(&td))?;
+
+        Ok(written.into())
+    }
+
+    fn sys_fstatat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let dirfd: i32 = i.args[0].try_into().unwrap();
+        let path = unsafe { i.args[1].to_path() }?.unwrap();
+        let stat_out: *mut Stat = i.args[2].into();
+        let flags: AtFlags = i.args[3].try_into().unwrap();
+
+        let td = VThread::current().unwrap();
+
+        td.priv_check(Privilege::SCE683)?;
+
+        let stat = self.statat(flags, At::Fd(dirfd), path, &td)?;
+
+        unsafe {
+            *stat_out = stat;
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
+    /// See `kern_statat_vnhook` on the PS4 for a reference. Not that we ignore the hook argument for now.
+    #[allow(unused_variables)] // Remove this when statat is being implemented
+    fn statat(
+        self: &Arc<Self>,
+        flags: AtFlags,
+        dirat: At,
+        path: impl AsRef<VPath>,
+        td: &VThread,
+    ) -> Result<Stat, StatError> {
+        // TODO: this will need lookup from a start dir
+        todo!()
     }
 
     fn revoke(&self, vn: Arc<Vnode>, td: &VThread) -> Result<(), RevokeError> {
@@ -544,6 +785,7 @@ impl Fs {
     }
 
     /// See `kern_mkdirat` on the PS4 for a reference.
+    #[allow(unused_variables)] // Remove this when mkdirat is being implemented.
     fn mkdirat(
         &self,
         at: At,
@@ -636,16 +878,121 @@ pub struct FsConfig {
     ) -> Result<Mount, Box<dyn Errno>>,
 }
 
+#[derive(Debug)]
+/// Represents the fd arg for
+enum Offset {
+    Current,
+    Provided(u64),
+}
+
+#[derive(Debug)]
+/// Represents the fd arg for
+enum At {
+    Cwd,
+    Fd(i32),
+}
+
+pub struct IoVec {
+    base: *const u8,
+    len: usize,
+}
+
+impl IoVec {
+    pub unsafe fn try_from_raw_parts(base: *const u8, len: usize) -> Result<Self, IoVecError> {
+        Ok(Self { base, len })
+    }
+}
+
+const UIO_MAXIOV: u32 = 1024;
+const IOSIZE_MAX: usize = 0x7fffffff;
+
+pub struct Uio<'a> {
+    vecs: &'a [IoVec], // uio_iov + uio_iovcnt
+    bytes_left: usize, // uio_resid
+}
+
+impl<'a> Uio<'a> {
+    /// See `copyinuio` on the PS4 for a reference.
+    pub unsafe fn copyin(first: *const IoVec, count: u32) -> Result<Self, CopyInUioError> {
+        if count > UIO_MAXIOV {
+            return Err(CopyInUioError::TooManyVecs);
+        }
+
+        let vecs = std::slice::from_raw_parts(first, count as usize);
+        let bytes_left = vecs.iter().map(|v| v.len).try_fold(0, |acc, len| {
+            if acc > IOSIZE_MAX - len {
+                Err(CopyInUioError::MaxLenExceeded)
+            } else {
+                Ok(acc + len)
+            }
+        })?;
+
+        Ok(Self { vecs, bytes_left })
+    }
+}
+
+pub struct UioMut<'a> {
+    vecs: &'a mut [IoVec], // uio_iov + uio_iovcnt
+    bytes_left: usize,     // uio_resid
+}
+
+impl<'a> UioMut<'a> {
+    /// See `copyinuio` on the PS4 for a reference.
+    pub unsafe fn copyin(first: *mut IoVec, count: u32) -> Result<Self, CopyInUioError> {
+        if count > UIO_MAXIOV {
+            return Err(CopyInUioError::TooManyVecs);
+        }
+
+        let vecs = std::slice::from_raw_parts_mut(first, count as usize);
+        let bytes_left = vecs.iter().map(|v| v.len).try_fold(0, |acc, len| {
+            if acc > IOSIZE_MAX - len {
+                Err(CopyInUioError::MaxLenExceeded)
+            } else {
+                Ok(acc + len)
+            }
+        })?;
+
+        Ok(Self { vecs, bytes_left })
+    }
+}
+
+bitflags! {
+    /// Flags for *at() syscalls.
+    struct AtFlags: i32 {
+        const SYMLINK_NOFOLLOW = 0x200;
+    }
+}
+
+impl TryFrom<SysArg> for AtFlags {
+    type Error = TryFromIntError;
+
+    fn try_from(value: SysArg) -> Result<Self, Self::Error> {
+        Ok(Self::from_bits_retain(value.get().try_into()?))
+    }
+}
+
+#[derive(Debug, Error, Errno)]
+pub enum IoVecError {
+    #[error("len exceed the maximum value")]
+    #[errno(EINVAL)]
+    MaxLenExceeded,
+}
+
+#[derive(Debug, Error, Errno)]
+pub enum CopyInUioError {
+    #[error("too many iovecs")]
+    #[errno(EINVAL)]
+    TooManyVecs,
+
+    #[error("the sum of iovec lengths is too large")]
+    #[errno(EINVAL)]
+    MaxLenExceeded,
+}
+
 bitflags! {
     pub struct RevokeFlags: i32 {
         const REVOKE_ALL = 0x0001;
     }
-}
-
-#[derive(Debug)]
-pub enum At {
-    Cwd,
-    Fd(i32),
 }
 
 struct PollFd {
@@ -667,7 +1014,7 @@ pub enum FsError {
     LookupDevFailed(#[source] LookupError),
 }
 
-/// Represents an error when FS mounting is failed.
+/// Represents an error when FS mounting fails.
 #[derive(Debug, Error)]
 pub enum MountError {
     #[error("fstype is too long")]
@@ -701,7 +1048,7 @@ impl Errno for MountError {
     }
 }
 
-/// Represents an error when [`Fs::open()`] was failed.
+/// Represents an error when [`Fs::open()`] fails.
 #[derive(Debug, Error)]
 pub enum OpenError {
     #[error("cannot lookup the file")]
@@ -716,7 +1063,38 @@ impl Errno for OpenError {
     }
 }
 
-/// Represents an error when [`Fs::lookup()`] was failed.
+#[derive(Debug, Error)]
+pub enum WriteError {}
+
+impl Errno for WriteError {
+    fn errno(&self) -> NonZeroI32 {
+        todo!()
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum IoctlError {
+    #[error("Couldn't get file")]
+    FailedToGetFile(#[from] GetFileError),
+
+    #[error("Bad file flags {0:?}")]
+    BadFileFlags(VFileFlags),
+
+    #[error(transparent)]
+    FileIoctlFailed(Box<dyn Errno>),
+}
+
+impl Errno for IoctlError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::FailedToGetFile(e) => e.errno(),
+            Self::BadFileFlags(_) => EBADF,
+            Self::FileIoctlFailed(e) => e.errno(),
+        }
+    }
+}
+
+/// Represents an error when [`Fs::lookup()`] fails.
 #[derive(Debug, Error)]
 pub enum LookupError {
     #[error("no such file or directory")]
@@ -753,6 +1131,24 @@ impl Errno for RevokeError {
             Self::GetAttrError(e) => e.errno(),
             Self::PrivelegeError(e) => e.errno(),
             Self::RevokeFailed(e) => e.errno(),
+        }
+    }
+}
+/// Represents an error when one of the stat syscalls fails
+#[derive(Debug, Error)]
+pub enum StatError {
+    #[error("failed to get file")]
+    FailedToGetFile(#[from] GetFileError),
+
+    #[error("failed to get file attr")]
+    GetAttrError(#[from] Box<dyn Errno>),
+}
+
+impl Errno for StatError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::FailedToGetFile(e) => e.errno(),
+            Self::GetAttrError(e) => e.errno(),
         }
     }
 }

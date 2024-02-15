@@ -166,15 +166,14 @@ enum MountSource {
     Bind(VPathBuf),
 }
 
-/// Represents an error when [`mount()`] was failed.
+/// Represents an error when [`mount()`] fails.
 #[derive(Debug, Error, Errno)]
 enum MountError {
     #[error("cannot create {0}")]
     #[errno(EIO)]
     CreateDirectoryFailed(PathBuf, #[source] std::io::Error),
 }
-
-/// Represents an error when [`get_vnode()`] was failed.
+/// Represents an error when [`get_vnode()`] fails.
 #[derive(Debug, Error)]
 enum GetVnodeError {
     #[error("cannot open the specified file")]

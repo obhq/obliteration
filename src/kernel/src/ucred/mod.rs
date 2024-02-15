@@ -66,7 +66,10 @@ impl Ucred {
 
     /// See `sceSblACMgrIsDiskplayeruiProcess` on the PS4 for a reference.
     pub fn is_diskplayerui_process(&self) -> bool {
-        self.auth.paid.get() == 0x380000001000000f || self.auth.paid.get() == 0x3800000010000013
+        matches!(
+            self.auth.paid.get(),
+            0x380000001000000f | 0x3800000010000013
+        )
     }
 
     /// See `sceSblACMgrIsNongameUcred` on the PS4 for a reference.
