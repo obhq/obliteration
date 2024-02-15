@@ -1,7 +1,6 @@
 use crate::errno::{Errno, EBADF, EBUSY, EINVAL, ENAMETOOLONG, ENODEV, ENOENT, ESPIPE};
 use crate::info;
 use crate::process::{GetFileError, VThread};
-use crate::process::{GetFileError, VThread};
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::PrivilegeError;
 use crate::ucred::{Privilege, Ucred};
@@ -484,7 +483,7 @@ impl Fs {
         // Execute the operation.
         info!("Executing ioctl({com}) on file descriptor {fd}.");
 
-        self.ioctl(fd, com, data, td.deref())?;
+        self.ioctl(fd, com, data, &td)?;
 
         Ok(SysOut::ZERO)
     }
@@ -512,7 +511,7 @@ impl Fs {
         }
 
         // Execute the operation.
-        info!("Executing ioctl({com}) on file descriptor {fd}.");
+        info!("Executing ioctl({cmd}) on file descriptor {fd}.");
 
         match cmd {
             FIOCLEX => todo!("ioctl with cmd = FIOCLEX"),
@@ -547,7 +546,6 @@ impl Fs {
 
         // TODO: It seems like the initial ucred of the process is either root or has PRIV_VFS_ADMIN
         // privilege.
-        self.revoke(vn, &td)?;
         self.revoke(vn, &td)?;
 
         Ok(SysOut::ZERO)
@@ -660,7 +658,7 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
-        let offset: i64 = i.args[3].try_into().unwrap();
+        let offset: u64 = i.args[3].try_into().unwrap();
 
         let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
@@ -676,7 +674,7 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
-        let offset: i64 = i.args[3].try_into().unwrap();
+        let offset: u64 = i.args[3].try_into().unwrap();
 
         let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
@@ -692,14 +690,14 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *mut IoVec = i.args[1].into();
         let count: u32 = i.args[2].try_into().unwrap();
-        let offset: i64 = i.args[3].try_into().unwrap();
+        let offset: u64 = i.args[3].try_into().unwrap();
 
         let uio = unsafe { UioMut::copyin(iovec, count) }?;
 
         self.preadv(fd, uio, offset)
     }
 
-    fn preadv(&self, fd: i32, uio: UioMut, off: i64) -> Result<SysOut, SysErr> {
+    fn preadv(&self, fd: i32, uio: UioMut, off: u64) -> Result<SysOut, SysErr> {
         let td = VThread::current().unwrap();
 
         let file = td.proc().files().get_for_read(fd)?;
@@ -719,14 +717,14 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *const IoVec = i.args[1].into();
         let count: u32 = i.args[2].try_into().unwrap();
-        let offset: i64 = i.args[3].try_into().unwrap();
+        let offset: u64 = i.args[3].try_into().unwrap();
 
         let uio = unsafe { Uio::copyin(iovec, count) }?;
 
         self.pwritev(fd, uio, offset)
     }
 
-    fn pwritev(&self, fd: i32, uio: Uio, off: i64) -> Result<SysOut, SysErr> {
+    fn pwritev(&self, fd: i32, uio: Uio, off: u64) -> Result<SysOut, SysErr> {
         let td = VThread::current().unwrap();
 
         let file = td.proc().files().get_for_write(fd)?;
@@ -906,71 +904,11 @@ pub struct FsConfig {
     ) -> Result<Mount, Box<dyn Errno>>,
 }
 
-pub struct IoVec {
-    base: *const u8,
-    len: usize,
-}
-
-impl IoVec {
-    pub unsafe fn try_from_raw_parts(base: *const u8, len: usize) -> Result<Self, IoVecError> {
-        Ok(Self { base, len })
-    }
-}
-
-const UIO_MAXIOV: u32 = 1024;
-const IOSIZE_MAX: usize = 0x7fffffff;
-
-pub struct Uio<'a> {
-    vecs: &'a [IoVec], // uio_iov + uio_iovcnt
-    bytes_left: usize, // uio_resid
-}
-
-impl<'a> Uio<'a> {
-    const UIO_MAXIOV: u32 = 1024;
-    const IOSIZE_MAX: usize = 0x7fffffff;
-
-    /// See `copyinuio` on the PS4 for a reference.
-    pub unsafe fn copyin(first: *const IoVec, count: u32) -> Result<Self, CopyInUioError> {
-        if count > UIO_MAXIOV {
-            return Err(CopyInUioError::TooManyVecs);
-        }
-
-        let vecs = std::slice::from_raw_parts(first, count as usize);
-        let bytes_left = vecs.iter().map(|v| v.len).try_fold(0, |acc, len| {
-            if acc > IOSIZE_MAX - len {
-                Err(CopyInUioError::MaxLenExceeded)
-            } else {
-                Ok(acc + len)
-            }
-        })?;
-
-        Ok(Self { vecs, bytes_left })
-    }
-}
-
-pub struct UioMut<'a> {
-    vecs: &'a mut [IoVec], // uio_iov + uio_iovcnt
-    bytes_left: usize,     // uio_resid
-}
-
-impl<'a> UioMut<'a> {
-    /// See `copyinuio` on the PS4 for a reference.
-    pub unsafe fn copyin(first: *mut IoVec, count: u32) -> Result<Self, CopyInUioError> {
-        if count > UIO_MAXIOV {
-            return Err(CopyInUioError::TooManyVecs);
-        }
-
-        let vecs = std::slice::from_raw_parts_mut(first, count as usize);
-        let bytes_left = vecs.iter().map(|v| v.len).try_fold(0, |acc, len| {
-            if acc > IOSIZE_MAX - len {
-                Err(CopyInUioError::MaxLenExceeded)
-            } else {
-                Ok(acc + len)
-            }
-        })?;
-
-        Ok(Self { vecs, bytes_left })
-    }
+#[derive(Debug)]
+/// Represents the fd arg for
+enum Offset {
+    Current,
+    Provided(u64),
 }
 
 #[derive(Debug)]
@@ -1045,13 +983,6 @@ impl<'a> UioMut<'a> {
 
         Ok(Self { vecs, bytes_left })
     }
-}
-
-#[derive(Debug)]
-/// Represents the fd arg for
-enum At {
-    Cwd,
-    Fd(i32),
 }
 
 bitflags! {
