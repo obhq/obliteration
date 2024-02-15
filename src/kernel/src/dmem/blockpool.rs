@@ -1,5 +1,5 @@
 use crate::errno::{Errno, ENOTTY};
-use crate::fs::{FileBackend, IoCmd, VFile};
+use crate::fs::{FileBackend, IoCmd, Stat, VFile};
 use crate::process::VThread;
 use macros::Errno;
 use std::sync::Arc;
@@ -22,6 +22,15 @@ impl FileBackend for BlockPool {
             BLOCKPOOL_CMD2 => todo!("blockpool ioctl cmd 2"),
             _ => Err(IoctlError::InvalidCommand(cmd).into()),
         }
+    }
+
+    fn stat(self: &Arc<Self>, _: &VFile, _: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
+        let mut stat = Stat::zeroed();
+
+        stat.block_size = 0x10000;
+        stat.mode = 0o130000;
+
+        todo!()
     }
 }
 

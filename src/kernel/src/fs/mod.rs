@@ -1,13 +1,3 @@
-pub use self::dev::{make_dev, Cdev, CdevSw, DriverFlags, MakeDev, MakeDevError};
-pub use self::dirent::*;
-pub use self::file::*;
-pub use self::ioctl::*;
-pub use self::mount::*;
-pub use self::path::*;
-pub use self::perm::*;
-pub use self::stat::*;
-pub use self::vnode::*;
-
 use crate::errno::{Errno, EBADF, EBUSY, EINVAL, ENAMETOOLONG, ENODEV, ENOENT, ESPIPE};
 use crate::info;
 use crate::process::{GetFileError, VThread};
@@ -24,6 +14,16 @@ use std::num::{NonZeroI32, TryFromIntError};
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use thiserror::Error;
+
+pub use self::dev::{make_dev, Cdev, CdevSw, DriverFlags, MakeDev, MakeDevError};
+pub use self::dirent::*;
+pub use self::file::*;
+pub use self::ioctl::*;
+pub use self::mount::*;
+pub use self::path::*;
+pub use self::perm::*;
+pub use self::stat::*;
+pub use self::vnode::*;
 
 mod dev;
 mod dirent;
@@ -693,7 +693,7 @@ impl Fs {
 
         let file = td.proc().files().get_for_read(fd)?;
 
-        if !file.ops().flags().intersects(VFileOpsFlags::SEEKABLE) {
+        if !file.op_flags().intersects(VFileOpsFlags::SEEKABLE) {
             return Err(SysErr::Raw(ESPIPE));
         }
 
@@ -720,7 +720,7 @@ impl Fs {
 
         let file = td.proc().files().get_for_write(fd)?;
 
-        if !file.ops().flags().intersects(VFileOpsFlags::SEEKABLE) {
+        if !file.op_flags().intersects(VFileOpsFlags::SEEKABLE) {
             return Err(SysErr::Raw(ESPIPE));
         }
 

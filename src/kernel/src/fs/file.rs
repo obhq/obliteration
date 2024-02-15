@@ -34,11 +34,60 @@ impl VFile {
         &mut self.flags
     }
 
-    pub fn read(&self, data: &mut [u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+    /// See `dofileread` on the PS4 for a reference.
+    pub fn do_read(
+        &self,
+        mut uio: UioMut,
+        off: Offset,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        if uio.bytes_left == 0 {
+            return Ok(0);
+        }
+
+        // TODO: consider implementing ktrace.
+
+        let res = self.read(&mut uio, td);
+
+        if let Err(ref e) = res {
+            todo!()
+        }
+
+        res
+    }
+
+    /// See `dofilewrite` on the PS4 for a reference.
+    pub fn do_write(
+        &self,
+        mut uio: Uio,
+        off: Offset,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        // TODO: consider implementing ktrace.
+        // TODO: implement bwillwrite.
+
+        let res = self.write(&mut uio, td);
+
+        if let Err(ref e) = res {
+            todo!()
+        }
+
+        res
+    }
+
+    fn read(&self, buf: &mut UioMut, td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
         match self.backend {
-            VFileType::Vnode(ref vn) => vn.read(self, data, td),
-            VFileType::KernelQueue(ref kq) => kq.read(self, data, td),
-            VFileType::Blockpool(ref bp) => bp.read(self, data, td),
+            VFileType::Vnode(ref vn) => vn.read(self, buf, td),
+            VFileType::KernelQueue(ref kq) => kq.read(self, buf, td),
+            VFileType::Blockpool(ref bp) => bp.read(self, buf, td),
+        }
+    }
+
+    fn write(&self, buf: &mut Uio, td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+        match self.backend {
+            VFileType::Vnode(ref vn) => vn.write(self, buf, td),
+            VFileType::KernelQueue(ref kq) => kq.write(self, buf, td),
+            VFileType::Blockpool(ref bp) => bp.write(self, buf, td),
         }
     }
 
@@ -56,7 +105,19 @@ impl VFile {
     }
 
     pub fn stat(&self, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
-        (self.ops.stat)(self, td)
+        match self.backend {
+            VFileType::Vnode(ref vn) => vn.stat(self, td),
+            VFileType::KernelQueue(ref kq) => kq.stat(self, td),
+            VFileType::Blockpool(ref bp) => bp.stat(self, td),
+        }
+    }
+
+    pub fn op_flags(&self) -> VFileOpsFlags {
+        match self.backend {
+            VFileType::Vnode(ref vn) => vn.flags(),
+            VFileType::KernelQueue(ref kq) => kq.flags(),
+            VFileType::Blockpool(ref bp) => bp.flags(),
+        }
     }
 }
 
@@ -91,18 +152,6 @@ pub enum VFileType {
     Blockpool(Arc<BlockPool>),     // DTYPE_BPOOL = 17,
 }
 
-/// An implementation of `fileops` structure.
-#[derive(Debug)]
-pub struct VFileOps {
-    pub read: VFileRead,
-    pub write: VFileWrite,
-    pub ioctl: VFileIoctl,
-}
-
-type VFileRead = fn(&VFile, &mut [u8], Option<&VThread>) -> Result<usize, Box<dyn Errno>>;
-type VFileWrite = fn(&VFile, &[u8], Option<&VThread>) -> Result<usize, Box<dyn Errno>>;
-type VFileIoctl = fn(&VFile, IoCmd, &mut [u8], Option<&VThread>) -> Result<(), Box<dyn Errno>>;
-
 bitflags! {
     /// Flags for [`VFile`].
     #[derive(Debug, Clone, Copy)]
@@ -112,13 +161,21 @@ bitflags! {
     }
 }
 
+bitflags! {
+    #[derive(Debug, Clone, Copy)]
+    pub struct VFileOpsFlags: u32 {
+        const PASSABLE = 0x00000001; // FREAD
+        const SEEKABLE = 0x00000002; // FWRITE
+    }
+}
+
 /// An implementation of `fileops` structure.
 pub trait FileBackend: Debug + Send + Sync + 'static {
     #[allow(unused_variables)]
     fn read(
         self: &Arc<Self>,
         file: &VFile,
-        buf: &mut [u8],
+        buf: &mut UioMut,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         Err(Box::new(DefaultError::ReadNotSupported))
@@ -128,7 +185,7 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
     fn write(
         self: &Arc<Self>,
         file: &VFile,
-        buf: &[u8],
+        buf: &mut Uio,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         Err(Box::new(DefaultError::WriteNotSupported))
@@ -143,6 +200,13 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultError::IoctlNotSupported))
+    }
+
+    #[allow(unused_variables)]
+    fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>>;
+
+    fn flags(&self) -> VFileOpsFlags {
+        VFileOpsFlags::empty()
     }
 }
 
