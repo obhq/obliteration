@@ -34,6 +34,10 @@ impl VFile {
         &mut self.flags
     }
 
+    pub fn vnode(&self) -> Option<Arc<Vnode>> {
+        todo!()
+    }
+
     /// See `dofileread` on the PS4 for a reference.
     pub fn do_read(
         &self,
@@ -113,11 +117,11 @@ impl VFile {
         }
     }
 
-    pub fn op_flags(&self) -> VFileOpsFlags {
+    pub fn is_seekable(&self) -> bool {
         match self.backend {
-            VFileType::Vnode(ref vn) => vn.flags(),
-            VFileType::KernelQueue(ref kq) => kq.flags(),
-            VFileType::Blockpool(ref bp) => bp.flags(),
+            VFileType::Vnode(_) => true,
+            VFileType::KernelQueue(_) => false,
+            VFileType::Blockpool(_) => false,
         }
     }
 }
@@ -146,7 +150,6 @@ impl Write for VFile {
 
 /// Type of [`VFile`].
 #[derive(Debug)]
-#[rustfmt::skip]
 pub enum VFileType {
     Vnode(Arc<Vnode>),             // DTYPE_VNODE = 1
     KernelQueue(Arc<KernelQueue>), // DTYPE_KQUEUE = 5,
@@ -205,10 +208,6 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
 
     #[allow(unused_variables)]
     fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>>;
-
-    fn flags(&self) -> VFileOpsFlags {
-        VFileOpsFlags::empty()
-    }
 }
 
 #[derive(Debug, Error, Errno)]

@@ -672,7 +672,7 @@ impl Fs {
 
         let file = td.proc().files().get_for_read(fd)?;
 
-        if !file.op_flags().intersects(VFileOpsFlags::SEEKABLE) {
+        if !file.is_seekable() {
             return Err(SysErr::Raw(ESPIPE));
         }
 
@@ -699,7 +699,7 @@ impl Fs {
 
         let file = td.proc().files().get_for_write(fd)?;
 
-        if !file.op_flags().intersects(VFileOpsFlags::SEEKABLE) {
+        if !file.is_seekable() {
             return Err(SysErr::Raw(ESPIPE));
         }
 
@@ -775,7 +775,7 @@ impl Fs {
 
     fn sys_lseek(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
-        let mut offset: i64 = i.args[1].try_into().unwrap();
+        let offset: i64 = i.args[1].try_into().unwrap();
         let whence: Whence = {
             let whence: i32 = i.args[2].try_into().unwrap();
 
@@ -786,15 +786,23 @@ impl Fs {
 
         let file = td.proc().files().get(fd)?;
 
-        match whence {
-            Whence::Set => {}
-            Whence::Cur => todo!("lseek with whence = SEEK_CUR"),
-            Whence::End => todo!("lseek with whence = SEEK_END"),
-            Whence::Data => todo!("lseek with whence = SEEK_DATA"),
-            Whence::Hole => todo!("lseek with whence = SEEK_HOLE"),
+        if !file.is_seekable() {
+            return Err(SysErr::Raw(ESPIPE));
         }
 
-        Ok(offset.into())
+        let vnode = file.vnode().expect("File is not backed by a vnode");
+
+        // check vnode type
+
+        let offset = match whence {
+            Whence::Set => offset,
+            Whence::Cur => todo!("lseek with whence = SEEK_CUR"),
+            Whence::End => todo!(),
+            Whence::Data => todo!("lseek with whence = SEEK_DATA"),
+            Whence::Hole => todo!("lseek with whence = SEEK_HOLE"),
+        };
+
+        todo!()
     }
 
     fn sys_mkdirat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
