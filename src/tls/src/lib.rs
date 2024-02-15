@@ -113,14 +113,14 @@ impl<T> Tls<T> {
         let err = libc::pthread_key_delete(storage);
 
         if err != 0 {
-            panic!("pthread_key_delete was failed: {err}");
+            panic!("pthread_key_delete failed: {err}");
         }
     }
 
     #[cfg(windows)]
     unsafe fn free_storage(storage: Storage) {
         if windows_sys::Win32::System::Threading::FlsFree(storage) == 0 {
-            panic!("FlsFree was failed: {}", Error::last_os_error());
+            panic!("FlsFree failed: {}", Error::last_os_error());
         }
     }
 
@@ -139,14 +139,14 @@ impl<T> Tls<T> {
         let err = libc::pthread_setspecific(storage, value as _);
 
         if err != 0 {
-            panic!("pthread_setspecific was failed: {err}");
+            panic!("pthread_setspecific failed: {err}");
         }
     }
 
     #[cfg(windows)]
     unsafe fn set_raw(storage: Storage, value: *mut T) {
         if windows_sys::Win32::System::Threading::FlsSetValue(storage, value as _) == 0 {
-            panic!("FlsSetValue was failed: {}", Error::last_os_error());
+            panic!("FlsSetValue failed: {}", Error::last_os_error());
         }
     }
 }

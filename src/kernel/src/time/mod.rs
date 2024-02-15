@@ -40,6 +40,20 @@ impl TimeManager {
     }
 }
 
+/// An implementation of the `timespec` structure.
+#[derive(Debug, Clone, Copy)]
+#[repr(C)]
+pub struct TimeSpec {
+    sec: i64,
+    nsec: i64,
+}
+
+impl TimeSpec {
+    pub fn now() -> Self {
+        todo!()
+    }
+}
+
 #[repr(C)]
 struct TimeVal {
     sec: i64,  // tv_sec

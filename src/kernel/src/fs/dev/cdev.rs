@@ -2,11 +2,11 @@ use super::dirent::Dirent;
 use crate::errno::Errno;
 use crate::fs::{Mode, OpenFlags, VFile};
 use crate::process::VThread;
+use crate::time::TimeSpec;
 use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use std::sync::{Arc, Weak};
-use std::time::SystemTime;
 
 /// An implementation of `cdev` and `cdev_priv` structures.
 #[derive(Debug)]
@@ -17,9 +17,9 @@ pub struct Cdev {
     uid: Uid,                                  // si_uid
     gid: Gid,                                  // si_gid
     mode: Mode,                                // si_mode
-    ctime: SystemTime,                         // si_ctime
-    atime: SystemTime,                         // si_atime
-    mtime: SystemTime,                         // si_mtime
+    ctime: TimeSpec,                           // si_ctime
+    atime: TimeSpec,                           // si_atime
+    mtime: TimeSpec,                           // si_mtime
     cred: Option<Arc<Ucred>>,                  // si_cred
     max_io: usize,                             // si_iosize_max
     flags: DeviceFlags,                        // si_flags
@@ -41,7 +41,7 @@ impl Cdev {
         inode: i32,
     ) -> Self {
         let gg = GutexGroup::new();
-        let now = SystemTime::now();
+        let now = TimeSpec::now();
 
         Self {
             sw: sw.clone(),
