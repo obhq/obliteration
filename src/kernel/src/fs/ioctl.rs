@@ -22,15 +22,18 @@ macro_rules! commands {
             #[non_exhaustive]
             #[repr(u32)]
             $vis enum $enum_name<'a> {
-                $( $( #[$attr] )* $variant $( (&'a $(mut $($hack)? )? $type) )? = {
-                    assert!( !$enum_name::is_invalid($value) );
+                $(
+                    $( #[$attr] )*
+                    $variant $( (&'a $(mut $($hack)? )? $type) )? = {
+                        assert!( !$enum_name::is_invalid($value) );
 
-                    $(
-                        assert!(std::mem::size_of::<$type>() == IoCmd::iocparm_len($value));
-                    )?
+                        $(
+                            assert!(std::mem::size_of::<$type>() == IoCmd::iocparm_len($value));
+                        )?
 
-                    $value
-                },)*
+                        $value
+                    },
+                )*
             }
 
             impl<'a> $enum_name<'a> {
