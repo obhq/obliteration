@@ -203,7 +203,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         // Get file.
         let td = VThread::current();
-        let file = match self.fs.open(path, td.as_ref().map(|v| v.deref().as_ref())) {
+        let file = match self.fs.open(path, td.as_deref().map(|v| v.deref())) {
             Ok(v) => v,
             Err(e) => return Err(LoadError::OpenFileFailed(e)),
         };
@@ -223,7 +223,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         // Search for TLS free slot.
         let names = vec![name];
         let tls = elf.tls().map(|i| &elf.programs()[i]);
-        let tls = if tls.map(|p| p.memory_size()).unwrap_or(0) == 0 {
+        let tls = if tls.map_or(0, |p| p.memory_size()) == 0 {
             0
         } else {
             let mut alloc = self.tls.write();

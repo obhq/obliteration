@@ -1,5 +1,5 @@
 use crate::{
-    fs::{FileBackend, VFileFlags, VFileType},
+    fs::{FileBackend, Stat, VFile, VFileFlags, VFileType},
     process::{FileDesc, VThread},
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
 };
@@ -34,7 +34,7 @@ impl KernelQueueManager {
 
                 Ok(VFileType::KernelQueue(kq))
             },
-            VFileFlags::FREAD | VFileFlags::FWRITE,
+            VFileFlags::READ | VFileFlags::WRITE,
         )?;
 
         Ok(fd.into())
@@ -54,4 +54,16 @@ impl KernelQueue {
     }
 }
 
-impl FileBackend for KernelQueue {}
+impl FileBackend for KernelQueue {
+    fn stat(
+        self: &Arc<Self>,
+        _: &VFile,
+        _: Option<&VThread>,
+    ) -> Result<Stat, Box<dyn crate::errno::Errno>> {
+        let mut stat = Stat::zeroed();
+
+        stat.mode = 0o10000;
+
+        Ok(stat)
+    }
+}

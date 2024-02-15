@@ -115,7 +115,7 @@ impl Filesystem for TempFs {
     }
 }
 
-/// Represents an error when [`mount()`] was failed.
+/// Represents an error when [`mount()`] fails.
 #[derive(Debug, Error)]
 enum MountError {
     #[error("update is not supported")]

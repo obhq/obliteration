@@ -127,7 +127,7 @@ impl MemoryManager {
             todo!("mmap with len = 0");
         }
 
-        if flags.intersects(MappingFlags::MAP_NOEXTEND | MappingFlags::MAP_ANON) {
+        if flags.intersects(MappingFlags::MAP_VOID | MappingFlags::MAP_ANON) {
             if offset != 0 {
                 return Err(MmapError::NonZeroOffset);
             } else if fd != -1 {
@@ -162,12 +162,12 @@ impl MemoryManager {
             todo!("mmap with addr = 0x880000000");
         }
 
-        if flags.contains(MappingFlags::MAP_NOEXTEND) {
-            flags = flags | MappingFlags::MAP_ANON;
-            td.as_ref().and_then(|t| {
-                t.set_fpop(None);
-                Some(t)
-            });
+        if flags.contains(MappingFlags::MAP_VOID) {
+            flags |= MappingFlags::MAP_ANON;
+
+            if let Some(ref td) = td {
+                td.set_fpop(None);
+            }
         } else if !flags.contains(MappingFlags::MAP_ANON) {
             todo!("mmap with flags & 0x1000 = 0");
         }
@@ -611,7 +611,7 @@ impl MemoryManager {
         let addr = (addr & 0xffffffffffffc000) as *mut u8;
 
         if let Err(e) = self.mname(addr, len, name) {
-            warn!(e, "mname({addr:p}, {len:#x}, {name}) was failed");
+            warn!(e, "mname({addr:p}, {len:#x}, {name}) failed");
         }
 
         Ok(SysOut::ZERO)
@@ -754,7 +754,7 @@ bitflags! {
     pub struct MappingFlags: u32 {
         const MAP_PRIVATE = 0x00000002;
         const MAP_FIXED = 0x00000010;
-        const MAP_NOEXTEND = 0x00000100;
+        const MAP_VOID = 0x00000100;
         const MAP_STACK = 0x00000400;
         const MAP_ANON = 0x00001000;
         const MAP_GUARD = 0x00002000;
