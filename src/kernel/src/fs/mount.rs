@@ -159,7 +159,9 @@ impl MountOpts {
         self.0.insert(k, v.into());
     }
 
-    pub fn remove<T>(&mut self, name: &'static str) -> Option<Result<T, MountOptError>>
+    /// Returns `None` if the mount option is not present, Some(Err) if it is present but of a
+    /// different type, and Some(Ok) if it is present and of the correct type.
+    pub fn try_remove<T>(&mut self, name: &'static str) -> Option<Result<T, MountOptError>>
     where
         T: TryFrom<MountOpt, Error = MountOpt>,
     {
@@ -170,6 +172,22 @@ impl MountOpts {
             .map_err(|opt| MountOptError::new::<T>(name, opt));
 
         Some(res)
+    }
+
+    /// # Panics
+    /// Panics if the mount option is present, but of a different type.
+    pub fn remove<T>(&mut self, name: &'static str) -> Option<T>
+    where
+        T: TryFrom<MountOpt, Error = MountOpt>,
+    {
+        self.try_remove(name).map(Result::unwrap)
+    }
+
+    pub fn remove_or<T>(&mut self, name: &'static str, fallback: T) -> T
+    where
+        T: TryFrom<MountOpt, Error = MountOpt>,
+    {
+        self.remove(name).unwrap_or(fallback)
     }
 
     pub fn retain(&mut self, mut f: impl FnMut(&str, &mut MountOpt) -> bool) {

@@ -255,8 +255,8 @@ impl Fs {
         td: Option<&VThread>,
     ) -> Result<Arc<Vnode>, MountError> {
         // Process the options.
-        let fs: Box<str> = opts.remove("fstype").unwrap().unwrap();
-        let path: VPathBuf = opts.remove("fspath").unwrap().unwrap();
+        let fs: Box<str> = opts.remove("fstype").unwrap();
+        let path: VPathBuf = opts.remove("fspath").unwrap();
 
         opts.retain(|k, v| {
             match k {
