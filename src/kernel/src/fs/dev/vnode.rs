@@ -102,7 +102,6 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         self: Arc<Self>,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] cmd: IoCmd,
-        #[allow(unused_variables)] data: &mut [u8],
         #[allow(unused_variables)] td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         todo!()

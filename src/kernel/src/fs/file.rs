@@ -96,16 +96,11 @@ impl VFile {
     }
 
     /// See `fo_ioctl` on the PS4 for a reference.
-    pub fn ioctl(
-        &self,
-        cmd: IoCmd,
-        data: &mut [u8],
-        td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    pub fn ioctl(&self, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
         match self.backend {
-            VFileType::Vnode(ref vn) => vn.ioctl(self, cmd, data, td),
-            VFileType::KernelQueue(ref kq) => kq.ioctl(self, cmd, data, td),
-            VFileType::Blockpool(ref bp) => bp.ioctl(self, cmd, data, td),
+            VFileType::Vnode(ref vn) => vn.ioctl(self, cmd, td),
+            VFileType::KernelQueue(ref kq) => kq.ioctl(self, cmd, td),
+            VFileType::Blockpool(ref bp) => bp.ioctl(self, cmd, td),
         }
     }
 
@@ -165,14 +160,6 @@ bitflags! {
     }
 }
 
-bitflags! {
-    #[derive(Debug, Clone, Copy)]
-    pub struct VFileOpsFlags: u32 {
-        const PASSABLE = 0x00000001; // DFLAG_PASSABLE
-        const SEEKABLE = 0x00000002; // DFLAG_SEEKABLE
-    }
-}
-
 /// An implementation of `fileops` structure.
 pub trait FileBackend: Debug + Send + Sync + 'static {
     #[allow(unused_variables)]
@@ -200,7 +187,6 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         self: &Arc<Self>,
         file: &VFile,
         cmd: IoCmd,
-        data: &mut [u8],
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultError::IoctlNotSupported))
