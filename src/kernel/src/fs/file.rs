@@ -80,7 +80,7 @@ impl VFile {
     }
 
     fn read(&self, buf: &mut UioMut, td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
-        match self.backend {
+        match self.ty {
             VFileType::Vnode(ref vn) => vn.read(self, buf, td),
             VFileType::KernelQueue(ref kq) => kq.read(self, buf, td),
             VFileType::Blockpool(ref bp) => bp.read(self, buf, td),
@@ -88,7 +88,7 @@ impl VFile {
     }
 
     fn write(&self, buf: &mut Uio, td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
-        match self.backend {
+        match self.ty {
             VFileType::Vnode(ref vn) => vn.write(self, buf, td),
             VFileType::KernelQueue(ref kq) => kq.write(self, buf, td),
             VFileType::Blockpool(ref bp) => bp.write(self, buf, td),
@@ -110,18 +110,18 @@ impl VFile {
     }
 
     pub fn stat(&self, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
-        match self.backend {
+        match self.ty {
             VFileType::Vnode(ref vn) => vn.stat(self, td),
             VFileType::KernelQueue(ref kq) => kq.stat(self, td),
             VFileType::Blockpool(ref bp) => bp.stat(self, td),
         }
     }
 
-    pub fn op_flags(&self) -> VFileOpsFlags {
-        match self.backend {
-            VFileType::Vnode(ref vn) => vn.flags(),
-            VFileType::KernelQueue(ref kq) => kq.flags(),
-            VFileType::Blockpool(ref bp) => bp.flags(),
+    pub fn is_seekable(&self) -> bool {
+        match self.ty {
+            VFileType::Vnode(_) => true,
+            VFileType::KernelQueue(_) => false,
+            VFileType::Blockpool(_) => false,
         }
     }
 }
@@ -166,14 +166,6 @@ bitflags! {
     }
 }
 
-bitflags! {
-    #[derive(Debug, Clone, Copy)]
-    pub struct VFileOpsFlags: u32 {
-        const PASSABLE = 0x00000001; // DFLAG_PASSABLE
-        const SEEKABLE = 0x00000002; // DFLAG_SEEKABLE
-    }
-}
-
 /// An implementation of `fileops` structure.
 pub trait FileBackend: Debug + Send + Sync + 'static {
     #[allow(unused_variables)]
@@ -209,10 +201,6 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
 
     #[allow(unused_variables)]
     fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>>;
-
-    fn flags(&self) -> VFileOpsFlags {
-        VFileOpsFlags::empty()
-    }
 }
 
 #[derive(Debug, Error, Errno)]

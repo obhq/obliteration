@@ -1,6 +1,6 @@
 use super::{
     unixify_access, Access, FileBackend, IoCmd, Mode, Mount, OpenFlags, RevokeFlags, Stat, Uio,
-    UioMut, VFile, VFileOpsFlags,
+    UioMut, VFile,
 };
 use crate::errno::{Errno, EINVAL, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
@@ -156,12 +156,9 @@ impl FileBackend for Vnode {
         todo!()
     }
 
+    #[allow(unused_variables)] // TODO: remove when implementing
     fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
         todo!()
-    }
-
-    fn flags(&self) -> VFileOpsFlags {
-        VFileOpsFlags::SEEKABLE | VFileOpsFlags::PASSABLE
     }
 }
 
