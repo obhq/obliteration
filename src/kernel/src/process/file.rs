@@ -1,7 +1,9 @@
 use crate::errno::{Errno, EBADF};
-use crate::fs::{VFile, VFileFlags, Vnode};
-use crate::syscalls::SysErr;
+use crate::fs::{VFile, VFileFlags, VFileType, Vnode};
+use crate::kqueue::KernelQueue;
 use gmtx::{Gutex, GutexGroup};
+use macros::Errno;
+use std::collections::VecDeque;
 use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
@@ -9,20 +11,22 @@ use thiserror::Error;
 /// An implementation of `filedesc` structure.
 #[derive(Debug)]
 pub struct FileDesc {
-    files: Gutex<Vec<Option<Arc<VFile>>>>, // fd_ofiles
-    cwd: Gutex<Arc<Vnode>>,                // fd_cdir
-    root: Gutex<Arc<Vnode>>,               // fd_rdir
+    files: Gutex<Vec<Option<Arc<VFile>>>>,          // fd_ofiles
+    cwd: Gutex<Arc<Vnode>>,                         // fd_cdir
+    root: Gutex<Arc<Vnode>>,                        // fd_rdir
+    kqueue_list: Gutex<VecDeque<Arc<KernelQueue>>>, // fd_kqlist
 }
 
 impl FileDesc {
-    pub(super) fn new(root: Arc<Vnode>) -> Self {
+    pub(super) fn new(root: Arc<Vnode>) -> Arc<Self> {
         let gg = GutexGroup::new();
 
-        Self {
+        Arc::new(Self {
             files: gg.spawn(vec![None, None, None]),
             cwd: gg.spawn(root.clone()),
             root: gg.spawn(root),
-        }
+            kqueue_list: gg.spawn(VecDeque::new()),
+        })
     }
 
     pub fn cwd(&self) -> Arc<Vnode> {
@@ -31,6 +35,19 @@ impl FileDesc {
 
     pub fn root(&self) -> Arc<Vnode> {
         self.root.read().clone()
+    }
+
+    pub fn insert_kqueue(&self, kq: Arc<KernelQueue>) {
+        self.kqueue_list.write().push_front(kq);
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing; add budget argument
+    pub fn alloc_with_budget<E: Errno>(
+        &self,
+        constructor: impl FnOnce(i32) -> Result<VFileType, E>,
+        flags: VFileFlags,
+    ) -> Result<i32, FileAllocError<E>> {
+        todo!()
     }
 
     /// See `finstall` on the PS4 for a reference.
@@ -68,12 +85,8 @@ impl FileDesc {
         todo!()
     }
 
-    pub fn free(&self, fd: i32) -> Result<(), SysErr> {
-        if fd < 0 {
-            return Err(SysErr::Raw(EBADF));
-        }
-
-        let fd: usize = fd.try_into().unwrap();
+    pub fn free(&self, fd: i32) -> Result<(), FreeError> {
+        let fd: usize = fd.try_into().map_err(|_| FreeError::NegativeFd)?;
 
         let mut files = self.files.write();
 
@@ -82,7 +95,7 @@ impl FileDesc {
 
             Ok(())
         } else {
-            Err(SysErr::Raw(EBADF))
+            Err(FreeError::NoFile)
         }
     }
 }
@@ -94,4 +107,29 @@ impl Errno for GetFileError {
     fn errno(&self) -> NonZeroI32 {
         todo!()
     }
+}
+
+#[derive(Debug, Error)]
+pub enum FileAllocError<E: Errno> {
+    #[error(transparent)]
+    Inner(E),
+}
+
+impl<E: Errno> Errno for FileAllocError<E> {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::Inner(e) => e.errno(),
+        }
+    }
+}
+
+#[derive(Debug, Error, Errno)]
+pub enum FreeError {
+    #[error("negative file descriptor provided")]
+    #[errno(EBADF)]
+    NegativeFd,
+
+    #[error("no file associated with file descriptor")]
+    #[errno(EBADF)]
+    NoFile,
 }

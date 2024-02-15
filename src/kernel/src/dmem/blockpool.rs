@@ -38,10 +38,9 @@ impl Errno for GenericError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             GenericError::OperationNotSupported => ENXIO,
-        }
-    }
-}
-
+      }
+  }
+  
 #[derive(Debug, Error, Errno)]
 pub enum IoctlError {
     #[error("invalid command {0}")]
