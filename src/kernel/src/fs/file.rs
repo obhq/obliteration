@@ -165,8 +165,8 @@ bitflags! {
 bitflags! {
     #[derive(Debug, Clone, Copy)]
     pub struct VFileOpsFlags: u32 {
-        const PASSABLE = 0x00000001; // FREAD
-        const SEEKABLE = 0x00000002; // FWRITE
+        const PASSABLE = 0x00000001; // DFLAG_PASSABLE
+        const SEEKABLE = 0x00000002; // DFLAG_SEEKABLE
     }
 }
 

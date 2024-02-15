@@ -447,35 +447,8 @@ impl Fs {
         let com: IoCmd = i.args[1].try_into()?;
         let data_arg: *mut u8 = i.args[2].into();
 
-        let size: usize = com.size();
-        let mut vec = vec![0u8; size];
-
         // Get data.
-        let data = if size == 0 {
-            &mut []
-        } else if com.is_void() {
-            todo!("ioctl with com & IOC_VOID != 0");
-        } else {
-            &mut vec[..]
-        };
-
-        if com.is_in() {
-            todo!("ioctl with IOC_IN & != 0");
-        } else if com.is_out() {
-            data.fill(0);
-        }
-
-        if com.is_void() {
-            unsafe {
-                std::ptr::copy_nonoverlapping(data.as_ptr(), data_arg, size);
-            }
-        }
-
-        if com.is_void() {
-            unsafe {
-                std::ptr::copy_nonoverlapping(data.as_ptr(), data_arg, size);
-            }
-        }
+        let data = unsafe { std::slice::from_raw_parts_mut(data_arg, com.size()) };
 
         // Get target file.
         let td = VThread::current().unwrap();
@@ -496,10 +469,10 @@ impl Fs {
         data: &mut [u8],
         td: &VThread,
     ) -> Result<SysOut, IoctlError> {
-        const UNK_COM1: IoCmd = IoCmd::io(b'f', 1);
-        const UNK_COM2: IoCmd = IoCmd::io(b'f', 2);
-        const UNK_COM3: IoCmd = IoCmd::iowint(b'f', 0x7e);
-        const UNK_COM4: IoCmd = IoCmd::iowint(b'f', 0x7d);
+        const FIOCLEX: IoCmd = IoCmd::io(b'f', 1);
+        const FIONCLEX: IoCmd = IoCmd::io(b'f', 2);
+        const FIONBIO: IoCmd = IoCmd::iowint(b'f', 0x7e);
+        const FIOASYNC: IoCmd = IoCmd::iowint(b'f', 0x7d);
 
         let file = td.proc().files().get(fd)?;
 
@@ -509,9 +482,6 @@ impl Fs {
         {
             return Err(IoctlError::BadFileFlags(file.flags()));
         }
-
-        // Execute the operation.
-        info!("Executing ioctl({cmd}) on file descriptor {fd}.");
 
         match cmd {
             FIOCLEX => todo!("ioctl with cmd = FIOCLEX"),
@@ -938,9 +908,6 @@ pub struct Uio<'a> {
 }
 
 impl<'a> Uio<'a> {
-    const UIO_MAXIOV: u32 = 1024;
-    const IOSIZE_MAX: usize = 0x7fffffff;
-
     /// See `copyinuio` on the PS4 for a reference.
     pub unsafe fn copyin(first: *const IoVec, count: u32) -> Result<Self, CopyInUioError> {
         if count > UIO_MAXIOV {
