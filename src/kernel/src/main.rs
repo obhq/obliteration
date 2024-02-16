@@ -45,6 +45,7 @@ mod kqueue;
 mod llvm;
 mod log;
 mod memory;
+mod net;
 mod osem;
 mod process;
 mod regmgr;
