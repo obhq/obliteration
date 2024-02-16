@@ -8,6 +8,7 @@ use crate::kqueue::KernelQueueManager;
 use crate::llvm::Llvm;
 use crate::log::{print, LOGGER};
 use crate::memory::{MemoryManager, MemoryManagerError};
+use crate::net::NetManager;
 use crate::osem::OsemManager;
 use crate::process::{VProc, VProcInitError, VThread};
 use crate::regmgr::RegMgr;
@@ -45,6 +46,7 @@ mod kqueue;
 mod llvm;
 mod log;
 mod memory;
+mod net;
 mod osem;
 mod process;
 mod regmgr;
@@ -265,9 +267,13 @@ fn run<E: crate::ee::ExecutionEngine>(
     RegMgr::new(&mut syscalls);
     let machdep = MachDep::new(&mut syscalls);
     let budget = BudgetManager::new(&mut syscalls);
+
     DmemManager::new(fs, &mut syscalls);
     Sysctl::new(mm, &machdep, &mut syscalls);
     TimeManager::new(&mut syscalls);
+    KernelQueueManager::new(&mut syscalls);
+    NetManager::new(&mut syscalls);
+
     // TODO: Get correct budget name from the PS4.
     let budget_id = budget.create(Budget::new("big app", ProcType::BigApp));
     let proc = VProc::new(
@@ -281,7 +287,6 @@ fn run<E: crate::ee::ExecutionEngine>(
     )?;
 
     OsemManager::new(&mut syscalls, &proc);
-    KernelQueueManager::new(&mut syscalls);
 
     // Initialize runtime linker.
     info!("Initializing runtime linker.");

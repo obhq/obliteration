@@ -900,7 +900,6 @@ pub struct FsConfig {
 }
 
 #[derive(Debug)]
-
 pub enum Offset {
     Current,
     Provided(u64),
