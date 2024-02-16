@@ -51,7 +51,7 @@ impl FileDesc {
     pub fn cmask(&self) -> u32 {
         self.cmask
     }
-  
+
     #[allow(unused_variables)] // TODO: remove when implementing; add budget argument
     pub fn alloc_with_budget<E: Errno>(
         &self,
