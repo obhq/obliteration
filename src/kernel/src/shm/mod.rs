@@ -17,15 +17,11 @@ use std::{
 
 pub struct SharedMemoryManager {
     mm: Arc<MemoryManager>,
-    map: RwLock<HashMap<VPathBuf, Arc<Shm>>>,
 }
 
 impl SharedMemoryManager {
     pub fn new(mm: &Arc<MemoryManager>, sys: &mut Syscalls) -> Arc<Self> {
-        let shm = Arc::new(Self {
-            mm: mm.clone(),
-            map: RwLock::default(),
-        });
+        let shm = Arc::new(Self { mm: mm.clone() });
 
         sys.register(482, &shm, Self::sys_shm_open);
         sys.register(483, &shm, Self::sys_shm_unlink);
