@@ -10,6 +10,7 @@ use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use macros::Errno;
 use std::fmt::Debug;
 use std::sync::{Arc, Weak};
+use thiserror::Error;
 
 /// An implementation of `cdev` and `cdev_priv` structures.
 #[derive(Debug)]
