@@ -1,15 +1,17 @@
+use thiserror::Error;
+
 use crate::{
     errno::{Errno, EINVAL},
     fs::{
-        check_access, Access, DefaultError, FileBackend, IoCmd, Mode, OpenFlags, Stat, Uio, UioMut,
-        VFile, VFileFlags, VPathBuf,
+        check_access, Access, DefaultError, FileBackend, IoCmd, Mode, OpenFlags, Stat,
+        TruncateLength, Uio, UioMut, VFile, VFileFlags, VPathBuf,
     },
     memory::MemoryManager,
     process::VThread,
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
     ucred::{Gid, Ucred, Uid},
 };
-use std::{convert::Infallible, sync::Arc};
+use std::{convert::Infallible, num::NonZeroI32, sync::Arc};
 
 pub struct SharedMemoryManager {
     mm: Arc<MemoryManager>,
@@ -85,7 +87,7 @@ pub struct Shm {
 
 impl Shm {
     /// See `shm_do_truncate` on the PS4 for a reference.
-    fn truncate(&self, size: usize) {
+    fn do_truncate(&self, length: TruncateLength) -> Result<(), TruncateError> {
         todo!()
     }
 
@@ -145,5 +147,25 @@ impl FileBackend for Shm {
         stat.block_size = 0x4000;
 
         todo!()
+    }
+
+    fn truncate(
+        self: &Arc<Self>,
+        _: &VFile,
+        length: TruncateLength,
+        _: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        self.do_truncate(length)?;
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum TruncateError {}
+
+impl Errno for TruncateError {
+    fn errno(&self) -> NonZeroI32 {
+        match *self {}
     }
 }
