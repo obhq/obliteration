@@ -74,10 +74,6 @@ impl SharedMemoryManager {
         Ok(fd.into())
     }
 
-    fn alloc_shm(&self, cred: &Ucred, mode: u32) -> Arc<Shm> {
-        todo!()
-    }
-
     fn sys_shm_unlink(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         todo!("sys_shm_unlink")
     }
