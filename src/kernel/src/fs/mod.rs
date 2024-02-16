@@ -11,6 +11,7 @@ use macros::Errno;
 use param::Param;
 use std::fmt::{Display, Formatter};
 use std::num::{NonZeroI32, TryFromIntError};
+use std::os::fd;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use thiserror::Error;
@@ -147,6 +148,8 @@ impl Fs {
         sys.register(290, &fs, Self::sys_pwritev);
         sys.register(476, &fs, Self::sys_pwrite);
         sys.register(478, &fs, Self::sys_lseek);
+        sys.register(479, &fs, Self::sys_truncate);
+        sys.register(480, &fs, Self::sys_ftruncate);
         sys.register(493, &fs, Self::sys_fstatat);
         sys.register(496, &fs, Self::sys_mkdirat);
 
@@ -797,6 +800,54 @@ impl Fs {
         todo!()
     }
 
+    fn sys_truncate(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let path = unsafe { i.args[0].to_path() }?.unwrap();
+        let length = i.args[1].into();
+
+        let td = VThread::current().unwrap();
+
+        self.truncate(path, length, &td)?;
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn truncate(&self, path: &VPath, length: i64, td: VThread) -> Result<(), TruncateError> {
+        let _length: TruncateLength = length
+            .try_into()
+            .map_err(|_| TruncateError::InvalidLength)?;
+
+        let _vn = self.lookup(path, Some(&td))?;
+
+        todo!()
+    }
+
+    fn sys_ftruncate(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd = i.args[0].try_into().unwrap();
+        let length = i.args[1].into();
+
+        let td = VThread::current().unwrap();
+
+        self.ftruncate(fd, length, &td)?;
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn ftruncate(&self, fd: i32, length: i64, td: &VThread) -> Result<(), TruncateError> {
+        let length = length
+            .try_into()
+            .map_err(|_| TruncateError::InvalidLength)?;
+
+        let file = td.proc().files().get(fd)?;
+
+        if !file.flags().contains(VFileFlags::WRITE) {
+            return Err(TruncateError::FileNotWritable);
+        }
+
+        file.truncate(length, Some(&td))?;
+
+        Ok(())
+    }
+
     fn sys_mkdirat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let td = VThread::current().unwrap();
 
@@ -1044,6 +1095,19 @@ struct PollFd {
     revents: i16, // likewise
 }
 
+pub struct TruncateLength(i64);
+
+impl TryFrom<i64> for TruncateLength {
+    type Error = ();
+    fn try_from(value: i64) -> Result<Self, Self::Error> {
+        if value < 0 {
+            Err(())
+        } else {
+            Ok(Self(value))
+        }
+    }
+}
+
 /// Represents an error when FS was failed to initialized.
 #[derive(Debug, Error)]
 pub enum FsError {
@@ -1192,6 +1256,50 @@ impl Errno for StatError {
         match self {
             Self::FailedToGetFile(e) => e.errno(),
             Self::GetAttrError(e) => e.errno(),
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum TruncateError {
+    #[error("the provided length is invalid")]
+    InvalidLength,
+
+    #[error("failed to get file")]
+    FailedToLookupFile(#[from] LookupError),
+}
+
+impl Errno for TruncateError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::InvalidLength => EINVAL,
+            Self::FailedToLookupFile(e) => e.errno(),
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum FileTruncateError {
+    #[error("the provided length is invalid")]
+    InvalidLength,
+
+    #[error("failed to get file")]
+    FailedToGetFile(#[from] GetFileError),
+
+    #[error("file is not writable")]
+    FileNotWritable,
+
+    #[error(transparent)]
+    TruncateError(#[from] Box<dyn Errno>),
+}
+
+impl Errno for TruncateError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::InvalidLength => EINVAL,
+            Self::FailedToGetFile(e) => e.errno(),
+            Self::FileNotWritable => EINVAL,
+            Self::TruncateError(e) => e.errno(),
         }
     }
 }

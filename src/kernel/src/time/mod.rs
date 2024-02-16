@@ -50,7 +50,16 @@ pub struct TimeSpec {
 
 impl TimeSpec {
     pub fn now() -> Self {
-        todo!()
+        TimeVal::microtime().expect("Couldn't get time").into()
+    }
+}
+
+impl From<TimeVal> for TimeSpec {
+    fn from(tv: TimeVal) -> Self {
+        Self {
+            sec: tv.sec,
+            nsec: tv.usec * 1000,
+        }
     }
 }
 
