@@ -780,7 +780,7 @@ impl Fs {
 
         match whence {
             Whence::Set => {}
-            Whence::Cur => todo!("lseek with whence = SEEK_CUR"),
+            Whence::Current => todo!("lseek with whence = SEEK_CUR"),
             Whence::End => todo!(),
             Whence::Data => {
                 let _ = file.ioctl(IoCmd::FIOSEEKDATA(&mut offset), Some(&td));
@@ -914,11 +914,11 @@ enum At {
 }
 
 pub enum Whence {
-    Set = 0,  // SEEK_SET
-    Cur = 1,  // SEEK_CUR
-    End = 2,  // SEEK_END
-    Data = 3, // SEEK_DATA
-    Hole = 4, // SEEK_HOLE
+    Set = 0,     // SEEK_SET
+    Current = 1, // SEEK_CUR
+    End = 2,     // SEEK_END
+    Data = 3,    // SEEK_DATA
+    Hole = 4,    // SEEK_HOLE
 }
 
 impl TryFrom<i32> for Whence {
@@ -927,7 +927,7 @@ impl TryFrom<i32> for Whence {
     fn try_from(value: i32) -> Result<Self, Self::Error> {
         match value {
             0 => Ok(Self::Set),
-            1 => Ok(Self::Cur),
+            1 => Ok(Self::Current),
             2 => Ok(Self::End),
             3 => Ok(Self::Data),
             4 => Ok(Self::Hole),
