@@ -5,6 +5,7 @@ use crate::errno::{ENOTTY, ENXIO, EOPNOTSUPP};
 use crate::kqueue::KernelQueue;
 use crate::net::Socket;
 use crate::process::VThread;
+use crate::shm::Shm;
 use bitflags::bitflags;
 use macros::Errno;
 use std::fmt::Debug;
@@ -55,7 +56,6 @@ impl VFile {
         }
 
         res
-
     }
 
     /// See `dofilewrite` on the PS4 for a reference.
@@ -82,6 +82,7 @@ impl VFile {
             VFileType::Vnode(vn) => vn.read(self, buf, td),
             VFileType::Socket(so) | VFileType::IpcSocket(so) => so.read(self, buf, td),
             VFileType::KernelQueue(kq) => kq.read(self, buf, td),
+            VFileType::SharedMemory(shm) => shm.read(self, buf, td),
             VFileType::Blockpool(bp) => bp.read(self, buf, td),
         }
     }
@@ -91,6 +92,7 @@ impl VFile {
             VFileType::Vnode(vn) => vn.write(self, buf, td),
             VFileType::Socket(so) | VFileType::IpcSocket(so) => so.write(self, buf, td),
             VFileType::KernelQueue(kq) => kq.write(self, buf, td),
+            VFileType::SharedMemory(shm) => shm.write(self, buf, td),
             VFileType::Blockpool(bp) => bp.write(self, buf, td),
         }
     }
@@ -106,6 +108,7 @@ impl VFile {
             VFileType::Vnode(vn) => vn.ioctl(self, cmd, data, td),
             VFileType::Socket(so) | VFileType::IpcSocket(so) => so.ioctl(self, cmd, data, td),
             VFileType::KernelQueue(kq) => kq.ioctl(self, cmd, data, td),
+            VFileType::SharedMemory(shm) => shm.ioctl(self, cmd, data, td),
             VFileType::Blockpool(bp) => bp.ioctl(self, cmd, data, td),
         }
     }
@@ -115,6 +118,7 @@ impl VFile {
             VFileType::Vnode(vn) => vn.stat(self, td),
             VFileType::Socket(so) | VFileType::IpcSocket(so) => so.stat(self, td),
             VFileType::KernelQueue(kq) => kq.stat(self, td),
+            VFileType::SharedMemory(shm) => shm.stat(self, td),
             VFileType::Blockpool(bp) => bp.stat(self, td),
         }
     }
@@ -153,6 +157,7 @@ pub enum VFileType {
     Vnode(Arc<Vnode>),             // DTYPE_VNODE = 1
     Socket(Arc<Socket>),           // DTYPE_SOCKET = 2,
     KernelQueue(Arc<KernelQueue>), // DTYPE_KQUEUE = 5,
+    SharedMemory(Arc<Shm> ),       // DTYPE_SHM = 8,
     IpcSocket(Arc<Socket>),        // DTYPE_IPCSOCKET = 15,
     Blockpool(Arc<BlockPool>),     // DTYPE_BLOCKPOOL = 17,
 }
