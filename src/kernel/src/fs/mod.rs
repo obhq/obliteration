@@ -759,7 +759,7 @@ impl Fs {
 
     fn sys_lseek(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
-        let mut offset: i64 = i.args[1].try_into().unwrap();
+        let mut offset: i64 = i.args[1].into();
         let whence: Whence = {
             let whence: i32 = i.args[2].try_into().unwrap();
 
