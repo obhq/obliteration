@@ -262,8 +262,6 @@ fn run<E: crate::ee::ExecutionEngine>(
     // Initialize TTY system.
     #[allow(unused_variables)] // TODO: Remove this when someone use tty.
     let tty = TtyManager::new()?;
-    #[allow(unused_variables)] // TODO: Remove this when someone use shm.
-    let shm = SharedMemoryManager::new(mm, &mut syscalls);
 
     // Initialize kernel components.
     #[allow(unused_variables)] // TODO: Remove this when someone use debug.

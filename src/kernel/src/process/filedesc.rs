@@ -62,7 +62,7 @@ impl FileDesc {
         todo!()
     }
 
-    #[allow(unused_variables)] // TODO: remove when implementing; add budget argument
+    #[allow(unused_variables)] // TODO: remove when implementing;
     pub fn alloc_without_budget<E: Errno>(
         &self,
         constructor: impl FnOnce(i32) -> Result<VFileType, E>,
