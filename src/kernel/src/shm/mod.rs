@@ -116,6 +116,7 @@ impl Shm {
 }
 
 impl FileBackend for Shm {
+    #[allow(unused_variables)]
     fn read(
         self: &Arc<Self>,
         file: &VFile,
@@ -125,6 +126,7 @@ impl FileBackend for Shm {
         Err(DefaultError::OperationNotSupported.into())
     }
 
+    #[allow(unused_variables)]
     fn write(
         self: &Arc<Self>,
         file: &VFile,
@@ -134,6 +136,7 @@ impl FileBackend for Shm {
         Err(DefaultError::OperationNotSupported.into())
     }
 
+    #[allow(unused_variables)] // remove when implementing
     fn ioctl(
         self: &Arc<Self>,
         file: &VFile,
@@ -144,6 +147,7 @@ impl FileBackend for Shm {
         todo!()
     }
 
+    #[allow(unused_variables)] // remove when implementing
     fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
         let mut stat = Stat::zeroed();
 
