@@ -104,11 +104,11 @@ impl VFile {
     /// See `fo_ioctl` on the PS4 for a reference.
     pub fn ioctl(&self, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
         match &self.backend {
-            VFileType::Vnode(vn) => vn.ioctl(self, cmd, data, td),
-            VFileType::Socket(so) | VFileType::IpcSocket(so) => so.ioctl(self, cmd, data, td),
-            VFileType::KernelQueue(kq) => kq.ioctl(self, cmd, data, td),
-            VFileType::SharedMemory(shm) => shm.ioctl(self, cmd, data, td),
-            VFileType::Blockpool(bp) => bp.ioctl(self, cmd, data, td),
+            VFileType::Vnode(vn) => vn.ioctl(self, cmd, td),
+            VFileType::Socket(so) | VFileType::IpcSocket(so) => so.ioctl(self, cmd, td),
+            VFileType::KernelQueue(kq) => kq.ioctl(self, cmd, td),
+            VFileType::SharedMemory(shm) => shm.ioctl(self, cmd, td),
+            VFileType::Blockpool(bp) => bp.ioctl(self, cmd, td),
         }
     }
 
@@ -155,7 +155,7 @@ pub enum VFileType {
     Vnode(Arc<Vnode>),             // DTYPE_VNODE = 1
     Socket(Arc<Socket>),           // DTYPE_SOCKET = 2,
     KernelQueue(Arc<KernelQueue>), // DTYPE_KQUEUE = 5,
-    SharedMemory(Arc<Shm> ),       // DTYPE_SHM = 8,
+    SharedMemory(Arc<Shm>),        // DTYPE_SHM = 8,
     IpcSocket(Arc<Socket>),        // DTYPE_IPCSOCKET = 15,
     Blockpool(Arc<BlockPool>),     // DTYPE_BLOCKPOOL = 17,
 }

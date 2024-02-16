@@ -1,19 +1,15 @@
 use crate::{
     errno::{Errno, EINVAL},
     fs::{
-        check_access, Access, DefaultError, FileBackend, Mode, OpenFlags, Stat, VFile, VFileFlags,
-        VPathBuf,
+        check_access, Access, DefaultError, FileBackend, IoCmd, Mode, OpenFlags, Stat, Uio, UioMut,
+        VFile, VFileFlags, VPathBuf,
     },
     memory::MemoryManager,
     process::VThread,
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
     ucred::{Gid, Ucred, Uid},
 };
-use std::{
-    collections::HashMap,
-    convert::Infallible,
-    sync::{Arc, RwLock},
-};
+use std::{convert::Infallible, sync::Arc};
 
 pub struct SharedMemoryManager {
     mm: Arc<MemoryManager>,
@@ -116,7 +112,7 @@ impl FileBackend for Shm {
     fn read(
         self: &Arc<Self>,
         file: &VFile,
-        buf: &mut crate::fs::UioMut,
+        buf: &mut UioMut,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         Err(DefaultError::OperationNotSupported.into())
@@ -126,7 +122,7 @@ impl FileBackend for Shm {
     fn write(
         self: &Arc<Self>,
         file: &VFile,
-        buf: &mut crate::fs::Uio,
+        buf: &mut Uio,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         Err(DefaultError::OperationNotSupported.into())
@@ -136,8 +132,7 @@ impl FileBackend for Shm {
     fn ioctl(
         self: &Arc<Self>,
         file: &VFile,
-        cmd: crate::fs::IoCmd,
-        data: &mut [u8],
+        cmd: IoCmd,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         todo!()
