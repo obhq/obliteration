@@ -1,4 +1,5 @@
 use super::{CpuMask, CpuSet, VProc, NEXT_ID};
+use crate::errno::Errno;
 use crate::fs::VFile;
 use crate::signal::SignalSet;
 use crate::ucred::{Privilege, PrivilegeError, Ucred};
@@ -8,6 +9,7 @@ use llt::{OsThread, SpawnError};
 use std::num::NonZeroI32;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use thiserror::Error;
 use tls::{Local, Tls};
 
 /// An implementation of `thread` structure for the main application.
@@ -182,3 +184,12 @@ impl Drop for Running {
 }
 
 static VTHREAD: Tls<Arc<VThread>> = Tls::new();
+
+#[derive(Debug, Error)]
+pub enum FileAllocError {}
+
+impl Errno for FileAllocError {
+    fn errno(&self) -> NonZeroI32 {
+        match *self {}
+    }
+}
