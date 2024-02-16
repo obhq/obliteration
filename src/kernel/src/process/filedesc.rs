@@ -1,3 +1,4 @@
+use crate::budget::BudgetType;
 use crate::errno::{Errno, EBADF};
 use crate::fs::{VFile, VFileFlags, VFileType, Vnode};
 use crate::kqueue::KernelQueue;
@@ -50,6 +51,7 @@ impl FileDesc {
         &self,
         constructor: impl FnOnce(i32) -> Result<VFileType, E>,
         flags: VFileFlags,
+        budget: BudgetType,
     ) -> Result<i32, FileAllocError<E>> {
         todo!()
     }
