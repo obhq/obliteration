@@ -13,6 +13,7 @@ use crate::osem::OsemManager;
 use crate::process::{VProc, VProcInitError, VThread};
 use crate::regmgr::RegMgr;
 use crate::rtld::{LoadFlags, ModuleFlags, RuntimeLinker};
+use crate::shm::SharedMemoryManager;
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
 use crate::time::TimeManager;
@@ -51,6 +52,7 @@ mod osem;
 mod process;
 mod regmgr;
 mod rtld;
+mod shm;
 mod signal;
 mod syscalls;
 mod sysctl;
@@ -269,6 +271,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     let budget = BudgetManager::new(&mut syscalls);
 
     DmemManager::new(fs, &mut syscalls);
+    SharedMemoryManager::new(mm, &mut syscalls);
     Sysctl::new(mm, &machdep, &mut syscalls);
     TimeManager::new(&mut syscalls);
     KernelQueueManager::new(&mut syscalls);
