@@ -131,6 +131,7 @@ impl VFile {
             VFileType::Vnode(vn) => vn.truncate(self, length, td),
             VFileType::Socket(so) | VFileType::IpcSocket(so) => so.truncate(self, length, td),
             VFileType::KernelQueue(kq) => kq.truncate(self, length, td),
+            VFileType::SharedMemory(shm) => shm.truncate(self, length, td),
             VFileType::Blockpool(bp) => bp.truncate(self, length, td),
         }
     }
@@ -250,7 +251,7 @@ pub enum DefaultError {
     #[error("invalid value provided")]
     #[errno(EINVAL)]
     InvalidValue,
-  
+
     #[error("operation is not supported")]
     #[errno(EOPNOTSUPP)]
     OperationNotSupported,

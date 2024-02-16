@@ -11,7 +11,6 @@ use macros::Errno;
 use param::Param;
 use std::fmt::{Display, Formatter};
 use std::num::{NonZeroI32, TryFromIntError};
-use std::os::fd;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use thiserror::Error;
@@ -811,7 +810,7 @@ impl Fs {
         Ok(SysOut::ZERO)
     }
 
-    fn truncate(&self, path: &VPath, length: i64, td: VThread) -> Result<(), TruncateError> {
+    fn truncate(&self, path: &VPath, length: i64, td: &VThread) -> Result<(), TruncateError> {
         let _length: TruncateLength = length
             .try_into()
             .map_err(|_| TruncateError::InvalidLength)?;
@@ -832,15 +831,15 @@ impl Fs {
         Ok(SysOut::ZERO)
     }
 
-    fn ftruncate(&self, fd: i32, length: i64, td: &VThread) -> Result<(), TruncateError> {
+    fn ftruncate(&self, fd: i32, length: i64, td: &VThread) -> Result<(), FileTruncateError> {
         let length = length
             .try_into()
-            .map_err(|_| TruncateError::InvalidLength)?;
+            .map_err(|_| FileTruncateError::InvalidLength)?;
 
         let file = td.proc().files().get(fd)?;
 
         if !file.flags().contains(VFileFlags::WRITE) {
-            return Err(TruncateError::FileNotWritable);
+            return Err(FileTruncateError::FileNotWritable);
         }
 
         file.truncate(length, Some(&td))?;
@@ -1297,7 +1296,7 @@ pub enum FileTruncateError {
     TruncateError(#[from] Box<dyn Errno>),
 }
 
-impl Errno for TruncateError {
+impl Errno for FileTruncateError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::InvalidLength => EINVAL,
