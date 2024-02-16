@@ -150,7 +150,6 @@ impl FileBackend for Vnode {
         self: &Arc<Self>,
         file: &VFile,
         cmd: IoCmd,
-        data: &mut [u8],
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         todo!()
@@ -227,7 +226,6 @@ pub(super) trait VnodeBackend: Debug + Send + Sync {
         self: Arc<Self>,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] cmd: IoCmd,
-        #[allow(unused_variables)] data: &mut [u8],
         #[allow(unused_variables)] td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultError::IoctlNotSupported))

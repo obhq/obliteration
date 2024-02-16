@@ -101,9 +101,8 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     fn ioctl(
         self: Arc<Self>,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
-        cmd: IoCmd,
-        data: &mut [u8],
-        td: Option<&VThread>,
+        #[allow(unused_variables)] cmd: IoCmd,
+        #[allow(unused_variables)] td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         let ref fs = self.fs;
 

@@ -146,6 +146,7 @@ impl Fs {
         sys.register(289, &fs, Self::sys_preadv);
         sys.register(290, &fs, Self::sys_pwritev);
         sys.register(476, &fs, Self::sys_pwrite);
+        sys.register(478, &fs, Self::sys_lseek);
         sys.register(493, &fs, Self::sys_fstatat);
         sys.register(496, &fs, Self::sys_mkdirat);
 
@@ -444,36 +445,20 @@ impl Fs {
 
     fn sys_ioctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
-        let cmd: IoCmd = i.args[1].try_into()?;
-        let data_arg: *mut u8 = i.args[2].into();
+        // Our IoCmd contains both the command and the argument (if there is one).
+        let cmd = IoCmd::try_from_raw_parts(i.args[1].into(), i.args[2].into())?;
 
-        // Get data.
-        let data = unsafe { std::slice::from_raw_parts_mut(data_arg, cmd.size()) };
-
-        // Get target file.
         let td = VThread::current().unwrap();
 
-        // Execute the operation.
-        info!("Executing ioctl({cmd}) on file descriptor {fd}.");
+        info!("Executing ioctl({cmd:?}) on file descriptor {fd}.");
 
-        self.ioctl(fd, cmd, data, &td)?;
+        self.ioctl(fd, cmd, &td)?;
 
         Ok(SysOut::ZERO)
     }
 
     /// See `kern_ioctl` on the PS4 for a reference.
-    fn ioctl(
-        self: &Arc<Self>,
-        fd: i32,
-        cmd: IoCmd,
-        data: &mut [u8],
-        td: &VThread,
-    ) -> Result<SysOut, IoctlError> {
-        const FIOCLEX: IoCmd = IoCmd::io(b'f', 1);
-        const FIONCLEX: IoCmd = IoCmd::io(b'f', 2);
-        const FIONBIO: IoCmd = IoCmd::iowint(b'f', 0x7e);
-        const FIOASYNC: IoCmd = IoCmd::iowint(b'f', 0x7d);
-
+    fn ioctl(self: &Arc<Self>, fd: i32, cmd: IoCmd, td: &VThread) -> Result<SysOut, IoctlError> {
         let file = td.proc().files().get(fd)?;
 
         if !file
@@ -484,15 +469,14 @@ impl Fs {
         }
 
         match cmd {
-            FIOCLEX => todo!("ioctl with cmd = FIOCLEX"),
-            FIONCLEX => todo!("ioctl with cmd = FIONCLEX"),
-            FIONBIO => todo!("ioctl with cmd = FIONBIO"),
-            FIOASYNC => todo!("ioctl with cmd = FIOASYNC"),
+            IoCmd::FIOCLEX => todo!("ioctl with cmd = FIOCLEX"),
+            IoCmd::FIONCLEX => todo!("ioctl with cmd = FIONCLEX"),
+            IoCmd::FIONBIO(_) => todo!("ioctl with cmd = FIONBIO"),
+            IoCmd::FIOASYNC(_) => todo!("ioctl with cmd = FIOASYNC"),
             _ => {}
         }
 
-        file.ioctl(cmd, data, Some(&td))
-            .map_err(IoctlError::FileIoctlFailed)?;
+        file.ioctl(cmd, Some(&td))?;
 
         Ok(SysOut::ZERO)
     }
@@ -764,10 +748,51 @@ impl Fs {
         self.mkdirat(At::Cwd, path, mode, Some(&td))
     }
 
+    #[allow(unused_variables)]
     fn sys_poll(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fds: *mut PollFd = i.args[0].into();
         let nfds: u32 = i.args[1].try_into().unwrap();
         let timeout: i32 = i.args[2].try_into().unwrap();
+
+        todo!()
+    }
+
+    fn sys_lseek(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let mut offset: i64 = i.args[1].into();
+        let whence: Whence = {
+            let whence: i32 = i.args[2].try_into().unwrap();
+
+            whence.try_into()?
+        };
+
+        let td = VThread::current().unwrap();
+
+        let file = td.proc().files().get(fd)?;
+
+        if !file.is_seekable() {
+            return Err(SysErr::Raw(ESPIPE));
+        }
+
+        let _vnode = file.vnode().expect("File is not backed by a vnode");
+
+        // check vnode type
+
+        match whence {
+            Whence::Set => {}
+            Whence::Current => todo!("lseek with whence = SEEK_CUR"),
+            Whence::End => todo!(),
+            Whence::Data => {
+                let _ = file.ioctl(IoCmd::FIOSEEKDATA(&mut offset), Some(&td));
+
+                todo!()
+            }
+            Whence::Hole => {
+                let _ = file.ioctl(IoCmd::FIOSEEKHOLE(&mut offset), Some(&td));
+
+                todo!()
+            }
+        }
 
         todo!()
     }
@@ -820,13 +845,17 @@ impl Fs {
 
 bitflags! {
     /// Flags for [`Fs::sys_open()`].
+    #[derive(Clone, Copy, PartialEq, Eq)]
     pub struct OpenFlags: u32 {
+        const O_RDONLY = 0x00000000;
         const O_WRONLY = 0x00000001;
         const O_RDWR = 0x00000002;
         const O_ACCMODE = Self::O_WRONLY.bits() | Self::O_RDWR.bits();
         const O_SHLOCK = 0x00000010;
         const O_EXLOCK = 0x00000020;
+        const O_CREAT = 0x00000200;
         const O_TRUNC = 0x00000400;
+        const O_EXCL = 0x00000800;
         const O_EXEC = 0x00040000;
         const O_CLOEXEC = 0x00100000;
         const UNK1 = 0x00400000;
@@ -835,7 +864,7 @@ bitflags! {
 
 impl OpenFlags {
     /// An implementation of `FFLAGS` macro.
-    fn into_fflags(self) -> VFileFlags {
+    pub fn into_fflags(self) -> VFileFlags {
         VFileFlags::from_bits_truncate(self.bits() + 1)
     }
 }
@@ -875,17 +904,39 @@ pub struct FsConfig {
 }
 
 #[derive(Debug)]
-/// Represents the fd arg for
-enum Offset {
+pub enum Offset {
     Current,
     Provided(u64),
 }
 
 #[derive(Debug)]
-/// Represents the fd arg for
+/// Represents the fd arg for *at syscalls
 enum At {
     Cwd,
     Fd(i32),
+}
+
+pub enum Whence {
+    Set = 0,     // SEEK_SET
+    Current = 1, // SEEK_CUR
+    End = 2,     // SEEK_END
+    Data = 3,    // SEEK_DATA
+    Hole = 4,    // SEEK_HOLE
+}
+
+impl TryFrom<i32> for Whence {
+    type Error = SysErr;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::Set),
+            1 => Ok(Self::Current),
+            2 => Ok(Self::End),
+            3 => Ok(Self::Data),
+            4 => Ok(Self::Hole),
+            _ => Err(SysErr::Raw(EINVAL)),
+        }
+    }
 }
 
 pub struct IoVec {
@@ -1077,7 +1128,7 @@ pub enum IoctlError {
     BadFileFlags(VFileFlags),
 
     #[error(transparent)]
-    FileIoctlFailed(Box<dyn Errno>),
+    FileIoctlFailed(#[from] Box<dyn Errno>),
 }
 
 impl Errno for IoctlError {

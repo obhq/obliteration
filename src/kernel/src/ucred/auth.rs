@@ -32,10 +32,7 @@ impl AuthInfo {
 
         // Skip leading zeroes.
         let i = id.find(|c| c != '0')?;
-        let id: u16 = match id[i..].parse() {
-            Ok(v) => v,
-            Err(_) => return None,
-        };
+        let id: u16 = id[i..].parse().ok()?;
 
         Some(Self {
             paid: AuthPaid((0x34000003ACC2 << 16) | Into::<u64>::into(id)),

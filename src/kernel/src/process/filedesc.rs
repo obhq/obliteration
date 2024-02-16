@@ -1,3 +1,4 @@
+use crate::budget::BudgetType;
 use crate::errno::{Errno, EBADF};
 use crate::fs::{VFile, VFileFlags, VFileType, Vnode};
 use crate::kqueue::KernelQueue;
@@ -16,6 +17,7 @@ pub struct FileDesc {
     cwd: Gutex<Arc<Vnode>>,                // fd_cdir
     root: Gutex<Arc<Vnode>>,               // fd_rdir
     kqueue_list: Gutex<VecDeque<Arc<KernelQueue>>>, // fd_kqlist
+    cmask: u32,                            // fd_cmask
 }
 
 impl FileDesc {
@@ -28,6 +30,7 @@ impl FileDesc {
             cwd: gg.spawn(root.clone()),
             root: gg.spawn(root),
             kqueue_list: gg.spawn(VecDeque::new()),
+            cmask: 0o22, // TODO: verify this
         };
 
         Arc::new(filedesc)
@@ -45,8 +48,22 @@ impl FileDesc {
         self.kqueue_list.write().push_front(kq);
     }
 
+    pub fn cmask(&self) -> u32 {
+        self.cmask
+    }
+
     #[allow(unused_variables)] // TODO: remove when implementing; add budget argument
     pub fn alloc_with_budget<E: Errno>(
+        &self,
+        constructor: impl FnOnce(i32) -> Result<VFileType, E>,
+        flags: VFileFlags,
+        budget: BudgetType,
+    ) -> Result<i32, FileAllocError<E>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing;
+    pub fn alloc_without_budget<E: Errno>(
         &self,
         constructor: impl FnOnce(i32) -> Result<VFileType, E>,
         flags: VFileFlags,

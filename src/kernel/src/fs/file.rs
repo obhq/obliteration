@@ -1,9 +1,11 @@
 use super::{IoCmd, Offset, Stat, Uio, UioMut, Vnode};
 use crate::dmem::BlockPool;
 use crate::errno::Errno;
-use crate::errno::{ENOTTY, ENXIO};
+use crate::errno::{ENOTTY, ENXIO, EOPNOTSUPP};
 use crate::kqueue::KernelQueue;
+use crate::net::Socket;
 use crate::process::VThread;
+use crate::shm::Shm;
 use bitflags::bitflags;
 use macros::Errno;
 use std::fmt::Debug;
@@ -34,7 +36,7 @@ impl VFile {
         &mut self.flags
     }
 
-    pub fn vnode(&self) -> Option<&Arc<Vnode>> {
+    pub fn vnode(&self) -> Option<Arc<Vnode>> {
         todo!()
     }
 
@@ -80,49 +82,48 @@ impl VFile {
     }
 
     fn read(&self, buf: &mut UioMut, td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
-        match self.ty {
-            VFileType::Vnode(ref vn) => vn.read(self, buf, td),
-            VFileType::KernelQueue(ref kq) => kq.read(self, buf, td),
-            VFileType::Blockpool(ref bp) => bp.read(self, buf, td),
+        match &self.backend {
+            VFileType::Vnode(vn) => vn.read(self, buf, td),
+            VFileType::Socket(so) | VFileType::IpcSocket(so) => so.read(self, buf, td),
+            VFileType::KernelQueue(kq) => kq.read(self, buf, td),
+            VFileType::SharedMemory(shm) => shm.read(self, buf, td),
+            VFileType::Blockpool(bp) => bp.read(self, buf, td),
         }
     }
 
     fn write(&self, buf: &mut Uio, td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
-        match self.ty {
-            VFileType::Vnode(ref vn) => vn.write(self, buf, td),
-            VFileType::KernelQueue(ref kq) => kq.write(self, buf, td),
-            VFileType::Blockpool(ref bp) => bp.write(self, buf, td),
+        match &self.backend {
+            VFileType::Vnode(vn) => vn.write(self, buf, td),
+            VFileType::Socket(so) | VFileType::IpcSocket(so) => so.write(self, buf, td),
+            VFileType::KernelQueue(kq) => kq.write(self, buf, td),
+            VFileType::SharedMemory(shm) => shm.write(self, buf, td),
+            VFileType::Blockpool(bp) => bp.write(self, buf, td),
         }
     }
 
     /// See `fo_ioctl` on the PS4 for a reference.
-    pub fn ioctl(
-        &self,
-        cmd: IoCmd,
-        data: &mut [u8],
-        td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
-        match self.ty {
-            VFileType::Vnode(ref vn) => vn.ioctl(self, cmd, data, td),
-            VFileType::KernelQueue(ref kq) => kq.ioctl(self, cmd, data, td),
-            VFileType::Blockpool(ref bp) => bp.ioctl(self, cmd, data, td),
+    pub fn ioctl(&self, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
+        match &self.backend {
+            VFileType::Vnode(vn) => vn.ioctl(self, cmd, td),
+            VFileType::Socket(so) | VFileType::IpcSocket(so) => so.ioctl(self, cmd, td),
+            VFileType::KernelQueue(kq) => kq.ioctl(self, cmd, td),
+            VFileType::SharedMemory(shm) => shm.ioctl(self, cmd, td),
+            VFileType::Blockpool(bp) => bp.ioctl(self, cmd, td),
         }
     }
 
     pub fn stat(&self, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
-        match self.ty {
-            VFileType::Vnode(ref vn) => vn.stat(self, td),
-            VFileType::KernelQueue(ref kq) => kq.stat(self, td),
-            VFileType::Blockpool(ref bp) => bp.stat(self, td),
+        match &self.backend {
+            VFileType::Vnode(vn) => vn.stat(self, td),
+            VFileType::Socket(so) | VFileType::IpcSocket(so) => so.stat(self, td),
+            VFileType::KernelQueue(kq) => kq.stat(self, td),
+            VFileType::SharedMemory(shm) => shm.stat(self, td),
+            VFileType::Blockpool(bp) => bp.stat(self, td),
         }
     }
 
     pub fn is_seekable(&self) -> bool {
-        match self.ty {
-            VFileType::Vnode(_) => true,
-            VFileType::KernelQueue(_) => false,
-            VFileType::Blockpool(_) => false,
-        }
+        matches!(self.backend, VFileType::Vnode(_))
     }
 }
 
@@ -150,11 +151,13 @@ impl Write for VFile {
 
 /// Type of [`VFile`].
 #[derive(Debug)]
-#[rustfmt::skip]
 pub enum VFileType {
     Vnode(Arc<Vnode>),             // DTYPE_VNODE = 1
+    Socket(Arc<Socket>),           // DTYPE_SOCKET = 2,
     KernelQueue(Arc<KernelQueue>), // DTYPE_KQUEUE = 5,
-    Blockpool(Arc<BlockPool>),     // DTYPE_BPOOL = 17,
+    SharedMemory(Arc<Shm>),        // DTYPE_SHM = 8,
+    IpcSocket(Arc<Socket>),        // DTYPE_IPCSOCKET = 15,
+    Blockpool(Arc<BlockPool>),     // DTYPE_BLOCKPOOL = 17,
 }
 
 bitflags! {
@@ -193,7 +196,6 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         self: &Arc<Self>,
         file: &VFile,
         cmd: IoCmd,
-        data: &mut [u8],
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultError::IoctlNotSupported))
@@ -216,4 +218,8 @@ pub enum DefaultError {
     #[error("iocll is not supported")]
     #[errno(ENOTTY)]
     IoctlNotSupported,
+
+    #[error("operation is not supported")]
+    #[errno(EOPNOTSUPP)]
+    OperationNotSupported,
 }
