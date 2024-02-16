@@ -811,9 +811,7 @@ impl Fs {
     }
 
     fn truncate(&self, path: &VPath, length: i64, td: &VThread) -> Result<(), TruncateError> {
-        let _length: TruncateLength = length
-            .try_into()
-            .map_err(|_| TruncateError::InvalidLength)?;
+        let _length: TruncateLength = length.try_into()?;
 
         let _vn = self.lookup(path, Some(&td))?;
 
@@ -832,9 +830,7 @@ impl Fs {
     }
 
     fn ftruncate(&self, fd: i32, length: i64, td: &VThread) -> Result<(), FileTruncateError> {
-        let length = length
-            .try_into()
-            .map_err(|_| FileTruncateError::InvalidLength)?;
+        let length = length.try_into()?;
 
         let file = td.proc().files().get(fd)?;
 
@@ -1101,15 +1097,16 @@ struct PollFd {
 pub struct TruncateLength(i64);
 
 impl TryFrom<i64> for TruncateLength {
-    type Error = ();
+    type Error = TruncateLengthError;
     fn try_from(value: i64) -> Result<Self, Self::Error> {
         if value < 0 {
-            Err(())
+            Err(TruncateLengthError(()))
         } else {
             Ok(Self(value))
         }
     }
 }
+pub struct TruncateLengthError(());
 
 /// Represents an error when FS was failed to initialized.
 #[derive(Debug, Error)]
@@ -1281,6 +1278,12 @@ impl Errno for TruncateError {
     }
 }
 
+impl From<TruncateLengthError> for TruncateError {
+    fn from(_: TruncateLengthError) -> Self {
+        Self::InvalidLength
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum FileTruncateError {
     #[error("the provided length is invalid")]
@@ -1304,6 +1307,12 @@ impl Errno for FileTruncateError {
             Self::FileNotWritable => EINVAL,
             Self::TruncateError(e) => e.errno(),
         }
+    }
+}
+
+impl From<TruncateLengthError> for FileTruncateError {
+    fn from(_: TruncateLengthError) -> Self {
+        Self::InvalidLength
     }
 }
 
