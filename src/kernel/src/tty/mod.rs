@@ -1,7 +1,5 @@
 use crate::errno::Errno;
-use crate::fs::{
-    make_dev, Cdev, CdevSw, DriverFlags, IoCmd, MakeDev, MakeDevError, Mode, OpenFlags,
-};
+use crate::fs::{make_dev, Cdev, CdevSw, DriverFlags, MakeDev, MakeDevError, Mode, OpenFlags};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use std::sync::Arc;
@@ -15,9 +13,6 @@ pub struct TtyManager {
 }
 
 impl TtyManager {
-    #[allow(dead_code)]
-    const TIOCSCTTY: IoCmd = IoCmd::io(b't', 97);
-
     pub fn new() -> Result<Arc<Self>, TtyInitError> {
         // Create /dev/console.
         let console = Arc::new(CdevSw::new(

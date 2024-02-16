@@ -140,6 +140,7 @@ bitflags! {
     pub struct Access: u32 {
         const EXEC             = 0o00000000100; // VEXEC
         const WRITE            = 0o00000000200; // VWRITE
+        const READ             = 0o00000000400; // VREAD
         const ADMIN            = 0o00000010000; // VADMIN
         const EXPLICIT_DENY    = 0o00000100000; // VEXPLICIT_DENY
         const DELETE_CHILD     = 0o00001000000; // VDELETE_CHILD

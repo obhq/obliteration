@@ -1,6 +1,6 @@
 use super::{
     unixify_access, Access, FileBackend, IoCmd, Mode, Mount, OpenFlags, RevokeFlags, Stat, Uio,
-    UioMut, VFile, VFileOpsFlags,
+    UioMut, VFile,
 };
 use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
@@ -149,7 +149,6 @@ impl FileBackend for Vnode {
         self: &Arc<Self>,
         file: &VFile,
         cmd: IoCmd,
-        data: &mut [u8],
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         todo!()
@@ -157,10 +156,6 @@ impl FileBackend for Vnode {
 
     fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
         todo!()
-    }
-
-    fn flags(&self) -> VFileOpsFlags {
-        VFileOpsFlags::SEEKABLE | VFileOpsFlags::PASSABLE
     }
 }
 
@@ -229,7 +224,6 @@ pub(super) trait VnodeBackend: Debug + Send + Sync {
         self: Arc<Self>,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] cmd: IoCmd,
-        #[allow(unused_variables)] data: &mut [u8],
         #[allow(unused_variables)] td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultError::IoctlNotSupported))

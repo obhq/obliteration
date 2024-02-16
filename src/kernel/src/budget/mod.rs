@@ -74,6 +74,21 @@ impl Budget {
     }
 }
 
+#[derive(Debug)]
+pub enum BudgetType {
+    DirectMemory = 1,
+    VirtualMemory = 2,
+    LockedMemory = 3,
+    CpuSet = 4,
+    FdFile = 5,
+    FdSocket = 6,
+    FdEqueue = 7,
+    FdPipe = 8,
+    FdDevice = 9,
+    Threads = 10,
+    FdIpcSocket = 11,
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProcType {

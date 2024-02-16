@@ -40,6 +40,10 @@ impl Ucred {
         self.real_uid
     }
 
+    pub fn groups(&self) -> &[Gid] {
+        &self.groups
+    }
+
     pub fn auth(&self) -> &AuthInfo {
         &self.auth
     }
