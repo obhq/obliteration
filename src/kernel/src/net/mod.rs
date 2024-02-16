@@ -1,3 +1,4 @@
+use crate::budget::BudgetType;
 use crate::fs::{VFileFlags, VFileType};
 use crate::{
     process::VThread,

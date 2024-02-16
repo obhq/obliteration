@@ -672,7 +672,7 @@ impl Fs {
 
         let file = td.proc().files().get_for_read(fd)?;
 
-        if !file.op_flags().intersects(VFileOpsFlags::SEEKABLE) {
+        if !file.is_seekable() {
             return Err(SysErr::Raw(ESPIPE));
         }
 
@@ -699,7 +699,7 @@ impl Fs {
 
         let file = td.proc().files().get_for_write(fd)?;
 
-        if !file.op_flags().intersects(VFileOpsFlags::SEEKABLE) {
+        if !file.is_seekable() {
             return Err(SysErr::Raw(ESPIPE));
         }
 
@@ -876,7 +876,7 @@ pub struct FsConfig {
 
 #[derive(Debug)]
 /// Represents the fd arg for
-enum Offset {
+pub enum Offset {
     Current,
     Provided(u64),
 }
