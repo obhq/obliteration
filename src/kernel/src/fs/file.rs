@@ -99,17 +99,12 @@ impl VFile {
     }
 
     /// See `fo_ioctl` on the PS4 for a reference.
-    pub fn ioctl(
-        &self,
-        cmd: IoCmd,
-        data: &mut [u8],
-        td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    pub fn ioctl(&self, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
         match &self.backend {
-            VFileType::Vnode(vn) => vn.ioctl(self, cmd, data, td),
-            VFileType::Socket(so) | VFileType::IpcSocket(so) => so.ioctl(self, cmd, data, td),
-            VFileType::KernelQueue(kq) => kq.ioctl(self, cmd, data, td),
-            VFileType::Blockpool(bp) => bp.ioctl(self, cmd, data, td),
+            VFileType::Vnode(vn) => vn.ioctl(self, cmd, td),
+            VFileType::Socket(so) | VFileType::IpcSocket(so) => so.ioctl(self, cmd, td),
+            VFileType::KernelQueue(kq) => kq.ioctl(self, cmd, td),
+            VFileType::Blockpool(bp) => bp.ioctl(self, cmd, td),
         }
     }
 
