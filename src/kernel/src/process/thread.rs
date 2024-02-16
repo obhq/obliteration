@@ -1,6 +1,6 @@
 use super::{CpuMask, CpuSet, VProc, NEXT_ID};
 use crate::errno::Errno;
-use crate::fs::{VFile, VFileFlags, VFileOps};
+use crate::fs::VFile;
 use crate::signal::SignalSet;
 use crate::ucred::{Privilege, PrivilegeError, Ucred};
 use bitflags::bitflags;
@@ -103,15 +103,6 @@ impl VThread {
     /// An implementation of `priv_check`.
     pub fn priv_check(&self, p: Privilege) -> Result<(), PrivilegeError> {
         self.cred.priv_check(p)
-    }
-
-    pub fn falloc<T, E>(
-        &self,
-        flags: VFileFlags,
-        ops: &'static VFileOps,
-        data_fn: impl FnOnce(i32) -> Result<T, E>,
-    ) -> Result<i32, FileAllocError> {
-        todo!()
     }
 
     /// Start the thread.

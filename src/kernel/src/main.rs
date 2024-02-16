@@ -273,6 +273,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     let budget = BudgetManager::new(&mut syscalls);
 
     DmemManager::new(fs, &mut syscalls);
+    SharedMemoryManager::new(mm, &mut syscalls);
     Sysctl::new(mm, &machdep, &mut syscalls);
     TimeManager::new(&mut syscalls);
     KernelQueueManager::new(&mut syscalls);

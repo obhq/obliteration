@@ -13,7 +13,7 @@ pub struct Stat {
     atime: TimeSpec,
     mtime: TimeSpec,
     ctime: TimeSpec,
-    size: i64,
+    pub size: i64,
     block_count: i64,
     pub block_size: u32,
     flags: u32,

@@ -1,7 +1,7 @@
 use super::{IoCmd, Offset, Stat, Uio, UioMut, Vnode};
 use crate::dmem::BlockPool;
 use crate::errno::Errno;
-use crate::errno::{ENOTTY, ENXIO};
+use crate::errno::{ENOTTY, ENXIO, EOPNOTSUPP};
 use crate::kqueue::KernelQueue;
 use crate::net::Socket;
 use crate::process::VThread;
@@ -165,14 +165,6 @@ bitflags! {
     }
 }
 
-bitflags! {
-    #[derive(Debug, Clone, Copy)]
-    pub struct VFileOpsFlags: u32 {
-        const PASSABLE = 0x00000001; // DFLAG_PASSABLE
-        const SEEKABLE = 0x00000002; // DFLAG_SEEKABLE
-    }
-}
-
 /// An implementation of `fileops` structure.
 pub trait FileBackend: Debug + Send + Sync + 'static {
     #[allow(unused_variables)]
@@ -208,10 +200,6 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
 
     #[allow(unused_variables)]
     fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>>;
-
-    fn flags(&self) -> VFileOpsFlags {
-        VFileOpsFlags::empty()
-    }
 }
 
 #[derive(Debug, Error, Errno)]
@@ -227,4 +215,8 @@ pub enum DefaultError {
     #[error("iocll is not supported")]
     #[errno(ENOTTY)]
     IoctlNotSupported,
+
+    #[error("operation is not supported")]
+    #[errno(EOPNOTSUPP)]
+    OperationNotSupported,
 }
