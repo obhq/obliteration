@@ -96,7 +96,6 @@ impl FileBackend for Socket {
         self: &Arc<Self>,
         file: &VFile,
         cmd: IoCmd,
-        data: &mut [u8],
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         todo!()

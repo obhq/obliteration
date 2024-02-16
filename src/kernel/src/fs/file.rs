@@ -36,6 +36,10 @@ impl VFile {
         &mut self.flags
     }
 
+    pub fn vnode(&self) -> Option<Arc<Vnode>> {
+        todo!()
+    }
+
     /// See `dofileread` on the PS4 for a reference.
     pub fn do_read(
         &self,
@@ -98,12 +102,7 @@ impl VFile {
     }
 
     /// See `fo_ioctl` on the PS4 for a reference.
-    pub fn ioctl(
-        &self,
-        cmd: IoCmd,
-        data: &mut [u8],
-        td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    pub fn ioctl(&self, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
         match &self.backend {
             VFileType::Vnode(vn) => vn.ioctl(self, cmd, data, td),
             VFileType::Socket(so) | VFileType::IpcSocket(so) => so.ioctl(self, cmd, data, td),
@@ -152,7 +151,6 @@ impl Write for VFile {
 
 /// Type of [`VFile`].
 #[derive(Debug)]
-#[rustfmt::skip]
 pub enum VFileType {
     Vnode(Arc<Vnode>),             // DTYPE_VNODE = 1
     Socket(Arc<Socket>),           // DTYPE_SOCKET = 2,
@@ -171,6 +169,7 @@ bitflags! {
     }
 }
 
+/// An implementation of `fileops` structure.
 pub trait FileBackend: Debug + Send + Sync + 'static {
     #[allow(unused_variables)]
     fn read(
@@ -197,7 +196,6 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         self: &Arc<Self>,
         file: &VFile,
         cmd: IoCmd,
-        data: &mut [u8],
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultError::IoctlNotSupported))

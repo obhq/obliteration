@@ -30,6 +30,15 @@ impl From<i32> for SysOut {
     }
 }
 
+impl From<i64> for SysOut {
+    fn from(value: i64) -> Self {
+        Self {
+            rax: value as usize,
+            rdx: 0,
+        }
+    }
+}
+
 impl From<usize> for SysOut {
     fn from(value: usize) -> Self {
         Self { rax: value, rdx: 0 }
