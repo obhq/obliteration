@@ -55,6 +55,7 @@ impl VFile {
         }
 
         res
+
     }
 
     /// See `dofilewrite` on the PS4 for a reference.
@@ -165,7 +166,6 @@ bitflags! {
     }
 }
 
-/// An implementation of `fileops` structure.
 pub trait FileBackend: Debug + Send + Sync + 'static {
     #[allow(unused_variables)]
     fn read(

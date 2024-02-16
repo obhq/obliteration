@@ -64,7 +64,7 @@ impl FileDesc {
     pub fn cmask(&self) -> u32 {
         self.cmask
     }
-
+  
     /// See `finstall` on the PS4 for a reference.
     pub fn alloc(&self, file: Arc<VFile>) -> i32 {
         // TODO: Implement fdalloc.

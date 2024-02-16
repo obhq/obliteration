@@ -158,6 +158,7 @@ impl FileBackend for Vnode {
     fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
         todo!()
     }
+
 }
 
 impl Drop for Vnode {
