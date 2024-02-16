@@ -1,11 +1,14 @@
 use super::dirent::Dirent;
 use crate::errno::Errno;
-use crate::fs::{Mode, OpenFlags, VFile};
+use crate::errno::ENODEV;
+use crate::fs::{IoCmd, Mode, OpenFlags, VFile};
 use crate::process::VThread;
 use crate::time::TimeSpec;
 use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
+use macros::Errno;
+use std::fmt::Debug;
 use std::sync::{Arc, Weak};
 
 /// An implementation of `cdev` and `cdev_priv` structures.
@@ -149,3 +152,44 @@ bitflags! {
 pub type CdevOpen = fn(&Arc<Cdev>, OpenFlags, i32, Option<&VThread>) -> Result<(), Box<dyn Errno>>;
 pub type CdevFd =
     fn(&Arc<Cdev>, OpenFlags, Option<&VThread>, Option<&mut VFile>) -> Result<(), Box<dyn Errno>>;
+
+trait Device: Debug + Sync + Send + 'static {
+    #[allow(unused_variables)]
+    fn read(
+        self: Arc<Self>,
+        data: &mut [u8],
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        Err(Box::new(DefaultError::ReadNotSupported))
+    }
+
+    #[allow(unused_variables)]
+    fn write(self: Arc<Self>, data: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+        Err(Box::new(DefaultError::WriteNotSupported))
+    }
+
+    #[allow(unused_variables)]
+    fn ioctl(
+        self: Arc<Self>,
+        cmd: IoCmd,
+        data: &mut [u8],
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        Err(Box::new(DefaultError::IoctlNotSupported))
+    }
+}
+
+#[derive(Debug, Error, Errno)]
+pub enum DefaultError {
+    #[error("read not supported")]
+    #[errno(ENODEV)]
+    ReadNotSupported,
+
+    #[error("write not supported")]
+    #[errno(ENODEV)]
+    WriteNotSupported,
+
+    #[error("ioctl not supported")]
+    #[errno(ENODEV)]
+    IoctlNotSupported,
+}
