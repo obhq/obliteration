@@ -10,7 +10,6 @@ use macros::vpath;
 use std::{
     collections::HashMap,
     num::NonZeroI32,
-    ops::Deref,
     sync::{Arc, RwLock},
 };
 use thiserror::Error;
