@@ -900,14 +900,14 @@ pub struct FsConfig {
 }
 
 #[derive(Debug)]
-/// Represents the fd arg for
+
 pub enum Offset {
     Current,
     Provided(u64),
 }
 
 #[derive(Debug)]
-/// Represents the fd arg for
+/// Represents the fd arg for *at syscalls
 enum At {
     Cwd,
     Fd(i32),
