@@ -12,6 +12,7 @@ use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ERANGE, ESRCH};
 use crate::fs::Vnode;
 use crate::idt::Idt;
 use crate::info;
+use crate::signal::SigChldFlags;
 use crate::signal::{
     strsignal, SignalAct, SignalFlags, SignalSet, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_DFL,
     SIG_IGN, SIG_MAXSIG, SIG_SETMASK, SIG_UNBLOCK,
@@ -291,12 +292,24 @@ impl VProc {
         if sig == 0 || sig > SIG_MAXSIG {
             return Err(SysErr::Raw(EINVAL));
         }
+        let sig = NonZeroI32::new(sig).unwrap();
 
         // Save the old actions.
         let mut acts = self.sigacts.write();
 
         if !oact.is_null() {
-            todo!("sys_sigaction with oact != null");
+            let handler = acts.handler(sig);
+            let flags = acts.signal_flags(sig);
+            let mask = acts.catchmask(sig);
+            let old_act = SignalAct {
+                handler: handler,
+                flags: flags,
+                mask: mask,
+            };
+
+            unsafe {
+                *oact = old_act;
+            }
         }
 
         if act.is_null() {
@@ -304,7 +317,6 @@ impl VProc {
         }
 
         // Set new actions.
-        let sig = NonZeroI32::new(sig).unwrap();
         let handler = unsafe { (*act).handler };
         let flags = unsafe { (*act).flags };
         let mut mask = unsafe { (*act).mask };
@@ -357,7 +369,27 @@ impl VProc {
         }
 
         if sig == SIGCHLD {
-            todo!("sys_sigaction with sig = SIGCHLD");
+            let mut flag = acts.flag();
+
+            if flags.intersects(SignalFlags::SA_NOCLDSTOP) {
+                flag |= SigChldFlags::PS_NOCLDSTOP;
+            } else {
+                flag &= !SigChldFlags::PS_NOCLDSTOP;
+            }
+
+            if !flags.intersects(SignalFlags::SA_NOCLDWAIT) || self.id == PID1 {
+                flag &= !SigChldFlags::PS_NOCLDWAIT;
+            } else {
+                flag |= SigChldFlags::PS_NOCLDWAIT;
+            }
+
+            if acts.handler(sig) == SIG_IGN {
+                flag |= SigChldFlags::PS_CLDSIGIGN;
+            } else {
+                flag &= !SigChldFlags::PS_CLDSIGIGN;
+            }
+
+            acts.set_flag(flag);
         }
 
         // TODO: Refactor this for readability.
@@ -614,3 +646,4 @@ pub enum VProcInitError {
 }
 
 static NEXT_ID: AtomicI32 = AtomicI32::new(1);
+const PID1: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(1) };
