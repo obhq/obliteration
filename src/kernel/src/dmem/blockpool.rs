@@ -1,5 +1,5 @@
 use crate::errno::Errno;
-use crate::fs::{FileBackend, IoCmd, Stat, VFile};
+use crate::fs::{DefaultError, FileBackend, IoCmd, Stat, VFile};
 use crate::process::VThread;
 use std::sync::Arc;
 
@@ -14,7 +14,11 @@ impl FileBackend for BlockPool {
         cmd: IoCmd,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        todo!()
+        match cmd {
+            IoCmd::BLKPOOL1(_) => todo!(),
+            IoCmd::BLKPOOL2(_) => todo!(),
+            _ => Err(Box::new(DefaultError::IoCmdNotSupported)),
+        }
     }
 
     fn stat(self: &Arc<Self>, _: &VFile, _: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {

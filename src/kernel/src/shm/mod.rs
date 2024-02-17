@@ -9,6 +9,7 @@ use crate::{
     memory::MemoryManager,
     process::VThread,
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
+    time::TimeSpec,
     ucred::{Gid, Ucred, Uid},
 };
 use std::{convert::Infallible, num::NonZeroI32, sync::Arc};
@@ -78,14 +79,20 @@ pub enum ShmPath {
     Path(VPathBuf),
 }
 
+/// POSIX shared memory, an implementation of `shmfd`.
 #[derive(Debug)]
-pub struct Shm {
+pub struct SharedMemory {
+    size: u64,
+    atime: TimeSpec,
+    mtime: TimeSpec,
+    ctime: TimeSpec,
+    birthtime: TimeSpec,
     uid: Uid,
     gid: Gid,
     mode: Mode,
 }
 
-impl Shm {
+impl SharedMemory {
     /// See `shm_do_truncate` on the PS4 for a reference.
     fn do_truncate(&self, length: TruncateLength) -> Result<(), TruncateError> {
         todo!()
@@ -109,7 +116,7 @@ impl Shm {
     }
 }
 
-impl FileBackend for Shm {
+impl FileBackend for SharedMemory {
     #[allow(unused_variables)]
     fn read(
         self: &Arc<Self>,
@@ -137,7 +144,11 @@ impl FileBackend for Shm {
         cmd: IoCmd,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        todo!()
+        match cmd {
+            IoCmd::SHM0(_) => todo!(),
+            IoCmd::SHM1(_) => todo!(),
+            _ => Err(DefaultError::IoCmdNotSupported.into()),
+        }
     }
 
     #[allow(unused_variables)] // remove when implementing
@@ -145,6 +156,15 @@ impl FileBackend for Shm {
         let mut stat = Stat::zeroed();
 
         stat.block_size = 0x4000;
+        stat.size = self.size;
+        stat.block_count = (self.size + (stat.block_size as u64) - 1) / (stat.block_size as u64);
+
+        stat.atime = self.atime;
+        stat.mtime = self.mtime;
+        stat.ctime = self.ctime;
+        stat.birthtime = self.birthtime;
+
+        stat.mode = self.mode.raw() | 0o100000;
 
         todo!()
     }

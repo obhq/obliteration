@@ -52,15 +52,6 @@ bitflags! {
     }
 }
 
-#[derive(Debug, Error)]
-pub enum SocketCreateError {}
-
-impl Errno for SocketCreateError {
-    fn errno(&self) -> NonZeroI32 {
-        match *self {}
-    }
-}
-
 impl FileBackend for Socket {
     /// See soo_read on the PS4 for a reference.
     fn read(
@@ -103,6 +94,10 @@ impl FileBackend for Socket {
 
     #[allow(unused_variables)] // TODO: remove when implementing
     fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
+        let mut stat = Stat::zeroed();
+
+        stat.mode = 0o140000;
+
         todo!()
     }
 
@@ -113,6 +108,15 @@ impl FileBackend for Socket {
         _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         Err(DefaultError::InvalidValue.into())
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum SocketCreateError {}
+
+impl Errno for SocketCreateError {
+    fn errno(&self) -> NonZeroI32 {
+        match *self {}
     }
 }
 

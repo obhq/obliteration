@@ -29,6 +29,11 @@ macro_rules! commands {
 
                         $(
                             assert!(std::mem::size_of::<$type>() == IoCmd::iocparm_len($value));
+
+                            $(
+                                assert!($value & IoCmd::IOC_OUT != 0);
+                                $($hack:lifetime)?;
+                            )?
                         )?
 
                         $value
@@ -84,21 +89,51 @@ macro_rules! commands {
 
 commands! {
     pub enum IoCmd {
+        /** Disk commands **/
+        /// Get media size in bytes.
+        DIOCGMEDIASIZE(&mut i64) = 0x40086418,
+
+        /** Generic file commands **/
         /// Set close on exec on fd.
         FIOCLEX = 0x20006601,
         /// Remove close on exec on fd.
         FIONCLEX = 0x20006602,
+        /// Get number of bytes to read
+        FIONREAD(&mut i32) = 0x4004667f,
         /// Set/clear non-blocking I/O.
-        FIONBIO(&i32) = 0x8004667d,
+        FIONBIO(&i32) = 0x8004667e,
         /// Set/clear async I/O.
-        FIOASYNC(&i32) = 0x8004667e,
+        FIOASYNC(&i32) = 0x8004667d,
+        /// Set owner.
+        FIOSETOWN(&i32) = 0x8004667c,
+        /// Get owner.
+        FIOGETOWN(&mut i32) = 0x4004667b,
         /// Seek data.
         FIOSEEKDATA(&mut i64) = 0xC0086661,
         /// Seek hole.
         FIOSEEKHOLE(&mut i64) = 0xC0086662,
+
+        /** Terminal commands **/
         /// Become controlling terminal.
         TIOCSCTTY = 0x20007461,
-        /// Get media size in bytes.
-        DIOCGMEDIASIZE(&i64) = 0x40086418,
+
+        /** POSIX shared memory commands **/
+        /// Unknown shm command
+        SHM0(&mut i32) = 0x4004a100,
+        /// Unknown shm command
+        SHM1(&mut i32) = 0x4004a101,
+
+        /** Blockpool commands **/
+        /// Unknown blockpool command
+        BLKPOOL1(&mut Unknown32) = 0xc020a801,
+        /// Unknown blockpool command
+        BLKPOOL2(&mut Unknown16) = 0x4010a802,
     }
 }
+
+/// This struct is to be used for commands where the type of data is unknown
+#[derive(Debug)]
+pub struct Unknown<const N: usize>([u8; N]);
+
+type Unknown16 = Unknown<16>;
+type Unknown32 = Unknown<32>;

@@ -3,23 +3,23 @@ use crate::time::TimeSpec;
 /// An implementation of the `stat` structure.
 #[repr(C)]
 pub struct Stat {
-    dev: i32,
-    ino: u32,
+    pub dev: i32,
+    pub ino: u32,
     pub mode: u16,
-    nlink: u16,
-    uid: u32,
-    gid: u32,
-    rdev: i32,
-    atime: TimeSpec,
-    mtime: TimeSpec,
-    ctime: TimeSpec,
-    pub size: i64,
-    block_count: i64,
+    pub nlink: u16,
+    pub uid: u32,
+    pub gid: u32,
+    pub rdev: i32,
+    pub atime: TimeSpec,
+    pub mtime: TimeSpec,
+    pub ctime: TimeSpec,
+    pub size: u64,
+    pub block_count: u64,
     pub block_size: u32,
-    flags: u32,
-    gen: u32,
+    pub flags: u32,
+    pub gen: u32,
     _spare: i32,
-    birthtime: TimeSpec,
+    pub birthtime: TimeSpec,
 }
 
 impl Stat {

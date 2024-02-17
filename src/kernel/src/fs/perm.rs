@@ -126,6 +126,10 @@ impl Mode {
             Some(Self(v))
         }
     }
+
+    pub fn raw(&self) -> u16 {
+        self.0
+    }
 }
 
 impl From<Mode> for u32 {

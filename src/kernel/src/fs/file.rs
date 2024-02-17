@@ -5,7 +5,7 @@ use crate::errno::{EINVAL, ENOTTY, ENXIO, EOPNOTSUPP};
 use crate::kqueue::KernelQueue;
 use crate::net::Socket;
 use crate::process::VThread;
-use crate::shm::Shm;
+use crate::shm::SharedMemory;
 use bitflags::bitflags;
 use macros::Errno;
 use std::fmt::Debug;
@@ -171,13 +171,13 @@ impl Write for VFile {
 /// Type of [`VFile`].
 #[derive(Debug)]
 pub enum VFileType {
-    Vnode(Arc<Vnode>),             // DTYPE_VNODE = 1
-    Socket(Arc<Socket>),           // DTYPE_SOCKET = 2,
-    KernelQueue(Arc<KernelQueue>), // DTYPE_KQUEUE = 5,
-    SharedMemory(Arc<Shm>),        // DTYPE_SHM = 8,
-    Device(Arc<Cdev>),             // DTYPE_DEV = 11,
-    IpcSocket(Arc<Socket>),        // DTYPE_IPCSOCKET = 15,
-    Blockpool(Arc<BlockPool>),     // DTYPE_BLOCKPOOL = 17,
+    Vnode(Arc<Vnode>),               // DTYPE_VNODE = 1
+    Socket(Arc<Socket>),             // DTYPE_SOCKET = 2,
+    KernelQueue(Arc<KernelQueue>),   // DTYPE_KQUEUE = 5,
+    SharedMemory(Arc<SharedMemory>), // DTYPE_SHM = 8,
+    Device(Arc<Cdev>),               // DTYPE_DEV = 11,
+    IpcSocket(Arc<Socket>),          // DTYPE_IPCSOCKET = 15,
+    Blockpool(Arc<BlockPool>),       // DTYPE_BLOCKPOOL = 17,
 }
 
 bitflags! {
@@ -189,7 +189,7 @@ bitflags! {
     }
 }
 
-/// An implementation of `fileops` structure.
+/// An implementation of `fileops` structure, the implementing type serves as f_data.
 pub trait FileBackend: Debug + Send + Sync + 'static {
     #[allow(unused_variables)]
     fn read(
@@ -218,9 +218,10 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         cmd: IoCmd,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        Err(Box::new(DefaultError::IoctlNotSupported))
+        Err(Box::new(DefaultError::IoCmdNotSupported))
     }
 
+    /// This function doesn't have a default erroring implementation because it seems to be implemented in every instance of `fileops`.
     #[allow(unused_variables)]
     fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>>;
 
@@ -245,9 +246,10 @@ pub enum DefaultError {
     #[errno(ENXIO)]
     WriteNotSupported,
 
-    #[error("ioctl is not supported")]
+    /// This is used even if the file backend doesn't support any ioctl commands.
+    #[error("io command is not supported")]
     #[errno(ENOTTY)]
-    IoctlNotSupported,
+    IoCmdNotSupported,
 
     #[error("truncating is not supported")]
     #[errno(ENXIO)]
