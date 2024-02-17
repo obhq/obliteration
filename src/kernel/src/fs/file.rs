@@ -221,7 +221,8 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         Err(Box::new(DefaultError::IoCmdNotSupported))
     }
 
-    /// This function doesn't have a default erroring implementation because it seems to be implemented in every instance of `fileops`.
+    /// This method doesn't have a default erroring implementation like the other ones,
+    /// because it seems to be properly implemented in every instance of `fileops`.
     #[allow(unused_variables)]
     fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>>;
 
