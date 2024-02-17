@@ -1,12 +1,17 @@
 use super::dirent::Dirent;
 use crate::errno::Errno;
-use crate::fs::{IoCmd, Mode, OpenFlags, VFile};
+use crate::errno::ENODEV;
+use crate::fs::Uio;
+use crate::fs::{FileBackend, IoCmd, Mode, OpenFlags, Stat, TruncateLength, UioMut, VFile};
 use crate::process::VThread;
 use crate::time::TimeSpec;
 use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
+use macros::Errno;
+use std::fmt::Debug;
 use std::sync::{Arc, Weak};
+use thiserror::Error;
 
 /// An implementation of `cdev` and `cdev_priv` structures.
 #[derive(Debug)]
@@ -98,6 +103,53 @@ impl Cdev {
     }
 }
 
+impl FileBackend for Cdev {
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn read(
+        self: &Arc<Self>,
+        file: &VFile,
+        buf: &mut UioMut,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn write(
+        self: &Arc<Self>,
+        file: &VFile,
+        buf: &mut Uio,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn ioctl(
+        self: &Arc<Self>,
+        file: &VFile,
+        cmd: IoCmd,
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn truncate(
+        self: &Arc<Self>,
+        file: &VFile,
+        length: TruncateLength,
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+}
+
 bitflags! {
     /// Flags for [`Cdev`].
     #[derive(Debug, Clone, Copy)]
@@ -158,3 +210,40 @@ pub type CdevFd =
     fn(&Arc<Cdev>, OpenFlags, Option<&VThread>, Option<&mut VFile>) -> Result<(), Box<dyn Errno>>;
 pub type CdevIoctl =
     fn(&Arc<Cdev>, IoCmd, &mut [u8], Option<&VThread>) -> Result<(), Box<dyn Errno>>;
+
+/// An implementation of the `cdevsw` structure.
+pub(super) trait Device: Debug + Sync + Send + 'static {
+    #[allow(unused_variables)]
+    fn read(
+        self: Arc<Self>,
+        data: &mut [u8],
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        Err(Box::new(DefaultError::ReadNotSupported))
+    }
+
+    #[allow(unused_variables)]
+    fn write(self: Arc<Self>, data: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+        Err(Box::new(DefaultError::WriteNotSupported))
+    }
+
+    #[allow(unused_variables)]
+    fn ioctl(self: Arc<Self>, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
+        Err(Box::new(DefaultError::IoctlNotSupported))
+    }
+}
+
+#[derive(Debug, Error, Errno)]
+pub(super) enum DefaultError {
+    #[error("read not supported")]
+    #[errno(ENODEV)]
+    ReadNotSupported,
+
+    #[error("write not supported")]
+    #[errno(ENODEV)]
+    WriteNotSupported,
+
+    #[error("ioctl not supported")]
+    #[errno(ENODEV)]
+    IoctlNotSupported,
+}
