@@ -33,7 +33,7 @@ impl<T> Idt<T> {
     where
         F: FnOnce(usize) -> Entry<T>,
     {
-        let Ok((entry, id)) = self.alloc::<_, Infallible>(|id| Ok(factory(id))) else {
+        let Ok((_, id)) = self.alloc::<_, Infallible>(|id| Ok(factory(id))) else {
             unreachable!();
         };
 
