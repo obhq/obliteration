@@ -41,7 +41,7 @@ impl Socket {
     }
 
     /// See `soreceive` on the PS4 for a reference.
-    /// This function is not implemented yet.
+    #[allow(unused_variables)] // TODO: remove when implementing
     fn receive(&self, buf: &mut UioMut, td: Option<&VThread>) -> Result<usize, ReceiveError> {
         todo!()
     }
