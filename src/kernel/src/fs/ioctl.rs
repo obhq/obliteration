@@ -42,12 +42,6 @@ macro_rules! commands {
             }
 
             impl<'a> $enum_name<'a> {
-                pub const IOCPARM_SHIFT: u32 = 13;
-                pub const IOCPARM_MASK: u32 = (1 << Self::IOCPARM_SHIFT) - 1;
-                pub const IOC_VOID: u32 = 0x20000000;
-                pub const IOC_OUT: u32 = 0x40000000;
-                pub const IOC_IN: u32 = 0x80000000;
-
                 pub fn try_from_raw_parts(cmd: u64, arg: *mut u8) -> Result<Self, SysErr> {
                     let cmd = cmd as u32;
 
@@ -63,25 +57,6 @@ macro_rules! commands {
                     Ok(cmd)
                 }
 
-                const fn is_invalid(com: u32) -> bool {
-                    if com & (Self::IOC_VOID | Self::IOC_IN | Self::IOC_OUT) == 0 {
-                        return true;
-                    }
-
-                    if com & (Self::IOC_IN | Self::IOC_OUT) != 0 && Self::iocparm_len(com) == 0 {
-                        return true;
-                    }
-
-                    if com & Self::IOC_VOID != 0 && Self::iocparm_len(com) != 0 && Self::iocparm_len(com) != 4 {
-                        return true;
-                    }
-
-                    false
-                }
-
-                const fn iocparm_len(com: u32) -> usize {
-                    ((com >> 16) & Self::IOCPARM_MASK) as usize
-                }
             }
         };
     }
@@ -128,6 +103,34 @@ commands! {
         BLKPOOL1(&mut Unknown32) = 0xc020a801,
         /// Unknown blockpool command
         BLKPOOL2(&mut Unknown16) = 0x4010a802,
+    }
+}
+
+impl IoCmd<'_> {
+    pub const SHIFT: u32 = 13; // IOCPARM_SHIFT
+    pub const MASK: u32 = (1 << Self::SHIFT) - 1; // IOCPARM_MASK
+    pub const VOID: u32 = 0x20000000; // IOC_VOID
+    pub const OUT: u32 = 0x40000000; // IOC_OUT
+    pub const IN: u32 = 0x80000000; // IOC_IN
+
+    const fn is_invalid(com: u32) -> bool {
+        if com & (Self::VOID | Self::IN | Self::OUT) == 0 {
+            return true;
+        }
+
+        if com & (Self::IN | Self::OUT) != 0 && Self::iocparm_len(com) == 0 {
+            return true;
+        }
+
+        if com & Self::VOID != 0 && Self::iocparm_len(com) != 0 && Self::iocparm_len(com) != 4 {
+            return true;
+        }
+
+        false
+    }
+
+    const fn iocparm_len(com: u32) -> usize {
+        ((com >> 16) & Self::MASK) as usize
     }
 }
 
