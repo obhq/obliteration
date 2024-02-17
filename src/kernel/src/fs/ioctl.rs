@@ -131,7 +131,7 @@ commands! {
     }
 }
 
-/// This struct is to be used for commands where the type of data is unknown
+/// To be used for commands where the type of data is unknown
 #[derive(Debug)]
 pub struct Unknown<const N: usize>([u8; N]);
 
