@@ -18,7 +18,7 @@ macro_rules! commands {
         ) => {
             /// A wrapper type for an ioctl command.
             /// FreeBSD uses an u_long, but masks off the top 4 bytes in kern_ioctl, so we can use an u32.
-            #[derive(Debug)]
+            #[derive(Debug, PartialEq, Eq)]
             #[non_exhaustive]
             #[repr(u32)]
             $vis enum $enum_name<'a> {
