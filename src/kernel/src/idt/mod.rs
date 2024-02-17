@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 pub use self::entry::*;
 
 mod entry;
@@ -27,10 +29,21 @@ impl<T> Idt<T> {
         }
     }
 
+    pub fn alloc_infallible<F>(&mut self, factory: F) -> usize
+    where
+        F: FnOnce(usize) -> Entry<T>,
+    {
+        let Ok((entry, id)) = self.alloc::<_, Infallible>(|id| Ok(factory(id))) else {
+            unreachable!();
+        };
+
+        id
+    }
+
     /// See `id_alloc` on the PS4 for a reference.
     pub fn alloc<F, E>(&mut self, factory: F) -> Result<(&mut Entry<T>, usize), E>
     where
-        F: FnOnce(usize) -> Result<T, E>,
+        F: FnOnce(usize) -> Result<Entry<T>, E>,
     {
         // Allocate a new set if necessary.
         let id = self.next;
@@ -47,12 +60,12 @@ impl<T> Idt<T> {
         assert!(entry.is_none());
 
         // Set the value.
-        let value = entry.insert(Entry::new(factory(id)?));
+        let entry = entry.insert(factory(id)?);
 
         // Update table states.
         self.next += 1;
 
-        Ok((value, id))
+        Ok((entry, id))
     }
 
     /// See `id_rlock` on the PS4 for a reference.

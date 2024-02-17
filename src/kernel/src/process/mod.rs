@@ -21,7 +21,6 @@ use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
 use std::cmp::min;
-use std::convert::Infallible;
 use std::ffi::c_char;
 use std::mem::zeroed;
 use std::num::NonZeroI32;
@@ -116,7 +115,6 @@ impl VProc {
         sys.register(464, &vp, Self::sys_thr_set_name);
         sys.register(466, &vp, Self::sys_rtprio_thread);
         sys.register(487, &vp, Self::sys_cpuset_getaffinity);
-        sys.register(557, &vp, Self::sys_namedobj_create);
         sys.register(585, &vp, Self::sys_is_in_sandbox);
         sys.register(587, &vp, Self::sys_get_authinfo);
         sys.register(602, &vp, Self::sys_randomized_path);
@@ -518,30 +516,6 @@ impl VProc {
         }
     }
 
-    // TODO: This should not be here.
-    fn sys_namedobj_create(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        // Get arguments.
-        let name = unsafe { i.args[0].to_str(32)?.ok_or(SysErr::Raw(EINVAL))? };
-        let data: usize = i.args[1].into();
-        let flags: u32 = i.args[2].try_into().unwrap();
-
-        // Allocate the entry.
-        let mut table = self.objects.write();
-        let (entry, id) = table
-            .alloc::<_, Infallible>(|_| Ok(Arc::new(NamedObj::new(name.to_owned(), data))))
-            .unwrap();
-
-        entry.set_name(Some(name.to_owned()));
-        entry.set_ty((flags as u16) | 0x1000);
-
-        info!(
-            "Named object '{}' (ID = {}) was created with data = {:#x} and flags = {:#x}.",
-            name, id, data, flags
-        );
-
-        Ok(id.into())
-    }
-
     fn sys_is_in_sandbox(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
         // TODO: Implement this once FS rework has been usable.
         Ok(1.into())
@@ -630,19 +604,6 @@ impl VProc {
 struct RtPrio {
     ty: u16,
     prio: u16,
-}
-
-/// TODO: Move this to somewhere else.
-#[derive(Debug)]
-pub struct NamedObj {
-    name: String,
-    data: usize,
-}
-
-impl NamedObj {
-    pub fn new(name: String, data: usize) -> Self {
-        Self { name, data }
-    }
 }
 
 /// Represents an error when [`VProc`] construction is failed.
