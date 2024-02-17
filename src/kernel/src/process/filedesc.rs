@@ -90,7 +90,7 @@ impl FileDesc {
             return i as i32;
         }
 
-        // This should never happened.
+        // This should never happen.
         panic!("Too many files has been opened.");
     }
 

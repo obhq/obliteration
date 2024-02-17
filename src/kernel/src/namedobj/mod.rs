@@ -20,10 +20,9 @@ impl NamedObjManager {
         namedobj
     }
 
-    // TODO: This should not be here.
     fn sys_namedobj_create(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
-        let name = unsafe { i.args[0].to_str(32)?.ok_or(SysErr::Raw(EINVAL))? };
+        let name = unsafe { i.args[0].to_str(32) }?.ok_or(SysErr::Raw(EINVAL))?;
         let data: usize = i.args[1].into();
         let flags: u32 = i.args[2].try_into().unwrap();
 
@@ -49,7 +48,6 @@ impl NamedObjManager {
     }
 }
 
-/// TODO: Move this to somewhere else.
 #[derive(Debug)]
 pub struct NamedObj {
     name: String,
