@@ -31,7 +31,7 @@ macro_rules! commands {
                             assert!(std::mem::size_of::<$type>() == IoCmd::iocparm_len($value));
 
                             $(
-                                assert!($value & IoCmd::IOC_OUT != 0);
+                                assert!($value & IoCmd::OUT != 0);
                                 $($hack:lifetime)?;
                             )?
                         )?
