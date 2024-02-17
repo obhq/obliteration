@@ -1,4 +1,4 @@
-use crate::signal::{Signal, SignalSet, SIG_MAXSIG};
+use crate::signal::{Signal, SigChldFlags, SignalFlags, SignalSet, SIGCHLD, SIG_MAXSIG};
 
 /// An implementation of `sigacts` structure.
 #[derive(Debug)]
@@ -12,6 +12,7 @@ pub struct SignalActs {
     modern: SignalSet,                           // ps_siginfo
     ignore: SignalSet,                           // ps_sigignore
     catch: SignalSet,                            // ps_sigcatch
+    flag: SigChldFlags,                          // ps_flag
 }
 
 impl SignalActs {
@@ -26,6 +27,7 @@ impl SignalActs {
             modern: SignalSet::default(),
             ignore: SignalSet::default(),
             catch: SignalSet::default(),
+            flag: SigChldFlags::empty(),
         }
     }
 
@@ -35,6 +37,10 @@ impl SignalActs {
 
     pub fn set_handler(&mut self, sig: Signal, h: usize) {
         self.handler[(sig.get() - 1) as usize] = h;
+    }
+
+    pub fn catchmask(&self, sig: Signal) -> SignalSet {
+        self.catchmask[(sig.get() - 1) as usize]
     }
 
     pub fn set_catchmask(&mut self, sig: Signal, mask: SignalSet) {
@@ -71,5 +77,44 @@ impl SignalActs {
 
     pub fn remove_catch(&mut self, sig: Signal) {
         self.catch.remove(sig);
+    }
+
+    pub fn flag(&self) -> SigChldFlags {
+        self.flag
+    }
+
+    pub fn set_flag(&mut self, flag: SigChldFlags) {
+        self.flag = flag;
+    }
+
+    pub fn signal_flags(&self, sig: Signal) -> SignalFlags {
+        let mut flags: SignalFlags = SignalFlags::empty();
+
+        if self.stack.contains(sig) {
+            flags |= SignalFlags::SA_ONSTACK;
+        }
+        if self.interupt.contains(sig) {
+            flags |= SignalFlags::SA_RESTART;
+        }
+        if self.reset.contains(sig) {
+            flags |= SignalFlags::SA_RESETHAND;
+        }
+        if self.nodefer.contains(sig) {
+            flags |= SignalFlags::SA_NODEFER;
+        }
+        if self.modern.contains(sig) {
+            flags |= SignalFlags::SA_SIGINFO;
+        }
+
+        if sig == SIGCHLD {
+            if self.flag.intersects(SigChldFlags::PS_NOCLDSTOP) {
+                flags |= SignalFlags::SA_NOCLDSTOP;
+            }
+            if self.flag.intersects(SigChldFlags::PS_NOCLDWAIT) {
+                flags |= SignalFlags::SA_NOCLDWAIT
+            }
+        }
+
+        flags
     }
 }

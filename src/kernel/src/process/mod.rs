@@ -12,7 +12,7 @@ use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ERANGE, ESRCH};
 use crate::fs::Vnode;
 use crate::idt::Idt;
 use crate::info;
-use crate::signal::Signal;
+use crate::signal::{Signal, SigChldFlags};
 use crate::signal::{
     strsignal, SignalAct, SignalFlags, SignalSet, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_DFL,
     SIG_IGN, SIG_SETMASK, SIG_UNBLOCK,
@@ -298,7 +298,18 @@ impl VProc {
         let mut acts = self.sigacts.write();
 
         if !oact.is_null() {
-            todo!("sys_sigaction with oact != null");
+            let handler = acts.handler(sig);
+            let flags = acts.signal_flags(sig);
+            let mask = acts.catchmask(sig);
+            let old_act = SignalAct {
+                handler: handler,
+                flags: flags,
+                mask: mask,
+            };
+
+            unsafe {
+                *oact = old_act;
+            }
         }
 
         if act.is_null() {
@@ -358,7 +369,27 @@ impl VProc {
         }
 
         if sig == SIGCHLD {
-            todo!("sys_sigaction with sig = SIGCHLD");
+            let mut flag = acts.flag();
+
+            if flags.intersects(SignalFlags::SA_NOCLDSTOP) {
+                flag |= SigChldFlags::PS_NOCLDSTOP;
+            } else {
+                flag &= !SigChldFlags::PS_NOCLDSTOP;
+            }
+
+            if !flags.intersects(SignalFlags::SA_NOCLDWAIT) || self.id == PID1 {
+                flag &= !SigChldFlags::PS_NOCLDWAIT;
+            } else {
+                flag |= SigChldFlags::PS_NOCLDWAIT;
+            }
+
+            if acts.handler(sig) == SIG_IGN {
+                flag |= SigChldFlags::PS_CLDSIGIGN;
+            } else {
+                flag &= !SigChldFlags::PS_CLDSIGIGN;
+            }
+
+            acts.set_flag(flag);
         }
 
         // TODO: Refactor this for readability.
@@ -652,3 +683,4 @@ pub enum VProcInitError {
 }
 
 static NEXT_ID: AtomicI32 = AtomicI32::new(1);
+const PID1: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(1) };
