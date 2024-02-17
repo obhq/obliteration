@@ -32,7 +32,7 @@ macro_rules! commands {
 
                             $(
                                 assert!($value & IoCmd::OUT != 0);
-                                $($hack:lifetime)?;
+                                $($hack:lifetime)?
                             )?
                         )?
 

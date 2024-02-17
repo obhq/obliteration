@@ -7,7 +7,6 @@ use crate::ucred::{Privilege, Ucred};
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup};
 use macros::vpath;
-use macros::Errno;
 use param::Param;
 use std::fmt::{Display, Formatter};
 use std::num::{NonZeroI32, TryFromIntError};
@@ -23,6 +22,7 @@ pub use self::mount::*;
 pub use self::path::*;
 pub use self::perm::*;
 pub use self::stat::*;
+pub use self::uio::*;
 pub use self::vnode::*;
 
 mod dev;
@@ -36,6 +36,7 @@ mod path;
 mod perm;
 mod stat;
 mod tmp;
+mod uio;
 mod vnode;
 
 /// A virtual filesystem for emulating a PS4 filesystem.
@@ -985,70 +986,6 @@ impl TryFrom<i32> for Whence {
     }
 }
 
-pub struct IoVec {
-    base: *const u8,
-    len: usize,
-}
-
-impl IoVec {
-    pub unsafe fn try_from_raw_parts(base: *const u8, len: usize) -> Result<Self, IoVecError> {
-        Ok(Self { base, len })
-    }
-}
-
-const UIO_MAXIOV: u32 = 1024;
-const IOSIZE_MAX: usize = 0x7fffffff;
-
-pub struct Uio<'a> {
-    vecs: &'a [IoVec], // uio_iov + uio_iovcnt
-    bytes_left: usize, // uio_resid
-}
-
-impl<'a> Uio<'a> {
-    /// See `copyinuio` on the PS4 for a reference.
-    pub unsafe fn copyin(first: *const IoVec, count: u32) -> Result<Self, CopyInUioError> {
-        if count > UIO_MAXIOV {
-            return Err(CopyInUioError::TooManyVecs);
-        }
-
-        let vecs = std::slice::from_raw_parts(first, count as usize);
-        let bytes_left = vecs.iter().map(|v| v.len).try_fold(0, |acc, len| {
-            if acc > IOSIZE_MAX - len {
-                Err(CopyInUioError::MaxLenExceeded)
-            } else {
-                Ok(acc + len)
-            }
-        })?;
-
-        Ok(Self { vecs, bytes_left })
-    }
-}
-
-pub struct UioMut<'a> {
-    vecs: &'a mut [IoVec], // uio_iov + uio_iovcnt
-    bytes_left: usize,     // uio_resid
-}
-
-impl<'a> UioMut<'a> {
-    /// See `copyinuio` on the PS4 for a reference.
-    pub unsafe fn copyin(first: *mut IoVec, count: u32) -> Result<Self, CopyInUioError> {
-        if count > UIO_MAXIOV {
-            return Err(CopyInUioError::TooManyVecs);
-        }
-
-        let vecs = std::slice::from_raw_parts_mut(first, count as usize);
-        let bytes_left = vecs.iter().map(|v| v.len).try_fold(0, |acc, len| {
-            if acc > IOSIZE_MAX - len {
-                Err(CopyInUioError::MaxLenExceeded)
-            } else {
-                Ok(acc + len)
-            }
-        })?;
-
-        Ok(Self { vecs, bytes_left })
-    }
-}
-
 bitflags! {
     /// Flags for *at() syscalls.
     struct AtFlags: i32 {
@@ -1062,24 +999,6 @@ impl TryFrom<SysArg> for AtFlags {
     fn try_from(value: SysArg) -> Result<Self, Self::Error> {
         Ok(Self::from_bits_retain(value.get().try_into()?))
     }
-}
-
-#[derive(Debug, Error, Errno)]
-pub enum IoVecError {
-    #[error("len exceed the maximum value")]
-    #[errno(EINVAL)]
-    MaxLenExceeded,
-}
-
-#[derive(Debug, Error, Errno)]
-pub enum CopyInUioError {
-    #[error("too many iovecs")]
-    #[errno(EINVAL)]
-    TooManyVecs,
-
-    #[error("the sum of iovec lengths is too large")]
-    #[errno(EINVAL)]
-    MaxLenExceeded,
 }
 
 bitflags! {
