@@ -154,7 +154,7 @@ pub type CdevOpen = fn(&Arc<Cdev>, OpenFlags, i32, Option<&VThread>) -> Result<(
 pub type CdevFd =
     fn(&Arc<Cdev>, OpenFlags, Option<&VThread>, Option<&mut VFile>) -> Result<(), Box<dyn Errno>>;
 
-trait Device: Debug + Sync + Send + 'static {
+pub(super) trait Device: Debug + Sync + Send + 'static {
     #[allow(unused_variables)]
     fn read(
         self: Arc<Self>,
@@ -170,18 +170,13 @@ trait Device: Debug + Sync + Send + 'static {
     }
 
     #[allow(unused_variables)]
-    fn ioctl(
-        self: Arc<Self>,
-        cmd: IoCmd,
-        data: &mut [u8],
-        td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    fn ioctl(self: Arc<Self>, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultError::IoctlNotSupported))
     }
 }
 
 #[derive(Debug, Error, Errno)]
-pub enum DefaultError {
+pub(super) enum DefaultError {
     #[error("read not supported")]
     #[errno(ENODEV)]
     ReadNotSupported,
