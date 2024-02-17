@@ -115,7 +115,7 @@ impl FileDesc {
     fn get_internal(&self, fd: i32, flags: VFileFlags) -> Result<Arc<VFile>, GetFileError> {
         let fd: usize = fd.try_into()?;
 
-        let ref files = self.files.write();
+        let files = self.files.write();
 
         let file = files
             .get(fd as usize)
