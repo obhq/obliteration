@@ -1,6 +1,7 @@
 use crate::{
     budget::BudgetType,
-    fs::{FileBackend, Stat, VFile, VFileFlags, VFileType},
+    errno::Errno,
+    fs::{DefaultError, FileBackend, Stat, TruncateLength, VFile, VFileFlags, VFileType},
     process::{FileDesc, VThread},
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
 };
@@ -57,15 +58,20 @@ impl KernelQueue {
 }
 
 impl FileBackend for KernelQueue {
-    fn stat(
-        self: &Arc<Self>,
-        _: &VFile,
-        _: Option<&VThread>,
-    ) -> Result<Stat, Box<dyn crate::errno::Errno>> {
+    fn stat(self: &Arc<Self>, _: &VFile, _: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
         let mut stat = Stat::zeroed();
 
         stat.mode = 0o10000;
 
         Ok(stat)
+    }
+
+    fn truncate(
+        self: &Arc<Self>,
+        _: &VFile,
+        _: TruncateLength,
+        _: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        Err(DefaultError::InvalidValue.into())
     }
 }
