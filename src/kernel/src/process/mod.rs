@@ -12,11 +12,11 @@ use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ERANGE, ESRCH};
 use crate::fs::Vnode;
 use crate::idt::Idt;
 use crate::info;
-use crate::signal::{Signal, SigChldFlags};
 use crate::signal::{
     strsignal, SignalAct, SignalFlags, SignalSet, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_DFL,
     SIG_IGN, SIG_SETMASK, SIG_UNBLOCK,
 };
+use crate::signal::{SigChldFlags, Signal};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};

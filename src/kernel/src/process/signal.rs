@@ -1,4 +1,4 @@
-use crate::signal::{Signal, SigChldFlags, SignalFlags, SignalSet, SIGCHLD, SIG_MAXSIG};
+use crate::signal::{SigChldFlags, Signal, SignalFlags, SignalSet, SIGCHLD, SIG_MAXSIG};
 
 /// An implementation of `sigacts` structure.
 #[derive(Debug)]
