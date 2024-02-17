@@ -60,12 +60,12 @@ impl<T> Idt<T> {
         assert!(entry.is_none());
 
         // Set the value.
-        let entry = entry.insert(factory(id)?);
+        let value = entry.insert(factory(id)?);
 
         // Update table states.
         self.next += 1;
 
-        Ok((entry, id))
+        Ok((value, id))
     }
 
     /// See `id_rlock` on the PS4 for a reference.
