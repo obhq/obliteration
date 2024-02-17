@@ -33,7 +33,7 @@ impl Vnode {
         fs: &Arc<Mount>,
         ty: VnodeType,
         tag: &'static str,
-        backend: impl VnodeBackend + 'static,
+        backend: impl VnodeBackend,
     ) -> Arc<Self> {
         let gg = GutexGroup::new();
 
@@ -191,7 +191,7 @@ pub enum VnodeType {
 /// `vop_bypass` because it required the return type for all operations to be the same.
 ///
 /// All default implementation here are the implementation of `default_vnodeops`.
-pub(super) trait VnodeBackend: Debug + Send + Sync {
+pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
     /// An implementation of `vop_access`.
     fn access(
         self: Arc<Self>,
