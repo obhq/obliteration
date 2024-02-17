@@ -1,7 +1,8 @@
 use super::dirent::Dirent;
 use crate::errno::Errno;
 use crate::errno::ENODEV;
-use crate::fs::{IoCmd, Mode, OpenFlags, VFile};
+use crate::fs::Uio;
+use crate::fs::{FileBackend, IoCmd, Mode, OpenFlags, Stat, TruncateLength, UioMut, VFile};
 use crate::process::VThread;
 use crate::time::TimeSpec;
 use crate::ucred::{Gid, Ucred, Uid};
@@ -102,6 +103,53 @@ impl Cdev {
     }
 }
 
+impl FileBackend for Cdev {
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn read(
+        self: &Arc<Self>,
+        file: &VFile,
+        buf: &mut UioMut,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn write(
+        self: &Arc<Self>,
+        file: &VFile,
+        buf: &mut Uio,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn ioctl(
+        self: &Arc<Self>,
+        file: &VFile,
+        cmd: IoCmd,
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn truncate(
+        self: &Arc<Self>,
+        file: &VFile,
+        length: TruncateLength,
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+}
+
 bitflags! {
     /// Flags for [`Cdev`].
     #[derive(Debug, Clone, Copy)]
@@ -154,6 +202,7 @@ pub type CdevOpen = fn(&Arc<Cdev>, OpenFlags, i32, Option<&VThread>) -> Result<(
 pub type CdevFd =
     fn(&Arc<Cdev>, OpenFlags, Option<&VThread>, Option<&mut VFile>) -> Result<(), Box<dyn Errno>>;
 
+/// An implementation of the `cdevsw` structure.
 pub(super) trait Device: Debug + Sync + Send + 'static {
     #[allow(unused_variables)]
     fn read(
