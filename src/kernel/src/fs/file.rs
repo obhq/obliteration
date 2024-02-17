@@ -1,7 +1,7 @@
-use super::{IoCmd, Offset, Stat, Uio, UioMut, Vnode};
+use super::{IoCmd, Offset, Stat, TruncateLength, Uio, UioMut, Vnode};
 use crate::dmem::BlockPool;
 use crate::errno::Errno;
-use crate::errno::{ENOTTY, ENXIO, EOPNOTSUPP};
+use crate::errno::{EINVAL, ENOTTY, ENXIO, EOPNOTSUPP};
 use crate::kqueue::KernelQueue;
 use crate::net::Socket;
 use crate::process::VThread;
@@ -122,6 +122,20 @@ impl VFile {
         }
     }
 
+    pub fn truncate(
+        &self,
+        length: TruncateLength,
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        match &self.backend {
+            VFileType::Vnode(vn) => vn.truncate(self, length, td),
+            VFileType::Socket(so) | VFileType::IpcSocket(so) => so.truncate(self, length, td),
+            VFileType::KernelQueue(kq) => kq.truncate(self, length, td),
+            VFileType::SharedMemory(shm) => shm.truncate(self, length, td),
+            VFileType::Blockpool(bp) => bp.truncate(self, length, td),
+        }
+    }
+
     pub fn is_seekable(&self) -> bool {
         matches!(self.backend, VFileType::Vnode(_))
     }
@@ -203,6 +217,16 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
 
     #[allow(unused_variables)]
     fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>>;
+
+    #[allow(unused_variables)]
+    fn truncate(
+        self: &Arc<Self>,
+        file: &VFile,
+        length: TruncateLength,
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        Err(Box::new(DefaultError::TruncateNotSupported))
+    }
 }
 
 #[derive(Debug, Error, Errno)]
@@ -215,9 +239,18 @@ pub enum DefaultError {
     #[errno(ENXIO)]
     WriteNotSupported,
 
-    #[error("iocll is not supported")]
+    #[error("ioctl is not supported")]
     #[errno(ENOTTY)]
     IoctlNotSupported,
+
+    #[error("truncating is not supported")]
+    #[errno(ENXIO)]
+    TruncateNotSupported,
+
+    /// This is used by some file backends to indicate that the operation is not supported.
+    #[error("invalid value provided")]
+    #[errno(EINVAL)]
+    InvalidValue,
 
     #[error("operation is not supported")]
     #[errno(EOPNOTSUPP)]
