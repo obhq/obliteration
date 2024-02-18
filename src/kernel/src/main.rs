@@ -12,6 +12,7 @@ use crate::net::NetManager;
 use crate::osem::OsemManager;
 use crate::process::{VProc, VProcInitError, VThread};
 use crate::regmgr::RegMgr;
+use crate::rng::RngManager;
 use crate::rtld::{LoadFlags, ModuleFlags, RuntimeLinker};
 use crate::shm::SharedMemoryManager;
 use crate::syscalls::Syscalls;
@@ -51,6 +52,7 @@ mod net;
 mod osem;
 mod process;
 mod regmgr;
+mod rng;
 mod rtld;
 mod shm;
 mod signal;
@@ -276,6 +278,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     TimeManager::new(&mut syscalls);
     KernelQueueManager::new(&mut syscalls);
     NetManager::new(&mut syscalls);
+    RngManager::new();
 
     // TODO: Get correct budget name from the PS4.
     let budget_id = budget.create(Budget::new("big app", ProcType::BigApp));
