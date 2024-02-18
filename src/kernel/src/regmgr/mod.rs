@@ -361,10 +361,9 @@ impl RegMgr {
                 let mut out = 0;
                 let ret = self.get_int(key, &mut out).unwrap();
 
-                if ret == 0 {
-                    Ok(out.into())
-                } else {
-                    Err(SysErr::Raw(unsafe { NonZeroI32::new_unchecked(ret) }))
+                match NonZeroI32::new(ret) {
+                    None => Ok(ret.into()),
+                    Some(v) => Err(SysErr::Raw(v)),
                 }
             }
             _ => Err(SysErr::Raw(EINVAL)),

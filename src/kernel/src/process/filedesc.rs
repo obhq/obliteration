@@ -6,7 +6,7 @@ use gmtx::{Gutex, GutexGroup};
 use macros::Errno;
 use std::collections::VecDeque;
 use std::convert::Infallible;
-use std::num::NonZeroI32;
+use std::num::{NonZeroI32, TryFromIntError};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -90,11 +90,11 @@ impl FileDesc {
             return i as i32;
         }
 
-        // This should never happened.
+        // This should never happen.
         panic!("Too many files has been opened.");
     }
 
-    // TODO: implement capabilities
+    // TODO: (maybe) implement capabilities
 
     /// See `fget` on the PS4 for a reference.
     pub fn get(&self, fd: i32) -> Result<Arc<VFile>, GetFileError> {
@@ -113,27 +113,28 @@ impl FileDesc {
 
     /// See `_fget` and `fget_unlocked` on the PS4 for a reference.
     fn get_internal(&self, fd: i32, flags: VFileFlags) -> Result<Arc<VFile>, GetFileError> {
-        if fd < 0 {
-            return Err(GetFileError::NegativeFd(fd));
-        }
+        let fd: usize = fd.try_into()?;
 
         let files = self.files.write();
 
-        if fd as usize >= files.len() {
-            return Err(GetFileError::FdOutOfRange(fd));
-        }
+        let file = files
+            .get(fd as usize)
+            .ok_or(GetFileError::FdOutOfRange)? // None means the file descriptor is out of range
+            .as_ref()
+            .ok_or(GetFileError::NoFile)?; // Some(None) means the file descriptor is not associated with a file
 
-        loop {
-            if let None = files.get(fd as usize) {
-                return Err(GetFileError::NoFile(fd));
+        match flags {
+            VFileFlags::WRITE | VFileFlags::READ if !file.flags().intersects(flags) => {
+                return Err(GetFileError::BadFlags(flags, file.flags()));
             }
-
-            todo!()
+            _ => {}
         }
+
+        Ok(file.clone())
     }
 
     pub fn free(&self, fd: i32) -> Result<(), FreeError> {
-        let fd: usize = fd.try_into().map_err(|_| FreeError::NegativeFd)?;
+        let fd: usize = fd.try_into()?;
 
         let mut files = self.files.write();
 
@@ -147,25 +148,28 @@ impl FileDesc {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum GetFileError {
-    #[error("got negative file descriptor {0}")]
-    NegativeFd(i32),
+    #[error("got negative file descriptor")]
+    #[errno(EBADF)]
+    NegativeFd,
 
-    #[error("file descriptor {0} out of range")]
-    FdOutOfRange(i32),
+    #[error("file descriptor is out of range")]
+    #[errno(EBADF)]
+    FdOutOfRange,
 
-    #[error("no file assoiated with file descriptor {0}")]
-    NoFile(i32),
+    #[error("no file assoiated with file descriptor")]
+    #[errno(EBADF)]
+    NoFile,
+
+    #[error("bad flags associated with file descriptor: expected {0:?}, file has {1:?}")]
+    #[errno(EBADF)]
+    BadFlags(VFileFlags, VFileFlags),
 }
 
-impl Errno for GetFileError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::NegativeFd(_) => EBADF,
-            Self::FdOutOfRange(_) => EBADF,
-            Self::NoFile(_) => EBADF,
-        }
+impl From<TryFromIntError> for GetFileError {
+    fn from(_: TryFromIntError) -> Self {
+        GetFileError::NegativeFd
     }
 }
 
@@ -192,4 +196,10 @@ pub enum FreeError {
     #[error("no file associated with file descriptor")]
     #[errno(EBADF)]
     NoFile,
+}
+
+impl From<TryFromIntError> for FreeError {
+    fn from(_: TryFromIntError) -> Self {
+        FreeError::NegativeFd
+    }
 }
