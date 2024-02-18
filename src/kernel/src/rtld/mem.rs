@@ -59,10 +59,8 @@ impl Memory {
                     }
                 }
                 ProgramType::PT_SCE_RELRO => {
-                    if relro.is_some() {
+                    if relro.replace(segments.len()).is_some() {
                         return Err(MapError::MultipleRelroProgram);
-                    } else {
-                        relro = Some(segments.len());
                     }
                 }
                 _ => continue,

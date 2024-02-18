@@ -451,22 +451,60 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
     }
 
     fn sys_dynlib_get_info(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let arg1: usize = i.args[1].into();
-        let info: *mut DynlibInfo = i.args[2].into();
+        let handle: u32 = i.args[0].try_into().unwrap();
+        let info = {
+            let info: *mut DynlibInfo = i.args[2].into();
+
+            unsafe { &mut *info }
+        };
 
         if self.app.file_info().is_none() {
             return Err(SysErr::Raw(EPERM));
         }
 
-        if unsafe { (*info).size } != size_of::<DynlibInfo>() {
+        if info.size != size_of::<DynlibInfo>() {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        let info = unsafe { &mut *info };
+        *info = self.dynlib_get_info(handle, true)?;
 
-        *info = unsafe { zeroed() };
+        Ok(SysOut::ZERO)
+    }
 
-        todo!()
+    fn dynlib_get_info(&self, handle: u32, unk: bool) -> Result<DynlibInfo, SysErr> {
+        let mut info: DynlibInfo = unsafe { zeroed() };
+
+        let modules = self.list.read();
+
+        let md = modules
+            .iter()
+            .find(|m| m.id() == handle)
+            .ok_or(SysErr::Raw(ESRCH))?;
+
+        if unk && todo!() {
+            return Err(SysErr::Raw(EPERM));
+        }
+
+        let name = md.path().file_name().unwrap();
+
+        let mem = md.memory();
+        let addr = mem.addr();
+
+        info.name[..name.len()].copy_from_slice(name.as_bytes());
+        info.name[0xff] = 0;
+        info.segment_count = 2;
+        info.mapbase = mem.base();
+        info.textsize = mem.text_segment().len().try_into().unwrap();
+        info.unk1 = 5;
+        info.database = addr + mem.data_segment().start();
+        info.datasize = mem.data_segment().len().try_into().unwrap();
+        info.unk2 = 3;
+
+        //TODO: set unk4 and segment_count
+
+        info.fingerprint = md.fingerprint();
+
+        Ok(info)
     }
 
     fn sys_dynlib_load_prx(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -914,10 +952,10 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         // Lookup the module.
         let modules = self.list.read();
-        let md = match modules.iter().find(|m| m.id() == handle) {
-            Some(v) => v,
-            None => return Err(SysErr::Raw(ESRCH)),
-        };
+        let md = modules
+            .iter()
+            .find(|m| m.id() == handle)
+            .ok_or(SysErr::Raw(ESRCH))?;
 
         // Fill the info.
         let info = unsafe { &mut *info };
@@ -932,7 +970,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         info.database = addr + mem.data_segment().start();
         info.datasize = mem.data_segment().len().try_into().unwrap();
         info.unk4 = 3;
-        info.unk6 = 2;
+        info.segment_count = 2;
         info.refcount = Arc::strong_count(md).try_into().unwrap();
 
         // Copy module name.
@@ -1048,6 +1086,18 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 #[repr(C)]
 struct DynlibInfo {
     size: usize,
+    name: [u8; 256],
+    mapbase: usize,
+    textsize: u32,
+    unk1: u32, // always 5
+    database: usize,
+    datasize: u32,
+    unk2: u32,       // always 3
+    unk3: [u8; 0xc], // always zeroes
+    unk4: u32,
+    unk5: [u8; 0x10],   // always zeroes
+    segment_count: u32, // always 2
+    fingerprint: [u8; 0x14],
 }
 
 const _: () = assert!(size_of::<DynlibInfo>() == 0x160);
@@ -1076,9 +1126,9 @@ struct DynlibInfoEx {
     unk3: u32, // Always 5.
     database: usize,
     datasize: u32,
-    unk4: u32,        // Always 3.
-    unk5: [u8; 0x20], // Always zeroes.
-    unk6: u32,        // Always 2.
+    unk4: u32,          // Always 3.
+    unk5: [u8; 0x20],   // Always zeroes.
+    segment_count: u32, // Always 2.
     refcount: u32,
 }
 

@@ -39,6 +39,7 @@ pub struct Module<E: ExecutionEngine + ?Sized> {
     needed: Vec<NeededModule>,
     modules: Vec<ModuleInfo>,
     libraries: Vec<LibraryInfo>,
+    fingerprint: [u8; 20],
     memory: Memory,
     relocated: Gutex<Vec<Option<Relocated<E>>>>,
     file_info: Option<FileInfo>,
@@ -179,6 +180,7 @@ impl<E: ExecutionEngine> Module<E> {
             needed: Vec::new(),
             modules: Vec::new(),
             libraries: Vec::new(),
+            fingerprint: [0; 20],
             memory,
             relocated: gg.spawn(Vec::new()),
             file_info: None,
@@ -191,11 +193,7 @@ impl<E: ExecutionEngine> Module<E> {
 
         if let Some(info) = file_info {
             module.digest_dynamic(base, &info)?;
-            module.relocated = gg.spawn(
-                std::iter::repeat_with(|| None)
-                    .take(info.reloc_count() + info.plt_count())
-                    .collect(),
-            );
+            module.relocated = gg.spawn(Vec::default());
             module.file_info = Some(info);
         }
 
@@ -280,6 +278,10 @@ impl<E: ExecutionEngine> Module<E> {
 
     pub fn libraries(&self) -> &[LibraryInfo] {
         self.libraries.as_ref()
+    }
+
+    pub fn fingerprint(&self) -> [u8; 20] {
+        self.fingerprint
     }
 
     pub fn memory(&self) -> &Memory {
@@ -569,6 +571,7 @@ impl<E: ExecutionEngine> Module<E> {
                 DynamicTag::DT_SONAME => self.digest_soname(info, i, value)?,
                 DynamicTag::DT_TEXTREL => *self.flags.get_mut() |= ModuleFlags::TEXT_REL,
                 DynamicTag::DT_FLAGS => self.digest_flags(value)?,
+                DynamicTag::DT_SCE_FINGERPRINT => todo!(),
                 DynamicTag::DT_SCE_MODULE_INFO | DynamicTag::DT_SCE_NEEDED_MODULE => {
                     self.digest_module_info(info, i, value)?;
                 }

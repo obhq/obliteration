@@ -279,7 +279,7 @@ impl FileInfo {
         let id = LE::read_u16(&data[6..]);
 
         // Lookup name.
-        let name = match self.read_str(name.try_into().unwrap()) {
+        let name = match self.read_str(name as usize) {
             Ok(v) => v.to_owned(),
             Err(e) => return Err(ReadModuleError::InvalidNameOffset(name, e)),
         };
@@ -316,7 +316,9 @@ impl FileInfo {
         };
 
         // Get Rust string.
-        std::str::from_utf8(raw).map_err(|_| StringTableError::NotUtf8)
+        let string = std::str::from_utf8(raw)?;
+
+        Ok(string)
     }
 }
 
@@ -418,4 +420,10 @@ pub enum StringTableError {
 
     #[error("the offset is not a UTF-8 string")]
     NotUtf8,
+}
+
+impl From<std::str::Utf8Error> for StringTableError {
+    fn from(_: std::str::Utf8Error) -> Self {
+        Self::NotUtf8
+    }
 }
