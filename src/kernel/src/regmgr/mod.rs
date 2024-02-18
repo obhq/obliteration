@@ -31,7 +31,7 @@ impl RegMgr {
         // Get arguments.
         let op: u32 = i.args[0].try_into().unwrap();
         let buf: *mut i32 = i.args[2].into();
-        let req: *const u8 = i.args[3].into();
+        let req = i.args[3];
         let reqlen: usize = i.args[4].into();
 
         let td = VThread::current().unwrap();
@@ -42,7 +42,7 @@ impl RegMgr {
             todo!("regmgr_call with buf = null");
         }
 
-        if req.is_null() {
+        if req == 0 {
             todo!("regmgr_call with req = null");
         }
 
@@ -50,7 +50,7 @@ impl RegMgr {
             todo!("regmgr_call with reqlen > 2048");
         }
 
-        let command = match RegMgrCommand::try_from_raw_parts(op, req) {
+        let command = match unsafe { RegMgrCommand::try_from_raw_parts(op, req) } {
             Ok(v) => v,
             Err(e) => {
                 warn!(e, "regmgr_call({op}) failed");

@@ -448,7 +448,7 @@ impl Fs {
     fn sys_ioctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         // Our IoCmd contains both the command and the argument (if there is one).
-        let cmd = IoCmd::try_from_raw_parts(i.args[1].into(), i.args[2].into())?;
+        let cmd = unsafe { IoCmd::try_from_raw_parts(i.args[1].into(), i.args[2].into())? };
 
         let td = VThread::current().unwrap();
 

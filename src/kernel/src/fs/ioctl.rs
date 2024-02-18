@@ -1,5 +1,7 @@
 use crate::errno::ENOTTY;
+use crate::syscalls::SysArg;
 use crate::syscalls::SysErr;
+use std::convert::Into;
 
 /// This macro does some compile time verification to ensure we don't mistype anything.
 /// It also ensures that we don't miss any commands, since [`IoCmd::try_from_raw_parts`] will panic with a todo! if it encounters an unknown command.
@@ -43,7 +45,9 @@ macro_rules! commands {
                 pub const IOC_OUT: u32 = 0x40000000;
                 pub const IOC_IN: u32 = 0x80000000;
 
-                pub fn try_from_raw_parts(cmd: u64, arg: *mut u8) -> Result<Self, SysErr> {
+                /// # Safety
+                /// `arg` has to be a pointer to the correct value
+                pub unsafe fn try_from_raw_parts(cmd: u64, arg: SysArg) -> Result<Self, SysErr> {
                     let cmd = cmd as u32;
 
                     if Self::is_invalid(cmd) {
@@ -51,7 +55,7 @@ macro_rules! commands {
                     }
 
                     let cmd = match cmd {
-                        $( $value => Self::$variant $( ( unsafe { &mut *(arg as *mut $type) } ) )? ,)*
+                        $( $value => Self::$variant $( ( unsafe { &mut *(Into::<*mut $type>::into(arg)) } ) )? ,)*
                         _ => todo!("Unhandled ioctl command {:#x}", cmd)
                     };
 
