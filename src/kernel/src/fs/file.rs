@@ -182,7 +182,7 @@ pub enum VFileType {
 
 bitflags! {
     /// Flags for [`VFile`].
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct VFileFlags: u32 {
         const READ = 0x00000001; // FREAD
         const WRITE = 0x00000002; // FWRITE

@@ -508,6 +508,19 @@ impl Fs {
         Ok(SysOut::ZERO)
     }
 
+    fn revoke(&self, vn: Arc<Vnode>, td: &VThread) -> Result<(), RevokeError> {
+        let vattr = vn.getattr().map_err(RevokeError::GetAttrError)?;
+
+        if td.cred().effective_uid() != vattr.uid() {
+            td.priv_check(Privilege::VFS_ADMIN)?;
+        }
+
+        vn.revoke(RevokeFlags::REVOKE_ALL)
+            .map_err(RevokeError::RevokeFailed)?;
+
+        Ok(())
+    }
+
     fn sys_readv(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *mut IoVec = i.args[1].into();
@@ -727,19 +740,6 @@ impl Fs {
     ) -> Result<Stat, StatError> {
         // TODO: this will need lookup from a start dir
         todo!()
-    }
-
-    fn revoke(&self, vn: Arc<Vnode>, td: &VThread) -> Result<(), RevokeError> {
-        let vattr = vn.getattr().map_err(RevokeError::GetAttrError)?;
-
-        if td.cred().effective_uid() != vattr.uid() {
-            td.priv_check(Privilege::VFS_ADMIN)?;
-        }
-
-        vn.revoke(RevokeFlags::REVOKE_ALL)
-            .map_err(RevokeError::RevokeFailed)?;
-
-        Ok(())
     }
 
     fn sys_mkdir(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
