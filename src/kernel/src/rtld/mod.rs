@@ -148,6 +148,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         sys.register(591, &ld, Self::sys_dynlib_dlsym);
         sys.register(592, &ld, Self::sys_dynlib_get_list);
+        sys.register(608, &ld, Self::sys_dynlib_get_info);
         sys.register(594, &ld, Self::sys_dynlib_load_prx);
         sys.register(596, &ld, Self::sys_dynlib_do_copy_relocations);
         sys.register(598, &ld, Self::sys_dynlib_get_proc_param);
@@ -447,6 +448,25 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         info!("Copied {} module IDs for dynamic linking.", list.len());
 
         Ok(SysOut::ZERO)
+    }
+
+    fn sys_dynlib_get_info(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let arg1: usize = i.args[1].into();
+        let info: *mut DynlibInfo = i.args[2].into();
+
+        if self.app.file_info().is_none() {
+            return Err(SysErr::Raw(EPERM));
+        }
+
+        if unsafe { (*info).size } != size_of::<DynlibInfo>() {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        let info = unsafe { &mut *info };
+
+        *info = unsafe { zeroed() };
+
+        todo!()
     }
 
     fn sys_dynlib_load_prx(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -887,9 +907,8 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         }
 
         // Check buffer size.
-        let size: usize = unsafe { (*info).size.try_into().unwrap() };
 
-        if size != size_of::<DynlibInfoEx>() {
+        if unsafe { (*info).size } != size_of::<DynlibInfoEx>() {
             return Err(SysErr::Raw(EINVAL));
         }
 
@@ -1027,8 +1046,15 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 }
 
 #[repr(C)]
+struct DynlibInfo {
+    size: usize,
+}
+
+const _: () = assert!(size_of::<DynlibInfo>() == 0x160);
+
+#[repr(C)]
 struct DynlibInfoEx {
-    size: u64,
+    size: usize,
     name: [u8; 256],
     handle: u32,
     tlsindex: u32,
@@ -1055,6 +1081,8 @@ struct DynlibInfoEx {
     unk6: u32,        // Always 2.
     refcount: u32,
 }
+
+const _: () = assert!(size_of::<DynlibInfoEx>() == 0x1a8);
 
 /// Contains how TLS was allocated so far.
 #[derive(Debug)]
