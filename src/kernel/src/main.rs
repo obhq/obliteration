@@ -4,6 +4,7 @@ use crate::debug::{DebugManager, DebugManagerInitError};
 use crate::dmem::DmemManager;
 use crate::ee::{EntryArg, RawFn};
 use crate::fs::{Fs, FsError, MountError, MountFlags, MountOpts, VPath};
+use crate::gc::GcManager;
 use crate::kqueue::KernelQueueManager;
 use crate::llvm::Llvm;
 use crate::log::{print, LOGGER};
@@ -42,6 +43,7 @@ mod dmem;
 mod ee;
 mod errno;
 mod fs;
+mod gc;
 mod idt;
 mod kqueue;
 mod llvm;
@@ -276,6 +278,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     TimeManager::new(&mut syscalls);
     KernelQueueManager::new(&mut syscalls);
     NetManager::new(&mut syscalls);
+    GcManager::new();
 
     // TODO: Get correct budget name from the PS4.
     let budget_id = budget.create(Budget::new("big app", ProcType::BigApp));
