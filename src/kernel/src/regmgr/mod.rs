@@ -1,16 +1,17 @@
-pub use self::key::*;
-
+use self::command::*;
 use crate::errno::EINVAL;
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
-use crate::ucred::Ucred;
+use crate::ucred::{Privilege, Ucred};
 use crate::{info, warn};
 use std::fmt::{Display, Formatter};
 use std::num::NonZeroI32;
-use std::ptr::read;
 use std::sync::Arc;
 use thiserror::Error;
 
+pub use self::key::*;
+
+mod command;
 mod key;
 
 /// An implementation of PS4 registry manager.
@@ -33,7 +34,10 @@ impl RegMgr {
         let req: *const u8 = i.args[3].into();
         let reqlen: usize = i.args[4].into();
 
-        // TODO: Check the result of priv_check(td, 682).
+        let td = VThread::current().unwrap();
+
+        td.cred().priv_check(Privilege::SCE682)?;
+
         if buf.is_null() {
             todo!("regmgr_call with buf = null");
         }
@@ -46,13 +50,21 @@ impl RegMgr {
             todo!("regmgr_call with reqlen > 2048");
         }
 
+        let command = match RegMgrCommand::try_from_raw_parts(op, req) {
+            Ok(v) => v,
+            Err(e) => {
+                warn!(e, "regmgr_call({op}) failed");
+                unsafe { *buf = e.code() };
+                return Ok(SysOut::ZERO);
+            }
+        };
+
         // Execute the operation.
-        let td = VThread::current().unwrap();
-        let r = match op {
-            0x18 => {
-                let v1 = unsafe { read::<u64>(req as _) };
-                let v2 = unsafe { read::<u32>(req.add(8) as _) };
-                let value = unsafe { read::<i32>(req.add(12) as _) };
+        let r = match command {
+            RegMgrCommand::SetInt(arg) => {
+                let v1 = arg.v1;
+                let v2 = arg.v2;
+                let value = arg.value;
 
                 info!(
                     "Attempting to set registry with v1: {}, v2: {}, value: {}.",
@@ -64,15 +76,13 @@ impl RegMgr {
                     self.set_int(k, value)
                 })
             }
-            0x19 => {
-                let v1 = unsafe { read::<u64>(req as _) };
-                let v2 = unsafe { read::<u32>(req.add(8) as _) };
+            RegMgrCommand::Unk1(arg) => {
+                let v1 = arg.v1;
+                let v2 = arg.v2;
 
                 self.decode_key(v1, v2, td.cred(), 1)
                     .and_then(|k| todo!("regmgr_call({op}) with matched key = {k}"))
             }
-            0x27 | 0x40.. => Err(RegError::V800d0219),
-            v => todo!("regmgr_call({v})"),
         };
 
         // Write the result.

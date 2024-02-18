@@ -99,6 +99,7 @@ impl Ucred {
             Privilege::MAXFILES
             | Privilege::PROC_SETLOGIN
             | Privilege::SCE680
+            | Privilege::SCE682
             | Privilege::SCE683
             | Privilege::SCE686 => self.is_system(),
             v => todo!("priv_check_cred(cred, {v})"),
