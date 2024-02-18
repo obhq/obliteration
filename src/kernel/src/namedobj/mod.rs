@@ -55,9 +55,9 @@ pub struct NamedObj {
 }
 
 impl NamedObj {
-    pub fn new(name: impl ToString, data: usize) -> Self {
+    pub fn new(name: impl Into<String>, data: usize) -> Self {
         Self {
-            name: name.to_string(),
+            name: name.into(),
             data,
         }
     }
