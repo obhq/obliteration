@@ -2,7 +2,7 @@ use super::RegError;
 
 #[repr(u32)]
 pub(super) enum RegMgrCommand<'a> {
-    SetInt(&'a SetIngArg) = 0x18,
+    SetInt(&'a SetIntArg) = 0x18,
     Unk1(&'a Unk1Arg) = 0x19,
 }
 impl RegMgrCommand<'_> {
@@ -17,7 +17,7 @@ impl RegMgrCommand<'_> {
 }
 
 #[repr(C)]
-pub(super) struct SetIngArg {
+pub(super) struct SetIntArg {
     pub v1: u64,
     pub v2: u32,
     pub value: i32,
