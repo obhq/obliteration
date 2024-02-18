@@ -92,6 +92,9 @@ impl Sysctl {
     pub const VM_PS4DEV_TRCMEM_TOTAL: i32 = 571;
     pub const VM_PS4DEV_TRCMEM_AVAIL: i32 = 572;
 
+    pub const VM_BUDGETS: i32 = 313;
+    pub const VM_BUDGETS_MLOCK_AVAIL: i32 = 314;
+
     pub const HW_PAGESIZE: i32 = 7;
 
     pub fn new(mm: &Arc<MemoryManager>, machdep: &Arc<MachDep>, sys: &mut Syscalls) -> Arc<Self> {
@@ -439,6 +442,16 @@ impl Sysctl {
         todo!()
     }
 
+    fn budgets_mlock_avail(
+        &self,
+        _: &'static Oid,
+        _: &Arg,
+        _: usize,
+        _req: &mut SysctlReq,
+    ) -> Result<(), SysErr> {
+        todo!()
+    }
+
     fn machdep_tsc_freq(
         &self,
         oid: &'static Oid,
@@ -630,6 +643,8 @@ type Handler = fn(&Sysctl, &'static Oid, &Arg, usize, &mut SysctlReq) -> Result<
 //         └─── ...
 //         └─── (2.1.571) VM_PS4DEV_TRCMEM_TOTAL
 //         └─── (2.1.572) VM_PS4DEV_TRCMEM_AVAIL
+//     └─── (2.313) VM_BUDGETS
+//         └─── (2.313.314) VM_BUDGETS_MLOCK_AVAIL
 //     └─── ...
 // └─── (3) VFS
 //     └─── ...
@@ -916,7 +931,7 @@ static VM_CHILDREN: OidList = OidList {
 
 static VM_PS4DEV: Oid = Oid {
     parent: &VM_CHILDREN,
-    link: None, // TODO: Change to a proper value.
+    link: Some(&VM_BUDGETS), // TODO: Change to a proper value.
     number: Sysctl::VM_PS4DEV,
     kind: Sysctl::CTLFLAG_RD | Sysctl::CTLTYPE_NODE,
     arg1: Some(&VM_PS4DEV_CHILDREN),
@@ -957,6 +972,38 @@ static VM_PS4DEV_TRCMEM_AVAIL: Oid = Oid {
     handler: Some(Sysctl::handle_int),
     fmt: "IU",
     descr: "trace memory available",
+    enabled: true,
+};
+
+static VM_BUDGETS: Oid = Oid {
+    parent: &VM_CHILDREN,
+    link: None, // TODO: Change to a proper value.
+    number: Sysctl::VM_BUDGETS,
+    kind: Sysctl::CTLFLAG_RW | Sysctl::CTLTYPE_NODE,
+    arg1: Some(&VM_BUDGETS_CHILDREN),
+    arg2: 0,
+    name: "budgets",
+    handler: None,
+    fmt: "N",
+    descr: "VM budgets",
+    enabled: true,
+};
+
+static VM_BUDGETS_CHILDREN: OidList = OidList {
+    first: Some(&VM_BUDGETS_MLOCK_AVAIL),
+};
+
+static VM_BUDGETS_MLOCK_AVAIL: Oid = Oid {
+    parent: &VM_BUDGETS_CHILDREN,
+    link: None,
+    number: Sysctl::VM_BUDGETS_MLOCK_AVAIL,
+    kind: Sysctl::CTLFLAG_RD | Sysctl::CTLTYPE_ULONG,
+    arg1: None,
+    arg2: 0,
+    name: "mlock_avail",
+    handler: Some(Sysctl::budgets_mlock_avail),
+    fmt: "L",
+    descr: "Available MLOCK budget",
     enabled: true,
 };
 
