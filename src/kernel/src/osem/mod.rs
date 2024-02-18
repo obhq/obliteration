@@ -1,8 +1,8 @@
 use crate::errno::EINVAL;
+use crate::idt::Entry;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::VProc;
 use bitflags::bitflags;
-use std::convert::Infallible;
 use std::sync::Arc;
 
 pub struct OsemManager {
@@ -37,10 +37,8 @@ impl OsemManager {
 
         let mut objects = self.proc.objects_mut();
 
-        let (entry, id) = objects.alloc::<_, Infallible>(|_| Ok(Osem::new(flags)))?;
-
-        entry.set_name(Some(name.to_owned()));
-        entry.set_ty(0x120);
+        let id = objects
+            .alloc_infallible(|_| Entry::new(Some(name.to_owned()), Osem::new(flags), 0x120));
 
         Ok(id.into())
     }

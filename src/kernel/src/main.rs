@@ -8,6 +8,7 @@ use crate::kqueue::KernelQueueManager;
 use crate::llvm::Llvm;
 use crate::log::{print, LOGGER};
 use crate::memory::{MemoryManager, MemoryManagerError};
+use crate::namedobj::NamedObjManager;
 use crate::net::NetManager;
 use crate::osem::OsemManager;
 use crate::process::{VProc, VProcInitError, VThread};
@@ -47,6 +48,7 @@ mod kqueue;
 mod llvm;
 mod log;
 mod memory;
+mod namedobj;
 mod net;
 mod osem;
 mod process;
@@ -289,6 +291,7 @@ fn run<E: crate::ee::ExecutionEngine>(
         &mut syscalls,
     )?;
 
+    NamedObjManager::new(&mut syscalls, &proc);
     OsemManager::new(&mut syscalls, &proc);
 
     // Initialize runtime linker.
