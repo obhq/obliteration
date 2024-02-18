@@ -5,6 +5,7 @@ use crate::budget::ProcType;
 use crate::ee::{ExecutionEngine, RawFn};
 use crate::errno::{Errno, EINVAL, ENOENT, ENOEXEC, ENOMEM, EPERM, ESRCH};
 use crate::fs::{Fs, OpenError, VPath, VPathBuf};
+use crate::idt::Entry;
 use crate::info;
 use crate::log::print;
 use crate::memory::{MemoryManager, MemoryUpdateError, MmapError, Protections};
@@ -272,10 +273,8 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
                 return Err(LoadError::SetupFailed(e));
             }
 
-            Ok(Arc::new(md))
+            Ok(Entry::new(None, Arc::new(md), 0x2000))
         })?;
-
-        entry.set_ty(0x2000);
 
         // Add to list.
         let module = entry.data().clone().downcast::<Module<E>>().unwrap();
