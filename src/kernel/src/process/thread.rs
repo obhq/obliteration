@@ -92,6 +92,10 @@ impl VThread {
         &self.cpuset
     }
 
+    pub fn name(&self) -> GutexReadGuard<'_, Option<String>> {
+        self.name.read()
+    }
+
     pub fn set_name(&self, name: Option<&str>) {
         *self.name.write() = name.map(|n| n.to_owned());
     }

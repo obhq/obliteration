@@ -8,7 +8,7 @@ pub use self::signal::*;
 pub use self::thread::*;
 
 use crate::budget::ProcType;
-use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ERANGE, ESRCH};
+use crate::errno::{EFAULT, EINVAL, ENAMETOOLONG, EPERM, ERANGE, ESRCH};
 use crate::fs::Vnode;
 use crate::idt::Idt;
 use crate::info;
@@ -119,6 +119,7 @@ impl VProc {
         sys.register(585, &vp, Self::sys_is_in_sandbox);
         sys.register(587, &vp, Self::sys_get_authinfo);
         sys.register(602, &vp, Self::sys_randomized_path);
+        sys.register(616, &vp, Self::sys_thr_get_name);
 
         Ok(vp)
     }
@@ -441,6 +442,44 @@ impl VProc {
             );
 
             thr.set_name(name);
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn sys_thr_get_name(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+        let tid: i32 = i.args[0].try_into().unwrap();
+        let name: *mut c_char = i.args[1].into();
+
+        info!("sys_thr_get_name({:#x}, {:#x})", tid, name as usize);
+
+        let threads = self.threads.read();
+
+        let thr = threads.iter().find(|t| t.id().get() == tid);
+
+        if name.is_null() {
+            return Err(SysErr::Raw(EFAULT));
+        }
+
+        match thr {
+            Some(td) => {
+                let thread_name = td.name().to_owned().unwrap_or("".into());
+                unsafe {
+                    name.copy_from_nonoverlapping(thread_name.as_ptr().cast(), thread_name.len());
+                    *name.add(thread_name.len()) = 0;
+                }
+            }
+            None => {
+                let td = VThread::current().unwrap();
+                if !td.cred().is_system() {
+                    return Err(SysErr::Raw(ESRCH));
+                }
+
+                todo!(
+                    "sys_thr_get_name with tid {:#x} not belonging to the process",
+                    tid
+                );
+            }
         }
 
         Ok(SysOut::ZERO)
