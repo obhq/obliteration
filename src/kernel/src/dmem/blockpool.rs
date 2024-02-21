@@ -17,7 +17,7 @@ impl FileBackend for BlockPool {
         match cmd {
             IoCmd::BLKPOOL1(_) => todo!(),
             IoCmd::BLKPOOL2(_) => todo!(),
-            _ => Err(Box::new(DefaultError::IoCmdNotSupported)),
+            _ => Err(Box::new(DefaultError::CommandNotSupported)),
         }
     }
 

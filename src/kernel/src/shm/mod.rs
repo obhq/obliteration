@@ -147,7 +147,7 @@ impl FileBackend for SharedMemory {
         match cmd {
             IoCmd::SHM0(_) => todo!(),
             IoCmd::SHM1(_) => todo!(),
-            _ => Err(DefaultError::IoCmdNotSupported.into()),
+            _ => Err(Box::new(DefaultError::CommandNotSupported)),
         }
     }
 
