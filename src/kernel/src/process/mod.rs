@@ -553,7 +553,7 @@ impl VProc {
         Ok(1.into())
     }
 
-    fn sys_get_authinfo(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_get_authinfo(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let pid: i32 = i.args[0].try_into().unwrap();
         let buf: *mut AuthInfo = i.args[1].into();
@@ -565,7 +565,6 @@ impl VProc {
 
         // Check privilege.
         let mut info: AuthInfo = unsafe { zeroed() };
-        let td = VThread::current().unwrap();
 
         if td.priv_check(Privilege::SCE686).is_ok() {
             info = self.cred.auth().clone();

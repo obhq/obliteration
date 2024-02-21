@@ -277,7 +277,7 @@ impl Fs {
             bytes_left: len,
         };
 
-        self.readv(fd, uio)
+        self.readv(fd, uio, td)
     }
 
     /// See `vfs_donmount` on the PS4 for a reference.
@@ -522,12 +522,10 @@ impl Fs {
 
         let uio = unsafe { UioMut::copyin(iovec, count) }?;
 
-        self.readv(fd, uio)
+        self.readv(fd, uio, td)
     }
 
-    fn readv(&self, fd: i32, uio: UioMut) -> Result<SysOut, SysErr> {
-        let td = VThread::current().unwrap();
-
+    fn readv(&self, fd: i32, uio: UioMut, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_read(fd)?;
 
         let read = file.do_read(uio, Offset::Current, Some(&td))?;
@@ -623,7 +621,7 @@ impl Fs {
             bytes_left: len,
         };
 
-        self.preadv(fd, uio, offset)
+        self.preadv(fd, uio, offset, td)
     }
 
     fn sys_pwrite(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -639,7 +637,7 @@ impl Fs {
             bytes_left: len,
         };
 
-        self.pwritev(fd, uio, offset)
+        self.pwritev(fd, uio, offset, td)
     }
 
     fn sys_preadv(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -650,12 +648,10 @@ impl Fs {
 
         let uio = unsafe { UioMut::copyin(iovec, count) }?;
 
-        self.preadv(fd, uio, offset)
+        self.preadv(fd, uio, offset, td)
     }
 
-    fn preadv(&self, fd: i32, uio: UioMut, off: u64) -> Result<SysOut, SysErr> {
-        let td = VThread::current().unwrap();
-
+    fn preadv(&self, fd: i32, uio: UioMut, off: u64, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_read(fd)?;
 
         if !file.is_seekable() {
@@ -677,12 +673,10 @@ impl Fs {
 
         let uio = unsafe { Uio::copyin(iovec, count) }?;
 
-        self.pwritev(fd, uio, offset)
+        self.pwritev(fd, uio, offset, td)
     }
 
-    fn pwritev(&self, fd: i32, uio: Uio, off: u64) -> Result<SysOut, SysErr> {
-        let td = VThread::current().unwrap();
-
+    fn pwritev(&self, fd: i32, uio: Uio, off: u64, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_write(fd)?;
 
         if !file.is_seekable() {

@@ -24,7 +24,6 @@ impl DmemManager {
     }
 
     fn sys_dmem_container(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
-        let td = VThread::current().unwrap();
         let set: i32 = i.args[0].try_into().unwrap();
         let get: i32 = td.proc().dmem_container().try_into().unwrap();
 
