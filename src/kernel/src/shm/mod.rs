@@ -93,7 +93,7 @@ pub struct SharedMemory {
 }
 
 impl SharedMemory {
-    /// See `shm_do_truncate` on the PS4 for a reference.
+    /// See `shm_dotruncate` on the PS4 for a reference.
     fn do_truncate(&self, length: TruncateLength) -> Result<(), TruncateError> {
         todo!()
     }
