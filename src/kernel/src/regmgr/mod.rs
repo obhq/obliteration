@@ -27,7 +27,7 @@ impl RegMgr {
         mgr
     }
 
-    fn sys_regmgr_call(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_regmgr_call(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let op: u32 = i.args[0].try_into().unwrap();
         let buf: *mut i32 = i.args[2].into();
@@ -48,7 +48,6 @@ impl RegMgr {
         }
 
         // Execute the operation.
-        let td = VThread::current().unwrap();
         let r = match op {
             0x18 => {
                 let v1 = unsafe { read::<u64>(req as _) };
@@ -333,7 +332,7 @@ impl RegMgr {
         None
     }
 
-    fn sys_workaround8849(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_workaround8849(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let key = {
             let arg: usize = i.args[0].into();
             let key: u32 = arg.try_into().unwrap();

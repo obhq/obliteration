@@ -19,13 +19,11 @@ impl KernelQueueManager {
         kq
     }
 
-    fn sys_kqueueex(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_kqueueex(self: &Arc<Self>, _: &VThread, _: &SysIn) -> Result<SysOut, SysErr> {
         todo!()
     }
 
-    fn sys_kqueue(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
-        let td = VThread::current().unwrap();
-
+    fn sys_kqueue(self: &Arc<Self>, td: &VThread, _: &SysIn) -> Result<SysOut, SysErr> {
         let filedesc = td.proc().files();
 
         let fd = filedesc.alloc_with_budget::<Infallible>(
