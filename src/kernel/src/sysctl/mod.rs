@@ -394,10 +394,7 @@ impl Sysctl {
         req.write(&td.proc().ptc().to_ne_bytes())?;
 
         td.proc().uptc().store(
-            req.old
-                .as_mut()
-                .map(|v| v.as_mut_ptr())
-                .unwrap_or(null_mut()),
+            req.old.as_mut().map_or(null_mut(), |v| v.as_mut_ptr()),
             Ordering::Relaxed,
         );
 
