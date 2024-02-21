@@ -110,7 +110,7 @@ impl Sysctl {
         ctl
     }
 
-    fn sys_sysctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_sysctl(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let name: *const i32 = i.args[0].into();
         let namelen: u32 = i.args[1].try_into().unwrap();
@@ -127,8 +127,6 @@ impl Sysctl {
         } else {
             unsafe { std::slice::from_raw_parts(name, namelen as _) }
         };
-
-        let td = VThread::current().unwrap();
 
         if name[0] == Self::CTL_DEBUG && !td.proc().cred().is_system() {
             return Err(SysErr::Raw(EINVAL));

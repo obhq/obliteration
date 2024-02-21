@@ -23,7 +23,7 @@ impl DmemManager {
         dmem
     }
 
-    fn sys_dmem_container(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_dmem_container(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let td = VThread::current().unwrap();
         let set: i32 = i.args[0].try_into().unwrap();
         let get: i32 = td.proc().dmem_container().try_into().unwrap();
@@ -35,7 +35,7 @@ impl DmemManager {
         Ok(get.into())
     }
 
-    fn sys_blockpool_open(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_blockpool_open(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let flags: u32 = i.args[0].try_into().unwrap();
 
         if flags & 0xffafffff != 0 {

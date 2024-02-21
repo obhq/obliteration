@@ -1,5 +1,6 @@
 use crate::errno::EINVAL;
 use crate::idt::Entry;
+use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::VProc;
 use bitflags::bitflags;
@@ -18,7 +19,7 @@ impl OsemManager {
         osem
     }
 
-    fn sys_osem_create(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_osem_create(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let name = unsafe { i.args[0].to_str(32) }?.unwrap();
         let flags = {
             let flags = i.args[1].try_into().unwrap();
