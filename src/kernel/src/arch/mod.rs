@@ -31,10 +31,9 @@ impl MachDep {
         mach
     }
 
-    fn sysarch(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sysarch(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let op: u32 = i.args[0].try_into().unwrap();
         let parms: *mut u8 = i.args[1].into();
-        let td = VThread::current().unwrap();
         let mut pcb = td.pcb_mut();
 
         if op < 2 {
