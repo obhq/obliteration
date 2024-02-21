@@ -218,7 +218,7 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         cmd: IoCmd,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        Err(Box::new(DefaultError::IoCmdNotSupported))
+        Err(Box::new(DefaultError::CommandNotSupported))
     }
 
     /// This method doesn't have a default erroring implementation like the other ones,
@@ -250,7 +250,7 @@ pub enum DefaultError {
     /// This is used even if the file backend doesn't support any ioctl commands.
     #[error("io command is not supported")]
     #[errno(ENOTTY)]
-    IoCmdNotSupported,
+    CommandNotSupported,
 
     #[error("truncating is not supported")]
     #[errno(ENXIO)]
