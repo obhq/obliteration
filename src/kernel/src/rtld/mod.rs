@@ -381,7 +381,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         unsafe { String::from_utf8_unchecked(nid) }
     }
 
-    fn sys_dynlib_dlsym(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_dynlib_dlsym(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Check if application is dynamic linking.
         if self.app.file_info().is_none() {
             return Err(SysErr::Raw(EPERM));
@@ -418,7 +418,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_dynlib_get_list(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_dynlib_get_list(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let buf: *mut u32 = i.args[0].into();
         let max: usize = i.args[1].into();
@@ -448,9 +448,8 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_dynlib_load_prx(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_dynlib_load_prx(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Check if application is a dynamic SELF.
-        let td = VThread::current().unwrap();
 
         if self.app.file_info().is_none() {
             return Err(SysErr::Raw(EPERM));
@@ -554,7 +553,11 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_dynlib_do_copy_relocations(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_dynlib_do_copy_relocations(
+        self: &Arc<Self>,
+        _: &VThread,
+        _: &SysIn,
+    ) -> Result<SysOut, SysErr> {
         if let Some(info) = self.app.file_info() {
             if info.relocs().any(|r| r.ty() == Relocation::R_X86_64_COPY) {
                 return Err(SysErr::Raw(EINVAL));
@@ -566,7 +569,11 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         }
     }
 
-    fn sys_dynlib_get_proc_param(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_dynlib_get_proc_param(
+        self: &Arc<Self>,
+        _: &VThread,
+        i: &SysIn,
+    ) -> Result<SysOut, SysErr> {
         // Get arguments.
         let param: *mut usize = i.args[0].into();
         let size: *mut usize = i.args[1].into();
@@ -591,6 +598,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
     fn sys_dynlib_process_needed_and_relocate(
         self: &Arc<Self>,
+        td: &VThread,
         _: &SysIn,
     ) -> Result<SysOut, SysErr> {
         // Check if application is dynamic linking.
@@ -874,7 +882,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         }
     }
 
-    fn sys_dynlib_get_info_ex(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_dynlib_get_info_ex(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let handle: u32 = i.args[0].try_into().unwrap();
         let flags: u32 = i.args[1].try_into().unwrap();
@@ -994,7 +1002,11 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_dynlib_get_obj_member(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_dynlib_get_obj_member(
+        self: &Arc<Self>,
+        _: &VThread,
+        i: &SysIn,
+    ) -> Result<SysOut, SysErr> {
         let handle: u32 = i.args[0].try_into().unwrap();
         let ty: u8 = i.args[1].try_into().unwrap();
         let out: *mut usize = i.args[2].into();

@@ -28,7 +28,7 @@ impl SharedMemoryManager {
         shm
     }
 
-    fn sys_shm_open(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_shm_open(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let path = unsafe { i.args[0].to_shm_path() }?.expect("invalid shm path");
         let flags: OpenFlags = i.args[1].try_into().unwrap();
         let mode: u32 = i.args[2].try_into().unwrap();
@@ -47,8 +47,6 @@ impl SharedMemoryManager {
         {
             return Err(SysErr::Raw(EINVAL));
         }
-
-        let td = VThread::current().unwrap();
 
         let filedesc = td.proc().files();
 
@@ -69,7 +67,7 @@ impl SharedMemoryManager {
         Ok(fd.into())
     }
 
-    fn sys_shm_unlink(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_shm_unlink(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         todo!("sys_shm_unlink")
     }
 }

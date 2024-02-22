@@ -266,7 +266,7 @@ impl Fs {
         Ok(vn)
     }
 
-    fn sys_read(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_read(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
@@ -278,7 +278,7 @@ impl Fs {
             bytes_left: len,
         };
 
-        self.readv(fd, uio)
+        self.readv(fd, uio, td)
     }
 
     /// See `vfs_donmount` on the PS4 for a reference.
@@ -376,7 +376,7 @@ impl Fs {
         }
     }
 
-    fn sys_write(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_write(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *const u8 = i.args[1].into();
         let len: usize = i.args[2].into();
@@ -388,10 +388,10 @@ impl Fs {
             bytes_left: len,
         };
 
-        self.writev(fd, uio)
+        self.writev(fd, uio, td)
     }
 
-    fn sys_open(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_open(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let path = unsafe { i.args[0].to_path()?.unwrap() };
         let flags: OpenFlags = i.args[1].try_into().unwrap();
@@ -422,7 +422,6 @@ impl Fs {
         info!("Opening {path} with flags = {flags}.");
 
         // Lookup file.
-        let td = VThread::current().unwrap();
         let mut file = self.open(path, Some(&td))?;
 
         *file.flags_mut() = flags.into_fflags();
@@ -435,8 +434,7 @@ impl Fs {
         Ok(fd.into())
     }
 
-    fn sys_close(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let td = VThread::current().unwrap();
+    fn sys_close(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
 
         info!("Closing fd {fd}.");
@@ -446,12 +444,10 @@ impl Fs {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_ioctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_ioctl(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         // Our IoCmd contains both the command and the argument (if there is one).
         let cmd = IoCmd::try_from_raw_parts(i.args[1].into(), i.args[2].into())?;
-
-        let td = VThread::current().unwrap();
 
         info!("Executing ioctl({cmd:?}) on file descriptor {fd}.");
 
@@ -484,13 +480,12 @@ impl Fs {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_revoke(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_revoke(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let path = unsafe { i.args[0].to_path()?.unwrap() };
 
         info!("Revoking access to {path}.");
 
         // Check current thread privilege.
-        let td = VThread::current().unwrap();
 
         td.priv_check(Privilege::SCE683)?;
 
@@ -521,19 +516,17 @@ impl Fs {
         Ok(())
     }
 
-    fn sys_readv(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_readv(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *mut IoVec = i.args[1].into();
         let count: u32 = i.args[2].try_into().unwrap();
 
         let uio = unsafe { UioMut::copyin(iovec, count) }?;
 
-        self.readv(fd, uio)
+        self.readv(fd, uio, td)
     }
 
-    fn readv(&self, fd: i32, uio: UioMut) -> Result<SysOut, SysErr> {
-        let td = VThread::current().unwrap();
-
+    fn readv(&self, fd: i32, uio: UioMut, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_read(fd)?;
 
         let read = file.do_read(uio, Offset::Current, Some(&td))?;
@@ -541,19 +534,17 @@ impl Fs {
         Ok(read.into())
     }
 
-    fn sys_writev(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_writev(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *const IoVec = i.args[1].into();
         let iovcnt: u32 = i.args[2].try_into().unwrap();
 
         let uio = unsafe { Uio::copyin(iovec, iovcnt) }?;
 
-        self.writev(fd, uio)
+        self.writev(fd, uio, td)
     }
 
-    fn writev(&self, fd: i32, uio: Uio) -> Result<SysOut, SysErr> {
-        let td = VThread::current().unwrap();
-
+    fn writev(&self, fd: i32, uio: Uio, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_write(fd)?;
 
         let written = file.do_write(uio, Offset::Current, Some(&td))?;
@@ -561,11 +552,9 @@ impl Fs {
         Ok(written.into())
     }
 
-    fn sys_stat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_stat(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let stat_out: *mut Stat = i.args[1].into();
-
-        let td = VThread::current().unwrap();
 
         let stat = self.stat(path, &td)?;
 
@@ -581,11 +570,9 @@ impl Fs {
         self.statat(AtFlags::empty(), At::Cwd, path, td)
     }
 
-    fn sys_fstat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_fstat(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let stat_out: *mut Stat = i.args[1].into();
-
-        let td = VThread::current().unwrap();
 
         let stat = self.fstat(fd, &td)?;
 
@@ -602,11 +589,9 @@ impl Fs {
         todo!()
     }
 
-    fn sys_lstat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_lstat(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let stat_out: *mut Stat = i.args[1].into();
-
-        let td = VThread::current().unwrap();
 
         td.priv_check(Privilege::SCE683)?;
 
@@ -624,7 +609,7 @@ impl Fs {
         self.statat(AtFlags::SYMLINK_NOFOLLOW, At::Cwd, path, td)
     }
 
-    fn sys_pread(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_pread(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
@@ -637,10 +622,10 @@ impl Fs {
             bytes_left: len,
         };
 
-        self.preadv(fd, uio, offset)
+        self.preadv(fd, uio, offset, td)
     }
 
-    fn sys_pwrite(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_pwrite(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
@@ -653,10 +638,10 @@ impl Fs {
             bytes_left: len,
         };
 
-        self.pwritev(fd, uio, offset)
+        self.pwritev(fd, uio, offset, td)
     }
 
-    fn sys_preadv(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_preadv(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *mut IoVec = i.args[1].into();
         let count: u32 = i.args[2].try_into().unwrap();
@@ -664,12 +649,10 @@ impl Fs {
 
         let uio = unsafe { UioMut::copyin(iovec, count) }?;
 
-        self.preadv(fd, uio, offset)
+        self.preadv(fd, uio, offset, td)
     }
 
-    fn preadv(&self, fd: i32, uio: UioMut, off: u64) -> Result<SysOut, SysErr> {
-        let td = VThread::current().unwrap();
-
+    fn preadv(&self, fd: i32, uio: UioMut, off: u64, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_read(fd)?;
 
         if !file.is_seekable() {
@@ -683,7 +666,7 @@ impl Fs {
         Ok(read.into())
     }
 
-    fn sys_pwritev(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_pwritev(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *const IoVec = i.args[1].into();
         let count: u32 = i.args[2].try_into().unwrap();
@@ -691,12 +674,10 @@ impl Fs {
 
         let uio = unsafe { Uio::copyin(iovec, count) }?;
 
-        self.pwritev(fd, uio, offset)
+        self.pwritev(fd, uio, offset, td)
     }
 
-    fn pwritev(&self, fd: i32, uio: Uio, off: u64) -> Result<SysOut, SysErr> {
-        let td = VThread::current().unwrap();
-
+    fn pwritev(&self, fd: i32, uio: Uio, off: u64, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_write(fd)?;
 
         if !file.is_seekable() {
@@ -710,13 +691,11 @@ impl Fs {
         Ok(written.into())
     }
 
-    fn sys_fstatat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_fstatat(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let dirfd: i32 = i.args[0].try_into().unwrap();
         let path = unsafe { i.args[1].to_path() }?.unwrap();
         let stat_out: *mut Stat = i.args[2].into();
         let flags: AtFlags = i.args[3].try_into().unwrap();
-
-        let td = VThread::current().unwrap();
 
         td.priv_check(Privilege::SCE683)?;
 
@@ -742,17 +721,15 @@ impl Fs {
         todo!()
     }
 
-    fn sys_mkdir(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_mkdir(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let mode: u32 = i.args[1].try_into().unwrap();
-
-        let td = VThread::current().unwrap();
 
         self.mkdirat(At::Cwd, path, mode, Some(&td))
     }
 
     #[allow(unused_variables)]
-    fn sys_poll(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_poll(self: &Arc<Self>, _td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fds: *mut PollFd = i.args[0].into();
         let nfds: u32 = i.args[1].try_into().unwrap();
         let timeout: i32 = i.args[2].try_into().unwrap();
@@ -760,7 +737,7 @@ impl Fs {
         todo!()
     }
 
-    fn sys_lseek(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_lseek(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let mut offset: i64 = i.args[1].into();
         let whence: Whence = {
@@ -768,8 +745,6 @@ impl Fs {
 
             whence.try_into()?
         };
-
-        let td = VThread::current().unwrap();
 
         let file = td.proc().files().get(fd)?;
 
@@ -800,11 +775,9 @@ impl Fs {
         todo!()
     }
 
-    fn sys_truncate(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_truncate(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let length = i.args[1].into();
-
-        let td = VThread::current().unwrap();
 
         self.truncate(path, length, &td)?;
 
@@ -819,11 +792,9 @@ impl Fs {
         todo!()
     }
 
-    fn sys_ftruncate(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_ftruncate(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd = i.args[0].try_into().unwrap();
         let length = i.args[1].into();
-
-        let td = VThread::current().unwrap();
 
         self.ftruncate(fd, length, &td)?;
 
@@ -844,9 +815,7 @@ impl Fs {
         Ok(())
     }
 
-    fn sys_mkdirat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let td = VThread::current().unwrap();
-
+    fn sys_mkdirat(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         td.priv_check(Privilege::SCE683)?;
 
         let fd: i32 = i.args[0].try_into().unwrap();
