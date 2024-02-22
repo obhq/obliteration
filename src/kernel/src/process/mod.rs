@@ -548,13 +548,13 @@ impl VProc {
                     todo!("cpuset_which with id = -1");
                 } else {
                     let threads = self.threads.read();
-                    let td = threads.iter().find(|t| t.id().get() == id as i32).cloned();
+                    let td = threads
+                        .iter()
+                        .find(|t| t.id().get() == id as i32)
+                        .ok_or(SysErr::Raw(ESRCH))?
+                        .clone();
 
-                    if td.is_none() {
-                        return Err(SysErr::Raw(ESRCH));
-                    }
-
-                    td
+                    Some(td)
                 }
             }
             v => todo!("cpuset_which with which = {v:?}"),
