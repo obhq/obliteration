@@ -153,5 +153,5 @@ impl Errno for OpenError {
 
 /// See `null_nodeget` on the PS4 for a reference.
 pub(super) fn null_nodeget(mnt: &Arc<Mount>, lower: Arc<Vnode>) -> Arc<Vnode> {
-    todo!()
+    lower
 }

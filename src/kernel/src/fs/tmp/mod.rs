@@ -111,7 +111,37 @@ struct TempFs {
 
 impl Filesystem for TempFs {
     fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Arc<Vnode> {
-        todo!()
+        Vnode::new(
+            mnt,
+            super::VnodeType::Directory(false),
+            "tmpfs",
+            VnodeBackend {
+                lower: self.root.clone(),
+            },
+        )
+    }
+}
+
+#[derive(Debug)]
+struct VnodeBackend {
+    lower: Arc<Node>,
+}
+
+impl crate::fs::vnode::VnodeBackend for VnodeBackend {
+    fn lookup(
+        self: Arc<Self>,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] td: Option<&crate::process::VThread>,
+        #[allow(unused_variables)] name: &str,
+    ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+        Ok(Vnode::new(
+            vn.fs(),
+            vn.ty().clone(),
+            "tmpfs",
+            VnodeBackend {
+                lower: self.lower.clone(),
+            },
+        ))
     }
 }
 

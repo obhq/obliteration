@@ -148,7 +148,7 @@ impl VFile {
 
 impl Seek for VFile {
     fn seek(&mut self, _pos: SeekFrom) -> std::io::Result<u64> {
-        todo!()
+        todo!("seek")
     }
 }
 

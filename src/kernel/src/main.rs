@@ -3,7 +3,7 @@ use crate::budget::{Budget, BudgetManager, ProcType};
 use crate::debug::{DebugManager, DebugManagerInitError};
 use crate::dmem::DmemManager;
 use crate::ee::{EntryArg, RawFn};
-use crate::fs::{Fs, FsError, MountError, MountFlags, MountOpts, VPath};
+use crate::fs::{Fs, FsError, MountError, MountFlags, MountOpts, VPath, VPathBuf};
 use crate::kqueue::KernelQueueManager;
 use crate::llvm::Llvm;
 use crate::log::{print, LOGGER};
@@ -144,7 +144,7 @@ fn start() -> Result<(), KernelError> {
     writeln!(
         log,
         "Application Version : {}",
-        param.app_ver().unwrap_or("UNKNOWN")
+        param.app_ver().unwrap_or(&"UNKNOWN")
     )
     .unwrap();
 
@@ -185,10 +185,18 @@ fn start() -> Result<(), KernelError> {
         },
     ));
 
+    let game_dir = args.game.into_os_string().into_string().unwrap();
+
     // Initialize foundations.
     let llvm = Llvm::new();
     let mut syscalls = Syscalls::new();
-    let fs = Fs::new(args.system, args.game, &param, &cred, &mut syscalls)?;
+    let fs = Fs::new(
+        args.system,
+        game_dir.to_owned(),
+        &param,
+        &cred,
+        &mut syscalls,
+    )?;
 
     // TODO: Get mount options from the PS4.
     let mut opts = MountOpts::new();
@@ -222,6 +230,20 @@ fn start() -> Result<(), KernelError> {
     .unwrap();
 
     print(log);
+
+    let mut opts = MountOpts::new();
+    let path = format!("/mnt/sandbox/{}_000/app0", param.title_id());
+
+    opts.insert("fstype", "nullfs");
+    opts.insert("fspath", VPathBuf::from(VPath::new(path.as_str()).unwrap()));
+    opts.insert("target", VPathBuf::try_from(game_dir).unwrap());
+    opts.insert("ro", false);
+
+    fs.mount(opts, MountFlags::MNT_LOCAL, None).unwrap();
+
+    let jail_root = fs.lookup(VPath::new(&path).unwrap(), None).unwrap();
+
+    *fs.root.write() = jail_root;
 
     // Select execution engine.
     match args.execution_engine.unwrap_or_default() {

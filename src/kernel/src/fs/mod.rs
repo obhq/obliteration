@@ -41,8 +41,8 @@ mod vnode;
 /// A virtual filesystem for emulating a PS4 filesystem.
 #[derive(Debug)]
 pub struct Fs {
-    mounts: Gutex<Mounts>,   // mountlist
-    root: Gutex<Arc<Vnode>>, // rootvnode
+    mounts: Gutex<Mounts>,       // mountlist
+    pub root: Gutex<Arc<Vnode>>, // rootvnode
     kern_cred: Arc<Ucred>,
 }
 
@@ -160,9 +160,9 @@ impl Fs {
     }
 
     pub fn open(&self, path: impl AsRef<VPath>, td: Option<&VThread>) -> Result<VFile, OpenError> {
-        let _vnode = self.lookup(path, td).map_err(OpenError::LookupFailed)?;
+        let vnode = self.lookup(path, td).map_err(OpenError::LookupFailed)?;
 
-        todo!();
+        Ok(VFile::new(VFileType::Vnode(vnode)))
     }
 
     /// This method will **not** follow the last component if it is a mount point or a link.
