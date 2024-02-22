@@ -1,4 +1,6 @@
 use crate::errno::{Errno, ENOSPC};
+use crate::fs::{Access, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeBackend};
+use crate::process::VThread;
 use macros::Errno;
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
@@ -40,6 +42,55 @@ impl Nodes {
 /// An implementation of `tmpfs_node` structure.
 #[derive(Debug)]
 pub struct Node {}
+
+impl VnodeBackend for Node {
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn access(
+        self: Arc<Self>,
+        vn: &Arc<Vnode>,
+        td: Option<&VThread>,
+        mode: Access,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn getattr(self: Arc<Self>, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn lookup(
+        self: Arc<Self>,
+        vn: &Arc<Vnode>,
+        td: Option<&VThread>,
+        name: &str,
+    ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn mkdir(
+        self: Arc<Self>,
+        parent: &Arc<Vnode>,
+        name: &str,
+        mode: u32,
+        td: Option<&VThread>,
+    ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn open(
+        self: Arc<Self>,
+        vn: &Arc<Vnode>,
+        td: Option<&VThread>,
+        mode: OpenFlags,
+        #[allow(unused_variables)] file: Option<&mut VFile>,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+}
 
 /// Represents an error when [`Nodes::alloc()`] fails.
 #[derive(Debug, Error, Errno)]
