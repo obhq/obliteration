@@ -11,7 +11,7 @@ use param::Param;
 use std::fmt::{Display, Formatter};
 use std::num::{NonZeroI32, TryFromIntError};
 use std::path::PathBuf;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use thiserror::Error;
 
 pub use self::dev::{make_dev, Cdev, CdevSw, DriverFlags, MakeDev, MakeDevError};
@@ -54,7 +54,7 @@ impl Fs {
         param: &Arc<Param>,
         kern_cred: &Arc<Ucred>,
         sys: &mut Syscalls,
-    ) -> Result<Arc<Self>, FsError> {
+    ) -> Result<Arc<Self>, FsInitError> {
         // Mount devfs as an initial root.
         let mut mounts = Mounts::new();
         let conf = Self::find_config("devfs").unwrap();
@@ -66,11 +66,11 @@ impl Fs {
             MountOpts::new(),
             MountFlags::empty(),
         )
-        .map_err(FsError::MountDevFailed)?;
+        .map_err(FsInitError::MountDevFailed)?;
 
         // Get an initial root vnode.
         let init = mounts.push(init);
-        let root = init.root();
+        let root = init.root().map_err(FsInitError::GetDevRootFailed)?;
 
         // Setup mount options for root FS.
         let mut opts = MountOpts::new();
@@ -93,7 +93,7 @@ impl Fs {
 
         let root = fs
             .mount(opts, MountFlags::MNT_ROOTFS, None)
-            .map_err(FsError::MountRootFailed)?;
+            .map_err(FsInitError::MountRootFailed)?;
 
         // Swap devfs with rootfs so rootfs become an actual root.
         let old = {
@@ -107,13 +107,13 @@ impl Fs {
         };
 
         // Disconnect rootfs from the root of devfs.
-        *old.root().item_mut() = None;
+        *old.root().map_err(FsInitError::GetRootFailed)?.item_mut() = None;
         *fs.mounts.read().root().parent_mut() = None;
 
         // Set devfs parent to /dev on the root FS.
         let dev = fs
             .lookup(vpath!("/dev"), None)
-            .map_err(FsError::LookupDevFailed)?;
+            .map_err(FsInitError::LookupDevFailed)?;
 
         assert!(dev.is_directory());
 
@@ -126,7 +126,7 @@ impl Fs {
         {
             let mut i = dev.item_mut();
             assert!(i.is_none());
-            *i = Some(Arc::new(Arc::downgrade(&old)));
+            *i = Some(VnodeItem::Mount(Arc::downgrade(&old)));
         }
 
         // Install syscall handlers.
@@ -196,20 +196,18 @@ impl Fs {
         // TODO: Handle link.
         let mut item = root.item_mut();
 
-        match item
-            .as_ref()
-            .map(|i| i.downcast_ref::<Weak<Mount>>().unwrap())
-        {
-            Some(m) => match m.upgrade() {
+        match item.as_ref() {
+            Some(VnodeItem::Mount(m)) => match m.upgrade() {
                 Some(m) => {
                     drop(item);
-                    root = m.root();
+                    root = m.root().map_err(LookupError::GetRootFailed)?;
                 }
                 None => {
                     *item = None;
                     drop(item);
                 }
             },
+            Some(_) => unreachable!(),
             None => drop(item),
         }
 
@@ -220,20 +218,18 @@ impl Fs {
                 VnodeType::Directory(_) => {
                     let mut item = vn.item_mut();
 
-                    match item
-                        .as_ref()
-                        .map(|i| i.downcast_ref::<Weak<Mount>>().unwrap())
-                    {
-                        Some(m) => match m.upgrade() {
+                    match item.as_ref() {
+                        Some(VnodeItem::Mount(m)) => match m.upgrade() {
                             Some(m) => {
                                 drop(item);
-                                vn = m.root();
+                                vn = m.root().map_err(LookupError::GetRootFailed)?;
                             }
                             None => {
                                 *item = None;
                                 drop(item);
                             }
                         },
+                        Some(_) => unreachable!(),
                         None => drop(item),
                     }
                 }
@@ -322,7 +318,7 @@ impl Fs {
                 _ => return true,
             }
 
-            return false;
+            false
         });
 
         if fs.len() >= 15 {
@@ -368,11 +364,11 @@ impl Fs {
                 return Err(MountError::PathAlreadyMounted);
             }
 
-            *item = Some(Arc::new(Arc::downgrade(&mount)));
+            *item = Some(VnodeItem::Mount(Arc::downgrade(&mount)));
             drop(item);
 
             // TODO: Implement the remaining logics from the PS4.
-            Ok(mount.root())
+            Ok(mount.root().map_err(MountError::GetRootFailed)?)
         }
     }
 
@@ -996,11 +992,17 @@ impl TryFrom<i64> for TruncateLength {
 }
 pub struct TruncateLengthError(());
 
-/// Represents an error when FS was failed to initialized.
+/// Represents an error when FS fails to initialize.
 #[derive(Debug, Error)]
-pub enum FsError {
+pub enum FsInitError {
     #[error("cannot mount devfs")]
     MountDevFailed(#[source] Box<dyn Errno>),
+
+    #[error("cannot get devfs root vnode")]
+    GetDevRootFailed(#[source] Box<dyn Errno>),
+
+    #[error("cannot get root mount vnode")]
+    GetRootFailed(#[source] Box<dyn Errno>),
 
     #[error("cannot mount rootfs")]
     MountRootFailed(#[source] MountError),
@@ -1029,6 +1031,9 @@ pub enum MountError {
 
     #[error("fspath is already mounted")]
     PathAlreadyMounted,
+
+    #[error("cannot get root")]
+    GetRootFailed(#[source] Box<dyn Errno>),
 }
 
 impl Errno for MountError {
@@ -1039,6 +1044,7 @@ impl Errno for MountError {
             Self::LookupPathFailed(e) => e.errno(),
             Self::MountFailed(e) => e.errno(),
             Self::PathAlreadyMounted => EBUSY,
+            Self::GetRootFailed(e) => e.errno(),
         }
     }
 }
@@ -1092,6 +1098,9 @@ impl Errno for IoctlError {
 /// Represents an error when [`Fs::lookup()`] fails.
 #[derive(Debug, Error)]
 pub enum LookupError {
+    #[error("failed to get mount root")]
+    GetRootFailed(#[source] Box<dyn Errno>),
+
     #[error("no such file or directory")]
     NotFound,
 
@@ -1102,6 +1111,7 @@ pub enum LookupError {
 impl Errno for LookupError {
     fn errno(&self) -> NonZeroI32 {
         match self {
+            Self::GetRootFailed(e) => e.errno(),
             Self::NotFound => ENOENT,
             Self::LookupFailed(_, _, e) => e.errno(),
         }
