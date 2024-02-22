@@ -114,7 +114,7 @@ impl VProc {
         sys.register(464, &vp, Self::sys_thr_set_name);
         sys.register(466, &vp, Self::sys_rtprio_thread);
         sys.register(487, &vp, Self::sys_cpuset_getaffinity);
-        sys.register(487, &vp, Self::sys_cpuset_setaffinity);
+        sys.register(488, &vp, Self::sys_cpuset_setaffinity);
         sys.register(585, &vp, Self::sys_is_in_sandbox);
         sys.register(587, &vp, Self::sys_get_authinfo);
         sys.register(602, &vp, Self::sys_randomized_path);
