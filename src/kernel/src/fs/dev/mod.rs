@@ -3,7 +3,7 @@ use self::dirent::Dirent;
 use self::vnode::VnodeBackend;
 use super::{
     path_contains, DirentType, Filesystem, FsConfig, Mode, Mount, MountFlags, MountOpts,
-    MountSource, VPathBuf, Vnode, VnodeType,
+    MountSource, VPathBuf, Vnode, VnodeItem, VnodeType,
 };
 use crate::errno::{Errno, EEXIST, ENOENT, EOPNOTSUPP};
 use crate::ucred::{Gid, Ucred, Uid};
@@ -105,7 +105,7 @@ fn alloc_vnode(
                 .ok_or(AllocVnodeError::DeviceGone)?;
             let vn = Vnode::new(mnt, VnodeType::Character, tag, backend);
 
-            *vn.item_mut() = Some(dev);
+            *vn.item_mut() = Some(VnodeItem::Device(dev));
             vn
         }
         DirentType::Directory => Vnode::new(
@@ -358,10 +358,12 @@ pub fn mount(
 }
 
 impl Filesystem for DevFs {
-    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Arc<Vnode> {
+    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Result<Arc<Vnode>, Box<dyn Errno>> {
         let ent = self.root.clone();
 
-        alloc_vnode(self, mnt, ent).unwrap()
+        let vnode = alloc_vnode(self, mnt, ent)?;
+
+        Ok(vnode)
     }
 }
 
