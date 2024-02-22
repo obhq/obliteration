@@ -30,10 +30,9 @@ impl BudgetManager {
         id
     }
 
-    fn sys_budget_get_ptype(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_budget_get_ptype(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Check if PID is our process.
         let pid: i32 = i.args[0].try_into().unwrap();
-        let td = VThread::current().unwrap();
 
         info!("Getting budget process type for process {pid}.");
 

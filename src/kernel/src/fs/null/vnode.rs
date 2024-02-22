@@ -65,7 +65,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         let vnode = if Arc::ptr_eq(&lower, vn) {
             vn.clone()
         } else {
-            null_nodeget(vn.fs(), lower)
+            null_nodeget(vn.fs(), lower)?
         };
 
         Ok(vnode)
@@ -152,6 +152,18 @@ impl Errno for OpenError {
 }
 
 /// See `null_nodeget` on the PS4 for a reference.
-pub(super) fn null_nodeget(mnt: &Arc<Mount>, lower: Arc<Vnode>) -> Arc<Vnode> {
+pub(super) fn null_nodeget(
+    mnt: &Arc<Mount>,
+    lower: Arc<Vnode>,
+) -> Result<Arc<Vnode>, NodeGetError> {
     todo!()
+}
+
+#[derive(Debug, Error)]
+pub(super) enum NodeGetError {}
+
+impl Errno for NodeGetError {
+    fn errno(&self) -> NonZeroI32 {
+        todo!()
+    }
 }
