@@ -9,6 +9,7 @@ use param::Param;
 use std::collections::HashMap;
 use std::fs::create_dir;
 use std::io::ErrorKind;
+use std::num::NonZeroI32;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 use thiserror::Error;
@@ -114,8 +115,10 @@ pub fn mount(
 }
 
 impl Filesystem for HostFs {
-    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Arc<Vnode> {
-        get_vnode(&self, mnt, None).unwrap()
+    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+        let vnode = get_vnode(&self, mnt, None)?;
+
+        Ok(vnode)
     }
 }
 
@@ -146,7 +149,7 @@ fn get_vnode(
     // Get vnode type.
     let ty = match file.is_directory() {
         Ok(true) => VnodeType::Directory(path == fs.root),
-        Ok(false) => todo!(),
+        Ok(false) => VnodeType::File,
         Err(e) => return Err(GetVnodeError::GetFileTypeFailed(e)),
     };
 
@@ -181,4 +184,10 @@ enum GetVnodeError {
 
     #[error("cannot determine file type")]
     GetFileTypeFailed(#[source] std::io::Error),
+}
+
+impl Errno for GetVnodeError {
+    fn errno(&self) -> NonZeroI32 {
+        todo!()
+    }
 }

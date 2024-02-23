@@ -1,16 +1,15 @@
 use super::{
-    unixify_access, Access, FileBackend, IoCmd, Mode, Mount, OpenFlags, RevokeFlags, Stat,
+    unixify_access, Access, Cdev, FileBackend, IoCmd, Mode, Mount, OpenFlags, RevokeFlags, Stat,
     TruncateLength, Uio, UioMut, VFile,
 };
 use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
-use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
+use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use macros::Errno;
-use std::any::Any;
 use std::fmt::Debug;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use thiserror::Error;
 
 /// An implementation of `vnode`.
@@ -20,11 +19,11 @@ use thiserror::Error;
 /// file/directory have only one vnode.
 #[derive(Debug)]
 pub struct Vnode {
-    fs: Arc<Mount>,                                  // v_mount
-    ty: VnodeType,                                   // v_type
-    tag: &'static str,                               // v_tag
-    backend: Arc<dyn VnodeBackend>,                  // v_op + v_data
-    item: Gutex<Option<Arc<dyn Any + Send + Sync>>>, // v_un
+    fs: Arc<Mount>,                 // v_mount
+    ty: VnodeType,                  // v_type
+    tag: &'static str,              // v_tag
+    backend: Arc<dyn VnodeBackend>, // v_op + v_data
+    item: Gutex<Option<VnodeItem>>, // v_un
 }
 
 impl Vnode {
@@ -64,11 +63,11 @@ impl Vnode {
         matches!(self.ty, VnodeType::Character)
     }
 
-    pub fn item(&self) -> Option<Arc<dyn Any + Send + Sync>> {
-        self.item.read().clone()
+    pub fn item(&self) -> GutexReadGuard<Option<VnodeItem>> {
+        self.item.read()
     }
 
-    pub fn item_mut(&self) -> GutexWriteGuard<Option<Arc<dyn Any + Send + Sync>>> {
+    pub fn item_mut(&self) -> GutexWriteGuard<Option<VnodeItem>> {
         self.item.write()
     }
 
@@ -174,6 +173,12 @@ impl Drop for Vnode {
     fn drop(&mut self) {
         ACTIVE.fetch_sub(1, Ordering::Relaxed);
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum VnodeItem {
+    Mount(Weak<Mount>),
+    Device(Arc<Cdev>),
 }
 
 /// An implementation of `vtype`.
