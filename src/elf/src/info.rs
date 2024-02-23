@@ -301,6 +301,15 @@ impl FileInfo {
         Ok(LibraryInfo::new(id, name, LibraryFlags::empty()))
     }
 
+    pub fn read_fingerprint(&self, offset: usize) -> [u8; 20] {
+        let offset = offset + self.dynoff;
+
+        let mut fingerprint = [0u8; 20];
+        fingerprint.copy_from_slice(&self.data[offset..(offset + 20)]);
+
+        fingerprint
+    }
+
     pub fn read_str(&self, offset: usize) -> Result<&str, StringTableError> {
         // Get raw string.
         let tab = &self.data[self.strtab..(self.strtab + self.strsz)];

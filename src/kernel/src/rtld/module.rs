@@ -193,7 +193,11 @@ impl<E: ExecutionEngine> Module<E> {
 
         if let Some(info) = file_info {
             module.digest_dynamic(base, &info)?;
-            module.relocated = gg.spawn(Vec::default());
+            module.relocated = gg.spawn(
+                std::iter::repeat_with(|| None)
+                    .take(info.reloc_count() + info.plt_count())
+                    .collect(),
+            );
             module.file_info = Some(info);
         }
 
@@ -542,6 +546,8 @@ impl<E: ExecutionEngine> Module<E> {
     /// See `digest_dynamic` on the PS4 for a reference.
     fn digest_dynamic(&mut self, base: usize, info: &FileInfo) -> Result<(), MapError> {
         // TODO: Implement the remaining tags.
+        let mut fingerprint_offset = None;
+
         for (i, (tag, value)) in info.dynamic().enumerate() {
             match tag {
                 DynamicTag::DT_NULL => break,
@@ -571,7 +577,9 @@ impl<E: ExecutionEngine> Module<E> {
                 DynamicTag::DT_SONAME => self.digest_soname(info, i, value)?,
                 DynamicTag::DT_TEXTREL => *self.flags.get_mut() |= ModuleFlags::TEXT_REL,
                 DynamicTag::DT_FLAGS => self.digest_flags(value)?,
-                DynamicTag::DT_SCE_FINGERPRINT => todo!(),
+                DynamicTag::DT_SCE_FINGERPRINT => {
+                    fingerprint_offset = Some(u64::from_le_bytes(value) as usize)
+                }
                 DynamicTag::DT_SCE_MODULE_INFO | DynamicTag::DT_SCE_NEEDED_MODULE => {
                     self.digest_module_info(info, i, value)?;
                 }
@@ -581,6 +589,8 @@ impl<E: ExecutionEngine> Module<E> {
                 _ => continue,
             }
         }
+
+        self.digest_fingerprint(info, fingerprint_offset.unwrap_or(0));
 
         Ok(())
     }
@@ -636,6 +646,12 @@ impl<E: ExecutionEngine> Module<E> {
         }
 
         Ok(())
+    }
+
+    fn digest_fingerprint(&mut self, info: &FileInfo, offset: usize) {
+        let fingerprint = info.read_fingerprint(offset);
+
+        self.fingerprint = fingerprint;
     }
 
     fn digest_module_info(
