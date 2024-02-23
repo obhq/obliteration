@@ -12,7 +12,7 @@ use param::Param;
 use std::fmt::{Display, Formatter};
 use std::num::{NonZeroI32, TryFromIntError};
 use std::path::PathBuf;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use thiserror::Error;
 
 pub use self::dev::{make_dev, Cdev, CdevSw, DriverFlags, MakeDev, MakeDevError};
@@ -53,7 +53,7 @@ impl Fs {
         param: &Arc<Param>,
         kern_cred: &Arc<Ucred>,
         sys: &mut Syscalls,
-    ) -> Result<Arc<Self>, FsError> {
+    ) -> Result<Arc<Self>, FsInitError> {
         // Mount devfs as an initial root.
         let mut mounts = Mounts::new();
         let conf = Self::find_config("devfs").unwrap();
@@ -65,11 +65,11 @@ impl Fs {
             MountOpts::new(),
             MountFlags::empty(),
         )
-        .map_err(FsError::MountDevFailed)?;
+        .map_err(FsInitError::MountDevFailed)?;
 
         // Get an initial root vnode.
         let init = mounts.push(init);
-        let root = init.root();
+        let root = init.root().map_err(FsInitError::GetDevRootFailed)?;
 
         // Setup mount options for root FS.
         let mut opts = MountOpts::new();
@@ -92,7 +92,7 @@ impl Fs {
 
         let root = fs
             .mount(opts, MountFlags::MNT_ROOTFS, None)
-            .map_err(FsError::MountRootFailed)?;
+            .map_err(FsInitError::MountRootFailed)?;
 
         // Swap devfs with rootfs so rootfs become an actual root.
         let old = {
@@ -106,13 +106,13 @@ impl Fs {
         };
 
         // Disconnect rootfs from the root of devfs.
-        *old.root().item_mut() = None;
+        *old.root().map_err(FsInitError::GetRootFailed)?.item_mut() = None;
         *fs.mounts.read().root().parent_mut() = None;
 
         // Set devfs parent to /dev on the root FS.
         let dev = fs
             .lookup(vpath!("/dev"), None)
-            .map_err(FsError::LookupDevFailed)?;
+            .map_err(FsInitError::LookupDevFailed)?;
 
         assert!(dev.is_directory());
 
@@ -125,7 +125,7 @@ impl Fs {
         {
             let mut i = dev.item_mut();
             assert!(i.is_none());
-            *i = Some(Arc::new(Arc::downgrade(&old)));
+            *i = Some(VnodeItem::Mount(Arc::downgrade(&old)));
         }
 
         // Install syscall handlers.
@@ -195,20 +195,18 @@ impl Fs {
         // TODO: Handle link.
         let mut item = root.item_mut();
 
-        match item
-            .as_ref()
-            .map(|i| i.downcast_ref::<Weak<Mount>>().unwrap())
-        {
-            Some(m) => match m.upgrade() {
+        match item.as_ref() {
+            Some(VnodeItem::Mount(m)) => match m.upgrade() {
                 Some(m) => {
                     drop(item);
-                    root = m.root();
+                    root = m.root().map_err(LookupError::GetRootFailed)?;
                 }
                 None => {
                     *item = None;
                     drop(item);
                 }
             },
+            Some(_) => unreachable!(),
             None => drop(item),
         }
 
@@ -219,20 +217,18 @@ impl Fs {
                 VnodeType::Directory(_) => {
                     let mut item = vn.item_mut();
 
-                    match item
-                        .as_ref()
-                        .map(|i| i.downcast_ref::<Weak<Mount>>().unwrap())
-                    {
-                        Some(m) => match m.upgrade() {
+                    match item.as_ref() {
+                        Some(VnodeItem::Mount(m)) => match m.upgrade() {
                             Some(m) => {
                                 drop(item);
-                                vn = m.root();
+                                vn = m.root().map_err(LookupError::GetRootFailed)?;
                             }
                             None => {
                                 *item = None;
                                 drop(item);
                             }
                         },
+                        Some(_) => unreachable!(),
                         None => drop(item),
                     }
                 }
@@ -265,7 +261,7 @@ impl Fs {
         Ok(vn)
     }
 
-    fn sys_read(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_read(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
@@ -277,7 +273,7 @@ impl Fs {
             bytes_left: len,
         };
 
-        self.readv(fd, uio)
+        self.readv(fd, uio, td)
     }
 
     /// See `vfs_donmount` on the PS4 for a reference.
@@ -321,7 +317,7 @@ impl Fs {
                 _ => return true,
             }
 
-            return false;
+            false
         });
 
         if fs.len() >= 15 {
@@ -367,15 +363,15 @@ impl Fs {
                 return Err(MountError::PathAlreadyMounted);
             }
 
-            *item = Some(Arc::new(Arc::downgrade(&mount)));
+            *item = Some(VnodeItem::Mount(Arc::downgrade(&mount)));
             drop(item);
 
             // TODO: Implement the remaining logics from the PS4.
-            Ok(mount.root())
+            Ok(mount.root().map_err(MountError::GetRootFailed)?)
         }
     }
 
-    fn sys_write(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_write(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *const u8 = i.args[1].into();
         let len: usize = i.args[2].into();
@@ -387,10 +383,10 @@ impl Fs {
             bytes_left: len,
         };
 
-        self.writev(fd, uio)
+        self.writev(fd, uio, td)
     }
 
-    fn sys_open(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_open(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let path = unsafe { i.args[0].to_path()?.unwrap() };
         let flags: OpenFlags = i.args[1].try_into().unwrap();
@@ -421,7 +417,6 @@ impl Fs {
         info!("Opening {path} with flags = {flags}.");
 
         // Lookup file.
-        let td = VThread::current().unwrap();
         let mut file = self.open(path, Some(&td))?;
 
         *file.flags_mut() = flags.into_fflags();
@@ -434,8 +429,7 @@ impl Fs {
         Ok(fd.into())
     }
 
-    fn sys_close(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let td = VThread::current().unwrap();
+    fn sys_close(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
 
         info!("Closing fd {fd}.");
@@ -445,12 +439,10 @@ impl Fs {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_ioctl(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_ioctl(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         // Our IoCmd contains both the command and the argument (if there is one).
         let cmd = IoCmd::try_from_raw_parts(i.args[1].into(), i.args[2].into())?;
-
-        let td = VThread::current().unwrap();
 
         info!("Executing ioctl({cmd:?}) on file descriptor {fd}.");
 
@@ -483,13 +475,12 @@ impl Fs {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_revoke(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_revoke(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let path = unsafe { i.args[0].to_path()?.unwrap() };
 
         info!("Revoking access to {path}.");
 
         // Check current thread privilege.
-        let td = VThread::current().unwrap();
 
         td.priv_check(Privilege::SCE683)?;
 
@@ -507,19 +498,30 @@ impl Fs {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_readv(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn revoke(&self, vn: Arc<Vnode>, td: &VThread) -> Result<(), RevokeError> {
+        let vattr = vn.getattr().map_err(RevokeError::GetAttrError)?;
+
+        if td.cred().effective_uid() != vattr.uid() {
+            td.priv_check(Privilege::VFS_ADMIN)?;
+        }
+
+        vn.revoke(RevokeFlags::REVOKE_ALL)
+            .map_err(RevokeError::RevokeFailed)?;
+
+        Ok(())
+    }
+
+    fn sys_readv(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *mut IoVec = i.args[1].into();
         let count: u32 = i.args[2].try_into().unwrap();
 
         let uio = unsafe { UioMut::copyin(iovec, count) }?;
 
-        self.readv(fd, uio)
+        self.readv(fd, uio, td)
     }
 
-    fn readv(&self, fd: i32, uio: UioMut) -> Result<SysOut, SysErr> {
-        let td = VThread::current().unwrap();
-
+    fn readv(&self, fd: i32, uio: UioMut, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_read(fd)?;
 
         let read = file.do_read(uio, Offset::Current, Some(&td))?;
@@ -527,19 +529,17 @@ impl Fs {
         Ok(read.into())
     }
 
-    fn sys_writev(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_writev(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *const IoVec = i.args[1].into();
         let iovcnt: u32 = i.args[2].try_into().unwrap();
 
         let uio = unsafe { Uio::copyin(iovec, iovcnt) }?;
 
-        self.writev(fd, uio)
+        self.writev(fd, uio, td)
     }
 
-    fn writev(&self, fd: i32, uio: Uio) -> Result<SysOut, SysErr> {
-        let td = VThread::current().unwrap();
-
+    fn writev(&self, fd: i32, uio: Uio, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_write(fd)?;
 
         let written = file.do_write(uio, Offset::Current, Some(&td))?;
@@ -547,11 +547,9 @@ impl Fs {
         Ok(written.into())
     }
 
-    fn sys_stat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_stat(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let stat_out: *mut Stat = i.args[1].into();
-
-        let td = VThread::current().unwrap();
 
         let stat = self.stat(path, &td)?;
 
@@ -567,11 +565,9 @@ impl Fs {
         self.statat(AtFlags::empty(), At::Cwd, path, td)
     }
 
-    fn sys_fstat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_fstat(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let stat_out: *mut Stat = i.args[1].into();
-
-        let td = VThread::current().unwrap();
 
         let stat = self.fstat(fd, &td)?;
 
@@ -588,11 +584,9 @@ impl Fs {
         todo!()
     }
 
-    fn sys_lstat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_lstat(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let stat_out: *mut Stat = i.args[1].into();
-
-        let td = VThread::current().unwrap();
 
         td.priv_check(Privilege::SCE683)?;
 
@@ -610,7 +604,7 @@ impl Fs {
         self.statat(AtFlags::SYMLINK_NOFOLLOW, At::Cwd, path, td)
     }
 
-    fn sys_pread(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_pread(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
@@ -623,10 +617,10 @@ impl Fs {
             bytes_left: len,
         };
 
-        self.preadv(fd, uio, offset)
+        self.preadv(fd, uio, offset, td)
     }
 
-    fn sys_pwrite(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_pwrite(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
@@ -639,10 +633,10 @@ impl Fs {
             bytes_left: len,
         };
 
-        self.pwritev(fd, uio, offset)
+        self.pwritev(fd, uio, offset, td)
     }
 
-    fn sys_preadv(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_preadv(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *mut IoVec = i.args[1].into();
         let count: u32 = i.args[2].try_into().unwrap();
@@ -650,12 +644,10 @@ impl Fs {
 
         let uio = unsafe { UioMut::copyin(iovec, count) }?;
 
-        self.preadv(fd, uio, offset)
+        self.preadv(fd, uio, offset, td)
     }
 
-    fn preadv(&self, fd: i32, uio: UioMut, off: u64) -> Result<SysOut, SysErr> {
-        let td = VThread::current().unwrap();
-
+    fn preadv(&self, fd: i32, uio: UioMut, off: u64, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_read(fd)?;
 
         if !file.is_seekable() {
@@ -669,7 +661,7 @@ impl Fs {
         Ok(read.into())
     }
 
-    fn sys_pwritev(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_pwritev(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *const IoVec = i.args[1].into();
         let count: u32 = i.args[2].try_into().unwrap();
@@ -677,12 +669,10 @@ impl Fs {
 
         let uio = unsafe { Uio::copyin(iovec, count) }?;
 
-        self.pwritev(fd, uio, offset)
+        self.pwritev(fd, uio, offset, td)
     }
 
-    fn pwritev(&self, fd: i32, uio: Uio, off: u64) -> Result<SysOut, SysErr> {
-        let td = VThread::current().unwrap();
-
+    fn pwritev(&self, fd: i32, uio: Uio, off: u64, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_write(fd)?;
 
         if !file.is_seekable() {
@@ -696,13 +686,11 @@ impl Fs {
         Ok(written.into())
     }
 
-    fn sys_fstatat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_fstatat(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let dirfd: i32 = i.args[0].try_into().unwrap();
         let path = unsafe { i.args[1].to_path() }?.unwrap();
         let stat_out: *mut Stat = i.args[2].into();
         let flags: AtFlags = i.args[3].try_into().unwrap();
-
-        let td = VThread::current().unwrap();
 
         td.priv_check(Privilege::SCE683)?;
 
@@ -728,30 +716,15 @@ impl Fs {
         todo!()
     }
 
-    fn revoke(&self, vn: Arc<Vnode>, td: &VThread) -> Result<(), RevokeError> {
-        let vattr = vn.getattr().map_err(RevokeError::GetAttrError)?;
-
-        if td.cred().effective_uid() != vattr.uid() {
-            td.priv_check(Privilege::VFS_ADMIN)?;
-        }
-
-        vn.revoke(RevokeFlags::REVOKE_ALL)
-            .map_err(RevokeError::RevokeFailed)?;
-
-        Ok(())
-    }
-
-    fn sys_mkdir(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_mkdir(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let mode: u32 = i.args[1].try_into().unwrap();
-
-        let td = VThread::current().unwrap();
 
         self.mkdirat(At::Cwd, path, mode, Some(&td))
     }
 
     #[allow(unused_variables)]
-    fn sys_poll(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_poll(self: &Arc<Self>, _td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fds: *mut PollFd = i.args[0].into();
         let nfds: u32 = i.args[1].try_into().unwrap();
         let timeout: i32 = i.args[2].try_into().unwrap();
@@ -759,7 +732,7 @@ impl Fs {
         todo!()
     }
 
-    fn sys_lseek(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_lseek(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let mut offset: i64 = i.args[1].into();
         let whence: Whence = {
@@ -767,8 +740,6 @@ impl Fs {
 
             whence.try_into()?
         };
-
-        let td = VThread::current().unwrap();
 
         let file = td.proc().files().get(fd)?;
 
@@ -799,11 +770,9 @@ impl Fs {
         todo!()
     }
 
-    fn sys_truncate(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_truncate(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let length = i.args[1].into();
-
-        let td = VThread::current().unwrap();
 
         self.truncate(path, length, &td)?;
 
@@ -818,11 +787,9 @@ impl Fs {
         todo!()
     }
 
-    fn sys_ftruncate(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_ftruncate(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd = i.args[0].try_into().unwrap();
         let length = i.args[1].into();
-
-        let td = VThread::current().unwrap();
 
         self.ftruncate(fd, length, &td)?;
 
@@ -843,9 +810,7 @@ impl Fs {
         Ok(())
     }
 
-    fn sys_mkdirat(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let td = VThread::current().unwrap();
-
+    fn sys_mkdirat(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         td.priv_check(Privilege::SCE683)?;
 
         let fd: i32 = i.args[0].try_into().unwrap();
@@ -1108,11 +1073,17 @@ impl TryFrom<i64> for TruncateLength {
 }
 pub struct TruncateLengthError(());
 
-/// Represents an error when FS was failed to initialized.
+/// Represents an error when FS fails to initialize.
 #[derive(Debug, Error)]
-pub enum FsError {
+pub enum FsInitError {
     #[error("cannot mount devfs")]
     MountDevFailed(#[source] Box<dyn Errno>),
+
+    #[error("cannot get devfs root vnode")]
+    GetDevRootFailed(#[source] Box<dyn Errno>),
+
+    #[error("cannot get root mount vnode")]
+    GetRootFailed(#[source] Box<dyn Errno>),
 
     #[error("cannot mount rootfs")]
     MountRootFailed(#[source] MountError),
@@ -1141,6 +1112,9 @@ pub enum MountError {
 
     #[error("fspath is already mounted")]
     PathAlreadyMounted,
+
+    #[error("cannot get root")]
+    GetRootFailed(#[source] Box<dyn Errno>),
 }
 
 impl Errno for MountError {
@@ -1151,6 +1125,7 @@ impl Errno for MountError {
             Self::LookupPathFailed(e) => e.errno(),
             Self::MountFailed(e) => e.errno(),
             Self::PathAlreadyMounted => EBUSY,
+            Self::GetRootFailed(e) => e.errno(),
         }
     }
 }
@@ -1204,6 +1179,9 @@ impl Errno for IoctlError {
 /// Represents an error when [`Fs::lookup()`] fails.
 #[derive(Debug, Error)]
 pub enum LookupError {
+    #[error("failed to get mount root")]
+    GetRootFailed(#[source] Box<dyn Errno>),
+
     #[error("no such file or directory")]
     NotFound,
 
@@ -1214,6 +1192,7 @@ pub enum LookupError {
 impl Errno for LookupError {
     fn errno(&self) -> NonZeroI32 {
         match self {
+            Self::GetRootFailed(e) => e.errno(),
             Self::NotFound => ENOENT,
             Self::LookupFailed(_, _, e) => e.errno(),
         }

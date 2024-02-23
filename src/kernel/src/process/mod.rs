@@ -22,7 +22,6 @@ use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::any::Any;
 use std::cmp::min;
-use std::convert::Infallible;
 use std::ffi::c_char;
 use std::mem::zeroed;
 use std::num::NonZeroI32;
@@ -108,7 +107,7 @@ impl VProc {
             gg,
         });
 
-        sys.register(20, &vp, |p, _| Ok(p.id().into()));
+        sys.register(20, &vp, Self::sys_getpid);
         sys.register(50, &vp, Self::sys_setlogin);
         sys.register(147, &vp, Self::sys_setsid);
         sys.register(340, &vp, Self::sys_sigprocmask);
@@ -117,7 +116,6 @@ impl VProc {
         sys.register(464, &vp, Self::sys_thr_set_name);
         sys.register(466, &vp, Self::sys_rtprio_thread);
         sys.register(487, &vp, Self::sys_cpuset_getaffinity);
-        sys.register(557, &vp, Self::sys_namedobj_create);
         sys.register(585, &vp, Self::sys_is_in_sandbox);
         sys.register(587, &vp, Self::sys_get_authinfo);
         sys.register(602, &vp, Self::sys_randomized_path);
@@ -177,11 +175,13 @@ impl VProc {
         &self.gg
     }
 
-    fn sys_setlogin(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_getpid(self: &Arc<Self>, _: &VThread, _: &SysIn) -> Result<SysOut, SysErr> {
+        Ok(self.id.into())
+    }
+
+    fn sys_setlogin(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Check current thread privilege.
-        VThread::current()
-            .unwrap()
-            .priv_check(Privilege::PROC_SETLOGIN)?;
+        td.priv_check(Privilege::PROC_SETLOGIN)?;
 
         // Get login name.
         let login = unsafe { i.args[0].to_str(17) }
@@ -205,9 +205,9 @@ impl VProc {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_setsid(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_setsid(self: &Arc<Self>, td: &VThread, _: &SysIn) -> Result<SysOut, SysErr> {
         // Check if current thread has privilege.
-        VThread::current().unwrap().priv_check(Privilege::SCE680)?;
+        td.priv_check(Privilege::SCE680)?;
 
         // Check if the process already become a group leader.
         let mut group = self.group.write();
@@ -225,7 +225,7 @@ impl VProc {
         Ok(self.id.into())
     }
 
-    fn sys_sigprocmask(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_sigprocmask(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let how: i32 = i.args[0].try_into().unwrap();
         let set: *const SignalSet = i.args[1].into();
@@ -240,8 +240,7 @@ impl VProc {
 
         // Keep the current mask for copying to the oset. We need to copy to the oset only when this
         // function succees.
-        let vt = VThread::current().unwrap();
-        let mut mask = vt.sigmask_mut();
+        let mut mask = td.sigmask_mut();
         let prev = *mask;
 
         // Update the mask.
@@ -285,7 +284,7 @@ impl VProc {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_sigaction(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_sigaction(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let sig: i32 = i.args[0].try_into().unwrap();
         let act: *const SignalAct = i.args[1].into();
@@ -414,13 +413,13 @@ impl VProc {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_thr_self(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_thr_self(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let id: *mut i64 = i.args[0].into();
-        unsafe { *id = VThread::current().unwrap().id().get().into() };
+        unsafe { *id = td.id().get().into() };
         Ok(SysOut::ZERO)
     }
 
-    fn sys_thr_set_name(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_thr_set_name(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let tid: i64 = i.args[0].into();
         let name: Option<&str> = unsafe { i.args[1].to_str(32) }?;
 
@@ -448,12 +447,11 @@ impl VProc {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_rtprio_thread(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_rtprio_thread(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         const RTP_LOOKUP: i32 = 0;
         const RTP_SET: i32 = 1;
         const RTP_UNK: i32 = 2;
 
-        let td = VThread::current().unwrap();
         let function: i32 = i.args[0].try_into().unwrap();
         let lwpid: i32 = i.args[1].try_into().unwrap();
         let rtp: *mut RtPrio = i.args[2].into();
@@ -480,7 +478,7 @@ impl VProc {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_cpuset_getaffinity(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_cpuset_getaffinity(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let level: i32 = i.args[0].try_into().unwrap();
         let which: i32 = i.args[1].try_into().unwrap();
@@ -550,36 +548,12 @@ impl VProc {
         }
     }
 
-    // TODO: This should not be here.
-    fn sys_namedobj_create(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
-        // Get arguments.
-        let name = unsafe { i.args[0].to_str(32)?.ok_or(SysErr::Raw(EINVAL))? };
-        let data: usize = i.args[1].into();
-        let flags: u32 = i.args[2].try_into().unwrap();
-
-        // Allocate the entry.
-        let mut table = self.objects.write();
-        let (entry, id) = table
-            .alloc::<_, Infallible>(|_| Ok(Arc::new(NamedObj::new(name.to_owned(), data))))
-            .unwrap();
-
-        entry.set_name(Some(name.to_owned()));
-        entry.set_ty((flags as u16) | 0x1000);
-
-        info!(
-            "Named object '{}' (ID = {}) was created with data = {:#x} and flags = {:#x}.",
-            name, id, data, flags
-        );
-
-        Ok(id.into())
-    }
-
-    fn sys_is_in_sandbox(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_is_in_sandbox(self: &Arc<Self>, _: &VThread, _: &SysIn) -> Result<SysOut, SysErr> {
         // TODO: Implement this once FS rework has been usable.
         Ok(1.into())
     }
 
-    fn sys_get_authinfo(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_get_authinfo(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let pid: i32 = i.args[0].try_into().unwrap();
         let buf: *mut AuthInfo = i.args[1].into();
@@ -591,7 +565,6 @@ impl VProc {
 
         // Check privilege.
         let mut info: AuthInfo = unsafe { zeroed() };
-        let td = VThread::current().unwrap();
 
         if td.priv_check(Privilege::SCE686).is_ok() {
             info = self.cred.auth().clone();
@@ -617,7 +590,7 @@ impl VProc {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_randomized_path(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_randomized_path(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let set = i.args[0];
         let get: *mut c_char = i.args[1].into();
         let len: *mut usize = i.args[2].into();
@@ -662,19 +635,6 @@ impl VProc {
 struct RtPrio {
     ty: u16,
     prio: u16,
-}
-
-/// TODO: Move this to somewhere else.
-#[derive(Debug)]
-pub struct NamedObj {
-    name: String,
-    data: usize,
-}
-
-impl NamedObj {
-    pub fn new(name: String, data: usize) -> Self {
-        Self { name, data }
-    }
 }
 
 /// Represents an error when [`VProc`] construction is failed.

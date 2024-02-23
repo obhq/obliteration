@@ -7,11 +7,11 @@ pub struct Entry<T> {
 }
 
 impl<T> Entry<T> {
-    pub(super) fn new(data: T) -> Self {
+    pub fn new(name: Option<String>, data: T, ty: u16) -> Self {
         Self {
-            name: None,
+            name: name,
             data,
-            ty: 0,
+            ty,
         }
     }
 
@@ -21,13 +21,5 @@ impl<T> Entry<T> {
 
     pub fn ty(&self) -> u16 {
         self.ty
-    }
-
-    pub fn set_name(&mut self, v: Option<String>) {
-        self.name = v;
-    }
-
-    pub fn set_ty(&mut self, v: u16) {
-        self.ty = v;
     }
 }
