@@ -415,7 +415,7 @@ impl VProc {
     }
 
     fn sys_thr_set_name(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
-        let tid: i32 = i.args[0].try_into().unwrap();
+        let tid: i64 = i.args[0].try_into().unwrap();
         let name: Option<&str> = unsafe { i.args[1].to_str(32) }?;
 
         if tid == -1 {
@@ -427,7 +427,7 @@ impl VProc {
 
             let thr = threads
                 .iter()
-                .find(|t| t.id().get() == tid)
+                .find(|t| t.id().get() == tid as i32)
                 .ok_or(SysErr::Raw(ESRCH))?;
 
             info!(
