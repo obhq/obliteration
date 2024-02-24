@@ -18,6 +18,8 @@ jobs:
     name: Housekeep
     runs-on: ubuntu-latest
     steps:
+    - name: Install Python modules
+      run: pip install PyGithub
     - name: Update PRs
       run: |
         from datetime import datetime
