@@ -12,11 +12,11 @@ use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ERANGE, ESRCH};
 use crate::fs::Vnode;
 use crate::idt::Idt;
 use crate::info;
-use crate::signal::SigChldFlags;
 use crate::signal::{
     strsignal, SignalAct, SignalFlags, SignalSet, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_DFL,
-    SIG_IGN, SIG_MAXSIG, SIG_SETMASK, SIG_UNBLOCK,
+    SIG_IGN, SIG_SETMASK, SIG_UNBLOCK,
 };
+use crate::signal::{SigChldFlags, Signal};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
@@ -281,14 +281,12 @@ impl VProc {
 
     fn sys_sigaction(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
-        let sig: i32 = i.args[0].try_into().unwrap();
+        let sig = {
+            let sig: i32 = i.args[0].try_into().unwrap();
+            Signal::new(sig).ok_or(SysErr::Raw(EINVAL))?
+        };
         let act: *const SignalAct = i.args[1].into();
         let oact: *mut SignalAct = i.args[2].into();
-
-        if sig == 0 || sig > SIG_MAXSIG {
-            return Err(SysErr::Raw(EINVAL));
-        }
-        let sig = NonZeroI32::new(sig).unwrap();
 
         // Save the old actions.
         let mut acts = self.sigacts.write();
