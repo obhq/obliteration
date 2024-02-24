@@ -208,14 +208,18 @@ pub(super) trait Device: Debug + Sync + Send + 'static {
     #[allow(unused_variables)]
     fn read(
         self: Arc<Self>,
-        data: &mut [u8],
+        data: &mut UioMut,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         Err(Box::new(DefaultError::ReadNotSupported))
     }
 
     #[allow(unused_variables)]
-    fn write(self: Arc<Self>, data: &[u8], td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+    fn write(
+        self: Arc<Self>,
+        data: &mut Uio,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
         Err(Box::new(DefaultError::WriteNotSupported))
     }
 

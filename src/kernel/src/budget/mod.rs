@@ -1,9 +1,8 @@
 use crate::errno::{ENOENT, ENOSYS, ESRCH};
-use crate::idt::Idt;
+use crate::idt::{Entry, Idt};
 use crate::info;
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
-use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
 
 /// An implementation of budget system on the PS4.
@@ -25,20 +24,15 @@ impl BudgetManager {
     pub fn create(&self, budget: Budget) -> usize {
         let name = budget.name.clone();
         let mut budgets = self.budgets.lock().unwrap();
-        let (entry, id) = budgets
-            .alloc::<_, Infallible>(|_| Ok(Arc::new(budget)))
-            .unwrap();
 
-        entry.set_name(Some(name));
-        entry.set_ty(0x2000);
+        let id = budgets.alloc_infallible(|_| Entry::new(Some(name), Arc::new(budget), 0x2000));
 
         id
     }
 
-    fn sys_budget_get_ptype(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_budget_get_ptype(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Check if PID is our process.
         let pid: i32 = i.args[0].try_into().unwrap();
-        let td = VThread::current().unwrap();
 
         info!("Getting budget process type for process {pid}.");
 

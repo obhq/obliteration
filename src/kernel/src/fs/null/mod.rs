@@ -21,8 +21,10 @@ impl NullFs {
 }
 
 impl Filesystem for NullFs {
-    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Arc<Vnode> {
-        null_nodeget(mnt, self.lower.clone())
+    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+        let vnode = null_nodeget(mnt, self.lower.clone())?;
+
+        Ok(vnode)
     }
 }
 
