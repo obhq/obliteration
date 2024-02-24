@@ -318,8 +318,8 @@ impl Drop for HostFile {
 
     #[cfg(windows)]
     fn drop(&mut self) {
+        use windows_sys::Wdk::Foundation::NtClose;
         use windows_sys::Win32::Foundation::{RtlNtStatusToDosError, STATUS_SUCCESS};
-        use windows_sys::Win32::System::WindowsProgramming::NtClose;
 
         let err = unsafe { NtClose(self.raw) };
 

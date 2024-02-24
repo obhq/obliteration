@@ -32,6 +32,7 @@ tls = { path = "../tls" }
 [target.'cfg(windows)'.dependencies.windows-sys]
 version = "0.52"
 features = [
+    "Wdk",
     "Wdk_Foundation",
     "Win32_Foundation",
     "Win32_Security",
