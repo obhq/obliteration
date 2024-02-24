@@ -129,31 +129,23 @@ enum GetAttrError {
 }
 
 /// Represents an error when [`lookup()`] fails.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 enum LookupError {
     #[error("current file is not a directory")]
+    #[errno(ENOTDIR)]
     NotDirectory,
 
     #[error("cannot resolve '..' on the root directory")]
+    #[errno(EIO)]
     DotdotOnRoot,
 
     #[error("access denied")]
     AccessDenied(#[source] Box<dyn Errno>),
 
     #[error("name contains unsupported characters")]
+    #[errno(ENOENT)]
     InvalidName,
 
     #[error("cannot get vnode")]
     GetVnodeFailed(#[source] GetVnodeError),
-}
-
-impl Errno for LookupError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::NotDirectory => ENOTDIR,
-            Self::DotdotOnRoot | Self::GetVnodeFailed(_) => EIO,
-            Self::AccessDenied(e) => e.errno(),
-            Self::InvalidName => ENOENT,
-        }
-    }
 }

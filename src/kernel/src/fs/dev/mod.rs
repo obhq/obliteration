@@ -310,18 +310,11 @@ impl Devices {
 }
 
 /// Represents an error when [`make_dev()`] is failed.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum MakeDevError {
     #[error("the device with the same name already exist")]
+    #[errno(EEXIST)]
     AlreadyExist(String),
-}
-
-impl Errno for MakeDevError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::AlreadyExist(_) => EEXIST,
-        }
-    }
 }
 
 pub fn mount(

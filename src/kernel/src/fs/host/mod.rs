@@ -177,17 +177,11 @@ enum MountError {
     CreateDirectoryFailed(PathBuf, #[source] std::io::Error),
 }
 /// Represents an error when [`get_vnode()`] fails.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 enum GetVnodeError {
     #[error("cannot open the specified file")]
     OpenFileFailed(#[source] std::io::Error),
 
     #[error("cannot determine file type")]
     GetFileTypeFailed(#[source] std::io::Error),
-}
-
-impl Errno for GetVnodeError {
-    fn errno(&self) -> NonZeroI32 {
-        todo!()
-    }
 }

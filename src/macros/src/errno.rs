@@ -1,6 +1,6 @@
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
-use syn::{punctuated::Punctuated, Field, Fields, ItemEnum, Meta, Token, Variant};
+use syn::{punctuated::Punctuated, Fields, ItemEnum, Meta, Token, Variant};
 
 pub fn transform(arg: ItemEnum) -> syn::Result<TokenStream> {
     let enum_name = &arg.ident;
@@ -11,17 +11,25 @@ pub fn transform(arg: ItemEnum) -> syn::Result<TokenStream> {
         .map(|variant| process_variant(variant, enum_name))
         .collect::<Result<Vec<_>, _>>()?;
 
-    let res = quote!(
-        impl Errno for #enum_name {
-            fn errno(&self) -> std::num::NonZeroI32 {
-                match *self {
-                    #(#arms)*
+    if arms.is_empty() {
+         Ok(quote!(
+            impl Errno for #enum_name {
+                fn errno(&self) -> std::num::NonZeroI32 {
+                    match *self {}
                 }
             }
-        }
-    );
-
-    Ok(res)
+        ))
+    } else {
+        Ok(quote!(
+            impl Errno for #enum_name {
+                fn errno(&self) -> std::num::NonZeroI32 {
+                    match self {
+                        #(#arms)*
+                    }
+                }
+            }
+        ))
+    }
 }
 
 fn process_variant(variant: &Variant, enum_name: &Ident) -> syn::Result<TokenStream> {
@@ -68,10 +76,11 @@ fn process_variant(variant: &Variant, enum_name: &Ident) -> syn::Result<TokenStr
     match &variant.fields {
         Fields::Named(_) => todo!("Named fields are not supported yet"),
         Fields::Unnamed(fields) => {
+            let ref fields = fields.unnamed;
+
             let mut pos = None;
 
             fields
-                .unnamed
                 .iter()
                 .enumerate()
                 .try_for_each(|(i, field)| {
@@ -97,8 +106,13 @@ fn process_variant(variant: &Variant, enum_name: &Ident) -> syn::Result<TokenStr
                 Some(pos) => {
                     let variant_name = &variant.ident;
 
-                    Ok(quote!(
-                        #enum_name::#variant_name (e) => e.errno()))
+                    // The field at index `pos` is the one we are interested in
+
+                    let inner = (0..fields.len())
+                        .map(|i| if i == pos { quote!(e) } else { quote!(_) })
+                        .fold(quote!(), |acc, c| quote!(#acc #c));
+
+                    Ok(quote!(#enum_name::#variant_name ( #inner ) => e.errno(),))
                 }
                 None => Err(syn::Error::new_spanned(
                     variant,
@@ -106,16 +120,9 @@ fn process_variant(variant: &Variant, enum_name: &Ident) -> syn::Result<TokenStr
                 )),
             };
         }
-        Fields::Unit => {
-            return Err(syn::Error::new_spanned(
-                variant,
-                "no errno attribute found on a variant with no fields",
-            ))
-        }
+        Fields::Unit => Err(syn::Error::new_spanned(
+            variant,
+            "no errno attribute found on a variant with no fields",
+        )),
     }
-
-    Err(syn::Error::new_spanned(
-        variant,
-        "variant does not have an errno attribute or any inner error to get the errno from",
-    ))
 }

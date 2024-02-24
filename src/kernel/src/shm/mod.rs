@@ -1,3 +1,4 @@
+use macros::Errno;
 use thiserror::Error;
 
 use crate::{
@@ -159,11 +160,5 @@ impl FileBackend for Shm {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum TruncateError {}
-
-impl Errno for TruncateError {
-    fn errno(&self) -> NonZeroI32 {
-        match *self {}
-    }
-}
