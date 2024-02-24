@@ -1,17 +1,15 @@
-use self::file::HostFile;
+use self::file::{HostFile, HostId};
 use self::vnode::VnodeBackend;
 use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, VPathBuf, Vnode, VnodeType};
 use crate::errno::{Errno, EIO};
 use crate::ucred::Ucred;
-use gmtx::{Gutex, GutexGroup};
 use macros::Errno;
 use param::Param;
 use std::collections::HashMap;
 use std::fs::create_dir;
 use std::io::ErrorKind;
-use std::num::NonZeroI32;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Weak};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex, Weak};
 use thiserror::Error;
 
 mod file;
@@ -23,9 +21,8 @@ mod vnode;
 /// report this as `exfatfs` otherwise it might be unexpected by the PS4.
 #[derive(Debug)]
 pub struct HostFs {
-    root: PathBuf,
-    app: Arc<VPathBuf>,
-    actives: Gutex<HashMap<PathBuf, Weak<Vnode>>>,
+    root: Arc<HostFile>,
+    actives: Mutex<HashMap<HostId, Weak<Vnode>>>,
 }
 
 pub fn mount(
@@ -96,9 +93,13 @@ pub fn mount(
 
     map.insert(app.join("app0").unwrap(), MountSource::Bind(pfs));
 
-    // Set mount data.
-    let gg = GutexGroup::new();
+    // Open root directory.
+    let root = match HostFile::root(&system) {
+        Ok(v) => v,
+        Err(e) => return Err(Box::new(MountError::OpenRootFailed(system, e))),
+    };
 
+    // Set mount data.
     Ok(Mount::new(
         conf,
         cred,
@@ -107,17 +108,15 @@ pub fn mount(
         parent,
         flags | MountFlags::MNT_LOCAL,
         HostFs {
-            root: system,
-            app: Arc::new(app),
-            actives: gg.spawn(HashMap::new()),
+            root: Arc::new(root),
+            actives: Mutex::default(),
         },
     ))
 }
 
 impl Filesystem for HostFs {
     fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Result<Arc<Vnode>, Box<dyn Errno>> {
-        let vnode = get_vnode(&self, mnt, None)?;
-
+        let vnode = get_vnode(&self, mnt, &self.root)?;
         Ok(vnode)
     }
 }
@@ -125,39 +124,37 @@ impl Filesystem for HostFs {
 fn get_vnode(
     fs: &Arc<HostFs>,
     mnt: &Arc<Mount>,
-    path: Option<&Path>,
+    file: &Arc<HostFile>,
 ) -> Result<Arc<Vnode>, GetVnodeError> {
-    // Get target path.
-    let path = match path {
-        Some(v) => v,
-        None => &fs.root,
+    // Get file ID.
+    let id = match file.id() {
+        Ok(v) => v,
+        Err(e) => return Err(GetVnodeError::GetFileIdFailed(e)),
     };
 
     // Check if active.
-    let mut actives = fs.actives.write();
+    let mut actives = fs.actives.lock().unwrap();
 
-    if let Some(v) = actives.get(path).and_then(|v| v.upgrade()) {
+    if let Some(v) = actives.get(&id).and_then(|v| v.upgrade()) {
         return Ok(v);
     }
 
-    // Open the file. Beware of deadlock here.
-    let file = match HostFile::open(path) {
-        Ok(v) => v,
-        Err(e) => return Err(GetVnodeError::OpenFileFailed(e)),
-    };
-
-    // Get vnode type.
+    // Get vnode type. Beware of deadlock here.
     let ty = match file.is_directory() {
-        Ok(true) => VnodeType::Directory(path == fs.root),
+        Ok(true) => VnodeType::Directory(Arc::ptr_eq(file, &fs.root)),
         Ok(false) => VnodeType::File,
         Err(e) => return Err(GetVnodeError::GetFileTypeFailed(e)),
     };
 
     // Allocate a new vnode.
-    let vn = Vnode::new(mnt, ty, "exfatfs", VnodeBackend::new(fs.clone(), file));
+    let vn = Vnode::new(
+        mnt,
+        ty,
+        "exfatfs",
+        VnodeBackend::new(fs.clone(), file.clone()),
+    );
 
-    actives.insert(path.to_owned(), Arc::downgrade(&vn));
-    drop(actives);
+    actives.insert(id, Arc::downgrade(&vn));
 
     Ok(vn)
 }
@@ -175,19 +172,19 @@ enum MountError {
     #[error("cannot create {0}")]
     #[errno(EIO)]
     CreateDirectoryFailed(PathBuf, #[source] std::io::Error),
+
+    #[error("couldn't open {0} as a root directory")]
+    #[errno(EIO)]
+    OpenRootFailed(PathBuf, #[source] std::io::Error),
 }
 /// Represents an error when [`get_vnode()`] fails.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 enum GetVnodeError {
-    #[error("cannot open the specified file")]
-    OpenFileFailed(#[source] std::io::Error),
+    #[error("couldn't get file identifier")]
+    #[errno(EIO)]
+    GetFileIdFailed(#[source] std::io::Error),
 
     #[error("cannot determine file type")]
+    #[errno(EIO)]
     GetFileTypeFailed(#[source] std::io::Error),
-}
-
-impl Errno for GetVnodeError {
-    fn errno(&self) -> NonZeroI32 {
-        todo!()
-    }
 }
