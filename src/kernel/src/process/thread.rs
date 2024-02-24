@@ -6,6 +6,7 @@ use crate::ucred::{Privilege, PrivilegeError, Ucred};
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use llt::{OsThread, SpawnError};
+use macros::Errno;
 use std::num::NonZeroI32;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -185,11 +186,5 @@ impl Drop for Running {
 
 static VTHREAD: Tls<Arc<VThread>> = Tls::new();
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum FileAllocError {}
-
-impl Errno for FileAllocError {
-    fn errno(&self) -> NonZeroI32 {
-        match *self {}
-    }
-}

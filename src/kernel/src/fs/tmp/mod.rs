@@ -2,7 +2,7 @@ use self::node::{AllocNodeError, Node, Nodes};
 use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, MountSource, VPathBuf, Vnode};
 use crate::errno::{Errno, EINVAL};
 use crate::ucred::{Ucred, Uid};
-use std::num::NonZeroI32;
+use macros::Errno;
 use std::sync::atomic::AtomicI32;
 use std::sync::Arc;
 use thiserror::Error;
@@ -119,9 +119,10 @@ fn alloc_vnode(mnt: &Arc<Mount>, node: &Arc<Node>) -> Result<Arc<Vnode>, AllocVn
 }
 
 /// Represents an error when [`mount()`] fails.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 enum MountError {
     #[error("update is not supported")]
+    #[errno(EINVAL)]
     UpdateNotSupported,
 
     #[error("cannot get mount point attributes")]
@@ -131,21 +132,5 @@ enum MountError {
     AllocRootFailed(#[from] AllocNodeError),
 }
 
-impl Errno for MountError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::UpdateNotSupported => EINVAL,
-            Self::GetParentAttrsFailed(e) => e.errno(),
-            Self::AllocRootFailed(e) => e.errno(),
-        }
-    }
-}
-
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 enum AllocVnodeError {}
-
-impl Errno for AllocVnodeError {
-    fn errno(&self) -> NonZeroI32 {
-        todo!()
-    }
-}

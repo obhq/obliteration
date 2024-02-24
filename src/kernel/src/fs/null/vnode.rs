@@ -3,7 +3,8 @@ use crate::{
     fs::{perm::Access, Mount, MountFlags, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType},
     process::VThread,
 };
-use std::{num::NonZeroI32, sync::Arc};
+use macros::Errno;
+use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Debug)]
@@ -87,70 +88,6 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     }
 }
 
-#[derive(Debug, Error)]
-pub enum AccessError {
-    #[error("mounted as readonly")]
-    Readonly,
-
-    #[error("vnode is directory")]
-    IsDirectory,
-
-    #[error("access from lower vnode failed")]
-    AccessFromLowerFailed(#[from] Box<dyn Errno>),
-}
-
-impl Errno for AccessError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::Readonly => EROFS,
-            Self::IsDirectory => EISDIR,
-            Self::AccessFromLowerFailed(e) => e.errno(),
-        }
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum GetAttrError {
-    #[error("getattr from lower vnode failed")]
-    GetAttrFromLowerFailed(#[from] Box<dyn Errno>),
-}
-
-impl Errno for GetAttrError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::GetAttrFromLowerFailed(e) => e.errno(),
-        }
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum LookupError {
-    #[error("lookup from lower vnode failed")]
-    LookupFromLowerFailed(#[source] Box<dyn Errno>),
-}
-
-impl Errno for LookupError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::LookupFromLowerFailed(e) => e.errno(),
-        }
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum OpenError {
-    #[error("open from lower vnode failed")]
-    OpenFromLowerFailed(#[source] Box<dyn Errno>),
-}
-
-impl Errno for OpenError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::OpenFromLowerFailed(e) => e.errno(),
-        }
-    }
-}
-
 /// See `null_nodeget` on the PS4 for a reference.
 pub(super) fn null_nodeget(
     mnt: &Arc<Mount>,
@@ -159,11 +96,37 @@ pub(super) fn null_nodeget(
     todo!()
 }
 
-#[derive(Debug, Error)]
-pub(super) enum NodeGetError {}
+#[derive(Debug, Error, Errno)]
+pub enum AccessError {
+    #[error("mounted as readonly")]
+    #[errno(EROFS)]
+    Readonly,
 
-impl Errno for NodeGetError {
-    fn errno(&self) -> NonZeroI32 {
-        todo!()
-    }
+    #[error("vnode is directory")]
+    #[errno(EISDIR)]
+    IsDirectory,
+
+    #[error("access from lower vnode failed")]
+    AccessFromLowerFailed(#[from] Box<dyn Errno>),
 }
+
+#[derive(Debug, Error, Errno)]
+pub enum GetAttrError {
+    #[error("getattr from lower vnode failed")]
+    GetAttrFromLowerFailed(#[from] Box<dyn Errno>),
+}
+
+#[derive(Debug, Error, Errno)]
+pub enum LookupError {
+    #[error("lookup from lower vnode failed")]
+    LookupFromLowerFailed(#[source] Box<dyn Errno>),
+}
+
+#[derive(Debug, Error, Errno)]
+pub enum OpenError {
+    #[error("open from lower vnode failed")]
+    OpenFromLowerFailed(#[source] Box<dyn Errno>),
+}
+
+#[derive(Debug, Error, Errno)]
+pub(super) enum NodeGetError {}
