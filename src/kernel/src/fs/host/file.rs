@@ -1,65 +1,145 @@
+use std::collections::HashMap;
 use std::io::Error;
 use std::mem::zeroed;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::sync::{Arc, Mutex, Weak};
 
 /// Encapsulate a raw file or directory on the host.
 #[derive(Debug)]
 pub struct HostFile {
-    path: PathBuf,
     raw: RawFile,
+    parent: Option<Arc<Self>>,
+    children: Mutex<HashMap<String, Weak<Self>>>,
 }
 
 impl HostFile {
-    pub fn open<P: Into<PathBuf>>(path: P) -> Result<Self, Error> {
-        let path = path.into();
-        let raw = Self::raw_open(&path)?;
+    #[cfg(unix)]
+    pub fn root(path: impl AsRef<Path>) -> Result<Self, Error> {
+        use libc::{open, O_CLOEXEC, O_DIRECTORY, O_RDONLY};
+        use std::ffi::CString;
+        use std::os::unix::ffi::OsStrExt;
 
-        Ok(Self { path, raw })
+        let path = path.as_ref();
+        let path = CString::new(path.as_os_str().as_bytes()).unwrap();
+        let fd = unsafe { open(path.as_ptr(), O_RDONLY | O_CLOEXEC | O_DIRECTORY) };
+
+        if fd < 0 {
+            Err(Error::last_os_error())
+        } else {
+            Ok(Self {
+                raw: fd,
+                parent: None,
+                children: Mutex::default(),
+            })
+        }
     }
 
-    pub fn path(&self) -> &Path {
-        &self.path
+    #[cfg(windows)]
+    pub fn root(path: impl AsRef<Path>) -> Result<Self, Error> {
+        use std::os::windows::ffi::OsStrExt;
+        use std::ptr::null_mut;
+        use windows_sys::Win32::Foundation::{
+            RtlNtStatusToDosError, STATUS_SUCCESS, UNICODE_STRING,
+        };
+        use windows_sys::Win32::Storage::FileSystem::{
+            NtCreateFile, FILE_OPEN, FILE_READ_ATTRIBUTES, FILE_READ_EA, FILE_SHARE_READ,
+            FILE_SHARE_WRITE, READ_CONTROL,
+        };
+        use windows_sys::Win32::System::Kernel::OBJ_CASE_INSENSITIVE;
+        use windows_sys::Win32::System::WindowsProgramming::{
+            FILE_DIRECTORY_FILE, OBJECT_ATTRIBUTES,
+        };
+
+        // Encode path name.
+        let path = path.as_ref();
+        let mut path: Vec<u16> = path.as_os_str().encode_wide().collect();
+        let len: u16 = (path.len() * 2).try_into().unwrap();
+        let mut path = UNICODE_STRING {
+            Length: len,
+            MaximumLength: len,
+            Buffer: path.as_mut_ptr(),
+        };
+
+        // Setup OBJECT_ATTRIBUTES.
+        let mut attr = OBJECT_ATTRIBUTES {
+            Length: std::mem::size_of::<OBJECT_ATTRIBUTES>().try_into().unwrap(),
+            RootDirectory: 0,
+            ObjectName: &mut path,
+            Attributes: OBJ_CASE_INSENSITIVE as _,
+            SecurityDescriptor: null_mut(),
+            SecurityQualityOfService: null_mut(),
+        };
+
+        // Open.
+        let mut handle = 0;
+        let mut status = unsafe { zeroed() };
+        let err = unsafe {
+            NtCreateFile(
+                &mut handle,
+                FILE_READ_ATTRIBUTES | FILE_READ_EA | READ_CONTROL,
+                &mut attr,
+                &mut status,
+                null_mut(),
+                0,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                FILE_OPEN,
+                FILE_DIRECTORY_FILE,
+                null_mut(),
+                0,
+            )
+        };
+
+        if err == STATUS_SUCCESS {
+            Ok(Self {
+                raw: handle,
+                parent: None,
+                children: Mutex::default(),
+            })
+        } else {
+            Err(Error::from_raw_os_error(unsafe {
+                RtlNtStatusToDosError(err).try_into().unwrap()
+            }))
+        }
+    }
+
+    pub fn parent(&self) -> Option<&Arc<Self>> {
+        self.parent.as_ref()
+    }
+
+    #[cfg(unix)]
+    pub fn id(&self) -> Result<HostId, Error> {
+        self.stat().map(|s| HostId {
+            dev: s.st_dev,
+            ino: s.st_ino,
+        })
+    }
+
+    #[cfg(windows)]
+    pub fn id(&self) -> Result<HostId, Error> {
+        self.stat().map(|i| HostId {
+            volume: i.dwVolumeSerialNumber,
+            index: (Into::<u64>::into(i.nFileIndexHigh) << 32) | Into::<u64>::into(i.nFileIndexLow),
+        })
     }
 
     #[cfg(unix)]
     pub fn is_directory(&self) -> Result<bool, Error> {
-        use libc::{fstat, S_IFDIR, S_IFMT};
+        use libc::{S_IFDIR, S_IFMT};
 
-        let mut stat = unsafe { zeroed() };
-
-        if unsafe { fstat(self.raw, &mut stat) } < 0 {
-            return Err(Error::last_os_error());
-        }
-
-        Ok((stat.st_mode & S_IFMT) == S_IFDIR)
+        self.stat().map(|s| (s.st_mode & S_IFMT) == S_IFDIR)
     }
 
     #[cfg(windows)]
     pub fn is_directory(&self) -> Result<bool, Error> {
-        use windows_sys::Win32::Storage::FileSystem::{
-            GetFileInformationByHandle, FILE_ATTRIBUTE_DIRECTORY,
-        };
+        use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_DIRECTORY;
 
-        let mut info = unsafe { zeroed() };
-
-        if unsafe { GetFileInformationByHandle(self.raw, &mut info) } == 0 {
-            return Err(Error::last_os_error());
-        }
-
-        Ok((info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0)
+        self.stat()
+            .map(|i| (i.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0)
     }
 
     #[cfg(unix)]
     pub fn len(&self) -> Result<u64, Error> {
-        use libc::fstat;
-
-        let mut stat = unsafe { zeroed() };
-
-        if unsafe { fstat(self.raw, &mut stat) } < 0 {
-            return Err(Error::last_os_error());
-        }
-
-        Ok(stat.st_size.try_into().unwrap())
+        self.stat().map(|s| s.st_size.try_into().unwrap())
     }
 
     #[cfg(windows)]
@@ -75,51 +155,153 @@ impl HostFile {
         Ok(size.try_into().unwrap())
     }
 
+    pub fn open(self: &Arc<Self>, name: &str) -> Result<Arc<Self>, Error> {
+        // Check if active.
+        let mut children = self.children.lock().unwrap();
+
+        if let Some(v) = children.get(name).and_then(|c| c.upgrade()) {
+            return Ok(v);
+        }
+
+        // Open a new file and add to active list. Beware of deadlock here.
+        let child = Arc::new(Self {
+            raw: Self::raw_open(self.raw, name)?,
+            parent: Some(self.clone()),
+            children: Mutex::default(),
+        });
+
+        children.insert(name.to_owned(), Arc::downgrade(&child));
+
+        Ok(child)
+    }
+
     #[cfg(unix)]
-    fn raw_open(path: &Path) -> Result<RawFile, Error> {
-        use libc::{O_NOCTTY, O_RDONLY};
-        use std::ffi::CString;
-        use std::os::unix::ffi::OsStrExt;
+    fn stat(&self) -> Result<libc::stat, Error> {
+        use libc::fstat;
 
-        let path = CString::new(path.as_os_str().as_bytes()).unwrap();
-        let fd = unsafe { libc::open(path.as_ptr(), O_RDONLY | O_NOCTTY) };
+        let mut stat = unsafe { zeroed() };
 
-        if fd < 0 {
+        if unsafe { fstat(self.raw, &mut stat) } < 0 {
             Err(Error::last_os_error())
         } else {
-            Ok(fd)
+            Ok(stat)
         }
     }
 
     #[cfg(windows)]
-    fn raw_open(path: &Path) -> Result<RawFile, Error> {
-        use std::os::windows::ffi::OsStrExt;
-        use std::ptr::null;
-        use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
-        use windows_sys::Win32::Storage::FileSystem::{
-            CreateFileW, FILE_FLAG_BACKUP_SEMANTICS, FILE_SHARE_DELETE, FILE_SHARE_READ,
-            FILE_SHARE_WRITE, OPEN_EXISTING,
-        };
+    fn stat(
+        &self,
+    ) -> Result<windows_sys::Win32::Storage::FileSystem::BY_HANDLE_FILE_INFORMATION, Error> {
+        use windows_sys::Win32::Storage::FileSystem::GetFileInformationByHandle;
 
-        let mut path: Vec<u16> = path.as_os_str().encode_wide().collect();
-        path.push(0);
+        let mut info = unsafe { zeroed() };
 
-        let handle = unsafe {
-            CreateFileW(
-                path.as_ptr(),
-                0,
-                FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-                null(),
-                OPEN_EXISTING,
-                FILE_FLAG_BACKUP_SEMANTICS,
-                0,
-            )
-        };
-
-        if handle == INVALID_HANDLE_VALUE {
+        if unsafe { GetFileInformationByHandle(self.raw, &mut info) } == 0 {
             Err(Error::last_os_error())
         } else {
-            Ok(handle)
+            Ok(info)
+        }
+    }
+
+    #[cfg(unix)]
+    fn raw_open(dir: RawFile, name: &str) -> Result<RawFile, Error> {
+        use libc::{openat, EISDIR, ENOTDIR, O_CLOEXEC, O_DIRECTORY, O_NOCTTY, O_RDONLY, O_RDWR};
+        use std::ffi::CString;
+
+        let name = CString::new(name).unwrap();
+
+        loop {
+            // Try open as a file first.
+            let fd = unsafe { openat(dir, name.as_ptr(), O_RDWR | O_CLOEXEC | O_NOCTTY) };
+
+            if fd >= 0 {
+                break Ok(fd);
+            }
+
+            // Check if directory.
+            let err = Error::last_os_error();
+
+            if err.raw_os_error().unwrap() != EISDIR {
+                break Err(err);
+            }
+
+            // Try open as a directory.
+            let fd = unsafe { openat(dir, name.as_ptr(), O_RDONLY | O_CLOEXEC | O_DIRECTORY) };
+
+            if fd >= 0 {
+                break Ok(fd);
+            }
+
+            // Check if non-directory. This is possible because someone might remove the directory
+            // and create a file with the same name before we try to open it as a directory.
+            let err = Error::last_os_error();
+
+            if err.raw_os_error().unwrap() != ENOTDIR {
+                break Err(err);
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    fn raw_open(dir: RawFile, name: &str) -> Result<RawFile, Error> {
+        use std::ptr::null_mut;
+        use windows_sys::Win32::Foundation::{
+            RtlNtStatusToDosError, STATUS_SUCCESS, UNICODE_STRING,
+        };
+        use windows_sys::Win32::Storage::FileSystem::{
+            NtCreateFile, DELETE, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_OPEN,
+        };
+        use windows_sys::Win32::System::WindowsProgramming::{
+            FILE_NON_DIRECTORY_FILE, FILE_RANDOM_ACCESS, OBJECT_ATTRIBUTES,
+        };
+
+        // Encode name.
+        let mut name: Vec<u16> = name.encode_utf16().collect();
+        let len: u16 = (name.len() * 2).try_into().unwrap();
+        let mut name = UNICODE_STRING {
+            Length: len,
+            MaximumLength: len,
+            Buffer: name.as_mut_ptr(),
+        };
+
+        // Setup OBJECT_ATTRIBUTES.
+        let mut attr = OBJECT_ATTRIBUTES {
+            Length: std::mem::size_of::<OBJECT_ATTRIBUTES>().try_into().unwrap(),
+            RootDirectory: dir,
+            ObjectName: &mut name,
+            Attributes: 0, // TODO: Verify if exfatfs on PS4 root is case-insensitive.
+            SecurityDescriptor: null_mut(),
+            SecurityQualityOfService: null_mut(),
+        };
+
+        loop {
+            // Try open as a file first.
+            let mut handle = 0;
+            let mut status = unsafe { zeroed() };
+            let err = unsafe {
+                NtCreateFile(
+                    &mut handle,
+                    DELETE | FILE_GENERIC_READ | FILE_GENERIC_WRITE,
+                    &mut attr,
+                    &mut status,
+                    null_mut(),
+                    0,
+                    0,
+                    FILE_OPEN,
+                    FILE_NON_DIRECTORY_FILE | FILE_RANDOM_ACCESS,
+                    null_mut(),
+                    0,
+                )
+            };
+
+            if err == STATUS_SUCCESS {
+                break Ok(handle);
+            }
+
+            // TODO: Check if file is a directory.
+            break Err(Error::from_raw_os_error(unsafe {
+                RtlNtStatusToDosError(err).try_into().unwrap()
+            }));
         }
     }
 }
@@ -131,19 +313,38 @@ impl Drop for HostFile {
 
         if unsafe { close(self.raw) } < 0 {
             let e = Error::last_os_error();
-            panic!("Failed to close {}: {}.", self.path.display(), e);
+            panic!("Failed to close FD #{}: {}.", self.raw, e);
         }
     }
 
     #[cfg(windows)]
     fn drop(&mut self) {
-        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::Foundation::{RtlNtStatusToDosError, STATUS_SUCCESS};
+        use windows_sys::Win32::System::WindowsProgramming::NtClose;
 
-        if unsafe { CloseHandle(self.raw) } == 0 {
-            let e = Error::last_os_error();
-            panic!("Failed to close {}: {}.", self.path.display(), e);
+        let err = unsafe { NtClose(self.raw) };
+
+        if err != STATUS_SUCCESS {
+            panic!(
+                "Failed to close handle #{}: {}.",
+                self.raw,
+                Error::from_raw_os_error(unsafe { RtlNtStatusToDosError(err).try_into().unwrap() })
+            );
         }
     }
+}
+
+/// Unique identifier for [`HostFile`].
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct HostId {
+    #[cfg(unix)]
+    dev: libc::dev_t,
+    #[cfg(unix)]
+    ino: libc::ino_t,
+    #[cfg(windows)]
+    volume: u32,
+    #[cfg(windows)]
+    index: u64,
 }
 
 #[cfg(unix)]
