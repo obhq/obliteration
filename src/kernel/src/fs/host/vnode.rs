@@ -14,11 +14,11 @@ use thiserror::Error;
 #[derive(Debug)]
 pub struct VnodeBackend {
     fs: Arc<HostFs>,
-    file: HostFile,
+    file: Arc<HostFile>,
 }
 
 impl VnodeBackend {
-    pub fn new(fs: Arc<HostFs>, file: HostFile) -> Self {
+    pub fn new(fs: Arc<HostFs>, file: Arc<HostFile>) -> Self {
         Self { fs, file }
     }
 }
@@ -78,23 +78,22 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             .map_err(LookupError::AccessDenied)?;
 
         // Check name.
-        if name == "." {
-            return Ok(vn.clone());
-        }
-
-        let path = match name {
-            ".." => Cow::Borrowed(self.file.path().parent().unwrap()),
+        let file = match name {
+            "." => return Ok(vn.clone()),
+            ".." => Cow::Borrowed(self.file.parent().unwrap()),
             _ => {
+                // Don't allow name to be a file path.
                 if name.contains(|c| c == '/' || c == '\\') {
                     return Err(Box::new(LookupError::InvalidName));
                 }
 
-                Cow::Owned(self.file.path().join(name))
+                // Lookup the file.
+                Cow::Owned(self.file.open(name).map_err(LookupError::OpenFailed)?)
             }
         };
 
         // Get vnode.
-        let vn = get_vnode(&self.fs, vn.fs(), Some(&path)).map_err(LookupError::GetVnodeFailed)?;
+        let vn = get_vnode(&self.fs, vn.fs(), &file).map_err(LookupError::GetVnodeFailed)?;
 
         Ok(vn)
     }
@@ -143,6 +142,9 @@ enum LookupError {
     #[error("name contains unsupported characters")]
     InvalidName,
 
+    #[error("couldn't open the specified file")]
+    OpenFailed(#[source] std::io::Error),
+
     #[error("cannot get vnode")]
     GetVnodeFailed(#[source] GetVnodeError),
 }
@@ -151,7 +153,7 @@ impl Errno for LookupError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::NotDirectory => ENOTDIR,
-            Self::DotdotOnRoot | Self::GetVnodeFailed(_) => EIO,
+            Self::DotdotOnRoot | Self::GetVnodeFailed(_) | Self::OpenFailed(_) => EIO,
             Self::AccessDenied(e) => e.errno(),
             Self::InvalidName => ENOENT,
         }
