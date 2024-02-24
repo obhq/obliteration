@@ -4,7 +4,7 @@ use crate::{
     process::VThread,
 };
 use macros::Errno;
-use std::{num::NonZeroI32, sync::Arc};
+use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Debug)]

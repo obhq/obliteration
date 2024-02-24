@@ -10,7 +10,7 @@ use macros::vpath;
 use macros::Errno;
 use param::Param;
 use std::fmt::{Display, Formatter};
-use std::num::{NonZeroI32, TryFromIntError};
+use std::num::TryFromIntError;
 use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;

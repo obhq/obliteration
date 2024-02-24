@@ -9,7 +9,6 @@ use crate::errno::{Errno, EEXIST, ENOENT, EOPNOTSUPP};
 use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
 use macros::Errno;
-use std::num::NonZeroI32;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use thiserror::Error;

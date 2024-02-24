@@ -6,7 +6,6 @@ use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use macros::Errno;
 use std::borrow::Cow;
-use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
 

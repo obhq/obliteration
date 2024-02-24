@@ -12,7 +12,7 @@ use crate::{
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
     ucred::{Gid, Ucred, Uid},
 };
-use std::{convert::Infallible, num::NonZeroI32, sync::Arc};
+use std::{convert::Infallible, sync::Arc};
 
 pub struct SharedMemoryManager {
     mm: Arc<MemoryManager>,

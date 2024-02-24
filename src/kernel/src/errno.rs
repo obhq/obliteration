@@ -1,7 +1,6 @@
 use std::convert::Infallible;
 use std::error::Error;
 use std::num::NonZeroI32;
-use thiserror::Error;
 
 // This file contains errno used in a PS4 system. The value of each errno must be the same as the
 // PS4.
