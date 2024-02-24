@@ -35,11 +35,13 @@ impl Socket {
     }
 
     /// See `sosend` on the PS4 for a reference.
+    #[allow(unused_variables)] // TODO: remove when implementing
     fn send(&self, buf: &mut Uio, td: Option<&VThread>) -> Result<usize, SendError> {
         todo!()
     }
 
     /// See `soreceive` on the PS4 for a reference.
+    #[allow(unused_variables)] // TODO: remove when implementing
     fn receive(&self, buf: &mut UioMut, td: Option<&VThread>) -> Result<usize, ReceiveError> {
         todo!()
     }
