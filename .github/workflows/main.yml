@@ -22,15 +22,20 @@ jobs:
       run: pip install PyGithub
     - name: Update PRs
       run: |
-        from datetime import datetime
+        from datetime import datetime, timezone
         from github import Auth, Github
 
-        now = datetime.now()
+        now = datetime.now(timezone.utc)
         gh = Github(auth=Auth.Token("${{ secrets.GITHUB_TOKEN }}"))
         repo = gh.get_repo("${{ github.repository }}")
 
         for pull in repo.get_pulls("open", "updated", "desc", "${{ github.ref_name }}"):
           if (now - pull.updated_at).days > 30:
             break
-          pull.add_to_labels("B-out-of-date")
+          ood = False
+          for label in pull.labels:
+            if label.name == "B-out-of-date":
+              ood = True
+          if not ood:
+            pull.add_to_labels("B-out-of-date")
       shell: python
