@@ -47,7 +47,7 @@ macro_rules! commands {
 
                 /// # Safety
                 /// `arg` has to be a pointer to the correct value
-                pub unsafe fn try_from_raw_parts(cmd: u64, arg: SysArg) -> Result<Self, SysErr> {
+                pub unsafe fn try_from_raw_parts(cmd: u64, arg: RawCommandArg) -> Result<Self, SysErr> {
                     let cmd = cmd as u32;
 
                     if Self::is_invalid(cmd) {
@@ -55,7 +55,7 @@ macro_rules! commands {
                     }
 
                     let cmd = match cmd {
-                        $( $value => Self::$variant $( ( unsafe { &mut *(Into::<*mut $type>::into(arg)) } ) )? ,)*
+                        $( $value => Self::$variant $( ( unsafe { &mut *(arg.ptr() as *mut $type) } ) )? ,)*
                         _ => todo!("Unhandled ioctl command {:#x}", cmd)
                     };
 
@@ -104,5 +104,29 @@ commands! {
         TIOCSCTTY = 0x20007461,
         /// Get media size in bytes.
         DIOCGMEDIASIZE(&i64) = 0x40086418,
+    }
+}
+
+pub struct RawCommandArg<'a> {
+    ptr: *mut u8,
+    _phantom: std::marker::PhantomData<&'a u8>,
+}
+
+impl<'a> RawCommandArg<'a> {
+    pub fn ptr(&self) -> *mut u8 {
+        self.ptr
+    }
+
+    pub fn is_null(&self) -> bool {
+        self.ptr.is_null()
+    }
+}
+
+impl From<SysArg> for RawCommandArg<'_> {
+    fn from(arg: SysArg) -> Self {
+        Self {
+            ptr: arg.into(),
+            _phantom: std::marker::PhantomData,
+        }
     }
 }

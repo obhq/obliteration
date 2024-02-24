@@ -441,8 +441,11 @@ impl Fs {
 
     fn sys_ioctl(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
+        let cmd: u64 = i.args[1].into();
+        let arg: RawCommandArg = i.args[2].into();
+
         // Our IoCmd contains both the command and the argument (if there is one).
-        let cmd = unsafe { IoCmd::try_from_raw_parts(i.args[1].into(), i.args[2].into())? };
+        let cmd = unsafe { IoCmd::try_from_raw_parts(cmd, arg)? };
 
         info!("Executing ioctl({cmd:?}) on file descriptor {fd}.");
 

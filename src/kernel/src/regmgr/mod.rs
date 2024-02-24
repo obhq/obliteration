@@ -1,5 +1,6 @@
 use self::command::*;
 use crate::errno::EINVAL;
+use crate::fs::RawCommandArg;
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{Privilege, Ucred};
@@ -7,7 +8,6 @@ use crate::{info, warn};
 use std::fmt::{Display, Formatter};
 use std::num::NonZeroI32;
 use std::ops::Index;
-use std::ptr::read;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -33,7 +33,7 @@ impl RegMgr {
         // Get arguments.
         let op: u32 = i.args[0].try_into().unwrap();
         let buf: *mut i32 = i.args[2].into();
-        let req = i.args[3];
+        let req: RawCommandArg = i.args[3].into();
         let reqlen: usize = i.args[4].into();
 
         let td = VThread::current().unwrap();
@@ -44,7 +44,7 @@ impl RegMgr {
             todo!("regmgr_call with buf = null");
         }
 
-        if req == 0 {
+        if req.is_null() {
             todo!("regmgr_call with req = null");
         }
 
