@@ -37,9 +37,11 @@ jobs:
       run: |
         from github import Auth, Github
 
+        author = "${{ github.event.pull_request.head.user.login }}"
+        head = "${{ github.event.pull_request.head.sha }}"
         gh = Github(auth=Auth.Token("${{ secrets.GITHUB_TOKEN }}"))
         repo = gh.get_repo("${{ github.repository }}")
-        cmp = repo.compare("${{ github.base_ref }}", "${{ github.event.head.user.login }}:${{ github.event.head.sha }}")
+        cmp = repo.compare("${{ github.base_ref }}", f"{author}:{head}")
 
         if cmp.status != "behind":
           pull = repo.get_pull(${{ github.event.number }})
