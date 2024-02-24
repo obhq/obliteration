@@ -1,4 +1,5 @@
 use crate::errno::Errno;
+use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use std::num::NonZeroI32;
 use std::sync::Arc;
@@ -16,7 +17,7 @@ impl TimeManager {
         time
     }
 
-    pub fn sys_gettimeofday(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    pub fn sys_gettimeofday(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let tv: *mut TimeVal = i.args[0].into();
         let tz: *mut TimeZone = i.args[1].into();
 
@@ -33,7 +34,7 @@ impl TimeManager {
         Ok(SysOut::ZERO)
     }
 
-    pub fn sys_clock_gettime(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    pub fn sys_clock_gettime(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let clock: i32 = i.args[0].try_into().unwrap();
 
         todo!("clock_gettime with clock = {clock}")
@@ -50,7 +51,16 @@ pub struct TimeSpec {
 
 impl TimeSpec {
     pub fn now() -> Self {
-        todo!()
+        TimeVal::microtime().expect("Couldn't get time").into()
+    }
+}
+
+impl From<TimeVal> for TimeSpec {
+    fn from(tv: TimeVal) -> Self {
+        Self {
+            sec: tv.sec,
+            nsec: tv.usec * 1000,
+        }
     }
 }
 

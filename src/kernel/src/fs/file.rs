@@ -1,10 +1,11 @@
-use super::{IoCmd, Offset, Stat, Uio, UioMut, Vnode};
+use super::{Cdev, IoCmd, Offset, Stat, TruncateLength, Uio, UioMut, Vnode};
 use crate::dmem::BlockPool;
 use crate::errno::Errno;
-use crate::errno::{ENOTTY, ENXIO};
+use crate::errno::{EINVAL, ENOTTY, ENXIO, EOPNOTSUPP};
 use crate::kqueue::KernelQueue;
 use crate::net::Socket;
 use crate::process::VThread;
+use crate::shm::Shm;
 use bitflags::bitflags;
 use macros::Errno;
 use std::fmt::Debug;
@@ -15,14 +16,14 @@ use thiserror::Error;
 /// An implementation of `file` structure.
 #[derive(Debug)]
 pub struct VFile {
-    backend: VFileType, // f_type
-    flags: VFileFlags,  // f_flag
+    ty: VFileType,     // f_type
+    flags: VFileFlags, // f_flag
 }
 
 impl VFile {
-    pub(super) fn new(backend: VFileType) -> Self {
+    pub(super) fn new(ty: VFileType) -> Self {
         Self {
-            backend,
+            ty,
             flags: VFileFlags::empty(),
         }
     }
@@ -33,6 +34,10 @@ impl VFile {
 
     pub fn flags_mut(&mut self) -> &mut VFileFlags {
         &mut self.flags
+    }
+
+    pub fn vnode(&self) -> Option<Arc<Vnode>> {
+        todo!()
     }
 
     /// See `dofileread` on the PS4 for a reference.
@@ -77,49 +82,67 @@ impl VFile {
     }
 
     fn read(&self, buf: &mut UioMut, td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
-        match &self.backend {
+        match &self.ty {
             VFileType::Vnode(vn) => vn.read(self, buf, td),
             VFileType::Socket(so) | VFileType::IpcSocket(so) => so.read(self, buf, td),
             VFileType::KernelQueue(kq) => kq.read(self, buf, td),
+            VFileType::SharedMemory(shm) => shm.read(self, buf, td),
+            VFileType::Device(dev) => dev.read(self, buf, td),
             VFileType::Blockpool(bp) => bp.read(self, buf, td),
         }
     }
 
     fn write(&self, buf: &mut Uio, td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
-        match &self.backend {
+        match &self.ty {
             VFileType::Vnode(vn) => vn.write(self, buf, td),
             VFileType::Socket(so) | VFileType::IpcSocket(so) => so.write(self, buf, td),
             VFileType::KernelQueue(kq) => kq.write(self, buf, td),
+            VFileType::SharedMemory(shm) => shm.write(self, buf, td),
+            VFileType::Device(dev) => dev.write(self, buf, td),
             VFileType::Blockpool(bp) => bp.write(self, buf, td),
         }
     }
 
     /// See `fo_ioctl` on the PS4 for a reference.
-    pub fn ioctl(
-        &self,
-        cmd: IoCmd,
-        data: &mut [u8],
-        td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
-        match &self.backend {
-            VFileType::Vnode(vn) => vn.ioctl(self, cmd, data, td),
-            VFileType::Socket(so) | VFileType::IpcSocket(so) => so.ioctl(self, cmd, data, td),
-            VFileType::KernelQueue(kq) => kq.ioctl(self, cmd, data, td),
-            VFileType::Blockpool(bp) => bp.ioctl(self, cmd, data, td),
+    pub fn ioctl(&self, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
+        match &self.ty {
+            VFileType::Vnode(vn) => vn.ioctl(self, cmd, td),
+            VFileType::Socket(so) | VFileType::IpcSocket(so) => so.ioctl(self, cmd, td),
+            VFileType::KernelQueue(kq) => kq.ioctl(self, cmd, td),
+            VFileType::SharedMemory(shm) => shm.ioctl(self, cmd, td),
+            VFileType::Device(dev) => dev.ioctl(self, cmd, td),
+            VFileType::Blockpool(bp) => bp.ioctl(self, cmd, td),
         }
     }
 
     pub fn stat(&self, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
-        match &self.backend {
+        match &self.ty {
             VFileType::Vnode(vn) => vn.stat(self, td),
             VFileType::Socket(so) | VFileType::IpcSocket(so) => so.stat(self, td),
             VFileType::KernelQueue(kq) => kq.stat(self, td),
+            VFileType::SharedMemory(shm) => shm.stat(self, td),
+            VFileType::Device(dev) => dev.stat(self, td),
             VFileType::Blockpool(bp) => bp.stat(self, td),
         }
     }
 
+    pub fn truncate(
+        &self,
+        length: TruncateLength,
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        match &self.ty {
+            VFileType::Vnode(vn) => vn.truncate(self, length, td),
+            VFileType::Socket(so) | VFileType::IpcSocket(so) => so.truncate(self, length, td),
+            VFileType::KernelQueue(kq) => kq.truncate(self, length, td),
+            VFileType::SharedMemory(shm) => shm.truncate(self, length, td),
+            VFileType::Device(dev) => dev.truncate(self, length, td),
+            VFileType::Blockpool(bp) => bp.truncate(self, length, td),
+        }
+    }
+
     pub fn is_seekable(&self) -> bool {
-        matches!(self.backend, VFileType::Vnode(_))
+        matches!(self.ty, VFileType::Vnode(_) | VFileType::Device(_))
     }
 }
 
@@ -147,29 +170,22 @@ impl Write for VFile {
 
 /// Type of [`VFile`].
 #[derive(Debug)]
-#[rustfmt::skip]
 pub enum VFileType {
     Vnode(Arc<Vnode>),             // DTYPE_VNODE = 1
     Socket(Arc<Socket>),           // DTYPE_SOCKET = 2,
     KernelQueue(Arc<KernelQueue>), // DTYPE_KQUEUE = 5,
+    SharedMemory(Arc<Shm>),        // DTYPE_SHM = 8,
+    Device(Arc<Cdev>),             // DTYPE_DEV = 11,
     IpcSocket(Arc<Socket>),        // DTYPE_IPCSOCKET = 15,
     Blockpool(Arc<BlockPool>),     // DTYPE_BLOCKPOOL = 17,
 }
 
 bitflags! {
     /// Flags for [`VFile`].
-    #[derive(Debug, Clone, Copy)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct VFileFlags: u32 {
         const READ = 0x00000001; // FREAD
         const WRITE = 0x00000002; // FWRITE
-    }
-}
-
-bitflags! {
-    #[derive(Debug, Clone, Copy)]
-    pub struct VFileOpsFlags: u32 {
-        const PASSABLE = 0x00000001; // DFLAG_PASSABLE
-        const SEEKABLE = 0x00000002; // DFLAG_SEEKABLE
     }
 }
 
@@ -200,7 +216,6 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         self: &Arc<Self>,
         file: &VFile,
         cmd: IoCmd,
-        data: &mut [u8],
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultError::IoctlNotSupported))
@@ -209,8 +224,14 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
     #[allow(unused_variables)]
     fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>>;
 
-    fn flags(&self) -> VFileOpsFlags {
-        VFileOpsFlags::empty()
+    #[allow(unused_variables)]
+    fn truncate(
+        self: &Arc<Self>,
+        file: &VFile,
+        length: TruncateLength,
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        Err(Box::new(DefaultError::TruncateNotSupported))
     }
 }
 
@@ -224,7 +245,20 @@ pub enum DefaultError {
     #[errno(ENXIO)]
     WriteNotSupported,
 
-    #[error("iocll is not supported")]
+    #[error("ioctl is not supported")]
     #[errno(ENOTTY)]
     IoctlNotSupported,
+
+    #[error("truncating is not supported")]
+    #[errno(ENXIO)]
+    TruncateNotSupported,
+
+    /// This is used by some file backends to indicate that the operation is not supported.
+    #[error("invalid value provided")]
+    #[errno(EINVAL)]
+    InvalidValue,
+
+    #[error("operation is not supported")]
+    #[errno(EOPNOTSUPP)]
+    OperationNotSupported,
 }

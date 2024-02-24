@@ -106,8 +106,21 @@ bitflags! {
         const SA_ONSTACK = 0x0001;
         const SA_RESTART = 0x0002;
         const SA_RESETHAND = 0x0004;
+        const SA_NOCLDSTOP = 0x0008;
         const SA_NODEFER = 0x0010;
+        const SA_NOCLDWAIT = 0x0020;
         const SA_SIGINFO = 0x0040;
+    }
+}
+
+bitflags! {
+    /// Flags for SIGCHLD.
+    #[repr(transparent)]
+    #[derive(Clone, Copy, Debug)]
+    pub struct SigChldFlags: u32 {
+        const PS_NOCLDWAIT = 0x0001;
+        const PS_NOCLDSTOP = 0x0002;
+        const PS_CLDSIGIGN = 0x0004;
     }
 }
 

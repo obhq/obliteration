@@ -1,4 +1,4 @@
-use crate::fs::{FileBackend, IoCmd, Stat, Uio, UioMut, VFile};
+use crate::fs::{DefaultError, FileBackend, IoCmd, Stat, TruncateLength, Uio, UioMut, VFile};
 use crate::ucred::Ucred;
 use crate::{
     errno::{Errno, EPIPE},
@@ -35,11 +35,13 @@ impl Socket {
     }
 
     /// See `sosend` on the PS4 for a reference.
+    #[allow(unused_variables)] // TODO: remove when implementing
     fn send(&self, buf: &mut Uio, td: Option<&VThread>) -> Result<usize, SendError> {
         todo!()
     }
 
     /// See `soreceive` on the PS4 for a reference.
+    #[allow(unused_variables)] // TODO: remove when implementing
     fn receive(&self, buf: &mut UioMut, td: Option<&VThread>) -> Result<usize, ReceiveError> {
         todo!()
     }
@@ -96,14 +98,23 @@ impl FileBackend for Socket {
         self: &Arc<Self>,
         file: &VFile,
         cmd: IoCmd,
-        data: &mut [u8],
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         todo!()
     }
 
+    #[allow(unused_variables)] // TODO: remove when implementing
     fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
         todo!()
+    }
+
+    fn truncate(
+        self: &Arc<Self>,
+        _: &VFile,
+        _: TruncateLength,
+        _: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        Err(DefaultError::InvalidValue.into())
     }
 }
 

@@ -1,6 +1,7 @@
 use crate::{
     budget::BudgetType,
-    fs::{FileBackend, Stat, VFile, VFileFlags, VFileType},
+    errno::Errno,
+    fs::{DefaultError, FileBackend, Stat, TruncateLength, VFile, VFileFlags, VFileType},
     process::{FileDesc, VThread},
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
 };
@@ -18,13 +19,11 @@ impl KernelQueueManager {
         kq
     }
 
-    fn sys_kqueueex(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_kqueueex(self: &Arc<Self>, _: &VThread, _: &SysIn) -> Result<SysOut, SysErr> {
         todo!()
     }
 
-    fn sys_kqueue(self: &Arc<Self>, _: &SysIn) -> Result<SysOut, SysErr> {
-        let td = VThread::current().unwrap();
-
+    fn sys_kqueue(self: &Arc<Self>, td: &VThread, _: &SysIn) -> Result<SysOut, SysErr> {
         let filedesc = td.proc().files();
 
         let fd = filedesc.alloc_with_budget::<Infallible>(
@@ -57,15 +56,20 @@ impl KernelQueue {
 }
 
 impl FileBackend for KernelQueue {
-    fn stat(
-        self: &Arc<Self>,
-        _: &VFile,
-        _: Option<&VThread>,
-    ) -> Result<Stat, Box<dyn crate::errno::Errno>> {
+    fn stat(self: &Arc<Self>, _: &VFile, _: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
         let mut stat = Stat::zeroed();
 
         stat.mode = 0o10000;
 
         Ok(stat)
+    }
+
+    fn truncate(
+        self: &Arc<Self>,
+        _: &VFile,
+        _: TruncateLength,
+        _: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        Err(DefaultError::InvalidValue.into())
     }
 }

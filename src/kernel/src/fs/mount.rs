@@ -1,4 +1,5 @@
 use super::{FsConfig, Mode, VPathBuf, Vnode};
+use crate::errno::Errno;
 use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
 use macros::EnumConversions;
@@ -115,7 +116,7 @@ impl Mount {
         self.parent.write().unwrap()
     }
 
-    pub fn root(self: &Arc<Self>) -> Arc<Vnode> {
+    pub fn root(self: &Arc<Self>) -> Result<Arc<Vnode>, Box<dyn Errno>> {
         self.fs.clone().root(self)
     }
 
@@ -129,7 +130,7 @@ impl Mount {
 /// Our version is a bit different from FreeBSD. We moved `vfs_mount` into `vfsconf` and we merge it
 /// with `mnt_data`.
 pub(super) trait Filesystem: Debug + Send + Sync {
-    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Arc<Vnode>; // vfs_root
+    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Result<Arc<Vnode>, Box<dyn Errno>>; // vfs_root
 }
 
 bitflags! {

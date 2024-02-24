@@ -1,6 +1,7 @@
 use super::SysErr;
 use crate::errno::{ENAMETOOLONG, ENOENT};
 use crate::fs::{VPath, VPathBuf};
+use crate::shm::ShmPath;
 use std::ffi::{c_char, CStr};
 use std::fmt::{Formatter, LowerHex};
 use std::num::TryFromIntError;
@@ -36,6 +37,23 @@ impl SysArg {
         };
 
         Ok(Some(path))
+    }
+
+    pub unsafe fn to_shm_path(self) -> Result<Option<ShmPath>, SysErr> {
+        match self.0 {
+            1 => Ok(Some(ShmPath::Anon)),
+            ptr => {
+                let slice = unsafe { std::slice::from_raw_parts(ptr as *const u8, 0x400) };
+
+                let cstr =
+                    CStr::from_bytes_until_nul(slice).map_err(|_| SysErr::Raw(ENAMETOOLONG))?;
+
+                let path = VPath::new(cstr.to_string_lossy().as_ref())
+                    .map(|p| ShmPath::Path(p.to_owned()));
+
+                Ok(path)
+            }
+        }
     }
 
     /// See `copyinstr` on the PS4 for a reference.

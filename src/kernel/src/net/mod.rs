@@ -26,12 +26,10 @@ impl NetManager {
         net
     }
 
-    fn sys_socket(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_socket(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let domain: i32 = i.args[0].try_into().unwrap();
         let ty: i32 = i.args[1].try_into().unwrap();
         let proto: i32 = i.args[2].try_into().unwrap();
-
-        let td = VThread::current().unwrap();
 
         let budget = if domain == 1 {
             BudgetType::FdIpcSocket
@@ -41,7 +39,7 @@ impl NetManager {
 
         let fd = td.proc().files().alloc_with_budget::<SocketCreateError>(
             |_| {
-                let so = Socket::new(domain, ty, proto, td.as_ref().cred(), td.as_ref(), None)?;
+                let so = Socket::new(domain, ty, proto, td.cred(), td, None)?;
 
                 let ty = if domain == 1 {
                     VFileType::IpcSocket(so)
@@ -58,13 +56,11 @@ impl NetManager {
         Ok(fd.into())
     }
 
-    fn sys_socketex(self: &Arc<Self>, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_socketex(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let name = unsafe { i.args[0].to_str(32)? };
         let domain: i32 = i.args[1].try_into().unwrap();
         let ty: i32 = i.args[2].try_into().unwrap();
         let proto: i32 = i.args[3].try_into().unwrap();
-
-        let td = VThread::current().unwrap();
 
         let budget = if domain == 1 {
             BudgetType::FdIpcSocket
@@ -74,7 +70,7 @@ impl NetManager {
 
         let fd = td.proc().files().alloc_with_budget::<SocketCreateError>(
             |_| {
-                let so = Socket::new(domain, ty, proto, td.as_ref().cred(), td.as_ref(), name)?;
+                let so = Socket::new(domain, ty, proto, td.cred(), td, name)?;
 
                 let ty = if domain == 1 {
                     VFileType::IpcSocket(so)

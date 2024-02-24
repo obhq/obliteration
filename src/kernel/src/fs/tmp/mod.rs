@@ -22,11 +22,10 @@ pub fn mount(
         return Err(Box::new(MountError::UpdateNotSupported));
     }
 
+    let parent = parent.expect("Parent vnode has to be provided to tmpfs");
+
     // Get mount point attributes.
-    let attrs = match parent.as_ref().unwrap().getattr() {
-        Ok(v) => v,
-        Err(e) => return Err(Box::new(MountError::GetParentAttrsFailed(e))),
-    };
+    let attrs = parent.getattr().map_err(MountError::GetParentAttrsFailed)?;
 
     // Get GID.
     let gid = if cred.real_uid() == Uid::ROOT {
@@ -77,17 +76,14 @@ pub fn mount(
     });
 
     // Allocate a root node.
-    let root = match nodes.alloc() {
-        Ok(v) => v,
-        Err(e) => return Err(Box::new(MountError::AllocRootFailed(e))),
-    };
+    let root = nodes.alloc()?;
 
     Ok(Mount::new(
         conf,
         cred,
         MountSource::Driver("tmpfs"),
         path,
-        parent,
+        Some(parent),
         flags | MountFlags::MNT_LOCAL,
         TempFs {
             max_pages: pages,
@@ -110,9 +106,16 @@ struct TempFs {
 }
 
 impl Filesystem for TempFs {
-    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Arc<Vnode> {
-        todo!()
+    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+        let vnode = alloc_vnode(mnt, &self.root)?;
+
+        Ok(vnode)
     }
+}
+
+#[allow(unused_variables)] // TODO: remove when implementing
+fn alloc_vnode(mnt: &Arc<Mount>, node: &Arc<Node>) -> Result<Arc<Vnode>, AllocVnodeError> {
+    todo!()
 }
 
 /// Represents an error when [`mount()`] fails.
@@ -125,7 +128,7 @@ enum MountError {
     GetParentAttrsFailed(#[source] Box<dyn Errno>),
 
     #[error("cannot allocate a root node")]
-    AllocRootFailed(#[source] AllocNodeError),
+    AllocRootFailed(#[from] AllocNodeError),
 }
 
 impl Errno for MountError {
@@ -135,5 +138,14 @@ impl Errno for MountError {
             Self::GetParentAttrsFailed(e) => e.errno(),
             Self::AllocRootFailed(e) => e.errno(),
         }
+    }
+}
+
+#[derive(Debug, Error)]
+enum AllocVnodeError {}
+
+impl Errno for AllocVnodeError {
+    fn errno(&self) -> NonZeroI32 {
+        todo!()
     }
 }

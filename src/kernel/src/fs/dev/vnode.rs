@@ -1,8 +1,9 @@
 use super::dirent::Dirent;
-use super::{alloc_vnode, AllocVnodeError, Cdev, DevFs};
+use super::{alloc_vnode, AllocVnodeError, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
-    check_access, Access, IoCmd, OpenFlags, RevokeFlags, VFile, Vnode, VnodeAttrs, VnodeType,
+    check_access, Access, IoCmd, OpenFlags, RevokeFlags, VFile, Vnode, VnodeAttrs, VnodeItem,
+    VnodeType,
 };
 use crate::process::VThread;
 use macros::Errno;
@@ -102,7 +103,6 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         self: Arc<Self>,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] cmd: IoCmd,
-        #[allow(unused_variables)] data: &mut [u8],
         #[allow(unused_variables)] td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         todo!()
@@ -176,7 +176,10 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         }
 
         // Not sure why FreeBSD check if vnode is VBLK because all of vnode here always be VCHR.
-        let dev = vn.item().unwrap().downcast::<Cdev>().unwrap();
+        let item = vn.item();
+        let Some(VnodeItem::Device(dev)) = item.as_ref() else {
+            unreachable!();
+        };
         let sw = dev.sw();
 
         if file.is_none() && sw.fdopen().is_some() {

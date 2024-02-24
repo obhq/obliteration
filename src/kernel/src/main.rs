@@ -3,16 +3,18 @@ use crate::budget::{Budget, BudgetManager, ProcType};
 use crate::debug::{DebugManager, DebugManagerInitError};
 use crate::dmem::DmemManager;
 use crate::ee::{EntryArg, RawFn};
-use crate::fs::{Fs, FsError, MountError, MountFlags, MountOpts, VPath};
+use crate::fs::{Fs, FsInitError, MountError, MountFlags, MountOpts, VPath};
 use crate::kqueue::KernelQueueManager;
 use crate::llvm::Llvm;
 use crate::log::{print, LOGGER};
 use crate::memory::{MemoryManager, MemoryManagerError};
+use crate::namedobj::NamedObjManager;
 use crate::net::NetManager;
 use crate::osem::OsemManager;
 use crate::process::{VProc, VProcInitError, VThread};
 use crate::regmgr::RegMgr;
 use crate::rtld::{LoadFlags, ModuleFlags, RuntimeLinker};
+use crate::shm::SharedMemoryManager;
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
 use crate::time::TimeManager;
@@ -46,11 +48,13 @@ mod kqueue;
 mod llvm;
 mod log;
 mod memory;
+mod namedobj;
 mod net;
 mod osem;
 mod process;
 mod regmgr;
 mod rtld;
+mod shm;
 mod signal;
 mod syscalls;
 mod sysctl;
@@ -269,6 +273,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     let budget = BudgetManager::new(&mut syscalls);
 
     DmemManager::new(fs, &mut syscalls);
+    SharedMemoryManager::new(mm, &mut syscalls);
     Sysctl::new(mm, &machdep, &mut syscalls);
     TimeManager::new(&mut syscalls);
     KernelQueueManager::new(&mut syscalls);
@@ -286,6 +291,7 @@ fn run<E: crate::ee::ExecutionEngine>(
         &mut syscalls,
     )?;
 
+    NamedObjManager::new(&mut syscalls, &proc);
     OsemManager::new(&mut syscalls, &proc);
 
     // Initialize runtime linker.
@@ -513,7 +519,7 @@ enum KernelError {
     InvalidTitleId(PathBuf),
 
     #[error("filesystem initialization failed")]
-    FilesystemInitFailed(#[from] FsError),
+    FilesystemInitFailed(#[from] FsInitError),
 
     #[error("couldn't mount {0}")]
     MountFailed(&'static VPath, #[source] MountError),

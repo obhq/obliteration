@@ -1,16 +1,15 @@
 use super::{
-    unixify_access, Access, FileBackend, IoCmd, Mode, Mount, OpenFlags, RevokeFlags, Stat, Uio,
-    UioMut, VFile, VFileOpsFlags,
+    unixify_access, Access, Cdev, FileBackend, IoCmd, Mode, Mount, OpenFlags, RevokeFlags, Stat,
+    TruncateLength, Uio, UioMut, VFile,
 };
 use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
-use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
+use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use macros::Errno;
-use std::any::Any;
 use std::fmt::Debug;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use thiserror::Error;
 
 /// An implementation of `vnode`.
@@ -20,11 +19,11 @@ use thiserror::Error;
 /// file/directory have only one vnode.
 #[derive(Debug)]
 pub struct Vnode {
-    fs: Arc<Mount>,                                  // v_mount
-    ty: VnodeType,                                   // v_type
-    tag: &'static str,                               // v_tag
-    backend: Arc<dyn VnodeBackend>,                  // v_op + v_data
-    item: Gutex<Option<Arc<dyn Any + Send + Sync>>>, // v_un
+    fs: Arc<Mount>,                 // v_mount
+    ty: VnodeType,                  // v_type
+    tag: &'static str,              // v_tag
+    backend: Arc<dyn VnodeBackend>, // v_op + v_data
+    item: Gutex<Option<VnodeItem>>, // v_un
 }
 
 impl Vnode {
@@ -33,7 +32,7 @@ impl Vnode {
         fs: &Arc<Mount>,
         ty: VnodeType,
         tag: &'static str,
-        backend: impl VnodeBackend + 'static,
+        backend: impl VnodeBackend,
     ) -> Arc<Self> {
         let gg = GutexGroup::new();
 
@@ -64,11 +63,11 @@ impl Vnode {
         matches!(self.ty, VnodeType::Character)
     }
 
-    pub fn item(&self) -> Option<Arc<dyn Any + Send + Sync>> {
-        self.item.read().clone()
+    pub fn item(&self) -> GutexReadGuard<Option<VnodeItem>> {
+        self.item.read()
     }
 
-    pub fn item_mut(&self) -> GutexWriteGuard<Option<Arc<dyn Any + Send + Sync>>> {
+    pub fn item_mut(&self) -> GutexWriteGuard<Option<VnodeItem>> {
         self.item.write()
     }
 
@@ -149,18 +148,24 @@ impl FileBackend for Vnode {
         self: &Arc<Self>,
         file: &VFile,
         cmd: IoCmd,
-        data: &mut [u8],
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         todo!()
     }
 
+    #[allow(unused_variables)] // TODO: remove when implementing
     fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
         todo!()
     }
 
-    fn flags(&self) -> VFileOpsFlags {
-        VFileOpsFlags::SEEKABLE | VFileOpsFlags::PASSABLE
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn truncate(
+        self: &Arc<Self>,
+        file: &VFile,
+        length: TruncateLength,
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
     }
 }
 
@@ -168,6 +173,12 @@ impl Drop for Vnode {
     fn drop(&mut self) {
         ACTIVE.fetch_sub(1, Ordering::Relaxed);
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum VnodeItem {
+    Mount(Weak<Mount>),
+    Device(Arc<Cdev>),
 }
 
 /// An implementation of `vtype`.
@@ -185,7 +196,7 @@ pub enum VnodeType {
 /// `vop_bypass` because it required the return type for all operations to be the same.
 ///
 /// All default implementation here are the implementation of `default_vnodeops`.
-pub(super) trait VnodeBackend: Debug + Send + Sync {
+pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
     /// An implementation of `vop_access`.
     fn access(
         self: Arc<Self>,
@@ -229,7 +240,6 @@ pub(super) trait VnodeBackend: Debug + Send + Sync {
         self: Arc<Self>,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] cmd: IoCmd,
-        #[allow(unused_variables)] data: &mut [u8],
         #[allow(unused_variables)] td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultError::IoctlNotSupported))
