@@ -1140,7 +1140,7 @@ struct DynlibInfo {
     data_segment: SegmentInfo,
     relro_segment: SegmentInfo,
     unk_segment: SegmentInfo,
-    segment_count: u32, // always 2
+    segment_count: u32,
     fingerprint: [u8; 0x14],
 }
 
