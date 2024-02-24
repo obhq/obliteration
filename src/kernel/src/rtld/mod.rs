@@ -857,6 +857,19 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
                     (Relocated::Tls((md, index)), value)
                 }
+                Relocation::R_X86_64_DTPOFF64 => {
+                    let md = match resolver.resolve_with_local(md, sym, symflags) {
+                        Some((md, _)) => md,
+                        None => continue,
+                    };
+
+                    let sym = md.symbol(sym).unwrap();
+                    let value = unsafe { read_unaligned::<usize>(target.as_ptr().cast()) };
+
+                    let relocated = (value + sym.value()).wrapping_add_signed(addend);
+
+                    (Relocated::Data((md, relocated)), relocated)
+                }
                 v => return Err(RelocateError::UnsupportedRela(md.path().to_owned(), v)),
             };
 
