@@ -34,6 +34,9 @@ version = "0.52"
 features = [
     "Wdk",
     "Wdk_Foundation",
+    "Wdk_Storage",
+    "Wdk_Storage_FileSystem",
+    "Win32",
     "Win32_Foundation",
     "Win32_Security",
     "Win32_Storage_FileSystem",
