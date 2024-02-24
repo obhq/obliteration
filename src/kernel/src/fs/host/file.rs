@@ -273,34 +273,32 @@ impl HostFile {
             SecurityQualityOfService: null_mut(),
         };
 
-        loop {
-            // Try open as a file first.
-            let mut handle = 0;
-            let mut status = unsafe { zeroed() };
-            let err = unsafe {
-                NtCreateFile(
-                    &mut handle,
-                    DELETE | FILE_GENERIC_READ | FILE_GENERIC_WRITE,
-                    &mut attr,
-                    &mut status,
-                    null_mut(),
-                    0,
-                    0,
-                    FILE_OPEN,
-                    FILE_NON_DIRECTORY_FILE | FILE_RANDOM_ACCESS,
-                    null_mut(),
-                    0,
-                )
-            };
+        // Try open as a file first.
+        let mut handle = 0;
+        let mut status = unsafe { zeroed() };
+        let err = unsafe {
+            NtCreateFile(
+                &mut handle,
+                DELETE | FILE_GENERIC_READ | FILE_GENERIC_WRITE,
+                &mut attr,
+                &mut status,
+                null_mut(),
+                0,
+                0,
+                FILE_OPEN,
+                FILE_NON_DIRECTORY_FILE | FILE_RANDOM_ACCESS,
+                null_mut(),
+                0,
+            )
+        };
 
-            if err == STATUS_SUCCESS {
-                break Ok(handle);
-            }
-
+        if err == STATUS_SUCCESS {
+            Ok(handle)
+        } else {
             // TODO: Check if file is a directory.
-            break Err(Error::from_raw_os_error(unsafe {
+            Err(Error::from_raw_os_error(unsafe {
                 RtlNtStatusToDosError(err).try_into().unwrap()
-            }));
+            }))
         }
     }
 }
