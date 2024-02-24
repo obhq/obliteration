@@ -30,6 +30,8 @@ jobs:
     name: Post build
     runs-on: ubuntu-latest
     needs: [build-windows, build-linux, build-mac]
+    permissions:
+      pull-requests: write
     steps:
     - name: Install Python modules
       run: pip install PyGithub
