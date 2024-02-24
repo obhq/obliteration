@@ -1131,7 +1131,7 @@ pub enum OpenError {
 #[derive(Debug, Error, Errno)]
 pub enum WriteError {}
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum IoctlError {
     #[error("Couldn't get file")]
     FailedToGetFile(#[from] GetFileError),

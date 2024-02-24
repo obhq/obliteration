@@ -1,6 +1,6 @@
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
-use syn::{punctuated::Punctuated, Fields, ItemEnum, Meta, Token, Variant};
+use syn::{punctuated::Punctuated, Fields, ItemEnum, Meta, Token, Variant, Index};
 
 pub fn transform(arg: ItemEnum) -> syn::Result<TokenStream> {
     let enum_name = &arg.ident;
@@ -12,7 +12,7 @@ pub fn transform(arg: ItemEnum) -> syn::Result<TokenStream> {
         .collect::<Result<Vec<_>, _>>()?;
 
     if arms.is_empty() {
-         Ok(quote!(
+        Ok(quote!(
             impl Errno for #enum_name {
                 fn errno(&self) -> std::num::NonZeroI32 {
                     match *self {}
@@ -105,14 +105,13 @@ fn process_variant(variant: &Variant, enum_name: &Ident) -> syn::Result<TokenStr
             return match pos {
                 Some(pos) => {
                     let variant_name = &variant.ident;
-
                     // The field at index `pos` is the one we are interested in
 
-                    let inner = (0..fields.len())
-                        .map(|i| if i == pos { quote!(e) } else { quote!(_) })
-                        .fold(quote!(), |acc, c| quote!(#acc #c));
+                    // We have to use this. otherwise the macro would expand to something like
+                    // `{ 0usize: e, .. }` which is accepted, but only temporarily
+                    let index = Index::from(pos);
 
-                    Ok(quote!(#enum_name::#variant_name ( #inner ) => e.errno(),))
+                    Ok(quote!(#enum_name::#variant_name { #index: e, .. } => e.errno(),))
                 }
                 None => Err(syn::Error::new_spanned(
                     variant,

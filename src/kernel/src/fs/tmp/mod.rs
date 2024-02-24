@@ -2,7 +2,7 @@ use self::node::{AllocNodeError, Node, Nodes};
 use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, MountSource, VPathBuf, Vnode};
 use crate::errno::{Errno, EINVAL};
 use crate::ucred::{Ucred, Uid};
-use std::num::NonZeroI32;
+use macros::Errno;
 use std::sync::atomic::AtomicI32;
 use std::sync::Arc;
 use thiserror::Error;

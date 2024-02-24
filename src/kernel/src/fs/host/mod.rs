@@ -180,8 +180,10 @@ enum MountError {
 #[derive(Debug, Error, Errno)]
 enum GetVnodeError {
     #[error("cannot open the specified file")]
+    #[errno(EIO)]
     OpenFileFailed(#[source] std::io::Error),
 
     #[error("cannot determine file type")]
+    #[errno(EIO)]
     GetFileTypeFailed(#[source] std::io::Error),
 }
