@@ -39,7 +39,7 @@ jobs:
 
         gh = Github(auth=Auth.Token("${{ secrets.GITHUB_TOKEN }}"))
         repo = gh.get_repo("${{ github.repository }}")
-        cmp = repo.compare("${{ github.base_ref }}", "${{ github.head_ref }}")
+        cmp = repo.compare("${{ github.base_ref }}", "${{ github.event.head.user.login }}:${{ github.event.head.sha }}")
 
         if cmp.status != "behind":
           pull = repo.get_pull(${{ github.event.number }})
