@@ -5,18 +5,43 @@ on:
     - '*'
 concurrency: pr-${{ github.ref }}
 jobs:
-  quality-checks:
-    name: Pre-Build
-    uses: ./.github/workflows/qc-prebuild.yml
-  windows:
-    needs: quality-checks
+  prebuild:
+    name: Pre build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout source
+      uses: actions/checkout@v4
+    - name: Check Rust styles
+      run: cargo fmt --check
+      working-directory: src
+  build-windows:
     name: Build
     uses: ./.github/workflows/ci-windows.yml
-  linux:
-    needs: quality-checks
+    needs: prebuild
+  build-linux:
     name: Build
     uses: ./.github/workflows/ci-linux.yml
-  mac:
-    needs: quality-checks
+    needs: prebuild
+  build-mac:
     name: Build
     uses: ./.github/workflows/ci-mac.yml
+    needs: prebuild
+  postbuild:
+    name: Post build
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-linux, build-mac]
+    steps:
+    - name: Install Python modules
+      run: pip install PyGithub
+    - name: Update PR
+      run: |
+        from github import Auth, Github
+
+        gh = Github(auth=Auth.Token("${{ secrets.GITHUB_TOKEN }}"))
+        repo = gh.get_repo("${{ github.repository }}")
+        cmp = repo.compare("${{ github.base_ref }}", "${{ github.head_ref }}")
+
+        if cmp.status != "behind":
+          pull = repo.get_pull(${{ github.event.number }})
+          pull.add_to_labels("S-ready")
+      shell: python
