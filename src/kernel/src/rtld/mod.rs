@@ -452,9 +452,9 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
     fn sys_dynlib_get_info(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let handle: u32 = i.args[0].try_into().unwrap();
         let info = {
-            let info: *mut DynlibInfo = i.args[2].into();
+            let info_out: *mut DynlibInfo = i.args[2].into();
 
-            unsafe { &mut *info }
+            unsafe { &mut *info_out }
         };
 
         if self.app.file_info().is_none() {
@@ -492,16 +492,36 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         info.name[..name.len()].copy_from_slice(name.as_bytes());
         info.name[0xff] = 0;
         info.segment_count = 2;
-        info.mapbase = mem.base();
-        info.textsize = mem.text_segment().len().try_into().unwrap();
-        info.unk1 = 5;
-        info.database = addr + mem.data_segment().start();
-        info.datasize = mem.data_segment().len().try_into().unwrap();
-        info.unk2 = 3;
 
-        //TODO: set unk4 and segment_count
+        info.text_segment.addr = mem.base();
+        info.text_segment.size = mem.text_segment().len().try_into().unwrap();
+        info.text_segment.prot = 5;
+
+        info.data_segment.addr = addr + mem.data_segment().start();
+        info.data_segment.size = mem.data_segment().len().try_into().unwrap();
+        info.data_segment.prot = 3;
+
+        if let Some(seg) = mem.relro_segment() {
+            info.relro_segment.addr = addr + seg.start();
+            info.relro_segment.size = seg.len().try_into().unwrap();
+            info.relro_segment.prot = 1;
+
+            info.segment_count += 1;
+        };
 
         info.fingerprint = md.fingerprint();
+
+        let mut e = info!();
+
+        writeln!(
+            e,
+            "Retrieved info for module {} (ID = {}).",
+            md.path(),
+            handle
+        )
+        .unwrap();
+
+        writeln!(e, "{:#?}", info).unwrap();
 
         Ok(info)
     }
@@ -972,6 +992,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         // Lookup the module.
         let modules = self.list.read();
+
         let md = modules
             .iter()
             .find(|m| m.id() == handle)
@@ -984,12 +1005,15 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         *info = unsafe { zeroed() };
         info.handle = md.id();
-        info.mapbase = addr + mem.base();
-        info.textsize = mem.text_segment().len().try_into().unwrap();
-        info.unk3 = 5;
-        info.database = addr + mem.data_segment().start();
-        info.datasize = mem.data_segment().len().try_into().unwrap();
-        info.unk4 = 3;
+
+        info.text_segment.addr = addr + mem.base();
+        info.text_segment.size = mem.text_segment().len().try_into().unwrap();
+        info.text_segment.prot = 5;
+
+        info.data_segment.addr = addr + mem.data_segment().start();
+        info.data_segment.size = mem.data_segment().len().try_into().unwrap();
+        info.data_segment.prot = 3;
+
         info.segment_count = 2;
         info.refcount = Arc::strong_count(md).try_into().unwrap();
 
@@ -1056,16 +1080,8 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             handle
         )
         .unwrap();
-        writeln!(e, "mapbase     : {:#x}", info.mapbase).unwrap();
-        writeln!(e, "textsize    : {:#x}", info.textsize).unwrap();
-        writeln!(e, "database    : {:#x}", info.database).unwrap();
-        writeln!(e, "datasize    : {:#x}", info.datasize).unwrap();
-        writeln!(e, "tlsindex    : {}", info.tlsindex).unwrap();
-        writeln!(e, "tlsinit     : {:#x}", info.tlsinit).unwrap();
-        writeln!(e, "tlsoffset   : {:#x}", info.tlsoffset).unwrap();
-        writeln!(e, "init        : {:#x}", info.init).unwrap();
-        writeln!(e, "fini        : {:#x}", info.fini).unwrap();
-        writeln!(e, "eh_frame_hdr: {:#x}", info.eh_frame_hdr).unwrap();
+
+        writeln!(e, "{:#?}", info).unwrap();
 
         print(e);
 
@@ -1107,25 +1123,30 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
     }
 }
 
+#[derive(Debug)]
+#[repr(C)]
+struct SegmentInfo {
+    addr: usize,
+    size: u32,
+    prot: u32,
+}
+
+#[derive(Debug)]
 #[repr(C)]
 struct DynlibInfo {
     size: usize,
     name: [u8; 256],
-    mapbase: usize,
-    textsize: u32,
-    unk1: u32, // always 5
-    database: usize,
-    datasize: u32,
-    unk2: u32,       // always 3
-    unk3: [u8; 0xc], // always zeroes
-    unk4: u32,
-    unk5: [u8; 0x10],   // always zeroes
+    text_segment: SegmentInfo,
+    data_segment: SegmentInfo,
+    relro_segment: SegmentInfo,
+    unk_segment: SegmentInfo,
     segment_count: u32, // always 2
     fingerprint: [u8; 0x14],
 }
 
 const _: () = assert!(size_of::<DynlibInfo>() == 0x160);
 
+#[derive(Debug)]
 #[repr(C)]
 struct DynlibInfoEx {
     size: usize,
@@ -1145,13 +1166,10 @@ struct DynlibInfoEx {
     eh_frame: usize,
     eh_frame_hdr_size: u32,
     eh_frame_size: u32,
-    mapbase: usize,
-    textsize: u32,
-    unk3: u32, // Always 5.
-    database: usize,
-    datasize: u32,
-    unk4: u32,          // Always 3.
-    unk5: [u8; 0x20],   // Always zeroes.
+    text_segment: SegmentInfo,
+    data_segment: SegmentInfo,
+    relro_segment: SegmentInfo,
+    unk_segment: SegmentInfo,
     segment_count: u32, // Always 2.
     refcount: u32,
 }

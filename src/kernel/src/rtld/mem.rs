@@ -18,6 +18,7 @@ pub struct Memory {
     base: usize,
     text: usize,
     data: usize,
+    relro: Option<usize>,
     obcode: usize,
     obcode_sealed: Gutex<usize>,
     obdata: usize,
@@ -128,7 +129,7 @@ impl Memory {
         len += segment.len;
         segments.push(segment);
 
-        // Create workspace for our data. We cannot mix this the code because the executable-space
+        // Create workspace for our data. We cannot mix this with the code because the executable-space
         // protection on some system don't allow execution on writable page.
         let obdata = segments.len();
         let segment = MemorySegment {
@@ -176,6 +177,7 @@ impl Memory {
             base,
             text,
             data,
+            relro,
             obcode,
             obcode_sealed: gg.spawn(0),
             obdata,
@@ -206,6 +208,10 @@ impl Memory {
 
     pub fn data_segment(&self) -> &MemorySegment {
         &self.segments[self.data]
+    }
+
+    pub fn relro_segment(&self) -> Option<&MemorySegment> {
+        self.relro.as_ref().map(|i| &self.segments[*i])
     }
 
     /// # Safety
