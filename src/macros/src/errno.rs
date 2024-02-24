@@ -1,6 +1,6 @@
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
-use syn::{punctuated::Punctuated, Fields, ItemEnum, Meta, Token, Variant};
+use syn::{punctuated::Punctuated, Field, Fields, ItemEnum, Meta, Token, Variant};
 
 pub fn transform(arg: ItemEnum) -> syn::Result<TokenStream> {
     let enum_name = &arg.ident;
@@ -14,7 +14,7 @@ pub fn transform(arg: ItemEnum) -> syn::Result<TokenStream> {
     let res = quote!(
         impl Errno for #enum_name {
             fn errno(&self) -> std::num::NonZeroI32 {
-                match self {
+                match *self {
                     #(#arms)*
                 }
             }
@@ -61,8 +61,61 @@ fn process_variant(variant: &Variant, enum_name: &Ident) -> syn::Result<TokenStr
         }
     }
 
+    // If we are here, that means we haven't found any errno attributes
+    // Now we try to check the data to find a field marked with
+    // either #[source] or #[from] (which belong to the thiserror crate)
+
+    match &variant.fields {
+        Fields::Named(_) => todo!("Named fields are not supported yet"),
+        Fields::Unnamed(fields) => {
+            let mut pos = None;
+
+            fields
+                .unnamed
+                .iter()
+                .enumerate()
+                .try_for_each(|(i, field)| {
+                    for attr in field.attrs.iter() {
+                        if attr.path().is_ident("source") || attr.path().is_ident("from") {
+                            if let Some(_) = pos.replace(i) {
+                                return Err(syn::Error::new_spanned(
+                                    attr,
+                                    format!(
+                                        "multiple fields marked with either #[source] or #[from] found. \
+                                        Only one field is allowed"
+                                    ),
+                                ))
+                            }
+                        }
+
+                    }
+
+                    Ok(())
+                })?;
+
+            return match pos {
+                Some(pos) => {
+                    let variant_name = &variant.ident;
+
+                    Ok(quote!(
+                        #enum_name::#variant_name (e) => e.errno()))
+                }
+                None => Err(syn::Error::new_spanned(
+                    variant,
+                    "no fields of this variant are marked with either #[source] or #[from]",
+                )),
+            };
+        }
+        Fields::Unit => {
+            return Err(syn::Error::new_spanned(
+                variant,
+                "no errno attribute found on a variant with no fields",
+            ))
+        }
+    }
+
     Err(syn::Error::new_spanned(
         variant,
-        "variant does not have an errno attribute",
+        "variant does not have an errno attribute or any inner error to get the errno from",
     ))
 }
