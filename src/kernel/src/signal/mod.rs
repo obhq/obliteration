@@ -43,8 +43,7 @@ macro_rules! signals {
 }
 
 // List of PS4 signals. The value must be the same as PS4 kernel.
-#[rustfmt::skip]
-signals!(
+signals! {
     SIGHUP(1),
     SIGINT(2),
     SIGQUIT(3),
@@ -78,7 +77,7 @@ signals!(
     SIGUSR2(31),
     SIGTHR(32),
     SIGNONE(128),
-);
+}
 
 pub fn strsignal(sig: Signal) -> Cow<'static, str> {
     // This function is generated inside the macro `signals!`.
