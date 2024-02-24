@@ -18,6 +18,8 @@ jobs:
     name: Housekeep
     runs-on: ubuntu-latest
     steps:
+    - name: Install Node packages
+      run: sudo npm install -g octokit
     - name: Update PRs
       run: |
         import { Octokit } from 'octokit';
