@@ -5,7 +5,10 @@ use crate::{
     process::{FileDesc, VThread},
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
 };
-use std::{convert::Infallible, sync::Arc};
+use std::{
+    convert::Infallible,
+    sync::{Arc, Weak},
+};
 
 pub struct KernelQueueManager {}
 
@@ -44,13 +47,13 @@ impl KernelQueueManager {
 
 #[derive(Debug)]
 pub struct KernelQueue {
-    filedesc: Arc<FileDesc>,
+    filedesc: Weak<FileDesc>,
 }
 
 impl KernelQueue {
     pub fn new(filedesc: &Arc<FileDesc>) -> Arc<Self> {
         Arc::new(KernelQueue {
-            filedesc: filedesc.clone(),
+            filedesc: Arc::downgrade(filedesc),
         })
     }
 }
@@ -70,6 +73,6 @@ impl FileBackend for KernelQueue {
         _: TruncateLength,
         _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        Err(DefaultError::InvalidValue.into())
+        Err(Box::new(DefaultError::InvalidValue))
     }
 }
