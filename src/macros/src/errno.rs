@@ -1,6 +1,6 @@
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
-use syn::{punctuated::Punctuated, Fields, ItemEnum, Meta, Token, Variant, Index};
+use syn::{punctuated::Punctuated, Fields, Index, ItemEnum, Meta, Token, Variant};
 
 pub fn transform(arg: ItemEnum) -> syn::Result<TokenStream> {
     let enum_name = &arg.ident;
