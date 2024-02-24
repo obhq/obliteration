@@ -63,7 +63,6 @@ pub struct VProc {
     app_info: AppInfo,
     ptc: u64,
     uptc: AtomicPtr<u8>,
-    gg: Arc<GutexGroup>,
 }
 
 impl VProc {
@@ -104,7 +103,6 @@ impl VProc {
             app_info: AppInfo::new(),
             ptc: 0,
             uptc: AtomicPtr::new(null_mut()),
-            gg,
         });
 
         sys.register(20, &vp, Self::sys_getpid);
@@ -116,6 +114,7 @@ impl VProc {
         sys.register(464, &vp, Self::sys_thr_set_name);
         sys.register(466, &vp, Self::sys_rtprio_thread);
         sys.register(487, &vp, Self::sys_cpuset_getaffinity);
+        sys.register(488, &vp, Self::sys_cpuset_setaffinity);
         sys.register(585, &vp, Self::sys_is_in_sandbox);
         sys.register(587, &vp, Self::sys_get_authinfo);
         sys.register(602, &vp, Self::sys_randomized_path);
@@ -169,10 +168,6 @@ impl VProc {
 
     pub fn uptc(&self) -> &AtomicPtr<u8> {
         &self.uptc
-    }
-
-    pub fn gutex_group(&self) -> &Arc<GutexGroup> {
-        &self.gg
     }
 
     fn sys_getpid(self: &Arc<Self>, _: &VThread, _: &SysIn) -> Result<SysOut, SysErr> {
@@ -284,7 +279,7 @@ impl VProc {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_sigaction(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_sigaction(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let sig: i32 = i.args[0].try_into().unwrap();
         let act: *const SignalAct = i.args[1].into();
@@ -419,8 +414,8 @@ impl VProc {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_thr_set_name(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
-        let tid: i64 = i.args[0].into();
+    fn sys_thr_set_name(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let tid: i64 = i.args[0].try_into().unwrap();
         let name: Option<&str> = unsafe { i.args[1].to_str(32) }?;
 
         if tid == -1 {
@@ -478,10 +473,10 @@ impl VProc {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_cpuset_getaffinity(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_cpuset_getaffinity(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
-        let level: i32 = i.args[0].try_into().unwrap();
-        let which: i32 = i.args[1].try_into().unwrap();
+        let level: CpuLevel = TryInto::<i32>::try_into(i.args[0]).unwrap().try_into()?;
+        let which: CpuWhich = TryInto::<i32>::try_into(i.args[1]).unwrap().try_into()?;
         let id: i64 = i.args[2].into();
         let cpusetsize: usize = i.args[3].into();
         let mask: *mut u8 = i.args[4].into();
@@ -491,18 +486,18 @@ impl VProc {
             return Err(SysErr::Raw(ERANGE));
         }
 
-        let ttd = self.cpuset_which(which, id)?;
+        let td = self.cpuset_which(which, id)?;
         let mut buf = vec![0u8; cpusetsize];
 
         match level {
-            CPU_LEVEL_WHICH => match which {
-                CPU_WHICH_TID => {
-                    let v = ttd.cpuset().mask().bits[0].to_ne_bytes();
+            CpuLevel::Which => match which {
+                CpuWhich::Tid => {
+                    let v = td.cpuset().mask().bits[0].to_ne_bytes();
                     buf[..v.len()].copy_from_slice(&v);
                 }
-                v => todo!("sys_cpuset_getaffinity with which = {v}"),
+                v => todo!("sys_cpuset_getaffinity with which = {v:?}"),
             },
-            v => todo!("sys_cpuset_getaffinity with level = {v}"),
+            v => todo!("sys_cpuset_getaffinity with level = {v:?}"),
         }
 
         // TODO: What is this?
@@ -522,24 +517,47 @@ impl VProc {
         Ok(SysOut::ZERO)
     }
 
+    fn sys_cpuset_setaffinity(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let level: CpuLevel = TryInto::<i32>::try_into(i.args[0]).unwrap().try_into()?;
+        let which: CpuWhich = TryInto::<i32>::try_into(i.args[1]).unwrap().try_into()?;
+        let _id: i64 = i.args[2].into();
+        let cpusetsize: usize = i.args[3].into();
+        let _mask: *const u8 = i.args[4].into();
+
+        // TODO: Refactor this for readability.
+        if cpusetsize.wrapping_sub(8) > 8 {
+            return Err(SysErr::Raw(ERANGE));
+        }
+
+        match level {
+            CpuLevel::Which => match which {
+                CpuWhich::Tid => {
+                    todo!();
+                }
+                v => todo!("sys_cpuset_setaffinity with which = {v:?}"),
+            },
+            v => todo!("sys_cpuset_setaffinity with level = {v:?}"),
+        }
+    }
+
     /// See `cpuset_which` on the PS4 for a reference.
-    fn cpuset_which(&self, which: i32, id: i64) -> Result<Arc<VThread>, SysErr> {
+    fn cpuset_which(&self, which: CpuWhich, id: i64) -> Result<Arc<VThread>, SysErr> {
         let td = match which {
-            CPU_WHICH_TID => {
+            CpuWhich::Tid => {
                 if id == -1 {
                     todo!("cpuset_which with id = -1");
                 } else {
                     let threads = self.threads.read();
-                    let td = threads.iter().find(|t| t.id().get() == id as i32).cloned();
+                    let td = threads
+                        .iter()
+                        .find(|t| t.id().get() == id as i32)
+                        .ok_or(SysErr::Raw(ESRCH))?
+                        .clone();
 
-                    if td.is_none() {
-                        return Err(SysErr::Raw(ESRCH));
-                    }
-
-                    td
+                    Some(td)
                 }
             }
-            v => todo!("cpuset_which with which = {v}"),
+            v => todo!("cpuset_which with which = {v:?}"),
         };
 
         match td {
