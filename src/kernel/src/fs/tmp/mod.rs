@@ -113,6 +113,7 @@ impl Filesystem for TempFs {
     }
 }
 
+#[allow(unused_variables)] // TODO: remove when implementing
 fn alloc_vnode(mnt: &Arc<Mount>, node: &Arc<Node>) -> Result<Arc<Vnode>, AllocVnodeError> {
     todo!()
 }
