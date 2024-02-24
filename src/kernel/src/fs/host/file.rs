@@ -38,17 +38,15 @@ impl HostFile {
     pub fn root(path: impl AsRef<Path>) -> Result<Self, Error> {
         use std::os::windows::ffi::OsStrExt;
         use std::ptr::null_mut;
+        use windows_sys::Wdk::Foundation::OBJECT_ATTRIBUTES;
+        use windows_sys::Wdk::Storage::FileSystem::{NtCreateFile, FILE_DIRECTORY_FILE, FILE_OPEN};
         use windows_sys::Win32::Foundation::{
             RtlNtStatusToDosError, STATUS_SUCCESS, UNICODE_STRING,
         };
         use windows_sys::Win32::Storage::FileSystem::{
-            NtCreateFile, FILE_OPEN, FILE_READ_ATTRIBUTES, FILE_READ_EA, FILE_SHARE_READ,
-            FILE_SHARE_WRITE, READ_CONTROL,
+            FILE_READ_ATTRIBUTES, FILE_READ_EA, FILE_SHARE_READ, FILE_SHARE_WRITE, READ_CONTROL,
         };
         use windows_sys::Win32::System::Kernel::OBJ_CASE_INSENSITIVE;
-        use windows_sys::Win32::System::WindowsProgramming::{
-            FILE_DIRECTORY_FILE, OBJECT_ATTRIBUTES,
-        };
 
         // Encode path name.
         let path = path.as_ref();
@@ -245,14 +243,15 @@ impl HostFile {
     #[cfg(windows)]
     fn raw_open(dir: RawFile, name: &str) -> Result<RawFile, Error> {
         use std::ptr::null_mut;
+        use windows_sys::Wdk::Foundation::OBJECT_ATTRIBUTES;
+        use windows_sys::Wdk::Storage::FileSystem::{
+            NtCreateFile, FILE_NON_DIRECTORY_FILE, FILE_OPEN, FILE_RANDOM_ACCESS,
+        };
         use windows_sys::Win32::Foundation::{
             RtlNtStatusToDosError, STATUS_SUCCESS, UNICODE_STRING,
         };
         use windows_sys::Win32::Storage::FileSystem::{
-            NtCreateFile, DELETE, FILE_GENERIC_READ, FILE_GENERIC_WRITE, FILE_OPEN,
-        };
-        use windows_sys::Win32::System::WindowsProgramming::{
-            FILE_NON_DIRECTORY_FILE, FILE_RANDOM_ACCESS, OBJECT_ATTRIBUTES,
+            DELETE, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
         };
 
         // Encode name.
