@@ -108,13 +108,14 @@ impl Iterator for SignalIter {
     type Item = Signal;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current <= SIG_MAXSIG {
-            let signal = Signal(unsafe { NonZeroI32::new_unchecked(self.current) });
-            self.current += 1;
-            Some(signal)
-        } else {
-            None
+        if self.current > SIG_MAXSIG {
+            return None;
         }
+
+        let sig = Signal::new(self.current);
+        self.current += 1;
+
+        sig
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
