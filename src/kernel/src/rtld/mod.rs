@@ -418,7 +418,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_dynlib_get_list(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_dynlib_get_list(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let buf: *mut u32 = i.args[0].into();
         let max: usize = i.args[1].into();
@@ -598,7 +598,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
     fn sys_dynlib_process_needed_and_relocate(
         self: &Arc<Self>,
-        td: &VThread,
+        _: &VThread,
         _: &SysIn,
     ) -> Result<SysOut, SysErr> {
         // Check if application is dynamic linking.

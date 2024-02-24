@@ -544,7 +544,7 @@ impl MemoryManager {
         Err(SysErr::Raw(EOPNOTSUPP))
     }
 
-    fn sys_mmap(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_mmap(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let addr: usize = i.args[0].into();
         let len: usize = i.args[1].into();
@@ -594,7 +594,7 @@ impl MemoryManager {
         Ok(pages.into_raw().into())
     }
 
-    fn sys_mname(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_mname(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let addr: usize = i.args[0].into();
         let len: usize = i.args[1].into();
         let name = unsafe { i.args[2].to_str(32)?.unwrap() };
