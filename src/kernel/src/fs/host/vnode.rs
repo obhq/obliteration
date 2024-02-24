@@ -6,7 +6,6 @@ use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use macros::Errno;
 use std::borrow::Cow;
-use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -128,34 +127,28 @@ enum GetAttrError {
 }
 
 /// Represents an error when [`lookup()`] fails.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 enum LookupError {
     #[error("current file is not a directory")]
+    #[errno(ENOTDIR)]
     NotDirectory,
 
     #[error("cannot resolve '..' on the root directory")]
+    #[errno(EIO)]
     DotdotOnRoot,
 
     #[error("access denied")]
     AccessDenied(#[source] Box<dyn Errno>),
 
     #[error("name contains unsupported characters")]
+    #[errno(ENOENT)]
     InvalidName,
 
     #[error("couldn't open the specified file")]
+    #[errno(EIO)]
     OpenFailed(#[source] std::io::Error),
 
     #[error("cannot get vnode")]
+    #[errno(EIO)]
     GetVnodeFailed(#[source] GetVnodeError),
-}
-
-impl Errno for LookupError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::NotDirectory => ENOTDIR,
-            Self::DotdotOnRoot | Self::GetVnodeFailed(_) | Self::OpenFailed(_) => EIO,
-            Self::AccessDenied(e) => e.errno(),
-            Self::InvalidName => ENOENT,
-        }
-    }
 }

@@ -1,3 +1,4 @@
+use macros::Errno;
 use thiserror::Error;
 
 use crate::{
@@ -11,7 +12,7 @@ use crate::{
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
     ucred::{Gid, Ucred, Uid},
 };
-use std::{convert::Infallible, num::NonZeroI32, sync::Arc};
+use std::{convert::Infallible, sync::Arc};
 
 pub struct SharedMemoryManager {
     mm: Arc<MemoryManager>,
@@ -159,11 +160,5 @@ impl FileBackend for Shm {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum TruncateError {}
-
-impl Errno for TruncateError {
-    fn errno(&self) -> NonZeroI32 {
-        match *self {}
-    }
-}

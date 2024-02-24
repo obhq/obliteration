@@ -42,4 +42,4 @@ jobs:
             labels: ['B-out-of-date'],
           });
         }
-      shell: node --input-type=module {0}
+      shell: node --experimental-default-type=module {0}
