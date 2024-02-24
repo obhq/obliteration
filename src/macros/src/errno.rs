@@ -1,6 +1,6 @@
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
-use syn::{punctuated::Punctuated, Fields, ItemEnum, Meta, Token, Variant};
+use syn::{punctuated::Punctuated, Fields, Index, ItemEnum, Meta, Token, Variant};
 
 pub fn transform(arg: ItemEnum) -> syn::Result<TokenStream> {
     let enum_name = &arg.ident;
@@ -11,17 +11,25 @@ pub fn transform(arg: ItemEnum) -> syn::Result<TokenStream> {
         .map(|variant| process_variant(variant, enum_name))
         .collect::<Result<Vec<_>, _>>()?;
 
-    let res = quote!(
-        impl Errno for #enum_name {
-            fn errno(&self) -> std::num::NonZeroI32 {
-                match self {
-                    #(#arms)*
+    if arms.is_empty() {
+        Ok(quote!(
+            impl Errno for #enum_name {
+                fn errno(&self) -> std::num::NonZeroI32 {
+                    match *self {}
                 }
             }
-        }
-    );
-
-    Ok(res)
+        ))
+    } else {
+        Ok(quote!(
+            impl Errno for #enum_name {
+                fn errno(&self) -> std::num::NonZeroI32 {
+                    match self {
+                        #(#arms)*
+                    }
+                }
+            }
+        ))
+    }
 }
 
 fn process_variant(variant: &Variant, enum_name: &Ident) -> syn::Result<TokenStream> {
@@ -61,8 +69,59 @@ fn process_variant(variant: &Variant, enum_name: &Ident) -> syn::Result<TokenStr
         }
     }
 
-    Err(syn::Error::new_spanned(
-        variant,
-        "variant does not have an errno attribute",
-    ))
+    // If we are here, that means we haven't found any errno attributes
+    // Now we try to check the data to find a field marked with
+    // either #[source] or #[from] (which belong to the thiserror crate)
+
+    match &variant.fields {
+        Fields::Named(_) => todo!("Named fields are not supported yet"),
+        Fields::Unnamed(fields) => {
+            let ref fields = fields.unnamed;
+
+            let mut pos = None;
+
+            fields
+                .iter()
+                .enumerate()
+                .try_for_each(|(i, field)| {
+                    for attr in field.attrs.iter() {
+                        if attr.path().is_ident("source") || attr.path().is_ident("from") {
+                            if let Some(_) = pos.replace(i) {
+                                return Err(syn::Error::new_spanned(
+                                    attr,
+                                    format!(
+                                        "multiple fields marked with either #[source] or #[from] found. \
+                                        Only one field is allowed"
+                                    ),
+                                ))
+                            }
+                        }
+
+                    }
+
+                    Ok(())
+                })?;
+
+            return match pos {
+                Some(pos) => {
+                    let variant_name = &variant.ident;
+                    // The field at index `pos` is the one we are interested in
+
+                    // We have to use this. otherwise the macro would expand to something like
+                    // `{ 0usize: e, .. }` which is accepted, but only temporarily
+                    let index = Index::from(pos);
+
+                    Ok(quote!(#enum_name::#variant_name { #index: e, .. } => e.errno(),))
+                }
+                None => Err(syn::Error::new_spanned(
+                    variant,
+                    "no fields of this variant are marked with either #[source] or #[from]",
+                )),
+            };
+        }
+        Fields::Unit => Err(syn::Error::new_spanned(
+            variant,
+            "no errno attribute found on a variant with no fields",
+        )),
+    }
 }

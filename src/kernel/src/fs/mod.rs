@@ -10,7 +10,7 @@ use macros::vpath;
 use macros::Errno;
 use param::Param;
 use std::fmt::{Display, Formatter};
-use std::num::{NonZeroI32, TryFromIntError};
+use std::num::TryFromIntError;
 use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
@@ -1093,15 +1093,18 @@ pub enum FsInitError {
 }
 
 /// Represents an error when FS mounting fails.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum MountError {
     #[error("fstype is too long")]
+    #[errno(ENAMETOOLONG)]
     FsTooLong,
 
     #[error("fspath is too long")]
+    #[errno(ENAMETOOLONG)]
     PathTooLong,
 
     #[error("fstype is not valid")]
+    #[errno(ENODEV)]
     InvalidFs,
 
     #[error("fspath is not found")]
@@ -1111,95 +1114,51 @@ pub enum MountError {
     MountFailed(#[source] Box<dyn Errno>),
 
     #[error("fspath is already mounted")]
+    #[errno(EBUSY)]
     PathAlreadyMounted,
 
     #[error("cannot get root")]
     GetRootFailed(#[source] Box<dyn Errno>),
 }
 
-impl Errno for MountError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::FsTooLong | Self::PathTooLong => ENAMETOOLONG,
-            Self::InvalidFs => ENODEV,
-            Self::LookupPathFailed(e) => e.errno(),
-            Self::MountFailed(e) => e.errno(),
-            Self::PathAlreadyMounted => EBUSY,
-            Self::GetRootFailed(e) => e.errno(),
-        }
-    }
-}
-
 /// Represents an error when [`Fs::open()`] fails.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum OpenError {
     #[error("cannot lookup the file")]
     LookupFailed(#[source] LookupError),
 }
 
-impl Errno for OpenError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::LookupFailed(e) => e.errno(),
-        }
-    }
-}
-
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum WriteError {}
 
-impl Errno for WriteError {
-    fn errno(&self) -> NonZeroI32 {
-        todo!()
-    }
-}
-
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum IoctlError {
     #[error("Couldn't get file")]
     FailedToGetFile(#[from] GetFileError),
 
     #[error("Bad file flags {0:?}")]
+    #[errno(EBADF)]
     BadFileFlags(VFileFlags),
 
     #[error(transparent)]
     FileIoctlFailed(#[from] Box<dyn Errno>),
 }
 
-impl Errno for IoctlError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::FailedToGetFile(e) => e.errno(),
-            Self::BadFileFlags(_) => EBADF,
-            Self::FileIoctlFailed(e) => e.errno(),
-        }
-    }
-}
-
 /// Represents an error when [`Fs::lookup()`] fails.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum LookupError {
     #[error("failed to get mount root")]
     GetRootFailed(#[source] Box<dyn Errno>),
 
     #[error("no such file or directory")]
+    #[errno(ENOENT)]
     NotFound,
 
     #[error("cannot lookup '{1}' from component #{0}")]
     LookupFailed(usize, Box<str>, #[source] Box<dyn Errno>),
 }
 
-impl Errno for LookupError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::GetRootFailed(e) => e.errno(),
-            Self::NotFound => ENOENT,
-            Self::LookupFailed(_, _, e) => e.errno(),
-        }
-    }
-}
-
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum RevokeError {
     #[error("failed to get file attr")]
     GetAttrError(#[source] Box<dyn Errno>),
@@ -1211,17 +1170,8 @@ pub enum RevokeError {
     RevokeFailed(#[source] Box<dyn Errno>),
 }
 
-impl Errno for RevokeError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::GetAttrError(e) => e.errno(),
-            Self::PrivelegeError(e) => e.errno(),
-            Self::RevokeFailed(e) => e.errno(),
-        }
-    }
-}
 /// Represents an error when one of the stat syscalls fails
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum StatError {
     #[error("failed to get file")]
     FailedToGetFile(#[from] GetFileError),
@@ -1230,31 +1180,14 @@ pub enum StatError {
     GetAttrError(#[from] Box<dyn Errno>),
 }
 
-impl Errno for StatError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::FailedToGetFile(e) => e.errno(),
-            Self::GetAttrError(e) => e.errno(),
-        }
-    }
-}
-
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum TruncateError {
     #[error("the provided length is invalid")]
+    #[errno(EINVAL)]
     InvalidLength,
 
     #[error("failed to get file")]
     FailedToLookupFile(#[from] LookupError),
-}
-
-impl Errno for TruncateError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::InvalidLength => EINVAL,
-            Self::FailedToLookupFile(e) => e.errno(),
-        }
-    }
 }
 
 impl From<TruncateLengthError> for TruncateError {
@@ -1263,30 +1196,21 @@ impl From<TruncateLengthError> for TruncateError {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum FileTruncateError {
     #[error("the provided length is invalid")]
+    #[errno(EINVAL)]
     InvalidLength,
 
     #[error("failed to get file")]
     FailedToGetFile(#[from] GetFileError),
 
     #[error("file is not writable")]
+    #[errno(EINVAL)]
     FileNotWritable,
 
     #[error(transparent)]
     TruncateError(#[from] Box<dyn Errno>),
-}
-
-impl Errno for FileTruncateError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::InvalidLength => EINVAL,
-            Self::FailedToGetFile(e) => e.errno(),
-            Self::FileNotWritable => EINVAL,
-            Self::TruncateError(e) => e.errno(),
-        }
-    }
 }
 
 impl From<TruncateLengthError> for FileTruncateError {

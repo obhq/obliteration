@@ -7,7 +7,6 @@ use crate::fs::{
 };
 use crate::process::VThread;
 use macros::Errno;
-use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -209,34 +208,25 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 }
 
 /// Represents an error when [`lookup()`] is failed.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 enum LookupError {
     #[error("file is not a directory")]
+    #[errno(ENOTDIR)]
     NotDirectory,
 
     #[error("cannot resolve '..' on the root directory")]
+    #[errno(EIO)]
     DotdotOnRoot,
 
     #[error("access denied")]
     AccessDenied(#[source] Box<dyn Errno>),
 
     #[error("file have no parent")]
+    #[errno(ENOENT)]
     NoParent,
 
     #[error("cannot allocate a vnode")]
     AllocVnodeFailed(#[source] AllocVnodeError),
-}
-
-impl Errno for LookupError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::NotDirectory => ENOTDIR,
-            Self::DotdotOnRoot => EIO,
-            Self::AccessDenied(e) => e.errno(),
-            Self::NoParent => ENOENT,
-            Self::AllocVnodeFailed(e) => e.errno(),
-        }
-    }
 }
 
 /// Represents an error when [`open()`] is failed.

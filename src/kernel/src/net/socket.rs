@@ -5,7 +5,8 @@ use crate::{
     process::VThread,
 };
 use bitflags::bitflags;
-use std::{num::NonZeroI32, sync::Arc};
+use macros::Errno;
+use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Debug)]
@@ -51,15 +52,6 @@ bitflags! {
     #[derive(Debug, Clone, Copy)]
     struct SocketOptions: i16 {
         const NOSIGPIPE = 0x0800;
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum SocketCreateError {}
-
-impl Errno for SocketCreateError {
-    fn errno(&self) -> NonZeroI32 {
-        match *self {}
     }
 }
 
@@ -118,25 +110,15 @@ impl FileBackend for Socket {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
+pub enum SocketCreateError {}
+
+#[derive(Debug, Error, Errno)]
 enum ReceiveError {}
 
-impl Errno for ReceiveError {
-    fn errno(&self) -> NonZeroI32 {
-        todo!()
-    }
-}
-
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 enum SendError {
     #[error("Broken pipe")]
+    #[errno(EPIPE)]
     BrokenPipe,
-}
-
-impl Errno for SendError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::BrokenPipe => EPIPE,
-        }
-    }
 }
