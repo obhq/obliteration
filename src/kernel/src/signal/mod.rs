@@ -11,7 +11,7 @@ mod set;
 pub struct Signal(NonZeroI32);
 
 impl Signal {
-    pub fn new(raw: i32) -> Option<Self> {
+    pub const fn new(raw: i32) -> Option<Self> {
         match raw {
             1..=SIG_MAXSIG => Some(Signal(unsafe { NonZeroI32::new_unchecked(raw) })),
             _ => None,
@@ -27,13 +27,13 @@ macro_rules! signals {
     ($($name:ident($num:expr),)*) => {
         $(
             #[allow(dead_code)]
-            pub const $name: Signal = Signal(unsafe {
-                assert!($num > 0 && $num <= SIG_MAXSIG);
-                NonZeroI32::new_unchecked($num)
-            });
+            pub const $name: Signal = match Signal::new($num) {
+                Some(sig) => sig,
+                None => panic!(),
+            };
         )*
 
-        pub fn strsignal_impl(sig: Signal) -> Cow<'static, str> {
+        fn strsignal_impl(sig: Signal) -> Cow<'static, str> {
             match sig.0.get() {
                 $( $num => Cow::Borrowed(stringify!($name)), )*
                 _ => format!("{sig}", sig = sig.get()).into(),
@@ -43,8 +43,8 @@ macro_rules! signals {
 }
 
 // List of PS4 signals. The value must be the same as PS4 kernel.
-#[rustfmt::skip]
-signals!(
+
+signals! {
     SIGHUP(1),
     SIGINT(2),
     SIGQUIT(3),
@@ -78,7 +78,7 @@ signals!(
     SIGUSR2(31),
     SIGTHR(32),
     SIGNONE(128),
-);
+}
 
 pub fn strsignal(sig: Signal) -> Cow<'static, str> {
     // This function is generated inside the macro `signals!`.
@@ -109,10 +109,9 @@ impl Iterator for SignalIter {
     type Item = Signal;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current <= SIG_MAXSIG {
-            let signal = Signal(unsafe { NonZeroI32::new_unchecked(self.current) });
+        if let Some(sig) = Signal::new(self.current) {
             self.current += 1;
-            Some(signal)
+            Some(sig)
         } else {
             None
         }
