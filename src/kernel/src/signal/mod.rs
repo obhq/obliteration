@@ -11,7 +11,7 @@ mod set;
 pub struct Signal(NonZeroI32);
 
 impl Signal {
-    pub fn new(raw: i32) -> Option<Self> {
+    pub const fn new(raw: i32) -> Option<Self> {
         match raw {
             1..=SIG_MAXSIG => Some(Signal(unsafe { NonZeroI32::new_unchecked(raw) })),
             _ => None,
@@ -27,13 +27,13 @@ macro_rules! signals {
     ($($name:ident($num:expr),)*) => {
         $(
             #[allow(dead_code)]
-            pub const $name: Signal = Signal(unsafe {
-                assert!($num > 0 && $num <= SIG_MAXSIG);
-                NonZeroI32::new_unchecked($num)
-            });
+            pub const $name: Signal = match Signal::new($num) {
+                Some(sig) => sig,
+                None => panic!(),
+            };
         )*
 
-        pub fn strsignal_impl(sig: Signal) -> Cow<'static, str> {
+        fn strsignal_impl(sig: Signal) -> Cow<'static, str> {
             match sig.0.get() {
                 $( $num => Cow::Borrowed(stringify!($name)), )*
                 _ => format!("{sig}", sig = sig.get()).into(),

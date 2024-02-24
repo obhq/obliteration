@@ -14,7 +14,7 @@ macro_rules! error_numbers {
             };
         )*
 
-        pub fn strerror_impl(num: NonZeroI32) -> &'static str {
+        fn strerror_impl(num: NonZeroI32) -> &'static str {
             match num {
                 $( $name => $desc, )*
                 _ => todo!("strerror {num}", num = num.get()),
