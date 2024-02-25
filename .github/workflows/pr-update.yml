@@ -19,7 +19,8 @@ jobs:
         from urllib.request import Request, urlopen
         from zipfile import ZipFile
 
-        gh = Github(auth=Auth.Token("${{ secrets.GITHUB_TOKEN }}"))
+        tok = "${{ secrets.GITHUB_TOKEN }}"
+        gh = Github(auth=Auth.Token(tok))
         repo = gh.get_repo("${{ github.repository }}")
         run = repo.get_workflow_run(${{ github.event.workflow_run.id }})
         info = None
@@ -29,7 +30,7 @@ jobs:
             info = artifact
 
         req = Request(info.archive_download_url, None, {
-          "Authorization": "Bearer ${{ secrets.GITHUB_TOKEN }}",
+          "Authorization": f"Bearer {tok}",
           "Accept": "application/vnd.github+json"
         })
 
