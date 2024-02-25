@@ -15,6 +15,7 @@ jobs:
     - name: Update PR
       run: |
         from github import Auth, Github
+        from io import BytesIO
         import json
         from urllib.request import Request, urlopen
         from zipfile import ZipFile
@@ -34,7 +35,7 @@ jobs:
         req.add_unredirected_header("Accept", "application/vnd.github+json")
 
         with urlopen(req) as info:
-          zip = ZipFile(info)
+          zip = ZipFile(BytesIO(info.read()))
           with zip.open("build-info.json") as info:
             info = json.load(info)
 
