@@ -30,7 +30,7 @@ jobs:
             info = artifact
 
         req = Request(info.archive_download_url, None, {
-          "Authorization": f"Bearer {tok}",
+          "Authorization": f"token {tok}",
           "Accept": "application/vnd.github+json"
         })
 
