@@ -645,18 +645,12 @@ impl VProc {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        let proc = td.proc();
-
-        *info = ProcTypeInfo {
-            len: size_of::<ProcTypeInfo>(),
-            ty: proc.budget_ptype() as u32,
-            flags: proc.get_proc_type_info_flags(),
-        };
+        *info = td.proc().get_proc_type_info();
 
         Ok(SysOut::ZERO)
     }
 
-    fn get_proc_type_info_flags(&self) -> ProcTypeInfoFlags {
+    fn get_proc_type_info(&self) -> ProcTypeInfo {
         let cred = self.cred();
 
         let mut flags = ProcTypeInfoFlags::empty();
@@ -691,7 +685,11 @@ impl VProc {
             cred.has_sce_program_attribute(),
         );
 
-        flags
+        ProcTypeInfo {
+            len: size_of::<ProcTypeInfo>(),
+            ty: self.budget_ptype as u32,
+            flags,
+        }
     }
 
     fn new_id() -> NonZeroI32 {
