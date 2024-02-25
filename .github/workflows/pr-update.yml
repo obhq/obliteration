@@ -9,6 +9,8 @@ jobs:
     name: Update PR
     runs-on: ubuntu-latest
     if: github.event.workflow_run.conclusion == 'success'
+    permissions:
+      actions: read
     steps:
     - name: Install Python modules
       run: pip install PyGithub
@@ -19,10 +21,9 @@ jobs:
         from urllib.request import urlopen
         from zipfile import ZipFile
 
-        event = json.loads('''${{ toJSON(github.event.workflow_run) }}''')
         gh = Github(auth=Auth.Token("${{ secrets.GITHUB_TOKEN }}"))
         repo = gh.get_repo("${{ github.repository }}")
-        run = repo.get_workflow_run(event["id"])
+        run = repo.get_workflow_run(${{ github.event.workflow_run.id }})
         info = None
 
         for artifact in run.get_artifacts():
