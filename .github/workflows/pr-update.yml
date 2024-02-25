@@ -29,10 +29,9 @@ jobs:
           if artifact.name == "build-info":
             info = artifact
 
-        req = Request(info.archive_download_url, None, {
-          "Authorization": f"token {tok}",
-          "Accept": "application/vnd.github+json"
-        })
+        req = Request(info.archive_download_url)
+        req.add_unredirected_header("Authorization", f"token {tok}")
+        req.add_unredirected_header("Accept", "application/vnd.github+json")
 
         with urlopen(req) as info:
           zip = ZipFile(info)
