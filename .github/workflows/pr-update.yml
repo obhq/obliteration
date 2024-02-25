@@ -15,11 +15,13 @@ jobs:
     - name: Update PR
       run: |
         from github import Auth, Github
+        from io import BytesIO
         import json
         from urllib.request import Request, urlopen
         from zipfile import ZipFile
 
-        gh = Github(auth=Auth.Token("${{ secrets.GITHUB_TOKEN }}"))
+        tok = "${{ secrets.GITHUB_TOKEN }}"
+        gh = Github(auth=Auth.Token(tok))
         repo = gh.get_repo("${{ github.repository }}")
         run = repo.get_workflow_run(${{ github.event.workflow_run.id }})
         info = None
@@ -28,13 +30,12 @@ jobs:
           if artifact.name == "build-info":
             info = artifact
 
-        req = Request(info.archive_download_url, None, {
-          "Authorization": "Bearer ${{ secrets.GITHUB_TOKEN }}",
-          "Accept": "application/vnd.github+json"
-        })
+        req = Request(info.archive_download_url)
+        req.add_unredirected_header("Authorization", f"token {tok}")
+        req.add_unredirected_header("Accept", "application/vnd.github+json")
 
         with urlopen(req) as info:
-          zip = ZipFile(info)
+          zip = ZipFile(BytesIO(info.read()))
           with zip.open("build-info.json") as info:
             info = json.load(info)
 
