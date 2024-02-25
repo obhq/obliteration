@@ -57,14 +57,12 @@ impl Ucred {
         self.groups[1..].binary_search(&gid).is_ok()
     }
 
-    /// See `sceSblACMgrIsWebcoreProcess` on the PS4 for a reference.
     pub fn is_unknown(&self) -> bool {
         // TODO: Refactor this for readability.
         let id = self.auth.paid.get().wrapping_add(0xc7ffffffeffffffc);
         (id < 0xf) && ((0x6001 >> (id & 0x3f) & 1) != 0)
     }
 
-    /// See `sceSblACMgrIsDiskplayeruiProcess` on the PS4 for a reference.
     pub fn is_unknown2(&self) -> bool {
         matches!(
             self.auth.paid.get(),
