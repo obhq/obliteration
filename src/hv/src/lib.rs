@@ -3,12 +3,18 @@ use thiserror::Error;
 
 #[cfg(target_os = "macos")]
 mod darwin;
+#[cfg(any(target_os = "linux", target_os = "android"))]
+mod linux;
+#[cfg(target_os = "windows")]
+mod win32;
 
 /// Manage a virtual machine of the current process.
 ///
 /// Each process can have only one VM. The reason this type is not a global variable is because we
 /// want to be able to drop it.
 pub struct Hypervisor {
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    kvm: std::os::fd::OwnedFd,
     #[allow(dead_code)]
     active: Active, // Drop as the last one.
 }
@@ -23,12 +29,16 @@ impl Hypervisor {
             v => return Err(NewError::HostFailed(v)),
         }
 
-        Ok(Self { active })
+        Ok(Self {
+            #[cfg(any(target_os = "linux", target_os = "android"))]
+            kvm: self::linux::kvm_new()?,
+            active,
+        })
     }
 }
 
 impl Drop for Hypervisor {
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     fn drop(&mut self) {}
 
     #[cfg(target_os = "windows")]
@@ -68,9 +78,30 @@ pub enum NewError {
     #[error("there is an active hypervisor")]
     Active,
 
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[error("couldn't open {0}")]
+    OpenKvmFailed(&'static str, #[source] std::io::Error),
+
+    #[cfg(target_os = "windows")]
+    #[error("couldn't create WHP partition object ({0:#x})")]
+    CreatePartitionFailed(windows_sys::core::HRESULT),
+
     #[cfg(target_os = "macos")]
     #[error("the host failed to create the hypervisor ({0:#x})")]
     HostFailed(std::ffi::c_int),
 }
 
 static ACTIVE: AtomicBool = AtomicBool::new(false);
+
+// macOS requires additional entitlements for the application to use Hypervisor framework, which
+// cannot be done with "cargo test".
+#[cfg(not(target_os = "macos"))]
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new() {
+        Hypervisor::new().unwrap();
+    }
+}
