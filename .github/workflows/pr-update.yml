@@ -1,0 +1,53 @@
+name: Update PR
+on:
+  workflow_run:
+    workflows: [PR Build]
+    types:
+    - completed
+jobs:
+  postbuild:
+    name: Update PR
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success'
+    steps:
+    - name: Install Python modules
+      run: pip install PyGithub
+    - name: Update PR
+      run: |
+        from github import Auth, Github
+        import json
+        from urllib.request import Request, urlopen
+        from zipfile import ZipFile
+
+        gh = Github(auth=Auth.Token("${{ secrets.GITHUB_TOKEN }}"))
+        repo = gh.get_repo("${{ github.repository }}")
+        run = repo.get_workflow_run(${{ github.event.workflow_run.id }})
+        info = None
+
+        for artifact in run.get_artifacts():
+          if artifact.name == "build-info":
+            info = artifact
+
+        req = Request(info.archive_download_url, None, {
+          "Authorization": "Bearer ${{ secrets.GITHUB_TOKEN }}",
+          "Accept": "application/vnd.github+json"
+        })
+
+        with urlopen(req) as info:
+          zip = ZipFile(info)
+          with zip.open("build-info.json") as info:
+            info = json.load(info)
+
+        author = info["author"];
+        head = info["head"]
+        cmp = repo.compare(info["base"], f"{author}:{head}")
+
+        if cmp.status != "behind":
+          pull = repo.get_pull(info["pr"])
+          ready = False
+          for label in pull.labels:
+            if label.name == "S-ready":
+              ready = True
+          if not ready:
+            pull.add_to_labels("S-ready")
+      shell: python
