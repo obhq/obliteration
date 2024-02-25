@@ -15,6 +15,8 @@ mod win32;
 pub struct Hypervisor {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     kvm: std::os::fd::OwnedFd,
+    #[cfg(target_os = "windows")]
+    whp: self::win32::Partition,
     #[allow(dead_code)]
     active: Active, // Drop as the last one.
 }
@@ -32,6 +34,8 @@ impl Hypervisor {
         Ok(Self {
             #[cfg(any(target_os = "linux", target_os = "android"))]
             kvm: self::linux::kvm_new()?,
+            #[cfg(target_os = "windows")]
+            whp: self::win32::Partition::new()?,
             active,
         })
     }
