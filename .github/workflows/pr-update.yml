@@ -1,4 +1,4 @@
-name: PR Post Build
+name: Update PR
 on:
   workflow_run:
     workflows: [PR Build]
@@ -34,7 +34,9 @@ jobs:
           with zip.open("build-info.json") as info:
             info = json.load(info)
 
-        cmp = repo.compare(info["base"], f"{info["author"]}:{info["head"]}")
+        author = info["author"];
+        head = info["head"]
+        cmp = repo.compare(info["base"], f"{author}:{head}")
 
         if cmp.status != "behind":
           pull = repo.get_pull(info["pr"])
