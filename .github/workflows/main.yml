@@ -18,30 +18,25 @@ jobs:
     name: Housekeep
     runs-on: ubuntu-latest
     steps:
-    - name: Install Node packages
-      run: sudo npm install -g octokit
+    - name: Install Python modules
+      run: pip install PyGithub
     - name: Update PRs
       run: |
-        import { Octokit } from 'octokit';
+        from datetime import datetime, timezone
+        from github import Auth, Github
 
-        const octokit = new Octokit({ auth: '${{ secrets.GITHUB_TOKEN }}' });
-        const owner = '${{ github.event.repository.owner.login }}';
-        const repo = '${{ github.event.repository.name }}';
-        const resp = await octokit.request('GET /repos/{owner}/{repo}/pulls', {
-          owner,
-          repo,
-          base: '${{ github.ref_name }}',
-          sort: 'updated',
-          direction: 'desc',
-          per_page: 100,
-        });
+        now = datetime.now(timezone.utc)
+        gh = Github(auth=Auth.Token("${{ secrets.GITHUB_TOKEN }}"))
+        repo = gh.get_repo("${{ github.repository }}")
 
-        for (const pull of resp.data) {
-          await octokit.request('POST /repos/{owner}/{repo}/issues/{issue_number}/labels', {
-            owner,
-            repo,
-            issue_number: pull.number,
-            labels: ['B-out-of-date'],
-          });
-        }
-      shell: node --experimental-default-type=module {0}
+        for pull in repo.get_pulls("open", "updated", "desc", "${{ github.ref_name }}"):
+          if (now - pull.updated_at).days > 30:
+            break
+          ready = False
+          for label in pull.labels:
+            if label.name == "S-ready":
+              ready = True
+          if ready:
+            print(f"Removing S-ready from {pull.title}")
+            pull.remove_from_labels("S-ready")
+      shell: python

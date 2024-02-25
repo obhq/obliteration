@@ -21,6 +21,7 @@ use crate::time::TimeManager;
 use crate::tty::{TtyInitError, TtyManager};
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use clap::{Parser, ValueEnum};
+use hv::Hypervisor;
 use llt::{OsThread, SpawnError};
 use macros::vpath;
 use param::Param;
@@ -347,6 +348,9 @@ fn run<E: crate::ee::ExecutionEngine>(
         todo!("statically linked eboot.bin");
     }
 
+    // Setup hypervisor.
+    let hv = Hypervisor::new().map_err(KernelError::CreateHypervisorFailed)?;
+
     // Get entry point.
     let boot = ld.kernel().unwrap();
     let mut arg = Box::pin(EntryArg::<E>::new(&proc, mm, app.clone()));
@@ -548,6 +552,9 @@ enum KernelError {
 
     #[error("libSceLibcInternal couldn't be loaded")]
     FailedToLoadLibSceLibcInternal(#[source] Box<dyn Error>),
+
+    #[error("couldn't create a hypervisor")]
+    CreateHypervisorFailed(#[from] hv::NewError),
 
     #[error("main thread couldn't be created")]
     FailedToCreateMainThread(#[from] SpawnError),
