@@ -1,0 +1,10 @@
+[package]
+name = "hv"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+thiserror = "1.0.57"
+
+[target.'cfg(unit)'.dependencies]
+libc = "0.2.153"

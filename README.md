@@ -32,7 +32,7 @@ We have a Discord server for discussion about Obliteration and its development. 
 
 ## System requirements
 
-- Windows 10, Linux or macOS.
+- Windows 10, Linux or macOS 11+.
 - x86-64 CPU.
 - A jailbroken PS4 with FTP server that supports SELF decryption.
 
