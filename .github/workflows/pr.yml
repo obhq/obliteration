@@ -26,3 +26,27 @@ jobs:
     name: Build
     uses: ./.github/workflows/ci-mac.yml
     needs: prebuild
+  postbuild:
+    name: Post build
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-linux, build-mac]
+    steps:
+    - name: Generate build information
+      run: |
+        import json
+
+        info = {
+          "pr": ${{ github.event.number }},
+          "base": "${{ github.base_ref }}",
+          "head": "${{ github.event.pull_request.head.sha }}",
+          "author": "${{ github.event.pull_request.head.user.login }}"
+        }
+
+        with open("build-info.json", "w") as fp:
+          json.dump(info, fp)
+      shell: python
+    - name: Upload build information
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-info
+        path: build-info.json
