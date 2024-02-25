@@ -9,8 +9,6 @@ jobs:
     name: Update PR
     runs-on: ubuntu-latest
     if: github.event.workflow_run.conclusion == 'success'
-    permissions:
-      actions: read
     steps:
     - name: Install Python modules
       run: pip install PyGithub
@@ -18,7 +16,7 @@ jobs:
       run: |
         from github import Auth, Github
         import json
-        from urllib.request import urlopen
+        from urllib.request import Request, urlopen
         from zipfile import ZipFile
 
         gh = Github(auth=Auth.Token("${{ secrets.GITHUB_TOKEN }}"))
@@ -30,7 +28,12 @@ jobs:
           if artifact.name == "build-info":
             info = artifact
 
-        with urlopen(info.archive_download_url) as info:
+        req = Request(info.archive_download_url, None, {
+          "Authorization": "Bearer ${{ secrets.GITHUB_TOKEN }}",
+          "Accept": "application/vnd.github+json"
+        })
+
+        with urlopen(req) as info:
           zip = ZipFile(info)
           with zip.open("build-info.json") as info:
             info = json.load(info)
