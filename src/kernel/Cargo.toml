@@ -15,6 +15,7 @@ clap = { version = "4.1", features = ["derive"] }
 discord-rich-presence = "0.2"
 elf = { path = "../elf" }
 gmtx = { path = "../gmtx" }
+hv = { path = "../hv" }
 iced-x86 = { version = "1.18", features = ["code_asm"] }
 libc = "0.2"
 llt = { path = "../llt" }
