@@ -81,7 +81,7 @@ pub fn mount(
     Ok(Mount::new(
         conf,
         cred,
-        MountSource::Driver("tmpfs"),
+        MountSource::Driver("tmpfs".into()),
         path,
         Some(parent),
         flags | MountFlags::MNT_LOCAL,

@@ -3,7 +3,8 @@ use crate::budget::{Budget, BudgetManager, ProcType};
 use crate::debug::{DebugManager, DebugManagerInitError};
 use crate::dmem::DmemManager;
 use crate::ee::{EntryArg, RawFn};
-use crate::fs::{Fs, FsInitError, MountError, MountFlags, MountOpts, VPath};
+use crate::errno::EEXIST;
+use crate::fs::{Fs, FsInitError, MkdirError, MountError, MountFlags, MountOpts, VPath};
 use crate::kqueue::KernelQueueManager;
 use crate::llvm::Llvm;
 use crate::log::{print, LOGGER};
@@ -189,11 +190,20 @@ fn start() -> Result<(), KernelError> {
     // Initialize foundations.
     let llvm = Llvm::new();
     let mut syscalls = Syscalls::new();
-    let fs = Fs::new(args.system, args.game, &param, &cred, &mut syscalls)?;
+    let fs = Fs::new(args.system, &cred, &mut syscalls)?;
+
+    // TODO: Check permission of /mnt on the PS4.
+    let path = vpath!("/mnt");
+
+    if let Err(e) = fs.mkdir(path, 0o555, None) {
+        match e {
+            MkdirError::CreateFailed(e) if e.errno() == EEXIST => {}
+            e => return Err(KernelError::CreateDirectoryFailed(path, e)),
+        }
+    }
 
     // TODO: Get mount options from the PS4.
     let mut opts = MountOpts::new();
-    let path = vpath!("/mnt");
 
     opts.insert("fstype", "tmpfs");
     opts.insert("fspath", path.to_owned());
@@ -524,6 +534,9 @@ enum KernelError {
 
     #[error("filesystem initialization failed")]
     FilesystemInitFailed(#[from] FsInitError),
+
+    #[error("couldn't create {0}")]
+    CreateDirectoryFailed(&'static VPath, #[source] MkdirError),
 
     #[error("couldn't mount {0}")]
     MountFailed(&'static VPath, #[source] MountError),

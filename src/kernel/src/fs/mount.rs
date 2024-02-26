@@ -4,9 +4,12 @@ use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
 use macros::EnumConversions;
 use param::Param;
+use std::borrow::Cow;
 use std::collections::HashMap;
+use std::convert::Infallible;
 use std::fmt::Formatter;
 use std::fmt::{Debug, Display, Error};
+use std::hint::unreachable_unchecked;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock, RwLockWriteGuard};
 use thiserror::Error;
@@ -166,24 +169,24 @@ impl MountOpts {
 
     /// Returns `None` if the mount option is not present, Some(Err) if it is present but of a
     /// different type, and Some(Ok) if it is present and of the correct type.
-    pub fn try_remove<T>(&mut self, name: &'static str) -> Option<Result<T, MountOptError>>
+    pub fn try_remove<T, E>(&mut self, name: &'static str) -> Option<Result<T, MountOptError>>
     where
-        T: TryFrom<MountOpt, Error = MountOpt>,
+        T: TryFrom<MountOpt, Error = E>,
+        E: Into<MountOpt>,
     {
         let opt = self.0.remove(name)?;
-
-        let res = opt
-            .try_into()
-            .map_err(|opt| MountOptError::new::<T>(name, opt));
+        let res =
+            TryInto::<T>::try_into(opt).map_err(|opt| MountOptError::new::<T>(name, opt.into()));
 
         Some(res)
     }
 
     /// # Panics
     /// Panics if the mount option is present, but of a different type.
-    pub fn remove<T>(&mut self, name: &'static str) -> Option<T>
+    pub fn remove<T, E>(&mut self, name: &'static str) -> Option<T>
     where
-        T: TryFrom<MountOpt, Error = MountOpt>,
+        T: TryFrom<MountOpt, Error = E>,
+        E: Into<MountOpt>,
     {
         self.try_remove(name).map(Result::unwrap)
     }
@@ -243,6 +246,14 @@ impl From<String> for MountOpt {
     }
 }
 
+impl From<Infallible> for MountOpt {
+    fn from(_: Infallible) -> Self {
+        // SAFETY: Infallible type guarantee it value will never be constructed, which imply this
+        // method cannot be called because it required the value of Infallible.
+        unsafe { unreachable_unchecked() }
+    }
+}
+
 #[derive(Debug, Error)]
 pub struct MountOptError {
     optname: &'static str,
@@ -271,6 +282,7 @@ impl MountOptError {
 }
 
 /// An implementation of `statfs` structure.
+#[allow(dead_code)]
 #[derive(Debug)]
 pub struct FsStats {
     ty: u32,             // f_type
@@ -289,7 +301,7 @@ impl FsStats {
 /// Source of each mount.
 #[derive(Debug)]
 pub enum MountSource {
-    Driver(&'static str),
+    Driver(Cow<'static, str>),
     Path(VPathBuf),
 }
 
