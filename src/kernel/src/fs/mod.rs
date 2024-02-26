@@ -1,4 +1,4 @@
-use crate::errno::{Errno, EBADF, EBUSY, EINVAL, ENAMETOOLONG, ENODEV, ENOENT, ESPIPE};
+use crate::errno::{Errno, EBADF, EBUSY, EEXIST, EINVAL, ENAMETOOLONG, ENODEV, ENOENT, ESPIPE};
 use crate::info;
 use crate::process::{GetFileError, VThread};
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
@@ -6,9 +6,8 @@ use crate::ucred::PrivilegeError;
 use crate::ucred::{Privilege, Ucred};
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup};
-use macros::vpath;
-use macros::Errno;
-use param::Param;
+use macros::{vpath, Errno};
+use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::num::TryFromIntError;
 use std::path::PathBuf;
@@ -49,8 +48,6 @@ pub struct Fs {
 impl Fs {
     pub fn new(
         system: impl Into<PathBuf>,
-        game: impl Into<PathBuf>,
-        param: &Arc<Param>,
         kern_cred: &Arc<Ucred>,
         sys: &mut Syscalls,
     ) -> Result<Arc<Self>, FsInitError> {
@@ -78,9 +75,7 @@ impl Fs {
         opts.insert("fspath", VPathBuf::new());
         opts.insert("from", "md0");
         opts.insert("ro", true);
-        opts.insert("ob:system", system.into());
-        opts.insert("ob:game", game.into());
-        opts.insert("ob:param", param.clone());
+        opts.insert("ob:root", system.into());
 
         // Mount root FS.
         let gg = GutexGroup::new();
@@ -109,13 +104,26 @@ impl Fs {
         *old.root().map_err(FsInitError::GetRootFailed)?.item_mut() = None;
         *fs.mounts.read().root().parent_mut() = None;
 
+        // TODO: Check what permission of /dev on the PS4.
+        let dev = match root.mkdir("dev", 0o555, None) {
+            Ok(v) => v,
+            Err(e) => match e.errno() {
+                EEXIST => {
+                    let vn = root
+                        .lookup(None, "dev")
+                        .map_err(FsInitError::LookupDevFailed)?;
+
+                    if !vn.is_directory() {
+                        return Err(FsInitError::DevNotDirectory);
+                    }
+
+                    vn
+                }
+                _ => return Err(FsInitError::CreateDevFailed(e)),
+            },
+        };
+
         // Set devfs parent to /dev on the root FS.
-        let dev = fs
-            .lookup(vpath!("/dev"), None)
-            .map_err(FsInitError::LookupDevFailed)?;
-
-        assert!(dev.is_directory());
-
         {
             let mut p = old.parent_mut();
             assert!(p.is_none());
@@ -160,15 +168,17 @@ impl Fs {
     }
 
     pub fn open(&self, path: impl AsRef<VPath>, td: Option<&VThread>) -> Result<VFile, OpenError> {
-        let _vnode = self.lookup(path, td).map_err(OpenError::LookupFailed)?;
+        let vnode = self
+            .lookup(path, true, td)
+            .map_err(OpenError::LookupFailed)?;
 
         todo!();
     }
 
-    /// This method will **not** follow the last component if it is a mount point or a link.
     pub fn lookup(
         &self,
         path: impl AsRef<VPath>,
+        follow: bool,
         td: Option<&VThread>,
     ) -> Result<Arc<Vnode>, LookupError> {
         // Why we don't follow how namei was implemented? The reason is because:
@@ -192,57 +202,21 @@ impl Fs {
             root.clone()
         };
 
-        // TODO: Handle link.
-        let mut item = root.item_mut();
-
-        match item.as_ref() {
-            Some(VnodeItem::Mount(m)) => match m.upgrade() {
-                Some(m) => {
-                    drop(item);
-                    root = m.root().map_err(LookupError::GetRootFailed)?;
-                }
-                None => {
-                    *item = None;
-                    drop(item);
-                }
-            },
-            Some(_) => unreachable!(),
-            None => drop(item),
-        }
+        // Resolve the root. The reason we did this after we have the starting vnode is because the
+        // starting vnode will be resolved in the lookup loop.
+        let root = Self::follow(&root).map_err(LookupError::GetRootFailed)?;
 
         // Walk on path component.
         for (i, com) in path.components().enumerate() {
-            // TODO: Handle link.
-            match vn.ty() {
-                VnodeType::Directory(_) => {
-                    let mut item = vn.item_mut();
+            let resolved = Self::follow(&vn).map_err(LookupError::GetRootFailed)?;
 
-                    match item.as_ref() {
-                        Some(VnodeItem::Mount(m)) => match m.upgrade() {
-                            Some(m) => {
-                                drop(item);
-                                vn = m.root().map_err(LookupError::GetRootFailed)?;
-                            }
-                            None => {
-                                *item = None;
-                                drop(item);
-                            }
-                        },
-                        Some(_) => unreachable!(),
-                        None => drop(item),
-                    }
-                }
-                VnodeType::Character => return Err(LookupError::NotFound),
-                _ => todo!(),
-            }
-
-            // Prevent ".." on root.
-            if com == ".." && Arc::ptr_eq(&vn, &root) {
+            // Prevent ".." on root so this cannot escape from chroot.
+            if com == ".." && Arc::ptr_eq(&resolved, &root) {
                 return Err(LookupError::NotFound);
             }
 
             // Lookup next component.
-            vn = match vn.lookup(td, com) {
+            vn = match resolved.lookup(td, com) {
                 Ok(v) => v,
                 Err(e) => {
                     if e.errno() == ENOENT {
@@ -258,7 +232,33 @@ impl Fs {
             };
         }
 
+        // Follow the last vnode.
+        if follow {
+            if let Cow::Owned(v) = Self::follow(&vn).map_err(LookupError::GetRootFailed)? {
+                vn = v;
+            }
+        }
+
         Ok(vn)
+    }
+
+    pub fn mkdir(
+        &self,
+        path: impl AsRef<VPath>,
+        mode: u32,
+        td: Option<&VThread>,
+    ) -> Result<Arc<Vnode>, MkdirError> {
+        // Get parent.
+        let path = path.as_ref();
+        let parent = path.parent().ok_or(MkdirError::RootPath)?;
+        let parent = self
+            .lookup(parent, true, td)
+            .map_err(MkdirError::LookupParentFailed)?;
+
+        // Create the directory.
+        parent
+            .mkdir(path.file_name().unwrap(), mode, td)
+            .map_err(MkdirError::CreateFailed)
     }
 
     fn sys_read(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -333,13 +333,12 @@ impl Fs {
             let conf = Self::find_config(fs).ok_or(MountError::InvalidFs)?;
 
             // Lookup parent vnode.
-            let vn = match self.lookup(path.as_ref(), td) {
-                Ok(v) => v,
+            let vn = match self.lookup(path.as_ref(), false, td) {
+                Ok(v) => v, // TODO: Check if the PS4 also check if the vnode is a directory.
                 Err(e) => return Err(MountError::LookupPathFailed(e)),
             };
 
             // TODO: Check if jailed.
-
             flags.remove(MountFlags::from_bits_retain(0xFFFFFFFF272F3F80));
 
             // TODO: Implement budgetid.
@@ -485,7 +484,8 @@ impl Fs {
         td.priv_check(Privilege::SCE683)?;
 
         // TODO: Check vnode::v_rdev.
-        let vn = self.lookup(path, Some(&td))?;
+        // TODO: Check if the PS4 follow the vnode.
+        let vn = self.lookup(path, true, Some(&td))?;
 
         if !vn.is_character() {
             return Err(SysErr::Raw(EINVAL));
@@ -780,9 +780,10 @@ impl Fs {
     }
 
     fn truncate(&self, path: &VPath, length: i64, td: &VThread) -> Result<(), TruncateError> {
-        let _length: TruncateLength = length.try_into()?;
+        let length: TruncateLength = length.try_into()?;
 
-        let _vn = self.lookup(path, Some(&td))?;
+        // TODO: Check if the PS4 follow the vnode.
+        let vn = self.lookup(path, true, Some(&td))?;
 
         todo!()
     }
@@ -831,6 +832,38 @@ impl Fs {
     ) -> Result<SysOut, SysErr> {
         // This will require relative lookups
         todo!()
+    }
+
+    /// Gets root vnode of the mounted filesystem if `vn` is currently mounted or follow it if it is
+    /// a link.
+    ///
+    /// This function will recursive follow the link so the returned vnode will never be a mount
+    /// point or a link.
+    fn follow(vn: &Arc<Vnode>) -> Result<Cow<Arc<Vnode>>, Box<dyn Errno>> {
+        let vn = match vn.ty() {
+            VnodeType::Directory(_) => {
+                let mut item = vn.item_mut();
+
+                match item.as_ref() {
+                    Some(VnodeItem::Mount(m)) => match m.upgrade() {
+                        Some(m) => {
+                            drop(item);
+                            Cow::Owned(m.root()?)
+                        }
+                        None => {
+                            *item = None;
+                            Cow::Borrowed(vn)
+                        }
+                    },
+                    Some(_) => unreachable!(),
+                    None => Cow::Borrowed(vn),
+                }
+            }
+            VnodeType::Link => todo!(),
+            _ => Cow::Borrowed(vn),
+        };
+
+        Ok(vn)
     }
 
     /// See `vfs_byname` and `vfs_byname_kld` on the PS4 for a reference.
@@ -1089,7 +1122,13 @@ pub enum FsInitError {
     MountRootFailed(#[source] MountError),
 
     #[error("cannot lookup /dev")]
-    LookupDevFailed(#[source] LookupError),
+    LookupDevFailed(#[source] Box<dyn Errno>),
+
+    #[error("couldn't create /dev directory")]
+    CreateDevFailed(#[source] Box<dyn Errno>),
+
+    #[error("/dev is not a directory")]
+    DevNotDirectory,
 }
 
 /// Represents an error when FS mounting fails.
@@ -1156,6 +1195,19 @@ pub enum LookupError {
 
     #[error("cannot lookup '{1}' from component #{0}")]
     LookupFailed(usize, Box<str>, #[source] Box<dyn Errno>),
+}
+
+/// Represents an error when [`Fs::mkdir()`] fails.
+#[derive(Debug, Error)]
+pub enum MkdirError {
+    #[error("path is a root directory")]
+    RootPath,
+
+    #[error("couldn't lookup the parent")]
+    LookupParentFailed(#[source] LookupError),
+
+    #[error("couldn't create the directory")]
+    CreateFailed(#[source] Box<dyn Errno>),
 }
 
 #[derive(Debug, Error, Errno)]
@@ -1293,5 +1345,5 @@ static PFS: FsConfig = FsConfig {
     name: "pfs",
     ty: 0xA4,
     next: None,
-    mount: |_, _, _, _, _, _| todo!("mount for pfs"),
+    mount: self::host::mount,
 };
