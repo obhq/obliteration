@@ -1,13 +1,14 @@
 use self::file::{HostFile, HostId};
 use self::vnode::VnodeBackend;
-use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, VPathBuf, Vnode, VnodeType};
+use super::{
+    Filesystem, FsConfig, Mount, MountFlags, MountOpt, MountOpts, MountSource, VPathBuf, Vnode,
+    VnodeType,
+};
 use crate::errno::{Errno, EIO};
 use crate::ucred::Ucred;
 use macros::Errno;
-use param::Param;
+use std::borrow::Cow;
 use std::collections::HashMap;
-use std::fs::create_dir;
-use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, Weak};
 use thiserror::Error;
@@ -15,10 +16,11 @@ use thiserror::Error;
 mod file;
 mod vnode;
 
-/// Mount data for host FS.
+/// Implementation of [`Filesystem`] to mount a directory from the host.
 ///
-/// We subtitute `exfatfs` with this because the root FS on the PS4 is exFAT. That mean we must
-/// report this as `exfatfs` otherwise it might be unexpected by the PS4.
+/// We subtitute `exfatfs` and `pfs` with this because root FS on the PS4 is exFAT and game data is
+/// PFS. That mean we must report this either as `exfatfs` or `pfs` otherwise it might be unexpected
+/// by the PS4.
 #[derive(Debug)]
 pub struct HostFs {
     root: Arc<HostFile>,
@@ -34,76 +36,30 @@ pub fn mount(
     flags: MountFlags,
 ) -> Result<Mount, Box<dyn Errno>> {
     // Check mount flags.
-    if !flags.intersects(MountFlags::MNT_ROOTFS) {
-        todo!("mounting host FS on non-root");
-    } else if flags.intersects(MountFlags::MNT_UPDATE) {
-        todo!("update root FS mounting");
+    if flags.intersects(MountFlags::MNT_UPDATE) {
+        todo!("update HostFS mounting");
     }
 
-    // Get options.
-    let system: PathBuf = opts.remove("ob:system").unwrap();
-    let game: PathBuf = opts.remove("ob:game").unwrap();
-    let param: Arc<Param> = opts.remove("ob:param").unwrap();
-
-    // Create dev mount point.
-    let dev = system.join("dev");
-
-    if let Err(e) = create_dir(&dev) {
-        if e.kind() != ErrorKind::AlreadyExists {
-            return Err(Box::new(MountError::CreateDirectoryFailed(dev, e)));
-        }
-    }
-
-    // Map root.
-    let mut map: HashMap<VPathBuf, MountSource> = HashMap::new();
-
-    map.insert(VPathBuf::new(), MountSource::Host(system.clone()));
-
-    // Create a directory for game PFS.
-    let mut pfs = system.join("mnt");
-
-    pfs.push("sandbox");
-    pfs.push("pfsmnt");
-
-    if let Err(e) = std::fs::create_dir_all(&pfs) {
-        panic!("Cannot create {}: {}.", pfs.display(), e);
-    }
-
-    // Map game PFS.
-    let pfs: VPathBuf = format!("/mnt/sandbox/pfsmnt/{}-app0-patch0-union", param.title_id())
-        .try_into()
-        .unwrap();
-
-    map.insert(pfs.clone(), MountSource::Host(game));
-
-    // Create a directory for app0.
-    let mut app = system.join("mnt");
-
-    app.push("sandbox");
-    app.push(format!("{}_000", param.title_id()));
-
-    if let Err(e) = std::fs::create_dir_all(&app) {
-        panic!("Cannot create {}: {}.", app.display(), e);
-    }
-
-    // Map /mnt/sandbox/{id}_000/app0 to /mnt/sandbox/pfsmnt/{id}-app0-patch0-union.
-    let app: VPathBuf = format!("/mnt/sandbox/{}_000", param.title_id())
-        .try_into()
-        .unwrap();
-
-    map.insert(app.join("app0").unwrap(), MountSource::Bind(pfs));
+    // Get source name.
+    let from: MountOpt = opts.remove("from").unwrap();
+    let source = match from {
+        MountOpt::Str(v) => MountSource::Driver(Cow::Owned(v.into_string())),
+        MountOpt::VPath(v) => MountSource::Path(v),
+        _ => unreachable!(),
+    };
 
     // Open root directory.
-    let root = match HostFile::root(&system) {
+    let root: PathBuf = opts.remove("ob:root").unwrap();
+    let root = match HostFile::root(&root) {
         Ok(v) => v,
-        Err(e) => return Err(Box::new(MountError::OpenRootFailed(system, e))),
+        Err(e) => return Err(Box::new(MountError::OpenRootFailed(root, e))),
     };
 
     // Set mount data.
     Ok(Mount::new(
         conf,
         cred,
-        super::MountSource::Driver("md0"), // TODO: Actually it is /dev/md0 but the PS4 show as md0.
+        source,
         path,
         parent,
         flags | MountFlags::MNT_LOCAL,
@@ -159,20 +115,9 @@ fn get_vnode(
     Ok(vn)
 }
 
-/// Source of mount point.
-#[derive(Debug)]
-enum MountSource {
-    Host(PathBuf),
-    Bind(VPathBuf),
-}
-
 /// Represents an error when [`mount()`] fails.
 #[derive(Debug, Error, Errno)]
 enum MountError {
-    #[error("cannot create {0}")]
-    #[errno(EIO)]
-    CreateDirectoryFailed(PathBuf, #[source] std::io::Error),
-
     #[error("couldn't open {0} as a root directory")]
     #[errno(EIO)]
     OpenRootFailed(PathBuf, #[source] std::io::Error),
