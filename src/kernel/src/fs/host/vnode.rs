@@ -149,6 +149,5 @@ enum LookupError {
     OpenFailed(#[source] std::io::Error),
 
     #[error("cannot get vnode")]
-    #[errno(EIO)]
     GetVnodeFailed(#[source] GetVnodeError),
 }

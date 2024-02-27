@@ -650,9 +650,9 @@ impl Fs {
     fn preadv(&self, fd: i32, uio: UioMut, off: u64, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_read(fd)?;
 
-        if !file.is_seekable() {
+        if file.vnode().is_none() {
             return Err(SysErr::Raw(ESPIPE));
-        }
+        };
 
         // TODO: check vnode type
 
@@ -675,9 +675,9 @@ impl Fs {
     fn pwritev(&self, fd: i32, uio: Uio, off: u64, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_write(fd)?;
 
-        if !file.is_seekable() {
+        if file.vnode().is_none() {
             return Err(SysErr::Raw(ESPIPE));
-        }
+        };
 
         // TODO: check vnode type
 
@@ -743,11 +743,9 @@ impl Fs {
 
         let file = td.proc().files().get(fd)?;
 
-        if !file.is_seekable() {
+        let Some(vnode) = file.vnode() else {
             return Err(SysErr::Raw(ESPIPE));
-        }
-
-        let _vnode = file.vnode().expect("File is not backed by a vnode");
+        };
 
         // check vnode type
 

@@ -16,8 +16,9 @@ use thiserror::Error;
 /// An implementation of `file` structure.
 #[derive(Debug)]
 pub struct VFile {
-    ty: VFileType,     // f_type
-    flags: VFileFlags, // f_flag
+    ty: VFileType,             // f_type
+    flags: VFileFlags,         // f_flag
+    vnode: Option<Arc<Vnode>>, // f_vnode
 }
 
 impl VFile {
@@ -25,6 +26,7 @@ impl VFile {
         Self {
             ty,
             flags: VFileFlags::empty(),
+            vnode: None,
         }
     }
 
@@ -36,8 +38,10 @@ impl VFile {
         &mut self.flags
     }
 
-    pub fn vnode(&self) -> Option<Arc<Vnode>> {
-        todo!()
+    /// Checking if this returns `Some` is equivalent to when FreeBSD and the PS4 check
+    /// fp->f_ops->fo_flags & DFLAG_PASSABLE != 0, therefore we use this instead.
+    pub fn vnode(&self) -> Option<&Arc<Vnode>> {
+        self.vnode.as_ref()
     }
 
     /// See `dofileread` on the PS4 for a reference.
@@ -139,10 +143,6 @@ impl VFile {
             VFileType::Device(dev) => dev.truncate(self, length, td),
             VFileType::Blockpool(bp) => bp.truncate(self, length, td),
         }
-    }
-
-    pub fn is_seekable(&self) -> bool {
-        matches!(self.ty, VFileType::Vnode(_) | VFileType::Device(_))
     }
 }
 
