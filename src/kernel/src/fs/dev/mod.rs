@@ -3,11 +3,12 @@ use self::dirent::Dirent;
 use self::vnode::VnodeBackend;
 use super::{
     path_contains, DirentType, Filesystem, FsConfig, Mode, Mount, MountFlags, MountOpts,
-    MountSource, VPathBuf, Vnode, VnodeItem, VnodeType,
+    MountSource, VPathBuf, Vnode, VnodeType,
 };
 use crate::errno::{Errno, EEXIST, ENOENT, EOPNOTSUPP};
 use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
+use gmtx::GutexGroup;
 use macros::Errno;
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
@@ -102,14 +103,22 @@ fn alloc_vnode(
                 .unwrap()
                 .upgrade()
                 .ok_or(AllocVnodeError::DeviceGone)?;
-            let vn = Vnode::new(mnt, VnodeType::CharacterDevice, tag, backend);
 
-            *vn.item_mut() = Some(VnodeItem::Device(dev));
+            let vn = Vnode::new(
+                mnt,
+                VnodeType::CharacterDevice(GutexGroup::new().spawn(Some(dev))),
+                tag,
+                backend,
+            );
+
             vn
         }
         DirentType::Directory => Vnode::new(
             mnt,
-            VnodeType::Directory(ent.inode() == DevFs::DEVFS_ROOTINO),
+            VnodeType::Directory(
+                ent.inode() == DevFs::DEVFS_ROOTINO,
+                GutexGroup::new().spawn(None),
+            ),
             tag,
             backend,
         ),

@@ -101,7 +101,14 @@ impl Fs {
         };
 
         // Disconnect rootfs from the root of devfs.
-        *old.root().map_err(FsInitError::GetRootFailed)?.item_mut() = None;
+        {
+            let root = old.root().map_err(FsInitError::GetRootFailed)?;
+            let VnodeType::Directory(_, mount) = root.ty() else {
+                unreachable!();
+            };
+
+            *mount.write() = None;
+        }
         *fs.mounts.read().root().parent_mut() = None;
 
         // TODO: Check what permission of /dev on the PS4.
@@ -131,9 +138,12 @@ impl Fs {
         }
 
         {
-            let mut i = dev.item_mut();
-            assert!(i.is_none());
-            *i = Some(VnodeItem::Mount(Arc::downgrade(&old)));
+            let VnodeType::Directory(_, mount) = dev.ty() else {
+                unreachable!();
+            };
+            let mut mount = mount.write();
+            assert!(mount.is_none());
+            *mount = Some(Arc::downgrade(&old));
         }
 
         // Install syscall handlers.
@@ -354,7 +364,11 @@ impl Fs {
 
             // Set vnode to mounted. Beware of deadlock here.
             let mount = self.mounts.write().push(mount);
-            let mut item = vn.item_mut();
+
+            let VnodeType::Directory(_, item) = vn.ty() else {
+                unreachable!();
+            };
+            let mut item = item.write();
 
             if item.is_some() {
                 drop(item);
@@ -362,7 +376,7 @@ impl Fs {
                 return Err(MountError::PathAlreadyMounted);
             }
 
-            *item = Some(VnodeItem::Mount(Arc::downgrade(&mount)));
+            *item = Some(Arc::downgrade(&mount));
             drop(item);
 
             // TODO: Implement the remaining logics from the PS4.
@@ -837,21 +851,17 @@ impl Fs {
     /// point or a link.
     fn follow(vn: &Arc<Vnode>) -> Result<Cow<Arc<Vnode>>, Box<dyn Errno>> {
         let vn = match vn.ty() {
-            VnodeType::Directory(_) => {
-                let mut item = vn.item_mut();
+            VnodeType::Directory(_, mount) => {
+                let mut mount = mount.write();
 
-                match item.as_ref() {
-                    Some(VnodeItem::Mount(m)) => match m.upgrade() {
-                        Some(m) => {
-                            drop(item);
-                            Cow::Owned(m.root()?)
-                        }
+                match mount.as_ref() {
+                    Some(m) => match m.upgrade() {
+                        Some(m) => Cow::Owned(m.root()?),
                         None => {
-                            *item = None;
+                            *mount = None;
                             Cow::Borrowed(vn)
                         }
                     },
-                    Some(_) => unreachable!(),
                     None => Cow::Borrowed(vn),
                 }
             }
