@@ -502,6 +502,7 @@ impl Fs {
 
         if let VnodeType::CharacterDevice(dev) = vn.ty() {
             let dev = dev.read();
+
             if dev.as_ref().is_none() {
                 return Err(SysErr::Raw(EINVAL));
             }
