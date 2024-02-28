@@ -102,7 +102,7 @@ fn alloc_vnode(
                 .unwrap()
                 .upgrade()
                 .ok_or(AllocVnodeError::DeviceGone)?;
-            let vn = Vnode::new(mnt, VnodeType::Character, tag, backend);
+            let vn = Vnode::new(mnt, VnodeType::CharacterDevice, tag, backend);
 
             *vn.item_mut() = Some(VnodeItem::Device(dev));
             vn
