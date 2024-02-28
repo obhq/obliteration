@@ -41,7 +41,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         let mode = match vn.ty() {
             VnodeType::Directory(_) => Mode::new(0o555).unwrap(),
             VnodeType::File | VnodeType::Link => todo!(),
-            VnodeType::Character => unreachable!(), // Character devices should only be in devfs.
+            VnodeType::CharacterDevice => unreachable!(), // Character devices should only be in devfs.
         };
 
         Ok(VnodeAttrs::new(Uid::ROOT, Gid::ROOT, mode, size, u32::MAX))

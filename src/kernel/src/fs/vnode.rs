@@ -60,7 +60,7 @@ impl Vnode {
     }
 
     pub fn is_character(&self) -> bool {
-        matches!(self.ty, VnodeType::Character)
+        matches!(self.ty, VnodeType::CharacterDevice)
     }
 
     pub fn item(&self) -> GutexReadGuard<Option<VnodeItem>> {
@@ -182,11 +182,11 @@ pub enum VnodeItem {
 }
 
 /// An implementation of `vtype`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VnodeType {
     File,            // VREG
     Directory(bool), // VDIR
-    Character,       // VCHR
+    CharacterDevice, // VCHR
     Link,            // VLNK
 }
 

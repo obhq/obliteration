@@ -608,7 +608,7 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
-        let offset: u64 = i.args[3].try_into().unwrap();
+        let offset: i64 = i.args[3].try_into().unwrap();
 
         let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
@@ -624,7 +624,7 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
-        let offset: u64 = i.args[3].try_into().unwrap();
+        let offset: i64 = i.args[3].try_into().unwrap();
 
         let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
@@ -640,23 +640,25 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *mut IoVec = i.args[1].into();
         let count: u32 = i.args[2].try_into().unwrap();
-        let offset: u64 = i.args[3].try_into().unwrap();
+        let offset: i64 = i.args[3].try_into().unwrap();
 
         let uio = unsafe { UioMut::copyin(iovec, count) }?;
 
         self.preadv(fd, uio, offset, td)
     }
 
-    fn preadv(&self, fd: i32, uio: UioMut, off: u64, td: &VThread) -> Result<SysOut, SysErr> {
+    fn preadv(&self, fd: i32, uio: UioMut, offset: i64, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_read(fd)?;
 
-        if file.vnode().is_none() {
+        let Some(vnode) = file.vnode() else {
             return Err(SysErr::Raw(ESPIPE));
         };
 
-        // TODO: check vnode type
+        if offset < 0 && vnode.ty() != &VnodeType::CharacterDevice {
+            return Err(SysErr::Raw(EINVAL));
+        }
 
-        let read = file.do_read(uio, Offset::Provided(off), Some(&td))?;
+        let read = file.do_read(uio, Offset::Provided(offset), Some(&td))?;
 
         Ok(read.into())
     }
@@ -665,23 +667,29 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *const IoVec = i.args[1].into();
         let count: u32 = i.args[2].try_into().unwrap();
-        let offset: u64 = i.args[3].try_into().unwrap();
+        let offset: i64 = i.args[3].try_into().unwrap();
 
         let uio = unsafe { Uio::copyin(iovec, count) }?;
 
         self.pwritev(fd, uio, offset, td)
     }
 
-    fn pwritev(&self, fd: i32, uio: Uio, off: u64, td: &VThread) -> Result<SysOut, SysErr> {
+    fn pwritev(&self, fd: i32, uio: Uio, offset: i64, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_write(fd)?;
 
         if file.vnode().is_none() {
             return Err(SysErr::Raw(ESPIPE));
         };
 
-        // TODO: check vnode type
+        let Some(vnode) = file.vnode() else {
+            return Err(SysErr::Raw(ESPIPE));
+        };
 
-        let written = file.do_write(uio, Offset::Provided(off), Some(&td))?;
+        if offset < 0 && vnode.ty() != &VnodeType::CharacterDevice {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        let written = file.do_write(uio, Offset::Provided(offset), Some(&td))?;
 
         Ok(written.into())
     }
@@ -948,7 +956,7 @@ pub struct FsConfig {
 #[derive(Debug)]
 pub enum Offset {
     Current,
-    Provided(u64),
+    Provided(i64),
 }
 
 #[derive(Debug)]
