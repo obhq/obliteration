@@ -654,7 +654,7 @@ impl Fs {
             return Err(SysErr::Raw(ESPIPE));
         };
 
-        if offset < 0 && vnode.ty() != &VnodeType::CharacterDevice {
+        if offset < 0 && !vnode.is_character() {
             return Err(SysErr::Raw(EINVAL));
         }
 
@@ -685,7 +685,7 @@ impl Fs {
             return Err(SysErr::Raw(ESPIPE));
         };
 
-        if offset < 0 && vnode.ty() != &VnodeType::CharacterDevice {
+        if offset < 0 && !vnode.is_character() {
             return Err(SysErr::Raw(EINVAL));
         }
 
