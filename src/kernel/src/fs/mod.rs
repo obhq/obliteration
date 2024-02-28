@@ -497,11 +497,15 @@ impl Fs {
 
         td.priv_check(Privilege::SCE683)?;
 
-        // TODO: Check vnode::v_rdev.
         // TODO: Check if the PS4 follow the vnode.
         let vn = self.lookup(path, true, Some(&td))?;
 
-        if !vn.is_character() {
+        if let VnodeType::CharacterDevice(dev) = vn.ty() {
+            let dev = dev.read();
+            if dev.as_ref().is_none() {
+                return Err(SysErr::Raw(EINVAL));
+            }
+        } else {
             return Err(SysErr::Raw(EINVAL));
         }
 
