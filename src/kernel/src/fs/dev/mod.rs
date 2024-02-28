@@ -337,7 +337,7 @@ pub fn mount(
     Ok(Mount::new(
         conf,
         cred,
-        MountSource::Driver("devfs"),
+        MountSource::Driver("devfs".into()),
         path,
         parent,
         flags | MountFlags::MNT_LOCAL,
