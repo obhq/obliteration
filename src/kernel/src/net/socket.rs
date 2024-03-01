@@ -106,7 +106,7 @@ impl FileBackend for Socket {
         _: TruncateLength,
         _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        Err(DefaultError::InvalidValue.into())
+        Err(Box::new(DefaultError::InvalidValue))
     }
 }
 
