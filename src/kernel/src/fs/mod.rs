@@ -188,7 +188,7 @@ impl Fs {
         //
         // So we decided to implement our own lookup algorithm.
         let path = path.as_ref();
-        let mut root = match td {
+        let root = match td {
             Some(td) => td.proc().files().root(),
             None => self.root(),
         };
