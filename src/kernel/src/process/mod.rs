@@ -456,7 +456,6 @@ impl VProc {
         )
     }
 
-    #[clippy::too_many_arguments]
     #[allow(unused_variables)] // TODO: Remove this when implementing.
     fn create_thread(
         &self,
