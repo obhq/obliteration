@@ -17,8 +17,8 @@ pub struct VnodeBackend {
 }
 
 impl VnodeBackend {
-    pub fn new(fs: Arc<HostFs>, file: Arc<HostFile>) -> Self {
-        Self { fs, file }
+    pub fn new(fs: Arc<HostFs>, file: Arc<HostFile>) -> Arc<Self> {
+        Arc::new(Self { fs, file })
     }
 }
 

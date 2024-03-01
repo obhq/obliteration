@@ -32,7 +32,7 @@ impl Vnode {
         fs: &Arc<Mount>,
         ty: VnodeType,
         tag: &'static str,
-        backend: impl VnodeBackend,
+        backend: Arc<impl VnodeBackend>,
     ) -> Arc<Self> {
         let gg = GutexGroup::new();
 
@@ -42,7 +42,7 @@ impl Vnode {
             fs: fs.clone(),
             ty,
             tag,
-            backend: Arc::new(backend),
+            backend: backend,
             item: gg.spawn(None),
         })
     }
