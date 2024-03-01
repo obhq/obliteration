@@ -719,6 +719,8 @@ struct ThrParam {
     spare: [usize; 3],
 }
 
+const _: () = assert!(size_of::<ThrParam>() == 0x68);
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 #[repr(i32)]
 enum RtpFunction {
