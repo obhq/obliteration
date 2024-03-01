@@ -608,7 +608,7 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
-        let offset: i64 = i.args[3].try_into().unwrap();
+        let offset: i64 = i.args[3].into();
 
         let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
@@ -624,7 +624,7 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
-        let offset: i64 = i.args[3].try_into().unwrap();
+        let offset: i64 = i.args[3].into();
 
         let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
@@ -640,7 +640,7 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *mut IoVec = i.args[1].into();
         let count: u32 = i.args[2].try_into().unwrap();
-        let offset: i64 = i.args[3].try_into().unwrap();
+        let offset: i64 = i.args[3].into();
 
         let uio = unsafe { UioMut::copyin(iovec, count) }?;
 
@@ -665,7 +665,7 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *const IoVec = i.args[1].into();
         let count: u32 = i.args[2].try_into().unwrap();
-        let offset: i64 = i.args[3].try_into().unwrap();
+        let offset: i64 = i.args[3].into();
 
         let uio = unsafe { Uio::copyin(iovec, count) }?;
 
