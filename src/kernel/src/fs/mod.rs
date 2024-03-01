@@ -416,7 +416,7 @@ impl Fs {
         info!("Opening {path} with flags = {flags}.");
 
         // Lookup file.
-        let mut file = self.open(path, Some(&td))?;
+        let mut file = self.open(path, Some(td))?;
 
         *file.flags_mut() = flags.into_fflags();
 
@@ -445,7 +445,7 @@ impl Fs {
 
         info!("Executing ioctl({cmd:?}) on file descriptor {fd}.");
 
-        self.ioctl(fd, cmd, &td)?;
+        self.ioctl(fd, cmd, td)?;
 
         Ok(SysOut::ZERO)
     }
@@ -469,7 +469,7 @@ impl Fs {
             _ => {}
         }
 
-        file.ioctl(cmd, Some(&td))?;
+        file.ioctl(cmd, Some(td))?;
 
         Ok(SysOut::ZERO)
     }
@@ -485,7 +485,7 @@ impl Fs {
 
         // TODO: Check vnode::v_rdev.
         // TODO: Check if the PS4 follow the vnode.
-        let vn = self.lookup(path, true, Some(&td))?;
+        let vn = self.lookup(path, true, Some(td))?;
 
         if !vn.is_character() {
             return Err(SysErr::Raw(EINVAL));
@@ -493,7 +493,7 @@ impl Fs {
 
         // TODO: It seems like the initial ucred of the process is either root or has PRIV_VFS_ADMIN
         // privilege.
-        self.revoke(vn, &td)?;
+        self.revoke(vn, td)?;
 
         Ok(SysOut::ZERO)
     }
@@ -524,7 +524,7 @@ impl Fs {
     fn readv(&self, fd: i32, uio: UioMut, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_read(fd)?;
 
-        let read = file.do_read(uio, Offset::Current, Some(&td))?;
+        let read = file.do_read(uio, Offset::Current, Some(td))?;
 
         Ok(read.into())
     }
@@ -542,7 +542,7 @@ impl Fs {
     fn writev(&self, fd: i32, uio: Uio, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_write(fd)?;
 
-        let written = file.do_write(uio, Offset::Current, Some(&td))?;
+        let written = file.do_write(uio, Offset::Current, Some(td))?;
 
         Ok(written.into())
     }
@@ -551,7 +551,7 @@ impl Fs {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let stat_out: *mut Stat = i.args[1].into();
 
-        let stat = self.stat(path, &td)?;
+        let stat = self.stat(path, td)?;
 
         unsafe {
             *stat_out = stat;
@@ -569,7 +569,7 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let stat_out: *mut Stat = i.args[1].into();
 
-        let stat = self.fstat(fd, &td)?;
+        let stat = self.fstat(fd, td)?;
 
         unsafe {
             *stat_out = stat;
@@ -590,7 +590,7 @@ impl Fs {
 
         td.priv_check(Privilege::SCE683)?;
 
-        let stat = self.lstat(path, &td)?;
+        let stat = self.lstat(path, td)?;
 
         unsafe {
             *stat_out = stat;
@@ -656,7 +656,7 @@ impl Fs {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        let read = file.do_read(uio, Offset::Provided(offset), Some(&td))?;
+        let read = file.do_read(uio, Offset::Provided(offset), Some(td))?;
 
         Ok(read.into())
     }
@@ -681,7 +681,7 @@ impl Fs {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        let written = file.do_write(uio, Offset::Provided(offset), Some(&td))?;
+        let written = file.do_write(uio, Offset::Provided(offset), Some(td))?;
 
         Ok(written.into())
     }
@@ -694,7 +694,7 @@ impl Fs {
 
         td.priv_check(Privilege::SCE683)?;
 
-        let stat = self.statat(flags, At::Fd(dirfd), path, &td)?;
+        let stat = self.statat(flags, At::Fd(dirfd), path, td)?;
 
         unsafe {
             *stat_out = stat;
@@ -720,7 +720,7 @@ impl Fs {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let mode: u32 = i.args[1].try_into().unwrap();
 
-        self.mkdirat(At::Cwd, path, mode, Some(&td))
+        self.mkdirat(At::Cwd, path, mode, Some(td))
     }
 
     #[allow(unused_variables)]
@@ -752,12 +752,12 @@ impl Fs {
             Whence::Current => todo!("lseek with whence = SEEK_CUR"),
             Whence::End => todo!(),
             Whence::Data => {
-                let _ = file.ioctl(IoCmd::FIOSEEKDATA(&mut offset), Some(&td));
+                let _ = file.ioctl(IoCmd::FIOSEEKDATA(&mut offset), Some(td));
 
                 todo!()
             }
             Whence::Hole => {
-                let _ = file.ioctl(IoCmd::FIOSEEKHOLE(&mut offset), Some(&td));
+                let _ = file.ioctl(IoCmd::FIOSEEKHOLE(&mut offset), Some(td));
 
                 todo!()
             }
@@ -770,7 +770,7 @@ impl Fs {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let length = i.args[1].into();
 
-        self.truncate(path, length, &td)?;
+        self.truncate(path, length, td)?;
 
         Ok(SysOut::ZERO)
     }
@@ -779,7 +779,7 @@ impl Fs {
         let length: TruncateLength = length.try_into()?;
 
         // TODO: Check if the PS4 follow the vnode.
-        let vn = self.lookup(path, true, Some(&td))?;
+        let vn = self.lookup(path, true, Some(td))?;
 
         todo!()
     }
@@ -788,7 +788,7 @@ impl Fs {
         let fd = i.args[0].try_into().unwrap();
         let length = i.args[1].into();
 
-        self.ftruncate(fd, length, &td)?;
+        self.ftruncate(fd, length, td)?;
 
         Ok(SysOut::ZERO)
     }
@@ -802,7 +802,7 @@ impl Fs {
             return Err(FileTruncateError::FileNotWritable);
         }
 
-        file.truncate(length, Some(&td))?;
+        file.truncate(length, Some(td))?;
 
         Ok(())
     }
@@ -814,7 +814,7 @@ impl Fs {
         let path = unsafe { i.args[1].to_path() }?.unwrap();
         let mode: u32 = i.args[2].try_into().unwrap();
 
-        self.mkdirat(At::Fd(fd), path, mode, Some(&td))
+        self.mkdirat(At::Fd(fd), path, mode, Some(td))
     }
 
     /// See `kern_mkdirat` on the PS4 for a reference.
