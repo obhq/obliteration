@@ -173,7 +173,7 @@ impl HostFile {
         Ok(child)
     }
 
-    pub fn mkdir(self: &Arc<Self>, name: &str, mode: u16) -> Result<Arc<Self>, Error> {
+    pub fn mkdir(self: &Arc<Self>, name: &str, mode: u32) -> Result<Arc<Self>, Error> {
         let raw = Self::raw_mkdir(self.raw, name, mode)?;
 
         Ok(Arc::new(Self {
@@ -198,7 +198,7 @@ impl HostFile {
     }
 
     #[cfg(windows)]
-    fn raw_mkdir(parent: RawFile, name: &str, mode: u16) -> Result<RawFile, Error> {
+    fn raw_mkdir(parent: RawFile, name: &str, mode: u32) -> Result<RawFile, Error> {
         todo!()
     }
 
