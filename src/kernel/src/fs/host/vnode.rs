@@ -119,6 +119,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         ))
     }
 
+    #[allow(unused_variables)] // TODO: remove when implementing.
     fn open(
         self: Arc<Self>,
         vn: &Arc<Vnode>,

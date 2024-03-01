@@ -173,7 +173,7 @@ impl HostFile {
         Ok(child)
     }
 
-    pub fn mkdir(self: &Arc<Self>, name: &str, mode: u32) -> Result<Arc<Self>, Error> {
+    pub fn mkdir(self: &Arc<Self>, name: &str, mode: u16) -> Result<Arc<Self>, Error> {
         let raw = Self::raw_mkdir(self.raw, name, mode)?;
 
         Ok(Arc::new(Self {
@@ -184,13 +184,13 @@ impl HostFile {
     }
 
     #[cfg(unix)]
-    fn raw_mkdir(parent: RawFile, name: &str, mode: u32) -> Result<RawFile, Error> {
-        use libc::mkdirat;
+    fn raw_mkdir(parent: RawFile, name: &str, mode: u16) -> Result<RawFile, Error> {
+        use libc::{mkdirat, mode_t};
         use std::ffi::CString;
 
         let c_name = CString::new(name).unwrap();
 
-        if unsafe { mkdirat(parent, c_name.as_ptr(), mode) } < 0 {
+        if unsafe { mkdirat(parent, c_name.as_ptr(), (mode & 0o777) as mode_t) } < 0 {
             Err(Error::last_os_error())
         } else {
             Self::raw_open(parent, name)
@@ -198,7 +198,7 @@ impl HostFile {
     }
 
     #[cfg(windows)]
-    fn raw_mkdir(parent: RawFile, name: &str, mode: u32) -> Result<RawFile, Error> {
+    fn raw_mkdir(parent: RawFile, name: &str, mode: u16) -> Result<RawFile, Error> {
         todo!()
     }
 

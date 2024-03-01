@@ -4,7 +4,7 @@ use thiserror::Error;
 use crate::{
     errno::{Errno, EINVAL},
     fs::{
-        check_access, Access, DefaultError, FileBackend, IoCmd, Mode, OpenFlags, Stat,
+        check_access, Access, AccessError, DefaultError, FileBackend, IoCmd, Mode, OpenFlags, Stat,
         TruncateLength, Uio, UioMut, VFile, VFileFlags, VPathBuf,
     },
     memory::MemoryManager,
@@ -14,6 +14,7 @@ use crate::{
 };
 use std::{convert::Infallible, sync::Arc};
 
+#[allow(dead_code)] // TODO: remove when used.
 pub struct SharedMemoryManager {
     mm: Arc<MemoryManager>,
 }
@@ -50,6 +51,7 @@ impl SharedMemoryManager {
 
         let filedesc = td.proc().files();
 
+        #[allow(unused_variables)] // TODO: remove when implementing.
         let mode = mode & filedesc.cmask() & 0o7777;
 
         let fd = filedesc.alloc_without_budget::<Infallible>(
@@ -57,7 +59,7 @@ impl SharedMemoryManager {
                 ShmPath::Anon => {
                     todo!()
                 }
-                ShmPath::Path(path) => {
+                ShmPath::Path(_) => {
                     todo!()
                 }
             },
@@ -67,6 +69,7 @@ impl SharedMemoryManager {
         Ok(fd.into())
     }
 
+    #[allow(unused_variables)] // TODO: remove when implementing.
     fn sys_shm_unlink(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         todo!("sys_shm_unlink")
     }
@@ -78,6 +81,7 @@ pub enum ShmPath {
 }
 
 #[derive(Debug)]
+#[allow(unused_variables)] // TODO: remove when used.
 pub struct Shm {
     uid: Uid,
     gid: Gid,
@@ -86,12 +90,14 @@ pub struct Shm {
 
 impl Shm {
     /// See `shm_do_truncate` on the PS4 for a reference.
+    #[allow(unused_variables)] // TODO: remove when implementing.
     fn do_truncate(&self, length: TruncateLength) -> Result<(), TruncateError> {
         todo!()
     }
 
     /// See `shm_access` on the PS4 for a reference.
-    fn access(&self, cred: &Ucred, flags: VFileFlags) -> Result<(), Box<dyn Errno>> {
+    #[allow(dead_code)] // TODO: remove when used.
+    fn access(&self, cred: &Ucred, flags: VFileFlags) -> Result<(), AccessError> {
         let mut access = Access::empty();
 
         if flags.intersects(VFileFlags::READ) {
