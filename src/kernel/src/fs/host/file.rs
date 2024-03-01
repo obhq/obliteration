@@ -173,6 +173,35 @@ impl HostFile {
         Ok(child)
     }
 
+    pub fn mkdir(self: &Arc<Self>, name: &str, mode: u32) -> Result<Arc<Self>, Error> {
+        let raw = Self::raw_mkdir(self.raw, name, mode)?;
+
+        Ok(Arc::new(Self {
+            raw,
+            parent: Some(self.clone()),
+            children: Mutex::default(),
+        }))
+    }
+
+    #[cfg(unix)]
+    fn raw_mkdir(parent: RawFile, name: &str, mode: u32) -> Result<RawFile, Error> {
+        use libc::mkdirat;
+        use std::ffi::CString;
+
+        let c_name = CString::new(name).unwrap();
+
+        if unsafe { mkdirat(parent, c_name.as_ptr(), mode) } < 0 {
+            Err(Error::last_os_error())
+        } else {
+            Self::raw_open(parent, name)
+        }
+    }
+
+    #[cfg(windows)]
+    fn raw_mkdir(parent: RawFile, name: &str, mode: u32) -> Result<RawFile, Error> {
+        todo!()
+    }
+
     #[cfg(unix)]
     fn stat(&self) -> Result<libc::stat, Error> {
         use libc::fstat;
@@ -338,6 +367,7 @@ pub struct HostId {
     dev: libc::dev_t,
     #[cfg(unix)]
     ino: libc::ino_t,
+
     #[cfg(windows)]
     volume: u32,
     #[cfg(windows)]
