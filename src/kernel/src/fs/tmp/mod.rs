@@ -3,6 +3,7 @@ use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, MountSource, VPa
 use crate::errno::{Errno, EINVAL};
 use crate::ucred::{Ucred, Uid};
 use macros::Errno;
+use std::num::NonZeroU64;
 use std::sync::atomic::AtomicI32;
 use std::sync::Arc;
 use thiserror::Error;
@@ -55,7 +56,7 @@ pub fn mount(
     let size: usize = opts.remove_or("size", 0);
 
     // Get maximum file size.
-    let file_size = opts.remove_or("maxfilesize", 0);
+    let file_size = NonZeroU64::new(opts.remove_or("maxfilesize", 0));
 
     // TODO: Refactor this for readability.
     let pages = if size.wrapping_sub(0x4000) < 0xffffffffffff8000 {
@@ -87,7 +88,7 @@ pub fn mount(
         flags | MountFlags::MNT_LOCAL,
         TempFs {
             max_pages: pages,
-            max_file_size: if file_size == 0 { u64::MAX } else { file_size },
+            max_file_size: file_size.map_or(u64::MAX, |x| x.get()),
             next_inode: AtomicI32::new(2), // TODO: Use a proper implementation.
             nodes,
             root,
