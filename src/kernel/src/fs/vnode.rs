@@ -42,7 +42,7 @@ impl Vnode {
             fs: fs.clone(),
             ty,
             tag,
-            backend: backend,
+            backend,
             item: gg.spawn(None),
         })
     }
