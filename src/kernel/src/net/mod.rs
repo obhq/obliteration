@@ -1,14 +1,18 @@
 use crate::budget::BudgetType;
-use crate::fs::{VFileFlags, VFileType};
+use crate::errno::Errno;
+use crate::fs::{IoVec, VFileFlags, VFileType};
 use crate::{
     process::VThread,
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
 };
+use bitflags::bitflags;
 use core::fmt;
+use macros::Errno;
 use std::{
     fmt::{Display, Formatter},
     sync::Arc,
 };
+use thiserror::Error;
 
 pub use self::socket::*;
 
@@ -20,10 +24,52 @@ impl NetManager {
     pub fn new(sys: &mut Syscalls) -> Arc<Self> {
         let net = Arc::new(Self {});
 
+        sys.register(27, &net, Self::sys_recvmsg);
+        sys.register(28, &net, Self::sys_sendmsg);
+        sys.register(29, &net, Self::sys_recvfrom);
         sys.register(97, &net, Self::sys_socket);
         sys.register(113, &net, Self::sys_socketex);
+        sys.register(133, &net, Self::sys_sendto);
 
         net
+    }
+
+    #[allow(unused_variables)] // TODO: Remove this when implementing
+    fn sys_recvmsg(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let msg: *mut MsgHdr = i.args[1].into();
+        let flags = {
+            let flags = TryInto::<u32>::try_into(i.args[2]).unwrap();
+            MessageFlags::from_bits_retain(flags)
+        };
+
+        todo!()
+    }
+
+    fn sys_sendmsg(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let msg: *const MsgHdr = i.args[1].into();
+        let flags = {
+            let flags = TryInto::<u32>::try_into(i.args[2]).unwrap();
+            MessageFlags::from_bits_retain(flags)
+        };
+
+        let sent = self.sendit(fd, unsafe { &*msg }, flags, td)?;
+
+        Ok(sent.into())
+    }
+
+    #[allow(unused_variables)] // TODO: Remove this when implementing
+    fn sys_recvfrom(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let buf: *mut u8 = i.args[1].into();
+        let buflen: usize = i.args[2].into();
+        let flags = {
+            let flags = TryInto::<u32>::try_into(i.args[3]).unwrap();
+            MessageFlags::from_bits_retain(flags)
+        };
+
+        todo!()
     }
 
     fn sys_socket(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -86,6 +132,64 @@ impl NetManager {
 
         Ok(fd.into())
     }
+
+    fn sys_sendto(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let buf: *const u8 = i.args[1].into();
+        let buflen: usize = i.args[2].into();
+        let flags = {
+            let flags = TryInto::<u32>::try_into(i.args[3]).unwrap();
+            MessageFlags::from_bits_retain(flags)
+        };
+        let to: *const u8 = i.args[4].into();
+        let tolen: u32 = i.args[5].try_into().unwrap();
+
+        let ref iovec = unsafe { IoVec::from_raw_parts(buf, buflen) };
+
+        let msg = MsgHdr {
+            name: to,
+            len: tolen,
+            iovec: iovec as *const IoVec,
+            iovec_len: 1,
+            control: core::ptr::null(),
+            control_len: 0,
+            flags: 0,
+        };
+
+        let sent = self.sendit(fd, &msg, flags, td)?;
+
+        Ok(sent.into())
+    }
+
+    /// See `kern_sendit` on the PS4 for a reference.
+    #[allow(unused_variables)] // TODO: Remove this when implementing
+    fn sendit(
+        &self,
+        fd: i32,
+        msg: &MsgHdr,
+        flags: MessageFlags,
+        td: &VThread,
+    ) -> Result<usize, SendItError> {
+        todo!()
+    }
+}
+
+bitflags! {
+    #[repr(C)]
+    pub struct MessageFlags: u32 {
+
+    }
+}
+
+#[repr(C)]
+struct MsgHdr {
+    name: *const u8,
+    len: u32,
+    iovec: *const IoVec,
+    iovec_len: u32,
+    control: *const u8,
+    control_len: u32,
+    flags: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -112,3 +216,6 @@ impl Display for AddressFamily {
         }
     }
 }
+
+#[derive(Debug, Error, Errno)]
+enum SendItError {}
