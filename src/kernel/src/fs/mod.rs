@@ -581,9 +581,12 @@ impl Fs {
     }
 
     /// See `kern_fstat` on the PS4 for a reference.
-    #[allow(unused_variables)] // Remove this when it is being implemented
     fn fstat(self: &Arc<Self>, fd: i32, td: &VThread) -> Result<Stat, StatError> {
-        todo!()
+        let file = td.proc().files().get(fd)?;
+
+        let stat = file.stat(Some(td))?;
+
+        Ok(stat)
     }
 
     fn sys_lstat(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
