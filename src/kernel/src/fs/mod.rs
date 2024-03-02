@@ -612,7 +612,7 @@ impl Fs {
         let len: usize = i.args[2].try_into().unwrap();
         let offset: i64 = i.args[3].into();
 
-        let iovec = unsafe { IoVec::from_raw_parts(ptr, len) };
+        let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
         let uio = UioMut {
             vecs: &mut [iovec],
@@ -628,7 +628,7 @@ impl Fs {
         let len: usize = i.args[2].try_into().unwrap();
         let offset: i64 = i.args[3].into();
 
-        let iovec = unsafe { IoVec::from_raw_parts(ptr, len) };
+        let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
         let uio = Uio {
             vecs: &[iovec],
