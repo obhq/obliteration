@@ -21,6 +21,7 @@ use crate::sysctl::Sysctl;
 use crate::time::TimeManager;
 use crate::tty::{TtyInitError, TtyManager};
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
+use crate::umtx::UmtxManager;
 use clap::{Parser, ValueEnum};
 use hv::Hypervisor;
 use llt::{OsThread, SpawnError};
@@ -63,6 +64,7 @@ mod sysctl;
 mod time;
 mod tty;
 mod ucred;
+mod umtx;
 
 fn main() -> Exit {
     start().into()
@@ -304,6 +306,7 @@ fn run<E: crate::ee::ExecutionEngine>(
 
     NamedObjManager::new(&mut syscalls, &proc);
     OsemManager::new(&mut syscalls, &proc);
+    UmtxManager::new(&mut syscalls);
 
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
