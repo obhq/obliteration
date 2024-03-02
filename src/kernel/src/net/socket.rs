@@ -39,13 +39,13 @@ impl Socket {
     }
 
     /// See `sosetopt` on the PS4 for a reference.
-    #[allow(unused_variables)] // TODO: remove when implementing
+    #[allow(dead_code, unused_variables)] // TODO: remove when implementing
     fn setopt(&self, opt: SockOpt) -> Result<(), SetOptError> {
         todo!()
     }
 
     /// See `sogetopt` on the PS4 for a reference.
-    #[allow(unused_variables)] // TODO: remove when implementing
+    #[allow(dead_code, unused_variables)] // TODO: remove when implementing
     fn getopt(&self, opt: SockOpt) -> Result<(), GetOptError> {
         todo!()
     }
