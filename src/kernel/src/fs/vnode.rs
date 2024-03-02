@@ -55,6 +55,10 @@ impl Vnode {
         &self.ty
     }
 
+    pub fn backend(&self) -> &Arc<dyn VnodeBackend> {
+        &self.backend
+    }
+
     pub fn is_directory(&self) -> bool {
         matches!(self.ty, VnodeType::Directory(_))
     }

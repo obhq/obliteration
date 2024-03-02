@@ -66,7 +66,13 @@ impl VnodeBackend for Node {
         td: Option<&VThread>,
         name: &str,
     ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
-        todo!()
+        match name {
+            ".." => todo!(),
+            "." => todo!(),
+            _ => {
+                todo!()
+            }
+        }
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing

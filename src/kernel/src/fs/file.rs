@@ -147,18 +147,21 @@ impl VFile {
 }
 
 impl Seek for VFile {
+    #[allow(unused_variables)] // TODO: Remove when implementing.
     fn seek(&mut self, _pos: SeekFrom) -> std::io::Result<u64> {
         todo!()
     }
 }
 
 impl Read for VFile {
+    #[allow(unused_variables)] // TODO: Remove when implementing.
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         todo!()
     }
 }
 
 impl Write for VFile {
+    #[allow(unused_variables)] // TODO: Remove when implementing.
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         todo!()
     }

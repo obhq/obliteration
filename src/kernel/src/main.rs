@@ -23,6 +23,7 @@ use crate::tty::{TtyInitError, TtyManager};
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use crate::umtx::UmtxManager;
 use clap::{Parser, ValueEnum};
+use fs::VPathBuf;
 use hv::Hypervisor;
 use llt::{OsThread, SpawnError};
 use macros::vpath;
@@ -195,12 +196,13 @@ fn start() -> Result<(), KernelError> {
     let fs = Fs::new(args.system, &cred, &mut syscalls)?;
 
     // TODO: Check permission of /mnt on the PS4.
+    // TODO: compress these mkdirs using mkdirall.
     let path = vpath!("/mnt");
 
     if let Err(e) = fs.mkdir(path, 0o555, None) {
         match e {
             MkdirError::CreateFailed(e) if e.errno() == EEXIST => {}
-            e => return Err(KernelError::CreateDirectoryFailed(path, e)),
+            e => return Err(KernelError::CreateDirectoryFailed(path.into(), e)),
         }
     }
 
@@ -209,6 +211,23 @@ fn start() -> Result<(), KernelError> {
 
     opts.insert("fstype", "tmpfs");
     opts.insert("fspath", path.to_owned());
+
+    if let Err(e) = fs.mount(opts, MountFlags::empty(), None) {
+        return Err(KernelError::MountFailed(path.into(), e));
+    }
+
+    let path = VPathBuf::try_from(format!(
+        "/mnt/sandbox/{}_000/app0",
+        args.game.file_name().unwrap().to_str().unwrap()
+    ))
+    .unwrap();
+
+    let mut opts = MountOpts::new();
+
+    opts.insert("fstype", "exfatfs");
+    opts.insert("fspath", path.clone());
+    opts.insert("from", path.clone());
+    opts.insert("ob:root", args.game.clone());
 
     if let Err(e) = fs.mount(opts, MountFlags::empty(), None) {
         return Err(KernelError::MountFailed(path, e));
@@ -291,6 +310,8 @@ fn run<E: crate::ee::ExecutionEngine>(
     TimeManager::new(&mut syscalls);
     KernelQueueManager::new(&mut syscalls);
     NetManager::new(&mut syscalls);
+
+    let system_path = vpath!("/QXuNNl0Zhn");
 
     // TODO: Get correct budget name from the PS4.
     let budget_id = budget.create(Budget::new("big app", ProcType::BigApp));
@@ -539,10 +560,10 @@ enum KernelError {
     FilesystemInitFailed(#[from] FsInitError),
 
     #[error("couldn't create {0}")]
-    CreateDirectoryFailed(&'static VPath, #[source] MkdirError),
+    CreateDirectoryFailed(VPathBuf, #[source] MkdirError),
 
     #[error("couldn't mount {0}")]
-    MountFailed(&'static VPath, #[source] MountError),
+    MountFailed(VPathBuf, #[source] MountError),
 
     #[error("memory manager initialization failed")]
     MemoryManagerInitFailed(#[from] MemoryManagerError),
