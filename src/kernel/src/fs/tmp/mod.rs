@@ -1,4 +1,5 @@
 use self::node::{AllocNodeError, Node, Nodes};
+use super::VnodeType;
 use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, MountSource, VPathBuf, Vnode};
 use crate::errno::{Errno, EINVAL};
 use crate::ucred::{Ucred, Uid};
@@ -108,15 +109,25 @@ struct TempFs {
 
 impl Filesystem for TempFs {
     fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Result<Arc<Vnode>, Box<dyn Errno>> {
-        let vnode = alloc_vnode(mnt, &self.root)?;
+        let vnode = alloc_vnode(mnt, &self, &self.root)?;
 
         Ok(vnode)
     }
 }
 
+/// See tmpfs_alloc_vp
 #[allow(unused_variables)] // TODO: remove when implementing
-fn alloc_vnode(mnt: &Arc<Mount>, node: &Arc<Node>) -> Result<Arc<Vnode>, AllocVnodeError> {
-    todo!()
+fn alloc_vnode(
+    mnt: &Arc<Mount>,
+    fs: &Arc<TempFs>,
+    node: &Arc<Node>,
+) -> Result<Arc<Vnode>, AllocVnodeError> {
+    Ok(Vnode::new(
+        mnt,
+        VnodeType::Directory(Arc::ptr_eq(&fs.root, node)),
+        "tmpfs",
+        node.clone(),
+    ))
 }
 
 /// Represents an error when [`mount()`] fails.
