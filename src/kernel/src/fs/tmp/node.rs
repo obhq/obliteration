@@ -2,6 +2,7 @@ use crate::errno::{Errno, ENOSPC};
 use crate::fs::{Access, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeBackend};
 use crate::process::VThread;
 use macros::Errno;
+use std::any::Any;
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
