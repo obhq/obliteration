@@ -162,6 +162,7 @@ impl NetManager {
     }
 
     /// See `kern_sendit` on the PS4 for a reference.
+    #[allow(unused_variables)] // TODO: Remove this when implementing
     fn sendit(
         &self,
         fd: i32,
