@@ -266,7 +266,7 @@ impl Fs {
         let ptr: *mut u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
 
-        let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
+        let iovec = unsafe { IoVec::from_raw_parts(ptr, len) };
 
         let uio = UioMut {
             vecs: &mut [iovec],
@@ -375,7 +375,7 @@ impl Fs {
         let ptr: *const u8 = i.args[1].into();
         let len: usize = i.args[2].into();
 
-        let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
+        let iovec = unsafe { IoVec::from_raw_parts(ptr, len) };
 
         let uio = Uio {
             vecs: &[iovec],
@@ -610,7 +610,7 @@ impl Fs {
         let len: usize = i.args[2].try_into().unwrap();
         let offset: i64 = i.args[3].into();
 
-        let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
+        let iovec = unsafe { IoVec::from_raw_parts(ptr, len) };
 
         let uio = UioMut {
             vecs: &mut [iovec],
@@ -626,7 +626,7 @@ impl Fs {
         let len: usize = i.args[2].try_into().unwrap();
         let offset: i64 = i.args[3].into();
 
-        let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
+        let iovec = unsafe { IoVec::from_raw_parts(ptr, len) };
 
         let uio = Uio {
             vecs: &[iovec],
@@ -985,8 +985,8 @@ pub struct IoVec {
 }
 
 impl IoVec {
-    pub unsafe fn try_from_raw_parts(base: *const u8, len: usize) -> Result<Self, IoVecError> {
-        Ok(Self { base, len })
+    pub unsafe fn from_raw_parts(base: *const u8, len: usize) -> Self {
+        Self { base, len }
     }
 }
 
