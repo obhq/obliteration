@@ -196,7 +196,6 @@ fn start() -> Result<(), KernelError> {
     let fs = Fs::new(args.system, &cred, &mut syscalls)?;
 
     // TODO: Check permission of /mnt on the PS4.
-    // TODO: compress these mkdirs using mkdirall.
     let path = vpath!("/mnt");
 
     if let Err(e) = fs.mkdir(path, 0o555, None) {
@@ -310,8 +309,6 @@ fn run<E: crate::ee::ExecutionEngine>(
     TimeManager::new(&mut syscalls);
     KernelQueueManager::new(&mut syscalls);
     NetManager::new(&mut syscalls);
-
-    let system_path = vpath!("/QXuNNl0Zhn");
 
     // TODO: Get correct budget name from the PS4.
     let budget_id = budget.create(Budget::new("big app", ProcType::BigApp));

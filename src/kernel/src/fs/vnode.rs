@@ -7,6 +7,7 @@ use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use macros::Errno;
+use std::any::Any;
 use std::fmt::Debug;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
@@ -200,7 +201,7 @@ pub enum VnodeType {
 /// `vop_bypass` because it required the return type for all operations to be the same.
 ///
 /// All default implementation here are the implementation of `default_vnodeops`.
-pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
+pub(super) trait VnodeBackend: Any + Debug + Send + Sync + 'static {
     /// An implementation of `vop_access`.
     fn access(
         self: Arc<Self>,
