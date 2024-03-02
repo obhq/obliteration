@@ -1,6 +1,6 @@
 use super::{
-    unixify_access, Access, Cdev, FileBackend, IoCmd, Mode, Mount, OpenFlags, RevokeFlags, Stat,
-    TruncateLength, Uio, UioMut, VFile,
+    unixify_access, Access, CharacterDevice, FileBackend, IoCmd, Mode, Mount, OpenFlags,
+    RevokeFlags, Stat, TruncateLength, Uio, UioMut, VFile,
 };
 use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
@@ -178,7 +178,7 @@ impl Drop for Vnode {
 #[derive(Debug, Clone)]
 pub enum VnodeItem {
     Mount(Weak<Mount>),
-    Device(Arc<Cdev>),
+    Device(Arc<CharacterDevice>),
 }
 
 /// An implementation of `vtype`.

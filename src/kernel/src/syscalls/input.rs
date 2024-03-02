@@ -4,7 +4,7 @@ use crate::fs::{VPath, VPathBuf};
 use crate::shm::ShmPath;
 use std::ffi::{c_char, CStr};
 use std::fmt::{Formatter, LowerHex};
-use std::num::TryFromIntError;
+use std::num::{NonZeroI32, TryFromIntError};
 
 /// Input of the syscall entry point.
 #[repr(C)]
@@ -120,6 +120,15 @@ impl TryFrom<SysArg> for i32 {
 
     fn try_from(v: SysArg) -> Result<Self, Self::Error> {
         TryInto::<u32>::try_into(v.0).map(|v| v as i32)
+    }
+}
+
+impl TryFrom<SysArg> for Option<NonZeroI32> {
+    type Error = TryFromIntError;
+
+    fn try_from(v: SysArg) -> Result<Self, Self::Error> {
+        let v = TryInto::<i32>::try_into(v)?;
+        Ok(NonZeroI32::new(v))
     }
 }
 

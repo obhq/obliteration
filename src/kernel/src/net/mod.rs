@@ -1,5 +1,5 @@
 use crate::budget::BudgetType;
-use crate::errno::Errno;
+use crate::errno::{Errno, EFAULT, EINVAL};
 use crate::fs::{IoVec, VFileFlags, VFileType};
 use crate::{
     process::VThread,
@@ -8,6 +8,7 @@ use crate::{
 use bitflags::bitflags;
 use core::fmt;
 use macros::Errno;
+use std::num::NonZeroI32;
 use std::{
     fmt::{Display, Formatter},
     sync::Arc,
@@ -28,7 +29,9 @@ impl NetManager {
         sys.register(28, &net, Self::sys_sendmsg);
         sys.register(29, &net, Self::sys_recvfrom);
         sys.register(97, &net, Self::sys_socket);
+        sys.register(105, &net, Self::sys_setsockopt);
         sys.register(113, &net, Self::sys_socketex);
+        sys.register(105, &net, Self::sys_getsockopt);
         sys.register(133, &net, Self::sys_sendto);
 
         net
@@ -72,10 +75,22 @@ impl NetManager {
         todo!()
     }
 
+    fn sys_setsockopt(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let level: i32 = i.args[1].try_into().unwrap();
+        let name: i32 = i.args[2].try_into().unwrap();
+        let value: *const u8 = i.args[3].into();
+        let len: i32 = i.args[4].try_into().unwrap();
+
+        self.setsockopt(fd, level, name, value, len, td)?;
+
+        Ok(SysOut::ZERO)
+    }
+
     fn sys_socket(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let domain: i32 = i.args[0].try_into().unwrap();
         let ty: i32 = i.args[1].try_into().unwrap();
-        let proto: i32 = i.args[2].try_into().unwrap();
+        let proto: Option<NonZeroI32> = i.args[2].try_into().unwrap();
 
         let budget = if domain == 1 {
             BudgetType::FdIpcSocket
@@ -102,11 +117,23 @@ impl NetManager {
         Ok(fd.into())
     }
 
+    fn sys_getsockopt(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let level: i32 = i.args[1].try_into().unwrap();
+        let name: i32 = i.args[2].try_into().unwrap();
+        let value: *mut u8 = i.args[3].into();
+        let len: *mut i32 = i.args[4].into();
+
+        self.getsockopt(fd, level, name, value, len, td)?;
+
+        Ok(SysOut::ZERO)
+    }
+
     fn sys_socketex(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let name = unsafe { i.args[0].to_str(32)? };
         let domain: i32 = i.args[1].try_into().unwrap();
         let ty: i32 = i.args[2].try_into().unwrap();
-        let proto: i32 = i.args[3].try_into().unwrap();
+        let proto: Option<NonZeroI32> = i.args[3].try_into().unwrap();
 
         let budget = if domain == 1 {
             BudgetType::FdIpcSocket
@@ -161,6 +188,52 @@ impl NetManager {
         Ok(sent.into())
     }
 
+    /// See `kern_setsockopt` on the PS4 for a reference.
+    #[allow(unused_variables)] // TODO: Remove this when implementing
+    fn setsockopt(
+        &self,
+        fd: i32,
+        level: i32,
+        name: i32,
+        value: *const u8,
+        len: i32,
+        td: &VThread,
+    ) -> Result<(), SetOptError> {
+        if value.is_null() || len == 0 {
+            return Err(SetOptError::InvalidValue);
+        }
+
+        if len < 0 {
+            return Err(SetOptError::InvalidLength);
+        }
+
+        todo!()
+    }
+
+    /// See `kern_setsockopt` on the PS4 for a reference.
+    #[allow(unused_variables)] // TODO: Remove this when implementing
+    fn getsockopt(
+        &self,
+        fd: i32,
+        level: i32,
+        name: i32,
+        value: *mut u8,
+        len: *mut i32,
+        td: &VThread,
+    ) -> Result<(), GetOptError> {
+        if value.is_null() {
+            unsafe {
+                *len = 0;
+            }
+        }
+
+        if unsafe { *len } < 0 {
+            return Err(GetOptError::InvalidValue);
+        }
+
+        todo!()
+    }
+
     /// See `kern_sendit` on the PS4 for a reference.
     #[allow(unused_variables)] // TODO: Remove this when implementing
     fn sendit(
@@ -176,9 +249,7 @@ impl NetManager {
 
 bitflags! {
     #[repr(C)]
-    pub struct MessageFlags: u32 {
-
-    }
+    pub struct MessageFlags: u32 {}
 }
 
 #[repr(C)]
@@ -215,6 +286,26 @@ impl Display for AddressFamily {
             _ => todo!(),
         }
     }
+}
+
+enum SockOpt {}
+
+#[derive(Debug, Error, Errno)]
+enum SetOptError {
+    #[error("Invalid value or value length")]
+    #[errno(EFAULT)]
+    InvalidValue,
+
+    #[error("Invalid length")]
+    #[errno(EINVAL)]
+    InvalidLength,
+}
+
+#[derive(Debug, Error, Errno)]
+enum GetOptError {
+    #[error("invalid length")]
+    #[errno(EFAULT)]
+    InvalidValue,
 }
 
 #[derive(Debug, Error, Errno)]

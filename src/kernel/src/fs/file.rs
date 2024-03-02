@@ -1,4 +1,4 @@
-use super::{Cdev, IoCmd, Offset, Stat, TruncateLength, Uio, UioMut, Vnode};
+use super::{CharacterDevice, IoCmd, Offset, Stat, TruncateLength, Uio, UioMut, Vnode};
 use crate::dmem::BlockPool;
 use crate::errno::Errno;
 use crate::errno::{EINVAL, ENOTTY, ENXIO, EOPNOTSUPP};
@@ -175,7 +175,7 @@ pub enum VFileType {
     Socket(Arc<Socket>),           // DTYPE_SOCKET = 2,
     KernelQueue(Arc<KernelQueue>), // DTYPE_KQUEUE = 5,
     SharedMemory(Arc<Shm>),        // DTYPE_SHM = 8,
-    Device(Arc<Cdev>),             // DTYPE_DEV = 11,
+    Device(Arc<CharacterDevice>),  // DTYPE_DEV = 11,
     IpcSocket(Arc<Socket>),        // DTYPE_IPCSOCKET = 15,
     Blockpool(Arc<BlockPool>),     // DTYPE_BLOCKPOOL = 17,
 }
