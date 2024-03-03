@@ -5,7 +5,7 @@ use crate::{
         TruncateLength, Uio, UioMut, VFile, VFileFlags, VPathBuf,
     },
     memory::MemoryManager,
-    process::VThread,
+    process::{PollEvents, VThread},
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
     ucred::{Gid, Ucred, Uid},
 };
@@ -142,6 +142,11 @@ impl FileBackend for SharedMemory {
         cmd: IoCmd,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn poll(self: &Arc<Self>, file: &VFile, events: PollEvents, td: &VThread) -> PollEvents {
         todo!()
     }
 

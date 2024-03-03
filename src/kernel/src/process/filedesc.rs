@@ -2,6 +2,7 @@ use crate::budget::BudgetType;
 use crate::errno::{Errno, EBADF};
 use crate::fs::{VFile, VFileFlags, VFileType, Vnode};
 use crate::kqueue::KernelQueue;
+use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup};
 use macros::Errno;
 use std::collections::VecDeque;
@@ -148,6 +149,35 @@ impl FileDesc {
         } else {
             Err(FreeError::NoFile)
         }
+    }
+}
+
+pub struct PollFd {
+    fd: i32,
+    events: PollEvents,
+    revents: PollEvents,
+}
+
+bitflags! {
+    #[repr(transparent)]
+    #[derive(Debug, Clone, Copy)]
+    pub struct PollEvents: u16 {
+        const IN = 0x0001; // POLLIN
+        const PRI = 0x0002; // POLLPRI
+        const OUT = 0x0004; // POLLOUT
+
+        const READNORMAL = 0x0040; // POLLRDNORM
+        const WRITENORMAL = Self::OUT.bits(); // POLLWRNORM
+        const READBAND = 0x0080; // POLLRDBAND
+        const WRITEBAND = 0x0100; // POLLWRBAND
+
+        const ERROR = 0x0008; // POLLERR
+        const HUNGUP = 0x0010; // POLLHUP
+        const NOVAL = 0x0020; // POLLNVAL
+
+        const STANDARD = Self::IN.bits() | Self::PRI.bits() | Self::OUT.bits()
+            | Self::READNORMAL.bits() | Self::READBAND.bits() | Self::WRITENORMAL.bits()
+            | Self::WRITEBAND.bits() | Self::ERROR.bits() | Self::HUNGUP.bits() | Self::NOVAL.bits();
     }
 }
 

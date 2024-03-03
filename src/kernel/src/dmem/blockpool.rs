@@ -1,6 +1,6 @@
 use crate::errno::Errno;
 use crate::fs::{FileBackend, IoCmd, Stat, VFile};
-use crate::process::VThread;
+use crate::process::{PollEvents, VThread};
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -14,6 +14,11 @@ impl FileBackend for BlockPool {
         cmd: IoCmd,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn poll(self: &Arc<Self>, file: &VFile, events: PollEvents, td: &VThread) -> PollEvents {
         todo!()
     }
 

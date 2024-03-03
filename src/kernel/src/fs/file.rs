@@ -4,7 +4,7 @@ use crate::errno::Errno;
 use crate::errno::{EINVAL, ENOTTY, ENXIO, EOPNOTSUPP};
 use crate::kqueue::KernelQueue;
 use crate::net::Socket;
-use crate::process::VThread;
+use crate::process::{PollEvents, VThread};
 use crate::shm::SharedMemory;
 use bitflags::bitflags;
 use macros::Errno;
@@ -225,6 +225,9 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
     ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultError::IoctlNotSupported))
     }
+
+    #[allow(unused_variables)]
+    fn poll(self: &Arc<Self>, file: &VFile, events: PollEvents, td: &VThread) -> PollEvents;
 
     #[allow(unused_variables)]
     fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>>;

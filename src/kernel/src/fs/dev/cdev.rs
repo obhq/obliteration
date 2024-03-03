@@ -3,6 +3,7 @@ use crate::errno::Errno;
 use crate::errno::ENODEV;
 use crate::fs::Uio;
 use crate::fs::{FileBackend, IoCmd, Mode, OpenFlags, Stat, TruncateLength, UioMut, VFile};
+use crate::process::PollEvents;
 use crate::process::VThread;
 use crate::time::TimeSpec;
 use crate::ucred::{Gid, Ucred, Uid};
@@ -131,6 +132,11 @@ impl FileBackend for CharacterDevice {
         cmd: IoCmd,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn poll(self: &Arc<Self>, file: &VFile, events: PollEvents, td: &VThread) -> PollEvents {
         todo!()
     }
 

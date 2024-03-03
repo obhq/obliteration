@@ -1,6 +1,6 @@
 use crate::errno::{Errno, EBADF, EBUSY, EEXIST, EINVAL, ENAMETOOLONG, ENODEV, ENOENT, ESPIPE};
 use crate::info;
-use crate::process::{GetFileError, VThread};
+use crate::process::{GetFileError, PollFd, VThread};
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::PrivilegeError;
 use crate::ucred::{Privilege, Ucred};
@@ -1003,12 +1003,6 @@ bitflags! {
     pub struct RevokeFlags: i32 {
         const REVOKE_ALL = 0x0001;
     }
-}
-
-struct PollFd {
-    fd: i32,
-    events: i16,  // TODO: this probably deserves its own type
-    revents: i16, // likewise
 }
 
 pub struct TruncateLength(i64);

@@ -1,4 +1,5 @@
 use crate::fs::{DefaultError, FileBackend, IoCmd, Stat, TruncateLength, Uio, UioMut, VFile};
+use crate::process::PollEvents;
 use crate::ucred::Ucred;
 use crate::{
     errno::{Errno, EPIPE},
@@ -107,6 +108,11 @@ impl FileBackend for Socket {
         cmd: IoCmd,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn poll(self: &Arc<Self>, file: &VFile, events: PollEvents, td: &VThread) -> PollEvents {
         todo!()
     }
 
