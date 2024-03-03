@@ -72,47 +72,49 @@ pub fn mount(
 
 impl Filesystem for HostFs {
     fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Result<Arc<Vnode>, Box<dyn Errno>> {
-        let vnode = get_vnode(&self, mnt, &self.root)?;
+        let vnode = self.get_vnode(mnt, &self.root)?;
         Ok(vnode)
     }
 }
 
-fn get_vnode(
-    fs: &Arc<HostFs>,
-    mnt: &Arc<Mount>,
-    file: &Arc<HostFile>,
-) -> Result<Arc<Vnode>, GetVnodeError> {
-    // Get file ID.
-    let id = match file.id() {
-        Ok(v) => v,
-        Err(e) => return Err(GetVnodeError::GetFileIdFailed(e)),
-    };
+impl HostFs {
+    fn get_vnode(
+        self: &Arc<HostFs>,
+        mnt: &Arc<Mount>,
+        file: &Arc<HostFile>,
+    ) -> Result<Arc<Vnode>, GetVnodeError> {
+        // Get file ID.
+        let id = match file.id() {
+            Ok(v) => v,
+            Err(e) => return Err(GetVnodeError::GetFileIdFailed(e)),
+        };
 
-    // Check if active.
-    let mut actives = fs.actives.lock().unwrap();
+        // Check if active.
+        let mut actives = self.actives.lock().unwrap();
 
-    if let Some(v) = actives.get(&id).and_then(|v| v.upgrade()) {
-        return Ok(v);
+        if let Some(v) = actives.get(&id).and_then(|v| v.upgrade()) {
+            return Ok(v);
+        }
+
+        // Get vnode type. Beware of deadlock here.
+        let ty = match file.is_directory() {
+            Ok(true) => VnodeType::Directory(Arc::ptr_eq(file, &self.root)),
+            Ok(false) => VnodeType::File,
+            Err(e) => return Err(GetVnodeError::GetFileTypeFailed(e)),
+        };
+
+        // Allocate a new vnode.
+        let vn = Vnode::new(
+            mnt,
+            ty,
+            mnt.config().name,
+            VnodeBackend::new(self.clone(), file.clone()),
+        );
+
+        actives.insert(id, Arc::downgrade(&vn));
+
+        Ok(vn)
     }
-
-    // Get vnode type. Beware of deadlock here.
-    let ty = match file.is_directory() {
-        Ok(true) => VnodeType::Directory(Arc::ptr_eq(file, &fs.root)),
-        Ok(false) => VnodeType::File,
-        Err(e) => return Err(GetVnodeError::GetFileTypeFailed(e)),
-    };
-
-    // Allocate a new vnode.
-    let vn = Vnode::new(
-        mnt,
-        ty,
-        "exfatfs",
-        VnodeBackend::new(fs.clone(), file.clone()),
-    );
-
-    actives.insert(id, Arc::downgrade(&vn));
-
-    Ok(vn)
 }
 
 /// Represents an error when [`mount()`] fails.
