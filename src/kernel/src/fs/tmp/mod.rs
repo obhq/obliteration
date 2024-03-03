@@ -118,7 +118,7 @@ impl Filesystem for TempFs {
 }
 
 impl TempFs {
-    /// See tmpfs_alloc_vps on the PS4 for a reference.
+    /// See tmpfs_alloc_vp on the PS4 for a reference.
     fn alloc_vnode(
         self: &Arc<TempFs>,
         mnt: &Arc<Mount>,
