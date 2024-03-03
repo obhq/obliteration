@@ -1,5 +1,5 @@
 use super::file::HostFile;
-use super::{get_vnode, GetVnodeError, HostFs};
+use super::{GetVnodeError, HostFs};
 use crate::errno::{Errno, EEXIST, EIO, ENOENT, ENOTDIR};
 use crate::fs::{Access, IoCmd, Mode, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
@@ -92,7 +92,10 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         };
 
         // Get vnode.
-        let vn = get_vnode(&self.fs, vn.fs(), &file).map_err(LookupError::GetVnodeFailed)?;
+        let vn = self
+            .fs
+            .get_vnode(vn.fs(), &file)
+            .map_err(LookupError::GetVnodeFailed)?;
 
         Ok(vn)
     }
@@ -110,13 +113,12 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             .file
             .mkdir(name, mode)
             .map_err(|e| MkDirError::from(e))?;
+        let vn = self
+            .fs
+            .get_vnode(parent.fs(), &dir)
+            .map_err(MkDirError::GetVnodeFailed)?;
 
-        Ok(Vnode::new(
-            parent.fs(),
-            VnodeType::Directory(false),
-            "exfatfs",
-            VnodeBackend::new(self.fs.clone(), dir),
-        ))
+        Ok(vn)
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing.
@@ -165,6 +167,7 @@ enum LookupError {
     GetVnodeFailed(#[source] GetVnodeError),
 }
 
+/// Represents an error when [`VnodeBackend::mkdir()`] fails.
 #[derive(Debug, Error, Errno)]
 enum MkDirError {
     #[error("couldn't create directory")]
@@ -174,6 +177,9 @@ enum MkDirError {
     #[error("directory already exists")]
     #[errno(EEXIST)]
     AlreadyExists,
+
+    #[error("couldn't get vnode")]
+    GetVnodeFailed(#[source] GetVnodeError),
 }
 
 impl From<std::io::Error> for MkDirError {
