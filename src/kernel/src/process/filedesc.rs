@@ -26,8 +26,8 @@ impl FileDesc {
         let gg = GutexGroup::new();
 
         let filedesc = Self {
-            // TODO: these aren't none on the PS4
-            files: gg.spawn(vec![None, None, None]),
+            // TODO: this probably be
+            files: gg.spawn(vec![]),
             cwd: gg.spawn(root.clone()),
             root: gg.spawn(root),
             kqueue_list: gg.spawn(VecDeque::new()),
@@ -77,9 +77,7 @@ impl FileDesc {
         // TODO: Implement fdalloc.
         let mut files = self.files.write();
 
-        for i in 3..=i32::MAX {
-            let i: usize = i.try_into().unwrap();
-
+        for i in 0..=(i32::MAX) as usize {
             if i == files.len() {
                 files.push(Some(file));
             } else if files[i].is_none() {
