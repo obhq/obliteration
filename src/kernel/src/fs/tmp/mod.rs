@@ -1,5 +1,7 @@
-use self::node::{AllocNodeError, Node, Nodes};
-use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, MountSource, VPathBuf, Vnode};
+use self::node::{AllocNodeError, Node, Nodes, VnodeBackend};
+use super::{
+    Filesystem, FsConfig, Mount, MountFlags, MountOpts, MountSource, VPathBuf, Vnode, VnodeType,
+};
 use crate::errno::{Errno, EINVAL};
 use crate::ucred::{Ucred, Uid};
 use macros::Errno;
@@ -77,7 +79,7 @@ pub fn mount(
     });
 
     // Allocate a root node.
-    let root = nodes.alloc()?;
+    let root = nodes.alloc(VnodeType::Directory(true))?;
 
     Ok(Mount::new(
         conf,
@@ -109,22 +111,36 @@ struct TempFs {
 
 impl Filesystem for TempFs {
     fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Result<Arc<Vnode>, Box<dyn Errno>> {
-        let vnode = alloc_vnode(mnt, &self, &self.root)?;
+        let vnode = self.alloc_vnode(mnt, &self.root)?;
 
         Ok(vnode)
     }
 }
 
-/// See tmpfs_alloc_vp
-#[allow(unused_variables)] // TODO: remove when implementing
-fn alloc_vnode(
-    mnt: &Arc<Mount>,
-    fs: &Arc<TempFs>,
-    node: &Arc<Node>,
-) -> Result<Arc<Vnode>, AllocVnodeError> {
-    // Make sure we don't return more than one Vnode for the same Node. It is a logic error if more
-    // than one vnode encapsulate the same node.
-    todo!()
+impl TempFs {
+    /// See tmpfs_alloc_vps on the PS4 for a reference.
+    fn alloc_vnode(
+        self: &Arc<TempFs>,
+        mnt: &Arc<Mount>,
+        node: &Arc<Node>,
+    ) -> Result<Arc<Vnode>, AllocVnodeError> {
+        let mut vnode_ref = node.vnode_mut();
+
+        if let Some(vnode) = vnode_ref.as_ref() {
+            Ok(vnode.clone())
+        } else {
+            let vnode = Vnode::new(
+                mnt,
+                node.ty().clone(),
+                "tmpfs",
+                VnodeBackend::new(node.clone()),
+            );
+
+            *vnode_ref = Some(vnode.clone());
+
+            Ok(vnode)
+        }
+    }
 }
 
 /// Represents an error when [`mount()`] fails.

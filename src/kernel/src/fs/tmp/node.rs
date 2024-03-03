@@ -1,6 +1,7 @@
 use crate::errno::{Errno, ENOSPC};
-use crate::fs::{Access, OpenFlags, VFile, Vnode, VnodeAttrs};
+use crate::fs::{Access, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
+use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use macros::Errno;
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
@@ -22,7 +23,7 @@ impl Nodes {
     }
 
     /// See `tmpfs_alloc_node` on the PS4 for a reference.
-    pub fn alloc(&self) -> Result<Arc<Node>, AllocNodeError> {
+    pub fn alloc(&self, ty: VnodeType) -> Result<Arc<Node>, AllocNodeError> {
         // Check if maximum number of nodes has been reached.
         let mut list = self.list.write().unwrap();
 
@@ -31,7 +32,11 @@ impl Nodes {
         }
 
         // TODO: Implement node creation.
-        let node = Arc::new(Node {});
+        let gg = GutexGroup::new();
+        let node = Arc::new(Node {
+            vnode: gg.spawn(None),
+            ty,
+        });
 
         list.push_front(node.clone());
 
@@ -41,7 +46,24 @@ impl Nodes {
 
 /// An implementation of `tmpfs_node` structure.
 #[derive(Debug)]
-pub struct Node {}
+pub struct Node {
+    vnode: Gutex<Option<Arc<Vnode>>>, // tn_vnode
+    ty: VnodeType,                    // tn_type
+}
+
+impl Node {
+    pub fn vnode(&self) -> GutexReadGuard<Option<Arc<Vnode>>> {
+        self.vnode.read()
+    }
+
+    pub fn vnode_mut(&self) -> GutexWriteGuard<Option<Arc<Vnode>>> {
+        self.vnode.write()
+    }
+
+    pub fn ty(&self) -> &VnodeType {
+        &self.ty
+    }
+}
 
 /// An implementation of [`crate::fs::VnodeBackend`] for tmpfs.
 #[derive(Debug)]
