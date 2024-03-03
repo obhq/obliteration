@@ -17,23 +17,18 @@ pub struct VnodeBackend {
 }
 
 impl VnodeBackend {
-    pub fn new(fs: Arc<HostFs>, file: Arc<HostFile>) -> Arc<Self> {
-        Arc::new(Self { fs, file })
+    pub fn new(fs: Arc<HostFs>, file: Arc<HostFile>) -> Self {
+        Self { fs, file }
     }
 }
 
 impl crate::fs::VnodeBackend for VnodeBackend {
-    fn access(
-        self: Arc<Self>,
-        _: &Arc<Vnode>,
-        _: Option<&VThread>,
-        _: Access,
-    ) -> Result<(), Box<dyn Errno>> {
+    fn access(&self, _: &Arc<Vnode>, _: Option<&VThread>, _: Access) -> Result<(), Box<dyn Errno>> {
         // TODO: Check how the PS4 check file permission for exfatfs.
         Ok(())
     }
 
-    fn getattr(self: Arc<Self>, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
+    fn getattr(&self, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
         // Get file size.
         let size = self.file.len().map_err(GetAttrError::GetSizeFailed)?;
 
@@ -48,7 +43,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     }
 
     fn ioctl(
-        self: Arc<Self>,
+        &self,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] cmd: IoCmd,
         #[allow(unused_variables)] td: Option<&VThread>,
@@ -57,7 +52,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     }
 
     fn lookup(
-        self: Arc<Self>,
+        &self,
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         name: &str,
@@ -101,7 +96,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     }
 
     fn mkdir(
-        self: Arc<Self>,
+        &self,
         parent: &Arc<Vnode>,
         name: &str,
         mode: u32,
@@ -123,7 +118,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 
     #[allow(unused_variables)] // TODO: remove when implementing.
     fn open(
-        self: Arc<Self>,
+        &self,
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         mode: OpenFlags,
