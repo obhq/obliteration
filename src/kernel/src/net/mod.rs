@@ -199,7 +199,7 @@ impl NetManager {
         len: i32,
         td: &VThread,
     ) -> Result<(), SetOptError> {
-        if value.is_null() || len == 0 {
+        if value.is_null() && len != 0 {
             return Err(SetOptError::InvalidValue);
         }
 
@@ -292,11 +292,11 @@ enum SockOpt {}
 
 #[derive(Debug, Error, Errno)]
 enum SetOptError {
-    #[error("Invalid value or value length")]
+    #[error("invalid value or length")]
     #[errno(EFAULT)]
     InvalidValue,
 
-    #[error("Invalid length")]
+    #[error("invalid length")]
     #[errno(EINVAL)]
     InvalidLength,
 }
@@ -304,7 +304,7 @@ enum SetOptError {
 #[derive(Debug, Error, Errno)]
 enum GetOptError {
     #[error("invalid length")]
-    #[errno(EFAULT)]
+    #[errno(EINVAL)]
     InvalidValue,
 }
 
