@@ -1,15 +1,14 @@
 use crate::{
     errno::Errno,
-    fs::{dev::Device, IoCmd},
+    fs::{Device, IoCmd},
     process::VThread,
 };
 use std::sync::Arc;
 
 #[derive(Debug)]
-struct Dmem {}
+struct Gc {}
 
-impl Device for Dmem {
-    #[allow(unused_variables)] // TODO: remove when implementing
+impl Device for Gc {
     fn ioctl(self: Arc<Self>, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
         todo!()
     }

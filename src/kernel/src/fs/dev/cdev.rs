@@ -193,14 +193,14 @@ pub type CdevOpen =
     fn(&Arc<CharacterDevice>, OpenFlags, i32, Option<&VThread>) -> Result<(), Box<dyn Errno>>;
 
 /// An implementation of the `cdevsw` structure.
-pub(super) trait Device: Debug + Sync + Send + 'static {
+pub trait Device: Debug + Sync + Send + 'static {
     #[allow(unused_variables)]
     fn read(
         self: Arc<Self>,
         data: &mut UioMut,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        Err(Box::new(DefaultError::ReadNotSupported))
+        Err(Box::new(DefaultDeviceError::ReadNotSupported))
     }
 
     #[allow(unused_variables)]
@@ -209,17 +209,17 @@ pub(super) trait Device: Debug + Sync + Send + 'static {
         data: &mut Uio,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        Err(Box::new(DefaultError::WriteNotSupported))
+        Err(Box::new(DefaultDeviceError::WriteNotSupported))
     }
 
     #[allow(unused_variables)]
     fn ioctl(self: Arc<Self>, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
-        Err(Box::new(DefaultError::CommandNotSupported))
+        Err(Box::new(DefaultDeviceError::CommandNotSupported))
     }
 }
 
 #[derive(Debug, Error, Errno)]
-pub(super) enum DefaultError {
+pub enum DefaultDeviceError {
     #[error("read not supported")]
     #[errno(ENODEV)]
     ReadNotSupported,

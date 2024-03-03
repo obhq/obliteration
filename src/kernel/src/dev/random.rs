@@ -1,9 +1,6 @@
 use crate::{
     errno::Errno,
-    fs::{
-        dev::{DefaultError, Device},
-        IoCmd, Uio, UioMut,
-    },
+    fs::{DefaultDeviceError, Device, IoCmd, Uio, UioMut},
     process::VThread,
 };
 use std::sync::Arc;
@@ -33,7 +30,7 @@ impl Device for Random {
     fn ioctl(self: Arc<Self>, cmd: IoCmd, _: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
         match cmd {
             IoCmd::FIOASYNC(_) | IoCmd::FIONBIO(_) => Ok(()),
-            _ => Err(Box::new(DefaultError::CommandNotSupported)),
+            _ => Err(Box::new(DefaultDeviceError::CommandNotSupported)),
         }
     }
 }

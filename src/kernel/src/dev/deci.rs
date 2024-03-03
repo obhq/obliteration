@@ -1,14 +1,11 @@
-use crate::{
-    errno::Errno,
-    fs::{dev::Device, IoCmd, UioMut},
-    process::VThread,
-};
+use crate::fs::{Device, Uio, UioMut};
+use crate::{errno::Errno, process::VThread};
 use std::sync::Arc;
 
 #[derive(Debug)]
-struct Hid {}
+struct Deci {}
 
-impl Device for Hid {
+impl Device for Deci {
     #[allow(unused_variables)] // TODO: remove when implementing
     fn read(
         self: Arc<Self>,
@@ -19,7 +16,11 @@ impl Device for Hid {
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
-    fn ioctl(self: Arc<Self>, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
+    fn write(
+        self: Arc<Self>,
+        data: &mut Uio,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
         todo!()
     }
 }

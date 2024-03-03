@@ -1,6 +1,6 @@
 use crate::{
     errno::Errno,
-    fs::{dev::Device, IoCmd},
+    fs::{Device, IoCmd},
     process::VThread,
 };
 use std::sync::Arc;

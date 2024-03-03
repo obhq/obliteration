@@ -1,4 +1,3 @@
-pub use self::cdev::*;
 use self::dirent::Dirent;
 use self::vnode::VnodeBackend;
 use super::{
@@ -13,8 +12,9 @@ use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use thiserror::Error;
 
+pub use self::cdev::*;
+
 mod cdev;
-mod devices;
 mod dirent;
 mod vnode;
 

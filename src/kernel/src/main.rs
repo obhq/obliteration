@@ -42,6 +42,7 @@ mod arch;
 mod arnd;
 mod budget;
 mod debug;
+mod dev;
 mod dmem;
 mod ee;
 mod errno;

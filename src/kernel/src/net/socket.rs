@@ -1,4 +1,6 @@
-use crate::fs::{DefaultError, FileBackend, IoCmd, Stat, TruncateLength, Uio, UioMut, VFile};
+use crate::fs::{
+    DefaultFileBackendError, FileBackend, IoCmd, Stat, TruncateLength, Uio, UioMut, VFile,
+};
 use crate::ucred::Ucred;
 use crate::{
     errno::{Errno, EPIPE},
@@ -121,7 +123,7 @@ impl FileBackend for Socket {
         _: TruncateLength,
         _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        Err(Box::new(DefaultError::InvalidValue))
+        Err(Box::new(DefaultFileBackendError::InvalidValue))
     }
 }
 

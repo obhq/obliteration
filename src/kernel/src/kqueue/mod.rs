@@ -1,7 +1,9 @@
 use crate::{
     budget::BudgetType,
     errno::Errno,
-    fs::{DefaultError, FileBackend, Stat, TruncateLength, VFile, VFileFlags, VFileType},
+    fs::{
+        DefaultFileBackendError, FileBackend, Stat, TruncateLength, VFile, VFileFlags, VFileType,
+    },
     process::{FileDesc, VThread},
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
 };
@@ -73,6 +75,6 @@ impl FileBackend for KernelQueue {
         _: TruncateLength,
         _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        Err(Box::new(DefaultError::InvalidValue))
+        Err(Box::new(DefaultFileBackendError::InvalidValue))
     }
 }
