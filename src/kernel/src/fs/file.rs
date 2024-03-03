@@ -5,7 +5,7 @@ use crate::errno::{EINVAL, ENOTTY, ENXIO, EOPNOTSUPP};
 use crate::kqueue::KernelQueue;
 use crate::net::Socket;
 use crate::process::VThread;
-use crate::shm::Shm;
+use crate::shm::SharedMemory;
 use bitflags::bitflags;
 use macros::Errno;
 use std::fmt::Debug;
@@ -174,13 +174,13 @@ impl Write for VFile {
 /// Type of [`VFile`].
 #[derive(Debug)]
 pub enum VFileType {
-    Vnode(Arc<Vnode>),             // DTYPE_VNODE = 1
-    Socket(Arc<Socket>),           // DTYPE_SOCKET = 2,
-    KernelQueue(Arc<KernelQueue>), // DTYPE_KQUEUE = 5,
-    SharedMemory(Arc<Shm>),        // DTYPE_SHM = 8,
-    Device(Arc<CharacterDevice>),  // DTYPE_DEV = 11,
-    IpcSocket(Arc<Socket>),        // DTYPE_IPCSOCKET = 15,
-    Blockpool(Arc<BlockPool>),     // DTYPE_BLOCKPOOL = 17,
+    Vnode(Arc<Vnode>),               // DTYPE_VNODE = 1
+    Socket(Arc<Socket>),             // DTYPE_SOCKET = 2,
+    KernelQueue(Arc<KernelQueue>),   // DTYPE_KQUEUE = 5,
+    SharedMemory(Arc<SharedMemory>), // DTYPE_SHM = 8,
+    Device(Arc<CharacterDevice>),    // DTYPE_DEV = 11,
+    IpcSocket(Arc<Socket>),          // DTYPE_IPCSOCKET = 15,
+    Blockpool(Arc<BlockPool>),       // DTYPE_BLOCKPOOL = 17,
 }
 
 bitflags! {
