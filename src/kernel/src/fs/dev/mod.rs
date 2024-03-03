@@ -14,6 +14,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use thiserror::Error;
 
 mod cdev;
+mod devices;
 mod dirent;
 mod vnode;
 
