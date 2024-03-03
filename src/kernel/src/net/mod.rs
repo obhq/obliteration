@@ -1,6 +1,7 @@
 use crate::budget::BudgetType;
 use crate::errno::{Errno, EFAULT, EINVAL};
 use crate::fs::{IoVec, VFileFlags, VFileType};
+use crate::info;
 use crate::{
     process::VThread,
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
@@ -31,6 +32,7 @@ impl NetManager {
         sys.register(97, &net, Self::sys_socket);
         sys.register(105, &net, Self::sys_setsockopt);
         sys.register(113, &net, Self::sys_socketex);
+        sys.register(114, &net, Self::sys_socketclose);
         sys.register(118, &net, Self::sys_getsockopt);
         sys.register(133, &net, Self::sys_sendto);
 
@@ -158,6 +160,16 @@ impl NetManager {
         )?;
 
         Ok(fd.into())
+    }
+
+    fn sys_socketclose(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+
+        info!("Attempting to close socket at fd {fd}.");
+
+        td.proc().files().free(fd)?;
+
+        Ok(SysOut::ZERO)
     }
 
     fn sys_sendto(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {

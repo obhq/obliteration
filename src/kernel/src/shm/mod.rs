@@ -1,6 +1,3 @@
-use macros::Errno;
-use thiserror::Error;
-
 use crate::{
     errno::{Errno, EINVAL},
     fs::{
@@ -12,7 +9,9 @@ use crate::{
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
     ucred::{Gid, Ucred, Uid},
 };
+use macros::Errno;
 use std::{convert::Infallible, sync::Arc};
+use thiserror::Error;
 
 #[allow(dead_code)] // TODO: remove when used.
 pub struct SharedMemoryManager {
