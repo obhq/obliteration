@@ -111,6 +111,10 @@ impl Mount {
         }
     }
 
+    pub fn config(&self) -> &'static FsConfig {
+        self.config
+    }
+
     pub fn flags(&self) -> MountFlags {
         self.flags
     }
