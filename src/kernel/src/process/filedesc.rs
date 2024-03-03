@@ -138,6 +138,8 @@ impl FileDesc {
 
         let mut files = self.files.write();
 
+        // TODO: implement knote_fdclose
+
         if let Some(file) = files.get_mut(fd) {
             *file = None;
 
