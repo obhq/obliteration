@@ -1,11 +1,11 @@
-use crate::fs::Cdev;
+use crate::fs::CharacterDevice;
 use std::sync::Arc;
 
 /// Encapsulate a deci device (e.g. `deci_stdout`).
 #[allow(dead_code)]
 pub struct DeciDev {
     name: &'static str,
-    dev: Arc<Cdev>,
+    dev: Arc<CharacterDevice>,
 }
 
 impl DeciDev {
@@ -24,7 +24,7 @@ impl DeciDev {
         "deci_coredump",
     ];
 
-    pub(super) fn new(name: &'static str, dev: Arc<Cdev>) -> Self {
+    pub(super) fn new(name: &'static str, dev: Arc<CharacterDevice>) -> Self {
         Self { name, dev }
     }
 }

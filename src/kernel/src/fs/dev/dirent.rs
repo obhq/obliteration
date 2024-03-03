@@ -1,4 +1,4 @@
-use super::Cdev;
+use super::CharacterDevice;
 use crate::fs::{DirentType, Mode, Vnode};
 use crate::ucred::{Gid, Uid};
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
@@ -9,18 +9,18 @@ use std::time::SystemTime;
 /// An implementation of `devfs_dirent` structure.
 #[derive(Debug)]
 pub struct Dirent {
-    inode: i32,                        // de_inode
-    uid: Gutex<Uid>,                   // de_uid
-    gid: Gutex<Gid>,                   // de_gid
-    mode: Gutex<Mode>,                 // de_mode
-    dir: Option<Weak<Self>>,           // de_dir
-    children: Gutex<Vec<Arc<Self>>>,   // de_dlist
-    ctime: SystemTime,                 // de_ctime
-    atime: Gutex<SystemTime>,          // de_atime
-    mtime: Gutex<SystemTime>,          // de_mtime
-    cdev: Option<Weak<Cdev>>,          // de_cdp
-    vnode: Gutex<Option<Weak<Vnode>>>, // de_vnode
-    dirent: crate::fs::Dirent,         // de_dirent
+    inode: i32,                          // de_inode
+    uid: Gutex<Uid>,                     // de_uid
+    gid: Gutex<Gid>,                     // de_gid
+    mode: Gutex<Mode>,                   // de_mode
+    dir: Option<Weak<Self>>,             // de_dir
+    children: Gutex<Vec<Arc<Self>>>,     // de_dlist
+    ctime: SystemTime,                   // de_ctime
+    atime: Gutex<SystemTime>,            // de_atime
+    mtime: Gutex<SystemTime>,            // de_mtime
+    cdev: Option<Weak<CharacterDevice>>, // de_cdp
+    vnode: Gutex<Option<Weak<Vnode>>>,   // de_vnode
+    dirent: crate::fs::Dirent,           // de_dirent
 }
 
 impl Dirent {
@@ -31,7 +31,7 @@ impl Dirent {
         gid: Gid,
         mode: Mode,
         dir: Option<Weak<Self>>,
-        cdev: Option<Weak<Cdev>>,
+        cdev: Option<Weak<CharacterDevice>>,
         name: impl Into<String>,
     ) -> Self {
         let gg = GutexGroup::new();
@@ -78,7 +78,7 @@ impl Dirent {
         self.children.write()
     }
 
-    pub fn cdev(&self) -> Option<&Weak<Cdev>> {
+    pub fn cdev(&self) -> Option<&Weak<CharacterDevice>> {
         self.cdev.as_ref()
     }
 
