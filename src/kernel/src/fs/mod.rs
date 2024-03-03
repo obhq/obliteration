@@ -433,7 +433,7 @@ impl Fs {
     fn sys_close(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
 
-        info!("Closing fd {fd}.");
+        info!("Attempting to close fd {fd}.");
 
         td.proc().files().free(fd)?;
 
