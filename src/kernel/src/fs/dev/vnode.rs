@@ -1,5 +1,5 @@
 use super::dirent::Dirent;
-use super::{alloc_vnode, AllocVnodeError, DevFs};
+use super::{AllocVnodeError, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
     check_access, Access, IoCmd, OpenFlags, RevokeFlags, VFile, Vnode, VnodeAttrs, VnodeItem,
@@ -140,7 +140,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
                     None => return Err(Box::new(LookupError::NoParent)),
                 };
 
-                match alloc_vnode(self.fs.clone(), vn.fs(), parent) {
+                match self.fs.alloc_vnode(vn.fs(), parent) {
                     Ok(v) => Ok(v),
                     Err(e) => Err(Box::new(LookupError::AllocVnodeFailed(e))),
                 }
@@ -155,7 +155,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
                     None => todo!("devfs lookup with non-existent file"),
                 };
 
-                match alloc_vnode(self.fs.clone(), vn.fs(), item) {
+                match self.fs.alloc_vnode(vn.fs(), item) {
                     Ok(v) => Ok(v),
                     Err(e) => Err(Box::new(LookupError::AllocVnodeFailed(e))),
                 }
@@ -168,7 +168,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         mode: OpenFlags,
-        mut file: Option<&mut VFile>,
+        file: Option<&mut VFile>,
     ) -> Result<(), Box<dyn Errno>> {
         if !vn.is_character() {
             return Ok(());
@@ -181,21 +181,11 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         };
         let sw = dev.sw();
 
-        if file.is_none() && sw.fdopen().is_some() {
-            return Err(Box::new(OpenError::NeedFile));
-        }
-
         // Execute switch handler.
-        match sw.fdopen() {
-            Some(fdopen) => fdopen(&dev, mode, td, file.as_deref_mut())?,
-            None => sw.open().unwrap()(&dev, mode, 0x2000, td)?,
-        };
+        sw.open()(&dev, mode, 0x2000, td)?;
 
         // Set file OP.
-        let file = match file {
-            Some(v) => v,
-            None => return Ok(()),
-        };
+        let Some(file) = file else { return Ok(()) };
 
         // TODO: Implement remaining logics from the PS4.
         Ok(())

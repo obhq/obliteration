@@ -80,52 +80,6 @@ pub fn dev_exists(name: impl AsRef<str>) -> bool {
     false
 }
 
-/// See `devfs_allocv` on the PS4 for a reference.
-fn alloc_vnode(
-    fs: Arc<DevFs>,
-    mnt: &Arc<Mount>,
-    ent: Arc<Dirent>,
-) -> Result<Arc<Vnode>, AllocVnodeError> {
-    // Check for active vnode.
-    let mut current = ent.vnode_mut();
-
-    if let Some(v) = current.as_ref().and_then(|v| v.upgrade()) {
-        return Ok(v);
-    }
-
-    // Create vnode. Beware of deadlock because we are currently holding on dirent lock.
-    let tag = "devfs";
-    let backend = VnodeBackend::new(fs, ent.clone());
-    let vn = match ent.ty() {
-        DirentType::Character => {
-            let dev = ent
-                .cdev()
-                .unwrap()
-                .upgrade()
-                .ok_or(AllocVnodeError::DeviceGone)?;
-            let vn = Vnode::new(mnt, VnodeType::CharacterDevice, tag, backend);
-
-            *vn.item_mut() = Some(VnodeItem::Device(dev));
-            vn
-        }
-        DirentType::Directory => Vnode::new(
-            mnt,
-            VnodeType::Directory(ent.inode() == DevFs::DEVFS_ROOTINO),
-            tag,
-            backend,
-        ),
-        DirentType::Link => todo!("devfs_allocv with DT_LNK"),
-    };
-
-    // Set current vnode.
-
-    *current = Some(Arc::downgrade(&vn));
-    drop(current);
-
-    // TODO: Implement insmntque1.
-    Ok(vn)
-}
-
 /// An implementation of `devfs_mount` structure.
 #[derive(Debug)]
 pub struct DevFs {
@@ -286,6 +240,52 @@ impl DevFs {
         dir.children_mut().push(Arc::new(dd));
         dir
     }
+
+    /// See `devfs_allocv` on the PS4 for a reference.
+    fn alloc_vnode(
+        self: &Arc<Self>,
+        mnt: &Arc<Mount>,
+        ent: Arc<Dirent>,
+    ) -> Result<Arc<Vnode>, AllocVnodeError> {
+        // Check for active vnode.
+        let mut current = ent.vnode_mut();
+
+        if let Some(v) = current.as_ref().and_then(|v| v.upgrade()) {
+            return Ok(v);
+        }
+
+        // Create vnode. Beware of deadlock because we are currently holding on dirent lock.
+        let tag = "devfs";
+        let backend = VnodeBackend::new(self.clone(), ent.clone());
+        let vn = match ent.ty() {
+            DirentType::Character => {
+                let dev = ent
+                    .cdev()
+                    .unwrap()
+                    .upgrade()
+                    .ok_or(AllocVnodeError::DeviceGone)?;
+                let vn = Vnode::new(mnt, VnodeType::CharacterDevice, tag, backend);
+
+                *vn.item_mut() = Some(VnodeItem::Device(dev));
+                vn
+            }
+            DirentType::Directory => Vnode::new(
+                mnt,
+                VnodeType::Directory(ent.inode() == DevFs::DEVFS_ROOTINO),
+                tag,
+                backend,
+            ),
+            DirentType::Link => todo!("devfs_allocv with DT_LNK"),
+        };
+
+        // Set current vnode.
+
+        *current = Some(Arc::downgrade(&vn));
+        drop(current);
+
+        // TODO: Implement insmntque1.
+        Ok(vn)
+    }
 }
 
 bitflags! {
@@ -354,7 +354,7 @@ impl Filesystem for DevFs {
     fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Result<Arc<Vnode>, Box<dyn Errno>> {
         let ent = self.root.clone();
 
-        let vnode = alloc_vnode(self, mnt, ent)?;
+        let vnode = self.alloc_vnode(mnt, ent)?;
 
         Ok(vnode)
     }
