@@ -20,14 +20,14 @@ pub struct VnodeBackend {
 }
 
 impl VnodeBackend {
-    pub fn new(fs: Arc<DevFs>, dirent: Arc<Dirent>) -> Arc<Self> {
-        Arc::new(Self { fs, dirent })
+    pub fn new(fs: Arc<DevFs>, dirent: Arc<Dirent>) -> Self {
+        Self { fs, dirent }
     }
 }
 
 impl crate::fs::VnodeBackend for VnodeBackend {
     fn access(
-        self: Arc<Self>,
+        &self,
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         mode: Access,
@@ -71,7 +71,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         Err(Box::new(err))
     }
 
-    fn getattr(self: Arc<Self>, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
+    fn getattr(&self, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
         // Populate devices.
         self.fs.populate();
 
@@ -99,7 +99,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     }
 
     fn ioctl(
-        self: Arc<Self>,
+        &self,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] cmd: IoCmd,
         #[allow(unused_variables)] td: Option<&VThread>,
@@ -108,7 +108,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     }
 
     fn lookup(
-        self: Arc<Self>,
+        &self,
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         name: &str,
@@ -164,7 +164,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     }
 
     fn open(
-        self: Arc<Self>,
+        &self,
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         mode: OpenFlags,
@@ -191,7 +191,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         Ok(())
     }
 
-    fn revoke(self: Arc<Self>, vn: &Arc<Vnode>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
+    fn revoke(&self, vn: &Arc<Vnode>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
         // TODO: Implement this.
         Ok(())
     }
