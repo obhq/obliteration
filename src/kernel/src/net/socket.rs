@@ -6,8 +6,11 @@ use crate::{
 };
 use bitflags::bitflags;
 use macros::Errno;
+use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
+
+use super::{GetOptError, SetOptError, SockOpt};
 
 #[derive(Debug)]
 pub struct Socket {
@@ -23,7 +26,7 @@ impl Socket {
     pub fn new(
         domain: i32,
         ty: i32,
-        proto: i32,
+        proto: Option<NonZeroI32>,
         cred: &Arc<Ucred>,
         td: &VThread,
         name: Option<&str>,
@@ -33,6 +36,18 @@ impl Socket {
 
     fn options(&self) -> SocketOptions {
         self.options
+    }
+
+    /// See `sosetopt` on the PS4 for a reference.
+    #[allow(dead_code, unused_variables)] // TODO: remove when implementing
+    fn setopt(&self, opt: SockOpt) -> Result<(), SetOptError> {
+        todo!()
+    }
+
+    /// See `sogetopt` on the PS4 for a reference.
+    #[allow(dead_code, unused_variables)] // TODO: remove when implementing
+    fn getopt(&self, opt: SockOpt) -> Result<(), GetOptError> {
+        todo!()
     }
 
     /// See `sosend` on the PS4 for a reference.
@@ -106,7 +121,7 @@ impl FileBackend for Socket {
         _: TruncateLength,
         _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        Err(DefaultError::InvalidValue.into())
+        Err(Box::new(DefaultError::InvalidValue))
     }
 }
 

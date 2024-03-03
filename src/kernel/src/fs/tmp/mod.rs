@@ -1,8 +1,10 @@
 use self::node::{AllocNodeError, Node, Nodes};
+use super::VnodeType;
 use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, MountSource, VPathBuf, Vnode};
 use crate::errno::{Errno, EINVAL};
 use crate::ucred::{Ucred, Uid};
 use macros::Errno;
+use std::num::NonZeroU64;
 use std::sync::atomic::AtomicI32;
 use std::sync::Arc;
 use thiserror::Error;
@@ -55,7 +57,7 @@ pub fn mount(
     let size: usize = opts.remove_or("size", 0);
 
     // Get maximum file size.
-    let file_size = opts.remove_or("maxfilesize", 0);
+    let file_size = NonZeroU64::new(opts.remove_or("maxfilesize", 0));
 
     // TODO: Refactor this for readability.
     let pages = if size.wrapping_sub(0x4000) < 0xffffffffffff8000 {
@@ -87,7 +89,7 @@ pub fn mount(
         flags | MountFlags::MNT_LOCAL,
         TempFs {
             max_pages: pages,
-            max_file_size: if file_size == 0 { u64::MAX } else { file_size },
+            max_file_size: file_size.map_or(u64::MAX, |x| x.get()),
             next_inode: AtomicI32::new(2), // TODO: Use a proper implementation.
             nodes,
             root,
@@ -107,15 +109,25 @@ struct TempFs {
 
 impl Filesystem for TempFs {
     fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Result<Arc<Vnode>, Box<dyn Errno>> {
-        let vnode = alloc_vnode(mnt, &self.root)?;
+        let vnode = alloc_vnode(mnt, &self, &self.root)?;
 
         Ok(vnode)
     }
 }
 
+/// See tmpfs_alloc_vp
 #[allow(unused_variables)] // TODO: remove when implementing
-fn alloc_vnode(mnt: &Arc<Mount>, node: &Arc<Node>) -> Result<Arc<Vnode>, AllocVnodeError> {
-    todo!()
+fn alloc_vnode(
+    mnt: &Arc<Mount>,
+    fs: &Arc<TempFs>,
+    node: &Arc<Node>,
+) -> Result<Arc<Vnode>, AllocVnodeError> {
+    Ok(Vnode::new(
+        mnt,
+        VnodeType::Directory(Arc::ptr_eq(&fs.root, node)),
+        "tmpfs",
+        node.clone(),
+    ))
 }
 
 /// Represents an error when [`mount()`] fails.

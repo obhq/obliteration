@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 
-pub use self::dev::{make_dev, Cdev, CdevSw, DriverFlags, MakeDev, MakeDevError};
+pub use self::dev::{make_dev, CdevSw, CharacterDevice, DriverFlags, MakeDev, MakeDevError};
 pub use self::dirent::*;
 pub use self::file::*;
 pub use self::ioctl::*;
@@ -22,6 +22,7 @@ pub use self::mount::*;
 pub use self::path::*;
 pub use self::perm::*;
 pub use self::stat::*;
+pub use self::uio::*;
 pub use self::vnode::*;
 
 mod dev;
@@ -35,6 +36,7 @@ mod path;
 mod perm;
 mod stat;
 mod tmp;
+mod uio;
 mod vnode;
 
 /// A virtual filesystem for emulating a PS4 filesystem.
@@ -198,7 +200,7 @@ impl Fs {
         //
         // So we decided to implement our own lookup algorithm.
         let path = path.as_ref();
-        let mut root = match td {
+        let root = match td {
             Some(td) => td.proc().files().root(),
             None => self.root(),
         };
@@ -269,21 +271,6 @@ impl Fs {
         parent
             .mkdir(path.file_name().unwrap(), mode, td)
             .map_err(MkdirError::CreateFailed)
-    }
-
-    fn sys_read(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
-        let fd: i32 = i.args[0].try_into().unwrap();
-        let ptr: *mut u8 = i.args[1].into();
-        let len: usize = i.args[2].try_into().unwrap();
-
-        let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
-
-        let uio = UioMut {
-            vecs: &mut [iovec],
-            bytes_left: len,
-        };
-
-        self.readv(fd, uio, td)
     }
 
     /// See `vfs_donmount` on the PS4 for a reference.
@@ -384,6 +371,21 @@ impl Fs {
         }
     }
 
+    fn sys_read(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let ptr: *mut u8 = i.args[1].into();
+        let len: usize = i.args[2].try_into().unwrap();
+
+        let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
+
+        let uio = UioMut {
+            vecs: &mut [iovec],
+            bytes_left: len,
+        };
+
+        self.readv(fd, uio, td)
+    }
+
     fn sys_write(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *const u8 = i.args[1].into();
@@ -430,7 +432,7 @@ impl Fs {
         info!("Opening {path} with flags = {flags}.");
 
         // Lookup file.
-        let mut file = self.open(path, Some(&td))?;
+        let mut file = self.open(path, Some(td))?;
 
         *file.flags_mut() = flags.into_fflags();
 
@@ -459,7 +461,7 @@ impl Fs {
 
         info!("Executing ioctl({cmd:?}) on file descriptor {fd}.");
 
-        self.ioctl(fd, cmd, &td)?;
+        self.ioctl(fd, cmd, td)?;
 
         Ok(SysOut::ZERO)
     }
@@ -483,7 +485,7 @@ impl Fs {
             _ => {}
         }
 
-        file.ioctl(cmd, Some(&td))?;
+        file.ioctl(cmd, Some(td))?;
 
         Ok(SysOut::ZERO)
     }
@@ -498,7 +500,7 @@ impl Fs {
         td.priv_check(Privilege::SCE683)?;
 
         // TODO: Check if the PS4 follow the vnode.
-        let vn = self.lookup(path, true, Some(&td))?;
+        let vn = self.lookup(path, true, Some(td))?;
 
         if let VnodeType::CharacterDevice(dev) = vn.ty() {
             let dev = dev.read();
@@ -512,7 +514,7 @@ impl Fs {
 
         // TODO: It seems like the initial ucred of the process is either root or has PRIV_VFS_ADMIN
         // privilege.
-        self.revoke(vn, &td)?;
+        self.revoke(vn, td)?;
 
         Ok(SysOut::ZERO)
     }
@@ -543,7 +545,7 @@ impl Fs {
     fn readv(&self, fd: i32, uio: UioMut, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_read(fd)?;
 
-        let read = file.do_read(uio, Offset::Current, Some(&td))?;
+        let read = file.do_read(uio, Offset::Current, Some(td))?;
 
         Ok(read.into())
     }
@@ -561,7 +563,7 @@ impl Fs {
     fn writev(&self, fd: i32, uio: Uio, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_write(fd)?;
 
-        let written = file.do_write(uio, Offset::Current, Some(&td))?;
+        let written = file.do_write(uio, Offset::Current, Some(td))?;
 
         Ok(written.into())
     }
@@ -570,7 +572,7 @@ impl Fs {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let stat_out: *mut Stat = i.args[1].into();
 
-        let stat = self.stat(path, &td)?;
+        let stat = self.stat(path, td)?;
 
         unsafe {
             *stat_out = stat;
@@ -588,7 +590,7 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let stat_out: *mut Stat = i.args[1].into();
 
-        let stat = self.fstat(fd, &td)?;
+        let stat = self.fstat(fd, td)?;
 
         unsafe {
             *stat_out = stat;
@@ -598,9 +600,12 @@ impl Fs {
     }
 
     /// See `kern_fstat` on the PS4 for a reference.
-    #[allow(unused_variables)] // Remove this when it is being implemented
     fn fstat(self: &Arc<Self>, fd: i32, td: &VThread) -> Result<Stat, StatError> {
-        todo!()
+        let file = td.proc().files().get(fd)?;
+
+        let stat = file.stat(Some(td))?;
+
+        Ok(stat)
     }
 
     fn sys_lstat(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -609,7 +614,7 @@ impl Fs {
 
         td.priv_check(Privilege::SCE683)?;
 
-        let stat = self.lstat(path, &td)?;
+        let stat = self.lstat(path, td)?;
 
         unsafe {
             *stat_out = stat;
@@ -627,7 +632,7 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
-        let offset: i64 = i.args[3].try_into().unwrap();
+        let offset: i64 = i.args[3].into();
 
         let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
@@ -643,7 +648,7 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
-        let offset: i64 = i.args[3].try_into().unwrap();
+        let offset: i64 = i.args[3].into();
 
         let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
@@ -659,7 +664,7 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *mut IoVec = i.args[1].into();
         let count: u32 = i.args[2].try_into().unwrap();
-        let offset: i64 = i.args[3].try_into().unwrap();
+        let offset: i64 = i.args[3].into();
 
         let uio = unsafe { UioMut::copyin(iovec, count) }?;
 
@@ -675,7 +680,7 @@ impl Fs {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        let read = file.do_read(uio, Offset::Provided(offset), Some(&td))?;
+        let read = file.do_read(uio, Offset::Provided(offset), Some(td))?;
 
         Ok(read.into())
     }
@@ -684,7 +689,7 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *const IoVec = i.args[1].into();
         let count: u32 = i.args[2].try_into().unwrap();
-        let offset: i64 = i.args[3].try_into().unwrap();
+        let offset: i64 = i.args[3].into();
 
         let uio = unsafe { Uio::copyin(iovec, count) }?;
 
@@ -700,7 +705,7 @@ impl Fs {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        let written = file.do_write(uio, Offset::Provided(offset), Some(&td))?;
+        let written = file.do_write(uio, Offset::Provided(offset), Some(td))?;
 
         Ok(written.into())
     }
@@ -713,7 +718,7 @@ impl Fs {
 
         td.priv_check(Privilege::SCE683)?;
 
-        let stat = self.statat(flags, At::Fd(dirfd), path, &td)?;
+        let stat = self.statat(flags, At::Fd(dirfd), path, td)?;
 
         unsafe {
             *stat_out = stat;
@@ -739,7 +744,7 @@ impl Fs {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let mode: u32 = i.args[1].try_into().unwrap();
 
-        self.mkdirat(At::Cwd, path, mode, Some(&td))
+        self.mkdirat(At::Cwd, path, mode, Some(td))
     }
 
     #[allow(unused_variables)]
@@ -771,12 +776,12 @@ impl Fs {
             Whence::Current => todo!("lseek with whence = SEEK_CUR"),
             Whence::End => todo!(),
             Whence::Data => {
-                let _ = file.ioctl(IoCmd::FIOSEEKDATA(&mut offset), Some(&td));
+                let _ = file.ioctl(IoCmd::FIOSEEKDATA(&mut offset), Some(td));
 
                 todo!()
             }
             Whence::Hole => {
-                let _ = file.ioctl(IoCmd::FIOSEEKHOLE(&mut offset), Some(&td));
+                let _ = file.ioctl(IoCmd::FIOSEEKHOLE(&mut offset), Some(td));
 
                 todo!()
             }
@@ -789,7 +794,7 @@ impl Fs {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let length = i.args[1].into();
 
-        self.truncate(path, length, &td)?;
+        self.truncate(path, length, td)?;
 
         Ok(SysOut::ZERO)
     }
@@ -798,7 +803,7 @@ impl Fs {
         let length: TruncateLength = length.try_into()?;
 
         // TODO: Check if the PS4 follow the vnode.
-        let vn = self.lookup(path, true, Some(&td))?;
+        let vn = self.lookup(path, true, Some(td))?;
 
         todo!()
     }
@@ -807,7 +812,7 @@ impl Fs {
         let fd = i.args[0].try_into().unwrap();
         let length = i.args[1].into();
 
-        self.ftruncate(fd, length, &td)?;
+        self.ftruncate(fd, length, td)?;
 
         Ok(SysOut::ZERO)
     }
@@ -821,7 +826,7 @@ impl Fs {
             return Err(FileTruncateError::FileNotWritable);
         }
 
-        file.truncate(length, Some(&td))?;
+        file.truncate(length, Some(td))?;
 
         Ok(())
     }
@@ -833,7 +838,7 @@ impl Fs {
         let path = unsafe { i.args[1].to_path() }?.unwrap();
         let mode: u32 = i.args[2].try_into().unwrap();
 
-        self.mkdirat(At::Fd(fd), path, mode, Some(&td))
+        self.mkdirat(At::Fd(fd), path, mode, Some(td))
     }
 
     /// See `kern_mkdirat` on the PS4 for a reference.
@@ -994,70 +999,6 @@ impl TryFrom<i32> for Whence {
     }
 }
 
-pub struct IoVec {
-    base: *const u8,
-    len: usize,
-}
-
-impl IoVec {
-    pub unsafe fn try_from_raw_parts(base: *const u8, len: usize) -> Result<Self, IoVecError> {
-        Ok(Self { base, len })
-    }
-}
-
-const UIO_MAXIOV: u32 = 1024;
-const IOSIZE_MAX: usize = 0x7fffffff;
-
-pub struct Uio<'a> {
-    vecs: &'a [IoVec], // uio_iov + uio_iovcnt
-    bytes_left: usize, // uio_resid
-}
-
-impl<'a> Uio<'a> {
-    /// See `copyinuio` on the PS4 for a reference.
-    pub unsafe fn copyin(first: *const IoVec, count: u32) -> Result<Self, CopyInUioError> {
-        if count > UIO_MAXIOV {
-            return Err(CopyInUioError::TooManyVecs);
-        }
-
-        let vecs = std::slice::from_raw_parts(first, count as usize);
-        let bytes_left = vecs.iter().map(|v| v.len).try_fold(0, |acc, len| {
-            if acc > IOSIZE_MAX - len {
-                Err(CopyInUioError::MaxLenExceeded)
-            } else {
-                Ok(acc + len)
-            }
-        })?;
-
-        Ok(Self { vecs, bytes_left })
-    }
-}
-
-pub struct UioMut<'a> {
-    vecs: &'a mut [IoVec], // uio_iov + uio_iovcnt
-    bytes_left: usize,     // uio_resid
-}
-
-impl<'a> UioMut<'a> {
-    /// See `copyinuio` on the PS4 for a reference.
-    pub unsafe fn copyin(first: *mut IoVec, count: u32) -> Result<Self, CopyInUioError> {
-        if count > UIO_MAXIOV {
-            return Err(CopyInUioError::TooManyVecs);
-        }
-
-        let vecs = std::slice::from_raw_parts_mut(first, count as usize);
-        let bytes_left = vecs.iter().map(|v| v.len).try_fold(0, |acc, len| {
-            if acc > IOSIZE_MAX - len {
-                Err(CopyInUioError::MaxLenExceeded)
-            } else {
-                Ok(acc + len)
-            }
-        })?;
-
-        Ok(Self { vecs, bytes_left })
-    }
-}
-
 bitflags! {
     /// Flags for *at() syscalls.
     struct AtFlags: i32 {
@@ -1071,24 +1012,6 @@ impl TryFrom<SysArg> for AtFlags {
     fn try_from(value: SysArg) -> Result<Self, Self::Error> {
         Ok(Self::from_bits_retain(value.get().try_into()?))
     }
-}
-
-#[derive(Debug, Error, Errno)]
-pub enum IoVecError {
-    #[error("len exceed the maximum value")]
-    #[errno(EINVAL)]
-    MaxLenExceeded,
-}
-
-#[derive(Debug, Error, Errno)]
-pub enum CopyInUioError {
-    #[error("too many iovecs")]
-    #[errno(EINVAL)]
-    TooManyVecs,
-
-    #[error("the sum of iovec lengths is too large")]
-    #[errno(EINVAL)]
-    MaxLenExceeded,
 }
 
 bitflags! {

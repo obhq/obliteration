@@ -4,7 +4,7 @@ use crate::debug::{DebugManager, DebugManagerInitError};
 use crate::dmem::DmemManager;
 use crate::ee::{EntryArg, RawFn};
 use crate::errno::EEXIST;
-use crate::fs::{Fs, FsInitError, MkdirError, MountError, MountFlags, MountOpts, VPath};
+use crate::fs::{Fs, FsInitError, MkdirError, MountError, MountFlags, MountOpts, VPathBuf};
 use crate::kqueue::KernelQueueManager;
 use crate::llvm::Llvm;
 use crate::log::{print, LOGGER};
@@ -21,6 +21,7 @@ use crate::sysctl::Sysctl;
 use crate::time::TimeManager;
 use crate::tty::{TtyInitError, TtyManager};
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
+use crate::umtx::UmtxManager;
 use clap::{Parser, ValueEnum};
 use hv::Hypervisor;
 use llt::{OsThread, SpawnError};
@@ -63,6 +64,7 @@ mod sysctl;
 mod time;
 mod tty;
 mod ucred;
+mod umtx;
 
 fn main() -> Exit {
     start().into()
@@ -198,7 +200,7 @@ fn start() -> Result<(), KernelError> {
     if let Err(e) = fs.mkdir(path, 0o555, None) {
         match e {
             MkdirError::CreateFailed(e) if e.errno() == EEXIST => {}
-            e => return Err(KernelError::CreateDirectoryFailed(path, e)),
+            e => return Err(KernelError::CreateDirectoryFailed(path.into(), e)),
         }
     }
 
@@ -207,6 +209,36 @@ fn start() -> Result<(), KernelError> {
 
     opts.insert("fstype", "tmpfs");
     opts.insert("fspath", path.to_owned());
+
+    if let Err(e) = fs.mount(opts, MountFlags::empty(), None) {
+        return Err(KernelError::MountFailed(path.into(), e));
+    }
+
+    // TODO: Check permission of these paths on the PS4.
+    let paths = [vpath!("/mnt/sandbox"), vpath!("/mnt/sandbox/pfsmnt")];
+
+    for path in paths {
+        if let Err(e) = fs.mkdir(path, 0o555, None) {
+            return Err(KernelError::CreateDirectoryFailed(path.into(), e));
+        }
+    }
+
+    // TODO: Check permission of /mnt/sandbox/pfsmnt/CUSAXXXXX-app0 on the PS4.
+    let path: VPathBuf = format!("/mnt/sandbox/pfsmnt/{}-app0", param.title_id())
+        .try_into()
+        .unwrap();
+
+    if let Err(e) = fs.mkdir(&path, 0o555, None) {
+        return Err(KernelError::CreateDirectoryFailed(path, e));
+    }
+
+    // TODO: Get mount options from the PS4.
+    let mut opts = MountOpts::new();
+
+    opts.insert("fstype", "pfs");
+    opts.insert("fspath", path.clone());
+    opts.insert("from", vpath!("/dev/lvd2").to_owned());
+    opts.insert("ob:root", args.game);
 
     if let Err(e) = fs.mount(opts, MountFlags::empty(), None) {
         return Err(KernelError::MountFailed(path, e));
@@ -304,6 +336,7 @@ fn run<E: crate::ee::ExecutionEngine>(
 
     NamedObjManager::new(&mut syscalls, &proc);
     OsemManager::new(&mut syscalls, &proc);
+    UmtxManager::new(&mut syscalls);
 
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
@@ -536,10 +569,10 @@ enum KernelError {
     FilesystemInitFailed(#[from] FsInitError),
 
     #[error("couldn't create {0}")]
-    CreateDirectoryFailed(&'static VPath, #[source] MkdirError),
+    CreateDirectoryFailed(VPathBuf, #[source] MkdirError),
 
     #[error("couldn't mount {0}")]
-    MountFailed(&'static VPath, #[source] MountError),
+    MountFailed(VPathBuf, #[source] MountError),
 
     #[error("memory manager initialization failed")]
     MemoryManagerInitFailed(#[from] MemoryManagerError),

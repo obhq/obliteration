@@ -1,6 +1,8 @@
 use self::deci::DeciDev;
 use crate::errno::Errno;
-use crate::fs::{make_dev, Cdev, CdevSw, DriverFlags, MakeDev, MakeDevError, Mode, OpenFlags};
+use crate::fs::{
+    make_dev, CdevSw, CharacterDevice, DriverFlags, MakeDev, MakeDevError, Mode, OpenFlags,
+};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use std::sync::Arc;
@@ -46,7 +48,7 @@ impl DebugManager {
     }
 
     fn deci_open(
-        _: &Arc<Cdev>,
+        _: &Arc<CharacterDevice>,
         _: OpenFlags,
         _: i32,
         _: Option<&VThread>,

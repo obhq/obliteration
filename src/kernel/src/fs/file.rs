@@ -1,11 +1,11 @@
-use super::{Cdev, IoCmd, Offset, Stat, TruncateLength, Uio, UioMut, Vnode};
+use super::{CharacterDevice, IoCmd, Offset, Stat, TruncateLength, Uio, UioMut, Vnode};
 use crate::dmem::BlockPool;
 use crate::errno::Errno;
 use crate::errno::{EINVAL, ENOTTY, ENXIO, EOPNOTSUPP};
 use crate::kqueue::KernelQueue;
 use crate::net::Socket;
 use crate::process::VThread;
-use crate::shm::Shm;
+use crate::shm::SharedMemory;
 use bitflags::bitflags;
 use macros::Errno;
 use std::fmt::Debug;
@@ -147,18 +147,21 @@ impl VFile {
 }
 
 impl Seek for VFile {
+    #[allow(unused_variables)] // TODO: Remove when implementing.
     fn seek(&mut self, _pos: SeekFrom) -> std::io::Result<u64> {
         todo!()
     }
 }
 
 impl Read for VFile {
+    #[allow(unused_variables)] // TODO: Remove when implementing.
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         todo!()
     }
 }
 
 impl Write for VFile {
+    #[allow(unused_variables)] // TODO: Remove when implementing.
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         todo!()
     }
@@ -171,13 +174,13 @@ impl Write for VFile {
 /// Type of [`VFile`].
 #[derive(Debug)]
 pub enum VFileType {
-    Vnode(Arc<Vnode>),             // DTYPE_VNODE = 1
-    Socket(Arc<Socket>),           // DTYPE_SOCKET = 2,
-    KernelQueue(Arc<KernelQueue>), // DTYPE_KQUEUE = 5,
-    SharedMemory(Arc<Shm>),        // DTYPE_SHM = 8,
-    Device(Arc<Cdev>),             // DTYPE_DEV = 11,
-    IpcSocket(Arc<Socket>),        // DTYPE_IPCSOCKET = 15,
-    Blockpool(Arc<BlockPool>),     // DTYPE_BLOCKPOOL = 17,
+    Vnode(Arc<Vnode>),               // DTYPE_VNODE = 1
+    Socket(Arc<Socket>),             // DTYPE_SOCKET = 2,
+    KernelQueue(Arc<KernelQueue>),   // DTYPE_KQUEUE = 5,
+    SharedMemory(Arc<SharedMemory>), // DTYPE_SHM = 8,
+    Device(Arc<CharacterDevice>),    // DTYPE_DEV = 11,
+    IpcSocket(Arc<Socket>),          // DTYPE_IPCSOCKET = 15,
+    Blockpool(Arc<BlockPool>),       // DTYPE_BLOCKPOOL = 17,
 }
 
 bitflags! {

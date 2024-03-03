@@ -1,12 +1,13 @@
 use super::{
-    unixify_access, Access, Cdev, FileBackend, IoCmd, Mode, Mount, OpenFlags, RevokeFlags, Stat,
-    TruncateLength, Uio, UioMut, VFile,
+    unixify_access, Access, CharacterDevice, FileBackend, IoCmd, Mode, Mount, OpenFlags,
+    RevokeFlags, Stat, TruncateLength, Uio, UioMut, VFile,
 };
 use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use gmtx::{Gutex, GutexGroup};
 use macros::Errno;
+use std::any::Any;
 use std::fmt::Debug;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
@@ -31,7 +32,7 @@ impl Vnode {
         fs: &Arc<Mount>,
         ty: VnodeType,
         tag: &'static str,
-        backend: impl VnodeBackend,
+        backend: Arc<impl VnodeBackend>,
     ) -> Arc<Self> {
         let gg = GutexGroup::new();
 
@@ -41,7 +42,7 @@ impl Vnode {
             fs: fs.clone(),
             ty,
             tag,
-            backend: Arc::new(backend),
+            backend
         })
     }
 
@@ -180,7 +181,7 @@ pub enum VnodeType {
 /// `vop_bypass` because it required the return type for all operations to be the same.
 ///
 /// All default implementation here are the implementation of `default_vnodeops`.
-pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
+pub(super) trait VnodeBackend: Any + Debug + Send + Sync + 'static {
     /// An implementation of `vop_access`.
     fn access(
         self: Arc<Self>,
@@ -226,7 +227,7 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
         #[allow(unused_variables)] cmd: IoCmd,
         #[allow(unused_variables)] td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        Err(Box::new(DefaultError::IoctlNotSupported))
+        Err(Box::new(DefaultError::CommandNotSupported))
     }
 
     /// An implementation of `vop_lookup`.
@@ -311,7 +312,7 @@ impl VnodeAttrs {
     }
 }
 
-/// Represents an error when [`DEFAULT_VNODEOPS`] is failed.
+/// Represents an error when [`DEFAULT_VNODEOPS`] fails.
 #[derive(Debug, Error, Errno)]
 enum DefaultError {
     #[error("operation not supported")]
@@ -328,7 +329,7 @@ enum DefaultError {
 
     #[error("ioctl not supported")]
     #[errno(ENOTTY)]
-    IoctlNotSupported,
+    CommandNotSupported,
 }
 
 static ACTIVE: AtomicUsize = AtomicUsize::new(0); // numvnodes

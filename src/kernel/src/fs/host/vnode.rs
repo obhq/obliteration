@@ -1,6 +1,6 @@
 use super::file::HostFile;
 use super::{get_vnode, GetVnodeError, HostFs};
-use crate::errno::{Errno, EIO, ENOENT, ENOTDIR};
+use crate::errno::{Errno, EEXIST, EIO, ENOENT, ENOTDIR};
 use crate::fs::{Access, IoCmd, Mode, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
@@ -17,17 +17,17 @@ pub struct VnodeBackend {
 }
 
 impl VnodeBackend {
-    pub fn new(fs: Arc<HostFs>, file: Arc<HostFile>) -> Self {
-        Self { fs, file }
+    pub fn new(fs: Arc<HostFs>, file: Arc<HostFile>) -> Arc<Self> {
+        Arc::new(Self { fs, file })
     }
 }
 
 impl crate::fs::VnodeBackend for VnodeBackend {
     fn access(
         self: Arc<Self>,
-        vn: &Arc<Vnode>,
-        td: Option<&VThread>,
-        mode: Access,
+        _: &Arc<Vnode>,
+        _: Option<&VThread>,
+        _: Access,
     ) -> Result<(), Box<dyn Errno>> {
         // TODO: Check how the PS4 check file permission for exfatfs.
         Ok(())
@@ -104,9 +104,22 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         mode: u32,
         td: Option<&VThread>,
     ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
-        todo!()
+        parent.access(td, Access::WRITE)?;
+
+        let dir = self
+            .file
+            .mkdir(name, mode)
+            .map_err(|e| MkDirError::from(e))?;
+
+        Ok(Vnode::new(
+            parent.fs(),
+            VnodeType::Directory(false),
+            "exfatfs",
+            VnodeBackend::new(self.fs.clone(), dir),
+        ))
     }
 
+    #[allow(unused_variables)] // TODO: remove when implementing.
     fn open(
         self: Arc<Self>,
         vn: &Arc<Vnode>,
@@ -150,4 +163,24 @@ enum LookupError {
 
     #[error("cannot get vnode")]
     GetVnodeFailed(#[source] GetVnodeError),
+}
+
+#[derive(Debug, Error, Errno)]
+enum MkDirError {
+    #[error("couldn't create directory")]
+    #[errno(EIO)]
+    CreateFailed(#[source] std::io::Error),
+
+    #[error("directory already exists")]
+    #[errno(EEXIST)]
+    AlreadyExists,
+}
+
+impl From<std::io::Error> for MkDirError {
+    fn from(e: std::io::Error) -> Self {
+        match e.kind() {
+            std::io::ErrorKind::AlreadyExists => MkDirError::AlreadyExists,
+            _ => MkDirError::CreateFailed(e),
+        }
+    }
 }
