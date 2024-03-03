@@ -31,7 +31,7 @@ impl NetManager {
         sys.register(97, &net, Self::sys_socket);
         sys.register(105, &net, Self::sys_setsockopt);
         sys.register(113, &net, Self::sys_socketex);
-        sys.register(105, &net, Self::sys_getsockopt);
+        sys.register(118, &net, Self::sys_getsockopt);
         sys.register(133, &net, Self::sys_sendto);
 
         net
