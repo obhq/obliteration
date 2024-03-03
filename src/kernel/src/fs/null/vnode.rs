@@ -21,7 +21,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     ) -> Result<(), Box<dyn Errno>> {
         if mode.contains(Access::WRITE) {
             match vn.ty() {
-                VnodeType::Directory(_) | VnodeType::Link | VnodeType::File => {
+                VnodeType::Directory(_, _) | VnodeType::Link | VnodeType::File => {
                     if vn.fs().flags().contains(MountFlags::MNT_RDONLY) {
                         Err(AccessError::Readonly)?
                     }

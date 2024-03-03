@@ -2,8 +2,7 @@ use super::dirent::Dirent;
 use super::{alloc_vnode, AllocVnodeError, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
-    check_access, Access, IoCmd, OpenFlags, RevokeFlags, VFile, Vnode, VnodeAttrs, VnodeItem,
-    VnodeType,
+    check_access, Access, IoCmd, OpenFlags, RevokeFlags, VFile, Vnode, VnodeAttrs, VnodeType,
 };
 use crate::process::VThread;
 use macros::Errno;
@@ -35,7 +34,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         // Get dirent.
         let mut dirent = self.dirent.clone();
         let is_dir = match vn.ty() {
-            VnodeType::Directory(_) => {
+            VnodeType::Directory(_, _) => {
                 if let Some(v) = dirent.dir() {
                     // Is it possible the parent will be gone here?
                     dirent = v.upgrade().unwrap();
@@ -90,7 +89,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         let gid = dirent.gid();
         let mode = dirent.mode();
         let size = match vn.ty() {
-            VnodeType::Directory(_) => 512,
+            VnodeType::Directory(_, _) => 512,
             VnodeType::Link => todo!(), /* TODO: strlen(dirent.de_symlink) */
             _ => 0,
         };
@@ -118,7 +117,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 
         // Check if directory.
         match vn.ty() {
-            VnodeType::Directory(root) => {
+            VnodeType::Directory(root, _) => {
                 if name == ".." && *root {
                     return Err(Box::new(LookupError::DotdotOnRoot));
                 }
@@ -175,10 +174,16 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         }
 
         // Not sure why FreeBSD check if vnode is VBLK because all of vnode here always be VCHR.
-        let item = vn.item();
-        let Some(VnodeItem::Device(dev)) = item.as_ref() else {
+        let VnodeType::CharacterDevice(dev) = vn.ty() else {
             unreachable!();
         };
+
+        let dev = dev.read();
+
+        let Some(dev) = dev.as_ref() else {
+            unreachable!();
+        };
+
         let sw = dev.sw();
 
         if file.is_none() && sw.fdopen().is_some() {

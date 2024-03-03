@@ -5,7 +5,7 @@ use super::{
 use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
-use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
+use gmtx::{Gutex, GutexGroup};
 use macros::Errno;
 use std::any::Any;
 use std::fmt::Debug;
@@ -24,7 +24,6 @@ pub struct Vnode {
     ty: VnodeType,                  // v_type
     tag: &'static str,              // v_tag
     backend: Arc<dyn VnodeBackend>, // v_op + v_data
-    item: Gutex<Option<VnodeItem>>, // v_un
 }
 
 impl Vnode {
@@ -43,8 +42,7 @@ impl Vnode {
             fs: fs.clone(),
             ty,
             tag,
-            backend,
-            item: gg.spawn(None),
+            backend
         })
     }
 
@@ -57,19 +55,11 @@ impl Vnode {
     }
 
     pub fn is_directory(&self) -> bool {
-        matches!(self.ty, VnodeType::Directory(_))
+        matches!(self.ty, VnodeType::Directory(_, _))
     }
 
     pub fn is_character(&self) -> bool {
-        matches!(self.ty, VnodeType::CharacterDevice)
-    }
-
-    pub fn item(&self) -> GutexReadGuard<Option<VnodeItem>> {
-        self.item.read()
-    }
-
-    pub fn item_mut(&self) -> GutexWriteGuard<Option<VnodeItem>> {
-        self.item.write()
+        matches!(self.ty, VnodeType::CharacterDevice(_))
     }
 
     pub fn access(
@@ -176,19 +166,13 @@ impl Drop for Vnode {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum VnodeItem {
-    Mount(Weak<Mount>),
-    Device(Arc<CharacterDevice>),
-}
-
 /// An implementation of `vtype`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum VnodeType {
-    File,            // VREG
-    Directory(bool), // VDIR
-    CharacterDevice, // VCHR
-    Link,            // VLNK
+    File,                                        // VREG
+    Directory(bool, Gutex<Option<Weak<Mount>>>), // VDIR
+    CharacterDevice(Gutex<Option<Arc<Cdev>>>),   // VCHR
+    Link,                                        // VLNK
 }
 
 /// An implementation of `vop_vector` structure.

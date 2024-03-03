@@ -6,6 +6,7 @@ use super::{
 };
 use crate::errno::{Errno, EIO};
 use crate::ucred::Ucred;
+use gmtx::GutexGroup;
 use macros::Errno;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -97,7 +98,9 @@ fn get_vnode(
 
     // Get vnode type. Beware of deadlock here.
     let ty = match file.is_directory() {
-        Ok(true) => VnodeType::Directory(Arc::ptr_eq(file, &fs.root)),
+        Ok(true) => {
+            VnodeType::Directory(Arc::ptr_eq(file, &fs.root), GutexGroup::new().spawn(None))
+        }
         Ok(false) => VnodeType::File,
         Err(e) => return Err(GetVnodeError::GetFileTypeFailed(e)),
     };
