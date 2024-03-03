@@ -214,7 +214,7 @@ pub(super) trait Device: Debug + Sync + Send + 'static {
 
     #[allow(unused_variables)]
     fn ioctl(self: Arc<Self>, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
-        Err(Box::new(DefaultError::IoctlNotSupported))
+        Err(Box::new(DefaultError::CommandNotSupported))
     }
 }
 
@@ -230,5 +230,5 @@ pub(super) enum DefaultError {
 
     #[error("ioctl not supported")]
     #[errno(ENODEV)]
-    IoctlNotSupported,
+    CommandNotSupported,
 }

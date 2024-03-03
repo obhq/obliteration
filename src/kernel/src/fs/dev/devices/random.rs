@@ -1,6 +1,9 @@
 use crate::{
     errno::Errno,
-    fs::{dev::Device, IoCmd, Uio, UioMut},
+    fs::{
+        dev::{DefaultError, Device},
+        IoCmd, Uio, UioMut,
+    },
     process::VThread,
 };
 use std::sync::Arc;
@@ -27,8 +30,10 @@ impl Device for Random {
         todo!()
     }
 
-    #[allow(unused_variables)] // TODO: remove when implementing
-    fn ioctl(self: Arc<Self>, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
-        todo!()
+    fn ioctl(self: Arc<Self>, cmd: IoCmd, _: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
+        match cmd {
+            IoCmd::FIOASYNC(_) | IoCmd::FIONBIO(_) => Ok(()),
+            _ => Err(Box::new(DefaultError::CommandNotSupported)),
+        }
     }
 }
