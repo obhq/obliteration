@@ -14,7 +14,7 @@ struct VnodeBackend {
 
 impl crate::fs::VnodeBackend for VnodeBackend {
     fn accessx(
-        self: Arc<Self>,
+        &self,
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         mode: Access,
@@ -38,7 +38,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     }
 
     /// This function tries to mimic what calling `null_bypass` would do.
-    fn getattr(self: Arc<Self>, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
+    fn getattr(&self, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
         let mut attr = self
             .lower
             .getattr()
@@ -53,7 +53,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 
     /// This function tries to mimic what calling `null_bypass` would do.
     fn lookup(
-        self: Arc<Self>,
+        &self,
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         name: &str,
@@ -74,7 +74,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 
     /// This function tries to mimic what calling `null_bypass` would do.
     fn open(
-        self: Arc<Self>,
+        &self,
         _: &Arc<Vnode>,
         td: Option<&VThread>,
         mode: OpenFlags,
