@@ -26,7 +26,7 @@ impl FileDesc {
         let gg = GutexGroup::new();
 
         let filedesc = Self {
-            // TODO: this probably be
+            // TODO: the first 3 file descriptors should probably be ttyconsdev
             files: gg.spawn(vec![]),
             cwd: gg.spawn(root.clone()),
             root: gg.spawn(root),
