@@ -39,16 +39,18 @@ jobs:
           with zip.open("build-info.json") as info:
             info = json.load(info)
 
-        author = info["author"];
-        head = info["head"]
-        cmp = repo.compare(info["base"], f"{author}:{head}")
+        pull = repo.get_pull(info["pr"])
 
-        if cmp.status != "behind":
-          pull = repo.get_pull(info["pr"])
-          ready = False
-          for label in pull.labels:
-            if label.name == "S-ready":
-              ready = True
-          if not ready:
-            pull.add_to_labels("S-ready")
+        if not pull.draft:
+          author = info["author"];
+          head = info["head"]
+          cmp = repo.compare(info["base"], f"{author}:{head}")
+
+          if cmp.status != "behind":
+            ready = False
+            for label in pull.labels:
+              if label.name == "S-ready":
+                ready = True
+            if not ready:
+              pull.add_to_labels("S-ready")
       shell: python
