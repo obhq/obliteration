@@ -150,6 +150,7 @@ impl FileDesc {
     }
 }
 
+#[repr(C)]
 pub struct PollFd {
     fd: i32,
     events: PollEvents,
