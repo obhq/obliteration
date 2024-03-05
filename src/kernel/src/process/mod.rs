@@ -442,22 +442,24 @@ impl VProc {
             todo!("thr_new with non-null rtp");
         }
 
-        self.create_thread(
-            td,
-            param.start_func,
-            param.arg,
-            param.stack_base,
-            param.stack_size,
-            param.tls_base,
-            param.child_tid,
-            param.parent_tid,
-            param.flags,
-            param.rtprio,
-        )
+        unsafe {
+            self.create_thread(
+                td,
+                param.start_func,
+                param.arg,
+                param.stack_base,
+                param.stack_size,
+                param.tls_base,
+                param.child_tid,
+                param.parent_tid,
+                param.flags,
+                param.rtprio,
+            )
+        }
     }
 
     #[allow(unused_variables)] // TODO: Remove this when implementing.
-    fn create_thread(
+    unsafe fn create_thread(
         &self,
         td: &VThread,
         start_func: fn(usize),
