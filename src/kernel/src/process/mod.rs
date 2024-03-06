@@ -432,30 +432,30 @@ impl VProc {
             todo!("thr_new with param_size != sizeof(ThrParam)");
         }
 
-        self.thr_new(td, unsafe { &*param })?;
+        unsafe {
+            self.thr_new(td, &*param)?;
+        }
 
         Ok(SysOut::ZERO)
     }
 
-    fn thr_new(&self, td: &VThread, param: &ThrParam) -> Result<SysOut, CreateThreadError> {
+    unsafe fn thr_new(&self, td: &VThread, param: &ThrParam) -> Result<SysOut, CreateThreadError> {
         if param.rtprio != null() {
             todo!("thr_new with non-null rtp");
         }
 
-        unsafe {
-            self.create_thread(
-                td,
-                param.start_func,
-                param.arg,
-                param.stack_base,
-                param.stack_size,
-                param.tls_base,
-                param.child_tid,
-                param.parent_tid,
-                param.flags,
-                param.rtprio,
-            )
-        }
+        self.create_thread(
+            td,
+            param.start_func,
+            param.arg,
+            param.stack_base,
+            param.stack_size,
+            param.tls_base,
+            param.child_tid,
+            param.parent_tid,
+            param.flags,
+            param.rtprio,
+        )
     }
 
     #[allow(unused_variables)] // TODO: Remove this when implementing.
