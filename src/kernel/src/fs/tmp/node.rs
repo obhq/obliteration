@@ -1,8 +1,7 @@
 use crate::errno::{Errno, ENOSPC};
-use crate::fs::{Access, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeBackend};
+use crate::fs::{Access, OpenFlags, VFile, Vnode, VnodeAttrs};
 use crate::process::VThread;
 use macros::Errno;
-use std::any::Any;
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
@@ -44,10 +43,22 @@ impl Nodes {
 #[derive(Debug)]
 pub struct Node {}
 
-impl VnodeBackend for Node {
+/// An implementation of [`crate::fs::VnodeBackend`] for tmpfs.
+#[derive(Debug)]
+pub struct VnodeBackend {
+    node: Arc<Node>,
+}
+
+impl VnodeBackend {
+    pub fn new(node: Arc<Node>) -> Self {
+        Self { node }
+    }
+}
+
+impl crate::fs::VnodeBackend for VnodeBackend {
     #[allow(unused_variables)] // TODO: remove when implementing
     fn access(
-        self: Arc<Self>,
+        &self,
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         mode: Access,
@@ -56,13 +67,13 @@ impl VnodeBackend for Node {
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
-    fn getattr(self: Arc<Self>, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
+    fn getattr(&self, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
         todo!()
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
     fn lookup(
-        self: Arc<Self>,
+        &self,
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         name: &str,
@@ -78,7 +89,7 @@ impl VnodeBackend for Node {
 
     #[allow(unused_variables)] // TODO: remove when implementing
     fn mkdir(
-        self: Arc<Self>,
+        &self,
         parent: &Arc<Vnode>,
         name: &str,
         mode: u32,
@@ -89,7 +100,7 @@ impl VnodeBackend for Node {
 
     #[allow(unused_variables)] // TODO: remove when implementing
     fn open(
-        self: Arc<Self>,
+        &self,
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         mode: OpenFlags,

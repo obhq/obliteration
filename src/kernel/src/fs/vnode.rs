@@ -1,13 +1,12 @@
 use super::{
-    unixify_access, Access, Cdev, FileBackend, IoCmd, Mode, Mount, OpenFlags, RevokeFlags, Stat,
-    TruncateLength, Uio, UioMut, VFile,
+    unixify_access, Access, CharacterDevice, FileBackend, IoCmd, Mode, Mount, OpenFlags,
+    RevokeFlags, Stat, TruncateLength, Uio, UioMut, VFile,
 };
 use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use macros::Errno;
-use std::any::Any;
 use std::fmt::Debug;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
@@ -23,7 +22,7 @@ pub struct Vnode {
     fs: Arc<Mount>,                 // v_mount
     ty: VnodeType,                  // v_type
     tag: &'static str,              // v_tag
-    backend: Arc<dyn VnodeBackend>, // v_op + v_data
+    backend: Box<dyn VnodeBackend>, // v_op + v_data
     item: Gutex<Option<VnodeItem>>, // v_un
 }
 
@@ -33,7 +32,7 @@ impl Vnode {
         fs: &Arc<Mount>,
         ty: VnodeType,
         tag: &'static str,
-        backend: Arc<impl VnodeBackend>,
+        backend: impl VnodeBackend,
     ) -> Arc<Self> {
         let gg = GutexGroup::new();
 
@@ -43,7 +42,7 @@ impl Vnode {
             fs: fs.clone(),
             ty,
             tag,
-            backend,
+            backend: Box::new(backend),
             item: gg.spawn(None),
         })
     }
@@ -77,7 +76,7 @@ impl Vnode {
         td: Option<&VThread>,
         mode: Access,
     ) -> Result<(), Box<dyn Errno>> {
-        self.backend.clone().access(self, td, mode)
+        self.backend.access(self, td, mode)
     }
 
     pub fn accessx(
@@ -85,11 +84,11 @@ impl Vnode {
         td: Option<&VThread>,
         mode: Access,
     ) -> Result<(), Box<dyn Errno>> {
-        self.backend.clone().accessx(self, td, mode)
+        self.backend.accessx(self, td, mode)
     }
 
     pub fn getattr(self: &Arc<Self>) -> Result<VnodeAttrs, Box<dyn Errno>> {
-        self.backend.clone().getattr(self)
+        self.backend.getattr(self)
     }
 
     pub fn lookup(
@@ -97,7 +96,7 @@ impl Vnode {
         td: Option<&VThread>,
         name: &str,
     ) -> Result<Arc<Self>, Box<dyn Errno>> {
-        self.backend.clone().lookup(self, td, name)
+        self.backend.lookup(self, td, name)
     }
 
     pub fn mkdir(
@@ -106,7 +105,7 @@ impl Vnode {
         mode: u32,
         td: Option<&VThread>,
     ) -> Result<Arc<Self>, Box<dyn Errno>> {
-        self.backend.clone().mkdir(self, name, mode, td)
+        self.backend.mkdir(self, name, mode, td)
     }
 
     pub fn open(
@@ -115,11 +114,11 @@ impl Vnode {
         mode: OpenFlags,
         file: Option<&mut VFile>,
     ) -> Result<(), Box<dyn Errno>> {
-        self.backend.clone().open(self, td, mode, file)
+        self.backend.open(self, td, mode, file)
     }
 
     pub fn revoke(self: &Arc<Self>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
-        self.backend.clone().revoke(self, flags)
+        self.backend.revoke(self, flags)
     }
 }
 
@@ -179,7 +178,7 @@ impl Drop for Vnode {
 #[derive(Debug, Clone)]
 pub enum VnodeItem {
     Mount(Weak<Mount>),
-    Device(Arc<Cdev>),
+    Device(Arc<CharacterDevice>),
 }
 
 /// An implementation of `vtype`.
@@ -197,10 +196,10 @@ pub enum VnodeType {
 /// `vop_bypass` because it required the return type for all operations to be the same.
 ///
 /// All default implementation here are the implementation of `default_vnodeops`.
-pub(super) trait VnodeBackend: Any + Debug + Send + Sync + 'static {
+pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
     /// An implementation of `vop_access`.
     fn access(
-        self: Arc<Self>,
+        &self,
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         mode: Access,
@@ -210,7 +209,7 @@ pub(super) trait VnodeBackend: Any + Debug + Send + Sync + 'static {
 
     /// An implementation of `vop_accessx`.
     fn accessx(
-        self: Arc<Self>,
+        &self,
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         mode: Access,
@@ -230,7 +229,7 @@ pub(super) trait VnodeBackend: Any + Debug + Send + Sync + 'static {
 
     /// An implementation of `vop_getattr`.
     fn getattr(
-        self: Arc<Self>,
+        &self,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
     ) -> Result<VnodeAttrs, Box<dyn Errno>> {
         // Inline vop_bypass.
@@ -238,7 +237,7 @@ pub(super) trait VnodeBackend: Any + Debug + Send + Sync + 'static {
     }
 
     fn ioctl(
-        self: Arc<Self>,
+        &self,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] cmd: IoCmd,
         #[allow(unused_variables)] td: Option<&VThread>,
@@ -248,7 +247,7 @@ pub(super) trait VnodeBackend: Any + Debug + Send + Sync + 'static {
 
     /// An implementation of `vop_lookup`.
     fn lookup(
-        self: Arc<Self>,
+        &self,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] td: Option<&VThread>,
         #[allow(unused_variables)] name: &str,
@@ -260,7 +259,7 @@ pub(super) trait VnodeBackend: Any + Debug + Send + Sync + 'static {
     /// There should be a VnodeAttrs argument instead of mode,
     /// but it seems that the only argument that actually gets used is mode.
     fn mkdir(
-        self: Arc<Self>,
+        &self,
         #[allow(unused_variables)] parent: &Arc<Vnode>,
         #[allow(unused_variables)] name: &str,
         #[allow(unused_variables)] mode: u32,
@@ -271,7 +270,7 @@ pub(super) trait VnodeBackend: Any + Debug + Send + Sync + 'static {
 
     /// An implementation of `vop_open`.
     fn open(
-        self: Arc<Self>,
+        &self,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] td: Option<&VThread>,
         #[allow(unused_variables)] mode: OpenFlags,
@@ -282,7 +281,7 @@ pub(super) trait VnodeBackend: Any + Debug + Send + Sync + 'static {
 
     /// An implementation of `vop_revoke`.
     fn revoke(
-        self: Arc<Self>,
+        &self,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] flags: RevokeFlags,
     ) -> Result<(), Box<dyn Errno>> {

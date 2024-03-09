@@ -15,7 +15,7 @@ use thiserror::Error;
 
 /// An implementation of `cdev` and `cdev_priv` structures.
 #[derive(Debug)]
-pub struct Cdev {
+pub struct CharacterDevice {
     sw: Arc<CdevSw>,                           // si_devsw
     unit: i32,                                 // si_drv0
     name: String,                              // si_name
@@ -32,7 +32,7 @@ pub struct Cdev {
     dirents: Gutex<Vec<Option<Weak<Dirent>>>>, // cdp_dirents + cdp_maxdirent
 }
 
-impl Cdev {
+impl CharacterDevice {
     /// See `devfs_alloc` on the PS4 for a reference.
     pub(super) fn new(
         sw: &Arc<CdevSw>,
@@ -103,7 +103,7 @@ impl Cdev {
     }
 }
 
-impl FileBackend for Cdev {
+impl FileBackend for CharacterDevice {
     #[allow(unused_variables)] // TODO: remove when implementing
     fn read(
         self: &Arc<Self>,
@@ -198,9 +198,14 @@ bitflags! {
     }
 }
 
-pub type CdevOpen = fn(&Arc<Cdev>, OpenFlags, i32, Option<&VThread>) -> Result<(), Box<dyn Errno>>;
-pub type CdevFd =
-    fn(&Arc<Cdev>, OpenFlags, Option<&VThread>, Option<&mut VFile>) -> Result<(), Box<dyn Errno>>;
+pub type CdevOpen =
+    fn(&Arc<CharacterDevice>, OpenFlags, i32, Option<&VThread>) -> Result<(), Box<dyn Errno>>;
+pub type CdevFd = fn(
+    &Arc<CharacterDevice>,
+    OpenFlags,
+    Option<&VThread>,
+    Option<&mut VFile>,
+) -> Result<(), Box<dyn Errno>>;
 
 /// An implementation of the `cdevsw` structure.
 pub(super) trait Device: Debug + Sync + Send + 'static {

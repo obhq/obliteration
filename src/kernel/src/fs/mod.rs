@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 
-pub use self::dev::{make_dev, Cdev, CdevSw, DriverFlags, MakeDev, MakeDevError};
+pub use self::dev::{make_dev, CdevSw, CharacterDevice, DriverFlags, MakeDev, MakeDevError};
 pub use self::dirent::*;
 pub use self::file::*;
 pub use self::ioctl::*;
@@ -433,7 +433,7 @@ impl Fs {
     fn sys_close(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
 
-        info!("Closing fd {fd}.");
+        info!("Attempting to close fd {fd}.");
 
         td.proc().files().free(fd)?;
 
@@ -655,7 +655,7 @@ impl Fs {
     fn preadv(&self, fd: i32, uio: UioMut, offset: i64, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_read(fd)?;
 
-        let vnode = file.vnode().ok_or(SysErr::Raw(ESPIPE))?;
+        let vnode = file.seekable_vnode().ok_or(SysErr::Raw(ESPIPE))?;
 
         if offset < 0 && !vnode.is_character() {
             return Err(SysErr::Raw(EINVAL));
@@ -680,7 +680,7 @@ impl Fs {
     fn pwritev(&self, fd: i32, uio: Uio, offset: i64, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_write(fd)?;
 
-        let vnode = file.vnode().ok_or(SysErr::Raw(ESPIPE))?;
+        let vnode = file.seekable_vnode().ok_or(SysErr::Raw(ESPIPE))?;
 
         if offset < 0 && !vnode.is_character() {
             return Err(SysErr::Raw(EINVAL));
@@ -748,7 +748,7 @@ impl Fs {
 
         let file = td.proc().files().get(fd)?;
 
-        let vnode = file.vnode().ok_or(SysErr::Raw(ESPIPE))?;
+        let vnode = file.seekable_vnode().ok_or(SysErr::Raw(ESPIPE))?;
 
         // check vnode type
 

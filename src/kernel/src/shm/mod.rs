@@ -1,6 +1,3 @@
-use macros::Errno;
-use thiserror::Error;
-
 use crate::{
     errno::{Errno, EINVAL},
     fs::{
@@ -12,7 +9,9 @@ use crate::{
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
     ucred::{Gid, Ucred, Uid},
 };
+use macros::Errno;
 use std::{convert::Infallible, sync::Arc};
+use thiserror::Error;
 
 #[allow(dead_code)] // TODO: remove when used.
 pub struct SharedMemoryManager {
@@ -80,15 +79,16 @@ pub enum ShmPath {
     Path(VPathBuf),
 }
 
+/// An implementation of the `shmfd` structure.
 #[derive(Debug)]
 #[allow(unused_variables)] // TODO: remove when used.
-pub struct Shm {
+pub struct SharedMemory {
     uid: Uid,
     gid: Gid,
     mode: Mode,
 }
 
-impl Shm {
+impl SharedMemory {
     /// See `shm_do_truncate` on the PS4 for a reference.
     #[allow(unused_variables)] // TODO: remove when implementing.
     fn do_truncate(&self, length: TruncateLength) -> Result<(), TruncateError> {
@@ -114,7 +114,7 @@ impl Shm {
     }
 }
 
-impl FileBackend for Shm {
+impl FileBackend for SharedMemory {
     #[allow(unused_variables)]
     fn read(
         self: &Arc<Self>,
@@ -122,7 +122,7 @@ impl FileBackend for Shm {
         buf: &mut UioMut,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        Err(DefaultError::OperationNotSupported.into())
+        Err(Box::new(DefaultError::OperationNotSupported))
     }
 
     #[allow(unused_variables)]
@@ -132,7 +132,7 @@ impl FileBackend for Shm {
         buf: &mut Uio,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        Err(DefaultError::OperationNotSupported.into())
+        Err(Box::new(DefaultError::OperationNotSupported))
     }
 
     #[allow(unused_variables)] // remove when implementing

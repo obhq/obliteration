@@ -1,5 +1,4 @@
 use self::node::{AllocNodeError, Node, Nodes};
-use super::VnodeType;
 use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, MountSource, VPathBuf, Vnode};
 use crate::errno::{Errno, EINVAL};
 use crate::ucred::{Ucred, Uid};
@@ -98,6 +97,7 @@ pub fn mount(
 }
 
 /// An implementation of `tmpfs_mount` structure.
+#[allow(dead_code)]
 #[derive(Debug)]
 struct TempFs {
     max_pages: usize,      // tm_pages_max
@@ -122,12 +122,9 @@ fn alloc_vnode(
     fs: &Arc<TempFs>,
     node: &Arc<Node>,
 ) -> Result<Arc<Vnode>, AllocVnodeError> {
-    Ok(Vnode::new(
-        mnt,
-        VnodeType::Directory(Arc::ptr_eq(&fs.root, node)),
-        "tmpfs",
-        node.clone(),
-    ))
+    // Make sure we don't return more than one Vnode for the same Node. It is a logic error if more
+    // than one vnode encapsulate the same node.
+    todo!()
 }
 
 /// Represents an error when [`mount()`] fails.

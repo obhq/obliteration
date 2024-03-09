@@ -1,5 +1,5 @@
 use super::file::HostFile;
-use super::{get_vnode, GetVnodeError, HostFs};
+use super::{GetVnodeError, HostFs};
 use crate::errno::{Errno, EEXIST, EIO, ENOENT, ENOTDIR};
 use crate::fs::{Access, IoCmd, Mode, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
@@ -17,23 +17,18 @@ pub struct VnodeBackend {
 }
 
 impl VnodeBackend {
-    pub fn new(fs: Arc<HostFs>, file: Arc<HostFile>) -> Arc<Self> {
-        Arc::new(Self { fs, file })
+    pub fn new(fs: Arc<HostFs>, file: Arc<HostFile>) -> Self {
+        Self { fs, file }
     }
 }
 
 impl crate::fs::VnodeBackend for VnodeBackend {
-    fn access(
-        self: Arc<Self>,
-        _: &Arc<Vnode>,
-        _: Option<&VThread>,
-        _: Access,
-    ) -> Result<(), Box<dyn Errno>> {
+    fn access(&self, _: &Arc<Vnode>, _: Option<&VThread>, _: Access) -> Result<(), Box<dyn Errno>> {
         // TODO: Check how the PS4 check file permission for exfatfs.
         Ok(())
     }
 
-    fn getattr(self: Arc<Self>, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
+    fn getattr(&self, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
         // Get file size.
         let size = self.file.len().map_err(GetAttrError::GetSizeFailed)?;
 
@@ -48,7 +43,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     }
 
     fn ioctl(
-        self: Arc<Self>,
+        &self,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] cmd: IoCmd,
         #[allow(unused_variables)] td: Option<&VThread>,
@@ -57,7 +52,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     }
 
     fn lookup(
-        self: Arc<Self>,
+        &self,
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         name: &str,
@@ -92,13 +87,16 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         };
 
         // Get vnode.
-        let vn = get_vnode(&self.fs, vn.fs(), &file).map_err(LookupError::GetVnodeFailed)?;
+        let vn = self
+            .fs
+            .get_vnode(vn.fs(), &file)
+            .map_err(LookupError::GetVnodeFailed)?;
 
         Ok(vn)
     }
 
     fn mkdir(
-        self: Arc<Self>,
+        &self,
         parent: &Arc<Vnode>,
         name: &str,
         mode: u32,
@@ -110,18 +108,17 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             .file
             .mkdir(name, mode)
             .map_err(|e| MkDirError::from(e))?;
+        let vn = self
+            .fs
+            .get_vnode(parent.fs(), &dir)
+            .map_err(MkDirError::GetVnodeFailed)?;
 
-        Ok(Vnode::new(
-            parent.fs(),
-            VnodeType::Directory(false),
-            "exfatfs",
-            VnodeBackend::new(self.fs.clone(), dir),
-        ))
+        Ok(vn)
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing.
     fn open(
-        self: Arc<Self>,
+        &self,
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         mode: OpenFlags,
@@ -165,6 +162,7 @@ enum LookupError {
     GetVnodeFailed(#[source] GetVnodeError),
 }
 
+/// Represents an error when [`VnodeBackend::mkdir()`] fails.
 #[derive(Debug, Error, Errno)]
 enum MkDirError {
     #[error("couldn't create directory")]
@@ -174,6 +172,9 @@ enum MkDirError {
     #[error("directory already exists")]
     #[errno(EEXIST)]
     AlreadyExists,
+
+    #[error("couldn't get vnode")]
+    GetVnodeFailed(#[source] GetVnodeError),
 }
 
 impl From<std::io::Error> for MkDirError {

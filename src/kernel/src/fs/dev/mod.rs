@@ -27,7 +27,7 @@ pub fn make_dev(
     mode: Mode,
     cred: Option<Arc<Ucred>>,
     flags: MakeDev,
-) -> Result<Arc<Cdev>, MakeDevError> {
+) -> Result<Arc<CharacterDevice>, MakeDevError> {
     if sw.flags().intersects(DriverFlags::D_NEEDMINOR) {
         todo!("make_dev_credv with D_NEEDMINOR");
     }
@@ -47,7 +47,7 @@ pub fn make_dev(
     }
 
     // Create cdev.
-    let dev = Arc::new(Cdev::new(
+    let dev = Arc::new(CharacterDevice::new(
         sw,
         unit,
         name,
@@ -297,12 +297,12 @@ bitflags! {
 
 /// List of devices in the system.
 struct Devices {
-    list: Vec<Arc<Cdev>>, // cdevp_list
-    generation: u32,      // devfs_generation
+    list: Vec<Arc<CharacterDevice>>, // cdevp_list
+    generation: u32,                 // devfs_generation
 }
 
 impl Devices {
-    fn push(&mut self, d: Arc<Cdev>) {
+    fn push(&mut self, d: Arc<CharacterDevice>) {
         self.list.push(d);
         self.generation += 1;
     }
