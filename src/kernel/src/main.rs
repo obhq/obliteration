@@ -4,7 +4,7 @@ use crate::debug::{DebugManager, DebugManagerInitError};
 use crate::dmem::DmemManager;
 use crate::ee::{EntryArg, RawFn};
 use crate::errno::EEXIST;
-use crate::fs::{Fs, FsInitError, MkdirError, MountError, MountFlags, MountOpts, VPath};
+use crate::fs::{Fs, FsInitError, MkdirError, MountError, MountFlags, MountOpts, VPathBuf};
 use crate::kqueue::KernelQueueManager;
 use crate::llvm::Llvm;
 use crate::log::{print, LOGGER};
@@ -23,7 +23,6 @@ use crate::tty::{TtyInitError, TtyManager};
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use crate::umtx::UmtxManager;
 use clap::{Parser, ValueEnum};
-use fs::VPathBuf;
 use hv::Hypervisor;
 use llt::{OsThread, SpawnError};
 use macros::vpath;
@@ -215,18 +214,95 @@ fn start() -> Result<(), KernelError> {
         return Err(KernelError::MountFailed(path.into(), e));
     }
 
-    let path = VPathBuf::try_from(format!(
-        "/mnt/sandbox/{}_000/app0",
-        args.game.file_name().unwrap().to_str().unwrap()
-    ))
-    .unwrap();
+    // TODO: Check permission of these paths on the PS4.
+    let paths = [vpath!("/mnt/sandbox"), vpath!("/mnt/sandbox/pfsmnt")];
 
+    for path in paths {
+        if let Err(e) = fs.mkdir(path, 0o555, None) {
+            return Err(KernelError::CreateDirectoryFailed(path.into(), e));
+        }
+    }
+
+    // TODO: Check permission of /mnt/sandbox/pfsmnt/CUSAXXXXX-app0 on the PS4.
+    let game: VPathBuf = format!("/mnt/sandbox/pfsmnt/{}-app0", param.title_id())
+        .try_into()
+        .unwrap();
+
+    if let Err(e) = fs.mkdir(&game, 0o555, None) {
+        return Err(KernelError::CreateDirectoryFailed(game, e));
+    }
+
+    // TODO: Get mount options from the PS4.
     let mut opts = MountOpts::new();
 
-    opts.insert("fstype", "exfatfs");
+    opts.insert("fstype", "pfs");
+    opts.insert("fspath", game.clone());
+    opts.insert("from", vpath!("/dev/lvd2").to_owned());
+    opts.insert("ob:root", args.game);
+
+    if let Err(e) = fs.mount(opts, MountFlags::empty(), None) {
+        return Err(KernelError::MountFailed(game, e));
+    }
+
+    // TODO: Check permission of /mnt/sandbox/CUSAXXXXX_000 on the PS4.
+    let root: VPathBuf = format!("/mnt/sandbox/{}_000", param.title_id())
+        .try_into()
+        .unwrap();
+
+    if let Err(e) = fs.mkdir(&root, 0o555, None) {
+        return Err(KernelError::CreateDirectoryFailed(root, e));
+    }
+
+    // TODO: Check permission of /mnt/sandbox/CUSAXXXXX_000/app0 on the PS4.
+    let app = root.join("app0").unwrap();
+
+    if let Err(e) = fs.mkdir(&app, 0o555, None) {
+        return Err(KernelError::CreateDirectoryFailed(app, e));
+    }
+
+    // TODO: Get mount options from the PS4.
+    let mut opts = MountOpts::new();
+
+    opts.insert("fstype", "nullfs");
+    opts.insert("fspath", app.clone());
+    opts.insert("target", game);
+
+    if let Err(e) = fs.mount(opts, MountFlags::empty(), None) {
+        return Err(KernelError::MountFailed(app, e));
+    }
+
+    // TODO: Check permission of /mnt/sandbox/pfsmnt/CUSAXXXXX-app0-patch0-union on the PS4.
+    let path: VPathBuf = format!("/mnt/sandbox/pfsmnt/{}-app0-patch0-union", param.title_id())
+        .try_into()
+        .unwrap();
+
+    if let Err(e) = fs.mkdir(&path, 0o555, None) {
+        return Err(KernelError::CreateDirectoryFailed(path, e));
+    }
+
+    // TODO: Get mount options from the PS4.
+    let mut opts = MountOpts::new();
+
+    opts.insert("fstype", "nullfs");
     opts.insert("fspath", path.clone());
-    opts.insert("from", path.clone());
-    opts.insert("ob:root", args.game.clone());
+    opts.insert("target", app);
+
+    if let Err(e) = fs.mount(opts, MountFlags::empty(), None) {
+        return Err(KernelError::MountFailed(path, e));
+    }
+
+    // TODO: Check permission of /mnt/sandbox/CUSAXXXXX_000/dev on the PS4.
+    let path = root.join("dev").unwrap();
+
+    if let Err(e) = fs.mkdir(&path, 0o555, None) {
+        return Err(KernelError::CreateDirectoryFailed(path, e));
+    }
+
+    // TODO: Get mount options from the PS4.
+    let mut opts = MountOpts::new();
+
+    opts.insert("fstype", "devfs");
+    opts.insert("fspath", path.clone());
 
     if let Err(e) = fs.mount(opts, MountFlags::empty(), None) {
         return Err(KernelError::MountFailed(path, e));
@@ -265,6 +341,7 @@ fn start() -> Result<(), KernelError> {
             &fs,
             &mm,
             crate::ee::native::NativeEngine::new(),
+            root,
         ),
         #[cfg(not(target_arch = "x86_64"))]
         ExecutionEngine::Native => {
@@ -279,6 +356,7 @@ fn start() -> Result<(), KernelError> {
             &fs,
             &mm,
             crate::ee::llvm::LlvmEngine::new(&llvm),
+            root,
         ),
     }
 }
@@ -291,6 +369,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     fs: &Arc<Fs>,
     mm: &Arc<MemoryManager>,
     ee: Arc<E>,
+    root: VPathBuf,
 ) -> Result<(), KernelError> {
     // Initialize TTY system.
     #[allow(unused_variables)] // TODO: Remove this when someone use tty.
@@ -312,12 +391,13 @@ fn run<E: crate::ee::ExecutionEngine>(
 
     // TODO: Get correct budget name from the PS4.
     let budget_id = budget.create(Budget::new("big app", ProcType::BigApp));
+    let root = fs.lookup(root, true, None).unwrap();
     let proc = VProc::new(
         auth,
         budget_id,
         ProcType::BigApp,
-        1,         // See sys_budget_set on the PS4.
-        fs.root(), // TODO: Change to a proper value once FS rework is done.
+        1, // See sys_budget_set on the PS4.
+        root,
         "QXuNNl0Zhn",
         &mut syscalls,
     )?;
