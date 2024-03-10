@@ -27,7 +27,7 @@ impl Device for Random {
         todo!()
     }
 
-    fn ioctl(self: Arc<Self>, cmd: IoCmd, _: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
+    fn ioctl(self: Arc<Self>, cmd: IoCmd, _: &VThread) -> Result<(), Box<dyn Errno>> {
         match cmd {
             IoCmd::FIOASYNC(_) | IoCmd::FIONBIO(_) => Ok(()),
             _ => Err(Box::new(DefaultDeviceError::CommandNotSupported)),

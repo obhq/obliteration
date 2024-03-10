@@ -21,8 +21,7 @@ enum DmemContainer {
 }
 
 impl Device for Dmem {
-    fn ioctl(self: Arc<Self>, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
-        let td = td.unwrap();
+    fn ioctl(self: Arc<Self>, cmd: IoCmd, td: &VThread) -> Result<(), Box<dyn Errno>> {
         let cred = td.cred();
 
         if cred.is_unk1() || cred.is_unk2() {
