@@ -197,6 +197,7 @@ bitflags! {
 /// An implementation of `fileops` structure.
 pub trait FileBackend: Debug + Send + Sync + 'static {
     #[allow(unused_variables)]
+    /// An implementation of `fo_read`.
     fn read(
         self: &Arc<Self>,
         file: &VFile,
@@ -207,6 +208,7 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
     }
 
     #[allow(unused_variables)]
+    /// An implementation of `fo_write`.
     fn write(
         self: &Arc<Self>,
         file: &VFile,
@@ -217,6 +219,7 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
     }
 
     #[allow(unused_variables)]
+    /// An implementation of `fo_ioctl`.
     fn ioctl(
         self: &Arc<Self>,
         file: &VFile,
@@ -227,12 +230,16 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
     }
 
     #[allow(unused_variables)]
+    /// An implementation of `fo_poll`.
+    /// Note that we return [`PollEvents`] (a wrapper around `u16`) instead of `int`, which is what the PS4 returns.
     fn poll(self: &Arc<Self>, file: &VFile, events: PollEvents, td: &VThread) -> PollEvents;
 
     #[allow(unused_variables)]
+    /// An implementation of `fo_stat`.
     fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>>;
 
     #[allow(unused_variables)]
+    /// An implementation of `fo_truncate`.
     fn truncate(
         self: &Arc<Self>,
         file: &VFile,
