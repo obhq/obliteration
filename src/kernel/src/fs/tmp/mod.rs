@@ -69,7 +69,11 @@ pub fn mount(
 
     // Setup node list.
     let nodes = Nodes::new(if inodes < 4 {
-        pages.saturating_add(3)
+        if pages < 0xfffffffd {
+            pages + 3
+        } else {
+            u32::MAX as usize
+        }
     } else {
         inodes.try_into().unwrap()
     });
