@@ -1,5 +1,5 @@
 use super::dirent::Dirent;
-use super::{alloc_vnode, AllocVnodeError, DevFs};
+use super::{AllocVnodeError, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
     check_access, Access, IoCmd, OpenFlags, RevokeFlags, VFile, Vnode, VnodeAttrs, VnodeItem,
@@ -140,7 +140,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
                     None => return Err(Box::new(LookupError::NoParent)),
                 };
 
-                match alloc_vnode(self.fs.clone(), vn.fs(), parent) {
+                match self.fs.alloc_vnode(vn.mount(), parent) {
                     Ok(v) => Ok(v),
                     Err(e) => Err(Box::new(LookupError::AllocVnodeFailed(e))),
                 }
@@ -155,7 +155,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
                     None => todo!("devfs lookup with non-existent file"),
                 };
 
-                match alloc_vnode(self.fs.clone(), vn.fs(), item) {
+                match self.fs.alloc_vnode(vn.mount(), item) {
                     Ok(v) => Ok(v),
                     Err(e) => Err(Box::new(LookupError::AllocVnodeFailed(e))),
                 }

@@ -47,7 +47,7 @@ impl Vnode {
         })
     }
 
-    pub fn fs(&self) -> &Arc<Mount> {
+    pub fn mount(&self) -> &Arc<Mount> {
         &self.fs
     }
 

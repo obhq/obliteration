@@ -1,4 +1,4 @@
-use self::node::{AllocNodeError, Node, Nodes, VnodeBackend};
+use self::node::{AllocNodeError, Node, NodeType, Nodes, VnodeBackend};
 use super::{
     Filesystem, FsConfig, Mount, MountFlags, MountOpts, MountSource, VPathBuf, Vnode, VnodeType,
 };
@@ -79,7 +79,7 @@ pub fn mount(
     });
 
     // Allocate a root node.
-    let root = nodes.alloc(VnodeType::Directory(true))?;
+    let root = nodes.alloc(NodeType::Directory { is_root: true })?;
 
     Ok(Mount::new(
         conf,
@@ -131,9 +131,9 @@ impl TempFs {
         } else {
             let vnode = Vnode::new(
                 mnt,
-                node.ty().clone(),
+                node.ty().into_vnode_type(),
                 "tmpfs",
-                VnodeBackend::new(node.clone()),
+                VnodeBackend::new(self, node.clone()),
             );
 
             *vnode_ref = Some(vnode.clone());

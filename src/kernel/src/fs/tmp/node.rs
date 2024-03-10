@@ -7,6 +7,8 @@ use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
 
+use super::{AllocVnodeError, TempFs};
+
 /// A collection of [`Node`].
 #[derive(Debug)]
 pub struct Nodes {
@@ -23,7 +25,7 @@ impl Nodes {
     }
 
     /// See `tmpfs_alloc_node` on the PS4 for a reference.
-    pub fn alloc(&self, ty: VnodeType) -> Result<Arc<Node>, AllocNodeError> {
+    pub fn alloc(&self, ty: NodeType) -> Result<Arc<Node>, AllocNodeError> {
         // Check if maximum number of nodes has been reached.
         let mut list = self.list.write().unwrap();
 
@@ -48,32 +50,63 @@ impl Nodes {
 #[derive(Debug)]
 pub struct Node {
     vnode: Gutex<Option<Arc<Vnode>>>, // tn_vnode
-    ty: VnodeType,                    // tn_type
+    ty: NodeType,                     // tn_type
 }
 
 impl Node {
-    pub fn vnode(&self) -> GutexReadGuard<Option<Arc<Vnode>>> {
-        self.vnode.read()
-    }
-
     pub fn vnode_mut(&self) -> GutexWriteGuard<Option<Arc<Vnode>>> {
         self.vnode.write()
     }
 
-    pub fn ty(&self) -> &VnodeType {
+    pub fn ty(&self) -> &NodeType {
         &self.ty
+    }
+}
+
+/// An implementation of `tmpfs_dirent` structure.
+pub struct Dirent {
+    name: Box<str>,  // td_name + td_namelen
+    node: Arc<Node>, // td_node
+}
+
+impl Dirent {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn node(&self) -> &Arc<Node> {
+        &self.node
+    }
+}
+
+#[derive(Debug)]
+pub enum NodeType {
+    Directory { is_root: bool },
+    File,
+}
+
+impl NodeType {
+    pub(super) fn into_vnode_type(&self) -> VnodeType {
+        match self {
+            Self::Directory { is_root } => VnodeType::Directory(*is_root),
+            Self::File => VnodeType::File,
+        }
     }
 }
 
 /// An implementation of [`crate::fs::VnodeBackend`] for tmpfs.
 #[derive(Debug)]
 pub struct VnodeBackend {
+    tmpfs: Arc<TempFs>,
     node: Arc<Node>,
 }
 
 impl VnodeBackend {
-    pub fn new(node: Arc<Node>) -> Self {
-        Self { node }
+    pub fn new(tmpfs: &Arc<TempFs>, node: Arc<Node>) -> Self {
+        Self {
+            tmpfs: tmpfs.clone(),
+            node,
+        }
     }
 }
 
@@ -109,15 +142,25 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         }
     }
 
-    #[allow(unused_variables)] // TODO: remove when implementing
     fn mkdir(
         &self,
         parent: &Arc<Vnode>,
         name: &str,
-        mode: u32,
-        td: Option<&VThread>,
+        _mode: u32,
+        _td: Option<&VThread>,
     ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
-        todo!()
+        let node = self
+            .tmpfs
+            .nodes
+            .alloc(NodeType::Directory { is_root: false })
+            .map_err(MkDirError::FailedToAllocNode)?;
+
+        let vnode = self
+            .tmpfs
+            .alloc_vnode(parent.mount(), &node)
+            .map_err(MkDirError::FailedToAllocVnode)?;
+
+        Ok(vnode)
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
@@ -138,4 +181,14 @@ pub enum AllocNodeError {
     #[error("maximum number of nodes has been reached")]
     #[errno(ENOSPC)]
     LimitReached,
+}
+
+/// Represents an error when [`VnodeBackend::mkdir()`] fails.
+#[derive(Debug, Error, Errno)]
+pub enum MkDirError {
+    #[error("couldn't allocate a node")]
+    FailedToAllocNode(#[from] AllocNodeError),
+
+    #[error("couldn't allocate a vnode")]
+    FailedToAllocVnode(#[from] AllocVnodeError),
 }

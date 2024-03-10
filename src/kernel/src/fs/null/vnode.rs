@@ -22,7 +22,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         if mode.contains(Access::WRITE) {
             match vn.ty() {
                 VnodeType::Directory(_) | VnodeType::Link | VnodeType::File => {
-                    if vn.fs().flags().contains(MountFlags::MNT_RDONLY) {
+                    if vn.mount().flags().contains(MountFlags::MNT_RDONLY) {
                         Err(AccessError::Readonly)?
                     }
                 }
@@ -44,7 +44,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             .getattr()
             .map_err(GetAttrError::GetAttrFromLowerFailed)?;
 
-        let fsid = vn.fs().stats().id()[0];
+        let fsid = vn.mount().stats().id()[0];
 
         attr.set_fsid(fsid);
 
@@ -66,7 +66,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         let vnode = if Arc::ptr_eq(&lower, vn) {
             vn.clone()
         } else {
-            null_nodeget(vn.fs(), lower)?
+            null_nodeget(vn.mount(), lower)?
         };
 
         Ok(vnode)

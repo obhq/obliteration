@@ -89,7 +89,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         // Get vnode.
         let vn = self
             .fs
-            .get_vnode(vn.fs(), &file)
+            .get_vnode(vn.mount(), &file)
             .map_err(LookupError::GetVnodeFailed)?;
 
         Ok(vn)
@@ -110,7 +110,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             .map_err(|e| MkDirError::from(e))?;
         let vn = self
             .fs
-            .get_vnode(parent.fs(), &dir)
+            .get_vnode(parent.mount(), &dir)
             .map_err(MkDirError::GetVnodeFailed)?;
 
         Ok(vn)
