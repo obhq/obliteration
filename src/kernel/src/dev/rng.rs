@@ -9,8 +9,11 @@ use std::sync::Arc;
 struct Rng {}
 
 impl Device for Rng {
-    #[allow(unused_variables)] // TODO: remove when implementing
-    fn ioctl(self: Arc<Self>, cmd: IoCmd, td: &VThread) -> Result<(), Box<dyn Errno>> {
-        todo!()
+    fn ioctl(self: Arc<Self>, cmd: IoCmd, _: &VThread) -> Result<(), Box<dyn Errno>> {
+        match cmd {
+            IoCmd::RNG1 => todo!(),
+            IoCmd::RNG2 => todo!(),
+            _ => todo!(), // ENOIOCTL,
+        }
     }
 }
