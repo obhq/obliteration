@@ -19,5 +19,5 @@ features = [
     "Win32_System_SystemInformation"
 ]
 
-[target.'cfg(any(target_os = "linux", target_os = "android"))'.build-dependencies]
+[build-dependencies]
 cc = "1.0.90"
