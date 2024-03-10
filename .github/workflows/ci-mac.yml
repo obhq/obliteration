@@ -129,6 +129,8 @@ jobs:
 
         otool -L "$app"
         otool -L "$krn"
+    - name: Sign kernel
+      run: codesign -s - --entitlements entitlements.plist dist/Obliteration.app/Contents/MacOS/obkrnl
     - name: Create Apple Disk Image
       run: hdiutil create -volname Obliteration -srcfolder dist Obliteration.dmg
     - name: Upload artifacts
