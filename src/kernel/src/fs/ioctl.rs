@@ -84,6 +84,12 @@ macro_rules! commands {
 
 commands! {
     pub enum IoCmd {
+        /// Get media size in bytes.
+        DIOCGMEDIASIZE(&i64) = 0x40086418,
+
+        /// Get total size?
+        DMEM10(&mut usize) = 0x4008800a,
+
         /// Set close on exec on fd.
         FIOCLEX = 0x20006601,
         /// Remove close on exec on fd.
@@ -96,9 +102,9 @@ commands! {
         FIOSEEKDATA(&mut i64) = 0xC0086661,
         /// Seek hole.
         FIOSEEKHOLE(&mut i64) = 0xC0086662,
+
         /// Become controlling terminal.
         TIOCSCTTY = 0x20007461,
-        /// Get media size in bytes.
-        DIOCGMEDIASIZE(&i64) = 0x40086418,
+
     }
 }
