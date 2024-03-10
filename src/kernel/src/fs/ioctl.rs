@@ -134,6 +134,6 @@ pub struct Unknown<const N: usize>([u8; N]);
 
 impl<const N: usize> Debug for Unknown<N> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Unknown type with size of {}", N)
+        write!(f, "Unknown type with size of {N}")
     }
 }
