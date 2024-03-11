@@ -7,7 +7,7 @@ use crate::ucred::{Ucred, Uid};
 use macros::Errno;
 use std::num::NonZeroU64;
 use std::sync::atomic::AtomicI32;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use thiserror::Error;
 
 mod node;
@@ -79,7 +79,10 @@ pub fn mount(
     });
 
     // Allocate a root node.
-    let root = nodes.alloc(NodeType::Directory { is_root: true })?;
+    let root = nodes.alloc(NodeType::Directory {
+        is_root: true,
+        entries: RwLock::default(),
+    })?;
 
     Ok(Mount::new(
         conf,

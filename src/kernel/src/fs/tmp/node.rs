@@ -1,7 +1,7 @@
-use crate::errno::{Errno, ENOSPC};
+use crate::errno::{Errno, ENOENT, ENOSPC};
 use crate::fs::{Access, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
-use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
+use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use macros::Errno;
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
@@ -46,7 +46,7 @@ impl Nodes {
     }
 }
 
-/// An implementation of `tmpfs_node` structure.
+/// An implementation of the `tmpfs_node` structure.
 #[derive(Debug)]
 pub struct Node {
     vnode: Gutex<Option<Arc<Vnode>>>, // tn_vnode
@@ -63,7 +63,8 @@ impl Node {
     }
 }
 
-/// An implementation of `tmpfs_dirent` structure.
+/// An implementation of the `tmpfs_dirent` structure.
+#[derive(Debug)]
 pub struct Dirent {
     name: Box<str>,  // td_name + td_namelen
     node: Arc<Node>, // td_node
@@ -81,14 +82,17 @@ impl Dirent {
 
 #[derive(Debug)]
 pub enum NodeType {
-    Directory { is_root: bool },
+    Directory {
+        is_root: bool,
+        entries: RwLock<Vec<Arc<Dirent>>>,
+    },
     File,
 }
 
 impl NodeType {
     pub(super) fn into_vnode_type(&self) -> VnodeType {
         match self {
-            Self::Directory { is_root } => VnodeType::Directory(*is_root),
+            Self::Directory { is_root, .. } => VnodeType::Directory(*is_root),
             Self::File => VnodeType::File,
         }
     }
@@ -118,7 +122,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         td: Option<&VThread>,
         mode: Access,
     ) -> Result<(), Box<dyn Errno>> {
-        todo!()
+        Ok(())
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
@@ -133,11 +137,30 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         td: Option<&VThread>,
         name: &str,
     ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+        vn.access(td, Access::EXEC)
+            .map_err(LookupError::AccessDenied)?;
+
         match name {
             ".." => todo!(),
-            "." => todo!(),
+            "." => Ok(vn.clone()),
             _ => {
-                todo!()
+                let NodeType::Directory { entries, .. } = self.node.ty() else {
+                    unreachable!()
+                };
+
+                let entries = entries.read().unwrap();
+
+                let dirent = entries
+                    .iter()
+                    .find(|dirent| dirent.name() == name)
+                    .ok_or_else(|| LookupError::NoParent)?;
+
+                let vnode = self
+                    .tmpfs
+                    .alloc_vnode(vn.mount(), &dirent.node())
+                    .map_err(LookupError::FailedToAllocVnode)?;
+
+                Ok(vnode)
             }
         }
     }
@@ -149,16 +172,31 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         _mode: u32,
         _td: Option<&VThread>,
     ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+        // The node for the newly created directory.
         let node = self
             .tmpfs
             .nodes
-            .alloc(NodeType::Directory { is_root: false })
+            .alloc(NodeType::Directory {
+                is_root: false,
+                entries: RwLock::default(),
+            })
             .map_err(MkDirError::FailedToAllocNode)?;
+
+        let dirent = Dirent {
+            name: name.into(),
+            node: node.clone(),
+        };
 
         let vnode = self
             .tmpfs
             .alloc_vnode(parent.mount(), &node)
             .map_err(MkDirError::FailedToAllocVnode)?;
+
+        let NodeType::Directory { entries, .. } = self.node.ty() else {
+            unreachable!()
+        };
+
+        entries.write().unwrap().push(Arc::new(dirent));
 
         Ok(vnode)
     }
@@ -181,6 +219,20 @@ pub enum AllocNodeError {
     #[error("maximum number of nodes has been reached")]
     #[errno(ENOSPC)]
     LimitReached,
+}
+
+/// Represents an error when [`VnodeBackend::lookup()`] fails.
+#[derive(Debug, Error, Errno)]
+pub enum LookupError {
+    #[error("access denied")]
+    AccessDenied(#[source] Box<dyn Errno>),
+
+    #[error("node not found")]
+    #[errno(ENOENT)]
+    NoParent,
+
+    #[error("failed to alloc vnode")]
+    FailedToAllocVnode(#[from] AllocVnodeError),
 }
 
 /// Represents an error when [`VnodeBackend::mkdir()`] fails.
