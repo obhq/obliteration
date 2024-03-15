@@ -158,6 +158,9 @@ pub struct PollFd {
 }
 
 bitflags! {
+    /// This type is the direct equivalent of the `events` and `revents` fields of [`PollFd`].
+    /// In [`crate::fs::FileBackend`], which is an equivalent of vfileops, we also return this type. even though
+    /// FreeBSD uses and `int` there
     #[repr(transparent)]
     #[derive(Debug, Clone, Copy)]
     pub struct PollEvents: u16 {

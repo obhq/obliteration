@@ -231,7 +231,6 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
 
     #[allow(unused_variables)]
     /// An implementation of `fo_poll`.
-    /// Note that we return [`PollEvents`] (a wrapper around `u16`) instead of `int`, which is what the PS4 returns.
     fn poll(self: &Arc<Self>, file: &VFile, events: PollEvents, td: &VThread) -> PollEvents;
 
     #[allow(unused_variables)]
