@@ -34,17 +34,30 @@ impl Vnode {
         tag: &'static str,
         backend: impl VnodeBackend,
     ) -> Arc<Self> {
+        Arc::new(Self::new_plain(fs, ty, tag, backend))
+    }
+
+    pub(super) fn new_plain(
+        fs: &Arc<Mount>,
+        ty: VnodeType,
+        tag: &'static str,
+        backend: impl VnodeBackend,
+    ) -> Self {
         let gg = GutexGroup::new();
 
         ACTIVE.fetch_add(1, Ordering::Relaxed);
 
-        Arc::new(Self {
+        Self {
             fs: fs.clone(),
             ty,
             tag,
             backend: Box::new(backend),
             item: gg.spawn(None),
-        })
+        }
+    }
+
+    pub fn new_cyclic(f: impl FnOnce(&Weak<Vnode>) -> Vnode) -> Arc<Self> {
+        Arc::new_cyclic(f)
     }
 
     pub fn mount(&self) -> &Arc<Mount> {
@@ -65,6 +78,10 @@ impl Vnode {
 
     pub fn item(&self) -> GutexReadGuard<Option<VnodeItem>> {
         self.item.read()
+    }
+
+    pub fn hash(&self) -> u32 {
+        todo!()
     }
 
     pub fn item_mut(&self) -> GutexWriteGuard<Option<VnodeItem>> {

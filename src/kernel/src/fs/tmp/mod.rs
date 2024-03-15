@@ -4,6 +4,7 @@ use super::{
 };
 use crate::errno::{Errno, EINVAL};
 use crate::ucred::{Ucred, Uid};
+use gmtx::GutexGroup;
 use macros::Errno;
 use std::num::NonZeroU64;
 use std::sync::atomic::AtomicI32;
@@ -78,10 +79,12 @@ pub fn mount(
         inodes.try_into().unwrap()
     });
 
+    let gg = GutexGroup::new();
+
     // Allocate a root node.
     let root = nodes.alloc(NodeType::Directory {
         is_root: true,
-        entries: RwLock::default(),
+        entries: gg.spawn(Vec::new()),
     })?;
 
     Ok(Mount::new(

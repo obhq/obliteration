@@ -1,15 +1,28 @@
 use crate::{
     errno::{Errno, EISDIR, EROFS},
-    fs::{perm::Access, Mount, MountFlags, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType},
+    fs::{
+        null::hash::NULL_HASHTABLE, perm::Access, Mount, MountFlags, OpenFlags, VFile, Vnode,
+        VnodeAttrs, VnodeType,
+    },
     process::VThread,
 };
 use macros::Errno;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use thiserror::Error;
 
 #[derive(Debug)]
-struct VnodeBackend {
+pub(super) struct VnodeBackend {
     lower: Arc<Vnode>,
+    null_node: Weak<Vnode>,
+}
+
+impl VnodeBackend {
+    pub(super) fn new(lower: &Arc<Vnode>, null_node: &Weak<Vnode>) -> Self {
+        Self {
+            lower: lower.clone(),
+            null_node: null_node.clone(),
+        }
+    }
 }
 
 impl crate::fs::VnodeBackend for VnodeBackend {
@@ -66,7 +79,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         let vnode = if Arc::ptr_eq(&lower, vn) {
             vn.clone()
         } else {
-            null_nodeget(vn.mount(), lower)?
+            null_nodeget(vn.mount(), &lower)?
         };
 
         Ok(vnode)
@@ -91,9 +104,22 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 /// See `null_nodeget` on the PS4 for a reference.
 pub(super) fn null_nodeget(
     mnt: &Arc<Mount>,
-    lower: Arc<Vnode>,
+    lower: &Arc<Vnode>,
 ) -> Result<Arc<Vnode>, NodeGetError> {
-    todo!()
+    if let Some(vnode) = NULL_HASHTABLE.get(mnt, lower) {
+        return Ok(vnode);
+    }
+
+    let vnode = Vnode::new_cyclic(|null_node| {
+        Vnode::new_plain(
+            mnt,
+            lower.ty().clone(),
+            "nullfs",
+            VnodeBackend::new(lower, null_node),
+        )
+    });
+
+    Ok(vnode)
 }
 
 #[derive(Debug, Error, Errno)]

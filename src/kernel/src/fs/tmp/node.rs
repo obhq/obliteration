@@ -84,7 +84,7 @@ impl Dirent {
 pub enum NodeType {
     Directory {
         is_root: bool,
-        entries: RwLock<Vec<Arc<Dirent>>>,
+        entries: Gutex<Vec<Arc<Dirent>>>,
     },
     File,
 }
@@ -148,7 +148,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
                     unreachable!()
                 };
 
-                let entries = entries.read().unwrap();
+                let entries = entries.read();
 
                 let dirent = entries
                     .iter()
@@ -173,12 +173,14 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         _td: Option<&VThread>,
     ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
         // The node for the newly created directory.
+        let gg = GutexGroup::new();
+
         let node = self
             .tmpfs
             .nodes
             .alloc(NodeType::Directory {
                 is_root: false,
-                entries: RwLock::default(),
+                entries: gg.spawn(Vec::new()),
             })
             .map_err(MkDirError::FailedToAllocNode)?;
 
@@ -196,7 +198,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             unreachable!()
         };
 
-        entries.write().unwrap().push(Arc::new(dirent));
+        entries.write().push(Arc::new(dirent));
 
         Ok(vnode)
     }

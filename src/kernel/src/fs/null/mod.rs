@@ -6,6 +6,7 @@ use macros::Errno;
 use std::sync::Arc;
 use thiserror::Error;
 
+mod hash;
 mod vnode;
 
 /// An implementation of `null_mount` structure.
@@ -22,7 +23,7 @@ impl NullFs {
 
 impl Filesystem for NullFs {
     fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Result<Arc<Vnode>, Box<dyn Errno>> {
-        let vnode = null_nodeget(mnt, self.lower.clone())?;
+        let vnode = null_nodeget(mnt, &self.lower)?;
 
         Ok(vnode)
     }
