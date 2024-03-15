@@ -22,7 +22,7 @@ pub struct Vnode {
     fs: Arc<Mount>,                 // v_mount
     ty: VnodeType,                  // v_type
     tag: &'static str,              // v_tag
-    backend: Box<dyn VnodeBackend>, // v_op + v_data
+    backend: Arc<dyn VnodeBackend>, // v_op + v_data
     item: Gutex<Option<VnodeItem>>, // v_un
 }
 
@@ -34,14 +34,14 @@ impl Vnode {
         tag: &'static str,
         backend: impl VnodeBackend,
     ) -> Arc<Self> {
-        Arc::new(Self::new_plain(fs, ty, tag, backend))
+        Arc::new(Self::new_plain(fs, ty, tag, Arc::new(backend)))
     }
 
     pub(super) fn new_plain(
         fs: &Arc<Mount>,
         ty: VnodeType,
         tag: &'static str,
-        backend: impl VnodeBackend,
+        backend: Arc<impl VnodeBackend>,
     ) -> Self {
         let gg = GutexGroup::new();
 
@@ -51,7 +51,7 @@ impl Vnode {
             fs: fs.clone(),
             ty,
             tag,
-            backend: Box::new(backend),
+            backend,
             item: gg.spawn(None),
         }
     }
@@ -80,6 +80,7 @@ impl Vnode {
         self.item.read()
     }
 
+    /// See `vfs_hash_index` on the PS4 for a reference.
     pub fn hash(&self) -> u32 {
         todo!()
     }

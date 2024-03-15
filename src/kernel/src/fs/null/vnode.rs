@@ -23,6 +23,14 @@ impl VnodeBackend {
             null_node: null_node.clone(),
         }
     }
+
+    pub(super) fn lower(&self) -> &Arc<Vnode> {
+        &self.lower
+    }
+
+    pub(super) fn null_node(&self) -> &Weak<Vnode> {
+        &self.null_node
+    }
 }
 
 impl crate::fs::VnodeBackend for VnodeBackend {
@@ -111,12 +119,13 @@ pub(super) fn null_nodeget(
     }
 
     let vnode = Vnode::new_cyclic(|null_node| {
-        Vnode::new_plain(
-            mnt,
-            lower.ty().clone(),
-            "nullfs",
-            VnodeBackend::new(lower, null_node),
-        )
+        let backend = Arc::new(VnodeBackend::new(lower, null_node));
+
+        if let Some(vnode) = NULL_HASHTABLE.insert(mnt, &backend) {
+            todo!();
+        }
+
+        Vnode::new_plain(mnt, lower.ty().clone(), "nullfs", backend)
     });
 
     Ok(vnode)
