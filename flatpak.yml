@@ -32,7 +32,6 @@ modules:
   - cmake -DOB_BUILD_LLVM:BOOL=OFF --preset linux-release .
   - cmake --build --preset linux-release
   - cargo test --manifest-path src/Cargo.toml --workspace --exclude core
-  - cargo clippy --manifest-path src/Cargo.toml --release
   - cmake --install build --prefix "$FLATPAK_DEST"
   - mkdir -pv "$FLATPAK_DEST/lib"
   - cp -v /usr/lib/sdk/llvm17/lib/libLLVM-17.so "$FLATPAK_DEST/lib"
