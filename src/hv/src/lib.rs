@@ -55,26 +55,34 @@ impl Hypervisor {
 
         // Initialize platform hypervisor.
         #[cfg(any(target_os = "linux", target_os = "android"))]
-        return Self::new_linux(active, ram, addr, len.get());
+        return Self::new_linux(active, cpu, ram, addr, len.get());
 
         #[cfg(target_os = "windows")]
         return Self::new_windows(active, cpu, ram, addr, len.get());
 
         #[cfg(target_os = "macos")]
-        return Self::new_mac(active, ram, addr, len.get());
+        return Self::new_mac(active, cpu, ram, addr, len.get());
     }
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     unsafe fn new_linux(
         active: Active,
+        cpu: NonZeroUsize,
         ram: *mut u8,
         addr: usize,
         len: usize,
     ) -> Result<Self, NewError> {
         use std::os::fd::AsFd;
 
+        // Open KVM device.
         let kvm = self::linux::open_kvm()?;
-        let vm = self::linux::create_vm(kvm.as_fd())?;
+
+        if cpu.get() > self::linux::max_vcpus(kvm.as_fd()).map_err(NewError::GetMaxCpuFailed)? {
+            return Err(NewError::InvalidCpuCount);
+        }
+
+        // Create a new VM.
+        let vm = self::linux::create_vm(kvm.as_fd()).map_err(NewError::CreateVmFailed)?;
 
         Ok(Self { vm, kvm, active })
     }
@@ -97,11 +105,18 @@ impl Hypervisor {
     #[cfg(target_os = "macos")]
     unsafe fn new_mac(
         active: Active,
+        cpu: NonZeroUsize,
         ram: *mut u8,
         addr: usize,
         len: usize,
     ) -> Result<Self, NewError> {
+        // Create a VM.
         let vm = self::darwin::Vm::new()?;
+        let cpu: u64 = cpu.get().try_into().unwrap();
+
+        if cpu > vm.capability(0).map_err(NewError::GetMaxCpuFailed)? {
+            return Err(NewError::InvalidCpuCount);
+        }
 
         Ok(Self { vm, active })
     }
@@ -156,7 +171,6 @@ pub enum NewError {
     #[error("couldn't determine page size of the host")]
     GetHostPageSizeFailed(#[source] std::io::Error),
 
-    #[cfg(target_os = "windows")]
     #[error("the number of CPU is not valid")]
     InvalidCpuCount,
 
@@ -174,6 +188,10 @@ pub enum NewError {
     #[cfg(any(target_os = "linux", target_os = "android"))]
     #[error("unexpected KVM version")]
     KvmVersionMismatched,
+
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[error("couldn't get maximum number of CPU for a VM")]
+    GetMaxCpuFailed(#[source] std::io::Error),
 
     #[cfg(any(target_os = "linux", target_os = "android"))]
     #[error("couldn't create a VM")]
@@ -194,6 +212,10 @@ pub enum NewError {
     #[cfg(target_os = "macos")]
     #[error("couldn't create a VM ({0:#x})")]
     CreateVmFailed(std::ffi::c_int),
+
+    #[cfg(target_os = "macos")]
+    #[error("couldn't get maximum number of CPU for a VM")]
+    GetMaxCpuFailed(std::ffi::c_int),
 }
 
 static ACTIVE: AtomicBool = AtomicBool::new(false);
