@@ -101,7 +101,7 @@ jobs:
           fi
         done
       if: ${{ steps.qt-cache.outputs.cache-hit != 'true' }}
-    - name: Update Rust-Lang
+    - name: Update Rust
       run: rustup update stable
     - name: Run CMake
       run: cmake -DOB_BUILD_LLVM:BOOL=OFF --preset mac-release .
@@ -109,9 +109,6 @@ jobs:
       run: cmake --build --preset mac-release
     - name: Run tests
       run: cargo test --workspace --exclude core
-      working-directory: src
-    - name: Run Clippy
-      run: cargo clippy --release
       working-directory: src
     - name: Create Application Bundle
       run: |
