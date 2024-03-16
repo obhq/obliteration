@@ -1,6 +1,7 @@
 use crate::NewError;
 use std::ffi::c_void;
 use std::mem::size_of;
+use std::num::NonZeroUsize;
 use windows_sys::core::HRESULT;
 use windows_sys::Win32::System::Hypervisor::{
     WHvCreatePartition, WHvDeletePartition, WHvPartitionPropertyCodeProcessorCount,
