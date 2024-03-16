@@ -97,7 +97,7 @@ jobs:
       if: ${{ steps.restore-vulkan.outputs.cache-hit != 'true' }}
     - name: Set Vulkan SDK path
       run:  echo "VULKAN_SDK=C:\VulkanSDK" >> $env:GITHUB_ENV
-    - name: Update Rust-Lang
+    - name: Update Rust
       run: rustup update stable
     - name: Run CMake
       run: cmake -DOB_BUILD_LLVM:BOOL=OFF --preset windows-release .
@@ -105,9 +105,6 @@ jobs:
       run: cmake --build --preset windows-release
     - name: Run tests
       run: cargo test --workspace --exclude core
-      working-directory: src
-    - name: Run Clippy
-      run: cargo clippy --release
       working-directory: src
     - name: Export artifacts
       run: cmake --install build --prefix dist
