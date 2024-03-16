@@ -1,23 +1,18 @@
 use super::Module;
-use crate::ee::ExecutionEngine;
 use bitflags::bitflags;
 use elf::Symbol;
 use std::borrow::Cow;
 use std::sync::Arc;
 
 /// An object to resolve a symbol from loaded (S)ELF.
-pub struct SymbolResolver<'a, E: ExecutionEngine> {
-    mains: &'a [Arc<Module<E>>],
-    globals: &'a [Arc<Module<E>>],
+pub struct SymbolResolver<'a> {
+    mains: &'a [Arc<Module>],
+    globals: &'a [Arc<Module>],
     new_algorithm: bool,
 }
 
-impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
-    pub fn new(
-        mains: &'a [Arc<Module<E>>],
-        globals: &'a [Arc<Module<E>>],
-        new_algorithm: bool,
-    ) -> Self {
+impl<'a> SymbolResolver<'a> {
+    pub fn new(mains: &'a [Arc<Module>], globals: &'a [Arc<Module>], new_algorithm: bool) -> Self {
         Self {
             mains,
             globals,
@@ -28,10 +23,10 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
     /// See `find_symdef` on the PS4 for a reference.
     pub fn resolve_with_local(
         &self,
-        md: &Arc<Module<E>>,
+        md: &Arc<Module>,
         index: usize,
         mut flags: ResolveFlags,
-    ) -> Option<(Arc<Module<E>>, usize)> {
+    ) -> Option<(Arc<Module>, usize)> {
         // Check if symbol index is valid.
         let sym = md.symbols().get(index)?;
         let data = md.file_info().unwrap();
@@ -102,14 +97,14 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
     /// See `symlook_default` on the PS4 for a reference.
     pub fn resolve(
         &self,
-        refmod: &'a Arc<Module<E>>,
+        refmod: &'a Arc<Module>,
         name: Option<&str>,
         decoded_name: Option<&Cow<str>>,
         symmod: Option<&str>,
         symlib: Option<&str>,
         hash: u64,
         flags: ResolveFlags,
-    ) -> Option<(Arc<Module<E>>, usize)> {
+    ) -> Option<(Arc<Module>, usize)> {
         // TODO: Resolve from DAGs.
         self.resolve_from_global(refmod, name, decoded_name, symmod, symlib, hash, flags)
     }
@@ -117,14 +112,14 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
     /// See `symlook_global` on the PS4 for a reference.
     pub fn resolve_from_global(
         &self,
-        refmod: &'a Arc<Module<E>>,
+        refmod: &'a Arc<Module>,
         name: Option<&str>,
         decoded_name: Option<&Cow<str>>,
         symmod: Option<&str>,
         symlib: Option<&str>,
         hash: u64,
         flags: ResolveFlags,
-    ) -> Option<(Arc<Module<E>>, usize)> {
+    ) -> Option<(Arc<Module>, usize)> {
         // Resolve from list_main.
         let mut result = None;
 
@@ -171,15 +166,15 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
     /// See `symlook_list` on the PS4 for a reference.
     pub fn resolve_from_list(
         &self,
-        refmod: &'a Arc<Module<E>>,
+        refmod: &'a Arc<Module>,
         name: Option<&str>,
         decoded_name: Option<&Cow<str>>,
         symmod: Option<&str>,
         symlib: Option<&str>,
         hash: u64,
         flags: ResolveFlags,
-        list: &'a [Arc<Module<E>>],
-    ) -> Option<(Arc<Module<E>>, usize)> {
+        list: &'a [Arc<Module>],
+    ) -> Option<(Arc<Module>, usize)> {
         // Get module name.
         let symmod = if !flags.contains(ResolveFlags::UNK2) {
             symmod
@@ -242,15 +237,15 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
     /// See `symlook_obj` on the PS4 for a reference.
     pub fn resolve_from_module(
         &self,
-        _: &'a Arc<Module<E>>,
+        _: &'a Arc<Module>,
         name: Option<&str>,
         decoded_name: Option<&str>,
         symmod: Option<&str>,
         symlib: Option<&str>,
         hash: u64,
         flags: ResolveFlags,
-        md: &Arc<Module<E>>,
-    ) -> Option<(Arc<Module<E>>, usize)> {
+        md: &Arc<Module>,
+    ) -> Option<(Arc<Module>, usize)> {
         let info = md.file_info().unwrap();
         let buckets = info.buckets();
         let hash: usize = hash.try_into().unwrap();
@@ -414,7 +409,7 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
         symlib: Option<&str>,
         sym: &Symbol,
         flags: ResolveFlags,
-        md: &'a Arc<Module<E>>,
+        md: &'a Arc<Module>,
     ) -> bool {
         // Check type.
         let ty = sym.ty();
@@ -499,7 +494,7 @@ impl<'a, E: ExecutionEngine> SymbolResolver<'a, E> {
     }
 
     /// See `convert_mangled_name_to_long` on the PS4 for a reference.
-    fn decode_legacy(md: &Module<E>, name: &str) -> Option<String> {
+    fn decode_legacy(md: &Module, name: &str) -> Option<String> {
         // Split the name.
         let mut p = name.splitn(3, '#');
         let n = p.next()?;

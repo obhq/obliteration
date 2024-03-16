@@ -1,4 +1,3 @@
-use super::ExecutionEngine;
 use crate::fs::{VPath, VPathBuf};
 use crate::memory::Protections;
 use crate::process::VThread;
@@ -38,10 +37,27 @@ impl NativeEngine {
         })
     }
 
-    fn patch_mod<E>(self: &Arc<Self>, module: &mut Module<E>) -> Result<usize, SetupModuleError>
-    where
-        E: ExecutionEngine,
-    {
+    pub fn set_syscalls(&self, v: Syscalls) {
+        self.syscalls.set(v).unwrap();
+    }
+
+    pub fn setup_module(self: &Arc<Self>, md: &mut Module) -> Result<(), SetupModuleError> {
+        self.patch_mod(md)?;
+        Ok(())
+    }
+
+    pub unsafe fn get_function(
+        self: &Arc<Self>,
+        md: &Arc<Module>,
+        addr: usize,
+    ) -> Result<Arc<RawFn>, GetFunctionError> {
+        Ok(Arc::new(RawFn {
+            md: md.clone(),
+            addr,
+        }))
+    }
+
+    fn patch_mod(self: &Arc<Self>, module: &mut Module) -> Result<usize, SetupModuleError> {
         let path = module.path();
 
         // Patch all executable sections.
@@ -648,33 +664,7 @@ impl NativeEngine {
     }
 }
 
-impl ExecutionEngine for NativeEngine {
-    type RawFn = RawFn;
-    type SetupModuleErr = SetupModuleError;
-    type GetFunctionErr = GetFunctionError;
-
-    fn set_syscalls(&self, v: Syscalls) {
-        self.syscalls.set(v).unwrap();
-    }
-
-    fn setup_module(self: &Arc<Self>, md: &mut Module<Self>) -> Result<(), Self::SetupModuleErr> {
-        self.patch_mod(md)?;
-        Ok(())
-    }
-
-    unsafe fn get_function(
-        self: &Arc<Self>,
-        md: &Arc<Module<Self>>,
-        addr: usize,
-    ) -> Result<Arc<Self::RawFn>, Self::GetFunctionErr> {
-        Ok(Arc::new(RawFn {
-            md: md.clone(),
-            addr,
-        }))
-    }
-}
-
-/// An implementation of [`super::RawFn`].
+/// Raw executable function.
 #[derive(Debug)]
 pub struct RawFn {
     #[allow(unused)]
@@ -682,12 +672,12 @@ pub struct RawFn {
     addr: usize,
 }
 
-impl super::RawFn for RawFn {
-    fn addr(&self) -> usize {
+impl RawFn {
+    pub fn addr(&self) -> usize {
         self.addr
     }
 
-    unsafe fn exec1<R, A>(&self, a: A) -> R {
+    pub unsafe fn exec1<R, A>(&self, a: A) -> R {
         let f: unsafe extern "sysv64" fn(A) -> R = transmute(self.addr);
         f(a)
     }

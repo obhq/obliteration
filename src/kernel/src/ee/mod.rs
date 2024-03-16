@@ -3,53 +3,20 @@ use crate::memory::MemoryManager;
 use crate::process::ResourceType;
 use crate::process::VProc;
 use crate::rtld::Module;
-use crate::syscalls::Syscalls;
-use std::error::Error;
 use std::ffi::CString;
-use std::fmt::Debug;
 use std::marker::PhantomPinned;
 use std::mem::size_of_val;
 use std::pin::Pin;
 use std::sync::Arc;
 
-pub mod llvm;
 #[cfg(target_arch = "x86_64")]
 pub mod native;
 
-/// An object to execute the PS4 binary.
-pub trait ExecutionEngine: Debug + Send + Sync + 'static {
-    type RawFn: RawFn;
-    type SetupModuleErr: Error;
-    type GetFunctionErr: Error;
-
-    /// # Panics
-    /// If this method called a second time.
-    fn set_syscalls(&self, v: Syscalls);
-
-    fn setup_module(self: &Arc<Self>, md: &mut Module<Self>) -> Result<(), Self::SetupModuleErr>;
-
-    unsafe fn get_function(
-        self: &Arc<Self>,
-        md: &Arc<Module<Self>>,
-        addr: usize,
-    ) -> Result<Arc<Self::RawFn>, Self::GetFunctionErr>;
-}
-
-/// A function that was produced by [`ExecutionEngine`].
-pub trait RawFn: Debug + Send + Sync + 'static {
-    /// Returns address of this function in the memory.
-    fn addr(&self) -> usize;
-
-    /// # Safety
-    /// The provided signature must be matched with the underlying function.
-    unsafe fn exec1<R, A>(&self, a: A) -> R;
-}
-
 /// Encapsulate an argument of the PS4 entry point.
-pub struct EntryArg<E: ExecutionEngine> {
+pub struct EntryArg {
     vp: Arc<VProc>,
     mm: Arc<MemoryManager>,
-    app: Arc<Module<E>>,
+    app: Arc<Module>,
     name: CString,
     path: CString,
     canary: [u8; 64],
@@ -58,8 +25,8 @@ pub struct EntryArg<E: ExecutionEngine> {
     _pin: PhantomPinned,
 }
 
-impl<E: ExecutionEngine> EntryArg<E> {
-    pub fn new(vp: &Arc<VProc>, mm: &Arc<MemoryManager>, app: Arc<Module<E>>) -> Self {
+impl EntryArg {
+    pub fn new(vp: &Arc<VProc>, mm: &Arc<MemoryManager>, app: Arc<Module>) -> Self {
         let path = app.path();
         let name = CString::new(path.file_name().unwrap()).unwrap();
         let path = CString::new(path.as_str()).unwrap();
