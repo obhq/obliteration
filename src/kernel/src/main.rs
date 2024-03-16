@@ -23,7 +23,6 @@ use crate::tty::{TtyInitError, TtyManager};
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use crate::umtx::UmtxManager;
 use clap::{Parser, ValueEnum};
-use hv::Hypervisor;
 use llt::{OsThread, SpawnError};
 use macros::vpath;
 use param::Param;
@@ -460,8 +459,7 @@ fn run<E: crate::ee::ExecutionEngine>(
         todo!("statically linked eboot.bin");
     }
 
-    // Setup hypervisor.
-    let hv = Hypervisor::new().map_err(KernelError::CreateHypervisorFailed)?;
+    // TODO: Setup hypervisor.
 
     // Get entry point.
     let boot = ld.kernel().unwrap();
