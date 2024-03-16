@@ -30,7 +30,12 @@ impl Hypervisor {
     /// # Safety
     /// `ram` cannot be null and must be allocated with a Virtual Memory API (e.g. `mmap` on *nix or
     /// `VirtualAlloc` on Windows). This memory must be valid throughout the lifetime of the VM.
-    pub unsafe fn new(ram: *mut u8, addr: usize, len: NonZeroUsize) -> Result<Self, NewError> {
+    pub unsafe fn new(
+        cpu: NonZeroUsize,
+        ram: *mut u8,
+        addr: usize,
+        len: NonZeroUsize,
+    ) -> Result<Self, NewError> {
         // Check if another instance already active.
         let active = Active::new().ok_or(NewError::Active)?;
 
@@ -53,7 +58,7 @@ impl Hypervisor {
         return Self::new_linux(active, ram, addr, len.get());
 
         #[cfg(target_os = "windows")]
-        return Self::new_windows(active, ram, addr, len.get());
+        return Self::new_windows(active, cpu, ram, addr, len.get());
 
         #[cfg(target_os = "macos")]
         return Self::new_mac(active, ram, addr, len.get());
@@ -77,11 +82,12 @@ impl Hypervisor {
     #[cfg(target_os = "windows")]
     unsafe fn new_windows(
         active: Active,
+        cpu: NonZeroUsize,
         ram: *mut u8,
         addr: usize,
         len: usize,
     ) -> Result<Self, NewError> {
-        let mut whp = self::win32::Partition::new()?;
+        let mut whp = self::win32::Partition::new(cpu)?;
 
         whp.setup()?;
 
@@ -150,6 +156,10 @@ pub enum NewError {
     #[error("couldn't determine page size of the host")]
     GetHostPageSizeFailed(#[source] std::io::Error),
 
+    #[cfg(target_os = "windows")]
+    #[error("the number of CPU is not valid")]
+    InvalidCpuCount,
+
     #[error("the specified memory size is not valid")]
     InvalidMemorySize,
 
@@ -174,6 +184,10 @@ pub enum NewError {
     CreatePartitionFailed(windows_sys::core::HRESULT),
 
     #[cfg(target_os = "windows")]
+    #[error("couldn't set number of CPU ({0:#x})")]
+    SetCpuCountFailed(windows_sys::core::HRESULT),
+
+    #[cfg(target_os = "windows")]
     #[error("couldn't setup WHP partition ({0:#x})")]
     SetupPartitionFailed(windows_sys::core::HRESULT),
 
@@ -194,9 +208,10 @@ mod tests {
 
     #[test]
     fn new() {
+        let cpu = unsafe { NonZeroUsize::new_unchecked(8) };
         let ram = Ram::new();
 
-        unsafe { Hypervisor::new(ram.addr, 0, Ram::SIZE).unwrap() };
+        unsafe { Hypervisor::new(cpu, ram.addr, 0, Ram::SIZE).unwrap() };
     }
 
     struct Ram {
