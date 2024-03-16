@@ -190,6 +190,7 @@ static ACTIVE: AtomicBool = AtomicBool::new(false);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Error;
 
     #[test]
     fn new() {
@@ -203,18 +204,18 @@ mod tests {
     }
 
     impl Ram {
-        const SIZE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(0x4000) };
+        const SIZE: NonZeroUsize = unsafe { NonZeroUsize::new_unchecked(1024 * 1024 * 1024 * 8) };
 
         #[cfg(unix)]
         fn new() -> Self {
-            use libc::{mmap, MAP_ANON, MAP_FAILED, MAP_PRIVATE, PROT_READ, PROT_WRITE};
+            use libc::{mmap, MAP_ANON, MAP_FAILED, MAP_PRIVATE, PROT_NONE};
             use std::ptr::null_mut;
 
             let addr = unsafe {
                 mmap(
                     null_mut(),
                     Self::SIZE.get(),
-                    PROT_READ | PROT_WRITE,
+                    PROT_NONE,
                     MAP_PRIVATE | MAP_ANON,
                     -1,
                     0,
@@ -222,7 +223,7 @@ mod tests {
             };
 
             if addr == MAP_FAILED {
-                panic!("mmap() fails: {}", std::io::Error::last_os_error());
+                panic!("mmap() fails: {}", Error::last_os_error());
             }
 
             Self { addr: addr.cast() }
@@ -231,21 +232,13 @@ mod tests {
         #[cfg(windows)]
         fn new() -> Self {
             use std::ptr::null;
-            use windows_sys::Win32::System::Memory::{
-                VirtualAlloc, MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE,
-            };
+            use windows_sys::Win32::System::Memory::{VirtualAlloc, MEM_RESERVE, PAGE_NOACCESS};
 
-            let addr = unsafe {
-                VirtualAlloc(
-                    null(),
-                    Self::SIZE.get(),
-                    MEM_COMMIT | MEM_RESERVE,
-                    PAGE_READWRITE,
-                )
-            };
+            let addr =
+                unsafe { VirtualAlloc(null(), Self::SIZE.get(), MEM_RESERVE, PAGE_NOACCESS) };
 
             if addr.is_null() {
-                panic!("VirtualAlloc() fails: {}", std::io::Error::last_os_error());
+                panic!("VirtualAlloc() fails: {}", Error::last_os_error());
             }
 
             Self { addr: addr.cast() }
@@ -258,7 +251,7 @@ mod tests {
             use libc::munmap;
 
             if unsafe { munmap(self.addr.cast(), Self::SIZE.get()) } < 0 {
-                panic!("munmap() fails: {}", std::io::Error::last_os_error());
+                panic!("munmap() fails: {}", Error::last_os_error());
             }
         }
 
@@ -267,7 +260,7 @@ mod tests {
             use windows_sys::Win32::System::Memory::{VirtualFree, MEM_RELEASE};
 
             if unsafe { VirtualFree(self.addr.cast(), 0, MEM_RELEASE) } == 0 {
-                panic!("VirtualFree() fails: {}", std::io::Error::last_os_error());
+                panic!("VirtualFree() fails: {}", Error::last_os_error());
             }
         }
     }
