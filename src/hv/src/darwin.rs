@@ -12,6 +12,15 @@ impl Vm {
             v => Err(NewError::CreateVmFailed(v)),
         }
     }
+
+    pub fn capability(&self, id: u64) -> Result<u64, c_int> {
+        let mut value = 0;
+
+        match unsafe { hv_capability(id, &mut value) } {
+            0 => Ok(value),
+            v => Err(v),
+        }
+    }
 }
 
 impl Drop for Vm {
@@ -27,4 +36,5 @@ impl Drop for Vm {
 extern "C" {
     fn hv_vm_create(config: *mut ()) -> c_int;
     fn hv_vm_destroy() -> c_int;
+    fn hv_capability(capability: u64, value: *mut u64) -> c_int;
 }
