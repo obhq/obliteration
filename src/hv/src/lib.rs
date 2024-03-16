@@ -112,8 +112,9 @@ impl Hypervisor {
     ) -> Result<Self, NewError> {
         // Create a VM.
         let vm = self::darwin::Vm::new()?;
+        let cpu: u64 = cpu.get().try_into().unwrap();
 
-        if cpu.get().try_into().unwrap() > vm.capability(0).map_err(NewError::GetMaxCpuFailed)? {
+        if cpu > vm.capability(0).map_err(NewError::GetMaxCpuFailed)? {
             return Err(NewError::InvalidCpuCount);
         }
 
