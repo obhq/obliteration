@@ -29,8 +29,7 @@ jobs:
       run: |
         flatpak install --noninteractive flathub \
           org.kde.Platform//6.6 org.kde.Sdk//6.6 \
-          org.freedesktop.Sdk.Extension.rust-stable//23.08 \
-          org.freedesktop.Sdk.Extension.llvm17//23.08
+          org.freedesktop.Sdk.Extension.rust-stable//23.08
       if: ${{ steps.flatpak-runtime.outputs.cache-hit != 'true' }}
     - name: Restore build files
       uses: actions/cache/restore@v4

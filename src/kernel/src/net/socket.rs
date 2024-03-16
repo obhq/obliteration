@@ -1,5 +1,5 @@
 use crate::fs::{
-    DefaultFileBackendError, FileBackend, IoCmd, Stat, TruncateLength, Uio, UioMut, VFile,
+    DefaultFileBackendError, FileBackend, IoCmd, Stat, PollEvents, TruncateLength, Uio, UioMut, VFile,
 };
 use crate::ucred::Ucred;
 use crate::{
@@ -11,8 +11,6 @@ use macros::Errno;
 use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
-
-use super::{GetOptError, SetOptError, SockOpt};
 
 #[derive(Debug)]
 pub struct Socket {
@@ -109,6 +107,11 @@ impl FileBackend for Socket {
         cmd: IoCmd,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn poll(self: &Arc<Self>, file: &VFile, events: PollEvents, td: &VThread) -> PollEvents {
         todo!()
     }
 

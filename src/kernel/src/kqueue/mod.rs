@@ -2,7 +2,7 @@ use crate::{
     budget::BudgetType,
     errno::Errno,
     fs::{
-        DefaultFileBackendError, FileBackend, Stat, TruncateLength, VFile, VFileFlags, VFileType,
+        DefaultFileBackendError, FileBackend, PollEvents, Stat, TruncateLength, VFile, VFileFlags, VFileType,
     },
     process::{FileDesc, VThread},
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
@@ -61,6 +61,11 @@ impl KernelQueue {
 }
 
 impl FileBackend for KernelQueue {
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn poll(self: &Arc<Self>, file: &VFile, events: PollEvents, td: &VThread) -> PollEvents {
+        todo!()
+    }
+
     fn stat(self: &Arc<Self>, _: &VFile, _: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
         let mut stat = Stat::zeroed();
 

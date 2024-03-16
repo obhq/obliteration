@@ -2,7 +2,7 @@ pub use self::mem::*;
 pub use self::module::*;
 use self::resolver::{ResolveFlags, SymbolResolver};
 use crate::budget::ProcType;
-use crate::ee::{ExecutionEngine, RawFn};
+use crate::ee::native::{NativeEngine, SetupModuleError};
 use crate::errno::{Errno, EINVAL, ENOENT, ENOEXEC, ENOMEM, EPERM, ESRCH};
 use crate::fs::{Fs, OpenError, VPath, VPathBuf};
 use crate::idt::Entry;
@@ -33,21 +33,21 @@ mod resolver;
 /// An implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/libexec/rtld-elf/rtld.c.
 #[derive(Debug)]
-pub struct RuntimeLinker<E: ExecutionEngine> {
+pub struct RuntimeLinker {
     fs: Arc<Fs>,
     mm: Arc<MemoryManager>,
-    ee: Arc<E>,
+    ee: Arc<NativeEngine>,
     // TODO: Move all fields after this to proc.
-    list: Gutex<Vec<Arc<Module<E>>>>,      // obj_list + obj_tail
-    app: Arc<Module<E>>,                   // obj_main
-    kernel: Gutex<Option<Arc<Module<E>>>>, // obj_kernel
-    mains: Gutex<Vec<Arc<Module<E>>>>,     // list_main
-    globals: Gutex<Vec<Arc<Module<E>>>>,   // list_global
+    list: Gutex<Vec<Arc<Module>>>,      // obj_list + obj_tail
+    app: Arc<Module>,                   // obj_main
+    kernel: Gutex<Option<Arc<Module>>>, // obj_kernel
+    mains: Gutex<Vec<Arc<Module>>>,     // list_main
+    globals: Gutex<Vec<Arc<Module>>>,   // list_global
     tls: Gutex<TlsAlloc>,
     flags: LinkerFlags,
 }
 
-impl<E: ExecutionEngine> RuntimeLinker<E> {
+impl RuntimeLinker {
     const NID_CHARS: &'static [u8] =
         b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-";
     const NID_SALT: [u8; 16] = [
@@ -58,10 +58,10 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
     pub fn new(
         fs: &Arc<Fs>,
         mm: &Arc<MemoryManager>,
-        ee: &Arc<E>,
+        ee: &Arc<NativeEngine>,
         sys: &mut Syscalls,
         dump: Option<&Path>,
-    ) -> Result<Arc<Self>, RuntimeLinkerError<E>> {
+    ) -> Result<Arc<Self>, RuntimeLinkerError> {
         // Get eboot.bin.
         let path = vpath!("/app0/eboot.bin");
         let file = match fs.open(path, None) {
@@ -159,15 +159,15 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         Ok(ld)
     }
 
-    pub fn app(&self) -> &Arc<Module<E>> {
+    pub fn app(&self) -> &Arc<Module> {
         &self.app
     }
 
-    pub fn kernel(&self) -> Option<Arc<Module<E>>> {
+    pub fn kernel(&self) -> Option<Arc<Module>> {
         self.kernel.read().clone()
     }
 
-    pub fn set_kernel(&self, md: Arc<Module<E>>) {
+    pub fn set_kernel(&self, md: Arc<Module>) {
         *self.kernel.write() = Some(md);
     }
 
@@ -180,7 +180,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         _: LoadFlags,
         force: bool,
         main: bool,
-    ) -> Result<Arc<Module<E>>, LoadError<E>> {
+    ) -> Result<Arc<Module>, LoadError> {
         // Check if already loaded.
         let name = path.file_name().unwrap().to_owned();
         let mut list = self.list.write();
@@ -276,7 +276,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         })?;
 
         // Add to list.
-        let module = entry.data().clone().downcast::<Module<E>>().unwrap();
+        let module = entry.data().clone().downcast::<Module>().unwrap();
 
         list.push(module.clone());
 
@@ -288,7 +288,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
     }
 
     /// See `init_dag` on the PS4 for a reference.
-    fn init_dag(&self, md: &Arc<Module<E>>) {
+    fn init_dag(&self, md: &Arc<Module>) {
         // Do nothing if already initializes.
         let mut flags = md.flags_mut();
 
@@ -307,7 +307,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
     /// See `do_dlsym` on the PS4 for a reference.
     fn resolve_symbol<'a>(
         &self,
-        md: &'a Arc<Module<E>>,
+        md: &'a Arc<Module>,
         mut name: Cow<'a, str>,
         mut lib: Option<&'a str>,
         flags: ResolveFlags,
@@ -345,7 +345,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
                 None,
                 mname,
                 lib,
-                SymbolResolver::<E>::hash(Some(name.as_ref()), lib, mname),
+                SymbolResolver::hash(Some(name.as_ref()), lib, mname),
                 flags | ResolveFlags::UNK3 | ResolveFlags::UNK4,
                 &dags,
             )
@@ -673,9 +673,9 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
     /// No other threads may access the memory of all loaded modules.
     unsafe fn relocate(
         &self,
-        md: &Arc<Module<E>>,
-        list: &[Arc<Module<E>>],
-        resolver: &SymbolResolver<E>,
+        md: &Arc<Module>,
+        list: &[Arc<Module>],
+        resolver: &SymbolResolver,
     ) -> Result<(), RelocateError> {
         // TODO: Implement flags & 0x800.
         self.relocate_single(md, resolver)?;
@@ -698,8 +698,8 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
     /// No other thread may access the module memory.
     unsafe fn relocate_single<'b>(
         &self,
-        md: &'b Arc<Module<E>>,
-        resolver: &SymbolResolver<'b, E>,
+        md: &'b Arc<Module>,
+        resolver: &SymbolResolver<'b>,
     ) -> Result<(), RelocateError> {
         // Unprotect the memory.
         let mut mem = match md.memory().unprotect() {
@@ -722,10 +722,10 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
     /// See `reloc_non_plt` on the PS4 kernel for a reference.
     fn relocate_rela<'b>(
         &self,
-        md: &'b Arc<Module<E>>,
+        md: &'b Arc<Module>,
         mem: &mut [u8],
-        relocated: &mut [Option<Relocated<E>>],
-        resolver: &SymbolResolver<'b, E>,
+        relocated: &mut [Option<Relocated>],
+        resolver: &SymbolResolver<'b>,
     ) -> Result<(), RelocateError> {
         let info = md.file_info().unwrap(); // Let it panic because the PS4 assume it is available.
         let addr = mem.as_ptr() as usize;
@@ -827,10 +827,10 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
     /// See `reloc_jmplots` on the PS4 for a reference.
     fn relocate_plt<'b>(
         &self,
-        md: &'b Arc<Module<E>>,
+        md: &'b Arc<Module>,
         mem: &mut [u8],
-        relocated: &mut [Option<Relocated<E>>],
-        resolver: &SymbolResolver<'b, E>,
+        relocated: &mut [Option<Relocated>],
+        resolver: &SymbolResolver<'b>,
     ) -> Result<(), RelocateError> {
         // Do nothing if not a dynamic module.
         let info = match md.file_info() {
@@ -878,7 +878,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         Ok(())
     }
 
-    fn get_relocated(md: Arc<Module<E>>, sym: usize) -> (Relocated<E>, usize) {
+    fn get_relocated(md: Arc<Module>, sym: usize) -> (Relocated, usize) {
         let sym = md.symbol(sym).unwrap();
 
         match sym.ty() {
@@ -1110,7 +1110,7 @@ bitflags! {
 
 /// Represents the error for [`RuntimeLinker`] initialization.
 #[derive(Debug, Error)]
-pub enum RuntimeLinkerError<E: ExecutionEngine> {
+pub enum RuntimeLinkerError {
     #[error("cannot open {0}")]
     OpenExeFailed(VPathBuf, #[source] OpenError),
 
@@ -1124,7 +1124,7 @@ pub enum RuntimeLinkerError<E: ExecutionEngine> {
     MapExeFailed(VPathBuf, #[source] MapError),
 
     #[error("cannot setup {0}")]
-    SetupExeFailed(VPathBuf, #[source] E::SetupModuleErr),
+    SetupExeFailed(VPathBuf, #[source] SetupModuleError),
 }
 
 /// Represents an error for (S)ELF mapping.
@@ -1178,7 +1178,7 @@ pub enum MapError {
 
 /// Represents an error for (S)ELF loading.
 #[derive(Debug, Error)]
-pub enum LoadError<E: ExecutionEngine> {
+pub enum LoadError {
     #[error("cannot open the specified file")]
     OpenFileFailed(#[source] OpenError),
 
@@ -1195,10 +1195,10 @@ pub enum LoadError<E: ExecutionEngine> {
     ImpureText,
 
     #[error("cannot setup the module")]
-    SetupFailed(#[source] E::SetupModuleErr),
+    SetupFailed(#[source] SetupModuleError),
 }
 
-impl<E: ExecutionEngine> Errno for LoadError<E> {
+impl Errno for LoadError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::OpenFileFailed(_) => ENOENT,
