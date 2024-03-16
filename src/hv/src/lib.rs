@@ -1,5 +1,4 @@
 use std::num::NonZeroUsize;
-use std::os::fd::AsFd;
 use std::sync::atomic::{AtomicBool, Ordering};
 use thiserror::Error;
 
@@ -67,6 +66,8 @@ impl Hypervisor {
         addr: usize,
         len: usize,
     ) -> Result<Self, NewError> {
+        use std::os::fd::AsFd;
+
         let kvm = self::linux::open_kvm()?;
         let vm = self::linux::create_vm(kvm.as_fd())?;
 
