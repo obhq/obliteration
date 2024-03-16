@@ -2,8 +2,9 @@ use super::dirent::Dirent;
 use crate::errno::Errno;
 use crate::errno::ENODEV;
 use crate::fs::Uio;
-use crate::fs::{FileBackend, IoCmd, Mode, OpenFlags, Stat, TruncateLength, UioMut, VFile};
-use crate::process::PollEvents;
+use crate::fs::{
+    FileBackend, IoCmd, Mode, OpenFlags, PollEvents, Stat, TruncateLength, UioMut, VFile,
+};
 use crate::process::VThread;
 use crate::time::TimeSpec;
 use crate::ucred::{Gid, Ucred, Uid};

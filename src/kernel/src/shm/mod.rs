@@ -1,11 +1,11 @@
 use crate::{
     errno::{Errno, EINVAL},
     fs::{
-        check_access, Access, AccessError, DefaultError, FileBackend, IoCmd, Mode, OpenFlags, Stat,
-        TruncateLength, Uio, UioMut, VFile, VFileFlags, VPathBuf,
+        check_access, Access, AccessError, DefaultError, FileBackend, IoCmd, Mode, OpenFlags,
+        PollEvents, Stat, TruncateLength, Uio, UioMut, VFile, VFileFlags, VPathBuf,
     },
     memory::MemoryManager,
-    process::{PollEvents, VThread},
+    process::VThread,
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
     ucred::{Gid, Ucred, Uid},
 };

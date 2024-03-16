@@ -2,9 +2,10 @@ use super::{CharacterDevice, IoCmd, Offset, Stat, TruncateLength, Uio, UioMut, V
 use crate::dmem::BlockPool;
 use crate::errno::Errno;
 use crate::errno::{EINVAL, ENOTTY, ENXIO, EOPNOTSUPP};
+use crate::fs::PollEvents;
 use crate::kqueue::KernelQueue;
 use crate::net::Socket;
-use crate::process::{PollEvents, VThread};
+use crate::process::VThread;
 use crate::shm::SharedMemory;
 use bitflags::bitflags;
 use macros::Errno;

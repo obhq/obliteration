@@ -1,6 +1,6 @@
 use crate::errno::Errno;
-use crate::fs::{FileBackend, IoCmd, Stat, VFile};
-use crate::process::{PollEvents, VThread};
+use crate::fs::{FileBackend, IoCmd, PollEvents, Stat, VFile};
+use crate::process::VThread;
 use std::sync::Arc;
 
 #[derive(Debug)]

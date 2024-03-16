@@ -1,8 +1,10 @@
 use crate::{
     budget::BudgetType,
     errno::Errno,
-    fs::{DefaultError, FileBackend, Stat, TruncateLength, VFile, VFileFlags, VFileType},
-    process::{FileDesc, PollEvents, VThread},
+    fs::{
+        DefaultError, FileBackend, PollEvents, Stat, TruncateLength, VFile, VFileFlags, VFileType,
+    },
+    process::{FileDesc, VThread},
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
 };
 use std::{

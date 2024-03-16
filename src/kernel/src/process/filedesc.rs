@@ -150,39 +150,6 @@ impl FileDesc {
     }
 }
 
-#[repr(C)]
-pub struct PollFd {
-    fd: i32,
-    events: PollEvents,
-    revents: PollEvents,
-}
-
-bitflags! {
-    /// This type is the direct equivalent of the `events` and `revents` fields of [`PollFd`].
-    /// In [`crate::fs::FileBackend`], which is a equivalent of the `vfileops` struct, we also return this type. even though
-    /// FreeBSD uses and `int` there
-    #[repr(transparent)]
-    #[derive(Debug, Clone, Copy)]
-    pub struct PollEvents: u16 {
-        const IN = 0x0001; // POLLIN
-        const PRI = 0x0002; // POLLPRI
-        const OUT = 0x0004; // POLLOUT
-
-        const READNORMAL = 0x0040; // POLLRDNORM
-        const WRITENORMAL = Self::OUT.bits(); // POLLWRNORM
-        const READBAND = 0x0080; // POLLRDBAND
-        const WRITEBAND = 0x0100; // POLLWRBAND
-
-        const ERROR = 0x0008; // POLLERR
-        const HUNGUP = 0x0010; // POLLHUP
-        const NOVAL = 0x0020; // POLLNVAL
-
-        const STANDARD = Self::IN.bits() | Self::PRI.bits() | Self::OUT.bits()
-            | Self::READNORMAL.bits() | Self::READBAND.bits() | Self::WRITENORMAL.bits()
-            | Self::WRITEBAND.bits() | Self::ERROR.bits() | Self::HUNGUP.bits() | Self::NOVAL.bits();
-    }
-}
-
 #[derive(Debug, Error, Errno)]
 pub enum GetFileError {
     #[error("got negative file descriptor")]

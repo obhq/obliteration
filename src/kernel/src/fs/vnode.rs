@@ -3,7 +3,8 @@ use super::{
     RevokeFlags, Stat, TruncateLength, Uio, UioMut, VFile,
 };
 use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
-use crate::process::{PollEvents, VThread};
+use crate::fs::PollEvents;
+use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use macros::Errno;
