@@ -2,11 +2,11 @@ use crate::arch::MachDep;
 use crate::budget::{Budget, BudgetManager, ProcType};
 use crate::debug::{DebugManager, DebugManagerInitError};
 use crate::dmem::DmemManager;
-use crate::ee::{EntryArg, RawFn};
+use crate::ee::native::NativeEngine;
+use crate::ee::EntryArg;
 use crate::errno::EEXIST;
 use crate::fs::{Fs, FsInitError, MkdirError, MountError, MountFlags, MountOpts, VPathBuf};
 use crate::kqueue::KernelQueueManager;
-use crate::llvm::Llvm;
 use crate::log::{print, LOGGER};
 use crate::memory::{MemoryManager, MemoryManagerError};
 use crate::namedobj::NamedObjManager;
@@ -22,7 +22,7 @@ use crate::time::TimeManager;
 use crate::tty::{TtyInitError, TtyManager};
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use crate::umtx::UmtxManager;
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use llt::{OsThread, SpawnError};
 use macros::vpath;
 use param::Param;
@@ -47,7 +47,6 @@ mod errno;
 mod fs;
 mod idt;
 mod kqueue;
-mod llvm;
 mod log;
 mod memory;
 mod namedobj;
@@ -66,10 +65,10 @@ mod ucred;
 mod umtx;
 
 fn main() -> Exit {
-    start().into()
+    run().into()
 }
 
-fn start() -> Result<(), KernelError> {
+fn run() -> Result<(), KernelError> {
     // Begin logger.
     log::init();
 
@@ -189,7 +188,6 @@ fn start() -> Result<(), KernelError> {
     ));
 
     // Initialize foundations.
-    let llvm = Llvm::new();
     let mut syscalls = Syscalls::new();
     let fs = Fs::new(args.system, &cred, &mut syscalls)?;
 
@@ -329,47 +327,6 @@ fn start() -> Result<(), KernelError> {
 
     print(log);
 
-    // Select execution engine.
-    match args.execution_engine.unwrap_or_default() {
-        #[cfg(target_arch = "x86_64")]
-        ExecutionEngine::Native => run(
-            args.debug_dump,
-            &param,
-            auth,
-            syscalls,
-            &fs,
-            &mm,
-            crate::ee::native::NativeEngine::new(),
-            root,
-        ),
-        #[cfg(not(target_arch = "x86_64"))]
-        ExecutionEngine::Native => {
-            error!("Native execution engine cannot be used on your machine.");
-            Err(KernelError::NativeExecutionEngineNotSupported)
-        }
-        ExecutionEngine::Llvm => run(
-            args.debug_dump,
-            &param,
-            auth,
-            syscalls,
-            &fs,
-            &mm,
-            crate::ee::llvm::LlvmEngine::new(&llvm),
-            root,
-        ),
-    }
-}
-
-fn run<E: crate::ee::ExecutionEngine>(
-    dump: Option<PathBuf>,
-    param: &Arc<Param>,
-    auth: AuthInfo,
-    mut syscalls: Syscalls,
-    fs: &Arc<Fs>,
-    mm: &Arc<MemoryManager>,
-    ee: Arc<E>,
-    root: VPathBuf,
-) -> Result<(), KernelError> {
     // Initialize TTY system.
     #[allow(unused_variables)] // TODO: Remove this when someone use tty.
     let tty = TtyManager::new()?;
@@ -381,9 +338,9 @@ fn run<E: crate::ee::ExecutionEngine>(
     let machdep = MachDep::new(&mut syscalls);
     let budget = BudgetManager::new(&mut syscalls);
 
-    DmemManager::new(fs, &mut syscalls);
-    SharedMemoryManager::new(mm, &mut syscalls);
-    Sysctl::new(mm, &machdep, &mut syscalls);
+    DmemManager::new(&fs, &mut syscalls);
+    SharedMemoryManager::new(&mm, &mut syscalls);
+    Sysctl::new(&mm, &machdep, &mut syscalls);
     TimeManager::new(&mut syscalls);
     KernelQueueManager::new(&mut syscalls);
     NetManager::new(&mut syscalls);
@@ -408,7 +365,8 @@ fn run<E: crate::ee::ExecutionEngine>(
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
 
-    let ld = RuntimeLinker::new(fs, mm, &ee, &mut syscalls, dump.as_deref())
+    let ee = NativeEngine::new();
+    let ld = RuntimeLinker::new(&fs, &mm, &ee, &mut syscalls, args.debug_dump.as_deref())
         .map_err(|e| KernelError::RuntimeLinkerInitFailed(e.into()))?;
 
     ee.set_syscalls(syscalls);
@@ -462,7 +420,7 @@ fn run<E: crate::ee::ExecutionEngine>(
 
     // Get entry point.
     let boot = ld.kernel().unwrap();
-    let mut arg = Box::pin(EntryArg::<E>::new(&proc, mm, app.clone()));
+    let mut arg = Box::pin(EntryArg::new(&proc, &mm, app.clone()));
     let entry = unsafe { boot.get_function(boot.entry().unwrap()) };
     let entry = move || unsafe { entry.exec1(arg.as_mut().as_vec().as_ptr()) };
 
@@ -482,7 +440,7 @@ fn run<E: crate::ee::ExecutionEngine>(
     let main: OsThread = unsafe { main.start(stack.start(), stack.len(), entry) }?;
 
     // Begin Discord Rich Presence before blocking current thread.
-    if let Err(e) = discord_presence(param) {
+    if let Err(e) = discord_presence(&param) {
         warn!(e, "Failed to setup Discord rich presence");
     }
 
@@ -579,27 +537,6 @@ struct Args {
     #[arg(long)]
     #[serde(default)]
     pro: bool,
-
-    #[arg(long, short)]
-    execution_engine: Option<ExecutionEngine>,
-}
-
-#[derive(Clone, ValueEnum, Deserialize)]
-enum ExecutionEngine {
-    Native,
-    Llvm,
-}
-
-impl Default for ExecutionEngine {
-    #[cfg(target_arch = "x86_64")]
-    fn default() -> Self {
-        ExecutionEngine::Native
-    }
-
-    #[cfg(not(target_arch = "x86_64"))]
-    fn default() -> Self {
-        ExecutionEngine::Llvm
-    }
 }
 
 #[derive(Debug, Error)]
@@ -642,10 +579,6 @@ enum KernelError {
 
     #[error("memory manager initialization failed")]
     MemoryManagerInitFailed(#[from] MemoryManagerError),
-
-    #[cfg(not(target_arch = "x86_64"))]
-    #[error("the native execution engine is only supported on x86_64")]
-    NativeExecutionEngineNotSupported,
 
     #[error("tty initialization failed")]
     TtyInitFailed(#[from] TtyInitError),
