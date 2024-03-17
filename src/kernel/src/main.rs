@@ -5,7 +5,7 @@ use crate::dmem::DmemManager;
 use crate::ee::native::NativeEngine;
 use crate::ee::EntryArg;
 use crate::errno::EEXIST;
-use crate::fs::{Fs, FsInitError, MkdirError, MountError, MountFlags, MountOpts, VPathBuf};
+use crate::fs::{Fs, FsInitError, MkdirError, MountError, MountFlags, MountOpts, VPath, VPathBuf};
 use crate::kqueue::KernelQueueManager;
 use crate::log::{print, LOGGER};
 use crate::memory::{MemoryManager, MemoryManagerError};
@@ -14,7 +14,7 @@ use crate::net::NetManager;
 use crate::osem::OsemManager;
 use crate::process::{VProc, VProcInitError, VThread};
 use crate::regmgr::RegMgr;
-use crate::rtld::{LoadFlags, ModuleFlags, RuntimeLinker};
+use crate::rtld::{ExecError, LoadFlags, ModuleFlags, RuntimeLinker};
 use crate::shm::SharedMemoryManager;
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
@@ -367,13 +367,25 @@ fn run() -> Result<(), KernelError> {
     info!("Initializing runtime linker.");
 
     let ee = NativeEngine::new();
-    let ld = RuntimeLinker::new(&fs, &mm, &ee, &mut syscalls, args.debug_dump.as_deref())
-        .map_err(|e| KernelError::RuntimeLinkerInitFailed(e.into()))?;
+    let ld = RuntimeLinker::new(&fs, &mm, &ee, &mut syscalls);
 
     ee.set_syscalls(syscalls);
 
-    // Print application module.
-    let app = ld.app();
+    // TODO: Check if this credential is actually correct for game main thread.
+    let cred = Arc::new(Ucred::new(
+        Uid::ROOT,
+        Uid::ROOT,
+        vec![Gid::ROOT],
+        AuthInfo::SYS_CORE.clone(),
+    ));
+
+    let main = VThread::new(proc.clone(), &cred);
+
+    // Load eboot.bin.
+    let path = vpath!("/app0/eboot.bin");
+    let app = ld
+        .exec(path, &main)
+        .map_err(|e| KernelError::ExecFailed(path, e))?;
     let mut log = info!();
 
     writeln!(log, "Application   : {}", app.path()).unwrap();
@@ -390,7 +402,7 @@ fn run() -> Result<(), KernelError> {
     info!("Loading {path}.");
 
     let libkernel = ld
-        .load(&proc, path, flags, false, true)
+        .load(path, flags, false, true, &main)
         .map_err(|e| KernelError::FailedToLoadLibkernel(e.into()))?;
 
     libkernel.flags_mut().remove(ModuleFlags::UNK2);
@@ -404,7 +416,7 @@ fn run() -> Result<(), KernelError> {
     info!("Loading {path}.");
 
     let libc = ld
-        .load(&proc, path, flags, false, true)
+        .load(path, flags, false, true, &main)
         .map_err(|e| KernelError::FailedToLoadLibSceLibcInternal(e.into()))?;
 
     libc.flags_mut().remove(ModuleFlags::UNK2);
@@ -425,18 +437,10 @@ fn run() -> Result<(), KernelError> {
     let entry = unsafe { boot.get_function(boot.entry().unwrap()) };
     let entry = move || unsafe { entry.exec1(arg.as_mut().as_vec().as_ptr()) };
 
-    // Spawn main thread.
+    // Start main thread.
     info!("Starting application.");
 
     // TODO: Check how this constructed.
-    let cred = Arc::new(Ucred::new(
-        Uid::ROOT,
-        Uid::ROOT,
-        vec![Gid::ROOT],
-        AuthInfo::SYS_CORE.clone(),
-    ));
-
-    let main = VThread::new(proc, &cred);
     let stack = mm.stack();
     let main: OsThread = unsafe { main.start(stack.start(), stack.len(), entry) }?;
 
@@ -590,8 +594,8 @@ enum KernelError {
     #[error("virtual process initialization failed")]
     VProcInitFailed(#[from] VProcInitError),
 
-    #[error("runtime linker initialization failed")]
-    RuntimeLinkerInitFailed(#[source] Box<dyn Error>),
+    #[error("couldn't execute {0}")]
+    ExecFailed(&'static VPath, #[source] ExecError),
 
     #[error("libkernel couldn't be loaded")]
     FailedToLoadLibkernel(#[source] Box<dyn Error>),

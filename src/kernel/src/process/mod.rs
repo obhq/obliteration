@@ -11,7 +11,7 @@ use crate::signal::{
 use crate::signal::{SigChldFlags, Signal};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
-use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
+use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use macros::Errno;
 use std::any::Any;
 use std::cmp::min;
@@ -26,6 +26,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 pub use self::appinfo::*;
+pub use self::binary::*;
 pub use self::cpuset::*;
 pub use self::filedesc::*;
 pub use self::group::*;
@@ -35,6 +36,7 @@ pub use self::signal::*;
 pub use self::thread::*;
 
 mod appinfo;
+mod binary;
 mod cpuset;
 mod filedesc;
 mod group;
@@ -60,6 +62,7 @@ pub struct VProc {
     system_path: String,               // p_randomized_path
     limits: Limits,                    // p_limit
     comm: Gutex<Option<String>>,       // p_comm
+    bin: Gutex<Option<Binaries>>,      // p_dynlib?
     objects: Gutex<Idt<Arc<dyn Any + Send + Sync>>>,
     budget_id: usize,
     budget_ptype: ProcType,
@@ -104,6 +107,7 @@ impl VProc {
             dmem_container,
             limits,
             comm: gg.spawn(None), //TODO: Find out how this is actually set
+            bin: gg.spawn(None),
             app_info: AppInfo::new(),
             ptc: 0,
             uptc: AtomicPtr::new(null_mut()),
@@ -145,6 +149,14 @@ impl VProc {
 
     pub fn set_name(&self, name: Option<&str>) {
         *self.comm.write() = name.map(|n| n.to_owned());
+    }
+
+    pub fn bin(&self) -> GutexReadGuard<Option<Binaries>> {
+        self.bin.read()
+    }
+
+    pub fn bin_mut(&self) -> GutexWriteGuard<Option<Binaries>> {
+        self.bin.write()
     }
 
     pub fn objects_mut(&self) -> GutexWriteGuard<'_, Idt<Arc<dyn Any + Send + Sync>>> {
