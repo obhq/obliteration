@@ -1,5 +1,5 @@
 use super::{MapError, Memory};
-use crate::ee::ExecutionEngine;
+use crate::ee::native::{NativeEngine, RawFn};
 use crate::fs::{VFile, VPath, VPathBuf};
 use crate::log::{print, LogEntry};
 use crate::memory::MemoryManager;
@@ -19,8 +19,8 @@ use std::sync::Arc;
 /// An implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/libexec/rtld-elf/rtld.h#L147.
 #[derive(Debug)]
-pub struct Module<E: ExecutionEngine + ?Sized> {
-    ee: Arc<E>,
+pub struct Module {
+    ee: Arc<NativeEngine>,
     id: u32,
     init: Option<usize>,
     entry: Option<usize>,
@@ -41,7 +41,7 @@ pub struct Module<E: ExecutionEngine + ?Sized> {
     libraries: Vec<LibraryInfo>,
     fingerprint: [u8; 20],
     memory: Memory,
-    relocated: Gutex<Vec<Option<Relocated<E>>>>,
+    relocated: Gutex<Vec<Option<Relocated>>>,
     file_info: Option<FileInfo>,
     path: VPathBuf,
     is_self: bool,
@@ -50,10 +50,10 @@ pub struct Module<E: ExecutionEngine + ?Sized> {
     symbols: Vec<Symbol>,
 }
 
-impl<E: ExecutionEngine> Module<E> {
+impl Module {
     pub(super) fn map<N: Into<String>>(
         mm: &Arc<MemoryManager>,
-        ee: &Arc<E>,
+        ee: &Arc<NativeEngine>,
         mut image: Elf<VFile>,
         base: usize,
         mem_name: N,
@@ -292,7 +292,7 @@ impl<E: ExecutionEngine> Module<E> {
         &self.memory
     }
 
-    pub fn relocated_mut(&self) -> GutexWriteGuard<'_, Vec<Option<Relocated<E>>>> {
+    pub fn relocated_mut(&self) -> GutexWriteGuard<'_, Vec<Option<Relocated>>> {
         self.relocated.write()
     }
 
@@ -320,7 +320,7 @@ impl<E: ExecutionEngine> Module<E> {
     /// # Safety
     /// `off` must be a valid offset without base adjustment of a function in the memory of this
     /// module.
-    pub unsafe fn get_function(self: &Arc<Self>, off: usize) -> Arc<E::RawFn> {
+    pub unsafe fn get_function(self: &Arc<Self>, off: usize) -> Arc<RawFn> {
         self.ee
             .get_function(self, self.memory.addr() + self.memory.base() + off)
             .unwrap()
@@ -777,8 +777,8 @@ pub struct NeededModule {
 
 /// Indicated a type of value in the relocation entry.
 #[derive(Debug)]
-pub enum Relocated<E: ExecutionEngine + ?Sized> {
-    Executable(Arc<E::RawFn>),
-    Data((Arc<Module<E>>, usize)),
-    Tls((Arc<Module<E>>, usize)),
+pub enum Relocated {
+    Executable(Arc<RawFn>),
+    Data((Arc<Module>, usize)),
+    Tls((Arc<Module>, usize)),
 }

@@ -2,26 +2,25 @@ pub use self::mem::*;
 pub use self::module::*;
 use self::resolver::{ResolveFlags, SymbolResolver};
 use crate::budget::ProcType;
-use crate::ee::{ExecutionEngine, RawFn};
+use crate::ee::native::{NativeEngine, SetupModuleError};
 use crate::errno::{Errno, EINVAL, ENOENT, ENOEXEC, ENOMEM, EPERM, ESRCH};
 use crate::fs::{Fs, OpenError, VPath, VPathBuf};
 use crate::idt::Entry;
 use crate::info;
 use crate::log::print;
 use crate::memory::{MemoryManager, MemoryUpdateError, MmapError, Protections};
-use crate::process::{VProc, VThread};
+use crate::process::{Binaries, VThread};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use bitflags::bitflags;
 use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation, Symbol};
 use gmtx::{Gutex, GutexGroup};
-use macros::vpath;
+use macros::Errno;
 use sha1::{Digest, Sha1};
 use std::borrow::Cow;
 use std::io::Write;
 use std::mem::{size_of, zeroed};
 use std::num::NonZeroI32;
 use std::ops::Deref;
-use std::path::Path;
 use std::ptr::{read_unaligned, write_unaligned};
 use std::sync::Arc;
 use thiserror::Error;
@@ -33,21 +32,20 @@ mod resolver;
 /// An implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/libexec/rtld-elf/rtld.c.
 #[derive(Debug)]
-pub struct RuntimeLinker<E: ExecutionEngine> {
+pub struct RuntimeLinker {
     fs: Arc<Fs>,
     mm: Arc<MemoryManager>,
-    ee: Arc<E>,
+    ee: Arc<NativeEngine>,
     // TODO: Move all fields after this to proc.
-    list: Gutex<Vec<Arc<Module<E>>>>,      // obj_list + obj_tail
-    app: Arc<Module<E>>,                   // obj_main
-    kernel: Gutex<Option<Arc<Module<E>>>>, // obj_kernel
-    mains: Gutex<Vec<Arc<Module<E>>>>,     // list_main
-    globals: Gutex<Vec<Arc<Module<E>>>>,   // list_global
+    list: Gutex<Vec<Arc<Module>>>,      // obj_list + obj_tail
+    kernel: Gutex<Option<Arc<Module>>>, // obj_kernel
+    mains: Gutex<Vec<Arc<Module>>>,     // list_main
+    globals: Gutex<Vec<Arc<Module>>>,   // list_global
     tls: Gutex<TlsAlloc>,
-    flags: LinkerFlags,
+    flags: Gutex<LinkerFlags>,
 }
 
-impl<E: ExecutionEngine> RuntimeLinker<E> {
+impl RuntimeLinker {
     const NID_CHARS: &'static [u8] =
         b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+-";
     const NID_SALT: [u8; 16] = [
@@ -58,22 +56,56 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
     pub fn new(
         fs: &Arc<Fs>,
         mm: &Arc<MemoryManager>,
-        ee: &Arc<E>,
+        ee: &Arc<NativeEngine>,
         sys: &mut Syscalls,
-        dump: Option<&Path>,
-    ) -> Result<Arc<Self>, RuntimeLinkerError<E>> {
-        // Get eboot.bin.
-        let path = vpath!("/app0/eboot.bin");
-        let file = match fs.open(path, None) {
-            Ok(v) => v,
-            Err(e) => return Err(RuntimeLinkerError::OpenExeFailed(path.to_owned(), e)),
-        };
+    ) -> Arc<Self> {
+        let gg = GutexGroup::new();
+        let ld = Arc::new(Self {
+            fs: fs.clone(),
+            mm: mm.clone(),
+            ee: ee.clone(),
+            list: gg.spawn(Vec::new()),
+            kernel: gg.spawn(None),
+            mains: gg.spawn(Vec::new()),
+            globals: gg.spawn(Vec::new()),
+            tls: gg.spawn(TlsAlloc {
+                max_index: 1,
+                last_offset: 0,
+                last_size: 0,
+                static_space: 0,
+            }),
+            flags: gg.spawn(LinkerFlags::empty()),
+        });
 
-        // Open eboot.bin.
-        let elf = match Elf::open(path.as_str(), file) {
-            Ok(v) => v,
-            Err(e) => return Err(RuntimeLinkerError::OpenElfFailed(path.to_owned(), e)),
-        };
+        sys.register(591, &ld, Self::sys_dynlib_dlsym);
+        sys.register(592, &ld, Self::sys_dynlib_get_list);
+        sys.register(594, &ld, Self::sys_dynlib_load_prx);
+        sys.register(596, &ld, Self::sys_dynlib_do_copy_relocations);
+        sys.register(598, &ld, Self::sys_dynlib_get_proc_param);
+        sys.register(599, &ld, Self::sys_dynlib_process_needed_and_relocate);
+        sys.register(608, &ld, Self::sys_dynlib_get_info_ex);
+        sys.register(649, &ld, Self::sys_dynlib_get_obj_member);
+
+        ld
+    }
+
+    pub fn kernel(&self) -> Option<Arc<Module>> {
+        self.kernel.read().clone()
+    }
+
+    pub fn set_kernel(&self, md: Arc<Module>) {
+        *self.kernel.write() = Some(md);
+    }
+
+    /// See `kern_execve` on the PS4 for a reference.
+    pub fn exec(&self, path: impl AsRef<VPath>, td: &VThread) -> Result<Arc<Module>, ExecError> {
+        // Open executable.
+        let path = path.as_ref();
+        let file = self
+            .fs
+            .open(path, Some(td))
+            .map_err(ExecError::OpenExeFailed)?;
+        let elf = Elf::open(path.as_str(), file).map_err(ExecError::ReadExeFailed)?;
 
         // Check image type.
         match elf.ty() {
@@ -83,7 +115,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
                 }
             }
             FileType::ET_SCE_DYNEXEC if elf.dynamic().is_some() => {}
-            _ => return Err(RuntimeLinkerError::InvalidExe(path.to_owned())),
+            _ => return Err(ExecError::InvalidExe),
         }
 
         // Get base address.
@@ -95,21 +127,23 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
         // TODO: Apply remaining checks from exec_self_imgact.
         // Map eboot.bin.
-        let mut app = match Module::map(mm, ee, elf, base, "executable", 0, Vec::new(), 1) {
-            Ok(v) => v,
-            Err(e) => return Err(RuntimeLinkerError::MapExeFailed(path.to_owned(), e)),
-        };
-
-        if let Some(p) = dump {
-            app.dump(p.join(format!("{}.dump", path.file_name().unwrap())))
-                .ok();
-        }
+        let mut app = Module::map(
+            &self.mm,
+            &self.ee,
+            elf,
+            base,
+            "executable",
+            0,
+            Vec::new(),
+            1,
+        )
+        .map_err(ExecError::MapFailed)?;
 
         *app.flags_mut() |= ModuleFlags::MAIN_PROG;
 
-        if let Err(e) = ee.setup_module(&mut app) {
-            return Err(RuntimeLinkerError::SetupExeFailed(path.to_owned(), e));
-        }
+        self.ee
+            .setup_module(&mut app)
+            .map_err(ExecError::SetupFailed)?;
 
         // Check if application need certain modules.
         let mut flags = LinkerFlags::empty();
@@ -128,62 +162,37 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         // TODO: Apply logic from aio_proc_rundown_exec.
         // TODO: Apply logic from gs_is_event_handler_process_exec.
         let app = Arc::new(app);
-        let gg = GutexGroup::new();
-        let ld = Arc::new(Self {
-            fs: fs.clone(),
-            mm: mm.clone(),
-            ee: ee.clone(),
-            list: gg.spawn(vec![app.clone()]),
-            app: app.clone(),
-            kernel: gg.spawn(None),
-            mains: gg.spawn(vec![app]),
-            globals: gg.spawn(Vec::new()),
-            tls: gg.spawn(TlsAlloc {
-                max_index: 1,
-                last_offset: 0,
-                last_size: 0,
-                static_space: 0,
-            }),
-            flags,
-        });
+        let mut list = self.list.write();
+        let mut mains = self.mains.write();
+        let mut bin = td.proc().bin_mut();
 
-        sys.register(591, &ld, Self::sys_dynlib_dlsym);
-        sys.register(592, &ld, Self::sys_dynlib_get_list);
-        sys.register(593, &ld, Self::sys_dynlib_get_info);
-        sys.register(594, &ld, Self::sys_dynlib_load_prx);
-        sys.register(596, &ld, Self::sys_dynlib_do_copy_relocations);
-        sys.register(598, &ld, Self::sys_dynlib_get_proc_param);
-        sys.register(599, &ld, Self::sys_dynlib_process_needed_and_relocate);
-        sys.register(608, &ld, Self::sys_dynlib_get_info_ex);
-        sys.register(649, &ld, Self::sys_dynlib_get_obj_member);
+        if bin.is_some() {
+            todo!("multiple exec on the same process");
+        }
 
-        Ok(ld)
-    }
+        list.push(app.clone());
+        mains.push(app.clone());
+        *bin = Some(Binaries::new(app.clone()));
 
-    pub fn app(&self) -> &Arc<Module<E>> {
-        &self.app
-    }
+        *self.flags.write() = flags;
 
-    pub fn kernel(&self) -> Option<Arc<Module<E>>> {
-        self.kernel.read().clone()
-    }
-
-    pub fn set_kernel(&self, md: Arc<Module<E>>) {
-        *self.kernel.write() = Some(md);
+        Ok(app)
     }
 
     /// See `load_object`, `do_load_object` and `self_load_shared_object` on the PS4 for a
     /// reference.
     pub fn load(
         &self,
-        proc: &VProc,
         path: &VPath,
         _: LoadFlags,
         force: bool,
         main: bool,
-    ) -> Result<Arc<Module<E>>, LoadError<E>> {
+        td: &VThread,
+    ) -> Result<Arc<Module>, LoadError> {
         // Check if already loaded.
         let name = path.file_name().unwrap().to_owned();
+        let mut bin = td.proc().bin_mut();
+        let bin = bin.as_mut().ok_or(LoadError::NoExe)?;
         let mut list = self.list.write();
 
         if !force {
@@ -193,19 +202,18 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         }
 
         // Check if application is decid.(s)elf.
-        let app = self.app.path().file_name().unwrap();
+        let app = bin.app().path().file_name().unwrap();
 
         if app != "decid.elf" && app != "decid.self" {
             // TODO: Check what the PS4 is doing here.
         }
 
-        if self.flags.intersects(LinkerFlags::HAS_ASAN) {
+        if self.flags.read().intersects(LinkerFlags::HAS_ASAN) {
             todo!("do_load_object with sanitizer & 2");
         }
 
         // Get file.
-        let td = VThread::current();
-        let file = match self.fs.open(path, td.as_deref().map(|v| v.deref())) {
+        let file = match self.fs.open(path, Some(td)) {
             Ok(v) => v,
             Err(e) => return Err(LoadError::OpenFileFailed(e)),
         };
@@ -250,7 +258,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         };
 
         // Map file.
-        let mut table = proc.objects_mut();
+        let mut table = td.proc().objects_mut();
         let (entry, _) = table.alloc(|id| {
             let name = path.file_name().unwrap();
             let id: u32 = (id + 1).try_into().unwrap();
@@ -277,7 +285,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         })?;
 
         // Add to list.
-        let module = entry.data().clone().downcast::<Module<E>>().unwrap();
+        let module = entry.data().clone().downcast::<Module>().unwrap();
 
         list.push(module.clone());
 
@@ -289,7 +297,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
     }
 
     /// See `init_dag` on the PS4 for a reference.
-    fn init_dag(&self, md: &Arc<Module<E>>) {
+    fn init_dag(&self, md: &Arc<Module>) {
         // Do nothing if already initializes.
         let mut flags = md.flags_mut();
 
@@ -308,7 +316,8 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
     /// See `do_dlsym` on the PS4 for a reference.
     fn resolve_symbol<'a>(
         &self,
-        md: &'a Arc<Module<E>>,
+        bin: &Binaries,
+        md: &'a Arc<Module>,
         mut name: Cow<'a, str>,
         mut lib: Option<&'a str>,
         flags: ResolveFlags,
@@ -331,7 +340,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         let resolver = SymbolResolver::new(
             &mains,
             &globals,
-            self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::HAS_ASAN),
+            bin.app().sdk_ver() >= 0x5000000 || self.flags.read().contains(LinkerFlags::HAS_ASAN),
         );
 
         // Resolve.
@@ -346,7 +355,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
                 None,
                 mname,
                 lib,
-                SymbolResolver::<E>::hash(Some(name.as_ref()), lib, mname),
+                SymbolResolver::hash(Some(name.as_ref()), lib, mname),
                 flags | ResolveFlags::UNK3 | ResolveFlags::UNK4,
                 &dags,
             )
@@ -382,9 +391,12 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         unsafe { String::from_utf8_unchecked(nid) }
     }
 
-    fn sys_dynlib_dlsym(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_dynlib_dlsym(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Check if application is dynamic linking.
-        if self.app.file_info().is_none() {
+        let bin = td.proc().bin();
+        let bin = bin.as_ref().ok_or(SysErr::Raw(EPERM))?;
+
+        if bin.app().file_info().is_none() {
             return Err(SysErr::Raw(EPERM));
         }
 
@@ -410,7 +422,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         }
 
         // Resolve the symbol.
-        let addr = match self.resolve_symbol(md, name.into(), None, flags) {
+        let addr = match self.resolve_symbol(&bin, md, name.into(), None, flags) {
             Some(v) => v,
             None => return Err(SysErr::Raw(ESRCH)),
         };
@@ -419,14 +431,17 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_dynlib_get_list(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_dynlib_get_list(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let buf: *mut u32 = i.args[0].into();
         let max: usize = i.args[1].into();
         let copied: *mut usize = i.args[2].into();
 
         // Check if application is dynamic linking.
-        if self.app.file_info().is_none() {
+        let bin = td.proc().bin();
+        let bin = bin.as_ref().ok_or(SysErr::Raw(EPERM))?;
+
+        if bin.app().file_info().is_none() {
             return Err(SysErr::Raw(EPERM));
         }
 
@@ -528,8 +543,10 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
     fn sys_dynlib_load_prx(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Check if application is a dynamic SELF.
+        let mut bin = td.proc().bin_mut();
+        let bin = bin.as_mut().ok_or(SysErr::Raw(EPERM))?;
 
-        if self.app.file_info().is_none() {
+        if bin.app().file_info().is_none() {
             return Err(SysErr::Raw(EPERM));
         }
 
@@ -567,11 +584,11 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
                 // TODO: Refactor this for readability.
                 self.load(
-                    td.proc(),
                     name,
                     LoadFlags::from_bits_retain(((flags & 1) << 5) + ((flags >> 10) & 0x40) + 2),
                     true, // TODO: This hard-coded because we don't support relative path yet.
                     false,
+                    td,
                 )?
             }
         };
@@ -609,7 +626,8 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
             let resolver = SymbolResolver::new(
                 &mains,
                 &globals,
-                self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::HAS_ASAN),
+                bin.app().sdk_ver() >= 0x5000000
+                    || self.flags.read().contains(LinkerFlags::HAS_ASAN),
             );
 
             self.init_dag(&md);
@@ -633,10 +651,13 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
     fn sys_dynlib_do_copy_relocations(
         self: &Arc<Self>,
-        _: &VThread,
+        td: &VThread,
         _: &SysIn,
     ) -> Result<SysOut, SysErr> {
-        if let Some(info) = self.app.file_info() {
+        let bin = td.proc().bin();
+        let bin = bin.as_ref().ok_or(SysErr::Raw(EPERM))?;
+
+        if let Some(info) = bin.app().file_info() {
             if info.relocs().any(|r| r.ty() == Relocation::R_X86_64_COPY) {
                 return Err(SysErr::Raw(EINVAL));
             }
@@ -649,7 +670,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
     fn sys_dynlib_get_proc_param(
         self: &Arc<Self>,
-        _: &VThread,
+        td: &VThread,
         i: &SysIn,
     ) -> Result<SysOut, SysErr> {
         // Get arguments.
@@ -657,15 +678,18 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         let size: *mut usize = i.args[1].into();
 
         // Check if application is a dynamic SELF.
-        if self.app.file_info().is_none() {
+        let bin = td.proc().bin();
+        let bin = bin.as_ref().ok_or(SysErr::Raw(EPERM))?;
+
+        if bin.app().file_info().is_none() {
             return Err(SysErr::Raw(EPERM));
         }
 
         // Get param.
-        match self.app.proc_param() {
+        match bin.app().proc_param() {
             Some((param_offset, param_size)) => {
                 // TODO: Seems like ET_SCE_DYNEXEC is mapped at a fixed address.
-                unsafe { *param = self.app.memory().addr() + *param_offset };
+                unsafe { *param = bin.app().memory().addr() + *param_offset };
                 unsafe { *size = *param_size };
             }
             None => todo!("app is dynamic but no PT_SCE_PROCPARAM"),
@@ -676,11 +700,14 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
     fn sys_dynlib_process_needed_and_relocate(
         self: &Arc<Self>,
-        _: &VThread,
+        td: &VThread,
         _: &SysIn,
     ) -> Result<SysOut, SysErr> {
         // Check if application is dynamic linking.
-        if self.app.file_info().is_none() {
+        let bin = td.proc().bin();
+        let bin = bin.as_ref().ok_or(SysErr::Raw(EINVAL))?;
+
+        if bin.app().file_info().is_none() {
             return Err(SysErr::Raw(EINVAL));
         }
 
@@ -734,12 +761,12 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         let resolver = SymbolResolver::new(
             &mains,
             &globals,
-            self.app.sdk_ver() >= 0x5000000 || self.flags.contains(LinkerFlags::HAS_ASAN),
+            bin.app().sdk_ver() >= 0x5000000 || self.flags.read().contains(LinkerFlags::HAS_ASAN),
         );
 
         info!("Relocating initial modules.");
 
-        unsafe { self.relocate(&self.app, &list, &resolver) }?;
+        unsafe { self.relocate(bin.app(), &list, &resolver) }?;
 
         // TODO: Apply the remaining logics from the PS4.
         Ok(SysOut::ZERO)
@@ -751,9 +778,9 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
     /// No other threads may access the memory of all loaded modules.
     unsafe fn relocate(
         &self,
-        md: &Arc<Module<E>>,
-        list: &[Arc<Module<E>>],
-        resolver: &SymbolResolver<E>,
+        md: &Arc<Module>,
+        list: &[Arc<Module>],
+        resolver: &SymbolResolver,
     ) -> Result<(), RelocateError> {
         // TODO: Implement flags & 0x800.
         self.relocate_single(md, resolver)?;
@@ -776,8 +803,8 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
     /// No other thread may access the module memory.
     unsafe fn relocate_single<'b>(
         &self,
-        md: &'b Arc<Module<E>>,
-        resolver: &SymbolResolver<'b, E>,
+        md: &'b Arc<Module>,
+        resolver: &SymbolResolver<'b>,
     ) -> Result<(), RelocateError> {
         // Unprotect the memory.
         let mut mem = match md.memory().unprotect() {
@@ -800,10 +827,10 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
     /// See `reloc_non_plt` on the PS4 kernel for a reference.
     fn relocate_rela<'b>(
         &self,
-        md: &'b Arc<Module<E>>,
+        md: &'b Arc<Module>,
         mem: &mut [u8],
-        relocated: &mut [Option<Relocated<E>>],
-        resolver: &SymbolResolver<'b, E>,
+        relocated: &mut [Option<Relocated>],
+        resolver: &SymbolResolver<'b>,
     ) -> Result<(), RelocateError> {
         let info = md.file_info().unwrap(); // Let it panic because the PS4 assume it is available.
         let addr = mem.as_ptr() as usize;
@@ -905,10 +932,10 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
     /// See `reloc_jmplots` on the PS4 for a reference.
     fn relocate_plt<'b>(
         &self,
-        md: &'b Arc<Module<E>>,
+        md: &'b Arc<Module>,
         mem: &mut [u8],
-        relocated: &mut [Option<Relocated<E>>],
-        resolver: &SymbolResolver<'b, E>,
+        relocated: &mut [Option<Relocated>],
+        resolver: &SymbolResolver<'b>,
     ) -> Result<(), RelocateError> {
         // Do nothing if not a dynamic module.
         let info = match md.file_info() {
@@ -956,7 +983,7 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         Ok(())
     }
 
-    fn get_relocated(md: Arc<Module<E>>, sym: usize) -> (Relocated<E>, usize) {
+    fn get_relocated(md: Arc<Module>, sym: usize) -> (Relocated, usize) {
         let sym = md.symbol(sym).unwrap();
 
         match sym.ty() {
@@ -973,14 +1000,17 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
         }
     }
 
-    fn sys_dynlib_get_info_ex(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_dynlib_get_info_ex(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let handle: u32 = i.args[0].try_into().unwrap();
         let flags: u32 = i.args[1].try_into().unwrap();
         let info: *mut DynlibInfoEx = i.args[2].into();
 
         // Check if application is dynamic linking.
-        if self.app.file_info().is_none() {
+        let bin = td.proc().bin();
+        let bin = bin.as_ref().ok_or(SysErr::Raw(EPERM))?;
+
+        if bin.app().file_info().is_none() {
             return Err(SysErr::Raw(EPERM));
         }
 
@@ -1090,14 +1120,16 @@ impl<E: ExecutionEngine> RuntimeLinker<E> {
 
     fn sys_dynlib_get_obj_member(
         self: &Arc<Self>,
-        _: &VThread,
+        td: &VThread,
         i: &SysIn,
     ) -> Result<SysOut, SysErr> {
         let handle: u32 = i.args[0].try_into().unwrap();
         let ty: u8 = i.args[1].try_into().unwrap();
         let out: *mut usize = i.args[2].into();
+        let bin = td.proc().bin();
+        let bin = bin.as_ref().ok_or(SysErr::Raw(EINVAL))?;
 
-        if self.app.file_info().is_none() {
+        if bin.app().file_info().is_none() {
             return Err(SysErr::Raw(EINVAL));
         }
 
@@ -1204,23 +1236,23 @@ bitflags! {
     }
 }
 
-/// Represents the error for [`RuntimeLinker`] initialization.
+/// Represents an error when [`RuntimeLinker::exec()`] fails.
 #[derive(Debug, Error)]
-pub enum RuntimeLinkerError<E: ExecutionEngine> {
-    #[error("cannot open {0}")]
-    OpenExeFailed(VPathBuf, #[source] OpenError),
+pub enum ExecError {
+    #[error("cannot open the executable")]
+    OpenExeFailed(#[source] OpenError),
 
-    #[error("cannot open {0}")]
-    OpenElfFailed(VPathBuf, #[source] elf::OpenError),
+    #[error("cannot read the executable")]
+    ReadExeFailed(#[source] elf::OpenError),
 
-    #[error("{0} is not a valid executable")]
-    InvalidExe(VPathBuf),
+    #[error("invalid executable")]
+    InvalidExe,
 
-    #[error("cannot map {0}")]
-    MapExeFailed(VPathBuf, #[source] MapError),
+    #[error("cannot map the executable")]
+    MapFailed(#[source] MapError),
 
-    #[error("cannot setup {0}")]
-    SetupExeFailed(VPathBuf, #[source] E::SetupModuleErr),
+    #[error("cannot setup the executable")]
+    SetupFailed(#[source] SetupModuleError),
 }
 
 /// Represents an error for (S)ELF mapping.
@@ -1273,38 +1305,35 @@ pub enum MapError {
 }
 
 /// Represents an error for (S)ELF loading.
-#[derive(Debug, Error)]
-pub enum LoadError<E: ExecutionEngine> {
+#[derive(Debug, Error, Errno)]
+pub enum LoadError {
+    #[error("the process does not have executable file")]
+    #[errno(EPERM)]
+    NoExe,
+
     #[error("cannot open the specified file")]
+    #[errno(ENOENT)]
     OpenFileFailed(#[source] OpenError),
 
     #[error("cannot open (S)ELF")]
+    #[errno(ENOEXEC)]
     OpenElfFailed(#[source] elf::OpenError),
 
     #[error("the specified file is not valid module")]
+    #[errno(ENOEXEC)]
     InvalidElf,
 
     #[error("cannot map file")]
+    #[errno(ENOEXEC)]
     MapFailed(#[source] MapError),
 
     #[error("the specified file has impure text")]
+    #[errno(EINVAL)]
     ImpureText,
 
     #[error("cannot setup the module")]
-    SetupFailed(#[source] E::SetupModuleErr),
-}
-
-impl<E: ExecutionEngine> Errno for LoadError<E> {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::OpenFileFailed(_) => ENOENT,
-            Self::OpenElfFailed(_)
-            | Self::InvalidElf
-            | Self::MapFailed(_)
-            | Self::SetupFailed(_) => ENOEXEC,
-            Self::ImpureText => EINVAL,
-        }
-    }
+    #[errno(ENOEXEC)]
+    SetupFailed(#[source] SetupModuleError),
 }
 
 /// Represents an error for modules relocation.

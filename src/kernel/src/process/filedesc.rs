@@ -2,6 +2,7 @@ use crate::budget::BudgetType;
 use crate::errno::{Errno, EBADF};
 use crate::fs::{VFile, VFileFlags, VFileType, Vnode};
 use crate::kqueue::KernelQueue;
+use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup};
 use macros::Errno;
 use std::collections::VecDeque;
@@ -25,8 +26,8 @@ impl FileDesc {
         let gg = GutexGroup::new();
 
         let filedesc = Self {
-            // TODO: these aren't none on the PS4
-            files: gg.spawn(vec![None, None, None]),
+            // TODO: the first 3 file descriptors should probably be ttyconsdev
+            files: gg.spawn(vec![]),
             cwd: gg.spawn(root.clone()),
             root: gg.spawn(root),
             kqueue_list: gg.spawn(VecDeque::new()),
@@ -76,9 +77,7 @@ impl FileDesc {
         // TODO: Implement fdalloc.
         let mut files = self.files.write();
 
-        for i in 3..=i32::MAX {
-            let i: usize = i.try_into().unwrap();
-
+        for i in 0..=(i32::MAX) as usize {
             if i == files.len() {
                 files.push(Some(file));
             } else if files[i].is_none() {

@@ -2,9 +2,6 @@ cmake_minimum_required(VERSION 3.21)
 
 project(obliteration)
 
-# Project options.
-option(OB_BUILD_LLVM "Download and build the LLVM from source." ON)
-
 # Set warning level to highest. This will propagate to sub-directories too.
 if(WIN32)
     add_compile_options(/W4)
