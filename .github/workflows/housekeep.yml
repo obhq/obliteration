@@ -1,0 +1,27 @@
+name: Housekeep
+on:
+  schedule:
+  - cron: '0 0 * * *'
+jobs:
+  housekeep:
+    name: Housekeep
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install Python modules
+      run: pip install PyGithub
+    - name: Update PRs
+      run: |
+        from datetime import datetime, timezone
+        from github import Auth, Github
+
+        now = datetime.now(timezone.utc)
+        gh = Github(auth=Auth.Token("${{ secrets.GITHUB_TOKEN }}"))
+        repo = gh.get_repo("${{ github.repository }}")
+
+        for pull in repo.get_pulls("open", "updated", "asc"):
+          if (now - pull.updated_at).days <= 30:
+            break
+          print(f"Closing {pull.title}")
+          pull.create_issue_comment("We are closing this PR due to no any activities in the last 30 days. Feel free to re-open it if you would like to continue working on this.")
+          pull.edit(state="closed")
+      shell: python
