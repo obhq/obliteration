@@ -14,8 +14,8 @@ jobs:
   build-mac:
     name: Build
     uses: ./.github/workflows/ci-mac.yml
-  housekeep:
-    name: Housekeep
+  pr:
+    name: Update PRs
     runs-on: ubuntu-latest
     steps:
     - name: Install Python modules
