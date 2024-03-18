@@ -116,8 +116,8 @@ pub(super) fn null_nodeget(
 ) -> Result<Arc<Vnode>, NodeGetError> {
     let mut table = NULL_HASHTABLE.lock().unwrap();
 
-    if let Some(vnode) = table.get(mnt, lower) {
-        return Ok(vnode);
+    if let Some(nullnode) = table.get(mnt, lower) {
+        return Ok(nullnode);
     }
 
     let nullnode = Vnode::new_cyclic(|null_node| {

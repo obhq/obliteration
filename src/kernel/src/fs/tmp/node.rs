@@ -229,7 +229,7 @@ pub enum LookupError {
     #[error("access denied")]
     AccessDenied(#[source] Box<dyn Errno>),
 
-    #[error("node not found")]
+    #[error("tmpfs node not found")]
     #[errno(ENOENT)]
     NoParent,
 

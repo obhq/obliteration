@@ -42,14 +42,14 @@ pub fn mount(
     flags: MountFlags,
 ) -> Result<Mount, Box<dyn Errno>> {
     if flags.intersects(MountFlags::MNT_ROOTFS) {
-        Err(MountError::RootFs)?;
+        return Err(Box::new(MountError::RootFs));
     }
 
     if flags.intersects(MountFlags::MNT_UPDATE) {
         if let Some(true) = opts.remove("export") {
             todo!("nullfs_mount with MNT_UPDATE and export = true")
         } else {
-            Err(MountError::NoExport)?
+            return Err(Box::new(MountError::NoExport));
         }
     }
 
@@ -59,7 +59,7 @@ pub fn mount(
 
     let lower = fs
         .unwrap()
-        .lookup(&path, true, None)
+        .lookup(&target, true, None)
         .map_err(MountError::LookupTargetVnode)?;
 
     Ok(Mount::new(
