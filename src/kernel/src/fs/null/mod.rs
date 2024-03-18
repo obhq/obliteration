@@ -59,7 +59,7 @@ pub fn mount(
 
     let lower = fs
         .unwrap()
-        .lookup(&path, false, None)
+        .lookup(&path, true, None)
         .map_err(MountError::LookupTargetVnode)?;
 
     Ok(Mount::new(
@@ -85,8 +85,4 @@ enum MountError {
 
     #[error("couldn't lookup target vnode")]
     LookupTargetVnode(#[source] LookupError),
-
-    #[error("avoiding deadlock")]
-    #[errno(EDEADLK)]
-    AvoidingDeadlock,
 }
