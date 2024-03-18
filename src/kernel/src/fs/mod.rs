@@ -214,7 +214,7 @@ impl Fs {
 
             // Prevent ".." on root so this cannot escape from chroot.
             if com == ".." && Arc::ptr_eq(&resolved, &root) {
-                return Err(LookupError::NotFound);
+                return Err(LookupError::EscapeChroot);
             }
 
             // Lookup next component.
@@ -222,7 +222,7 @@ impl Fs {
                 Ok(v) => v,
                 Err(e) => {
                     if e.errno() == ENOENT {
-                        return Err(LookupError::NotFound);
+                        return Err(LookupError::NotFound(e));
                     } else {
                         return Err(LookupError::LookupFailed(
                             i,
@@ -1137,7 +1137,11 @@ pub enum LookupError {
 
     #[error("no such file or directory")]
     #[errno(ENOENT)]
-    NotFound,
+    EscapeChroot,
+
+    #[error("no such file or directory")]
+    #[errno(ENOENT)]
+    NotFound(#[source] Box<dyn Errno>),
 
     #[error("cannot lookup '{1}' from component #{0}")]
     LookupFailed(usize, Box<str>, #[source] Box<dyn Errno>),

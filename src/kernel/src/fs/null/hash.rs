@@ -1,46 +1,36 @@
+use crate::fs::{Mount, Vnode};
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
 };
 
-use crate::fs::{Mount, Vnode};
+pub(super) static NULL_HASHTABLE: Mutex<NullHashTable> = Mutex::new(NullHashTable(None));
 
-use super::vnode::VnodeBackend;
-
-pub(super) static NULL_HASHTABLE: NullHashTable = NullHashTable(Mutex::new(None));
-
-pub(super) struct NullHashTable(Mutex<Option<HashMap<u32, Arc<VnodeBackend>>>>);
+// Maps a hash to a pair of (lower vnode, null vnode).
+pub(super) struct NullHashTable(Option<HashMap<u32, (Arc<Vnode>, Arc<Vnode>)>>);
 
 impl NullHashTable {
     /// See `null_hashget` on the PS4 for a reference.
-    pub(super) fn get(&self, mnt: &Arc<Mount>, lower: &Arc<Vnode>) -> Option<Arc<Vnode>> {
-        let table = self.0.lock().unwrap();
+    pub(super) fn get(&mut self, mnt: &Arc<Mount>, lower: &Arc<Vnode>) -> Option<Arc<Vnode>> {
+        let table = self.0.get_or_insert(HashMap::new());
 
-        let table = table.as_ref()?;
+        let hash = lower.hash_index();
 
-        let hash = lower.hash();
+        let (stored_lower, nullnode) = table.get(&hash)?;
 
-        let backend = table.get(&hash)?;
-
-        todo!()
-    }
-
-    /// See `null_hashins` on the PS4 for a reference.
-    pub(super) fn insert(
-        &self,
-        mnt: &Arc<Mount>,
-        backend: &Arc<VnodeBackend>,
-    ) -> Option<Arc<Vnode>> {
-        let mut table = self.0.lock().unwrap();
-
-        let table = table.get_or_insert(HashMap::new());
-
-        let hash = backend.lower().hash();
-
-        if let Some(backend) = table.insert(hash, backend.clone()) {
-            todo!()
+        if Arc::ptr_eq(lower, stored_lower) && Arc::ptr_eq(nullnode.mount(), mnt) {
+            return Some(nullnode.clone());
         }
 
         None
+    }
+
+    /// See `null_hashins` on the PS4 for a reference.
+    pub(super) fn insert(&mut self, mnt: &Arc<Mount>, lower: &Arc<Vnode>, nullnode: &Arc<Vnode>) {
+        let table = self.0.get_or_insert(HashMap::new());
+
+        let hash_index = lower.hash_index();
+
+        table.insert(hash_index, (lower.clone(), nullnode.clone()));
     }
 }

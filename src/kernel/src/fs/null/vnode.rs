@@ -114,25 +114,27 @@ pub(super) fn null_nodeget(
     mnt: &Arc<Mount>,
     lower: &Arc<Vnode>,
 ) -> Result<Arc<Vnode>, NodeGetError> {
-    if let Some(vnode) = NULL_HASHTABLE.get(mnt, lower) {
+    let mut table = NULL_HASHTABLE.lock().unwrap();
+
+    if let Some(vnode) = table.get(mnt, lower) {
         return Ok(vnode);
     }
 
-    let vnode = Vnode::new_cyclic(|null_node| {
+    let nullnode = Vnode::new_cyclic(|null_node| {
         let backend = Arc::new(VnodeBackend::new(lower, null_node));
-
-        if let Some(vnode) = NULL_HASHTABLE.insert(mnt, &backend) {
-            todo!();
-        }
 
         Vnode::new_plain(mnt, lower.ty().clone(), "nullfs", backend)
     });
 
-    Ok(vnode)
+    table.insert(mnt, lower, &nullnode);
+
+    drop(table);
+
+    Ok(nullnode)
 }
 
 #[derive(Debug, Error, Errno)]
-pub enum AccessError {
+pub(super) enum AccessError {
     #[error("mounted as readonly")]
     #[errno(EROFS)]
     Readonly,
@@ -146,19 +148,19 @@ pub enum AccessError {
 }
 
 #[derive(Debug, Error, Errno)]
-pub enum GetAttrError {
+pub(super) enum GetAttrError {
     #[error("getattr from lower vnode failed")]
     GetAttrFromLowerFailed(#[from] Box<dyn Errno>),
 }
 
 #[derive(Debug, Error, Errno)]
-pub enum LookupError {
+pub(super) enum LookupError {
     #[error("lookup from lower vnode failed")]
     LookupFromLowerFailed(#[source] Box<dyn Errno>),
 }
 
 #[derive(Debug, Error, Errno)]
-pub enum OpenError {
+pub(super) enum OpenError {
     #[error("open from lower vnode failed")]
     OpenFromLowerFailed(#[source] Box<dyn Errno>),
 }

@@ -1,14 +1,12 @@
 use self::node::{AllocNodeError, Node, NodeType, Nodes, VnodeBackend};
-use super::{
-    Filesystem, FsConfig, Mount, MountFlags, MountOpts, MountSource, VPathBuf, Vnode, VnodeType,
-};
+use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, MountSource, VPathBuf, Vnode};
 use crate::errno::{Errno, EINVAL};
 use crate::ucred::{Ucred, Uid};
 use gmtx::GutexGroup;
 use macros::Errno;
 use std::num::NonZeroU64;
 use std::sync::atomic::AtomicI32;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use thiserror::Error;
 
 mod node;
