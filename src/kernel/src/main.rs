@@ -328,11 +328,11 @@ fn run() -> Result<(), KernelError> {
     print(log);
 
     // Initialize TTY system.
-    #[allow(unused_variables)] // TODO: Remove this when someone use tty.
+    #[allow(unused_variables)] // TODO: Remove this when someone uses tty.
     let tty = TtyManager::new()?;
 
     // Initialize kernel components.
-    #[allow(unused_variables)] // TODO: Remove this when someone use debug.
+    #[allow(unused_variables)] // TODO: Remove this when someone uses debug.
     let debug = DebugManager::new()?;
     RegMgr::new(&mut syscalls);
     let machdep = MachDep::new(&mut syscalls);
@@ -385,6 +385,7 @@ fn run() -> Result<(), KernelError> {
     let app = ld
         .exec(path, &main)
         .map_err(|e| KernelError::ExecFailed(path, e))?;
+
     let mut log = info!();
 
     writeln!(log, "Application   : {}", app.path()).unwrap();

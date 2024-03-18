@@ -1,15 +1,36 @@
 use crate::{
     errno::{Errno, EISDIR, EROFS},
-    fs::{perm::Access, Mount, MountFlags, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType},
+    fs::{
+        null::hash::NULL_HASHTABLE, perm::Access, Mount, MountFlags, OpenFlags, VFile, Vnode,
+        VnodeAttrs, VnodeType,
+    },
     process::VThread,
 };
 use macros::Errno;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use thiserror::Error;
 
 #[derive(Debug)]
-struct VnodeBackend {
+pub(super) struct VnodeBackend {
     lower: Arc<Vnode>,
+    null_node: Weak<Vnode>,
+}
+
+impl VnodeBackend {
+    pub(super) fn new(lower: &Arc<Vnode>, null_node: &Weak<Vnode>) -> Self {
+        Self {
+            lower: lower.clone(),
+            null_node: null_node.clone(),
+        }
+    }
+
+    pub(super) fn lower(&self) -> &Arc<Vnode> {
+        &self.lower
+    }
+
+    pub(super) fn null_node(&self) -> &Weak<Vnode> {
+        &self.null_node
+    }
 }
 
 impl crate::fs::VnodeBackend for VnodeBackend {
@@ -22,7 +43,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         if mode.contains(Access::WRITE) {
             match vn.ty() {
                 VnodeType::Directory(_) | VnodeType::Link | VnodeType::File => {
-                    if vn.fs().flags().contains(MountFlags::MNT_RDONLY) {
+                    if vn.mount().flags().contains(MountFlags::MNT_RDONLY) {
                         Err(AccessError::Readonly)?
                     }
                 }
@@ -44,7 +65,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             .getattr()
             .map_err(GetAttrError::GetAttrFromLowerFailed)?;
 
-        let fsid = vn.fs().stats().id()[0];
+        let fsid = vn.mount().stats().id()[0];
 
         attr.set_fsid(fsid);
 
@@ -66,7 +87,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         let vnode = if Arc::ptr_eq(&lower, vn) {
             vn.clone()
         } else {
-            null_nodeget(vn.fs(), lower)?
+            null_nodeget(vn.mount(), &lower)?
         };
 
         Ok(vnode)
@@ -91,13 +112,29 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 /// See `null_nodeget` on the PS4 for a reference.
 pub(super) fn null_nodeget(
     mnt: &Arc<Mount>,
-    lower: Arc<Vnode>,
+    lower: &Arc<Vnode>,
 ) -> Result<Arc<Vnode>, NodeGetError> {
-    todo!()
+    let mut table = NULL_HASHTABLE.lock().unwrap();
+
+    if let Some(nullnode) = table.get(mnt, lower) {
+        return Ok(nullnode);
+    }
+
+    let nullnode = Vnode::new_cyclic(|null_node| {
+        let backend = Arc::new(VnodeBackend::new(lower, null_node));
+
+        Vnode::new_plain(mnt, lower.ty().clone(), "nullfs", backend)
+    });
+
+    table.insert(mnt, lower, &nullnode);
+
+    drop(table);
+
+    Ok(nullnode)
 }
 
 #[derive(Debug, Error, Errno)]
-pub enum AccessError {
+pub(super) enum AccessError {
     #[error("mounted as readonly")]
     #[errno(EROFS)]
     Readonly,
@@ -111,19 +148,19 @@ pub enum AccessError {
 }
 
 #[derive(Debug, Error, Errno)]
-pub enum GetAttrError {
+pub(super) enum GetAttrError {
     #[error("getattr from lower vnode failed")]
     GetAttrFromLowerFailed(#[from] Box<dyn Errno>),
 }
 
 #[derive(Debug, Error, Errno)]
-pub enum LookupError {
+pub(super) enum LookupError {
     #[error("lookup from lower vnode failed")]
     LookupFromLowerFailed(#[source] Box<dyn Errno>),
 }
 
 #[derive(Debug, Error, Errno)]
-pub enum OpenError {
+pub(super) enum OpenError {
     #[error("open from lower vnode failed")]
     OpenFromLowerFailed(#[source] Box<dyn Errno>),
 }

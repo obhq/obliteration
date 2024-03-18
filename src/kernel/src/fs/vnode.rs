@@ -2,6 +2,7 @@ use super::{
     unixify_access, Access, CharacterDevice, FileBackend, IoCmd, Mode, Mount, OpenFlags,
     RevokeFlags, Stat, TruncateLength, Uio, UioMut, VFile,
 };
+use crate::arnd;
 use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
 use crate::fs::PollEvents;
 use crate::process::VThread;
@@ -9,6 +10,7 @@ use crate::ucred::{Gid, Uid};
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use macros::Errno;
 use std::fmt::Debug;
+use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 use thiserror::Error;
@@ -20,36 +22,56 @@ use thiserror::Error;
 /// file/directory have only one vnode.
 #[derive(Debug)]
 pub struct Vnode {
-    fs: Arc<Mount>,                 // v_mount
+    mount: Arc<Mount>,              // v_mount
     ty: VnodeType,                  // v_type
     tag: &'static str,              // v_tag
-    backend: Box<dyn VnodeBackend>, // v_op + v_data
+    backend: Arc<dyn VnodeBackend>, // v_op + v_data
+    hash: u32,                      // v_hash
     item: Gutex<Option<VnodeItem>>, // v_un
 }
 
 impl Vnode {
     /// See `getnewvnode` on the PS4 for a reference.
     pub(super) fn new(
-        fs: &Arc<Mount>,
+        mount: &Arc<Mount>,
         ty: VnodeType,
         tag: &'static str,
         backend: impl VnodeBackend,
     ) -> Arc<Self> {
+        Arc::new(Self::new_plain(mount, ty, tag, Arc::new(backend)))
+    }
+
+    pub(super) fn new_plain(
+        mount: &Arc<Mount>,
+        ty: VnodeType,
+        tag: &'static str,
+        backend: Arc<impl VnodeBackend>,
+    ) -> Self {
         let gg = GutexGroup::new();
 
         ACTIVE.fetch_add(1, Ordering::Relaxed);
 
-        Arc::new(Self {
-            fs: fs.clone(),
+        Self {
+            mount: mount.clone(),
             ty,
             tag,
-            backend: Box::new(backend),
+            backend,
+            hash: {
+                let mut buf = [0u8; 4];
+                arnd::rand_bytes(&mut buf);
+
+                u32::from_ne_bytes(buf)
+            },
             item: gg.spawn(None),
-        })
+        }
     }
 
-    pub fn fs(&self) -> &Arc<Mount> {
-        &self.fs
+    pub fn new_cyclic(f: impl FnOnce(&Weak<Vnode>) -> Vnode) -> Arc<Self> {
+        Arc::new_cyclic(f)
+    }
+
+    pub fn mount(&self) -> &Arc<Mount> {
+        &self.mount
     }
 
     pub fn ty(&self) -> &VnodeType {
@@ -62,6 +84,11 @@ impl Vnode {
 
     pub fn is_character(&self) -> bool {
         matches!(self.ty, VnodeType::CharacterDevice)
+    }
+
+    /// See `vfs_hash_index` on the PS4 for a reference.
+    pub fn hash_index(&self) -> u32 {
+        self.hash.wrapping_add(self.mount().hashseed())
     }
 
     pub fn item(&self) -> GutexReadGuard<Option<VnodeItem>> {
