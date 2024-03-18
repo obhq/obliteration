@@ -1,7 +1,7 @@
 use crate::{
     errno::{Errno, EISDIR, EROFS},
     fs::{
-        null::hash::NULL_HASHTABLE, perm::Access, Mount, MountFlags, OpenFlags, VFile, Vnode,
+        null::hash::NULL_HASHTABLE, perm::Access, Mount, MountFlags, OpenFlags, VFileType, Vnode,
         VnodeAttrs, VnodeType,
     },
     process::VThread,
@@ -98,14 +98,14 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         &self,
         _: &Arc<Vnode>,
         td: Option<&VThread>,
-        mode: OpenFlags,
-        file: Option<&mut VFile>,
-    ) -> Result<(), Box<dyn Errno>> {
-        self.lower
-            .open(td, mode, file)
+        flags: OpenFlags,
+    ) -> Result<VFileType, Box<dyn Errno>> {
+        let filetype = self
+            .lower
+            .open(td, flags)
             .map_err(OpenError::OpenFromLowerFailed)?;
 
-        Ok(())
+        Ok(filetype)
     }
 }
 

@@ -24,8 +24,7 @@ impl DebugManager {
         let mut deci_devs = Vec::with_capacity(DeciDev::NAMES.len());
         let sw = Arc::new(CdevSw::new(
             DriverFlags::from_bits_retain(0x80080000),
-            Some(Self::deci_open),
-            None,
+            Self::deci_open,
         ));
 
         for name in DeciDev::NAMES {

@@ -1,6 +1,6 @@
 use super::{
     unixify_access, Access, CharacterDevice, FileBackend, IoCmd, Mode, Mount, OpenFlags,
-    RevokeFlags, Stat, TruncateLength, Uio, UioMut, VFile,
+    RevokeFlags, Stat, TruncateLength, Uio, UioMut, VFile, VFileType,
 };
 use crate::arnd;
 use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
@@ -10,7 +10,6 @@ use crate::ucred::{Gid, Uid};
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use macros::Errno;
 use std::fmt::Debug;
-use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 use thiserror::Error;
@@ -139,10 +138,9 @@ impl Vnode {
     pub fn open(
         self: &Arc<Self>,
         td: Option<&VThread>,
-        mode: OpenFlags,
-        file: Option<&mut VFile>,
-    ) -> Result<(), Box<dyn Errno>> {
-        self.backend.open(self, td, mode, file)
+        flags: OpenFlags,
+    ) -> Result<VFileType, Box<dyn Errno>> {
+        self.backend.open(self, td, flags)
     }
 
     pub fn revoke(self: &Arc<Self>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
@@ -158,7 +156,7 @@ impl FileBackend for Vnode {
         buf: &mut UioMut,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        todo!()
+        self.backend.read(file, buf, td)
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
@@ -168,7 +166,7 @@ impl FileBackend for Vnode {
         buf: &mut Uio,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        todo!()
+        self.backend.write(file, buf, td)
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
@@ -306,11 +304,8 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
         &self,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] td: Option<&VThread>,
-        #[allow(unused_variables)] mode: OpenFlags,
-        #[allow(unused_variables)] file: Option<&mut VFile>,
-    ) -> Result<(), Box<dyn Errno>> {
-        Ok(())
-    }
+        #[allow(unused_variables)] flags: OpenFlags,
+    ) -> Result<VFileType, Box<dyn Errno>>;
 
     /// An implementation of `vop_revoke`.
     fn revoke(
@@ -319,6 +314,27 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
         #[allow(unused_variables)] flags: RevokeFlags,
     ) -> Result<(), Box<dyn Errno>> {
         panic!("vop_revoke called");
+    }
+
+    /// An implementation of `vop_read`.
+    fn read(
+        &self,
+        file: &VFile,
+        buf: &mut UioMut,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!()
+    }
+
+    /// An implementation of `vop_write`.
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn write(
+        &self,
+        file: &VFile,
+        buf: &mut Uio,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!()
     }
 }
 

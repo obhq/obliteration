@@ -2,7 +2,7 @@ use super::dirent::Dirent;
 use super::{AllocVnodeError, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
-    check_access, Access, IoCmd, OpenFlags, RevokeFlags, VFile, Vnode, VnodeAttrs, VnodeItem,
+    check_access, Access, IoCmd, OpenFlags, RevokeFlags, VFileType, Vnode, VnodeAttrs, VnodeItem,
     VnodeType,
 };
 use crate::process::VThread;
@@ -167,11 +167,10 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         &self,
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
-        mode: OpenFlags,
-        mut file: Option<&mut VFile>,
-    ) -> Result<(), Box<dyn Errno>> {
+        flags: OpenFlags,
+    ) -> Result<VFileType, Box<dyn Errno>> {
         if !vn.is_character() {
-            return Ok(());
+            todo!()
         }
 
         // Not sure why FreeBSD check if vnode is VBLK because all of vnode here always be VCHR.
@@ -181,24 +180,10 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         };
         let sw = dev.sw();
 
-        if file.is_none() && sw.fdopen().is_some() {
-            return Err(Box::new(OpenError::NeedFile));
-        }
-
         // Execute switch handler.
-        match sw.fdopen() {
-            Some(fdopen) => fdopen(&dev, mode, td, file.as_deref_mut())?,
-            None => sw.open().unwrap()(&dev, mode, 0x2000, td)?,
-        };
+        sw.open()(&dev, flags, 0x2000, td)?;
 
-        // Set file OP.
-        let file = match file {
-            Some(v) => v,
-            None => return Ok(()),
-        };
-
-        // TODO: Implement remaining logics from the PS4.
-        Ok(())
+        todo!()
     }
 
     fn revoke(&self, vn: &Arc<Vnode>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {

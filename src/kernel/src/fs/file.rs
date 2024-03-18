@@ -10,7 +10,7 @@ use crate::shm::SharedMemory;
 use bitflags::bitflags;
 use macros::Errno;
 use std::fmt::Debug;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{ErrorKind, Read, Seek, SeekFrom};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -19,6 +19,8 @@ use thiserror::Error;
 pub struct VFile {
     ty: VFileType,     // f_type
     flags: VFileFlags, // f_flag
+    /// Devices allow negative offsets, so this is a signed integer.
+    offset: i64, // f_offset
 }
 
 impl VFile {
@@ -26,6 +28,7 @@ impl VFile {
         Self {
             ty,
             flags: VFileFlags::empty(),
+            offset: 0,
         }
     }
 
@@ -150,27 +153,35 @@ impl VFile {
 }
 
 impl Seek for VFile {
-    #[allow(unused_variables)] // TODO: Remove when implementing.
-    fn seek(&mut self, _pos: SeekFrom) -> std::io::Result<u64> {
-        todo!()
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        // This checks whether this file is seekabe.
+        self.seekable_vnode()
+            .ok_or(Into::<std::io::Error>::into(ErrorKind::Other))?;
+
+        let offset: u64 = match pos {
+            SeekFrom::Start(offset) => offset.try_into().unwrap_or_else(|_| todo!()),
+            SeekFrom::Current(offset) => {
+                todo!()
+            }
+            SeekFrom::End(offset) => {
+                todo!()
+            }
+        };
+
+        self.offset = offset.try_into().unwrap_or_else(|_| todo!());
+
+        Ok(offset as u64)
     }
 }
 
 impl Read for VFile {
     #[allow(unused_variables)] // TODO: Remove when implementing.
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        todo!()
-    }
-}
+        let mut uio = todo!();
 
-impl Write for VFile {
-    #[allow(unused_variables)] // TODO: Remove when implementing.
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        todo!()
-    }
+        let read = VFile::read(self, &mut uio, None).unwrap();
 
-    fn flush(&mut self) -> std::io::Result<()> {
-        todo!()
+        Ok(read)
     }
 }
 

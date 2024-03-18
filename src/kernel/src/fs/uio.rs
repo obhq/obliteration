@@ -10,7 +10,7 @@ pub struct IoVec {
 
 impl IoVec {
     /// This is for when the PS4 DOES check the length (such as in read, write, pread and pwrite)
-    pub unsafe fn try_from_raw_parts(base: *const u8, len: usize) -> Result<Self, IoVecError> {
+    pub unsafe fn try_from_raw_parts<'a>(base: *const u8, len: usize) -> Result<Self, IoVecError> {
         if len > IOSIZE_MAX {
             return Err(IoVecError::MaxLenExceeded);
         }
@@ -19,7 +19,7 @@ impl IoVec {
     }
 
     /// This is for when the PS4 DOES NOT check the length (such as in recvmsg, recvfrom, sendmsg and sendto)
-    pub unsafe fn from_raw_parts(base: *const u8, len: usize) -> Self {
+    pub unsafe fn from_raw_parts<'a>(base: *const u8, len: usize) -> Self {
         Self { base, len }
     }
 }
