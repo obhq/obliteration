@@ -19,7 +19,7 @@ use thiserror::Error;
 pub struct VFile {
     ty: VFileType,     // f_type
     flags: VFileFlags, // f_flag
-    /// Devices allow negative offsets, so this is a signed integer.
+    /// Character devices allow negative offsets, so this is a signed integer.
     offset: i64, // f_offset
 }
 
