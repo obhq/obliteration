@@ -1,7 +1,9 @@
 use super::file::HostFile;
 use super::{GetVnodeError, HostFs};
 use crate::errno::{Errno, EEXIST, EIO, ENOENT, ENOTDIR};
-use crate::fs::{Access, IoCmd, Mode, OpenFlags, VFileType, Vnode, VnodeAttrs, VnodeType};
+use crate::fs::{
+    Access, IoCmd, Mode, OpenFlags, Uio, UioMut, VFile, VFileType, Vnode, VnodeAttrs, VnodeType,
+};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use macros::Errno;
@@ -126,6 +128,25 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         // TODO: implement what the PS4 does here
 
         Ok(VFileType::Vnode(vn.clone()))
+    }
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn read(
+        &self,
+        file: &VFile,
+        buf: &mut UioMut,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn write(
+        &self,
+        file: &VFile,
+        buf: &mut Uio,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!()
     }
 }
 

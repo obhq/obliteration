@@ -156,7 +156,7 @@ impl Seek for VFile {
     fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
         // This checks whether this file is seekabe.
         self.seekable_vnode()
-            .ok_or(Into::<std::io::Error>::into(ErrorKind::Other))?;
+            .ok_or(std::io::Error::from(ErrorKind::Other))?;
 
         let offset: u64 = match pos {
             SeekFrom::Start(offset) => offset.try_into().unwrap_or_else(|_| todo!()),
