@@ -1,5 +1,8 @@
 use self::vnode::null_nodeget;
-use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, MountSource, VPathBuf, Vnode};
+use super::{
+    Filesystem, Fs, FsConfig, LookupError, Mount, MountFlags, MountOpts, MountSource, VPathBuf,
+    Vnode,
+};
 use crate::errno::{Errno, EDEADLK, EOPNOTSUPP};
 use crate::ucred::Ucred;
 use macros::Errno;
@@ -30,15 +33,14 @@ impl Filesystem for NullFs {
 }
 
 pub fn mount(
+    fs: Option<&Arc<Fs>>,
     conf: &'static FsConfig,
     cred: &Arc<Ucred>,
     path: VPathBuf,
-    parent: Option<Arc<Vnode>>,
+    _: Option<Arc<Vnode>>,
     mut opts: MountOpts,
     flags: MountFlags,
 ) -> Result<Mount, Box<dyn Errno>> {
-    let lower = parent.expect("No parent vnode provided to nullfs");
-
     if flags.intersects(MountFlags::MNT_ROOTFS) {
         Err(MountError::RootFs)?;
     }
@@ -54,6 +56,11 @@ pub fn mount(
     // Get target path.
     let target: VPathBuf =
         opts.remove_or_else("target", || todo!("nullfs_mount without target option"));
+
+    let lower = fs
+        .unwrap()
+        .lookup(&path, false, None)
+        .map_err(MountError::LookupTargetVnode)?;
 
     Ok(Mount::new(
         conf,
@@ -75,6 +82,9 @@ enum MountError {
     #[error("update mount is not supported without export option")]
     #[errno(EOPNOTSUPP)]
     NoExport,
+
+    #[error("couldn't lookup target vnode")]
+    LookupTargetVnode(#[source] LookupError),
 
     #[error("avoiding deadlock")]
     #[errno(EDEADLK)]

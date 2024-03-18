@@ -57,6 +57,7 @@ impl Fs {
         let mut mounts = Mounts::new();
         let conf = Self::find_config("devfs").unwrap();
         let init = (conf.mount)(
+            None,
             conf,
             kern_cred,
             vpath!("/dev").to_owned(),
@@ -330,6 +331,7 @@ impl Fs {
 
             // TODO: Implement budgetid.
             let mount = (conf.mount)(
+                Some(self),
                 conf,
                 td.map_or(&self.kern_cred, |t| t.cred()),
                 path,
@@ -939,6 +941,7 @@ pub struct FsConfig {
     ty: u32,                         // vfc_typenum
     next: Option<&'static FsConfig>, // vfc_list.next
     mount: fn(
+        fs: Option<&Arc<Fs>>,
         conf: &'static Self,
         cred: &Arc<Ucred>,
         path: VPathBuf,
@@ -1232,14 +1235,14 @@ static MLFS: FsConfig = FsConfig {
     name: "mlfs",
     ty: 0xF1,
     next: Some(&UDF2),
-    mount: |_, _, _, _, _, _| todo!("mount for mlfs"),
+    mount: |_, _, _, _, _, _, _| todo!("mount for mlfs"),
 };
 
 static UDF2: FsConfig = FsConfig {
     name: "udf2",
     ty: 0,
     next: Some(&DEVFS),
-    mount: |_, _, _, _, _, _| todo!("mount for udf2"),
+    mount: |_, _, _, _, _, _, _| todo!("mount for udf2"),
 };
 
 static DEVFS: FsConfig = FsConfig {
@@ -1260,28 +1263,28 @@ static UNIONFS: FsConfig = FsConfig {
     name: "unionfs",
     ty: 0x41,
     next: Some(&PROCFS),
-    mount: |_, _, _, _, _, _| todo!("mount for unionfs"),
+    mount: |_, _, _, _, _, _, _| todo!("mount for unionfs"),
 };
 
 static PROCFS: FsConfig = FsConfig {
     name: "procfs",
     ty: 0x2,
     next: Some(&CD9660),
-    mount: |_, _, _, _, _, _| todo!("mount for procfs"),
+    mount: |_, _, _, _, _, _, _| todo!("mount for procfs"),
 };
 
 static CD9660: FsConfig = FsConfig {
     name: "cd9660",
     ty: 0xBD,
     next: Some(&UFS),
-    mount: |_, _, _, _, _, _| todo!("mount for cd9660"),
+    mount: |_, _, _, _, _, _, _| todo!("mount for cd9660"),
 };
 
 static UFS: FsConfig = FsConfig {
     name: "ufs",
     ty: 0x35,
     next: Some(&NULLFS),
-    mount: |_, _, _, _, _, _| todo!("mount for ufs"),
+    mount: |_, _, _, _, _, _, _| todo!("mount for ufs"),
 };
 
 static NULLFS: FsConfig = FsConfig {

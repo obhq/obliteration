@@ -1,5 +1,5 @@
 use self::node::{AllocNodeError, Node, NodeType, Nodes, VnodeBackend};
-use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, MountSource, VPathBuf, Vnode};
+use super::{Filesystem, Fs, FsConfig, Mount, MountFlags, MountOpts, MountSource, VPathBuf, Vnode};
 use crate::errno::{Errno, EINVAL};
 use crate::ucred::{Ucred, Uid};
 use gmtx::GutexGroup;
@@ -12,6 +12,7 @@ use thiserror::Error;
 mod node;
 
 pub fn mount(
+    _: Option<&Arc<Fs>>,
     conf: &'static FsConfig,
     cred: &Arc<Ucred>,
     path: VPathBuf,

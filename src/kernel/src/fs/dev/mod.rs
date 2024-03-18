@@ -2,7 +2,7 @@ pub use self::cdev::*;
 use self::dirent::Dirent;
 use self::vnode::VnodeBackend;
 use super::{
-    path_contains, DirentType, Filesystem, FsConfig, Mode, Mount, MountFlags, MountOpts,
+    path_contains, DirentType, Filesystem, Fs, FsConfig, Mode, Mount, MountFlags, MountOpts,
     MountSource, VPathBuf, Vnode, VnodeItem, VnodeType,
 };
 use crate::errno::{Errno, EEXIST, ENOENT, EOPNOTSUPP};
@@ -317,6 +317,7 @@ pub enum MakeDevError {
 }
 
 pub fn mount(
+    _: Option<&Arc<Fs>>,
     conf: &'static FsConfig,
     cred: &Arc<Ucred>,
     path: VPathBuf,
