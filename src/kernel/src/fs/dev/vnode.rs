@@ -140,7 +140,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
                     None => return Err(Box::new(LookupError::NoParent)),
                 };
 
-                match self.fs.alloc_vnode(vn.fs(), parent) {
+                match self.fs.alloc_vnode(vn.mount(), parent) {
                     Ok(v) => Ok(v),
                     Err(e) => Err(Box::new(LookupError::AllocVnodeFailed(e))),
                 }
@@ -155,7 +155,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
                     None => todo!("devfs lookup with non-existent file"),
                 };
 
-                match self.fs.alloc_vnode(vn.fs(), item) {
+                match self.fs.alloc_vnode(vn.mount(), parent) {
                     Ok(v) => Ok(v),
                     Err(e) => Err(Box::new(LookupError::AllocVnodeFailed(e))),
                 }
@@ -179,6 +179,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         let Some(VnodeItem::Device(dev)) = item.as_ref() else {
             unreachable!();
         };
+      
         let sw = dev.sw();
 
         // Execute switch handler.
@@ -187,13 +188,12 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         // Set file OP.
         let Some(file) = file else { return Ok(()) };
 
-        // TODO: Implement remaining logics from the PS4.
-        Ok(())
+        todo!()
     }
 
     fn revoke(&self, vn: &Arc<Vnode>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
         // TODO: Implement this.
-        Ok(())
+        todo!()
     }
 }
 

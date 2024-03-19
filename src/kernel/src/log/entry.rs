@@ -98,8 +98,8 @@ impl LogEntry {
 
         // Do not strip "kernel/src/" due to we also set a panic hook. That mean the file path may
         // be from another crate.
-        write!(stdout, ":{file}").unwrap();
-        write!(self.plain, ":{file}").unwrap();
+        write!(stdout, ": {file}").unwrap();
+        write!(self.plain, ": {file}").unwrap();
 
         // Write line number.
         if let Some(line) = line {
