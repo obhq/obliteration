@@ -176,6 +176,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         flags: OpenFlags,
     ) -> Result<VFileType, Box<dyn Errno>> {
         if !vn.is_character() {
+            // This should correspond to dead_fileops.
             todo!()
         }
 
