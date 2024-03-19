@@ -1,7 +1,8 @@
-use self::node::{AllocNodeError, Node, Nodes};
-use super::{Filesystem, FsConfig, Mount, MountFlags, MountOpts, MountSource, VPathBuf, Vnode};
+use self::node::{AllocNodeError, Node, NodeType, Nodes, VnodeBackend};
+use super::{Filesystem, Fs, FsConfig, Mount, MountFlags, MountOpts, MountSource, VPathBuf, Vnode};
 use crate::errno::{Errno, EINVAL};
 use crate::ucred::{Ucred, Uid};
+use gmtx::GutexGroup;
 use macros::Errno;
 use std::num::NonZeroU64;
 use std::sync::atomic::AtomicI32;
@@ -11,6 +12,7 @@ use thiserror::Error;
 mod node;
 
 pub fn mount(
+    _: Option<&Arc<Fs>>,
     conf: &'static FsConfig,
     cred: &Arc<Ucred>,
     path: VPathBuf,
@@ -30,23 +32,23 @@ pub fn mount(
 
     // Get GID.
     let gid = if cred.real_uid() == Uid::ROOT {
-        opts.remove_or("gid", attrs.gid())
+        opts.remove_or("gid", attrs.gid)
     } else {
-        attrs.gid()
+        attrs.gid
     };
 
     // Get UID.
     let uid = if cred.real_uid() == Uid::ROOT {
-        opts.remove_or("uid", attrs.uid())
+        opts.remove_or("uid", attrs.uid)
     } else {
-        attrs.uid()
+        attrs.uid
     };
 
     // Get mode.
     let mode = if cred.real_uid() == Uid::ROOT {
-        opts.remove_or("mode", attrs.mode())
+        opts.remove_or("mode", attrs.mode)
     } else {
-        attrs.mode()
+        attrs.mode
     };
 
     // Get maximum inodes.
@@ -70,14 +72,19 @@ pub fn mount(
         if pages < 0xfffffffd {
             pages + 3
         } else {
-            u32::MAX.try_into().unwrap()
+            u32::MAX as usize
         }
     } else {
         inodes.try_into().unwrap()
     });
 
+    let gg = GutexGroup::new();
+
     // Allocate a root node.
-    let root = nodes.alloc()?;
+    let root = nodes.alloc(NodeType::Directory {
+        is_root: true,
+        entries: gg.spawn(Vec::new()),
+    })?;
 
     Ok(Mount::new(
         conf,
@@ -109,22 +116,36 @@ struct TempFs {
 
 impl Filesystem for TempFs {
     fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Result<Arc<Vnode>, Box<dyn Errno>> {
-        let vnode = alloc_vnode(mnt, &self, &self.root)?;
+        let vnode = self.alloc_vnode(mnt, &self.root)?;
 
         Ok(vnode)
     }
 }
 
-/// See tmpfs_alloc_vp
-#[allow(unused_variables)] // TODO: remove when implementing
-fn alloc_vnode(
-    mnt: &Arc<Mount>,
-    fs: &Arc<TempFs>,
-    node: &Arc<Node>,
-) -> Result<Arc<Vnode>, AllocVnodeError> {
-    // Make sure we don't return more than one Vnode for the same Node. It is a logic error if more
-    // than one vnode encapsulate the same node.
-    todo!()
+impl TempFs {
+    /// See tmpfs_alloc_vp on the PS4 for a reference.
+    fn alloc_vnode(
+        self: &Arc<TempFs>,
+        mnt: &Arc<Mount>,
+        node: &Arc<Node>,
+    ) -> Result<Arc<Vnode>, AllocVnodeError> {
+        let mut vnode_ref = node.vnode_mut();
+
+        if let Some(vnode) = vnode_ref.as_ref() {
+            Ok(vnode.clone())
+        } else {
+            let vnode = Vnode::new(
+                mnt,
+                node.ty().into_vnode_type(),
+                "tmpfs",
+                VnodeBackend::new(self, node.clone()),
+            );
+
+            *vnode_ref = Some(vnode.clone());
+
+            Ok(vnode)
+        }
+    }
 }
 
 /// Represents an error when [`mount()`] fails.

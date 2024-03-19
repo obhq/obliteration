@@ -39,7 +39,13 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             VnodeType::CharacterDevice => unreachable!(), // Character devices should only be in devfs.
         };
 
-        Ok(VnodeAttrs::new(Uid::ROOT, Gid::ROOT, mode, size, u32::MAX))
+        Ok(VnodeAttrs {
+            uid: Uid::ROOT,
+            gid: Gid::ROOT,
+            mode,
+            size,
+            fsid: u32::MAX,
+        })
     }
 
     fn ioctl(
@@ -89,7 +95,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         // Get vnode.
         let vn = self
             .fs
-            .get_vnode(vn.fs(), &file)
+            .get_vnode(vn.mount(), &file)
             .map_err(LookupError::GetVnodeFailed)?;
 
         Ok(vn)
@@ -110,7 +116,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             .map_err(|e| MkDirError::from(e))?;
         let vn = self
             .fs
-            .get_vnode(parent.fs(), &dir)
+            .get_vnode(parent.mount(), &dir)
             .map_err(MkDirError::GetVnodeFailed)?;
 
         Ok(vn)

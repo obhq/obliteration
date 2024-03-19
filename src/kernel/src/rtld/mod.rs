@@ -105,6 +105,7 @@ impl RuntimeLinker {
             .fs
             .open(path, Some(td))
             .map_err(ExecError::OpenExeFailed)?;
+
         let elf = Elf::open(path.as_str(), file).map_err(ExecError::ReadExeFailed)?;
 
         // Check image type.

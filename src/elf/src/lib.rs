@@ -52,7 +52,7 @@ pub struct Elf<I: Read + Seek> {
 }
 
 impl<I: Read + Seek> Elf<I> {
-    pub fn open<N: Into<String>>(name: N, mut image: I) -> Result<Self, OpenError> {
+    pub fn open(name: impl Into<String>, mut image: I) -> Result<Self, OpenError> {
         // Seek to file header.
         if let Err(e) = image.rewind() {
             return Err(OpenError::SeekFailed(0, e));
