@@ -184,12 +184,14 @@ impl RuntimeLinker {
     /// reference.
     pub fn load(
         &self,
-        path: &VPath,
+        path: impl AsRef<VPath>,
         _: LoadFlags,
         force: bool,
         main: bool,
         td: &VThread,
     ) -> Result<Arc<Module>, LoadError> {
+        let path = path.as_ref();
+
         // Check if already loaded.
         let name = path.file_name().unwrap().to_owned();
         let mut bin = td.proc().bin_mut();
