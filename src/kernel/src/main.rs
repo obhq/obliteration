@@ -268,6 +268,39 @@ fn run() -> Result<(), KernelError> {
         return Err(KernelError::MountFailed(app, e));
     }
 
+    let system_component = "QXuNNl0Zhn";
+
+    let system_path = root.join(system_component).unwrap();
+
+    if let Err(e) = fs.mkdir(&system_path, 0o555, None) {
+        return Err(KernelError::CreateDirectoryFailed(system_path, e));
+    }
+
+    // TODO: Check permission of /mnt/sandbox/CUSAXXXXX_000/<SYSTEM_PATH>/common on the PS4.
+    let common_path = system_path.join("common").unwrap();
+
+    if let Err(e) = fs.mkdir(&common_path, 0o555, None) {
+        return Err(KernelError::CreateDirectoryFailed(common_path, e));
+    }
+
+    // TODO: Check permission of /mnt/sandbox/CUSAXXXXX_000/<SYSTEM_PATH>/common/lib on the PS4.
+    let lib_path = system_path.join("lib").unwrap();
+
+    if let Err(e) = fs.mkdir(&lib_path, 0o555, None) {
+        return Err(KernelError::CreateDirectoryFailed(lib_path, e));
+    }
+
+    // TODO: Get mount options from the PS4.
+    let mut opts = MountOpts::new();
+
+    opts.insert("fstype", "nullfs");
+    opts.insert("fspath", system_path);
+    opts.insert("target", vpath!("/system").to_owned());
+
+    if let Err(e) = fs.mount(opts, MountFlags::empty(), None) {
+        return Err(KernelError::MountFailed(app, e));
+    }
+
     // TODO: Check permission of /mnt/sandbox/pfsmnt/CUSAXXXXX-app0-patch0-union on the PS4.
     let path: VPathBuf = format!("/mnt/sandbox/pfsmnt/{}-app0-patch0-union", param.title_id())
         .try_into()
@@ -391,9 +424,17 @@ fn run() -> Result<(), KernelError> {
     writeln!(log, "Application   : {}", app.path()).unwrap();
     app.print(log);
 
+    let lib_path = VPathBuf::new()
+        .join(system_component)
+        .unwrap()
+        .join("common")
+        .unwrap()
+        .join("lib")
+        .unwrap();
+
     // Preload libkernel.
     let mut flags = LoadFlags::UNK1;
-    let path = vpath!("/system/common/lib/libkernel.sprx");
+    let path = lib_path.join("libkernel.sprx").unwrap();
 
     if proc.budget_ptype() == ProcType::BigApp {
         flags |= LoadFlags::BIG_APP;
@@ -411,7 +452,7 @@ fn run() -> Result<(), KernelError> {
     ld.set_kernel(libkernel);
 
     // Preload libSceLibcInternal.
-    let path = vpath!("/system/common/lib/libSceLibcInternal.sprx");
+    let path = lib_path.join("libSceLibcInternal.sprx").unwrap();
 
     info!("Loading {path}.");
 
