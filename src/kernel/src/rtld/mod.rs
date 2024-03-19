@@ -465,7 +465,7 @@ impl RuntimeLinker {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_dynlib_get_info(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_dynlib_get_info(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let handle: u32 = i.args[0].try_into().unwrap();
         let info = {
             let info_out: *mut DynlibInfo = i.args[2].into();
@@ -473,7 +473,9 @@ impl RuntimeLinker {
             unsafe { &mut *info_out }
         };
 
-        if self.app.file_info().is_none() {
+        let bin = td.proc().bin();
+
+        if bin.as_ref().map(|bin| bin.app().file_info()).is_none() {
             return Err(SysErr::Raw(EPERM));
         }
 
