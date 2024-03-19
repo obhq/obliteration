@@ -58,15 +58,7 @@ impl VFile {
             return Ok(0);
         }
 
-        // TODO: consider implementing ktrace.
-
-        let res = self.read(&mut uio, td);
-
-        if let Err(ref e) = res {
-            todo!()
-        }
-
-        res
+        todo!()
     }
 
     /// See `dofilewrite` on the PS4 for a reference.
@@ -76,37 +68,38 @@ impl VFile {
         off: Offset,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        // TODO: consider implementing ktrace.
-        // TODO: implement bwillwrite.
-
-        let res = self.write(&mut uio, td);
-
-        if let Err(ref e) = res {
-            todo!()
-        }
-
-        res
+        todo!()
     }
 
-    fn read(&self, buf: &mut UioMut, td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+    fn read(
+        &self,
+        buf: &mut UioMut,
+        off: i64,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
         match &self.ty {
-            VFileType::Vnode(vn) => vn.read(self, buf, td),
-            VFileType::Socket(so) | VFileType::IpcSocket(so) => so.read(self, buf, td),
-            VFileType::KernelQueue(kq) => kq.read(self, buf, td),
-            VFileType::SharedMemory(shm) => shm.read(self, buf, td),
-            VFileType::Device(dev) => dev.read(self, buf, td),
-            VFileType::Blockpool(bp) => bp.read(self, buf, td),
+            VFileType::Vnode(vn) => vn.read(self, buf, off, td),
+            VFileType::Socket(so) | VFileType::IpcSocket(so) => so.read(self, buf, off, td),
+            VFileType::KernelQueue(kq) => kq.read(self, buf, off, td),
+            VFileType::SharedMemory(shm) => shm.read(self, buf, off, td),
+            VFileType::Device(dev) => dev.read(self, buf, off, td),
+            VFileType::Blockpool(bp) => bp.read(self, buf, off, td),
         }
     }
 
-    fn write(&self, buf: &mut Uio, td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+    fn write(
+        &self,
+        buf: &mut Uio,
+        off: i64,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
         match &self.ty {
-            VFileType::Vnode(vn) => vn.write(self, buf, td),
-            VFileType::Socket(so) | VFileType::IpcSocket(so) => so.write(self, buf, td),
-            VFileType::KernelQueue(kq) => kq.write(self, buf, td),
-            VFileType::SharedMemory(shm) => shm.write(self, buf, td),
-            VFileType::Device(dev) => dev.write(self, buf, td),
-            VFileType::Blockpool(bp) => bp.write(self, buf, td),
+            VFileType::Vnode(vn) => vn.write(self, buf, off, td),
+            VFileType::Socket(so) | VFileType::IpcSocket(so) => so.write(self, buf, off, td),
+            VFileType::KernelQueue(kq) => kq.write(self, buf, off, td),
+            VFileType::SharedMemory(shm) => shm.write(self, buf, off, td),
+            VFileType::Device(dev) => dev.write(self, buf, off, td),
+            VFileType::Blockpool(bp) => bp.write(self, buf, off, td),
         }
     }
 
@@ -203,6 +196,7 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         self: &Arc<Self>,
         file: &VFile,
         buf: &mut UioMut,
+        off: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         Err(Box::new(DefaultError::ReadNotSupported))
@@ -214,6 +208,7 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         self: &Arc<Self>,
         file: &VFile,
         buf: &mut Uio,
+        off: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         Err(Box::new(DefaultError::WriteNotSupported))
@@ -227,7 +222,7 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         cmd: IoCmd,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        Err(Box::new(DefaultError::IoctlNotSupported))
+        Err(Box::new(DefaultError::CommandNotSupported))
     }
 
     #[allow(unused_variables)]
@@ -262,7 +257,7 @@ pub enum DefaultError {
 
     #[error("ioctl is not supported")]
     #[errno(ENOTTY)]
-    IoctlNotSupported,
+    CommandNotSupported,
 
     #[error("truncating is not supported")]
     #[errno(ENXIO)]

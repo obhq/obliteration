@@ -155,6 +155,7 @@ impl FileBackend for Vnode {
         self: &Arc<Self>,
         file: &VFile,
         buf: &mut UioMut,
+        off: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         todo!()
@@ -165,6 +166,7 @@ impl FileBackend for Vnode {
         self: &Arc<Self>,
         file: &VFile,
         buf: &mut Uio,
+        off: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         todo!()
@@ -319,6 +321,24 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
     ) -> Result<(), Box<dyn Errno>> {
         panic!("vop_revoke called");
     }
+
+    /// An implementation of `vop_read`.
+    fn read(
+        &self,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] buf: &mut UioMut,
+        #[allow(unused_variables)] off: i64,
+        #[allow(unused_variables)] td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>>;
+
+    /// An implementation of `vop_write`.
+    fn write(
+        &self,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] buf: &mut Uio,
+        #[allow(unused_variables)] off: i64,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>>;
 }
 
 /// An implementation of `vattr` struct.

@@ -111,6 +111,7 @@ impl FileBackend for CharacterDevice {
         self: &Arc<Self>,
         file: &VFile,
         buf: &mut UioMut,
+        off: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         todo!()
@@ -121,6 +122,7 @@ impl FileBackend for CharacterDevice {
         self: &Arc<Self>,
         file: &VFile,
         buf: &mut Uio,
+        off: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         todo!()
@@ -201,26 +203,29 @@ pub type CdevOpen =
 
 /// An implementation of the `cdevsw` structure.
 pub(super) trait Device: Debug + Sync + Send + 'static {
-    #[allow(unused_variables)]
     fn read(
         self: Arc<Self>,
-        data: &mut UioMut,
-        td: Option<&VThread>,
+        #[allow(unused_variables)] data: &mut UioMut,
+        #[allow(unused_variables)] off: i64,
+        #[allow(unused_variables)] td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         Err(Box::new(DefaultError::ReadNotSupported))
     }
 
-    #[allow(unused_variables)]
     fn write(
         self: Arc<Self>,
-        data: &mut Uio,
-        td: Option<&VThread>,
+        #[allow(unused_variables)] data: &mut Uio,
+        #[allow(unused_variables)] off: i64,
+        #[allow(unused_variables)] td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         Err(Box::new(DefaultError::WriteNotSupported))
     }
 
-    #[allow(unused_variables)]
-    fn ioctl(self: Arc<Self>, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
+    fn ioctl(
+        self: Arc<Self>,
+        #[allow(unused_variables)] cmd: IoCmd,
+        #[allow(unused_variables)] td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultError::IoctlNotSupported))
     }
 }

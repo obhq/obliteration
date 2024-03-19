@@ -1,8 +1,8 @@
 use crate::{
     errno::{Errno, EISDIR, EROFS},
     fs::{
-        null::hash::NULL_HASHTABLE, perm::Access, Mount, MountFlags, OpenFlags, VFile, Vnode,
-        VnodeAttrs, VnodeType,
+        null::hash::NULL_HASHTABLE, perm::Access, Mount, MountFlags, OpenFlags, Uio, UioMut, VFile,
+        Vnode, VnodeAttrs, VnodeType,
     },
     process::VThread,
 };
@@ -104,6 +104,28 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             .map_err(OpenError::OpenFromLowerFailed)?;
 
         Ok(())
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn read(
+        &self,
+        vn: &Arc<Vnode>,
+        buf: &mut UioMut,
+        off: i64,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!();
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn write(
+        &self,
+        vn: &Arc<Vnode>,
+        buf: &mut Uio,
+        off: i64,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!();
     }
 }
 

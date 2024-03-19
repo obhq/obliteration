@@ -1,13 +1,12 @@
+use super::{AllocVnodeError, TempFs};
 use crate::errno::{Errno, ENOENT, ENOSPC};
-use crate::fs::{Access, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType};
+use crate::fs::{Access, OpenFlags, Uio, UioMut, VFile, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use macros::Errno;
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
-
-use super::{AllocVnodeError, TempFs};
 
 /// A collection of [`Node`].
 #[derive(Debug)]
@@ -86,14 +85,12 @@ pub enum NodeType {
         is_root: bool,
         entries: Gutex<Vec<Arc<Dirent>>>,
     },
-    File,
 }
 
 impl NodeType {
     pub(super) fn into_vnode_type(&self) -> VnodeType {
         match self {
             Self::Directory { is_root, .. } => VnodeType::Directory(*is_root),
-            Self::File => VnodeType::File,
         }
     }
 }
@@ -212,6 +209,28 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         #[allow(unused_variables)] file: Option<&mut VFile>,
     ) -> Result<(), Box<dyn Errno>> {
         todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn read(
+        &self,
+        vn: &Arc<Vnode>,
+        buf: &mut UioMut,
+        off: i64,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!();
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn write(
+        &self,
+        vn: &Arc<Vnode>,
+        buf: &mut Uio,
+        off: i64,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!();
     }
 }
 
