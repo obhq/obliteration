@@ -221,7 +221,7 @@ impl HostFile {
     }
 
     #[cfg(windows)]
-    fn read(&self, buf: &mut UioMut, offset: i64) -> Result<usize, Error> {
+    pub(super) fn read(&self, buf: &mut UioMut, offset: i64) -> Result<usize, Error> {
         todo!()
     }
 
