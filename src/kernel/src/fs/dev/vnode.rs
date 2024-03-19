@@ -2,8 +2,8 @@ use super::dirent::Dirent;
 use super::{AllocVnodeError, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
-    check_access, Access, IoCmd, OpenFlags, RevokeFlags, Uio, UioMut, VFile, VFileType, Vnode,
-    VnodeAttrs, VnodeItem, VnodeType,
+    check_access, Access, IoCmd, OpenFlags, RevokeFlags, Uio, UioMut, VFileType, Vnode, VnodeAttrs,
+    VnodeItem, VnodeType,
 };
 use crate::process::VThread;
 use macros::Errno;
@@ -189,14 +189,14 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         let sw = dev.sw();
 
         // Execute switch handler.
-        sw.open()(&dev, mode, 0x2000, td)?;
+        sw.open()(&dev, flags, 0x2000, td)?;
 
         Ok(VFileType::Device(dev.clone()))
     }
 
     fn revoke(&self, vn: &Arc<Vnode>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
         // TODO: Implement this.
-        todo!()
+        Ok(())
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
