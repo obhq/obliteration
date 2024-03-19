@@ -1,6 +1,6 @@
 use crate::{
     errno::Errno,
-    fs::{Device, IoCmd},
+    fs::{CharacterDevice, Device, IoCmd},
     process::VThread,
 };
 use std::sync::Arc;
@@ -9,7 +9,12 @@ use std::sync::Arc;
 struct Rng {}
 
 impl Device for Rng {
-    fn ioctl(self: Arc<Self>, cmd: IoCmd, _: &VThread) -> Result<(), Box<dyn Errno>> {
+    fn ioctl(
+        self: &Arc<Self>,
+        dev: &Arc<CharacterDevice>,
+        cmd: IoCmd,
+        _: &VThread,
+    ) -> Result<(), Box<dyn Errno>> {
         match cmd {
             IoCmd::RNG1 => todo!(),
             IoCmd::RNG2 => todo!(),

@@ -1,6 +1,6 @@
 use crate::{
     errno::{Errno, EPERM},
-    fs::{Device, IoCmd},
+    fs::{CharacterDevice, Device, IoCmd},
     process::VThread,
 };
 use macros::Errno;
@@ -21,7 +21,12 @@ enum DmemContainer {
 }
 
 impl Device for Dmem {
-    fn ioctl(self: Arc<Self>, cmd: IoCmd, td: &VThread) -> Result<(), Box<dyn Errno>> {
+    fn ioctl(
+        self: &Arc<Self>,
+        dev: &Arc<CharacterDevice>,
+        cmd: IoCmd,
+        td: &VThread,
+    ) -> Result<(), Box<dyn Errno>> {
         let cred = td.cred();
 
         if cred.is_unk1() || cred.is_unk2() {

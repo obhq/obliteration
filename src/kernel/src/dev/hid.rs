@@ -1,6 +1,6 @@
 use crate::{
     errno::Errno,
-    fs::{Device, IoCmd, UioMut},
+    fs::{CharacterDevice, Device, IoCmd, UioMut},
     process::VThread,
 };
 use std::sync::Arc;
@@ -11,7 +11,8 @@ struct Hid {}
 impl Device for Hid {
     #[allow(unused_variables)] // TODO: remove when implementing
     fn read(
-        self: Arc<Self>,
+        self: &Arc<Self>,
+        dev: &Arc<CharacterDevice>,
         data: &mut UioMut,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
@@ -19,7 +20,12 @@ impl Device for Hid {
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
-    fn ioctl(self: Arc<Self>, cmd: IoCmd, td: &VThread) -> Result<(), Box<dyn Errno>> {
+    fn ioctl(
+        self: &Arc<Self>,
+        dev: &Arc<CharacterDevice>,
+        cmd: IoCmd,
+        td: &VThread,
+    ) -> Result<(), Box<dyn Errno>> {
         todo!()
     }
 }

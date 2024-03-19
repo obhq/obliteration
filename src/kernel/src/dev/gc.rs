@@ -1,6 +1,6 @@
 use crate::{
     errno::Errno,
-    fs::{Device, IoCmd},
+    fs::{CharacterDevice, Device, IoCmd},
     process::VThread,
 };
 use std::sync::Arc;
@@ -10,7 +10,12 @@ struct Gc {}
 
 impl Device for Gc {
     #[allow(unused_variables)] // TODO: remove when implementing
-    fn ioctl(self: Arc<Self>, cmd: IoCmd, td: &VThread) -> Result<(), Box<dyn Errno>> {
+    fn ioctl(
+        self: &Arc<Self>,
+        dev: &Arc<CharacterDevice>,
+        cmd: IoCmd,
+        td: &VThread,
+    ) -> Result<(), Box<dyn Errno>> {
         todo!()
     }
 }

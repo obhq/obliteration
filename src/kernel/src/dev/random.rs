@@ -1,6 +1,6 @@
 use crate::{
     errno::Errno,
-    fs::{DefaultDeviceError, Device, IoCmd, Uio, UioMut},
+    fs::{CharacterDevice, DefaultDeviceError, Device, IoCmd, Uio, UioMut},
     process::VThread,
 };
 use std::sync::Arc;
@@ -11,7 +11,8 @@ struct Random {}
 impl Device for Random {
     #[allow(unused_variables)] // TODO: remove when implementing
     fn read(
-        self: Arc<Self>,
+        self: &Arc<Self>,
+        dev: &Arc<CharacterDevice>,
         data: &mut UioMut,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
@@ -20,14 +21,20 @@ impl Device for Random {
 
     #[allow(unused_variables)] // TODO: remove when implementing
     fn write(
-        self: Arc<Self>,
+        self: &Arc<Self>,
+        dev: &Arc<CharacterDevice>,
         data: &mut Uio,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         todo!()
     }
 
-    fn ioctl(self: Arc<Self>, cmd: IoCmd, _: &VThread) -> Result<(), Box<dyn Errno>> {
+    fn ioctl(
+        self: &Arc<Self>,
+        dev: &Arc<CharacterDevice>,
+        cmd: IoCmd,
+        _: &VThread,
+    ) -> Result<(), Box<dyn Errno>> {
         match cmd {
             IoCmd::FIOASYNC(_) | IoCmd::FIONBIO(_) => Ok(()),
             _ => Err(Box::new(DefaultDeviceError::CommandNotSupported)),

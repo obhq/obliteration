@@ -1,4 +1,5 @@
 use super::dirent::Dirent;
+use crate::dev;
 use crate::errno::Errno;
 use crate::errno::ENODEV;
 use crate::fs::Uio;
@@ -203,7 +204,8 @@ pub type CdevOpen =
 pub trait Device: Debug + Sync + Send + 'static {
     #[allow(unused_variables)]
     fn read(
-        self: Arc<Self>,
+        self: &Arc<Self>,
+        dev: &Arc<CharacterDevice>,
         data: &mut UioMut,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
@@ -212,7 +214,8 @@ pub trait Device: Debug + Sync + Send + 'static {
 
     #[allow(unused_variables)]
     fn write(
-        self: Arc<Self>,
+        self: &Arc<Self>,
+        dev: &Arc<CharacterDevice>,
         data: &mut Uio,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
@@ -220,7 +223,12 @@ pub trait Device: Debug + Sync + Send + 'static {
     }
 
     #[allow(unused_variables)]
-    fn ioctl(self: Arc<Self>, cmd: IoCmd, td: &VThread) -> Result<(), Box<dyn Errno>> {
+    fn ioctl(
+        self: &Arc<Self>,
+        dev: &Arc<CharacterDevice>,
+        cmd: IoCmd,
+        td: &VThread,
+    ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultDeviceError::CommandNotSupported))
     }
 }
