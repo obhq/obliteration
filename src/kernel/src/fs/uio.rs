@@ -1,7 +1,6 @@
-use std::{io::IoSliceMut, marker::PhantomData};
-
 use crate::errno::{Errno, EINVAL};
 use macros::Errno;
+use std::marker::PhantomData;
 use thiserror::Error;
 
 const UIO_MAXIOV: u32 = 1024;

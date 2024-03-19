@@ -2,7 +2,6 @@ use crate::budget::BudgetType;
 use crate::errno::{Errno, EBADF};
 use crate::fs::{VFile, VFileFlags, VFileType, Vnode};
 use crate::kqueue::KernelQueue;
-use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup};
 use macros::Errno;
 use std::collections::VecDeque;
