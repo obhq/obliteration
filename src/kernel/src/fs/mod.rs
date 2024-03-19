@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 
-pub use self::dev::{make_dev, Cdev, CdevSw, DriverFlags, MakeDev, MakeDevError};
+pub use self::dev::{make_dev, CdevSw, CharacterDevice, DriverFlags, MakeDev, MakeDevError};
 pub use self::dirent::*;
 pub use self::file::*;
 pub use self::ioctl::*;
@@ -22,6 +22,7 @@ pub use self::mount::*;
 pub use self::path::*;
 pub use self::perm::*;
 pub use self::stat::*;
+pub use self::uio::*;
 pub use self::vnode::*;
 
 mod dev;
@@ -35,6 +36,7 @@ mod path;
 mod perm;
 mod stat;
 mod tmp;
+mod uio;
 mod vnode;
 
 /// A virtual filesystem for emulating a PS4 filesystem.
@@ -55,6 +57,7 @@ impl Fs {
         let mut mounts = Mounts::new();
         let conf = Self::find_config("devfs").unwrap();
         let init = (conf.mount)(
+            None,
             conf,
             kern_cred,
             vpath!("/dev").to_owned(),
@@ -188,7 +191,7 @@ impl Fs {
         //
         // So we decided to implement our own lookup algorithm.
         let path = path.as_ref();
-        let mut root = match td {
+        let root = match td {
             Some(td) => td.proc().files().root(),
             None => self.root(),
         };
@@ -212,7 +215,7 @@ impl Fs {
 
             // Prevent ".." on root so this cannot escape from chroot.
             if com == ".." && Arc::ptr_eq(&resolved, &root) {
-                return Err(LookupError::NotFound);
+                return Err(LookupError::EscapeChroot);
             }
 
             // Lookup next component.
@@ -220,7 +223,7 @@ impl Fs {
                 Ok(v) => v,
                 Err(e) => {
                     if e.errno() == ENOENT {
-                        return Err(LookupError::NotFound);
+                        return Err(LookupError::NotFound(e));
                     } else {
                         return Err(LookupError::LookupFailed(
                             i,
@@ -259,21 +262,6 @@ impl Fs {
         parent
             .mkdir(path.file_name().unwrap(), mode, td)
             .map_err(MkdirError::CreateFailed)
-    }
-
-    fn sys_read(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
-        let fd: i32 = i.args[0].try_into().unwrap();
-        let ptr: *mut u8 = i.args[1].into();
-        let len: usize = i.args[2].try_into().unwrap();
-
-        let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
-
-        let uio = UioMut {
-            vecs: &mut [iovec],
-            bytes_left: len,
-        };
-
-        self.readv(fd, uio, td)
     }
 
     /// See `vfs_donmount` on the PS4 for a reference.
@@ -343,6 +331,7 @@ impl Fs {
 
             // TODO: Implement budgetid.
             let mount = (conf.mount)(
+                Some(self),
                 conf,
                 td.map_or(&self.kern_cred, |t| t.cred()),
                 path,
@@ -368,6 +357,21 @@ impl Fs {
             // TODO: Implement the remaining logics from the PS4.
             Ok(mount.root().map_err(MountError::GetRootFailed)?)
         }
+    }
+
+    fn sys_read(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let ptr: *mut u8 = i.args[1].into();
+        let len: usize = i.args[2].try_into().unwrap();
+
+        let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
+
+        let uio = UioMut {
+            vecs: &mut [iovec],
+            bytes_left: len,
+        };
+
+        self.readv(fd, uio, td)
     }
 
     fn sys_write(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -416,7 +420,7 @@ impl Fs {
         info!("Opening {path} with flags = {flags}.");
 
         // Lookup file.
-        let mut file = self.open(path, Some(&td))?;
+        let mut file = self.open(path, Some(td))?;
 
         *file.flags_mut() = flags.into_fflags();
 
@@ -431,7 +435,7 @@ impl Fs {
     fn sys_close(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
 
-        info!("Closing fd {fd}.");
+        info!("Attempting to close fd {fd}.");
 
         td.proc().files().free(fd)?;
 
@@ -448,7 +452,7 @@ impl Fs {
 
         info!("Executing ioctl({cmd:?}) on file descriptor {fd}.");
 
-        self.ioctl(fd, cmd, &td)?;
+        self.ioctl(fd, cmd, td)?;
 
         Ok(SysOut::ZERO)
     }
@@ -472,7 +476,7 @@ impl Fs {
             _ => {}
         }
 
-        file.ioctl(cmd, Some(&td))?;
+        file.ioctl(cmd, Some(td))?;
 
         Ok(SysOut::ZERO)
     }
@@ -488,7 +492,7 @@ impl Fs {
 
         // TODO: Check vnode::v_rdev.
         // TODO: Check if the PS4 follow the vnode.
-        let vn = self.lookup(path, true, Some(&td))?;
+        let vn = self.lookup(path, true, Some(td))?;
 
         if !vn.is_character() {
             return Err(SysErr::Raw(EINVAL));
@@ -496,7 +500,7 @@ impl Fs {
 
         // TODO: It seems like the initial ucred of the process is either root or has PRIV_VFS_ADMIN
         // privilege.
-        self.revoke(vn, &td)?;
+        self.revoke(vn, td)?;
 
         Ok(SysOut::ZERO)
     }
@@ -504,7 +508,7 @@ impl Fs {
     fn revoke(&self, vn: Arc<Vnode>, td: &VThread) -> Result<(), RevokeError> {
         let vattr = vn.getattr().map_err(RevokeError::GetAttrError)?;
 
-        if td.cred().effective_uid() != vattr.uid() {
+        if td.cred().effective_uid() != vattr.uid {
             td.priv_check(Privilege::VFS_ADMIN)?;
         }
 
@@ -527,7 +531,7 @@ impl Fs {
     fn readv(&self, fd: i32, uio: UioMut, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_read(fd)?;
 
-        let read = file.do_read(uio, Offset::Current, Some(&td))?;
+        let read = file.do_read(uio, Offset::Current, Some(td))?;
 
         Ok(read.into())
     }
@@ -545,7 +549,7 @@ impl Fs {
     fn writev(&self, fd: i32, uio: Uio, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_write(fd)?;
 
-        let written = file.do_write(uio, Offset::Current, Some(&td))?;
+        let written = file.do_write(uio, Offset::Current, Some(td))?;
 
         Ok(written.into())
     }
@@ -554,7 +558,7 @@ impl Fs {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let stat_out: *mut Stat = i.args[1].into();
 
-        let stat = self.stat(path, &td)?;
+        let stat = self.stat(path, td)?;
 
         unsafe {
             *stat_out = stat;
@@ -572,7 +576,7 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let stat_out: *mut Stat = i.args[1].into();
 
-        let stat = self.fstat(fd, &td)?;
+        let stat = self.fstat(fd, td)?;
 
         unsafe {
             *stat_out = stat;
@@ -582,9 +586,12 @@ impl Fs {
     }
 
     /// See `kern_fstat` on the PS4 for a reference.
-    #[allow(unused_variables)] // Remove this when it is being implemented
     fn fstat(self: &Arc<Self>, fd: i32, td: &VThread) -> Result<Stat, StatError> {
-        todo!()
+        let file = td.proc().files().get(fd)?;
+
+        let stat = file.stat(Some(td))?;
+
+        Ok(stat)
     }
 
     fn sys_lstat(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -593,7 +600,7 @@ impl Fs {
 
         td.priv_check(Privilege::SCE683)?;
 
-        let stat = self.lstat(path, &td)?;
+        let stat = self.lstat(path, td)?;
 
         unsafe {
             *stat_out = stat;
@@ -611,7 +618,7 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
-        let offset: u64 = i.args[3].try_into().unwrap();
+        let offset: i64 = i.args[3].into();
 
         let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
@@ -627,7 +634,7 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
-        let offset: u64 = i.args[3].try_into().unwrap();
+        let offset: i64 = i.args[3].into();
 
         let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
@@ -643,23 +650,23 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *mut IoVec = i.args[1].into();
         let count: u32 = i.args[2].try_into().unwrap();
-        let offset: u64 = i.args[3].try_into().unwrap();
+        let offset: i64 = i.args[3].into();
 
         let uio = unsafe { UioMut::copyin(iovec, count) }?;
 
         self.preadv(fd, uio, offset, td)
     }
 
-    fn preadv(&self, fd: i32, uio: UioMut, off: u64, td: &VThread) -> Result<SysOut, SysErr> {
+    fn preadv(&self, fd: i32, uio: UioMut, offset: i64, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_read(fd)?;
 
-        if !file.is_seekable() {
-            return Err(SysErr::Raw(ESPIPE));
+        let vnode = file.seekable_vnode().ok_or(SysErr::Raw(ESPIPE))?;
+
+        if offset < 0 && !vnode.is_character() {
+            return Err(SysErr::Raw(EINVAL));
         }
 
-        // TODO: check vnode type
-
-        let read = file.do_read(uio, Offset::Provided(off), Some(&td))?;
+        let read = file.do_read(uio, Offset::Provided(offset), Some(td))?;
 
         Ok(read.into())
     }
@@ -668,23 +675,23 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *const IoVec = i.args[1].into();
         let count: u32 = i.args[2].try_into().unwrap();
-        let offset: u64 = i.args[3].try_into().unwrap();
+        let offset: i64 = i.args[3].into();
 
         let uio = unsafe { Uio::copyin(iovec, count) }?;
 
         self.pwritev(fd, uio, offset, td)
     }
 
-    fn pwritev(&self, fd: i32, uio: Uio, off: u64, td: &VThread) -> Result<SysOut, SysErr> {
+    fn pwritev(&self, fd: i32, uio: Uio, offset: i64, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_write(fd)?;
 
-        if !file.is_seekable() {
-            return Err(SysErr::Raw(ESPIPE));
+        let vnode = file.seekable_vnode().ok_or(SysErr::Raw(ESPIPE))?;
+
+        if offset < 0 && !vnode.is_character() {
+            return Err(SysErr::Raw(EINVAL));
         }
 
-        // TODO: check vnode type
-
-        let written = file.do_write(uio, Offset::Provided(off), Some(&td))?;
+        let written = file.do_write(uio, Offset::Provided(offset), Some(td))?;
 
         Ok(written.into())
     }
@@ -697,7 +704,7 @@ impl Fs {
 
         td.priv_check(Privilege::SCE683)?;
 
-        let stat = self.statat(flags, At::Fd(dirfd), path, &td)?;
+        let stat = self.statat(flags, At::Fd(dirfd), path, td)?;
 
         unsafe {
             *stat_out = stat;
@@ -723,7 +730,7 @@ impl Fs {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let mode: u32 = i.args[1].try_into().unwrap();
 
-        self.mkdirat(At::Cwd, path, mode, Some(&td))
+        self.mkdirat(At::Cwd, path, mode, Some(td))
     }
 
     #[allow(unused_variables)]
@@ -746,11 +753,7 @@ impl Fs {
 
         let file = td.proc().files().get(fd)?;
 
-        if !file.is_seekable() {
-            return Err(SysErr::Raw(ESPIPE));
-        }
-
-        let _vnode = file.vnode().expect("File is not backed by a vnode");
+        let vnode = file.seekable_vnode().ok_or(SysErr::Raw(ESPIPE))?;
 
         // check vnode type
 
@@ -759,12 +762,12 @@ impl Fs {
             Whence::Current => todo!("lseek with whence = SEEK_CUR"),
             Whence::End => todo!(),
             Whence::Data => {
-                let _ = file.ioctl(IoCmd::FIOSEEKDATA(&mut offset), Some(&td));
+                let _ = file.ioctl(IoCmd::FIOSEEKDATA(&mut offset), Some(td));
 
                 todo!()
             }
             Whence::Hole => {
-                let _ = file.ioctl(IoCmd::FIOSEEKHOLE(&mut offset), Some(&td));
+                let _ = file.ioctl(IoCmd::FIOSEEKHOLE(&mut offset), Some(td));
 
                 todo!()
             }
@@ -777,7 +780,7 @@ impl Fs {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let length = i.args[1].into();
 
-        self.truncate(path, length, &td)?;
+        self.truncate(path, length, td)?;
 
         Ok(SysOut::ZERO)
     }
@@ -786,7 +789,7 @@ impl Fs {
         let length: TruncateLength = length.try_into()?;
 
         // TODO: Check if the PS4 follow the vnode.
-        let vn = self.lookup(path, true, Some(&td))?;
+        let vn = self.lookup(path, true, Some(td))?;
 
         todo!()
     }
@@ -795,7 +798,7 @@ impl Fs {
         let fd = i.args[0].try_into().unwrap();
         let length = i.args[1].into();
 
-        self.ftruncate(fd, length, &td)?;
+        self.ftruncate(fd, length, td)?;
 
         Ok(SysOut::ZERO)
     }
@@ -809,7 +812,7 @@ impl Fs {
             return Err(FileTruncateError::FileNotWritable);
         }
 
-        file.truncate(length, Some(&td))?;
+        file.truncate(length, Some(td))?;
 
         Ok(())
     }
@@ -821,7 +824,7 @@ impl Fs {
         let path = unsafe { i.args[1].to_path() }?.unwrap();
         let mode: u32 = i.args[2].try_into().unwrap();
 
-        self.mkdirat(At::Fd(fd), path, mode, Some(&td))
+        self.mkdirat(At::Fd(fd), path, mode, Some(td))
     }
 
     /// See `kern_mkdirat` on the PS4 for a reference.
@@ -941,6 +944,7 @@ pub struct FsConfig {
     ty: u32,                         // vfc_typenum
     next: Option<&'static FsConfig>, // vfc_list.next
     mount: fn(
+        fs: Option<&Arc<Fs>>,
         conf: &'static Self,
         cred: &Arc<Ucred>,
         path: VPathBuf,
@@ -953,7 +957,7 @@ pub struct FsConfig {
 #[derive(Debug)]
 pub enum Offset {
     Current,
-    Provided(u64),
+    Provided(i64),
 }
 
 #[derive(Debug)]
@@ -986,70 +990,6 @@ impl TryFrom<i32> for Whence {
     }
 }
 
-pub struct IoVec {
-    base: *const u8,
-    len: usize,
-}
-
-impl IoVec {
-    pub unsafe fn try_from_raw_parts(base: *const u8, len: usize) -> Result<Self, IoVecError> {
-        Ok(Self { base, len })
-    }
-}
-
-const UIO_MAXIOV: u32 = 1024;
-const IOSIZE_MAX: usize = 0x7fffffff;
-
-pub struct Uio<'a> {
-    vecs: &'a [IoVec], // uio_iov + uio_iovcnt
-    bytes_left: usize, // uio_resid
-}
-
-impl<'a> Uio<'a> {
-    /// See `copyinuio` on the PS4 for a reference.
-    pub unsafe fn copyin(first: *const IoVec, count: u32) -> Result<Self, CopyInUioError> {
-        if count > UIO_MAXIOV {
-            return Err(CopyInUioError::TooManyVecs);
-        }
-
-        let vecs = std::slice::from_raw_parts(first, count as usize);
-        let bytes_left = vecs.iter().map(|v| v.len).try_fold(0, |acc, len| {
-            if acc > IOSIZE_MAX - len {
-                Err(CopyInUioError::MaxLenExceeded)
-            } else {
-                Ok(acc + len)
-            }
-        })?;
-
-        Ok(Self { vecs, bytes_left })
-    }
-}
-
-pub struct UioMut<'a> {
-    vecs: &'a mut [IoVec], // uio_iov + uio_iovcnt
-    bytes_left: usize,     // uio_resid
-}
-
-impl<'a> UioMut<'a> {
-    /// See `copyinuio` on the PS4 for a reference.
-    pub unsafe fn copyin(first: *mut IoVec, count: u32) -> Result<Self, CopyInUioError> {
-        if count > UIO_MAXIOV {
-            return Err(CopyInUioError::TooManyVecs);
-        }
-
-        let vecs = std::slice::from_raw_parts_mut(first, count as usize);
-        let bytes_left = vecs.iter().map(|v| v.len).try_fold(0, |acc, len| {
-            if acc > IOSIZE_MAX - len {
-                Err(CopyInUioError::MaxLenExceeded)
-            } else {
-                Ok(acc + len)
-            }
-        })?;
-
-        Ok(Self { vecs, bytes_left })
-    }
-}
-
 bitflags! {
     /// Flags for *at() syscalls.
     struct AtFlags: i32 {
@@ -1065,34 +1005,10 @@ impl TryFrom<SysArg> for AtFlags {
     }
 }
 
-#[derive(Debug, Error, Errno)]
-pub enum IoVecError {
-    #[error("len exceed the maximum value")]
-    #[errno(EINVAL)]
-    MaxLenExceeded,
-}
-
-#[derive(Debug, Error, Errno)]
-pub enum CopyInUioError {
-    #[error("too many iovecs")]
-    #[errno(EINVAL)]
-    TooManyVecs,
-
-    #[error("the sum of iovec lengths is too large")]
-    #[errno(EINVAL)]
-    MaxLenExceeded,
-}
-
 bitflags! {
     pub struct RevokeFlags: i32 {
         const REVOKE_ALL = 0x0001;
     }
-}
-
-struct PollFd {
-    fd: i32,
-    events: i16,  // TODO: this probably deserves its own type
-    revents: i16, // likewise
 }
 
 pub struct TruncateLength(i64);
@@ -1108,6 +1024,39 @@ impl TryFrom<i64> for TruncateLength {
     }
 }
 pub struct TruncateLengthError(());
+
+#[repr(C)]
+pub struct PollFd {
+    fd: i32,
+    events: PollEvents,
+    revents: PollEvents,
+}
+
+bitflags! {
+    /// This type is the direct equivalent of the `events` and `revents` fields of [`PollFd`].
+    /// In [`crate::fs::FileBackend`], which is a equivalent of the `vfileops` struct, we also return this type. even though
+    /// FreeBSD uses and `int` there
+    #[repr(transparent)]
+    #[derive(Debug, Clone, Copy)]
+    pub struct PollEvents: u16 {
+        const IN = 0x0001; // POLLIN
+        const PRI = 0x0002; // POLLPRI
+        const OUT = 0x0004; // POLLOUT
+
+        const READNORMAL = 0x0040; // POLLRDNORM
+        const WRITENORMAL = Self::OUT.bits(); // POLLWRNORM
+        const READBAND = 0x0080; // POLLRDBAND
+        const WRITEBAND = 0x0100; // POLLWRBAND
+
+        const ERROR = 0x0008; // POLLERR
+        const HUNGUP = 0x0010; // POLLHUP
+        const NOVAL = 0x0020; // POLLNVAL
+
+        const STANDARD = Self::IN.bits() | Self::PRI.bits() | Self::OUT.bits()
+            | Self::READNORMAL.bits() | Self::READBAND.bits() | Self::WRITENORMAL.bits()
+            | Self::WRITEBAND.bits() | Self::ERROR.bits() | Self::HUNGUP.bits() | Self::NOVAL.bits();
+    }
+}
 
 /// Represents an error when FS fails to initialize.
 #[derive(Debug, Error)]
@@ -1194,7 +1143,11 @@ pub enum LookupError {
 
     #[error("no such file or directory")]
     #[errno(ENOENT)]
-    NotFound,
+    EscapeChroot,
+
+    #[error("no such file or directory")]
+    #[errno(ENOENT)]
+    NotFound(#[source] Box<dyn Errno>),
 
     #[error("cannot lookup '{1}' from component #{0}")]
     LookupFailed(usize, Box<str>, #[source] Box<dyn Errno>),
@@ -1285,14 +1238,14 @@ static MLFS: FsConfig = FsConfig {
     name: "mlfs",
     ty: 0xF1,
     next: Some(&UDF2),
-    mount: |_, _, _, _, _, _| todo!("mount for mlfs"),
+    mount: |_, _, _, _, _, _, _| todo!("mount for mlfs"),
 };
 
 static UDF2: FsConfig = FsConfig {
     name: "udf2",
     ty: 0,
     next: Some(&DEVFS),
-    mount: |_, _, _, _, _, _| todo!("mount for udf2"),
+    mount: |_, _, _, _, _, _, _| todo!("mount for udf2"),
 };
 
 static DEVFS: FsConfig = FsConfig {
@@ -1313,28 +1266,28 @@ static UNIONFS: FsConfig = FsConfig {
     name: "unionfs",
     ty: 0x41,
     next: Some(&PROCFS),
-    mount: |_, _, _, _, _, _| todo!("mount for unionfs"),
+    mount: |_, _, _, _, _, _, _| todo!("mount for unionfs"),
 };
 
 static PROCFS: FsConfig = FsConfig {
     name: "procfs",
     ty: 0x2,
     next: Some(&CD9660),
-    mount: |_, _, _, _, _, _| todo!("mount for procfs"),
+    mount: |_, _, _, _, _, _, _| todo!("mount for procfs"),
 };
 
 static CD9660: FsConfig = FsConfig {
     name: "cd9660",
     ty: 0xBD,
     next: Some(&UFS),
-    mount: |_, _, _, _, _, _| todo!("mount for cd9660"),
+    mount: |_, _, _, _, _, _, _| todo!("mount for cd9660"),
 };
 
 static UFS: FsConfig = FsConfig {
     name: "ufs",
     ty: 0x35,
     next: Some(&NULLFS),
-    mount: |_, _, _, _, _, _| todo!("mount for ufs"),
+    mount: |_, _, _, _, _, _, _| todo!("mount for ufs"),
 };
 
 static NULLFS: FsConfig = FsConfig {

@@ -3,9 +3,9 @@
 ## About
 [![CI](https://github.com/obhq/obliteration/actions/workflows/main.yml/badge.svg)](https://github.com/obhq/obliteration/actions/workflows/main.yml) [![Discord](https://img.shields.io/discord/1121284256816185444?color=740d03&label=Obliteration&logo=discord)](https://discord.gg/Qsdaxj6tnH)
 
-Obliteration is an experimental PS4 emulator using [Kyty](https://github.com/InoriRus/Kyty) and [Uplift](https://github.com/idc/uplift) as a reference. The project is under development and cannot run any games that Kyty is able to run yet.
+Obliteration is an experimental PS4 emulator for Windows, Linux and macOS. **The project is under development and cannot run any games yet**. The reason it take so long is because we decided to go with the correct path without stubbing as much as possible.
 
-**The original author of Kyty is not involved in the development of Obliteration in any way.** Obliteration is a completely separate project. The reason you see the author of Kyty in the contributor list is because this project contains commits from Kyty.
+This project started as a hard-fork from [Kyty](https://github.com/InoriRus/Kyty). Then we decided to rewrite the whole project from scratch by using Kyty and [Uplift](https://github.com/idc/uplift) as a reference to help us getting started with the project. How Obliteration work is totally different from Kyty because we decided to go with the same path as Uplift (and Spine?) instead of Kyty. This is the reason why Obliteration required firmware files from the PS4 in order to work while Kyty does not.
 
 ## Get a daily build
 
@@ -28,12 +28,11 @@ We have a Discord server for discussion about Obliteration and its development. 
 - [x] Built-in PKG file supports for Fake PKG.
 - [x] Game library.
 - [x] Emulate system calls instead of user-space libraries.
-- [ ] Supports AArch64 CPU.
 
 ## System requirements
 
 - Windows 10, Linux or macOS 11+.
-- x86-64 CPU.
+- x86-64 CPU. We want to support non-x86 but currently we don't have any developers who are willing to work on this.
 - A jailbroken PS4 with FTP server that supports SELF decryption.
 
 ### Windows-specific requirements
@@ -53,8 +52,6 @@ Obliteration supports only 4KB/8KB/16KB pages. Most people should not have any p
 - Rust on the latest stable channel
 - CMake 3.21+
   - Make sure you have `Add CMake to the system PATH` selected when installing
-- Python 3.6+
-  - Make sure you have `Add python.exe to PATH` selected when installing
 
 ### Linux prerequisites
 

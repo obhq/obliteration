@@ -1,8 +1,10 @@
 use super::{
-    unixify_access, Access, Cdev, FileBackend, IoCmd, Mode, Mount, OpenFlags, RevokeFlags, Stat,
-    TruncateLength, Uio, UioMut, VFile,
+    unixify_access, Access, CharacterDevice, FileBackend, IoCmd, Mode, Mount, OpenFlags,
+    RevokeFlags, Stat, TruncateLength, Uio, UioMut, VFile,
 };
+use crate::arnd;
 use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
+use crate::fs::PollEvents;
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
@@ -19,36 +21,56 @@ use thiserror::Error;
 /// file/directory have only one vnode.
 #[derive(Debug)]
 pub struct Vnode {
-    fs: Arc<Mount>,                 // v_mount
+    mount: Arc<Mount>,              // v_mount
     ty: VnodeType,                  // v_type
     tag: &'static str,              // v_tag
     backend: Arc<dyn VnodeBackend>, // v_op + v_data
+    hash: u32,                      // v_hash
     item: Gutex<Option<VnodeItem>>, // v_un
 }
 
 impl Vnode {
     /// See `getnewvnode` on the PS4 for a reference.
     pub(super) fn new(
-        fs: &Arc<Mount>,
+        mount: &Arc<Mount>,
         ty: VnodeType,
         tag: &'static str,
         backend: impl VnodeBackend,
     ) -> Arc<Self> {
+        Arc::new(Self::new_plain(mount, ty, tag, Arc::new(backend)))
+    }
+
+    pub(super) fn new_plain(
+        mount: &Arc<Mount>,
+        ty: VnodeType,
+        tag: &'static str,
+        backend: Arc<impl VnodeBackend>,
+    ) -> Self {
         let gg = GutexGroup::new();
 
         ACTIVE.fetch_add(1, Ordering::Relaxed);
 
-        Arc::new(Self {
-            fs: fs.clone(),
+        Self {
+            mount: mount.clone(),
             ty,
             tag,
-            backend: Arc::new(backend),
+            backend,
+            hash: {
+                let mut buf = [0u8; 4];
+                arnd::rand_bytes(&mut buf);
+
+                u32::from_ne_bytes(buf)
+            },
             item: gg.spawn(None),
-        })
+        }
     }
 
-    pub fn fs(&self) -> &Arc<Mount> {
-        &self.fs
+    pub fn new_cyclic(f: impl FnOnce(&Weak<Vnode>) -> Vnode) -> Arc<Self> {
+        Arc::new_cyclic(f)
+    }
+
+    pub fn mount(&self) -> &Arc<Mount> {
+        &self.mount
     }
 
     pub fn ty(&self) -> &VnodeType {
@@ -60,7 +82,12 @@ impl Vnode {
     }
 
     pub fn is_character(&self) -> bool {
-        matches!(self.ty, VnodeType::Character)
+        matches!(self.ty, VnodeType::CharacterDevice)
+    }
+
+    /// See `vfs_hash_index` on the PS4 for a reference.
+    pub fn hash_index(&self) -> u32 {
+        self.hash.wrapping_add(self.mount().hashseed())
     }
 
     pub fn item(&self) -> GutexReadGuard<Option<VnodeItem>> {
@@ -76,7 +103,7 @@ impl Vnode {
         td: Option<&VThread>,
         mode: Access,
     ) -> Result<(), Box<dyn Errno>> {
-        self.backend.clone().access(self, td, mode)
+        self.backend.access(self, td, mode)
     }
 
     pub fn accessx(
@@ -84,11 +111,11 @@ impl Vnode {
         td: Option<&VThread>,
         mode: Access,
     ) -> Result<(), Box<dyn Errno>> {
-        self.backend.clone().accessx(self, td, mode)
+        self.backend.accessx(self, td, mode)
     }
 
     pub fn getattr(self: &Arc<Self>) -> Result<VnodeAttrs, Box<dyn Errno>> {
-        self.backend.clone().getattr(self)
+        self.backend.getattr(self)
     }
 
     pub fn lookup(
@@ -96,7 +123,7 @@ impl Vnode {
         td: Option<&VThread>,
         name: &str,
     ) -> Result<Arc<Self>, Box<dyn Errno>> {
-        self.backend.clone().lookup(self, td, name)
+        self.backend.lookup(self, td, name)
     }
 
     pub fn mkdir(
@@ -105,7 +132,7 @@ impl Vnode {
         mode: u32,
         td: Option<&VThread>,
     ) -> Result<Arc<Self>, Box<dyn Errno>> {
-        self.backend.clone().mkdir(self, name, mode, td)
+        self.backend.mkdir(self, name, mode, td)
     }
 
     pub fn open(
@@ -114,11 +141,11 @@ impl Vnode {
         mode: OpenFlags,
         file: Option<&mut VFile>,
     ) -> Result<(), Box<dyn Errno>> {
-        self.backend.clone().open(self, td, mode, file)
+        self.backend.open(self, td, mode, file)
     }
 
     pub fn revoke(self: &Arc<Self>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
-        self.backend.clone().revoke(self, flags)
+        self.backend.revoke(self, flags)
     }
 }
 
@@ -154,6 +181,11 @@ impl FileBackend for Vnode {
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
+    fn poll(self: &Arc<Self>, file: &VFile, events: PollEvents, td: &VThread) -> PollEvents {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
     fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
         todo!()
     }
@@ -178,15 +210,15 @@ impl Drop for Vnode {
 #[derive(Debug, Clone)]
 pub enum VnodeItem {
     Mount(Weak<Mount>),
-    Device(Arc<Cdev>),
+    Device(Arc<CharacterDevice>),
 }
 
 /// An implementation of `vtype`.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum VnodeType {
     File,            // VREG
     Directory(bool), // VDIR
-    Character,       // VCHR
+    CharacterDevice, // VCHR
     Link,            // VLNK
 }
 
@@ -199,7 +231,7 @@ pub enum VnodeType {
 pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
     /// An implementation of `vop_access`.
     fn access(
-        self: Arc<Self>,
+        &self,
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         mode: Access,
@@ -209,7 +241,7 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
 
     /// An implementation of `vop_accessx`.
     fn accessx(
-        self: Arc<Self>,
+        &self,
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         mode: Access,
@@ -229,7 +261,7 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
 
     /// An implementation of `vop_getattr`.
     fn getattr(
-        self: Arc<Self>,
+        &self,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
     ) -> Result<VnodeAttrs, Box<dyn Errno>> {
         // Inline vop_bypass.
@@ -237,17 +269,17 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
     }
 
     fn ioctl(
-        self: Arc<Self>,
+        &self,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] cmd: IoCmd,
         #[allow(unused_variables)] td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        Err(Box::new(DefaultError::IoctlNotSupported))
+        Err(Box::new(DefaultError::CommandNotSupported))
     }
 
     /// An implementation of `vop_lookup`.
     fn lookup(
-        self: Arc<Self>,
+        &self,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] td: Option<&VThread>,
         #[allow(unused_variables)] name: &str,
@@ -259,7 +291,7 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
     /// There should be a VnodeAttrs argument instead of mode,
     /// but it seems that the only argument that actually gets used is mode.
     fn mkdir(
-        self: Arc<Self>,
+        &self,
         #[allow(unused_variables)] parent: &Arc<Vnode>,
         #[allow(unused_variables)] name: &str,
         #[allow(unused_variables)] mode: u32,
@@ -270,7 +302,7 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
 
     /// An implementation of `vop_open`.
     fn open(
-        self: Arc<Self>,
+        &self,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] td: Option<&VThread>,
         #[allow(unused_variables)] mode: OpenFlags,
@@ -281,7 +313,7 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
 
     /// An implementation of `vop_revoke`.
     fn revoke(
-        self: Arc<Self>,
+        &self,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] flags: RevokeFlags,
     ) -> Result<(), Box<dyn Errno>> {
@@ -292,42 +324,14 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
 /// An implementation of `vattr` struct.
 #[allow(dead_code)]
 pub struct VnodeAttrs {
-    uid: Uid,   // va_uid
-    gid: Gid,   // va_gid
-    mode: Mode, // va_mode
-    size: u64,  // va_size
-    fsid: u32,  // va_fsid
+    pub uid: Uid,   // va_uid
+    pub gid: Gid,   // va_gid
+    pub mode: Mode, // va_mode
+    pub size: u64,  // va_size
+    pub fsid: u32,  // va_fsid
 }
 
-impl VnodeAttrs {
-    pub fn new(uid: Uid, gid: Gid, mode: Mode, size: u64, fsid: u32) -> Self {
-        Self {
-            uid,
-            gid,
-            mode,
-            size,
-            fsid,
-        }
-    }
-
-    pub fn uid(&self) -> Uid {
-        self.uid
-    }
-
-    pub fn gid(&self) -> Gid {
-        self.gid
-    }
-
-    pub fn mode(&self) -> Mode {
-        self.mode
-    }
-
-    pub fn set_fsid(&mut self, fsid: u32) {
-        self.fsid = fsid;
-    }
-}
-
-/// Represents an error when [`DEFAULT_VNODEOPS`] is failed.
+/// Represents an error when [`DEFAULT_VNODEOPS`] fails.
 #[derive(Debug, Error, Errno)]
 enum DefaultError {
     #[error("operation not supported")]
@@ -344,7 +348,7 @@ enum DefaultError {
 
     #[error("ioctl not supported")]
     #[errno(ENOTTY)]
-    IoctlNotSupported,
+    CommandNotSupported,
 }
 
 static ACTIVE: AtomicUsize = AtomicUsize::new(0); // numvnodes

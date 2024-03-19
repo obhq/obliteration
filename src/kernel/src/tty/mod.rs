@@ -1,5 +1,7 @@
 use crate::errno::Errno;
-use crate::fs::{make_dev, Cdev, CdevSw, DriverFlags, MakeDev, MakeDevError, Mode, OpenFlags};
+use crate::fs::{
+    make_dev, CdevSw, CharacterDevice, DriverFlags, MakeDev, MakeDevError, Mode, OpenFlags,
+};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use std::sync::Arc;
@@ -9,7 +11,7 @@ use thiserror::Error;
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct TtyManager {
-    console: Arc<Cdev>, // dev_console
+    console: Arc<CharacterDevice>, // dev_console
 }
 
 impl TtyManager {
@@ -17,8 +19,7 @@ impl TtyManager {
         // Create /dev/console.
         let console = Arc::new(CdevSw::new(
             DriverFlags::from_bits_retain(0x80000004),
-            Some(Self::console_open),
-            None,
+            Self::console_open,
         ));
 
         let console = make_dev(
@@ -38,7 +39,7 @@ impl TtyManager {
 
     /// See `ttyconsdev_open` on the PS4 for a reference.
     fn console_open(
-        _: &Arc<Cdev>,
+        _: &Arc<CharacterDevice>,
         _: OpenFlags,
         _: i32,
         _: Option<&VThread>,

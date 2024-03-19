@@ -2,65 +2,14 @@ name: CI (Windows)
 on:
   workflow_call:
 env:
-  CMAKE_BUILD_PARALLEL_LEVEL: '2'
+  CMAKE_BUILD_PARALLEL_LEVEL: '4'
 jobs:
-  llvm:
-    name: LLVM for Windows
-    runs-on: windows-2022
-    outputs:
-      dist-key: ${{ steps.cache-keys.outputs.dist }}
-    steps:
-    - name: Hash LLVM URL
-      run: |
-        $url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.5/llvm-project-17.0.5.src.tar.xz"
-        $urlhash = [System.BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($url))).Replace("-", "").ToLower()
-        echo "llvmurl=$url" >> $env:GITHUB_OUTPUT
-        echo "hash=$urlhash" >> $env:GITHUB_OUTPUT
-      id: download
-    - name: Generate cache keys
-      run: echo "dist=${{ runner.os }}-llvm-${{ steps.download.outputs.hash }}" >> $env:GITHUB_OUTPUT
-      id: cache-keys
-    - name: Check cached artifacts
-      uses: actions/cache/restore@v4
-      with:
-        path: lib/llvm
-        key: ${{ steps.cache-keys.outputs.dist }}
-        lookup-only: true
-      id: cache
-    - name: Download LLVM
-      run: |
-        Invoke-WebRequest -Uri ${{ steps.download.outputs.llvmurl }} -OutFile llvm.tar.xz
-        unxz llvm.tar.xz
-        tar -x --strip-components=1 -f llvm.tar
-      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
-    - name: Run CMake
-      run: cmake --install-prefix ${{ github.workspace }}/lib/llvm -Wno-dev -DLLVM_ENABLE_ZSTD:BOOL=OFF -DLLVM_APPEND_VC_REV:BOOL=OFF -DLLVM_TARGETS_TO_BUILD:STRING=X86 -B build llvm
-      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
-    - name: Build
-      run: cmake --build build --config Release
-      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
-    - name: Export artifacts
-      run: cmake --install build --config Release
-      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
-    - name: Cache artifacts
-      uses: actions/cache/save@v4
-      with:
-        path: lib/llvm
-        key: ${{ steps.cache-keys.outputs.dist }}
-      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
   build:
     name: Windows
     runs-on: windows-2022
-    needs: llvm
     steps:
     - name: Checkout source
       uses: actions/checkout@v4
-    - name: Download LLVM
-      uses: actions/cache/restore@v4
-      with:
-        path: lib/llvm
-        key: ${{ needs.llvm.outputs.dist-key }}
-        fail-on-cache-miss: true
     - name: Generate cache keys
       run: |
         echo "cargo=${{ runner.os }}-cargo" >> $env:GITHUB_OUTPUT
@@ -97,17 +46,14 @@ jobs:
       if: ${{ steps.restore-vulkan.outputs.cache-hit != 'true' }}
     - name: Set Vulkan SDK path
       run:  echo "VULKAN_SDK=C:\VulkanSDK" >> $env:GITHUB_ENV
-    - name: Update Rust-Lang
+    - name: Update Rust
       run: rustup update stable
     - name: Run CMake
-      run: cmake -DOB_BUILD_LLVM:BOOL=OFF --preset windows-release .
+      run: cmake --preset windows-release .
     - name: Build
       run: cmake --build --preset windows-release
     - name: Run tests
       run: cargo test --workspace --exclude core
-      working-directory: src
-    - name: Run Clippy
-      run: cargo clippy --release
       working-directory: src
     - name: Export artifacts
       run: cmake --install build --prefix dist

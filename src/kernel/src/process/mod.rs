@@ -1,13 +1,5 @@
-pub use self::appinfo::*;
-pub use self::cpuset::*;
-pub use self::filedesc::*;
-pub use self::group::*;
-pub use self::rlimit::*;
-pub use self::session::*;
-pub use self::signal::*;
-pub use self::thread::*;
-
 use crate::budget::ProcType;
+use crate::errno::Errno;
 use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ERANGE, ESRCH};
 use crate::fs::Vnode;
 use crate::idt::Idt;
@@ -19,18 +11,32 @@ use crate::signal::{
 use crate::signal::{SigChldFlags, Signal};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
-use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
+use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
+use macros::Errno;
 use std::any::Any;
 use std::cmp::min;
 use std::ffi::c_char;
+use std::mem::size_of;
 use std::mem::zeroed;
 use std::num::NonZeroI32;
+use std::ptr::null;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicI32, AtomicPtr, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
 
+pub use self::appinfo::*;
+pub use self::binary::*;
+pub use self::cpuset::*;
+pub use self::filedesc::*;
+pub use self::group::*;
+pub use self::rlimit::*;
+pub use self::session::*;
+pub use self::signal::*;
+pub use self::thread::*;
+
 mod appinfo;
+mod binary;
 mod cpuset;
 mod filedesc;
 mod group;
@@ -56,6 +62,7 @@ pub struct VProc {
     system_path: String,               // p_randomized_path
     limits: Limits,                    // p_limit
     comm: Gutex<Option<String>>,       // p_comm
+    bin: Gutex<Option<Binaries>>,      // p_dynlib?
     objects: Gutex<Idt<Arc<dyn Any + Send + Sync>>>,
     budget_id: usize,
     budget_ptype: ProcType,
@@ -100,6 +107,7 @@ impl VProc {
             dmem_container,
             limits,
             comm: gg.spawn(None), //TODO: Find out how this is actually set
+            bin: gg.spawn(None),
             app_info: AppInfo::new(),
             ptc: 0,
             uptc: AtomicPtr::new(null_mut()),
@@ -111,6 +119,7 @@ impl VProc {
         sys.register(340, &vp, Self::sys_sigprocmask);
         sys.register(416, &vp, Self::sys_sigaction);
         sys.register(432, &vp, Self::sys_thr_self);
+        sys.register(455, &vp, Self::sys_thr_new);
         sys.register(464, &vp, Self::sys_thr_set_name);
         sys.register(466, &vp, Self::sys_rtprio_thread);
         sys.register(487, &vp, Self::sys_cpuset_getaffinity);
@@ -140,6 +149,14 @@ impl VProc {
 
     pub fn set_name(&self, name: Option<&str>) {
         *self.comm.write() = name.map(|n| n.to_owned());
+    }
+
+    pub fn bin(&self) -> GutexReadGuard<Option<Binaries>> {
+        self.bin.read()
+    }
+
+    pub fn bin_mut(&self) -> GutexWriteGuard<Option<Binaries>> {
+        self.bin.write()
     }
 
     pub fn objects_mut(&self) -> GutexWriteGuard<'_, Idt<Arc<dyn Any + Send + Sync>>> {
@@ -408,12 +425,70 @@ impl VProc {
 
     fn sys_thr_self(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let id: *mut i64 = i.args[0].into();
+
         unsafe { *id = td.id().get().into() };
+
         Ok(SysOut::ZERO)
     }
 
+    fn sys_thr_new(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let param: *const ThrParam = i.args[0].into();
+        let param_size: i32 = i.args[1].try_into().unwrap();
+
+        if param_size < 0 && param_size as usize > size_of::<ThrParam>() {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        // The given param size seems to so far only be 0x68, we can handle this when we encounter it.
+        if param_size as usize != size_of::<ThrParam>() {
+            todo!("thr_new with param_size != sizeof(ThrParam)");
+        }
+
+        unsafe {
+            self.thr_new(td, &*param)?;
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
+    unsafe fn thr_new(&self, td: &VThread, param: &ThrParam) -> Result<SysOut, CreateThreadError> {
+        if param.rtprio != null() {
+            todo!("thr_new with non-null rtp");
+        }
+
+        self.create_thread(
+            td,
+            param.start_func,
+            param.arg,
+            param.stack_base,
+            param.stack_size,
+            param.tls_base,
+            param.child_tid,
+            param.parent_tid,
+            param.flags,
+            param.rtprio,
+        )
+    }
+
+    #[allow(unused_variables)] // TODO: Remove this when implementing.
+    unsafe fn create_thread(
+        &self,
+        td: &VThread,
+        start_func: fn(usize),
+        arg: usize,
+        stack_base: *const u8,
+        stack_size: usize,
+        tls_base: *const u8,
+        child_tid: *mut i64,
+        parent_tid: *mut i64,
+        flags: i32,
+        rtprio: *const RtPrio,
+    ) -> Result<SysOut, CreateThreadError> {
+        todo!()
+    }
+
     fn sys_thr_set_name(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
-        let tid: i64 = i.args[0].try_into().unwrap();
+        let tid: i64 = i.args[0].into();
         let name: Option<&str> = unsafe { i.args[1].to_str(32) }?;
 
         if tid == -1 {
@@ -441,31 +516,27 @@ impl VProc {
     }
 
     fn sys_rtprio_thread(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
-        const RTP_LOOKUP: i32 = 0;
-        const RTP_SET: i32 = 1;
-        const RTP_UNK: i32 = 2;
-
-        let function: i32 = i.args[0].try_into().unwrap();
+        let function: RtpFunction = TryInto::<i32>::try_into(i.args[0]).unwrap().try_into()?;
         let lwpid: i32 = i.args[1].try_into().unwrap();
         let rtp: *mut RtPrio = i.args[2].into();
         let rtp = unsafe { &mut *rtp };
 
-        if function == RTP_SET {
+        if function == RtpFunction::Set {
             todo!("rtprio_thread with function = 1");
         }
 
-        if function == RTP_UNK && td.cred().is_system() {
+        if function == RtpFunction::Unk && td.cred().is_system() {
             todo!("rtprio_thread with function = 2");
         } else if lwpid != 0 && lwpid != td.id().get() {
             return Err(SysErr::Raw(ESRCH));
-        } else if function == RTP_LOOKUP {
+        } else if function == RtpFunction::Lookup {
             rtp.ty = td.pri_class();
             rtp.prio = match td.pri_class() & 0xfff7 {
                 2..=4 => td.base_user_pri(),
                 _ => 0,
             };
         } else {
-            todo!("rtprio_thread with function = {function}");
+            todo!("rtprio_thread with function = {function:?}");
         }
 
         Ok(SysOut::ZERO)
@@ -646,6 +717,46 @@ impl VProc {
     }
 }
 
+#[repr(C)]
+struct ThrParam {
+    start_func: fn(usize),
+    arg: usize,
+    stack_base: *const u8,
+    stack_size: usize,
+    tls_base: *const u8,
+    tls_size: usize,
+    child_tid: *mut i64,
+    parent_tid: *mut i64,
+    flags: i32,
+    rtprio: *const RtPrio,
+    spare: [usize; 3],
+}
+
+const _: () = assert!(size_of::<ThrParam>() == 0x68);
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[repr(i32)]
+enum RtpFunction {
+    Lookup = 0,
+    Set = 1,
+    Unk = 2,
+}
+
+impl TryFrom<i32> for RtpFunction {
+    type Error = SysErr;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        let rtp = match value {
+            0 => RtpFunction::Lookup,
+            1 => RtpFunction::Set,
+            2 => RtpFunction::Unk,
+            _ => return Err(SysErr::Raw(EINVAL)),
+        };
+
+        Ok(rtp)
+    }
+}
+
 /// Outout of sys_rtprio_thread.
 #[repr(C)]
 struct RtPrio {
@@ -659,6 +770,9 @@ pub enum VProcInitError {
     #[error("failed to load limits")]
     FailedToLoadLimits(#[from] LoadLimitError),
 }
+
+#[derive(Debug, Error, Errno)]
+pub enum CreateThreadError {}
 
 static NEXT_ID: AtomicI32 = AtomicI32::new(1);
 const PID1: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(1) };

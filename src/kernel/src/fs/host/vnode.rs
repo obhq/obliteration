@@ -1,6 +1,6 @@
 use super::file::HostFile;
-use super::{get_vnode, GetVnodeError, HostFs};
-use crate::errno::{Errno, EIO, ENOENT, ENOTDIR};
+use super::{GetVnodeError, HostFs};
+use crate::errno::{Errno, EEXIST, EIO, ENOENT, ENOTDIR};
 use crate::fs::{Access, IoCmd, Mode, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
@@ -23,17 +23,12 @@ impl VnodeBackend {
 }
 
 impl crate::fs::VnodeBackend for VnodeBackend {
-    fn access(
-        self: Arc<Self>,
-        vn: &Arc<Vnode>,
-        td: Option<&VThread>,
-        mode: Access,
-    ) -> Result<(), Box<dyn Errno>> {
+    fn access(&self, _: &Arc<Vnode>, _: Option<&VThread>, _: Access) -> Result<(), Box<dyn Errno>> {
         // TODO: Check how the PS4 check file permission for exfatfs.
         Ok(())
     }
 
-    fn getattr(self: Arc<Self>, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
+    fn getattr(&self, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
         // Get file size.
         let size = self.file.len().map_err(GetAttrError::GetSizeFailed)?;
 
@@ -41,14 +36,20 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         let mode = match vn.ty() {
             VnodeType::Directory(_) => Mode::new(0o555).unwrap(),
             VnodeType::File | VnodeType::Link => todo!(),
-            VnodeType::Character => unreachable!(), // Character devices should only be in devfs.
+            VnodeType::CharacterDevice => unreachable!(), // Character devices should only be in devfs.
         };
 
-        Ok(VnodeAttrs::new(Uid::ROOT, Gid::ROOT, mode, size, u32::MAX))
+        Ok(VnodeAttrs {
+            uid: Uid::ROOT,
+            gid: Gid::ROOT,
+            mode,
+            size,
+            fsid: u32::MAX,
+        })
     }
 
     fn ioctl(
-        self: Arc<Self>,
+        &self,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] cmd: IoCmd,
         #[allow(unused_variables)] td: Option<&VThread>,
@@ -57,7 +58,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     }
 
     fn lookup(
-        self: Arc<Self>,
+        &self,
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         name: &str,
@@ -92,23 +93,38 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         };
 
         // Get vnode.
-        let vn = get_vnode(&self.fs, vn.fs(), &file).map_err(LookupError::GetVnodeFailed)?;
+        let vn = self
+            .fs
+            .get_vnode(vn.mount(), &file)
+            .map_err(LookupError::GetVnodeFailed)?;
 
         Ok(vn)
     }
 
     fn mkdir(
-        self: Arc<Self>,
+        &self,
         parent: &Arc<Vnode>,
         name: &str,
         mode: u32,
         td: Option<&VThread>,
     ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
-        todo!()
+        parent.access(td, Access::WRITE)?;
+
+        let dir = self
+            .file
+            .mkdir(name, mode)
+            .map_err(|e| MkDirError::from(e))?;
+        let vn = self
+            .fs
+            .get_vnode(parent.mount(), &dir)
+            .map_err(MkDirError::GetVnodeFailed)?;
+
+        Ok(vn)
     }
 
+    #[allow(unused_variables)] // TODO: remove when implementing.
     fn open(
-        self: Arc<Self>,
+        &self,
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         mode: OpenFlags,
@@ -149,6 +165,29 @@ enum LookupError {
     OpenFailed(#[source] std::io::Error),
 
     #[error("cannot get vnode")]
-    #[errno(EIO)]
     GetVnodeFailed(#[source] GetVnodeError),
+}
+
+/// Represents an error when [`VnodeBackend::mkdir()`] fails.
+#[derive(Debug, Error, Errno)]
+enum MkDirError {
+    #[error("couldn't create directory")]
+    #[errno(EIO)]
+    CreateFailed(#[source] std::io::Error),
+
+    #[error("directory already exists")]
+    #[errno(EEXIST)]
+    AlreadyExists,
+
+    #[error("couldn't get vnode")]
+    GetVnodeFailed(#[source] GetVnodeError),
+}
+
+impl From<std::io::Error> for MkDirError {
+    fn from(e: std::io::Error) -> Self {
+        match e.kind() {
+            std::io::ErrorKind::AlreadyExists => MkDirError::AlreadyExists,
+            _ => MkDirError::CreateFailed(e),
+        }
+    }
 }

@@ -2,7 +2,9 @@ use super::dirent::Dirent;
 use crate::errno::Errno;
 use crate::errno::ENODEV;
 use crate::fs::Uio;
-use crate::fs::{FileBackend, IoCmd, Mode, OpenFlags, Stat, TruncateLength, UioMut, VFile};
+use crate::fs::{
+    FileBackend, IoCmd, Mode, OpenFlags, PollEvents, Stat, TruncateLength, UioMut, VFile,
+};
 use crate::process::VThread;
 use crate::time::TimeSpec;
 use crate::ucred::{Gid, Ucred, Uid};
@@ -15,7 +17,7 @@ use thiserror::Error;
 
 /// An implementation of `cdev` and `cdev_priv` structures.
 #[derive(Debug)]
-pub struct Cdev {
+pub struct CharacterDevice {
     sw: Arc<CdevSw>,                           // si_devsw
     unit: i32,                                 // si_drv0
     name: String,                              // si_name
@@ -32,7 +34,7 @@ pub struct Cdev {
     dirents: Gutex<Vec<Option<Weak<Dirent>>>>, // cdp_dirents + cdp_maxdirent
 }
 
-impl Cdev {
+impl CharacterDevice {
     /// See `devfs_alloc` on the PS4 for a reference.
     pub(super) fn new(
         sw: &Arc<CdevSw>,
@@ -103,7 +105,7 @@ impl Cdev {
     }
 }
 
-impl FileBackend for Cdev {
+impl FileBackend for CharacterDevice {
     #[allow(unused_variables)] // TODO: remove when implementing
     fn read(
         self: &Arc<Self>,
@@ -135,6 +137,11 @@ impl FileBackend for Cdev {
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
+    fn poll(self: &Arc<Self>, file: &VFile, events: PollEvents, td: &VThread) -> PollEvents {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
     fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
         todo!()
     }
@@ -162,31 +169,22 @@ bitflags! {
 /// An implementation of `cdevsw` structure.
 #[derive(Debug)]
 pub struct CdevSw {
-    flags: DriverFlags,     // d_flags
-    open: Option<CdevOpen>, // d_open
-    fdopen: Option<CdevFd>, // d_fdopen
+    flags: DriverFlags, // d_flags
+    open: CdevOpen,     // d_open
 }
 
 impl CdevSw {
     /// See `prep_cdevsw` on the PS4 for a reference.
-    pub fn new(flags: DriverFlags, open: Option<CdevOpen>, fdopen: Option<CdevFd>) -> Self {
-        Self {
-            flags,
-            open,
-            fdopen,
-        }
+    pub fn new(flags: DriverFlags, open: CdevOpen) -> Self {
+        Self { flags, open }
     }
 
     pub fn flags(&self) -> DriverFlags {
         self.flags
     }
 
-    pub fn open(&self) -> Option<CdevOpen> {
+    pub fn open(&self) -> CdevOpen {
         self.open
-    }
-
-    pub fn fdopen(&self) -> Option<CdevFd> {
-        self.fdopen
     }
 }
 
@@ -198,9 +196,8 @@ bitflags! {
     }
 }
 
-pub type CdevOpen = fn(&Arc<Cdev>, OpenFlags, i32, Option<&VThread>) -> Result<(), Box<dyn Errno>>;
-pub type CdevFd =
-    fn(&Arc<Cdev>, OpenFlags, Option<&VThread>, Option<&mut VFile>) -> Result<(), Box<dyn Errno>>;
+pub type CdevOpen =
+    fn(&Arc<CharacterDevice>, OpenFlags, i32, Option<&VThread>) -> Result<(), Box<dyn Errno>>;
 
 /// An implementation of the `cdevsw` structure.
 pub(super) trait Device: Debug + Sync + Send + 'static {

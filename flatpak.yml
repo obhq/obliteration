@@ -6,13 +6,10 @@ platform-extensions:
 - org.freedesktop.Platform.GL.default
 sdk: org.kde.Sdk
 sdk-extensions:
-- org.freedesktop.Sdk.Extension.llvm17
 - org.freedesktop.Sdk.Extension.rust-stable
 command: obliteration
 build-options:
   append-path: /usr/lib/sdk/rust-stable/bin
-  env:
-    LLVM_SYS_170_PREFIX: /usr/lib/sdk/llvm17
   build-args:
   - --share=network
   - --device=kvm # required for running tests
@@ -27,15 +24,12 @@ finish-args:
   - --socket=pulseaudio
 modules:
 - name: obliteration
-  buildsystem: simple # cmake does not work somehow
+  buildsystem: simple
   build-commands:
-  - cmake -DOB_BUILD_LLVM:BOOL=OFF --preset linux-release .
+  - cmake --preset linux-release .
   - cmake --build --preset linux-release
   - cargo test --manifest-path src/Cargo.toml --workspace --exclude core
-  - cargo clippy --manifest-path src/Cargo.toml --release
   - cmake --install build --prefix "$FLATPAK_DEST"
-  - mkdir -pv "$FLATPAK_DEST/lib"
-  - cp -v /usr/lib/sdk/llvm17/lib/libLLVM-17.so "$FLATPAK_DEST/lib"
   sources:
   - type: dir
     path: .

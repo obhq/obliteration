@@ -1,4 +1,5 @@
 use super::{FsConfig, Mode, VPathBuf, Vnode};
+use crate::arnd;
 use crate::errno::Errno;
 use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
@@ -9,6 +10,7 @@ use std::collections::HashMap;
 use std::convert::Infallible;
 use std::fmt::Formatter;
 use std::fmt::{Debug, Display, Error};
+use std::hash::{Hash, Hasher};
 use std::hint::unreachable_unchecked;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock, RwLockWriteGuard};
@@ -78,6 +80,7 @@ pub struct Mount {
     cred: Arc<Ucred>,                   // mnt_cred
     parent: RwLock<Option<Arc<Vnode>>>, // mnt_vnodecovered
     flags: MountFlags,                  // mnt_flag
+    hashseed: u32,                      // mnt_hashseed
     stats: FsStats,                     // mnt_stat
 }
 
@@ -101,6 +104,12 @@ impl Mount {
             cred: cred.clone(),
             parent: RwLock::new(parent),
             flags,
+            hashseed: {
+                let mut buf = [0u8; 4];
+                arnd::rand_bytes(&mut buf);
+
+                u32::from_ne_bytes(buf)
+            },
             stats: FsStats {
                 ty: config.ty,
                 id: [0; 2],
@@ -111,8 +120,16 @@ impl Mount {
         }
     }
 
+    pub fn config(&self) -> &'static FsConfig {
+        self.config
+    }
+
     pub fn flags(&self) -> MountFlags {
         self.flags
+    }
+
+    pub fn hashseed(&self) -> u32 {
+        self.hashseed
     }
 
     pub fn parent_mut(&self) -> RwLockWriteGuard<Option<Arc<Vnode>>> {
