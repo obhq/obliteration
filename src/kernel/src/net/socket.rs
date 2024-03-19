@@ -77,6 +77,7 @@ impl FileBackend for Socket {
         self: &Arc<Self>,
         _: &VFile,
         buf: &mut UioMut,
+        offset: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         let read = self.receive(buf, td)?;
@@ -88,6 +89,7 @@ impl FileBackend for Socket {
         self: &Arc<Self>,
         _: &VFile,
         buf: &mut Uio,
+        offset: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         let written = match self.send(buf, td) {

@@ -143,8 +143,26 @@ impl Vnode {
         self.backend.open(self, td, flags)
     }
 
-    pub fn revoke(self: &Arc<Self>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
+    pub(super) fn revoke(self: &Arc<Self>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
         self.backend.revoke(self, flags)
+    }
+
+    pub(super) fn read(
+        self: &Arc<Self>,
+        buf: &mut UioMut,
+        offset: i64,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        self.backend.read(self, buf, offset, td)
+    }
+
+    pub(super) fn write(
+        self: &Arc<Self>,
+        buf: &mut Uio,
+        offset: i64,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        self.backend.write(self, buf, offset, td)
     }
 }
 
@@ -154,9 +172,10 @@ impl FileBackend for Vnode {
         self: &Arc<Self>,
         file: &VFile,
         buf: &mut UioMut,
+        offset: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        self.backend.read(file, buf, td)
+        self.backend.read(self, buf, offset, td)
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
@@ -164,9 +183,10 @@ impl FileBackend for Vnode {
         self: &Arc<Self>,
         file: &VFile,
         buf: &mut Uio,
+        offset: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        self.backend.write(file, buf, td)
+        todo!()
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
@@ -308,6 +328,7 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
     ) -> Result<VFileType, Box<dyn Errno>>;
 
     /// An implementation of `vop_revoke`.
+    /// This should only be in devfs.
     fn revoke(
         &self,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
@@ -317,25 +338,24 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
     }
 
     /// An implementation of `vop_read`.
+    #[allow(unused_variables)]
     fn read(
         &self,
-        file: &VFile,
+        vn: &Arc<Vnode>,
         buf: &mut UioMut,
+        offset: i64,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
-        todo!()
-    }
+    ) -> Result<usize, Box<dyn Errno>>;
 
     /// An implementation of `vop_write`.
-    #[allow(unused_variables)] // TODO: remove when implementing
+    #[allow(unused_variables)]
     fn write(
         &self,
-        file: &VFile,
+        vn: &Arc<Vnode>,
         buf: &mut Uio,
+        offset: i64,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
-        todo!()
-    }
+    ) -> Result<usize, Box<dyn Errno>>;
 }
 
 /// An implementation of `vattr` struct.

@@ -1,5 +1,5 @@
 use crate::errno::{Errno, ENOENT, ENOSPC};
-use crate::fs::{Access, OpenFlags, VFileType, Vnode, VnodeAttrs, VnodeType};
+use crate::fs::{Access, OpenFlags, Uio, UioMut, VFileType, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use macros::Errno;
@@ -210,6 +210,28 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         td: Option<&VThread>,
         flags: OpenFlags,
     ) -> Result<VFileType, Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn read(
+        &self,
+        vn: &Arc<Vnode>,
+        buf: &mut UioMut,
+        offset: i64,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn write(
+        &self,
+        vn: &Arc<Vnode>,
+        buf: &mut Uio,
+        offset: i64,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
         todo!()
     }
 }

@@ -4,6 +4,8 @@ use std::mem::zeroed;
 use std::path::Path;
 use std::sync::{Arc, Mutex, Weak};
 
+use crate::fs::UioMut;
+
 /// Encapsulate a raw file or directory on the host.
 #[derive(Debug)]
 pub struct HostFile {
@@ -199,6 +201,27 @@ impl HostFile {
 
     #[cfg(windows)]
     fn raw_mkdir(parent: RawFile, name: &str, mode: u32) -> Result<RawFile, Error> {
+        todo!()
+    }
+
+    #[cfg(unix)]
+    pub(super) fn read(&self, buf: &mut UioMut, offset: i64) -> Result<usize, Error> {
+        use libc::preadv;
+
+        let (iov, iovcnt) = buf.as_host();
+
+        // TODO: figure out if this is worth optimizing (we could store the next expected offset and if it matches, just do readv instead of preadv).
+        let ret = unsafe { preadv(self.raw, iov, iovcnt, offset) };
+
+        if ret < 0 {
+            Err(Error::last_os_error())
+        } else {
+            Ok(ret as usize)
+        }
+    }
+
+    #[cfg(windows)]
+    fn read(&self, buf: &mut UioMut, offset: i64) -> Result<usize, Error> {
         todo!()
     }
 

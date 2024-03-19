@@ -2,7 +2,7 @@ use super::file::HostFile;
 use super::{GetVnodeError, HostFs};
 use crate::errno::{Errno, EEXIST, EIO, ENOENT, ENOTDIR};
 use crate::fs::{
-    Access, IoCmd, Mode, OpenFlags, Uio, UioMut, VFile, VFileType, Vnode, VnodeAttrs, VnodeType,
+    Access, IoCmd, Mode, OpenFlags, Uio, UioMut, VFileType, Vnode, VnodeAttrs, VnodeType,
 };
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
@@ -110,10 +110,8 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             .file
             .mkdir(name, mode)
             .map_err(|e| MkDirError::from(e))?;
-        let vn = self
-            .fs
-            .get_vnode(parent.mount(), &dir)
-            .map_err(MkDirError::GetVnodeFailed)?;
+
+        let vn = self.fs.get_vnode(parent.mount(), &dir)?;
 
         Ok(vn)
     }
@@ -129,21 +127,26 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 
         Ok(VFileType::Vnode(vn.clone()))
     }
+
     #[allow(unused_variables)] // TODO: remove when implementing
     fn read(
         &self,
-        file: &VFile,
+        vn: &Arc<Vnode>,
         buf: &mut UioMut,
+        offset: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        todo!()
+        let read = self.file.read(buf, offset).map_err(ReadError::ReadFailed)?;
+
+        Ok(read)
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
     fn write(
         &self,
-        file: &VFile,
+        vn: &Arc<Vnode>,
         buf: &mut Uio,
+        offset: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         todo!()
@@ -196,7 +199,7 @@ enum MkDirError {
     AlreadyExists,
 
     #[error("couldn't get vnode")]
-    GetVnodeFailed(#[source] GetVnodeError),
+    GetVnodeFailed(#[from] GetVnodeError),
 }
 
 impl From<std::io::Error> for MkDirError {
@@ -206,4 +209,11 @@ impl From<std::io::Error> for MkDirError {
             _ => MkDirError::CreateFailed(e),
         }
     }
+}
+
+#[derive(Debug, Error, Errno)]
+enum ReadError {
+    #[error("read failed")]
+    #[errno(EIO)]
+    ReadFailed(#[from] std::io::Error),
 }
