@@ -2,7 +2,8 @@ use crate::{
     budget::BudgetType,
     errno::Errno,
     fs::{
-        DefaultFileBackendError, FileBackend, PollEvents, Stat, TruncateLength, VFile, VFileFlags, VFileType,
+        DefaultFileBackendError, FileBackend, PollEvents, Stat, TruncateLength, VFile, VFileFlags,
+        VFileType,
     },
     process::{FileDesc, VThread},
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
