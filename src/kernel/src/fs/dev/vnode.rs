@@ -155,7 +155,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
                     None => todo!("devfs lookup with non-existent file"),
                 };
 
-                match self.fs.alloc_vnode(vn.mount(), parent) {
+                match self.fs.alloc_vnode(vn.mount(), item) {
                     Ok(v) => Ok(v),
                     Err(e) => Err(Box::new(LookupError::AllocVnodeFailed(e))),
                 }
@@ -179,7 +179,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         let Some(VnodeItem::Device(dev)) = item.as_ref() else {
             unreachable!();
         };
-      
+
         let sw = dev.sw();
 
         // Execute switch handler.

@@ -1,5 +1,6 @@
 use crate::fs::{
-    DefaultFileBackendError, FileBackend, IoCmd, Stat, PollEvents, TruncateLength, Uio, UioMut, VFile,
+    DefaultFileBackendError, FileBackend, IoCmd, PollEvents, Stat, TruncateLength, Uio, UioMut,
+    VFile,
 };
 use crate::ucred::Ucred;
 use crate::{
@@ -11,6 +12,8 @@ use macros::Errno;
 use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
+
+use super::{GetOptError, SetOptError, SockOpt};
 
 #[derive(Debug)]
 pub struct Socket {

@@ -1,8 +1,8 @@
 use crate::{
     errno::{Errno, EINVAL},
     fs::{
-        check_access, Access, AccessError, DefaultFileBackendError, FileBackend, IoCmd, Mode, PollEvents
-        OpenFlags, Stat, TruncateLength, Uio, UioMut, VFile, VFileFlags, VPathBuf,
+        check_access, Access, AccessError, DefaultFileBackendError, FileBackend, IoCmd, Mode,
+        OpenFlags, PollEvents, Stat, TruncateLength, Uio, UioMut, VFile, VFileFlags, VPathBuf,
     },
     memory::MemoryManager,
     process::VThread,
