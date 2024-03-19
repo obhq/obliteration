@@ -2,7 +2,7 @@ use super::dirent::Dirent;
 use super::{AllocVnodeError, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
-    check_access, Access, IoCmd, OpenFlags, RevokeFlags, VFile, Vnode, VnodeAttrs, VnodeItem,
+    check_access, Access, IoCmd, OpenFlags, RevokeFlags, VFileType, Vnode, VnodeAttrs, VnodeItem,
     VnodeType,
 };
 use crate::process::VThread;
@@ -166,12 +166,11 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     fn open(
         &self,
         vn: &Arc<Vnode>,
-        td: Option<&VThread>,
         mode: OpenFlags,
-        mut file: Option<&mut VFile>,
-    ) -> Result<(), Box<dyn Errno>> {
+        td: Option<&VThread>,
+    ) -> Result<VFileType, Box<dyn Errno>> {
         if !vn.is_character() {
-            return Ok(());
+            todo!()
         }
 
         // Not sure why FreeBSD check if vnode is VBLK because all of vnode here always be VCHR.
@@ -186,12 +185,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         sw.open()(&dev, mode, 0x2000, td)?;
 
         // Set file OP.
-        let file = match file {
-            Some(v) => v,
-            None => return Ok(()),
-        };
-
-        todo!()
+        Ok(VFileType::Device(dev.clone()))
     }
 
     fn revoke(&self, vn: &Arc<Vnode>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {

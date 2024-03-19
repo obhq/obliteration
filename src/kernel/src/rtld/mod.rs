@@ -467,12 +467,16 @@ impl RuntimeLinker {
 
     fn sys_dynlib_load_prx(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Check if application is a dynamic SELF.
-        let mut bin = td.proc().bin_mut();
-        let bin = bin.as_mut().ok_or(SysErr::Raw(EPERM))?;
+        let mut bin_guard = td.proc().bin_mut();
+        let bin = bin_guard.as_mut().ok_or(SysErr::Raw(EPERM))?;
+
+        let sdk_ver = bin.app().sdk_ver();
 
         if bin.app().file_info().is_none() {
             return Err(SysErr::Raw(EPERM));
         }
+
+        drop(bin_guard);
 
         // Not sure what is this. Maybe kernel only flags?
         let mut flags: u32 = i.args[1].try_into().unwrap();
@@ -550,8 +554,7 @@ impl RuntimeLinker {
             let resolver = SymbolResolver::new(
                 &mains,
                 &globals,
-                bin.app().sdk_ver() >= 0x5000000
-                    || self.flags.read().contains(LinkerFlags::HAS_ASAN),
+                sdk_ver >= 0x5000000 || self.flags.read().contains(LinkerFlags::HAS_ASAN),
             );
 
             self.init_dag(&md);
