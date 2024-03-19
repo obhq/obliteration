@@ -1,5 +1,5 @@
 use super::dirent::Dirent;
-use super::{alloc_vnode, AllocVnodeError, DevFs};
+use super::{AllocVnodeError, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
     check_access, Access, IoCmd, OpenFlags, RevokeFlags, VFile, Vnode, VnodeAttrs, VnodeItem,
@@ -140,7 +140,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
                     None => return Err(Box::new(LookupError::NoParent)),
                 };
 
-                match alloc_vnode(self.fs.clone(), vn.fs(), parent) {
+                match self.fs.alloc_vnode(vn.mount(), parent) {
                     Ok(v) => Ok(v),
                     Err(e) => Err(Box::new(LookupError::AllocVnodeFailed(e))),
                 }
@@ -155,7 +155,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
                     None => todo!("devfs lookup with non-existent file"),
                 };
 
-                match alloc_vnode(self.fs.clone(), vn.fs(), item) {
+                match self.fs.alloc_vnode(vn.mount(), item) {
                     Ok(v) => Ok(v),
                     Err(e) => Err(Box::new(LookupError::AllocVnodeFailed(e))),
                 }
@@ -179,17 +179,11 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         let Some(VnodeItem::Device(dev)) = item.as_ref() else {
             unreachable!();
         };
+
         let sw = dev.sw();
 
-        if file.is_none() && sw.fdopen().is_some() {
-            return Err(Box::new(OpenError::NeedFile));
-        }
-
         // Execute switch handler.
-        match sw.fdopen() {
-            Some(fdopen) => fdopen(&dev, mode, td, file.as_deref_mut())?,
-            None => sw.open().unwrap()(&dev, mode, 0x2000, td)?,
-        };
+        sw.open()(&dev, mode, 0x2000, td)?;
 
         // Set file OP.
         let file = match file {
@@ -197,13 +191,12 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             None => return Ok(()),
         };
 
-        // TODO: Implement remaining logics from the PS4.
-        Ok(())
+        todo!()
     }
 
     fn revoke(&self, vn: &Arc<Vnode>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
         // TODO: Implement this.
-        Ok(())
+        todo!()
     }
 }
 

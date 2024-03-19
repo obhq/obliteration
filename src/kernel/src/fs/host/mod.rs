@@ -1,7 +1,7 @@
 use self::file::{HostFile, HostId};
 use self::vnode::VnodeBackend;
 use super::{
-    Filesystem, FsConfig, Mount, MountFlags, MountOpt, MountOpts, MountSource, VPathBuf, Vnode,
+    Filesystem, Fs, FsConfig, Mount, MountFlags, MountOpt, MountOpts, MountSource, VPathBuf, Vnode,
     VnodeType,
 };
 use crate::errno::{Errno, EIO};
@@ -28,6 +28,7 @@ pub struct HostFs {
 }
 
 pub fn mount(
+    _: Option<&Arc<Fs>>,
     conf: &'static FsConfig,
     cred: &Arc<Ucred>,
     path: VPathBuf,
