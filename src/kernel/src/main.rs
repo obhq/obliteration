@@ -257,12 +257,45 @@ fn run() -> Result<(), KernelError> {
         return Err(KernelError::CreateDirectoryFailed(app, e));
     }
 
+    let system_component = "QXuNNl0Zhn";
+
+    let system_path = root.join(system_component).unwrap();
+
+    if let Err(e) = fs.mkdir(&system_path, 0o555, None) {
+        return Err(KernelError::CreateDirectoryFailed(system_path, e));
+    }
+
+    // TODO: Check permission of /mnt/sandbox/CUSAXXXXX_000/QXuNNl0Zhn on the PS4.
+    let common_path = system_path.join("common").unwrap();
+
+    if let Err(e) = fs.mkdir(&common_path, 0o555, None) {
+        return Err(KernelError::CreateDirectoryFailed(common_path, e));
+    }
+
+    // TODO: Check permission of /mnt/sandbox/CUSAXXXXX_000/QXuNNl0Zhn on the PS4.
+    let lib_path = system_path.join("lib").unwrap();
+
+    if let Err(e) = fs.mkdir(&lib_path, 0o555, None) {
+        return Err(KernelError::CreateDirectoryFailed(lib_path, e));
+    }
+
     // TODO: Get mount options from the PS4.
     let mut opts = MountOpts::new();
 
     opts.insert("fstype", "nullfs");
     opts.insert("fspath", app.clone());
     opts.insert("target", game);
+
+    if let Err(e) = fs.mount(opts, MountFlags::empty(), None) {
+        return Err(KernelError::MountFailed(app, e));
+    }
+
+    // TODO: Get mount options from the PS4.
+    let mut opts = MountOpts::new();
+
+    opts.insert("fstype", "nullfs");
+    opts.insert("fspath", system_path);
+    opts.insert("target", vpath!("/system").to_owned());
 
     if let Err(e) = fs.mount(opts, MountFlags::empty(), None) {
         return Err(KernelError::MountFailed(app, e));
@@ -354,7 +387,7 @@ fn run() -> Result<(), KernelError> {
         ProcType::BigApp,
         1, // See sys_budget_set on the PS4.
         root,
-        "QXuNNl0Zhn",
+        system_component,
         &mut syscalls,
     )?;
 
@@ -393,7 +426,13 @@ fn run() -> Result<(), KernelError> {
 
     // Preload libkernel.
     let mut flags = LoadFlags::UNK1;
-    let path = vpath!("/system/common/lib/libkernel.sprx");
+    let path = VPathBuf::new()
+        .join(system_component)
+        .unwrap()
+        .join("common")
+        .unwrap()
+        .join("lib")
+        .unwrap();
 
     if proc.budget_ptype() == ProcType::BigApp {
         flags |= LoadFlags::BIG_APP;
