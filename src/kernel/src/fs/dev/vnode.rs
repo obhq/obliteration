@@ -2,8 +2,8 @@ use super::dirent::Dirent;
 use super::{AllocVnodeError, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
-    check_access, Access, IoCmd, OpenFlags, RevokeFlags, Uio, UioMut, VFileType, Vnode, VnodeAttrs,
-    VnodeItem, VnodeType,
+    check_access, Access, IoCmd, OpenFlags, RevokeFlags, Uio, UioMut, VFile, VFileType, Vnode,
+    VnodeAttrs, VnodeItem, VnodeType,
 };
 use crate::process::VThread;
 use macros::Errno;
@@ -86,16 +86,22 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         }
 
         // Atomic get attributes.
-        let uid = dirent.uid();
-        let gid = dirent.gid();
-        let mode = dirent.mode();
+        let uid = *dirent.uid();
+        let gid = *dirent.gid();
+        let mode = *dirent.mode();
         let size = match vn.ty() {
             VnodeType::Directory(_) => 512,
             VnodeType::Link => todo!(), /* TODO: strlen(dirent.de_symlink) */
             _ => 0,
         };
 
-        todo!()
+        Ok(VnodeAttrs {
+            uid,
+            gid,
+            mode,
+            size,
+            fsid: 0,
+        })
     }
 
     fn ioctl(

@@ -41,7 +41,13 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             VnodeType::CharacterDevice => unreachable!(), // Character devices should only be in devfs.
         };
 
-        Ok(VnodeAttrs::new(Uid::ROOT, Gid::ROOT, mode, size, u32::MAX))
+        Ok(VnodeAttrs {
+            uid: Uid::ROOT,
+            gid: Gid::ROOT,
+            mode,
+            size,
+            fsid: u32::MAX,
+        })
     }
 
     fn ioctl(
