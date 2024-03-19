@@ -19,8 +19,7 @@ impl TtyManager {
         // Create /dev/console.
         let console = Arc::new(CdevSw::new(
             DriverFlags::from_bits_retain(0x80000004),
-            Some(Self::console_open),
-            None,
+            Self::console_open,
         ));
 
         let console = make_dev(
