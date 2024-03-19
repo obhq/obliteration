@@ -73,6 +73,7 @@ bitflags! {
 
 impl FileBackend for Socket {
     /// See soo_read on the PS4 for a reference.
+    /// TODO: are offsets relevant here?
     fn read(
         self: &Arc<Self>,
         _: &VFile,
@@ -85,11 +86,13 @@ impl FileBackend for Socket {
         Ok(read)
     }
 
+    /// See soo_write on the PS4 for a reference.
+    /// TODO: are offsets relevant here?
     fn write(
         self: &Arc<Self>,
         _: &VFile,
         buf: &mut Uio,
-        _: i64,
+        off: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         let written = match self.send(buf, td) {
@@ -103,6 +106,7 @@ impl FileBackend for Socket {
         Ok(written)
     }
 
+    /// See soo_ioctl on the PS4 for a reference.
     #[allow(unused_variables)] // TODO: remove when implementing
     fn ioctl(
         self: &Arc<Self>,
