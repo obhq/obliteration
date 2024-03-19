@@ -169,31 +169,22 @@ bitflags! {
 /// An implementation of `cdevsw` structure.
 #[derive(Debug)]
 pub struct CdevSw {
-    flags: DriverFlags,     // d_flags
-    open: Option<CdevOpen>, // d_open
-    fdopen: Option<CdevFd>, // d_fdopen
+    flags: DriverFlags, // d_flags
+    open: CdevOpen,     // d_open
 }
 
 impl CdevSw {
     /// See `prep_cdevsw` on the PS4 for a reference.
-    pub fn new(flags: DriverFlags, open: Option<CdevOpen>, fdopen: Option<CdevFd>) -> Self {
-        Self {
-            flags,
-            open,
-            fdopen,
-        }
+    pub fn new(flags: DriverFlags, open: CdevOpen) -> Self {
+        Self { flags, open }
     }
 
     pub fn flags(&self) -> DriverFlags {
         self.flags
     }
 
-    pub fn open(&self) -> Option<CdevOpen> {
+    pub fn open(&self) -> CdevOpen {
         self.open
-    }
-
-    pub fn fdopen(&self) -> Option<CdevFd> {
-        self.fdopen
     }
 }
 
@@ -207,12 +198,6 @@ bitflags! {
 
 pub type CdevOpen =
     fn(&Arc<CharacterDevice>, OpenFlags, i32, Option<&VThread>) -> Result<(), Box<dyn Errno>>;
-pub type CdevFd = fn(
-    &Arc<CharacterDevice>,
-    OpenFlags,
-    Option<&VThread>,
-    Option<&mut VFile>,
-) -> Result<(), Box<dyn Errno>>;
 
 /// An implementation of the `cdevsw` structure.
 pub(super) trait Device: Debug + Sync + Send + 'static {
