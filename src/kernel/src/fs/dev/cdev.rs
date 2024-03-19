@@ -201,12 +201,6 @@ bitflags! {
 
 pub type CdevOpen =
     fn(&Arc<CharacterDevice>, OpenFlags, i32, Option<&VThread>) -> Result<(), Box<dyn Errno>>;
-pub type CdevFd = fn(
-    &Arc<CharacterDevice>,
-    OpenFlags,
-    Option<&VThread>,
-    Option<&mut VFile>,
-) -> Result<(), Box<dyn Errno>>;
 
 /// An implementation of the `cdevsw` structure.
 pub(super) trait Device: Debug + Sync + Send + 'static {

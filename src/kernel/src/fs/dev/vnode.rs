@@ -185,17 +185,18 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         let Some(VnodeItem::Device(dev)) = item.as_ref() else {
             unreachable!();
         };
+
         let sw = dev.sw();
 
         // Execute switch handler.
-        sw.open()(&dev, flags, 0x2000, td)?;
+        sw.open()(&dev, mode, 0x2000, td)?;
 
         todo!()
     }
 
     fn revoke(&self, vn: &Arc<Vnode>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
         // TODO: Implement this.
-        Ok(())
+        todo!()
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
