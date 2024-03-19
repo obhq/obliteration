@@ -79,6 +79,7 @@ impl RuntimeLinker {
 
         sys.register(591, &ld, Self::sys_dynlib_dlsym);
         sys.register(592, &ld, Self::sys_dynlib_get_list);
+        sys.register(593, &ld, Self::sys_dynlib_get_info);
         sys.register(594, &ld, Self::sys_dynlib_load_prx);
         sys.register(596, &ld, Self::sys_dynlib_do_copy_relocations);
         sys.register(598, &ld, Self::sys_dynlib_get_proc_param);
