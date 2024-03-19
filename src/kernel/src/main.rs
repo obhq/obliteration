@@ -424,15 +424,17 @@ fn run() -> Result<(), KernelError> {
     writeln!(log, "Application   : {}", app.path()).unwrap();
     app.print(log);
 
-    // Preload libkernel.
-    let mut flags = LoadFlags::UNK1;
-    let path = VPathBuf::new()
+    let lib_path = VPathBuf::new()
         .join(system_component)
         .unwrap()
         .join("common")
         .unwrap()
         .join("lib")
         .unwrap();
+
+    // Preload libkernel.
+    let mut flags = LoadFlags::UNK1;
+    let path = lib_path.join("libkernel.sprx").unwrap();
 
     if proc.budget_ptype() == ProcType::BigApp {
         flags |= LoadFlags::BIG_APP;
@@ -450,7 +452,7 @@ fn run() -> Result<(), KernelError> {
     ld.set_kernel(libkernel);
 
     // Preload libSceLibcInternal.
-    let path = vpath!("/system/common/lib/libSceLibcInternal.sprx");
+    let path = lib_path.join("libSceLibcInternal.sprx").unwrap();
 
     info!("Loading {path}.");
 

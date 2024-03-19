@@ -193,7 +193,7 @@ impl Read for VFile {
 
         let mut uio = UioMut::from_single_vec(iovec);
 
-        let read = VFile::read(self, &mut uio, self.offset, None).unwrap_or_else(|_| todo!());
+        let read = VFile::read(self, &mut uio, self.offset, None).unwrap_or_else(|e| todo!());
 
         if let Ok(read) = TryInto::<i64>::try_into(read) {
             self.offset += read;
