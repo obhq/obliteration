@@ -65,9 +65,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             .getattr()
             .map_err(GetAttrError::GetAttrFromLowerFailed)?;
 
-        let fsid = vn.mount().stats().id()[0];
-
-        attr.set_fsid(fsid);
+        attr.fsid = vn.mount().stats().id()[0];
 
         Ok(attr)
     }

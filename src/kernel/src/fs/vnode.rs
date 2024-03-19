@@ -10,7 +10,6 @@ use crate::ucred::{Gid, Uid};
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use macros::Errno;
 use std::fmt::Debug;
-use std::hash::{Hash, Hasher};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Weak};
 use thiserror::Error;
@@ -325,39 +324,11 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
 /// An implementation of `vattr` struct.
 #[allow(dead_code)]
 pub struct VnodeAttrs {
-    uid: Uid,   // va_uid
-    gid: Gid,   // va_gid
-    mode: Mode, // va_mode
-    size: u64,  // va_size
-    fsid: u32,  // va_fsid
-}
-
-impl VnodeAttrs {
-    pub fn new(uid: Uid, gid: Gid, mode: Mode, size: u64, fsid: u32) -> Self {
-        Self {
-            uid,
-            gid,
-            mode,
-            size,
-            fsid,
-        }
-    }
-
-    pub fn uid(&self) -> Uid {
-        self.uid
-    }
-
-    pub fn gid(&self) -> Gid {
-        self.gid
-    }
-
-    pub fn mode(&self) -> Mode {
-        self.mode
-    }
-
-    pub fn set_fsid(&mut self, fsid: u32) {
-        self.fsid = fsid;
-    }
+    pub uid: Uid,   // va_uid
+    pub gid: Gid,   // va_gid
+    pub mode: Mode, // va_mode
+    pub size: u64,  // va_size
+    pub fsid: u32,  // va_fsid
 }
 
 /// Represents an error when [`DEFAULT_VNODEOPS`] fails.
