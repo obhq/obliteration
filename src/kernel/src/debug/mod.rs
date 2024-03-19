@@ -52,7 +52,7 @@ impl DebugManager {
         _: i32,
         _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        todo!()
+        Ok(())
     }
 }
 

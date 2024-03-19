@@ -128,6 +128,7 @@ impl FileBackend for CharacterDevice {
         todo!()
     }
 
+    /// An implementation of `devfs_ioctl_f` structure.
     #[allow(unused_variables)] // TODO: remove when implementing
     fn ioctl(
         self: &Arc<Self>,
@@ -135,7 +136,7 @@ impl FileBackend for CharacterDevice {
         cmd: IoCmd,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        todo!()
+        Ok(())
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing

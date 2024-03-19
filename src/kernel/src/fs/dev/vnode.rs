@@ -191,7 +191,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         // Execute switch handler.
         sw.open()(&dev, mode, 0x2000, td)?;
 
-        todo!()
+        Ok(VFileType::Device(dev.clone()))
     }
 
     fn revoke(&self, vn: &Arc<Vnode>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
