@@ -265,10 +265,10 @@ bitflags! {
 }
 
 #[repr(C)]
-struct MsgHdr {
+struct MsgHdr<'a> {
     name: *const u8,
     len: u32,
-    iovec: *const IoVec,
+    iovec: *const IoVec<'a>,
     iovec_len: u32,
     control: *const u8,
     control_len: u32,
