@@ -294,8 +294,8 @@ fn run() -> Result<(), KernelError> {
     let mut opts = MountOpts::new();
 
     opts.insert("fstype", "nullfs");
-    opts.insert("fspath", system_path);
-    opts.insert("target", vpath!("/system").to_owned());
+    opts.insert("fspath", lib_path);
+    opts.insert("target", vpath!("/system/common/lib").to_owned());
 
     if let Err(e) = fs.mount(opts, MountFlags::empty(), None) {
         return Err(KernelError::MountFailed(app, e));
