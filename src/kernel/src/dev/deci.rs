@@ -1,14 +1,30 @@
-use crate::fs::{CharacterDevice, Device, Uio, UioMut};
+use crate::fs::{CharacterDevice, Device, OpenFlags, Uio, UioMut};
 use crate::{errno::Errno, process::VThread};
 use std::sync::Arc;
 
 #[derive(Debug)]
-struct Deci {}
+pub struct Deci {}
+
+impl Deci {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 
 impl Device for Deci {
+    fn open(
+        &self,
+        dev: &Arc<CharacterDevice>,
+        mode: OpenFlags,
+        devtype: i32,
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+
     #[allow(unused_variables)] // TODO: remove when implementing
     fn read(
-        self: &Arc<Self>,
+        &self,
         dev: &Arc<CharacterDevice>,
         data: &mut UioMut,
         td: Option<&VThread>,
@@ -18,7 +34,7 @@ impl Device for Deci {
 
     #[allow(unused_variables)] // TODO: remove when implementing
     fn write(
-        self: &Arc<Self>,
+        &self,
         dev: &Arc<CharacterDevice>,
         data: &mut Uio,
         td: Option<&VThread>,

@@ -22,7 +22,7 @@ enum DmemContainer {
 
 impl Device for Dmem {
     fn ioctl(
-        self: &Arc<Self>,
+        &self,
         dev: &Arc<CharacterDevice>,
         cmd: IoCmd,
         td: &VThread,

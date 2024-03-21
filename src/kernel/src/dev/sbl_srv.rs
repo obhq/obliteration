@@ -11,7 +11,7 @@ struct SblSrv {}
 impl Device for SblSrv {
     #[allow(unused_variables)] // TODO: remove when implementing
     fn ioctl(
-        self: &Arc<Self>,
+        &self,
         dev: &Arc<CharacterDevice>,
         cmd: IoCmd,
         td: &VThread,

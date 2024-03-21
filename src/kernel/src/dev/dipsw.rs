@@ -11,7 +11,7 @@ struct Dipsw {}
 impl Device for Dipsw {
     #[allow(unused_variables)]
     fn ioctl(
-        self: &Arc<Self>,
+        &self,
         dev: &Arc<CharacterDevice>,
         cmd: IoCmd,
         td: &VThread,

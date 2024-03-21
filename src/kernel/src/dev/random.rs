@@ -11,7 +11,7 @@ struct Random {}
 impl Device for Random {
     #[allow(unused_variables)] // TODO: remove when implementing
     fn read(
-        self: &Arc<Self>,
+        &self,
         dev: &Arc<CharacterDevice>,
         data: &mut UioMut,
         td: Option<&VThread>,
@@ -21,7 +21,7 @@ impl Device for Random {
 
     #[allow(unused_variables)] // TODO: remove when implementing
     fn write(
-        self: &Arc<Self>,
+        &self,
         dev: &Arc<CharacterDevice>,
         data: &mut Uio,
         td: Option<&VThread>,
@@ -30,7 +30,7 @@ impl Device for Random {
     }
 
     fn ioctl(
-        self: &Arc<Self>,
+        &self,
         dev: &Arc<CharacterDevice>,
         cmd: IoCmd,
         _: &VThread,

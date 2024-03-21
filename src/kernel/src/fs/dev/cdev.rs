@@ -1,5 +1,4 @@
 use super::dirent::Dirent;
-use crate::dev;
 use crate::errno::Errno;
 use crate::errno::ENODEV;
 use crate::fs::Uio;
@@ -19,7 +18,7 @@ use thiserror::Error;
 /// An implementation of `cdev` and `cdev_priv` structures.
 #[derive(Debug)]
 pub struct CharacterDevice {
-    sw: Arc<CdevSw>,                           // si_devsw
+    driver: Box<dyn Device>,                   // si_devsw
     unit: i32,                                 // si_drv0
     name: String,                              // si_name
     uid: Uid,                                  // si_uid
@@ -38,7 +37,7 @@ pub struct CharacterDevice {
 impl CharacterDevice {
     /// See `devfs_alloc` on the PS4 for a reference.
     pub(super) fn new(
-        sw: &Arc<CdevSw>,
+        driver: impl Device,
         unit: i32,
         name: impl Into<String>,
         uid: Uid,
@@ -52,7 +51,7 @@ impl CharacterDevice {
         let now = TimeSpec::now();
 
         Self {
-            sw: sw.clone(),
+            driver: Box::new(driver),
             inode,
             unit,
             name: name.into(),
@@ -69,8 +68,8 @@ impl CharacterDevice {
         }
     }
 
-    pub fn sw(&self) -> &CdevSw {
-        self.sw.as_ref()
+    pub fn driver(&self) -> &dyn Device {
+        self.driver.as_ref()
     }
 
     pub fn name(&self) -> &str {
@@ -167,28 +166,6 @@ bitflags! {
     }
 }
 
-/// An implementation of `cdevsw` structure.
-#[derive(Debug)]
-pub struct CdevSw {
-    flags: DriverFlags, // d_flags
-    open: CdevOpen,     // d_open
-}
-
-impl CdevSw {
-    /// See `prep_cdevsw` on the PS4 for a reference.
-    pub fn new(flags: DriverFlags, open: CdevOpen) -> Self {
-        Self { flags, open }
-    }
-
-    pub fn flags(&self) -> DriverFlags {
-        self.flags
-    }
-
-    pub fn open(&self) -> CdevOpen {
-        self.open
-    }
-}
-
 bitflags! {
     /// Flags for [`CdevSw`].
     #[derive(Debug, Clone, Copy)]
@@ -203,8 +180,19 @@ pub type CdevOpen =
 /// An implementation of the `cdevsw` structure.
 pub trait Device: Debug + Sync + Send + 'static {
     #[allow(unused_variables)]
+    fn open(
+        &self,
+        dev: &Arc<CharacterDevice>,
+        mode: OpenFlags,
+        devtype: i32,
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        Ok(())
+    }
+
+    #[allow(unused_variables)]
     fn read(
-        self: &Arc<Self>,
+        &self,
         dev: &Arc<CharacterDevice>,
         data: &mut UioMut,
         td: Option<&VThread>,
@@ -214,7 +202,7 @@ pub trait Device: Debug + Sync + Send + 'static {
 
     #[allow(unused_variables)]
     fn write(
-        self: &Arc<Self>,
+        &self,
         dev: &Arc<CharacterDevice>,
         data: &mut Uio,
         td: Option<&VThread>,
@@ -224,7 +212,7 @@ pub trait Device: Debug + Sync + Send + 'static {
 
     #[allow(unused_variables)]
     fn ioctl(
-        self: &Arc<Self>,
+        &self,
         dev: &Arc<CharacterDevice>,
         cmd: IoCmd,
         td: &VThread,

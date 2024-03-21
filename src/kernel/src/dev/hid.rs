@@ -11,7 +11,7 @@ struct Hid {}
 impl Device for Hid {
     #[allow(unused_variables)] // TODO: remove when implementing
     fn read(
-        self: &Arc<Self>,
+        &self,
         dev: &Arc<CharacterDevice>,
         data: &mut UioMut,
         td: Option<&VThread>,
@@ -21,7 +21,7 @@ impl Device for Hid {
 
     #[allow(unused_variables)] // TODO: remove when implementing
     fn ioctl(
-        self: &Arc<Self>,
+        &self,
         dev: &Arc<CharacterDevice>,
         cmd: IoCmd,
         td: &VThread,

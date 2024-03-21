@@ -1,9 +1,6 @@
 use self::deci::DeciDev;
-use crate::errno::Errno;
-use crate::fs::{
-    make_dev, CdevSw, CharacterDevice, DriverFlags, MakeDev, MakeDevError, Mode, OpenFlags,
-};
-use crate::process::VThread;
+use crate::dev::Deci;
+use crate::fs::{make_dev, MakeDevError, MakeDevFlags, Mode};
 use crate::ucred::{Gid, Uid};
 use std::sync::Arc;
 use thiserror::Error;
@@ -22,21 +19,17 @@ impl DebugManager {
     pub fn new() -> Result<Arc<Self>, DebugManagerInitError> {
         // Create deci devices.
         let mut deci_devs = Vec::with_capacity(DeciDev::NAMES.len());
-        let sw = Arc::new(CdevSw::new(
-            DriverFlags::from_bits_retain(0x80080000),
-            Self::deci_open,
-        ));
 
         for name in DeciDev::NAMES {
             match make_dev(
-                &sw,
+                Deci::new(),
                 0,
                 name,
                 Uid::ROOT,
                 Gid::ROOT,
                 Mode::new(0o666).unwrap(),
                 None,
-                MakeDev::empty(),
+                MakeDevFlags::empty(),
             ) {
                 Ok(v) => deci_devs.push(DeciDev::new(name, v)),
                 Err(e) => return Err(DebugManagerInitError::CreateDeciFailed(name, e)),
@@ -44,15 +37,6 @@ impl DebugManager {
         }
 
         Ok(Arc::new(Self { deci_devs }))
-    }
-
-    fn deci_open(
-        _: &Arc<CharacterDevice>,
-        _: OpenFlags,
-        _: i32,
-        _: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
-        todo!()
     }
 }
 

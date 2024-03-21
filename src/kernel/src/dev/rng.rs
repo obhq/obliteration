@@ -10,7 +10,7 @@ struct Rng {}
 
 impl Device for Rng {
     fn ioctl(
-        self: &Arc<Self>,
+        &self,
         dev: &Arc<CharacterDevice>,
         cmd: IoCmd,
         _: &VThread,
