@@ -12,6 +12,7 @@ impl Deci {
 }
 
 impl Device for Deci {
+    #[allow(unused_variables)] // TODO: remove when implementing
     fn open(
         &self,
         dev: &Arc<CharacterDevice>,
