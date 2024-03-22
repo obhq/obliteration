@@ -49,7 +49,9 @@ impl HostFile {
         use windows_sys::Win32::System::Kernel::OBJ_CASE_INSENSITIVE;
 
         // Encode path name.
-        let path = path.as_ref();
+        let mut path_spec = String::from("\\??\\");
+        path_spec.push_str(path.as_ref().to_str().unwrap());
+        let path = std::path::Path::new(&path_spec);
         let mut path: Vec<u16> = path.as_os_str().encode_wide().collect();
         let len: u16 = (path.len() * 2).try_into().unwrap();
         let mut path = UNICODE_STRING {
