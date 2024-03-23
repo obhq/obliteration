@@ -1,6 +1,11 @@
-use crate::fs::{CharacterDevice, DeviceDriver, OpenFlags, Uio, UioMut};
+use crate::fs::{
+    make_dev, CharacterDevice, DeviceDriver, DriverFlags, MakeDevError, MakeDevFlags, Mode,
+    OpenFlags, Uio, UioMut,
+};
+use crate::ucred::{Gid, Uid};
 use crate::{errno::Errno, process::VThread};
 use std::sync::Arc;
+use thiserror::Error;
 
 #[derive(Debug)]
 pub struct Deci {}
@@ -42,4 +47,73 @@ impl DeviceDriver for Deci {
     ) -> Result<usize, Box<dyn Errno>> {
         todo!()
     }
+}
+
+/// Encapsulate a deci device (e.g. `deci_stdout`).
+#[allow(dead_code)]
+pub struct DeciDev {
+    name: &'static str,
+    dev: Arc<CharacterDevice>,
+}
+
+impl DeciDev {
+    pub const NAMES: [&'static str; 12] = [
+        "deci_stdout",
+        "deci_stderr",
+        "deci_tty2",
+        "deci_tty3",
+        "deci_tty4",
+        "deci_tty5",
+        "deci_tty6",
+        "deci_tty7",
+        "deci_ttya0",
+        "deci_ttyb0",
+        "deci_ttyc0",
+        "deci_coredump",
+    ];
+
+    pub(super) fn new(name: &'static str, dev: Arc<CharacterDevice>) -> Self {
+        Self { name, dev }
+    }
+}
+
+/// An implementation of debugging functionalities of the PS4 (not Obliteration debugging).
+///
+/// It is unclear what deci is stand for. Probably Debug Console Interface?
+#[allow(dead_code)]
+pub struct DebugManager {
+    deci_devs: Vec<DeciDev>, // decitty_XX
+}
+
+impl DebugManager {
+    pub fn new() -> Result<Arc<Self>, DebugManagerInitError> {
+        // Create deci devices.
+        let mut deci_devs = Vec::with_capacity(DeciDev::NAMES.len());
+
+        for name in DeciDev::NAMES {
+            match make_dev(
+                Deci::new(),
+                DriverFlags::from_bits_retain(0x80080000),
+                0,
+                name,
+                Uid::ROOT,
+                Gid::ROOT,
+                Mode::new(0o666).unwrap(),
+                None,
+                MakeDevFlags::empty(),
+            ) {
+                Ok(v) => deci_devs.push(DeciDev::new(name, v)),
+                Err(e) => return Err(DebugManagerInitError::CreateDeciFailed(name, e)),
+            }
+        }
+
+        Ok(Arc::new(Self { deci_devs }))
+    }
+}
+
+/// Represents an error when [`DebugManager`] is failed to initialize.
+#[derive(Debug, Error)]
+pub enum DebugManagerInitError {
+    #[error("couldn't create {0}")]
+    CreateDeciFailed(&'static str, #[source] MakeDevError),
 }
