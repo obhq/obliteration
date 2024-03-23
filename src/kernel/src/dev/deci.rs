@@ -8,15 +8,15 @@ use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Debug)]
-pub struct Deci {}
+struct Driver {}
 
-impl Deci {
+impl Driver {
     pub fn new() -> Self {
         Self {}
     }
 }
 
-impl DeviceDriver for Deci {
+impl DeviceDriver for Driver {
     #[allow(unused_variables)] // TODO: remove when implementing
     fn open(
         &self,
@@ -49,14 +49,14 @@ impl DeviceDriver for Deci {
     }
 }
 
-/// Encapsulate a deci device (e.g. `deci_stdout`).
+/// Encapsulates a deci device (e.g. `deci_stdout`).
 #[allow(dead_code)]
-pub struct DeciDev {
+pub struct Deci {
     name: &'static str,
     dev: Arc<CharacterDevice>,
 }
 
-impl DeciDev {
+impl Deci {
     pub const NAMES: [&'static str; 12] = [
         "deci_stdout",
         "deci_stderr",
@@ -82,17 +82,17 @@ impl DeciDev {
 /// It is unclear what deci is stand for. Probably Debug Console Interface?
 #[allow(dead_code)]
 pub struct DebugManager {
-    deci_devs: Vec<DeciDev>, // decitty_XX
+    deci_devs: Vec<Deci>, // decitty_XX
 }
 
 impl DebugManager {
     pub fn new() -> Result<Arc<Self>, DebugManagerInitError> {
         // Create deci devices.
-        let mut deci_devs = Vec::with_capacity(DeciDev::NAMES.len());
+        let mut deci_devs = Vec::with_capacity(Deci::NAMES.len());
 
-        for name in DeciDev::NAMES {
+        for name in Deci::NAMES {
             match make_dev(
-                Deci::new(),
+                Driver::new(),
                 DriverFlags::from_bits_retain(0x80080000),
                 0,
                 name,
@@ -102,7 +102,7 @@ impl DebugManager {
                 None,
                 MakeDevFlags::empty(),
             ) {
-                Ok(v) => deci_devs.push(DeciDev::new(name, v)),
+                Ok(v) => deci_devs.push(Deci::new(name, v)),
                 Err(e) => return Err(DebugManagerInitError::CreateDeciFailed(name, e)),
             }
         }
