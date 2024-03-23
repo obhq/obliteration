@@ -44,14 +44,16 @@ impl HostFile {
             RtlNtStatusToDosError, STATUS_SUCCESS, UNICODE_STRING,
         };
         use windows_sys::Win32::Storage::FileSystem::{
-            FILE_READ_ATTRIBUTES, FILE_READ_EA, FILE_SHARE_READ, FILE_SHARE_WRITE, READ_CONTROL,
+            FILE_READ_ATTRIBUTES, FILE_READ_EA, FILE_SHARE_READ, FILE_SHARE_WRITE,
         };
         use windows_sys::Win32::System::Kernel::OBJ_CASE_INSENSITIVE;
 
         // Encode path name.
-        let path_spec = format!("\\??\\{}", path.as_ref().to_str().unwrap());
-        let path = std::path::PathBuf::from(path_spec);
-        let mut path: Vec<u16> = path.as_os_str().encode_wide().collect();
+        let path = path.as_ref();
+        let mut path: Vec<u16> = [0x5Cu16, 0x3F, 0x3F, 0x5C] // Prefix path with "\??\".
+            .into_iter()
+            .chain(path.as_os_str().encode_wide())
+            .collect();
         let len: u16 = (path.len() * 2).try_into().unwrap();
         let mut path = UNICODE_STRING {
             Length: len,
@@ -75,7 +77,7 @@ impl HostFile {
         let err = unsafe {
             NtCreateFile(
                 &mut handle,
-                FILE_READ_ATTRIBUTES | FILE_READ_EA | READ_CONTROL,
+                FILE_READ_ATTRIBUTES | FILE_READ_EA,
                 &mut attr,
                 &mut status,
                 null_mut(),
@@ -186,21 +188,87 @@ impl HostFile {
 
     #[cfg(unix)]
     fn raw_mkdir(parent: RawFile, name: &str, mode: u32) -> Result<RawFile, Error> {
-        use libc::{mkdirat, mode_t};
+        use libc::mkdirat;
         use std::ffi::CString;
 
         let c_name = CString::new(name).unwrap();
 
-        if unsafe { mkdirat(parent, c_name.as_ptr(), (mode & 0o777) as mode_t) } < 0 {
+        if unsafe { mkdirat(parent, c_name.as_ptr(), 0o777) } < 0 {
             Err(Error::last_os_error())
         } else {
+            // TODO: Store mode somewhere that work on any FS. We should not use mode on the host
+            // for this because it can be lose when the user restore their files from the backup.
             Self::raw_open(parent, name)
         }
     }
 
     #[cfg(windows)]
     fn raw_mkdir(parent: RawFile, name: &str, mode: u32) -> Result<RawFile, Error> {
-        todo!()
+        use std::mem::size_of;
+        use std::ptr::null_mut;
+        use windows_sys::Wdk::Foundation::OBJECT_ATTRIBUTES;
+        use windows_sys::Wdk::Storage::FileSystem::{
+            NtCreateFile, FILE_CREATE, FILE_DIRECTORY_FILE,
+        };
+        use windows_sys::Win32::Foundation::{
+            RtlNtStatusToDosError, STATUS_SUCCESS, UNICODE_STRING,
+        };
+        use windows_sys::Win32::Storage::FileSystem::{
+            FILE_ATTRIBUTE_DIRECTORY, FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES, FILE_READ_EA,
+            FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_TRAVERSE, FILE_WRITE_ATTRIBUTES, FILE_WRITE_EA,
+        };
+
+        // Encode name.
+        let mut name: Vec<u16> = name.encode_utf16().collect();
+        let len: u16 = (name.len() * 2).try_into().unwrap();
+        let mut name = UNICODE_STRING {
+            Length: len,
+            MaximumLength: len,
+            Buffer: name.as_mut_ptr(),
+        };
+
+        // Setup OBJECT_ATTRIBUTES.
+        let mut attr = OBJECT_ATTRIBUTES {
+            Length: size_of::<OBJECT_ATTRIBUTES>().try_into().unwrap(),
+            RootDirectory: parent,
+            ObjectName: &mut name,
+            Attributes: 0,
+            SecurityDescriptor: null_mut(),
+            SecurityQualityOfService: null_mut(),
+        };
+
+        // Create.
+        let mut handle = 0;
+        let mut status = unsafe { zeroed() };
+        let error = unsafe {
+            NtCreateFile(
+                &mut handle,
+                FILE_READ_ATTRIBUTES
+                    | FILE_READ_EA
+                    | FILE_WRITE_ATTRIBUTES
+                    | FILE_WRITE_EA
+                    | FILE_LIST_DIRECTORY
+                    | FILE_TRAVERSE,
+                &mut attr,
+                &mut status,
+                null_mut(),
+                FILE_ATTRIBUTE_DIRECTORY,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                FILE_CREATE,
+                FILE_DIRECTORY_FILE,
+                null_mut(),
+                0,
+            )
+        };
+
+        if error == STATUS_SUCCESS {
+            // TODO: Store mode somewhere that work on any FS.
+            Ok(handle)
+        } else {
+            Err(unsafe {
+                Error::from_raw_os_error(RtlNtStatusToDosError(error).try_into().unwrap())
+            })
+        }
     }
 
     #[cfg(unix)]
