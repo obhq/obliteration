@@ -7,65 +7,17 @@ use param::Param;
 use sha2::Digest;
 use std::convert::Infallible;
 use std::error::Error;
-use std::ffi::{c_void, CStr, CString};
+use std::ffi::{c_void, CString};
 use std::fmt::{Display, Formatter};
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::{Cursor, Read, Write};
 use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
-use std::ptr::null_mut;
 use thiserror::Error;
 
 pub mod entry;
 pub mod header;
 pub mod keys;
-
-#[no_mangle]
-pub unsafe extern "C" fn pkg_open(file: *const c_char, error: *mut *mut error::Error) -> *mut Pkg {
-    let path = CStr::from_ptr(file);
-    let pkg = match Pkg::open(path.to_str().unwrap()) {
-        Ok(v) => Box::new(v),
-        Err(e) => {
-            *error = error::Error::new(e);
-            return null_mut();
-        }
-    };
-
-    Box::into_raw(pkg)
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn pkg_close(pkg: *mut Pkg) {
-    drop(Box::from_raw(pkg));
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn pkg_get_param(pkg: &Pkg, error: *mut *mut error::Error) -> *mut Param {
-    let param = match pkg.get_param() {
-        Ok(v) => Box::new(v),
-        Err(e) => {
-            *error = error::Error::new(e);
-            return null_mut();
-        }
-    };
-
-    Box::into_raw(param)
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn pkg_extract(
-    pkg: &Pkg,
-    dir: *const c_char,
-    status: extern "C" fn(*const c_char, u64, u64, ud: *mut c_void),
-    ud: *mut c_void,
-) -> *mut error::Error {
-    let dir = CStr::from_ptr(dir);
-
-    match pkg.extract(dir.to_str().unwrap(), status, ud) {
-        Ok(_) => null_mut(),
-        Err(e) => error::Error::new(e),
-    }
-}
 
 // https://www.psdevwiki.com/ps4/Package_Files
 pub struct Pkg {
@@ -127,7 +79,7 @@ impl Pkg {
     pub fn extract(
         &self,
         dir: impl AsRef<Path>,
-        status: extern "C" fn(*const c_char, u64, u64, ud: *mut c_void),
+        status: extern "C" fn(*const c_char, usize, usize, *mut c_void),
         ud: *mut c_void,
     ) -> Result<(), ExtractError> {
         let dir = dir.as_ref();
@@ -141,7 +93,7 @@ impl Pkg {
     fn extract_entries(
         &self,
         dir: impl AsRef<Path>,
-        status: extern "C" fn(*const c_char, u64, u64, ud: *mut c_void),
+        status: extern "C" fn(*const c_char, usize, usize, *mut c_void),
         ud: *mut c_void,
     ) -> Result<(), ExtractError> {
         for num in 0..self.header.entry_count() {
@@ -182,7 +134,7 @@ impl Pkg {
             // Report status.
             let name = CString::new(path.to_string_lossy().as_ref()).unwrap();
 
-            status(name.as_ptr(), size as u64, 0, ud);
+            status(name.as_ptr(), num, self.header.entry_count(), ud);
 
             // Create a directory for destination file.
             let dir = path.parent().unwrap();
@@ -205,9 +157,13 @@ impl Pkg {
             } else if let Err(e) = file.write_all(data) {
                 return Err(ExtractError::WriteEntryFailed(path, e));
             }
+        }
 
-            // Report status.
-            status(name.as_ptr(), size as u64, size as u64, ud);
+        // Report completion.
+        if self.header.entry_count() != 0 {
+            let total = self.header.entry_count();
+
+            status(c"Entries extraction completed".as_ptr(), total, total, ud);
         }
 
         Ok(())
@@ -216,7 +172,7 @@ impl Pkg {
     fn extract_pfs(
         &self,
         dir: impl AsRef<Path>,
-        status: extern "C" fn(*const c_char, u64, u64, ud: *mut c_void),
+        status: extern "C" fn(*const c_char, usize, usize, *mut c_void),
         ud: *mut c_void,
     ) -> Result<(), ExtractError> {
         use pfs::directory::Item;
@@ -231,7 +187,7 @@ impl Pkg {
 
         // Open outer PFS.
         let mut outer = match pfs::open(Cursor::new(outer), Some(&self.ekpfs)) {
-            Ok(v) => match v.open() {
+            Ok(v) => match v.root().open() {
                 Ok(v) => v,
                 Err(e) => return Err(ExtractError::OpenOuterSuperRootFailed(e)),
             },
@@ -256,38 +212,56 @@ impl Pkg {
         };
 
         // Open inner PFS.
-        let mut inner = if inner.is_compressed() {
+        let inner = if inner.is_compressed() {
             let pfsc = match pfs::pfsc::Reader::open(inner) {
                 Ok(v) => v,
                 Err(e) => return Err(ExtractError::CreateInnerDecompressorFailed(e)),
             };
 
             match pfs::open(pfsc, None) {
-                Ok(v) => match v.open() {
-                    Ok(v) => v,
-                    Err(e) => return Err(ExtractError::OpenInnerSuperRootFailed(e)),
-                },
+                Ok(v) => v,
                 Err(e) => return Err(ExtractError::OpenInnerFailed(e)),
             }
         } else {
             match pfs::open(inner, None) {
-                Ok(v) => match v.open() {
-                    Ok(v) => v,
-                    Err(e) => return Err(ExtractError::OpenInnerSuperRootFailed(e)),
-                },
+                Ok(v) => v,
                 Err(e) => return Err(ExtractError::OpenInnerFailed(e)),
             }
         };
 
+        // Open inner root.
+        let mut inodes = inner.inodes();
+        let mut root = match inner.root().open() {
+            Ok(v) => v,
+            Err(e) => return Err(ExtractError::OpenInnerSuperRootFailed(e)),
+        };
+
+        inodes -= 1; // Exclude root.
+        inodes -= root.len(); // Exclude top-level items.
+
         // Open inner uroot directory.
-        let uroot = match inner.take(b"uroot") {
+        let uroot = match root.take(b"uroot") {
             Some(Item::Directory(v)) => v,
             Some(Item::File(_)) => return Err(ExtractError::NoInnerUroot),
             None => return Err(ExtractError::NoInnerUroot),
         };
 
         // Extract inner uroot.
-        self.extract_directory(Vec::new(), uroot, dir, status, ud)
+        let mut progress = 0;
+
+        self.extract_directory(Vec::new(), uroot, dir, &mut |path| {
+            let path = CString::new(path.to_string_lossy().into_owned()).unwrap();
+
+            status(path.as_ptr(), progress, inodes, ud);
+            progress += 1;
+        })?;
+
+        // Report completion.
+        if progress != 0 {
+            status(c"PFS extraction completed".as_ptr(), inodes, inodes, ud);
+        }
+
+        Ok(())
     }
 
     fn extract_directory(
@@ -295,8 +269,7 @@ impl Pkg {
         path: Vec<&[u8]>,
         dir: pfs::directory::Directory,
         output: impl AsRef<Path>,
-        status: extern "C" fn(*const c_char, u64, u64, ud: *mut c_void),
-        ud: *mut c_void,
+        status: &mut impl FnMut(&Path),
     ) -> Result<(), ExtractError> {
         // Open PFS directory.
         let items = match dir.open() {
@@ -352,12 +325,14 @@ impl Pkg {
                     };
 
                     // Create output directory.
+                    status(&output);
+
                     if let Err(e) = create_dir_all(&output) {
                         return Err(ExtractError::CreateDirectoryFailed(output, e));
                     }
 
                     // Extract files.
-                    self.extract_directory(path, i, &output, status, ud)?;
+                    self.extract_directory(path, i, &output, status)?;
 
                     meta
                 }
@@ -377,11 +352,7 @@ impl Pkg {
                         gid: file.gid(),
                     };
 
-                    // Report initial status.
-                    let size = file.len();
-                    let status_name = CString::new(name).unwrap();
-
-                    status(status_name.as_ptr(), size, 0, ud);
+                    status(&output);
 
                     // Open destination file.
                     let mut dest = match OpenOptions::new()
@@ -394,8 +365,6 @@ impl Pkg {
                     };
 
                     // Copy.
-                    let mut written = 0u64;
-
                     loop {
                         // Read source.
                         let read = match file.read(&mut buffer) {
@@ -420,11 +389,6 @@ impl Pkg {
                         if let Err(e) = dest.write_all(&buffer[..read]) {
                             return Err(ExtractError::WriteFileFailed(output, e));
                         }
-
-                        written += read as u64; // Buffer size just 32768.
-
-                        // Update status.
-                        status(status_name.as_ptr(), size, written, ud);
                     }
 
                     meta
