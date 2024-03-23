@@ -16,7 +16,7 @@ pub mod image;
 pub mod inode;
 pub mod pfsc;
 
-pub fn open<'a, I>(mut image: I, ekpfs: Option<&[u8]>) -> Result<Directory<'a>, OpenError>
+pub fn open<'a, I>(mut image: I, ekpfs: Option<&[u8]>) -> Result<Rc<Pfs<'a>>, OpenError>
 where
     I: Read + Seek + 'a,
 {
@@ -126,19 +126,28 @@ where
         return Err(OpenError::InvalidSuperRoot);
     }
 
-    // Construct super-root.
-    let pfs = Pfs {
+    Ok(Rc::new(Pfs {
         image: Mutex::new(image),
         inodes,
-    };
-
-    Ok(Directory::new(Rc::new(pfs), super_root))
+        root: super_root,
+    }))
 }
 
 /// Represents a loaded PFS.
-pub(crate) struct Pfs<'a> {
+pub struct Pfs<'a> {
     image: Mutex<Box<dyn Image + 'a>>,
     inodes: Vec<Inode>,
+    root: usize,
+}
+
+impl<'a> Pfs<'a> {
+    pub fn inodes(&self) -> usize {
+        self.inodes.len()
+    }
+
+    pub fn root(self: &Rc<Self>) -> Directory<'a> {
+        Directory::new(self.clone(), self.root)
+    }
 }
 
 /// Encapsulate a PFS image.

@@ -1,11 +1,11 @@
 #include "main_window.hpp"
 #include "app_data.hpp"
+#include "core.hpp"
 #include "game_models.hpp"
 #include "game_settings.hpp"
 #include "game_settings_dialog.hpp"
 #include "log_formatter.hpp"
 #include "path.hpp"
-#include "pkg.hpp"
 #include "progress_dialog.hpp"
 #include "settings.hpp"
 #include "string.hpp"
@@ -317,34 +317,16 @@ void MainWindow::installPkg()
     // Extract items.
     progress.setWindowTitle(title);
 
-    error = pkg_extract(pkg, directory.c_str(), [](const char *name, std::uint64_t total, std::uint64_t written, void *ud) {
-        auto toProgress = [total](std::uint64_t v) -> int {
-            if (total >= 1024UL*1024UL*1024UL*1024UL) { // >= 1TB
-                return v / (1024UL*1024UL*1024UL*10UL); // 10GB step.
-            } else if (total >= 1024UL*1024UL*1024UL*100UL) { // >= 100GB
-                return v / (1024UL*1024UL*1024UL); // 1GB step.
-            } else if (total >= 1024UL*1024UL*1024UL*10UL) { // >= 10GB
-                return v / (1024UL*1024UL*100UL); // 100MB step.
-            } else if (total >= 1024UL*1024UL*1024UL) { // >= 1GB
-                return v / (1024UL*1024UL*10UL); // 10MB step.
-            } else if (total >= 1024UL*1024UL*100UL) { // >= 100MB
-                return v / (1024UL*1024UL);// 1MB step.
-            } else {
-                return v;
-            }
-        };
-
+    error = pkg_extract(pkg, directory.c_str(), [](const char *status, std::size_t current, std::size_t total, void *ud) {
         auto progress = reinterpret_cast<ProgressDialog *>(ud);
-        auto max = toProgress(total);
-        auto value = toProgress(written);
-        auto label = QString("Installing %1...").arg(name);
 
-        if (progress->statusText() != label) {
-            progress->setStatusText(label);
-            progress->setValue(0);
-            progress->setMaximum(max);
+        progress->setStatusText(status);
+
+        if (current) {
+            progress->setValue(static_cast<int>(current));
         } else {
-            progress->setValue(value == max && written != total ? value - 1 : value);
+            progress->setValue(0);
+            progress->setMaximum(static_cast<int>(total));
         }
     }, &progress);
 
