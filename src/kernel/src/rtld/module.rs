@@ -39,6 +39,7 @@ pub struct Module {
     needed: Vec<NeededModule>,
     modules: Vec<ModuleInfo>,
     libraries: Vec<LibraryInfo>,
+    fingerprint: [u8; 20],
     memory: Memory,
     relocated: Gutex<Vec<Option<Relocated>>>,
     file_info: Option<FileInfo>,
@@ -179,6 +180,7 @@ impl Module {
             needed: Vec::new(),
             modules: Vec::new(),
             libraries: Vec::new(),
+            fingerprint: [0; 20],
             memory,
             relocated: gg.spawn(Vec::new()),
             file_info: None,
@@ -280,6 +282,10 @@ impl Module {
 
     pub fn libraries(&self) -> &[LibraryInfo] {
         self.libraries.as_ref()
+    }
+
+    pub fn fingerprint(&self) -> [u8; 20] {
+        self.fingerprint
     }
 
     pub fn memory(&self) -> &Memory {
@@ -540,6 +546,8 @@ impl Module {
     /// See `digest_dynamic` on the PS4 for a reference.
     fn digest_dynamic(&mut self, base: usize, info: &FileInfo) -> Result<(), MapError> {
         // TODO: Implement the remaining tags.
+        let mut fingerprint_offset = None;
+
         for (i, (tag, value)) in info.dynamic().enumerate() {
             match tag {
                 DynamicTag::DT_NULL => break,
@@ -569,6 +577,9 @@ impl Module {
                 DynamicTag::DT_SONAME => self.digest_soname(info, i, value)?,
                 DynamicTag::DT_TEXTREL => *self.flags.get_mut() |= ModuleFlags::TEXT_REL,
                 DynamicTag::DT_FLAGS => self.digest_flags(value)?,
+                DynamicTag::DT_SCE_FINGERPRINT => {
+                    fingerprint_offset = Some(u64::from_le_bytes(value) as usize)
+                }
                 DynamicTag::DT_SCE_MODULE_INFO | DynamicTag::DT_SCE_NEEDED_MODULE => {
                     self.digest_module_info(info, i, value)?;
                 }
@@ -578,6 +589,8 @@ impl Module {
                 _ => continue,
             }
         }
+
+        self.digest_fingerprint(info, fingerprint_offset.unwrap_or(0));
 
         Ok(())
     }
@@ -633,6 +646,12 @@ impl Module {
         }
 
         Ok(())
+    }
+
+    fn digest_fingerprint(&mut self, info: &FileInfo, offset: usize) {
+        let fingerprint = info.read_fingerprint(offset);
+
+        self.fingerprint = fingerprint;
     }
 
     fn digest_module_info(

@@ -336,6 +336,10 @@ impl<I: Read + Seek> Elf<I> {
         self.programs.as_slice()
     }
 
+    pub fn relro(&self) -> Option<usize> {
+        self.relro
+    }
+
     pub fn dynamic(&self) -> Option<usize> {
         self.dynamic
     }
