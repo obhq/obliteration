@@ -180,10 +180,8 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             unreachable!();
         };
 
-        let driver = dev.driver();
-
         // Execute switch handler.
-        driver.open(&dev, mode, 0x2000, td)?;
+        dev.open(mode, 0x2000, td)?;
 
         // Set file OP.
         let Some(file) = file else { return Ok(()) };

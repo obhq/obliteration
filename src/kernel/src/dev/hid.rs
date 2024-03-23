@@ -1,6 +1,6 @@
 use crate::{
     errno::Errno,
-    fs::{CharacterDevice, Device, IoCmd, UioMut},
+    fs::{CharacterDevice, DeviceDriver, IoCmd, UioMut},
     process::VThread,
 };
 use std::sync::Arc;
@@ -8,7 +8,7 @@ use std::sync::Arc;
 #[derive(Debug)]
 struct Hid {}
 
-impl Device for Hid {
+impl DeviceDriver for Hid {
     #[allow(unused_variables)] // TODO: remove when implementing
     fn read(
         &self,

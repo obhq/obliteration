@@ -1,6 +1,6 @@
 use crate::{
     errno::Errno,
-    fs::{CharacterDevice, Device, IoCmd},
+    fs::{CharacterDevice, DeviceDriver, IoCmd},
     process::VThread,
 };
 use std::sync::Arc;
@@ -8,7 +8,7 @@ use std::sync::Arc;
 #[derive(Debug)]
 struct Rng {}
 
-impl Device for Rng {
+impl DeviceDriver for Rng {
     fn ioctl(
         &self,
         dev: &Arc<CharacterDevice>,

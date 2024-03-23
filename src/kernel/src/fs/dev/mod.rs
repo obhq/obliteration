@@ -20,7 +20,7 @@ mod vnode;
 
 /// See `make_dev_credv` on the PS4 for a reference.
 pub fn make_dev(
-    driver: impl Device,
+    driver: impl DeviceDriver,
     unit: i32,
     name: impl Into<String>,
     uid: Uid,
@@ -45,7 +45,6 @@ pub fn make_dev(
 
     // Create cdev.
     let dev = Arc::new(CharacterDevice::new(
-        driver,
         unit,
         name,
         uid,
@@ -54,6 +53,7 @@ pub fn make_dev(
         cred,
         df,
         INODE.fetch_add(1, Ordering::Relaxed).try_into().unwrap(),
+        driver,
     ));
 
     DEVICES.write().unwrap().push(dev.clone());

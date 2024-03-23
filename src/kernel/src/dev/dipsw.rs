@@ -1,6 +1,6 @@
 use crate::{
     errno::Errno,
-    fs::{CharacterDevice, Device, IoCmd},
+    fs::{CharacterDevice, DeviceDriver, IoCmd},
     process::VThread,
 };
 use std::sync::Arc;
@@ -8,7 +8,7 @@ use std::sync::Arc;
 #[derive(Debug)]
 struct Dipsw {}
 
-impl Device for Dipsw {
+impl DeviceDriver for Dipsw {
     #[allow(unused_variables)]
     fn ioctl(
         &self,

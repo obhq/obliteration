@@ -1,6 +1,6 @@
 use crate::{
     errno::{Errno, EPERM},
-    fs::{CharacterDevice, Device, IoCmd},
+    fs::{CharacterDevice, DeviceDriver, IoCmd},
     process::VThread,
 };
 use macros::Errno;
@@ -20,7 +20,7 @@ enum DmemContainer {
     Two,
 }
 
-impl Device for Dmem {
+impl DeviceDriver for Dmem {
     fn ioctl(
         &self,
         dev: &Arc<CharacterDevice>,

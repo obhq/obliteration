@@ -1,6 +1,6 @@
 use crate::{
     errno::Errno,
-    fs::{CharacterDevice, Device, IoCmd},
+    fs::{CharacterDevice, DeviceDriver, IoCmd},
     process::VThread,
 };
 use std::sync::Arc;
@@ -8,7 +8,7 @@ use std::sync::Arc;
 #[derive(Debug)]
 struct SblSrv {}
 
-impl Device for SblSrv {
+impl DeviceDriver for SblSrv {
     #[allow(unused_variables)] // TODO: remove when implementing
     fn ioctl(
         &self,

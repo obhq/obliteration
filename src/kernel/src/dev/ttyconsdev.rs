@@ -1,4 +1,4 @@
-use crate::fs::{CharacterDevice, Device, IoCmd, OpenFlags, Uio, UioMut};
+use crate::fs::{CharacterDevice, DeviceDriver, IoCmd, OpenFlags, Uio, UioMut};
 use crate::{errno::Errno, process::VThread};
 use std::sync::Arc;
 
@@ -11,7 +11,7 @@ impl TtyConsDev {
     }
 }
 
-impl Device for TtyConsDev {
+impl DeviceDriver for TtyConsDev {
     fn open(
         &self,
         dev: &Arc<CharacterDevice>,

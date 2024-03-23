@@ -18,7 +18,7 @@ use thiserror::Error;
 /// An implementation of `cdev` and `cdev_priv` structures.
 #[derive(Debug)]
 pub struct CharacterDevice {
-    driver: Box<dyn Device>,                   // si_devsw
+    driver: Box<dyn DeviceDriver>,             // si_devsw
     unit: i32,                                 // si_drv0
     name: String,                              // si_name
     uid: Uid,                                  // si_uid
@@ -37,7 +37,6 @@ pub struct CharacterDevice {
 impl CharacterDevice {
     /// See `devfs_alloc` on the PS4 for a reference.
     pub(super) fn new(
-        driver: impl Device,
         unit: i32,
         name: impl Into<String>,
         uid: Uid,
@@ -46,6 +45,7 @@ impl CharacterDevice {
         cred: Option<Arc<Ucred>>,
         flags: DeviceFlags,
         inode: i32,
+        driver: impl DeviceDriver,
     ) -> Self {
         let gg = GutexGroup::new();
         let now = TimeSpec::now();
@@ -68,8 +68,13 @@ impl CharacterDevice {
         }
     }
 
-    pub fn driver(&self) -> &dyn Device {
-        self.driver.as_ref()
+    pub fn open(
+        self: &Arc<Self>,
+        mode: OpenFlags,
+        devtype: i32,
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        self.driver.open(self, mode, devtype, td)
     }
 
     pub fn name(&self) -> &str {
@@ -174,11 +179,8 @@ bitflags! {
     }
 }
 
-pub type CdevOpen =
-    fn(&Arc<CharacterDevice>, OpenFlags, i32, Option<&VThread>) -> Result<(), Box<dyn Errno>>;
-
 /// An implementation of the `cdevsw` structure.
-pub trait Device: Debug + Sync + Send + 'static {
+pub trait DeviceDriver: Debug + Sync + Send + 'static {
     #[allow(unused_variables)]
     fn open(
         &self,
@@ -217,7 +219,7 @@ pub trait Device: Debug + Sync + Send + 'static {
         cmd: IoCmd,
         td: &VThread,
     ) -> Result<(), Box<dyn Errno>> {
-        Err(Box::new(DefaultDeviceError::CommandNotSupported))
+        Err(Box::new(DefaultDeviceError::IoctlNotSupported))
     }
 }
 
@@ -233,5 +235,5 @@ pub enum DefaultDeviceError {
 
     #[error("ioctl not supported")]
     #[errno(ENODEV)]
-    CommandNotSupported,
+    IoctlNotSupported,
 }

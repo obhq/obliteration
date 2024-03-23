@@ -1,4 +1,4 @@
-use crate::fs::{CharacterDevice, Device, OpenFlags, Uio, UioMut};
+use crate::fs::{CharacterDevice, DeviceDriver, OpenFlags, Uio, UioMut};
 use crate::{errno::Errno, process::VThread};
 use std::sync::Arc;
 
@@ -11,7 +11,7 @@ impl Deci {
     }
 }
 
-impl Device for Deci {
+impl DeviceDriver for Deci {
     #[allow(unused_variables)] // TODO: remove when implementing
     fn open(
         &self,

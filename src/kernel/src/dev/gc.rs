@@ -1,6 +1,6 @@
 use crate::{
     errno::Errno,
-    fs::{CharacterDevice, Device, IoCmd, OpenFlags},
+    fs::{CharacterDevice, DeviceDriver, IoCmd, OpenFlags},
     process::VThread,
 };
 use std::sync::Arc;
@@ -8,7 +8,7 @@ use std::sync::Arc;
 #[derive(Debug)]
 struct Gc {}
 
-impl Device for Gc {
+impl DeviceDriver for Gc {
     #[allow(unused_variables)] // TODO: remove when implementing
     fn open(
         &self,
