@@ -8,15 +8,15 @@ use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Debug)]
-pub struct TtyConsDev {}
+pub struct TtyConsole {}
 
-impl TtyConsDev {
+impl TtyConsole {
     pub fn new() -> Self {
         Self {}
     }
 }
 
-impl DeviceDriver for TtyConsDev {
+impl DeviceDriver for TtyConsole {
     fn open(
         &self,
         dev: &Arc<CharacterDevice>,
@@ -70,7 +70,7 @@ impl TtyManager {
         // Create /dev/console.
 
         let console = make_dev(
-            TtyConsDev::new(),
+            TtyConsole::new(),
             DriverFlags::from_bits_retain(0x80000004),
             0,
             "console",

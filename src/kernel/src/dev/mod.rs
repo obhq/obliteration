@@ -6,7 +6,7 @@ pub use hid::*;
 pub use random::*;
 pub use rng::*;
 pub use sbl_srv::*;
-pub use ttyconsdev::*;
+pub use ttyconsole::*;
 
 mod deci;
 mod dipsw;
@@ -16,4 +16,4 @@ mod hid;
 mod random;
 mod rng;
 mod sbl_srv;
-mod ttyconsdev;
+mod ttyconsole;
