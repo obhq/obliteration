@@ -69,7 +69,7 @@ Obliteration supports only 4KB/8KB/16KB pages. Most people should not have any p
 
 ### Install Qt 6
 
-You need to install Qt 6 on your system before you proceed. The minimum version is 6.5.
+You need to install Qt 6 on your system before you proceed. The minimum version is 6.5. You also need to enable SVG supports when installing.
 
 #### Windows-specific requirements
 
@@ -118,11 +118,10 @@ You can use `-j` to enable parallel building (e.g. `cmake --build --preset PRESE
 
 Before proceeding, make sure the build preset you are using is `*-debug`. We recommend Visual Studio Code as a code editor with the following extensions:
 
-- [C/C++](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools)
-- [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
-- [CMake](https://marketplace.visualstudio.com/items?itemName=twxs.cmake)
-- [CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools)
-- [CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb)
+- CMake Tools ([Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools) | [Open VSX](https://open-vsx.org/extension/ms-vscode/cmake-tools))
+- clangd ([Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=llvm-vs-code-extensions.vscode-clangd) | [Open VSX](https://open-vsx.org/extension/llvm-vs-code-extensions/vscode-clangd))
+- rust-analyzer ([Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer) | [Open VSX](https://open-vsx.org/extension/rust-lang/rust-analyzer))
+- CodeLLDB ([Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb) | [Open VSX](https://open-vsx.org/extension/vadimcn/vscode-lldb))
 
 Then open this folder with VS Code. It will ask which CMake preset to use and you need to choose the same one that you were using when building. Everything should work out of the box (e.g. code completion, debugging, etc).
 
