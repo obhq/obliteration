@@ -167,6 +167,10 @@ pub struct Items<'a> {
 }
 
 impl<'a> Items<'a> {
+    pub fn len(&self) -> usize {
+        self.items.len()
+    }
+
     pub fn get(&self, name: &[u8]) -> Option<&Item<'a>> {
         self.items.get(name)
     }

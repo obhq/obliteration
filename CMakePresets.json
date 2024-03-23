@@ -3,7 +3,10 @@
   "configurePresets": [
     {
       "name": "default",
-      "binaryDir": "${sourceDir}/build"
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true
+      }
     },
     {
       "name": "windows",
