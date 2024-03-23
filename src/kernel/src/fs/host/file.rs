@@ -211,12 +211,14 @@ impl HostFile {
             NtCreateFile, FILE_CREATE, FILE_DIRECTORY_FILE,
         };
         use windows_sys::Win32::Foundation::{
-            RtlNtStatusToDosError, STATUS_SUCCESS, UNICODE_STRING,
+            RtlNtStatusToDosError, ERROR_FILE_EXISTS, STATUS_ACCESS_DENIED, STATUS_SUCCESS,
+            UNICODE_STRING,
         };
         use windows_sys::Win32::Storage::FileSystem::{
             FILE_ATTRIBUTE_DIRECTORY, FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES, FILE_READ_EA,
             FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_TRAVERSE, FILE_WRITE_ATTRIBUTES, FILE_WRITE_EA,
         };
+        use windows_sys::Win32::System::WindowsProgramming::FILE_EXISTS;
 
         // Encode name.
         let mut name: Vec<u16> = name.encode_utf16().collect();
@@ -264,6 +266,12 @@ impl HostFile {
         if error == STATUS_SUCCESS {
             // TODO: Store mode somewhere that work on any FS.
             Ok(handle)
+        } else if error == STATUS_ACCESS_DENIED
+            && TryInto::<u32>::try_into(status.Information).unwrap() == FILE_EXISTS
+        {
+            Err(Error::from_raw_os_error(
+                ERROR_FILE_EXISTS.try_into().unwrap(),
+            ))
         } else {
             Err(unsafe {
                 Error::from_raw_os_error(RtlNtStatusToDosError(error).try_into().unwrap())
