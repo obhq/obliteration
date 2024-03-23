@@ -1,4 +1,5 @@
 .DS_Store
+/.cache/
 /.flatpak-builder/
 /.kernel-debug
 /build/
