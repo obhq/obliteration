@@ -1,6 +1,7 @@
 use crate::arch::MachDep;
 use crate::budget::{Budget, BudgetManager, ProcType};
 use crate::debug::{DebugManager, DebugManagerInitError};
+use crate::dev::TtyManager;
 use crate::dmem::DmemManager;
 use crate::ee::native::NativeEngine;
 use crate::ee::EntryArg;
@@ -19,10 +20,10 @@ use crate::shm::SharedMemoryManager;
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
 use crate::time::TimeManager;
-use crate::tty::{TtyInitError, TtyManager};
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use crate::umtx::UmtxManager;
 use clap::Parser;
+use dev::TtyInitError;
 use llt::{OsThread, SpawnError};
 use macros::vpath;
 use param::Param;
@@ -61,7 +62,6 @@ mod signal;
 mod syscalls;
 mod sysctl;
 mod time;
-mod tty;
 mod ucred;
 mod umtx;
 
