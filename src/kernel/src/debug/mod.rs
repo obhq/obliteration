@@ -1,6 +1,6 @@
 use self::deci::DeciDev;
 use crate::dev::Deci;
-use crate::fs::{make_dev, MakeDevError, MakeDevFlags, Mode};
+use crate::fs::{make_dev, DriverFlags, MakeDevError, MakeDevFlags, Mode};
 use crate::ucred::{Gid, Uid};
 use std::sync::Arc;
 use thiserror::Error;
@@ -23,6 +23,7 @@ impl DebugManager {
         for name in DeciDev::NAMES {
             match make_dev(
                 Deci::new(),
+                DriverFlags::from_bits_retain(0x80080000),
                 0,
                 name,
                 Uid::ROOT,

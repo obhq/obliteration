@@ -21,6 +21,7 @@ mod vnode;
 /// See `make_dev_credv` on the PS4 for a reference.
 pub fn make_dev(
     driver: impl DeviceDriver,
+    driver_flags: DriverFlags,
     unit: i32,
     name: impl Into<String>,
     uid: Uid,
@@ -29,6 +30,10 @@ pub fn make_dev(
     cred: Option<Arc<Ucred>>,
     flags: MakeDevFlags,
 ) -> Result<Arc<CharacterDevice>, MakeDevError> {
+    if driver_flags.intersects(DriverFlags::D_NEEDMINOR) {
+        todo!("make_dev with D_NEEDMINOR");
+    }
+
     // TODO: Implement prep_devname.
     let name = name.into();
 

@@ -1,6 +1,6 @@
 use crate::fs::{
-    make_dev, CharacterDevice, DeviceDriver, IoCmd, MakeDevError, MakeDevFlags, Mode, OpenFlags,
-    Uio, UioMut,
+    make_dev, CharacterDevice, DeviceDriver, DriverFlags, IoCmd, MakeDevError, MakeDevFlags, Mode,
+    OpenFlags, Uio, UioMut,
 };
 use crate::ucred::{Gid, Uid};
 use crate::{errno::Errno, process::VThread};
@@ -71,6 +71,7 @@ impl TtyManager {
 
         let console = make_dev(
             TtyConsDev::new(),
+            DriverFlags::from_bits_retain(0x80000004),
             0,
             "console",
             Uid::ROOT,
