@@ -1,3 +1,4 @@
+use super::{GetOptError, SetOptError, SockOpt};
 use crate::fs::{
     DefaultFileBackendError, FileBackend, IoCmd, PollEvents, Stat, TruncateLength, Uio, UioMut,
     VFile,
@@ -12,8 +13,6 @@ use macros::Errno;
 use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
-
-use super::{GetOptError, SetOptError, SockOpt};
 
 #[derive(Debug)]
 pub struct Socket {
