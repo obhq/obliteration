@@ -13,7 +13,8 @@ impl DeviceDriver for Hid {
     fn read(
         &self,
         dev: &Arc<CharacterDevice>,
-        data: &mut UioMut,
+        uio: &mut UioMut,
+        off: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         todo!()

@@ -257,7 +257,7 @@ pub enum DefaultFileBackendError {
 
     #[error("ioctl is not supported")]
     #[errno(ENOTTY)]
-    IoctldNotSupported,
+    IoctlNotSupported,
 
     #[error("truncating is not supported")]
     #[errno(ENXIO)]

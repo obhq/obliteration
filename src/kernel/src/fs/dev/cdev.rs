@@ -197,7 +197,7 @@ pub trait DeviceDriver: Debug + Sync + Send + 'static {
     fn read(
         &self,
         dev: &Arc<CharacterDevice>,
-        data: &mut UioMut,
+        uio: &mut UioMut,
         off: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
@@ -207,7 +207,8 @@ pub trait DeviceDriver: Debug + Sync + Send + 'static {
     fn write(
         &self,
         dev: &Arc<CharacterDevice>,
-        data: &mut Uio,
+        uio: &mut Uio,
+        off: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         Err(Box::new(DefaultDeviceError::WriteNotSupported))
