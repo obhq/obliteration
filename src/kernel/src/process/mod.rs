@@ -34,6 +34,7 @@ pub use self::rlimit::*;
 pub use self::session::*;
 pub use self::signal::*;
 pub use self::thread::*;
+pub use self::vm::*;
 
 mod appinfo;
 mod binary;
@@ -44,19 +45,19 @@ mod rlimit;
 mod session;
 mod signal;
 mod thread;
+mod vm;
 
-/// An implementation of `proc` structure represent the main application process.
+/// An implementation of `proc` structure.
 ///
-/// Each process of the Obliteration Kernel encapsulates only one PS4 process. The reason we don't
-/// encapsulate multiple PS4 processes is because there is no way to emulate `fork` with 100%
-/// compatibility from the user-mode application. The PS4 also forbids the game process from creating
-/// a child process, so there's no reason for us to support this.
+/// Currently this struct represent the main application process. We will support multiple processes
+/// once we have migrated the PS4 code to run inside a virtual machine.
 #[derive(Debug)]
 pub struct VProc {
     id: NonZeroI32,                    // p_pid
     threads: Gutex<Vec<Arc<VThread>>>, // p_threads
     cred: Ucred,                       // p_ucred
     group: Gutex<Option<VProcGroup>>,  // p_pgrp
+    vm: Arc<MemoryManager>,            // p_vmspace
     sigacts: Gutex<SignalActs>,        // p_sigacts
     files: Arc<FileDesc>,              // p_fd
     system_path: String,               // p_randomized_path
@@ -98,6 +99,7 @@ impl VProc {
             threads: gg.spawn(Vec::new()),
             cred,
             group: gg.spawn(None),
+            vm: MemoryManager::new(sys)?,
             sigacts: gg.spawn(SignalActs::new()),
             files: FileDesc::new(root),
             system_path: system_path.into(),
@@ -137,6 +139,10 @@ impl VProc {
 
     pub fn cred(&self) -> &Ucred {
         &self.cred
+    }
+
+    pub fn vm(&self) -> &MemoryManager {
+        &self.vm
     }
 
     pub fn files(&self) -> &Arc<FileDesc> {
@@ -769,6 +775,9 @@ struct RtPrio {
 pub enum VProcInitError {
     #[error("failed to load limits")]
     FailedToLoadLimits(#[from] LoadLimitError),
+
+    #[error("virtual memory initialization failed")]
+    VmInitFailed(#[from] MemoryManagerError),
 }
 
 #[derive(Debug, Error, Errno)]

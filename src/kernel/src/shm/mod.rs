@@ -4,7 +4,6 @@ use crate::{
         check_access, Access, AccessError, DefaultFileBackendError, FileBackend, IoCmd, Mode,
         OpenFlags, PollEvents, Stat, TruncateLength, Uio, UioMut, VFile, VFileFlags, VPathBuf,
     },
-    memory::MemoryManager,
     process::VThread,
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
     ucred::{Gid, Ucred, Uid},
@@ -13,14 +12,11 @@ use macros::Errno;
 use std::{convert::Infallible, sync::Arc};
 use thiserror::Error;
 
-#[allow(dead_code)] // TODO: remove when used.
-pub struct SharedMemoryManager {
-    mm: Arc<MemoryManager>,
-}
+pub struct SharedMemoryManager {}
 
 impl SharedMemoryManager {
-    pub fn new(mm: &Arc<MemoryManager>, sys: &mut Syscalls) -> Arc<Self> {
-        let shm = Arc::new(Self { mm: mm.clone() });
+    pub fn new(sys: &mut Syscalls) -> Arc<Self> {
+        let shm = Arc::new(Self {});
 
         sys.register(482, &shm, Self::sys_shm_open);
         sys.register(483, &shm, Self::sys_shm_unlink);
