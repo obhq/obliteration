@@ -82,7 +82,7 @@ impl Hypervisor {
             ram.vm_addr().try_into().unwrap(),
             ram.len().try_into().unwrap(),
         )
-        .map_err(NewError::MapRamFailed)?;
+        .map_err(HypervisorError::MapRamFailed)?;
 
         Ok(Self { part, ram })
     }
