@@ -1,6 +1,6 @@
 use crate::NewError;
 use libc::{open, O_RDWR};
-use std::ffi::c_int;
+use std::ffi::{c_int, c_void};
 use std::io::Error;
 use std::os::fd::{AsRawFd, BorrowedFd, FromRawFd, OwnedFd};
 
@@ -46,8 +46,28 @@ pub fn create_vm(kvm: BorrowedFd) -> Result<OwnedFd, Error> {
     }
 }
 
+pub fn set_user_memory_region(
+    vm: BorrowedFd,
+    slot: u32,
+    addr: u64,
+    len: u64,
+    mem: *mut c_void,
+) -> Result<(), Error> {
+    match unsafe { kvm_set_user_memory_region(vm.as_raw_fd(), slot, addr, len, mem) } {
+        0 => Ok(()),
+        v => Err(Error::from_raw_os_error(v)),
+    }
+}
+
 extern "C" {
     fn kvm_check_version(kvm: c_int, compat: *mut bool) -> c_int;
     fn kvm_max_vcpus(kvm: c_int, max: *mut usize) -> c_int;
     fn kvm_create_vm(kvm: c_int, fd: *mut c_int) -> c_int;
+    fn kvm_set_user_memory_region(
+        vm: c_int,
+        slot: u32,
+        addr: u64,
+        len: u64,
+        mem: *mut c_void,
+    ) -> c_int;
 }
