@@ -1,8 +1,8 @@
 use crate::{
     errno::{Errno, EINVAL},
     fs::{
-        check_access, Access, AccessError, DefaultError, FileBackend, IoCmd, Mode, OpenFlags,
-        PollEvents, Stat, TruncateLength, Uio, UioMut, VFile, VFileFlags, VPathBuf,
+        check_access, Access, AccessError, DefaultFileBackendError, FileBackend, IoCmd, Mode,
+        OpenFlags, PollEvents, Stat, TruncateLength, Uio, UioMut, VFile, VFileFlags, VPathBuf,
     },
     memory::MemoryManager,
     process::VThread,
@@ -122,7 +122,7 @@ impl FileBackend for SharedMemory {
         buf: &mut UioMut,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        Err(Box::new(DefaultError::OperationNotSupported))
+        Err(Box::new(DefaultFileBackendError::OperationNotSupported))
     }
 
     #[allow(unused_variables)]
@@ -132,7 +132,7 @@ impl FileBackend for SharedMemory {
         buf: &mut Uio,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        Err(Box::new(DefaultError::OperationNotSupported))
+        Err(Box::new(DefaultFileBackendError::OperationNotSupported))
     }
 
     #[allow(unused_variables)] // remove when implementing

@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
 
-pub use self::dev::{make_dev, CdevSw, CharacterDevice, DriverFlags, MakeDev, MakeDevError};
+pub use self::dev::*;
 pub use self::dirent::*;
 pub use self::file::*;
 pub use self::ioctl::*;

@@ -179,10 +179,8 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             unreachable!();
         };
 
-        let sw = dev.sw();
-
         // Execute switch handler.
-        sw.open()(&dev, mode, 0x2000, td)?;
+        dev.open(mode, 0x2000, td)?;
 
         // Set file OP.
         Ok(VFileType::Device(dev.clone()))
