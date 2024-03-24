@@ -1,7 +1,5 @@
-use crate::NewError;
 use std::ffi::c_void;
 use std::mem::size_of;
-use std::num::NonZeroUsize;
 use windows_sys::core::HRESULT;
 use windows_sys::Win32::System::Hypervisor::{
     WHvCreatePartition, WHvDeletePartition, WHvMapGpaRange, WHvMapGpaRangeFlagExecute,
@@ -14,49 +12,32 @@ use windows_sys::Win32::System::Hypervisor::{
 pub struct Partition(WHV_PARTITION_HANDLE);
 
 impl Partition {
-    pub fn new(cpu: NonZeroUsize) -> Result<Self, NewError> {
-        let cpu = cpu
-            .get()
-            .try_into()
-            .map_err(|_| NewError::InvalidCpuCount)?;
-
-        // Create a partition.
+    pub fn new() -> Result<Self, HRESULT> {
         let mut handle = 0;
         let status = unsafe { WHvCreatePartition(&mut handle) };
 
         if status < 0 {
-            return Err(NewError::CreatePartitionFailed(status));
+            Err(status)
+        } else {
+            Ok(Self(handle))
         }
+    }
 
-        // Set CPU count.
-        let mut part = Self(handle);
+    pub fn set_vcpu(&mut self, n: usize) -> Result<(), HRESULT> {
         let status = unsafe {
-            part.set_property(
+            self.set_property(
                 WHvPartitionPropertyCodeProcessorCount,
                 &WHV_PARTITION_PROPERTY {
-                    ProcessorCount: cpu,
+                    ProcessorCount: n.try_into().unwrap(),
                 },
             )
         };
 
         if status < 0 {
-            return Err(NewError::SetCpuCountFailed(status));
+            Err(status)
+        } else {
+            Ok(())
         }
-
-        return Ok(part);
-    }
-
-    pub unsafe fn set_property(
-        &mut self,
-        name: WHV_PARTITION_PROPERTY_CODE,
-        value: &WHV_PARTITION_PROPERTY,
-    ) -> HRESULT {
-        WHvSetPartitionProperty(
-            self.0,
-            name,
-            value as *const WHV_PARTITION_PROPERTY as *const c_void,
-            size_of::<WHV_PARTITION_PROPERTY>().try_into().unwrap(),
-        )
     }
 
     pub fn setup(&mut self) -> Result<(), HRESULT> {
@@ -85,6 +66,19 @@ impl Partition {
         } else {
             Ok(())
         }
+    }
+
+    unsafe fn set_property(
+        &mut self,
+        name: WHV_PARTITION_PROPERTY_CODE,
+        value: &WHV_PARTITION_PROPERTY,
+    ) -> HRESULT {
+        WHvSetPartitionProperty(
+            self.0,
+            name,
+            value as *const WHV_PARTITION_PROPERTY as *const c_void,
+            size_of::<WHV_PARTITION_PROPERTY>().try_into().unwrap(),
+        )
     }
 }
 

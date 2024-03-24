@@ -31,7 +31,7 @@ impl DeviceDriver for Random {
 
     fn ioctl(
         &self,
-        dev: &Arc<CharacterDevice>,
+        _: &Arc<CharacterDevice>,
         cmd: IoCmd,
         _: &VThread,
     ) -> Result<(), Box<dyn Errno>> {
