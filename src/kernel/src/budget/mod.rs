@@ -66,6 +66,7 @@ impl Budget {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum BudgetType {
     DirectMemory = 1,
@@ -81,6 +82,7 @@ pub enum BudgetType {
     FdIpcSocket = 11,
 }
 
+#[allow(dead_code)]
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProcType {
