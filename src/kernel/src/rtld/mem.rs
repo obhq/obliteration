@@ -1,6 +1,6 @@
 use super::MapError;
 use crate::fs::VFile;
-use crate::memory::{MappingFlags, MemoryManager, MemoryUpdateError, Protections};
+use crate::process::{MappingFlags, MemoryUpdateError, Protections, VProc};
 use elf::{Elf, ProgramFlags, ProgramType};
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::alloc::Layout;
@@ -11,7 +11,8 @@ use thiserror::Error;
 
 /// A memory of the loaded module.
 pub struct Memory {
-    mm: Arc<MemoryManager>,
+    // This will be remove from here soon once we started working on multi-processes.
+    proc: Arc<VProc>,
     ptr: *mut u8,
     len: usize,
     segments: Vec<MemorySegment>,
@@ -27,7 +28,7 @@ pub struct Memory {
 
 impl Memory {
     pub(super) fn new<N: Into<String>>(
-        mm: &Arc<MemoryManager>,
+        proc: &Arc<VProc>,
         image: &Elf<VFile>,
         base: usize,
         name: N,
@@ -144,7 +145,7 @@ impl Memory {
         segments.push(segment);
 
         // TODO: Use separate name for our code and data.
-        let mut pages = match mm.mmap(
+        let mut pages = match proc.vm().mmap(
             0,
             len,
             Protections::empty(),
@@ -163,7 +164,7 @@ impl Memory {
             let len = seg.len;
             let prot = seg.prot;
 
-            if let Err(e) = mm.mprotect(addr, len, prot) {
+            if let Err(e) = proc.vm().mprotect(addr, len, prot) {
                 return Err(MapError::ProtectMemoryFailed(addr, len, prot, e));
             }
         }
@@ -171,7 +172,7 @@ impl Memory {
         let gg = GutexGroup::new();
 
         Ok(Self {
-            mm: mm.clone(),
+            proc: proc.clone(),
             ptr: pages.into_raw(),
             len,
             segments,
@@ -286,12 +287,12 @@ impl Memory {
         let len = seg.len;
         let prot = Protections::CPU_READ | Protections::CPU_WRITE;
 
-        if let Err(e) = self.mm.mprotect(ptr, len, prot) {
+        if let Err(e) = self.proc.vm().mprotect(ptr, len, prot) {
             return Err(UnprotectSegmentError::MprotectFailed(ptr, len, prot, e));
         }
 
         Ok(UnprotectedSegment {
-            mm: &self.mm,
+            proc: &self.proc,
             ptr,
             len,
             prot: seg.prot,
@@ -319,12 +320,12 @@ impl Memory {
         // Unprotect the memory.
         let prot = Protections::CPU_READ | Protections::CPU_WRITE;
 
-        if let Err(e) = self.mm.mprotect(self.ptr, end, prot) {
+        if let Err(e) = self.proc.vm().mprotect(self.ptr, end, prot) {
             return Err(UnprotectError::MprotectFailed(self.ptr, end, prot, e));
         }
 
         Ok(UnprotectedMemory {
-            mm: &self.mm,
+            proc: &self.proc,
             ptr: self.ptr,
             len: end,
             segments: &self.segments,
@@ -342,7 +343,7 @@ impl Drop for Memory {
         }
 
         // Unmap the memory.
-        self.mm.munmap(self.ptr, self.len).unwrap();
+        self.proc.vm().munmap(self.ptr, self.len).unwrap();
     }
 }
 
@@ -404,7 +405,7 @@ impl MemorySegment {
 
 /// A memory segment in an unprotected form.
 pub struct UnprotectedSegment<'a> {
-    mm: &'a MemoryManager,
+    proc: &'a VProc,
     ptr: *mut u8,
     len: usize,
     prot: Protections,
@@ -419,13 +420,16 @@ impl<'a> AsMut<[u8]> for UnprotectedSegment<'a> {
 
 impl<'a> Drop for UnprotectedSegment<'a> {
     fn drop(&mut self) {
-        self.mm.mprotect(self.ptr, self.len, self.prot).unwrap();
+        self.proc
+            .vm()
+            .mprotect(self.ptr, self.len, self.prot)
+            .unwrap();
     }
 }
 
 /// The unprotected form of [`Memory`], not including our custom segments.
 pub struct UnprotectedMemory<'a> {
-    mm: &'a MemoryManager,
+    proc: &'a VProc,
     ptr: *mut u8,
     len: usize,
     segments: &'a [MemorySegment],
@@ -440,7 +444,7 @@ impl<'a> Drop for UnprotectedMemory<'a> {
 
             let addr = unsafe { self.ptr.add(s.start()) };
 
-            self.mm.mprotect(addr, s.len(), s.prot()).unwrap();
+            self.proc.vm().mprotect(addr, s.len(), s.prot()).unwrap();
         }
     }
 }

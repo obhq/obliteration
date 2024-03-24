@@ -8,7 +8,6 @@ use crate::errno::EEXIST;
 use crate::fs::{Fs, FsInitError, MkdirError, MountError, MountFlags, MountOpts, VPath, VPathBuf};
 use crate::kqueue::KernelQueueManager;
 use crate::log::{print, LOGGER};
-use crate::memory::{MemoryManager, MemoryManagerError};
 use crate::namedobj::NamedObjManager;
 use crate::net::NetManager;
 use crate::osem::OsemManager;
@@ -48,7 +47,6 @@ mod fs;
 mod idt;
 mod kqueue;
 mod log;
-mod memory;
 mod namedobj;
 mod net;
 mod osem;
@@ -337,28 +335,6 @@ fn run() -> Result<(), KernelError> {
         return Err(KernelError::MountFailed(path, e));
     }
 
-    // Initialize memory management.
-    let mm = MemoryManager::new(&mut syscalls)?;
-
-    let mut log = info!();
-
-    writeln!(log, "Page size             : {:#x}", mm.page_size()).unwrap();
-    writeln!(
-        log,
-        "Allocation granularity: {:#x}",
-        mm.allocation_granularity()
-    )
-    .unwrap();
-    writeln!(
-        log,
-        "Main stack            : {:p}:{:p}",
-        mm.stack().start(),
-        mm.stack().end()
-    )
-    .unwrap();
-
-    print(log);
-
     // Initialize TTY system.
     #[allow(unused_variables)] // TODO: Remove this when someone uses tty.
     let tty = TtyManager::new()?;
@@ -371,8 +347,8 @@ fn run() -> Result<(), KernelError> {
     let budget = BudgetManager::new(&mut syscalls);
 
     DmemManager::new(&fs, &mut syscalls);
-    SharedMemoryManager::new(&mm, &mut syscalls);
-    Sysctl::new(&mm, &machdep, &mut syscalls);
+    SharedMemoryManager::new(&mut syscalls);
+    Sysctl::new(&machdep, &mut syscalls);
     TimeManager::new(&mut syscalls);
     KernelQueueManager::new(&mut syscalls);
     NetManager::new(&mut syscalls);
@@ -390,6 +366,12 @@ fn run() -> Result<(), KernelError> {
         &mut syscalls,
     )?;
 
+    info!(
+        "Application stack: {:p}:{:p}",
+        proc.vm().stack().start(),
+        proc.vm().stack().end()
+    );
+
     NamedObjManager::new(&mut syscalls, &proc);
     OsemManager::new(&mut syscalls, &proc);
     UmtxManager::new(&mut syscalls);
@@ -398,7 +380,7 @@ fn run() -> Result<(), KernelError> {
     info!("Initializing runtime linker.");
 
     let ee = NativeEngine::new();
-    let ld = RuntimeLinker::new(&fs, &mm, &ee, &mut syscalls);
+    let ld = RuntimeLinker::new(&fs, &ee, &mut syscalls);
 
     ee.set_syscalls(syscalls);
 
@@ -473,7 +455,7 @@ fn run() -> Result<(), KernelError> {
 
     // Get entry point.
     let boot = ld.kernel().unwrap();
-    let mut arg = Box::pin(EntryArg::new(&proc, &mm, app.clone()));
+    let mut arg = Box::pin(EntryArg::new(&proc, app.clone()));
     let entry = unsafe { boot.get_function(boot.entry().unwrap()) };
     let entry = move || unsafe { entry.exec1(arg.as_mut().as_vec().as_ptr()) };
 
@@ -481,7 +463,7 @@ fn run() -> Result<(), KernelError> {
     info!("Starting application.");
 
     // TODO: Check how this constructed.
-    let stack = mm.stack();
+    let stack = proc.vm().stack();
     let main: OsThread = unsafe { main.start(stack.start(), stack.len(), entry) }?;
 
     // Begin Discord Rich Presence before blocking current thread.
@@ -621,9 +603,6 @@ enum KernelError {
 
     #[error("couldn't mount {0}")]
     MountFailed(VPathBuf, #[source] MountError),
-
-    #[error("memory manager initialization failed")]
-    MemoryManagerInitFailed(#[from] MemoryManagerError),
 
     #[error("tty initialization failed")]
     TtyInitFailed(#[from] TtyInitError),
