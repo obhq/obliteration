@@ -1,6 +1,5 @@
 use super::dirent::Dirent;
-use crate::errno::Errno;
-use crate::errno::ENODEV;
+use crate::errno::{Errno, ENODEV, ENOTTY};
 use crate::fs::Uio;
 use crate::fs::{
     FileBackend, IoCmd, Mode, OpenFlags, PollEvents, Stat, TruncateLength, UioMut, VFile,
@@ -236,4 +235,8 @@ pub enum DefaultDeviceError {
     #[error("ioctl not supported")]
     #[errno(ENODEV)]
     IoctlNotSupported,
+
+    #[error("command not supported")]
+    #[errno(ENOTTY)]
+    CommandNotSupported,
 }

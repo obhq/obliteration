@@ -37,7 +37,7 @@ impl DeviceDriver for Random {
     ) -> Result<(), Box<dyn Errno>> {
         match cmd {
             IoCmd::FIOASYNC(_) | IoCmd::FIONBIO(_) => Ok(()),
-            _ => Err(Box::new(DefaultDeviceError::IoctlNotSupported)),
+            _ => Err(Box::new(DefaultDeviceError::CommandNotSupported)),
         }
     }
 }
