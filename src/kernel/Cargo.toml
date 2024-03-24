@@ -15,7 +15,6 @@ clap = { version = "4.1", features = ["derive"] }
 discord-rich-presence = "0.2"
 elf = { path = "../elf" }
 gmtx = { path = "../gmtx" }
-hv = { path = "../hv" }
 iced-x86 = { version = "1.18", features = ["code_asm"] }
 libc = "0.2"
 llt = { path = "../llt" }
@@ -42,6 +41,7 @@ features = [
     "Win32_Storage_FileSystem",
     "Win32_System",
     "Win32_System_Diagnostics_Debug",
+    "Win32_System_Hypervisor",
     "Win32_System_IO",
     "Win32_System_Kernel",
     "Win32_System_Memory",
@@ -50,3 +50,6 @@ features = [
     "Win32_System_Time",
     "Win32_System_WindowsProgramming",
 ]
+
+[build-dependencies]
+cc = "1.0.90"
