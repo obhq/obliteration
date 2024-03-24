@@ -1,7 +1,7 @@
 use super::file::HostFile;
 use super::{GetVnodeError, HostFs};
 use crate::errno::{Errno, EEXIST, EIO, ENOENT, ENOTDIR};
-use crate::fs::{Access, IoCmd, Mode, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType};
+use crate::fs::{Access, IoCmd, Mode, OpenFlags, Uio, UioMut, VFile, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use macros::Errno;
@@ -131,6 +131,28 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         file: Option<&mut VFile>,
     ) -> Result<(), Box<dyn Errno>> {
         todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn read(
+        &self,
+        vn: &Arc<Vnode>,
+        buf: &mut UioMut,
+        off: i64,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!();
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn write(
+        &self,
+        vn: &Arc<Vnode>,
+        buf: &mut Uio,
+        off: i64,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!();
     }
 }
 

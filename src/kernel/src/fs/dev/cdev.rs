@@ -115,6 +115,7 @@ impl FileBackend for CharacterDevice {
         self: &Arc<Self>,
         file: &VFile,
         buf: &mut UioMut,
+        off: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         todo!()
@@ -125,6 +126,7 @@ impl FileBackend for CharacterDevice {
         self: &Arc<Self>,
         file: &VFile,
         buf: &mut Uio,
+        off: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         todo!()
@@ -195,23 +197,23 @@ pub trait DeviceDriver: Debug + Sync + Send + 'static {
     fn read(
         &self,
         dev: &Arc<CharacterDevice>,
-        data: &mut UioMut,
+        uio: &mut UioMut,
+        off: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         Err(Box::new(DefaultDeviceError::ReadNotSupported))
     }
 
-    #[allow(unused_variables)]
     fn write(
         &self,
         dev: &Arc<CharacterDevice>,
-        data: &mut Uio,
+        uio: &mut Uio,
+        off: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         Err(Box::new(DefaultDeviceError::WriteNotSupported))
     }
 
-    #[allow(unused_variables)]
     fn ioctl(
         &self,
         dev: &Arc<CharacterDevice>,
