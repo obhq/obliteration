@@ -8,8 +8,7 @@ use crate::fs::{Fs, OpenError, VPath, VPathBuf};
 use crate::idt::Entry;
 use crate::info;
 use crate::log::print;
-use crate::memory::{MemoryManager, MemoryUpdateError, MmapError, Protections};
-use crate::process::{Binaries, VThread};
+use crate::process::{Binaries, MemoryUpdateError, MmapError, Protections, VThread};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use bitflags::bitflags;
 use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation, Symbol};
@@ -34,7 +33,6 @@ mod resolver;
 #[derive(Debug)]
 pub struct RuntimeLinker {
     fs: Arc<Fs>,
-    mm: Arc<MemoryManager>,
     ee: Arc<NativeEngine>,
     // TODO: Move all fields after this to proc.
     list: Gutex<Vec<Arc<Module>>>,      // obj_list + obj_tail
@@ -53,16 +51,10 @@ impl RuntimeLinker {
         0x30,
     ];
 
-    pub fn new(
-        fs: &Arc<Fs>,
-        mm: &Arc<MemoryManager>,
-        ee: &Arc<NativeEngine>,
-        sys: &mut Syscalls,
-    ) -> Arc<Self> {
+    pub fn new(fs: &Arc<Fs>, ee: &Arc<NativeEngine>, sys: &mut Syscalls) -> Arc<Self> {
         let gg = GutexGroup::new();
         let ld = Arc::new(Self {
             fs: fs.clone(),
-            mm: mm.clone(),
             ee: ee.clone(),
             list: gg.spawn(Vec::new()),
             kernel: gg.spawn(None),
@@ -129,8 +121,8 @@ impl RuntimeLinker {
         // TODO: Apply remaining checks from exec_self_imgact.
         // Map eboot.bin.
         let mut app = Module::map(
-            &self.mm,
             &self.ee,
+            td.proc(),
             elf,
             base,
             "executable",
@@ -265,7 +257,7 @@ impl RuntimeLinker {
         let (entry, _) = table.alloc(|id| {
             let name = path.file_name().unwrap();
             let id: u32 = (id + 1).try_into().unwrap();
-            let mut md = match Module::map(&self.mm, &self.ee, elf, 0, name, id, names, tls) {
+            let mut md = match Module::map(&self.ee, td.proc(), elf, 0, name, id, names, tls) {
                 Ok(v) => v,
                 Err(e) => return Err(LoadError::MapFailed(e)),
             };

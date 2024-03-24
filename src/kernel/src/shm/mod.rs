@@ -1,10 +1,9 @@
 use crate::{
     errno::{Errno, EINVAL},
     fs::{
-        check_access, Access, AccessError, DefaultError, FileBackend, IoCmd, Mode, OpenFlags,
-        PollEvents, Stat, TruncateLength, Uio, UioMut, VFile, VFileFlags, VPathBuf,
+        check_access, Access, AccessError, DefaultFileBackendError, FileBackend, IoCmd, Mode,
+        OpenFlags, PollEvents, Stat, TruncateLength, Uio, UioMut, VFile, VFileFlags, VPathBuf,
     },
-    memory::MemoryManager,
     process::VThread,
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
     ucred::{Gid, Ucred, Uid},
@@ -13,14 +12,11 @@ use macros::Errno;
 use std::{convert::Infallible, sync::Arc};
 use thiserror::Error;
 
-#[allow(dead_code)] // TODO: remove when used.
-pub struct SharedMemoryManager {
-    mm: Arc<MemoryManager>,
-}
+pub struct SharedMemoryManager {}
 
 impl SharedMemoryManager {
-    pub fn new(mm: &Arc<MemoryManager>, sys: &mut Syscalls) -> Arc<Self> {
-        let shm = Arc::new(Self { mm: mm.clone() });
+    pub fn new(sys: &mut Syscalls) -> Arc<Self> {
+        let shm = Arc::new(Self {});
 
         sys.register(482, &shm, Self::sys_shm_open);
         sys.register(483, &shm, Self::sys_shm_unlink);
@@ -122,7 +118,7 @@ impl FileBackend for SharedMemory {
         _: i64,
         _: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        Err(Box::new(DefaultError::OperationNotSupported))
+        Err(Box::new(DefaultFileBackendError::OperationNotSupported))
     }
 
     fn write(
@@ -132,7 +128,7 @@ impl FileBackend for SharedMemory {
         _: i64,
         _: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        Err(Box::new(DefaultError::OperationNotSupported))
+        Err(Box::new(DefaultFileBackendError::OperationNotSupported))
     }
 
     #[allow(unused_variables)] // remove when implementing

@@ -237,7 +237,7 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         offset: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        Err(Box::new(DefaultError::ReadNotSupported))
+        Err(Box::new(DefaultFileBackendError::ReadNotSupported))
     }
 
     #[allow(unused_variables)]
@@ -249,7 +249,7 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         offset: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        Err(Box::new(DefaultError::WriteNotSupported))
+        Err(Box::new(DefaultFileBackendError::WriteNotSupported))
     }
 
     #[allow(unused_variables)]
@@ -260,7 +260,7 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         cmd: IoCmd,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        Err(Box::new(DefaultError::IoctlNotSupported))
+        Err(Box::new(DefaultFileBackendError::IoctlNotSupported))
     }
 
     #[allow(unused_variables)]
@@ -279,12 +279,12 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         length: TruncateLength,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        Err(Box::new(DefaultError::TruncateNotSupported))
+        Err(Box::new(DefaultFileBackendError::TruncateNotSupported))
     }
 }
 
 #[derive(Debug, Error, Errno)]
-pub enum DefaultError {
+pub enum DefaultFileBackendError {
     #[error("reading is not supported")]
     #[errno(ENXIO)]
     ReadNotSupported,

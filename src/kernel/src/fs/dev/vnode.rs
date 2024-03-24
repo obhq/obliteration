@@ -186,8 +186,6 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             unreachable!();
         };
 
-        let sw = dev.sw();
-
         // Execute switch handler.
         sw.open()(&dev, flags, 0x2000, td)?;
 

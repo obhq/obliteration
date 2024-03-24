@@ -1,7 +1,5 @@
 use crate::arnd::rand_bytes;
-use crate::memory::MemoryManager;
-use crate::process::ResourceType;
-use crate::process::VProc;
+use crate::process::{ResourceType, VProc};
 use crate::rtld::Module;
 use std::ffi::CString;
 use std::marker::PhantomPinned;
@@ -15,7 +13,6 @@ pub mod native;
 /// Encapsulate an argument of the PS4 entry point.
 pub struct EntryArg {
     vp: Arc<VProc>,
-    mm: Arc<MemoryManager>,
     app: Arc<Module>,
     name: CString,
     path: CString,
@@ -26,7 +23,7 @@ pub struct EntryArg {
 }
 
 impl EntryArg {
-    pub fn new(vp: &Arc<VProc>, mm: &Arc<MemoryManager>, app: Arc<Module>) -> Self {
+    pub fn new(vp: &Arc<VProc>, app: Arc<Module>) -> Self {
         let path = app.path();
         let name = CString::new(path.file_name().unwrap()).unwrap();
         let path = CString::new(path.as_str()).unwrap();
@@ -36,7 +33,6 @@ impl EntryArg {
 
         Self {
             vp: vp.clone(),
-            mm: mm.clone(),
             app,
             name,
             path,
@@ -100,7 +96,7 @@ impl EntryArg {
         pin.vec.push(21); // AT_PAGESIZESLEN
         pin.vec.push(size_of_val(&pin.pagesizes));
         pin.vec.push(23); // AT_STACKPROT
-        pin.vec.push(pin.mm.stack().prot().bits() as _);
+        pin.vec.push(pin.vp.vm().stack().prot().bits() as _);
         pin.vec.push(0); // AT_NULL
         pin.vec.push(0);
 
