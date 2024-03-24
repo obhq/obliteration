@@ -1,6 +1,7 @@
 use super::{GetOptError, SetOptError, SockOpt};
 use crate::fs::{
-    DefaultError, FileBackend, IoCmd, PollEvents, Stat, TruncateLength, Uio, UioMut, VFile,
+    DefaultFileBackendError, FileBackend, IoCmd, PollEvents, Stat, TruncateLength, Uio, UioMut,
+    VFile,
 };
 use crate::ucred::Ucred;
 use crate::{
@@ -133,7 +134,7 @@ impl FileBackend for Socket {
         _: TruncateLength,
         _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        Err(Box::new(DefaultError::InvalidValue))
+        Err(Box::new(DefaultFileBackendError::InvalidValue))
     }
 }
 

@@ -1,6 +1,5 @@
 use super::dirent::Dirent;
-use crate::errno::Errno;
-use crate::errno::ENODEV;
+use crate::errno::{Errno, ENODEV, ENOTTY};
 use crate::fs::Uio;
 use crate::fs::{
     FileBackend, IoCmd, Mode, OpenFlags, PollEvents, Stat, TruncateLength, UioMut, VFile,
@@ -18,7 +17,7 @@ use thiserror::Error;
 /// An implementation of `cdev` and `cdev_priv` structures.
 #[derive(Debug)]
 pub struct CharacterDevice {
-    sw: Arc<CdevSw>,                           // si_devsw
+    driver: Box<dyn DeviceDriver>,             // si_devsw
     unit: i32,                                 // si_drv0
     name: String,                              // si_name
     uid: Uid,                                  // si_uid
@@ -37,7 +36,6 @@ pub struct CharacterDevice {
 impl CharacterDevice {
     /// See `devfs_alloc` on the PS4 for a reference.
     pub(super) fn new(
-        sw: &Arc<CdevSw>,
         unit: i32,
         name: impl Into<String>,
         uid: Uid,
@@ -46,12 +44,13 @@ impl CharacterDevice {
         cred: Option<Arc<Ucred>>,
         flags: DeviceFlags,
         inode: i32,
+        driver: impl DeviceDriver,
     ) -> Self {
         let gg = GutexGroup::new();
         let now = TimeSpec::now();
 
         Self {
-            sw: sw.clone(),
+            driver: Box::new(driver),
             inode,
             unit,
             name: name.into(),
@@ -68,8 +67,13 @@ impl CharacterDevice {
         }
     }
 
-    pub fn sw(&self) -> &CdevSw {
-        self.sw.as_ref()
+    pub fn open(
+        self: &Arc<Self>,
+        mode: OpenFlags,
+        devtype: i32,
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        self.driver.open(self, mode, devtype, td)
     }
 
     pub fn name(&self) -> &str {
@@ -168,28 +172,6 @@ bitflags! {
     }
 }
 
-/// An implementation of `cdevsw` structure.
-#[derive(Debug)]
-pub struct CdevSw {
-    flags: DriverFlags, // d_flags
-    open: CdevOpen,     // d_open
-}
-
-impl CdevSw {
-    /// See `prep_cdevsw` on the PS4 for a reference.
-    pub fn new(flags: DriverFlags, open: CdevOpen) -> Self {
-        Self { flags, open }
-    }
-
-    pub fn flags(&self) -> DriverFlags {
-        self.flags
-    }
-
-    pub fn open(&self) -> CdevOpen {
-        self.open
-    }
-}
-
 bitflags! {
     /// Flags for [`CdevSw`].
     #[derive(Debug, Clone, Copy)]
@@ -198,40 +180,51 @@ bitflags! {
     }
 }
 
-pub type CdevOpen =
-    fn(&Arc<CharacterDevice>, OpenFlags, i32, Option<&VThread>) -> Result<(), Box<dyn Errno>>;
-
 /// An implementation of the `cdevsw` structure.
-pub(super) trait Device: Debug + Sync + Send + 'static {
+pub trait DeviceDriver: Debug + Sync + Send + 'static {
+    #[allow(unused_variables)]
+    fn open(
+        &self,
+        dev: &Arc<CharacterDevice>,
+        mode: OpenFlags,
+        devtype: i32,
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        Ok(())
+    }
+
+    #[allow(unused_variables)]
     fn read(
-        self: Arc<Self>,
-        #[allow(unused_variables)] data: &mut UioMut,
-        #[allow(unused_variables)] off: i64,
-        #[allow(unused_variables)] td: Option<&VThread>,
+        &self,
+        dev: &Arc<CharacterDevice>,
+        data: &mut UioMut,
+        off: i64,
+        td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        Err(Box::new(DefaultError::ReadNotSupported))
+        Err(Box::new(DefaultDeviceError::ReadNotSupported))
     }
 
     fn write(
-        self: Arc<Self>,
-        #[allow(unused_variables)] data: &mut Uio,
-        #[allow(unused_variables)] off: i64,
-        #[allow(unused_variables)] td: Option<&VThread>,
+        &self,
+        dev: &Arc<CharacterDevice>,
+        data: &mut Uio,
+        td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        Err(Box::new(DefaultError::WriteNotSupported))
+        Err(Box::new(DefaultDeviceError::WriteNotSupported))
     }
 
     fn ioctl(
-        self: Arc<Self>,
-        #[allow(unused_variables)] cmd: IoCmd,
-        #[allow(unused_variables)] td: Option<&VThread>,
+        &self,
+        dev: &Arc<CharacterDevice>,
+        cmd: IoCmd,
+        td: &VThread,
     ) -> Result<(), Box<dyn Errno>> {
-        Err(Box::new(DefaultError::IoctlNotSupported))
+        Err(Box::new(DefaultDeviceError::IoctlNotSupported))
     }
 }
 
 #[derive(Debug, Error, Errno)]
-pub(super) enum DefaultError {
+pub enum DefaultDeviceError {
     #[error("read not supported")]
     #[errno(ENODEV)]
     ReadNotSupported,
@@ -243,4 +236,8 @@ pub(super) enum DefaultError {
     #[error("ioctl not supported")]
     #[errno(ENODEV)]
     IoctlNotSupported,
+
+    #[error("command not supported")]
+    #[errno(ENOTTY)]
+    CommandNotSupported,
 }

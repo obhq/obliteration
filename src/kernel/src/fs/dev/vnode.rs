@@ -168,7 +168,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         mode: OpenFlags,
-        mut file: Option<&mut VFile>,
+        file: Option<&mut VFile>,
     ) -> Result<(), Box<dyn Errno>> {
         if !vn.is_character() {
             return Ok(());
@@ -180,16 +180,11 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             unreachable!();
         };
 
-        let sw = dev.sw();
-
         // Execute switch handler.
-        sw.open()(&dev, mode, 0x2000, td)?;
+        dev.open(mode, 0x2000, td)?;
 
         // Set file OP.
-        let file = match file {
-            Some(v) => v,
-            None => return Ok(()),
-        };
+        let Some(file) = file else { return Ok(()) };
 
         todo!()
     }
