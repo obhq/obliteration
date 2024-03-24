@@ -1,6 +1,5 @@
 use crate::fs::{VPath, VPathBuf};
-use crate::memory::Protections;
-use crate::process::VThread;
+use crate::process::{Protections, VThread};
 use crate::rtld::{CodeWorkspaceError, Memory, Module, UnprotectSegmentError};
 use crate::syscalls::{SysIn, SysOut, Syscalls};
 use byteorder::{ByteOrder, LE};
