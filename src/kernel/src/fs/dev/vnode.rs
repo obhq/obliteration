@@ -187,7 +187,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         };
 
         // Execute switch handler.
-        sw.open()(&dev, flags, 0x2000, td)?;
+        dev.open(flags, 0x2000, td)?;
 
         Ok(VFileType::Device(dev.clone()))
     }
