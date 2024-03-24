@@ -84,6 +84,15 @@ impl Hypervisor {
         // Create a new VM.
         let vm = self::linux::create_vm(kvm.as_fd()).map_err(NewError::CreateVmFailed)?;
 
+        self::linux::set_user_memory_region(
+            vm.as_fd(),
+            0,
+            addr.try_into().unwrap(),
+            len.try_into().unwrap(),
+            ram.cast(),
+        )
+        .map_err(NewError::MapMemoryFailed)?;
+
         Ok(Self { vm, kvm, active })
     }
 
@@ -95,9 +104,18 @@ impl Hypervisor {
         addr: usize,
         len: usize,
     ) -> Result<Self, NewError> {
+        // Setup a partition.
         let mut whp = self::win32::Partition::new(cpu)?;
 
-        whp.setup()?;
+        whp.setup().map_err(NewError::SetupPartitionFailed)?;
+
+        // Map memory.
+        whp.map_gpa(
+            ram.cast(),
+            addr.try_into().unwrap(),
+            len.try_into().unwrap(),
+        )
+        .map_err(NewError::MapMemoryFailed)?;
 
         Ok(Self { whp, active })
     }
@@ -117,6 +135,10 @@ impl Hypervisor {
         if cpu > vm.capability(0).map_err(NewError::GetMaxCpuFailed)? {
             return Err(NewError::InvalidCpuCount);
         }
+
+        // Map memory.
+        vm.vm_map(ram.cast(), addr.try_into().unwrap(), len)
+            .map_err(NewError::MapMemoryFailed)?;
 
         Ok(Self { vm, active })
     }
@@ -197,6 +219,10 @@ pub enum NewError {
     #[error("couldn't create a VM")]
     CreateVmFailed(#[source] std::io::Error),
 
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    #[error("couldn't map a VM memory")]
+    MapMemoryFailed(#[source] std::io::Error),
+
     #[cfg(target_os = "windows")]
     #[error("couldn't create WHP partition object ({0:#x})")]
     CreatePartitionFailed(windows_sys::core::HRESULT),
@@ -209,6 +235,10 @@ pub enum NewError {
     #[error("couldn't setup WHP partition ({0:#x})")]
     SetupPartitionFailed(windows_sys::core::HRESULT),
 
+    #[cfg(target_os = "windows")]
+    #[error("couldn't map memory to WHP partition ({0:#x})")]
+    MapMemoryFailed(windows_sys::core::HRESULT),
+
     #[cfg(target_os = "macos")]
     #[error("couldn't create a VM ({0:#x})")]
     CreateVmFailed(std::ffi::c_int),
@@ -216,6 +246,10 @@ pub enum NewError {
     #[cfg(target_os = "macos")]
     #[error("couldn't get maximum number of CPU for a VM")]
     GetMaxCpuFailed(std::ffi::c_int),
+
+    #[cfg(target_os = "macos")]
+    #[error("couldn't map memory to the VM")]
+    MapMemoryFailed(std::ffi::c_int),
 }
 
 static ACTIVE: AtomicBool = AtomicBool::new(false);
