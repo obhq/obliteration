@@ -7,7 +7,6 @@ members = [
     "fs",
     "ftp",
     "gmtx",
-    "hv",
     "kernel",
     "llt",
     "macros",
