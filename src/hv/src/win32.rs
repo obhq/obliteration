@@ -4,7 +4,8 @@ use std::mem::size_of;
 use std::num::NonZeroUsize;
 use windows_sys::core::HRESULT;
 use windows_sys::Win32::System::Hypervisor::{
-    WHvCreatePartition, WHvDeletePartition, WHvPartitionPropertyCodeProcessorCount,
+    WHvCreatePartition, WHvDeletePartition, WHvMapGpaRange, WHvMapGpaRangeFlagExecute,
+    WHvMapGpaRangeFlagRead, WHvMapGpaRangeFlagWrite, WHvPartitionPropertyCodeProcessorCount,
     WHvSetPartitionProperty, WHvSetupPartition, WHV_PARTITION_HANDLE, WHV_PARTITION_PROPERTY,
     WHV_PARTITION_PROPERTY_CODE,
 };
@@ -58,11 +59,29 @@ impl Partition {
         )
     }
 
-    pub fn setup(&mut self) -> Result<(), NewError> {
+    pub fn setup(&mut self) -> Result<(), HRESULT> {
         let status = unsafe { WHvSetupPartition(self.0) };
 
         if status < 0 {
-            Err(NewError::SetupPartitionFailed(status))
+            Err(status)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn map_gpa(&self, host: *const c_void, guest: u64, len: u64) -> Result<(), HRESULT> {
+        let status = unsafe {
+            WHvMapGpaRange(
+                self.0,
+                host,
+                guest,
+                len,
+                WHvMapGpaRangeFlagRead | WHvMapGpaRangeFlagWrite | WHvMapGpaRangeFlagExecute,
+            )
+        };
+
+        if status < 0 {
+            Err(status)
         } else {
             Ok(())
         }
