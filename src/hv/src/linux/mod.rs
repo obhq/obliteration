@@ -6,7 +6,7 @@ use std::os::fd::{AsRawFd, BorrowedFd, FromRawFd, OwnedFd};
 
 pub fn open_kvm() -> Result<OwnedFd, NewError> {
     // Open KVM.
-    let fd = unsafe { open(b"/dev/kvm\0".as_ptr().cast(), O_RDWR) };
+    let fd = unsafe { open(c"/dev/kvm".as_ptr(), O_RDWR) };
 
     if fd < 0 {
         return Err(NewError::OpenKvmFailed("/dev/kvm", Error::last_os_error()));
