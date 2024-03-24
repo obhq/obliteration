@@ -276,7 +276,7 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
         #[allow(unused_variables)] cmd: IoCmd,
         #[allow(unused_variables)] td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        Err(Box::new(DefaultError::CommandNotSupported))
+        Err(Box::new(DefaultError::IoctlNotSupported))
     }
 
     /// An implementation of `vop_lookup`.
@@ -368,7 +368,7 @@ enum DefaultError {
 
     #[error("ioctl not supported")]
     #[errno(ENOTTY)]
-    CommandNotSupported,
+    IoctlNotSupported,
 }
 
 static ACTIVE: AtomicUsize = AtomicUsize::new(0); // numvnodes
