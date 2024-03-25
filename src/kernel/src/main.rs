@@ -8,6 +8,7 @@ use crate::dmem::{DmemManager, DmemManagerInitError};
 use crate::ee::native::NativeEngine;
 use crate::ee::EntryArg;
 use crate::errno::EEXIST;
+use crate::evf::EvfManager;
 use crate::fs::{Fs, FsInitError, MkdirError, MountError, MountFlags, MountOpts, VPath, VPathBuf};
 use crate::hv::Hypervisor;
 use crate::kqueue::KernelQueueManager;
@@ -47,6 +48,7 @@ mod dev;
 mod dmem;
 mod ee;
 mod errno;
+mod evf;
 mod fs;
 mod hv;
 mod idt;
@@ -363,6 +365,7 @@ fn run() -> Result<(), KernelError> {
     let budget = BudgetManager::new(&mut syscalls);
 
     DmemManager::new(&fs, &mut syscalls)?;
+    EvfManager::new(&mut syscalls);
     SharedMemoryManager::new(&mut syscalls);
     Sysctl::new(&machdep, &mut syscalls);
     TimeManager::new(&mut syscalls);

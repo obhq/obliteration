@@ -66,6 +66,23 @@ impl<T> Idt<T> {
     }
 
     /// See `id_rlock` on the PS4 for a reference.
+    pub fn get(&self, id: usize, ty: Option<u16>) -> Option<&Entry<T>> {
+        if id >= 0x10000 {
+            return None;
+        }
+
+        let i = id & 0x1fff;
+        let set = self.sets.get(i / 0x80);
+        let entry = set.and_then(|s| s[i % 0x80].as_ref());
+
+        if entry.map(|x| x.ty()) != ty {
+            return None;
+        }
+
+        entry
+    }
+
+    /// See `id_rlock` on the PS4 for a reference.
     pub fn get_mut(&mut self, id: usize, ty: Option<u16>) -> Option<&mut Entry<T>> {
         if id >= 0x10000 {
             return None;
