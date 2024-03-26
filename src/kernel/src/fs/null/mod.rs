@@ -3,7 +3,7 @@ use super::{
     Filesystem, Fs, FsConfig, LookupError, Mount, MountFlags, MountOpts, MountSource, VPathBuf,
     Vnode,
 };
-use crate::errno::{Errno, EDEADLK, EOPNOTSUPP};
+use crate::errno::{Errno, EOPNOTSUPP};
 use crate::ucred::Ucred;
 use macros::Errno;
 use std::sync::Arc;
