@@ -210,7 +210,7 @@ impl HostFile {
         use std::ptr::null_mut;
         use windows_sys::Wdk::{
             Foundation::OBJECT_ATTRIBUTES,
-            Storage::FileSystem::{NtCreateFile, FILE_DIRECTORY_FILE, FILE_OPEN},
+            Storage::FileSystem::{NtCreateFile, FILE_CREATE, FILE_DIRECTORY_FILE},
         };
         use windows_sys::Win32::{
             Foundation::{RtlNtStatusToDosError, STATUS_SUCCESS, UNICODE_STRING},
@@ -257,7 +257,7 @@ impl HostFile {
                 null_mut(),
                 FILE_ATTRIBUTE_DIRECTORY,
                 FILE_SHARE_READ | FILE_SHARE_WRITE,
-                FILE_OPEN,
+                FILE_CREATE,
                 FILE_DIRECTORY_FILE,
                 null_mut(),
                 0,
