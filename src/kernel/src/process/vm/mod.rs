@@ -85,8 +85,11 @@ impl MemoryManager {
 
         sys.register(69, &mm, Self::sys_sbrk);
         sys.register(70, &mm, Self::sys_sstk);
+        sys.register(78, &mm, Self::sys_munmap);
         sys.register(477, &mm, Self::sys_mmap);
+        sys.register(548, &mm, Self::sys_batch_map);
         sys.register(588, &mm, Self::sys_mname);
+        sys.register(628, &mm, Self::sys_mmap_dmem);
 
         Ok(mm)
     }
@@ -544,6 +547,14 @@ impl MemoryManager {
         Err(SysErr::Raw(EOPNOTSUPP))
     }
 
+    #[allow(unused_variables)]
+    fn sys_munmap(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let addr: usize = i.args[0].into();
+        let len: usize = i.args[1].into();
+
+        todo!()
+    }
+
     fn sys_mmap(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let addr: usize = i.args[0].into();
@@ -594,6 +605,115 @@ impl MemoryManager {
         Ok(pages.into_raw().into())
     }
 
+    fn sys_batch_map(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let dmem_fd: i32 = i.args[0].try_into().unwrap();
+        let flags: MappingFlags = i.args[1].try_into().unwrap();
+        let operations: *const BatchMapOp = i.args[2].into();
+        let num_of_ops: i32 = i.args[3].try_into().unwrap();
+        let num_of_processed_ops: *mut i32 = i.args[4].into();
+
+        if flags.bits() & 0xe0bffb6f != 0 {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        let slice_size = num_of_ops.try_into().ok().ok_or(SysErr::Raw(EINVAL))?;
+        let operations = unsafe { std::slice::from_raw_parts(operations, slice_size) };
+
+        let mut ret = Ok(0.into());
+        let mut processed = 0;
+        for op in operations {
+            // TODO: implement remaining logic when op != MapTypeProtect && some addr != 0
+
+            ret = match op.op.try_into() {
+                Ok(MapOp::MapDirect) => {
+                    if td.proc().dmem_container != 1
+                        /* || td.proc().unk4 & 2 != 0 */
+                        /* || td.proc().sdk_version < 0x2500000 */
+                        || flags.intersects(MappingFlags::MAP_STACK)
+                    {
+                        todo!()
+                    }
+
+                    let args = SysIn {
+                        id: 628,
+                        offset: i.offset,
+                        module: i.module,
+                        args: [
+                            op.addr.into(),
+                            op.len.into(),
+                            (op.ty as usize).into(),
+                            (op.prot as usize).into(),
+                            (flags.bits() as usize).into(),
+                            op.offset.into(),
+                        ],
+                    };
+                    self.sys_mmap_dmem(td, &args)
+                }
+                Ok(MapOp::MapFlexible) => {
+                    if op.addr & 0x3fff != 0 || op.len & 0x3fff != 0 || op.prot & 0xc8 != 0 {
+                        ret = Err(SysErr::Raw(EINVAL));
+                        break;
+                    }
+
+                    let args = SysIn {
+                        id: 477,
+                        offset: i.offset,
+                        module: i.module,
+                        args: [
+                            op.addr.into(),
+                            op.len.into(),
+                            (op.prot as usize).into(),
+                            (flags.intersection(MappingFlags::MAP_ANON).bits() as usize).into(),
+                            (!0).into(),
+                            0.into(),
+                        ],
+                    };
+                    self.sys_mmap(td, &args)
+                }
+                Ok(MapOp::Protect) => todo!(),
+                Ok(MapOp::TypeProtect) => todo!(),
+                Ok(MapOp::Unmap) => {
+                    if op.addr & 0x3fff != 0 || op.len & 0x3fff != 0 {
+                        ret = Err(SysErr::Raw(EINVAL));
+                        break;
+                    }
+
+                    let args = SysIn {
+                        id: 73,
+                        offset: i.offset,
+                        module: i.module,
+                        args: [
+                            op.addr.into(),
+                            op.len.into(),
+                            0.into(),
+                            0.into(),
+                            0.into(),
+                            0.into(),
+                        ],
+                    };
+                    self.sys_munmap(td, &args)
+                }
+                Err(conv_error) => Err(conv_error),
+            };
+
+            if ret.is_err() {
+                break;
+            }
+
+            processed = processed + 1;
+        }
+
+        // TODO: invalidate TLB
+
+        if !num_of_processed_ops.is_null() {
+            unsafe {
+                *num_of_processed_ops = processed;
+            }
+        }
+
+        ret
+    }
+
     fn sys_mname(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let addr: usize = i.args[0].into();
         let len: usize = i.args[1].into();
@@ -615,6 +735,18 @@ impl MemoryManager {
         }
 
         Ok(SysOut::ZERO)
+    }
+
+    #[allow(unused_variables)]
+    fn sys_mmap_dmem(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let start_addr: usize = i.args[0].into();
+        let len: usize = i.args[1].into();
+        let mem_type: MemoryType = i.args[2].try_into().unwrap();
+        let prot: Protections = i.args[3].try_into().unwrap();
+        let flags: MappingFlags = i.args[4].try_into().unwrap();
+        let start_phys_addr: usize = i.args[5].into();
+
+        todo!()
     }
 
     fn align_virtual_page(ptr: *mut u8) -> *mut u8 {
@@ -837,4 +969,59 @@ pub enum MemoryUpdateError {
 
     #[error("address {0:p} is not mapped")]
     UnmappedAddr(*const u8),
+}
+
+#[repr(C)]
+struct BatchMapOp {
+    addr: usize,
+    offset: usize,
+    len: usize,
+    prot: u8,
+    ty: u8,
+    op: i32,
+}
+
+#[repr(i32)]
+enum MapOp {
+    MapDirect = 0,
+    Unmap = 1,
+    Protect = 2,
+    MapFlexible = 3,
+    TypeProtect = 4,
+}
+
+impl TryFrom<i32> for MapOp {
+    type Error = SysErr;
+
+    fn try_from(raw: i32) -> Result<Self, SysErr> {
+        match raw {
+            0 => Ok(MapOp::MapDirect),
+            1 => Ok(MapOp::Unmap),
+            2 => Ok(MapOp::Protect),
+            3 => Ok(MapOp::MapFlexible),
+            4 => Ok(MapOp::TypeProtect),
+            _ => Err(SysErr::Raw(EINVAL)),
+        }
+    }
+}
+
+#[repr(i32)]
+enum MemoryType {
+    WB_ONION = 0,
+    WC_GARLIC = 3,
+    WB_GARLIC = 10,
+}
+
+impl TryFrom<SysArg> for MemoryType {
+    type Error = TryFromIntError;
+
+    fn try_from(value: SysArg) -> Result<Self, Self::Error> {
+        let val: i64 = value.into();
+        match val {
+            0 => Ok(MemoryType::WB_ONION),
+            3 => Ok(MemoryType::WC_GARLIC),
+            10 => Ok(MemoryType::WB_GARLIC),
+            _ => unreachable!(),
+        }
+    }
 }
