@@ -14,7 +14,7 @@ struct Dmem {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-enum DmemContainer {
+pub enum DmemContainer {
     Zero,
     One,
     Two,
@@ -33,8 +33,10 @@ impl DeviceDriver for Dmem {
             return Err(Box::new(IoctlErr::InsufficientCredentials));
         }
 
+        let proc_dmem_container = td.proc().dmem_container();
+
         if self.container != DmemContainer::Two
-            && self.container as usize != td.proc().dmem_container()
+            && self.container as usize != *proc_dmem_container
             && !cred.is_system()
         {
             return Err(Box::new(IoctlErr::InsufficientCredentials));
@@ -42,6 +44,10 @@ impl DeviceDriver for Dmem {
 
         match cmd {
             IoCmd::DMEM10(size) => *size = self.total_size,
+            IoCmd::DMEMGETPRT(_prt) => todo!(),
+            IoCmd::DMEMGETAVAIL(_avail) => todo!(),
+            IoCmd::DMEMALLOC(_alloc) => todo!(),
+            IoCmd::DMEMQUERY(_query) => todo!(),
             _ => todo!(),
         }
 
@@ -54,4 +60,42 @@ enum IoctlErr {
     #[error("bad credentials")]
     #[errno(EPERM)]
     InsufficientCredentials,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct PrtAperture {
+    addr: usize,
+    len: usize,
+    id: i64,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct DmemAvailable {
+    start_or_phys_out: usize,
+    end: usize,
+    align: usize,
+    size_out: usize,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct DmemAllocate {
+    start_or_phys_out: usize,
+    end: usize,
+    len: usize,
+    align: usize,
+    mem_type: i32,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct DmemQuery {
+    dmem_container: i32,
+    flags: i32,
+    unk: usize,
+    phys_addr: usize,
+    info_out: usize,
+    info_size: usize,
 }

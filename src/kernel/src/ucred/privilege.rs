@@ -18,6 +18,7 @@ impl Privilege {
     pub const VFS_LOOKUP: Self = Self(314);
     pub const SCE680: Self = Self(680);
     pub const SCE683: Self = Self(683);
+    pub const SCE685: Self = Self(685);
     pub const SCE686: Self = Self(686);
 }
 
@@ -33,6 +34,7 @@ impl Display for Privilege {
             Self::VFS_LOOKUP => f.write_str("PRIV_VFS_LOOKUP"),
             Self::SCE680 => f.write_str("SCE680"),
             Self::SCE683 => f.write_str("SCE683"),
+            Self::SCE685 => f.write_str("SCE685"),
             Self::SCE686 => f.write_str("SCE686"),
             v => v.0.fmt(f),
         }
