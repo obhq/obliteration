@@ -5,6 +5,7 @@ use crate::dmem::DmemManager;
 use crate::ee::native::NativeEngine;
 use crate::ee::EntryArg;
 use crate::errno::EEXIST;
+use crate::evf::EvfManager;
 use crate::fs::{Fs, FsInitError, MkdirError, MountError, MountFlags, MountOpts, VPath, VPathBuf};
 use crate::hv::Hypervisor;
 use crate::kqueue::KernelQueueManager;
@@ -44,6 +45,7 @@ mod dev;
 mod dmem;
 mod ee;
 mod errno;
+mod evf;
 mod fs;
 mod hv;
 mod idt;
@@ -377,6 +379,7 @@ fn run() -> Result<(), KernelError> {
 
     NamedObjManager::new(&mut syscalls, &proc);
     OsemManager::new(&mut syscalls, &proc);
+    EvfManager::new(&mut syscalls, &proc);
     UmtxManager::new(&mut syscalls);
 
     // Initialize runtime linker.

@@ -165,6 +165,10 @@ impl VProc {
         self.bin.write()
     }
 
+    pub fn objects(&self) -> GutexReadGuard<Idt<Arc<dyn Any + Send + Sync>>> {
+        self.objects.read()
+    }
+
     pub fn objects_mut(&self) -> GutexWriteGuard<'_, Idt<Arc<dyn Any + Send + Sync>>> {
         self.objects.write()
     }
