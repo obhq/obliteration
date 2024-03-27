@@ -1,4 +1,3 @@
-use crate::NewError;
 use std::ffi::{c_int, c_void};
 use std::ptr::null_mut;
 
@@ -6,10 +5,10 @@ use std::ptr::null_mut;
 pub struct Vm(());
 
 impl Vm {
-    pub fn new() -> Result<Self, NewError> {
+    pub fn new() -> Result<Self, c_int> {
         match unsafe { hv_vm_create(null_mut()) } {
             0 => Ok(Self(())),
-            v => Err(NewError::CreateVmFailed(v)),
+            v => Err(v),
         }
     }
 

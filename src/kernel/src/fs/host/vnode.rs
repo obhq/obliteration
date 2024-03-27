@@ -89,8 +89,10 @@ impl crate::fs::VnodeBackend for VnodeBackend {
                     return Err(Box::new(LookupError::InvalidName));
                 }
 
+                let host_file = self.file.open(name).map_err(LookupError::OpenFailed)?;
+
                 // Lookup the file.
-                Cow::Owned(self.file.open(name).map_err(LookupError::OpenFailed)?)
+                Cow::Owned(host_file)
             }
         };
 

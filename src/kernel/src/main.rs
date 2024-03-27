@@ -6,6 +6,7 @@ use crate::ee::native::NativeEngine;
 use crate::ee::EntryArg;
 use crate::errno::EEXIST;
 use crate::fs::{Fs, FsInitError, MkdirError, MountError, MountFlags, MountOpts, VPath, VPathBuf};
+use crate::hv::Hypervisor;
 use crate::kqueue::KernelQueueManager;
 use crate::log::{print, LOGGER};
 use crate::namedobj::NamedObjManager;
@@ -44,6 +45,7 @@ mod dmem;
 mod ee;
 mod errno;
 mod fs;
+mod hv;
 mod idt;
 mod kqueue;
 mod log;
@@ -185,6 +187,7 @@ fn run() -> Result<(), KernelError> {
     ));
 
     // Initialize foundations.
+    let hv = Hypervisor::new()?;
     let mut syscalls = Syscalls::new();
     let fs = Fs::new(args.system, &cred, &mut syscalls)?;
 
@@ -623,7 +626,7 @@ enum KernelError {
     FailedToLoadLibSceLibcInternal(#[source] Box<dyn Error>),
 
     #[error("couldn't create a hypervisor")]
-    CreateHypervisorFailed(#[from] hv::NewError),
+    CreateHypervisorFailed(#[from] hv::HypervisorError),
 
     #[error("main thread couldn't be created")]
     FailedToCreateMainThread(#[from] SpawnError),

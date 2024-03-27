@@ -66,8 +66,8 @@ impl From<TimeVal> for TimeSpec {
 
 #[repr(C)]
 struct TimeVal {
-    sec: i64,  // tv_sec
-    usec: i64, // tv_usec
+    sec: i64,  // tv_sec (seconds)
+    usec: i64, // tv_usec (microseconds)
 }
 
 impl TimeVal {
@@ -88,37 +88,24 @@ impl TimeVal {
     #[cfg(windows)]
     fn microtime() -> Result<Self, MicroTimeError> {
         use std::mem::MaybeUninit;
-        use windows_sys::Win32::System::{
-            SystemInformation::GetSystemTime, Time::SystemTimeToFileTime,
-        };
+        use windows_sys::Win32::System::SystemInformation::GetSystemTimePreciseAsFileTime;
 
-        // The number of hundreds of nanoseconds between the Windows epoch (1601-01-01T00:00:00Z)
-        // and the Unix epoch (1970-01-01T00:00:00Z)
-        const EPOCH: u64 = 116444736000000000;
+        let mut file_time = MaybeUninit::uninit();
 
-        let mut system_time = MaybeUninit::uninit();
-        let mut filetime = MaybeUninit::uninit();
+        unsafe {
+            GetSystemTimePreciseAsFileTime(file_time.as_mut_ptr());
+        }
 
-        let (system_time, filetime) = unsafe {
-            GetSystemTime(system_time.as_mut_ptr());
-            let res = SystemTimeToFileTime(system_time.as_ptr(), filetime.as_mut_ptr());
+        let file_time = unsafe { file_time.assume_init() };
 
-            if res == 0 {
-                Err(std::io::Error::last_os_error())?
-            }
+        let intervals = (file_time.dwHighDateTime as u64) << 32 | file_time.dwLowDateTime as u64;
 
-            (system_time.assume_init(), filetime.assume_init())
-        };
+        let sec = (intervals / 10_000_000 - 11_644_473_600)
+            .try_into()
+            .unwrap();
+        let usec = (intervals % 10_000_000).try_into().unwrap();
 
-        let mut time = 0;
-
-        time += filetime.dwLowDateTime as u64;
-        time += (filetime.dwHighDateTime as u64) << 32;
-
-        Ok(Self {
-            sec: ((time - EPOCH) / 10_000_000) as i64,
-            usec: (system_time.wMilliseconds * 1000) as i64,
-        })
+        Ok(Self { sec, usec })
     }
 }
 

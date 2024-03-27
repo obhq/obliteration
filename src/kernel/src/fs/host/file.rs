@@ -199,27 +199,27 @@ impl HostFile {
             Err(Error::last_os_error())
         } else {
             // TODO: Store mode somewhere that work on any FS. We should not use mode on the host
-            // for this because it can be lose when the user restore their files from the backup.
+            // for this because it can be lost when the user restores their files from the backup.
             Self::raw_open(parent, name)
         }
     }
 
     #[cfg(windows)]
-    fn raw_mkdir(parent: RawFile, name: &str, mode: u32) -> Result<RawFile, Error> {
+    fn raw_mkdir(parent: RawFile, name: &str, _mode: u32) -> Result<RawFile, Error> {
         use std::mem::size_of;
         use std::ptr::null_mut;
-        use windows_sys::Wdk::Foundation::OBJECT_ATTRIBUTES;
-        use windows_sys::Wdk::Storage::FileSystem::{
-            NtCreateFile, FILE_CREATE, FILE_DIRECTORY_FILE,
+        use windows_sys::Wdk::{
+            Foundation::OBJECT_ATTRIBUTES,
+            Storage::FileSystem::{NtCreateFile, FILE_DIRECTORY_FILE, FILE_OPEN},
         };
-        use windows_sys::Win32::Foundation::{
-            RtlNtStatusToDosError, STATUS_SUCCESS, UNICODE_STRING,
+        use windows_sys::Win32::{
+            Foundation::{RtlNtStatusToDosError, STATUS_SUCCESS, UNICODE_STRING},
+            Storage::FileSystem::{
+                FILE_ATTRIBUTE_DIRECTORY, FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES, FILE_READ_EA,
+                FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_TRAVERSE, FILE_WRITE_ATTRIBUTES,
+                FILE_WRITE_EA,
+            },
         };
-        use windows_sys::Win32::Storage::FileSystem::{
-            FILE_ATTRIBUTE_DIRECTORY, FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES, FILE_READ_EA,
-            FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_TRAVERSE, FILE_WRITE_ATTRIBUTES, FILE_WRITE_EA,
-        };
-        use windows_sys::Win32::System::WindowsProgramming::FILE_EXISTS;
 
         // Encode name.
         let mut name: Vec<u16> = name.encode_utf16().collect();
@@ -257,7 +257,7 @@ impl HostFile {
                 null_mut(),
                 FILE_ATTRIBUTE_DIRECTORY,
                 FILE_SHARE_READ | FILE_SHARE_WRITE,
-                FILE_CREATE,
+                FILE_OPEN,
                 FILE_DIRECTORY_FILE,
                 null_mut(),
                 0,
@@ -367,7 +367,8 @@ impl HostFile {
         use std::ptr::null_mut;
         use windows_sys::Wdk::Foundation::OBJECT_ATTRIBUTES;
         use windows_sys::Wdk::Storage::FileSystem::{
-            NtCreateFile, FILE_NON_DIRECTORY_FILE, FILE_OPEN, FILE_RANDOM_ACCESS,
+            NtCreateFile, FILE_DIRECTORY_FILE, FILE_NON_DIRECTORY_FILE, FILE_OPEN,
+            FILE_RANDOM_ACCESS,
         };
         use windows_sys::Win32::Foundation::{
             RtlNtStatusToDosError, STATUS_SUCCESS, UNICODE_STRING,
@@ -417,10 +418,30 @@ impl HostFile {
         if err == STATUS_SUCCESS {
             Ok(handle)
         } else {
-            // TODO: Check if file is a directory.
-            Err(Error::from_raw_os_error(unsafe {
-                RtlNtStatusToDosError(err).try_into().unwrap()
-            }))
+            // Try open as a directory.
+            let err = unsafe {
+                NtCreateFile(
+                    &mut handle,
+                    DELETE | FILE_GENERIC_READ | FILE_GENERIC_WRITE,
+                    &mut attr,
+                    &mut status,
+                    null_mut(),
+                    0,
+                    0,
+                    FILE_OPEN,
+                    FILE_DIRECTORY_FILE,
+                    null_mut(),
+                    0,
+                )
+            };
+
+            if err == STATUS_SUCCESS {
+                Ok(handle)
+            } else {
+                Err(Error::from_raw_os_error(unsafe {
+                    RtlNtStatusToDosError(err).try_into().unwrap()
+                }))
+            }
         }
     }
 }
