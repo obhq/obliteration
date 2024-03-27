@@ -208,10 +208,12 @@ impl HostFile {
         use std::ptr::null_mut;
         use windows_sys::Wdk::{
             Foundation::OBJECT_ATTRIBUTES,
-            Storage::FileSystem::{NtCreateFile, FILE_DIRECTORY_FILE, FILE_OPEN},
+            Storage::FileSystem::{NtCreateFile, FILE_CREATE, FILE_DIRECTORY_FILE, FILE_OPEN},
         };
         use windows_sys::Win32::{
-            Foundation::{RtlNtStatusToDosError, STATUS_SUCCESS, UNICODE_STRING},
+            Foundation::{
+                RtlNtStatusToDosError, STATUS_OBJECT_NAME_NOT_FOUND, STATUS_SUCCESS, UNICODE_STRING,
+            },
             Storage::FileSystem::{
                 FILE_ATTRIBUTE_DIRECTORY, FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES, FILE_READ_EA,
                 FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_TRAVERSE, FILE_WRITE_ATTRIBUTES,
@@ -238,7 +240,7 @@ impl HostFile {
             SecurityQualityOfService: null_mut(),
         };
 
-        // Create.
+        // Read file if it exists.
         let mut handle = 0;
         let mut status = unsafe { zeroed() };
         let error = unsafe {
@@ -265,7 +267,41 @@ impl HostFile {
         if error == STATUS_SUCCESS {
             // TODO: Store mode somewhere that work on any FS.
             Ok(handle)
+        } else if error == STATUS_OBJECT_NAME_NOT_FOUND {
+            // File does not exist, attempt to create the file.
+            let mut handle = 0;
+            let mut status = unsafe { zeroed() };
+            let error = unsafe {
+                NtCreateFile(
+                    &mut handle,
+                    FILE_READ_ATTRIBUTES
+                        | FILE_READ_EA
+                        | FILE_WRITE_ATTRIBUTES
+                        | FILE_WRITE_EA
+                        | FILE_LIST_DIRECTORY
+                        | FILE_TRAVERSE,
+                    &mut attr,
+                    &mut status,
+                    null_mut(),
+                    FILE_ATTRIBUTE_DIRECTORY,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    FILE_CREATE,
+                    FILE_DIRECTORY_FILE,
+                    null_mut(),
+                    0,
+                )
+            };
+            if error == STATUS_SUCCESS {
+                // TODO: Store mode somewhere that work on any FS.
+                Ok(handle)
+            } else {
+                // Reading AND creating file has failed.
+                Err(unsafe {
+                    Error::from_raw_os_error(RtlNtStatusToDosError(error).try_into().unwrap())
+                })
+            }
         } else {
+            // Error other than file not existing.
             Err(unsafe {
                 Error::from_raw_os_error(RtlNtStatusToDosError(error).try_into().unwrap())
             })
