@@ -1,6 +1,6 @@
 use super::{
     unixify_access, Access, CharacterDevice, FileBackend, IoCmd, Mode, Mount, OpenFlags,
-    RevokeFlags, Stat, TruncateLength, Uio, UioMut, VFile,
+    RevokeFlags, Stat, TruncateLength, Uio, UioMut, VFile, VFileType,
 };
 use crate::arnd;
 use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
@@ -137,11 +137,10 @@ impl Vnode {
 
     pub fn open(
         self: &Arc<Self>,
-        td: Option<&VThread>,
         mode: OpenFlags,
-        file: Option<&mut VFile>,
-    ) -> Result<(), Box<dyn Errno>> {
-        self.backend.open(self, td, mode, file)
+        td: Option<&VThread>,
+    ) -> Result<VFileType, Box<dyn Errno>> {
+        self.backend.open(self, mode, td)
     }
 
     pub fn revoke(self: &Arc<Self>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
@@ -304,12 +303,9 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
     fn open(
         &self,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
-        #[allow(unused_variables)] td: Option<&VThread>,
         #[allow(unused_variables)] mode: OpenFlags,
-        #[allow(unused_variables)] file: Option<&mut VFile>,
-    ) -> Result<(), Box<dyn Errno>> {
-        Ok(())
-    }
+        #[allow(unused_variables)] td: Option<&VThread>,
+    ) -> Result<VFileType, Box<dyn Errno>>;
 
     /// An implementation of `vop_revoke`.
     fn revoke(
