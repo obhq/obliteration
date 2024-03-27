@@ -1,5 +1,5 @@
 use crate::errno::Errno;
-use crate::fs::{FileBackend, IoCmd, PollEvents, Stat, VFile};
+use crate::fs::{DefaultFileBackendError, FileBackend, IoCmd, PollEvents, Stat, VFile};
 use crate::process::VThread;
 use std::sync::Arc;
 
@@ -14,7 +14,11 @@ impl FileBackend for BlockPool {
         cmd: IoCmd,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        todo!()
+        match cmd {
+            IoCmd::BPOOLEXPAND(args) => todo!(),
+            IoCmd::BPOOLSTATS(out) => todo!(),
+            _ => Err(Box::new(DefaultFileBackendError::IoctlNotSupported)),
+        }
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
@@ -30,4 +34,22 @@ impl FileBackend for BlockPool {
 
         todo!()
     }
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct BlockpoolExpandArgs {
+    len: usize,
+    search_start: usize,
+    search_end: usize,
+    alignment: usize,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct BlockpoolStats {
+    avail_flushed: i32,
+    avail_cached: i32,
+    allocated_flushed: i32,
+    allocated_cached: i32,
 }
