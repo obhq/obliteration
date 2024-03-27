@@ -243,7 +243,7 @@ impl HostFile {
         // Read file if it exists.
         let mut handle = 0;
         let mut status = unsafe { zeroed() };
-        let error = unsafe {
+        let mut error = unsafe {
             NtCreateFile(
                 &mut handle,
                 FILE_READ_ATTRIBUTES
@@ -269,9 +269,9 @@ impl HostFile {
             Ok(handle)
         } else if error == STATUS_OBJECT_NAME_NOT_FOUND {
             // File does not exist, attempt to create the file.
-            let mut handle = 0;
-            let mut status = unsafe { zeroed() };
-            let error = unsafe {
+            handle = 0;
+            status = unsafe { zeroed() };
+            error = unsafe {
                 NtCreateFile(
                     &mut handle,
                     FILE_READ_ATTRIBUTES
