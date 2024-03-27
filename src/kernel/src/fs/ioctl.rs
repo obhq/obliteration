@@ -1,3 +1,5 @@
+use crate::dev::{DmemAllocate, DmemAvailable, DmemQuery, PrtAperture};
+use crate::dmem::{BlockpoolExpandArgs, BlockpoolStats};
 use crate::errno::ENOTTY;
 use crate::syscalls::SysErr;
 use std::fmt::Debug;
@@ -105,6 +107,19 @@ commands! {
 
         /// Get total size?
         DMEM10(&mut usize) = 0x4008800a,
+        /// Get PRT aperture
+        DMEMGETPRT(&mut PrtAperture) = 0xC018800C,
+        /// Get available memory size
+        DMEMGETAVAIL(&mut DmemAvailable) = 0xC0208016,
+        /// Allocate direct memory
+        DMEMALLOC(&mut DmemAllocate) = 0xC0288001,
+        /// Query direct memory
+        DMEMQUERY(&mut DmemQuery) = 0x80288012,
+
+        /// sceKernelMemoryPoolExpand
+        BPOOLEXPAND(&BlockpoolExpandArgs) = 0xC020A801,
+        /// sceKernelMemoryPoolGetBlockStats
+        BPOOLSTATS(&mut BlockpoolStats) = 0x4010A802,
 
         /// Set close on exec on fd.
         FIOCLEX = 0x20006601,
