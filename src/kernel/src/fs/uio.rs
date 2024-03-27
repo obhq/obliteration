@@ -1,5 +1,6 @@
 use crate::errno::{Errno, EINVAL};
 use macros::Errno;
+use std::marker::PhantomData;
 use thiserror::Error;
 
 const UIO_MAXIOV: u32 = 1024;
@@ -9,7 +10,7 @@ const IOSIZE_MAX: usize = 0x7fffffff;
 pub struct IoVec<'a> {
     base: *const u8,
     len: usize,
-    _phantom: std::marker::PhantomData<&'a u8>,
+    _phantom: PhantomData<&'a u8>,
 }
 
 impl<'a> IoVec<'a> {
@@ -22,7 +23,7 @@ impl<'a> IoVec<'a> {
         Ok(Self {
             base,
             len,
-            _phantom: std::marker::PhantomData,
+            _phantom: PhantomData,
         })
     }
 
@@ -31,11 +32,18 @@ impl<'a> IoVec<'a> {
         Self {
             base,
             len,
-            _phantom: std::marker::PhantomData,
+            _phantom: PhantomData,
+        }
+    }
+
+    pub fn from_slice(slice: &'a [u8]) -> Self {
+        Self {
+            base: slice.as_ptr(),
+            len: slice.len(),
+            _phantom: PhantomData,
         }
     }
 }
-
 pub struct Uio<'a> {
     pub(super) vecs: &'a [IoVec<'a>], // uio_iov + uio_iovcnt
     pub(super) bytes_left: usize,     // uio_resid
@@ -83,6 +91,23 @@ impl<'a> UioMut<'a> {
         })?;
 
         Ok(Self { vecs, bytes_left })
+    }
+
+    pub fn from_single_vec(vec: &'a mut IoVec<'a>) -> Self {
+        let bytes_left = vec.len;
+
+        Self {
+            vecs: std::slice::from_mut(vec),
+            bytes_left,
+        }
+    }
+
+    #[cfg(unix)]
+    pub fn as_host(&mut self) -> (&'a mut libc::iovec, libc::c_int) {
+        let iov = self.vecs.as_mut_ptr() as *mut libc::iovec;
+        let iovcnt = self.vecs.len().try_into().unwrap();
+
+        (unsafe { &mut *iov }, iovcnt)
     }
 }
 

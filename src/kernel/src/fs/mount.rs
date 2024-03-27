@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::convert::Infallible;
 use std::fmt::Formatter;
 use std::fmt::{Debug, Display, Error};
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::hint::unreachable_unchecked;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, RwLock, RwLockWriteGuard};

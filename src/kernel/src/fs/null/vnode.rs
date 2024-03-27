@@ -1,8 +1,8 @@
 use crate::{
     errno::{Errno, EISDIR, EROFS},
     fs::{
-        null::hash::NULL_HASHTABLE, perm::Access, Mount, MountFlags, OpenFlags, VFile, Vnode,
-        VnodeAttrs, VnodeType,
+        null::hash::NULL_HASHTABLE, perm::Access, Mount, MountFlags, OpenFlags, Uio, UioMut,
+        VFileType, Vnode, VnodeAttrs, VnodeType,
     },
     process::VThread,
 };
@@ -96,14 +96,46 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         &self,
         _: &Arc<Vnode>,
         td: Option<&VThread>,
-        mode: OpenFlags,
-        file: Option<&mut VFile>,
-    ) -> Result<(), Box<dyn Errno>> {
-        self.lower
-            .open(td, mode, file)
+        flags: OpenFlags,
+    ) -> Result<VFileType, Box<dyn Errno>> {
+        let filetype = self
+            .lower
+            .open(td, flags)
             .map_err(OpenError::OpenFromLowerFailed)?;
 
-        Ok(())
+        Ok(filetype)
+    }
+
+    /// This function tries to mimic what calling `null_bypass` would do.
+    fn read(
+        &self,
+        vn: &Arc<Vnode>,
+        buf: &mut UioMut,
+        offset: i64,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        let read = self
+            .lower
+            .read(buf, offset, td)
+            .map_err(ReadError::ReadFromLowerFailed)?;
+
+        Ok(read)
+    }
+
+    /// This function tries to mimic what calling `null_bypass` would do.
+    fn write(
+        &self,
+        vn: &Arc<Vnode>,
+        buf: &mut Uio,
+        offset: i64,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        let written = self
+            .lower
+            .write(buf, offset, td)
+            .map_err(WriteError::WriteFromLowerFailed)?;
+
+        Ok(written)
     }
 }
 
@@ -146,21 +178,33 @@ pub(super) enum AccessError {
 }
 
 #[derive(Debug, Error, Errno)]
-pub(super) enum GetAttrError {
+enum GetAttrError {
     #[error("getattr from lower vnode failed")]
     GetAttrFromLowerFailed(#[from] Box<dyn Errno>),
 }
 
 #[derive(Debug, Error, Errno)]
-pub(super) enum LookupError {
+enum LookupError {
     #[error("lookup from lower vnode failed")]
     LookupFromLowerFailed(#[source] Box<dyn Errno>),
 }
 
 #[derive(Debug, Error, Errno)]
-pub(super) enum OpenError {
+enum OpenError {
     #[error("open from lower vnode failed")]
     OpenFromLowerFailed(#[source] Box<dyn Errno>),
+}
+
+#[derive(Debug, Error, Errno)]
+enum ReadError {
+    #[error("read from lower vnode failed")]
+    ReadFromLowerFailed(#[source] Box<dyn Errno>),
+}
+
+#[derive(Debug, Error, Errno)]
+enum WriteError {
+    #[error("write from lower vnode failed")]
+    WriteFromLowerFailed(#[source] Box<dyn Errno>),
 }
 
 #[derive(Debug, Error, Errno)]

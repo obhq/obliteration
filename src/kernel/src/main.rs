@@ -257,6 +257,28 @@ fn run() -> Result<(), KernelError> {
         return Err(KernelError::CreateDirectoryFailed(app, e));
     }
 
+    let system_component = "QXuNNl0Zhn";
+
+    let system_path = root.join(system_component).unwrap();
+
+    if let Err(e) = fs.mkdir(&system_path, 0o555, None) {
+        return Err(KernelError::CreateDirectoryFailed(system_path, e));
+    }
+
+    // TODO: Check permission of /mnt/sandbox/CUSAXXXXX_000/QXuNNl0Zhn on the PS4.
+    let common_path = system_path.join("common").unwrap();
+
+    if let Err(e) = fs.mkdir(&common_path, 0o555, None) {
+        return Err(KernelError::CreateDirectoryFailed(common_path, e));
+    }
+
+    // TODO: Check permission of /mnt/sandbox/CUSAXXXXX_000/QXuNNl0Zhn on the PS4.
+    let lib_path = system_path.join("lib").unwrap();
+
+    if let Err(e) = fs.mkdir(&lib_path, 0o555, None) {
+        return Err(KernelError::CreateDirectoryFailed(lib_path, e));
+    }
+
     // TODO: Get mount options from the PS4.
     let mut opts = MountOpts::new();
 
@@ -266,28 +288,6 @@ fn run() -> Result<(), KernelError> {
 
     if let Err(e) = fs.mount(opts, MountFlags::empty(), None) {
         return Err(KernelError::MountFailed(app, e));
-    }
-
-    let system_component = "QXuNNl0Zhn";
-
-    let system_path = root.join(system_component).unwrap();
-
-    if let Err(e) = fs.mkdir(&system_path, 0o555, None) {
-        return Err(KernelError::CreateDirectoryFailed(system_path, e));
-    }
-
-    // TODO: Check permission of /mnt/sandbox/CUSAXXXXX_000/<SYSTEM_PATH>/common on the PS4.
-    let common_path = system_path.join("common").unwrap();
-
-    if let Err(e) = fs.mkdir(&common_path, 0o555, None) {
-        return Err(KernelError::CreateDirectoryFailed(common_path, e));
-    }
-
-    // TODO: Check permission of /mnt/sandbox/CUSAXXXXX_000/<SYSTEM_PATH>/common/lib on the PS4.
-    let lib_path = system_path.join("lib").unwrap();
-
-    if let Err(e) = fs.mkdir(&lib_path, 0o555, None) {
-        return Err(KernelError::CreateDirectoryFailed(lib_path, e));
     }
 
     // TODO: Get mount options from the PS4.
@@ -365,7 +365,7 @@ fn run() -> Result<(), KernelError> {
         ProcType::BigApp,
         1, // See sys_budget_set on the PS4.
         root,
-        "QXuNNl0Zhn",
+        system_component,
         &mut syscalls,
     )?;
 

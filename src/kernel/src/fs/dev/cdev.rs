@@ -115,6 +115,7 @@ impl FileBackend for CharacterDevice {
         self: &Arc<Self>,
         file: &VFile,
         buf: &mut UioMut,
+        offset: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         todo!()
@@ -125,11 +126,13 @@ impl FileBackend for CharacterDevice {
         self: &Arc<Self>,
         file: &VFile,
         buf: &mut Uio,
+        offset: i64,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         todo!()
     }
 
+    /// An implementation of `devfs_ioctl_f` structure.
     #[allow(unused_variables)] // TODO: remove when implementing
     fn ioctl(
         self: &Arc<Self>,
@@ -137,7 +140,7 @@ impl FileBackend for CharacterDevice {
         cmd: IoCmd,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        todo!()
+        Ok(())
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing

@@ -84,6 +84,7 @@ impl<I: Read + Seek> Elf<I> {
             // Load SELF segment headers.
             let mut segments: Vec<SelfSegment> = Vec::with_capacity(segment_count);
 
+            // TODO: this could be done using vector reads
             for i in 0..segment_count {
                 // Read header.
                 let mut hdr = [0u8; 32];

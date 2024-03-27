@@ -171,11 +171,11 @@ impl Fs {
     }
 
     pub fn open(&self, path: impl AsRef<VPath>, td: Option<&VThread>) -> Result<VFile, OpenError> {
-        let vnode = self
-            .lookup(path, true, td)
-            .map_err(OpenError::LookupFailed)?;
+        let vnode = self.lookup(path, true, td)?;
 
-        todo!();
+        let ty = vnode.open(td, OpenFlags::empty())?;
+
+        Ok(VFile::new(ty))
     }
 
     pub fn lookup(
@@ -1113,7 +1113,10 @@ pub enum MountError {
 #[derive(Debug, Error, Errno)]
 pub enum OpenError {
     #[error("cannot lookup the file")]
-    LookupFailed(#[source] LookupError),
+    LookupFailed(#[from] LookupError),
+
+    #[error("cannot open the vnode")]
+    OpenFailed(#[from] Box<dyn Errno>),
 }
 
 #[derive(Debug, Error, Errno)]

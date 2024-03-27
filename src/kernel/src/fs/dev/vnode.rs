@@ -2,8 +2,8 @@ use super::dirent::Dirent;
 use super::{AllocVnodeError, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
-    check_access, Access, IoCmd, OpenFlags, RevokeFlags, VFile, Vnode, VnodeAttrs, VnodeItem,
-    VnodeType,
+    check_access, Access, IoCmd, OpenFlags, RevokeFlags, Uio, UioMut, VFileType, Vnode, VnodeAttrs,
+    VnodeItem, VnodeType,
 };
 use crate::process::VThread;
 use macros::Errno;
@@ -86,16 +86,22 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         }
 
         // Atomic get attributes.
-        let uid = dirent.uid();
-        let gid = dirent.gid();
-        let mode = dirent.mode();
+        let uid = *dirent.uid();
+        let gid = *dirent.gid();
+        let mode = *dirent.mode();
         let size = match vn.ty() {
             VnodeType::Directory(_) => 512,
             VnodeType::Link => todo!(), /* TODO: strlen(dirent.de_symlink) */
             _ => 0,
         };
 
-        todo!()
+        Ok(VnodeAttrs {
+            uid,
+            gid,
+            mode,
+            size,
+            fsid: 0,
+        })
     }
 
     fn ioctl(
@@ -167,11 +173,11 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         &self,
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
-        mode: OpenFlags,
-        file: Option<&mut VFile>,
-    ) -> Result<(), Box<dyn Errno>> {
+        flags: OpenFlags,
+    ) -> Result<VFileType, Box<dyn Errno>> {
         if !vn.is_character() {
-            return Ok(());
+            // This should correspond to dead_fileops.
+            todo!()
         }
 
         // Not sure why FreeBSD check if vnode is VBLK because all of vnode here always be VCHR.
@@ -181,16 +187,35 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         };
 
         // Execute switch handler.
-        dev.open(mode, 0x2000, td)?;
+        dev.open(flags, 0x2000, td)?;
 
-        // Set file OP.
-        let Some(file) = file else { return Ok(()) };
-
-        todo!()
+        Ok(VFileType::Device(dev.clone()))
     }
 
     fn revoke(&self, vn: &Arc<Vnode>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
         // TODO: Implement this.
+        Ok(())
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn read(
+        &self,
+        vn: &Arc<Vnode>,
+        buf: &mut UioMut,
+        offset: i64,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn write(
+        &self,
+        vn: &Arc<Vnode>,
+        buf: &mut Uio,
+        offset: i64,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
         todo!()
     }
 }
