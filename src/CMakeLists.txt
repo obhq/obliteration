@@ -1,6 +1,3 @@
-# CMake modules
-include(ExternalProject)
-
 # External dependencies.
 find_package(Qt6 COMPONENTS Widgets REQUIRED)
 find_package(Threads REQUIRED)
@@ -33,6 +30,8 @@ add_executable(obliteration WIN32 MACOSX_BUNDLE
     main.cpp
     main_window.cpp
     path.cpp
+    pkg_extractor.cpp
+    pkg_installer.cpp
     progress_dialog.cpp
     resources.qrc
     settings.cpp

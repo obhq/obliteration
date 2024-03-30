@@ -10,11 +10,6 @@
 #include <QMessageBox>
 #include <QThread>
 
-static const char *MkpathTarget[] = {
-    "dev",
-    "mnt/app0"
-};
-
 bool isSystemInitialized()
 {
     return isSystemInitialized(readSystemDirectorySetting());
@@ -40,16 +35,6 @@ bool initSystem(const QString &path, const QString &from, bool explicitDecryptio
 {
     // Setup progress dialog.
     ProgressDialog progress("Initializing system", QString("Connecting to %1").arg(from), parent);
-
-    // Create empty directories.
-    QDir base(path);
-
-    for (auto relative : MkpathTarget) {
-        if (!base.mkpath(relative)) {
-            QMessageBox::critical(parent, "Error", QString("Cannot create a directory inside %1").arg(path));
-            return false;
-        }
-    }
 
     // Setup the system downloader.
     QThread background;
