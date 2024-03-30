@@ -135,14 +135,6 @@ impl Vnode {
         self.backend.mkdir(self, name, mode, td)
     }
 
-    pub fn open(
-        self: &Arc<Self>,
-        mode: OpenFlags,
-        td: Option<&VThread>,
-    ) -> Result<VFileType, Box<dyn Errno>> {
-        self.backend.open(self, mode, td)
-    }
-
     pub fn revoke(self: &Arc<Self>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
         self.backend.revoke(self, flags)
     }
@@ -298,14 +290,6 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
     ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
         Err(Box::new(DefaultError::NotSupported))
     }
-
-    /// An implementation of `vop_open`.
-    fn open(
-        &self,
-        #[allow(unused_variables)] vn: &Arc<Vnode>,
-        #[allow(unused_variables)] mode: OpenFlags,
-        #[allow(unused_variables)] td: Option<&VThread>,
-    ) -> Result<VFileType, Box<dyn Errno>>;
 
     /// An implementation of `vop_revoke`.
     fn revoke(

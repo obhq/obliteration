@@ -123,16 +123,6 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 
         Ok(vn)
     }
-
-    #[allow(unused_variables)] // TODO: remove when implementing.
-    fn open(
-        &self,
-        vn: &Arc<Vnode>,
-        mode: OpenFlags,
-        td: Option<&VThread>,
-    ) -> Result<VFileType, Box<dyn Errno>> {
-        todo!()
-    }
 }
 
 /// Represents an error when [`getattr()`] fails.

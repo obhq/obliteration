@@ -173,7 +173,13 @@ impl Fs {
     pub fn open(&self, path: impl AsRef<VPath>, td: Option<&VThread>) -> Result<VFile, OpenError> {
         let vnode = self.lookup(path, true, td)?;
 
-        todo!();
+        let ty = if let Some(VnodeItem::Device(dev)) = vnode.item().as_ref() {
+            VFileType::Device(dev.clone())
+        } else {
+            VFileType::Vnode(vnode.clone())
+        };
+
+        Ok(VFile::new(ty))
     }
 
     pub fn lookup(

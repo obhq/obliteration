@@ -163,29 +163,6 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         }
     }
 
-    fn open(
-        &self,
-        vn: &Arc<Vnode>,
-        mode: OpenFlags,
-        td: Option<&VThread>,
-    ) -> Result<VFileType, Box<dyn Errno>> {
-        if !vn.is_character() {
-            todo!()
-        }
-
-        // Not sure why FreeBSD check if vnode is VBLK because all of vnode here always be VCHR.
-        let item = vn.item();
-        let Some(VnodeItem::Device(dev)) = item.as_ref() else {
-            unreachable!();
-        };
-
-        // Execute switch handler.
-        dev.open(mode, 0x2000, td)?;
-
-        // Set file OP.
-        Ok(VFileType::Device(dev.clone()))
-    }
-
     fn revoke(&self, vn: &Arc<Vnode>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
         // TODO: Implement this.
         todo!()
