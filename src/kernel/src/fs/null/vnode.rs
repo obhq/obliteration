@@ -1,8 +1,7 @@
 use crate::{
     errno::{Errno, EISDIR, EROFS},
     fs::{
-        null::hash::NULL_HASHTABLE, perm::Access, Mount, MountFlags, OpenFlags, VFile, Vnode,
-        VnodeAttrs, VnodeType,
+        null::hash::NULL_HASHTABLE, perm::Access, Mount, MountFlags, Vnode, VnodeAttrs, VnodeType,
     },
     process::VThread,
 };
@@ -89,21 +88,6 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         };
 
         Ok(vnode)
-    }
-
-    /// This function tries to mimic what calling `null_bypass` would do.
-    fn open(
-        &self,
-        _: &Arc<Vnode>,
-        td: Option<&VThread>,
-        mode: OpenFlags,
-        file: Option<&mut VFile>,
-    ) -> Result<(), Box<dyn Errno>> {
-        self.lower
-            .open(td, mode, file)
-            .map_err(OpenError::OpenFromLowerFailed)?;
-
-        Ok(())
     }
 }
 

@@ -1,13 +1,12 @@
+use super::{AllocVnodeError, TempFs};
 use crate::errno::{Errno, ENOENT, ENOSPC};
-use crate::fs::{Access, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType};
+use crate::fs::{Access, OpenFlags, VFileType, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use macros::Errno;
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
-
-use super::{AllocVnodeError, TempFs};
 
 /// A collection of [`Node`].
 #[derive(Debug)]
@@ -201,17 +200,6 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         entries.write().push(Arc::new(dirent));
 
         Ok(vnode)
-    }
-
-    #[allow(unused_variables)] // TODO: remove when implementing
-    fn open(
-        &self,
-        vn: &Arc<Vnode>,
-        td: Option<&VThread>,
-        mode: OpenFlags,
-        #[allow(unused_variables)] file: Option<&mut VFile>,
-    ) -> Result<(), Box<dyn Errno>> {
-        todo!()
     }
 }
 

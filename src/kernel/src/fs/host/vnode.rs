@@ -1,7 +1,7 @@
 use super::file::HostFile;
 use super::{GetVnodeError, HostFs};
 use crate::errno::{Errno, EEXIST, EIO, ENOENT, ENOTDIR};
-use crate::fs::{Access, IoCmd, Mode, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType};
+use crate::fs::{Access, IoCmd, Mode, OpenFlags, VFileType, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use macros::Errno;
@@ -122,17 +122,6 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             .map_err(MkDirError::GetVnodeFailed)?;
 
         Ok(vn)
-    }
-
-    #[allow(unused_variables)] // TODO: remove when implementing.
-    fn open(
-        &self,
-        vn: &Arc<Vnode>,
-        td: Option<&VThread>,
-        mode: OpenFlags,
-        file: Option<&mut VFile>,
-    ) -> Result<(), Box<dyn Errno>> {
-        todo!()
     }
 }
 
