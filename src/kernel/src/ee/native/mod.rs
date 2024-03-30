@@ -1,7 +1,8 @@
 use crate::fs::{VPath, VPathBuf};
-use crate::process::{Protections, VThread};
+use crate::process::VThread;
 use crate::rtld::{CodeWorkspaceError, Memory, Module, UnprotectSegmentError};
 use crate::syscalls::{SysIn, SysOut, Syscalls};
+use crate::vm::Protections;
 use byteorder::{ByteOrder, LE};
 use iced_x86::code_asm::{
     al, dword_ptr, ecx, get_gpr64, qword_ptr, r10, r11, r11d, r12, r13, r14, r15, r8, r9, rax, rbp,

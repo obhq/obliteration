@@ -11,6 +11,7 @@ use crate::signal::{
 use crate::signal::{SigChldFlags, Signal};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
+use crate::vm::{MemoryManagerError, Vm};
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use macros::Errno;
 use std::any::Any;
@@ -34,7 +35,6 @@ pub use self::rlimit::*;
 pub use self::session::*;
 pub use self::signal::*;
 pub use self::thread::*;
-pub use self::vm::*;
 
 mod appinfo;
 mod binary;
@@ -45,7 +45,6 @@ mod rlimit;
 mod session;
 mod signal;
 mod thread;
-mod vm;
 
 /// An implementation of `proc` structure.
 ///
@@ -57,7 +56,7 @@ pub struct VProc {
     threads: Gutex<Vec<Arc<VThread>>>, // p_threads
     cred: Ucred,                       // p_ucred
     group: Gutex<Option<VProcGroup>>,  // p_pgrp
-    vm: Arc<MemoryManager>,            // p_vmspace
+    vm: Arc<Vm>,                       // p_vmspace
     sigacts: Gutex<SignalActs>,        // p_sigacts
     files: Arc<FileDesc>,              // p_fd
     system_path: String,               // p_randomized_path
@@ -99,7 +98,7 @@ impl VProc {
             threads: gg.spawn(Vec::new()),
             cred,
             group: gg.spawn(None),
-            vm: MemoryManager::new(sys)?,
+            vm: Vm::new(sys)?,
             sigacts: gg.spawn(SignalActs::new()),
             files: FileDesc::new(root),
             system_path: system_path.into(),
@@ -141,7 +140,7 @@ impl VProc {
         &self.cred
     }
 
-    pub fn vm(&self) -> &MemoryManager {
+    pub fn vm(&self) -> &Arc<Vm> {
         &self.vm
     }
 
