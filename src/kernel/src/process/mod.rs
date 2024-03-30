@@ -11,6 +11,7 @@ use crate::signal::{
 use crate::signal::{SigChldFlags, Signal};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
+use crate::vm::{MemoryManager, MemoryManagerError};
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use macros::Errno;
 use std::any::Any;
@@ -34,7 +35,6 @@ pub use self::rlimit::*;
 pub use self::session::*;
 pub use self::signal::*;
 pub use self::thread::*;
-pub use self::vm::*;
 
 mod appinfo;
 mod binary;
@@ -45,7 +45,6 @@ mod rlimit;
 mod session;
 mod signal;
 mod thread;
-mod vm;
 
 /// An implementation of `proc` structure.
 ///

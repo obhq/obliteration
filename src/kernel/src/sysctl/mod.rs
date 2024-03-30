@@ -3,8 +3,9 @@ use crate::arnd::rand_bytes;
 use crate::errno::{
     EFAULT, EINVAL, EISDIR, ENAMETOOLONG, ENOENT, ENOMEM, ENOTDIR, EOPNOTSUPP, EPERM, ESRCH,
 };
-use crate::process::{MemoryManager, VThread};
+use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
+use crate::vm::MemoryManager;
 use std::any::Any;
 use std::cmp::min;
 use std::ptr::null_mut;
