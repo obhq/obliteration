@@ -4,12 +4,13 @@
 #include <QUtf8StringView>
 
 #include <cstddef>
+#include <cstdint>
 
 struct error;
 struct param;
 struct pkg;
 
-typedef void (*pkg_extract_status_t) (const char *status, std::size_t current, std::size_t total, void *ud);
+typedef void (*pkg_extract_status_t) (const char *status, std::size_t bar, std::uint64_t current, std::uint64_t total, void *ud);
 
 extern "C" {
     void error_free(error *err);
@@ -171,7 +172,16 @@ class Pkg final {
 public:
     Pkg() : m_obj(nullptr) {}
     Pkg(const Pkg &) = delete;
-    ~Pkg() { close(); }
+    Pkg(Pkg &&other)
+    {
+        m_obj = other.m_obj;
+        other.m_obj = nullptr;
+    }
+
+    ~Pkg()
+    {
+        close();
+    }
 
 public:
     Pkg &operator=(const Pkg &) = delete;

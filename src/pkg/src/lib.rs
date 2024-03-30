@@ -7,11 +7,9 @@ use param::Param;
 use sha2::Digest;
 use std::convert::Infallible;
 use std::error::Error;
-use std::ffi::{c_void, CString};
 use std::fmt::{Display, Formatter};
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::{Cursor, Read, Write};
-use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
@@ -79,13 +77,12 @@ impl Pkg {
     pub fn extract(
         &self,
         dir: impl AsRef<Path>,
-        status: extern "C" fn(*const c_char, usize, usize, *mut c_void),
-        ud: *mut c_void,
+        mut progress: impl PkgProgress,
     ) -> Result<(), ExtractError> {
         let dir = dir.as_ref();
 
-        self.extract_entries(dir.join("sce_sys"), status, ud)?;
-        self.extract_pfs(dir, status, ud)?;
+        self.extract_entries(dir.join("sce_sys"), &mut progress)?;
+        self.extract_pfs(dir, &mut progress)?;
 
         Ok(())
     }
@@ -93,9 +90,10 @@ impl Pkg {
     fn extract_entries(
         &self,
         dir: impl AsRef<Path>,
-        status: extern "C" fn(*const c_char, usize, usize, *mut c_void),
-        ud: *mut c_void,
+        progress: &mut impl PkgProgress,
     ) -> Result<(), ExtractError> {
+        let dir = dir.as_ref();
+
         for num in 0..self.header.entry_count() {
             // Check offset.
             let offset = self.header.table_offset() + num * Entry::RAW_SIZE;
@@ -108,7 +106,7 @@ impl Pkg {
             let entry = unsafe { Entry::read(raw) };
 
             // Get file path.
-            let path = match entry.to_path(dir.as_ref()) {
+            let path = match entry.to_path(dir) {
                 Some(v) => v,
                 None => continue,
             };
@@ -132,9 +130,7 @@ impl Pkg {
             };
 
             // Report status.
-            let name = CString::new(path.to_string_lossy().as_ref()).unwrap();
-
-            status(name.as_ptr(), num, self.header.entry_count(), ud);
+            progress.entry_start(&path, num, self.header.entry_count());
 
             // Create a directory for destination file.
             let dir = path.parent().unwrap();
@@ -161,9 +157,7 @@ impl Pkg {
 
         // Report completion.
         if self.header.entry_count() != 0 {
-            let total = self.header.entry_count();
-
-            status(c"Entries extraction completed".as_ptr(), total, total, ud);
+            progress.entries_completed(self.header.entry_count());
         }
 
         Ok(())
@@ -172,8 +166,7 @@ impl Pkg {
     fn extract_pfs(
         &self,
         dir: impl AsRef<Path>,
-        status: extern "C" fn(*const c_char, usize, usize, *mut c_void),
-        ud: *mut c_void,
+        progress: &mut impl PkgProgress,
     ) -> Result<(), ExtractError> {
         use pfs::directory::Item;
 
@@ -247,18 +240,12 @@ impl Pkg {
         };
 
         // Extract inner uroot.
-        let mut progress = 0;
+        if inodes != 0 {
+            let dir = dir.as_ref();
 
-        self.extract_directory(Vec::new(), uroot, dir, &mut |path| {
-            let path = CString::new(path.to_string_lossy().into_owned()).unwrap();
-
-            status(path.as_ptr(), progress, inodes, ud);
-            progress += 1;
-        })?;
-
-        // Report completion.
-        if progress != 0 {
-            status(c"PFS extraction completed".as_ptr(), inodes, inodes, ud);
+            progress.pfs_start(inodes);
+            self.extract_directory(dir, Vec::new(), uroot, dir, progress)?;
+            progress.pfs_completed();
         }
 
         Ok(())
@@ -266,10 +253,11 @@ impl Pkg {
 
     fn extract_directory(
         &self,
+        root: &Path,
         path: Vec<&[u8]>,
         dir: pfs::directory::Directory,
         output: impl AsRef<Path>,
-        status: &mut impl FnMut(&Path),
+        progress: &mut impl PkgProgress,
     ) -> Result<(), ExtractError> {
         // Open PFS directory.
         let items = match dir.open() {
@@ -325,19 +313,20 @@ impl Pkg {
                     };
 
                     // Create output directory.
-                    status(&output);
+                    progress.pfs_directory(&output);
 
                     if let Err(e) = create_dir_all(&output) {
                         return Err(ExtractError::CreateDirectoryFailed(output, e));
                     }
 
                     // Extract files.
-                    self.extract_directory(path, i, &output, status)?;
+                    self.extract_directory(root, path, i, &output, progress)?;
 
                     meta
                 }
                 Item::File(mut file) => {
                     // Construct metadata.
+                    let len = file.len();
                     let meta = fs::Metadata {
                         mode: file.mode().into(),
                         atime: file.atime(),
@@ -352,7 +341,7 @@ impl Pkg {
                         gid: file.gid(),
                     };
 
-                    status(&output);
+                    progress.pfs_file(&output, len);
 
                     // Open destination file.
                     let mut dest = match OpenOptions::new()
@@ -365,6 +354,8 @@ impl Pkg {
                     };
 
                     // Copy.
+                    let mut copied = 0u64;
+
                     loop {
                         // Read source.
                         let read = match file.read(&mut buffer) {
@@ -389,6 +380,10 @@ impl Pkg {
                         if let Err(e) = dest.write_all(&buffer[..read]) {
                             return Err(ExtractError::WriteFileFailed(output, e));
                         }
+
+                        // Report progress.
+                        copied += TryInto::<u64>::try_into(read).unwrap();
+                        progress.pfs_write(copied, len);
                     }
 
                     meta
@@ -572,6 +567,16 @@ impl Pkg {
 
         Err(FindEntryError::NotFound)
     }
+}
+
+pub trait PkgProgress {
+    fn entry_start(&mut self, path: &Path, current: usize, total: usize);
+    fn entries_completed(&mut self, total: usize);
+    fn pfs_start(&mut self, files: usize);
+    fn pfs_directory(&mut self, path: &Path);
+    fn pfs_file(&mut self, path: &Path, len: u64);
+    fn pfs_write(&mut self, current: u64, len: u64);
+    fn pfs_completed(&mut self);
 }
 
 #[derive(Debug)]
