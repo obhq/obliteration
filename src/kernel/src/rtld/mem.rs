@@ -1,6 +1,7 @@
 use super::MapError;
 use crate::fs::VFile;
-use crate::process::{MappingFlags, MemoryUpdateError, Protections, VProc};
+use crate::process::VProc;
+use crate::vm::{MappingFlags, MemoryUpdateError, Protections};
 use elf::{Elf, ProgramFlags, ProgramType};
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::alloc::Layout;

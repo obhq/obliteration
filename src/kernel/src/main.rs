@@ -62,6 +62,7 @@ mod sysctl;
 mod time;
 mod ucred;
 mod umtx;
+mod vm;
 
 fn main() -> Exit {
     run().into()
