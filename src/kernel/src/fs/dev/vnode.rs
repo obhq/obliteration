@@ -2,8 +2,7 @@ use super::dirent::Dirent;
 use super::{AllocVnodeError, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
-    check_access, Access, IoCmd, OpenFlags, RevokeFlags, Uio, UioMut, VFileType, Vnode, VnodeAttrs,
-    VnodeItem, VnodeType,
+    check_access, Access, IoCmd, RevokeFlags, Uio, UioMut, Vnode, VnodeAttrs, VnodeType,
 };
 use crate::process::VThread;
 use macros::Errno;

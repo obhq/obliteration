@@ -1,6 +1,6 @@
 use super::{
-    unixify_access, Access, CharacterDevice, FileBackend, IoCmd, Mode, Mount, OpenFlags,
-    RevokeFlags, Stat, TruncateLength, Uio, UioMut, VFile, VFileType,
+    unixify_access, Access, CharacterDevice, FileBackend, IoCmd, Mode, Mount, RevokeFlags, Stat,
+    TruncateLength, Uio, UioMut, VFile,
 };
 use crate::arnd;
 use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
