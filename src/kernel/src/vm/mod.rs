@@ -22,16 +22,16 @@ mod page;
 mod stack;
 mod storage;
 
-/// Manage all paged memory that can be seen by a PS4 app.
+/// Implementation of `vmspace` structure.
 #[derive(Debug)]
-pub struct MemoryManager {
+pub struct Vm {
     page_size: usize,
     allocation_granularity: usize,
     allocations: RwLock<BTreeMap<usize, Alloc>>, // Key is Alloc::addr.
     stack: AppStack,
 }
 
-impl MemoryManager {
+impl Vm {
     /// Size of a memory page on PS4.
     pub const VIRTUAL_PAGE_SIZE: usize = 0x4000;
 
@@ -555,7 +555,7 @@ impl MemoryManager {
 
         // Check if the request is a guard for main stack.
         if addr == self.stack.guard() {
-            assert_eq!(len, MemoryManager::VIRTUAL_PAGE_SIZE);
+            assert_eq!(len, Self::VIRTUAL_PAGE_SIZE);
             assert!(prot.is_empty());
             assert!(flags.intersects(MappingFlags::MAP_ANON));
             assert_eq!(fd, -1);
@@ -650,7 +650,7 @@ impl MemoryManager {
     }
 }
 
-unsafe impl Sync for MemoryManager {}
+unsafe impl Sync for Vm {}
 
 /// Contains information for an allocation of virtual pages.
 #[derive(Debug)]
