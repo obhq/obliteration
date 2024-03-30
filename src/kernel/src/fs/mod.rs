@@ -175,7 +175,13 @@ impl Fs {
             .lookup(path, true, td)
             .map_err(OpenError::LookupFailed)?;
 
-        todo!();
+        let ty = if let Some(VnodeItem::Device(dev)) = vnode.item().as_ref() {
+            VFileType::Device(dev.clone())
+        } else {
+            VFileType::Vnode(vnode.clone())
+        };
+
+        Ok(VFile::new(ty))
     }
 
     pub fn lookup(

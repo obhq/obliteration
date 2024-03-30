@@ -1,6 +1,6 @@
 use super::{
     unixify_access, Access, CharacterDevice, FileBackend, IoCmd, Mode, Mount, OpenFlags,
-    RevokeFlags, Stat, TruncateLength, Uio, UioMut, VFile,
+    RevokeFlags, Stat, TruncateLength, Uio, UioMut, VFile, VFileType,
 };
 use crate::arnd;
 use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
@@ -133,15 +133,6 @@ impl Vnode {
         td: Option<&VThread>,
     ) -> Result<Arc<Self>, Box<dyn Errno>> {
         self.backend.mkdir(self, name, mode, td)
-    }
-
-    pub fn open(
-        self: &Arc<Self>,
-        td: Option<&VThread>,
-        mode: OpenFlags,
-        file: Option<&mut VFile>,
-    ) -> Result<(), Box<dyn Errno>> {
-        self.backend.open(self, td, mode, file)
     }
 
     pub fn revoke(self: &Arc<Self>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
@@ -298,17 +289,6 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
         #[allow(unused_variables)] td: Option<&VThread>,
     ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
         Err(Box::new(DefaultError::NotSupported))
-    }
-
-    /// An implementation of `vop_open`.
-    fn open(
-        &self,
-        #[allow(unused_variables)] vn: &Arc<Vnode>,
-        #[allow(unused_variables)] td: Option<&VThread>,
-        #[allow(unused_variables)] mode: OpenFlags,
-        #[allow(unused_variables)] file: Option<&mut VFile>,
-    ) -> Result<(), Box<dyn Errno>> {
-        Ok(())
     }
 
     /// An implementation of `vop_revoke`.
