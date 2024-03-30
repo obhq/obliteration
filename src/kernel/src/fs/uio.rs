@@ -34,6 +34,18 @@ impl<'a> IoVec<'a> {
             _phantom: std::marker::PhantomData,
         }
     }
+
+    pub fn from_slice(slice: &mut [u8]) -> Self {
+        Self {
+            base: slice.as_ptr(),
+            len: slice.len(),
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
 }
 
 pub struct Uio<'a> {
@@ -83,6 +95,15 @@ impl<'a> UioMut<'a> {
         })?;
 
         Ok(Self { vecs, bytes_left })
+    }
+
+    pub fn from_single_vec(vec: &'a mut IoVec<'a>) -> Self {
+        let bytes_left = vec.len;
+
+        Self {
+            vecs: std::slice::from_mut(vec),
+            bytes_left,
+        }
     }
 }
 

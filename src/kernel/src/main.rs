@@ -365,7 +365,7 @@ fn run() -> Result<(), KernelError> {
         ProcType::BigApp,
         1, // See sys_budget_set on the PS4.
         root,
-        "QXuNNl0Zhn",
+        system_component,
         &mut syscalls,
     )?;
 

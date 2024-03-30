@@ -1,7 +1,7 @@
 use super::file::HostFile;
 use super::{GetVnodeError, HostFs};
 use crate::errno::{Errno, EEXIST, EIO, ENOENT, ENOTDIR};
-use crate::fs::{Access, IoCmd, Mode, OpenFlags, VFileType, Vnode, VnodeAttrs, VnodeType};
+use crate::fs::{Access, IoCmd, Mode, Uio, UioMut, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use macros::Errno;
@@ -123,6 +123,24 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 
         Ok(vn)
     }
+
+    fn read(
+        &self,
+        #[allow(unused_variables)] buf: &mut UioMut,
+        #[allow(unused_variables)] td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        let read = self.file.read(buf).map_err(ReadError::ReadFailed)?;
+
+        Ok(read)
+    }
+
+    fn write(
+        &self,
+        #[allow(unused_variables)] buf: &mut Uio,
+        #[allow(unused_variables)] td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!()
+    }
 }
 
 /// Represents an error when [`getattr()`] fails.
@@ -181,4 +199,11 @@ impl From<std::io::Error> for MkDirError {
             _ => MkDirError::CreateFailed(e),
         }
     }
+}
+
+#[derive(Debug, Error, Errno)]
+enum ReadError {
+    #[error("read failed")]
+    #[errno(EIO)]
+    ReadFailed(#[source] std::io::Error),
 }

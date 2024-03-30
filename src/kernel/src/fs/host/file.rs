@@ -1,3 +1,4 @@
+use crate::fs::UioMut;
 use std::collections::HashMap;
 use std::io::Error;
 use std::mem::zeroed;
@@ -270,6 +271,16 @@ impl HostFile {
                 Error::from_raw_os_error(RtlNtStatusToDosError(error).try_into().unwrap())
             })
         }
+    }
+
+    #[cfg(unix)]
+    pub(super) fn read(&self, buf: &mut UioMut) -> Result<usize, Error> {
+        todo!()
+    }
+
+    #[cfg(windows)]
+    pub(super) fn read(&self, buf: &mut UioMut) -> Result<usize, Error> {
+        todo!()
     }
 
     #[cfg(unix)]

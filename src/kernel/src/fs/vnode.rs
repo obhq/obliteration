@@ -138,6 +138,22 @@ impl Vnode {
     pub fn revoke(self: &Arc<Self>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
         self.backend.revoke(self, flags)
     }
+
+    pub fn read(
+        self: &Arc<Self>,
+        buf: &mut UioMut,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        self.backend.read(buf, td)
+    }
+
+    pub fn write(
+        self: &Arc<Self>,
+        buf: &mut Uio,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        self.backend.write(buf, td)
+    }
 }
 
 impl FileBackend for Vnode {
@@ -148,7 +164,7 @@ impl FileBackend for Vnode {
         buf: &mut UioMut,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        todo!()
+        self.backend.read(buf, td)
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
@@ -299,6 +315,18 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
     ) -> Result<(), Box<dyn Errno>> {
         panic!("vop_revoke called");
     }
+
+    fn read(
+        &self,
+        #[allow(unused_variables)] buf: &mut UioMut,
+        #[allow(unused_variables)] td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>>;
+
+    fn write(
+        &self,
+        #[allow(unused_variables)] buf: &mut Uio,
+        #[allow(unused_variables)] td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>>;
 }
 
 /// An implementation of `vattr` struct.
