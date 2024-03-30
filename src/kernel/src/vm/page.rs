@@ -1,14 +1,14 @@
-use super::MemoryManager;
+use super::Vm;
 
 /// Encapsulated one or more virtual pages.
 pub struct VPages<'a> {
-    mm: &'a MemoryManager,
+    mm: &'a Vm,
     ptr: *mut u8,
     len: usize,
 }
 
 impl<'a> VPages<'a> {
-    pub(super) fn new(mm: &'a MemoryManager, ptr: *mut u8, len: usize) -> Self {
+    pub(super) fn new(mm: &'a Vm, ptr: *mut u8, len: usize) -> Self {
         Self { mm, ptr, len }
     }
 

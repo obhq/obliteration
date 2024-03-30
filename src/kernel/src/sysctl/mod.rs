@@ -5,7 +5,7 @@ use crate::errno::{
 };
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
-use crate::vm::MemoryManager;
+use crate::vm::Vm;
 use std::any::Any;
 use std::cmp::min;
 use std::ptr::null_mut;
@@ -1080,7 +1080,7 @@ static HW_PAGESIZE: Oid = Oid {
     number: Sysctl::HW_PAGESIZE,
     kind: Sysctl::CTLFLAG_RD | Sysctl::CTLFLAG_MPSAFE | Sysctl::CTLFLAG_CAPRD | Sysctl::CTLTYPE_INT,
     arg1: None,
-    arg2: MemoryManager::VIRTUAL_PAGE_SIZE,
+    arg2: Vm::VIRTUAL_PAGE_SIZE,
     name: "pagesize",
     handler: Some(Sysctl::handle_int),
     fmt: "I",
