@@ -275,12 +275,30 @@ impl HostFile {
 
     #[cfg(unix)]
     pub(super) fn read(&self, buf: &mut UioMut) -> Result<usize, Error> {
+        use libc::pread;
+
+        buf.write_with::<Error>(|iov, mut offset| {
+            let nbytes = if let Ok(nbytes) = iov.len().try_into() {
+                nbytes
+            } else {
+                todo!()
+            };
+
+            let nread = unsafe { pread(self.raw, iov.ptr().cast(), nbytes, offset) };
+
+            match nread {
+                0.. if nread == nbytes as i64 => Ok(nread as u64),
+                0.. => todo!(),
+                _ => todo!(),
+            }
+        })?;
+
         todo!()
     }
 
     #[cfg(windows)]
     pub(super) fn read(&self, buf: &mut UioMut) -> Result<(), Error> {
-        use std::{mem::MaybeUninit, ptr::null_mut};
+        use std::ptr::null_mut;
         use windows_sys::{
             Wdk::Storage::FileSystem::NtReadFile,
             Win32::{
