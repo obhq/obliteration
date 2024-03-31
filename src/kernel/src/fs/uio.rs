@@ -35,7 +35,7 @@ impl<'a> IoVec<'a> {
         }
     }
 
-    pub fn from_slice(slice: &mut [u8]) -> Self {
+    pub fn from_slice(slice: &'a mut [u8]) -> Self {
         Self {
             base: slice.as_ptr(),
             len: slice.len(),
