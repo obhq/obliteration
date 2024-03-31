@@ -116,7 +116,7 @@ impl FileBackend for SharedMemory {
         _: &VFile,
         _: &mut UioMut,
         _: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultFileBackendError::OperationNotSupported))
     }
 
@@ -125,7 +125,7 @@ impl FileBackend for SharedMemory {
         _: &VFile,
         _: &mut Uio,
         _: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultFileBackendError::OperationNotSupported))
     }
 

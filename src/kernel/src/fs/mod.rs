@@ -372,12 +372,7 @@ impl Fs {
 
         let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
-        let uio = UioMut {
-            vecs: &mut [iovec],
-            bytes_left: len,
-        };
-
-        self.readv(fd, uio, td)
+        todo!()
     }
 
     fn sys_write(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -387,12 +382,7 @@ impl Fs {
 
         let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
-        let uio = Uio {
-            vecs: &[iovec],
-            bytes_left: len,
-        };
-
-        self.writev(fd, uio, td)
+        todo!()
     }
 
     fn sys_open(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -628,9 +618,10 @@ impl Fs {
         let uio = UioMut {
             vecs: &mut [iovec],
             bytes_left: len,
+            offset,
         };
 
-        self.preadv(fd, uio, offset, td)
+        self.preadv(fd, uio, td)
     }
 
     fn sys_pwrite(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -641,12 +632,7 @@ impl Fs {
 
         let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
-        let uio = Uio {
-            vecs: &[iovec],
-            bytes_left: len,
-        };
-
-        self.pwritev(fd, uio, offset, td)
+        todo!()
     }
 
     fn sys_preadv(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -655,23 +641,19 @@ impl Fs {
         let count: u32 = i.args[2].try_into().unwrap();
         let offset: i64 = i.args[3].into();
 
-        let uio = unsafe { UioMut::copyin(iovec, count) }?;
-
-        self.preadv(fd, uio, offset, td)
+        todo!()
     }
 
-    fn preadv(&self, fd: i32, uio: UioMut, offset: i64, td: &VThread) -> Result<SysOut, SysErr> {
+    fn preadv(&self, fd: i32, uio: UioMut, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_read(fd)?;
 
         let vnode = file.seekable_vnode().ok_or(SysErr::Raw(ESPIPE))?;
 
-        if offset < 0 && !vnode.is_character() {
+        if uio.offset < 0 && !vnode.is_character() {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        let read = file.do_read(uio, Offset::Provided(offset), Some(td))?;
-
-        Ok(read.into())
+        todo!()
     }
 
     fn sys_pwritev(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -680,9 +662,7 @@ impl Fs {
         let count: u32 = i.args[2].try_into().unwrap();
         let offset: i64 = i.args[3].into();
 
-        let uio = unsafe { Uio::copyin(iovec, count) }?;
-
-        self.pwritev(fd, uio, offset, td)
+        todo!()
     }
 
     fn pwritev(&self, fd: i32, uio: Uio, offset: i64, td: &VThread) -> Result<SysOut, SysErr> {
@@ -694,9 +674,7 @@ impl Fs {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        let written = file.do_write(uio, Offset::Provided(offset), Some(td))?;
-
-        Ok(written.into())
+        todo!()
     }
 
     fn sys_fstatat(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {

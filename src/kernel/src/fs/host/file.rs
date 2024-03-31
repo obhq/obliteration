@@ -279,8 +279,65 @@ impl HostFile {
     }
 
     #[cfg(windows)]
-    pub(super) fn read(&self, buf: &mut UioMut) -> Result<usize, Error> {
-        todo!()
+    pub(super) fn read(&self, buf: &mut UioMut) -> Result<(), Error> {
+        use std::{mem::MaybeUninit, ptr::null_mut};
+        use windows_sys::{
+            Wdk::Storage::FileSystem::NtReadFile,
+            Win32::{
+                Foundation::{STATUS_END_OF_FILE, STATUS_PENDING},
+                System::{
+                    Threading::{WaitForSingleObject, INFINITE},
+                    IO::{IO_STATUS_BLOCK, IO_STATUS_BLOCK_0},
+                },
+            },
+        };
+
+        buf.write_with::<Error>(|iov, mut offset| {
+            let nbytes = if let Ok(nbytes) = iov.len().try_into() {
+                nbytes
+            } else {
+                todo!()
+            };
+
+            let mut io_status = IO_STATUS_BLOCK {
+                Anonymous: IO_STATUS_BLOCK_0 {
+                    Status: STATUS_PENDING,
+                },
+                Information: 0,
+            };
+
+            let status = unsafe {
+                NtReadFile(
+                    self.raw,
+                    0,
+                    None,
+                    null_mut(),
+                    &mut io_status,
+                    iov.ptr().cast(),
+                    nbytes,
+                    &mut offset,
+                    null_mut(),
+                )
+            };
+
+            let status = if status == STATUS_PENDING {
+                unsafe {
+                    WaitForSingleObject(self.raw, INFINITE);
+                    io_status.Anonymous.Status
+                }
+            } else {
+                status
+            };
+
+            match status {
+                STATUS_PENDING => todo!(),
+                STATUS_END_OF_FILE => todo!(),
+                0.. => Ok(io_status.Information as u64),
+                _ => todo!(),
+            }
+        })?;
+
+        Ok(())
     }
 
     #[cfg(unix)]

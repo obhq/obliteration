@@ -73,33 +73,26 @@ bitflags! {
 }
 
 impl FileBackend for Socket {
+    #[allow(unused_variables)] // TODO: remove when implementing
     /// See soo_read on the PS4 for a reference.
     fn read(
         self: &Arc<Self>,
         _: &VFile,
         buf: &mut UioMut,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
-        let read = self.receive(buf, td)?;
-
-        Ok(read)
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
     }
 
+    #[allow(unused_variables)] // TODO: remove when implementing
+    /// See soo_write on the PS4 for a reference.
     fn write(
         self: &Arc<Self>,
         _: &VFile,
         buf: &mut Uio,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
-        let written = match self.send(buf, td) {
-            Ok(written) => written,
-            Err(SendError::BrokenPipe) if self.options().intersects(SocketOptions::NOSIGPIPE) => {
-                todo!()
-            }
-            Err(e) => return Err(e.into()),
-        };
-
-        Ok(written)
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing

@@ -244,16 +244,16 @@ fn run() -> Result<(), KernelError> {
     }
 
     // TODO: Check permission of /mnt/sandbox/CUSAXXXXX_000 on the PS4.
-    let root: VPathBuf = format!("/mnt/sandbox/{}_000", param.title_id())
+    let proc_root: VPathBuf = format!("/mnt/sandbox/{}_000", param.title_id())
         .try_into()
         .unwrap();
 
-    if let Err(e) = fs.mkdir(&root, 0o555, None) {
-        return Err(KernelError::CreateDirectoryFailed(root, e));
+    if let Err(e) = fs.mkdir(&proc_root, 0o555, None) {
+        return Err(KernelError::CreateDirectoryFailed(proc_root, e));
     }
 
     // TODO: Check permission of /mnt/sandbox/CUSAXXXXX_000/app0 on the PS4.
-    let app = root.join("app0").unwrap();
+    let app = proc_root.join("app0").unwrap();
 
     if let Err(e) = fs.mkdir(&app, 0o555, None) {
         return Err(KernelError::CreateDirectoryFailed(app, e));
@@ -272,7 +272,7 @@ fn run() -> Result<(), KernelError> {
 
     let system_component = "QXuNNl0Zhn";
 
-    let system_path = root.join(system_component).unwrap();
+    let system_path = proc_root.join(system_component).unwrap();
 
     if let Err(e) = fs.mkdir(&system_path, 0o555, None) {
         return Err(KernelError::CreateDirectoryFailed(system_path, e));
@@ -324,7 +324,7 @@ fn run() -> Result<(), KernelError> {
     }
 
     // TODO: Check permission of /mnt/sandbox/CUSAXXXXX_000/dev on the PS4.
-    let path = root.join("dev").unwrap();
+    let path = proc_root.join("dev").unwrap();
 
     if let Err(e) = fs.mkdir(&path, 0o555, None) {
         return Err(KernelError::CreateDirectoryFailed(path, e));
@@ -369,13 +369,14 @@ fn run() -> Result<(), KernelError> {
 
     // TODO: Get correct budget name from the PS4.
     let budget_id = budget.create(Budget::new("big app", ProcType::BigApp));
-    let root = fs.lookup(root, true, None).unwrap();
+    let proc_root = fs.lookup(proc_root, true, None).unwrap();
+
     let proc = VProc::new(
         auth,
         budget_id,
         ProcType::BigApp,
         1, // See sys_budget_set on the PS4.
-        root,
+        proc_root,
         system_component,
         syscalls,
     )?;

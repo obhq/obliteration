@@ -116,7 +116,7 @@ impl FileBackend for CharacterDevice {
         file: &VFile,
         buf: &mut UioMut,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn Errno>> {
         todo!()
     }
 
@@ -126,7 +126,7 @@ impl FileBackend for CharacterDevice {
         file: &VFile,
         buf: &mut Uio,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn Errno>> {
         todo!()
     }
 
