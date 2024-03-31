@@ -1,13 +1,12 @@
+use super::{AllocVnodeError, TempFs};
 use crate::errno::{Errno, ENOENT, ENOSPC};
-use crate::fs::{Access, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType};
+use crate::fs::{Access, Uio, UioMut, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use macros::Errno;
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
-
-use super::{AllocVnodeError, TempFs};
 
 /// A collection of [`Node`].
 #[derive(Debug)]
@@ -153,7 +152,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
                 let dirent = entries
                     .iter()
                     .find(|dirent| dirent.name() == name)
-                    .ok_or_else(|| LookupError::NoParent)?;
+                    .ok_or(LookupError::NotFound)?;
 
                 let vnode = self
                     .tmpfs
@@ -203,13 +202,20 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         Ok(vnode)
     }
 
-    #[allow(unused_variables)] // TODO: remove when implementing
-    fn open(
+    fn read(
         &self,
-        vn: &Arc<Vnode>,
-        td: Option<&VThread>,
-        mode: OpenFlags,
-        #[allow(unused_variables)] file: Option<&mut VFile>,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] buf: &mut UioMut,
+        #[allow(unused_variables)] td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+
+    fn write(
+        &self,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] buf: &mut Uio,
+        #[allow(unused_variables)] td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         todo!()
     }
@@ -231,7 +237,7 @@ pub enum LookupError {
 
     #[error("tmpfs node not found")]
     #[errno(ENOENT)]
-    NoParent,
+    NotFound,
 
     #[error("failed to alloc vnode")]
     FailedToAllocVnode(#[from] AllocVnodeError),

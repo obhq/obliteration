@@ -3,9 +3,9 @@ use crate::arnd::rand_bytes;
 use crate::errno::{
     EFAULT, EINVAL, EISDIR, ENAMETOOLONG, ENOENT, ENOMEM, ENOTDIR, EOPNOTSUPP, EPERM, ESRCH,
 };
-use crate::memory::MemoryManager;
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
+use crate::vm::Vm;
 use std::any::Any;
 use std::cmp::min;
 use std::ptr::null_mut;
@@ -17,7 +17,6 @@ use std::sync::Arc;
 /// This is an implementation of
 /// https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/kern/kern_sysctl.c.
 pub struct Sysctl {
-    mm: Arc<MemoryManager>,
     machdep: Arc<MachDep>,
 }
 
@@ -99,9 +98,8 @@ impl Sysctl {
 
     pub const HW_PAGESIZE: i32 = 7;
 
-    pub fn new(mm: &Arc<MemoryManager>, machdep: &Arc<MachDep>, sys: &mut Syscalls) -> Arc<Self> {
+    pub fn new(machdep: &Arc<MachDep>, sys: &mut Syscalls) -> Arc<Self> {
         let ctl = Arc::new(Self {
-            mm: mm.clone(),
             machdep: machdep.clone(),
         });
 
@@ -137,24 +135,27 @@ impl Sysctl {
         }
 
         // Setup a request.
-        let mut req = SysctlReq::default();
-
-        if !oldlenp.is_null() {
-            req.validlen = unsafe { *oldlenp };
-        }
-
-        req.old = if old.is_null() {
-            None
-        } else if oldlenp.is_null() {
-            Some(unsafe { std::slice::from_raw_parts_mut(old, 0) })
-        } else {
-            Some(unsafe { std::slice::from_raw_parts_mut(old, *oldlenp) })
-        };
-
-        req.new = if new.is_null() {
-            None
-        } else {
-            Some(unsafe { std::slice::from_raw_parts(new, newlen) })
+        let mut req = SysctlReq {
+            td,
+            old: if old.is_null() {
+                None
+            } else if oldlenp.is_null() {
+                Some(unsafe { std::slice::from_raw_parts_mut(old, 0) })
+            } else {
+                Some(unsafe { std::slice::from_raw_parts_mut(old, *oldlenp) })
+            },
+            oldidx: 0,
+            new: if new.is_null() {
+                None
+            } else {
+                Some(unsafe { std::slice::from_raw_parts(new, newlen) })
+            },
+            newidx: 0,
+            validlen: if oldlenp.is_null() {
+                0
+            } else {
+                unsafe { *oldlenp }
+            },
         };
 
         // Execute.
@@ -408,7 +409,7 @@ impl Sysctl {
         _: usize,
         req: &mut SysctlReq,
     ) -> Result<(), SysErr> {
-        let stack = self.mm.stack().end() as usize;
+        let stack = req.td.proc().vm().stack().end() as usize;
         let value = stack.to_ne_bytes();
 
         req.write(&value)
@@ -544,8 +545,8 @@ impl Sysctl {
 }
 
 /// An implementation of `sysctl_req` structure.
-#[derive(Default)]
 pub struct SysctlReq<'a> {
+    pub td: &'a VThread,
     pub old: Option<&'a mut [u8]>,
     pub oldidx: usize,
     pub new: Option<&'a [u8]>,
@@ -1079,7 +1080,7 @@ static HW_PAGESIZE: Oid = Oid {
     number: Sysctl::HW_PAGESIZE,
     kind: Sysctl::CTLFLAG_RD | Sysctl::CTLFLAG_MPSAFE | Sysctl::CTLFLAG_CAPRD | Sysctl::CTLTYPE_INT,
     arg1: None,
-    arg2: MemoryManager::VIRTUAL_PAGE_SIZE,
+    arg2: Vm::VIRTUAL_PAGE_SIZE,
     name: "pagesize",
     handler: Some(Sysctl::handle_int),
     fmt: "I",

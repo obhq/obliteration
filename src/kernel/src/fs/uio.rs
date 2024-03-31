@@ -7,7 +7,7 @@ const IOSIZE_MAX: usize = 0x7fffffff;
 
 #[repr(C)]
 pub struct IoVec<'a> {
-    base: *const u8,
+    ptr: *const u8,
     len: usize,
     _phantom: std::marker::PhantomData<&'a u8>,
 }
@@ -20,7 +20,7 @@ impl<'a> IoVec<'a> {
         }
 
         Ok(Self {
-            base,
+            ptr: base,
             len,
             _phantom: std::marker::PhantomData,
         })
@@ -29,10 +29,26 @@ impl<'a> IoVec<'a> {
     /// This is for when the PS4 DOES NOT check the length (such as in recvmsg, recvfrom, sendmsg and sendto)
     pub unsafe fn from_raw_parts(base: *const u8, len: usize) -> Self {
         Self {
-            base,
+            ptr: base,
             len,
             _phantom: std::marker::PhantomData,
         }
+    }
+
+    pub fn from_slice(slice: &'a mut [u8]) -> Self {
+        Self {
+            ptr: slice.as_ptr(),
+            len: slice.len(),
+            _phantom: std::marker::PhantomData,
+        }
+    }
+
+    pub fn ptr(&self) -> *mut u8 {
+        self.ptr as _
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
     }
 }
 
@@ -64,6 +80,7 @@ impl<'a> Uio<'a> {
 pub struct UioMut<'a> {
     pub(super) vecs: &'a mut [IoVec<'a>], // uio_iov + uio_iovcnt
     pub(super) bytes_left: usize,         // uio_resid
+    pub(super) offset: i64,               // uio_offset
 }
 
 impl<'a> UioMut<'a> {
@@ -82,7 +99,31 @@ impl<'a> UioMut<'a> {
             }
         })?;
 
-        Ok(Self { vecs, bytes_left })
+        todo!()
+    }
+
+    pub fn from_single_vec(vec: &'a mut IoVec<'a>, offset: i64) -> Self {
+        let bytes_left = vec.len;
+
+        Self {
+            vecs: std::slice::from_mut(vec),
+            bytes_left,
+            offset,
+        }
+    }
+
+    pub fn write_with<E>(
+        &mut self,
+        func: impl Fn(&mut IoVec, i64) -> Result<u64, E>,
+    ) -> Result<(), E> {
+        for vec in self.vecs.iter_mut() {
+            let written = func(vec, self.offset)?;
+
+            self.offset.checked_add_unsigned(written).unwrap();
+            self.bytes_left -= written as usize;
+        }
+
+        Ok(())
     }
 }
 

@@ -141,7 +141,7 @@ impl Param {
                     app_ver = Some(Self::read_utf8(&mut raw, i, format, len, 8)?);
                 }
                 b"CATEGORY" => {
-                    category = Some(Self::read_utf8(&mut raw, i, format, 4, 4)?);
+                    category = Some(Self::read_utf8(&mut raw, i, format, len, 4)?);
                 }
                 b"CONTENT_ID" => {
                     content_id = Some(Self::read_utf8(&mut raw, i, format, len, 48)?);

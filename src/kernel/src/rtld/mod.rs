@@ -8,9 +8,9 @@ use crate::fs::{Fs, OpenError, VPath, VPathBuf};
 use crate::idt::Entry;
 use crate::info;
 use crate::log::print;
-use crate::memory::{MemoryManager, MemoryUpdateError, MmapError, Protections};
 use crate::process::{Binaries, VThread};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
+use crate::vm::{MemoryUpdateError, MmapError, Protections};
 use bitflags::bitflags;
 use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation, Symbol};
 use gmtx::{Gutex, GutexGroup};
@@ -34,7 +34,6 @@ mod resolver;
 #[derive(Debug)]
 pub struct RuntimeLinker {
     fs: Arc<Fs>,
-    mm: Arc<MemoryManager>,
     ee: Arc<NativeEngine>,
     // TODO: Move all fields after this to proc.
     list: Gutex<Vec<Arc<Module>>>,      // obj_list + obj_tail
@@ -53,16 +52,10 @@ impl RuntimeLinker {
         0x30,
     ];
 
-    pub fn new(
-        fs: &Arc<Fs>,
-        mm: &Arc<MemoryManager>,
-        ee: &Arc<NativeEngine>,
-        sys: &mut Syscalls,
-    ) -> Arc<Self> {
+    pub fn new(fs: &Arc<Fs>, ee: &Arc<NativeEngine>, sys: &mut Syscalls) -> Arc<Self> {
         let gg = GutexGroup::new();
         let ld = Arc::new(Self {
             fs: fs.clone(),
-            mm: mm.clone(),
             ee: ee.clone(),
             list: gg.spawn(Vec::new()),
             kernel: gg.spawn(None),
@@ -127,11 +120,12 @@ impl RuntimeLinker {
             0
         };
 
+        // TODO: Check exec_new_vmspace on the PS4 to see what we have missed here.
         // TODO: Apply remaining checks from exec_self_imgact.
         // Map eboot.bin.
         let mut app = Module::map(
-            &self.mm,
             &self.ee,
+            td.proc(),
             elf,
             base,
             "executable",
@@ -266,7 +260,7 @@ impl RuntimeLinker {
         let (entry, _) = table.alloc(|id| {
             let name = path.file_name().unwrap();
             let id: u32 = (id + 1).try_into().unwrap();
-            let mut md = match Module::map(&self.mm, &self.ee, elf, 0, name, id, names, tls) {
+            let mut md = match Module::map(&self.ee, td.proc(), elf, 0, name, id, names, tls) {
                 Ok(v) => v,
                 Err(e) => return Err(LoadError::MapFailed(e)),
             };
@@ -549,12 +543,16 @@ impl RuntimeLinker {
 
     fn sys_dynlib_load_prx(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Check if application is a dynamic SELF.
-        let mut bin = td.proc().bin_mut();
-        let bin = bin.as_mut().ok_or(SysErr::Raw(EPERM))?;
+        let mut bin_guard = td.proc().bin_mut();
+        let bin = bin_guard.as_mut().ok_or(SysErr::Raw(EPERM))?;
+
+        let sdk_ver = bin.app().sdk_ver();
 
         if bin.app().file_info().is_none() {
             return Err(SysErr::Raw(EPERM));
         }
+
+        drop(bin_guard);
 
         // Not sure what is this. Maybe kernel only flags?
         let mut flags: u32 = i.args[1].try_into().unwrap();
@@ -632,8 +630,7 @@ impl RuntimeLinker {
             let resolver = SymbolResolver::new(
                 &mains,
                 &globals,
-                bin.app().sdk_ver() >= 0x5000000
-                    || self.flags.read().contains(LinkerFlags::HAS_ASAN),
+                sdk_ver >= 0x5000000 || self.flags.read().contains(LinkerFlags::HAS_ASAN),
             );
 
             self.init_dag(&md);

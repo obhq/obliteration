@@ -1,5 +1,6 @@
 use crate::errno::ENOTTY;
 use crate::syscalls::SysErr;
+use std::fmt::Debug;
 
 /// This macro does some compile time verification to ensure we don't mistype anything.
 /// It also ensures that we don't miss any commands, since [`IoCmd::try_from_raw_parts`] will panic with a todo! if it encounters an unknown command.
@@ -84,6 +85,27 @@ macro_rules! commands {
 
 commands! {
     pub enum IoCmd {
+        /// Get media size in bytes.
+        DIOCGMEDIASIZE(&i64) = 0x40086418,
+
+        /// sceKernelInitializeDipsw
+        DIPSWINIT = 0x20008800,
+        /// sceKernelSetDipsw
+        DIPSWSET(&Unknown2) = 0x80028801,
+        /// sceKernelUnsetDipsw
+        DIPSWUNSET(&Unknown2) = 0x80028802,
+        /// sceKernelCheckDipsw
+        DIPSWCHECK(&mut Unknown8) = 0xC0088803,
+        /// sceKernelReadDipswData
+        DIPSWREAD(&Unknown16) = 0x80108804,
+        /// sceKernelWriteDipswData
+        DIPSWWRITE(&Unknown16) = 0x80108805,
+        /// sceKernelCheckDipsw
+        DIPSWCHECK2(&mut i32) = 0x40048806,
+
+        /// Get total size?
+        DMEM10(&mut usize) = 0x4008800a,
+
         /// Set close on exec on fd.
         FIOCLEX = 0x20006601,
         /// Remove close on exec on fd.
@@ -96,9 +118,22 @@ commands! {
         FIOSEEKDATA(&mut i64) = 0xC0086661,
         /// Seek hole.
         FIOSEEKHOLE(&mut i64) = 0xC0086662,
+
+        /// Unkown rng command
+        RNG1 = 0x40445301,
+        /// Unkown rng command
+        RNG2 = 0x40445302,
+
         /// Become controlling terminal.
         TIOCSCTTY = 0x20007461,
-        /// Get media size in bytes.
-        DIOCGMEDIASIZE(&i64) = 0x40086418,
+
     }
 }
+
+type Unknown2 = Unknown<2>;
+type Unknown8 = Unknown<8>;
+type Unknown16 = Unknown<16>;
+
+/// A dummy type to be used as a placeholder for unknown data.
+#[derive(Debug)]
+pub struct Unknown<const N: usize>([u8; N]);
