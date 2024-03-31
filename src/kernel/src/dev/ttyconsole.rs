@@ -54,7 +54,7 @@ impl DeviceDriver for TtyConsole {
         cmd: IoCmd,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        todo!()
+        Ok(())
     }
 }
 
