@@ -1,7 +1,7 @@
 use crate::{
-    errno::EINVAL,
     process::VThread,
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
+    Errno,
 };
 use std::sync::Arc;
 
@@ -23,7 +23,7 @@ impl UmtxManager {
         if let Some(op) = OP_TABLE.get(op as usize) {
             op(td, i)
         } else {
-            Err(SysErr::Raw(EINVAL))
+            Err(SysErr::Raw(Errno::EINVAL))
         }
     }
 }

@@ -13,16 +13,16 @@ pub fn transform(arg: ItemEnum) -> syn::Result<TokenStream> {
 
     if arms.is_empty() {
         Ok(quote!(
-            impl Errno for #enum_name {
-                fn errno(&self) -> std::num::NonZeroI32 {
+            impl AsErrno for #enum_name {
+                fn errno(&self) -> crate::Errno {
                     match *self {}
                 }
             }
         ))
     } else {
         Ok(quote!(
-            impl Errno for #enum_name {
-                fn errno(&self) -> std::num::NonZeroI32 {
+            impl AsErrno for #enum_name {
+                fn errno(&self) -> crate::Errno {
                     match self {
                         #(#arms)*
                     }
@@ -52,9 +52,13 @@ fn process_variant(variant: &Variant, enum_name: &Ident) -> syn::Result<TokenStr
                     let variant_name = &variant.ident;
 
                     let arm = match variant.fields {
-                        Fields::Unit => quote!(#enum_name::#variant_name => #errno,),
-                        Fields::Named(_) => quote!(#enum_name::#variant_name {..} => #errno,),
-                        Fields::Unnamed(_) => quote!(#enum_name::#variant_name (..) => #errno,),
+                        Fields::Unit => quote!(#enum_name::#variant_name => crate::Errno::#errno,),
+                        Fields::Named(_) => {
+                            quote!(#enum_name::#variant_name {..} => crate::Errno::#errno,)
+                        }
+                        Fields::Unnamed(_) => {
+                            quote!(#enum_name::#variant_name (..) => crate::Errno::#errno,)
+                        }
                     };
 
                     return Ok(arm);

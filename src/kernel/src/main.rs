@@ -4,7 +4,6 @@ use crate::dev::{DebugManager, TtyManager};
 use crate::dmem::DmemManager;
 use crate::ee::native::NativeEngine;
 use crate::ee::EntryArg;
-use crate::errno::EEXIST;
 use crate::fs::{Fs, FsInitError, MkdirError, MountError, MountFlags, MountOpts, VPath, VPathBuf};
 use crate::hv::Hypervisor;
 use crate::kqueue::KernelQueueManager;
@@ -36,6 +35,8 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use sysinfo::{MemoryRefreshKind, System};
 use thiserror::Error;
+
+pub use errno::*;
 
 mod arch;
 mod arnd;
@@ -198,7 +199,7 @@ fn run() -> Result<(), KernelError> {
 
     if let Err(e) = fs.mkdir(path, 0o555, None) {
         match e {
-            MkdirError::CreateFailed(e) if e.errno() == EEXIST => {}
+            MkdirError::CreateFailed(e) if e.errno() == Errno::EEXIST => {}
             e => return Err(KernelError::CreateDirectoryFailed(path.into(), e)),
         }
     }

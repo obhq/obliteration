@@ -1,8 +1,7 @@
-use crate::errno::EINVAL;
 use crate::idt::Entry;
-use crate::info;
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
+use crate::{info, Errno};
 use std::sync::Arc;
 
 pub struct NamedObjManager {}
@@ -18,7 +17,7 @@ impl NamedObjManager {
 
     fn sys_namedobj_create(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
-        let name = unsafe { i.args[0].to_str(32) }?.ok_or(SysErr::Raw(EINVAL))?;
+        let name = unsafe { i.args[0].to_str(32) }?.ok_or(SysErr::Raw(Errno::EINVAL))?;
         let data: usize = i.args[1].into();
         let flags: u32 = i.args[2].try_into().unwrap();
 

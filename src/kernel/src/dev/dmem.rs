@@ -1,5 +1,5 @@
 use crate::{
-    errno::{Errno, EPERM},
+    errno::AsErrno,
     fs::{CharacterDevice, DeviceDriver, IoCmd},
     process::VThread,
 };
@@ -26,7 +26,7 @@ impl DeviceDriver for Dmem {
         dev: &Arc<CharacterDevice>,
         cmd: IoCmd,
         td: &VThread,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         let cred = td.cred();
 
         if cred.is_unk1() || cred.is_unk2() {

@@ -1,4 +1,4 @@
-use crate::{errno::EINVAL, syscalls::SysErr};
+use crate::{syscalls::SysErr, Errno};
 
 /// An implementation of `cpuset`.
 #[derive(Debug)]
@@ -40,7 +40,7 @@ impl TryFrom<i32> for CpuLevel {
             1 => Ok(Self::Root),
             2 => Ok(Self::Cpuset),
             3 => Ok(Self::Which),
-            _ => Err(SysErr::Raw(EINVAL)),
+            _ => Err(SysErr::Raw(Errno::EINVAL)),
         }
     }
 }
@@ -66,7 +66,7 @@ impl TryFrom<i32> for CpuWhich {
             3 => Ok(Self::Cpuset),
             4 => Ok(Self::Irq),
             5 => Ok(Self::Jail),
-            _ => Err(SysErr::Raw(EINVAL)),
+            _ => Err(SysErr::Raw(Errno::EINVAL)),
         }
     }
 }

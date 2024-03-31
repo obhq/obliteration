@@ -1,5 +1,5 @@
 use crate::budget::BudgetType;
-use crate::errno::{Errno, EFAULT, EINVAL};
+use crate::errno::AsErrno;
 use crate::fs::{IoVec, VFileFlags, VFileType};
 use crate::info;
 use crate::{

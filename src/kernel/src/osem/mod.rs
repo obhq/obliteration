@@ -1,7 +1,7 @@
-use crate::errno::EINVAL;
 use crate::idt::Entry;
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
+use crate::Errno;
 use bitflags::bitflags;
 use std::sync::Arc;
 
@@ -23,7 +23,7 @@ impl OsemManager {
             let mut flags = OsemFlags::from_bits_retain(flags);
 
             if flags.bits() & 0xfffffefc != 0 || flags.bits() & 0x3 == 0x3 {
-                return Err(SysErr::Raw(EINVAL));
+                return Err(SysErr::Raw(Errno::EINVAL));
             }
 
             if flags.bits() & 0x3 == 0 {

@@ -1,12 +1,13 @@
 use crate::budget::BudgetType;
-use crate::errno::{Errno, EBADF};
+use crate::errno::AsErrno;
 use crate::fs::{VFile, VFileFlags, VFileType, Vnode};
 use crate::kqueue::KernelQueue;
+use crate::Errno;
 use gmtx::{Gutex, GutexGroup};
 use macros::Errno;
 use std::collections::VecDeque;
 use std::convert::Infallible;
-use std::num::{NonZeroI32, TryFromIntError};
+use std::num::TryFromIntError;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -53,7 +54,7 @@ impl FileDesc {
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing; add budget argument
-    pub fn alloc_with_budget<E: Errno>(
+    pub fn alloc_with_budget<E: AsErrno>(
         &self,
         constructor: impl FnOnce(i32) -> Result<VFileType, E>,
         flags: VFileFlags,
@@ -63,7 +64,7 @@ impl FileDesc {
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing;
-    pub fn alloc_without_budget<E: Errno>(
+    pub fn alloc_without_budget<E: AsErrno>(
         &self,
         constructor: impl FnOnce(i32) -> Result<VFileType, E>,
         flags: VFileFlags,
@@ -175,13 +176,13 @@ impl From<TryFromIntError> for GetFileError {
 }
 
 #[derive(Debug, Error)]
-pub enum FileAllocError<E: Errno = Infallible> {
+pub enum FileAllocError<E: AsErrno = Infallible> {
     #[error(transparent)]
     Inner(E),
 }
 
-impl<E: Errno> Errno for FileAllocError<E> {
-    fn errno(&self) -> NonZeroI32 {
+impl<E: AsErrno> AsErrno for FileAllocError<E> {
+    fn errno(&self) -> Errno {
         match self {
             Self::Inner(e) => e.errno(),
         }

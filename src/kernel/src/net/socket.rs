@@ -4,10 +4,7 @@ use crate::fs::{
     VFile,
 };
 use crate::ucred::Ucred;
-use crate::{
-    errno::{Errno, EPIPE},
-    process::VThread,
-};
+use crate::{errno::AsErrno, process::VThread};
 use bitflags::bitflags;
 use macros::Errno;
 use std::num::NonZeroI32;
@@ -79,7 +76,7 @@ impl FileBackend for Socket {
         _: &VFile,
         buf: &mut UioMut,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         let read = self.receive(buf, td)?;
 
         Ok(read)
@@ -90,7 +87,7 @@ impl FileBackend for Socket {
         _: &VFile,
         buf: &mut Uio,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         let written = match self.send(buf, td) {
             Ok(written) => written,
             Err(SendError::BrokenPipe) if self.options().intersects(SocketOptions::NOSIGPIPE) => {
@@ -108,7 +105,7 @@ impl FileBackend for Socket {
         file: &VFile,
         cmd: IoCmd,
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         todo!()
     }
 
@@ -118,7 +115,11 @@ impl FileBackend for Socket {
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
-    fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
+    fn stat(
+        self: &Arc<Self>,
+        file: &VFile,
+        td: Option<&VThread>,
+    ) -> Result<Stat, Box<dyn AsErrno>> {
         todo!()
     }
 
@@ -127,7 +128,7 @@ impl FileBackend for Socket {
         _: &VFile,
         _: TruncateLength,
         _: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         Err(Box::new(DefaultFileBackendError::InvalidValue))
     }
 }

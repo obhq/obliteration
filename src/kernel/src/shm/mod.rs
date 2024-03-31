@@ -1,5 +1,5 @@
 use crate::{
-    errno::{Errno, EINVAL},
+    errno::AsErrno,
     fs::{
         check_access, Access, AccessError, DefaultFileBackendError, FileBackend, IoCmd, Mode,
         OpenFlags, PollEvents, Stat, TruncateLength, Uio, UioMut, VFile, VFileFlags, VPathBuf,
@@ -7,6 +7,7 @@ use crate::{
     process::VThread,
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
     ucred::{Gid, Ucred, Uid},
+    Errno,
 };
 use macros::Errno;
 use std::{convert::Infallible, sync::Arc};
@@ -32,7 +33,7 @@ impl SharedMemoryManager {
         if (flags & OpenFlags::O_ACCMODE != OpenFlags::O_RDONLY)
             || (flags & OpenFlags::O_ACCMODE != OpenFlags::O_RDWR)
         {
-            return Err(SysErr::Raw(EINVAL));
+            return Err(SysErr::Raw(Errno::EINVAL));
         }
 
         if !flags
@@ -41,7 +42,7 @@ impl SharedMemoryManager {
             )
             .is_empty()
         {
-            return Err(SysErr::Raw(EINVAL));
+            return Err(SysErr::Raw(Errno::EINVAL));
         }
 
         let filedesc = td.proc().files();
@@ -116,7 +117,7 @@ impl FileBackend for SharedMemory {
         _: &VFile,
         _: &mut UioMut,
         _: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         Err(Box::new(DefaultFileBackendError::OperationNotSupported))
     }
 
@@ -125,7 +126,7 @@ impl FileBackend for SharedMemory {
         _: &VFile,
         _: &mut Uio,
         _: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         Err(Box::new(DefaultFileBackendError::OperationNotSupported))
     }
 
@@ -135,7 +136,7 @@ impl FileBackend for SharedMemory {
         file: &VFile,
         cmd: IoCmd,
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         todo!()
     }
 
@@ -145,7 +146,11 @@ impl FileBackend for SharedMemory {
     }
 
     #[allow(unused_variables)] // remove when implementing
-    fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
+    fn stat(
+        self: &Arc<Self>,
+        file: &VFile,
+        td: Option<&VThread>,
+    ) -> Result<Stat, Box<dyn AsErrno>> {
         let mut stat = Stat::zeroed();
 
         stat.block_size = 0x4000;
@@ -158,7 +163,7 @@ impl FileBackend for SharedMemory {
         _: &VFile,
         length: TruncateLength,
         _: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         self.do_truncate(length)?;
 
         Ok(())

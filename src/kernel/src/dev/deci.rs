@@ -3,7 +3,7 @@ use crate::fs::{
     OpenFlags, Uio, UioMut,
 };
 use crate::ucred::{Gid, Uid};
-use crate::{errno::Errno, process::VThread};
+use crate::{errno::AsErrno, process::VThread};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -24,7 +24,7 @@ impl DeviceDriver for Driver {
         mode: OpenFlags,
         devtype: i32,
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         todo!()
     }
 
@@ -34,7 +34,7 @@ impl DeviceDriver for Driver {
         dev: &Arc<CharacterDevice>,
         data: &mut UioMut,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         todo!()
     }
 
@@ -44,7 +44,7 @@ impl DeviceDriver for Driver {
         dev: &Arc<CharacterDevice>,
         data: &mut Uio,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         todo!()
     }
 }

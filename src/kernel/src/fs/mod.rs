@@ -1,9 +1,9 @@
-use crate::errno::{Errno, EBADF, EBUSY, EEXIST, EINVAL, ENAMETOOLONG, ENODEV, ENOENT, ESPIPE};
-use crate::info;
+use crate::errno::AsErrno;
 use crate::process::{GetFileError, VThread};
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::PrivilegeError;
 use crate::ucred::{Privilege, Ucred};
+use crate::{info, Errno};
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup};
 use macros::{vpath, Errno};
@@ -111,7 +111,7 @@ impl Fs {
         let dev = match root.mkdir("dev", 0o555, None) {
             Ok(v) => v,
             Err(e) => match e.errno() {
-                EEXIST => {
+                Errno::EEXIST => {
                     let vn = root
                         .lookup(None, "dev")
                         .map_err(FsInitError::LookupDevFailed)?;
@@ -228,7 +228,7 @@ impl Fs {
             vn = match resolved.lookup(td, com) {
                 Ok(v) => v,
                 Err(e) => {
-                    if e.errno() == ENOENT {
+                    if e.errno() == Errno::ENOENT {
                         return Err(LookupError::NotFound(e));
                     } else {
                         return Err(LookupError::LookupFailed(
@@ -404,10 +404,10 @@ impl Fs {
         // Check flags.
         if flags.intersects(OpenFlags::O_EXEC) {
             if flags.intersects(OpenFlags::O_ACCMODE) {
-                return Err(SysErr::Raw(EINVAL));
+                return Err(SysErr::Raw(Errno::EINVAL));
             }
         } else if flags.contains(OpenFlags::O_ACCMODE) {
-            return Err(SysErr::Raw(EINVAL));
+            return Err(SysErr::Raw(Errno::EINVAL));
         }
 
         // Get full path.
@@ -498,7 +498,7 @@ impl Fs {
         let vn = self.lookup(path, true, Some(td))?;
 
         if !vn.is_character() {
-            return Err(SysErr::Raw(EINVAL));
+            return Err(SysErr::Raw(Errno::EINVAL));
         }
 
         // TODO: It seems like the initial ucred of the process is either root or has PRIV_VFS_ADMIN
@@ -663,10 +663,10 @@ impl Fs {
     fn preadv(&self, fd: i32, uio: UioMut, offset: i64, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_read(fd)?;
 
-        let vnode = file.seekable_vnode().ok_or(SysErr::Raw(ESPIPE))?;
+        let vnode = file.seekable_vnode().ok_or(SysErr::Raw(Errno::ESPIPE))?;
 
         if offset < 0 && !vnode.is_character() {
-            return Err(SysErr::Raw(EINVAL));
+            return Err(SysErr::Raw(Errno::EINVAL));
         }
 
         let read = file.do_read(uio, Offset::Provided(offset), Some(td))?;
@@ -688,10 +688,10 @@ impl Fs {
     fn pwritev(&self, fd: i32, uio: Uio, offset: i64, td: &VThread) -> Result<SysOut, SysErr> {
         let file = td.proc().files().get_for_write(fd)?;
 
-        let vnode = file.seekable_vnode().ok_or(SysErr::Raw(ESPIPE))?;
+        let vnode = file.seekable_vnode().ok_or(SysErr::Raw(Errno::ESPIPE))?;
 
         if offset < 0 && !vnode.is_character() {
-            return Err(SysErr::Raw(EINVAL));
+            return Err(SysErr::Raw(Errno::EINVAL));
         }
 
         let written = file.do_write(uio, Offset::Provided(offset), Some(td))?;
@@ -756,7 +756,7 @@ impl Fs {
 
         let file = td.proc().files().get(fd)?;
 
-        let vnode = file.seekable_vnode().ok_or(SysErr::Raw(ESPIPE))?;
+        let vnode = file.seekable_vnode().ok_or(SysErr::Raw(Errno::ESPIPE))?;
 
         // check vnode type
 
@@ -848,7 +848,7 @@ impl Fs {
     ///
     /// This function will recursive follow the link so the returned vnode will never be a mount
     /// point or a link.
-    fn follow(vn: &Arc<Vnode>) -> Result<Cow<Arc<Vnode>>, Box<dyn Errno>> {
+    fn follow(vn: &Arc<Vnode>) -> Result<Cow<Arc<Vnode>>, Box<dyn AsErrno>> {
         let vn = match vn.ty() {
             VnodeType::Directory(_) => {
                 let mut item = vn.item_mut();
@@ -954,7 +954,7 @@ pub struct FsConfig {
         parent: Option<Arc<Vnode>>,
         opts: MountOpts,
         flags: MountFlags,
-    ) -> Result<Mount, Box<dyn Errno>>,
+    ) -> Result<Mount, Box<dyn AsErrno>>,
 }
 
 #[derive(Debug)]
@@ -988,7 +988,7 @@ impl TryFrom<i32> for Whence {
             2 => Ok(Self::End),
             3 => Ok(Self::Data),
             4 => Ok(Self::Hole),
-            _ => Err(SysErr::Raw(EINVAL)),
+            _ => Err(SysErr::Raw(Errno::EINVAL)),
         }
     }
 }
@@ -1065,22 +1065,22 @@ bitflags! {
 #[derive(Debug, Error)]
 pub enum FsInitError {
     #[error("cannot mount devfs")]
-    MountDevFailed(#[source] Box<dyn Errno>),
+    MountDevFailed(#[source] Box<dyn AsErrno>),
 
     #[error("cannot get devfs root vnode")]
-    GetDevRootFailed(#[source] Box<dyn Errno>),
+    GetDevRootFailed(#[source] Box<dyn AsErrno>),
 
     #[error("cannot get root mount vnode")]
-    GetRootFailed(#[source] Box<dyn Errno>),
+    GetRootFailed(#[source] Box<dyn AsErrno>),
 
     #[error("cannot mount rootfs")]
     MountRootFailed(#[source] MountError),
 
     #[error("cannot lookup /dev")]
-    LookupDevFailed(#[source] Box<dyn Errno>),
+    LookupDevFailed(#[source] Box<dyn AsErrno>),
 
     #[error("couldn't create /dev directory")]
-    CreateDevFailed(#[source] Box<dyn Errno>),
+    CreateDevFailed(#[source] Box<dyn AsErrno>),
 
     #[error("/dev is not a directory")]
     DevNotDirectory,
@@ -1105,14 +1105,14 @@ pub enum MountError {
     LookupPathFailed(#[source] LookupError),
 
     #[error("cannot mount the filesystem")]
-    MountFailed(#[source] Box<dyn Errno>),
+    MountFailed(#[source] Box<dyn AsErrno>),
 
     #[error("fspath is already mounted")]
     #[errno(EBUSY)]
     PathAlreadyMounted,
 
     #[error("cannot get root")]
-    GetRootFailed(#[source] Box<dyn Errno>),
+    GetRootFailed(#[source] Box<dyn AsErrno>),
 }
 
 /// Represents an error when [`Fs::open()`] fails.
@@ -1135,14 +1135,14 @@ pub enum IoctlError {
     BadFileFlags(VFileFlags),
 
     #[error(transparent)]
-    FileIoctlFailed(#[from] Box<dyn Errno>),
+    FileIoctlFailed(#[from] Box<dyn AsErrno>),
 }
 
 /// Represents an error when [`Fs::lookup()`] fails.
 #[derive(Debug, Error, Errno)]
 pub enum LookupError {
     #[error("failed to get mount root")]
-    GetRootFailed(#[source] Box<dyn Errno>),
+    GetRootFailed(#[source] Box<dyn AsErrno>),
 
     #[error("no such file or directory")]
     #[errno(ENOENT)]
@@ -1150,10 +1150,10 @@ pub enum LookupError {
 
     #[error("no such file or directory")]
     #[errno(ENOENT)]
-    NotFound(#[source] Box<dyn Errno>),
+    NotFound(#[source] Box<dyn AsErrno>),
 
     #[error("cannot lookup '{1}' from component #{0}")]
-    LookupFailed(usize, Box<str>, #[source] Box<dyn Errno>),
+    LookupFailed(usize, Box<str>, #[source] Box<dyn AsErrno>),
 }
 
 /// Represents an error when [`Fs::mkdir()`] fails.
@@ -1166,19 +1166,19 @@ pub enum MkdirError {
     LookupParentFailed(#[source] LookupError),
 
     #[error("couldn't create the directory")]
-    CreateFailed(#[source] Box<dyn Errno>),
+    CreateFailed(#[source] Box<dyn AsErrno>),
 }
 
 #[derive(Debug, Error, Errno)]
 pub enum RevokeError {
     #[error("failed to get file attr")]
-    GetAttrError(#[source] Box<dyn Errno>),
+    GetAttrError(#[source] Box<dyn AsErrno>),
 
     #[error("insufficient privilege")]
     PrivelegeError(#[from] PrivilegeError),
 
     #[error("failed to revoke access")]
-    RevokeFailed(#[source] Box<dyn Errno>),
+    RevokeFailed(#[source] Box<dyn AsErrno>),
 }
 
 /// Represents an error when one of the stat syscalls fails
@@ -1188,7 +1188,7 @@ pub enum StatError {
     FailedToGetFile(#[from] GetFileError),
 
     #[error("failed to get file attr")]
-    GetAttrError(#[from] Box<dyn Errno>),
+    GetAttrError(#[from] Box<dyn AsErrno>),
 }
 
 #[derive(Debug, Error, Errno)]
@@ -1221,7 +1221,7 @@ pub enum FileTruncateError {
     FileNotWritable,
 
     #[error(transparent)]
-    TruncateError(#[from] Box<dyn Errno>),
+    TruncateError(#[from] Box<dyn AsErrno>),
 }
 
 impl From<TruncateLengthError> for FileTruncateError {

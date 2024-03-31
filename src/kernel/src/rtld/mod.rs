@@ -3,7 +3,7 @@ pub use self::module::*;
 use self::resolver::{ResolveFlags, SymbolResolver};
 use crate::budget::ProcType;
 use crate::ee::native::{NativeEngine, SetupModuleError};
-use crate::errno::{Errno, EINVAL, ENOENT, ENOEXEC, ENOMEM, EPERM, ESRCH};
+use crate::errno::AsErrno;
 use crate::fs::{Fs, OpenError, VPath, VPathBuf};
 use crate::idt::Entry;
 use crate::info;
@@ -11,6 +11,7 @@ use crate::log::print;
 use crate::process::{Binaries, VThread};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::vm::{MemoryUpdateError, MmapError, Protections};
+use crate::Errno;
 use bitflags::bitflags;
 use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation, Symbol};
 use gmtx::{Gutex, GutexGroup};
@@ -19,7 +20,6 @@ use sha1::{Digest, Sha1};
 use std::borrow::Cow;
 use std::io::Write;
 use std::mem::{size_of, zeroed};
-use std::num::NonZeroI32;
 use std::ops::Deref;
 use std::ptr::{read_unaligned, write_unaligned};
 use std::sync::Arc;
@@ -391,10 +391,10 @@ impl RuntimeLinker {
     fn sys_dynlib_dlsym(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Check if application is dynamic linking.
         let bin = td.proc().bin();
-        let bin = bin.as_ref().ok_or(SysErr::Raw(EPERM))?;
+        let bin = bin.as_ref().ok_or(SysErr::Raw(Errno::EPERM))?;
 
         if bin.app().file_info().is_none() {
-            return Err(SysErr::Raw(EPERM));
+            return Err(SysErr::Raw(Errno::EPERM));
         }
 
         // Get arguments.
@@ -406,7 +406,7 @@ impl RuntimeLinker {
         let list = self.list.read();
         let md = match list.iter().find(|m| m.id() == handle) {
             Some(v) => v,
-            None => return Err(SysErr::Raw(ESRCH)),
+            None => return Err(SysErr::Raw(Errno::ESRCH)),
         };
 
         info!("Getting symbol '{}' from {}.", name, md.path());
@@ -421,7 +421,7 @@ impl RuntimeLinker {
         // Resolve the symbol.
         let addr = match self.resolve_symbol(&bin, md, name.into(), None, flags) {
             Some(v) => v,
-            None => return Err(SysErr::Raw(ESRCH)),
+            None => return Err(SysErr::Raw(Errno::ESRCH)),
         };
 
         unsafe { *out = addr };
@@ -436,17 +436,17 @@ impl RuntimeLinker {
 
         // Check if application is dynamic linking.
         let bin = td.proc().bin();
-        let bin = bin.as_ref().ok_or(SysErr::Raw(EPERM))?;
+        let bin = bin.as_ref().ok_or(SysErr::Raw(Errno::EPERM))?;
 
         if bin.app().file_info().is_none() {
-            return Err(SysErr::Raw(EPERM));
+            return Err(SysErr::Raw(Errno::EPERM));
         }
 
         // Copy module ID.
         let list = self.list.read();
 
         if list.len() > max {
-            return Err(SysErr::Raw(ENOMEM));
+            return Err(SysErr::Raw(Errno::ENOMEM));
         }
 
         for (i, m) in list.iter().enumerate() {
@@ -464,12 +464,12 @@ impl RuntimeLinker {
     fn sys_dynlib_load_prx(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Check if application is a dynamic SELF.
         let mut bin_guard = td.proc().bin_mut();
-        let bin = bin_guard.as_mut().ok_or(SysErr::Raw(EPERM))?;
+        let bin = bin_guard.as_mut().ok_or(SysErr::Raw(Errno::EPERM))?;
 
         let sdk_ver = bin.app().sdk_ver();
 
         if bin.app().file_info().is_none() {
-            return Err(SysErr::Raw(EPERM));
+            return Err(SysErr::Raw(Errno::EPERM));
         }
 
         drop(bin_guard);
@@ -478,7 +478,7 @@ impl RuntimeLinker {
         let mut flags: u32 = i.args[1].try_into().unwrap();
 
         if (flags & 0xfff8ffff) != 0 {
-            return Err(SysErr::Raw(EINVAL));
+            return Err(SysErr::Raw(Errno::EINVAL));
         }
 
         // TODO: It looks like the PS4 check if this get called from a browser. The problem is this
@@ -578,16 +578,16 @@ impl RuntimeLinker {
         _: &SysIn,
     ) -> Result<SysOut, SysErr> {
         let bin = td.proc().bin();
-        let bin = bin.as_ref().ok_or(SysErr::Raw(EPERM))?;
+        let bin = bin.as_ref().ok_or(SysErr::Raw(Errno::EPERM))?;
 
         if let Some(info) = bin.app().file_info() {
             if info.relocs().any(|r| r.ty() == Relocation::R_X86_64_COPY) {
-                return Err(SysErr::Raw(EINVAL));
+                return Err(SysErr::Raw(Errno::EINVAL));
             }
 
             Ok(SysOut::ZERO)
         } else {
-            Err(SysErr::Raw(EPERM))
+            Err(SysErr::Raw(Errno::EPERM))
         }
     }
 
@@ -602,10 +602,10 @@ impl RuntimeLinker {
 
         // Check if application is a dynamic SELF.
         let bin = td.proc().bin();
-        let bin = bin.as_ref().ok_or(SysErr::Raw(EPERM))?;
+        let bin = bin.as_ref().ok_or(SysErr::Raw(Errno::EPERM))?;
 
         if bin.app().file_info().is_none() {
-            return Err(SysErr::Raw(EPERM));
+            return Err(SysErr::Raw(Errno::EPERM));
         }
 
         // Get param.
@@ -628,10 +628,10 @@ impl RuntimeLinker {
     ) -> Result<SysOut, SysErr> {
         // Check if application is dynamic linking.
         let bin = td.proc().bin();
-        let bin = bin.as_ref().ok_or(SysErr::Raw(EINVAL))?;
+        let bin = bin.as_ref().ok_or(SysErr::Raw(Errno::EINVAL))?;
 
         if bin.app().file_info().is_none() {
-            return Err(SysErr::Raw(EINVAL));
+            return Err(SysErr::Raw(Errno::EINVAL));
         }
 
         // Starting locking from here until relocation is completed to prevent the other thread
@@ -931,24 +931,24 @@ impl RuntimeLinker {
 
         // Check if application is dynamic linking.
         let bin = td.proc().bin();
-        let bin = bin.as_ref().ok_or(SysErr::Raw(EPERM))?;
+        let bin = bin.as_ref().ok_or(SysErr::Raw(Errno::EPERM))?;
 
         if bin.app().file_info().is_none() {
-            return Err(SysErr::Raw(EPERM));
+            return Err(SysErr::Raw(Errno::EPERM));
         }
 
         // Check buffer size.
         let size: usize = unsafe { (*info).size.try_into().unwrap() };
 
         if size != size_of::<DynlibInfoEx>() {
-            return Err(SysErr::Raw(EINVAL));
+            return Err(SysErr::Raw(Errno::EINVAL));
         }
 
         // Lookup the module.
         let modules = self.list.read();
         let md = match modules.iter().find(|m| m.id() == handle) {
             Some(v) => v,
-            None => return Err(SysErr::Raw(ESRCH)),
+            None => return Err(SysErr::Raw(Errno::ESRCH)),
         };
 
         // Fill the info.
@@ -1055,10 +1055,10 @@ impl RuntimeLinker {
         let ty: u8 = i.args[1].try_into().unwrap();
         let out: *mut usize = i.args[2].into();
         let bin = td.proc().bin();
-        let bin = bin.as_ref().ok_or(SysErr::Raw(EINVAL))?;
+        let bin = bin.as_ref().ok_or(SysErr::Raw(Errno::EINVAL))?;
 
         if bin.app().file_info().is_none() {
-            return Err(SysErr::Raw(EINVAL));
+            return Err(SysErr::Raw(Errno::EINVAL));
         }
 
         let list = self.list.read();
@@ -1066,7 +1066,7 @@ impl RuntimeLinker {
         let module = list
             .iter()
             .find(|m| m.id() == handle)
-            .ok_or(SysErr::Raw(ESRCH))?;
+            .ok_or(SysErr::Raw(Errno::ESRCH))?;
 
         unsafe {
             *out = match ty {
@@ -1075,7 +1075,7 @@ impl RuntimeLinker {
                     .mod_param()
                     .map(|param| module.memory().addr() + param)
                     .expect("No mod param"),
-                _ => return Err(SysErr::Raw(EINVAL)),
+                _ => return Err(SysErr::Raw(Errno::EINVAL)),
             }
         }
 
@@ -1254,16 +1254,16 @@ pub enum RelocateError {
     UnsupportedPlt(VPathBuf, u32),
 }
 
-impl Errno for RelocateError {
-    fn errno(&self) -> NonZeroI32 {
+impl AsErrno for RelocateError {
+    fn errno(&self) -> Errno {
         match self {
             Self::UnprotectFailed(_, e) => match e {
                 UnprotectError::MprotectFailed(_, _, _, _) => {
                     todo!("dynlib_process_needed_and_relocate with mprotect failed");
                 }
             },
-            Self::UnsupportedRela(_, _) => ENOEXEC,
-            Self::UnsupportedPlt(_, _) => EINVAL,
+            Self::UnsupportedRela(_, _) => Errno::ENOEXEC,
+            Self::UnsupportedPlt(_, _) => Errno::EINVAL,
         }
     }
 }

@@ -1,4 +1,4 @@
-use crate::errno::{Errno, EINVAL};
+use crate::errno::AsErrno;
 use macros::Errno;
 use thiserror::Error;
 

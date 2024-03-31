@@ -1,5 +1,5 @@
 use super::{CpuMask, CpuSet, VProc, NEXT_ID};
-use crate::errno::Errno;
+use crate::errno::AsErrno;
 use crate::fs::VFile;
 use crate::signal::SignalSet;
 use crate::ucred::{Privilege, PrivilegeError, Ucred};

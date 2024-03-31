@@ -1,7 +1,6 @@
-use crate::errno::EINVAL;
-use crate::info;
 use crate::process::{PcbFlags, VThread};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
+use crate::{info, Errno};
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
@@ -37,7 +36,7 @@ impl MachDep {
         let mut pcb = td.pcb_mut();
 
         if op < 2 {
-            return Err(SysErr::Raw(EINVAL));
+            return Err(SysErr::Raw(Errno::EINVAL));
         }
 
         match op {

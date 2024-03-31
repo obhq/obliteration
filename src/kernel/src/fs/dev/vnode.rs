@@ -1,6 +1,6 @@
 use super::dirent::Dirent;
 use super::{AllocVnodeError, DevFs};
-use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
+use crate::errno::AsErrno;
 use crate::fs::{
     check_access, Access, IoCmd, RevokeFlags, Uio, UioMut, Vnode, VnodeAttrs, VnodeType,
 };
@@ -30,7 +30,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         mode: Access,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         // Get dirent.
         let mut dirent = self.dirent.clone();
         let is_dir = match vn.ty() {
@@ -70,7 +70,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         Err(Box::new(err))
     }
 
-    fn getattr(&self, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
+    fn getattr(&self, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn AsErrno>> {
         // Populate devices.
         self.fs.populate();
 
@@ -102,7 +102,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] cmd: IoCmd,
         #[allow(unused_variables)] td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         todo!()
     }
 
@@ -111,7 +111,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         name: &str,
-    ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+    ) -> Result<Arc<Vnode>, Box<dyn AsErrno>> {
         // Populate devices.
         self.fs.populate();
 
@@ -162,7 +162,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         }
     }
 
-    fn revoke(&self, vn: &Arc<Vnode>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
+    fn revoke(&self, vn: &Arc<Vnode>, flags: RevokeFlags) -> Result<(), Box<dyn AsErrno>> {
         // TODO: Implement this.
         todo!()
     }
@@ -172,7 +172,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] buf: &mut UioMut,
         #[allow(unused_variables)] td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         todo!()
     }
 
@@ -181,7 +181,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] buf: &mut Uio,
         #[allow(unused_variables)] td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         todo!()
     }
 }
@@ -198,7 +198,7 @@ enum LookupError {
     DotdotOnRoot,
 
     #[error("access denied")]
-    AccessDenied(#[source] Box<dyn Errno>),
+    AccessDenied(#[source] Box<dyn AsErrno>),
 
     #[error("file have no parent")]
     #[errno(ENOENT)]

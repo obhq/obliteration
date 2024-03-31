@@ -1,5 +1,5 @@
 use crate::{
-    errno::Errno,
+    errno::AsErrno,
     fs::{CharacterDevice, DeviceDriver, IoCmd},
     process::VThread,
 };
@@ -14,7 +14,7 @@ impl DeviceDriver for Rng {
         dev: &Arc<CharacterDevice>,
         cmd: IoCmd,
         _: &VThread,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         match cmd {
             IoCmd::RNG1 => todo!(),
             IoCmd::RNG2 => todo!(),

@@ -1,4 +1,4 @@
-use crate::errno::Errno;
+use crate::errno::AsErrno;
 use crate::fs::{FileBackend, IoCmd, PollEvents, Stat, VFile};
 use crate::process::VThread;
 use std::sync::Arc;
@@ -13,7 +13,7 @@ impl FileBackend for BlockPool {
         file: &VFile,
         cmd: IoCmd,
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         todo!()
     }
 
@@ -22,7 +22,7 @@ impl FileBackend for BlockPool {
         todo!()
     }
 
-    fn stat(self: &Arc<Self>, _: &VFile, _: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
+    fn stat(self: &Arc<Self>, _: &VFile, _: Option<&VThread>) -> Result<Stat, Box<dyn AsErrno>> {
         let mut stat = Stat::zeroed();
 
         stat.block_size = 0x10000;

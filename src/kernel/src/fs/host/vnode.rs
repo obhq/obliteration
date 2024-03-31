@@ -1,6 +1,6 @@
 use super::file::HostFile;
 use super::{GetVnodeError, HostFs};
-use crate::errno::{Errno, EEXIST, EIO, ENOENT, ENOTDIR};
+use crate::errno::AsErrno;
 use crate::fs::{Access, IoCmd, Mode, Uio, UioMut, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
@@ -23,12 +23,17 @@ impl VnodeBackend {
 }
 
 impl crate::fs::VnodeBackend for VnodeBackend {
-    fn access(&self, _: &Arc<Vnode>, _: Option<&VThread>, _: Access) -> Result<(), Box<dyn Errno>> {
+    fn access(
+        &self,
+        _: &Arc<Vnode>,
+        _: Option<&VThread>,
+        _: Access,
+    ) -> Result<(), Box<dyn AsErrno>> {
         // TODO: Check how the PS4 check file permission for exfatfs.
         Ok(())
     }
 
-    fn getattr(&self, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
+    fn getattr(&self, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn AsErrno>> {
         // Get file size.
         let size = self.file.len().map_err(GetAttrError::GetSizeFailed)?;
 
@@ -53,7 +58,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] cmd: IoCmd,
         #[allow(unused_variables)] td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         todo!()
     }
 
@@ -62,7 +67,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         name: &str,
-    ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+    ) -> Result<Arc<Vnode>, Box<dyn AsErrno>> {
         // Check if directory.
         match vn.ty() {
             VnodeType::Directory(root) => {
@@ -109,7 +114,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         name: &str,
         mode: u32,
         td: Option<&VThread>,
-    ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+    ) -> Result<Arc<Vnode>, Box<dyn AsErrno>> {
         parent.access(td, Access::WRITE)?;
 
         let dir = self
@@ -129,7 +134,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         _: &Arc<Vnode>,
         buf: &mut UioMut,
         _: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         let read = self.file.read(buf).map_err(ReadError::ReadFailed)?;
 
         Ok(read)
@@ -140,7 +145,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] buf: &mut Uio,
         #[allow(unused_variables)] td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         todo!()
     }
 }
@@ -165,7 +170,7 @@ enum LookupError {
     DotdotOnRoot,
 
     #[error("access denied")]
-    AccessDenied(#[source] Box<dyn Errno>),
+    AccessDenied(#[source] Box<dyn AsErrno>),
 
     #[error("name contains unsupported characters")]
     #[errno(ENOENT)]

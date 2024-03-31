@@ -1,7 +1,7 @@
-use crate::errno::EINVAL;
 use crate::fs::Fs;
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
+use crate::Errno;
 use std::sync::Arc;
 
 pub use self::blockpool::*;
@@ -38,7 +38,7 @@ impl DmemManager {
         let flags: u32 = i.args[0].try_into().unwrap();
 
         if flags & 0xffafffff != 0 {
-            return Err(SysErr::Raw(EINVAL));
+            return Err(SysErr::Raw(Errno::EINVAL));
         }
 
         todo!("sys_blockpool_open on new FS")

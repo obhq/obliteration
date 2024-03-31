@@ -1,5 +1,5 @@
 use crate::{
-    errno::{Errno, EISDIR, EROFS},
+    errno::AsErrno,
     fs::{
         null::hash::NULL_HASHTABLE, perm::Access, Mount, MountFlags, Uio, UioMut, Vnode,
         VnodeAttrs, VnodeType,
@@ -39,7 +39,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         mode: Access,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         if mode.contains(Access::WRITE) {
             match vn.ty() {
                 VnodeType::Directory(_) | VnodeType::Link | VnodeType::File => {
@@ -59,7 +59,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     }
 
     /// This function tries to mimic what calling `null_bypass` would do.
-    fn getattr(&self, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn Errno>> {
+    fn getattr(&self, vn: &Arc<Vnode>) -> Result<VnodeAttrs, Box<dyn AsErrno>> {
         let mut attr = self
             .lower
             .getattr()
@@ -76,7 +76,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         name: &str,
-    ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+    ) -> Result<Arc<Vnode>, Box<dyn AsErrno>> {
         let lower = self
             .lower
             .lookup(td, name)
@@ -96,7 +96,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         _: &Arc<Vnode>,
         buf: &mut UioMut,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         let read = self
             .lower
             .read(buf, td)
@@ -110,7 +110,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         _: &Arc<Vnode>,
         buf: &mut Uio,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         let written = self
             .lower
             .write(buf, td)
@@ -155,25 +155,25 @@ pub(super) enum AccessError {
     IsDirectory,
 
     #[error("access from lower vnode failed")]
-    AccessFromLowerFailed(#[from] Box<dyn Errno>),
+    AccessFromLowerFailed(#[from] Box<dyn AsErrno>),
 }
 
 #[derive(Debug, Error, Errno)]
 pub(super) enum GetAttrError {
     #[error("getattr from lower vnode failed")]
-    GetAttrFromLowerFailed(#[from] Box<dyn Errno>),
+    GetAttrFromLowerFailed(#[from] Box<dyn AsErrno>),
 }
 
 #[derive(Debug, Error, Errno)]
 pub(super) enum LookupError {
     #[error("lookup from lower vnode failed")]
-    LookupFromLowerFailed(#[source] Box<dyn Errno>),
+    LookupFromLowerFailed(#[source] Box<dyn AsErrno>),
 }
 
 #[derive(Debug, Error, Errno)]
 pub(super) enum OpenError {
     #[error("open from lower vnode failed")]
-    OpenFromLowerFailed(#[source] Box<dyn Errno>),
+    OpenFromLowerFailed(#[source] Box<dyn AsErrno>),
 }
 
 #[derive(Debug, Error, Errno)]
@@ -182,11 +182,11 @@ pub(super) enum NodeGetError {}
 #[derive(Debug, Error, Errno)]
 enum ReadError {
     #[error("read from lower vnode failed")]
-    ReadFromLowerFailed(#[source] Box<dyn Errno>),
+    ReadFromLowerFailed(#[source] Box<dyn AsErrno>),
 }
 
 #[derive(Debug, Error, Errno)]
 enum WriteError {
     #[error("write from lower vnode failed")]
-    WriteFromLowerFailed(#[source] Box<dyn Errno>),
+    WriteFromLowerFailed(#[source] Box<dyn AsErrno>),
 }

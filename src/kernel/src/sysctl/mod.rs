@@ -1,11 +1,9 @@
 use crate::arch::MachDep;
 use crate::arnd::rand_bytes;
-use crate::errno::{
-    EFAULT, EINVAL, EISDIR, ENAMETOOLONG, ENOENT, ENOMEM, ENOTDIR, EOPNOTSUPP, EPERM, ESRCH,
-};
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::vm::Vm;
+use crate::Errno;
 use std::any::Any;
 use std::cmp::min;
 use std::ptr::null_mut;
@@ -119,15 +117,15 @@ impl Sysctl {
 
         // Convert name to a slice.
         let name = if !(2..=(Self::CTL_MAXNAME as u32)).contains(&namelen) {
-            return Err(SysErr::Raw(EINVAL));
+            return Err(SysErr::Raw(Errno::EINVAL));
         } else if name.is_null() {
-            return Err(SysErr::Raw(EFAULT));
+            return Err(SysErr::Raw(Errno::EFAULT));
         } else {
             unsafe { std::slice::from_raw_parts(name, namelen as _) }
         };
 
         if name[0] == Self::CTL_DEBUG && !td.proc().cred().is_system() {
-            return Err(SysErr::Raw(EINVAL));
+            return Err(SysErr::Raw(Errno::EINVAL));
         }
 
         if name[0] == Self::CTL_VM && name[1] == Self::VM_PS4DEV {
@@ -160,7 +158,7 @@ impl Sysctl {
 
         // Execute.
         if let Err(e) = self.exec(name, &mut req) {
-            if e.errno() != ENOMEM {
+            if e.errno() != Errno::ENOMEM {
                 return Err(e);
             }
         }
@@ -197,7 +195,7 @@ impl Sysctl {
             // Check type.
             if (oid.kind & Self::CTLTYPE) != Self::CTLTYPE_NODE {
                 if indx != name.len() {
-                    return Err(SysErr::Raw(ENOTDIR));
+                    return Err(SysErr::Raw(Errno::ENOTDIR));
                 }
             } else if indx != name.len() && oid.handler.is_none() {
                 if indx == Self::CTL_MAXNAME {
@@ -210,15 +208,15 @@ impl Sysctl {
 
             // Check if enabled.
             if !oid.enabled {
-                return Err(SysErr::Raw(ENOENT));
+                return Err(SysErr::Raw(Errno::ENOENT));
             } else if (oid.kind & Self::CTLTYPE) == Self::CTLTYPE_NODE && oid.handler.is_none() {
-                return Err(SysErr::Raw(EISDIR));
+                return Err(SysErr::Raw(Errno::EISDIR));
             }
 
             // Check if write is allowed.
             if req.new.is_some() {
                 if (oid.kind & Self::CTLFLAG_WR) == 0 {
-                    return Err(SysErr::Raw(EPERM));
+                    return Err(SysErr::Raw(Errno::EPERM));
                 } else if (oid.kind & Self::CTLFLAG_SECURE) != 0 {
                     todo!("sysctl on kind & CTLFLAG_SECURE");
                 }
@@ -231,7 +229,7 @@ impl Sysctl {
             // Get the handler.
             let handler = match oid.handler {
                 Some(v) => v,
-                None => return Err(SysErr::Raw(EINVAL)),
+                None => return Err(SysErr::Raw(Errno::EINVAL)),
             };
 
             // Get handler arguments.
@@ -260,9 +258,9 @@ impl Sysctl {
         let newlen = req.new.as_ref().map(|b| b.len()).unwrap_or(0);
 
         if newlen == 0 {
-            return Err(SysErr::Raw(ENOENT));
+            return Err(SysErr::Raw(Errno::ENOENT));
         } else if newlen >= 0x400 {
-            return Err(SysErr::Raw(ENAMETOOLONG));
+            return Err(SysErr::Raw(Errno::ENAMETOOLONG));
         }
 
         // Read name.
@@ -276,7 +274,7 @@ impl Sysctl {
         };
 
         if name.is_empty() {
-            return Err(SysErr::Raw(ENOENT));
+            return Err(SysErr::Raw(Errno::ENOENT));
         }
 
         // Remove '.' at the end if present.
@@ -318,7 +316,7 @@ impl Sysctl {
             };
 
             if (oid.kind & Self::CTLTYPE) != Self::CTLTYPE_NODE || oid.handler.is_some() {
-                return Err(SysErr::Raw(ENOENT));
+                return Err(SysErr::Raw(Errno::ENOENT));
             }
 
             next = oid.arg1.unwrap().downcast_ref::<OidList>().unwrap().first;
@@ -341,7 +339,7 @@ impl Sysctl {
         let oldlen = req.old.as_ref().map(|b| b.len()).unwrap_or(0);
 
         if oldlen >= 73 {
-            return Err(SysErr::Raw(EINVAL));
+            return Err(SysErr::Raw(Errno::EINVAL));
         }
 
         // Check if the request is for our process.
@@ -353,7 +351,7 @@ impl Sysctl {
         let td = VThread::current().unwrap();
 
         if arg1[0] != td.proc().id().get() {
-            return Err(SysErr::Raw(ESRCH));
+            return Err(SysErr::Raw(Errno::ESRCH));
         }
 
         // TODO: Implement sceSblACMgrIsSystemUcred.
@@ -480,7 +478,7 @@ impl Sysctl {
         let freq = self.machdep.tsc_freq().load(Ordering::Relaxed);
 
         match freq {
-            0 => Err(SysErr::Raw(EOPNOTSUPP)),
+            0 => Err(SysErr::Raw(Errno::EOPNOTSUPP)),
             _ => {
                 self.handle_64(oid, &Arg::Static(Some(&freq)), 0, req)?;
 
@@ -567,7 +565,7 @@ impl<'a> SysctlReq<'a> {
             self.newidx += buf.len();
             Ok(())
         } else {
-            Err(SysErr::Raw(EINVAL))
+            Err(SysErr::Raw(Errno::EINVAL))
         }
     }
 
@@ -593,7 +591,7 @@ impl<'a> SysctlReq<'a> {
         };
 
         if data.len() > i {
-            Err(SysErr::Raw(ENOMEM))
+            Err(SysErr::Raw(Errno::ENOMEM))
         } else {
             Ok(())
         }

@@ -3,7 +3,7 @@ use super::{
     TruncateLength, Uio, UioMut, VFile,
 };
 use crate::arnd;
-use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
+use crate::errno::AsErrno;
 use crate::fs::PollEvents;
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
@@ -102,7 +102,7 @@ impl Vnode {
         self: &Arc<Vnode>,
         td: Option<&VThread>,
         mode: Access,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         self.backend.access(self, td, mode)
     }
 
@@ -110,11 +110,11 @@ impl Vnode {
         self: &Arc<Self>,
         td: Option<&VThread>,
         mode: Access,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         self.backend.accessx(self, td, mode)
     }
 
-    pub fn getattr(self: &Arc<Self>) -> Result<VnodeAttrs, Box<dyn Errno>> {
+    pub fn getattr(self: &Arc<Self>) -> Result<VnodeAttrs, Box<dyn AsErrno>> {
         self.backend.getattr(self)
     }
 
@@ -122,7 +122,7 @@ impl Vnode {
         self: &Arc<Self>,
         td: Option<&VThread>,
         name: &str,
-    ) -> Result<Arc<Self>, Box<dyn Errno>> {
+    ) -> Result<Arc<Self>, Box<dyn AsErrno>> {
         self.backend.lookup(self, td, name)
     }
 
@@ -131,11 +131,11 @@ impl Vnode {
         name: &str,
         mode: u32,
         td: Option<&VThread>,
-    ) -> Result<Arc<Self>, Box<dyn Errno>> {
+    ) -> Result<Arc<Self>, Box<dyn AsErrno>> {
         self.backend.mkdir(self, name, mode, td)
     }
 
-    pub fn revoke(self: &Arc<Self>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
+    pub fn revoke(self: &Arc<Self>, flags: RevokeFlags) -> Result<(), Box<dyn AsErrno>> {
         self.backend.revoke(self, flags)
     }
 
@@ -143,7 +143,7 @@ impl Vnode {
         self: &Arc<Self>,
         buf: &mut UioMut,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         self.backend.read(self, buf, td)
     }
 
@@ -151,7 +151,7 @@ impl Vnode {
         self: &Arc<Self>,
         buf: &mut Uio,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         self.backend.write(self, buf, td)
     }
 }
@@ -162,7 +162,7 @@ impl FileBackend for Vnode {
         _: &VFile,
         buf: &mut UioMut,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         self.backend.read(self, buf, td)
     }
 
@@ -171,7 +171,7 @@ impl FileBackend for Vnode {
         _: &VFile,
         buf: &mut Uio,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         self.backend.write(self, buf, td)
     }
 
@@ -181,7 +181,7 @@ impl FileBackend for Vnode {
         file: &VFile,
         cmd: IoCmd,
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         todo!()
     }
 
@@ -191,7 +191,11 @@ impl FileBackend for Vnode {
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
-    fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
+    fn stat(
+        self: &Arc<Self>,
+        file: &VFile,
+        td: Option<&VThread>,
+    ) -> Result<Stat, Box<dyn AsErrno>> {
         todo!()
     }
 
@@ -201,7 +205,7 @@ impl FileBackend for Vnode {
         file: &VFile,
         length: TruncateLength,
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         todo!()
     }
 }
@@ -240,7 +244,7 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         mode: Access,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         vn.accessx(td, mode)
     }
 
@@ -250,7 +254,7 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
         vn: &Arc<Vnode>,
         td: Option<&VThread>,
         mode: Access,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         let mode = match unixify_access(mode) {
             Some(v) => v,
             None => return Err(Box::new(DefaultError::NotPermitted)),
@@ -268,7 +272,7 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
     fn getattr(
         &self,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
-    ) -> Result<VnodeAttrs, Box<dyn Errno>> {
+    ) -> Result<VnodeAttrs, Box<dyn AsErrno>> {
         // Inline vop_bypass.
         Err(Box::new(DefaultError::NotSupported))
     }
@@ -278,7 +282,7 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] cmd: IoCmd,
         #[allow(unused_variables)] td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         Err(Box::new(DefaultError::CommandNotSupported))
     }
 
@@ -288,7 +292,7 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] td: Option<&VThread>,
         #[allow(unused_variables)] name: &str,
-    ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+    ) -> Result<Arc<Vnode>, Box<dyn AsErrno>> {
         Err(Box::new(DefaultError::NotDirectory))
     }
 
@@ -301,7 +305,7 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
         #[allow(unused_variables)] name: &str,
         #[allow(unused_variables)] mode: u32,
         #[allow(unused_variables)] td: Option<&VThread>,
-    ) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+    ) -> Result<Arc<Vnode>, Box<dyn AsErrno>> {
         Err(Box::new(DefaultError::NotSupported))
     }
 
@@ -310,7 +314,7 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
         &self,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] flags: RevokeFlags,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         panic!("vop_revoke called");
     }
 
@@ -320,7 +324,7 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] buf: &mut UioMut,
         #[allow(unused_variables)] td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>>;
+    ) -> Result<usize, Box<dyn AsErrno>>;
 
     /// An implementation of `vop_write`.
     fn write(
@@ -328,7 +332,7 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] buf: &mut Uio,
         #[allow(unused_variables)] td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>>;
+    ) -> Result<usize, Box<dyn AsErrno>>;
 }
 
 /// An implementation of `vattr` struct.

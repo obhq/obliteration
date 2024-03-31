@@ -1,16 +1,14 @@
-pub use self::key::*;
-
-use crate::errno::EINVAL;
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::Ucred;
-use crate::{info, warn};
+use crate::{info, warn, Errno};
 use std::fmt::{Display, Formatter};
-use std::num::NonZeroI32;
 use std::ops::Index;
 use std::ptr::read;
 use std::sync::Arc;
 use thiserror::Error;
+
+pub use self::key::*;
 
 mod key;
 
@@ -78,7 +76,10 @@ impl RegMgr {
         // Write the result.
         unsafe {
             *buf = match r {
-                Ok(v) => v,
+                Ok(v) => match v {
+                    Ok(()) => 0,
+                    Err(e) => e.into(),
+                },
                 Err(e) => {
                     warn!(e, "regmgr_call({op}) failed");
                     e.code()
@@ -172,7 +173,7 @@ impl RegMgr {
     }
 
     /// See `sceRegMgrGetInt` on the PS4 for a reference.
-    fn get_int(&self, key: RegKey, out: &mut i32) -> Result<i32, RegError> {
+    fn get_int(&self, key: RegKey, out: &mut i32) -> Result<Result<(), Errno>, RegError> {
         let mut buf = [0u8; 4];
 
         if let Err(e) = self.check_param(key, 0, buf.len()) {
@@ -189,7 +190,7 @@ impl RegMgr {
     }
 
     /// See `sceRegMgrSetInt` on the PS4 for a reference.
-    fn set_int(&self, key: RegKey, value: i32) -> Result<i32, RegError> {
+    fn set_int(&self, key: RegKey, value: i32) -> Result<Result<(), Errno>, RegError> {
         let value = value.to_le_bytes();
 
         if let Err(e) = self.check_param(key, 0, value.len()) {
@@ -203,14 +204,14 @@ impl RegMgr {
     }
 
     /// See `regMgrComSetReg` on the PS4 for a reference.
-    fn set_value(&self, key: RegKey, value: &[u8]) -> Result<i32, RegError> {
+    fn set_value(&self, key: RegKey, value: &[u8]) -> Result<Result<(), Errno>, RegError> {
         'l1: for e in &UNK_ENTRIES1 {
             for i in 0..e.unk2 {
                 if (i << (e.unk1 & 0xff)) + e.key.value() == key.value() {
                     if (e.unk3 & 1) == 0 {
                         break 'l1;
                     } else {
-                        return Ok(0);
+                        return Ok(Ok(()));
                     }
                 }
             }
@@ -225,7 +226,8 @@ impl RegMgr {
 
         if entry.len < 5 {
             let mut buf = [0u8; 4];
-            self.get_value(key, &mut buf[..entry.len])?;
+
+            let _ = self.get_value(key, &mut buf[..entry.len])?;
 
             if entry.unk4 == 1 {
                 todo!("regMgrComSetReg({key}) with unk4 = 1");
@@ -240,11 +242,11 @@ impl RegMgr {
             todo!("regMgrComSetReg({key}) with len >= 5");
         }
 
-        Ok(0)
+        Ok(Ok(()))
     }
 
     /// See `regMgrComGetReg` on the PS4 for a reference.
-    fn get_value(&self, key: RegKey, buf: &mut [u8]) -> Result<i32, RegError> {
+    fn get_value(&self, key: RegKey, buf: &mut [u8]) -> Result<Result<(), Errno>, RegError> {
         // Special cases for specific keys.
         match key {
             RegKey::REGISTRY_RECOVER
@@ -262,7 +264,7 @@ impl RegMgr {
         // Lookup the entry.
         let entry = match self.lookup(key) {
             Some(v) => v,
-            None => return Ok(0),
+            None => return Ok(Ok(())),
         };
 
         if entry.len > buf.len() {
@@ -278,7 +280,7 @@ impl RegMgr {
 
                         buf[..entry.len].copy_from_slice(&data[..entry.len]);
 
-                        return Ok(0);
+                        return Ok(Ok(()));
                     }
                 }
                 v => todo!("regMgrComGetReg({key}) with unk6 = {v}"),
@@ -349,12 +351,12 @@ impl RegMgr {
                 let mut out = 0;
                 let ret = self.get_int(key, &mut out).unwrap();
 
-                match NonZeroI32::new(ret) {
-                    None => Ok(ret.into()),
-                    Some(v) => Err(SysErr::Raw(v)),
+                match ret {
+                    Ok(()) => Ok(0.into()),
+                    Err(e) => Err(SysErr::Raw(e)),
                 }
             }
-            _ => Err(SysErr::Raw(EINVAL)),
+            _ => Err(SysErr::Raw(Errno::EINVAL)),
         }
     }
 }

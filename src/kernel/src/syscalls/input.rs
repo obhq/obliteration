@@ -1,7 +1,7 @@
 use super::SysErr;
-use crate::errno::{ENAMETOOLONG, ENOENT};
 use crate::fs::{VPath, VPathBuf};
 use crate::shm::ShmPath;
+use crate::Errno;
 use std::ffi::{c_char, CStr};
 use std::fmt::{Formatter, LowerHex};
 use std::num::{NonZeroI32, TryFromIntError};
@@ -33,7 +33,7 @@ impl SysArg {
                 Some(v) => v,
                 None => todo!("syscall with non-absolute path {v}"),
             },
-            Err(_) => return Err(SysErr::Raw(ENOENT)),
+            Err(_) => return Err(SysErr::Raw(Errno::ENOENT)),
         };
 
         Ok(Some(path))
@@ -45,8 +45,8 @@ impl SysArg {
             ptr => {
                 let slice = unsafe { std::slice::from_raw_parts(ptr as *const u8, 0x400) };
 
-                let cstr =
-                    CStr::from_bytes_until_nul(slice).map_err(|_| SysErr::Raw(ENAMETOOLONG))?;
+                let cstr = CStr::from_bytes_until_nul(slice)
+                    .map_err(|_| SysErr::Raw(Errno::ENAMETOOLONG))?;
 
                 let path = VPath::new(cstr.to_string_lossy().as_ref())
                     .map(|p| ShmPath::Path(p.to_owned()));
@@ -76,7 +76,7 @@ impl SysArg {
             Some(i) => Ok(Some(
                 std::str::from_utf8(std::slice::from_raw_parts(ptr as _, i)).unwrap(),
             )),
-            None => Err(SysErr::Raw(ENAMETOOLONG)),
+            None => Err(SysErr::Raw(Errno::ENAMETOOLONG)),
         }
     }
 

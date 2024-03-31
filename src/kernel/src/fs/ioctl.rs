@@ -1,5 +1,5 @@
-use crate::errno::ENOTTY;
 use crate::syscalls::SysErr;
+use crate::Errno;
 use std::fmt::Debug;
 
 /// This macro does some compile time verification to ensure we don't mistype anything.
@@ -48,7 +48,7 @@ macro_rules! commands {
                     let cmd = cmd as u32;
 
                     if Self::is_invalid(cmd) {
-                        return Err(SysErr::Raw(ENOTTY));
+                        return Err(SysErr::Raw(Errno::ENOTTY));
                     }
 
                     let cmd = match cmd {

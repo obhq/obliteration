@@ -1,5 +1,5 @@
 use crate::{
-    errno::Errno,
+    errno::AsErrno,
     fs::{CharacterDevice, DeviceDriver, IoCmd, OpenFlags},
     process::VThread,
 };
@@ -16,7 +16,7 @@ impl DeviceDriver for Gc {
         mode: OpenFlags,
         devtype: i32,
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         todo!()
     }
 
@@ -26,7 +26,7 @@ impl DeviceDriver for Gc {
         dev: &Arc<CharacterDevice>,
         cmd: IoCmd,
         td: &VThread,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         todo!()
     }
 }

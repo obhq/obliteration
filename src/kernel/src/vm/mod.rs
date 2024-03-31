@@ -3,9 +3,10 @@ pub use self::stack::*;
 
 use self::iter::StartFromMut;
 use self::storage::Storage;
-use crate::errno::{Errno, EINVAL, ENOMEM, EOPNOTSUPP};
+use crate::errno::AsErrno;
 use crate::process::VThread;
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
+use crate::Errno;
 use crate::{info, warn};
 use bitflags::bitflags;
 use macros::Errno;
@@ -524,12 +525,12 @@ impl Vm {
 
     fn sys_sbrk(self: &Arc<Self>, _: &VThread, _: &SysIn) -> Result<SysOut, SysErr> {
         // Return EOPNOTSUPP (Not yet implemented syscall)
-        Err(SysErr::Raw(EOPNOTSUPP))
+        Err(SysErr::Raw(Errno::EOPNOTSUPP))
     }
 
     fn sys_sstk(self: &Arc<Self>, _: &VThread, _: &SysIn) -> Result<SysOut, SysErr> {
         // Return EOPNOTSUPP (Not yet implemented syscall)
-        Err(SysErr::Raw(EOPNOTSUPP))
+        Err(SysErr::Raw(Errno::EOPNOTSUPP))
     }
 
     fn sys_mmap(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {

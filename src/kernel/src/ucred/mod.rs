@@ -1,9 +1,10 @@
+use crate::errno::AsErrno;
+use macros::Errno;
+use thiserror::Error;
+
 pub use self::auth::*;
 pub use self::id::*;
 pub use self::privilege::*;
-use crate::errno::{Errno, EPERM};
-use macros::Errno;
-use thiserror::Error;
 
 mod auth;
 mod id;

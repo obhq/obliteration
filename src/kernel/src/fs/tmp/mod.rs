@@ -1,6 +1,6 @@
 use self::node::{AllocNodeError, Node, NodeType, Nodes, VnodeBackend};
 use super::{Filesystem, Fs, FsConfig, Mount, MountFlags, MountOpts, MountSource, VPathBuf, Vnode};
-use crate::errno::{Errno, EINVAL};
+use crate::errno::AsErrno;
 use crate::ucred::{Ucred, Uid};
 use gmtx::GutexGroup;
 use macros::Errno;
@@ -19,7 +19,7 @@ pub fn mount(
     parent: Option<Arc<Vnode>>,
     mut opts: MountOpts,
     flags: MountFlags,
-) -> Result<Mount, Box<dyn Errno>> {
+) -> Result<Mount, Box<dyn AsErrno>> {
     // Check flags.
     if flags.intersects(MountFlags::MNT_UPDATE) {
         return Err(Box::new(MountError::UpdateNotSupported));
@@ -115,7 +115,7 @@ struct TempFs {
 }
 
 impl Filesystem for TempFs {
-    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Result<Arc<Vnode>, Box<dyn AsErrno>> {
         let vnode = self.alloc_vnode(mnt, &self.root)?;
 
         Ok(vnode)
@@ -156,7 +156,7 @@ enum MountError {
     UpdateNotSupported,
 
     #[error("cannot get mount point attributes")]
-    GetParentAttrsFailed(#[source] Box<dyn Errno>),
+    GetParentAttrsFailed(#[source] Box<dyn AsErrno>),
 
     #[error("cannot allocate a root node")]
     AllocRootFailed(#[from] AllocNodeError),

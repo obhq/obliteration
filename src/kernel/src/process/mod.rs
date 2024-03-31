@@ -1,9 +1,7 @@
 use crate::budget::ProcType;
-use crate::errno::Errno;
-use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ERANGE, ESRCH};
+use crate::errno::AsErrno;
 use crate::fs::Vnode;
 use crate::idt::Idt;
-use crate::info;
 use crate::signal::{
     strsignal, SignalAct, SignalFlags, SignalSet, SIGCHLD, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_DFL,
     SIG_IGN, SIG_SETMASK, SIG_UNBLOCK,
@@ -13,6 +11,7 @@ use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::sysent::ProcAbi;
 use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
 use crate::vm::{MemoryManagerError, Vm};
+use crate::{info, Errno};
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use macros::Errno;
 use std::any::Any;
@@ -213,8 +212,8 @@ impl VProc {
         // Get login name.
         let login = unsafe { i.args[0].to_str(17) }
             .map_err(|e| {
-                if e.errno() == ENAMETOOLONG {
-                    SysErr::Raw(EINVAL)
+                if e.errno() == Errno::ENAMETOOLONG {
+                    SysErr::Raw(Errno::EINVAL)
                 } else {
                     e
                 }
@@ -240,7 +239,7 @@ impl VProc {
         let mut group = self.group.write();
 
         if group.is_some() {
-            return Err(SysErr::Raw(EPERM));
+            return Err(SysErr::Raw(Errno::EPERM));
         }
 
         // TODO: Find out the correct login name for VSession.
@@ -297,7 +296,7 @@ impl VProc {
 
                     // TODO: Invoke signotify at the end.
                 }
-                _ => return Err(SysErr::Raw(EINVAL)),
+                _ => return Err(SysErr::Raw(Errno::EINVAL)),
             }
 
             // TODO: Check if we need to invoke reschedule_signals.
@@ -315,7 +314,7 @@ impl VProc {
         // Get arguments.
         let sig = {
             let sig: i32 = i.args[0].try_into().unwrap();
-            Signal::new(sig).ok_or(SysErr::Raw(EINVAL))?
+            Signal::new(sig).ok_or(SysErr::Raw(Errno::EINVAL))?
         };
         let act: *const SignalAct = i.args[1].into();
         let oact: *mut SignalAct = i.args[2].into();
@@ -356,7 +355,7 @@ impl VProc {
         );
 
         if (sig == SIGKILL || sig == SIGSTOP) && handler != 0 {
-            return Err(SysErr::Raw(EINVAL));
+            return Err(SysErr::Raw(Errno::EINVAL));
         }
 
         mask.remove(SIGKILL);
@@ -451,7 +450,7 @@ impl VProc {
         let param_size: i32 = i.args[1].try_into().unwrap();
 
         if param_size < 0 && param_size as usize > size_of::<ThrParam>() {
-            return Err(SysErr::Raw(EINVAL));
+            return Err(SysErr::Raw(Errno::EINVAL));
         }
 
         // The given param size seems to so far only be 0x68, we can handle this when we encounter it.
@@ -516,7 +515,7 @@ impl VProc {
             let thr = threads
                 .iter()
                 .find(|t| t.id().get() == tid as i32)
-                .ok_or(SysErr::Raw(ESRCH))?;
+                .ok_or(SysErr::Raw(Errno::ESRCH))?;
 
             info!(
                 "Setting name of thread {} to '{}'.",
@@ -543,7 +542,7 @@ impl VProc {
         if function == RtpFunction::Unk && td.cred().is_system() {
             todo!("rtprio_thread with function = 2");
         } else if lwpid != 0 && lwpid != td.id().get() {
-            return Err(SysErr::Raw(ESRCH));
+            return Err(SysErr::Raw(Errno::ESRCH));
         } else if function == RtpFunction::Lookup {
             rtp.ty = td.pri_class();
             rtp.prio = match td.pri_class() & 0xfff7 {
@@ -567,7 +566,7 @@ impl VProc {
 
         // TODO: Refactor this for readability.
         if cpusetsize.wrapping_sub(8) > 8 {
-            return Err(SysErr::Raw(ERANGE));
+            return Err(SysErr::Raw(Errno::ERANGE));
         }
 
         let td = self.cpuset_which(which, id)?;
@@ -610,7 +609,7 @@ impl VProc {
 
         // TODO: Refactor this for readability.
         if cpusetsize.wrapping_sub(8) > 8 {
-            return Err(SysErr::Raw(ERANGE));
+            return Err(SysErr::Raw(Errno::ERANGE));
         }
 
         match level {
@@ -635,7 +634,7 @@ impl VProc {
                     let td = threads
                         .iter()
                         .find(|t| t.id().get() == id as i32)
-                        .ok_or(SysErr::Raw(ESRCH))?
+                        .ok_or(SysErr::Raw(Errno::ESRCH))?
                         .clone();
 
                     Some(td)
@@ -662,7 +661,7 @@ impl VProc {
 
         // Check if PID is our process.
         if pid != 0 && pid != self.id.get() {
-            return Err(SysErr::Raw(ESRCH));
+            return Err(SysErr::Raw(Errno::ESRCH));
         }
 
         // Check privilege.
@@ -765,7 +764,7 @@ impl TryFrom<i32> for RtpFunction {
             0 => RtpFunction::Lookup,
             1 => RtpFunction::Set,
             2 => RtpFunction::Unk,
-            _ => return Err(SysErr::Raw(EINVAL)),
+            _ => return Err(SysErr::Raw(Errno::EINVAL)),
         };
 
         Ok(rtp)

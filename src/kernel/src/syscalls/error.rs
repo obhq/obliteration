@@ -1,17 +1,17 @@
-use crate::errno::{strerror, Errno};
+use crate::errno::{strerror, AsErrno};
+use crate::Errno;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::num::NonZeroI32;
 
 /// Error of each syscall.
 #[derive(Debug)]
 pub enum SysErr {
-    Raw(NonZeroI32),
-    Object(Box<dyn Errno>),
+    Raw(Errno),
+    Object(Box<dyn AsErrno>),
 }
 
 impl SysErr {
-    pub fn errno(&self) -> NonZeroI32 {
+    pub fn errno(&self) -> Errno {
         match self {
             Self::Raw(v) => *v,
             Self::Object(v) => v.errno(),
@@ -19,13 +19,13 @@ impl SysErr {
     }
 }
 
-impl From<Box<dyn Errno>> for SysErr {
-    fn from(value: Box<dyn Errno>) -> Self {
+impl From<Box<dyn AsErrno>> for SysErr {
+    fn from(value: Box<dyn AsErrno>) -> Self {
         Self::Object(value)
     }
 }
 
-impl<T: Errno + 'static> From<T> for SysErr {
+impl<T: AsErrno + 'static> From<T> for SysErr {
     fn from(value: T) -> Self {
         Self::Object(Box::new(value))
     }

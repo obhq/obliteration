@@ -1,5 +1,5 @@
 use crate::{
-    errno::Errno,
+    errno::AsErrno,
     fs::{CharacterDevice, DeviceDriver, IoCmd, UioMut},
     process::VThread,
 };
@@ -15,7 +15,7 @@ impl DeviceDriver for Hid {
         dev: &Arc<CharacterDevice>,
         data: &mut UioMut,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         todo!()
     }
 
@@ -25,7 +25,7 @@ impl DeviceDriver for Hid {
         dev: &Arc<CharacterDevice>,
         cmd: IoCmd,
         td: &VThread,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         todo!()
     }
 }

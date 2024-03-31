@@ -1,6 +1,5 @@
-use crate::errno::ENOSYS;
 use crate::process::VThread;
-use crate::warn;
+use crate::{warn, Errno};
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 
@@ -68,7 +67,7 @@ impl Syscalls {
                 i.args[4],
                 i.args[5],
             ),
-            None => return ENOSYS.get().into(),
+            None => return Errno::ENOSYS.into(),
         };
 
         let td = VThread::current().expect("Syscall invoked outside of a PS4 thread context");
@@ -78,7 +77,7 @@ impl Syscalls {
             Ok(v) => v,
             Err(e) => {
                 warn!(e, "Syscall {} failed", i.id);
-                return e.errno().get().into();
+                return e.errno().into();
             }
         };
 

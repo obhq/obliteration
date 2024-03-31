@@ -1,4 +1,4 @@
-use crate::errno::{Errno, EACCES, EPERM};
+use crate::errno::AsErrno;
 use crate::ucred::{Gid, Privilege, Ucred, Uid};
 use bitflags::bitflags;
 use macros::Errno;

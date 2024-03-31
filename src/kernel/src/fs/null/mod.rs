@@ -3,7 +3,7 @@ use super::{
     Filesystem, Fs, FsConfig, LookupError, Mount, MountFlags, MountOpts, MountSource, VPathBuf,
     Vnode,
 };
-use crate::errno::{Errno, EOPNOTSUPP};
+use crate::errno::AsErrno;
 use crate::ucred::Ucred;
 use macros::Errno;
 use std::sync::Arc;
@@ -25,7 +25,7 @@ impl NullFs {
 }
 
 impl Filesystem for NullFs {
-    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Result<Arc<Vnode>, Box<dyn AsErrno>> {
         let vnode = null_nodeget(mnt, &self.lower)?;
 
         Ok(vnode)
@@ -40,7 +40,7 @@ pub fn mount(
     _: Option<Arc<Vnode>>,
     mut opts: MountOpts,
     flags: MountFlags,
-) -> Result<Mount, Box<dyn Errno>> {
+) -> Result<Mount, Box<dyn AsErrno>> {
     if flags.intersects(MountFlags::MNT_ROOTFS) {
         return Err(Box::new(MountError::RootFs));
     }

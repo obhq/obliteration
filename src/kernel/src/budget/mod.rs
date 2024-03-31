@@ -1,8 +1,7 @@
-use crate::errno::{ENOENT, ENOSYS, ESRCH};
 use crate::idt::{Entry, Idt};
-use crate::info;
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
+use crate::{info, Errno};
 use std::sync::{Arc, Mutex};
 
 /// An implementation of budget system on the PS4.
@@ -41,13 +40,13 @@ impl BudgetManager {
 
                 match self.budgets.lock().unwrap().get_mut(id, Some(0x2000)) {
                     Some(v) => Ok((v.data().ptype as i32).into()),
-                    None => Err(SysErr::Raw(ENOENT)),
+                    None => Err(SysErr::Raw(Errno::ENOENT)),
                 }
             } else {
-                Err(SysErr::Raw(ESRCH))
+                Err(SysErr::Raw(Errno::ESRCH))
             }
         } else {
-            Err(SysErr::Raw(ENOSYS))
+            Err(SysErr::Raw(Errno::ENOSYS))
         }
     }
 }

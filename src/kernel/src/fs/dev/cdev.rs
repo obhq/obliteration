@@ -1,5 +1,5 @@
 use super::dirent::Dirent;
-use crate::errno::{Errno, ENODEV, ENOTTY};
+use crate::errno::AsErrno;
 use crate::fs::Uio;
 use crate::fs::{
     FileBackend, IoCmd, Mode, OpenFlags, PollEvents, Stat, TruncateLength, UioMut, VFile,
@@ -72,7 +72,7 @@ impl CharacterDevice {
         mode: OpenFlags,
         devtype: i32,
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         self.driver.open(self, mode, devtype, td)
     }
 
@@ -116,7 +116,7 @@ impl FileBackend for CharacterDevice {
         file: &VFile,
         buf: &mut UioMut,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         todo!()
     }
 
@@ -126,7 +126,7 @@ impl FileBackend for CharacterDevice {
         file: &VFile,
         buf: &mut Uio,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         todo!()
     }
 
@@ -136,7 +136,7 @@ impl FileBackend for CharacterDevice {
         file: &VFile,
         cmd: IoCmd,
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         todo!()
     }
 
@@ -146,7 +146,11 @@ impl FileBackend for CharacterDevice {
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
-    fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
+    fn stat(
+        self: &Arc<Self>,
+        file: &VFile,
+        td: Option<&VThread>,
+    ) -> Result<Stat, Box<dyn AsErrno>> {
         todo!()
     }
 
@@ -156,7 +160,7 @@ impl FileBackend for CharacterDevice {
         file: &VFile,
         length: TruncateLength,
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         todo!()
     }
 }
@@ -187,7 +191,7 @@ pub trait DeviceDriver: Debug + Sync + Send + 'static {
         mode: OpenFlags,
         devtype: i32,
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         Ok(())
     }
 
@@ -197,7 +201,7 @@ pub trait DeviceDriver: Debug + Sync + Send + 'static {
         dev: &Arc<CharacterDevice>,
         data: &mut UioMut,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         Err(Box::new(DefaultDeviceError::ReadNotSupported))
     }
 
@@ -207,7 +211,7 @@ pub trait DeviceDriver: Debug + Sync + Send + 'static {
         dev: &Arc<CharacterDevice>,
         data: &mut Uio,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         Err(Box::new(DefaultDeviceError::WriteNotSupported))
     }
 
@@ -217,7 +221,7 @@ pub trait DeviceDriver: Debug + Sync + Send + 'static {
         dev: &Arc<CharacterDevice>,
         cmd: IoCmd,
         td: &VThread,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         Err(Box::new(DefaultDeviceError::IoctlNotSupported))
     }
 }

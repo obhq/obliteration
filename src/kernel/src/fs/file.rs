@@ -1,7 +1,6 @@
 use super::{CharacterDevice, IoCmd, Offset, Stat, TruncateLength, Uio, UioMut, Vnode};
 use crate::dmem::BlockPool;
-use crate::errno::Errno;
-use crate::errno::{EINVAL, ENOTTY, ENXIO, EOPNOTSUPP};
+use crate::errno::AsErrno;
 use crate::fs::{IoVec, PollEvents};
 use crate::kqueue::KernelQueue;
 use crate::net::Socket;
@@ -55,7 +54,7 @@ impl VFile {
         mut uio: UioMut,
         off: Offset,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         if uio.bytes_left == 0 {
             return Ok(0);
         }
@@ -77,7 +76,7 @@ impl VFile {
         mut uio: Uio,
         off: Offset,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         // TODO: consider implementing ktrace.
         // TODO: implement bwillwrite.
 
@@ -90,7 +89,7 @@ impl VFile {
         res
     }
 
-    fn read(&self, buf: &mut UioMut, td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+    fn read(&self, buf: &mut UioMut, td: Option<&VThread>) -> Result<usize, Box<dyn AsErrno>> {
         match &self.ty {
             VFileType::Vnode(vn) => FileBackend::read(vn, self, buf, td),
             VFileType::Socket(so) | VFileType::IpcSocket(so) => so.read(self, buf, td),
@@ -101,7 +100,7 @@ impl VFile {
         }
     }
 
-    fn write(&self, buf: &mut Uio, td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+    fn write(&self, buf: &mut Uio, td: Option<&VThread>) -> Result<usize, Box<dyn AsErrno>> {
         match &self.ty {
             VFileType::Vnode(vn) => FileBackend::write(vn, self, buf, td),
             VFileType::Socket(so) | VFileType::IpcSocket(so) => so.write(self, buf, td),
@@ -113,7 +112,7 @@ impl VFile {
     }
 
     /// See `fo_ioctl` on the PS4 for a reference.
-    pub fn ioctl(&self, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
+    pub fn ioctl(&self, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn AsErrno>> {
         match &self.ty {
             VFileType::Vnode(vn) => vn.ioctl(self, cmd, td),
             VFileType::Socket(so) | VFileType::IpcSocket(so) => so.ioctl(self, cmd, td),
@@ -124,7 +123,7 @@ impl VFile {
         }
     }
 
-    pub fn stat(&self, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
+    pub fn stat(&self, td: Option<&VThread>) -> Result<Stat, Box<dyn AsErrno>> {
         match &self.ty {
             VFileType::Vnode(vn) => vn.stat(self, td),
             VFileType::Socket(so) | VFileType::IpcSocket(so) => so.stat(self, td),
@@ -139,7 +138,7 @@ impl VFile {
         &self,
         length: TruncateLength,
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         match &self.ty {
             VFileType::Vnode(vn) => vn.truncate(self, length, td),
             VFileType::Socket(so) | VFileType::IpcSocket(so) => so.truncate(self, length, td),
@@ -233,7 +232,7 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         file: &VFile,
         buf: &mut UioMut,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         Err(Box::new(DefaultFileBackendError::ReadNotSupported))
     }
 
@@ -244,7 +243,7 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         file: &VFile,
         buf: &mut Uio,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         Err(Box::new(DefaultFileBackendError::WriteNotSupported))
     }
 
@@ -255,7 +254,7 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         file: &VFile,
         cmd: IoCmd,
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         Err(Box::new(DefaultFileBackendError::IoctlNotSupported))
     }
 
@@ -265,7 +264,8 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
 
     #[allow(unused_variables)]
     /// An implementation of `fo_stat`.
-    fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>>;
+    fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>)
+        -> Result<Stat, Box<dyn AsErrno>>;
 
     #[allow(unused_variables)]
     /// An implementation of `fo_truncate`.
@@ -274,7 +274,7 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         file: &VFile,
         length: TruncateLength,
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         Err(Box::new(DefaultFileBackendError::TruncateNotSupported))
     }
 }

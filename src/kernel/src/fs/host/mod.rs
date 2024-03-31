@@ -4,7 +4,7 @@ use super::{
     Filesystem, Fs, FsConfig, Mount, MountFlags, MountOpt, MountOpts, MountSource, VPathBuf, Vnode,
     VnodeType,
 };
-use crate::errno::{Errno, EIO};
+use crate::errno::AsErrno;
 use crate::ucred::Ucred;
 use macros::Errno;
 use std::borrow::Cow;
@@ -24,7 +24,7 @@ pub fn mount(
     parent: Option<Arc<Vnode>>,
     mut opts: MountOpts,
     flags: MountFlags,
-) -> Result<Mount, Box<dyn Errno>> {
+) -> Result<Mount, Box<dyn AsErrno>> {
     // Check mount flags.
     if flags.intersects(MountFlags::MNT_UPDATE) {
         todo!("update HostFS mounting");
@@ -72,7 +72,7 @@ pub struct HostFs {
 }
 
 impl Filesystem for HostFs {
-    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Result<Arc<Vnode>, Box<dyn AsErrno>> {
         let vnode = self.get_vnode(mnt, &self.root)?;
         Ok(vnode)
     }

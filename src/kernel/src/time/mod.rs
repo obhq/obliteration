@@ -1,7 +1,7 @@
-use crate::errno::Errno;
+use crate::errno::AsErrno;
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
-use std::num::NonZeroI32;
+use macros::Errno;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -125,16 +125,9 @@ struct TimeZone {
     dsttime: i32,     // tz_dsttime
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Errno)]
 pub enum MicroTimeError {
     #[error("Failed to get time")]
+    #[errno(EIO)]
     IoError(#[from] std::io::Error),
-}
-
-impl Errno for MicroTimeError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::IoError(_) => todo!(),
-        }
-    }
 }

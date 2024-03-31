@@ -1,6 +1,6 @@
 use crate::{
     budget::BudgetType,
-    errno::Errno,
+    errno::AsErrno,
     fs::{
         DefaultFileBackendError, FileBackend, PollEvents, Stat, TruncateLength, VFile, VFileFlags,
         VFileType,
@@ -67,7 +67,7 @@ impl FileBackend for KernelQueue {
         todo!()
     }
 
-    fn stat(self: &Arc<Self>, _: &VFile, _: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
+    fn stat(self: &Arc<Self>, _: &VFile, _: Option<&VThread>) -> Result<Stat, Box<dyn AsErrno>> {
         let mut stat = Stat::zeroed();
 
         stat.mode = 0o10000;
@@ -80,7 +80,7 @@ impl FileBackend for KernelQueue {
         _: &VFile,
         _: TruncateLength,
         _: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         Err(Box::new(DefaultFileBackendError::InvalidValue))
     }
 }

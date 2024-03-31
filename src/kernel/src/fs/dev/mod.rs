@@ -4,7 +4,7 @@ use super::{
     path_contains, DirentType, Filesystem, Fs, FsConfig, Mode, Mount, MountFlags, MountOpts,
     MountSource, VPathBuf, Vnode, VnodeItem, VnodeType,
 };
-use crate::errno::{Errno, EEXIST, ENOENT, EOPNOTSUPP};
+use crate::errno::AsErrno;
 use crate::ucred::{Gid, Ucred, Uid};
 use bitflags::bitflags;
 use macros::Errno;
@@ -326,7 +326,7 @@ pub fn mount(
     parent: Option<Arc<Vnode>>,
     _: MountOpts,
     flags: MountFlags,
-) -> Result<Mount, Box<dyn Errno>> {
+) -> Result<Mount, Box<dyn AsErrno>> {
     // Check mount flags.
     if flags.intersects(MountFlags::MNT_ROOTFS) {
         return Err(Box::new(MountError::RootFs));
@@ -353,7 +353,7 @@ pub fn mount(
 }
 
 impl Filesystem for DevFs {
-    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Result<Arc<Vnode>, Box<dyn Errno>> {
+    fn root(self: Arc<Self>, mnt: &Arc<Mount>) -> Result<Arc<Vnode>, Box<dyn AsErrno>> {
         let ent = self.root.clone();
 
         let vnode = self.alloc_vnode(mnt, ent)?;

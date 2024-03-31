@@ -1,5 +1,5 @@
 use crate::{
-    errno::Errno,
+    errno::AsErrno,
     fs::{CharacterDevice, DefaultDeviceError, DeviceDriver, IoCmd, Uio, UioMut},
     process::VThread,
 };
@@ -15,7 +15,7 @@ impl DeviceDriver for Random {
         dev: &Arc<CharacterDevice>,
         data: &mut UioMut,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         todo!()
     }
 
@@ -25,7 +25,7 @@ impl DeviceDriver for Random {
         dev: &Arc<CharacterDevice>,
         data: &mut Uio,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<usize, Box<dyn AsErrno>> {
         todo!()
     }
 
@@ -34,7 +34,7 @@ impl DeviceDriver for Random {
         _: &Arc<CharacterDevice>,
         cmd: IoCmd,
         _: &VThread,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         match cmd {
             IoCmd::FIOASYNC(_) | IoCmd::FIONBIO(_) => Ok(()),
             _ => Err(Box::new(DefaultDeviceError::CommandNotSupported)),

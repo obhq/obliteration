@@ -1,5 +1,5 @@
 use crate::{
-    errno::Errno,
+    errno::AsErrno,
     fs::{CharacterDevice, DeviceDriver, IoCmd},
     process::VThread,
 };
@@ -15,7 +15,7 @@ impl DeviceDriver for Dipsw {
         dev: &Arc<CharacterDevice>,
         cmd: IoCmd,
         td: &VThread,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn AsErrno>> {
         if !td.cred().is_system() {
             todo!()
         } else {
