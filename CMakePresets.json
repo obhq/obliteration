@@ -11,8 +11,8 @@
     {
       "name": "windows",
       "inherits": "default",
-      "generator": "Visual Studio 17 2022",
-      "architecture": "x64",
+      "generator": "Ninja",
+      "toolchainFile": "cmake/Windows.MSVC.toolchain.cmake",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -21,11 +21,17 @@
     },
     {
       "name": "windows-release",
-      "inherits": "windows"
+      "inherits": "windows",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
     },
     {
       "name": "windows-debug",
-      "inherits": "windows"
+      "inherits": "windows",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
     },
     {
       "name": "linux",
@@ -79,13 +85,11 @@
   "buildPresets": [
     {
       "name": "windows-release",
-      "configurePreset": "windows-release",
-      "configuration": "Release"
+      "configurePreset": "windows-release"
     },
     {
       "name": "windows-debug",
-      "configurePreset": "windows-debug",
-      "configuration": "Debug"
+      "configurePreset": "windows-debug"
     },
     {
       "name": "linux-release",

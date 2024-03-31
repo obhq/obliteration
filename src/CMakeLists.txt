@@ -14,7 +14,8 @@ endif()
 
 add_custom_target(core
     COMMAND cargo build $<IF:$<CONFIG:Debug>,--profile=dev,--release>
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    BYPRODUCTS ${KERNEL} ${LIBCORE})
 
 # Setup application target.
 add_executable(obliteration WIN32 MACOSX_BUNDLE
