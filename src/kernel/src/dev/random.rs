@@ -33,7 +33,7 @@ impl DeviceDriver for Random {
         &self,
         _: &Arc<CharacterDevice>,
         cmd: IoCmd,
-        _: &VThread,
+        _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         match cmd {
             IoCmd::FIOASYNC(_) | IoCmd::FIONBIO(_) => Ok(()),

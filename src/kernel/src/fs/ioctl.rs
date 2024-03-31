@@ -1,3 +1,4 @@
+use super::FioDeviceGetNameArg;
 use crate::errno::ENOTTY;
 use crate::syscalls::SysErr;
 use std::fmt::Debug;
@@ -110,10 +111,22 @@ commands! {
         FIOCLEX = 0x20006601,
         /// Remove close on exec on fd.
         FIONCLEX = 0x20006602,
+        /// Get # bytes to read
+        FIONREAD(&i32) = 0x8004667f,
         /// Set/clear non-blocking I/O.
-        FIONBIO(&i32) = 0x8004667d,
+        FIONBIO(&i32) = 0x8004667e,
         /// Set/clear async I/O.
-        FIOASYNC(&i32) = 0x8004667e,
+        FIOASYNC(&i32) = 0x8004667d,
+        /// Set owner
+        FIOSETOWN(&i32) = 0x8004667c,
+        /// Get owner
+        FIOGETOWN(&i32) = 0x8004667b,
+        /// get d_flags type part
+        FIODTYPE(&mut i32) = 0x4004667a,
+        /// Get start blk #
+        FIOGETLBA(&mut i32) = 0x40046679,
+        /// Get dev. name
+        FIODGNAME(&FioDeviceGetNameArg) = 0x40106678,
         /// Seek data.
         FIOSEEKDATA(&mut i64) = 0xC0086661,
         /// Seek hole.

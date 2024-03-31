@@ -24,7 +24,7 @@ impl DeviceDriver for Hid {
         &self,
         dev: &Arc<CharacterDevice>,
         cmd: IoCmd,
-        td: &VThread,
+        td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         todo!()
     }

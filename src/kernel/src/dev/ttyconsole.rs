@@ -52,7 +52,7 @@ impl DeviceDriver for TtyConsole {
         &self,
         dev: &Arc<CharacterDevice>,
         cmd: IoCmd,
-        td: &VThread,
+        td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         todo!()
     }

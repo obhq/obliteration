@@ -14,8 +14,10 @@ impl DeviceDriver for Dipsw {
         &self,
         dev: &Arc<CharacterDevice>,
         cmd: IoCmd,
-        td: &VThread,
+        td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
+        let td = td.unwrap();
+
         if !td.cred().is_system() {
             todo!()
         } else {
