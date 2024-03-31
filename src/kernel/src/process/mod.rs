@@ -10,6 +10,7 @@ use crate::signal::{
 };
 use crate::signal::{SigChldFlags, Signal};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
+use crate::sysent::ProcAbi;
 use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
 use crate::vm::{MemoryManagerError, Vm};
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
@@ -23,7 +24,7 @@ use std::num::NonZeroI32;
 use std::ptr::null;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicI32, AtomicPtr, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use thiserror::Error;
 
 pub use self::appinfo::*;
@@ -56,6 +57,7 @@ pub struct VProc {
     threads: Gutex<Vec<Arc<VThread>>>, // p_threads
     cred: Ucred,                       // p_ucred
     group: Gutex<Option<VProcGroup>>,  // p_pgrp
+    abi: OnceLock<ProcAbi>,            // p_sysent
     vm: Arc<Vm>,                       // p_vmspace
     sigacts: Gutex<SignalActs>,        // p_sigacts
     files: Arc<FileDesc>,              // p_fd
@@ -80,7 +82,7 @@ impl VProc {
         dmem_container: usize,
         root: Arc<Vnode>,
         system_path: impl Into<String>,
-        sys: &mut Syscalls,
+        mut sys: Syscalls,
     ) -> Result<Arc<Self>, VProcInitError> {
         let cred = if auth.caps.is_system() {
             // TODO: The groups will be copied from the parent process, which is SceSysCore.
@@ -98,7 +100,8 @@ impl VProc {
             threads: gg.spawn(Vec::new()),
             cred,
             group: gg.spawn(None),
-            vm: Vm::new(sys)?,
+            abi: OnceLock::new(),
+            vm: Vm::new(&mut sys)?,
             sigacts: gg.spawn(SignalActs::new()),
             files: FileDesc::new(root),
             system_path: system_path.into(),
@@ -114,6 +117,7 @@ impl VProc {
             uptc: AtomicPtr::new(null_mut()),
         });
 
+        // TODO: Move all syscalls here to somewhere else.
         sys.register(20, &vp, Self::sys_getpid);
         sys.register(50, &vp, Self::sys_setlogin);
         sys.register(147, &vp, Self::sys_setsid);
@@ -129,6 +133,8 @@ impl VProc {
         sys.register(587, &vp, Self::sys_get_authinfo);
         sys.register(602, &vp, Self::sys_randomized_path);
 
+        vp.abi.set(ProcAbi::new(sys)).unwrap();
+
         Ok(vp)
     }
 
@@ -138,6 +144,10 @@ impl VProc {
 
     pub fn cred(&self) -> &Ucred {
         &self.cred
+    }
+
+    pub fn abi(&self) -> &ProcAbi {
+        self.abi.get().unwrap()
     }
 
     pub fn vm(&self) -> &Arc<Vm> {
