@@ -143,7 +143,7 @@ impl Vnode {
         self: &Arc<Self>,
         buf: &mut UioMut,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn Errno>> {
         self.backend.read(self, buf, td)
     }
 
@@ -151,7 +151,7 @@ impl Vnode {
         self: &Arc<Self>,
         buf: &mut Uio,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn Errno>> {
         self.backend.write(self, buf, td)
     }
 }
@@ -162,7 +162,7 @@ impl FileBackend for Vnode {
         _: &VFile,
         buf: &mut UioMut,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn Errno>> {
         self.backend.read(self, buf, td)
     }
 
@@ -171,7 +171,7 @@ impl FileBackend for Vnode {
         _: &VFile,
         buf: &mut Uio,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn Errno>> {
         self.backend.write(self, buf, td)
     }
 
@@ -320,7 +320,7 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] buf: &mut UioMut,
         #[allow(unused_variables)] td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>>;
+    ) -> Result<(), Box<dyn Errno>>;
 
     /// An implementation of `vop_write`.
     fn write(
@@ -328,7 +328,7 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] buf: &mut Uio,
         #[allow(unused_variables)] td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>>;
+    ) -> Result<(), Box<dyn Errno>>;
 }
 
 /// An implementation of `vattr` struct.

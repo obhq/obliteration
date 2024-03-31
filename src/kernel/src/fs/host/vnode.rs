@@ -129,7 +129,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         _: &Arc<Vnode>,
         buf: &mut UioMut,
         _: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn Errno>> {
         let read = self.file.read(buf).map_err(ReadError::ReadFailed)?;
 
         Ok(read)
@@ -140,7 +140,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] buf: &mut Uio,
         #[allow(unused_variables)] td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn Errno>> {
         todo!()
     }
 }

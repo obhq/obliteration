@@ -209,7 +209,7 @@ impl HostFile {
         use std::ptr::null_mut;
         use windows_sys::Wdk::{
             Foundation::OBJECT_ATTRIBUTES,
-            Storage::FileSystem::{NtCreateFile, FILE_CREATE, FILE_DIRECTORY_FILE},
+            Storage::FileSystem::{NtCreateFile, FILE_DIRECTORY_FILE, FILE_OPEN},
         };
         use windows_sys::Win32::{
             Foundation::{RtlNtStatusToDosError, STATUS_SUCCESS, UNICODE_STRING},
@@ -256,7 +256,7 @@ impl HostFile {
                 null_mut(),
                 FILE_ATTRIBUTE_DIRECTORY,
                 FILE_SHARE_READ | FILE_SHARE_WRITE,
-                FILE_CREATE,
+                FILE_OPEN,
                 FILE_DIRECTORY_FILE,
                 null_mut(),
                 0,
@@ -274,13 +274,89 @@ impl HostFile {
     }
 
     #[cfg(unix)]
-    pub(super) fn read(&self, buf: &mut UioMut) -> Result<usize, Error> {
-        todo!()
+    pub(super) fn read(&self, buf: &mut UioMut) -> Result<(), Error> {
+        use libc::pread;
+
+        buf.write_with::<Error>(|iov, mut offset| {
+            let nbytes = if let Ok(nbytes) = iov.len().try_into() {
+                nbytes
+            } else {
+                todo!()
+            };
+
+            let nread = unsafe { pread(self.raw, iov.ptr().cast(), nbytes, offset) };
+
+            match nread {
+                0.. if nread == nbytes as isize => Ok(nread as u64),
+                0.. => todo!(),
+                _ => todo!(),
+            }
+        })?;
+
+        Ok(())
     }
 
     #[cfg(windows)]
-    pub(super) fn read(&self, buf: &mut UioMut) -> Result<usize, Error> {
-        todo!()
+    pub(super) fn read(&self, buf: &mut UioMut) -> Result<(), Error> {
+        use std::ptr::null_mut;
+        use windows_sys::{
+            Wdk::Storage::FileSystem::NtReadFile,
+            Win32::{
+                Foundation::{STATUS_END_OF_FILE, STATUS_PENDING},
+                System::{
+                    Threading::{WaitForSingleObject, INFINITE},
+                    IO::{IO_STATUS_BLOCK, IO_STATUS_BLOCK_0},
+                },
+            },
+        };
+
+        buf.write_with::<Error>(|iov, mut offset| {
+            let nbytes = if let Ok(nbytes) = iov.len().try_into() {
+                nbytes
+            } else {
+                todo!()
+            };
+
+            let mut io_status = IO_STATUS_BLOCK {
+                Anonymous: IO_STATUS_BLOCK_0 {
+                    Status: STATUS_PENDING,
+                },
+                Information: 0,
+            };
+
+            let status = unsafe {
+                NtReadFile(
+                    self.raw,
+                    0,
+                    None,
+                    null_mut(),
+                    &mut io_status,
+                    iov.ptr().cast(),
+                    nbytes,
+                    &mut offset,
+                    null_mut(),
+                )
+            };
+
+            let status = if status == STATUS_PENDING {
+                unsafe {
+                    WaitForSingleObject(self.raw, INFINITE);
+                    io_status.Anonymous.Status
+                }
+            } else {
+                status
+            };
+
+            match status {
+                STATUS_PENDING => todo!(),
+                STATUS_END_OF_FILE => todo!(),
+                0.. if io_status.Information == nbytes as usize => Ok(io_status.Information as u64),
+                0.. => todo!(),
+                _ => todo!(),
+            }
+        })?;
+
+        Ok(())
     }
 
     #[cfg(unix)]
