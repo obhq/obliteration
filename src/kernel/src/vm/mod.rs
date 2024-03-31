@@ -25,7 +25,6 @@ mod storage;
 /// Implementation of `vmspace` structure.
 #[derive(Debug)]
 pub struct Vm {
-    page_size: usize,
     allocation_granularity: usize,
     allocations: RwLock<BTreeMap<usize, Alloc>>, // Key is Alloc::addr.
     stack: AppStack,
@@ -35,6 +34,7 @@ impl Vm {
     /// Size of a memory page on PS4.
     pub const VIRTUAL_PAGE_SIZE: usize = 0x4000;
 
+    /// See `vmspace_alloc` on the PS4 for a reference.
     pub fn new(sys: &mut Syscalls) -> Result<Arc<Self>, MemoryManagerError> {
         // Check if page size on the host is supported. We don't need to check allocation
         // granularity because it is always multiply by page size, which is a correct value.
@@ -49,9 +49,7 @@ impl Vm {
             return Err(MemoryManagerError::UnsupportedPageSize);
         }
 
-        // TODO: Check exec_new_vmspace on the PS4 to see what we have missed here.
         let mut mm = Self {
-            page_size,
             allocation_granularity,
             allocations: RwLock::default(),
             stack: AppStack::new(),
@@ -89,16 +87,6 @@ impl Vm {
         sys.register(588, &mm, Self::sys_mname);
 
         Ok(mm)
-    }
-
-    /// Gets size of page on the host system.
-    pub fn page_size(&self) -> usize {
-        self.page_size
-    }
-
-    /// Gets allocation granularity on the host system.
-    pub fn allocation_granularity(&self) -> usize {
-        self.allocation_granularity
     }
 
     pub fn stack(&self) -> &AppStack {

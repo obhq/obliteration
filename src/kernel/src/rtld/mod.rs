@@ -119,6 +119,7 @@ impl RuntimeLinker {
             0
         };
 
+        // TODO: Check exec_new_vmspace on the PS4 to see what we have missed here.
         // TODO: Apply remaining checks from exec_self_imgact.
         // Map eboot.bin.
         let mut app = Module::map(

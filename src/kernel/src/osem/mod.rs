@@ -2,24 +2,21 @@ use crate::errno::EINVAL;
 use crate::idt::Entry;
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
-use crate::VProc;
 use bitflags::bitflags;
 use std::sync::Arc;
 
-pub struct OsemManager {
-    proc: Arc<VProc>,
-}
+pub struct OsemManager {}
 
 impl OsemManager {
-    pub fn new(sys: &mut Syscalls, proc: &Arc<VProc>) -> Arc<Self> {
-        let osem = Arc::new(Self { proc: proc.clone() });
+    pub fn new(sys: &mut Syscalls) -> Arc<Self> {
+        let osem = Arc::new(Self {});
 
         sys.register(549, &osem, Self::sys_osem_create);
 
         osem
     }
 
-    fn sys_osem_create(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_osem_create(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let name = unsafe { i.args[0].to_str(32) }?.unwrap();
         let flags = {
             let flags = i.args[1].try_into().unwrap();
@@ -36,7 +33,7 @@ impl OsemManager {
             flags
         };
 
-        let mut objects = self.proc.objects_mut();
+        let mut objects = td.proc().objects_mut();
 
         let id = objects
             .alloc_infallible(|_| Entry::new(Some(name.to_owned()), Osem::new(flags), 0x120));

@@ -59,6 +59,7 @@ mod shm;
 mod signal;
 mod syscalls;
 mod sysctl;
+mod sysent;
 mod time;
 mod ucred;
 mod umtx;
@@ -356,6 +357,15 @@ fn run() -> Result<(), KernelError> {
     TimeManager::new(&mut syscalls);
     KernelQueueManager::new(&mut syscalls);
     NetManager::new(&mut syscalls);
+    NamedObjManager::new(&mut syscalls);
+    OsemManager::new(&mut syscalls);
+    UmtxManager::new(&mut syscalls);
+
+    // Initialize runtime linker.
+    info!("Initializing runtime linker.");
+
+    let ee = NativeEngine::new();
+    let ld = RuntimeLinker::new(&fs, &ee, &mut syscalls);
 
     // TODO: Get correct budget name from the PS4.
     let budget_id = budget.create(Budget::new("big app", ProcType::BigApp));
@@ -367,7 +377,7 @@ fn run() -> Result<(), KernelError> {
         1, // See sys_budget_set on the PS4.
         root,
         "QXuNNl0Zhn",
-        &mut syscalls,
+        syscalls,
     )?;
 
     info!(
@@ -375,18 +385,6 @@ fn run() -> Result<(), KernelError> {
         proc.vm().stack().start(),
         proc.vm().stack().end()
     );
-
-    NamedObjManager::new(&mut syscalls, &proc);
-    OsemManager::new(&mut syscalls, &proc);
-    UmtxManager::new(&mut syscalls);
-
-    // Initialize runtime linker.
-    info!("Initializing runtime linker.");
-
-    let ee = NativeEngine::new();
-    let ld = RuntimeLinker::new(&fs, &ee, &mut syscalls);
-
-    ee.set_syscalls(syscalls);
 
     // TODO: Check if this credential is actually correct for game main thread.
     let cred = Arc::new(Ucred::new(
