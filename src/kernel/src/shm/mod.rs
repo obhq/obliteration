@@ -111,22 +111,20 @@ impl SharedMemory {
 }
 
 impl FileBackend for SharedMemory {
-    #[allow(unused_variables)]
     fn read(
         self: &Arc<Self>,
-        file: &VFile,
-        buf: &mut UioMut,
-        td: Option<&VThread>,
+        _: &VFile,
+        _: &mut UioMut,
+        _: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         Err(Box::new(DefaultFileBackendError::OperationNotSupported))
     }
 
-    #[allow(unused_variables)]
     fn write(
         self: &Arc<Self>,
-        file: &VFile,
-        buf: &mut Uio,
-        td: Option<&VThread>,
+        _: &VFile,
+        _: &mut Uio,
+        _: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         Err(Box::new(DefaultFileBackendError::OperationNotSupported))
     }

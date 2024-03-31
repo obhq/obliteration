@@ -8,8 +8,9 @@ use crate::fs::{Fs, OpenError, VPath, VPathBuf};
 use crate::idt::Entry;
 use crate::info;
 use crate::log::print;
-use crate::process::{Binaries, MemoryUpdateError, MmapError, Protections, VThread};
+use crate::process::{Binaries, VThread};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
+use crate::vm::{MemoryUpdateError, MmapError, Protections};
 use bitflags::bitflags;
 use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation, Symbol};
 use gmtx::{Gutex, GutexGroup};
@@ -118,6 +119,7 @@ impl RuntimeLinker {
             0
         };
 
+        // TODO: Check exec_new_vmspace on the PS4 to see what we have missed here.
         // TODO: Apply remaining checks from exec_self_imgact.
         // Map eboot.bin.
         let mut app = Module::map(

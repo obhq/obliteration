@@ -52,6 +52,8 @@ Obliteration supports only 4KB/8KB/16KB pages. Most people should not have any p
 - Rust on the latest stable channel
 - CMake 3.21+
   - Make sure you have `Add CMake to the system PATH` selected when installing
+- [Ninja](https://ninja-build.org)
+  - Make sure Ninja is added to `PATH`
 
 ### Linux prerequisites
 

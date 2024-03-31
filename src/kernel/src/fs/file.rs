@@ -2,7 +2,7 @@ use super::{CharacterDevice, IoCmd, Offset, Stat, TruncateLength, Uio, UioMut, V
 use crate::dmem::BlockPool;
 use crate::errno::Errno;
 use crate::errno::{EINVAL, ENOTTY, ENXIO, EOPNOTSUPP};
-use crate::fs::PollEvents;
+use crate::fs::{IoVec, PollEvents};
 use crate::kqueue::KernelQueue;
 use crate::net::Socket;
 use crate::process::VThread;
@@ -19,6 +19,7 @@ use thiserror::Error;
 pub struct VFile {
     ty: VFileType,     // f_type
     flags: VFileFlags, // f_flag
+    offset: i64,       // f_offset
 }
 
 impl VFile {
@@ -26,6 +27,7 @@ impl VFile {
         Self {
             ty,
             flags: VFileFlags::empty(),
+            offset: 0,
         }
     }
 
@@ -90,7 +92,7 @@ impl VFile {
 
     fn read(&self, buf: &mut UioMut, td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
         match &self.ty {
-            VFileType::Vnode(vn) => vn.read(self, buf, td),
+            VFileType::Vnode(vn) => FileBackend::read(vn, self, buf, td),
             VFileType::Socket(so) | VFileType::IpcSocket(so) => so.read(self, buf, td),
             VFileType::KernelQueue(kq) => kq.read(self, buf, td),
             VFileType::SharedMemory(shm) => shm.read(self, buf, td),
@@ -101,7 +103,7 @@ impl VFile {
 
     fn write(&self, buf: &mut Uio, td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
         match &self.ty {
-            VFileType::Vnode(vn) => vn.write(self, buf, td),
+            VFileType::Vnode(vn) => FileBackend::write(vn, self, buf, td),
             VFileType::Socket(so) | VFileType::IpcSocket(so) => so.write(self, buf, td),
             VFileType::KernelQueue(kq) => kq.write(self, buf, td),
             VFileType::SharedMemory(shm) => shm.write(self, buf, td),
@@ -154,12 +156,39 @@ impl Seek for VFile {
     fn seek(&mut self, _pos: SeekFrom) -> std::io::Result<u64> {
         todo!()
     }
+
+    fn rewind(&mut self) -> std::io::Result<()> {
+        self.offset = 0;
+
+        Ok(())
+    }
+
+    fn stream_position(&mut self) -> std::io::Result<u64> {
+        if let Ok(offset) = self.offset.try_into() {
+            Ok(offset)
+        } else {
+            todo!()
+        }
+    }
 }
 
 impl Read for VFile {
-    #[allow(unused_variables)] // TODO: Remove when implementing.
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        todo!()
+        let ref mut iovec = IoVec::from_slice(buf);
+
+        let mut uio = UioMut::from_single_vec(iovec);
+
+        let Ok(read) = VFile::read(self, &mut uio, None) else {
+            todo!()
+        };
+
+        if let Ok(read) = TryInto::<i64>::try_into(read) {
+            self.offset += read;
+        } else {
+            todo!()
+        }
+
+        Ok(read)
     }
 }
 
