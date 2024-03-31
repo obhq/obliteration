@@ -316,12 +316,14 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
         panic!("vop_revoke called");
     }
 
+    /// An implementation of `vop_read`.
     fn read(
         &self,
         #[allow(unused_variables)] buf: &mut UioMut,
         #[allow(unused_variables)] td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>>;
 
+    /// An implementation of `vop_write`.
     fn write(
         &self,
         #[allow(unused_variables)] buf: &mut Uio,
