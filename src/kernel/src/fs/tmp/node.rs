@@ -152,7 +152,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
                 let dirent = entries
                     .iter()
                     .find(|dirent| dirent.name() == name)
-                    .ok_or_else(|| LookupError::NotFound)?;
+                    .ok_or(LookupError::NotFound)?;
 
                 let vnode = self
                     .tmpfs
