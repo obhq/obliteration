@@ -274,7 +274,7 @@ impl HostFile {
     }
 
     #[cfg(unix)]
-    pub(super) fn read(&self, buf: &mut UioMut) -> Result<usize, Error> {
+    pub(super) fn read(&self, buf: &mut UioMut) -> Result<(), Error> {
         use libc::pread;
 
         buf.write_with::<Error>(|iov, mut offset| {
