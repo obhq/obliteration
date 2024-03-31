@@ -112,14 +112,6 @@ impl<'a> UioMut<'a> {
         }
     }
 
-    pub fn vecs_mut(&mut self) -> &mut [IoVec<'a>] {
-        self.vecs
-    }
-
-    pub fn offset(&self) -> i64 {
-        self.offset
-    }
-
     pub fn write_with<E>(
         &mut self,
         func: impl Fn(&mut IoVec, i64) -> Result<u64, E>,
