@@ -96,13 +96,12 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         _: &Arc<Vnode>,
         buf: &mut UioMut,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
-        let read = self
-            .lower
+    ) -> Result<(), Box<dyn Errno>> {
+        self.lower
             .read(buf, td)
             .map_err(ReadError::ReadFromLowerFailed)?;
 
-        Ok(read)
+        Ok(())
     }
 
     fn write(
@@ -110,13 +109,12 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         _: &Arc<Vnode>,
         buf: &mut Uio,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
-        let written = self
-            .lower
+    ) -> Result<(), Box<dyn Errno>> {
+        self.lower
             .write(buf, td)
             .map_err(WriteError::WriteFromLowerFailed)?;
 
-        Ok(written)
+        Ok(())
     }
 }
 
