@@ -1,7 +1,7 @@
 use crate::fs::{VPath, VPathBuf};
 use crate::process::VThread;
 use crate::rtld::{CodeWorkspaceError, Memory, Module, UnprotectSegmentError};
-use crate::syscalls::{SysIn, SysOut, Syscalls};
+use crate::syscalls::{SysIn, SysOut};
 use crate::vm::Protections;
 use byteorder::{ByteOrder, LE};
 use iced_x86::code_asm::{
@@ -11,13 +11,12 @@ use iced_x86::code_asm::{
 use iced_x86::{Code, Decoder, DecoderOptions, Instruction, OpKind, Register};
 use std::any::Any;
 use std::mem::{size_of, transmute};
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use thiserror::Error;
 
 /// An implementation of [`ExecutionEngine`] for running the PS4 binary natively.
 #[derive(Debug)]
 pub struct NativeEngine {
-    syscalls: OnceLock<Syscalls>,
     xsave_area: i32,
 }
 
@@ -31,14 +30,7 @@ impl NativeEngine {
 
         assert!(xsave_area > 0);
 
-        Arc::new(Self {
-            syscalls: OnceLock::new(),
-            xsave_area,
-        })
-    }
-
-    pub fn set_syscalls(&self, v: Syscalls) {
-        self.syscalls.set(v).unwrap();
+        Arc::new(Self { xsave_area })
     }
 
     pub fn setup_module(self: &Arc<Self>, md: &mut Module) -> Result<(), SetupModuleError> {
@@ -448,7 +440,12 @@ impl NativeEngine {
     /// # Safety
     /// This method cannot be called from Rust.
     unsafe extern "sysv64" fn syscall(&self, i: &SysIn, o: &mut SysOut) -> i64 {
-        self.syscalls.get().unwrap().exec(i, o)
+        VThread::current()
+            .unwrap()
+            .proc()
+            .abi()
+            .syscalls()
+            .exec(i, o)
     }
 
     /// # Safety
