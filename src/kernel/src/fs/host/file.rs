@@ -293,7 +293,7 @@ impl HostFile {
             }
         })?;
 
-        Ók(())
+        Ok(())
     }
 
     #[cfg(windows)]
