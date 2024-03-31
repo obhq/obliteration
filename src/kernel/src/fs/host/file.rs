@@ -287,7 +287,7 @@ impl HostFile {
             let nread = unsafe { pread(self.raw, iov.ptr().cast(), nbytes, offset) };
 
             match nread {
-                0.. if nread == nbytes as i64 => Ok(nread as u64),
+                0.. if nread == nbytes as isize => Ok(nread as u64),
                 0.. => todo!(),
                 _ => todo!(),
             }
