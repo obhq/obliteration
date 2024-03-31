@@ -1,7 +1,8 @@
 use crate::{
     errno::{Errno, EISDIR, EROFS},
     fs::{
-        null::hash::NULL_HASHTABLE, perm::Access, Mount, MountFlags, Vnode, VnodeAttrs, VnodeType,
+        null::hash::NULL_HASHTABLE, perm::Access, Mount, MountFlags, Uio, UioMut, Vnode,
+        VnodeAttrs, VnodeType,
     },
     process::VThread,
 };
@@ -89,6 +90,34 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 
         Ok(vnode)
     }
+
+    fn read(
+        &self,
+        _: &Arc<Vnode>,
+        buf: &mut UioMut,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        let read = self
+            .lower
+            .read(buf, td)
+            .map_err(ReadError::ReadFromLowerFailed)?;
+
+        Ok(read)
+    }
+
+    fn write(
+        &self,
+        _: &Arc<Vnode>,
+        buf: &mut Uio,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        let written = self
+            .lower
+            .write(buf, td)
+            .map_err(WriteError::WriteFromLowerFailed)?;
+
+        Ok(written)
+    }
 }
 
 /// See `null_nodeget` on the PS4 for a reference.
@@ -149,3 +178,15 @@ pub(super) enum OpenError {
 
 #[derive(Debug, Error, Errno)]
 pub(super) enum NodeGetError {}
+
+#[derive(Debug, Error, Errno)]
+enum ReadError {
+    #[error("read from lower vnode failed")]
+    ReadFromLowerFailed(#[source] Box<dyn Errno>),
+}
+
+#[derive(Debug, Error, Errno)]
+enum WriteError {
+    #[error("write from lower vnode failed")]
+    WriteFromLowerFailed(#[source] Box<dyn Errno>),
+}

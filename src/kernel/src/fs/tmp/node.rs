@@ -1,6 +1,6 @@
 use super::{AllocVnodeError, TempFs};
 use crate::errno::{Errno, ENOENT, ENOSPC};
-use crate::fs::{Access, OpenFlags, VFileType, Vnode, VnodeAttrs, VnodeType};
+use crate::fs::{Access, Uio, UioMut, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use macros::Errno;
@@ -200,6 +200,24 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         entries.write().push(Arc::new(dirent));
 
         Ok(vnode)
+    }
+
+    fn read(
+        &self,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] buf: &mut UioMut,
+        #[allow(unused_variables)] td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!()
+    }
+
+    fn write(
+        &self,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] buf: &mut Uio,
+        #[allow(unused_variables)] td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        todo!()
     }
 }
 

@@ -1,6 +1,6 @@
 use super::{
-    unixify_access, Access, CharacterDevice, FileBackend, IoCmd, Mode, Mount, OpenFlags,
-    RevokeFlags, Stat, TruncateLength, Uio, UioMut, VFile, VFileType,
+    unixify_access, Access, CharacterDevice, FileBackend, IoCmd, Mode, Mount, RevokeFlags, Stat,
+    TruncateLength, Uio, UioMut, VFile,
 };
 use crate::arnd;
 use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
@@ -138,27 +138,41 @@ impl Vnode {
     pub fn revoke(self: &Arc<Self>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
         self.backend.revoke(self, flags)
     }
-}
 
-impl FileBackend for Vnode {
-    #[allow(unused_variables)] // TODO: remove when implementing
-    fn read(
+    pub fn read(
         self: &Arc<Self>,
-        file: &VFile,
         buf: &mut UioMut,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        todo!()
+        self.backend.read(self, buf, td)
     }
 
-    #[allow(unused_variables)] // TODO: remove when implementing
-    fn write(
+    pub fn write(
         self: &Arc<Self>,
-        file: &VFile,
         buf: &mut Uio,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        todo!()
+        self.backend.write(self, buf, td)
+    }
+}
+
+impl FileBackend for Vnode {
+    fn read(
+        self: &Arc<Self>,
+        _: &VFile,
+        buf: &mut UioMut,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        self.backend.read(self, buf, td)
+    }
+
+    fn write(
+        self: &Arc<Self>,
+        _: &VFile,
+        buf: &mut Uio,
+        td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>> {
+        self.backend.write(self, buf, td)
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
@@ -299,6 +313,22 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
     ) -> Result<(), Box<dyn Errno>> {
         panic!("vop_revoke called");
     }
+
+    /// An implementation of `vop_read`.
+    fn read(
+        &self,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] buf: &mut UioMut,
+        #[allow(unused_variables)] td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>>;
+
+    /// An implementation of `vop_write`.
+    fn write(
+        &self,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] buf: &mut Uio,
+        #[allow(unused_variables)] td: Option<&VThread>,
+    ) -> Result<usize, Box<dyn Errno>>;
 }
 
 /// An implementation of `vattr` struct.
