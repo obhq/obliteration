@@ -1,33 +1,29 @@
-use crate::{
-    errno::EINVAL,
-    idt::Entry,
-    info,
-    process::{VProc, VThread},
-    syscalls::{SysErr, SysIn, SysOut, Syscalls},
-};
+use crate::errno::EINVAL;
+use crate::idt::Entry;
+use crate::info;
+use crate::process::VThread;
+use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use std::sync::Arc;
 
-pub struct NamedObjManager {
-    proc: Arc<VProc>,
-}
+pub struct NamedObjManager {}
 
 impl NamedObjManager {
-    pub fn new(sys: &mut Syscalls, proc: &Arc<VProc>) -> Arc<Self> {
-        let namedobj = Arc::new(Self { proc: proc.clone() });
+    pub fn new(sys: &mut Syscalls) -> Arc<Self> {
+        let namedobj = Arc::new(Self {});
 
         sys.register(557, &namedobj, Self::sys_namedobj_create);
 
         namedobj
     }
 
-    fn sys_namedobj_create(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_namedobj_create(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let name = unsafe { i.args[0].to_str(32) }?.ok_or(SysErr::Raw(EINVAL))?;
         let data: usize = i.args[1].into();
         let flags: u32 = i.args[2].try_into().unwrap();
 
         // Allocate the entry.
-        let mut table = self.proc.objects_mut();
+        let mut table = td.proc().objects_mut();
 
         let obj = NamedObj::new(name, data);
 

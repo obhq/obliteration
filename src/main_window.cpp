@@ -6,7 +6,7 @@
 #include "game_settings_dialog.hpp"
 #include "log_formatter.hpp"
 #include "path.hpp"
-#include "progress_dialog.hpp"
+#include "pkg_installer.hpp"
 #include "settings.hpp"
 #include "string.hpp"
 
@@ -239,109 +239,25 @@ void MainWindow::tabChanged()
 void MainWindow::installPkg()
 {
     // Browse a PKG.
-    auto pkgPath = QDir::toNativeSeparators(QFileDialog::getOpenFileName(this, "Install PKG", QString(), "PKG Files (*.pkg)")).toStdString();
+    auto path = QDir::toNativeSeparators(QFileDialog::getOpenFileName(this, "Install PKG", QString(), "PKG Files (*.pkg)"));
 
-    if (pkgPath.empty()) {
+    if (path.isEmpty()) {
         return;
     }
 
-    // Show dialog to display progress.
-    ProgressDialog progress("Install PKG", "Opening PKG...", this);
+    // Run installer.
+    PkgInstaller installer(readGamesDirectorySetting(), path, this);
 
-    // Open a PKG.
-    Pkg pkg;
-    Error error;
-
-    pkg = pkg_open(pkgPath.c_str(), &error);
-
-    if (!pkg) {
-        QMessageBox::critical(&progress, "Error", QString("Cannot open %1: %2").arg(pkgPath.c_str()).arg(error.message()));
-        return;
-    }
-
-    // Get game ID.
-    Param param(pkg_get_param(pkg, &error));
-
-    if (!param) {
-        QMessageBox::critical(&progress, "Error", QString("Failed to get param.sfo from %1: %2").arg(pkgPath.c_str()).arg(error.message()));
-        return;
-    }
-
-    // Create game directory.
-    auto gamesDirectory = readGamesDirectorySetting();
-
-    // Get Param information
-    auto appver = param.appver();
-    auto category = param.category();
-    auto shortContentId = param.shortContentId();
-    auto title = param.title();
-    auto titleId = param.titleId();
-
-    // Check if file is Patch/DLC.
-    bool patchOrDlc = false;
-    if (category.startsWith("gp") || category.contains("ac")) {
-        patchOrDlc = true;
-    }
-
-    // If PKG isn't a game, DLC, or Patch, don't allow.
-    if (!patchOrDlc && !category.startsWith("gd")) {
-            QString msg("PKG file is not a Patch, DLC, or a Game. Possibly a corrupted PKG?");
-
-            QMessageBox::critical(&progress, "Error", msg);
-            return;
-    }
-
-    auto directory = joinPath(gamesDirectory, titleId);
-
-    // Setup folders for DLC and Patch PKGs
-    if (patchOrDlc == true) {
-        if (category.contains("ac")) {
-            // TODO: Add DLC support, short_content_id is most likely to be used.
-            QString msg("DLC PKG support is not yet implemented.");
-
-            QMessageBox::critical(&progress, "Error", msg);
-            return;
-        } else {
-            // If our PKG is for Patching, add -PATCH- to the end of the foldername along with the patch APPVER. (-PATCH-01.01)
-            directory += "-PATCH-" + appver.toStdString();
-        }
-    }
-
-    if (!QDir().mkdir(QString::fromStdString(directory))) {
-        QString msg("Install directory could not be created at\n%1");
-
-        QMessageBox::critical(&progress, "Error", msg.arg(QString::fromStdString(directory)));
-        return;
-    }
-
-    // Extract items.
-    progress.setWindowTitle(title);
-
-    error = pkg_extract(pkg, directory.c_str(), [](const char *status, std::size_t current, std::size_t total, void *ud) {
-        auto progress = reinterpret_cast<ProgressDialog *>(ud);
-
-        progress->setStatusText(status);
-
-        if (current) {
-            progress->setValue(static_cast<int>(current));
-        } else {
-            progress->setValue(0);
-            progress->setMaximum(static_cast<int>(total));
-        }
-    }, &progress);
-
-    pkg.close();
-    progress.complete();
-
-    if (error) {
-        QMessageBox::critical(this, "Error", QString("Failed to extract %1: %2").arg(pkgPath.c_str()).arg(error.message()));
+    if (!installer.exec()) {
         return;
     }
 
     // Add to game list if new game.
+    auto &id = installer.gameId();
     bool success = false;
-    if (!patchOrDlc) {
-        success = loadGame(titleId);
+
+    if (!id.isEmpty()) {
+        success = loadGame(id);
     } else {
         success = true;
     }

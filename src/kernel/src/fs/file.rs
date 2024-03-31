@@ -2,7 +2,7 @@ use super::{CharacterDevice, IoCmd, Offset, Stat, TruncateLength, Uio, UioMut, V
 use crate::dmem::BlockPool;
 use crate::errno::Errno;
 use crate::errno::{EINVAL, ENOTTY, ENXIO, EOPNOTSUPP};
-use crate::fs::PollEvents;
+use crate::fs::{IoVec, PollEvents};
 use crate::kqueue::KernelQueue;
 use crate::net::Socket;
 use crate::process::VThread;
@@ -10,7 +10,7 @@ use crate::shm::SharedMemory;
 use bitflags::bitflags;
 use macros::Errno;
 use std::fmt::Debug;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{ErrorKind, Read, Seek, SeekFrom};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -19,6 +19,7 @@ use thiserror::Error;
 pub struct VFile {
     ty: VFileType,     // f_type
     flags: VFileFlags, // f_flag
+    offset: i64,       // f_offset
 }
 
 impl VFile {
@@ -26,6 +27,7 @@ impl VFile {
         Self {
             ty,
             flags: VFileFlags::empty(),
+            offset: 0,
         }
     }
 
@@ -60,13 +62,7 @@ impl VFile {
 
         // TODO: consider implementing ktrace.
 
-        let res = self.read(&mut uio, td);
-
-        if let Err(ref e) = res {
-            todo!()
-        }
-
-        res
+        todo!()
     }
 
     /// See `dofilewrite` on the PS4 for a reference.
@@ -79,18 +75,12 @@ impl VFile {
         // TODO: consider implementing ktrace.
         // TODO: implement bwillwrite.
 
-        let res = self.write(&mut uio, td);
-
-        if let Err(ref e) = res {
-            todo!()
-        }
-
-        res
+        todo!()
     }
 
-    fn read(&self, buf: &mut UioMut, td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+    fn read(&self, buf: &mut UioMut, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
         match &self.ty {
-            VFileType::Vnode(vn) => vn.read(self, buf, td),
+            VFileType::Vnode(vn) => FileBackend::read(vn, self, buf, td),
             VFileType::Socket(so) | VFileType::IpcSocket(so) => so.read(self, buf, td),
             VFileType::KernelQueue(kq) => kq.read(self, buf, td),
             VFileType::SharedMemory(shm) => shm.read(self, buf, td),
@@ -99,9 +89,9 @@ impl VFile {
         }
     }
 
-    fn write(&self, buf: &mut Uio, td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
+    fn write(&self, buf: &mut Uio, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
         match &self.ty {
-            VFileType::Vnode(vn) => vn.write(self, buf, td),
+            VFileType::Vnode(vn) => FileBackend::write(vn, self, buf, td),
             VFileType::Socket(so) | VFileType::IpcSocket(so) => so.write(self, buf, td),
             VFileType::KernelQueue(kq) => kq.write(self, buf, td),
             VFileType::SharedMemory(shm) => shm.write(self, buf, td),
@@ -150,27 +140,67 @@ impl VFile {
 }
 
 impl Seek for VFile {
-    #[allow(unused_variables)] // TODO: Remove when implementing.
-    fn seek(&mut self, _pos: SeekFrom) -> std::io::Result<u64> {
-        todo!()
+    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+        self.seekable_vnode().ok_or(ErrorKind::Other)?;
+
+        // Negative seeks should not be allowed here
+        let offset: u64 = match pos {
+            SeekFrom::Start(offset) => offset,
+            SeekFrom::Current(_) => {
+                todo!()
+            }
+            SeekFrom::End(_) => {
+                todo!()
+            }
+        };
+
+        self.offset = if let Ok(offset) = offset.try_into() {
+            offset
+        } else {
+            todo!()
+        };
+
+        Ok(offset as u64)
+    }
+
+    fn rewind(&mut self) -> std::io::Result<()> {
+        self.offset = 0;
+
+        Ok(())
+    }
+
+    fn stream_position(&mut self) -> std::io::Result<u64> {
+        if let Ok(offset) = self.offset.try_into() {
+            Ok(offset)
+        } else {
+            todo!()
+        }
     }
 }
 
 impl Read for VFile {
-    #[allow(unused_variables)] // TODO: Remove when implementing.
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        todo!()
-    }
-}
+        let total = buf.len();
 
-impl Write for VFile {
-    #[allow(unused_variables)] // TODO: Remove when implementing.
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        todo!()
-    }
+        let ref mut iovec = IoVec::from_slice(buf);
 
-    fn flush(&mut self) -> std::io::Result<()> {
-        todo!()
+        let mut uio = UioMut::from_single_vec(iovec, self.offset);
+
+        if let Err(e) = VFile::read(self, &mut uio, None) {
+            println!("Error: {:?}", e);
+
+            todo!()
+        };
+
+        let read = total - uio.bytes_left;
+
+        if let Ok(read) = TryInto::<i64>::try_into(read) {
+            self.offset += read;
+        } else {
+            todo!()
+        }
+
+        Ok(read)
     }
 }
 
@@ -204,8 +234,8 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         file: &VFile,
         buf: &mut UioMut,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
-        Err(Box::new(DefaultError::ReadNotSupported))
+    ) -> Result<(), Box<dyn Errno>> {
+        Err(Box::new(DefaultFileBackendError::ReadNotSupported))
     }
 
     #[allow(unused_variables)]
@@ -215,8 +245,8 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         file: &VFile,
         buf: &mut Uio,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
-        Err(Box::new(DefaultError::WriteNotSupported))
+    ) -> Result<(), Box<dyn Errno>> {
+        Err(Box::new(DefaultFileBackendError::WriteNotSupported))
     }
 
     #[allow(unused_variables)]
@@ -227,7 +257,7 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         cmd: IoCmd,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        Err(Box::new(DefaultError::IoctlNotSupported))
+        Err(Box::new(DefaultFileBackendError::IoctlNotSupported))
     }
 
     #[allow(unused_variables)]
@@ -246,12 +276,12 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
         length: TruncateLength,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        Err(Box::new(DefaultError::TruncateNotSupported))
+        Err(Box::new(DefaultFileBackendError::TruncateNotSupported))
     }
 }
 
 #[derive(Debug, Error, Errno)]
-pub enum DefaultError {
+pub enum DefaultFileBackendError {
     #[error("reading is not supported")]
     #[errno(ENXIO)]
     ReadNotSupported,

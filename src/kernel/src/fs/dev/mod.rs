@@ -1,4 +1,3 @@
-pub use self::cdev::*;
 use self::dirent::Dirent;
 use self::vnode::VnodeBackend;
 use super::{
@@ -13,23 +12,26 @@ use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use thiserror::Error;
 
+pub use self::cdev::*;
+
 mod cdev;
 mod dirent;
 mod vnode;
 
 /// See `make_dev_credv` on the PS4 for a reference.
 pub fn make_dev(
-    sw: &Arc<CdevSw>,
+    driver: impl DeviceDriver,
+    driver_flags: DriverFlags,
     unit: i32,
     name: impl Into<String>,
     uid: Uid,
     gid: Gid,
     mode: Mode,
     cred: Option<Arc<Ucred>>,
-    flags: MakeDev,
+    flags: MakeDevFlags,
 ) -> Result<Arc<CharacterDevice>, MakeDevError> {
-    if sw.flags().intersects(DriverFlags::D_NEEDMINOR) {
-        todo!("make_dev_credv with D_NEEDMINOR");
+    if driver_flags.intersects(DriverFlags::D_NEEDMINOR) {
+        todo!("make_dev with D_NEEDMINOR");
     }
 
     // TODO: Implement prep_devname.
@@ -42,13 +44,12 @@ pub fn make_dev(
     // Get device flags.
     let mut df = DeviceFlags::empty();
 
-    if flags.intersects(MakeDev::MAKEDEV_ETERNAL) {
+    if flags.intersects(MakeDevFlags::MAKEDEV_ETERNAL) {
         df |= DeviceFlags::SI_ETERNAL;
     }
 
     // Create cdev.
     let dev = Arc::new(CharacterDevice::new(
-        sw,
         unit,
         name,
         uid,
@@ -57,6 +58,7 @@ pub fn make_dev(
         cred,
         df,
         INODE.fetch_add(1, Ordering::Relaxed).try_into().unwrap(),
+        driver,
     ));
 
     DEVICES.write().unwrap().push(dev.clone());
@@ -242,7 +244,7 @@ impl DevFs {
 
     /// See `devfs_allocv` on the PS4 for a reference.
     fn alloc_vnode(
-        self: &Arc<DevFs>,
+        self: &Arc<Self>,
         mnt: &Arc<Mount>,
         ent: Arc<Dirent>,
     ) -> Result<Arc<Vnode>, AllocVnodeError> {
@@ -290,7 +292,7 @@ impl DevFs {
 bitflags! {
     /// Flags for [`make_dev()`].
     #[derive(Clone, Copy)]
-    pub struct MakeDev: u32 {
+    pub struct MakeDevFlags: u32 {
         const MAKEDEV_ETERNAL = 0x10;
     }
 }

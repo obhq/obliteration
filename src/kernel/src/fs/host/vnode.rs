@@ -1,7 +1,7 @@
 use super::file::HostFile;
 use super::{GetVnodeError, HostFs};
 use crate::errno::{Errno, EEXIST, EIO, ENOENT, ENOTDIR};
-use crate::fs::{Access, IoCmd, Mode, OpenFlags, VFile, Vnode, VnodeAttrs, VnodeType};
+use crate::fs::{Access, IoCmd, Mode, Uio, UioMut, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use macros::Errno;
@@ -87,8 +87,10 @@ impl crate::fs::VnodeBackend for VnodeBackend {
                     return Err(Box::new(LookupError::InvalidName));
                 }
 
+                let host_file = self.file.open(name).map_err(LookupError::OpenFailed)?;
+
                 // Lookup the file.
-                Cow::Owned(self.file.open(name).map_err(LookupError::OpenFailed)?)
+                Cow::Owned(host_file)
             }
         };
 
@@ -122,13 +124,22 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         Ok(vn)
     }
 
-    #[allow(unused_variables)] // TODO: remove when implementing.
-    fn open(
+    fn read(
         &self,
-        vn: &Arc<Vnode>,
-        td: Option<&VThread>,
-        mode: OpenFlags,
-        file: Option<&mut VFile>,
+        _: &Arc<Vnode>,
+        buf: &mut UioMut,
+        _: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        let read = self.file.read(buf).map_err(ReadError::ReadFailed)?;
+
+        Ok(read)
+    }
+
+    fn write(
+        &self,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] buf: &mut Uio,
+        #[allow(unused_variables)] td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         todo!()
     }
@@ -190,4 +201,11 @@ impl From<std::io::Error> for MkDirError {
             _ => MkDirError::CreateFailed(e),
         }
     }
+}
+
+#[derive(Debug, Error, Errno)]
+enum ReadError {
+    #[error("read failed")]
+    #[errno(EIO)]
+    ReadFailed(#[source] std::io::Error),
 }

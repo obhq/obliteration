@@ -1,10 +1,9 @@
 use crate::{
     errno::{Errno, EINVAL},
     fs::{
-        check_access, Access, AccessError, DefaultError, FileBackend, IoCmd, Mode, OpenFlags,
-        PollEvents, Stat, TruncateLength, Uio, UioMut, VFile, VFileFlags, VPathBuf,
+        check_access, Access, AccessError, DefaultFileBackendError, FileBackend, IoCmd, Mode,
+        OpenFlags, PollEvents, Stat, TruncateLength, Uio, UioMut, VFile, VFileFlags, VPathBuf,
     },
-    memory::MemoryManager,
     process::VThread,
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
     ucred::{Gid, Ucred, Uid},
@@ -13,14 +12,11 @@ use macros::Errno;
 use std::{convert::Infallible, sync::Arc};
 use thiserror::Error;
 
-#[allow(dead_code)] // TODO: remove when used.
-pub struct SharedMemoryManager {
-    mm: Arc<MemoryManager>,
-}
+pub struct SharedMemoryManager {}
 
 impl SharedMemoryManager {
-    pub fn new(mm: &Arc<MemoryManager>, sys: &mut Syscalls) -> Arc<Self> {
-        let shm = Arc::new(Self { mm: mm.clone() });
+    pub fn new(sys: &mut Syscalls) -> Arc<Self> {
+        let shm = Arc::new(Self {});
 
         sys.register(482, &shm, Self::sys_shm_open);
         sys.register(483, &shm, Self::sys_shm_unlink);
@@ -115,24 +111,22 @@ impl SharedMemory {
 }
 
 impl FileBackend for SharedMemory {
-    #[allow(unused_variables)]
     fn read(
         self: &Arc<Self>,
-        file: &VFile,
-        buf: &mut UioMut,
-        td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
-        Err(Box::new(DefaultError::OperationNotSupported))
+        _: &VFile,
+        _: &mut UioMut,
+        _: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        Err(Box::new(DefaultFileBackendError::OperationNotSupported))
     }
 
-    #[allow(unused_variables)]
     fn write(
         self: &Arc<Self>,
-        file: &VFile,
-        buf: &mut Uio,
-        td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
-        Err(Box::new(DefaultError::OperationNotSupported))
+        _: &VFile,
+        _: &mut Uio,
+        _: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        Err(Box::new(DefaultFileBackendError::OperationNotSupported))
     }
 
     #[allow(unused_variables)] // remove when implementing

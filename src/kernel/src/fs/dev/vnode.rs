@@ -2,8 +2,7 @@ use super::dirent::Dirent;
 use super::{AllocVnodeError, DevFs};
 use crate::errno::{Errno, EIO, ENOENT, ENOTDIR, ENXIO};
 use crate::fs::{
-    check_access, Access, IoCmd, OpenFlags, RevokeFlags, VFile, Vnode, VnodeAttrs, VnodeItem,
-    VnodeType,
+    check_access, Access, IoCmd, RevokeFlags, Uio, UioMut, Vnode, VnodeAttrs, VnodeType,
 };
 use crate::process::VThread;
 use macros::Errno;
@@ -163,39 +162,26 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         }
     }
 
-    fn open(
-        &self,
-        vn: &Arc<Vnode>,
-        td: Option<&VThread>,
-        mode: OpenFlags,
-        mut file: Option<&mut VFile>,
-    ) -> Result<(), Box<dyn Errno>> {
-        if !vn.is_character() {
-            return Ok(());
-        }
-
-        // Not sure why FreeBSD check if vnode is VBLK because all of vnode here always be VCHR.
-        let item = vn.item();
-        let Some(VnodeItem::Device(dev)) = item.as_ref() else {
-            unreachable!();
-        };
-
-        let sw = dev.sw();
-
-        // Execute switch handler.
-        sw.open()(&dev, mode, 0x2000, td)?;
-
-        // Set file OP.
-        let file = match file {
-            Some(v) => v,
-            None => return Ok(()),
-        };
-
+    fn revoke(&self, vn: &Arc<Vnode>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
+        // TODO: Implement this.
         todo!()
     }
 
-    fn revoke(&self, vn: &Arc<Vnode>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
-        // TODO: Implement this.
+    fn read(
+        &self,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] buf: &mut UioMut,
+        #[allow(unused_variables)] td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+
+    fn write(
+        &self,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
+        #[allow(unused_variables)] buf: &mut Uio,
+        #[allow(unused_variables)] td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
         todo!()
     }
 }

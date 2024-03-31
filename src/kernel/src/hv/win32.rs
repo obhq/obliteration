@@ -1,10 +1,9 @@
-use crate::NewError;
 use std::ffi::c_void;
 use std::mem::size_of;
-use std::num::NonZeroUsize;
 use windows_sys::core::HRESULT;
 use windows_sys::Win32::System::Hypervisor::{
-    WHvCreatePartition, WHvDeletePartition, WHvPartitionPropertyCodeProcessorCount,
+    WHvCreatePartition, WHvDeletePartition, WHvMapGpaRange, WHvMapGpaRangeFlagExecute,
+    WHvMapGpaRangeFlagRead, WHvMapGpaRangeFlagWrite, WHvPartitionPropertyCodeProcessorCount,
     WHvSetPartitionProperty, WHvSetupPartition, WHV_PARTITION_HANDLE, WHV_PARTITION_PROPERTY,
     WHV_PARTITION_PROPERTY_CODE,
 };
@@ -13,39 +12,63 @@ use windows_sys::Win32::System::Hypervisor::{
 pub struct Partition(WHV_PARTITION_HANDLE);
 
 impl Partition {
-    pub fn new(cpu: NonZeroUsize) -> Result<Self, NewError> {
-        let cpu = cpu
-            .get()
-            .try_into()
-            .map_err(|_| NewError::InvalidCpuCount)?;
-
-        // Create a partition.
+    pub fn new() -> Result<Self, HRESULT> {
         let mut handle = 0;
         let status = unsafe { WHvCreatePartition(&mut handle) };
 
         if status < 0 {
-            return Err(NewError::CreatePartitionFailed(status));
+            Err(status)
+        } else {
+            Ok(Self(handle))
         }
+    }
 
-        // Set CPU count.
-        let mut part = Self(handle);
+    pub fn set_vcpu(&mut self, n: usize) -> Result<(), HRESULT> {
         let status = unsafe {
-            part.set_property(
+            self.set_property(
                 WHvPartitionPropertyCodeProcessorCount,
                 &WHV_PARTITION_PROPERTY {
-                    ProcessorCount: cpu,
+                    ProcessorCount: n.try_into().unwrap(),
                 },
             )
         };
 
         if status < 0 {
-            return Err(NewError::SetCpuCountFailed(status));
+            Err(status)
+        } else {
+            Ok(())
         }
-
-        return Ok(part);
     }
 
-    pub unsafe fn set_property(
+    pub fn setup(&mut self) -> Result<(), HRESULT> {
+        let status = unsafe { WHvSetupPartition(self.0) };
+
+        if status < 0 {
+            Err(status)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn map_gpa(&self, host: *const c_void, guest: u64, len: u64) -> Result<(), HRESULT> {
+        let status = unsafe {
+            WHvMapGpaRange(
+                self.0,
+                host,
+                guest,
+                len,
+                WHvMapGpaRangeFlagRead | WHvMapGpaRangeFlagWrite | WHvMapGpaRangeFlagExecute,
+            )
+        };
+
+        if status < 0 {
+            Err(status)
+        } else {
+            Ok(())
+        }
+    }
+
+    unsafe fn set_property(
         &mut self,
         name: WHV_PARTITION_PROPERTY_CODE,
         value: &WHV_PARTITION_PROPERTY,
@@ -56,16 +79,6 @@ impl Partition {
             value as *const WHV_PARTITION_PROPERTY as *const c_void,
             size_of::<WHV_PARTITION_PROPERTY>().try_into().unwrap(),
         )
-    }
-
-    pub fn setup(&mut self) -> Result<(), NewError> {
-        let status = unsafe { WHvSetupPartition(self.0) };
-
-        if status < 0 {
-            Err(NewError::SetupPartitionFailed(status))
-        } else {
-            Ok(())
-        }
     }
 }
 

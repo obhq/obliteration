@@ -10,8 +10,10 @@ use crate::signal::{
 };
 use crate::signal::{SigChldFlags, Signal};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
+use crate::sysent::ProcAbi;
 use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
 use bitflags::bitflags;
+use crate::vm::{MemoryManagerError, Vm};
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use macros::Errno;
 use std::any::Any;
@@ -23,7 +25,7 @@ use std::num::NonZeroI32;
 use std::ptr::null;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicI32, AtomicPtr, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use thiserror::Error;
 
 pub use self::appinfo::*;
@@ -46,18 +48,18 @@ mod session;
 mod signal;
 mod thread;
 
-/// An implementation of `proc` structure represent the main application process.
+/// An implementation of `proc` structure.
 ///
-/// Each process of the Obliteration Kernel encapsulates only one PS4 process. The reason we don't
-/// encapsulate multiple PS4 processes is because there is no way to emulate `fork` with 100%
-/// compatibility from the user-mode application. The PS4 also forbids the game process from creating
-/// a child process, so there's no reason for us to support this.
+/// Currently this struct represent the main application process. We will support multiple processes
+/// once we have migrated the PS4 code to run inside a virtual machine.
 #[derive(Debug)]
 pub struct VProc {
     id: NonZeroI32,                    // p_pid
     threads: Gutex<Vec<Arc<VThread>>>, // p_threads
     cred: Ucred,                       // p_ucred
     group: Gutex<Option<VProcGroup>>,  // p_pgrp
+    abi: OnceLock<ProcAbi>,            // p_sysent
+    vm: Arc<Vm>,                       // p_vmspace
     sigacts: Gutex<SignalActs>,        // p_sigacts
     files: Arc<FileDesc>,              // p_fd
     system_path: String,               // p_randomized_path
@@ -81,7 +83,7 @@ impl VProc {
         dmem_container: usize,
         root: Arc<Vnode>,
         system_path: impl Into<String>,
-        sys: &mut Syscalls,
+        mut sys: Syscalls,
     ) -> Result<Arc<Self>, VProcInitError> {
         let cred = if auth.caps.is_system() {
             // TODO: The groups will be copied from the parent process, which is SceSysCore.
@@ -99,6 +101,8 @@ impl VProc {
             threads: gg.spawn(Vec::new()),
             cred,
             group: gg.spawn(None),
+            abi: OnceLock::new(),
+            vm: Vm::new(&mut sys)?,
             sigacts: gg.spawn(SignalActs::new()),
             files: FileDesc::new(root),
             system_path: system_path.into(),
@@ -114,6 +118,7 @@ impl VProc {
             uptc: AtomicPtr::new(null_mut()),
         });
 
+        // TODO: Move all syscalls here to somewhere else.
         sys.register(20, &vp, Self::sys_getpid);
         sys.register(50, &vp, Self::sys_setlogin);
         sys.register(147, &vp, Self::sys_setsid);
@@ -130,6 +135,8 @@ impl VProc {
         sys.register(602, &vp, Self::sys_randomized_path);
         sys.register(612, &vp, Self::sys_get_proc_type_info);
 
+        vp.abi.set(ProcAbi::new(sys)).unwrap();
+
         Ok(vp)
     }
 
@@ -139,6 +146,14 @@ impl VProc {
 
     pub fn cred(&self) -> &Ucred {
         &self.cred
+    }
+
+    pub fn abi(&self) -> &ProcAbi {
+        self.abi.get().unwrap()
+    }
+
+    pub fn vm(&self) -> &Arc<Vm> {
+        &self.vm
     }
 
     pub fn files(&self) -> &Arc<FileDesc> {
@@ -846,6 +861,9 @@ bitflags! {
 pub enum VProcInitError {
     #[error("failed to load limits")]
     FailedToLoadLimits(#[from] LoadLimitError),
+
+    #[error("virtual memory initialization failed")]
+    VmInitFailed(#[from] MemoryManagerError),
 }
 
 #[derive(Debug, Error, Errno)]

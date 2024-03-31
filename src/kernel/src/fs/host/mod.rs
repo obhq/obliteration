@@ -16,17 +16,6 @@ use thiserror::Error;
 mod file;
 mod vnode;
 
-/// Implementation of [`Filesystem`] to mount a directory from the host.
-///
-/// We subtitute `exfatfs` and `pfs` with this because root FS on the PS4 is exFAT and game data is
-/// PFS. That mean we must report this either as `exfatfs` or `pfs` otherwise it might be unexpected
-/// by the PS4.
-#[derive(Debug)]
-pub struct HostFs {
-    root: Arc<HostFile>,
-    actives: Mutex<HashMap<HostId, Weak<Vnode>>>,
-}
-
 pub fn mount(
     _: Option<&Arc<Fs>>,
     conf: &'static FsConfig,
@@ -69,6 +58,17 @@ pub fn mount(
             actives: Mutex::default(),
         },
     ))
+}
+
+/// Implementation of [`Filesystem`] to mount a directory from the host.
+///
+/// We subtitute `exfatfs` and `pfs` with this because root FS on the PS4 is exFAT and game data is
+/// PFS. That mean we must report this either as `exfatfs` or `pfs` otherwise it might be unexpected
+/// by the PS4.
+#[derive(Debug)]
+pub struct HostFs {
+    root: Arc<HostFile>,
+    actives: Mutex<HashMap<HostId, Weak<Vnode>>>,
 }
 
 impl Filesystem for HostFs {

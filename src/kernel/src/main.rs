@@ -1,14 +1,14 @@
 use crate::arch::MachDep;
 use crate::budget::{Budget, BudgetManager, ProcType};
-use crate::debug::{DebugManager, DebugManagerInitError};
+use crate::dev::{DebugManager, TtyManager};
 use crate::dmem::DmemManager;
 use crate::ee::native::NativeEngine;
 use crate::ee::EntryArg;
 use crate::errno::EEXIST;
 use crate::fs::{Fs, FsInitError, MkdirError, MountError, MountFlags, MountOpts, VPath, VPathBuf};
+use crate::hv::Hypervisor;
 use crate::kqueue::KernelQueueManager;
 use crate::log::{print, LOGGER};
-use crate::memory::{MemoryManager, MemoryManagerError};
 use crate::namedobj::NamedObjManager;
 use crate::net::NetManager;
 use crate::osem::OsemManager;
@@ -19,10 +19,10 @@ use crate::shm::SharedMemoryManager;
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
 use crate::time::TimeManager;
-use crate::tty::{TtyInitError, TtyManager};
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use crate::umtx::UmtxManager;
 use clap::Parser;
+use dev::{DebugManagerInitError, TtyInitError};
 use llt::{OsThread, SpawnError};
 use macros::vpath;
 use param::Param;
@@ -40,15 +40,15 @@ use thiserror::Error;
 mod arch;
 mod arnd;
 mod budget;
-mod debug;
+mod dev;
 mod dmem;
 mod ee;
 mod errno;
 mod fs;
+mod hv;
 mod idt;
 mod kqueue;
 mod log;
-mod memory;
 mod namedobj;
 mod net;
 mod osem;
@@ -59,10 +59,11 @@ mod shm;
 mod signal;
 mod syscalls;
 mod sysctl;
+mod sysent;
 mod time;
-mod tty;
 mod ucred;
 mod umtx;
+mod vm;
 
 fn main() -> Exit {
     run().into()
@@ -188,6 +189,7 @@ fn run() -> Result<(), KernelError> {
     ));
 
     // Initialize foundations.
+    let hv = Hypervisor::new()?;
     let mut syscalls = Syscalls::new();
     let fs = Fs::new(args.system, &cred, &mut syscalls)?;
 
@@ -242,16 +244,16 @@ fn run() -> Result<(), KernelError> {
     }
 
     // TODO: Check permission of /mnt/sandbox/CUSAXXXXX_000 on the PS4.
-    let root: VPathBuf = format!("/mnt/sandbox/{}_000", param.title_id())
+    let proc_root: VPathBuf = format!("/mnt/sandbox/{}_000", param.title_id())
         .try_into()
         .unwrap();
 
-    if let Err(e) = fs.mkdir(&root, 0o555, None) {
-        return Err(KernelError::CreateDirectoryFailed(root, e));
+    if let Err(e) = fs.mkdir(&proc_root, 0o555, None) {
+        return Err(KernelError::CreateDirectoryFailed(proc_root, e));
     }
 
     // TODO: Check permission of /mnt/sandbox/CUSAXXXXX_000/app0 on the PS4.
-    let app = root.join("app0").unwrap();
+    let app = proc_root.join("app0").unwrap();
 
     if let Err(e) = fs.mkdir(&app, 0o555, None) {
         return Err(KernelError::CreateDirectoryFailed(app, e));
@@ -270,7 +272,7 @@ fn run() -> Result<(), KernelError> {
 
     let system_component = "QXuNNl0Zhn";
 
-    let system_path = root.join(system_component).unwrap();
+    let system_path = proc_root.join(system_component).unwrap();
 
     if let Err(e) = fs.mkdir(&system_path, 0o555, None) {
         return Err(KernelError::CreateDirectoryFailed(system_path, e));
@@ -284,7 +286,7 @@ fn run() -> Result<(), KernelError> {
     }
 
     // TODO: Check permission of /mnt/sandbox/CUSAXXXXX_000/<SYSTEM_PATH>/common/lib on the PS4.
-    let lib_path = system_path.join("lib").unwrap();
+    let lib_path = common_path.join("lib").unwrap();
 
     if let Err(e) = fs.mkdir(&lib_path, 0o555, None) {
         return Err(KernelError::CreateDirectoryFailed(lib_path, e));
@@ -322,7 +324,7 @@ fn run() -> Result<(), KernelError> {
     }
 
     // TODO: Check permission of /mnt/sandbox/CUSAXXXXX_000/dev on the PS4.
-    let path = root.join("dev").unwrap();
+    let path = proc_root.join("dev").unwrap();
 
     if let Err(e) = fs.mkdir(&path, 0o555, None) {
         return Err(KernelError::CreateDirectoryFailed(path, e));
@@ -338,28 +340,6 @@ fn run() -> Result<(), KernelError> {
         return Err(KernelError::MountFailed(path, e));
     }
 
-    // Initialize memory management.
-    let mm = MemoryManager::new(&mut syscalls)?;
-
-    let mut log = info!();
-
-    writeln!(log, "Page size             : {:#x}", mm.page_size()).unwrap();
-    writeln!(
-        log,
-        "Allocation granularity: {:#x}",
-        mm.allocation_granularity()
-    )
-    .unwrap();
-    writeln!(
-        log,
-        "Main stack            : {:p}:{:p}",
-        mm.stack().start(),
-        mm.stack().end()
-    )
-    .unwrap();
-
-    print(log);
-
     // Initialize TTY system.
     #[allow(unused_variables)] // TODO: Remove this when someone uses tty.
     let tty = TtyManager::new()?;
@@ -372,36 +352,40 @@ fn run() -> Result<(), KernelError> {
     let budget = BudgetManager::new(&mut syscalls);
 
     DmemManager::new(&fs, &mut syscalls);
-    SharedMemoryManager::new(&mm, &mut syscalls);
-    Sysctl::new(&mm, &machdep, &mut syscalls);
+    SharedMemoryManager::new(&mut syscalls);
+    Sysctl::new(&machdep, &mut syscalls);
     TimeManager::new(&mut syscalls);
     KernelQueueManager::new(&mut syscalls);
     NetManager::new(&mut syscalls);
-
-    // TODO: Get correct budget name from the PS4.
-    let budget_id = budget.create(Budget::new("big app", ProcType::BigApp));
-    let root = fs.lookup(root, true, None).unwrap();
-    let proc = VProc::new(
-        auth,
-        budget_id,
-        ProcType::BigApp,
-        1, // See sys_budget_set on the PS4.
-        root,
-        "QXuNNl0Zhn",
-        &mut syscalls,
-    )?;
-
-    NamedObjManager::new(&mut syscalls, &proc);
-    OsemManager::new(&mut syscalls, &proc);
+    NamedObjManager::new(&mut syscalls);
+    OsemManager::new(&mut syscalls);
     UmtxManager::new(&mut syscalls);
 
     // Initialize runtime linker.
     info!("Initializing runtime linker.");
 
     let ee = NativeEngine::new();
-    let ld = RuntimeLinker::new(&fs, &mm, &ee, &mut syscalls);
+    let ld = RuntimeLinker::new(&fs, &ee, &mut syscalls);
 
-    ee.set_syscalls(syscalls);
+    // TODO: Get correct budget name from the PS4.
+    let budget_id = budget.create(Budget::new("big app", ProcType::BigApp));
+    let proc_root = fs.lookup(proc_root, true, None).unwrap();
+
+    let proc = VProc::new(
+        auth,
+        budget_id,
+        ProcType::BigApp,
+        1, // See sys_budget_set on the PS4.
+        proc_root,
+        system_component,
+        syscalls,
+    )?;
+
+    info!(
+        "Application stack: {:p}:{:p}",
+        proc.vm().stack().start(),
+        proc.vm().stack().end()
+    );
 
     // TODO: Check if this credential is actually correct for game main thread.
     let cred = Arc::new(Ucred::new(
@@ -474,7 +458,7 @@ fn run() -> Result<(), KernelError> {
 
     // Get entry point.
     let boot = ld.kernel().unwrap();
-    let mut arg = Box::pin(EntryArg::new(&proc, &mm, app.clone()));
+    let mut arg = Box::pin(EntryArg::new(&proc, app.clone()));
     let entry = unsafe { boot.get_function(boot.entry().unwrap()) };
     let entry = move || unsafe { entry.exec1(arg.as_mut().as_vec().as_ptr()) };
 
@@ -482,7 +466,7 @@ fn run() -> Result<(), KernelError> {
     info!("Starting application.");
 
     // TODO: Check how this constructed.
-    let stack = mm.stack();
+    let stack = proc.vm().stack();
     let main: OsThread = unsafe { main.start(stack.start(), stack.len(), entry) }?;
 
     // Begin Discord Rich Presence before blocking current thread.
@@ -623,9 +607,6 @@ enum KernelError {
     #[error("couldn't mount {0}")]
     MountFailed(VPathBuf, #[source] MountError),
 
-    #[error("memory manager initialization failed")]
-    MemoryManagerInitFailed(#[from] MemoryManagerError),
-
     #[error("tty initialization failed")]
     TtyInitFailed(#[from] TtyInitError),
 
@@ -645,7 +626,7 @@ enum KernelError {
     FailedToLoadLibSceLibcInternal(#[source] Box<dyn Error>),
 
     #[error("couldn't create a hypervisor")]
-    CreateHypervisorFailed(#[from] hv::NewError),
+    CreateHypervisorFailed(#[from] hv::HypervisorError),
 
     #[error("main thread couldn't be created")]
     FailedToCreateMainThread(#[from] SpawnError),

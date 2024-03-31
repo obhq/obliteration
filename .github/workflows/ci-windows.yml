@@ -10,6 +10,8 @@ jobs:
     steps:
     - name: Checkout source
       uses: actions/checkout@v4
+    - name: Install Ninja
+      run: choco install ninja
     - name: Generate cache keys
       run: |
         echo "cargo=${{ runner.os }}-cargo" >> $env:GITHUB_OUTPUT
