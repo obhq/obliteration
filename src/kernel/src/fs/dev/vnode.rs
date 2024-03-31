@@ -169,6 +169,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 
     fn read(
         &self,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] buf: &mut UioMut,
         #[allow(unused_variables)] td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
@@ -177,6 +178,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 
     fn write(
         &self,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] buf: &mut Uio,
         #[allow(unused_variables)] td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {

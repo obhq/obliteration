@@ -144,7 +144,7 @@ impl Vnode {
         buf: &mut UioMut,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        self.backend.read(buf, td)
+        self.backend.read(self, buf, td)
     }
 
     pub fn write(
@@ -152,7 +152,7 @@ impl Vnode {
         buf: &mut Uio,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        self.backend.write(buf, td)
+        self.backend.write(self, buf, td)
     }
 }
 
@@ -164,7 +164,7 @@ impl FileBackend for Vnode {
         buf: &mut UioMut,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        self.backend.read(buf, td)
+        self.backend.read(self, buf, td)
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
@@ -174,7 +174,7 @@ impl FileBackend for Vnode {
         buf: &mut Uio,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
-        todo!()
+        self.backend.write(self, buf, td)
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
@@ -319,6 +319,7 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
     /// An implementation of `vop_read`.
     fn read(
         &self,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] buf: &mut UioMut,
         #[allow(unused_variables)] td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>>;
@@ -326,6 +327,7 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
     /// An implementation of `vop_write`.
     fn write(
         &self,
+        #[allow(unused_variables)] vn: &Arc<Vnode>,
         #[allow(unused_variables)] buf: &mut Uio,
         #[allow(unused_variables)] td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>>;
