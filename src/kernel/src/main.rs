@@ -1,6 +1,6 @@
 use crate::arch::MachDep;
 use crate::budget::{Budget, BudgetManager, ProcType};
-use crate::dev::{DebugManager, TtyManager};
+use crate::dev::{DebugManager, DipswManager, TtyManager};
 use crate::dmem::DmemManager;
 use crate::ee::native::NativeEngine;
 use crate::ee::EntryArg;
@@ -22,7 +22,7 @@ use crate::time::TimeManager;
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use crate::umtx::UmtxManager;
 use clap::Parser;
-use dev::{DebugManagerInitError, TtyInitError};
+use dev::{DebugManagerInitError, DipswInitError, TtyInitError};
 use llt::{OsThread, SpawnError};
 use macros::vpath;
 use param::Param;
@@ -343,6 +343,8 @@ fn run() -> Result<(), KernelError> {
     // Initialize TTY system.
     #[allow(unused_variables)] // TODO: Remove this when someone uses tty.
     let tty = TtyManager::new()?;
+    #[allow(unused_variables)] // TODO: Remove this when someone uses tty.
+    let dipsw = DipswManager::new()?;
 
     // Initialize kernel components.
     #[allow(unused_variables)] // TODO: Remove this when someone uses debug.
@@ -609,6 +611,9 @@ enum KernelError {
 
     #[error("tty initialization failed")]
     TtyInitFailed(#[from] TtyInitError),
+
+    #[error("dipsw initialization failed")]
+    DipswInitFailed(#[from] DipswInitError),
 
     #[error("debug manager initialization failed")]
     DebugManagerInitFailed(#[from] DebugManagerInitError),
