@@ -157,20 +157,18 @@ impl Vnode {
 }
 
 impl FileBackend for Vnode {
-    #[allow(unused_variables)] // TODO: remove when implementing
     fn read(
         self: &Arc<Self>,
-        file: &VFile,
+        _: &VFile,
         buf: &mut UioMut,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
         self.backend.read(self, buf, td)
     }
 
-    #[allow(unused_variables)] // TODO: remove when implementing
     fn write(
         self: &Arc<Self>,
-        file: &VFile,
+        _: &VFile,
         buf: &mut Uio,
         td: Option<&VThread>,
     ) -> Result<usize, Box<dyn Errno>> {
