@@ -332,7 +332,8 @@ impl HostFile {
             match status {
                 STATUS_PENDING => todo!(),
                 STATUS_END_OF_FILE => todo!(),
-                0.. => Ok(io_status.Information as u64),
+                0.. if io_status.Information == nbytes as usize => Ok(io_status.Information as u64),
+                0.. => todo!(),
                 _ => todo!(),
             }
         })?;
