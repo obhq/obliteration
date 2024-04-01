@@ -23,6 +23,7 @@ use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use crate::umtx::UmtxManager;
 use clap::Parser;
 use dev::{DebugManagerInitError, TtyInitError};
+use dmem::DmemManagerInitError;
 use llt::{OsThread, SpawnError};
 use macros::vpath;
 use param::Param;
@@ -351,7 +352,7 @@ fn run() -> Result<(), KernelError> {
     let machdep = MachDep::new(&mut syscalls);
     let budget = BudgetManager::new(&mut syscalls);
 
-    DmemManager::new(&fs, &mut syscalls);
+    DmemManager::new(&fs, &mut syscalls)?;
     SharedMemoryManager::new(&mut syscalls);
     Sysctl::new(&machdep, &mut syscalls);
     TimeManager::new(&mut syscalls);
@@ -375,7 +376,7 @@ fn run() -> Result<(), KernelError> {
         auth,
         budget_id,
         ProcType::BigApp,
-        1, // See sys_budget_set on the PS4.
+        dev::DmemContainer::One, // See sys_budget_set on the PS4.
         proc_root,
         system_component,
         syscalls,
@@ -612,6 +613,9 @@ enum KernelError {
 
     #[error("debug manager initialization failed")]
     DebugManagerInitFailed(#[from] DebugManagerInitError),
+
+    #[error("dmem manager initialization failed")]
+    DmemManagerInitFailes(#[from] DmemManagerInitError),
 
     #[error("virtual process initialization failed")]
     VProcInitFailed(#[from] VProcInitError),

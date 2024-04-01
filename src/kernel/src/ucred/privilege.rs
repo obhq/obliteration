@@ -57,6 +57,8 @@ privileges! {
         /// Currently unknown.
         SCE683 = 683,
         /// Currently unknown.
+        SCE683 = 685,
+        /// Currently unknown.
         SCE686 = 686,
     }
 }

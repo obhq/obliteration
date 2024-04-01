@@ -1,4 +1,5 @@
 use crate::budget::ProcType;
+use crate::dev::DmemContainer;
 use crate::errno::Errno;
 use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ERANGE, ESRCH};
 use crate::fs::Vnode;
@@ -69,7 +70,7 @@ pub struct VProc {
     objects: Gutex<Idt<Arc<dyn Any + Send + Sync>>>,
     budget_id: usize,
     budget_ptype: ProcType,
-    dmem_container: usize,
+    dmem_container: Gutex<DmemContainer>,
     app_info: AppInfo,
     ptc: u64,
     uptc: AtomicPtr<u8>,
@@ -80,7 +81,7 @@ impl VProc {
         auth: AuthInfo,
         budget_id: usize,
         budget_ptype: ProcType,
-        dmem_container: usize,
+        dmem_container: DmemContainer,
         root: Arc<Vnode>,
         system_path: impl Into<String>,
         mut sys: Syscalls,
@@ -109,7 +110,7 @@ impl VProc {
             objects: gg.spawn(Idt::new(0x1000)),
             budget_id,
             budget_ptype,
-            dmem_container,
+            dmem_container: gg.spawn(dmem_container),
             limits,
             comm: gg.spawn(None), //TODO: Find out how this is actually set
             bin: gg.spawn(None),
@@ -188,8 +189,12 @@ impl VProc {
         self.budget_ptype
     }
 
-    pub fn dmem_container(&self) -> usize {
-        self.dmem_container
+    pub fn dmem_container(&self) -> GutexReadGuard<'_, DmemContainer> {
+        self.dmem_container.read()
+    }
+
+    pub fn dmem_container_mut(&self) -> GutexWriteGuard<'_, DmemContainer> {
+        self.dmem_container.write()
     }
 
     pub fn app_info(&self) -> &AppInfo {
