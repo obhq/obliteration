@@ -4,15 +4,18 @@ use crate::fs::{
 };
 use crate::ucred::{Gid, Uid};
 use crate::{errno::Errno, process::VThread};
+use macros::Errno;
 use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Debug)]
-pub struct TtyConsole {}
+pub struct TtyConsole {
+    tty: Tty,
+}
 
 impl TtyConsole {
     pub fn new() -> Self {
-        Self {}
+        Self { tty: Tty::new() }
     }
 }
 
@@ -33,7 +36,7 @@ impl DeviceDriver for TtyConsole {
         dev: &Arc<CharacterDevice>,
         data: &mut UioMut,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn Errno>> {
         todo!()
     }
 
@@ -43,18 +46,41 @@ impl DeviceDriver for TtyConsole {
         dev: &Arc<CharacterDevice>,
         data: &mut Uio,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn Errno>> {
         todo!()
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
+    /// See `ttydev_ioctl` in FreeBSD for a reference.
     fn ioctl(
         &self,
         dev: &Arc<CharacterDevice>,
         cmd: IoCmd,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        todo!()
+        // TODO: implement tty_wait_background
+        match cmd {
+            IoCmd::TIOCSCTTY => self.tty.ioctl(cmd, td)?,
+            _ => todo!(),
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct Tty {}
+
+impl Tty {
+    fn new() -> Self {
+        Self {}
+    }
+
+    fn ioctl(&self, cmd: IoCmd, td: Option<&VThread>) -> Result<(), TtyIoctlError> {
+        match cmd {
+            IoCmd::TIOCSCTTY => todo!(),
+            _ => todo!(),
+        }
     }
 }
 
@@ -66,7 +92,7 @@ pub struct TtyManager {
 }
 
 impl TtyManager {
-    pub fn new() -> Result<Arc<Self>, TtyInitError> {
+    pub fn new() -> Result<Arc<Self>, TtyManagerInitError> {
         // Create /dev/console.
 
         let console = make_dev(
@@ -87,7 +113,11 @@ impl TtyManager {
 
 /// Represents an error when [`TtyManager`] fails to initialize.
 #[derive(Debug, Error)]
-pub enum TtyInitError {
+pub enum TtyManagerInitError {
     #[error("cannot create console device")]
     CreateConsoleFailed(#[from] MakeDevError),
 }
+
+/// Represents an error when [`Tty::ioctl`] fails to initialize.
+#[derive(Debug, Error, Errno)]
+pub enum TtyIoctlError {}

@@ -22,7 +22,7 @@ use crate::time::TimeManager;
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use crate::umtx::UmtxManager;
 use clap::Parser;
-use dev::{DebugManagerInitError, DipswInitError, TtyInitError};
+use dev::{DebugManagerInitError, DipswInitError, TtyManagerInitError};
 use llt::{OsThread, SpawnError};
 use macros::vpath;
 use param::Param;
@@ -610,7 +610,7 @@ enum KernelError {
     MountFailed(VPathBuf, #[source] MountError),
 
     #[error("tty initialization failed")]
-    TtyInitFailed(#[from] TtyInitError),
+    TtyInitFailed(#[from] TtyManagerInitError),
 
     #[error("dipsw initialization failed")]
     DipswInitFailed(#[from] DipswInitError),

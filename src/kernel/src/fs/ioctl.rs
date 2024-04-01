@@ -139,7 +139,6 @@ commands! {
 
         /// Become controlling terminal.
         TIOCSCTTY = 0x20007461,
-
     }
 }
 

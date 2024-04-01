@@ -210,7 +210,7 @@ pub trait DeviceDriver: Debug + Sync + Send + 'static {
         dev: &Arc<CharacterDevice>,
         data: &mut UioMut,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultDeviceError::ReadNotSupported))
     }
 
@@ -220,7 +220,7 @@ pub trait DeviceDriver: Debug + Sync + Send + 'static {
         dev: &Arc<CharacterDevice>,
         data: &mut Uio,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultDeviceError::WriteNotSupported))
     }
 
