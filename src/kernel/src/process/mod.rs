@@ -14,6 +14,7 @@ use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::sysent::ProcAbi;
 use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
 use crate::vm::{MemoryManagerError, Vm};
+use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use macros::Errno;
 use std::any::Any;
@@ -133,6 +134,7 @@ impl VProc {
         sys.register(585, &vp, Self::sys_is_in_sandbox);
         sys.register(587, &vp, Self::sys_get_authinfo);
         sys.register(602, &vp, Self::sys_randomized_path);
+        sys.register(612, &vp, Self::sys_get_proc_type_info);
 
         vp.abi.set(ProcAbi::new(sys)).unwrap();
 
@@ -726,6 +728,63 @@ impl VProc {
         Ok(SysOut::ZERO)
     }
 
+    fn sys_get_proc_type_info(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let info = unsafe { &mut *Into::<*mut ProcTypeInfo>::into(i.args[0]) };
+
+        if info.len != size_of::<ProcTypeInfo>() {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        *info = td.proc().get_proc_type_info();
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn get_proc_type_info(&self) -> ProcTypeInfo {
+        let cred = self.cred();
+
+        let mut flags = ProcTypeInfoFlags::empty();
+
+        flags.set(
+            ProcTypeInfoFlags::IS_JIT_COMPILER_PROCESS,
+            cred.is_jit_compiler_process(),
+        );
+        flags.set(
+            ProcTypeInfoFlags::IS_JIT_APPLICATION_PROCESS,
+            cred.is_jit_application_process(),
+        );
+        flags.set(
+            ProcTypeInfoFlags::IS_VIDEOPLAYER_PROCESS,
+            cred.is_videoplayer_process(),
+        );
+        flags.set(
+            ProcTypeInfoFlags::IS_DISKPLAYERUI_PROCESS,
+            cred.is_diskplayerui_process(),
+        );
+        flags.set(
+            ProcTypeInfoFlags::HAS_USE_VIDEO_SERVICE_CAPABILITY,
+            cred.has_use_video_service_capability(),
+        );
+        flags.set(
+            ProcTypeInfoFlags::IS_WEBCORE_PROCESS,
+            cred.is_webcore_process(),
+        );
+        flags.set(
+            ProcTypeInfoFlags::HAS_SCE_PROGRAM_ATTRIBUTE,
+            cred.has_sce_program_attribute(),
+        );
+        flags.set(
+            ProcTypeInfoFlags::IS_DEBUGGABLE_PROCESS,
+            cred.is_debuggable_process(),
+        );
+
+        ProcTypeInfo {
+            len: size_of::<ProcTypeInfo>(),
+            ty: self.budget_ptype as u32,
+            flags,
+        }
+    }
+
     fn new_id() -> NonZeroI32 {
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
 
@@ -782,6 +841,28 @@ impl TryFrom<i32> for RtpFunction {
 struct RtPrio {
     ty: u16,
     prio: u16,
+}
+
+/// Outout of sys_get_proc_type_info.
+#[repr(C)]
+struct ProcTypeInfo {
+    len: usize,
+    ty: u32,
+    flags: ProcTypeInfoFlags,
+}
+
+bitflags! {
+    #[repr(transparent)]
+    struct ProcTypeInfoFlags: u32 {
+        const IS_JIT_COMPILER_PROCESS = 0x1;
+        const IS_JIT_APPLICATION_PROCESS = 0x2;
+        const IS_VIDEOPLAYER_PROCESS = 0x4;
+        const IS_DISKPLAYERUI_PROCESS = 0x8;
+        const HAS_USE_VIDEO_SERVICE_CAPABILITY = 0x10;
+        const IS_WEBCORE_PROCESS = 0x20;
+        const HAS_SCE_PROGRAM_ATTRIBUTE = 0x40;
+        const IS_DEBUGGABLE_PROCESS = 0x80;
+    }
 }
 
 /// Represents an error when [`VProc`] construction is failed.

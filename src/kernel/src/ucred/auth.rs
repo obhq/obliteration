@@ -87,6 +87,18 @@ impl AuthCaps {
         (self.0[0] & 0x2000000000000000) != 0
     }
 
+    pub fn is_jit_compiler_process(&self) -> bool {
+        todo!()
+    }
+
+    pub fn is_jit_application_process(&self) -> bool {
+        todo!()
+    }
+
+    pub fn has_use_video_service_capability(&self) -> bool {
+        self.0[0] >> 0x39 & 1 != 0
+    }
+
     pub fn is_system(&self) -> bool {
         (self.0[0] & 0x4000000000000000) != 0
     }
@@ -111,6 +123,14 @@ pub struct AuthAttrs([u64; 4]);
 impl AuthAttrs {
     pub fn new(raw: [u64; 4]) -> Self {
         Self(raw)
+    }
+
+    pub fn has_sce_program_attribute(&self) -> bool {
+        todo!()
+    }
+
+    pub fn is_debuggable_process(&self) -> bool {
+        todo!()
     }
 
     pub fn is_unk1(&self) -> bool {
