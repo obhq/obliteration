@@ -137,7 +137,13 @@ impl FileBackend for CharacterDevice {
         cmd: IoCmd,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        todo!()
+        match cmd {
+            IoCmd::FIODTYPE(_) => todo!(),
+            IoCmd::FIODGNAME(_) => todo!(),
+            _ => self.driver.ioctl(self, cmd, td)?,
+        }
+
+        Ok(())
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
@@ -179,6 +185,13 @@ bitflags! {
     }
 }
 
+#[repr(C)]
+#[derive(Debug)]
+pub struct FioDeviceGetNameArg {
+    len: i32,
+    buf: *mut u8,
+}
+
 /// An implementation of the `cdevsw` structure.
 pub trait DeviceDriver: Debug + Sync + Send + 'static {
     #[allow(unused_variables)]
@@ -198,7 +211,7 @@ pub trait DeviceDriver: Debug + Sync + Send + 'static {
         dev: &Arc<CharacterDevice>,
         data: &mut UioMut,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultDeviceError::ReadNotSupported))
     }
 
@@ -208,7 +221,7 @@ pub trait DeviceDriver: Debug + Sync + Send + 'static {
         dev: &Arc<CharacterDevice>,
         data: &mut Uio,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultDeviceError::WriteNotSupported))
     }
 
@@ -217,7 +230,7 @@ pub trait DeviceDriver: Debug + Sync + Send + 'static {
         &self,
         dev: &Arc<CharacterDevice>,
         cmd: IoCmd,
-        td: &VThread,
+        td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultDeviceError::IoctlNotSupported))
     }
