@@ -428,7 +428,7 @@ fn run() -> Result<(), KernelError> {
 
     info!("Loading {path}.");
 
-    let libkernel = ld
+    let (libkernel, _) = ld
         .load(path, flags, false, true, &main)
         .map_err(|e| KernelError::FailedToLoadLibkernel(e.into()))?;
 
@@ -442,7 +442,7 @@ fn run() -> Result<(), KernelError> {
 
     info!("Loading {path}.");
 
-    let libc = ld
+    let (libc, _) = ld
         .load(path, flags, false, true, &main)
         .map_err(|e| KernelError::FailedToLoadLibSceLibcInternal(e.into()))?;
 
