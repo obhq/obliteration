@@ -33,8 +33,14 @@ impl DeviceDriver for Dipsw {
         if !td.cred().is_system() {
             todo!()
         } else {
-            todo!()
+            match cmd {
+                // TODO: properly implement this
+                IoCmd::DIPSWCHECK2(val) => *val = false as i32,
+                _ => todo!(),
+            }
         }
+
+        Ok(())
     }
 }
 
