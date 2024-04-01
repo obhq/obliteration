@@ -143,7 +143,7 @@ impl FileBackend for CharacterDevice {
             _ => self.driver.ioctl(self, cmd, td)?,
         }
 
-        todo!()
+        Ok(())
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
