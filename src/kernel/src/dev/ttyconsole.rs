@@ -1,22 +1,27 @@
+use crate::errno::EPERM;
 use crate::fs::{
     make_dev, CharacterDevice, DeviceDriver, DriverFlags, IoCmd, MakeDevError, MakeDevFlags, Mode,
     OpenFlags, Uio, UioMut,
 };
 use crate::ucred::{Gid, Uid};
 use crate::{errno::Errno, process::VThread};
+use macros::Errno;
 use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Debug)]
-pub struct TtyConsole {}
+pub struct TtyConsole {
+    tty: Tty,
+}
 
 impl TtyConsole {
     pub fn new() -> Self {
-        Self {}
+        Self { tty: Tty::new() }
     }
 }
 
 impl DeviceDriver for TtyConsole {
+    #[allow(unused_variables)] // TODO: remove when implementing
     fn open(
         &self,
         dev: &Arc<CharacterDevice>,
@@ -33,7 +38,7 @@ impl DeviceDriver for TtyConsole {
         dev: &Arc<CharacterDevice>,
         data: &mut UioMut,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn Errno>> {
         todo!()
     }
 
@@ -43,18 +48,53 @@ impl DeviceDriver for TtyConsole {
         dev: &Arc<CharacterDevice>,
         data: &mut Uio,
         td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    ) -> Result<(), Box<dyn Errno>> {
         todo!()
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
+    /// See `ttydev_ioctl` on the PS4 for a reference.
     fn ioctl(
         &self,
         dev: &Arc<CharacterDevice>,
         cmd: IoCmd,
-        td: &VThread,
+        td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        todo!()
+        // TODO: implement tty_wait_background
+
+        match cmd {
+            IoCmd::TIOCSCTTY => self.tty.ioctl(cmd, td)?,
+            _ => todo!(),
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct Tty {}
+
+impl Tty {
+    fn new() -> Self {
+        Self {}
+    }
+
+    /// See `tty_ioctl` on the PS4 for a reference.
+    fn ioctl(&self, cmd: IoCmd, td: Option<&VThread>) -> Result<(), TtyIoctlError> {
+        // TODO: implement ttydevsw_ioctl
+
+        self.generic_ioctl(cmd, td)
+    }
+
+    /// See `tty_ioctl` on the PS4 for a reference.
+    fn generic_ioctl(&self, cmd: IoCmd, td: Option<&VThread>) -> Result<(), TtyIoctlError> {
+        // TODO: implement ttydevsw_ioctl
+
+        match cmd {
+            // TODO: implement this properly
+            IoCmd::TIOCSCTTY => return Ok(()),
+            _ => todo!(),
+        }
     }
 }
 
@@ -66,7 +106,7 @@ pub struct TtyManager {
 }
 
 impl TtyManager {
-    pub fn new() -> Result<Arc<Self>, TtyInitError> {
+    pub fn new() -> Result<Arc<Self>, TtyManagerInitError> {
         // Create /dev/console.
 
         let console = make_dev(
@@ -87,7 +127,15 @@ impl TtyManager {
 
 /// Represents an error when [`TtyManager`] fails to initialize.
 #[derive(Debug, Error)]
-pub enum TtyInitError {
+pub enum TtyManagerInitError {
     #[error("cannot create console device")]
     CreateConsoleFailed(#[from] MakeDevError),
+}
+
+/// Represents an error when [`Tty::ioctl`] fails to initialize.
+#[derive(Debug, Error, Errno)]
+pub enum TtyIoctlError {
+    #[error("process is not leader")]
+    #[errno(EPERM)]
+    ProcessNotLeader,
 }

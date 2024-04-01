@@ -94,7 +94,13 @@ impl crate::fs::VnodeBackend for VnodeBackend {
             _ => 0,
         };
 
-        todo!()
+        Ok(VnodeAttrs {
+            uid: *uid,
+            gid: *gid,
+            mode: *mode,
+            size,
+            fsid: u32::MAX,
+        })
     }
 
     fn ioctl(
@@ -162,9 +168,9 @@ impl crate::fs::VnodeBackend for VnodeBackend {
         }
     }
 
-    fn revoke(&self, vn: &Arc<Vnode>, flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
+    fn revoke(&self, vn: &Arc<Vnode>, _flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
         // TODO: Implement this.
-        todo!()
+        Ok(())
     }
 
     fn read(
