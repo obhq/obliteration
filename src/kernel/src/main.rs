@@ -1,6 +1,6 @@
 use crate::arch::MachDep;
 use crate::budget::{Budget, BudgetManager, ProcType};
-use crate::dev::{DebugManager, TtyManager};
+use crate::dev::{DebugManager, DipswManager, TtyManager};
 use crate::dmem::DmemManager;
 use crate::ee::native::NativeEngine;
 use crate::ee::EntryArg;
@@ -22,7 +22,7 @@ use crate::time::TimeManager;
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use crate::umtx::UmtxManager;
 use clap::Parser;
-use dev::{DebugManagerInitError, TtyInitError};
+use dev::{DebugManagerInitError, DipswInitError, TtyManagerInitError};
 use dmem::DmemManagerInitError;
 use llt::{OsThread, SpawnError};
 use macros::vpath;
@@ -190,6 +190,7 @@ fn run() -> Result<(), KernelError> {
     ));
 
     // Initialize foundations.
+    #[allow(unused_variables)] // TODO: Remove this when someone uses hv.
     let hv = Hypervisor::new()?;
     let mut syscalls = Syscalls::new();
     let fs = Fs::new(args.system, &cred, &mut syscalls)?;
@@ -344,6 +345,8 @@ fn run() -> Result<(), KernelError> {
     // Initialize TTY system.
     #[allow(unused_variables)] // TODO: Remove this when someone uses tty.
     let tty = TtyManager::new()?;
+    #[allow(unused_variables)] // TODO: Remove this when someone uses dipsw.
+    let dipsw = DipswManager::new()?;
 
     // Initialize kernel components.
     #[allow(unused_variables)] // TODO: Remove this when someone uses debug.
@@ -609,7 +612,10 @@ enum KernelError {
     MountFailed(VPathBuf, #[source] MountError),
 
     #[error("tty initialization failed")]
-    TtyInitFailed(#[from] TtyInitError),
+    TtyInitFailed(#[from] TtyManagerInitError),
+
+    #[error("dipsw initialization failed")]
+    DipswInitFailed(#[from] DipswInitError),
 
     #[error("debug manager initialization failed")]
     DebugManagerInitFailed(#[from] DebugManagerInitError),

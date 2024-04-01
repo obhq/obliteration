@@ -56,8 +56,10 @@ impl DeviceDriver for Dmem {
         &self,
         dev: &Arc<CharacterDevice>,
         cmd: IoCmd,
-        td: &VThread,
+        td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
+        let td = td.unwrap();
+
         let cred = td.cred();
 
         if cred.is_unk1() || cred.is_unk2() {
