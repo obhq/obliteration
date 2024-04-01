@@ -87,6 +87,7 @@ impl<T> Gutex<T> {
         let lock = self.group.lock();
         let active = self.active.get();
 
+        // SAFETY: This is safe because we own the lock that protect both active and value.
         unsafe {
             if *active != 0 {
                 panic!(
@@ -95,9 +96,9 @@ impl<T> Gutex<T> {
             }
 
             *active = usize::MAX;
-        }
 
-        GutexWriteGuard::new(lock, self)
+            GutexWriteGuard::new(&mut *active, &mut *self.value.get(), lock)
+        }
     }
 }
 
@@ -211,8 +212,8 @@ unsafe impl Sync for GutexGroup {}
 /// An RAII object used to release the lock on [`GutexGroup`]. This type cannot be send because it
 /// will cause data race on the group when dropping if more than one [`GroupGuard`] are active.
 struct GroupGuard<'a> {
-    group: &'a GutexGroup,
-    phantom: PhantomData<Rc<i32>>, // For !Send and !Sync.
+    pub group: &'a GutexGroup,
+    pub phantom: PhantomData<Rc<i32>>, // For !Send and !Sync.
 }
 
 impl<'a> GroupGuard<'a> {
