@@ -1,3 +1,4 @@
+use crate::errno::EPERM;
 use crate::fs::{
     make_dev, CharacterDevice, DeviceDriver, DriverFlags, IoCmd, MakeDevError, MakeDevFlags, Mode,
     OpenFlags, Uio, UioMut,
@@ -20,6 +21,7 @@ impl TtyConsole {
 }
 
 impl DeviceDriver for TtyConsole {
+    #[allow(unused_variables)] // TODO: remove when implementing
     fn open(
         &self,
         dev: &Arc<CharacterDevice>,
@@ -51,7 +53,7 @@ impl DeviceDriver for TtyConsole {
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
-    /// See `ttydev_ioctl` in FreeBSD for a reference.
+    /// See `ttydev_ioctl` on the PS4 for a reference.
     fn ioctl(
         &self,
         dev: &Arc<CharacterDevice>,
@@ -59,6 +61,7 @@ impl DeviceDriver for TtyConsole {
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         // TODO: implement tty_wait_background
+
         match cmd {
             IoCmd::TIOCSCTTY => self.tty.ioctl(cmd, td)?,
             _ => todo!(),
@@ -76,9 +79,20 @@ impl Tty {
         Self {}
     }
 
+    /// See `tty_ioctl` on the PS4 for a reference.
     fn ioctl(&self, cmd: IoCmd, td: Option<&VThread>) -> Result<(), TtyIoctlError> {
+        // TODO: implement ttydevsw_ioctl
+
+        self.generic_ioctl(cmd, td)
+    }
+
+    /// See `tty_ioctl` on the PS4 for a reference.
+    fn generic_ioctl(&self, cmd: IoCmd, td: Option<&VThread>) -> Result<(), TtyIoctlError> {
+        // TODO: implement ttydevsw_ioctl
+
         match cmd {
-            IoCmd::TIOCSCTTY => todo!(),
+            // TODO: implement this properly
+            IoCmd::TIOCSCTTY => return Ok(()),
             _ => todo!(),
         }
     }
@@ -120,4 +134,8 @@ pub enum TtyManagerInitError {
 
 /// Represents an error when [`Tty::ioctl`] fails to initialize.
 #[derive(Debug, Error, Errno)]
-pub enum TtyIoctlError {}
+pub enum TtyIoctlError {
+    #[error("process is not leader")]
+    #[errno(EPERM)]
+    ProcessNotLeader,
+}

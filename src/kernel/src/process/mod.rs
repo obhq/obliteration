@@ -55,18 +55,18 @@ mod thread;
 /// once we have migrated the PS4 code to run inside a virtual machine.
 #[derive(Debug)]
 pub struct VProc {
-    id: NonZeroI32,                    // p_pid
-    threads: Gutex<Vec<Arc<VThread>>>, // p_threads
-    cred: Ucred,                       // p_ucred
-    group: Gutex<Option<VProcGroup>>,  // p_pgrp
-    abi: OnceLock<ProcAbi>,            // p_sysent
-    vm: Arc<Vm>,                       // p_vmspace
-    sigacts: Gutex<SignalActs>,        // p_sigacts
-    files: Arc<FileDesc>,              // p_fd
-    system_path: String,               // p_randomized_path
-    limits: Limits,                    // p_limit
-    comm: Gutex<Option<String>>,       // p_comm
-    bin: Gutex<Option<Binaries>>,      // p_dynlib?
+    id: NonZeroI32,                        // p_pid
+    threads: Gutex<Vec<Arc<VThread>>>,     // p_threads
+    cred: Ucred,                           // p_ucred
+    group: Gutex<Option<Arc<VProcGroup>>>, // p_pgrp
+    abi: OnceLock<ProcAbi>,                // p_sysent
+    vm: Arc<Vm>,                           // p_vmspace
+    sigacts: Gutex<SignalActs>,            // p_sigacts
+    files: Arc<FileDesc>,                  // p_fd
+    system_path: String,                   // p_randomized_path
+    limits: Limits,                        // p_limit
+    comm: Gutex<Option<String>>,           // p_comm
+    bin: Gutex<Option<Binaries>>,          // p_dynlib?
     objects: Gutex<Idt<Arc<dyn Any + Send + Sync>>>,
     budget_id: usize,
     budget_ptype: ProcType,
@@ -261,7 +261,11 @@ impl VProc {
 
     fn sys_sigprocmask(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
-        let how: i32 = i.args[0].try_into().unwrap();
+        let how: How = {
+            let how: i32 = i.args[0].try_into().unwrap();
+            how.try_into()?
+        };
+
         let set: *const SignalSet = i.args[1].into();
         let oset: *mut SignalSet = i.args[2].into();
 
@@ -280,7 +284,7 @@ impl VProc {
         // Update the mask.
         if let Some(mut set) = set {
             match how {
-                SIG_BLOCK => {
+                How::Block => {
                     // Remove uncatchable signals.
                     set.remove(SIGKILL);
                     set.remove(SIGSTOP);
@@ -288,13 +292,13 @@ impl VProc {
                     // Update mask.
                     *mask |= set;
                 }
-                SIG_UNBLOCK => {
+                How::Unblock => {
                     // Update mask.
                     *mask &= !set;
 
                     // TODO: Invoke signotify at the end.
                 }
-                SIG_SETMASK => {
+                How::SetMask => {
                     // Remove uncatchable signals.
                     set.remove(SIGKILL);
                     set.remove(SIGSTOP);
@@ -304,7 +308,6 @@ impl VProc {
 
                     // TODO: Invoke signotify at the end.
                 }
-                _ => return Err(SysErr::Raw(EINVAL)),
             }
 
             // TODO: Check if we need to invoke reschedule_signals.
@@ -793,6 +796,28 @@ impl VProc {
         assert!(id > 0);
 
         NonZeroI32::new(id).unwrap()
+    }
+}
+
+#[derive(Debug)]
+enum How {
+    Block,
+    Unblock,
+    SetMask,
+}
+
+impl TryFrom<i32> for How {
+    type Error = SysErr;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        let how = match value {
+            SIG_BLOCK => How::Block,
+            SIG_UNBLOCK => How::Unblock,
+            SIG_SETMASK => How::SetMask,
+            _ => return Err(SysErr::Raw(EINVAL)),
+        };
+
+        Ok(how)
     }
 }
 

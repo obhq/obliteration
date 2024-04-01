@@ -20,7 +20,7 @@ macro_rules! commands {
                 )*
             }
         ) => {
-            /// A wrapper type for an ioctl command.
+            /// A wrapper type for an ioctl command and its data.
             /// FreeBSD uses an u_long, but masks off the top 4 bytes in kern_ioctl, so we can use an u32.
             #[derive(Debug)]
             #[non_exhaustive]
