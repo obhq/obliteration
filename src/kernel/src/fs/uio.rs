@@ -9,7 +9,7 @@ const IOSIZE_MAX: usize = 0x7fffffff;
 pub struct IoVec<'a> {
     ptr: *const u8,
     len: usize,
-    _phantom: std::marker::PhantomData<&'a u8>,
+    _phantom: std::marker::PhantomData<&'a [u8]>,
 }
 
 impl<'a> IoVec<'a> {
@@ -55,11 +55,16 @@ impl<'a> IoVec<'a> {
 pub struct Uio<'a> {
     pub(super) vecs: &'a [IoVec<'a>], // uio_iov + uio_iovcnt
     pub(super) bytes_left: usize,     // uio_resid
+    pub(super) offset: i64,           // uio_offset
 }
 
 impl<'a> Uio<'a> {
     /// See `copyinuio` on the PS4 for a reference.
-    pub unsafe fn copyin(first: *const IoVec<'a>, count: u32) -> Result<Self, CopyInUioError> {
+    pub unsafe fn copyin(
+        first: *const IoVec<'a>,
+        count: u32,
+        offset: i64,
+    ) -> Result<Self, CopyInUioError> {
         if count > UIO_MAXIOV {
             return Err(CopyInUioError::TooManyVecs);
         }
@@ -73,7 +78,11 @@ impl<'a> Uio<'a> {
             }
         })?;
 
-        Ok(Self { vecs, bytes_left })
+        Ok(Self {
+            vecs,
+            bytes_left,
+            offset,
+        })
     }
 }
 
@@ -85,7 +94,11 @@ pub struct UioMut<'a> {
 
 impl<'a> UioMut<'a> {
     /// See `copyinuio` on the PS4 for a reference.
-    pub unsafe fn copyin(first: *mut IoVec<'a>, count: u32) -> Result<Self, CopyInUioError> {
+    pub unsafe fn copyin(
+        first: *mut IoVec<'a>,
+        count: u32,
+        offset: i64,
+    ) -> Result<Self, CopyInUioError> {
         if count > UIO_MAXIOV {
             return Err(CopyInUioError::TooManyVecs);
         }
@@ -99,7 +112,11 @@ impl<'a> UioMut<'a> {
             }
         })?;
 
-        todo!()
+        Ok(Self {
+            vecs,
+            bytes_left,
+            offset,
+        })
     }
 
     pub fn from_single_vec(vec: &'a mut IoVec<'a>, offset: i64) -> Self {
@@ -119,7 +136,7 @@ impl<'a> UioMut<'a> {
         for vec in self.vecs.iter_mut() {
             let written = func(vec, self.offset)?;
 
-            self.offset.checked_add_unsigned(written).unwrap();
+            self.offset = self.offset.checked_add_unsigned(written).unwrap();
             self.bytes_left -= written as usize;
         }
 

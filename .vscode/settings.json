@@ -10,6 +10,7 @@
   "lldb.launch.initCommands": [
     "settings set target.x86-disassembly-flavor intel"
   ],
+  "rust-analyzer.imports.granularity.group": "module",
   "[rust]": {
     "editor.defaultFormatter": "rust-lang.rust-analyzer",
     "editor.formatOnSave": true

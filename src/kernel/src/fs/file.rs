@@ -8,6 +8,7 @@ use crate::net::Socket;
 use crate::process::VThread;
 use crate::shm::SharedMemory;
 use bitflags::bitflags;
+use gmtx::{Gutex, GutexGroup};
 use macros::Errno;
 use std::fmt::Debug;
 use std::io::{ErrorKind, Read, Seek, SeekFrom};
@@ -17,17 +18,19 @@ use thiserror::Error;
 /// An implementation of `file` structure.
 #[derive(Debug)]
 pub struct VFile {
-    ty: VFileType,     // f_type
-    flags: VFileFlags, // f_flag
-    offset: i64,       // f_offset
+    ty: VFileType,      // f_type
+    flags: VFileFlags,  // f_flag
+    offset: Gutex<i64>, // f_offset
 }
 
 impl VFile {
     pub(super) fn new(ty: VFileType) -> Self {
+        let gg = GutexGroup::new();
+
         Self {
             ty,
             flags: VFileFlags::empty(),
-            offset: 0,
+            offset: gg.spawn(0),
         }
     }
 
@@ -50,12 +53,7 @@ impl VFile {
     }
 
     /// See `dofileread` on the PS4 for a reference.
-    pub fn do_read(
-        &self,
-        mut uio: UioMut,
-        off: Offset,
-        td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    pub fn do_read(&self, mut uio: UioMut, td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
         if uio.bytes_left == 0 {
             return Ok(0);
         }
@@ -66,12 +64,7 @@ impl VFile {
     }
 
     /// See `dofilewrite` on the PS4 for a reference.
-    pub fn do_write(
-        &self,
-        mut uio: Uio,
-        off: Offset,
-        td: Option<&VThread>,
-    ) -> Result<usize, Box<dyn Errno>> {
+    pub fn do_write(&self, mut uio: Uio, td: Option<&VThread>) -> Result<usize, Box<dyn Errno>> {
         // TODO: consider implementing ktrace.
         // TODO: implement bwillwrite.
 
@@ -154,7 +147,7 @@ impl Seek for VFile {
             }
         };
 
-        self.offset = if let Ok(offset) = offset.try_into() {
+        *self.offset.write() = if let Ok(offset) = offset.try_into() {
             offset
         } else {
             todo!()
@@ -164,13 +157,13 @@ impl Seek for VFile {
     }
 
     fn rewind(&mut self) -> std::io::Result<()> {
-        self.offset = 0;
+        *self.offset.write() = 0;
 
         Ok(())
     }
 
     fn stream_position(&mut self) -> std::io::Result<u64> {
-        if let Ok(offset) = self.offset.try_into() {
+        if let Ok(offset) = (*self.offset.read()).try_into() {
             Ok(offset)
         } else {
             todo!()
@@ -184,7 +177,9 @@ impl Read for VFile {
 
         let ref mut iovec = IoVec::from_slice(buf);
 
-        let mut uio = UioMut::from_single_vec(iovec, self.offset);
+        let mut offset = self.offset.write();
+
+        let mut uio = UioMut::from_single_vec(iovec, *offset);
 
         if let Err(e) = VFile::read(self, &mut uio, None) {
             println!("Error: {:?}", e);
@@ -195,7 +190,7 @@ impl Read for VFile {
         let read = total - uio.bytes_left;
 
         if let Ok(read) = TryInto::<i64>::try_into(read) {
-            self.offset += read;
+            *offset += read;
         } else {
             todo!()
         }

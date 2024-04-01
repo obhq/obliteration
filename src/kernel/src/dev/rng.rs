@@ -13,7 +13,7 @@ impl DeviceDriver for Rng {
         &self,
         dev: &Arc<CharacterDevice>,
         cmd: IoCmd,
-        _: &VThread,
+        _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         match cmd {
             IoCmd::RNG1 => todo!(),

@@ -1,3 +1,6 @@
+use super::FioDeviceGetNameArg;
+use crate::dev::{DmemAllocate, DmemAvailable, DmemQuery, PrtAperture};
+use crate::dmem::{BlockpoolExpandArgs, BlockpoolStats};
 use crate::errno::ENOTTY;
 use crate::syscalls::SysErr;
 use std::fmt::Debug;
@@ -17,7 +20,7 @@ macro_rules! commands {
                 )*
             }
         ) => {
-            /// A wrapper type for an ioctl command.
+            /// A wrapper type for an ioctl command and its data.
             /// FreeBSD uses an u_long, but masks off the top 4 bytes in kern_ioctl, so we can use an u32.
             #[derive(Debug)]
             #[non_exhaustive]
@@ -85,8 +88,13 @@ macro_rules! commands {
 
 commands! {
     pub enum IoCmd {
+        /// sceKernelMemoryPoolExpand
+        BPOOLEXPAND(&mut BlockpoolExpandArgs) = 0xC020A801,
+        /// sceKernelMemoryPoolGetBlockStats
+        BPOOLSTATS(&mut BlockpoolStats) = 0x4010A802,
+
         /// Get media size in bytes.
-        DIOCGMEDIASIZE(&i64) = 0x40086418,
+        DIOCGMEDIASIZE(&mut i64) = 0x40086418,
 
         /// sceKernelInitializeDipsw
         DIPSWINIT = 0x20008800,
@@ -105,15 +113,35 @@ commands! {
 
         /// Get total size?
         DMEM10(&mut usize) = 0x4008800a,
+        /// Get PRT aperture
+        DMEMGETPRT(&mut PrtAperture) = 0xC018800C,
+        /// Get available memory size
+        DMEMGETAVAIL(&mut DmemAvailable) = 0xC0208016,
+        /// Allocate direct memory
+        DMEMALLOC(&mut DmemAllocate) = 0xC0288001,
+        /// Query direct memory
+        DMEMQUERY(&DmemQuery) = 0x80288012,
 
         /// Set close on exec on fd.
         FIOCLEX = 0x20006601,
         /// Remove close on exec on fd.
         FIONCLEX = 0x20006602,
+        /// Get # bytes to read
+        FIONREAD(&mut i32) = 0x4004667f,
         /// Set/clear non-blocking I/O.
-        FIONBIO(&i32) = 0x8004667d,
+        FIONBIO(&i32) = 0x8004667e,
         /// Set/clear async I/O.
-        FIOASYNC(&i32) = 0x8004667e,
+        FIOASYNC(&i32) = 0x8004667d,
+        /// Set owner
+        FIOSETOWN(&i32) = 0x8004667c,
+        /// Get owner
+        FIOGETOWN(&mut i32) = 0x4004667b,
+        /// get d_flags type part
+        FIODTYPE(&mut i32) = 0x4004667a,
+        /// Get start blk #
+        FIOGETLBA(&mut i32) = 0x40046679,
+        /// Get dev. name
+        FIODGNAME(&FioDeviceGetNameArg) = 0x80106678,
         /// Seek data.
         FIOSEEKDATA(&mut i64) = 0xC0086661,
         /// Seek hole.
@@ -126,7 +154,6 @@ commands! {
 
         /// Become controlling terminal.
         TIOCSCTTY = 0x20007461,
-
     }
 }
 

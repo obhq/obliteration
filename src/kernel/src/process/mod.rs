@@ -1,4 +1,5 @@
 use crate::budget::ProcType;
+use crate::dev::DmemContainer;
 use crate::errno::Errno;
 use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ERANGE, ESRCH};
 use crate::fs::Vnode;
@@ -13,6 +14,7 @@ use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::sysent::ProcAbi;
 use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
 use crate::vm::{MemoryManagerError, Vm};
+use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use macros::Errno;
 use std::any::Any;
@@ -53,22 +55,22 @@ mod thread;
 /// once we have migrated the PS4 code to run inside a virtual machine.
 #[derive(Debug)]
 pub struct VProc {
-    id: NonZeroI32,                    // p_pid
-    threads: Gutex<Vec<Arc<VThread>>>, // p_threads
-    cred: Ucred,                       // p_ucred
-    group: Gutex<Option<VProcGroup>>,  // p_pgrp
-    abi: OnceLock<ProcAbi>,            // p_sysent
-    vm: Arc<Vm>,                       // p_vmspace
-    sigacts: Gutex<SignalActs>,        // p_sigacts
-    files: Arc<FileDesc>,              // p_fd
-    system_path: String,               // p_randomized_path
-    limits: Limits,                    // p_limit
-    comm: Gutex<Option<String>>,       // p_comm
-    bin: Gutex<Option<Binaries>>,      // p_dynlib?
+    id: NonZeroI32,                        // p_pid
+    threads: Gutex<Vec<Arc<VThread>>>,     // p_threads
+    cred: Ucred,                           // p_ucred
+    group: Gutex<Option<Arc<VProcGroup>>>, // p_pgrp
+    abi: OnceLock<ProcAbi>,                // p_sysent
+    vm: Arc<Vm>,                           // p_vmspace
+    sigacts: Gutex<SignalActs>,            // p_sigacts
+    files: Arc<FileDesc>,                  // p_fd
+    system_path: String,                   // p_randomized_path
+    limits: Limits,                        // p_limit
+    comm: Gutex<Option<String>>,           // p_comm
+    bin: Gutex<Option<Binaries>>,          // p_dynlib?
     objects: Gutex<Idt<Arc<dyn Any + Send + Sync>>>,
     budget_id: usize,
     budget_ptype: ProcType,
-    dmem_container: usize,
+    dmem_container: Gutex<DmemContainer>,
     app_info: AppInfo,
     ptc: u64,
     uptc: AtomicPtr<u8>,
@@ -79,7 +81,7 @@ impl VProc {
         auth: AuthInfo,
         budget_id: usize,
         budget_ptype: ProcType,
-        dmem_container: usize,
+        dmem_container: DmemContainer,
         root: Arc<Vnode>,
         system_path: impl Into<String>,
         mut sys: Syscalls,
@@ -108,7 +110,7 @@ impl VProc {
             objects: gg.spawn(Idt::new(0x1000)),
             budget_id,
             budget_ptype,
-            dmem_container,
+            dmem_container: gg.spawn(dmem_container),
             limits,
             comm: gg.spawn(None), //TODO: Find out how this is actually set
             bin: gg.spawn(None),
@@ -132,6 +134,7 @@ impl VProc {
         sys.register(585, &vp, Self::sys_is_in_sandbox);
         sys.register(587, &vp, Self::sys_get_authinfo);
         sys.register(602, &vp, Self::sys_randomized_path);
+        sys.register(612, &vp, Self::sys_get_proc_type_info);
 
         vp.abi.set(ProcAbi::new(sys)).unwrap();
 
@@ -186,8 +189,12 @@ impl VProc {
         self.budget_ptype
     }
 
-    pub fn dmem_container(&self) -> usize {
-        self.dmem_container
+    pub fn dmem_container(&self) -> GutexReadGuard<'_, DmemContainer> {
+        self.dmem_container.read()
+    }
+
+    pub fn dmem_container_mut(&self) -> GutexWriteGuard<'_, DmemContainer> {
+        self.dmem_container.write()
     }
 
     pub fn app_info(&self) -> &AppInfo {
@@ -254,7 +261,11 @@ impl VProc {
 
     fn sys_sigprocmask(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
-        let how: i32 = i.args[0].try_into().unwrap();
+        let how: How = {
+            let how: i32 = i.args[0].try_into().unwrap();
+            how.try_into()?
+        };
+
         let set: *const SignalSet = i.args[1].into();
         let oset: *mut SignalSet = i.args[2].into();
 
@@ -273,7 +284,7 @@ impl VProc {
         // Update the mask.
         if let Some(mut set) = set {
             match how {
-                SIG_BLOCK => {
+                How::Block => {
                     // Remove uncatchable signals.
                     set.remove(SIGKILL);
                     set.remove(SIGSTOP);
@@ -281,13 +292,13 @@ impl VProc {
                     // Update mask.
                     *mask |= set;
                 }
-                SIG_UNBLOCK => {
+                How::Unblock => {
                     // Update mask.
                     *mask &= !set;
 
                     // TODO: Invoke signotify at the end.
                 }
-                SIG_SETMASK => {
+                How::SetMask => {
                     // Remove uncatchable signals.
                     set.remove(SIGKILL);
                     set.remove(SIGSTOP);
@@ -297,7 +308,6 @@ impl VProc {
 
                     // TODO: Invoke signotify at the end.
                 }
-                _ => return Err(SysErr::Raw(EINVAL)),
             }
 
             // TODO: Check if we need to invoke reschedule_signals.
@@ -721,6 +731,63 @@ impl VProc {
         Ok(SysOut::ZERO)
     }
 
+    fn sys_get_proc_type_info(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let info = unsafe { &mut *Into::<*mut ProcTypeInfo>::into(i.args[0]) };
+
+        if info.len != size_of::<ProcTypeInfo>() {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        *info = td.proc().get_proc_type_info();
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn get_proc_type_info(&self) -> ProcTypeInfo {
+        let cred = self.cred();
+
+        let mut flags = ProcTypeInfoFlags::empty();
+
+        flags.set(
+            ProcTypeInfoFlags::IS_JIT_COMPILER_PROCESS,
+            cred.is_jit_compiler_process(),
+        );
+        flags.set(
+            ProcTypeInfoFlags::IS_JIT_APPLICATION_PROCESS,
+            cred.is_jit_application_process(),
+        );
+        flags.set(
+            ProcTypeInfoFlags::IS_VIDEOPLAYER_PROCESS,
+            cred.is_videoplayer_process(),
+        );
+        flags.set(
+            ProcTypeInfoFlags::IS_DISKPLAYERUI_PROCESS,
+            cred.is_diskplayerui_process(),
+        );
+        flags.set(
+            ProcTypeInfoFlags::HAS_USE_VIDEO_SERVICE_CAPABILITY,
+            cred.has_use_video_service_capability(),
+        );
+        flags.set(
+            ProcTypeInfoFlags::IS_WEBCORE_PROCESS,
+            cred.is_webcore_process(),
+        );
+        flags.set(
+            ProcTypeInfoFlags::HAS_SCE_PROGRAM_ATTRIBUTE,
+            cred.has_sce_program_attribute(),
+        );
+        flags.set(
+            ProcTypeInfoFlags::IS_DEBUGGABLE_PROCESS,
+            cred.is_debuggable_process(),
+        );
+
+        ProcTypeInfo {
+            len: size_of::<ProcTypeInfo>(),
+            ty: self.budget_ptype as u32,
+            flags,
+        }
+    }
+
     fn new_id() -> NonZeroI32 {
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
 
@@ -729,6 +796,28 @@ impl VProc {
         assert!(id > 0);
 
         NonZeroI32::new(id).unwrap()
+    }
+}
+
+#[derive(Debug)]
+enum How {
+    Block,
+    Unblock,
+    SetMask,
+}
+
+impl TryFrom<i32> for How {
+    type Error = SysErr;
+
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        let how = match value {
+            SIG_BLOCK => How::Block,
+            SIG_UNBLOCK => How::Unblock,
+            SIG_SETMASK => How::SetMask,
+            _ => return Err(SysErr::Raw(EINVAL)),
+        };
+
+        Ok(how)
     }
 }
 
@@ -777,6 +866,28 @@ impl TryFrom<i32> for RtpFunction {
 struct RtPrio {
     ty: u16,
     prio: u16,
+}
+
+/// Outout of sys_get_proc_type_info.
+#[repr(C)]
+struct ProcTypeInfo {
+    len: usize,
+    ty: u32,
+    flags: ProcTypeInfoFlags,
+}
+
+bitflags! {
+    #[repr(transparent)]
+    struct ProcTypeInfoFlags: u32 {
+        const IS_JIT_COMPILER_PROCESS = 0x1;
+        const IS_JIT_APPLICATION_PROCESS = 0x2;
+        const IS_VIDEOPLAYER_PROCESS = 0x4;
+        const IS_DISKPLAYERUI_PROCESS = 0x8;
+        const HAS_USE_VIDEO_SERVICE_CAPABILITY = 0x10;
+        const IS_WEBCORE_PROCESS = 0x20;
+        const HAS_SCE_PROGRAM_ATTRIBUTE = 0x40;
+        const IS_DEBUGGABLE_PROCESS = 0x80;
+    }
 }
 
 /// Represents an error when [`VProc`] construction is failed.

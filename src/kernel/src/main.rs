@@ -1,6 +1,6 @@
 use crate::arch::MachDep;
 use crate::budget::{Budget, BudgetManager, ProcType};
-use crate::dev::{DebugManager, TtyManager};
+use crate::dev::{DebugManager, DipswManager, TtyManager};
 use crate::dmem::DmemManager;
 use crate::ee::native::NativeEngine;
 use crate::ee::EntryArg;
@@ -22,7 +22,8 @@ use crate::time::TimeManager;
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use crate::umtx::UmtxManager;
 use clap::Parser;
-use dev::{DebugManagerInitError, TtyInitError};
+use dev::{DebugManagerInitError, DipswInitError, TtyManagerInitError};
+use dmem::DmemManagerInitError;
 use llt::{OsThread, SpawnError};
 use macros::vpath;
 use param::Param;
@@ -189,6 +190,7 @@ fn run() -> Result<(), KernelError> {
     ));
 
     // Initialize foundations.
+    #[allow(unused_variables)] // TODO: Remove this when someone uses hv.
     let hv = Hypervisor::new()?;
     let mut syscalls = Syscalls::new();
     let fs = Fs::new(args.system, &cred, &mut syscalls)?;
@@ -343,6 +345,8 @@ fn run() -> Result<(), KernelError> {
     // Initialize TTY system.
     #[allow(unused_variables)] // TODO: Remove this when someone uses tty.
     let tty = TtyManager::new()?;
+    #[allow(unused_variables)] // TODO: Remove this when someone uses dipsw.
+    let dipsw = DipswManager::new()?;
 
     // Initialize kernel components.
     #[allow(unused_variables)] // TODO: Remove this when someone uses debug.
@@ -351,7 +355,7 @@ fn run() -> Result<(), KernelError> {
     let machdep = MachDep::new(&mut syscalls);
     let budget = BudgetManager::new(&mut syscalls);
 
-    DmemManager::new(&fs, &mut syscalls);
+    DmemManager::new(&fs, &mut syscalls)?;
     SharedMemoryManager::new(&mut syscalls);
     Sysctl::new(&machdep, &mut syscalls);
     TimeManager::new(&mut syscalls);
@@ -375,7 +379,7 @@ fn run() -> Result<(), KernelError> {
         auth,
         budget_id,
         ProcType::BigApp,
-        1, // See sys_budget_set on the PS4.
+        dev::DmemContainer::One, // See sys_budget_set on the PS4.
         proc_root,
         system_component,
         syscalls,
@@ -426,7 +430,7 @@ fn run() -> Result<(), KernelError> {
 
     info!("Loading {path}.");
 
-    let libkernel = ld
+    let (libkernel, _) = ld
         .load(path, flags, false, true, &main)
         .map_err(|e| KernelError::FailedToLoadLibkernel(e.into()))?;
 
@@ -440,7 +444,7 @@ fn run() -> Result<(), KernelError> {
 
     info!("Loading {path}.");
 
-    let libc = ld
+    let (libc, _) = ld
         .load(path, flags, false, true, &main)
         .map_err(|e| KernelError::FailedToLoadLibSceLibcInternal(e.into()))?;
 
@@ -608,10 +612,16 @@ enum KernelError {
     MountFailed(VPathBuf, #[source] MountError),
 
     #[error("tty initialization failed")]
-    TtyInitFailed(#[from] TtyInitError),
+    TtyInitFailed(#[from] TtyManagerInitError),
+
+    #[error("dipsw initialization failed")]
+    DipswInitFailed(#[from] DipswInitError),
 
     #[error("debug manager initialization failed")]
     DebugManagerInitFailed(#[from] DebugManagerInitError),
+
+    #[error("dmem manager initialization failed")]
+    DmemManagerInitFailes(#[from] DmemManagerInitError),
 
     #[error("virtual process initialization failed")]
     VProcInitFailed(#[from] VProcInitError),

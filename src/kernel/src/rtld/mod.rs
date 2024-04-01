@@ -13,7 +13,7 @@ use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::vm::{MemoryUpdateError, MmapError, Protections};
 use bitflags::bitflags;
 use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation, Symbol};
-use gmtx::{Gutex, GutexGroup};
+use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use macros::Errno;
 use sha1::{Digest, Sha1};
 use std::borrow::Cow;
@@ -36,10 +36,7 @@ pub struct RuntimeLinker {
     fs: Arc<Fs>,
     ee: Arc<NativeEngine>,
     // TODO: Move all fields after this to proc.
-    list: Gutex<Vec<Arc<Module>>>,      // obj_list + obj_tail
     kernel: Gutex<Option<Arc<Module>>>, // obj_kernel
-    mains: Gutex<Vec<Arc<Module>>>,     // list_main
-    globals: Gutex<Vec<Arc<Module>>>,   // list_global
     tls: Gutex<TlsAlloc>,
     flags: Gutex<LinkerFlags>,
 }
@@ -57,10 +54,7 @@ impl RuntimeLinker {
         let ld = Arc::new(Self {
             fs: fs.clone(),
             ee: ee.clone(),
-            list: gg.spawn(Vec::new()),
             kernel: gg.spawn(None),
-            mains: gg.spawn(Vec::new()),
-            globals: gg.spawn(Vec::new()),
             tls: gg.spawn(TlsAlloc {
                 max_index: 1,
                 last_offset: 0,
@@ -158,16 +152,12 @@ impl RuntimeLinker {
         // TODO: Apply logic from aio_proc_rundown_exec.
         // TODO: Apply logic from gs_is_event_handler_process_exec.
         let app = Arc::new(app);
-        let mut list = self.list.write();
-        let mut mains = self.mains.write();
         let mut bin = td.proc().bin_mut();
 
         if bin.is_some() {
             todo!("multiple exec on the same process");
         }
 
-        list.push(app.clone());
-        mains.push(app.clone());
         *bin = Some(Binaries::new(app.clone()));
 
         *self.flags.write() = flags;
@@ -177,25 +167,31 @@ impl RuntimeLinker {
 
     /// See `load_object`, `do_load_object` and `self_load_shared_object` on the PS4 for a
     /// reference.
-    pub fn load(
+    pub fn load<'a>(
         &self,
         path: impl AsRef<VPath>,
         _: LoadFlags,
         force: bool,
         main: bool,
-        td: &VThread,
-    ) -> Result<Arc<Module>, LoadError> {
+        td: &'a VThread,
+    ) -> Result<(Arc<Module>, GutexWriteGuard<'a, Binaries>), LoadError> {
+        // Check if module with the same path already loaded.
         let path = path.as_ref();
+        let mut bin = td.proc().bin_mut().ok_or(LoadError::NoExe)?;
+        let loaded = bin.list().skip(1).find(|m| m.path() == path);
 
-        // Check if already loaded.
+        if let Some(v) = loaded {
+            return Ok((v.clone(), bin));
+        }
+
+        // Check if module with the same base name already loaded.
         let name = path.file_name().unwrap().to_owned();
-        let mut bin = td.proc().bin_mut();
-        let bin = bin.as_mut().ok_or(LoadError::NoExe)?;
-        let mut list = self.list.write();
 
         if !force {
-            if let Some(m) = list.iter().skip(1).find(|m| m.names().contains(&name)) {
-                return Ok(m.clone());
+            let loaded = bin.list().skip(1).find(|m| m.names().contains(&name));
+
+            if let Some(v) = loaded {
+                return Ok((v.clone(), bin));
             }
         }
 
@@ -239,7 +235,7 @@ impl RuntimeLinker {
 
             loop {
                 // Check if the current value has been used.
-                if !list.iter().any(|m| m.tls_index() == index) {
+                if !bin.list().any(|m| m.tls_index() == index) {
                     break;
                 }
 
@@ -285,13 +281,9 @@ impl RuntimeLinker {
         // Add to list.
         let module = entry.data().clone().downcast::<Module>().unwrap();
 
-        list.push(module.clone());
+        bin.push(module.clone(), main);
 
-        if main {
-            self.mains.write().push(module.clone());
-        }
-
-        Ok(module)
+        Ok((module, bin))
     }
 
     /// See `init_dag` on the PS4 for a reference.
@@ -333,11 +325,8 @@ impl RuntimeLinker {
         }
 
         // Setup resolver.
-        let mains = self.mains.read();
-        let globals = self.globals.read();
         let resolver = SymbolResolver::new(
-            &mains,
-            &globals,
+            bin,
             bin.app().sdk_ver() >= 0x5000000 || self.flags.read().contains(LinkerFlags::HAS_ASAN),
         );
 
@@ -355,7 +344,7 @@ impl RuntimeLinker {
                 lib,
                 SymbolResolver::hash(Some(name.as_ref()), lib, mname),
                 flags | ResolveFlags::UNK3 | ResolveFlags::UNK4,
-                &dags,
+                dags.deref(),
             )
         };
 
@@ -404,8 +393,7 @@ impl RuntimeLinker {
         let out: *mut usize = i.args[2].into();
 
         // Get target module.
-        let list = self.list.read();
-        let md = match list.iter().find(|m| m.id() == handle) {
+        let md = match bin.list().find(|m| m.id() == handle) {
             Some(v) => v,
             None => return Err(SysErr::Raw(ESRCH)),
         };
@@ -444,20 +432,19 @@ impl RuntimeLinker {
         }
 
         // Copy module ID.
-        let list = self.list.read();
+        let list = bin.list();
+        let len = list.len();
 
-        if list.len() > max {
+        if len > max {
             return Err(SysErr::Raw(ENOMEM));
         }
 
-        for (i, m) in list.iter().enumerate() {
+        for (i, m) in list.enumerate() {
             unsafe { *buf.add(i) = m.id() };
         }
 
         // Set copied.
-        unsafe { *copied = list.len() };
-
-        info!("Copied {} module IDs for dynamic linking.", list.len());
+        unsafe { *copied = len };
 
         Ok(SysOut::ZERO)
     }
@@ -542,18 +529,6 @@ impl RuntimeLinker {
     }
 
     fn sys_dynlib_load_prx(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
-        // Check if application is a dynamic SELF.
-        let mut bin_guard = td.proc().bin_mut();
-        let bin = bin_guard.as_mut().ok_or(SysErr::Raw(EPERM))?;
-
-        let sdk_ver = bin.app().sdk_ver();
-
-        if bin.app().file_info().is_none() {
-            return Err(SysErr::Raw(EPERM));
-        }
-
-        drop(bin_guard);
-
         // Not sure what is this. Maybe kernel only flags?
         let mut flags: u32 = i.args[1].try_into().unwrap();
 
@@ -575,31 +550,18 @@ impl RuntimeLinker {
 
         info!("Loading {name} with {flags:#x}.");
 
-        // Start locking from here and keep the lock until we finished.
-        let mut globals = self.globals.write();
-
-        // Check if already loaded.
-        let list = self.list.read();
-        let md = match list.iter().skip(1).find(|m| m.path() == name) {
-            Some(v) => v.clone(),
-            None => {
-                // Drop list lock first because load is going to acquire the write lock on it.
-                drop(list);
-
-                // TODO: Refactor this for readability.
-                self.load(
-                    name,
-                    LoadFlags::from_bits_retain(((flags & 1) << 5) + ((flags >> 10) & 0x40) + 2),
-                    true, // TODO: This hard-coded because we don't support relative path yet.
-                    false,
-                    td,
-                )?
-            }
-        };
+        // TODO: Refactor this for readability.
+        let (md, mut bin) = self.load(
+            name,
+            LoadFlags::from_bits_retain(((flags & 1) << 5) + ((flags >> 10) & 0x40) + 2),
+            true, // TODO: This hard-coded because we don't support relative path yet.
+            false,
+            td,
+        )?;
 
         // Add to global list if it is not in the list yet.
-        if !globals.iter().any(|m| Arc::ptr_eq(m, &md)) {
-            globals.push(md.clone());
+        if !bin.globals().any(|m| Arc::ptr_eq(m, &md)) {
+            bin.push_global(md.clone());
         }
 
         // The PS4 checking on the refcount to see if it need to do relocation. We can't do the same
@@ -625,20 +587,20 @@ impl RuntimeLinker {
             drop(mf); // init_dag need to lock this.
 
             // Initialize DAG and relocate the module.
-            let list = self.list.read();
-            let mains = self.mains.read();
             let resolver = SymbolResolver::new(
-                &mains,
-                &globals,
-                sdk_ver >= 0x5000000 || self.flags.read().contains(LinkerFlags::HAS_ASAN),
+                &bin,
+                bin.app().sdk_ver() >= 0x5000000
+                    || self.flags.read().contains(LinkerFlags::HAS_ASAN),
             );
 
             self.init_dag(&md);
 
-            if unsafe { self.relocate(&md, &list, &resolver).is_err() } {
+            if unsafe { self.relocate(&md, bin.list(), &resolver).is_err() } {
                 todo!("sys_dynlib_load_prx with location failed");
             }
         }
+
+        drop(bin);
 
         // Print the module.
         let mut log = info!();
@@ -714,19 +676,15 @@ impl RuntimeLinker {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        // Starting locking from here until relocation is completed to prevent the other thread
-        // hijack our current states.
-        let list = self.list.read();
-
-        for md in list.deref() {
+        // Initialize module DAG.
+        for md in bin.list() {
             self.init_dag(md);
         }
 
         // Initialize TLS.
-        let mains = self.mains.read();
         let mut tls = self.tls.write();
 
-        for md in mains.deref() {
+        for md in bin.mains() {
             // Skip if already initialized.
             let mut flags = md.flags_mut();
 
@@ -760,16 +718,14 @@ impl RuntimeLinker {
         drop(tls);
 
         // Do relocation.
-        let globals = self.globals.read();
         let resolver = SymbolResolver::new(
-            &mains,
-            &globals,
+            bin,
             bin.app().sdk_ver() >= 0x5000000 || self.flags.read().contains(LinkerFlags::HAS_ASAN),
         );
 
         info!("Relocating initial modules.");
 
-        unsafe { self.relocate(bin.app(), &list, &resolver) }?;
+        unsafe { self.relocate(bin.app(), bin.list(), &resolver) }?;
 
         // TODO: Apply the remaining logics from the PS4.
         Ok(SysOut::ZERO)
@@ -779,10 +735,10 @@ impl RuntimeLinker {
     ///
     /// # Safety
     /// No other threads may access the memory of all loaded modules.
-    unsafe fn relocate(
+    unsafe fn relocate<'a>(
         &self,
         md: &Arc<Module>,
-        list: &[Arc<Module>],
+        list: impl Iterator<Item = &'a Arc<Module>>,
         resolver: &SymbolResolver,
     ) -> Result<(), RelocateError> {
         // TODO: Implement flags & 0x800.
@@ -1024,12 +980,10 @@ impl RuntimeLinker {
         }
 
         // Lookup the module.
-        let modules = self.list.read();
-
-        let md = modules
-            .iter()
-            .find(|m| m.id() == handle)
-            .ok_or(SysErr::Raw(ESRCH))?;
+        let md = match bin.list().find(|m| m.id() == handle) {
+            Some(v) => v,
+            None => return Err(SysErr::Raw(ESRCH)),
+        };
 
         // Fill the info.
         let info = unsafe { &mut *info };
@@ -1136,10 +1090,8 @@ impl RuntimeLinker {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        let list = self.list.read();
-
-        let module = list
-            .iter()
+        let module = bin
+            .list()
             .find(|m| m.id() == handle)
             .ok_or(SysErr::Raw(ESRCH))?;
 
