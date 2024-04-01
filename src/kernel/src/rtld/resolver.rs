@@ -1,23 +1,20 @@
 use super::Module;
+use crate::process::Binaries;
 use bitflags::bitflags;
 use elf::Symbol;
 use std::borrow::Cow;
+use std::ops::Deref;
 use std::sync::Arc;
 
 /// An object to resolve a symbol from loaded (S)ELF.
 pub struct SymbolResolver<'a> {
-    mains: &'a [Arc<Module>],
-    globals: &'a [Arc<Module>],
+    bin: &'a Binaries,
     new_algorithm: bool,
 }
 
 impl<'a> SymbolResolver<'a> {
-    pub fn new(mains: &'a [Arc<Module>], globals: &'a [Arc<Module>], new_algorithm: bool) -> Self {
-        Self {
-            mains,
-            globals,
-            new_algorithm,
-        }
+    pub fn new(bin: &'a Binaries, new_algorithm: bool) -> Self {
+        Self { bin, new_algorithm }
     }
 
     /// See `find_symdef` on the PS4 for a reference.
@@ -131,13 +128,13 @@ impl<'a> SymbolResolver<'a> {
             symlib,
             hash,
             flags,
-            self.mains,
+            self.bin.mains(),
         ) {
             result = Some(v);
         }
 
         // Resolve from list_global.
-        for md in self.globals {
+        for md in self.bin.globals() {
             if let Some((ref md, sym)) = result {
                 if md.symbol(sym).unwrap().binding() != Symbol::STB_WEAK {
                     break;
@@ -152,7 +149,7 @@ impl<'a> SymbolResolver<'a> {
                 symlib,
                 hash,
                 flags,
-                &md.dag_static(),
+                md.dag_static().deref(),
             ) {
                 if result.is_none() || md.symbol(sym).unwrap().binding() != Symbol::STB_WEAK {
                     result = Some((md, sym));
@@ -173,7 +170,7 @@ impl<'a> SymbolResolver<'a> {
         symlib: Option<&str>,
         hash: u64,
         flags: ResolveFlags,
-        list: &'a [Arc<Module>],
+        list: impl IntoIterator<Item = &'a Arc<Module>>,
     ) -> Option<(Arc<Module>, usize)> {
         // Get module name.
         let symmod = if !flags.contains(ResolveFlags::UNK2) {
