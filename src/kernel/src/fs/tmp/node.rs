@@ -152,7 +152,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
                 let dirent = entries
                     .iter()
                     .find(|dirent| dirent.name() == name)
-                    .ok_or_else(|| LookupError::NoParent)?;
+                    .ok_or(LookupError::NotFound)?;
 
                 let vnode = self
                     .tmpfs
@@ -237,7 +237,7 @@ pub enum LookupError {
 
     #[error("tmpfs node not found")]
     #[errno(ENOENT)]
-    NoParent,
+    NotFound,
 
     #[error("failed to alloc vnode")]
     FailedToAllocVnode(#[from] AllocVnodeError),

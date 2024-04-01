@@ -286,7 +286,7 @@ fn run() -> Result<(), KernelError> {
     }
 
     // TODO: Check permission of /mnt/sandbox/CUSAXXXXX_000/<SYSTEM_PATH>/common/lib on the PS4.
-    let lib_path = system_path.join("lib").unwrap();
+    let lib_path = common_path.join("lib").unwrap();
 
     if let Err(e) = fs.mkdir(&lib_path, 0o555, None) {
         return Err(KernelError::CreateDirectoryFailed(lib_path, e));
