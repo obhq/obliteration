@@ -516,17 +516,15 @@ impl Fs {
         let iovec: *mut IoVec = i.args[1].into();
         let count: u32 = i.args[2].try_into().unwrap();
 
-        let uio = unsafe { UioMut::copyin(iovec, count) }?;
-
-        self.readv(fd, uio, td)
+        todo!()
     }
 
-    fn readv(&self, fd: i32, uio: UioMut, td: &VThread) -> Result<SysOut, SysErr> {
+    fn readv(&self, fd: i32, uio: UioMut, td: &VThread) -> Result<usize, SysErr> {
         let file = td.proc().files().get_for_read(fd)?;
 
-        let read = file.do_read(uio, Offset::Current, Some(td))?;
+        let read = file.do_read(uio, Some(td))?;
 
-        Ok(read.into())
+        Ok(read)
     }
 
     fn sys_writev(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -534,17 +532,15 @@ impl Fs {
         let iovec: *const IoVec = i.args[1].into();
         let iovcnt: u32 = i.args[2].try_into().unwrap();
 
-        let uio = unsafe { Uio::copyin(iovec, iovcnt) }?;
-
-        self.writev(fd, uio, td)
+        todo!()
     }
 
-    fn writev(&self, fd: i32, uio: Uio, td: &VThread) -> Result<SysOut, SysErr> {
+    fn writev(&self, fd: i32, uio: Uio, td: &VThread) -> Result<usize, SysErr> {
         let file = td.proc().files().get_for_write(fd)?;
 
-        let written = file.do_write(uio, Offset::Current, Some(td))?;
+        let written = file.do_write(uio, Some(td))?;
 
-        Ok(written.into())
+        Ok(written)
     }
 
     fn sys_stat(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -621,7 +617,9 @@ impl Fs {
             offset,
         };
 
-        self.preadv(fd, uio, td)
+        let read = self.preadv(fd, uio, td)?;
+
+        Ok(read.into())
     }
 
     fn sys_pwrite(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -632,7 +630,15 @@ impl Fs {
 
         let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
-        todo!()
+        let uio = Uio {
+            vecs: &[iovec],
+            bytes_left: len,
+            offset,
+        };
+
+        let written = self.pwritev(fd, uio, td)?;
+
+        Ok(written.into())
     }
 
     fn sys_preadv(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -641,10 +647,14 @@ impl Fs {
         let count: u32 = i.args[2].try_into().unwrap();
         let offset: i64 = i.args[3].into();
 
-        todo!()
+        let uio = unsafe { UioMut::copyin(iovec, count, offset) }?;
+
+        let read = self.preadv(fd, uio, td)?;
+
+        Ok(read.into())
     }
 
-    fn preadv(&self, fd: i32, uio: UioMut, td: &VThread) -> Result<SysOut, SysErr> {
+    fn preadv(&self, fd: i32, uio: UioMut, td: &VThread) -> Result<usize, SysErr> {
         let file = td.proc().files().get_for_read(fd)?;
 
         let vnode = file.seekable_vnode().ok_or(SysErr::Raw(ESPIPE))?;
@@ -653,7 +663,9 @@ impl Fs {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        todo!()
+        let read = file.do_read(uio, Some(td))?;
+
+        Ok(read)
     }
 
     fn sys_pwritev(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -662,19 +674,25 @@ impl Fs {
         let count: u32 = i.args[2].try_into().unwrap();
         let offset: i64 = i.args[3].into();
 
-        todo!()
+        let uio = unsafe { Uio::copyin(iovec, count, offset) }?;
+
+        let written = self.pwritev(fd, uio, td)?;
+
+        Ok(written.into())
     }
 
-    fn pwritev(&self, fd: i32, uio: Uio, offset: i64, td: &VThread) -> Result<SysOut, SysErr> {
+    fn pwritev(&self, fd: i32, uio: Uio, td: &VThread) -> Result<usize, SysErr> {
         let file = td.proc().files().get_for_write(fd)?;
 
         let vnode = file.seekable_vnode().ok_or(SysErr::Raw(ESPIPE))?;
 
-        if offset < 0 && !vnode.is_character() {
+        if uio.offset < 0 && !vnode.is_character() {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        todo!()
+        let written = file.do_write(uio, Some(td))?;
+
+        Ok(written)
     }
 
     fn sys_fstatat(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -766,6 +784,7 @@ impl Fs {
         Ok(SysOut::ZERO)
     }
 
+    #[allow(unused_variables)] // Remove this when is implementing.
     fn truncate(&self, path: &VPath, length: i64, td: &VThread) -> Result<(), TruncateError> {
         let length: TruncateLength = length.try_into()?;
 
