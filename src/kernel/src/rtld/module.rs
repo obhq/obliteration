@@ -47,6 +47,7 @@ pub struct Module {
     file_type: FileType,
     programs: Vec<Program>,
     symbols: Vec<Symbol>,
+    ref_count: Gutex<u32>,
 }
 
 impl Module {
@@ -187,6 +188,7 @@ impl Module {
             file_type,
             programs,
             symbols,
+            ref_count: gg.spawn(1),
         };
 
         if let Some(info) = file_info {
@@ -309,6 +311,14 @@ impl Module {
 
     pub fn symbols(&self) -> &[Symbol] {
         self.symbols.as_ref()
+    }
+
+    pub fn ref_count(&self) -> GutexReadGuard<'_, u32> {
+        self.ref_count.read()
+    }
+
+    pub fn ref_count_mut(&self) -> GutexWriteGuard<'_, u32> {
+        self.ref_count.write()
     }
 
     /// # Safety

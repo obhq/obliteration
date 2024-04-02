@@ -66,6 +66,7 @@ impl RuntimeLinker {
 
         sys.register(591, &ld, Self::sys_dynlib_dlsym);
         sys.register(592, &ld, Self::sys_dynlib_get_list);
+        sys.register(593, &ld, Self::sys_dynlib_get_info);
         sys.register(594, &ld, Self::sys_dynlib_load_prx);
         sys.register(596, &ld, Self::sys_dynlib_do_copy_relocations);
         sys.register(598, &ld, Self::sys_dynlib_get_proc_param);
@@ -180,6 +181,8 @@ impl RuntimeLinker {
         let loaded = bin.list().skip(1).find(|m| m.path() == path);
 
         if let Some(v) = loaded {
+            *v.ref_count_mut() += 1;
+
             return Ok((v.clone(), bin));
         }
 
@@ -446,6 +449,10 @@ impl RuntimeLinker {
         unsafe { *copied = len };
 
         Ok(SysOut::ZERO)
+    }
+
+    fn sys_dynlib_get_info(self: &Arc<Self>, _td: &VThread, _i: &SysIn) -> Result<SysOut, SysErr> {
+        todo!()
     }
 
     fn sys_dynlib_load_prx(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -920,7 +927,7 @@ impl RuntimeLinker {
         info.datasize = mem.data_segment().len().try_into().unwrap();
         info.unk4 = 3;
         info.unk6 = 2;
-        info.refcount = Arc::strong_count(md).try_into().unwrap();
+        info.refcount = *md.ref_count();
 
         // Copy module name.
         if flags & 2 == 0 || !md.flags().contains(ModuleFlags::UNK1) {
