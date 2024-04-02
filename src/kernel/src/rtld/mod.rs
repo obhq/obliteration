@@ -129,7 +129,7 @@ impl RuntimeLinker {
         )
         .map_err(ExecError::MapFailed)?;
 
-        *app.flags_mut() |= ModuleFlags::MAIN_PROG;
+        *app.flags_mut() |= ModuleFlags::MAINPROG;
 
         self.ee
             .setup_module(&mut app)
@@ -270,7 +270,7 @@ impl RuntimeLinker {
             // TODO: Check the call to sceSblAuthMgrIsLoadable in the self_load_shared_object on the PS4
             // to see how it is return the value.
             if name != "libc.sprx" && name != "libSceFios2.sprx" {
-                *md.flags_mut() |= ModuleFlags::UNK1;
+                *md.flags_mut() |= ModuleFlags::IS_SYSTEM;
             }
 
             if let Err(e) = self.ee.setup_module(&mut md) {
@@ -335,7 +335,7 @@ impl RuntimeLinker {
         // Resolve.
         let dags = md.dag_static();
 
-        let sym = if md.flags().intersects(ModuleFlags::MAIN_PROG) {
+        let sym = if md.flags().intersects(ModuleFlags::MAINPROG) {
             todo!("do_dlsym on MAIN_PROG");
         } else {
             resolver.resolve_from_list(
@@ -481,7 +481,7 @@ impl RuntimeLinker {
         &self,
         handle: u32,
         bin: &Binaries,
-        unk: bool,
+        no_system: bool,
     ) -> Result<DynlibInfo, SysErr> {
         let mut info: DynlibInfo = unsafe { zeroed() };
 
@@ -491,7 +491,7 @@ impl RuntimeLinker {
             .find(|m| m.id() == handle)
             .ok_or(SysErr::Raw(ESRCH))?;
 
-        if unk && todo!() {
+        if no_system && md.flags().intersects(ModuleFlags::IS_SYSTEM) {
             return Err(SysErr::Raw(EPERM));
         }
 
@@ -1021,7 +1021,7 @@ impl RuntimeLinker {
         info.refcount = *md.ref_count();
 
         // Copy module name.
-        if flags & 2 == 0 || !md.flags().contains(ModuleFlags::UNK1) {
+        if flags & 2 == 0 || !md.flags().contains(ModuleFlags::IS_SYSTEM) {
             let name = md.path().file_name().unwrap();
 
             info.name[..name.len()].copy_from_slice(name.as_bytes());
@@ -1032,13 +1032,13 @@ impl RuntimeLinker {
         // Let's keep the same behavior as the PS4 for now.
         info.tlsindex = if flags & 1 != 0 {
             let flags = md.flags();
-            let mut upper = if flags.contains(ModuleFlags::UNK1) {
+            let mut upper = if flags.contains(ModuleFlags::IS_SYSTEM) {
                 1
             } else {
                 0
             };
 
-            if flags.contains(ModuleFlags::MAIN_PROG) {
+            if flags.contains(ModuleFlags::MAINPROG) {
                 upper += 2;
             }
 

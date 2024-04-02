@@ -758,14 +758,14 @@ bitflags! {
     /// Flags for [`Module`].
     #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct ModuleFlags: u16 {
-        const MAIN_PROG = 0x0001;
+        const MAINPROG = 0x0001;
         const TEXT_REL = 0x0002;
         const JMPSLOTS_DONE = 0x0004; // TODO: This seems incorrect.
         const TLS_DONE = 0x0008;
         const INIT_SCANNED = 0x0010;
         const ON_FINI_LIST = 0x0020;
         const DAG_INITED = 0x0040;
-        const UNK1 = 0x0100; // TODO: Rename this.
+        const IS_SYSTEM = 0x0100; // TODO: Rename this.
         const UNK2 = 0x0200; // TODO: Rename this.
         const UNK3 = 0x0400; // TODO: Rename this.
         const UNK4 = 0x0800; // TODO: It seems like this is actually JMPSLOTS_DONE.
