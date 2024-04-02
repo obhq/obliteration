@@ -454,10 +454,12 @@ impl RuntimeLinker {
     fn sys_dynlib_get_info(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let handle: u32 = i.args[0].try_into().unwrap();
         let info = {
-            let info_out: *mut DynlibInfo = i.args[2].into();
+            let info_out: *mut DynlibInfo = i.args[1].into();
 
             unsafe { &mut *info_out }
         };
+
+        info!("Getting info for module id = {}.", handle);
 
         let bin = td.proc().bin();
 
@@ -470,7 +472,7 @@ impl RuntimeLinker {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        *info = self.dynlib_get_info(handle, true, bin)?;
+        *info = self.dynlib_get_info(handle, bin, true)?;
 
         Ok(SysOut::ZERO)
     }
@@ -478,8 +480,8 @@ impl RuntimeLinker {
     fn dynlib_get_info(
         &self,
         handle: u32,
-        unk: bool,
         bin: &Binaries,
+        unk: bool,
     ) -> Result<DynlibInfo, SysErr> {
         let mut info: DynlibInfo = unsafe { zeroed() };
 
@@ -976,6 +978,8 @@ impl RuntimeLinker {
         let handle: u32 = i.args[0].try_into().unwrap();
         let flags: u32 = i.args[1].try_into().unwrap();
         let info: *mut DynlibInfoEx = i.args[2].into();
+
+        info!("Getting info_ex for module id = {}.", handle);
 
         // Check if application is dynamic linking.
         let bin = td.proc().bin();
