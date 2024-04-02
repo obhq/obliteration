@@ -461,26 +461,31 @@ impl RuntimeLinker {
 
         let bin = td.proc().bin();
 
-        if bin.as_ref().map(|bin| bin.app().file_info()).is_none() {
-            return Err(SysErr::Raw(EPERM));
-        }
+        let bin = match bin.as_ref() {
+            Some(bin) if bin.app().file_info().is_some() => bin,
+            _ => return Err(SysErr::Raw(EPERM)),
+        };
 
         if info.size != size_of::<DynlibInfo>() {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        *info = self.dynlib_get_info(handle, true)?;
+        *info = self.dynlib_get_info(handle, true, bin)?;
 
         Ok(SysOut::ZERO)
     }
 
-    fn dynlib_get_info(&self, handle: u32, unk: bool) -> Result<DynlibInfo, SysErr> {
+    fn dynlib_get_info(
+        &self,
+        handle: u32,
+        unk: bool,
+        bin: &Binaries,
+    ) -> Result<DynlibInfo, SysErr> {
         let mut info: DynlibInfo = unsafe { zeroed() };
 
-        let modules = self.list.read();
+        let mut modules = bin.list();
 
         let md = modules
-            .iter()
             .find(|m| m.id() == handle)
             .ok_or(SysErr::Raw(ESRCH))?;
 
@@ -525,10 +530,14 @@ impl RuntimeLinker {
         )
         .unwrap();
 
-        writeln!(e, "{:#?}", info).unwrap();
+        writeln!(e, "mapbase : {:#x}", info.text_segment.addr).unwrap();
+        writeln!(e, "textsize: {:#x}", info.text_segment.size).unwrap();
+        writeln!(e, "database: {:#x}", info.data_segment.addr).unwrap();
+        writeln!(e, "datasize: {:#x}", info.data_segment.size).unwrap();
+
+        print(e);
 
         Ok(info)
-      
     }
 
     fn sys_dynlib_load_prx(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -1071,7 +1080,16 @@ impl RuntimeLinker {
         )
         .unwrap();
 
-        writeln!(e, "{:#?}", info).unwrap();
+        writeln!(e, "mapbase     : {:#x}", info.text_segment.addr).unwrap();
+        writeln!(e, "textsize    : {:#x}", info.text_segment.size).unwrap();
+        writeln!(e, "database    : {:#x}", info.data_segment.addr).unwrap();
+        writeln!(e, "datasize    : {:#x}", info.data_segment.size).unwrap();
+        writeln!(e, "tlsindex    : {}", info.tlsindex).unwrap();
+        writeln!(e, "tlsinit     : {:#x}", info.tlsinit).unwrap();
+        writeln!(e, "tlsoffset   : {:#x}", info.tlsoffset).unwrap();
+        writeln!(e, "init        : {:#x}", info.init).unwrap();
+        writeln!(e, "fini        : {:#x}", info.fini).unwrap();
+        writeln!(e, "eh_frame_hdr: {:#x}", info.eh_frame_hdr).unwrap();
 
         print(e);
 
