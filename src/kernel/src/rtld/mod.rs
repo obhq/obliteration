@@ -181,6 +181,8 @@ impl RuntimeLinker {
         let loaded = bin.list().skip(1).find(|m| m.path() == path);
 
         if let Some(v) = loaded {
+            *v.ref_count_mut() += 1;
+
             return Ok((v.clone(), bin));
         }
 
@@ -526,6 +528,7 @@ impl RuntimeLinker {
         writeln!(e, "{:#?}", info).unwrap();
 
         Ok(info)
+      
     }
 
     fn sys_dynlib_load_prx(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -1002,7 +1005,7 @@ impl RuntimeLinker {
         info.data_segment.prot = 3;
 
         info.segment_count = 2;
-        info.refcount = Arc::strong_count(md).try_into().unwrap();
+        info.refcount = *md.ref_count();
 
         // Copy module name.
         if flags & 2 == 0 || !md.flags().contains(ModuleFlags::UNK1) {
