@@ -1074,7 +1074,7 @@ impl RuntimeLinker {
 
         writeln!(
             e,
-            "Retrieved info for module {} (ID = {}).",
+            "Retrieved info_ex for module {} (ID = {}).",
             md.path(),
             handle
         )
