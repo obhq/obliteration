@@ -126,11 +126,17 @@ impl AuthAttrs {
     }
 
     pub fn has_sce_program_attribute(&self) -> bool {
-        todo!()
+        (self.0[0] & 0x80000000) != 0
     }
 
     pub fn is_debuggable_process(&self) -> bool {
-        todo!()
+        let debug_attr = self.0[0];
+        if (debug_attr & 0x1000000) == 0 {
+            if (debug_attr & 0x2000000) != 0 {
+                return true;
+            }
+        }
+        return false;
     }
 
     pub fn is_unk1(&self) -> bool {
