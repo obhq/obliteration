@@ -90,3 +90,13 @@ pub enum ProcType {
     MiniApp,
     System, // TODO: Verify this.
 }
+
+impl Into<u32> for ProcType {
+    fn into(self) -> u32 {
+        match self {
+            ProcType::BigApp => 0,
+            ProcType::MiniApp => 1,
+            ProcType::System => 2,
+        }
+    }
+}
