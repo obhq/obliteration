@@ -57,6 +57,7 @@ privileges! {
         /// Currently unknown.
         SCE683 = 683,
         /// Currently unknown.
+        #[allow(unused)]
         SCE685 = 685,
         /// Currently unknown.
         SCE686 = 686,
