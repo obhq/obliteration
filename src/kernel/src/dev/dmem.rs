@@ -78,9 +78,7 @@ impl DeviceDriver for Dmem {
         match cmd {
             IoCmd::DMEMTOTAL(size) => *size = self.total_size,
             IoCmd::DMEMGETPRT(_prt) => todo!(),
-            IoCmd::DMEMGETAVAIL(avail) => {
-                avail.start_or_phys_out = self.total_size;
-            }
+            IoCmd::DMEMGETAVAIL(avail) => todo!(),
             IoCmd::DMEMALLOC(_alloc) => todo!(),
             IoCmd::DMEMQUERY(_query) => todo!(),
             _ => todo!(),
