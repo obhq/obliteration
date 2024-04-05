@@ -132,7 +132,7 @@ impl RegMgr {
         // Lookup the entry.
         let key = RegKey::new(key);
         let entry = self.lookup(key).ok_or(RegError::NotFound(key))?;
-        let web = if cred.is_webcore_process() || cred.is_diskplayerui_process() {
+        let web = if cred.is_libkernel_web() || cred.is_webprocess_webapp_or_webmas() {
             1
         } else {
             0

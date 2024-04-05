@@ -783,7 +783,7 @@ impl VProc {
 
         ProcTypeInfo {
             len: size_of::<ProcTypeInfo>(),
-            ty: self.budget_ptype as u32,
+            ty: self.budget_ptype.into(),
             flags,
         }
     }
