@@ -443,7 +443,7 @@ impl Fs {
         // Our IoCmd contains both the command and the argument (if there is one).
         let cmd = IoCmd::try_from_raw_parts(i.args[1].into(), i.args[2].into())?;
 
-        info!("Executing ioctl({cmd:?}) on file descriptor {fd}.");
+        info!("Executing ioctl {cmd:?} on file descriptor {fd}.");
 
         self.ioctl(fd, cmd, td)?;
 

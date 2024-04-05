@@ -35,7 +35,7 @@ privileges! {
     /// See https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/sys/priv.h for standard
     /// FreeBSD privileges.
     #[repr(i32)]
-    #[derive(Clone, Copy, PartialEq, Eq)]
+    #[derive(PartialEq, Eq)]
     pub enum Privilege {
         /// Exceed system open files limit.
         #[allow(unused)]
@@ -57,6 +57,7 @@ privileges! {
         /// Currently unknown.
         SCE683 = 683,
         /// Currently unknown.
+        #[allow(unused)]
         SCE685 = 685,
         /// Currently unknown.
         SCE686 = 686,

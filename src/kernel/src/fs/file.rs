@@ -24,7 +24,7 @@ pub struct VFile {
 }
 
 impl VFile {
-    pub(super) fn new(ty: VFileType) -> Self {
+    pub fn new(ty: VFileType) -> Self {
         let gg = GutexGroup::new();
 
         Self {
