@@ -125,10 +125,9 @@ impl AuthAttrs {
         if self.0[0] & 0x1000000 == 0 {
             if self.0[0] & 0x2000000 != 0 {
                 true
-            } else if todo!() {
-                true
             } else {
-                todo!()
+                // TODO: properly implement this branch.
+                false
             }
         } else {
             todo!()

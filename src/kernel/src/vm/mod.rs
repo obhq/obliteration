@@ -295,11 +295,11 @@ impl Vm {
     }
 
     /// See `vm_map_set_name` on the PS4 for a reference.
-    pub fn mname<N: AsRef<str>>(
+    pub fn mname(
         &self,
         addr: *mut u8,
         len: usize,
-        name: N,
+        name: impl AsRef<str>,
     ) -> Result<(), MemoryUpdateError> {
         let name = name.as_ref();
         let sname = CString::new(name);
@@ -310,7 +310,7 @@ impl Vm {
             |i| i.name != name,
             |i| {
                 if let Ok(name) = &sname {
-                    i.storage.set_name(i.addr, i.len, name).ok();
+                    let _ = i.storage.set_name(i.addr, i.len, name);
                 }
 
                 i.name = name.to_owned();
@@ -510,7 +510,7 @@ impl Vm {
 
         // Set storage name if supported.
         if let Ok(name) = CString::new(name.as_str()) {
-            storage.set_name(addr, len, &name).ok();
+            let _ = storage.set_name(addr, len, &name);
         }
 
         Ok(Alloc {

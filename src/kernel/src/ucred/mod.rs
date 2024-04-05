@@ -57,13 +57,13 @@ impl Ucred {
         self.groups[1..].binary_search(&gid).is_ok()
     }
 
-    pub fn is_unknown1(&self) -> bool {
+    pub fn is_libkernel_web(&self) -> bool {
         // TODO: Refactor this for readability.
         let val = self.auth.paid.get().wrapping_add(0xc7ffffffeffffffc);
         (val < 0xf) && ((0x6001 >> (val & 0x3f) & 1) != 0)
     }
 
-    pub fn is_unknown2(&self) -> bool {
+    pub fn is_webprocess_webapp_or_webmas(&self) -> bool {
         matches!(
             self.auth.paid.get(),
             0x380000001000000f | 0x3800000010000013
