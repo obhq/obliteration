@@ -43,14 +43,6 @@ impl TryInto<DmemContainer> for i32 {
     }
 }
 
-impl TryInto<DmemContainer> for usize {
-    type Error = SysErr;
-
-    fn try_into(self) -> Result<DmemContainer, Self::Error> {
-        (self as i32).try_into()
-    }
-}
-
 impl DeviceDriver for Dmem {
     fn ioctl(
         &self,
@@ -79,7 +71,7 @@ impl DeviceDriver for Dmem {
             // TODO: properly implement this
             IoCmd::DMEMTOTAL(size) => *size = self.total_size,
             IoCmd::DMEMGETPRT(_prt) => todo!(),
-            IoCmd::DMEMGETAVAIL(avail) => todo!(),
+            IoCmd::DMEMGETAVAIL(_avail) => todo!(),
             IoCmd::DMEMALLOC(_alloc) => todo!(),
             IoCmd::DMEMQUERY(_query) => todo!(),
             _ => todo!(),
