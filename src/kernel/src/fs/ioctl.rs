@@ -112,7 +112,7 @@ commands! {
         DIPSWCHECK2(&mut i32) = 0x40048806,
 
         /// Get total size?
-        DMEM10(&mut usize) = 0x4008800a,
+        DMEMTOTAL(&mut usize) = 0x4008800a,
         /// Get PRT aperture
         DMEMGETPRT(&mut PrtAperture) = 0xC018800C,
         /// Get available memory size
