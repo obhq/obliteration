@@ -790,7 +790,7 @@ impl RuntimeLinker {
 
         self.relocate_rela(md, mem.as_mut(), &mut relocated, resolver)?;
 
-        if !md.flags().contains(ModuleFlags::UNK4) {
+        if !md.flags().contains(ModuleFlags::JMPSLOTS_DONE) {
             self.relocate_plt(md, mem.as_mut(), &mut relocated, resolver)?;
         }
 
@@ -1059,7 +1059,7 @@ impl RuntimeLinker {
         info.tlsoffset = (*md.tls_offset()).try_into().unwrap();
 
         // Initialization and finalization functions.
-        if !md.flags().contains(ModuleFlags::UNK5) {
+        if !md.flags().contains(ModuleFlags::NOT_GET_PROC) {
             info.init = md.init().map(|v| addr + v).unwrap_or(0);
             info.fini = md.fini().map(|v| addr + v).unwrap_or(0);
         }
