@@ -174,7 +174,7 @@ impl Module {
             proc_param,
             mod_param,
             sdk_ver,
-            flags: gg.spawn(ModuleFlags::UNK2),
+            flags: gg.spawn(ModuleFlags::IS_NEW),
             names,
             dag_static: gg.spawn(Vec::new()),
             dag_dynamic: gg.spawn(Vec::new()),
@@ -760,16 +760,15 @@ bitflags! {
     pub struct ModuleFlags: u16 {
         const MAINPROG = 0x0001;
         const TEXT_REL = 0x0002;
-        const JMPSLOTS_DONE = 0x0004; // TODO: This seems incorrect.
         const TLS_DONE = 0x0008;
         const INIT_SCANNED = 0x0010;
         const ON_FINI_LIST = 0x0020;
         const DAG_INITED = 0x0040;
-        const IS_SYSTEM = 0x0100; // TODO: Rename this.
-        const UNK2 = 0x0200; // TODO: Rename this.
-        const UNK3 = 0x0400; // TODO: Rename this.
-        const UNK4 = 0x0800; // TODO: It seems like this is actually JMPSLOTS_DONE.
-        const UNK5 = 0x1000; // TODO: Rename this.
+        const IS_SYSTEM = 0x0100;
+        const IS_NEW = 0x0200;
+        const LIBC_FIOS = 0x0400;
+        const JMPSLOTS_DONE = 0x0800;
+        const NOT_GET_PROC = 0x1000;
     }
 }
 
