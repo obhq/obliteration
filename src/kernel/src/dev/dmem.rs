@@ -54,7 +54,7 @@ impl TryInto<DmemContainer> for usize {
 impl DeviceDriver for Dmem {
     fn ioctl(
         &self,
-        dev: &Arc<CharacterDevice>,
+        _: &Arc<CharacterDevice>,
         cmd: IoCmd,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {

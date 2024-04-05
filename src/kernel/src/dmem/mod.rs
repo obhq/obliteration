@@ -1,14 +1,15 @@
-use thiserror::Error;
-
 use crate::dev::{Dmem, DmemContainer};
 use crate::errno::EINVAL;
-use crate::fs::{make_dev, CharacterDevice, DriverFlags, Fs, MakeDevError, MakeDevFlags, Mode};
+use crate::fs::{
+    make_dev, CharacterDevice, DriverFlags, Fs, MakeDevError, MakeDevFlags, Mode, VFile, VFileType,
+};
 use crate::info;
-use crate::process::{VProc, VThread};
+use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
-use crate::ucred::{Gid, Privilege, Uid};
+use crate::ucred::{Gid, Uid};
 use std::ops::Index;
 use std::sync::Arc;
+use thiserror::Error;
 
 pub use self::blockpool::*;
 
@@ -112,24 +113,31 @@ impl DmemManager {
     fn sys_dmem_container(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let dmem_id: i32 = i.args[0].try_into().unwrap();
 
-        let mut dmem_container = td.proc().dmem_container_mut();
-        let old_dmem_container = *dmem_container;
+        let dmem_container = td.proc().dmem_container_mut();
+        let current_container = *dmem_container;
 
         if dmem_id != -1 {
             todo!()
         }
 
-        Ok(old_dmem_container.into())
+        Ok(current_container.into())
     }
 
-    fn sys_blockpool_open(self: &Arc<Self>, _td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_blockpool_open(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let flags: u32 = i.args[0].try_into().unwrap();
 
         if flags & 0xffafffff != 0 {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        todo!("sys_blockpool_open on new FS")
+        let bp = BlockPool::new();
+
+        let fd = td
+            .proc()
+            .files()
+            .alloc(Arc::new(VFile::new(VFileType::Blockpool(bp))));
+
+        Ok(fd.into())
     }
 
     fn sys_blockpool_map(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -157,10 +165,6 @@ impl DmemManager {
 
     fn sys_blockpool_move(self: &Arc<Self>, _: &VThread, _i: &SysIn) -> Result<SysOut, SysErr> {
         todo!()
-    }
-
-    fn get_dmem_device<'a>(self: &'a Arc<Self>, dmem: DmemContainer) -> &'a DmemDevice {
-        self.index(dmem)
     }
 }
 

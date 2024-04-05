@@ -6,6 +6,12 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub struct BlockPool {}
 
+impl BlockPool {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {})
+    }
+}
+
 impl FileBackend for BlockPool {
     #[allow(unused_variables)] // TODO: remove when implementing
     fn ioctl(
