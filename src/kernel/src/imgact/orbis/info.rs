@@ -1,4 +1,4 @@
-use crate::{
+use super::{
     DynamicEntries, DynamicTag, LibraryFlags, LibraryInfo, ModuleInfo, Relocations, Symbols,
 };
 use byteorder::{ByteOrder, LE};

@@ -6,13 +6,13 @@ use crate::ee::native::{NativeEngine, SetupModuleError};
 use crate::errno::{Errno, EINVAL, ENOENT, ENOEXEC, ENOMEM, EPERM, ESRCH};
 use crate::fs::{Fs, OpenError, VPath, VPathBuf};
 use crate::idt::Entry;
+use crate::imgact::orbis::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation, Symbol};
 use crate::info;
 use crate::log::print;
 use crate::process::{Binaries, VThread};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::vm::{MemoryUpdateError, MmapError, Protections};
 use bitflags::bitflags;
-use elf::{DynamicFlags, Elf, FileType, ReadProgramError, Relocation, Symbol};
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use macros::Errno;
 use sha1::{Digest, Sha1};
@@ -93,7 +93,6 @@ impl RuntimeLinker {
             .fs
             .open(path, Some(td))
             .map_err(ExecError::OpenExeFailed)?;
-
         let elf = Elf::open(path.as_str(), file).map_err(ExecError::ReadExeFailed)?;
 
         // Check image type.
@@ -146,6 +145,7 @@ impl RuntimeLinker {
             }
         }
 
+        // TODO: Move modules preload to here for dynamic executable.
         // TODO: Apply logic from dmem_handle_process_exec_begin.
         // TODO: Apply logic from procexec_handler.
         // TODO: Apply logic from umtx_exec_hook.
@@ -1223,7 +1223,7 @@ pub enum ExecError {
     OpenExeFailed(#[source] OpenError),
 
     #[error("cannot read the executable")]
-    ReadExeFailed(#[source] elf::OpenError),
+    ReadExeFailed(#[source] crate::imgact::orbis::OpenError),
 
     #[error("invalid executable")]
     InvalidExe,
@@ -1266,22 +1266,22 @@ pub enum MapError {
     UnprotectMemoryFailed(#[source] UnprotectError),
 
     #[error("cannot read symbol entry {0}")]
-    ReadSymbolFailed(usize, #[source] elf::ReadSymbolError),
+    ReadSymbolFailed(usize, #[source] crate::imgact::orbis::ReadSymbolError),
 
     #[error("cannot read DT_NEEDED from dynamic entry {0}")]
-    ReadNeededFailed(usize, #[source] elf::StringTableError),
+    ReadNeededFailed(usize, #[source] crate::imgact::orbis::StringTableError),
 
     #[error("cannot read DT_SONAME from dynamic entry {0}")]
-    ReadNameFailed(usize, #[source] elf::StringTableError),
+    ReadNameFailed(usize, #[source] crate::imgact::orbis::StringTableError),
 
     #[error("{0} is obsolete")]
     ObsoleteFlags(DynamicFlags),
 
     #[error("cannot read module info from dynamic entry {0}")]
-    ReadModuleInfoFailed(usize, #[source] elf::ReadModuleError),
+    ReadModuleInfoFailed(usize, #[source] crate::imgact::orbis::ReadModuleError),
 
     #[error("cannot read libraru info from dynamic entry {0}")]
-    ReadLibraryInfoFailed(usize, #[source] elf::ReadLibraryError),
+    ReadLibraryInfoFailed(usize, #[source] crate::imgact::orbis::ReadLibraryError),
 }
 
 /// Represents an error for (S)ELF loading.
@@ -1297,7 +1297,7 @@ pub enum LoadError {
 
     #[error("cannot open (S)ELF")]
     #[errno(ENOEXEC)]
-    OpenElfFailed(#[source] elf::OpenError),
+    OpenElfFailed(#[source] crate::imgact::orbis::OpenError),
 
     #[error("the specified file is not valid module")]
     #[errno(ENOEXEC)]

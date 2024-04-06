@@ -1,19 +1,17 @@
 use super::{MapError, Memory};
 use crate::ee::native::{NativeEngine, RawFn};
 use crate::fs::{VFile, VPath, VPathBuf};
+use crate::imgact::orbis::{
+    DynamicFlags, DynamicTag, Elf, FileInfo, FileType, LibraryFlags, LibraryInfo, ModuleInfo,
+    Program, Symbol,
+};
 use crate::log::{print, LogEntry};
 use crate::process::VProc;
 use bitflags::bitflags;
 use byteorder::{ByteOrder, LE};
-use elf::{
-    DynamicFlags, DynamicTag, Elf, FileInfo, FileType, LibraryFlags, LibraryInfo, ModuleInfo,
-    Program, Symbol,
-};
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use std::fmt::{Display, Formatter};
-use std::fs::OpenOptions;
 use std::io::Write;
-use std::path::Path;
 use std::sync::Arc;
 
 /// An implementation of
@@ -334,17 +332,6 @@ impl Module {
         self.ee
             .get_function(self, self.memory.addr() + self.memory.base() + off)
             .unwrap()
-    }
-
-    pub fn dump<P: AsRef<Path>>(&mut self, path: P) -> Result<(), std::io::Error> {
-        let path = path.as_ref();
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(path)?;
-
-        file.write_all(unsafe { self.memory.as_bytes() })
     }
 
     pub fn print(&self, mut entry: LogEntry) {
