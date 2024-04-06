@@ -129,7 +129,7 @@ impl RuntimeLinker {
         )
         .map_err(ExecError::MapFailed)?;
 
-        *app.flags_mut() |= ModuleFlags::MAIN_PROG;
+        *app.flags_mut() |= ModuleFlags::MAINPROG;
 
         self.ee
             .setup_module(&mut app)
@@ -270,7 +270,7 @@ impl RuntimeLinker {
             // TODO: Check the call to sceSblAuthMgrIsLoadable in the self_load_shared_object on the PS4
             // to see how it is return the value.
             if name != "libc.sprx" && name != "libSceFios2.sprx" {
-                *md.flags_mut() |= ModuleFlags::UNK1;
+                *md.flags_mut() |= ModuleFlags::IS_SYSTEM;
             }
 
             if let Err(e) = self.ee.setup_module(&mut md) {
@@ -335,7 +335,7 @@ impl RuntimeLinker {
         // Resolve.
         let dags = md.dag_static();
 
-        let sym = if md.flags().intersects(ModuleFlags::MAIN_PROG) {
+        let sym = if md.flags().intersects(ModuleFlags::MAINPROG) {
             todo!("do_dlsym on MAIN_PROG");
         } else {
             resolver.resolve_from_list(
@@ -451,8 +451,95 @@ impl RuntimeLinker {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_dynlib_get_info(self: &Arc<Self>, _td: &VThread, _i: &SysIn) -> Result<SysOut, SysErr> {
-        todo!()
+    fn sys_dynlib_get_info(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let handle: u32 = i.args[0].try_into().unwrap();
+        let info = {
+            let info_out: *mut DynlibInfo = i.args[1].into();
+
+            unsafe { &mut *info_out }
+        };
+
+        info!("Getting info for module id = {}.", handle);
+
+        let bin = td.proc().bin();
+
+        let bin = match bin.as_ref() {
+            Some(bin) if bin.app().file_info().is_some() => bin,
+            _ => return Err(SysErr::Raw(EPERM)),
+        };
+
+        if info.size != size_of::<DynlibInfo>() {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        *info = self.dynlib_get_info(handle, bin, true)?;
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn dynlib_get_info(
+        &self,
+        handle: u32,
+        bin: &Binaries,
+        no_system: bool,
+    ) -> Result<DynlibInfo, SysErr> {
+        let mut info: DynlibInfo = unsafe { zeroed() };
+
+        let mut modules = bin.list();
+
+        let md = modules
+            .find(|m| m.id() == handle)
+            .ok_or(SysErr::Raw(ESRCH))?;
+
+        if no_system && md.flags().intersects(ModuleFlags::IS_SYSTEM) {
+            return Err(SysErr::Raw(EPERM));
+        }
+
+        let name = md.path().file_name().unwrap();
+
+        let mem = md.memory();
+        let addr = mem.addr();
+
+        info.name[..name.len()].copy_from_slice(name.as_bytes());
+        info.name[0xff] = 0;
+        info.segment_count = 2;
+
+        info.text_segment.addr = mem.base();
+        info.text_segment.size = mem.text_segment().len().try_into().unwrap();
+        info.text_segment.prot = 5;
+
+        info.data_segment.addr = addr + mem.data_segment().start();
+        info.data_segment.size = mem.data_segment().len().try_into().unwrap();
+        info.data_segment.prot = 3;
+
+        if let Some(seg) = mem.relro_segment() {
+            info.relro_segment.addr = addr + seg.start();
+            info.relro_segment.size = seg.len().try_into().unwrap();
+            info.relro_segment.prot = 1;
+
+            info.segment_count += 1;
+        };
+
+        info.fingerprint = md.fingerprint();
+
+        let mut e = info!();
+
+        writeln!(
+            e,
+            "Retrieved info for module {} (ID = {}).",
+            md.path(),
+            handle
+        )
+        .unwrap();
+
+        writeln!(e, "mapbase : {:#x}", info.text_segment.addr).unwrap();
+        writeln!(e, "textsize: {:#x}", info.text_segment.size).unwrap();
+        writeln!(e, "database: {:#x}", info.data_segment.addr).unwrap();
+        writeln!(e, "datasize: {:#x}", info.data_segment.size).unwrap();
+
+        print(e);
+
+        Ok(info)
     }
 
     fn sys_dynlib_load_prx(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -703,7 +790,7 @@ impl RuntimeLinker {
 
         self.relocate_rela(md, mem.as_mut(), &mut relocated, resolver)?;
 
-        if !md.flags().contains(ModuleFlags::UNK4) {
+        if !md.flags().contains(ModuleFlags::JMPSLOTS_DONE) {
             self.relocate_plt(md, mem.as_mut(), &mut relocated, resolver)?;
         }
 
@@ -892,6 +979,8 @@ impl RuntimeLinker {
         let flags: u32 = i.args[1].try_into().unwrap();
         let info: *mut DynlibInfoEx = i.args[2].into();
 
+        info!("Getting info_ex for module id = {}.", handle);
+
         // Check if application is dynamic linking.
         let bin = td.proc().bin();
         let bin = bin.as_ref().ok_or(SysErr::Raw(EPERM))?;
@@ -901,9 +990,8 @@ impl RuntimeLinker {
         }
 
         // Check buffer size.
-        let size: usize = unsafe { (*info).size.try_into().unwrap() };
 
-        if size != size_of::<DynlibInfoEx>() {
+        if unsafe { (*info).size } != size_of::<DynlibInfoEx>() {
             return Err(SysErr::Raw(EINVAL));
         }
 
@@ -920,17 +1008,20 @@ impl RuntimeLinker {
 
         *info = unsafe { zeroed() };
         info.handle = md.id();
-        info.mapbase = addr + mem.base();
-        info.textsize = mem.text_segment().len().try_into().unwrap();
-        info.unk3 = 5;
-        info.database = addr + mem.data_segment().start();
-        info.datasize = mem.data_segment().len().try_into().unwrap();
-        info.unk4 = 3;
-        info.unk6 = 2;
+
+        info.text_segment.addr = addr + mem.base();
+        info.text_segment.size = mem.text_segment().len().try_into().unwrap();
+        info.text_segment.prot = 5;
+
+        info.data_segment.addr = addr + mem.data_segment().start();
+        info.data_segment.size = mem.data_segment().len().try_into().unwrap();
+        info.data_segment.prot = 3;
+
+        info.segment_count = 2;
         info.refcount = *md.ref_count();
 
         // Copy module name.
-        if flags & 2 == 0 || !md.flags().contains(ModuleFlags::UNK1) {
+        if flags & 2 == 0 || !md.flags().contains(ModuleFlags::IS_SYSTEM) {
             let name = md.path().file_name().unwrap();
 
             info.name[..name.len()].copy_from_slice(name.as_bytes());
@@ -941,13 +1032,13 @@ impl RuntimeLinker {
         // Let's keep the same behavior as the PS4 for now.
         info.tlsindex = if flags & 1 != 0 {
             let flags = md.flags();
-            let mut upper = if flags.contains(ModuleFlags::UNK1) {
+            let mut upper = if flags.contains(ModuleFlags::IS_SYSTEM) {
                 1
             } else {
                 0
             };
 
-            if flags.contains(ModuleFlags::MAIN_PROG) {
+            if flags.contains(ModuleFlags::MAINPROG) {
                 upper += 2;
             }
 
@@ -968,7 +1059,7 @@ impl RuntimeLinker {
         info.tlsoffset = (*md.tls_offset()).try_into().unwrap();
 
         // Initialization and finalization functions.
-        if !md.flags().contains(ModuleFlags::UNK5) {
+        if !md.flags().contains(ModuleFlags::NOT_GET_PROC) {
             info.init = md.init().map(|v| addr + v).unwrap_or(0);
             info.fini = md.fini().map(|v| addr + v).unwrap_or(0);
         }
@@ -987,15 +1078,16 @@ impl RuntimeLinker {
 
         writeln!(
             e,
-            "Retrieved info for module {} (ID = {}).",
+            "Retrieved info_ex for module {} (ID = {}).",
             md.path(),
             handle
         )
         .unwrap();
-        writeln!(e, "mapbase     : {:#x}", info.mapbase).unwrap();
-        writeln!(e, "textsize    : {:#x}", info.textsize).unwrap();
-        writeln!(e, "database    : {:#x}", info.database).unwrap();
-        writeln!(e, "datasize    : {:#x}", info.datasize).unwrap();
+
+        writeln!(e, "mapbase     : {:#x}", info.text_segment.addr).unwrap();
+        writeln!(e, "textsize    : {:#x}", info.text_segment.size).unwrap();
+        writeln!(e, "database    : {:#x}", info.data_segment.addr).unwrap();
+        writeln!(e, "datasize    : {:#x}", info.data_segment.size).unwrap();
         writeln!(e, "tlsindex    : {}", info.tlsindex).unwrap();
         writeln!(e, "tlsinit     : {:#x}", info.tlsinit).unwrap();
         writeln!(e, "tlsoffset   : {:#x}", info.tlsoffset).unwrap();
@@ -1043,9 +1135,33 @@ impl RuntimeLinker {
     }
 }
 
+#[derive(Debug)]
+#[repr(C)]
+struct SegmentInfo {
+    addr: usize,
+    size: u32,
+    prot: u32,
+}
+
+#[derive(Debug)]
+#[repr(C)]
+struct DynlibInfo {
+    size: usize,
+    name: [u8; 256],
+    text_segment: SegmentInfo,
+    data_segment: SegmentInfo,
+    relro_segment: SegmentInfo,
+    unk_segment: SegmentInfo,
+    segment_count: u32,
+    fingerprint: [u8; 0x14],
+}
+
+const _: () = assert!(size_of::<DynlibInfo>() == 0x160);
+
+#[derive(Debug)]
 #[repr(C)]
 struct DynlibInfoEx {
-    size: u64,
+    size: usize,
     name: [u8; 256],
     handle: u32,
     tlsindex: u32,
@@ -1062,16 +1178,15 @@ struct DynlibInfoEx {
     eh_frame: usize,
     eh_frame_hdr_size: u32,
     eh_frame_size: u32,
-    mapbase: usize,
-    textsize: u32,
-    unk3: u32, // Always 5.
-    database: usize,
-    datasize: u32,
-    unk4: u32,        // Always 3.
-    unk5: [u8; 0x20], // Always zeroes.
-    unk6: u32,        // Always 2.
+    text_segment: SegmentInfo,
+    data_segment: SegmentInfo,
+    relro_segment: SegmentInfo,
+    unk_segment: SegmentInfo,
+    segment_count: u32, // Always 2.
     refcount: u32,
 }
+
+const _: () = assert!(size_of::<DynlibInfoEx>() == 0x1a8);
 
 /// Contains how TLS was allocated so far.
 #[derive(Debug)]

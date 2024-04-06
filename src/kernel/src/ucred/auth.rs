@@ -55,7 +55,7 @@ impl AuthInfo {
 
 /// A wrapper type for `paid` field of [`AuthInfo`].
 ///
-/// PAID is an abbreviation of "Program Authority ID", not the game has been paid!
+/// PAID is an abbreviation of "Program Authority ID", not the game 3 been paid!
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy)]
 pub struct AuthPaid(u64);
@@ -72,7 +72,7 @@ impl AuthPaid {
 /// A wrapper type for `caps` field of [`AuthInfo`].
 #[repr(transparent)]
 #[derive(Debug, Clone)]
-pub struct AuthCaps([u64; 4]);
+pub struct AuthCaps(pub(super) [u64; 4]);
 
 impl AuthCaps {
     pub fn new(raw: [u64; 4]) -> Self {
@@ -85,14 +85,6 @@ impl AuthCaps {
 
     pub fn is_user(&self) -> bool {
         (self.0[0] & 0x2000000000000000) != 0
-    }
-
-    pub fn is_jit_compiler_process(&self) -> bool {
-        todo!()
-    }
-
-    pub fn is_jit_application_process(&self) -> bool {
-        todo!()
     }
 
     pub fn has_use_video_service_capability(&self) -> bool {
@@ -130,13 +122,16 @@ impl AuthAttrs {
     }
 
     pub fn is_debuggable_process(&self) -> bool {
-        let debug_attr = self.0[0];
-        if (debug_attr & 0x1000000) == 0 {
-            if (debug_attr & 0x2000000) != 0 {
-                return true;
+        if self.0[0] & 0x1000000 == 0 {
+            if self.0[0] & 0x2000000 != 0 {
+                true
+            } else {
+                // TODO: properly implement this branch.
+                false
             }
+        } else {
+            todo!()
         }
-        return false;
     }
 
     pub fn is_unk1(&self) -> bool {

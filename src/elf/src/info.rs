@@ -279,7 +279,7 @@ impl FileInfo {
         let id = LE::read_u16(&data[6..]);
 
         // Lookup name.
-        let name = match self.read_str(name.try_into().unwrap()) {
+        let name = match self.read_str(name as usize) {
             Ok(v) => v.to_owned(),
             Err(e) => return Err(ReadModuleError::InvalidNameOffset(name, e)),
         };
@@ -301,6 +301,15 @@ impl FileInfo {
         Ok(LibraryInfo::new(id, name, LibraryFlags::empty()))
     }
 
+    pub fn read_fingerprint(&self, offset: usize) -> [u8; 20] {
+        let offset = offset + self.dynoff;
+
+        let mut fingerprint = [0u8; 20];
+        fingerprint.copy_from_slice(&self.data[offset..(offset + 20)]);
+
+        fingerprint
+    }
+
     pub fn read_str(&self, offset: usize) -> Result<&str, StringTableError> {
         // Get raw string.
         let tab = &self.data[self.strtab..(self.strtab + self.strsz)];
@@ -316,7 +325,9 @@ impl FileInfo {
         };
 
         // Get Rust string.
-        std::str::from_utf8(raw).map_err(|_| StringTableError::NotUtf8)
+        let string = std::str::from_utf8(raw)?;
+
+        Ok(string)
     }
 }
 
@@ -418,4 +429,10 @@ pub enum StringTableError {
 
     #[error("the offset is not a UTF-8 string")]
     NotUtf8,
+}
+
+impl From<std::str::Utf8Error> for StringTableError {
+    fn from(_: std::str::Utf8Error) -> Self {
+        Self::NotUtf8
+    }
 }

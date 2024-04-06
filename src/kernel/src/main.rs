@@ -434,7 +434,7 @@ fn run() -> Result<(), KernelError> {
         .load(path, flags, false, true, &main)
         .map_err(|e| KernelError::FailedToLoadLibkernel(e.into()))?;
 
-    libkernel.flags_mut().remove(ModuleFlags::UNK2);
+    libkernel.flags_mut().remove(ModuleFlags::IS_NEW);
     libkernel.print(info!());
 
     ld.set_kernel(libkernel);
@@ -448,7 +448,7 @@ fn run() -> Result<(), KernelError> {
         .load(path, flags, false, true, &main)
         .map_err(|e| KernelError::FailedToLoadLibSceLibcInternal(e.into()))?;
 
-    libc.flags_mut().remove(ModuleFlags::UNK2);
+    libc.flags_mut().remove(ModuleFlags::IS_NEW);
     libc.print(info!());
 
     drop(libc);

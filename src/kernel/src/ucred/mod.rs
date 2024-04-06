@@ -57,13 +57,13 @@ impl Ucred {
         self.groups[1..].binary_search(&gid).is_ok()
     }
 
-    pub fn is_unknown1(&self) -> bool {
+    pub fn is_libkernel_web(&self) -> bool {
         // TODO: Refactor this for readability.
-        let id = self.auth.paid.get().wrapping_add(0xc7ffffffeffffffc);
-        (id < 0xf) && ((0x6001 >> (id & 0x3f) & 1) != 0)
+        let val = self.auth.paid.get().wrapping_add(0xc7ffffffeffffffc);
+        (val < 0xf) && ((0x6001 >> (val & 0x3f) & 1) != 0)
     }
 
-    pub fn is_unknown2(&self) -> bool {
+    pub fn is_webprocess_webapp_or_webmas(&self) -> bool {
         matches!(
             self.auth.paid.get(),
             0x380000001000000f | 0x3800000010000013
@@ -77,12 +77,36 @@ impl Ucred {
 
     /// See `sceSblACMgrIsJitCompilerProcess` on the PS4 for a reference.
     pub fn is_jit_compiler_process(&self) -> bool {
-        self.auth.caps.is_jit_compiler_process()
+        let val = self.auth.caps.0[1];
+
+        if val >> 0x3e & 1 == 0 {
+            if val >> 0x38 & 1 != 0 && !todo!() {
+                true
+            } else if (self.auth.paid.get() >> 56) == 0x31 && !todo!() {
+                true
+            } else {
+                false
+            }
+        } else {
+            true
+        }
     }
 
-    /// See `sceSblACMgrIsJitCompilerProcess` on the PS4 for a reference.
+    /// See `sceSblACMgrIsJitApplicationProcess` on the PS4 for a reference.
     pub fn is_jit_application_process(&self) -> bool {
-        self.auth.caps.is_jit_application_process()
+        let val = self.auth.caps.0[1];
+
+        if val >> 0x3d & 1 == 0 {
+            if val >> 0x38 & 1 != 0 && !todo!() {
+                true
+            } else if (self.auth.paid.get() >> 56) == 0x31 && !todo!() {
+                true
+            } else {
+                false
+            }
+        } else {
+            true
+        }
     }
 
     /// See `sceSblACMgrIsVideoplayerProcess` on the PS4 for a reference.
@@ -97,14 +121,17 @@ impl Ucred {
 
     /// See `sceSblACMgrIsWebcoreProcess` on the PS4 for a reference.
     pub fn is_webcore_process(&self) -> bool {
-        todo!()
+        let val = self.auth.paid.get().wrapping_add(0xc7ffffffeffffffd);
+
+        (val < 0x11) && (0x1d003 >> (val & 0x3f) & 1 != 0)
     }
 
+    /// See `sceSblACMgrHasSceProgramAttribute` on the PS4 for a reference.
     pub fn has_sce_program_attribute(&self) -> bool {
         self.auth.attrs.has_sce_program_attribute()
     }
 
-    /// See `sceSblACMgrHasSceProgramAttribute` on the PS4 for a reference.
+    /// See `sceSblACMgrIsDebuggableProcess` on the PS4 for a reference.
     pub fn is_debuggable_process(&self) -> bool {
         self.auth.attrs.is_debuggable_process()
     }

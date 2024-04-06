@@ -39,6 +39,7 @@ pub struct Module {
     needed: Vec<NeededModule>,
     modules: Vec<ModuleInfo>,
     libraries: Vec<LibraryInfo>,
+    fingerprint: [u8; 20],
     memory: Memory,
     relocated: Gutex<Vec<Option<Relocated>>>,
     file_info: Option<FileInfo>,
@@ -173,13 +174,14 @@ impl Module {
             proc_param,
             mod_param,
             sdk_ver,
-            flags: gg.spawn(ModuleFlags::UNK2),
+            flags: gg.spawn(ModuleFlags::IS_NEW),
             names,
             dag_static: gg.spawn(Vec::new()),
             dag_dynamic: gg.spawn(Vec::new()),
             needed: Vec::new(),
             modules: Vec::new(),
             libraries: Vec::new(),
+            fingerprint: [0; 20],
             memory,
             relocated: gg.spawn(Vec::new()),
             file_info: None,
@@ -282,6 +284,10 @@ impl Module {
 
     pub fn libraries(&self) -> &[LibraryInfo] {
         self.libraries.as_ref()
+    }
+
+    pub fn fingerprint(&self) -> [u8; 20] {
+        self.fingerprint
     }
 
     pub fn memory(&self) -> &Memory {
@@ -550,6 +556,8 @@ impl Module {
     /// See `digest_dynamic` on the PS4 for a reference.
     fn digest_dynamic(&mut self, base: usize, info: &FileInfo) -> Result<(), MapError> {
         // TODO: Implement the remaining tags.
+        let mut fingerprint_offset = None;
+
         for (i, (tag, value)) in info.dynamic().enumerate() {
             match tag {
                 DynamicTag::DT_NULL => break,
@@ -579,6 +587,9 @@ impl Module {
                 DynamicTag::DT_SONAME => self.digest_soname(info, i, value)?,
                 DynamicTag::DT_TEXTREL => *self.flags.get_mut() |= ModuleFlags::TEXT_REL,
                 DynamicTag::DT_FLAGS => self.digest_flags(value)?,
+                DynamicTag::DT_SCE_FINGERPRINT => {
+                    fingerprint_offset = Some(u64::from_le_bytes(value) as usize)
+                }
                 DynamicTag::DT_SCE_MODULE_INFO | DynamicTag::DT_SCE_NEEDED_MODULE => {
                     self.digest_module_info(info, i, value)?;
                 }
@@ -588,6 +599,8 @@ impl Module {
                 _ => continue,
             }
         }
+
+        self.digest_fingerprint(info, fingerprint_offset.unwrap_or(0));
 
         Ok(())
     }
@@ -643,6 +656,12 @@ impl Module {
         }
 
         Ok(())
+    }
+
+    fn digest_fingerprint(&mut self, info: &FileInfo, offset: usize) {
+        let fingerprint = info.read_fingerprint(offset);
+
+        self.fingerprint = fingerprint;
     }
 
     fn digest_module_info(
@@ -739,18 +758,17 @@ bitflags! {
     /// Flags for [`Module`].
     #[derive(Debug, Clone, Copy, PartialEq)]
     pub struct ModuleFlags: u16 {
-        const MAIN_PROG = 0x0001;
+        const MAINPROG = 0x0001;
         const TEXT_REL = 0x0002;
-        const JMPSLOTS_DONE = 0x0004; // TODO: This seems incorrect.
         const TLS_DONE = 0x0008;
         const INIT_SCANNED = 0x0010;
         const ON_FINI_LIST = 0x0020;
         const DAG_INITED = 0x0040;
-        const UNK1 = 0x0100; // TODO: Rename this.
-        const UNK2 = 0x0200; // TODO: Rename this.
-        const UNK3 = 0x0400; // TODO: Rename this.
-        const UNK4 = 0x0800; // TODO: It seems like this is actually JMPSLOTS_DONE.
-        const UNK5 = 0x1000; // TODO: Rename this.
+        const IS_SYSTEM = 0x0100;
+        const IS_NEW = 0x0200;
+        const LIBC_FIOS = 0x0400;
+        const JMPSLOTS_DONE = 0x0800;
+        const NOT_GET_PROC = 0x1000;
     }
 }
 
