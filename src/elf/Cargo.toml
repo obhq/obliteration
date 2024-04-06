@@ -1,9 +1,0 @@
-[package]
-name = "elf"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-bitflags = "2.1"
-byteorder = "1.4"
-thiserror = "1.0"

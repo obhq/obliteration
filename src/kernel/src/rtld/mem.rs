@@ -1,8 +1,8 @@
 use super::MapError;
 use crate::fs::VFile;
+use crate::imgact::orbis::{Elf, ProgramFlags, ProgramType};
 use crate::process::VProc;
 use crate::vm::{MappingFlags, MemoryUpdateError, Protections};
-use elf::{Elf, ProgramFlags, ProgramType};
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use std::alloc::Layout;
 use std::fmt::{Debug, Formatter};
