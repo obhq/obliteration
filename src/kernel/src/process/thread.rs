@@ -31,14 +31,15 @@ pub struct VThread {
 }
 
 impl VThread {
-    pub fn new(proc: Arc<VProc>, cred: &Arc<Ucred>) -> Self {
+    pub fn new(proc: Arc<VProc>) -> Self {
         // TODO: Check how the PS4 actually allocate the thread ID.
         let gg = GutexGroup::new();
+        let cred = proc.cred().clone();
 
         Self {
             proc,
             id: NonZeroI32::new(NEXT_ID.fetch_add(1, Ordering::Relaxed)).unwrap(),
-            cred: cred.clone(),
+            cred,
             sigmask: gg.spawn(SignalSet::default()),
             pri_class: 3, // TODO: Check the actual value on the PS4 when a thread is created.
             base_user_pri: 700, // TODO: Same here.
