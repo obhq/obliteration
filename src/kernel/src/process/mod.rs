@@ -57,7 +57,7 @@ mod thread;
 pub struct VProc {
     id: NonZeroI32,                        // p_pid
     threads: Gutex<Vec<Arc<VThread>>>,     // p_threads
-    cred: Ucred,                           // p_ucred
+    cred: Arc<Ucred>,                      // p_ucred
     group: Gutex<Option<Arc<VProcGroup>>>, // p_pgrp
     abi: OnceLock<ProcAbi>,                // p_sysent
     vm: Arc<Vm>,                           // p_vmspace
@@ -100,7 +100,7 @@ impl VProc {
         let vp = Arc::new(Self {
             id: Self::new_id(),
             threads: gg.spawn(Vec::new()),
-            cred,
+            cred: Arc::new(cred),
             group: gg.spawn(None),
             abi: OnceLock::new(),
             vm: Vm::new(&mut sys)?,
@@ -145,7 +145,7 @@ impl VProc {
         self.id
     }
 
-    pub fn cred(&self) -> &Ucred {
+    pub fn cred(&self) -> &Arc<Ucred> {
         &self.cred
     }
 
