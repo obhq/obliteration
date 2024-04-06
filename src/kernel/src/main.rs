@@ -1,7 +1,10 @@
 use crate::arch::MachDep;
 use crate::budget::{Budget, BudgetManager, ProcType};
-use crate::dev::{DebugManager, DipswManager, TtyManager};
-use crate::dmem::DmemManager;
+use crate::dev::{
+    DebugManager, DebugManagerInitError, DipswInitError, DipswManager, TtyManager,
+    TtyManagerInitError,
+};
+use crate::dmem::{DmemManager, DmemManagerInitError};
 use crate::ee::native::NativeEngine;
 use crate::ee::EntryArg;
 use crate::errno::EEXIST;
@@ -22,8 +25,6 @@ use crate::time::TimeManager;
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use crate::umtx::UmtxManager;
 use clap::Parser;
-use dev::{DebugManagerInitError, DipswInitError, TtyManagerInitError};
-use dmem::DmemManagerInitError;
 use llt::{OsThread, SpawnError};
 use macros::vpath;
 use param::Param;
@@ -80,7 +81,7 @@ fn run() -> Result<(), KernelError> {
 
         serde_yaml::from_reader(file).map_err(KernelError::FailedToParseDebugConfig)?
     } else {
-        Args::try_parse()?
+        Args::try_parse().map_err(KernelError::FailedToParseArgs)?
     };
 
     // Initialize debug dump.
@@ -366,8 +367,6 @@ fn run() -> Result<(), KernelError> {
     UmtxManager::new(&mut syscalls);
 
     // Initialize runtime linker.
-    info!("Initializing runtime linker.");
-
     let ee = NativeEngine::new();
     let ld = RuntimeLinker::new(&fs, &ee, &mut syscalls);
 
@@ -391,18 +390,9 @@ fn run() -> Result<(), KernelError> {
         proc.vm().stack().end()
     );
 
-    // TODO: Check if this credential is actually correct for game main thread.
-    let cred = Arc::new(Ucred::new(
-        Uid::ROOT,
-        Uid::ROOT,
-        vec![Gid::ROOT],
-        AuthInfo::SYS_CORE.clone(),
-    ));
-
-    let main = VThread::new(proc.clone(), &cred);
-
     // Load eboot.bin.
     let path = vpath!("/app0/eboot.bin");
+    let main = VThread::new(proc.clone());
     let app = ld
         .exec(path, &main)
         .map_err(|e| KernelError::ExecFailed(path, e))?;
@@ -591,7 +581,7 @@ enum KernelError {
     FailedToParseDebugConfig(#[source] serde_yaml::Error),
 
     #[error("couldn't parse arguments")]
-    FailedToParseArgs(#[from] clap::Error),
+    FailedToParseArgs(#[source] clap::Error),
 
     #[error("couldn't open param.sfo")]
     FailedToOpenGameParam(#[source] std::io::Error),
