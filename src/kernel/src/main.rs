@@ -49,6 +49,7 @@ mod errno;
 mod fs;
 mod hv;
 mod idt;
+mod imgact;
 mod kqueue;
 mod log;
 mod namedobj;

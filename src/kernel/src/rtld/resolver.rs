@@ -1,7 +1,7 @@
 use super::Module;
+use crate::imgact::orbis::Symbol;
 use crate::process::Binaries;
 use bitflags::bitflags;
-use elf::Symbol;
 use std::borrow::Cow;
 use std::ops::Deref;
 use std::sync::Arc;

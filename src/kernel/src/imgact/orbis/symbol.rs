@@ -1,4 +1,4 @@
-use crate::{FileInfo, StringTableError};
+use super::{FileInfo, StringTableError};
 use byteorder::{ByteOrder, LE};
 use thiserror::Error;
 
