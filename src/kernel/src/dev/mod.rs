@@ -1,4 +1,3 @@
-pub use camera::*;
 pub use deci::*;
 pub use dipsw::*;
 pub use dmem::*;
@@ -9,7 +8,6 @@ pub use rng::*;
 pub use sbl_srv::*;
 pub use ttyconsole::*;
 
-mod camera;
 mod deci;
 mod dipsw;
 mod dmem;
