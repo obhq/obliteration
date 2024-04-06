@@ -31,13 +31,13 @@ impl DeviceDriver for Dipsw {
         let td = td.unwrap();
 
         if !td.cred().is_system() {
-            todo!()
-        } else {
             match cmd {
                 // TODO: properly implement this
                 IoCmd::DIPSWCHECK2(val) => *val = false as i32,
                 _ => todo!(),
             }
+        } else {
+            todo!()
         }
 
         Ok(())

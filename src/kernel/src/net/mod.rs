@@ -1,7 +1,7 @@
 use crate::budget::BudgetType;
 use crate::errno::{Errno, EFAULT, EINVAL};
 use crate::fs::{IoVec, VFileFlags, VFileType};
-use crate::info;
+use crate::{arnd, info};
 use crate::{
     process::VThread,
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
@@ -30,6 +30,7 @@ impl NetManager {
         sys.register(28, &net, Self::sys_sendmsg);
         sys.register(29, &net, Self::sys_recvfrom);
         sys.register(97, &net, Self::sys_socket);
+        sys.register(99, &net, Self::sys_netcontrol);
         sys.register(105, &net, Self::sys_setsockopt);
         sys.register(113, &net, Self::sys_socketex);
         sys.register(114, &net, Self::sys_socketclose);
@@ -75,6 +76,42 @@ impl NetManager {
         };
 
         todo!()
+    }
+
+    fn sys_netcontrol(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let op: i32 = i.args[1].try_into().unwrap();
+        let buf: *mut u8 = i.args[2].into();
+        let buflen: u32 = i.args[3].try_into().unwrap();
+
+        let buf = if buf.is_null() {
+            None
+        } else {
+            if buflen > 160 {
+                return Err(SysErr::Raw(EINVAL));
+            }
+
+            Some(unsafe { core::slice::from_raw_parts_mut(buf, buflen as usize) })
+        };
+
+        let _ = if fd < 0 {
+        } else {
+            todo!()
+        };
+
+        match buf {
+            Some(buf) => match op {
+                0x14 if buf.len() > 3 => arnd::rand_bytes(&mut buf[..4]),
+                _ => todo!("netcontrol with op = {op}"),
+            },
+            None => todo!("netcontrol with buf = null"),
+        }
+
+        if fd > -1 {
+            todo!()
+        }
+
+        Ok(SysOut::ZERO)
     }
 
     fn sys_setsockopt(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
