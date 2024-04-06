@@ -201,7 +201,7 @@ impl GutexGroup {
 
     #[cfg(target_os = "linux")]
     unsafe fn wake_one(addr: *mut i32) {
-        use libc::{syscall, SYS_futex, EAGAIN, FUTEX_PRIVATE_FLAG, FUTEX_WAKE};
+        use libc::{syscall, SYS_futex, FUTEX_PRIVATE_FLAG, FUTEX_WAKE};
 
         if unsafe { syscall(SYS_futex, addr, FUTEX_WAKE | FUTEX_PRIVATE_FLAG, 1) } < 0 {
             panic!("FUTEX_WAKE failed: {}", Error::last_os_error());

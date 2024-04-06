@@ -903,5 +903,5 @@ pub enum VProcInitError {
 #[derive(Debug, Error, Errno)]
 pub enum CreateThreadError {}
 
-static NEXT_ID: AtomicI32 = AtomicI32::new(1);
+static NEXT_ID: AtomicI32 = AtomicI32::new(123);
 const PID1: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(1) };
