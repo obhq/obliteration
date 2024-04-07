@@ -33,11 +33,14 @@ We have a Discord server for discussion about Obliteration and its development. 
 
 - Windows 10, Linux or macOS 11+.
 - x86-64 CPU. We want to support non-x86 but currently we don't have any developers who are willing to work on this.
+- CPU with hardware virtualization supports.
+  - Windows and Linux users may need to enable this feature on the BIOS/UEFI settings.
 - A jailbroken PS4 with FTP server that supports SELF decryption.
 
 ### Windows-specific requirements
 
 - [Microsoft Visual C++ 2022 Redistributable](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist). If there is an error related to `msvcp140.dll`, `vcruntime140.dll`, or `vcruntime140_1.dll` that means you need to install this manually. It's likely your system already has it, so try to run Obliteration first.
+- [Virtual Machine Platform](https://github.com/obhq/obliteration/wiki/Common-Issues)
 
 ### Linux-specific requirements
 
