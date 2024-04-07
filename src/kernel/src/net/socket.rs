@@ -33,12 +33,7 @@ impl Socket {
         td: &VThread,
         name: Option<&str>,
     ) -> Result<Arc<Self>, SocketCreateError> {
-        Ok(Arc::new(Socket {
-            ty,
-            options: SocketOptions::empty(),
-            cred: cred.clone(),
-            name: name.map(|s| s.to_string().into_boxed_str()),
-        }))
+        todo!("socreate")
     }
 
     fn options(&self) -> SocketOptions {
