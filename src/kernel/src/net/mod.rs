@@ -173,7 +173,7 @@ impl NetManager {
     }
 
     fn sys_socketex(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
-        let name = unsafe { i.args[0].to_str(32)? }.unwrap();
+        let name = unsafe { i.args[0].to_str(32)? };
         let domain: i32 = i.args[1].try_into().unwrap();
         let ty: i32 = i.args[2].try_into().unwrap();
         let proto: Option<NonZeroI32> = i.args[3].try_into().unwrap();
@@ -186,7 +186,7 @@ impl NetManager {
 
         let fd = td.proc().files().alloc_with_budget::<SocketCreateError>(
             |_| {
-                let so = Socket::new(domain, ty, proto, td.cred(), td, Some(name))?;
+                let so = Socket::new(domain, ty, proto, td.cred(), td, name)?;
 
                 let ty = if domain == 1 {
                     VFileType::IpcSocket(so)
@@ -199,7 +199,11 @@ impl NetManager {
             budget,
         )?;
 
-        info!("Opened a socket with name = {name} at fd {fd}.");
+        if let Some(name) = name {
+            info!("Opened a socket with name = {name} at fd {fd}.");
+        } else {
+            info!("Opened a socket at fd {fd}.");
+        }
 
         Ok(fd.into())
     }
