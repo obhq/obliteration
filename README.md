@@ -153,8 +153,13 @@ Just follow how Qt is written (e.g. coding style, etc.). Always prefers Qt class
 
 The application consists of 2 binaries:
 
-1. Main application. This is what users will see when they launch Obliteration. Its entry point is inside `src/main.cpp`.
-2. Emulator kernel. This is where emulation takes place. Its entry point is inside `src/kernel/src/main.rs`.
+#### Frontend
+
+This is what users will see when they launch Obliteration. Its entry point is inside `src/main.cpp`.
+
+#### Kernel
+
+This is where emulation takes place. Its entry point is inside `src/kernel/src/main.rs`.
 
 ### Debugging the kernel
 
