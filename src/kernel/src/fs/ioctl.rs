@@ -151,9 +151,9 @@ commands! {
         FIOSEEKHOLE(&mut i64) = 0xC0086662,
 
         /// Unkown rng command
-        RNG1 = 0x40445301,
+        RNG1(&mut Unknown68) = 0x40445301,
         /// Unkown rng command
-        RNG2 = 0x40445302,
+        RNG2(&mut Unknown68) = 0x40445302,
 
         /// Become controlling terminal.
         TIOCSCTTY = 0x20007461,
@@ -164,6 +164,7 @@ type Unknown2 = Unknown<2>;
 type Unknown8 = Unknown<8>;
 type Unknown16 = Unknown<16>;
 type Unknown36 = Unknown<36>;
+type Unknown68 = Unknown<68>;
 
 /// A dummy type to be used as a placeholder for unknown data.
 #[derive(Debug)]
