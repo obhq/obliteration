@@ -1,6 +1,6 @@
 use crate::budget::BudgetType;
 use crate::errno::{Errno, EFAULT, EINVAL};
-use crate::fs::{IoVec, VFileFlags, VFileType};
+use crate::fs::{IoVec, VFile, VFileFlags, VFileType};
 use crate::{arnd, info};
 use crate::{
     process::VThread,
@@ -148,9 +148,8 @@ impl NetManager {
                     VFileType::Socket(so)
                 };
 
-                Ok(ty)
+                Ok(VFile::new(ty, VFileFlags::READ | VFileFlags::WRITE))
             },
-            VFileFlags::WRITE | VFileFlags::READ,
             budget,
         )?;
 
@@ -191,9 +190,8 @@ impl NetManager {
                     VFileType::Socket(so)
                 };
 
-                Ok(ty)
+                Ok(VFile::new(ty, VFileFlags::READ | VFileFlags::WRITE))
             },
-            VFileFlags::WRITE | VFileFlags::READ,
             budget,
         )?;
 

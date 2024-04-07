@@ -152,6 +152,8 @@ commands! {
         /// Unkown rng command
         RNG2 = 0x40445302,
 
+        BNISSYSTMPROC(&Unknown36) = 0x802450c9,
+
         /// Become controlling terminal.
         TIOCSCTTY = 0x20007461,
     }
@@ -160,6 +162,7 @@ commands! {
 type Unknown2 = Unknown<2>;
 type Unknown8 = Unknown<8>;
 type Unknown16 = Unknown<16>;
+type Unknown36 = Unknown<36>;
 
 /// A dummy type to be used as a placeholder for unknown data.
 #[derive(Debug)]

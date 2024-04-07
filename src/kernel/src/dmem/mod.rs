@@ -1,7 +1,8 @@
 use crate::dev::{Dmem, DmemContainer};
 use crate::errno::EINVAL;
 use crate::fs::{
-    make_dev, CharacterDevice, DriverFlags, Fs, MakeDevError, MakeDevFlags, Mode, VFile, VFileType,
+    make_dev, CharacterDevice, DriverFlags, Fs, MakeDevError, MakeDevFlags, Mode, VFile,
+    VFileFlags, VFileType,
 };
 use crate::info;
 use crate::process::VThread;
@@ -132,10 +133,12 @@ impl DmemManager {
 
         let bp = BlockPool::new();
 
+        let flags = VFileFlags::from_bits_retain(flags) | VFileFlags::WRITE;
+
         let fd = td
             .proc()
             .files()
-            .alloc(Arc::new(VFile::new(VFileType::Blockpool(bp))));
+            .alloc(Arc::new(VFile::new(VFileType::Blockpool(bp), flags)));
 
         Ok(fd.into())
     }

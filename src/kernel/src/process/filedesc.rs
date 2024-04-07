@@ -1,6 +1,6 @@
 use crate::budget::BudgetType;
 use crate::errno::{Errno, EBADF};
-use crate::fs::{VFile, VFileFlags, VFileType, Vnode};
+use crate::fs::{VFile, VFileFlags, Vnode};
 use crate::kqueue::KernelQueue;
 use gmtx::{Gutex, GutexGroup};
 use macros::Errno;
@@ -55,20 +55,40 @@ impl FileDesc {
     #[allow(unused_variables)] // TODO: remove when implementing; add budget argument
     pub fn alloc_with_budget<E: Errno>(
         &self,
-        constructor: impl FnOnce(i32) -> Result<VFileType, E>,
-        flags: VFileFlags,
-        budget: BudgetType,
+        constructor: impl FnOnce(i32) -> Result<VFile, E>,
+        _budget: BudgetType,
     ) -> Result<i32, FileAllocError<E>> {
-        todo!()
+        // TODO: check budget
+
+        self.alloc_without_budget(constructor)
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing;
     pub fn alloc_without_budget<E: Errno>(
         &self,
-        constructor: impl FnOnce(i32) -> Result<VFileType, E>,
-        flags: VFileFlags,
+        constructor: impl FnOnce(i32) -> Result<VFile, E>,
     ) -> Result<i32, FileAllocError<E>> {
-        todo!()
+        // TODO: Implement fdalloc.
+        let mut files = self.files.write();
+
+        for i in 0..=(i32::MAX) as usize {
+            if i == files.len() {
+                let file = constructor(i as i32).map_err(FileAllocError::Inner)?;
+
+                files.push(Some(Arc::new(file)));
+            } else if files[i].is_none() {
+                let file = constructor(i as i32).map_err(FileAllocError::Inner)?;
+
+                files[i] = Some(Arc::new(file));
+            } else {
+                continue;
+            }
+
+            return Ok(i as i32);
+        }
+
+        // This should never happen.
+        panic!("Too many files has been opened.");
     }
 
     /// See `finstall` on the PS4 for a reference.

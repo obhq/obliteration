@@ -82,21 +82,18 @@ pub enum BudgetType {
     FdIpcSocket = 11,
 }
 
-#[allow(dead_code)]
 #[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProcType {
-    BigApp,
-    MiniApp,
-    System, // TODO: Verify this.
+    BigApp = 0,
+    #[allow(unused)]
+    MiniApp = 1,
+    #[allow(unused)]
+    System = 2, // TODO: Verify this.
 }
 
 impl Into<u32> for ProcType {
     fn into(self) -> u32 {
-        match self {
-            ProcType::BigApp => 0,
-            ProcType::MiniApp => 1,
-            ProcType::System => 2,
-        }
+        self as u32
     }
 }

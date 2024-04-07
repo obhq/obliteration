@@ -38,9 +38,11 @@ impl KernelQueueManager {
 
                 filedesc.insert_kqueue(kq.clone());
 
-                Ok(VFileType::KernelQueue(kq))
+                Ok(VFile::new(
+                    VFileType::KernelQueue(kq),
+                    VFileFlags::READ | VFileFlags::WRITE,
+                ))
             },
-            VFileFlags::READ | VFileFlags::WRITE,
             BudgetType::FdEqueue,
         )?;
 
