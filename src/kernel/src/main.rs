@@ -15,7 +15,7 @@ use crate::log::{print, LOGGER};
 use crate::namedobj::NamedObjManager;
 use crate::net::NetManager;
 use crate::osem::OsemManager;
-use crate::process::{VProc, VProcInitError, VThread};
+use crate::process::{ProcManager, VProc, VProcInitError, VThread};
 use crate::regmgr::RegMgr;
 use crate::rtld::{ExecError, LoadFlags, ModuleFlags, RuntimeLinker};
 use crate::shm::SharedMemoryManager;
@@ -115,11 +115,9 @@ fn run() -> Result<(), KernelError> {
 
     path.push("param.sfo");
 
-    // Open param.sfo.
-    let param = File::open(&path).map_err(KernelError::FailedToOpenGameParam)?;
-
     // Load param.sfo.
-    let param = Arc::new(Param::read(param)?);
+    let param = File::open(&path).map_err(KernelError::FailedToOpenGameParam)?;
+    let param = Arc::new(Param::read(param).map_err(KernelError::FailedToReadGameParam)?);
 
     // Get auth info for the process.
     let auth =
@@ -366,6 +364,7 @@ fn run() -> Result<(), KernelError> {
     NamedObjManager::new(&mut syscalls);
     OsemManager::new(&mut syscalls);
     UmtxManager::new(&mut syscalls);
+    ProcManager::new(&mut syscalls);
 
     // Initialize runtime linker.
     let ee = NativeEngine::new();
@@ -448,8 +447,6 @@ fn run() -> Result<(), KernelError> {
     if app.file_info().is_none() {
         todo!("statically linked eboot.bin");
     }
-
-    // TODO: Setup hypervisor.
 
     // Get entry point.
     let boot = ld.kernel().unwrap();
@@ -588,7 +585,7 @@ enum KernelError {
     FailedToOpenGameParam(#[source] std::io::Error),
 
     #[error("couldn't read param.sfo ")]
-    FailedToReadGameParam(#[from] param::ReadError),
+    FailedToReadGameParam(#[source] param::ReadError),
 
     #[error("{0} has an invalid title identifier")]
     InvalidTitleId(PathBuf),
