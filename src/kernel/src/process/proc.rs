@@ -1,6 +1,6 @@
 use super::{
-    AppInfo, Binaries, CpuLevel, CpuWhich, FileDesc, Limits, LoadLimitError, ResourceLimit,
-    ResourceType, SignalActs, VProcGroup, VSession, VThread, NEXT_ID,
+    AppInfo, Binaries, CpuLevel, CpuWhich, FileDesc, Limits, ResourceLimit, ResourceType,
+    SignalActs, SpawnError, VProcGroup, VSession, VThread, NEXT_ID,
 };
 use crate::budget::ProcType;
 use crate::dev::DmemContainer;
@@ -17,7 +17,7 @@ use crate::signal::{SigChldFlags, Signal};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::sysent::ProcAbi;
 use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
-use crate::vm::{MemoryManagerError, Vm};
+use crate::vm::Vm;
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use macros::Errno;
@@ -61,7 +61,7 @@ pub struct VProc {
 }
 
 impl VProc {
-    pub fn new(
+    pub(super) fn new(
         auth: AuthInfo,
         budget_id: usize,
         budget_ptype: ProcType,
@@ -69,7 +69,7 @@ impl VProc {
         root: Arc<Vnode>,
         system_path: impl Into<String>,
         mut sys: Syscalls,
-    ) -> Result<Arc<Self>, VProcInitError> {
+    ) -> Result<Arc<Self>, SpawnError> {
         let cred = if auth.caps.is_system() {
             // TODO: The groups will be copied from the parent process, which is SceSysCore.
             Ucred::new(Uid::ROOT, Uid::ROOT, vec![Gid::ROOT], auth)
@@ -876,16 +876,6 @@ bitflags! {
         const HAS_SCE_PROGRAM_ATTRIBUTE = 0x40;
         const IS_DEBUGGABLE_PROCESS = 0x80;
     }
-}
-
-/// Represents an error when [`VProc`] construction is failed.
-#[derive(Debug, Error)]
-pub enum VProcInitError {
-    #[error("failed to load limits")]
-    FailedToLoadLimits(#[from] LoadLimitError),
-
-    #[error("virtual memory initialization failed")]
-    VmInitFailed(#[from] MemoryManagerError),
 }
 
 #[derive(Debug, Error, Errno)]
