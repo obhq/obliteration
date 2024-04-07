@@ -117,6 +117,8 @@ impl DmemManager {
         let dmem_container = td.proc().dmem_container_mut();
         let current_container = *dmem_container;
 
+        info!("Getting dmem container");
+
         if dmem_id != -1 {
             todo!()
         }
@@ -139,6 +141,8 @@ impl DmemManager {
             .proc()
             .files()
             .alloc(Arc::new(VFile::new(VFileType::Blockpool(bp), flags)));
+
+        info!("Opened a blockpool at fd = {fd}");
 
         Ok(fd.into())
     }
