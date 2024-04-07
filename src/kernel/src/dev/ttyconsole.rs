@@ -92,7 +92,7 @@ impl Tty {
 
         match cmd {
             // TODO: implement this properly
-            IoCmd::TIOCSCTTY => return Ok(()),
+            IoCmd::TIOCSCTTY => todo!(),
             _ => todo!(),
         }
     }

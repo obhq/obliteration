@@ -169,8 +169,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     }
 
     fn revoke(&self, vn: &Arc<Vnode>, _flags: RevokeFlags) -> Result<(), Box<dyn Errno>> {
-        // TODO: Implement this.
-        Ok(())
+        todo!()
     }
 
     fn read(
