@@ -722,6 +722,8 @@ impl VProc {
     fn sys_get_proc_type_info(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let info = unsafe { &mut *Into::<*mut ProcTypeInfo>::into(i.args[0]) };
 
+        info!("Getting process type information.");
+
         if info.len != size_of::<ProcTypeInfo>() {
             return Err(SysErr::Raw(EINVAL));
         }
