@@ -150,10 +150,10 @@ commands! {
         /// Seek hole.
         FIOSEEKHOLE(&mut i64) = 0xC0086662,
 
-        /// Unkown rng command
-        RNG1(&mut Unknown68) = 0x40445301,
-        /// Unkown rng command
-        RNG2(&mut Unknown68) = 0x40445302,
+        /// Get genuine random
+        RNGGETGENUINE(&mut Unknown68) = 0x40445301,
+        /// Fips186Prng
+        RNGFIPS(&mut Unknown68) = 0x40445302,
 
         /// Become controlling terminal.
         TIOCSCTTY = 0x20007461,
