@@ -93,6 +93,9 @@ commands! {
         /// sceKernelMemoryPoolGetBlockStats
         BPOOLSTATS(&mut BlockpoolStats) = 0x4010A802,
 
+        /// An unkown bnet command, called from libSceNet
+        BNETUNK(&Unknown36) = 0x802450c9,
+
         /// Get media size in bytes.
         DIOCGMEDIASIZE(&mut i64) = 0x40086418,
 
@@ -151,8 +154,6 @@ commands! {
         RNG1 = 0x40445301,
         /// Unkown rng command
         RNG2 = 0x40445302,
-
-        BNISSYSTMPROC(&Unknown36) = 0x802450c9,
 
         /// Become controlling terminal.
         TIOCSCTTY = 0x20007461,
