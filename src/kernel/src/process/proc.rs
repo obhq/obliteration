@@ -1,3 +1,7 @@
+use super::{
+    AppInfo, Binaries, CpuLevel, CpuWhich, FileDesc, Limits, LoadLimitError, ResourceLimit,
+    ResourceType, SignalActs, VProcGroup, VSession, VThread, NEXT_ID,
+};
 use crate::budget::ProcType;
 use crate::dev::DmemContainer;
 use crate::errno::Errno;
@@ -25,29 +29,9 @@ use std::mem::zeroed;
 use std::num::NonZeroI32;
 use std::ptr::null;
 use std::ptr::null_mut;
-use std::sync::atomic::{AtomicI32, AtomicPtr, Ordering};
+use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::{Arc, OnceLock};
 use thiserror::Error;
-
-pub use self::appinfo::*;
-pub use self::binary::*;
-pub use self::cpuset::*;
-pub use self::filedesc::*;
-pub use self::group::*;
-pub use self::rlimit::*;
-pub use self::session::*;
-pub use self::signal::*;
-pub use self::thread::*;
-
-mod appinfo;
-mod binary;
-mod cpuset;
-mod filedesc;
-mod group;
-mod rlimit;
-mod session;
-mod signal;
-mod thread;
 
 /// An implementation of `proc` structure.
 ///
@@ -143,6 +127,10 @@ impl VProc {
 
     pub fn id(&self) -> NonZeroI32 {
         self.id
+    }
+
+    pub fn threads_mut(&self) -> GutexWriteGuard<Vec<Arc<VThread>>> {
+        self.threads.write()
     }
 
     pub fn cred(&self) -> &Arc<Ucred> {
@@ -413,7 +401,7 @@ impl VProc {
                 flag &= !SigChldFlags::PS_NOCLDSTOP;
             }
 
-            if !flags.intersects(SignalFlags::SA_NOCLDWAIT) || self.id == PID1 {
+            if !flags.intersects(SignalFlags::SA_NOCLDWAIT) || self.id.get() == 1 {
                 flag &= !SigChldFlags::PS_NOCLDWAIT;
             } else {
                 flag |= SigChldFlags::PS_NOCLDWAIT;
@@ -902,6 +890,3 @@ pub enum VProcInitError {
 
 #[derive(Debug, Error, Errno)]
 pub enum CreateThreadError {}
-
-static NEXT_ID: AtomicI32 = AtomicI32::new(123);
-const PID1: NonZeroI32 = unsafe { NonZeroI32::new_unchecked(1) };

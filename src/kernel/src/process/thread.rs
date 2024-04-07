@@ -128,7 +128,7 @@ impl VThread {
         let running = Running(td.clone());
         // Lock the list before spawn the thread to prevent race condition if the new thread run
         // too fast and found out they is not in our list.
-        let mut threads = proc.threads.write();
+        let mut threads = proc.threads_mut();
         let raw = llt::spawn(stack, stack_size, move || {
             // This closure must not have any variables that need to be dropped on the stack. The
             // reason is because this thread will be exited without returning from the routine. That
@@ -178,7 +178,7 @@ struct Running(Arc<VThread>);
 
 impl Drop for Running {
     fn drop(&mut self) {
-        let mut threads = self.0.proc.threads.write();
+        let mut threads = self.0.proc.threads_mut();
         let index = threads.iter().position(|td| td.id == self.0.id).unwrap();
 
         threads.remove(index);
