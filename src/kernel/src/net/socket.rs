@@ -33,7 +33,7 @@ impl Socket {
         td: &VThread,
         name: Option<&str>,
     ) -> Result<Arc<Self>, SocketCreateError> {
-        todo!("socreate")
+        todo!()
     }
 
     fn options(&self) -> SocketOptions {
