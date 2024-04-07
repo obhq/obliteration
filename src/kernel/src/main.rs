@@ -1,7 +1,7 @@
 use crate::arch::MachDep;
 use crate::budget::{Budget, BudgetManager, ProcType};
 use crate::dev::{
-    DebugManager, DebugManagerInitError, DipswInitError, DipswManager, TtyManager,
+    DebugManager, DebugManagerInitError, DipswInitError, DipswManager, DmemContainer, TtyManager,
     TtyManagerInitError,
 };
 use crate::dmem::{DmemManager, DmemManagerInitError};
@@ -15,7 +15,7 @@ use crate::log::{print, LOGGER};
 use crate::namedobj::NamedObjManager;
 use crate::net::NetManager;
 use crate::osem::OsemManager;
-use crate::process::{ProcManager, VProc, VProcInitError, VThread};
+use crate::process::{ProcManager, VThread};
 use crate::regmgr::RegMgr;
 use crate::rtld::{ExecError, LoadFlags, ModuleFlags, RuntimeLinker};
 use crate::shm::SharedMemoryManager;
@@ -364,7 +364,7 @@ fn run() -> Result<(), KernelError> {
     NamedObjManager::new(&mut syscalls);
     OsemManager::new(&mut syscalls);
     UmtxManager::new(&mut syscalls);
-    ProcManager::new(&mut syscalls);
+    let pmgr = ProcManager::new(&mut syscalls);
 
     // Initialize runtime linker.
     let ee = NativeEngine::new();
@@ -373,16 +373,17 @@ fn run() -> Result<(), KernelError> {
     // TODO: Get correct budget name from the PS4.
     let budget_id = budget.create(Budget::new("big app", ProcType::BigApp));
     let proc_root = fs.lookup(proc_root, true, None).unwrap();
-
-    let proc = VProc::new(
-        auth,
-        budget_id,
-        ProcType::BigApp,
-        dev::DmemContainer::One, // See sys_budget_set on the PS4.
-        proc_root,
-        system_component,
-        syscalls,
-    )?;
+    let proc = pmgr
+        .spawn(
+            auth,
+            budget_id,
+            ProcType::BigApp,
+            DmemContainer::One, // See sys_budget_set on the PS4.
+            proc_root,
+            system_component,
+            syscalls,
+        )
+        .map_err(KernelError::CreateProcessFailed)?;
 
     info!(
         "Application stack: {:p}:{:p}",
@@ -611,8 +612,8 @@ enum KernelError {
     #[error("dmem manager initialization failed")]
     DmemManagerInitFailes(#[from] DmemManagerInitError),
 
-    #[error("virtual process initialization failed")]
-    VProcInitFailed(#[from] VProcInitError),
+    #[error("couldn't create application process")]
+    CreateProcessFailed(#[source] self::process::SpawnError),
 
     #[error("couldn't execute {0}")]
     ExecFailed(&'static VPath, #[source] ExecError),
