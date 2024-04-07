@@ -84,6 +84,8 @@ impl NetManager {
         let buf: *mut u8 = i.args[2].into();
         let buflen: u32 = i.args[3].try_into().unwrap();
 
+        info!("Netcontrol called with op = {op}.");
+
         let buf = if buf.is_null() {
             None
         } else {
@@ -153,6 +155,8 @@ impl NetManager {
             budget,
         )?;
 
+        info!("Opened a socket at fd {fd}.");
+
         Ok(fd.into())
     }
 
@@ -194,6 +198,8 @@ impl NetManager {
             },
             budget,
         )?;
+
+        info!("Opened a socket(ex) at fd {fd}.");
 
         Ok(fd.into())
     }
