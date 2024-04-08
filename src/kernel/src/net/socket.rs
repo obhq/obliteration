@@ -50,7 +50,7 @@ impl Socket {
 
         socket
             .backend
-            .attach(&socket, Some(td))
+            .attach(&socket, td)
             .map_err(SocketCreateError::AttachError)?;
 
         Ok(socket)

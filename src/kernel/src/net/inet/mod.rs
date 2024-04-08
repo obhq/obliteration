@@ -10,16 +10,16 @@ pub(super) enum InetProtocol {
 }
 
 impl SocketBackend for InetProtocol {
-    fn attach(&self, socket: &Arc<Socket>, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
+    fn attach(&self, _: &Arc<Socket>, _: &VThread) -> Result<(), Box<dyn Errno>> {
         //TODO: properly implement this.
         Ok(())
     }
 
     fn control(
         &self,
-        socket: &Arc<Socket>,
+        _: &Arc<Socket>,
         cmd: IoCmd,
-        td: Option<&VThread>,
+        _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         match self {
             Self::UdpP2P => match cmd {

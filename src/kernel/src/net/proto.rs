@@ -8,7 +8,7 @@ use std::sync::Arc;
 /// and therefore it is impossible to fully predict the correct implementation. In the future, this struct might end up containing functions from the
 /// `protosw` struct as well.
 pub(super) trait SocketBackend {
-    fn attach(&self, socket: &Arc<Socket>, td: Option<&VThread>) -> Result<(), Box<dyn Errno>>;
+    fn attach(&self, socket: &Arc<Socket>, td: &VThread) -> Result<(), Box<dyn Errno>>;
 
     // TODO: a ifnet argument might have to be added in the future
     fn control(
@@ -25,7 +25,7 @@ pub(super) enum Protocol {
 }
 
 impl SocketBackend for Protocol {
-    fn attach(&self, socket: &Arc<Socket>, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
+    fn attach(&self, socket: &Arc<Socket>, td: &VThread) -> Result<(), Box<dyn Errno>> {
         match self {
             Self::Inet(protocol) => protocol.attach(socket, td),
         }
