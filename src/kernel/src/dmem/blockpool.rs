@@ -1,25 +1,23 @@
 use crate::errno::Errno;
 use crate::fs::{DefaultFileBackendError, FileBackend, IoCmd, PollEvents, Stat, VFile};
 use crate::process::VThread;
-use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct BlockPool {}
 
 impl BlockPool {
-    pub fn new() -> Arc<Self> {
-        Arc::new(Self {})
+    pub fn new() -> Self {
+        Self {}
     }
 }
 
 impl FileBackend for BlockPool {
+    fn is_seekable(&self) -> bool {
+        todo!()
+    }
+
     #[allow(unused_variables)] // TODO: remove when implementing
-    fn ioctl(
-        self: &Arc<Self>,
-        file: &VFile,
-        cmd: IoCmd,
-        td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    fn ioctl(&self, file: &VFile, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
         match cmd {
             IoCmd::BPOOLEXPAND(args) => todo!(),
             IoCmd::BPOOLSTATS(out) => todo!(),
@@ -28,11 +26,11 @@ impl FileBackend for BlockPool {
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
-    fn poll(self: &Arc<Self>, file: &VFile, events: PollEvents, td: &VThread) -> PollEvents {
+    fn poll(&self, file: &VFile, events: PollEvents, td: &VThread) -> PollEvents {
         todo!()
     }
 
-    fn stat(self: &Arc<Self>, _: &VFile, _: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
+    fn stat(&self, _: &VFile, _: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
         let mut stat = Stat::zeroed();
 
         stat.block_size = 0x10000;

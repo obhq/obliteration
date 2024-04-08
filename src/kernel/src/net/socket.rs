@@ -1,14 +1,12 @@
 use super::proto::{Protocol, SocketBackend};
 use super::{GetOptError, SetOptError, SockAddr, SockOpt};
+use crate::errno::{Errno, EPROTONOSUPPORT};
 use crate::fs::{
-    DefaultFileBackendError, FileBackend, IoCmd, PollEvents, Stat, TruncateLength, Uio, UioMut,
-    VFile,
+    DefaultFileBackendError, FileBackend, IoCmd, IoLen, IoVec, IoVecMut, PollEvents, Stat,
+    TruncateLength, VFile,
 };
+use crate::process::VThread;
 use crate::ucred::Ucred;
-use crate::{
-    errno::{Errno, EPROTONOSUPPORT},
-    process::VThread,
-};
 use macros::Errno;
 use std::num::NonZeroI32;
 use std::sync::Arc;
@@ -63,13 +61,13 @@ impl Socket {
 
     /// See `sosend` on the PS4 for a reference.
     #[allow(unused)] // TODO: remove when used
-    fn send(&self, buf: &mut Uio, td: Option<&VThread>) -> Result<usize, SendError> {
+    fn send(&self, buf: &[IoVec], td: Option<&VThread>) -> Result<usize, SendError> {
         todo!()
     }
 
     /// See `soreceive` on the PS4 for a reference.
     #[allow(unused)] // TODO: remove when used
-    fn receive(&self, buf: &mut UioMut, td: Option<&VThread>) -> Result<usize, ReceiveError> {
+    fn receive(&self, buf: &mut [IoVecMut], td: Option<&VThread>) -> Result<usize, ReceiveError> {
         todo!()
     }
 
@@ -97,35 +95,36 @@ impl Socket {
 }
 
 impl FileBackend for Socket {
+    fn is_seekable(&self) -> bool {
+        todo!()
+    }
+
     #[allow(unused_variables)] // TODO: remove when implementing
     /// See soo_read on the PS4 for a reference.
     fn read(
-        self: &Arc<Self>,
+        &self,
         _: &VFile,
-        buf: &mut UioMut,
+        off: u64,
+        buf: &mut [IoVecMut],
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<IoLen, Box<dyn Errno>> {
         todo!()
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
     /// See soo_write on the PS4 for a reference.
     fn write(
-        self: &Arc<Self>,
+        &self,
         _: &VFile,
-        buf: &mut Uio,
+        off: u64,
+        buf: &[IoVec],
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<IoLen, Box<dyn Errno>> {
         todo!()
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
-    fn ioctl(
-        self: &Arc<Self>,
-        file: &VFile,
-        cmd: IoCmd,
-        td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    fn ioctl(&self, file: &VFile, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
         match cmd {
             IoCmd::FIONBIO(_) => todo!("socket ioctl with FIONBIO"),
             IoCmd::FIOASYNC(_) => todo!("socket ioctl with FIOASYNC"),
@@ -137,22 +136,22 @@ impl FileBackend for Socket {
             IoCmd::SIOCSPGRP(_) => todo!("socket ioctl with SIOCSPGRP"),
             IoCmd::SIOCGPGRP(_) => todo!("socket ioctl with SIOCGPGRP"),
             IoCmd::SIOCATMARK(_) => todo!("socket ioctl with SIOCATMARK"),
-            _ => self.backend.control(self, cmd, td),
+            _ => self.backend.control(todo!(), cmd, td),
         }
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
-    fn poll(self: &Arc<Self>, file: &VFile, events: PollEvents, td: &VThread) -> PollEvents {
+    fn poll(&self, file: &VFile, events: PollEvents, td: &VThread) -> PollEvents {
         todo!()
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
-    fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
+    fn stat(&self, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
         todo!()
     }
 
     fn truncate(
-        self: &Arc<Self>,
+        &self,
         _: &VFile,
         _: TruncateLength,
         _: Option<&VThread>,

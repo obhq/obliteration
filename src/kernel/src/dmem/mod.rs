@@ -137,10 +137,12 @@ impl DmemManager {
 
         let flags = VFileFlags::from_bits_retain(flags) | VFileFlags::WRITE;
 
-        let fd = td
-            .proc()
-            .files()
-            .alloc(Arc::new(VFile::new(VFileType::Blockpool(bp), flags)));
+        let fd = td.proc().files().alloc(Arc::new(VFile::new(
+            VFileType::Blockpool,
+            flags,
+            None,
+            Box::new(bp),
+        )));
 
         info!("Opened a blockpool at fd = {fd}");
 

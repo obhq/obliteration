@@ -1,4 +1,4 @@
-use crate::fs::UioMut;
+use crate::fs::{IoLen, IoVecMut};
 use std::collections::HashMap;
 use std::io::Error;
 use std::mem::zeroed;
@@ -46,6 +46,7 @@ impl HostFile {
         };
         use windows_sys::Win32::Storage::FileSystem::{
             FILE_READ_ATTRIBUTES, FILE_READ_EA, FILE_SHARE_READ, FILE_SHARE_WRITE,
+            FILE_WRITE_ATTRIBUTES, FILE_WRITE_EA,
         };
         use windows_sys::Win32::System::Kernel::OBJ_CASE_INSENSITIVE;
 
@@ -78,14 +79,14 @@ impl HostFile {
         let err = unsafe {
             NtCreateFile(
                 &mut handle,
-                FILE_READ_ATTRIBUTES | FILE_READ_EA,
+                Self::directory_access_flags(),
                 &mut attr,
                 &mut status,
                 null_mut(),
                 0,
-                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                0,
                 FILE_OPEN,
-                FILE_DIRECTORY_FILE,
+                Self::directory_options(),
                 null_mut(),
                 0,
             )
@@ -207,10 +208,12 @@ impl HostFile {
     fn raw_mkdir(parent: RawFile, name: &str, _mode: u32) -> Result<RawFile, Error> {
         use std::mem::size_of;
         use std::ptr::null_mut;
+        use windows_sys::Wdk::Storage::FileSystem::FILE_CREATE;
         use windows_sys::Wdk::{
             Foundation::OBJECT_ATTRIBUTES,
-            Storage::FileSystem::{NtCreateFile, FILE_DIRECTORY_FILE, FILE_OPEN},
+            Storage::FileSystem::{NtCreateFile, FILE_DIRECTORY_FILE},
         };
+        use windows_sys::Win32::Storage::FileSystem::{DELETE, SYNCHRONIZE};
         use windows_sys::Win32::{
             Foundation::{RtlNtStatusToDosError, STATUS_SUCCESS, UNICODE_STRING},
             Storage::FileSystem::{
@@ -245,19 +248,14 @@ impl HostFile {
         let error = unsafe {
             NtCreateFile(
                 &mut handle,
-                FILE_READ_ATTRIBUTES
-                    | FILE_READ_EA
-                    | FILE_WRITE_ATTRIBUTES
-                    | FILE_WRITE_EA
-                    | FILE_LIST_DIRECTORY
-                    | FILE_TRAVERSE,
+                DELETE | Self::directory_access_flags(),
                 &mut attr,
                 &mut status,
                 null_mut(),
                 FILE_ATTRIBUTE_DIRECTORY,
-                FILE_SHARE_READ | FILE_SHARE_WRITE,
-                FILE_OPEN,
-                FILE_DIRECTORY_FILE,
+                0,
+                FILE_CREATE,
+                Self::directory_options(),
                 null_mut(),
                 0,
             )
@@ -273,90 +271,59 @@ impl HostFile {
         }
     }
 
-    #[cfg(unix)]
-    pub(super) fn read(&self, buf: &mut UioMut) -> Result<(), Error> {
-        use libc::pread;
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    pub fn read(&self, off: u64, buf: &mut [IoVecMut]) -> Result<IoLen, Error> {
+        use libc::preadv;
 
-        buf.write_with::<Error>(|iov, mut offset| {
-            let nbytes = if let Ok(nbytes) = iov.len().try_into() {
-                nbytes
-            } else {
-                todo!()
-            };
+        // Our iovec implementation has the same layout as iovec on Linux and macOS so we can pass
+        // it directly to preadv.
+        let vecs = buf.as_ptr().cast();
+        let off = off.try_into().unwrap();
+        let read = unsafe { preadv(self.raw, vecs, buf.len().try_into().unwrap(), off) };
 
-            let nread = unsafe { pread(self.raw, iov.ptr().cast(), nbytes, offset) };
-
-            match nread {
-                0.. if nread == nbytes as isize => Ok(nread as u64),
-                0.. => todo!(),
-                _ => todo!(),
-            }
-        })?;
-
-        Ok(())
+        if read < 0 {
+            Err(Error::last_os_error())
+        } else {
+            Ok(IoLen::from_usize(read as _).unwrap())
+        }
     }
 
     #[cfg(windows)]
-    pub(super) fn read(&self, buf: &mut UioMut) -> Result<(), Error> {
-        use std::ptr::null_mut;
-        use windows_sys::{
-            Wdk::Storage::FileSystem::NtReadFile,
-            Win32::{
-                Foundation::{STATUS_END_OF_FILE, STATUS_PENDING},
-                System::{
-                    Threading::{WaitForSingleObject, INFINITE},
-                    IO::{IO_STATUS_BLOCK, IO_STATUS_BLOCK_0},
-                },
-            },
+    pub fn read(&self, off: u64, buf: &mut [IoVecMut]) -> Result<IoLen, Error> {
+        use std::ptr::null;
+        use windows_sys::Wdk::Storage::FileSystem::NtReadFile;
+        use windows_sys::Win32::Foundation::{
+            RtlNtStatusToDosError, STATUS_END_OF_FILE, STATUS_SUCCESS,
         };
 
-        buf.write_with::<Error>(|iov, mut offset| {
-            let nbytes = if let Ok(nbytes) = iov.len().try_into() {
-                nbytes
-            } else {
-                todo!()
-            };
-
-            let mut io_status = IO_STATUS_BLOCK {
-                Anonymous: IO_STATUS_BLOCK_0 {
-                    Status: STATUS_PENDING,
-                },
-                Information: 0,
-            };
-
-            let status = unsafe {
-                NtReadFile(
-                    self.raw,
-                    0,
-                    None,
-                    null_mut(),
-                    &mut io_status,
-                    iov.ptr().cast(),
-                    nbytes,
-                    &mut offset,
-                    null_mut(),
-                )
-            };
-
-            let status = if status == STATUS_PENDING {
-                unsafe {
-                    WaitForSingleObject(self.raw, INFINITE);
-                    io_status.Anonymous.Status
-                }
-            } else {
-                status
-            };
-
-            match status {
-                STATUS_PENDING => todo!(),
-                STATUS_END_OF_FILE => todo!(),
-                0.. if io_status.Information == nbytes as usize => Ok(io_status.Information as u64),
-                0.. => todo!(),
-                _ => todo!(),
+        // Windows does not provide preadv equivalent so we can fill only the first IoVecMut to
+        // achieve atomic read.
+        let off = off.try_into().unwrap();
+        let buf = &mut buf[0];
+        let mut status = unsafe { zeroed() };
+        let read = match unsafe {
+            NtReadFile(
+                self.raw,
+                0,
+                None,
+                null(),
+                &mut status,
+                buf.as_mut_ptr().cast(),
+                buf.len().get().try_into().unwrap(),
+                &off,
+                null(),
+            )
+        } {
+            STATUS_SUCCESS => status.Information,
+            STATUS_END_OF_FILE => 0,
+            v => {
+                return Err(Error::from_raw_os_error(unsafe {
+                    RtlNtStatusToDosError(v).try_into().unwrap()
+                }));
             }
-        })?;
+        };
 
-        Ok(())
+        Ok(IoLen::from_usize(read).unwrap())
     }
 
     #[cfg(unix)]
@@ -432,13 +399,16 @@ impl HostFile {
         use windows_sys::Wdk::Foundation::OBJECT_ATTRIBUTES;
         use windows_sys::Wdk::Storage::FileSystem::{
             NtCreateFile, FILE_DIRECTORY_FILE, FILE_NON_DIRECTORY_FILE, FILE_OPEN,
-            FILE_RANDOM_ACCESS,
+            FILE_RANDOM_ACCESS, FILE_SYNCHRONOUS_IO_NONALERT,
         };
         use windows_sys::Win32::Foundation::{
-            RtlNtStatusToDosError, STATUS_SUCCESS, UNICODE_STRING,
+            RtlNtStatusToDosError, STATUS_FILE_IS_A_DIRECTORY, STATUS_NOT_A_DIRECTORY,
+            STATUS_SUCCESS, UNICODE_STRING,
         };
         use windows_sys::Win32::Storage::FileSystem::{
-            DELETE, FILE_GENERIC_READ, FILE_GENERIC_WRITE,
+            DELETE, FILE_APPEND_DATA, FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES, FILE_READ_DATA,
+            FILE_READ_EA, FILE_TRAVERSE, FILE_WRITE_ATTRIBUTES, FILE_WRITE_DATA, FILE_WRITE_EA,
+            SYNCHRONIZE,
         };
 
         // Encode name.
@@ -463,50 +433,90 @@ impl HostFile {
         // Try open as a file first.
         let mut handle = 0;
         let mut status = unsafe { zeroed() };
-        let err = unsafe {
-            NtCreateFile(
-                &mut handle,
-                DELETE | FILE_GENERIC_READ | FILE_GENERIC_WRITE,
-                &mut attr,
-                &mut status,
-                null_mut(),
-                0,
-                0,
-                FILE_OPEN,
-                FILE_NON_DIRECTORY_FILE | FILE_RANDOM_ACCESS,
-                null_mut(),
-                0,
-            )
-        };
 
-        if err == STATUS_SUCCESS {
-            Ok(handle)
-        } else {
-            // Try open as a directory.
+        loop {
             let err = unsafe {
                 NtCreateFile(
                     &mut handle,
-                    DELETE | FILE_GENERIC_READ | FILE_GENERIC_WRITE,
+                    DELETE
+                        | FILE_READ_DATA
+                        | FILE_READ_ATTRIBUTES
+                        | FILE_READ_EA
+                        | FILE_WRITE_DATA
+                        | FILE_WRITE_ATTRIBUTES
+                        | FILE_WRITE_EA
+                        | FILE_APPEND_DATA
+                        | SYNCHRONIZE,
                     &mut attr,
                     &mut status,
                     null_mut(),
                     0,
                     0,
                     FILE_OPEN,
-                    FILE_DIRECTORY_FILE,
+                    FILE_NON_DIRECTORY_FILE | FILE_RANDOM_ACCESS | FILE_SYNCHRONOUS_IO_NONALERT,
                     null_mut(),
                     0,
                 )
             };
 
             if err == STATUS_SUCCESS {
-                Ok(handle)
-            } else {
-                Err(Error::from_raw_os_error(unsafe {
+                break Ok(handle);
+            } else if err != STATUS_FILE_IS_A_DIRECTORY {
+                break Err(Error::from_raw_os_error(unsafe {
                     RtlNtStatusToDosError(err).try_into().unwrap()
-                }))
+                }));
+            }
+
+            // Try open as a directory.
+            let err = unsafe {
+                NtCreateFile(
+                    &mut handle,
+                    DELETE | Self::directory_access_flags(),
+                    &mut attr,
+                    &mut status,
+                    null_mut(),
+                    0,
+                    0,
+                    FILE_OPEN,
+                    Self::directory_options(),
+                    null_mut(),
+                    0,
+                )
+            };
+
+            if err == STATUS_SUCCESS {
+                break Ok(handle);
+            } else if err != STATUS_NOT_A_DIRECTORY {
+                break Err(Error::from_raw_os_error(unsafe {
+                    RtlNtStatusToDosError(err).try_into().unwrap()
+                }));
             }
         }
+    }
+
+    #[cfg(windows)]
+    fn directory_access_flags() -> u32 {
+        use windows_sys::Win32::Storage::FileSystem::{
+            FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES, FILE_READ_EA, FILE_TRAVERSE,
+            FILE_WRITE_ATTRIBUTES, FILE_WRITE_EA, SYNCHRONIZE,
+        };
+
+        FILE_READ_ATTRIBUTES
+            | FILE_READ_EA
+            | FILE_WRITE_ATTRIBUTES
+            | FILE_WRITE_EA
+            | SYNCHRONIZE
+            | FILE_LIST_DIRECTORY
+            | FILE_TRAVERSE
+    }
+
+    #[cfg(windows)]
+    fn directory_options() -> u32 {
+        use windows_sys::Wdk::Storage::FileSystem::{
+            FILE_DIRECTORY_FILE, FILE_SYNCHRONOUS_IO_NONALERT,
+        };
+
+        FILE_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT
     }
 }
 

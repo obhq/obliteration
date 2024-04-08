@@ -1254,8 +1254,8 @@ pub enum MapError {
     #[error("cannot allocate {0} bytes")]
     MemoryAllocationFailed(usize, #[source] MmapError),
 
-    #[error("cannot protect {1:#018x} bytes starting at {0:p} with {2}")]
-    ProtectMemoryFailed(*const u8, usize, Protections, #[source] MemoryUpdateError),
+    #[error("cannot protect {1:#018x} bytes starting at {0:#x} with {2}")]
+    ProtectMemoryFailed(usize, usize, Protections, #[source] MemoryUpdateError),
 
     #[error("cannot unprotect segment {0}")]
     UnprotectSegmentFailed(usize, #[source] UnprotectSegmentError),

@@ -119,11 +119,11 @@ impl FileDesc {
     pub fn get_socket(&self, fd: i32) -> Result<Arc<Socket>, GetSocketError> {
         let file = self.get(fd)?;
 
-        let (VFileType::Socket(so) | VFileType::IpcSocket(so)) = file.ty() else {
+        let (VFileType::Socket | VFileType::IpcSocket) = file.ty() else {
             return Err(GetSocketError::NotSocket);
         };
 
-        Ok(so.clone())
+        Ok(todo!())
     }
 
     /// See `fget` on the PS4 for a reference.

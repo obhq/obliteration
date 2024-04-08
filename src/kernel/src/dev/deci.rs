@@ -1,9 +1,10 @@
+use crate::errno::Errno;
 use crate::fs::{
-    make_dev, CharacterDevice, DeviceDriver, DriverFlags, MakeDevError, MakeDevFlags, Mode,
-    OpenFlags, Uio, UioMut,
+    make_dev, CharacterDevice, DeviceDriver, DriverFlags, IoLen, IoVec, IoVecMut, MakeDevError,
+    MakeDevFlags, Mode, OpenFlags,
 };
+use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
-use crate::{errno::Errno, process::VThread};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -32,9 +33,10 @@ impl DeviceDriver for Driver {
     fn read(
         &self,
         dev: &Arc<CharacterDevice>,
-        data: &mut UioMut,
+        off: Option<u64>,
+        buf: &mut [IoVecMut],
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<IoLen, Box<dyn Errno>> {
         todo!()
     }
 
@@ -42,9 +44,10 @@ impl DeviceDriver for Driver {
     fn write(
         &self,
         dev: &Arc<CharacterDevice>,
-        data: &mut Uio,
+        off: Option<u64>,
+        buf: &[IoVec],
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<IoLen, Box<dyn Errno>> {
         todo!()
     }
 }

@@ -165,7 +165,7 @@ impl Memory {
             let prot = seg.prot;
 
             if let Err(e) = proc.vm().mprotect(addr, len, prot) {
-                return Err(MapError::ProtectMemoryFailed(addr, len, prot, e));
+                return Err(MapError::ProtectMemoryFailed(addr as _, len, prot, e));
             }
         }
 
@@ -293,7 +293,9 @@ impl Memory {
         let prot = Protections::CPU_READ | Protections::CPU_WRITE;
 
         if let Err(e) = self.proc.vm().mprotect(ptr, len, prot) {
-            return Err(UnprotectSegmentError::MprotectFailed(ptr, len, prot, e));
+            return Err(UnprotectSegmentError::MprotectFailed(
+                ptr as _, len, prot, e,
+            ));
         }
 
         Ok(UnprotectedSegment {
@@ -326,7 +328,7 @@ impl Memory {
         let prot = Protections::CPU_READ | Protections::CPU_WRITE;
 
         if let Err(e) = self.proc.vm().mprotect(self.ptr, end, prot) {
-            return Err(UnprotectError::MprotectFailed(self.ptr, end, prot, e));
+            return Err(UnprotectError::MprotectFailed(self.ptr as _, end, prot, e));
         }
 
         Ok(UnprotectedMemory {
@@ -506,13 +508,13 @@ pub enum CodeWorkspaceError {
 /// Represents an error when [`Memory::unprotect_segment()`] is failed.
 #[derive(Debug, Error)]
 pub enum UnprotectSegmentError {
-    #[error("cannot protect {1:#018x} bytes starting at {0:p} with {2}")]
-    MprotectFailed(*const u8, usize, Protections, #[source] MemoryUpdateError),
+    #[error("cannot protect {1:#018x} bytes starting at {0:#x} with {2}")]
+    MprotectFailed(usize, usize, Protections, #[source] MemoryUpdateError),
 }
 
 /// Represents an error when [`Memory::unprotect()`] is failed.
 #[derive(Debug, Error)]
 pub enum UnprotectError {
-    #[error("cannot protect {1:#018x} bytes starting at {0:p} with {2}")]
-    MprotectFailed(*const u8, usize, Protections, #[source] MemoryUpdateError),
+    #[error("cannot protect {1:#018x} bytes starting at {0:#x} with {2}")]
+    MprotectFailed(usize, usize, Protections, #[source] MemoryUpdateError),
 }

@@ -1,8 +1,6 @@
-use crate::{
-    errno::Errno,
-    fs::{CharacterDevice, DeviceDriver, IoCmd, UioMut},
-    process::VThread,
-};
+use crate::errno::Errno;
+use crate::fs::{CharacterDevice, DeviceDriver, IoCmd, IoLen, IoVecMut};
+use crate::process::VThread;
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -13,9 +11,10 @@ impl DeviceDriver for Hid {
     fn read(
         &self,
         dev: &Arc<CharacterDevice>,
-        data: &mut UioMut,
+        off: Option<u64>,
+        buf: &mut [IoVecMut],
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<IoLen, Box<dyn Errno>> {
         todo!()
     }
 
