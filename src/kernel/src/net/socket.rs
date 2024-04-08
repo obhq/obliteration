@@ -44,7 +44,7 @@ impl Socket {
 
         let socket = Arc::new(Socket {
             cred: Arc::clone(cred),
-            name: name.map(|s| s.to_string().into_boxed_str()),
+            name: name.map(|s| s.into()),
             backend,
         });
 
