@@ -42,6 +42,7 @@ impl DeviceDriver for Rng {
     }
 }
 
+#[repr(C)]
 #[derive(Debug)]
 pub struct RngInput {
     /// This field seems to be treated as an error
