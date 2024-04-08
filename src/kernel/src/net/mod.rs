@@ -111,7 +111,7 @@ impl NetManager {
         match buf.as_mut() {
             Some(buf) => match op {
                 // bnet_get_secure_seed
-                0x14 if buf.len() > 3 => arnd::rand_bytes(&mut buf[..4]),
+                0x14 if buflen > 3 => arnd::rand_bytes(&mut buf[..4]),
                 _ => todo!("netcontrol with op = {op}"),
             },
             None => todo!("netcontrol with buf = null"),
