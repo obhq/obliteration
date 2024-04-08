@@ -81,19 +81,26 @@ impl NetManager {
     fn sys_netcontrol(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let op: i32 = i.args[1].try_into().unwrap();
-        let buf: *mut u8 = i.args[2].into();
+        let ptr: *mut u8 = i.args[2].into();
         let buflen: u32 = i.args[3].try_into().unwrap();
 
         info!("Netcontrol called with op = {op}.");
 
-        let buf = if buf.is_null() {
+        let mut buf = if ptr.is_null() {
             None
         } else {
             if buflen > 160 {
                 return Err(SysErr::Raw(EINVAL));
             }
 
-            Some(unsafe { core::slice::from_raw_parts_mut(buf, buflen as usize) })
+            let buf = Box::new([0u8; 160]);
+
+            if op & 0x30000000 != 0 {
+                // TODO: copyin
+                todo!()
+            }
+
+            Some(buf)
         };
 
         let _ = if fd < 0 {
@@ -101,7 +108,7 @@ impl NetManager {
             todo!()
         };
 
-        match buf {
+        match buf.as_mut() {
             Some(buf) => match op {
                 // bnet_get_secure_seed
                 0x14 if buf.len() > 3 => arnd::rand_bytes(&mut buf[..4]),
@@ -112,6 +119,12 @@ impl NetManager {
 
         if fd > -1 {
             todo!()
+        }
+
+        if let Some(buf) = buf {
+            if op & 0x30000000 != 0x20000000 {
+                unsafe { std::ptr::copy_nonoverlapping(buf.as_ptr(), ptr, buflen as usize) };
+            }
         }
 
         Ok(SysOut::ZERO)
