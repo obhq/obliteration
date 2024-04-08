@@ -93,6 +93,9 @@ commands! {
         /// sceKernelMemoryPoolGetBlockStats
         BPOOLSTATS(&mut BlockpoolStats) = 0x4010A802,
 
+        /// An unkown bnet command, called from libSceNet
+        BNETUNK(&Unknown36) = 0x802450c9,
+
         /// Get media size in bytes.
         DIOCGMEDIASIZE(&mut i64) = 0x40086418,
 
@@ -147,10 +150,10 @@ commands! {
         /// Seek hole.
         FIOSEEKHOLE(&mut i64) = 0xC0086662,
 
-        /// Unkown rng command
-        RNG1 = 0x40445301,
-        /// Unkown rng command
-        RNG2 = 0x40445302,
+        /// Get genuine random
+        RNGGETGENUINE(&mut Unknown68) = 0x40445301,
+        /// Fips186Prng
+        RNGFIPS(&mut Unknown68) = 0x40445302,
 
         /// Become controlling terminal.
         TIOCSCTTY = 0x20007461,
@@ -160,6 +163,8 @@ commands! {
 type Unknown2 = Unknown<2>;
 type Unknown8 = Unknown<8>;
 type Unknown16 = Unknown<16>;
+type Unknown36 = Unknown<36>;
+type Unknown68 = Unknown<68>;
 
 /// A dummy type to be used as a placeholder for unknown data.
 #[derive(Debug)]

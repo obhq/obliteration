@@ -1,7 +1,7 @@
 use crate::budget::BudgetType;
 use crate::errno::{Errno, EFAULT, EINVAL};
-use crate::fs::{IoVec, VFileFlags, VFileType};
-use crate::info;
+use crate::fs::{IoVec, VFile, VFileFlags, VFileType};
+use crate::{arnd, info};
 use crate::{
     process::VThread,
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
@@ -30,6 +30,7 @@ impl NetManager {
         sys.register(28, &net, Self::sys_sendmsg);
         sys.register(29, &net, Self::sys_recvfrom);
         sys.register(97, &net, Self::sys_socket);
+        sys.register(99, &net, Self::sys_netcontrol);
         sys.register(105, &net, Self::sys_setsockopt);
         sys.register(113, &net, Self::sys_socketex);
         sys.register(114, &net, Self::sys_socketclose);
@@ -77,6 +78,58 @@ impl NetManager {
         todo!()
     }
 
+    fn sys_netcontrol(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let op: i32 = i.args[1].try_into().unwrap();
+        let ptr: *mut u8 = i.args[2].into();
+        let buflen: u32 = i.args[3].try_into().unwrap();
+
+        info!("Netcontrol called with op = {op}.");
+
+        let mut buf = if ptr.is_null() {
+            None
+        } else {
+            if buflen > 160 {
+                return Err(SysErr::Raw(EINVAL));
+            }
+
+            let buf = Box::new([0u8; 160]);
+
+            if op & 0x30000000 != 0 {
+                // TODO: copyin
+                todo!()
+            }
+
+            Some(buf)
+        };
+
+        let _ = if fd < 0 {
+        } else {
+            todo!()
+        };
+
+        match buf.as_mut() {
+            Some(buf) => match op {
+                // bnet_get_secure_seed
+                0x14 if buflen > 3 => arnd::rand_bytes(&mut buf[..4]),
+                _ => todo!("netcontrol with op = {op}"),
+            },
+            None => todo!("netcontrol with buf = null"),
+        }
+
+        if fd > -1 {
+            todo!()
+        }
+
+        if let Some(buf) = buf {
+            if op & 0x30000000 != 0x20000000 {
+                unsafe { std::ptr::copy_nonoverlapping(buf.as_ptr(), ptr, buflen as usize) };
+            }
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
     fn sys_setsockopt(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let level: i32 = i.args[1].try_into().unwrap();
@@ -110,11 +163,12 @@ impl NetManager {
                     VFileType::Socket(so)
                 };
 
-                Ok(ty)
+                Ok(VFile::new(ty, VFileFlags::READ | VFileFlags::WRITE))
             },
-            VFileFlags::WRITE | VFileFlags::READ,
             budget,
         )?;
+
+        info!("Opened a socket at fd {fd}.");
 
         Ok(fd.into())
     }
@@ -153,11 +207,16 @@ impl NetManager {
                     VFileType::Socket(so)
                 };
 
-                Ok(ty)
+                Ok(VFile::new(ty, VFileFlags::READ | VFileFlags::WRITE))
             },
-            VFileFlags::WRITE | VFileFlags::READ,
             budget,
         )?;
+
+        if let Some(name) = name {
+            info!("Opened a socket with name = {name} at fd {fd}.");
+        } else {
+            info!("Opened a socket at fd {fd}.");
+        }
 
         Ok(fd.into())
     }

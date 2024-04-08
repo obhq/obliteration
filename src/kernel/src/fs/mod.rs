@@ -170,7 +170,12 @@ impl Fs {
         self.root.read().clone()
     }
 
-    pub fn open(&self, path: impl AsRef<VPath>, td: Option<&VThread>) -> Result<VFile, OpenError> {
+    pub fn open(
+        &self,
+        path: impl AsRef<VPath>,
+        flags: VFileFlags,
+        td: Option<&VThread>,
+    ) -> Result<VFile, OpenError> {
         let vnode = self
             .lookup(path, true, td)
             .map_err(OpenError::LookupFailed)?;
@@ -181,7 +186,7 @@ impl Fs {
             VFileType::Vnode(vnode.clone())
         };
 
-        Ok(VFile::new(ty))
+        Ok(VFile::new(ty, flags))
     }
 
     pub fn lookup(
@@ -389,7 +394,6 @@ impl Fs {
         // Get arguments.
         let path = unsafe { i.args[0].to_path()?.unwrap() };
         let flags: OpenFlags = i.args[1].try_into().unwrap();
-        let mode: u32 = i.args[2].try_into().unwrap();
 
         // Check flags.
         if flags.intersects(OpenFlags::O_EXEC) {
@@ -409,16 +413,17 @@ impl Fs {
             todo!("open({path}) with flags & O_EXLOCK");
         } else if flags.intersects(OpenFlags::O_TRUNC) {
             todo!("open({path}) with flags & O_TRUNC");
-        } else if mode != 0 {
-            todo!("open({path}, {flags}) with mode = {mode}");
+        } else {
+            let mode: u32 = i.args[2].try_into().unwrap();
+            if mode != 0 {
+                todo!("open({path}, {flags}) with mode = {mode}");
+            }
         }
 
         info!("Opening {path} with flags = {flags}.");
 
         // Lookup file.
-        let mut file = self.open(path, Some(td))?;
-
-        *file.flags_mut() = flags.into_fflags();
+        let mut file = self.open(path, flags.into_fflags(), Some(td))?;
 
         // Install to descriptor table.
         let fd = td.proc().files().alloc(Arc::new(file));

@@ -1,7 +1,8 @@
 use crate::dev::{Dmem, DmemContainer};
 use crate::errno::EINVAL;
 use crate::fs::{
-    make_dev, CharacterDevice, DriverFlags, Fs, MakeDevError, MakeDevFlags, Mode, VFile, VFileType,
+    make_dev, CharacterDevice, DriverFlags, Fs, MakeDevError, MakeDevFlags, Mode, VFile,
+    VFileFlags, VFileType,
 };
 use crate::info;
 use crate::process::VThread;
@@ -116,6 +117,8 @@ impl DmemManager {
         let dmem_container = td.proc().dmem_container_mut();
         let current_container = *dmem_container;
 
+        info!("Getting dmem container");
+
         if dmem_id != -1 {
             todo!()
         }
@@ -132,10 +135,14 @@ impl DmemManager {
 
         let bp = BlockPool::new();
 
+        let flags = VFileFlags::from_bits_retain(flags) | VFileFlags::WRITE;
+
         let fd = td
             .proc()
             .files()
-            .alloc(Arc::new(VFile::new(VFileType::Blockpool(bp))));
+            .alloc(Arc::new(VFile::new(VFileType::Blockpool(bp), flags)));
+
+        info!("Opened a blockpool at fd = {fd}");
 
         Ok(fd.into())
     }

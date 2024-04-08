@@ -49,17 +49,14 @@ impl SharedMemoryManager {
         #[allow(unused_variables)] // TODO: remove when implementing.
         let mode = mode & filedesc.cmask() & 0o7777;
 
-        let fd = filedesc.alloc_without_budget::<Infallible>(
-            |_| match path {
-                ShmPath::Anon => {
-                    todo!()
-                }
-                ShmPath::Path(_) => {
-                    todo!()
-                }
-            },
-            (flags & OpenFlags::O_ACCMODE).into_fflags(),
-        )?;
+        let fd = filedesc.alloc_without_budget::<Infallible>(|_| match path {
+            ShmPath::Anon => {
+                todo!()
+            }
+            ShmPath::Path(_) => {
+                todo!()
+            }
+        })?;
 
         Ok(fd.into())
     }

@@ -24,22 +24,18 @@ pub struct VFile {
 }
 
 impl VFile {
-    pub fn new(ty: VFileType) -> Self {
+    pub fn new(ty: VFileType, flags: VFileFlags) -> Self {
         let gg = GutexGroup::new();
 
         Self {
             ty,
-            flags: VFileFlags::empty(),
+            flags,
             offset: gg.spawn(0),
         }
     }
 
     pub fn flags(&self) -> VFileFlags {
         self.flags
-    }
-
-    pub fn flags_mut(&mut self) -> &mut VFileFlags {
-        &mut self.flags
     }
 
     /// Checking if this returns `Some` is equivalent to when FreeBSD and the PS4 check

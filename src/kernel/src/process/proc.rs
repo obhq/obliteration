@@ -8,6 +8,7 @@ use crate::errno::Errno;
 use crate::errno::{EINVAL, ERANGE, ESRCH};
 use crate::fs::Vnode;
 use crate::idt::Idt;
+use crate::info;
 use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::sysent::ProcAbi;
@@ -481,6 +482,8 @@ impl VProc {
 
     fn sys_get_proc_type_info(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let info = unsafe { &mut *Into::<*mut ProcTypeInfo>::into(i.args[0]) };
+
+        info!("Getting process type information.");
 
         if info.len != size_of::<ProcTypeInfo>() {
             return Err(SysErr::Raw(EINVAL));

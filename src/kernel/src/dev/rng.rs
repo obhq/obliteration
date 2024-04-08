@@ -16,8 +16,8 @@ impl DeviceDriver for Rng {
         _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         match cmd {
-            IoCmd::RNG1 => todo!(),
-            IoCmd::RNG2 => todo!(),
+            IoCmd::RNGGETGENUINE(_) => todo!(),
+            IoCmd::RNGFIPS(_) => todo!(),
             _ => todo!(), // ENOIOCTL,
         }
     }
