@@ -1,5 +1,5 @@
 use super::FioDeviceGetNameArg;
-use crate::dev::{DmemAllocate, DmemAvailable, DmemQuery, PrtAperture};
+use crate::dev::{DmemAllocate, DmemAvailable, DmemQuery, PrtAperture, RngInput};
 use crate::dmem::{BlockpoolExpandArgs, BlockpoolStats};
 use crate::errno::ENOTTY;
 use crate::syscalls::SysErr;
@@ -113,6 +113,8 @@ commands! {
         DIPSWWRITE(&Unknown16) = 0x80108805,
         /// sceKernelCheckDipsw
         DIPSWCHECK2(&mut i32) = 0x40048806,
+        /// Unkown dipsw command
+        DIPSWUNK(&mut i32) = 0x40048807,
 
         /// Get total size?
         DMEMTOTAL(&mut usize) = 0x4008800a,
@@ -145,15 +147,36 @@ commands! {
         FIOGETLBA(&mut i32) = 0x40046679,
         /// Get dev. name
         FIODGNAME(&FioDeviceGetNameArg) = 0x80106678,
+        /// Get # bytes (yet) to write
+        FIONWRITE(&mut i32) = 0x40046677,
+        /// Get space in send queue
+        FIONSPACE(&mut i32) = 0x40046676,
         /// Seek data.
         FIOSEEKDATA(&mut i64) = 0xC0086661,
         /// Seek hole.
         FIOSEEKHOLE(&mut i64) = 0xC0086662,
 
+        GC12(&mut Unknown16) = 0xc010810b,
+        /// Currently unknown gc command
+        GC16(&mut Unknown12) = 0xc00c8110,
+        /// Currently unknown gc command
+        GC25(&mut Unknown132) = 0xc0848119,
+        /// Currently unknown gc command
+        GC27(&mut Unknown8) = 0xc008811b,
+        /// Currently unknown gc command
+        GC31(&mut i32) = 0xc004811f,
+
         /// Get genuine random
-        RNGGETGENUINE(&mut Unknown68) = 0x40445301,
+        RNGGETGENUINE(&mut RngInput) = 0x40445301,
         /// Fips186Prng
-        RNGFIPS(&mut Unknown68) = 0x40445302,
+        RNGFIPS(&mut RngInput) = 0x40445302,
+
+        /// Cat oob mark?
+        SIOCATMARK(&mut i32) = 0x40047307,
+        /// Set process group
+        SIOCSPGRP(&i32) = 0x80047308,
+        /// Get process group
+        SIOCGPGRP(&mut i32) = 0x40047309,
 
         /// Become controlling terminal.
         TIOCSCTTY = 0x20007461,
@@ -162,9 +185,11 @@ commands! {
 
 type Unknown2 = Unknown<2>;
 type Unknown8 = Unknown<8>;
+type Unknown12 = Unknown<12>;
 type Unknown16 = Unknown<16>;
 type Unknown36 = Unknown<36>;
 type Unknown68 = Unknown<68>;
+type Unknown132 = Unknown<132>;
 
 /// A dummy type to be used as a placeholder for unknown data.
 #[derive(Debug)]

@@ -313,7 +313,7 @@ impl Devices {
 /// Represents an error when [`make_dev()`] is failed.
 #[derive(Debug, Error, Errno)]
 pub enum MakeDevError {
-    #[error("the device with the same name already exist")]
+    #[error("the device with the same name already exists")]
     #[errno(EEXIST)]
     AlreadyExist(String),
 }
