@@ -34,7 +34,7 @@ impl Socket {
         let backend = match domain {
             2 => {
                 let protocol = match (ty, proto) {
-                    (6, None) => InetProtocol::UdpP2P,
+                    (6, None) => InetProtocol::UdpPeerToPeer,
                     _ => todo!(),
                 };
                 Protocol::Inet(protocol)
