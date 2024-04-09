@@ -63,12 +63,12 @@ impl DeviceDriver for Camera {
 }
 
 pub struct CameraManager {
-    dipsw: Arc<CharacterDevice>,
+    camera: Arc<CharacterDevice>,
 }
 
 impl CameraManager {
     pub fn new() -> Result<Arc<Self>, CameraInitError> {
-        let dipsw = make_dev(
+        let camera = make_dev(
             Camera::new(),
             DriverFlags::from_bits_retain(0x80000004),
             0,
@@ -80,7 +80,7 @@ impl CameraManager {
             MakeDevFlags::MAKEDEV_ETERNAL,
         )?;
 
-        Ok(Arc::new(Self { dipsw }))
+        Ok(Arc::new(Self { camera }))
     }
 }
 

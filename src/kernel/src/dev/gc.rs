@@ -37,6 +37,8 @@ impl DeviceDriver for Gc {
         cmd: IoCmd,
         _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
+        return Ok(());
+
         match cmd {
             IoCmd::GC12(_) => todo!("GC12 ioctl"),
             IoCmd::GC16(_) => todo!("GC16 ioctl"),
@@ -49,7 +51,7 @@ impl DeviceDriver for Gc {
 }
 
 pub struct GcManager {
-    dipsw: Arc<CharacterDevice>,
+    gc: Arc<CharacterDevice>,
 }
 
 impl GcManager {
@@ -66,7 +68,7 @@ impl GcManager {
             MakeDevFlags::MAKEDEV_ETERNAL,
         )?;
 
-        Ok(Arc::new(Self { dipsw: gc }))
+        Ok(Arc::new(Self { gc }))
     }
 }
 
