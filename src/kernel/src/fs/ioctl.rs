@@ -188,7 +188,6 @@ type Unknown8 = Unknown<8>;
 type Unknown12 = Unknown<12>;
 type Unknown16 = Unknown<16>;
 type Unknown36 = Unknown<36>;
-type Unknown68 = Unknown<68>;
 type Unknown132 = Unknown<132>;
 
 /// A dummy type to be used as a placeholder for unknown data.
