@@ -37,8 +37,6 @@ impl DeviceDriver for Gc {
         cmd: IoCmd,
         _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        return Ok(());
-
         match cmd {
             IoCmd::GC12(_) => todo!("GC12 ioctl"),
             IoCmd::GC16(_) => todo!("GC16 ioctl"),
