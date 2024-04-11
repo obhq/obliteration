@@ -62,16 +62,19 @@ impl NamedObjManager {
     fn sys_mdbg_service(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get the mdbg arg
         let mdbg_type: i32 = i.args[0].try_into().unwrap();
-        if mdbg_type == 0x1 {
-            // Get arguments for namedobj creation
-            let name = unsafe { i.args[1].to_str(32) }?.ok_or(SysErr::Raw(EINVAL))?;
-            let data: usize = i.args[2].into();
-            let flags: u32 = i.args[3].try_into().unwrap();
 
-            self.namedobj_create(td, name, data, flags)
-        } else {
-            info!("mdbg_service with value {:?}", mdbg_type);
-            Ok(SysOut::ZERO)
+        match mdbg_type {
+            0x1 => {
+                // Get arguments for namedobj creation
+                let name = unsafe { i.args[1].to_str(32) }?.ok_or(SysErr::Raw(EINVAL))?;
+                let data: usize = i.args[2].into();
+                let flags: u32 = i.args[3].try_into().unwrap();
+
+                self.namedobj_create(td, name, data, flags)
+            }
+            _ => {
+                todo!("mdbg_service with value {:?}", mdbg_type);
+            }
         }
     }
 }
