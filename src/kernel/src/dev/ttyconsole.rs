@@ -131,8 +131,4 @@ pub enum TtyManagerInitError {
 
 /// Represents an error when [`Tty::ioctl`] fails to initialize.
 #[derive(Debug, Error, Errno)]
-pub enum TtyIoctlError {
-    #[error("process is not leader")]
-    #[errno(EPERM)]
-    ProcessNotLeader,
-}
+pub enum TtyIoctlError {}
