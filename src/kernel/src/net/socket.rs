@@ -17,7 +17,7 @@ use thiserror::Error;
 pub struct Socket {
     cred: Arc<Ucred>, // so_cred
     name: Option<Box<str>>,
-    backend: Protocol,
+    backend: Protocol, // so_proto + so_type
 }
 
 impl Socket {
@@ -31,6 +31,7 @@ impl Socket {
         td: &VThread,
         name: Option<&str>,
     ) -> Result<Arc<Self>, SocketCreateError> {
+        // TODO: implement prison_check_af
         let backend = match domain {
             2 => {
                 let protocol = match (ty, proto) {
