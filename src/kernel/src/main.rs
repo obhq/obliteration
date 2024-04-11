@@ -1,8 +1,8 @@
 use crate::arch::MachDep;
 use crate::budget::{Budget, BudgetManager, ProcType};
 use crate::dev::{
-    DebugManager, DebugManagerInitError, DipswInitError, DipswManager, DmemContainer, TtyManager,
-    TtyManagerInitError,
+    CameraManager, DebugManager, DebugManagerInitError, DipswInitError, DipswManager,
+    DmemContainer, GcManager, RngManager, TtyManager, TtyManagerInitError,
 };
 use crate::dmem::{DmemManager, DmemManagerInitError};
 use crate::ee::native::NativeEngine;
@@ -25,6 +25,7 @@ use crate::time::TimeManager;
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use crate::umtx::UmtxManager;
 use clap::Parser;
+use dev::{CameraInitError, GcInitError, RngInitError};
 use llt::{OsThread, SpawnError};
 use macros::vpath;
 use param::Param;
@@ -347,6 +348,12 @@ fn run() -> Result<(), KernelError> {
     let tty = TtyManager::new()?;
     #[allow(unused_variables)] // TODO: Remove this when someone uses dipsw.
     let dipsw = DipswManager::new()?;
+    #[allow(unused_variables)] // TODO: Remove this when someone uses gc.
+    let gc = GcManager::new()?;
+    #[allow(unused_variables)] // TODO: Remove this when someone uses camera.
+    let camera = CameraManager::new()?;
+    #[allow(unused_variables)] // TODO: Remove this when someone uses rng.
+    let rng = RngManager::new()?;
 
     // Initialize kernel components.
     #[allow(unused_variables)] // TODO: Remove this when someone uses debug.
@@ -609,8 +616,17 @@ enum KernelError {
     #[error("debug manager initialization failed")]
     DebugManagerInitFailed(#[from] DebugManagerInitError),
 
+    #[error("gc manager initialization failed")]
+    GcManagerInitFailed(#[from] GcInitError),
+
+    #[error("camera manager initialization failed")]
+    CameraManagerInitFailed(#[from] CameraInitError),
+
+    #[error("rng manager initialization failed")]
+    RngManagerInitFailed(#[from] RngInitError),
+
     #[error("dmem manager initialization failed")]
-    DmemManagerInitFailes(#[from] DmemManagerInitError),
+    DmemManagerInitFailed(#[from] DmemManagerInitError),
 
     #[error("couldn't create application process")]
     CreateProcessFailed(#[source] self::process::SpawnError),

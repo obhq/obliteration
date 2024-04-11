@@ -33,7 +33,7 @@ impl DeviceDriver for Dipsw {
         if !td.cred().is_system() {
             match cmd {
                 // TODO: properly implement this
-                IoCmd::DIPSWCHECK2(val) => *val = false as i32,
+                IoCmd::DIPSWCHECK2(val) | IoCmd::DIPSWUNK(val) => *val = false as i32,
                 _ => todo!(),
             }
         } else {
@@ -66,9 +66,9 @@ impl DipswManager {
     }
 }
 
-/// Represents an error when [`TtyManager`] fails to initialize.
+/// Represents an error when [`DipswManager`] fails to initialize.
 #[derive(Debug, Error)]
 pub enum DipswInitError {
     #[error("cannot create dipsw device")]
-    CreateConsoleFailed(#[from] MakeDevError),
+    CreateDipswFailed(#[from] MakeDevError),
 }

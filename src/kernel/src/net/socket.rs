@@ -1,4 +1,4 @@
-use super::{GetOptError, SetOptError, SockOpt};
+use super::{GetOptError, InetProtocol, Protocol, SetOptError, SockOpt, SocketBackend};
 use crate::fs::{
     DefaultFileBackendError, FileBackend, IoCmd, PollEvents, Stat, TruncateLength, Uio, UioMut,
     VFile,
@@ -8,7 +8,6 @@ use crate::{
     errno::{Errno, EPIPE},
     process::VThread,
 };
-use bitflags::bitflags;
 use macros::Errno;
 use std::num::NonZeroI32;
 use std::sync::Arc;
@@ -16,10 +15,9 @@ use thiserror::Error;
 
 #[derive(Debug)]
 pub struct Socket {
-    ty: i32,                // so_type
-    options: SocketOptions, // so_options
-    cred: Arc<Ucred>,       // so_cred
+    cred: Arc<Ucred>, // so_cred
     name: Option<Box<str>>,
+    backend: Protocol, // so_proto + so_type
 }
 
 impl Socket {
@@ -33,11 +31,30 @@ impl Socket {
         td: &VThread,
         name: Option<&str>,
     ) -> Result<Arc<Self>, SocketCreateError> {
-        todo!()
-    }
+        // TODO: implement prison_check_af
+        let backend = match domain {
+            2 => {
+                let protocol = match (ty, proto) {
+                    (6, None) => InetProtocol::UdpPeerToPeer,
+                    _ => todo!(),
+                };
+                Protocol::Inet(protocol)
+            }
+            _ => todo!(),
+        };
 
-    fn options(&self) -> SocketOptions {
-        self.options
+        let socket = Arc::new(Socket {
+            cred: Arc::clone(cred),
+            name: name.map(|s| s.into()),
+            backend,
+        });
+
+        socket
+            .backend
+            .attach(&socket, td)
+            .map_err(SocketCreateError::AttachError)?;
+
+        Ok(socket)
     }
 
     /// See `sosetopt` on the PS4 for a reference.
@@ -62,13 +79,6 @@ impl Socket {
     #[allow(unused_variables)] // TODO: remove when implementing
     fn receive(&self, buf: &mut UioMut, td: Option<&VThread>) -> Result<usize, ReceiveError> {
         todo!()
-    }
-}
-
-bitflags! {
-    #[derive(Debug, Clone, Copy)]
-    struct SocketOptions: i16 {
-        const NOSIGPIPE = 0x0800;
     }
 }
 
@@ -102,7 +112,19 @@ impl FileBackend for Socket {
         cmd: IoCmd,
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        todo!()
+        match cmd {
+            IoCmd::FIONBIO(_) => todo!("socket ioctl with FIONBIO"),
+            IoCmd::FIOASYNC(_) => todo!("socket ioctl with FIOASYNC"),
+            IoCmd::FIONREAD(_) => todo!("socket ioctl with FIONREAD"),
+            IoCmd::FIONWRITE(_) => todo!("socket ioctl with FIONWRITE"),
+            IoCmd::FIONSPACE(_) => todo!("socket ioctl with FIONSPACE"),
+            IoCmd::FIOSETOWN(_) => todo!("socket ioctl with FIOSETOWN"),
+            IoCmd::FIOGETOWN(_) => todo!("socket ioctl with FIOGETOWN"),
+            IoCmd::SIOCSPGRP(_) => todo!("socket ioctl with SIOCSPGRP"),
+            IoCmd::SIOCGPGRP(_) => todo!("socket ioctl with SIOCGPGRP"),
+            IoCmd::SIOCATMARK(_) => todo!("socket ioctl with SIOCATMARK"),
+            _ => self.backend.control(self, cmd, td),
+        }
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
@@ -126,7 +148,10 @@ impl FileBackend for Socket {
 }
 
 #[derive(Debug, Error, Errno)]
-pub enum SocketCreateError {}
+pub enum SocketCreateError {
+    #[error("couldn't attach socket")]
+    AttachError(#[source] Box<dyn Errno>),
+}
 
 #[derive(Debug, Error, Errno)]
 enum ReceiveError {}

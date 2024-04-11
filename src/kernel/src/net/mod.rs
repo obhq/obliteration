@@ -16,8 +16,12 @@ use std::{
 };
 use thiserror::Error;
 
+use self::inet::*;
+use self::proto::*;
 pub use self::socket::*;
 
+mod inet;
+mod proto;
 mod socket;
 
 pub struct NetManager {}
