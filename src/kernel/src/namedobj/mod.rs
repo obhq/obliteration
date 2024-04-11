@@ -74,6 +74,7 @@ impl NamedObjManager {
             Ok(SysOut::ZERO)
         }
     }
+}
 
 #[derive(Debug)]
 pub struct NamedObj {
