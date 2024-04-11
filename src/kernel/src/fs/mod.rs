@@ -375,6 +375,8 @@ impl Fs {
         let ptr: *mut u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
 
+        info!("Reading {len} bytes from fd {fd}.");
+
         let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
         todo!()
@@ -384,6 +386,8 @@ impl Fs {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *const u8 = i.args[1].into();
         let len: usize = i.args[2].into();
+
+        info!("Writing {len} bytes to fd {fd}.");
 
         let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
@@ -423,7 +427,7 @@ impl Fs {
         info!("Opening {path} with flags = {flags}.");
 
         // Lookup file.
-        let mut file = self.open(path, flags.into_fflags(), Some(td))?;
+        let file = self.open(path, flags.into_fflags(), Some(td))?;
 
         // Install to descriptor table.
         let fd = td.proc().files().alloc(Arc::new(file));
@@ -614,6 +618,8 @@ impl Fs {
         let len: usize = i.args[2].try_into().unwrap();
         let offset: i64 = i.args[3].into();
 
+        info!("Reading {len} bytes from fd {fd} at offset {offset}.");
+
         let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
         let uio = UioMut {
@@ -632,6 +638,8 @@ impl Fs {
         let ptr: *mut u8 = i.args[1].into();
         let len: usize = i.args[2].try_into().unwrap();
         let offset: i64 = i.args[3].into();
+
+        info!("Writing {len} bytes to fd {fd} at offset {offset}.");
 
         let iovec = unsafe { IoVec::try_from_raw_parts(ptr, len) }?;
 
@@ -754,6 +762,8 @@ impl Fs {
 
             whence.try_into()?
         };
+
+        info!("Seeking fd {fd} to offset {offset} with whence = {whence:?}.");
 
         let file = td.proc().files().get(fd)?;
 
@@ -972,6 +982,7 @@ enum At {
     Fd(i32),
 }
 
+#[derive(Debug)]
 pub enum Whence {
     Set = 0,     // SEEK_SET
     Current = 1, // SEEK_CUR
@@ -1016,6 +1027,7 @@ bitflags! {
     }
 }
 
+#[allow(unused)]
 pub struct TruncateLength(i64);
 
 impl TryFrom<i64> for TruncateLength {
