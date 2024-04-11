@@ -41,7 +41,7 @@ impl DeviceDriver for Gc {
             IoCmd::GC12(_) => todo!("GC12 ioctl"),
             IoCmd::GC16(_) => todo!("GC16 ioctl"),
             IoCmd::GC25(_) => todo!("GC25 ioctl"),
-            IoCmd::GC27(_) => todo!("GC32 ioctl"),
+            IoCmd::GC27(_) => todo!("GC27 ioctl"),
             IoCmd::GC31(_) => todo!("GC31 ioctl"),
             _ => todo!(),
         }
