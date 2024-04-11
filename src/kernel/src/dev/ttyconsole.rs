@@ -86,10 +86,8 @@ impl Tty {
         self.generic_ioctl(cmd, td)
     }
 
-    /// See `tty_ioctl` on the PS4 for a reference.
+    /// See `tty_generic_ioctl` on the PS4 for a reference.
     fn generic_ioctl(&self, cmd: IoCmd, _td: Option<&VThread>) -> Result<(), TtyIoctlError> {
-        // TODO: implement ttydevsw_ioctl
-
         match cmd {
             IoCmd::TIOCSCTTY => todo!(),
             _ => todo!(),
