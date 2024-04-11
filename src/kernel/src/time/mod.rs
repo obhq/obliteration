@@ -1,4 +1,4 @@
-use crate::errno::{Errno, EINVAL};
+use crate::errno::Errno;
 use crate::info;
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
@@ -41,6 +41,7 @@ impl TimeManager {
 
             clock.try_into()?
         };
+
         let timespec: *mut TimeSpec = i.args[1].into();
 
         info!("Getting clock time with clock_id = {clock:?}");
@@ -56,9 +57,8 @@ impl TimeManager {
 
     #[cfg(unix)]
     pub fn nanouptime() -> Result<TimeSpec, NanoUpTimeError> {
-        use std::mem::MaybeUninit;
-
         use libc::clock_gettime;
+        use std::mem::MaybeUninit;
 
         let mut ts = MaybeUninit::uninit();
 
