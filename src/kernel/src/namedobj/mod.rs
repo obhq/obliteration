@@ -18,7 +18,7 @@ impl NamedObjManager {
         namedobj
     }
 
-   fn namedobj_create(
+    fn namedobj_create(
         self: &Self,
         td: &VThread,
         name: &str,
