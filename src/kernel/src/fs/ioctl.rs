@@ -156,6 +156,7 @@ commands! {
         /// Seek hole.
         FIOSEEKHOLE(&mut i64) = 0xC0086662,
 
+        /// Currently unknown gc command
         GC12(&mut Unknown16) = 0xc010810b,
         /// Currently unknown gc command
         GC16(&mut Unknown12) = 0xc00c8110,

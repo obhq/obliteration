@@ -31,6 +31,7 @@ impl Socket {
         td: &VThread,
         name: Option<&str>,
     ) -> Result<Arc<Self>, SocketCreateError> {
+        // TODO: implement prison_check_af
         let backend = match domain {
             2 => {
                 let protocol = match (ty, proto) {

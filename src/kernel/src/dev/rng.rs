@@ -51,7 +51,7 @@ pub struct RngInput {
 }
 
 pub struct RngManager {
-    dipsw: Arc<CharacterDevice>,
+    rng: Arc<CharacterDevice>,
 }
 
 impl RngManager {
@@ -68,7 +68,7 @@ impl RngManager {
             MakeDevFlags::MAKEDEV_ETERNAL,
         )?;
 
-        Ok(Arc::new(Self { dipsw: rng }))
+        Ok(Arc::new(Self { rng }))
     }
 }
 
