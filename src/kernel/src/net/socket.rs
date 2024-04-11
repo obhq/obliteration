@@ -17,7 +17,7 @@ use thiserror::Error;
 pub struct Socket {
     cred: Arc<Ucred>, // so_cred
     name: Option<Box<str>>,
-    backend: Protocol,
+    backend: Protocol, // so_proto + so_type
 }
 
 impl Socket {
