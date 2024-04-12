@@ -60,7 +60,7 @@ impl TimeManager {
                 | ClockId::MONOTONIC_PRECISE => Self::nanouptime()?,
                 ClockId::UPTIME_FAST | ClockId::MONOTONIC_FAST => todo!(),
                 ClockId::REALTIME_FAST => todo!(),
-                ClockId::SECOND => todo!(),
+                ClockId::SECOND => Self::time_second()?,
                 ClockId::THREAD_CPUTIME_ID => todo!(),
                 ClockId::PROC_TIME => todo!(),
                 ClockId::EXT_NETWORK => todo!(),
@@ -152,50 +152,10 @@ impl TimeManager {
         })
     }
 
-    #[cfg(unix)]
-    pub fn time_second() -> Result<TimeSpec, SecondsError> {
-        use libc::clock_gettime;
-        use std::mem::MaybeUninit;
-
-        let mut ts = MaybeUninit::uninit();
-
-        let res = unsafe { clock_gettime(libc::CLOCK_MONOTONIC, ts.as_mut_ptr()) };
-
-        if res < 0 {
-            return Err(std::io::Error::last_os_error().into());
-        }
-
-        let ts = unsafe { ts.assume_init() };
-
+    pub fn time_second() -> Result<TimeSpec, NanoUpTimeError> {
         Ok(TimeSpec {
-            sec: ts.tv_sec,
             nsec: 0,
-        })
-    }
-
-    #[cfg(windows)]
-    pub fn time_second() -> Result<TimeSpec, SecondsError> {
-        use windows_sys::Win32::System::Performance::{
-            QueryPerformanceCounter, QueryPerformanceFrequency,
-        };
-
-        let mut counter = 0;
-        let mut frequency = 0;
-
-        unsafe {
-            if QueryPerformanceCounter(&mut counter) == 0 {
-                return Err(std::io::Error::last_os_error().into());
-            }
-            if QueryPerformanceFrequency(&mut frequency) == 0 {
-                return Err(std::io::Error::last_os_error().into());
-            }
-        }
-
-        let seconds = counter / frequency;
-
-        Ok(TimeSpec {
-            sec: seconds as i64,
-            nsec: 0,
+            ..Self::nanouptime()?
         })
     }
 }
@@ -356,20 +316,6 @@ pub enum NanoUpTimeError {
 }
 
 impl Errno for NanoUpTimeError {
-    fn errno(&self) -> NonZeroI32 {
-        match self {
-            Self::IoError(_) => todo!(),
-        }
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum SecondsError {
-    #[error("Failed to get time")]
-    IoError(#[from] std::io::Error),
-}
-
-impl Errno for SecondsError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::IoError(_) => todo!(),
