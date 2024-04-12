@@ -124,8 +124,79 @@ impl TimeManager {
     }
 
     #[cfg(windows)]
-    fn nanouptime() -> Result<TimeSpec, NanoUpTimeError> {
-        todo!()
+    pub fn nanouptime() -> Result<TimeSpec, NanoUpTimeError> {
+        use windows_sys::Win32::System::Performance::{
+            QueryPerformanceCounter, QueryPerformanceFrequency,
+        };
+
+        let mut counter = 0;
+        let mut frequency = 0;
+
+        unsafe {
+            if QueryPerformanceCounter(&mut counter) == 0 {
+                return Err(std::io::Error::last_os_error().into());
+            }
+            if QueryPerformanceFrequency(&mut frequency) == 0 {
+                return Err(std::io::Error::last_os_error().into());
+            }
+        }
+
+        // Convert the counter to nanoseconds (Ensure no overflow using leftover ticks.)
+        let seconds = counter / frequency;
+        let leftover_ticks = counter % frequency;
+        let nanoseconds = (leftover_ticks * 1_000_000_000) / frequency;
+
+        Ok(TimeSpec {
+            sec: seconds as i64,
+            nsec: nanoseconds as i64,
+        })
+    }
+
+    #[cfg(unix)]
+    pub fn time_second() -> Result<TimeSpec, SecondsError> {
+        use libc::clock_gettime;
+        use std::mem::MaybeUninit;
+
+        let mut ts = MaybeUninit::uninit();
+
+        let res = unsafe { clock_gettime(libc::CLOCK_MONOTONIC, ts.as_mut_ptr()) };
+
+        if res < 0 {
+            return Err(std::io::Error::last_os_error().into());
+        }
+
+        let ts = unsafe { ts.assume_init() };
+
+        Ok(TimeSpec {
+            sec: ts.tv_sec,
+            nsec: 0,
+        })
+    }
+
+    #[cfg(windows)]
+    pub fn time_second() -> Result<TimeSpec, SecondsError> {
+        use windows_sys::Win32::System::Performance::{
+            QueryPerformanceCounter, QueryPerformanceFrequency,
+        };
+
+        let mut counter = 0;
+        let mut frequency = 0;
+
+        unsafe {
+            if QueryPerformanceCounter(&mut counter) == 0 {
+                return Err(std::io::Error::last_os_error().into());
+            }
+            if QueryPerformanceFrequency(&mut frequency) == 0 {
+                return Err(std::io::Error::last_os_error().into());
+            }
+        }
+
+        let seconds = counter / frequency;
+
+        Ok(TimeSpec {
+            sec: seconds as i64,
+            nsec: 0,
+        })
     }
 }
 
@@ -175,6 +246,7 @@ impl TryFrom<i32> for ClockId {
             16 => Self::EXT_NETWORK,
             17 => Self::EXT_DEBUG_NETWORK,
             18 => Self::EXT_AD_NETWORK,
+            19 => Self::EXT_RAW_NETWORK,
             ..=-1 => Self(value),
             _ => return Err(SysErr::Raw(EINVAL)),
         };
@@ -284,6 +356,20 @@ pub enum NanoUpTimeError {
 }
 
 impl Errno for NanoUpTimeError {
+    fn errno(&self) -> NonZeroI32 {
+        match self {
+            Self::IoError(_) => todo!(),
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum SecondsError {
+    #[error("Failed to get time")]
+    IoError(#[from] std::io::Error),
+}
+
+impl Errno for SecondsError {
     fn errno(&self) -> NonZeroI32 {
         match self {
             Self::IoError(_) => todo!(),
