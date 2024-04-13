@@ -11,9 +11,9 @@ impl NamedObjManager {
     pub fn new(sys: &mut Syscalls) -> Arc<Self> {
         let namedobj = Arc::new(Self {});
 
-        sys.register(557, &Arc::clone(&namedobj), Self::sys_namedobj_create);
+        sys.register(557, &namedobj, Self::sys_namedobj_create);
 
-        sys.register(601, &Arc::clone(&namedobj), Self::sys_mdbg_service);
+        sys.register(601, &namedobj, Self::sys_mdbg_service);
 
         namedobj
     }
