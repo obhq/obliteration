@@ -627,8 +627,8 @@ impl Vm {
 
         let mut processed = 0;
 
-        let result = operations.iter().try_for_each(|batch_op| {
-            match batch_op.op.try_into()? {
+        let result = operations.iter().try_for_each(|arg| {
+            match arg.op.try_into()? {
                 BatchMapOp::MapDirect => {
                     if *td.proc().dmem_container() != DmemContainer::One
                     /* || td.proc().unk4 & 2 != 0 */
@@ -639,26 +639,23 @@ impl Vm {
                     }
 
                     self.mmap_dmem_internal(
-                        batch_op.addr,
-                        batch_op.len,
-                        batch_op.ty.try_into().unwrap(),
-                        batch_op.prot.try_into().unwrap(),
+                        arg.addr,
+                        arg.len,
+                        arg.ty.try_into().unwrap(),
+                        arg.prot.try_into().unwrap(),
                         flags,
-                        batch_op.offset,
+                        arg.offset,
                     )?;
                 }
                 BatchMapOp::MapFlexible => {
-                    if batch_op.addr & 0x3fff != 0
-                        || batch_op.len & 0x3fff != 0
-                        || batch_op.prot & 0xc8 != 0
-                    {
+                    if arg.addr & 0x3fff != 0 || arg.len & 0x3fff != 0 || arg.prot & 0xc8 != 0 {
                         return Err(SysErr::Raw(EINVAL));
                     }
 
                     self.mmap_internal(
-                        batch_op.addr,
-                        batch_op.len,
-                        batch_op.prot.try_into().unwrap(),
+                        arg.addr,
+                        arg.len,
+                        arg.prot.try_into().unwrap(),
                         flags.intersection(MappingFlags::MAP_ANON),
                         -1,
                         0,
@@ -667,11 +664,11 @@ impl Vm {
                 BatchMapOp::Protect => todo!(),
                 BatchMapOp::TypeProtect => todo!(),
                 BatchMapOp::Unmap => {
-                    if batch_op.addr & 0x3fff != 0 || batch_op.len & 0x3fff != 0 {
+                    if arg.addr & 0x3fff != 0 || arg.len & 0x3fff != 0 {
                         return Err(SysErr::Raw(EINVAL));
                     }
 
-                    self.munmap_internal(batch_op.addr, batch_op.len)?;
+                    self.munmap_internal(arg.addr, arg.len)?;
                 }
                 _ => todo!(),
             }
