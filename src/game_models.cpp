@@ -1,5 +1,6 @@
 #include "game_models.hpp"
 #include "path.hpp"
+#include <QFile>
 
 Game::Game(const QString &id, const QString &name, const QString &directory) :
     m_id(id),
@@ -18,8 +19,14 @@ QPixmap Game::icon() const
     auto dir = joinPath(m_directory, "sce_sys");
     auto path = joinPath(dir.c_str(), "icon0.png");
 
-    // Construct icon object.
-    QPixmap icon(path.c_str());
+    QPixmap icon;
+
+    if (QFile::exists(path.c_str())) {
+        icon.load(path.c_str());
+    } else {
+        // Load fallback icon if icon0 doesn't exist.
+        icon.load(":/resources/fallbackicon0.png");
+    }
 
     // For games with large icon sizes.
     if (icon.width() != 512 || icon.height() != 512) {
