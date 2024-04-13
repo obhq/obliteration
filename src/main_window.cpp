@@ -26,6 +26,7 @@
 #include <QPlainTextEdit>
 #include <QProgressDialog>
 #include <QResizeEvent>
+#include <QScrollBar>
 #include <QSettings>
 #include <QStyleHints>
 #include <QTabWidget>
@@ -33,7 +34,6 @@
 #include <QUrl>
 
 #include <filesystem>
-#include <qscrollbar.h>
 
 MainWindow::MainWindow() :
     m_tab(nullptr),
