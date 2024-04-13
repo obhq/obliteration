@@ -26,6 +26,7 @@
 #include <QPlainTextEdit>
 #include <QProgressDialog>
 #include <QResizeEvent>
+#include <QScrollBar>
 #include <QSettings>
 #include <QStyleHints>
 #include <QTabWidget>
@@ -111,6 +112,7 @@ MainWindow::MainWindow() :
     m_games->setModel(new GameListModel(this));
     m_games->setViewMode(QListView::IconMode);
     m_games->setWordWrap(true);
+    m_games->verticalScrollBar()->setSingleStep(20);
 
 
     connect(m_games, &QAbstractItemView::doubleClicked, this, &MainWindow::startGame);
