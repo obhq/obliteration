@@ -60,7 +60,7 @@ impl TimeManager {
                 | ClockId::MONOTONIC_PRECISE => Self::nanouptime()?,
                 ClockId::UPTIME_FAST | ClockId::MONOTONIC_FAST => todo!(),
                 ClockId::REALTIME_FAST => todo!(),
-                ClockId::SECOND => todo!(),
+                ClockId::SECOND => Self::time_second()?,
                 ClockId::THREAD_CPUTIME_ID => todo!(),
                 ClockId::PROC_TIME => todo!(),
                 ClockId::EXT_NETWORK => todo!(),
@@ -124,8 +124,39 @@ impl TimeManager {
     }
 
     #[cfg(windows)]
-    fn nanouptime() -> Result<TimeSpec, NanoUpTimeError> {
-        todo!()
+    pub fn nanouptime() -> Result<TimeSpec, NanoUpTimeError> {
+        use windows_sys::Win32::System::Performance::{
+            QueryPerformanceCounter, QueryPerformanceFrequency,
+        };
+
+        let mut counter = 0;
+        let mut frequency = 0;
+
+        unsafe {
+            if QueryPerformanceCounter(&mut counter) == 0 {
+                return Err(std::io::Error::last_os_error().into());
+            }
+            if QueryPerformanceFrequency(&mut frequency) == 0 {
+                return Err(std::io::Error::last_os_error().into());
+            }
+        }
+
+        // Convert the counter to nanoseconds (Ensure no overflow using leftover ticks.)
+        let seconds = counter / frequency;
+        let leftover_ticks = counter % frequency;
+        let nanoseconds = (leftover_ticks * 1_000_000_000) / frequency;
+
+        Ok(TimeSpec {
+            sec: seconds as i64,
+            nsec: nanoseconds as i64,
+        })
+    }
+
+    pub fn time_second() -> Result<TimeSpec, NanoUpTimeError> {
+        Ok(TimeSpec {
+            nsec: 0,
+            ..Self::nanouptime()?
+        })
     }
 }
 
@@ -175,6 +206,7 @@ impl TryFrom<i32> for ClockId {
             16 => Self::EXT_NETWORK,
             17 => Self::EXT_DEBUG_NETWORK,
             18 => Self::EXT_AD_NETWORK,
+            19 => Self::EXT_RAW_NETWORK,
             ..=-1 => Self(value),
             _ => return Err(SysErr::Raw(EINVAL)),
         };
