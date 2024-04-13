@@ -156,16 +156,24 @@ commands! {
         /// Seek hole.
         FIOSEEKHOLE(&mut i64) = 0xC0086662,
 
-        /// Currently unknown gc command
-        GC12(&mut Unknown16) = 0xc010810b,
-        /// Currently unknown gc command
-        GC16(&mut Unknown12) = 0xc00c8110,
-        /// Currently unknown gc command
-        GC25(&mut Unknown132) = 0xc0848119,
+        /// Get CU mask
+        GCGETCUMASK(&mut Unknown16) = 0xc010810b,
+        /// Set GS ring queue sizes
+        GCSETGSRINGSIZES(&mut Unknown12) = 0xc00c8110,
+        /// Ding dong for workload
+        GCDINGDONGFORWORKLOAD(&mut Unknown16) = 0xc010811c,
+        /// Get mip stats report
+        GCMIPSTATSREPORT(&mut Unknown132) = 0xc0848119,
         /// Currently unknown gc command
         GC27(&mut Unknown8) = 0xc008811b,
-        /// Currently unknown gc command
-        GC31(&mut i32) = 0xc004811f,
+        /// Get number of tca units
+        GCGETNUMTCAUNITS(&mut i32) = 0xc004811f,
+        /// Set wave limit multiplier
+        GCSETWAVELIMITMULTIPLIER(&mut i64) = 0xc0088101,
+        /// Map compute queue
+        GCMAPCOMPUTEQUEUE(&mut Unknown48) = 0xc030810d,
+        /// Unmap compute queue
+        GCUNMAPCOMPUTEQUEUE(&mut Unknown12) = 0xc00c810e,
 
         /// Get genuine random
         RNGGETGENUINE(&mut RngInput) = 0x40445301,
@@ -189,6 +197,7 @@ type Unknown8 = Unknown<8>;
 type Unknown12 = Unknown<12>;
 type Unknown16 = Unknown<16>;
 type Unknown36 = Unknown<36>;
+type Unknown48 = Unknown<48>;
 type Unknown132 = Unknown<132>;
 
 /// A dummy type to be used as a placeholder for unknown data.
