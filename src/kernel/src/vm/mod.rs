@@ -541,11 +541,11 @@ impl Vm {
         let addr: usize = i.args[0].into();
         let len: usize = i.args[1].into();
 
-        self.sys_munmap_internal(addr, len)
+        self.munmap_internal(addr, len)
     }
 
     #[allow(unused_variables)]
-    fn sys_munmap_internal(self: &Arc<Self>, addr: usize, len: usize) -> Result<SysOut, SysErr> {
+    fn munmap_internal(self: &Arc<Self>, addr: usize, len: usize) -> Result<SysOut, SysErr> {
         todo!()
     }
 
@@ -558,10 +558,10 @@ impl Vm {
         let fd: i32 = i.args[4].try_into().unwrap();
         let pos: usize = i.args[5].into();
 
-        self.sys_mmap_internal(addr, len, prot, flags, fd, pos)
+        self.mmap_internal(addr, len, prot, flags, fd, pos)
     }
 
-    fn sys_mmap_internal(
+    fn mmap_internal(
         self: &Arc<Self>,
         addr: usize,
         len: usize,
@@ -614,7 +614,7 @@ impl Vm {
     fn sys_batch_map(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let dmem_fd: i32 = i.args[0].try_into().unwrap();
         let flags: MappingFlags = i.args[1].try_into().unwrap();
-        let operations: *const BatchMapOp = i.args[2].into();
+        let operations: *const BatchMapArg = i.args[2].into();
         let num_of_ops: i32 = i.args[3].try_into().unwrap();
         let num_of_processed_ops: *mut i32 = i.args[4].into();
 
@@ -625,64 +625,61 @@ impl Vm {
         let slice_size = num_of_ops.try_into().ok().ok_or(SysErr::Raw(EINVAL))?;
         let operations = unsafe { std::slice::from_raw_parts(operations, slice_size) };
 
-        let mut ret = Ok(0.into());
         let mut processed = 0;
-        for op in operations {
-            // TODO: implement remaining logic when op != MapTypeProtect && some addr != 0
 
-            ret = match op.op.try_into() {
-                Ok(MapOp::MapDirect) => {
+        let result = operations.iter().try_for_each(|batch_op| {
+            match batch_op.op.try_into()? {
+                BatchMapOp::MapDirect => {
                     if *td.proc().dmem_container() != DmemContainer::One
-                        /* || td.proc().unk4 & 2 != 0 */
-                        /* || td.proc().sdk_version < 0x2500000 */
-                        || flags.intersects(MappingFlags::MAP_STACK)
+                    /* || td.proc().unk4 & 2 != 0 */
+                    /* || td.proc().sdk_version < 0x2500000 */
+                    || flags.intersects(MappingFlags::MAP_STACK)
                     {
                         todo!()
                     }
 
-                    self.sys_mmap_dmem_internal(
-                        op.addr,
-                        op.len,
-                        op.ty.try_into().unwrap(),
-                        op.prot.try_into().unwrap(),
+                    self.mmap_dmem_internal(
+                        batch_op.addr,
+                        batch_op.len,
+                        batch_op.ty.try_into().unwrap(),
+                        batch_op.prot.try_into().unwrap(),
                         flags,
-                        op.offset,
-                    )
+                        batch_op.offset,
+                    )?;
                 }
-                Ok(MapOp::MapFlexible) => {
-                    if op.addr & 0x3fff != 0 || op.len & 0x3fff != 0 || op.prot & 0xc8 != 0 {
-                        ret = Err(SysErr::Raw(EINVAL));
-                        break;
+                BatchMapOp::MapFlexible => {
+                    if batch_op.addr & 0x3fff != 0
+                        || batch_op.len & 0x3fff != 0
+                        || batch_op.prot & 0xc8 != 0
+                    {
+                        return Err(SysErr::Raw(EINVAL));
                     }
 
-                    self.sys_mmap_internal(
-                        op.addr,
-                        op.len,
-                        op.prot.try_into().unwrap(),
+                    self.mmap_internal(
+                        batch_op.addr,
+                        batch_op.len,
+                        batch_op.prot.try_into().unwrap(),
                         flags.intersection(MappingFlags::MAP_ANON),
                         -1,
                         0,
-                    )
+                    )?;
                 }
-                Ok(MapOp::Protect) => todo!(),
-                Ok(MapOp::TypeProtect) => todo!(),
-                Ok(MapOp::Unmap) => {
-                    if op.addr & 0x3fff != 0 || op.len & 0x3fff != 0 {
-                        ret = Err(SysErr::Raw(EINVAL));
-                        break;
+                BatchMapOp::Protect => todo!(),
+                BatchMapOp::TypeProtect => todo!(),
+                BatchMapOp::Unmap => {
+                    if batch_op.addr & 0x3fff != 0 || batch_op.len & 0x3fff != 0 {
+                        return Err(SysErr::Raw(EINVAL));
                     }
 
-                    self.sys_munmap_internal(op.addr, op.len)
+                    self.munmap_internal(batch_op.addr, batch_op.len)?;
                 }
-                Err(conv_error) => Err(conv_error),
-            };
-
-            if ret.is_err() {
-                break;
+                _ => todo!(),
             }
 
             processed = processed + 1;
-        }
+
+            Ok(())
+        });
 
         // TODO: invalidate TLB
 
@@ -692,7 +689,7 @@ impl Vm {
             }
         }
 
-        ret
+        result.map(|_| SysOut::ZERO)
     }
 
     fn sys_mname(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -727,11 +724,11 @@ impl Vm {
         let flags: MappingFlags = i.args[4].try_into().unwrap();
         let start_phys_addr: usize = i.args[5].into();
 
-        self.sys_mmap_dmem_internal(start_addr, len, mem_type, prot, flags, start_phys_addr)
+        self.mmap_dmem_internal(start_addr, len, mem_type, prot, flags, start_phys_addr)
     }
 
     #[allow(unused_variables)]
-    fn sys_mmap_dmem_internal(
+    fn mmap_dmem_internal(
         self: &Arc<Self>,
         start_addr: usize,
         len: usize,
@@ -974,7 +971,7 @@ pub enum MemoryUpdateError {
 }
 
 #[repr(C)]
-struct BatchMapOp {
+struct BatchMapArg {
     addr: usize,
     offset: usize,
     len: usize,
@@ -984,7 +981,7 @@ struct BatchMapOp {
 }
 
 #[repr(i32)]
-enum MapOp {
+enum BatchMapOp {
     MapDirect = 0,
     Unmap = 1,
     Protect = 2,
@@ -992,16 +989,16 @@ enum MapOp {
     TypeProtect = 4,
 }
 
-impl TryFrom<i32> for MapOp {
+impl TryFrom<i32> for BatchMapOp {
     type Error = SysErr;
 
     fn try_from(raw: i32) -> Result<Self, SysErr> {
         match raw {
-            0 => Ok(MapOp::MapDirect),
-            1 => Ok(MapOp::Unmap),
-            2 => Ok(MapOp::Protect),
-            3 => Ok(MapOp::MapFlexible),
-            4 => Ok(MapOp::TypeProtect),
+            0 => Ok(BatchMapOp::MapDirect),
+            1 => Ok(BatchMapOp::Unmap),
+            2 => Ok(BatchMapOp::Protect),
+            3 => Ok(BatchMapOp::MapFlexible),
+            4 => Ok(BatchMapOp::TypeProtect),
             _ => Err(SysErr::Raw(EINVAL)),
         }
     }

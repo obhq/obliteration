@@ -256,7 +256,7 @@ impl RuntimeLinker {
 
         // Map file.
         let mut table = td.proc().objects_mut();
-        let (entry, _) = table.alloc(|id| {
+        let (entry, _) = table.try_alloc_with(|id| {
             let name = path.file_name().unwrap();
             let id: u32 = (id + 1).try_into().unwrap();
             let mut md = match Module::map(&self.ee, td.proc(), elf, 0, name, id, names, tls) {
