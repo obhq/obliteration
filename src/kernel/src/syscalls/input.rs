@@ -159,3 +159,9 @@ impl LowerHex for SysArg {
         LowerHex::fmt(&self.0, f)
     }
 }
+
+impl From<usize> for SysArg {
+    fn from(value: usize) -> Self {
+        SysArg(value)
+    }
+}

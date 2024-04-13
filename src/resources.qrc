@@ -11,6 +11,7 @@
     <file>resources/lightmode/cog-outline.svg</file>
     <file>resources/lightmode/folder-open-outline.svg</file>
     <file>resources/lightmode/view-comfy.svg</file>
+    <file>resources/fallbackicon0.png</file>
     <file>resources/obliteration-icon.png</file>
   </qresource>
 </RCC>
