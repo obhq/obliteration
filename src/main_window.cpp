@@ -33,6 +33,7 @@
 #include <QUrl>
 
 #include <filesystem>
+#include <qscrollbar.h>
 
 MainWindow::MainWindow() :
     m_tab(nullptr),
@@ -111,6 +112,7 @@ MainWindow::MainWindow() :
     m_games->setModel(new GameListModel(this));
     m_games->setViewMode(QListView::IconMode);
     m_games->setWordWrap(true);
+    m_games->verticalScrollBar()->setSingleStep(20);
 
 
     connect(m_games, &QAbstractItemView::doubleClicked, this, &MainWindow::startGame);
