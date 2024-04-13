@@ -1003,9 +1003,9 @@ impl TryFrom<i32> for BatchMapOp {
 
 #[repr(i32)]
 enum MemoryType {
-    WB_ONION = 0,
-    WC_GARLIC = 3,
-    WB_GARLIC = 10,
+    WbOnion = 0,
+    WcGarlic = 3,
+    WbGarlic = 10,
 }
 
 impl TryFrom<SysArg> for MemoryType {
@@ -1022,9 +1022,9 @@ impl TryFrom<u8> for MemoryType {
 
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         match value {
-            0 => Ok(MemoryType::WB_ONION),
-            3 => Ok(MemoryType::WC_GARLIC),
-            10 => Ok(MemoryType::WB_GARLIC),
+            0 => Ok(MemoryType::WbOnion),
+            3 => Ok(MemoryType::WcGarlic),
+            10 => Ok(MemoryType::WbGarlic),
             _ => unreachable!(),
         }
     }
