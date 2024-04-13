@@ -43,7 +43,7 @@ impl Socket {
             _ => todo!(),
         };
 
-        let socket = Arc::new(Socket {
+        let socket = Arc::new(Self {
             cred: Arc::clone(cred),
             name: name.map(|s| s.into()),
             backend,

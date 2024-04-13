@@ -19,6 +19,7 @@ private:
     QString m_id;
     QString m_name;
     QString m_directory;
+    mutable QPixmap m_cachedIcon;
 };
 
 class GameListModel final : public QAbstractListModel {

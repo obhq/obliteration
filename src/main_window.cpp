@@ -106,10 +106,12 @@ MainWindow::MainWindow() :
 
     // Setup game list.
     m_games = new QListView();
+    m_games->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_games->setLayoutMode(QListView::SinglePass);
+    m_games->setModel(new GameListModel(this));
     m_games->setViewMode(QListView::IconMode);
     m_games->setWordWrap(true);
-    m_games->setContextMenuPolicy(Qt::CustomContextMenu);
-    m_games->setModel(new GameListModel(this));
+
 
     connect(m_games, &QAbstractItemView::doubleClicked, this, &MainWindow::startGame);
     connect(m_games, &QWidget::customContextMenuRequested, this, &MainWindow::requestGamesContextMenu);

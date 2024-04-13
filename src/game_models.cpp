@@ -1,5 +1,6 @@
 #include "game_models.hpp"
 #include "path.hpp"
+#include <QFile>
 
 Game::Game(const QString &id, const QString &name, const QString &directory) :
     m_id(id),
@@ -12,23 +13,30 @@ Game::~Game()
 {
 }
 
-QPixmap Game::icon() const
-{
+QPixmap Game::icon() const {
+    if (!m_cachedIcon.isNull()) {
+        return m_cachedIcon;
+    }
+
     // Get icon path.
     auto dir = joinPath(m_directory, "sce_sys");
     auto path = joinPath(dir.c_str(), "icon0.png");
 
-    // Construct icon object.
-    QPixmap icon(path.c_str());
-
-    // For games with large icon sizes.
-    if (icon.width() != 512 || icon.height() != 512) {
-        icon = icon.scaled(512, 512, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    if (QFile::exists(path.c_str())) {
+        m_cachedIcon.load(path.c_str());
+    } else {
+        // Load fallback icon if icon0 doesn't exist.
+        m_cachedIcon.load(":/resources/fallbackicon0.png");
     }
 
-    icon.setDevicePixelRatio(2.0);
+    // For games with large icon sizes.
+    if (m_cachedIcon.width() != 512 || m_cachedIcon.height() != 512) {
+        m_cachedIcon = m_cachedIcon.scaled(512, 512, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    }
 
-    return icon;
+    m_cachedIcon.setDevicePixelRatio(2.0);
+
+    return m_cachedIcon;
 }
 
 GameListModel::GameListModel(QObject *parent) :

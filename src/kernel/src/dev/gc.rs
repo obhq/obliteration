@@ -38,11 +38,15 @@ impl DeviceDriver for Gc {
         _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         match cmd {
-            IoCmd::GC12(_) => todo!("GC12 ioctl"),
-            IoCmd::GC16(_) => todo!("GC16 ioctl"),
-            IoCmd::GC25(_) => todo!("GC25 ioctl"),
+            IoCmd::GCGETCUMASK(_) => todo!("GCGETCUMASK ioctl"),
+            IoCmd::GCSETGSRINGSIZES(_) => todo!("GCSETGSRINGSIZES ioctl"),
+            IoCmd::GCMIPSTATSREPORT(_) => todo!("GCMIPSTATSREPORT ioctl"),
             IoCmd::GC27(_) => todo!("GC27 ioctl"),
-            IoCmd::GC31(_) => todo!("GC31 ioctl"),
+            IoCmd::GCGETNUMTCAUNITS(_) => todo!("GCGETNUMTCAUNITS ioctl"),
+            IoCmd::GCDINGDONGFORWORKLOAD(_) => todo!("GCDINGDONGFORWORKLOAD ioctl"),
+            IoCmd::GCMAPCOMPUTEQUEUE(_) => todo!("GCMAPCOMPUTEQUEUE ioctl"),
+            IoCmd::GCUNMAPCOMPUTEQUEUE(_) => todo!("GCUNMAPCOMPUTEQUEUE ioctl"),
+            IoCmd::GCSETWAVELIMITMULTIPLIER(_) => todo!("GCSETWAVELIMITMULTIPLIER ioctl"),
             _ => todo!(),
         }
     }
