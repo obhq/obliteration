@@ -73,6 +73,7 @@ impl Socket {
         todo!()
     }
 
+    /// See `sobind` on the PS4 for a reference.
     pub fn bind(self: &Arc<Self>, addr: &SockAddr, td: &VThread) -> Result<(), Box<dyn Errno>> {
         self.backend.bind(self, addr, td)?;
 
