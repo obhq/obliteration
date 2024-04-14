@@ -1,4 +1,4 @@
-use super::{Socket, SocketBackend};
+use super::{SockAddr, Socket, SocketBackend};
 use crate::errno::{Errno, EOPNOTSUPP};
 use crate::fs::IoCmd;
 use crate::process::VThread;
@@ -17,6 +17,15 @@ impl SocketBackend for InetProtocol {
         match self {
             Self::UdpPeerToPeer => Ok(()),
         }
+    }
+
+    fn connect(
+        &self,
+        socket: &Arc<Socket>,
+        addr: &SockAddr,
+        td: &VThread,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
     }
 
     fn control(

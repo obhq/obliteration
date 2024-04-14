@@ -1,5 +1,5 @@
 use super::unix::UnixProtocol;
-use super::{InetProtocol, Socket};
+use super::{InetProtocol, SockAddr, Socket};
 use crate::errno::Errno;
 use crate::fs::IoCmd;
 use crate::process::VThread;
@@ -11,6 +11,13 @@ use std::sync::Arc;
 /// `protosw` struct as well.
 pub(super) trait SocketBackend {
     fn attach(&self, socket: &Arc<Socket>, td: &VThread) -> Result<(), Box<dyn Errno>>;
+
+    fn connect(
+        &self,
+        socket: &Arc<Socket>,
+        addr: &SockAddr,
+        td: &VThread,
+    ) -> Result<(), Box<dyn Errno>>;
 
     // TODO: a ifnet argument might have to be added in the future
     fn control(
@@ -66,6 +73,18 @@ impl SocketBackend for Protocol {
         match self {
             Self::Unix(protocol) => protocol.attach(socket, td),
             Self::Inet(protocol) => protocol.attach(socket, td),
+        }
+    }
+
+    fn connect(
+        &self,
+        socket: &Arc<Socket>,
+        addr: &SockAddr,
+        td: &VThread,
+    ) -> Result<(), Box<dyn Errno>> {
+        match self {
+            Self::Unix(protocol) => protocol.connect(socket, addr, td),
+            Self::Inet(protocol) => protocol.connect(socket, addr, td),
         }
     }
 

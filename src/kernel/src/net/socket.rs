@@ -1,4 +1,4 @@
-use super::{GetOptError, Protocol, SetOptError, SockOpt, SocketBackend};
+use super::{GetOptError, Protocol, SetOptError, SockAddr, SockOpt, SocketBackend};
 use crate::fs::{
     DefaultFileBackendError, FileBackend, IoCmd, PollEvents, Stat, TruncateLength, Uio, UioMut,
     VFile,
@@ -76,6 +76,13 @@ impl Socket {
     /// See `solisten` on the PS4 for a reference.
     pub fn listen(self: &Arc<Self>, backlog: i32, td: Option<&VThread>) -> Result<(), ListenError> {
         self.backend.listen(self, backlog, td)?;
+
+        Ok(())
+    }
+
+    /// See `soconnect` on the PS4 for a reference.
+    pub fn connect(self: &Arc<Self>, addr: &SockAddr, td: &VThread) -> Result<(), Box<dyn Errno>> {
+        self.backend.connect(self, addr, td)?;
 
         Ok(())
     }

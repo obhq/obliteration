@@ -763,10 +763,11 @@ impl Fs {
             whence.try_into()?
         };
 
-        info!("Seeking fd {fd} to offset {offset} with whence = {whence:?}.");
+        info!("Seeking fd {fd} with whence = {whence:?} and offset = {offset}.");
 
         let file = td.proc().files().get(fd)?;
 
+        #[allow(unused_variables)] // Remove this when is implementing.
         let vnode = file.seekable_vnode().ok_or(SysErr::Raw(ESPIPE))?;
 
         // check vnode type

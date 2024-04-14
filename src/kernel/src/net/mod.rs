@@ -1,19 +1,16 @@
 use crate::budget::BudgetType;
-use crate::errno::{Errno, EFAULT, EINVAL};
+use crate::errno::{Errno, EFAULT, EINVAL, ENAMETOOLONG};
 use crate::fs::{IoVec, VFile, VFileFlags, VFileType};
+use crate::process::GetSocketError;
 use crate::{arnd, info};
 use crate::{
     process::VThread,
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
 };
 use bitflags::bitflags;
-use core::fmt;
 use macros::Errno;
 use std::num::NonZeroI32;
-use std::{
-    fmt::{Display, Formatter},
-    sync::Arc,
-};
+use std::sync::Arc;
 use thiserror::Error;
 
 use self::inet::*;
@@ -34,7 +31,9 @@ impl NetManager {
         sys.register(27, &net, Self::sys_recvmsg);
         sys.register(28, &net, Self::sys_sendmsg);
         sys.register(29, &net, Self::sys_recvfrom);
+        sys.register(30, &net, Self::sys_accept);
         sys.register(97, &net, Self::sys_socket);
+        sys.register(98, &net, Self::sys_connect);
         sys.register(99, &net, Self::sys_netcontrol);
         sys.register(105, &net, Self::sys_setsockopt);
         sys.register(106, &net, Self::sys_listen);
@@ -80,6 +79,14 @@ impl NetManager {
             let flags = TryInto::<u32>::try_into(i.args[3]).unwrap();
             MessageFlags::from_bits_retain(flags)
         };
+
+        todo!()
+    }
+
+    fn sys_accept(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let addr: *mut u8 = i.args[1].into();
+        let addrlen: *mut u32 = i.args[2].try_into().unwrap();
 
         todo!()
     }
@@ -188,6 +195,24 @@ impl NetManager {
         info!("Opened a socket at fd {fd}.");
 
         Ok(fd.into())
+    }
+
+    fn sys_connect(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let ptr: *const u8 = i.args[1].into();
+        let len: i32 = i.args[2].try_into().unwrap();
+
+        let addr = SockAddr::get(ptr, len)?;
+
+        self.connect(fd, &addr, td)?;
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn connect(&self, fd: i32, addr: &SockAddr, td: &VThread) -> Result<(), ConnectError> {
+        let socket = td.proc().files().get_socket(fd)?;
+
+        todo!()
     }
 
     fn sys_getsockopt(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -351,32 +376,53 @@ struct MsgHdr<'a> {
     flags: u32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct AddressFamily(i32);
-
-impl AddressFamily {
-    pub const UNSPEC: Self = Self(0);
-    pub const LOCAL: Self = Self::UNIX;
-    pub const UNIX: Self = Self(1);
-    pub const INET: Self = Self(2);
-    pub const ROUTE: Self = Self(17);
-    pub const INET6: Self = Self(28);
+pub struct SockAddr {
+    _len: u8,
+    family: u8,
+    data: [u8],
 }
 
-impl Display for AddressFamily {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match *self {
-            Self::UNSPEC => write!(f, "UNSPEC"),
-            Self::LOCAL => write!(f, "LOCAL"),
-            Self::INET => write!(f, "INET"),
-            Self::ROUTE => write!(f, "ROUTE"),
-            Self::INET6 => write!(f, "INET6"),
-            _ => todo!(),
+impl SockAddr {
+    pub fn get(ptr: *const u8, len: i32) -> Result<Box<Self>, GetSockAddrError> {
+        if len > 255 {
+            return Err(GetSockAddrError::TooLong);
         }
+
+        if len < 2 {
+            return Err(GetSockAddrError::TooShort);
+        }
+
+        // This is ok if the conditions above are upheld
+        let len = len as usize;
+
+        let mut vec = Vec::with_capacity(len);
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(ptr, vec.as_mut_ptr(), len);
+        }
+
+        todo!()
+    }
+
+    pub fn family(&self) -> u8 {
+        self.family
+    }
+
+    pub fn data(&self) -> &[u8] {
+        &self.data
     }
 }
 
 enum SockOpt {}
+
+#[derive(Debug, Error, Errno)]
+enum ConnectError {
+    #[error("failed to get socket")]
+    GetSocketError(#[from] GetSocketError),
+
+    #[error("failed to connect")]
+    ConnectError(#[from] Box<dyn Errno>),
+}
 
 #[derive(Debug, Error, Errno)]
 enum SetOptError {
@@ -398,3 +444,14 @@ enum GetOptError {
 
 #[derive(Debug, Error, Errno)]
 enum SendItError {}
+
+#[derive(Debug, Error, Errno)]
+pub enum GetSockAddrError {
+    #[error("length too big")]
+    #[errno(ENAMETOOLONG)]
+    TooLong,
+
+    #[error("too short")]
+    #[errno(EINVAL)]
+    TooShort,
+}

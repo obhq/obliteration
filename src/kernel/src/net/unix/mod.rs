@@ -1,4 +1,4 @@
-use super::{Socket, SocketBackend};
+use super::{SockAddr, Socket, SocketBackend};
 use crate::errno::Errno;
 use crate::fs::IoCmd;
 use crate::process::VThread;
@@ -13,6 +13,15 @@ pub(super) enum UnixProtocol {
 
 impl SocketBackend for UnixProtocol {
     fn attach(&self, _: &Arc<Socket>, _: &VThread) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+
+    fn connect(
+        &self,
+        _socket: &Arc<Socket>,
+        _addr: &SockAddr,
+        _td: &VThread,
+    ) -> Result<(), Box<dyn Errno>> {
         todo!()
     }
 
