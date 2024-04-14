@@ -112,7 +112,7 @@ impl NetManager {
         Ok(())
     }
 
-    fn sys_netcontrol(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_netcontrol(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let op: i32 = i.args[1].try_into().unwrap();
         let ptr: *mut u8 = i.args[2].into();
