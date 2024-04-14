@@ -34,6 +34,10 @@ impl VFile {
         }
     }
 
+    pub fn ty(&self) -> &VFileType {
+        &self.ty
+    }
+
     pub fn flags(&self) -> VFileFlags {
         self.flags
     }

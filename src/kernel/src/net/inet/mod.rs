@@ -1,8 +1,10 @@
 use super::{Socket, SocketBackend};
-use crate::errno::Errno;
+use crate::errno::{Errno, EOPNOTSUPP};
 use crate::fs::IoCmd;
 use crate::process::VThread;
+use macros::Errno;
 use std::sync::Arc;
+use thiserror::Error;
 
 #[derive(Debug)]
 pub(super) enum InetProtocol {
@@ -32,4 +34,23 @@ impl SocketBackend for InetProtocol {
             },
         }
     }
+
+    fn listen(
+        &self,
+        _socket: &Arc<Socket>,
+        _backlog: i32,
+        _td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        match self {
+            Self::UdpPeerToPeer => Err(Box::new(ListenError::ListenError)),
+        }
+    }
+}
+
+#[derive(Debug, Error, Errno)]
+#[error("listen is not supported for this protocol")]
+enum ListenError {
+    #[error("listen is not supported for this protocol")]
+    #[errno(EOPNOTSUPP)]
+    ListenError,
 }
