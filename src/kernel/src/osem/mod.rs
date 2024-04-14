@@ -35,8 +35,7 @@ impl OsemManager {
 
         let mut objects = td.proc().objects_mut();
 
-        let id = objects
-            .alloc_infallible(|_| Entry::new(Some(name.to_owned()), Osem::new(flags), 0x120));
+        let id = objects.alloc(Entry::new(Some(name.to_owned()), Osem::new(flags), 0x120));
 
         Ok(id.into())
     }

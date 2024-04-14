@@ -29,11 +29,8 @@ impl<T> Idt<T> {
         }
     }
 
-    pub fn alloc_infallible<F>(&mut self, factory: F) -> usize
-    where
-        F: FnOnce(usize) -> Entry<T>,
-    {
-        let Ok((_, id)) = self.alloc::<_, Infallible>(|id| Ok(factory(id))) else {
+    pub fn alloc(&mut self, entry: Entry<T>) -> usize {
+        let Ok((_, id)) = self.try_alloc_with::<_, Infallible>(|id| Ok(entry)) else {
             unreachable!();
         };
 
@@ -41,7 +38,7 @@ impl<T> Idt<T> {
     }
 
     /// See `id_alloc` on the PS4 for a reference.
-    pub fn alloc<F, E>(&mut self, factory: F) -> Result<(&mut Entry<T>, usize), E>
+    pub fn try_alloc_with<F, E>(&mut self, factory: F) -> Result<(&mut Entry<T>, usize), E>
     where
         F: FnOnce(usize) -> Result<Entry<T>, E>,
     {

@@ -25,7 +25,7 @@ impl BudgetManager {
         let name = budget.name.clone();
         let mut budgets = self.budgets.lock().unwrap();
 
-        budgets.alloc_infallible(|_| Entry::new(Some(name), Arc::new(budget), 0x2000))
+        budgets.alloc(Entry::new(Some(name), Arc::new(budget), 0x2000))
     }
 
     fn sys_budget_get_ptype(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
