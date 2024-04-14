@@ -48,9 +48,8 @@ impl SocketBackend for InetProtocol {
 }
 
 #[derive(Debug, Error, Errno)]
-#[error("listen is not supported for this protocol")]
 enum ListenError {
-    #[error("listen is not supported for this protocol")]
+    #[error("listening is not supported for this protocol")]
     #[errno(EOPNOTSUPP)]
     ListenError,
 }
