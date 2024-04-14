@@ -23,6 +23,7 @@ pub use self::socket::*;
 mod inet;
 mod proto;
 mod socket;
+mod unix;
 
 pub struct NetManager {}
 
@@ -36,6 +37,7 @@ impl NetManager {
         sys.register(97, &net, Self::sys_socket);
         sys.register(99, &net, Self::sys_netcontrol);
         sys.register(105, &net, Self::sys_setsockopt);
+        sys.register(106, &net, Self::sys_listen);
         sys.register(113, &net, Self::sys_socketex);
         sys.register(114, &net, Self::sys_socketclose);
         sys.register(118, &net, Self::sys_getsockopt);
@@ -142,6 +144,17 @@ impl NetManager {
         let len: i32 = i.args[4].try_into().unwrap();
 
         self.setsockopt(fd, level, name, value, len, td)?;
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn sys_listen(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let backlog: i32 = i.args[1].try_into().unwrap();
+
+        let socket = td.proc().files().get_socket(fd)?;
+
+        socket.listen(backlog, Some(td))?;
 
         Ok(SysOut::ZERO)
     }

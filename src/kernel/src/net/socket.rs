@@ -1,11 +1,11 @@
-use super::{GetOptError, InetProtocol, Protocol, SetOptError, SockOpt, SocketBackend};
+use super::{GetOptError, Protocol, SetOptError, SockOpt, SocketBackend};
 use crate::fs::{
     DefaultFileBackendError, FileBackend, IoCmd, PollEvents, Stat, TruncateLength, Uio, UioMut,
     VFile,
 };
 use crate::ucred::Ucred;
 use crate::{
-    errno::{Errno, EPIPE},
+    errno::{Errno, EPIPE, EPROTONOSUPPORT},
     process::VThread,
 };
 use macros::Errno;
@@ -32,16 +32,8 @@ impl Socket {
         name: Option<&str>,
     ) -> Result<Arc<Self>, SocketCreateError> {
         // TODO: implement prison_check_af
-        let backend = match domain {
-            2 => {
-                let protocol = match (ty, proto) {
-                    (6, None) => InetProtocol::UdpPeerToPeer,
-                    _ => todo!(),
-                };
-                Protocol::Inet(protocol)
-            }
-            _ => todo!(),
-        };
+        let backend =
+            Protocol::find(domain, ty, proto).ok_or(SocketCreateError::NoProtocolFound)?;
 
         let socket = Arc::new(Self {
             cred: Arc::clone(cred),
@@ -79,6 +71,13 @@ impl Socket {
     #[allow(unused_variables)] // TODO: remove when implementing
     fn receive(&self, buf: &mut UioMut, td: Option<&VThread>) -> Result<usize, ReceiveError> {
         todo!()
+    }
+
+    /// See `solisten` on the PS4 for a reference.
+    pub fn listen(self: &Arc<Self>, backlog: i32, td: Option<&VThread>) -> Result<(), ListenError> {
+        self.backend.listen(self, backlog, td)?;
+
+        Ok(())
     }
 }
 
@@ -149,6 +148,10 @@ impl FileBackend for Socket {
 
 #[derive(Debug, Error, Errno)]
 pub enum SocketCreateError {
+    #[error("no protocol found")]
+    #[errno(EPROTONOSUPPORT)]
+    NoProtocolFound,
+
     #[error("couldn't attach socket")]
     AttachError(#[source] Box<dyn Errno>),
 }
@@ -161,4 +164,10 @@ enum SendError {
     #[error("Broken pipe")]
     #[errno(EPIPE)]
     BrokenPipe,
+}
+
+#[derive(Debug, Error, Errno)]
+pub enum ListenError {
+    #[error("listen failed")]
+    ListenFailed(#[from] Box<dyn Errno>),
 }
