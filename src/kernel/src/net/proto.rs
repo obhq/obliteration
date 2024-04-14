@@ -12,6 +12,13 @@ use std::sync::Arc;
 pub(super) trait SocketBackend {
     fn attach(&self, socket: &Arc<Socket>, td: &VThread) -> Result<(), Box<dyn Errno>>;
 
+    fn bind(
+        &self,
+        socket: &Arc<Socket>,
+        addr: &SockAddr,
+        td: &VThread,
+    ) -> Result<(), Box<dyn Errno>>;
+
     fn connect(
         &self,
         socket: &Arc<Socket>,
@@ -73,6 +80,18 @@ impl SocketBackend for Protocol {
         match self {
             Self::Unix(protocol) => protocol.attach(socket, td),
             Self::Inet(protocol) => protocol.attach(socket, td),
+        }
+    }
+
+    fn bind(
+        &self,
+        socket: &Arc<Socket>,
+        addr: &SockAddr,
+        td: &VThread,
+    ) -> Result<(), Box<dyn Errno>> {
+        match self {
+            Self::Unix(protocol) => protocol.connect(socket, addr, td),
+            Self::Inet(protocol) => protocol.connect(socket, addr, td),
         }
     }
 

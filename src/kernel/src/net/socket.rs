@@ -73,9 +73,8 @@ impl Socket {
         todo!()
     }
 
-    /// See `solisten` on the PS4 for a reference.
-    pub fn listen(self: &Arc<Self>, backlog: i32, td: Option<&VThread>) -> Result<(), ListenError> {
-        self.backend.listen(self, backlog, td)?;
+    pub fn bind(self: &Arc<Self>, addr: &SockAddr, td: &VThread) -> Result<(), Box<dyn Errno>> {
+        self.backend.bind(self, addr, td)?;
 
         Ok(())
     }
@@ -83,6 +82,13 @@ impl Socket {
     /// See `soconnect` on the PS4 for a reference.
     pub fn connect(self: &Arc<Self>, addr: &SockAddr, td: &VThread) -> Result<(), Box<dyn Errno>> {
         self.backend.connect(self, addr, td)?;
+
+        Ok(())
+    }
+
+    /// See `solisten` on the PS4 for a reference.
+    pub fn listen(self: &Arc<Self>, backlog: i32, td: Option<&VThread>) -> Result<(), ListenError> {
+        self.backend.listen(self, backlog, td)?;
 
         Ok(())
     }

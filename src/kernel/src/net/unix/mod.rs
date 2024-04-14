@@ -16,6 +16,15 @@ impl SocketBackend for UnixProtocol {
         todo!()
     }
 
+    fn bind(
+        &self,
+        _socket: &Arc<Socket>,
+        _addr: &SockAddr,
+        _td: &VThread,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+
     fn connect(
         &self,
         _socket: &Arc<Socket>,

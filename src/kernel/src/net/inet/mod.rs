@@ -19,6 +19,15 @@ impl SocketBackend for InetProtocol {
         }
     }
 
+    fn bind(
+        &self,
+        _socket: &Arc<Socket>,
+        _addr: &SockAddr,
+        _td: &VThread,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+
     fn connect(
         &self,
         socket: &Arc<Socket>,

@@ -35,6 +35,7 @@ impl NetManager {
         sys.register(97, &net, Self::sys_socket);
         sys.register(98, &net, Self::sys_connect);
         sys.register(99, &net, Self::sys_netcontrol);
+        sys.register(104, &net, Self::sys_bind);
         sys.register(105, &net, Self::sys_setsockopt);
         sys.register(106, &net, Self::sys_listen);
         sys.register(113, &net, Self::sys_socketex);
@@ -89,6 +90,26 @@ impl NetManager {
         let addrlen: *mut u32 = i.args[2].try_into().unwrap();
 
         todo!()
+    }
+
+    fn sys_bind(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let fd: i32 = i.args[0].try_into().unwrap();
+        let ptr: *const u8 = i.args[1].into();
+        let len: i32 = i.args[2].try_into().unwrap();
+
+        let addr = SockAddr::get(ptr, len)?;
+
+        self.bind(fd, &addr, td)?;
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn bind(&self, fd: i32, addr: &SockAddr, td: &VThread) -> Result<(), BindError> {
+        let socket = td.proc().files().get_socket(fd)?;
+
+        socket.bind(addr, td)?;
+
+        Ok(())
     }
 
     fn sys_netcontrol(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -376,11 +397,7 @@ struct MsgHdr<'a> {
     flags: u32,
 }
 
-pub struct SockAddr {
-    _len: u8,
-    family: u8,
-    data: [u8],
-}
+pub struct SockAddr([u8]);
 
 impl SockAddr {
     pub fn get(ptr: *const u8, len: i32) -> Result<Box<Self>, GetSockAddrError> {
@@ -401,15 +418,15 @@ impl SockAddr {
             std::ptr::copy_nonoverlapping(ptr, vec.as_mut_ptr(), len);
         }
 
-        todo!()
+        Ok(unsafe { std::mem::transmute(vec.into_boxed_slice()) })
     }
 
     pub fn family(&self) -> u8 {
-        self.family
+        self.0[1]
     }
 
     pub fn data(&self) -> &[u8] {
-        &self.data
+        &self.0[2..]
     }
 }
 
@@ -422,6 +439,15 @@ enum ConnectError {
 
     #[error("failed to connect")]
     ConnectError(#[from] Box<dyn Errno>),
+}
+
+#[derive(Debug, Error, Errno)]
+enum BindError {
+    #[error("failed to get socket")]
+    GetSocketError(#[from] GetSocketError),
+
+    #[error("failed to bind")]
+    BindError(#[from] Box<dyn Errno>),
 }
 
 #[derive(Debug, Error, Errno)]
