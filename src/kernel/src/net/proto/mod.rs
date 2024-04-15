@@ -1,45 +1,67 @@
-use super::unix::UnixProtocol;
-use super::{InetProtocol, SockAddr, Socket};
-use crate::errno::Errno;
+use super::{SockAddr, Socket};
+use crate::errno::{Errno, EOPNOTSUPP};
 use crate::fs::IoCmd;
 use crate::process::VThread;
+use macros::Errno;
 use std::num::NonZeroI32;
 use std::sync::Arc;
+use thiserror::Error;
+
+use self::inet::*;
+use self::unix::*;
+
+mod inet;
+mod unix;
 
 /// An implementation of the `pr_usrreqs` struct. This is subject to potential refactors, as it has to cover a lot of code
 /// and therefore it is impossible to fully predict the correct implementation. In the future, this struct might end up containing functions from the
 /// `protosw` struct as well.
 pub(super) trait SocketBackend {
-    fn attach(&self, socket: &Arc<Socket>, td: &VThread) -> Result<(), Box<dyn Errno>>;
+    #[allow(unused_variables)]
+    fn attach(&self, socket: &Arc<Socket>, td: &VThread) -> Result<(), Box<dyn Errno>> {
+        Err(Box::new(AttachError::NotSupported))
+    }
 
+    #[allow(unused_variables)]
     fn bind(
         &self,
         socket: &Arc<Socket>,
         addr: &SockAddr,
         td: &VThread,
-    ) -> Result<(), Box<dyn Errno>>;
+    ) -> Result<(), Box<dyn Errno>> {
+        Err(Box::new(AttachError::NotSupported))
+    }
 
+    #[allow(unused_variables)]
     fn connect(
         &self,
         socket: &Arc<Socket>,
         addr: &SockAddr,
         td: &VThread,
-    ) -> Result<(), Box<dyn Errno>>;
+    ) -> Result<(), Box<dyn Errno>> {
+        Err(Box::new(ConnectError::NotSupported))
+    }
 
     // TODO: a ifnet argument might have to be added in the future
+    #[allow(unused_variables)]
     fn control(
         &self,
         socket: &Arc<Socket>,
         cmd: IoCmd,
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>>;
+    ) -> Result<(), Box<dyn Errno>> {
+        Err(Box::new(ControlError::NotSupported))
+    }
 
+    #[allow(unused_variables)]
     fn listen(
         &self,
         socket: &Arc<Socket>,
         backlog: i32,
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>>;
+    ) -> Result<(), Box<dyn Errno>> {
+        Err(Box::new(ListenError::NotSupported))
+    }
 }
 #[derive(Debug)]
 pub(super) enum Protocol {
@@ -129,4 +151,39 @@ impl SocketBackend for Protocol {
             Self::Inet(protocol) => protocol.listen(socket, backlog, td),
         }
     }
+}
+
+#[derive(Debug, Error, Errno)]
+pub(super) enum AttachError {
+    #[error("attaching is not supported for this protocol")]
+    #[errno(EOPNOTSUPP)]
+    NotSupported,
+}
+
+#[derive(Debug, Error, Errno)]
+pub(super) enum BindError {
+    #[error("binding is not supported for this protocol")]
+    #[errno(EOPNOTSUPP)]
+    NotSupported,
+}
+
+#[derive(Debug, Error, Errno)]
+pub(super) enum ConnectError {
+    #[error("connecting is not supported for this protocol")]
+    #[errno(EOPNOTSUPP)]
+    NotSupported,
+}
+
+#[derive(Debug, Error, Errno)]
+pub(super) enum ControlError {
+    #[error("controlling is not supported for this protocol")]
+    #[errno(EOPNOTSUPP)]
+    NotSupported,
+}
+
+#[derive(Debug, Error, Errno)]
+pub(super) enum ListenError {
+    #[error("listening is not supported for this protocol")]
+    #[errno(EOPNOTSUPP)]
+    NotSupported,
 }

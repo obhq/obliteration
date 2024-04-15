@@ -1,11 +1,12 @@
-use super::{GetOptError, Protocol, SetOptError, SockAddr, SockOpt, SocketBackend};
+use super::proto::{Protocol, SocketBackend};
+use super::{GetOptError, SetOptError, SockAddr, SockOpt};
 use crate::fs::{
     DefaultFileBackendError, FileBackend, IoCmd, PollEvents, Stat, TruncateLength, Uio, UioMut,
     VFile,
 };
 use crate::ucred::Ucred;
 use crate::{
-    errno::{Errno, EPIPE, EPROTONOSUPPORT},
+    errno::{Errno, EPROTONOSUPPORT},
     process::VThread,
 };
 use macros::Errno;
@@ -61,13 +62,13 @@ impl Socket {
     }
 
     /// See `sosend` on the PS4 for a reference.
-    #[allow(unused_variables)] // TODO: remove when implementing
+    #[allow(unused)] // TODO: remove when used
     fn send(&self, buf: &mut Uio, td: Option<&VThread>) -> Result<usize, SendError> {
         todo!()
     }
 
     /// See `soreceive` on the PS4 for a reference.
-    #[allow(unused_variables)] // TODO: remove when implementing
+    #[allow(unused)] // TODO: remove when used
     fn receive(&self, buf: &mut UioMut, td: Option<&VThread>) -> Result<usize, ReceiveError> {
         todo!()
     }
@@ -80,6 +81,7 @@ impl Socket {
     }
 
     /// See `soconnect` on the PS4 for a reference.
+    #[allow(unused)] // TODO: remove when used
     pub fn connect(self: &Arc<Self>, addr: &SockAddr, td: &VThread) -> Result<(), Box<dyn Errno>> {
         self.backend.connect(self, addr, td)?;
 
@@ -173,11 +175,7 @@ pub enum SocketCreateError {
 enum ReceiveError {}
 
 #[derive(Debug, Error, Errno)]
-enum SendError {
-    #[error("Broken pipe")]
-    #[errno(EPIPE)]
-    BrokenPipe,
-}
+enum SendError {}
 
 #[derive(Debug, Error, Errno)]
 pub enum ListenError {

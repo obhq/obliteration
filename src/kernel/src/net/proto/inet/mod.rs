@@ -1,10 +1,8 @@
-use super::{SockAddr, Socket, SocketBackend};
-use crate::errno::{Errno, EOPNOTSUPP};
+use super::{ListenError, SockAddr, Socket, SocketBackend};
+use crate::errno::Errno;
 use crate::fs::IoCmd;
 use crate::process::VThread;
-use macros::Errno;
 use std::sync::Arc;
-use thiserror::Error;
 
 #[derive(Debug)]
 pub(super) enum InetProtocol {
@@ -63,11 +61,4 @@ impl SocketBackend for InetProtocol {
             Self::UdpPeerToPeer => Err(Box::new(ListenError::NotSupported)),
         }
     }
-}
-
-#[derive(Debug, Error, Errno)]
-enum ListenError {
-    #[error("listening is not supported for this protocol")]
-    #[errno(EOPNOTSUPP)]
-    NotSupported,
 }
