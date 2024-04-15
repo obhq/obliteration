@@ -60,7 +60,7 @@ impl SocketBackend for InetProtocol {
         _td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         match self {
-            Self::UdpPeerToPeer => Err(Box::new(ListenError::ListenError)),
+            Self::UdpPeerToPeer => Err(Box::new(ListenError::NotSupported)),
         }
     }
 }
@@ -69,5 +69,5 @@ impl SocketBackend for InetProtocol {
 enum ListenError {
     #[error("listening is not supported for this protocol")]
     #[errno(EOPNOTSUPP)]
-    ListenError,
+    NotSupported,
 }
