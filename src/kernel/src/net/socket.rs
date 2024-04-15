@@ -21,7 +21,6 @@ pub struct Socket {
 }
 
 impl Socket {
-    #[allow(unused_variables)] // TODO: remove when implementing
     /// See `socreate` on the PS4 for a reference.
     pub fn new(
         domain: i32,

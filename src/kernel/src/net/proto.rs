@@ -56,7 +56,7 @@ impl Protocol {
                     (1, None) => UnixProtocol::Stream,
                     (2, None) => UnixProtocol::Datagram,
                     (5, None) => UnixProtocol::SeqPacket,
-                    _ => return None,
+                    _ => todo!(),
                 };
 
                 Protocol::Unix(protocol)
