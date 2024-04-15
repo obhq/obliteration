@@ -1,7 +1,8 @@
 use crate::budget::BudgetType;
-use crate::errno::{Errno, EBADF};
-use crate::fs::{VFile, VFileFlags, Vnode};
+use crate::errno::{Errno, EBADF, ENOTSOCK};
+use crate::fs::{VFile, VFileFlags, VFileType, Vnode};
 use crate::kqueue::KernelQueue;
+use crate::net::Socket;
 use gmtx::{Gutex, GutexGroup};
 use macros::Errno;
 use std::collections::VecDeque;
@@ -114,6 +115,17 @@ impl FileDesc {
 
     // TODO: (maybe) implement capabilities
 
+    /// See `getsock_cap` on the PS4 for a reference.
+    pub fn get_socket(&self, fd: i32) -> Result<Arc<Socket>, GetSocketError> {
+        let file = self.get(fd)?;
+
+        let (VFileType::Socket(so) | VFileType::IpcSocket(so)) = file.ty() else {
+            return Err(GetSocketError::NotSocket);
+        };
+
+        Ok(so.clone())
+    }
+
     /// See `fget` on the PS4 for a reference.
     pub fn get(&self, fd: i32) -> Result<Arc<VFile>, GetFileError> {
         self.get_internal(fd, VFileFlags::empty())
@@ -167,6 +179,16 @@ impl FileDesc {
             Err(FreeError::NoFile)
         }
     }
+}
+
+#[derive(Debug, Error, Errno)]
+pub enum GetSocketError {
+    #[error("failed to get file")]
+    GetFileError(#[from] GetFileError),
+
+    #[error("file is not a socket")]
+    #[errno(ENOTSOCK)]
+    NotSocket,
 }
 
 #[derive(Debug, Error, Errno)]

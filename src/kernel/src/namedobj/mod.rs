@@ -30,7 +30,7 @@ impl NamedObjManager {
 
         let obj = NamedObj::new(name, data);
 
-        let id = table.alloc_infallible(|_| {
+        let id = table.alloc({
             Entry::new(
                 Some(name.to_owned()),
                 Arc::new(obj),
