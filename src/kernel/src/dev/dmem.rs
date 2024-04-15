@@ -30,14 +30,14 @@ pub enum DmemContainer {
     Two,
 }
 
-impl TryInto<DmemContainer> for i32 {
+impl TryFrom<i32> for DmemContainer {
     type Error = SysErr;
 
-    fn try_into(self) -> Result<DmemContainer, Self::Error> {
-        match self {
-            0 => Ok(DmemContainer::Zero),
-            1 => Ok(DmemContainer::One),
-            2 => Ok(DmemContainer::Two),
+    fn try_from(value: i32) -> Result<Self, Self::Error> {
+        match value {
+            0 => Ok(Self::Zero),
+            1 => Ok(Self::One),
+            2 => Ok(Self::Two),
             _ => Err(SysErr::Raw(EINVAL)),
         }
     }
