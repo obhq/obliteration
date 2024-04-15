@@ -1,4 +1,4 @@
-use super::{CharacterDevice, IoCmd, Offset, Stat, TruncateLength, Uio, UioMut, Vnode};
+use super::{CharacterDevice, IoCmd, Stat, TruncateLength, Uio, UioMut, Vnode};
 use crate::dmem::BlockPool;
 use crate::errno::Errno;
 use crate::errno::{EINVAL, ENOTTY, ENXIO, EOPNOTSUPP};
