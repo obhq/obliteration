@@ -41,11 +41,10 @@ pub(super) trait SocketBackend {
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>>;
 }
-#[repr(u8)]
 #[derive(Debug)]
 pub(super) enum Protocol {
-    Unix(UnixProtocol) = 1,
-    Inet(InetProtocol) = 2,
+    Unix(UnixProtocol), // 1
+    Inet(InetProtocol), // 2
 }
 
 impl Protocol {
