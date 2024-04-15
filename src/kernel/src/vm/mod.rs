@@ -27,7 +27,7 @@ mod storage;
 #[derive(Debug)]
 pub struct Vm {
     allocation_granularity: usize,
-    allocations: RwLock<BTreeMap<usize, Alloc>>, // Key is Alloc::addr.
+    allocations: RwLock<BTreeMap<usize, Mapping>>, // Key is Alloc::addr.
     stack: AppStack,
 }
 
@@ -85,6 +85,8 @@ impl Vm {
         sys.register(69, &mm, Self::sys_sbrk);
         sys.register(70, &mm, Self::sys_sstk);
         sys.register(73, &mm, Self::sys_munmap);
+        sys.register(74, &mm, Self::sys_mprotect);
+        sys.register(203, &mm, Self::sys_mlock);
         sys.register(477, &mm, Self::sys_mmap);
         sys.register(548, &mm, Self::sys_batch_map);
         sys.register(588, &mm, Self::sys_mname);
@@ -181,6 +183,19 @@ impl Vm {
         self.map(addr, len, prot, name.into())
     }
 
+    fn mlock(&self, addr: usize, len: usize) -> Result<(), SysErr> {
+        self.update(
+            addr as _,
+            len,
+            |i| !i.locked,
+            |i| {
+                i.storage.lock(i.addr, i.len).unwrap();
+                i.locked = true;
+            },
+        )
+        .map_err(|_| SysErr::Raw(EINVAL))
+    }
+
     pub fn munmap(&self, addr: *mut u8, len: usize) -> Result<(), MunmapError> {
         // Check arguments.
         let first = addr as usize;
@@ -193,7 +208,7 @@ impl Vm {
 
         // Do unmapping every pages in the range.
         let end = Self::align_virtual_page(unsafe { addr.add(len) });
-        let mut adds: Vec<Alloc> = Vec::new();
+        let mut adds: Vec<Mapping> = Vec::new();
         let mut removes: Vec<usize> = Vec::new();
         let mut allocs = self.allocations.write().unwrap();
 
@@ -211,12 +226,13 @@ impl Vm {
 
                 // Check if we need to split in the middle.
                 let decommit = if end < info.end() {
-                    adds.push(Alloc {
+                    adds.push(Mapping {
                         addr: end,
                         len: (info.end() as usize) - (end as usize),
                         prot: info.prot,
                         name: info.name.clone(),
                         storage: info.storage.clone(),
+                        locked: false,
                     });
 
                     (end as usize) - (addr as usize)
@@ -245,12 +261,13 @@ impl Vm {
                 // Split the region.
                 removes.push(info.addr as usize);
 
-                adds.push(Alloc {
+                adds.push(Mapping {
                     addr: end,
                     len: info.len - decommit,
                     prot: info.prot,
                     name: info.name.clone(),
                     storage: info.storage.clone(),
+                    locked: false,
                 });
             } else {
                 // Unmap the whole allocation.
@@ -365,8 +382,8 @@ impl Vm {
         mut update: U,
     ) -> Result<(), MemoryUpdateError>
     where
-        F: FnMut(&Alloc) -> bool,
-        U: FnMut(&mut Alloc),
+        F: FnMut(&Mapping) -> bool,
+        U: FnMut(&mut Mapping),
     {
         // Check arguments.
         let first = addr as usize;
@@ -381,7 +398,7 @@ impl Vm {
         let mut valid_addr = false;
         let end = Self::align_virtual_page(unsafe { addr.add(len) });
         let mut prev: *mut u8 = null_mut();
-        let mut targets: Vec<&mut Alloc> = Vec::new();
+        let mut targets: Vec<&mut Mapping> = Vec::new();
         let mut allocs = self.allocations.write().unwrap();
 
         for (_, info) in StartFromMut::new(&mut allocs, first) {
@@ -409,7 +426,7 @@ impl Vm {
         }
 
         // Update allocations within the range.
-        let mut adds: Vec<Alloc> = Vec::new();
+        let mut adds: Vec<Mapping> = Vec::new();
 
         for info in targets {
             let storage = &info.storage;
@@ -425,12 +442,13 @@ impl Vm {
                 };
 
                 // Split the first allocation.
-                let mut alloc = Alloc {
+                let mut alloc = Mapping {
                     addr,
                     len,
                     prot: info.prot,
                     name: info.name.clone(),
                     storage: storage.clone(),
+                    locked: false,
                 };
 
                 update(&mut alloc);
@@ -438,12 +456,13 @@ impl Vm {
 
                 // Check if the splitting was in the middle.
                 if len != remain {
-                    adds.push(Alloc {
+                    adds.push(Mapping {
                         addr: end,
                         len: (info.end() as usize) - (end as usize),
                         prot: info.prot,
                         name: info.name.clone(),
                         storage: storage.clone(),
+                        locked: false,
                     });
                 }
 
@@ -454,12 +473,13 @@ impl Vm {
                 let tail = (info.end() as usize) - (end as usize);
 
                 info.len -= tail;
-                adds.push(Alloc {
+                adds.push(Mapping {
                     addr: end,
                     len: tail,
                     prot: info.prot,
                     name: info.name.clone(),
                     storage: storage.clone(),
+                    locked: false,
                 });
 
                 update(info);
@@ -484,7 +504,7 @@ impl Vm {
         len: usize,
         prot: Protections,
         name: String,
-    ) -> Result<Alloc, std::io::Error> {
+    ) -> Result<Mapping, std::io::Error> {
         use self::storage::Memory;
 
         // Determine how to allocate.
@@ -517,12 +537,13 @@ impl Vm {
             let _ = storage.set_name(addr, len, &name);
         }
 
-        Ok(Alloc {
+        Ok(Mapping {
             addr,
             len,
             prot,
             name,
             storage: Arc::new(storage),
+            locked: false,
         })
     }
 
@@ -547,6 +568,58 @@ impl Vm {
     #[allow(unused_variables)]
     fn munmap_internal(self: &Arc<Self>, addr: usize, len: usize) -> Result<SysOut, SysErr> {
         todo!()
+    }
+
+    fn sys_mprotect(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let addr: usize = i.args[0].into();
+        let len: usize = i.args[1].into();
+        let prot: Protections = i.args[2].try_into().unwrap();
+
+        info!("sys_mprotect({:#x}, {:#x}, {})", addr, len, prot);
+
+        self.mprotect_internal(addr, len, prot)
+    }
+
+    fn mprotect_internal(
+        self: &Arc<Self>,
+        addr: usize,
+        len: usize,
+        prot: Protections,
+    ) -> Result<SysOut, SysErr> {
+        let addr = addr + 0x3fff & 0xffffffffffffc000;
+        let end = addr & 0x3fff + 0x3fff + len & 0xffffffffffffc000;
+
+        let prot = if prot.intersects(Protections::CPU_WRITE) {
+            prot.union(Protections::CPU_READ)
+        } else {
+            prot
+        };
+
+        self.mprotect(addr as _, end - addr, prot)
+            .map_err(|_| SysErr::Raw(EINVAL))?;
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn sys_mlock(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let addr: usize = i.args[0].into();
+        let len: usize = i.args[1].into();
+
+        info!("sys_mlock({:#x}, {:#x})", addr, len);
+
+        self.mlock_internal(addr, len)
+    }
+
+    fn mlock_internal(self: &Arc<Self>, addr: usize, len: usize) -> Result<SysOut, SysErr> {
+        let end = addr + len + 0x3fff & 0xffffffffffffc000;
+
+        if addr > end {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        self.mlock(addr, len)?;
+
+        Ok(SysOut::ZERO)
     }
 
     fn sys_mmap(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -661,7 +734,13 @@ impl Vm {
                         0,
                     )?;
                 }
-                BatchMapOp::Protect => todo!(),
+                BatchMapOp::Protect => {
+                    if arg.addr & 0x3fff != 0 || arg.len & 0x3fff != 0 || arg.prot & 0xc8 != 0 {
+                        return Err(SysErr::Raw(EINVAL));
+                    }
+
+                    self.mprotect_internal(arg.addr, arg.len, arg.prot.try_into().unwrap())?;
+                }
                 BatchMapOp::TypeProtect => todo!(),
                 BatchMapOp::Unmap => {
                     if arg.addr & 0x3fff != 0 || arg.len & 0x3fff != 0 {
@@ -774,21 +853,22 @@ unsafe impl Sync for Vm {}
 
 /// Contains information for an allocation of virtual pages.
 #[derive(Debug)]
-struct Alloc {
+struct Mapping {
     addr: *mut u8,
     len: usize,
     prot: Protections,
     name: String,
     storage: Arc<dyn Storage>,
+    locked: bool,
 }
 
-impl Alloc {
+impl Mapping {
     fn end(&self) -> *mut u8 {
         unsafe { self.addr.add(self.len) }
     }
 }
 
-unsafe impl Send for Alloc {}
+unsafe impl Send for Mapping {}
 
 bitflags! {
     /// Flags to tell what access is possible for the virtual page.

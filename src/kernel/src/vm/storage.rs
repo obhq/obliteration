@@ -10,6 +10,7 @@ pub(super) trait Storage: Debug {
     fn addr(&self) -> *mut u8;
     fn decommit(&self, addr: *mut u8, len: usize) -> Result<(), Error>;
     fn protect(&self, addr: *mut u8, len: usize, prot: Protections) -> Result<(), Error>;
+    fn lock(&self, addr: *mut u8, len: usize) -> Result<(), Error>;
     fn set_name(&self, addr: *mut u8, len: usize, name: &CStr) -> Result<(), Error>;
 }
 
@@ -149,6 +150,28 @@ impl Storage for Memory {
         let mut old = 0;
 
         if unsafe { VirtualProtect(addr as _, len, prot.into_host(), &mut old) } == 0 {
+            Err(Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+
+    #[cfg(unix)]
+    fn lock(&self, addr: *mut u8, len: usize) -> Result<(), Error> {
+        use libc::mlock;
+
+        if unsafe { mlock(addr as _, len) } < 0 {
+            Err(Error::last_os_error())
+        } else {
+            Ok(())
+        }
+    }
+
+    #[cfg(windows)]
+    fn lock(&self, addr: *mut u8, len: usize) -> Result<(), Error> {
+        use windows_sys::Win32::System::Memory::VirtualLock;
+
+        if unsafe { VirtualLock(addr as _, len) } == 0 {
             Err(Error::last_os_error())
         } else {
             Ok(())
