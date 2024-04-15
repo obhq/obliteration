@@ -38,7 +38,7 @@ impl TryFrom<i32> for DmemContainer {
             0 => Ok(Self::Zero),
             1 => Ok(Self::One),
             2 => Ok(Self::Two),
-            _ => Err(SysErr(EINVAL)),
+            _ => Err(SysErr::Raw(EINVAL)),
         }
     }
 }
