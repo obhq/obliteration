@@ -30,9 +30,9 @@ impl SocketBackend for InetProtocol {
 
     fn connect(
         &self,
-        socket: &Arc<Socket>,
-        addr: &SockAddr,
-        td: &VThread,
+        _socket: &Arc<Socket>,
+        _addr: &SockAddr,
+        _td: &VThread,
     ) -> Result<(), Box<dyn Errno>> {
         todo!()
     }
