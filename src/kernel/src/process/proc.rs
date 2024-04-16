@@ -9,7 +9,6 @@ use crate::errno::{EINVAL, ERANGE, ESRCH};
 use crate::fs::Vnode;
 use crate::idt::Idt;
 use crate::info;
-use crate::signal::{SignalSet, SIGKILL, SIGSTOP, SIG_BLOCK, SIG_SETMASK, SIG_UNBLOCK};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::sysent::ProcAbi;
 use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
@@ -98,7 +97,6 @@ impl VProc {
         });
 
         // TODO: Move all syscalls here to somewhere else.
-        sys.register(340, &vp, Self::sys_sigprocmask);
         sys.register(455, &vp, Self::sys_thr_new);
         sys.register(466, &vp, Self::sys_rtprio_thread);
         sys.register(487, &vp, Self::sys_cpuset_getaffinity);
@@ -198,68 +196,6 @@ impl VProc {
 
     pub fn uptc(&self) -> &AtomicPtr<u8> {
         &self.uptc
-    }
-
-    fn sys_sigprocmask(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
-        // Get arguments.
-        let how: How = {
-            let how: i32 = i.args[0].try_into().unwrap();
-            how.try_into()?
-        };
-
-        let set: *const SignalSet = i.args[1].into();
-        let oset: *mut SignalSet = i.args[2].into();
-
-        // Convert set to an option.
-        let set = if set.is_null() {
-            None
-        } else {
-            Some(unsafe { *set })
-        };
-
-        // Keep the current mask for copying to the oset. We need to copy to the oset only when this
-        // function succees.
-        let mut mask = td.sigmask_mut();
-        let prev = *mask;
-
-        // Update the mask.
-        if let Some(mut set) = set {
-            match how {
-                How::Block => {
-                    // Remove uncatchable signals.
-                    set.remove(SIGKILL);
-                    set.remove(SIGSTOP);
-
-                    // Update mask.
-                    *mask |= set;
-                }
-                How::Unblock => {
-                    // Update mask.
-                    *mask &= !set;
-
-                    // TODO: Invoke signotify at the end.
-                }
-                How::SetMask => {
-                    // Remove uncatchable signals.
-                    set.remove(SIGKILL);
-                    set.remove(SIGSTOP);
-
-                    // Replace mask.
-                    *mask = set;
-
-                    // TODO: Invoke signotify at the end.
-                }
-            }
-
-            // TODO: Check if we need to invoke reschedule_signals.
-        }
-
-        // Copy output.
-        if !oset.is_null() {
-            unsafe { *oset = prev };
-        }
-
-        Ok(SysOut::ZERO)
     }
 
     fn sys_thr_new(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -547,28 +483,6 @@ impl VProc {
         assert!(id > 0);
 
         NonZeroI32::new(id).unwrap()
-    }
-}
-
-#[derive(Debug)]
-enum How {
-    Block,
-    Unblock,
-    SetMask,
-}
-
-impl TryFrom<i32> for How {
-    type Error = SysErr;
-
-    fn try_from(value: i32) -> Result<Self, Self::Error> {
-        let how = match value {
-            SIG_BLOCK => How::Block,
-            SIG_UNBLOCK => How::Unblock,
-            SIG_SETMASK => How::SetMask,
-            _ => return Err(SysErr::Raw(EINVAL)),
-        };
-
-        Ok(how)
     }
 }
 

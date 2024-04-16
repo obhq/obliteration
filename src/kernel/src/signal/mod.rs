@@ -1,11 +1,86 @@
 pub use self::set::*;
-
+use crate::errno::EINVAL;
+use crate::process::VThread;
+use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
 use bitflags::bitflags;
 use std::borrow::Cow;
 use std::fmt::{Display, Formatter};
 use std::num::NonZeroI32;
+use std::sync::Arc;
 
 mod set;
+
+/// Manage process/thread signal.
+pub struct SignalManager {}
+
+impl SignalManager {
+    pub fn new(sys: &mut Syscalls) -> Arc<Self> {
+        // Register syscalls.
+        let mgr = Arc::new(Self {});
+
+        sys.register(340, &mgr, Self::sys_sigprocmask);
+
+        mgr
+    }
+
+    fn sys_sigprocmask(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        // Get arguments.
+        let how: MaskOp = i.args[0].try_into()?;
+        let set: *const SignalSet = i.args[1].into();
+        let oset: *mut SignalSet = i.args[2].into();
+
+        // Convert set to an option.
+        let set = if set.is_null() {
+            None
+        } else {
+            Some(unsafe { *set })
+        };
+
+        // Keep the current mask for copying to the oset. We need to copy to the oset only when this
+        // function succees.
+        let mut mask = td.sigmask_mut();
+        let prev = *mask;
+
+        // Update the mask.
+        if let Some(mut set) = set {
+            match how {
+                MaskOp::Block => {
+                    // Remove uncatchable signals.
+                    set.remove(SIGKILL);
+                    set.remove(SIGSTOP);
+
+                    // Update mask.
+                    *mask |= set;
+                }
+                MaskOp::Unblock => {
+                    // Update mask.
+                    *mask &= !set;
+
+                    // TODO: Invoke signotify at the end.
+                }
+                MaskOp::Set => {
+                    // Remove uncatchable signals.
+                    set.remove(SIGKILL);
+                    set.remove(SIGSTOP);
+
+                    // Replace mask.
+                    *mask = set;
+
+                    // TODO: Invoke signotify at the end.
+                }
+            }
+
+            // TODO: Check if we need to invoke reschedule_signals.
+        }
+
+        // Copy output.
+        if !oset.is_null() {
+            unsafe { *oset = prev };
+        }
+
+        Ok(SysOut::ZERO)
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Signal(NonZeroI32);
@@ -85,13 +160,33 @@ pub fn strsignal(sig: Signal) -> Cow<'static, str> {
 }
 
 pub const SIG_MAXSIG: i32 = 128;
-// List of sigprocmask operations. The value must be the same as PS4 kernel.
-pub const SIG_BLOCK: i32 = 1;
-pub const SIG_UNBLOCK: i32 = 2;
-pub const SIG_SETMASK: i32 = 3;
-
 pub const SIG_IGN: usize = 1;
 pub const SIG_DFL: usize = 0;
+
+/// List of sigprocmask operations. The value must be the same as PS4 kernel.
+#[repr(i32)]
+#[derive(Debug, Clone, Copy)]
+pub enum MaskOp {
+    Block = 1,   // SIG_BLOCK
+    Unblock = 2, // SIG_UNBLOCK
+    Set = 3,     // SIG_SETMASK
+}
+
+impl TryFrom<SysArg> for MaskOp {
+    type Error = SysErr;
+
+    fn try_from(value: SysArg) -> Result<Self, Self::Error> {
+        let raw: i32 = value.try_into().map_err(|_| SysErr::Raw(EINVAL))?;
+        let op = match raw {
+            v if v == Self::Block as i32 => Self::Block,
+            v if v == Self::Unblock as i32 => Self::Unblock,
+            v if v == Self::Set as i32 => Self::Set,
+            _ => return Err(SysErr::Raw(EINVAL)),
+        };
+
+        Ok(op)
+    }
+}
 
 /// An iterator over all possible signals
 pub struct SignalIter {
