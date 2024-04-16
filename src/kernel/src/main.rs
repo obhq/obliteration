@@ -19,6 +19,7 @@ use crate::process::{ProcManager, VThread};
 use crate::regmgr::RegMgr;
 use crate::rtld::{ExecError, LoadFlags, ModuleFlags, RuntimeLinker};
 use crate::shm::SharedMemoryManager;
+use crate::signal::SignalManager;
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
 use crate::time::TimeManager;
@@ -362,6 +363,7 @@ fn run() -> Result<(), KernelError> {
     let machdep = MachDep::new(&mut syscalls);
     let budget = BudgetManager::new(&mut syscalls);
 
+    SignalManager::new(&mut syscalls);
     DmemManager::new(&fs, &mut syscalls)?;
     SharedMemoryManager::new(&mut syscalls);
     Sysctl::new(&machdep, &mut syscalls);
