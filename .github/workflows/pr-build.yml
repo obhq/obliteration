@@ -26,10 +26,14 @@ jobs:
     name: Build
     uses: ./.github/workflows/ci-mac.yml
     needs: prebuild
+  build-web:
+    name: Build
+    uses: ./.github/workflows/ci-web.yml
+    needs: prebuild
   postbuild:
     name: Post build
     runs-on: ubuntu-latest
-    needs: [build-windows, build-linux, build-mac]
+    needs: [build-windows, build-linux, build-mac, build-web]
     steps:
     - name: Generate build information
       run: |

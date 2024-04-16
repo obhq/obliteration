@@ -1,0 +1,4 @@
+docs_dir: web
+site_name: Obliteration
+theme:
+  name: material
