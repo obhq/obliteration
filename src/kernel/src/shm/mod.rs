@@ -1,15 +1,14 @@
-use crate::{
-    errno::{Errno, EINVAL},
-    fs::{
-        check_access, Access, AccessError, DefaultFileBackendError, FileBackend, IoCmd, Mode,
-        OpenFlags, PollEvents, Stat, TruncateLength, Uio, UioMut, VFile, VFileFlags, VPathBuf,
-    },
-    process::VThread,
-    syscalls::{SysErr, SysIn, SysOut, Syscalls},
-    ucred::{Gid, Ucred, Uid},
+use crate::errno::{Errno, EINVAL};
+use crate::fs::{
+    check_access, Access, AccessError, DefaultFileBackendError, FileBackend, IoCmd, IoLen, IoVec,
+    IoVecMut, Mode, OpenFlags, PollEvents, Stat, TruncateLength, VFile, VFileFlags, VPathBuf,
 };
+use crate::process::VThread;
+use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
+use crate::ucred::{Gid, Ucred, Uid};
 use macros::Errno;
-use std::{convert::Infallible, sync::Arc};
+use std::convert::Infallible;
+use std::sync::Arc;
 use thiserror::Error;
 
 pub struct SharedMemoryManager {}
@@ -108,41 +107,42 @@ impl SharedMemory {
 }
 
 impl FileBackend for SharedMemory {
+    fn is_seekable(&self) -> bool {
+        todo!()
+    }
+
     fn read(
-        self: &Arc<Self>,
+        &self,
         _: &VFile,
-        _: &mut UioMut,
+        _: u64,
+        _: &mut [IoVecMut],
         _: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<IoLen, Box<dyn Errno>> {
         Err(Box::new(DefaultFileBackendError::OperationNotSupported))
     }
 
     fn write(
-        self: &Arc<Self>,
+        &self,
         _: &VFile,
-        _: &mut Uio,
+        _: u64,
+        _: &[IoVec],
         _: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<IoLen, Box<dyn Errno>> {
         Err(Box::new(DefaultFileBackendError::OperationNotSupported))
     }
 
     #[allow(unused_variables)] // remove when implementing
-    fn ioctl(
-        self: &Arc<Self>,
-        file: &VFile,
-        cmd: IoCmd,
-        td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    fn ioctl(&self, file: &VFile, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
         todo!()
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing
-    fn poll(self: &Arc<Self>, file: &VFile, events: PollEvents, td: &VThread) -> PollEvents {
+    fn poll(&self, file: &VFile, events: PollEvents, td: &VThread) -> PollEvents {
         todo!()
     }
 
     #[allow(unused_variables)] // remove when implementing
-    fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
+    fn stat(&self, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
         let mut stat = Stat::zeroed();
 
         stat.block_size = 0x4000;
@@ -151,7 +151,7 @@ impl FileBackend for SharedMemory {
     }
 
     fn truncate(
-        self: &Arc<Self>,
+        &self,
         _: &VFile,
         length: TruncateLength,
         _: Option<&VThread>,

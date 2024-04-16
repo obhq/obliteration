@@ -1,10 +1,9 @@
 use super::{
-    unixify_access, Access, CharacterDevice, FileBackend, IoCmd, Mode, Mount, RevokeFlags, Stat,
-    TruncateLength, Uio, UioMut, VFile,
+    unixify_access, Access, CharacterDevice, FileBackend, IoCmd, IoLen, IoVec, IoVecMut, Mode,
+    Mount, PollEvents, RevokeFlags, Stat, TruncateLength, VFile,
 };
 use crate::arnd;
 use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
-use crate::fs::PollEvents;
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
@@ -24,7 +23,7 @@ pub struct Vnode {
     mount: Arc<Mount>,              // v_mount
     ty: VnodeType,                  // v_type
     tag: &'static str,              // v_tag
-    backend: Arc<dyn VnodeBackend>, // v_op + v_data
+    backend: Box<dyn VnodeBackend>, // v_op + v_data
     hash: u32,                      // v_hash
     item: Gutex<Option<VnodeItem>>, // v_un
 }
@@ -37,24 +36,15 @@ impl Vnode {
         tag: &'static str,
         backend: impl VnodeBackend,
     ) -> Arc<Self> {
-        Arc::new(Self::new_plain(mount, ty, tag, Arc::new(backend)))
-    }
-
-    pub(super) fn new_plain(
-        mount: &Arc<Mount>,
-        ty: VnodeType,
-        tag: &'static str,
-        backend: Arc<impl VnodeBackend>,
-    ) -> Self {
         let gg = GutexGroup::new();
 
         ACTIVE.fetch_add(1, Ordering::Relaxed);
 
-        Self {
+        Arc::new(Self {
             mount: mount.clone(),
             ty,
             tag,
-            backend,
+            backend: Box::new(backend),
             hash: {
                 let mut buf = [0u8; 4];
                 arnd::rand_bytes(&mut buf);
@@ -62,11 +52,7 @@ impl Vnode {
                 u32::from_ne_bytes(buf)
             },
             item: gg.spawn(None),
-        }
-    }
-
-    pub fn new_cyclic(f: impl FnOnce(&Weak<Vnode>) -> Vnode) -> Arc<Self> {
-        Arc::new_cyclic(f)
+        })
     }
 
     pub fn mount(&self) -> &Arc<Mount> {
@@ -141,68 +127,24 @@ impl Vnode {
 
     pub fn read(
         self: &Arc<Self>,
-        buf: &mut UioMut,
+        off: u64,
+        buf: &mut [IoVecMut],
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
-        self.backend.read(self, buf, td)
+    ) -> Result<IoLen, Box<dyn Errno>> {
+        self.backend.read(self, off, buf, td)
     }
 
     pub fn write(
         self: &Arc<Self>,
-        buf: &mut Uio,
+        off: u64,
+        buf: &[IoVec],
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
-        self.backend.write(self, buf, td)
-    }
-}
-
-impl FileBackend for Vnode {
-    fn read(
-        self: &Arc<Self>,
-        _: &VFile,
-        buf: &mut UioMut,
-        td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
-        self.backend.read(self, buf, td)
+    ) -> Result<IoLen, Box<dyn Errno>> {
+        self.backend.write(self, off, buf, td)
     }
 
-    fn write(
-        self: &Arc<Self>,
-        _: &VFile,
-        buf: &mut Uio,
-        td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
-        self.backend.write(self, buf, td)
-    }
-
-    #[allow(unused_variables)] // TODO: remove when implementing
-    fn ioctl(
-        self: &Arc<Self>,
-        file: &VFile,
-        cmd: IoCmd,
-        td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
-        todo!()
-    }
-
-    #[allow(unused_variables)] // TODO: remove when implementing
-    fn poll(self: &Arc<Self>, file: &VFile, events: PollEvents, td: &VThread) -> PollEvents {
-        todo!()
-    }
-
-    #[allow(unused_variables)] // TODO: remove when implementing
-    fn stat(self: &Arc<Self>, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
-        todo!()
-    }
-
-    #[allow(unused_variables)] // TODO: remove when implementing
-    fn truncate(
-        self: &Arc<Self>,
-        file: &VFile,
-        length: TruncateLength,
-        td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
-        todo!()
+    pub fn to_file_backend(self: &Arc<Self>) -> Box<dyn FileBackend> {
+        self.backend.to_file_backend(self)
     }
 }
 
@@ -318,17 +260,23 @@ pub(super) trait VnodeBackend: Debug + Send + Sync + 'static {
     fn read(
         &self,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
-        #[allow(unused_variables)] buf: &mut UioMut,
+        #[allow(unused_variables)] off: u64,
+        #[allow(unused_variables)] buf: &mut [IoVecMut],
         #[allow(unused_variables)] td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>>;
+    ) -> Result<IoLen, Box<dyn Errno>>;
 
     /// An implementation of `vop_write`.
     fn write(
         &self,
         #[allow(unused_variables)] vn: &Arc<Vnode>,
-        #[allow(unused_variables)] buf: &mut Uio,
+        #[allow(unused_variables)] off: u64,
+        #[allow(unused_variables)] buf: &[IoVec],
         #[allow(unused_variables)] td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>>;
+    ) -> Result<IoLen, Box<dyn Errno>>;
+
+    fn to_file_backend(&self, vn: &Arc<Vnode>) -> Box<dyn FileBackend> {
+        Box::new(VnodeFileBackend(vn.clone()))
+    }
 }
 
 /// An implementation of `vattr` struct.
@@ -341,7 +289,64 @@ pub struct VnodeAttrs {
     pub fsid: u32,  // va_fsid
 }
 
-/// Represents an error when [`DEFAULT_VNODEOPS`] fails.
+/// Implementation of `vnops`.
+#[derive(Debug)]
+pub(super) struct VnodeFileBackend(Arc<Vnode>);
+
+impl VnodeFileBackend {
+    pub fn new(vn: Arc<Vnode>) -> Self {
+        Self(vn)
+    }
+}
+
+impl FileBackend for VnodeFileBackend {
+    fn is_seekable(&self) -> bool {
+        true
+    }
+
+    fn read(
+        &self,
+        _: &VFile,
+        off: u64,
+        buf: &mut [IoVecMut],
+        td: Option<&VThread>,
+    ) -> Result<IoLen, Box<dyn Errno>> {
+        self.0.read(off, buf, td)
+    }
+
+    fn write(
+        &self,
+        _: &VFile,
+        off: u64,
+        buf: &[IoVec],
+        td: Option<&VThread>,
+    ) -> Result<IoLen, Box<dyn Errno>> {
+        self.0.write(off, buf, td)
+    }
+
+    fn ioctl(&self, file: &VFile, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+
+    fn poll(&self, file: &VFile, events: PollEvents, td: &VThread) -> PollEvents {
+        todo!()
+    }
+
+    fn stat(&self, file: &VFile, td: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
+        todo!()
+    }
+
+    fn truncate(
+        &self,
+        file: &VFile,
+        length: TruncateLength,
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+}
+
+/// Represents an error when default implementation of [`VnodeBackend`] fails.
 #[derive(Debug, Error, Errno)]
 enum DefaultError {
     #[error("operation not supported")]

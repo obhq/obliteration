@@ -199,12 +199,17 @@ impl NetManager {
                 let so = Socket::new(domain, ty, proto, td.cred(), td, None)?;
 
                 let ty = if domain == 1 {
-                    VFileType::IpcSocket(so)
+                    VFileType::IpcSocket
                 } else {
-                    VFileType::Socket(so)
+                    VFileType::Socket
                 };
 
-                Ok(VFile::new(ty, VFileFlags::READ | VFileFlags::WRITE))
+                Ok(VFile::new(
+                    ty,
+                    VFileFlags::READ | VFileFlags::WRITE,
+                    None,
+                    todo!(),
+                ))
             },
             budget,
         )?;
@@ -261,12 +266,17 @@ impl NetManager {
                 let so = Socket::new(domain, ty, proto, td.cred(), td, name)?;
 
                 let ty = if domain == 1 {
-                    VFileType::IpcSocket(so)
+                    VFileType::IpcSocket
                 } else {
-                    VFileType::Socket(so)
+                    VFileType::Socket
                 };
 
-                Ok(VFile::new(ty, VFileFlags::READ | VFileFlags::WRITE))
+                Ok(VFile::new(
+                    ty,
+                    VFileFlags::READ | VFileFlags::WRITE,
+                    None,
+                    todo!(),
+                ))
             },
             budget,
         )?;
@@ -301,12 +311,10 @@ impl NetManager {
         let to: *const u8 = i.args[4].into();
         let tolen: u32 = i.args[5].try_into().unwrap();
 
-        let ref iovec = unsafe { IoVec::from_raw_parts(buf, buflen) };
-
         let msg = MsgHdr {
             name: to,
             len: tolen,
-            iovec: iovec as *const IoVec,
+            iovec: todo!(),
             iovec_len: 1,
             control: core::ptr::null(),
             control_len: 0,

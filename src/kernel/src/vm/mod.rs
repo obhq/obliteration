@@ -394,7 +394,7 @@ impl Vm {
 
             // TODO: Check if PS4 requires contiguous allocations.
             if !prev.is_null() && info.addr != prev {
-                return Err(MemoryUpdateError::UnmappedAddr(prev));
+                return Err(MemoryUpdateError::UnmappedAddr(prev as _));
             }
 
             prev = info.end();
@@ -963,8 +963,8 @@ pub enum MemoryUpdateError {
     #[error("invalid addr")]
     InvalidAddr,
 
-    #[error("address {0:p} is not mapped")]
-    UnmappedAddr(*const u8),
+    #[error("address {0:#x} is not mapped")]
+    UnmappedAddr(usize),
 }
 
 #[repr(C)]

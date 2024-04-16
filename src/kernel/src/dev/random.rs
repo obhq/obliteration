@@ -1,8 +1,6 @@
-use crate::{
-    errno::Errno,
-    fs::{CharacterDevice, DefaultDeviceError, DeviceDriver, IoCmd, Uio, UioMut},
-    process::VThread,
-};
+use crate::errno::Errno;
+use crate::fs::{CharacterDevice, DefaultDeviceError, DeviceDriver, IoCmd, IoLen, IoVec, IoVecMut};
+use crate::process::VThread;
 use std::sync::Arc;
 
 #[derive(Debug)]
@@ -13,9 +11,10 @@ impl DeviceDriver for Random {
     fn read(
         &self,
         dev: &Arc<CharacterDevice>,
-        data: &mut UioMut,
+        off: Option<u64>,
+        buf: &mut [IoVecMut],
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<IoLen, Box<dyn Errno>> {
         todo!()
     }
 
@@ -23,9 +22,10 @@ impl DeviceDriver for Random {
     fn write(
         &self,
         dev: &Arc<CharacterDevice>,
-        data: &mut Uio,
+        off: Option<u64>,
+        buf: &[IoVec],
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<IoLen, Box<dyn Errno>> {
         todo!()
     }
 

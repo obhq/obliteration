@@ -1,6 +1,6 @@
 use super::{AllocVnodeError, TempFs};
 use crate::errno::{Errno, ENOENT, ENOSPC};
-use crate::fs::{Access, Uio, UioMut, Vnode, VnodeAttrs, VnodeType};
+use crate::fs::{Access, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
 use gmtx::{Gutex, GutexGroup, GutexWriteGuard};
 use macros::Errno;
@@ -204,19 +204,21 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 
     fn read(
         &self,
-        #[allow(unused_variables)] vn: &Arc<Vnode>,
-        #[allow(unused_variables)] buf: &mut UioMut,
-        #[allow(unused_variables)] td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+        vn: &Arc<Vnode>,
+        off: u64,
+        buf: &mut [crate::fs::IoVecMut],
+        td: Option<&VThread>,
+    ) -> Result<crate::fs::IoLen, Box<dyn Errno>> {
         todo!()
     }
 
     fn write(
         &self,
-        #[allow(unused_variables)] vn: &Arc<Vnode>,
-        #[allow(unused_variables)] buf: &mut Uio,
-        #[allow(unused_variables)] td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+        vn: &Arc<Vnode>,
+        off: u64,
+        buf: &[crate::fs::IoVec],
+        td: Option<&VThread>,
+    ) -> Result<crate::fs::IoLen, Box<dyn Errno>> {
         todo!()
     }
 }

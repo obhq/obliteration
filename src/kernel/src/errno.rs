@@ -1,9 +1,9 @@
+//! This module contains errno used in a PS4 system. The value of each errno must be the same as the
+//! PS4.
 use std::convert::Infallible;
 use std::error::Error;
+use std::hint::unreachable_unchecked;
 use std::num::NonZeroI32;
-
-// This file contains errno used in a PS4 system. The value of each errno must be the same as the
-// PS4.
 
 macro_rules! error_numbers {
     ($($name:ident($num:expr) => $desc:literal,)*) => {
@@ -127,7 +127,7 @@ error_numbers! {
 }
 
 /// An object that is mappable to PS4 errno.
-pub trait Errno: Error {
+pub trait Errno: Error + Send + Sync {
     fn errno(&self) -> NonZeroI32;
 }
 
@@ -143,14 +143,16 @@ impl<T: Errno + 'static> From<T> for Box<dyn Errno> {
     }
 }
 
+impl Errno for Infallible {
+    fn errno(&self) -> NonZeroI32 {
+        // SAFETY: This is safe because Infallible type guarantee its value cannot be constructed,
+        // which imply this method cannot be called because it required a value of Infallible type.
+        unsafe { unreachable_unchecked() };
+    }
+}
+
 /// Get human readable text.
 pub fn strerror(num: NonZeroI32) -> &'static str {
     // This function is generated inside the macro `error_numbers!`.
     strerror_impl(num)
-}
-
-impl Errno for Infallible {
-    fn errno(&self) -> NonZeroI32 {
-        match *self {}
-    }
 }

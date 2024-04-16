@@ -1,7 +1,7 @@
 use super::file::HostFile;
 use super::{GetVnodeError, HostFs};
 use crate::errno::{Errno, EEXIST, EIO, ENOENT, ENOTDIR};
-use crate::fs::{Access, IoCmd, Mode, Uio, UioMut, Vnode, VnodeAttrs, VnodeType};
+use crate::fs::{Access, IoCmd, IoLen, IoVec, IoVecMut, Mode, Vnode, VnodeAttrs, VnodeType};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
 use macros::Errno;
@@ -127,20 +127,23 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     fn read(
         &self,
         _: &Arc<Vnode>,
-        buf: &mut UioMut,
+        off: u64,
+        buf: &mut [IoVecMut],
         _: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
-        let read = self.file.read(buf).map_err(ReadError::ReadFailed)?;
-
-        Ok(read)
+    ) -> Result<IoLen, Box<dyn Errno>> {
+        match self.file.read(off, buf) {
+            Ok(v) => Ok(v),
+            Err(e) => Err(Box::new(ReadError::ReadFailed(e))),
+        }
     }
 
     fn write(
         &self,
-        #[allow(unused_variables)] vn: &Arc<Vnode>,
-        #[allow(unused_variables)] buf: &mut Uio,
-        #[allow(unused_variables)] td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+        vn: &Arc<Vnode>,
+        off: u64,
+        buf: &[IoVec],
+        td: Option<&VThread>,
+    ) -> Result<IoLen, Box<dyn Errno>> {
         todo!()
     }
 }

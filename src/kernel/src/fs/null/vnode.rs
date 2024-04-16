@@ -1,35 +1,25 @@
-use crate::{
-    errno::{Errno, EISDIR, EROFS},
-    fs::{
-        null::hash::NULL_HASHTABLE, perm::Access, Mount, MountFlags, Uio, UioMut, Vnode,
-        VnodeAttrs, VnodeType,
-    },
-    process::VThread,
-};
+use super::hash::NULL_HASHTABLE;
+use crate::errno::{Errno, EISDIR, EROFS};
+use crate::fs::{Access, IoLen, IoVec, IoVecMut, Mount, MountFlags, Vnode, VnodeAttrs, VnodeType};
+use crate::process::VThread;
 use macros::Errno;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Debug)]
 pub(super) struct VnodeBackend {
     lower: Arc<Vnode>,
-    null_node: Weak<Vnode>,
 }
 
 impl VnodeBackend {
-    pub(super) fn new(lower: &Arc<Vnode>, null_node: &Weak<Vnode>) -> Self {
+    pub(super) fn new(lower: &Arc<Vnode>) -> Self {
         Self {
             lower: lower.clone(),
-            null_node: null_node.clone(),
         }
     }
 
     pub(super) fn lower(&self) -> &Arc<Vnode> {
         &self.lower
-    }
-
-    pub(super) fn null_node(&self) -> &Weak<Vnode> {
-        &self.null_node
     }
 }
 
@@ -94,27 +84,27 @@ impl crate::fs::VnodeBackend for VnodeBackend {
     fn read(
         &self,
         _: &Arc<Vnode>,
-        buf: &mut UioMut,
+        off: u64,
+        buf: &mut [IoVecMut],
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
-        self.lower
-            .read(buf, td)
-            .map_err(ReadError::ReadFromLowerFailed)?;
-
-        Ok(())
+    ) -> Result<IoLen, Box<dyn Errno>> {
+        match self.lower.read(off, buf, td) {
+            Ok(v) => Ok(v),
+            Err(e) => Err(Box::new(ReadError::ReadFromLowerFailed(e))),
+        }
     }
 
     fn write(
         &self,
-        _: &Arc<Vnode>,
-        buf: &mut Uio,
+        vn: &Arc<Vnode>,
+        off: u64,
+        buf: &[IoVec],
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
-        self.lower
-            .write(buf, td)
-            .map_err(WriteError::WriteFromLowerFailed)?;
-
-        Ok(())
+    ) -> Result<IoLen, Box<dyn Errno>> {
+        match self.lower.write(off, buf, td) {
+            Ok(v) => Ok(v),
+            Err(e) => Err(Box::new(WriteError::WriteFromLowerFailed(e))),
+        }
     }
 }
 
@@ -129,11 +119,7 @@ pub(super) fn null_nodeget(
         return Ok(nullnode);
     }
 
-    let nullnode = Vnode::new_cyclic(|null_node| {
-        let backend = Arc::new(VnodeBackend::new(lower, null_node));
-
-        Vnode::new_plain(mnt, lower.ty().clone(), "nullfs", backend)
-    });
+    let nullnode = Vnode::new(mnt, lower.ty().clone(), "nullfs", VnodeBackend::new(lower));
 
     table.insert(mnt, lower, &nullnode);
 

@@ -1,163 +1,162 @@
 use crate::errno::{Errno, EINVAL};
-use macros::Errno;
+use crate::syscalls::{SysArg, SysOut};
+use std::fmt::{Display, Formatter};
+use std::marker::PhantomData;
+use std::num::NonZeroI32;
+use std::ops::{Deref, DerefMut};
 use thiserror::Error;
 
-const UIO_MAXIOV: u32 = 1024;
-const IOSIZE_MAX: usize = 0x7fffffff;
-
+/// Implementation of `iovec` structure for writing.
 #[repr(C)]
 pub struct IoVec<'a> {
     ptr: *const u8,
-    len: usize,
-    _phantom: std::marker::PhantomData<&'a [u8]>,
+    len: IoLen,
+    phantom: PhantomData<&'a [u8]>,
 }
 
 impl<'a> IoVec<'a> {
-    /// This is for when the PS4 DOES check the length (such as in read, write, pread and pwrite)
-    pub unsafe fn try_from_raw_parts(base: *const u8, len: usize) -> Result<Self, IoVecError> {
-        if len > IOSIZE_MAX {
-            return Err(IoVecError::MaxLenExceeded);
-        }
-
-        Ok(Self {
-            ptr: base,
-            len,
-            _phantom: std::marker::PhantomData,
-        })
-    }
-
-    /// This is for when the PS4 DOES NOT check the length (such as in recvmsg, recvfrom, sendmsg and sendto)
-    pub unsafe fn from_raw_parts(base: *const u8, len: usize) -> Self {
+    /// # Safety
+    /// `ptr` must outlive `'a`.
+    pub unsafe fn new(ptr: *const u8, len: IoLen) -> Self {
         Self {
-            ptr: base,
+            ptr,
             len,
-            _phantom: std::marker::PhantomData,
+            phantom: PhantomData,
         }
     }
 
-    pub fn from_slice(slice: &'a mut [u8]) -> Self {
-        Self {
-            ptr: slice.as_ptr(),
-            len: slice.len(),
-            _phantom: std::marker::PhantomData,
-        }
-    }
-
-    pub fn ptr(&self) -> *mut u8 {
-        self.ptr as _
-    }
-
-    pub fn len(&self) -> usize {
+    pub fn len(&self) -> IoLen {
         self.len
     }
 }
 
-pub struct Uio<'a> {
-    pub(super) vecs: &'a [IoVec<'a>], // uio_iov + uio_iovcnt
-    pub(super) bytes_left: usize,     // uio_resid
-    pub(super) offset: i64,           // uio_offset
-}
+impl<'a> Deref for IoVec<'a> {
+    type Target = [u8];
 
-impl<'a> Uio<'a> {
-    /// See `copyinuio` on the PS4 for a reference.
-    pub unsafe fn copyin(
-        first: *const IoVec<'a>,
-        count: u32,
-        offset: i64,
-    ) -> Result<Self, CopyInUioError> {
-        if count > UIO_MAXIOV {
-            return Err(CopyInUioError::TooManyVecs);
-        }
-
-        let vecs = std::slice::from_raw_parts(first, count as usize);
-        let bytes_left = vecs.iter().map(|v| v.len).try_fold(0, |acc, len| {
-            if acc > IOSIZE_MAX - len {
-                Err(CopyInUioError::MaxLenExceeded)
-            } else {
-                Ok(acc + len)
-            }
-        })?;
-
-        Ok(Self {
-            vecs,
-            bytes_left,
-            offset,
-        })
+    fn deref(&self) -> &Self::Target {
+        unsafe { std::slice::from_raw_parts(self.ptr, self.len.get()) }
     }
 }
 
-pub struct UioMut<'a> {
-    pub(super) vecs: &'a mut [IoVec<'a>], // uio_iov + uio_iovcnt
-    pub(super) bytes_left: usize,         // uio_resid
-    pub(super) offset: i64,               // uio_offset
+/// Implementation of `iovec` structure for reading.
+#[repr(C)]
+pub struct IoVecMut<'a> {
+    ptr: *mut u8,
+    len: IoLen,
+    phantom: PhantomData<&'a mut [u8]>,
 }
 
-impl<'a> UioMut<'a> {
-    /// See `copyinuio` on the PS4 for a reference.
-    pub unsafe fn copyin(
-        first: *mut IoVec<'a>,
-        count: u32,
-        offset: i64,
-    ) -> Result<Self, CopyInUioError> {
-        if count > UIO_MAXIOV {
-            return Err(CopyInUioError::TooManyVecs);
-        }
-
-        let vecs = std::slice::from_raw_parts_mut(first, count as usize);
-        let bytes_left = vecs.iter().map(|v| v.len).try_fold(0, |acc, len| {
-            if acc > IOSIZE_MAX - len {
-                Err(CopyInUioError::MaxLenExceeded)
-            } else {
-                Ok(acc + len)
-            }
-        })?;
-
-        Ok(Self {
-            vecs,
-            bytes_left,
-            offset,
-        })
-    }
-
-    pub fn from_single_vec(vec: &'a mut IoVec<'a>, offset: i64) -> Self {
-        let bytes_left = vec.len;
-
+impl<'a> IoVecMut<'a> {
+    /// # Safety
+    /// `ptr` must outlive `'a`.
+    pub unsafe fn new(ptr: *mut u8, len: IoLen) -> Self {
         Self {
-            vecs: std::slice::from_mut(vec),
-            bytes_left,
-            offset,
+            ptr,
+            len,
+            phantom: PhantomData,
         }
     }
 
-    pub fn write_with<E>(
-        &mut self,
-        func: impl Fn(&mut IoVec, i64) -> Result<u64, E>,
-    ) -> Result<(), E> {
-        for vec in self.vecs.iter_mut() {
-            let written = func(vec, self.offset)?;
-
-            self.offset = self.offset.checked_add_unsigned(written).unwrap();
-            self.bytes_left -= written as usize;
-        }
-
-        Ok(())
+    pub fn len(&self) -> IoLen {
+        self.len
     }
 }
 
-#[derive(Debug, Error, Errno)]
-pub enum IoVecError {
-    #[error("len exceed the maximum value")]
-    #[errno(EINVAL)]
-    MaxLenExceeded,
+impl<'a> Deref for IoVecMut<'a> {
+    type Target = [u8];
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { std::slice::from_raw_parts(self.ptr, self.len.get()) }
+    }
 }
 
-#[derive(Debug, Error, Errno)]
-pub enum CopyInUioError {
-    #[error("too many iovecs")]
-    #[errno(EINVAL)]
-    TooManyVecs,
+impl<'a> DerefMut for IoVecMut<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { std::slice::from_raw_parts_mut(self.ptr, self.len.get()) }
+    }
+}
 
-    #[error("the sum of iovec lengths is too large")]
-    #[errno(EINVAL)]
-    MaxLenExceeded,
+/// Represents a length of [`IoVec`] and [`IoVecMut`].
+#[repr(transparent)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct IoLen(usize);
+
+impl IoLen {
+    pub const ZERO: Self = Self(0);
+    pub const MAX: Self = Self(0x7fffffff);
+
+    pub fn from_usize(v: usize) -> Result<Self, IoLenError> {
+        let v = Self(v);
+
+        if v > Self::MAX {
+            Err(IoLenError(()))
+        } else {
+            Ok(v)
+        }
+    }
+
+    pub fn get(self) -> usize {
+        self.0
+    }
+
+    pub fn checked_add(self, rhs: Self) -> Option<Self> {
+        let r = self.0.checked_add(rhs.0).map(IoLen)?;
+
+        if r > Self::MAX {
+            None
+        } else {
+            Some(r)
+        }
+    }
+
+    pub fn saturating_add(self, rhs: Self) -> Self {
+        let r = Self(self.0.saturating_add(rhs.0));
+
+        if r > Self::MAX {
+            Self::MAX
+        } else {
+            r
+        }
+    }
+
+    pub fn checked_sub(self, rhs: Self) -> Option<Self> {
+        self.0.checked_sub(rhs.0).map(IoLen)
+    }
+}
+
+impl TryFrom<SysArg> for IoLen {
+    type Error = IoLenError;
+
+    fn try_from(value: SysArg) -> Result<Self, Self::Error> {
+        Self::from_usize(value.get())
+    }
+}
+
+impl PartialEq<usize> for IoLen {
+    fn eq(&self, other: &usize) -> bool {
+        self.0 == *other
+    }
+}
+
+impl Display for IoLen {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl From<IoLen> for SysOut {
+    fn from(value: IoLen) -> Self {
+        value.0.into()
+    }
+}
+
+/// Represents an error when [`IoLen`] fails to construct.
+#[derive(Debug, Error)]
+#[error("invalid value")]
+pub struct IoLenError(());
+
+impl Errno for IoLenError {
+    fn errno(&self) -> NonZeroI32 {
+        EINVAL
+    }
 }

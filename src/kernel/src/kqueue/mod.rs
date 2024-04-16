@@ -1,17 +1,12 @@
-use crate::{
-    budget::BudgetType,
-    errno::Errno,
-    fs::{
-        DefaultFileBackendError, FileBackend, PollEvents, Stat, TruncateLength, VFile, VFileFlags,
-        VFileType,
-    },
-    process::{FileDesc, VThread},
-    syscalls::{SysErr, SysIn, SysOut, Syscalls},
+use crate::budget::BudgetType;
+use crate::errno::Errno;
+use crate::fs::{
+    DefaultFileBackendError, PollEvents, Stat, TruncateLength, VFile, VFileFlags, VFileType,
 };
-use std::{
-    convert::Infallible,
-    sync::{Arc, Weak},
-};
+use crate::process::{FileDesc, VThread};
+use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
+use std::convert::Infallible;
+use std::sync::{Arc, Weak};
 
 pub struct KernelQueueManager {}
 
@@ -39,8 +34,10 @@ impl KernelQueueManager {
                 filedesc.insert_kqueue(kq.clone());
 
                 Ok(VFile::new(
-                    VFileType::KernelQueue(kq),
+                    VFileType::KernelQueue,
                     VFileFlags::READ | VFileFlags::WRITE,
+                    None,
+                    Box::new(FileBackend(kq)),
                 ))
             },
             BudgetType::FdEqueue,
@@ -63,13 +60,21 @@ impl KernelQueue {
     }
 }
 
-impl FileBackend for KernelQueue {
-    #[allow(unused_variables)] // TODO: remove when implementing
-    fn poll(self: &Arc<Self>, file: &VFile, events: PollEvents, td: &VThread) -> PollEvents {
+/// Implementation of [`crate::fs::FileBackend`] for kqueue.
+#[derive(Debug)]
+struct FileBackend(Arc<KernelQueue>);
+
+impl crate::fs::FileBackend for FileBackend {
+    fn is_seekable(&self) -> bool {
         todo!()
     }
 
-    fn stat(self: &Arc<Self>, _: &VFile, _: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn poll(&self, file: &VFile, events: PollEvents, td: &VThread) -> PollEvents {
+        todo!()
+    }
+
+    fn stat(&self, _: &VFile, _: Option<&VThread>) -> Result<Stat, Box<dyn Errno>> {
         let mut stat = Stat::zeroed();
 
         stat.mode = 0o10000;
@@ -78,7 +83,7 @@ impl FileBackend for KernelQueue {
     }
 
     fn truncate(
-        self: &Arc<Self>,
+        &self,
         _: &VFile,
         _: TruncateLength,
         _: Option<&VThread>,

@@ -1,9 +1,10 @@
+use crate::errno::{Errno, EPERM};
 use crate::fs::{
-    make_dev, CharacterDevice, DeviceDriver, DriverFlags, IoCmd, MakeDevError, MakeDevFlags, Mode,
-    OpenFlags, Uio, UioMut,
+    make_dev, CharacterDevice, DeviceDriver, DriverFlags, IoCmd, IoLen, IoVec, IoVecMut,
+    MakeDevError, MakeDevFlags, Mode, OpenFlags,
 };
+use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
-use crate::{errno::Errno, process::VThread};
 use macros::Errno;
 use std::sync::Arc;
 use thiserror::Error;
@@ -35,9 +36,10 @@ impl DeviceDriver for TtyConsole {
     fn read(
         &self,
         dev: &Arc<CharacterDevice>,
-        data: &mut UioMut,
+        off: Option<u64>,
+        buf: &mut [IoVecMut],
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<IoLen, Box<dyn Errno>> {
         todo!()
     }
 
@@ -45,9 +47,10 @@ impl DeviceDriver for TtyConsole {
     fn write(
         &self,
         dev: &Arc<CharacterDevice>,
-        data: &mut Uio,
+        off: Option<u64>,
+        buf: &[IoVec],
         td: Option<&VThread>,
-    ) -> Result<(), Box<dyn Errno>> {
+    ) -> Result<IoLen, Box<dyn Errno>> {
         todo!()
     }
 
