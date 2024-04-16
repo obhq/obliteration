@@ -1,7 +1,7 @@
 use crate::budget::ProcType;
 use crate::dev::DmemContainer;
 use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ESRCH};
-use crate::fs::Vnode;
+use crate::fs::{Fs, Vnode};
 use crate::info;
 use crate::signal::{
     strsignal, SigChldFlags, Signal, SignalAct, SignalFlags, SIGCHLD, SIGKILL, SIGSTOP, SIG_DFL,
@@ -39,12 +39,14 @@ mod signal;
 mod thread;
 
 /// Manage all PS4 processes.
-pub struct ProcManager {}
+pub struct ProcManager {
+    fs: Arc<Fs>,
+}
 
 impl ProcManager {
-    pub fn new(sys: &mut Syscalls) -> Arc<Self> {
+    pub fn new(fs: &Arc<Fs>, sys: &mut Syscalls) -> Arc<Self> {
         // Register syscalls.
-        let pmgr = Arc::new(Self {});
+        let pmgr = Arc::new(Self { fs: fs.clone() });
 
         sys.register(20, &pmgr, Self::sys_getpid);
         sys.register(50, &pmgr, Self::sys_setlogin);
@@ -52,6 +54,7 @@ impl ProcManager {
         sys.register(416, &pmgr, Self::sys_sigaction);
         sys.register(432, &pmgr, Self::sys_thr_self);
         sys.register(464, &pmgr, Self::sys_thr_set_name);
+        sys.register(585, &pmgr, Self::sys_is_in_sandbox);
         sys.register(602, &pmgr, Self::sys_randomized_path);
 
         pmgr
@@ -294,6 +297,12 @@ impl ProcManager {
         }
 
         Ok(SysOut::ZERO)
+    }
+
+    fn sys_is_in_sandbox(self: &Arc<Self>, td: &VThread, _: &SysIn) -> Result<SysOut, SysErr> {
+        let v = !Arc::ptr_eq(&td.proc().files().root(), &self.fs.root());
+
+        Ok(v.into())
     }
 
     fn sys_randomized_path(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
