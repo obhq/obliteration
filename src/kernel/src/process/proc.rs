@@ -4,8 +4,7 @@ use super::{
 };
 use crate::budget::ProcType;
 use crate::dev::DmemContainer;
-use crate::errno::Errno;
-use crate::errno::{EINVAL, ERANGE, ESRCH};
+use crate::errno::{Errno, EINVAL, ERANGE, ESRCH};
 use crate::fs::Vnode;
 use crate::idt::Idt;
 use crate::info;
@@ -101,7 +100,6 @@ impl VProc {
         sys.register(466, &vp, Self::sys_rtprio_thread);
         sys.register(487, &vp, Self::sys_cpuset_getaffinity);
         sys.register(488, &vp, Self::sys_cpuset_setaffinity);
-        sys.register(585, &vp, Self::sys_is_in_sandbox);
         sys.register(587, &vp, Self::sys_get_authinfo);
         sys.register(612, &vp, Self::sys_get_proc_type_info);
 
@@ -372,11 +370,6 @@ impl VProc {
             Some(v) => Ok(v),
             None => todo!("cpuset_which with td = NULL"),
         }
-    }
-
-    fn sys_is_in_sandbox(self: &Arc<Self>, _: &VThread, _: &SysIn) -> Result<SysOut, SysErr> {
-        // TODO: Implement this once FS rework has been usable.
-        Ok(1.into())
     }
 
     fn sys_get_authinfo(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {

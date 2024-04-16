@@ -373,7 +373,7 @@ fn run() -> Result<(), KernelError> {
     NamedObjManager::new(&mut syscalls);
     OsemManager::new(&mut syscalls);
     UmtxManager::new(&mut syscalls);
-    let pmgr = ProcManager::new(&mut syscalls);
+    let pmgr = ProcManager::new(&fs, &mut syscalls);
 
     // Initialize runtime linker.
     let ee = NativeEngine::new();
