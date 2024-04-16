@@ -1,10 +1,10 @@
 use crate::errno::{Errno, EINVAL};
 use crate::syscalls::{SysArg, SysOut};
-use std::error::Error;
 use std::fmt::{Display, Formatter};
 use std::marker::PhantomData;
 use std::num::NonZeroI32;
 use std::ops::{Deref, DerefMut};
+use thiserror::Error;
 
 /// Implementation of `iovec` structure for writing.
 #[repr(C)]
@@ -151,19 +151,12 @@ impl From<IoLen> for SysOut {
 }
 
 /// Represents an error when [`IoLen`] fails to construct.
-#[derive(Debug)]
+#[derive(Debug, Error)]
+#[error("invalid value")]
 pub struct IoLenError(());
-
-impl Error for IoLenError {}
 
 impl Errno for IoLenError {
     fn errno(&self) -> NonZeroI32 {
         EINVAL
-    }
-}
-
-impl Display for IoLenError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str("invalid value")
     }
 }
