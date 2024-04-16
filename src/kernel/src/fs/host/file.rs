@@ -495,7 +495,7 @@ impl HostFile {
     }
 
     #[cfg(windows)]
-    fn directory_access_flags() -> u32 {
+    const fn directory_access_flags() -> u32 {
         use windows_sys::Win32::Storage::FileSystem::{
             FILE_LIST_DIRECTORY, FILE_READ_ATTRIBUTES, FILE_READ_EA, FILE_TRAVERSE,
             FILE_WRITE_ATTRIBUTES, FILE_WRITE_EA, SYNCHRONIZE,
@@ -511,7 +511,7 @@ impl HostFile {
     }
 
     #[cfg(windows)]
-    fn directory_options() -> u32 {
+    const fn directory_options() -> u32 {
         use windows_sys::Wdk::Storage::FileSystem::{
             FILE_DIRECTORY_FILE, FILE_SYNCHRONOUS_IO_NONALERT,
         };
