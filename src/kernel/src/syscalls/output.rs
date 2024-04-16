@@ -21,6 +21,15 @@ impl<T> From<*mut T> for SysOut {
     }
 }
 
+impl From<bool> for SysOut {
+    fn from(value: bool) -> Self {
+        Self {
+            rax: value.into(),
+            rdx: 0,
+        }
+    }
+}
+
 impl From<i32> for SysOut {
     fn from(value: i32) -> Self {
         Self {
