@@ -105,6 +105,8 @@ impl NetManager {
 
         let addr = unsafe { SockAddr::get(ptr, len) }?;
 
+        info!("Binding socket at fd {fd} to {addr:?}.");
+
         self.bind(fd, &addr, td)?;
 
         Ok(SysOut::ZERO)
@@ -236,6 +238,8 @@ impl NetManager {
 
         let addr = unsafe { SockAddr::get(ptr, len) }?;
 
+        info!("Connecting socket at fd {fd} to {addr:?}.");
+
         self.connect(fd, &addr, td)?;
 
         Ok(SysOut::ZERO)
@@ -298,7 +302,7 @@ impl NetManager {
     fn sys_socketclose(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
 
-        info!("Close socket at fd {fd}.");
+        info!("Closing socket at fd {fd}.");
 
         td.proc().files().free(fd)?;
 
@@ -409,7 +413,6 @@ struct MsgHdr<'a> {
     flags: u32,
 }
 
-#[derive(Debug)]
 #[repr(transparent)]
 pub struct SockAddr([u8]);
 
@@ -437,6 +440,15 @@ impl SockAddr {
     pub fn addr(&self) -> &[u8] {
         // SAFETY: this is ok because we know that the slice is big enough
         unsafe { &self.0.get_unchecked(2..) }
+    }
+}
+
+impl std::fmt::Debug for SockAddr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SockAddr")
+            .field("family", &self.family())
+            .field("addr", &self.addr())
+            .finish()
     }
 }
 
