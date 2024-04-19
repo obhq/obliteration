@@ -9,6 +9,7 @@ use crate::{
 };
 use bitflags::bitflags;
 use macros::Errno;
+use std::fmt::Debug;
 use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
@@ -51,7 +52,11 @@ impl NetManager {
             MessageFlags::from_bits_retain(flags)
         };
 
-        todo!()
+        let msg = unsafe { &mut *msg };
+
+        info!("Recieving a message {msg:?} from fd {fd} with flags {flags:?}.");
+
+        Ok((msg.iovec_len as i32).into())
     }
 
     fn sys_sendmsg(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -61,6 +66,10 @@ impl NetManager {
             let flags = TryInto::<u32>::try_into(i.args[2]).unwrap();
             MessageFlags::from_bits_retain(flags)
         };
+
+        let msg = unsafe { &*msg };
+
+        info!("Sending a message {msg:?} to fd {fd} with flags {flags:?}.");
 
         let sent = self.sendit(fd, unsafe { &*msg }, flags, td)?;
 
@@ -80,6 +89,7 @@ impl NetManager {
         todo!()
     }
 
+    #[allow(unused_variables)] // TODO: Remove this when implementing
     fn sys_accept(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let addr: *mut u8 = i.args[1].into();
@@ -93,7 +103,7 @@ impl NetManager {
         let ptr: *const u8 = i.args[1].into();
         let len: i32 = i.args[2].try_into().unwrap();
 
-        let addr = SockAddr::get(ptr, len)?;
+        let addr = unsafe { SockAddr::get(ptr, len) }?;
 
         self.bind(fd, &addr, td)?;
 
@@ -214,7 +224,7 @@ impl NetManager {
             budget,
         )?;
 
-        info!("Opened a socket at fd {fd}.");
+        info!("Opened a socket at fd {fd} with domain {domain}, type {ty}, and proto {proto:?}.");
 
         Ok(fd.into())
     }
@@ -224,17 +234,16 @@ impl NetManager {
         let ptr: *const u8 = i.args[1].into();
         let len: i32 = i.args[2].try_into().unwrap();
 
-        let addr = SockAddr::get(ptr, len)?;
+        let addr = unsafe { SockAddr::get(ptr, len) }?;
 
         self.connect(fd, &addr, td)?;
 
         Ok(SysOut::ZERO)
     }
 
+    #[allow(unused_variables)] // TODO: Remove this when implementing
     fn connect(&self, fd: i32, addr: &SockAddr, td: &VThread) -> Result<(), ConnectError> {
-        let socket = td.proc().files().get_socket(fd)?;
-
-        todo!()
+        todo!("connect")
     }
 
     fn sys_getsockopt(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -281,11 +290,7 @@ impl NetManager {
             budget,
         )?;
 
-        if let Some(name) = name {
-            info!("Opened a socket with name = {name} at fd {fd}.");
-        } else {
-            info!("Opened a socket at fd {fd}.");
-        }
+        info!("Opened a socket at fd {fd} with domain {domain}, type {ty}, proto {proto:?} and name {name:?}.");
 
         Ok(fd.into())
     }
@@ -293,13 +298,14 @@ impl NetManager {
     fn sys_socketclose(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
 
-        info!("Attempting to close socket at fd {fd}.");
+        info!("Close socket at fd {fd}.");
 
         td.proc().files().free(fd)?;
 
         Ok(SysOut::ZERO)
     }
 
+    #[allow(unused_variables)] // TODO: Remove this when implementing
     fn sys_sendto(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let buf: *const u8 = i.args[1].into();
@@ -386,25 +392,30 @@ impl NetManager {
 }
 
 bitflags! {
+    #[derive(Debug)]
     #[repr(C)]
     pub struct MessageFlags: u32 {}
 }
 
+#[derive(Debug)]
 #[repr(C)]
 struct MsgHdr<'a> {
     name: *const u8,
     len: u32,
-    iovec: *const IoVec<'a>,
+    iovec: *mut IoVec<'a>,
     iovec_len: u32,
     control: *const u8,
     control_len: u32,
     flags: u32,
 }
 
+#[derive(Debug)]
+#[repr(transparent)]
 pub struct SockAddr([u8]);
 
 impl SockAddr {
-    pub fn get(ptr: *const u8, len: i32) -> Result<Box<Self>, GetSockAddrError> {
+    #[allow(unused_variables)] // TODO: Remove this when implementing
+    pub unsafe fn get(ptr: *const u8, len: i32) -> Result<Box<Self>, GetSockAddrError> {
         if len > 255 {
             return Err(GetSockAddrError::TooLong);
         }
@@ -413,24 +424,19 @@ impl SockAddr {
             return Err(GetSockAddrError::TooShort);
         }
 
-        // This is ok if the conditions above are upheld
-        let len = len as usize;
-
-        let mut vec = Vec::with_capacity(len);
-
-        unsafe {
-            std::ptr::copy_nonoverlapping(ptr, vec.as_mut_ptr(), len);
-        }
-
-        Ok(unsafe { std::mem::transmute(vec.into_boxed_slice()) })
+        todo!()
     }
 
+    #[allow(unused)] // TODO: remove this when used
     pub fn family(&self) -> u8 {
-        self.0[1]
+        // SAFETY: this is ok because we know that the slice is big enough
+        unsafe { *self.0.get_unchecked(1) }
     }
 
-    pub fn data(&self) -> &[u8] {
-        &self.0[2..]
+    #[allow(unused)] // TODO: remove this when used
+    pub fn addr(&self) -> &[u8] {
+        // SAFETY: this is ok because we know that the slice is big enough
+        unsafe { &self.0.get_unchecked(2..) }
     }
 }
 
