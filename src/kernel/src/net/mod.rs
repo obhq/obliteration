@@ -56,7 +56,7 @@ impl NetManager {
 
         info!("Recieving a message {msg:?} from fd {fd} with flags {flags:?}.");
 
-        Ok((msg.iovec_len as i32).into())
+        todo!()
     }
 
     fn sys_sendmsg(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
