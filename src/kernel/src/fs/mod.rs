@@ -368,7 +368,7 @@ impl Fs {
     fn sys_read(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
-        let len: usize = i.args[2].try_into().unwrap();
+        let len: IoLen = i.args[2].try_into()?;
 
         info!("Reading {len} bytes from fd {fd}.");
 
@@ -378,7 +378,7 @@ impl Fs {
     fn sys_write(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *const u8 = i.args[1].into();
-        let len: usize = i.args[2].into();
+        let len: IoLen = i.args[2].try_into()?;
 
         info!("Writing {len} bytes to fd {fd}.");
 
@@ -431,7 +431,7 @@ impl Fs {
     fn sys_close(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
 
-        info!("Attempting to close fd {fd}.");
+        info!("Closing fd {fd}.");
 
         td.proc().files().free(fd)?;
 
@@ -519,10 +519,8 @@ impl Fs {
         todo!()
     }
 
-    fn readv(&self, fd: i32, td: &VThread) -> Result<usize, SysErr> {
-        let file = td.proc().files().get_for_read(fd)?;
-
-        todo!();
+    fn readv(&self, fd: i32, iov: &mut [IoVecMut], td: &VThread) -> Result<IoLen, SysErr> {
+        todo!()
     }
 
     fn sys_writev(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
