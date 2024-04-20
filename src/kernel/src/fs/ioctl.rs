@@ -1,5 +1,5 @@
 use super::FioDeviceGetNameArg;
-use crate::dev::{DmemAllocate, DmemAvailable, DmemQuery, PrtAperture, RngInput};
+use crate::dev::{CuMask, DingDongForWorkload, DmemAllocate, DmemAvailable, DmemQuery, PrtAperture, RngInput};
 use crate::dmem::{BlockpoolExpandArgs, BlockpoolStats};
 use crate::errno::ENOTTY;
 use crate::syscalls::SysErr;
@@ -162,7 +162,7 @@ commands! {
         /// Set wave limit multiplier
         GCSETWAVELIMITMULTIPLIER(&mut i64) = 0xc0088101,
         /// Get CU mask
-        GCGETCUMASK(&mut Unknown16) = 0xc010810b,
+        GCGETCUMASK(&mut CuMask) = 0xc010810b,
         /// Map compute queue
         GCMAPCOMPUTEQUEUE(&mut Unknown48) = 0xc030810d,
         /// Unmap compute queue
@@ -172,9 +172,9 @@ commands! {
         /// Get mip stats report
         GCMIPSTATSREPORT(&mut Unknown132) = 0xc0848119,
         /// Currently unknown gc command
-        GC27(&mut Unknown8) = 0xc008811b,
+        GCARESUBMITSALLOWED(&mut Unknown8) = 0xc008811b,
         /// Ding dong for workload
-        GCDINGDONGFORWORKLOAD(&mut Unknown16) = 0xc010811c,
+        GCDINGDONGFORWORKLOAD(&mut DingDongForWorkload) = 0xc010811c,
         /// Get number of tca units
         GCGETNUMTCAUNITS(&mut i32) = 0xc004811f,
 

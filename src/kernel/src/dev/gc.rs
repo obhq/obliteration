@@ -41,7 +41,7 @@ impl DeviceDriver for Gc {
             IoCmd::GCGETCUMASK(_) => todo!("GCGETCUMASK ioctl"),
             IoCmd::GCSETGSRINGSIZES(_) => todo!("GCSETGSRINGSIZES ioctl"),
             IoCmd::GCMIPSTATSREPORT(_) => todo!("GCMIPSTATSREPORT ioctl"),
-            IoCmd::GC27(_) => todo!("GC27 ioctl"),
+            IoCmd::GCARESUBMITSALLOWED(_) => todo!("GC27 ioctl"),
             IoCmd::GCGETNUMTCAUNITS(_) => todo!("GCGETNUMTCAUNITS ioctl"),
             IoCmd::GCDINGDONGFORWORKLOAD(_) => todo!("GCDINGDONGFORWORKLOAD ioctl"),
             IoCmd::GCMAPCOMPUTEQUEUE(_) => todo!("GCMAPCOMPUTEQUEUE ioctl"),
@@ -73,6 +73,26 @@ impl GcManager {
         Ok(Arc::new(Self { gc }))
     }
 }
+
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct CuMask {
+    unk1: i32,
+    unk2: i32,
+    unk3: i32,
+    unk4: i32,
+}
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct DingDongForWorkload {
+    unk1: i32,
+    unk2: i32,
+    unk3: i32,
+    unk4: i32,
+}
+
 
 /// Represents an error when [`GcManager`] fails to initialize.
 #[derive(Debug, Error)]
