@@ -10,6 +10,7 @@ use crate::ee::EntryArg;
 use crate::errno::EEXIST;
 use crate::fs::{Fs, FsInitError, MkdirError, MountError, MountFlags, MountOpts, VPath, VPathBuf};
 use crate::hv::Hypervisor;
+use crate::idps::ConsoleId;
 use crate::kqueue::KernelQueueManager;
 use crate::log::{print, LOGGER};
 use crate::namedobj::NamedObjManager;
@@ -50,6 +51,7 @@ mod ee;
 mod errno;
 mod fs;
 mod hv;
+mod idps;
 mod idt;
 mod imgact;
 mod kqueue;
@@ -569,6 +571,10 @@ struct Args {
     #[arg(long)]
     #[serde(default)]
     pro: bool,
+
+    #[arg(long)]
+    #[serde(default)]
+    idps: ConsoleId,
 }
 
 #[derive(Debug, Error)]
