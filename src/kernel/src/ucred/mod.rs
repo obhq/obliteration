@@ -2,6 +2,7 @@ pub use self::auth::*;
 pub use self::id::*;
 pub use self::privilege::*;
 use crate::errno::{Errno, EPERM};
+use crate::rcmgr::RcMgr;
 use macros::Errno;
 use thiserror::Error;
 
@@ -132,8 +133,8 @@ impl Ucred {
     }
 
     /// See `sceSblACMgrIsDebuggableProcess` on the PS4 for a reference.
-    pub fn is_debuggable_process(&self) -> bool {
-        self.auth.attrs.is_debuggable_process()
+    pub fn is_debuggable_process(&self, rc: &RcMgr) -> bool {
+        self.auth.attrs.is_debuggable_process(rc)
     }
 
     /// See `sceSblACMgrIsNongameUcred` on the PS4 for a reference.
