@@ -116,7 +116,7 @@ impl Ucred {
 
     /// See `sceSblACMgrHasUseVideoServiceCapability` on the PS4 for a reference.
     pub fn has_use_video_service_capability(&self) -> bool {
-        self.auth.caps.has_use_video_service_capability()
+        self.auth.caps.has_use_video_service()
     }
 
     /// See `sceSblACMgrIsWebcoreProcess` on the PS4 for a reference.
