@@ -86,6 +86,7 @@ impl Sysctl {
     pub const KERN_PROC_APPINFO: i32 = 35;
     pub const KERN_PROC_SANITIZER: i32 = 41;
     pub const KERN_PROC_PTC: i32 = 43;
+    pub const KERN_PROC_TEXT_SEGMENT: i32 = 44;
     pub const MACHDEP_TSC_FREQ: i32 = 492;
 
     pub const VM_PS4DEV: i32 = 1;
@@ -402,6 +403,16 @@ impl Sysctl {
         Ok(())
     }
 
+    fn kern_proc_text_segment(
+        &self,
+        _: &'static Oid,
+        _: &Arg,
+        _: usize,
+        _: &mut SysctlReq,
+    ) -> Result<(), SysErr> {
+        todo!()
+    }
+
     fn kern_usrstack(
         &self,
         _: &'static Oid,
@@ -640,7 +651,8 @@ type Handler = fn(&Sysctl, &'static Oid, &Arg, usize, &mut SysctlReq) -> Result<
 //         └─── ...
 //         └─── (1.14.41) KERN_PROC_SANITIZER
 //         └─── ...
-//         └─── (1.13.43) KERN_PROC_PTC
+//         └─── (1.14.43) KERN_PROC_PTC
+//         └─── (1.14.44) KERN_PROC_TEXT_SEGMENT
 //         └─── ...
 //     └─── (1.33) KERN_USRSTACK
 //     └─── ...
@@ -791,7 +803,7 @@ static KERN_PROC_SANITIZER: Oid = Oid {
 
 static KERN_PROC_PTC: Oid = Oid {
     parent: &KERN_PROC_CHILDREN,
-    link: None, // TODO: Implement this.
+    link: Some(&KERN_PROC_TEXT_SEGMENT),
     number: Sysctl::KERN_PROC_PTC,
     kind: Sysctl::CTLFLAG_RD
         | Sysctl::CTLFLAG_ANYBODY
@@ -803,6 +815,20 @@ static KERN_PROC_PTC: Oid = Oid {
     handler: Some(Sysctl::kern_proc_ptc),
     fmt: "LU",
     descr: "Process time counter",
+    enabled: true,
+};
+
+static KERN_PROC_TEXT_SEGMENT: Oid = Oid {
+    parent: &KERN_PROC_CHILDREN,
+    link: None, // TODO: Implement this.
+    number: Sysctl::KERN_PROC_TEXT_SEGMENT,
+    kind: Sysctl::CTLFLAG_RD | Sysctl::CTLFLAG_MPSAFE | Sysctl::CTLTYPE_NODE,
+    arg1: None, // TODO: This value on the PS4 is not null.
+    arg2: 0,
+    name: "kern_dynlib_get_libkernel_text_segment",
+    handler: Some(Sysctl::kern_proc_text_segment),
+    fmt: "N",
+    descr: "Sanitizing mode",
     enabled: true,
 };
 

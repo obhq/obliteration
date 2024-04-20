@@ -74,6 +74,7 @@ impl DeviceDriver for Dmem {
             IoCmd::DMEMGETAVAIL(_avail) => todo!(),
             IoCmd::DMEMALLOC(_alloc) => todo!(),
             IoCmd::DMEMQUERY(_query) => todo!(),
+            IoCmd::DMEMALLOCMAIN(_alloc) => todo!(),
             _ => todo!(),
         }
 

@@ -1,5 +1,8 @@
 use super::FioDeviceGetNameArg;
-use crate::dev::{DmemAllocate, DmemAvailable, DmemQuery, PrtAperture, RngInput};
+use crate::dev::{
+    CuMask, DingDongForWorkload, DmemAllocate, DmemAvailable, DmemQuery, MipStatsReport,
+    PrtAperture, RngInput, SubmitArg,
+};
 use crate::dmem::{BlockpoolExpandArgs, BlockpoolStats};
 use crate::errno::ENOTTY;
 use crate::syscalls::SysErr;
@@ -89,9 +92,9 @@ macro_rules! commands {
 commands! {
     pub enum IoCmd {
         /// sceKernelMemoryPoolExpand
-        BPOOLEXPAND(&mut BlockpoolExpandArgs) = 0xC020A801,
+        BPOOLEXPAND(&mut BlockpoolExpandArgs) = 0xc020a801,
         /// sceKernelMemoryPoolGetBlockStats
-        BPOOLSTATS(&mut BlockpoolStats) = 0x4010A802,
+        BPOOLSTATS(&mut BlockpoolStats) = 0x4010a802,
 
         /// An unkown bnet command, called from libSceNet
         BNETUNK(&Unknown36) = 0x802450c9,
@@ -106,7 +109,7 @@ commands! {
         /// sceKernelUnsetDipsw
         DIPSWUNSET(&Unknown2) = 0x80028802,
         /// sceKernelCheckDipsw
-        DIPSWCHECK(&mut Unknown8) = 0xC0088803,
+        DIPSWCHECK(&mut Unknown8) = 0xc0088803,
         /// sceKernelReadDipswData
         DIPSWREAD(&Unknown16) = 0x80108804,
         /// sceKernelWriteDipswData
@@ -116,16 +119,19 @@ commands! {
         /// Unkown dipsw command
         DIPSWUNK(&mut i32) = 0x40048807,
 
+
+        /// Allocate direct memory
+        DMEMALLOC(&mut DmemAllocate) = 0xc0288001,
         /// Get total size?
         DMEMTOTAL(&mut usize) = 0x4008800a,
         /// Get PRT aperture
-        DMEMGETPRT(&mut PrtAperture) = 0xC018800C,
-        /// Get available memory size
-        DMEMGETAVAIL(&mut DmemAvailable) = 0xC0208016,
-        /// Allocate direct memory
-        DMEMALLOC(&mut DmemAllocate) = 0xC0288001,
+        DMEMGETPRT(&mut PrtAperture) = 0xc018800c,
+        /// Allocate main direct memory
+        DMEMALLOCMAIN(&mut DmemAllocate) = 0xc0288011,
         /// Query direct memory
         DMEMQUERY(&DmemQuery) = 0x80288012,
+        /// Get available memory size
+        DMEMGETAVAIL(&mut DmemAvailable) = 0xc0208016,
 
         /// Set close on exec on fd.
         FIOCLEX = 0x20006601,
@@ -152,28 +158,30 @@ commands! {
         /// Get space in send queue
         FIONSPACE(&mut i32) = 0x40046676,
         /// Seek data.
-        FIOSEEKDATA(&mut i64) = 0xC0086661,
+        FIOSEEKDATA(&mut i64) = 0xc0086661,
         /// Seek hole.
-        FIOSEEKHOLE(&mut i64) = 0xC0086662,
+        FIOSEEKHOLE(&mut i64) = 0xc0086662,
 
-        /// Get CU mask
-        GCGETCUMASK(&mut Unknown16) = 0xc010810b,
-        /// Set GS ring queue sizes
-        GCSETGSRINGSIZES(&mut Unknown12) = 0xc00c8110,
-        /// Ding dong for workload
-        GCDINGDONGFORWORKLOAD(&mut Unknown16) = 0xc010811c,
-        /// Get mip stats report
-        GCMIPSTATSREPORT(&mut Unknown132) = 0xc0848119,
-        /// Currently unknown gc command
-        GC27(&mut Unknown8) = 0xc008811b,
-        /// Get number of tca units
-        GCGETNUMTCAUNITS(&mut i32) = 0xc004811f,
         /// Set wave limit multiplier
         GCSETWAVELIMITMULTIPLIER(&mut i64) = 0xc0088101,
+        /// Submit
+        GCSUBMIT(&mut SubmitArg) = 0xc0108102,
+        /// Get CU mask
+        GCGETCUMASK(&mut CuMask) = 0xc010810b,
         /// Map compute queue
         GCMAPCOMPUTEQUEUE(&mut Unknown48) = 0xc030810d,
         /// Unmap compute queue
         GCUNMAPCOMPUTEQUEUE(&mut Unknown12) = 0xc00c810e,
+        /// Set GS ring queue sizes
+        GCSETGSRINGSIZES(&mut Unknown12) = 0xc00c8110,
+        /// Get mip stats report
+        GCMIPSTATSREPORT(&mut MipStatsReport) = 0xc0848119,
+        /// Currently unknown gc command
+        GCARESUBMITSALLOWED(&mut Unknown8) = 0xc008811b,
+        /// Ding dong for workload
+        GCDINGDONGFORWORKLOAD(&mut DingDongForWorkload) = 0xc010811c,
+        /// Get number of tca units
+        GCGETNUMTCAUNITS(&mut i32) = 0xc004811f,
 
         /// Get genuine random
         RNGGETGENUINE(&mut RngInput) = 0x40445301,
@@ -198,7 +206,6 @@ type Unknown12 = Unknown<12>;
 type Unknown16 = Unknown<16>;
 type Unknown36 = Unknown<36>;
 type Unknown48 = Unknown<48>;
-type Unknown132 = Unknown<132>;
 
 /// A dummy type to be used as a placeholder for unknown data.
 #[derive(Debug)]
