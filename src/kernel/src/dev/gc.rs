@@ -80,7 +80,7 @@ impl GcManager {
 pub struct SubmitArg {
     pid: i32,
     count: i32,
-    commands: usize,
+    commands: usize, // TODO: this is actually an address
 }
 
 
