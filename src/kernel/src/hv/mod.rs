@@ -11,16 +11,21 @@ mod win32;
 
 /// Manage a virtual machine for running the PS4 processes.
 ///
-/// Do not create more than one Hypervisor because it will not work macOS.
+/// Do not create more than one Hypervisor because it will not work on macOS.
 pub struct Hypervisor {
+    #[cfg(target_os = "linux")]
+    vcpus: [std::os::fd::OwnedFd; 8], // Drop before VM.
     #[cfg(target_os = "linux")]
     vm: std::os::fd::OwnedFd, // Drop before KVM.
     #[cfg(target_os = "linux")]
     kvm: std::os::fd::OwnedFd,
+
     #[cfg(target_os = "windows")]
     part: self::win32::Partition,
+
     #[cfg(target_os = "macos")]
     vm: self::mac::Vm,
+
     ram: Ram, // Drop after a VM.
 }
 
@@ -62,7 +67,31 @@ impl Hypervisor {
         )
         .map_err(HypervisorError::MapRamFailed)?;
 
-        Ok(Self { vm, kvm, ram })
+        let vcpus = [
+            self::linux::create_vcpu(vm.as_fd(), 0)
+                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 0))?,
+            self::linux::create_vcpu(vm.as_fd(), 1)
+                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 1))?,
+            self::linux::create_vcpu(vm.as_fd(), 2)
+                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 2))?,
+            self::linux::create_vcpu(vm.as_fd(), 3)
+                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 3))?,
+            self::linux::create_vcpu(vm.as_fd(), 4)
+                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 4))?,
+            self::linux::create_vcpu(vm.as_fd(), 5)
+                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 5))?,
+            self::linux::create_vcpu(vm.as_fd(), 6)
+                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 6))?,
+            self::linux::create_vcpu(vm.as_fd(), 7)
+                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 7))?,
+        ];
+
+        Ok(Self {
+            vcpus,
+            vm,
+            kvm,
+            ram,
+        })
     }
 
     #[cfg(target_os = "windows")]
@@ -152,6 +181,10 @@ pub enum HypervisorError {
     #[cfg(target_os = "linux")]
     #[error("couldn't map the RAM to the VM")]
     MapRamFailed(#[source] std::io::Error),
+
+    #[cfg(target_os = "linux")]
+    #[error("couldn't create vcpu #{1}")]
+    CreateVcpuFailed(#[source] std::io::Error, u8),
 
     #[cfg(target_os = "windows")]
     #[error("couldn't create WHP partition object ({0:#x})")]

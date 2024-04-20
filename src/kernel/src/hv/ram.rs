@@ -5,7 +5,7 @@ use std::io::Error;
 ///
 /// This struct will allocate a 8GB of memory immediately but not commit any parts of it until there
 /// is an allocation request. That mean the actual memory usage is not fixed at 8GB but will be
-/// depend on what PS4 applications currently running. If it is a simple game the memory usage might
+/// dependent on what PS4 applications currently running. If it is a simple game the memory usage might be
 /// just a hundred of megabytes.
 pub struct Ram {
     addr: usize,
