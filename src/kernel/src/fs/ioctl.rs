@@ -1,5 +1,5 @@
 use super::FioDeviceGetNameArg;
-use crate::dev::{CuMask, DingDongForWorkload, DmemAllocate, DmemAvailable, DmemQuery, PrtAperture, RngInput, SubmitArg};
+use crate::dev::{CuMask, DingDongForWorkload, DmemAllocate, DmemAvailable, DmemQuery, MipStatsReport, PrtAperture, RngInput, SubmitArg};
 use crate::dmem::{BlockpoolExpandArgs, BlockpoolStats};
 use crate::errno::ENOTTY;
 use crate::syscalls::SysErr;
@@ -172,7 +172,7 @@ commands! {
         /// Set GS ring queue sizes
         GCSETGSRINGSIZES(&mut Unknown12) = 0xc00c8110,
         /// Get mip stats report
-        GCMIPSTATSREPORT(&mut Unknown132) = 0xc0848119,
+        GCMIPSTATSREPORT(&mut MipStatsReport) = 0xc0848119,
         /// Currently unknown gc command
         GCARESUBMITSALLOWED(&mut Unknown8) = 0xc008811b,
         /// Ding dong for workload
@@ -203,7 +203,6 @@ type Unknown12 = Unknown<12>;
 type Unknown16 = Unknown<16>;
 type Unknown36 = Unknown<36>;
 type Unknown48 = Unknown<48>;
-type Unknown132 = Unknown<132>;
 
 /// A dummy type to be used as a placeholder for unknown data.
 #[derive(Debug)]

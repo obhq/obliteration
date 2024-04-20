@@ -38,16 +38,16 @@ impl DeviceDriver for Gc {
         _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         match cmd {
-            IoCmd::GCSUBMIT(submit_arg) => todo!("GCSUBMIT ioctl"),
-            IoCmd::GCGETCUMASK(_) => todo!("GCGETCUMASK ioctl"),
-            IoCmd::GCSETGSRINGSIZES(_) => todo!("GCSETGSRINGSIZES ioctl"),
-            IoCmd::GCMIPSTATSREPORT(_) => todo!("GCMIPSTATSREPORT ioctl"),
-            IoCmd::GCARESUBMITSALLOWED(_) => todo!("GC27 ioctl"),
-            IoCmd::GCGETNUMTCAUNITS(_) => todo!("GCGETNUMTCAUNITS ioctl"),
-            IoCmd::GCDINGDONGFORWORKLOAD(_) => todo!("GCDINGDONGFORWORKLOAD ioctl"),
-            IoCmd::GCMAPCOMPUTEQUEUE(_) => todo!("GCMAPCOMPUTEQUEUE ioctl"),
-            IoCmd::GCUNMAPCOMPUTEQUEUE(_) => todo!("GCUNMAPCOMPUTEQUEUE ioctl"),
-            IoCmd::GCSETWAVELIMITMULTIPLIER(_) => todo!("GCSETWAVELIMITMULTIPLIER ioctl"),
+            IoCmd::GCSETWAVELIMITMULTIPLIER(mult) => todo!("GCSETWAVELIMITMULTIPLIER: {mult:?}"),
+            IoCmd::GCSUBMIT(submit_arg) => todo!("GCSUBMIT ioctl: {submit_arg:?}"),
+            IoCmd::GCGETCUMASK(mask) => todo!("GCGETCUMASK ioctl: {mask:?}"),
+            IoCmd::GCMAPCOMPUTEQUEUE(queue) => todo!("GCMAPCOMPUTEQUEUE ioctl: {queue:?}"),
+            IoCmd::GCUNMAPCOMPUTEQUEUE(unk) => todo!("GCUNMAPCOMPUTEQUEUE ioctl: {unk:?}"),
+            IoCmd::GCSETGSRINGSIZES(unk1) => todo!("GCSETGSRINGSIZES ioctl: {unk1:?}"),
+            IoCmd::GCMIPSTATSREPORT(report) => todo!("GCMIPSTATSREPORT ioctl: {report:?}"),
+            IoCmd::GCARESUBMITSALLOWED(unk) => todo!("GCARESUBMITSALLOWED ioctl: {unk:?}"),
+            IoCmd::GCGETNUMTCAUNITS(num) => todo!("GCGETNUMTCAUNITS ioctl: {num:?}"),
+            IoCmd::GCDINGDONGFORWORKLOAD(unk) => todo!("GCDINGDONGFORWORKLOAD ioctl: {unk:?}"),
             _ => todo!(),
         }
     }
@@ -92,6 +92,16 @@ pub struct CuMask {
     unk3: i32,
     unk4: i32,
 }
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct MipStatsReport {
+    ty: i32,
+    unk1: i32,
+    unk2: i32,
+    unk4: [u8; 120]
+}
+
 
 #[derive(Debug)]
 #[repr(C)]
