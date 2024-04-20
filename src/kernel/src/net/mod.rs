@@ -54,7 +54,7 @@ impl NetManager {
 
         let msg = unsafe { &mut *msg };
 
-        info!("Recieving a message {msg:?} from fd {fd} with flags {flags:?}.");
+        info!("Receiving a message {msg:?} from fd {fd} with flags {flags:?}.");
 
         todo!()
     }
