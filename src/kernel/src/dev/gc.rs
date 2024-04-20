@@ -83,7 +83,6 @@ pub struct SubmitArg {
     commands: usize, // TODO: this is actually an address
 }
 
-
 #[derive(Debug)]
 #[repr(C)]
 pub struct CuMask {
@@ -99,9 +98,8 @@ pub struct MipStatsReport {
     ty: i32,
     unk1: i32,
     unk2: i32,
-    unk4: [u8; 120]
+    unk4: [u8; 120],
 }
-
 
 #[derive(Debug)]
 #[repr(C)]
@@ -111,7 +109,6 @@ pub struct DingDongForWorkload {
     unk3: i32,
     unk4: i32,
 }
-
 
 /// Represents an error when [`GcManager`] fails to initialize.
 #[derive(Debug, Error)]
