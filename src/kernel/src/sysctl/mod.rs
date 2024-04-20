@@ -803,7 +803,7 @@ static KERN_PROC_SANITIZER: Oid = Oid {
 
 static KERN_PROC_PTC: Oid = Oid {
     parent: &KERN_PROC_CHILDREN,
-    link: Some(&KERN_PROC_TEXT_SEGMENT), // TODO: Implement this.
+    link: Some(&KERN_PROC_TEXT_SEGMENT),
     number: Sysctl::KERN_PROC_PTC,
     kind: Sysctl::CTLFLAG_RD
         | Sysctl::CTLFLAG_ANYBODY

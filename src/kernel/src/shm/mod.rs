@@ -28,7 +28,7 @@ impl SharedMemoryManager {
         let flags: OpenFlags = i.args[1].try_into().unwrap();
         let mode: u32 = i.args[2].try_into().unwrap();
 
-        if flags & OpenFlags::O_ACCMODE | OpenFlags::O_RDWR != OpenFlags::O_RDWR {
+        if (flags | OpenFlags::O_RDWR) & OpenFlags::O_ACCMODE != OpenFlags::O_RDWR {
             return Err(SysErr::Raw(EINVAL));
         }
 
