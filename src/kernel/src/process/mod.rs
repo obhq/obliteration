@@ -3,6 +3,7 @@ use crate::dev::DmemContainer;
 use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ESRCH};
 use crate::fs::{Fs, Vnode};
 use crate::info;
+use crate::rcmgr::RcMgr;
 use crate::signal::{
     strsignal, SigChldFlags, Signal, SignalAct, SignalFlags, SIGCHLD, SIGKILL, SIGSTOP, SIG_DFL,
     SIG_IGN,
@@ -42,12 +43,16 @@ mod thread;
 /// Manage all PS4 processes.
 pub struct ProcManager {
     fs: Arc<Fs>,
+    rc: Arc<RcMgr>,
 }
 
 impl ProcManager {
-    pub fn new(fs: &Arc<Fs>, sys: &mut Syscalls) -> Arc<Self> {
+    pub fn new(fs: &Arc<Fs>, rc: &Arc<RcMgr>, sys: &mut Syscalls) -> Arc<Self> {
         // Register syscalls.
-        let pmgr = Arc::new(Self { fs: fs.clone() });
+        let pmgr = Arc::new(Self {
+            fs: fs.clone(),
+            rc: rc.clone(),
+        });
 
         sys.register(20, &pmgr, Self::sys_getpid);
         sys.register(50, &pmgr, Self::sys_setlogin);
@@ -390,7 +395,7 @@ impl ProcManager {
 
         flags.set(
             ProcTypeInfoFlags::IS_DEBUGGABLE_PROCESS,
-            cred.is_debuggable_process(),
+            cred.is_debuggable_process(&self.rc),
         );
 
         unsafe { (*info).flags = flags };

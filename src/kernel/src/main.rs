@@ -17,6 +17,7 @@ use crate::namedobj::NamedObjManager;
 use crate::net::NetManager;
 use crate::osem::OsemManager;
 use crate::process::{ProcManager, VThread};
+use crate::rcmgr::RcMgr;
 use crate::regmgr::RegMgr;
 use crate::rtld::{ExecError, LoadFlags, ModuleFlags, RuntimeLinker};
 use crate::shm::SharedMemoryManager;
@@ -60,6 +61,7 @@ mod namedobj;
 mod net;
 mod osem;
 mod process;
+mod rcmgr;
 mod regmgr;
 mod rtld;
 mod shm;
@@ -196,8 +198,9 @@ fn run() -> Result<(), KernelError> {
     // Initialize foundations.
     #[allow(unused_variables)] // TODO: Remove this when someone uses hv.
     let hv = Hypervisor::new()?;
-    let mut syscalls = Syscalls::new();
-    let fs = Fs::new(args.system, &cred, &mut syscalls)?;
+    let mut sys = Syscalls::new();
+    let fs = Fs::new(args.system, &cred, &mut sys).map_err(KernelError::FilesystemInitFailed)?;
+    let rc = RcMgr::new();
 
     // TODO: Check permission of /mnt on the PS4.
     let path = vpath!("/mnt");
@@ -361,25 +364,25 @@ fn run() -> Result<(), KernelError> {
     // Initialize kernel components.
     #[allow(unused_variables)] // TODO: Remove this when someone uses debug.
     let debug = DebugManager::new()?;
-    RegMgr::new(&mut syscalls);
-    let machdep = MachDep::new(&mut syscalls);
-    let budget = BudgetManager::new(&mut syscalls);
+    RegMgr::new(&mut sys);
+    let machdep = MachDep::new(&mut sys);
+    let budget = BudgetManager::new(&mut sys);
 
-    SignalManager::new(&mut syscalls);
-    DmemManager::new(&fs, &mut syscalls)?;
-    SharedMemoryManager::new(&mut syscalls);
-    Sysctl::new(&machdep, &mut syscalls);
-    TimeManager::new(&mut syscalls);
-    KernelQueueManager::new(&mut syscalls);
-    NetManager::new(&mut syscalls);
-    NamedObjManager::new(&mut syscalls);
-    OsemManager::new(&mut syscalls);
-    UmtxManager::new(&mut syscalls);
-    let pmgr = ProcManager::new(&fs, &mut syscalls);
+    SignalManager::new(&mut sys);
+    DmemManager::new(&fs, &mut sys)?;
+    SharedMemoryManager::new(&mut sys);
+    Sysctl::new(&machdep, &mut sys);
+    TimeManager::new(&mut sys);
+    KernelQueueManager::new(&mut sys);
+    NetManager::new(&mut sys);
+    NamedObjManager::new(&mut sys);
+    OsemManager::new(&mut sys);
+    UmtxManager::new(&mut sys);
+    let pmgr = ProcManager::new(&fs, &rc, &mut sys);
 
     // Initialize runtime linker.
     let ee = NativeEngine::new();
-    let ld = RuntimeLinker::new(&fs, &ee, &mut syscalls);
+    let ld = RuntimeLinker::new(&fs, &ee, &mut sys);
 
     // TODO: Get correct budget name from the PS4.
     let budget_id = budget.create(Budget::new("big app", ProcType::BigApp));
@@ -392,7 +395,7 @@ fn run() -> Result<(), KernelError> {
             DmemContainer::One, // See sys_budget_set on the PS4.
             proc_root,
             system_component,
-            syscalls,
+            sys,
         )
         .map_err(KernelError::CreateProcessFailed)?;
 
@@ -607,7 +610,7 @@ enum KernelError {
     InvalidTitleId(PathBuf),
 
     #[error("filesystem initialization failed")]
-    FilesystemInitFailed(#[from] FsInitError),
+    FilesystemInitFailed(#[source] FsInitError),
 
     #[error("couldn't create {0}")]
     CreateDirectoryFailed(VPathBuf, #[source] MkdirError),
