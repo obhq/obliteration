@@ -87,12 +87,12 @@ impl AuthCaps {
         (self.0[0] & 0x2000000000000000) != 0
     }
 
-    pub fn has_use_video_service_capability(&self) -> bool {
-        self.0[0] >> 0x39 & 1 != 0
-    }
-
     pub fn is_system(&self) -> bool {
         (self.0[0] & 0x4000000000000000) != 0
+    }
+
+    pub fn has_use_video_service(&self) -> bool {
+        (self.0[1] & 0x0200000000000000) != 0
     }
 
     pub fn is_unk1(&self) -> bool {
@@ -117,28 +117,27 @@ impl AuthAttrs {
         Self(raw)
     }
 
-    pub fn has_sce_program_attribute(&self) -> bool {
-        (self.0[0] & 0x80000000) != 0
+    pub fn is_unk2(&self) -> bool {
+        (self.0[0] & 0x00400000) != 0
+    }
+
+    pub fn is_unk1(&self) -> bool {
+        (self.0[0] & 0x00800000) != 0
     }
 
     pub fn is_debuggable_process(&self) -> bool {
-        if self.0[0] & 0x1000000 == 0 {
-            if self.0[0] & 0x2000000 != 0 {
+        if self.0[0] & 0x01000000 == 0 {
+            if self.0[0] & 0x02000000 != 0 {
                 true
             } else {
-                // TODO: properly implement this branch.
-                false
+                todo!()
             }
         } else {
             todo!()
         }
     }
 
-    pub fn is_unk1(&self) -> bool {
-        (self.0[0] & 0x800000) != 0
-    }
-
-    pub fn is_unk2(&self) -> bool {
-        (self.0[0] & 0x400000) != 0
+    pub fn has_sce_program_attribute(&self) -> bool {
+        (self.0[0] & 0x80000000) != 0
     }
 }

@@ -1,9 +1,7 @@
 {
-  "cmake.configureOnOpen": true,
   "cmake.debugConfig": {
     "cwd": "${workspaceFolder}"
   },
-  "cmake.skipConfigureIfCachePresent": true,
   "files.insertFinalNewline": true,
   "files.trimFinalNewlines": true,
   "files.trimTrailingWhitespace": true,
@@ -12,7 +10,6 @@
   ],
   "rust-analyzer.imports.granularity.group": "module",
   "[rust]": {
-    "editor.defaultFormatter": "rust-lang.rust-analyzer",
     "editor.formatOnSave": true
   }
 }

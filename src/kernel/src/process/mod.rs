@@ -10,6 +10,7 @@ use crate::signal::{
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{AuthInfo, Privilege};
 use crate::vm::MemoryManagerError;
+use bitflags::bitflags;
 use std::cmp::min;
 use std::ffi::c_char;
 use std::sync::atomic::AtomicI32;
@@ -56,6 +57,7 @@ impl ProcManager {
         sys.register(464, &pmgr, Self::sys_thr_set_name);
         sys.register(585, &pmgr, Self::sys_is_in_sandbox);
         sys.register(602, &pmgr, Self::sys_randomized_path);
+        sys.register(612, &pmgr, Self::sys_get_proc_type_info);
 
         pmgr
     }
@@ -333,6 +335,90 @@ impl ProcManager {
         }
 
         Ok(SysOut::ZERO)
+    }
+
+    fn sys_get_proc_type_info(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        // Check buffer size.
+        let info: *mut ProcTypeInfo = i.args[0].into();
+
+        if unsafe { (*info).nbuf != 16 } {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        // Set output size and process type.
+        unsafe { (*info).len = (*info).nbuf };
+        unsafe { (*info).ptype = td.proc().budget_ptype() };
+
+        // Set flags.
+        let cred = td.proc().cred();
+        let mut flags = ProcTypeInfoFlags::empty();
+
+        flags.set(
+            ProcTypeInfoFlags::IS_JIT_COMPILER_PROCESS,
+            cred.is_jit_compiler_process(),
+        );
+
+        flags.set(
+            ProcTypeInfoFlags::IS_JIT_APPLICATION_PROCESS,
+            cred.is_jit_application_process(),
+        );
+
+        flags.set(
+            ProcTypeInfoFlags::IS_VIDEOPLAYER_PROCESS,
+            cred.is_videoplayer_process(),
+        );
+
+        flags.set(
+            ProcTypeInfoFlags::IS_DISKPLAYERUI_PROCESS,
+            cred.is_diskplayerui_process(),
+        );
+
+        flags.set(
+            ProcTypeInfoFlags::HAS_USE_VIDEO_SERVICE_CAPABILITY,
+            cred.has_use_video_service_capability(),
+        );
+
+        flags.set(
+            ProcTypeInfoFlags::IS_WEBCORE_PROCESS,
+            cred.is_webcore_process(),
+        );
+
+        flags.set(
+            ProcTypeInfoFlags::HAS_SCE_PROGRAM_ATTRIBUTE,
+            cred.has_sce_program_attribute(),
+        );
+
+        flags.set(
+            ProcTypeInfoFlags::IS_DEBUGGABLE_PROCESS,
+            cred.is_debuggable_process(),
+        );
+
+        unsafe { (*info).flags = flags };
+
+        Ok(SysOut::ZERO)
+    }
+}
+
+/// Outout of sys_get_proc_type_info.
+#[repr(C)]
+struct ProcTypeInfo {
+    nbuf: usize,
+    len: usize,
+    ptype: ProcType,
+    flags: ProcTypeInfoFlags,
+}
+
+bitflags! {
+    #[repr(transparent)]
+    struct ProcTypeInfoFlags: u32 {
+        const IS_JIT_COMPILER_PROCESS = 0x1;
+        const IS_JIT_APPLICATION_PROCESS = 0x2;
+        const IS_VIDEOPLAYER_PROCESS = 0x4;
+        const IS_DISKPLAYERUI_PROCESS = 0x8;
+        const HAS_USE_VIDEO_SERVICE_CAPABILITY = 0x10;
+        const IS_WEBCORE_PROCESS = 0x20;
+        const HAS_SCE_PROGRAM_ATTRIBUTE = 0x40;
+        const IS_DEBUGGABLE_PROCESS = 0x80;
     }
 }
 
