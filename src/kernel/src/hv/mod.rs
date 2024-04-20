@@ -68,17 +68,30 @@ impl Hypervisor {
         .map_err(HypervisorError::MapRamFailed)?;
 
         let vcpus = [
-            self::linux::create_vcpu(vm.as_fd(), 0).map_err(|e| HypervisorError::CreateVcpuFailed(e, 0))?,
-            self::linux::create_vcpu(vm.as_fd(), 1).map_err(|e| HypervisorError::CreateVcpuFailed(e, 1))?,
-            self::linux::create_vcpu(vm.as_fd(), 2).map_err(|e| HypervisorError::CreateVcpuFailed(e, 2))?,
-            self::linux::create_vcpu(vm.as_fd(), 3).map_err(|e| HypervisorError::CreateVcpuFailed(e, 3))?,
-            self::linux::create_vcpu(vm.as_fd(), 4).map_err(|e| HypervisorError::CreateVcpuFailed(e, 4))?,
-            self::linux::create_vcpu(vm.as_fd(), 5).map_err(|e| HypervisorError::CreateVcpuFailed(e, 5))?,
-            self::linux::create_vcpu(vm.as_fd() ,6).map_err(|e| HypervisorError::CreateVcpuFailed(e, 6))?,
-            self::linux::create_vcpu(vm.as_fd(), 7).map_err(|e| HypervisorError::CreateVcpuFailed(e, 7))?,
+            self::linux::create_vcpu(vm.as_fd(), 0)
+                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 0))?,
+            self::linux::create_vcpu(vm.as_fd(), 1)
+                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 1))?,
+            self::linux::create_vcpu(vm.as_fd(), 2)
+                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 2))?,
+            self::linux::create_vcpu(vm.as_fd(), 3)
+                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 3))?,
+            self::linux::create_vcpu(vm.as_fd(), 4)
+                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 4))?,
+            self::linux::create_vcpu(vm.as_fd(), 5)
+                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 5))?,
+            self::linux::create_vcpu(vm.as_fd(), 6)
+                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 6))?,
+            self::linux::create_vcpu(vm.as_fd(), 7)
+                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 7))?,
         ];
 
-        Ok(Self { vcpus, vm, kvm, ram })
+        Ok(Self {
+            vcpus,
+            vm,
+            kvm,
+            ram,
+        })
     }
 
     #[cfg(target_os = "windows")]

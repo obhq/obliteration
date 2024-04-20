@@ -66,7 +66,7 @@ pub fn set_user_memory_region(
 pub fn create_vcpu(vm: BorrowedFd, id: i32) -> Result<OwnedFd, Error> {
     let mut vcpu = -1;
 
-    match unsafe { kvm_create_vcpu(vm.as_raw_fd(), id,&mut vcpu) } {
+    match unsafe { kvm_create_vcpu(vm.as_raw_fd(), id, &mut vcpu) } {
         0 => Ok(unsafe { OwnedFd::from_raw_fd(vcpu) }),
         v => Err(Error::from_raw_os_error(v)),
     }
@@ -83,5 +83,5 @@ extern "C" {
         len: u64,
         mem: *mut c_void,
     ) -> c_int;
-    fn kvm_create_vcpu(vm: c_int,id: c_int,  fd: *mut c_int) -> c_int;
+    fn kvm_create_vcpu(vm: c_int, id: c_int, fd: *mut c_int) -> c_int;
 }
