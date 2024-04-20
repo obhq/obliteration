@@ -89,9 +89,9 @@ macro_rules! commands {
 commands! {
     pub enum IoCmd {
         /// sceKernelMemoryPoolExpand
-        BPOOLEXPAND(&mut BlockpoolExpandArgs) = 0xC020A801,
+        BPOOLEXPAND(&mut BlockpoolExpandArgs) = 0xc020a801,
         /// sceKernelMemoryPoolGetBlockStats
-        BPOOLSTATS(&mut BlockpoolStats) = 0x4010A802,
+        BPOOLSTATS(&mut BlockpoolStats) = 0x4010a802,
 
         /// An unkown bnet command, called from libSceNet
         BNETUNK(&Unknown36) = 0x802450c9,
@@ -106,7 +106,7 @@ commands! {
         /// sceKernelUnsetDipsw
         DIPSWUNSET(&Unknown2) = 0x80028802,
         /// sceKernelCheckDipsw
-        DIPSWCHECK(&mut Unknown8) = 0xC0088803,
+        DIPSWCHECK(&mut Unknown8) = 0xc0088803,
         /// sceKernelReadDipswData
         DIPSWREAD(&Unknown16) = 0x80108804,
         /// sceKernelWriteDipswData
@@ -116,18 +116,19 @@ commands! {
         /// Unkown dipsw command
         DIPSWUNK(&mut i32) = 0x40048807,
 
+
+        /// Allocate direct memory
+        DMEMALLOC(&mut DmemAllocate) = 0xc0288001,
         /// Get total size?
         DMEMTOTAL(&mut usize) = 0x4008800a,
         /// Get PRT aperture
-        DMEMGETPRT(&mut PrtAperture) = 0xC018800C,
-        /// Get available memory size
-        DMEMGETAVAIL(&mut DmemAvailable) = 0xC0208016,
-        /// Allocate direct memory
-        DMEMALLOC(&mut DmemAllocate) = 0xC0288001,
+        DMEMGETPRT(&mut PrtAperture) = 0xc018800c,
         /// Allocate main direct memory
-        DMEMALLOCMAIN(&mut DmemAllocate) = 0xC0288011,
+        DMEMALLOCMAIN(&mut DmemAllocate) = 0xc0288011,
         /// Query direct memory
         DMEMQUERY(&DmemQuery) = 0x80288012,
+        /// Get available memory size
+        DMEMGETAVAIL(&mut DmemAvailable) = 0xc0208016,
 
         /// Set close on exec on fd.
         FIOCLEX = 0x20006601,
@@ -154,9 +155,9 @@ commands! {
         /// Get space in send queue
         FIONSPACE(&mut i32) = 0x40046676,
         /// Seek data.
-        FIOSEEKDATA(&mut i64) = 0xC0086661,
+        FIOSEEKDATA(&mut i64) = 0xc0086661,
         /// Seek hole.
-        FIOSEEKHOLE(&mut i64) = 0xC0086662,
+        FIOSEEKHOLE(&mut i64) = 0xc0086662,
 
         /// Get CU mask
         GCGETCUMASK(&mut Unknown16) = 0xc010810b,
