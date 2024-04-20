@@ -1,6 +1,6 @@
-use thiserror::Error;
 #[cfg(target_os = "macos")]
 use std::num::NonZero;
+use thiserror::Error;
 
 pub use self::ram::*;
 
