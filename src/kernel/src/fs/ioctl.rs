@@ -1,5 +1,5 @@
 use super::FioDeviceGetNameArg;
-use crate::dev::{CuMask, DingDongForWorkload, DmemAllocate, DmemAvailable, DmemQuery, PrtAperture, RngInput};
+use crate::dev::{CuMask, DingDongForWorkload, DmemAllocate, DmemAvailable, DmemQuery, PrtAperture, RngInput, SubmitArg};
 use crate::dmem::{BlockpoolExpandArgs, BlockpoolStats};
 use crate::errno::ENOTTY;
 use crate::syscalls::SysErr;
@@ -161,6 +161,8 @@ commands! {
 
         /// Set wave limit multiplier
         GCSETWAVELIMITMULTIPLIER(&mut i64) = 0xc0088101,
+        /// Submit
+        GCSUBMIT(&mut SubmitArg) = 0xc0108102,
         /// Get CU mask
         GCGETCUMASK(&mut CuMask) = 0xc010810b,
         /// Map compute queue

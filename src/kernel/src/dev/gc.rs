@@ -38,6 +38,7 @@ impl DeviceDriver for Gc {
         _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         match cmd {
+            IoCmd::GCSUBMIT(submit_arg) => todo!("GCSUBMIT ioctl"),
             IoCmd::GCGETCUMASK(_) => todo!("GCGETCUMASK ioctl"),
             IoCmd::GCSETGSRINGSIZES(_) => todo!("GCSETGSRINGSIZES ioctl"),
             IoCmd::GCMIPSTATSREPORT(_) => todo!("GCMIPSTATSREPORT ioctl"),
@@ -72,6 +73,14 @@ impl GcManager {
 
         Ok(Arc::new(Self { gc }))
     }
+}
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct SubmitArg {
+    pid: i32,
+    count: i32,
+    commands: usize,
 }
 
 
