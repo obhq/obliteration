@@ -1,6 +1,6 @@
 use std::ffi::{c_int, c_void};
-use std::ptr::null_mut;
 use std::num::NonZero;
+use std::ptr::null_mut;
 
 /// RAII struct for `hv_vm_create` and `hv_vm_destroy`.
 pub struct Vm(());
@@ -27,7 +27,7 @@ impl Vm {
     }
 
     pub fn vm_map(&self, host: *mut c_void, guest: u64, len: usize) -> Result<(), NonZero<c_int>> {
-        let ret = unsafe { hv_vm_map(host, guest, len, 1 | 2 | 4)};
+        let ret = unsafe { hv_vm_map(host, guest, len, 1 | 2 | 4) };
 
         match NonZero::new(ret) {
             Some(ret) => Err(ret),
