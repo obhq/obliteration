@@ -159,24 +159,24 @@ commands! {
         /// Seek hole.
         FIOSEEKHOLE(&mut i64) = 0xc0086662,
 
-        /// Get CU mask
-        GCGETCUMASK(&mut Unknown16) = 0xc010810b,
-        /// Set GS ring queue sizes
-        GCSETGSRINGSIZES(&mut Unknown12) = 0xc00c8110,
-        /// Ding dong for workload
-        GCDINGDONGFORWORKLOAD(&mut Unknown16) = 0xc010811c,
-        /// Get mip stats report
-        GCMIPSTATSREPORT(&mut Unknown132) = 0xc0848119,
-        /// Currently unknown gc command
-        GC27(&mut Unknown8) = 0xc008811b,
-        /// Get number of tca units
-        GCGETNUMTCAUNITS(&mut i32) = 0xc004811f,
         /// Set wave limit multiplier
         GCSETWAVELIMITMULTIPLIER(&mut i64) = 0xc0088101,
+        /// Get CU mask
+        GCGETCUMASK(&mut Unknown16) = 0xc010810b,
         /// Map compute queue
         GCMAPCOMPUTEQUEUE(&mut Unknown48) = 0xc030810d,
         /// Unmap compute queue
         GCUNMAPCOMPUTEQUEUE(&mut Unknown12) = 0xc00c810e,
+        /// Set GS ring queue sizes
+        GCSETGSRINGSIZES(&mut Unknown12) = 0xc00c8110,
+        /// Get mip stats report
+        GCMIPSTATSREPORT(&mut Unknown132) = 0xc0848119,
+        /// Currently unknown gc command
+        GC27(&mut Unknown8) = 0xc008811b,
+        /// Ding dong for workload
+        GCDINGDONGFORWORKLOAD(&mut Unknown16) = 0xc010811c,
+        /// Get number of tca units
+        GCGETNUMTCAUNITS(&mut i32) = 0xc004811f,
 
         /// Get genuine random
         RNGGETGENUINE(&mut RngInput) = 0x40445301,
