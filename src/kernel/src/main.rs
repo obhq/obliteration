@@ -1,8 +1,9 @@
 use crate::arch::MachDep;
 use crate::budget::{Budget, BudgetManager, ProcType};
 use crate::dev::{
-    CameraManager, DebugManager, DebugManagerInitError, DipswInitError, DipswManager,
-    DmemContainer, GcManager, RngManager, TtyManager, TtyManagerInitError,
+    CameraInitError, CameraManager, DebugManager, DebugManagerInitError, DipswInitError,
+    DipswManager, DmemContainer, GcInitError, GcManager, RngInitError, RngManager, TtyManager,
+    TtyManagerInitError,
 };
 use crate::dmem::{DmemManager, DmemManagerInitError};
 use crate::ee::native::NativeEngine;
@@ -28,7 +29,6 @@ use crate::time::TimeManager;
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use crate::umtx::UmtxManager;
 use clap::Parser;
-use dev::{CameraInitError, GcInitError, RngInitError};
 use llt::{OsThread, SpawnError};
 use macros::vpath;
 use param::Param;
@@ -36,8 +36,8 @@ use serde::Deserialize;
 use std::error::Error;
 use std::fs::{create_dir_all, remove_dir_all, File};
 use std::io::Write;
-use std::path::PathBuf;
-use std::process::{ExitCode, Termination};
+use std::path::{Path, PathBuf};
+use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::SystemTime;
 use sysinfo::{MemoryRefreshKind, System};
@@ -74,23 +74,42 @@ mod ucred;
 mod umtx;
 mod vm;
 
-fn main() -> Exit {
-    run().into()
-}
-
-fn run() -> Result<(), KernelError> {
-    // Begin logger.
-    log::init();
-
+fn main() -> ExitCode {
     // Load arguments.
-    let args = if std::env::args().any(|a| a == "--debug") {
-        let file = File::open(".kernel-debug").map_err(KernelError::FailedToOpenDebugConfig)?;
+    let args = if std::env::args_os().any(|a| a == "--debug") {
+        let path = Path::new(".kernel-debug");
+        let file = match File::open(path) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to open {}: {}.", path.display(), e);
+                return ExitCode::FAILURE;
+            }
+        };
 
-        serde_yaml::from_reader(file).map_err(KernelError::FailedToParseDebugConfig)?
+        match serde_yaml::from_reader(file) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Failed to parse {}: {}.", path.display(), e);
+                return ExitCode::FAILURE;
+            }
+        }
     } else {
-        Args::try_parse().map_err(KernelError::FailedToParseArgs)?
+        Args::parse()
     };
 
+    // Run the kernel.
+    log::init();
+
+    match run(args) {
+        Ok(_) => ExitCode::SUCCESS,
+        Err(e) => {
+            error!(e, "Error while running kernel");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run(args: Args) -> Result<(), KernelError> {
     // Initialize debug dump.
     if let Some(path) = &args.debug_dump {
         // Remove previous dump.
@@ -556,6 +575,7 @@ fn join_thread(thr: OsThread) -> Result<(), std::io::Error> {
 }
 
 #[derive(Parser, Deserialize)]
+#[command(about)]
 #[serde(rename_all = "kebab-case")]
 struct Args {
     #[arg(long)]
@@ -591,15 +611,6 @@ enum DiscordPresenceError {
 
 #[derive(Debug, Error)]
 enum KernelError {
-    #[error("couldn't open .kernel-debug")]
-    FailedToOpenDebugConfig(#[source] std::io::Error),
-
-    #[error("couldn't parse .kernel-debug")]
-    FailedToParseDebugConfig(#[source] serde_yaml::Error),
-
-    #[error("couldn't parse arguments")]
-    FailedToParseArgs(#[source] clap::Error),
-
     #[error("couldn't open param.sfo")]
     FailedToOpenGameParam(#[source] std::io::Error),
 
@@ -659,33 +670,4 @@ enum KernelError {
 
     #[error("failed to join with main thread")]
     FailedToJoinMainThread(#[source] std::io::Error),
-}
-
-/// We have to use this for a custom implementation of the [`Termination`] trait, because
-/// we need to log the error using our own error! macro instead of [`std::fmt::Debug::fmt`],
-/// which is what the default implementation of Termination uses for [`Result<T: Termination, E: Debug>`].
-enum Exit {
-    Ok,
-    Err(KernelError),
-}
-
-impl Termination for Exit {
-    fn report(self) -> ExitCode {
-        match self {
-            Exit::Ok => ExitCode::SUCCESS,
-            Exit::Err(e) => {
-                error!(e, "Error while running kernel");
-                ExitCode::FAILURE
-            }
-        }
-    }
-}
-
-impl From<Result<(), KernelError>> for Exit {
-    fn from(r: Result<(), KernelError>) -> Self {
-        match r {
-            Ok(_) => Exit::Ok,
-            Err(e) => Exit::Err(e),
-        }
-    }
 }
