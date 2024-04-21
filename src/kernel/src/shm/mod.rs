@@ -2,6 +2,7 @@ use crate::errno::{Errno, EINVAL};
 use crate::fs::{
     check_access, Access, AccessError, DefaultFileBackendError, FileBackend, IoCmd, IoLen, IoVec,
     IoVecMut, Mode, OpenFlags, PollEvents, Stat, TruncateLength, VFile, VFileFlags, VPathBuf,
+    Vnode,
 };
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
@@ -67,7 +68,7 @@ pub enum ShmPath {
 /// An implementation of the `shmfd` structure.
 #[derive(Debug)]
 #[allow(unused_variables)] // TODO: remove when used.
-pub struct SharedMemory {
+struct SharedMemory {
     uid: Uid,
     gid: Gid,
     mode: Mode,
@@ -152,6 +153,10 @@ impl FileBackend for SharedMemory {
         self.do_truncate(length)?;
 
         Ok(())
+    }
+
+    fn vnode(&self) -> Option<&Arc<Vnode>> {
+        todo!()
     }
 }
 

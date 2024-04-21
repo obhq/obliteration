@@ -5,6 +5,7 @@ use crate::process::VThread;
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup};
 use macros::Errno;
+use std::any::{Any, TypeId};
 use std::fmt::Debug;
 use std::io::{ErrorKind, Read, Seek, SeekFrom};
 use std::sync::Arc;
@@ -13,33 +14,20 @@ use thiserror::Error;
 /// An implementation of `file` structure.
 #[derive(Debug)]
 pub struct VFile {
-    ty: VFileType,             // f_type
-    flags: VFileFlags,         // f_flag
-    vnode: Option<Arc<Vnode>>, // f_vnode
-    offset: Gutex<u64>,        // f_offset
+    flags: VFileFlags,  // f_flag
+    offset: Gutex<u64>, // f_offset
     backend: Box<dyn FileBackend>,
 }
 
 impl VFile {
-    pub fn new(
-        ty: VFileType,
-        flags: VFileFlags,
-        vnode: Option<Arc<Vnode>>,
-        backend: Box<dyn FileBackend>,
-    ) -> Self {
+    pub fn new(flags: VFileFlags, backend: Box<dyn FileBackend>) -> Self {
         let gg = GutexGroup::new();
 
         Self {
-            ty,
             flags,
-            vnode,
             offset: gg.spawn(0),
             backend,
         }
-    }
-
-    pub fn ty(&self) -> &VFileType {
-        &self.ty
     }
 
     pub fn flags(&self) -> VFileFlags {
@@ -51,7 +39,7 @@ impl VFile {
     }
 
     pub fn vnode(&self) -> Option<&Arc<Vnode>> {
-        self.vnode.as_ref()
+        self.backend.vnode()
     }
 
     pub fn ioctl(&self, cmd: IoCmd, td: Option<&VThread>) -> Result<(), Box<dyn Errno>> {
@@ -68,6 +56,25 @@ impl VFile {
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         self.backend.truncate(self, length, td)
+    }
+
+    /// Gets the `f_data` associated with this file.
+    ///
+    /// File implementation should use this method to check if the file has expected type. This
+    /// method should be impossible for non-file implementation to call because it required an
+    /// implementation of [`FileBackend`], which should not exposed by the subsystem itself. This
+    /// also imply the other subsystems cannot call this method with the other subsystem
+    /// implementation.
+    pub fn backend<T: FileBackend>(&self) -> Option<&T> {
+        // TODO: Use Any::downcast_ref() when https://github.com/rust-lang/rust/issues/65991 is
+        // stabilized. Our current implementation here is copied from Any::downcast_ref().
+        let b = self.backend.as_ref();
+
+        if b.type_id() == TypeId::of::<T>() {
+            Some(unsafe { &*(b as *const dyn FileBackend as *const T) })
+        } else {
+            None
+        }
     }
 }
 
@@ -122,19 +129,6 @@ impl Read for VFile {
     }
 }
 
-/// Type of [`VFile`].
-#[repr(i16)]
-#[derive(Debug, Clone, Copy)]
-pub enum VFileType {
-    Vnode = 1,        // DTYPE_VNODE
-    Socket = 2,       // DTYPE_SOCKET
-    KernelQueue = 5,  // DTYPE_KQUEUE
-    SharedMemory = 8, // DTYPE_SHM
-    Device = 11,      // DTYPE_DEV
-    IpcSocket = 15,   // DTYPE_IPCSOCKET
-    Blockpool = 17,   // DTYPE_BLOCKPOOL
-}
-
 bitflags! {
     /// Flags for [`VFile`].
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -145,7 +139,10 @@ bitflags! {
 }
 
 /// An implementation of `fileops` structure.
-pub trait FileBackend: Debug + Send + Sync + 'static {
+///
+/// The implementation is internal to the subsystem itself so it should not expose itself to the
+/// outside.
+pub trait FileBackend: Any + Debug + Send + Sync + 'static {
     /// Implementation of `fo_flags` with `DFLAG_SEEKABLE`.
     fn is_seekable(&self) -> bool;
 
@@ -191,6 +188,12 @@ pub trait FileBackend: Debug + Send + Sync + 'static {
     ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultFileBackendError::TruncateNotSupported))
     }
+
+    /// Get a vnode associated with this file (if any).
+    ///
+    /// Usually this will be [`Some`] if the file was opened from a filesystem (e.g. `/dev/null`)
+    /// and [`None`] if the file is not living on the filesystem (e.g. kqueue).
+    fn vnode(&self) -> Option<&Arc<Vnode>>;
 }
 
 #[derive(Debug, Error, Errno)]

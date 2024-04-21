@@ -9,6 +9,7 @@
     "settings set target.x86-disassembly-flavor intel"
   ],
   "rust-analyzer.imports.granularity.group": "module",
+  "rust-analyzer.imports.group.enable": false,
   "[rust]": {
     "editor.formatOnSave": true
   }

@@ -2,7 +2,7 @@ use super::dirent::Dirent;
 use crate::errno::{Errno, ENODEV, ENOTTY};
 use crate::fs::{
     FileBackend, IoCmd, IoLen, IoVec, IoVecMut, Mode, OpenFlags, PollEvents, Stat, TruncateLength,
-    VFile,
+    VFile, Vnode,
 };
 use crate::process::VThread;
 use crate::time::TimeSpec;
@@ -111,11 +111,14 @@ impl CharacterDevice {
 
 /// Implementation of `devfs_ops_f`.
 #[derive(Debug)]
-pub(super) struct CdevFileBackend(Arc<CharacterDevice>);
+pub(super) struct CdevFileBackend {
+    vnode: Arc<Vnode>,
+    dev: Arc<CharacterDevice>,
+}
 
 impl CdevFileBackend {
-    pub fn new(dev: Arc<CharacterDevice>) -> Self {
-        Self(dev)
+    pub fn new(vnode: Arc<Vnode>, dev: Arc<CharacterDevice>) -> Self {
+        Self { vnode, dev }
     }
 }
 
@@ -148,7 +151,7 @@ impl FileBackend for CdevFileBackend {
         match cmd {
             IoCmd::FIODTYPE(_) => todo!(),
             IoCmd::FIODGNAME(_) => todo!(),
-            _ => self.0.driver.ioctl(&self.0, cmd, td)?,
+            _ => self.dev.driver.ioctl(&self.dev, cmd, td)?,
         }
 
         Ok(())
@@ -169,6 +172,10 @@ impl FileBackend for CdevFileBackend {
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         todo!()
+    }
+
+    fn vnode(&self) -> Option<&Arc<Vnode>> {
+        Some(&self.vnode)
     }
 }
 
