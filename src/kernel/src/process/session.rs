@@ -1,17 +1,16 @@
-use std::num::NonZeroI32;
-use std::sync::Arc;
-
+use super::Pid;
 use gmtx::{Gutex, GutexGroup};
+use std::sync::Arc;
 
 /// An implementation of `session` structure.
 #[derive(Debug)]
 pub struct VSession {
-    id: NonZeroI32,       // s_sid
+    id: Pid,              // s_sid
     login: Gutex<String>, // s_login
 }
 
 impl VSession {
-    pub fn new(id: NonZeroI32, login: String) -> Arc<Self> {
+    pub fn new(id: Pid, login: String) -> Arc<Self> {
         let gg = GutexGroup::new();
 
         Arc::new(Self {

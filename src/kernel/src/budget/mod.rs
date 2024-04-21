@@ -34,8 +34,8 @@ impl BudgetManager {
 
         info!("Getting budget process type for process {pid}.");
 
-        if td.cred().is_system() || pid == -1 || pid == td.proc().id().get() {
-            if pid == -1 || pid == td.proc().id().get() {
+        if td.cred().is_system() || pid == -1 || pid == td.proc().id() {
+            if pid == -1 || pid == td.proc().id() {
                 // Lookup budget.
                 let id = td.proc().budget_id();
 

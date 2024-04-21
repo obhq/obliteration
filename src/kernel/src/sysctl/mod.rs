@@ -353,7 +353,7 @@ impl Sysctl {
 
         let td = VThread::current().unwrap();
 
-        if arg1[0] != td.proc().id().get() {
+        if arg1[0] != td.proc().id() {
             return Err(SysErr::Raw(ESRCH));
         }
 
