@@ -1,17 +1,16 @@
-use super::VSession;
+use super::{Pid, VSession};
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
-use std::num::NonZeroI32;
 use std::sync::Arc;
 
 /// An implementation of `pgrp` struct.
 #[derive(Debug)]
 pub struct VProcGroup {
-    id: NonZeroI32,                // pg_id
+    id: Pid,                       // pg_id
     session: Gutex<Arc<VSession>>, // pg_session
 }
 
 impl VProcGroup {
-    pub fn new(id: NonZeroI32, session: Arc<VSession>) -> Arc<Self> {
+    pub fn new(id: Pid, session: Arc<VSession>) -> Arc<Self> {
         let gg = GutexGroup::new();
 
         Arc::new(Self {

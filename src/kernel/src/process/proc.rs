@@ -1,6 +1,6 @@
 use super::{
-    AppInfo, Binaries, CpuLevel, CpuWhich, FileDesc, Limits, ResourceLimit, ResourceType,
-    SignalActs, SpawnError, VProcGroup, VThread, NEXT_ID,
+    AppInfo, Binaries, CpuLevel, CpuWhich, FileDesc, Limits, Pid, ResourceLimit, ResourceType,
+    SignalActs, SpawnError, VProcGroup, VThread,
 };
 use crate::budget::ProcType;
 use crate::dev::DmemContainer;
@@ -14,12 +14,9 @@ use crate::vm::Vm;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use macros::Errno;
 use std::any::Any;
-use std::mem::size_of;
-use std::mem::zeroed;
-use std::num::NonZeroI32;
-use std::ptr::null;
-use std::ptr::null_mut;
-use std::sync::atomic::{AtomicPtr, Ordering};
+use std::mem::{size_of, zeroed};
+use std::ptr::{null, null_mut};
+use std::sync::atomic::AtomicPtr;
 use std::sync::{Arc, OnceLock};
 use thiserror::Error;
 
@@ -29,7 +26,7 @@ use thiserror::Error;
 /// once we have migrated the PS4 code to run inside a virtual machine.
 #[derive(Debug)]
 pub struct VProc {
-    id: NonZeroI32,                        // p_pid
+    id: Pid,                               // p_pid
     threads: Gutex<Vec<Arc<VThread>>>,     // p_threads
     cred: Arc<Ucred>,                      // p_ucred
     group: Gutex<Option<Arc<VProcGroup>>>, // p_pgrp
@@ -52,6 +49,7 @@ pub struct VProc {
 
 impl VProc {
     pub(super) fn new(
+        id: Pid,
         auth: AuthInfo,
         budget_id: usize,
         budget_ptype: ProcType,
@@ -72,7 +70,7 @@ impl VProc {
         let limits = Limits::load()?;
 
         let vp = Arc::new(Self {
-            id: Self::new_id(),
+            id,
             threads: gg.spawn(Vec::new()),
             cred: Arc::new(cred),
             group: gg.spawn(None),
@@ -105,7 +103,7 @@ impl VProc {
         Ok(vp)
     }
 
-    pub fn id(&self) -> NonZeroI32 {
+    pub fn id(&self) -> Pid {
         self.id
     }
 
@@ -375,7 +373,7 @@ impl VProc {
         let buf: *mut AuthInfo = i.args[1].into();
 
         // Check if PID is our process.
-        if pid != 0 && pid != self.id.get() {
+        if pid != 0 && pid != self.id {
             return Err(SysErr::Raw(ESRCH));
         }
 
@@ -404,16 +402,6 @@ impl VProc {
         }
 
         Ok(SysOut::ZERO)
-    }
-
-    fn new_id() -> NonZeroI32 {
-        let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
-
-        // Just in case if the user manage to spawn 2,147,483,647 threads in a single run so we
-        // don't encountered a weird bug.
-        assert!(id > 0);
-
-        NonZeroI32::new(id).unwrap()
     }
 }
 

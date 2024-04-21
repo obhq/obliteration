@@ -14,7 +14,8 @@ use crate::vm::MemoryManagerError;
 use bitflags::bitflags;
 use std::cmp::min;
 use std::ffi::c_char;
-use std::sync::atomic::AtomicI32;
+use std::num::NonZeroI32;
+use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -23,6 +24,7 @@ pub use self::binary::*;
 pub use self::cpuset::*;
 pub use self::filedesc::*;
 pub use self::group::*;
+pub use self::pid::*;
 pub use self::proc::*;
 pub use self::rlimit::*;
 pub use self::session::*;
@@ -34,6 +36,7 @@ mod binary;
 mod cpuset;
 mod filedesc;
 mod group;
+mod pid;
 mod proc;
 mod rlimit;
 mod session;
@@ -79,6 +82,7 @@ impl ProcManager {
         sys: Syscalls,
     ) -> Result<Arc<VProc>, SpawnError> {
         VProc::new(
+            Self::new_id().into(),
             auth,
             budget_id,
             budget_ptype,
@@ -235,7 +239,7 @@ impl ProcManager {
                 flag &= !SigChldFlags::PS_NOCLDSTOP;
             }
 
-            if !flags.intersects(SignalFlags::SA_NOCLDWAIT) || proc.id().get() == 1 {
+            if !flags.intersects(SignalFlags::SA_NOCLDWAIT) || proc.id() == 1 {
                 flag &= !SigChldFlags::PS_NOCLDWAIT;
             } else {
                 flag |= SigChldFlags::PS_NOCLDWAIT;
@@ -402,9 +406,19 @@ impl ProcManager {
 
         Ok(SysOut::ZERO)
     }
+
+    fn new_id() -> NonZeroI32 {
+        let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+
+        // Just in case if the user manage to spawn 2,147,483,647 threads in a single run so we
+        // don't encountered a weird bug.
+        assert!(id > 0);
+
+        NonZeroI32::new(id).unwrap()
+    }
 }
 
-/// Outout of sys_get_proc_type_info.
+/// Output of [`ProcManager::sys_get_proc_type_info()`].
 #[repr(C)]
 struct ProcTypeInfo {
     nbuf: usize,
