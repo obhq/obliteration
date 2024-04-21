@@ -1,7 +1,7 @@
 use crate::budget::BudgetType;
 use crate::errno::Errno;
 use crate::fs::{
-    DefaultFileBackendError, PollEvents, Stat, TruncateLength, VFile, VFileFlags, VFileType,
+    DefaultFileBackendError, PollEvents, Stat, TruncateLength, VFile, VFileFlags, Vnode,
 };
 use crate::process::{FileDesc, VThread};
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
@@ -34,9 +34,7 @@ impl KernelQueueManager {
                 filedesc.insert_kqueue(kq.clone());
 
                 Ok(VFile::new(
-                    VFileType::KernelQueue,
                     VFileFlags::READ | VFileFlags::WRITE,
-                    None,
                     Box::new(FileBackend(kq)),
                 ))
             },
@@ -89,5 +87,9 @@ impl crate::fs::FileBackend for FileBackend {
         _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultFileBackendError::InvalidValue))
+    }
+
+    fn vnode(&self) -> Option<&Arc<Vnode>> {
+        None
     }
 }

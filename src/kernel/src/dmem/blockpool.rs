@@ -1,6 +1,7 @@
 use crate::errno::Errno;
-use crate::fs::{DefaultFileBackendError, FileBackend, IoCmd, PollEvents, Stat, VFile};
+use crate::fs::{DefaultFileBackendError, FileBackend, IoCmd, PollEvents, Stat, VFile, Vnode};
 use crate::process::VThread;
+use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct BlockPool {}
@@ -37,6 +38,10 @@ impl FileBackend for BlockPool {
         stat.mode = 0o130000;
 
         todo!()
+    }
+
+    fn vnode(&self) -> Option<&Arc<Vnode>> {
+        None
     }
 }
 

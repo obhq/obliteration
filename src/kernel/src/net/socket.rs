@@ -3,7 +3,7 @@ use super::{GetOptError, SetOptError, SockAddr, SockOpt};
 use crate::errno::{Errno, EPROTONOSUPPORT};
 use crate::fs::{
     DefaultFileBackendError, FileBackend, IoCmd, IoLen, IoVec, IoVecMut, PollEvents, Stat,
-    TruncateLength, VFile,
+    TruncateLength, VFile, Vnode,
 };
 use crate::process::VThread;
 use crate::ucred::Ucred;
@@ -94,7 +94,21 @@ impl Socket {
     }
 }
 
-impl FileBackend for Socket {
+/// Implementation of [`FileBackend`] for [`Socket`].
+#[derive(Debug)]
+pub struct SocketFileBackend(Arc<Socket>);
+
+impl SocketFileBackend {
+    pub fn new(sock: Arc<Socket>) -> Box<Self> {
+        Box::new(Self(sock))
+    }
+
+    pub fn as_sock(&self) -> &Arc<Socket> {
+        &self.0
+    }
+}
+
+impl FileBackend for SocketFileBackend {
     fn is_seekable(&self) -> bool {
         todo!()
     }
@@ -136,7 +150,7 @@ impl FileBackend for Socket {
             IoCmd::SIOCSPGRP(_) => todo!("socket ioctl with SIOCSPGRP"),
             IoCmd::SIOCGPGRP(_) => todo!("socket ioctl with SIOCGPGRP"),
             IoCmd::SIOCATMARK(_) => todo!("socket ioctl with SIOCATMARK"),
-            _ => self.backend.control(todo!(), cmd, td),
+            _ => self.0.backend.control(todo!(), cmd, td),
         }
     }
 
@@ -157,6 +171,10 @@ impl FileBackend for Socket {
         _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         Err(Box::new(DefaultFileBackendError::InvalidValue))
+    }
+
+    fn vnode(&self) -> Option<&Arc<Vnode>> {
+        None
     }
 }
 

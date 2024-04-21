@@ -181,7 +181,7 @@ impl Fs {
             .map_err(OpenError::LookupFailed)?;
         let backend = vnode.to_file_backend();
 
-        Ok(VFile::new(VFileType::Vnode, flags, Some(vnode), backend))
+        Ok(VFile::new(flags, backend))
     }
 
     pub fn lookup(
