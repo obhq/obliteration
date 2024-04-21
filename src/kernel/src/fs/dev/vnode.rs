@@ -196,7 +196,7 @@ impl crate::fs::VnodeBackend for VnodeBackend {
 
     fn to_file_backend(&self, vn: &Arc<Vnode>) -> Box<dyn FileBackend> {
         match vn.item().deref() {
-            Some(VnodeItem::Device(d)) => Box::new(CdevFileBackend::new(d.clone())),
+            Some(VnodeItem::Device(d)) => Box::new(CdevFileBackend::new(vn.clone(), d.clone())),
             _ => Box::new(VnodeFileBackend::new(vn.clone())),
         }
     }

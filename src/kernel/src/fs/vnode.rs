@@ -2,7 +2,6 @@ use super::{
     unixify_access, Access, CharacterDevice, FileBackend, IoCmd, IoLen, IoVec, IoVecMut, Mode,
     Mount, PollEvents, RevokeFlags, Stat, TruncateLength, VFile,
 };
-use crate::arnd;
 use crate::errno::{Errno, ENOTDIR, ENOTTY, EOPNOTSUPP, EPERM};
 use crate::process::VThread;
 use crate::ucred::{Gid, Uid};
@@ -47,8 +46,7 @@ impl Vnode {
             backend: Box::new(backend),
             hash: {
                 let mut buf = [0u8; 4];
-                arnd::rand_bytes(&mut buf);
-
+                crate::arnd::rand_bytes(&mut buf);
                 u32::from_ne_bytes(buf)
             },
             item: gg.spawn(None),
@@ -343,6 +341,10 @@ impl FileBackend for VnodeFileBackend {
         td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
         todo!()
+    }
+
+    fn vnode(&self) -> Option<&Arc<Vnode>> {
+        Some(&self.0)
     }
 }
 
