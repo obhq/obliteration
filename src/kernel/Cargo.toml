@@ -1,6 +1,7 @@
 [package]
 name = "kernel"
 version = "0.1.0"
+description = "Free and open-source alternative PlayStation 4 kernel for Windows, Linux and macOS"
 edition = "2021"
 
 [[bin]]
@@ -11,7 +12,7 @@ path = "src/main.rs"
 bitflags = "2.1"
 bytemuck = "1.14.0"
 byteorder = "1.4"
-clap = { version = "4.1", features = ["derive"] }
+clap = { version = "4.1", features = ["cargo", "derive"] }
 discord-rich-presence = "0.2"
 gmtx = { path = "../gmtx" }
 iced-x86 = { version = "1.18", features = ["code_asm"] }
