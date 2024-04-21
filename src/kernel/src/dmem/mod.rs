@@ -1,8 +1,8 @@
+use self::blockpool::BlockPool;
 use crate::dev::{Dmem, DmemContainer};
 use crate::errno::EINVAL;
 use crate::fs::{
-    make_dev, CharacterDevice, DriverFlags, Fs, MakeDevError, MakeDevFlags, Mode, VFile,
-    VFileFlags, VFileType,
+    make_dev, CharacterDevice, DriverFlags, Fs, MakeDevError, MakeDevFlags, Mode, VFile, VFileFlags,
 };
 use crate::info;
 use crate::process::VThread;
@@ -12,7 +12,7 @@ use std::ops::Index;
 use std::sync::Arc;
 use thiserror::Error;
 
-pub use self::blockpool::*;
+pub use self::blockpool::{BlockpoolExpandArgs, BlockpoolStats};
 
 mod blockpool;
 
@@ -134,15 +134,11 @@ impl DmemManager {
         }
 
         let bp = BlockPool::new();
-
         let flags = VFileFlags::from_bits_retain(flags) | VFileFlags::WRITE;
-
-        let fd = td.proc().files().alloc(Arc::new(VFile::new(
-            VFileType::Blockpool,
-            flags,
-            None,
-            Box::new(bp),
-        )));
+        let fd = td
+            .proc()
+            .files()
+            .alloc(Arc::new(VFile::new(flags, Box::new(bp))));
 
         info!("Opened a blockpool at fd = {fd}");
 

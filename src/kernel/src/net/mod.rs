@@ -1,12 +1,10 @@
+use self::socket::{Socket, SocketCreateError, SocketFileBackend};
 use crate::budget::BudgetType;
-use crate::errno::{Errno, EFAULT, EINVAL, ENAMETOOLONG};
-use crate::fs::{IoVec, VFile, VFileFlags, VFileType};
-use crate::process::GetSocketError;
-use crate::{arnd, info};
-use crate::{
-    process::VThread,
-    syscalls::{SysErr, SysIn, SysOut, Syscalls},
-};
+use crate::errno::{Errno, EFAULT, EINVAL, ENAMETOOLONG, ENOTSOCK};
+use crate::fs::{IoVec, VFile, VFileFlags};
+use crate::info;
+use crate::process::VThread;
+use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use bitflags::bitflags;
 use macros::Errno;
 use std::fmt::Debug;
@@ -14,11 +12,10 @@ use std::num::NonZeroI32;
 use std::sync::Arc;
 use thiserror::Error;
 
-pub use self::socket::*;
-
 mod proto;
 mod socket;
 
+/// Provides networking services (e.g. socket).
 pub struct NetManager {}
 
 impl NetManager {
@@ -43,7 +40,6 @@ impl NetManager {
         net
     }
 
-    #[allow(unused_variables)] // TODO: Remove this when implementing
     fn sys_recvmsg(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let msg: *mut MsgHdr = i.args[1].into();
@@ -102,7 +98,6 @@ impl NetManager {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *const u8 = i.args[1].into();
         let len: i32 = i.args[2].try_into().unwrap();
-
         let addr = unsafe { SockAddr::get(ptr, len) }?;
 
         info!("Binding socket at fd {fd} to {addr:?}.");
@@ -112,10 +107,15 @@ impl NetManager {
         Ok(SysOut::ZERO)
     }
 
-    fn bind(&self, fd: i32, addr: &SockAddr, td: &VThread) -> Result<(), BindError> {
-        let socket = td.proc().files().get_socket(fd)?;
+    /// See `kern_bind` on the PS4 for a reference.
+    fn bind(&self, fd: i32, addr: &SockAddr, td: &VThread) -> Result<(), SysErr> {
+        let file = td.proc().files().get(fd)?;
+        let sock = file
+            .backend::<SocketFileBackend>()
+            .ok_or(SysErr::Raw(ENOTSOCK))?
+            .as_sock();
 
-        socket.bind(addr, td)?;
+        sock.bind(addr, td)?;
 
         Ok(())
     }
@@ -153,7 +153,7 @@ impl NetManager {
         match buf.as_mut() {
             Some(buf) => match op {
                 // bnet_get_secure_seed
-                0x14 if buflen > 3 => arnd::rand_bytes(&mut buf[..4]),
+                0x14 if buflen > 3 => crate::arnd::rand_bytes(&mut buf[..4]),
                 _ => todo!("netcontrol with op = {op}"),
             },
             None => todo!("netcontrol with buf = null"),
@@ -187,8 +187,11 @@ impl NetManager {
     fn sys_listen(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let backlog: i32 = i.args[1].try_into().unwrap();
-
-        let socket = td.proc().files().get_socket(fd)?;
+        let file = td.proc().files().get(fd)?;
+        let socket = file
+            .backend::<SocketFileBackend>()
+            .ok_or(SysErr::Raw(ENOTSOCK))?
+            .as_sock();
 
         socket.listen(backlog, Some(td))?;
 
@@ -210,17 +213,9 @@ impl NetManager {
             |_| {
                 let so = Socket::new(domain, ty, proto, td.cred(), td, None)?;
 
-                let ty = if domain == 1 {
-                    VFileType::IpcSocket
-                } else {
-                    VFileType::Socket
-                };
-
                 Ok(VFile::new(
-                    ty,
                     VFileFlags::READ | VFileFlags::WRITE,
-                    None,
-                    todo!(),
+                    SocketFileBackend::new(so),
                 ))
             },
             budget,
@@ -246,7 +241,7 @@ impl NetManager {
     }
 
     #[allow(unused_variables)] // TODO: Remove this when implementing
-    fn connect(&self, fd: i32, addr: &SockAddr, td: &VThread) -> Result<(), ConnectError> {
+    fn connect(&self, fd: i32, addr: &SockAddr, td: &VThread) -> Result<(), SysErr> {
         todo!("connect")
     }
 
@@ -278,17 +273,9 @@ impl NetManager {
             |_| {
                 let so = Socket::new(domain, ty, proto, td.cred(), td, name)?;
 
-                let ty = if domain == 1 {
-                    VFileType::IpcSocket
-                } else {
-                    VFileType::Socket
-                };
-
                 Ok(VFile::new(
-                    ty,
                     VFileFlags::READ | VFileFlags::WRITE,
-                    None,
-                    todo!(),
+                    SocketFileBackend::new(so),
                 ))
             },
             budget,
@@ -417,7 +404,6 @@ struct MsgHdr<'a> {
 pub struct SockAddr([u8]);
 
 impl SockAddr {
-    #[allow(unused_variables)] // TODO: Remove this when implementing
     pub unsafe fn get(ptr: *const u8, len: i32) -> Result<Box<Self>, GetSockAddrError> {
         if len > 255 {
             return Err(GetSockAddrError::TooLong);
@@ -453,24 +439,6 @@ impl std::fmt::Debug for SockAddr {
 }
 
 enum SockOpt {}
-
-#[derive(Debug, Error, Errno)]
-enum ConnectError {
-    #[error("failed to get socket")]
-    GetSocketError(#[from] GetSocketError),
-
-    #[error("failed to connect")]
-    ConnectError(#[from] Box<dyn Errno>),
-}
-
-#[derive(Debug, Error, Errno)]
-enum BindError {
-    #[error("failed to get socket")]
-    GetSocketError(#[from] GetSocketError),
-
-    #[error("failed to bind")]
-    BindError(#[from] Box<dyn Errno>),
-}
 
 #[derive(Debug, Error, Errno)]
 enum SetOptError {
