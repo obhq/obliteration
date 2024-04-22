@@ -64,7 +64,7 @@ pub fn set_user_memory_region(
 }
 
 pub fn get_vcpu_mmap_size(kvm: BorrowedFd) -> Result<i32, Error> {
-   match unsafe { kvm_get_vcpu_mmap_size(kvm.as_raw_fd()) } {
+    match unsafe { kvm_get_vcpu_mmap_size(kvm.as_raw_fd()) } {
         size @ 0.. => Ok(size),
         v => Err(Error::from_raw_os_error(v)),
     }

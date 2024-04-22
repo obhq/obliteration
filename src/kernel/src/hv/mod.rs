@@ -67,7 +67,8 @@ impl Hypervisor {
         )
         .map_err(HypervisorError::MapRamFailed)?;
 
-        let mmap_size = self::linux::get_vcpu_mmap_size(kvm.as_fd()).map_err(HypervisorError::GetVcpuMmapSizeFailed)?;
+        let mmap_size = self::linux::get_vcpu_mmap_size(kvm.as_fd())
+            .map_err(HypervisorError::GetVcpuMmapSizeFailed)?;
 
         let vcpus = [
             self::linux::create_vcpu(vm.as_fd(), 0)

@@ -39,7 +39,6 @@ impl Ram {
             mem.cast()
         };
 
-
         Ok(Self { addr, mem })
     }
 
