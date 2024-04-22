@@ -67,6 +67,8 @@ impl Hypervisor {
         )
         .map_err(HypervisorError::MapRamFailed)?;
 
+        let mmap_size = self::linux::get_vcpu_mmap_size(kvm.as_fd()).map_err(HypervisorError::GetVcpuMmapSizeFailed)?;
+
         let vcpus = [
             self::linux::create_vcpu(vm.as_fd(), 0)
                 .map_err(|e| HypervisorError::CreateVcpuFailed(e, 0))?,
@@ -181,6 +183,10 @@ pub enum HypervisorError {
     #[cfg(target_os = "linux")]
     #[error("couldn't map the RAM to the VM")]
     MapRamFailed(#[source] std::io::Error),
+
+    #[cfg(target_os = "linux")]
+    #[error("couldn't get the size of VCPU mmap")]
+    GetVcpuMmapSizeFailed(#[source] std::io::Error),
 
     #[cfg(target_os = "linux")]
     #[error("couldn't create vcpu #{1}")]
