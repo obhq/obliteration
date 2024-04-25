@@ -1,6 +1,5 @@
 use self::run::KvmRun;
 use super::HypervisorError;
-use libc::{open, O_RDWR};
 use std::ffi::{c_int, c_void};
 use std::io::Error;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
@@ -14,6 +13,8 @@ pub struct Kvm(OwnedFd);
 
 impl Kvm {
     pub fn open() -> Result<Self, HypervisorError> {
+        use libc::{open, O_RDWR};
+
         let fd = unsafe { open(c"/dev/kvm".as_ptr(), O_RDWR) };
 
         if fd < 0 {
