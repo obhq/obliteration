@@ -14,7 +14,7 @@ mod win32;
 /// Do not create more than one Hypervisor because it will not work on macOS.
 pub struct Hypervisor {
     #[cfg(target_os = "linux")]
-    vcpus: [std::os::fd::OwnedFd; 8], // Drop before VM.
+    vcpus: self::linux::VCpus, // Drop before VM.
     #[cfg(target_os = "linux")]
     vm: std::os::fd::OwnedFd, // Drop before KVM.
     #[cfg(target_os = "linux")]
@@ -47,6 +47,7 @@ impl Hypervisor {
     #[cfg(target_os = "linux")]
     fn new_linux(ram: Ram) -> Result<Self, HypervisorError> {
         use std::os::fd::AsFd;
+        use crate::info;
 
         // Open KVM device.
         let kvm = self::linux::open_kvm()?;
@@ -67,27 +68,10 @@ impl Hypervisor {
         )
         .map_err(HypervisorError::MapRamFailed)?;
 
-        let mmap_size = self::linux::get_vcpu_mmap_size(kvm.as_fd())
-            .map_err(HypervisorError::GetVcpuMmapSizeFailed)?;
+        let mmap_size = self::linux::get_vcpu_mmap_size(kvm.as_fd()).map_err(HypervisorError::GetMmapSizeFailed)?;
 
-        let vcpus = [
-            self::linux::create_vcpu(vm.as_fd(), 0)
-                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 0))?,
-            self::linux::create_vcpu(vm.as_fd(), 1)
-                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 1))?,
-            self::linux::create_vcpu(vm.as_fd(), 2)
-                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 2))?,
-            self::linux::create_vcpu(vm.as_fd(), 3)
-                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 3))?,
-            self::linux::create_vcpu(vm.as_fd(), 4)
-                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 4))?,
-            self::linux::create_vcpu(vm.as_fd(), 5)
-                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 5))?,
-            self::linux::create_vcpu(vm.as_fd(), 6)
-                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 6))?,
-            self::linux::create_vcpu(vm.as_fd(), 7)
-                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 7))?,
-        ];
+        let vcpus = self::linux::VCpus::create(vm.as_fd(), mmap_size)
+            .map_err(HypervisorError::CreateVCpusError)?;
 
         Ok(Self {
             vcpus,
@@ -186,12 +170,12 @@ pub enum HypervisorError {
     MapRamFailed(#[source] std::io::Error),
 
     #[cfg(target_os = "linux")]
-    #[error("couldn't get the size of VCPU mmap")]
-    GetVcpuMmapSizeFailed(#[source] std::io::Error),
+    #[error("couldn't get the size of vCPU mmap")]
+    GetMmapSizeFailed(#[source] std::io::Error),
 
     #[cfg(target_os = "linux")]
-    #[error("couldn't create vcpu #{1}")]
-    CreateVcpuFailed(#[source] std::io::Error, u8),
+    #[error("couldn't create vCPUs")]
+    CreateVCpusError(#[source] self::linux::CreateVCpusError),
 
     #[cfg(target_os = "windows")]
     #[error("couldn't create WHP partition object ({0:#x})")]

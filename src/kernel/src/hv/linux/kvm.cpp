@@ -84,3 +84,8 @@ extern "C" int kvm_create_vcpu(int vm, int id, int *fd)
 
     return 0;
 }
+
+extern "C" int kvm_run(int vcpu)
+{
+    return ioctl(vcpu, KVM_RUN);
+}

@@ -1,8 +1,83 @@
+use self::run::KvmRun;
 use super::HypervisorError;
 use libc::{open, O_RDWR};
 use std::ffi::{c_int, c_void};
 use std::io::Error;
 use std::os::fd::{AsRawFd, BorrowedFd, FromRawFd, OwnedFd};
+use std::ptr::NonNull;
+use thiserror::Error;
+
+mod regs;
+mod run;
+
+#[derive(Debug)]
+pub struct VCpus([VCpu; 8]);
+
+impl VCpus {
+    pub fn create(vm: BorrowedFd, mmap_size: usize) -> Result<Self, CreateVCpusError> {
+        let vcpus = [
+            VCpu::create(vm, 0, mmap_size).map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 0))?,
+            VCpu::create(vm, 1, mmap_size).map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 1))?,
+            VCpu::create(vm, 2, mmap_size).map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 2))?,
+            VCpu::create(vm, 3, mmap_size).map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 3))?,
+            VCpu::create(vm, 4, mmap_size).map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 4))?,
+            VCpu::create(vm, 5, mmap_size).map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 5))?,
+            VCpu::create(vm, 6, mmap_size).map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 6))?,
+            VCpu::create(vm, 7, mmap_size).map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 7))?,
+        ];
+
+        Ok(Self (vcpus))
+    }
+}
+
+#[derive(Debug)]
+struct VCpu {
+    fd: OwnedFd,
+    kvm_run: NonNull<KvmRun>,
+}
+
+impl VCpu {
+    pub fn create(vm: BorrowedFd, id: i32, mmap_size: usize) -> Result<Self, CreateVCpuError> {
+        use libc::{MAP_SHARED, PROT_READ, PROT_WRITE};
+
+        let fd = create_vcpu(vm, id).map_err(CreateVCpuError::CreateVcpuFailed)?;
+
+        let kvm_run = unsafe {
+            libc::mmap(
+                std::ptr::null_mut(),
+                mmap_size,
+                PROT_READ | PROT_WRITE,
+                MAP_SHARED,
+                fd.as_raw_fd(),
+                0,
+            )
+        };
+
+        if kvm_run == libc::MAP_FAILED {
+            return Err(CreateVCpuError::MmapFailed(Error::last_os_error()));
+        }
+
+        Ok(Self {
+            fd,
+            kvm_run: NonNull::new(kvm_run.cast()).unwrap(),
+        })
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum CreateVCpusError {
+    #[error("Failed to create vCPU #{1}")]
+    CreateVcpuFailed(#[source] CreateVCpuError, u8),
+}
+
+#[derive(Debug, Error)]
+pub enum CreateVCpuError {
+    #[error("Failed to create vCPU")]
+    CreateVcpuFailed(#[source] Error),
+
+    #[error("Failed to mmap KVM_RUN")]
+    MmapFailed(#[source] Error),
+}
 
 pub fn open_kvm() -> Result<OwnedFd, HypervisorError> {
     // Open KVM.
@@ -63,9 +138,9 @@ pub fn set_user_memory_region(
     }
 }
 
-pub fn get_vcpu_mmap_size(kvm: BorrowedFd) -> Result<i32, Error> {
+pub fn get_vcpu_mmap_size(kvm: BorrowedFd) -> Result<usize, Error> {
     match unsafe { kvm_get_vcpu_mmap_size(kvm.as_raw_fd()) } {
-        size @ 0.. => Ok(size),
+        size @ 0.. => Ok(size as usize),
         v => Err(Error::from_raw_os_error(v)),
     }
 }
@@ -92,4 +167,5 @@ extern "C" {
     ) -> c_int;
     fn kvm_get_vcpu_mmap_size(kvm: c_int) -> c_int;
     fn kvm_create_vcpu(vm: c_int, id: c_int, fd: *mut c_int) -> c_int;
+    fn kvm_run(vcpu: c_int) -> c_int;
 }
