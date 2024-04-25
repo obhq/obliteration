@@ -1,5 +1,5 @@
 #[repr(C)]
-struct KvmRegs {
+pub struct KvmRegs {
     rax: u64,
     rbx: u64,
     rcx: u64,
@@ -25,7 +25,7 @@ struct KvmRegs {
 }
 
 #[repr(C)]
-struct KvmSpecialRegs {
+pub struct KvmSpecialRegs {
     cs: KvmSegment,
     ds: KvmSegment,
     es: KvmSegment,

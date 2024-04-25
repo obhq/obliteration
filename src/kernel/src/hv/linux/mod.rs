@@ -1,7 +1,9 @@
+use self::regs::KvmRegs;
 use self::run::KvmRun;
 use super::HypervisorError;
 use std::ffi::{c_int, c_void};
 use std::io::Error;
+use std::mem::MaybeUninit;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::ptr::NonNull;
 use thiserror::Error;
@@ -152,10 +154,30 @@ struct VCpu {
     kvm_run: NonNull<KvmRun>,
 }
 
+impl VCpu {
+    pub fn get_regs(&self) -> Result<KvmRegs, Error> {
+        let mut regs = MaybeUninit::<KvmRegs>::uninit();
+
+        match unsafe { kvm_get_regs(self.fd.as_raw_fd(), regs.as_mut_ptr()) } {
+            0 => Ok(unsafe { regs.assume_init() }),
+            v => Err(Error::from_raw_os_error(v)),
+        }
+    }
+
+    pub fn set_regs(&self, regs: KvmRegs) -> Result<(), Error> {
+        match unsafe { kvm_set_regs(self.fd.as_raw_fd(), &regs) } {
+            0 => Ok(()),
+            v => Err(Error::from_raw_os_error(v)),
+        }
+    }
+}
+
 extern "C" {
     fn kvm_check_version(kvm: c_int, compat: *mut bool) -> c_int;
     fn kvm_max_vcpus(kvm: c_int, max: *mut usize) -> c_int;
     fn kvm_create_vm(kvm: c_int, fd: *mut c_int) -> c_int;
+    fn kvm_get_vcpu_mmap_size(kvm: c_int) -> c_int;
+
     fn kvm_set_user_memory_region(
         vm: c_int,
         slot: u32,
@@ -163,9 +185,11 @@ extern "C" {
         len: u64,
         mem: *mut c_void,
     ) -> c_int;
-    fn kvm_get_vcpu_mmap_size(kvm: c_int) -> c_int;
     fn kvm_create_vcpu(vm: c_int, id: c_int, fd: *mut c_int) -> c_int;
+
     fn kvm_run(vcpu: c_int) -> c_int;
+    fn kvm_get_regs(vcpu: c_int, regs: *mut KvmRegs) -> c_int;
+    fn kvm_set_regs(vcpu: c_int, regs: *const KvmRegs) -> c_int;
 }
 
 #[derive(Debug, Error)]
