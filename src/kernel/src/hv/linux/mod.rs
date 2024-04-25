@@ -12,12 +12,6 @@ mod run;
 
 pub struct Kvm(OwnedFd);
 
-impl AsFd for Kvm {
-    fn as_fd(&self) -> BorrowedFd {
-        self.0.as_fd()
-    }
-}
-
 impl Kvm {
     pub fn open() -> Result<Self, HypervisorError> {
         let fd = unsafe { open(c"/dev/kvm".as_ptr(), O_RDWR) };
