@@ -26,11 +26,10 @@ impl Kvm {
         let mut compat = false;
 
         match unsafe { kvm_check_version(fd.as_raw_fd(), &mut compat) } {
-            0 => {
-                if !compat {
-                    return Err(HypervisorError::KvmVersionMismatched);
-                }
+            0 if !compat => {
+                return Err(HypervisorError::KvmVersionMismatched);
             }
+            0 => {}
             v => {
                 return Err(HypervisorError::GetKvmVersionFailed(
                     Error::from_raw_os_error(v),
