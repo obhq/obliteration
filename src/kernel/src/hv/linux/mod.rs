@@ -156,7 +156,7 @@ struct VCpu {
 
 impl VCpu {
     pub fn get_regs(&self) -> Result<KvmRegs, Error> {
-        let mut regs = MaybeUninit::<KvmRegs>::uninit();
+        let mut regs = MaybeUninit::uninit();
 
         match unsafe { kvm_get_regs(self.fd.as_raw_fd(), regs.as_mut_ptr()) } {
             0 => Ok(unsafe { regs.assume_init() }),
