@@ -64,7 +64,8 @@ impl Hypervisor {
         )?;
 
         let mmap_size = kvm.get_vcpu_mmap_size()?;
-        let vcpus = vm.create_vcpus(mmap_size)
+        let vcpus = vm
+            .create_vcpus(mmap_size)
             .map_err(HypervisorError::CreateVCpusError)?;
 
         Ok(Self {

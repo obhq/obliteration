@@ -49,7 +49,9 @@ impl Kvm {
     pub fn get_vcpu_mmap_size(&self) -> Result<usize, HypervisorError> {
         match unsafe { kvm_get_vcpu_mmap_size(self.0.as_raw_fd()) } {
             size @ 0.. => Ok(size as usize),
-            v => Err(HypervisorError::GetMmapSizeFailed(Error::from_raw_os_error(v))),
+            v => Err(HypervisorError::GetMmapSizeFailed(
+                Error::from_raw_os_error(v),
+            )),
         }
     }
 
@@ -92,14 +94,22 @@ impl Vm {
 
     pub fn create_vcpus(&self, mmap_size: usize) -> Result<VCpus, CreateVCpusError> {
         let vcpus = [
-            self.create_vcpu(0, mmap_size).map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 0))?,
-            self.create_vcpu(1, mmap_size).map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 1))?,
-            self.create_vcpu(2, mmap_size).map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 2))?,
-            self.create_vcpu(3, mmap_size).map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 3))?,
-            self.create_vcpu(4, mmap_size).map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 4))?,
-            self.create_vcpu(5, mmap_size).map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 5))?,
-            self.create_vcpu(6, mmap_size).map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 6))?,
-            self.create_vcpu(7, mmap_size).map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 7))?,
+            self.create_vcpu(0, mmap_size)
+                .map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 0))?,
+            self.create_vcpu(1, mmap_size)
+                .map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 1))?,
+            self.create_vcpu(2, mmap_size)
+                .map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 2))?,
+            self.create_vcpu(3, mmap_size)
+                .map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 3))?,
+            self.create_vcpu(4, mmap_size)
+                .map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 4))?,
+            self.create_vcpu(5, mmap_size)
+                .map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 5))?,
+            self.create_vcpu(6, mmap_size)
+                .map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 6))?,
+            self.create_vcpu(7, mmap_size)
+                .map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 7))?,
         ];
 
         Ok(VCpus(vcpus))
@@ -112,7 +122,9 @@ impl Vm {
 
         let fd = match unsafe { kvm_create_vcpu(self.0.as_raw_fd(), id, &mut vcpu) } {
             0 => Ok(unsafe { OwnedFd::from_raw_fd(vcpu) }),
-            v => Err(CreateVCpuError::CreateVcpuFailed(Error::from_raw_os_error(v))),
+            v => Err(CreateVCpuError::CreateVcpuFailed(Error::from_raw_os_error(
+                v,
+            ))),
         }?;
 
         let kvm_run = unsafe {
