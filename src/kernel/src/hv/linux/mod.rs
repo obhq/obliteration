@@ -3,7 +3,7 @@ use super::HypervisorError;
 use libc::{open, O_RDWR};
 use std::ffi::{c_int, c_void};
 use std::io::Error;
-use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd};
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::ptr::NonNull;
 use thiserror::Error;
 
