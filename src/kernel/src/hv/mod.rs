@@ -46,8 +46,8 @@ impl Hypervisor {
 
     #[cfg(target_os = "linux")]
     fn new_linux(ram: Ram) -> Result<Self, HypervisorError> {
-        use std::os::fd::AsFd;
         use crate::info;
+        use std::os::fd::AsFd;
 
         // Open KVM device.
         let kvm = self::linux::open_kvm()?;
@@ -68,7 +68,8 @@ impl Hypervisor {
         )
         .map_err(HypervisorError::MapRamFailed)?;
 
-        let mmap_size = self::linux::get_vcpu_mmap_size(kvm.as_fd()).map_err(HypervisorError::GetMmapSizeFailed)?;
+        let mmap_size = self::linux::get_vcpu_mmap_size(kvm.as_fd())
+            .map_err(HypervisorError::GetMmapSizeFailed)?;
 
         let vcpus = self::linux::VCpus::create(vm.as_fd(), mmap_size)
             .map_err(HypervisorError::CreateVCpusError)?;

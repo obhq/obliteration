@@ -26,7 +26,7 @@ impl VCpus {
             VCpu::create(vm, 7, mmap_size).map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 7))?,
         ];
 
-        Ok(Self (vcpus))
+        Ok(Self(vcpus))
     }
 }
 
