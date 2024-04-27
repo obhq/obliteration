@@ -112,7 +112,7 @@ impl Vm {
     }
 
     fn create_vcpu(&self, id: i32, mmap_size: usize) -> Result<VCpu, CreateVCpuError> {
-        use libc::{MAP_SHARED, PROT_READ, PROT_WRITE};
+        use libc::{mmap, MAP_FAILED, MAP_SHARED, PROT_READ, PROT_WRITE};
 
         let mut vcpu = -1;
 
@@ -124,7 +124,7 @@ impl Vm {
         }?;
 
         let kvm_run = unsafe {
-            libc::mmap(
+            mmap(
                 std::ptr::null_mut(),
                 mmap_size,
                 PROT_READ | PROT_WRITE,
@@ -134,7 +134,7 @@ impl Vm {
             )
         };
 
-        if kvm_run == libc::MAP_FAILED {
+        if kvm_run == MAP_FAILED {
             return Err(CreateVCpuError::MmapFailed(Error::last_os_error()));
         }
 

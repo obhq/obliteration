@@ -594,6 +594,10 @@ struct Args {
     #[arg(long)]
     #[serde(default)]
     pro: bool,
+
+    #[arg(long)]
+    #[serde(default)]
+    idps: ConsoleId,
 }
 
 #[derive(Debug, Error)]
