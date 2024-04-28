@@ -139,6 +139,7 @@ impl Vm {
         Ok(VCpu {
             fd,
             kvm_run: NonNull::new(kvm_run.cast()).unwrap(),
+            mmap_size,
         })
     }
 }
@@ -150,6 +151,19 @@ pub struct VCpus([VCpu; 8]);
 struct VCpu {
     fd: OwnedFd,
     kvm_run: NonNull<KvmRun>,
+    mmap_size: usize,
+}
+
+impl Drop for VCpu {
+    fn drop(&mut self) {
+        use libc::munmap;
+
+        unsafe {
+            if munmap(self.kvm_run.as_ptr().cast(), self.mmap_size) < 0 {
+                panic!("failed to munmap KVM_RUN: {}", Error::last_os_error());
+            };
+        }
+    }
 }
 
 impl VCpu {
@@ -158,14 +172,14 @@ impl VCpu {
 
         match unsafe { kvm_get_regs(self.fd.as_raw_fd(), regs.as_mut_ptr()) } {
             0 => Ok(unsafe { regs.assume_init() }),
-            v => Err(Error::from_raw_os_error(v)),
+            _ => Err(Error::last_os_error()),
         }
     }
 
     pub fn set_regs(&self, regs: KvmRegs) -> Result<(), Error> {
         match unsafe { kvm_set_regs(self.fd.as_raw_fd(), &regs) } {
             0 => Ok(()),
-            v => Err(Error::from_raw_os_error(v)),
+            _ => Err(Error::last_os_error()),
         }
     }
 }
@@ -192,15 +206,15 @@ extern "C" {
 
 #[derive(Debug, Error)]
 pub enum CreateVCpusError {
-    #[error("Failed to create vCPU #{1}")]
+    #[error("failed to create vcpu #{1}")]
     CreateVcpuFailed(#[source] CreateVCpuError, u8),
 }
 
 #[derive(Debug, Error)]
 pub enum CreateVCpuError {
-    #[error("Failed to create vCPU")]
+    #[error("failed to create vcpu")]
     CreateVcpuFailed(#[source] Error),
 
-    #[error("Failed to mmap KVM_RUN")]
+    #[error("failed to mmap KVM_RUN")]
     MmapFailed(#[source] Error),
 }

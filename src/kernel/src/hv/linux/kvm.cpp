@@ -95,7 +95,7 @@ extern "C" int kvm_get_regs(int vcpu, kvm_regs *regs)
     return ioctl(vcpu, KVM_GET_REGS, regs);
 }
 
-extern "C" int kvm_set_regs(int vcpu, kvm_regs *regs)
+extern "C" int kvm_set_regs(int vcpu, kvm_regs *const regs)
 {
     return ioctl(vcpu, KVM_SET_REGS, regs);
 }
