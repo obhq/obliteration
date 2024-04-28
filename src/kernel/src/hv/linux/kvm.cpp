@@ -67,6 +67,11 @@ extern "C" int kvm_set_user_memory_region(
     return 0;
 }
 
+extern "C" int kvm_get_vcpu_mmap_size(int kvm)
+{
+    return ioctl(kvm, KVM_GET_VCPU_MMAP_SIZE);
+}
+
 extern "C" int kvm_create_vcpu(int vm, int id, int *fd)
 {
     auto vcpu = ioctl(vm, KVM_CREATE_VCPU, id);
@@ -78,4 +83,19 @@ extern "C" int kvm_create_vcpu(int vm, int id, int *fd)
     *fd = vcpu;
 
     return 0;
+}
+
+extern "C" int kvm_run(int vcpu)
+{
+    return ioctl(vcpu, KVM_RUN);
+}
+
+extern "C" int kvm_get_regs(int vcpu, kvm_regs *regs)
+{
+    return ioctl(vcpu, KVM_GET_REGS, regs);
+}
+
+extern "C" int kvm_set_regs(int vcpu, kvm_regs *const regs)
+{
+    return ioctl(vcpu, KVM_SET_REGS, regs);
 }
