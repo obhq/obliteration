@@ -45,9 +45,7 @@ impl Kvm {
     pub fn get_vcpu_mmap_size(&self) -> Result<usize, HypervisorError> {
         match unsafe { kvm_get_vcpu_mmap_size(self.0.as_raw_fd()) } {
             size @ 0.. => Ok(size as usize),
-            _ => Err(HypervisorError::GetMmapSizeFailed(
-                Error::last_os_error()
-            )),
+            _ => Err(HypervisorError::GetMmapSizeFailed(Error::last_os_error())),
         }
     }
 
