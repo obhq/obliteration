@@ -14,11 +14,11 @@ mod win32;
 /// Do not create more than one Hypervisor because it will not work on macOS.
 pub struct Hypervisor {
     #[cfg(target_os = "linux")]
-    vcpus: [std::os::fd::OwnedFd; 8], // Drop before VM.
+    vcpus: self::linux::VCpus, // Drop before VM.
     #[cfg(target_os = "linux")]
-    vm: std::os::fd::OwnedFd, // Drop before KVM.
+    vm: self::linux::Vm, // Drop before KVM.
     #[cfg(target_os = "linux")]
-    kvm: std::os::fd::OwnedFd,
+    kvm: self::linux::Kvm,
 
     #[cfg(target_os = "windows")]
     part: self::win32::Partition,
@@ -46,45 +46,27 @@ impl Hypervisor {
 
     #[cfg(target_os = "linux")]
     fn new_linux(ram: Ram) -> Result<Self, HypervisorError> {
-        use std::os::fd::AsFd;
-
         // Open KVM device.
-        let kvm = self::linux::open_kvm()?;
+        let kvm = self::linux::Kvm::open()?;
 
-        if self::linux::max_vcpus(kvm.as_fd()).map_err(HypervisorError::GetMaxCpuFailed)? < 8 {
+        if kvm.max_vcpus()? < 8 {
             return Err(HypervisorError::MaxCpuTooLow);
         }
 
         // Create a new VM.
-        let vm = self::linux::create_vm(kvm.as_fd()).map_err(HypervisorError::CreateVmFailed)?;
+        let vm = kvm.create_vm()?;
 
-        self::linux::set_user_memory_region(
-            vm.as_fd(),
+        vm.set_user_memory_region(
             0,
             ram.vm_addr().try_into().unwrap(),
             ram.len().try_into().unwrap(),
             ram.host_addr().cast(),
-        )
-        .map_err(HypervisorError::MapRamFailed)?;
+        )?;
 
-        let vcpus = [
-            self::linux::create_vcpu(vm.as_fd(), 0)
-                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 0))?,
-            self::linux::create_vcpu(vm.as_fd(), 1)
-                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 1))?,
-            self::linux::create_vcpu(vm.as_fd(), 2)
-                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 2))?,
-            self::linux::create_vcpu(vm.as_fd(), 3)
-                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 3))?,
-            self::linux::create_vcpu(vm.as_fd(), 4)
-                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 4))?,
-            self::linux::create_vcpu(vm.as_fd(), 5)
-                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 5))?,
-            self::linux::create_vcpu(vm.as_fd(), 6)
-                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 6))?,
-            self::linux::create_vcpu(vm.as_fd(), 7)
-                .map_err(|e| HypervisorError::CreateVcpuFailed(e, 7))?,
-        ];
+        let mmap_size = kvm.get_vcpu_mmap_size()?;
+        let vcpus = vm
+            .create_vcpus(mmap_size)
+            .map_err(HypervisorError::CreateVCpusError)?;
 
         Ok(Self {
             vcpus,
@@ -155,6 +137,10 @@ pub enum HypervisorError {
     #[error("couldn't create a RAM")]
     CreateRamFailed(#[source] std::io::Error),
 
+    #[cfg(target_os = "linux")]
+    #[error("couldn't get maximum number of CPU for a VM")]
+    GetMaxCpuFailed(#[source] std::io::Error),
+
     #[error("your OS does not support 8 vCPU on a VM")]
     MaxCpuTooLow,
 
@@ -171,10 +157,6 @@ pub enum HypervisorError {
     KvmVersionMismatched,
 
     #[cfg(target_os = "linux")]
-    #[error("couldn't get maximum number of CPU for a VM")]
-    GetMaxCpuFailed(#[source] std::io::Error),
-
-    #[cfg(target_os = "linux")]
     #[error("couldn't create a VM")]
     CreateVmFailed(#[source] std::io::Error),
 
@@ -183,8 +165,12 @@ pub enum HypervisorError {
     MapRamFailed(#[source] std::io::Error),
 
     #[cfg(target_os = "linux")]
-    #[error("couldn't create vcpu #{1}")]
-    CreateVcpuFailed(#[source] std::io::Error, u8),
+    #[error("couldn't get the size of vCPU mmap")]
+    GetMmapSizeFailed(#[source] std::io::Error),
+
+    #[cfg(target_os = "linux")]
+    #[error("couldn't create vCPUs")]
+    CreateVCpusError(#[source] self::linux::CreateVCpusError),
 
     #[cfg(target_os = "windows")]
     #[error("couldn't create WHP partition object ({0:#x})")]

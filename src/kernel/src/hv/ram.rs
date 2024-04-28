@@ -16,7 +16,6 @@ impl Ram {
     pub const SIZE: usize = 1024 * 1024 * 1024 * 8; // 8GB
 
     pub fn new(addr: usize) -> Result<Self, Error> {
-        // Reserve a memory range on *nix.
         #[cfg(unix)]
         let mem = {
             use libc::{mmap, MAP_ANON, MAP_FAILED, MAP_PRIVATE, PROT_NONE};
@@ -40,7 +39,6 @@ impl Ram {
             mem.cast()
         };
 
-        // Reserve a memory range on Windows.
         #[cfg(windows)]
         let mem = {
             use std::ptr::null;

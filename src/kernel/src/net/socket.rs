@@ -150,7 +150,7 @@ impl FileBackend for SocketFileBackend {
             IoCmd::SIOCSPGRP(_) => todo!("socket ioctl with SIOCSPGRP"),
             IoCmd::SIOCGPGRP(_) => todo!("socket ioctl with SIOCGPGRP"),
             IoCmd::SIOCATMARK(_) => todo!("socket ioctl with SIOCATMARK"),
-            _ => self.0.backend.control(todo!(), cmd, td),
+            _ => self.0.backend.control(&self.0, cmd, td),
         }
     }
 

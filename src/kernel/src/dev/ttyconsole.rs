@@ -1,4 +1,4 @@
-use crate::errno::{Errno, EPERM};
+use crate::errno::Errno;
 use crate::fs::{
     make_dev, CharacterDevice, DeviceDriver, DriverFlags, IoCmd, IoLen, IoVec, IoVecMut,
     MakeDevError, MakeDevFlags, Mode, OpenFlags,
