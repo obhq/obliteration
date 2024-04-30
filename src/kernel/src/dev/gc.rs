@@ -37,8 +37,6 @@ impl DeviceDriver for Gc {
         cmd: IoCmd,
         _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
-        return Ok(());
-
         match cmd {
             IoCmd::GCSETWAVELIMITMULTIPLIER(mult) => todo!("GCSETWAVELIMITMULTIPLIER: {mult:?}"),
             IoCmd::GCSUBMIT(submit_arg) => todo!("GCSUBMIT ioctl: {submit_arg:?}"),
