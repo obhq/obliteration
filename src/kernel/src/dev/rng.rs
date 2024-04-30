@@ -65,7 +65,7 @@ impl RngManager {
             Gid::ROOT,
             Mode::new(0o444).unwrap(),
             None,
-            MakeDevFlags::MAKEDEV_ETERNAL,
+            MakeDevFlags::ETERNAL,
         )?;
 
         Ok(Arc::new(Self { rng }))

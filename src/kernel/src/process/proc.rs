@@ -97,6 +97,7 @@ impl VProc {
         sys.register(487, &vp, Self::sys_cpuset_getaffinity);
         sys.register(488, &vp, Self::sys_cpuset_setaffinity);
         sys.register(587, &vp, Self::sys_get_authinfo);
+        sys.register(601, &vp, |_, _, _| Ok(SysOut::ZERO));
 
         vp.abi.set(ProcAbi::new(sys)).unwrap();
 

@@ -1,9 +1,7 @@
 use crate::arch::MachDep;
 use crate::budget::{Budget, BudgetManager, ProcType};
 use crate::dev::{
-    CameraInitError, CameraManager, DebugManager, DebugManagerInitError, DipswInitError,
-    DipswManager, DmemContainer, GcInitError, GcManager, RngInitError, RngManager, TtyManager,
-    TtyManagerInitError,
+    CameraInitError, CameraManager, DceManager, DebugManager, DebugManagerInitError, DipswInitError, DipswManager, DmemContainer, GcInitError, GcManager, HmdManager, RngInitError, RngManager, SblSrvManager, TtyManager, TtyManagerInitError
 };
 use crate::dmem::{DmemManager, DmemManagerInitError};
 use crate::ee::native::NativeEngine;
@@ -29,6 +27,7 @@ use crate::time::TimeManager;
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use crate::umtx::UmtxManager;
 use clap::Parser;
+use dev::{DceInitError, HmdInitError, SblSrvInitError};
 use llt::{OsThread, SpawnError};
 use macros::vpath;
 use param::Param;
@@ -379,6 +378,12 @@ fn run(args: Args) -> Result<(), KernelError> {
     let camera = CameraManager::new()?;
     #[allow(unused_variables)] // TODO: Remove this when someone uses rng.
     let rng = RngManager::new()?;
+    #[allow(unused_variables)] // TODO: Remove this when someone uses sbl_srv.
+    let sbl_srv = SblSrvManager::new()?;
+    #[allow(unused_variables)] // TODO: Remove this when someone uses hmd.
+    let hmd_cmd = HmdManager::new()?;
+    #[allow(unused_variables)] // TODO: Remove this when someone uses dce.
+    let dce = DceManager::new()?;
 
     // Initialize kernel components.
     #[allow(unused_variables)] // TODO: Remove this when someone uses debug.
@@ -649,6 +654,15 @@ enum KernelError {
 
     #[error("dmem manager initialization failed")]
     DmemManagerInitFailed(#[from] DmemManagerInitError),
+
+    #[error("sbl_srv manager initialization failed")]
+    SblSrvManagerInitFailed(#[from] SblSrvInitError),
+
+    #[error("hmd manager initialization failed")]
+    HmdManagerInitFailed(#[from] HmdInitError),
+
+    #[error("dce manager initialization failed")]
+    DceManagerInitFailed(#[from] DceInitError),
 
     #[error("couldn't create application process")]
     CreateProcessFailed(#[source] self::process::SpawnError),

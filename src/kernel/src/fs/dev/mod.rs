@@ -44,7 +44,7 @@ pub fn make_dev(
     // Get device flags.
     let mut df = DeviceFlags::empty();
 
-    if flags.intersects(MakeDevFlags::MAKEDEV_ETERNAL) {
+    if flags.intersects(MakeDevFlags::ETERNAL) {
         df |= DeviceFlags::SI_ETERNAL;
     }
 
@@ -293,7 +293,7 @@ bitflags! {
     /// Flags for [`make_dev()`].
     #[derive(Clone, Copy)]
     pub struct MakeDevFlags: u32 {
-        const MAKEDEV_ETERNAL = 0x10;
+        const ETERNAL = 0x10;
     }
 }
 

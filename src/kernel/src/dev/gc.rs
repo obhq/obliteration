@@ -37,6 +37,8 @@ impl DeviceDriver for Gc {
         cmd: IoCmd,
         _: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
+        return Ok(());
+
         match cmd {
             IoCmd::GCSETWAVELIMITMULTIPLIER(mult) => todo!("GCSETWAVELIMITMULTIPLIER: {mult:?}"),
             IoCmd::GCSUBMIT(submit_arg) => todo!("GCSUBMIT ioctl: {submit_arg:?}"),
@@ -68,7 +70,7 @@ impl GcManager {
             Gid::ROOT,
             Mode::new(0o666).unwrap(),
             None,
-            MakeDevFlags::MAKEDEV_ETERNAL,
+            MakeDevFlags::ETERNAL,
         )?;
 
         Ok(Arc::new(Self { gc }))

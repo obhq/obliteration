@@ -161,7 +161,6 @@ impl Vm {
                 td.set_fpop(None);
             }
         } else if !flags.contains(MappingFlags::MAP_ANON) {
-            todo!("mmap with flags & 0x1000 = 0");
         }
 
         if flags.contains(MappingFlags::UNK1) {
