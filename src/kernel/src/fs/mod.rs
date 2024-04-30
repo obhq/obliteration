@@ -372,7 +372,7 @@ impl Fs {
 
         info!("Reading {len} bytes from fd {fd}.");
 
-        todo!()
+        todo!("sys_read")
     }
 
     fn sys_write(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
@@ -382,7 +382,7 @@ impl Fs {
 
         info!("Writing {len} bytes to fd {fd}.");
 
-        Ok(len.into())
+        todo!("sys_write")
     }
 
     fn sys_open(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
