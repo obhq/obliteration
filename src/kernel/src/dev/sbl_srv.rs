@@ -1,7 +1,11 @@
 use crate::{
     errno::Errno,
-    fs::{make_dev, CharacterDevice, DeviceDriver, DriverFlags, IoCmd, MakeDevError, MakeDevFlags, Mode},
-    process::VThread, ucred::{Gid, Uid},
+    fs::{
+        make_dev, CharacterDevice, DeviceDriver, DriverFlags, IoCmd, MakeDevError, MakeDevFlags,
+        Mode,
+    },
+    process::VThread,
+    ucred::{Gid, Uid},
 };
 use std::sync::Arc;
 use thiserror::Error;

@@ -1,7 +1,9 @@
 use crate::arch::MachDep;
 use crate::budget::{Budget, BudgetManager, ProcType};
 use crate::dev::{
-    CameraInitError, CameraManager, DceManager, DebugManager, DebugManagerInitError, DipswInitError, DipswManager, DmemContainer, GcInitError, GcManager, HmdManager, RngInitError, RngManager, SblSrvManager, TtyManager, TtyManagerInitError
+    CameraInitError, CameraManager, DceManager, DebugManager, DebugManagerInitError,
+    DipswInitError, DipswManager, DmemContainer, GcInitError, GcManager, HmdManager, RngInitError,
+    RngManager, SblSrvManager, TtyManager, TtyManagerInitError,
 };
 use crate::dmem::{DmemManager, DmemManagerInitError};
 use crate::ee::native::NativeEngine;
