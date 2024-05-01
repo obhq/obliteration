@@ -12,7 +12,7 @@ use thiserror::Error;
 
 #[derive(Debug)]
 struct Gc {
-    suspended: bool
+    suspended: bool,
 }
 
 impl Gc {
@@ -59,7 +59,7 @@ impl DeviceDriver for Gc {
                 }
 
                 todo!("GCSETGSRINGSIZES ioctl: {unk1:?}")
-            },
+            }
             IoCmd::GCMIPSTATSREPORT(report) => todo!("GCMIPSTATSREPORT ioctl: {report:?}"),
             IoCmd::GCARESUBMITSALLOWED(unk) => todo!("GCARESUBMITSALLOWED ioctl: {unk:?}"),
             IoCmd::GCGETNUMTCAUNITS(num) => todo!("GCGETNUMTCAUNITS ioctl: {num:?}"),
@@ -118,7 +118,7 @@ pub struct MapComputeQueueArg {
     ring_base_address: usize,
     read_ptr_address: usize,
     ding_dong: usize,
-    len_log: u32
+    len_log: u32,
 }
 
 #[derive(Debug)]

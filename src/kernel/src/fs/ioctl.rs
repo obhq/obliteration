@@ -1,6 +1,8 @@
 use super::FioDeviceGetNameArg;
 use crate::dev::{
-    CuMask, DceFlipControlArg, DceRegisterBufferPtrsArg, DceSubmitFlipArg, DingDongForWorkload, DmemAllocate, DmemAvailable, DmemQuery, MapComputeQueueArg, MipStatsReport, PrtAperture, RngInput, SubmitArg, UnMapComputeQueueArg
+    CuMask, DceFlipControlArg, DceRegisterBufferPtrsArg, DceSubmitFlipArg, DingDongForWorkload,
+    DmemAllocate, DmemAvailable, DmemQuery, MapComputeQueueArg, MipStatsReport, PrtAperture,
+    RngInput, SubmitArg, UnMapComputeQueueArg,
 };
 use crate::dmem::{BlockpoolExpandArgs, BlockpoolStats};
 use crate::errno::ENOTTY;
