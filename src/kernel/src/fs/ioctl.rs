@@ -1,7 +1,6 @@
 use super::FioDeviceGetNameArg;
 use crate::dev::{
-    CuMask, DceFlipControlArg, DceRegisterBufferPtrsArg, DceSubmitFlipArg, DingDongForWorkload,
-    DmemAllocate, DmemAvailable, DmemQuery, MipStatsReport, PrtAperture, RngInput, SubmitArg,
+    CuMask, DceFlipControlArg, DceRegisterBufferPtrsArg, DceSubmitFlipArg, DingDongForWorkload, DmemAllocate, DmemAvailable, DmemQuery, MapComputeQueueArg, MipStatsReport, PrtAperture, RngInput, SubmitArg, UnMapComputeQueueArg
 };
 use crate::dmem::{BlockpoolExpandArgs, BlockpoolStats};
 use crate::errno::ENOTTY;
@@ -179,9 +178,9 @@ commands! {
         /// Get CU mask
         GCGETCUMASK(&mut CuMask) = 0xc010810b,
         /// Map compute queue
-        GCMAPCOMPUTEQUEUE(&mut Unknown48) = 0xc030810d,
+        GCMAPCOMPUTEQUEUE(&mut MapComputeQueueArg) = 0xc030810d,
         /// Unmap compute queue
-        GCUNMAPCOMPUTEQUEUE(&mut Unknown12) = 0xc00c810e,
+        GCUNMAPCOMPUTEQUEUE(&mut UnMapComputeQueueArg) = 0xc00c810e,
         /// Set GS ring queue sizes
         GCSETGSRINGSIZES(&mut Unknown12) = 0xc00c8110,
         /// Get mip stats report
