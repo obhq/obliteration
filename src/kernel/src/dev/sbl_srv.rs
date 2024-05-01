@@ -44,10 +44,10 @@ impl SblSrvManager {
             "sbl_srv",
             Uid::ROOT,
             Gid::ROOT,
-            Mode::new(0o444).unwrap(),
+            Mode::new(0o600).unwrap(),
             None,
-            MakeDevFlags::ETERNAL,
-        )?;
+            MakeDevFlags::empty(),
+        ).map_err(SblSrvInitError::CreateSblSrvFailed)?;
 
         Ok(Arc::new(Self { sbl }))
     }
@@ -57,5 +57,5 @@ impl SblSrvManager {
 #[derive(Debug, Error)]
 pub enum SblSrvInitError {
     #[error("cannot create sbl_srv device")]
-    CreateSblSrvFailed(#[from] MakeDevError),
+    CreateSblSrvFailed(#[source] MakeDevError),
 }
