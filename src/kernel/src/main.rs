@@ -56,6 +56,7 @@ mod hv;
 mod idps;
 mod idt;
 mod imgact;
+mod ipmi;
 mod kqueue;
 mod log;
 mod namedobj;
@@ -74,7 +75,6 @@ mod time;
 mod ucred;
 mod umtx;
 mod vm;
-mod ipmi;
 
 fn main() -> ExitCode {
     // Load arguments.
