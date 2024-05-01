@@ -1,7 +1,7 @@
 use super::FioDeviceGetNameArg;
 use crate::dev::{
-    CuMask, DceFlipControl, DingDongForWorkload, DmemAllocate, DmemAvailable, DmemQuery,
-    MipStatsReport, PrtAperture, RngInput, SubmitArg,
+    CuMask, DceFlipControlArg, DceRegisterBufferPtrsArg, DceSubmitFlipArg, DingDongForWorkload,
+    DmemAllocate, DmemAvailable, DmemQuery, MipStatsReport, PrtAperture, RngInput, SubmitArg,
 };
 use crate::dmem::{BlockpoolExpandArgs, BlockpoolStats};
 use crate::errno::ENOTTY;
@@ -100,11 +100,11 @@ commands! {
         BNETUNK(&Unknown36) = 0x802450c9,
 
         /// Flip control.
-        DCEFLIPCONTROL(&mut DceFlipControl) = 0xC0308203,
+        DCEFLIPCONTROL(&mut DceFlipControlArg) = 0xC0308203,
         /// Submit flip
-        DCESUBMITFLIP(&mut Unknown48) = 0xC0308204,
+        DCESUBMITFLIP(&mut DceSubmitFlipArg) = 0xC0488204,
         /// Register buffer pointers
-        DCEREGBUFPOINTERS(&mut Unknown48) = 0xC0308206,
+        DCEREGBUFPTRS(&mut DceRegisterBufferPtrsArg) = 0xC0308206,
         /// Register buffer attribute
         DCEREGBUFATTR(&mut Unknown48) = 0xC0308207,
         /// Deregister identifier

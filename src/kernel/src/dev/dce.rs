@@ -1,6 +1,5 @@
 use crate::{
     errno::Errno,
-    error,
     fs::{
         make_dev, CharacterDevice, DeviceDriver, DriverFlags, IoCmd, MakeDevError, MakeDevFlags,
         Mode, OpenFlags,
@@ -41,7 +40,7 @@ impl DeviceDriver for Dce {
         match cmd {
             IoCmd::DCEFLIPCONTROL(_) => todo!("DCEFLIPCONTROL ioctl"),
             IoCmd::DCESUBMITFLIP(_) => todo!("DCESUBMITFLIP ioctl"),
-            IoCmd::DCEREGBUFPOINTERS(_) => todo!("DCEREGBUFPOINTERS ioctl"),
+            IoCmd::DCEREGBUFPTRS(_) => todo!("DCEREGBUFPOINTERS ioctl"),
             IoCmd::DCEREGBUFATTR(_) => todo!("DCEREGBUFATTR ioctl"),
             IoCmd::DCEDEREGIDENT(_) => todo!("DCEDEREGIDENT ioctl"),
             _ => todo!(),
@@ -71,15 +70,41 @@ impl DceManager {
     }
 }
 
+#[repr(C)]
 #[derive(Debug)]
-pub struct DceFlipControl {
+pub struct DceFlipControlArg {
     id: u32,
-    spare: u32,
+    arg1: usize,
     arg2: usize,
-    ptr: usize,
-    size: usize,
-    unk1: u64,
-    unk2: u64,
+    arg3: usize,
+    arg4: u64,
+    arg5: u64,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct DceSubmitFlipArg {
+    canary: usize,
+    buffer_index: usize,
+    flip_mode: u32,
+    arg1: usize,
+    arg2: usize,
+    eop_nz: u32,
+    eop_val: usize,
+    unk: usize,
+    rout: usize,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct DceRegisterBufferPtrsArg {
+    canary: usize,
+    index: u32,
+    attrid: u32,
+    left: usize,
+    right: usize,
+    unk: u32,
+    _align: u64,
 }
 
 /// Represents an error when [`DceManager`] fails to initialize.
