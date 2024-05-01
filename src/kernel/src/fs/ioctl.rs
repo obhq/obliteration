@@ -101,6 +101,14 @@ commands! {
 
         /// Flip control.
         DCEFLIPCONTROL(&mut DceFlipControl) = 0xC0308203,
+        /// Submit flip
+        DCESUBMITFLIP(&mut Unknown48) = 0xC0308204,
+        /// Register buffer pointers
+        DCEREGBUFPOINTERS(&mut Unknown48) = 0xC0308206,
+        /// Register buffer attribute
+        DCEREGBUFATTR(&mut Unknown48) = 0xC0308207,
+        /// Deregister identifier
+        DCEDEREGIDENT(&mut u64) = 0x80088209,
 
         /// Get media size in bytes.
         DIOCGMEDIASIZE(&mut i64) = 0x40086418,

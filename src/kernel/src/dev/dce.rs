@@ -40,10 +40,14 @@ impl DeviceDriver for Dce {
     ) -> Result<(), Box<dyn Errno>> {
         match cmd {
             IoCmd::DCEFLIPCONTROL(_) => todo!("DCEFLIPCONTROL ioctl"),
+            IoCmd::DCESUBMITFLIP(_) => todo!("DCESUBMITFLIP ioctl"),
+            IoCmd::DCEREGBUFPOINTERS(_) => todo!("DCEREGBUFPOINTERS ioctl"),
+            IoCmd::DCEREGBUFATTR(_) => todo!("DCEREGBUFATTR ioctl"),
+            IoCmd::DCEDEREGIDENT(_) => todo!("DCEDEREGIDENT ioctl"),
             _ => todo!(),
         }
 
-        Ok(())
+
     }
 }
 
