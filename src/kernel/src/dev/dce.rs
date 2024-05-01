@@ -46,8 +46,6 @@ impl DeviceDriver for Dce {
             IoCmd::DCEDEREGIDENT(_) => todo!("DCEDEREGIDENT ioctl"),
             _ => todo!(),
         }
-
-
     }
 }
 
