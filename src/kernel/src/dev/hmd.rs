@@ -1,4 +1,3 @@
-use thiserror::Error;
 use crate::{
     errno::Errno,
     fs::{
@@ -9,6 +8,7 @@ use crate::{
     ucred::{Gid, Uid},
 };
 use std::sync::Arc;
+use thiserror::Error;
 
 #[derive(Debug)]
 struct HmdCmd {}
