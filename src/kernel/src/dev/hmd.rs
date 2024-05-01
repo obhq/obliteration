@@ -177,7 +177,7 @@ impl HmdManager {
             "hmd_cr",
             Uid::ROOT,
             Gid::ROOT,
-            Mode::new(0o666).unwrap(),
+            Mode::new(0o600).unwrap(),
             None,
             MakeDevFlags::empty(),
         )
