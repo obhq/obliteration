@@ -47,7 +47,8 @@ impl SblSrvManager {
             Mode::new(0o600).unwrap(),
             None,
             MakeDevFlags::empty(),
-        ).map_err(SblSrvInitError::CreateSblSrvFailed)?;
+        )
+        .map_err(SblSrvInitError::CreateSblSrvFailed)?;
 
         Ok(Arc::new(Self { sbl }))
     }
