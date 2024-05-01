@@ -133,7 +133,7 @@ impl HmdManager {
 
         let hmd_snsr = make_dev(
             HmdSnsr {},
-            DriverFlags::INIT | DriverFlags::NEEDMINOR,
+            DriverFlags::from_bits_retain(0x80080000),
             0,
             "hmd_snsr",
             Uid::ROOT,
