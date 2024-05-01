@@ -371,31 +371,31 @@ fn run(args: Args) -> Result<(), KernelError> {
 
     // Initialize TTY system.
     #[allow(unused_variables)] // TODO: Remove this when someone uses tty.
-    let tty = TtyManager::new()?;
+    let tty = TtyManager::new().map_err(KernelError::TtyInitFailed)?;
     #[allow(unused_variables)] // TODO: Remove this when someone uses dipsw.
-    let dipsw = DipswManager::new()?;
+    let dipsw = DipswManager::new().map_err(KernelError::DipswInitFailed)?;
     #[allow(unused_variables)] // TODO: Remove this when someone uses gc.
-    let gc = GcManager::new()?;
+    let gc = GcManager::new().map_err(KernelError::GcManagerInitFailed)?;
     #[allow(unused_variables)] // TODO: Remove this when someone uses camera.
-    let camera = CameraManager::new()?;
+    let camera = CameraManager::new().map_err(KernelError::CameraManagerInitFailed)?;
     #[allow(unused_variables)] // TODO: Remove this when someone uses rng.
-    let rng = RngManager::new()?;
+    let rng = RngManager::new().map_err(KernelError::RngManagerInitFailed)?;
     #[allow(unused_variables)] // TODO: Remove this when someone uses sbl_srv.
-    let sbl_srv = SblSrvManager::new()?;
+    let sbl_srv = SblSrvManager::new().map_err(KernelError::SblSrvManagerInitFailed)?;
     #[allow(unused_variables)] // TODO: Remove this when someone uses hmd.
-    let hmd_cmd = HmdManager::new()?;
+    let hmd_cmd = HmdManager::new().map_err(KernelError::HmdManagerInitFailed)?;
     #[allow(unused_variables)] // TODO: Remove this when someone uses dce.
-    let dce = DceManager::new()?;
+    let dce = DceManager::new().map_err(KernelError::DceManagerInitFailed)?;
 
     // Initialize kernel components.
     #[allow(unused_variables)] // TODO: Remove this when someone uses debug.
-    let debug = DebugManager::new()?;
+    let debug = DebugManager::new().map_err(KernelError::DebugManagerInitFailed)?;
     RegMgr::new(&mut sys);
     let machdep = MachDep::new(&mut sys);
     let budget = BudgetManager::new(&mut sys);
 
     SignalManager::new(&mut sys);
-    DmemManager::new(&fs, &mut sys)?;
+    DmemManager::new(&fs, &mut sys).map_err(KernelError::DmemManagerInitFailed)?;
     SharedMemoryManager::new(&mut sys);
     Sysctl::new(&machdep, &mut sys);
     TimeManager::new(&mut sys);
@@ -637,34 +637,34 @@ enum KernelError {
     MountFailed(VPathBuf, #[source] MountError),
 
     #[error("tty initialization failed")]
-    TtyInitFailed(#[from] TtyManagerInitError),
+    TtyInitFailed(#[source] TtyManagerInitError),
 
     #[error("dipsw initialization failed")]
-    DipswInitFailed(#[from] DipswInitError),
+    DipswInitFailed(#[source] DipswInitError),
 
     #[error("debug manager initialization failed")]
-    DebugManagerInitFailed(#[from] DebugManagerInitError),
+    DebugManagerInitFailed(#[source] DebugManagerInitError),
 
     #[error("gc manager initialization failed")]
-    GcManagerInitFailed(#[from] GcInitError),
+    GcManagerInitFailed(#[source] GcInitError),
 
     #[error("camera manager initialization failed")]
-    CameraManagerInitFailed(#[from] CameraInitError),
+    CameraManagerInitFailed(#[source] CameraInitError),
 
     #[error("rng manager initialization failed")]
-    RngManagerInitFailed(#[from] RngInitError),
+    RngManagerInitFailed(#[source] RngInitError),
 
     #[error("dmem manager initialization failed")]
-    DmemManagerInitFailed(#[from] DmemManagerInitError),
+    DmemManagerInitFailed(#[source] DmemManagerInitError),
 
     #[error("sbl_srv manager initialization failed")]
-    SblSrvManagerInitFailed(#[from] SblSrvInitError),
+    SblSrvManagerInitFailed(#[source] SblSrvInitError),
 
     #[error("hmd manager initialization failed")]
-    HmdManagerInitFailed(#[from] HmdInitError),
+    HmdManagerInitFailed(#[source] HmdInitError),
 
     #[error("dce manager initialization failed")]
-    DceManagerInitFailed(#[from] DceInitError),
+    DceManagerInitFailed(#[source] DceInitError),
 
     #[error("couldn't create application process")]
     CreateProcessFailed(#[source] self::process::SpawnError),
