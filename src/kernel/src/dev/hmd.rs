@@ -82,11 +82,38 @@ impl DeviceDriver for HmdDist {
     }
 }
 
+#[derive(Debug)]
+struct HmdCr {}
+
+impl DeviceDriver for HmdCr {
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn open(
+        &self,
+        dev: &Arc<CharacterDevice>,
+        mode: OpenFlags,
+        devtype: i32,
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn ioctl(
+        &self,
+        dev: &Arc<CharacterDevice>,
+        cmd: IoCmd,
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+}
+
 pub struct HmdManager {
     hmd_cmd: Arc<CharacterDevice>,
     hmd_snsr: Arc<CharacterDevice>,
     hmd_3da: Arc<CharacterDevice>,
     hmd_dist: Arc<CharacterDevice>,
+    hmd_cr: Arc<CharacterDevice>,
 }
 
 impl HmdManager {
@@ -143,11 +170,25 @@ impl HmdManager {
         )
         .map_err(HmdInitError::CreateHmdDistFailed)?;
 
+        let hmd_cr = make_dev(
+            HmdCr {},
+            DriverFlags::INIT,
+            0,
+            "hmd_cr",
+            Uid::ROOT,
+            Gid::ROOT,
+            Mode::new(0o666).unwrap(),
+            None,
+            MakeDevFlags::empty(),
+        )
+        .map_err(HmdInitError::CreateHmdCrFailed)?;
+
         Ok(Arc::new(Self {
             hmd_cmd,
             hmd_snsr,
             hmd_3da,
             hmd_dist,
+            hmd_cr,
         }))
     }
 }
@@ -163,4 +204,6 @@ pub enum HmdInitError {
     CreateHmd3daFailed(#[source] MakeDevError),
     #[error("cannot create hmd_dist device")]
     CreateHmdDistFailed(#[source] MakeDevError),
+    #[error("cannot create hmd_cr device")]
+    CreateHmdCrFailed(#[source] MakeDevError),
 }
