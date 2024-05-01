@@ -30,7 +30,7 @@ pub fn make_dev(
     cred: Option<Arc<Ucred>>,
     flags: MakeDevFlags,
 ) -> Result<Arc<CharacterDevice>, MakeDevError> {
-    if driver_flags.intersects(DriverFlags::D_NEEDMINOR) {
+    if driver_flags.intersects(DriverFlags::NEEDMINOR) {
         todo!("make_dev with D_NEEDMINOR");
     }
 

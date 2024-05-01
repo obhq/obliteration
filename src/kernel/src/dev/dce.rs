@@ -55,7 +55,7 @@ impl DceManager {
     pub fn new() -> Result<Arc<Self>, DceInitError> {
         let dce = make_dev(
             Dce::new(),
-            DriverFlags::D_INIT,
+            DriverFlags::INIT,
             0,
             "dce",
             Uid::ROOT,

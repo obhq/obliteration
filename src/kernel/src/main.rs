@@ -74,6 +74,7 @@ mod time;
 mod ucred;
 mod umtx;
 mod vm;
+mod ipmi;
 
 fn main() -> ExitCode {
     // Load arguments.

@@ -93,7 +93,7 @@ impl HmdManager {
     pub fn new() -> Result<Arc<Self>, HmdInitError> {
         let hmd_cmd = make_dev(
             HmdCmd {},
-            DriverFlags::D_INIT,
+            DriverFlags::INIT,
             0,
             "hmd_cmd",
             Uid::ROOT,
@@ -106,7 +106,7 @@ impl HmdManager {
 
         let hmd_snsr = make_dev(
             HmdSnsr {},
-            DriverFlags::D_INIT,
+            DriverFlags::INIT | DriverFlags::NEEDMINOR,
             0,
             "hmd_snsr",
             Uid::ROOT,
@@ -119,7 +119,7 @@ impl HmdManager {
 
         let hmd_3da = make_dev(
             Hmd3da {},
-            DriverFlags::D_INIT,
+            DriverFlags::INIT,
             0,
             "hmd_3da",
             Uid::ROOT,
@@ -132,7 +132,7 @@ impl HmdManager {
 
         let hmd_dist = make_dev(
             HmdDist {},
-            DriverFlags::D_INIT,
+            DriverFlags::INIT,
             0,
             "hmd_dist",
             Uid::ROOT,
@@ -156,11 +156,11 @@ impl HmdManager {
 #[derive(Debug, Error)]
 pub enum HmdInitError {
     #[error("cannot create hmd_cmd device")]
-    CreateHmdCmdFailed(MakeDevError),
+    CreateHmdCmdFailed(#[source] MakeDevError),
     #[error("cannot create hmd_snsr device")]
-    CreateHmdSnsrFailed(MakeDevError),
+    CreateHmdSnsrFailed(#[source] MakeDevError),
     #[error("cannot create hmd_3da device")]
-    CreateHmd3daFailed(MakeDevError),
+    CreateHmd3daFailed(#[source] MakeDevError),
     #[error("cannot create hmd_dist device")]
-    CreateHmdDistFailed(MakeDevError),
+    CreateHmdDistFailed(#[source] MakeDevError),
 }

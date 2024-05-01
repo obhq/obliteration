@@ -39,7 +39,7 @@ impl SblSrvManager {
     pub fn new() -> Result<Arc<Self>, SblSrvInitError> {
         let sbl = make_dev(
             SblSrv {},
-            DriverFlags::D_INIT,
+            DriverFlags::INIT,
             0,
             "sbl_srv",
             Uid::ROOT,

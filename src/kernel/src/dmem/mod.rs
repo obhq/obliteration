@@ -44,7 +44,7 @@ impl DmemManager {
             let name = "dmem0";
             match make_dev(
                 Dmem::new(Self::DMEM_TOTAL_SIZE, DmemContainer::Zero),
-                DriverFlags::D_INIT,
+                DriverFlags::INIT,
                 0,
                 name,
                 Uid::ROOT,
@@ -62,7 +62,7 @@ impl DmemManager {
             let name = "dmem1";
             match make_dev(
                 Dmem::new(Self::DMEM_TOTAL_SIZE, DmemContainer::One),
-                DriverFlags::D_INIT,
+                DriverFlags::INIT,
                 0,
                 name,
                 Uid::ROOT,
@@ -80,7 +80,7 @@ impl DmemManager {
             let name = "dmem2";
             match make_dev(
                 Dmem::new(Self::DMEM_TOTAL_SIZE, DmemContainer::Two),
-                DriverFlags::D_INIT,
+                DriverFlags::INIT,
                 0,
                 name,
                 Uid::ROOT,
