@@ -772,6 +772,10 @@ impl Fs {
         let nfds: u32 = i.args[1].try_into().unwrap();
         let timeout: i32 = i.args[2].try_into().unwrap();
 
+        let fds = unsafe { std::slice::from_raw_parts_mut(fds, nfds.try_into().unwrap()) };
+
+        info!("Polling {nfds} file descriptors: {fds:?}.");
+
         todo!()
     }
 
@@ -1065,6 +1069,7 @@ impl TryFrom<i64> for TruncateLength {
 pub struct TruncateLengthError(());
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct PollFd {
     fd: i32,
     events: PollEvents,

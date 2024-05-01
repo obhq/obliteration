@@ -11,11 +11,13 @@ use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Debug)]
-struct Gc {}
+struct Gc {
+    suspended: bool
+}
 
 impl Gc {
     fn new() -> Self {
-        Self {}
+        Self { suspended: false }
     }
 }
 
@@ -35,8 +37,16 @@ impl DeviceDriver for Gc {
         &self,
         _: &Arc<CharacterDevice>,
         cmd: IoCmd,
-        _: Option<&VThread>,
+        td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
+        if self.suspended {
+            todo!("gc suspended")
+        }
+
+        let td = td.unwrap();
+
+        let gc_check_passed = td.proc().cred().unk_gc_check();
+
         match cmd {
             IoCmd::GCSETWAVELIMITMULTIPLIER(mult) => todo!("GCSETWAVELIMITMULTIPLIER: {mult:?}"),
             IoCmd::GCSUBMIT(submit_arg) => todo!("GCSUBMIT ioctl: {submit_arg:?}"),
