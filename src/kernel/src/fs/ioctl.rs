@@ -108,7 +108,7 @@ commands! {
         /// Register buffer attribute
         DCEREGBUFATTR(&mut Unknown48) = 0xC0308207,
         /// Deregister identifier
-        DCEDEREGIDENT(&mut u64) = 0x80088209,
+        DCEDEREGIDENT(&u64) = 0x80088209,
 
         /// Get media size in bytes.
         DIOCGMEDIASIZE(&mut i64) = 0x40086418,
