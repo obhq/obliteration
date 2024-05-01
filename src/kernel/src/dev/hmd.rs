@@ -4,7 +4,7 @@ use crate::{
     errno::Errno,
     fs::{
         make_dev, CharacterDevice, DeviceDriver, DriverFlags, IoCmd, MakeDevError, MakeDevFlags,
-        Mode,
+        Mode, OpenFlags,
     },
     process::VThread,
     ucred::{Gid, Uid},
@@ -15,6 +15,17 @@ use std::sync::Arc;
 struct HmdCmd {}
 
 impl DeviceDriver for HmdCmd {
+    #[allow(unused_variables)] // TODO: remove when implementing
+    fn open(
+        &self,
+        dev: &Arc<CharacterDevice>,
+        mode: OpenFlags,
+        devtype: i32,
+        td: Option<&VThread>,
+    ) -> Result<(), Box<dyn Errno>> {
+        todo!()
+    }
+
     #[allow(unused_variables)] // TODO: remove when implementing
     fn ioctl(
         &self,
