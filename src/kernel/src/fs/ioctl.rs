@@ -130,7 +130,6 @@ commands! {
         /// Unkown dipsw command
         DIPSWUNK(&mut i32) = 0x40048807,
 
-
         /// Allocate direct memory
         DMEMALLOC(&mut DmemAllocate) = 0xc0288001,
         /// Get total size?
