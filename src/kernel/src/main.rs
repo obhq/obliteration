@@ -56,7 +56,6 @@ mod hv;
 mod idps;
 mod idt;
 mod imgact;
-mod ipmi;
 mod kqueue;
 mod log;
 mod namedobj;
