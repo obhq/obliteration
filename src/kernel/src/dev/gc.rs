@@ -46,6 +46,7 @@ impl DeviceDriver for Gc {
         let td = td.unwrap();
 
         let gc_check_passed = td.proc().cred().unk_gc_check();
+        // TODO: implement devfs_get_cdevpriv
 
         match cmd {
             IoCmd::GCSETWAVELIMITMULTIPLIER(mult) => todo!("GCSETWAVELIMITMULTIPLIER: {mult:?}"),
@@ -123,7 +124,7 @@ pub struct MapComputeQueueArg {
 
 #[derive(Debug)]
 #[repr(C)]
-pub struct UnMapComputeQueueArg {
+pub struct UnmapComputeQueueArg {
     unk1: u32,
     unk2: u32,
     unk3: u32,
