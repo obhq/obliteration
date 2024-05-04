@@ -45,7 +45,7 @@ impl DeviceDriver for Gc {
 
         let td = td.unwrap();
 
-        let gc_check_passed = td.proc().cred().unk_gc_check();
+        let gc_check_passed = td.cred().unk_gc_check();
         // TODO: implement devfs_get_cdevpriv
 
         match cmd {
