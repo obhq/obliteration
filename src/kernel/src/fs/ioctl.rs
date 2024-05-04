@@ -1,7 +1,8 @@
 use super::FioDeviceGetNameArg;
 use crate::dev::{
-    CuMask, DingDongForWorkload, DmemAllocate, DmemAvailable, DmemQuery, MipStatsReport,
-    PrtAperture, RngInput, SubmitArg,
+    CuMask, DceFlipControlArg, DceRegisterBufferPtrsArg, DceSubmitFlipArg, DingDongForWorkload,
+    DmemAllocate, DmemAvailable, DmemQuery, MapComputeQueueArg, MipStatsReport, PrtAperture,
+    RngInput, SubmitArg, UnmapComputeQueueArg,
 };
 use crate::dmem::{BlockpoolExpandArgs, BlockpoolStats};
 use crate::errno::ENOTTY;
@@ -99,6 +100,17 @@ commands! {
         /// An unkown bnet command, called from libSceNet
         BNETUNK(&Unknown36) = 0x802450c9,
 
+        /// Flip control.
+        DCEFLIPCONTROL(&mut DceFlipControlArg) = 0xC0308203,
+        /// Submit flip
+        DCESUBMITFLIP(&mut DceSubmitFlipArg) = 0xC0488204,
+        /// Register buffer pointers
+        DCEREGBUFPTRS(&mut DceRegisterBufferPtrsArg) = 0xC0308206,
+        /// Register buffer attribute
+        DCEREGBUFATTR(&mut Unknown48) = 0xC0308207,
+        /// Deregister identifier
+        DCEDEREGIDENT(&u64) = 0x80088209,
+
         /// Get media size in bytes.
         DIOCGMEDIASIZE(&mut i64) = 0x40086418,
 
@@ -118,7 +130,6 @@ commands! {
         DIPSWCHECK2(&mut i32) = 0x40048806,
         /// Unkown dipsw command
         DIPSWUNK(&mut i32) = 0x40048807,
-
 
         /// Allocate direct memory
         DMEMALLOC(&mut DmemAllocate) = 0xc0288001,
@@ -169,9 +180,9 @@ commands! {
         /// Get CU mask
         GCGETCUMASK(&mut CuMask) = 0xc010810b,
         /// Map compute queue
-        GCMAPCOMPUTEQUEUE(&mut Unknown48) = 0xc030810d,
+        GCMAPCOMPUTEQUEUE(&mut MapComputeQueueArg) = 0xc030810d,
         /// Unmap compute queue
-        GCUNMAPCOMPUTEQUEUE(&mut Unknown12) = 0xc00c810e,
+        GCUNMAPCOMPUTEQUEUE(&mut UnmapComputeQueueArg) = 0xc00c810e,
         /// Set GS ring queue sizes
         GCSETGSRINGSIZES(&mut Unknown12) = 0xc00c8110,
         /// Get mip stats report

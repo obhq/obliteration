@@ -1,20 +1,24 @@
 pub use camera::*;
+pub use dce::*;
 pub use deci::*;
 pub use dipsw::*;
 pub use dmem::*;
 pub use gc::*;
 pub use hid::*;
+pub use hmd::*;
 pub use random::*;
 pub use rng::*;
 pub use sbl_srv::*;
 pub use ttyconsole::*;
 
 mod camera;
+mod dce;
 mod deci;
 mod dipsw;
 mod dmem;
 mod gc;
 mod hid;
+mod hmd;
 mod random;
 mod rng;
 mod sbl_srv;
