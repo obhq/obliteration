@@ -154,6 +154,13 @@ impl Ucred {
         self.auth.caps.is_unk1() && self.auth.attrs.is_unk2()
     }
 
+    pub fn unk_gc_check(&self) -> bool {
+        matches!(
+            self.auth.paid.get(),
+            0x3800000000000009 | 0x380100000000002c
+        )
+    }
+
     /// See `priv_check_cred` on the PS4 for a reference.
     pub fn priv_check(&self, p: Privilege) -> Result<(), PrivilegeError> {
         // TODO: Check suser_enabled.

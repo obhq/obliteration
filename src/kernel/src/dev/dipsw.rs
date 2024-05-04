@@ -59,7 +59,7 @@ impl DipswManager {
             Gid::ROOT,
             Mode::new(0o644).unwrap(),
             None,
-            MakeDevFlags::MAKEDEV_ETERNAL,
+            MakeDevFlags::ETERNAL,
         )?;
 
         Ok(Arc::new(Self { dipsw }))

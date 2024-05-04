@@ -192,8 +192,8 @@ bitflags! {
     /// Flags for [`CdevSw`].
     #[derive(Debug, Clone, Copy)]
     pub struct DriverFlags: u32 {
-        const D_NEEDMINOR = 0x00800000;
-        const D_INIT = 0x80000000;
+        const NEEDMINOR = 0x00800000;
+        const INIT = 0x80000000;
     }
 }
 

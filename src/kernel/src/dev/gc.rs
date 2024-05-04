@@ -11,11 +11,13 @@ use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Debug)]
-struct Gc {}
+struct Gc {
+    suspended: bool,
+}
 
 impl Gc {
     fn new() -> Self {
-        Self {}
+        Self { suspended: false }
     }
 }
 
@@ -35,15 +37,30 @@ impl DeviceDriver for Gc {
         &self,
         _: &Arc<CharacterDevice>,
         cmd: IoCmd,
-        _: Option<&VThread>,
+        td: Option<&VThread>,
     ) -> Result<(), Box<dyn Errno>> {
+        if self.suspended {
+            todo!("gc suspended")
+        }
+
+        let td = td.unwrap();
+
+        let gc_check_passed = td.cred().unk_gc_check();
+        // TODO: implement devfs_get_cdevpriv
+
         match cmd {
             IoCmd::GCSETWAVELIMITMULTIPLIER(mult) => todo!("GCSETWAVELIMITMULTIPLIER: {mult:?}"),
             IoCmd::GCSUBMIT(submit_arg) => todo!("GCSUBMIT ioctl: {submit_arg:?}"),
             IoCmd::GCGETCUMASK(mask) => todo!("GCGETCUMASK ioctl: {mask:?}"),
             IoCmd::GCMAPCOMPUTEQUEUE(queue) => todo!("GCMAPCOMPUTEQUEUE ioctl: {queue:?}"),
             IoCmd::GCUNMAPCOMPUTEQUEUE(unk) => todo!("GCUNMAPCOMPUTEQUEUE ioctl: {unk:?}"),
-            IoCmd::GCSETGSRINGSIZES(unk1) => todo!("GCSETGSRINGSIZES ioctl: {unk1:?}"),
+            IoCmd::GCSETGSRINGSIZES(unk1) => {
+                for _ in 0..100 {
+                    todo!()
+                }
+
+                todo!("GCSETGSRINGSIZES ioctl: {unk1:?}")
+            }
             IoCmd::GCMIPSTATSREPORT(report) => todo!("GCMIPSTATSREPORT ioctl: {report:?}"),
             IoCmd::GCARESUBMITSALLOWED(unk) => todo!("GCARESUBMITSALLOWED ioctl: {unk:?}"),
             IoCmd::GCGETNUMTCAUNITS(num) => todo!("GCGETNUMTCAUNITS ioctl: {num:?}"),
@@ -68,7 +85,7 @@ impl GcManager {
             Gid::ROOT,
             Mode::new(0o666).unwrap(),
             None,
-            MakeDevFlags::MAKEDEV_ETERNAL,
+            MakeDevFlags::ETERNAL,
         )?;
 
         Ok(Arc::new(Self { gc }))
@@ -90,6 +107,27 @@ pub struct CuMask {
     unk2: i32,
     unk3: i32,
     unk4: i32,
+}
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct MapComputeQueueArg {
+    pipe_hi: u32,
+    pipe_lo: u32,
+    queue_id: u32,
+    offset: u32,
+    ring_base_address: usize,
+    read_ptr_address: usize,
+    ding_dong: usize,
+    len_log: u32,
+}
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct UnmapComputeQueueArg {
+    unk1: u32,
+    unk2: u32,
+    unk3: u32,
 }
 
 #[derive(Debug)]

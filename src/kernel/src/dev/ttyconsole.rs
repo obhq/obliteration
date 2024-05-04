@@ -117,7 +117,7 @@ impl TtyManager {
             Gid::ROOT,
             Mode::new(0o600).unwrap(),
             None,
-            MakeDevFlags::MAKEDEV_ETERNAL,
+            MakeDevFlags::ETERNAL,
         )?;
 
         Ok(Arc::new(Self { console }))
