@@ -106,10 +106,7 @@ impl Vm {
                 .map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 7))?,
         ];
 
-        Ok(VCpus {
-            vcpus,
-            mmap_size,
-        })
+        Ok(VCpus { vcpus, mmap_size })
     }
 
     fn create_vcpu(&self, id: i32, mmap_size: usize) -> Result<VCpu, CreateVCpuError> {
@@ -141,7 +138,7 @@ impl Vm {
 
         Ok(VCpu {
             fd,
-            kvm_run: NonNull::new(kvm_run.cast()).unwrap()
+            kvm_run: NonNull::new(kvm_run.cast()).unwrap(),
         })
     }
 }
@@ -160,9 +157,7 @@ impl Drop for VCpus {
             }
         }
     }
-
 }
-
 
 #[derive(Debug)]
 struct VCpu {
