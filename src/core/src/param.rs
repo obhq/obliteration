@@ -65,5 +65,8 @@ pub unsafe extern "C" fn param_title_id_get(param: &Param, buf: &mut QString) {
 
 #[no_mangle]
 pub unsafe extern "C" fn param_version_get(param: &Param, buf: &mut QString) {
-    buf.set(param.version());
+    match param.version() {
+        Some(version) => buf.set(version),
+        None => buf.set(""),
+    }
 }
