@@ -106,7 +106,10 @@ impl Vm {
                 .map_err(|e| CreateVCpusError::CreateVcpuFailed(e, 7))?,
         ];
 
-        Ok(VCpus(vcpus))
+        Ok(VCpus {
+            vcpus,
+            mmap_size,
+        })
     }
 
     fn create_vcpu(&self, id: i32, mmap_size: usize) -> Result<VCpu, CreateVCpuError> {
@@ -138,32 +141,33 @@ impl Vm {
 
         Ok(VCpu {
             fd,
-            kvm_run: NonNull::new(kvm_run.cast()).unwrap(),
-            mmap_size,
+            kvm_run: NonNull::new(kvm_run.cast()).unwrap()
         })
     }
 }
 
 #[derive(Debug)]
-pub struct VCpus([VCpu; 8]);
+pub struct VCpus {
+    vcpus: [VCpu; 8],
+    mmap_size: usize,
+}
+
+impl Drop for VCpus {
+    fn drop(&mut self) {
+        for vcpu in &self.vcpus {
+            unsafe {
+                libc::munmap(vcpu.kvm_run.as_ptr().cast(), self.mmap_size);
+            }
+        }
+    }
+
+}
+
 
 #[derive(Debug)]
 struct VCpu {
     fd: OwnedFd,
     kvm_run: NonNull<KvmRun>,
-    mmap_size: usize,
-}
-
-impl Drop for VCpu {
-    fn drop(&mut self) {
-        use libc::munmap;
-
-        unsafe {
-            if munmap(self.kvm_run.as_ptr().cast(), self.mmap_size) < 0 {
-                panic!("failed to munmap KVM_RUN: {}", Error::last_os_error());
-            };
-        }
-    }
 }
 
 impl VCpu {

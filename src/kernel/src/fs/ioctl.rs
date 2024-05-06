@@ -194,6 +194,9 @@ commands! {
         /// Get number of tca units
         GCGETNUMTCAUNITS(&mut i32) = 0xc004811f,
 
+        /// Hid unknown
+        HIDOPENPORTFORUSER(&Unknown12) = 0x800c4802,
+
         /// Get genuine random
         RNGGETGENUINE(&mut RngInput) = 0x40445301,
         /// Fips186Prng
