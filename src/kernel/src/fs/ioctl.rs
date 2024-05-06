@@ -100,7 +100,7 @@ commands! {
         /// An unkown bnet command, called from libSceNet
         BNETUNK(&Unknown36) = 0x802450c9,
 
-        /// Flip control.
+        /// Flip control
         DCEFLIPCONTROL(&mut DceFlipControlArg) = 0xC0308203,
         /// Submit flip
         DCESUBMITFLIP(&mut DceSubmitFlipArg) = 0xC0488204,
@@ -194,7 +194,7 @@ commands! {
         /// Get number of tca units
         GCGETNUMTCAUNITS(&mut i32) = 0xc004811f,
 
-        /// Hid unknown
+        /// Open port for user
         HIDOPENPORTFORUSER(&Unknown12) = 0x800c4802,
 
         /// Get genuine random
