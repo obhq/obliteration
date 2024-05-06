@@ -12,7 +12,7 @@ pub struct Param {
     content_id: Box<str>,
     title: Option<Box<str>>,
     title_id: Box<str>,
-    version: Box<str>,
+    version: Option<Box<str>>,
 }
 
 impl Param {
@@ -166,7 +166,7 @@ impl Param {
             content_id: content_id.ok_or(ReadError::MissingContentId)?,
             title,
             title_id: title_id.ok_or(ReadError::MissingTitleId)?,
-            version: version.ok_or(ReadError::MissingVersion)?,
+            version: version,
         })
     }
 
@@ -204,8 +204,8 @@ impl Param {
     }
 
     /// Fetches the value VERSION from given Param.SFO
-    pub fn version(&self) -> &str {
-        &self.version
+    pub fn version(&self) -> Option<&str> {
+        self.version.as_deref()
     }
 
     fn read_utf8<R: Read>(
@@ -276,7 +276,4 @@ pub enum ReadError {
 
     #[error("TITLE_ID parameter not found")]
     MissingTitleId,
-
-    #[error("VERSION parameter not found")]
-    MissingVersion,
 }
