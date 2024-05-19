@@ -392,10 +392,10 @@ void MainWindow::startGame(const QModelIndex &index)
     // Setup kernel arguments.
     QStringList args;
 
-    args << "--system" << readSystemDirectorySetting();
-    args << "--game" << game->directory();
     args << "--debug-dump" << kernelDebugDump();
     args << "--clear-debug-dump";
+    args << readSystemDirectorySetting();
+    args << game->directory();
 
     // Setup environment variable.
     auto env = QProcessEnvironment::systemEnvironment();
