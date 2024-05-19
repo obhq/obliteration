@@ -1,9 +1,10 @@
 use crate::arch::MachDep;
+use crate::args::Args;
 use crate::budget::{Budget, BudgetManager, ProcType};
 use crate::dev::{
-    CameraInitError, CameraManager, DceManager, DebugManager, DebugManagerInitError,
-    DipswInitError, DipswManager, DmemContainer, GcInitError, GcManager, HmdManager, RngInitError,
-    RngManager, SblSrvManager, TtyManager, TtyManagerInitError,
+    CameraInitError, CameraManager, DceInitError, DceManager, DebugManager, DebugManagerInitError,
+    DipswInitError, DipswManager, DmemContainer, GcInitError, GcManager, HmdInitError, HmdManager,
+    RngInitError, RngManager, SblSrvInitError, SblSrvManager, TtyManager, TtyManagerInitError,
 };
 use crate::dmem::{DmemManager, DmemManagerInitError};
 use crate::ee::native::NativeEngine;
@@ -11,7 +12,6 @@ use crate::ee::EntryArg;
 use crate::errno::EEXIST;
 use crate::fs::{Fs, FsInitError, MkdirError, MountError, MountFlags, MountOpts, VPath, VPathBuf};
 use crate::hv::Hypervisor;
-use crate::idps::ConsoleId;
 use crate::kqueue::KernelQueueManager;
 use crate::log::{print, LOGGER};
 use crate::namedobj::NamedObjManager;
@@ -28,12 +28,9 @@ use crate::sysctl::Sysctl;
 use crate::time::TimeManager;
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use crate::umtx::UmtxManager;
-use clap::Parser;
-use dev::{DceInitError, HmdInitError, SblSrvInitError};
 use llt::{OsThread, SpawnError};
 use macros::vpath;
 use param::Param;
-use serde::Deserialize;
 use std::error::Error;
 use std::fs::{create_dir_all, remove_dir_all, File};
 use std::io::Write;
@@ -45,6 +42,7 @@ use sysinfo::{MemoryRefreshKind, System};
 use thiserror::Error;
 
 mod arch;
+mod args;
 mod arnd;
 mod budget;
 mod dev;
@@ -87,7 +85,7 @@ fn main() -> ExitCode {
             }
         };
 
-        match serde_yaml::from_reader(file) {
+        match Args::from_file(file) {
             Ok(v) => v,
             Err(e) => {
                 eprintln!("Failed to parse {}: {}.", path.display(), e);
@@ -95,7 +93,7 @@ fn main() -> ExitCode {
             }
         }
     } else {
-        Args::parse()
+        Args::from_command_line()
     };
 
     // Run the kernel.
@@ -579,32 +577,6 @@ fn join_thread(thr: OsThread) -> Result<(), std::io::Error> {
     assert_ne!(unsafe { CloseHandle(thr) }, 0);
 
     Ok(())
-}
-
-#[derive(Parser, Deserialize)]
-#[command(about)]
-#[serde(rename_all = "kebab-case")]
-struct Args {
-    #[arg(long)]
-    system: PathBuf,
-
-    #[arg(long)]
-    game: PathBuf,
-
-    #[arg(long)]
-    debug_dump: Option<PathBuf>,
-
-    #[arg(long)]
-    #[serde(default)]
-    clear_debug_dump: bool,
-
-    #[arg(long)]
-    #[serde(default)]
-    pro: bool,
-
-    #[arg(long)]
-    #[serde(default)]
-    idps: ConsoleId,
 }
 
 #[derive(Debug, Error)]
