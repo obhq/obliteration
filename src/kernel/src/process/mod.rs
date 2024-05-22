@@ -15,6 +15,7 @@ use bitflags::bitflags;
 use std::cmp::min;
 use std::collections::HashMap;
 use std::ffi::c_char;
+use std::mem::zeroed;
 use std::num::NonZeroI32;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, RwLock, Weak};
@@ -67,6 +68,7 @@ impl ProcManager {
         sys.register(432, &mgr, Self::sys_thr_self);
         sys.register(464, &mgr, Self::sys_thr_set_name);
         sys.register(585, &mgr, Self::sys_is_in_sandbox);
+        sys.register(587, &mgr, Self::sys_get_authinfo);
         sys.register(602, &mgr, Self::sys_randomized_path);
         sys.register(612, &mgr, Self::sys_get_proc_type_info);
 
@@ -337,6 +339,54 @@ impl ProcManager {
         let v = !Arc::ptr_eq(&td.proc().files().root(), &self.fs.root());
 
         Ok(v.into())
+    }
+
+    fn sys_get_authinfo(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        // Get arguments.
+        let pid: i32 = i.args[0].try_into().unwrap();
+        let buf: *mut AuthInfo = i.args[1].into();
+
+        // Get target process.
+        let proc = match NonZeroI32::new(pid) {
+            Some(pid) => {
+                let p = self
+                    .list
+                    .read()
+                    .unwrap()
+                    .get(&pid.into())
+                    .and_then(|p| p.upgrade())
+                    .ok_or(SysErr::Raw(ESRCH))?;
+
+                // TODO: Implement p_cansee check.
+                p
+            }
+            None => td.proc().clone(),
+        };
+
+        // Check privilege.
+        let cred = proc.cred();
+        let auth = if td.priv_check(Privilege::SCE686).is_ok() {
+            cred.auth().clone()
+        } else {
+            // TODO: Refactor this for readability.
+            let paid = cred.auth().paid.get().wrapping_add(0xc7ffffffeffffffc);
+            let mut info: AuthInfo = unsafe { zeroed() };
+
+            if paid < 0xf && ((0x6001u32 >> (paid & 0x3f)) & 1) != 0 {
+                info.paid = cred.auth().paid;
+            }
+
+            info.caps = cred.auth().caps.clone();
+            info.caps.clear_non_type();
+            info
+        };
+
+        // Copy to output buf.
+        if !buf.is_null() {
+            unsafe { *buf = auth };
+        }
+
+        Ok(SysOut::ZERO)
     }
 
     fn sys_randomized_path(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
