@@ -13,10 +13,11 @@ use crate::ucred::{AuthInfo, Privilege};
 use crate::vm::MemoryManagerError;
 use bitflags::bitflags;
 use std::cmp::min;
+use std::collections::HashMap;
 use std::ffi::c_char;
 use std::num::NonZeroI32;
 use std::sync::atomic::{AtomicI32, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock, Weak};
 use thiserror::Error;
 
 pub use self::appinfo::*;
@@ -47,27 +48,29 @@ mod thread;
 pub struct ProcManager {
     fs: Arc<Fs>,
     rc: Arc<RcMgr>,
+    list: RwLock<HashMap<Pid, Weak<VProc>>>, // pidhashtbl
 }
 
 impl ProcManager {
     pub fn new(fs: &Arc<Fs>, rc: &Arc<RcMgr>, sys: &mut Syscalls) -> Arc<Self> {
         // Register syscalls.
-        let pmgr = Arc::new(Self {
+        let mgr = Arc::new(Self {
             fs: fs.clone(),
             rc: rc.clone(),
+            list: RwLock::default(),
         });
 
-        sys.register(20, &pmgr, Self::sys_getpid);
-        sys.register(50, &pmgr, Self::sys_setlogin);
-        sys.register(147, &pmgr, Self::sys_setsid);
-        sys.register(416, &pmgr, Self::sys_sigaction);
-        sys.register(432, &pmgr, Self::sys_thr_self);
-        sys.register(464, &pmgr, Self::sys_thr_set_name);
-        sys.register(585, &pmgr, Self::sys_is_in_sandbox);
-        sys.register(602, &pmgr, Self::sys_randomized_path);
-        sys.register(612, &pmgr, Self::sys_get_proc_type_info);
+        sys.register(20, &mgr, Self::sys_getpid);
+        sys.register(50, &mgr, Self::sys_setlogin);
+        sys.register(147, &mgr, Self::sys_setsid);
+        sys.register(416, &mgr, Self::sys_sigaction);
+        sys.register(432, &mgr, Self::sys_thr_self);
+        sys.register(464, &mgr, Self::sys_thr_set_name);
+        sys.register(585, &mgr, Self::sys_is_in_sandbox);
+        sys.register(602, &mgr, Self::sys_randomized_path);
+        sys.register(612, &mgr, Self::sys_get_proc_type_info);
 
-        pmgr
+        mgr
     }
 
     /// See `fork1` on the PS4 for a reference.
@@ -81,7 +84,10 @@ impl ProcManager {
         system_path: impl Into<String>,
         sys: Syscalls,
     ) -> Result<Arc<VProc>, SpawnError> {
-        VProc::new(
+        use std::collections::hash_map::Entry;
+
+        // Create the process.
+        let proc = VProc::new(
             Self::new_id().into(),
             auth,
             budget_id,
@@ -90,7 +96,24 @@ impl ProcManager {
             root,
             system_path,
             sys,
-        )
+        )?;
+
+        // Add to list.
+        let weak = Arc::downgrade(&proc);
+        let mut list = self.list.write().unwrap();
+
+        match list.entry(proc.id()) {
+            Entry::Occupied(mut e) => {
+                assert!(e.insert(weak).upgrade().is_none());
+            }
+            Entry::Vacant(e) => {
+                e.insert(weak);
+            }
+        }
+
+        drop(list);
+
+        Ok(proc)
     }
 
     fn sys_getpid(self: &Arc<Self>, td: &VThread, _: &SysIn) -> Result<SysOut, SysErr> {
