@@ -9,12 +9,12 @@ use crate::fs::Vnode;
 use crate::idt::Idt;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use crate::sysent::ProcAbi;
-use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
+use crate::ucred::{AuthInfo, Gid, Ucred, Uid};
 use crate::vm::Vm;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use macros::Errno;
 use std::any::Any;
-use std::mem::{size_of, zeroed};
+use std::mem::size_of;
 use std::ptr::{null, null_mut};
 use std::sync::atomic::AtomicPtr;
 use std::sync::{Arc, OnceLock};
@@ -96,7 +96,6 @@ impl VProc {
         sys.register(466, &vp, Self::sys_rtprio_thread);
         sys.register(487, &vp, Self::sys_cpuset_getaffinity);
         sys.register(488, &vp, Self::sys_cpuset_setaffinity);
-        sys.register(587, &vp, Self::sys_get_authinfo);
 
         vp.abi.set(ProcAbi::new(sys)).unwrap();
 
@@ -365,43 +364,6 @@ impl VProc {
             Some(v) => Ok(v),
             None => todo!("cpuset_which with td = NULL"),
         }
-    }
-
-    fn sys_get_authinfo(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
-        // Get arguments.
-        let pid: i32 = i.args[0].try_into().unwrap();
-        let buf: *mut AuthInfo = i.args[1].into();
-
-        // Check if PID is our process.
-        if pid != 0 && pid != self.id {
-            return Err(SysErr::Raw(ESRCH));
-        }
-
-        // Check privilege.
-        let mut info: AuthInfo = unsafe { zeroed() };
-
-        if td.priv_check(Privilege::SCE686).is_ok() {
-            info = self.cred.auth().clone();
-        } else {
-            // TODO: Refactor this for readability.
-            let paid = self.cred.auth().paid.get().wrapping_add(0xc7ffffffeffffffc);
-
-            if paid < 0xf && ((0x6001u32 >> (paid & 0x3f)) & 1) != 0 {
-                info.paid = self.cred.auth().paid;
-            }
-
-            info.caps = self.cred.auth().caps.clone();
-            info.caps.clear_non_type();
-        }
-
-        // Copy into.
-        if buf.is_null() {
-            todo!("get_authinfo with buf = null");
-        } else {
-            unsafe { *buf = info };
-        }
-
-        Ok(SysOut::ZERO)
     }
 }
 
