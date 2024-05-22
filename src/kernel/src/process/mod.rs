@@ -343,11 +343,11 @@ impl ProcManager {
 
     fn sys_get_authinfo(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
-        let pid: i32 = i.args[0].try_into().unwrap();
+        let pid: Option<NonZeroI32> = i.args[0].try_into().unwrap();
         let buf: *mut AuthInfo = i.args[1].into();
 
         // Get target process.
-        let proc = match NonZeroI32::new(pid) {
+        let proc = match pid {
             Some(pid) => {
                 let p = self
                     .list
