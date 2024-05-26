@@ -1,6 +1,6 @@
 use crate::budget::ProcType;
 use crate::dev::DmemContainer;
-use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ESRCH};
+use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ERANGE, ESRCH};
 use crate::fs::{Fs, Vnode};
 use crate::info;
 use crate::rcmgr::RcMgr;
@@ -67,6 +67,7 @@ impl ProcManager {
         sys.register(416, &mgr, Self::sys_sigaction);
         sys.register(432, &mgr, Self::sys_thr_self);
         sys.register(464, &mgr, Self::sys_thr_set_name);
+        sys.register(487, &mgr, Self::sys_cpuset_getaffinity);
         sys.register(585, &mgr, Self::sys_is_in_sandbox);
         sys.register(587, &mgr, Self::sys_get_authinfo);
         sys.register(602, &mgr, Self::sys_randomized_path);
@@ -335,6 +336,50 @@ impl ProcManager {
         Ok(SysOut::ZERO)
     }
 
+    fn sys_cpuset_getaffinity(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        // Get arguments.
+        let level: CpuLevel = i.args[0].try_into()?;
+        let which: CpuWhich = i.args[1].try_into()?;
+        let id: i64 = i.args[2].into();
+        let cpusetsize: usize = i.args[3].into();
+        let mask: *mut u8 = i.args[4].into();
+
+        // TODO: Refactor this for readability.
+        if cpusetsize.wrapping_sub(8) > 8 {
+            return Err(SysErr::Raw(ERANGE));
+        }
+
+        let (_, td) = self.cpuset_which(which, id)?;
+        let mut buf = vec![0u8; cpusetsize];
+
+        match level {
+            CpuLevel::Which => match which {
+                CpuWhich::Tid => {
+                    let v = td.cpuset().mask().bits[0].to_ne_bytes();
+                    buf[..v.len()].copy_from_slice(&v);
+                }
+                v => todo!("sys_cpuset_getaffinity with which = {v:?}"),
+            },
+            v => todo!("sys_cpuset_getaffinity with level = {v:?}"),
+        }
+
+        // TODO: What is this?
+        let x = u32::from_ne_bytes(buf[..4].try_into().unwrap());
+        let y = (x >> 1 & 0x55) + (x & 0x55) * 2;
+        let z = (y >> 2 & 0xfffffff3) + (y & 0x33) * 4;
+
+        unsafe {
+            std::ptr::write_unaligned::<u64>(
+                buf.as_mut_ptr() as _,
+                (z >> 4 | (z & 0xf) << 4) as u64,
+            );
+
+            std::ptr::copy_nonoverlapping(buf.as_ptr(), mask, cpusetsize);
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
     fn sys_is_in_sandbox(self: &Arc<Self>, td: &VThread, _: &SysIn) -> Result<SysOut, SysErr> {
         let v = !Arc::ptr_eq(&td.proc().files().root(), &self.fs.root());
 
@@ -478,6 +523,67 @@ impl ProcManager {
         unsafe { (*info).flags = flags };
 
         Ok(SysOut::ZERO)
+    }
+
+    /// See `cpuset_which` on the PS4 for a reference.
+    fn cpuset_which(&self, which: CpuWhich, id: i64) -> Result<(Arc<VProc>, Arc<VThread>), SysErr> {
+        // Get process and thread.
+        let (p, td) = match which {
+            CpuWhich::Tid => {
+                let td = if id == -1 {
+                    VThread::current().unwrap().clone()
+                } else {
+                    id.try_into()
+                        .ok()
+                        .and_then(|id| NonZeroI32::new(id))
+                        .and_then(|id| self.thread(id, None))
+                        .ok_or(SysErr::Raw(ESRCH))?
+                };
+
+                (td.proc().clone(), Some(td))
+            }
+            v => todo!("cpuset_which with which = {v:?}"),
+        };
+
+        // Check if the calling thread can reschedule the process.
+        VThread::current().unwrap().can_sched(&p)?;
+
+        match td {
+            Some(td) => Ok((p, td)),
+            None => todo!(),
+        }
+    }
+
+    /// See `tdfind` on the PS4 for a reference.
+    fn thread(&self, tid: NonZeroI32, pid: Option<Pid>) -> Option<Arc<VThread>> {
+        // TODO: Use a proper implementation.
+        match pid {
+            Some(pid) => {
+                let proc = self
+                    .list
+                    .read()
+                    .unwrap()
+                    .get(&pid)
+                    .and_then(|p| p.upgrade())?;
+                let threads = proc.threads();
+
+                threads.iter().find(|&t| t.id() == tid).cloned()
+            }
+            None => {
+                let procs = self.list.read().unwrap();
+
+                for p in procs.values().map(|p| p.upgrade()).filter_map(|i| i) {
+                    let threads = p.threads();
+                    let found = threads.iter().find(|&t| t.id() == tid).cloned();
+
+                    if found.is_some() {
+                        return found;
+                    }
+                }
+
+                None
+            }
+        }
     }
 
     fn new_id() -> NonZeroI32 {
