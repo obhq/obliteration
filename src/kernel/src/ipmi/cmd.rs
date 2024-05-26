@@ -206,7 +206,7 @@ pub(super) struct SessionUserData {
 #[derive(Debug)]
 pub(super) struct IpmiPacketInfo {
     size: usize,
-    type_: u32,
+    ty: u32,
     client_kid: u32,
     event_handler: *const (),
 }
