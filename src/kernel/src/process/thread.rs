@@ -107,6 +107,17 @@ impl VThread {
         self.cred.priv_check(p)
     }
 
+    /// Determine whether current thread may reschedule `p`.
+    ///
+    /// See `p_cansched` on the PS4 for a reference.
+    pub fn can_sched(&self, p: &Arc<VProc>) -> Result<(), CanSchedError> {
+        if Arc::ptr_eq(&self.proc, p) {
+            return Ok(());
+        }
+
+        todo!()
+    }
+
     /// Start the thread.
     ///
     /// The caller is responsible for `stack` deallocation.
@@ -185,7 +196,8 @@ impl Drop for Running {
     }
 }
 
-static VTHREAD: Tls<Arc<VThread>> = Tls::new();
-
+/// Represents an error when [`VThread::can_sched()`] fails.
 #[derive(Debug, Error, Errno)]
-pub enum FileAllocError {}
+pub enum CanSchedError {}
+
+static VTHREAD: Tls<Arc<VThread>> = Tls::new();

@@ -94,7 +94,6 @@ impl VProc {
         // TODO: Move all syscalls here to somewhere else.
         sys.register(455, &vp, Self::sys_thr_new);
         sys.register(466, &vp, Self::sys_rtprio_thread);
-        sys.register(487, &vp, Self::sys_cpuset_getaffinity);
         sys.register(488, &vp, Self::sys_cpuset_setaffinity);
 
         vp.abi.set(ProcAbi::new(sys)).unwrap();
@@ -273,53 +272,9 @@ impl VProc {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_cpuset_getaffinity(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
-        // Get arguments.
-        let level: CpuLevel = TryInto::<i32>::try_into(i.args[0]).unwrap().try_into()?;
-        let which: CpuWhich = TryInto::<i32>::try_into(i.args[1]).unwrap().try_into()?;
-        let id: i64 = i.args[2].into();
-        let cpusetsize: usize = i.args[3].into();
-        let mask: *mut u8 = i.args[4].into();
-
-        // TODO: Refactor this for readability.
-        if cpusetsize.wrapping_sub(8) > 8 {
-            return Err(SysErr::Raw(ERANGE));
-        }
-
-        let td = self.cpuset_which(which, id)?;
-        let mut buf = vec![0u8; cpusetsize];
-
-        match level {
-            CpuLevel::Which => match which {
-                CpuWhich::Tid => {
-                    let v = td.cpuset().mask().bits[0].to_ne_bytes();
-                    buf[..v.len()].copy_from_slice(&v);
-                }
-                v => todo!("sys_cpuset_getaffinity with which = {v:?}"),
-            },
-            v => todo!("sys_cpuset_getaffinity with level = {v:?}"),
-        }
-
-        // TODO: What is this?
-        let x = u32::from_ne_bytes(buf[..4].try_into().unwrap());
-        let y = (x >> 1 & 0x55) + (x & 0x55) * 2;
-        let z = (y >> 2 & 0xfffffff3) + (y & 0x33) * 4;
-
-        unsafe {
-            std::ptr::write_unaligned::<u64>(
-                buf.as_mut_ptr() as _,
-                (z >> 4 | (z & 0xf) << 4) as u64,
-            );
-
-            std::ptr::copy_nonoverlapping(buf.as_ptr(), mask, cpusetsize);
-        }
-
-        Ok(SysOut::ZERO)
-    }
-
     fn sys_cpuset_setaffinity(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
-        let level: CpuLevel = TryInto::<i32>::try_into(i.args[0]).unwrap().try_into()?;
-        let which: CpuWhich = TryInto::<i32>::try_into(i.args[1]).unwrap().try_into()?;
+        let level: CpuLevel = i.args[0].try_into()?;
+        let which: CpuWhich = i.args[1].try_into()?;
         let _id: i64 = i.args[2].into();
         let cpusetsize: usize = i.args[3].into();
         let _mask: *const u8 = i.args[4].into();
@@ -337,32 +292,6 @@ impl VProc {
                 v => todo!("sys_cpuset_setaffinity with which = {v:?}"),
             },
             v => todo!("sys_cpuset_setaffinity with level = {v:?}"),
-        }
-    }
-
-    /// See `cpuset_which` on the PS4 for a reference.
-    fn cpuset_which(&self, which: CpuWhich, id: i64) -> Result<Arc<VThread>, SysErr> {
-        let td = match which {
-            CpuWhich::Tid => {
-                if id == -1 {
-                    todo!("cpuset_which with id = -1");
-                } else {
-                    let threads = self.threads.read();
-                    let td = threads
-                        .iter()
-                        .find(|t| t.id().get() == id as i32)
-                        .ok_or(SysErr::Raw(ESRCH))?
-                        .clone();
-
-                    Some(td)
-                }
-            }
-            v => todo!("cpuset_which with which = {v:?}"),
-        };
-
-        match td {
-            Some(v) => Ok(v),
-            None => todo!("cpuset_which with td = NULL"),
         }
     }
 }

@@ -1,4 +1,5 @@
-use crate::{errno::EINVAL, syscalls::SysErr};
+use crate::errno::EINVAL;
+use crate::syscalls::{SysArg, SysErr};
 
 /// An implementation of `cpuset`.
 #[derive(Debug)]
@@ -24,30 +25,40 @@ pub struct CpuMask {
 }
 
 /// An implementation of `cpulevel_t`.
-#[derive(Debug, Clone, Copy)]
 #[repr(i32)]
+#[derive(Debug, Clone, Copy)]
 pub(super) enum CpuLevel {
     Root = 1,
     Cpuset = 2,
     Which = 3,
 }
 
-impl TryFrom<i32> for CpuLevel {
+impl CpuLevel {
+    pub fn new(v: i32) -> Option<Self> {
+        Some(match v {
+            1 => Self::Root,
+            2 => Self::Cpuset,
+            3 => Self::Which,
+            _ => return None,
+        })
+    }
+}
+
+impl TryFrom<SysArg> for CpuLevel {
     type Error = SysErr;
 
-    fn try_from(value: i32) -> Result<Self, Self::Error> {
-        match value {
-            1 => Ok(Self::Root),
-            2 => Ok(Self::Cpuset),
-            3 => Ok(Self::Which),
-            _ => Err(SysErr::Raw(EINVAL)),
-        }
+    fn try_from(value: SysArg) -> Result<Self, Self::Error> {
+        value
+            .try_into()
+            .ok()
+            .and_then(|v| Self::new(v))
+            .ok_or(SysErr::Raw(EINVAL))
     }
 }
 
 /// An implementation of `cpuwhich_t`.
-#[derive(Debug, Clone, Copy)]
 #[repr(i32)]
+#[derive(Debug, Clone, Copy)]
 pub(super) enum CpuWhich {
     Tid = 1,
     Pid = 2,
@@ -56,17 +67,27 @@ pub(super) enum CpuWhich {
     Jail = 5,
 }
 
-impl TryFrom<i32> for CpuWhich {
+impl CpuWhich {
+    pub fn new(v: i32) -> Option<Self> {
+        Some(match v {
+            1 => Self::Tid,
+            2 => Self::Pid,
+            3 => Self::Cpuset,
+            4 => Self::Irq,
+            5 => Self::Jail,
+            _ => return None,
+        })
+    }
+}
+
+impl TryFrom<SysArg> for CpuWhich {
     type Error = SysErr;
 
-    fn try_from(value: i32) -> Result<Self, Self::Error> {
-        match value {
-            1 => Ok(Self::Tid),
-            2 => Ok(Self::Pid),
-            3 => Ok(Self::Cpuset),
-            4 => Ok(Self::Irq),
-            5 => Ok(Self::Jail),
-            _ => Err(SysErr::Raw(EINVAL)),
-        }
+    fn try_from(value: SysArg) -> Result<Self, Self::Error> {
+        value
+            .try_into()
+            .ok()
+            .and_then(|v| Self::new(v))
+            .ok_or(SysErr::Raw(EINVAL))
     }
 }
