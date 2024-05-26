@@ -39,9 +39,13 @@ ipmi_command! {
     #[derive(Debug)]
     // TODO: add the rest of the commands
     pub(super) enum IpmiCommand<'a> {
-        CreateServer = 0x0,
+        CreateServer(&mut CreateServerArgs) = 0x0,
+        DestroyServer = 0x1,
         CreateClient(&mut CreateClientArgs) = 0x2,
         DestroyClient = 0x3,
+        CreateSession(&mut CreateSessionArgs) = 0x4,
+        DestroySession = 0x5,
+        ServerReceivePacket(&mut ServerReceivePacketArgs) = 0x201,
         InvokeAsyncMethod(&mut InvokeAsyncMethodArgs) = 0x241,
         TryGetResult(&mut TryGetResultArgs) = 0x243,
         TryGetMessage(&mut TryGetMessagetArgs) = 0x252,
@@ -54,10 +58,34 @@ ipmi_command! {
 
 #[repr(C)]
 #[derive(Debug)]
-pub(super) struct CreateClientArgs {
-    client_impl: usize,
+pub(super) struct CreateServerArgs {
+    imp: usize,
     name: *const u8,
-    param: usize,
+    config: *const IpmiCreateServerConfig,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub(super) struct CreateClientArgs {
+    imp: usize,
+    name: *const u8,
+    config: *const IpmiCreateClientConfig,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub(super) struct CreateSessionArgs {
+    imp: usize,
+    user_data: *const SessionUserData,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub(super) struct ServerReceivePacketArgs {
+    buf: *mut u8,
+    buf_size: usize,
+    packet_info: *const IpmiPacketInfo,
+    unk: *mut u32,
 }
 
 #[repr(C)]
@@ -94,8 +122,8 @@ pub(super) struct ClientDisconnectArgs {
 pub(super) struct TryGetMessagetArgs {
     queue_index: u32,
     msg: *mut u8,
-    msg_size: *mut u64,
-    max_size: u64,
+    msg_size: *mut usize,
+    max_size: usize,
 }
 
 #[repr(C)]
@@ -131,15 +159,54 @@ pub(super) struct PollEventFlagArgs {
 
 #[repr(C)]
 #[derive(Debug)]
+struct IpmiCreateServerConfig {
+    size: usize,
+    unk1: u32,
+    unk2: u32,
+    unk3: u32,
+    unk4: u32,
+    enable_multiple_server_threads: u32,
+    unk5: u32,
+    unk6: u64,
+    user_data: *const (),
+    event_handler: *const (),
+}
+
+#[repr(C)]
+#[derive(Debug)]
+struct IpmiCreateClientConfig {
+    size: usize,
+    unk: [u32; 80],
+    user_data: *const (),
+}
+
+#[repr(C)]
+#[derive(Debug)]
 pub(super) struct BufferInfo {
     data: *mut u8,
-    capacity: u64,
-    size: u64,
+    capacity: usize,
+    size: usize,
 }
 
 #[repr(C)]
 #[derive(Debug)]
 pub(super) struct DataInfo {
     data: *mut u8,
-    size: u64,
+    size: usize,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub(super) struct SessionUserData {
+    size: usize,
+    data: *const u8,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub(super) struct IpmiPacketInfo {
+    size: usize,
+    type_: u32,
+    client_kid: u32,
+    event_handler: *const (),
 }

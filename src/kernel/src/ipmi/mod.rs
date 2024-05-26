@@ -1,5 +1,4 @@
 use crate::{
-    errno::EINVAL,
     info,
     process::VThread,
     syscalls::{SysErr, SysIn, SysOut, Syscalls},
@@ -31,39 +30,58 @@ impl IpmiManager {
         let arg: *mut () = i.args[3].into();
         let size: usize = i.args[4].into();
 
-        let mut ret: i32 = 0;
+        let mut retval: i32 = 0;
 
         if size > BUF_SIZE {
-            ret = -0x7ff1ffff;
+            retval = -0x7ff1ffff;
 
             todo!();
         }
 
-        let cmd = unsafe { IpmiCommand::from_raw(cmd, arg, size)? };
+        if cmd < 0x271 {
+            todo!();
+        }
+
+        let cmd = unsafe { IpmiCommand::from_raw(cmd, arg, size) };
 
         info!("ipmimgr_call with cmd = {cmd:?}");
 
-        match cmd {
-            IpmiCommand::CreateServer => self.create_server(&mut ret, td)?,
-            IpmiCommand::CreateClient(arg) => self.create_client(arg, &mut ret, td)?,
-            IpmiCommand::DestroyClient => self.destroy_client(kid, &mut ret, td)?,
+        let ret = match cmd {
+            IpmiCommand::CreateServer(arg) => self.create_server(arg, &mut retval, td),
+            IpmiCommand::DestroyServer => self.destroy_server(kid, &mut retval, td),
+            IpmiCommand::CreateClient(arg) => self.create_client(arg, &mut retval, td),
+            IpmiCommand::DestroyClient => self.destroy_client(kid, &mut retval, td),
+            IpmiCommand::CreateSession(arg) => self.create_session(arg, &mut retval, td),
+            IpmiCommand::DestroySession => self.destroy_session(kid, &mut retval, td),
+            IpmiCommand::ServerReceivePacket(arg) => {
+                self.server_receive_packet(arg, kid, &mut retval, td)
+            }
             IpmiCommand::InvokeAsyncMethod(arg) => {
-                self.invoke_async_method(arg, kid, &mut ret, td)?
+                self.invoke_async_method(arg, kid, &mut retval, td)
             }
-            IpmiCommand::TryGetResult(arg) => self.try_get_result(arg, kid, &mut ret, td)?,
-            IpmiCommand::TryGetMessage(arg) => self.try_get_message(arg, kid, &mut ret, td)?,
-            IpmiCommand::DisconnectClient(arg) => self.disconnect_client(arg, kid, &mut ret, td)?,
+            IpmiCommand::TryGetResult(arg) => self.try_get_result(arg, kid, &mut retval, td),
+            IpmiCommand::TryGetMessage(arg) => self.try_get_message(arg, kid, &mut retval, td),
+            IpmiCommand::DisconnectClient(arg) => self.disconnect_client(arg, kid, &mut retval, td),
             IpmiCommand::InvokeSyncMethod(arg) => {
-                self.invoke_sync_method(arg, kid, &mut ret, td)?
+                self.invoke_sync_method(arg, kid, &mut retval, td)
             }
-            IpmiCommand::ConnectClient(arg) => self.connect_client(arg, kid, &mut ret, td)?,
-            IpmiCommand::PollEventFlag(arg) => self.poll_event_flag(arg, kid, &mut ret, td)?,
-        }
+            IpmiCommand::ConnectClient(arg) => self.connect_client(arg, kid, &mut retval, td),
+            IpmiCommand::PollEventFlag(arg) => self.poll_event_flag(arg, kid, &mut retval, td),
+        };
 
         todo!()
     }
 
-    fn create_server(&self, ret: &mut i32, td: &VThread) -> Result<(), SysErr> {
+    fn create_server(
+        &self,
+        args: &CreateServerArgs,
+        ret: &mut i32,
+        td: &VThread,
+    ) -> Result<(), SysErr> {
+        todo!()
+    }
+
+    fn destroy_server(&self, id: u32, ret: &mut i32, td: &VThread) -> Result<(), SysErr> {
         todo!()
     }
 
@@ -77,6 +95,29 @@ impl IpmiManager {
     }
 
     fn destroy_client(&self, id: u32, ret: &mut i32, td: &VThread) -> Result<(), SysErr> {
+        todo!()
+    }
+
+    fn create_session(
+        &self,
+        args: &CreateSessionArgs,
+        ret: &mut i32,
+        td: &VThread,
+    ) -> Result<(), SysErr> {
+        todo!()
+    }
+
+    fn destroy_session(&self, id: u32, ret: &mut i32, td: &VThread) -> Result<(), SysErr> {
+        todo!()
+    }
+
+    fn server_receive_packet(
+        &self,
+        args: &ServerReceivePacketArgs,
+        kid: u32,
+        ret: &mut i32,
+        td: &VThread,
+    ) -> Result<(), SysErr> {
         todo!()
     }
 
