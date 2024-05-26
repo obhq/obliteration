@@ -17,7 +17,7 @@ use std::fmt::Debug;
 /// should not be messed with.
 macro_rules! commands {
         (
-            $vis:vis enum $enum_name:ident {
+            $vis:vis enum $enum_name:ident<$lt:lifetime> {
                 $(
                     $( #[$attr:meta] )*
                     $variant:ident $( (& $(mut $($hack:lifetime)? )? $type:ty) )? = $value:literal,
@@ -32,7 +32,7 @@ macro_rules! commands {
             $vis enum $enum_name<'a> {
                 $(
                     $( #[$attr] )*
-                    $variant $( (&'a $(mut $($hack)? )? $type) )? = {
+                    $variant $( (& $lt $(mut $($hack)? )? $type) )? = {
                         assert!( !$enum_name::is_invalid($value) );
 
                         $(
@@ -44,7 +44,7 @@ macro_rules! commands {
                 )*
             }
 
-            impl<'a> $enum_name<'a> {
+            impl<$lt> $enum_name<$lt> {
                 pub const IOCPARM_SHIFT: u32 = 13;
                 pub const IOCPARM_MASK: u32 = (1 << Self::IOCPARM_SHIFT) - 1;
                 pub const IOC_VOID: u32 = 0x20000000;
@@ -91,7 +91,7 @@ macro_rules! commands {
 // TODO: implement void ioctl commands with int data
 
 commands! {
-    pub enum IoCmd {
+    pub enum IoCmd<'a> {
         /// sceKernelMemoryPoolExpand
         BPOOLEXPAND(&mut BlockpoolExpandArgs) = 0xc020a801,
         /// sceKernelMemoryPoolGetBlockStats
@@ -100,7 +100,7 @@ commands! {
         /// An unkown bnet command, called from libSceNet
         BNETUNK(&Unknown36) = 0x802450c9,
 
-        /// Flip control.
+        /// Flip control
         DCEFLIPCONTROL(&mut DceFlipControlArg) = 0xC0308203,
         /// Submit flip
         DCESUBMITFLIP(&mut DceSubmitFlipArg) = 0xC0488204,
@@ -193,6 +193,9 @@ commands! {
         GCDINGDONGFORWORKLOAD(&mut DingDongForWorkload) = 0xc010811c,
         /// Get number of tca units
         GCGETNUMTCAUNITS(&mut i32) = 0xc004811f,
+
+        /// Open port for user
+        HIDOPENPORTFORUSER(&Unknown12) = 0x800c4802,
 
         /// Get genuine random
         RNGGETGENUINE(&mut RngInput) = 0x40445301,
