@@ -17,7 +17,7 @@ macro_rules! ipmi_command {
         }
 
         impl<$lt> $enum_name<$lt> {
-            pub(super) unsafe fn from_raw(cmd: u32, arg: *mut ()) -> Result<Self, SysErr> {
+            pub(super) unsafe fn from_raw(cmd: u32, arg: *mut (), size: usize) -> Result<Self, SysErr> {
                 match cmd {
                     $(
                         $value => {

@@ -39,7 +39,7 @@ impl IpmiManager {
             todo!();
         }
 
-        let cmd = unsafe { IpmiCommand::from_raw(cmd, arg)? };
+        let cmd = unsafe { IpmiCommand::from_raw(cmd, arg, size)? };
 
         info!("ipmimgr_call with cmd = {cmd:?}");
 
