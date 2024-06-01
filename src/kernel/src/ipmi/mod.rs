@@ -16,12 +16,12 @@ impl IpmiManager {
     pub fn new(syscalls: &mut Syscalls) -> Arc<Self> {
         let ipmi = Arc::new(Self {});
 
-        syscalls.register(622, &ipmi, Self::ipmi_mgr_call);
+        syscalls.register(622, &ipmi, Self::sys_ipmi_mgr_call);
 
         ipmi
     }
 
-    fn ipmi_mgr_call(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_ipmi_mgr_call(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
         const BUF_SIZE: usize = 0x40;
 
         let cmd: u32 = i.args[0].try_into().unwrap();
