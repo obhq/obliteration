@@ -625,7 +625,7 @@ impl Vm {
         let slice_size = match num_of_ops.try_into() {
             Ok(size) => size,
             Err(_) if num_out.is_null() => return Err(SysErr::Raw(EINVAL)),
-            Err(_) => todo!()
+            Err(_) => todo!(),
         };
 
         let operations = unsafe { std::slice::from_raw_parts(operations, slice_size) };
