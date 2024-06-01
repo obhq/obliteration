@@ -28,3 +28,11 @@ impl DeviceDriver for Hid {
         todo!()
     }
 }
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct OpenPortArgs {
+    user_id: u32,
+    ty: u32,
+    index: u32,
+}

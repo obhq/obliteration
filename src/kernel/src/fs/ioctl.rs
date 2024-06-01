@@ -1,8 +1,8 @@
 use super::FioDeviceGetNameArg;
 use crate::dev::{
     CuMask, DceFlipControlArg, DceRegisterBufferPtrsArg, DceSubmitFlipArg, DingDongForWorkload,
-    DmemAllocate, DmemAvailable, DmemQuery, MapComputeQueueArg, MipStatsReport, PrtAperture,
-    RngInput, SubmitArg, UnmapComputeQueueArg,
+    DmemAllocate, DmemAvailable, DmemQuery, MapComputeQueueArg, MipStatsReport, OpenPortArgs,
+    PrtAperture, RngInput, SubmitArg, UnmapComputeQueueArg,
 };
 use crate::dmem::{BlockpoolExpandArgs, BlockpoolStats};
 use crate::errno::ENOTTY;
@@ -195,7 +195,7 @@ commands! {
         GCGETNUMTCAUNITS(&mut i32) = 0xc004811f,
 
         /// Open port for user
-        HIDOPENPORTFORUSER(&Unknown12) = 0x800c4802,
+        HIDOPENPORTFORUSER(&OpenPortArgs) = 0x800c4802,
 
         /// Get genuine random
         RNGGETGENUINE(&mut RngInput) = 0x40445301,
