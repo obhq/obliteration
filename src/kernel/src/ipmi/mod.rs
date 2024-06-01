@@ -39,7 +39,7 @@ impl IpmiManager {
         }
 
         match cmd {
-            ..0x271 => todo!(),
+            ..=0x270 => todo!(),
             0x271 | 0x372 | 0x473 => todo!(),
             _ => {}
         }
