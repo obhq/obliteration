@@ -382,16 +382,19 @@ impl ProcManager {
     }
 
     fn sys_cpuset_setaffinity(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let level: CpuLevel = i.args[0].try_into()?;
+        let which: CpuWhich = i.args[1].try_into()?;
+        let id: i64 = i.args[2].into();
         let cpusetsize: usize = i.args[3].into();
+        let mask: *const u8 = i.args[4].into();
 
-        // TODO: Refactor this for readability.
         if cpusetsize.wrapping_sub(8) > 8 {
             return Err(SysErr::Raw(ERANGE));
         }
 
-        if cpusetsize >= 9 {
-            todo!()
-        }
+        let mut buf = vec![0u8; cpusetsize];
+
+        unsafe { std::ptr::copy_nonoverlapping(mask, buf.as_mut_ptr(), cpusetsize) };
 
         todo!()
     }
