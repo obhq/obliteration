@@ -68,6 +68,7 @@ impl ProcManager {
         sys.register(432, &mgr, Self::sys_thr_self);
         sys.register(464, &mgr, Self::sys_thr_set_name);
         sys.register(487, &mgr, Self::sys_cpuset_getaffinity);
+        sys.register(488, &mgr, Self::sys_cpuset_setaffinity);
         sys.register(585, &mgr, Self::sys_is_in_sandbox);
         sys.register(587, &mgr, Self::sys_get_authinfo);
         sys.register(602, &mgr, Self::sys_randomized_path);
@@ -378,6 +379,21 @@ impl ProcManager {
         }
 
         Ok(SysOut::ZERO)
+    }
+
+    fn sys_cpuset_setaffinity(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let cpusetsize: usize = i.args[3].into();
+
+        // TODO: Refactor this for readability.
+        if cpusetsize.wrapping_sub(8) > 8 {
+            return Err(SysErr::Raw(ERANGE));
+        }
+
+        if cpusetsize >= 9 {
+            todo!()
+        }
+
+        todo!()
     }
 
     fn sys_is_in_sandbox(self: &Arc<Self>, td: &VThread, _: &SysIn) -> Result<SysOut, SysErr> {
