@@ -346,7 +346,7 @@ impl ProcManager {
         let mask: *mut u8 = i.args[4].into();
 
         // TODO: Refactor this for readability.
-        if cpusetsize.wrapping_sub(8) > std::mem::size_of::<CpuSet>() {
+        if cpusetsize.wrapping_sub(8) > 8 {
             return Err(SysErr::Raw(ERANGE));
         }
 
@@ -388,7 +388,7 @@ impl ProcManager {
         let cpusetsize: usize = i.args[3].into();
         let mask: *const u8 = i.args[4].into();
 
-        if cpusetsize.wrapping_sub(8) > std::mem::size_of::<CpuSet>() {
+        if cpusetsize.wrapping_sub(8) > 8 {
             return Err(SysErr::Raw(ERANGE));
         }
 
