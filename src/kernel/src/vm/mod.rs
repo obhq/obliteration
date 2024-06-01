@@ -622,7 +622,7 @@ impl Vm {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        let slice_size = num_of_ops.try_into().ok().ok_or(SysErr::Raw(EINVAL))?;
+        let slice_size = num_of_ops.try_into().map_err(|_| SysErr::Raw(EINVAL))?;
         let operations = unsafe { std::slice::from_raw_parts(operations, slice_size) };
 
         let mut processed = 0;

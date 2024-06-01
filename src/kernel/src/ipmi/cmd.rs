@@ -5,14 +5,14 @@ macro_rules! ipmi_command {
         $( #[$meta:meta] )*
         $vis:vis enum $enum_name:ident<$lt:lifetime> {
             $(
-                $variant:ident $( (&mut $arg_ty:ty) )? = $value:expr,
+                $variant:ident $( (& $vlt:lifetime mut $arg_ty:ty) )? = $value:expr,
             )*
         }
     ) => {
         $( #[$meta] )*
         $vis enum $enum_name<$lt> {
             $(
-                $variant $( (& $lt mut $arg_ty) )? = $value,
+                $variant $( (& $vlt mut $arg_ty) )? = $value,
             )*
         }
 
@@ -39,20 +39,20 @@ ipmi_command! {
     #[derive(Debug)]
     // TODO: add the rest of the commands
     pub(super) enum IpmiCommand<'a> {
-        CreateServer(&mut CreateServerArgs) = 0x0,
+        CreateServer(&'a mut CreateServerArgs) = 0x0,
         DestroyServer = 0x1,
-        CreateClient(&mut CreateClientArgs) = 0x2,
+        CreateClient(&'a mut CreateClientArgs) = 0x2,
         DestroyClient = 0x3,
-        CreateSession(&mut CreateSessionArgs) = 0x4,
+        CreateSession(&'a mut CreateSessionArgs) = 0x4,
         DestroySession = 0x5,
-        ServerReceivePacket(&mut ServerReceivePacketArgs) = 0x201,
-        InvokeAsyncMethod(&mut InvokeAsyncMethodArgs) = 0x241,
-        TryGetResult(&mut TryGetResultArgs) = 0x243,
-        TryGetMessage(&mut TryGetMessagetArgs) = 0x252,
-        DisconnectClient(&mut ClientDisconnectArgs) = 0x310,
-        InvokeSyncMethod(&mut InvokeSyncMethodArgs) = 0x320,
-        ConnectClient(&mut ConnectArgs) = 0x400,
-        PollEventFlag(&mut PollEventFlagArgs) = 0x491,
+        ServerReceivePacket(&'a mut ServerReceivePacketArgs) = 0x201,
+        InvokeAsyncMethod(&'a mut InvokeAsyncMethodArgs) = 0x241,
+        TryGetResult(&'a mut TryGetResultArgs) = 0x243,
+        TryGetMessage(&'a mut TryGetMessagetArgs) = 0x252,
+        DisconnectClient(&'a mut ClientDisconnectArgs) = 0x310,
+        InvokeSyncMethod(&'a mut InvokeSyncMethodArgs) = 0x320,
+        ConnectClient(&'a mut ConnectArgs) = 0x400,
+        PollEventFlag(&'a mut PollEventFlagArgs) = 0x491,
     }
 }
 
