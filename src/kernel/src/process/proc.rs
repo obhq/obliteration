@@ -1,10 +1,10 @@
 use super::{
-    AppInfo, Binaries, CpuLevel, CpuWhich, FileDesc, Limits, Pid, ResourceLimit, ResourceType,
-    SignalActs, SpawnError, VProcGroup, VThread,
+    AppInfo, Binaries, FileDesc, Limits, Pid, ResourceLimit, ResourceType, SignalActs, SpawnError,
+    VProcGroup, VThread,
 };
 use crate::budget::ProcType;
 use crate::dev::DmemContainer;
-use crate::errno::{Errno, EINVAL, ERANGE, ESRCH};
+use crate::errno::{Errno, EINVAL, ESRCH};
 use crate::fs::Vnode;
 use crate::idt::Idt;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
@@ -94,7 +94,6 @@ impl VProc {
         // TODO: Move all syscalls here to somewhere else.
         sys.register(455, &vp, Self::sys_thr_new);
         sys.register(466, &vp, Self::sys_rtprio_thread);
-        sys.register(488, &vp, Self::sys_cpuset_setaffinity);
 
         vp.abi.set(ProcAbi::new(sys)).unwrap();
 
@@ -270,29 +269,6 @@ impl VProc {
         }
 
         Ok(SysOut::ZERO)
-    }
-
-    fn sys_cpuset_setaffinity(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
-        let level: CpuLevel = i.args[0].try_into()?;
-        let which: CpuWhich = i.args[1].try_into()?;
-        let _id: i64 = i.args[2].into();
-        let cpusetsize: usize = i.args[3].into();
-        let _mask: *const u8 = i.args[4].into();
-
-        // TODO: Refactor this for readability.
-        if cpusetsize.wrapping_sub(8) > 8 {
-            return Err(SysErr::Raw(ERANGE));
-        }
-
-        match level {
-            CpuLevel::Which => match which {
-                CpuWhich::Tid => {
-                    todo!();
-                }
-                v => todo!("sys_cpuset_setaffinity with which = {v:?}"),
-            },
-            v => todo!("sys_cpuset_setaffinity with level = {v:?}"),
-        }
     }
 }
 
