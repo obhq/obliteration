@@ -1,13 +1,13 @@
-use super::Alloc;
+use super::Mapping;
 use std::collections::BTreeMap;
 
 /// An iterator to enumerate all [`Alloc`] as mutable starting within the specified address.
 pub(super) struct StartFromMut<'a> {
-    iter: Option<std::collections::btree_map::RangeMut<'a, usize, Alloc>>,
+    iter: Option<std::collections::btree_map::RangeMut<'a, usize, Mapping>>,
 }
 
 impl<'a> StartFromMut<'a> {
-    pub fn new(map: &'a mut BTreeMap<usize, Alloc>, addr: usize) -> Self {
+    pub fn new(map: &'a mut BTreeMap<usize, Mapping>, addr: usize) -> Self {
         // Find the first allocation info.
         let first = match map.range(..=addr).next_back() {
             Some(v) => v.1,
@@ -26,7 +26,7 @@ impl<'a> StartFromMut<'a> {
 }
 
 impl<'a> Iterator for StartFromMut<'a> {
-    type Item = (usize, &'a mut Alloc);
+    type Item = (usize, &'a mut Mapping);
 
     fn next(&mut self) -> Option<Self::Item> {
         let iter = match &mut self.iter {
