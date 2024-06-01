@@ -38,8 +38,10 @@ impl IpmiManager {
             todo!();
         }
 
-        if cmd < 0x271 {
-            todo!();
+        match cmd {
+            ..0x271 => todo!(),
+            0x271 | 0x372 | 0x473 => todo!(),
+            _ => {}
         }
 
         let cmd = unsafe { IpmiCommand::from_raw(cmd, arg, size) }?;
