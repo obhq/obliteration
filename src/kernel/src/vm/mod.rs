@@ -616,13 +616,18 @@ impl Vm {
         let flags: MappingFlags = i.args[1].try_into().unwrap();
         let operations: *const BatchMapArg = i.args[2].into();
         let num_of_ops: i32 = i.args[3].try_into().unwrap();
-        let num_of_processed_ops: *mut i32 = i.args[4].into();
+        let num_out: *mut i32 = i.args[4].into();
 
         if flags.bits() & 0xe0bffb6f != 0 {
             return Err(SysErr::Raw(EINVAL));
         }
 
-        let slice_size = num_of_ops.try_into().ok().ok_or(SysErr::Raw(EINVAL))?;
+        let slice_size = match num_of_ops.try_into() {
+            Ok(size) => size,
+            Err(_) if num_out.is_null() => return Err(SysErr::Raw(EINVAL)),
+            Err(_) => todo!(),
+        };
+
         let operations = unsafe { std::slice::from_raw_parts(operations, slice_size) };
 
         let mut processed = 0;
@@ -680,9 +685,9 @@ impl Vm {
 
         // TODO: invalidate TLB
 
-        if !num_of_processed_ops.is_null() {
+        if !num_out.is_null() {
             unsafe {
-                *num_of_processed_ops = processed;
+                *num_out = processed;
             }
         }
 

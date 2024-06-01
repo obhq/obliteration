@@ -4,10 +4,12 @@ pub use self::entry::*;
 
 mod entry;
 
+const ENTRY_COUNT: usize = 0x80;
+
 /// An implementation of `sys/kern/orbis_idt.c`.
 #[derive(Debug)]
 pub struct Idt<T> {
-    sets: Vec<[Option<Entry<T>>; 0x80]>,
+    sets: Vec<[Option<Entry<T>>; ENTRY_COUNT]>,
     next: usize,
     limit: usize,
 }
@@ -20,7 +22,7 @@ impl<T> Idt<T> {
         assert_ne!(limit, 0);
 
         // Allocate the first set.
-        let sets = vec![[Self::NONE; 0x80]];
+        let sets = vec![[Self::NONE; ENTRY_COUNT]];
 
         Self {
             sets,
@@ -44,7 +46,7 @@ impl<T> Idt<T> {
     {
         // Allocate a new set if necessary.
         let id = self.next;
-        let set = id / 0x80;
+        let set = id / ENTRY_COUNT;
 
         while set >= self.sets.len() {
             todo!("id_alloc with entries span across the first set");
@@ -52,7 +54,7 @@ impl<T> Idt<T> {
 
         // Get the entry.
         let set = &mut self.sets[set];
-        let entry = &mut set[id % 0x80];
+        let entry = &mut set[id % ENTRY_COUNT];
 
         assert!(entry.is_none());
 
@@ -72,8 +74,8 @@ impl<T> Idt<T> {
         }
 
         let i = id & 0x1fff;
-        let set = self.sets.get_mut(i / 0x80)?;
-        let entry = set[i % 0x80].as_mut()?;
+        let set = self.sets.get_mut(i / ENTRY_COUNT)?;
+        let entry = set[i % ENTRY_COUNT].as_mut()?;
 
         if let Some(ty) = ty {
             if entry.ty() != ty {
