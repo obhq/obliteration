@@ -526,18 +526,18 @@ impl Vm {
         })
     }
 
-    fn sys_sbrk(self: &Arc<Self>, _: &VThread, _: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_sbrk(self: &Arc<Self>, _: &Arc<VThread>, _: &SysIn) -> Result<SysOut, SysErr> {
         // Return EOPNOTSUPP (Not yet implemented syscall)
         Err(SysErr::Raw(EOPNOTSUPP))
     }
 
-    fn sys_sstk(self: &Arc<Self>, _: &VThread, _: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_sstk(self: &Arc<Self>, _: &Arc<VThread>, _: &SysIn) -> Result<SysOut, SysErr> {
         // Return EOPNOTSUPP (Not yet implemented syscall)
         Err(SysErr::Raw(EOPNOTSUPP))
     }
 
     #[allow(unused_variables)]
-    fn sys_munmap(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_munmap(self: &Arc<Self>, _: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let addr: usize = i.args[0].into();
         let len: usize = i.args[1].into();
 
@@ -549,7 +549,7 @@ impl Vm {
         todo!()
     }
 
-    fn sys_mmap(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_mmap(self: &Arc<Self>, _: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let addr: usize = i.args[0].into();
         let len: usize = i.args[1].into();
@@ -611,7 +611,7 @@ impl Vm {
         Ok(pages.into_raw().into())
     }
 
-    fn sys_batch_map(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_batch_map(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let dmem_fd: i32 = i.args[0].try_into().unwrap();
         let flags: MappingFlags = i.args[1].try_into().unwrap();
         let operations: *const BatchMapArg = i.args[2].into();
@@ -694,7 +694,7 @@ impl Vm {
         result.map(|_| SysOut::ZERO)
     }
 
-    fn sys_mname(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_mname(self: &Arc<Self>, _: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let addr: usize = i.args[0].into();
         let len: usize = i.args[1].into();
         let name = unsafe { i.args[2].to_str(32)?.unwrap() };
@@ -718,7 +718,7 @@ impl Vm {
     }
 
     #[allow(unused_variables)]
-    fn sys_mmap_dmem(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_mmap_dmem(self: &Arc<Self>, _: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let start_addr: usize = i.args[0].into();
         let len: usize = i.args[1].into();
         let mem_type: MemoryType = i.args[2].try_into().unwrap();

@@ -111,7 +111,11 @@ impl DmemManager {
         Ok(dmem)
     }
 
-    fn sys_dmem_container(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_dmem_container(
+        self: &Arc<Self>,
+        td: &Arc<VThread>,
+        i: &SysIn,
+    ) -> Result<SysOut, SysErr> {
         let dmem_id: i32 = i.args[0].try_into().unwrap();
 
         let dmem_container = td.proc().dmem_container_mut();
@@ -126,7 +130,11 @@ impl DmemManager {
         Ok(current_container.into())
     }
 
-    fn sys_blockpool_open(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_blockpool_open(
+        self: &Arc<Self>,
+        td: &Arc<VThread>,
+        i: &SysIn,
+    ) -> Result<SysOut, SysErr> {
         let flags: u32 = i.args[0].try_into().unwrap();
 
         if flags & 0xffafffff != 0 {
@@ -145,7 +153,7 @@ impl DmemManager {
         Ok(fd.into())
     }
 
-    fn sys_blockpool_map(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_blockpool_map(self: &Arc<Self>, _: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let addr: usize = i.args[0].into();
         let len: usize = i.args[1].into();
         let mem_type: i32 = i.args[2].try_into().unwrap();
@@ -160,15 +168,27 @@ impl DmemManager {
         todo!()
     }
 
-    fn sys_blockpool_unmap(self: &Arc<Self>, _: &VThread, _i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_blockpool_unmap(
+        self: &Arc<Self>,
+        _: &Arc<VThread>,
+        _i: &SysIn,
+    ) -> Result<SysOut, SysErr> {
         todo!()
     }
 
-    fn sys_blockpool_batch(self: &Arc<Self>, _: &VThread, _i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_blockpool_batch(
+        self: &Arc<Self>,
+        _: &Arc<VThread>,
+        _i: &SysIn,
+    ) -> Result<SysOut, SysErr> {
         todo!()
     }
 
-    fn sys_blockpool_move(self: &Arc<Self>, _: &VThread, _i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_blockpool_move(
+        self: &Arc<Self>,
+        _: &Arc<VThread>,
+        _i: &SysIn,
+    ) -> Result<SysOut, SysErr> {
         todo!()
     }
 }

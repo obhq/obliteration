@@ -1,6 +1,5 @@
 use crate::errno::ENOSYS;
 use crate::process::VThread;
-use crate::warn;
 use std::fmt::{Debug, Formatter};
 use std::sync::Arc;
 
@@ -13,34 +12,30 @@ mod input;
 mod output;
 
 /// Provides PS4 kernel routines for PS4 application and system libraries.
-pub struct Syscalls {
-    handlers: [Option<SyscallHandler>; 678],
-}
-
-type SyscallHandler = Box<dyn Fn(&VThread, &SysIn) -> Result<SysOut, SysErr> + Send + Sync>;
+pub struct Syscalls([Option<Handler>; 680]);
 
 impl Syscalls {
-    pub fn new() -> Self {
-        // Allows us to initialize the array with `None` without having to resort to non-const operations.
-        const NONE: Option<SyscallHandler> = None;
+    pub const fn new() -> Self {
+        // Allows us to initialize the array with `None` without having to resort to non-const
+        // operations.
+        const NONE: Option<Handler> = None;
 
-        Self {
-            handlers: [NONE; 678],
-        }
+        Self([NONE; 680])
     }
 
     /// # Panics
     /// If `id` is not a valid number or the syscall with identifier `id` is already registered.
-    pub fn register<O: Send + Sync + 'static>(
+    pub fn register<C: Send + Sync + 'static>(
         &mut self,
         id: u32,
-        o: &Arc<O>,
-        handler: fn(&Arc<O>, &VThread, &SysIn) -> Result<SysOut, SysErr>,
+        cx: &Arc<C>,
+        handler: fn(&Arc<C>, &Arc<VThread>, &SysIn) -> Result<SysOut, SysErr>,
     ) {
-        let o = o.clone();
+        let id: usize = id.try_into().unwrap();
+        let cx = cx.clone();
 
-        assert!(self.handlers[id as usize]
-            .replace(Box::new(move |td, i| handler(&o, td, i)))
+        assert!(self.0[id]
+            .replace(Box::new(move |td, i| handler(&cx, td, i)))
             .is_none());
     }
 
@@ -54,10 +49,11 @@ impl Syscalls {
         //
         // See https://github.com/freebsd/freebsd-src/blob/release/9.1.0/sys/kern/init_sysent.c#L36
         // for standard FreeBSD syscalls.
-        let handler = match self.handlers.get(i.id as usize) {
+        let id: usize = i.id.try_into().unwrap();
+        let handler = match self.0.get(id) {
             Some(Some(v)) => v,
             Some(None) => todo!(
-                "syscall {} at {:#x} on {} with args = ({:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x})",
+                "syscall {} at {:#x} on {} with args = [{:#x}, {:#x}, {:#x}, {:#x}, {:#x}, {:#x}]",
                 i.id,
                 i.offset,
                 i.module,
@@ -71,15 +67,11 @@ impl Syscalls {
             None => return ENOSYS.get().into(),
         };
 
-        let td = VThread::current().expect("Syscall invoked outside of a PS4 thread context");
-
         // Execute the handler.
+        let td = VThread::current().expect("syscall invoked outside of a PS4 thread context");
         let v = match handler(&td, i) {
             Ok(v) => v,
-            Err(e) => {
-                warn!(e, "Syscall {} failed", i.id);
-                return e.errno().get().into();
-            }
+            Err(e) => return e.errno().get().into(),
         };
 
         // Write the output.
@@ -93,3 +85,5 @@ impl Debug for Syscalls {
         f.debug_struct("Syscalls").finish()
     }
 }
+
+type Handler = Box<dyn Fn(&Arc<VThread>, &SysIn) -> Result<SysOut, SysErr> + Send + Sync>;
