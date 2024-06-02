@@ -23,7 +23,7 @@ impl SignalManager {
         mgr
     }
 
-    fn sys_sigprocmask(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_sigprocmask(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let how: MaskOp = i.args[0].try_into()?;
         let set: *const SignalSet = i.args[1].into();

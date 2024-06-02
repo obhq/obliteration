@@ -1,14 +1,14 @@
-use crate::{
-    info,
-    process::VThread,
-    syscalls::{SysErr, SysIn, SysOut, Syscalls},
-    warn,
+use self::cmd::{
+    ClientDisconnectArgs, ConnectArgs, CreateClientArgs, CreateServerArgs, CreateSessionArgs,
+    InvokeAsyncMethodArgs, InvokeSyncMethodArgs, IpmiCommand, PollEventFlagArgs,
+    ServerReceivePacketArgs, TryGetMessagetArgs, TryGetResultArgs,
 };
+use crate::info;
+use crate::process::VThread;
+use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
 use std::sync::Arc;
 
 mod cmd;
-
-use cmd::*;
 
 pub struct IpmiManager {}
 
@@ -21,7 +21,7 @@ impl IpmiManager {
         ipmi
     }
 
-    fn sys_ipmi_mgr_call(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_ipmi_mgr_call(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         const BUF_SIZE: usize = 0x40;
 
         let cmd: u32 = i.args[0].try_into().unwrap();

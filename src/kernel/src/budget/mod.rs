@@ -28,7 +28,11 @@ impl BudgetManager {
         budgets.alloc(Entry::new(Some(name), Arc::new(budget), 0x2000))
     }
 
-    fn sys_budget_get_ptype(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_budget_get_ptype(
+        self: &Arc<Self>,
+        td: &Arc<VThread>,
+        i: &SysIn,
+    ) -> Result<SysOut, SysErr> {
         // Check if PID is our process.
         let pid: i32 = i.args[0].try_into().unwrap();
 
