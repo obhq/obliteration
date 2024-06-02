@@ -1,10 +1,10 @@
 use super::{
-    AppInfo, Binaries, FileDesc, Limits, Pid, ResourceLimit, ResourceType, SignalActs, SpawnError,
-    VProcGroup, VThread,
+    AppInfo, Binaries, FileDesc, Limits, Pid, ResourceLimit, ResourceType, RtPrio, SignalActs,
+    SpawnError, VProcGroup, VThread,
 };
 use crate::budget::ProcType;
 use crate::dev::DmemContainer;
-use crate::errno::{Errno, EINVAL, ESRCH};
+use crate::errno::{Errno, EINVAL};
 use crate::fs::Vnode;
 use crate::idt::Idt;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
@@ -93,7 +93,6 @@ impl VProc {
 
         // TODO: Move all syscalls here to somewhere else.
         sys.register(455, &vp, Self::sys_thr_new);
-        sys.register(466, &vp, Self::sys_rtprio_thread);
 
         vp.abi.set(ProcAbi::new(sys)).unwrap();
 
@@ -243,33 +242,6 @@ impl VProc {
     ) -> Result<SysOut, CreateThreadError> {
         todo!()
     }
-
-    fn sys_rtprio_thread(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
-        let function: RtpFunction = TryInto::<i32>::try_into(i.args[0]).unwrap().try_into()?;
-        let lwpid: i32 = i.args[1].try_into().unwrap();
-        let rtp: *mut RtPrio = i.args[2].into();
-        let rtp = unsafe { &mut *rtp };
-
-        if function == RtpFunction::Set {
-            todo!("rtprio_thread with function = 1");
-        }
-
-        if function == RtpFunction::Unk && td.cred().is_system() {
-            todo!("rtprio_thread with function = 2");
-        } else if lwpid != 0 && lwpid != td.id().get() {
-            return Err(SysErr::Raw(ESRCH));
-        } else if function == RtpFunction::Lookup {
-            rtp.ty = td.pri_class();
-            rtp.prio = match td.pri_class() & 0xfff7 {
-                2..=4 => td.base_user_pri(),
-                _ => 0,
-            };
-        } else {
-            todo!("rtprio_thread with function = {function:?}");
-        }
-
-        Ok(SysOut::ZERO)
-    }
 }
 
 #[repr(C)]
@@ -288,36 +260,6 @@ struct ThrParam {
 }
 
 const _: () = assert!(size_of::<ThrParam>() == 0x68);
-
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-#[repr(i32)]
-enum RtpFunction {
-    Lookup = 0,
-    Set = 1,
-    Unk = 2,
-}
-
-impl TryFrom<i32> for RtpFunction {
-    type Error = SysErr;
-
-    fn try_from(value: i32) -> Result<Self, Self::Error> {
-        let rtp = match value {
-            0 => RtpFunction::Lookup,
-            1 => RtpFunction::Set,
-            2 => RtpFunction::Unk,
-            _ => return Err(SysErr::Raw(EINVAL)),
-        };
-
-        Ok(rtp)
-    }
-}
-
-/// Outout of sys_rtprio_thread.
-#[repr(C)]
-struct RtPrio {
-    ty: u16,
-    prio: u16,
-}
 
 #[derive(Debug, Error, Errno)]
 pub enum CreateThreadError {}

@@ -2,7 +2,7 @@ use super::{CpuMask, CpuSet, VProc, NEXT_ID};
 use crate::errno::Errno;
 use crate::fs::VFile;
 use crate::signal::SignalSet;
-use crate::ucred::{Privilege, PrivilegeError, Ucred};
+use crate::ucred::{CanSeeError, Privilege, PrivilegeError, Ucred};
 use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use llt::{OsThread, SpawnError};
@@ -116,6 +116,13 @@ impl VThread {
         }
 
         todo!()
+    }
+
+    /// Determine if current thread "can see" the subject specified by `p`.
+    ///
+    /// See `p_cansee` on the PS4 for a reference.
+    pub fn can_see(&self, p: &Arc<VProc>) -> Result<(), CanSeeError> {
+        self.cred.can_see(p.cred())
     }
 
     /// Start the thread.

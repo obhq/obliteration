@@ -8,7 +8,7 @@ use crate::signal::{
     strsignal, SigChldFlags, Signal, SignalAct, SignalFlags, SIGCHLD, SIGKILL, SIGSTOP, SIG_DFL,
     SIG_IGN,
 };
-use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
+use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
 use crate::ucred::{AuthInfo, Privilege};
 use crate::vm::MemoryManagerError;
 use bitflags::bitflags;
@@ -67,6 +67,7 @@ impl ProcManager {
         sys.register(416, &mgr, Self::sys_sigaction);
         sys.register(432, &mgr, Self::sys_thr_self);
         sys.register(464, &mgr, Self::sys_thr_set_name);
+        sys.register(466, &mgr, Self::sys_rtprio_thread);
         sys.register(487, &mgr, Self::sys_cpuset_getaffinity);
         sys.register(488, &mgr, Self::sys_cpuset_setaffinity);
         sys.register(585, &mgr, Self::sys_is_in_sandbox);
@@ -332,6 +333,47 @@ impl ProcManager {
             );
 
             thr.set_name(name);
+        }
+
+        Ok(SysOut::ZERO)
+    }
+
+    fn sys_rtprio_thread(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+        let function: RtpFunction = i.args[0].try_into()?;
+        let lwpid: i32 = i.args[1].try_into().unwrap();
+        let rtp: *mut RtPrio = i.args[2].into();
+        let rtp = unsafe { &mut *rtp };
+
+        if function == RtpFunction::Set {
+            todo!("sys_rtprio_thread with function = 1");
+        }
+
+        if function == RtpFunction::Unk && td.cred().is_system() {
+            todo!("sys_rtprio_thread with function = 2");
+        } else {
+            let td1 = if lwpid == 0 || lwpid == td.id().get() {
+                todo!("sys_rtprio_thread with calling thread");
+            } else {
+                let threads = td.proc().threads();
+
+                threads
+                    .iter()
+                    .find(|&t| t.id().get() == lwpid)
+                    .ok_or(SysErr::Raw(ESRCH))?
+                    .clone()
+            };
+
+            if function == RtpFunction::Lookup {
+                td.can_see(td1.proc())?;
+
+                rtp.ty = td1.pri_class();
+                rtp.prio = match td1.pri_class() & 0xfff7 {
+                    2..=4 => td1.base_user_pri(),
+                    _ => 0,
+                };
+            } else {
+                todo!("sys_rtprio_thread with function = {function:?}");
+            }
         }
 
         Ok(SysOut::ZERO)
@@ -614,6 +656,46 @@ impl ProcManager {
 
         NonZeroI32::new(id).unwrap()
     }
+}
+
+#[repr(i32)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+enum RtpFunction {
+    Lookup = 0,
+    Set = 1,
+    Unk = 2,
+}
+
+impl RtpFunction {
+    fn new(v: i32) -> Option<Self> {
+        let v = match v {
+            0 => RtpFunction::Lookup,
+            1 => RtpFunction::Set,
+            2 => RtpFunction::Unk,
+            _ => return None,
+        };
+
+        Some(v)
+    }
+}
+
+impl TryFrom<SysArg> for RtpFunction {
+    type Error = SysErr;
+
+    fn try_from(value: SysArg) -> Result<Self, Self::Error> {
+        value
+            .try_into()
+            .ok()
+            .and_then(|v| Self::new(v))
+            .ok_or(SysErr::Raw(EINVAL))
+    }
+}
+
+/// Implementation of `rtprio` structure.
+#[repr(C)]
+struct RtPrio {
+    ty: u16,
+    prio: u16,
 }
 
 /// Output of [`ProcManager::sys_get_proc_type_info()`].
