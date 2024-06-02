@@ -19,7 +19,7 @@ impl TimeManager {
         time
     }
 
-    fn sys_gettimeofday(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_gettimeofday(self: &Arc<Self>, _: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let tv: *mut TimeVal = i.args[0].into();
         let tz: *mut TimeZone = i.args[1].into();
 
@@ -38,7 +38,7 @@ impl TimeManager {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_clock_gettime(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_clock_gettime(self: &Arc<Self>, _: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let clock_id: ClockId = {
             let clock: i32 = i.args[0].try_into().unwrap();
 
@@ -74,7 +74,7 @@ impl TimeManager {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_clock_getres(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_clock_getres(self: &Arc<Self>, _: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let clock_id: ClockId = {
             let clock: i32 = i.args[0].try_into().unwrap();
 

@@ -365,7 +365,7 @@ impl Fs {
         }
     }
 
-    fn sys_read(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_read(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
         let len: IoLen = i.args[2].try_into()?;
@@ -375,7 +375,7 @@ impl Fs {
         todo!("sys_read")
     }
 
-    fn sys_write(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_write(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *const u8 = i.args[1].into();
         let len: IoLen = i.args[2].try_into()?;
@@ -385,7 +385,7 @@ impl Fs {
         todo!("sys_write")
     }
 
-    fn sys_open(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_open(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let path = unsafe { i.args[0].to_path()?.unwrap() };
         let flags: OpenFlags = i.args[1].try_into().unwrap();
@@ -428,7 +428,7 @@ impl Fs {
         Ok(fd.into())
     }
 
-    fn sys_close(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_close(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
 
         info!("Closing fd {fd}.");
@@ -438,7 +438,7 @@ impl Fs {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_ioctl(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_ioctl(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         // Our IoCmd contains both the command and the argument (if there is one).
         let cmd = IoCmd::try_from_raw_parts(i.args[1].into(), i.args[2].into())?;
@@ -474,7 +474,7 @@ impl Fs {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_revoke(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_revoke(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let path = unsafe { i.args[0].to_path()?.unwrap() };
 
         info!("Revoking access to {path}.");
@@ -511,7 +511,7 @@ impl Fs {
         Ok(())
     }
 
-    fn sys_readv(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_readv(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *mut IoVec = i.args[1].into();
         let count: u32 = i.args[2].try_into().unwrap();
@@ -523,7 +523,7 @@ impl Fs {
         todo!()
     }
 
-    fn sys_writev(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_writev(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *const IoVec = i.args[1].into();
         let iovcnt: u32 = i.args[2].try_into().unwrap();
@@ -537,7 +537,7 @@ impl Fs {
         todo!()
     }
 
-    fn sys_stat(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_stat(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let stat_out: *mut Stat = i.args[1].into();
 
@@ -555,7 +555,7 @@ impl Fs {
         self.statat(AtFlags::empty(), At::Cwd, path, td)
     }
 
-    fn sys_fstat(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_fstat(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let stat_out: *mut Stat = i.args[1].into();
 
@@ -577,7 +577,7 @@ impl Fs {
         Ok(stat)
     }
 
-    fn sys_lstat(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_lstat(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let stat_out: *mut Stat = i.args[1].into();
 
@@ -597,7 +597,7 @@ impl Fs {
         self.statat(AtFlags::SYMLINK_NOFOLLOW, At::Cwd, path, td)
     }
 
-    fn sys_pread(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_pread(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *mut u8 = i.args[1].into();
         let len: IoLen = i.args[2].try_into()?;
@@ -611,7 +611,7 @@ impl Fs {
         Ok(read.into())
     }
 
-    fn sys_pwrite(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_pwrite(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *const u8 = i.args[1].into();
         let len: IoLen = i.args[2].try_into()?;
@@ -625,7 +625,7 @@ impl Fs {
         Ok(written.into())
     }
 
-    fn sys_preadv(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_preadv(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *mut IoVecMut = i.args[1].into();
@@ -680,7 +680,7 @@ impl Fs {
         todo!()
     }
 
-    fn sys_pwritev(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_pwritev(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let fd: i32 = i.args[0].try_into().unwrap();
         let iovec: *const IoVec = i.args[1].into();
@@ -729,7 +729,7 @@ impl Fs {
         todo!()
     }
 
-    fn sys_fstatat(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_fstatat(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let dirfd: i32 = i.args[0].try_into().unwrap();
         let path = unsafe { i.args[1].to_path() }?.unwrap();
         let stat_out: *mut Stat = i.args[2].into();
@@ -759,7 +759,7 @@ impl Fs {
         todo!()
     }
 
-    fn sys_mkdir(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_mkdir(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let mode: u32 = i.args[1].try_into().unwrap();
 
@@ -767,7 +767,7 @@ impl Fs {
     }
 
     #[allow(unused_variables)]
-    fn sys_poll(self: &Arc<Self>, _td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_poll(self: &Arc<Self>, _td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fds: *mut PollFd = i.args[0].into();
         let nfds: u32 = i.args[1].try_into().unwrap();
         let timeout: i32 = i.args[2].try_into().unwrap();
@@ -779,7 +779,7 @@ impl Fs {
         todo!()
     }
 
-    fn sys_lseek(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_lseek(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let mut offset: i64 = i.args[1].into();
         let whence: Whence = {
@@ -817,7 +817,7 @@ impl Fs {
         todo!()
     }
 
-    fn sys_truncate(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_truncate(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let path = unsafe { i.args[0].to_path() }?.unwrap();
         let length = i.args[1].into();
 
@@ -836,7 +836,7 @@ impl Fs {
         todo!()
     }
 
-    fn sys_ftruncate(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_ftruncate(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd = i.args[0].try_into().unwrap();
         let length = i.args[1].into();
 
@@ -859,7 +859,7 @@ impl Fs {
         Ok(())
     }
 
-    fn sys_mkdirat(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_mkdirat(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         td.priv_check(Privilege::SCE683)?;
 
         let fd: i32 = i.args[0].try_into().unwrap();

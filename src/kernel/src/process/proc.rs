@@ -187,7 +187,7 @@ impl VProc {
         &self.uptc
     }
 
-    fn sys_thr_new(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_thr_new(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let param: *const ThrParam = i.args[0].into();
         let param_size: i32 = i.args[1].try_into().unwrap();
 

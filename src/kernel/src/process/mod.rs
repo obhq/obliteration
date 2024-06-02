@@ -121,11 +121,11 @@ impl ProcManager {
         Ok(proc)
     }
 
-    fn sys_getpid(self: &Arc<Self>, td: &VThread, _: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_getpid(self: &Arc<Self>, td: &Arc<VThread>, _: &SysIn) -> Result<SysOut, SysErr> {
         Ok(td.proc().id().into())
     }
 
-    fn sys_setlogin(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_setlogin(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         // Check current thread privilege.
         td.priv_check(Privilege::PROC_SETLOGIN)?;
 
@@ -151,7 +151,7 @@ impl ProcManager {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_setsid(self: &Arc<Self>, td: &VThread, _: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_setsid(self: &Arc<Self>, td: &Arc<VThread>, _: &SysIn) -> Result<SysOut, SysErr> {
         // Check if current thread has privilege.
         td.priv_check(Privilege::SCE680)?;
 
@@ -174,7 +174,7 @@ impl ProcManager {
         Ok(pid.into())
     }
 
-    fn sys_sigaction(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_sigaction(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let sig = {
             let sig: i32 = i.args[0].try_into().unwrap();
@@ -302,7 +302,7 @@ impl ProcManager {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_thr_self(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_thr_self(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let id: *mut i64 = i.args[0].into();
 
         unsafe { *id = td.id().get().into() };
@@ -310,7 +310,7 @@ impl ProcManager {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_thr_set_name(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_thr_set_name(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let tid: i64 = i.args[0].into();
         let name: Option<&str> = unsafe { i.args[1].to_str(32) }?;
         let proc = td.proc();
@@ -338,7 +338,7 @@ impl ProcManager {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_rtprio_thread(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_rtprio_thread(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let function: RtpFunction = i.args[0].try_into()?;
         let lwpid: i32 = i.args[1].try_into().unwrap();
         let rtp: *mut RtPrio = i.args[2].into();
@@ -379,7 +379,11 @@ impl ProcManager {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_cpuset_getaffinity(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_cpuset_getaffinity(
+        self: &Arc<Self>,
+        _: &Arc<VThread>,
+        i: &SysIn,
+    ) -> Result<SysOut, SysErr> {
         // Get arguments.
         let level: CpuLevel = i.args[0].try_into()?;
         let which: CpuWhich = i.args[1].try_into()?;
@@ -423,7 +427,11 @@ impl ProcManager {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_cpuset_setaffinity(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_cpuset_setaffinity(
+        self: &Arc<Self>,
+        _: &Arc<VThread>,
+        i: &SysIn,
+    ) -> Result<SysOut, SysErr> {
         let level: CpuLevel = i.args[0].try_into()?;
         let which: CpuWhich = i.args[1].try_into()?;
         let id: i64 = i.args[2].into();
@@ -441,13 +449,13 @@ impl ProcManager {
         todo!()
     }
 
-    fn sys_is_in_sandbox(self: &Arc<Self>, td: &VThread, _: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_is_in_sandbox(self: &Arc<Self>, td: &Arc<VThread>, _: &SysIn) -> Result<SysOut, SysErr> {
         let v = !Arc::ptr_eq(&td.proc().files().root(), &self.fs.root());
 
         Ok(v.into())
     }
 
-    fn sys_get_authinfo(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_get_authinfo(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
         let pid: Option<NonZeroI32> = i.args[0].try_into().unwrap();
         let buf: *mut AuthInfo = i.args[1].into();
@@ -495,7 +503,11 @@ impl ProcManager {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_randomized_path(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_randomized_path(
+        self: &Arc<Self>,
+        td: &Arc<VThread>,
+        i: &SysIn,
+    ) -> Result<SysOut, SysErr> {
         let set = i.args[0];
         let get: *mut c_char = i.args[1].into();
         let len: *mut usize = i.args[2].into();
@@ -525,7 +537,11 @@ impl ProcManager {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_get_proc_type_info(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_get_proc_type_info(
+        self: &Arc<Self>,
+        td: &Arc<VThread>,
+        i: &SysIn,
+    ) -> Result<SysOut, SysErr> {
         // Check buffer size.
         let info: *mut ProcTypeInfo = i.args[0].into();
 

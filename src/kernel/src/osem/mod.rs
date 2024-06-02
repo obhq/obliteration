@@ -16,7 +16,7 @@ impl OsemManager {
         osem
     }
 
-    fn sys_osem_create(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_osem_create(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let name = unsafe { i.args[0].to_str(32) }?.unwrap();
         let flags = {
             let flags = i.args[1].try_into().unwrap();

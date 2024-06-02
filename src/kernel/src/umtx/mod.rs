@@ -17,7 +17,7 @@ impl UmtxManager {
     }
 
     #[allow(non_snake_case)]
-    fn sys__umtx_op(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys__umtx_op(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let op: i32 = i.args[1].try_into().unwrap();
 
         if let Some(op) = OP_TABLE.get(op as usize) {

@@ -40,7 +40,7 @@ impl NetManager {
         net
     }
 
-    fn sys_recvmsg(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_recvmsg(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let msg: *mut MsgHdr = i.args[1].into();
         let flags = {
@@ -55,7 +55,7 @@ impl NetManager {
         todo!()
     }
 
-    fn sys_sendmsg(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_sendmsg(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let msg: *const MsgHdr = i.args[1].into();
         let flags = {
@@ -73,7 +73,7 @@ impl NetManager {
     }
 
     #[allow(unused_variables)] // TODO: Remove this when implementing
-    fn sys_recvfrom(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_recvfrom(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let buf: *mut u8 = i.args[1].into();
         let buflen: usize = i.args[2].into();
@@ -86,7 +86,7 @@ impl NetManager {
     }
 
     #[allow(unused_variables)] // TODO: Remove this when implementing
-    fn sys_accept(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_accept(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let addr: *mut u8 = i.args[1].into();
         let addrlen: *mut u32 = i.args[2].try_into().unwrap();
@@ -94,7 +94,7 @@ impl NetManager {
         todo!()
     }
 
-    fn sys_bind(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_bind(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *const u8 = i.args[1].into();
         let len: i32 = i.args[2].try_into().unwrap();
@@ -120,7 +120,7 @@ impl NetManager {
         Ok(())
     }
 
-    fn sys_netcontrol(self: &Arc<Self>, _: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_netcontrol(self: &Arc<Self>, _: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let op: i32 = i.args[1].try_into().unwrap();
         let ptr: *mut u8 = i.args[2].into();
@@ -172,7 +172,7 @@ impl NetManager {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_setsockopt(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_setsockopt(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let level: i32 = i.args[1].try_into().unwrap();
         let name: i32 = i.args[2].try_into().unwrap();
@@ -184,7 +184,7 @@ impl NetManager {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_listen(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_listen(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let backlog: i32 = i.args[1].try_into().unwrap();
         let file = td.proc().files().get(fd)?;
@@ -198,7 +198,7 @@ impl NetManager {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_socket(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_socket(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let domain: i32 = i.args[0].try_into().unwrap();
         let ty: i32 = i.args[1].try_into().unwrap();
         let proto: Option<NonZeroI32> = i.args[2].try_into().unwrap();
@@ -226,7 +226,7 @@ impl NetManager {
         Ok(fd.into())
     }
 
-    fn sys_connect(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_connect(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let ptr: *const u8 = i.args[1].into();
         let len: i32 = i.args[2].try_into().unwrap();
@@ -245,7 +245,7 @@ impl NetManager {
         todo!("connect")
     }
 
-    fn sys_getsockopt(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_getsockopt(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let level: i32 = i.args[1].try_into().unwrap();
         let name: i32 = i.args[2].try_into().unwrap();
@@ -257,7 +257,7 @@ impl NetManager {
         Ok(SysOut::ZERO)
     }
 
-    fn sys_socketex(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_socketex(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let name = unsafe { i.args[0].to_str(32)? };
         let domain: i32 = i.args[1].try_into().unwrap();
         let ty: i32 = i.args[2].try_into().unwrap();
@@ -286,7 +286,7 @@ impl NetManager {
         Ok(fd.into())
     }
 
-    fn sys_socketclose(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_socketclose(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
 
         info!("Closing socket at fd {fd}.");
@@ -297,7 +297,7 @@ impl NetManager {
     }
 
     #[allow(unused_variables)] // TODO: Remove this when implementing
-    fn sys_sendto(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_sendto(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let fd: i32 = i.args[0].try_into().unwrap();
         let buf: *const u8 = i.args[1].into();
         let buflen: usize = i.args[2].into();

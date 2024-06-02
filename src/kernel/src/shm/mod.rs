@@ -24,7 +24,7 @@ impl SharedMemoryManager {
         shm
     }
 
-    fn sys_shm_open(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_shm_open(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let path = unsafe { i.args[0].to_shm_path() }?.expect("invalid shm path");
         let flags: OpenFlags = i.args[1].try_into().unwrap();
         let mode: u32 = i.args[2].try_into().unwrap();
@@ -55,7 +55,7 @@ impl SharedMemoryManager {
     }
 
     #[allow(unused_variables)] // TODO: remove when implementing.
-    fn sys_shm_unlink(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_shm_unlink(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         todo!("sys_shm_unlink")
     }
 }

@@ -16,7 +16,11 @@ impl NamedObjManager {
         namedobj
     }
 
-    fn sys_namedobj_create(self: &Arc<Self>, td: &VThread, i: &SysIn) -> Result<SysOut, SysErr> {
+    fn sys_namedobj_create(
+        self: &Arc<Self>,
+        td: &Arc<VThread>,
+        i: &SysIn,
+    ) -> Result<SysOut, SysErr> {
         // Get arguments.
         let name = unsafe { i.args[0].to_str(32) }?.ok_or(SysErr::Raw(EINVAL))?;
         let data: usize = i.args[1].into();
