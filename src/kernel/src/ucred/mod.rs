@@ -41,10 +41,6 @@ impl Ucred {
         self.real_uid
     }
 
-    pub fn groups(&self) -> &[Gid] {
-        &self.groups
-    }
-
     pub fn auth(&self) -> &AuthInfo {
         &self.auth
     }
@@ -161,6 +157,13 @@ impl Ucred {
         )
     }
 
+    /// Determine if current credential "can see" the subject specified by `other`.
+    ///
+    /// See `cr_cansee` on the PS4 for a reference.
+    pub fn can_see(&self, other: &Self) -> Result<(), CanSeeError> {
+        todo!()
+    }
+
     /// See `priv_check_cred` on the PS4 for a reference.
     pub fn priv_check(&self, p: Privilege) -> Result<(), PrivilegeError> {
         // TODO: Check suser_enabled.
@@ -189,7 +192,11 @@ impl Ucred {
     }
 }
 
-/// Represents an error when [`Ucred::priv_check()`] is failed.
+/// Represents an error when [`Ucred::can_see()`] fails.
+#[derive(Debug, Error, Errno)]
+pub enum CanSeeError {}
+
+/// Represents an error when [`Ucred::priv_check()`] fails.
 #[derive(Debug, Error, Errno)]
 pub enum PrivilegeError {
     #[error("the current credential does not have the specified privilege")]
