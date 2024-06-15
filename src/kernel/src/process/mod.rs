@@ -352,7 +352,7 @@ impl ProcManager {
             todo!("sys_rtprio_thread with function = 2");
         } else {
             let td1 = if lwpid == 0 || lwpid == td.id().get() {
-                todo!("sys_rtprio_thread with calling thread");
+                td.clone()
             } else {
                 let threads = td.proc().threads();
 
