@@ -79,7 +79,7 @@ impl Vm {
         mm.stack
             .set_stack(unsafe { guard.add(Self::VIRTUAL_PAGE_SIZE) });
 
-        // Register syscall handlers.
+        // TODO: Move all syscalls here to somewhere else.
         let mm = Arc::new(mm);
 
         sys.register(69, &mm, Self::sys_sbrk);
