@@ -3,10 +3,10 @@ pub use self::stack::*;
 pub use self::vm::*;
 
 use self::storage::Storage;
-use crate::syscalls::SysArg;
+use crate::hv::Hypervisor;
+use crate::syscalls::{SysArg, Syscalls};
 use bitflags::bitflags;
-use std::fmt::Display;
-use std::fmt::Formatter;
+use std::fmt::{Display, Formatter};
 use std::num::TryFromIntError;
 use std::sync::Arc;
 
@@ -15,6 +15,19 @@ mod page;
 mod stack;
 mod storage;
 mod vm;
+
+/// Manage all virtual memory in the system.
+pub struct VmMgr {
+    hv: Arc<Hypervisor>,
+}
+
+impl VmMgr {
+    pub fn new(hv: Arc<Hypervisor>, sys: &mut Syscalls) -> Arc<Self> {
+        let mgr = Arc::new(Self { hv });
+
+        mgr
+    }
+}
 
 bitflags! {
     /// Flags to tell what access is possible for the virtual page.
