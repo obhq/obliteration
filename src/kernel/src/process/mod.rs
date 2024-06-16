@@ -15,7 +15,7 @@ use bitflags::bitflags;
 use std::cmp::min;
 use std::collections::HashMap;
 use std::ffi::c_char;
-use std::mem::zeroed;
+use std::mem::{size_of, transmute, zeroed};
 use std::num::NonZeroI32;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, RwLock, Weak};
@@ -66,6 +66,7 @@ impl ProcManager {
         sys.register(147, &mgr, Self::sys_setsid);
         sys.register(416, &mgr, Self::sys_sigaction);
         sys.register(432, &mgr, Self::sys_thr_self);
+        sys.register(455, &mgr, Self::sys_thr_new);
         sys.register(464, &mgr, Self::sys_thr_set_name);
         sys.register(466, &mgr, Self::sys_rtprio_thread);
         sys.register(487, &mgr, Self::sys_cpuset_getaffinity);
@@ -310,6 +311,24 @@ impl ProcManager {
         Ok(SysOut::ZERO)
     }
 
+    fn sys_thr_new(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
+        // Check param size.
+        let size = TryInto::<u32>::try_into(i.args[1]).unwrap() as usize;
+
+        if size > size_of::<ThrParam>() {
+            return Err(SysErr::Raw(EINVAL));
+        }
+
+        // Copy param.
+        let mut param: ThrParam = unsafe { zeroed() };
+
+        unsafe {
+            std::ptr::copy_nonoverlapping::<u8>(i.args[0].into(), transmute(&mut param), size)
+        };
+
+        todo!()
+    }
+
     fn sys_thr_set_name(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let tid: i64 = i.args[0].into();
         let name: Option<&str> = unsafe { i.args[1].to_str(32) }?;
@@ -352,7 +371,7 @@ impl ProcManager {
             todo!("sys_rtprio_thread with function = 2");
         } else {
             let td1 = if lwpid == 0 || lwpid == td.id().get() {
-                todo!("sys_rtprio_thread with calling thread");
+                td.clone()
             } else {
                 let threads = td.proc().threads();
 
@@ -672,6 +691,22 @@ impl ProcManager {
 
         NonZeroI32::new(id).unwrap()
     }
+}
+
+/// Implementation of `thr_param` structure.
+#[repr(C)]
+struct ThrParam {
+    start_func: Option<fn(usize)>,
+    arg: usize,
+    stack_base: *const u8,
+    stack_size: usize,
+    tls_base: *const u8,
+    tls_size: usize,
+    child_tid: *mut i64,
+    parent_tid: *mut i64,
+    flags: i32,
+    rtprio: *const RtPrio,
+    spare: [usize; 3],
 }
 
 #[repr(i32)]

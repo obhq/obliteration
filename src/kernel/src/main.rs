@@ -28,6 +28,7 @@ use crate::sysctl::Sysctl;
 use crate::time::TimeManager;
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use crate::umtx::UmtxManager;
+use crate::vm::VmMgr;
 use llt::{OsThread, SpawnError};
 use macros::vpath;
 use param::Param;
@@ -215,9 +216,9 @@ fn run(args: Args) -> Result<(), KernelError> {
     ));
 
     // Initialize foundations.
-    #[allow(unused_variables)] // TODO: Remove this when someone uses hv.
-    let hv = Hypervisor::new()?;
+    let hv = Arc::new(Hypervisor::new().map_err(KernelError::CreateHypervisorFailed)?);
     let mut sys = Syscalls::new();
+    let vm = VmMgr::new(hv, &mut sys);
     let fs = Fs::new(args.system, &cred, &mut sys).map_err(KernelError::FilesystemInitFailed)?;
     let rc = RcMgr::new();
 
@@ -652,7 +653,7 @@ enum KernelError {
     FailedToLoadLibSceLibcInternal(#[source] Box<dyn Error>),
 
     #[error("couldn't create a hypervisor")]
-    CreateHypervisorFailed(#[from] hv::HypervisorError),
+    CreateHypervisorFailed(#[source] self::hv::HypervisorError),
 
     #[error("main thread couldn't be created")]
     FailedToCreateMainThread(#[from] SpawnError),
