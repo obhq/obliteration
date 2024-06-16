@@ -1,24 +1,20 @@
 use super::{
-    AppInfo, Binaries, FileDesc, Limits, Pid, ResourceLimit, ResourceType, RtPrio, SignalActs,
-    SpawnError, VProcGroup, VThread,
+    AppInfo, Binaries, FileDesc, Limits, Pid, ResourceLimit, ResourceType, SignalActs, SpawnError,
+    VProcGroup, VThread,
 };
 use crate::budget::ProcType;
 use crate::dev::DmemContainer;
-use crate::errno::{Errno, EINVAL};
 use crate::fs::Vnode;
 use crate::idt::Idt;
-use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
+use crate::syscalls::Syscalls;
 use crate::sysent::ProcAbi;
 use crate::ucred::{AuthInfo, Gid, Ucred, Uid};
 use crate::vm::Vm;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
-use macros::Errno;
 use std::any::Any;
-use std::mem::size_of;
-use std::ptr::{null, null_mut};
+use std::ptr::null_mut;
 use std::sync::atomic::AtomicPtr;
-use std::sync::{Arc, OnceLock};
-use thiserror::Error;
+use std::sync::Arc;
 
 /// An implementation of `proc` structure.
 ///
@@ -30,7 +26,7 @@ pub struct VProc {
     threads: Gutex<Vec<Arc<VThread>>>,     // p_threads
     cred: Arc<Ucred>,                      // p_ucred
     group: Gutex<Option<Arc<VProcGroup>>>, // p_pgrp
-    abi: OnceLock<ProcAbi>,                // p_sysent
+    abi: ProcAbi,                          // p_sysent
     vm: Arc<Vm>,                           // p_vmspace
     sigacts: Gutex<SignalActs>,            // p_sigacts
     files: Arc<FileDesc>,                  // p_fd
@@ -68,14 +64,14 @@ impl VProc {
 
         let gg = GutexGroup::new();
         let limits = Limits::load()?;
-
+        let vm = Vm::new(&mut sys)?;
         let vp = Arc::new(Self {
             id,
             threads: gg.spawn(Vec::new()),
             cred: Arc::new(cred),
             group: gg.spawn(None),
-            abi: OnceLock::new(),
-            vm: Vm::new(&mut sys)?,
+            abi: ProcAbi::new(sys),
+            vm,
             sigacts: gg.spawn(SignalActs::new()),
             files: FileDesc::new(root),
             system_path: system_path.into(),
@@ -90,11 +86,6 @@ impl VProc {
             ptc: 0,
             uptc: AtomicPtr::new(null_mut()),
         });
-
-        // TODO: Move all syscalls here to somewhere else.
-        sys.register(455, &vp, Self::sys_thr_new);
-
-        vp.abi.set(ProcAbi::new(sys)).unwrap();
 
         Ok(vp)
     }
@@ -120,7 +111,7 @@ impl VProc {
     }
 
     pub fn abi(&self) -> &ProcAbi {
-        self.abi.get().unwrap()
+        &self.abi
     }
 
     pub fn vm(&self) -> &Arc<Vm> {
@@ -186,80 +177,4 @@ impl VProc {
     pub fn uptc(&self) -> &AtomicPtr<u8> {
         &self.uptc
     }
-
-    fn sys_thr_new(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let param: *const ThrParam = i.args[0].into();
-        let param_size: i32 = i.args[1].try_into().unwrap();
-
-        if param_size < 0 && param_size as usize > size_of::<ThrParam>() {
-            return Err(SysErr::Raw(EINVAL));
-        }
-
-        // The given param size seems to so far only be 0x68, we can handle this when we encounter it.
-        if param_size as usize != size_of::<ThrParam>() {
-            todo!("thr_new with param_size != sizeof(ThrParam)");
-        }
-
-        unsafe {
-            self.thr_new(td, &*param)?;
-        }
-
-        Ok(SysOut::ZERO)
-    }
-
-    unsafe fn thr_new(&self, td: &VThread, param: &ThrParam) -> Result<SysOut, CreateThreadError> {
-        if param.rtprio != null() {
-            todo!("thr_new with non-null rtp");
-        }
-
-        self.create_thread(
-            td,
-            param.start_func,
-            param.arg,
-            param.stack_base,
-            param.stack_size,
-            param.tls_base,
-            param.child_tid,
-            param.parent_tid,
-            param.flags,
-            param.rtprio,
-        )
-    }
-
-    #[allow(unused_variables)] // TODO: Remove this when implementing.
-    unsafe fn create_thread(
-        &self,
-        td: &VThread,
-        start_func: fn(usize),
-        arg: usize,
-        stack_base: *const u8,
-        stack_size: usize,
-        tls_base: *const u8,
-        child_tid: *mut i64,
-        parent_tid: *mut i64,
-        flags: i32,
-        rtprio: *const RtPrio,
-    ) -> Result<SysOut, CreateThreadError> {
-        todo!()
-    }
 }
-
-#[repr(C)]
-struct ThrParam {
-    start_func: fn(usize),
-    arg: usize,
-    stack_base: *const u8,
-    stack_size: usize,
-    tls_base: *const u8,
-    tls_size: usize,
-    child_tid: *mut i64,
-    parent_tid: *mut i64,
-    flags: i32,
-    rtprio: *const RtPrio,
-    spare: [usize; 3],
-}
-
-const _: () = assert!(size_of::<ThrParam>() == 0x68);
-
-#[derive(Debug, Error, Errno)]
-pub enum CreateThreadError {}
