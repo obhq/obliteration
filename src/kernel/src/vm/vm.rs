@@ -484,7 +484,7 @@ impl Vm {
             // allocation will be large enough for a second allocation with fixed address.
             // The whole idea is coming from: https://stackoverflow.com/a/31411825/1829232
             let len = len + (Self::VIRTUAL_PAGE_SIZE - self.allocation_granularity);
-            let storage = Memory::new(addr, len)?;
+            let storage = Memory::new(if name == "executable" { 0x400000 } else { 0 }, len)?;
 
             // Do the second allocation.
             let addr = Self::align_virtual_page(storage.addr());
@@ -494,7 +494,7 @@ impl Vm {
         } else {
             // If allocation granularity is equal or larger than the virtual page that mean the
             // result of mmap will always aligned correctly.
-            let storage = Memory::new(addr, len)?;
+            let storage = Memory::new(if name == "executable" { 0x400000 } else { 0 }, len)?;
             let addr = storage.addr();
 
             (addr, len, storage)

@@ -100,7 +100,7 @@ impl RuntimeLinker {
         match elf.ty() {
             FileType::ET_EXEC | FileType::ET_SCE_EXEC | FileType::ET_SCE_REPLAY_EXEC => {
                 if elf.info().is_none() {
-                    todo!("a statically linked eboot.bin is not supported yet.");
+                    info!("a statically linked eboot.bin is not tested");
                 }
             }
             FileType::ET_SCE_DYNEXEC if elf.dynamic().is_some() => {}

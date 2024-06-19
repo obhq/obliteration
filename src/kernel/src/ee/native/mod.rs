@@ -665,8 +665,8 @@ impl NativeEngine {
 #[derive(Debug)]
 pub struct RawFn {
     #[allow(unused)]
-    md: Arc<dyn Any + Send + Sync>, // Keep module alive.
-    addr: usize,
+    pub md: Arc<dyn Any + Send + Sync>, // Keep module alive.
+    pub addr: usize,
 }
 
 impl RawFn {

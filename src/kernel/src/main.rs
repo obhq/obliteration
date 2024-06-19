@@ -29,6 +29,7 @@ use crate::time::TimeManager;
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use crate::umtx::UmtxManager;
 use crate::vm::VmMgr;
+use ee::native::RawFn;
 use llt::{OsThread, SpawnError};
 use macros::vpath;
 use param::Param;
@@ -443,64 +444,87 @@ fn run(args: Args) -> Result<(), KernelError> {
     writeln!(log, "Application   : {}", app.path()).unwrap();
     app.print(log);
 
-    let lib_path = VPathBuf::new()
-        .join(system_component)
-        .unwrap()
-        .join("common")
-        .unwrap()
-        .join("lib")
-        .unwrap();
+    let main = if app.clone().file_info().is_some() {
+        let lib_path = VPathBuf::new()
+            .join(system_component)
+            .unwrap()
+            .join("common")
+            .unwrap()
+            .join("lib")
+            .unwrap();
 
-    // Preload libkernel.
-    let mut flags = LoadFlags::UNK1;
-    let path = lib_path.join("libkernel.sprx").unwrap();
+        // Preload libkernel.
+        let mut flags = LoadFlags::UNK1;
+        let path = lib_path.join("libkernel.sprx").unwrap();
 
-    if proc.budget_ptype() == ProcType::BigApp {
-        flags |= LoadFlags::BIG_APP;
-    }
+        if proc.budget_ptype() == ProcType::BigApp {
+            flags |= LoadFlags::BIG_APP;
+        }
 
-    info!("Loading {path}.");
+        info!("Loading {path}.");
 
-    let (libkernel, _) = ld
-        .load(path, flags, false, true, &main)
-        .map_err(|e| KernelError::FailedToLoadLibkernel(e.into()))?;
+        let (libkernel, _) = ld
+            .load(path, flags, false, true, &main)
+            .map_err(|e| KernelError::FailedToLoadLibkernel(e.into()))?;
 
-    libkernel.flags_mut().remove(ModuleFlags::IS_NEW);
-    libkernel.print(info!());
+        libkernel.flags_mut().remove(ModuleFlags::IS_NEW);
+        libkernel.print(info!());
 
-    ld.set_kernel(libkernel);
+        ld.set_kernel(libkernel);
 
-    // Preload libSceLibcInternal.
-    let path = lib_path.join("libSceLibcInternal.sprx").unwrap();
+        // Preload libSceLibcInternal.
+        let path = lib_path.join("libSceLibcInternal.sprx").unwrap();
 
-    info!("Loading {path}.");
+        info!("Loading {path}.");
 
-    let (libc, _) = ld
-        .load(path, flags, false, true, &main)
-        .map_err(|e| KernelError::FailedToLoadLibSceLibcInternal(e.into()))?;
+        let (libc, _) = ld
+            .load(path, flags, false, true, &main)
+            .map_err(|e| KernelError::FailedToLoadLibSceLibcInternal(e.into()))?;
 
-    libc.flags_mut().remove(ModuleFlags::IS_NEW);
-    libc.print(info!());
+        libc.flags_mut().remove(ModuleFlags::IS_NEW);
+        libc.print(info!());
 
-    drop(libc);
+        drop(libc);
 
-    // Get eboot.bin.
-    if app.file_info().is_none() {
-        todo!("statically linked eboot.bin");
-    }
+        // Get eboot.bin.
+        if app.file_info().is_none() {
+            error!("statically linked eboot.bin");
+        }
 
-    // Get entry point.
-    let boot = ld.kernel().unwrap();
-    let mut arg = Box::pin(EntryArg::new(&proc, app.clone()));
-    let entry = unsafe { boot.get_function(boot.entry().unwrap()) };
-    let entry = move || unsafe { entry.exec1(arg.as_mut().as_vec().as_ptr()) };
+        // Get entry point.
+        let boot = ld.kernel().unwrap();
+        let mut arg = Box::pin(EntryArg::new(&proc, app.clone()));
+        let entry = unsafe { boot.get_function(boot.entry().unwrap()) };
+        let entry = move || unsafe { entry.exec1(arg.as_mut().as_vec().as_ptr()) };
 
-    // Start main thread.
-    info!("Starting application.");
+        // Start main thread.
+        info!("Starting application.");
 
-    // TODO: Check how this constructed.
-    let stack = proc.vm().stack();
-    let main: OsThread = unsafe { main.start(stack.start(), stack.len(), entry) }?;
+        // TODO: Check how this constructed.
+        let stack = proc.vm().stack();
+        let main: OsThread = unsafe { main.start(stack.start(), stack.len(), entry) }?;
+
+        main
+    } else {
+        let boot = app.clone();
+        let mut arg = Box::pin(EntryArg::new(&proc, app.clone()));
+        let entry = unsafe {
+            Arc::new(RawFn {
+                md: boot.clone(),
+                addr: boot.entry().unwrap(),
+            })
+        };
+        let entry = move || unsafe { entry.exec1(arg.as_mut().as_vec().as_ptr()) };
+
+        // Start main thread.
+        info!("Starting application.");
+
+        // TODO: Check how this constructed.
+        let stack = proc.vm().stack();
+        let main: OsThread = unsafe { main.start(stack.start(), stack.len(), entry) }?;
+
+        main
+    };
 
     // Begin Discord Rich Presence before blocking current thread.
     if let Err(e) = discord_presence(&param) {

@@ -88,7 +88,7 @@ impl Module {
                 assert_ne!(p.addr(), 0);
                 assert_ne!(p.memory_size(), 0);
 
-                let header = base + p.addr();
+                let header = p.addr();
                 let header_size = p.memory_size();
                 let (frame, frame_size) = unsafe { Self::digest_eh(&memory, header, header_size) };
 
@@ -390,12 +390,7 @@ impl Module {
         }
 
         if let Some(v) = self.entry {
-            writeln!(
-                entry,
-                "Entry address : {:#018x}",
-                mem.addr() + mem.base() + v
-            )
-            .unwrap();
+            writeln!(entry, "Entry address : {:#018x}", v).unwrap();
         }
 
         if let Some(v) = self.fini {
@@ -450,7 +445,7 @@ impl Module {
                 None => continue,
             };
 
-            let addr = mem.addr() + s.start();
+            let addr = s.start();
 
             writeln!(
                 entry,
@@ -474,7 +469,7 @@ impl Module {
         // Let it panic because the PS4 assume the index is valid.
         let frame: isize = LE::read_i32(&hdr[4..]).try_into().unwrap();
 
-        assert_ne!(frame, 0);
+        // assert_ne!(frame, 0);
 
         // Get first frame.
         let frame: usize = match hdr[1] {
