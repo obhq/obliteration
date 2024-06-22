@@ -69,7 +69,7 @@ extern "C" int kvm_set_user_memory_region(
 
 extern "C" int kvm_get_vcpu_mmap_size(int kvm)
 {
-    return ioctl(kvm, KVM_GET_VCPU_MMAP_SIZE);
+    return ioctl(kvm, KVM_GET_VCPU_MMAP_SIZE, 0);
 }
 
 extern "C" int kvm_create_vcpu(int vm, int id, int *fd)

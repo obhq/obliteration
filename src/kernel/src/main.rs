@@ -29,7 +29,7 @@ use crate::time::TimeManager;
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use crate::umtx::UmtxManager;
 use crate::vm::VmMgr;
-use llt::{OsThread, SpawnError};
+use llt::SpawnError;
 use macros::vpath;
 use param::Param;
 use std::error::Error;
@@ -37,6 +37,8 @@ use std::fs::{create_dir_all, remove_dir_all, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::time::SystemTime;
 use sysinfo::{MemoryRefreshKind, System};
@@ -218,7 +220,7 @@ fn run(args: Args) -> Result<(), KernelError> {
     // Initialize foundations.
     let hv = Arc::new(Hypervisor::new().map_err(KernelError::CreateHypervisorFailed)?);
     let mut sys = Syscalls::new();
-    let vm = VmMgr::new(hv, &mut sys);
+    let vm = VmMgr::new(hv.clone(), &mut sys);
     let fs = Fs::new(args.system, &cred, &mut sys).map_err(KernelError::FilesystemInitFailed)?;
     let rc = RcMgr::new();
 
@@ -500,15 +502,50 @@ fn run(args: Args) -> Result<(), KernelError> {
 
     // TODO: Check how this constructed.
     let stack = proc.vm().stack();
-    let main: OsThread = unsafe { main.start(stack.start(), stack.len(), entry) }?;
+
+    unsafe { main.start(stack.start(), stack.len(), entry) }?;
 
     // Begin Discord Rich Presence before blocking current thread.
     if let Err(e) = discord_presence(&param) {
         warn!(e, "Failed to setup Discord rich presence");
     }
 
-    // Wait for main thread to exit. This should never return.
-    join_thread(main).map_err(KernelError::FailedToJoinMainThread)?;
+    // Spawn threads to drive vCPUs.
+    let exit = AtomicBool::new(false);
+
+    std::thread::scope(|s| {
+        let (tx, rx) = channel();
+
+        for _ in 0..Hypervisor::VCPU {
+            let tx = tx.clone();
+            let exit = &exit;
+            let hv = hv.as_ref();
+
+            s.spawn(move || tx.send(cpu(&exit, &hv)));
+        }
+
+        drop(tx);
+
+        // Wait for all vCPUs to exit.
+        for r in rx {
+            exit.store(true, Ordering::Relaxed);
+
+            if let Err(e) = r {
+                return Err(e);
+            }
+        }
+
+        Ok(())
+    })
+    .map_err(KernelError::CpuError)
+}
+
+fn cpu(exit: &AtomicBool, hv: &Hypervisor) -> Result<(), CpuError> {
+    let cpu = hv
+        .create_cpu()
+        .map_err(|e| CpuError::CreateCpuFailed(Box::new(e)))?;
+
+    while !exit.load(Ordering::Relaxed) {}
 
     Ok(())
 }
@@ -556,31 +593,6 @@ fn discord_presence(param: &Param) -> Result<(), DiscordPresenceError> {
     Ok(())
 }
 
-#[cfg(unix)]
-fn join_thread(thr: OsThread) -> Result<(), std::io::Error> {
-    let err = unsafe { libc::pthread_join(thr, std::ptr::null_mut()) };
-
-    if err != 0 {
-        Err(std::io::Error::from_raw_os_error(err))
-    } else {
-        Ok(())
-    }
-}
-
-#[cfg(windows)]
-fn join_thread(thr: OsThread) -> Result<(), std::io::Error> {
-    use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
-    use windows_sys::Win32::System::Threading::{WaitForSingleObject, INFINITE};
-
-    if unsafe { WaitForSingleObject(thr, INFINITE) } != WAIT_OBJECT_0 {
-        return Err(std::io::Error::last_os_error());
-    }
-
-    assert_ne!(unsafe { CloseHandle(thr) }, 0);
-
-    Ok(())
-}
-
 #[derive(Debug, Error)]
 enum DiscordPresenceError {
     #[error("failed to create Discord IPC")]
@@ -590,6 +602,7 @@ enum DiscordPresenceError {
     FailedToUpdatePresence(#[source] Box<dyn Error>),
 }
 
+/// Represents an error when [`run()`] fails.
 #[derive(Debug, Error)]
 enum KernelError {
     #[error("couldn't open param.sfo")]
@@ -647,10 +660,10 @@ enum KernelError {
     ExecFailed(&'static VPath, #[source] ExecError),
 
     #[error("libkernel couldn't be loaded")]
-    FailedToLoadLibkernel(#[source] Box<dyn Error>),
+    FailedToLoadLibkernel(#[source] self::rtld::LoadError),
 
     #[error("libSceLibcInternal couldn't be loaded")]
-    FailedToLoadLibSceLibcInternal(#[source] Box<dyn Error>),
+    FailedToLoadLibSceLibcInternal(#[source] self::rtld::LoadError),
 
     #[error("couldn't create a hypervisor")]
     CreateHypervisorFailed(#[source] self::hv::HypervisorError),
@@ -658,6 +671,13 @@ enum KernelError {
     #[error("main thread couldn't be created")]
     FailedToCreateMainThread(#[from] SpawnError),
 
-    #[error("failed to join with main thread")]
-    FailedToJoinMainThread(#[source] std::io::Error),
+    #[error("one or more of virtual CPUs was failed")]
+    CpuError(#[source] CpuError),
+}
+
+/// Represents an error when [`cpu()`] fails.
+#[derive(Debug, Error)]
+enum CpuError {
+    #[error("couldn't create a virtual CPU")]
+    CreateCpuFailed(#[source] Box<dyn Error + Send>),
 }
