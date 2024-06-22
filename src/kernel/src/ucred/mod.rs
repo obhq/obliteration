@@ -190,7 +190,7 @@ impl Ucred {
 
     /// See `cr_see_other_gids` on the PS4 for a reference.
     pub fn see_other_gids(&self, other: &Self) -> Result<(), SeeOtherGidsError> {
-       if !SEE_OTHER_GIDS {
+        if !SEE_OTHER_GIDS {
             todo!()
         }
 
