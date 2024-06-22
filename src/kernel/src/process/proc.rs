@@ -64,7 +64,7 @@ impl VProc {
 
         let gg = GutexGroup::new();
         let limits = Limits::load()?;
-        let vm_space = VmSpace::new(&mut sys)?;
+        let vm_space = VmSpace::new()?;
 
         let vp = Arc::new(Self {
             id,

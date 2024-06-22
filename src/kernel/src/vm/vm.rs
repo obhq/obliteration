@@ -24,7 +24,7 @@ impl VmSpace {
     pub const VIRTUAL_PAGE_SIZE: usize = 0x4000;
 
     /// See `vmspace_alloc` on the PS4 for a reference.
-    pub fn new(sys: &mut Syscalls) -> Result<Arc<Self>, MemoryManagerError> {
+    pub fn new() -> Result<Arc<Self>, MemoryManagerError> {
         // Check if page size on the host is supported. We don't need to check allocation
         // granularity because it is always multiply by page size, which is a correct value.
         let (page_size, allocation_granularity) = Self::get_memory_model();
