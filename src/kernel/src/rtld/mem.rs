@@ -145,7 +145,7 @@ impl Memory {
         segments.push(segment);
 
         // TODO: Use separate name for our code and data.
-        let mut pages = match proc.vm().mmap(
+        let mut pages = match proc.vm_space().mmap(
             0,
             len,
             Protections::empty(),
@@ -164,7 +164,7 @@ impl Memory {
             let len = seg.len;
             let prot = seg.prot;
 
-            if let Err(e) = proc.vm().mprotect(addr, len, prot) {
+            if let Err(e) = proc.vm_space().mprotect(addr, len, prot) {
                 return Err(MapError::ProtectMemoryFailed(addr as _, len, prot, e));
             }
         }
@@ -292,7 +292,7 @@ impl Memory {
         let len = seg.len;
         let prot = Protections::CPU_READ | Protections::CPU_WRITE;
 
-        if let Err(e) = self.proc.vm().mprotect(ptr, len, prot) {
+        if let Err(e) = self.proc.vm_space().mprotect(ptr, len, prot) {
             return Err(UnprotectSegmentError::MprotectFailed(
                 ptr as _, len, prot, e,
             ));
@@ -327,7 +327,7 @@ impl Memory {
         // Unprotect the memory.
         let prot = Protections::CPU_READ | Protections::CPU_WRITE;
 
-        if let Err(e) = self.proc.vm().mprotect(self.ptr, end, prot) {
+        if let Err(e) = self.proc.vm_space().mprotect(self.ptr, end, prot) {
             return Err(UnprotectError::MprotectFailed(self.ptr as _, end, prot, e));
         }
 
@@ -350,7 +350,7 @@ impl Drop for Memory {
         }
 
         // Unmap the memory.
-        self.proc.vm().munmap(self.ptr, self.len).unwrap();
+        self.proc.vm_space().munmap(self.ptr, self.len).unwrap();
     }
 }
 
@@ -428,7 +428,7 @@ impl<'a> AsMut<[u8]> for UnprotectedSegment<'a> {
 impl<'a> Drop for UnprotectedSegment<'a> {
     fn drop(&mut self) {
         self.proc
-            .vm()
+            .vm_space()
             .mprotect(self.ptr, self.len, self.prot)
             .unwrap();
     }
@@ -451,7 +451,10 @@ impl<'a> Drop for UnprotectedMemory<'a> {
 
             let addr = unsafe { self.ptr.add(s.start()) };
 
-            self.proc.vm().mprotect(addr, s.len(), s.prot()).unwrap();
+            self.proc
+                .vm_space()
+                .mprotect(addr, s.len(), s.prot())
+                .unwrap();
         }
     }
 }

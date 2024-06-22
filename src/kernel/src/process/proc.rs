@@ -9,7 +9,7 @@ use crate::idt::Idt;
 use crate::syscalls::Syscalls;
 use crate::sysent::ProcAbi;
 use crate::ucred::{AuthInfo, Gid, Ucred, Uid};
-use crate::vm::Vm;
+use crate::vm::VmSpace;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use std::any::Any;
 use std::ptr::null_mut;
@@ -27,7 +27,7 @@ pub struct VProc {
     cred: Arc<Ucred>,                      // p_ucred
     group: Gutex<Option<Arc<VProcGroup>>>, // p_pgrp
     abi: ProcAbi,                          // p_sysent
-    vm: Arc<Vm>,                           // p_vmspace
+    vm: Arc<VmSpace>,                      // p_vmspace
     sigacts: Gutex<SignalActs>,            // p_sigacts
     files: Arc<FileDesc>,                  // p_fd
     system_path: String,                   // p_randomized_path
@@ -64,7 +64,7 @@ impl VProc {
 
         let gg = GutexGroup::new();
         let limits = Limits::load()?;
-        let vm = Vm::new(&mut sys)?;
+        let vm = VmSpace::new(&mut sys)?;
         let vp = Arc::new(Self {
             id,
             threads: gg.spawn(Vec::new()),
@@ -114,7 +114,7 @@ impl VProc {
         &self.abi
     }
 
-    pub fn vm(&self) -> &Arc<Vm> {
+    pub fn vm_space(&self) -> &Arc<VmSpace> {
         &self.vm
     }
 

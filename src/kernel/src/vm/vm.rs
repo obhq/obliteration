@@ -1,27 +1,25 @@
 use super::iter::StartFromMut;
-use super::{Alloc, AppStack, MappingFlags, Protections, VPages};
-use crate::dev::DmemContainer;
-use crate::errno::{Errno, EINVAL, ENOMEM, EOPNOTSUPP};
+use super::{Alloc, AppStack, MappingFlags, MemoryType, Protections, VPages};
+use crate::errno::{Errno, EINVAL, ENOMEM};
 use crate::process::VThread;
-use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
+use crate::syscalls::{SysErr, SysOut, Syscalls};
 use crate::{info, warn};
 use macros::Errno;
 use std::collections::BTreeMap;
 use std::ffi::CString;
-use std::num::TryFromIntError;
 use std::ptr::null_mut;
 use std::sync::{Arc, RwLock};
 use thiserror::Error;
 
 /// Implementation of `vmspace` structure.
 #[derive(Debug)]
-pub struct Vm {
+pub struct VmSpace {
     allocation_granularity: usize,
     allocations: RwLock<BTreeMap<usize, Alloc>>, // Key is Alloc::addr.
     stack: AppStack,
 }
 
-impl Vm {
+impl VmSpace {
     /// Size of a memory page on PS4.
     pub const VIRTUAL_PAGE_SIZE: usize = 0x4000;
 
@@ -69,16 +67,7 @@ impl Vm {
         mm.stack
             .set_stack(unsafe { guard.add(Self::VIRTUAL_PAGE_SIZE) });
 
-        // TODO: Move all syscalls here to somewhere else.
         let mm = Arc::new(mm);
-
-        sys.register(69, &mm, Self::sys_sbrk);
-        sys.register(70, &mm, Self::sys_sstk);
-        sys.register(73, &mm, Self::sys_munmap);
-        sys.register(477, &mm, Self::sys_mmap);
-        sys.register(548, &mm, Self::sys_batch_map);
-        sys.register(588, &mm, Self::sys_mname);
-        sys.register(628, &mm, Self::sys_mmap_dmem);
 
         Ok(mm)
     }
@@ -516,40 +505,12 @@ impl Vm {
         })
     }
 
-    fn sys_sbrk(self: &Arc<Self>, _: &Arc<VThread>, _: &SysIn) -> Result<SysOut, SysErr> {
-        Err(SysErr::Raw(EOPNOTSUPP))
-    }
-
-    fn sys_sstk(self: &Arc<Self>, _: &Arc<VThread>, _: &SysIn) -> Result<SysOut, SysErr> {
-        Err(SysErr::Raw(EOPNOTSUPP))
-    }
-
     #[allow(unused_variables)]
-    fn sys_munmap(self: &Arc<Self>, _: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let addr: usize = i.args[0].into();
-        let len: usize = i.args[1].into();
-
-        self.munmap_internal(addr, len)
-    }
-
-    #[allow(unused_variables)]
-    fn munmap_internal(self: &Arc<Self>, addr: usize, len: usize) -> Result<SysOut, SysErr> {
+    pub fn munmap_internal(self: &Arc<Self>, addr: usize, len: usize) -> Result<SysOut, SysErr> {
         todo!()
     }
 
-    fn sys_mmap(self: &Arc<Self>, _: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
-        // Get arguments.
-        let addr: usize = i.args[0].into();
-        let len: usize = i.args[1].into();
-        let prot: Protections = i.args[2].try_into().unwrap();
-        let flags: MappingFlags = i.args[3].try_into().unwrap();
-        let fd: i32 = i.args[4].try_into().unwrap();
-        let pos: usize = i.args[5].into();
-
-        self.mmap_internal(addr, len, prot, flags, fd, pos)
-    }
-
-    fn mmap_internal(
+    pub fn mmap_internal(
         self: &Arc<Self>,
         addr: usize,
         len: usize,
@@ -599,126 +560,8 @@ impl Vm {
         Ok(pages.into_raw().into())
     }
 
-    fn sys_batch_map(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let dmem_fd: i32 = i.args[0].try_into().unwrap();
-        let flags: MappingFlags = i.args[1].try_into().unwrap();
-        let operations: *const BatchMapArg = i.args[2].into();
-        let num_of_ops: i32 = i.args[3].try_into().unwrap();
-        let num_out: *mut i32 = i.args[4].into();
-
-        if flags.bits() & 0xe0bffb6f != 0 {
-            return Err(SysErr::Raw(EINVAL));
-        }
-
-        let slice_size = match num_of_ops.try_into() {
-            Ok(size) => size,
-            Err(_) if num_out.is_null() => return Err(SysErr::Raw(EINVAL)),
-            Err(_) => todo!(),
-        };
-
-        let operations = unsafe { std::slice::from_raw_parts(operations, slice_size) };
-
-        let mut processed = 0;
-
-        let result = operations.iter().try_for_each(|arg| {
-            match arg.op.try_into()? {
-                BatchMapOp::MapDirect => {
-                    if *td.proc().dmem_container() != DmemContainer::One
-                    /* || td.proc().unk4 & 2 != 0 */
-                    /* || td.proc().sdk_version < 0x2500000 */
-                    || flags.intersects(MappingFlags::MAP_STACK)
-                    {
-                        todo!()
-                    }
-
-                    self.mmap_dmem_internal(
-                        arg.addr,
-                        arg.len,
-                        arg.ty.try_into().unwrap(),
-                        arg.prot.try_into().unwrap(),
-                        flags,
-                        arg.offset,
-                    )?;
-                }
-                BatchMapOp::MapFlexible => {
-                    if arg.addr & 0x3fff != 0 || arg.len & 0x3fff != 0 || arg.prot & 0xc8 != 0 {
-                        return Err(SysErr::Raw(EINVAL));
-                    }
-
-                    self.mmap_internal(
-                        arg.addr,
-                        arg.len,
-                        arg.prot.try_into().unwrap(),
-                        flags.intersection(MappingFlags::MAP_ANON),
-                        -1,
-                        0,
-                    )?;
-                }
-                BatchMapOp::Protect => todo!(),
-                BatchMapOp::TypeProtect => todo!(),
-                BatchMapOp::Unmap => {
-                    if arg.addr & 0x3fff != 0 || arg.len & 0x3fff != 0 {
-                        return Err(SysErr::Raw(EINVAL));
-                    }
-
-                    self.munmap_internal(arg.addr, arg.len)?;
-                }
-                _ => todo!(),
-            }
-
-            processed = processed + 1;
-
-            Ok(())
-        });
-
-        // TODO: invalidate TLB
-
-        if !num_out.is_null() {
-            unsafe {
-                *num_out = processed;
-            }
-        }
-
-        result.map(|_| SysOut::ZERO)
-    }
-
-    fn sys_mname(self: &Arc<Self>, _: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let addr: usize = i.args[0].into();
-        let len: usize = i.args[1].into();
-        let name = unsafe { i.args[2].to_str(32)?.unwrap() };
-
-        info!(
-            "Setting name for {:#x}:{:#x} to '{}'.",
-            addr,
-            addr + len,
-            name
-        );
-
-        // PS4 does not check if vm_map_set_name is failed.
-        let len = ((addr & 0x3fff) + len + 0x3fff) & 0xffffffffffffc000;
-        let addr = (addr & 0xffffffffffffc000) as *mut u8;
-
-        if let Err(e) = self.mname(addr, len, name) {
-            warn!(e, "mname({addr:p}, {len:#x}, {name}) failed");
-        }
-
-        Ok(SysOut::ZERO)
-    }
-
     #[allow(unused_variables)]
-    fn sys_mmap_dmem(self: &Arc<Self>, _: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
-        let start_addr: usize = i.args[0].into();
-        let len: usize = i.args[1].into();
-        let mem_type: MemoryType = i.args[2].try_into().unwrap();
-        let prot: Protections = i.args[3].try_into().unwrap();
-        let flags: MappingFlags = i.args[4].try_into().unwrap();
-        let start_phys_addr: usize = i.args[5].into();
-
-        self.mmap_dmem_internal(start_addr, len, mem_type, prot, flags, start_phys_addr)
-    }
-
-    #[allow(unused_variables)]
-    fn mmap_dmem_internal(
+    pub fn mmap_dmem_internal(
         self: &Arc<Self>,
         start_addr: usize,
         len: usize,
@@ -763,7 +606,7 @@ impl Vm {
     }
 }
 
-unsafe impl Sync for Vm {}
+unsafe impl Sync for VmSpace {}
 
 /// Represents an error when [`MemoryManager`] is failed to initialize.
 #[derive(Debug, Error)]
@@ -824,67 +667,4 @@ pub enum MemoryUpdateError {
 
     #[error("address {0:#x} is not mapped")]
     UnmappedAddr(usize),
-}
-
-#[repr(C)]
-struct BatchMapArg {
-    addr: usize,
-    offset: usize,
-    len: usize,
-    prot: u8,
-    ty: u8,
-    op: i32,
-}
-
-#[repr(i32)]
-enum BatchMapOp {
-    MapDirect = 0,
-    Unmap = 1,
-    Protect = 2,
-    MapFlexible = 3,
-    TypeProtect = 4,
-}
-
-impl TryFrom<i32> for BatchMapOp {
-    type Error = SysErr;
-
-    fn try_from(raw: i32) -> Result<Self, SysErr> {
-        match raw {
-            0 => Ok(BatchMapOp::MapDirect),
-            1 => Ok(BatchMapOp::Unmap),
-            2 => Ok(BatchMapOp::Protect),
-            3 => Ok(BatchMapOp::MapFlexible),
-            4 => Ok(BatchMapOp::TypeProtect),
-            _ => Err(SysErr::Raw(EINVAL)),
-        }
-    }
-}
-
-#[repr(i32)]
-enum MemoryType {
-    WbOnion = 0,
-    WcGarlic = 3,
-    WbGarlic = 10,
-}
-
-impl TryFrom<SysArg> for MemoryType {
-    type Error = TryFromIntError;
-
-    fn try_from(value: SysArg) -> Result<Self, Self::Error> {
-        let val: u8 = value.try_into().unwrap();
-        val.try_into()
-    }
-}
-
-impl TryFrom<u8> for MemoryType {
-    type Error = TryFromIntError;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(MemoryType::WbOnion),
-            3 => Ok(MemoryType::WcGarlic),
-            10 => Ok(MemoryType::WbGarlic),
-            _ => unreachable!(),
-        }
-    }
 }
