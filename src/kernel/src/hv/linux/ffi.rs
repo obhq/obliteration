@@ -14,7 +14,7 @@ extern "C" {
         len: u64,
         mem: *mut c_void,
     ) -> c_int;
-    pub fn kvm_create_vcpu(vm: c_int, id: c_int, fd: *mut c_int) -> c_int;
+    pub fn kvm_create_vcpu(vm: c_int, id: u32, fd: *mut c_int) -> c_int;
 
     pub fn kvm_run(vcpu: c_int) -> c_int;
     pub fn kvm_get_regs(vcpu: c_int, regs: *mut KvmRegs) -> c_int;

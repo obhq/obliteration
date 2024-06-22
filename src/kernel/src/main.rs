@@ -11,12 +11,13 @@ use crate::ee::native::NativeEngine;
 use crate::ee::EntryArg;
 use crate::errno::EEXIST;
 use crate::fs::{Fs, FsInitError, MkdirError, MountError, MountFlags, MountOpts, VPath, VPathBuf};
-use crate::hv::Hypervisor;
+use crate::hv::{Cpu, Hypervisor};
 use crate::kqueue::KernelQueueManager;
 use crate::log::{print, LOGGER};
 use crate::namedobj::NamedObjManager;
 use crate::net::NetManager;
 use crate::osem::OsemManager;
+use crate::pcpu::Pcpu;
 use crate::process::{ProcManager, VThread};
 use crate::rcmgr::RcMgr;
 use crate::regmgr::RegMgr;
@@ -63,6 +64,7 @@ mod log;
 mod namedobj;
 mod net;
 mod osem;
+mod pcpu;
 mod process;
 mod rcmgr;
 mod regmgr;
@@ -541,10 +543,13 @@ fn run(args: Args) -> Result<(), KernelError> {
 }
 
 fn cpu(exit: &AtomicBool, hv: &Hypervisor) -> Result<(), CpuError> {
+    // Initialize a virtual CPU.
     let cpu = hv
         .create_cpu()
         .map_err(|e| CpuError::CreateCpuFailed(Box::new(e)))?;
+    let mut cx = Pcpu::new(cpu.id());
 
+    // Enter dispatch loop.
     while !exit.load(Ordering::Relaxed) {}
 
     Ok(())
