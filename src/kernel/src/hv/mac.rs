@@ -1,30 +1,37 @@
 use std::ffi::{c_int, c_void};
+use std::num::NonZero;
 use std::ptr::null_mut;
 
 /// RAII struct for `hv_vm_create` and `hv_vm_destroy`.
 pub struct Vm(());
 
 impl Vm {
-    pub fn new() -> Result<Self, c_int> {
-        match unsafe { hv_vm_create(null_mut()) } {
-            0 => Ok(Self(())),
-            v => Err(v),
+    pub fn new() -> Result<Self, NonZero<c_int>> {
+        let ret = unsafe { hv_vm_create(null_mut()) };
+
+        match NonZero::new(ret) {
+            Some(ret) => Err(ret),
+            None => Ok(Self(())),
         }
     }
 
-    pub fn capability(&self, id: u64) -> Result<u64, c_int> {
+    pub fn capability(&self, id: u64) -> Result<u64, NonZero<c_int>> {
         let mut value = 0;
 
-        match unsafe { hv_capability(id, &mut value) } {
-            0 => Ok(value),
-            v => Err(v),
+        let ret = unsafe { hv_capability(id, &mut value) };
+
+        match NonZero::new(ret) {
+            Some(ret) => Err(ret),
+            None => Ok(value),
         }
     }
 
-    pub fn vm_map(&self, host: *mut c_void, guest: u64, len: usize) -> Result<(), c_int> {
-        match unsafe { hv_vm_map(host, guest, len, 1 | 2 | 4) } {
-            0 => Ok(()),
-            v => Err(v),
+    pub fn vm_map(&self, host: *mut c_void, guest: u64, len: usize) -> Result<(), NonZero<c_int>> {
+        let ret = unsafe { hv_vm_map(host, guest, len, 1 | 2 | 4) };
+
+        match NonZero::new(ret) {
+            Some(ret) => Err(ret),
+            None => Ok(()),
         }
     }
 }

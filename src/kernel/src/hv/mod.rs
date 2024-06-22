@@ -1,11 +1,17 @@
-pub use self::ram::*;
+#[cfg(target_os = "macos")]
+use std::num::NonZero;
 use thiserror::Error;
+
+pub use self::ram::*;
 
 #[cfg(target_os = "linux")]
 mod linux;
+
 #[cfg(target_os = "macos")]
 mod mac;
+
 mod ram;
+
 #[cfg(target_os = "windows")]
 mod win32;
 
@@ -190,13 +196,13 @@ pub enum HypervisorError {
 
     #[cfg(target_os = "macos")]
     #[error("couldn't create a VM ({0:#x})")]
-    CreateVmFailed(std::ffi::c_int),
+    CreateVmFailed(NonZero<std::ffi::c_int>),
 
     #[cfg(target_os = "macos")]
     #[error("couldn't get maximum number of CPU for a VM")]
-    GetMaxCpuFailed(std::ffi::c_int),
+    GetMaxCpuFailed(NonZero<std::ffi::c_int>),
 
     #[cfg(target_os = "macos")]
     #[error("couldn't map memory to the VM")]
-    MapRamFailed(std::ffi::c_int),
+    MapRamFailed(NonZero<std::ffi::c_int>),
 }
