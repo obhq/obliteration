@@ -27,7 +27,7 @@ pub struct VProc {
     cred: Arc<Ucred>,                      // p_ucred
     group: Gutex<Option<Arc<VProcGroup>>>, // p_pgrp
     abi: ProcAbi,                          // p_sysent
-    vm: Arc<VmSpace>,                      // p_vmspace
+    vm_space: Arc<VmSpace>,                      // p_vmspace
     sigacts: Gutex<SignalActs>,            // p_sigacts
     files: Arc<FileDesc>,                  // p_fd
     system_path: String,                   // p_randomized_path
@@ -64,14 +64,15 @@ impl VProc {
 
         let gg = GutexGroup::new();
         let limits = Limits::load()?;
-        let vm = VmSpace::new(&mut sys)?;
+        let vm_space = VmSpace::new(&mut sys)?;
+
         let vp = Arc::new(Self {
             id,
             threads: gg.spawn(Vec::new()),
             cred: Arc::new(cred),
             group: gg.spawn(None),
             abi: ProcAbi::new(sys),
-            vm,
+            vm_space,
             sigacts: gg.spawn(SignalActs::new()),
             files: FileDesc::new(root),
             system_path: system_path.into(),
@@ -115,7 +116,7 @@ impl VProc {
     }
 
     pub fn vm_space(&self) -> &Arc<VmSpace> {
-        &self.vm
+        &self.vm_space
     }
 
     pub fn sigacts_mut(&self) -> GutexWriteGuard<SignalActs> {
