@@ -1,3 +1,4 @@
+use super::ffi::{hv_capability, hv_vm_create, hv_vm_destroy, hv_vm_map};
 use std::ffi::{c_int, c_void};
 use std::num::NonZero;
 use std::ptr::null_mut;
@@ -17,7 +18,6 @@ impl Vm {
 
     pub fn capability(&self, id: u64) -> Result<u64, NonZero<c_int>> {
         let mut value = 0;
-
         let ret = unsafe { hv_capability(id, &mut value) };
 
         match NonZero::new(ret) {
@@ -44,11 +44,4 @@ impl Drop for Vm {
             panic!("hv_vm_destroy() fails with {status:#x}");
         }
     }
-}
-
-extern "C" {
-    fn hv_vm_create(config: *mut ()) -> c_int;
-    fn hv_vm_destroy() -> c_int;
-    fn hv_capability(capability: u64, value: *mut u64) -> c_int;
-    fn hv_vm_map(uva: *mut c_void, gpa: u64, size: usize, flags: u64) -> c_int;
 }

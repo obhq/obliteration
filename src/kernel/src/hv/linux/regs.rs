@@ -1,4 +1,5 @@
 #[repr(C)]
+#[derive(Default)]
 pub struct KvmRegs {
     rax: u64,
     rbx: u64,

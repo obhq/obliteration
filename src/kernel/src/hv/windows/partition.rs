@@ -1,11 +1,12 @@
+use super::cpu::WhpCpu;
 use std::ffi::c_void;
 use std::mem::size_of;
 use windows_sys::core::HRESULT;
 use windows_sys::Win32::System::Hypervisor::{
-    WHvCreatePartition, WHvDeletePartition, WHvMapGpaRange, WHvMapGpaRangeFlagExecute,
-    WHvMapGpaRangeFlagRead, WHvMapGpaRangeFlagWrite, WHvPartitionPropertyCodeProcessorCount,
-    WHvSetPartitionProperty, WHvSetupPartition, WHV_PARTITION_HANDLE, WHV_PARTITION_PROPERTY,
-    WHV_PARTITION_PROPERTY_CODE,
+    WHvCreatePartition, WHvCreateVirtualProcessor, WHvDeletePartition, WHvMapGpaRange,
+    WHvMapGpaRangeFlagExecute, WHvMapGpaRangeFlagRead, WHvMapGpaRangeFlagWrite,
+    WHvPartitionPropertyCodeProcessorCount, WHvSetPartitionProperty, WHvSetupPartition,
+    WHV_PARTITION_HANDLE, WHV_PARTITION_PROPERTY, WHV_PARTITION_PROPERTY_CODE,
 };
 
 /// Encapsulate a WHP partition.
@@ -23,7 +24,7 @@ impl Partition {
         }
     }
 
-    pub fn set_vcpu(&mut self, n: usize) -> Result<(), HRESULT> {
+    pub fn set_processor_count(&mut self, n: usize) -> Result<(), HRESULT> {
         let status = unsafe {
             self.set_property(
                 WHvPartitionPropertyCodeProcessorCount,
@@ -65,6 +66,16 @@ impl Partition {
             Err(status)
         } else {
             Ok(())
+        }
+    }
+
+    pub fn create_virtual_processor(&self, index: u32) -> Result<WhpCpu<'_>, HRESULT> {
+        let status = unsafe { WHvCreateVirtualProcessor(self.0, index, 0) };
+
+        if status < 0 {
+            Err(status)
+        } else {
+            Ok(WhpCpu::new(self.0, index))
         }
     }
 
