@@ -1,14 +1,18 @@
-pub use self::auth::*;
-pub use self::id::*;
-pub use self::privilege::*;
 use crate::errno::{Errno, EPERM};
 use crate::rcmgr::RcMgr;
 use macros::Errno;
 use thiserror::Error;
 
+pub use self::auth::*;
+pub use self::id::*;
+pub use self::privilege::*;
+
 mod auth;
 mod id;
 mod privilege;
+
+static SEE_OTHER_GIDS: bool = true;
+static SEE_OTHER_UIDS: bool = true;
 
 /// An implementation of `ucred` structure.
 #[derive(Debug, Clone)]
@@ -161,7 +165,36 @@ impl Ucred {
     ///
     /// See `cr_cansee` on the PS4 for a reference.
     pub fn can_see(&self, other: &Self) -> Result<(), CanSeeError> {
+        self.prison_check(other).map_err(|_e| todo!())?;
+
+        self.see_other_uids(other).map_err(|_e| todo!())?;
+
+        self.see_other_gids(other).map_err(|_e| todo!())?;
+
+        Ok(())
+    }
+
+    /// See `prison_check` on the PS4 for a reference.
+    pub fn prison_check(&self, other: &Self) -> Result<(), PrisonCheckError> {
         todo!()
+    }
+
+    /// See `cr_see_other_gids` on the PS4 for a reference.
+    pub fn see_other_uids(&self, other: &Self) -> Result<(), SeeOtherUidsError> {
+        if !SEE_OTHER_UIDS && self.real_uid != other.real_uid {
+            todo!()
+        }
+
+        Ok(())
+    }
+
+    /// See `cr_see_other_gids` on the PS4 for a reference.
+    pub fn see_other_gids(&self, other: &Self) -> Result<(), SeeOtherGidsError> {
+       if !SEE_OTHER_GIDS {
+            todo!()
+        }
+
+        Ok(())
     }
 
     /// See `priv_check_cred` on the PS4 for a reference.
@@ -195,6 +228,18 @@ impl Ucred {
 /// Represents an error when [`Ucred::can_see()`] fails.
 #[derive(Debug, Error, Errno)]
 pub enum CanSeeError {}
+
+/// Represents an error when [`Ucred::prison_check()`] fails.
+#[derive(Debug, Error, Errno)]
+pub enum PrisonCheckError {}
+
+/// Represents an error when [`Ucred::see_other_uids()`] fails.
+#[derive(Debug, Error, Errno)]
+pub enum SeeOtherUidsError {}
+
+/// Represents an error when [`Ucred::see_other_gids()`] fails.
+#[derive(Debug, Error, Errno)]
+pub enum SeeOtherGidsError {}
 
 /// Represents an error when [`Ucred::priv_check()`] fails.
 #[derive(Debug, Error, Errno)]

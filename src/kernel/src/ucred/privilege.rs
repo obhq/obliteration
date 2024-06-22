@@ -40,6 +40,12 @@ privileges! {
         /// Exceed system open files limit.
         #[allow(unused)]
         MAXFILES = 3,
+        /// Exempt bsd.seeothergids.
+        #[allow(unused)]
+        SEEOTHERGIDS = 59,
+        /// Exempt bsd.seeotheruids.
+        #[allow(unused)]
+        SEEOTHERUIDS = 60,
         /// Can call setlogin.
         PROC_SETLOGIN = 161,
         /// Override vnode DAC read perm.
