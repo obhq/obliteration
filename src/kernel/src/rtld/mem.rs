@@ -70,7 +70,7 @@ impl Memory {
             }
 
             // Get offset and length.
-            let start = base + prog.addr();
+            let start = prog.addr();
             let len = prog.aligned_size();
 
             if start & 0x3fff != 0 {
@@ -146,7 +146,7 @@ impl Memory {
 
         // TODO: Use separate name for our code and data.
         let mut pages = match proc.vm().mmap(
-            0,
+            base as _,
             len,
             Protections::empty(),
             name,
@@ -288,7 +288,7 @@ impl Memory {
         seg: usize,
     ) -> Result<UnprotectedSegment<'_>, UnprotectSegmentError> {
         let seg = &self.segments[seg];
-        let ptr = self.ptr.add(seg.start);
+        let ptr = seg.start as _;
         let len = seg.len;
         let prot = Protections::CPU_READ | Protections::CPU_WRITE;
 

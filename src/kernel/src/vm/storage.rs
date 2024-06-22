@@ -23,9 +23,18 @@ pub(super) struct Memory {
 impl Memory {
     #[cfg(unix)]
     pub fn new(addr: usize, len: usize) -> Result<Self, Error> {
-        use libc::{mmap, MAP_ANON, MAP_FAILED, MAP_PRIVATE, PROT_NONE};
+        use libc::{mmap, MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, PROT_NONE};
 
-        let addr = unsafe { mmap(addr as _, len, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0) };
+        let addr = unsafe {
+            mmap(
+                addr as _,
+                len,
+                PROT_NONE,
+                MAP_PRIVATE | MAP_ANON | (if addr != 0 { MAP_FIXED } else { 0 }),
+                -1,
+                0,
+            )
+        };
 
         if addr == MAP_FAILED {
             return Err(Error::last_os_error());
