@@ -27,7 +27,7 @@ pub struct VProc {
     cred: Arc<Ucred>,                      // p_ucred
     group: Gutex<Option<Arc<VProcGroup>>>, // p_pgrp
     abi: ProcAbi,                          // p_sysent
-    vm_space: Arc<VmSpace>,                      // p_vmspace
+    vm_space: Arc<VmSpace>,                // p_vmspace
     sigacts: Gutex<SignalActs>,            // p_sigacts
     files: Arc<FileDesc>,                  // p_fd
     system_path: String,                   // p_randomized_path
