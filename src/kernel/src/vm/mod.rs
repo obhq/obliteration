@@ -189,7 +189,7 @@ impl VmMgr {
         let flags: MappingFlags = i.args[4].try_into().unwrap();
         let start_phys_addr: usize = i.args[5].into();
 
-       td.proc().vm_space().mmap_dmem_internal(
+        td.proc().vm_space().mmap_dmem_internal(
             start_addr,
             len,
             mem_type,
