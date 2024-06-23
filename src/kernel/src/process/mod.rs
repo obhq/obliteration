@@ -9,12 +9,13 @@ use crate::signal::{
     SIG_IGN,
 };
 use crate::syscalls::{SysArg, SysErr, SysIn, SysOut, Syscalls};
-use crate::ucred::{AuthInfo, Privilege};
+use crate::sysent::ProcAbi;
+use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
 use crate::vm::MemoryManagerError;
 use bitflags::bitflags;
 use std::cmp::min;
 use std::collections::HashMap;
-use std::ffi::c_char;
+use std::ffi::{c_char, c_int};
 use std::mem::{size_of, transmute, zeroed};
 use std::num::NonZeroI32;
 use std::sync::atomic::{AtomicI32, Ordering};
@@ -53,12 +54,19 @@ pub struct ProcManager {
 }
 
 impl ProcManager {
-    pub fn new(fs: &Arc<Fs>, rc: &Arc<RcMgr>, sys: &mut Syscalls) -> Arc<Self> {
+    pub fn new(fs: &Arc<Fs>, rc: &Arc<RcMgr>, proc0: &Arc<VProc>, sys: &mut Syscalls) -> Arc<Self> {
+        // Setup process list.
+        let mut list = HashMap::new();
+        let id = proc0.id();
+
+        assert_eq!(id, Pid::KERNEL);
+        assert!(list.insert(id, Arc::downgrade(proc0)).is_none());
+
         // Register syscalls.
         let mgr = Arc::new(Self {
             fs: fs.clone(),
             rc: rc.clone(),
-            list: RwLock::default(),
+            list: RwLock::new(list),
         });
 
         sys.register(20, &mgr, Self::sys_getpid);
@@ -82,26 +90,35 @@ impl ProcManager {
     /// See `fork1` on the PS4 for a reference.
     pub fn spawn(
         &self,
+        abi: ProcAbi,
         auth: AuthInfo,
         budget_id: usize,
         budget_ptype: ProcType,
         dmem_container: DmemContainer,
         root: Arc<Vnode>,
         system_path: impl Into<String>,
-        sys: Syscalls,
     ) -> Result<Arc<VProc>, SpawnError> {
         use std::collections::hash_map::Entry;
+
+        // Get credential.
+        let cred = if auth.caps.is_system() {
+            // TODO: The groups will be copied from the parent process, which is SceSysCore.
+            Ucred::new(Uid::ROOT, Uid::ROOT, vec![Gid::ROOT], auth)
+        } else {
+            let uid = Uid::new(1).unwrap();
+            Ucred::new(uid, uid, vec![Gid::new(1).unwrap()], auth)
+        };
 
         // Create the process.
         let proc = VProc::new(
             Self::new_id().into(),
-            auth,
-            budget_id,
-            budget_ptype,
+            Arc::new(cred),
+            abi,
+            Some(budget_id),
+            Some(budget_ptype),
             dmem_container,
             root,
             system_path,
-            sys,
         )?;
 
         // Add to list.
@@ -570,7 +587,7 @@ impl ProcManager {
 
         // Set output size and process type.
         unsafe { (*info).len = (*info).nbuf };
-        unsafe { (*info).ptype = td.proc().budget_ptype() };
+        unsafe { (*info).ptype = td.proc().budget_ptype().map(|v| v as c_int).unwrap_or(-1) };
 
         // Set flags.
         let cred = td.proc().cred();
@@ -754,7 +771,7 @@ struct RtPrio {
 struct ProcTypeInfo {
     nbuf: usize,
     len: usize,
-    ptype: ProcType,
+    ptype: c_int,
     flags: ProcTypeInfoFlags,
 }
 

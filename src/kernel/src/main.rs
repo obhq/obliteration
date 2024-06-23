@@ -18,14 +18,16 @@ use crate::namedobj::NamedObjManager;
 use crate::net::NetManager;
 use crate::osem::OsemManager;
 use crate::pcpu::Pcpu;
-use crate::process::{ProcManager, VThread};
+use crate::process::{Pid, ProcManager, VProc, VThread};
 use crate::rcmgr::RcMgr;
 use crate::regmgr::RegMgr;
 use crate::rtld::{ExecError, LoadFlags, ModuleFlags, RuntimeLinker};
+use crate::sched::Scheduler;
 use crate::shm::SharedMemoryManager;
 use crate::signal::SignalManager;
 use crate::syscalls::Syscalls;
 use crate::sysctl::Sysctl;
+use crate::sysent::ProcAbi;
 use crate::time::TimeManager;
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use crate::umtx::UmtxManager;
@@ -69,6 +71,7 @@ mod process;
 mod rcmgr;
 mod regmgr;
 mod rtld;
+mod sched;
 mod shm;
 mod signal;
 mod syscalls;
@@ -222,9 +225,21 @@ fn run(args: Args) -> Result<(), KernelError> {
     // Initialize foundations.
     let hv = Arc::new(Hypervisor::new().map_err(KernelError::CreateHypervisorFailed)?);
     let mut sys = Syscalls::new();
+    let sched = Arc::new(Scheduler::new());
     let vm = VmMgr::new(hv.clone(), &mut sys);
     let fs = Fs::new(args.system, &cred, &mut sys).map_err(KernelError::FilesystemInitFailed)?;
     let rc = RcMgr::new();
+    let proc0 = VProc::new(
+        Pid::KERNEL,
+        cred.clone(),
+        ProcAbi::new(None),
+        None,
+        None,
+        DmemContainer::Zero,
+        fs.root(),
+        "",
+    )
+    .map_err(KernelError::CreateProc0Failed)?;
 
     // TODO: Check permission of /mnt on the PS4.
     let path = vpath!("/mnt");
@@ -408,24 +423,25 @@ fn run(args: Args) -> Result<(), KernelError> {
     NamedObjManager::new(&mut sys);
     OsemManager::new(&mut sys);
     UmtxManager::new(&mut sys);
-    let pmgr = ProcManager::new(&fs, &rc, &mut sys);
+    let pmgr = ProcManager::new(&fs, &rc, &proc0, &mut sys);
 
     // Initialize runtime linker.
     let ee = NativeEngine::new();
     let ld = RuntimeLinker::new(&fs, &ee, &mut sys);
 
     // TODO: Get correct budget name from the PS4.
+    let sys = Arc::new(sys);
     let budget_id = budget.create(Budget::new("big app", ProcType::BigApp));
     let proc_root = fs.lookup(proc_root, true, None).unwrap();
     let proc = pmgr
         .spawn(
+            ProcAbi::new(Some(sys)),
             auth,
             budget_id,
             ProcType::BigApp,
             DmemContainer::One, // See sys_budget_set on the PS4.
             proc_root,
             system_component,
-            sys,
         )
         .map_err(KernelError::CreateProcessFailed)?;
 
@@ -459,7 +475,7 @@ fn run(args: Args) -> Result<(), KernelError> {
     let mut flags = LoadFlags::UNK1;
     let path = lib_path.join("libkernel.sprx").unwrap();
 
-    if proc.budget_ptype() == ProcType::BigApp {
+    if proc.budget_ptype().is_some_and(|v| v == ProcType::BigApp) {
         flags |= LoadFlags::BIG_APP;
     }
 
@@ -522,8 +538,10 @@ fn run(args: Args) -> Result<(), KernelError> {
             let tx = tx.clone();
             let exit = &exit;
             let hv = hv.as_ref();
+            let sched = sched.as_ref();
+            let proc0 = &proc0;
 
-            s.spawn(move || tx.send(cpu(&exit, &hv)));
+            s.spawn(move || tx.send(cpu(exit, hv, sched, proc0)));
         }
 
         drop(tx);
@@ -542,15 +560,23 @@ fn run(args: Args) -> Result<(), KernelError> {
     .map_err(KernelError::CpuError)
 }
 
-fn cpu(exit: &AtomicBool, hv: &Hypervisor) -> Result<(), CpuError> {
+fn cpu(
+    exit: &AtomicBool,
+    hv: &Hypervisor,
+    sched: &Scheduler,
+    proc0: &Arc<VProc>,
+) -> Result<(), CpuError> {
     // Initialize a virtual CPU.
     let cpu = hv
         .create_cpu()
         .map_err(|e| CpuError::CreateCpuFailed(Box::new(e)))?;
-    let mut cx = Pcpu::new(cpu.id());
+    let idle = Arc::new(VThread::new(proc0.clone())); // TODO: Use a proper implementation.
+    let mut cx = Pcpu::new(cpu.id(), Arc::downgrade(&idle));
 
     // Enter dispatch loop.
-    while !exit.load(Ordering::Relaxed) {}
+    while !exit.load(Ordering::Relaxed) {
+        let td = sched.choose(&cx);
+    }
 
     Ok(())
 }
@@ -621,6 +647,9 @@ enum KernelError {
 
     #[error("filesystem initialization failed")]
     FilesystemInitFailed(#[source] FsInitError),
+
+    #[error("couldn't create proc0")]
+    CreateProc0Failed(#[source] self::process::SpawnError),
 
     #[error("couldn't create {0}")]
     CreateDirectoryFailed(VPathBuf, #[source] MkdirError),

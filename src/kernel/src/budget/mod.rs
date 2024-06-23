@@ -41,7 +41,7 @@ impl BudgetManager {
         if td.cred().is_system() || pid == -1 || pid == td.proc().id() {
             if pid == -1 || pid == td.proc().id() {
                 // Lookup budget.
-                let id = td.proc().budget_id();
+                let id = td.proc().budget_id().ok_or(SysErr::Raw(ENOENT))?;
 
                 match self.budgets.lock().unwrap().get_mut(id, Some(0x2000)) {
                     Some(v) => Ok((v.data().ptype as i32).into()),

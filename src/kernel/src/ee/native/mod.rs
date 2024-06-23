@@ -445,6 +445,7 @@ impl NativeEngine {
             .proc()
             .abi()
             .syscalls()
+            .unwrap()
             .exec(i, o)
     }
 

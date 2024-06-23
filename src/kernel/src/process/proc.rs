@@ -6,9 +6,8 @@ use crate::budget::ProcType;
 use crate::dev::DmemContainer;
 use crate::fs::Vnode;
 use crate::idt::Idt;
-use crate::syscalls::Syscalls;
 use crate::sysent::ProcAbi;
-use crate::ucred::{AuthInfo, Gid, Ucred, Uid};
+use crate::ucred::Ucred;
 use crate::vm::VmSpace;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use std::any::Any;
@@ -17,9 +16,6 @@ use std::sync::atomic::AtomicPtr;
 use std::sync::Arc;
 
 /// An implementation of `proc` structure.
-///
-/// Currently this struct represent the main application process. We will support multiple processes
-/// once we have migrated the PS4 code to run inside a virtual machine.
 #[derive(Debug)]
 pub struct VProc {
     id: Pid,                               // p_pid
@@ -35,8 +31,8 @@ pub struct VProc {
     comm: Gutex<Option<String>>,           // p_comm
     bin: Gutex<Option<Binaries>>,          // p_dynlib?
     objects: Gutex<Idt<Arc<dyn Any + Send + Sync>>>,
-    budget_id: usize,
-    budget_ptype: ProcType,
+    budget_id: Option<usize>,
+    budget_ptype: Option<ProcType>,
     dmem_container: Gutex<DmemContainer>,
     app_info: AppInfo,
     ptc: u64,
@@ -44,34 +40,25 @@ pub struct VProc {
 }
 
 impl VProc {
-    pub(super) fn new(
+    pub fn new(
         id: Pid,
-        auth: AuthInfo,
-        budget_id: usize,
-        budget_ptype: ProcType,
+        cred: Arc<Ucred>,
+        abi: ProcAbi,
+        budget_id: Option<usize>,
+        budget_ptype: Option<ProcType>,
         dmem_container: DmemContainer,
         root: Arc<Vnode>,
         system_path: impl Into<String>,
-        mut sys: Syscalls,
     ) -> Result<Arc<Self>, SpawnError> {
-        let cred = if auth.caps.is_system() {
-            // TODO: The groups will be copied from the parent process, which is SceSysCore.
-            Ucred::new(Uid::ROOT, Uid::ROOT, vec![Gid::ROOT], auth)
-        } else {
-            let uid = Uid::new(1).unwrap();
-            Ucred::new(uid, uid, vec![Gid::new(1).unwrap()], auth)
-        };
-
         let gg = GutexGroup::new();
         let limits = Limits::load()?;
         let vm_space = VmSpace::new()?;
-
         let vp = Arc::new(Self {
             id,
             threads: gg.spawn(Vec::new()),
-            cred: Arc::new(cred),
+            cred,
             group: gg.spawn(None),
-            abi: ProcAbi::new(sys),
+            abi,
             vm_space,
             sigacts: gg.spawn(SignalActs::new()),
             files: FileDesc::new(root),
@@ -151,11 +138,11 @@ impl VProc {
         self.objects.write()
     }
 
-    pub fn budget_id(&self) -> usize {
+    pub fn budget_id(&self) -> Option<usize> {
         self.budget_id
     }
 
-    pub fn budget_ptype(&self) -> ProcType {
+    pub fn budget_ptype(&self) -> Option<ProcType> {
         self.budget_ptype
     }
 

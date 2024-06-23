@@ -2,12 +2,13 @@ use crate::syscalls::SysOut;
 use std::num::NonZeroI32;
 
 /// Unique identifier of a process.
-///
-/// Unlike FreeBSD, our implementation does not allow zero value for PID. That mean we don't have
-/// `proc0` to represent the kernel itself.
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Pid(i32);
+
+impl Pid {
+    pub const KERNEL: Self = Self(0);
+}
 
 impl From<NonZeroI32> for Pid {
     fn from(value: NonZeroI32) -> Self {
