@@ -429,8 +429,8 @@ fn run(args: Args) -> Result<(), KernelError> {
 
     info!(
         "Application stack: {:p}:{:p}",
-        proc.vm().stack().start(),
-        proc.vm().stack().end()
+        proc.vm_space().stack().start(),
+        proc.vm_space().stack().end()
     );
 
     // Load eboot.bin.
@@ -501,7 +501,7 @@ fn run(args: Args) -> Result<(), KernelError> {
     info!("Starting application.");
 
     // TODO: Check how this constructed.
-    let stack = proc.vm().stack();
+    let stack = proc.vm_space().stack();
 
     unsafe { main.start(stack.start(), stack.len(), entry) }?;
 

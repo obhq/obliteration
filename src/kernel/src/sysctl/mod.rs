@@ -5,7 +5,7 @@ use crate::errno::{
 };
 use crate::process::VThread;
 use crate::syscalls::{SysErr, SysIn, SysOut, Syscalls};
-use crate::vm::Vm;
+use crate::vm::VmSpace;
 use std::any::Any;
 use std::cmp::min;
 use std::ptr::null_mut;
@@ -420,7 +420,7 @@ impl Sysctl {
         _: usize,
         req: &mut SysctlReq,
     ) -> Result<(), SysErr> {
-        let stack = req.td.proc().vm().stack().end() as usize;
+        let stack = req.td.proc().vm_space().stack().end() as usize;
         let value = stack.to_ne_bytes();
 
         req.write(&value)
@@ -1106,7 +1106,7 @@ static HW_PAGESIZE: Oid = Oid {
     number: Sysctl::HW_PAGESIZE,
     kind: Sysctl::CTLFLAG_RD | Sysctl::CTLFLAG_MPSAFE | Sysctl::CTLFLAG_CAPRD | Sysctl::CTLTYPE_INT,
     arg1: None,
-    arg2: Vm::VIRTUAL_PAGE_SIZE,
+    arg2: VmSpace::VIRTUAL_PAGE_SIZE,
     name: "pagesize",
     handler: Some(Sysctl::handle_int),
     fmt: "I",

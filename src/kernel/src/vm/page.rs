@@ -1,14 +1,14 @@
-use super::Vm;
+use super::VmSpace;
 
 /// Encapsulated one or more virtual pages.
 pub struct VPages<'a> {
-    mm: &'a Vm,
+    mm: &'a VmSpace,
     ptr: *mut u8,
     len: usize,
 }
 
 impl<'a> VPages<'a> {
-    pub(super) fn new(mm: &'a Vm, ptr: *mut u8, len: usize) -> Self {
+    pub(super) fn new(mm: &'a VmSpace, ptr: *mut u8, len: usize) -> Self {
         Self { mm, ptr, len }
     }
 

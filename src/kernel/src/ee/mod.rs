@@ -96,7 +96,7 @@ impl EntryArg {
         pin.vec.push(21); // AT_PAGESIZESLEN
         pin.vec.push(size_of_val(&pin.pagesizes));
         pin.vec.push(23); // AT_STACKPROT
-        pin.vec.push(pin.vp.vm().stack().prot().bits() as _);
+        pin.vec.push(pin.vp.vm_space().stack().prot().bits() as _);
         pin.vec.push(0); // AT_NULL
         pin.vec.push(0);
 
