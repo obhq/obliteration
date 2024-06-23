@@ -10,6 +10,7 @@ use thiserror::Error;
 
 /// Implementation of [`Cpu`] for KVM.
 pub struct KvmCpu<'a> {
+    id: u32,
     fd: OwnedFd,
     cx: (*mut KvmRun, usize),
     vm: PhantomData<&'a OwnedFd>,
@@ -19,8 +20,9 @@ impl<'a> KvmCpu<'a> {
     /// # Safety
     /// - `cx` cannot be null and must be obtained from `mmap` on `fd`.
     /// - `len` must be the same value that used on `mmap`.
-    pub unsafe fn new(fd: OwnedFd, cx: *mut KvmRun, len: usize) -> Self {
+    pub unsafe fn new(id: u32, fd: OwnedFd, cx: *mut KvmRun, len: usize) -> Self {
         Self {
+            id,
             fd,
             cx: (cx, len),
             vm: PhantomData,
@@ -41,6 +43,10 @@ impl<'a> Drop for KvmCpu<'a> {
 impl<'a> Cpu for KvmCpu<'a> {
     type GetStatesErr = GetStatesError;
     type SetStatesErr = SetStatesError;
+
+    fn id(&self) -> usize {
+        self.id.try_into().unwrap()
+    }
 
     fn get_states(&mut self, states: &mut CpuStates) -> Result<(), Self::GetStatesErr> {
         use std::io::Error;

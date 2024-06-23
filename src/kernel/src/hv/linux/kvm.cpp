@@ -72,7 +72,7 @@ extern "C" int kvm_get_vcpu_mmap_size(int kvm)
     return ioctl(kvm, KVM_GET_VCPU_MMAP_SIZE, 0);
 }
 
-extern "C" int kvm_create_vcpu(int vm, int id, int *fd)
+extern "C" int kvm_create_vcpu(int vm, uint32_t id, int *fd)
 {
     auto vcpu = ioctl(vm, KVM_CREATE_VCPU, id);
 

@@ -44,7 +44,7 @@ impl Platform for Hf {
     type Cpu<'a> = HfCpu<'a>;
     type CpuErr = HfCpuError;
 
-    fn create_cpu(&self, _: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {
+    fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {
         let mut instance = 0;
         let ret = unsafe { hv_vcpu_create(&mut instance, 0) };
 
@@ -52,7 +52,7 @@ impl Platform for Hf {
             return Err(HfCpuError::CreateVcpuFailed(e));
         }
 
-        Ok(HfCpu::new(instance))
+        Ok(HfCpu::new(id, instance))
     }
 }
 

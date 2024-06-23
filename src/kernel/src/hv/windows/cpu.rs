@@ -34,6 +34,10 @@ impl<'a> Cpu for WhpCpu<'a> {
     type GetStatesErr = GetStatesError;
     type SetStatesErr = SetStatesError;
 
+    fn id(&self) -> usize {
+        self.index.try_into().unwrap()
+    }
+
     fn get_states(&mut self, states: &mut CpuStates) -> Result<(), Self::GetStatesErr> {
         todo!()
     }

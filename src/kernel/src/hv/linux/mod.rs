@@ -134,7 +134,7 @@ impl Platform for Kvm {
             return Err(KvmCpuError::GetKvmRunFailed(Error::last_os_error()));
         }
 
-        Ok(unsafe { KvmCpu::new(vcpu, cx.cast(), self.vcpu_mmap_size) })
+        Ok(unsafe { KvmCpu::new(id, vcpu, cx.cast(), self.vcpu_mmap_size) })
     }
 }
 

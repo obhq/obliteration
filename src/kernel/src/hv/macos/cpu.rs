@@ -5,13 +5,15 @@ use thiserror::Error;
 
 /// Implementation of [`Cpu`] for Hypervisor Framework.
 pub struct HfCpu<'a> {
+    id: usize,
     instance: u64,
     vm: PhantomData<&'a ()>,
 }
 
 impl<'a> HfCpu<'a> {
-    pub fn new(instance: u64) -> Self {
+    pub fn new(id: usize, instance: u64) -> Self {
         Self {
+            id,
             instance,
             vm: PhantomData,
         }
@@ -31,6 +33,10 @@ impl<'a> Drop for HfCpu<'a> {
 impl<'a> Cpu for HfCpu<'a> {
     type GetStatesErr = GetStatesError;
     type SetStatesErr = SetStatesError;
+
+    fn id(&self) -> usize {
+        self.id
+    }
 
     fn get_states(&mut self, states: &mut CpuStates) -> Result<(), Self::GetStatesErr> {
         todo!()
