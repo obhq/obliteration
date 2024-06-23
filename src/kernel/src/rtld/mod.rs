@@ -571,7 +571,11 @@ impl RuntimeLinker {
             None => todo!("sys_dynlib_load_prx with relative path"),
         };
 
-        if td.proc().budget_ptype() == ProcType::BigApp {
+        if td
+            .proc()
+            .budget_ptype()
+            .is_some_and(|v| v == ProcType::BigApp)
+        {
             flags |= 0x01;
         }
 
