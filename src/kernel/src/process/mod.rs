@@ -13,15 +13,17 @@ use crate::sysent::ProcAbi;
 use crate::ucred::{AuthInfo, Gid, Privilege, Ucred, Uid};
 use crate::vm::MemoryManagerError;
 use bitflags::bitflags;
+use gmtx::{Gutex, GutexGroup};
 use std::cmp::min;
 use std::collections::HashMap;
 use std::ffi::{c_char, c_int};
 use std::mem::{size_of, transmute, zeroed};
 use std::num::NonZeroI32;
-use std::sync::atomic::{AtomicI32, Ordering};
-use std::sync::{Arc, RwLock, Weak};
+use std::sync::atomic::AtomicI32;
+use std::sync::{Arc, Weak};
 use thiserror::Error;
 
+pub use self::active::*;
 pub use self::appinfo::*;
 pub use self::binary::*;
 pub use self::cpuset::*;
@@ -33,7 +35,9 @@ pub use self::rlimit::*;
 pub use self::session::*;
 pub use self::signal::*;
 pub use self::thread::*;
+pub use self::zombie::*;
 
+mod active;
 mod appinfo;
 mod binary;
 mod cpuset;
@@ -45,28 +49,41 @@ mod rlimit;
 mod session;
 mod signal;
 mod thread;
+mod zombie;
 
 /// Manage all PS4 processes.
 pub struct ProcManager {
     fs: Arc<Fs>,
     rc: Arc<RcMgr>,
-    list: RwLock<HashMap<Pid, Weak<VProc>>>, // pidhashtbl
+    procs: Gutex<HashMap<Pid, Weak<VProc>>>, // allproc + pidhashtbl + zombproc
+    sessions: Gutex<HashMap<Pid, Weak<VSession>>>,
+    groups: Gutex<HashMap<Pid, Weak<VProcGroup>>>, // pgrphashtbl
+    last_pid: Gutex<i32>,                          // lastpid
+    random_pid: Gutex<bool>,                       // randompid
 }
 
 impl ProcManager {
+    const PID_MAX: i32 = 99999;
+
     pub fn new(fs: &Arc<Fs>, rc: &Arc<RcMgr>, proc0: &Arc<VProc>, sys: &mut Syscalls) -> Arc<Self> {
         // Setup process list.
         let mut list = HashMap::new();
+        let last_pid = 0;
         let id = proc0.id();
 
-        assert_eq!(id, Pid::KERNEL);
+        assert_eq!(id, last_pid);
         assert!(list.insert(id, Arc::downgrade(proc0)).is_none());
 
         // Register syscalls.
+        let gg = GutexGroup::new();
         let mgr = Arc::new(Self {
             fs: fs.clone(),
             rc: rc.clone(),
-            list: RwLock::new(list),
+            procs: gg.spawn(list),
+            sessions: gg.spawn(HashMap::new()),
+            groups: gg.spawn(HashMap::new()),
+            last_pid: gg.spawn(last_pid),
+            random_pid: gg.spawn(false),
         });
 
         sys.register(20, &mgr, Self::sys_getpid);
@@ -97,6 +114,7 @@ impl ProcManager {
         dmem_container: DmemContainer,
         root: Arc<Vnode>,
         system_path: impl Into<String>,
+        kernel: bool,
     ) -> Result<Arc<VProc>, SpawnError> {
         use std::collections::hash_map::Entry;
 
@@ -110,8 +128,9 @@ impl ProcManager {
         };
 
         // Create the process.
+        let pid = self.alloc_pid(kernel);
         let proc = VProc::new(
-            Self::new_id().into(),
+            pid,
             Arc::new(cred),
             abi,
             Some(budget_id),
@@ -123,7 +142,7 @@ impl ProcManager {
 
         // Add to list.
         let weak = Arc::downgrade(&proc);
-        let mut list = self.list.write().unwrap();
+        let mut list = self.procs.write();
 
         match list.entry(proc.id()) {
             Entry::Occupied(mut e) => {
@@ -493,24 +512,21 @@ impl ProcManager {
 
     fn sys_get_authinfo(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         // Get arguments.
-        let pid: Option<NonZeroI32> = i.args[0].try_into().unwrap();
+        let pid: Pid = i.args[0].into();
         let buf: *mut AuthInfo = i.args[1].into();
 
         // Get target process.
-        let proc = match pid {
-            Some(pid) => {
-                let p = self
-                    .list
-                    .read()
-                    .unwrap()
-                    .get(&pid.into())
-                    .and_then(|p| p.upgrade())
-                    .ok_or(SysErr::Raw(ESRCH))?;
-
-                // TODO: Implement p_cansee check.
-                p
-            }
-            None => td.proc().clone(),
+        let proc = if pid != 0 {
+            let p = self
+                .procs
+                .read()
+                .get(&pid)
+                .and_then(|p| p.upgrade())
+                .ok_or(SysErr::Raw(ESRCH))?;
+            td.can_see(&p)?;
+            p
+        } else {
+            td.proc().clone()
         };
 
         // Check privilege.
@@ -672,18 +688,13 @@ impl ProcManager {
         // TODO: Use a proper implementation.
         match pid {
             Some(pid) => {
-                let proc = self
-                    .list
-                    .read()
-                    .unwrap()
-                    .get(&pid)
-                    .and_then(|p| p.upgrade())?;
+                let proc = self.procs.read().get(&pid).and_then(|p| p.upgrade())?;
                 let threads = proc.threads();
 
                 threads.iter().find(|&t| t.id() == tid).cloned()
             }
             None => {
-                let procs = self.list.read().unwrap();
+                let procs = self.procs.read();
 
                 for p in procs.values().map(|p| p.upgrade()).filter_map(|i| i) {
                     let threads = p.threads();
@@ -699,14 +710,49 @@ impl ProcManager {
         }
     }
 
-    fn new_id() -> NonZeroI32 {
-        let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
+    /// See `fork_findpid` on the PS4 for a reference.
+    fn alloc_pid(&self, high: bool) -> Pid {
+        // Get starting PID.
+        let mut last_pid = self.last_pid.write();
+        let mut pid = *last_pid + 1;
 
-        // Just in case if the user manage to spawn 2,147,483,647 threads in a single run so we
-        // don't encountered a weird bug.
-        assert!(id > 0);
+        if !high {
+            if *self.random_pid.read() {
+                todo!("randompid")
+            }
+        } else if pid < 10 {
+            pid = 10;
+        }
 
-        NonZeroI32::new(id).unwrap()
+        // Find unused PID. We use a different algorithm here. The PS4 will check every processes,
+        // groups and sessions to see if the PID is not in use. The problem with this is it require
+        // a global `pidchecked` variable to keep track the boundary it has checked, which is
+        // error-prone.
+        let procs = self.procs.read();
+        let sessions = self.sessions.read();
+        let groups = self.groups.read();
+
+        loop {
+            if pid >= Self::PID_MAX {
+                todo!("pid >= PID_MAX");
+            }
+
+            if !procs.contains_key(&pid)
+                && !sessions.contains_key(&pid)
+                && !groups.contains_key(&pid)
+            {
+                break;
+            }
+
+            pid += 1;
+        }
+
+        // Update last PID.
+        if !high {
+            *last_pid = pid;
+        }
+
+        Pid::new(pid).unwrap()
     }
 }
 
