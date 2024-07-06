@@ -442,6 +442,7 @@ fn run(args: Args) -> Result<(), KernelError> {
             DmemContainer::One, // See sys_budget_set on the PS4.
             proc_root,
             system_component,
+            true, // TODO: Change to false when we switched to run /mini-syscore.elf.
         )
         .map_err(KernelError::CreateProcessFailed)?;
 

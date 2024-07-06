@@ -1,6 +1,6 @@
 use super::{
-    AppInfo, Binaries, FileDesc, Limits, Pid, ResourceLimit, ResourceType, SignalActs, SpawnError,
-    VProcGroup, VThread,
+    ActiveProc, AppInfo, Binaries, FileDesc, Limits, Pid, ResourceLimit, ResourceType, SignalActs,
+    SpawnError, VProcGroup, VThread, ZombieProc,
 };
 use crate::budget::ProcType;
 use crate::dev::DmemContainer;
@@ -19,6 +19,7 @@ use std::sync::Arc;
 #[derive(Debug)]
 pub struct VProc {
     id: Pid,                               // p_pid
+    state: Gutex<ProcState>,               // p_state
     threads: Gutex<Vec<Arc<VThread>>>,     // p_threads
     cred: Arc<Ucred>,                      // p_ucred
     group: Gutex<Option<Arc<VProcGroup>>>, // p_pgrp
@@ -55,6 +56,7 @@ impl VProc {
         let vm_space = VmSpace::new()?;
         let vp = Arc::new(Self {
             id,
+            state: gg.spawn(ProcState::Active(ActiveProc::new())),
             threads: gg.spawn(Vec::new()),
             cred,
             group: gg.spawn(None),
@@ -165,4 +167,11 @@ impl VProc {
     pub fn uptc(&self) -> &AtomicPtr<u8> {
         &self.uptc
     }
+}
+
+/// State of [`VProc`].
+#[derive(Debug)]
+pub enum ProcState {
+    Active(ActiveProc), // PRS_NORMAL
+    Zombie(ZombieProc), // PRS_ZOMBIE
 }

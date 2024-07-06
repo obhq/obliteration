@@ -1,5 +1,5 @@
-use crate::syscalls::SysOut;
-use std::num::NonZeroI32;
+use crate::syscalls::{SysArg, SysOut};
+use std::borrow::Borrow;
 
 /// Unique identifier of a process.
 #[repr(transparent)]
@@ -8,11 +8,27 @@ pub struct Pid(i32);
 
 impl Pid {
     pub const KERNEL: Self = Self(0);
+
+    /// Returns [`None`] if `v` is negative.
+    pub const fn new(v: i32) -> Option<Self> {
+        if v >= 0 {
+            Some(Self(v))
+        } else {
+            None
+        }
+    }
 }
 
-impl From<NonZeroI32> for Pid {
-    fn from(value: NonZeroI32) -> Self {
-        Self(value.get())
+impl From<SysArg> for Pid {
+    fn from(value: SysArg) -> Self {
+        // We want to catch when the PS4 send an unexpected PID instead of silently return an error.
+        Pid::new(value.try_into().unwrap()).unwrap()
+    }
+}
+
+impl Borrow<i32> for Pid {
+    fn borrow(&self) -> &i32 {
+        &self.0
     }
 }
 
