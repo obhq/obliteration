@@ -18,7 +18,7 @@ use crate::namedobj::NamedObjManager;
 use crate::net::NetManager;
 use crate::osem::OsemManager;
 use crate::pcpu::Pcpu;
-use crate::process::{Pid, ProcManager, VProc, VThread};
+use crate::process::{ProcManager, ProcManagerError, VThread};
 use crate::rcmgr::RcMgr;
 use crate::regmgr::RegMgr;
 use crate::rtld::{ExecError, LoadFlags, ModuleFlags, RuntimeLinker};
@@ -55,6 +55,7 @@ mod dev;
 mod dmem;
 mod ee;
 mod errno;
+mod event;
 mod fs;
 mod hv;
 mod idps;
@@ -74,6 +75,7 @@ mod rtld;
 mod sched;
 mod shm;
 mod signal;
+mod subsystem;
 mod syscalls;
 mod sysctl;
 mod sysent;
@@ -229,17 +231,8 @@ fn run(args: Args) -> Result<(), KernelError> {
     let vm = VmMgr::new(hv.clone(), &mut sys);
     let fs = Fs::new(args.system, &cred, &mut sys).map_err(KernelError::FilesystemInitFailed)?;
     let rc = RcMgr::new();
-    let proc0 = VProc::new(
-        Pid::KERNEL,
-        cred.clone(),
-        ProcAbi::new(None),
-        None,
-        None,
-        DmemContainer::Zero,
-        fs.root(),
-        "",
-    )
-    .map_err(KernelError::CreateProc0Failed)?;
+    let pmgr = ProcManager::new(&cred, &fs, &rc, &mut sys)
+        .map_err(KernelError::CreateProcManagerFailed)?;
 
     // TODO: Check permission of /mnt on the PS4.
     let path = vpath!("/mnt");
@@ -423,7 +416,6 @@ fn run(args: Args) -> Result<(), KernelError> {
     NamedObjManager::new(&mut sys);
     OsemManager::new(&mut sys);
     UmtxManager::new(&mut sys);
-    let pmgr = ProcManager::new(&fs, &rc, &proc0, &mut sys);
 
     // Initialize runtime linker.
     let ee = NativeEngine::new();
@@ -540,9 +532,9 @@ fn run(args: Args) -> Result<(), KernelError> {
             let exit = &exit;
             let hv = hv.as_ref();
             let sched = sched.as_ref();
-            let proc0 = &proc0;
+            let pmgr = pmgr.as_ref();
 
-            s.spawn(move || tx.send(cpu(exit, hv, sched, proc0)));
+            s.spawn(move || tx.send(cpu(exit, hv, sched, pmgr)));
         }
 
         drop(tx);
@@ -565,13 +557,13 @@ fn cpu(
     exit: &AtomicBool,
     hv: &Hypervisor,
     sched: &Scheduler,
-    proc0: &Arc<VProc>,
+    pmgr: &ProcManager,
 ) -> Result<(), CpuError> {
     // Initialize a virtual CPU.
     let cpu = hv
         .create_cpu()
         .map_err(|e| CpuError::CreateCpuFailed(Box::new(e)))?;
-    let idle = Arc::new(VThread::new(proc0.clone())); // TODO: Use a proper implementation.
+    let idle = Arc::new(VThread::new(pmgr.proc0().clone())); // TODO: Use a proper implementation.
     let mut cx = Pcpu::new(cpu.id(), Arc::downgrade(&idle));
 
     // Enter dispatch loop.
@@ -649,8 +641,8 @@ enum KernelError {
     #[error("filesystem initialization failed")]
     FilesystemInitFailed(#[source] FsInitError),
 
-    #[error("couldn't create proc0")]
-    CreateProc0Failed(#[source] self::process::SpawnError),
+    #[error("couldn't create a process manager")]
+    CreateProcManagerFailed(#[source] ProcManagerError),
 
     #[error("couldn't create {0}")]
     CreateDirectoryFailed(VPathBuf, #[source] MkdirError),

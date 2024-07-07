@@ -1,6 +1,7 @@
 use crate::budget::ProcType;
 use crate::dev::DmemContainer;
 use crate::errno::{EINVAL, ENAMETOOLONG, EPERM, ERANGE, ESRCH};
+use crate::event::{Event, EventSet};
 use crate::fs::{Fs, Vnode};
 use crate::info;
 use crate::rcmgr::RcMgr;
@@ -20,7 +21,7 @@ use std::ffi::{c_char, c_int};
 use std::mem::{size_of, transmute, zeroed};
 use std::num::NonZeroI32;
 use std::sync::atomic::AtomicI32;
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, RwLockWriteGuard, Weak};
 use thiserror::Error;
 
 pub use self::active::*;
@@ -55,35 +56,60 @@ mod zombie;
 pub struct ProcManager {
     fs: Arc<Fs>,
     rc: Arc<RcMgr>,
+    proc0: Arc<VProc>,                       // proc0
     procs: Gutex<HashMap<Pid, Weak<VProc>>>, // allproc + pidhashtbl + zombproc
     sessions: Gutex<HashMap<Pid, Weak<VSession>>>,
     groups: Gutex<HashMap<Pid, Weak<VProcGroup>>>, // pgrphashtbl
     last_pid: Gutex<i32>,                          // lastpid
     random_pid: Gutex<bool>,                       // randompid
+    events: Arc<EventSet<ProcEvents>>,
 }
 
 impl ProcManager {
     const PID_MAX: i32 = 99999;
 
-    pub fn new(fs: &Arc<Fs>, rc: &Arc<RcMgr>, proc0: &Arc<VProc>, sys: &mut Syscalls) -> Arc<Self> {
+    pub fn new(
+        kern: &Arc<Ucred>,
+        fs: &Arc<Fs>,
+        rc: &Arc<RcMgr>,
+        sys: &mut Syscalls,
+    ) -> Result<Arc<Self>, ProcManagerError> {
+        // Setup proc0.
+        let events = Arc::default();
+        let proc0 = VProc::new(
+            Pid::KERNEL,
+            kern.clone(),
+            ProcAbi::new(None),
+            None,
+            None,
+            DmemContainer::Zero,
+            fs.root(),
+            "",
+            &events,
+        )
+        .map_err(ProcManagerError::CreateProc0Failed)?;
+
         // Setup process list.
+        let proc0 = Arc::new(proc0);
         let mut list = HashMap::new();
         let last_pid = 0;
         let id = proc0.id();
 
         assert_eq!(id, last_pid);
-        assert!(list.insert(id, Arc::downgrade(proc0)).is_none());
+        assert!(list.insert(id, Arc::downgrade(&proc0)).is_none());
 
         // Register syscalls.
         let gg = GutexGroup::new();
         let mgr = Arc::new(Self {
             fs: fs.clone(),
             rc: rc.clone(),
+            proc0,
             procs: gg.spawn(list),
             sessions: gg.spawn(HashMap::new()),
             groups: gg.spawn(HashMap::new()),
             last_pid: gg.spawn(last_pid),
             random_pid: gg.spawn(false),
+            events,
         });
 
         sys.register(20, &mgr, Self::sys_getpid);
@@ -101,7 +127,15 @@ impl ProcManager {
         sys.register(602, &mgr, Self::sys_randomized_path);
         sys.register(612, &mgr, Self::sys_get_proc_type_info);
 
-        mgr
+        Ok(mgr)
+    }
+
+    pub fn proc0(&self) -> &Arc<VProc> {
+        &self.proc0
+    }
+
+    pub fn events(&self) -> RwLockWriteGuard<ProcEvents> {
+        self.events.lock()
     }
 
     /// See `fork1` on the PS4 for a reference.
@@ -138,9 +172,11 @@ impl ProcManager {
             dmem_container,
             root,
             system_path,
+            &self.events,
         )?;
 
         // Add to list.
+        let proc = Arc::new(proc);
         let weak = Arc::downgrade(&proc);
         let mut list = self.procs.write();
 
@@ -756,6 +792,12 @@ impl ProcManager {
     }
 }
 
+/// Events that related to a process.
+#[derive(Default)]
+pub struct ProcEvents {
+    pub init: Event<fn(&mut VProc)>, // process_init
+}
+
 /// Implementation of `thr_param` structure.
 #[repr(C)]
 struct ThrParam {
@@ -835,7 +877,14 @@ bitflags! {
     }
 }
 
-/// Represents an error when [`ProcManager::spawn()`] was failed.
+/// Represents an error when [`ProcManager::new()`] fails.
+#[derive(Debug, Error)]
+pub enum ProcManagerError {
+    #[error("couldn't create proc0")]
+    CreateProc0Failed(#[source] SpawnError),
+}
+
+/// Represents an error when [`ProcManager::spawn()`] fails.
 #[derive(Debug, Error)]
 pub enum SpawnError {
     #[error("failed to load limits")]

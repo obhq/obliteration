@@ -1,9 +1,10 @@
 use super::{
-    ActiveProc, AppInfo, Binaries, FileDesc, Limits, Pid, ResourceLimit, ResourceType, SignalActs,
-    SpawnError, VProcGroup, VThread, ZombieProc,
+    ActiveProc, AppInfo, Binaries, FileDesc, Limits, Pid, ProcEvents, ResourceLimit, ResourceType,
+    SignalActs, SpawnError, VProcGroup, VThread, ZombieProc,
 };
 use crate::budget::ProcType;
 use crate::dev::DmemContainer;
+use crate::event::EventSet;
 use crate::fs::Vnode;
 use crate::idt::Idt;
 use crate::sysent::ProcAbi;
@@ -50,11 +51,12 @@ impl VProc {
         dmem_container: DmemContainer,
         root: Arc<Vnode>,
         system_path: impl Into<String>,
-    ) -> Result<Arc<Self>, SpawnError> {
+        events: &Arc<EventSet<ProcEvents>>,
+    ) -> Result<Self, SpawnError> {
         let gg = GutexGroup::new();
         let limits = Limits::load()?;
         let vm_space = VmSpace::new()?;
-        let vp = Arc::new(Self {
+        let mut vp = Self {
             id,
             state: gg.spawn(ProcState::Active(ActiveProc::new())),
             threads: gg.spawn(Vec::new()),
@@ -75,7 +77,11 @@ impl VProc {
             app_info: AppInfo::new(),
             ptc: 0,
             uptc: AtomicPtr::new(null_mut()),
-        });
+        };
+
+        for h in events.trigger().select(|s| &s.init) {
+            h(&mut vp);
+        }
 
         Ok(vp)
     }
