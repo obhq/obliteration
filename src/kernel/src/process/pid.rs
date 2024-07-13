@@ -8,6 +8,7 @@ pub struct Pid(i32);
 
 impl Pid {
     pub const KERNEL: Self = Self(0);
+    pub const IDLE: Self = Self(10);
 
     /// Returns [`None`] if `v` is negative.
     pub const fn new(v: i32) -> Option<Self> {

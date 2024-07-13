@@ -425,7 +425,7 @@ fn run(args: Args) -> Result<(), KernelError> {
     let sys = Arc::new(sys);
     let budget_id = budget.create(Budget::new("big app", ProcType::BigApp));
     let proc_root = fs.lookup(proc_root, true, None).unwrap();
-    let proc = pmgr
+    let main = pmgr
         .spawn(
             ProcAbi::new(Some(sys)),
             auth,
@@ -437,6 +437,7 @@ fn run(args: Args) -> Result<(), KernelError> {
             true, // TODO: Change to false when we switched to run /mini-syscore.elf.
         )
         .map_err(KernelError::CreateProcessFailed)?;
+    let proc = main.proc();
 
     info!(
         "Application stack: {:p}:{:p}",
@@ -446,7 +447,6 @@ fn run(args: Args) -> Result<(), KernelError> {
 
     // Load eboot.bin.
     let path = vpath!("/app0/eboot.bin");
-    let main = VThread::new(proc.clone());
     let app = ld
         .exec(path, &main)
         .map_err(|e| KernelError::ExecFailed(path, e))?;
@@ -527,14 +527,14 @@ fn run(args: Args) -> Result<(), KernelError> {
     std::thread::scope(|s| {
         let (tx, rx) = channel();
 
-        for _ in 0..Hypervisor::VCPU {
+        for id in 0..Hypervisor::VCPU {
             let tx = tx.clone();
             let exit = &exit;
             let hv = hv.as_ref();
             let sched = sched.as_ref();
             let pmgr = pmgr.as_ref();
 
-            s.spawn(move || tx.send(cpu(exit, hv, sched, pmgr)));
+            s.spawn(move || tx.send(cpu(id, exit, hv, sched, pmgr)));
         }
 
         drop(tx);
@@ -554,6 +554,7 @@ fn run(args: Args) -> Result<(), KernelError> {
 }
 
 fn cpu(
+    id: usize,
     exit: &AtomicBool,
     hv: &Hypervisor,
     sched: &Scheduler,
@@ -563,7 +564,10 @@ fn cpu(
     let cpu = hv
         .create_cpu()
         .map_err(|e| CpuError::CreateCpuFailed(Box::new(e)))?;
-    let idle = Arc::new(VThread::new(pmgr.proc0().clone())); // TODO: Use a proper implementation.
+    let idle = pmgr.spawn_kthread(
+        Some(pmgr.idle()),
+        format!("SceIdleCpu{}", 7u8.wrapping_sub(id as u8)),
+    );
     let mut cx = Pcpu::new(cpu.id(), Arc::downgrade(&idle));
 
     // Enter dispatch loop.

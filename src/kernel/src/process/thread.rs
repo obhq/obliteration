@@ -1,22 +1,18 @@
-use super::{CpuMask, CpuSet, VProc, NEXT_ID};
+use super::{CpuMask, CpuSet, Pcb, ProcEvents, VProc};
 use crate::errno::Errno;
+use crate::event::EventSet;
 use crate::fs::VFile;
 use crate::signal::SignalSet;
 use crate::ucred::{CanSeeError, Privilege, PrivilegeError, Ucred};
-use bitflags::bitflags;
 use gmtx::{Gutex, GutexGroup, GutexReadGuard, GutexWriteGuard};
 use llt::{OsThread, SpawnError};
 use macros::Errno;
 use std::num::NonZeroI32;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use thiserror::Error;
 use tls::{Local, Tls};
 
-/// An implementation of `thread` structure for the main application.
-///
-/// See [`super::VProc`] for more information.
-#[derive(Debug)]
+/// An implementation of `thread` structure.
 pub struct VThread {
     proc: Arc<VProc>,            // td_proc
     id: NonZeroI32,              // td_tid
@@ -31,26 +27,44 @@ pub struct VThread {
 }
 
 impl VThread {
-    pub fn new(proc: Arc<VProc>) -> Self {
-        // TODO: Check how the PS4 actually allocate the thread ID.
+    pub(super) fn new(
+        proc: &Arc<VProc>,
+        id: NonZeroI32,
+        events: &Arc<EventSet<ProcEvents>>,
+    ) -> Arc<Self> {
         let gg = GutexGroup::new();
         let cred = proc.cred().clone();
-
-        Self {
-            proc,
-            id: NonZeroI32::new(NEXT_ID.fetch_add(1, Ordering::Relaxed)).unwrap(),
+        let mut td = Self {
+            proc: proc.clone(),
+            id,
             cred,
             sigmask: gg.spawn(SignalSet::default()),
             pri_class: 3, // TODO: Check the actual value on the PS4 when a thread is created.
             base_user_pri: 700, // TODO: Same here.
-            pcb: gg.spawn(Pcb {
-                fsbase: 0,
-                flags: PcbFlags::empty(),
-            }),
+            pcb: gg.spawn(Pcb::default()),
             cpuset: CpuSet::new(CpuMask::default()), // TODO: Same here.
             name: gg.spawn(None),                    // TODO: Same here
             fpop: gg.spawn(None),
+        };
+
+        // Trigger thread_init event.
+        let mut et = events.trigger();
+
+        for h in et.select(|s| &s.thread_init) {
+            h(&mut td);
         }
+
+        // Trigger thread_ctor event.
+        let td = Arc::new(td);
+        let weak = Arc::downgrade(&td);
+
+        for h in et.select(|s| &s.thread_ctor) {
+            h(&weak);
+        }
+
+        drop(et);
+
+        td
     }
 
     /// Return [`None`] if the calling thread is not a PS4 thread.
@@ -133,7 +147,7 @@ impl VThread {
     /// The range of memory specified by `stack` and `stack_size` must be valid throughout lifetime
     /// of the thread. Specify an unaligned stack will cause undefined behavior.
     pub unsafe fn start<F>(
-        self,
+        self: &Arc<Self>,
         stack: *mut u8,
         stack_size: usize,
         mut routine: F,
@@ -141,12 +155,7 @@ impl VThread {
     where
         F: FnMut() + Send + 'static,
     {
-        let proc = self.proc.clone();
-        let td = Arc::new(self);
-        let running = Running(td.clone());
-        // Lock the list before spawn the thread to prevent race condition if the new thread run
-        // too fast and found out they is not in our list.
-        let mut threads = proc.threads_mut();
+        let running = Running(self.clone());
         let raw = llt::spawn(stack, stack_size, move || {
             // This closure must not have any variables that need to be dropped on the stack. The
             // reason is because this thread will be exited without returning from the routine. That
@@ -155,39 +164,7 @@ impl VThread {
             routine();
         })?;
 
-        // Add to the list.
-        threads.push(td);
-
         Ok(raw)
-    }
-}
-
-/// An implementation of `pcb` structure.
-#[derive(Debug)]
-pub struct Pcb {
-    fsbase: usize,   // pcb_fsbase
-    flags: PcbFlags, // pcb_flags
-}
-
-impl Pcb {
-    pub fn fsbase(&self) -> usize {
-        self.fsbase
-    }
-
-    pub fn set_fsbase(&mut self, v: usize) {
-        self.fsbase = v;
-    }
-
-    pub fn flags_mut(&mut self) -> &mut PcbFlags {
-        &mut self.flags
-    }
-}
-
-bitflags! {
-    /// Flags of [`Pcb`].
-    #[derive(Debug)]
-    pub struct PcbFlags: u32 {
-        const PCB_FULL_IRET = 0x01;
     }
 }
 
