@@ -51,8 +51,8 @@ impl MachDep {
                 // kernel.
                 let v = unsafe { std::ptr::read_unaligned(parms as _) };
 
-                pcb.set_fsbase(v);
-                *pcb.flags_mut() |= PcbFlags::PCB_FULL_IRET;
+                pcb.fsbase = v;
+                pcb.flags |= PcbFlags::PCB_FULL_IRET;
 
                 info!("FS segment has been changed to {v:#x}.");
             }

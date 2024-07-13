@@ -17,9 +17,9 @@ use std::sync::atomic::AtomicPtr;
 use std::sync::Arc;
 
 /// An implementation of `proc` structure.
-#[derive(Debug)]
 pub struct VProc {
     id: Pid,                               // p_pid
+    name: Gutex<String>,                   // p_comm
     state: Gutex<ProcState>,               // p_state
     threads: Gutex<Vec<Arc<VThread>>>,     // p_threads
     cred: Arc<Ucred>,                      // p_ucred
@@ -30,7 +30,6 @@ pub struct VProc {
     files: Arc<FileDesc>,                  // p_fd
     system_path: String,                   // p_randomized_path
     limits: Limits,                        // p_limit
-    comm: Gutex<Option<String>>,           // p_comm
     bin: Gutex<Option<Binaries>>,          // p_dynlib?
     objects: Gutex<Idt<Arc<dyn Any + Send + Sync>>>,
     budget_id: Option<usize>,
@@ -42,8 +41,9 @@ pub struct VProc {
 }
 
 impl VProc {
-    pub fn new(
+    pub(super) fn new(
         id: Pid,
+        name: impl Into<String>,
         cred: Arc<Ucred>,
         abi: ProcAbi,
         budget_id: Option<usize>,
@@ -52,12 +52,13 @@ impl VProc {
         root: Arc<Vnode>,
         system_path: impl Into<String>,
         events: &Arc<EventSet<ProcEvents>>,
-    ) -> Result<Self, SpawnError> {
+    ) -> Result<Arc<Self>, SpawnError> {
         let gg = GutexGroup::new();
         let limits = Limits::load()?;
         let vm_space = VmSpace::new()?;
-        let mut vp = Self {
+        let mut proc = Self {
             id,
+            name: gg.spawn(name.into()),
             state: gg.spawn(ProcState::Active(ActiveProc::new())),
             threads: gg.spawn(Vec::new()),
             cred,
@@ -72,18 +73,30 @@ impl VProc {
             budget_ptype,
             dmem_container: gg.spawn(dmem_container),
             limits,
-            comm: gg.spawn(None), //TODO: Find out how this is actually set
             bin: gg.spawn(None),
             app_info: AppInfo::new(),
             ptc: 0,
             uptc: AtomicPtr::new(null_mut()),
         };
 
-        for h in events.trigger().select(|s| &s.init) {
-            h(&mut vp);
+        // Trigger process_init event.
+        let mut et = events.trigger();
+
+        for h in et.select(|s| &s.process_init) {
+            h(&mut proc);
         }
 
-        Ok(vp)
+        // Trigger process_ctor event.
+        let proc = Arc::new(proc);
+        let weak = Arc::downgrade(&proc);
+
+        for h in et.select(|s| &s.process_ctor) {
+            h(&weak);
+        }
+
+        drop(et);
+
+        Ok(proc)
     }
 
     pub fn id(&self) -> Pid {
@@ -130,8 +143,8 @@ impl VProc {
         &self.limits[ty]
     }
 
-    pub fn set_name(&self, name: Option<&str>) {
-        *self.comm.write() = name.map(|n| n.to_owned());
+    pub fn set_name(&self, name: impl Into<String>) {
+        *self.name.write() = name.into();
     }
 
     pub fn bin(&self) -> GutexReadGuard<Option<Binaries>> {

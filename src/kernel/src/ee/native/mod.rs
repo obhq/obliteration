@@ -590,7 +590,7 @@ impl NativeEngine {
     /// # Safety
     /// This method cannot be called from Rust.
     unsafe extern "sysv64" fn resolve_fs(&self, disp: usize) -> usize {
-        std::ptr::read_unaligned((VThread::current().unwrap().pcb().fsbase() + disp) as _)
+        std::ptr::read_unaligned((VThread::current().unwrap().pcb().fsbase + disp) as _)
     }
 
     /// # Safety

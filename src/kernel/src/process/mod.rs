@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::ffi::{c_char, c_int};
 use std::mem::{size_of, transmute, zeroed};
 use std::num::NonZeroI32;
-use std::sync::atomic::AtomicI32;
+use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, RwLockWriteGuard, Weak};
 use thiserror::Error;
 
@@ -30,6 +30,7 @@ pub use self::binary::*;
 pub use self::cpuset::*;
 pub use self::filedesc::*;
 pub use self::group::*;
+pub use self::pcb::*;
 pub use self::pid::*;
 pub use self::proc::*;
 pub use self::rlimit::*;
@@ -44,6 +45,7 @@ mod binary;
 mod cpuset;
 mod filedesc;
 mod group;
+mod pcb;
 mod pid;
 mod proc;
 mod rlimit;
@@ -56,7 +58,9 @@ mod zombie;
 pub struct ProcManager {
     fs: Arc<Fs>,
     rc: Arc<RcMgr>,
-    proc0: Arc<VProc>,                       // proc0
+    proc0: Arc<VProc>,     // proc0
+    thread0: Arc<VThread>, // thread0
+    idle: Arc<VProc>,
     procs: Gutex<HashMap<Pid, Weak<VProc>>>, // allproc + pidhashtbl + zombproc
     sessions: Gutex<HashMap<Pid, Weak<VSession>>>,
     groups: Gutex<HashMap<Pid, Weak<VProcGroup>>>, // pgrphashtbl
@@ -75,28 +79,49 @@ impl ProcManager {
         sys: &mut Syscalls,
     ) -> Result<Arc<Self>, ProcManagerError> {
         // Setup proc0.
+        let root = fs.root();
         let events = Arc::default();
         let proc0 = VProc::new(
             Pid::KERNEL,
+            "kernel",
             kern.clone(),
             ProcAbi::new(None),
             None,
             None,
             DmemContainer::Zero,
-            fs.root(),
+            root.clone(),
             "",
             &events,
         )
         .map_err(ProcManagerError::CreateProc0Failed)?;
 
+        // Setup thread0.
+        let thread0 = VThread::new(&proc0, NonZeroI32::new(Self::PID_MAX + 1).unwrap(), &events);
+
+        proc0.threads_mut().push(thread0.clone());
+
+        // Create idle process.
+        let idle = VProc::new(
+            Pid::IDLE,
+            "idle",
+            kern.clone(),
+            ProcAbi::new(None),
+            None,
+            None,
+            DmemContainer::Zero,
+            root.clone(),
+            "",
+            &events,
+        )
+        .map_err(ProcManagerError::CreateIdleFailed)?;
+
         // Setup process list.
-        let proc0 = Arc::new(proc0);
         let mut list = HashMap::new();
         let last_pid = 0;
-        let id = proc0.id();
 
-        assert_eq!(id, last_pid);
-        assert!(list.insert(id, Arc::downgrade(&proc0)).is_none());
+        assert_eq!(proc0.id(), last_pid);
+        assert!(list.insert(proc0.id(), Arc::downgrade(&proc0)).is_none());
+        assert!(list.insert(idle.id(), Arc::downgrade(&idle)).is_none());
 
         // Register syscalls.
         let gg = GutexGroup::new();
@@ -104,6 +129,8 @@ impl ProcManager {
             fs: fs.clone(),
             rc: rc.clone(),
             proc0,
+            thread0,
+            idle,
             procs: gg.spawn(list),
             sessions: gg.spawn(HashMap::new()),
             groups: gg.spawn(HashMap::new()),
@@ -134,6 +161,14 @@ impl ProcManager {
         &self.proc0
     }
 
+    pub fn thread0(&self) -> &Arc<VThread> {
+        &self.thread0
+    }
+
+    pub fn idle(&self) -> &Arc<VProc> {
+        &self.idle
+    }
+
     pub fn events(&self) -> RwLockWriteGuard<ProcEvents> {
         self.events.lock()
     }
@@ -149,7 +184,7 @@ impl ProcManager {
         root: Arc<Vnode>,
         system_path: impl Into<String>,
         kernel: bool,
-    ) -> Result<Arc<VProc>, SpawnError> {
+    ) -> Result<Arc<VThread>, SpawnError> {
         use std::collections::hash_map::Entry;
 
         // Get credential.
@@ -165,6 +200,7 @@ impl ProcManager {
         let pid = self.alloc_pid(kernel);
         let proc = VProc::new(
             pid,
+            "", // TODO: Copy from parent process.
             Arc::new(cred),
             abi,
             Some(budget_id),
@@ -175,14 +211,22 @@ impl ProcManager {
             &self.events,
         )?;
 
+        // Create main thread.
+        let td = VThread::new(
+            &proc,
+            NonZeroI32::new(NEXT_TID.fetch_add(1, Ordering::Relaxed)).unwrap(),
+            &self.events,
+        );
+
+        proc.threads_mut().push(td.clone());
+
         // Add to list.
-        let proc = Arc::new(proc);
         let weak = Arc::downgrade(&proc);
         let mut list = self.procs.write();
 
         match list.entry(proc.id()) {
             Entry::Occupied(mut e) => {
-                assert!(e.insert(weak).upgrade().is_none());
+                assert_eq!(e.insert(weak).strong_count(), 0);
             }
             Entry::Vacant(e) => {
                 e.insert(weak);
@@ -191,7 +235,26 @@ impl ProcManager {
 
         drop(list);
 
-        Ok(proc)
+        Ok(td)
+    }
+
+    /// See `kthread_add` on the PS4 for a reference.
+    pub fn spawn_kthread(
+        &self,
+        proc: Option<&Arc<VProc>>,
+        name: impl Into<String>,
+    ) -> Arc<VThread> {
+        let proc = proc.unwrap_or(&self.proc0);
+        let td = VThread::new(
+            proc,
+            NonZeroI32::new(NEXT_TID.fetch_add(1, Ordering::Relaxed)).unwrap(),
+            &self.events,
+        );
+
+        proc.threads_mut().push(td.clone());
+
+        // TODO: Implement remaining logics.
+        td
     }
 
     fn sys_getpid(self: &Arc<Self>, td: &Arc<VThread>, _: &SysIn) -> Result<SysOut, SysErr> {
@@ -403,11 +466,11 @@ impl ProcManager {
 
     fn sys_thr_set_name(self: &Arc<Self>, td: &Arc<VThread>, i: &SysIn) -> Result<SysOut, SysErr> {
         let tid: i64 = i.args[0].into();
-        let name: Option<&str> = unsafe { i.args[1].to_str(32) }?;
+        let name = unsafe { i.args[1].to_str(32)?.unwrap_or("") };
         let proc = td.proc();
 
         if tid == -1 {
-            info!("Setting process name to '{}'.", name.unwrap_or("NULL"));
+            info!("Setting process name to '{name}'.");
 
             proc.set_name(name);
         } else {
@@ -417,13 +480,9 @@ impl ProcManager {
                 .find(|t| t.id().get() == tid as i32)
                 .ok_or(SysErr::Raw(ESRCH))?;
 
-            info!(
-                "Setting name of thread {} to '{}'.",
-                thr.id(),
-                name.unwrap_or("NULL")
-            );
+            info!("Setting name of thread {} to '{}'.", thr.id(), name);
 
-            thr.set_name(name);
+            thr.set_name(Some(name));
         }
 
         Ok(SysOut::ZERO)
@@ -795,7 +854,10 @@ impl ProcManager {
 /// Events that related to a process.
 #[derive(Default)]
 pub struct ProcEvents {
-    pub init: Event<fn(&mut VProc)>, // process_init
+    pub process_init: Event<fn(&mut VProc)>,
+    pub process_ctor: Event<fn(&Weak<VProc>)>,
+    pub thread_init: Event<fn(&mut VThread)>,
+    pub thread_ctor: Event<fn(&Weak<VThread>)>,
 }
 
 /// Implementation of `thr_param` structure.
@@ -882,6 +944,9 @@ bitflags! {
 pub enum ProcManagerError {
     #[error("couldn't create proc0")]
     CreateProc0Failed(#[source] SpawnError),
+
+    #[error("couldn't create idle proc")]
+    CreateIdleFailed(#[source] SpawnError),
 }
 
 /// Represents an error when [`ProcManager::spawn()`] fails.
@@ -894,4 +959,5 @@ pub enum SpawnError {
     VmInitFailed(#[from] MemoryManagerError),
 }
 
-static NEXT_ID: AtomicI32 = AtomicI32::new(123);
+// TODO: Use a proper implementation.
+static NEXT_TID: AtomicI32 = AtomicI32::new(ProcManager::PID_MAX + 2);
