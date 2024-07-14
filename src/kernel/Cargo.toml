@@ -4,10 +4,6 @@ version = "0.1.0"
 description = "Free and open-source alternative PlayStation 4 kernel for Windows, Linux and macOS"
 edition = "2021"
 
-[[bin]]
-name = "obkrnl"
-path = "src/main.rs"
-
 [dependencies]
 bitflags = "2.1"
 bytemuck = "1.14.0"

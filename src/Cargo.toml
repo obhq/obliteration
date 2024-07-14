@@ -9,6 +9,7 @@ members = [
     "kernel",
     "llt",
     "macros",
+    "obkrnl",
     "param",
     "pfs",
     "pkg",

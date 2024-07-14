@@ -1,7 +1,7 @@
 {
   "configurations": [
     {
-      "name": "Frontend",
+      "name": "Main",
       "type": "lldb",
       "request": "launch",
       "args": [],
@@ -20,18 +20,10 @@
       }
     },
     {
-      "name": "Kernel | Debug",
+      "name": "Legacy Kernel",
       "type": "lldb",
       "request": "launch",
-      "program": "${workspaceFolder}/src/target/debug/obkrnl",
-      "args": ["--debug"],
-      "cwd": "${workspaceFolder}"
-    },
-    {
-      "name": "Kernel | Release",
-      "type": "lldb",
-      "request": "launch",
-      "program": "${workspaceFolder}/src/target/release/obkrnl",
+      "program": "${workspaceFolder}/src/target/debug/kernel",
       "args": ["--debug"],
       "cwd": "${workspaceFolder}"
     }
