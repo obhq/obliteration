@@ -5,14 +5,10 @@ runtime-version: '6.6'
 platform-extensions:
 - org.freedesktop.Platform.GL.default
 sdk: org.kde.Sdk
-sdk-extensions:
-- org.freedesktop.Sdk.Extension.rust-stable
 command: obliteration
 build-options:
-  append-path: /usr/lib/sdk/rust-stable/bin
   build-args:
   - --share=network
-  - --device=kvm # required for running tests
 finish-args:
   - --filesystem=home
   - --share=network
@@ -24,11 +20,20 @@ finish-args:
   - --socket=pulseaudio
 modules:
 - name: obliteration
+  build-options:
+    env:
+      RUSTUP_HOME: /run/build/obliteration/.rustup
+      CARGO_HOME: /run/build/obliteration/.cargo
+    append-path: /run/build/obliteration/.cargo/bin
   buildsystem: simple
   build-commands:
-  - cmake --preset linux-release .
+  - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+  - |
+    if [ ${FLATPAK_ARCH} == 'x86_64' ]; then
+      rustup target add x86_64-unknown-none
+    fi
+  - cmake --preset linux-release
   - cmake --build --preset linux-release
-  - cargo test --manifest-path src/Cargo.toml --workspace --exclude core
   - cmake --install build --prefix "$FLATPAK_DEST"
   sources:
   - type: dir

@@ -56,6 +56,8 @@ jobs:
       if: ${{ steps.qt-cache.outputs.cache-hit != 'true' }}
     - name: Update Rust
       run: rustup update stable
+    - name: Add additional Rust targets
+      run: rustup target add x86_64-unknown-none
     - name: Run CMake
       run: cmake --preset mac-release .
     - name: Build
@@ -71,16 +73,14 @@ jobs:
     - name: Fix library paths
       run: |
         app="dist/Obliteration.app/Contents/MacOS/obliteration"
-        krn="dist/Obliteration.app/Contents/MacOS/obkrnl"
 
         install_name_tool -change '@rpath/QtWidgets.framework/Versions/A/QtWidgets' '@executable_path/../Frameworks/QtWidgets.framework/Versions/A/QtWidgets' "$app"
         install_name_tool -change '@rpath/QtGui.framework/Versions/A/QtGui' '@executable_path/../Frameworks/QtGui.framework/Versions/A/QtGui' "$app"
         install_name_tool -change '@rpath/QtCore.framework/Versions/A/QtCore' '@executable_path/../Frameworks/QtCore.framework/Versions/A/QtCore' "$app"
 
         otool -L "$app"
-        otool -L "$krn"
-    - name: Sign kernel
-      run: codesign -s - --entitlements entitlements.plist dist/Obliteration.app/Contents/MacOS/obkrnl
+    - name: Sign application
+      run: codesign -s - --entitlements entitlements.plist --deep dist/Obliteration.app
     - name: Create Apple Disk Image
       run: hdiutil create -volname Obliteration -srcfolder dist Obliteration.dmg
     - name: Upload artifacts

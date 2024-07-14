@@ -12,6 +12,12 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y flatpak flatpak-builder
+    - name: Lint Rust sources
+      run: cargo clippy --package obkrnl -- -D warnings
+      working-directory: src
+    - name: Run tests
+      run: cargo test --workspace --exclude core
+      working-directory: src
     - name: Add Flathub
       run: flatpak remote-add --user flathub https://flathub.org/repo/flathub.flatpakrepo
     - name: Generate cache keys

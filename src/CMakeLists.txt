@@ -3,19 +3,28 @@ find_package(Qt6 COMPONENTS Widgets REQUIRED)
 find_package(Threads REQUIRED)
 
 # Setup Rust target.
-set(RUST_OUTPUTS $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/debug,${CMAKE_CURRENT_SOURCE_DIR}/target/release>)
-set(KERNEL ${RUST_OUTPUTS}/obkrnl${CMAKE_EXECUTABLE_SUFFIX})
+set(FREESTANDING_TARGET x86_64-unknown-none)
+set(FREESTANDING_OUTPUTS $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/${FREESTANDING_TARGET}/debug,${CMAKE_CURRENT_SOURCE_DIR}/target/${FREESTANDING_TARGET}/release>)
+set(KERNEL ${FREESTANDING_OUTPUTS}/obkrnl)
+set(HOST_OUTPUTS $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/debug,${CMAKE_CURRENT_SOURCE_DIR}/target/release>)
 
 if(WIN32)
-    set(LIBCORE ${RUST_OUTPUTS}/core.lib)
+    set(LIBCORE ${HOST_OUTPUTS}/core.lib)
 else()
-    set(LIBCORE ${RUST_OUTPUTS}/libcore.a)
+    set(LIBCORE ${HOST_OUTPUTS}/libcore.a)
 endif()
 
 add_custom_target(core
     COMMAND cargo build $<IF:$<CONFIG:Debug>,--profile=dev,--release>
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    BYPRODUCTS ${KERNEL} ${LIBCORE})
+    BYPRODUCTS ${LIBCORE})
+
+add_custom_target(kernel
+    COMMAND cargo build $<IF:$<CONFIG:Debug>,--profile=dev,--release> --target ${FREESTANDING_TARGET}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/obkrnl
+    BYPRODUCTS ${KERNEL})
+
+add_dependencies(core kernel)
 
 # Setup application target.
 add_executable(obliteration WIN32 MACOSX_BUNDLE
@@ -97,7 +106,7 @@ elseif(APPLE)
 endif()
 
 if(APPLE)
-    install(PROGRAMS ${KERNEL} DESTINATION obliteration.app/Contents/MacOS)
+    install(FILES ${KERNEL} DESTINATION obliteration.app/Contents/Resources)
 else()
-    install(PROGRAMS ${KERNEL} TYPE BIN)
+    install(FILES ${KERNEL} TYPE DATA)
 endif()
