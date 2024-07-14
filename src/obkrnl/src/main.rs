@@ -1,15 +1,17 @@
 #![no_std]
-#![no_main]
+#![cfg_attr(not(test), no_main)]
 
-#[no_mangle]
+use core::panic::PanicInfo;
+
+#[cfg_attr(not(test), no_mangle)]
 fn _start() -> ! {
     loop {
         unsafe { core::arch::x86_64::_mm_pause() };
     }
 }
 
-#[cfg(not(test))]
-#[panic_handler]
-fn panic(_: &core::panic::PanicInfo) -> ! {
+#[allow(dead_code)]
+#[cfg_attr(not(test), panic_handler)]
+fn panic(_: &PanicInfo) -> ! {
     loop {}
 }
