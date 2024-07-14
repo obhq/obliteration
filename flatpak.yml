@@ -5,11 +5,8 @@ runtime-version: '6.6'
 platform-extensions:
 - org.freedesktop.Platform.GL.default
 sdk: org.kde.Sdk
-sdk-extensions:
-- org.freedesktop.Sdk.Extension.rust-stable
 command: obliteration
 build-options:
-  append-path: /usr/lib/sdk/rust-stable/bin
   build-args:
   - --share=network
 finish-args:
@@ -25,6 +22,7 @@ modules:
 - name: obliteration
   buildsystem: simple
   build-commands:
+  - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
   - |
     m=$(uname -m)
 
