@@ -36,6 +36,7 @@ add_executable(obliteration WIN32 MACOSX_BUNDLE
     game_settings.cpp
     game_settings_dialog.cpp
     initialize_wizard.cpp
+    launch_settings.cpp
     log_formatter.cpp
     main.cpp
     main_window.cpp

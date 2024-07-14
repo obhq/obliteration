@@ -2,7 +2,6 @@
 #include "path.hpp"
 #include "progress_dialog.hpp"
 #include "settings.hpp"
-#include "string.hpp"
 #include "system_downloader.hpp"
 
 #include <QCoreApplication>
@@ -20,12 +19,11 @@ bool isSystemInitialized(const QString &path)
     auto libkernel = toPath(path);
 
     try {
-        libkernel /= STR("system");
-        libkernel /= STR("common");
-        libkernel /= STR("lib");
-        libkernel /= STR("libkernel.sprx");
-
-        return std::filesystem::exists(libkernel);
+#ifdef _WIN32
+        return std::filesystem::exists(libkernel / L"system" / L"common" / L"lib" / L"libkernel.sprx");
+#else
+        return std::filesystem::exists(libkernel / "system" / "common" / "lib" / "libkernel.sprx");
+#endif
     } catch (...) {
         return false;
     }

@@ -1,10 +1,13 @@
 #pragma once
 
-#include <QMainWindow>
-#include <QProcess>
+#include "core.hpp"
 
+#include <QMainWindow>
+
+class LaunchSettings;
 class LogFormatter;
-class QListView;
+class QStackedWidget;
+class QTableView;
 
 class MainWindow final : public QMainWindow {
 public:
@@ -16,29 +19,25 @@ public:
 
 protected:
     void closeEvent(QCloseEvent *event) override;
-    void resizeEvent(QResizeEvent *event) override;
 
 private slots:
-    void tabChanged();
     void installPkg();
     void openSystemFolder();
     void reportIssue();
     void aboutObliteration();
     void requestGamesContextMenu(const QPoint &pos);
-    void startGame(const QModelIndex &index);
-    void kernelError(QProcess::ProcessError error);
-    void kernelOutput();
-    void kernelTerminated(int exitCode, QProcess::ExitStatus exitStatus);
+    void startKernel();
 
 private:
     bool loadGame(const QString &gameId);
-    void killKernel();
     void restoreGeometry();
     bool requireEmulatorStopped();
 
 private:
     QTabWidget *m_tab;
-    QListView *m_games;
+    QStackedWidget *m_screen;
+    LaunchSettings *m_launch;
+    QTableView *m_games;
     LogFormatter *m_log;
-    QProcess *m_kernel;
+    Vmm m_kernel;
 };

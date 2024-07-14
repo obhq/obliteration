@@ -9,6 +9,7 @@
 struct error;
 struct param;
 struct pkg;
+struct vmm;
 
 typedef void (*pkg_extract_status_t) (const char *status, std::size_t bar, std::uint64_t current, std::uint64_t total, void *ud);
 
@@ -39,6 +40,9 @@ extern "C" {
         bool explicit_decryption,
         void (*status) (const char *, std::uint64_t, std::uint64_t, void *),
         void *ud);
+
+    vmm *vmm_new();
+    void vmm_free(vmm *vmm);
 }
 
 class Error final {
@@ -208,4 +212,27 @@ public:
 
 private:
     pkg *m_obj;
+};
+
+class Vmm final {
+public:
+    Vmm() : m_obj(nullptr) {}
+    Vmm(const Vmm &) = delete;
+    ~Vmm() { kill(); }
+
+public:
+    Vmm &operator=(const Vmm &) = delete;
+    operator bool() const { return m_obj != nullptr; }
+
+public:
+    void kill()
+    {
+        if (m_obj) {
+            vmm_free(m_obj);
+            m_obj = nullptr;
+        }
+    }
+
+private:
+    vmm *m_obj;
 };
