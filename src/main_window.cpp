@@ -1,14 +1,13 @@
 #include "main_window.hpp"
-#include "app_data.hpp"
 #include "core.hpp"
 #include "game_models.hpp"
 #include "game_settings.hpp"
 #include "game_settings_dialog.hpp"
+#include "launch_settings.hpp"
 #include "log_formatter.hpp"
 #include "path.hpp"
 #include "pkg_installer.hpp"
 #include "settings.hpp"
-#include "string.hpp"
 
 #include <QAction>
 #include <QApplication>
@@ -18,8 +17,8 @@
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
+#include <QHeaderView>
 #include <QIcon>
-#include <QListView>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -28,7 +27,9 @@
 #include <QResizeEvent>
 #include <QScrollBar>
 #include <QSettings>
+#include <QStackedWidget>
 #include <QStyleHints>
+#include <QTableView>
 #include <QTabWidget>
 #include <QToolBar>
 #include <QUrl>
@@ -37,9 +38,10 @@
 
 MainWindow::MainWindow() :
     m_tab(nullptr),
+    m_screen(nullptr),
+    m_launch(nullptr),
     m_games(nullptr),
-    m_log(nullptr),
-    m_kernel(nullptr)
+    m_log(nullptr)
 {
     setWindowTitle("Obliteration");
 
@@ -87,40 +89,36 @@ MainWindow::MainWindow() :
     helpMenu->addAction(aboutQt);
     helpMenu->addAction(about);
 
-#ifndef __APPLE__
-    // File toolbar.
-    auto fileBar = addToolBar("&File");
-
-    fileBar->setMovable(false);
-    fileBar->addAction(installPkg);
-#endif
-
     // Central widget.
     m_tab = new QTabWidget(this);
     m_tab->setDocumentMode(true);
-
-#ifdef __APPLE__
     m_tab->tabBar()->setExpanding(true);
-#endif
 
     setCentralWidget(m_tab);
 
+    // Setup screen tab.
+    m_screen = new QStackedWidget();
+
+    m_tab->addTab(m_screen, QIcon(svgPath + "monitor.svg"), "Screen");
+
+    // Setup launch settings.
+    m_launch = new LaunchSettings();
+
+    connect(m_launch, &LaunchSettings::startClicked, this, &MainWindow::startKernel);
+
+    m_screen->addWidget(m_launch);
+
     // Setup game list.
-    m_games = new QListView();
+    m_games = new QTableView();
     m_games->setContextMenuPolicy(Qt::CustomContextMenu);
-    m_games->setLayoutMode(QListView::SinglePass);
+    m_games->setSortingEnabled(true);
+    m_games->setWordWrap(false);
+    m_games->verticalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     m_games->setModel(new GameListModel(this));
-    m_games->setViewMode(QListView::IconMode);
-    m_games->setWordWrap(true);
-    m_games->verticalScrollBar()->setSingleStep(20);
 
-
-    connect(m_games, &QAbstractItemView::doubleClicked, this, &MainWindow::startGame);
     connect(m_games, &QWidget::customContextMenuRequested, this, &MainWindow::requestGamesContextMenu);
 
     m_tab->addTab(m_games, QIcon(svgPath + "view-comfy.svg"), "Games");
-
-    connect(m_tab, &QTabWidget::currentChanged, this, &MainWindow::tabChanged);
 
     // Setup log view.
     auto log = new QPlainTextEdit();
@@ -169,7 +167,6 @@ bool MainWindow::loadGames()
 
     // Load games
     progress.setLabelText("Loading games...");
-    auto gameList = reinterpret_cast<GameListModel *>(m_games->model());
 
     for (auto &gameId : games) {
         if (progress.wasCanceled() || !loadGame(gameId)) {
@@ -179,7 +176,10 @@ bool MainWindow::loadGames()
         progress.setValue(++step);
     }
 
-    gameList->sort(0, Qt::AscendingOrder); // TODO add ability to select descending order (button?)
+    // Update widgets.
+    m_games->horizontalHeader()->setSortIndicator(0, Qt::AscendingOrder);
+    m_games->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+    m_games->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
 
     return true;
 }
@@ -201,7 +201,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
             return;
         }
 
-        killKernel();
+        m_kernel.kill();
     }
 
     // Save geometry.
@@ -218,26 +218,6 @@ void MainWindow::closeEvent(QCloseEvent *event)
     }
 
     QMainWindow::closeEvent(event);
-}
-
-void MainWindow::resizeEvent(QResizeEvent *event)
-{
-    // Allows the games list to resort if window is resized.
-    if (m_tab->currentIndex() == 0) {
-        m_games->updateGeometry();
-        m_games->doItemsLayout();
-    }
-
-    QMainWindow::resizeEvent(event);
-}
-
-void MainWindow::tabChanged()
-{
-    // Update games list if window was resized on another tab.
-    if (m_tab->currentIndex() == 0) {
-        m_games->updateGeometry();
-        m_games->doItemsLayout();
-    }
 }
 
 void MainWindow::installPkg()
@@ -341,19 +321,17 @@ void MainWindow::requestGamesContextMenu(const QPoint &pos)
     }
 }
 
-void MainWindow::startGame(const QModelIndex &index)
+void MainWindow::startKernel()
 {
-    if (requireEmulatorStopped()) {
+    // Just switch to screen tab if currently running.
+    if (m_kernel) {
+        m_tab->setCurrentIndex(0);
         return;
     }
 
-    // Get target game.
-    auto model = reinterpret_cast<GameListModel *>(m_games->model());
-    auto game = model->get(index.row()); // Qt already guaranteed the index is valid.
-
-    // Clear previous log and switch to log view.
+    // Clear previous log and switch to screen tab.
     m_log->reset();
-    m_tab->setCurrentIndex(1);
+    m_tab->setCurrentIndex(0);
 
     // Get full path to kernel binary.
     QString path;
@@ -361,117 +339,32 @@ void MainWindow::startGame(const QModelIndex &index)
     if (QFile::exists(".obliteration-development")) {
         auto b = std::filesystem::current_path();
 
-        b /= STR("src");
-        b /= STR("target");
-#ifdef NDEBUG
-        b /= STR("release");
+#if defined(_WIN32) && defined(NDEBUG)
+        path = QString::fromStdWString((b / L"src" / L"target" / L"x86_64-unknown-none" / L"release" / L"obkrnl").wstring());
+#elif defined(_WIN32) && !defined(NDEBUG)
+        path = QString::fromStdWString((b / L"src" / L"target" / L"x86_64-unknown-none" / L"debug" / L"obkrnl").wstring());
+#elif defined(NDEBUG)
+        path = QString::fromStdString((b / "src" / "target" / "x86_64-unknown-none" / "release" / "obkrnl").string());
 #else
-        b /= STR("debug");
-#endif
-
-#ifdef _WIN32
-        b /= L"obkrnl.exe";
-        path = QString::fromStdWString(b.wstring());
-#else
-        b /= "obkrnl";
-        path = QString::fromStdString(b.string());
+        path = QString::fromStdString((b / "src" / "target" / "x86_64-unknown-none" / "debug" / "obkrnl").string());
 #endif
     } else {
 #ifdef _WIN32
         std::filesystem::path b(QCoreApplication::applicationDirPath().toStdString(), std::filesystem::path::native_format);
-        b /= L"bin";
-        b /= L"obkrnl.exe";
+        b /= L"share";
+        b /= L"obkrnl";
         path = QString::fromStdWString(b.wstring());
 #else
-        std::filesystem::path b(QCoreApplication::applicationDirPath().toStdString(), std::filesystem::path::native_format);
+        auto b = std::filesystem::path(QCoreApplication::applicationDirPath().toStdString(), std::filesystem::path::native_format).parent_path();
+#ifdef __APPLE__
+        b /= "Resources";
+#else
+        b /= "share";
+#endif
         b /= "obkrnl";
         path = QString::fromStdString(b.string());
 #endif
     }
-
-    // Setup kernel arguments.
-    QStringList args;
-
-    args << "--debug-dump" << kernelDebugDump();
-    args << "--clear-debug-dump";
-    args << readSystemDirectorySetting();
-    args << game->directory();
-
-    // Setup environment variable.
-    auto env = QProcessEnvironment::systemEnvironment();
-
-    env.insert("TERM", "xterm");
-
-    // Prepare kernel launching.
-    m_kernel = new QProcess(this);
-    m_kernel->setProgram(path);
-    m_kernel->setArguments(args);
-    m_kernel->setProcessEnvironment(env);
-    m_kernel->setProcessChannelMode(QProcess::MergedChannels);
-
-    connect(m_kernel, &QProcess::errorOccurred, this, &MainWindow::kernelError);
-    connect(m_kernel, &QIODevice::readyRead, this, &MainWindow::kernelOutput);
-    connect(m_kernel, &QProcess::finished, this, &MainWindow::kernelTerminated);
-
-    // Launch kernel.
-    m_kernel->start(QIODeviceBase::ReadOnly | QIODeviceBase::Text);
-}
-
-void MainWindow::kernelError(QProcess::ProcessError error)
-{
-    // Get error message.
-    QString msg;
-
-    switch (error) {
-    case QProcess::FailedToStart:
-        msg = QString("Failed to launch %1.").arg(m_kernel->program());
-        break;
-    case QProcess::Crashed:
-        msg = "The kernel crashed.";
-        break;
-    default:
-        msg = "The kernel encountered an unknown error.";
-    }
-
-    // Flush the kenel log before we destroy its object.
-    kernelOutput();
-
-    // Destroy object.
-    m_kernel->deleteLater();
-    m_kernel = nullptr;
-
-    // Display error.
-    QMessageBox::critical(this, "Error", msg);
-}
-
-void MainWindow::kernelOutput()
-{
-    // It is possible for Qt to signal this slot after QProcess::errorOccurred or QProcess::finished
-    // so we need to check if the those signals has been received.
-    if (!m_kernel) {
-        return;
-    }
-
-    while (m_kernel->canReadLine()) {
-        auto line = QString::fromUtf8(m_kernel->readLine());
-
-        m_log->appendMessage(line);
-    }
-}
-
-void MainWindow::kernelTerminated(int, QProcess::ExitStatus)
-{
-    // Do nothing if we got QProcess::errorOccurred before this signal.
-    if (!m_kernel) {
-        return;
-    }
-
-    kernelOutput();
-
-    QMessageBox::critical(this, "Error", "The emulator kernel has stopped unexpectedly. Please take a look at the log and report this issue if possible.");
-
-    m_kernel->deleteLater();
-    m_kernel = nullptr;
 }
 
 bool MainWindow::loadGame(const QString &gameId)
@@ -507,24 +400,6 @@ bool MainWindow::loadGame(const QString &gameId)
     return true;
 }
 
-void MainWindow::killKernel()
-{
-    // Do nothing if the kernel already terminated. This prevent a crash if this method is putting
-    // behind the message box and the kernel itself was terminated while waiting for the user to confirm.
-    if (!m_kernel) {
-        return;
-    }
-
-    // We need to disconnect all slots first otherwise the application will be freeze.
-    disconnect(m_kernel, nullptr, nullptr, nullptr);
-
-    m_kernel->kill();
-    m_kernel->waitForFinished(-1);
-
-    delete m_kernel;
-    m_kernel = nullptr;
-}
-
 void MainWindow::restoreGeometry()
 {
     QSettings settings;
@@ -554,13 +429,13 @@ bool MainWindow::requireEmulatorStopped()
         killPrompt.setStandardButtons(QMessageBox::Cancel | QMessageBox::Yes);
         killPrompt.setDefaultButton(QMessageBox::Cancel);
         killPrompt.setIcon(QMessageBox::Warning);
-        if (killPrompt.exec() == QMessageBox::Yes) {
-            killKernel();
-            return false; // Kernel was killed
+
+        if (killPrompt.exec() != QMessageBox::Yes) {
+            return true;
         }
 
-        return true; // Kernel left running
+        m_kernel.kill();
     }
 
-    return false; // Kernel isn't running
+    return false;
 }
