@@ -25,6 +25,12 @@ modules:
 - name: obliteration
   buildsystem: simple
   build-commands:
+  - |
+    m=$(uname -m)
+
+    if [ ${m} == 'x86_64' ]; then
+      rustup target add x86_64-unknown-none
+    fi
   - cmake --preset linux-release
   - cmake --build --preset linux-release
   - cmake --install build --prefix "$FLATPAK_DEST"
