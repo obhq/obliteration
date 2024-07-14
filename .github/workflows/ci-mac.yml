@@ -80,7 +80,7 @@ jobs:
 
         otool -L "$app"
     - name: Sign application
-      run: codesign -s - --entitlements entitlements.plist dist/Obliteration.app
+      run: codesign -s - --entitlements entitlements.plist --deep dist/Obliteration.app
     - name: Create Apple Disk Image
       run: hdiutil create -volname Obliteration -srcfolder dist Obliteration.dmg
     - name: Upload artifacts
