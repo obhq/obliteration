@@ -3,7 +3,9 @@
 
 #[no_mangle]
 fn _start() -> ! {
-    loop {}
+    loop {
+        unsafe { core::arch::x86_64::_mm_pause() };
+    }
 }
 
 #[cfg(not(test))]

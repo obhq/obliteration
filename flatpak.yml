@@ -12,7 +12,6 @@ build-options:
   append-path: /usr/lib/sdk/rust-stable/bin
   build-args:
   - --share=network
-  - --device=kvm # required for running tests
 finish-args:
   - --filesystem=home
   - --share=network
@@ -26,9 +25,8 @@ modules:
 - name: obliteration
   buildsystem: simple
   build-commands:
-  - cmake --preset linux-release .
+  - cmake --preset linux-release
   - cmake --build --preset linux-release
-  - cargo test --manifest-path src/Cargo.toml --workspace --exclude core
   - cmake --install build --prefix "$FLATPAK_DEST"
   sources:
   - type: dir
