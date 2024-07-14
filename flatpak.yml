@@ -22,7 +22,7 @@ modules:
 - name: obliteration
   buildsystem: simple
   build-commands:
-  - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+  - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -yv
   - . "$HOME/.cargo/env"
   - |
     m=$(uname -m)
