@@ -20,14 +20,15 @@ finish-args:
   - --socket=pulseaudio
 modules:
 - name: obliteration
+  build-options:
+    env:
+      RUSTUP_HOME: /run/build/obliteration/.rustup
+      CARGO_HOME: /run/build/obliteration/.cargo
   buildsystem: simple
   build-commands:
-  - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -yv
-  - . "$HOME/.cargo/env"
+  - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
   - |
-    m=$(uname -m)
-
-    if [ ${m} == 'x86_64' ]; then
+    if [ ${FLATPAK_ARCH} == 'x86_64' ]; then
       rustup target add x86_64-unknown-none
     fi
   - cmake --preset linux-release
