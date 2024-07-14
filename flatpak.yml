@@ -24,6 +24,7 @@ modules:
     env:
       RUSTUP_HOME: /run/build/obliteration/.rustup
       CARGO_HOME: /run/build/obliteration/.cargo
+    append-path: /run/build/obliteration/.cargo/bin
   buildsystem: simple
   build-commands:
   - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
