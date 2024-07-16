@@ -16,8 +16,6 @@ members = [
     "tls"
 ]
 
-default-members = ["core", "kernel"]
-
 [profile.dev]
 panic = "abort"
 
