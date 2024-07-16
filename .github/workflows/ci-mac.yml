@@ -40,8 +40,8 @@ jobs:
         }
 
         open(my $output, '>>', $ENV{GITHUB_OUTPUT}) || die "Cannot open GITHUB_OUTPUT: $!";
-        print $output "cargo=${{ runner.os }}-cargo\n";
-        print $output "qt=${{ runner.os }}-qt-".$qt->hexdigest."\n";
+        print $output "cargo=${{ runner.os }}-${{ runner.arch }}-cargo\n";
+        print $output "qt=${{ runner.os }}-${{ runner.arch }}-qt-".$qt->hexdigest."\n";
       shell: perl {0}
       id: cache-keys
     - name: Restore Cargo home
