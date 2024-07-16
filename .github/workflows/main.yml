@@ -11,9 +11,22 @@ jobs:
   build-linux:
     name: Build
     uses: ./.github/workflows/ci-linux.yml
-  build-mac:
+  build-mac-intel:
     name: Build
     uses: ./.github/workflows/ci-mac.yml
+    with:
+      name: Mac Intel
+      macos: macos-12
+      kernel-target: x86_64-unknown-none
+      artifact-name: obliteration-mac-intel
+  build-mac-m1:
+    name: Build
+    uses: ./.github/workflows/ci-mac.yml
+    with:
+      name: Mac M1
+      macos: macos-14
+      kernel-target: aarch64-unknown-none-softfloat
+      artifact-name: obliteration-mac-m1
   pr:
     name: Update PRs
     runs-on: ubuntu-latest

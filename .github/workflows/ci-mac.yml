@@ -1,12 +1,25 @@
 name: CI (Mac)
 on:
   workflow_call:
+    inputs:
+      name:
+        type: string
+        required: true
+      macos:
+        type: string
+        required: true
+      kernel-target:
+        type: string
+        required: true
+      artifact-name:
+        type: string
+        required: true
 env:
   CMAKE_BUILD_PARALLEL_LEVEL: '3'
 jobs:
   build:
-    name: Mac
-    runs-on: macos-12
+    name: ${{ inputs.name }}
+    runs-on: ${{ inputs.macos }}
     env:
       CMAKE_PREFIX_PATH: qt/6.6.0/macos
       QT_URL_BASE: https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_660/qt.qt6.660.clang_64/6.6.0-0-202310040910qtbase-MacOS-MacOS_12-Clang-MacOS-MacOS_12-X86_64-ARM64.7z
@@ -27,8 +40,8 @@ jobs:
         }
 
         open(my $output, '>>', $ENV{GITHUB_OUTPUT}) || die "Cannot open GITHUB_OUTPUT: $!";
-        print $output "cargo=${{ runner.os }}-cargo\n";
-        print $output "qt=${{ runner.os }}-qt-".$qt->hexdigest."\n";
+        print $output "cargo=${{ runner.os }}-${{ runner.arch }}-cargo\n";
+        print $output "qt=${{ runner.os }}-${{ runner.arch }}-qt-".$qt->hexdigest."\n";
       shell: perl {0}
       id: cache-keys
     - name: Restore Cargo home
@@ -57,13 +70,13 @@ jobs:
     - name: Update Rust
       run: rustup update stable
     - name: Add additional Rust targets
-      run: rustup target add x86_64-unknown-none
+      run: rustup target add ${{ inputs.kernel-target }}
     - name: Run CMake
       run: cmake --preset mac-release .
     - name: Build
       run: cmake --build --preset mac-release
     - name: Run tests
-      run: cargo test --workspace --exclude core
+      run: cargo test --workspace --exclude core --exclude kernel
       working-directory: src
     - name: Create Application Bundle
       run: |
@@ -86,7 +99,7 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: obliteration-mac-intel
+        name: ${{ inputs.artifact-name }}
         path: Obliteration.dmg
     - name: Cache Cargo home
       uses: actions/cache/save@v4

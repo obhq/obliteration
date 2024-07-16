@@ -3,9 +3,24 @@ find_package(Qt6 COMPONENTS Widgets REQUIRED)
 find_package(Threads REQUIRED)
 
 # Setup Rust target.
-set(FREESTANDING_TARGET x86_64-unknown-none)
-set(FREESTANDING_OUTPUTS $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/${FREESTANDING_TARGET}/debug,${CMAKE_CURRENT_SOURCE_DIR}/target/${FREESTANDING_TARGET}/release>)
-set(KERNEL ${FREESTANDING_OUTPUTS}/obkrnl)
+if(WIN32)
+    if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "AMD64")
+        set(KERNEL_TARGET x86_64-unknown-none)
+    else()
+        message(FATAL_ERROR "Target CPU is not supported")
+    endif()
+else()
+    if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
+        set(KERNEL_TARGET x86_64-unknown-none)
+    elseif(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "arm64")
+        set(KERNEL_TARGET aarch64-unknown-none-softfloat)
+    else()
+        message(FATAL_ERROR "Target CPU is not supported")
+    endif()
+endif()
+
+set(KERNEL_OUTPUTS $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/${KERNEL_TARGET}/debug,${CMAKE_CURRENT_SOURCE_DIR}/target/${KERNEL_TARGET}/release>)
+set(KERNEL ${KERNEL_OUTPUTS}/obkrnl)
 set(HOST_OUTPUTS $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/debug,${CMAKE_CURRENT_SOURCE_DIR}/target/release>)
 
 if(WIN32)
@@ -16,11 +31,11 @@ endif()
 
 add_custom_target(core
     COMMAND cargo build $<IF:$<CONFIG:Debug>,--profile=dev,--release>
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/core
     BYPRODUCTS ${LIBCORE})
 
 add_custom_target(kernel
-    COMMAND cargo build $<IF:$<CONFIG:Debug>,--profile=dev,--release> --target ${FREESTANDING_TARGET}
+    COMMAND cargo build $<IF:$<CONFIG:Debug>,--profile=dev,--release> --target ${KERNEL_TARGET}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/obkrnl
     BYPRODUCTS ${KERNEL})
 

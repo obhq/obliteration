@@ -23,7 +23,16 @@
       "name": "Legacy Kernel",
       "type": "lldb",
       "request": "launch",
-      "program": "${workspaceFolder}/src/target/debug/kernel",
+      "cargo": {
+        "args": [
+          "build",
+          "--manifest-path",
+          "${workspaceFolder}/src/kernel/Cargo.toml"
+        ],
+        "filter": {
+          "kind": "bin"
+        }
+      },
       "args": ["--debug"],
       "cwd": "${workspaceFolder}"
     }
