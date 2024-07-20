@@ -61,9 +61,7 @@ add_executable(obliteration WIN32 MACOSX_BUNDLE
     progress_dialog.cpp
     resources.qrc
     settings.cpp
-    system.cpp
-    system_downloader.cpp
-    update_firmware.cpp)
+    system.cpp)
 
 if(WIN32)
     target_sources(obliteration PRIVATE resources.rc)

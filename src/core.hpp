@@ -34,12 +34,11 @@ extern "C" {
     param *pkg_get_param(const pkg *pkg, error **error);
     error *pkg_extract(const pkg *pkg, const char *dir, pkg_extract_status_t status, void *ud);
 
-    error *system_download(
-        const char *from,
-        const char *to,
-        bool explicit_decryption,
-        void (*status) (const char *, std::uint64_t, std::uint64_t, void *),
-        void *ud);
+    error *update_firmware(
+        const char *root,
+        const char *fw,
+        void *cx,
+        void (*status) (const char *, std::uint64_t, std::uint64_t, void *));
 
     vmm *vmm_new();
     void vmm_free(vmm *vmm);

@@ -1,13 +1,10 @@
 #include "system.hpp"
+#include "core.hpp"
 #include "path.hpp"
 #include "progress_dialog.hpp"
 #include "settings.hpp"
-#include "system_downloader.hpp"
 
-#include <QCoreApplication>
-#include <QDir>
 #include <QMessageBox>
-#include <QThread>
 
 bool isSystemInitialized()
 {
@@ -16,70 +13,54 @@ bool isSystemInitialized()
 
 bool isSystemInitialized(const QString &path)
 {
-    auto libkernel = toPath(path);
+    auto root = toPath(path);
+    std::filesystem::file_status status;
 
     try {
 #ifdef _WIN32
-        return std::filesystem::exists(libkernel / L"system" / L"common" / L"lib" / L"libkernel.sprx");
+        status = std::filesystem::status(root / L"part" / L"md0.obp");
 #else
-        return std::filesystem::exists(libkernel / "system" / "common" / "lib" / "libkernel.sprx");
+        status = std::filesystem::status(root / "part" / "md0.obp");
 #endif
     } catch (...) {
         return false;
     }
+
+    return status.type() == std::filesystem::file_type::regular;
 }
 
-bool initSystem(const QString &path, const QString &from, bool explicitDecryption, QWidget *parent)
+bool initSystem(const QString &path, const QString &firmware, QWidget *parent)
 {
     // Setup progress dialog.
-    ProgressDialog progress("Initializing system", QString("Connecting to %1").arg(from), parent);
+    ProgressDialog progress("Initializing system", QString("Opening %1").arg(firmware), parent);
 
-    // Setup the system downloader.
-    QThread background;
-    QObject context;
-    QString error;
-    auto finished = false;
-    auto downloader = new SystemDownloader(from, path, explicitDecryption);
+    // Update firmware.
+    auto root = path.toStdString();
+    auto fw = firmware.toStdString();
+    Error error = update_firmware(
+        root.c_str(),
+        fw.c_str(),
+        &progress, [](const char *status, std::uint64_t total, std::uint64_t written, void *cx) {
+            auto progress = reinterpret_cast<ProgressDialog *>(cx);
 
-    downloader->moveToThread(&background);
+            if (progress->statusText() != status) {
+                progress->setStatusText(status);
+                progress->setValue(0);
+                progress->setMaximum(total);
+            } else {
+                progress->setValue(written);
+            }
+        });
 
-    QObject::connect(&background, &QThread::started, downloader, &SystemDownloader::exec);
-    QObject::connect(&background, &QThread::finished, downloader, &QObject::deleteLater);
-
-    QObject::connect(downloader, &SystemDownloader::statusChanged, &context, [&](auto status, auto total, auto written) {
-        if (progress.statusText() != status) {
-            progress.setStatusText(status);
-            progress.setValue(0);
-            progress.setMaximum(total);
-        } else {
-            progress.setValue(written);
-        }
-    });
-
-    QObject::connect(downloader, &SystemDownloader::finished, &context, [&](auto e) {
-        error = e;
-        finished = true;
-    });
-
-    // Start dumping.
-    background.start();
-
-    while (!finished) {
-        QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents);
-    }
-
-    // Clean up.
-    background.quit();
-    background.wait();
     progress.complete();
 
     // Check result.
-    if (!error.isEmpty()) {
-        QMessageBox::critical(parent, "Error", QString("Failed to download system files from %1 to %2: %3").arg(from).arg(path).arg(error));
+    if (error) {
+        QMessageBox::critical(parent, "Error", QString("Failed to install %1 to %2: %3").arg(firmware).arg(path).arg(error.message()));
         return false;
     }
 
-    QMessageBox::information(parent, "Success", "Downloaded system files successfully.");
+    QMessageBox::information(parent, "Success", "Firmware installed successfully.");
 
     return true;
 }
