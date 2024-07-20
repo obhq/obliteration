@@ -15,6 +15,7 @@ on:
         type: string
         required: true
 env:
+  CARGO_NET_GIT_FETCH_WITH_CLI: true
   CMAKE_BUILD_PARALLEL_LEVEL: '3'
 jobs:
   build:

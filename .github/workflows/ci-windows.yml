@@ -2,6 +2,7 @@ name: CI (Windows)
 on:
   workflow_call:
 env:
+  CARGO_NET_GIT_FETCH_WITH_CLI: true
   CMAKE_BUILD_PARALLEL_LEVEL: '4'
 jobs:
   build:
