@@ -1,4 +1,5 @@
 {
+  "cmake.configureOnOpen": true,
   "cmake.debugConfig": {
     "cwd": "${workspaceFolder}"
   },

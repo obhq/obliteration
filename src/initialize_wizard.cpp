@@ -1,10 +1,10 @@
 #include "initialize_wizard.hpp"
 #include "settings.hpp"
 #include "system.hpp"
-#include "update_firmware.hpp"
 
 #include <QDir>
 #include <QFileDialog>
+#include <QFileInfo>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -36,9 +36,11 @@ public:
         // Introduction.
         auto intro = new QLabel(
             "This wizard will help you setup Obliteration. To ensure you're ready, make sure you "
-            "have a jailbroken PS4 with an enabled FTP server. You will also need your PS4's IP "
-            "address and the port used for FTP connection.");
+            "have a firmware dumped from your PS4 using "
+            "<a href=\"https://github.com/obhq/firmware-dumper\">Firmware Dumper</a>.");
         intro->setWordWrap(true);
+        intro->setOpenExternalLinks(true);
+
         layout->addWidget(intro);
 
         setLayout(layout);
@@ -53,7 +55,9 @@ public:
 
         // Page properties.
         setTitle("Location for system files");
-        setSubTitle("The selected directory will be used for any PS4 data. (Save Data and Firmware Files).");
+        setSubTitle(
+            "The selected directory will be used for everything except games (e.g. save "
+            "data and firmware files).");
 
         // Widgets.
         layout->addLayout(setupInputRow());
@@ -77,7 +81,6 @@ public:
 
         return true;
     }
-
 private:
     QLayout *setupInputRow()
     {
@@ -115,7 +118,6 @@ private:
         }
     }
 
-private:
     QLineEdit *m_input;
 };
 
@@ -127,7 +129,9 @@ public:
 
         // Page properties.
         setTitle("Location to install games");
-        setSubTitle("The selected directory will be used for game installation. The directory cannot be the same as the system directory.");
+        setSubTitle(
+            "The selected directory will be used for game installation. The directory "
+            "cannot be the same as the system directory.");
 
         // Widgets.
         layout->addLayout(setupInputRow());
@@ -156,7 +160,6 @@ public:
 
         return true;
     }
-
 private:
     QLayout *setupInputRow()
     {
@@ -194,50 +197,78 @@ private:
         }
     }
 
-private:
     QLineEdit *m_input;
 };
 
 class FirmwarePage : public QWizardPage {
 public:
-    FirmwarePage() : m_form(nullptr)
+    FirmwarePage() : m_input(nullptr)
     {
         auto layout = new QVBoxLayout();
 
         // Page properties.
         setTitle("Install firmware");
-        setSubTitle("Obliteration requires some firmware files from your PS4 in order to work.");
+        setSubTitle("Select a firmware dump that you got from Firmware Dumper.");
 
-        // Page widgets.
-        m_form = new UpdateFirmware();
-        layout->addWidget(m_form);
+        // Widgets.
+        layout->addLayout(setupInputRow());
 
         setLayout(layout);
     }
 
     bool validatePage() override
     {
+        // Check file path.
+        QFileInfo path(m_input->text());
+
+        if (!path.isFile()) {
+            QMessageBox::critical(this, "Error", "The specified file does not exist.");
+            return false;
+        }
+
         // Get system path.
         auto systemPath = wizard()->hasVisitedPage(PageSystem)
             ? field(FIELD_SYSTEM_LOCATION).toString()
             : readSystemDirectorySetting();
 
-        // Load update form.
-        auto from = m_form->from();
-
-        if (from.isEmpty()) {
-            QMessageBox::critical(this, "Error", "No FTP server was specified.");
-            return false;
-        }
-
-        auto explicitDecryption = m_form->explicitDecryption();
-
         // Install.
-        return initSystem(systemPath, from, explicitDecryption, this);
+        return initSystem(systemPath, path.canonicalFilePath(), this);
+    }
+private:
+    QLayout *setupInputRow()
+    {
+        auto layout = new QHBoxLayout();
+
+        // Label.
+        auto label = new QLabel("&File:");
+        layout->addWidget(label);
+
+        // Input.
+        m_input = new QLineEdit();
+
+        label->setBuddy(m_input);
+        layout->addWidget(m_input);
+
+        // Browse button.
+        auto browse = new QPushButton("...");
+
+        connect(browse, &QPushButton::clicked, this, &FirmwarePage::browseDump);
+
+        layout->addWidget(browse);
+
+        return layout;
     }
 
-private:
-    UpdateFirmware *m_form;
+    void browseDump()
+    {
+        auto path = QFileDialog::getOpenFileName(this, "Select a firmware dump", {}, "Firmware Dump (*.obf)");
+
+        if (!path.isEmpty()) {
+            m_input->setText(QDir::toNativeSeparators(path));
+        }
+    }
+
+    QLineEdit *m_input;
 };
 
 class ConclusionPage : public QWizardPage {
@@ -247,7 +278,7 @@ public:
         auto layout = new QVBoxLayout();
 
         // Page properties.
-        setTitle("Setup complete.");
+        setTitle("Setup complete");
 
         // Introduction.
         auto intro = new QLabel("You can now install your games and play them using Obliteration.");
@@ -304,13 +335,13 @@ int InitializeWizard::nextId() const
             return PageSystem;
         }
 
-        Q_FALLTHROUGH();
+        [[fallthrough]];
     case PageSystem:
         if (!hasGamesDirectorySetting()) {
             return PageGame;
         }
 
-        Q_FALLTHROUGH();
+        [[fallthrough]];
     case PageGame:
         if (hasVisitedPage(PageSystem)) {
             // No system path has been configured before.
@@ -321,7 +352,7 @@ int InitializeWizard::nextId() const
             return PageFirmware;
         }
 
-        Q_FALLTHROUGH();
+        [[fallthrough]];
     case PageFirmware:
         return PageConclusion;
     case PageConclusion:
