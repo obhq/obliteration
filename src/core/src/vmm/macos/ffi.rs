@@ -1,5 +1,6 @@
 use std::ffi::{c_int, c_void};
 
+#[link(name = "Hypervisor", kind = "framework")]
 extern "C" {
     pub fn hv_vm_create(config: *mut ()) -> c_int;
     pub fn hv_vm_destroy() -> c_int;
