@@ -20,6 +20,7 @@ features = [
     "Win32",
     "Win32_Foundation",
     "Win32_System",
+    "Win32_System_Hypervisor",
     "Win32_System_Memory",
 ]
 
