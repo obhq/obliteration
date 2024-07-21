@@ -17,6 +17,8 @@ impl Vm {
     }
 
     pub fn vm_map(&self, host: *mut c_void, guest: u64, len: usize) -> Result<(), NonZero<c_int>> {
+        #[cfg(target_arch = "aarch64")]
+        let len = len.try_into().unwrap();
         let ret = unsafe { hv_vm_map(host, guest, len, 1 | 2 | 4) };
 
         match NonZero::new(ret) {
