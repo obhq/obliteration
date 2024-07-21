@@ -1,5 +1,5 @@
-use super::ffi::hv_vcpu_destroy;
 use crate::vmm::{Cpu, CpuStates};
+use hv_sys::hv_vcpu_destroy;
 use std::marker::PhantomData;
 use thiserror::Error;
 

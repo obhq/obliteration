@@ -5,7 +5,10 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+
+#ifdef __linux__
 #include <linux/kvm.h>
+#endif
 
 struct Param;
 struct Pkg;
@@ -107,30 +110,6 @@ extern int kvm_get_regs(int vcpu, kvm_regs *regs);
 
 #if defined(__linux__)
 extern int kvm_set_regs(int vcpu, const kvm_regs *regs);
-#endif
-
-#if defined(__APPLE__)
-extern int hv_vm_create(void *config);
-#endif
-
-#if defined(__APPLE__)
-extern int hv_vm_destroy(void);
-#endif
-
-#if defined(__APPLE__)
-extern int hv_capability(uint64_t capability, uint64_t *value);
-#endif
-
-#if defined(__APPLE__)
-extern int hv_vm_map(void *uva, uint64_t gpa, size_t size, uint64_t flags);
-#endif
-
-#if defined(__APPLE__)
-extern int hv_vcpu_create(uint64_t *vcpu, uint64_t flags);
-#endif
-
-#if defined(__APPLE__)
-extern int hv_vcpu_destroy(uint64_t vcpu);
 #endif
 
 #ifdef __cplusplus

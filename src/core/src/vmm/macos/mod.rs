@@ -1,14 +1,13 @@
 use self::cpu::HfCpu;
-use self::ffi::hv_vcpu_create;
 use self::vm::Vm;
 use super::{HypervisorError, MemoryAddr, Platform, Ram};
+use hv_sys::hv_vcpu_create;
 use std::ffi::c_int;
 use std::num::NonZero;
 use std::sync::Arc;
 use thiserror::Error;
 
 mod cpu;
-mod ffi;
 mod vm;
 
 /// Implementation of [`Platform`] using Hypervisor Framework.
@@ -20,13 +19,9 @@ pub struct Hf {
 }
 
 impl Hf {
-    pub fn new(cpu: usize, ram: Arc<Ram>) -> Result<Self, HypervisorError> {
+    pub fn new(_: usize, ram: Arc<Ram>) -> Result<Self, HypervisorError> {
         // Create a VM.
         let vm = Vm::new().map_err(HypervisorError::CreateVmFailed)?;
-
-        if (vm.capability(0).map_err(HypervisorError::GetMaxCpuFailed)? as usize) < cpu {
-            return Err(HypervisorError::MaxCpuTooLow);
-        }
 
         // Map memory.
         vm.vm_map(

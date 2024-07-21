@@ -1,4 +1,4 @@
-use super::ffi::{hv_capability, hv_vm_create, hv_vm_destroy, hv_vm_map};
+use hv_sys::{hv_vm_create, hv_vm_destroy, hv_vm_map};
 use std::ffi::{c_int, c_void};
 use std::num::NonZero;
 use std::ptr::null_mut;
@@ -13,16 +13,6 @@ impl Vm {
         match NonZero::new(ret) {
             Some(ret) => Err(ret),
             None => Ok(Self(())),
-        }
-    }
-
-    pub fn capability(&self, id: u64) -> Result<u64, NonZero<c_int>> {
-        let mut value = 0;
-        let ret = unsafe { hv_capability(id, &mut value) };
-
-        match NonZero::new(ret) {
-            Some(ret) => Err(ret),
-            None => Ok(value),
         }
     }
 

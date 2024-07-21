@@ -154,10 +154,6 @@ enum HypervisorError {
     CreateVmFailed(std::num::NonZero<std::ffi::c_int>),
 
     #[cfg(target_os = "macos")]
-    #[error("couldn't get maximum number of CPU for a VM")]
-    GetMaxCpuFailed(std::num::NonZero<std::ffi::c_int>),
-
-    #[cfg(target_os = "macos")]
     #[error("couldn't map memory to the VM")]
     MapRamFailed(std::num::NonZero<std::ffi::c_int>),
 }

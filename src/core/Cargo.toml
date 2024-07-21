@@ -24,5 +24,8 @@ features = [
     "Win32_System_Memory",
 ]
 
+[target.'cfg(target_os = "macos")'.dependencies]
+hv-sys = "0.1.1"
+
 [build-dependencies]
 cbindgen = "0.26.0"

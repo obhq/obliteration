@@ -8,15 +8,16 @@ fn main() {
     let mut buf = String::new();
     let externs = ["Param", "Pkg"];
 
+    buf.push_str("\n#ifdef __linux__");
+    buf.push_str("\n#include <linux/kvm.h>");
+    buf.push_str("\n#endif");
+
+    buf.push('\n');
+
     for ext in externs {
         buf.push_str("\nstruct ");
         buf.push_str(ext);
         buf.push(';');
-    }
-
-    match std::env::var("CARGO_CFG_TARGET_OS").unwrap().as_str() {
-        "linux" => conf.sys_includes.push("linux/kvm.h".into()),
-        _ => {}
     }
 
     conf.after_includes = Some(buf);
