@@ -2,6 +2,10 @@
 find_package(Qt6 COMPONENTS Widgets REQUIRED)
 find_package(Threads REQUIRED)
 
+if(APPLE)
+    find_library(HYPERVISOR Hypervisor REQUIRED)
+endif()
+
 # Setup Rust target.
 if(WIN32)
     if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "AMD64")
@@ -98,6 +102,8 @@ target_link_libraries(obliteration PRIVATE ${LIBCORE})
 
 if(WIN32)
     target_link_libraries(obliteration PRIVATE bcrypt imm32 ntdll setupapi userenv version winmm ws2_32)
+elseif(APPLE)
+    target_link_libraries(obliteration PRIVATE ${HYPERVISOR})
 else()
     target_link_libraries(obliteration PRIVATE ${CMAKE_DL_LIBS})
 endif()
