@@ -1,5 +1,6 @@
-// The reason we need C++ here is because the KVM ioctls is not available in the libc binding.
-#include <linux/kvm.h>
+// This file contains KVM wrappers for Rust side. The reason we need these wrappers is because the
+// KVM ioctls is not available in the libc binding.
+#include "core.h"
 
 #include <sys/ioctl.h>
 
@@ -95,7 +96,7 @@ extern "C" int kvm_get_regs(int vcpu, kvm_regs *regs)
     return ioctl(vcpu, KVM_GET_REGS, regs);
 }
 
-extern "C" int kvm_set_regs(int vcpu, kvm_regs *const regs)
+extern "C" int kvm_set_regs(int vcpu, const kvm_regs *regs)
 {
     return ioctl(vcpu, KVM_SET_REGS, regs);
 }

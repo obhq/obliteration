@@ -67,6 +67,8 @@ if(WIN32)
     target_sources(obliteration PRIVATE resources.rc)
 elseif(APPLE)
     target_sources(obliteration PRIVATE resources/obliteration.icns)
+elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+    target_sources(obliteration PRIVATE kvm.cpp)
 endif()
 
 add_dependencies(obliteration core)

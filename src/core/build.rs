@@ -14,12 +14,25 @@ fn main() {
         buf.push(';');
     }
 
+    match std::env::var("CARGO_CFG_TARGET_OS").unwrap().as_str() {
+        "linux" => conf.sys_includes.push("linux/kvm.h".into()),
+        _ => {}
+    }
+
     conf.after_includes = Some(buf);
     conf.pragma_once = true;
     conf.language = Language::C;
     conf.cpp_compat = true;
     conf.style = Style::Tag;
     conf.usize_is_size_t = true;
+    conf.export.exclude.push("KvmRegs".into());
+    conf.export
+        .rename
+        .insert("KvmRegs".into(), "kvm_regs".into());
+    conf.defines
+        .insert("target_os = linux".into(), "__linux__".into());
+    conf.defines
+        .insert("target_os = macos".into(), "__APPLE__".into());
 
     Builder::new()
         .with_crate(&core)

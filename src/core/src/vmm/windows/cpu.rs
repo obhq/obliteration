@@ -1,4 +1,4 @@
-use crate::hv::{Cpu, CpuStates};
+use crate::vmm::{Cpu, CpuStates};
 use std::marker::PhantomData;
 use thiserror::Error;
 use windows_sys::Win32::System::Hypervisor::{WHvDeleteVirtualProcessor, WHV_PARTITION_HANDLE};

@@ -1,7 +1,7 @@
 use super::ffi::{kvm_get_regs, kvm_set_regs};
 use super::regs::KvmRegs;
 use super::run::KvmRun;
-use crate::hv::{Cpu, CpuStates};
+use crate::vmm::{Cpu, CpuStates};
 use libc::munmap;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;

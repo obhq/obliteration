@@ -47,6 +47,3 @@ features = [
     "Win32_System_Time",
     "Win32_System_WindowsProgramming",
 ]
-
-[build-dependencies]
-cc = "1.0.90"
