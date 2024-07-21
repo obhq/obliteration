@@ -39,5 +39,5 @@ private:
     LaunchSettings *m_launch;
     QTableView *m_games;
     LogFormatter *m_log;
-    Vmm m_kernel;
+    RustPtr<Vmm> m_kernel;
 };
