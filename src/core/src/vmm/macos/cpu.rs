@@ -1,17 +1,17 @@
 use crate::vmm::{Cpu, CpuStates};
-use hv_sys::hv_vcpu_destroy;
+use hv_sys::{hv_vcpu_destroy, hv_vcpu_t};
 use std::marker::PhantomData;
 use thiserror::Error;
 
 /// Implementation of [`Cpu`] for Hypervisor Framework.
 pub struct HfCpu<'a> {
     id: usize,
-    instance: u64,
+    instance: hv_vcpu_t,
     vm: PhantomData<&'a ()>,
 }
 
 impl<'a> HfCpu<'a> {
-    pub fn new(id: usize, instance: u64) -> Self {
+    pub fn new(id: usize, instance: hv_vcpu_t) -> Self {
         Self {
             id,
             instance,
