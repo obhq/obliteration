@@ -41,6 +41,10 @@ impl Platform for Hf {
 
     fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {
         let mut instance = 0;
+        #[cfg(target_arch = "aarch64")]
+        let ret =
+            unsafe { hv_vcpu_create(&mut instance, std::ptr::null_mut(), std::ptr::null_mut()) };
+        #[cfg(target_arch = "x86_64")]
         let ret = unsafe { hv_vcpu_create(&mut instance, 0) };
 
         if let Some(e) = NonZero::new(ret) {
