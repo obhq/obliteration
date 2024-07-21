@@ -1,7 +1,6 @@
-pub use error::*;
-
-mod ffi;
+mod error;
 mod param;
 mod pkg;
+mod string;
 mod system;
 mod vmm;

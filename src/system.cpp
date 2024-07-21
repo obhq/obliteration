@@ -37,7 +37,9 @@ bool initSystem(const QString &path, const QString &firmware, QWidget *parent)
     // Update firmware.
     auto root = path.toStdString();
     auto fw = firmware.toStdString();
-    Error error = update_firmware(
+    RustPtr<RustError> error;
+
+    error = update_firmware(
         root.c_str(),
         fw.c_str(),
         &progress, [](const char *status, std::uint64_t total, std::uint64_t written, void *cx) {
@@ -56,7 +58,10 @@ bool initSystem(const QString &path, const QString &firmware, QWidget *parent)
 
     // Check result.
     if (error) {
-        QMessageBox::critical(parent, "Error", QString("Failed to install %1 to %2: %3").arg(firmware).arg(path).arg(error.message()));
+        QMessageBox::critical(
+            parent,
+            "Error",
+            QString("Failed to install %1 to %2: %3").arg(firmware).arg(path).arg(error_message(error)));
         return false;
     }
 

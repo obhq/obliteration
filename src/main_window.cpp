@@ -1,5 +1,4 @@
 #include "main_window.hpp"
-#include "core.hpp"
 #include "game_models.hpp"
 #include "game_settings.hpp"
 #include "game_settings_dialog.hpp"
@@ -201,7 +200,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
             return;
         }
 
-        m_kernel.kill();
+        m_kernel.free();
     }
 
     // Save geometry.
@@ -383,18 +382,27 @@ bool MainWindow::loadGame(const QString &gameId)
         // Read game information from param.sfo.
         auto paramDir = joinPath(gamePath.c_str(), "sce_sys");
         auto paramPath = joinPath(paramDir.c_str(), "param.sfo");
-        Error error;
-        Param param(param_open(paramPath.c_str(), &error));
+        RustPtr<RustError> error;
+        RustPtr<Param> param;
+
+        param = param_open(paramPath.c_str(), &error);
 
         if (!param) {
-            QMessageBox::critical(this, "Error", QString("Cannot open %1: %2").arg(paramPath.c_str()).arg(error.message()));
+            QMessageBox::critical(
+                this,
+                "Error",
+                QString("Cannot open %1: %2").arg(paramPath.c_str()).arg(error_message(error)));
             return false;
         }
 
         // Add to list.
         auto list = reinterpret_cast<GameListModel *>(m_games->model());
+        RustPtr<char> titleId, title;
 
-        list->add(new Game(param.titleId(), param.title(), gamePath.c_str()));
+        titleId = param_title_id_get(param);
+        title = param_title_get(param);
+
+        list->add(new Game(titleId.get(), title.get(), gamePath.c_str()));
     }
 
     return true;
@@ -434,7 +442,7 @@ bool MainWindow::requireEmulatorStopped()
             return true;
         }
 
-        m_kernel.kill();
+        m_kernel.free();
     }
 
     return false;

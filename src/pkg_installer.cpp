@@ -17,6 +17,8 @@
 #include <string>
 #include <utility>
 
+#include <string.h>
+
 PkgInstaller::PkgInstaller(const QString &games, const QString &pkg, QWidget *parent) :
     QDialog(parent),
     m_games(games),
@@ -79,38 +81,54 @@ int PkgInstaller::exec()
     }
 
     // Open a PKG.
-    Pkg pkg;
-    Error error;
+    RustPtr<Pkg> pkg;
+    RustPtr<RustError> error;
 
     log(QString("Opening %1").arg(m_pkg));
     pkg = pkg_open(m_pkg.toStdString().c_str(), &error);
 
     if (!pkg) {
-        QMessageBox::critical(this, "Error", QString("Couldn't open %1: %2").arg(m_pkg).arg(error.message()));
+        QMessageBox::critical(
+            this,
+            "Error",
+            QString("Couldn't open %1: %2").arg(m_pkg).arg(error_message(error)));
         return Rejected;
     }
 
     // Get param.sfo.
-    Param param(pkg_get_param(pkg, &error));
+    RustPtr<Param> param;
+
+    param = pkg_get_param(pkg, &error);
 
     if (!param) {
-        QMessageBox::critical(this, "Error", QString("Couldn't get param.sfo from %1: %2").arg(m_pkg).arg(error.message()));
+        QMessageBox::critical(
+            this,
+            "Error",
+            QString("Couldn't get param.sfo from %1: %2").arg(m_pkg).arg(error_message(error)));
         return Rejected;
     }
 
     // Get path to install.
-    auto id = param.titleId();
-    auto directory = joinPath(m_games, id);
-    auto category = param.category();
+    RustPtr<char> id, category, appver, title;
 
-    if (category == "gp") {
-        directory.append("-PATCH-").append(param.appver().toStdString());
-    } else if (category == "ac") {
+    id = param_title_id_get(param);
+    category = param_category_get(param);
+    appver = param_app_ver_get(param);
+    title = param_title_get(param);
+
+    auto directory = joinPath(m_games, id.get());
+
+    if (strcmp(category, "gp") == 0) {
+        directory.append("-PATCH-").append(appver);
+    } else if (strcmp(category, "ac") == 0) {
         // TODO: Add DLC support, short_content_id is most likely to be used.
         QMessageBox::critical(this, "Error", "DLC PKG support is not yet implemented.");
         return Rejected;
-    } else if (category != "gd") {
-        QMessageBox::critical(this, "Error", QString("Don't know how to install a PKG with category = %1.").arg(category));
+    } else if (strcmp(category, "gd")) {
+        QMessageBox::critical(
+            this,
+            "Error",
+            QString("Don't know how to install a PKG with category = %1.").arg(category.get()));
         return Rejected;
     }
 
@@ -124,7 +142,7 @@ int PkgInstaller::exec()
         return Rejected;
     }
 
-    setWindowTitle(param.title());
+    setWindowTitle(title.get());
 
     // Setup extractor.
     QThread background;
@@ -170,7 +188,7 @@ int PkgInstaller::exec()
     }
 
     // Set success data.
-    if (category == "gd") {
+    if (strcmp(category, "gd") == 0) {
         m_gameId = std::move(id);
     }
 

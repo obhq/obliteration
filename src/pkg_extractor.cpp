@@ -1,6 +1,6 @@
 #include "pkg_extractor.hpp"
 
-PkgExtractor::PkgExtractor(Pkg &&pkg, std::string &&dst) :
+PkgExtractor::PkgExtractor(RustPtr<Pkg> &&pkg, std::string &&dst) :
     m_pkg(std::move(pkg)),
     m_dst(std::move(dst))
 {
@@ -12,7 +12,9 @@ PkgExtractor::~PkgExtractor()
 
 void PkgExtractor::exec()
 {
-    Error e = pkg_extract(
+    RustPtr<RustError> e;
+
+    e = pkg_extract(
         m_pkg,
         m_dst.c_str(),
         [](const char *status, std::size_t bar, std::uint64_t current, std::uint64_t total, void *ud) {
@@ -21,7 +23,7 @@ void PkgExtractor::exec()
         this);
 
     if (e) {
-        emit finished(e.message());
+        emit finished(error_message(e));
     } else {
         emit finished(QString());
     }
