@@ -6,8 +6,14 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#ifdef __linux__
+#include <linux/kvm.h>
+#endif
+
 struct Param;
 struct Pkg;
+
+#define Ram_SIZE (((1024 * 1024) * 1024) * 8)
 
 /**
  * Error object managed by Rust side.
@@ -62,9 +68,49 @@ struct RustError *update_firmware(const char *root,
                                   void *cx,
                                   void (*status)(const char*, uint64_t, uint64_t, void*));
 
-struct Vmm *vmm_new(void);
+struct Vmm *vmm_new(struct RustError **err);
 
 void vmm_free(struct Vmm *vmm);
+
+#if defined(__linux__)
+extern int kvm_check_version(int kvm, bool *compat);
+#endif
+
+#if defined(__linux__)
+extern int kvm_max_vcpus(int kvm, size_t *max);
+#endif
+
+#if defined(__linux__)
+extern int kvm_create_vm(int kvm, int *fd);
+#endif
+
+#if defined(__linux__)
+extern int kvm_get_vcpu_mmap_size(int kvm);
+#endif
+
+#if defined(__linux__)
+extern int kvm_set_user_memory_region(int vm,
+                                      uint32_t slot,
+                                      uint64_t addr,
+                                      uint64_t len,
+                                      void *mem);
+#endif
+
+#if defined(__linux__)
+extern int kvm_create_vcpu(int vm, uint32_t id, int *fd);
+#endif
+
+#if defined(__linux__)
+extern int kvm_run(int vcpu);
+#endif
+
+#if defined(__linux__)
+extern int kvm_get_regs(int vcpu, kvm_regs *regs);
+#endif
+
+#if defined(__linux__)
+extern int kvm_set_regs(int vcpu, const kvm_regs *regs);
+#endif
 
 #ifdef __cplusplus
 } // extern "C"

@@ -11,14 +11,12 @@ use crate::ee::native::NativeEngine;
 use crate::ee::EntryArg;
 use crate::errno::EEXIST;
 use crate::fs::{Fs, FsInitError, MkdirError, MountError, MountFlags, MountOpts, VPath, VPathBuf};
-use crate::hv::{Cpu, Hypervisor};
 use crate::kqueue::KernelQueueManager;
 use crate::log::{print, LOGGER};
 use crate::namedobj::NamedObjManager;
 use crate::net::NetManager;
 use crate::osem::OsemManager;
-use crate::pcpu::Pcpu;
-use crate::process::{ProcManager, ProcManagerError, VThread};
+use crate::process::{ProcManager, ProcManagerError};
 use crate::rcmgr::RcMgr;
 use crate::regmgr::RegMgr;
 use crate::rtld::{ExecError, LoadFlags, ModuleFlags, RuntimeLinker};
@@ -32,7 +30,7 @@ use crate::time::TimeManager;
 use crate::ucred::{AuthAttrs, AuthCaps, AuthInfo, AuthPaid, Gid, Ucred, Uid};
 use crate::umtx::UmtxManager;
 use crate::vm::VmMgr;
-use llt::SpawnError;
+use llt::{OsThread, SpawnError};
 use macros::vpath;
 use param::Param;
 use std::error::Error;
@@ -40,8 +38,6 @@ use std::fs::{create_dir_all, remove_dir_all, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::channel;
 use std::sync::Arc;
 use std::time::SystemTime;
 use sysinfo::{MemoryRefreshKind, System};
@@ -57,7 +53,6 @@ mod ee;
 mod errno;
 mod event;
 mod fs;
-mod hv;
 mod idps;
 mod idt;
 mod imgact;
@@ -225,10 +220,9 @@ fn run(args: Args) -> Result<(), KernelError> {
     ));
 
     // Initialize foundations.
-    let hv = Arc::new(Hypervisor::new().map_err(KernelError::CreateHypervisorFailed)?);
     let mut sys = Syscalls::new();
     let sched = Arc::new(Scheduler::new());
-    let vm = VmMgr::new(hv.clone(), &mut sys);
+    let vm = VmMgr::new(&mut sys);
     let fs = Fs::new(args.system, &cred, &mut sys).map_err(KernelError::FilesystemInitFailed)?;
     let rc = RcMgr::new();
     let pmgr = ProcManager::new(&cred, &fs, &rc, &mut sys)
@@ -513,67 +507,15 @@ fn run(args: Args) -> Result<(), KernelError> {
 
     // TODO: Check how this constructed.
     let stack = proc.vm_space().stack();
-
-    unsafe { main.start(stack.start(), stack.len(), entry) }?;
+    let main = unsafe { main.start(stack.start(), stack.len(), entry) }?;
 
     // Begin Discord Rich Presence before blocking current thread.
     if let Err(e) = discord_presence(&param) {
         warn!(e, "Failed to setup Discord rich presence");
     }
 
-    // Spawn threads to drive vCPUs.
-    let exit = AtomicBool::new(false);
-
-    std::thread::scope(|s| {
-        let (tx, rx) = channel();
-
-        for id in 0..Hypervisor::VCPU {
-            let tx = tx.clone();
-            let exit = &exit;
-            let hv = hv.as_ref();
-            let sched = sched.as_ref();
-            let pmgr = pmgr.as_ref();
-
-            s.spawn(move || tx.send(cpu(id, exit, hv, sched, pmgr)));
-        }
-
-        drop(tx);
-
-        // Wait for all vCPUs to exit.
-        for r in rx {
-            exit.store(true, Ordering::Relaxed);
-
-            if let Err(e) = r {
-                return Err(e);
-            }
-        }
-
-        Ok(())
-    })
-    .map_err(KernelError::CpuError)
-}
-
-fn cpu(
-    id: usize,
-    exit: &AtomicBool,
-    hv: &Hypervisor,
-    sched: &Scheduler,
-    pmgr: &ProcManager,
-) -> Result<(), CpuError> {
-    // Initialize a virtual CPU.
-    let cpu = hv
-        .create_cpu()
-        .map_err(|e| CpuError::CreateCpuFailed(Box::new(e)))?;
-    let idle = pmgr.spawn_kthread(
-        Some(pmgr.idle()),
-        format!("SceIdleCpu{}", 7u8.wrapping_sub(id as u8)),
-    );
-    let mut cx = Pcpu::new(cpu.id(), Arc::downgrade(&idle));
-
-    // Enter dispatch loop.
-    while !exit.load(Ordering::Relaxed) {
-        let td = sched.choose(&cx);
-    }
+    // Wait for main thread to exit. This should never return.
+    join_thread(main).map_err(KernelError::FailedToJoinMainThread)?;
 
     Ok(())
 }
@@ -617,6 +559,31 @@ fn discord_presence(param: &Param) -> Result<(), DiscordPresenceError> {
 
     // Keep client alive forever.
     Box::leak(client.into());
+
+    Ok(())
+}
+
+#[cfg(unix)]
+fn join_thread(thr: OsThread) -> Result<(), std::io::Error> {
+    let err = unsafe { libc::pthread_join(thr, std::ptr::null_mut()) };
+
+    if err != 0 {
+        Err(std::io::Error::from_raw_os_error(err))
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(windows)]
+fn join_thread(thr: OsThread) -> Result<(), std::io::Error> {
+    use windows_sys::Win32::Foundation::{CloseHandle, WAIT_OBJECT_0};
+    use windows_sys::Win32::System::Threading::{WaitForSingleObject, INFINITE};
+
+    if unsafe { WaitForSingleObject(thr, INFINITE) } != WAIT_OBJECT_0 {
+        return Err(std::io::Error::last_os_error());
+    }
+
+    assert_ne!(unsafe { CloseHandle(thr) }, 0);
 
     Ok(())
 }
@@ -696,19 +663,9 @@ enum KernelError {
     #[error("libSceLibcInternal couldn't be loaded")]
     FailedToLoadLibSceLibcInternal(#[source] self::rtld::LoadError),
 
-    #[error("couldn't create a hypervisor")]
-    CreateHypervisorFailed(#[source] self::hv::HypervisorError),
-
     #[error("main thread couldn't be created")]
     FailedToCreateMainThread(#[from] SpawnError),
 
-    #[error("one or more of virtual CPUs was failed")]
-    CpuError(#[source] CpuError),
-}
-
-/// Represents an error when [`cpu()`] fails.
-#[derive(Debug, Error)]
-enum CpuError {
-    #[error("couldn't create a virtual CPU")]
-    CreateCpuFailed(#[source] Box<dyn Error + Send>),
+    #[error("failed to join with main thread")]
+    FailedToJoinMainThread(#[source] std::io::Error),
 }

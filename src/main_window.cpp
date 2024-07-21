@@ -34,6 +34,7 @@
 #include <QUrl>
 
 #include <filesystem>
+#include <utility>
 
 MainWindow::MainWindow() :
     m_tab(nullptr),
@@ -364,6 +365,22 @@ void MainWindow::startKernel()
         path = QString::fromStdString(b.string());
 #endif
     }
+
+    // Setup VMM.
+    RustPtr<RustError> error;
+    RustPtr<Vmm> vmm;
+
+    vmm = vmm_new(&error);
+
+    if (!vmm) {
+        QMessageBox::critical(
+            this,
+            "Error",
+            QString("Couldn't create a VMM: %1").arg(error_message(error)));
+        return;
+    }
+
+    m_kernel = std::move(vmm);
 }
 
 bool MainWindow::loadGame(const QString &gameId)

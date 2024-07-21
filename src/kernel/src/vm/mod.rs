@@ -6,7 +6,6 @@ use self::storage::Storage;
 use crate::dev::DmemContainer;
 use crate::errno::EINVAL;
 use crate::errno::EOPNOTSUPP;
-use crate::hv::Hypervisor;
 use crate::info;
 use crate::process::VThread;
 use crate::syscalls::SysErr;
@@ -26,13 +25,11 @@ mod storage;
 mod vm;
 
 /// Manage all virtual memory in the system.
-pub struct VmMgr {
-    hv: Arc<Hypervisor>,
-}
+pub struct VmMgr {}
 
 impl VmMgr {
-    pub fn new(hv: Arc<Hypervisor>, sys: &mut Syscalls) -> Arc<Self> {
-        let mgr = Arc::new(Self { hv });
+    pub fn new(sys: &mut Syscalls) -> Arc<Self> {
+        let mgr = Arc::new(Self {});
 
         sys.register(69, &mgr, Self::sys_sbrk);
         sys.register(70, &mgr, Self::sys_sstk);
