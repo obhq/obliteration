@@ -8,7 +8,10 @@ pub struct Vm(());
 
 impl Vm {
     pub fn new() -> Result<Self, NonZero<c_int>> {
+        #[cfg(target_arch = "aarch64")]
         let ret = unsafe { hv_vm_create(null_mut()) };
+        #[cfg(target_arch = "x86_64")]
+        let ret = unsafe { hv_vm_create(0) };
 
         match NonZero::new(ret) {
             Some(ret) => Err(ret),
