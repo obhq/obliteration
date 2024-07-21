@@ -1,5 +1,5 @@
 use crate::vmm::{Cpu, CpuStates};
-use hv_sys::{hv_vcpu_destroy, hv_vcpu_t};
+use hv_sys::hv_vcpu_destroy;
 use std::marker::PhantomData;
 use thiserror::Error;
 
@@ -46,6 +46,12 @@ impl<'a> Cpu for HfCpu<'a> {
         todo!()
     }
 }
+
+#[cfg(target_arch = "aarch64")]
+type hv_vcpu_t = hv_sys::hv_vcpu_t;
+
+#[cfg(target_arch = "x86_64")]
+type hv_vcpu_t = hv_sys::hv_vcpuid_t;
 
 /// Implementation of [`Cpu::GetStatesErr`].
 #[derive(Debug, Error)]
