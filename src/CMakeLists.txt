@@ -108,6 +108,11 @@ else()
     target_link_libraries(obliteration PRIVATE ${CMAKE_DL_LIBS})
 endif()
 
+if(APPLE)
+    add_custom_command(TARGET obliteration POST_BUILD
+        COMMAND codesign -s - --entitlements ${CMAKE_SOURCE_DIR}/entitlements.plist obliteration.app)
+endif()
+
 # Setup installation.
 if(WIN32)
     install(TARGETS obliteration DESTINATION .)
