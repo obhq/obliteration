@@ -92,8 +92,6 @@ jobs:
         install_name_tool -change '@rpath/QtCore.framework/Versions/A/QtCore' '@executable_path/../Frameworks/QtCore.framework/Versions/A/QtCore' "$app"
 
         otool -L "$app"
-    - name: Sign application
-      run: codesign -s - --entitlements entitlements.plist --deep dist/Obliteration.app
     - name: Create Apple Disk Image
       run: hdiutil create -volname Obliteration -srcfolder dist Obliteration.dmg
     - name: Upload artifacts
