@@ -2,7 +2,7 @@ use super::iter::StartFromMut;
 use super::{Alloc, AppStack, MappingFlags, MemoryType, Protections, VPages};
 use crate::errno::{Errno, EINVAL, ENOMEM};
 use crate::process::VThread;
-use crate::syscalls::{SysErr, SysOut, Syscalls};
+use crate::syscalls::{SysErr, SysOut};
 use crate::{info, warn};
 use macros::Errno;
 use std::collections::BTreeMap;

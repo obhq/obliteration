@@ -334,26 +334,26 @@ void MainWindow::startKernel()
     m_tab->setCurrentIndex(0);
 
     // Get full path to kernel binary.
-    QString path;
+    std::string kernel;
 
     if (QFile::exists(".obliteration-development")) {
         auto b = std::filesystem::current_path();
 
 #if defined(_WIN32) && defined(NDEBUG)
-        path = QString::fromStdWString((b / L"src" / L"target" / L"x86_64-unknown-none" / L"release" / L"obkrnl").wstring());
+        kernel = (b / L"src" / L"target" / L"x86_64-unknown-none" / L"release" / L"obkrnl").u8string();
 #elif defined(_WIN32) && !defined(NDEBUG)
-        path = QString::fromStdWString((b / L"src" / L"target" / L"x86_64-unknown-none" / L"debug" / L"obkrnl").wstring());
+        kernel = (b / L"src" / L"target" / L"x86_64-unknown-none" / L"debug" / L"obkrnl").u8string();
 #elif defined(NDEBUG)
-        path = QString::fromStdString((b / "src" / "target" / "x86_64-unknown-none" / "release" / "obkrnl").string());
+        kernel = (b / "src" / "target" / "x86_64-unknown-none" / "release" / "obkrnl").u8string();
 #else
-        path = QString::fromStdString((b / "src" / "target" / "x86_64-unknown-none" / "debug" / "obkrnl").string());
+        kernel = (b / "src" / "target" / "x86_64-unknown-none" / "debug" / "obkrnl").u8string();
 #endif
     } else {
 #ifdef _WIN32
         std::filesystem::path b(QCoreApplication::applicationDirPath().toStdString(), std::filesystem::path::native_format);
         b /= L"share";
         b /= L"obkrnl";
-        path = QString::fromStdWString(b.wstring());
+        kernel = b.u8string();
 #else
         auto b = std::filesystem::path(QCoreApplication::applicationDirPath().toStdString(), std::filesystem::path::native_format).parent_path();
 #ifdef __APPLE__
@@ -362,11 +362,11 @@ void MainWindow::startKernel()
         b /= "share";
 #endif
         b /= "obkrnl";
-        path = QString::fromStdString(b.string());
+        kernel = b.u8string();
 #endif
     }
 
-    // Setup VMM.
+    // Create VMM.
     RustPtr<RustError> error;
     RustPtr<Vmm> vmm;
 
@@ -377,6 +377,17 @@ void MainWindow::startKernel()
             this,
             "Error",
             QString("Couldn't create a VMM: %1").arg(error_message(error)));
+        return;
+    }
+
+    // Run.
+    error = vmm_run(vmm, kernel.c_str());
+
+    if (error) {
+        QMessageBox::critical(
+            this,
+            "Error",
+            QString("Couldn't run %1: %2").arg(kernel.c_str()).arg(error_message(error)));
         return;
     }
 
