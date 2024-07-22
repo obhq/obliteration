@@ -1,6 +1,6 @@
 use self::cpu::HfCpu;
 use self::vm::Vm;
-use super::{HypervisorError, MemoryAddr, Platform, Ram};
+use super::{MemoryAddr, Platform, Ram, VmmError};
 use hv_sys::hv_vcpu_create;
 use std::ffi::c_int;
 use std::num::NonZero;
@@ -19,9 +19,9 @@ pub struct Hf {
 }
 
 impl Hf {
-    pub fn new(_: usize, ram: Arc<Ram>) -> Result<Self, HypervisorError> {
+    pub fn new(_: usize, ram: Arc<Ram>) -> Result<Self, VmmError> {
         // Create a VM.
-        let vm = Vm::new().map_err(HypervisorError::CreateVmFailed)?;
+        let vm = Vm::new().map_err(VmmError::CreateVmFailed)?;
 
         // Map memory.
         vm.vm_map(
@@ -29,7 +29,7 @@ impl Hf {
             ram.vm_addr().try_into().unwrap(),
             ram.len(),
         )
-        .map_err(HypervisorError::MapRamFailed)?;
+        .map_err(VmmError::MapRamFailed)?;
 
         Ok(Self { vm, ram })
     }

@@ -44,7 +44,7 @@ We have a Discord server for discussion about Obliteration and its development. 
 
 ### Linux-specific requirements
 
-Obliteration supports only 4KB/8KB/16KB pages. Most people should not have any problem with this because 4KB is the default for most distros.
+Obliteration supports only 4KB/8KB/16KB pages. Most people should not have any problem with this because 4KB is the default for most distros. A PR to support other page size is welcome.
 
 ## Building and Development
 

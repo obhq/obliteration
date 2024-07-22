@@ -3,7 +3,7 @@ use self::ffi::{
     kvm_check_version, kvm_create_vcpu, kvm_create_vm, kvm_get_vcpu_mmap_size, kvm_max_vcpus,
     kvm_set_user_memory_region,
 };
-use super::{HypervisorError, MemoryAddr, Platform, Ram};
+use super::{MemoryAddr, Platform, Ram, VmmError};
 use libc::{mmap, open, MAP_FAILED, MAP_PRIVATE, O_RDWR, PROT_READ, PROT_WRITE};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::ptr::null_mut;
@@ -26,14 +26,14 @@ pub struct Kvm {
 }
 
 impl Kvm {
-    pub fn new(cpu: usize, ram: Arc<Ram>) -> Result<Self, HypervisorError> {
+    pub fn new(cpu: usize, ram: Arc<Ram>) -> Result<Self, VmmError> {
         use std::io::Error;
 
         // Open KVM device.
         let kvm = unsafe { open(b"/dev/kvm\0".as_ptr().cast(), O_RDWR) };
 
         if kvm < 0 {
-            return Err(HypervisorError::OpenKvmFailed(Error::last_os_error()));
+            return Err(VmmError::OpenKvmFailed(Error::last_os_error()));
         }
 
         // Check KVM version.
@@ -42,14 +42,10 @@ impl Kvm {
 
         match unsafe { kvm_check_version(kvm.as_raw_fd(), &mut compat) } {
             0 if !compat => {
-                return Err(HypervisorError::KvmVersionMismatched);
+                return Err(VmmError::KvmVersionMismatched);
             }
             0 => {}
-            v => {
-                return Err(HypervisorError::GetKvmVersionFailed(
-                    Error::from_raw_os_error(v),
-                ))
-            }
+            v => return Err(VmmError::GetKvmVersionFailed(Error::from_raw_os_error(v))),
         }
 
         // Check max CPU.
@@ -58,20 +54,18 @@ impl Kvm {
         match unsafe { kvm_max_vcpus(kvm.as_raw_fd(), &mut max) } {
             0 => {}
             v => {
-                return Err(HypervisorError::GetMaxCpuFailed(Error::from_raw_os_error(
-                    v,
-                )));
+                return Err(VmmError::GetMaxCpuFailed(Error::from_raw_os_error(v)));
             }
         }
 
         if max < cpu {
-            return Err(HypervisorError::MaxCpuTooLow);
+            return Err(VmmError::MaxCpuTooLow);
         }
 
         // Get size of CPU context.
         let vcpu_mmap_size = match unsafe { kvm_get_vcpu_mmap_size(kvm.as_raw_fd()) } {
             size @ 0.. => size as usize,
-            _ => return Err(HypervisorError::GetMmapSizeFailed(Error::last_os_error())),
+            _ => return Err(VmmError::GetMmapSizeFailed(Error::last_os_error())),
         };
 
         // Create a VM.
@@ -79,7 +73,7 @@ impl Kvm {
 
         match unsafe { kvm_create_vm(kvm.as_raw_fd(), &mut vm) } {
             0 => {}
-            v => return Err(HypervisorError::CreateVmFailed(Error::from_raw_os_error(v))),
+            v => return Err(VmmError::CreateVmFailed(Error::from_raw_os_error(v))),
         }
 
         // Set RAM.
@@ -91,7 +85,7 @@ impl Kvm {
 
         match unsafe { kvm_set_user_memory_region(vm.as_raw_fd(), slot, addr, len, mem) } {
             0 => {}
-            v => return Err(HypervisorError::MapRamFailed(Error::from_raw_os_error(v))),
+            v => return Err(VmmError::MapRamFailed(Error::from_raw_os_error(v))),
         }
 
         Ok(Self {

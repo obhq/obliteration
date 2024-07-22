@@ -15,6 +15,8 @@ struct Pkg;
 
 #define Ram_SIZE (((1024 * 1024) * 1024) * 8)
 
+#define Ram_VM_PAGE_SIZE 16384
+
 /**
  * Error object managed by Rust side.
  */
@@ -71,6 +73,8 @@ struct RustError *update_firmware(const char *root,
 struct Vmm *vmm_new(struct RustError **err);
 
 void vmm_free(struct Vmm *vmm);
+
+struct RustError *vmm_run(struct Vmm *vmm, const char *kernel);
 
 #if defined(__linux__)
 extern int kvm_check_version(int kvm, bool *compat);

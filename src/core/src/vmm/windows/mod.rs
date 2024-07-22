@@ -1,6 +1,6 @@
 use self::cpu::WhpCpu;
 use self::partition::Partition;
-use super::{HypervisorError, MemoryAddr, Platform, Ram};
+use super::{MemoryAddr, Platform, Ram, VmmError};
 use std::sync::Arc;
 use thiserror::Error;
 use windows_sys::core::HRESULT;
@@ -17,14 +17,13 @@ pub struct Whp {
 }
 
 impl Whp {
-    pub fn new(cpu: usize, ram: Arc<Ram>) -> Result<Self, HypervisorError> {
+    pub fn new(cpu: usize, ram: Arc<Ram>) -> Result<Self, VmmError> {
         // Setup a partition.
-        let mut part = Partition::new().map_err(HypervisorError::CreatePartitionFailed)?;
+        let mut part = Partition::new().map_err(VmmError::CreatePartitionFailed)?;
 
         part.set_processor_count(cpu)
-            .map_err(HypervisorError::SetCpuCountFailed)?;
-        part.setup()
-            .map_err(HypervisorError::SetupPartitionFailed)?;
+            .map_err(VmmError::SetCpuCountFailed)?;
+        part.setup().map_err(VmmError::SetupPartitionFailed)?;
 
         // Map memory.
         part.map_gpa(
@@ -32,7 +31,7 @@ impl Whp {
             ram.vm_addr().try_into().unwrap(),
             ram.len().try_into().unwrap(),
         )
-        .map_err(HypervisorError::MapRamFailed)?;
+        .map_err(VmmError::MapRamFailed)?;
 
         Ok(Self { part, ram })
     }
