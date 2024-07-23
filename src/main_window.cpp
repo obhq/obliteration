@@ -317,15 +317,22 @@ void MainWindow::startKernel()
 
     if (QFile::exists(".obliteration-development")) {
         auto b = std::filesystem::current_path();
+#ifdef _WIN32
+        auto target = L"x86_64-unknown-none";
+#elif defined(__aarch64__)
+        auto target = "aarch64-unknown-none-softfloat";
+#else
+        auto target = "x86_64-unknown-none";
+#endif
 
 #if defined(_WIN32) && defined(NDEBUG)
-        kernel = (b / L"src" / L"target" / L"x86_64-unknown-none" / L"release" / L"obkrnl").u8string();
+        kernel = (b / L"src" / L"target" / target / L"release" / L"obkrnl").u8string();
 #elif defined(_WIN32) && !defined(NDEBUG)
-        kernel = (b / L"src" / L"target" / L"x86_64-unknown-none" / L"debug" / L"obkrnl").u8string();
+        kernel = (b / L"src" / L"target" / target / L"debug" / L"obkrnl").u8string();
 #elif defined(NDEBUG)
-        kernel = (b / "src" / "target" / "x86_64-unknown-none" / "release" / "obkrnl").u8string();
+        kernel = (b / "src" / "target" / target / "release" / "obkrnl").u8string();
 #else
-        kernel = (b / "src" / "target" / "x86_64-unknown-none" / "debug" / "obkrnl").u8string();
+        kernel = (b / "src" / "target" / target / "debug" / "obkrnl").u8string();
 #endif
     } else {
 #ifdef _WIN32
