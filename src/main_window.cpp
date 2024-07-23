@@ -6,13 +6,13 @@
 #include "log_formatter.hpp"
 #include "path.hpp"
 #include "pkg_installer.hpp"
+#include "resources.hpp"
 #include "settings.hpp"
 
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
 #include <QDesktopServices>
-#include <QGuiApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
@@ -27,7 +27,6 @@
 #include <QScrollBar>
 #include <QSettings>
 #include <QStackedWidget>
-#include <QStyleHints>
 #include <QTableView>
 #include <QTabWidget>
 #include <QToolBar>
@@ -45,15 +44,6 @@ MainWindow::MainWindow() :
 {
     setWindowTitle("Obliteration");
 
-    // Determine current theme.
-    QString svgPath;
-
-    if (QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark) {
-        svgPath = ":/resources/darkmode/";
-    } else {
-        svgPath = ":/resources/lightmode/";
-    }
-
     // File menu.
     auto fileMenu = menuBar()->addMenu("&File");
     auto installPkg = new QAction("&Install PKG", this);
@@ -61,8 +51,8 @@ MainWindow::MainWindow() :
     auto quit = new QAction("&Quit", this);
 
 #ifndef __APPLE__
-    installPkg->setIcon(QIcon(svgPath + "archive-arrow-down-outline.svg"));
-    openSystemFolder->setIcon(QIcon(svgPath + "folder-open-outline.svg"));
+    installPkg->setIcon(loadIcon(":/resources/archive-arrow-down-outline.svg"));
+    openSystemFolder->setIcon(loadIcon(":/resources/folder-open-outline.svg"));
 #endif
 
     connect(installPkg, &QAction::triggered, this, &MainWindow::installPkg);
@@ -99,7 +89,7 @@ MainWindow::MainWindow() :
     // Setup screen tab.
     m_screen = new QStackedWidget();
 
-    m_tab->addTab(m_screen, QIcon(svgPath + "monitor.svg"), "Screen");
+    m_tab->addTab(m_screen, loadIcon(":/resources/monitor.svg"), "Screen");
 
     // Setup launch settings.
     m_launch = new LaunchSettings();
@@ -118,7 +108,7 @@ MainWindow::MainWindow() :
 
     connect(m_games, &QWidget::customContextMenuRequested, this, &MainWindow::requestGamesContextMenu);
 
-    m_tab->addTab(m_games, QIcon(svgPath + "view-comfy.svg"), "Games");
+    m_tab->addTab(m_games, loadIcon(":/resources/view-comfy.svg"), "Games");
 
     // Setup log view.
     auto log = new QPlainTextEdit();
@@ -137,10 +127,7 @@ MainWindow::MainWindow() :
 
     m_log = new LogFormatter(log, this);
 
-    m_tab->addTab(log, QIcon(svgPath + "card-text-outline.svg"), "Log");
-
-    // Setup status bar.
-    statusBar();
+    m_tab->addTab(log, loadIcon(":/resources/card-text-outline.svg"), "Log");
 
     // Show the window.
     restoreGeometry();
@@ -287,16 +274,8 @@ void MainWindow::requestGamesContextMenu(const QPoint &pos)
     QAction settings("&Settings", this);
 
 #ifndef __APPLE__
-    QString svgPath;
-
-    if (QGuiApplication::styleHints()->colorScheme() == Qt::ColorScheme::Dark) {
-        svgPath = ":/resources/darkmode/";
-    } else {
-        svgPath = ":/resources/lightmode/";
-    }
-
-    openFolder.setIcon(QIcon(svgPath + "folder-open-outline.svg"));
-    settings.setIcon(QIcon(svgPath + "cog-outline.svg"));
+    openFolder.setIcon(loadIcon(":/resources/folder-open-outline.svg"));
+    settings.setIcon(loadIcon(":/resources/cog-outline.svg"));
 #endif
 
     menu.addAction(&openFolder);

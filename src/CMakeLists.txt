@@ -63,6 +63,7 @@ add_executable(obliteration WIN32 MACOSX_BUNDLE
     pkg_extractor.cpp
     pkg_installer.cpp
     progress_dialog.cpp
+    resources.cpp
     resources.qrc
     settings.cpp
     system.cpp)

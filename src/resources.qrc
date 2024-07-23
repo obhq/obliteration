@@ -1,18 +1,13 @@
 <!DOCTYPE RCC>
 <RCC version="1.0">
   <qresource>
-    <file>resources/darkmode/archive-arrow-down-outline.svg</file>
-    <file>resources/darkmode/card-text-outline.svg</file>
-    <file>resources/darkmode/cog-outline.svg</file>
-    <file>resources/darkmode/folder-open-outline.svg</file>
-    <file>resources/darkmode/view-comfy.svg</file>
-    <file>resources/lightmode/archive-arrow-down-outline.svg</file>
-    <file>resources/lightmode/card-text-outline.svg</file>
-    <file>resources/lightmode/cog-outline.svg</file>
-    <file>resources/lightmode/folder-open-outline.svg</file>
-    <file>resources/lightmode/monitor.svg</file>
-    <file>resources/lightmode/view-comfy.svg</file>
+    <file>resources/archive-arrow-down-outline.svg</file>
+    <file>resources/card-text-outline.svg</file>
+    <file>resources/cog-outline.svg</file>
     <file>resources/fallbackicon0.png</file>
+    <file>resources/folder-open-outline.svg</file>
+    <file>resources/monitor.svg</file>
     <file>resources/obliteration-icon.png</file>
+    <file>resources/view-comfy.svg</file>
   </qresource>
 </RCC>
