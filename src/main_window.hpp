@@ -3,9 +3,10 @@
 #include "core.hpp"
 
 #include <QMainWindow>
+#include <QPointer>
 
 class LaunchSettings;
-class LogFormatter;
+class LogsViewer;
 class QStackedWidget;
 class QTableView;
 
@@ -23,6 +24,7 @@ protected:
 private slots:
     void installPkg();
     void openSystemFolder();
+    void viewLogs();
     void reportIssue();
     void aboutObliteration();
     void requestGamesContextMenu(const QPoint &pos);
@@ -38,6 +40,6 @@ private:
     QStackedWidget *m_screen;
     LaunchSettings *m_launch;
     QTableView *m_games;
-    LogFormatter *m_log;
+    QPointer<LogsViewer> m_logs;
     RustPtr<Vmm> m_kernel;
 };
