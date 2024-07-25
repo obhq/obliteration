@@ -5,10 +5,10 @@
 #include <QMainWindow>
 #include <QPointer>
 
+class GameListModel;
 class LaunchSettings;
 class LogsViewer;
 class QStackedWidget;
-class QTableView;
 
 class MainWindow final : public QMainWindow {
 public:
@@ -27,7 +27,6 @@ private slots:
     void viewLogs();
     void reportIssue();
     void aboutObliteration();
-    void requestGamesContextMenu(const QPoint &pos);
     void startKernel();
 
 private:
@@ -35,11 +34,9 @@ private:
     void restoreGeometry();
     bool requireEmulatorStopped();
 
-private:
-    QTabWidget *m_tab;
-    QStackedWidget *m_screen;
+    QStackedWidget *m_main;
+    GameListModel *m_games;
     LaunchSettings *m_launch;
-    QTableView *m_games;
     QPointer<LogsViewer> m_logs;
     RustPtr<Vmm> m_kernel;
 };
