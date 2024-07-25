@@ -1,7 +1,5 @@
 #include "main_window.hpp"
 #include "game_models.hpp"
-#include "game_settings.hpp"
-#include "game_settings_dialog.hpp"
 #include "launch_settings.hpp"
 #include "logs_viewer.hpp"
 #include "path.hpp"
@@ -16,9 +14,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
-#include <QHeaderView>
 #include <QIcon>
-#include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QProgressDialog>
@@ -26,8 +22,6 @@
 #include <QScrollBar>
 #include <QSettings>
 #include <QStackedWidget>
-#include <QTableView>
-#include <QTabWidget>
 #include <QToolBar>
 #include <QUrl>
 
@@ -35,10 +29,9 @@
 #include <utility>
 
 MainWindow::MainWindow() :
-    m_tab(nullptr),
-    m_screen(nullptr),
-    m_launch(nullptr),
-    m_games(nullptr)
+    m_main(nullptr),
+    m_games(nullptr),
+    m_launch(nullptr)
 {
     setWindowTitle("Obliteration");
 
@@ -86,35 +79,17 @@ MainWindow::MainWindow() :
     helpMenu->addAction(about);
 
     // Central widget.
-    m_tab = new QTabWidget(this);
-    m_tab->setDocumentMode(true);
-    m_tab->tabBar()->setExpanding(true);
+    m_main = new QStackedWidget();
 
-    setCentralWidget(m_tab);
-
-    // Setup screen tab.
-    m_screen = new QStackedWidget();
-
-    m_tab->addTab(m_screen, loadIcon(":/resources/monitor.svg"), "Screen");
+    setCentralWidget(m_main);
 
     // Setup launch settings.
-    m_launch = new LaunchSettings();
+    m_games = new GameListModel(this);
+    m_launch = new LaunchSettings(m_games);
 
     connect(m_launch, &LaunchSettings::startClicked, this, &MainWindow::startKernel);
 
-    m_screen->addWidget(m_launch);
-
-    // Setup game list.
-    m_games = new QTableView();
-    m_games->setContextMenuPolicy(Qt::CustomContextMenu);
-    m_games->setSortingEnabled(true);
-    m_games->setWordWrap(false);
-    m_games->verticalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
-    m_games->setModel(new GameListModel(this));
-
-    connect(m_games, &QWidget::customContextMenuRequested, this, &MainWindow::requestGamesContextMenu);
-
-    m_tab->addTab(m_games, loadIcon(":/resources/view-comfy.svg"), "Games");
+    m_main->addWidget(m_launch);
 
     // Show the window.
     restoreGeometry();
@@ -150,10 +125,7 @@ bool MainWindow::loadGames()
         progress.setValue(++step);
     }
 
-    // Update widgets.
-    m_games->horizontalHeader()->setSortIndicator(0, Qt::AscendingOrder);
-    m_games->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    m_games->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    m_games->sort(0);
 
     return true;
 }
@@ -266,58 +238,8 @@ void MainWindow::aboutObliteration()
     QMessageBox::about(this, "About Obliteration", "Obliteration is a free and open-source software for playing your PlayStation 4 titles on PC.");
 }
 
-void MainWindow::requestGamesContextMenu(const QPoint &pos)
-{
-    // Get item index.
-    auto index = m_games->indexAt(pos);
-
-    if (!index.isValid()) {
-        return;
-    }
-
-    auto model = reinterpret_cast<GameListModel *>(m_games->model());
-    auto game = model->get(index.row());
-
-    // Setup menu.
-    QMenu menu(this);
-    QAction openFolder("Open &Folder", this);
-    QAction settings("&Settings", this);
-
-#ifndef __APPLE__
-    openFolder.setIcon(loadIcon(":/resources/folder-open-outline.svg"));
-    settings.setIcon(loadIcon(":/resources/cog-outline.svg"));
-#endif
-
-    menu.addAction(&openFolder);
-    menu.addAction(&settings);
-
-    // Show menu.
-    auto selected = menu.exec(m_games->viewport()->mapToGlobal(pos));
-
-    if (!selected) {
-        return;
-    }
-
-    if (selected == &openFolder) {
-        QString folderPath = game->directory();
-        QDesktopServices::openUrl(QUrl::fromLocalFile(folderPath));
-    } else if (selected == &settings) {
-        // Load settings then show a dialog to edit.
-        auto settings = GameSettings::load(game);
-        GameSettingsDialog dialog(game, settings.get(), this);
-
-        dialog.exec();
-    }
-}
-
 void MainWindow::startKernel()
 {
-    // Just switch to screen tab if currently running.
-    if (m_kernel) {
-        m_tab->setCurrentIndex(0);
-        return;
-    }
-
     // Get full path to kernel binary.
     std::string kernel;
 
@@ -416,13 +338,12 @@ bool MainWindow::loadGame(const QString &gameId)
         }
 
         // Add to list.
-        auto list = reinterpret_cast<GameListModel *>(m_games->model());
         RustPtr<char> titleId, title;
 
         titleId = param_title_id_get(param);
         title = param_title_get(param);
 
-        list->add(new Game(titleId.get(), title.get(), gamePath.c_str()));
+        m_games->add(new Game(titleId.get(), title.get(), gamePath.c_str()));
     }
 
     return true;
