@@ -3,7 +3,7 @@
 #include "game_settings.hpp"
 #include "game_settings_dialog.hpp"
 #include "launch_settings.hpp"
-#include "log_formatter.hpp"
+#include "logs_viewer.hpp"
 #include "path.hpp"
 #include "pkg_installer.hpp"
 #include "resources.hpp"
@@ -21,7 +21,6 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
-#include <QPlainTextEdit>
 #include <QProgressDialog>
 #include <QResizeEvent>
 #include <QScrollBar>
@@ -39,8 +38,7 @@ MainWindow::MainWindow() :
     m_tab(nullptr),
     m_screen(nullptr),
     m_launch(nullptr),
-    m_games(nullptr),
-    m_log(nullptr)
+    m_games(nullptr)
 {
     setWindowTitle("Obliteration");
 
@@ -63,6 +61,14 @@ MainWindow::MainWindow() :
     fileMenu->addAction(openSystemFolder);
     fileMenu->addSeparator();
     fileMenu->addAction(quit);
+
+    // View menu.
+    auto viewMenu = menuBar()->addMenu("&View");
+    auto logs = new QAction("Logs", this);
+
+    connect(logs, &QAction::triggered, this, &MainWindow::viewLogs);
+
+    viewMenu->addAction(logs);
 
     // Help menu.
     auto helpMenu = menuBar()->addMenu("&Help");
@@ -110,25 +116,6 @@ MainWindow::MainWindow() :
 
     m_tab->addTab(m_games, loadIcon(":/resources/view-comfy.svg"), "Games");
 
-    // Setup log view.
-    auto log = new QPlainTextEdit();
-
-    log->setReadOnly(true);
-    log->setLineWrapMode(QPlainTextEdit::NoWrap);
-    log->setMaximumBlockCount(10000);
-
-#ifdef _WIN32
-    log->document()->setDefaultFont(QFont("Courier New", 10));
-#elif __APPLE__
-    log->document()->setDefaultFont(QFont("menlo", 10));
-#else
-    log->document()->setDefaultFont(QFont("monospace", 10));
-#endif
-
-    m_log = new LogFormatter(log, this);
-
-    m_tab->addTab(log, loadIcon(":/resources/card-text-outline.svg"), "Log");
-
     // Show the window.
     restoreGeometry();
 }
@@ -173,6 +160,9 @@ bool MainWindow::loadGames()
 
 void MainWindow::closeEvent(QCloseEvent *event)
 {
+    // This will set to accept by QMainWindow::closeEvent.
+    event->ignore();
+
     // Ask user to confirm.
     if (m_kernel) {
         QMessageBox confirm(this);
@@ -184,11 +174,15 @@ void MainWindow::closeEvent(QCloseEvent *event)
         confirm.setIcon(QMessageBox::Warning);
 
         if (confirm.exec() != QMessageBox::Yes) {
-            event->ignore();
             return;
         }
 
         m_kernel.free();
+    }
+
+    // Close child windows.
+    if (m_logs && !m_logs->close()) {
+        return;
     }
 
     // Save geometry.
@@ -242,6 +236,22 @@ void MainWindow::openSystemFolder()
 {
     QString folderPath = readSystemDirectorySetting();
     QDesktopServices::openUrl(QUrl::fromLocalFile(folderPath));
+}
+
+void MainWindow::viewLogs()
+{
+    // Check for previous window.
+    if (m_logs) {
+        m_logs->activateWindow();
+        m_logs->raise();
+        return;
+    }
+
+    // Create a window.
+    m_logs = new LogsViewer();
+
+    m_logs->setAttribute(Qt::WA_DeleteOnClose);
+    m_logs->show();
 }
 
 void MainWindow::reportIssue()
@@ -307,10 +317,6 @@ void MainWindow::startKernel()
         m_tab->setCurrentIndex(0);
         return;
     }
-
-    // Clear previous log and switch to screen tab.
-    m_log->reset();
-    m_tab->setCurrentIndex(0);
 
     // Get full path to kernel binary.
     std::string kernel;

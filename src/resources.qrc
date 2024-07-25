@@ -2,7 +2,6 @@
 <RCC version="1.0">
   <qresource>
     <file>resources/archive-arrow-down-outline.svg</file>
-    <file>resources/card-text-outline.svg</file>
     <file>resources/cog-outline.svg</file>
     <file>resources/fallbackicon0.png</file>
     <file>resources/folder-open-outline.svg</file>

@@ -57,6 +57,7 @@ add_executable(obliteration WIN32 MACOSX_BUNDLE
     initialize_wizard.cpp
     launch_settings.cpp
     log_formatter.cpp
+    logs_viewer.cpp
     main.cpp
     main_window.cpp
     path.cpp
