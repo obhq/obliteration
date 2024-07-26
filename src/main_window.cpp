@@ -5,6 +5,7 @@
 #include "path.hpp"
 #include "pkg_installer.hpp"
 #include "resources.hpp"
+#include "screen.hpp"
 #include "settings.hpp"
 
 #include <QAction>
@@ -31,7 +32,8 @@
 MainWindow::MainWindow() :
     m_main(nullptr),
     m_games(nullptr),
-    m_launch(nullptr)
+    m_launch(nullptr),
+    m_screen(nullptr)
 {
     setWindowTitle("Obliteration");
 
@@ -83,13 +85,18 @@ MainWindow::MainWindow() :
 
     setCentralWidget(m_main);
 
-    // Setup launch settings.
+    // Launch settings.
     m_games = new GameListModel(this);
     m_launch = new LaunchSettings(m_games);
 
     connect(m_launch, &LaunchSettings::startClicked, this, &MainWindow::startKernel);
 
     m_main->addWidget(m_launch);
+
+    // Screen.
+    m_screen = new Screen();
+
+    m_main->addWidget(createWindowContainer(m_screen));
 
     // Show the window.
     restoreGeometry();
@@ -306,6 +313,7 @@ void MainWindow::startKernel()
     }
 
     m_kernel = std::move(vmm);
+    m_main->setCurrentIndex(1);
 }
 
 bool MainWindow::loadGame(const QString &gameId)

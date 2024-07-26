@@ -9,6 +9,7 @@ class GameListModel;
 class LaunchSettings;
 class LogsViewer;
 class QStackedWidget;
+class Screen;
 
 class MainWindow final : public QMainWindow {
 public:
@@ -37,6 +38,7 @@ private:
     QStackedWidget *m_main;
     GameListModel *m_games;
     LaunchSettings *m_launch;
+    Screen *m_screen;
     QPointer<LogsViewer> m_logs;
     RustPtr<Vmm> m_kernel;
 };

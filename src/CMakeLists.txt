@@ -67,6 +67,7 @@ add_executable(obliteration WIN32 MACOSX_BUNDLE
     progress_dialog.cpp
     resources.cpp
     resources.qrc
+    screen.cpp
     settings.cpp
     system.cpp)
 
