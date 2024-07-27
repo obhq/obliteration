@@ -37,7 +37,7 @@ bool initSystem(const QString &path, const QString &firmware, QWidget *parent)
     // Update firmware.
     auto root = path.toStdString();
     auto fw = firmware.toStdString();
-    RustPtr<RustError> error;
+    Rust<RustError> error;
 
     error = update_firmware(
         root.c_str(),

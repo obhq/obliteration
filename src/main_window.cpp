@@ -59,7 +59,7 @@ MainWindow::MainWindow() :
 
     // View menu.
     auto viewMenu = menuBar()->addMenu("&View");
-    auto logs = new QAction("Logs", this);
+    auto logs = new QAction("&Logs", this);
 
     connect(logs, &QAction::triggered, this, &MainWindow::viewLogs);
 
@@ -288,8 +288,8 @@ void MainWindow::startKernel()
     }
 
     // Create VMM.
-    RustPtr<RustError> error;
-    RustPtr<Vmm> vmm;
+    Rust<RustError> error;
+    Rust<Vmm> vmm;
 
     vmm = vmm_new(&error);
 
@@ -332,8 +332,8 @@ bool MainWindow::loadGame(const QString &gameId)
         // Read game information from param.sfo.
         auto paramDir = joinPath(gamePath.c_str(), "sce_sys");
         auto paramPath = joinPath(paramDir.c_str(), "param.sfo");
-        RustPtr<RustError> error;
-        RustPtr<Param> param;
+        Rust<RustError> error;
+        Rust<Param> param;
 
         param = param_open(paramPath.c_str(), &error);
 
@@ -346,7 +346,7 @@ bool MainWindow::loadGame(const QString &gameId)
         }
 
         // Add to list.
-        RustPtr<char> titleId, title;
+        Rust<char> titleId, title;
 
         titleId = param_title_id_get(param);
         title = param_title_get(param);

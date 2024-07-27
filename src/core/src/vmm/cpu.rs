@@ -27,4 +27,7 @@ pub trait CpuStates {
 
     #[cfg(target_arch = "x86_64")]
     fn set_efer(&mut self, v: usize);
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_cs(&mut self, ty: u8, dpl: u8, p: bool, l: bool, d: bool);
 }

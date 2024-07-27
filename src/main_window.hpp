@@ -40,5 +40,5 @@ private:
     LaunchSettings *m_launch;
     Screen *m_screen;
     QPointer<LogsViewer> m_logs;
-    RustPtr<Vmm> m_kernel;
+    Rust<Vmm> m_kernel;
 };

@@ -1,6 +1,6 @@
 #include "pkg_extractor.hpp"
 
-PkgExtractor::PkgExtractor(RustPtr<Pkg> &&pkg, std::string &&dst) :
+PkgExtractor::PkgExtractor(Rust<Pkg> &&pkg, std::string &&dst) :
     m_pkg(std::move(pkg)),
     m_dst(std::move(dst))
 {
@@ -12,7 +12,7 @@ PkgExtractor::~PkgExtractor()
 
 void PkgExtractor::exec()
 {
-    RustPtr<RustError> e;
+    Rust<RustError> e;
 
     e = pkg_extract(
         m_pkg,
