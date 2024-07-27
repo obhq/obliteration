@@ -81,8 +81,8 @@ int PkgInstaller::exec()
     }
 
     // Open a PKG.
-    RustPtr<Pkg> pkg;
-    RustPtr<RustError> error;
+    Rust<Pkg> pkg;
+    Rust<RustError> error;
 
     log(QString("Opening %1").arg(m_pkg));
     pkg = pkg_open(m_pkg.toStdString().c_str(), &error);
@@ -96,7 +96,7 @@ int PkgInstaller::exec()
     }
 
     // Get param.sfo.
-    RustPtr<Param> param;
+    Rust<Param> param;
 
     param = pkg_get_param(pkg, &error);
 
@@ -109,7 +109,7 @@ int PkgInstaller::exec()
     }
 
     // Get path to install.
-    RustPtr<char> id, category, appver, title;
+    Rust<char> id, category, appver, title;
 
     id = param_title_id_get(param);
     category = param_category_get(param);

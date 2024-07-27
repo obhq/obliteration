@@ -55,19 +55,19 @@ pub struct KvmSpecialRegs {
 #[cfg(target_arch = "x86_64")]
 #[repr(C)]
 pub struct KvmSegment {
-    base: u64,
-    limit: u32,
-    selector: u16,
-    ty: u8,
-    present: u8,
-    dpl: u8,
-    db: u8,
-    s: u8,
-    l: u8,
-    g: u8,
-    avl: u8,
-    unusable: u8,
-    padding: u8,
+    pub base: u64,
+    pub limit: u32,
+    pub selector: u16,
+    pub ty: u8,
+    pub present: u8,
+    pub dpl: u8,
+    pub db: u8,
+    pub s: u8,
+    pub l: u8,
+    pub g: u8,
+    pub avl: u8,
+    pub unusable: u8,
+    pub padding: u8,
 }
 
 #[cfg(target_arch = "x86_64")]

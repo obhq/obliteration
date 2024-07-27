@@ -74,6 +74,11 @@ impl<'a> CpuStates for HfStates<'a> {
     fn set_efer(&mut self, v: usize) {
         todo!()
     }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_cs(&mut self, ty: u8, dpl: u8, p: bool, l: bool, d: bool) {
+        todo!()
+    }
 }
 
 /// Implementation of [`Cpu::GetStatesErr`].

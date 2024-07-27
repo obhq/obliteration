@@ -442,6 +442,9 @@ unsafe fn setup_main_cpu(cpu: &mut impl Cpu, ram: &Ram, klen: usize) -> Result<(
 
     states.set_cr0(cr0);
 
+    // Set CS to 64-bit mode with ring 0.
+    states.set_cs(0, 0, true, true, false);
+
     Ok(())
 }
 

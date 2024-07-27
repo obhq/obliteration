@@ -108,6 +108,16 @@ impl<'a> CpuStates for KvmStates<'a> {
         self.sregs.efer = v;
         self.sdirty = true;
     }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_cs(&mut self, ty: u8, dpl: u8, p: bool, l: bool, d: bool) {
+        self.sregs.cs.ty = ty;
+        self.sregs.cs.dpl = dpl;
+        self.sregs.cs.present = p.into();
+        self.sregs.cs.l = l.into();
+        self.sregs.cs.db = d.into();
+        self.sdirty = true;
+    }
 }
 
 impl<'a> Drop for KvmStates<'a> {

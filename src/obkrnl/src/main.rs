@@ -1,6 +1,7 @@
 #![no_std]
 #![cfg_attr(not(test), no_main)]
 
+use core::arch::asm;
 use core::panic::PanicInfo;
 
 /// See PS4 kernel entry point for a reference.
@@ -9,11 +10,11 @@ fn _start() -> ! {
     loop {
         #[cfg(target_arch = "x86_64")]
         unsafe {
-            core::arch::x86_64::_mm_pause()
+            asm!("hlt")
         };
         #[cfg(target_arch = "aarch64")]
         unsafe {
-            core::arch::asm!("wfi")
+            asm!("wfi")
         };
     }
 }

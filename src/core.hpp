@@ -5,25 +5,25 @@
 #include <stdlib.h>
 
 template<typename T>
-class RustPtr final {
+class Rust final {
 public:
-    RustPtr() : m_ptr(nullptr) {}
-    explicit RustPtr(T *ptr) : m_ptr(ptr) {}
-    RustPtr(const RustPtr &) = delete;
+    Rust() : m_ptr(nullptr) {}
+    explicit Rust(T *ptr) : m_ptr(ptr) {}
+    Rust(const Rust &) = delete;
 
-    RustPtr(RustPtr &&other) : m_ptr(other.m_ptr)
+    Rust(Rust &&other) : m_ptr(other.m_ptr)
     {
         other.m_ptr = nullptr;
     }
 
-    ~RustPtr()
+    ~Rust()
     {
         free();
     }
 
-    RustPtr &operator=(const RustPtr &) = delete;
+    Rust &operator=(const Rust &) = delete;
 
-    RustPtr &operator=(RustPtr &&other)
+    Rust &operator=(Rust &&other)
     {
         free();
 
@@ -33,7 +33,7 @@ public:
         return *this;
     }
 
-    RustPtr &operator=(T *ptr)
+    Rust &operator=(T *ptr)
     {
         free();
         m_ptr = ptr;
@@ -56,14 +56,14 @@ private:
 };
 
 template<>
-inline void RustPtr<char>::free()
+inline void Rust<char>::free()
 {
     ::free(m_ptr);
     m_ptr = nullptr;
 }
 
 template<>
-inline void RustPtr<Param>::free()
+inline void Rust<Param>::free()
 {
     if (m_ptr) {
         param_close(m_ptr);
@@ -72,7 +72,7 @@ inline void RustPtr<Param>::free()
 }
 
 template<>
-inline void RustPtr<Pkg>::free()
+inline void Rust<Pkg>::free()
 {
     if (m_ptr) {
         pkg_close(m_ptr);
@@ -81,7 +81,7 @@ inline void RustPtr<Pkg>::free()
 }
 
 template<>
-inline void RustPtr<RustError>::free()
+inline void Rust<RustError>::free()
 {
     if (m_ptr) {
         error_free(m_ptr);
@@ -90,7 +90,7 @@ inline void RustPtr<RustError>::free()
 }
 
 template<>
-inline void RustPtr<Vmm>::free()
+inline void Rust<Vmm>::free()
 {
     if (m_ptr) {
         vmm_free(m_ptr);

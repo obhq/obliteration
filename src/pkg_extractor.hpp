@@ -7,7 +7,7 @@
 class PkgExtractor final : public QObject {
     Q_OBJECT
 public:
-    PkgExtractor(RustPtr<Pkg> &&pkg, std::string &&dst);
+    PkgExtractor(Rust<Pkg> &&pkg, std::string &&dst);
     ~PkgExtractor() override;
 public slots:
     void exec();
@@ -17,6 +17,6 @@ signals:
 private:
     void update(const char *status, std::size_t bar, std::uint64_t current, std::uint64_t total);
 private:
-    RustPtr<Pkg> m_pkg;
+    Rust<Pkg> m_pkg;
     std::string m_dst;
 };
