@@ -445,6 +445,13 @@ unsafe fn setup_main_cpu(cpu: &mut impl Cpu, ram: &Ram, klen: usize) -> Result<(
     Ok(())
 }
 
+/// # Safety
+/// This function requires the kernel was mapped at address 0.
+#[cfg(target_arch = "aarch64")]
+unsafe fn setup_main_cpu(cpu: &mut impl Cpu, ram: &Ram, klen: usize) -> Result<(), MainCpuError> {
+    todo!()
+}
+
 #[cfg(target_os = "linux")]
 fn setup_hypervisor(cpu: usize, ram: Arc<Ram>) -> Result<self::linux::Kvm, VmmError> {
     self::linux::Kvm::new(cpu, ram)
