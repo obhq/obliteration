@@ -3,7 +3,7 @@ use self::ffi::{
     kvm_check_version, kvm_create_vcpu, kvm_create_vm, kvm_get_vcpu_mmap_size, kvm_max_vcpus,
     kvm_set_user_memory_region,
 };
-use super::{MemoryAddr, Platform, Ram, VmmError};
+use super::{Hypervisor, MemoryAddr, Ram, VmmError};
 use libc::{mmap, open, MAP_FAILED, MAP_PRIVATE, O_RDWR, PROT_READ, PROT_WRITE};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::ptr::null_mut;
@@ -15,7 +15,7 @@ mod ffi;
 mod regs;
 mod run;
 
-/// Implementation of [`Platform`] using KVM.
+/// Implementation of [`Hypervisor`] using KVM.
 ///
 /// Fields in this struct need to drop in a correct order (e.g. vm must be dropped before ram).
 pub struct Kvm {
@@ -81,7 +81,7 @@ impl Kvm {
         let slot = 0;
         let addr = ram.vm_addr().try_into().unwrap();
         let len = ram.len().try_into().unwrap();
-        let mem = ram.host_addr().cast();
+        let mem = ram.host_addr().cast_mut().cast();
 
         match unsafe { kvm_set_user_memory_region(vm.as_raw_fd(), slot, addr, len, mem) } {
             0 => {}
@@ -97,7 +97,7 @@ impl Kvm {
     }
 }
 
-impl Platform for Kvm {
+impl Hypervisor for Kvm {
     type Cpu<'a> = KvmCpu<'a>;
     type CpuErr = KvmCpuError;
 
@@ -132,7 +132,7 @@ impl Platform for Kvm {
     }
 }
 
-/// Implementation of [`Platform::CpuErr`].
+/// Implementation of [`Hypervisor::CpuErr`].
 #[derive(Debug, Error)]
 pub enum KvmCpuError {
     #[error("failed to create vcpu")]

@@ -1,5 +1,5 @@
-use super::ffi::{kvm_get_regs, kvm_set_regs};
-use super::regs::KvmRegs;
+use super::ffi::{kvm_get_regs, kvm_get_sregs, kvm_set_regs, kvm_set_sregs};
+use super::regs::{KvmRegs, KvmSpecialRegs};
 use super::run::KvmRun;
 use crate::vmm::{Cpu, CpuStates};
 use libc::munmap;
@@ -41,38 +41,91 @@ impl<'a> Drop for KvmCpu<'a> {
 }
 
 impl<'a> Cpu for KvmCpu<'a> {
+    type States<'b> = KvmStates<'b> where Self: 'b;
     type GetStatesErr = GetStatesError;
-    type SetStatesErr = SetStatesError;
 
     fn id(&self) -> usize {
         self.id.try_into().unwrap()
     }
 
-    fn get_states(&mut self, states: &mut CpuStates) -> Result<(), Self::GetStatesErr> {
+    fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
         use std::io::Error;
 
         // Get general purpose registers.
-        let mut regs = MaybeUninit::uninit();
-        let regs = match unsafe { kvm_get_regs(self.fd.as_raw_fd(), regs.as_mut_ptr()) } {
-            0 => unsafe { regs.assume_init() },
-            _ => return Err(GetStatesError::GetRegsFailed(Error::last_os_error())),
+        let mut gregs = MaybeUninit::uninit();
+        let gregs = match unsafe { kvm_get_regs(self.fd.as_raw_fd(), gregs.as_mut_ptr()) } {
+            0 => unsafe { gregs.assume_init() },
+            _ => return Err(GetStatesError::GetGRegsFailed(Error::last_os_error())),
         };
 
-        todo!()
+        // Get special registers.
+        let mut sregs = MaybeUninit::uninit();
+        let sregs = match unsafe { kvm_get_sregs(self.fd.as_raw_fd(), sregs.as_mut_ptr()) } {
+            0 => unsafe { sregs.assume_init() },
+            _ => return Err(GetStatesError::GetSRegsFailed(Error::last_os_error())),
+        };
+
+        Ok(KvmStates {
+            cpu: &mut self.fd,
+            gregs,
+            gdirty: false,
+            sregs,
+            sdirty: false,
+        })
+    }
+}
+
+/// Implementation of [`Cpu::States`] for KVM.
+pub struct KvmStates<'a> {
+    cpu: &'a mut OwnedFd,
+    gregs: KvmRegs,
+    gdirty: bool,
+    sregs: KvmSpecialRegs,
+    sdirty: bool,
+}
+
+impl<'a> CpuStates for KvmStates<'a> {
+    #[cfg(target_arch = "x86_64")]
+    fn set_cr0(&mut self, v: usize) {
+        self.sregs.cr0 = v;
+        self.sdirty = true;
     }
 
-    fn set_states(&mut self, states: &CpuStates) -> Result<(), Self::SetStatesErr> {
+    #[cfg(target_arch = "x86_64")]
+    fn set_cr3(&mut self, v: usize) {
+        self.sregs.cr3 = v;
+        self.sdirty = true;
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_cr4(&mut self, v: usize) {
+        self.sregs.cr4 = v;
+        self.sdirty = true;
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_efer(&mut self, v: usize) {
+        self.sregs.efer = v;
+        self.sdirty = true;
+    }
+}
+
+impl<'a> Drop for KvmStates<'a> {
+    fn drop(&mut self) {
         use std::io::Error;
 
         // Set general purpose registers.
-        let mut regs = KvmRegs::default();
-
-        match unsafe { kvm_set_regs(self.fd.as_raw_fd(), &regs) } {
-            0 => {}
-            _ => return Err(SetStatesError::SetRegsFailed(Error::last_os_error())),
+        if unsafe { self.gdirty && kvm_set_regs(self.cpu.as_raw_fd(), &self.gregs) != 0 } {
+            panic!(
+                "couldn't set general purpose registers: {}",
+                Error::last_os_error()
+            );
         }
 
-        todo!()
+        // Set special registers.
+        if unsafe { self.sdirty && kvm_set_sregs(self.cpu.as_raw_fd(), &self.sregs) != 0 } {
+            panic!("couldn't set special registers: {}", Error::last_os_error());
+        }
     }
 }
 
@@ -80,12 +133,8 @@ impl<'a> Cpu for KvmCpu<'a> {
 #[derive(Debug, Error)]
 pub enum GetStatesError {
     #[error("couldn't get general purpose registers")]
-    GetRegsFailed(#[source] std::io::Error),
-}
+    GetGRegsFailed(#[source] std::io::Error),
 
-/// Implementation of [`Cpu::SetStatesErr`].
-#[derive(Debug, Error)]
-pub enum SetStatesError {
-    #[error("couldn't set general purpose registers")]
-    SetRegsFailed(#[source] std::io::Error),
+    #[error("couldn't get special registers")]
+    GetSRegsFailed(#[source] std::io::Error),
 }

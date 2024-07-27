@@ -1,58 +1,60 @@
+#[cfg(target_arch = "x86_64")]
 #[repr(C)]
-#[derive(Default)]
 pub struct KvmRegs {
-    rax: u64,
-    rbx: u64,
-    rcx: u64,
-    rdx: u64,
+    pub rax: u64,
+    pub rbx: u64,
+    pub rcx: u64,
+    pub rdx: u64,
 
-    rsi: u64,
-    rdi: u64,
-    rsp: u64,
-    rbp: u64,
+    pub rsi: u64,
+    pub rdi: u64,
+    pub rsp: u64,
+    pub rbp: u64,
 
-    r8: u64,
-    r9: u64,
-    r10: u64,
-    r11: u64,
+    pub r8: u64,
+    pub r9: u64,
+    pub r10: u64,
+    pub r11: u64,
 
-    r12: u64,
-    r13: u64,
-    r14: u64,
-    r15: u64,
+    pub r12: u64,
+    pub r13: u64,
+    pub r14: u64,
+    pub r15: u64,
 
-    rip: u64,
-    rflags: u64,
+    pub rip: u64,
+    pub rflags: u64,
 }
 
+#[cfg(target_arch = "x86_64")]
 #[repr(C)]
 pub struct KvmSpecialRegs {
-    cs: KvmSegment,
-    ds: KvmSegment,
-    es: KvmSegment,
-    fs: KvmSegment,
-    gs: KvmSegment,
-    ss: KvmSegment,
+    pub cs: KvmSegment,
+    pub ds: KvmSegment,
+    pub es: KvmSegment,
+    pub fs: KvmSegment,
+    pub gs: KvmSegment,
+    pub ss: KvmSegment,
 
-    tr: KvmSegment,
-    ldt: KvmSegment,
+    pub tr: KvmSegment,
+    pub ldt: KvmSegment,
 
-    gdt: KvmDTable,
-    idt: KvmDTable,
+    pub gdt: KvmDTable,
+    pub idt: KvmDTable,
 
-    cr0: u64,
-    cr2: u64,
-    cr3: u64,
-    cr4: u64,
-    cr8: u64,
+    pub cr0: usize,
+    pub cr2: u64,
+    pub cr3: usize,
+    pub cr4: usize,
+    pub cr8: u64,
 
-    efer: u64,
-    apic_base: u64,
-    interrupt_bitmap: [u64; 4],
+    pub efer: usize,
+    pub apic_base: u64,
+    pub interrupt_bitmap: [u64; 4],
 }
 
+#[cfg(target_arch = "x86_64")]
 #[repr(C)]
-struct KvmSegment {
+pub struct KvmSegment {
     base: u64,
     limit: u32,
     selector: u16,
@@ -68,8 +70,9 @@ struct KvmSegment {
     padding: u8,
 }
 
+#[cfg(target_arch = "x86_64")]
 #[repr(C)]
-struct KvmDTable {
+pub struct KvmDTable {
     base: u64,
     limit: u16,
     padding: [u16; 3],

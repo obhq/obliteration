@@ -7,16 +7,14 @@ use std::io::{Error, ErrorKind};
 /// is an allocation request. That mean the actual memory usage is not fixed at 8GB but will be
 /// dependent on what PS4 applications currently running. If it is a simple game the memory usage might be
 /// just a hundred of megabytes.
-pub struct Ram {
-    addr: usize,
-    mem: *mut u8,
-}
+pub struct Ram(*mut u8);
 
 impl Ram {
+    pub const ADDR: usize = 0; // It seems like RAM on all system always at address 0.
     pub const SIZE: usize = 1024 * 1024 * 1024 * 8; // 8GB
     pub const VM_PAGE_SIZE: usize = 0x4000;
 
-    pub fn new(addr: usize) -> Result<Self, VmmError> {
+    pub fn new() -> Result<Self, VmmError> {
         // In theory we can support any page size on the host. The problem is it required a lot of
         // work. It is also unlikely for someone to need this feature because AFAIK the maximum page
         // size on a consumer computer is the same as PS4. With page size the same as PS4 or lower
@@ -65,7 +63,7 @@ impl Ram {
             mem.cast()
         };
 
-        Ok(Self { addr, mem })
+        Ok(Self(mem))
     }
 
     /// # Panics
@@ -82,7 +80,7 @@ impl Ram {
             return Err(Error::from(ErrorKind::InvalidInput));
         }
 
-        Self::commit(self.mem.add(off), len)
+        Self::commit(self.0.add(off), len)
     }
 
     /// # Panics
@@ -98,7 +96,7 @@ impl Ram {
             return Err(Error::from(ErrorKind::InvalidInput));
         }
 
-        Self::decommit(self.mem.add(off), len)
+        Self::decommit(self.0.add(off), len)
     }
 
     #[cfg(unix)]
@@ -190,10 +188,10 @@ impl Drop for Ram {
     fn drop(&mut self) {
         use libc::munmap;
 
-        if unsafe { munmap(self.mem.cast(), Self::SIZE) } < 0 {
+        if unsafe { munmap(self.0.cast(), Self::SIZE) } < 0 {
             panic!(
                 "failed to unmap RAM at {:p}: {}",
-                self.mem,
+                self.0,
                 Error::last_os_error()
             );
         }
@@ -203,10 +201,10 @@ impl Drop for Ram {
     fn drop(&mut self) {
         use windows_sys::Win32::System::Memory::{VirtualFree, MEM_RELEASE};
 
-        if unsafe { VirtualFree(self.mem.cast(), 0, MEM_RELEASE) } == 0 {
+        if unsafe { VirtualFree(self.0.cast(), 0, MEM_RELEASE) } == 0 {
             panic!(
                 "failed to free RAM at {:p}: {}",
-                self.mem,
+                self.0,
                 Error::last_os_error()
             );
         }
@@ -215,11 +213,11 @@ impl Drop for Ram {
 
 impl MemoryAddr for Ram {
     fn vm_addr(&self) -> usize {
-        self.addr
+        Self::ADDR
     }
 
-    fn host_addr(&self) -> *mut () {
-        self.mem.cast()
+    fn host_addr(&self) -> *const u8 {
+        self.0
     }
 
     fn len(&self) -> usize {

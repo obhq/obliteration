@@ -1,11 +1,14 @@
 use self::ram::Ram;
 use crate::error::RustError;
+use std::error::Error;
 use std::ffi::{c_char, CStr};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::ptr::null_mut;
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::Sender;
 use std::sync::Arc;
+use std::thread::JoinHandle;
 use thiserror::Error;
 
 pub(self) use self::cpu::*;
@@ -25,12 +28,11 @@ mod windows;
 const ELF_MACHINE: u16 = 62;
 #[cfg(target_arch = "aarch64")]
 const ELF_MACHINE: u16 = 183;
-const KERNEL_PADDR: usize = 0; // TODO: Figure out where PS4 map the kernel.
 
 #[no_mangle]
 pub unsafe extern "C" fn vmm_new(err: *mut *mut RustError) -> *mut Vmm {
     // Setup RAM.
-    let ram = match Ram::new(0) {
+    let ram = match Ram::new() {
         Ok(v) => Arc::new(v),
         Err(e) => {
             *err = RustError::wrap(e);
@@ -39,7 +41,7 @@ pub unsafe extern "C" fn vmm_new(err: *mut *mut RustError) -> *mut Vmm {
     };
 
     // Setup hypervisor.
-    let hv = match setup_platform(8, ram.clone()) {
+    let hv = match setup_hypervisor(8, ram.clone()) {
         Ok(v) => v,
         Err(e) => {
             *err = RustError::wrap(e);
@@ -49,9 +51,10 @@ pub unsafe extern "C" fn vmm_new(err: *mut *mut RustError) -> *mut Vmm {
 
     // Create VMM.
     let vmm = Vmm {
-        hv,
+        hv: Arc::new(hv),
         ram,
-        created_cpu: AtomicUsize::new(0),
+        cpus: Vec::new(),
+        shutdown: Arc::new(AtomicBool::new(false)),
     };
 
     Box::into_raw(vmm.into())
@@ -64,6 +67,10 @@ pub unsafe extern "C" fn vmm_free(vmm: *mut Vmm) {
 
 #[no_mangle]
 pub unsafe extern "C" fn vmm_run(vmm: *mut Vmm, kernel: *const c_char) -> *mut RustError {
+    if !(*vmm).cpus.is_empty() {
+        return RustError::new("the kernel is already running");
+    }
+
     // Check if path UTF-8.
     let path = match CStr::from_ptr(kernel).to_str() {
         Ok(v) => v,
@@ -172,8 +179,8 @@ pub unsafe extern "C" fn vmm_run(vmm: *mut Vmm, kernel: *const c_char) -> *mut R
 
     // Make sure the first PT_LOAD includes the ELF header.
     match loads.first() {
-        Some(&(p_offset, _, p_vaddr, _)) => {
-            if p_offset != 0 || p_vaddr != 0 {
+        Some(&(p_offset, _, _, _)) => {
+            if p_offset != 0 {
                 return RustError::new("the first PT_LOAD does not includes ELF header");
             }
         }
@@ -196,9 +203,8 @@ pub unsafe extern "C" fn vmm_run(vmm: *mut Vmm, kernel: *const c_char) -> *mut R
     // Allocate RAM.
     let stack_off = end; // TODO: Figure out how PS4 allocate the stack.
     let stack_len = 1024 * 1024 * 2; // TODO: Same here.
-    let off = KERNEL_PADDR.checked_sub((*vmm).ram.vm_addr()).unwrap();
     let len = stack_off + stack_len;
-    let mem = match (*vmm).ram.alloc(off, len) {
+    let mem = match (*vmm).ram.alloc(0, len) {
         Ok(v) => v,
         Err(e) => {
             return RustError::with_source(format!("couldn't allocate {len} bytes from RAM"), e);
@@ -227,30 +233,257 @@ pub unsafe extern "C" fn vmm_run(vmm: *mut Vmm, kernel: *const c_char) -> *mut R
         }
     }
 
-    // TODO: Set hypervisor to run the mapped kernel then start a thread to drive the vCPU.
+    // Spawn a thread to drive main CPU.
+    let hv = (*vmm).hv.clone();
+    let ram = (*vmm).ram.clone();
+    let shutdown = (*vmm).shutdown.clone();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let main = move || main_cpu(hv, ram, len, shutdown, tx);
+    let main = match std::thread::Builder::new().spawn(main) {
+        Ok(v) => v,
+        Err(e) => return RustError::with_source("couldn't spawn main CPU", e),
+    };
+
+    // Wait for main CPU to enter event loop.
+    let r = match rx.recv() {
+        Ok(v) => v,
+        Err(_) => {
+            main.join().unwrap();
+            return RustError::new("main CPU stopped unexpectedly");
+        }
+    };
+
+    if let Err(e) = r {
+        main.join().unwrap();
+        return RustError::with_source("couldn't start main CPU", e);
+    }
+
+    // Push to CPU list.
+    (*vmm).cpus.push(main);
+
     null_mut()
 }
 
+/// # Safety
+/// This function requires the kernel was mapped at address 0.
+unsafe fn main_cpu(
+    hv: Arc<P>,
+    ram: Arc<Ram>,
+    klen: usize,
+    shutdown: Arc<AtomicBool>,
+    status: Sender<Result<(), MainCpuError>>,
+) {
+    // Create vCPU.
+    let mut cpu = match hv.create_cpu(0) {
+        Ok(v) => v,
+        Err(e) => {
+            status.send(Err(MainCpuError::CreateCpuFailed(e))).unwrap();
+            return;
+        }
+    };
+
+    if let Err(e) = setup_main_cpu(&mut cpu, &ram, klen) {
+        status.send(Err(e)).unwrap();
+        return;
+    }
+
+    // TODO: Set hypervisor to run the mapped kernel.
+    status.send(Ok(())).unwrap();
+    drop(status);
+
+    while !shutdown.load(Ordering::Relaxed) {}
+}
+
+/// # Safety
+/// This function requires the kernel was mapped at address 0.
+#[cfg(target_arch = "x86_64")]
+unsafe fn setup_main_cpu(cpu: &mut impl Cpu, ram: &Ram, klen: usize) -> Result<(), MainCpuError> {
+    // Allocate page-map level-4 table. We use 4K 4-Level Paging with identity mapping to boot the
+    // kernel. Not sure how the PS4 achieve 16K page because x86-64 does not support it. Maybe it is
+    // a special request from Sony to AMD?
+    //
+    // See Page Translation and Protection section on AMD64 Architecture Programmer's Manual Volume
+    // 2 for how paging work in long-mode.
+    let mut alloc = klen;
+    let len = (512usize * 8).next_multiple_of(Ram::VM_PAGE_SIZE);
+    let pml4t = match ram.alloc(alloc, len) {
+        Ok(v) => std::slice::from_raw_parts_mut::<usize>(v.cast(), 512),
+        Err(e) => return Err(MainCpuError::AllocPml4TableFailed(e)),
+    };
+
+    alloc += len;
+
+    // Setup page tables to cover the whole mapped kernel.
+    for addr in (0..klen).step_by(4096) {
+        // Get page-directory pointer table.
+        let pml4o = (addr & 0xFF8000000000) >> 39;
+        let pdpt = match pml4t[pml4o] {
+            0 => {
+                // Allocate page-directory pointer table.
+                let len = (512usize * 8).next_multiple_of(Ram::VM_PAGE_SIZE);
+                let pdpt = match ram.alloc(alloc, len) {
+                    Ok(v) => std::slice::from_raw_parts_mut::<usize>(v.cast(), 512),
+                    Err(e) => return Err(MainCpuError::AllocPdpTableFailed(e)),
+                };
+
+                // Set page-map level-4 entry.
+                assert_eq!(alloc & 0x7FF0000000000000, 0);
+                assert_eq!(alloc & 0xFFF, 0);
+
+                pml4t[pml4o] = alloc;
+                pml4t[pml4o] |= 0b01; // Present (P) Bit.
+                pml4t[pml4o] |= 0b10; // Read/Write (R/W) Bit.
+
+                alloc += len;
+
+                pdpt
+            }
+            v => std::slice::from_raw_parts_mut::<usize>(
+                ram.host_addr().add(v & 0xFFFFFFFFFF000).cast_mut().cast(),
+                512,
+            ),
+        };
+
+        // Get page-directory table.
+        let pdpo = (addr & 0x7FC0000000) >> 30;
+        let pdt = match pdpt[pdpo] {
+            0 => {
+                // Allocate page-directory table.
+                let len = (512usize * 8).next_multiple_of(Ram::VM_PAGE_SIZE);
+                let pdt = match ram.alloc(alloc, len) {
+                    Ok(v) => std::slice::from_raw_parts_mut::<usize>(v.cast(), 512),
+                    Err(e) => return Err(MainCpuError::AllocPdTableFailed(e)),
+                };
+
+                assert_eq!(alloc & 0x7FF0000000000000, 0);
+                assert_eq!(alloc & 0xFFF, 0);
+
+                pdpt[pdpo] = alloc;
+                pdpt[pdpo] |= 0b01; // Present (P) Bit.
+                pdpt[pdpo] |= 0b10; // Read/Write (R/W) Bit.
+
+                alloc += len;
+
+                pdt
+            }
+            v => std::slice::from_raw_parts_mut::<usize>(
+                ram.host_addr().add(v & 0xFFFFFFFFFF000).cast_mut().cast(),
+                512,
+            ),
+        };
+
+        // Get page table.
+        let pdo = (addr & 0x3FE00000) >> 21;
+        let pt = match pdt[pdo] {
+            0 => {
+                // Allocate page table.
+                let len = (512usize * 8).next_multiple_of(Ram::VM_PAGE_SIZE);
+                let pt = match ram.alloc(alloc, len) {
+                    Ok(v) => std::slice::from_raw_parts_mut::<usize>(v.cast(), 512),
+                    Err(e) => return Err(MainCpuError::AllocPageTableFailed(e)),
+                };
+
+                assert_eq!(alloc & 0x7FF0000000000000, 0);
+                assert_eq!(alloc & 0xFFF, 0);
+
+                pdt[pdo] = alloc;
+                pdt[pdo] |= 0b01; // Present (P) Bit.
+                pdt[pdo] |= 0b10; // Read/Write (R/W) Bit.
+
+                alloc += len;
+
+                pt
+            }
+            v => std::slice::from_raw_parts_mut::<usize>(
+                ram.host_addr().add(v & 0xFFFFFFFFFF000).cast_mut().cast(),
+                512,
+            ),
+        };
+
+        // Set page table entry.
+        let pto = (addr & 0x1FF000) >> 12;
+
+        assert_eq!(pt[pto], 0);
+        assert_eq!(addr & 0x7FF0000000000000, 0);
+        assert_eq!(addr & 0xFFF, 0);
+
+        pt[pto] = addr;
+        pt[pto] |= 0b01; // Present (P) Bit.
+        pt[pto] |= 0b10; // Read/Write (R/W) Bit.
+    }
+
+    // Set CR3 to page-map level-4 table.
+    let mut states = cpu
+        .states()
+        .map_err(|e| MainCpuError::GetCpuStatesFailed(Box::new(e)))?;
+
+    states.set_cr3(klen);
+
+    // Set CR4.
+    let mut cr4 = 0;
+
+    cr4 |= 0x20; // Physical-address extensions (PAE).
+
+    states.set_cr4(cr4);
+
+    // Set EFER.
+    let mut efer = 0;
+
+    efer |= 0x100; // Long Mode Enable (LME).
+    efer |= 0x400; // Long Mode Active (LMA).
+
+    states.set_efer(efer);
+
+    // Set CR0.
+    let mut cr0 = 0;
+
+    cr0 |= 0x00000001; // Protected Mode Enable (PE).
+    cr0 |= 0x80000000; // Paging (PG).
+
+    states.set_cr0(cr0);
+
+    Ok(())
+}
+
+/// # Safety
+/// This function requires the kernel was mapped at address 0.
+#[cfg(target_arch = "aarch64")]
+unsafe fn setup_main_cpu(cpu: &mut impl Cpu, ram: &Ram, klen: usize) -> Result<(), MainCpuError> {
+    todo!()
+}
+
 #[cfg(target_os = "linux")]
-fn setup_platform(cpu: usize, ram: Arc<Ram>) -> Result<self::linux::Kvm, VmmError> {
+fn setup_hypervisor(cpu: usize, ram: Arc<Ram>) -> Result<self::linux::Kvm, VmmError> {
     self::linux::Kvm::new(cpu, ram)
 }
 
 #[cfg(target_os = "windows")]
-fn setup_platform(cpu: usize, ram: Arc<Ram>) -> Result<self::windows::Whp, VmmError> {
+fn setup_hypervisor(cpu: usize, ram: Arc<Ram>) -> Result<self::windows::Whp, VmmError> {
     self::windows::Whp::new(cpu, ram)
 }
 
 #[cfg(target_os = "macos")]
-fn setup_platform(cpu: usize, ram: Arc<Ram>) -> Result<self::macos::Hf, VmmError> {
+fn setup_hypervisor(cpu: usize, ram: Arc<Ram>) -> Result<self::macos::Hf, VmmError> {
     self::macos::Hf::new(cpu, ram)
 }
 
 /// Manage a virtual machine that run the kernel.
 pub struct Vmm {
-    hv: P,
+    hv: Arc<P>,
     ram: Arc<Ram>,
-    created_cpu: AtomicUsize,
+    cpus: Vec<JoinHandle<()>>,
+    shutdown: Arc<AtomicBool>,
+}
+
+impl Drop for Vmm {
+    fn drop(&mut self) {
+        // Cancel all CPU threads.
+        self.shutdown.store(true, Ordering::Relaxed);
+
+        for cpu in self.cpus.drain(..) {
+            cpu.join().unwrap();
+        }
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -268,7 +501,7 @@ trait MemoryAddr {
     fn vm_addr(&self) -> usize;
 
     /// Address in our process.
-    fn host_addr(&self) -> *mut ();
+    fn host_addr(&self) -> *const u8;
 
     /// Total size of the object, in bytes.
     fn len(&self) -> usize;
@@ -340,4 +573,30 @@ enum VmmError {
     #[cfg(target_os = "macos")]
     #[error("couldn't map memory to the VM")]
     MapRamFailed(std::num::NonZero<std::ffi::c_int>),
+}
+
+/// Represents an error when [`main_cpu()`] fails to reach event loop.
+#[derive(Debug, Error)]
+enum MainCpuError {
+    #[error("couldn't create vCPU")]
+    CreateCpuFailed(#[source] <P as Hypervisor>::CpuErr),
+
+    #[cfg(target_arch = "x86_64")]
+    #[error("couldn't allocate RAM for page-map level-4 table")]
+    AllocPml4TableFailed(#[source] std::io::Error),
+
+    #[cfg(target_arch = "x86_64")]
+    #[error("couldn't allocate RAM for page-directory pointer table")]
+    AllocPdpTableFailed(#[source] std::io::Error),
+
+    #[cfg(target_arch = "x86_64")]
+    #[error("couldn't allocate RAM for page-directory table")]
+    AllocPdTableFailed(#[source] std::io::Error),
+
+    #[cfg(target_arch = "x86_64")]
+    #[error("couldn't allocate RAM for page table")]
+    AllocPageTableFailed(#[source] std::io::Error),
+
+    #[error("couldn't get vCPU states")]
+    GetCpuStatesFailed(#[source] Box<dyn Error + Send>),
 }

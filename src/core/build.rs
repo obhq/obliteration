@@ -27,9 +27,13 @@ fn main() {
     conf.style = Style::Tag;
     conf.usize_is_size_t = true;
     conf.export.exclude.push("KvmRegs".into());
+    conf.export.exclude.push("KvmSpecialRegs".into());
     conf.export
         .rename
         .insert("KvmRegs".into(), "kvm_regs".into());
+    conf.export
+        .rename
+        .insert("KvmSpecialRegs".into(), "kvm_sregs".into());
     conf.defines
         .insert("target_os = linux".into(), "__linux__".into());
     conf.defines

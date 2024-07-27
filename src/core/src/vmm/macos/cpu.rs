@@ -31,18 +31,14 @@ impl<'a> Drop for HfCpu<'a> {
 }
 
 impl<'a> Cpu for HfCpu<'a> {
+    type States<'b> = HfStates<'b> where Self: 'b;
     type GetStatesErr = GetStatesError;
-    type SetStatesErr = SetStatesError;
 
     fn id(&self) -> usize {
         self.id
     }
 
-    fn get_states(&mut self, states: &mut CpuStates) -> Result<(), Self::GetStatesErr> {
-        todo!()
-    }
-
-    fn set_states(&mut self, states: &CpuStates) -> Result<(), Self::SetStatesErr> {
+    fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
         todo!()
     }
 }
@@ -53,10 +49,33 @@ type hv_vcpu_t = hv_sys::hv_vcpu_t;
 #[cfg(target_arch = "x86_64")]
 type hv_vcpu_t = hv_sys::hv_vcpuid_t;
 
+/// Implementation of [`Cpu::States`] for Hypervisor Framework.
+pub struct HfStates<'a> {
+    cpu: PhantomData<&'a mut HfCpu<'a>>,
+}
+
+impl<'a> CpuStates for HfStates<'a> {
+    #[cfg(target_arch = "x86_64")]
+    fn set_cr0(&mut self, v: usize) {
+        todo!()
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_cr3(&mut self, v: usize) {
+        todo!()
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_cr4(&mut self, v: usize) {
+        todo!()
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_efer(&mut self, v: usize) {
+        todo!()
+    }
+}
+
 /// Implementation of [`Cpu::GetStatesErr`].
 #[derive(Debug, Error)]
 pub enum GetStatesError {}
-
-/// Implementation of [`Cpu::SetStatesErr`].
-#[derive(Debug, Error)]
-pub enum SetStatesError {}
