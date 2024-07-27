@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use thiserror::Error;
 use windows_sys::Win32::System::Hypervisor::{WHvDeleteVirtualProcessor, WHV_PARTITION_HANDLE};
 
-/// Implementation of [`Cpu`] for KVM.
+/// Implementation of [`Cpu`] for Windows Hypervisor Platform.
 pub struct WhpCpu<'a> {
     part: WHV_PARTITION_HANDLE,
     index: u32,
@@ -31,18 +31,41 @@ impl<'a> Drop for WhpCpu<'a> {
 }
 
 impl<'a> Cpu for WhpCpu<'a> {
+    type States<'b> = WhpStates<'b> where Self: 'b;
     type GetStatesErr = GetStatesError;
-    type SetStatesErr = SetStatesError;
 
     fn id(&self) -> usize {
         self.index.try_into().unwrap()
     }
 
-    fn get_states(&mut self, states: &mut CpuStates) -> Result<(), Self::GetStatesErr> {
+    fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
+        todo!()
+    }
+}
+
+/// Implementation of [`Cpu::States`] for Windows Hypervisor Platform.
+pub struct WhpStates<'a> {
+    cpu: PhantomData<&'a mut WhpCpu<'a>>,
+}
+
+impl<'a> CpuStates for WhpStates<'a> {
+    #[cfg(target_arch = "x86_64")]
+    fn set_cr0(&mut self, v: usize) {
         todo!()
     }
 
-    fn set_states(&mut self, states: &CpuStates) -> Result<(), Self::SetStatesErr> {
+    #[cfg(target_arch = "x86_64")]
+    fn set_cr3(&mut self, v: usize) {
+        todo!()
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_cr4(&mut self, v: usize) {
+        todo!()
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_efer(&mut self, v: usize) {
         todo!()
     }
 }
@@ -50,7 +73,3 @@ impl<'a> Cpu for WhpCpu<'a> {
 /// Implementation of [`Cpu::GetStatesErr`].
 #[derive(Debug, Error)]
 pub enum GetStatesError {}
-
-/// Implementation of [`Cpu::SetStatesErr`].
-#[derive(Debug, Error)]
-pub enum SetStatesError {}

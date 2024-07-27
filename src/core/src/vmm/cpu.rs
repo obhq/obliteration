@@ -2,13 +2,29 @@ use std::error::Error;
 
 /// Represents a core of the PS4 CPU.
 pub trait Cpu {
-    type GetStatesErr: Error;
-    type SetStatesErr: Error;
+    type States<'a>: CpuStates + 'a
+    where
+        Self: 'a;
+    type GetStatesErr: Error + Send + 'static;
 
     fn id(&self) -> usize;
-    fn get_states(&mut self, states: &mut CpuStates) -> Result<(), Self::GetStatesErr>;
-    fn set_states(&mut self, states: &CpuStates) -> Result<(), Self::SetStatesErr>;
+    fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr>;
 }
 
 /// States of [`Cpu`].
-pub struct CpuStates {}
+///
+/// [`Drop`] implementation on the type that implement this trait may panic if it fails to commit
+/// the states.
+pub trait CpuStates {
+    #[cfg(target_arch = "x86_64")]
+    fn set_cr0(&mut self, v: usize);
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_cr3(&mut self, v: usize);
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_cr4(&mut self, v: usize);
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_efer(&mut self, v: usize);
+}

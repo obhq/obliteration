@@ -13,6 +13,8 @@
 struct Param;
 struct Pkg;
 
+#define Ram_ADDR 0
+
 #define Ram_SIZE (((1024 * 1024) * 1024) * 8)
 
 #define Ram_VM_PAGE_SIZE 16384
@@ -114,6 +116,14 @@ extern int kvm_get_regs(int vcpu, kvm_regs *regs);
 
 #if defined(__linux__)
 extern int kvm_set_regs(int vcpu, const kvm_regs *regs);
+#endif
+
+#if defined(__linux__)
+extern int kvm_get_sregs(int vcpu, kvm_sregs *regs);
+#endif
+
+#if defined(__linux__)
+extern int kvm_set_sregs(int vcpu, const kvm_sregs *regs);
 #endif
 
 #ifdef __cplusplus

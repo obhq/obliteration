@@ -1,6 +1,6 @@
 use self::cpu::HfCpu;
 use self::vm::Vm;
-use super::{MemoryAddr, Platform, Ram, VmmError};
+use super::{Hypervisor, MemoryAddr, Ram, VmmError};
 use hv_sys::hv_vcpu_create;
 use std::ffi::c_int;
 use std::num::NonZero;
@@ -10,7 +10,7 @@ use thiserror::Error;
 mod cpu;
 mod vm;
 
-/// Implementation of [`Platform`] using Hypervisor Framework.
+/// Implementation of [`Hypervisor`] using Hypervisor Framework.
 ///
 /// Fields in this struct need to drop in a correct order.
 pub struct Hf {
@@ -25,7 +25,7 @@ impl Hf {
 
         // Map memory.
         vm.vm_map(
-            ram.host_addr().cast(),
+            ram.host_addr().cast_mut().cast(),
             ram.vm_addr().try_into().unwrap(),
             ram.len(),
         )
@@ -35,7 +35,7 @@ impl Hf {
     }
 }
 
-impl Platform for Hf {
+impl Hypervisor for Hf {
     type Cpu<'a> = HfCpu<'a>;
     type CpuErr = HfCpuError;
 
@@ -55,7 +55,7 @@ impl Platform for Hf {
     }
 }
 
-/// Implementation of [`Platform::CpuErr`].
+/// Implementation of [`Hypervisor::CpuErr`].
 #[derive(Debug, Error)]
 pub enum HfCpuError {
     #[error("couldn't create a vCPU ({0:#x})")]

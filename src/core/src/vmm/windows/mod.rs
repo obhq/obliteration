@@ -1,6 +1,6 @@
 use self::cpu::WhpCpu;
 use self::partition::Partition;
-use super::{MemoryAddr, Platform, Ram, VmmError};
+use super::{Hypervisor, MemoryAddr, Ram, VmmError};
 use std::sync::Arc;
 use thiserror::Error;
 use windows_sys::core::HRESULT;
@@ -8,7 +8,7 @@ use windows_sys::core::HRESULT;
 mod cpu;
 mod partition;
 
-/// Implementation of [`Platform`] using Windows Hypervisor Platform.
+/// Implementation of [`Hypervisor`] using Windows Hypervisor Platform.
 ///
 /// Fields in this struct need to drop in a correct order.
 pub struct Whp {
@@ -37,7 +37,7 @@ impl Whp {
     }
 }
 
-impl Platform for Whp {
+impl Hypervisor for Whp {
     type Cpu<'a> = WhpCpu<'a>;
     type CpuErr = WhpCpuError;
 
@@ -50,7 +50,7 @@ impl Platform for Whp {
     }
 }
 
-/// Implementation of [`Platform::CpuErr`].
+/// Implementation of [`Hypervisor::CpuErr`].
 #[derive(Debug, Error)]
 pub enum WhpCpuError {
     #[error("couldn't create a virtual processor ({0:#x})")]
