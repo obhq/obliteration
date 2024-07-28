@@ -67,8 +67,8 @@ impl<'a> Cpu for HfCpu<'a> {
             .read_register(hv_sys::hv_x86_reg_t_HV_X86_CR4)
             .map_err(GetStatesError::ReadCr4)?;
         /*let efer = self
-            .read_register(hv_sys::hv_x86_reg_t_HV_X86_EFER)
-            .map_err(GetStatesError::ReadEfer)?;*/
+        .read_register(hv_sys::hv_x86_reg_t_HV_X86_EFER)
+        .map_err(GetStatesError::ReadEfer)?;*/
         let cs = self
             .read_register(hv_sys::hv_x86_reg_t_HV_X86_CS)
             .map_err(GetStatesError::ReadCs)?;
@@ -115,7 +115,7 @@ impl<'a> Cpu for HfCpu<'a> {
         let exit_reason = MaybeUninit::uninit();
 
         if let Some(err) = NonZero::new(unsafe {
-            hv_sys::hv_vcpu_get_executed_exitinfo(self.instance, exit_reason.as_ptr())
+            hv_sys::hv_vcpu_exit_info(self.instance, exit_reason.as_mut_ptr())
         }) {
             return Err(RunError::ReadExitReason(err));
         };
@@ -128,7 +128,7 @@ impl<'a> Cpu for HfCpu<'a> {
 }
 
 impl HfCpu<'_> {
-    pub fn read_register(
+    fn read_register(
         &self,
         register: hv_sys::hv_x86_reg_t,
     ) -> Result<usize, NonZero<hv_sys::hv_return_t>> {
