@@ -83,9 +83,6 @@ impl<'a> Cpu for HfCpu<'a> {
         let cr4 = self
             .read_register(hv_sys::hv_x86_reg_t_HV_X86_CR4)
             .map_err(GetStatesError::ReadCr4)?;
-        let cs = self
-            .read_register(hv_sys::hv_x86_reg_t_HV_X86_CS)
-            .map_err(GetStatesError::ReadCs)?;
         let ds = self
             .read_register(hv_sys::hv_x86_reg_t_HV_X86_DS)
             .map_err(GetStatesError::ReadDs)?;
@@ -111,7 +108,7 @@ impl<'a> Cpu for HfCpu<'a> {
             cr0,
             cr3,
             cr4,
-            cs,
+
             ds,
             es,
             fs,
@@ -174,7 +171,7 @@ impl HfCpu<'_> {
         wrap_return!(unsafe {
             hv_sys::hv_vcpu_get_reg(self.instance, register, value.as_mut_ptr().cast()),
             Err
-        });
+        })?;
 
         Ok(unsafe { value.assume_init() })
     }
@@ -203,12 +200,6 @@ pub struct HfStates<'a> {
     cr0: usize,
     cr3: usize,
     cr4: usize,
-
-    cs_ty: u8,
-    cs_dpl: u8,
-    cs_p: bool,
-    cs_l: bool,
-    cs_d: bool,
 
     ds: usize,
     es: usize,
