@@ -66,9 +66,9 @@ impl<'a> Cpu for HfCpu<'a> {
         let cr4 = self
             .read_register(hv_sys::hv_x86_reg_t_HV_X86_CR4)
             .map_err(GetStatesError::ReadCr4)?;
-        let efer = self
+        /*let efer = self
             .read_register(hv_sys::hv_x86_reg_t_HV_X86_EFER)
-            .map_err(GetStatesError::ReadEfer)?;
+            .map_err(GetStatesError::ReadEfer)?;*/
         let cs = self
             .read_register(hv_sys::hv_x86_reg_t_HV_X86_CS)
             .map_err(GetStatesError::ReadCs)?;
@@ -155,8 +155,7 @@ pub struct HfStates<'a> {
     cr0: usize,
     cr3: usize,
     cr4: usize,
-    efer: usize,
-
+    //efer: usize,
     cs: usize,
     ds: usize,
     es: usize,
@@ -198,8 +197,7 @@ impl<'a> CpuStates for HfStates<'a> {
 
     #[cfg(target_arch = "x86_64")]
     fn set_efer(&mut self, v: usize) {
-        self.efer = v;
-        self.dirty = true;
+        todo!()
     }
 
     #[cfg(target_arch = "x86_64")]
