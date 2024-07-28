@@ -6,9 +6,9 @@ use std::num::NonZero;
 use thiserror::Error;
 
 macro_rules! wrap_return {
-    ($ret:expr, $err:ident) => {
+    ($ret:expr, $err:path) => {
         match NonZero::new($ret) {
-            Some(errno) => $err(errno),
+            Some(errno) => Err($err(errno)),
             None => Ok(()),
         }
     };
