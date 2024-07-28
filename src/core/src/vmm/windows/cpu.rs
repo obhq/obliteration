@@ -66,7 +66,7 @@ impl<'a> Cpu for WhpCpu<'a> {
             Err(GetStatesError::GetRegistersFailed(status))
         } else {
             Ok(WhpStates {
-                cpu: self,
+                cpu: &mut self,
                 values,
                 dirty: false,
             })
