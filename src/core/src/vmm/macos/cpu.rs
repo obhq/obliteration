@@ -280,7 +280,7 @@ impl<'a> CpuStates for HfStates<'a> {
     }
 }
 
-impl Drop for HfStates<'_> {
+impl Drop for HfStates<'_, '_> {
     fn drop(&mut self) {
         if !self.dirty {
             return;
