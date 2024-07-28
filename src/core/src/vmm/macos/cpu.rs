@@ -113,6 +113,7 @@ impl<'a> Cpu for HfCpu<'a> {
         todo!()
     }
 
+    #[cfg(target_arch = "x86_64")]
     fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr> {
         if let Some(err) = NonZero::new(unsafe { hv_sys::hv_vcpu_run(self.instance) }) {
             return Err(RunError::Run(err));
@@ -130,6 +131,11 @@ impl<'a> Cpu for HfCpu<'a> {
             cpu: PhantomData,
             exit_info: unsafe { exit_reason.assume_init() },
         })
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr> {
+        todo!()
     }
 }
 
@@ -272,6 +278,7 @@ impl Drop for HfStates<'_> {
 /// Implementation of [`Cpu::Exit`] for Hypervisor Framework.
 pub struct HfExit<'a> {
     cpu: PhantomData<&'a mut HfCpu<'a>>,
+    #[cfg(target_arch = "x86_64")]
     exit_info: hv_sys::hv_vm_exitinfo_t,
 }
 
