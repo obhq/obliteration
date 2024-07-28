@@ -66,7 +66,7 @@ impl<'a> Cpu for WhpCpu<'a> {
             Err(GetStatesError::GetRegistersFailed(status))
         } else {
             Ok(WhpStates {
-                cpu: PhantomData,
+                cpu: self,
                 values,
                 dirty: false,
             })
@@ -80,7 +80,7 @@ impl<'a> Cpu for WhpCpu<'a> {
 
 /// Implementation of [`Cpu::States`] for Windows Hypervisor Platform.
 pub struct WhpStates<'a> {
-    cpu: PhantomData<&'a mut WhpCpu<'a>>,
+    cpu: &'a mut WhpCpu<'a>,
     values: [WHV_REGISTER_VALUE; REGISTERS],
     dirty: bool,
 }
@@ -110,8 +110,8 @@ impl<'a> Drop for WhpStates<'a> {
 
         let status = unsafe {
             WHvSetVirtualProcessorRegisters(
-                self.part,
-                self.index,
+                self.cpu.part,
+                self.cpu.index,
                 Self::NAMES.as_ptr(),
                 REGISTERS as _,
                 self.values.as_ptr(),
@@ -166,7 +166,7 @@ impl<'a> CpuStates for WhpStates<'a> {
         // Rust binding does not provides a way to set bitfield so we need to do this manually. See
         // https://learn.microsoft.com/en-us/virtualization/api/hypervisor-platform/funcs/whvvirtualprocessordatatypes
         // for the structure of WHV_X64_SEGMENT_REGISTER.
-        let v = &mut self.values[6].Segment.Anonymous.Attributes;
+        let v = unsafe { &mut self.values[6].Segment.Anonymous.Attributes };
         let ty: u16 = ty.into();
         let dpl: u16 = dpl.into();
         let p: u16 = p.into();
@@ -184,7 +184,7 @@ impl<'a> CpuStates for WhpStates<'a> {
 
     #[cfg(target_arch = "x86_64")]
     fn set_ds(&mut self, p: bool) {
-        let v = &mut self.values[7].Segment.Anonymous.Attributes;
+        let v = unsafe { &mut self.values[7].Segment.Anonymous.Attributes };
         let p: u16 = p.into();
 
         *v = p << 7;
@@ -194,7 +194,7 @@ impl<'a> CpuStates for WhpStates<'a> {
 
     #[cfg(target_arch = "x86_64")]
     fn set_es(&mut self, p: bool) {
-        let v = &mut self.values[8].Segment.Anonymous.Attributes;
+        let v = unsafe { &mut self.values[8].Segment.Anonymous.Attributes };
         let p: u16 = p.into();
 
         *v = p << 7;
@@ -204,7 +204,7 @@ impl<'a> CpuStates for WhpStates<'a> {
 
     #[cfg(target_arch = "x86_64")]
     fn set_fs(&mut self, p: bool) {
-        let v = &mut self.values[9].Segment.Anonymous.Attributes;
+        let v = unsafe { &mut self.values[9].Segment.Anonymous.Attributes };
         let p: u16 = p.into();
 
         *v = p << 7;
@@ -214,7 +214,7 @@ impl<'a> CpuStates for WhpStates<'a> {
 
     #[cfg(target_arch = "x86_64")]
     fn set_gs(&mut self, p: bool) {
-        let v = &mut self.values[10].Segment.Anonymous.Attributes;
+        let v = unsafe { &mut self.values[10].Segment.Anonymous.Attributes };
         let p: u16 = p.into();
 
         *v = p << 7;
@@ -224,7 +224,7 @@ impl<'a> CpuStates for WhpStates<'a> {
 
     #[cfg(target_arch = "x86_64")]
     fn set_ss(&mut self, p: bool) {
-        let v = &mut self.values[11].Segment.Anonymous.Attributes;
+        let v = unsafe { &mut self.values[11].Segment.Anonymous.Attributes };
         let p: u16 = p.into();
 
         *v = p << 7;
