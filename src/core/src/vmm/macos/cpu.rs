@@ -208,7 +208,7 @@ pub struct HfStates<'a, 'b> {
     ss: usize,
 }
 
-impl<'a> CpuStates for HfStates<'a> {
+impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
     #[cfg(target_arch = "x86_64")]
     fn set_rsp(&mut self, v: usize) {
         self.rsp = v;
@@ -280,7 +280,7 @@ impl<'a> CpuStates for HfStates<'a> {
     }
 }
 
-impl Drop for HfStates<'_, '_> {
+impl<'a, 'b> Drop for HfStates<'a, 'b> {
     fn drop(&mut self) {
         if !self.dirty {
             return;
