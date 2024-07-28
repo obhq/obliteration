@@ -14,19 +14,19 @@ type hv_vcpu_t = hv_sys::hv_vcpu_t;
 type hv_vcpu_t = hv_sys::hv_vcpuid_t;
 
 macro_rules! wrap_return {
+    ($ret:expr, Err) => {
+        match NonZero::new($ret) {
+            Some(errno) => Err(errno),
+            None => Ok(()),
+        }
+    }
+
     ($ret:expr, $err:path) => {
         match NonZero::new($ret) {
             Some(errno) => Err($err(errno)),
             None => Ok(()),
         }
-    };
-
-    ($ret:expr, $err:ident) => {
-        match NonZero::new($ret) {
-            Some(errno) => $err(errno),
-            None => Ok(()),
-        }
-    };
+    }
 }
 
 /// Implementation of [`Cpu`] for Hypervisor Framework.
