@@ -51,18 +51,42 @@ impl<'a> Cpu for HfCpu<'a> {
     }
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
-        let rsp = self.read_register(hv_sys::hv_x86_reg_t_HV_X86_RIP).map_err(GetStatesError::ReadRsp)?;
-        let rip = self.read_register(hv_sys::hv_x86_reg_t_HV_X86_RSP).map_err(GetStatesError::ReadRip)?;
-        let cr0 = self.read_register(hv_sys::hv_x86_reg_t_HV_X86_CR0).map_err(GetStatesError::ReadCr0)?;
-        let cr3 = self.read_register(hv_sys::hv_x86_reg_t_HV_X86_CR3).map_err(GetStatesError::ReadCr3)?;
-        let cr4 = self.read_register(hv_sys::hv_x86_reg_t_HV_X86_CR4).map_err(GetStatesError::ReadCr4)?;
-        let efer = self.read_register(hv_sys::hv_x86_reg_t_HV_X86_EFER).map_err(GetStatesError::ReadEfer)?;
-        let cs = self.read_register(hv_sys::hv_x86_reg_t_HV_X86_CS).map_err(GetStatesError::ReadCs)?;
-        let ds = self.read_register(hv_sys::hv_x86_reg_t_HV_X86_DS).map_err(GetStatesError::ReadDs)?;
-        let es = self.read_register(hv_sys::hv_x86_reg_t_HV_X86_ES).map_err(GetStatesError::ReadEs)?;
-        let fs = self.read_register(hv_sys::hv_x86_reg_t_HV_X86_FS).map_err(GetStatesError::ReadFs)?;
-        let gs = self.read_register(hv_sys::hv_x86_reg_t_HV_X86_GS).map_err(GetStatesError::ReadGs)?;
-        let ss = self.read_register(hv_sys::hv_x86_reg_t_HV_X86_SS).map_err(GetStatesError::ReadSs)?;
+        let rsp = self
+            .read_register(hv_sys::hv_x86_reg_t_HV_X86_RIP)
+            .map_err(GetStatesError::ReadRsp)?;
+        let rip = self
+            .read_register(hv_sys::hv_x86_reg_t_HV_X86_RSP)
+            .map_err(GetStatesError::ReadRip)?;
+        let cr0 = self
+            .read_register(hv_sys::hv_x86_reg_t_HV_X86_CR0)
+            .map_err(GetStatesError::ReadCr0)?;
+        let cr3 = self
+            .read_register(hv_sys::hv_x86_reg_t_HV_X86_CR3)
+            .map_err(GetStatesError::ReadCr3)?;
+        let cr4 = self
+            .read_register(hv_sys::hv_x86_reg_t_HV_X86_CR4)
+            .map_err(GetStatesError::ReadCr4)?;
+        let efer = self
+            .read_register(hv_sys::hv_x86_reg_t_HV_X86_EFER)
+            .map_err(GetStatesError::ReadEfer)?;
+        let cs = self
+            .read_register(hv_sys::hv_x86_reg_t_HV_X86_CS)
+            .map_err(GetStatesError::ReadCs)?;
+        let ds = self
+            .read_register(hv_sys::hv_x86_reg_t_HV_X86_DS)
+            .map_err(GetStatesError::ReadDs)?;
+        let es = self
+            .read_register(hv_sys::hv_x86_reg_t_HV_X86_ES)
+            .map_err(GetStatesError::ReadEs)?;
+        let fs = self
+            .read_register(hv_sys::hv_x86_reg_t_HV_X86_FS)
+            .map_err(GetStatesError::ReadFs)?;
+        let gs = self
+            .read_register(hv_sys::hv_x86_reg_t_HV_X86_GS)
+            .map_err(GetStatesError::ReadGs)?;
+        let ss = self
+            .read_register(hv_sys::hv_x86_reg_t_HV_X86_SS)
+            .map_err(GetStatesError::ReadSs)?;
 
         Ok(HfStates {
             cpu: PhantomData,
@@ -101,7 +125,10 @@ impl<'a> Cpu for HfCpu<'a> {
 }
 
 impl HfCpu<'_> {
-    pub fn read_register(&self, register: hv_sys::hv_x86_reg_t) -> Result<usize, NonZero<hv_sys::hv_return_t>> {
+    pub fn read_register(
+        &self,
+        register: hv_sys::hv_x86_reg_t,
+    ) -> Result<usize, NonZero<hv_sys::hv_return_t>> {
         let mut value = MaybeUninit::<usize>::uninit();
 
         wrap_return!(
