@@ -1,9 +1,9 @@
 use crate::vmm::{Cpu, CpuExit, CpuStates};
 use hv_sys::hv_vcpu_destroy;
 use std::marker::PhantomData;
-use thiserror::Error;
-use std::num::NonZero;
 use std::mem::MaybeUninit;
+use std::num::NonZero;
+use thiserror::Error;
 
 macro_rules! wrap_return {
     ($ret:expr, $err:ident) => {
@@ -11,7 +11,7 @@ macro_rules! wrap_return {
             Some(errno) => $err(errno),
             None => Ok(()),
         }
-    }
+    };
 }
 
 /// Implementation of [`Cpu`] for Hypervisor Framework.
@@ -65,18 +65,54 @@ impl<'a> Cpu for HfCpu<'a> {
         let mut gs = MaybeUninit::new();
         let mut ss = MaybeUninit::new();
 
-        wrap_return!(hv_vcpu_read_register(self.instance, hv_sys::HV_X86_RSP, rsp.as_mut_ptr().cast()), GetStatesError::ReadRsp)?;
-        wrap_return!(hv_vcpu_read_register(self.instance, hv_sys::HV_X86_RIP, rip.as_mut_ptr().cast()), GetStatesError::ReadRip)?;
-        wrap_return!(hv_vcpu_read_register(self.instance, hv_sys::HV_X86_CR0, cr0.as_mut_ptr().cast()), GetStatesError::ReadCr0)?;
-        wrap_return!(hv_vcpu_read_register(self.instance, hv_sys::HV_X86_CR3, cr3.as_mut_ptr().cast()), GetStatesError::ReadCr3)?;
-        wrap_return!(hv_vcpu_read_register(self.instance, hv_sys::HV_X86_CR4, cr4.as_mut_ptr().cast()), GetStatesError::ReadCr4)?;
-        wrap_return!(hv_vcpu_read_register(self.instance, hv_sys::HV_X86_EFER, efer.as_mut_ptr().cast()), GetStatesError::ReadEfer)?;
-        wrap_return!(hv_vcpu_read_register(self.instance, hv_sys::HV_X86_CS, cs.as_mut_ptr().cast()), GetStatesError::ReadCs)?;
-        wrap_return!(hv_vcpu_read_register(self.instance, hv_sys::HV_X86_DS, ds.as_mut_ptr().cast()), GetStatesError::ReadDs)?;
-        wrap_return!(hv_vcpu_read_register(self.instance, hv_sys::HV_X86_ES, es.as_mut_ptr().cast()), GetStatesError::ReadEs)?;
-        wrap_return!(hv_vcpu_read_register(self.instance, hv_sys::HV_X86_FS, fs.as_mut_ptr().cast()), GetStatesError::ReadFs)?;
-        wrap_return!(hv_vcpu_read_register(self.instance, hv_sys::HV_X86_GS, gs.as_mut_ptr().cast()), GetStatesError::ReadGs)?;
-        wrap_return!(hv_vcpu_read_register(self.instance, hv_sys::HV_X86_SS, ss.as_mut_ptr().cast()), GetStatesError::ReadSs)?;
+        wrap_return!(
+            hv_vcpu_read_register(self.instance, hv_sys::HV_X86_RSP, rsp.as_mut_ptr().cast()),
+            GetStatesError::ReadRsp
+        )?;
+        wrap_return!(
+            hv_vcpu_read_register(self.instance, hv_sys::HV_X86_RIP, rip.as_mut_ptr().cast()),
+            GetStatesError::ReadRip
+        )?;
+        wrap_return!(
+            hv_vcpu_read_register(self.instance, hv_sys::HV_X86_CR0, cr0.as_mut_ptr().cast()),
+            GetStatesError::ReadCr0
+        )?;
+        wrap_return!(
+            hv_vcpu_read_register(self.instance, hv_sys::HV_X86_CR3, cr3.as_mut_ptr().cast()),
+            GetStatesError::ReadCr3
+        )?;
+        wrap_return!(
+            hv_vcpu_read_register(self.instance, hv_sys::HV_X86_CR4, cr4.as_mut_ptr().cast()),
+            GetStatesError::ReadCr4
+        )?;
+        wrap_return!(
+            hv_vcpu_read_register(self.instance, hv_sys::HV_X86_EFER, efer.as_mut_ptr().cast()),
+            GetStatesError::ReadEfer
+        )?;
+        wrap_return!(
+            hv_vcpu_read_register(self.instance, hv_sys::HV_X86_CS, cs.as_mut_ptr().cast()),
+            GetStatesError::ReadCs
+        )?;
+        wrap_return!(
+            hv_vcpu_read_register(self.instance, hv_sys::HV_X86_DS, ds.as_mut_ptr().cast()),
+            GetStatesError::ReadDs
+        )?;
+        wrap_return!(
+            hv_vcpu_read_register(self.instance, hv_sys::HV_X86_ES, es.as_mut_ptr().cast()),
+            GetStatesError::ReadEs
+        )?;
+        wrap_return!(
+            hv_vcpu_read_register(self.instance, hv_sys::HV_X86_FS, fs.as_mut_ptr().cast()),
+            GetStatesError::ReadFs
+        )?;
+        wrap_return!(
+            hv_vcpu_read_register(self.instance, hv_sys::HV_X86_GS, gs.as_mut_ptr().cast()),
+            GetStatesError::ReadGs
+        )?;
+        wrap_return!(
+            hv_vcpu_read_register(self.instance, hv_sys::HV_X86_SS, ss.as_mut_ptr().cast()),
+            GetStatesError::ReadSs
+        )?;
 
         Ok(HfStates {
             cpu: PhantomData,
@@ -101,7 +137,10 @@ impl<'a> Cpu for HfCpu<'a> {
 
         let exit_reason = MaybeUninit::new();
 
-        wrap_return!(hv_sys::hv_vcpu_exit_info(self.instance, exit_reason.as_mut_ptr()), RunError::ReadExitReason)?;
+        wrap_return!(
+            hv_sys::hv_vcpu_exit_info(self.instance, exit_reason.as_mut_ptr()),
+            RunError::ReadExitReason
+        )?;
 
         Ok(HfExit {
             cpu: PhantomData,
@@ -231,7 +270,7 @@ impl Drop for HfStates<'_> {
 /// Implementation of [`Cpu::Exit`] for Hypervisor Framework.
 pub struct HfExit<'a> {
     cpu: PhantomData<&'a mut HfCpu<'a>>,
-    exit_info: hv_sys::hv_vm_exitinfo_t
+    exit_info: hv_sys::hv_vm_exitinfo_t,
 }
 
 impl<'a> CpuExit for HfExit<'a> {
