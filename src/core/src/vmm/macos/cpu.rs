@@ -215,16 +215,7 @@ impl<'a> CpuStates for HfStates<'a> {
 
     #[cfg(target_arch = "x86_64")]
     fn set_cs(&mut self, ty: u8, dpl: u8, p: bool, l: bool, d: bool) {
-        let mut value = self.cs & 0xFFFF; // Preserve the selector
-        value |= (ty as u64) << 40;
-        value |= (dpl as u64) << 45;
-        value |= (p as u64) << 47;
-        value |= (l as u64) << 53;
-        value |= (d as u64) << 54;
-
-        self.cs = value;
-
-        self.dirty = true;
+        todo!()
     }
 
     #[cfg(target_arch = "x86_64")]
