@@ -1,27 +1,27 @@
 #[cfg(target_arch = "x86_64")]
 #[repr(C)]
 pub struct KvmRegs {
-    pub rax: u64,
-    pub rbx: u64,
-    pub rcx: u64,
-    pub rdx: u64,
+    pub rax: usize,
+    pub rbx: usize,
+    pub rcx: usize,
+    pub rdx: usize,
 
-    pub rsi: u64,
-    pub rdi: u64,
-    pub rsp: u64,
-    pub rbp: u64,
+    pub rsi: usize,
+    pub rdi: usize,
+    pub rsp: usize,
+    pub rbp: usize,
 
-    pub r8: u64,
-    pub r9: u64,
-    pub r10: u64,
-    pub r11: u64,
+    pub r8: usize,
+    pub r9: usize,
+    pub r10: usize,
+    pub r11: usize,
 
-    pub r12: u64,
-    pub r13: u64,
-    pub r14: u64,
-    pub r15: u64,
+    pub r12: usize,
+    pub r13: usize,
+    pub r14: usize,
+    pub r15: usize,
 
-    pub rip: u64,
+    pub rip: usize,
     pub rflags: u64,
 }
 

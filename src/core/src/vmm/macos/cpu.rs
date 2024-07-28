@@ -1,4 +1,4 @@
-use crate::vmm::{Cpu, CpuStates};
+use crate::vmm::{Cpu, CpuExit, CpuStates};
 use hv_sys::hv_vcpu_destroy;
 use std::marker::PhantomData;
 use thiserror::Error;
@@ -33,12 +33,18 @@ impl<'a> Drop for HfCpu<'a> {
 impl<'a> Cpu for HfCpu<'a> {
     type States<'b> = HfStates<'b> where Self: 'b;
     type GetStatesErr = GetStatesError;
+    type Exit<'b> = HfExit<'b> where Self: 'b;
+    type RunErr = std::io::Error;
 
     fn id(&self) -> usize {
         self.id
     }
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
+        todo!()
+    }
+
+    fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr> {
         todo!()
     }
 }
@@ -55,6 +61,16 @@ pub struct HfStates<'a> {
 }
 
 impl<'a> CpuStates for HfStates<'a> {
+    #[cfg(target_arch = "x86_64")]
+    fn set_rsp(&mut self, v: usize) {
+        todo!()
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_rip(&mut self, v: usize) {
+        todo!()
+    }
+
     #[cfg(target_arch = "x86_64")]
     fn set_cr0(&mut self, v: usize) {
         todo!()
@@ -77,6 +93,43 @@ impl<'a> CpuStates for HfStates<'a> {
 
     #[cfg(target_arch = "x86_64")]
     fn set_cs(&mut self, ty: u8, dpl: u8, p: bool, l: bool, d: bool) {
+        todo!()
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_ds(&mut self, p: bool) {
+        todo!()
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_es(&mut self, p: bool) {
+        todo!()
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_fs(&mut self, p: bool) {
+        todo!()
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_gs(&mut self, p: bool) {
+        todo!()
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_ss(&mut self, p: bool) {
+        todo!()
+    }
+}
+
+/// Implementation of [`Cpu::Exit`] for Hypervisor Framework.
+pub struct HfExit<'a> {
+    cpu: PhantomData<&'a mut HfCpu<'a>>,
+}
+
+impl<'a> CpuExit for HfExit<'a> {
+    #[cfg(target_arch = "x86_64")]
+    fn is_hlt(&self) -> bool {
         todo!()
     }
 }
