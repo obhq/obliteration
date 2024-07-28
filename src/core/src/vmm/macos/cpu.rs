@@ -329,9 +329,6 @@ pub enum GetStatesError {
     #[error("error while reading cr4: {0:#x}")]
     ReadCr4(NonZero<hv_sys::hv_return_t>),
 
-    #[error("error while reading efer: {0:#x}")]
-    ReadEfer(NonZero<hv_sys::hv_return_t>),
-
     #[error("error while reading ds: {0:#x}")]
     ReadDs(NonZero<hv_sys::hv_return_t>),
 
