@@ -1,7 +1,7 @@
-use super::ffi::{kvm_get_regs, kvm_get_sregs, kvm_set_regs, kvm_set_sregs};
+use super::ffi::{kvm_get_regs, kvm_get_sregs, kvm_run, kvm_set_regs, kvm_set_sregs};
 use super::regs::{KvmRegs, KvmSpecialRegs};
 use super::run::KvmRun;
-use crate::vmm::{Cpu, CpuStates};
+use crate::vmm::{Cpu, CpuExit, CpuStates};
 use libc::munmap;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
@@ -21,6 +21,8 @@ impl<'a> KvmCpu<'a> {
     /// - `cx` cannot be null and must be obtained from `mmap` on `fd`.
     /// - `len` must be the same value that used on `mmap`.
     pub unsafe fn new(id: u32, fd: OwnedFd, cx: *mut KvmRun, len: usize) -> Self {
+        assert!(len >= size_of::<KvmRun>());
+
         Self {
             id,
             fd,
@@ -43,6 +45,8 @@ impl<'a> Drop for KvmCpu<'a> {
 impl<'a> Cpu for KvmCpu<'a> {
     type States<'b> = KvmStates<'b> where Self: 'b;
     type GetStatesErr = GetStatesError;
+    type Exit<'b> = KvmExit<'b> where Self: 'b;
+    type RunErr = std::io::Error;
 
     fn id(&self) -> usize {
         self.id.try_into().unwrap()
@@ -73,6 +77,15 @@ impl<'a> Cpu for KvmCpu<'a> {
             sdirty: false,
         })
     }
+
+    fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr> {
+        match unsafe { kvm_run(self.fd.as_raw_fd()) } {
+            0 => Ok(KvmExit {
+                cx: unsafe { &*self.cx.0 },
+            }),
+            _ => Err(std::io::Error::last_os_error()),
+        }
+    }
 }
 
 /// Implementation of [`Cpu::States`] for KVM.
@@ -85,6 +98,18 @@ pub struct KvmStates<'a> {
 }
 
 impl<'a> CpuStates for KvmStates<'a> {
+    #[cfg(target_arch = "x86_64")]
+    fn set_rsp(&mut self, v: usize) {
+        self.gregs.rsp = v;
+        self.gdirty = true;
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_rip(&mut self, v: usize) {
+        self.gregs.rip = v;
+        self.gdirty = true;
+    }
+
     #[cfg(target_arch = "x86_64")]
     fn set_cr0(&mut self, v: usize) {
         self.sregs.cr0 = v;
@@ -118,6 +143,36 @@ impl<'a> CpuStates for KvmStates<'a> {
         self.sregs.cs.db = d.into();
         self.sdirty = true;
     }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_ds(&mut self, p: bool) {
+        self.sregs.ds.present = p.into();
+        self.sdirty = true;
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_es(&mut self, p: bool) {
+        self.sregs.es.present = p.into();
+        self.sdirty = true;
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_fs(&mut self, p: bool) {
+        self.sregs.fs.present = p.into();
+        self.sdirty = true;
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_gs(&mut self, p: bool) {
+        self.sregs.gs.present = p.into();
+        self.sdirty = true;
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_ss(&mut self, p: bool) {
+        self.sregs.ss.present = p.into();
+        self.sdirty = true;
+    }
 }
 
 impl<'a> Drop for KvmStates<'a> {
@@ -136,6 +191,18 @@ impl<'a> Drop for KvmStates<'a> {
         if unsafe { self.sdirty && kvm_set_sregs(self.cpu.as_raw_fd(), &self.sregs) != 0 } {
             panic!("couldn't set special registers: {}", Error::last_os_error());
         }
+    }
+}
+
+/// Implementation of [`Cpu::Exit`] for KVM.
+pub struct KvmExit<'a> {
+    cx: &'a KvmRun,
+}
+
+impl<'a> CpuExit for KvmExit<'a> {
+    #[cfg(target_arch = "x86_64")]
+    fn is_hlt(&self) -> bool {
+        self.cx.exit_reason == 5
     }
 }
 

@@ -12,14 +12,14 @@ use std::thread::JoinHandle;
 use thiserror::Error;
 
 pub(self) use self::cpu::*;
-pub(self) use self::platform::*;
+pub(self) use self::hv::*;
 
 mod cpu;
+mod hv;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
-mod platform;
 mod ram;
 #[cfg(target_os = "windows")]
 mod windows;
@@ -109,7 +109,7 @@ pub unsafe extern "C" fn vmm_run(vmm: *mut Vmm, kernel: *const c_char) -> *mut R
     }
 
     // Load ELF header.
-    let e_entry = u64::from_ne_bytes(hdr[24..32].try_into().unwrap());
+    let e_entry = usize::from_ne_bytes(hdr[24..32].try_into().unwrap());
     let e_phoff = u64::from_ne_bytes(hdr[32..40].try_into().unwrap());
     let e_phentsize: usize = u16::from_ne_bytes(hdr[54..56].try_into().unwrap()).into();
     let e_phnum: usize = u16::from_ne_bytes(hdr[56..58].try_into().unwrap()).into();
@@ -238,7 +238,7 @@ pub unsafe extern "C" fn vmm_run(vmm: *mut Vmm, kernel: *const c_char) -> *mut R
     let ram = (*vmm).ram.clone();
     let shutdown = (*vmm).shutdown.clone();
     let (tx, rx) = std::sync::mpsc::channel();
-    let main = move || main_cpu(hv, ram, len, shutdown, tx);
+    let main = move || main_cpu(hv, ram, end, stack_len, e_entry, shutdown, tx);
     let main = match std::thread::Builder::new().spawn(main) {
         Ok(v) => v,
         Err(e) => return RustError::with_source("couldn't spawn main CPU", e),
@@ -265,11 +265,14 @@ pub unsafe extern "C" fn vmm_run(vmm: *mut Vmm, kernel: *const c_char) -> *mut R
 }
 
 /// # Safety
-/// This function requires the kernel was mapped at address 0.
+/// - The kernel must be mapped at address 0.
+/// - The stack must be immediate follow the kernel.
 unsafe fn main_cpu(
     hv: Arc<P>,
     ram: Arc<Ram>,
     klen: usize,
+    slen: usize,
+    entry: usize,
     shutdown: Arc<AtomicBool>,
     status: Sender<Result<(), MainCpuError>>,
 ) {
@@ -282,29 +285,39 @@ unsafe fn main_cpu(
         }
     };
 
-    if let Err(e) = setup_main_cpu(&mut cpu, &ram, klen) {
+    if let Err(e) = setup_main_cpu(&mut cpu, &ram, klen, slen, entry) {
         status.send(Err(e)).unwrap();
         return;
     }
 
-    // TODO: Set hypervisor to run the mapped kernel.
+    // Enter dispatch loop.
     status.send(Ok(())).unwrap();
     drop(status);
 
-    while !shutdown.load(Ordering::Relaxed) {}
+    while !shutdown.load(Ordering::Relaxed) {
+        run_main_cpu(&mut cpu);
+    }
 }
 
 /// # Safety
-/// This function requires the kernel was mapped at address 0.
+/// - The kernel must be mapped at address 0.
+/// - The stack must be immediate follow the kernel.
 #[cfg(target_arch = "x86_64")]
-unsafe fn setup_main_cpu(cpu: &mut impl Cpu, ram: &Ram, klen: usize) -> Result<(), MainCpuError> {
+unsafe fn setup_main_cpu(
+    cpu: &mut impl Cpu,
+    ram: &Ram,
+    klen: usize,
+    slen: usize,
+    entry: usize,
+) -> Result<(), MainCpuError> {
     // Allocate page-map level-4 table. We use 4K 4-Level Paging with identity mapping to boot the
     // kernel. Not sure how the PS4 achieve 16K page because x86-64 does not support it. Maybe it is
     // a special request from Sony to AMD?
     //
     // See Page Translation and Protection section on AMD64 Architecture Programmer's Manual Volume
     // 2 for how paging work in long-mode.
-    let mut alloc = klen;
+    let kend = klen + slen;
+    let mut alloc = kend;
     let len = (512usize * 8).next_multiple_of(Ram::VM_PAGE_SIZE);
     let pml4t = match ram.alloc(alloc, len) {
         Ok(v) => std::slice::from_raw_parts_mut::<usize>(v.cast(), 512),
@@ -314,7 +327,7 @@ unsafe fn setup_main_cpu(cpu: &mut impl Cpu, ram: &Ram, klen: usize) -> Result<(
     alloc += len;
 
     // Setup page tables to cover the whole mapped kernel.
-    for addr in (0..klen).step_by(4096) {
+    for addr in (0..kend).step_by(4096) {
         // Get page-directory pointer table.
         let pml4o = (addr & 0xFF8000000000) >> 39;
         let pdpt = match pml4t[pml4o] {
@@ -417,7 +430,9 @@ unsafe fn setup_main_cpu(cpu: &mut impl Cpu, ram: &Ram, klen: usize) -> Result<(
         .states()
         .map_err(|e| MainCpuError::GetCpuStatesFailed(Box::new(e)))?;
 
-    states.set_cr3(klen);
+    assert_eq!(kend & 0xFFF0000000000FFF, 0);
+
+    states.set_cr3(kend);
 
     // Set CR4.
     let mut cr4 = 0;
@@ -445,13 +460,48 @@ unsafe fn setup_main_cpu(cpu: &mut impl Cpu, ram: &Ram, klen: usize) -> Result<(
     // Set CS to 64-bit mode with ring 0.
     states.set_cs(0, 0, true, true, false);
 
+    // Set data segments. The only fields used on 64-bit mode is P.
+    states.set_ds(true);
+    states.set_es(true);
+    states.set_fs(true);
+    states.set_gs(true);
+    states.set_ss(true);
+
+    // Set entry point and stack pointer.
+    states.set_rsp(kend); // Top-down.
+    states.set_rip(entry);
+
     Ok(())
 }
 
 /// # Safety
-/// This function requires the kernel was mapped at address 0.
+/// - The kernel must be mapped at address 0.
+/// - The stack must be immediate follow the kernel.
 #[cfg(target_arch = "aarch64")]
-unsafe fn setup_main_cpu(cpu: &mut impl Cpu, ram: &Ram, klen: usize) -> Result<(), MainCpuError> {
+unsafe fn setup_main_cpu(
+    cpu: &mut impl Cpu,
+    ram: &Ram,
+    klen: usize,
+    slen: usize,
+    entry: usize,
+) -> Result<(), MainCpuError> {
+    todo!()
+}
+
+#[cfg(target_arch = "x86_64")]
+fn run_main_cpu(cpu: &mut impl Cpu) {
+    // Run the vCPU and check if it was exit because of HLT instruction.
+    let exit = cpu.run().unwrap();
+
+    if exit.is_hlt() {
+        return;
+    }
+
+    todo!()
+}
+
+#[cfg(target_arch = "aarch64")]
+fn run_main_cpu(cpu: &mut impl Cpu) {
     todo!()
 }
 

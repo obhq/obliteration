@@ -2,22 +2,22 @@ use std::mem::ManuallyDrop;
 
 #[repr(C)]
 pub struct KvmRun {
-    request_interrupt_window: u8,
-    immediate_exit: u8,
-    padding1: [u8; 6],
+    pub request_interrupt_window: u8,
+    pub immediate_exit: u8,
+    pub padding1: [u8; 6],
 
-    exit_reason: u32,
-    ready_for_interrupt_injection: u8,
-    if_flag: u8,
-    flags: u16,
+    pub exit_reason: u32,
+    pub ready_for_interrupt_injection: u8,
+    pub if_flag: u8,
+    pub flags: u16,
 
-    cr8: u64,
-    apic_base: u64,
-    exit: Exit,
+    pub cr8: u64,
+    pub apic_base: u64,
+    pub exit: Exit,
 }
 
 #[repr(C)]
-union Exit {
+pub union Exit {
     hw: ManuallyDrop<Hw>,
     fail_entry: ManuallyDrop<FailEntry>,
     ex: ManuallyDrop<Ex>,
