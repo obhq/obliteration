@@ -121,9 +121,9 @@ impl<'a> Cpu for HfCpu<'a> {
 
         let mut exit_reason = MaybeUninit::uninit();
 
-        if let Some(err) = NonZero::new(unsafe {
-            hv_sys::hv_vcpu_exit_info(self.instance, exit_reason.as_mut_ptr())
-        }) {
+        let ret = unsafe { hv_sys::hv_vcpu_exit_info(self.instance, exit_reason.as_mut_ptr()) };
+
+        if let Some(err) = NonZero::new(ret) {
             return Err(RunError::ReadExitReason(err));
         };
 
@@ -147,9 +147,11 @@ impl HfCpu<'_> {
     ) -> Result<usize, NonZero<hv_sys::hv_return_t>> {
         let mut value = MaybeUninit::<usize>::uninit();
 
-        if let Some(err) = NonZero::new(unsafe {
-            hv_sys::hv_vcpu_read_register(self.instance, register, value.as_mut_ptr().cast())
-        }) {
+        let ret = unsafe {
+            hv_sys::hv_vcpu_read_register(self.instance, register, value.as_mut_ptr().cast());
+        };
+
+        if let Some(err) = NonZero::new(ret) {
             return Err(err);
         }
 
@@ -163,9 +165,10 @@ impl HfCpu<'_> {
     ) -> Result<usize, NonZero<hv_sys::hv_return_t>> {
         let mut value = MaybeUninit::<usize>::uninit();
 
-        if let Some(err) = NonZero::new(unsafe {
-            hv_sys::hv_vcpu_get_reg(self.instance, register, value.as_mut_ptr().cast())
-        }) {
+        let ret =
+            unsafe { hv_sys::hv_vcpu_get_reg(self.instance, register, value.as_mut_ptr().cast()) };
+
+        if let Some(err) = NonZero::new(ret) {
             return Err(err);
         }
 
