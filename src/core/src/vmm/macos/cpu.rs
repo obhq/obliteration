@@ -14,7 +14,7 @@ type hv_vcpu_t = hv_sys::hv_vcpu_t;
 type hv_vcpu_t = hv_sys::hv_vcpuid_t;
 
 macro_rules! wrap_return {
-    ($ret:expr, Err) => {
+    ($ret:expr) => {
         match NonZero::new($ret) {
             Some(errno) => Err(errno),
             None => Ok(()),
@@ -55,8 +55,7 @@ impl<'a> HfCpu<'a> {
         wrap_return!(
             unsafe {
                 hv_sys::hv_vcpu_read_register(self.instance, register, value.as_mut_ptr().cast())
-            },
-            Err
+            }
         )?;
 
         Ok(unsafe { value.assume_init() })
@@ -70,8 +69,7 @@ impl<'a> HfCpu<'a> {
         let mut value = MaybeUninit::<usize>::uninit();
 
         wrap_return!(
-            unsafe { hv_sys::hv_vcpu_get_reg(self.instance, register, value.as_mut_ptr().cast()) },
-            Err
+            unsafe { hv_sys::hv_vcpu_get_reg(self.instance, register, value.as_mut_ptr().cast()) }
         )?;
 
         Ok(unsafe { value.assume_init() })
@@ -84,8 +82,7 @@ impl<'a> HfCpu<'a> {
         value: usize,
     ) -> Result<(), NonZero<hv_sys::hv_return_t>> {
         wrap_return!(
-            unsafe { hv_sys::hv_vcpu_write_register(self.instance, register, value as u64) },
-            Err
+            unsafe { hv_sys::hv_vcpu_write_register(self.instance, register, value as u64) }
         )
     }
 }
