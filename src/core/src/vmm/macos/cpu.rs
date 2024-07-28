@@ -148,7 +148,7 @@ impl HfCpu<'_> {
         let mut value = MaybeUninit::<usize>::uninit();
 
         let ret = unsafe {
-            hv_sys::hv_vcpu_read_register(self.instance, register, value.as_mut_ptr().cast());
+            hv_sys::hv_vcpu_read_register(self.instance, register, value.as_mut_ptr().cast())
         };
 
         if let Some(err) = NonZero::new(ret) {
