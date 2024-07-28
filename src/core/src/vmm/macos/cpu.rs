@@ -301,7 +301,7 @@ impl Drop for HfStates<'_> {
             return;
         }
 
-        self.cpu
+        todo!()
     }
 }
 
