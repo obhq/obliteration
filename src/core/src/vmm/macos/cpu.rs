@@ -135,7 +135,7 @@ impl HfCpu<'_> {
         let mut value = MaybeUninit::<usize>::uninit();
 
         if let Some(err) = NonZero::new(unsafe {
-            hv_sys::hv_vcpu_read_register(self.instance, register, value.as_mut_ptr())
+            hv_sys::hv_vcpu_read_register(self.instance, register, value.as_mut_ptr().cast())
         }) {
             return Err(err);
         }
