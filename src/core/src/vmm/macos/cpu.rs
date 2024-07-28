@@ -20,6 +20,13 @@ macro_rules! wrap_return {
             None => Ok(()),
         }
     };
+
+    ($ret:expr, $err:ident) => {
+        match NonZero::new($ret) {
+            Some(errno) => Err($err(errno)),
+            None => Ok(()),
+        }
+    };
 }
 
 /// Implementation of [`Cpu`] for Hypervisor Framework.
@@ -294,7 +301,7 @@ impl Drop for HfStates<'_> {
             return;
         }
 
-        self
+        self.cpu
     }
 }
 
