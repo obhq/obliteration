@@ -50,6 +50,7 @@ impl<'a> Cpu for HfCpu<'a> {
         self.id
     }
 
+    #[cfg(target_arch = "x86_64")]
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
         let rsp = self
             .read_register(hv_sys::hv_x86_reg_t_HV_X86_RIP)
@@ -107,6 +108,11 @@ impl<'a> Cpu for HfCpu<'a> {
         })
     }
 
+    #[cfg(target_arch = "aarch64")]
+    fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
+        todo!()
+    }
+
     fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr> {
         if let Some(err) = NonZero::new(unsafe { hv_sys::hv_vcpu_run(self.instance) }) {
             return Err(RunError::Run(err));
@@ -128,6 +134,7 @@ impl<'a> Cpu for HfCpu<'a> {
 }
 
 impl HfCpu<'_> {
+    #[cfg(target_arch = "x86_64")]
     fn read_register(
         &self,
         register: hv_sys::hv_x86_reg_t,
@@ -136,6 +143,22 @@ impl HfCpu<'_> {
 
         if let Some(err) = NonZero::new(unsafe {
             hv_sys::hv_vcpu_read_register(self.instance, register, value.as_mut_ptr().cast())
+        }) {
+            return Err(err);
+        }
+
+        Ok(unsafe { value.assume_init() })
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    fn read_register(
+        &self,
+        register: hv_sys::hv_reg_t,
+    ) -> Result<usize, NonZero<hv_sys::hv_return_t>> {
+        let mut value = MaybeUninit::<usize>::uninit();
+
+        if let Some(err) = NonZero::new(unsafe {
+            hv_sys::hv_vcpu_get_reg(self.instance, register, value.as_mut_ptr().cast())
         }) {
             return Err(err);
         }
