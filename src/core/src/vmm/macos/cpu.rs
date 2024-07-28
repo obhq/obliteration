@@ -168,6 +168,7 @@ pub struct HfStates<'a> {
     cr4: usize,
     efer: usize,
 
+    cs: usize,
     ds: usize,
     es: usize,
     fs: usize,
