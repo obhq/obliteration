@@ -153,10 +153,12 @@ impl HfCpu<'_> {
     ) -> Result<usize, NonZero<hv_sys::hv_return_t>> {
         let mut value = MaybeUninit::<usize>::uninit();
 
-        wrap_return!(unsafe {
-            hv_sys::hv_vcpu_read_register(self.instance, register, value.as_mut_ptr().cast()),
+        wrap_return!(
+            unsafe {
+                hv_sys::hv_vcpu_read_register(self.instance, register, value.as_mut_ptr().cast())
+            },
             Err
-        })?;
+        )?;
 
         Ok(unsafe { value.assume_init() })
     }
@@ -168,10 +170,10 @@ impl HfCpu<'_> {
     ) -> Result<usize, NonZero<hv_sys::hv_return_t>> {
         let mut value = MaybeUninit::<usize>::uninit();
 
-        wrap_return!(unsafe {
-            hv_sys::hv_vcpu_get_reg(self.instance, register, value.as_mut_ptr().cast()),
+        wrap_return!(
+            unsafe { hv_sys::hv_vcpu_get_reg(self.instance, register, value.as_mut_ptr().cast()) },
             Err
-        })?;
+        )?;
 
         Ok(unsafe { value.assume_init() })
     }
@@ -182,10 +184,10 @@ impl HfCpu<'_> {
         register: hv_sys::hv_x86_reg_t,
         value: usize,
     ) -> Result<(), NonZero<hv_sys::hv_return_t>> {
-        wrap_return!(unsafe {
-            hv_sys::hv_vcpu_write_register(self.instance, register, value as u64),
+        wrap_return!(
+            unsafe { hv_sys::hv_vcpu_write_register(self.instance, register, value as u64) },
             Err
-        })
+        )
     }
 }
 
