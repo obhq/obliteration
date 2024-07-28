@@ -52,18 +52,18 @@ impl<'a> Cpu for HfCpu<'a> {
     }
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
-        let mut rsp = MaybeUninit::new();
-        let mut rip = MaybeUninit::new();
-        let mut cr0 = MaybeUninit::new();
-        let mut cr3 = MaybeUninit::new();
-        let mut cr4 = MaybeUninit::new();
-        let mut efer = MaybeUninit::new();
-        let mut cs = MaybeUninit::new();
-        let mut ds = MaybeUninit::new();
-        let mut es = MaybeUninit::new();
-        let mut fs = MaybeUninit::new();
-        let mut gs = MaybeUninit::new();
-        let mut ss = MaybeUninit::new();
+        let mut rsp = MaybeUninit::uninit();
+        let mut rip = MaybeUninit::uninit();
+        let mut cr0 = MaybeUninit::uninit();
+        let mut cr3 = MaybeUninit::uninit();
+        let mut cr4 = MaybeUninit::uninit();
+        let mut efer = MaybeUninit::uninit();
+        let mut cs = MaybeUninit::uninit();
+        let mut ds = MaybeUninit::uninit();
+        let mut es = MaybeUninit::uninit();
+        let mut fs = MaybeUninit::uninit();
+        let mut gs = MaybeUninit::uninit();
+        let mut ss = MaybeUninit::uninit();
 
         wrap_return!(
             hv_vcpu_read_register(self.instance, hv_sys::HV_X86_RSP, rsp.as_mut_ptr().cast()),
@@ -135,7 +135,7 @@ impl<'a> Cpu for HfCpu<'a> {
     fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr> {
         wrap_return!(hv_sys::hv_vcpu_run(self.instance), RunError::Run)?;
 
-        let exit_reason = MaybeUninit::new();
+        let exit_reason = MaybeUninit::uninit();
 
         wrap_return!(
             hv_sys::hv_vcpu_exit_info(self.instance, exit_reason.as_mut_ptr()),
