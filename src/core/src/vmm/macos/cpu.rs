@@ -248,13 +248,7 @@ impl<'a> CpuStates for HfStates<'a> {
 
     #[cfg(target_arch = "x86_64")]
     fn set_cs(&mut self, ty: u8, dpl: u8, p: bool, l: bool, d: bool) {
-        self.cs_ty = ty;
-        self.cs_dpl = dpl;
-        self.cs_p = p;
-        self.cs_l = l;
-        self.cs_d = d;
-
-        self.dirty = true;
+        todo!()
     }
 
     #[cfg(target_arch = "x86_64")]
