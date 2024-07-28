@@ -19,14 +19,14 @@ macro_rules! wrap_return {
             Some(errno) => Err(errno),
             None => Ok(()),
         }
-    }
+    };
 
     ($ret:expr, $err:path) => {
         match NonZero::new($ret) {
             Some(errno) => Err($err(errno)),
             None => Ok(()),
         }
-    }
+    };
 }
 
 /// Implementation of [`Cpu`] for Hypervisor Framework.
