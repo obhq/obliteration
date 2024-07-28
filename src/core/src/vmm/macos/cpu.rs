@@ -112,7 +112,7 @@ impl<'a> Cpu for HfCpu<'a> {
             return Err(RunError::Run(err));
         };
 
-        let exit_reason = MaybeUninit::uninit();
+        let mut exit_reason = MaybeUninit::uninit();
 
         if let Some(err) = NonZero::new(unsafe {
             hv_sys::hv_vcpu_exit_info(self.instance, exit_reason.as_mut_ptr())
