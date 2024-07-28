@@ -295,13 +295,7 @@ unsafe fn main_cpu(
     drop(status);
 
     while !shutdown.load(Ordering::Relaxed) {
-        let exit = cpu.run().unwrap();
-
-        if exit.is_hlt() {
-            continue;
-        }
-
-        todo!()
+        run_main_cpu(&mut cpu);
     }
 }
 
@@ -491,6 +485,23 @@ unsafe fn setup_main_cpu(
     slen: usize,
     entry: usize,
 ) -> Result<(), MainCpuError> {
+    todo!()
+}
+
+#[cfg(target_arch = "x86_64")]
+fn run_main_cpu(cpu: &mut impl Cpu) {
+    // Run the vCPU and check if it was exit because of HLT instruction.
+    let exit = cpu.run().unwrap();
+
+    if exit.is_hlt() {
+        return;
+    }
+
+    todo!()
+}
+
+#[cfg(target_arch = "aarch64")]
+fn run_main_cpu(cpu: &mut impl Cpu) {
     todo!()
 }
 
