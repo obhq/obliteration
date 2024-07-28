@@ -131,10 +131,12 @@ impl HfCpu<'_> {
     ) -> Result<usize, NonZero<hv_sys::hv_return_t>> {
         let mut value = MaybeUninit::<usize>::uninit();
 
-        wrap_return!(
-            hv_vcpu_read_register(self.instance, register, value.as_mut_ptr().cast()),
-            NonZero::new
-        )?;
+        match NonZero::new(unsafe {
+            hv_sys::hv_vcpu_read_register(self.instance, register, value.as_mut_ptr())
+        }) {
+            Some(err) => return Err(err),
+            None => {}
+        }
 
         Ok(unsafe { value.assume_init() })
     }
