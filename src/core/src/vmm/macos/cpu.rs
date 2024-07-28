@@ -23,7 +23,7 @@ macro_rules! wrap_return {
 
     ($ret:expr, $err:ident) => {
         match NonZero::new($ret) {
-            Some(errno) => Err($err(errno)),
+            Some(errno) => $err(errno),
             None => Ok(()),
         }
     };
