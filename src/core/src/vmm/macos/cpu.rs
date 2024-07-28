@@ -97,7 +97,7 @@ impl<'a> Cpu for HfCpu<'a> {
             cr0,
             cr3,
             cr4,
-            efer,
+            /*efer,*/
             cs,
             ds,
             es,
