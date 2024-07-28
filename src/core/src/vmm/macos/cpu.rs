@@ -44,20 +44,54 @@ impl<'a> HfCpu<'a> {
             vm: PhantomData,
         }
     }
-}
 
-impl<'a> Drop for HfCpu<'a> {
-    fn drop(&mut self) {
-        let ret = unsafe { hv_vcpu_destroy(self.instance) };
+    #[cfg(target_arch = "x86_64")]
+    fn read_register(
+        &self,
+        register: hv_sys::hv_x86_reg_t,
+    ) -> Result<usize, NonZero<hv_sys::hv_return_t>> {
+        let mut value = MaybeUninit::<usize>::uninit();
 
-        if ret != 0 {
-            panic!("hv_vcpu_destroy() fails with {ret:#x}");
-        }
+        wrap_return!(
+            unsafe {
+                hv_sys::hv_vcpu_read_register(self.instance, register, value.as_mut_ptr().cast())
+            },
+            Err
+        )?;
+
+        Ok(unsafe { value.assume_init() })
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    fn read_register(
+        &self,
+        register: hv_sys::hv_reg_t,
+    ) -> Result<usize, NonZero<hv_sys::hv_return_t>> {
+        let mut value = MaybeUninit::<usize>::uninit();
+
+        wrap_return!(
+            unsafe { hv_sys::hv_vcpu_get_reg(self.instance, register, value.as_mut_ptr().cast()) },
+            Err
+        )?;
+
+        Ok(unsafe { value.assume_init() })
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn write_register(
+        &self,
+        register: hv_sys::hv_x86_reg_t,
+        value: usize,
+    ) -> Result<(), NonZero<hv_sys::hv_return_t>> {
+        wrap_return!(
+            unsafe { hv_sys::hv_vcpu_write_register(self.instance, register, value as u64) },
+            Err
+        )
     }
 }
 
 impl<'a> Cpu for HfCpu<'a> {
-    type States<'b> = HfStates<'b> where Self: 'b;
+    type States<'b> = HfStates<'b, 'a> where Self: 'b;
     type GetStatesErr = GetStatesError;
     type Exit<'b> = HfExit<'b> where Self: 'b;
     type RunErr = RunError;
@@ -145,55 +179,19 @@ impl<'a> Cpu for HfCpu<'a> {
     }
 }
 
-impl HfCpu<'_> {
-    #[cfg(target_arch = "x86_64")]
-    fn read_register(
-        &self,
-        register: hv_sys::hv_x86_reg_t,
-    ) -> Result<usize, NonZero<hv_sys::hv_return_t>> {
-        let mut value = MaybeUninit::<usize>::uninit();
+impl<'a> Drop for HfCpu<'a> {
+    fn drop(&mut self) {
+        let ret = unsafe { hv_vcpu_destroy(self.instance) };
 
-        wrap_return!(
-            unsafe {
-                hv_sys::hv_vcpu_read_register(self.instance, register, value.as_mut_ptr().cast())
-            },
-            Err
-        )?;
-
-        Ok(unsafe { value.assume_init() })
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    fn read_register(
-        &self,
-        register: hv_sys::hv_reg_t,
-    ) -> Result<usize, NonZero<hv_sys::hv_return_t>> {
-        let mut value = MaybeUninit::<usize>::uninit();
-
-        wrap_return!(
-            unsafe { hv_sys::hv_vcpu_get_reg(self.instance, register, value.as_mut_ptr().cast()) },
-            Err
-        )?;
-
-        Ok(unsafe { value.assume_init() })
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    fn write_register(
-        &self,
-        register: hv_sys::hv_x86_reg_t,
-        value: usize,
-    ) -> Result<(), NonZero<hv_sys::hv_return_t>> {
-        wrap_return!(
-            unsafe { hv_sys::hv_vcpu_write_register(self.instance, register, value as u64) },
-            Err
-        )
+        if ret != 0 {
+            panic!("hv_vcpu_destroy() fails with {ret:#x}");
+        }
     }
 }
 
 /// Implementation of [`Cpu::States`] for Hypervisor Framework.
-pub struct HfStates<'a> {
-    cpu: &'a mut HfCpu<'a>,
+pub struct HfStates<'a, 'b> {
+    cpu: &'a mut HfCpu<'b>,
     dirty: bool,
 
     rsp: usize,
