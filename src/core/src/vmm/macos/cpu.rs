@@ -108,18 +108,16 @@ impl<'a> Cpu for HfCpu<'a> {
     }
 
     fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr> {
-        match NonZero::new(unsafe { hv_sys::hv_vcpu_run(self.instance) }) {
-            Some(err) => return Err(RunError::Run(err)),
-            None => {}
+        if let Some(err) = NonZero::new(unsafe { hv_sys::hv_vcpu_run(self.instance) }) {
+            return Err(RunError::Run(err));
         };
 
         let exit_reason = MaybeUninit::uninit();
 
-        match NonZero::new(unsafe {
+        if let Some(err) = NonZero::new(unsafe {
             hv_sys::hv_vcpu_get_executed_exitinfo(self.instance, exit_reason.as_ptr())
         }) {
-            Some(err) => return Err(RunError::ReadExitReason(err)),
-            None => {}
+            return Err(RunError::ReadExitReason(err));
         };
 
         Ok(HfExit {
@@ -136,11 +134,10 @@ impl HfCpu<'_> {
     ) -> Result<usize, NonZero<hv_sys::hv_return_t>> {
         let mut value = MaybeUninit::<usize>::uninit();
 
-        match NonZero::new(unsafe {
+        if let Some(err) = NonZero::new(unsafe {
             hv_sys::hv_vcpu_read_register(self.instance, register, value.as_mut_ptr())
         }) {
-            Some(err) => return Err(err),
-            None => {}
+            return Err(err);
         }
 
         Ok(unsafe { value.assume_init() })
