@@ -13,6 +13,15 @@ type hv_vcpu_t = hv_sys::hv_vcpu_t;
 #[allow(non_camel_case_types)]
 type hv_vcpu_t = hv_sys::hv_vcpuid_t;
 
+macro_rules! wrap_return {
+    ($ret:expr, $err:path) => {
+        match NonZero::new($ret) {
+            Some(errno) => Err($err(errno)),
+            None => Ok(()),
+        }
+    };
+}
+
 /// Implementation of [`Cpu`] for Hypervisor Framework.
 pub struct HfCpu<'a> {
     id: usize,
@@ -67,9 +76,6 @@ impl<'a> Cpu for HfCpu<'a> {
         let cr4 = self
             .read_register(hv_sys::hv_x86_reg_t_HV_X86_CR4)
             .map_err(GetStatesError::ReadCr4)?;
-        /*let efer = self
-        .read_register(hv_sys::hv_x86_reg_t_HV_X86_EFER)
-        .map_err(GetStatesError::ReadEfer)?;*/
         let cs = self
             .read_register(hv_sys::hv_x86_reg_t_HV_X86_CS)
             .map_err(GetStatesError::ReadCs)?;
@@ -90,7 +96,7 @@ impl<'a> Cpu for HfCpu<'a> {
             .map_err(GetStatesError::ReadSs)?;
 
         Ok(HfStates {
-            cpu: PhantomData,
+            cpu: self,
             dirty: false,
 
             rsp,
@@ -98,7 +104,6 @@ impl<'a> Cpu for HfCpu<'a> {
             cr0,
             cr3,
             cr4,
-            /*efer,*/
             cs,
             ds,
             es,
@@ -115,17 +120,14 @@ impl<'a> Cpu for HfCpu<'a> {
 
     #[cfg(target_arch = "x86_64")]
     fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr> {
-        if let Some(err) = NonZero::new(unsafe { hv_sys::hv_vcpu_run(self.instance) }) {
-            return Err(RunError::Run(err));
-        };
+        wrap_return!(unsafe { hv_sys::hv_vcpu_run(self.instance) }, RunError::Run)?;
 
         let mut exit_reason = MaybeUninit::uninit();
 
-        let ret = unsafe { hv_sys::hv_vcpu_exit_info(self.instance, exit_reason.as_mut_ptr()) };
-
-        if let Some(err) = NonZero::new(ret) {
-            return Err(RunError::ReadExitReason(err));
-        };
+        wrap_return!(
+            unsafe { hv_sys::hv_vcpu_exit_info(self.instance, exit_reason.as_mut_ptr()) },
+            RunError::ReadExitReason
+        )?;
 
         Ok(HfExit {
             cpu: PhantomData,
@@ -147,13 +149,10 @@ impl HfCpu<'_> {
     ) -> Result<usize, NonZero<hv_sys::hv_return_t>> {
         let mut value = MaybeUninit::<usize>::uninit();
 
-        let ret = unsafe {
-            hv_sys::hv_vcpu_read_register(self.instance, register, value.as_mut_ptr().cast())
-        };
-
-        if let Some(err) = NonZero::new(ret) {
-            return Err(err);
-        }
+        wrap_return!(unsafe {
+            hv_sys::hv_vcpu_read_register(self.instance, register, value.as_mut_ptr().cast()),
+            Err
+        })?;
 
         Ok(unsafe { value.assume_init() })
     }
@@ -165,20 +164,30 @@ impl HfCpu<'_> {
     ) -> Result<usize, NonZero<hv_sys::hv_return_t>> {
         let mut value = MaybeUninit::<usize>::uninit();
 
-        let ret =
-            unsafe { hv_sys::hv_vcpu_get_reg(self.instance, register, value.as_mut_ptr().cast()) };
-
-        if let Some(err) = NonZero::new(ret) {
-            return Err(err);
-        }
+        wrap_return!(unsafe {
+            hv_sys::hv_vcpu_get_reg(self.instance, register, value.as_mut_ptr().cast()),
+            Err
+        });
 
         Ok(unsafe { value.assume_init() })
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn write_register(
+        &self,
+        register: hv_sys::hv_x86_reg_t,
+        value: usize,
+    ) -> Result<(), NonZero<hv_sys::hv_return_t>> {
+        wrap_return!(unsafe {
+            hv_sys::hv_vcpu_write_register(self.instance, register, value as u64),
+            Err
+        })
     }
 }
 
 /// Implementation of [`Cpu::States`] for Hypervisor Framework.
 pub struct HfStates<'a> {
-    cpu: PhantomData<&'a mut HfCpu<'a>>,
+    cpu: &'a mut HfCpu<'a>,
     dirty: bool,
 
     rsp: usize,
@@ -187,8 +196,13 @@ pub struct HfStates<'a> {
     cr0: usize,
     cr3: usize,
     cr4: usize,
-    //efer: usize,
-    cs: usize,
+
+    cs_ty: u8,
+    cs_dpl: u8,
+    cs_p: bool,
+    cs_l: bool,
+    cs_d: bool,
+
     ds: usize,
     es: usize,
     fs: usize,
@@ -234,7 +248,13 @@ impl<'a> CpuStates for HfStates<'a> {
 
     #[cfg(target_arch = "x86_64")]
     fn set_cs(&mut self, ty: u8, dpl: u8, p: bool, l: bool, d: bool) {
-        todo!()
+        self.cs_ty = ty;
+        self.cs_dpl = dpl;
+        self.cs_p = p;
+        self.cs_l = l;
+        self.cs_d = d;
+
+        self.dirty = true;
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -274,7 +294,7 @@ impl Drop for HfStates<'_> {
             return;
         }
 
-        todo!()
+        self
     }
 }
 
