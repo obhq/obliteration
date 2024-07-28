@@ -1,14 +1,15 @@
 use crate::vmm::{Cpu, CpuExit, CpuStates};
 use std::marker::PhantomData;
-use std::mem::zeroed;
+use std::mem::{size_of, zeroed, MaybeUninit};
 use thiserror::Error;
 use windows_sys::core::HRESULT;
 use windows_sys::Win32::System::Hypervisor::{
-    WHvDeleteVirtualProcessor, WHvGetVirtualProcessorRegisters, WHvSetVirtualProcessorRegisters,
-    WHvX64RegisterCr0, WHvX64RegisterCr3, WHvX64RegisterCr4, WHvX64RegisterCs, WHvX64RegisterDs,
-    WHvX64RegisterEfer, WHvX64RegisterEs, WHvX64RegisterFs, WHvX64RegisterGs, WHvX64RegisterRip,
-    WHvX64RegisterRsp, WHvX64RegisterSs, WHV_PARTITION_HANDLE, WHV_REGISTER_NAME,
-    WHV_REGISTER_VALUE,
+    WHvDeleteVirtualProcessor, WHvGetVirtualProcessorRegisters, WHvRunVirtualProcessor,
+    WHvRunVpExitReasonX64Halt, WHvSetVirtualProcessorRegisters, WHvX64RegisterCr0,
+    WHvX64RegisterCr3, WHvX64RegisterCr4, WHvX64RegisterCs, WHvX64RegisterDs, WHvX64RegisterEfer,
+    WHvX64RegisterEs, WHvX64RegisterFs, WHvX64RegisterGs, WHvX64RegisterRip, WHvX64RegisterRsp,
+    WHvX64RegisterSs, WHV_PARTITION_HANDLE, WHV_REGISTER_NAME, WHV_REGISTER_VALUE,
+    WHV_RUN_VP_EXIT_CONTEXT,
 };
 
 const REGISTERS: usize = 12;
@@ -43,8 +44,8 @@ impl<'a> Drop for WhpCpu<'a> {
 impl<'a> Cpu for WhpCpu<'a> {
     type States<'b> = WhpStates<'b, 'a> where Self: 'b;
     type GetStatesErr = GetStatesError;
-    type Exit<'b> = WhpExit<'b> where Self: 'b;
-    type RunErr = std::io::Error;
+    type Exit<'b> = WhpExit<'b, 'a> where Self: 'b;
+    type RunErr = RunError;
 
     fn id(&self) -> usize {
         self.index.try_into().unwrap()
@@ -63,7 +64,7 @@ impl<'a> Cpu for WhpCpu<'a> {
         };
 
         if status < 0 {
-            Err(GetStatesError::GetRegistersFailed(status))
+            Err(GetStatesError::GetVirtualProcessorRegistersFailed(status))
         } else {
             Ok(WhpStates {
                 cpu: self,
@@ -74,7 +75,24 @@ impl<'a> Cpu for WhpCpu<'a> {
     }
 
     fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr> {
-        todo!()
+        let mut cx = MaybeUninit::<WHV_RUN_VP_EXIT_CONTEXT>::uninit();
+        let status = unsafe {
+            WHvRunVirtualProcessor(
+                self.part,
+                self.index,
+                cx.as_mut_ptr().cast(),
+                size_of::<WHV_RUN_VP_EXIT_CONTEXT>() as _,
+            )
+        };
+
+        if status < 0 {
+            Err(RunError::RunVirtualProcessorFailed(status))
+        } else {
+            Ok(WhpExit {
+                cpu: PhantomData,
+                cx: unsafe { cx.assume_init() },
+            })
+        }
     }
 }
 
@@ -234,20 +252,28 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
 }
 
 /// Implementation of [`Cpu::Exit`] for Windows Hypervisor Platform.
-pub struct WhpExit<'a> {
-    cpu: PhantomData<&'a mut WhpCpu<'a>>,
+pub struct WhpExit<'a, 'b> {
+    cpu: PhantomData<&'a mut WhpCpu<'b>>,
+    cx: WHV_RUN_VP_EXIT_CONTEXT,
 }
 
-impl<'a> CpuExit for WhpExit<'a> {
+impl<'a, 'b> CpuExit for WhpExit<'a, 'b> {
     #[cfg(target_arch = "x86_64")]
     fn is_hlt(&self) -> bool {
-        todo!()
+        self.cx.ExitReason == WHvRunVpExitReasonX64Halt
     }
 }
 
 /// Implementation of [`Cpu::GetStatesErr`].
 #[derive(Debug, Error)]
 pub enum GetStatesError {
-    #[error("couldn't get CPU registers ({0:#x})")]
-    GetRegistersFailed(HRESULT),
+    #[error("WHvGetVirtualProcessorRegisters was failed ({0:#x})")]
+    GetVirtualProcessorRegistersFailed(HRESULT),
+}
+
+/// Implementation of [`Cpu::RunErr`].
+#[derive(Debug, Error)]
+pub enum RunError {
+    #[error("WHvRunVirtualProcessor was failed ({0:#x})")]
+    RunVirtualProcessorFailed(HRESULT),
 }
