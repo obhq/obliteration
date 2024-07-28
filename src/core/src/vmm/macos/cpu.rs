@@ -108,14 +108,19 @@ impl<'a> Cpu for HfCpu<'a> {
     }
 
     fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr> {
-        wrap_return!(hv_sys::hv_vcpu_run(self.instance), RunError::Run)?;
+        match NonZero::new(unsafe { hv_sys::hv_vcpu_run(self.instance) }) {
+            Some(err) => return Err(RunError::Run(err)),
+            None => {}
+        };
 
         let exit_reason = MaybeUninit::uninit();
 
-        wrap_return!(
-            hv_sys::hv_vcpu_exit_info(self.instance, exit_reason.as_mut_ptr()),
-            RunError::ReadExitReason
-        )?;
+        match NonZero::new(unsafe {
+            hv_sys::hv_vcpu_get_executed_exitinfo(self.instance, exit_reason.as_ptr())
+        }) {
+            Some(err) => return Err(RunError::ReadExitReason(err)),
+            None => {}
+        };
 
         Ok(HfExit {
             cpu: PhantomData,
