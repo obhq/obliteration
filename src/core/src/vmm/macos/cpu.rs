@@ -52,11 +52,9 @@ impl<'a> HfCpu<'a> {
     ) -> Result<usize, NonZero<hv_sys::hv_return_t>> {
         let mut value = MaybeUninit::<usize>::uninit();
 
-        wrap_return!(
-            unsafe {
-                hv_sys::hv_vcpu_read_register(self.instance, register, value.as_mut_ptr().cast())
-            }
-        )?;
+        wrap_return!(unsafe {
+            hv_sys::hv_vcpu_read_register(self.instance, register, value.as_mut_ptr().cast())
+        })?;
 
         Ok(unsafe { value.assume_init() })
     }
@@ -68,9 +66,9 @@ impl<'a> HfCpu<'a> {
     ) -> Result<usize, NonZero<hv_sys::hv_return_t>> {
         let mut value = MaybeUninit::<usize>::uninit();
 
-        wrap_return!(
-            unsafe { hv_sys::hv_vcpu_get_reg(self.instance, register, value.as_mut_ptr().cast()) }
-        )?;
+        wrap_return!(unsafe {
+            hv_sys::hv_vcpu_get_reg(self.instance, register, value.as_mut_ptr().cast())
+        })?;
 
         Ok(unsafe { value.assume_init() })
     }
@@ -81,9 +79,9 @@ impl<'a> HfCpu<'a> {
         register: hv_sys::hv_x86_reg_t,
         value: usize,
     ) -> Result<(), NonZero<hv_sys::hv_return_t>> {
-        wrap_return!(
-            unsafe { hv_sys::hv_vcpu_write_register(self.instance, register, value as u64) }
-        )
+        wrap_return!(unsafe {
+            hv_sys::hv_vcpu_write_register(self.instance, register, value as u64)
+        })
     }
 }
 
@@ -248,32 +246,27 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
 
     #[cfg(target_arch = "x86_64")]
     fn set_ds(&mut self, p: bool) {
-        self.ds = p as usize;
-        self.dirty = true;
+        todo!()
     }
 
     #[cfg(target_arch = "x86_64")]
     fn set_es(&mut self, p: bool) {
-        self.es = p as usize;
-        self.dirty = true;
+        todo!()
     }
 
     #[cfg(target_arch = "x86_64")]
     fn set_fs(&mut self, p: bool) {
-        self.fs = p as usize;
-        self.dirty = true;
+        todo!()
     }
 
     #[cfg(target_arch = "x86_64")]
     fn set_gs(&mut self, p: bool) {
-        self.gs = p as usize;
-        self.dirty = true;
+        todo!()
     }
 
     #[cfg(target_arch = "x86_64")]
     fn set_ss(&mut self, p: bool) {
-        self.ss = p as usize;
-        self.dirty = true;
+        todo!()
     }
 }
 
