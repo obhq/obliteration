@@ -41,7 +41,7 @@ impl<'a> Drop for WhpCpu<'a> {
 }
 
 impl<'a> Cpu for WhpCpu<'a> {
-    type States<'b> = WhpStates<'b> where Self: 'b;
+    type States<'b> = WhpStates<'b, 'a> where Self: 'b;
     type GetStatesErr = GetStatesError;
     type Exit<'b> = WhpExit<'b> where Self: 'b;
     type RunErr = std::io::Error;
@@ -66,7 +66,7 @@ impl<'a> Cpu for WhpCpu<'a> {
             Err(GetStatesError::GetRegistersFailed(status))
         } else {
             Ok(WhpStates {
-                cpu: &mut self,
+                cpu: self,
                 values,
                 dirty: false,
             })
@@ -79,13 +79,13 @@ impl<'a> Cpu for WhpCpu<'a> {
 }
 
 /// Implementation of [`Cpu::States`] for Windows Hypervisor Platform.
-pub struct WhpStates<'a> {
-    cpu: &'a mut WhpCpu<'a>,
+pub struct WhpStates<'a, 'b> {
+    cpu: &'a mut WhpCpu<'b>,
     values: [WHV_REGISTER_VALUE; REGISTERS],
     dirty: bool,
 }
 
-impl<'a> WhpStates<'a> {
+impl<'a, 'b> WhpStates<'a, 'b> {
     const NAMES: [WHV_REGISTER_NAME; REGISTERS] = [
         WHvX64RegisterRsp,
         WHvX64RegisterRip,
@@ -102,7 +102,7 @@ impl<'a> WhpStates<'a> {
     ];
 }
 
-impl<'a> Drop for WhpStates<'a> {
+impl<'a, 'b> Drop for WhpStates<'a, 'b> {
     fn drop(&mut self) {
         if !self.dirty {
             return;
@@ -124,7 +124,7 @@ impl<'a> Drop for WhpStates<'a> {
     }
 }
 
-impl<'a> CpuStates for WhpStates<'a> {
+impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
     #[cfg(target_arch = "x86_64")]
     fn set_rsp(&mut self, v: usize) {
         self.values[0].Reg64 = v.try_into().unwrap();
