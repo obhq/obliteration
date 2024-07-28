@@ -201,9 +201,9 @@ pub unsafe extern "C" fn vmm_run(vmm: *mut Vmm, kernel: *const c_char) -> *mut R
     end = end.next_multiple_of(Ram::VM_PAGE_SIZE);
 
     // Allocate RAM.
-    let stack_off = end; // TODO: Figure out how PS4 allocate the stack.
-    let stack_len = 1024 * 1024 * 2; // TODO: Same here.
-    let len = stack_off + stack_len;
+    let soff = end; // TODO: Figure out how PS4 allocate the stack.
+    let slen = 1024 * 1024 * 2; // TODO: Same here.
+    let len = soff + slen;
     let mem = match (*vmm).ram.alloc(0, len) {
         Ok(v) => v,
         Err(e) => {
@@ -238,7 +238,7 @@ pub unsafe extern "C" fn vmm_run(vmm: *mut Vmm, kernel: *const c_char) -> *mut R
     let ram = (*vmm).ram.clone();
     let shutdown = (*vmm).shutdown.clone();
     let (tx, rx) = std::sync::mpsc::channel();
-    let main = move || main_cpu(hv, ram, end, stack_len, e_entry, shutdown, tx);
+    let main = move || main_cpu(hv, ram, end, slen, e_entry, dynamic.as_ref(), shutdown, tx);
     let main = match std::thread::Builder::new().spawn(main) {
         Ok(v) => v,
         Err(e) => return RustError::with_source("couldn't spawn main CPU", e),
@@ -273,6 +273,7 @@ unsafe fn main_cpu(
     klen: usize,
     slen: usize,
     entry: usize,
+    dynamic: Option<&(usize, usize)>,
     shutdown: Arc<AtomicBool>,
     status: Sender<Result<(), MainCpuError>>,
 ) {
@@ -285,7 +286,7 @@ unsafe fn main_cpu(
         }
     };
 
-    if let Err(e) = setup_main_cpu(&mut cpu, &ram, klen, slen, entry) {
+    if let Err(e) = setup_main_cpu(&mut cpu, &ram, klen, slen, entry, dynamic) {
         status.send(Err(e)).unwrap();
         return;
     }
@@ -309,10 +310,14 @@ unsafe fn setup_main_cpu(
     klen: usize,
     slen: usize,
     entry: usize,
+    dynamic: Option<&(usize, usize)>,
 ) -> Result<(), MainCpuError> {
-    // Allocate page-map level-4 table. We use 4K 4-Level Paging with identity mapping to boot the
-    // kernel. Not sure how the PS4 achieve 16K page because x86-64 does not support it. Maybe it is
-    // a special request from Sony to AMD?
+    // For x86-64 we require the kernel to be a Position-Independent Executable so we can map it at
+    // the same address as the PS4 kernel.
+    let dynamic = dynamic.ok_or(MainCpuError::NonPieKernel)?;
+
+    // Allocate page-map level-4 table. We use 4K 4-Level Paging here. Not sure how the PS4 achieve
+    // 16K page because x86-64 does not support it. Maybe it is a special request from Sony to AMD?
     //
     // See Page Translation and Protection section on AMD64 Architecture Programmer's Manual Volume
     // 2 for how paging work in long-mode.
@@ -326,8 +331,12 @@ unsafe fn setup_main_cpu(
 
     alloc += len;
 
-    // Setup page tables to cover the whole mapped kernel.
-    for addr in (0..kend).step_by(4096) {
+    // Setup page tables to map virtual address 0xffffffff82200000 to the kernel.
+    // TODO: Implement ASLR.
+    let base = 0xffffffff82200000;
+    let end = base + kend; // kend is also size of the kernel because the kernel mapped at addr 0.
+
+    for addr in (base..end).step_by(4096) {
         // Get page-directory pointer table.
         let pml4o = (addr & 0xFF8000000000) >> 39;
         let pdpt = match pml4t[pml4o] {
@@ -415,12 +424,13 @@ unsafe fn setup_main_cpu(
 
         // Set page table entry.
         let pto = (addr & 0x1FF000) >> 12;
+        let addr = addr - base;
 
         assert_eq!(pt[pto], 0);
         assert_eq!(addr & 0x7FF0000000000000, 0);
         assert_eq!(addr & 0xFFF, 0);
 
-        pt[pto] = addr;
+        pt[pto] = addr; // Physical-address here!
         pt[pto] |= 0b01; // Present (P) Bit.
         pt[pto] |= 0b10; // Read/Write (R/W) Bit.
     }
@@ -432,7 +442,7 @@ unsafe fn setup_main_cpu(
 
     assert_eq!(kend & 0xFFF0000000000FFF, 0);
 
-    states.set_cr3(kend);
+    states.set_cr3(kend); // Physical-address here!
 
     // Set CR4.
     let mut cr4 = 0;
@@ -467,9 +477,68 @@ unsafe fn setup_main_cpu(
     states.set_gs(true);
     states.set_ss(true);
 
-    // Set entry point and stack pointer.
-    states.set_rsp(kend); // Top-down.
-    states.set_rip(entry);
+    // Set entry point and stack pointer. Both are virtual address.
+    states.set_rsp(end); // Top-down.
+    states.set_rip(base + entry);
+
+    // Check if PT_DYNAMIC valid.
+    let &(p_vaddr, p_memsz) = dynamic;
+
+    if p_memsz % 16 != 0 {
+        return Err(MainCpuError::InvalidDynamicLinking);
+    }
+
+    match p_vaddr.checked_add(p_memsz) {
+        Some(v) if v <= klen => {}
+        _ => return Err(MainCpuError::InvalidDynamicLinking),
+    }
+
+    // Parse PT_DYNAMIC.
+    let dynamic = std::slice::from_raw_parts(ram.host_addr().add(p_vaddr), p_memsz);
+    let mut rela = None;
+    let mut relasz = None;
+
+    for entry in dynamic.chunks_exact(16) {
+        let tag = usize::from_ne_bytes(entry[..8].try_into().unwrap());
+        let val = usize::from_ne_bytes(entry[8..].try_into().unwrap());
+
+        match tag {
+            0 => break,              // DT_NULL
+            7 => rela = Some(val),   // DT_RELA
+            8 => relasz = Some(val), // DT_RELASZ
+            _ => {}
+        }
+    }
+
+    // Relocate the kernel to virtual address.
+    let relocs = match (rela, relasz) {
+        (None, None) => return Ok(()),
+        (Some(rela), Some(relasz)) if relasz % 24 == 0 => match rela.checked_add(relasz) {
+            Some(v) if v <= klen => std::slice::from_raw_parts(ram.host_addr().add(rela), relasz),
+            _ => return Err(MainCpuError::InvalidDynamicLinking),
+        },
+        _ => return Err(MainCpuError::InvalidDynamicLinking),
+    };
+
+    for reloc in relocs.chunks_exact(24) {
+        let r_offset = usize::from_ne_bytes(reloc[..8].try_into().unwrap());
+        let r_info = usize::from_ne_bytes(reloc[8..16].try_into().unwrap());
+        let r_addend = isize::from_ne_bytes(reloc[16..].try_into().unwrap());
+
+        match r_info & 0xffffffff {
+            // R_X86_64_NONE
+            0 => break,
+            // R_X86_64_RELATIVE
+            8 => match r_offset.checked_add(8) {
+                Some(v) if v <= klen => core::ptr::write_unaligned(
+                    ram.host_addr().add(r_offset).cast_mut().cast(),
+                    base.wrapping_add_signed(r_addend),
+                ),
+                _ => return Err(MainCpuError::InvalidDynamicLinking),
+            },
+            _ => {}
+        }
+    }
 
     Ok(())
 }
@@ -484,6 +553,7 @@ unsafe fn setup_main_cpu(
     klen: usize,
     slen: usize,
     entry: usize,
+    dynamic: Option<&(usize, usize)>,
 ) -> Result<(), MainCpuError> {
     todo!()
 }
@@ -635,6 +705,10 @@ enum MainCpuError {
     CreateCpuFailed(#[source] <P as Hypervisor>::CpuErr),
 
     #[cfg(target_arch = "x86_64")]
+    #[error("the kernel is not a position-independent executable")]
+    NonPieKernel,
+
+    #[cfg(target_arch = "x86_64")]
     #[error("couldn't allocate RAM for page-map level-4 table")]
     AllocPml4TableFailed(#[source] std::io::Error),
 
@@ -649,6 +723,10 @@ enum MainCpuError {
     #[cfg(target_arch = "x86_64")]
     #[error("couldn't allocate RAM for page table")]
     AllocPageTableFailed(#[source] std::io::Error),
+
+    #[cfg(target_arch = "x86_64")]
+    #[error("the kernel has invalid PT_DYNAMIC")]
+    InvalidDynamicLinking,
 
     #[error("couldn't get vCPU states")]
     GetCpuStatesFailed(#[source] Box<dyn Error + Send>),
