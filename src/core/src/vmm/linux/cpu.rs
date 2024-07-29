@@ -212,7 +212,9 @@ impl<'a> CpuExit for KvmExit<'a> {
 
                 match io.direction {
                     0 => todo!(), // KVM_EXIT_IO_IN
-                    1 => CpuIo::Out(port, unsafe { std::slice::from_raw_parts(data, len) }),
+                    1 => crate::vmm::ExitReason::IoOut(port, unsafe {
+                        std::slice::from_raw_parts(data, len)
+                    }),
                     _ => unreachable!(),
                 }
             }
