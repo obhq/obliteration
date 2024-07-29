@@ -259,8 +259,11 @@ pub struct WhpExit<'a, 'b> {
 
 impl<'a, 'b> CpuExit for WhpExit<'a, 'b> {
     #[cfg(target_arch = "x86_64")]
-    fn is_hlt(&self) -> bool {
-        self.cx.ExitReason == WHvRunVpExitReasonX64Halt
+    fn reason(&self) -> crate::vmm::ExitReason {
+        match self.cx.ExitReason {
+            WHvRunVpExitReasonX64Halt => crate::vmm::ExitReason::Halt,
+            reason => todo!("unhandled exit reason: {:#x}", reason),
+        }
     }
 }
 

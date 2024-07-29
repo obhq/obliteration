@@ -201,8 +201,11 @@ pub struct KvmExit<'a> {
 
 impl<'a> CpuExit for KvmExit<'a> {
     #[cfg(target_arch = "x86_64")]
-    fn is_hlt(&self) -> bool {
-        self.cx.exit_reason == 5
+    fn reason(&self) -> crate::vmm::ExitReason {
+        match self.cx.exit_reason {
+            5 => crate::vmm::ExitReason::Hlt,
+            reason => todo!("unhandled exit reason: {}", reason),
+        }
     }
 }
 

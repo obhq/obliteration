@@ -563,11 +563,10 @@ fn run_main_cpu(cpu: &mut impl Cpu) {
     // Run the vCPU and check if it was exit because of HLT instruction.
     let exit = cpu.run().unwrap();
 
-    if exit.is_hlt() {
-        return;
+    match exit.reason() {
+        ExitReason::Hlt => return,
+        ExitReason::Other => todo!(),
     }
-
-    todo!()
 }
 
 #[cfg(target_arch = "aarch64")]
