@@ -224,10 +224,17 @@ void MainWindow::viewLogs()
         m_logs->activateWindow();
         m_logs->raise();
         return;
+    } else if (!m_kernel) {
+        QMessageBox::information(this, "Information", "The kernel is not running.");
+        return;
     }
 
     // Create a window.
     m_logs = new LogsViewer();
+
+    vmm_logs(m_kernel, m_logs.get(), [](uint8_t, const char *msg, size_t len, void *cx) {
+        reinterpret_cast<LogsViewer *>(cx)->append(QString::fromUtf8(msg, len));
+    });
 
     m_logs->setAttribute(Qt::WA_DeleteOnClose);
     m_logs->show();

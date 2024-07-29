@@ -1,13 +1,16 @@
 use self::ram::Ram;
 use crate::error::RustError;
+use obvirt::console::MsgType;
+use std::collections::VecDeque;
 use std::error::Error;
-use std::ffi::{c_char, CStr};
+use std::ffi::{c_char, c_void, CStr};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
+use std::ops::Deref;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use thiserror::Error;
 
@@ -54,6 +57,7 @@ pub unsafe extern "C" fn vmm_new(err: *mut *mut RustError) -> *mut Vmm {
         hv: Arc::new(hv),
         ram,
         cpus: Vec::new(),
+        logs: Arc::default(),
         shutdown: Arc::new(AtomicBool::new(false)),
     };
 
@@ -233,12 +237,17 @@ pub unsafe extern "C" fn vmm_run(vmm: *mut Vmm, kernel: *const c_char) -> *mut R
         }
     }
 
+    // Setup arguments for main CPU.
+    let args = CpuArgs {
+        hv: (*vmm).hv.clone(),
+        logs: (*vmm).logs.clone(),
+        shutdown: (*vmm).shutdown.clone(),
+    };
+
     // Spawn a thread to drive main CPU.
-    let hv = (*vmm).hv.clone();
     let ram = (*vmm).ram.clone();
-    let shutdown = (*vmm).shutdown.clone();
     let (tx, rx) = std::sync::mpsc::channel();
-    let main = move || main_cpu(hv, ram, end, slen, e_entry, dynamic.as_ref(), shutdown, tx);
+    let main = move || main_cpu(&args, ram, end, slen, e_entry, dynamic.as_ref(), tx);
     let main = match std::thread::Builder::new().spawn(main) {
         Ok(v) => v,
         Err(e) => return RustError::with_source("couldn't spawn main CPU", e),
@@ -264,21 +273,33 @@ pub unsafe extern "C" fn vmm_run(vmm: *mut Vmm, kernel: *const c_char) -> *mut R
     null_mut()
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn vmm_logs(
+    vmm: *const Vmm,
+    cx: *mut c_void,
+    cb: unsafe extern "C" fn(u8, *const c_char, usize, *mut c_void),
+) {
+    let logs = (*vmm).logs.lock().unwrap();
+
+    for (ty, msg) in logs.deref() {
+        cb(*ty as u8, msg.as_ptr().cast(), msg.len(), cx);
+    }
+}
+
 /// # Safety
 /// - The kernel must be mapped at address 0.
 /// - The stack must be immediate follow the kernel.
 unsafe fn main_cpu(
-    hv: Arc<P>,
+    args: &CpuArgs,
     ram: Arc<Ram>,
     klen: usize,
     slen: usize,
     entry: usize,
     dynamic: Option<&(usize, usize)>,
-    shutdown: Arc<AtomicBool>,
     status: Sender<Result<(), MainCpuError>>,
 ) {
     // Create vCPU.
-    let mut cpu = match hv.create_cpu(0) {
+    let mut cpu = match args.hv.create_cpu(0) {
         Ok(v) => v,
         Err(e) => {
             status.send(Err(MainCpuError::CreateCpuFailed(e))).unwrap();
@@ -295,9 +316,7 @@ unsafe fn main_cpu(
     status.send(Ok(())).unwrap();
     drop(status);
 
-    while !shutdown.load(Ordering::Relaxed) {
-        run_main_cpu(&mut cpu);
-    }
+    run_cpu(cpu, args);
 }
 
 /// # Safety
@@ -559,20 +578,62 @@ unsafe fn setup_main_cpu(
 }
 
 #[cfg(target_arch = "x86_64")]
-fn run_main_cpu(cpu: &mut impl Cpu) {
-    // Run the vCPU and check if it was exit because of HLT instruction.
-    let exit = cpu.run().unwrap();
+fn run_cpu(mut cpu: impl Cpu, args: &CpuArgs) {
+    let mut logs = Vec::new();
 
-    if exit.is_hlt() {
-        return;
+    while !args.shutdown.load(Ordering::Relaxed) {
+        // Run the vCPU and check why VM exit.
+        let mut exit = cpu.run().unwrap();
+
+        if let Some(io) = exit.is_io() {
+            match io {
+                CpuIo::Out(0, data) => {
+                    logs.extend_from_slice(data);
+                    parse_logs(&args.logs, &mut logs);
+                }
+                CpuIo::Out(_, _) => todo!(),
+            }
+        } else if !exit.is_hlt() {
+            todo!()
+        }
     }
-
-    todo!()
 }
 
 #[cfg(target_arch = "aarch64")]
-fn run_main_cpu(cpu: &mut impl Cpu) {
+fn run_cpu(mut cpu: impl Cpu, args: &CpuArgs) {
     todo!()
+}
+
+#[cfg(target_arch = "x86_64")]
+fn parse_logs(logs: &Mutex<VecDeque<(MsgType, String)>>, data: &mut Vec<u8>) {
+    // Check minimum size.
+    let (hdr, msg) = match data.split_at_checked(9) {
+        Some(v) => v,
+        None => return,
+    };
+
+    // Check if message completed.
+    let len = usize::from_ne_bytes(hdr[1..].try_into().unwrap());
+    let msg = match msg.get(..len) {
+        Some(v) => v,
+        None => return,
+    };
+
+    // Push to list.
+    let ty = MsgType::from_u8(hdr[0]).unwrap();
+    let msg = std::str::from_utf8(msg).unwrap().to_owned();
+    let mut logs = logs.lock().unwrap();
+
+    logs.push_back((ty, msg));
+
+    while logs.len() > 10000 {
+        logs.pop_front();
+    }
+
+    drop(logs);
+
+    // Remove parsed data.
+    data.drain(..(hdr.len() + len));
 }
 
 #[cfg(target_os = "linux")]
@@ -595,6 +656,7 @@ pub struct Vmm {
     hv: Arc<P>,
     ram: Arc<Ram>,
     cpus: Vec<JoinHandle<()>>,
+    logs: Arc<Mutex<VecDeque<(MsgType, String)>>>,
     shutdown: Arc<AtomicBool>,
 }
 
@@ -628,6 +690,13 @@ trait MemoryAddr {
 
     /// Total size of the object, in bytes.
     fn len(&self) -> usize;
+}
+
+/// Encapsulates arguments for a function to run a CPU.
+struct CpuArgs {
+    hv: Arc<P>,
+    logs: Arc<Mutex<VecDeque<(MsgType, String)>>>,
+    shutdown: Arc<AtomicBool>,
 }
 
 /// Represents an error when [`vmm_new()`] fails.
