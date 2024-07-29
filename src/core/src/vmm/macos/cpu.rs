@@ -1,4 +1,4 @@
-use crate::vmm::{Cpu, CpuExit, CpuIo, CpuStates};
+use crate::vmm::{Cpu, CpuExit, CpuStates};
 use hv_sys::hv_vcpu_destroy;
 use std::marker::PhantomData;
 use thiserror::Error;
@@ -134,7 +134,7 @@ impl<'a> CpuExit for HfExit<'a> {
     }
 
     #[cfg(target_arch = "x86_64")]
-    fn is_io(&mut self) -> Option<CpuIo> {
+    fn is_io(&mut self) -> Option<crate::vmm::CpuIo> {
         todo!()
     }
 }
