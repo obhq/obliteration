@@ -261,7 +261,7 @@ impl<'a, 'b> CpuExit for WhpExit<'a, 'b> {
     #[cfg(target_arch = "x86_64")]
     fn reason(&self) -> crate::vmm::ExitReason {
         match self.cx.ExitReason {
-            WHvRunVpExitReasonX64Halt => crate::vmm::ExitReason::Halt,
+            WHvRunVpExitReasonX64Halt => crate::vmm::ExitReason::Hlt,
             reason => todo!("unhandled exit reason: {:#x}", reason),
         }
     }
