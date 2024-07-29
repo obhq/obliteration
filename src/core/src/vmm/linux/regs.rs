@@ -25,7 +25,6 @@ pub struct KvmRegs {
     pub rflags: u64,
 }
 
-
 #[cfg(target_arch = "aarch64")]
 #[repr(C)]
 struct KvmRegs {
@@ -53,7 +52,6 @@ struct UserFpSimdState {
     pub fpcr: u32,
     pub reserved: [u32; 2],
 }
-
 
 #[cfg(target_arch = "x86_64")]
 #[repr(C)]
