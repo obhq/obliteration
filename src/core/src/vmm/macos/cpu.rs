@@ -427,11 +427,6 @@ impl<'a> CpuExit for HfExit<'a> {
     fn reason(&self) -> crate::vmm::ExitReason {
         todo!()
     }
-
-    #[cfg(target_arch = "x86_64")]
-    fn is_io(&mut self) -> Option<crate::vmm::CpuIo> {
-        todo!()
-    }
 }
 
 /// Implementation of [`Cpu::RunErr`].

@@ -265,11 +265,6 @@ impl<'a, 'b> CpuExit for WhpExit<'a, 'b> {
             reason => todo!("unhandled exit reason: {:#x}", reason),
         }
     }
-
-    #[cfg(target_arch = "x86_64")]
-    fn is_io(&mut self) -> Option<CpuIo> {
-        todo!()
-    }
 }
 
 /// Implementation of [`Cpu::GetStatesErr`].
