@@ -8,6 +8,7 @@ members = [
     "llt",
     "macros",
     "obkrnl",
+    "obvirt",
     "param",
     "pfs",
     "pkg",
