@@ -154,7 +154,7 @@ impl<'a> Cpu for HfCpu<'a> {
     #[cfg(target_arch = "x86_64")]
     fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr> {
         wrap_return!(
-            unsafe { hv_sys::hv_vcpu_run_until(self.instance, HV_DEADLINE_FOREVER) },
+            unsafe { hv_sys::hv_vcpu_run_until(self.instance, hv_sys::HV_DEADLINE_FOREVER) },
             RunError::Run
         )?;
 
