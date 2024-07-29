@@ -274,6 +274,7 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
 }
 
 impl<'a, 'b> Drop for HfStates<'a, 'b> {
+    #[cfg(target_arch = "x86_64")]
     fn drop(&mut self) {
         if !self.dirty {
             return;
@@ -294,6 +295,11 @@ impl<'a, 'b> Drop for HfStates<'a, 'b> {
         self.cpu
             .write_register(hv_sys::hv_x86_reg_t_HV_X86_CR4, self.cr4)
             .unwrap();
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    fn drop(&mut self) {
+        todo!()
     }
 }
 
