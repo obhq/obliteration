@@ -307,33 +307,43 @@ pub enum RunError {
 /// Implementation of [`Cpu::GetStatesErr`].
 #[derive(Debug, Error)]
 pub enum GetStatesError {
+    #[cfg(target_arch = "x86_64")]
     #[error("error while reading rsp: {0:#x}")]
     ReadRsp(NonZero<hv_sys::hv_return_t>),
 
+    #[cfg(target_arch = "x86_64")]
     #[error("error while reading rip: {0:#x}")]
     ReadRip(NonZero<hv_sys::hv_return_t>),
 
+    #[cfg(target_arch = "x86_64")]
     #[error("error while reading cr0: {0:#x}")]
     ReadCr0(NonZero<hv_sys::hv_return_t>),
 
+    #[cfg(target_arch = "x86_64")]
     #[error("error while reading cr3: {0:#x}")]
     ReadCr3(NonZero<hv_sys::hv_return_t>),
 
+    #[cfg(target_arch = "x86_64")]
     #[error("error while reading cr4: {0:#x}")]
     ReadCr4(NonZero<hv_sys::hv_return_t>),
 
+    #[cfg(target_arch = "x86_64")]
     #[error("error while reading ds: {0:#x}")]
     ReadDs(NonZero<hv_sys::hv_return_t>),
 
+    #[cfg(target_arch = "x86_64")]
     #[error("error while reading es: {0:#x}")]
     ReadEs(NonZero<hv_sys::hv_return_t>),
 
+    #[cfg(target_arch = "x86_64")]
     #[error("error while reading fs: {0:#x}")]
     ReadFs(NonZero<hv_sys::hv_return_t>),
 
+    #[cfg(target_arch = "x86_64")]
     #[error("error while reading gs: {0:#x}")]
     ReadGs(NonZero<hv_sys::hv_return_t>),
 
+    #[cfg(target_arch = "x86_64")]
     #[error("error while reading ss: {0:#x}")]
     ReadSs(NonZero<hv_sys::hv_return_t>),
 }
