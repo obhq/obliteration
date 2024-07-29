@@ -586,7 +586,7 @@ fn run_cpu(mut cpu: impl Cpu, args: &CpuArgs) {
         let exit = cpu.run().unwrap();
 
         match exit.reason() {
-            ExitReason::Hlt => {},
+            ExitReason::Hlt => {}
             ExitReason::IoOut(0, data) => {
                 logs.extend_from_slice(data);
                 parse_logs(&args.logs, &mut logs);

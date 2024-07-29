@@ -97,9 +97,11 @@ impl<'a> Cpu for HfCpu<'a> {
 
     #[cfg(target_arch = "x86_64")]
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
-        let cr0 = self.read_register(hv_sys::hv_x86_reg_t_HV_X86_CR0)
+        let cr0 = self
+            .read_register(hv_sys::hv_x86_reg_t_HV_X86_CR0)
             .map_err(GetStatesError::ReadCr0)?;
-        let cr4 = self.read_register(hv_sys::hv_x86_reg_t_HV_X86_CR4)
+        let cr4 = self
+            .read_register(hv_sys::hv_x86_reg_t_HV_X86_CR4)
             .map_err(GetStatesError::ReadCr4)?;
 
         let mut cs = 0u64;
@@ -110,12 +112,30 @@ impl<'a> Cpu for HfCpu<'a> {
         let mut ss = 0u64;
 
         unsafe {
-            wrap_return!(hv_sys::hv_vmx_vcpu_read_vmcs(self.instance, hv_sys::VMCS_GUEST_CS_AR, &mut cs), GetStatesError::ReadCs)?;
-            wrap_return!(hv_sys::hv_vmx_vcpu_read_vmcs(self.instance, hv_sys::VMCS_GUEST_DS_AR, &mut ds), GetStatesError::ReadDs)?;
-            wrap_return!(hv_sys::hv_vmx_vcpu_read_vmcs(self.instance, hv_sys::VMCS_GUEST_ES_AR, &mut es), GetStatesError::ReadEs)?;
-            wrap_return!(hv_sys::hv_vmx_vcpu_read_vmcs(self.instance, hv_sys::VMCS_GUEST_FS_AR, &mut fs), GetStatesError::ReadFs)?;
-            wrap_return!(hv_sys::hv_vmx_vcpu_read_vmcs(self.instance, hv_sys::VMCS_GUEST_GS_AR, &mut gs), GetStatesError::ReadGs)?;
-            wrap_return!(hv_sys::hv_vmx_vcpu_read_vmcs(self.instance, hv_sys::VMCS_GUEST_SS_AR, &mut ss), GetStatesError::ReadSs)?;
+            wrap_return!(
+                hv_sys::hv_vmx_vcpu_read_vmcs(self.instance, hv_sys::VMCS_GUEST_CS_AR, &mut cs),
+                GetStatesError::ReadCs
+            )?;
+            wrap_return!(
+                hv_sys::hv_vmx_vcpu_read_vmcs(self.instance, hv_sys::VMCS_GUEST_DS_AR, &mut ds),
+                GetStatesError::ReadDs
+            )?;
+            wrap_return!(
+                hv_sys::hv_vmx_vcpu_read_vmcs(self.instance, hv_sys::VMCS_GUEST_ES_AR, &mut es),
+                GetStatesError::ReadEs
+            )?;
+            wrap_return!(
+                hv_sys::hv_vmx_vcpu_read_vmcs(self.instance, hv_sys::VMCS_GUEST_FS_AR, &mut fs),
+                GetStatesError::ReadFs
+            )?;
+            wrap_return!(
+                hv_sys::hv_vmx_vcpu_read_vmcs(self.instance, hv_sys::VMCS_GUEST_GS_AR, &mut gs),
+                GetStatesError::ReadGs
+            )?;
+            wrap_return!(
+                hv_sys::hv_vmx_vcpu_read_vmcs(self.instance, hv_sys::VMCS_GUEST_SS_AR, &mut ss),
+                GetStatesError::ReadSs
+            )?;
         }
 
         Ok(HfStates {
@@ -308,45 +328,84 @@ impl<'a, 'b> Drop for HfStates<'a, 'b> {
         }
 
         if self.dirty_flags.contains(DirtyFlags::RIP) {
-            self.cpu.write_register(hv_sys::hv_x86_reg_t_HV_X86_RIP, self.rip).unwrap();
+            self.cpu
+                .write_register(hv_sys::hv_x86_reg_t_HV_X86_RIP, self.rip)
+                .unwrap();
         }
         if self.dirty_flags.contains(DirtyFlags::RSP) {
-            self.cpu.write_register(hv_sys::hv_x86_reg_t_HV_X86_RSP, self.rsp).unwrap();
+            self.cpu
+                .write_register(hv_sys::hv_x86_reg_t_HV_X86_RSP, self.rsp)
+                .unwrap();
         }
         if self.dirty_flags.contains(DirtyFlags::CR0) {
-            self.cpu.write_register(hv_sys::hv_x86_reg_t_HV_X86_CR0, self.cr0).unwrap();
+            self.cpu
+                .write_register(hv_sys::hv_x86_reg_t_HV_X86_CR0, self.cr0)
+                .unwrap();
         }
         if self.dirty_flags.contains(DirtyFlags::CR3) {
-            self.cpu.write_register(hv_sys::hv_x86_reg_t_HV_X86_CR3, self.cr3).unwrap();
+            self.cpu
+                .write_register(hv_sys::hv_x86_reg_t_HV_X86_CR3, self.cr3)
+                .unwrap();
         }
         if self.dirty_flags.contains(DirtyFlags::CR4) {
-            self.cpu.write_register(hv_sys::hv_x86_reg_t_HV_X86_CR4, self.cr4).unwrap();
+            self.cpu
+                .write_register(hv_sys::hv_x86_reg_t_HV_X86_CR4, self.cr4)
+                .unwrap();
         }
         if self.dirty_flags.contains(DirtyFlags::EFER) {
-            unsafe { hv_sys::hv_vmx_vcpu_write_vmcs(self.cpu.instance, hv_sys::VMCS_GUEST_IA32_EFER, self.efer as u64) }.unwrap();
+            unsafe {
+                hv_sys::hv_vmx_vcpu_write_vmcs(
+                    self.cpu.instance,
+                    hv_sys::VMCS_GUEST_IA32_EFER,
+                    self.efer as u64,
+                )
+            }
+            .unwrap();
         }
         if self.dirty_flags.contains(DirtyFlags::CS) {
             unsafe {
-                hv_sys::hv_vmx_vcpu_write_vmcs(self.cpu.instance, hv_sys::VMCS_GUEST_CS, 0).unwrap();
-                hv_sys::hv_vmx_vcpu_write_vmcs(self.cpu.instance, hv_sys::VMCS_GUEST_CS_BASE, 0).unwrap();
-                hv_sys::hv_vmx_vcpu_write_vmcs(self.cpu.instance, hv_sys::VMCS_GUEST_CS_LIMIT, 0xffffffff).unwrap();
-                hv_sys::hv_vmx_vcpu_write_vmcs(self.cpu.instance, hv_sys::VMCS_GUEST_CS_AR, self.cs).unwrap();
+                hv_sys::hv_vmx_vcpu_write_vmcs(self.cpu.instance, hv_sys::VMCS_GUEST_CS, 0)
+                    .unwrap();
+                hv_sys::hv_vmx_vcpu_write_vmcs(self.cpu.instance, hv_sys::VMCS_GUEST_CS_BASE, 0)
+                    .unwrap();
+                hv_sys::hv_vmx_vcpu_write_vmcs(
+                    self.cpu.instance,
+                    hv_sys::VMCS_GUEST_CS_LIMIT,
+                    0xffffffff,
+                )
+                .unwrap();
+                hv_sys::hv_vmx_vcpu_write_vmcs(
+                    self.cpu.instance,
+                    hv_sys::VMCS_GUEST_CS_AR,
+                    self.cs,
+                )
+                .unwrap();
             }
         }
         if self.dirty_flags.contains(DirtyFlags::DS) {
-            self.cpu.write_register(hv_sys::hv_x86_reg_t_HV_X86_DS, self.ds).unwrap();
+            self.cpu
+                .write_register(hv_sys::hv_x86_reg_t_HV_X86_DS, self.ds)
+                .unwrap();
         }
         if self.dirty_flags.contains(DirtyFlags::ES) {
-            self.cpu.write_register(hv_sys::hv_x86_reg_t_HV_X86_ES, self.es).unwrap();
+            self.cpu
+                .write_register(hv_sys::hv_x86_reg_t_HV_X86_ES, self.es)
+                .unwrap();
         }
         if self.dirty_flags.contains(DirtyFlags::FS) {
-            self.cpu.write_register(hv_sys::hv_x86_reg_t_HV_X86_FS, self.fs).unwrap();
+            self.cpu
+                .write_register(hv_sys::hv_x86_reg_t_HV_X86_FS, self.fs)
+                .unwrap();
         }
         if self.dirty_flags.contains(DirtyFlags::GS) {
-            self.cpu.write_register(hv_sys::hv_x86_reg_t_HV_X86_GS, self.gs).unwrap();
+            self.cpu
+                .write_register(hv_sys::hv_x86_reg_t_HV_X86_GS, self.gs)
+                .unwrap();
         }
         if self.dirty_flags.contains(DirtyFlags::SS) {
-            self.cpu.write_register(hv_sys::hv_x86_reg_t_HV_X86_SS, self.ss).unwrap();
+            self.cpu
+                .write_register(hv_sys::hv_x86_reg_t_HV_X86_SS, self.ss)
+                .unwrap();
         }
     }
 
