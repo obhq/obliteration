@@ -167,16 +167,16 @@ impl<'a> Cpu for HfCpu<'a> {
             RunError::Run
         )?;
 
-        let mut exit_reason = MaybeUninit::uninit();
+        let mut exit_reason = 0u64;
 
         wrap_return!(
-            unsafe { hv_sys::hv_vcpu_exit_info(self.instance, exit_reason.as_mut_ptr()) },
+            unsafe { hv_sys::hv_vmx_vcpu_read_vmcs(self.instance, VMCS_RO_EXIT_REASON, exit_reason.as_mut_ptr()) },
             RunError::ReadExitReason
         )?;
 
         Ok(HfExit {
             cpu: PhantomData,
-            exit_info: unsafe { exit_reason.assume_init() },
+            exit_reason,
         })
     }
 
@@ -419,13 +419,17 @@ impl<'a, 'b> Drop for HfStates<'a, 'b> {
 pub struct HfExit<'a> {
     cpu: PhantomData<&'a mut HfCpu<'a>>,
     #[cfg(target_arch = "x86_64")]
-    exit_info: hv_sys::hv_vm_exitinfo_t,
+    exit_reason: u64,
 }
 
 impl<'a> CpuExit for HfExit<'a> {
     #[cfg(target_arch = "x86_64")]
     fn reason(&mut self) -> crate::vmm::ExitReason {
-        todo!()
+        match exit_reason {
+            hv_sys::VMX_REASON_HLT => crate::vmm::ExitReason::Hlt,
+            hv_sys::VMX_REASON_IO => todo!(),
+            _ => todo!()
+        }
     }
 }
 
