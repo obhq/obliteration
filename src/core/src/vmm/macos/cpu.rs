@@ -153,7 +153,10 @@ impl<'a> Cpu for HfCpu<'a> {
 
     #[cfg(target_arch = "x86_64")]
     fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr> {
-        wrap_return!(unsafe { hv_sys::hv_vcpu_run_until(self.instance, HV_DEADLINE_FOREVER) }, RunError::Run)?;
+        wrap_return!(
+            unsafe { hv_sys::hv_vcpu_run_until(self.instance, HV_DEADLINE_FOREVER) },
+            RunError::Run
+        )?;
 
         let mut exit_reason = MaybeUninit::uninit();
 
@@ -276,7 +279,21 @@ impl<'a, 'b> Drop for HfStates<'a, 'b> {
             return;
         }
 
-        todo!()
+        self.cpu
+            .write_register(hv_sys::hv_x86_reg_t_HV_X86_RIP, self.rip)
+            .unwrap();
+        self.cpu
+            .write_register(hv_sys::hv_x86_reg_t_HV_X86_RSP, self.rsp)
+            .unwrap();
+        self.cpu
+            .write_register(hv_sys::hv_x86_reg_t_HV_X86_CR0, self.cr0)
+            .unwrap();
+        self.cpu
+            .write_register(hv_sys::hv_x86_reg_t_HV_X86_CR3, self.cr3)
+            .unwrap();
+        self.cpu
+            .write_register(hv_sys::hv_x86_reg_t_HV_X86_CR4, self.cr4)
+            .unwrap();
     }
 }
 
