@@ -64,9 +64,10 @@ pub trait CpuExit {
     fn reason(&self) -> ExitReason;
 }
 
-pub enum ExitReason {
+#[derive(Debug)]
+pub enum ExitReason<'a> {
     Hlt,
     Other,
     #[cfg(target_arch = "x86_64")]
-    Out(u16, &'a [u8]),
+    IoOut(u16, &'a [u8]),
 }
