@@ -203,29 +203,22 @@ impl<'a> CpuExit for KvmExit<'a> {
     #[cfg(target_arch = "x86_64")]
     fn reason(&self) -> crate::vmm::ExitReason {
         match self.cx.exit_reason {
+            2 => {
+                // Check direction.
+                let io = unsafe { &self.cx.exit.io };
+                let port = io.port;
+                let data = unsafe { (self.cx as *const KvmRun as *const u8).add(io.data_offset) };
+                let len: usize = io.size.into();
+
+                match io.direction {
+                    0 => todo!(), // KVM_EXIT_IO_IN
+                    1 => CpuIo::Out(port, unsafe { std::slice::from_raw_parts(data, len) }),
+                    _ => unreachable!(),
+                }
+            }
             5 => crate::vmm::ExitReason::Hlt,
             reason => todo!("unhandled exit reason: {}", reason),
         }
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    fn is_io(&mut self) -> Option<CpuIo> {
-        // Check if I/O.
-        if self.cx.exit_reason != 2 {
-            return None;
-        }
-
-        // Check direction.
-        let io = unsafe { &self.cx.exit.io };
-        let port = io.port;
-        let data = unsafe { (self.cx as *const KvmRun as *const u8).add(io.data_offset) };
-        let len: usize = io.size.into();
-
-        Some(match io.direction {
-            0 => todo!(), // KVM_EXIT_IO_IN
-            1 => CpuIo::Out(port, unsafe { std::slice::from_raw_parts(data, len) }),
-            _ => unreachable!(),
-        })
     }
 }
 
