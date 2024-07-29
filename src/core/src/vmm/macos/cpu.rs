@@ -424,7 +424,7 @@ pub struct HfExit<'a> {
 
 impl<'a> CpuExit for HfExit<'a> {
     #[cfg(target_arch = "x86_64")]
-    fn reason(&self) -> crate::vmm::ExitReason {
+    fn reason(&mut self) -> crate::vmm::ExitReason {
         todo!()
     }
 }

@@ -61,7 +61,7 @@ pub trait CpuStates {
 /// Contains information when VM exited.
 pub trait CpuExit {
     #[cfg(target_arch = "x86_64")]
-    fn reason(&self) -> ExitReason;
+    fn reason(&mut self) -> ExitReason;
 }
 
 #[derive(Debug)]

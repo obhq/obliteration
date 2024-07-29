@@ -201,7 +201,7 @@ pub struct KvmExit<'a> {
 
 impl<'a> CpuExit for KvmExit<'a> {
     #[cfg(target_arch = "x86_64")]
-    fn reason(&self) -> crate::vmm::ExitReason {
+    fn reason(&mut self) -> crate::vmm::ExitReason {
         match self.cx.exit_reason {
             2 => {
                 // Check direction.

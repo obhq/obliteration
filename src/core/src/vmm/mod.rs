@@ -583,7 +583,7 @@ fn run_cpu(mut cpu: impl Cpu, args: &CpuArgs) {
 
     while !args.shutdown.load(Ordering::Relaxed) {
         // Run the vCPU and check why VM exit.
-        let exit = cpu.run().unwrap();
+        let mut exit = cpu.run().unwrap();
 
         match exit.reason() {
             ExitReason::Hlt => {}
@@ -592,7 +592,7 @@ fn run_cpu(mut cpu: impl Cpu, args: &CpuArgs) {
                 parse_logs(&args.logs, &mut logs);
             }
             ExitReason::IoOut(_, _) => todo!(),
-            _ => todo!("unhandled VM exit reason: {:?}", exit.reason()),
+            reason => todo!("unhandled VM exit reason: {reason:?}"),
         }
     }
 }
