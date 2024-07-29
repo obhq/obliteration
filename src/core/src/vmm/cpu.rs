@@ -67,4 +67,6 @@ pub trait CpuExit {
 pub enum ExitReason {
     Hlt,
     Other,
+    #[cfg(target_arch = "x86_64")]
+    Out(u16, &'a [u8]),
 }

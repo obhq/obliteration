@@ -78,6 +78,8 @@ void vmm_free(struct Vmm *vmm);
 
 struct RustError *vmm_run(struct Vmm *vmm, const char *kernel);
 
+void vmm_logs(const struct Vmm *vmm, void *cx, void (*cb)(uint8_t, const char*, size_t, void*));
+
 #if defined(__linux__)
 extern int kvm_check_version(int kvm, bool *compat);
 #endif

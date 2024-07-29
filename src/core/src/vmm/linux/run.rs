@@ -21,7 +21,7 @@ pub union Exit {
     hw: ManuallyDrop<Hw>,
     fail_entry: ManuallyDrop<FailEntry>,
     ex: ManuallyDrop<Ex>,
-    io: ManuallyDrop<Io>,
+    pub io: Io,
     debug: ManuallyDrop<Debug>,
     mmio: ManuallyDrop<Mmio>,
     iocsr_io: ManuallyDrop<IocsrIo>,
@@ -68,12 +68,13 @@ struct Ex {
 }
 
 #[repr(C)]
-struct Io {
-    direction: u8,
-    size: u8,
-    port: u16,
-    count: u32,
-    data_offset: u64,
+#[derive(Clone, Copy)]
+pub struct Io {
+    pub direction: u8,
+    pub size: u8,
+    pub port: u16,
+    pub count: u32,
+    pub data_offset: usize,
 }
 
 #[repr(C)]

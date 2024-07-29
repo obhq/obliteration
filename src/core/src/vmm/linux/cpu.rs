@@ -1,7 +1,7 @@
 use super::ffi::{kvm_get_regs, kvm_get_sregs, kvm_run, kvm_set_regs, kvm_set_sregs};
 use super::regs::{KvmRegs, KvmSpecialRegs};
 use super::run::KvmRun;
-use crate::vmm::{Cpu, CpuExit, CpuStates};
+use crate::vmm::{Cpu, CpuExit, CpuIo, CpuStates};
 use libc::munmap;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
@@ -206,6 +206,26 @@ impl<'a> CpuExit for KvmExit<'a> {
             5 => crate::vmm::ExitReason::Hlt,
             reason => todo!("unhandled exit reason: {}", reason),
         }
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn is_io(&mut self) -> Option<CpuIo> {
+        // Check if I/O.
+        if self.cx.exit_reason != 2 {
+            return None;
+        }
+
+        // Check direction.
+        let io = unsafe { &self.cx.exit.io };
+        let port = io.port;
+        let data = unsafe { (self.cx as *const KvmRun as *const u8).add(io.data_offset) };
+        let len: usize = io.size.into();
+
+        Some(match io.direction {
+            0 => todo!(), // KVM_EXIT_IO_IN
+            1 => CpuIo::Out(port, unsafe { std::slice::from_raw_parts(data, len) }),
+            _ => unreachable!(),
+        })
     }
 }
 

@@ -10,13 +10,13 @@ LogsViewer::LogsViewer() :
     auto layout = new QHBoxLayout();
 
     setWindowTitle("Obliteration Logs");
+    resize(1000, 500);
 
     // Setup viewer.
     auto viewer = new QPlainTextEdit();
 
     viewer->setReadOnly(true);
     viewer->setLineWrapMode(QPlainTextEdit::NoWrap);
-    viewer->setMaximumBlockCount(10000);
 
 #ifdef _WIN32
     viewer->document()->setDefaultFont(QFont("Courier New", 10));
@@ -36,4 +36,9 @@ LogsViewer::LogsViewer() :
 
 LogsViewer::~LogsViewer()
 {
+}
+
+void LogsViewer::append(const QString &text)
+{
+    m_formatter->appendMessage(text);
 }
