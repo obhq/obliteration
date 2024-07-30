@@ -12,3 +12,12 @@ Screen::Screen()
 Screen::~Screen()
 {
 }
+
+bool Screen::event(QEvent *ev)
+{
+    if (ev->type() == QEvent::UpdateRequest) {
+        emit updateRequestReceived();
+    }
+
+    return QWindow::event(ev);
+}

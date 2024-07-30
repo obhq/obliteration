@@ -33,7 +33,7 @@ const ELF_MACHINE: u16 = 62;
 const ELF_MACHINE: u16 = 183;
 
 #[no_mangle]
-pub unsafe extern "C" fn vmm_new(err: *mut *mut RustError) -> *mut Vmm {
+pub unsafe extern "C" fn vmm_new(screen: usize, err: *mut *mut RustError) -> *mut Vmm {
     // Setup RAM.
     let ram = match Ram::new() {
         Ok(v) => Arc::new(v),
@@ -270,6 +270,11 @@ pub unsafe extern "C" fn vmm_run(vmm: *mut Vmm, kernel: *const c_char) -> *mut R
     // Push to CPU list.
     (*vmm).cpus.push(main);
 
+    null_mut()
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vmm_draw(vmm: *mut Vmm) -> *mut RustError {
     null_mut()
 }
 

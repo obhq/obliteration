@@ -29,6 +29,7 @@ private slots:
     void reportIssue();
     void aboutObliteration();
     void startKernel();
+    void updateScreen();
 
 private:
     bool loadGame(const QString &gameId);
