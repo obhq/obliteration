@@ -96,6 +96,8 @@ MainWindow::MainWindow() :
     // Screen.
     m_screen = new Screen();
 
+    connect(m_screen, &Screen::updateRequestReceived, this, &MainWindow::updateScreen);
+
     m_main->addWidget(createWindowContainer(m_screen));
 
     // Show the window.
@@ -298,7 +300,7 @@ void MainWindow::startKernel()
     Rust<RustError> error;
     Rust<Vmm> vmm;
 
-    vmm = vmm_new(&error);
+    vmm = vmm_new(m_screen->winId(), &error);
 
     if (!vmm) {
         QMessageBox::critical(
@@ -320,7 +322,36 @@ void MainWindow::startKernel()
     }
 
     m_kernel = std::move(vmm);
+
+    // Swap launch settings with the screen and start drawing loop.
     m_main->setCurrentIndex(1);
+    m_screen->requestUpdate();
+}
+
+void MainWindow::updateScreen()
+{
+    // Do nothing if the kernel is not running.
+    if (!m_kernel) {
+        return;
+    }
+
+    // Draw the screen.
+    Rust<RustError> error;
+
+    error = vmm_draw(m_kernel);
+
+    if (error) {
+        m_kernel.free();
+
+        QMessageBox::critical(
+            this,
+            "Error",
+            QString("Couldn't draw the screen: %1").arg(error_message(error)));
+        return;
+    }
+
+    // Queue next update.
+    m_screen->requestUpdate();
 }
 
 bool MainWindow::loadGame(const QString &gameId)
