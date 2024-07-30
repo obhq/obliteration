@@ -78,12 +78,16 @@ QLayout *LaunchSettings::buildActions()
     layout->addWidget(actions);
 
     // Save button.
-    auto save = actions->addButton("Save", QDialogButtonBox::ApplyRole);
+    auto save = new QPushButton(loadIcon(":/resources/content-save.svg"), "Save");
+
+    actions->addButton(save, QDialogButtonBox::ApplyRole);
 
     // Start button.
-    auto start = actions->addButton("Start", QDialogButtonBox::AcceptRole);
+    auto start = new QPushButton(loadIcon(":/resources/play.svg"), "Start");
 
     connect(start, &QAbstractButton::clicked, [this]() { emit startClicked(); });
+
+    actions->addButton(start, QDialogButtonBox::AcceptRole);
 
     return layout;
 }
