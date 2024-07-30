@@ -75,12 +75,23 @@ impl<'a> HfCpu<'a> {
 
     #[cfg(target_arch = "x86_64")]
     fn write_register(
-        &self,
+        &mut self,
         register: hv_sys::hv_x86_reg_t,
         value: usize,
     ) -> Result<(), NonZero<hv_sys::hv_return_t>> {
         wrap_return!(unsafe {
             hv_sys::hv_vcpu_write_register(self.instance, register, value as u64)
+        })
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn write_vmcs(
+        &mut self,
+        field: u32,
+        value: u64,
+    ) -> Result<(), NonZero<hv_sys::hv_return_t>> {
+        wrap_return!(unsafe {
+            hv_sys::hv_vmx_vcpu_write_vmcs(self.instance, field, value)
         })
     }
 }
@@ -370,22 +381,10 @@ impl<'a, 'b> Drop for HfStates<'a, 'b> {
         }
         if self.dirty_flags.contains(DirtyFlags::CS) {
             unsafe {
-                hv_sys::hv_vmx_vcpu_write_vmcs(self.cpu.instance, hv_sys::VMCS_GUEST_CS, 0)
-                    .unwrap();
-                hv_sys::hv_vmx_vcpu_write_vmcs(self.cpu.instance, hv_sys::VMCS_GUEST_CS_BASE, 0)
-                    .unwrap();
-                hv_sys::hv_vmx_vcpu_write_vmcs(
-                    self.cpu.instance,
-                    hv_sys::VMCS_GUEST_CS_LIMIT,
-                    0xffffffff,
-                )
-                .unwrap();
-                hv_sys::hv_vmx_vcpu_write_vmcs(
-                    self.cpu.instance,
-                    hv_sys::VMCS_GUEST_CS_AR,
-                    self.cs,
-                )
-                .unwrap();
+                self.cpu.write_vmcs(hv_sys::VMCS_GUEST_CS, 0).unwrap();
+                self.cpu.write_vmcs(hv_sys::VMCS_GUEST_CS_BASE, 0).unwrap();
+                self.cpu.write_vmcs(hv_sys::VMCS_GUEST_CS_LIMIT, 0xffffffff).unwrap();
+                self.cpu.write_vmcs(hv_sys::VMCS_GUEST_CS_AR, self.cs).unwrap();
             }
         }
         if self.dirty_flags.contains(DirtyFlags::DS) {
