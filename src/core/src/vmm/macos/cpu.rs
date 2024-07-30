@@ -170,7 +170,13 @@ impl<'a> Cpu for HfCpu<'a> {
         let mut exit_reason = 0u64;
 
         wrap_return!(
-            unsafe { hv_sys::hv_vmx_vcpu_read_vmcs(self.instance, VMCS_RO_EXIT_REASON, exit_reason.as_mut_ptr()) },
+            unsafe {
+                hv_sys::hv_vmx_vcpu_read_vmcs(
+                    self.instance,
+                    VMCS_RO_EXIT_REASON,
+                    exit_reason.as_mut_ptr(),
+                )
+            },
             RunError::ReadExitReason
         )?;
 
@@ -428,7 +434,7 @@ impl<'a> CpuExit for HfExit<'a> {
         match exit_reason {
             hv_sys::VMX_REASON_HLT => crate::vmm::ExitReason::Hlt,
             hv_sys::VMX_REASON_IO => todo!(),
-            _ => todo!()
+            _ => todo!(),
         }
     }
 }
