@@ -178,7 +178,7 @@ impl<'a> Cpu for HfCpu<'a> {
             unsafe {
                 hv_sys::hv_vmx_vcpu_read_vmcs(
                     self.instance,
-                    VMCS_RO_EXIT_REASON,
+                    hv_sys::VMCS_RO_EXIT_REASON,
                     exit_reason.as_mut_ptr(),
                 )
             },
@@ -354,16 +354,6 @@ impl<'a, 'b> Drop for HfStates<'a, 'b> {
             self.cpu
                 .write_register(hv_sys::hv_x86_reg_t_HV_X86_CR4, self.cr4)
                 .unwrap();
-        }
-        if self.dirty_flags.contains(DirtyFlags::EFER) {
-            unsafe {
-                hv_sys::hv_vmx_vcpu_write_vmcs(
-                    self.cpu.instance,
-                    hv_sys::VMCS_GUEST_IA32_EFER,
-                    self.efer as u64,
-                )
-            }
-            .unwrap();
         }
         if self.dirty_flags.contains(DirtyFlags::CS) {
             unsafe {
