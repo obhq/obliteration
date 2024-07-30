@@ -258,13 +258,6 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
 
     #[cfg(target_arch = "x86_64")]
     fn set_cr0(&mut self, v: usize) {
-        self.cr0 = v;
-        self.dirty_flags.insert(DirtyFlags::CR0);
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    fn set_cr0(&mut self, v: usize) {
-        // Preserve certain bits that should not be modified
         const FIXED_BITS: usize = 0x60000010; // PE, NE, ET, and PG bits
         self.cr0 = (self.cr0 & FIXED_BITS) | (v & !FIXED_BITS);
         self.dirty_flags.insert(DirtyFlags::CR0);
@@ -272,7 +265,6 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
 
     #[cfg(target_arch = "x86_64")]
     fn set_cr4(&mut self, v: usize) {
-        // Preserve certain bits that should not be modified
         const FIXED_BITS: usize = 0x2000; // VMXE bit
         self.cr4 = (self.cr4 & FIXED_BITS) | (v & !FIXED_BITS);
         self.dirty_flags.insert(DirtyFlags::CR4);
@@ -428,7 +420,7 @@ pub struct HfExit<'a> {
 impl<'a> CpuExit for HfExit<'a> {
     #[cfg(target_arch = "x86_64")]
     fn reason(&mut self) -> crate::vmm::ExitReason {
-        match exit_reason {
+        match self.exit_reason {
             hv_sys::VMX_REASON_HLT => crate::vmm::ExitReason::Hlt,
             hv_sys::VMX_REASON_IO => todo!(),
             _ => todo!(),
