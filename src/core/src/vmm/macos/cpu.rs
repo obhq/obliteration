@@ -148,15 +148,15 @@ impl<'a> Cpu for HfCpu<'a> {
             dirty_flags: DirtyFlags::empty(),
             rsp: 0,
             rip: 0,
-            cr0,
+            cr0: cr0.try_into().unwrap(),
             cr3: 0,
-            cr4,
+            cr4: cr4.try_into().unwrap(),
             cs,
-            ds,
-            es,
-            fs,
-            gs,
-            ss,
+            ds: ds.try_into().unwrap(),
+            es: es.try_into().unwrap(),
+            fs: fs.try_into().unwrap(),
+            gs: gs.try_into().unwrap(),
+            ss: ss.try_into().unwrap(),
         })
     }
 
@@ -261,6 +261,12 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
         const FIXED_BITS: usize = 0x60000010; // PE, NE, ET, and PG bits
         self.cr0 = (self.cr0 & FIXED_BITS) | (v & !FIXED_BITS);
         self.dirty_flags.insert(DirtyFlags::CR0);
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_cr3(&mut self, v: usize) {
+        self.cr3 = v;
+        self.dirty_flags.insert(DirtyFlags::CR3);
     }
 
     #[cfg(target_arch = "x86_64")]
