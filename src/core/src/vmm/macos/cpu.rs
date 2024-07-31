@@ -327,6 +327,17 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
         self.ss = if p { 0x0093 } else { 0x0000 };
         self.dirty_flags.insert(DirtyFlags::SS);
     }
+
+
+    #[cfg(target_arch = "aarch64")]
+    fn set_sp(&mut self, v: usize) {
+        todo!()
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    fn set_pc(&mut self, v: usize) {
+        todo!()
+    }
 }
 
 impl<'a, 'b> Drop for HfStates<'a, 'b> {

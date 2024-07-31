@@ -249,6 +249,17 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
 
         self.dirty = true;
     }
+
+
+    #[cfg(target_arch = "aarch64")]
+    fn set_sp(&mut self, v: usize) {
+        todo!()
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    fn set_pc(&mut self, v: usize) {
+        todo!()
+    }
 }
 
 /// Implementation of [`Cpu::Exit`] for Windows Hypervisor Platform.

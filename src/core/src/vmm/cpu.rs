@@ -56,6 +56,13 @@ pub trait CpuStates {
 
     #[cfg(target_arch = "x86_64")]
     fn set_ss(&mut self, p: bool);
+
+
+    #[cfg(target_arch = "aarch64")]
+    fn set_sp(&mut self, v: usize);
+
+    #[cfg(target_arch = "aarch64")]
+    fn set_pc(&mut self, v: usize);
 }
 
 /// Contains information when VM exited.
