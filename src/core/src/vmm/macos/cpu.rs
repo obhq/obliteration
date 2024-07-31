@@ -179,7 +179,7 @@ impl<'a> Cpu for HfCpu<'a> {
                 hv_sys::hv_vmx_vcpu_read_vmcs(
                     self.instance,
                     hv_sys::VMCS_RO_EXIT_REASON,
-                    exit_reason.as_mut_ptr(),
+                    &mut exit_reason,
                 )
             },
             RunError::ReadExitReason
