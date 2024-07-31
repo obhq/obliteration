@@ -16,6 +16,7 @@ use thiserror::Error;
 
 pub(self) use self::cpu::*;
 pub(self) use self::hv::*;
+pub(self) use self::screen::Screen;
 
 mod cpu;
 mod hv;
@@ -24,6 +25,7 @@ mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 mod ram;
+mod screen;
 #[cfg(target_os = "windows")]
 mod windows;
 
@@ -52,11 +54,21 @@ pub unsafe extern "C" fn vmm_new(screen: usize, err: *mut *mut RustError) -> *mu
         }
     };
 
+    // Setup screen.
+    let screen = match self::screen::Default::new(screen) {
+        Ok(v) => v,
+        Err(e) => {
+            *err = RustError::wrap(e);
+            return null_mut();
+        }
+    };
+
     // Create VMM.
     let vmm = Vmm {
         hv: Arc::new(hv),
         ram,
         cpus: Vec::new(),
+        screen: Arc::new(screen),
         logs: Arc::default(),
         shutdown: Arc::new(AtomicBool::new(false)),
     };
@@ -275,7 +287,10 @@ pub unsafe extern "C" fn vmm_run(vmm: *mut Vmm, kernel: *const c_char) -> *mut R
 
 #[no_mangle]
 pub unsafe extern "C" fn vmm_draw(vmm: *mut Vmm) -> *mut RustError {
-    null_mut()
+    match (*vmm).screen.update() {
+        Ok(_) => null_mut(),
+        Err(e) => RustError::wrap(e),
+    }
 }
 
 #[no_mangle]
@@ -661,6 +676,7 @@ pub struct Vmm {
     hv: Arc<P>,
     ram: Arc<Ram>,
     cpus: Vec<JoinHandle<()>>,
+    screen: Arc<self::screen::Default>,
     logs: Arc<Mutex<VecDeque<(MsgType, String)>>>,
     shutdown: Arc<AtomicBool>,
 }
