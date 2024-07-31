@@ -372,7 +372,6 @@ impl<'a, 'b> Drop for HfStates<'a, 'b> {
                 .unwrap();
         }
         if self.dirty_flags.contains(DirtyFlags::CS) {
-            unsafe {
                 self.cpu.write_vmcs(hv_sys::VMCS_GUEST_CS, 0).unwrap();
                 self.cpu.write_vmcs(hv_sys::VMCS_GUEST_CS_BASE, 0).unwrap();
                 self.cpu
@@ -381,7 +380,6 @@ impl<'a, 'b> Drop for HfStates<'a, 'b> {
                 self.cpu
                     .write_vmcs(hv_sys::VMCS_GUEST_CS_AR, self.cs)
                     .unwrap();
-            }
         }
         if self.dirty_flags.contains(DirtyFlags::DS) {
             self.cpu
