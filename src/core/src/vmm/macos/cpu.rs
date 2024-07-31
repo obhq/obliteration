@@ -426,7 +426,7 @@ impl<'a> CpuExit for HfExit<'a> {
     fn reason(&mut self) -> crate::vmm::ExitReason {
         let exit_reason = self.exit_reason.try_into().unwrap();
 
-        match self.exit_reason {
+        match exit_reason {
             hv_sys::VMX_REASON_HLT => crate::vmm::ExitReason::Hlt,
             hv_sys::VMX_REASON_IO => todo!(),
             _ => todo!(),
