@@ -328,7 +328,6 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
         self.dirty_flags.insert(DirtyFlags::SS);
     }
 
-
     #[cfg(target_arch = "aarch64")]
     fn set_sp(&mut self, v: usize) {
         todo!()

@@ -174,7 +174,6 @@ impl<'a> CpuStates for KvmStates<'a> {
         self.sdirty = true;
     }
 
-
     #[cfg(target_arch = "aarch64")]
     fn set_sp(&mut self, v: usize) {
         todo!()

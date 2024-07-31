@@ -250,7 +250,6 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
         self.dirty = true;
     }
 
-
     #[cfg(target_arch = "aarch64")]
     fn set_sp(&mut self, v: usize) {
         todo!()
