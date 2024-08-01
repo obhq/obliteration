@@ -1,4 +1,6 @@
+use super::VmmError;
 use std::error::Error;
+use std::sync::Arc;
 
 #[cfg(target_os = "macos")]
 mod metal;
@@ -12,8 +14,15 @@ pub type Default = self::vulkan::Vulkan;
 pub type Default = self::metal::Metal;
 
 /// Encapsulates a platform-specific surface for drawing a VM screen.
-pub trait Screen: Send + Sync {
+pub trait Screen {
+    type Buffer: ScreenBuffer;
     type UpdateErr: Error;
 
-    fn update(&self) -> Result<(), Self::UpdateErr>;
+    fn buffer(&self) -> &Arc<Self::Buffer>;
+    fn update(&mut self) -> Result<(), Self::UpdateErr>;
 }
+
+/// Manages off-screen buffers for [`Screen`].
+///
+/// How many buffering are available is depend on the implementation.
+pub trait ScreenBuffer: Send + Sync {}
