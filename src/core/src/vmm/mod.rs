@@ -68,7 +68,7 @@ pub unsafe extern "C" fn vmm_new(screen: usize, err: *mut *mut RustError) -> *mu
         hv: Arc::new(hv),
         ram,
         cpus: Vec::new(),
-        screen: Arc::new(screen),
+        screen,
         logs: Arc::default(),
         shutdown: Arc::new(AtomicBool::new(false)),
     };
@@ -252,6 +252,7 @@ pub unsafe extern "C" fn vmm_run(vmm: *mut Vmm, kernel: *const c_char) -> *mut R
     // Setup arguments for main CPU.
     let args = CpuArgs {
         hv: (*vmm).hv.clone(),
+        screen: (*vmm).screen.buffer().clone(),
         logs: (*vmm).logs.clone(),
         shutdown: (*vmm).shutdown.clone(),
     };
@@ -676,7 +677,7 @@ pub struct Vmm {
     hv: Arc<P>,
     ram: Arc<Ram>,
     cpus: Vec<JoinHandle<()>>,
-    screen: Arc<self::screen::Default>,
+    screen: self::screen::Default,
     logs: Arc<Mutex<VecDeque<(MsgType, String)>>>,
     shutdown: Arc<AtomicBool>,
 }
@@ -716,6 +717,7 @@ trait MemoryAddr {
 /// Encapsulates arguments for a function to run a CPU.
 struct CpuArgs {
     hv: Arc<P>,
+    screen: Arc<<self::screen::Default as Screen>::Buffer>,
     logs: Arc<Mutex<VecDeque<(MsgType, String)>>>,
     shutdown: Arc<AtomicBool>,
 }
@@ -786,6 +788,10 @@ enum VmmError {
     #[cfg(target_os = "macos")]
     #[error("couldn't map memory to the VM")]
     MapRamFailed(std::num::NonZero<std::ffi::c_int>),
+
+    #[cfg(target_os = "macos")]
+    #[error("couldn't get default MTLDevice")]
+    GetMetalDeviceFailed,
 }
 
 /// Represents an error when [`main_cpu()`] fails to reach event loop.

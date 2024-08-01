@@ -1,20 +1,32 @@
-use super::Screen;
-use crate::vmm::VmmError;
+use self::buffer::VulkanBuffer;
+use super::{Screen, ScreenBuffer, VmmError};
+use std::sync::Arc;
 use thiserror::Error;
 
+mod buffer;
+
 /// Implementation of [`Screen`] using Vulkan.
-pub struct Vulkan {}
+pub struct Vulkan {
+    buffer: Arc<VulkanBuffer>,
+}
 
 impl Vulkan {
     pub fn new(surface: usize) -> Result<Self, VmmError> {
-        Ok(Self {})
+        Ok(Self {
+            buffer: Arc::new(VulkanBuffer::new()),
+        })
     }
 }
 
 impl Screen for Vulkan {
+    type Buffer = VulkanBuffer;
     type UpdateErr = UpdateError;
 
-    fn update(&self) -> Result<(), Self::UpdateErr> {
+    fn buffer(&self) -> &Arc<Self::Buffer> {
+        &self.buffer
+    }
+
+    fn update(&mut self) -> Result<(), Self::UpdateErr> {
         todo!()
     }
 }
