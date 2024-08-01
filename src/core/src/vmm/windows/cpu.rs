@@ -52,6 +52,8 @@ impl<'a> Cpu for WhpCpu<'a> {
     }
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
+        println!("self.part: {:?}", self.part); // 0xC0000005 without this for some reason???
+
         let mut values: [WHV_REGISTER_VALUE; REGISTERS] = unsafe { zeroed() };
         let status = unsafe {
             WHvGetVirtualProcessorRegisters(
