@@ -48,7 +48,7 @@ impl<'a> Cpu for WhpCpu<'a> {
     type RunErr = RunError;
 
     fn id(&self) -> usize {
-        self.index.try_into().unwrap()
+        self.index as usize
     }
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
@@ -58,7 +58,7 @@ impl<'a> Cpu for WhpCpu<'a> {
                 self.part,
                 self.index,
                 WhpStates::NAMES.as_ptr(),
-                REGISTERS as _,
+                REGISTERS as u32,
                 values.as_mut_ptr(),
             )
         };
@@ -131,7 +131,7 @@ impl<'a, 'b> Drop for WhpStates<'a, 'b> {
                 self.cpu.part,
                 self.cpu.index,
                 Self::NAMES.as_ptr(),
-                REGISTERS as _,
+                REGISTERS as u32,
                 self.values.as_ptr(),
             )
         };
