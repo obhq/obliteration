@@ -1,4 +1,4 @@
-use crate::vmm::{Cpu, CpuExit, CpuStates};
+use crate::vmm::{Cpu, CpuExit, CpuStates, CpuIo};
 use std::marker::PhantomData;
 use std::mem::{size_of, zeroed, MaybeUninit};
 use thiserror::Error;
@@ -269,11 +269,13 @@ pub struct WhpExit<'a, 'b> {
 
 impl<'a, 'b> CpuExit for WhpExit<'a, 'b> {
     #[cfg(target_arch = "x86_64")]
-    fn reason(&mut self) -> crate::vmm::ExitReason {
-        match self.cx.ExitReason {
-            WHvRunVpExitReasonX64Halt => crate::vmm::ExitReason::Hlt,
-            reason => todo!("unhandled exit reason: {:#x}", reason),
-        }
+    fn is_hlt(&self) -> bool {
+        self.cx.ExitReason == WHvRunVpExitReasonX64Halt
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn is_io(&mut self) -> Option<CpuIo> {
+        todo!()
     }
 }
 

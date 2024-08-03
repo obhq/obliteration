@@ -67,12 +67,14 @@ pub trait CpuStates {
 /// Contains information when VM exited.
 pub trait CpuExit {
     #[cfg(target_arch = "x86_64")]
-    fn reason(&mut self) -> ExitReason;
+    fn is_hlt(&self) -> bool;
+
+    #[cfg(target_arch = "x86_64")]
+    fn is_io(&mut self) -> Option<CpuIo>;
 }
 
-#[derive(Debug)]
-pub enum ExitReason<'a> {
-    Hlt,
-    Other,
-    IoOut(u16, &'a [u8]),
+/// Contains information when a VM exited because of I/O instructions.
+#[cfg(target_arch = "x86_64")]
+pub enum CpuIo<'a> {
+    Out(u16, &'a [u8]),
 }

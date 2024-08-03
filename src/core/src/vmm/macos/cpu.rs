@@ -1,4 +1,4 @@
-use crate::vmm::{Cpu, CpuExit, CpuStates};
+use crate::vmm::{Cpu, CpuExit, CpuStates, CpuIo};
 use hv_sys::hv_vcpu_destroy;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
@@ -389,17 +389,21 @@ pub struct HfExit<'a> {
 
 impl<'a> CpuExit for HfExit<'a> {
     #[cfg(target_arch = "x86_64")]
-    fn reason(&mut self) -> crate::vmm::ExitReason {
-        let exit_reason = self.exit_reason.try_into().unwrap();
-
-        match exit_reason {
-            hv_sys::VMX_REASON_HLT => crate::vmm::ExitReason::Hlt,
-            hv_sys::VMX_REASON_IO => todo!(),
-            _ => todo!(),
+    fn is_hlt(&self) -> bool {
+        match self.exit_reason.try_into() {
+           Ok(hv_sys::VMX_REASON_HLT) => true,
+           _ => false,
         }
     }
-}
 
+    #[cfg(target_arch = "x86_64")]
+    fn is_io(&mut self) -> Option<CpuIo> {
+        match self.exit_reason.try_into() {
+            Ok(hv_sys::VMX_REASON_IO) => todo!(),
+            _ => None,
+         }
+    }
+}
 /// Implementation of [`Cpu::RunErr`].
 #[derive(Debug, Error)]
 pub enum RunError {
