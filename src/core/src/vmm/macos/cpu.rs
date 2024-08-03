@@ -1,9 +1,12 @@
-use crate::vmm::{Cpu, CpuExit, CpuIo, CpuStates};
+use crate::vmm::{Cpu, CpuExit, CpuStates};
 use hv_sys::hv_vcpu_destroy;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::num::NonZero;
 use thiserror::Error;
+
+#[cfg(target_arch = "x86_64")]
+use crate::vmm::CpuIo;
 
 #[cfg(target_arch = "aarch64")]
 #[allow(non_camel_case_types)]

@@ -218,8 +218,6 @@ impl<'a> CpuExit for KvmExit<'a> {
     #[cfg(target_arch = "x86_64")]
     fn is_io(&mut self) -> Option<CpuIo> {
         // Check if I/O.
-
-        use crate::vmm::CpuIo;
         if self.cx.exit_reason != 2 {
             return None;
         }
