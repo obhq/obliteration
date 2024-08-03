@@ -258,8 +258,7 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
 
     #[cfg(target_arch = "x86_64")]
     fn set_cr0(&mut self, v: usize) {
-        const FIXED_BITS: usize = 0x60000010; // PE, NE, ET, and PG bits
-        self.cr0 = (self.cr0 & FIXED_BITS) | (v & !FIXED_BITS);
+        self.cr0 = v;
         self.dirty_flags.insert(DirtyFlags::CR0);
     }
 
@@ -271,8 +270,7 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
 
     #[cfg(target_arch = "x86_64")]
     fn set_cr4(&mut self, v: usize) {
-        const FIXED_BITS: usize = 0x2000; // VMXE bit
-        self.cr4 = (self.cr4 & FIXED_BITS) | (v & !FIXED_BITS);
+        self.cr4 = v;
         self.dirty_flags.insert(DirtyFlags::CR4);
     }
 
@@ -285,47 +283,32 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
 
     #[cfg(target_arch = "x86_64")]
     fn set_cs(&mut self, ty: u8, dpl: u8, p: bool, l: bool, d: bool) {
-        let new_ar = 0x9b | // Present, Code, Readable
-                 ((ty as u64) << 8) |
-                 ((dpl as u64) << 5) |
-                 ((p as u64) << 7) |
-                 ((l as u64) << 13) |
-                 ((d as u64) << 14);
-
-        // Preserve bits that should not be modified
-        const FIXED_BITS: u64 = 0xFFFFF000; // Preserve upper 20 bits
-        self.cs = (self.cs & FIXED_BITS) | (new_ar & !FIXED_BITS);
-        self.dirty_flags.insert(DirtyFlags::CS);
+        todo!()
     }
 
     #[cfg(target_arch = "x86_64")]
     fn set_ds(&mut self, p: bool) {
-        self.ds = if p { 0x0093 } else { 0x0000 };
-        self.dirty_flags.insert(DirtyFlags::DS);
+        todo!()
     }
 
     #[cfg(target_arch = "x86_64")]
     fn set_es(&mut self, p: bool) {
-        self.es = if p { 0x0093 } else { 0x0000 };
-        self.dirty_flags.insert(DirtyFlags::ES);
+        todo!()
     }
 
     #[cfg(target_arch = "x86_64")]
     fn set_fs(&mut self, p: bool) {
-        self.fs = if p { 0x0093 } else { 0x0000 };
-        self.dirty_flags.insert(DirtyFlags::FS);
+        todo!()
     }
 
     #[cfg(target_arch = "x86_64")]
     fn set_gs(&mut self, p: bool) {
-        self.gs = if p { 0x0093 } else { 0x0000 };
-        self.dirty_flags.insert(DirtyFlags::GS);
+        todo!()
     }
 
     #[cfg(target_arch = "x86_64")]
     fn set_ss(&mut self, p: bool) {
-        self.ss = if p { 0x0093 } else { 0x0000 };
-        self.dirty_flags.insert(DirtyFlags::SS);
+        todo!()
     }
 
     #[cfg(target_arch = "aarch64")]
@@ -372,39 +355,22 @@ impl<'a, 'b> Drop for HfStates<'a, 'b> {
                 .unwrap();
         }
         if self.dirty_flags.contains(DirtyFlags::CS) {
-            self.cpu.write_vmcs(hv_sys::VMCS_GUEST_CS, 0).unwrap();
-            self.cpu.write_vmcs(hv_sys::VMCS_GUEST_CS_BASE, 0).unwrap();
-            self.cpu
-                .write_vmcs(hv_sys::VMCS_GUEST_CS_LIMIT, 0xffffffff)
-                .unwrap();
-            self.cpu
-                .write_vmcs(hv_sys::VMCS_GUEST_CS_AR, self.cs)
-                .unwrap();
+            todo!()
         }
         if self.dirty_flags.contains(DirtyFlags::DS) {
-            self.cpu
-                .write_register(hv_sys::hv_x86_reg_t_HV_X86_DS, self.ds)
-                .unwrap();
+            todo!()
         }
         if self.dirty_flags.contains(DirtyFlags::ES) {
-            self.cpu
-                .write_register(hv_sys::hv_x86_reg_t_HV_X86_ES, self.es)
-                .unwrap();
+            todo!()
         }
         if self.dirty_flags.contains(DirtyFlags::FS) {
-            self.cpu
-                .write_register(hv_sys::hv_x86_reg_t_HV_X86_FS, self.fs)
-                .unwrap();
+            todo!()
         }
         if self.dirty_flags.contains(DirtyFlags::GS) {
-            self.cpu
-                .write_register(hv_sys::hv_x86_reg_t_HV_X86_GS, self.gs)
-                .unwrap();
+            todo!()
         }
         if self.dirty_flags.contains(DirtyFlags::SS) {
-            self.cpu
-                .write_register(hv_sys::hv_x86_reg_t_HV_X86_SS, self.ss)
-                .unwrap();
+            todo!()
         }
     }
 
