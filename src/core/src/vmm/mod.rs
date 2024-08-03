@@ -607,14 +607,16 @@ fn run_cpu(mut cpu: impl Cpu, args: &CpuArgs) {
         // Run the vCPU and check why VM exit.
         let mut exit = cpu.run().unwrap();
 
-        match exit.reason() {
-            ExitReason::Hlt => {}
-            ExitReason::IoOut(0, data) => {
-                logs.extend_from_slice(data);
-                parse_logs(&args.logs, &mut logs);
+        if let Some(io) = exit.is_io() {
+            match io {
+                CpuIo::Out(0, data) => {
+                    logs.extend_from_slice(data);
+                    parse_logs(&args.logs, &mut logs);
+                }
+                CpuIo::Out(_, _) => todo!(),
             }
-            ExitReason::IoOut(_, _) => todo!(),
-            reason => todo!("unhandled VM exit reason: {reason:?}"),
+        } else if !exit.is_hlt() {
+            todo!()
         }
     }
 }

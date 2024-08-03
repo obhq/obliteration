@@ -1,4 +1,4 @@
-use crate::vmm::{Cpu, CpuExit, CpuStates, CpuIo};
+use crate::vmm::{Cpu, CpuExit, CpuIo, CpuStates};
 use std::marker::PhantomData;
 use std::mem::{size_of, zeroed, MaybeUninit};
 use thiserror::Error;

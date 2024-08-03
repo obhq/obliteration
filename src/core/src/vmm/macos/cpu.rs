@@ -1,4 +1,4 @@
-use crate::vmm::{Cpu, CpuExit, CpuStates, CpuIo};
+use crate::vmm::{Cpu, CpuExit, CpuIo, CpuStates};
 use hv_sys::hv_vcpu_destroy;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
@@ -391,8 +391,8 @@ impl<'a> CpuExit for HfExit<'a> {
     #[cfg(target_arch = "x86_64")]
     fn is_hlt(&self) -> bool {
         match self.exit_reason.try_into() {
-           Ok(hv_sys::VMX_REASON_HLT) => true,
-           _ => false,
+            Ok(hv_sys::VMX_REASON_HLT) => true,
+            _ => false,
         }
     }
 
@@ -401,7 +401,7 @@ impl<'a> CpuExit for HfExit<'a> {
         match self.exit_reason.try_into() {
             Ok(hv_sys::VMX_REASON_IO) => todo!(),
             _ => None,
-         }
+        }
     }
 }
 /// Implementation of [`Cpu::RunErr`].
