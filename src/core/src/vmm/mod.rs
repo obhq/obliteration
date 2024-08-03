@@ -507,8 +507,9 @@ unsafe fn setup_main_cpu(
 
     states.set_cr0(cr0);
 
-    // Set CS to 64-bit mode with ring 0.
-    states.set_cs(0, 0, true, true, false);
+    // Set CS to 64-bit mode with ring 0. Although x86-64 specs from AMD ignore the Code/Data flag
+    // on 64-bit mode but Intel CPU violate this spec so we need to enable it.
+    states.set_cs(0b1000, 0, true, true, false);
 
     // Set data segments. The only fields used on 64-bit mode is P.
     states.set_ds(true);
