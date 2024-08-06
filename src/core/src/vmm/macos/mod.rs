@@ -63,7 +63,7 @@ impl Hypervisor for Hf {
                 return Err(HfCpuError::CreateVcpuFailed(e));
             }
 
-            Ok(HfCpu::new_aarch64(id, instance))
+            Ok(HfCpu::new_aarch64(id, instance, exit))
         }
     }
 }
