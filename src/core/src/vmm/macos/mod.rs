@@ -41,17 +41,30 @@ impl Hypervisor for Hf {
 
     fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {
         let mut instance = 0;
-        #[cfg(target_arch = "aarch64")]
-        let ret =
-            unsafe { hv_vcpu_create(&mut instance, std::ptr::null_mut(), std::ptr::null_mut()) };
-        #[cfg(target_arch = "x86_64")]
-        let ret = unsafe { hv_vcpu_create(&mut instance, 0) };
 
-        if let Some(e) = NonZero::new(ret) {
-            return Err(HfCpuError::CreateVcpuFailed(e));
+        #[cfg(target_arch = "x86_64")]
+        {
+            let ret = unsafe { hv_vcpu_create(&mut instance, 0) };
+
+            if let Some(e) = NonZero::new(ret) {
+                return Err(HfCpuError::CreateVcpuFailed(e));
+            }
+
+            Ok(HfCpu::new_x64(id, instance))
         }
 
-        Ok(HfCpu::new(id, instance))
+        #[cfg(target_arch = "aarch64")]
+        {
+            let mut exit = std::ptr::null_mut();
+
+            let ret = unsafe { hv_vcpu_create(&mut instance, &mut exit, std::ptr::null_mut()) };
+
+            if let Some(e) = NonZero::new(ret) {
+                return Err(HfCpuError::CreateVcpuFailed(e));
+            }
+
+            Ok(HfCpu::new_aarch64(id, instance))
+        }
     }
 }
 
