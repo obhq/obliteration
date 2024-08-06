@@ -36,14 +36,33 @@ macro_rules! wrap_return {
 pub struct HfCpu<'a> {
     id: usize,
     instance: hv_vcpu_t,
+
+    #[cfg(target_arch = "aarch64")]
+    exit: *const hv_sys::hv_vcpu_exit_t,
+
     vm: PhantomData<&'a ()>,
 }
 
 impl<'a> HfCpu<'a> {
-    pub fn new(id: usize, instance: hv_vcpu_t) -> Self {
+    #[cfg(target_arch = "x86_64")]
+    pub fn new_x64(id: usize, instance: hv_vcpu_t) -> Self {
         Self {
             id,
             instance,
+            vm: PhantomData,
+        }
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    pub fn new_aarch64(
+        id: usize,
+        instance: hv_vcpu_t,
+        exit: *const hv_sys::hv_vcpu_exit_t,
+    ) -> Self {
+        Self {
+            id,
+            instance,
+            exit,
             vm: PhantomData,
         }
     }

@@ -1,20 +1,21 @@
 use cbindgen::{Builder, Config, Language, Style};
 use std::path::PathBuf;
 
+const LINUX_INCLUDE: &str = r#"
+#ifdef __linux__
+#include <linux/kvm.h>
+#endif
+"#;
+
 fn main() {
     let core = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let root = core.parent().unwrap();
     let mut conf = Config::default();
     let mut buf = String::new();
-    let externs = ["Param", "Pkg"];
 
-    buf.push_str("\n#ifdef __linux__");
-    buf.push_str("\n#include <linux/kvm.h>");
-    buf.push_str("\n#endif");
+    buf.push_str(LINUX_INCLUDE);
 
-    buf.push('\n');
-
-    for ext in externs {
+    for ext in ["Param", "Pkg"] {
         buf.push_str("\nstruct ");
         buf.push_str(ext);
         buf.push(';');
