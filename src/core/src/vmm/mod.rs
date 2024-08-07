@@ -1,5 +1,6 @@
 use self::ram::Ram;
 use crate::error::RustError;
+use obconf::{BootEnv, Vm};
 use obvirt::console::MsgType;
 use std::collections::VecDeque;
 use std::error::Error;
@@ -356,16 +357,30 @@ unsafe fn setup_main_cpu(
     // the same address as the PS4 kernel.
     let dynamic = dynamic.ok_or(MainCpuError::NonPieKernel)?;
 
+    // Get total size of kernel arguments.
+    let len = size_of::<BootEnv>().next_multiple_of(Ram::VM_PAGE_SIZE);
+
+    assert!(align_of::<BootEnv>() <= Ram::VM_PAGE_SIZE);
+
+    // Setup kernel arguments.
+    let mut alloc = klen + slen;
+    let kend = alloc + len;
+    let args = ram
+        .alloc(alloc, len)
+        .map_err(MainCpuError::AllocArgsFailed)?;
+
+    alloc += len;
+
+    std::ptr::write(args.cast(), BootEnv::Vm(Vm {}));
+
     // Allocate page-map level-4 table. We use 4K 4-Level Paging here. Not sure how the PS4 achieve
     // 16K page because x86-64 does not support it. Maybe it is a special request from Sony to AMD?
     //
     // See Page Translation and Protection section on AMD64 Architecture Programmer's Manual Volume
     // 2 for how paging work in long-mode.
-    let kend = klen + slen;
-    let mut alloc = kend;
     let len = (512usize * 8).next_multiple_of(Ram::VM_PAGE_SIZE);
-    let pml4t = match ram.alloc(alloc, len) {
-        Ok(v) => std::slice::from_raw_parts_mut::<usize>(v.cast(), 512),
+    let pml4t: &mut [usize; 512] = match ram.alloc(alloc, len) {
+        Ok(v) => &mut *v.cast(),
         Err(e) => return Err(MainCpuError::AllocPml4TableFailed(e)),
     };
 
@@ -518,8 +533,9 @@ unsafe fn setup_main_cpu(
     states.set_gs(true);
     states.set_ss(true);
 
-    // Set entry point and stack pointer. Both are virtual address.
-    states.set_rsp(end); // Top-down.
+    // Set entry point, its argument and stack pointer.
+    states.set_rdi(base + klen + slen);
+    states.set_rsp(base + klen + slen); // Top-down.
     states.set_rip(base + entry);
 
     // Check if PT_DYNAMIC valid.
@@ -800,6 +816,9 @@ enum VmmError {
 enum MainCpuError {
     #[error("couldn't create vCPU")]
     CreateCpuFailed(#[source] <P as Hypervisor>::CpuErr),
+
+    #[error("couldn't allocate RAM for kernel arguments")]
+    AllocArgsFailed(#[source] std::io::Error),
 
     #[cfg(target_arch = "x86_64")]
     #[error("the kernel is not a position-independent executable")]

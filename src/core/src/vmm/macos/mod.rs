@@ -39,7 +39,7 @@ impl Hypervisor for Hf {
     type Cpu<'a> = HfCpu<'a>;
     type CpuErr = HfCpuError;
 
-    fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {
+    fn create_cpu(&self, _: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {
         let mut instance = 0;
 
         #[cfg(target_arch = "x86_64")]
@@ -50,7 +50,7 @@ impl Hypervisor for Hf {
                 return Err(HfCpuError::CreateVcpuFailed(e));
             }
 
-            Ok(HfCpu::new_x64(id, instance))
+            Ok(HfCpu::new_x64(instance))
         }
 
         #[cfg(target_arch = "aarch64")]
@@ -63,7 +63,7 @@ impl Hypervisor for Hf {
                 return Err(HfCpuError::CreateVcpuFailed(e));
             }
 
-            Ok(HfCpu::new_aarch64(id, instance, exit))
+            Ok(HfCpu::new_aarch64(instance, exit))
         }
     }
 }

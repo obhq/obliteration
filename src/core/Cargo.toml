@@ -10,6 +10,7 @@ crate-type = ["staticlib"]
 bitflags = "2.6.0"
 humansize = "2.1.3"
 libc = "0.2.155"
+obconf = { path = "../obconf" }
 obfw = { git = "https://github.com/obhq/firmware-dumper.git", features = ["read", "std"] }
 obvirt = { path = "../obvirt" }
 param = { path = "../param" }
