@@ -11,7 +11,6 @@ pub trait Cpu {
         Self: 'a;
     type RunErr: Error + Send + 'static;
 
-    fn id(&self) -> usize;
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr>;
     fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr>;
 }
@@ -21,6 +20,9 @@ pub trait Cpu {
 /// [`Drop`] implementation on the type that implement this trait may panic if it fails to commit
 /// the states.
 pub trait CpuStates {
+    #[cfg(target_arch = "x86_64")]
+    fn set_rdi(&mut self, v: usize);
+
     #[cfg(target_arch = "x86_64")]
     fn set_rsp(&mut self, v: usize);
 

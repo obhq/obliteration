@@ -21,7 +21,9 @@ mod run;
 pub struct Kvm {
     vcpu_mmap_size: usize,
     vm: OwnedFd,
+    #[allow(dead_code)] // ram are needed by vm.
     ram: Arc<Ram>,
+    #[allow(dead_code)] // kvm are needed by vm.
     kvm: OwnedFd,
 }
 
@@ -128,7 +130,7 @@ impl Hypervisor for Kvm {
             return Err(KvmCpuError::GetKvmRunFailed(Error::last_os_error()));
         }
 
-        Ok(unsafe { KvmCpu::new(id, vcpu, cx.cast(), self.vcpu_mmap_size) })
+        Ok(unsafe { KvmCpu::new(vcpu, cx.cast(), self.vcpu_mmap_size) })
     }
 }
 

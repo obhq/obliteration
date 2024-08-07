@@ -35,7 +35,7 @@ pub unsafe extern "C" fn param_close(p: *mut Param) {
 
 #[no_mangle]
 pub unsafe extern "C" fn param_app_ver_get(p: *const Param) -> *mut c_char {
-    (*p).app_ver().map(|v| strdup(v)).unwrap_or(null_mut())
+    (*p).app_ver().map(strdup).unwrap_or(null_mut())
 }
 
 #[no_mangle]
@@ -55,7 +55,7 @@ pub unsafe extern "C" fn param_short_content_id_get(p: *const Param) -> *mut c_c
 
 #[no_mangle]
 pub unsafe extern "C" fn param_title_get(p: *const Param) -> *mut c_char {
-    (*p).title().map(|v| strdup(v)).unwrap_or(null_mut())
+    (*p).title().map(strdup).unwrap_or(null_mut())
 }
 
 #[no_mangle]
@@ -65,5 +65,5 @@ pub unsafe extern "C" fn param_title_id_get(p: *const Param) -> *mut c_char {
 
 #[no_mangle]
 pub unsafe extern "C" fn param_version_get(p: *const Param) -> *mut c_char {
-    (*p).version().map(|v| strdup(v)).unwrap_or(null_mut())
+    (*p).version().map(strdup).unwrap_or(null_mut())
 }

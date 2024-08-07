@@ -1,10 +1,13 @@
 #![no_std]
 #![cfg_attr(not(test), no_main)]
 
+use crate::config::set_boot_env;
 use crate::console::info;
 use core::arch::asm;
 use core::panic::PanicInfo;
+use obconf::BootEnv;
 
+mod config;
 mod console;
 
 /// Entry point of the kernel.
@@ -18,7 +21,10 @@ mod console;
 /// See PS4 kernel entry point for a reference.
 #[allow(dead_code)]
 #[cfg_attr(not(test), no_mangle)]
-fn _start() -> ! {
+extern "C" fn _start(env: &'static BootEnv) -> ! {
+    // SAFETY: This is safe because we called it as the first thing here.
+    unsafe { set_boot_env(env) };
+
     info("Starting Obliteration Kernel.");
 
     loop {

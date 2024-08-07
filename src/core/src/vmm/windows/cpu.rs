@@ -47,10 +47,6 @@ impl<'a> Cpu for WhpCpu<'a> {
     type Exit<'b> = WhpExit<'b, 'a> where Self: 'b;
     type RunErr = RunError;
 
-    fn id(&self) -> usize {
-        self.index.try_into().unwrap()
-    }
-
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
         let mut values: [WHV_REGISTER_VALUE; REGISTERS] = unsafe { zeroed() };
         let status = unsafe {
@@ -144,6 +140,11 @@ impl<'a, 'b> Drop for WhpStates<'a, 'b> {
 
 impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
     #[cfg(target_arch = "x86_64")]
+    fn set_rdi(&mut self, v: usize) {
+        todo!()
+    }
+
+    #[cfg(target_arch = "x86_64")]
     fn set_rsp(&mut self, v: usize) {
         self.values[0].Reg64 = v.try_into().unwrap();
         self.dirty = true;
@@ -181,9 +182,11 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
 
     #[cfg(target_arch = "x86_64")]
     fn set_cs(&mut self, ty: u8, dpl: u8, p: bool, l: bool, d: bool) {
-        // Rust binding does not provides a way to set bitfield so we need to do this manually. See
-        // https://learn.microsoft.com/en-us/virtualization/api/hypervisor-platform/funcs/whvvirtualprocessordatatypes
+        // Rust binding does not provides a way to set bit fields so we need to do this manually.
+        // See https://learn.microsoft.com/en-us/virtualization/api/hypervisor-platform/funcs/whvvirtualprocessordatatypes
         // for the structure of WHV_X64_SEGMENT_REGISTER.
+        //
+        // See https://learn.microsoft.com/en-us/cpp/cpp/cpp-bit-fields for the layout of bit fields on MSVC.
         let v = unsafe { &mut self.values[6].Segment.Anonymous.Attributes };
         let ty: u16 = ty.into();
         let dpl: u16 = dpl.into();

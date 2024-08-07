@@ -34,7 +34,6 @@ macro_rules! wrap_return {
 
 /// Implementation of [`Cpu`] for Hypervisor Framework.
 pub struct HfCpu<'a> {
-    id: usize,
     instance: hv_vcpu_t,
 
     #[cfg(target_arch = "aarch64")]
@@ -45,22 +44,16 @@ pub struct HfCpu<'a> {
 
 impl<'a> HfCpu<'a> {
     #[cfg(target_arch = "x86_64")]
-    pub fn new_x64(id: usize, instance: hv_vcpu_t) -> Self {
+    pub fn new_x64(instance: hv_vcpu_t) -> Self {
         Self {
-            id,
             instance,
             vm: PhantomData,
         }
     }
 
     #[cfg(target_arch = "aarch64")]
-    pub fn new_aarch64(
-        id: usize,
-        instance: hv_vcpu_t,
-        exit: *const hv_sys::hv_vcpu_exit_t,
-    ) -> Self {
+    pub fn new_aarch64(instance: hv_vcpu_t, exit: *const hv_sys::hv_vcpu_exit_t) -> Self {
         Self {
-            id,
             instance,
             exit,
             vm: PhantomData,
@@ -117,10 +110,6 @@ impl<'a> Cpu for HfCpu<'a> {
     type GetStatesErr = GetStatesError;
     type Exit<'b> = HfExit<'b> where Self: 'b;
     type RunErr = RunError;
-
-    fn id(&self) -> usize {
-        self.id
-    }
 
     #[cfg(target_arch = "x86_64")]
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
@@ -266,6 +255,11 @@ pub struct HfStates<'a, 'b> {
 }
 
 impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
+    #[cfg(target_arch = "x86_64")]
+    fn set_rdi(&mut self, v: usize) {
+        todo!()
+    }
+
     #[cfg(target_arch = "x86_64")]
     fn set_rsp(&mut self, v: usize) {
         self.rsp = v;

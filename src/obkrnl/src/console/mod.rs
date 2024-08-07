@@ -1,12 +1,17 @@
+use crate::config::boot_env;
+use obconf::BootEnv;
 use obvirt::console::MsgType;
 
-/// Each call will cause a VM exit so don't do this in a performance critical path.
+/// When running inside a VM each call will cause a VM to exit so don't do this in a performance
+/// critical path.
 pub fn info(msg: impl AsRef<str>) {
-    print(MsgType::Info, msg);
+    match boot_env() {
+        BootEnv::Vm(_) => print_vm(MsgType::Info, msg),
+    }
 }
 
 #[cfg(target_arch = "x86_64")]
-fn print(ty: MsgType, msg: impl AsRef<str>) {
+fn print_vm(ty: MsgType, msg: impl AsRef<str>) {
     let msg = msg.as_ref();
     let len = msg.len();
 
@@ -30,6 +35,6 @@ fn print(ty: MsgType, msg: impl AsRef<str>) {
 }
 
 #[cfg(target_arch = "aarch64")]
-fn print(_: MsgType, _: impl AsRef<str>) {
+fn print_vm(_: MsgType, _: impl AsRef<str>) {
     todo!()
 }

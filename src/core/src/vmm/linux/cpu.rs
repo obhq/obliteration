@@ -10,7 +10,6 @@ use thiserror::Error;
 
 /// Implementation of [`Cpu`] for KVM.
 pub struct KvmCpu<'a> {
-    id: u32,
     fd: OwnedFd,
     cx: (*mut KvmRun, usize),
     vm: PhantomData<&'a OwnedFd>,
@@ -20,11 +19,10 @@ impl<'a> KvmCpu<'a> {
     /// # Safety
     /// - `cx` cannot be null and must be obtained from `mmap` on `fd`.
     /// - `len` must be the same value that used on `mmap`.
-    pub unsafe fn new(id: u32, fd: OwnedFd, cx: *mut KvmRun, len: usize) -> Self {
+    pub unsafe fn new(fd: OwnedFd, cx: *mut KvmRun, len: usize) -> Self {
         assert!(len >= size_of::<KvmRun>());
 
         Self {
-            id,
             fd,
             cx: (cx, len),
             vm: PhantomData,
@@ -47,10 +45,6 @@ impl<'a> Cpu for KvmCpu<'a> {
     type GetStatesErr = GetStatesError;
     type Exit<'b> = KvmExit<'b> where Self: 'b;
     type RunErr = std::io::Error;
-
-    fn id(&self) -> usize {
-        self.id.try_into().unwrap()
-    }
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
         use std::io::Error;
@@ -98,6 +92,12 @@ pub struct KvmStates<'a> {
 }
 
 impl<'a> CpuStates for KvmStates<'a> {
+    #[cfg(target_arch = "x86_64")]
+    fn set_rdi(&mut self, v: usize) {
+        self.gregs.rdi = v;
+        self.gdirty = true;
+    }
+
     #[cfg(target_arch = "x86_64")]
     fn set_rsp(&mut self, v: usize) {
         self.gregs.rsp = v;
