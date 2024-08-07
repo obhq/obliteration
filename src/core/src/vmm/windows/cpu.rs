@@ -48,17 +48,18 @@ impl<'a> Cpu for WhpCpu<'a> {
     type RunErr = RunError;
 
     fn id(&self) -> usize {
-        self.index.try_into().unwrap()
+        self.index as usize
     }
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
+        self.part = self.part.clone(); // For some reason, we hit 0xC0000005 without cloning...
         let mut values: [WHV_REGISTER_VALUE; REGISTERS] = unsafe { zeroed() };
         let status = unsafe {
             WHvGetVirtualProcessorRegisters(
                 self.part,
                 self.index,
                 WhpStates::NAMES.as_ptr(),
-                REGISTERS as _,
+                REGISTERS as u32,
                 values.as_mut_ptr(),
             )
         };
@@ -131,7 +132,7 @@ impl<'a, 'b> Drop for WhpStates<'a, 'b> {
                 self.cpu.part,
                 self.cpu.index,
                 Self::NAMES.as_ptr(),
-                REGISTERS as _,
+                REGISTERS as u32,
                 self.values.as_ptr(),
             )
         };
