@@ -245,7 +245,7 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
 
     fn commit(self) -> Result<(), Self::Err> {
         if !self.dirty {
-            return;
+            return Ok(());
         }
 
         let status = unsafe {
