@@ -104,67 +104,25 @@ impl<'a> HfCpu<'a> {
 
 impl<'a> Cpu for HfCpu<'a> {
     type States<'b> = HfStates<'b, 'a> where Self: 'b;
-    type GetStatesErr = GetStatesError;
+    type GetStatesErr = StatesError;
     type Exit<'b> = HfExit<'b> where Self: 'b;
     type RunErr = RunError;
 
     #[cfg(target_arch = "x86_64")]
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
-        let cr0 = self
-            .read_register(hv_sys::hv_x86_reg_t_HV_X86_CR0)
-            .map_err(GetStatesError::ReadCr0)?;
-        let cr4 = self
-            .read_register(hv_sys::hv_x86_reg_t_HV_X86_CR4)
-            .map_err(GetStatesError::ReadCr4)?;
-
-        let mut cs = 0u64;
-        let mut ds = 0u64;
-        let mut es = 0u64;
-        let mut fs = 0u64;
-        let mut gs = 0u64;
-        let mut ss = 0u64;
-
-        unsafe {
-            wrap_return!(
-                hv_sys::hv_vmx_vcpu_read_vmcs(self.instance, hv_sys::VMCS_GUEST_CS_AR, &mut cs),
-                GetStatesError::ReadCs
-            )?;
-            wrap_return!(
-                hv_sys::hv_vmx_vcpu_read_vmcs(self.instance, hv_sys::VMCS_GUEST_DS_AR, &mut ds),
-                GetStatesError::ReadDs
-            )?;
-            wrap_return!(
-                hv_sys::hv_vmx_vcpu_read_vmcs(self.instance, hv_sys::VMCS_GUEST_ES_AR, &mut es),
-                GetStatesError::ReadEs
-            )?;
-            wrap_return!(
-                hv_sys::hv_vmx_vcpu_read_vmcs(self.instance, hv_sys::VMCS_GUEST_FS_AR, &mut fs),
-                GetStatesError::ReadFs
-            )?;
-            wrap_return!(
-                hv_sys::hv_vmx_vcpu_read_vmcs(self.instance, hv_sys::VMCS_GUEST_GS_AR, &mut gs),
-                GetStatesError::ReadGs
-            )?;
-            wrap_return!(
-                hv_sys::hv_vmx_vcpu_read_vmcs(self.instance, hv_sys::VMCS_GUEST_SS_AR, &mut ss),
-                GetStatesError::ReadSs
-            )?;
-        }
-
         Ok(HfStates {
             cpu: self,
-            dirty_flags: DirtyFlags::empty(),
-            rsp: 0,
-            rip: 0,
-            cr0: cr0.try_into().unwrap(),
-            cr3: 0,
-            cr4: cr4.try_into().unwrap(),
-            cs,
-            ds: ds.try_into().unwrap(),
-            es: es.try_into().unwrap(),
-            fs: fs.try_into().unwrap(),
-            gs: gs.try_into().unwrap(),
-            ss: ss.try_into().unwrap(),
+            rsp: State::None,
+            rip: State::None,
+            cr0: State::None,
+            cr3: State::None,
+            cr4: State::None,
+            cs: State::None,
+            ds: State::None,
+            es: State::None,
+            fs: State::None,
+            gs: State::None,
+            ss: State::None,
         })
     }
 
@@ -215,43 +173,25 @@ impl<'a> Drop for HfCpu<'a> {
     }
 }
 
-bitflags::bitflags! {
-    struct DirtyFlags: u16 {
-        const RSP  = 0x0001;
-        const RIP  = 0x0002;
-        const CR0  = 0x0004;
-        const CR3  = 0x0008;
-        const CR4  = 0x0010;
-        const CS   = 0x0020;
-        const DS   = 0x0040;
-        const ES   = 0x0080;
-        const FS   = 0x0100;
-        const GS   = 0x0200;
-        const SS   = 0x0400;
-    }
-}
-
 /// Implementation of [`Cpu::States`] for Hypervisor Framework.
 pub struct HfStates<'a, 'b> {
     cpu: &'a mut HfCpu<'b>,
-    dirty_flags: DirtyFlags,
-
-    rsp: usize,
-    rip: usize,
-
-    cr0: usize,
-    cr3: usize,
-    cr4: usize,
-
-    cs: u64,
-    ds: usize,
-    es: usize,
-    fs: usize,
-    gs: usize,
-    ss: usize,
+    rsp: State<usize>,
+    rip: State<usize>,
+    cr0: State<usize>,
+    cr3: State<usize>,
+    cr4: State<usize>,
+    cs: State<u64>,
+    ds: State<usize>,
+    es: State<usize>,
+    fs: State<usize>,
+    gs: State<usize>,
+    ss: State<usize>,
 }
 
 impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
+    type Err = StatesError;
+
     #[cfg(target_arch = "x86_64")]
     fn set_rdi(&mut self, v: usize) {
         todo!()
@@ -259,32 +199,27 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
 
     #[cfg(target_arch = "x86_64")]
     fn set_rsp(&mut self, v: usize) {
-        self.rsp = v;
-        self.dirty_flags.insert(DirtyFlags::RSP);
+        self.rsp = State::Dirty(v);
     }
 
     #[cfg(target_arch = "x86_64")]
     fn set_rip(&mut self, v: usize) {
-        self.rip = v;
-        self.dirty_flags.insert(DirtyFlags::RIP);
+        self.rip = State::Dirty(v);
     }
 
     #[cfg(target_arch = "x86_64")]
     fn set_cr0(&mut self, v: usize) {
-        self.cr0 = v;
-        self.dirty_flags.insert(DirtyFlags::CR0);
+        self.cr0 = State::Dirty(v);
     }
 
     #[cfg(target_arch = "x86_64")]
     fn set_cr3(&mut self, v: usize) {
-        self.cr3 = v;
-        self.dirty_flags.insert(DirtyFlags::CR3);
+        self.cr3 = State::Dirty(v);
     }
 
     #[cfg(target_arch = "x86_64")]
     fn set_cr4(&mut self, v: usize) {
-        self.cr4 = v;
-        self.dirty_flags.insert(DirtyFlags::CR4);
+        self.cr4 = State::Dirty(v);
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -333,64 +268,50 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
     fn set_pc(&mut self, v: usize) {
         todo!()
     }
-}
 
-impl<'a, 'b> Drop for HfStates<'a, 'b> {
     #[cfg(target_arch = "x86_64")]
-    fn drop(&mut self) {
-        if self.dirty_flags.is_empty() {
-            return;
+    fn commit(self) -> Result<(), Self::Err> {
+        if let State::Dirty(v) = self.rip {
+            self.cpu
+                .write_register(hv_sys::hv_x86_reg_t_HV_X86_RIP, v)
+                .map_err(StatesError::SetRipFailed)?;
         }
 
-        if self.dirty_flags.contains(DirtyFlags::RIP) {
+        if let State::Dirty(v) = self.rsp {
             self.cpu
-                .write_register(hv_sys::hv_x86_reg_t_HV_X86_RIP, self.rip)
-                .unwrap();
+                .write_register(hv_sys::hv_x86_reg_t_HV_X86_RSP, v)
+                .map_err(StatesError::SetRspFailed)?;
         }
-        if self.dirty_flags.contains(DirtyFlags::RSP) {
+
+        if let State::Dirty(v) = self.cr0 {
             self.cpu
-                .write_register(hv_sys::hv_x86_reg_t_HV_X86_RSP, self.rsp)
-                .unwrap();
+                .write_register(hv_sys::hv_x86_reg_t_HV_X86_CR0, v)
+                .map_err(StatesError::SetCr0Failed)?;
         }
-        if self.dirty_flags.contains(DirtyFlags::CR0) {
+
+        if let State::Dirty(v) = self.cr3 {
             self.cpu
-                .write_register(hv_sys::hv_x86_reg_t_HV_X86_CR0, self.cr0)
-                .unwrap();
+                .write_register(hv_sys::hv_x86_reg_t_HV_X86_CR3, v)
+                .map_err(StatesError::SetCr3Failed)?;
         }
-        if self.dirty_flags.contains(DirtyFlags::CR3) {
+
+        if let State::Dirty(v) = self.cr4 {
             self.cpu
-                .write_register(hv_sys::hv_x86_reg_t_HV_X86_CR3, self.cr3)
-                .unwrap();
-        }
-        if self.dirty_flags.contains(DirtyFlags::CR4) {
-            self.cpu
-                .write_register(hv_sys::hv_x86_reg_t_HV_X86_CR4, self.cr4)
-                .unwrap();
-        }
-        if self.dirty_flags.contains(DirtyFlags::CS) {
-            todo!()
-        }
-        if self.dirty_flags.contains(DirtyFlags::DS) {
-            todo!()
-        }
-        if self.dirty_flags.contains(DirtyFlags::ES) {
-            todo!()
-        }
-        if self.dirty_flags.contains(DirtyFlags::FS) {
-            todo!()
-        }
-        if self.dirty_flags.contains(DirtyFlags::GS) {
-            todo!()
-        }
-        if self.dirty_flags.contains(DirtyFlags::SS) {
-            todo!()
+                .write_register(hv_sys::hv_x86_reg_t_HV_X86_CR4, v)
+                .map_err(StatesError::SetCr4Failed)?;
         }
     }
 
     #[cfg(target_arch = "aarch64")]
-    fn drop(&mut self) {
+    fn commit(self) -> Result<(), Self::Err> {
         todo!()
     }
+}
+
+enum State<T> {
+    None,
+    Clean(T),
+    Dirty(T),
 }
 
 /// Implementation of [`Cpu::Exit`] for Hypervisor Framework.
@@ -420,37 +341,33 @@ impl<'a> CpuExit for HfExit<'a> {
 /// Implementation of [`Cpu::RunErr`].
 #[derive(Debug, Error)]
 pub enum RunError {
-    #[error("error running vcpu: {0:#x}")]
+    #[error("error running vcpu ({0:#x})")]
     Run(NonZero<hv_sys::hv_return_t>),
 
-    #[error("error while reading exit reason: {0:#x}")]
+    #[error("error while reading exit reason ({0:#x})")]
     ReadExitReason(NonZero<hv_sys::hv_return_t>),
 }
 
-/// Implementation of [`Cpu::GetStatesErr`].
+/// Implementation of [`Cpu::GetStatesErr`] and [`CpuStates::Err`].
 #[derive(Debug, Error)]
-pub enum GetStatesError {
-    #[error("error while reading CR0: {0:#x}")]
-    ReadCr0(NonZero<hv_sys::hv_return_t>),
+pub enum StatesError {
+    #[cfg(target_arch = "x86_64")]
+    #[error("couldn't set RIP")]
+    SetRipFailed(NonZero<hv_sys::hv_return_t>),
 
-    #[error("error while reading CR4: {0:#x}")]
-    ReadCr4(NonZero<hv_sys::hv_return_t>),
+    #[cfg(target_arch = "x86_64")]
+    #[error("couldn't set RSP")]
+    SetRspFailed(NonZero<hv_sys::hv_return_t>),
 
-    #[error("error while reading CS: {0:#x}")]
-    ReadCs(NonZero<hv_sys::hv_return_t>),
+    #[cfg(target_arch = "x86_64")]
+    #[error("couldn't set CR0")]
+    SetCr0Failed(NonZero<hv_sys::hv_return_t>),
 
-    #[error("error while reading DS: {0:#x}")]
-    ReadDs(NonZero<hv_sys::hv_return_t>),
+    #[cfg(target_arch = "x86_64")]
+    #[error("couldn't set CR3")]
+    SetCr3Failed(NonZero<hv_sys::hv_return_t>),
 
-    #[error("error while reading ES: {0:#x}")]
-    ReadEs(NonZero<hv_sys::hv_return_t>),
-
-    #[error("error while reading FS: {0:#x}")]
-    ReadFs(NonZero<hv_sys::hv_return_t>),
-
-    #[error("error while reading GS: {0:#x}")]
-    ReadGs(NonZero<hv_sys::hv_return_t>),
-
-    #[error("error while reading SS: {0:#x}")]
-    ReadSs(NonZero<hv_sys::hv_return_t>),
+    #[cfg(target_arch = "x86_64")]
+    #[error("couldn't set CR4")]
+    SetCr4Failed(NonZero<hv_sys::hv_return_t>),
 }

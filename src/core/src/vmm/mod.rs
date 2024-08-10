@@ -529,6 +529,10 @@ unsafe fn setup_main_cpu(
     states.set_rsp(base + klen + slen); // Top-down.
     states.set_rip(base + entry);
 
+    if let Err(e) = states.commit() {
+        return Err(MainCpuError::CommitCpuStatesFailed(Box::new(e)));
+    }
+
     // Check if PT_DYNAMIC valid.
     let &(p_vaddr, p_memsz) = dynamic;
 
@@ -815,4 +819,7 @@ enum MainCpuError {
 
     #[error("couldn't get vCPU states")]
     GetCpuStatesFailed(#[source] Box<dyn Error + Send>),
+
+    #[error("couldn't commit vCPU states")]
+    CommitCpuStatesFailed(#[source] Box<dyn Error + Send>),
 }
