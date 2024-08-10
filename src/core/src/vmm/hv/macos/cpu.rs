@@ -1,12 +1,9 @@
-use crate::vmm::{Cpu, CpuExit, CpuStates};
+use crate::vmm::hv::{Cpu, CpuExit, CpuStates};
 use hv_sys::hv_vcpu_destroy;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::num::NonZero;
 use thiserror::Error;
-
-#[cfg(target_arch = "x86_64")]
-use crate::vmm::CpuIo;
 
 #[cfg(target_arch = "aarch64")]
 #[allow(non_camel_case_types)]
@@ -413,7 +410,7 @@ impl<'a> CpuExit for HfExit<'a> {
     }
 
     #[cfg(target_arch = "x86_64")]
-    fn is_io(&mut self) -> Option<CpuIo> {
+    fn is_io(&mut self) -> Option<crate::vmm::hv::CpuIo> {
         match self.exit_reason.try_into() {
             Ok(hv_sys::VMX_REASON_IO) => todo!(),
             _ => None,
