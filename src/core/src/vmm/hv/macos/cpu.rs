@@ -300,6 +300,8 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
                 .write_register(hv_sys::hv_x86_reg_t_HV_X86_CR4, v)
                 .map_err(StatesError::SetCr4Failed)?;
         }
+
+        Ok(())
     }
 
     #[cfg(target_arch = "aarch64")]
