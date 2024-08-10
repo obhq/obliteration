@@ -1,4 +1,4 @@
-use self::hv::{Cpu, CpuExit, CpuIo, CpuStates, Hypervisor};
+use self::hv::{Cpu, CpuExit, CpuStates, Hypervisor};
 use self::ram::Ram;
 use self::screen::Screen;
 use crate::error::RustError;
@@ -608,6 +608,8 @@ unsafe fn setup_main_cpu(
 
 #[cfg(target_arch = "x86_64")]
 fn run_cpu(mut cpu: impl Cpu, args: &CpuArgs) {
+    use self::hv::CpuIo;
+
     let mut logs = Vec::new();
 
     while !args.shutdown.load(Ordering::Relaxed) {
