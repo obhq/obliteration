@@ -43,10 +43,9 @@ pub trait Cpu {
 }
 
 /// States of [`Cpu`].
-///
-/// [`Drop`] implementation on the type that implement this trait may panic if it fails to commit
-/// the states.
 pub trait CpuStates {
+    type Err: Error + Send + 'static;
+
     #[cfg(target_arch = "x86_64")]
     fn set_rdi(&mut self, v: usize);
 
@@ -91,6 +90,8 @@ pub trait CpuStates {
 
     #[cfg(target_arch = "aarch64")]
     fn set_pc(&mut self, v: usize);
+
+    fn commit(self) -> Result<(), Self::Err>;
 }
 
 /// Contains information when VM exited.

@@ -43,7 +43,7 @@ impl<'a> Drop for WhpCpu<'a> {
 
 impl<'a> Cpu for WhpCpu<'a> {
     type States<'b> = WhpStates<'b, 'a> where Self: 'b;
-    type GetStatesErr = GetStatesError;
+    type GetStatesErr = StatesError;
     type Exit<'b> = WhpExit<'b, 'a> where Self: 'b;
     type RunErr = RunError;
 
@@ -60,7 +60,7 @@ impl<'a> Cpu for WhpCpu<'a> {
         };
 
         if status < 0 {
-            Err(GetStatesError::GetVirtualProcessorRegistersFailed(status))
+            Err(StatesError::GetVirtualProcessorRegistersFailed(status))
         } else {
             Ok(WhpStates {
                 cpu: self,
@@ -116,29 +116,9 @@ impl<'a, 'b> WhpStates<'a, 'b> {
     ];
 }
 
-impl<'a, 'b> Drop for WhpStates<'a, 'b> {
-    fn drop(&mut self) {
-        if !self.dirty {
-            return;
-        }
-
-        let status = unsafe {
-            WHvSetVirtualProcessorRegisters(
-                self.cpu.part,
-                self.cpu.index,
-                Self::NAMES.as_ptr(),
-                REGISTERS as _,
-                self.values.as_ptr(),
-            )
-        };
-
-        if status < 0 {
-            panic!("WHvSetVirtualProcessorRegisters() was failed with {status:#x}");
-        }
-    }
-}
-
 impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
+    type Err = StatesError;
+
     #[cfg(target_arch = "x86_64")]
     fn set_rdi(&mut self, v: usize) {
         todo!()
@@ -262,6 +242,28 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
     fn set_pc(&mut self, v: usize) {
         todo!()
     }
+
+    fn commit(self) -> Result<(), Self::Err> {
+        if !self.dirty {
+            return Ok(());
+        }
+
+        let status = unsafe {
+            WHvSetVirtualProcessorRegisters(
+                self.cpu.part,
+                self.cpu.index,
+                Self::NAMES.as_ptr(),
+                REGISTERS as _,
+                self.values.as_ptr(),
+            )
+        };
+
+        if status < 0 {
+            Err(StatesError::SetVirtualProcessorRegistersFailed(status))
+        } else {
+            Ok(())
+        }
+    }
 }
 
 /// Implementation of [`Cpu::Exit`] for Windows Hypervisor Platform.
@@ -282,11 +284,14 @@ impl<'a, 'b> CpuExit for WhpExit<'a, 'b> {
     }
 }
 
-/// Implementation of [`Cpu::GetStatesErr`].
+/// Implementation of [`Cpu::GetStatesErr`] and [`CpuStates::Err`].
 #[derive(Debug, Error)]
-pub enum GetStatesError {
+pub enum StatesError {
     #[error("WHvGetVirtualProcessorRegisters was failed ({0:#x})")]
     GetVirtualProcessorRegistersFailed(HRESULT),
+
+    #[error("WHvSetVirtualProcessorRegisters was failed ({0:#x})")]
+    SetVirtualProcessorRegistersFailed(HRESULT),
 }
 
 /// Implementation of [`Cpu::RunErr`].

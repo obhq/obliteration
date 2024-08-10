@@ -42,7 +42,7 @@ impl<'a> Drop for KvmCpu<'a> {
 
 impl<'a> Cpu for KvmCpu<'a> {
     type States<'b> = KvmStates<'b> where Self: 'b;
-    type GetStatesErr = GetStatesError;
+    type GetStatesErr = StatesError;
     type Exit<'b> = KvmExit<'b> where Self: 'b;
     type RunErr = std::io::Error;
 
@@ -53,14 +53,14 @@ impl<'a> Cpu for KvmCpu<'a> {
         let mut gregs = MaybeUninit::uninit();
         let gregs = match unsafe { kvm_get_regs(self.fd.as_raw_fd(), gregs.as_mut_ptr()) } {
             0 => unsafe { gregs.assume_init() },
-            _ => return Err(GetStatesError::GetGRegsFailed(Error::last_os_error())),
+            _ => return Err(StatesError::GetGRegsFailed(Error::last_os_error())),
         };
 
         // Get special registers.
         let mut sregs = MaybeUninit::uninit();
         let sregs = match unsafe { kvm_get_sregs(self.fd.as_raw_fd(), sregs.as_mut_ptr()) } {
             0 => unsafe { sregs.assume_init() },
-            _ => return Err(GetStatesError::GetSRegsFailed(Error::last_os_error())),
+            _ => return Err(StatesError::GetSRegsFailed(Error::last_os_error())),
         };
 
         Ok(KvmStates {
@@ -92,6 +92,8 @@ pub struct KvmStates<'a> {
 }
 
 impl<'a> CpuStates for KvmStates<'a> {
+    type Err = StatesError;
+
     #[cfg(target_arch = "x86_64")]
     fn set_rdi(&mut self, v: usize) {
         self.gregs.rdi = v;
@@ -183,24 +185,21 @@ impl<'a> CpuStates for KvmStates<'a> {
     fn set_pc(&mut self, v: usize) {
         todo!()
     }
-}
 
-impl<'a> Drop for KvmStates<'a> {
-    fn drop(&mut self) {
+    fn commit(self) -> Result<(), Self::Err> {
         use std::io::Error;
 
         // Set general purpose registers.
         if unsafe { self.gdirty && kvm_set_regs(self.cpu.as_raw_fd(), &self.gregs) != 0 } {
-            panic!(
-                "couldn't set general purpose registers: {}",
-                Error::last_os_error()
-            );
+            return Err(StatesError::SetGRegsFailed(Error::last_os_error()));
         }
 
         // Set special registers.
         if unsafe { self.sdirty && kvm_set_sregs(self.cpu.as_raw_fd(), &self.sregs) != 0 } {
-            panic!("couldn't set special registers: {}", Error::last_os_error());
+            return Err(StatesError::SetSRegsFailed(Error::last_os_error()));
         }
+
+        Ok(())
     }
 }
 
@@ -236,12 +235,18 @@ impl<'a> CpuExit for KvmExit<'a> {
     }
 }
 
-/// Implementation of [`Cpu::GetStatesErr`].
+/// Implementation of [`Cpu::GetStatesErr`] and [`CpuStates::Err`].
 #[derive(Debug, Error)]
-pub enum GetStatesError {
+pub enum StatesError {
     #[error("couldn't get general purpose registers")]
     GetGRegsFailed(#[source] std::io::Error),
 
     #[error("couldn't get special registers")]
     GetSRegsFailed(#[source] std::io::Error),
+
+    #[error("couldn't set general purpose registers")]
+    SetGRegsFailed(#[source] std::io::Error),
+
+    #[error("couldn't set special registers")]
+    SetSRegsFailed(#[source] std::io::Error),
 }
