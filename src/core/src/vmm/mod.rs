@@ -1,4 +1,6 @@
+use self::hv::{Cpu, CpuExit, CpuIo, CpuStates, Hypervisor};
 use self::ram::Ram;
+use self::screen::Screen;
 use crate::error::RustError;
 use obconf::{BootEnv, Vm};
 use obvirt::console::MsgType;
@@ -15,11 +17,6 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use thiserror::Error;
 
-pub(self) use self::cpu::*;
-pub(self) use self::hv::*;
-pub(self) use self::screen::Screen;
-
-mod cpu;
 mod hv;
 mod ram;
 mod screen;

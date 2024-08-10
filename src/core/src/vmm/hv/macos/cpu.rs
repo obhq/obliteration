@@ -1,4 +1,4 @@
-use crate::vmm::{Cpu, CpuExit, CpuStates};
+use crate::vmm::hv::{Cpu, CpuExit, CpuStates};
 use hv_sys::hv_vcpu_destroy;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
