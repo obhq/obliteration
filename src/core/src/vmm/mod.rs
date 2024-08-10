@@ -1,5 +1,5 @@
 use self::hv::{Cpu, CpuExit, CpuStates, Hypervisor};
-use self::ram::Ram;
+use self::hw::Ram;
 use self::screen::Screen;
 use crate::error::RustError;
 use obconf::{BootEnv, Vm};
@@ -18,7 +18,7 @@ use std::thread::JoinHandle;
 use thiserror::Error;
 
 mod hv;
-mod ram;
+mod hw;
 mod screen;
 
 #[cfg(target_arch = "x86_64")]

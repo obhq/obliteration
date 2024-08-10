@@ -1,7 +1,7 @@
 use self::cpu::HfCpu;
 use self::vm::Vm;
 use super::Hypervisor;
-use crate::vmm::ram::Ram;
+use crate::vmm::hw::Ram;
 use crate::vmm::{MemoryAddr, VmmError};
 use hv_sys::hv_vcpu_create;
 use std::ffi::c_int;

@@ -1,4 +1,4 @@
-use super::{MemoryAddr, VmmError};
+use crate::vmm::{MemoryAddr, VmmError};
 use std::io::{Error, ErrorKind};
 
 /// Represents main memory of the PS4.

@@ -4,7 +4,7 @@ use self::ffi::{
     kvm_set_user_memory_region,
 };
 use super::Hypervisor;
-use crate::vmm::ram::Ram;
+use crate::vmm::hw::Ram;
 use crate::vmm::{MemoryAddr, VmmError};
 use libc::{mmap, open, MAP_FAILED, MAP_PRIVATE, O_RDWR, PROT_READ, PROT_WRITE};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
