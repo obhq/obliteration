@@ -3,7 +3,9 @@ use self::ffi::{
     kvm_check_version, kvm_create_vcpu, kvm_create_vm, kvm_get_vcpu_mmap_size, kvm_max_vcpus,
     kvm_set_user_memory_region,
 };
-use super::{Hypervisor, MemoryAddr, Ram, VmmError};
+use super::Hypervisor;
+use crate::vmm::ram::Ram;
+use crate::vmm::{MemoryAddr, VmmError};
 use libc::{mmap, open, MAP_FAILED, MAP_PRIVATE, O_RDWR, PROT_READ, PROT_WRITE};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::ptr::null_mut;

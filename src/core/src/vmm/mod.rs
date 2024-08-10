@@ -21,14 +21,8 @@ pub(self) use self::screen::Screen;
 
 mod cpu;
 mod hv;
-#[cfg(target_os = "linux")]
-mod linux;
-#[cfg(target_os = "macos")]
-mod macos;
 mod ram;
 mod screen;
-#[cfg(target_os = "windows")]
-mod windows;
 
 #[cfg(target_arch = "x86_64")]
 const ELF_MACHINE: u16 = 62;
@@ -47,7 +41,7 @@ pub unsafe extern "C" fn vmm_new(screen: usize, err: *mut *mut RustError) -> *mu
     };
 
     // Setup hypervisor.
-    let hv = match setup_hypervisor(8, ram.clone()) {
+    let hv = match self::hv::Default::new(8, ram.clone()) {
         Ok(v) => v,
         Err(e) => {
             *err = RustError::wrap(e);
@@ -674,24 +668,9 @@ fn parse_logs(logs: &Mutex<VecDeque<(MsgType, String)>>, data: &mut Vec<u8>) {
     data.drain(..(hdr.len() + len));
 }
 
-#[cfg(target_os = "linux")]
-fn setup_hypervisor(cpu: usize, ram: Arc<Ram>) -> Result<self::linux::Kvm, VmmError> {
-    self::linux::Kvm::new(cpu, ram)
-}
-
-#[cfg(target_os = "windows")]
-fn setup_hypervisor(cpu: usize, ram: Arc<Ram>) -> Result<self::windows::Whp, VmmError> {
-    self::windows::Whp::new(cpu, ram)
-}
-
-#[cfg(target_os = "macos")]
-fn setup_hypervisor(cpu: usize, ram: Arc<Ram>) -> Result<self::macos::Hf, VmmError> {
-    self::macos::Hf::new(cpu, ram)
-}
-
 /// Manage a virtual machine that run the kernel.
 pub struct Vmm {
-    hv: Arc<P>,
+    hv: Arc<self::hv::Default>,
     ram: Arc<Ram>,
     cpus: Vec<JoinHandle<()>>,
     screen: self::screen::Default,
@@ -710,15 +689,6 @@ impl Drop for Vmm {
     }
 }
 
-#[cfg(target_os = "linux")]
-type P = self::linux::Kvm;
-
-#[cfg(target_os = "windows")]
-type P = self::windows::Whp;
-
-#[cfg(target_os = "macos")]
-type P = self::macos::Hf;
-
 /// Object that has a physical address in the virtual machine.
 trait MemoryAddr {
     /// Physical address in the virtual machine.
@@ -733,7 +703,7 @@ trait MemoryAddr {
 
 /// Encapsulates arguments for a function to run a CPU.
 struct CpuArgs {
-    hv: Arc<P>,
+    hv: Arc<self::hv::Default>,
     screen: Arc<<self::screen::Default as Screen>::Buffer>,
     logs: Arc<Mutex<VecDeque<(MsgType, String)>>>,
     shutdown: Arc<AtomicBool>,
@@ -815,7 +785,7 @@ enum VmmError {
 #[derive(Debug, Error)]
 enum MainCpuError {
     #[error("couldn't create vCPU")]
-    CreateCpuFailed(#[source] <P as Hypervisor>::CpuErr),
+    CreateCpuFailed(#[source] <self::hv::Default as Hypervisor>::CpuErr),
 
     #[error("couldn't allocate RAM for kernel arguments")]
     AllocArgsFailed(#[source] std::io::Error),

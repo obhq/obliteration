@@ -1,6 +1,8 @@
 use self::cpu::WhpCpu;
 use self::partition::Partition;
-use super::{Hypervisor, MemoryAddr, Ram, VmmError};
+use super::Hypervisor;
+use crate::vmm::ram::Ram;
+use crate::vmm::{MemoryAddr, VmmError};
 use std::sync::Arc;
 use thiserror::Error;
 use windows_sys::core::HRESULT;
