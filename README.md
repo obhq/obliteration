@@ -32,10 +32,11 @@ We have a Discord server for discussion about Obliteration and its development. 
 ## System requirements
 
 - Windows 10, Linux or macOS 11+.
+  - On Windows and Linux make sure you have Vulkan installed. If you encountered `Failed to initialize Vulkan (-9)` that mean you don't have a Vulkan installed.
 - x86-64 CPU. We want to support non-x86 but currently we don't have any developers who are willing to work on this.
 - CPU with hardware virtualization supports.
   - Windows and Linux users may need to enable this feature on the BIOS/UEFI settings.
-- A jailbroken PS4 with FTP server that supports SELF decryption.
+- A PS4 with system software version 11.00 for firmware dumping.
 
 ### Windows-specific requirements
 
