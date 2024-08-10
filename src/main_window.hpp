@@ -9,16 +9,21 @@ class GameListModel;
 class LaunchSettings;
 class LogsViewer;
 class QStackedWidget;
+#ifndef __APPLE__
+class QVulkanInstance;
+#endif
 class Screen;
 
 class MainWindow final : public QMainWindow {
 public:
+#ifdef __APPLE__
     MainWindow();
+#else
+    MainWindow(QVulkanInstance *vulkan);
+#endif
     ~MainWindow();
 
-public:
     bool loadGames();
-
 protected:
     void closeEvent(QCloseEvent *event) override;
 

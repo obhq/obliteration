@@ -5,8 +5,9 @@
 
 #include <QApplication>
 #include <QMessageBox>
-
-#include <cstdlib>
+#ifndef __APPLE__
+#include <QVulkanInstance>
+#endif
 
 #ifndef _WIN32
 #include <sys/resource.h>
@@ -43,6 +44,19 @@ int main(int argc, char *argv[])
     }
 #endif
 
+    // Initialize Vulkan.
+#ifndef __APPLE__
+    QVulkanInstance vulkan;
+
+    if (!vulkan.create()) {
+        QMessageBox::critical(
+            nullptr,
+            "Error",
+            QString("Failed to initialize Vulkan (%1)").arg(vulkan.errorCode()));
+        return 1;
+    }
+#endif
+
     // Check if no any required settings.
     if (!hasRequiredUserSettings() || !isSystemInitialized()) {
         InitializeWizard init;
@@ -53,7 +67,11 @@ int main(int argc, char *argv[])
     }
 
     // Run main window.
+#ifdef __APPLE__
     MainWindow win;
+#else
+    MainWindow win(&vulkan);
+#endif
 
     if (!win.loadGames()) {
         return 1;

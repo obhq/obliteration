@@ -25,11 +25,18 @@
 #include <QStackedWidget>
 #include <QToolBar>
 #include <QUrl>
+#ifndef __APPLE__
+#include <QVulkanInstance>
+#endif
 
 #include <filesystem>
 #include <utility>
 
+#ifdef __APPLE__
 MainWindow::MainWindow() :
+#else
+MainWindow::MainWindow(QVulkanInstance *vulkan) :
+#endif
     m_main(nullptr),
     m_games(nullptr),
     m_launch(nullptr),
@@ -95,6 +102,10 @@ MainWindow::MainWindow() :
 
     // Screen.
     m_screen = new Screen();
+
+#ifndef __APPLE__
+    m_screen->setVulkanInstance(vulkan);
+#endif
 
     connect(m_screen, &Screen::updateRequestReceived, this, &MainWindow::updateScreen);
 
@@ -297,10 +308,17 @@ void MainWindow::startKernel()
     }
 
     // Create VMM.
+    size_t screen;
     Rust<RustError> error;
     Rust<Vmm> vmm;
 
-    vmm = vmm_new(m_screen->winId(), &error);
+#ifdef __APPLE__
+    screen = m_screen->winId();
+#else
+    screen = reinterpret_cast<size_t>(m_screen->vulkanInstance()->vkInstance());
+#endif
+
+    vmm = vmm_new(screen, &error);
 
     if (!vmm) {
         QMessageBox::critical(
