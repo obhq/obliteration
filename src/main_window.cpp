@@ -307,7 +307,7 @@ void MainWindow::startKernel()
 #endif
     }
 
-    // Create VMM.
+    // Run.
     size_t screen;
     Rust<RustError> error;
     Rust<Vmm> vmm;
@@ -318,20 +318,9 @@ void MainWindow::startKernel()
     screen = reinterpret_cast<size_t>(m_screen->vulkanInstance()->vkInstance());
 #endif
 
-    vmm = vmm_new(screen, &error);
+    vmm = vmm_run(kernel.c_str(), screen, &error);
 
     if (!vmm) {
-        QMessageBox::critical(
-            this,
-            "Error",
-            QString("Couldn't create a VMM: %1").arg(error_message(error)));
-        return;
-    }
-
-    // Run.
-    error = vmm_run(vmm, kernel.c_str());
-
-    if (error) {
         QMessageBox::critical(
             this,
             "Error",

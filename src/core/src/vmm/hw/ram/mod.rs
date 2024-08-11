@@ -1,5 +1,10 @@
-use crate::vmm::{MemoryAddr, VmmError};
+use crate::vmm::MemoryAddr;
 use std::io::{Error, ErrorKind};
+use thiserror::Error;
+
+pub use self::builder::*;
+
+mod builder;
 
 /// Represents main memory of the PS4.
 ///
@@ -14,73 +19,23 @@ impl Ram {
     pub const SIZE: usize = 1024 * 1024 * 1024 * 8; // 8GB
     pub const VM_PAGE_SIZE: usize = 0x4000;
 
-    pub fn new() -> Result<Self, VmmError> {
-        // In theory we can support any page size on the host. The problem is it required a lot of
-        // work. It is also unlikely for someone to need this feature because AFAIK the maximum page
-        // size on a consumer computer is the same as PS4. With page size the same as PS4 or lower
-        // we don't need to keep track allocations here.
-        let page_size = Self::get_page_size().map_err(VmmError::GetPageSizeFailed)?;
-
-        if page_size > Self::VM_PAGE_SIZE {
-            return Err(VmmError::UnsupportedPageSize);
-        }
-
-        // Reserve memory range.
-        #[cfg(unix)]
-        let mem = {
-            use libc::{mmap, MAP_ANON, MAP_FAILED, MAP_PRIVATE, PROT_NONE};
-            use std::ptr::null_mut;
-
-            let mem = unsafe {
-                mmap(
-                    null_mut(),
-                    Self::SIZE,
-                    PROT_NONE,
-                    MAP_PRIVATE | MAP_ANON,
-                    -1,
-                    0,
-                )
-            };
-
-            if mem == MAP_FAILED {
-                return Err(VmmError::CreateRamFailed(Error::last_os_error()));
-            }
-
-            mem.cast()
-        };
-
-        #[cfg(windows)]
-        let mem = {
-            use std::ptr::null;
-            use windows_sys::Win32::System::Memory::{VirtualAlloc, MEM_RESERVE, PAGE_NOACCESS};
-
-            let mem = unsafe { VirtualAlloc(null(), Self::SIZE, MEM_RESERVE, PAGE_NOACCESS) };
-
-            if mem.is_null() {
-                return Err(VmmError::CreateRamFailed(Error::last_os_error()));
-            }
-
-            mem.cast()
-        };
-
-        Ok(Self(mem))
-    }
-
     /// # Panics
     /// If `off` or `len` is not multiply by [`Self::VM_PAGE_SIZE`].
     ///
     /// # Safety
     /// This method does not check if `off` is already allocated. It is undefined behavior if
     /// `off` + `len` is overlapped with the previous allocation.
-    pub unsafe fn alloc(&self, off: usize, len: usize) -> Result<*mut u8, Error> {
+    pub unsafe fn alloc(&self, off: usize, len: usize) -> Result<&mut [u8], RamError> {
         assert_eq!(off % Self::VM_PAGE_SIZE, 0);
         assert_eq!(len % Self::VM_PAGE_SIZE, 0);
 
-        if off.checked_add(len).unwrap() > Self::SIZE {
-            return Err(Error::from(ErrorKind::InvalidInput));
+        if !off.checked_add(len).is_some_and(|v| v <= Self::SIZE) {
+            return Err(RamError::InvalidAddr);
         }
 
         Self::commit(self.0.add(off), len)
+            .map(|v| std::slice::from_raw_parts_mut(v, len))
+            .map_err(RamError::HostFailed)
     }
 
     /// # Panics
@@ -101,15 +56,13 @@ impl Ram {
 
     #[cfg(unix)]
     fn commit(addr: *const u8, len: usize) -> Result<*mut u8, Error> {
-        use libc::{
-            mmap, MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, PROT_EXEC, PROT_READ, PROT_WRITE,
-        };
+        use libc::{mmap, MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, PROT_READ, PROT_WRITE};
 
         let ptr = unsafe {
             mmap(
                 addr.cast_mut().cast(),
                 len,
-                PROT_EXEC | PROT_READ | PROT_WRITE,
+                PROT_READ | PROT_WRITE,
                 MAP_PRIVATE | MAP_ANON | MAP_FIXED,
                 -1,
                 0,
@@ -125,11 +78,9 @@ impl Ram {
 
     #[cfg(windows)]
     fn commit(addr: *const u8, len: usize) -> Result<*mut u8, Error> {
-        use windows_sys::Win32::System::Memory::{
-            VirtualAlloc, MEM_COMMIT, PAGE_EXECUTE_READWRITE,
-        };
+        use windows_sys::Win32::System::Memory::{VirtualAlloc, MEM_COMMIT, PAGE_READWRITE};
 
-        let ptr = unsafe { VirtualAlloc(addr.cast(), len, MEM_COMMIT, PAGE_EXECUTE_READWRITE) };
+        let ptr = unsafe { VirtualAlloc(addr.cast(), len, MEM_COMMIT, PAGE_READWRITE) };
 
         if ptr.is_null() {
             Err(Error::last_os_error())
@@ -158,28 +109,6 @@ impl Ram {
         } else {
             Ok(())
         }
-    }
-
-    #[cfg(unix)]
-    fn get_page_size() -> Result<usize, Error> {
-        let v = unsafe { libc::sysconf(libc::_SC_PAGE_SIZE) };
-
-        if v < 0 {
-            Err(Error::last_os_error())
-        } else {
-            Ok(v.try_into().unwrap())
-        }
-    }
-
-    #[cfg(windows)]
-    fn get_page_size() -> Result<usize, Error> {
-        use std::mem::zeroed;
-        use windows_sys::Win32::System::SystemInformation::GetSystemInfo;
-        let mut i = unsafe { zeroed() };
-
-        unsafe { GetSystemInfo(&mut i) };
-
-        Ok(i.dwPageSize.try_into().unwrap())
     }
 }
 
@@ -227,3 +156,22 @@ impl MemoryAddr for Ram {
 
 unsafe impl Send for Ram {}
 unsafe impl Sync for Ram {}
+
+/// Represents an error when an operation on [`Ram`] fails.
+#[derive(Debug, Error)]
+pub enum RamError {
+    #[error("unaligned address")]
+    UnalignedAddr,
+
+    #[error("overlapped address")]
+    OverlappedAddr,
+
+    #[error("invalid address")]
+    InvalidAddr,
+
+    #[error("invalid length")]
+    InvalidLen,
+
+    #[error("host failed")]
+    HostFailed(#[source] std::io::Error),
+}
