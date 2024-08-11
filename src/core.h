@@ -72,11 +72,9 @@ struct RustError *update_firmware(const char *root,
                                   void *cx,
                                   void (*status)(const char*, uint64_t, uint64_t, void*));
 
-struct Vmm *vmm_new(size_t screen, struct RustError **err);
-
 void vmm_free(struct Vmm *vmm);
 
-struct RustError *vmm_run(struct Vmm *vmm, const char *kernel);
+struct Vmm *vmm_run(const char *kernel, size_t screen, struct RustError **err);
 
 struct RustError *vmm_draw(struct Vmm *vmm);
 
