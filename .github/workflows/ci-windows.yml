@@ -48,17 +48,11 @@ jobs:
         rm qt.tar.xz
         mkdir qt-build
       if: ${{ steps.restore-qt.outputs.cache-hit != 'true' }}
-    - name: Configure Qt
-      run: |
-        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" amd64
-        ${{ github.workspace }}\qt-everywhere-src-6.7.2\configure.bat -prefix "${{ github.workspace }}\qt"
-      shell: cmd
-      working-directory: qt-build
-      if: ${{ steps.restore-qt.outputs.cache-hit != 'true' }}
     - name: Build Qt
       run: |
-        cmake --build . --parallel
-        cmake --install .
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" amd64
+        ${{ github.workspace }}\qt-everywhere-src-6.7.2\configure.bat -prefix "${{ github.workspace }}\qt" && cmake --build . --parallel && cmake --install .
+      shell: cmd
       working-directory: qt-build
       if: ${{ steps.restore-qt.outputs.cache-hit != 'true' }}
     - name: Set Qt path
