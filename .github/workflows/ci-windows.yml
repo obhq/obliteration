@@ -39,17 +39,21 @@ jobs:
         path: qt
         key: ${{ steps.cache-keys.outputs.qt }}
       id: restore-qt
-    - name: Build Qt
+    - name: Download Qt
       run: |
         Invoke-WebRequest `
           -Uri "https://download.qt.io/official_releases/qt/6.7/6.7.2/single/qt-everywhere-src-6.7.2.tar.xz" `
           -OutFile qt.tar.xz
         7z x qt.tar.xz
         mkdir qt-build
-        cd qt-build
+      if: ${{ steps.restore-qt.outputs.cache-hit != 'true' }}
+    - name: Build Qt
+      run: |
         ${{ github.workspace }}\qt-everywhere-src-6.7.2\configure.bat -prefix "${{ github.workspace }}\qt"
         cmake --build . --parallel
         cmake --install .
+      shell: cmd
+      working-directory: qt-build
       if: ${{ steps.restore-qt.outputs.cache-hit != 'true' }}
     - name: Set Qt path
       run: echo "CMAKE_PREFIX_PATH=qt\6.7.2\msvc2019_64" >> $env:GITHUB_ENV
