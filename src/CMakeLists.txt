@@ -100,7 +100,7 @@ endif()
 
 target_compile_features(obliteration PRIVATE cxx_std_17)
 
-target_link_libraries(obliteration PRIVATE Qt6::Widgets)
+target_link_libraries(obliteration PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets)
 target_link_libraries(obliteration PRIVATE Threads::Threads)
 target_link_libraries(obliteration PRIVATE ${LIBCORE})
 
