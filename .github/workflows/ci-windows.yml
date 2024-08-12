@@ -10,6 +10,8 @@ jobs:
     steps:
     - name: Checkout source
       uses: actions/checkout@v4
+    - name: Install Ninja
+      run: choco install ninja
     - name: Generate cache keys
       run: |
         echo "cargo=${{ runner.os }}-cargo" >> $env:GITHUB_OUTPUT
@@ -52,6 +54,8 @@ jobs:
         cmake --build . --parallel
         cmake --install .
       shell: cmd
+      env:
+        CMAKE_TOOLCHAIN_FILE: cmake/Windows.MSVC.toolchain.cmake
       working-directory: qt-build
       if: ${{ steps.restore-qt.outputs.cache-hit != 'true' }}
     - name: Set Qt path
@@ -65,8 +69,6 @@ jobs:
       run: rustup update stable
     - name: Add additional Rust targets
       run: rustup target add x86_64-unknown-none
-    - name: Install Ninja
-      run: choco install ninja
     - name: Run CMake
       run: cmake --preset windows-release .
     - name: Build
