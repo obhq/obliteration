@@ -44,7 +44,7 @@ jobs:
         Invoke-WebRequest `
           -Uri "https://download.qt.io/official_releases/qt/6.7/6.7.2/single/qt-everywhere-src-6.7.2.tar.xz" `
           -OutFile qt.tar.xz
-        7z x qt.tar.xz
+        7z x -so qt.tar.xz | 7z x -si -ttar
         mkdir qt-build
       if: ${{ steps.restore-qt.outputs.cache-hit != 'true' }}
     - name: Build Qt
