@@ -44,10 +44,10 @@ jobs:
         Invoke-WebRequest `
           -Uri "https://download.qt.io/official_releases/qt/6.7/6.7.2/single/qt-everywhere-src-6.7.2.tar.xz" `
           -OutFile qt.tar.xz
-        7z x qt.tar.xz -oqt-src
+        7z x qt.tar.xz
         mkdir qt-build
         cd qt-build
-        ${{ github.workspace }}\qt-src\configure.bat -prefix "${{ github.workspace }}\qt"
+        ${{ github.workspace }}\qt-everywhere-src-6.7.2\configure.bat -prefix "${{ github.workspace }}\qt"
         cmake --build . --parallel
         cmake --install .
       if: ${{ steps.restore-qt.outputs.cache-hit != 'true' }}
