@@ -32,6 +32,8 @@
 #include <filesystem>
 #include <utility>
 
+#include <string.h>
+
 #ifdef __APPLE__
 MainWindow::MainWindow() :
 #else
@@ -307,20 +309,33 @@ void MainWindow::startKernel()
 #endif
     }
 
+    // Swap launch settings with the screen before getting a Vulkan surface otherwise it will fail.
+    m_main->setCurrentIndex(1);
+
     // Run.
-    size_t screen;
+    VmmScreen screen;
     Rust<RustError> error;
     Rust<Vmm> vmm;
 
+    memset(&screen, 0, sizeof(screen));
+
 #ifdef __APPLE__
-    screen = m_screen->winId();
+    screen.view = m_screen->winId();
 #else
-    screen = reinterpret_cast<size_t>(m_screen->vulkanInstance()->vkInstance());
+    screen.vk_instance = reinterpret_cast<size_t>(m_screen->vulkanInstance()->vkInstance());
+    screen.vk_surface = reinterpret_cast<size_t>(QVulkanInstance::surfaceForWindow(m_screen));
+
+    if (!screen.vk_surface) {
+        m_main->setCurrentIndex(0);
+        QMessageBox::critical(this, "Error", "Couldn't create VkSurfaceKHR.");
+        return;
+    }
 #endif
 
-    vmm = vmm_run(kernel.c_str(), screen, &error);
+    vmm = vmm_run(kernel.c_str(), &screen, &error);
 
     if (!vmm) {
+        m_main->setCurrentIndex(0);
         QMessageBox::critical(
             this,
             "Error",
@@ -329,9 +344,6 @@ void MainWindow::startKernel()
     }
 
     m_kernel = std::move(vmm);
-
-    // Swap launch settings with the screen and start drawing loop.
-    m_main->setCurrentIndex(1);
     m_screen->requestUpdate();
 }
 

@@ -16,6 +16,9 @@ param = { path = "../param" }
 pkg = { path = "../pkg" }
 thiserror = "1.0"
 
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+ash = "0.38.0"
+
 [target.'cfg(windows)'.dependencies.windows-sys]
 version = "0.52.0"
 features = [

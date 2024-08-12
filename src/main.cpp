@@ -2,10 +2,14 @@
 #include "main_window.hpp"
 #include "settings.hpp"
 #include "system.hpp"
+#ifndef __APPLE__
+#include "vulkan.hpp"
+#endif
 
 #include <QApplication>
 #include <QMessageBox>
 #ifndef __APPLE__
+#include <QVersionNumber>
 #include <QVulkanInstance>
 #endif
 
@@ -48,6 +52,8 @@ int main(int argc, char *argv[])
 #ifndef __APPLE__
     QVulkanInstance vulkan;
 
+    vulkan.setApiVersion(QVersionNumber(1, 3));
+
     if (!vulkan.create()) {
         QMessageBox::critical(
             nullptr,
@@ -55,6 +61,8 @@ int main(int argc, char *argv[])
             QString("Failed to initialize Vulkan (%1)").arg(vulkan.errorCode()));
         return 1;
     }
+
+    vkFunctions = vulkan.functions();
 #endif
 
     // Check if no any required settings.

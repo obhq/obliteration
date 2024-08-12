@@ -1,5 +1,6 @@
 use self::buffer::MetalBuffer;
 use super::{Screen, ScreenBuffer, VmmError};
+use crate::vmm::VmmScreen;
 use metal::{CAMetalLayer, Device, MetalLayer};
 use objc::runtime::{Object, NO, YES};
 use objc::{msg_send, sel, sel_impl};
@@ -20,7 +21,7 @@ pub struct Metal {
 }
 
 impl Metal {
-    pub fn new(surface: usize) -> Result<Self, VmmError> {
+    pub fn new(screen: *const VmmScreen) -> Result<Self, VmmError> {
         // Get Metal device.
         let device = match Device::system_default() {
             Some(v) => v,
@@ -33,7 +34,7 @@ impl Metal {
         layer.set_device(&device);
 
         // Set view layer.
-        let view = surface as *mut Object;
+        let view = unsafe { (*screen).view as *mut Object };
 
         let _: () = unsafe { msg_send![view, setLayer:layer.as_ref()] };
         let _: () = unsafe { msg_send![view, setWantsLayer:YES] };
