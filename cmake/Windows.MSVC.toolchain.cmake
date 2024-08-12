@@ -50,6 +50,7 @@
 # | CMAKE_CXX_COMPILER                          | The path to the C++ compiler to use.                                                                  |
 # | CMAKE_MT                                    | The path to the 'mt.exe' tool to use.                                                                 |
 # | CMAKE_RC_COMPILER                           | The path tp the 'rc.exe' tool to use.                                                                 |
+# | CMAKE_SYSTEM_NAME                           | Windows                                                                                               |
 # | CMAKE_VS_PLATFORM_TOOLSET_VERSION           | The version of the MSVC toolset being used - e.g. 14.29.30133.                                        |
 # | WIN32                                       | 1                                                                                                     |
 # | MSVC                                        | 1                                                                                                     |
@@ -67,6 +68,7 @@ if(NOT (CMAKE_HOST_SYSTEM_NAME STREQUAL Windows))
 endif()
 
 set(UNUSED ${CMAKE_TOOLCHAIN_FILE}) # Note: only to prevent cmake unused variable warninig
+set(CMAKE_SYSTEM_NAME Windows)
 set(CMAKE_TRY_COMPILE_PLATFORM_VARIABLES
     CMAKE_CROSSCOMPILING
     CMAKE_SYSTEM_PROCESSOR
@@ -78,7 +80,7 @@ set(CMAKE_TRY_COMPILE_PLATFORM_VARIABLES
     VS_INSTALLATION_VERSION
     VS_PLATFORM_TOOLSET_VERSION
 )
-set(CMAKE_CROSSCOMPILING TRUE)
+set(CMAKE_CROSSCOMPILING FALSE)
 set(WIN32 1)
 set(MSVC 1)
 
