@@ -100,9 +100,9 @@ endif()
 
 target_compile_features(obliteration PRIVATE cxx_std_17)
 
+target_link_libraries(obliteration PRIVATE ${LIBCORE})
 target_link_libraries(obliteration PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets)
 target_link_libraries(obliteration PRIVATE Threads::Threads)
-target_link_libraries(obliteration PRIVATE ${LIBCORE})
 
 if(WIN32)
     target_link_libraries(obliteration PRIVATE bcrypt imm32 ntdll setupapi userenv version winhvplatform winmm ws2_32)
