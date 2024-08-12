@@ -10,8 +10,6 @@ jobs:
     steps:
     - name: Checkout source
       uses: actions/checkout@v4
-    - name: Install Ninja
-      run: choco install ninja
     - name: Generate cache keys
       run: |
         echo "cargo=${{ runner.os }}-cargo" >> $env:GITHUB_OUTPUT
@@ -67,6 +65,8 @@ jobs:
       run: rustup update stable
     - name: Add additional Rust targets
       run: rustup target add x86_64-unknown-none
+    - name: Install Ninja
+      run: choco install ninja
     - name: Run CMake
       run: cmake --preset windows-release .
     - name: Build
