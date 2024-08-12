@@ -74,16 +74,15 @@ impl RamBuilder {
 
     /// # Panics
     /// If called a second time.
-    pub fn alloc_kernel(&mut self) -> KernelBuilder {
-        let start = self.next;
-
+    pub fn alloc_kernel(&mut self, len: usize) -> Result<&mut [u8], RamError> {
         assert!(self.kern.is_none());
 
-        KernelBuilder {
-            rb: self,
-            start,
-            len: 0,
-        }
+        let mem = unsafe { self.ram.alloc(self.next, len)? };
+
+        self.kern = Some(self.next..(self.next + len));
+        self.next += len;
+
+        Ok(mem)
     }
 
     /// # Panics
@@ -380,43 +379,6 @@ impl RamBuilder {
         unsafe { GetSystemInfo(&mut i) };
 
         Ok(i.dwPageSize.try_into().unwrap())
-    }
-}
-
-/// Struct to allocate RAM to map the kernel.
-pub struct KernelBuilder<'a> {
-    rb: &'a mut RamBuilder,
-    start: usize,
-    len: usize,
-}
-
-impl<'a> KernelBuilder<'a> {
-    pub fn alloc_segment(&mut self, addr: usize, mut len: usize) -> Result<&mut [u8], RamError> {
-        // Check if addr valid.
-        if (addr % Ram::VM_PAGE_SIZE) != 0 {
-            return Err(RamError::UnalignedAddr);
-        } else if addr < self.len {
-            return Err(RamError::OverlappedAddr);
-        }
-
-        len = len
-            .checked_next_multiple_of(Ram::VM_PAGE_SIZE)
-            .ok_or(RamError::InvalidLen)?;
-
-        // Allocate.
-        let off = self.start.checked_add(addr).ok_or(RamError::InvalidAddr)?;
-        let seg = unsafe { self.rb.ram.alloc(off, len)? };
-
-        self.len = addr + len;
-
-        Ok(seg)
-    }
-}
-
-impl<'a> Drop for KernelBuilder<'a> {
-    fn drop(&mut self) {
-        self.rb.kern = Some(self.start..(self.start + self.len));
-        self.rb.next += self.len;
     }
 }
 

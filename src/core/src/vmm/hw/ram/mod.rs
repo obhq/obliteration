@@ -160,17 +160,8 @@ unsafe impl Sync for Ram {}
 /// Represents an error when an operation on [`Ram`] fails.
 #[derive(Debug, Error)]
 pub enum RamError {
-    #[error("unaligned address")]
-    UnalignedAddr,
-
-    #[error("overlapped address")]
-    OverlappedAddr,
-
     #[error("invalid address")]
     InvalidAddr,
-
-    #[error("invalid length")]
-    InvalidLen,
 
     #[error("host failed")]
     HostFailed(#[source] std::io::Error),
