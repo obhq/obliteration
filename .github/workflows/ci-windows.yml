@@ -50,7 +50,7 @@ jobs:
       if: ${{ steps.restore-qt.outputs.cache-hit != 'true' }}
     - name: Build Qt
       run: |
-        ${{ github.workspace }}\qt-everywhere-src-6.7.2\configure.bat -prefix "${{ github.workspace }}\qt" -platform win32-msvc
+        ${{ github.workspace }}\qt-everywhere-src-6.7.2\configure.bat -prefix "${{ github.workspace }}\qt"
         cmake --build . --parallel
         cmake --install .
       shell: cmd
