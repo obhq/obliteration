@@ -15,19 +15,28 @@ jobs:
     - name: Generate cache keys
       run: |
         echo "cargo=${{ runner.os }}-cargo" >> $env:GITHUB_OUTPUT
+        echo "qt=${{ runner.os }}-qt-6.7.2" >> $env:GITHUB_OUTPUT
         echo "vulkan=${{ runner.os }}-vulkan-1.3.290.0" >> $env:GITHUB_OUTPUT
       id: cache-keys
+    - name: Restore Qt
+      uses: actions/cache/restore@v4
+      with:
+        path: qt
+        key: ${{ steps.cache-keys.outputs.qt }}
+      id: restore-qt
     - name: Install Qt
       run: |
         Invoke-WebRequest `
-          -Uri "https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_660/qt.qt6.660.win64_msvc2019_64/6.6.0-0-202310040911qtbase-Windows-Windows_10_22H2-MSVC2019-Windows-Windows_10_22H2-X86_64.7z" `
+          -Uri "https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_672/qt.qt6.672.win64_msvc2019_64/6.7.2-0-202406110335qtbase-Windows-Windows_10_22H2-MSVC2019-Windows-Windows_10_22H2-X86_64.7z" `
           -OutFile qt-base.7z
         Invoke-WebRequest `
-          -Uri "https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_660/qt.qt6.660.win64_msvc2019_64/6.6.0-0-202310040911qtsvg-Windows-Windows_10_22H2-MSVC2019-Windows-Windows_10_22H2-X86_64.7z" `
+          -Uri "https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_672/qt.qt6.672.win64_msvc2019_64/6.7.2-0-202406110335qtsvg-Windows-Windows_10_22H2-MSVC2019-Windows-Windows_10_22H2-X86_64.7z" `
           -OutFile qt-svg.7z
         7z x qt-base.7z -oqt
         7z x qt-svg.7z -oqt
-        echo "CMAKE_PREFIX_PATH=qt\6.6.0\msvc2019_64" >> $env:GITHUB_ENV
+      if: ${{ steps.restore-qt.outputs.cache-hit != 'true' }}
+    - name: Set Qt path
+      run: echo "CMAKE_PREFIX_PATH=qt\6.7.2\msvc2019_64" >> $env:GITHUB_ENV
     - name: Restore Cargo home
       uses: actions/cache/restore@v4
       with:
@@ -78,3 +87,9 @@ jobs:
         path: ~/.cargo
         key: ${{ steps.cache-keys.outputs.cargo }}-${{ github.run_id }}
       if: startsWith(github.ref, 'refs/heads/')
+    - name: Cache Qt
+      uses: actions/cache/save@v4
+      with:
+        path: qt
+        key: ${{ steps.cache-keys.outputs.qt }}
+      if: startsWith(github.ref, 'refs/heads/') && steps.restore-qt.outputs.cache-hit != 'true'
