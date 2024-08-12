@@ -124,7 +124,7 @@ pub unsafe extern "C" fn vmm_run(
     }
 
     // Parse program headers.
-    let mut loads = Vec::with_capacity(e_phnum);
+    let mut segments = Vec::with_capacity(e_phnum);
     let mut dynamic = None;
 
     for (index, data) in data.chunks_exact(e_phentsize).enumerate() {
@@ -147,7 +147,7 @@ pub unsafe extern "C" fn vmm_run(
                     return null_mut();
                 }
 
-                loads.push((p_offset, p_filesz, p_vaddr, p_memsz));
+                segments.push((p_offset, p_filesz, p_vaddr, p_memsz));
             }
             2 => {
                 if dynamic.is_some() {
@@ -165,10 +165,10 @@ pub unsafe extern "C" fn vmm_run(
         }
     }
 
-    loads.sort_unstable_by_key(|i| i.2);
+    segments.sort_unstable_by_key(|i| i.2);
 
     // Make sure the first PT_LOAD includes the ELF header.
-    match loads.first() {
+    match segments.first() {
         Some(&(p_offset, _, _, _)) => {
             if p_offset != 0 {
                 *err = RustError::new("the first PT_LOAD does not includes ELF header");
@@ -181,6 +181,29 @@ pub unsafe extern "C" fn vmm_run(
         }
     }
 
+    // Get kernel memory size.
+    let mut len = 0;
+
+    for &(_, _, p_vaddr, p_memsz) in &segments {
+        if p_vaddr < len {
+            *err = RustError::new(format!(
+                "PT_LOAD at {p_vaddr:#x} is overlapped with the previous PT_LOAD"
+            ));
+            return null_mut();
+        }
+
+        len = match p_vaddr
+            .checked_add(p_memsz)
+            .and_then(|end| end.checked_next_multiple_of(Ram::VM_PAGE_SIZE))
+        {
+            Some(v) => v,
+            None => {
+                *err = RustError::new(format!("invalid p_memsz on PT_LOAD at {p_vaddr:#x}"));
+                return null_mut();
+            }
+        };
+    }
+
     // Setup RAM builder.
     let mut ram = match RamBuilder::new() {
         Ok(v) => v,
@@ -191,21 +214,15 @@ pub unsafe extern "C" fn vmm_run(
     };
 
     // Map the kernel.
-    let mut alloc = ram.alloc_kernel();
+    let kern = match ram.alloc_kernel(len) {
+        Ok(v) => v,
+        Err(e) => {
+            *err = RustError::with_source("couldn't allocate RAM for the kernel", e);
+            return null_mut();
+        }
+    };
 
-    for &(p_offset, p_filesz, p_vaddr, p_memsz) in &loads {
-        // Allocate RAM for segment.
-        let seg = match alloc.alloc_segment(p_vaddr, p_memsz) {
-            Ok(v) => v,
-            Err(e) => {
-                *err = RustError::with_source(
-                    format!("couldn't allocate RAM for a segment at {p_vaddr:#x}"),
-                    e,
-                );
-                return null_mut();
-            }
-        };
-
+    for &(p_offset, p_filesz, p_vaddr, p_memsz) in &segments {
         // Seek to segment data.
         match file.seek(SeekFrom::Start(p_offset)) {
             Ok(v) => {
@@ -221,13 +238,13 @@ pub unsafe extern "C" fn vmm_run(
         }
 
         // Read segment data.
+        let seg = &mut kern[p_vaddr..(p_vaddr + p_memsz)];
+
         if let Err(e) = file.read_exact(&mut seg[..p_filesz]) {
             *err = RustError::with_source(format!("couldn't read kernet at offset {p_offset}"), e);
             return null_mut();
         }
     }
-
-    drop(alloc);
 
     // Allocate stack.
     if let Err(e) = ram.alloc_stack(1024 * 1024 * 2) {
