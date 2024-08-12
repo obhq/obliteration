@@ -55,7 +55,7 @@ jobs:
         cmake --install .
       shell: cmd
       env:
-        CMAKE_TOOLCHAIN_FILE: cmake/Windows.MSVC.toolchain.cmake
+        CMAKE_TOOLCHAIN_FILE: ${{ github.workspace }}\cmake\Windows.MSVC.toolchain.cmake
       working-directory: qt-build
       if: ${{ steps.restore-qt.outputs.cache-hit != 'true' }}
     - name: Set Qt path
