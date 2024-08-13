@@ -56,7 +56,7 @@ jobs:
       working-directory: qt-build
       if: ${{ steps.restore-qt.outputs.cache-hit != 'true' }}
     - name: Set Qt path
-      run: echo "CMAKE_PREFIX_PATH=qt\6.7.2\msvc2019_64" >> $env:GITHUB_ENV
+      run: echo "CMAKE_PREFIX_PATH=qt" >> $env:GITHUB_ENV
     - name: Restore Cargo home
       uses: actions/cache/restore@v4
       with:
