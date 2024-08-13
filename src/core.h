@@ -29,6 +29,24 @@ struct RustError;
  */
 struct Vmm;
 
+/**
+ * Contains objects required to render the screen.
+ */
+struct VmmScreen {
+#if !defined(__APPLE__)
+    size_t vk_instance
+#endif
+    ;
+#if !defined(__APPLE__)
+    size_t vk_surface
+#endif
+    ;
+#if defined(__APPLE__)
+    size_t view
+#endif
+    ;
+};
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -74,7 +92,7 @@ struct RustError *update_firmware(const char *root,
 
 void vmm_free(struct Vmm *vmm);
 
-struct Vmm *vmm_run(const char *kernel, size_t screen, struct RustError **err);
+struct Vmm *vmm_run(const char *kernel, const struct VmmScreen *screen, struct RustError **err);
 
 struct RustError *vmm_draw(struct Vmm *vmm);
 

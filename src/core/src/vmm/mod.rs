@@ -34,7 +34,7 @@ pub unsafe extern "C" fn vmm_free(vmm: *mut Vmm) {
 #[no_mangle]
 pub unsafe extern "C" fn vmm_run(
     kernel: *const c_char,
-    screen: usize,
+    screen: *const VmmScreen,
     err: *mut *mut RustError,
 ) -> *mut Vmm {
     // Check if path UTF-8.
@@ -523,6 +523,17 @@ impl Drop for Vmm {
             cpu.join().unwrap();
         }
     }
+}
+
+/// Contains objects required to render the screen.
+#[repr(C)]
+pub struct VmmScreen {
+    #[cfg(not(target_os = "macos"))]
+    pub vk_instance: usize,
+    #[cfg(not(target_os = "macos"))]
+    pub vk_surface: usize,
+    #[cfg(target_os = "macos")]
+    pub view: usize,
 }
 
 /// Object that has a physical address in the virtual machine.

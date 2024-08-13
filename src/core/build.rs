@@ -23,6 +23,7 @@ fn main() {
 
     conf.after_includes = Some(buf);
     conf.pragma_once = true;
+    conf.tab_width = 4;
     conf.language = Language::C;
     conf.cpp_compat = true;
     conf.style = Style::Tag;
