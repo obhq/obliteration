@@ -28,6 +28,8 @@ pub trait Hypervisor: Send + Sync {
 }
 
 /// Represents a core of the PS4 CPU.
+///
+/// On AArch64 this represent one Processing Element (PE).
 pub trait Cpu {
     type States<'a>: CpuStates + 'a
     where
@@ -86,7 +88,7 @@ pub trait CpuStates {
     fn set_ss(&mut self, p: bool);
 
     #[cfg(target_arch = "aarch64")]
-    fn set_sp(&mut self, v: usize);
+    fn set_sp_el1(&mut self, v: usize);
 
     #[cfg(target_arch = "aarch64")]
     fn set_pc(&mut self, v: usize);

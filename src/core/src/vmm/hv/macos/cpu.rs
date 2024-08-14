@@ -128,7 +128,10 @@ impl<'a> Cpu for HfCpu<'a> {
 
     #[cfg(target_arch = "aarch64")]
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
-        todo!()
+        Ok(HfStates {
+            cpu: self,
+            sp_el1: State::None,
+        })
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -176,17 +179,30 @@ impl<'a> Drop for HfCpu<'a> {
 /// Implementation of [`Cpu::States`] for Hypervisor Framework.
 pub struct HfStates<'a, 'b> {
     cpu: &'a mut HfCpu<'b>,
+    #[cfg(target_arch = "x86_64")]
     rsp: State<usize>,
+    #[cfg(target_arch = "x86_64")]
     rip: State<usize>,
+    #[cfg(target_arch = "x86_64")]
     cr0: State<usize>,
+    #[cfg(target_arch = "x86_64")]
     cr3: State<usize>,
+    #[cfg(target_arch = "x86_64")]
     cr4: State<usize>,
+    #[cfg(target_arch = "x86_64")]
     cs: State<u64>,
+    #[cfg(target_arch = "x86_64")]
     ds: State<usize>,
+    #[cfg(target_arch = "x86_64")]
     es: State<usize>,
+    #[cfg(target_arch = "x86_64")]
     fs: State<usize>,
+    #[cfg(target_arch = "x86_64")]
     gs: State<usize>,
+    #[cfg(target_arch = "x86_64")]
     ss: State<usize>,
+    #[cfg(target_arch = "aarch64")]
+    sp_el1: State<usize>,
 }
 
 impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
@@ -260,8 +276,8 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
     }
 
     #[cfg(target_arch = "aarch64")]
-    fn set_sp(&mut self, v: usize) {
-        todo!()
+    fn set_sp_el1(&mut self, v: usize) {
+        self.sp_el1 = State::Dirty(v);
     }
 
     #[cfg(target_arch = "aarch64")]
@@ -306,7 +322,19 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
 
     #[cfg(target_arch = "aarch64")]
     fn commit(self) -> Result<(), Self::Err> {
-        todo!()
+        use hv_sys::{hv_sys_reg_t_HV_SYS_REG_SP_EL1, hv_vcpu_set_sys_reg};
+
+        let cpu = self.cpu.instance;
+
+        if let State::Dirty(v) = self.sp_el1 {
+            NonZero::new(unsafe {
+                hv_vcpu_set_sys_reg(cpu, hv_sys_reg_t_HV_SYS_REG_SP_EL1, v.try_into().unwrap())
+            })
+            .map(|v| Err::<(), _>(StatesError::SetSpEl1Failed(v)))
+            .transpose()?;
+        }
+
+        Ok(())
     }
 }
 
@@ -372,4 +400,8 @@ pub enum StatesError {
     #[cfg(target_arch = "x86_64")]
     #[error("couldn't set CR4")]
     SetCr4Failed(NonZero<hv_sys::hv_return_t>),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't set SP_EL1")]
+    SetSpEl1Failed(NonZero<hv_sys::hv_return_t>),
 }
