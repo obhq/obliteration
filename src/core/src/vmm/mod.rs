@@ -440,7 +440,16 @@ fn setup_main_cpu(cpu: &mut impl Cpu, entry: usize, map: RamMap) -> Result<(), M
 
 #[cfg(target_arch = "aarch64")]
 fn setup_main_cpu(cpu: &mut impl Cpu, entry: usize, map: RamMap) -> Result<(), MainCpuError> {
-    todo!()
+    let mut states = cpu
+        .states()
+        .map_err(|e| MainCpuError::GetCpuStatesFailed(Box::new(e)))?;
+
+    // Set stack pointer to the kernel.
+    states.set_sp_el1(map.stack_vaddr + map.stack_len); // Top-down.
+
+    states
+        .commit()
+        .map_err(|e| MainCpuError::CommitCpuStatesFailed(Box::new(e)))
 }
 
 #[cfg(target_arch = "x86_64")]

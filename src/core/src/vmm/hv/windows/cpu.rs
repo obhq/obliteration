@@ -234,7 +234,7 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
     }
 
     #[cfg(target_arch = "aarch64")]
-    fn set_sp(&mut self, v: usize) {
+    fn set_sp_el1(&mut self, v: usize) {
         todo!()
     }
 
