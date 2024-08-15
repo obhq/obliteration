@@ -69,6 +69,8 @@ jobs:
       if: ${{ steps.qt-cache.outputs.cache-hit != 'true' }}
     - name: Update Rust
       run: rustup update stable
+    - name: Install Rust nightly
+      run: rustup toolchain install nightly
     - name: Add additional Rust targets
       run: rustup target add ${{ inputs.kernel-target }}
     - name: Run CMake
