@@ -17,7 +17,12 @@ else()
     if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
         set(KERNEL_TARGET x86_64-unknown-none)
     elseif(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "arm64")
+        # Pre-compiled core crate for aarch64-unknown-none-softfloat does not support
+        # Position-Independent Executable so we need nightly toolchain for build-std feature to
+        # re-build core crate to support Position-Independent Executable.
         set(KERNEL_TARGET aarch64-unknown-none-softfloat)
+        set(KERNEL_TOOLCHAIN +nightly)
+        set(KERNEL_OPTS -Z build-std=core,alloc)
     else()
         message(FATAL_ERROR "Target CPU is not supported")
     endif()
@@ -39,7 +44,7 @@ add_custom_target(core
     BYPRODUCTS ${LIBCORE})
 
 add_custom_target(kernel
-    COMMAND cargo build $<IF:$<CONFIG:Debug>,--profile=dev,--release> --target ${KERNEL_TARGET}
+    COMMAND cargo ${KERNEL_TOOLCHAIN} build $<IF:$<CONFIG:Debug>,--profile=dev,--release> --target ${KERNEL_TARGET} ${KERNEL_OPTS}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/obkrnl
     BYPRODUCTS ${KERNEL})
 
