@@ -1,8 +1,16 @@
 fn main() {
-    let os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+    let target = std::env::var("TARGET").unwrap();
 
-    if os == "none" {
-        println!("cargo::rustc-link-arg-bins=-zcommon-page-size=0x4000");
-        println!("cargo::rustc-link-arg-bins=-zmax-page-size=0x4000");
+    match target.as_str() {
+        "aarch64-unknown-none-softfloat" => {
+            println!("cargo::rustc-link-arg-bins=--pie");
+            println!("cargo::rustc-link-arg-bins=-zcommon-page-size=0x4000");
+            println!("cargo::rustc-link-arg-bins=-zmax-page-size=0x4000");
+        }
+        "x86_64-unknown-none" => {
+            println!("cargo::rustc-link-arg-bins=-zcommon-page-size=0x4000");
+            println!("cargo::rustc-link-arg-bins=-zmax-page-size=0x4000");
+        }
+        _ => {}
     }
 }
