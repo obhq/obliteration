@@ -5,7 +5,7 @@ use self::ffi::{
 };
 use super::Hypervisor;
 use crate::vmm::hw::Ram;
-use crate::vmm::{MemoryAddr, VmmError};
+use crate::vmm::VmmError;
 use libc::{mmap, open, MAP_FAILED, MAP_PRIVATE, O_RDWR, PROT_READ, PROT_WRITE};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::ptr::null_mut;
@@ -83,7 +83,7 @@ impl Kvm {
         // Set RAM.
         let vm = unsafe { OwnedFd::from_raw_fd(vm) };
         let slot = 0;
-        let addr = ram.vm_addr().try_into().unwrap();
+        let addr = ram.addr().try_into().unwrap();
         let len = ram.len().try_into().unwrap();
         let mem = ram.host_addr().cast_mut().cast();
 

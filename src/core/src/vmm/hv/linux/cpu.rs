@@ -1,8 +1,12 @@
-use super::ffi::{kvm_get_regs, kvm_get_sregs, kvm_run, kvm_set_regs, kvm_set_sregs};
+use super::ffi::{
+    kvm_get_regs, kvm_get_sregs, kvm_run, kvm_set_regs, kvm_set_sregs, kvm_translate,
+    KvmTranslation,
+};
 use super::regs::{KvmRegs, KvmSpecialRegs};
 use super::run::KvmRun;
-use crate::vmm::hv::{Cpu, CpuExit, CpuIo, CpuStates};
+use crate::vmm::hv::{Cpu, CpuExit, CpuIo, CpuStates, IoBuf};
 use libc::munmap;
+use std::error::Error;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::os::fd::{AsRawFd, OwnedFd};
@@ -43,7 +47,7 @@ impl<'a> Drop for KvmCpu<'a> {
 impl<'a> Cpu for KvmCpu<'a> {
     type States<'b> = KvmStates<'b> where Self: 'b;
     type GetStatesErr = StatesError;
-    type Exit<'b> = KvmExit<'b> where Self: 'b;
+    type Exit<'b> = KvmExit<'b, 'a> where Self: 'b;
     type RunErr = std::io::Error;
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
@@ -74,9 +78,7 @@ impl<'a> Cpu for KvmCpu<'a> {
 
     fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr> {
         match unsafe { kvm_run(self.fd.as_raw_fd()) } {
-            0 => Ok(KvmExit {
-                cx: unsafe { &*self.cx.0 },
-            }),
+            0 => Ok(KvmExit(self)),
             _ => Err(std::io::Error::last_os_error()),
         }
     }
@@ -204,34 +206,62 @@ impl<'a> CpuStates for KvmStates<'a> {
 }
 
 /// Implementation of [`Cpu::Exit`] for KVM.
-pub struct KvmExit<'a> {
-    cx: &'a KvmRun,
-}
+pub struct KvmExit<'a, 'b>(&'a mut KvmCpu<'b>);
 
-impl<'a> CpuExit for KvmExit<'a> {
+impl<'a, 'b> CpuExit for KvmExit<'a, 'b> {
+    type Io = KvmIo<'a, 'b>;
+
     #[cfg(target_arch = "x86_64")]
-    fn is_hlt(&self) -> bool {
-        self.cx.exit_reason == 5
+    fn into_hlt(self) -> Result<(), Self> {
+        if unsafe { (*self.0.cx.0).exit_reason == 5 } {
+            Ok(())
+        } else {
+            Err(self)
+        }
     }
 
-    #[cfg(target_arch = "x86_64")]
-    fn is_io(&mut self) -> Option<CpuIo> {
-        // Check if I/O.
-        if self.cx.exit_reason != 2 {
-            return None;
+    fn into_io(self) -> Result<Self::Io, Self> {
+        if unsafe { (*self.0.cx.0).exit_reason } == 6 {
+            Ok(KvmIo(self.0))
+        } else {
+            Err(self)
         }
+    }
+}
 
-        // Check direction.
-        let io = unsafe { &self.cx.exit.io };
-        let port = io.port;
-        let data = unsafe { (self.cx as *const KvmRun as *const u8).add(io.data_offset) };
-        let len: usize = io.size.into();
+/// Implementation of [`CpuIo`] for KVM.
+pub struct KvmIo<'a, 'b>(&'a mut KvmCpu<'b>);
 
-        Some(match io.direction {
-            0 => todo!(), // KVM_EXIT_IO_IN
-            1 => CpuIo::Out(port, unsafe { std::slice::from_raw_parts(data, len) }),
-            _ => unreachable!(),
-        })
+impl<'a, 'b> CpuIo for KvmIo<'a, 'b> {
+    fn addr(&self) -> usize {
+        unsafe { (*self.0.cx.0).exit.mmio.phys_addr }
+    }
+
+    fn buffer(&mut self) -> IoBuf {
+        let io = unsafe { &mut (*self.0.cx.0).exit.mmio };
+        let len: usize = io.len.try_into().unwrap();
+        let buf = &mut io.data[..len];
+
+        match io.is_write {
+            0 => IoBuf::Read(buf),
+            _ => IoBuf::Write(buf),
+        }
+    }
+
+    fn translate(&self, vaddr: usize) -> Result<usize, Box<dyn Error>> {
+        let mut data = KvmTranslation {
+            linear_address: vaddr,
+            physical_address: 0,
+            valid: 0,
+            writeable: 0,
+            usermode: 0,
+            pad: [0; 5],
+        };
+
+        match unsafe { kvm_translate(self.0.fd.as_raw_fd(), &mut data) } {
+            0 => Ok(data.physical_address),
+            _ => return Err(Box::new(std::io::Error::last_os_error())),
+        }
     }
 }
 

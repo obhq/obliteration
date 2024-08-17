@@ -1,40 +1,26 @@
 use crate::config::boot_env;
+use core::fmt::Arguments;
 use obconf::BootEnv;
 use obvirt::console::MsgType;
 
-/// When running inside a VM each call will cause a VM to exit so don't do this in a performance
-/// critical path.
-pub fn info(msg: impl AsRef<str>) {
-    match boot_env() {
-        BootEnv::Vm(_) => print_vm(MsgType::Info, msg),
-    }
-}
+mod vm;
 
-#[cfg(target_arch = "x86_64")]
-fn print_vm(ty: MsgType, msg: impl AsRef<str>) {
-    let msg = msg.as_ref();
-    let len = msg.len();
-
-    unsafe {
-        core::arch::asm!(
-            "outsb", // ty
-            "mov rsi, rcx",
-            "outsd", // len+0
-            "outsd", // len+4
-            "mov rsi, rax",
-            "mov rcx, [rcx]",
-            "rep outsb", // msg
-            in("dx") 0, // port
-            in("rsi") &ty,
-            lateout("rsi") _,
-            in("rcx") &len,
-            lateout("rcx") _,
-            in("rax") msg.as_ptr()
-        )
+/// Write single line of information log.
+///
+/// When running inside a VM each call will cause a VM to exit multiple times so don't do this in a
+/// performance critical path.
+///
+/// The line should not contains LF character.
+#[macro_export]
+macro_rules! info {
+    ($($args:tt)*) => {
+        $crate::console::info(file!(), line!(), format_args!($($args)*))
     };
 }
 
-#[cfg(target_arch = "aarch64")]
-fn print_vm(_: MsgType, _: impl AsRef<str>) {
-    todo!()
+#[doc(hidden)]
+pub fn info(file: &str, line: u32, msg: Arguments) {
+    match boot_env() {
+        BootEnv::Vm(env) => self::vm::print(env, MsgType::Info, file, line, msg),
+    }
 }

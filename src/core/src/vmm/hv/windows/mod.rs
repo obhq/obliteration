@@ -2,7 +2,7 @@ use self::cpu::WhpCpu;
 use self::partition::Partition;
 use super::Hypervisor;
 use crate::vmm::hw::Ram;
-use crate::vmm::{MemoryAddr, VmmError};
+use crate::vmm::VmmError;
 use std::sync::Arc;
 use thiserror::Error;
 use windows_sys::core::HRESULT;
@@ -30,7 +30,7 @@ impl Whp {
         // Map memory.
         part.map_gpa(
             ram.host_addr().cast(),
-            ram.vm_addr().try_into().unwrap(),
+            ram.addr().try_into().unwrap(),
             ram.len().try_into().unwrap(),
         )
         .map_err(VmmError::MapRamFailed)?;

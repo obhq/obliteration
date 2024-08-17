@@ -13,12 +13,6 @@
 struct Param;
 struct Pkg;
 
-#define Ram_ADDR 0
-
-#define Ram_SIZE (((1024 * 1024) * 1024) * 8)
-
-#define Ram_VM_PAGE_SIZE 16384
-
 /**
  * Error object managed by Rust side.
  */
@@ -144,6 +138,10 @@ extern int kvm_get_sregs(int vcpu, kvm_sregs *regs);
 
 #if defined(__linux__)
 extern int kvm_set_sregs(int vcpu, const kvm_sregs *regs);
+#endif
+
+#if defined(__linux__)
+extern int kvm_translate(int vcpu, kvm_translation *arg);
 #endif
 
 #ifdef __cplusplus

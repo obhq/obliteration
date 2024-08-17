@@ -1,4 +1,5 @@
 use super::{Ram, RamError};
+use crate::vmm::hw::{DeviceTree, PAGE_SIZE};
 use crate::vmm::VmmError;
 use obconf::BootEnv;
 use std::ops::Range;
@@ -21,7 +22,7 @@ impl RamBuilder {
         // we don't need to keep track allocations here.
         let page_size = Self::get_page_size().map_err(VmmError::GetPageSizeFailed)?;
 
-        if page_size > Ram::VM_PAGE_SIZE {
+        if page_size > PAGE_SIZE.get() {
             return Err(VmmError::UnsupportedPageSize);
         }
 
@@ -103,10 +104,10 @@ impl RamBuilder {
     /// If called a second time.
     pub fn alloc_args(&mut self, env: BootEnv) -> Result<(), RamError> {
         assert!(self.args.is_none());
-        assert!(align_of::<BootEnv>() <= Ram::VM_PAGE_SIZE);
+        assert!(align_of::<BootEnv>() <= PAGE_SIZE.get());
 
         // Allocate RAM for all arguments.
-        let len = size_of::<BootEnv>().next_multiple_of(Ram::VM_PAGE_SIZE);
+        let len = size_of::<BootEnv>().next_multiple_of(PAGE_SIZE.get());
         let args = unsafe { self.ram.alloc(self.next, len)?.as_mut_ptr() };
 
         // Write env.
@@ -127,6 +128,7 @@ impl RamBuilder {
     #[cfg(target_arch = "x86_64")]
     pub fn build(
         mut self,
+        devices: &DeviceTree,
         dynamic: Option<(usize, usize)>,
     ) -> Result<(Ram, RamMap), RamBuilderError> {
         // For x86-64 we require the kernel to be a Position-Independent Executable so we can map it
@@ -144,6 +146,15 @@ impl RamBuilder {
             .map_err(RamBuilderError::AllocPml4TableFailed)?;
         let pml4t = unsafe { &mut *pml4t };
 
+        // Setup page tables to map virtual devices. We use identity mapping for virtual devices.
+        let mut dev_end = 0;
+
+        for (addr, dev) in devices.map() {
+            let len = dev.len().get();
+            self.setup_page_tables(pml4t, addr, addr, len)?;
+            dev_end = addr + len;
+        }
+
         // Setup page tables to map virtual address 0xffffffff82200000 to the kernel.
         // TODO: Implement ASLR.
         let mut vaddr = 0xffffffff82200000;
@@ -153,6 +164,8 @@ impl RamBuilder {
             .take()
             .map(|v| (v.start, v.end - v.start))
             .unwrap();
+
+        assert!(vaddr >= dev_end);
 
         self.setup_page_tables(pml4t, vaddr, kern_paddr, kern_len)?;
 
@@ -228,7 +241,11 @@ impl RamBuilder {
     }
 
     #[cfg(target_arch = "aarch64")]
-    pub fn build(self, dynamic: Option<(usize, usize)>) -> Result<(Ram, RamMap), RamBuilderError> {
+    pub fn build(
+        self,
+        devices: &DeviceTree,
+        dynamic: Option<(usize, usize)>,
+    ) -> Result<(Ram, RamMap), RamBuilderError> {
         todo!()
     }
 
@@ -278,7 +295,7 @@ impl RamBuilder {
         paddr: usize,
         len: usize,
     ) -> Result<(), RamBuilderError> {
-        assert_eq!(len % Ram::VM_PAGE_SIZE, 0);
+        assert_eq!(len % PAGE_SIZE, 0);
 
         fn set_page_entry(entry: &mut usize, addr: usize) {
             assert_eq!(addr & 0x7FF0000000000000, 0);
@@ -351,7 +368,7 @@ impl RamBuilder {
     #[cfg(target_arch = "x86_64")]
     fn alloc_page_table(&mut self) -> Result<(*mut [usize; 512], usize), RamError> {
         let off = self.next;
-        let len = (512usize * 8).next_multiple_of(Ram::VM_PAGE_SIZE);
+        let len = (512usize * 8).next_multiple_of(PAGE_SIZE.get());
         let tab = unsafe { self.ram.alloc(off, len).map(|v| v.as_mut_ptr().cast())? };
 
         self.next += len;
