@@ -14,7 +14,7 @@ mod vm;
 #[macro_export]
 macro_rules! info {
     ($($args:tt)*) => {
-        crate::console::info(file!(), line!(), format_args!($($args)*))
+        $crate::console::info(file!(), line!(), format_args!($($args)*))
     };
 }
 
