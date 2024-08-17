@@ -1,6 +1,7 @@
 # External dependencies.
 find_package(Qt6 COMPONENTS Widgets REQUIRED)
 find_package(Threads REQUIRED)
+find_package(Vulkan REQUIRED)
 
 if(APPLE)
     find_library(HYPERVISOR Hypervisor REQUIRED)
