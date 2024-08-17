@@ -1,7 +1,7 @@
 # External dependencies.
 find_package(Qt6 COMPONENTS Widgets REQUIRED)
 find_package(Threads REQUIRED)
-if(WIN32 OR UNIX)
+if(WIN32 OR (UNIX AND NOT APPLE))
     find_package(Vulkan REQUIRED)
 endif()
 
