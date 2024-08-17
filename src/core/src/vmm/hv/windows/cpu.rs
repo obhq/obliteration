@@ -274,7 +274,7 @@ pub struct WhpExit<'a, 'b> {
 }
 
 impl<'a, 'b> CpuExit for WhpExit<'a, 'b> {
-    type Io = WhpIo;
+    type Io = WhpIo<'a, 'b>;
 
     #[cfg(target_arch = "x86_64")]
     fn into_hlt(self) -> Result<(), Self> {
