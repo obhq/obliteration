@@ -2,7 +2,6 @@
 #![cfg_attr(not(test), no_main)]
 
 use crate::config::set_boot_env;
-use crate::console::info;
 use core::arch::asm;
 use core::panic::PanicInfo;
 use obconf::BootEnv;
@@ -25,7 +24,7 @@ extern "C" fn _start(env: &'static BootEnv) -> ! {
     // SAFETY: This is safe because we called it as the first thing here.
     unsafe { set_boot_env(env) };
 
-    info("Starting Obliteration Kernel.");
+    info!("Starting Obliteration Kernel.");
 
     loop {
         #[cfg(target_arch = "x86_64")]

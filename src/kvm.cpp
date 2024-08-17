@@ -110,3 +110,7 @@ extern "C" int kvm_set_sregs(int vcpu, const kvm_sregs *regs)
 {
     return ioctl(vcpu, KVM_SET_SREGS, regs);
 }
+
+extern "C" int kvm_translate(int vcpu, kvm_translation *arg) {
+    return ioctl(vcpu, KVM_TRANSLATE, arg);
+}

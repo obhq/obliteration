@@ -1,10 +1,12 @@
-use self::hv::{Cpu, CpuExit, CpuStates, Hypervisor};
-use self::hw::{Ram, RamBuilder, RamMap};
+use self::hv::{Cpu, CpuExit, CpuIo, CpuStates, Hypervisor};
+use self::hw::{
+    setup_devices, Device, DeviceContext, DeviceTree, Ram, RamBuilder, RamMap, PAGE_SIZE,
+};
 use self::screen::Screen;
 use crate::error::RustError;
 use obconf::{BootEnv, Vm};
 use obvirt::console::MsgType;
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 use std::error::Error;
 use std::ffi::{c_char, c_void, CStr};
 use std::fs::File;
@@ -142,7 +144,7 @@ pub unsafe extern "C" fn vmm_run(
                     return null_mut();
                 }
 
-                if p_align != Ram::VM_PAGE_SIZE {
+                if p_align != PAGE_SIZE.get() {
                     *err = RustError::new(format!("unsupported p_align on PT_LOAD {index}"));
                     return null_mut();
                 }
@@ -194,7 +196,7 @@ pub unsafe extern "C" fn vmm_run(
 
         len = match p_vaddr
             .checked_add(p_memsz)
-            .and_then(|end| end.checked_next_multiple_of(Ram::VM_PAGE_SIZE))
+            .and_then(|end| end.checked_next_multiple_of(PAGE_SIZE.get()))
         {
             Some(v) => v,
             None => {
@@ -252,8 +254,13 @@ pub unsafe extern "C" fn vmm_run(
         return null_mut();
     }
 
+    // Setup virtual devices.
+    let devices = Arc::new(setup_devices(Ram::SIZE));
+
     // Allocate arguments.
-    let env = BootEnv::Vm(Vm {});
+    let env = BootEnv::Vm(Vm {
+        console: devices.console().addr(),
+    });
 
     if let Err(e) = ram.alloc_args(env) {
         *err = RustError::with_source("couldn't allocate RAM for arguments", e);
@@ -261,7 +268,7 @@ pub unsafe extern "C" fn vmm_run(
     }
 
     // Build RAM.
-    let (ram, map) = match ram.build(dynamic) {
+    let (ram, map) = match ram.build(&devices, dynamic) {
         Ok(v) => v,
         Err(e) => {
             *err = RustError::with_source("couldn't build RAM", e);
@@ -292,9 +299,10 @@ pub unsafe extern "C" fn vmm_run(
     let logs = Arc::new(Mutex::new(VecDeque::new()));
     let shutdown = Arc::new(AtomicBool::new(false));
     let args = CpuArgs {
-        hv: hv.clone(),
+        hv,
+        ram,
         screen: screen.buffer().clone(),
-        logs: logs.clone(),
+        devices,
         shutdown: shutdown.clone(),
     };
 
@@ -327,8 +335,6 @@ pub unsafe extern "C" fn vmm_run(
 
     // Create VMM.
     let vmm = Vmm {
-        hv,
-        ram,
         cpus: vec![main],
         screen,
         logs,
@@ -452,71 +458,51 @@ fn setup_main_cpu(cpu: &mut impl Cpu, entry: usize, map: RamMap) -> Result<(), M
         .map_err(|e| MainCpuError::CommitCpuStatesFailed(Box::new(e)))
 }
 
-#[cfg(target_arch = "x86_64")]
 fn run_cpu(mut cpu: impl Cpu, args: &CpuArgs) {
-    use self::hv::CpuIo;
-
-    let mut logs = Vec::new();
+    let mut devices = args
+        .devices
+        .map()
+        .map(|(addr, dev)| (addr, dev.create_context(&args.ram)))
+        .collect::<BTreeMap<usize, Box<dyn DeviceContext>>>();
 
     while !args.shutdown.load(Ordering::Relaxed) {
-        // Run the vCPU and check why VM exit.
-        let mut exit = cpu.run().unwrap();
+        // Run the vCPU.
+        let exit = match cpu.run() {
+            Ok(v) => v,
+            Err(_) => todo!(),
+        };
 
-        if let Some(io) = exit.is_io() {
-            match io {
-                CpuIo::Out(0, data) => {
-                    logs.extend_from_slice(data);
-                    parse_logs(&args.logs, &mut logs);
-                }
-                CpuIo::Out(_, _) => todo!(),
-            }
-        } else if !exit.is_hlt() {
-            todo!()
+        // Check if HLT.
+        #[cfg(target_arch = "x86_64")]
+        let exit = match exit.into_hlt() {
+            Ok(_) => continue,
+            Err(v) => v,
+        };
+
+        // Check if I/O.
+        match exit.into_io() {
+            Ok(io) => match exec_io(&mut devices, io) {
+                Ok(_) => continue,
+                Err(_) => todo!(),
+            },
+            Err(_) => todo!(),
         }
     }
 }
 
-#[cfg(target_arch = "aarch64")]
-fn run_cpu(mut cpu: impl Cpu, args: &CpuArgs) {
-    todo!()
-}
+fn exec_io<'a>(
+    devices: &mut BTreeMap<usize, Box<dyn DeviceContext + 'a>>,
+    mut io: impl CpuIo,
+) -> Result<(), Box<dyn Error>> {
+    // Get target device.
+    let addr = io.addr();
+    let (_, dev) = devices.range_mut(..=addr).last().unwrap();
 
-#[cfg(target_arch = "x86_64")]
-fn parse_logs(logs: &Mutex<VecDeque<(MsgType, String)>>, data: &mut Vec<u8>) {
-    // Check minimum size.
-    let (hdr, msg) = match data.split_at_checked(9) {
-        Some(v) => v,
-        None => return,
-    };
-
-    // Check if message completed.
-    let len = usize::from_ne_bytes(hdr[1..].try_into().unwrap());
-    let msg = match msg.get(..len) {
-        Some(v) => v,
-        None => return,
-    };
-
-    // Push to list.
-    let ty = MsgType::from_u8(hdr[0]).unwrap();
-    let msg = std::str::from_utf8(msg).unwrap().to_owned();
-    let mut logs = logs.lock().unwrap();
-
-    logs.push_back((ty, msg));
-
-    while logs.len() > 10000 {
-        logs.pop_front();
-    }
-
-    drop(logs);
-
-    // Remove parsed data.
-    data.drain(..(hdr.len() + len));
+    dev.exec(&mut io)
 }
 
 /// Manage a virtual machine that run the kernel.
 pub struct Vmm {
-    hv: Arc<self::hv::Default>,
-    ram: Arc<Ram>,
     cpus: Vec<JoinHandle<()>>,
     screen: self::screen::Default,
     logs: Arc<Mutex<VecDeque<(MsgType, String)>>>,
@@ -545,23 +531,12 @@ pub struct VmmScreen {
     pub view: usize,
 }
 
-/// Object that has a physical address in the virtual machine.
-trait MemoryAddr {
-    /// Physical address in the virtual machine.
-    fn vm_addr(&self) -> usize;
-
-    /// Address in our process.
-    fn host_addr(&self) -> *const u8;
-
-    /// Total size of the object, in bytes.
-    fn len(&self) -> usize;
-}
-
 /// Encapsulates arguments for a function to run a CPU.
 struct CpuArgs {
     hv: Arc<self::hv::Default>,
+    ram: Arc<Ram>,
     screen: Arc<<self::screen::Default as Screen>::Buffer>,
-    logs: Arc<Mutex<VecDeque<(MsgType, String)>>>,
+    devices: Arc<DeviceTree>,
     shutdown: Arc<AtomicBool>,
 }
 

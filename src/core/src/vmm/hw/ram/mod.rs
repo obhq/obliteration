@@ -1,4 +1,4 @@
-use crate::vmm::MemoryAddr;
+use super::PAGE_SIZE;
 use std::io::{Error, ErrorKind};
 use thiserror::Error;
 
@@ -15,19 +15,30 @@ mod builder;
 pub struct Ram(*mut u8);
 
 impl Ram {
-    pub const ADDR: usize = 0; // It seems like RAM on all system always at address 0.
-    pub const SIZE: usize = 1024 * 1024 * 1024 * 8; // 8GB
-    pub const VM_PAGE_SIZE: usize = 0x4000;
+    pub(crate) const ADDR: usize = 0; // It seems like RAM on all system always at address 0.
+    pub(crate) const SIZE: usize = 1024 * 1024 * 1024 * 8; // 8GB
+
+    pub fn addr(&self) -> usize {
+        Self::ADDR
+    }
+
+    pub fn host_addr(&self) -> *const u8 {
+        self.0
+    }
+
+    pub fn len(&self) -> usize {
+        Self::SIZE
+    }
 
     /// # Panics
-    /// If `off` or `len` is not multiply by [`Self::VM_PAGE_SIZE`].
+    /// If `off` or `len` is not multiply by [`PAGE_SIZE`].
     ///
     /// # Safety
     /// This method does not check if `off` is already allocated. It is undefined behavior if
     /// `off` + `len` is overlapped with the previous allocation.
     pub unsafe fn alloc(&self, off: usize, len: usize) -> Result<&mut [u8], RamError> {
-        assert_eq!(off % Self::VM_PAGE_SIZE, 0);
-        assert_eq!(len % Self::VM_PAGE_SIZE, 0);
+        assert_eq!(off % PAGE_SIZE, 0);
+        assert_eq!(len % PAGE_SIZE, 0);
 
         if !off.checked_add(len).is_some_and(|v| v <= Self::SIZE) {
             return Err(RamError::InvalidAddr);
@@ -39,13 +50,13 @@ impl Ram {
     }
 
     /// # Panics
-    /// If `off` or `len` is not multiply by [`Self::VM_PAGE_SIZE`].
+    /// If `off` or `len` is not multiply by [`PAGE_SIZE`].
     ///
     /// # Safety
     /// Accessing the deallocated memory on the host will be undefined behavior.
     pub unsafe fn dealloc(&self, off: usize, len: usize) -> Result<(), Error> {
-        assert_eq!(off % Self::VM_PAGE_SIZE, 0);
-        assert_eq!(len % Self::VM_PAGE_SIZE, 0);
+        assert_eq!(off % PAGE_SIZE, 0);
+        assert_eq!(len % PAGE_SIZE, 0);
 
         if off.checked_add(len).unwrap() > Self::SIZE {
             return Err(Error::from(ErrorKind::InvalidInput));
@@ -137,20 +148,6 @@ impl Drop for Ram {
                 Error::last_os_error()
             );
         }
-    }
-}
-
-impl MemoryAddr for Ram {
-    fn vm_addr(&self) -> usize {
-        Self::ADDR
-    }
-
-    fn host_addr(&self) -> *const u8 {
-        self.0
-    }
-
-    fn len(&self) -> usize {
-        Self::SIZE
     }
 }
 

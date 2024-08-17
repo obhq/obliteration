@@ -97,16 +97,25 @@ pub trait CpuStates {
 }
 
 /// Contains information when VM exited.
-pub trait CpuExit {
-    #[cfg(target_arch = "x86_64")]
-    fn is_hlt(&self) -> bool;
+pub trait CpuExit: Sized {
+    type Io: CpuIo;
 
     #[cfg(target_arch = "x86_64")]
-    fn is_io(&mut self) -> Option<CpuIo>;
+    fn into_hlt(self) -> Result<(), Self>;
+
+    fn into_io(self) -> Result<Self::Io, Self>;
 }
 
-/// Contains information when a VM exited because of I/O instructions.
-#[cfg(target_arch = "x86_64")]
-pub enum CpuIo<'a> {
-    Out(u16, &'a [u8]),
+/// Contains information when a VM exited because of memory-mapped I/O.
+pub trait CpuIo {
+    /// Returns physical address where the VM attempting to be accessed.
+    fn addr(&self) -> usize;
+    fn buffer(&mut self) -> IoBuf;
+    fn translate(&self, vaddr: usize) -> Result<usize, Box<dyn Error>>;
+}
+
+/// Encapsulates a buffer for memory-mapped I/O.
+pub enum IoBuf<'a> {
+    Write(&'a [u8]),
+    Read(&'a mut [u8]),
 }

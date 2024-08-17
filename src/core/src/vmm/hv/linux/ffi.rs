@@ -21,4 +21,15 @@ extern "C" {
     pub fn kvm_set_regs(vcpu: c_int, regs: *const KvmRegs) -> c_int;
     pub fn kvm_get_sregs(vcpu: c_int, regs: *mut KvmSpecialRegs) -> c_int;
     pub fn kvm_set_sregs(vcpu: c_int, regs: *const KvmSpecialRegs) -> c_int;
+    pub fn kvm_translate(vcpu: c_int, arg: *mut KvmTranslation) -> c_int;
+}
+
+#[repr(C)]
+pub struct KvmTranslation {
+    pub linear_address: usize,
+    pub physical_address: usize,
+    pub valid: u8,
+    pub writeable: u8,
+    pub usermode: u8,
+    pub pad: [u8; 5],
 }

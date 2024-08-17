@@ -1,4 +1,5 @@
-use crate::vmm::hv::{Cpu, CpuExit, CpuIo, CpuStates};
+use crate::vmm::hv::{Cpu, CpuExit, CpuIo, CpuStates, IoBuf};
+use std::error::Error;
 use std::marker::PhantomData;
 use std::mem::{size_of, zeroed, MaybeUninit};
 use thiserror::Error;
@@ -273,13 +274,37 @@ pub struct WhpExit<'a, 'b> {
 }
 
 impl<'a, 'b> CpuExit for WhpExit<'a, 'b> {
-    #[cfg(target_arch = "x86_64")]
-    fn is_hlt(&self) -> bool {
-        self.cx.ExitReason == WHvRunVpExitReasonX64Halt
-    }
+    type Io = WhpIo;
 
     #[cfg(target_arch = "x86_64")]
-    fn is_io(&mut self) -> Option<CpuIo> {
+    fn into_hlt(self) -> Result<(), Self> {
+        if self.cx.ExitReason == WHvRunVpExitReasonX64Halt {
+            Ok(())
+        } else {
+            Err(self)
+        }
+    }
+
+    fn into_io(self) -> Result<Self::Io, Self> {
+        todo!();
+    }
+}
+
+/// Implementation of [`CpuIo`] for Windows Hypervisor Platform.
+pub struct WhpIo<'a, 'b> {
+    cpu: PhantomData<&'a mut WhpCpu<'b>>,
+}
+
+impl<'a, 'b> CpuIo for WhpIo<'a, 'b> {
+    fn addr(&self) -> usize {
+        todo!();
+    }
+
+    fn buffer(&mut self) -> IoBuf {
+        todo!();
+    }
+
+    fn translate(&self, vaddr: usize) -> Result<usize, Box<dyn Error>> {
         todo!()
     }
 }

@@ -23,7 +23,7 @@ pub union Exit {
     ex: ManuallyDrop<Ex>,
     pub io: Io,
     debug: ManuallyDrop<Debug>,
-    mmio: ManuallyDrop<Mmio>,
+    pub mmio: Mmio,
     iocsr_io: ManuallyDrop<IocsrIo>,
     hypercall: ManuallyDrop<Hypercall>,
     tpr_access: ManuallyDrop<TprAccess>,
@@ -92,11 +92,12 @@ struct KvmDebugExitArch {
 }
 
 #[repr(C)]
-struct Mmio {
-    phys_addr: u64,
-    data: [u8; 8],
-    len: u32,
-    is_write: u8,
+#[derive(Clone, Copy)]
+pub struct Mmio {
+    pub phys_addr: usize,
+    pub data: [u8; 8],
+    pub len: u32,
+    pub is_write: u8,
 }
 
 #[repr(C)]

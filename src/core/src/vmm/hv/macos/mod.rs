@@ -2,7 +2,7 @@ use self::cpu::HfCpu;
 use self::vm::Vm;
 use super::Hypervisor;
 use crate::vmm::hw::Ram;
-use crate::vmm::{MemoryAddr, VmmError};
+use crate::vmm::VmmError;
 use hv_sys::hv_vcpu_create;
 use std::ffi::c_int;
 use std::num::NonZero;
@@ -28,7 +28,7 @@ impl Hf {
         // Map memory.
         vm.vm_map(
             ram.host_addr().cast_mut().cast(),
-            ram.vm_addr().try_into().unwrap(),
+            ram.addr().try_into().unwrap(),
             ram.len(),
         )
         .map_err(VmmError::MapRamFailed)?;

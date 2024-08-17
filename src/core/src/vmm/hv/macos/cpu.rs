@@ -1,5 +1,6 @@
-use crate::vmm::hv::{Cpu, CpuExit, CpuStates};
+use crate::vmm::hv::{Cpu, CpuExit, CpuIo, CpuStates, IoBuf};
 use hv_sys::hv_vcpu_destroy;
+use std::error::Error;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::num::NonZero;
@@ -352,22 +353,38 @@ pub struct HfExit<'a> {
 }
 
 impl<'a> CpuExit for HfExit<'a> {
+    type Io = HfIo;
+
     #[cfg(target_arch = "x86_64")]
-    fn is_hlt(&self) -> bool {
+    fn into_hlt(self) -> Result<(), Self> {
         match self.exit_reason.try_into() {
-            Ok(hv_sys::VMX_REASON_HLT) => true,
-            _ => false,
+            Ok(hv_sys::VMX_REASON_HLT) => Ok(()),
+            _ => Err(self),
         }
     }
 
-    #[cfg(target_arch = "x86_64")]
-    fn is_io(&mut self) -> Option<crate::vmm::hv::CpuIo> {
-        match self.exit_reason.try_into() {
-            Ok(hv_sys::VMX_REASON_IO) => todo!(),
-            _ => None,
-        }
+    fn into_io(self) -> Result<Self::Io, Self> {
+        todo!();
     }
 }
+
+/// Implementation of [`CpuIo`] for Hypervisor Framework.
+pub struct HfIo {}
+
+impl CpuIo for HfIo {
+    fn addr(&self) -> usize {
+        todo!();
+    }
+
+    fn buffer(&mut self) -> IoBuf {
+        todo!();
+    }
+
+    fn translate(&self, vaddr: usize) -> Result<usize, Box<dyn Error>> {
+        todo!();
+    }
+}
+
 /// Implementation of [`Cpu::RunErr`].
 #[derive(Debug, Error)]
 pub enum RunError {
