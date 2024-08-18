@@ -82,14 +82,14 @@ fn process_variant(variant: &Variant, enum_name: &Ident) -> syn::Result<TokenStr
 
             fields.iter().enumerate().try_for_each(|(i, field)| {
                 for attr in field.attrs.iter() {
-                    if attr.path().is_ident("source") || attr.path().is_ident("from") {
-                        if pos.replace(i).is_some() {
-                            return Err(syn::Error::new_spanned(
-                                attr,
-                                "multiple fields marked with either #[source] or #[from] found. \
+                    if (attr.path().is_ident("source") || attr.path().is_ident("from"))
+                        && pos.replace(i).is_some()
+                    {
+                        return Err(syn::Error::new_spanned(
+                            attr,
+                            "multiple fields marked with either #[source] or #[from] found. \
                                         Only one field is allowed",
-                            ));
-                        }
+                        ));
                     }
                 }
 
