@@ -1,17 +1,21 @@
 use proc_macro::TokenStream;
-use syn::{parse_macro_input, Error, ItemEnum, ItemFn, LitStr};
+use syn::{parse_macro_input, Error, ItemEnum, ItemStatic, LitStr};
 
-mod cpu_abi;
+mod elf;
 mod enum_conversions;
 mod errno;
 mod vpath;
 
-/// Add `extern "sysv64"` on x86-64 or `extern "aapcs"` on AArch64.
+/// Note will not produced for test target.
 #[proc_macro_attribute]
-pub fn cpu_abi(_: TokenStream, item: TokenStream) -> TokenStream {
-    let item = parse_macro_input!(item as ItemFn);
+pub fn elf_note(args: TokenStream, item: TokenStream) -> TokenStream {
+    let item = parse_macro_input!(item as ItemStatic);
+    let mut opts = self::elf::Options::default();
+    let parser = syn::meta::parser(|m| opts.parse(m));
 
-    cpu_abi::transform(item)
+    parse_macro_input!(args with parser);
+
+    self::elf::transform_note(opts, item)
         .unwrap_or_else(Error::into_compile_error)
         .into()
 }

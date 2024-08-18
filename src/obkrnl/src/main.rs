@@ -8,6 +8,7 @@ use obconf::BootEnv;
 
 mod config;
 mod console;
+mod imgfmt;
 
 /// Entry point of the kernel.
 ///
