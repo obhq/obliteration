@@ -83,11 +83,10 @@ impl Kvm {
         // Set RAM.
         let vm = unsafe { OwnedFd::from_raw_fd(vm) };
         let slot = 0;
-        let addr = ram.addr().try_into().unwrap();
         let len = ram.len().try_into().unwrap();
         let mem = ram.host_addr().cast_mut().cast();
 
-        match unsafe { kvm_set_user_memory_region(vm.as_raw_fd(), slot, addr, len, mem) } {
+        match unsafe { kvm_set_user_memory_region(vm.as_raw_fd(), slot, 0, len, mem) } {
             0 => {}
             v => return Err(VmmError::MapRamFailed(Error::from_raw_os_error(v))),
         }

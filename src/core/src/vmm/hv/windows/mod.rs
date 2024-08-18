@@ -28,12 +28,8 @@ impl Whp {
         part.setup().map_err(VmmError::SetupPartitionFailed)?;
 
         // Map memory.
-        part.map_gpa(
-            ram.host_addr().cast(),
-            ram.addr().try_into().unwrap(),
-            ram.len().try_into().unwrap(),
-        )
-        .map_err(VmmError::MapRamFailed)?;
+        part.map_gpa(ram.host_addr().cast(), 0, ram.len().try_into().unwrap())
+            .map_err(VmmError::MapRamFailed)?;
 
         Ok(Self { part, ram })
     }

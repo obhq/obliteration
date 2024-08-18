@@ -1,7 +1,5 @@
 use self::hv::{Cpu, CpuExit, CpuIo, CpuStates, Hypervisor};
-use self::hw::{
-    setup_devices, Device, DeviceContext, DeviceTree, Ram, RamBuilder, RamMap, PAGE_SIZE,
-};
+use self::hw::{setup_devices, Device, DeviceContext, DeviceTree, Ram, RamBuilder, RamMap};
 use self::screen::Screen;
 use crate::error::RustError;
 use obconf::{BootEnv, Vm};
@@ -11,6 +9,7 @@ use std::error::Error;
 use std::ffi::{c_char, c_void, CStr};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
+use std::num::NonZero;
 use std::ops::Deref;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -135,17 +134,11 @@ pub unsafe extern "C" fn vmm_run(
         let p_vaddr = usize::from_ne_bytes(data[16..24].try_into().unwrap());
         let p_filesz = usize::from_ne_bytes(data[32..40].try_into().unwrap());
         let p_memsz = usize::from_ne_bytes(data[40..48].try_into().unwrap());
-        let p_align = usize::from_ne_bytes(data[48..56].try_into().unwrap());
 
         match p_type {
             1 => {
                 if p_filesz > p_memsz {
                     *err = RustError::new(format!("invalid p_filesz on on PT_LOAD {index}"));
-                    return null_mut();
-                }
-
-                if p_align != PAGE_SIZE.get() {
-                    *err = RustError::new(format!("unsupported p_align on PT_LOAD {index}"));
                     return null_mut();
                 }
 
@@ -194,10 +187,7 @@ pub unsafe extern "C" fn vmm_run(
             return null_mut();
         }
 
-        len = match p_vaddr
-            .checked_add(p_memsz)
-            .and_then(|end| end.checked_next_multiple_of(PAGE_SIZE.get()))
-        {
+        len = match p_vaddr.checked_add(p_memsz) {
             Some(v) => v,
             None => {
                 *err = RustError::new(format!("invalid p_memsz on PT_LOAD at {p_vaddr:#x}"));
@@ -206,8 +196,32 @@ pub unsafe extern "C" fn vmm_run(
         };
     }
 
+    // Get host page size.
+    let host_page_size = match get_page_size() {
+        Ok(v) => v,
+        Err(e) => {
+            *err = RustError::with_source("couldn't get host page size", e);
+            return null_mut();
+        }
+    };
+
+    // Round kernel memory size.
+    let len = match len {
+        0 => {
+            *err = RustError::new("the kernel has PT_LOAD with zero length");
+            return null_mut();
+        }
+        v => match v.checked_next_multiple_of(host_page_size.get()) {
+            Some(v) => NonZero::new_unchecked(v),
+            None => {
+                *err = RustError::new("total size of PT_LOAD is too large");
+                return null_mut();
+            }
+        },
+    };
+
     // Setup RAM builder.
-    let mut ram = match RamBuilder::new() {
+    let mut ram = match RamBuilder::new(host_page_size) {
         Ok(v) => v,
         Err(e) => {
             *err = RustError::wrap(e);
@@ -249,13 +263,14 @@ pub unsafe extern "C" fn vmm_run(
     }
 
     // Allocate stack.
-    if let Err(e) = ram.alloc_stack(1024 * 1024 * 2) {
+    if let Err(e) = ram.alloc_stack(NonZero::new(1024 * 1024 * 2).unwrap()) {
         *err = RustError::with_source("couldn't allocate RAM for stack", e);
         return null_mut();
     }
 
     // Setup virtual devices.
-    let devices = Arc::new(setup_devices(Ram::SIZE));
+    let vm_page_size = NonZero::new(0x4000).unwrap();
+    let devices = Arc::new(setup_devices(Ram::SIZE, vm_page_size));
 
     // Allocate arguments.
     let env = BootEnv::Vm(Vm {
@@ -462,8 +477,12 @@ fn run_cpu(mut cpu: impl Cpu, args: &CpuArgs) {
     let mut devices = args
         .devices
         .map()
-        .map(|(addr, dev)| (addr, dev.create_context(&args.ram)))
-        .collect::<BTreeMap<usize, Box<dyn DeviceContext>>>();
+        .map(|(addr, dev)| {
+            let end = dev.len().checked_add(addr).unwrap();
+
+            (addr, (dev.create_context(&args.ram), end))
+        })
+        .collect::<BTreeMap<usize, (Box<dyn DeviceContext>, NonZero<usize>)>>();
 
     while !args.shutdown.load(Ordering::Relaxed) {
         // Run the vCPU.
@@ -491,14 +510,38 @@ fn run_cpu(mut cpu: impl Cpu, args: &CpuArgs) {
 }
 
 fn exec_io<'a>(
-    devices: &mut BTreeMap<usize, Box<dyn DeviceContext + 'a>>,
+    devices: &mut BTreeMap<usize, (Box<dyn DeviceContext + 'a>, NonZero<usize>)>,
     mut io: impl CpuIo,
 ) -> Result<(), Box<dyn Error>> {
     // Get target device.
     let addr = io.addr();
-    let (_, dev) = devices.range_mut(..=addr).last().unwrap();
+    let (_, (dev, end)) = devices.range_mut(..=addr).last().unwrap();
+
+    assert!(addr < end.get());
 
     dev.exec(&mut io)
+}
+
+#[cfg(unix)]
+fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
+    let v = unsafe { libc::sysconf(libc::_SC_PAGE_SIZE) };
+
+    if v < 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(NonZero::new(v.try_into().unwrap()).unwrap())
+    }
+}
+
+#[cfg(windows)]
+fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
+    use std::mem::zeroed;
+    use windows_sys::Win32::System::SystemInformation::GetSystemInfo;
+    let mut i = unsafe { zeroed() };
+
+    unsafe { GetSystemInfo(&mut i) };
+
+    Ok(NonZero::new(i.dwPageSize.try_into().unwrap()))
 }
 
 /// Manage a virtual machine that run the kernel.
@@ -543,12 +586,6 @@ struct CpuArgs {
 /// Represents an error when [`vmm_new()`] fails.
 #[derive(Debug, Error)]
 enum VmmError {
-    #[error("couldn't get page size of the host")]
-    GetPageSizeFailed(#[source] std::io::Error),
-
-    #[error("host system is using an unsupported page size")]
-    UnsupportedPageSize,
-
     #[error("couldn't create a RAM")]
     CreateRamFailed(#[source] std::io::Error),
 

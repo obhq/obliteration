@@ -1,6 +1,6 @@
 use self::context::Context;
-use super::{Device, DeviceContext, Ram, PAGE_SIZE};
-use obvirt::console::MsgType;
+use super::{Device, DeviceContext, Ram};
+use obvirt::console::{Memory, MsgType};
 use std::collections::VecDeque;
 use std::num::NonZero;
 use std::sync::Mutex;
@@ -10,15 +10,22 @@ mod context;
 /// Virtual console for the VM.
 pub struct Console {
     addr: usize,
+    len: NonZero<usize>,
     logs: Mutex<VecDeque<Log>>,
 }
 
 impl Console {
-    pub(crate) const SIZE: NonZero<usize> = PAGE_SIZE;
+    pub fn new(addr: usize, vm_page_size: NonZero<usize>) -> Self {
+        let len = size_of::<Memory>()
+            .checked_next_multiple_of(vm_page_size.get())
+            .and_then(NonZero::new)
+            .unwrap();
 
-    pub fn new(addr: usize) -> Self {
+        addr.checked_add(len.get()).unwrap();
+
         Self {
             addr,
+            len,
             logs: Mutex::default(),
         }
     }
@@ -30,7 +37,7 @@ impl Device for Console {
     }
 
     fn len(&self) -> NonZero<usize> {
-        Self::SIZE
+        self.len
     }
 
     fn create_context<'a>(&'a self, ram: &'a Ram) -> Box<dyn DeviceContext + 'a> {
