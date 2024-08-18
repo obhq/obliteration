@@ -127,6 +127,7 @@ pub unsafe extern "C" fn vmm_run(
     // Parse program headers.
     let mut segments = Vec::with_capacity(e_phnum);
     let mut dynamic = None;
+    let mut note = None;
 
     for (index, data) in data.chunks_exact(e_phentsize).enumerate() {
         let p_type = u32::from_ne_bytes(data[..4].try_into().unwrap());
@@ -152,6 +153,14 @@ pub unsafe extern "C" fn vmm_run(
 
                 dynamic = Some((p_vaddr, p_memsz));
             }
+            4 => {
+                if note.is_some() {
+                    *err = RustError::new("multiple PT_NOTE is not supported");
+                    return null_mut();
+                }
+
+                note = Some((p_offset, p_filesz));
+            }
             6 | 1685382481 | 1685382482 => {}
             v => {
                 *err = RustError::new(format!("unknown p_type {v} on program header {index}"));
@@ -175,6 +184,144 @@ pub unsafe extern "C" fn vmm_run(
             return null_mut();
         }
     }
+
+    // Check if PT_NOTE exists.
+    let (off, mut len) = match note {
+        Some(v) => v,
+        None => {
+            *err = RustError::new("no PT_NOTE segment on the kernel");
+            return null_mut();
+        }
+    };
+
+    // Seek to PT_NOTE.
+    match file.seek(SeekFrom::Start(off)) {
+        Ok(v) => {
+            if v != off {
+                *err = RustError::new("the kernel is incomplete");
+                return null_mut();
+            }
+        }
+        Err(e) => {
+            *err = RustError::with_source(format_args!("couldn't seek to PT_NOTE at {off:#}"), e);
+            return null_mut();
+        }
+    }
+
+    // Parse PT_NOTE.
+    let mut vm_page_size = None;
+
+    for i in 0.. {
+        const HDR_LEN: usize = 4 * 3;
+
+        // Check remaining data.
+        match len {
+            0 => break,
+            ..HDR_LEN => {
+                *err = RustError::new("invalid PT_NOTE on the kernel");
+                return null_mut();
+            }
+            _ => {}
+        }
+
+        // Read note header.
+        let mut buf = [0u8; HDR_LEN];
+
+        if let Err(e) = file.read_exact(&mut buf) {
+            *err = RustError::with_source(format_args!("couldn't read kernel note #{i} header"), e);
+            return null_mut();
+        }
+
+        // Parse note header.
+        let nlen: usize = u32::from_ne_bytes(buf[..4].try_into().unwrap())
+            .try_into()
+            .unwrap();
+        let dlen: usize = u32::from_ne_bytes(buf[4..8].try_into().unwrap())
+            .try_into()
+            .unwrap();
+        let ty = u32::from_ne_bytes(buf[8..].try_into().unwrap());
+
+        if nlen > 0xff {
+            *err = RustError::new(format!("name on kernel note #{i} is too large"));
+            return null_mut();
+        }
+
+        if dlen > 0xff {
+            *err = RustError::new(format!("description on kernel note #{i} is too large"));
+            return null_mut();
+        }
+
+        // Check if header valid.
+        let nalign = nlen.next_multiple_of(4);
+
+        len = match HDR_LEN
+            .checked_add(nalign)
+            .and_then(|v| v.checked_add(dlen))
+            .and_then(|v| len.checked_sub(v))
+        {
+            Some(v) => v,
+            None => {
+                *err = RustError::new(format!("kernel note #{i} is not valid"));
+                return null_mut();
+            }
+        };
+
+        // Read note name + description.
+        let mut buf = vec![0u8; nalign + dlen];
+
+        if let Err(e) = file.read_exact(&mut buf) {
+            *err = RustError::with_source(format_args!("couldn't read kernel note #{i} data"), e);
+            return null_mut();
+        }
+
+        // Check name.
+        let name = match CStr::from_bytes_until_nul(&buf) {
+            Ok(v) if v.to_bytes_with_nul().len() == nlen => v,
+            _ => {
+                *err = RustError::new(format!("kernel note #{i} has invalid name"));
+                return null_mut();
+            }
+        };
+
+        if name.to_bytes() != b"obkrnl" {
+            continue;
+        }
+
+        // Parse description.
+        match ty {
+            0 => {
+                if vm_page_size.is_some() {
+                    *err = RustError::new(format!("kernel note #{i} is duplicated"));
+                    return null_mut();
+                }
+
+                vm_page_size = buf[nalign..]
+                    .try_into()
+                    .map(usize::from_ne_bytes)
+                    .ok()
+                    .and_then(NonZero::new)
+                    .filter(|v| v.is_power_of_two());
+
+                if vm_page_size.is_none() {
+                    *err = RustError::new(format!("invalid description on kernel note #{i}"));
+                    return null_mut();
+                }
+            }
+            v => {
+                *err = RustError::new(format!("unknown type {v} on kernel note #{i}"));
+                return null_mut();
+            }
+        }
+    }
+
+    // Check if page size exists.
+    let vm_page_size = match vm_page_size {
+        Some(v) => v,
+        None => {
+            *err = RustError::new("no page size in kernel note");
+            return null_mut();
+        }
+    };
 
     // Get kernel memory size.
     let mut len = 0;
@@ -211,7 +358,7 @@ pub unsafe extern "C" fn vmm_run(
             *err = RustError::new("the kernel has PT_LOAD with zero length");
             return null_mut();
         }
-        v => match v.checked_next_multiple_of(host_page_size.get()) {
+        v => match v.checked_next_multiple_of(vm_page_size.get()) {
             Some(v) => NonZero::new_unchecked(v),
             None => {
                 *err = RustError::new("total size of PT_LOAD is too large");
@@ -268,11 +415,8 @@ pub unsafe extern "C" fn vmm_run(
         return null_mut();
     }
 
-    // Setup virtual devices.
-    let vm_page_size = NonZero::new(0x4000).unwrap();
-    let devices = Arc::new(setup_devices(Ram::SIZE, vm_page_size));
-
     // Allocate arguments.
+    let devices = Arc::new(setup_devices(Ram::SIZE, vm_page_size));
     let env = BootEnv::Vm(Vm {
         console: devices.console().addr(),
     });
