@@ -529,7 +529,7 @@ fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
     if v < 0 {
         Err(std::io::Error::last_os_error())
     } else {
-        Ok(NonZero::new(v.try_into().unwrap()).unwrap())
+        Ok(v.try_into().ok().and_then(NonZero::new).unwrap())
     }
 }
 
@@ -541,7 +541,7 @@ fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
 
     unsafe { GetSystemInfo(&mut i) };
 
-    Ok(NonZero::new(i.dwPageSize.try_into().unwrap()))
+    Ok(i.dwPageSize.try_into().ok().and_then(NonZero::new).unwrap())
 }
 
 /// Manage a virtual machine that run the kernel.
