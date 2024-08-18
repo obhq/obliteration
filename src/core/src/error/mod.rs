@@ -1,6 +1,6 @@
 use std::error::Error;
 use std::ffi::{c_char, CString};
-use std::fmt::Write;
+use std::fmt::{Display, Write};
 
 #[no_mangle]
 pub unsafe extern "C" fn error_free(e: *mut RustError) {
@@ -16,12 +16,14 @@ pub unsafe extern "C" fn error_message(e: *const RustError) -> *const c_char {
 pub struct RustError(CString);
 
 impl RustError {
-    pub fn new(msg: impl AsRef<str>) -> *mut Self {
-        Box::into_raw(Self(CString::new(msg.as_ref()).unwrap()).into())
+    /// # Panics
+    /// If `msg` contains NUL character.
+    pub fn new(msg: impl Into<Vec<u8>>) -> *mut Self {
+        Box::into_raw(Self(CString::new(msg).unwrap()).into())
     }
 
-    pub fn with_source(msg: impl AsRef<str>, src: impl Error) -> *mut Self {
-        let mut msg = format!("{} -> {}", msg.as_ref(), src);
+    pub fn with_source(msg: impl Display, src: impl Error) -> *mut Self {
+        let mut msg = format!("{} -> {}", msg, src);
         let mut src = src.source();
 
         while let Some(e) = src {
