@@ -6,6 +6,7 @@ mod enum_conversions;
 mod errno;
 mod vpath;
 
+/// Note will not produced for test target.
 #[proc_macro_attribute]
 pub fn elf_note(args: TokenStream, item: TokenStream) -> TokenStream {
     let item = parse_macro_input!(item as ItemStatic);
