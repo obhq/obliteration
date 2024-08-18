@@ -1,7 +1,8 @@
 use super::{Ram, RamError};
-use crate::vmm::hw::{DeviceTree, PAGE_SIZE};
+use crate::vmm::hw::DeviceTree;
 use crate::vmm::VmmError;
 use obconf::BootEnv;
+use std::num::NonZero;
 use std::ops::Range;
 use thiserror::Error;
 
@@ -15,16 +16,10 @@ pub struct RamBuilder {
 }
 
 impl RamBuilder {
-    pub fn new() -> Result<Self, VmmError> {
-        // In theory we can support any page size on the host. The problem is it required a lot of
-        // work. It is also unlikely for someone to need this feature because AFAIK the maximum page
-        // size on a consumer computer is the same as PS4. With page size the same as PS4 or lower
-        // we don't need to keep track allocations here.
-        let page_size = Self::get_page_size().map_err(VmmError::GetPageSizeFailed)?;
-
-        if page_size > PAGE_SIZE.get() {
-            return Err(VmmError::UnsupportedPageSize);
-        }
+    /// # Safety
+    /// `host_page_size` must be valid.
+    pub unsafe fn new(host_page_size: NonZero<usize>) -> Result<Self, VmmError> {
+        use std::io::Error;
 
         // Reserve memory range.
         #[cfg(unix)]
@@ -32,19 +27,17 @@ impl RamBuilder {
             use libc::{mmap, MAP_ANON, MAP_FAILED, MAP_PRIVATE, PROT_NONE};
             use std::ptr::null_mut;
 
-            let mem = unsafe {
-                mmap(
-                    null_mut(),
-                    Ram::SIZE,
-                    PROT_NONE,
-                    MAP_PRIVATE | MAP_ANON,
-                    -1,
-                    0,
-                )
-            };
+            let mem = mmap(
+                null_mut(),
+                Ram::SIZE,
+                PROT_NONE,
+                MAP_PRIVATE | MAP_ANON,
+                -1,
+                0,
+            );
 
             if mem == MAP_FAILED {
-                return Err(VmmError::CreateRamFailed(std::io::Error::last_os_error()));
+                return Err(VmmError::CreateRamFailed(Error::last_os_error()));
             }
 
             mem.cast()
@@ -55,17 +48,20 @@ impl RamBuilder {
             use std::ptr::null;
             use windows_sys::Win32::System::Memory::{VirtualAlloc, MEM_RESERVE, PAGE_NOACCESS};
 
-            let mem = unsafe { VirtualAlloc(null(), Ram::SIZE, MEM_RESERVE, PAGE_NOACCESS) };
+            let mem = VirtualAlloc(null(), Ram::SIZE, MEM_RESERVE, PAGE_NOACCESS);
 
             if mem.is_null() {
-                return Err(VmmError::CreateRamFailed(std::io::Error::last_os_error()));
+                return Err(VmmError::CreateRamFailed(Error::last_os_error()));
             }
 
             mem.cast()
         };
 
         Ok(Self {
-            ram: Ram(mem),
+            ram: Ram {
+                mem,
+                host_page_size,
+            },
             next: 0,
             kern: None,
             stack: None,
@@ -74,28 +70,32 @@ impl RamBuilder {
     }
 
     /// # Panics
-    /// If called a second time.
-    pub fn alloc_kernel(&mut self, len: usize) -> Result<&mut [u8], RamError> {
+    /// - If `len` is not multiplied by host page size.
+    /// - If called a second time.
+    pub fn alloc_kernel(&mut self, len: NonZero<usize>) -> Result<&mut [u8], RamError> {
         assert!(self.kern.is_none());
 
-        let mem = unsafe { self.ram.alloc(self.next, len)? };
+        let addr = self.next;
+        let mem = unsafe { self.ram.alloc(addr, len)? };
 
-        self.kern = Some(self.next..(self.next + len));
-        self.next += len;
+        self.kern = Some(addr..(addr + len.get()));
+        self.next += len.get();
 
         Ok(mem)
     }
 
     /// # Panics
-    /// - If `len` is not multiplied by [`Ram::VM_PAGE_SIZE`].
+    /// - If `len` is not multiplied by host page size.
     /// - If called a second time.
-    pub fn alloc_stack(&mut self, len: usize) -> Result<(), RamError> {
+    pub fn alloc_stack(&mut self, len: NonZero<usize>) -> Result<(), RamError> {
         assert!(self.stack.is_none());
 
-        unsafe { self.ram.alloc(self.next, len) }?;
+        let addr = self.next;
 
-        self.stack = Some(self.next..(self.next + len));
-        self.next += len;
+        unsafe { self.ram.alloc(addr, len) }?;
+
+        self.stack = Some(addr..(addr + len.get()));
+        self.next += len.get();
 
         Ok(())
     }
@@ -104,23 +104,27 @@ impl RamBuilder {
     /// If called a second time.
     pub fn alloc_args(&mut self, env: BootEnv) -> Result<(), RamError> {
         assert!(self.args.is_none());
-        assert!(align_of::<BootEnv>() <= PAGE_SIZE.get());
+        assert!(align_of::<BootEnv>() <= self.ram.host_page_size.get());
 
         // Allocate RAM for all arguments.
-        let len = size_of::<BootEnv>().next_multiple_of(PAGE_SIZE.get());
-        let args = unsafe { self.ram.alloc(self.next, len)?.as_mut_ptr() };
+        let addr = self.next;
+        let len = size_of::<BootEnv>()
+            .checked_next_multiple_of(self.ram.host_page_size.get())
+            .and_then(NonZero::new)
+            .unwrap();
+        let args = unsafe { self.ram.alloc(addr, len)?.as_mut_ptr() };
 
         // Write env.
         let off = 0;
 
-        unsafe { std::ptr::write(args.cast(), env) };
+        unsafe { std::ptr::write(args.add(off).cast(), env) };
 
         self.args = Some(KernelArgs {
-            ram: self.next..(self.next + len),
+            ram: addr..(addr + len.get()),
             env: off,
         });
 
-        self.next += len;
+        self.next += len.get();
 
         Ok(())
     }
@@ -151,7 +155,7 @@ impl RamBuilder {
 
         for (addr, dev) in devices.map() {
             let len = dev.len().get();
-            self.setup_page_tables(pml4t, addr, addr, len)?;
+            self.setup_4k_page_tables(pml4t, addr, addr, len)?;
             dev_end = addr + len;
         }
 
@@ -167,7 +171,7 @@ impl RamBuilder {
 
         assert!(vaddr >= dev_end);
 
-        self.setup_page_tables(pml4t, vaddr, kern_paddr, kern_len)?;
+        self.setup_4k_page_tables(pml4t, vaddr, kern_paddr, kern_len)?;
 
         vaddr += kern_len;
 
@@ -179,7 +183,7 @@ impl RamBuilder {
             .map(|v| (v.start, v.end - v.start))
             .unwrap();
 
-        self.setup_page_tables(pml4t, vaddr, paddr, stack_len)?;
+        self.setup_4k_page_tables(pml4t, vaddr, paddr, stack_len)?;
 
         vaddr += stack_len;
 
@@ -188,7 +192,7 @@ impl RamBuilder {
         let ram = args.ram;
         let env_vaddr = vaddr + args.env;
 
-        self.setup_page_tables(pml4t, vaddr, ram.start, ram.end - ram.start)?;
+        self.setup_4k_page_tables(pml4t, vaddr, ram.start, ram.end - ram.start)?;
 
         // Check if PT_DYNAMIC valid.
         let (p_vaddr, p_memsz) = dynamic;
@@ -198,7 +202,8 @@ impl RamBuilder {
         }
 
         // Get PT_DYNAMIC.
-        let kern = unsafe { std::slice::from_raw_parts_mut(self.ram.0.add(kern_paddr), kern_len) };
+        let kern =
+            unsafe { std::slice::from_raw_parts_mut(self.ram.mem.add(kern_paddr), kern_len) };
         let dynamic = p_vaddr
             .checked_add(p_memsz)
             .and_then(|end| kern.get(p_vaddr..end))
@@ -288,14 +293,14 @@ impl RamBuilder {
     }
 
     #[cfg(target_arch = "x86_64")]
-    fn setup_page_tables(
+    fn setup_4k_page_tables(
         &mut self,
         pml4t: &mut [usize; 512],
         vaddr: usize,
         paddr: usize,
         len: usize,
     ) -> Result<(), RamBuilderError> {
-        assert_eq!(len % PAGE_SIZE, 0);
+        assert_eq!(len % 4096, 0);
 
         fn set_page_entry(entry: &mut usize, addr: usize) {
             assert_eq!(addr & 0x7FF0000000000000, 0);
@@ -320,7 +325,7 @@ impl RamBuilder {
 
                     unsafe { &mut *pdpt }
                 }
-                v => unsafe { &mut *self.ram.0.add(v & 0xFFFFFFFFFF000).cast() },
+                v => unsafe { &mut *self.ram.mem.add(v & 0xFFFFFFFFFF000).cast() },
             };
 
             // Get page-directory table.
@@ -335,7 +340,7 @@ impl RamBuilder {
 
                     unsafe { &mut *pdt }
                 }
-                v => unsafe { &mut *self.ram.0.add(v & 0xFFFFFFFFFF000).cast() },
+                v => unsafe { &mut *self.ram.mem.add(v & 0xFFFFFFFFFF000).cast() },
             };
 
             // Get page table.
@@ -350,7 +355,7 @@ impl RamBuilder {
 
                     unsafe { &mut *pt }
                 }
-                v => unsafe { &mut *self.ram.0.add(v & 0xFFFFFFFFFF000).cast() },
+                v => unsafe { &mut *self.ram.mem.add(v & 0xFFFFFFFFFF000).cast() },
             };
 
             // Set page table entry.
@@ -367,35 +372,22 @@ impl RamBuilder {
 
     #[cfg(target_arch = "x86_64")]
     fn alloc_page_table(&mut self) -> Result<(*mut [usize; 512], usize), RamError> {
-        let off = self.next;
-        let len = (512usize * 8).next_multiple_of(PAGE_SIZE.get());
-        let tab = unsafe { self.ram.alloc(off, len).map(|v| v.as_mut_ptr().cast())? };
+        // Get address and length.
+        let addr = self.next;
+        let len = (512usize * 8)
+            .checked_next_multiple_of(self.ram.host_page_size.get())
+            .and_then(NonZero::new)
+            .unwrap();
 
-        self.next += len;
+        // Page table on x86-64 always 4k aligned regardless page size being used.
+        assert_eq!(addr % 4096, 0);
 
-        Ok((tab, off))
-    }
+        // Allocate.
+        let tab = unsafe { self.ram.alloc(addr, len).map(|v| v.as_mut_ptr().cast())? };
 
-    #[cfg(unix)]
-    fn get_page_size() -> Result<usize, std::io::Error> {
-        let v = unsafe { libc::sysconf(libc::_SC_PAGE_SIZE) };
+        self.next += len.get();
 
-        if v < 0 {
-            Err(std::io::Error::last_os_error())
-        } else {
-            Ok(v.try_into().unwrap())
-        }
-    }
-
-    #[cfg(windows)]
-    fn get_page_size() -> Result<usize, std::io::Error> {
-        use std::mem::zeroed;
-        use windows_sys::Win32::System::SystemInformation::GetSystemInfo;
-        let mut i = unsafe { zeroed() };
-
-        unsafe { GetSystemInfo(&mut i) };
-
-        Ok(i.dwPageSize.try_into().unwrap())
+        Ok((tab, addr))
     }
 }
 

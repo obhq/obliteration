@@ -10,14 +10,12 @@ pub use self::ram::*;
 mod console;
 mod ram;
 
-pub(crate) const PAGE_SIZE: NonZero<usize> = unsafe { NonZero::new_unchecked(0x4000) };
-
-pub fn setup_devices(start_addr: usize) -> DeviceTree {
+pub fn setup_devices(start_addr: usize, vm_page_size: NonZero<usize>) -> DeviceTree {
     let mut map = BTreeMap::<usize, Arc<dyn Device>>::new();
 
     // Console.
     let addr = start_addr;
-    let console = Arc::new(Console::new(addr));
+    let console = Arc::new(Console::new(addr, vm_page_size));
 
     assert!(map.insert(console.addr(), console.clone()).is_none());
 

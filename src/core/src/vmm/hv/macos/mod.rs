@@ -26,12 +26,8 @@ impl Hf {
         let vm = Vm::new().map_err(VmmError::CreateVmFailed)?;
 
         // Map memory.
-        vm.vm_map(
-            ram.host_addr().cast_mut().cast(),
-            ram.addr().try_into().unwrap(),
-            ram.len(),
-        )
-        .map_err(VmmError::MapRamFailed)?;
+        vm.vm_map(ram.host_addr().cast_mut().cast(), 0, ram.len())
+            .map_err(VmmError::MapRamFailed)?;
 
         Ok(Self { vm, ram })
     }
