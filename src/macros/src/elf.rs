@@ -3,9 +3,9 @@ use quote::{quote, ToTokens};
 use syn::meta::ParseNestedMeta;
 use syn::{parse_quote, Error, ItemStatic, LitInt, LitStr, Meta, StaticMutability, Type};
 
-const OPT_SECTION: &'static str = "section";
-const OPT_NAME: &'static str = "name";
-const OPT_TY: &'static str = "ty";
+const OPT_SECTION: &str = "section";
+const OPT_NAME: &str = "name";
+const OPT_TY: &str = "ty";
 
 pub fn transform_note(opts: Options, mut item: ItemStatic) -> syn::Result<TokenStream> {
     // Forbid "used" and "link_section" attribute.

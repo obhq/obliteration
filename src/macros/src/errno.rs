@@ -76,33 +76,27 @@ fn process_variant(variant: &Variant, enum_name: &Ident) -> syn::Result<TokenStr
     match &variant.fields {
         Fields::Named(_) => todo!("Named fields are not supported yet"),
         Fields::Unnamed(fields) => {
-            let ref fields = fields.unnamed;
+            let fields = &fields.unnamed;
 
             let mut pos = None;
 
-            fields
-                .iter()
-                .enumerate()
-                .try_for_each(|(i, field)| {
-                    for attr in field.attrs.iter() {
-                        if attr.path().is_ident("source") || attr.path().is_ident("from") {
-                            if let Some(_) = pos.replace(i) {
-                                return Err(syn::Error::new_spanned(
-                                    attr,
-                                    format!(
-                                        "multiple fields marked with either #[source] or #[from] found. \
-                                        Only one field is allowed"
-                                    ),
-                                ))
-                            }
+            fields.iter().enumerate().try_for_each(|(i, field)| {
+                for attr in field.attrs.iter() {
+                    if attr.path().is_ident("source") || attr.path().is_ident("from") {
+                        if pos.replace(i).is_some() {
+                            return Err(syn::Error::new_spanned(
+                                attr,
+                                "multiple fields marked with either #[source] or #[from] found. \
+                                        Only one field is allowed",
+                            ));
                         }
-
                     }
+                }
 
-                    Ok(())
-                })?;
+                Ok(())
+            })?;
 
-            return match pos {
+            match pos {
                 Some(pos) => {
                     let variant_name = &variant.ident;
                     // The field at index `pos` is the one we are interested in
@@ -117,7 +111,7 @@ fn process_variant(variant: &Variant, enum_name: &Ident) -> syn::Result<TokenStr
                     variant,
                     "no fields of this variant are marked with either #[source] or #[from]",
                 )),
-            };
+            }
         }
         Fields::Unit => Err(syn::Error::new_spanned(
             variant,
