@@ -1,5 +1,6 @@
 use super::{Ram, RamError};
 use crate::vmm::hw::DeviceTree;
+use crate::vmm::kernel::ProgramHeader;
 use crate::vmm::VmmError;
 use obconf::BootEnv;
 use std::num::NonZero;
@@ -133,7 +134,7 @@ impl RamBuilder {
     pub fn build(
         mut self,
         devices: &DeviceTree,
-        dynamic: Option<(usize, usize)>,
+        dynamic: Option<ProgramHeader>,
     ) -> Result<(Ram, RamMap), RamBuilderError> {
         // For x86-64 we require the kernel to be a Position-Independent Executable so we can map it
         // at the same address as the PS4 kernel.
@@ -195,7 +196,8 @@ impl RamBuilder {
         self.setup_4k_page_tables(pml4t, vaddr, ram.start, ram.end - ram.start)?;
 
         // Check if PT_DYNAMIC valid.
-        let (p_vaddr, p_memsz) = dynamic;
+        let p_vaddr = dynamic.p_vaddr;
+        let p_memsz = dynamic.p_memsz;
 
         if p_memsz % 16 != 0 {
             return Err(RamBuilderError::InvalidDynamicLinking);
@@ -249,7 +251,7 @@ impl RamBuilder {
     pub fn build(
         self,
         devices: &DeviceTree,
-        dynamic: Option<(usize, usize)>,
+        dynamic: Option<ProgramHeader>,
     ) -> Result<(Ram, RamMap), RamBuilderError> {
         todo!()
     }

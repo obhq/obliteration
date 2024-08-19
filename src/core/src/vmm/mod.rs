@@ -1,5 +1,6 @@
 use self::hv::{Cpu, CpuExit, CpuIo, CpuStates, Hypervisor};
 use self::hw::{setup_devices, Device, DeviceContext, DeviceTree, Ram, RamBuilder, RamMap};
+use self::kernel::Kernel;
 use self::screen::Screen;
 use crate::error::RustError;
 use obconf::{BootEnv, Vm};
@@ -7,8 +8,7 @@ use obvirt::console::MsgType;
 use std::collections::{BTreeMap, VecDeque};
 use std::error::Error;
 use std::ffi::{c_char, c_void, CStr};
-use std::fs::File;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::Read;
 use std::num::NonZero;
 use std::ops::Deref;
 use std::ptr::null_mut;
@@ -20,12 +20,8 @@ use thiserror::Error;
 
 mod hv;
 mod hw;
+mod kernel;
 mod screen;
-
-#[cfg(target_arch = "x86_64")]
-const ELF_MACHINE: u16 = 62;
-#[cfg(target_arch = "aarch64")]
-const ELF_MACHINE: u16 = 183;
 
 #[no_mangle]
 pub unsafe extern "C" fn vmm_free(vmm: *mut Vmm) {
@@ -48,102 +44,55 @@ pub unsafe extern "C" fn vmm_run(
     };
 
     // Open kernel image.
-    let mut file = match File::open(path) {
+    let mut file = match Kernel::open(path) {
         Ok(v) => v,
         Err(e) => {
-            *err = RustError::with_source("couldn't open the kernel", e);
+            *err = RustError::with_source(format_args!("couldn't open {path}"), e);
             return null_mut();
         }
     };
 
-    // Read file header.
-    let mut hdr = [0; 64];
-
-    if let Err(e) = file.read_exact(&mut hdr) {
-        *err = RustError::with_source("couldn't read kernel header", e);
-        return null_mut();
-    }
-
-    // Check if ELF.
-    if &hdr[..4] != b"\x7fELF" {
-        *err = RustError::new("the kernel is not an ELF file");
-        return null_mut();
-    }
-
-    // Check ELF type.
-    if hdr[4] != 2 {
-        *err = RustError::new("the kernel is not 64-bit kernel");
-        return null_mut();
-    }
-
-    if hdr[6] != 1 {
-        *err = RustError::new("the kernel has unknown ELF version");
-        return null_mut();
-    }
-
-    if u16::from_ne_bytes(hdr[18..20].try_into().unwrap()) != ELF_MACHINE {
-        *err = RustError::new("the kernel is for a different CPU architecture");
-        return null_mut();
-    }
-
-    // Load ELF header.
-    let e_entry = usize::from_ne_bytes(hdr[24..32].try_into().unwrap());
-    let e_phoff = u64::from_ne_bytes(hdr[32..40].try_into().unwrap());
-    let e_phentsize: usize = u16::from_ne_bytes(hdr[54..56].try_into().unwrap()).into();
-    let e_phnum: usize = u16::from_ne_bytes(hdr[56..58].try_into().unwrap()).into();
-
-    if e_phentsize != 56 {
-        *err = RustError::new("the kernel has unsupported e_phentsize");
-        return null_mut();
-    }
-
-    if e_phnum > 16 {
-        *err = RustError::new("too many program headers");
-        return null_mut();
-    }
-
-    // Seek to program headers.
-    match file.seek(SeekFrom::Start(e_phoff)) {
-        Ok(v) => {
-            if v != e_phoff {
-                *err = RustError::new("the kernel is incomplete");
-                return null_mut();
-            }
-        }
+    // Get program header enumerator.
+    let hdrs = match file.program_headers() {
+        Ok(v) => v,
         Err(e) => {
-            *err = RustError::with_source("couldn't seek to program headers", e);
+            *err = RustError::with_source(
+                format_args!("couldn't start enumerating program headers of {path}"),
+                e,
+            );
+
             return null_mut();
         }
-    }
-
-    // Read program headers.
-    let mut data = vec![0; e_phnum * e_phentsize];
-
-    if let Err(e) = file.read_exact(&mut data) {
-        *err = RustError::with_source("couldn't read program headers", e);
-        return null_mut();
-    }
+    };
 
     // Parse program headers.
-    let mut segments = Vec::with_capacity(e_phnum);
+    let mut segments = Vec::new();
     let mut dynamic = None;
     let mut note = None;
 
-    for (index, data) in data.chunks_exact(e_phentsize).enumerate() {
-        let p_type = u32::from_ne_bytes(data[..4].try_into().unwrap());
-        let p_offset = u64::from_ne_bytes(data[8..16].try_into().unwrap());
-        let p_vaddr = usize::from_ne_bytes(data[16..24].try_into().unwrap());
-        let p_filesz = usize::from_ne_bytes(data[32..40].try_into().unwrap());
-        let p_memsz = usize::from_ne_bytes(data[40..48].try_into().unwrap());
+    for (index, item) in hdrs.enumerate() {
+        // Check if success.
+        let hdr = match item {
+            Ok(v) => v,
+            Err(e) => {
+                *err = RustError::with_source(
+                    format_args!("couldn't read program header #{index} on {path}"),
+                    e,
+                );
 
-        match p_type {
+                return null_mut();
+            }
+        };
+
+        // Process the header.
+        match hdr.p_type {
             1 => {
-                if p_filesz > p_memsz {
+                if hdr.p_filesz > TryInto::<u64>::try_into(hdr.p_memsz).unwrap() {
                     *err = RustError::new(format!("invalid p_filesz on on PT_LOAD {index}"));
                     return null_mut();
                 }
 
-                segments.push((p_offset, p_filesz, p_vaddr, p_memsz));
+                segments.push(hdr);
             }
             2 => {
                 if dynamic.is_some() {
@@ -151,7 +100,7 @@ pub unsafe extern "C" fn vmm_run(
                     return null_mut();
                 }
 
-                dynamic = Some((p_vaddr, p_memsz));
+                dynamic = Some(hdr);
             }
             4 => {
                 if note.is_some() {
@@ -159,7 +108,7 @@ pub unsafe extern "C" fn vmm_run(
                     return null_mut();
                 }
 
-                note = Some((p_offset, p_filesz));
+                note = Some(hdr);
             }
             6 | 1685382481 | 1685382482 => {}
             v => {
@@ -169,12 +118,12 @@ pub unsafe extern "C" fn vmm_run(
         }
     }
 
-    segments.sort_unstable_by_key(|i| i.2);
+    segments.sort_unstable_by_key(|i| i.p_vaddr);
 
     // Make sure the first PT_LOAD includes the ELF header.
     match segments.first() {
-        Some(&(p_offset, _, _, _)) => {
-            if p_offset != 0 {
+        Some(hdr) => {
+            if hdr.p_offset != 0 {
                 *err = RustError::new("the first PT_LOAD does not includes ELF header");
                 return null_mut();
             }
@@ -186,7 +135,7 @@ pub unsafe extern "C" fn vmm_run(
     }
 
     // Check if PT_NOTE exists.
-    let (off, mut len) = match note {
+    let note = match note {
         Some(v) => v,
         None => {
             *err = RustError::new("no PT_NOTE segment on the kernel");
@@ -195,39 +144,27 @@ pub unsafe extern "C" fn vmm_run(
     };
 
     // Seek to PT_NOTE.
-    match file.seek(SeekFrom::Start(off)) {
-        Ok(v) => {
-            if v != off {
-                *err = RustError::new("the kernel is incomplete");
-                return null_mut();
-            }
-        }
+    let mut data = match file.segment_data(&note) {
+        Ok(v) => v,
         Err(e) => {
-            *err = RustError::with_source(format_args!("couldn't seek to PT_NOTE at {off:#}"), e);
+            *err = RustError::with_source(format_args!("couldn't seek to PT_NOTE on {path}"), e);
             return null_mut();
         }
-    }
+    };
 
     // Parse PT_NOTE.
     let mut vm_page_size = None;
 
     for i in 0.. {
-        const HDR_LEN: usize = 4 * 3;
-
         // Check remaining data.
-        match len {
-            0 => break,
-            ..HDR_LEN => {
-                *err = RustError::new("invalid PT_NOTE on the kernel");
-                return null_mut();
-            }
-            _ => {}
+        if data.limit() == 0 {
+            break;
         }
 
         // Read note header.
-        let mut buf = [0u8; HDR_LEN];
+        let mut buf = [0u8; 4 * 3];
 
-        if let Err(e) = file.read_exact(&mut buf) {
+        if let Err(e) = data.read_exact(&mut buf) {
             *err = RustError::with_source(format_args!("couldn't read kernel note #{i} header"), e);
             return null_mut();
         }
@@ -251,25 +188,11 @@ pub unsafe extern "C" fn vmm_run(
             return null_mut();
         }
 
-        // Check if header valid.
-        let nalign = nlen.next_multiple_of(4);
-
-        len = match HDR_LEN
-            .checked_add(nalign)
-            .and_then(|v| v.checked_add(dlen))
-            .and_then(|v| len.checked_sub(v))
-        {
-            Some(v) => v,
-            None => {
-                *err = RustError::new(format!("kernel note #{i} is not valid"));
-                return null_mut();
-            }
-        };
-
         // Read note name + description.
+        let nalign = nlen.next_multiple_of(4);
         let mut buf = vec![0u8; nalign + dlen];
 
-        if let Err(e) = file.read_exact(&mut buf) {
+        if let Err(e) = data.read_exact(&mut buf) {
             *err = RustError::with_source(format_args!("couldn't read kernel note #{i} data"), e);
             return null_mut();
         }
@@ -326,18 +249,20 @@ pub unsafe extern "C" fn vmm_run(
     // Get kernel memory size.
     let mut len = 0;
 
-    for &(_, _, p_vaddr, p_memsz) in &segments {
-        if p_vaddr < len {
+    for hdr in &segments {
+        if hdr.p_vaddr < len {
             *err = RustError::new(format!(
-                "PT_LOAD at {p_vaddr:#x} is overlapped with the previous PT_LOAD"
+                "PT_LOAD at {:#x} is overlapped with the previous PT_LOAD",
+                hdr.p_vaddr
             ));
+
             return null_mut();
         }
 
-        len = match p_vaddr.checked_add(p_memsz) {
+        len = match hdr.p_vaddr.checked_add(hdr.p_memsz) {
             Some(v) => v,
             None => {
-                *err = RustError::new(format!("invalid p_memsz on PT_LOAD at {p_vaddr:#x}"));
+                *err = RustError::new(format!("invalid p_memsz on PT_LOAD at {:#x}", hdr.p_vaddr));
                 return null_mut();
             }
         };
@@ -385,26 +310,29 @@ pub unsafe extern "C" fn vmm_run(
         }
     };
 
-    for &(p_offset, p_filesz, p_vaddr, p_memsz) in &segments {
+    for hdr in &segments {
         // Seek to segment data.
-        match file.seek(SeekFrom::Start(p_offset)) {
-            Ok(v) => {
-                if v != p_offset {
-                    *err = RustError::new("the kernel is incomplete");
-                    return null_mut();
-                }
-            }
+        let mut data = match file.segment_data(hdr) {
+            Ok(v) => v,
             Err(e) => {
-                *err = RustError::with_source(format!("couldn't seek to offset {p_offset}"), e);
+                *err = RustError::with_source(
+                    format_args!("couldn't seek to offset {}", hdr.p_offset),
+                    e,
+                );
+
                 return null_mut();
             }
-        }
+        };
 
         // Read segment data.
-        let seg = &mut kern[p_vaddr..(p_vaddr + p_memsz)];
+        let mut seg = &mut kern[hdr.p_vaddr..(hdr.p_vaddr + hdr.p_memsz)];
 
-        if let Err(e) = file.read_exact(&mut seg[..p_filesz]) {
-            *err = RustError::with_source(format!("couldn't read kernet at offset {p_offset}"), e);
+        if let Err(e) = std::io::copy(&mut data, &mut seg) {
+            *err = RustError::with_source(
+                format_args!("couldn't read kernet at offset {}", hdr.p_offset),
+                e,
+            );
+
             return null_mut();
         }
     }
@@ -466,6 +394,7 @@ pub unsafe extern "C" fn vmm_run(
     };
 
     // Spawn a thread to drive main CPU.
+    let e_entry = file.entry();
     let (tx, rx) = std::sync::mpsc::channel();
     let main = move || main_cpu(&args, e_entry, map, tx);
     let main = match std::thread::Builder::new().spawn(main) {
