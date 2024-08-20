@@ -1,3 +1,4 @@
+#include "core.hpp"
 #include "initialize_wizard.hpp"
 #include "main_window.hpp"
 #include "settings.hpp"
@@ -8,6 +9,7 @@
 
 #include <QApplication>
 #include <QMessageBox>
+#include <QMetaObject>
 #ifndef __APPLE__
 #include <QVersionNumber>
 #include <QVulkanInstance>
@@ -16,6 +18,24 @@
 #ifndef _WIN32
 #include <sys/resource.h>
 #endif
+
+static void panicHook(
+    const char *file,
+    size_t flen,
+    uint32_t line,
+    const char *msg,
+    size_t mlen,
+    void *cx)
+{
+    QMetaObject::invokeMethod(reinterpret_cast<QObject *>(cx), [=]() {
+        auto text = QString("An unexpected error occurred at %1:%2: %3")
+            .arg(QString::fromUtf8(file, flen))
+            .arg(line)
+            .arg(QString::fromUtf8(msg, mlen));
+
+        QMessageBox::critical(nullptr, "Fatal Error", text);
+    });
+}
 
 int main(int argc, char *argv[])
 {
@@ -27,6 +47,11 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
 
     QGuiApplication::setWindowIcon(QIcon(":/resources/obliteration-icon.png"));
+
+    // Hook Rust panic.
+    QObject panic;
+
+    set_panic_hook(&panic, panicHook);
 
     // Increase number of file descriptors to maximum allowed.
 #ifndef _WIN32
