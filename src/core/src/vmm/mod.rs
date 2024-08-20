@@ -246,6 +246,22 @@ pub unsafe extern "C" fn vmm_run(
         }
     };
 
+    // TODO: Support any page size on the host. With page size the same as kernel or lower we don't
+    // need to keep track allocations in the RAM because any requested address from the kernel will
+    // always page-aligned on the host.
+    let host_page_size = match get_page_size() {
+        Ok(v) => v,
+        Err(e) => {
+            *err = RustError::with_source("couldn't get host page size", e);
+            return null_mut();
+        }
+    };
+
+    if host_page_size > vm_page_size {
+        *err = RustError::new("your system using an unsupported page size");
+        return null_mut();
+    }
+
     // Get kernel memory size.
     let mut len = 0;
 
@@ -267,15 +283,6 @@ pub unsafe extern "C" fn vmm_run(
             }
         };
     }
-
-    // Get host page size.
-    let host_page_size = match get_page_size() {
-        Ok(v) => v,
-        Err(e) => {
-            *err = RustError::with_source("couldn't get host page size", e);
-            return null_mut();
-        }
-    };
 
     // Round kernel memory size.
     let len = match len {
@@ -327,13 +334,21 @@ pub unsafe extern "C" fn vmm_run(
         // Read segment data.
         let mut seg = &mut kern[hdr.p_vaddr..(hdr.p_vaddr + hdr.p_memsz)];
 
-        if let Err(e) = std::io::copy(&mut data, &mut seg) {
-            *err = RustError::with_source(
-                format_args!("couldn't read kernet at offset {}", hdr.p_offset),
-                e,
-            );
+        match std::io::copy(&mut data, &mut seg) {
+            Ok(v) => {
+                if v != hdr.p_filesz {
+                    *err = RustError::new(format!("{path} is incomplete"));
+                    return null_mut();
+                }
+            }
+            Err(e) => {
+                *err = RustError::with_source(
+                    format_args!("couldn't read kernet at offset {}", hdr.p_offset),
+                    e,
+                );
 
-            return null_mut();
+                return null_mut();
+            }
         }
     }
 
@@ -666,6 +681,7 @@ enum VmmError {
     #[error("couldn't get maximum number of CPU for a VM")]
     GetMaxCpuFailed(#[source] std::io::Error),
 
+    #[cfg(not(target_os = "macos"))]
     #[error("your OS does not support 8 vCPU on a VM")]
     MaxCpuTooLow,
 
