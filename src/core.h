@@ -45,6 +45,9 @@ struct VmmScreen {
 extern "C" {
 #endif // __cplusplus
 
+void set_panic_hook(void *cx,
+                    void (*hook)(const char*, size_t, uint32_t, const char*, size_t, void*));
+
 void error_free(struct RustError *e);
 
 const char *error_message(const struct RustError *e);
