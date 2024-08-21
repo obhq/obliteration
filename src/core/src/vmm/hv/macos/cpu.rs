@@ -131,6 +131,7 @@ impl<'a> Cpu for HfCpu<'a> {
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
         Ok(HfStates {
             cpu: self,
+            tcr_el1: State::None,
             sp_el1: State::None,
         })
     }
@@ -203,7 +204,9 @@ pub struct HfStates<'a, 'b> {
     #[cfg(target_arch = "x86_64")]
     ss: State<usize>,
     #[cfg(target_arch = "aarch64")]
-    sp_el1: State<usize>,
+    tcr_el1: State<u64>,
+    #[cfg(target_arch = "aarch64")]
+    sp_el1: State<u64>,
 }
 
 impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
@@ -277,8 +280,19 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
     }
 
     #[cfg(target_arch = "aarch64")]
+    fn set_tcr_el1(&mut self, t0sz: u8, t1sz: u8) {
+        let t0sz: u64 = t0sz.into();
+        let t1sz: u64 = t1sz.into();
+
+        assert_eq!(t0sz & 0b11000000, 0);
+        assert_eq!(t1sz & 0b11000000, 0);
+
+        self.tcr_el1 = State::Dirty(t1sz << 16 | t0sz);
+    }
+
+    #[cfg(target_arch = "aarch64")]
     fn set_sp_el1(&mut self, v: usize) {
-        self.sp_el1 = State::Dirty(v);
+        self.sp_el1 = State::Dirty(v.try_into().unwrap());
     }
 
     #[cfg(target_arch = "aarch64")]
@@ -323,16 +337,23 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
 
     #[cfg(target_arch = "aarch64")]
     fn commit(self) -> Result<(), Self::Err> {
-        use hv_sys::{hv_sys_reg_t_HV_SYS_REG_SP_EL1, hv_vcpu_set_sys_reg};
+        use hv_sys::{
+            hv_sys_reg_t_HV_SYS_REG_SP_EL1, hv_sys_reg_t_HV_SYS_REG_TCR_EL1, hv_vcpu_set_sys_reg,
+        };
 
+        // Set system registers.
         let cpu = self.cpu.instance;
+        let set_sys = |reg, val| match NonZero::new(unsafe { hv_vcpu_set_sys_reg(cpu, reg, val) }) {
+            Some(v) => Err(v),
+            None => Ok(()),
+        };
+
+        if let State::Dirty(v) = self.tcr_el1 {
+            set_sys(hv_sys_reg_t_HV_SYS_REG_TCR_EL1, v).map_err(StatesError::SetTcrEl1Failed)?;
+        }
 
         if let State::Dirty(v) = self.sp_el1 {
-            NonZero::new(unsafe {
-                hv_vcpu_set_sys_reg(cpu, hv_sys_reg_t_HV_SYS_REG_SP_EL1, v.try_into().unwrap())
-            })
-            .map(|v| Err::<(), _>(StatesError::SetSpEl1Failed(v)))
-            .transpose()?;
+            set_sys(hv_sys_reg_t_HV_SYS_REG_SP_EL1, v).map_err(StatesError::SetSpEl1Failed)?;
         }
 
         Ok(())
@@ -417,6 +438,10 @@ pub enum StatesError {
     #[cfg(target_arch = "x86_64")]
     #[error("couldn't set CR4")]
     SetCr4Failed(NonZero<hv_sys::hv_return_t>),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't set TCR_EL1")]
+    SetTcrEl1Failed(NonZero<hv_sys::hv_return_t>),
 
     #[cfg(target_arch = "aarch64")]
     #[error("couldn't set SP_EL1")]
