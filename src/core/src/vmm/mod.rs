@@ -553,6 +553,9 @@ fn setup_main_cpu(cpu: &mut impl Cpu, entry: usize, map: RamMap) -> Result<(), M
         .states()
         .map_err(|e| MainCpuError::GetCpuStatesFailed(Box::new(e)))?;
 
+    // Uses 48-bit virtual addresses (64 - 16 = 48) for both kernel space and user space.
+    states.set_tcr_el1(16, 16);
+
     // Set stack pointer to the kernel.
     states.set_sp_el1(map.stack_vaddr + map.stack_len); // Top-down.
 

@@ -87,6 +87,11 @@ pub trait CpuStates {
     #[cfg(target_arch = "x86_64")]
     fn set_ss(&mut self, p: bool);
 
+    /// # Panics
+    /// If `t0sz` or `t1sz` larger than 6 bits.
+    #[cfg(target_arch = "aarch64")]
+    fn set_tcr_el1(&mut self, t0sz: u8, t1sz: u8);
+
     #[cfg(target_arch = "aarch64")]
     fn set_sp_el1(&mut self, v: usize);
 
