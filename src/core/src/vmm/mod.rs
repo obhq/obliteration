@@ -300,7 +300,7 @@ pub unsafe extern "C" fn vmm_run(
     };
 
     // Setup RAM builder.
-    let mut ram = match RamBuilder::new(host_page_size) {
+    let mut ram = match RamBuilder::new(vm_page_size) {
         Ok(v) => v,
         Err(e) => {
             *err = RustError::wrap(e);
@@ -554,9 +554,21 @@ fn setup_main_cpu(cpu: &mut impl Cpu, entry: usize, map: RamMap) -> Result<(), M
         .map_err(|e| MainCpuError::GetCpuStatesFailed(Box::new(e)))?;
 
     // Uses 48-bit Intermediate Physical Address (ips = 0b101) and 48-bit virtual addresses
-    // (64 - 16 = 48) for both kernel space and user space. Use ASID from user space (TTBR0_EL1 AKA
-    // lower VA range).
-    states.set_tcr_el1(0b101, false, 16, 16);
+    // (t?sz = 16) for both kernel space and user space. Use ASID from user space (a1 = 0).
+    states.set_tcr_el1(
+        0b101,
+        match map.page_size.get() {
+            0x4000 => 0b01,
+            _ => todo!(),
+        },
+        false,
+        16,
+        match map.page_size.get() {
+            0x4000 => 0b10,
+            _ => todo!(),
+        },
+        16,
+    );
 
     // Set page table.
     states.set_ttbr1_el1(map.page_table);

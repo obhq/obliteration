@@ -89,9 +89,10 @@ pub trait CpuStates {
 
     /// # Panics
     /// - If `ips` greater than 7.
-    /// - If `t0sz` or `t1sz` larger than 6 bits.
+    /// - If `tg1` or `tg0` geater than 3.
+    /// - If `t1sz` or `t0sz` larger than 6 bits.
     #[cfg(target_arch = "aarch64")]
-    fn set_tcr_el1(&mut self, ips: u8, a1: bool, t0sz: u8, t1sz: u8);
+    fn set_tcr_el1(&mut self, ips: u8, tg1: u8, a1: bool, t1sz: u8, tg0: u8, t0sz: u8);
 
     /// # Panics
     /// If `baddr` has non-zero on bit 0 or 48:64.

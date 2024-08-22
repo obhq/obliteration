@@ -18,8 +18,8 @@ pub struct RamBuilder {
 
 impl RamBuilder {
     /// # Safety
-    /// `host_page_size` must be valid.
-    pub unsafe fn new(host_page_size: NonZero<usize>) -> Result<Self, VmmError> {
+    /// `vm_page_size` must be greater or equal host page size.
+    pub unsafe fn new(vm_page_size: NonZero<usize>) -> Result<Self, VmmError> {
         use std::io::Error;
 
         // Reserve memory range.
@@ -59,10 +59,7 @@ impl RamBuilder {
         };
 
         Ok(Self {
-            ram: Ram {
-                mem,
-                host_page_size,
-            },
+            ram: Ram { mem, vm_page_size },
             next: 0,
             kern: None,
             stack: None,
@@ -71,7 +68,7 @@ impl RamBuilder {
     }
 
     /// # Panics
-    /// - If `len` is not multiplied by host page size.
+    /// - If `len` is not multiplied by VM page size.
     /// - If called a second time.
     pub fn alloc_kernel(&mut self, len: NonZero<usize>) -> Result<&mut [u8], RamError> {
         assert!(self.kern.is_none());
@@ -86,7 +83,7 @@ impl RamBuilder {
     }
 
     /// # Panics
-    /// - If `len` is not multiplied by host page size.
+    /// - If `len` is not multiplied by VM page size.
     /// - If called a second time.
     pub fn alloc_stack(&mut self, len: NonZero<usize>) -> Result<(), RamError> {
         assert!(self.stack.is_none());
@@ -105,12 +102,12 @@ impl RamBuilder {
     /// If called a second time.
     pub fn alloc_args(&mut self, env: BootEnv) -> Result<(), RamError> {
         assert!(self.args.is_none());
-        assert!(align_of::<BootEnv>() <= self.ram.host_page_size.get());
+        assert!(align_of::<BootEnv>() <= self.ram.vm_page_size.get());
 
         // Allocate RAM for all arguments.
         let addr = self.next;
         let len = size_of::<BootEnv>()
-            .checked_next_multiple_of(self.ram.host_page_size.get())
+            .checked_next_multiple_of(self.ram.vm_page_size.get())
             .and_then(NonZero::new)
             .unwrap();
         let args = unsafe { self.ram.alloc(addr, len)?.as_mut_ptr() };
@@ -129,8 +126,10 @@ impl RamBuilder {
 
         Ok(())
     }
+}
 
-    #[cfg(target_arch = "x86_64")]
+#[cfg(target_arch = "x86_64")]
+impl RamBuilder {
     pub fn build(
         mut self,
         devices: &DeviceTree,
@@ -236,6 +235,7 @@ impl RamBuilder {
 
         // Build map.
         let map = RamMap {
+            page_size: self.ram.vm_page_size,
             page_table,
             kern_vaddr,
             kern_len,
@@ -247,16 +247,6 @@ impl RamBuilder {
         Ok((self.ram, map))
     }
 
-    #[cfg(target_arch = "aarch64")]
-    pub fn build(
-        self,
-        devices: &DeviceTree,
-        dynamic: Option<ProgramHeader>,
-    ) -> Result<(Ram, RamMap), RamBuilderError> {
-        todo!()
-    }
-
-    #[cfg(target_arch = "x86_64")]
     fn relocate_kernel(
         kern: &mut [u8],
         vaddr: usize,
@@ -294,7 +284,6 @@ impl RamBuilder {
         Ok(())
     }
 
-    #[cfg(target_arch = "x86_64")]
     fn setup_4k_page_tables(
         &mut self,
         pml4t: &mut [usize; 512],
@@ -372,17 +361,189 @@ impl RamBuilder {
         Ok(())
     }
 
-    #[cfg(target_arch = "x86_64")]
     fn alloc_page_table(&mut self) -> Result<(*mut [usize; 512], usize), RamError> {
         // Get address and length.
         let addr = self.next;
         let len = (512usize * 8)
-            .checked_next_multiple_of(self.ram.host_page_size.get())
+            .checked_next_multiple_of(self.ram.vm_page_size.get())
             .and_then(NonZero::new)
             .unwrap();
 
         // Page table on x86-64 always 4k aligned regardless page size being used.
         assert_eq!(addr % 4096, 0);
+
+        // Allocate.
+        let tab = unsafe { self.ram.alloc(addr, len).map(|v| v.as_mut_ptr().cast())? };
+
+        self.next += len.get();
+
+        Ok((tab, addr))
+    }
+}
+
+#[cfg(target_arch = "aarch64")]
+impl RamBuilder {
+    pub fn build(
+        mut self,
+        devices: &DeviceTree,
+        dynamic: Option<ProgramHeader>,
+    ) -> Result<(Ram, RamMap), RamBuilderError> {
+        // Setup page tables.
+        let map = match self.ram.vm_page_size.get() {
+            0x4000 => self.build_16k_page_tables(devices)?,
+            _ => todo!(),
+        };
+
+        todo!("relocate the kernel");
+    }
+
+    fn build_16k_page_tables(&mut self, devices: &DeviceTree) -> Result<RamMap, RamBuilderError> {
+        // Allocate page table level 0.
+        let page_table = self.next;
+        let len = self.ram.vm_page_size;
+        let l0t: &mut [usize; 2] = match unsafe { self.ram.alloc(page_table, len) } {
+            Ok(v) => unsafe { &mut *v.as_mut_ptr().cast() },
+            Err(e) => return Err(RamBuilderError::AllocPageTableLevel0Failed(e)),
+        };
+
+        self.next += len.get();
+
+        // Map virtual devices. We use identity mapping for virtual devices.
+        let mut dev_end = 0;
+
+        for (addr, dev) in devices.map() {
+            let len = dev.len().get();
+            self.setup_16k_page_tables(l0t, addr, addr, len)?;
+            dev_end = addr + len;
+        }
+
+        // Setup page tables to map virtual address 0xffffffff82200000 to the kernel.
+        // TODO: Implement ASLR.
+        let mut vaddr = 0xffffffff82200000;
+        let kern_vaddr = vaddr;
+        let (kern_paddr, kern_len) = self
+            .kern
+            .take()
+            .map(|v| (v.start, v.end - v.start))
+            .unwrap();
+
+        assert!(vaddr >= dev_end);
+
+        self.setup_16k_page_tables(l0t, vaddr, kern_paddr, kern_len)?;
+
+        vaddr += kern_len;
+
+        // Setup page tables to map stack.
+        let stack_vaddr = vaddr;
+        let (paddr, stack_len) = self
+            .stack
+            .take()
+            .map(|v| (v.start, v.end - v.start))
+            .unwrap();
+
+        self.setup_16k_page_tables(l0t, vaddr, paddr, stack_len)?;
+
+        vaddr += stack_len;
+
+        // Setup page tables to map arguments.
+        let args = self.args.take().unwrap();
+        let ram = args.ram;
+        let env_vaddr = vaddr + args.env;
+
+        self.setup_16k_page_tables(l0t, vaddr, ram.start, ram.end - ram.start)?;
+
+        Ok(RamMap {
+            page_size: unsafe { NonZero::new_unchecked(0x4000) },
+            page_table,
+            kern_vaddr,
+            kern_len,
+            stack_vaddr,
+            stack_len,
+            env_vaddr,
+        })
+    }
+
+    fn setup_16k_page_tables(
+        &mut self,
+        l0t: &mut [usize; 2],
+        vaddr: usize,
+        paddr: usize,
+        len: usize,
+    ) -> Result<(), RamBuilderError> {
+        assert_eq!(len % 0x4000, 0);
+
+        fn set_page_entry(entry: &mut usize, addr: usize) {
+            assert_eq!(addr & 0xFFFF000000003FFF, 0);
+
+            *entry = addr;
+            *entry |= 0b01; // Valid.
+            *entry |= 0b10; // Table descriptor/Page descriptor.
+        }
+
+        for off in (0..len).step_by(0x4000) {
+            // Get level 1 table.
+            let addr = vaddr + off;
+            let l0o = (addr & 0x800000000000) >> 47;
+            let l1t = match l0t[l0o] {
+                0 => {
+                    let (l1t, addr) = self
+                        .alloc_16k_page_table()
+                        .map_err(RamBuilderError::AllocPageTableLevel1Failed)?;
+
+                    set_page_entry(&mut l0t[l0o], addr);
+
+                    unsafe { &mut *l1t }
+                }
+                v => unsafe { &mut *self.ram.mem.add(v & 0xFFFFFFFFC000).cast() },
+            };
+
+            // Get level 2 table.
+            let l1o = (addr & 0x7FF000000000) >> 36;
+            let l2t = match l1t[l1o] {
+                0 => {
+                    let (l2t, addr) = self
+                        .alloc_16k_page_table()
+                        .map_err(RamBuilderError::AllocPageTableLevel2Failed)?;
+
+                    set_page_entry(&mut l1t[l1o], addr);
+
+                    unsafe { &mut *l2t }
+                }
+                v => unsafe { &mut *self.ram.mem.add(v & 0xFFFFFFFFC000).cast() },
+            };
+
+            // Get level 3 table.
+            let l2o = (addr & 0xFFE000000) >> 25;
+            let l3t = match l2t[l2o] {
+                0 => {
+                    let (l3t, addr) = self
+                        .alloc_16k_page_table()
+                        .map_err(RamBuilderError::AllocPageTableLevel3Failed)?;
+
+                    set_page_entry(&mut l2t[l2o], addr);
+
+                    unsafe { &mut *l3t }
+                }
+                v => unsafe { &mut *self.ram.mem.add(v & 0xFFFFFFFFC000).cast() },
+            };
+
+            // Set page descriptor.
+            let l3o = (addr & 0x1FFC000) >> 14;
+            let addr = paddr + off;
+
+            assert_eq!(l3t[l3o], 0);
+
+            set_page_entry(&mut l3t[l3o], addr);
+        }
+
+        Ok(())
+    }
+
+    fn alloc_16k_page_table(&mut self) -> Result<(*mut [usize; 2048], usize), RamError> {
+        // Get address and length. The page table is effectively the same size as page size
+        // (2048 * 8 = 16384).
+        let addr = self.next;
+        let len = unsafe { NonZero::new_unchecked(0x4000) };
 
         // Allocate.
         let tab = unsafe { self.ram.alloc(addr, len).map(|v| v.as_mut_ptr().cast())? };
@@ -401,6 +562,7 @@ pub struct KernelArgs {
 
 /// Finalized layout of [`Ram`] before execute the kernel entry point.
 pub struct RamMap {
+    pub page_size: NonZero<usize>,
     pub page_table: usize,
     pub kern_vaddr: usize,
     pub kern_len: usize,
@@ -435,4 +597,20 @@ pub enum RamBuilderError {
     #[cfg(target_arch = "x86_64")]
     #[error("the kernel has invalid PT_DYNAMIC")]
     InvalidDynamicLinking,
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't allocate page table level 0")]
+    AllocPageTableLevel0Failed(#[source] RamError),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't allocate page table level 1")]
+    AllocPageTableLevel1Failed(#[source] RamError),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't allocate page table level 2")]
+    AllocPageTableLevel2Failed(#[source] RamError),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't allocate page table level 3")]
+    AllocPageTableLevel3Failed(#[source] RamError),
 }
