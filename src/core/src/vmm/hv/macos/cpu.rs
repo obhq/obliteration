@@ -132,6 +132,7 @@ impl<'a> Cpu for HfCpu<'a> {
         Ok(HfStates {
             cpu: self,
             tcr_el1: State::None,
+            ttbr1_el1: State::None,
             sp_el1: State::None,
         })
     }
@@ -205,6 +206,8 @@ pub struct HfStates<'a, 'b> {
     ss: State<usize>,
     #[cfg(target_arch = "aarch64")]
     tcr_el1: State<u64>,
+    #[cfg(target_arch = "aarch64")]
+    ttbr1_el1: State<u64>,
     #[cfg(target_arch = "aarch64")]
     sp_el1: State<u64>,
 }
@@ -280,14 +283,24 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
     }
 
     #[cfg(target_arch = "aarch64")]
-    fn set_tcr_el1(&mut self, t0sz: u8, t1sz: u8) {
+    fn set_tcr_el1(&mut self, ips: u8, a1: bool, t0sz: u8, t1sz: u8) {
+        let ips: u64 = ips.into();
+        let a1: u64 = a1.into();
         let t0sz: u64 = t0sz.into();
         let t1sz: u64 = t1sz.into();
 
+        assert_eq!(ips & 0b11111000, 0);
         assert_eq!(t0sz & 0b11000000, 0);
         assert_eq!(t1sz & 0b11000000, 0);
 
-        self.tcr_el1 = State::Dirty(t1sz << 16 | t0sz);
+        self.tcr_el1 = State::Dirty(ips << 32 | a1 << 22 | t1sz << 16 | t0sz);
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    fn set_ttbr1_el1(&mut self, baddr: usize) {
+        assert_eq!(baddr & 0xFFFF000000000001, 0);
+
+        self.ttbr1_el1 = State::Dirty(baddr.try_into().unwrap());
     }
 
     #[cfg(target_arch = "aarch64")]
@@ -338,7 +351,9 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
     #[cfg(target_arch = "aarch64")]
     fn commit(self) -> Result<(), Self::Err> {
         use hv_sys::{
-            hv_sys_reg_t_HV_SYS_REG_SP_EL1, hv_sys_reg_t_HV_SYS_REG_TCR_EL1, hv_vcpu_set_sys_reg,
+            hv_sys_reg_t_HV_SYS_REG_SP_EL1 as HV_SYS_REG_SP_EL1,
+            hv_sys_reg_t_HV_SYS_REG_TCR_EL1 as HV_SYS_REG_TCR_EL1,
+            hv_sys_reg_t_HV_SYS_REG_TTBR1_EL1 as HV_SYS_REG_TTBR1_EL1, hv_vcpu_set_sys_reg,
         };
 
         // Set system registers.
@@ -349,11 +364,15 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
         };
 
         if let State::Dirty(v) = self.tcr_el1 {
-            set_sys(hv_sys_reg_t_HV_SYS_REG_TCR_EL1, v).map_err(StatesError::SetTcrEl1Failed)?;
+            set_sys(HV_SYS_REG_TCR_EL1, v).map_err(StatesError::SetTcrEl1Failed)?;
+        }
+
+        if let State::Dirty(v) = self.ttbr1_el1 {
+            set_sys(HV_SYS_REG_TTBR1_EL1, v).map_err(StatesError::SetTtbr1El1Failed)?;
         }
 
         if let State::Dirty(v) = self.sp_el1 {
-            set_sys(hv_sys_reg_t_HV_SYS_REG_SP_EL1, v).map_err(StatesError::SetSpEl1Failed)?;
+            set_sys(HV_SYS_REG_SP_EL1, v).map_err(StatesError::SetSpEl1Failed)?;
         }
 
         Ok(())
@@ -442,6 +461,10 @@ pub enum StatesError {
     #[cfg(target_arch = "aarch64")]
     #[error("couldn't set TCR_EL1")]
     SetTcrEl1Failed(NonZero<hv_sys::hv_return_t>),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't set TTBR1_EL1")]
+    SetTtbr1El1Failed(NonZero<hv_sys::hv_return_t>),
 
     #[cfg(target_arch = "aarch64")]
     #[error("couldn't set SP_EL1")]

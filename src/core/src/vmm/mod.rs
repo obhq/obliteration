@@ -553,8 +553,13 @@ fn setup_main_cpu(cpu: &mut impl Cpu, entry: usize, map: RamMap) -> Result<(), M
         .states()
         .map_err(|e| MainCpuError::GetCpuStatesFailed(Box::new(e)))?;
 
-    // Uses 48-bit virtual addresses (64 - 16 = 48) for both kernel space and user space.
-    states.set_tcr_el1(16, 16);
+    // Uses 48-bit Intermediate Physical Address (ips = 0b101) and 48-bit virtual addresses
+    // (64 - 16 = 48) for both kernel space and user space. Use ASID from user space (TTBR0_EL1 AKA
+    // lower VA range).
+    states.set_tcr_el1(0b101, false, 16, 16);
+
+    // Set page table.
+    states.set_ttbr1_el1(map.page_table);
 
     // Set stack pointer to the kernel.
     states.set_sp_el1(map.stack_vaddr + map.stack_len); // Top-down.
