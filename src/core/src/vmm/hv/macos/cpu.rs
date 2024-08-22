@@ -283,17 +283,22 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
     }
 
     #[cfg(target_arch = "aarch64")]
-    fn set_tcr_el1(&mut self, ips: u8, a1: bool, t0sz: u8, t1sz: u8) {
+    fn set_tcr_el1(&mut self, ips: u8, tg1: u8, a1: bool, t1sz: u8, tg0: u8, t0sz: u8) {
         let ips: u64 = ips.into();
+        let tg1: u64 = tg1.into();
         let a1: u64 = a1.into();
-        let t0sz: u64 = t0sz.into();
         let t1sz: u64 = t1sz.into();
+        let tg0: u64 = tg0.into();
+        let t0sz: u64 = t0sz.into();
 
         assert_eq!(ips & 0b11111000, 0);
-        assert_eq!(t0sz & 0b11000000, 0);
+        assert_eq!(tg1 & 0b11111100, 0);
         assert_eq!(t1sz & 0b11000000, 0);
+        assert_eq!(tg0 & 0b11111100, 0);
+        assert_eq!(t0sz & 0b11000000, 0);
 
-        self.tcr_el1 = State::Dirty(ips << 32 | a1 << 22 | t1sz << 16 | t0sz);
+        self.tcr_el1 =
+            State::Dirty(ips << 32 | tg1 << 30 | a1 << 22 | t1sz << 16 | tg0 << 14 | t0sz);
     }
 
     #[cfg(target_arch = "aarch64")]

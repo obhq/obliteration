@@ -16,7 +16,7 @@ mod builder;
 /// RAM always started at address 0.
 pub struct Ram {
     mem: *mut u8,
-    host_page_size: NonZero<usize>,
+    vm_page_size: NonZero<usize>,
 }
 
 impl Ram {
@@ -31,14 +31,14 @@ impl Ram {
     }
 
     /// # Panics
-    /// If `addr` or `len` is not multiply by host page size.
+    /// If `addr` or `len` is not multiply by VM page size.
     ///
     /// # Safety
     /// This method does not check if `addr` is already allocated. It is undefined behavior if
     /// `addr` + `len` is overlapped with the previous allocation.
     pub unsafe fn alloc(&self, addr: usize, len: NonZero<usize>) -> Result<&mut [u8], RamError> {
-        assert_eq!(addr % self.host_page_size, 0);
-        assert_eq!(len.get() % self.host_page_size, 0);
+        assert_eq!(addr % self.vm_page_size, 0);
+        assert_eq!(len.get() % self.vm_page_size, 0);
 
         if !addr.checked_add(len.get()).is_some_and(|v| v <= Self::SIZE) {
             return Err(RamError::InvalidAddr);
@@ -50,13 +50,13 @@ impl Ram {
     }
 
     /// # Panics
-    /// If `addr` or `len` is not multiply by host page size.
+    /// If `addr` or `len` is not multiply by VM page size.
     ///
     /// # Safety
     /// Accessing the deallocated memory on the host after this will be undefined behavior.
     pub unsafe fn dealloc(&self, addr: usize, len: NonZero<usize>) -> Result<(), RamError> {
-        assert_eq!(addr % self.host_page_size, 0);
-        assert_eq!(len.get() % self.host_page_size, 0);
+        assert_eq!(addr % self.vm_page_size, 0);
+        assert_eq!(len.get() % self.vm_page_size, 0);
 
         if !addr.checked_add(len.get()).is_some_and(|v| v <= Self::SIZE) {
             return Err(RamError::InvalidAddr);
