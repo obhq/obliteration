@@ -132,6 +132,7 @@ impl<'a> Cpu for HfCpu<'a> {
         Ok(HfStates {
             cpu: self,
             tcr_el1: State::None,
+            ttbr0_el1: State::None,
             ttbr1_el1: State::None,
             sp_el1: State::None,
         })
@@ -206,6 +207,8 @@ pub struct HfStates<'a, 'b> {
     ss: State<usize>,
     #[cfg(target_arch = "aarch64")]
     tcr_el1: State<u64>,
+    #[cfg(target_arch = "aarch64")]
+    ttbr0_el1: State<u64>,
     #[cfg(target_arch = "aarch64")]
     ttbr1_el1: State<u64>,
     #[cfg(target_arch = "aarch64")]
@@ -302,6 +305,13 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
     }
 
     #[cfg(target_arch = "aarch64")]
+    fn set_ttbr0_el1(&mut self, baddr: usize) {
+        assert_eq!(baddr & 0xFFFF000000000001, 0);
+
+        self.ttbr0_el1 = State::Dirty(baddr.try_into().unwrap());
+    }
+
+    #[cfg(target_arch = "aarch64")]
     fn set_ttbr1_el1(&mut self, baddr: usize) {
         assert_eq!(baddr & 0xFFFF000000000001, 0);
 
@@ -358,6 +368,7 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
         use hv_sys::{
             hv_sys_reg_t_HV_SYS_REG_SP_EL1 as HV_SYS_REG_SP_EL1,
             hv_sys_reg_t_HV_SYS_REG_TCR_EL1 as HV_SYS_REG_TCR_EL1,
+            hv_sys_reg_t_HV_SYS_REG_TTBR0_EL1 as HV_SYS_REG_TTBR0_EL1,
             hv_sys_reg_t_HV_SYS_REG_TTBR1_EL1 as HV_SYS_REG_TTBR1_EL1, hv_vcpu_set_sys_reg,
         };
 
@@ -370,6 +381,10 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
 
         if let State::Dirty(v) = self.tcr_el1 {
             set_sys(HV_SYS_REG_TCR_EL1, v).map_err(StatesError::SetTcrEl1Failed)?;
+        }
+
+        if let State::Dirty(v) = self.ttbr0_el1 {
+            set_sys(HV_SYS_REG_TTBR0_EL1, v).map_err(StatesError::SetTtbr0El1Failed)?;
         }
 
         if let State::Dirty(v) = self.ttbr1_el1 {
@@ -466,6 +481,10 @@ pub enum StatesError {
     #[cfg(target_arch = "aarch64")]
     #[error("couldn't set TCR_EL1")]
     SetTcrEl1Failed(NonZero<hv_sys::hv_return_t>),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't set TTBR0_EL1")]
+    SetTtbr0El1Failed(NonZero<hv_sys::hv_return_t>),
 
     #[cfg(target_arch = "aarch64")]
     #[error("couldn't set TTBR1_EL1")]

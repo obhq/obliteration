@@ -570,7 +570,9 @@ fn setup_main_cpu(cpu: &mut impl Cpu, entry: usize, map: RamMap) -> Result<(), M
         16,
     );
 
-    // Set page table.
+    // Set page table. We need both lower and higher VA here because the virtual devices mapped with
+    // identity mapping.
+    states.set_ttbr0_el1(map.page_table);
     states.set_ttbr1_el1(map.page_table);
 
     // Set stack pointer to the kernel.
