@@ -97,6 +97,11 @@ pub trait CpuStates {
     /// # Panics
     /// If `baddr` has non-zero on bit 0 or 48:64.
     #[cfg(target_arch = "aarch64")]
+    fn set_ttbr0_el1(&mut self, baddr: usize);
+
+    /// # Panics
+    /// If `baddr` has non-zero on bit 0 or 48:64.
+    #[cfg(target_arch = "aarch64")]
     fn set_ttbr1_el1(&mut self, baddr: usize);
 
     #[cfg(target_arch = "aarch64")]
