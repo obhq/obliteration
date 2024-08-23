@@ -549,9 +549,12 @@ fn setup_main_cpu(cpu: &mut impl Cpu, entry: usize, map: RamMap) -> Result<(), M
 
 #[cfg(target_arch = "aarch64")]
 fn setup_main_cpu(cpu: &mut impl Cpu, entry: usize, map: RamMap) -> Result<(), MainCpuError> {
+    // Enable MMU to enable virtual address.
     let mut states = cpu
         .states()
         .map_err(|e| MainCpuError::GetCpuStatesFailed(Box::new(e)))?;
+
+    states.set_sctlr_el1(true);
 
     // Uses 48-bit Intermediate Physical Address (ips = 0b101) and 48-bit virtual addresses
     // (t?sz = 16) for both kernel space and user space. Use ASID from user space (a1 = 0).
@@ -575,8 +578,10 @@ fn setup_main_cpu(cpu: &mut impl Cpu, entry: usize, map: RamMap) -> Result<(), M
     states.set_ttbr0_el1(map.page_table);
     states.set_ttbr1_el1(map.page_table);
 
-    // Set stack pointer to the kernel.
+    // Set entry point, its argument and stack pointer.
+    states.set_x0(map.env_vaddr);
     states.set_sp_el1(map.stack_vaddr + map.stack_len); // Top-down.
+    states.set_pc(map.kern_vaddr + entry);
 
     states
         .commit()

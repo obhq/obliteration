@@ -87,6 +87,9 @@ pub trait CpuStates {
     #[cfg(target_arch = "x86_64")]
     fn set_ss(&mut self, p: bool);
 
+    #[cfg(target_arch = "aarch64")]
+    fn set_sctlr_el1(&mut self, m: bool);
+
     /// # Panics
     /// - If `ips` greater than 7.
     /// - If `tg1` or `tg0` geater than 3.
@@ -109,6 +112,9 @@ pub trait CpuStates {
 
     #[cfg(target_arch = "aarch64")]
     fn set_pc(&mut self, v: usize);
+
+    #[cfg(target_arch = "aarch64")]
+    fn set_x0(&mut self, v: usize);
 
     fn commit(self) -> Result<(), Self::Err>;
 }

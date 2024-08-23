@@ -131,10 +131,13 @@ impl<'a> Cpu for HfCpu<'a> {
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
         Ok(HfStates {
             cpu: self,
+            sctlr_el1: State::None,
             tcr_el1: State::None,
             ttbr0_el1: State::None,
             ttbr1_el1: State::None,
             sp_el1: State::None,
+            pc: State::None,
+            x0: State::None,
         })
     }
 
@@ -206,6 +209,8 @@ pub struct HfStates<'a, 'b> {
     #[cfg(target_arch = "x86_64")]
     ss: State<usize>,
     #[cfg(target_arch = "aarch64")]
+    sctlr_el1: State<u64>,
+    #[cfg(target_arch = "aarch64")]
     tcr_el1: State<u64>,
     #[cfg(target_arch = "aarch64")]
     ttbr0_el1: State<u64>,
@@ -213,6 +218,10 @@ pub struct HfStates<'a, 'b> {
     ttbr1_el1: State<u64>,
     #[cfg(target_arch = "aarch64")]
     sp_el1: State<u64>,
+    #[cfg(target_arch = "aarch64")]
+    pc: State<u64>,
+    #[cfg(target_arch = "aarch64")]
+    x0: State<u64>,
 }
 
 impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
@@ -286,6 +295,13 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
     }
 
     #[cfg(target_arch = "aarch64")]
+    fn set_sctlr_el1(&mut self, m: bool) {
+        let m: u64 = m.into();
+
+        self.sctlr_el1 = State::Dirty(m);
+    }
+
+    #[cfg(target_arch = "aarch64")]
     fn set_tcr_el1(&mut self, ips: u8, tg1: u8, a1: bool, t1sz: u8, tg0: u8, t0sz: u8) {
         let ips: u64 = ips.into();
         let tg1: u64 = tg1.into();
@@ -325,7 +341,12 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
 
     #[cfg(target_arch = "aarch64")]
     fn set_pc(&mut self, v: usize) {
-        todo!()
+        self.pc = State::Dirty(v.try_into().unwrap());
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    fn set_x0(&mut self, v: usize) {
+        self.x0 = State::Dirty(v.try_into().unwrap());
     }
 
     #[cfg(target_arch = "x86_64")]
@@ -366,10 +387,13 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
     #[cfg(target_arch = "aarch64")]
     fn commit(self) -> Result<(), Self::Err> {
         use hv_sys::{
+            hv_reg_t_HV_REG_PC as HV_REG_PC, hv_reg_t_HV_REG_X0 as HV_REG_X0,
+            hv_sys_reg_t_HV_SYS_REG_SCTLR_EL1 as HV_SYS_REG_SCTLR_EL1,
             hv_sys_reg_t_HV_SYS_REG_SP_EL1 as HV_SYS_REG_SP_EL1,
             hv_sys_reg_t_HV_SYS_REG_TCR_EL1 as HV_SYS_REG_TCR_EL1,
             hv_sys_reg_t_HV_SYS_REG_TTBR0_EL1 as HV_SYS_REG_TTBR0_EL1,
-            hv_sys_reg_t_HV_SYS_REG_TTBR1_EL1 as HV_SYS_REG_TTBR1_EL1, hv_vcpu_set_sys_reg,
+            hv_sys_reg_t_HV_SYS_REG_TTBR1_EL1 as HV_SYS_REG_TTBR1_EL1, hv_vcpu_set_reg,
+            hv_vcpu_set_sys_reg,
         };
 
         // Set system registers.
@@ -378,6 +402,10 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
             Some(v) => Err(v),
             None => Ok(()),
         };
+
+        if let State::Dirty(v) = self.sctlr_el1 {
+            set_sys(HV_SYS_REG_SCTLR_EL1, v).map_err(StatesError::SetSctlrEl1Failed)?;
+        }
 
         if let State::Dirty(v) = self.tcr_el1 {
             set_sys(HV_SYS_REG_TCR_EL1, v).map_err(StatesError::SetTcrEl1Failed)?;
@@ -393,6 +421,20 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
 
         if let State::Dirty(v) = self.sp_el1 {
             set_sys(HV_SYS_REG_SP_EL1, v).map_err(StatesError::SetSpEl1Failed)?;
+        }
+
+        // Set general registers.
+        let set_reg = |reg, val| match NonZero::new(unsafe { hv_vcpu_set_reg(cpu, reg, val) }) {
+            Some(v) => Err(v),
+            None => Ok(()),
+        };
+
+        if let State::Dirty(v) = self.pc {
+            set_reg(HV_REG_PC, v).map_err(StatesError::SetPcFailed)?;
+        }
+
+        if let State::Dirty(v) = self.x0 {
+            set_reg(HV_REG_X0, v).map_err(StatesError::SetX0Failed)?;
         }
 
         Ok(())
@@ -479,6 +521,10 @@ pub enum StatesError {
     SetCr4Failed(NonZero<hv_sys::hv_return_t>),
 
     #[cfg(target_arch = "aarch64")]
+    #[error("couldn't set SCTLR_EL1")]
+    SetSctlrEl1Failed(NonZero<hv_sys::hv_return_t>),
+
+    #[cfg(target_arch = "aarch64")]
     #[error("couldn't set TCR_EL1")]
     SetTcrEl1Failed(NonZero<hv_sys::hv_return_t>),
 
@@ -493,4 +539,12 @@ pub enum StatesError {
     #[cfg(target_arch = "aarch64")]
     #[error("couldn't set SP_EL1")]
     SetSpEl1Failed(NonZero<hv_sys::hv_return_t>),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't set PC")]
+    SetPcFailed(NonZero<hv_sys::hv_return_t>),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't set X0")]
+    SetX0Failed(NonZero<hv_sys::hv_return_t>),
 }
