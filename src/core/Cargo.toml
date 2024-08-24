@@ -14,7 +14,10 @@ obfw = { git = "https://github.com/obhq/firmware-dumper.git", features = ["read"
 obvirt = { path = "../obvirt" }
 param = { path = "../param" }
 pkg = { path = "../pkg" }
+postcard = { version = "1.0.10", features = ["use-std"], default-features = false }
+serde = { version = "1.0.209", features = ["derive"] }
 thiserror = "1.0"
+uuid = { version = "1.10.0", features = ["serde", "v4"] }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 ash = "0.38.0"

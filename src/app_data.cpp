@@ -9,8 +9,8 @@ static QString root()
     return QDir::toNativeSeparators(QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation));
 }
 
-QString kernelDebugDump()
+QString profiles()
 {
-    auto path = joinPath(root(), "kernel");
+    auto path = joinPath(root(), "profiles");
     return QString::fromStdString(path);
 }

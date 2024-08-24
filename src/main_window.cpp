@@ -1,9 +1,11 @@
 #include "main_window.hpp"
+#include "app_data.hpp"
 #include "game_models.hpp"
 #include "launch_settings.hpp"
 #include "logs_viewer.hpp"
 #include "path.hpp"
 #include "pkg_installer.hpp"
+#include "profile_models.hpp"
 #include "resources.hpp"
 #include "screen.hpp"
 #include "settings.hpp"
@@ -41,6 +43,7 @@ MainWindow::MainWindow() :
 MainWindow::MainWindow(QVulkanInstance *vulkan) :
 #endif
     m_main(nullptr),
+    m_profiles(nullptr),
     m_games(nullptr),
     m_launch(nullptr),
     m_screen(nullptr)
@@ -96,9 +99,11 @@ MainWindow::MainWindow(QVulkanInstance *vulkan) :
     setCentralWidget(m_main);
 
     // Launch settings.
+    m_profiles = new ProfileList(this);
     m_games = new GameListModel(this);
-    m_launch = new LaunchSettings(m_games);
+    m_launch = new LaunchSettings(m_profiles, m_games);
 
+    connect(m_launch, &LaunchSettings::saveClicked, this, &MainWindow::saveClicked);
     connect(m_launch, &LaunchSettings::startClicked, this, &MainWindow::startKernel);
 
     m_main->addWidget(m_launch);
@@ -113,13 +118,65 @@ MainWindow::MainWindow(QVulkanInstance *vulkan) :
     connect(m_screen, &Screen::updateRequestReceived, this, &MainWindow::updateScreen);
 
     m_main->addWidget(createWindowContainer(m_screen));
-
-    // Show the window.
-    restoreGeometry();
 }
 
 MainWindow::~MainWindow()
 {
+}
+
+bool MainWindow::loadProfiles()
+{
+    // List profile directories.
+    auto root = profiles();
+    auto dirs = QDir(root).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+
+    // Create default profile if the user don't have any profiles.
+    if (dirs.isEmpty()) {
+        Rust<Profile> p;
+        Rust<char> id;
+
+        p = profile_new("Default");
+        id = profile_id(p);
+
+        // Save.
+        auto path = joinPath(root, id.get());
+        Rust<RustError> error;
+
+        error = profile_save(p, path.c_str());
+
+        if (error) {
+            auto text = QString("Failed to save default profile to %1: %2.")
+                .arg(path.c_str())
+                .arg(error_message(error));
+
+            QMessageBox::critical(this, "Error", text);
+            return false;
+        }
+
+        dirs.append(id.get());
+    }
+
+    // Load profiles.
+    for (auto &dir : dirs) {
+        auto path = joinPath(root, dir);
+        Rust<RustError> error;
+        Rust<Profile> profile;
+
+        profile = profile_load(path.c_str(), &error);
+
+        if (!profile) {
+            auto text = QString("Failed to load a profile from %1: %2.")
+                .arg(path.c_str())
+                .arg(error_message(error));
+
+            QMessageBox::critical(this, "Error", text);
+            return false;
+        }
+
+        m_profiles->add(std::move(profile));
+    }
+
+    return true;
 }
 
 bool MainWindow::loadGames()
@@ -254,7 +311,37 @@ void MainWindow::reportIssue()
 
 void MainWindow::aboutObliteration()
 {
-    QMessageBox::about(this, "About Obliteration", "Obliteration is a free and open-source software for playing your PlayStation 4 titles on PC.");
+    QMessageBox::about(
+        this,
+        "About Obliteration",
+        "Obliteration is a free and open-source PlayStation 4 kernel. It will allows you to run "
+        "the PlayStation 4 system software that you have dumped from your PlayStation 4 on your "
+        "PC. This will allows you to play your games forever even if your PlayStation 4 stopped "
+        "working in the future.");
+}
+
+void MainWindow::saveClicked(Profile *p)
+{
+    // Get ID.
+    Rust<char> id;
+
+    id = profile_id(p);
+
+    // Save.
+    auto root = profiles();
+    auto path = joinPath(root, id.get());
+    Rust<RustError> error;
+
+    error = profile_save(p, path.c_str());
+
+    if (error) {
+        auto text = QString("Failed to save %1 profile to %2: %3.")
+            .arg(profile_name(p))
+            .arg(path.c_str())
+            .arg(error_message(error));
+
+        QMessageBox::critical(this, "Error", text);
+    }
 }
 
 void MainWindow::startKernel()

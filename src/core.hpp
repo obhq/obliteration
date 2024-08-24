@@ -40,7 +40,7 @@ public:
         return *this;
     }
 
-    operator T *() { return m_ptr; }
+    operator T *() const { return m_ptr; }
     operator bool() const { return m_ptr != nullptr; }
 
     T **operator&()
@@ -49,7 +49,7 @@ public:
         return &m_ptr;
     }
 
-    T *get() { return m_ptr; }
+    T *get() const { return m_ptr; }
     void free();
 private:
     T *m_ptr;
@@ -76,6 +76,15 @@ inline void Rust<Pkg>::free()
 {
     if (m_ptr) {
         pkg_close(m_ptr);
+        m_ptr = nullptr;
+    }
+}
+
+template<>
+inline void Rust<Profile>::free()
+{
+    if (m_ptr) {
+        profile_free(m_ptr);
         m_ptr = nullptr;
     }
 }

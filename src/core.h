@@ -21,6 +21,11 @@ enum VmmLog {
 };
 
 /**
+ * Contains settings to launch the kernel.
+ */
+struct Profile;
+
+/**
  * Error object managed by Rust side.
  */
 struct RustError;
@@ -108,6 +113,18 @@ struct RustError *pkg_extract(const Pkg *pkg, const char *dir, void (*status)(co
                                                                               uint64_t,
                                                                               uint64_t,
                                                                               void*), void *ud);
+
+struct Profile *profile_new(const char *name);
+
+struct Profile *profile_load(const char *path, struct RustError **err);
+
+void profile_free(struct Profile *p);
+
+char *profile_id(const struct Profile *p);
+
+const char *profile_name(const struct Profile *p);
+
+struct RustError *profile_save(const struct Profile *p, const char *path);
 
 struct RustError *update_firmware(const char *root,
                                   const char *fw,
