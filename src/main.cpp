@@ -111,9 +111,11 @@ int main(int argc, char *argv[])
     MainWindow win(&vulkan);
 #endif
 
-    if (!win.loadGames()) {
+    if (!win.loadProfiles() || !win.loadGames()) {
         return 1;
     }
+
+    win.restoreGeometry();
 
     return QApplication::exec();
 }

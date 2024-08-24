@@ -2,4 +2,4 @@
 
 #include <QString>
 
-QString kernelDebugDump();
+QString profiles();

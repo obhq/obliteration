@@ -1,9 +1,12 @@
 #pragma once
 
+#include "core.h"
+
 #include <QWidget>
 
 class DisplaySettings;
 class GameListModel;
+class ProfileList;
 class QComboBox;
 class QLayout;
 class QTableView;
@@ -11,13 +14,14 @@ class QTableView;
 class LaunchSettings final : public QWidget {
     Q_OBJECT
 public:
-    LaunchSettings(GameListModel *games, QWidget *parent = nullptr);
+    LaunchSettings(ProfileList *profiles, GameListModel *games, QWidget *parent = nullptr);
     ~LaunchSettings() override;
 signals:
+    void saveClicked(Profile *p);
     void startClicked();
 private:
     QWidget *buildSettings(GameListModel *games);
-    QLayout *buildActions();
+    QLayout *buildActions(ProfileList *profiles);
 
     void requestGamesContextMenu(const QPoint &pos);
 

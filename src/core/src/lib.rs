@@ -3,6 +3,7 @@ use std::ffi::{c_char, c_void};
 mod error;
 mod param;
 mod pkg;
+mod profile;
 mod string;
 mod system;
 mod vmm;

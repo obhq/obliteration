@@ -3,6 +3,7 @@
 #include "game_models.hpp"
 #include "game_settings.hpp"
 #include "game_settings_dialog.hpp"
+#include "profile_models.hpp"
 #include "resources.hpp"
 
 #include <QComboBox>
@@ -17,7 +18,7 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
-LaunchSettings::LaunchSettings(GameListModel *games, QWidget *parent) :
+LaunchSettings::LaunchSettings(ProfileList *profiles, GameListModel *games, QWidget *parent) :
     QWidget(parent),
     m_display(nullptr),
     m_games(nullptr),
@@ -26,7 +27,7 @@ LaunchSettings::LaunchSettings(GameListModel *games, QWidget *parent) :
     auto layout = new QVBoxLayout();
 
     layout->addWidget(buildSettings(games));
-    layout->addLayout(buildActions());
+    layout->addLayout(buildActions(profiles));
 
     setLayout(layout);
 }
@@ -63,12 +64,13 @@ QWidget *LaunchSettings::buildSettings(GameListModel *games)
     return tab;
 }
 
-QLayout *LaunchSettings::buildActions()
+QLayout *LaunchSettings::buildActions(ProfileList *profiles)
 {
     auto layout = new QHBoxLayout();
 
     // Profile list.
     m_profiles = new QComboBox();
+    m_profiles->setModel(profiles);
 
     layout->addWidget(m_profiles, 1);
 
@@ -79,6 +81,16 @@ QLayout *LaunchSettings::buildActions()
 
     // Save button.
     auto save = new QPushButton(loadIcon(":/resources/content-save.svg"), "Save");
+
+    connect(save, &QAbstractButton::clicked, [this]() {
+        auto index = m_profiles->currentIndex();
+
+        if (index >= 0) {
+            auto profiles = reinterpret_cast<ProfileList *>(m_profiles->model());
+
+            emit saveClicked(profiles->get(index));
+        }
+    });
 
     actions->addButton(save, QDialogButtonBox::ApplyRole);
 
