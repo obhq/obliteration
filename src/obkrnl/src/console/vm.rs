@@ -1,17 +1,15 @@
-use core::fmt::{Arguments, Write};
+use core::fmt::{Display, Write};
 use core::ptr::{addr_of_mut, write_volatile};
 use obconf::Vm;
-use obvirt::console::{Commit, Memory, MsgType};
+use obvirt::console::{Memory, MsgType};
 
-pub fn print(env: &Vm, ty: MsgType, file: &str, line: u32, msg: Arguments) {
+pub fn print(env: &Vm, ty: MsgType, msg: impl Display) {
     let c = env.console as *mut Memory;
+    let mut w = Writer(c);
 
-    unsafe { write_volatile(addr_of_mut!((*c).file_len), file.len()) };
-    unsafe { write_volatile(addr_of_mut!((*c).file_addr), file.as_ptr() as usize) };
+    writeln!(w, "{msg}").unwrap();
 
-    Writer(c).write_fmt(msg).unwrap();
-
-    unsafe { write_volatile(addr_of_mut!((*c).commit), Commit::new(ty, line)) };
+    unsafe { write_volatile(addr_of_mut!((*c).commit), ty) };
 }
 
 struct Writer(*mut Memory);

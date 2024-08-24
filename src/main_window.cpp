@@ -30,6 +30,7 @@
 #endif
 
 #include <filesystem>
+#include <iostream>
 #include <utility>
 
 #include <string.h>
@@ -234,25 +235,14 @@ void MainWindow::openSystemFolder()
 
 void MainWindow::viewLogs()
 {
-    // Check for previous window.
     if (m_logs) {
         m_logs->activateWindow();
         m_logs->raise();
-        return;
-    } else if (!m_kernel) {
-        QMessageBox::information(this, "Information", "The kernel is not running.");
-        return;
+    } else {
+        m_logs = new LogsViewer();
+        m_logs->setAttribute(Qt::WA_DeleteOnClose);
+        m_logs->show();
     }
-
-    // Create a window.
-    m_logs = new LogsViewer();
-
-    vmm_logs(m_kernel, m_logs.get(), [](uint8_t, const char *msg, size_t len, void *cx) {
-        reinterpret_cast<LogsViewer *>(cx)->append(QString::fromUtf8(msg, len));
-    });
-
-    m_logs->setAttribute(Qt::WA_DeleteOnClose);
-    m_logs->show();
 }
 
 void MainWindow::reportIssue()
@@ -332,7 +322,7 @@ void MainWindow::startKernel()
     }
 #endif
 
-    vmm = vmm_run(kernel.c_str(), &screen, &error);
+    vmm = vmm_run(kernel.c_str(), &screen, MainWindow::vmmHandler, this, &error);
 
     if (!vmm) {
         m_main->setCurrentIndex(0);
@@ -371,6 +361,19 @@ void MainWindow::updateScreen()
 
     // Queue next update.
     m_screen->requestUpdate();
+}
+
+void MainWindow::log(VmmLog type, const QString &msg)
+{
+    if (m_logs) {
+        m_logs->append(msg);
+    } else {
+        switch (type) {
+        case VmmLog_Info:
+            std::cout << msg.toStdString();
+            break;
+        }
+    }
 }
 
 bool MainWindow::loadGame(const QString &gameId)
@@ -452,4 +455,22 @@ bool MainWindow::requireEmulatorStopped()
     }
 
     return false;
+}
+
+bool MainWindow::vmmHandler(const VmmEvent *ev, void *cx)
+{
+    auto w = reinterpret_cast<MainWindow *>(cx);
+
+    switch (ev->tag) {
+    case VmmEvent_Log:
+        QMetaObject::invokeMethod(
+            w,
+            &MainWindow::log,
+            Qt::QueuedConnection,
+            ev->log.ty,
+            QString::fromUtf8(ev->log.data, ev->log.len));
+        break;
+    }
+
+    return true;
 }

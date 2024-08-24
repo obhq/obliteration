@@ -1,4 +1,3 @@
-#include "core.hpp"
 #include "initialize_wizard.hpp"
 #include "main_window.hpp"
 #include "settings.hpp"
@@ -10,6 +9,7 @@
 #include <QApplication>
 #include <QMessageBox>
 #include <QMetaObject>
+#include <QThread>
 #ifndef __APPLE__
 #include <QVersionNumber>
 #include <QVulkanInstance>
@@ -27,14 +27,19 @@ static void panicHook(
     size_t mlen,
     void *cx)
 {
-    QMetaObject::invokeMethod(reinterpret_cast<QObject *>(cx), [=]() {
+    auto main = reinterpret_cast<QObject *>(cx);
+    auto type = QThread::currentThread() == main->thread()
+        ? Qt::DirectConnection
+        : Qt::BlockingQueuedConnection;
+
+    QMetaObject::invokeMethod(main, [=]() {
         auto text = QString("An unexpected error occurred at %1:%2: %3")
             .arg(QString::fromUtf8(file, flen))
             .arg(line)
             .arg(QString::fromUtf8(msg, mlen));
 
         QMessageBox::critical(nullptr, "Fatal Error", text);
-    });
+    }, type);
 }
 
 int main(int argc, char *argv[])

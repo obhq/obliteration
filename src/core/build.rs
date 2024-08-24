@@ -40,6 +40,7 @@ fn main() {
     conf.export
         .rename
         .insert("KvmTranslation".into(), "kvm_translation".into());
+    conf.enumeration.prefix_with_name = true;
     conf.defines
         .insert("target_os = linux".into(), "__linux__".into());
     conf.defines

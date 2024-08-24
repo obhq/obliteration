@@ -14,6 +14,13 @@ struct Param;
 struct Pkg;
 
 /**
+ * Log category.
+ */
+enum VmmLog {
+    VmmLog_Info,
+};
+
+/**
  * Error object managed by Rust side.
  */
 struct RustError;
@@ -39,6 +46,26 @@ struct VmmScreen {
     size_t view
 #endif
     ;
+};
+
+/**
+ * Contains VMM event information.
+ */
+enum VmmEvent_Tag {
+    VmmEvent_Log,
+};
+
+struct VmmEvent_Log_Body {
+    enum VmmLog ty;
+    const char *data;
+    size_t len;
+};
+
+struct VmmEvent {
+    enum VmmEvent_Tag tag;
+    union {
+        struct VmmEvent_Log_Body log;
+    };
 };
 
 #ifdef __cplusplus
@@ -89,11 +116,13 @@ struct RustError *update_firmware(const char *root,
 
 void vmm_free(struct Vmm *vmm);
 
-struct Vmm *vmm_run(const char *kernel, const struct VmmScreen *screen, struct RustError **err);
+struct Vmm *vmm_run(const char *kernel,
+                    const struct VmmScreen *screen,
+                    bool (*event)(const struct VmmEvent*, void*),
+                    void *cx,
+                    struct RustError **err);
 
 struct RustError *vmm_draw(struct Vmm *vmm);
-
-void vmm_logs(const struct Vmm *vmm, void *cx, void (*cb)(uint8_t, const char*, size_t, void*));
 
 #if defined(__linux__)
 extern int kvm_check_version(int kvm, bool *compat);

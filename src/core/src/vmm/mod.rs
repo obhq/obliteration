@@ -5,16 +5,15 @@ use self::screen::Screen;
 use crate::error::RustError;
 use obconf::{BootEnv, Vm};
 use obvirt::console::MsgType;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::{c_char, c_void, CStr};
 use std::io::Read;
 use std::num::NonZero;
-use std::ops::Deref;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread::JoinHandle;
 use thiserror::Error;
 
@@ -32,6 +31,8 @@ pub unsafe extern "C" fn vmm_free(vmm: *mut Vmm) {
 pub unsafe extern "C" fn vmm_run(
     kernel: *const c_char,
     screen: *const VmmScreen,
+    event: unsafe extern "C" fn(*const VmmEvent, *mut c_void) -> bool,
+    cx: *mut c_void,
     err: *mut *mut RustError,
 ) -> *mut Vmm {
     // Check if path UTF-8.
@@ -359,7 +360,8 @@ pub unsafe extern "C" fn vmm_run(
     }
 
     // Allocate arguments.
-    let devices = Arc::new(setup_devices(Ram::SIZE, vm_page_size));
+    let event = VmmEventHandler { fp: event, cx };
+    let devices = Arc::new(setup_devices(Ram::SIZE, vm_page_size, event));
     let env = BootEnv::Vm(Vm {
         console: devices.console().addr(),
     });
@@ -398,7 +400,6 @@ pub unsafe extern "C" fn vmm_run(
     };
 
     // Setup arguments for main CPU.
-    let logs = Arc::new(Mutex::new(VecDeque::new()));
     let shutdown = Arc::new(AtomicBool::new(false));
     let args = CpuArgs {
         hv,
@@ -440,7 +441,6 @@ pub unsafe extern "C" fn vmm_run(
     let vmm = Vmm {
         cpus: vec![main],
         screen,
-        logs,
         shutdown,
     };
 
@@ -452,19 +452,6 @@ pub unsafe extern "C" fn vmm_draw(vmm: *mut Vmm) -> *mut RustError {
     match (*vmm).screen.update() {
         Ok(_) => null_mut(),
         Err(e) => RustError::wrap(e),
-    }
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn vmm_logs(
-    vmm: *const Vmm,
-    cx: *mut c_void,
-    cb: unsafe extern "C" fn(u8, *const c_char, usize, *mut c_void),
-) {
-    let logs = (*vmm).logs.lock().unwrap();
-
-    for (ty, msg) in logs.deref() {
-        cb(*ty as u8, msg.as_ptr().cast(), msg.len(), cx);
     }
 }
 
@@ -616,7 +603,13 @@ fn run_cpu(mut cpu: impl Cpu, args: &CpuArgs) {
         // Check if I/O.
         match exit.into_io() {
             Ok(io) => match exec_io(&mut devices, io) {
-                Ok(_) => continue,
+                Ok(status) => {
+                    if !status {
+                        args.shutdown.store(true, Ordering::Relaxed);
+                    }
+
+                    continue;
+                }
                 Err(_) => todo!(),
             },
             Err(_) => todo!(),
@@ -627,7 +620,7 @@ fn run_cpu(mut cpu: impl Cpu, args: &CpuArgs) {
 fn exec_io<'a>(
     devices: &mut BTreeMap<usize, (Box<dyn DeviceContext + 'a>, NonZero<usize>)>,
     mut io: impl CpuIo,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<bool, Box<dyn Error>> {
     // Get target device.
     let addr = io.addr();
     let (_, (dev, end)) = devices.range_mut(..=addr).last().unwrap();
@@ -663,7 +656,6 @@ fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
 pub struct Vmm {
     cpus: Vec<JoinHandle<()>>,
     screen: self::screen::Default,
-    logs: Arc<Mutex<VecDeque<(MsgType, String)>>>,
     shutdown: Arc<AtomicBool>,
 }
 
@@ -687,6 +679,48 @@ pub struct VmmScreen {
     pub vk_surface: usize,
     #[cfg(target_os = "macos")]
     pub view: usize,
+}
+
+/// Encapsulates a function to handle VMM events.
+#[derive(Clone, Copy)]
+struct VmmEventHandler {
+    fp: unsafe extern "C" fn(*const VmmEvent, *mut c_void) -> bool,
+    cx: *mut c_void,
+}
+
+impl VmmEventHandler {
+    unsafe fn invoke(self, e: VmmEvent) -> bool {
+        (self.fp)(&e, self.cx)
+    }
+}
+
+unsafe impl Send for VmmEventHandler {}
+unsafe impl Sync for VmmEventHandler {}
+
+/// Contains VMM event information.
+#[repr(C)]
+#[allow(dead_code)] // TODO: Figure out why Rust think fields in each enum are not used.
+pub enum VmmEvent {
+    Log {
+        ty: VmmLog,
+        data: *const c_char,
+        len: usize,
+    },
+}
+
+/// Log category.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub enum VmmLog {
+    Info,
+}
+
+impl From<MsgType> for VmmLog {
+    fn from(value: MsgType) -> Self {
+        match value {
+            MsgType::Info => Self::Info,
+        }
+    }
 }
 
 /// Encapsulates arguments for a function to run a CPU.

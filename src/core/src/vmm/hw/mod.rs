@@ -1,3 +1,4 @@
+use super::VmmEventHandler;
 use crate::vmm::hv::CpuIo;
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -10,12 +11,16 @@ pub use self::ram::*;
 mod console;
 mod ram;
 
-pub fn setup_devices(start_addr: usize, vm_page_size: NonZero<usize>) -> DeviceTree {
+pub fn setup_devices(
+    start_addr: usize,
+    vm_page_size: NonZero<usize>,
+    event: VmmEventHandler,
+) -> DeviceTree {
     let mut map = BTreeMap::<usize, Arc<dyn Device>>::new();
 
     // Console.
     let addr = start_addr;
-    let console = Arc::new(Console::new(addr, vm_page_size));
+    let console = Arc::new(Console::new(addr, vm_page_size, event));
 
     assert!(map.insert(console.addr(), console.clone()).is_none());
 
@@ -60,5 +65,5 @@ pub trait Device: Send + Sync {
 
 /// Context to execute memory-mapped I/O operations on a virtual device.
 pub trait DeviceContext {
-    fn exec(&mut self, exit: &mut dyn CpuIo) -> Result<(), Box<dyn Error>>;
+    fn exec(&mut self, exit: &mut dyn CpuIo) -> Result<bool, Box<dyn Error>>;
 }

@@ -37,14 +37,17 @@ private slots:
     void updateScreen();
 
 private:
+    void log(VmmLog type, const QString &msg);
     bool loadGame(const QString &gameId);
     void restoreGeometry();
     bool requireEmulatorStopped();
+
+    static bool vmmHandler(const VmmEvent *ev, void *cx);
 
     QStackedWidget *m_main;
     GameListModel *m_games;
     LaunchSettings *m_launch;
     Screen *m_screen;
     QPointer<LogsViewer> m_logs;
-    Rust<Vmm> m_kernel;
+    Rust<Vmm> m_kernel; // Destroy first.
 };
