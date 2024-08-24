@@ -21,9 +21,9 @@ jobs:
     name: ${{ inputs.name }}
     runs-on: ${{ inputs.macos }}
     env:
-      CMAKE_PREFIX_PATH: qt/6.6.0/macos
-      QT_URL_BASE: https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_660/qt.qt6.660.clang_64/6.6.0-0-202310040910qtbase-MacOS-MacOS_12-Clang-MacOS-MacOS_12-X86_64-ARM64.7z
-      QT_URL_SVG: https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_660/qt.qt6.660.clang_64/6.6.0-0-202310040910qtsvg-MacOS-MacOS_12-Clang-MacOS-MacOS_12-X86_64-ARM64.7z
+      CMAKE_PREFIX_PATH: qt/6.7.2/macos
+      QT_URL_BASE: https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_672/qt.qt6.672.clang_64/6.7.2-0-202406110330qtbase-MacOS-MacOS_13-Clang-MacOS-MacOS_13-X86_64-ARM64.7z
+      QT_URL_SVG: https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_672/qt.qt6.672.clang_64/6.7.2-0-202406110330qtsvg-MacOS-MacOS_13-Clang-MacOS-MacOS_13-X86_64-ARM64.7z
     steps:
     - name: Checkout source
       uses: actions/checkout@v4
