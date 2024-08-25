@@ -13,7 +13,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y flatpak flatpak-builder
     - name: Lint Rust sources
-      run: cargo clippy --package obkrnl -- -D warnings
+      run: cargo clippy --package obkrnl --target x86_64-unknown-none -- -D warnings
       working-directory: src
     - name: Run tests
       run: cargo test --workspace --exclude core --exclude kernel
