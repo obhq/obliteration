@@ -17,12 +17,16 @@ pub struct Memory {
 #[derive(Clone, Copy)]
 pub enum MsgType {
     Info,
+    Warn,
+    Error,
 }
 
 impl MsgType {
     pub fn from_u8(v: u8) -> Option<Self> {
         let v = match v {
-            v if v == MsgType::Info as u8 => MsgType::Info,
+            v if v == Self::Info as u8 => Self::Info,
+            v if v == Self::Warn as u8 => Self::Warn,
+            v if v == Self::Error as u8 => Self::Error,
             _ => return None,
         };
 

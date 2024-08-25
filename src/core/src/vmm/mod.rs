@@ -709,16 +709,24 @@ pub enum VmmEvent {
 }
 
 /// Log category.
+///
+/// The reason we need this because cbindgen is not good at exporting dependency types so we can't
+/// use [`MsgType`] directly. See https://github.com/mozilla/cbindgen/issues/667 for an example of
+/// the problem.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub enum VmmLog {
     Info,
+    Warn,
+    Error,
 }
 
 impl From<MsgType> for VmmLog {
     fn from(value: MsgType) -> Self {
         match value {
             MsgType::Info => Self::Info,
+            MsgType::Warn => Self::Warn,
+            MsgType::Error => Self::Error,
         }
     }
 }

@@ -101,14 +101,12 @@ impl<'a> DeviceContext for Context<'a> {
 
             // Trigger event.
             let msg = std::mem::take(&mut self.msg);
-            let status = match ty {
-                MsgType::Info => unsafe {
-                    self.dev.event.invoke(VmmEvent::Log {
-                        ty: ty.into(),
-                        data: msg.as_ptr().cast(),
-                        len: msg.len(),
-                    })
-                },
+            let status = unsafe {
+                self.dev.event.invoke(VmmEvent::Log {
+                    ty: ty.into(),
+                    data: msg.as_ptr().cast(),
+                    len: msg.len(),
+                })
             };
 
             if !status {

@@ -2,6 +2,8 @@
 #![cfg_attr(not(test), no_main)]
 
 use crate::config::set_boot_env;
+use crate::malloc::KernelHeap;
+use alloc::string::String;
 use core::arch::asm;
 use core::panic::PanicInfo;
 use obconf::BootEnv;
@@ -9,6 +11,10 @@ use obconf::BootEnv;
 mod config;
 mod console;
 mod imgfmt;
+mod malloc;
+mod panic;
+
+extern crate alloc;
 
 /// Entry point of the kernel.
 ///
@@ -40,7 +46,27 @@ extern "C" fn _start(env: &'static BootEnv) -> ! {
 }
 
 #[allow(dead_code)]
-#[cfg_attr(not(test), panic_handler)]
-fn panic(_: &PanicInfo) -> ! {
-    loop {}
+#[cfg_attr(target_os = "none", panic_handler)]
+fn panic(i: &PanicInfo) -> ! {
+    // Get location.
+    let (file, line) = match i.location() {
+        Some(v) => (v.file(), v.line()),
+        None => ("unknown", 0),
+    };
+
+    // Get message.
+    let msg = if let Some(&v) = i.payload().downcast_ref::<&str>() {
+        v
+    } else if let Some(v) = i.payload().downcast_ref::<String>() {
+        v
+    } else {
+        "unknown panic payload"
+    };
+
+    crate::console::error(file, line, msg);
+    crate::panic::panic();
 }
+
+#[allow(dead_code)]
+#[cfg_attr(target_os = "none", global_allocator)]
+static mut KERNEL_HEAP: KernelHeap = KernelHeap::new();
