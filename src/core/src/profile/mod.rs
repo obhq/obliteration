@@ -11,9 +11,8 @@ use uuid::Uuid;
 #[no_mangle]
 pub unsafe extern "C" fn profile_new(name: *const c_char) -> *mut Profile {
     Box::into_raw(Box::new(Profile {
-        id: Uuid::new_v4(),
         name: CStr::from_ptr(name).to_owned(),
-        created: SystemTime::now(),
+        ..Default::default()
     }))
 }
 
@@ -31,18 +30,18 @@ pub unsafe extern "C" fn profile_load(
         }
     };
 
-    // TODO: Use from_io() once https://github.com/jamesmunns/postcard/issues/162 is implemented.
+    // Open profile.bin.
     let path = root.join("profile.bin");
-    let data = match std::fs::read(&path) {
+    let file = match File::open(&path) {
         Ok(v) => v,
         Err(e) => {
-            *err = RustError::with_source(format_args!("couldn't read {}", path.display()), e);
+            *err = RustError::with_source(format_args!("couldn't open {}", path.display()), e);
             return null_mut();
         }
     };
 
     // Load profile.bin.
-    let p = match postcard::from_bytes(&data) {
+    let p = match ciborium::from_reader(file) {
         Ok(v) => v,
         Err(e) => {
             *err = RustError::with_source(format_args!("couldn't load {}", path.display()), e);
@@ -69,6 +68,16 @@ pub unsafe extern "C" fn profile_name(p: *const Profile) -> *const c_char {
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn profile_display_resolution(p: *const Profile) -> DisplayResolution {
+    (*p).display_resolution
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn profile_set_display_resolution(p: *mut Profile, v: DisplayResolution) {
+    (*p).display_resolution = v;
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn profile_save(p: *const Profile, path: *const c_char) -> *mut RustError {
     // Check if path UTF-8.
     let root = match CStr::from_ptr(path).to_str() {
@@ -91,7 +100,7 @@ pub unsafe extern "C" fn profile_save(p: *const Profile, path: *const c_char) ->
     };
 
     // Write profile.bin.
-    if let Err(e) = postcard::to_io(&*p, file) {
+    if let Err(e) = ciborium::into_writer(&*p, file) {
         return RustError::with_source(format_args!("couldn't write {}", path.display()), e);
     }
 
@@ -100,8 +109,33 @@ pub unsafe extern "C" fn profile_save(p: *const Profile, path: *const c_char) ->
 
 /// Contains settings to launch the kernel.
 #[derive(Deserialize, Serialize)]
+#[serde(default)]
 pub struct Profile {
     id: Uuid,
     name: CString,
+    display_resolution: DisplayResolution,
     created: SystemTime,
+}
+
+impl Default for Profile {
+    fn default() -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            name: CString::new("Default").unwrap(),
+            display_resolution: DisplayResolution::Hd,
+            created: SystemTime::now(),
+        }
+    }
+}
+
+/// Display resolution to report to the kernel.
+#[repr(C)]
+#[derive(Clone, Copy, Deserialize, Serialize)]
+pub enum DisplayResolution {
+    /// 1280 × 720.
+    Hd,
+    /// 1920 × 1080.
+    FullHd,
+    /// 3840 × 2160.
+    UltraHd,
 }
