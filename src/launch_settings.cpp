@@ -72,6 +72,8 @@ QLayout *LaunchSettings::buildActions(ProfileList *profiles)
     m_profiles = new QComboBox();
     m_profiles->setModel(profiles);
 
+    connect(m_profiles, &QComboBox::currentIndexChanged, this, &LaunchSettings::profileChanged);
+
     layout->addWidget(m_profiles, 1);
 
     // Actions bar.
@@ -140,4 +142,14 @@ void LaunchSettings::requestGamesContextMenu(const QPoint &pos)
 
         dialog.exec();
     }
+}
+
+void LaunchSettings::profileChanged(int index)
+{
+    assert(index >= 0);
+
+    auto profiles = reinterpret_cast<ProfileList *>(m_profiles->model());
+    auto p = profiles->get(index);
+
+    m_display->setProfile(p);
 }

@@ -24,6 +24,7 @@ private:
     QLayout *buildActions(ProfileList *profiles);
 
     void requestGamesContextMenu(const QPoint &pos);
+    void profileChanged(int index);
 
     DisplaySettings *m_display;
     QTableView *m_games;
