@@ -84,6 +84,10 @@ int main(int argc, char *argv[])
 
     vulkan.setApiVersion(QVersionNumber(1, 3));
 
+#if !defined(NDEBUG)
+    vulkan.setLayers({"VK_LAYER_KHRONOS_validation"});
+#endif
+
     if (!vulkan.create()) {
         QMessageBox::critical(
             nullptr,
