@@ -36,10 +36,9 @@ private slots:
     void viewLogs();
     void reportIssue();
     void aboutObliteration();
-    void saveClicked(Profile *p);
+    void saveProfile(Profile *p);
     void startKernel();
     void updateScreen();
-
 private:
     void log(VmmLog type, const QString &msg);
     bool loadGame(const QString &gameId);

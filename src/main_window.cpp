@@ -103,7 +103,7 @@ MainWindow::MainWindow(QVulkanInstance *vulkan) :
     m_games = new GameListModel(this);
     m_launch = new LaunchSettings(m_profiles, m_games);
 
-    connect(m_launch, &LaunchSettings::saveClicked, this, &MainWindow::saveClicked);
+    connect(m_launch, &LaunchSettings::saveClicked, this, &MainWindow::saveProfile);
     connect(m_launch, &LaunchSettings::startClicked, this, &MainWindow::startKernel);
 
     m_main->addWidget(m_launch);
@@ -320,7 +320,7 @@ void MainWindow::aboutObliteration()
         "working in the future.");
 }
 
-void MainWindow::saveClicked(Profile *p)
+void MainWindow::saveProfile(Profile *p)
 {
     // Get ID.
     Rust<char> id;
@@ -458,6 +458,10 @@ void MainWindow::log(VmmLog type, const QString &msg)
         switch (type) {
         case VmmLog_Info:
             std::cout << msg.toStdString();
+            break;
+        case VmmLog_Warn:
+        case VmmLog_Error:
+            std::cerr << msg.toStdString();
             break;
         }
     }
