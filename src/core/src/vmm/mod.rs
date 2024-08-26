@@ -111,7 +111,7 @@ pub unsafe extern "C" fn vmm_run(
 
                 note = Some(hdr);
             }
-            6 | 1685382481 | 1685382482 => {}
+            6 | 1685382480 | 1685382481 | 1685382482 => {}
             v => {
                 *err = RustError::new(format!("unknown p_type {v} on program header {index}"));
                 return null_mut();
