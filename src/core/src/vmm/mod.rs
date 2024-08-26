@@ -135,6 +135,15 @@ pub unsafe extern "C" fn vmm_run(
         }
     }
 
+    // Check if PT_DYNAMIC exists.
+    let dynamic = match dynamic {
+        Some(v) => v,
+        None => {
+            *err = RustError::new("no PT_DYNAMIC segment on the kernel");
+            return null_mut();
+        }
+    };
+
     // Check if PT_NOTE exists.
     let note = match note {
         Some(v) => v,
