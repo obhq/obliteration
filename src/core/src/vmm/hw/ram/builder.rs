@@ -126,6 +126,84 @@ impl RamBuilder {
 
         Ok(())
     }
+
+    /// # Safety
+    /// [`RamMap::kern_paddr`] and [`RamMap::kern_len`] must be valid.
+    unsafe fn relocate_kernel(
+        &mut self,
+        map: &RamMap,
+        dynamic: ProgramHeader,
+        ty: usize,
+    ) -> Result<(), RamBuilderError> {
+        // Check if PT_DYNAMIC valid.
+        let p_vaddr = dynamic.p_vaddr;
+        let p_memsz = dynamic.p_memsz;
+
+        if p_memsz % 16 != 0 {
+            return Err(RamBuilderError::InvalidDynamicLinking);
+        }
+
+        // Get PT_DYNAMIC.
+        let paddr = map.kern_paddr;
+        let kern = unsafe { std::slice::from_raw_parts_mut(self.ram.mem.add(paddr), map.kern_len) };
+        let dynamic = p_vaddr
+            .checked_add(p_memsz)
+            .and_then(|end| kern.get(p_vaddr..end))
+            .ok_or(RamBuilderError::InvalidDynamicLinking)?;
+
+        // Parse PT_DYNAMIC.
+        let mut rela = None;
+        let mut relasz = None;
+
+        for entry in dynamic.chunks_exact(16) {
+            let tag = usize::from_ne_bytes(entry[..8].try_into().unwrap());
+            let val = usize::from_ne_bytes(entry[8..].try_into().unwrap());
+
+            match tag {
+                0 => break,              // DT_NULL
+                7 => rela = Some(val),   // DT_RELA
+                8 => relasz = Some(val), // DT_RELASZ
+                _ => {}
+            }
+        }
+
+        // Check DT_RELA and DT_RELASZ.
+        let (relocs, len) = match (rela, relasz) {
+            (None, None) => return Ok(()),
+            (Some(rela), Some(relasz)) => (rela, relasz),
+            _ => return Err(RamBuilderError::InvalidDynamicLinking),
+        };
+
+        // Check if size valid.
+        if (len % 24) != 0 || !relocs.checked_add(len).is_some_and(|end| end <= kern.len()) {
+            return Err(RamBuilderError::InvalidDynamicLinking);
+        }
+
+        // Apply relocations.
+        for off in (0..len).step_by(24).map(|v| relocs + v) {
+            let r_offset = usize::from_ne_bytes(kern[off..(off + 8)].try_into().unwrap());
+            let r_info = usize::from_ne_bytes(kern[(off + 8)..(off + 16)].try_into().unwrap());
+            let r_addend = isize::from_ne_bytes(kern[(off + 16)..(off + 24)].try_into().unwrap());
+
+            match r_info & 0xffffffff {
+                // R_<ARCH>_NONE
+                0 => break,
+                // R_<ARCH>_RELATIVE
+                v if v == ty => {
+                    let dst = r_offset
+                        .checked_add(8)
+                        .and_then(|end| kern.get_mut(r_offset..end))
+                        .ok_or(RamBuilderError::InvalidDynamicLinking)?;
+                    let val = map.kern_vaddr.wrapping_add_signed(r_addend);
+
+                    unsafe { core::ptr::write_unaligned(dst.as_mut_ptr().cast(), val) };
+                }
+                _ => {}
+            }
+        }
+
+        Ok(())
+    }
 }
 
 #[cfg(target_arch = "x86_64")]
@@ -133,12 +211,8 @@ impl RamBuilder {
     pub fn build(
         mut self,
         devices: &DeviceTree,
-        dynamic: Option<ProgramHeader>,
+        dynamic: ProgramHeader,
     ) -> Result<(Ram, RamMap), RamBuilderError> {
-        // For x86-64 we require the kernel to be a Position-Independent Executable so we can map it
-        // at the same address as the PS4 kernel.
-        let dynamic = dynamic.ok_or(RamBuilderError::NonPieKernel)?;
-
         // Allocate page-map level-4 table. We use 4K 4-Level Paging here. Not sure how the PS4
         // achieve 16K page because x86-64 does not support it. Maybe it is a special request from
         // Sony to AMD?
@@ -194,49 +268,11 @@ impl RamBuilder {
 
         self.setup_4k_page_tables(pml4t, vaddr, ram.start, ram.end - ram.start)?;
 
-        // Check if PT_DYNAMIC valid.
-        let p_vaddr = dynamic.p_vaddr;
-        let p_memsz = dynamic.p_memsz;
-
-        if p_memsz % 16 != 0 {
-            return Err(RamBuilderError::InvalidDynamicLinking);
-        }
-
-        // Get PT_DYNAMIC.
-        let kern =
-            unsafe { std::slice::from_raw_parts_mut(self.ram.mem.add(kern_paddr), kern_len) };
-        let dynamic = p_vaddr
-            .checked_add(p_memsz)
-            .and_then(|end| kern.get(p_vaddr..end))
-            .ok_or(RamBuilderError::InvalidDynamicLinking)?;
-
-        // Parse PT_DYNAMIC.
-        let mut rela = None;
-        let mut relasz = None;
-
-        for entry in dynamic.chunks_exact(16) {
-            let tag = usize::from_ne_bytes(entry[..8].try_into().unwrap());
-            let val = usize::from_ne_bytes(entry[8..].try_into().unwrap());
-
-            match tag {
-                0 => break,              // DT_NULL
-                7 => rela = Some(val),   // DT_RELA
-                8 => relasz = Some(val), // DT_RELASZ
-                _ => {}
-            }
-        }
-
         // Relocate the kernel to virtual address.
-        match (rela, relasz) {
-            (None, None) => {}
-            (Some(rela), Some(relasz)) => Self::relocate_kernel(kern, kern_vaddr, rela, relasz)?,
-            _ => return Err(RamBuilderError::InvalidDynamicLinking),
-        }
-
-        // Build map.
         let map = RamMap {
             page_size: self.ram.vm_page_size,
             page_table,
+            kern_paddr,
             kern_vaddr,
             kern_len,
             stack_vaddr,
@@ -244,44 +280,9 @@ impl RamBuilder {
             env_vaddr,
         };
 
+        unsafe { self.relocate_kernel(&map, dynamic, 8)? };
+
         Ok((self.ram, map))
-    }
-
-    fn relocate_kernel(
-        kern: &mut [u8],
-        vaddr: usize,
-        relocs: usize,
-        len: usize,
-    ) -> Result<(), RamBuilderError> {
-        // Check if size valid.
-        if (len % 24) != 0 || !relocs.checked_add(len).is_some_and(|end| end <= kern.len()) {
-            return Err(RamBuilderError::InvalidDynamicLinking);
-        }
-
-        // Apply relocations.
-        for off in (0..len).step_by(24).map(|v| relocs + v) {
-            let r_offset = usize::from_ne_bytes(kern[off..(off + 8)].try_into().unwrap());
-            let r_info = usize::from_ne_bytes(kern[(off + 8)..(off + 16)].try_into().unwrap());
-            let r_addend = isize::from_ne_bytes(kern[(off + 16)..(off + 24)].try_into().unwrap());
-
-            match r_info & 0xffffffff {
-                // R_X86_64_NONE
-                0 => break,
-                // R_X86_64_RELATIVE
-                8 => {
-                    let dst = r_offset
-                        .checked_add(8)
-                        .and_then(|end| kern.get_mut(r_offset..end))
-                        .ok_or(RamBuilderError::InvalidDynamicLinking)?;
-                    let val = vaddr.wrapping_add_signed(r_addend);
-
-                    unsafe { core::ptr::write_unaligned(dst.as_mut_ptr().cast(), val) };
-                }
-                _ => {}
-            }
-        }
-
-        Ok(())
     }
 
     fn setup_4k_page_tables(
@@ -386,7 +387,7 @@ impl RamBuilder {
     pub fn build(
         mut self,
         devices: &DeviceTree,
-        dynamic: Option<ProgramHeader>,
+        dynamic: ProgramHeader,
     ) -> Result<(Ram, RamMap), RamBuilderError> {
         // Setup page tables.
         let map = match self.ram.vm_page_size.get() {
@@ -394,7 +395,10 @@ impl RamBuilder {
             _ => todo!(),
         };
 
-        todo!("relocate the kernel");
+        // Relocate the kernel to virtual address.
+        unsafe { self.relocate_kernel(&map, dynamic, 1027)? };
+
+        Ok((self.ram, map))
     }
 
     fn build_16k_page_tables(&mut self, devices: &DeviceTree) -> Result<RamMap, RamBuilderError> {
@@ -455,6 +459,7 @@ impl RamBuilder {
         Ok(RamMap {
             page_size: unsafe { NonZero::new_unchecked(0x4000) },
             page_table,
+            kern_paddr,
             kern_vaddr,
             kern_len,
             stack_vaddr,
@@ -564,6 +569,7 @@ pub struct KernelArgs {
 pub struct RamMap {
     pub page_size: NonZero<usize>,
     pub page_table: usize,
+    pub kern_paddr: usize,
     pub kern_vaddr: usize,
     pub kern_len: usize,
     pub stack_vaddr: usize,
@@ -574,10 +580,6 @@ pub struct RamMap {
 /// Represents an error when [`RamBuilder::build()`] fails
 #[derive(Debug, Error)]
 pub enum RamBuilderError {
-    #[cfg(target_arch = "x86_64")]
-    #[error("the kernel is not a position-independent executable")]
-    NonPieKernel,
-
     #[cfg(target_arch = "x86_64")]
     #[error("couldn't allocate page-map level-4 table")]
     AllocPml4TableFailed(#[source] RamError),
@@ -594,10 +596,6 @@ pub enum RamBuilderError {
     #[error("couldn't allocate page table")]
     AllocPageTableFailed(#[source] RamError),
 
-    #[cfg(target_arch = "x86_64")]
-    #[error("the kernel has invalid PT_DYNAMIC")]
-    InvalidDynamicLinking,
-
     #[cfg(target_arch = "aarch64")]
     #[error("couldn't allocate page table level 0")]
     AllocPageTableLevel0Failed(#[source] RamError),
@@ -613,4 +611,7 @@ pub enum RamBuilderError {
     #[cfg(target_arch = "aarch64")]
     #[error("couldn't allocate page table level 3")]
     AllocPageTableLevel3Failed(#[source] RamError),
+
+    #[error("the kernel has invalid PT_DYNAMIC")]
+    InvalidDynamicLinking,
 }
