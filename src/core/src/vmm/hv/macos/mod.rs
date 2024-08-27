@@ -9,6 +9,9 @@ use std::num::NonZero;
 use std::sync::Arc;
 use thiserror::Error;
 
+#[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
+#[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
+mod arch;
 mod cpu;
 mod vm;
 

@@ -1,6 +1,6 @@
-use crate::vmm::hv::{Cpu, CpuExit, CpuIo, CpuStates, IoBuf};
+use super::arch::HfExit;
+use crate::vmm::hv::{Cpu, CpuStates};
 use hv_sys::hv_vcpu_destroy;
-use std::error::Error;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::num::NonZero;
@@ -72,20 +72,6 @@ impl<'a> HfCpu<'a> {
         Ok(unsafe { value.assume_init() })
     }
 
-    #[cfg(target_arch = "aarch64")]
-    fn read_register(
-        &self,
-        register: hv_sys::hv_reg_t,
-    ) -> Result<usize, NonZero<hv_sys::hv_return_t>> {
-        let mut value = MaybeUninit::<usize>::uninit();
-
-        wrap_return!(unsafe {
-            hv_sys::hv_vcpu_get_reg(self.instance, register, value.as_mut_ptr().cast())
-        })?;
-
-        Ok(unsafe { value.assume_init() })
-    }
-
     #[cfg(target_arch = "x86_64")]
     fn write_register(
         &mut self,
@@ -106,7 +92,7 @@ impl<'a> HfCpu<'a> {
 impl<'a> Cpu for HfCpu<'a> {
     type States<'b> = HfStates<'b, 'a> where Self: 'b;
     type GetStatesErr = StatesError;
-    type Exit<'b> = HfExit<'b> where Self: 'b;
+    type Exit<'b> = HfExit<'b, 'a> where Self: 'b;
     type RunErr = RunError;
 
     #[cfg(target_arch = "x86_64")]
@@ -131,6 +117,7 @@ impl<'a> Cpu for HfCpu<'a> {
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
         Ok(HfStates {
             cpu: self,
+            pstate: State::None,
             sctlr_el1: State::None,
             tcr_el1: State::None,
             ttbr0_el1: State::None,
@@ -145,7 +132,7 @@ impl<'a> Cpu for HfCpu<'a> {
     fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr> {
         wrap_return!(
             unsafe { hv_sys::hv_vcpu_run_until(self.instance, hv_sys::HV_DEADLINE_FOREVER) },
-            RunError::Run
+            RunError::HypervisorFailed
         )?;
 
         let mut exit_reason = 0u64;
@@ -158,18 +145,20 @@ impl<'a> Cpu for HfCpu<'a> {
                     &mut exit_reason,
                 )
             },
-            RunError::ReadExitReason
+            RunError::ReadExitFailed
         )?;
 
-        Ok(HfExit {
-            cpu: PhantomData,
-            exit_reason,
-        })
+        Ok(HfExit::new(exit_reason))
     }
 
     #[cfg(target_arch = "aarch64")]
     fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr> {
-        todo!()
+        use hv_sys::hv_vcpu_run;
+
+        match NonZero::new(unsafe { hv_vcpu_run(self.instance) }) {
+            Some(v) => Err(RunError::HypervisorFailed(v)),
+            None => Ok(HfExit::new(self)),
+        }
     }
 }
 
@@ -208,6 +197,8 @@ pub struct HfStates<'a, 'b> {
     gs: State<usize>,
     #[cfg(target_arch = "x86_64")]
     ss: State<usize>,
+    #[cfg(target_arch = "aarch64")]
+    pstate: State<u64>,
     #[cfg(target_arch = "aarch64")]
     sctlr_el1: State<u64>,
     #[cfg(target_arch = "aarch64")]
@@ -295,14 +286,40 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
     }
 
     #[cfg(target_arch = "aarch64")]
-    fn set_sctlr_el1(&mut self, m: bool) {
+    fn set_pstate(&mut self, d: bool, a: bool, i: bool, f: bool, m: u8) {
+        let d: u64 = d.into();
+        let a: u64 = a.into();
+        let i: u64 = i.into();
+        let f: u64 = f.into();
         let m: u64 = m.into();
 
-        self.sctlr_el1 = State::Dirty(m);
+        assert_eq!(m & 0b11110000, 0);
+
+        self.pstate = State::Dirty(d << 9 | a << 8 | i << 7 | f << 6 | m);
     }
 
     #[cfg(target_arch = "aarch64")]
-    fn set_tcr_el1(&mut self, ips: u8, tg1: u8, a1: bool, t1sz: u8, tg0: u8, t0sz: u8) {
+    fn set_sctlr_el1(&mut self, m: bool) {
+        // All hard-coded values came from https://github.com/AsahiLinux/m1n1/issues/97/
+        let m: u64 = m.into();
+
+        self.sctlr_el1 = State::Dirty(0x30901084 | m);
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    fn set_tcr_el1(
+        &mut self,
+        tbi1: bool,
+        tbi0: bool,
+        ips: u8,
+        tg1: u8,
+        a1: bool,
+        t1sz: u8,
+        tg0: u8,
+        t0sz: u8,
+    ) {
+        let tbi1: u64 = tbi1.into();
+        let tbi0: u64 = tbi0.into();
         let ips: u64 = ips.into();
         let tg1: u64 = tg1.into();
         let a1: u64 = a1.into();
@@ -316,8 +333,16 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
         assert_eq!(tg0 & 0b11111100, 0);
         assert_eq!(t0sz & 0b11000000, 0);
 
-        self.tcr_el1 =
-            State::Dirty(ips << 32 | tg1 << 30 | a1 << 22 | t1sz << 16 | tg0 << 14 | t0sz);
+        self.tcr_el1 = State::Dirty(
+            tbi1 << 38
+                | tbi0 << 37
+                | ips << 32
+                | tg1 << 30
+                | a1 << 22
+                | t1sz << 16
+                | tg0 << 14
+                | t0sz,
+        );
     }
 
     #[cfg(target_arch = "aarch64")]
@@ -387,7 +412,8 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
     #[cfg(target_arch = "aarch64")]
     fn commit(self) -> Result<(), Self::Err> {
         use hv_sys::{
-            hv_reg_t_HV_REG_PC as HV_REG_PC, hv_reg_t_HV_REG_X0 as HV_REG_X0,
+            hv_reg_t_HV_REG_CPSR as HV_REG_CPSR, hv_reg_t_HV_REG_PC as HV_REG_PC,
+            hv_reg_t_HV_REG_X0 as HV_REG_X0,
             hv_sys_reg_t_HV_SYS_REG_SCTLR_EL1 as HV_SYS_REG_SCTLR_EL1,
             hv_sys_reg_t_HV_SYS_REG_SP_EL1 as HV_SYS_REG_SP_EL1,
             hv_sys_reg_t_HV_SYS_REG_TCR_EL1 as HV_SYS_REG_TCR_EL1,
@@ -396,20 +422,22 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
             hv_vcpu_set_sys_reg,
         };
 
-        // Set system registers.
+        // Set PSTATE. Hypervisor Framework use CPSR to represent PSTATE.
         let cpu = self.cpu.instance;
-        let set_sys = |reg, val| match NonZero::new(unsafe { hv_vcpu_set_sys_reg(cpu, reg, val) }) {
+        let set_reg = |reg, val| match NonZero::new(unsafe { hv_vcpu_set_reg(cpu, reg, val) }) {
             Some(v) => Err(v),
             None => Ok(()),
         };
 
-        if let State::Dirty(v) = self.sctlr_el1 {
-            set_sys(HV_SYS_REG_SCTLR_EL1, v).map_err(StatesError::SetSctlrEl1Failed)?;
+        if let State::Dirty(v) = self.pstate {
+            set_reg(HV_REG_CPSR, v).map_err(StatesError::SetPstateFailed)?;
         }
 
-        if let State::Dirty(v) = self.tcr_el1 {
-            set_sys(HV_SYS_REG_TCR_EL1, v).map_err(StatesError::SetTcrEl1Failed)?;
-        }
+        // Set system registers.
+        let set_sys = |reg, val| match NonZero::new(unsafe { hv_vcpu_set_sys_reg(cpu, reg, val) }) {
+            Some(v) => Err(v),
+            None => Ok(()),
+        };
 
         if let State::Dirty(v) = self.ttbr0_el1 {
             set_sys(HV_SYS_REG_TTBR0_EL1, v).map_err(StatesError::SetTtbr0El1Failed)?;
@@ -419,16 +447,19 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
             set_sys(HV_SYS_REG_TTBR1_EL1, v).map_err(StatesError::SetTtbr1El1Failed)?;
         }
 
+        if let State::Dirty(v) = self.tcr_el1 {
+            set_sys(HV_SYS_REG_TCR_EL1, v).map_err(StatesError::SetTcrEl1Failed)?;
+        }
+
+        if let State::Dirty(v) = self.sctlr_el1 {
+            set_sys(HV_SYS_REG_SCTLR_EL1, v).map_err(StatesError::SetSctlrEl1Failed)?;
+        }
+
         if let State::Dirty(v) = self.sp_el1 {
             set_sys(HV_SYS_REG_SP_EL1, v).map_err(StatesError::SetSpEl1Failed)?;
         }
 
         // Set general registers.
-        let set_reg = |reg, val| match NonZero::new(unsafe { hv_vcpu_set_reg(cpu, reg, val) }) {
-            Some(v) => Err(v),
-            None => Ok(()),
-        };
-
         if let State::Dirty(v) = self.pc {
             set_reg(HV_REG_PC, v).map_err(StatesError::SetPcFailed)?;
         }
@@ -447,54 +478,15 @@ enum State<T> {
     Dirty(T),
 }
 
-/// Implementation of [`Cpu::Exit`] for Hypervisor Framework.
-pub struct HfExit<'a> {
-    cpu: PhantomData<&'a mut HfCpu<'a>>,
-    #[cfg(target_arch = "x86_64")]
-    exit_reason: u64,
-}
-
-impl<'a> CpuExit for HfExit<'a> {
-    type Io = HfIo;
-
-    #[cfg(target_arch = "x86_64")]
-    fn into_hlt(self) -> Result<(), Self> {
-        match self.exit_reason.try_into() {
-            Ok(hv_sys::VMX_REASON_HLT) => Ok(()),
-            _ => Err(self),
-        }
-    }
-
-    fn into_io(self) -> Result<Self::Io, Self> {
-        todo!();
-    }
-}
-
-/// Implementation of [`CpuIo`] for Hypervisor Framework.
-pub struct HfIo {}
-
-impl CpuIo for HfIo {
-    fn addr(&self) -> usize {
-        todo!();
-    }
-
-    fn buffer(&mut self) -> IoBuf {
-        todo!();
-    }
-
-    fn translate(&self, vaddr: usize) -> Result<usize, Box<dyn Error>> {
-        todo!();
-    }
-}
-
 /// Implementation of [`Cpu::RunErr`].
 #[derive(Debug, Error)]
 pub enum RunError {
-    #[error("error running vcpu ({0:#x})")]
-    Run(NonZero<hv_sys::hv_return_t>),
+    #[error("Hypervisor Framework failed ({0:#x})")]
+    HypervisorFailed(NonZero<hv_sys::hv_return_t>),
 
+    #[cfg(target_arch = "x86_64")]
     #[error("error while reading exit reason ({0:#x})")]
-    ReadExitReason(NonZero<hv_sys::hv_return_t>),
+    ReadExitFailed(NonZero<hv_sys::hv_return_t>),
 }
 
 /// Implementation of [`Cpu::GetStatesErr`] and [`CpuStates::Err`].
@@ -519,6 +511,10 @@ pub enum StatesError {
     #[cfg(target_arch = "x86_64")]
     #[error("couldn't set CR4")]
     SetCr4Failed(NonZero<hv_sys::hv_return_t>),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't set PSTATE")]
+    SetPstateFailed(NonZero<hv_sys::hv_return_t>),
 
     #[cfg(target_arch = "aarch64")]
     #[error("couldn't set SCTLR_EL1")]

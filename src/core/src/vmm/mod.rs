@@ -545,28 +545,32 @@ fn setup_main_cpu(cpu: &mut impl Cpu, entry: usize, map: RamMap) -> Result<(), M
 
 #[cfg(target_arch = "aarch64")]
 fn setup_main_cpu(cpu: &mut impl Cpu, entry: usize, map: RamMap) -> Result<(), MainCpuError> {
-    // Enable MMU to enable virtual address.
+    // Set PSTATE so the PE run in AArch64 mode. Not sure why we need M here since the document said
+    // it is ignore. See https://gist.github.com/imbushuo/51b09e61ecd7b7ac063853ad65cedf34 where
+    // M = 5 came from.
     let mut states = cpu
         .states()
         .map_err(|e| MainCpuError::GetCpuStatesFailed(Box::new(e)))?;
 
-    states.set_sctlr_el1(true);
+    states.set_pstate(true, true, true, true, 0b101);
 
-    // Uses 48-bit Intermediate Physical Address (ips = 0b101) and 48-bit virtual addresses
-    // (t?sz = 16) for both kernel space and user space. Use ASID from user space (a1 = 0).
+    // Enable MMU to enable virtual address and set TCR_EL1.
+    states.set_sctlr_el1(true);
     states.set_tcr_el1(
-        0b101,
+        true,  // Ignore tob-byte when translate address with TTBR1_EL1.
+        true,  // Ignore top-byte when translate address with TTBR0_EL1.
+        0b101, // 48 bits Intermediate Physical Address.
         match map.page_size.get() {
-            0x4000 => 0b01,
+            0x4000 => 0b01, // 16K page for TTBR1_EL1.
             _ => todo!(),
         },
-        false,
-        16,
+        false, // Use ASID from TTBR0_EL1.
+        16,    // 48-bit virtual addresses for TTBR1_EL1.
         match map.page_size.get() {
-            0x4000 => 0b10,
+            0x4000 => 0b10, // 16K page for TTBR0_EL1.
             _ => todo!(),
         },
-        16,
+        16, // 48-bit virtual addresses for TTBR0_EL1.
     );
 
     // Set page table. We need both lower and higher VA here because the virtual devices mapped with
