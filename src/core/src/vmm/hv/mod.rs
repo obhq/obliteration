@@ -95,6 +95,9 @@ pub trait CpuStates {
     #[cfg(target_arch = "aarch64")]
     fn set_sctlr_el1(&mut self, m: bool);
 
+    #[cfg(target_arch = "aarch64")]
+    fn set_mair_el1(&mut self, attrs: u64);
+
     /// # Panics
     /// - If `ips` greater than 7.
     /// - If `tg1` or `tg0` geater than 3.
