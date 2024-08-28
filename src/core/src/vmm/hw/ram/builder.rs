@@ -384,6 +384,10 @@ impl RamBuilder {
 
 #[cfg(target_arch = "aarch64")]
 impl RamBuilder {
+    const MA_DEV_NG_NR_NE: u8 = 0; // MEMORY_ATTRS[0]
+    const MA_NOR: u8 = 1; // MEMORY_ATTRS[1]
+    const MEMORY_ATTRS: [u8; 8] = [0, 0b11111111, 0, 0, 0, 0, 0, 0];
+
     pub fn build(
         mut self,
         devices: &DeviceTree,
@@ -417,7 +421,7 @@ impl RamBuilder {
 
         for (addr, dev) in devices.map() {
             let len = dev.len().get();
-            self.setup_16k_page_tables(l0t, addr, addr, len)?;
+            self.setup_16k_page_tables(l0t, addr, addr, len, Self::MA_DEV_NG_NR_NE)?;
             dev_end = addr + len;
         }
 
@@ -433,7 +437,7 @@ impl RamBuilder {
 
         assert!(vaddr >= dev_end);
 
-        self.setup_16k_page_tables(l0t, vaddr, kern_paddr, kern_len)?;
+        self.setup_16k_page_tables(l0t, vaddr, kern_paddr, kern_len, Self::MA_NOR)?;
 
         vaddr += kern_len;
 
@@ -445,7 +449,7 @@ impl RamBuilder {
             .map(|v| (v.start, v.end - v.start))
             .unwrap();
 
-        self.setup_16k_page_tables(l0t, vaddr, paddr, stack_len)?;
+        self.setup_16k_page_tables(l0t, vaddr, paddr, stack_len, Self::MA_NOR)?;
 
         vaddr += stack_len;
 
@@ -454,11 +458,12 @@ impl RamBuilder {
         let ram = args.ram;
         let env_vaddr = vaddr + args.env;
 
-        self.setup_16k_page_tables(l0t, vaddr, ram.start, ram.end - ram.start)?;
+        self.setup_16k_page_tables(l0t, vaddr, ram.start, ram.end - ram.start, Self::MA_NOR)?;
 
         Ok(RamMap {
             page_size: unsafe { NonZero::new_unchecked(0x4000) },
             page_table,
+            memory_attrs: u64::from_le_bytes(Self::MEMORY_ATTRS),
             kern_paddr,
             kern_vaddr,
             kern_len,
@@ -474,8 +479,12 @@ impl RamBuilder {
         vaddr: usize,
         paddr: usize,
         len: usize,
+        attr: u8,
     ) -> Result<(), RamBuilderError> {
+        let attr: usize = attr.into();
+
         assert_eq!(len % 0x4000, 0);
+        assert_eq!(attr & 0b11111000, 0);
 
         fn set_page_entry(entry: &mut usize, addr: usize) {
             assert_eq!(addr & 0xFFFF000000003FFF, 0);
@@ -539,6 +548,8 @@ impl RamBuilder {
             assert_eq!(l3t[l3o], 0);
 
             set_page_entry(&mut l3t[l3o], addr);
+
+            l3t[l3o] |= attr << 2;
         }
 
         Ok(())
@@ -569,6 +580,8 @@ pub struct KernelArgs {
 pub struct RamMap {
     pub page_size: NonZero<usize>,
     pub page_table: usize,
+    #[cfg(target_arch = "aarch64")]
+    pub memory_attrs: u64,
     pub kern_paddr: usize,
     pub kern_vaddr: usize,
     pub kern_len: usize,

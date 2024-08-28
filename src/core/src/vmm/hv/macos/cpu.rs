@@ -119,6 +119,7 @@ impl<'a> Cpu for HfCpu<'a> {
             cpu: self,
             pstate: State::None,
             sctlr_el1: State::None,
+            mair_el1: State::None,
             tcr_el1: State::None,
             ttbr0_el1: State::None,
             ttbr1_el1: State::None,
@@ -201,6 +202,8 @@ pub struct HfStates<'a, 'b> {
     pstate: State<u64>,
     #[cfg(target_arch = "aarch64")]
     sctlr_el1: State<u64>,
+    #[cfg(target_arch = "aarch64")]
+    mair_el1: State<u64>,
     #[cfg(target_arch = "aarch64")]
     tcr_el1: State<u64>,
     #[cfg(target_arch = "aarch64")]
@@ -304,6 +307,11 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
         let m: u64 = m.into();
 
         self.sctlr_el1 = State::Dirty(0x30901084 | m);
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    fn set_mair_el1(&mut self, attrs: u64) {
+        self.mair_el1 = State::Dirty(attrs);
     }
 
     #[cfg(target_arch = "aarch64")]
@@ -414,6 +422,7 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
         use hv_sys::{
             hv_reg_t_HV_REG_CPSR as HV_REG_CPSR, hv_reg_t_HV_REG_PC as HV_REG_PC,
             hv_reg_t_HV_REG_X0 as HV_REG_X0,
+            hv_sys_reg_t_HV_SYS_REG_MAIR_EL1 as HV_SYS_REG_MAIR_EL1,
             hv_sys_reg_t_HV_SYS_REG_SCTLR_EL1 as HV_SYS_REG_SCTLR_EL1,
             hv_sys_reg_t_HV_SYS_REG_SP_EL1 as HV_SYS_REG_SP_EL1,
             hv_sys_reg_t_HV_SYS_REG_TCR_EL1 as HV_SYS_REG_TCR_EL1,
@@ -438,6 +447,10 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
             Some(v) => Err(v),
             None => Ok(()),
         };
+
+        if let State::Dirty(v) = self.mair_el1 {
+            set_sys(HV_SYS_REG_MAIR_EL1, v).map_err(StatesError::SetMairEl1Failed)?;
+        }
 
         if let State::Dirty(v) = self.ttbr0_el1 {
             set_sys(HV_SYS_REG_TTBR0_EL1, v).map_err(StatesError::SetTtbr0El1Failed)?;
@@ -523,6 +536,10 @@ pub enum StatesError {
     #[cfg(target_arch = "aarch64")]
     #[error("couldn't set TCR_EL1")]
     SetTcrEl1Failed(NonZero<hv_sys::hv_return_t>),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't set MAIR_EL1")]
+    SetMairEl1Failed(NonZero<hv_sys::hv_return_t>),
 
     #[cfg(target_arch = "aarch64")]
     #[error("couldn't set TTBR0_EL1")]

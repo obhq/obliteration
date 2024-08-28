@@ -556,6 +556,7 @@ fn setup_main_cpu(cpu: &mut impl Cpu, entry: usize, map: RamMap) -> Result<(), M
 
     // Enable MMU to enable virtual address and set TCR_EL1.
     states.set_sctlr_el1(true);
+    states.set_mair_el1(map.memory_attrs);
     states.set_tcr_el1(
         true,  // Ignore tob-byte when translate address with TTBR1_EL1.
         true,  // Ignore top-byte when translate address with TTBR0_EL1.
