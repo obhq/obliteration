@@ -5,6 +5,7 @@ use crate::config::set_boot_env;
 use crate::malloc::KernelHeap;
 use alloc::string::String;
 use core::arch::asm;
+use core::mem::zeroed;
 use core::panic::PanicInfo;
 use obconf::BootEnv;
 
@@ -26,7 +27,7 @@ extern crate alloc;
 ///
 /// See PS4 kernel entry point for a reference.
 #[allow(dead_code)]
-#[cfg_attr(not(test), no_mangle)]
+#[cfg_attr(target_os = "none", no_mangle)]
 extern "C" fn _start(env: &'static BootEnv) -> ! {
     // SAFETY: This is safe because we called it as the first thing here.
     unsafe { set_boot_env(env) };
@@ -67,6 +68,10 @@ fn panic(i: &PanicInfo) -> ! {
     crate::panic::panic();
 }
 
+// SAFETY: STAGE1_HEAP is a mutable static so it valid for reads and writes. This will be safe as
+// long as no one access STAGE1_HEAP.
 #[allow(dead_code)]
 #[cfg_attr(target_os = "none", global_allocator)]
-static mut KERNEL_HEAP: KernelHeap = KernelHeap::new();
+static mut KERNEL_HEAP: KernelHeap =
+    unsafe { KernelHeap::new(STAGE1_HEAP.as_mut_ptr(), STAGE1_HEAP.len()) };
+static mut STAGE1_HEAP: [u8; 1024 * 1024] = unsafe { zeroed() };
