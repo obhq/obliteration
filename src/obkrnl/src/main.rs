@@ -58,6 +58,9 @@ extern "C" fn _start(env: &'static BootEnv) -> ! {
 }
 
 fn main() -> ! {
+    // Activate stage 2 heap.
+    unsafe { KERNEL_HEAP.activate_stage2() };
+
     loop {
         #[cfg(target_arch = "x86_64")]
         unsafe {

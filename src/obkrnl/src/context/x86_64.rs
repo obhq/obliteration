@@ -1,5 +1,7 @@
 use super::Context;
+use crate::proc::Thread;
 use core::arch::asm;
+use core::mem::offset_of;
 
 /// Set kernel `GS` segment register to `cx`.
 ///
@@ -32,4 +34,19 @@ pub unsafe fn activate(cx: *mut Context) {
         in("eax") 0,
         options(preserves_flags, nostack)
     );
+}
+
+pub unsafe fn thread() -> *const Thread {
+    // SAFETY: "AtomicPtr<Thread>" is guarantee to have the same bit as "*mut Thread" and "mov" is
+    // atomic if the memory has correct alignment.
+    let mut td;
+
+    asm!(
+        "mov {out}, gs:[{off}]",
+        off = in(reg) offset_of!(Context, thread),
+        out = out(reg) td,
+        options(pure, readonly, preserves_flags, nostack)
+    );
+
+    td
 }
