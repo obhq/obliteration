@@ -2,8 +2,11 @@
 #![cfg_attr(not(test), no_main)]
 
 use crate::config::set_boot_env;
+use crate::context::Context;
 use crate::malloc::KernelHeap;
+use crate::proc::Thread;
 use alloc::string::String;
+use alloc::sync::Arc;
 use core::arch::asm;
 use core::mem::zeroed;
 use core::panic::PanicInfo;
@@ -11,19 +14,24 @@ use obconf::BootEnv;
 
 mod config;
 mod console;
+mod context;
 mod imgfmt;
 mod malloc;
 mod panic;
+mod proc;
 
 extern crate alloc;
 
 /// Entry point of the kernel.
 ///
-/// This will be called by a bootloader or a hypervisor. The following are requirements before
-/// transfer a control to this function:
+/// This will be called by a bootloader or a hypervisor. The following are requirements to call this
+/// function:
 ///
 /// 1. The kernel does not remap itself so it must be mapped at a desired virtual address and all
-///    relocations must be applied.
+///    relocations must be applied. This imply that the kernel can only be run in a virtual address
+///    space.
+/// 2. Interrupt is disabled.
+/// 3. Only main CPU can execute this function.
 ///
 /// See PS4 kernel entry point for a reference.
 #[allow(dead_code)]
@@ -34,6 +42,22 @@ extern "C" fn _start(env: &'static BootEnv) -> ! {
 
     info!("Starting Obliteration Kernel.");
 
+    // Setup thread0 to represent this thread.
+    let thread0 = unsafe { Thread::new_bare() };
+
+    // Setup CPU context. We use a different mechanism here. The PS4 put all of pcpu at a global
+    // level but we put it on each CPU stack instead.
+    let thread0 = Arc::new(thread0);
+    let mut cx = Context::new(thread0);
+
+    // SAFETY: We are in the main CPU entry point and we move all the remaining code after this into
+    // a dedicated no-return function.
+    unsafe { cx.activate() };
+
+    main();
+}
+
+fn main() -> ! {
     loop {
         #[cfg(target_arch = "x86_64")]
         unsafe {
