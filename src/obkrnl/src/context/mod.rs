@@ -1,5 +1,6 @@
 use crate::proc::Thread;
 use alloc::sync::Arc;
+use core::sync::atomic::{AtomicPtr, Ordering};
 
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
@@ -18,14 +19,14 @@ mod arch;
 /// interupt before reading `pc_cpuid`, which can make the CPU missed some events from the other
 /// hardwares.
 pub struct Context {
-    thread: *const Thread, // pc_curthread
+    thread: AtomicPtr<Thread>, // pc_curthread
 }
 
 impl Context {
     /// See `pcpu_init` on the PS4 for a reference.
     pub fn new(td: Arc<Thread>) -> Self {
         Self {
-            thread: Arc::into_raw(td),
+            thread: AtomicPtr::new(Arc::into_raw(td).cast_mut()),
         }
     }
 
@@ -41,6 +42,6 @@ impl Context {
 
 impl Drop for Context {
     fn drop(&mut self) {
-        unsafe { drop(Arc::from_raw(self.thread)) };
+        unsafe { drop(Arc::from_raw(self.thread.load(Ordering::Relaxed))) };
     }
 }
