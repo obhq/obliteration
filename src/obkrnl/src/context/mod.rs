@@ -30,6 +30,15 @@ impl Context {
         }
     }
 
+    pub fn thread() -> Arc<Thread> {
+        // It does not matter if we are on a different CPU after we load the Context::thread because
+        // it is going to be the same one since it represent the current thread.
+        let td = unsafe { self::arch::thread() };
+
+        unsafe { Arc::increment_strong_count(td) };
+        unsafe { Arc::from_raw(td) }
+    }
+
     /// # Safety
     /// The only place this method is safe to call is in the CPU entry point. Once this method
     /// return this instance must outlive the CPU lifetime and it must never be accessed via this
