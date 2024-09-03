@@ -1,4 +1,8 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+use super::hw::Ram;
+use super::VmmError;
 use std::error::Error;
+use std::sync::Arc;
 
 #[cfg(target_os = "linux")]
 mod linux;
@@ -8,20 +12,26 @@ mod macos;
 mod windows;
 
 #[cfg(target_os = "linux")]
-pub type Default = self::linux::Kvm;
+pub fn new(cpu: usize, ram: Arc<Ram>) -> Result<impl Hypervisor, VmmError> {
+    self::linux::Kvm::new(cpu, ram)
+}
 
 #[cfg(target_os = "windows")]
-pub type Default = self::windows::Whp;
+pub fn new(cpu: usize, ram: Arc<Ram>) -> Result<impl Hypervisor, VmmError> {
+    self::windows::Whp::new(cpu, ram)
+}
 
 #[cfg(target_os = "macos")]
-pub type Default = self::macos::Hf;
+pub fn new(cpu: usize, ram: Arc<Ram>) -> Result<impl Hypervisor, VmmError> {
+    self::macos::Hf::new(cpu, ram)
+}
 
 /// Underlying hypervisor (e.g. KVM on Linux).
 pub trait Hypervisor: Send + Sync {
     type Cpu<'a>: Cpu
     where
         Self: 'a;
-    type CpuErr: Error + Send;
+    type CpuErr: Error + Send + 'static;
 
     /// This method must be called by a thread that is going to drive the returned CPU.
     fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, Self::CpuErr>;
