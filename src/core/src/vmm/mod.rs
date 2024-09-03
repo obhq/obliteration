@@ -1,11 +1,14 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::hv::{Cpu, CpuExit, CpuIo, CpuStates, Hypervisor};
 use self::hw::{setup_devices, Device, DeviceContext, DeviceTree, Ram, RamBuilder, RamMap};
-use self::kernel::Kernel;
+use self::kernel::{
+    Kernel, PT_DYNAMIC, PT_GNU_EH_FRAME, PT_GNU_RELRO, PT_GNU_STACK, PT_LOAD, PT_NOTE, PT_PHDR,
+};
 use self::screen::Screen;
 use crate::error::RustError;
 use obconf::{BootEnv, Vm};
 use obvirt::console::MsgType;
+use std::cmp::max;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::{c_char, c_void, CStr};
@@ -88,7 +91,7 @@ pub unsafe extern "C" fn vmm_run(
 
         // Process the header.
         match hdr.p_type {
-            1 => {
+            PT_LOAD => {
                 if hdr.p_filesz > TryInto::<u64>::try_into(hdr.p_memsz).unwrap() {
                     *err = RustError::new(format!("invalid p_filesz on on PT_LOAD {index}"));
                     return null_mut();
@@ -96,7 +99,7 @@ pub unsafe extern "C" fn vmm_run(
 
                 segments.push(hdr);
             }
-            2 => {
+            PT_DYNAMIC => {
                 if dynamic.is_some() {
                     *err = RustError::new("multiple PT_DYNAMIC is not supported");
                     return null_mut();
@@ -104,7 +107,7 @@ pub unsafe extern "C" fn vmm_run(
 
                 dynamic = Some(hdr);
             }
-            4 => {
+            PT_NOTE => {
                 if note.is_some() {
                     *err = RustError::new("multiple PT_NOTE is not supported");
                     return null_mut();
@@ -112,7 +115,7 @@ pub unsafe extern "C" fn vmm_run(
 
                 note = Some(hdr);
             }
-            6 | 1685382480 | 1685382481 | 1685382482 => {}
+            PT_PHDR | PT_GNU_EH_FRAME | PT_GNU_STACK | PT_GNU_RELRO => {}
             v => {
                 *err = RustError::new(format!("unknown p_type {v} on program header {index}"));
                 return null_mut();
@@ -257,9 +260,7 @@ pub unsafe extern "C" fn vmm_run(
         }
     };
 
-    // TODO: Support any page size on the host. With page size the same as kernel or lower we don't
-    // need to keep track allocations in the RAM because any requested address from the kernel will
-    // always page-aligned on the host.
+    // Get page size on the host.
     let host_page_size = match get_page_size() {
         Ok(v) => v,
         Err(e) => {
@@ -267,11 +268,6 @@ pub unsafe extern "C" fn vmm_run(
             return null_mut();
         }
     };
-
-    if host_page_size > vm_page_size {
-        *err = RustError::new("your system using an unsupported page size");
-        return null_mut();
-    }
 
     // Get kernel memory size.
     let mut len = 0;
@@ -296,12 +292,13 @@ pub unsafe extern "C" fn vmm_run(
     }
 
     // Round kernel memory size.
+    let block_size = max(vm_page_size, host_page_size);
     let len = match len {
         0 => {
             *err = RustError::new("the kernel has PT_LOAD with zero length");
             return null_mut();
         }
-        v => match v.checked_next_multiple_of(vm_page_size.get()) {
+        v => match v.checked_next_multiple_of(block_size.get()) {
             Some(v) => NonZero::new_unchecked(v),
             None => {
                 *err = RustError::new("total size of PT_LOAD is too large");
@@ -311,7 +308,7 @@ pub unsafe extern "C" fn vmm_run(
     };
 
     // Setup RAM builder.
-    let mut ram = match RamBuilder::new(vm_page_size) {
+    let mut ram = match RamBuilder::new(block_size) {
         Ok(v) => v,
         Err(e) => {
             *err = RustError::wrap(e);
@@ -371,9 +368,10 @@ pub unsafe extern "C" fn vmm_run(
 
     // Allocate arguments.
     let event = VmmEventHandler { fp: event, cx };
-    let devices = Arc::new(setup_devices(Ram::SIZE, vm_page_size, event));
+    let devices = Arc::new(setup_devices(Ram::SIZE, block_size, event));
     let env = BootEnv::Vm(Vm {
         console: devices.console().addr(),
+        host_page_size,
     });
 
     if let Err(e) = ram.alloc_args(env) {
@@ -382,7 +380,7 @@ pub unsafe extern "C" fn vmm_run(
     }
 
     // Build RAM.
-    let (ram, map) = match ram.build(&devices, dynamic) {
+    let (ram, map) = match ram.build(vm_page_size, &devices, dynamic) {
         Ok(v) => v,
         Err(e) => {
             *err = RustError::with_source("couldn't build RAM", e);

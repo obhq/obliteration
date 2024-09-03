@@ -14,9 +14,9 @@ pub struct Console {
 }
 
 impl Console {
-    pub fn new(addr: usize, vm_page_size: NonZero<usize>, event: VmmEventHandler) -> Self {
+    pub fn new(addr: usize, block_size: NonZero<usize>, event: VmmEventHandler) -> Self {
         let len = size_of::<Memory>()
-            .checked_next_multiple_of(vm_page_size.get())
+            .checked_next_multiple_of(block_size.get())
             .and_then(NonZero::new)
             .unwrap();
 

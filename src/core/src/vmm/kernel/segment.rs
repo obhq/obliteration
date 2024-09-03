@@ -1,7 +1,16 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 use std::fs::File;
 use std::io::Read;
 use std::iter::FusedIterator;
 use thiserror::Error;
+
+pub(crate) const PT_LOAD: u32 = 1;
+pub(crate) const PT_DYNAMIC: u32 = 2;
+pub(crate) const PT_NOTE: u32 = 4;
+pub(crate) const PT_PHDR: u32 = 6;
+pub(crate) const PT_GNU_EH_FRAME: u32 = 0x6474e550;
+pub(crate) const PT_GNU_STACK: u32 = 0x6474e551;
+pub(crate) const PT_GNU_RELRO: u32 = 0x6474e552;
 
 /// Iterator to enumerate ELF program headers.
 pub struct ProgramHeaders<'a> {

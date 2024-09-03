@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 use super::{Ram, RamError};
 use crate::vmm::hw::DeviceTree;
 use crate::vmm::kernel::ProgramHeader;
@@ -18,8 +19,8 @@ pub struct RamBuilder {
 
 impl RamBuilder {
     /// # Safety
-    /// `vm_page_size` must be greater or equal host page size.
-    pub unsafe fn new(vm_page_size: NonZero<usize>) -> Result<Self, VmmError> {
+    /// `block_size` must be greater or equal host page size.
+    pub unsafe fn new(block_size: NonZero<usize>) -> Result<Self, VmmError> {
         use std::io::Error;
 
         // Reserve memory range.
@@ -59,7 +60,7 @@ impl RamBuilder {
         };
 
         Ok(Self {
-            ram: Ram { mem, vm_page_size },
+            ram: Ram { mem, block_size },
             next: 0,
             kern: None,
             stack: None,
@@ -68,7 +69,7 @@ impl RamBuilder {
     }
 
     /// # Panics
-    /// - If `len` is not multiplied by VM page size.
+    /// - If `len` is not multiplied by block size.
     /// - If called a second time.
     pub fn alloc_kernel(&mut self, len: NonZero<usize>) -> Result<&mut [u8], RamError> {
         assert!(self.kern.is_none());
@@ -83,7 +84,7 @@ impl RamBuilder {
     }
 
     /// # Panics
-    /// - If `len` is not multiplied by VM page size.
+    /// - If `len` is not multiplied by block size.
     /// - If called a second time.
     pub fn alloc_stack(&mut self, len: NonZero<usize>) -> Result<(), RamError> {
         assert!(self.stack.is_none());
@@ -102,12 +103,12 @@ impl RamBuilder {
     /// If called a second time.
     pub fn alloc_args(&mut self, env: BootEnv) -> Result<(), RamError> {
         assert!(self.args.is_none());
-        assert!(align_of::<BootEnv>() <= self.ram.vm_page_size.get());
+        assert!(align_of::<BootEnv>() <= self.ram.block_size.get());
 
         // Allocate RAM for all arguments.
         let addr = self.next;
         let len = size_of::<BootEnv>()
-            .checked_next_multiple_of(self.ram.vm_page_size.get())
+            .checked_next_multiple_of(self.ram.block_size.get())
             .and_then(NonZero::new)
             .unwrap();
         let args = unsafe { self.ram.alloc(addr, len)?.as_mut_ptr() };
@@ -210,6 +211,7 @@ impl RamBuilder {
 impl RamBuilder {
     pub fn build(
         mut self,
+        page_size: NonZero<usize>,
         devices: &DeviceTree,
         dynamic: ProgramHeader,
     ) -> Result<(Ram, RamMap), RamBuilderError> {
@@ -272,7 +274,7 @@ impl RamBuilder {
 
         // Relocate the kernel to virtual address.
         let map = RamMap {
-            page_size: self.ram.vm_page_size,
+            page_size,
             page_table,
             kern_paddr,
             kern_vaddr,
@@ -368,7 +370,7 @@ impl RamBuilder {
         // Get address and length.
         let addr = self.next;
         let len = (512usize * 8)
-            .checked_next_multiple_of(self.ram.vm_page_size.get())
+            .checked_next_multiple_of(self.ram.block_size.get())
             .and_then(NonZero::new)
             .unwrap();
 
@@ -392,11 +394,12 @@ impl RamBuilder {
 
     pub fn build(
         mut self,
+        page_size: NonZero<usize>,
         devices: &DeviceTree,
         dynamic: ProgramHeader,
     ) -> Result<(Ram, RamMap), RamBuilderError> {
         // Setup page tables.
-        let map = match self.ram.vm_page_size.get() {
+        let map = match page_size.get() {
             0x4000 => self.build_16k_page_tables(devices)?,
             _ => todo!(),
         };
@@ -410,8 +413,8 @@ impl RamBuilder {
     fn build_16k_page_tables(&mut self, devices: &DeviceTree) -> Result<RamMap, RamBuilderError> {
         // Allocate page table level 0.
         let page_table = self.next;
-        let len = self.ram.vm_page_size;
-        let l0t: &mut [usize; 2] = match unsafe { self.ram.alloc(page_table, len) } {
+        let len = self.ram.block_size;
+        let l0t: &mut [usize; 32] = match unsafe { self.ram.alloc(page_table, len) } {
             Ok(v) => unsafe { &mut *v.as_mut_ptr().cast() },
             Err(e) => return Err(RamBuilderError::AllocPageTableLevel0Failed(e)),
         };
@@ -477,7 +480,7 @@ impl RamBuilder {
 
     fn setup_16k_page_tables(
         &mut self,
-        l0t: &mut [usize; 2],
+        l0t: &mut [usize; 32],
         vaddr: usize,
         paddr: usize,
         len: usize,
@@ -558,10 +561,12 @@ impl RamBuilder {
     }
 
     fn alloc_16k_page_table(&mut self) -> Result<(*mut [usize; 2048], usize), RamError> {
-        // Get address and length. The page table is effectively the same size as page size
-        // (2048 * 8 = 16384).
+        // Get address and length.
         let addr = self.next;
-        let len = unsafe { NonZero::new_unchecked(0x4000) };
+        let len = (2048usize * 8)
+            .checked_next_multiple_of(self.ram.block_size.get())
+            .and_then(NonZero::new)
+            .unwrap();
 
         // Allocate.
         let tab = unsafe { self.ram.alloc(addr, len).map(|v| v.as_mut_ptr().cast())? };
