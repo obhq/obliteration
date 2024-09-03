@@ -13,14 +13,14 @@ mod ram;
 
 pub fn setup_devices(
     start_addr: usize,
-    vm_page_size: NonZero<usize>,
+    block_size: NonZero<usize>,
     event: VmmEventHandler,
 ) -> DeviceTree {
     let mut map = BTreeMap::<usize, Arc<dyn Device>>::new();
 
     // Console.
     let addr = start_addr;
-    let console = Arc::new(Console::new(addr, vm_page_size, event));
+    let console = Arc::new(Console::new(addr, block_size, event));
 
     assert!(map.insert(console.addr(), console.clone()).is_none());
 
