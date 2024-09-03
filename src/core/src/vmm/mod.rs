@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 use self::hv::{Cpu, CpuExit, CpuIo, CpuStates, Hypervisor};
 use self::hw::{setup_devices, Device, DeviceContext, DeviceTree, Ram, RamBuilder, RamMap};
 use self::kernel::Kernel;
@@ -391,7 +392,7 @@ pub unsafe extern "C" fn vmm_run(
 
     // Setup hypervisor.
     let ram = Arc::new(ram);
-    let hv = match self::hv::Default::new(8, ram.clone()) {
+    let hv = match self::hv::new(8, ram.clone()) {
         Ok(v) => Arc::new(v),
         Err(e) => {
             *err = RustError::with_source("couldn't setup a hypervisor", e);
@@ -464,12 +465,19 @@ pub unsafe extern "C" fn vmm_draw(vmm: *mut Vmm) -> *mut RustError {
     }
 }
 
-fn main_cpu(args: &CpuArgs, entry: usize, map: RamMap, status: Sender<Result<(), MainCpuError>>) {
+fn main_cpu<H: Hypervisor>(
+    args: &CpuArgs<H>,
+    entry: usize,
+    map: RamMap,
+    status: Sender<Result<(), MainCpuError>>,
+) {
     // Create vCPU.
     let mut cpu = match args.hv.create_cpu(0) {
         Ok(v) => v,
         Err(e) => {
-            status.send(Err(MainCpuError::CreateCpuFailed(e))).unwrap();
+            status
+                .send(Err(MainCpuError::CreateCpuFailed(Box::new(e))))
+                .unwrap();
             return;
         }
     };
@@ -589,7 +597,7 @@ fn setup_main_cpu(cpu: &mut impl Cpu, entry: usize, map: RamMap) -> Result<(), M
         .map_err(|e| MainCpuError::CommitCpuStatesFailed(Box::new(e)))
 }
 
-fn run_cpu(mut cpu: impl Cpu, args: &CpuArgs) {
+fn run_cpu<C: Cpu, H: Hypervisor>(mut cpu: C, args: &CpuArgs<H>) {
     let mut devices = args
         .devices
         .map()
@@ -746,8 +754,8 @@ impl From<MsgType> for VmmLog {
 }
 
 /// Encapsulates arguments for a function to run a CPU.
-struct CpuArgs {
-    hv: Arc<self::hv::Default>,
+struct CpuArgs<H: Hypervisor> {
+    hv: Arc<H>,
     ram: Arc<Ram>,
     screen: Arc<<self::screen::Default as Screen>::Buffer>,
     devices: Arc<DeviceTree>,
@@ -825,7 +833,7 @@ enum VmmError {
 #[derive(Debug, Error)]
 enum MainCpuError {
     #[error("couldn't create vCPU")]
-    CreateCpuFailed(#[source] <self::hv::Default as Hypervisor>::CpuErr),
+    CreateCpuFailed(#[source] Box<dyn Error + Send>),
 
     #[error("couldn't get vCPU states")]
     GetCpuStatesFailed(#[source] Box<dyn Error + Send>),
