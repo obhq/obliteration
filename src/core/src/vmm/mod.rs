@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use self::hv::{Cpu, CpuExit, CpuIo, CpuStates, Hypervisor};
+use self::hv::{Cpu, CpuExit, CpuIo, Hypervisor};
 use self::hw::{setup_devices, Device, DeviceContext, DeviceTree, Ram, RamBuilder, RamMap};
 use self::kernel::{
     Kernel, PT_DYNAMIC, PT_GNU_EH_FRAME, PT_GNU_RELRO, PT_GNU_STACK, PT_LOAD, PT_NOTE, PT_PHDR,
@@ -21,6 +21,9 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 use thiserror::Error;
 
+#[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
+#[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
+mod arch;
 mod hv;
 mod hw;
 mod kernel;
@@ -391,7 +394,7 @@ pub unsafe extern "C" fn vmm_run(
     // Setup hypervisor.
     let ram = Arc::new(ram);
     let hv = match self::hv::new(8, ram.clone()) {
-        Ok(v) => Arc::new(v),
+        Ok(v) => v,
         Err(e) => {
             *err = RustError::with_source("couldn't setup a hypervisor", e);
             return null_mut();
@@ -480,7 +483,7 @@ fn main_cpu<H: Hypervisor>(
         }
     };
 
-    if let Err(e) = setup_main_cpu(&mut cpu, entry, map) {
+    if let Err(e) = self::arch::setup_main_cpu(&mut cpu, entry, map) {
         status.send(Err(e)).unwrap();
         return;
     }
@@ -490,109 +493,6 @@ fn main_cpu<H: Hypervisor>(
     drop(status);
 
     run_cpu(cpu, args);
-}
-
-#[cfg(target_arch = "x86_64")]
-fn setup_main_cpu(cpu: &mut impl Cpu, entry: usize, map: RamMap) -> Result<(), MainCpuError> {
-    // Set CR3 to page-map level-4 table.
-    let mut states = cpu
-        .states()
-        .map_err(|e| MainCpuError::GetCpuStatesFailed(Box::new(e)))?;
-
-    assert_eq!(map.page_table & 0xFFF0000000000FFF, 0);
-
-    states.set_cr3(map.page_table);
-
-    // Set CR4.
-    let mut cr4 = 0;
-
-    cr4 |= 0x20; // Physical-address extensions (PAE).
-
-    states.set_cr4(cr4);
-
-    // Set EFER.
-    let mut efer = 0;
-
-    efer |= 0x100; // Long Mode Enable (LME).
-    efer |= 0x400; // Long Mode Active (LMA).
-
-    states.set_efer(efer);
-
-    // Set CR0.
-    let mut cr0 = 0;
-
-    cr0 |= 0x00000001; // Protected Mode Enable (PE).
-    cr0 |= 0x80000000; // Paging (PG).
-
-    states.set_cr0(cr0);
-
-    // Set CS to 64-bit mode with ring 0. Although x86-64 specs from AMD ignore the Code/Data flag
-    // on 64-bit mode but Intel CPU violate this spec so we need to enable it.
-    states.set_cs(0b1000, 0, true, true, false);
-
-    // Set data segments. The only fields used on 64-bit mode is P.
-    states.set_ds(true);
-    states.set_es(true);
-    states.set_fs(true);
-    states.set_gs(true);
-    states.set_ss(true);
-
-    // Set entry point, its argument and stack pointer.
-    states.set_rdi(map.env_vaddr);
-    states.set_rsp(map.stack_vaddr + map.stack_len); // Top-down.
-    states.set_rip(map.kern_vaddr + entry);
-
-    if let Err(e) = states.commit() {
-        return Err(MainCpuError::CommitCpuStatesFailed(Box::new(e)));
-    }
-
-    Ok(())
-}
-
-#[cfg(target_arch = "aarch64")]
-fn setup_main_cpu(cpu: &mut impl Cpu, entry: usize, map: RamMap) -> Result<(), MainCpuError> {
-    // Set PSTATE so the PE run in AArch64 mode. Not sure why we need M here since the document said
-    // it is ignore. See https://gist.github.com/imbushuo/51b09e61ecd7b7ac063853ad65cedf34 where
-    // M = 5 came from.
-    let mut states = cpu
-        .states()
-        .map_err(|e| MainCpuError::GetCpuStatesFailed(Box::new(e)))?;
-
-    states.set_pstate(true, true, true, true, 0b101);
-
-    // Enable MMU to enable virtual address and set TCR_EL1.
-    states.set_sctlr_el1(true);
-    states.set_mair_el1(map.memory_attrs);
-    states.set_tcr_el1(
-        true,  // Ignore tob-byte when translate address with TTBR1_EL1.
-        true,  // Ignore top-byte when translate address with TTBR0_EL1.
-        0b101, // 48 bits Intermediate Physical Address.
-        match map.page_size.get() {
-            0x4000 => 0b01, // 16K page for TTBR1_EL1.
-            _ => todo!(),
-        },
-        false, // Use ASID from TTBR0_EL1.
-        16,    // 48-bit virtual addresses for TTBR1_EL1.
-        match map.page_size.get() {
-            0x4000 => 0b10, // 16K page for TTBR0_EL1.
-            _ => todo!(),
-        },
-        16, // 48-bit virtual addresses for TTBR0_EL1.
-    );
-
-    // Set page table. We need both lower and higher VA here because the virtual devices mapped with
-    // identity mapping.
-    states.set_ttbr0_el1(map.page_table);
-    states.set_ttbr1_el1(map.page_table);
-
-    // Set entry point, its argument and stack pointer.
-    states.set_x0(map.env_vaddr);
-    states.set_sp_el1(map.stack_vaddr + map.stack_len); // Top-down.
-    states.set_pc(map.kern_vaddr + entry);
-
-    states
-        .commit()
-        .map_err(|e| MainCpuError::CommitCpuStatesFailed(Box::new(e)))
 }
 
 fn run_cpu<C: Cpu, H: Hypervisor>(mut cpu: C, args: &CpuArgs<H>) {
@@ -753,7 +653,7 @@ impl From<MsgType> for VmmLog {
 
 /// Encapsulates arguments for a function to run a CPU.
 struct CpuArgs<H: Hypervisor> {
-    hv: Arc<H>,
+    hv: H,
     ram: Arc<Ram>,
     screen: Arc<<self::screen::Default as Screen>::Buffer>,
     devices: Arc<DeviceTree>,
@@ -835,6 +735,14 @@ enum MainCpuError {
 
     #[error("couldn't get vCPU states")]
     GetCpuStatesFailed(#[source] Box<dyn Error + Send>),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't get ID_AA64MMFR0_EL1")]
+    GetIdAa64mmfr0Failed(#[source] Box<dyn Error + Send>),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("vCPU does not support {0:#x} page size")]
+    PageSizeNotSupported(NonZero<usize>),
 
     #[error("couldn't commit vCPU states")]
     CommitCpuStatesFailed(#[source] Box<dyn Error + Send>),
