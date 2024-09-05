@@ -12,6 +12,8 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y flatpak flatpak-builder
+    - name: Update Rust
+      run: rustup update stable
     - name: Add additional Rust targets
       run: rustup target add x86_64-unknown-none
     - name: Lint Rust sources
