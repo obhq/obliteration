@@ -59,7 +59,7 @@ pub trait CpuStates {
     type Err: Error + Send + 'static;
 
     #[cfg(target_arch = "aarch64")]
-    fn get_id_aa64_mmfr0(&mut self) -> Result<u64, Self::Err>;
+    fn get_id_aa64mmfr0(&mut self) -> Result<u64, Self::Err>;
 
     #[cfg(target_arch = "x86_64")]
     fn set_rdi(&mut self, v: usize);
