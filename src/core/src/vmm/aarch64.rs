@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 use super::hv::{Cpu, CpuStates};
 use super::hw::RamMap;
 use super::MainCpuError;
@@ -8,7 +9,7 @@ pub fn setup_main_cpu(cpu: &mut impl Cpu, entry: usize, map: RamMap) -> Result<(
         .states()
         .map_err(|e| MainCpuError::GetCpuStatesFailed(Box::new(e)))?;
     let mmfr0 = states
-        .get_id_aa64_mmfr0()
+        .get_id_aa64mmfr0()
         .map_err(|e| MainCpuError::GetIdAa64mmfr0Failed(Box::new(e)))?;
 
     match map.page_size.get() {
@@ -18,6 +19,13 @@ pub fn setup_main_cpu(cpu: &mut impl Cpu, entry: usize, map: RamMap) -> Result<(
             }
         }
         _ => todo!(),
+    }
+
+    // Check if CPU support at least 36 bits physical address.
+    let pa_range = mmfr0 & 0xF;
+
+    if pa_range == 0 {
+        return Err(MainCpuError::PhysicalAddressTooSmall);
     }
 
     // Set PSTATE so the PE run in AArch64 mode. Not sure why we need M here since the document said

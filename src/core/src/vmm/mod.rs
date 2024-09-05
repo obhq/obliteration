@@ -744,6 +744,10 @@ enum MainCpuError {
     #[error("vCPU does not support {0:#x} page size")]
     PageSizeNotSupported(NonZero<usize>),
 
+    #[cfg(target_arch = "aarch64")]
+    #[error("physical address supported by vCPU too small")]
+    PhysicalAddressTooSmall,
+
     #[error("couldn't commit vCPU states")]
     CommitCpuStatesFailed(#[source] Box<dyn Error + Send>),
 }

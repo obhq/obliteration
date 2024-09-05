@@ -5,7 +5,6 @@ use crate::config::set_boot_env;
 use crate::context::Context;
 use crate::malloc::KernelHeap;
 use crate::proc::Thread;
-use alloc::string::String;
 use alloc::sync::Arc;
 use core::arch::asm;
 use core::mem::zeroed;
@@ -82,16 +81,8 @@ fn panic(i: &PanicInfo) -> ! {
         None => ("unknown", 0),
     };
 
-    // Get message.
-    let msg = if let Some(&v) = i.payload().downcast_ref::<&str>() {
-        v
-    } else if let Some(v) = i.payload().downcast_ref::<String>() {
-        v
-    } else {
-        "unknown panic payload"
-    };
-
-    crate::console::error(file, line, msg);
+    // Print the message.
+    crate::console::error(file, line, i.message());
     crate::panic::panic();
 }
 
