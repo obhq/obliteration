@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use super::hv::{Cpu, CpuFeats, CpuStates};
+use super::hv::{Cpu, CpuFeats, CpuStates, Pstate};
 use super::hw::RamMap;
 use super::MainCpuError;
 
@@ -31,7 +31,14 @@ pub fn setup_main_cpu(
     // Set PSTATE so the PE run in AArch64 mode. Not sure why we need M here since the document said
     // it is ignore. See https://gist.github.com/imbushuo/51b09e61ecd7b7ac063853ad65cedf34 where
     // M = 5 came from.
-    states.set_pstate(true, true, true, true, 0b101);
+    states.set_pstate(
+        Pstate::new()
+            .with_m(0b101)
+            .with_f(true)
+            .with_i(true)
+            .with_a(true)
+            .with_d(true),
+    );
 
     // Enable MMU to enable virtual address and set TCR_EL1.
     states.set_sctlr_el1(true);
