@@ -4,6 +4,11 @@ use super::VmmError;
 use std::error::Error;
 use std::sync::Arc;
 
+pub use self::arch::*;
+
+#[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
+#[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
+mod arch;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
@@ -33,6 +38,8 @@ pub trait Hypervisor: Send + Sync {
         Self: 'a;
     type CpuErr: Error + Send + 'static;
 
+    fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr>;
+
     /// This method must be called by a thread that is going to drive the returned CPU.
     fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, Self::CpuErr>;
 }
@@ -57,9 +64,6 @@ pub trait Cpu {
 /// States of [`Cpu`].
 pub trait CpuStates {
     type Err: Error + Send + 'static;
-
-    #[cfg(target_arch = "aarch64")]
-    fn get_id_aa64mmfr0(&mut self) -> Result<u64, Self::Err>;
 
     #[cfg(target_arch = "x86_64")]
     fn set_rdi(&mut self, v: usize);

@@ -1,6 +1,6 @@
 use self::cpu::WhpCpu;
 use self::partition::Partition;
-use super::Hypervisor;
+use super::{CpuFeats, Hypervisor};
 use crate::vmm::hw::Ram;
 use crate::vmm::VmmError;
 use std::sync::Arc;
@@ -38,6 +38,10 @@ impl Whp {
 impl Hypervisor for Whp {
     type Cpu<'a> = WhpCpu<'a>;
     type CpuErr = WhpCpuError;
+
+    fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr> {
+        Ok(CpuFeats {})
+    }
 
     fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {
         let id = id.try_into().unwrap();

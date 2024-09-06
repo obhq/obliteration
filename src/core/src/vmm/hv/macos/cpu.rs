@@ -60,7 +60,7 @@ impl<'a> HfCpu<'a> {
     }
 
     #[cfg(target_arch = "aarch64")]
-    fn read_sys(&self, reg: hv_sys::hv_sys_reg_t) -> Result<u64, NonZero<hv_sys::hv_return_t>> {
+    pub fn read_sys(&self, reg: hv_sys::hv_sys_reg_t) -> Result<u64, NonZero<hv_sys::hv_return_t>> {
         use hv_sys::hv_vcpu_get_sys_reg;
 
         let mut v = 0;
@@ -130,7 +130,6 @@ impl<'a> Cpu for HfCpu<'a> {
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
         Ok(HfStates {
             cpu: self,
-            id_aa64mmfr0: State::None,
             pstate: State::None,
             sctlr_el1: State::None,
             mair_el1: State::None,
@@ -190,8 +189,6 @@ impl<'a> Drop for HfCpu<'a> {
 /// Implementation of [`Cpu::States`] for Hypervisor Framework.
 pub struct HfStates<'a, 'b> {
     cpu: &'a mut HfCpu<'b>,
-    #[cfg(target_arch = "aarch64")]
-    id_aa64mmfr0: State<u64>,
     #[cfg(target_arch = "x86_64")]
     rsp: State<usize>,
     #[cfg(target_arch = "x86_64")]
@@ -236,25 +233,6 @@ pub struct HfStates<'a, 'b> {
 
 impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
     type Err = StatesError;
-
-    #[cfg(target_arch = "aarch64")]
-    fn get_id_aa64mmfr0(&mut self) -> Result<u64, Self::Err> {
-        use hv_sys::hv_sys_reg_t_HV_SYS_REG_ID_AA64MMFR0_EL1 as HV_SYS_REG_ID_AA64MMFR0_EL1;
-
-        let v = match self.id_aa64mmfr0 {
-            State::None => {
-                let v = self
-                    .cpu
-                    .read_sys(HV_SYS_REG_ID_AA64MMFR0_EL1)
-                    .map_err(StatesError::ReadRegisterFailed)?;
-                self.id_aa64mmfr0 = State::Clean(v);
-                v
-            }
-            State::Clean(v) | State::Dirty(v) => v,
-        };
-
-        Ok(v)
-    }
 
     #[cfg(target_arch = "x86_64")]
     fn set_rdi(&mut self, v: usize) {

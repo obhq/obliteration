@@ -1,6 +1,7 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::HfCpu;
 use self::vm::Vm;
-use super::Hypervisor;
+use super::{CpuFeats, Hypervisor};
 use crate::vmm::hw::Ram;
 use crate::vmm::VmmError;
 use hv_sys::hv_vcpu_create;
@@ -40,6 +41,85 @@ impl Hypervisor for Hf {
     type Cpu<'a> = HfCpu<'a>;
     type CpuErr = HfCpuError;
 
+    #[cfg(target_arch = "aarch64")]
+    fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr> {
+        use hv_sys::hv_sys_reg_t_HV_SYS_REG_ID_AA64MMFR0_EL1 as HV_SYS_REG_ID_AA64MMFR0_EL1;
+
+        // Load ID_AA64MMFR0_EL1.
+        let cpu = self.create_cpu(0)?;
+        let reg = cpu
+            .read_sys(HV_SYS_REG_ID_AA64MMFR0_EL1)
+            .map_err(HfCpuError::ReadMmfr0Failed)?;
+
+        // FEAT_ExS.
+        let feat_exs = match (reg & 0xF00000000000) >> 44 {
+            0b0000 => false,
+            0b0001 => true,
+            _ => unreachable!(),
+        };
+
+        // TGran4.
+        let tgran4 = match (reg & 0xF0000000) >> 28 {
+            0b0000 | 0b0001 => true,
+            0b1111 => false,
+            _ => unreachable!(),
+        };
+
+        // TGran64.
+        let tgran64 = match (reg & 0xF000000) >> 24 {
+            0b0000 => true,
+            0b1111 => false,
+            _ => unreachable!(),
+        };
+
+        // TGran16.
+        let tgran16 = match (reg & 0xF00000) >> 20 {
+            0b0000 => false,
+            0b0001 | 0b0010 => true,
+            _ => unreachable!(),
+        };
+
+        // BigEnd.
+        let big_end = match (reg & 0xF00) >> 8 {
+            0b0000 => false,
+            0b0001 => true,
+            _ => unreachable!(),
+        };
+
+        // BigEndEL0.
+        let big_end_el0 = (big_end == false).then(|| match (reg & 0xF0000) >> 16 {
+            0b0000 => false,
+            0b0001 => true,
+            _ => unreachable!(),
+        });
+
+        // ASIDBits.
+        let asid16 = match (reg & 0xF0) >> 4 {
+            0b0000 => false,
+            0b0010 => true,
+            _ => unreachable!(),
+        };
+
+        // PARange.
+        let pa_range = (reg & 0xF).try_into().unwrap();
+
+        Ok(CpuFeats {
+            feat_exs,
+            tgran4,
+            tgran64,
+            tgran16,
+            big_end,
+            big_end_el0,
+            asid16,
+            pa_range,
+        })
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr> {
+        Ok(CpuFeats {})
+    }
+
     fn create_cpu(&self, _: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {
         let mut instance = 0;
 
@@ -74,4 +154,8 @@ impl Hypervisor for Hf {
 pub enum HfCpuError {
     #[error("couldn't create a vCPU ({0:#x})")]
     CreateVcpuFailed(NonZero<c_int>),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't read ID_AA64MMFR0_EL1 ({0:#x})")]
+    ReadMmfr0Failed(NonZero<hv_sys::hv_return_t>),
 }
