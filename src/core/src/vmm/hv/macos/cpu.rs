@@ -302,16 +302,8 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
     }
 
     #[cfg(target_arch = "aarch64")]
-    fn set_pstate(&mut self, d: bool, a: bool, i: bool, f: bool, m: u8) {
-        let d: u64 = d.into();
-        let a: u64 = a.into();
-        let i: u64 = i.into();
-        let f: u64 = f.into();
-        let m: u64 = m.into();
-
-        assert_eq!(m & 0b11110000, 0);
-
-        self.pstate = State::Dirty(d << 9 | a << 8 | i << 7 | f << 6 | m);
+    fn set_pstate(&mut self, v: crate::vmm::hv::Pstate) {
+        self.pstate = State::Dirty(v.into_bits().into());
     }
 
     #[cfg(target_arch = "aarch64")]

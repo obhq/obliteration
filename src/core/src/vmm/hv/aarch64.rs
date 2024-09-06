@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+use bitfield_struct::bitfield;
 
 /// Features available on a PE.
 pub struct CpuFeats {
@@ -36,4 +37,19 @@ pub struct CpuFeats {
     /// - `0b0100`: 44 bits, 16TB.
     /// - `0b0101`: 48 bits, 256TB.
     pub pa_range: u8,
+}
+
+/// Represents a value of `PSTATE`.
+#[bitfield(u32)]
+pub struct Pstate {
+    #[bits(4)]
+    pub m: u8,
+    #[bits(2)]
+    __: u8,
+    pub f: bool,
+    pub i: bool,
+    pub a: bool,
+    pub d: bool,
+    #[bits(22)]
+    __: u32,
 }

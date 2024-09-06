@@ -104,10 +104,8 @@ pub trait CpuStates {
     #[cfg(target_arch = "x86_64")]
     fn set_ss(&mut self, p: bool);
 
-    /// # Panics
-    /// If `m` larger than 4 bits.
     #[cfg(target_arch = "aarch64")]
-    fn set_pstate(&mut self, d: bool, a: bool, i: bool, f: bool, m: u8);
+    fn set_pstate(&mut self, v: Pstate);
 
     #[cfg(target_arch = "aarch64")]
     fn set_sctlr_el1(&mut self, m: bool);
