@@ -3,7 +3,7 @@ use self::ffi::{
     kvm_check_version, kvm_create_vcpu, kvm_create_vm, kvm_get_vcpu_mmap_size, kvm_max_vcpus,
     kvm_set_user_memory_region,
 };
-use super::Hypervisor;
+use super::{CpuFeats, Hypervisor};
 use crate::vmm::hw::Ram;
 use crate::vmm::VmmError;
 use libc::{mmap, open, MAP_FAILED, MAP_PRIVATE, O_RDWR, PROT_READ, PROT_WRITE};
@@ -103,6 +103,10 @@ impl Kvm {
 impl Hypervisor for Kvm {
     type Cpu<'a> = KvmCpu<'a>;
     type CpuErr = KvmCpuError;
+
+    fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr> {
+        Ok(CpuFeats {})
+    }
 
     fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {
         use std::io::Error;

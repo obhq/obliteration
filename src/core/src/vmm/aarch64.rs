@@ -1,20 +1,22 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use super::hv::{Cpu, CpuStates};
+use super::hv::{Cpu, CpuFeats, CpuStates};
 use super::hw::RamMap;
 use super::MainCpuError;
 
-pub fn setup_main_cpu(cpu: &mut impl Cpu, entry: usize, map: RamMap) -> Result<(), MainCpuError> {
+pub fn setup_main_cpu(
+    cpu: &mut impl Cpu,
+    entry: usize,
+    map: RamMap,
+    feats: &CpuFeats,
+) -> Result<(), MainCpuError> {
     // Check if CPU support VM page size.
     let mut states = cpu
         .states()
         .map_err(|e| MainCpuError::GetCpuStatesFailed(Box::new(e)))?;
-    let mmfr0 = states
-        .get_id_aa64mmfr0()
-        .map_err(|e| MainCpuError::GetIdAa64mmfr0Failed(Box::new(e)))?;
 
     match map.page_size.get() {
         0x4000 => {
-            if ((mmfr0 & 0xF00000) >> 20) == 0 {
+            if !feats.tgran16 {
                 return Err(MainCpuError::PageSizeNotSupported(map.page_size));
             }
         }
@@ -22,9 +24,7 @@ pub fn setup_main_cpu(cpu: &mut impl Cpu, entry: usize, map: RamMap) -> Result<(
     }
 
     // Check if CPU support at least 36 bits physical address.
-    let pa_range = mmfr0 & 0xF;
-
-    if pa_range == 0 {
+    if feats.pa_range == 0 {
         return Err(MainCpuError::PhysicalAddressTooSmall);
     }
 

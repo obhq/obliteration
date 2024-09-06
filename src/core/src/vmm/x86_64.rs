@@ -1,8 +1,13 @@
-use super::hv::{Cpu, CpuStates};
+use super::hv::{Cpu, CpuFeats, CpuStates};
 use super::hw::RamMap;
 use super::MainCpuError;
 
-pub fn setup_main_cpu(cpu: &mut impl Cpu, entry: usize, map: RamMap) -> Result<(), MainCpuError> {
+pub fn setup_main_cpu(
+    cpu: &mut impl Cpu,
+    entry: usize,
+    map: RamMap,
+    _: &CpuFeats,
+) -> Result<(), MainCpuError> {
     // Set CR3 to page-map level-4 table.
     let mut states = cpu
         .states()

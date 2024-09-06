@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use self::hv::{Cpu, CpuExit, CpuIo, Hypervisor};
+use self::hv::{Cpu, CpuExit, CpuFeats, CpuIo, Hypervisor};
 use self::hw::{setup_devices, Device, DeviceContext, DeviceTree, Ram, RamBuilder, RamMap};
 use self::kernel::{
     Kernel, PT_DYNAMIC, PT_GNU_EH_FRAME, PT_GNU_RELRO, PT_GNU_STACK, PT_LOAD, PT_NOTE, PT_PHDR,
@@ -393,10 +393,19 @@ pub unsafe extern "C" fn vmm_run(
 
     // Setup hypervisor.
     let ram = Arc::new(ram);
-    let hv = match self::hv::new(8, ram.clone()) {
+    let mut hv = match self::hv::new(8, ram.clone()) {
         Ok(v) => v,
         Err(e) => {
             *err = RustError::with_source("couldn't setup a hypervisor", e);
+            return null_mut();
+        }
+    };
+
+    // Load CPU features.
+    let feats = match hv.cpu_features() {
+        Ok(v) => v,
+        Err(e) => {
+            *err = RustError::with_source("couldn't get available vCPU features", e);
             return null_mut();
         }
     };
@@ -416,6 +425,7 @@ pub unsafe extern "C" fn vmm_run(
         hv,
         ram,
         screen: screen.buffer().clone(),
+        feats,
         devices,
         shutdown: shutdown.clone(),
     };
@@ -483,7 +493,7 @@ fn main_cpu<H: Hypervisor>(
         }
     };
 
-    if let Err(e) = self::arch::setup_main_cpu(&mut cpu, entry, map) {
+    if let Err(e) = self::arch::setup_main_cpu(&mut cpu, entry, map, &args.feats) {
         status.send(Err(e)).unwrap();
         return;
     }
@@ -656,6 +666,7 @@ struct CpuArgs<H: Hypervisor> {
     hv: H,
     ram: Arc<Ram>,
     screen: Arc<<self::screen::Default as Screen>::Buffer>,
+    feats: CpuFeats,
     devices: Arc<DeviceTree>,
     shutdown: Arc<AtomicBool>,
 }
@@ -735,10 +746,6 @@ enum MainCpuError {
 
     #[error("couldn't get vCPU states")]
     GetCpuStatesFailed(#[source] Box<dyn Error + Send>),
-
-    #[cfg(target_arch = "aarch64")]
-    #[error("couldn't get ID_AA64MMFR0_EL1")]
-    GetIdAa64mmfr0Failed(#[source] Box<dyn Error + Send>),
 
     #[cfg(target_arch = "aarch64")]
     #[error("vCPU does not support {0:#x} page size")]
