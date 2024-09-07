@@ -11,7 +11,7 @@ use core::alloc::Layout;
 /// This stage allocate a memory from a virtual memory management system. This struct is a merge of
 /// `malloc_type` and `malloc_type_internal` structure.
 pub struct Stage2 {
-    zones: Vec<Arc<UmaZone>>, // kmemsize + kmemzones
+    zones: [Vec<Arc<UmaZone>>; (usize::BITS - 1) as usize], // kmemsize + kmemzones
 }
 
 impl Stage2 {
@@ -22,25 +22,37 @@ impl Stage2 {
 
     /// See `kmeminit` on the PS4 for a reference.
     pub fn new() -> Self {
-        let mut zones = Vec::with_capacity(Self::KMEM_ZSIZE + 1);
-        let mut last = 0;
+        // The possible of maximum alignment that Layout allowed is a bit before the most
+        // significant bit of isize (e.g. 0x4000000000000000 on 64 bit system). So we can use
+        // "size_of::<usize>() * 8 - 1" to get the size of array for all possible alignment.
+        let zones = core::array::from_fn(|align| {
+            let mut zones = Vec::with_capacity(Self::KMEM_ZSIZE + 1);
+            let mut last = 0;
+            let align = align
+                .try_into()
+                .ok()
+                .and_then(|align| 1usize.checked_shl(align))
+                .unwrap();
 
-        for i in Self::KMEM_ZSHIFT.. {
-            // Stop if size larger than page size.
-            let size = 1usize << i;
+            for i in Self::KMEM_ZSHIFT.. {
+                // Stop if size larger than page size.
+                let size = 1usize << i;
 
-            if size > PAGE_SIZE {
-                break;
+                if size > PAGE_SIZE {
+                    break;
+                }
+
+                // Create zone.
+                let zone = Arc::new(UmaZone::new(size.to_string().into(), size, align - 1));
+
+                while last <= size {
+                    zones.push(zone.clone());
+                    last += Self::KMEM_ZBASE;
+                }
             }
 
-            // Create zone.
-            let zone = Arc::new(UmaZone::new(size.to_string().into(), size));
-
-            while last <= size {
-                zones.push(zone.clone());
-                last += Self::KMEM_ZBASE;
-            }
-        }
+            zones
+        });
 
         Self { zones }
     }
@@ -57,18 +69,21 @@ impl Stage2 {
             panic!("heap allocation in an interrupt handler is not supported");
         }
 
-        // TODO: Handle alignment.
-        let mut size = layout.size();
+        // Determine how to allocate.
+        let size = layout.size();
 
         if size <= PAGE_SIZE {
-            // Round size.
-            if (size & Self::KMEM_ZMASK) != 0 {
+            // Get zone to allocate from.
+            let align = layout.align().trailing_zeros() as usize;
+            let size = if (size & Self::KMEM_ZMASK) != 0 {
                 // TODO: Refactor this for readability.
-                size = (size + Self::KMEM_ZBASE) & !Self::KMEM_ZMASK;
-            }
+                (size + Self::KMEM_ZBASE) & !Self::KMEM_ZMASK
+            } else {
+                size
+            };
 
             // TODO: There are more logic after this on the PS4.
-            self.zones[size >> Self::KMEM_ZSHIFT].alloc()
+            self.zones[align][size >> Self::KMEM_ZSHIFT].alloc()
         } else {
             todo!()
         }

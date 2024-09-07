@@ -5,7 +5,7 @@ pub struct UmaZone {}
 
 impl UmaZone {
     /// See `uma_zcreate` on the PS4 for a reference.
-    pub fn new(_: Cow<'static, str>, _: usize) -> Self {
+    pub fn new(_: Cow<'static, str>, _: usize, _: usize) -> Self {
         Self {}
     }
 
