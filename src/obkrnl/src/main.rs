@@ -59,6 +59,8 @@ extern "C" fn _start(env: &'static BootEnv) -> ! {
 
 fn main() -> ! {
     // Activate stage 2 heap.
+    info!("Activating stage 2 heap.");
+
     unsafe { KERNEL_HEAP.activate_stage2() };
 
     loop {
