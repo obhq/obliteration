@@ -11,7 +11,7 @@ use core::alloc::Layout;
 /// This stage allocate a memory from a virtual memory management system. This struct is a merge of
 /// `malloc_type` and `malloc_type_internal` structure.
 pub struct Stage2 {
-    zones: [Vec<Arc<UmaZone>>; size_of::<usize>() * 8 - 1], // kmemsize + kmemzones
+    zones: [Vec<Arc<UmaZone>>; (usize::BITS - 1) as usize], // kmemsize + kmemzones
 }
 
 impl Stage2 {
