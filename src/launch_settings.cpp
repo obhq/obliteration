@@ -36,7 +36,11 @@ LaunchSettings::LaunchSettings(
 {
     auto layout = new QVBoxLayout();
 
+#ifdef __APPLE__
+    layout->addWidget(buildSettings(games));
+#else
     layout->addWidget(buildSettings(games, std::move(vkDevices)));
+#endif
     layout->addLayout(buildActions(profiles));
 
     setLayout(layout);
@@ -56,7 +60,11 @@ QWidget *LaunchSettings::buildSettings(GameListModel *games, QList<VkPhysicalDev
     auto tab = new QTabWidget();
 
     // Display settings.
+#ifdef __APPLE__
+    m_display = new DisplaySettings();
+#else
     m_display = new DisplaySettings(std::move(vkDevices));
+#endif
 
     tab->addTab(m_display, loadIcon(":/resources/monitor.svg"), "Display");
 
