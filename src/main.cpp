@@ -7,13 +7,17 @@
 #endif
 
 #include <QApplication>
+#include <QList>
 #include <QMessageBox>
 #include <QMetaObject>
 #include <QThread>
 #ifndef __APPLE__
 #include <QVersionNumber>
+#include <QVulkanFunctions>
 #include <QVulkanInstance>
 #endif
+
+#include <utility>
 
 #ifndef _WIN32
 #include <sys/resource.h>
@@ -92,11 +96,69 @@ int main(int argc, char *argv[])
         QMessageBox::critical(
             nullptr,
             "Error",
-            QString("Failed to initialize Vulkan (%1)").arg(vulkan.errorCode()));
+            QString("Failed to initialize Vulkan (%1).").arg(vulkan.errorCode()));
         return 1;
     }
 
     vkFunctions = vulkan.functions();
+
+    // List available devices.
+    QList<VkPhysicalDevice> vkDevices;
+
+    for (;;) {
+        // Get device count.
+        uint32_t count;
+        auto result = vkFunctions->vkEnumeratePhysicalDevices(vulkan.vkInstance(), &count, nullptr);
+
+        if (result != VK_SUCCESS) {
+            QMessageBox::critical(
+                nullptr,
+                "Error",
+                QString("Failed to get a number of Vulkan physical device (%1).").arg(result));
+            return 1;
+        } else if (!count) {
+            QMessageBox::critical(
+                nullptr,
+                "Error",
+                "No any Vulkan physical device available.");
+            return 1;
+        }
+
+        // Get devices.
+        vkDevices.resize(count);
+
+        result = vkFunctions->vkEnumeratePhysicalDevices(
+            vulkan.vkInstance(),
+            &count,
+            vkDevices.data());
+
+        if (result == VK_INCOMPLETE) {
+            continue;
+        } else if (result != VK_SUCCESS) {
+            QMessageBox::critical(
+                nullptr,
+                "Error",
+                QString("Failed to list Vulkan physical devices (%1).").arg(result));
+            return 1;
+        }
+
+        break;
+    }
+
+    // Filter out devices without Vulkan 1.3.
+    erase_if(vkDevices, [](VkPhysicalDevice dev) {
+        VkPhysicalDeviceProperties props;
+        vkFunctions->vkGetPhysicalDeviceProperties(dev, &props);
+        return props.apiVersion < VK_API_VERSION_1_3;
+    });
+
+    if (vkDevices.isEmpty()) {
+        QMessageBox::critical(
+            nullptr,
+            "Error",
+            "No any Vulkan device supports Vulkan 1.3.");
+        return 1;
+    }
 #endif
 
     // Check if no any required settings.
@@ -112,7 +174,7 @@ int main(int argc, char *argv[])
 #ifdef __APPLE__
     MainWindow win;
 #else
-    MainWindow win(&vulkan);
+    MainWindow win(&vulkan, std::move(vkDevices));
 #endif
 
     if (!win.loadProfiles() || !win.loadGames()) {

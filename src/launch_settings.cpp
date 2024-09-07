@@ -18,7 +18,17 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
+#include <utility>
+
+#ifdef __APPLE__
 LaunchSettings::LaunchSettings(ProfileList *profiles, GameListModel *games, QWidget *parent) :
+#else
+LaunchSettings::LaunchSettings(
+    ProfileList *profiles,
+    GameListModel *games,
+    QList<VkPhysicalDevice> &&vkDevices,
+    QWidget *parent) :
+#endif
     QWidget(parent),
     m_display(nullptr),
     m_games(nullptr),
@@ -26,7 +36,7 @@ LaunchSettings::LaunchSettings(ProfileList *profiles, GameListModel *games, QWid
 {
     auto layout = new QVBoxLayout();
 
-    layout->addWidget(buildSettings(games));
+    layout->addWidget(buildSettings(games, std::move(vkDevices)));
     layout->addLayout(buildActions(profiles));
 
     setLayout(layout);
@@ -36,13 +46,17 @@ LaunchSettings::~LaunchSettings()
 {
 }
 
+#ifdef __APPLE__
 QWidget *LaunchSettings::buildSettings(GameListModel *games)
+#else
+QWidget *LaunchSettings::buildSettings(GameListModel *games, QList<VkPhysicalDevice> &&vkDevices)
+#endif
 {
     // Tab.
     auto tab = new QTabWidget();
 
     // Display settings.
-    m_display = new DisplaySettings();
+    m_display = new DisplaySettings(std::move(vkDevices));
 
     tab->addTab(m_display, loadIcon(":/resources/monitor.svg"), "Display");
 
