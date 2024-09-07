@@ -18,6 +18,7 @@ mod imgfmt;
 mod malloc;
 mod panic;
 mod proc;
+mod uma;
 
 extern crate alloc;
 
