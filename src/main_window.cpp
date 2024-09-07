@@ -27,9 +27,6 @@
 #include <QStackedWidget>
 #include <QToolBar>
 #include <QUrl>
-#ifndef __APPLE__
-#include <QVulkanInstance>
-#endif
 
 #include <filesystem>
 #include <iostream>
@@ -40,7 +37,7 @@
 #ifdef __APPLE__
 MainWindow::MainWindow() :
 #else
-MainWindow::MainWindow(QVulkanInstance *vulkan) :
+MainWindow::MainWindow(QVulkanInstance *vulkan, QList<VkPhysicalDevice> &&vkDevices) :
 #endif
     m_main(nullptr),
     m_profiles(nullptr),
@@ -101,7 +98,11 @@ MainWindow::MainWindow(QVulkanInstance *vulkan) :
     // Launch settings.
     m_profiles = new ProfileList(this);
     m_games = new GameListModel(this);
+#ifdef __APPLE__
     m_launch = new LaunchSettings(m_profiles, m_games);
+#else
+    m_launch = new LaunchSettings(m_profiles, m_games, std::move(vkDevices));
+#endif
 
     connect(m_launch, &LaunchSettings::saveClicked, this, &MainWindow::saveProfile);
     connect(m_launch, &LaunchSettings::startClicked, this, &MainWindow::startKernel);

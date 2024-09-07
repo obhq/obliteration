@@ -1,20 +1,37 @@
 #include "display_settings.hpp"
+#include "vulkan.hpp"
 
 #include <QComboBox>
 #include <QGridLayout>
 #include <QGroupBox>
 #include <QMessageBox>
 #include <QVBoxLayout>
+#ifndef __APPLE__
+#include <QVulkanFunctions>
+#endif
 
+#include <utility>
+
+#ifdef __APPLE__
 DisplaySettings::DisplaySettings(QWidget *parent) :
+#else
+DisplaySettings::DisplaySettings(QList<VkPhysicalDevice> &&vkDevices, QWidget *parent) :
+#endif
     QWidget(parent),
+#ifndef __APPLE__
+    m_devices(nullptr),
+#endif
     m_resolutions(nullptr),
     m_profile(nullptr)
 {
     auto layout = new QGridLayout();
 
+#ifdef __APPLE__
     layout->addWidget(buildResolution(), 0, 0);
-    layout->setColumnStretch(1, 1);
+#else
+    layout->addWidget(buildDevice(std::move(vkDevices)), 0, 0);
+    layout->addWidget(buildResolution(), 0, 1);
+#endif
     layout->setRowStretch(1, 1);
 
     setLayout(layout);
@@ -43,6 +60,30 @@ void DisplaySettings::setProfile(Profile *p)
     }
 }
 
+#ifndef __APPLE__
+QWidget *DisplaySettings::buildDevice(QList<VkPhysicalDevice> &&vkDevices)
+{
+    // Setup group box.
+    auto group = new QGroupBox("Device");
+    auto layout = new QVBoxLayout();
+
+    // Setup device list.
+    m_devices = new QComboBox();
+
+    for (auto dev : vkDevices) {
+        auto data = new DisplayDevice(dev);
+
+        m_devices->addItem(data->name(), QVariant::fromValue(data));
+    }
+
+    layout->addWidget(m_devices);
+
+    group->setLayout(layout);
+
+    return group;
+}
+#endif
+
 QWidget *DisplaySettings::buildResolution()
 {
     // Setup group box.
@@ -67,3 +108,11 @@ QWidget *DisplaySettings::buildResolution()
 
     return group;
 }
+
+#ifndef __APPLE__
+DisplayDevice::DisplayDevice(VkPhysicalDevice handle) :
+    m_handle(handle)
+{
+    vkFunctions->vkGetPhysicalDeviceProperties(handle, &m_props);
+}
+#endif

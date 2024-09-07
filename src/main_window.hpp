@@ -2,17 +2,18 @@
 
 #include "core.hpp"
 
+#include <QList>
 #include <QMainWindow>
 #include <QPointer>
+#ifndef __APPLE__
+#include <QVulkanInstance>
+#endif
 
 class GameListModel;
 class LaunchSettings;
 class LogsViewer;
 class ProfileList;
 class QStackedWidget;
-#ifndef __APPLE__
-class QVulkanInstance;
-#endif
 class Screen;
 
 class MainWindow final : public QMainWindow {
@@ -20,7 +21,7 @@ public:
 #ifdef __APPLE__
     MainWindow();
 #else
-    MainWindow(QVulkanInstance *vulkan);
+    MainWindow(QVulkanInstance *vulkan, QList<VkPhysicalDevice> &&vkDevices);
 #endif
     ~MainWindow() override;
 
