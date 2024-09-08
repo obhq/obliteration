@@ -1,5 +1,5 @@
 # External dependencies.
-find_package(Qt6 COMPONENTS Widgets REQUIRED)
+find_package(Qt6 REQUIRED COMPONENTS Svg Widgets)
 find_package(Threads REQUIRED)
 if(WIN32 OR (UNIX AND NOT APPLE))
     find_package(Vulkan REQUIRED)
@@ -58,6 +58,7 @@ add_executable(obliteration WIN32 MACOSX_BUNDLE
     ansi_escape.cpp
     app_data.cpp
     core.cpp
+    cpu_settings.cpp
     display_settings.cpp
     game_graphic_settings.cpp
     game_models.cpp
@@ -109,7 +110,7 @@ endif()
 
 target_compile_features(obliteration PRIVATE cxx_std_17)
 
-target_link_libraries(obliteration PRIVATE Qt6::Widgets)
+target_link_libraries(obliteration PRIVATE Qt6::Svg Qt6::Widgets)
 target_link_libraries(obliteration PRIVATE Threads::Threads)
 target_link_libraries(obliteration PRIVATE ${LIBCORE})
 

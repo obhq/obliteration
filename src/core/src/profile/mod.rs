@@ -4,6 +4,7 @@ use obconf::Config;
 use serde::{Deserialize, Serialize};
 use std::ffi::{c_char, CStr, CString};
 use std::fs::File;
+use std::num::NonZero;
 use std::path::Path;
 use std::ptr::null_mut;
 use std::time::SystemTime;
@@ -131,7 +132,9 @@ impl Default for Profile {
             id: Uuid::new_v4(),
             name: CString::new("Default").unwrap(),
             display_resolution: DisplayResolution::Hd,
-            kernel_config: Config::default(),
+            kernel_config: Config {
+                max_cpu: NonZero::new(8).unwrap(),
+            },
             created: SystemTime::now(),
         }
     }

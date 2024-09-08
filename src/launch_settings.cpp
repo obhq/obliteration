@@ -1,4 +1,5 @@
 #include "launch_settings.hpp"
+#include "cpu_settings.hpp"
 #include "display_settings.hpp"
 #include "game_models.hpp"
 #include "game_settings.hpp"
@@ -31,6 +32,7 @@ LaunchSettings::LaunchSettings(
 #endif
     QWidget(parent),
     m_display(nullptr),
+    m_cpu(nullptr),
     m_games(nullptr),
     m_profiles(nullptr)
 {
@@ -73,6 +75,7 @@ QWidget *LaunchSettings::buildSettings(GameListModel *games, QList<VkPhysicalDev
 {
     // Tab.
     auto tab = new QTabWidget();
+    auto iconSize = tab->iconSize();
 
     // Display settings.
 #ifdef __APPLE__
@@ -81,7 +84,12 @@ QWidget *LaunchSettings::buildSettings(GameListModel *games, QList<VkPhysicalDev
     m_display = new DisplaySettings(std::move(vkDevices));
 #endif
 
-    tab->addTab(m_display, loadIcon(":/resources/monitor.svg"), "Display");
+    tab->addTab(m_display, loadIcon(":/resources/monitor.svg", iconSize), "Display");
+
+    // CPU settings.
+    m_cpu = new CpuSettings();
+
+    tab->addTab(m_cpu, loadIcon(":/resources/cpu-64-bit.svg", iconSize), "CPU");
 
     // Game list.
     m_games = new QTableView();
@@ -96,7 +104,7 @@ QWidget *LaunchSettings::buildSettings(GameListModel *games, QList<VkPhysicalDev
 
     connect(m_games, &QWidget::customContextMenuRequested, this, &LaunchSettings::requestGamesContextMenu);
 
-    tab->addTab(m_games, loadIcon(":/resources/view-comfy.svg"), "Games");
+    tab->addTab(m_games, loadIcon(":/resources/view-comfy.svg", iconSize), "Games");
 
     return tab;
 }
@@ -119,7 +127,9 @@ QLayout *LaunchSettings::buildActions(ProfileList *profiles)
     layout->addWidget(actions);
 
     // Save button.
-    auto save = new QPushButton(loadIcon(":/resources/content-save.svg"), "Save");
+    auto save = new QPushButton("Save");
+
+    save->setIcon(loadIcon(":/resources/content-save.svg", save->iconSize()));
 
     connect(save, &QAbstractButton::clicked, [this]() {
         auto index = m_profiles->currentIndex();
@@ -134,7 +144,9 @@ QLayout *LaunchSettings::buildActions(ProfileList *profiles)
     actions->addButton(save, QDialogButtonBox::ApplyRole);
 
     // Start button.
-    auto start = new QPushButton(loadIcon(":/resources/play.svg"), "Start");
+    auto start = new QPushButton("Start");
+
+    start->setIcon(loadIcon(":/resources/play.svg", start->iconSize()));
 
     connect(start, &QAbstractButton::clicked, [this]() { emit startClicked(); });
 
@@ -157,8 +169,8 @@ void LaunchSettings::requestGamesContextMenu(const QPoint &pos)
 
     // Setup menu.
     QMenu menu(this);
-    QAction openFolder(loadIcon(":/resources/folder-open-outline.svg"), "Open &Folder", this);
-    QAction settings(loadIcon(":/resources/cog-outline.svg"), "&Settings", this);
+    QAction openFolder("Open &Folder", this);
+    QAction settings("&Settings", this);
 
     menu.addAction(&openFolder);
     menu.addAction(&settings);

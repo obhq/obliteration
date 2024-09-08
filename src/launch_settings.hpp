@@ -8,6 +8,7 @@
 #endif
 #include <QWidget>
 
+class CpuSettings;
 class DisplaySettings;
 class GameListModel;
 class ProfileList;
@@ -45,6 +46,7 @@ private:
     void profileChanged(int index);
 
     DisplaySettings *m_display;
+    CpuSettings *m_cpu;
     QTableView *m_games;
     QComboBox *m_profiles;
 };

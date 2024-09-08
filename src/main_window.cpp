@@ -53,11 +53,6 @@ MainWindow::MainWindow(QVulkanInstance *vulkan, QList<VkPhysicalDevice> &&vkDevi
     auto openSystemFolder = new QAction("Open System &Folder", this);
     auto quit = new QAction("&Quit", this);
 
-#ifndef __APPLE__
-    installPkg->setIcon(loadIcon(":/resources/archive-arrow-down-outline.svg"));
-    openSystemFolder->setIcon(loadIcon(":/resources/folder-open-outline.svg"));
-#endif
-
     connect(installPkg, &QAction::triggered, this, &MainWindow::installPkg);
     connect(openSystemFolder, &QAction::triggered, this, &MainWindow::openSystemFolder);
     connect(quit, &QAction::triggered, this, &MainWindow::close);
