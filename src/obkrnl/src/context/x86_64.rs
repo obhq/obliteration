@@ -15,7 +15,7 @@ pub unsafe fn activate(cx: *mut Context) {
         in("ecx") 0xc0000101u32,
         in("edx") cx >> 32,
         in("eax") cx,
-        options(preserves_flags, nostack)
+        options(nomem, preserves_flags, nostack)
     );
 
     // Clear FS and GS for user mode.
@@ -24,7 +24,7 @@ pub unsafe fn activate(cx: *mut Context) {
         in("ecx") 0xc0000100u32,
         in("edx") 0,
         in("eax") 0,
-        options(preserves_flags, nostack)
+        options(nomem, preserves_flags, nostack)
     );
 
     asm!(
@@ -32,7 +32,7 @@ pub unsafe fn activate(cx: *mut Context) {
         in("ecx") 0xc0000102u32,
         in("edx") 0,
         in("eax") 0,
-        options(preserves_flags, nostack)
+        options(nomem, preserves_flags, nostack)
     );
 }
 
@@ -49,4 +49,24 @@ pub unsafe fn thread() -> *const Thread {
     );
 
     td
+}
+
+pub unsafe fn current() -> *const Context {
+    // Load current GS.
+    let mut edx: u32;
+    let mut eax: u32;
+
+    asm!(
+        "rdmsr",
+        in("ecx") 0xc0000101u32,
+        out("edx") edx,
+        out("eax") eax,
+        options(pure, nomem, preserves_flags, nostack)
+    );
+
+    // Combine EDX and EAX.
+    let edx = edx as usize;
+    let eax = eax as usize;
+
+    ((edx << 32) | eax) as *const Context
 }

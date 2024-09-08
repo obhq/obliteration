@@ -1,15 +1,15 @@
 #![no_std]
 #![cfg_attr(not(test), no_main)]
 
-use crate::config::set_boot_env;
 use crate::context::Context;
 use crate::malloc::KernelHeap;
 use crate::proc::Thread;
 use alloc::sync::Arc;
 use core::arch::asm;
 use core::mem::zeroed;
+use core::num::NonZero;
 use core::panic::PanicInfo;
-use obconf::BootEnv;
+use obconf::{BootEnv, Config};
 
 mod config;
 mod console;
@@ -37,8 +37,13 @@ extern crate alloc;
 #[allow(dead_code)]
 #[cfg_attr(target_os = "none", no_mangle)]
 extern "C" fn _start(env: &'static BootEnv) -> ! {
+    // TODO: Accept config from bootloader/hypervisor.
+    static CONFIG: Config = Config {
+        max_cpu: unsafe { NonZero::new_unchecked(1) },
+    };
+
     // SAFETY: This is safe because we called it as the first thing here.
-    unsafe { set_boot_env(env) };
+    unsafe { crate::config::setup(env, &CONFIG) };
 
     info!("Starting Obliteration Kernel.");
 
@@ -48,7 +53,7 @@ extern "C" fn _start(env: &'static BootEnv) -> ! {
     // Setup CPU context. We use a different mechanism here. The PS4 put all of pcpu at a global
     // level but we put it on each CPU stack instead.
     let thread0 = Arc::new(thread0);
-    let mut cx = Context::new(thread0);
+    let mut cx = Context::new(0, thread0);
 
     // SAFETY: We are in the main CPU entry point and we move all the remaining code after this into
     // a dedicated no-return function.

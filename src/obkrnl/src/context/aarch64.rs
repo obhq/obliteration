@@ -8,3 +8,7 @@ pub unsafe fn activate(_: *mut Context) {
 pub unsafe fn thread() -> *const Thread {
     todo!();
 }
+
+pub unsafe fn current() -> *const Context {
+    todo!();
+}

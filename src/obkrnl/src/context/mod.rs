@@ -12,20 +12,16 @@ mod arch;
 /// not safe to have a temporary a pointer or reference to this struct or its field because the CPU
 /// might get interupted, which mean it is possible for the next instruction to get executed on
 /// a different CPU if the interupt cause the CPU to switch the task.
-///
-/// We don't support `pc_cpuid` field here because it value is 100% unpredictable due to the above
-/// reason. Once we have loaded `pc_cpuid` the next instruction might get executed on a different
-/// CPU, which render the loaded value incorrect. The only way to prevent this issue is to disable
-/// interupt before reading `pc_cpuid`, which can make the CPU missed some events from the other
-/// hardwares.
 pub struct Context {
+    cpu: usize,                // pc_cpuid
     thread: AtomicPtr<Thread>, // pc_curthread
 }
 
 impl Context {
     /// See `pcpu_init` on the PS4 for a reference.
-    pub fn new(td: Arc<Thread>) -> Self {
+    pub fn new(cpu: usize, td: Arc<Thread>) -> Self {
         Self {
+            cpu,
             thread: AtomicPtr::new(Arc::into_raw(td).cast_mut()),
         }
     }
@@ -35,8 +31,26 @@ impl Context {
         // it is going to be the same one since it represent the current thread.
         let td = unsafe { self::arch::thread() };
 
+        // We cannot return a reference here because it requires 'static lifetime, which allow the
+        // caller to store it at a global level. Once the thread is destroyed that reference will be
+        // invalid.
         unsafe { Arc::increment_strong_count(td) };
         unsafe { Arc::from_raw(td) }
+    }
+
+    /// See `critical_enter` and `critical_exit` on the PS4 for a reference.
+    pub fn pin() -> PinnedContext {
+        // TODO: Verify if memory ordering here is correct. We need a call to self::arch::current()
+        // to execute after the thread is in a critical section. The CPU must not reorder this. Our
+        // current implementation follow how Drop on Arc is implemented.
+        let td = unsafe { self::arch::thread() };
+
+        unsafe { (*td).critical_sections().fetch_add(1, Ordering::Release) };
+        core::sync::atomic::fence(Ordering::Acquire);
+
+        // Once the thread is in a critical section it will never be switch a CPU so it is safe to
+        // keep a pointer to a context here.
+        PinnedContext(unsafe { self::arch::current() })
     }
 
     /// # Safety
@@ -52,5 +66,28 @@ impl Context {
 impl Drop for Context {
     fn drop(&mut self) {
         unsafe { drop(Arc::from_raw(self.thread.load(Ordering::Relaxed))) };
+    }
+}
+
+/// RAII struct to pin the current thread to current CPU.
+///
+/// This struct must not implement [`Send`] and [`Sync`]. Currently it stored a pointer, which will
+/// make it `!Send` and `!Sync`.
+pub struct PinnedContext(*const Context);
+
+impl PinnedContext {
+    pub fn cpu(&self) -> usize {
+        unsafe { (*self.0).cpu }
+    }
+}
+
+impl Drop for PinnedContext {
+    fn drop(&mut self) {
+        // TODO: Verify if memory ordering here is correct.
+        let td = unsafe { (*self.0).thread.load(Ordering::Relaxed) };
+
+        unsafe { (*td).critical_sections().fetch_sub(1, Ordering::Release) };
+
+        // TODO: Implement td_owepreempt.
     }
 }
