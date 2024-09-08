@@ -163,6 +163,7 @@ void vmm_free(struct Vmm *vmm);
 
 struct Vmm *vmm_run(const char *kernel,
                     const struct VmmScreen *screen,
+                    const struct Profile *profile,
                     bool (*event)(const struct VmmEvent*, void*),
                     void *cx,
                     struct RustError **err);
@@ -199,22 +200,6 @@ extern int kvm_create_vcpu(int vm, uint32_t id, int *fd);
 
 #if defined(__linux__)
 extern int kvm_run(int vcpu);
-#endif
-
-#if defined(__linux__)
-extern int kvm_get_regs(int vcpu, kvm_regs *regs);
-#endif
-
-#if defined(__linux__)
-extern int kvm_set_regs(int vcpu, const kvm_regs *regs);
-#endif
-
-#if defined(__linux__)
-extern int kvm_get_sregs(int vcpu, kvm_sregs *regs);
-#endif
-
-#if defined(__linux__)
-extern int kvm_set_sregs(int vcpu, const kvm_sregs *regs);
 #endif
 
 #if defined(__linux__)

@@ -126,6 +126,11 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
     }
 
     #[cfg(target_arch = "x86_64")]
+    fn set_rsi(&mut self, v: usize) {
+        todo!();
+    }
+
+    #[cfg(target_arch = "x86_64")]
     fn set_rsp(&mut self, v: usize) {
         self.values[0].Reg64 = v.try_into().unwrap();
         self.dirty = true;

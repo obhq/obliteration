@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::KvmCpu;
 use self::ffi::{
     kvm_check_version, kvm_create_vcpu, kvm_create_vm, kvm_get_vcpu_mmap_size, kvm_max_vcpus,
@@ -12,6 +13,8 @@ use std::ptr::null_mut;
 use std::sync::Arc;
 use thiserror::Error;
 
+#[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
+mod arch;
 mod cpu;
 mod ffi;
 mod regs;

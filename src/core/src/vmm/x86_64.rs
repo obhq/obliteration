@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 use super::hv::{Cpu, CpuFeats, CpuStates};
 use super::hw::RamMap;
 use super::MainCpuError;
@@ -53,12 +54,11 @@ pub fn setup_main_cpu(
 
     // Set entry point, its argument and stack pointer.
     states.set_rdi(map.env_vaddr);
+    states.set_rsi(map.conf_vaddr);
     states.set_rsp(map.stack_vaddr + map.stack_len); // Top-down.
     states.set_rip(map.kern_vaddr + entry);
 
-    if let Err(e) = states.commit() {
-        return Err(MainCpuError::CommitCpuStatesFailed(Box::new(e)));
-    }
-
-    Ok(())
+    states
+        .commit()
+        .map_err(|e| MainCpuError::CommitCpuStatesFailed(Box::new(e)))
 }

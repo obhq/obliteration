@@ -7,7 +7,6 @@ use crate::proc::Thread;
 use alloc::sync::Arc;
 use core::arch::asm;
 use core::mem::zeroed;
-use core::num::NonZero;
 use core::panic::PanicInfo;
 use obconf::{BootEnv, Config};
 
@@ -36,14 +35,9 @@ extern crate alloc;
 /// See PS4 kernel entry point for a reference.
 #[allow(dead_code)]
 #[cfg_attr(target_os = "none", no_mangle)]
-extern "C" fn _start(env: &'static BootEnv) -> ! {
-    // TODO: Accept config from bootloader/hypervisor.
-    static CONFIG: Config = Config {
-        max_cpu: unsafe { NonZero::new_unchecked(1) },
-    };
-
+extern "C" fn _start(env: &'static BootEnv, conf: &'static Config) -> ! {
     // SAFETY: This is safe because we called it as the first thing here.
-    unsafe { crate::config::setup(env, &CONFIG) };
+    unsafe { crate::config::setup(env, conf) };
 
     info!("Starting Obliteration Kernel.");
 

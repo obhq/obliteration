@@ -3,7 +3,7 @@ use super::{Ram, RamError};
 use crate::vmm::hw::DeviceTree;
 use crate::vmm::kernel::ProgramHeader;
 use crate::vmm::VmmError;
-use obconf::BootEnv;
+use obconf::{BootEnv, Config};
 use std::num::NonZero;
 use std::ops::Range;
 use thiserror::Error;
@@ -101,26 +101,30 @@ impl RamBuilder {
 
     /// # Panics
     /// If called a second time.
-    pub fn alloc_args(&mut self, env: BootEnv) -> Result<(), RamError> {
+    pub fn alloc_args(&mut self, env: BootEnv, conf: Config) -> Result<(), RamError> {
         assert!(self.args.is_none());
         assert!(align_of::<BootEnv>() <= self.ram.block_size.get());
 
         // Allocate RAM for all arguments.
         let addr = self.next;
         let len = size_of::<BootEnv>()
-            .checked_next_multiple_of(self.ram.block_size.get())
+            .checked_next_multiple_of(align_of::<Config>())
+            .and_then(|off| off.checked_add(size_of::<Config>()))
+            .and_then(|len| len.checked_next_multiple_of(self.ram.block_size.get()))
             .and_then(NonZero::new)
             .unwrap();
-        let args = unsafe { self.ram.alloc(addr, len)?.as_mut_ptr() };
+        let args = unsafe { self.ram.alloc(addr, len)? };
+        let mut w = ArgsWriter { mem: args, next: 0 };
 
-        // Write env.
-        let off = 0;
+        // Write arguments.
+        let env = w.write(env);
+        let conf = w.write(conf);
 
-        unsafe { std::ptr::write(args.add(off).cast(), env) };
-
+        // Write conf.
         self.args = Some(KernelArgs {
             ram: addr..(addr + len.get()),
-            env: off,
+            env,
+            conf,
         });
 
         self.next += len.get();
@@ -269,6 +273,7 @@ impl RamBuilder {
         let args = self.args.take().unwrap();
         let ram = args.ram;
         let env_vaddr = vaddr + args.env;
+        let conf_vaddr = vaddr + args.conf;
 
         self.setup_4k_page_tables(pml4t, vaddr, ram.start, ram.end - ram.start)?;
 
@@ -282,6 +287,7 @@ impl RamBuilder {
             stack_vaddr,
             stack_len,
             env_vaddr,
+            conf_vaddr,
         };
 
         unsafe { self.relocate_kernel(&map, dynamic, 8)? };
@@ -475,6 +481,7 @@ impl RamBuilder {
             stack_vaddr,
             stack_len,
             env_vaddr,
+            conf_vaddr: todo!(),
         })
     }
 
@@ -578,9 +585,29 @@ impl RamBuilder {
 }
 
 /// Contains information how kernel arguments was allocated.
-pub struct KernelArgs {
+struct KernelArgs {
     ram: Range<usize>,
     env: usize,
+    conf: usize,
+}
+
+/// Struct to write all kernel arguments into a single block of memory.
+struct ArgsWriter<'a> {
+    mem: &'a mut [u8],
+    next: usize,
+}
+
+impl<'a> ArgsWriter<'a> {
+    fn write<T>(&mut self, v: T) -> usize {
+        let off = self.next.next_multiple_of(align_of::<T>());
+        let len = size_of::<T>();
+        let mem = &mut self.mem[off..(off + len)];
+
+        unsafe { std::ptr::write(mem.as_mut_ptr().cast(), v) };
+        self.next = off + len;
+
+        off
+    }
 }
 
 /// Finalized layout of [`Ram`] before execute the kernel entry point.
@@ -595,6 +622,7 @@ pub struct RamMap {
     pub stack_vaddr: usize,
     pub stack_len: usize,
     pub env_vaddr: usize,
+    pub conf_vaddr: usize,
 }
 
 /// Represents an error when [`RamBuilder::build()`] fails

@@ -69,6 +69,9 @@ pub trait CpuStates {
     fn set_rdi(&mut self, v: usize);
 
     #[cfg(target_arch = "x86_64")]
+    fn set_rsi(&mut self, v: usize);
+
+    #[cfg(target_arch = "x86_64")]
     fn set_rsp(&mut self, v: usize);
 
     #[cfg(target_arch = "x86_64")]

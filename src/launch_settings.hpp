@@ -28,6 +28,8 @@ public:
         QWidget *parent = nullptr);
 #endif
     ~LaunchSettings() override;
+
+    Profile *currentProfile() const;
 signals:
     void saveClicked(Profile *p);
     void startClicked();
