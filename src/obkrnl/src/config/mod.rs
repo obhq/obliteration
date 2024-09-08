@@ -1,30 +1,33 @@
 use core::ptr::null;
 use macros::elf_note;
-use obconf::BootEnv;
+use obconf::{BootEnv, Config};
 
-#[cfg(target_arch = "aarch64")]
-pub use self::aarch64::*;
-#[cfg(target_arch = "x86_64")]
-pub use self::x86_64::*;
+pub use self::arch::*;
 
-#[cfg(target_arch = "aarch64")]
-mod aarch64;
-#[cfg(target_arch = "x86_64")]
-mod x86_64;
+#[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
+#[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
+mod arch;
 
 pub fn boot_env() -> &'static BootEnv {
-    // SAFETY: This is safe because the set_boot_env() requirements.
+    // SAFETY: This is safe because the setup() requirements.
     unsafe { &*BOOT_ENV }
+}
+
+pub fn config() -> &'static Config {
+    // SAFETY: This is safe because the setup() requirements.
+    unsafe { &*CONFIG }
 }
 
 /// # Safety
 /// This function must be called immediately in the kernel entry point. After that it must never
 /// be called again.
-pub unsafe fn set_boot_env(env: &'static BootEnv) {
+pub unsafe fn setup(env: &'static BootEnv, conf: &'static Config) {
     BOOT_ENV = env;
+    CONFIG = conf;
 }
 
 static mut BOOT_ENV: *const BootEnv = null();
+static mut CONFIG: *const Config = null();
 
 #[elf_note(section = ".note.obkrnl.page-size", name = "obkrnl", ty = 0)]
 static NOTE_PAGE_SIZE: [u8; size_of::<usize>()] = PAGE_SIZE.to_ne_bytes();
