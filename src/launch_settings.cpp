@@ -50,6 +50,21 @@ LaunchSettings::~LaunchSettings()
 {
 }
 
+Profile *LaunchSettings::currentProfile() const
+{
+    // Check if profile list is not empty.
+    auto index = m_profiles->currentIndex();
+
+    if (index < 0) {
+        return nullptr;
+    }
+
+    // Get profile.
+    auto profiles = reinterpret_cast<ProfileList *>(m_profiles->model());
+
+    return profiles->get(index);
+}
+
 #ifdef __APPLE__
 QWidget *LaunchSettings::buildSettings(GameListModel *games)
 #else

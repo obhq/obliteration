@@ -6,6 +6,7 @@ use self::kernel::{
 };
 use self::screen::Screen;
 use crate::error::RustError;
+use crate::profile::Profile;
 use obconf::{BootEnv, Vm};
 use obvirt::console::MsgType;
 use std::cmp::max;
@@ -38,6 +39,7 @@ pub unsafe extern "C" fn vmm_free(vmm: *mut Vmm) {
 pub unsafe extern "C" fn vmm_run(
     kernel: *const c_char,
     screen: *const VmmScreen,
+    profile: *const Profile,
     event: unsafe extern "C" fn(*const VmmEvent, *mut c_void) -> bool,
     cx: *mut c_void,
     err: *mut *mut RustError,
@@ -377,7 +379,7 @@ pub unsafe extern "C" fn vmm_run(
         host_page_size,
     });
 
-    if let Err(e) = ram.alloc_args(env) {
+    if let Err(e) = ram.alloc_args(env, (*profile).kernel_config().clone()) {
         *err = RustError::with_source("couldn't allocate RAM for arguments", e);
         return null_mut();
     }

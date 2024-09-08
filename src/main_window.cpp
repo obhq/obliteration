@@ -410,7 +410,13 @@ void MainWindow::startKernel()
     }
 #endif
 
-    vmm = vmm_run(kernel.c_str(), &screen, MainWindow::vmmHandler, this, &error);
+    vmm = vmm_run(
+        kernel.c_str(),
+        &screen,
+        m_launch->currentProfile(),
+        MainWindow::vmmHandler,
+        this,
+        &error);
 
     if (!vmm) {
         m_main->setCurrentIndex(0);

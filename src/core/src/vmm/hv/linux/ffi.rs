@@ -1,4 +1,3 @@
-use super::regs::{KvmRegs, KvmSpecialRegs};
 use std::ffi::{c_int, c_void};
 
 extern "C" {
@@ -17,10 +16,6 @@ extern "C" {
     pub fn kvm_create_vcpu(vm: c_int, id: u32, fd: *mut c_int) -> c_int;
 
     pub fn kvm_run(vcpu: c_int) -> c_int;
-    pub fn kvm_get_regs(vcpu: c_int, regs: *mut KvmRegs) -> c_int;
-    pub fn kvm_set_regs(vcpu: c_int, regs: *const KvmRegs) -> c_int;
-    pub fn kvm_get_sregs(vcpu: c_int, regs: *mut KvmSpecialRegs) -> c_int;
-    pub fn kvm_set_sregs(vcpu: c_int, regs: *const KvmSpecialRegs) -> c_int;
     pub fn kvm_translate(vcpu: c_int, arg: *mut KvmTranslation) -> c_int;
 }
 

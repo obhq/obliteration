@@ -240,6 +240,11 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
     }
 
     #[cfg(target_arch = "x86_64")]
+    fn set_rsi(&mut self, v: usize) {
+        todo!();
+    }
+
+    #[cfg(target_arch = "x86_64")]
     fn set_rsp(&mut self, v: usize) {
         self.rsp = State::Dirty(v);
     }

@@ -1,5 +1,6 @@
 use crate::error::RustError;
 use crate::string::strdup;
+use obconf::Config;
 use serde::{Deserialize, Serialize};
 use std::ffi::{c_char, CStr, CString};
 use std::fs::File;
@@ -114,7 +115,14 @@ pub struct Profile {
     id: Uuid,
     name: CString,
     display_resolution: DisplayResolution,
+    kernel_config: Config,
     created: SystemTime,
+}
+
+impl Profile {
+    pub fn kernel_config(&self) -> &Config {
+        &self.kernel_config
+    }
 }
 
 impl Default for Profile {
@@ -123,6 +131,7 @@ impl Default for Profile {
             id: Uuid::new_v4(),
             name: CString::new("Default").unwrap(),
             display_resolution: DisplayResolution::Hd,
+            kernel_config: Config::default(),
             created: SystemTime::now(),
         }
     }
