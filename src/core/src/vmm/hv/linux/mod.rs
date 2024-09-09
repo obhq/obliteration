@@ -5,7 +5,7 @@ use self::ffi::{
     kvm_set_user_memory_region,
 };
 use super::{CpuFeats, Hypervisor};
-use crate::vmm::hw::Ram;
+use crate::vmm::ram::Ram;
 use crate::vmm::VmmError;
 use libc::{mmap, open, MAP_FAILED, MAP_PRIVATE, O_RDWR, PROT_READ, PROT_WRITE};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
@@ -20,87 +20,84 @@ mod ffi;
 mod regs;
 mod run;
 
+pub fn new(cpu: usize, ram: Ram) -> Result<impl Hypervisor, VmmError> {
+    use std::io::Error;
+
+    // Open KVM device.
+    let kvm = unsafe { open(b"/dev/kvm\0".as_ptr().cast(), O_RDWR) };
+
+    if kvm < 0 {
+        return Err(VmmError::OpenKvmFailed(Error::last_os_error()));
+    }
+
+    // Check KVM version.
+    let kvm = unsafe { OwnedFd::from_raw_fd(kvm) };
+    let mut compat = false;
+
+    match unsafe { kvm_check_version(kvm.as_raw_fd(), &mut compat) } {
+        0 if !compat => {
+            return Err(VmmError::KvmVersionMismatched);
+        }
+        0 => {}
+        v => return Err(VmmError::GetKvmVersionFailed(Error::from_raw_os_error(v))),
+    }
+
+    // Check max CPU.
+    let mut max = 0;
+
+    match unsafe { kvm_max_vcpus(kvm.as_raw_fd(), &mut max) } {
+        0 => {}
+        v => {
+            return Err(VmmError::GetMaxCpuFailed(Error::from_raw_os_error(v)));
+        }
+    }
+
+    if max < cpu {
+        return Err(VmmError::MaxCpuTooLow);
+    }
+
+    // Get size of CPU context.
+    let vcpu_mmap_size = match unsafe { kvm_get_vcpu_mmap_size(kvm.as_raw_fd()) } {
+        size @ 0.. => size as usize,
+        _ => return Err(VmmError::GetMmapSizeFailed(Error::last_os_error())),
+    };
+
+    // Create a VM.
+    let mut vm = -1;
+
+    match unsafe { kvm_create_vm(kvm.as_raw_fd(), &mut vm) } {
+        0 => {}
+        v => return Err(VmmError::CreateVmFailed(Error::from_raw_os_error(v))),
+    }
+
+    // Set RAM.
+    let vm = unsafe { OwnedFd::from_raw_fd(vm) };
+    let slot = 0;
+    let len = ram.len().try_into().unwrap();
+    let mem = ram.host_addr().cast_mut().cast();
+
+    match unsafe { kvm_set_user_memory_region(vm.as_raw_fd(), slot, 0, len, mem) } {
+        0 => {}
+        v => return Err(VmmError::MapRamFailed(Error::from_raw_os_error(v))),
+    }
+
+    Ok(Kvm {
+        vcpu_mmap_size,
+        vm,
+        ram,
+        kvm,
+    })
+}
+
 /// Implementation of [`Hypervisor`] using KVM.
 ///
 /// Fields in this struct need to drop in a correct order (e.g. vm must be dropped before ram).
-pub struct Kvm {
+struct Kvm {
     vcpu_mmap_size: usize,
     vm: OwnedFd,
-    #[allow(dead_code)] // ram are needed by vm.
-    ram: Arc<Ram>,
+    ram: Ram,
     #[allow(dead_code)] // kvm are needed by vm.
     kvm: OwnedFd,
-}
-
-impl Kvm {
-    pub fn new(cpu: usize, ram: Arc<Ram>) -> Result<Self, VmmError> {
-        use std::io::Error;
-
-        // Open KVM device.
-        let kvm = unsafe { open(b"/dev/kvm\0".as_ptr().cast(), O_RDWR) };
-
-        if kvm < 0 {
-            return Err(VmmError::OpenKvmFailed(Error::last_os_error()));
-        }
-
-        // Check KVM version.
-        let kvm = unsafe { OwnedFd::from_raw_fd(kvm) };
-        let mut compat = false;
-
-        match unsafe { kvm_check_version(kvm.as_raw_fd(), &mut compat) } {
-            0 if !compat => {
-                return Err(VmmError::KvmVersionMismatched);
-            }
-            0 => {}
-            v => return Err(VmmError::GetKvmVersionFailed(Error::from_raw_os_error(v))),
-        }
-
-        // Check max CPU.
-        let mut max = 0;
-
-        match unsafe { kvm_max_vcpus(kvm.as_raw_fd(), &mut max) } {
-            0 => {}
-            v => {
-                return Err(VmmError::GetMaxCpuFailed(Error::from_raw_os_error(v)));
-            }
-        }
-
-        if max < cpu {
-            return Err(VmmError::MaxCpuTooLow);
-        }
-
-        // Get size of CPU context.
-        let vcpu_mmap_size = match unsafe { kvm_get_vcpu_mmap_size(kvm.as_raw_fd()) } {
-            size @ 0.. => size as usize,
-            _ => return Err(VmmError::GetMmapSizeFailed(Error::last_os_error())),
-        };
-
-        // Create a VM.
-        let mut vm = -1;
-
-        match unsafe { kvm_create_vm(kvm.as_raw_fd(), &mut vm) } {
-            0 => {}
-            v => return Err(VmmError::CreateVmFailed(Error::from_raw_os_error(v))),
-        }
-
-        // Set RAM.
-        let vm = unsafe { OwnedFd::from_raw_fd(vm) };
-        let slot = 0;
-        let len = ram.len().try_into().unwrap();
-        let mem = ram.host_addr().cast_mut().cast();
-
-        match unsafe { kvm_set_user_memory_region(vm.as_raw_fd(), slot, 0, len, mem) } {
-            0 => {}
-            v => return Err(VmmError::MapRamFailed(Error::from_raw_os_error(v))),
-        }
-
-        Ok(Self {
-            vcpu_mmap_size,
-            vm,
-            ram,
-            kvm,
-        })
-    }
 }
 
 impl Hypervisor for Kvm {
@@ -109,6 +106,14 @@ impl Hypervisor for Kvm {
 
     fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr> {
         Ok(CpuFeats {})
+    }
+
+    fn ram(&self) -> &Ram {
+        &self.ram
+    }
+
+    fn ram_mut(&mut self) -> &mut Ram {
+        &mut self.ram
     }
 
     fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {

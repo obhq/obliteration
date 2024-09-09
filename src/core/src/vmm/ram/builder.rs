@@ -1,71 +1,31 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::{Ram, RamError};
+use crate::vmm::hv::Hypervisor;
 use crate::vmm::hw::DeviceTree;
 use crate::vmm::kernel::ProgramHeader;
-use crate::vmm::VmmError;
 use obconf::{BootEnv, Config};
 use std::num::NonZero;
 use std::ops::Range;
 use thiserror::Error;
 
 /// Struct to build [`Ram`].
-pub struct RamBuilder {
-    ram: Ram,
+pub struct RamBuilder<'a> {
+    ram: &'a mut Ram,
     next: usize,
     kern: Option<Range<usize>>,
     stack: Option<Range<usize>>,
     args: Option<KernelArgs>,
 }
 
-impl RamBuilder {
-    /// # Safety
-    /// `block_size` must be greater or equal host page size.
-    pub unsafe fn new(block_size: NonZero<usize>) -> Result<Self, VmmError> {
-        use std::io::Error;
-
-        // Reserve memory range.
-        #[cfg(unix)]
-        let mem = {
-            use libc::{mmap, MAP_ANON, MAP_FAILED, MAP_PRIVATE, PROT_NONE};
-            use std::ptr::null_mut;
-
-            let mem = mmap(
-                null_mut(),
-                Ram::SIZE,
-                PROT_NONE,
-                MAP_PRIVATE | MAP_ANON,
-                -1,
-                0,
-            );
-
-            if mem == MAP_FAILED {
-                return Err(VmmError::CreateRamFailed(Error::last_os_error()));
-            }
-
-            mem.cast()
-        };
-
-        #[cfg(windows)]
-        let mem = {
-            use std::ptr::null;
-            use windows_sys::Win32::System::Memory::{VirtualAlloc, MEM_RESERVE, PAGE_NOACCESS};
-
-            let mem = VirtualAlloc(null(), Ram::SIZE, MEM_RESERVE, PAGE_NOACCESS);
-
-            if mem.is_null() {
-                return Err(VmmError::CreateRamFailed(Error::last_os_error()));
-            }
-
-            mem.cast()
-        };
-
-        Ok(Self {
-            ram: Ram { mem, block_size },
+impl<'a> RamBuilder<'a> {
+    pub(super) fn new(ram: &'a mut Ram) -> Self {
+        Self {
+            ram,
             next: 0,
             kern: None,
             stack: None,
             args: None,
-        })
+        }
     }
 
     /// # Panics
@@ -212,13 +172,13 @@ impl RamBuilder {
 }
 
 #[cfg(target_arch = "x86_64")]
-impl RamBuilder {
-    pub fn build(
+impl<'a> RamBuilder<'a> {
+    pub fn build<H: Hypervisor>(
         mut self,
         page_size: NonZero<usize>,
-        devices: &DeviceTree,
+        devices: &DeviceTree<H>,
         dynamic: ProgramHeader,
-    ) -> Result<(Ram, RamMap), RamBuilderError> {
+    ) -> Result<RamMap, RamBuilderError> {
         // Allocate page-map level-4 table. We use 4K 4-Level Paging here. You may wonder about this
         // because it seems like page size on the PS4 is 16K. The truth is the PS4 emulate the 16K
         // page size with 4K pages. You can check this by yourself by looking at
@@ -292,7 +252,7 @@ impl RamBuilder {
 
         unsafe { self.relocate_kernel(&map, dynamic, 8)? };
 
-        Ok((self.ram, map))
+        Ok(map)
     }
 
     fn setup_4k_page_tables(
@@ -393,17 +353,17 @@ impl RamBuilder {
 }
 
 #[cfg(target_arch = "aarch64")]
-impl RamBuilder {
+impl<'a> RamBuilder<'a> {
     const MA_DEV_NG_NR_NE: u8 = 0; // MEMORY_ATTRS[0]
     const MA_NOR: u8 = 1; // MEMORY_ATTRS[1]
     const MEMORY_ATTRS: [u8; 8] = [0, 0b11111111, 0, 0, 0, 0, 0, 0];
 
-    pub fn build(
+    pub fn build<H: Hypervisor>(
         mut self,
         page_size: NonZero<usize>,
-        devices: &DeviceTree,
+        devices: &DeviceTree<H>,
         dynamic: ProgramHeader,
-    ) -> Result<(Ram, RamMap), RamBuilderError> {
+    ) -> Result<RamMap, RamBuilderError> {
         // Setup page tables.
         let map = match page_size.get() {
             0x4000 => self.build_16k_page_tables(devices)?,
@@ -413,10 +373,13 @@ impl RamBuilder {
         // Relocate the kernel to virtual address.
         unsafe { self.relocate_kernel(&map, dynamic, 1027)? };
 
-        Ok((self.ram, map))
+        Ok(map)
     }
 
-    fn build_16k_page_tables(&mut self, devices: &DeviceTree) -> Result<RamMap, RamBuilderError> {
+    fn build_16k_page_tables<H: Hypervisor>(
+        &mut self,
+        devices: &DeviceTree<H>,
+    ) -> Result<RamMap, RamBuilderError> {
         // Allocate page table level 0.
         let page_table = self.next;
         let len = self.ram.block_size;

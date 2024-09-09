@@ -1,35 +1,17 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use super::hw::Ram;
-use super::VmmError;
+use super::ram::Ram;
 use std::error::Error;
-use std::sync::Arc;
 
 pub use self::arch::*;
+pub use self::os::new;
 
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
 mod arch;
-#[cfg(target_os = "linux")]
-mod linux;
-#[cfg(target_os = "macos")]
-mod macos;
-#[cfg(target_os = "windows")]
-mod windows;
-
-#[cfg(target_os = "linux")]
-pub fn new(cpu: usize, ram: Arc<Ram>) -> Result<impl Hypervisor, VmmError> {
-    self::linux::Kvm::new(cpu, ram)
-}
-
-#[cfg(target_os = "windows")]
-pub fn new(cpu: usize, ram: Arc<Ram>) -> Result<impl Hypervisor, VmmError> {
-    self::windows::Whp::new(cpu, ram)
-}
-
-#[cfg(target_os = "macos")]
-pub fn new(cpu: usize, ram: Arc<Ram>) -> Result<impl Hypervisor, VmmError> {
-    self::macos::Hf::new(cpu, ram)
-}
+#[cfg_attr(target_os = "linux", path = "linux/mod.rs")]
+#[cfg_attr(target_os = "macos", path = "macos/mod.rs")]
+#[cfg_attr(target_os = "windows", path = "windows/mod.rs")]
+mod os;
 
 /// Underlying hypervisor (e.g. KVM on Linux).
 pub trait Hypervisor: Send + Sync {
@@ -39,6 +21,8 @@ pub trait Hypervisor: Send + Sync {
     type CpuErr: Error + Send + 'static;
 
     fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr>;
+    fn ram(&self) -> &Ram;
+    fn ram_mut(&mut self) -> &mut Ram;
 
     /// This method must be called by a thread that is going to drive the returned CPU.
     fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, Self::CpuErr>;
