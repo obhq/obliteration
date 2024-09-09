@@ -1,28 +1,29 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+use super::hv::{CpuIo, Hypervisor};
 use super::VmmEventHandler;
-use crate::vmm::hv::CpuIo;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::num::NonZero;
 use std::sync::Arc;
 
 pub use self::console::*;
-pub use self::ram::*;
 
 mod console;
-mod ram;
 
-pub fn setup_devices(
+pub fn setup_devices<H: Hypervisor>(
     start_addr: usize,
     block_size: NonZero<usize>,
     event: VmmEventHandler,
-) -> DeviceTree {
-    let mut map = BTreeMap::<usize, Arc<dyn Device>>::new();
+) -> DeviceTree<H> {
+    let mut map = BTreeMap::<usize, Arc<dyn Device<H>>>::new();
 
     // Console.
     let addr = start_addr;
     let console = Arc::new(Console::new(addr, block_size, event));
 
-    assert!(map.insert(console.addr(), console.clone()).is_none());
+    assert!(map
+        .insert(<Console as Device<H>>::addr(&console), console.clone())
+        .is_none());
 
     // Make sure nothing are overlapped.
     let mut end = start_addr;
@@ -36,31 +37,31 @@ pub fn setup_devices(
 }
 
 /// Contains all virtual devices, except RAM; for the VM.
-pub struct DeviceTree {
+pub struct DeviceTree<H: Hypervisor> {
     console: Arc<Console>,
-    map: BTreeMap<usize, Arc<dyn Device>>,
+    map: BTreeMap<usize, Arc<dyn Device<H>>>,
 }
 
-impl DeviceTree {
-    pub fn console(&self) -> &Console {
-        &self.console
+impl<H: Hypervisor> DeviceTree<H> {
+    pub fn console(&self) -> &impl Device<H> {
+        self.console.as_ref()
     }
 
     /// Returns iterator ordered by physical address.
-    pub fn map(&self) -> impl Iterator<Item = (usize, &dyn Device)> + '_ {
+    pub fn map(&self) -> impl Iterator<Item = (usize, &dyn Device<H>)> + '_ {
         self.map.iter().map(|(addr, dev)| (*addr, dev.as_ref()))
     }
 }
 
 /// Virtual device that has a physical address in the virtual machine.
-pub trait Device: Send + Sync {
+pub trait Device<H: Hypervisor>: Send + Sync {
     /// Physical address in the virtual machine.
     fn addr(&self) -> usize;
 
     /// Total size of device memory, in bytes.
     fn len(&self) -> NonZero<usize>;
 
-    fn create_context<'a>(&'a self, ram: &'a Ram) -> Box<dyn DeviceContext + 'a>;
+    fn create_context<'a>(&'a self, hv: &'a H) -> Box<dyn DeviceContext + 'a>;
 }
 
 /// Context to execute memory-mapped I/O operations on a virtual device.

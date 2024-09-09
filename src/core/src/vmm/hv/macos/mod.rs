@@ -2,12 +2,11 @@
 use self::cpu::HfCpu;
 use self::vm::Vm;
 use super::{CpuFeats, Hypervisor};
-use crate::vmm::hw::Ram;
+use crate::vmm::ram::Ram;
 use crate::vmm::VmmError;
 use hv_sys::hv_vcpu_create;
 use std::ffi::c_int;
 use std::num::NonZero;
-use std::sync::Arc;
 use thiserror::Error;
 
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
@@ -16,25 +15,23 @@ mod arch;
 mod cpu;
 mod vm;
 
+pub fn new(_: usize, ram: Ram) -> Result<impl Hypervisor, VmmError> {
+    // Create a VM.
+    let vm = Vm::new().map_err(VmmError::CreateVmFailed)?;
+
+    // Map memory.
+    vm.vm_map(ram.host_addr().cast_mut().cast(), 0, ram.len())
+        .map_err(VmmError::MapRamFailed)?;
+
+    Ok(Hf { vm, ram })
+}
+
 /// Implementation of [`Hypervisor`] using Hypervisor Framework.
 ///
 /// Fields in this struct need to drop in a correct order.
-pub struct Hf {
+struct Hf {
     vm: Vm,
-    ram: Arc<Ram>,
-}
-
-impl Hf {
-    pub fn new(_: usize, ram: Arc<Ram>) -> Result<Self, VmmError> {
-        // Create a VM.
-        let vm = Vm::new().map_err(VmmError::CreateVmFailed)?;
-
-        // Map memory.
-        vm.vm_map(ram.host_addr().cast_mut().cast(), 0, ram.len())
-            .map_err(VmmError::MapRamFailed)?;
-
-        Ok(Self { vm, ram })
-    }
+    ram: Ram,
 }
 
 impl Hypervisor for Hf {
@@ -118,6 +115,14 @@ impl Hypervisor for Hf {
     #[cfg(target_arch = "x86_64")]
     fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr> {
         Ok(CpuFeats {})
+    }
+
+    fn ram(&self) -> &Ram {
+        &self.ram
+    }
+
+    fn ram_mut(&mut self) -> &mut Ram {
+        &mut self.ram
     }
 
     fn create_cpu(&self, _: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {

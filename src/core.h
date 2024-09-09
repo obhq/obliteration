@@ -170,42 +170,6 @@ struct Vmm *vmm_run(const char *kernel,
 
 struct RustError *vmm_draw(struct Vmm *vmm);
 
-#if defined(__linux__)
-extern int kvm_check_version(int kvm, bool *compat);
-#endif
-
-#if defined(__linux__)
-extern int kvm_max_vcpus(int kvm, size_t *max);
-#endif
-
-#if defined(__linux__)
-extern int kvm_create_vm(int kvm, int *fd);
-#endif
-
-#if defined(__linux__)
-extern int kvm_get_vcpu_mmap_size(int kvm);
-#endif
-
-#if defined(__linux__)
-extern int kvm_set_user_memory_region(int vm,
-                                      uint32_t slot,
-                                      uint64_t addr,
-                                      uint64_t len,
-                                      void *mem);
-#endif
-
-#if defined(__linux__)
-extern int kvm_create_vcpu(int vm, uint32_t id, int *fd);
-#endif
-
-#if defined(__linux__)
-extern int kvm_run(int vcpu);
-#endif
-
-#if defined(__linux__)
-extern int kvm_translate(int vcpu, kvm_translation *arg);
-#endif
-
 #ifdef __cplusplus
 } // extern "C"
 #endif // __cplusplus

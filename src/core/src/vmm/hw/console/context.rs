@@ -1,6 +1,7 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 use super::Console;
-use crate::vmm::hv::{CpuIo, IoBuf};
-use crate::vmm::hw::{DeviceContext, Ram};
+use crate::vmm::hv::{CpuIo, Hypervisor, IoBuf};
+use crate::vmm::hw::DeviceContext;
 use crate::vmm::VmmEvent;
 use obvirt::console::{Memory, MsgType};
 use std::error::Error;
@@ -8,18 +9,18 @@ use std::mem::offset_of;
 use thiserror::Error;
 
 /// Implementation of [`DeviceContext`].
-pub struct Context<'a> {
+pub struct Context<'a, H> {
     dev: &'a Console,
-    ram: &'a Ram,
+    hv: &'a H,
     msg_len: usize,
     msg: String,
 }
 
-impl<'a> Context<'a> {
-    pub fn new(dev: &'a Console, ram: &'a Ram) -> Self {
+impl<'a, H: Hypervisor> Context<'a, H> {
+    pub fn new(dev: &'a Console, hv: &'a H) -> Self {
         Self {
             dev,
-            ram,
+            hv,
             msg_len: 0,
             msg: String::new(),
         }
@@ -75,14 +76,14 @@ impl<'a> Context<'a> {
             .map_err(|e| ExecError::TranslateVaddrFailed(vaddr, e))?;
 
         // Read data.
-        let data = unsafe { self.ram.host_addr().add(paddr) };
+        let data = unsafe { self.hv.ram().host_addr().add(paddr) };
         let data = unsafe { std::slice::from_raw_parts(data, len) };
 
         Ok(std::str::from_utf8(data).unwrap())
     }
 }
 
-impl<'a> DeviceContext for Context<'a> {
+impl<'a, H: Hypervisor> DeviceContext for Context<'a, H> {
     fn exec(&mut self, exit: &mut dyn CpuIo) -> Result<bool, Box<dyn Error>> {
         // Check field.
         let off = exit.addr() - self.dev.addr;

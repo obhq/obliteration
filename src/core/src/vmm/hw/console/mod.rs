@@ -1,5 +1,7 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 use self::context::Context;
-use super::{Device, DeviceContext, Ram};
+use super::{Device, DeviceContext};
+use crate::vmm::hv::Hypervisor;
 use crate::vmm::VmmEventHandler;
 use obvirt::console::Memory;
 use std::num::NonZero;
@@ -26,7 +28,7 @@ impl Console {
     }
 }
 
-impl Device for Console {
+impl<H: Hypervisor> Device<H> for Console {
     fn addr(&self) -> usize {
         self.addr
     }
@@ -35,7 +37,7 @@ impl Device for Console {
         self.len
     }
 
-    fn create_context<'a>(&'a self, ram: &'a Ram) -> Box<dyn DeviceContext + 'a> {
-        Box::new(Context::new(self, ram))
+    fn create_context<'a>(&'a self, hv: &'a H) -> Box<dyn DeviceContext + 'a> {
+        Box::new(Context::new(self, hv))
     }
 }

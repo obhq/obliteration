@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::hv::{Cpu, CpuExit, CpuFeats, CpuIo, Hypervisor};
-use self::hw::{setup_devices, Device, DeviceContext, DeviceTree, Ram, RamBuilder, RamMap};
+use self::hw::{setup_devices, Device, DeviceContext, DeviceTree};
 use self::kernel::{
     Kernel, PT_DYNAMIC, PT_GNU_EH_FRAME, PT_GNU_RELRO, PT_GNU_STACK, PT_LOAD, PT_NOTE, PT_PHDR,
 };
+use self::ram::{Ram, RamMap};
 use self::screen::Screen;
 use crate::error::RustError;
 use crate::profile::Profile;
@@ -28,6 +29,7 @@ mod arch;
 mod hv;
 mod hw;
 mod kernel;
+mod ram;
 mod screen;
 
 #[no_mangle]
@@ -312,16 +314,35 @@ pub unsafe extern "C" fn vmm_run(
         },
     };
 
-    // Setup RAM builder.
-    let mut ram = match RamBuilder::new(block_size) {
+    // Setup RAM.
+    let ram = match Ram::new(block_size) {
         Ok(v) => v,
         Err(e) => {
-            *err = RustError::wrap(e);
+            *err = RustError::with_source("couldn't create a RAM", e);
+            return null_mut();
+        }
+    };
+
+    // Setup hypervisor.
+    let mut hv = match self::hv::new(8, ram) {
+        Ok(v) => v,
+        Err(e) => {
+            *err = RustError::with_source("couldn't setup a hypervisor", e);
+            return null_mut();
+        }
+    };
+
+    // Load CPU features.
+    let feats = match hv.cpu_features() {
+        Ok(v) => v,
+        Err(e) => {
+            *err = RustError::with_source("couldn't get available vCPU features", e);
             return null_mut();
         }
     };
 
     // Map the kernel.
+    let mut ram = hv.ram_mut().builder();
     let kern = match ram.alloc_kernel(len) {
         Ok(v) => v,
         Err(e) => {
@@ -385,29 +406,10 @@ pub unsafe extern "C" fn vmm_run(
     }
 
     // Build RAM.
-    let (ram, map) = match ram.build(vm_page_size, &devices, dynamic) {
+    let map = match ram.build(vm_page_size, &devices, dynamic) {
         Ok(v) => v,
         Err(e) => {
             *err = RustError::with_source("couldn't build RAM", e);
-            return null_mut();
-        }
-    };
-
-    // Setup hypervisor.
-    let ram = Arc::new(ram);
-    let mut hv = match self::hv::new(8, ram.clone()) {
-        Ok(v) => v,
-        Err(e) => {
-            *err = RustError::with_source("couldn't setup a hypervisor", e);
-            return null_mut();
-        }
-    };
-
-    // Load CPU features.
-    let feats = match hv.cpu_features() {
-        Ok(v) => v,
-        Err(e) => {
-            *err = RustError::with_source("couldn't get available vCPU features", e);
             return null_mut();
         }
     };
@@ -425,7 +427,6 @@ pub unsafe extern "C" fn vmm_run(
     let shutdown = Arc::new(AtomicBool::new(false));
     let args = CpuArgs {
         hv,
-        ram,
         screen: screen.buffer().clone(),
         feats,
         devices,
@@ -514,7 +515,7 @@ fn run_cpu<C: Cpu, H: Hypervisor>(mut cpu: C, args: &CpuArgs<H>) {
         .map(|(addr, dev)| {
             let end = dev.len().checked_add(addr).unwrap();
 
-            (addr, (dev.create_context(&args.ram), end))
+            (addr, (dev.create_context(&args.hv), end))
         })
         .collect::<BTreeMap<usize, (Box<dyn DeviceContext>, NonZero<usize>)>>();
 
@@ -666,19 +667,15 @@ impl From<MsgType> for VmmLog {
 /// Encapsulates arguments for a function to run a CPU.
 struct CpuArgs<H: Hypervisor> {
     hv: H,
-    ram: Arc<Ram>,
     screen: Arc<<self::screen::Default as Screen>::Buffer>,
     feats: CpuFeats,
-    devices: Arc<DeviceTree>,
+    devices: Arc<DeviceTree<H>>,
     shutdown: Arc<AtomicBool>,
 }
 
 /// Represents an error when [`vmm_new()`] fails.
 #[derive(Debug, Error)]
 enum VmmError {
-    #[error("couldn't create a RAM")]
-    CreateRamFailed(#[source] std::io::Error),
-
     #[cfg(target_os = "linux")]
     #[error("couldn't get maximum number of CPU for a VM")]
     GetMaxCpuFailed(#[source] std::io::Error),

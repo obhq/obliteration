@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::hv::{Cpu, CpuFeats, CpuStates, Pstate};
-use super::hw::RamMap;
+use super::ram::RamMap;
 use super::MainCpuError;
 
 pub fn setup_main_cpu(

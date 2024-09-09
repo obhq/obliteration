@@ -22,12 +22,60 @@ pub struct Ram {
 impl Ram {
     pub(crate) const SIZE: usize = 1024 * 1024 * 1024 * 8; // 8GB
 
+    /// # Safety
+    /// `block_size` must be greater or equal host page size.
+    pub unsafe fn new(block_size: NonZero<usize>) -> Result<Self, Error> {
+        use std::io::Error;
+
+        // Reserve memory range.
+        #[cfg(unix)]
+        let mem = {
+            use libc::{mmap, MAP_ANON, MAP_FAILED, MAP_PRIVATE, PROT_NONE};
+            use std::ptr::null_mut;
+
+            let mem = mmap(
+                null_mut(),
+                Self::SIZE,
+                PROT_NONE,
+                MAP_PRIVATE | MAP_ANON,
+                -1,
+                0,
+            );
+
+            if mem == MAP_FAILED {
+                return Err(Error::last_os_error());
+            }
+
+            mem.cast()
+        };
+
+        #[cfg(windows)]
+        let mem = {
+            use std::ptr::null;
+            use windows_sys::Win32::System::Memory::{VirtualAlloc, MEM_RESERVE, PAGE_NOACCESS};
+
+            let mem = VirtualAlloc(null(), Self::SIZE, MEM_RESERVE, PAGE_NOACCESS);
+
+            if mem.is_null() {
+                return Err(Error::last_os_error());
+            }
+
+            mem.cast()
+        };
+
+        Ok(Self { mem, block_size })
+    }
+
     pub fn host_addr(&self) -> *const u8 {
         self.mem
     }
 
     pub fn len(&self) -> usize {
         Self::SIZE
+    }
+
+    pub fn builder(&mut self) -> RamBuilder {
+        RamBuilder::new(self)
     }
 
     /// # Panics
