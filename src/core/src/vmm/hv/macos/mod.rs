@@ -3,8 +3,7 @@ use self::cpu::HfCpu;
 use super::{CpuFeats, Hypervisor};
 use crate::vmm::ram::Ram;
 use crate::vmm::VmmError;
-use hv_sys::{hv_vcpu_create, hv_vm_create, hv_vm_destroy, hv_vm_map};
-use std::ffi::c_int;
+use hv_sys::{hv_return_t, hv_vcpu_create, hv_vm_create, hv_vm_destroy, hv_vm_map};
 use std::num::NonZero;
 use thiserror::Error;
 
@@ -18,10 +17,10 @@ pub fn new(_: usize, ram: Ram) -> Result<impl Hypervisor, VmmError> {
 }
 
 /// Implementation of [`Hypervisor`] using Hypervisor Framework.
-///
-/// Fields in this struct need to drop in a correct order.
 struct Hvf {
     ram: Ram,
+    #[cfg(target_arch = "aarch64")]
+    cpu_config: hv_sys::hv_vcpu_config_t,
 }
 
 impl Hvf {
@@ -33,7 +32,11 @@ impl Hvf {
         let ret = unsafe { hv_vm_create(0) };
         let hv = match NonZero::new(ret) {
             Some(ret) => return Err(VmmError::CreateVmFailed(ret)),
-            None => Self { ram },
+            None => Self {
+                ram,
+                #[cfg(target_arch = "aarch64")]
+                cpu_config: unsafe { hv_sys::hv_vcpu_config_create() },
+            },
         };
 
         // Set RAM.
@@ -46,10 +49,33 @@ impl Hvf {
             None => Ok(hv),
         }
     }
+
+    #[cfg(target_arch = "aarch64")]
+    fn read_feature_reg(
+        &mut self,
+        reg: hv_sys::hv_feature_reg_t,
+    ) -> Result<u64, NonZero<hv_return_t>> {
+        use hv_sys::hv_vcpu_config_get_feature_reg;
+
+        let mut val = 0;
+        let ret = unsafe { hv_vcpu_config_get_feature_reg(self.cpu_config, reg, &mut val) };
+
+        match NonZero::new(ret) {
+            Some(e) => Err(e),
+            None => Ok(val),
+        }
+    }
 }
 
 impl Drop for Hvf {
     fn drop(&mut self) {
+        // Free CPU config.
+        #[cfg(target_arch = "aarch64")]
+        unsafe {
+            os_release(self.cpu_config.cast())
+        };
+
+        // Destroy VM.
         let status = unsafe { hv_vm_destroy() };
 
         if status != 0 {
@@ -64,75 +90,14 @@ impl Hypervisor for Hvf {
 
     #[cfg(target_arch = "aarch64")]
     fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr> {
-        use hv_sys::hv_sys_reg_t_HV_SYS_REG_ID_AA64MMFR0_EL1 as HV_SYS_REG_ID_AA64MMFR0_EL1;
+        use hv_sys::hv_feature_reg_t_HV_FEATURE_REG_ID_AA64MMFR0_EL1 as HV_FEATURE_REG_ID_AA64MMFR0_EL1;
 
-        // Load ID_AA64MMFR0_EL1.
-        let cpu = self.create_cpu(0)?;
-        let reg = cpu
-            .read_sys(HV_SYS_REG_ID_AA64MMFR0_EL1)
+        let mmfr0 = self
+            .read_feature_reg(HV_FEATURE_REG_ID_AA64MMFR0_EL1)
             .map_err(HvfCpuError::ReadMmfr0Failed)?;
 
-        // FEAT_ExS.
-        let feat_exs = match (reg & 0xF00000000000) >> 44 {
-            0b0000 => false,
-            0b0001 => true,
-            _ => unreachable!(),
-        };
-
-        // TGran4.
-        let tgran4 = match (reg & 0xF0000000) >> 28 {
-            0b0000 | 0b0001 => true,
-            0b1111 => false,
-            _ => unreachable!(),
-        };
-
-        // TGran64.
-        let tgran64 = match (reg & 0xF000000) >> 24 {
-            0b0000 => true,
-            0b1111 => false,
-            _ => unreachable!(),
-        };
-
-        // TGran16.
-        let tgran16 = match (reg & 0xF00000) >> 20 {
-            0b0000 => false,
-            0b0001 | 0b0010 => true,
-            _ => unreachable!(),
-        };
-
-        // BigEnd.
-        let big_end = match (reg & 0xF00) >> 8 {
-            0b0000 => false,
-            0b0001 => true,
-            _ => unreachable!(),
-        };
-
-        // BigEndEL0.
-        let big_end_el0 = (big_end == false).then(|| match (reg & 0xF0000) >> 16 {
-            0b0000 => false,
-            0b0001 => true,
-            _ => unreachable!(),
-        });
-
-        // ASIDBits.
-        let asid16 = match (reg & 0xF0) >> 4 {
-            0b0000 => false,
-            0b0010 => true,
-            _ => unreachable!(),
-        };
-
-        // PARange.
-        let pa_range = (reg & 0xF).try_into().unwrap();
-
         Ok(CpuFeats {
-            feat_exs,
-            tgran4,
-            tgran64,
-            tgran16,
-            big_end,
-            big_end_el0,
-            asid16,
-            pa_range,
+            mmfr0: mmfr0.into(),
         })
     }
 
@@ -153,7 +118,7 @@ impl Hypervisor for Hvf {
     fn create_cpu(&self, _: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {
         let mut instance = 0;
         let mut exit = std::ptr::null_mut();
-        let ret = unsafe { hv_vcpu_create(&mut instance, &mut exit, std::ptr::null_mut()) };
+        let ret = unsafe { hv_vcpu_create(&mut instance, &mut exit, self.cpu_config) };
 
         match NonZero::new(ret) {
             Some(e) => Err(HvfCpuError::CreateVcpuFailed(e)),
@@ -173,13 +138,21 @@ impl Hypervisor for Hvf {
     }
 }
 
+unsafe impl Send for Hvf {}
+unsafe impl Sync for Hvf {}
+
 /// Implementation of [`Hypervisor::CpuErr`].
 #[derive(Debug, Error)]
 pub enum HvfCpuError {
     #[error("couldn't create a vCPU ({0:#x})")]
-    CreateVcpuFailed(NonZero<c_int>),
+    CreateVcpuFailed(NonZero<hv_return_t>),
 
     #[cfg(target_arch = "aarch64")]
     #[error("couldn't read ID_AA64MMFR0_EL1 ({0:#x})")]
-    ReadMmfr0Failed(NonZero<hv_sys::hv_return_t>),
+    ReadMmfr0Failed(NonZero<hv_return_t>),
+}
+
+#[cfg(target_arch = "aarch64")]
+extern "C" {
+    fn os_release(object: *mut std::ffi::c_void);
 }

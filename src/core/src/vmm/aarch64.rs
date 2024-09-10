@@ -16,7 +16,7 @@ pub fn setup_main_cpu(
 
     match map.page_size.get() {
         0x4000 => {
-            if !feats.tgran16 {
+            if feats.mmfr0.t_gran16() == 0b0000 {
                 return Err(MainCpuError::PageSizeNotSupported(map.page_size));
             }
         }
@@ -24,7 +24,7 @@ pub fn setup_main_cpu(
     }
 
     // Check if CPU support at least 36 bits physical address.
-    if feats.pa_range == 0 {
+    if feats.mmfr0.pa_range() == 0 {
         return Err(MainCpuError::PhysicalAddressTooSmall);
     }
 
