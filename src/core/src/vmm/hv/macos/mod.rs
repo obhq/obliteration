@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::HfCpu;
-use self::vm::Vm;
 use super::{CpuFeats, Hypervisor};
 use crate::vmm::ram::Ram;
 use crate::vmm::VmmError;
-use hv_sys::hv_vcpu_create;
+use hv_sys::{hv_vcpu_create, hv_vm_create, hv_vm_destroy, hv_vm_map};
 use std::ffi::c_int;
 use std::num::NonZero;
 use thiserror::Error;
@@ -13,30 +12,55 @@ use thiserror::Error;
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
 mod arch;
 mod cpu;
-mod vm;
 
 pub fn new(_: usize, ram: Ram) -> Result<impl Hypervisor, VmmError> {
-    // Create a VM.
-    let vm = Vm::new().map_err(VmmError::CreateVmFailed)?;
-
-    // Map memory.
-    vm.vm_map(ram.host_addr().cast_mut().cast(), 0, ram.len())
-        .map_err(VmmError::MapRamFailed)?;
-
-    Ok(Hf { vm, ram })
+    Hvf::new(ram)
 }
 
 /// Implementation of [`Hypervisor`] using Hypervisor Framework.
 ///
 /// Fields in this struct need to drop in a correct order.
-struct Hf {
-    vm: Vm,
+struct Hvf {
     ram: Ram,
 }
 
-impl Hypervisor for Hf {
+impl Hvf {
+    fn new(ram: Ram) -> Result<Self, VmmError> {
+        // Create a VM.
+        #[cfg(target_arch = "aarch64")]
+        let ret = unsafe { hv_vm_create(std::ptr::null_mut()) };
+        #[cfg(target_arch = "x86_64")]
+        let ret = unsafe { hv_vm_create(0) };
+        let hv = match NonZero::new(ret) {
+            Some(ret) => return Err(VmmError::CreateVmFailed(ret)),
+            None => Self { ram },
+        };
+
+        // Set RAM.
+        let host = hv.ram.host_addr().cast_mut().cast();
+        let len = hv.ram.len().try_into().unwrap();
+        let ret = unsafe { hv_vm_map(host, 0, len, 1 | 2 | 4) };
+
+        match NonZero::new(ret) {
+            Some(ret) => Err(VmmError::MapRamFailed(ret)),
+            None => Ok(hv),
+        }
+    }
+}
+
+impl Drop for Hvf {
+    fn drop(&mut self) {
+        let status = unsafe { hv_vm_destroy() };
+
+        if status != 0 {
+            panic!("hv_vm_destroy() fails with {status:#x}");
+        }
+    }
+}
+
+impl Hypervisor for Hvf {
     type Cpu<'a> = HfCpu<'a>;
-    type CpuErr = HfCpuError;
+    type CpuErr = HvfCpuError;
 
     #[cfg(target_arch = "aarch64")]
     fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr> {
@@ -46,7 +70,7 @@ impl Hypervisor for Hf {
         let cpu = self.create_cpu(0)?;
         let reg = cpu
             .read_sys(HV_SYS_REG_ID_AA64MMFR0_EL1)
-            .map_err(HfCpuError::ReadMmfr0Failed)?;
+            .map_err(HvfCpuError::ReadMmfr0Failed)?;
 
         // FEAT_ExS.
         let feat_exs = match (reg & 0xF00000000000) >> 44 {
@@ -125,38 +149,33 @@ impl Hypervisor for Hf {
         &mut self.ram
     }
 
+    #[cfg(target_arch = "aarch64")]
     fn create_cpu(&self, _: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {
         let mut instance = 0;
+        let mut exit = std::ptr::null_mut();
+        let ret = unsafe { hv_vcpu_create(&mut instance, &mut exit, std::ptr::null_mut()) };
 
-        #[cfg(target_arch = "x86_64")]
-        {
-            let ret = unsafe { hv_vcpu_create(&mut instance, 0) };
-
-            if let Some(e) = NonZero::new(ret) {
-                return Err(HfCpuError::CreateVcpuFailed(e));
-            }
-
-            Ok(HfCpu::new_x64(instance))
+        match NonZero::new(ret) {
+            Some(e) => Err(HvfCpuError::CreateVcpuFailed(e)),
+            None => Ok(HfCpu::new_aarch64(instance, exit)),
         }
+    }
 
-        #[cfg(target_arch = "aarch64")]
-        {
-            let mut exit = std::ptr::null_mut();
+    #[cfg(target_arch = "x86_64")]
+    fn create_cpu(&self, _: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {
+        let mut instance = 0;
+        let ret = unsafe { hv_vcpu_create(&mut instance, 0) };
 
-            let ret = unsafe { hv_vcpu_create(&mut instance, &mut exit, std::ptr::null_mut()) };
-
-            if let Some(e) = NonZero::new(ret) {
-                return Err(HfCpuError::CreateVcpuFailed(e));
-            }
-
-            Ok(HfCpu::new_aarch64(instance, exit))
+        match NonZero::new(ret) {
+            Some(e) => Err(HvfCpuError::CreateVcpuFailed(e)),
+            None => Ok(HfCpu::new_x64(instance)),
         }
     }
 }
 
 /// Implementation of [`Hypervisor::CpuErr`].
 #[derive(Debug, Error)]
-pub enum HfCpuError {
+pub enum HvfCpuError {
     #[error("couldn't create a vCPU ({0:#x})")]
     CreateVcpuFailed(NonZero<c_int>),
 
