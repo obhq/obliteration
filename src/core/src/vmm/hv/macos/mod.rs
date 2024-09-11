@@ -90,14 +90,21 @@ impl Hypervisor for Hvf {
 
     #[cfg(target_arch = "aarch64")]
     fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr> {
-        use hv_sys::hv_feature_reg_t_HV_FEATURE_REG_ID_AA64MMFR0_EL1 as HV_FEATURE_REG_ID_AA64MMFR0_EL1;
+        use hv_sys::{
+            hv_feature_reg_t_HV_FEATURE_REG_ID_AA64MMFR0_EL1 as HV_FEATURE_REG_ID_AA64MMFR0_EL1,
+            hv_feature_reg_t_HV_FEATURE_REG_ID_AA64MMFR1_EL1 as HV_FEATURE_REG_ID_AA64MMFR1_EL1,
+        };
 
         let mmfr0 = self
             .read_feature_reg(HV_FEATURE_REG_ID_AA64MMFR0_EL1)
             .map_err(HvfCpuError::ReadMmfr0Failed)?;
+        let mmfr1 = self
+            .read_feature_reg(HV_FEATURE_REG_ID_AA64MMFR1_EL1)
+            .map_err(HvfCpuError::ReadMmfr1Failed)?;
 
         Ok(CpuFeats {
             mmfr0: mmfr0.into(),
+            mmfr1: mmfr1.into(),
         })
     }
 
@@ -150,6 +157,10 @@ pub enum HvfCpuError {
     #[cfg(target_arch = "aarch64")]
     #[error("couldn't read ID_AA64MMFR0_EL1 ({0:#x})")]
     ReadMmfr0Failed(NonZero<hv_return_t>),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't read ID_AA64MMFR1_EL1 ({0:#x})")]
+    ReadMmfr1Failed(NonZero<hv_return_t>),
 }
 
 #[cfg(target_arch = "aarch64")]
