@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = [
+    "src/core",
+    "src/fs",
+    "src/gmtx",
+    "src/kernel",
+    "src/llt",
+    "src/macros",
+    "src/obconf",
+    "src/obkrnl",
+    "src/obvirt",
+    "src/param",
+    "src/pfs",
+    "src/pkg",
+    "src/tls"
+]
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+debug = "full"

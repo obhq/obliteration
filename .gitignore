@@ -3,5 +3,5 @@
 /.flatpak-builder/
 /.kernel-debug
 /build/
-/src/target/
+/target/
 Cargo.lock
