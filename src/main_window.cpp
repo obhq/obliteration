@@ -356,13 +356,13 @@ void MainWindow::startKernel()
 #endif
 
 #if defined(_WIN32) && defined(NDEBUG)
-        kernel = (b / L"src" / L"target" / target / L"release" / L"obkrnl").u8string();
+        kernel = (b / L"target" / target / L"release" / L"obkrnl").u8string();
 #elif defined(_WIN32) && !defined(NDEBUG)
-        kernel = (b / L"src" / L"target" / target / L"debug" / L"obkrnl").u8string();
+        kernel = (b / L"target" / target / L"debug" / L"obkrnl").u8string();
 #elif defined(NDEBUG)
-        kernel = (b / "src" / "target" / target / "release" / "obkrnl").u8string();
+        kernel = (b / "target" / target / "release" / "obkrnl").u8string();
 #else
-        kernel = (b / "src" / "target" / target / "debug" / "obkrnl").u8string();
+        kernel = (b / "target" / target / "debug" / "obkrnl").u8string();
 #endif
     } else {
 #ifdef _WIN32
