@@ -7,6 +7,8 @@ pub struct CpuFeats {
     pub mmfr0: Mmfr0,
     /// Raw value of `ID_AA64MMFR1_EL1`.
     pub mmfr1: Mmfr1,
+    /// Raw value of `ID_AA64MMFR2_EL1`.
+    pub mmfr2: Mmfr2,
 }
 
 /// Represents a value of `PSTATE`.
@@ -439,4 +441,240 @@ pub struct Mmfr1 {
     /// From Armv8.9, the value `0b0000` is not permitted.
     #[bits(4)]
     pub ecbhb: u8,
+}
+
+/// Represents a value of `ID_AA64MMFR2_EL1`.
+///
+/// All documentation copied from Arm Architecture Reference Manual for A-profile architecture.
+#[bitfield(u64)]
+pub struct Mmfr2 {
+    /// Indicates support for Common not Private translations.
+    ///
+    /// - `0b0000`: Common not Private translations not supported.
+    /// - `0b0001`: Common not Private translations supported.
+    ///
+    /// All other values are reserved.
+    ///
+    /// FEAT_TTCNP implements the functionality identified by the value `0b0001`.
+    ///
+    /// From Armv8.2, the only permitted value is `0b0001`.
+    #[bits(4)]
+    pub cnp: u8,
+    /// User Access Override.
+    ///
+    /// - `0b0000`: UAO not supported.
+    /// - `0b0001`: UAO supported.
+    ///
+    /// All other values are reserved.
+    ///
+    /// FEAT_UAO implements the functionality identified by the value `0b0001`.
+    ///
+    /// From Armv8.2, the only permitted value is `0b0001`.
+    #[bits(4)]
+    pub uao: u8,
+    /// Indicates support for LSMAOE and nTLSMD bits in SCTLR_EL1 and SCTLR_EL2.
+    ///
+    /// - `0b0000`: LSMAOE and nTLSMD bits not supported.
+    /// - `0b0001`: LSMAOE and nTLSMD bits supported.
+    ///
+    /// All other values are reserved.
+    ///
+    /// FEAT_LSMAOC implements the functionality identified by the value `0b0001`.
+    #[bits(4)]
+    pub lsm: u8,
+    /// Indicates support for the IESB bit in the SCTLR_ELx registers.
+    ///
+    /// - `0b0000`: IESB bit in the SCTLR_ELx registers is not supported.
+    /// - `0b0001`: IESB bit in the SCTLR_ELx registers is supported.
+    ///
+    /// All other values are reserved.
+    ///
+    /// FEAT_IESB implements the functionality identified by the value `0b0001`.
+    #[bits(4)]
+    pub iesb: u8,
+    /// Indicates support for a larger virtual address.
+    ///
+    /// - `0b0000`: VMSAv8-64 supports 48-bit VAs.
+    /// - `0b0001`: VMSAv8-64 supports 52-bit VAs when using the 64KB translation granule. The size
+    ///   for other translation granules is not defined by this field.
+    /// - `0b0010`: *When FEAT_D128 is implemented:* VMSAv9-128 supports 56-bit VAs.
+    ///
+    /// All other values are reserved.
+    ///
+    /// FEAT_LVA implements the functionality identified by the value `0b0001`.
+    ///
+    /// FEAT_LVA3 implements the functionality identified by the value `0b0010`.
+    #[bits(4)]
+    pub va_range: u8,
+    /// Support for the use of revised CCSIDR_EL1 register format.
+    ///
+    /// - `0b0000`: 32-bit format implemented for all levels of the CCSIDR_EL1.
+    /// - `0b0001`: 64-bit format implemented for all levels of the CCSIDR_EL1.
+    ///
+    /// All other values are reserved.
+    ///
+    /// FEAT_CCIDX implements the functionality identified by the value `0b0001`.
+    ///
+    /// From Armv8.3, the permitted values are `0b0000` and `0b0001`.
+    #[bits(4)]
+    pub ccidx: u8,
+    /// Nested Virtualization. If EL2 is implemented, indicates support for the use of nested
+    /// virtualization.
+    ///
+    /// - `0b0000`: Nested virtualization is not supported.
+    /// - `0b0001`: The HCR_EL2.{AT, NV1, NV} bits are implemented.
+    /// - `0b0010`: The VNCR_EL2 register and the HCR_EL2.{NV2, AT, NV1, NV} bits are implemented.
+    ///
+    /// All other values are reserved.
+    ///
+    /// If EL2 is not implemented, the only permitted value is `0b0000`.
+    ///
+    /// FEAT_NV implements the functionality identified by the value `0b0001`.
+    ///
+    /// FEAT_NV2 implements the functionality identified by the value `0b0010`.
+    ///
+    /// In Armv8.3, if EL2 is implemented, the permitted values are `0b0000` and `0b0001`.
+    ///
+    /// From Armv8.4, if EL2 is implemented, the permitted values are `0b0000`, `0b0001`, and
+    /// `0b0010`.
+    #[bits(4)]
+    pub nv: u8,
+    /// Identifies support for small translation tables.
+    ///
+    /// - `0b0000`: The maximum value of the TCR_ELx.{T0SZ,T1SZ} and VTCR_EL2.T0SZ fields is 39.
+    /// - `0b0001`: The maximum value of the TCR_ELx.{T0SZ,T1SZ} and VTCR_EL2.T0SZ fields is 48 for
+    ///   4KB and 16KB granules, and 47 for 64KB granules.
+    ///
+    /// All other values are reserved.
+    ///
+    /// FEAT_TTST implements the functionality identified by the value `0b0001`.
+    ///
+    /// When FEAT_SEL2 is implemented, the value `0b0000` is not permitted.
+    #[bits(4)]
+    pub st: u8,
+    /// Identifies support for unaligned single-copy atomicity and atomic functions.
+    ///
+    /// - `0b0000`: Unaligned single-copy atomicity and atomic functions are not supported.
+    /// - `0b0001`: Unaligned single-copy atomicity and atomic functions with a 16-byte address
+    ///   range aligned to 16-bytes are supported.
+    ///
+    /// All other values are reserved.
+    ///
+    /// FEAT_LSE2 implements the functionality identified by the value `0b0001`.
+    ///
+    /// In Armv8.2, the permitted values are `0b0000` and `0b0001`.
+    ///
+    /// From Armv8.4, the only permitted value is `0b0001`.
+    #[bits(4)]
+    pub at: u8,
+    /// Indicates the value of ESR_ELx.EC that reports an exception generated by a read access to
+    /// the feature ID space.
+    ///
+    /// - `0b0000`: An exception which is generated by a read access to the feature ID space, other
+    ///   than a trap caused by HCR_EL2.TIDx, SCTLR_EL1.UCT, or SCTLR_EL2.UCT, is reported by
+    ///   ESR_ELx.EC == `0x0`.
+    /// - `0b0001`: All exceptions generated by an AArch64 read access to the feature ID space are
+    ///   reported by ESR_ELx.EC == `0x18`.
+    ///
+    /// All other values are reserved.
+    ///
+    /// The Feature ID space is defined as the System register space in AArch64 with op0==3,
+    /// op1=={0, 1, 3}, CRn==0, CRm=={0-7}, op2=={0-7}.
+    ///
+    /// FEAT_IDST implements the functionality identified by the value `0b0001`.
+    ///
+    /// From Armv8.4, the only permitted value is `0b0001`.
+    #[bits(4)]
+    pub ids: u8,
+    /// Indicates support for HCR_EL2.FWB.
+    ///
+    /// - `0b0000`: HCR_EL2.FWB bit is not supported.
+    /// - `0b0001`: HCR_EL2.FWB is supported.
+    ///
+    /// All other values reserved.
+    ///
+    /// FEAT_S2FWB implements the functionality identified by the value `0b0001`.
+    ///
+    /// From Armv8.4, the only permitted value is `0b0001`.
+    #[bits(4)]
+    pub fwb: u8,
+    #[bits(4)]
+    __: u8,
+    /// Indicates support for TTL field in address operations.
+    ///
+    /// - `0b0000`: TLB maintenance instructions by address have bits[47:44] as `RES0`.
+    /// - `0b0001`: TLB maintenance instructions by address have bits[47:44] holding the TTL field.
+    ///
+    /// All other values are reserved.
+    ///
+    /// FEAT_TTL implements the functionality identified by the value `0b0001`.
+    ///
+    /// This field affects TLBI IPAS2E1, TLBI IPAS2E1NXS, TLBI IPAS2E1IS, TLBI IPAS2E1ISNXS,
+    /// TLBI IPAS2E1OS, TLBI IPAS2E1OSNXS, TLBI IPAS2LE1, TLBI IPAS2LE1NXS, TLBI IPAS2LE1IS,
+    /// TLBI IPAS2LE1ISNXS, TLBI IPAS2LE1OS, TLBI IPAS2LE1OSNXS, TLBI VAAE1, TLBI VAAE1NXS,
+    /// TLBI VAAE1IS, TLBI VAAE1ISNXS, TLBI VAAE1OS, TLBI VAAE1OSNXS, TLBI VAALE1, TLBI VAALE1NXS,
+    /// TLBI VAALE1IS, TLBI VAALE1ISNXS, TLBI VAALE1OS, TLBI VAALE1OSNXS, TLBI VAE1, TLBI VAE1NXS,
+    /// TLBI VAE1IS, TLBI VAE1ISNXS, TLBI VAE1OS, TLBI VAE1OSNXS, TLBI VAE2, TLBI VAE2NXS,
+    /// TLBI VAE2IS, TLBI VAE2ISNXS, TLBI VAE2OS, TLBI VAE2OSNXS, TLBI VAE3, TLBI VAE3NXS,
+    /// TLBI VAE3IS, TLBI VAE3ISNXS, TLBI VAE3OS, TLBI VAE3OSNXS,TLBI VALE1, TLBI VALE1NXS,
+    /// TLBI VALE1IS, TLBI VALE1ISNXS, TLBI VALE1OS, TLBI VALE1OSNXS, TLBI VALE2, TLBI VALE2NXS,
+    /// TLBI VALE2IS, TLBI VALE2ISNXS, TLBI VALE2OS, TLBI VALE2OSNXS, TLBI VALE3, TLBI VALE3NXS,
+    /// TLBI VALE3IS, TLBI VALE3ISNXS, TLBI VALE3OS, TLBI VALE3OSNXS.
+    ///
+    /// From Armv8.4, the only permitted value is `0b0001`.
+    #[bits(4)]
+    pub ttl: u8,
+    /// Allows identification of the requirements of the hardware to have break-before-make
+    /// sequences when changing block size for a translation.
+    ///
+    /// - `0b0000`: Level 0 support for changing block size is supported.
+    /// - `0b0001`: Level 1 support for changing block size is supported.
+    /// - `0b0010`: Level 2 support for changing block size is supported.
+    ///
+    /// All other values are reserved.
+    ///
+    /// FEAT_BBM implements the functionality identified by the values `0b0000`, `0b0001`, and
+    /// `0b0010`.
+    ///
+    /// From Armv8.4, the permitted values are `0b0000`, `0b0001`, and `0b0010`.
+    #[bits(4)]
+    pub bbm: u8,
+    /// Enhanced Virtualization Traps. If EL2 is implemented, indicates support for the
+    /// HCR_EL2.{TTLBOS, TTLBIS, TOCU, TICAB, TID4} traps.
+    ///
+    /// - `0b0000`: HCR_EL2.{TTLBOS, TTLBIS, TOCU, TICAB, TID4} traps are not supported.
+    /// - `0b0001`: HCR_EL2.{TOCU, TICAB, TID4} traps are supported. HCR_EL2.{TTLBOS, TTLBIS} traps
+    ///   are not supported.
+    /// - `0b0010`: HCR_EL2.{TTLBOS, TTLBIS, TOCU, TICAB, TID4} traps are supported.
+    ///
+    /// All other values are reserved.
+    ///
+    /// FEAT_EVT implements the functionality identified by the values `0b0001` and `0b0010`.
+    ///
+    /// If EL2 is not implemented, the only permitted value is `0b0000`.
+    ///
+    /// In Armv8.2, the permitted values are `0b0000`, `0b0001`, and `0b0010`.
+    ///
+    /// From Armv8.5, the permitted values are:
+    ///
+    /// - `0b0000` when EL2 is not implemented.
+    /// - `0b0010` when EL2 is implemented.
+    #[bits(4)]
+    pub evt: u8,
+    /// Indicates support for the E0PD mechanism.
+    ///
+    /// - `0b0000`: E0PDx mechanism is not implemented.
+    /// - `0b0001`: E0PDx mechanism is implemented.
+    ///
+    /// All other values are reserved.
+    ///
+    /// FEAT_E0PD implements the functionality identified by the value `0b0001`.
+    ///
+    /// In Armv8.4, the permitted values are `0b0000` and `0b0001`.
+    ///
+    /// From Armv8.5, the only permitted value is `0b0001`.
+    ///
+    /// If FEAT_E0PD is implemented, FEAT_CSV3 must be implemented.
+    #[bits(4)]
+    pub e0pd: u8,
 }
