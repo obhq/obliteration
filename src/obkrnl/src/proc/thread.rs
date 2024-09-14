@@ -4,6 +4,9 @@ use core::sync::atomic::AtomicU32;
 ///
 /// All thread **must** run to completion once execution has been started otherwise resource will be
 /// leak if the thread is dropped while its execution currently in the kernel space.
+///
+/// We subtitute `TDP_NOSLEEPING` with `td_intr_nesting_level` since the only cases the thread
+/// should not allow to sleep is when it being handle an interupt.
 pub struct Thread {
     critical_sections: AtomicU32, // td_critnest
     active_interrupts: usize,     // td_intr_nesting_level
@@ -23,7 +26,12 @@ impl Thread {
         }
     }
 
-    pub fn critical_sections(&self) -> &AtomicU32 {
+    /// See [`crate::context::Context::pin()`] for a safe wrapper.
+    ///
+    /// # Safety
+    /// This is a counter. Each increment must paired with a decrement. Failure to do so will cause
+    /// the whole system to be in an undefined behavior.
+    pub unsafe fn critical_sections(&self) -> &AtomicU32 {
         &self.critical_sections
     }
 

@@ -8,11 +8,15 @@ pub use self::arch::*;
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
 mod arch;
 
+/// # Interupt safety
+/// This function is interupt safe.
 pub fn boot_env() -> &'static BootEnv {
     // SAFETY: This is safe because the setup() requirements.
     unsafe { &*BOOT_ENV }
 }
 
+/// # Interupt safety
+/// This function is interupt safe.
 pub fn config() -> &'static Config {
     // SAFETY: This is safe because the setup() requirements.
     unsafe { &*CONFIG }

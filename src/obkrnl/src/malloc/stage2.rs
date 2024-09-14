@@ -66,6 +66,8 @@ impl Stage2 {
         Self { zones, stats }
     }
 
+    /// Returns null on failure.
+    ///
     /// See `malloc` on the PS4 for a reference.
     ///
     /// # Safety

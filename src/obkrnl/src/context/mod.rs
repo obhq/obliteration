@@ -26,6 +26,9 @@ impl Context {
         }
     }
 
+    /// # Interupt safety
+    /// This function is interupt safe.
+    #[inline(never)]
     pub fn thread() -> Arc<Thread> {
         // It does not matter if we are on a different CPU after we load the Context::thread because
         // it is going to be the same one since it represent the current thread.
@@ -38,15 +41,19 @@ impl Context {
         unsafe { Arc::from_raw(td) }
     }
 
+    /// Pin the calling thread to one CPU.
+    ///
+    /// This thread will never switch to a different CPU until the returned [`PinnedContext`] is
+    /// dropped (but it is allowed to sleep).
+    ///
     /// See `critical_enter` and `critical_exit` on the PS4 for a reference.
+    #[inline(never)]
     pub fn pin() -> PinnedContext {
-        // TODO: Verify if memory ordering here is correct. We need a call to self::arch::current()
-        // to execute after the thread is in a critical section. The CPU must not reorder this. Our
-        // current implementation follow how Drop on Arc is implemented.
+        // Relax ordering should be enough here since this increment will be checked by the same CPU
+        // when an interupt happens.
         let td = unsafe { self::arch::thread() };
 
-        unsafe { (*td).critical_sections().fetch_add(1, Ordering::Release) };
-        core::sync::atomic::fence(Ordering::Acquire);
+        unsafe { (*td).critical_sections().fetch_add(1, Ordering::Relaxed) };
 
         // Once the thread is in a critical section it will never be switch a CPU so it is safe to
         // keep a pointer to a context here.
@@ -83,10 +90,11 @@ impl PinnedContext {
 
 impl Drop for PinnedContext {
     fn drop(&mut self) {
-        // TODO: Verify if memory ordering here is correct.
+        // Relax ordering should be enough here since this decrement will be checked by the same CPU
+        // when an interupt happens.
         let td = unsafe { (*self.0).thread.load(Ordering::Relaxed) };
 
-        unsafe { (*td).critical_sections().fetch_sub(1, Ordering::Release) };
+        unsafe { (*td).critical_sections().fetch_sub(1, Ordering::Relaxed) };
 
         // TODO: Implement td_owepreempt.
     }

@@ -74,6 +74,8 @@ fn main() -> ! {
     }
 }
 
+/// # Interupt safety
+/// This function is interupt safe.
 #[allow(dead_code)]
 #[cfg_attr(target_os = "none", panic_handler)]
 fn panic(i: &PanicInfo) -> ! {
