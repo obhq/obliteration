@@ -1,37 +1,29 @@
 use self::cache::UmaCache;
-use crate::config::config;
-use crate::context::Context;
+use crate::context::{Context, CpuLocal};
 use alloc::borrow::Cow;
-use alloc::vec::Vec;
+use core::num::NonZero;
 
 mod bucket;
 mod cache;
 
 /// Implementation of `uma_zone` structure.
 pub struct UmaZone {
-    size: usize,           // uz_size
-    caches: Vec<UmaCache>, // uz_cpu
+    size: NonZero<usize>,       // uz_size
+    caches: CpuLocal<UmaCache>, // uz_cpu
 }
 
 impl UmaZone {
     /// See `uma_zcreate` on the PS4 for a reference.
-    pub fn new(_: Cow<'static, str>, size: usize, _: usize) -> Self {
+    pub fn new(_: Cow<'static, str>, size: NonZero<usize>, _: usize) -> Self {
         // Ths PS4 allocate a new uma_zone from masterzone_z but we don't have that. This method
         // basically an implementation of zone_ctor.
-        let len = config().max_cpu.get();
-        let mut caches = Vec::with_capacity(len);
-
-        for _ in 0..len {
-            caches.push(UmaCache::default());
-        }
-
         Self {
-            size, // TODO: Check if size is allowed to be zero. If not, change it to NonZero<usize>.
-            caches,
+            size,
+            caches: CpuLocal::new(|_| UmaCache::default()),
         }
     }
 
-    pub fn size(&self) -> usize {
+    pub fn size(&self) -> NonZero<usize> {
         self.size
     }
 
@@ -45,8 +37,7 @@ impl UmaZone {
         }
 
         // Try to allocate from per-CPU cache.
-        let cx = Context::pin();
-        let cache = &self.caches[cx.cpu()];
+        let cache = self.caches.lock();
         let bucket = cache.alloc();
 
         while let Some(bucket) = bucket {

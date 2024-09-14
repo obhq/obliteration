@@ -9,6 +9,6 @@ pub unsafe fn thread() -> *const Thread {
     todo!();
 }
 
-pub unsafe fn current() -> *const Context {
+pub unsafe fn cpu() -> usize {
     todo!();
 }

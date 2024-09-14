@@ -34,4 +34,4 @@ static mut BOOT_ENV: *const BootEnv = null();
 static mut CONFIG: *const Config = null();
 
 #[elf_note(section = ".note.obkrnl.page-size", name = "obkrnl", ty = 0)]
-static NOTE_PAGE_SIZE: [u8; size_of::<usize>()] = PAGE_SIZE.to_ne_bytes();
+static NOTE_PAGE_SIZE: [u8; size_of::<usize>()] = PAGE_SIZE.get().to_ne_bytes();
