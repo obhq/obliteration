@@ -12,6 +12,10 @@ mod vm;
 /// performance critical path.
 ///
 /// The LF character will be automatically appended.
+///
+/// # Interupt safety
+/// This macro is interupt safe as long as [`Display`] implementation on all arguments are interupt
+/// safe (e.g. no heap allocation).
 #[macro_export]
 macro_rules! info {
     ($($args:tt)*) => {
@@ -19,6 +23,9 @@ macro_rules! info {
     };
 }
 
+/// # Interupt safety
+/// This function is interupt safe as long as [`Display`] implementation on `msg` are interupt safe
+/// (e.g. no heap allocation).
 #[inline(never)]
 pub fn info(file: &str, line: u32, msg: impl Display) {
     print(
@@ -33,6 +40,9 @@ pub fn info(file: &str, line: u32, msg: impl Display) {
     );
 }
 
+/// # Interupt safety
+/// This function is interupt safe as long as [`Display`] implementation on `msg` are interupt safe
+/// (e.g. no heap allocation).
 #[inline(never)]
 pub fn error(file: &str, line: u32, msg: impl Display) {
     print(
@@ -47,6 +57,9 @@ pub fn error(file: &str, line: u32, msg: impl Display) {
     )
 }
 
+/// # Interupt safety
+/// This function is interupt safe as long as [`Display`] implementation on `msg` are interupt safe
+/// (e.g. no heap allocation).
 fn print(vty: MsgType, msg: impl Display) {
     match boot_env() {
         BootEnv::Vm(env) => self::vm::print(env, vty, msg),
@@ -64,6 +77,7 @@ struct Log<'a, M: Display> {
 
 impl<'a, M: Display> Display for Log<'a, M> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        // This implementation must be interupt safe.
         writeln!(
             f,
             "{}++++++++++++++++++ {} {}:{}{0:#}",

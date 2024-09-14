@@ -52,7 +52,8 @@ pub unsafe fn thread() -> *const Thread {
 }
 
 pub unsafe fn current() -> *const Context {
-    // Load current GS.
+    // Load current GS. Although the "rdmsr" does not read or write to any memory but it need to
+    // synchronize with a critical section.
     let mut edx: u32;
     let mut eax: u32;
 
@@ -61,7 +62,7 @@ pub unsafe fn current() -> *const Context {
         in("ecx") 0xc0000101u32,
         out("edx") edx,
         out("eax") eax,
-        options(pure, nomem, preserves_flags, nostack)
+        options(preserves_flags, nostack)
     );
 
     // Combine EDX and EAX.
