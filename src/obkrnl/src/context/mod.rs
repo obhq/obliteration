@@ -2,9 +2,12 @@ use crate::proc::Thread;
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicPtr, Ordering};
 
+pub use self::local::*;
+
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
 mod arch;
+mod local;
 
 /// Implementation of `pcpu` structure.
 ///
@@ -55,9 +58,7 @@ impl Context {
 
         unsafe { (*td).critical_sections().fetch_add(1, Ordering::Relaxed) };
 
-        // Once the thread is in a critical section it will never be switch a CPU so it is safe to
-        // keep a pointer to a context here.
-        PinnedContext(unsafe { self::arch::current() })
+        PinnedContext(td)
     }
 
     /// # Safety
@@ -76,15 +77,20 @@ impl Drop for Context {
     }
 }
 
-/// RAII struct to pin the current thread to current CPU.
+/// RAII struct to pin the current thread to a CPU.
 ///
 /// This struct must not implement [`Send`] and [`Sync`]. Currently it stored a pointer, which will
 /// make it `!Send` and `!Sync`.
-pub struct PinnedContext(*const Context);
+pub struct PinnedContext(*const Thread);
 
 impl PinnedContext {
-    pub fn cpu(&self) -> usize {
-        unsafe { (*self.0).cpu }
+    /// See [`CpuLocal`] for a safe alternative if you want to store per-CPU value.
+    ///
+    /// # Safety
+    /// Anything that derive from the returned value will invalid when this [`PinnedContext`]
+    /// dropped.
+    pub unsafe fn cpu(&self) -> usize {
+        self::arch::cpu()
     }
 }
 
@@ -92,9 +98,9 @@ impl Drop for PinnedContext {
     fn drop(&mut self) {
         // Relax ordering should be enough here since this decrement will be checked by the same CPU
         // when an interupt happens.
-        let td = unsafe { (*self.0).thread.load(Ordering::Relaxed) };
+        let td = unsafe { &*self.0 };
 
-        unsafe { (*td).critical_sections().fetch_sub(1, Ordering::Relaxed) };
+        unsafe { td.critical_sections().fetch_sub(1, Ordering::Relaxed) };
 
         // TODO: Implement td_owepreempt.
     }

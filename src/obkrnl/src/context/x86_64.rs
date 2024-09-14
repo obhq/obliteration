@@ -51,23 +51,17 @@ pub unsafe fn thread() -> *const Thread {
     td
 }
 
-pub unsafe fn current() -> *const Context {
-    // Load current GS. Although the "rdmsr" does not read or write to any memory but it need to
-    // synchronize with a critical section.
-    let mut edx: u32;
-    let mut eax: u32;
+pub unsafe fn cpu() -> usize {
+    // SAFETY: This load load need to synchronize with a critical section. That mean we cannot use
+    // "pure" + "readonly" options here.
+    let mut cpu;
 
     asm!(
-        "rdmsr",
-        in("ecx") 0xc0000101u32,
-        out("edx") edx,
-        out("eax") eax,
+        "mov {out}, gs:[{off}]",
+        off = in(reg) offset_of!(Context, cpu),
+        out = out(reg) cpu,
         options(preserves_flags, nostack)
     );
 
-    // Combine EDX and EAX.
-    let edx = edx as usize;
-    let eax = eax as usize;
-
-    ((edx << 32) | eax) as *const Context
+    cpu
 }

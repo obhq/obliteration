@@ -5,6 +5,7 @@ use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::alloc::Layout;
+use core::num::NonZero;
 use core::sync::atomic::{AtomicU64, Ordering};
 
 /// Stage 2 kernel heap.
@@ -20,7 +21,7 @@ impl Stage2 {
     const KMEM_ZSHIFT: usize = 4;
     const KMEM_ZBASE: usize = 16;
     const KMEM_ZMASK: usize = Self::KMEM_ZBASE - 1;
-    const KMEM_ZSIZE: usize = PAGE_SIZE >> Self::KMEM_ZSHIFT;
+    const KMEM_ZSIZE: usize = PAGE_SIZE.get() >> Self::KMEM_ZSHIFT;
 
     /// See `kmeminit` on the PS4 for a reference.
     pub fn new() -> Self {
@@ -38,7 +39,7 @@ impl Stage2 {
 
             for i in Self::KMEM_ZSHIFT.. {
                 // Stop if size larger than page size.
-                let size = 1usize << i;
+                let size = NonZero::new(1usize << i).unwrap();
 
                 if size > PAGE_SIZE {
                     break;
@@ -47,7 +48,7 @@ impl Stage2 {
                 // Create zone.
                 let zone = Arc::new(UmaZone::new(size.to_string().into(), size, align - 1));
 
-                while last <= size {
+                while last <= size.get() {
                     zones.push(zone.clone());
                     last += Self::KMEM_ZBASE;
                 }
@@ -83,7 +84,7 @@ impl Stage2 {
         // Determine how to allocate.
         let size = layout.size();
 
-        if size <= PAGE_SIZE {
+        if size <= PAGE_SIZE.get() {
             // Get zone to allocate from.
             let align = layout.align().trailing_zeros() as usize;
             let size = if (size & Self::KMEM_ZMASK) != 0 {
@@ -100,7 +101,7 @@ impl Stage2 {
             // Update stats.
             let cx = Context::pin();
             let stats = &self.stats[cx.cpu()];
-            let size = if mem.is_null() { 0 } else { zone.size() };
+            let size = if mem.is_null() { 0 } else { zone.size().get() };
 
             if size != 0 {
                 stats

@@ -56,6 +56,7 @@ impl Drop for KernelHeap {
 }
 
 unsafe impl GlobalAlloc for KernelHeap {
+    #[inline(never)]
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         // SAFETY: GlobalAlloc::alloc required layout to be non-zero.
         self.stage2
@@ -65,6 +66,7 @@ unsafe impl GlobalAlloc for KernelHeap {
             .unwrap_or_else(|| self.stage1.alloc(layout))
     }
 
+    #[inline(never)]
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         if self.stage1.is_owner(ptr) {
             // SAFETY: GlobalAlloc::dealloc required ptr to be the same one that returned from our
