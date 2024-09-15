@@ -3,9 +3,8 @@
 
 use crate::context::Context;
 use crate::malloc::KernelHeap;
-use crate::proc::Thread;
+use crate::proc::{ProcMgr, Thread};
 use alloc::sync::Arc;
-use core::arch::asm;
 use core::mem::zeroed;
 use core::panic::PanicInfo;
 use obconf::{BootEnv, Config};
@@ -37,7 +36,7 @@ extern crate alloc;
 #[allow(dead_code)]
 #[cfg_attr(target_os = "none", no_mangle)]
 extern "C" fn _start(env: &'static BootEnv, conf: &'static Config) -> ! {
-    // SAFETY: This is safe because we called it as the first thing here.
+    // SAFETY: This function has a lot of restrictions. See Context documentation for more details.
     unsafe { crate::config::setup(env, conf) };
 
     info!("Starting Obliteration Kernel.");
@@ -45,33 +44,36 @@ extern "C" fn _start(env: &'static BootEnv, conf: &'static Config) -> ! {
     // Setup thread0 to represent this thread.
     let thread0 = unsafe { Thread::new_bare() };
 
-    // Setup CPU context. We use a different mechanism here. The PS4 put all of pcpu at a global
+    // Initialize foundations.
+    let pmgr = ProcMgr::new();
+
+    // Activate CPU context. We use a different mechanism here. The PS4 put all of pcpu at a global
     // level but we put it on each CPU stack instead.
     let thread0 = Arc::new(thread0);
-    let mut cx = Context::new(0, thread0);
+    let mut cx = unsafe { Context::new(0, thread0, pmgr.clone()) };
 
-    // SAFETY: We are in the main CPU entry point and we move all the remaining code after this into
-    // a dedicated no-return function.
     unsafe { cx.activate() };
 
-    main();
+    main(pmgr);
 }
 
-fn main() -> ! {
+fn main(pmgr: Arc<ProcMgr>) -> ! {
     // Activate stage 2 heap.
     info!("Activating stage 2 heap.");
 
     unsafe { KERNEL_HEAP.activate_stage2() };
 
+    // See scheduler() function on the PS4 for a reference.
+    // TODO: Subscribe to "system_suspend_phase2_pre_sync" and "system_resume_phase2" event.
     loop {
-        #[cfg(target_arch = "x86_64")]
-        unsafe {
-            asm!("hlt")
-        };
-        #[cfg(target_arch = "aarch64")]
-        unsafe {
-            asm!("wfi")
-        };
+        // TODO: Implement a call to vm_page_count_min().
+        let procs = pmgr.procs();
+
+        if procs.len() == 0 {
+            todo!();
+        }
+
+        todo!();
     }
 }
 
