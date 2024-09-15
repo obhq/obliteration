@@ -1,4 +1,4 @@
-use crate::proc::Thread;
+use crate::proc::{ProcMgr, Thread};
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicPtr, Ordering};
 
@@ -21,19 +21,35 @@ mod local;
 /// functions that require this context as `unsafe` nor make it check for the context because it
 /// will be (almost) all of it. So we impose this requirement on a function that setup a CPU
 /// instead.
+///
+/// Beware for any type that implement [`Drop`] because it may access the CPU context. For maximum
+/// safety the CPU setup function **must not cause any value of the kernel type to drop before
+/// context is activated**. It is safe to drop values of Rust core type (e.g. `String`) **only on a
+/// main CPU** because the only kernel functions it can call into is either stage 1 allocator or
+/// panic handler, both of them does not require a CPU context.
+#[allow(dead_code)] // All fields accessed by inline assembly.
 pub struct Context {
     cpu: usize,                // pc_cpuid
     thread: AtomicPtr<Thread>, // pc_curthread
+    pmgr: *const ProcMgr,
 }
 
 impl Context {
+    /// Once this function return you should call [`Self::activate()`] as soon as possible. The
+    /// returned value cannot be dropped otherwise it will be panic.
+    ///
     /// See `pcpu_init` on the PS4 for a reference.
-    pub fn new(cpu: usize, td: Arc<Thread>) -> Self {
+    ///
+    /// # Safety
+    /// - `cpu` must be unique and valid.
+    /// - `pmgr` must be the same one for all context.
+    pub unsafe fn new(cpu: usize, td: Arc<Thread>, pmgr: Arc<ProcMgr>) -> Self {
         // This function is not allowed to access the activated context due to it can be called
         // without the activation of the other context.
         Self {
             cpu,
             thread: AtomicPtr::new(Arc::into_raw(td).cast_mut()),
+            pmgr: Arc::into_raw(pmgr),
         }
     }
 
@@ -80,9 +96,7 @@ impl Context {
 
 impl Drop for Context {
     fn drop(&mut self) {
-        // This function is not allowed to access the activated context due to it can be called
-        // before context activation.
-        unsafe { drop(Arc::from_raw(self.thread.load(Ordering::Relaxed))) };
+        panic!("dropping Context can cause a bug so it is not supported");
     }
 }
 

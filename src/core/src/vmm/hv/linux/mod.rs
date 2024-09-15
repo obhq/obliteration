@@ -10,7 +10,6 @@ use crate::vmm::VmmError;
 use libc::{mmap, open, MAP_FAILED, MAP_PRIVATE, O_RDWR, PROT_READ, PROT_WRITE};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::ptr::null_mut;
-use std::sync::Arc;
 use thiserror::Error;
 
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
