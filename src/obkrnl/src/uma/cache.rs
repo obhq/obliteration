@@ -7,7 +7,7 @@ pub struct UmaCache {
 }
 
 impl UmaCache {
-    pub fn alloc(&self) -> Option<&UmaBucket> {
-        self.alloc.as_ref()
+    pub fn alloc_mut(&mut self) -> Option<&mut UmaBucket> {
+        self.alloc.as_mut()
     }
 }

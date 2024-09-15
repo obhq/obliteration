@@ -1,4 +1,4 @@
-use core::sync::atomic::AtomicU32;
+use core::sync::atomic::{AtomicU16, AtomicU32};
 
 /// Implementation of `thread` structure.
 ///
@@ -10,6 +10,7 @@ use core::sync::atomic::AtomicU32;
 pub struct Thread {
     critical_sections: AtomicU32, // td_critnest
     active_interrupts: usize,     // td_intr_nesting_level
+    active_mutexes: AtomicU16,    // td_locks
 }
 
 impl Thread {
@@ -18,11 +19,15 @@ impl Thread {
     /// responsibility to configure the thread after this so it have a proper states and trigger
     /// necessary events.
     pub unsafe fn new_bare() -> Self {
+        // This function is not allowed to access the CPU context due to it can be called before the
+        // context has been activated.
+        //
         // td_critnest on the PS4 started with 1 but this does not work in our case because we use
         // RAII to increase and decrease it.
         Self {
             critical_sections: AtomicU32::new(0),
             active_interrupts: 0,
+            active_mutexes: AtomicU16::new(0),
         }
     }
 
@@ -37,5 +42,9 @@ impl Thread {
 
     pub fn active_interrupts(&self) -> usize {
         self.active_interrupts
+    }
+
+    pub fn active_mutexes(&self) -> &AtomicU16 {
+        &self.active_mutexes
     }
 }

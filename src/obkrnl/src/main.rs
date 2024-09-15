@@ -14,6 +14,7 @@ mod config;
 mod console;
 mod context;
 mod imgfmt;
+mod lock;
 mod malloc;
 mod panic;
 mod proc;
@@ -79,7 +80,8 @@ fn main() -> ! {
 #[allow(dead_code)]
 #[cfg_attr(target_os = "none", panic_handler)]
 fn panic(i: &PanicInfo) -> ! {
-    // Get location.
+    // This function is not allowed to access the CPU context due to it can be called before the
+    // context has been activated.
     let (file, line) = match i.location() {
         Some(v) => (v.file(), v.line()),
         None => ("unknown", 0),

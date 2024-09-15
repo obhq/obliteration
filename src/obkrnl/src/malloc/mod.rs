@@ -47,6 +47,8 @@ impl KernelHeap {
 
 impl Drop for KernelHeap {
     fn drop(&mut self) {
+        // If stage 2 has not activated yet then this function is not allowed to access the CPU
+        // context due to it can be called before the context has been activated.
         let stage2 = self.stage2.load(Ordering::Acquire);
 
         if !stage2.is_null() {
@@ -58,6 +60,8 @@ impl Drop for KernelHeap {
 unsafe impl GlobalAlloc for KernelHeap {
     #[inline(never)]
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        // If stage 2 has not activated yet then this function is not allowed to access the CPU
+        // context due to it can be called before the context has been activated.
         // SAFETY: GlobalAlloc::alloc required layout to be non-zero.
         self.stage2
             .load(Ordering::Acquire)
@@ -68,6 +72,8 @@ unsafe impl GlobalAlloc for KernelHeap {
 
     #[inline(never)]
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        // If stage 2 has not activated yet then this function is not allowed to access the CPU
+        // context due to it can be called before the context has been activated.
         if self.stage1.is_owner(ptr) {
             // SAFETY: GlobalAlloc::dealloc required ptr to be the same one that returned from our
             // GlobalAlloc::alloc and layout to be the same one that passed to it.

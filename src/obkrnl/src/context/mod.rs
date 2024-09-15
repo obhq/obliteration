@@ -15,6 +15,12 @@ mod local;
 /// not safe to have a temporary a pointer or reference to this struct or its field because the CPU
 /// might get interupted, which mean it is possible for the next instruction to get executed on
 /// a different CPU if the interupt cause the CPU to switch the task.
+///
+/// The activation of this struct is a minimum requirements for a new CPU to call most of the other
+/// functions. The new CPU should call [`Context::activate`] as soon as possible. We don't make the
+/// functions that require this context as `unsafe` nor make it check for the context because it
+/// will be (almost) all of it. So we impose this requirement on a function that setup a CPU
+/// instead.
 pub struct Context {
     cpu: usize,                // pc_cpuid
     thread: AtomicPtr<Thread>, // pc_curthread
@@ -23,6 +29,8 @@ pub struct Context {
 impl Context {
     /// See `pcpu_init` on the PS4 for a reference.
     pub fn new(cpu: usize, td: Arc<Thread>) -> Self {
+        // This function is not allowed to access the activated context due to it can be called
+        // without the activation of the other context.
         Self {
             cpu,
             thread: AtomicPtr::new(Arc::into_raw(td).cast_mut()),
@@ -50,7 +58,6 @@ impl Context {
     /// dropped (but it is allowed to sleep).
     ///
     /// See `critical_enter` and `critical_exit` on the PS4 for a reference.
-    #[inline(never)]
     pub fn pin() -> PinnedContext {
         // Relax ordering should be enough here since this increment will be checked by the same CPU
         // when an interupt happens.
@@ -73,6 +80,8 @@ impl Context {
 
 impl Drop for Context {
     fn drop(&mut self) {
+        // This function is not allowed to access the activated context due to it can be called
+        // before context activation.
         unsafe { drop(Arc::from_raw(self.thread.load(Ordering::Relaxed))) };
     }
 }

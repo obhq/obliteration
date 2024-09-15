@@ -11,6 +11,8 @@ mod arch;
 /// # Interupt safety
 /// This function is interupt safe.
 pub fn boot_env() -> &'static BootEnv {
+    // This function is not allowed to access the CPU context due to it can be called before the
+    // context has been activated.
     // SAFETY: This is safe because the setup() requirements.
     unsafe { &*BOOT_ENV }
 }
@@ -18,6 +20,8 @@ pub fn boot_env() -> &'static BootEnv {
 /// # Interupt safety
 /// This function is interupt safe.
 pub fn config() -> &'static Config {
+    // This function is not allowed to access the CPU context due to it can be called before the
+    // context has been activated.
     // SAFETY: This is safe because the setup() requirements.
     unsafe { &*CONFIG }
 }
@@ -26,6 +30,7 @@ pub fn config() -> &'static Config {
 /// This function must be called immediately in the kernel entry point. After that it must never
 /// be called again.
 pub unsafe fn setup(env: &'static BootEnv, conf: &'static Config) {
+    // The requirement of this function imply that it is not allowed to access the CPU context.
     BOOT_ENV = env;
     CONFIG = conf;
 }
