@@ -4,6 +4,7 @@
 use crate::context::Context;
 use crate::malloc::KernelHeap;
 use crate::proc::{ProcMgr, Thread};
+use crate::sched::sleep;
 use alloc::sync::Arc;
 use core::mem::zeroed;
 use core::panic::PanicInfo;
@@ -17,6 +18,7 @@ mod lock;
 mod malloc;
 mod panic;
 mod proc;
+mod sched;
 mod uma;
 
 extern crate alloc;
@@ -63,14 +65,18 @@ fn main(pmgr: Arc<ProcMgr>) -> ! {
 
     unsafe { KERNEL_HEAP.activate_stage2() };
 
-    // See scheduler() function on the PS4 for a reference.
+    // See scheduler() function on the PS4 for a reference. Actually it should be called swapper
+    // instead.
     // TODO: Subscribe to "system_suspend_phase2_pre_sync" and "system_resume_phase2" event.
     loop {
         // TODO: Implement a call to vm_page_count_min().
         let procs = pmgr.procs();
 
         if procs.len() == 0 {
-            todo!();
+            // TODO: The PS4 check for some value for non-zero but it seems like that value always
+            // zero.
+            sleep();
+            continue;
         }
 
         todo!();

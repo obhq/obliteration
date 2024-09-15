@@ -1,3 +1,4 @@
+use super::MTX_UNOWNED;
 use crate::context::Context;
 use alloc::rc::Rc;
 use alloc::sync::Arc;
@@ -14,15 +15,13 @@ pub struct Mutex<T> {
 }
 
 impl<T> Mutex<T> {
-    const OWNER_NONE: usize = 4; // MTX_UNOWNED
-
     /// See `mtx_init` on the PS4 for a reference.
     pub fn new(data: T) -> Self {
         // This function is not allowed to access the CPU context due to it can be called before the
         // context has been activated.
         Self {
             data: UnsafeCell::new(data),
-            owning: AtomicUsize::new(Self::OWNER_NONE),
+            owning: AtomicUsize::new(MTX_UNOWNED),
             phantom: PhantomData,
         }
     }
@@ -40,7 +39,7 @@ impl<T> Mutex<T> {
         if self
             .owning
             .compare_exchange(
-                Self::OWNER_NONE,
+                MTX_UNOWNED,
                 Arc::as_ptr(&td) as usize,
                 Ordering::Acquire,
                 Ordering::Relaxed,
@@ -72,7 +71,7 @@ impl<T> Mutex<T> {
         if lock
             .compare_exchange(
                 Arc::as_ptr(&td) as usize,
-                Self::OWNER_NONE,
+                MTX_UNOWNED,
                 Ordering::Release,
                 Ordering::Relaxed,
             )
