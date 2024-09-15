@@ -1,3 +1,4 @@
+use crate::lock::{Gutex, GutexGroup, GutexWriteGuard};
 use core::sync::atomic::{AtomicU16, AtomicU32};
 
 /// Implementation of `thread` structure.
@@ -11,6 +12,7 @@ pub struct Thread {
     critical_sections: AtomicU32, // td_critnest
     active_interrupts: usize,     // td_intr_nesting_level
     active_mutexes: AtomicU16,    // td_locks
+    sleeping: Gutex<usize>,       // td_wchan
 }
 
 impl Thread {
@@ -24,10 +26,13 @@ impl Thread {
         //
         // td_critnest on the PS4 started with 1 but this does not work in our case because we use
         // RAII to increase and decrease it.
+        let gg = GutexGroup::new();
+
         Self {
             critical_sections: AtomicU32::new(0),
             active_interrupts: 0,
             active_mutexes: AtomicU16::new(0),
+            sleeping: gg.spawn(0),
         }
     }
 
@@ -46,5 +51,10 @@ impl Thread {
 
     pub fn active_mutexes(&self) -> &AtomicU16 {
         &self.active_mutexes
+    }
+
+    /// Sleeping address. Zero if this thread is not in a sleep queue.
+    pub fn sleeping_mut(&self) -> GutexWriteGuard<usize> {
+        self.sleeping.write()
     }
 }
