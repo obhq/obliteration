@@ -4,6 +4,10 @@ use alloc::vec::Vec;
 use core::ops::Deref;
 
 /// Encapsulates per-CPU value.
+///
+/// In theory you can use `RefCell` to have a mutable access to the value but it is prone to panic
+/// because the CPU is allowed to switch to the other thread, which will panic if the new thread
+/// attemp to lock the same `RefCell`.
 pub struct CpuLocal<T>(Vec<T>);
 
 impl<T> CpuLocal<T> {

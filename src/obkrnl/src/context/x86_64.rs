@@ -43,7 +43,7 @@ pub unsafe fn thread() -> *const Thread {
 
     asm!(
         "mov {out}, gs:[{off}]",
-        off = in(reg) offset_of!(Context, thread),
+        off = in(reg) offset_of!(Context, thread), // TODO: Use const from Rust 1.82.
         out = out(reg) td,
         options(pure, readonly, preserves_flags, nostack)
     );
@@ -52,13 +52,13 @@ pub unsafe fn thread() -> *const Thread {
 }
 
 pub unsafe fn cpu() -> usize {
-    // SAFETY: This load load need to synchronize with a critical section. That mean we cannot use
+    // SAFETY: This load need to synchronize with a critical section. That mean we cannot use
     // "pure" + "readonly" options here.
     let mut cpu;
 
     asm!(
         "mov {out}, gs:[{off}]",
-        off = in(reg) offset_of!(Context, cpu),
+        off = in(reg) offset_of!(Context, cpu), // TODO: Use const from Rust 1.82.
         out = out(reg) cpu,
         options(preserves_flags, nostack)
     );

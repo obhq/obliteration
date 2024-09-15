@@ -1,5 +1,6 @@
 use self::cache::UmaCache;
 use crate::context::{Context, CpuLocal};
+use crate::lock::Mutex;
 use alloc::borrow::Cow;
 use core::num::NonZero;
 
@@ -8,8 +9,8 @@ mod cache;
 
 /// Implementation of `uma_zone` structure.
 pub struct UmaZone {
-    size: NonZero<usize>,       // uz_size
-    caches: CpuLocal<UmaCache>, // uz_cpu
+    size: NonZero<usize>,              // uz_size
+    caches: CpuLocal<Mutex<UmaCache>>, // uz_cpu
 }
 
 impl UmaZone {
@@ -19,7 +20,7 @@ impl UmaZone {
         // basically an implementation of zone_ctor.
         Self {
             size,
-            caches: CpuLocal::new(|_| UmaCache::default()),
+            caches: CpuLocal::new(|_| Mutex::new(UmaCache::default())),
         }
     }
 
@@ -37,8 +38,9 @@ impl UmaZone {
         }
 
         // Try to allocate from per-CPU cache.
-        let cache = self.caches.lock();
-        let bucket = cache.alloc();
+        let pin = self.caches.lock();
+        let mut cache = pin.lock();
+        let bucket = cache.alloc_mut();
 
         while let Some(bucket) = bucket {
             if bucket.len() != 0 {
@@ -47,6 +49,9 @@ impl UmaZone {
 
             todo!()
         }
+
+        drop(cache);
+        drop(pin);
 
         todo!()
     }

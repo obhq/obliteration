@@ -4,6 +4,9 @@ use talc::{ClaimOnOom, Span, Talc};
 
 /// Stage 1 kernel heap.
 ///
+/// This stage is not allowed to access the CPU context due to it can be used before the context has
+/// been activated.
+///
 /// This stage allocate a memory from a static buffer (AKA arena).
 pub struct Stage1 {
     engine: spin::Mutex<Talc<ClaimOnOom>>,
@@ -49,3 +52,5 @@ impl Stage1 {
         self.engine.lock().free(NonNull::new_unchecked(ptr), layout);
     }
 }
+
+unsafe impl Sync for Stage1 {}
