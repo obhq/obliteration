@@ -2,8 +2,6 @@
 #include "cpu_settings.hpp"
 #include "display_settings.hpp"
 #include "game_models.hpp"
-#include "game_settings.hpp"
-#include "game_settings_dialog.hpp"
 #include "profile_models.hpp"
 #include "resources.hpp"
 
@@ -170,10 +168,8 @@ void LaunchSettings::requestGamesContextMenu(const QPoint &pos)
     // Setup menu.
     QMenu menu(this);
     QAction openFolder("Open &Folder", this);
-    QAction settings("&Settings", this);
 
     menu.addAction(&openFolder);
-    menu.addAction(&settings);
 
     // Show menu.
     auto selected = menu.exec(m_games->viewport()->mapToGlobal(pos));
@@ -184,12 +180,6 @@ void LaunchSettings::requestGamesContextMenu(const QPoint &pos)
 
     if (selected == &openFolder) {
         QDesktopServices::openUrl(QUrl::fromLocalFile(game->directory()));
-    } else if (selected == &settings) {
-        // Load settings then show a dialog to edit.
-        auto settings = GameSettings::load(game);
-        GameSettingsDialog dialog(game, settings.get(), this);
-
-        dialog.exec();
     }
 }
 
