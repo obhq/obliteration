@@ -26,6 +26,133 @@ pub struct Pstate {
     __: u32,
 }
 
+/// Represents a value of `SCTLR_EL1`.
+#[bitfield(u64)]
+pub struct Sctlr {
+    pub m: bool,
+    pub a: bool,
+    pub c: bool,
+    pub sa: bool,
+    pub sa0: bool,
+    pub cp15ben: bool,
+    pub naa: bool,
+    pub itd: bool,
+    pub sed: bool,
+    pub uma: bool,
+    pub enrctx: bool,
+    pub eos: bool,
+    pub i: bool,
+    pub endb: bool,
+    pub dze: bool,
+    pub uct: bool,
+    pub ntwi: bool,
+    __: bool,
+    pub ntwe: bool,
+    pub wxn: bool,
+    pub tscxt: bool,
+    pub iesb: bool,
+    pub eis: bool,
+    pub span: bool,
+    pub e0e: bool,
+    pub ee: bool,
+    pub uci: bool,
+    pub enda: bool,
+    pub ntlsmd: bool,
+    pub lsmaoe: bool,
+    pub enib: bool,
+    pub enia: bool,
+    pub cmow: bool,
+    pub mscen: bool,
+    __: bool,
+    pub bt0: bool,
+    pub bt1: bool,
+    pub itfsb: bool,
+    #[bits(2)]
+    pub tcf0: u8,
+    #[bits(2)]
+    pub tcf: u8,
+    pub ata0: bool,
+    pub ata: bool,
+    pub dssbs: bool,
+    pub tweden: bool,
+    #[bits(4)]
+    pub twedel: u8,
+    pub tmt0: bool,
+    pub tmt: bool,
+    pub tme0: bool,
+    pub tme: bool,
+    pub enasr: bool,
+    pub enas0: bool,
+    pub enals: bool,
+    pub epan: bool,
+    pub tcso0: bool,
+    pub tcso: bool,
+    pub entp2: bool,
+    pub nmi: bool,
+    pub spintmask: bool,
+    pub tidcp: bool,
+}
+
+/// Represents a value of `TCR_EL1`.
+#[bitfield(u64)]
+pub struct Tcr {
+    #[bits(6)]
+    pub t0sz: u8,
+    __: bool,
+    pub epd0: bool,
+    #[bits(2)]
+    pub irgn0: u8,
+    #[bits(2)]
+    pub orgn0: u8,
+    #[bits(2)]
+    pub sh0: u8,
+    #[bits(2)]
+    pub tg0: u8,
+    #[bits(6)]
+    pub t1sz: u8,
+    pub a1: bool,
+    pub epd1: bool,
+    #[bits(2)]
+    pub irgn1: u8,
+    #[bits(2)]
+    pub orgn1: u8,
+    #[bits(2)]
+    pub sh1: u8,
+    #[bits(2)]
+    pub tg1: u8,
+    #[bits(3)]
+    pub ips: u8,
+    __: bool,
+    pub asid: bool,
+    pub tbi0: bool,
+    pub tbi1: bool,
+    pub ha: bool,
+    pub hd: bool,
+    pub hpd0: bool,
+    pub hpd1: bool,
+    pub hwu059: bool,
+    pub hwu060: bool,
+    pub hwu061: bool,
+    pub hwu062: bool,
+    pub hwu159: bool,
+    pub hwu160: bool,
+    pub hwu161: bool,
+    pub hwu162: bool,
+    pub tbid0: bool,
+    pub tbid1: bool,
+    pub nfd0: bool,
+    pub nfd1: bool,
+    pub e0pd0: bool,
+    pub e0pd1: bool,
+    pub tcma0: bool,
+    pub tcma1: bool,
+    pub ds: bool,
+    pub mtx0: bool,
+    pub mtx1: bool,
+    __: bool,
+    __: bool,
+}
+
 /// Represents a value of `ID_AA64MMFR0_EL1`.
 ///
 /// All documentation copied from Arm Architecture Reference Manual for A-profile architecture.

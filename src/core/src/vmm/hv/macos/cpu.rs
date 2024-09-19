@@ -131,9 +131,9 @@ impl<'a> Cpu for HfCpu<'a> {
         Ok(HfStates {
             cpu: self,
             pstate: State::None,
-            sctlr_el1: State::None,
+            sctlr: State::None,
             mair_el1: State::None,
-            tcr_el1: State::None,
+            tcr: State::None,
             ttbr0_el1: State::None,
             ttbr1_el1: State::None,
             sp_el1: State::None,
@@ -214,11 +214,11 @@ pub struct HfStates<'a, 'b> {
     #[cfg(target_arch = "aarch64")]
     pstate: State<u64>,
     #[cfg(target_arch = "aarch64")]
-    sctlr_el1: State<u64>,
+    sctlr: State<u64>,
     #[cfg(target_arch = "aarch64")]
     mair_el1: State<u64>,
     #[cfg(target_arch = "aarch64")]
-    tcr_el1: State<u64>,
+    tcr: State<u64>,
     #[cfg(target_arch = "aarch64")]
     ttbr0_el1: State<u64>,
     #[cfg(target_arch = "aarch64")]
@@ -312,11 +312,8 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
     }
 
     #[cfg(target_arch = "aarch64")]
-    fn set_sctlr_el1(&mut self, m: bool) {
-        // All hard-coded values came from https://github.com/AsahiLinux/m1n1/issues/97/
-        let m: u64 = m.into();
-
-        self.sctlr_el1 = State::Dirty(0x30901084 | m);
+    fn set_sctlr(&mut self, v: crate::vmm::hv::Sctlr) {
+        self.sctlr = State::Dirty(v.into_bits());
     }
 
     #[cfg(target_arch = "aarch64")]
@@ -325,42 +322,8 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
     }
 
     #[cfg(target_arch = "aarch64")]
-    fn set_tcr_el1(
-        &mut self,
-        tbi1: bool,
-        tbi0: bool,
-        ips: u8,
-        tg1: u8,
-        a1: bool,
-        t1sz: u8,
-        tg0: u8,
-        t0sz: u8,
-    ) {
-        let tbi1: u64 = tbi1.into();
-        let tbi0: u64 = tbi0.into();
-        let ips: u64 = ips.into();
-        let tg1: u64 = tg1.into();
-        let a1: u64 = a1.into();
-        let t1sz: u64 = t1sz.into();
-        let tg0: u64 = tg0.into();
-        let t0sz: u64 = t0sz.into();
-
-        assert_eq!(ips & 0b11111000, 0);
-        assert_eq!(tg1 & 0b11111100, 0);
-        assert_eq!(t1sz & 0b11000000, 0);
-        assert_eq!(tg0 & 0b11111100, 0);
-        assert_eq!(t0sz & 0b11000000, 0);
-
-        self.tcr_el1 = State::Dirty(
-            tbi1 << 38
-                | tbi0 << 37
-                | ips << 32
-                | tg1 << 30
-                | a1 << 22
-                | t1sz << 16
-                | tg0 << 14
-                | t0sz,
-        );
+    fn set_tcr(&mut self, v: crate::vmm::hv::Tcr) {
+        self.tcr = State::Dirty(v.into_bits());
     }
 
     #[cfg(target_arch = "aarch64")]
@@ -470,12 +433,12 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
             set_sys(HV_SYS_REG_TTBR1_EL1, v).map_err(StatesError::SetTtbr1El1Failed)?;
         }
 
-        if let State::Dirty(v) = self.tcr_el1 {
-            set_sys(HV_SYS_REG_TCR_EL1, v).map_err(StatesError::SetTcrEl1Failed)?;
+        if let State::Dirty(v) = self.tcr {
+            set_sys(HV_SYS_REG_TCR_EL1, v).map_err(StatesError::SetTcrFailed)?;
         }
 
-        if let State::Dirty(v) = self.sctlr_el1 {
-            set_sys(HV_SYS_REG_SCTLR_EL1, v).map_err(StatesError::SetSctlrEl1Failed)?;
+        if let State::Dirty(v) = self.sctlr {
+            set_sys(HV_SYS_REG_SCTLR_EL1, v).map_err(StatesError::SetSctlrFailed)?;
         }
 
         if let State::Dirty(v) = self.sp_el1 {
@@ -545,11 +508,11 @@ pub enum StatesError {
 
     #[cfg(target_arch = "aarch64")]
     #[error("couldn't set SCTLR_EL1")]
-    SetSctlrEl1Failed(NonZero<hv_sys::hv_return_t>),
+    SetSctlrFailed(NonZero<hv_sys::hv_return_t>),
 
     #[cfg(target_arch = "aarch64")]
     #[error("couldn't set TCR_EL1")]
-    SetTcrEl1Failed(NonZero<hv_sys::hv_return_t>),
+    SetTcrFailed(NonZero<hv_sys::hv_return_t>),
 
     #[cfg(target_arch = "aarch64")]
     #[error("couldn't set MAIR_EL1")]

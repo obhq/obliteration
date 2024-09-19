@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::{Ram, RamError};
-use crate::vmm::hv::Hypervisor;
+use crate::vmm::hv::{CpuFeats, Hypervisor};
 use crate::vmm::hw::DeviceTree;
 use crate::vmm::kernel::ProgramHeader;
 use obconf::{BootEnv, Config};
@@ -175,6 +175,7 @@ impl<'a> RamBuilder<'a> {
 impl<'a> RamBuilder<'a> {
     pub fn build<H: Hypervisor>(
         mut self,
+        _: &CpuFeats,
         page_size: NonZero<usize>,
         devices: &DeviceTree<H>,
         dynamic: ProgramHeader,
@@ -360,24 +361,29 @@ impl<'a> RamBuilder<'a> {
 
     pub fn build<H: Hypervisor>(
         mut self,
+        feats: &CpuFeats,
         page_size: NonZero<usize>,
         devices: &DeviceTree<H>,
         dynamic: ProgramHeader,
     ) -> Result<RamMap, RamBuilderError> {
         // Setup page tables.
         let map = match page_size.get() {
-            0x4000 => self.build_16k_page_tables(devices)?,
+            0x4000 => self.build_16k_page_tables(feats, devices)?,
             _ => todo!(),
         };
 
         // Relocate the kernel to virtual address.
         unsafe { self.relocate_kernel(&map, dynamic, 1027)? };
 
+        // Flush modified memory.
+        std::sync::atomic::fence(std::sync::atomic::Ordering::Release);
+
         Ok(map)
     }
 
     fn build_16k_page_tables<H: Hypervisor>(
         &mut self,
+        feats: &CpuFeats,
         devices: &DeviceTree<H>,
     ) -> Result<RamMap, RamBuilderError> {
         // Allocate page table level 0.
@@ -395,7 +401,7 @@ impl<'a> RamBuilder<'a> {
 
         for (addr, dev) in devices.map() {
             let len = dev.len().get();
-            self.setup_16k_page_tables(l0t, addr, addr, len, Self::MA_DEV_NG_NR_NE)?;
+            self.setup_16k_page_tables(feats, l0t, addr, addr, len, Self::MA_DEV_NG_NR_NE)?;
             dev_end = addr + len;
         }
 
@@ -411,7 +417,7 @@ impl<'a> RamBuilder<'a> {
 
         assert!(vaddr >= dev_end);
 
-        self.setup_16k_page_tables(l0t, vaddr, kern_paddr, kern_len, Self::MA_NOR)?;
+        self.setup_16k_page_tables(feats, l0t, vaddr, kern_paddr, kern_len, Self::MA_NOR)?;
 
         vaddr += kern_len;
 
@@ -423,7 +429,7 @@ impl<'a> RamBuilder<'a> {
             .map(|v| (v.start, v.end - v.start))
             .unwrap();
 
-        self.setup_16k_page_tables(l0t, vaddr, paddr, stack_len, Self::MA_NOR)?;
+        self.setup_16k_page_tables(feats, l0t, vaddr, paddr, stack_len, Self::MA_NOR)?;
 
         vaddr += stack_len;
 
@@ -431,8 +437,16 @@ impl<'a> RamBuilder<'a> {
         let args = self.args.take().unwrap();
         let ram = args.ram;
         let env_vaddr = vaddr + args.env;
+        let conf_vaddr = vaddr + args.conf;
 
-        self.setup_16k_page_tables(l0t, vaddr, ram.start, ram.end - ram.start, Self::MA_NOR)?;
+        self.setup_16k_page_tables(
+            feats,
+            l0t,
+            vaddr,
+            ram.start,
+            ram.end - ram.start,
+            Self::MA_NOR,
+        )?;
 
         Ok(RamMap {
             page_size: unsafe { NonZero::new_unchecked(0x4000) },
@@ -444,12 +458,13 @@ impl<'a> RamBuilder<'a> {
             stack_vaddr,
             stack_len,
             env_vaddr,
-            conf_vaddr: todo!(),
+            conf_vaddr,
         })
     }
 
     fn setup_16k_page_tables(
         &mut self,
+        _: &CpuFeats,
         l0t: &mut [usize; 32],
         vaddr: usize,
         paddr: usize,
@@ -461,12 +476,12 @@ impl<'a> RamBuilder<'a> {
         assert_eq!(len % 0x4000, 0);
         assert_eq!(attr & 0b11111000, 0);
 
-        fn set_page_entry(entry: &mut usize, addr: usize) {
+        fn set_table_descriptor(entry: &mut usize, addr: usize) {
             assert_eq!(addr & 0xFFFF000000003FFF, 0);
 
             *entry = addr;
-            *entry |= 0b01; // Valid.
-            *entry |= 0b10; // Table descriptor/Page descriptor.
+            *entry |= 0b11; // Valid + Table descriptor/Page descriptor
+            *entry |= 1 << 10; // AF
         }
 
         for off in (0..len).step_by(0x4000) {
@@ -479,7 +494,7 @@ impl<'a> RamBuilder<'a> {
                         .alloc_16k_page_table()
                         .map_err(RamBuilderError::AllocPageTableLevel1Failed)?;
 
-                    set_page_entry(&mut l0t[l0o], addr);
+                    set_table_descriptor(&mut l0t[l0o], addr);
 
                     unsafe { &mut *l1t }
                 }
@@ -494,7 +509,7 @@ impl<'a> RamBuilder<'a> {
                         .alloc_16k_page_table()
                         .map_err(RamBuilderError::AllocPageTableLevel2Failed)?;
 
-                    set_page_entry(&mut l1t[l1o], addr);
+                    set_table_descriptor(&mut l1t[l1o], addr);
 
                     unsafe { &mut *l2t }
                 }
@@ -509,7 +524,7 @@ impl<'a> RamBuilder<'a> {
                         .alloc_16k_page_table()
                         .map_err(RamBuilderError::AllocPageTableLevel3Failed)?;
 
-                    set_page_entry(&mut l2t[l2o], addr);
+                    set_table_descriptor(&mut l2t[l2o], addr);
 
                     unsafe { &mut *l3t }
                 }
@@ -519,12 +534,18 @@ impl<'a> RamBuilder<'a> {
             // Set page descriptor.
             let l3o = (addr & 0x1FFC000) >> 14;
             let addr = paddr + off;
+            let mut desc = addr;
 
+            assert_eq!(addr & 0xFFFF000000003FFF, 0);
             assert_eq!(l3t[l3o], 0);
 
-            set_page_entry(&mut l3t[l3o], addr);
+            desc |= 0b11; // Valid descriptor + Page descriptor
+            desc |= attr << 2; // AttrIndx[2:0]
+            desc |= 0b00 << 6; // AP[2:1]
+            desc |= 0b11 << 8; // Inner Shareable
+            desc |= 1 << 10; // AF
 
-            l3t[l3o] |= attr << 2;
+            l3t[l3o] = desc;
         }
 
         Ok(())

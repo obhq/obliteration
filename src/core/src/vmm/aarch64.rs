@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use super::hv::{Cpu, CpuFeats, CpuStates, Pstate};
+use super::hv::{Cpu, CpuFeats, CpuStates, Pstate, Sctlr, Tcr};
 use super::ram::RamMap;
 use super::MainCpuError;
+use std::sync::atomic::Ordering;
 
 pub fn setup_main_cpu(
     cpu: &mut impl Cpu,
@@ -9,6 +10,9 @@ pub fn setup_main_cpu(
     map: RamMap,
     feats: &CpuFeats,
 ) -> Result<(), MainCpuError> {
+    // Acquire the memory modified by RAM builder.
+    std::sync::atomic::fence(Ordering::Acquire);
+
     // Check if CPU support VM page size.
     let mut states = cpu
         .states()
@@ -41,23 +45,37 @@ pub fn setup_main_cpu(
     );
 
     // Enable MMU to enable virtual address and set TCR_EL1.
-    states.set_sctlr_el1(true);
+    states.set_sctlr(
+        Sctlr::new()
+            .with_m(true)
+            .with_c(true)
+            .with_itd(true)
+            .with_i(true)
+            .with_tscxt(true)
+            .with_span(true)
+            .with_ntlsmd(true)
+            .with_lsmaoe(true),
+    );
     states.set_mair_el1(map.memory_attrs);
-    states.set_tcr_el1(
-        true,  // Ignore tob-byte when translate address with TTBR1_EL1.
-        true,  // Ignore top-byte when translate address with TTBR0_EL1.
-        0b101, // 48 bits Intermediate Physical Address.
-        match map.page_size.get() {
-            0x4000 => 0b01, // 16K page for TTBR1_EL1.
-            _ => todo!(),
-        },
-        false, // Use ASID from TTBR0_EL1.
-        16,    // 48-bit virtual addresses for TTBR1_EL1.
-        match map.page_size.get() {
-            0x4000 => 0b10, // 16K page for TTBR0_EL1.
-            _ => todo!(),
-        },
-        16, // 48-bit virtual addresses for TTBR0_EL1.
+    states.set_tcr(
+        Tcr::new()
+            .with_ips(feats.mmfr0.pa_range())
+            .with_tg1(match map.page_size.get() {
+                0x4000 => 0b01, // 16K page for TTBR1_EL1.
+                _ => todo!(),
+            })
+            .with_sh1(0b11)
+            .with_orgn1(0b01)
+            .with_irgn1(0b01)
+            .with_t1sz(16)
+            .with_tg0(match map.page_size.get() {
+                0x4000 => 0b10, // 16K page for TTBR0_EL1.
+                _ => todo!(),
+            })
+            .with_sh0(0b11)
+            .with_orgn0(0b01)
+            .with_irgn0(0b01)
+            .with_t0sz(16),
     );
 
     // Set page table. We need both lower and higher VA here because the virtual devices mapped with
