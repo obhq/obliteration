@@ -95,27 +95,13 @@ pub trait CpuStates {
     fn set_pstate(&mut self, v: Pstate);
 
     #[cfg(target_arch = "aarch64")]
-    fn set_sctlr_el1(&mut self, m: bool);
+    fn set_sctlr(&mut self, v: Sctlr);
 
     #[cfg(target_arch = "aarch64")]
     fn set_mair_el1(&mut self, attrs: u64);
 
-    /// # Panics
-    /// - If `ips` greater than 7.
-    /// - If `tg1` or `tg0` geater than 3.
-    /// - If `t1sz` or `t0sz` larger than 6 bits.
     #[cfg(target_arch = "aarch64")]
-    fn set_tcr_el1(
-        &mut self,
-        tbi1: bool,
-        tbi0: bool,
-        ips: u8,
-        tg1: u8,
-        a1: bool,
-        t1sz: u8,
-        tg0: u8,
-        t0sz: u8,
-    );
+    fn set_tcr(&mut self, v: Tcr);
 
     /// # Panics
     /// If `baddr` has non-zero on bit 0 or 48:64.

@@ -406,7 +406,7 @@ pub unsafe extern "C" fn vmm_run(
     }
 
     // Build RAM.
-    let map = match ram.build(vm_page_size, &devices, dynamic) {
+    let map = match ram.build(&feats, vm_page_size, &devices, dynamic) {
         Ok(v) => v,
         Err(e) => {
             *err = RustError::with_source("couldn't build RAM", e);
