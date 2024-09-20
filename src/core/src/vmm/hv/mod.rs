@@ -122,6 +122,9 @@ pub trait CpuStates {
     #[cfg(target_arch = "aarch64")]
     fn set_x0(&mut self, v: usize);
 
+    #[cfg(target_arch = "aarch64")]
+    fn set_x1(&mut self, v: usize);
+
     fn commit(self) -> Result<(), Self::Err>;
 }
 
