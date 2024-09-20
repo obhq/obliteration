@@ -12,7 +12,9 @@ pub struct CpuFeats {
 }
 
 /// Represents a value of `PSTATE`.
-#[bitfield(u32)]
+///
+/// This has the same structure as `SPSR_EL1` when exception taken from AArch64 state.
+#[bitfield(u64)]
 pub struct Pstate {
     #[bits(4)]
     pub m: u8,
@@ -22,7 +24,28 @@ pub struct Pstate {
     pub i: bool,
     pub a: bool,
     pub d: bool,
-    #[bits(22)]
+    #[bits(2)]
+    pub btype: u8,
+    pub ssbs: bool,
+    pub allint: bool,
+    #[bits(6)]
+    __: u8,
+    pub il: bool,
+    pub ss: bool,
+    pub pan: bool,
+    pub uao: bool,
+    pub dit: bool,
+    pub tco: bool,
+    #[bits(2)]
+    __: u8,
+    pub v: bool,
+    pub c: bool,
+    pub z: bool,
+    pub n: bool,
+    pub pm: bool,
+    pub ppend: bool,
+    pub exlock: bool,
+    #[bits(29)]
     __: u32,
 }
 

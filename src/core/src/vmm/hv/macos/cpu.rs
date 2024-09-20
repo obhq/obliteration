@@ -139,6 +139,7 @@ impl<'a> Cpu for HfCpu<'a> {
             sp_el1: State::None,
             pc: State::None,
             x0: State::None,
+            x1: State::None,
         })
     }
 
@@ -229,6 +230,8 @@ pub struct HfStates<'a, 'b> {
     pc: State<u64>,
     #[cfg(target_arch = "aarch64")]
     x0: State<u64>,
+    #[cfg(target_arch = "aarch64")]
+    x1: State<u64>,
 }
 
 impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
@@ -308,7 +311,7 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
 
     #[cfg(target_arch = "aarch64")]
     fn set_pstate(&mut self, v: crate::vmm::hv::Pstate) {
-        self.pstate = State::Dirty(v.into_bits().into());
+        self.pstate = State::Dirty(v.into_bits());
     }
 
     #[cfg(target_arch = "aarch64")]
@@ -355,6 +358,11 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
         self.x0 = State::Dirty(v.try_into().unwrap());
     }
 
+    #[cfg(target_arch = "aarch64")]
+    fn set_x1(&mut self, v: usize) {
+        self.x1 = State::Dirty(v.try_into().unwrap());
+    }
+
     #[cfg(target_arch = "x86_64")]
     fn commit(self) -> Result<(), Self::Err> {
         if let State::Dirty(v) = self.rip {
@@ -394,7 +402,7 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
     fn commit(self) -> Result<(), Self::Err> {
         use hv_sys::{
             hv_reg_t_HV_REG_CPSR as HV_REG_CPSR, hv_reg_t_HV_REG_PC as HV_REG_PC,
-            hv_reg_t_HV_REG_X0 as HV_REG_X0,
+            hv_reg_t_HV_REG_X0 as HV_REG_X0, hv_reg_t_HV_REG_X1 as HV_REG_X1,
             hv_sys_reg_t_HV_SYS_REG_MAIR_EL1 as HV_SYS_REG_MAIR_EL1,
             hv_sys_reg_t_HV_SYS_REG_SCTLR_EL1 as HV_SYS_REG_SCTLR_EL1,
             hv_sys_reg_t_HV_SYS_REG_SP_EL1 as HV_SYS_REG_SP_EL1,
@@ -452,6 +460,10 @@ impl<'a, 'b> CpuStates for HfStates<'a, 'b> {
 
         if let State::Dirty(v) = self.x0 {
             set_reg(HV_REG_X0, v).map_err(StatesError::SetX0Failed)?;
+        }
+
+        if let State::Dirty(v) = self.x1 {
+            set_reg(HV_REG_X1, v).map_err(StatesError::SetX1Failed)?;
         }
 
         Ok(())
@@ -537,4 +549,8 @@ pub enum StatesError {
     #[cfg(target_arch = "aarch64")]
     #[error("couldn't set X0")]
     SetX0Failed(NonZero<hv_sys::hv_return_t>),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't set X1")]
+    SetX1Failed(NonZero<hv_sys::hv_return_t>),
 }

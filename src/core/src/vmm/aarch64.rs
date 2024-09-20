@@ -32,12 +32,10 @@ pub fn setup_main_cpu(
         return Err(MainCpuError::PhysicalAddressTooSmall);
     }
 
-    // Set PSTATE so the PE run in AArch64 mode. Not sure why we need M here since the document said
-    // it is ignore. See https://gist.github.com/imbushuo/51b09e61ecd7b7ac063853ad65cedf34 where
-    // M = 5 came from.
+    // Set PSTATE.
     states.set_pstate(
         Pstate::new()
-            .with_m(0b101)
+            .with_m(0b0101) // EL1 with SP_EL1 (EL1h).
             .with_f(true)
             .with_i(true)
             .with_a(true)
@@ -85,6 +83,7 @@ pub fn setup_main_cpu(
 
     // Set entry point, its argument and stack pointer.
     states.set_x0(map.env_vaddr);
+    states.set_x1(map.conf_vaddr);
     states.set_sp_el1(map.stack_vaddr + map.stack_len); // Top-down.
     states.set_pc(map.kern_vaddr + entry);
 
