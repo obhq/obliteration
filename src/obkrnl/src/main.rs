@@ -10,6 +10,9 @@ use core::mem::zeroed;
 use core::panic::PanicInfo;
 use obconf::{BootEnv, Config};
 
+#[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
+#[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
+mod arch;
 mod config;
 mod console;
 mod context;
@@ -37,14 +40,16 @@ extern crate alloc;
 /// See PS4 kernel entry point for a reference.
 #[allow(dead_code)]
 #[cfg_attr(target_os = "none", no_mangle)]
-extern "C" fn _start(env: &'static BootEnv, conf: &'static Config) -> ! {
+unsafe extern "C" fn _start(env: &'static BootEnv, conf: &'static Config) -> ! {
     // SAFETY: This function has a lot of restrictions. See Context documentation for more details.
-    unsafe { crate::config::setup(env, conf) };
+    crate::config::setup(env, conf);
 
     info!("Starting Obliteration Kernel.");
 
+    self::arch::setup_main_cpu();
+
     // Setup thread0 to represent this thread.
-    let thread0 = unsafe { Thread::new_bare() };
+    let thread0 = Thread::new_bare();
 
     // Initialize foundations.
     let pmgr = ProcMgr::new();
@@ -52,9 +57,9 @@ extern "C" fn _start(env: &'static BootEnv, conf: &'static Config) -> ! {
     // Activate CPU context. We use a different mechanism here. The PS4 put all of pcpu at a global
     // level but we put it on each CPU stack instead.
     let thread0 = Arc::new(thread0);
-    let mut cx = unsafe { Context::new(0, thread0, pmgr.clone()) };
+    let mut cx = Context::new(0, thread0, pmgr.clone());
 
-    unsafe { cx.activate() };
+    cx.activate();
 
     main(pmgr);
 }

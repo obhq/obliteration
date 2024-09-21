@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 anstyle = { version = "1.0.8", default-features = false }
+bitfield-struct = "0.8.0"
 hashbrown = "0.14.5"
 macros = { path = "../macros" }
 obconf = { path = "../obconf" }
