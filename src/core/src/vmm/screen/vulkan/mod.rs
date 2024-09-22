@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 use self::buffer::VulkanBuffer;
 use self::ffi::{
     create_device, enumerate_device_extension_properties, enumerate_device_layer_properties,
@@ -15,8 +16,8 @@ use self::ffi::{
 };
 use super::{Screen, ScreenBuffer, VmmError};
 use crate::vmm::VmmScreen;
-use ash::vk::Handle;
-use ash::{Instance, InstanceFnV1_0, InstanceFnV1_1, InstanceFnV1_3};
+use ash::vk::{DeviceCreateInfo, DeviceQueueCreateInfo, Handle, QueueFlags};
+use ash::{Device, Instance, InstanceFnV1_0, InstanceFnV1_1, InstanceFnV1_3};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -26,13 +27,13 @@ mod ffi;
 /// Implementation of [`Screen`] using Vulkan.
 pub struct Vulkan {
     buffer: Arc<VulkanBuffer>,
-    instance: Instance,
+    device: Device,
 }
 
 impl Vulkan {
-    pub fn new(screen: *const VmmScreen) -> Result<Self, VmmError> {
+    pub fn new(screen: &VmmScreen) -> Result<Self, VmmError> {
         // Wrap VkInstance.
-        let instance = unsafe { (*screen).vk_instance.try_into().unwrap() };
+        let instance = screen.vk_instance.try_into().unwrap();
         let instance = ash::vk::Instance::from_raw(instance);
         let instance = Instance::from_parts_1_3(
             instance,
@@ -69,9 +70,29 @@ impl Vulkan {
             },
         );
 
+        // Wrap VkPhysicalDevice.
+        let physical = screen.vk_device.try_into().unwrap();
+        let physical = ash::vk::PhysicalDevice::from_raw(physical);
+
+        // Setup VkDeviceQueueCreateInfo.
+        let queue = unsafe { instance.get_physical_device_queue_family_properties(physical) }
+            .iter()
+            .position(|p| p.queue_flags.contains(QueueFlags::GRAPHICS))
+            .unwrap();
+        let queues = [DeviceQueueCreateInfo::default()
+            .queue_family_index(queue.try_into().unwrap())
+            .queue_priorities(&[1.0])];
+
+        // Create logical device.
+        let device = DeviceCreateInfo::default().queue_create_infos(&queues);
+        let device = match unsafe { instance.create_device(physical, &device, None) } {
+            Ok(v) => v,
+            Err(e) => return Err(VmmError::CreateVulkanDeviceFailed(e)),
+        };
+
         Ok(Self {
             buffer: Arc::new(VulkanBuffer::new()),
-            instance,
+            device,
         })
     }
 
@@ -80,6 +101,13 @@ impl Vulkan {
         _: *const ash::vk::AllocationCallbacks<'_>,
     ) {
         unreachable!();
+    }
+}
+
+impl Drop for Vulkan {
+    fn drop(&mut self) {
+        unsafe { self.device.device_wait_idle().unwrap() };
+        unsafe { self.device.destroy_device(None) };
     }
 }
 

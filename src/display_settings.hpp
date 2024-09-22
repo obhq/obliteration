@@ -7,6 +7,9 @@
 #endif
 #include <QWidget>
 
+#ifndef __APPLE__
+class DisplayDevice;
+#endif
 class QComboBox;
 
 class DisplaySettings final : public QWidget {
@@ -19,6 +22,10 @@ public:
     ~DisplaySettings() override;
 
     void setProfile(Profile *p);
+
+#ifndef __APPLE__
+    DisplayDevice *currentDevice() const;
+#endif
 private:
 #ifndef __APPLE__
     QWidget *buildDevice(QList<VkPhysicalDevice> &&vkDevices);
@@ -39,6 +46,7 @@ public:
     DisplayDevice(VkPhysicalDevice handle);
 
     const char *name() const { return m_props.deviceName; }
+    VkPhysicalDevice handle() const { return m_handle; }
 private:
     VkPhysicalDevice m_handle;
     VkPhysicalDeviceProperties m_props;

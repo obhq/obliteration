@@ -415,7 +415,7 @@ pub unsafe extern "C" fn vmm_run(
     };
 
     // Setup screen.
-    let screen = match self::screen::Default::new(screen) {
+    let screen = match self::screen::Default::new(&*screen) {
         Ok(v) => v,
         Err(e) => {
             *err = RustError::with_source("couldn't setup a screen", e);
@@ -609,6 +609,8 @@ pub struct VmmScreen {
     #[cfg(not(target_os = "macos"))]
     pub vk_instance: usize,
     #[cfg(not(target_os = "macos"))]
+    pub vk_device: usize,
+    #[cfg(not(target_os = "macos"))]
     pub vk_surface: usize,
     #[cfg(target_os = "macos")]
     pub view: usize,
@@ -707,6 +709,10 @@ enum VmmError {
     #[cfg(target_os = "linux")]
     #[error("couldn't get the size of vCPU mmap")]
     GetMmapSizeFailed(#[source] std::io::Error),
+
+    #[cfg(not(target_os = "macos"))]
+    #[error("couldn't create Vulkan device")]
+    CreateVulkanDeviceFailed(#[source] ash::vk::Result),
 
     #[cfg(target_os = "windows")]
     #[error("couldn't create WHP partition object ({0:#x})")]

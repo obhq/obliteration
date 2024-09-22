@@ -1,5 +1,6 @@
 #include "main_window.hpp"
 #include "app_data.hpp"
+#include "display_settings.hpp"
 #include "game_models.hpp"
 #include "launch_settings.hpp"
 #include "logs_viewer.hpp"
@@ -396,6 +397,7 @@ void MainWindow::startKernel()
     screen.view = m_screen->winId();
 #else
     screen.vk_instance = reinterpret_cast<size_t>(m_screen->vulkanInstance()->vkInstance());
+    screen.vk_device = reinterpret_cast<size_t>(m_launch->currentDisplayDevice()->handle());
     screen.vk_surface = reinterpret_cast<size_t>(QVulkanInstance::surfaceForWindow(m_screen));
 
     if (!screen.vk_surface) {
