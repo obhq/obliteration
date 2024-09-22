@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 use self::buffer::MetalBuffer;
 use super::{Screen, ScreenBuffer, VmmError};
 use crate::vmm::VmmScreen;
@@ -21,7 +22,7 @@ pub struct Metal {
 }
 
 impl Metal {
-    pub fn new(screen: *const VmmScreen) -> Result<Self, VmmError> {
+    pub fn new(screen: &VmmScreen) -> Result<Self, VmmError> {
         // Get Metal device.
         let device = match Device::system_default() {
             Some(v) => v,
@@ -34,7 +35,7 @@ impl Metal {
         layer.set_device(&device);
 
         // Set view layer.
-        let view = unsafe { (*screen).view as *mut Object };
+        let view = screen.view as *mut Object;
 
         let _: () = unsafe { msg_send![view, setLayer:layer.as_ref()] };
         let _: () = unsafe { msg_send![view, setWantsLayer:YES] };

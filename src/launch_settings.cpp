@@ -65,6 +65,13 @@ Profile *LaunchSettings::currentProfile() const
     return profiles->get(index);
 }
 
+#ifndef __APPLE__
+DisplayDevice *LaunchSettings::currentDisplayDevice() const
+{
+    return m_display->currentDevice();
+}
+#endif
+
 #ifdef __APPLE__
 QWidget *LaunchSettings::buildSettings(GameListModel *games)
 #else

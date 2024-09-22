@@ -68,6 +68,10 @@ struct VmmScreen {
 #endif
     ;
 #if !defined(__APPLE__)
+    size_t vk_device
+#endif
+    ;
+#if !defined(__APPLE__)
     size_t vk_surface
 #endif
     ;

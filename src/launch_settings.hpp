@@ -9,6 +9,9 @@
 #include <QWidget>
 
 class CpuSettings;
+#ifndef __APPLE__
+class DisplayDevice;
+#endif
 class DisplaySettings;
 class GameListModel;
 class ProfileList;
@@ -31,6 +34,9 @@ public:
     ~LaunchSettings() override;
 
     Profile *currentProfile() const;
+#ifndef __APPLE__
+    DisplayDevice *currentDisplayDevice() const;
+#endif
 signals:
     void saveClicked(Profile *p);
     void startClicked();

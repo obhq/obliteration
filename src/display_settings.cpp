@@ -61,6 +61,13 @@ void DisplaySettings::setProfile(Profile *p)
 }
 
 #ifndef __APPLE__
+DisplayDevice *DisplaySettings::currentDevice() const
+{
+    return m_devices->currentData().value<DisplayDevice *>();
+}
+#endif
+
+#ifndef __APPLE__
 QWidget *DisplaySettings::buildDevice(QList<VkPhysicalDevice> &&vkDevices)
 {
     // Setup group box.
