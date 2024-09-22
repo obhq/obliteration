@@ -159,6 +159,35 @@ int main(int argc, char *argv[])
             "No any Vulkan device supports Vulkan 1.3.");
         return 1;
     }
+
+    // Filter out devices that does not support graphics operations.
+    erase_if(vkDevices, [](VkPhysicalDevice dev) {
+        // Get number of queue family.
+        uint32_t count;
+
+        vkFunctions->vkGetPhysicalDeviceQueueFamilyProperties(dev, &count, nullptr);
+
+        // Get queue family.
+        QList<VkQueueFamilyProperties> families(count);
+
+        vkFunctions->vkGetPhysicalDeviceQueueFamilyProperties(dev, &count, families.data());
+
+        for (auto &f : families) {
+            if (f.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+                return false;
+            }
+        }
+
+        return true;
+    });
+
+    if (vkDevices.isEmpty()) {
+        QMessageBox::critical(
+            nullptr,
+            "Error",
+            "No any Vulkan device supports graphics operations.");
+        return 1;
+    }
 #endif
 
     // Check if no any required settings.
