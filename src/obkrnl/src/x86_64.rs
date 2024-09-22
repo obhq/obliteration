@@ -1,6 +1,6 @@
 use bitfield_struct::bitfield;
 use core::arch::{asm, global_asm};
-use core::mem::{transmute, zeroed};
+use core::mem::zeroed;
 
 /// # Safety
 /// This function can only be called by main CPU entry point.
@@ -38,7 +38,7 @@ pub unsafe fn setup_main_cpu() {
     static mut IDT: [GateDescriptor; 256] = unsafe { zeroed() };
 
     let set_idt = |n: usize, f: unsafe extern "C" fn() -> !, ty, dpl, ist| {
-        let f: usize = unsafe { transmute(f) };
+        let f = f as usize;
 
         IDT[n] = GateDescriptor::new()
             .with_offset1(f as u16)
