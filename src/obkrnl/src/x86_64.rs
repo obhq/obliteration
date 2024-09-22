@@ -1,6 +1,9 @@
 use bitfield_struct::bitfield;
 use core::arch::{asm, global_asm};
+use core::mem::zeroed;
 
+/// # Safety
+/// This function can only be called by main CPU entry point.
 pub unsafe fn setup_main_cpu() {
     // Switch GDT from bootloader GDT to our own.
     static GDT: [SegmentDescriptor; 3] = [
@@ -19,20 +22,42 @@ pub unsafe fn setup_main_cpu() {
             .with_p(true),
     ];
 
+    let cs = SegmentSelector::new().with_si(1);
+    let ds = SegmentSelector::new().with_si(2);
+
     set_gdtr(
         &Gdtr {
             limit: (size_of_val(&GDT) - 1).try_into().unwrap(),
             addr: GDT.as_ptr(),
         },
-        SegmentSelector::new().with_si(1),
-        SegmentSelector::new().with_si(2),
+        cs,
+        ds,
     );
 
-    // Set IDT.
-    let idtr = Idtr {
-        limit: (size_of_val(&IDT) - 1).try_into().unwrap(),
-        addr: IDT.as_ptr(),
+    // See idt0 on the PS4 for a reference.
+    static mut IDT: [GateDescriptor; 256] = unsafe { zeroed() };
+
+    let set_idt = |n: usize, f: unsafe extern "C" fn() -> !, ty, dpl, ist| {
+        let f = f as usize;
+
+        IDT[n] = GateDescriptor::new()
+            .with_offset1(f as u16)
+            .with_selector(cs)
+            .with_ist(ist)
+            .with_ty(ty)
+            .with_dpl(dpl)
+            .with_p(true)
+            .with_offset2((f >> 16).try_into().unwrap());
     };
+
+    set_idt(3, Xbpt, 0b1110, Dpl::Ring3, 0);
+
+    // Set IDT.
+    let limit = (size_of::<GateDescriptor>() * IDT.len() - 1)
+        .try_into()
+        .unwrap();
+    let addr = IDT.as_ptr();
+    let idtr = Idtr { limit, addr };
 
     asm!(
         "lidt qword ptr [{v}]",
@@ -43,6 +68,7 @@ pub unsafe fn setup_main_cpu() {
 
 extern "C" {
     fn set_gdtr(v: &Gdtr, code: SegmentSelector, data: SegmentSelector);
+    fn Xbpt() -> !;
 }
 
 // See lgdt on the PS4 for a reference.
@@ -59,6 +85,9 @@ global_asm!(
     "push rax",
     "retfq" // Set CS then return.
 );
+
+// See Xbpt on the PS4 for a reference.
+global_asm!("Xbpt:", "ud2");
 
 /// Raw value of a Global Descriptor-Table Register.
 ///
@@ -83,7 +112,7 @@ struct SegmentDescriptor {
     ty: u8,
     s: bool,
     #[bits(2)]
-    dpl: u8,
+    dpl: Dpl,
     p: bool,
     #[bits(4)]
     limit2: u8,
@@ -94,6 +123,34 @@ struct SegmentDescriptor {
     base2: u8,
 }
 
+/// Raw value of Descriptor Privilege-Level field.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy)]
+enum Dpl {
+    Ring0,
+    Ring1,
+    Ring2,
+    Ring3,
+}
+
+impl Dpl {
+    /// # Panics
+    /// If `v` is greater than 3.
+    const fn from_bits(v: u8) -> Self {
+        match v {
+            0 => Self::Ring0,
+            1 => Self::Ring1,
+            2 => Self::Ring2,
+            3 => Self::Ring3,
+            _ => panic!("invalid value"),
+        }
+    }
+
+    const fn into_bits(self) -> u8 {
+        self as _
+    }
+}
+
 /// Raw value of a Segment Selector (e.g. `CS` and `DS` register).
 ///
 /// See Segment Selectors section on AMD64 Architecture Programmer's Manual Volume 2 for more
@@ -101,7 +158,7 @@ struct SegmentDescriptor {
 #[bitfield(u16)]
 struct SegmentSelector {
     #[bits(2)]
-    rpl: u8,
+    rpl: Dpl,
     ti: bool,
     #[bits(13)]
     si: u16,
@@ -114,291 +171,29 @@ struct SegmentSelector {
 #[repr(C, packed)]
 struct Idtr {
     limit: u16,
-    addr: *const SystemDescriptor,
+    addr: *const GateDescriptor,
 }
 
-/// Raw value of a System Descriptor.
+/// Raw value of a Gate Descriptor.
 ///
-/// See System Descriptors section on AMD64 Architecture Programmer's Manual Volume 2 for more
+/// See Gate Descriptors section on AMD64 Architecture Programmer's Manual Volume 2 for more
 /// details.
 #[bitfield(u128)]
-struct SystemDescriptor {
-    limit1: u16,
-    #[bits(24)]
-    base1: u32,
+struct GateDescriptor {
+    offset1: u16,
+    #[bits(16)]
+    selector: SegmentSelector,
+    #[bits(3)]
+    ist: u8,
+    #[bits(5)]
+    __: u8,
     #[bits(4)]
     ty: u8,
-    s: bool,
+    __: bool,
     #[bits(2)]
-    dpl: u8,
+    dpl: Dpl,
     p: bool,
-    #[bits(4)]
-    limit2: u8,
-    avl: bool,
-    #[bits(2)]
-    __: u8,
-    g: bool,
-    #[bits(40)]
-    base2: u64,
+    #[bits(48)]
+    offset2: u64,
     __: u32,
 }
-
-/// See `idt0` on the PS4 for a reference.
-static IDT: [SystemDescriptor; 256] = [
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-    SystemDescriptor::new(),
-];
