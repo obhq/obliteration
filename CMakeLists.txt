@@ -24,7 +24,7 @@ if(WIN32)
 else()
     if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
         set(KERNEL_TARGET x86_64-unknown-none)
-    elseif(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "arm64")
+    elseif(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "arm64" OR ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64")
         # Pre-compiled core crate for aarch64-unknown-none-softfloat does not support
         # Position-Independent Executable so we need nightly toolchain for build-std feature to
         # re-build core crate to support Position-Independent Executable.

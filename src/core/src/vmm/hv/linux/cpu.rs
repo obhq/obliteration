@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::arch::{KvmStates, StatesError};
-use super::ffi::{kvm_run, kvm_translate, KvmTranslation};
+use super::ffi::kvm_run;
 use super::run::KvmRun;
 use crate::vmm::hv::{Cpu, CpuExit, CpuIo, IoBuf};
 use libc::munmap;
@@ -101,6 +101,12 @@ impl<'a, 'b> CpuIo for KvmIo<'a, 'b> {
         }
     }
 
+    #[cfg(target_arch = "aarch64")]
+    fn translate(&self, vaddr: usize) -> Result<usize, Box<dyn Error>> {
+        todo!()
+    }
+
+    #[cfg(target_arch = "x86_64")]
     fn translate(&self, vaddr: usize) -> Result<usize, Box<dyn Error>> {
         let mut data = KvmTranslation {
             linear_address: vaddr,
@@ -116,4 +122,20 @@ impl<'a, 'b> CpuIo for KvmIo<'a, 'b> {
             _ => return Err(Box::new(std::io::Error::last_os_error())),
         }
     }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[repr(C)]
+struct KvmTranslation {
+    linear_address: usize,
+    physical_address: usize,
+    valid: u8,
+    writeable: u8,
+    usermode: u8,
+    pad: [u8; 5],
+}
+
+extern "C" {
+    #[cfg(target_arch = "x86_64")]
+    fn kvm_translate(vcpu: std::ffi::c_int, arg: *mut KvmTranslation) -> std::ffi::c_int;
 }

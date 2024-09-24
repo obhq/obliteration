@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::KvmCpu;
 use self::ffi::{
-    kvm_check_version, kvm_create_vcpu, kvm_create_vm, kvm_get_vcpu_mmap_size, kvm_max_vcpus,
-    kvm_set_user_memory_region,
+    kvm_check_extension, kvm_check_version, kvm_create_vcpu, kvm_create_vm, kvm_get_vcpu_mmap_size,
+    kvm_max_vcpus, kvm_set_user_memory_region,
 };
 use super::{CpuFeats, Hypervisor};
 use crate::vmm::ram::Ram;
@@ -12,11 +12,11 @@ use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::ptr::null_mut;
 use thiserror::Error;
 
+#[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
 mod arch;
 mod cpu;
 mod ffi;
-mod regs;
 mod run;
 
 pub fn new(cpu: usize, ram: Ram) -> Result<impl Hypervisor, VmmError> {
@@ -53,6 +53,12 @@ pub fn new(cpu: usize, ram: Ram) -> Result<impl Hypervisor, VmmError> {
 
     if max < cpu {
         return Err(VmmError::MaxCpuTooLow);
+    }
+
+    // Check KVM_CAP_ONE_REG. KVM_SET_ONE_REG and KVM_GET_ONE_REG are the only API that support all
+    // architectures.
+    if unsafe { !kvm_check_extension(kvm.as_raw_fd(), 70) } {
+        return Err(VmmError::NoKvmOneReg);
     }
 
     // Get size of CPU context.
@@ -103,6 +109,54 @@ impl Hypervisor for Kvm {
     type Cpu<'a> = KvmCpu<'a>;
     type CpuErr = KvmCpuError;
 
+    #[cfg(target_arch = "aarch64")]
+    fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr> {
+        // See https://www.kernel.org/doc/html/latest/arch/arm64/cpu-feature-registers.html for the
+        // reason why we can access *_EL1 registers from a user space.
+        use crate::vmm::hv::{Mmfr0, Mmfr1, Mmfr2};
+        use std::arch::asm;
+
+        // ID_AA64MMFR0_EL1.
+        let mut mmfr0;
+
+        unsafe {
+            asm!(
+                "mrs {v}, ID_AA64MMFR0_EL1",
+                v = out(reg) mmfr0,
+                options(pure, nomem, preserves_flags, nostack)
+            )
+        };
+
+        // ID_AA64MMFR1_EL1.
+        let mut mmfr1;
+
+        unsafe {
+            asm!(
+                "mrs {v}, ID_AA64MMFR1_EL1",
+                v = out(reg) mmfr1,
+                options(pure, nomem, preserves_flags, nostack)
+            )
+        };
+
+        // ID_AA64MMFR2_EL1.
+        let mut mmfr2;
+
+        unsafe {
+            asm!(
+                "mrs {v}, ID_AA64MMFR2_EL1",
+                v = out(reg) mmfr2,
+                options(pure, nomem, preserves_flags, nostack)
+            )
+        };
+
+        Ok(CpuFeats {
+            mmfr0: Mmfr0::from_bits(mmfr0),
+            mmfr1: Mmfr1::from_bits(mmfr1),
+            mmfr2: Mmfr2::from_bits(mmfr2),
+        })
+    }
+
+    #[cfg(target_arch = "x86_64")]
     fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr> {
         Ok(CpuFeats {})
     }

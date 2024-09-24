@@ -21,6 +21,11 @@ extern "C" int kvm_check_version(int kvm, bool *compat)
     return 0;
 }
 
+extern "C" bool kvm_check_extension(int fd, int id)
+{
+    return ioctl(fd, KVM_CHECK_EXTENSION, id) > 0;
+}
+
 extern "C" int kvm_max_vcpus(int kvm, size_t *max)
 {
     auto num = ioctl(kvm, KVM_CHECK_EXTENSION, KVM_CAP_MAX_VCPUS);
@@ -91,6 +96,7 @@ extern "C" int kvm_run(int vcpu)
     return ioctl(vcpu, KVM_RUN, 0);
 }
 
+#ifndef __aarch64__
 extern "C" int kvm_get_regs(int vcpu, kvm_regs *regs)
 {
     return ioctl(vcpu, KVM_GET_REGS, regs);
@@ -100,7 +106,9 @@ extern "C" int kvm_set_regs(int vcpu, const kvm_regs *regs)
 {
     return ioctl(vcpu, KVM_SET_REGS, regs);
 }
+#endif
 
+#ifdef __x86_64__
 extern "C" int kvm_get_sregs(int vcpu, kvm_sregs *regs)
 {
     return ioctl(vcpu, KVM_GET_SREGS, regs);
@@ -114,3 +122,4 @@ extern "C" int kvm_set_sregs(int vcpu, const kvm_sregs *regs)
 extern "C" int kvm_translate(int vcpu, kvm_translation *arg) {
     return ioctl(vcpu, KVM_TRANSLATE, arg);
 }
+#endif
