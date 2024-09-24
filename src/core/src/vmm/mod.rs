@@ -699,6 +699,10 @@ enum VmmError {
     KvmVersionMismatched,
 
     #[cfg(target_os = "linux")]
+    #[error("your OS does not support KVM_CAP_ONE_REG")]
+    NoKvmOneReg,
+
+    #[cfg(target_os = "linux")]
     #[error("couldn't create a VM")]
     CreateVmFailed(#[source] std::io::Error),
 
