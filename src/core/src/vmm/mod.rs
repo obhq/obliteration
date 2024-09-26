@@ -702,6 +702,14 @@ enum VmmError {
     #[error("your OS does not support KVM_CAP_ONE_REG")]
     NoKvmOneReg,
 
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    #[error("your OS does not support KVM_CAP_ARM_VM_IPA_SIZE")]
+    NoVmIpaSize,
+
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    #[error("physical address supported by your CPU too small")]
+    PhysicalAddressTooSmall,
+
     #[cfg(target_os = "linux")]
     #[error("couldn't create a VM")]
     CreateVmFailed(#[source] std::io::Error),

@@ -9,47 +9,6 @@
 #include <stdint.h>
 #include <string.h>
 
-extern "C" int kvm_check_version(int kvm, bool *compat)
-{
-    auto v = ioctl(kvm, KVM_GET_API_VERSION);
-
-    if (v < 0) {
-        return errno;
-    }
-
-    *compat = (v == KVM_API_VERSION);
-    return 0;
-}
-
-extern "C" bool kvm_check_extension(int fd, int id)
-{
-    return ioctl(fd, KVM_CHECK_EXTENSION, id) > 0;
-}
-
-extern "C" int kvm_max_vcpus(int kvm, size_t *max)
-{
-    auto num = ioctl(kvm, KVM_CHECK_EXTENSION, KVM_CAP_MAX_VCPUS);
-
-    if (num < 0) {
-        return errno;
-    }
-
-    *max = static_cast<size_t>(num);
-    return 0;
-}
-
-extern "C" int kvm_create_vm(int kvm, int *fd)
-{
-    auto vm = ioctl(kvm, KVM_CREATE_VM, 0);
-
-    if (vm < 0) {
-        return errno;
-    }
-
-    *fd = vm;
-    return 0;
-}
-
 extern "C" int kvm_set_user_memory_region(
     int vm,
     uint32_t slot,
@@ -71,11 +30,6 @@ extern "C" int kvm_set_user_memory_region(
     }
 
     return 0;
-}
-
-extern "C" int kvm_get_vcpu_mmap_size(int kvm)
-{
-    return ioctl(kvm, KVM_GET_VCPU_MMAP_SIZE, 0);
 }
 
 extern "C" int kvm_create_vcpu(int vm, uint32_t id, int *fd)
