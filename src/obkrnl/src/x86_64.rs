@@ -1,12 +1,13 @@
 use bitfield_struct::bitfield;
 use core::arch::{asm, global_asm};
-use core::mem::zeroed;
+use core::mem::{transmute, zeroed};
+use core::ptr::addr_of;
 
 /// # Safety
-/// This function can only be called by main CPU entry point.
+/// This function can be called only once and must be called by main CPU entry point.
 pub unsafe fn setup_main_cpu() {
-    // Switch GDT from bootloader GDT to our own.
-    static GDT: [SegmentDescriptor; 3] = [
+    // Setup GDT.
+    static mut GDT: [SegmentDescriptor; 6] = [
         // Null descriptor.
         SegmentDescriptor::new(),
         // Code segment.
@@ -20,18 +21,50 @@ pub unsafe fn setup_main_cpu() {
             .with_ty(0b0010) // This required somehow although the docs said it is ignored.
             .with_s(true) // Same here.
             .with_p(true),
+        // Null descriptor to make TSS descriptor 16 bytes alignment.
+        SegmentDescriptor::new(),
+        // TSS descriptor.
+        SegmentDescriptor::new(),
+        SegmentDescriptor::new(),
     ];
 
+    // Setup Task State Segment (TSS).
+    static mut TSS_RSP0: [u8; 1024 * 128] = unsafe { zeroed() };
+    static mut TSS: Tss = unsafe { zeroed() };
+
+    TSS.rsp0 = TSS_RSP0.as_mut_ptr() as _;
+
+    // Setup TSS descriptor.
+    let tss: &'static mut TssDescriptor = transmute(&mut GDT[4]);
+    let base = addr_of!(TSS) as usize;
+
+    tss.set_limit1((size_of::<Tss>() - 1).try_into().unwrap());
+    tss.set_base1((base & 0xFFFFFF).try_into().unwrap());
+    tss.set_base2((base >> 24).try_into().unwrap());
+    tss.set_ty(0b1001); // Available 64-bit TSS.
+    tss.set_p(true);
+
+    // Switch GDT from bootloader GDT to our own.
     let cs = SegmentSelector::new().with_si(1);
     let ds = SegmentSelector::new().with_si(2);
+    let limit = (size_of::<SegmentDescriptor>() * GDT.len() - 1)
+        .try_into()
+        .unwrap();
 
     set_gdtr(
         &Gdtr {
-            limit: (size_of_val(&GDT) - 1).try_into().unwrap(),
+            limit,
             addr: GDT.as_ptr(),
         },
         cs,
         ds,
+    );
+
+    // Set Task Register (TR).
+    asm!(
+        "ltr {v:x}",
+        v = in(reg) SegmentSelector::new().with_si(4).into_bits(),
+        options(preserves_flags, nostack)
     );
 
     // See idt0 on the PS4 for a reference.
@@ -121,6 +154,55 @@ struct SegmentDescriptor {
     db: bool,
     g: bool,
     base2: u8,
+}
+
+/// Raw value of a TSS descriptor.
+///
+/// See TSS Descriptor section on AMD64 Architecture Programmer's Manual Volume 2 for more details.
+#[bitfield(u128)]
+struct TssDescriptor {
+    limit1: u16,
+    #[bits(24)]
+    base1: u32,
+    #[bits(4)]
+    ty: u8,
+    #[bits(access = None)]
+    s: bool,
+    #[bits(2)]
+    dpl: Dpl,
+    p: bool,
+    #[bits(4)]
+    limit2: u8,
+    avl: bool,
+    #[bits(2)]
+    __: u8,
+    g: bool,
+    #[bits(40)]
+    base2: u64,
+    __: u32,
+}
+
+/// Raw value of Long Mode TSS.
+///
+/// See 64-Bit Task State Segment section on AMD64 Architecture Programmer's Manual Volume 2 for
+/// more details.
+#[repr(C, packed)]
+struct Tss {
+    reserved1: u32,
+    rsp0: usize,
+    rsp1: usize,
+    rsp2: usize,
+    reserved2: u64,
+    ist1: usize,
+    ist2: usize,
+    ist3: usize,
+    ist4: usize,
+    ist5: usize,
+    ist6: usize,
+    ist7: usize,
+    reserved3: u64,
+    reserved4: u16,
+    io_map_base_address: u16,
 }
 
 /// Raw value of Descriptor Privilege-Level field.
