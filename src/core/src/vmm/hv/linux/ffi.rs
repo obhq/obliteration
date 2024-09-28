@@ -5,6 +5,7 @@ pub const KVM_CREATE_VM: c_ulong = _IO(KVMIO, 0x01);
 pub const KVM_CHECK_EXTENSION: c_ulong = _IO(KVMIO, 0x03);
 pub const KVM_GET_VCPU_MMAP_SIZE: c_ulong = _IO(KVMIO, 0x04);
 pub const KVM_CREATE_VCPU: c_ulong = _IO(KVMIO, 0x41);
+#[cfg(target_arch = "aarch64")]
 pub const KVM_GET_ONE_REG: c_ulong = _IOW::<KvmOneReg<()>>(KVMIO, 0xab);
 #[cfg(target_arch = "aarch64")]
 pub const KVM_ARM_VCPU_INIT: c_ulong = _IOW::<KvmVcpuInit>(KVMIO, 0xae);
@@ -14,6 +15,7 @@ pub const KVM_ARM_PREFERRED_TARGET: c_ulong = _IOR::<KvmVcpuInit>(KVMIO, 0xaf);
 pub const KVM_API_VERSION: c_int = 12;
 
 pub const KVM_CAP_MAX_VCPUS: c_int = 66;
+#[cfg(target_arch = "aarch64")]
 pub const KVM_CAP_ONE_REG: c_int = 70;
 #[cfg(target_arch = "aarch64")]
 pub const KVM_CAP_ARM_VM_IPA_SIZE: c_int = 165;
@@ -74,6 +76,7 @@ const fn _IOC(dir: c_ulong, ty: c_ulong, nr: c_ulong, size: c_ulong) -> c_ulong 
         | (size << _IOC_SIZESHIFT)
 }
 
+#[cfg(target_arch = "aarch64")]
 #[repr(C)]
 pub struct KvmOneReg<'a, T> {
     pub id: u64,

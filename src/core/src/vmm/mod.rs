@@ -698,7 +698,7 @@ enum VmmError {
     #[error("unexpected KVM version")]
     KvmVersionMismatched,
 
-    #[cfg(target_os = "linux")]
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
     #[error("your OS does not support KVM_CAP_ONE_REG")]
     NoKvmOneReg,
 

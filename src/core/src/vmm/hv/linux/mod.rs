@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::KvmCpu;
 use self::ffi::{
-    kvm_set_user_memory_region, KvmOneReg, KVM_API_VERSION, KVM_CAP_MAX_VCPUS, KVM_CAP_ONE_REG,
-    KVM_CHECK_EXTENSION, KVM_CREATE_VCPU, KVM_CREATE_VM, KVM_GET_API_VERSION, KVM_GET_ONE_REG,
-    KVM_GET_VCPU_MMAP_SIZE,
+    kvm_set_user_memory_region, KVM_API_VERSION, KVM_CAP_MAX_VCPUS, KVM_CHECK_EXTENSION,
+    KVM_CREATE_VCPU, KVM_CREATE_VM, KVM_GET_API_VERSION, KVM_GET_VCPU_MMAP_SIZE,
 };
 use super::{CpuFeats, Hypervisor};
 use crate::vmm::ram::Ram;
@@ -48,9 +47,15 @@ pub fn new(cpu: usize, ram: Ram) -> Result<impl Hypervisor, VmmError> {
         return Err(VmmError::MaxCpuTooLow);
     }
 
-    // Check KVM_CAP_ONE_REG. KVM_SET_ONE_REG and KVM_GET_ONE_REG are the only API that support all
-    // architectures.
-    if unsafe { ioctl(kvm.as_raw_fd(), KVM_CHECK_EXTENSION, KVM_CAP_ONE_REG) <= 0 } {
+    // On AArch64 we need KVM_SET_ONE_REG and KVM_GET_ONE_REG.
+    #[cfg(target_arch = "aarch64")]
+    if unsafe {
+        ioctl(
+            kvm.as_raw_fd(),
+            KVM_CHECK_EXTENSION,
+            self::ffi::KVM_CAP_ONE_REG,
+        ) <= 0
+    } {
         return Err(VmmError::NoKvmOneReg);
     }
 
@@ -189,7 +194,7 @@ impl Hypervisor for Kvm {
 
     #[cfg(target_arch = "aarch64")]
     fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr> {
-        use self::ffi::ARM64_SYS_REG;
+        use self::ffi::{KvmOneReg, ARM64_SYS_REG, KVM_GET_ONE_REG};
         use crate::vmm::hv::{Mmfr0, Mmfr1, Mmfr2};
         use std::arch::asm;
 
