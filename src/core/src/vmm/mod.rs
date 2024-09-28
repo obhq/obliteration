@@ -722,6 +722,10 @@ enum VmmError {
     #[error("couldn't get the size of vCPU mmap")]
     GetMmapSizeFailed(#[source] std::io::Error),
 
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    #[error("couldn't get preferred CPU target")]
+    GetPreferredTargetFailed(#[source] std::io::Error),
+
     #[cfg(not(target_os = "macos"))]
     #[error("couldn't create Vulkan device")]
     CreateVulkanDeviceFailed(#[source] ash::vk::Result),

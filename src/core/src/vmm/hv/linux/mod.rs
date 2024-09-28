@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::KvmCpu;
 use self::ffi::{
-    kvm_create_vcpu, kvm_set_user_memory_region, KVM_API_VERSION, KVM_CAP_MAX_VCPUS,
-    KVM_CAP_ONE_REG, KVM_CHECK_EXTENSION, KVM_CREATE_VM, KVM_GET_API_VERSION,
+    kvm_set_user_memory_region, KvmOneReg, KVM_API_VERSION, KVM_CAP_MAX_VCPUS, KVM_CAP_ONE_REG,
+    KVM_CHECK_EXTENSION, KVM_CREATE_VCPU, KVM_CREATE_VM, KVM_GET_API_VERSION, KVM_GET_ONE_REG,
     KVM_GET_VCPU_MMAP_SIZE,
 };
 use super::{CpuFeats, Hypervisor};
@@ -63,6 +63,18 @@ pub fn new(cpu: usize, ram: Ram) -> Result<impl Hypervisor, VmmError> {
 
     // Create a VM.
     let vm = create_vm(kvm.as_fd())?;
+    #[cfg(target_arch = "aarch64")]
+    let preferred_target = unsafe {
+        let mut v: self::ffi::KvmVcpuInit = std::mem::zeroed();
+
+        if ioctl(vm.as_raw_fd(), self::ffi::KVM_ARM_PREFERRED_TARGET, &mut v) < 0 {
+            return Err(VmmError::GetPreferredTargetFailed(Error::last_os_error()));
+        }
+
+        v
+    };
+
+    // Set RAM.
     let slot = 0;
     let len = ram.len().try_into().unwrap();
     let mem = ram.host_addr().cast_mut().cast();
@@ -74,6 +86,8 @@ pub fn new(cpu: usize, ram: Ram) -> Result<impl Hypervisor, VmmError> {
 
     Ok(Kvm {
         vcpu_mmap_size: vcpu_mmap_size.try_into().unwrap(),
+        #[cfg(target_arch = "aarch64")]
+        preferred_target,
         vm,
         ram,
         kvm,
@@ -127,10 +141,46 @@ fn create_vm(kvm: BorrowedFd) -> Result<OwnedFd, VmmError> {
 /// Fields in this struct need to drop in a correct order (e.g. vm must be dropped before ram).
 struct Kvm {
     vcpu_mmap_size: usize,
+    #[cfg(target_arch = "aarch64")]
+    preferred_target: self::ffi::KvmVcpuInit,
     vm: OwnedFd,
     ram: Ram,
     #[allow(dead_code)] // kvm are needed by vm.
     kvm: OwnedFd,
+}
+
+impl Kvm {
+    #[cfg(target_arch = "aarch64")]
+    fn create_cpu(&self, id: usize) -> Result<OwnedFd, KvmCpuError> {
+        use self::ffi::KVM_ARM_VCPU_INIT;
+
+        // Create CPU.
+        let cpu = unsafe { ioctl(self.vm.as_raw_fd(), KVM_CREATE_VCPU, id) };
+
+        if cpu < 0 {
+            return Err(KvmCpuError::CreateCpuFailed(Error::last_os_error()));
+        }
+
+        // Init CPU.
+        let cpu = unsafe { OwnedFd::from_raw_fd(cpu) };
+
+        if unsafe { ioctl(cpu.as_raw_fd(), KVM_ARM_VCPU_INIT, &self.preferred_target) < 0 } {
+            return Err(KvmCpuError::InitCpuFailed(Error::last_os_error()));
+        }
+
+        Ok(cpu)
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn create_cpu(&self, id: usize) -> Result<OwnedFd, KvmCpuError> {
+        let cpu = unsafe { ioctl(self.vm.as_raw_fd(), KVM_CREATE_VCPU, id) };
+
+        if cpu < 0 {
+            Err(KvmCpuError::CreateCpuFailed(Error::last_os_error()))
+        } else {
+            Ok(unsafe { OwnedFd::from_raw_fd(cpu) })
+        }
+    }
 }
 
 impl Hypervisor for Kvm {
@@ -139,21 +189,21 @@ impl Hypervisor for Kvm {
 
     #[cfg(target_arch = "aarch64")]
     fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr> {
-        // See https://www.kernel.org/doc/html/latest/arch/arm64/cpu-feature-registers.html for the
-        // reason why we can access *_EL1 registers from a user space.
+        use self::ffi::ARM64_SYS_REG;
         use crate::vmm::hv::{Mmfr0, Mmfr1, Mmfr2};
         use std::arch::asm;
 
         // ID_AA64MMFR0_EL1.
-        let mut mmfr0;
-
-        unsafe {
-            asm!(
-                "mrs {v}, ID_AA64MMFR0_EL1",
-                v = out(reg) mmfr0,
-                options(pure, nomem, preserves_flags, nostack)
-            )
+        let cpu = self.create_cpu(0)?;
+        let mut mmfr0 = Mmfr0::default();
+        let mut req = KvmOneReg {
+            id: ARM64_SYS_REG(0b11, 0b000, 0b0000, 0b0111, 0b000),
+            addr: &mut mmfr0,
         };
+
+        if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_ONE_REG, &mut req) < 0 } {
+            return Err(KvmCpuError::ReadMmfr0Failed(Error::last_os_error()));
+        }
 
         // ID_AA64MMFR1_EL1.
         let mut mmfr1;
@@ -178,7 +228,7 @@ impl Hypervisor for Kvm {
         };
 
         Ok(CpuFeats {
-            mmfr0: Mmfr0::from_bits(mmfr0),
+            mmfr0,
             mmfr1: Mmfr1::from_bits(mmfr1),
             mmfr2: Mmfr2::from_bits(mmfr2),
         })
@@ -198,17 +248,7 @@ impl Hypervisor for Kvm {
     }
 
     fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {
-        use std::io::Error;
-
-        // Create vCPU.
-        let id = id.try_into().unwrap();
-        let mut vcpu = -1;
-        let vcpu = match unsafe { kvm_create_vcpu(self.vm.as_raw_fd(), id, &mut vcpu) } {
-            0 => unsafe { OwnedFd::from_raw_fd(vcpu) },
-            v => return Err(KvmCpuError::CreateVcpuFailed(Error::from_raw_os_error(v))),
-        };
-
-        // Get kvm_run.
+        let vcpu = self.create_cpu(id)?;
         let cx = unsafe {
             mmap(
                 null_mut(),
@@ -231,9 +271,17 @@ impl Hypervisor for Kvm {
 /// Implementation of [`Hypervisor::CpuErr`].
 #[derive(Debug, Error)]
 pub enum KvmCpuError {
-    #[error("failed to create vcpu")]
-    CreateVcpuFailed(#[source] std::io::Error),
+    #[error("couldn't create vCPU")]
+    CreateCpuFailed(#[source] std::io::Error),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't initialize vCPU")]
+    InitCpuFailed(#[source] std::io::Error),
 
     #[error("couldn't get a pointer to kvm_run")]
     GetKvmRunFailed(#[source] std::io::Error),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't read ID_AA64MMFR0_EL1")]
+    ReadMmfr0Failed(#[source] std::io::Error),
 }
