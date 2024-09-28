@@ -32,19 +32,6 @@ extern "C" int kvm_set_user_memory_region(
     return 0;
 }
 
-extern "C" int kvm_create_vcpu(int vm, uint32_t id, int *fd)
-{
-    auto vcpu = ioctl(vm, KVM_CREATE_VCPU, id);
-
-    if (vcpu < 0) {
-        return errno;
-    }
-
-    *fd = vcpu;
-
-    return 0;
-}
-
 extern "C" int kvm_run(int vcpu)
 {
     return ioctl(vcpu, KVM_RUN, 0);
