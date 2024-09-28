@@ -196,7 +196,6 @@ impl Hypervisor for Kvm {
     fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr> {
         use self::ffi::{KvmOneReg, ARM64_SYS_REG, KVM_GET_ONE_REG};
         use crate::vmm::hv::{Mmfr0, Mmfr1, Mmfr2};
-        use std::arch::asm;
 
         // ID_AA64MMFR0_EL1.
         let cpu = self.create_cpu(0)?;
@@ -211,31 +210,31 @@ impl Hypervisor for Kvm {
         }
 
         // ID_AA64MMFR1_EL1.
-        let mut mmfr1;
-
-        unsafe {
-            asm!(
-                "mrs {v}, ID_AA64MMFR1_EL1",
-                v = out(reg) mmfr1,
-                options(pure, nomem, preserves_flags, nostack)
-            )
+        let mut mmfr1 = Mmfr1::default();
+        let mut req = KvmOneReg {
+            id: ARM64_SYS_REG(0b11, 0b000, 0b0000, 0b0111, 0b001),
+            addr: &mut mmfr1,
         };
+
+        if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_ONE_REG, &mut req) < 0 } {
+            return Err(KvmCpuError::ReadMmfr1Failed(Error::last_os_error()));
+        }
 
         // ID_AA64MMFR2_EL1.
-        let mut mmfr2;
-
-        unsafe {
-            asm!(
-                "mrs {v}, ID_AA64MMFR2_EL1",
-                v = out(reg) mmfr2,
-                options(pure, nomem, preserves_flags, nostack)
-            )
+        let mut mmfr2 = Mmfr2::default();
+        let mut req = KvmOneReg {
+            id: ARM64_SYS_REG(0b11, 0b000, 0b0000, 0b0111, 0b010),
+            addr: &mut mmfr2,
         };
+
+        if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_ONE_REG, &mut req) < 0 } {
+            return Err(KvmCpuError::ReadMmfr2Failed(Error::last_os_error()));
+        }
 
         Ok(CpuFeats {
             mmfr0,
-            mmfr1: Mmfr1::from_bits(mmfr1),
-            mmfr2: Mmfr2::from_bits(mmfr2),
+            mmfr1,
+            mmfr2,
         })
     }
 
@@ -289,4 +288,12 @@ pub enum KvmCpuError {
     #[cfg(target_arch = "aarch64")]
     #[error("couldn't read ID_AA64MMFR0_EL1")]
     ReadMmfr0Failed(#[source] std::io::Error),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't read ID_AA64MMFR1_EL1")]
+    ReadMmfr1Failed(#[source] std::io::Error),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't read ID_AA64MMFR2_EL1")]
+    ReadMmfr2Failed(#[source] std::io::Error),
 }
