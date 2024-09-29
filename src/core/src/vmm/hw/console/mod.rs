@@ -3,7 +3,7 @@ use self::context::Context;
 use super::{Device, DeviceContext};
 use crate::vmm::hv::Hypervisor;
 use crate::vmm::VmmEventHandler;
-use obvirt::console::Memory;
+use obconf::ConsoleMemory;
 use std::num::NonZero;
 
 mod context;
@@ -17,7 +17,7 @@ pub struct Console {
 
 impl Console {
     pub fn new(addr: usize, block_size: NonZero<usize>, event: VmmEventHandler) -> Self {
-        let len = size_of::<Memory>()
+        let len = size_of::<ConsoleMemory>()
             .checked_next_multiple_of(block_size.get())
             .and_then(NonZero::new)
             .unwrap();

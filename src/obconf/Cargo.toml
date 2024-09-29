@@ -3,5 +3,9 @@ name = "obconf"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+virt = ["dep:num_enum"]
+
 [dependencies]
+num_enum = { version = "0.7.3", default-features = false, optional = true }
 serde = { version = "1.0.210", features = ["derive"], default-features = false, optional = true }

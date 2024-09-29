@@ -9,7 +9,6 @@ members = [
     "src/macros",
     "src/obconf",
     "src/obkrnl",
-    "src/obvirt",
     "src/param",
     "src/pfs",
     "src/pkg",
