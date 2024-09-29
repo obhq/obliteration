@@ -2,8 +2,10 @@ use crate::proc::{ProcMgr, Thread};
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicPtr, Ordering};
 
+pub use self::arc::*;
 pub use self::local::*;
 
+mod arc;
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
 mod arch;
@@ -40,12 +42,13 @@ impl Context {
     ///
     /// See `pcpu_init` on the PS4 for a reference.
     ///
+    /// # Context safety
+    /// This function does not require a CPU context.
+    ///
     /// # Safety
     /// - `cpu` must be unique and valid.
-    /// - `pmgr` must be the same one for all context.
+    /// - `pmgr` must be the same for all context of the other CPU.
     pub unsafe fn new(cpu: usize, td: Arc<Thread>, pmgr: Arc<ProcMgr>) -> Self {
-        // This function is not allowed to access the activated context due to it can be called
-        // without the activation of the other context.
         Self {
             cpu,
             thread: AtomicPtr::new(Arc::into_raw(td).cast_mut()),
@@ -55,17 +58,10 @@ impl Context {
 
     /// # Interupt safety
     /// This function is interupt safe.
-    #[inline(never)]
-    pub fn thread() -> Arc<Thread> {
+    pub fn thread() -> BorrowedArc<Thread> {
         // It does not matter if we are on a different CPU after we load the Context::thread because
         // it is going to be the same one since it represent the current thread.
-        let td = unsafe { self::arch::thread() };
-
-        // We cannot return a reference here because it requires 'static lifetime, which allow the
-        // caller to store it at a global level. Once the thread is destroyed that reference will be
-        // invalid.
-        unsafe { Arc::increment_strong_count(td) };
-        unsafe { Arc::from_raw(td) }
+        unsafe { BorrowedArc::new(self::arch::thread()) }
     }
 
     /// Pin the calling thread to one CPU.

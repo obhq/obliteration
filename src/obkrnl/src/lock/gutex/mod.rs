@@ -1,5 +1,5 @@
 use super::MTX_UNOWNED;
-use crate::context::Context;
+use crate::context::{BorrowedArc, Context};
 use alloc::rc::Rc;
 use alloc::sync::Arc;
 use core::cell::UnsafeCell;
@@ -110,7 +110,7 @@ impl GutexGroup {
     fn lock(&self) -> GroupGuard {
         // Check if the calling thread already own the lock.
         let td = Context::thread();
-        let id = Arc::as_ptr(&td) as usize;
+        let id = BorrowedArc::as_ptr(&td) as usize;
 
         if id == self.owning.load(Ordering::Relaxed) {
             // SAFETY: This is safe because the current thread own the lock.

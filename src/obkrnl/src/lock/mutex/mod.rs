@@ -1,7 +1,6 @@
 use super::MTX_UNOWNED;
-use crate::context::Context;
+use crate::context::{BorrowedArc, Context};
 use alloc::rc::Rc;
-use alloc::sync::Arc;
 use core::cell::UnsafeCell;
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
@@ -40,7 +39,7 @@ impl<T> Mutex<T> {
             .owning
             .compare_exchange(
                 MTX_UNOWNED,
-                Arc::as_ptr(&td) as usize,
+                BorrowedArc::as_ptr(&td) as usize,
                 Ordering::Acquire,
                 Ordering::Relaxed,
             )
@@ -70,7 +69,7 @@ impl<T> Mutex<T> {
         // TODO: There is a check for (m->lock_object).lo_data == 0 on the PS4.
         if lock
             .compare_exchange(
-                Arc::as_ptr(&td) as usize,
+                BorrowedArc::as_ptr(&td) as usize,
                 MTX_UNOWNED,
                 Ordering::Release,
                 Ordering::Relaxed,
