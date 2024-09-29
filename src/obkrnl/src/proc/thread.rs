@@ -1,5 +1,9 @@
+use self::cell::PrivateCell;
 use crate::lock::{Gutex, GutexGroup, GutexWriteGuard};
-use core::sync::atomic::{AtomicU16, AtomicU32};
+use core::cell::RefMut;
+use core::sync::atomic::AtomicU16;
+
+mod cell;
 
 /// Implementation of `thread` structure.
 ///
@@ -9,27 +13,27 @@ use core::sync::atomic::{AtomicU16, AtomicU32};
 /// We subtitute `TDP_NOSLEEPING` with `td_intr_nesting_level` since the only cases the thread
 /// should not allow to sleep is when it being handle an interupt.
 pub struct Thread {
-    critical_sections: AtomicU32, // td_critnest
-    active_interrupts: usize,     // td_intr_nesting_level
-    active_mutexes: AtomicU16,    // td_locks
-    sleeping: Gutex<usize>,       // td_wchan
+    critical_sections: PrivateCell<u32>, // td_critnest
+    active_interrupts: usize,            // td_intr_nesting_level
+    active_mutexes: AtomicU16,           // td_locks
+    sleeping: Gutex<usize>,              // td_wchan
 }
 
 impl Thread {
+    /// # Context safety
+    /// This function does not require a CPU context.
+    ///
     /// # Safety
     /// This function does not do anything except initialize the struct memory. It is the caller
     /// responsibility to configure the thread after this so it have a proper states and trigger
     /// necessary events.
     pub unsafe fn new_bare() -> Self {
-        // This function is not allowed to access the CPU context due to it can be called before the
-        // context has been activated.
-        //
         // td_critnest on the PS4 started with 1 but this does not work in our case because we use
         // RAII to increase and decrease it.
         let gg = GutexGroup::new();
 
         Self {
-            critical_sections: AtomicU32::new(0),
+            critical_sections: PrivateCell::new(0),
             active_interrupts: 0,
             active_mutexes: AtomicU16::new(0),
             sleeping: gg.spawn(0),
@@ -41,8 +45,11 @@ impl Thread {
     /// # Safety
     /// This is a counter. Each increment must paired with a decrement. Failure to do so will cause
     /// the whole system to be in an undefined behavior.
-    pub unsafe fn critical_sections(&self) -> &AtomicU32 {
-        &self.critical_sections
+    ///
+    /// # Panics
+    /// If called from the other thread.
+    pub unsafe fn critical_sections_mut(&self) -> RefMut<u32> {
+        self.critical_sections.borrow_mut(self)
     }
 
     pub fn active_interrupts(&self) -> usize {
