@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::Console;
-use crate::vmm::hv::{CpuIo, Hypervisor, IoBuf};
-use crate::vmm::hw::DeviceContext;
+use crate::vmm::hv::{CpuIo, Hypervisor};
+use crate::vmm::hw::{read_bin, read_u8, read_usize, DeviceContext, MmioError};
 use crate::vmm::VmmEvent;
 use obconf::{ConsoleMemory, ConsoleType};
 use std::error::Error;
@@ -25,61 +25,6 @@ impl<'a, H: Hypervisor> Context<'a, H> {
             msg: Vec::new(),
         }
     }
-
-    fn read_u8(&self, off: usize, exit: &mut dyn CpuIo) -> Result<u8, ExecError> {
-        // Get data.
-        let data = match exit.buffer() {
-            IoBuf::Write(v) => v,
-            IoBuf::Read(_) => return Err(ExecError::ReadNotSupported(off)),
-        };
-
-        // Parse data.
-        if data.len() != 1 {
-            Err(ExecError::InvalidData(off))
-        } else {
-            Ok(data[0])
-        }
-    }
-
-    fn read_usize(&self, off: usize, exit: &mut dyn CpuIo) -> Result<usize, ExecError> {
-        // Get data.
-        let data = match exit.buffer() {
-            IoBuf::Write(v) => v,
-            IoBuf::Read(_) => return Err(ExecError::ReadNotSupported(off)),
-        };
-
-        // Parse data.
-        data.try_into()
-            .map(|v| usize::from_ne_bytes(v))
-            .map_err(|_| ExecError::InvalidData(off))
-    }
-
-    fn read_bin<'b>(
-        &self,
-        off: usize,
-        exit: &'b mut dyn CpuIo,
-        len: usize,
-    ) -> Result<&'b [u8], ExecError> {
-        // Get data.
-        let buf = match exit.buffer() {
-            IoBuf::Write(v) => v,
-            IoBuf::Read(_) => return Err(ExecError::ReadNotSupported(off)),
-        };
-
-        // Get address.
-        let vaddr = buf
-            .try_into()
-            .map(|v| usize::from_ne_bytes(v))
-            .map_err(|_| ExecError::InvalidData(off))?;
-        let paddr = exit
-            .translate(vaddr)
-            .map_err(|e| ExecError::TranslateVaddrFailed(vaddr, e))?;
-
-        // Read data.
-        let data = unsafe { self.hv.ram().host_addr().add(paddr) };
-
-        Ok(unsafe { std::slice::from_raw_parts(data, len) })
-    }
 }
 
 impl<'a, H: Hypervisor> DeviceContext for Context<'a, H> {
@@ -88,13 +33,15 @@ impl<'a, H: Hypervisor> DeviceContext for Context<'a, H> {
         let off = exit.addr() - self.dev.addr;
 
         if off == offset_of!(ConsoleMemory, msg_len) {
-            self.msg_len = self.read_usize(off, exit)?;
+            self.msg_len = read_usize(exit).map_err(|e| ExecError::ReadFailed(off, e))?;
         } else if off == offset_of!(ConsoleMemory, msg_addr) {
-            self.msg
-                .extend_from_slice(self.read_bin(off, exit, self.msg_len)?);
+            let data =
+                read_bin(exit, self.msg_len, self.hv).map_err(|e| ExecError::ReadFailed(off, e))?;
+
+            self.msg.extend_from_slice(data);
         } else if off == offset_of!(ConsoleMemory, commit) {
             // Parse data.
-            let commit = self.read_u8(off, exit)?;
+            let commit = read_u8(exit).map_err(|e| ExecError::ReadFailed(off, e))?;
             let ty: ConsoleType = commit
                 .try_into()
                 .map_err(|_| Box::new(ExecError::InvalidCommit(commit)))?;
@@ -126,14 +73,8 @@ enum ExecError {
     #[error("unknown field at offset {0:#}")]
     UnknownField(usize),
 
-    #[error("read at offset {0:#} is not supported")]
-    ReadNotSupported(usize),
-
-    #[error("invalid data for offset {0:#}")]
-    InvalidData(usize),
-
-    #[error("couldn't translate {0:#x} to physical address")]
-    TranslateVaddrFailed(usize, #[source] Box<dyn Error>),
+    #[error("couldn't read data for offset {0:#}")]
+    ReadFailed(usize, #[source] MmioError),
 
     #[error("{0:#} is not a valid commit")]
     InvalidCommit(u8),

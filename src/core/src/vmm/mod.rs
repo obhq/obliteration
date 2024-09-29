@@ -395,6 +395,7 @@ pub unsafe extern "C" fn vmm_run(
     let event = VmmEventHandler { fp: event, cx };
     let devices = Arc::new(setup_devices(Ram::SIZE, block_size, event));
     let env = BootEnv::Vm(Vm {
+        vmm: devices.vmm().addr(),
         console: devices.console().addr(),
         host_page_size,
     });
@@ -635,6 +636,9 @@ unsafe impl Sync for VmmEventHandler {}
 #[repr(C)]
 #[allow(dead_code)] // TODO: Figure out why Rust think fields in each enum are not used.
 pub enum VmmEvent {
+    Exiting {
+        success: bool,
+    },
     Log {
         ty: VmmLog,
         data: *const c_char,

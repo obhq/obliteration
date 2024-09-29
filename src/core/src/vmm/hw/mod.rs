@@ -1,48 +1,104 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use super::hv::{CpuIo, Hypervisor};
+use super::hv::{CpuIo, Hypervisor, IoBuf};
 use super::VmmEventHandler;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::num::NonZero;
 use std::sync::Arc;
+use thiserror::Error;
 
 pub use self::console::*;
+pub use self::vmm::*;
 
 mod console;
+mod vmm;
 
 pub fn setup_devices<H: Hypervisor>(
     start_addr: usize,
     block_size: NonZero<usize>,
     event: VmmEventHandler,
 ) -> DeviceTree<H> {
-    let mut map = BTreeMap::<usize, Arc<dyn Device<H>>>::new();
+    let mut b = MapBuilder {
+        map: BTreeMap::new(),
+        next: start_addr,
+    };
 
-    // Console.
-    let addr = start_addr;
-    let console = Arc::new(Console::new(addr, block_size, event));
+    let vmm = b.push(|addr| Vmm::new(addr, block_size, event));
+    let console = b.push(|addr| Console::new(addr, block_size, event));
 
-    assert!(map
-        .insert(<Console as Device<H>>::addr(&console), console.clone())
-        .is_none());
-
-    // Make sure nothing are overlapped.
-    let mut end = start_addr;
-
-    for (addr, dev) in &map {
-        assert!(*addr >= end);
-        end = addr.checked_add(dev.len().get()).unwrap();
+    DeviceTree {
+        vmm,
+        console,
+        map: b.map,
     }
+}
 
-    DeviceTree { console, map }
+fn read_u8(exit: &mut dyn CpuIo) -> Result<u8, MmioError> {
+    // Get data.
+    let data = match exit.buffer() {
+        IoBuf::Write(v) => v,
+        IoBuf::Read(_) => return Err(MmioError::InvalidOperation),
+    };
+
+    // Parse data.
+    if data.len() != 1 {
+        Err(MmioError::InvalidData)
+    } else {
+        Ok(data[0])
+    }
+}
+
+fn read_usize(exit: &mut dyn CpuIo) -> Result<usize, MmioError> {
+    // Get data.
+    let data = match exit.buffer() {
+        IoBuf::Write(v) => v,
+        IoBuf::Read(_) => return Err(MmioError::InvalidOperation),
+    };
+
+    // Parse data.
+    data.try_into()
+        .map(|v| usize::from_ne_bytes(v))
+        .map_err(|_| MmioError::InvalidData)
+}
+
+fn read_bin<'b>(
+    exit: &'b mut dyn CpuIo,
+    len: usize,
+    hv: &impl Hypervisor,
+) -> Result<&'b [u8], MmioError> {
+    // Get data.
+    let buf = match exit.buffer() {
+        IoBuf::Write(v) => v,
+        IoBuf::Read(_) => return Err(MmioError::InvalidOperation),
+    };
+
+    // Get address.
+    let vaddr = buf
+        .try_into()
+        .map(|v| usize::from_ne_bytes(v))
+        .map_err(|_| MmioError::InvalidData)?;
+    let paddr = exit
+        .translate(vaddr)
+        .map_err(|e| MmioError::TranslateVaddrFailed(vaddr, e))?;
+
+    // Get data.
+    let data = unsafe { hv.ram().host_addr().add(paddr) };
+
+    Ok(unsafe { std::slice::from_raw_parts(data, len) })
 }
 
 /// Contains all virtual devices, except RAM; for the VM.
 pub struct DeviceTree<H: Hypervisor> {
+    vmm: Arc<Vmm>,
     console: Arc<Console>,
     map: BTreeMap<usize, Arc<dyn Device<H>>>,
 }
 
 impl<H: Hypervisor> DeviceTree<H> {
+    pub fn vmm(&self) -> &impl Device<H> {
+        self.vmm.as_ref()
+    }
+
     pub fn console(&self) -> &impl Device<H> {
         self.console.as_ref()
     }
@@ -67,4 +123,34 @@ pub trait Device<H: Hypervisor>: Send + Sync {
 /// Context to execute memory-mapped I/O operations on a virtual device.
 pub trait DeviceContext {
     fn exec(&mut self, exit: &mut dyn CpuIo) -> Result<bool, Box<dyn Error>>;
+}
+
+/// Struct to build virtual device map.
+struct MapBuilder<H: Hypervisor> {
+    map: BTreeMap<usize, Arc<dyn Device<H>>>,
+    next: usize,
+}
+
+impl<H: Hypervisor> MapBuilder<H> {
+    fn push<T: Device<H> + 'static>(&mut self, f: impl FnOnce(usize) -> T) -> Arc<T> {
+        let d = Arc::new(f(self.next));
+
+        assert!(self.map.insert(self.next, d.clone()).is_none());
+        self.next = self.next.checked_add(d.len().get()).unwrap();
+
+        d
+    }
+}
+
+/// Represents an error when a Memory-mapped I/O operation fails.
+#[derive(Debug, Error)]
+enum MmioError {
+    #[error("invalid operation")]
+    InvalidOperation,
+
+    #[error("invalid data")]
+    InvalidData,
+
+    #[error("couldn't translate {0:#x} to physical address")]
+    TranslateVaddrFailed(usize, #[source] Box<dyn Error>),
 }
