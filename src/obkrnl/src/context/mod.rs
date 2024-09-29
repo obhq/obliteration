@@ -1,6 +1,5 @@
 use crate::proc::{ProcMgr, Thread};
 use alloc::sync::Arc;
-use core::sync::atomic::{AtomicPtr, Ordering};
 
 pub use self::arc::*;
 pub use self::local::*;
@@ -31,8 +30,8 @@ mod local;
 /// panic handler, both of them does not require a CPU context.
 #[allow(dead_code)] // All fields accessed by inline assembly.
 pub struct Context {
-    cpu: usize,                // pc_cpuid
-    thread: AtomicPtr<Thread>, // pc_curthread
+    cpu: usize,            // pc_cpuid
+    thread: *const Thread, // pc_curthread
     pmgr: *const ProcMgr,
 }
 
@@ -51,7 +50,7 @@ impl Context {
     pub unsafe fn new(cpu: usize, td: Arc<Thread>, pmgr: Arc<ProcMgr>) -> Self {
         Self {
             cpu,
-            thread: AtomicPtr::new(Arc::into_raw(td).cast_mut()),
+            thread: Arc::into_raw(td),
             pmgr: Arc::into_raw(pmgr),
         }
     }
@@ -71,11 +70,9 @@ impl Context {
     ///
     /// See `critical_enter` and `critical_exit` on the PS4 for a reference.
     pub fn pin() -> PinnedContext {
-        // Relax ordering should be enough here since this increment will be checked by the same CPU
-        // when an interupt happens.
         let td = unsafe { self::arch::thread() };
 
-        unsafe { (*td).critical_sections().fetch_add(1, Ordering::Relaxed) };
+        unsafe { *(*td).critical_sections_mut() += 1 };
 
         PinnedContext(td)
     }
@@ -115,11 +112,9 @@ impl PinnedContext {
 
 impl Drop for PinnedContext {
     fn drop(&mut self) {
-        // Relax ordering should be enough here since this decrement will be checked by the same CPU
-        // when an interupt happens.
         let td = unsafe { &*self.0 };
 
-        unsafe { td.critical_sections().fetch_sub(1, Ordering::Relaxed) };
+        unsafe { *td.critical_sections_mut() -= 1 };
 
         // TODO: Implement td_owepreempt.
     }
