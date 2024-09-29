@@ -454,6 +454,20 @@ void MainWindow::updateScreen()
     m_screen->requestUpdate();
 }
 
+void MainWindow::waitKernelExit(bool success)
+{
+    m_kernel.free();
+
+    if (!success) {
+        QMessageBox::critical(
+            this,
+            "Error",
+            "The kernel was stopped unexpectedly. See the kernel logs for more details.");
+    }
+
+    m_main->setCurrentIndex(0);
+}
+
 void MainWindow::log(VmmLog type, const QString &msg)
 {
     if (m_logs) {
@@ -557,6 +571,13 @@ bool MainWindow::vmmHandler(const VmmEvent *ev, void *cx)
     auto w = reinterpret_cast<MainWindow *>(cx);
 
     switch (ev->tag) {
+    case VmmEvent_Exiting:
+        QMetaObject::invokeMethod(
+            w,
+            &MainWindow::waitKernelExit,
+            Qt::QueuedConnection,
+            ev->exiting.success);
+        break;
     case VmmEvent_Log:
         QMetaObject::invokeMethod(
             w,

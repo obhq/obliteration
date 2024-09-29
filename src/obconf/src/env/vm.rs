@@ -3,13 +3,31 @@ use core::num::NonZero;
 /// Provides boot information when booting on a Virtual Machine.
 #[repr(C)]
 pub struct Vm {
+    /// Address of [VmmMemory].
+    pub vmm: usize,
     /// Address of [ConsoleMemory].
     pub console: usize,
     /// Page size on the host.
     pub host_page_size: NonZero<usize>,
 }
 
-/// Layout of console memory.
+/// Layout of a memory for Memory-mapped I/O to communicate with VMM.
+#[cfg(feature = "virt")]
+#[repr(C)]
+pub struct VmmMemory {
+    pub shutdown: KernelExit,
+}
+
+/// Exit status of the kernel.
+#[cfg(feature = "virt")]
+#[repr(u8)]
+#[derive(Clone, Copy, PartialEq, Eq, num_enum::IntoPrimitive, num_enum::TryFromPrimitive)]
+pub enum KernelExit {
+    Success,
+    Panic,
+}
+
+/// Layout of console memory for Memory-mapped I/O.
 ///
 /// The sequence of operations on a console memory is per-cpu. The kernel will start each log by:
 ///

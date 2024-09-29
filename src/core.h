@@ -85,7 +85,12 @@ struct VmmScreen {
  * Contains VMM event information.
  */
 enum VmmEvent_Tag {
+    VmmEvent_Exiting,
     VmmEvent_Log,
+};
+
+struct VmmEvent_Exiting_Body {
+    bool success;
 };
 
 struct VmmEvent_Log_Body {
@@ -97,6 +102,7 @@ struct VmmEvent_Log_Body {
 struct VmmEvent {
     enum VmmEvent_Tag tag;
     union {
+        struct VmmEvent_Exiting_Body exiting;
         struct VmmEvent_Log_Body log;
     };
 };

@@ -41,6 +41,7 @@ private slots:
     void startKernel();
     void updateScreen();
 private:
+    void waitKernelExit(bool success);
     void log(VmmLog type, const QString &msg);
     bool loadGame(const QString &gameId);
     bool requireEmulatorStopped();

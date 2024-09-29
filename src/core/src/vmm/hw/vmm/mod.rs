@@ -3,21 +3,21 @@ use self::context::Context;
 use super::{Device, DeviceContext};
 use crate::vmm::hv::Hypervisor;
 use crate::vmm::VmmEventHandler;
-use obconf::ConsoleMemory;
+use obconf::VmmMemory;
 use std::num::NonZero;
 
 mod context;
 
-/// Virtual console for the VM.
-pub struct Console {
+/// Virtual device for the kernel to communicate with the VMM.
+pub struct Vmm {
     addr: usize,
     len: NonZero<usize>,
     event: VmmEventHandler,
 }
 
-impl Console {
+impl Vmm {
     pub fn new(addr: usize, block_size: NonZero<usize>, event: VmmEventHandler) -> Self {
-        let len = size_of::<ConsoleMemory>()
+        let len = size_of::<VmmMemory>()
             .checked_next_multiple_of(block_size.get())
             .and_then(NonZero::new)
             .unwrap();
@@ -26,7 +26,7 @@ impl Console {
     }
 }
 
-impl<H: Hypervisor> Device<H> for Console {
+impl<H: Hypervisor> Device<H> for Vmm {
     fn addr(&self) -> usize {
         self.addr
     }
@@ -35,7 +35,7 @@ impl<H: Hypervisor> Device<H> for Console {
         self.len
     }
 
-    fn create_context<'a>(&'a self, hv: &'a H) -> Box<dyn DeviceContext + 'a> {
-        Box::new(Context::new(self, hv))
+    fn create_context<'a>(&'a self, _: &'a H) -> Box<dyn DeviceContext + 'a> {
+        Box::new(Context::new(self))
     }
 }
