@@ -1,7 +1,9 @@
-use crate::context::{BorrowedArc, Context};
+use self::cell::PrivateCell;
 use crate::lock::{Gutex, GutexGroup, GutexWriteGuard};
-use core::cell::{RefCell, RefMut};
+use core::cell::RefMut;
 use core::sync::atomic::AtomicU16;
+
+mod cell;
 
 /// Implementation of `thread` structure.
 ///
@@ -11,10 +13,10 @@ use core::sync::atomic::AtomicU16;
 /// We subtitute `TDP_NOSLEEPING` with `td_intr_nesting_level` since the only cases the thread
 /// should not allow to sleep is when it being handle an interupt.
 pub struct Thread {
-    critical_sections: Private<u32>, // td_critnest
-    active_interrupts: usize,        // td_intr_nesting_level
-    active_mutexes: AtomicU16,       // td_locks
-    sleeping: Gutex<usize>,          // td_wchan
+    critical_sections: PrivateCell<u32>, // td_critnest
+    active_interrupts: usize,            // td_intr_nesting_level
+    active_mutexes: AtomicU16,           // td_locks
+    sleeping: Gutex<usize>,              // td_wchan
 }
 
 impl Thread {
@@ -31,7 +33,7 @@ impl Thread {
         let gg = GutexGroup::new();
 
         Self {
-            critical_sections: Private::new(0),
+            critical_sections: PrivateCell::new(0),
             active_interrupts: 0,
             active_mutexes: AtomicU16::new(0),
             sleeping: gg.spawn(0),
@@ -61,28 +63,5 @@ impl Thread {
     /// Sleeping address. Zero if this thread is not in a sleep queue.
     pub fn sleeping_mut(&self) -> GutexWriteGuard<usize> {
         self.sleeping.write()
-    }
-}
-
-/// Encapsulates a field of [Thread] that can only be accessed by the CPU that currently executing
-/// the thread.
-struct Private<T>(RefCell<T>);
-
-impl<T> Private<T> {
-    fn new(v: T) -> Self {
-        Self(RefCell::new(v))
-    }
-
-    fn borrow_mut(&self, td: &Thread) -> RefMut<T> {
-        self.validate(td);
-        self.0.borrow_mut()
-    }
-
-    fn validate(&self, td: &Thread) {
-        let current = Context::thread();
-
-        if !core::ptr::eq(BorrowedArc::as_ptr(&current), td) {
-            panic!("accessing a private field from the other thread is not supported");
-        }
     }
 }
