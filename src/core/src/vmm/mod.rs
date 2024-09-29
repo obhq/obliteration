@@ -8,8 +8,7 @@ use self::ram::{Ram, RamMap};
 use self::screen::Screen;
 use crate::error::RustError;
 use crate::profile::Profile;
-use obconf::{BootEnv, Vm};
-use obvirt::console::MsgType;
+use obconf::{BootEnv, ConsoleType, Vm};
 use std::cmp::max;
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -646,8 +645,8 @@ pub enum VmmEvent {
 /// Log category.
 ///
 /// The reason we need this because cbindgen is not good at exporting dependency types so we can't
-/// use [`MsgType`] directly. See https://github.com/mozilla/cbindgen/issues/667 for an example of
-/// the problem.
+/// use [`ConsoleType`] directly. See https://github.com/mozilla/cbindgen/issues/667 for an example
+/// of the problem.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub enum VmmLog {
@@ -656,12 +655,12 @@ pub enum VmmLog {
     Error,
 }
 
-impl From<MsgType> for VmmLog {
-    fn from(value: MsgType) -> Self {
+impl From<ConsoleType> for VmmLog {
+    fn from(value: ConsoleType) -> Self {
         match value {
-            MsgType::Info => Self::Info,
-            MsgType::Warn => Self::Warn,
-            MsgType::Error => Self::Error,
+            ConsoleType::Info => Self::Info,
+            ConsoleType::Warn => Self::Warn,
+            ConsoleType::Error => Self::Error,
         }
     }
 }

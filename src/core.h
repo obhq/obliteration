@@ -35,8 +35,8 @@ enum DisplayResolution {
  * Log category.
  *
  * The reason we need this because cbindgen is not good at exporting dependency types so we can't
- * use [`MsgType`] directly. See https://github.com/mozilla/cbindgen/issues/667 for an example of
- * the problem.
+ * use [`ConsoleType`] directly. See https://github.com/mozilla/cbindgen/issues/667 for an example
+ * of the problem.
  */
 enum VmmLog {
     VmmLog_Info,

@@ -3,7 +3,7 @@ use super::Console;
 use crate::vmm::hv::{CpuIo, Hypervisor, IoBuf};
 use crate::vmm::hw::DeviceContext;
 use crate::vmm::VmmEvent;
-use obvirt::console::{Memory, MsgType};
+use obconf::{ConsoleMemory, ConsoleType};
 use std::error::Error;
 use std::mem::offset_of;
 use thiserror::Error;
@@ -13,7 +13,7 @@ pub struct Context<'a, H> {
     dev: &'a Console,
     hv: &'a H,
     msg_len: usize,
-    msg: String,
+    msg: Vec<u8>,
 }
 
 impl<'a, H: Hypervisor> Context<'a, H> {
@@ -22,7 +22,7 @@ impl<'a, H: Hypervisor> Context<'a, H> {
             dev,
             hv,
             msg_len: 0,
-            msg: String::new(),
+            msg: Vec::new(),
         }
     }
 
@@ -54,12 +54,12 @@ impl<'a, H: Hypervisor> Context<'a, H> {
             .map_err(|_| ExecError::InvalidData(off))
     }
 
-    fn read_str<'b>(
+    fn read_bin<'b>(
         &self,
         off: usize,
         exit: &'b mut dyn CpuIo,
         len: usize,
-    ) -> Result<&'b str, ExecError> {
+    ) -> Result<&'b [u8], ExecError> {
         // Get data.
         let buf = match exit.buffer() {
             IoBuf::Write(v) => v,
@@ -77,9 +77,8 @@ impl<'a, H: Hypervisor> Context<'a, H> {
 
         // Read data.
         let data = unsafe { self.hv.ram().host_addr().add(paddr) };
-        let data = unsafe { std::slice::from_raw_parts(data, len) };
 
-        Ok(std::str::from_utf8(data).unwrap())
+        Ok(unsafe { std::slice::from_raw_parts(data, len) })
     }
 }
 
@@ -88,17 +87,17 @@ impl<'a, H: Hypervisor> DeviceContext for Context<'a, H> {
         // Check field.
         let off = exit.addr() - self.dev.addr;
 
-        if off == offset_of!(Memory, msg_len) {
+        if off == offset_of!(ConsoleMemory, msg_len) {
             self.msg_len = self.read_usize(off, exit)?;
-        } else if off == offset_of!(Memory, msg_addr) {
-            self.msg.push_str(self.read_str(off, exit, self.msg_len)?);
-        } else if off == offset_of!(Memory, commit) {
+        } else if off == offset_of!(ConsoleMemory, msg_addr) {
+            self.msg
+                .extend_from_slice(self.read_bin(off, exit, self.msg_len)?);
+        } else if off == offset_of!(ConsoleMemory, commit) {
             // Parse data.
             let commit = self.read_u8(off, exit)?;
-            let ty = match MsgType::from_u8(commit) {
-                Some(v) => v,
-                None => return Err(Box::new(ExecError::InvalidCommit(commit))),
-            };
+            let ty: ConsoleType = commit
+                .try_into()
+                .map_err(|_| Box::new(ExecError::InvalidCommit(commit)))?;
 
             // Trigger event.
             let msg = std::mem::take(&mut self.msg);
