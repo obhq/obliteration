@@ -11,6 +11,7 @@ use libc::{ioctl, mmap, open, MAP_FAILED, MAP_PRIVATE, O_RDWR, PROT_READ, PROT_W
 use std::io::Error;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd};
 use std::ptr::null_mut;
+use std::sync::Mutex;
 use thiserror::Error;
 
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
@@ -89,10 +90,35 @@ pub fn new(cpu: usize, ram: Ram) -> Result<impl Hypervisor, VmmError> {
         v => return Err(VmmError::MapRamFailed(Error::from_raw_os_error(v))),
     }
 
+    // AArch64 require all CPU to be created before calling KVM_ARM_VCPU_INIT.
+    let mut cpus = Vec::with_capacity(cpu);
+
+    for id in 0..cpu {
+        let cpu = unsafe { ioctl(vm.as_raw_fd(), KVM_CREATE_VCPU, id) };
+
+        if cpu < 0 {
+            return Err(VmmError::CreateCpuFailed(id, Error::last_os_error()));
+        }
+
+        cpus.push(Mutex::new(unsafe { OwnedFd::from_raw_fd(cpu) }));
+    }
+
+    // Init CPU.
+    #[cfg(target_arch = "aarch64")]
+    for (i, cpu) in cpus.iter_mut().enumerate() {
+        use self::ffi::KVM_ARM_VCPU_INIT;
+
+        let cpu = cpu.get_mut().unwrap();
+
+        if unsafe { ioctl(cpu.as_raw_fd(), KVM_ARM_VCPU_INIT, &preferred_target) < 0 } {
+            return Err(VmmError::InitCpuFailed(i, Error::last_os_error()));
+        }
+    }
+
     Ok(Kvm {
+        feats: load_feats(cpus[0].get_mut().unwrap().as_fd())?,
+        cpus,
         vcpu_mmap_size: vcpu_mmap_size.try_into().unwrap(),
-        #[cfg(target_arch = "aarch64")]
-        preferred_target,
         vm,
         ram,
         kvm,
@@ -141,106 +167,76 @@ fn create_vm(kvm: BorrowedFd) -> Result<OwnedFd, VmmError> {
     }
 }
 
+#[cfg(target_arch = "aarch64")]
+fn load_feats(cpu: BorrowedFd) -> Result<CpuFeats, VmmError> {
+    use self::ffi::{KvmOneReg, ARM64_SYS_REG, KVM_GET_ONE_REG};
+    use crate::vmm::hv::{Mmfr0, Mmfr1, Mmfr2};
+
+    // ID_AA64MMFR0_EL1.
+    let mut mmfr0 = Mmfr0::default();
+    let mut req = KvmOneReg {
+        id: ARM64_SYS_REG(0b11, 0b000, 0b0000, 0b0111, 0b000),
+        addr: &mut mmfr0,
+    };
+
+    if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_ONE_REG, &mut req) < 0 } {
+        return Err(VmmError::ReadMmfr0Failed(Error::last_os_error()));
+    }
+
+    // ID_AA64MMFR1_EL1.
+    let mut mmfr1 = Mmfr1::default();
+    let mut req = KvmOneReg {
+        id: ARM64_SYS_REG(0b11, 0b000, 0b0000, 0b0111, 0b001),
+        addr: &mut mmfr1,
+    };
+
+    if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_ONE_REG, &mut req) < 0 } {
+        return Err(VmmError::ReadMmfr1Failed(Error::last_os_error()));
+    }
+
+    // ID_AA64MMFR2_EL1.
+    let mut mmfr2 = Mmfr2::default();
+    let mut req = KvmOneReg {
+        id: ARM64_SYS_REG(0b11, 0b000, 0b0000, 0b0111, 0b010),
+        addr: &mut mmfr2,
+    };
+
+    if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_ONE_REG, &mut req) < 0 } {
+        return Err(VmmError::ReadMmfr2Failed(Error::last_os_error()));
+    }
+
+    Ok(CpuFeats {
+        mmfr0,
+        mmfr1,
+        mmfr2,
+    })
+}
+
+#[cfg(target_arch = "x86_64")]
+fn load_feats(_: BorrowedFd) -> Result<CpuFeats, VmmError> {
+    Ok(CpuFeats {})
+}
+
 /// Implementation of [`Hypervisor`] using KVM.
 ///
 /// Fields in this struct need to drop in a correct order (e.g. vm must be dropped before ram).
 struct Kvm {
+    feats: CpuFeats,
+    cpus: Vec<Mutex<OwnedFd>>,
     vcpu_mmap_size: usize,
-    #[cfg(target_arch = "aarch64")]
-    preferred_target: self::ffi::KvmVcpuInit,
+    #[allow(dead_code)]
     vm: OwnedFd,
     ram: Ram,
     #[allow(dead_code)] // kvm are needed by vm.
     kvm: OwnedFd,
 }
 
-impl Kvm {
-    #[cfg(target_arch = "aarch64")]
-    fn create_cpu(&self, id: usize) -> Result<OwnedFd, KvmCpuError> {
-        use self::ffi::KVM_ARM_VCPU_INIT;
-
-        // Create CPU.
-        let cpu = unsafe { ioctl(self.vm.as_raw_fd(), KVM_CREATE_VCPU, id) };
-
-        if cpu < 0 {
-            return Err(KvmCpuError::CreateCpuFailed(Error::last_os_error()));
-        }
-
-        // Init CPU.
-        let cpu = unsafe { OwnedFd::from_raw_fd(cpu) };
-
-        if unsafe { ioctl(cpu.as_raw_fd(), KVM_ARM_VCPU_INIT, &self.preferred_target) < 0 } {
-            return Err(KvmCpuError::InitCpuFailed(Error::last_os_error()));
-        }
-
-        Ok(cpu)
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    fn create_cpu(&self, id: usize) -> Result<OwnedFd, KvmCpuError> {
-        let cpu = unsafe { ioctl(self.vm.as_raw_fd(), KVM_CREATE_VCPU, id) };
-
-        if cpu < 0 {
-            Err(KvmCpuError::CreateCpuFailed(Error::last_os_error()))
-        } else {
-            Ok(unsafe { OwnedFd::from_raw_fd(cpu) })
-        }
-    }
-}
-
 impl Hypervisor for Kvm {
     type Cpu<'a> = KvmCpu<'a>;
     type CpuErr = KvmCpuError;
 
-    #[cfg(target_arch = "aarch64")]
     fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr> {
-        use self::ffi::{KvmOneReg, ARM64_SYS_REG, KVM_GET_ONE_REG};
-        use crate::vmm::hv::{Mmfr0, Mmfr1, Mmfr2};
-
-        // ID_AA64MMFR0_EL1.
-        let cpu = self.create_cpu(0)?;
-        let mut mmfr0 = Mmfr0::default();
-        let mut req = KvmOneReg {
-            id: ARM64_SYS_REG(0b11, 0b000, 0b0000, 0b0111, 0b000),
-            addr: &mut mmfr0,
-        };
-
-        if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_ONE_REG, &mut req) < 0 } {
-            return Err(KvmCpuError::ReadMmfr0Failed(Error::last_os_error()));
-        }
-
-        // ID_AA64MMFR1_EL1.
-        let mut mmfr1 = Mmfr1::default();
-        let mut req = KvmOneReg {
-            id: ARM64_SYS_REG(0b11, 0b000, 0b0000, 0b0111, 0b001),
-            addr: &mut mmfr1,
-        };
-
-        if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_ONE_REG, &mut req) < 0 } {
-            return Err(KvmCpuError::ReadMmfr1Failed(Error::last_os_error()));
-        }
-
-        // ID_AA64MMFR2_EL1.
-        let mut mmfr2 = Mmfr2::default();
-        let mut req = KvmOneReg {
-            id: ARM64_SYS_REG(0b11, 0b000, 0b0000, 0b0111, 0b010),
-            addr: &mut mmfr2,
-        };
-
-        if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_ONE_REG, &mut req) < 0 } {
-            return Err(KvmCpuError::ReadMmfr2Failed(Error::last_os_error()));
-        }
-
-        Ok(CpuFeats {
-            mmfr0,
-            mmfr1,
-            mmfr2,
-        })
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr> {
-        Ok(CpuFeats {})
+        Ok(self.feats.clone())
     }
 
     fn ram(&self) -> &Ram {
@@ -252,14 +248,18 @@ impl Hypervisor for Kvm {
     }
 
     fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {
-        let vcpu = self.create_cpu(id)?;
+        // Get CPU.
+        let cpu = self.cpus.get(id).ok_or(KvmCpuError::InvalidId)?;
+        let cpu = cpu.try_lock().map_err(|_| KvmCpuError::DuplicatedId)?;
+
+        // Get run context.
         let cx = unsafe {
             mmap(
                 null_mut(),
                 self.vcpu_mmap_size,
                 PROT_READ | PROT_WRITE,
                 MAP_PRIVATE,
-                vcpu.as_raw_fd(),
+                cpu.as_raw_fd(),
                 0,
             )
         };
@@ -268,32 +268,19 @@ impl Hypervisor for Kvm {
             return Err(KvmCpuError::GetKvmRunFailed(Error::last_os_error()));
         }
 
-        Ok(unsafe { KvmCpu::new(vcpu, cx.cast(), self.vcpu_mmap_size) })
+        Ok(unsafe { KvmCpu::new(cpu, cx.cast(), self.vcpu_mmap_size) })
     }
 }
 
 /// Implementation of [`Hypervisor::CpuErr`].
 #[derive(Debug, Error)]
 pub enum KvmCpuError {
-    #[error("couldn't create vCPU")]
-    CreateCpuFailed(#[source] std::io::Error),
+    #[error("invalid CPU identifier")]
+    InvalidId,
 
-    #[cfg(target_arch = "aarch64")]
-    #[error("couldn't initialize vCPU")]
-    InitCpuFailed(#[source] std::io::Error),
+    #[error("CPU identifier currently in use")]
+    DuplicatedId,
 
     #[error("couldn't get a pointer to kvm_run")]
     GetKvmRunFailed(#[source] std::io::Error),
-
-    #[cfg(target_arch = "aarch64")]
-    #[error("couldn't read ID_AA64MMFR0_EL1")]
-    ReadMmfr0Failed(#[source] std::io::Error),
-
-    #[cfg(target_arch = "aarch64")]
-    #[error("couldn't read ID_AA64MMFR1_EL1")]
-    ReadMmfr1Failed(#[source] std::io::Error),
-
-    #[cfg(target_arch = "aarch64")]
-    #[error("couldn't read ID_AA64MMFR2_EL1")]
-    ReadMmfr2Failed(#[source] std::io::Error),
 }
