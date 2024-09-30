@@ -5,28 +5,23 @@ use super::run::KvmRun;
 use crate::vmm::hv::{Cpu, CpuExit, CpuIo, IoBuf};
 use libc::munmap;
 use std::error::Error;
-use std::marker::PhantomData;
 use std::os::fd::{AsRawFd, OwnedFd};
+use std::sync::MutexGuard;
 
 /// Implementation of [`Cpu`] for KVM.
 pub struct KvmCpu<'a> {
-    fd: OwnedFd,
+    fd: MutexGuard<'a, OwnedFd>,
     cx: (*mut KvmRun, usize),
-    vm: PhantomData<&'a OwnedFd>,
 }
 
 impl<'a> KvmCpu<'a> {
     /// # Safety
     /// - `cx` cannot be null and must be obtained from `mmap` on `fd`.
     /// - `len` must be the same value that used on `mmap`.
-    pub unsafe fn new(fd: OwnedFd, cx: *mut KvmRun, len: usize) -> Self {
+    pub unsafe fn new(fd: MutexGuard<'a, OwnedFd>, cx: *mut KvmRun, len: usize) -> Self {
         assert!(len >= size_of::<KvmRun>());
 
-        Self {
-            fd,
-            cx: (cx, len),
-            vm: PhantomData,
-        }
+        Self { fd, cx: (cx, len) }
     }
 }
 

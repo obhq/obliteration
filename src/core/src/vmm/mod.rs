@@ -722,6 +722,26 @@ enum VmmError {
     MapRamFailed(#[source] std::io::Error),
 
     #[cfg(target_os = "linux")]
+    #[error("couldn't create vCPU #{0}")]
+    CreateCpuFailed(usize, #[source] std::io::Error),
+
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    #[error("couldn't initialize vCPU #{0}")]
+    InitCpuFailed(usize, #[source] std::io::Error),
+
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    #[error("couldn't read ID_AA64MMFR0_EL1")]
+    ReadMmfr0Failed(#[source] std::io::Error),
+
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    #[error("couldn't read ID_AA64MMFR1_EL1")]
+    ReadMmfr1Failed(#[source] std::io::Error),
+
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    #[error("couldn't read ID_AA64MMFR2_EL1")]
+    ReadMmfr2Failed(#[source] std::io::Error),
+
+    #[cfg(target_os = "linux")]
     #[error("couldn't get the size of vCPU mmap")]
     GetMmapSizeFailed(#[source] std::io::Error),
 
