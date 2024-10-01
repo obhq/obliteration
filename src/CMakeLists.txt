@@ -43,7 +43,7 @@ elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
     target_sources(obliteration PRIVATE kvm.cpp vulkan.cpp)
 endif()
 
-add_dependencies(obliteration core)
+add_dependencies(obliteration libgui)
 
 set_target_properties(obliteration PROPERTIES AUTOMOC ON AUTORCC ON)
 
@@ -66,7 +66,7 @@ target_compile_features(obliteration PRIVATE cxx_std_17)
 
 target_link_libraries(obliteration PRIVATE Qt6::Svg Qt6::Widgets)
 target_link_libraries(obliteration PRIVATE Threads::Threads)
-target_link_libraries(obliteration PRIVATE ${LIBCORE})
+target_link_libraries(obliteration PRIVATE ${LIBGUI})
 
 if(WIN32)
     target_link_libraries(obliteration PRIVATE bcrypt imm32 ntdll setupapi userenv version winhvplatform winmm ws2_32)

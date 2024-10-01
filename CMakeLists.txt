@@ -41,22 +41,22 @@ set(KERNEL ${KERNEL_OUTPUTS}/obkrnl)
 set(HOST_OUTPUTS $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/debug,${CMAKE_CURRENT_SOURCE_DIR}/target/release>)
 
 if(WIN32)
-    set(LIBCORE ${HOST_OUTPUTS}/core.lib)
+    set(LIBGUI ${HOST_OUTPUTS}/gui.lib)
 else()
-    set(LIBCORE ${HOST_OUTPUTS}/libcore.a)
+    set(LIBGUI ${HOST_OUTPUTS}/libgui.a)
 endif()
 
-add_custom_target(core
+add_custom_target(libgui
     COMMAND cargo build $<IF:$<CONFIG:Debug>,--profile=dev,--release>
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src/core
-    BYPRODUCTS ${LIBCORE})
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/gui
+    BYPRODUCTS ${LIBGUI})
 
 add_custom_target(kernel
     COMMAND cargo ${KERNEL_TOOLCHAIN} build $<IF:$<CONFIG:Debug>,--profile=dev,--release> --target ${KERNEL_TARGET} ${KERNEL_OPTS}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src/obkrnl
     BYPRODUCTS ${KERNEL})
 
-add_dependencies(core kernel)
+add_dependencies(libgui kernel)
 
 # Add GUI.
 add_subdirectory(src)

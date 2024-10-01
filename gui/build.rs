@@ -51,5 +51,5 @@ fn main() {
         .with_config(conf)
         .generate()
         .unwrap()
-        .write_to_file(root.join("core.h"));
+        .write_to_file(root.join("src").join("core.h"));
 }
