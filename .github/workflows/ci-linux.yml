@@ -20,7 +20,7 @@ jobs:
       run: cargo clippy --package obkrnl --target x86_64-unknown-none -- -D warnings
       working-directory: src
     - name: Run tests
-      run: cargo test --workspace --exclude core --exclude kernel
+      run: cargo test --workspace --exclude gui --exclude kernel
       working-directory: src
     - name: Add Flathub
       run: flatpak remote-add --user flathub https://flathub.org/repo/flathub.flatpakrepo
