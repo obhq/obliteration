@@ -80,7 +80,7 @@ jobs:
     - name: Build
       run: cmake --build --preset mac-release
     - name: Run tests
-      run: cargo test --workspace --exclude core --exclude kernel
+      run: cargo test --workspace --exclude gui --exclude kernel
       working-directory: src
     - name: Create Application Bundle
       run: |

@@ -71,7 +71,7 @@ jobs:
     - name: Build
       run: cmake --build --preset windows-release
     - name: Run tests
-      run: cargo test --workspace --exclude core --exclude kernel
+      run: cargo test --workspace --exclude gui --exclude kernel
       working-directory: src
     - name: Export artifacts
       run: cmake --install build --prefix dist
