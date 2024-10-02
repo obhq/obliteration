@@ -1,22 +1,22 @@
 {
   "configurations": [
     {
-      "name": "Main",
+      "name": "GUI",
       "type": "lldb",
       "request": "launch",
       "args": [],
       "cwd": "${workspaceFolder}",
       "windows": {
-        "program": "${workspaceFolder}/build/src/Obliteration.exe",
+        "program": "${workspaceFolder}/build/gui/Obliteration.exe",
         "env": {
           "Path": "${env:Path};${env:CMAKE_PREFIX_PATH}\\bin"
         }
       },
       "linux": {
-        "program": "${workspaceFolder}/build/src/obliteration"
+        "program": "${workspaceFolder}/build/gui/obliteration"
       },
       "osx": {
-        "program": "${workspaceFolder}/build/src/obliteration.app/Contents/MacOS/obliteration"
+        "program": "${workspaceFolder}/build/gui/obliteration.app/Contents/MacOS/obliteration"
       }
     },
     {
@@ -33,7 +33,9 @@
           "kind": "bin"
         }
       },
-      "args": ["--debug"],
+      "args": [
+        "--debug"
+      ],
       "cwd": "${workspaceFolder}"
     }
   ],
