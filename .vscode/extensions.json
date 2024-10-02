@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "llvm-vs-code-extensions.vscode-clangd",
+    "ms-vscode.cmake-tools",
+    "ms-vscode.hexeditor",
+    "redhat.vscode-yaml",
+    "rust-lang.rust-analyzer",
+    "vadimcn.vscode-lldb"
+  ]
+}
