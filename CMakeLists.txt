@@ -59,4 +59,4 @@ add_custom_target(kernel
 add_dependencies(libgui kernel)
 
 # Add GUI.
-add_subdirectory(src)
+add_subdirectory(gui)
