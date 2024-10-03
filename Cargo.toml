@@ -2,13 +2,13 @@
 resolver = "2"
 members = [
     "gui",
+    "kernel",
     "src/fs",
     "src/gmtx",
     "src/kernel",
     "src/llt",
     "src/macros",
     "src/obconf",
-    "src/obkrnl",
     "src/param",
     "src/pfs",
     "src/pkg",

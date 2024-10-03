@@ -53,7 +53,7 @@ add_custom_target(libgui
 
 add_custom_target(kernel
     COMMAND cargo ${KERNEL_TOOLCHAIN} build $<IF:$<CONFIG:Debug>,--profile=dev,--release> --target ${KERNEL_TARGET} ${KERNEL_OPTS}
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src/obkrnl
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/kernel
     BYPRODUCTS ${KERNEL})
 
 add_dependencies(libgui kernel)
