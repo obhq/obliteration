@@ -8,8 +8,7 @@ const LINUX_INCLUDE: &str = r#"
 "#;
 
 fn main() {
-    let core = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    let root = core.parent().unwrap();
+    let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let mut conf = Config::default();
     let mut buf = String::new();
 
@@ -47,9 +46,9 @@ fn main() {
         .insert("target_os = macos".into(), "__APPLE__".into());
 
     Builder::new()
-        .with_crate(&core)
+        .with_crate(&root)
         .with_config(conf)
         .generate()
         .unwrap()
-        .write_to_file(root.join("src").join("core.h"));
+        .write_to_file(root.join("core.h"));
 }

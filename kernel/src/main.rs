@@ -22,6 +22,7 @@ mod malloc;
 mod panic;
 mod proc;
 mod sched;
+mod trap;
 mod uma;
 
 extern crate alloc;
