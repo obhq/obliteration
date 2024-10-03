@@ -1,3 +1,4 @@
+use crate::trap::interrupt_handler;
 use bitfield_struct::bitfield;
 use core::arch::{asm, global_asm};
 use core::mem::{transmute, zeroed};
@@ -32,7 +33,7 @@ pub unsafe fn setup_main_cpu() {
     static mut TSS_RSP0: [u8; 1024 * 128] = unsafe { zeroed() };
     static mut TSS: Tss = unsafe { zeroed() };
 
-    TSS.rsp0 = TSS_RSP0.as_mut_ptr() as _;
+    TSS.rsp0 = TSS_RSP0.as_mut_ptr().add(TSS_RSP0.len()) as _; // Top-down.
 
     // Setup TSS descriptor.
     let tss: &'static mut TssDescriptor = transmute(&mut GDT[4]);
@@ -120,7 +121,14 @@ global_asm!(
 );
 
 // See Xbpt on the PS4 for a reference.
-global_asm!("Xbpt:", "ud2");
+global_asm!(
+    "Xbpt:", // TODO: Check if coming from user-space.
+    "sub rsp, 0x80", // TODO: Use const from Rust 1.82.
+    "mov dword ptr [rsp+0x78], 3", // TODO: Use const from Rust 1.82.
+    "mov rdi, rsp",
+    "call {f}",
+    f = sym interrupt_handler
+);
 
 /// Raw value of a Global Descriptor-Table Register.
 ///

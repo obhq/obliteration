@@ -37,15 +37,15 @@ pub unsafe fn activate(cx: *mut Context) {
 }
 
 pub unsafe fn thread() -> *const Thread {
-    // SAFETY: "AtomicPtr<Thread>" is guarantee to have the same bit as "*mut Thread" and "mov" is
-    // atomic if the memory has correct alignment.
+    // SAFETY: "mov" is atomic if the memory has correct alignment. We can use "nomem" here since
+    // the value never changed.
     let mut td;
 
     asm!(
         "mov {out}, gs:[{off}]",
         off = in(reg) offset_of!(Context, thread), // TODO: Use const from Rust 1.82.
         out = out(reg) td,
-        options(pure, readonly, preserves_flags, nostack)
+        options(pure, nomem, preserves_flags, nostack)
     );
 
     td
