@@ -94,6 +94,10 @@ QWidget *LaunchSettings::buildSettings(GameListModel *games, QList<VkPhysicalDev
     // CPU settings.
     m_cpu = new CpuSettings();
 
+    connect(m_cpu, &CpuSettings::debugClicked, [this](const QString &addr) {
+        emit startClicked(addr);
+    });
+
     tab->addTab(m_cpu, loadIcon(":/resources/cpu-64-bit.svg", iconSize), "CPU");
 
     // Game list.
@@ -153,7 +157,7 @@ QLayout *LaunchSettings::buildActions(ProfileList *profiles)
 
     start->setIcon(loadIcon(":/resources/play.svg", start->iconSize()));
 
-    connect(start, &QAbstractButton::clicked, [this]() { emit startClicked(); });
+    connect(start, &QAbstractButton::clicked, [this]() { emit startClicked({}); });
 
     actions->addButton(start, QDialogButtonBox::AcceptRole);
 

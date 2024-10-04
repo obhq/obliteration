@@ -39,7 +39,7 @@ public:
 #endif
 signals:
     void saveClicked(Profile *p);
-    void startClicked();
+    void startClicked(const QString &debugAddr);
 private:
 #ifdef __APPLE__
     QWidget *buildSettings(GameListModel *games);

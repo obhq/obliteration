@@ -20,7 +20,8 @@ use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::Arc;
-use std::thread::JoinHandle;
+use std::thread::{sleep, JoinHandle};
+use std::time::Duration;
 use thiserror::Error;
 
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
@@ -50,19 +51,32 @@ pub unsafe extern "C" fn vmm_run(
     // Setup debug server.
     let debug = match debug.is_null() {
         true => None,
-        false => match CStr::from_ptr(debug).to_str() {
-            Ok(addr) => match TcpListener::bind(addr) {
-                Ok(v) => Some(v),
+        false => {
+            // Get address to listen.
+            let addr = match CStr::from_ptr(debug).to_str() {
+                Ok(v) => v,
+                Err(_) => {
+                    *err = RustError::new("address to listen for a debugger is not UTF-8");
+                    return null_mut();
+                }
+            };
+
+            // Setup server.
+            let sock = match TcpListener::bind(addr) {
+                Ok(v) => v,
                 Err(e) => {
                     *err = RustError::with_source("couldn't listen for a debugger", e);
                     return null_mut();
                 }
-            },
-            Err(_) => {
-                *err = RustError::new("address to listen for a debugger is not UTF-8");
+            };
+
+            if let Err(e) = sock.set_nonblocking(true) {
+                *err = RustError::with_source("couldn't enable non-blocking on a debug server", e);
                 return null_mut();
             }
-        },
+
+            Some(sock)
+        }
     };
 
     // Check if path UTF-8.
@@ -539,7 +553,21 @@ fn main_cpu<H: Hypervisor>(
         }
 
         // Wait for a debugger.
-        debug.accept().unwrap().0;
+        loop {
+            if args.shutdown.load(Ordering::Relaxed) {
+                return;
+            }
+
+            // Try accept a connection.
+            let e = match debug.accept() {
+                Ok(_) => break,
+                Err(e) => e,
+            };
+
+            assert_eq!(e.kind(), std::io::ErrorKind::WouldBlock);
+
+            sleep(Duration::from_secs(1));
+        }
     }
 
     run_cpu(cpu, args);
