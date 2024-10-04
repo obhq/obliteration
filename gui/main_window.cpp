@@ -341,7 +341,7 @@ void MainWindow::saveProfile(Profile *p)
     }
 }
 
-void MainWindow::startKernel()
+void MainWindow::startKernel(const QString &debugAddr)
 {
     // Get full path to kernel binary.
     std::string kernel;
@@ -387,6 +387,7 @@ void MainWindow::startKernel()
     m_main->setCurrentIndex(1);
 
     // Run.
+    auto debug = debugAddr.toStdString();
     VmmScreen screen;
     Rust<RustError> error;
     Rust<Vmm> vmm;
@@ -411,7 +412,7 @@ void MainWindow::startKernel()
         kernel.c_str(),
         &screen,
         m_launch->currentProfile(),
-        nullptr,
+        debug.empty() ? nullptr : debug.c_str(),
         MainWindow::vmmHandler,
         this,
         &error);
@@ -459,7 +460,7 @@ void MainWindow::waitingDebugger(const QString &addr)
 {
     QMessageBox::information(
         this,
-        "Action required",
+        "Debug",
         QString("The kernel are waiting for a debugger at %1.").arg(addr));
 }
 

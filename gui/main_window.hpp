@@ -38,7 +38,7 @@ private slots:
     void reportIssue();
     void aboutObliteration();
     void saveProfile(Profile *p);
-    void startKernel();
+    void startKernel(const QString &debugAddr);
     void updateScreen();
 private:
     void waitingDebugger(const QString &addr);
