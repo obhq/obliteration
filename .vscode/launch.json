@@ -20,6 +20,15 @@
       }
     },
     {
+      "name": "Kernel",
+      "type": "lldb",
+      "request": "custom",
+      "initCommands": [
+        "platform select remote-gdb-server",
+        "platform connect connect://localhost:1234"
+      ]
+    },
+    {
       "name": "Legacy Kernel",
       "type": "lldb",
       "request": "launch",

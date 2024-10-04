@@ -14,6 +14,7 @@ use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::{c_char, c_void, CStr};
 use std::io::Read;
+use std::net::TcpListener;
 use std::num::NonZero;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -41,10 +42,29 @@ pub unsafe extern "C" fn vmm_run(
     kernel: *const c_char,
     screen: *const VmmScreen,
     profile: *const Profile,
+    debug: *const c_char,
     event: unsafe extern "C" fn(*const VmmEvent, *mut c_void) -> bool,
     cx: *mut c_void,
     err: *mut *mut RustError,
 ) -> *mut Vmm {
+    // Setup debug server.
+    let debug = match debug.is_null() {
+        true => None,
+        false => match CStr::from_ptr(debug).to_str() {
+            Ok(addr) => match TcpListener::bind(addr) {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    *err = RustError::with_source("couldn't listen for a debugger", e);
+                    return null_mut();
+                }
+            },
+            Err(_) => {
+                *err = RustError::new("address to listen for a debugger is not UTF-8");
+                return null_mut();
+            }
+        },
+    };
+
     // Check if path UTF-8.
     let path = match CStr::from_ptr(kernel).to_str() {
         Ok(v) => v,
@@ -430,13 +450,14 @@ pub unsafe extern "C" fn vmm_run(
         screen: screen.buffer().clone(),
         feats,
         devices,
+        event,
         shutdown: shutdown.clone(),
     };
 
     // Spawn a thread to drive main CPU.
     let e_entry = file.entry();
     let (tx, rx) = std::sync::mpsc::channel();
-    let main = move || main_cpu(&args, e_entry, map, tx);
+    let main = move || main_cpu(&args, e_entry, map, debug, tx);
     let main = match std::thread::Builder::new().spawn(main) {
         Ok(v) => v,
         Err(e) => {
@@ -483,6 +504,7 @@ fn main_cpu<H: Hypervisor>(
     args: &CpuArgs<H>,
     entry: usize,
     map: RamMap,
+    debug: Option<TcpListener>,
     status: Sender<Result<(), MainCpuError>>,
 ) {
     // Create vCPU.
@@ -504,6 +526,21 @@ fn main_cpu<H: Hypervisor>(
     // Enter dispatch loop.
     status.send(Ok(())).unwrap();
     drop(status);
+
+    if let Some(debug) = debug {
+        // Tell the user to connect a debugger.
+        let addr = debug.local_addr().unwrap().to_string();
+        let len = addr.len();
+        let addr = addr.as_ptr().cast();
+
+        if !unsafe { args.event.invoke(VmmEvent::WaitingDebugger { addr, len }) } {
+            // This shutdown was initiate on the GUI so just return is enough.
+            return;
+        }
+
+        // Wait for a debugger.
+        debug.accept().unwrap().0;
+    }
 
     run_cpu(cpu, args);
 }
@@ -636,6 +673,10 @@ unsafe impl Sync for VmmEventHandler {}
 #[repr(C)]
 #[allow(dead_code)] // TODO: Figure out why Rust think fields in each enum are not used.
 pub enum VmmEvent {
+    WaitingDebugger {
+        addr: *const c_char,
+        len: usize,
+    },
     Exiting {
         success: bool,
     },
@@ -675,6 +716,7 @@ struct CpuArgs<H: Hypervisor> {
     screen: Arc<<self::screen::Default as Screen>::Buffer>,
     feats: CpuFeats,
     devices: Arc<DeviceTree<H>>,
+    event: VmmEventHandler,
     shutdown: Arc<AtomicBool>,
 }
 

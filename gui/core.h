@@ -85,8 +85,14 @@ struct VmmScreen {
  * Contains VMM event information.
  */
 enum VmmEvent_Tag {
+    VmmEvent_WaitingDebugger,
     VmmEvent_Exiting,
     VmmEvent_Log,
+};
+
+struct VmmEvent_WaitingDebugger_Body {
+    const char *addr;
+    size_t len;
 };
 
 struct VmmEvent_Exiting_Body {
@@ -102,6 +108,7 @@ struct VmmEvent_Log_Body {
 struct VmmEvent {
     enum VmmEvent_Tag tag;
     union {
+        struct VmmEvent_WaitingDebugger_Body waiting_debugger;
         struct VmmEvent_Exiting_Body exiting;
         struct VmmEvent_Log_Body log;
     };
@@ -174,6 +181,7 @@ void vmm_free(struct Vmm *vmm);
 struct Vmm *vmm_run(const char *kernel,
                     const struct VmmScreen *screen,
                     const struct Profile *profile,
+                    const char *debug,
                     bool (*event)(const struct VmmEvent*, void*),
                     void *cx,
                     struct RustError **err);
