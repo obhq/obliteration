@@ -411,6 +411,7 @@ void MainWindow::startKernel()
         kernel.c_str(),
         &screen,
         m_launch->currentProfile(),
+        nullptr,
         MainWindow::vmmHandler,
         this,
         &error);
@@ -452,6 +453,14 @@ void MainWindow::updateScreen()
 
     // Queue next update.
     m_screen->requestUpdate();
+}
+
+void MainWindow::waitingDebugger(const QString &addr)
+{
+    QMessageBox::information(
+        this,
+        "Action required",
+        QString("The kernel are waiting for a debugger at %1.").arg(addr));
 }
 
 void MainWindow::waitKernelExit(bool success)
@@ -571,6 +580,13 @@ bool MainWindow::vmmHandler(const VmmEvent *ev, void *cx)
     auto w = reinterpret_cast<MainWindow *>(cx);
 
     switch (ev->tag) {
+    case VmmEvent_WaitingDebugger:
+        QMetaObject::invokeMethod(
+            w,
+            &MainWindow::waitingDebugger,
+            Qt::QueuedConnection,
+            QString::fromUtf8(ev->waiting_debugger.addr, ev->waiting_debugger.len));
+        break;
     case VmmEvent_Exiting:
         QMetaObject::invokeMethod(
             w,
