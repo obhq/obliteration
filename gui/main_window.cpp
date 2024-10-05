@@ -101,7 +101,7 @@ MainWindow::MainWindow(QVulkanInstance *vulkan, QList<VkPhysicalDevice> &&vkDevi
 #endif
 
     connect(m_launch, &LaunchSettings::saveClicked, this, &MainWindow::saveProfile);
-    connect(m_launch, &LaunchSettings::startClicked, this, &MainWindow::startKernel);
+    connect(m_launch, &LaunchSettings::startClicked, this, &MainWindow::startVmm);
 
     m_main->addWidget(m_launch);
 
@@ -213,7 +213,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
     event->ignore();
 
     // Ask user to confirm.
-    if (m_kernel) {
+    if (m_vmm) {
         QMessageBox confirm(this);
 
         confirm.setText("Do you want to exit?");
@@ -226,7 +226,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
             return;
         }
 
-        m_kernel.free();
+        m_vmm.free();
     }
 
     // Close child windows.
@@ -341,7 +341,7 @@ void MainWindow::saveProfile(Profile *p)
     }
 }
 
-void MainWindow::startKernel(const QString &debugAddr)
+void MainWindow::startVmm(const QString &debugAddr)
 {
     // Get full path to kernel binary.
     std::string kernel;
@@ -426,24 +426,24 @@ void MainWindow::startKernel(const QString &debugAddr)
         return;
     }
 
-    m_kernel = std::move(vmm);
+    m_vmm = std::move(vmm);
     m_screen->requestUpdate();
 }
 
 void MainWindow::updateScreen()
 {
-    // Do nothing if the kernel is not running.
-    if (!m_kernel) {
+    // Do nothing if the VMM is not running.
+    if (!m_vmm) {
         return;
     }
 
     // Draw the screen.
     Rust<RustError> error;
 
-    error = vmm_draw(m_kernel);
+    error = vmm_draw(m_vmm);
 
     if (error) {
-        m_kernel.free();
+        m_vmm.free();
 
         QMessageBox::critical(
             this,
@@ -456,17 +456,26 @@ void MainWindow::updateScreen()
     m_screen->requestUpdate();
 }
 
+void MainWindow::vmmError(const QString &msg)
+{
+    m_vmm.free();
+
+    QMessageBox::critical(this, "Error", msg);
+
+    m_main->setCurrentIndex(0);
+}
+
 void MainWindow::waitingDebugger(const QString &addr)
 {
     QMessageBox::information(
         this,
         "Debug",
-        QString("The kernel are waiting for a debugger at %1.").arg(addr));
+        QString("The VMM are waiting for a debugger at %1.").arg(addr));
 }
 
 void MainWindow::waitKernelExit(bool success)
 {
-    m_kernel.free();
+    m_vmm.free();
 
     if (!success) {
         QMessageBox::critical(
@@ -555,32 +564,40 @@ void MainWindow::restoreGeometry()
     }
 }
 
-bool MainWindow::requireEmulatorStopped()
+bool MainWindow::requireVmmStopped()
 {
-    if (m_kernel) {
-        QMessageBox killPrompt(this);
+    if (m_vmm) {
+        QMessageBox prompt(this);
 
-        killPrompt.setText("Action requires kernel to be stopped to continue.");
-        killPrompt.setInformativeText("Do you want to kill the kernel?");
-        killPrompt.setStandardButtons(QMessageBox::Cancel | QMessageBox::Yes);
-        killPrompt.setDefaultButton(QMessageBox::Cancel);
-        killPrompt.setIcon(QMessageBox::Warning);
+        prompt.setText("Action requires VMM to be stopped to continue.");
+        prompt.setInformativeText("Do you want to kill the VMM?");
+        prompt.setStandardButtons(QMessageBox::Cancel | QMessageBox::Yes);
+        prompt.setDefaultButton(QMessageBox::Cancel);
+        prompt.setIcon(QMessageBox::Warning);
 
-        if (killPrompt.exec() != QMessageBox::Yes) {
-            return true;
+        if (prompt.exec() != QMessageBox::Yes) {
+            return false;
         }
 
-        m_kernel.free();
+        m_vmm.free();
     }
 
-    return false;
+    return true;
 }
 
-bool MainWindow::vmmHandler(const VmmEvent *ev, void *cx)
+void MainWindow::vmmHandler(const VmmEvent *ev, void *cx)
 {
+    // This method will be called from non-main thread.
     auto w = reinterpret_cast<MainWindow *>(cx);
 
     switch (ev->tag) {
+    case VmmEvent_Error:
+        QMetaObject::invokeMethod(
+            w,
+            &MainWindow::vmmError,
+            Qt::QueuedConnection,
+            QString(error_message(ev->error.reason)));
+        break;
     case VmmEvent_WaitingDebugger:
         QMetaObject::invokeMethod(
             w,
@@ -604,6 +621,4 @@ bool MainWindow::vmmHandler(const VmmEvent *ev, void *cx)
             QString::fromUtf8(ev->log.data, ev->log.len));
         break;
     }
-
-    return true;
 }

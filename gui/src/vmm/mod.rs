@@ -18,7 +18,6 @@ use std::net::TcpListener;
 use std::num::NonZero;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::Sender;
 use std::sync::Arc;
 use std::thread::{sleep, JoinHandle};
 use std::time::Duration;
@@ -45,7 +44,7 @@ pub unsafe extern "C" fn vmm_run(
     screen: *const VmmScreen,
     profile: *const Profile,
     debug: *const c_char,
-    event: unsafe extern "C" fn(*const VmmEvent, *mut c_void) -> bool,
+    event: unsafe extern "C" fn(*const VmmEvent, *mut c_void),
     cx: *mut c_void,
     err: *mut *mut RustError,
 ) -> *mut Vmm {
@@ -57,7 +56,7 @@ pub unsafe extern "C" fn vmm_run(
             let addr = match CStr::from_ptr(debug).to_str() {
                 Ok(v) => v,
                 Err(_) => {
-                    *err = RustError::new("address to listen for a debugger is not UTF-8");
+                    *err = RustError::new("address to listen for a debugger is not UTF-8").into_c();
                     return null_mut();
                 }
             };
@@ -66,13 +65,14 @@ pub unsafe extern "C" fn vmm_run(
             let sock = match TcpListener::bind(addr) {
                 Ok(v) => v,
                 Err(e) => {
-                    *err = RustError::with_source("couldn't listen for a debugger", e);
+                    *err = RustError::with_source("couldn't listen for a debugger", e).into_c();
                     return null_mut();
                 }
             };
 
             if let Err(e) = sock.set_nonblocking(true) {
-                *err = RustError::with_source("couldn't enable non-blocking on a debug server", e);
+                *err = RustError::with_source("couldn't enable non-blocking on a debug server", e)
+                    .into_c();
                 return null_mut();
             }
 
@@ -84,7 +84,7 @@ pub unsafe extern "C" fn vmm_run(
     let path = match CStr::from_ptr(kernel).to_str() {
         Ok(v) => v,
         Err(_) => {
-            *err = RustError::new("path of the kernel is not UTF-8");
+            *err = RustError::new("path of the kernel is not UTF-8").into_c();
             return null_mut();
         }
     };
@@ -93,7 +93,7 @@ pub unsafe extern "C" fn vmm_run(
     let mut file = match Kernel::open(path) {
         Ok(v) => v,
         Err(e) => {
-            *err = RustError::with_source(format_args!("couldn't open {path}"), e);
+            *err = RustError::with_source(format_args!("couldn't open {path}"), e).into_c();
             return null_mut();
         }
     };
@@ -105,7 +105,8 @@ pub unsafe extern "C" fn vmm_run(
             *err = RustError::with_source(
                 format_args!("couldn't start enumerating program headers of {path}"),
                 e,
-            );
+            )
+            .into_c();
 
             return null_mut();
         }
@@ -124,7 +125,8 @@ pub unsafe extern "C" fn vmm_run(
                 *err = RustError::with_source(
                     format_args!("couldn't read program header #{index} on {path}"),
                     e,
-                );
+                )
+                .into_c();
 
                 return null_mut();
             }
@@ -134,7 +136,8 @@ pub unsafe extern "C" fn vmm_run(
         match hdr.p_type {
             PT_LOAD => {
                 if hdr.p_filesz > TryInto::<u64>::try_into(hdr.p_memsz).unwrap() {
-                    *err = RustError::new(format!("invalid p_filesz on on PT_LOAD {index}"));
+                    *err =
+                        RustError::new(format!("invalid p_filesz on on PT_LOAD {index}")).into_c();
                     return null_mut();
                 }
 
@@ -142,7 +145,7 @@ pub unsafe extern "C" fn vmm_run(
             }
             PT_DYNAMIC => {
                 if dynamic.is_some() {
-                    *err = RustError::new("multiple PT_DYNAMIC is not supported");
+                    *err = RustError::new("multiple PT_DYNAMIC is not supported").into_c();
                     return null_mut();
                 }
 
@@ -150,7 +153,7 @@ pub unsafe extern "C" fn vmm_run(
             }
             PT_NOTE => {
                 if note.is_some() {
-                    *err = RustError::new("multiple PT_NOTE is not supported");
+                    *err = RustError::new("multiple PT_NOTE is not supported").into_c();
                     return null_mut();
                 }
 
@@ -158,7 +161,8 @@ pub unsafe extern "C" fn vmm_run(
             }
             PT_PHDR | PT_GNU_EH_FRAME | PT_GNU_STACK | PT_GNU_RELRO => {}
             v => {
-                *err = RustError::new(format!("unknown p_type {v} on program header {index}"));
+                *err = RustError::new(format!("unknown p_type {v} on program header {index}"))
+                    .into_c();
                 return null_mut();
             }
         }
@@ -170,12 +174,12 @@ pub unsafe extern "C" fn vmm_run(
     match segments.first() {
         Some(hdr) => {
             if hdr.p_offset != 0 {
-                *err = RustError::new("the first PT_LOAD does not includes ELF header");
+                *err = RustError::new("the first PT_LOAD does not includes ELF header").into_c();
                 return null_mut();
             }
         }
         None => {
-            *err = RustError::new("no any PT_LOAD on the kernel");
+            *err = RustError::new("no any PT_LOAD on the kernel").into_c();
             return null_mut();
         }
     }
@@ -184,7 +188,7 @@ pub unsafe extern "C" fn vmm_run(
     let dynamic = match dynamic {
         Some(v) => v,
         None => {
-            *err = RustError::new("no PT_DYNAMIC segment on the kernel");
+            *err = RustError::new("no PT_DYNAMIC segment on the kernel").into_c();
             return null_mut();
         }
     };
@@ -193,7 +197,7 @@ pub unsafe extern "C" fn vmm_run(
     let note = match note {
         Some(v) => v,
         None => {
-            *err = RustError::new("no PT_NOTE segment on the kernel");
+            *err = RustError::new("no PT_NOTE segment on the kernel").into_c();
             return null_mut();
         }
     };
@@ -202,7 +206,8 @@ pub unsafe extern "C" fn vmm_run(
     let mut data = match file.segment_data(&note) {
         Ok(v) => v,
         Err(e) => {
-            *err = RustError::with_source(format_args!("couldn't seek to PT_NOTE on {path}"), e);
+            *err = RustError::with_source(format_args!("couldn't seek to PT_NOTE on {path}"), e)
+                .into_c();
             return null_mut();
         }
     };
@@ -220,7 +225,8 @@ pub unsafe extern "C" fn vmm_run(
         let mut buf = [0u8; 4 * 3];
 
         if let Err(e) = data.read_exact(&mut buf) {
-            *err = RustError::with_source(format_args!("couldn't read kernel note #{i} header"), e);
+            *err = RustError::with_source(format_args!("couldn't read kernel note #{i} header"), e)
+                .into_c();
             return null_mut();
         }
 
@@ -234,12 +240,12 @@ pub unsafe extern "C" fn vmm_run(
         let ty = u32::from_ne_bytes(buf[8..].try_into().unwrap());
 
         if nlen > 0xff {
-            *err = RustError::new(format!("name on kernel note #{i} is too large"));
+            *err = RustError::new(format!("name on kernel note #{i} is too large")).into_c();
             return null_mut();
         }
 
         if dlen > 0xff {
-            *err = RustError::new(format!("description on kernel note #{i} is too large"));
+            *err = RustError::new(format!("description on kernel note #{i} is too large")).into_c();
             return null_mut();
         }
 
@@ -248,7 +254,8 @@ pub unsafe extern "C" fn vmm_run(
         let mut buf = vec![0u8; nalign + dlen];
 
         if let Err(e) = data.read_exact(&mut buf) {
-            *err = RustError::with_source(format_args!("couldn't read kernel note #{i} data"), e);
+            *err = RustError::with_source(format_args!("couldn't read kernel note #{i} data"), e)
+                .into_c();
             return null_mut();
         }
 
@@ -256,7 +263,7 @@ pub unsafe extern "C" fn vmm_run(
         let name = match CStr::from_bytes_until_nul(&buf) {
             Ok(v) if v.to_bytes_with_nul().len() == nlen => v,
             _ => {
-                *err = RustError::new(format!("kernel note #{i} has invalid name"));
+                *err = RustError::new(format!("kernel note #{i} has invalid name")).into_c();
                 return null_mut();
             }
         };
@@ -269,7 +276,7 @@ pub unsafe extern "C" fn vmm_run(
         match ty {
             0 => {
                 if vm_page_size.is_some() {
-                    *err = RustError::new(format!("kernel note #{i} is duplicated"));
+                    *err = RustError::new(format!("kernel note #{i} is duplicated")).into_c();
                     return null_mut();
                 }
 
@@ -281,12 +288,13 @@ pub unsafe extern "C" fn vmm_run(
                     .filter(|v| v.is_power_of_two());
 
                 if vm_page_size.is_none() {
-                    *err = RustError::new(format!("invalid description on kernel note #{i}"));
+                    *err =
+                        RustError::new(format!("invalid description on kernel note #{i}")).into_c();
                     return null_mut();
                 }
             }
             v => {
-                *err = RustError::new(format!("unknown type {v} on kernel note #{i}"));
+                *err = RustError::new(format!("unknown type {v} on kernel note #{i}")).into_c();
                 return null_mut();
             }
         }
@@ -296,7 +304,7 @@ pub unsafe extern "C" fn vmm_run(
     let vm_page_size = match vm_page_size {
         Some(v) => v,
         None => {
-            *err = RustError::new("no page size in kernel note");
+            *err = RustError::new("no page size in kernel note").into_c();
             return null_mut();
         }
     };
@@ -305,7 +313,7 @@ pub unsafe extern "C" fn vmm_run(
     let host_page_size = match get_page_size() {
         Ok(v) => v,
         Err(e) => {
-            *err = RustError::with_source("couldn't get host page size", e);
+            *err = RustError::with_source("couldn't get host page size", e).into_c();
             return null_mut();
         }
     };
@@ -318,7 +326,8 @@ pub unsafe extern "C" fn vmm_run(
             *err = RustError::new(format!(
                 "PT_LOAD at {:#x} is overlapped with the previous PT_LOAD",
                 hdr.p_vaddr
-            ));
+            ))
+            .into_c();
 
             return null_mut();
         }
@@ -326,7 +335,8 @@ pub unsafe extern "C" fn vmm_run(
         len = match hdr.p_vaddr.checked_add(hdr.p_memsz) {
             Some(v) => v,
             None => {
-                *err = RustError::new(format!("invalid p_memsz on PT_LOAD at {:#x}", hdr.p_vaddr));
+                *err = RustError::new(format!("invalid p_memsz on PT_LOAD at {:#x}", hdr.p_vaddr))
+                    .into_c();
                 return null_mut();
             }
         };
@@ -336,13 +346,13 @@ pub unsafe extern "C" fn vmm_run(
     let block_size = max(vm_page_size, host_page_size);
     let len = match len {
         0 => {
-            *err = RustError::new("the kernel has PT_LOAD with zero length");
+            *err = RustError::new("the kernel has PT_LOAD with zero length").into_c();
             return null_mut();
         }
         v => match v.checked_next_multiple_of(block_size.get()) {
             Some(v) => NonZero::new_unchecked(v),
             None => {
-                *err = RustError::new("total size of PT_LOAD is too large");
+                *err = RustError::new("total size of PT_LOAD is too large").into_c();
                 return null_mut();
             }
         },
@@ -352,7 +362,7 @@ pub unsafe extern "C" fn vmm_run(
     let ram = match Ram::new(block_size) {
         Ok(v) => v,
         Err(e) => {
-            *err = RustError::with_source("couldn't create a RAM", e);
+            *err = RustError::with_source("couldn't create a RAM", e).into_c();
             return null_mut();
         }
     };
@@ -361,7 +371,7 @@ pub unsafe extern "C" fn vmm_run(
     let mut hv = match self::hv::new(8, ram) {
         Ok(v) => v,
         Err(e) => {
-            *err = RustError::with_source("couldn't setup a hypervisor", e);
+            *err = RustError::with_source("couldn't setup a hypervisor", e).into_c();
             return null_mut();
         }
     };
@@ -370,7 +380,7 @@ pub unsafe extern "C" fn vmm_run(
     let feats = match hv.cpu_features() {
         Ok(v) => v,
         Err(e) => {
-            *err = RustError::with_source("couldn't get available vCPU features", e);
+            *err = RustError::with_source("couldn't get available vCPU features", e).into_c();
             return null_mut();
         }
     };
@@ -380,7 +390,7 @@ pub unsafe extern "C" fn vmm_run(
     let kern = match ram.alloc_kernel(len) {
         Ok(v) => v,
         Err(e) => {
-            *err = RustError::with_source("couldn't allocate RAM for the kernel", e);
+            *err = RustError::with_source("couldn't allocate RAM for the kernel", e).into_c();
             return null_mut();
         }
     };
@@ -393,7 +403,8 @@ pub unsafe extern "C" fn vmm_run(
                 *err = RustError::with_source(
                     format_args!("couldn't seek to offset {}", hdr.p_offset),
                     e,
-                );
+                )
+                .into_c();
 
                 return null_mut();
             }
@@ -405,7 +416,7 @@ pub unsafe extern "C" fn vmm_run(
         match std::io::copy(&mut data, &mut seg) {
             Ok(v) => {
                 if v != hdr.p_filesz {
-                    *err = RustError::new(format!("{path} is incomplete"));
+                    *err = RustError::new(format!("{path} is incomplete")).into_c();
                     return null_mut();
                 }
             }
@@ -413,7 +424,8 @@ pub unsafe extern "C" fn vmm_run(
                 *err = RustError::with_source(
                     format_args!("couldn't read kernet at offset {}", hdr.p_offset),
                     e,
-                );
+                )
+                .into_c();
 
                 return null_mut();
             }
@@ -422,7 +434,7 @@ pub unsafe extern "C" fn vmm_run(
 
     // Allocate stack.
     if let Err(e) = ram.alloc_stack(NonZero::new(1024 * 1024 * 2).unwrap()) {
-        *err = RustError::with_source("couldn't allocate RAM for stack", e);
+        *err = RustError::with_source("couldn't allocate RAM for stack", e).into_c();
         return null_mut();
     }
 
@@ -436,7 +448,7 @@ pub unsafe extern "C" fn vmm_run(
     });
 
     if let Err(e) = ram.alloc_args(env, (*profile).kernel_config().clone()) {
-        *err = RustError::with_source("couldn't allocate RAM for arguments", e);
+        *err = RustError::with_source("couldn't allocate RAM for arguments", e).into_c();
         return null_mut();
     }
 
@@ -444,7 +456,7 @@ pub unsafe extern "C" fn vmm_run(
     let map = match ram.build(&feats, vm_page_size, &devices, dynamic) {
         Ok(v) => v,
         Err(e) => {
-            *err = RustError::with_source("couldn't build RAM", e);
+            *err = RustError::with_source("couldn't build RAM", e).into_c();
             return null_mut();
         }
     };
@@ -453,7 +465,7 @@ pub unsafe extern "C" fn vmm_run(
     let screen = match self::screen::Default::new(&*screen) {
         Ok(v) => v,
         Err(e) => {
-            *err = RustError::with_source("couldn't setup a screen", e);
+            *err = RustError::with_source("couldn't setup a screen", e).into_c();
             return null_mut();
         }
     };
@@ -471,31 +483,14 @@ pub unsafe extern "C" fn vmm_run(
 
     // Spawn a thread to drive main CPU.
     let e_entry = file.entry();
-    let (tx, rx) = std::sync::mpsc::channel();
-    let main = move || main_cpu(&args, e_entry, map, debug, tx);
+    let main = move || main_cpu(&args, e_entry, map, debug);
     let main = match std::thread::Builder::new().spawn(main) {
         Ok(v) => v,
         Err(e) => {
-            *err = RustError::with_source("couldn't spawn main CPU", e);
+            *err = RustError::with_source("couldn't spawn main CPU", e).into_c();
             return null_mut();
         }
     };
-
-    // Wait for main CPU to enter event loop.
-    let r = match rx.recv() {
-        Ok(v) => v,
-        Err(_) => {
-            main.join().unwrap();
-            *err = RustError::new("main CPU stopped unexpectedly");
-            return null_mut();
-        }
-    };
-
-    if let Err(e) = r {
-        main.join().unwrap();
-        *err = RustError::with_source("couldn't start main CPU", e);
-        return null_mut();
-    }
 
     // Create VMM.
     let vmm = Vmm {
@@ -511,7 +506,7 @@ pub unsafe extern "C" fn vmm_run(
 pub unsafe extern "C" fn vmm_draw(vmm: *mut Vmm) -> *mut RustError {
     match (*vmm).screen.update() {
         Ok(_) => null_mut(),
-        Err(e) => RustError::wrap(e),
+        Err(e) => RustError::wrap(e).into_c(),
     }
 }
 
@@ -520,38 +515,31 @@ fn main_cpu<H: Hypervisor>(
     entry: usize,
     map: RamMap,
     debug: Option<TcpListener>,
-    status: Sender<Result<(), MainCpuError>>,
 ) {
     // Create vCPU.
     let mut cpu = match args.hv.create_cpu(0) {
         Ok(v) => v,
         Err(e) => {
-            status
-                .send(Err(MainCpuError::CreateCpuFailed(Box::new(e))))
-                .unwrap();
+            let e = RustError::with_source("couldn't create main CPU", e);
+            unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
             return;
         }
     };
 
     if let Err(e) = self::arch::setup_main_cpu(&mut cpu, entry, map, &args.feats) {
-        status.send(Err(e)).unwrap();
+        let e = RustError::with_source("couldn't setup main CPU", e);
+        unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
         return;
     }
 
-    // Enter dispatch loop.
-    status.send(Ok(())).unwrap();
-    drop(status);
-
+    // Wait for debugger.
     if let Some(debug) = debug {
         // Tell the user to connect a debugger.
         let addr = debug.local_addr().unwrap().to_string();
         let len = addr.len();
         let addr = addr.as_ptr().cast();
 
-        if !unsafe { args.event.invoke(VmmEvent::WaitingDebugger { addr, len }) } {
-            // This shutdown was initiate on the GUI so just return is enough.
-            return;
-        }
+        unsafe { args.event.invoke(VmmEvent::WaitingDebugger { addr, len }) };
 
         // Wait for a debugger.
         loop {
@@ -571,6 +559,7 @@ fn main_cpu<H: Hypervisor>(
         }
     }
 
+    // Enter dispatch loop.
     run_cpu(cpu, args);
 }
 
@@ -685,12 +674,12 @@ pub struct VmmScreen {
 /// Encapsulates a function to handle VMM events.
 #[derive(Clone, Copy)]
 struct VmmEventHandler {
-    fp: unsafe extern "C" fn(*const VmmEvent, *mut c_void) -> bool,
+    fp: unsafe extern "C" fn(*const VmmEvent, *mut c_void),
     cx: *mut c_void,
 }
 
 impl VmmEventHandler {
-    unsafe fn invoke(self, e: VmmEvent) -> bool {
+    unsafe fn invoke(self, e: VmmEvent) {
         (self.fp)(&e, self.cx)
     }
 }
@@ -702,6 +691,9 @@ unsafe impl Sync for VmmEventHandler {}
 #[repr(C)]
 #[allow(dead_code)] // TODO: Figure out why Rust think fields in each enum are not used.
 pub enum VmmEvent {
+    Error {
+        reason: *const RustError,
+    },
     WaitingDebugger {
         addr: *const c_char,
         len: usize,
@@ -856,9 +848,6 @@ enum VmmError {
 /// Represents an error when [`main_cpu()`] fails to reach event loop.
 #[derive(Debug, Error)]
 enum MainCpuError {
-    #[error("couldn't create vCPU")]
-    CreateCpuFailed(#[source] Box<dyn Error + Send>),
-
     #[error("couldn't get vCPU states")]
     GetCpuStatesFailed(#[source] Box<dyn Error + Send>),
 

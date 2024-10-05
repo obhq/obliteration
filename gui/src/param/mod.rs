@@ -11,7 +11,7 @@ pub unsafe extern "C" fn param_open(file: *const c_char, error: *mut *mut RustEr
     let file = match File::open(CStr::from_ptr(file).to_str().unwrap()) {
         Ok(v) => v,
         Err(e) => {
-            *error = RustError::with_source("couldn't open the specified file", e);
+            *error = RustError::with_source("couldn't open the specified file", e).into_c();
             return null_mut();
         }
     };
@@ -20,7 +20,7 @@ pub unsafe extern "C" fn param_open(file: *const c_char, error: *mut *mut RustEr
     let param = match Param::read(file) {
         Ok(v) => v,
         Err(e) => {
-            *error = RustError::with_source("couldn't read the specified file", e);
+            *error = RustError::with_source("couldn't read the specified file", e).into_c();
             return null_mut();
         }
     };
