@@ -2,7 +2,7 @@
 use gdbstub::target::ext::base::BaseOps;
 use thiserror::Error;
 
-/// Implementation of [`gdbstub::target::Target`] for x86-64.
+/// Implementation of [`gdbstub::target::Target`] for AArch64.
 pub struct Target {}
 
 impl gdbstub::target::Target for Target {
@@ -14,7 +14,7 @@ impl gdbstub::target::Target for Target {
     }
 }
 
-/// Implementation of [`gdbstub::arch::Arch`] for x86-64.
+/// Implementation of [`gdbstub::arch::Arch`] for AArch64.
 pub enum Arch {}
 
 impl gdbstub::arch::Arch for Arch {
@@ -24,7 +24,7 @@ impl gdbstub::arch::Arch for Arch {
     type RegId = RegId;
 }
 
-/// Implementation of [`gdbstub::arch::Registers`] for x86-64.
+/// Implementation of [`gdbstub::arch::Registers`] for AArch64.
 #[derive(Default, Debug, Clone, PartialEq)]
 pub struct Registers {}
 
@@ -44,7 +44,7 @@ impl gdbstub::arch::Registers for Registers {
     }
 }
 
-/// Implementation of [`gdbstub::arch::BreakpointKind`] for x86-64.
+/// Implementation of [`gdbstub::arch::BreakpointKind`] for AArch64.
 #[derive(Debug)]
 pub struct BreakpointKind {}
 
@@ -54,7 +54,7 @@ impl gdbstub::arch::BreakpointKind for BreakpointKind {
     }
 }
 
-/// Implementation of [`gdbstub::arch::RegId`] for x86-64.
+/// Implementation of [`gdbstub::arch::RegId`] for AArch64.
 #[derive(Debug)]
 pub struct RegId {}
 
@@ -64,6 +64,6 @@ impl gdbstub::arch::RegId for RegId {
     }
 }
 
-/// Implementation of [`gdbstub::target::Target::Error`] for x86-64.
+/// Implementation of [`gdbstub::target::Target::Error`] for AArch64.
 #[derive(Debug, Error)]
 pub enum TargetError {}
