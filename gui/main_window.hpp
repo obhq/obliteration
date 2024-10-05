@@ -38,16 +38,17 @@ private slots:
     void reportIssue();
     void aboutObliteration();
     void saveProfile(Profile *p);
-    void startKernel(const QString &debugAddr);
+    void startVmm(const QString &debugAddr);
     void updateScreen();
 private:
+    void vmmError(const QString &msg);
     void waitingDebugger(const QString &addr);
     void waitKernelExit(bool success);
     void log(VmmLog type, const QString &msg);
     bool loadGame(const QString &gameId);
-    bool requireEmulatorStopped();
+    bool requireVmmStopped();
 
-    static bool vmmHandler(const VmmEvent *ev, void *cx);
+    static void vmmHandler(const VmmEvent *ev, void *cx);
 
     QStackedWidget *m_main;
     ProfileList *m_profiles;
@@ -55,5 +56,5 @@ private:
     LaunchSettings *m_launch;
     Screen *m_screen;
     QPointer<LogsViewer> m_logs;
-    Rust<Vmm> m_kernel; // Destroy first.
+    Rust<Vmm> m_vmm; // Destroy first.
 };

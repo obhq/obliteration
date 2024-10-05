@@ -27,7 +27,7 @@ pub unsafe extern "C" fn profile_load(
     let root = match CStr::from_ptr(path).to_str() {
         Ok(v) => Path::new(v),
         Err(_) => {
-            *err = RustError::new("the specified path is not UTF-8");
+            *err = RustError::new("the specified path is not UTF-8").into_c();
             return null_mut();
         }
     };
@@ -37,7 +37,8 @@ pub unsafe extern "C" fn profile_load(
     let file = match File::open(&path) {
         Ok(v) => v,
         Err(e) => {
-            *err = RustError::with_source(format_args!("couldn't open {}", path.display()), e);
+            *err = RustError::with_source(format_args!("couldn't open {}", path.display()), e)
+                .into_c();
             return null_mut();
         }
     };
@@ -46,7 +47,8 @@ pub unsafe extern "C" fn profile_load(
     let p = match ciborium::from_reader(file) {
         Ok(v) => v,
         Err(e) => {
-            *err = RustError::with_source(format_args!("couldn't load {}", path.display()), e);
+            *err = RustError::with_source(format_args!("couldn't load {}", path.display()), e)
+                .into_c();
             return null_mut();
         }
     };
@@ -84,12 +86,12 @@ pub unsafe extern "C" fn profile_save(p: *const Profile, path: *const c_char) ->
     // Check if path UTF-8.
     let root = match CStr::from_ptr(path).to_str() {
         Ok(v) => Path::new(v),
-        Err(_) => return RustError::new("the specified path is not UTF-8"),
+        Err(_) => return RustError::new("the specified path is not UTF-8").into_c(),
     };
 
     // Create a directory.
     if let Err(e) = std::fs::create_dir_all(root) {
-        return RustError::with_source("couldn't create the specified path", e);
+        return RustError::with_source("couldn't create the specified path", e).into_c();
     }
 
     // Create profile.bin.
@@ -98,12 +100,14 @@ pub unsafe extern "C" fn profile_save(p: *const Profile, path: *const c_char) ->
         Ok(v) => v,
         Err(e) => {
             return RustError::with_source(format_args!("couldn't create {}", path.display()), e)
+                .into_c()
         }
     };
 
     // Write profile.bin.
     if let Err(e) = ciborium::into_writer(&*p, file) {
-        return RustError::with_source(format_args!("couldn't write {}", path.display()), e);
+        return RustError::with_source(format_args!("couldn't write {}", path.display()), e)
+            .into_c();
     }
 
     null_mut()

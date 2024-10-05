@@ -12,7 +12,7 @@ pub unsafe extern "C" fn pkg_open(file: *const c_char, error: *mut *mut RustErro
     let pkg = match Pkg::open(path.to_str().unwrap()) {
         Ok(v) => Box::new(v),
         Err(e) => {
-            *error = RustError::wrap(e);
+            *error = RustError::wrap(e).into_c();
             return null_mut();
         }
     };
@@ -30,7 +30,7 @@ pub unsafe extern "C" fn pkg_get_param(pkg: *const Pkg, error: *mut *mut RustErr
     let param = match (*pkg).get_param() {
         Ok(v) => Box::new(v),
         Err(e) => {
-            *error = RustError::wrap(e);
+            *error = RustError::wrap(e).into_c();
             return null_mut();
         }
     };
@@ -56,7 +56,7 @@ pub unsafe extern "C" fn pkg_extract(
 
     match (*pkg).extract(root, progress) {
         Ok(_) => null_mut(),
-        Err(e) => RustError::wrap(e),
+        Err(e) => RustError::wrap(e).into_c(),
     }
 }
 
