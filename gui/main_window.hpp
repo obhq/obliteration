@@ -48,6 +48,7 @@ private slots:
 private:
     void vmmError(const QString &msg);
     void waitingDebugger(const QString &addr);
+    void debuggerDisconnected();
     void waitKernelExit(bool success);
     void log(VmmLog type, const QString &msg);
     bool loadGame(const QString &gameId);
