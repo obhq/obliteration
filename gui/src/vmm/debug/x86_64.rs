@@ -5,6 +5,12 @@ use thiserror::Error;
 /// Implementation of [`gdbstub::target::Target`] for x86-64.
 pub struct Target {}
 
+impl Target {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
 impl gdbstub::target::Target for Target {
     type Arch = Arch;
     type Error = TargetError;
