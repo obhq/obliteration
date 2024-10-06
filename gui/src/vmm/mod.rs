@@ -8,15 +8,16 @@ use self::ram::{Ram, RamMap};
 use self::screen::Screen;
 use crate::error::RustError;
 use crate::profile::Profile;
-use gdbstub::stub::state_machine::GdbStubStateMachine;
-use gdbstub::stub::GdbStub;
+use gdbstub::stub::state_machine::state::Running;
+use gdbstub::stub::state_machine::{GdbStubStateMachine, GdbStubStateMachineInner};
+use gdbstub::stub::{GdbStub, MultiThreadStopReason};
 use obconf::{BootEnv, ConsoleType, Vm};
 use std::cmp::max;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::{c_char, c_void, CStr};
 use std::io::Read;
-use std::net::{TcpListener, TcpStream};
+use std::net::TcpListener;
 use std::num::NonZero;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -566,7 +567,7 @@ fn main_cpu<H: Hypervisor>(
 
         // Try accept a connection.
         let e = match debug.accept() {
-            Ok(v) => break v.0,
+            Ok(v) => break self::debug::Client::new(v.0),
             Err(e) => e,
         };
 
@@ -592,13 +593,19 @@ fn main_cpu<H: Hypervisor>(
         }
     };
 
+    // Run GDB until the client is waiting for the target to report a stop reason.
+    let gdb = match run_gdb(args, &mut target, gdb) {
+        Some(v) => v,
+        None => return,
+    };
+
     run_cpu(cpu, args, Some(gdb));
 }
 
 fn run_cpu<H: Hypervisor>(
     mut cpu: H::Cpu<'_>,
     args: &CpuArgs<H>,
-    gdb: Option<GdbStubStateMachine<self::debug::Target, TcpStream>>,
+    gdb: Option<GdbStubStateMachineInner<Running, self::debug::Target, self::debug::Client>>,
 ) {
     // Build device contexts for this CPU.
     let mut devices = args
@@ -658,6 +665,55 @@ fn exec_io<'a>(
     assert!(addr < end.get());
 
     dev.exec(&mut io)
+}
+
+fn run_gdb<'a, H: Hypervisor>(
+    args: &CpuArgs<H>,
+    target: &mut self::debug::Target,
+    mut state: GdbStubStateMachine<'a, self::debug::Target, self::debug::Client>,
+) -> Option<GdbStubStateMachineInner<'a, Running, self::debug::Target, self::debug::Client>> {
+    loop {
+        // Check current state.
+        let mut s = match state {
+            GdbStubStateMachine::Idle(s) => s,
+            GdbStubStateMachine::Running(s) => return Some(s),
+            GdbStubStateMachine::CtrlCInterrupt(s) => {
+                state = match s.interrupt_handled(target, None::<MultiThreadStopReason<u64>>) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let e = RustError::with_source("couldn't handle CTRL+C from a debugger", e);
+                        unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+                        return None;
+                    }
+                };
+
+                continue;
+            }
+            GdbStubStateMachine::Disconnected(_) => {
+                unsafe { args.event.invoke(VmmEvent::DebuggerDisconnected) };
+                return None;
+            }
+        };
+
+        // Read data from the client.
+        let b = match s.borrow_conn().read() {
+            Ok(v) => v,
+            Err(e) => {
+                let e = RustError::with_source("couldn't read data from a debugger", e);
+                unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+                return None;
+            }
+        };
+
+        state = match s.incoming_data(target, b) {
+            Ok(v) => v,
+            Err(e) => {
+                let e = RustError::with_source("couldn't process data from a debugger", e);
+                unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+                return None;
+            }
+        };
+    }
 }
 
 #[cfg(unix)]
@@ -740,6 +796,7 @@ pub enum VmmEvent {
         addr: *const c_char,
         len: usize,
     },
+    DebuggerDisconnected,
     Exiting {
         success: bool,
     },

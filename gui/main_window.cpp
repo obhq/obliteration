@@ -400,6 +400,13 @@ void MainWindow::waitingDebugger(const QString &addr)
     }
 }
 
+void MainWindow::debuggerDisconnected()
+{
+    if (m_args.isSet(Args::debug)) {
+        close();
+    }
+}
+
 void MainWindow::waitKernelExit(bool success)
 {
     m_vmm.free();
@@ -620,6 +627,12 @@ void MainWindow::vmmHandler(const VmmEvent *ev, void *cx)
             &MainWindow::waitingDebugger,
             Qt::QueuedConnection,
             QString::fromUtf8(ev->waiting_debugger.addr, ev->waiting_debugger.len));
+        break;
+    case VmmEvent_DebuggerDisconnected:
+        QMetaObject::invokeMethod(
+            w,
+            &MainWindow::debuggerDisconnected,
+            Qt::QueuedConnection);
         break;
     case VmmEvent_Exiting:
         QMetaObject::invokeMethod(
