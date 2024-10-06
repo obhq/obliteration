@@ -1,0 +1,32 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Launch VMM (Debug)",
+      "detail": "Launch the GUI then start the VMM in debug mode",
+      "type": "process",
+      "isBackground": true,
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "linux": {
+        "command": "${workspaceFolder}/build/gui/obliteration"
+      },
+      "osx": {
+        "command": "${workspaceFolder}/build/gui/obliteration.app/Contents/MacOS/obliteration"
+      },
+      "windows": {
+        "command": "${workspaceFolder}/build/gui/Obliteration.exe",
+        "options": {
+          "env": {
+            "Path": "${env:Path};${env:CMAKE_PREFIX_PATH}\\bin"
+          }
+        }
+      },
+      "args": [
+        "--debug",
+        "127.0.0.1:1234"
+      ]
+    }
+  ]
+}

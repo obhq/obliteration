@@ -7,6 +7,7 @@
 #endif
 
 #include <QApplication>
+#include <QCommandLineParser>
 #include <QList>
 #include <QMessageBox>
 #include <QMetaObject>
@@ -56,6 +57,14 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
 
     QGuiApplication::setWindowIcon(QIcon(":/resources/obliteration-icon.png"));
+
+    // Parse arguments.
+    QCommandLineParser args;
+
+    args.setApplicationDescription("Virtualization stack for Obliteration");
+    args.addHelpOption();
+    args.addOption(Args::debug);
+    args.process(app);
 
     // Hook Rust panic.
     QObject panic;
@@ -199,11 +208,11 @@ int main(int argc, char *argv[])
         }
     }
 
-    // Run main window.
+    // Setup main window.
 #ifdef __APPLE__
-    MainWindow win;
+    MainWindow win(args);
 #else
-    MainWindow win(&vulkan, std::move(vkDevices));
+    MainWindow win(args, &vulkan, std::move(vkDevices));
 #endif
 
     if (!win.loadProfiles() || !win.loadGames()) {
@@ -211,6 +220,13 @@ int main(int argc, char *argv[])
     }
 
     win.restoreGeometry();
+
+    // Run main window.
+    auto debug = args.value(Args::debug);
+
+    if (!debug.isEmpty()) {
+        win.startVmm(debug);
+    }
 
     return QApplication::exec();
 }
