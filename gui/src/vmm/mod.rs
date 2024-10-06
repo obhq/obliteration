@@ -8,13 +8,15 @@ use self::ram::{Ram, RamMap};
 use self::screen::Screen;
 use crate::error::RustError;
 use crate::profile::Profile;
+use gdbstub::stub::state_machine::GdbStubStateMachine;
+use gdbstub::stub::GdbStub;
 use obconf::{BootEnv, ConsoleType, Vm};
 use std::cmp::max;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::{c_char, c_void, CStr};
 use std::io::Read;
-use std::net::TcpListener;
+use std::net::{TcpListener, TcpStream};
 use std::num::NonZero;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -49,34 +51,11 @@ pub unsafe extern "C" fn vmm_run(
     err: *mut *mut RustError,
 ) -> *mut Vmm {
     // Setup debug server.
-    let debug = match debug.is_null() {
-        true => None,
-        false => {
-            // Get address to listen.
-            let addr = match CStr::from_ptr(debug).to_str() {
-                Ok(v) => v,
-                Err(_) => {
-                    *err = RustError::new("address to listen for a debugger is not UTF-8").into_c();
-                    return null_mut();
-                }
-            };
-
-            // Setup server.
-            let sock = match TcpListener::bind(addr) {
-                Ok(v) => v,
-                Err(e) => {
-                    *err = RustError::with_source("couldn't listen for a debugger", e).into_c();
-                    return null_mut();
-                }
-            };
-
-            if let Err(e) = sock.set_nonblocking(true) {
-                *err = RustError::with_source("couldn't enable non-blocking on a debug server", e)
-                    .into_c();
-                return null_mut();
-            }
-
-            Some(sock)
+    let debug = match setup_debug_server(debug) {
+        Ok(v) => v,
+        Err(e) => {
+            *err = e.into_c();
+            return null_mut();
         }
     };
 
@@ -510,6 +489,26 @@ pub unsafe extern "C" fn vmm_draw(vmm: *mut Vmm) -> *mut RustError {
     }
 }
 
+/// # Safety
+/// `addr` cannot be null and must point to a null-terminated string.
+unsafe fn setup_debug_server(addr: *const c_char) -> Result<Option<TcpListener>, RustError> {
+    // Get listen address.
+    let addr = match addr.is_null() {
+        true => return Ok(None),
+        false => CStr::from_ptr(addr)
+            .to_str()
+            .map_err(|_| RustError::new("address to listen for a debugger is not UTF-8"))?,
+    };
+
+    // Setup server.
+    let sock = TcpListener::bind(addr)
+        .map_err(|e| RustError::with_source("couldn't listen for a debugger", e))?;
+
+    sock.set_nonblocking(true)
+        .map(|_| Some(sock))
+        .map_err(|e| RustError::with_source("couldn't enable non-blocking on a debug server", e))
+}
+
 fn main_cpu<H: Hypervisor>(
     args: &CpuArgs<H>,
     entry: usize,
@@ -532,38 +531,76 @@ fn main_cpu<H: Hypervisor>(
         return;
     }
 
-    // Wait for debugger.
-    if let Some(debug) = debug {
-        // Tell the user to connect a debugger.
-        let addr = debug.local_addr().unwrap().to_string();
-        let len = addr.len();
-        let addr = addr.as_ptr().cast();
+    // Check if debug.
+    let debug = match debug {
+        Some(v) => v,
+        None => {
+            run_cpu(cpu, args, None);
+            return;
+        }
+    };
 
-        unsafe { args.event.invoke(VmmEvent::WaitingDebugger { addr, len }) };
+    // Get server address.
+    let addr = match debug.local_addr() {
+        Ok(v) => v.to_string(),
+        Err(e) => {
+            let e = RustError::with_source("couldn't get debug server address", e);
+            unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+            return;
+        }
+    };
 
-        // Wait for a debugger.
-        loop {
-            if args.shutdown.load(Ordering::Relaxed) {
+    // Tell the user to connect a debugger.
+    let len = addr.len();
+    let addr = addr.as_ptr().cast();
+
+    unsafe { args.event.invoke(VmmEvent::WaitingDebugger { addr, len }) };
+
+    // Wait for a debugger.
+    let client = loop {
+        use std::io::ErrorKind;
+
+        if args.shutdown.load(Ordering::Relaxed) {
+            return;
+        }
+
+        // Try accept a connection.
+        let e = match debug.accept() {
+            Ok(v) => break v.0,
+            Err(e) => e,
+        };
+
+        match e.kind() {
+            ErrorKind::WouldBlock => sleep(Duration::from_millis(500)),
+            ErrorKind::Interrupted => {}
+            _ => {
+                let e = RustError::with_source("couldn't accept a debugger connection", e);
+                unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
                 return;
             }
-
-            // Try accept a connection.
-            let e = match debug.accept() {
-                Ok(_) => break,
-                Err(e) => e,
-            };
-
-            assert_eq!(e.kind(), std::io::ErrorKind::WouldBlock);
-
-            sleep(Duration::from_secs(1));
         }
-    }
+    };
 
-    // Enter dispatch loop.
-    run_cpu(cpu, args);
+    // Setup GDB stub.
+    let mut target = self::debug::Target::new();
+    let gdb = match GdbStub::new(client).run_state_machine(&mut target) {
+        Ok(v) => v,
+        Err(e) => {
+            let e = RustError::with_source("couldn't setup a GDB stub", e);
+            unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+            return;
+        }
+    };
+
+    run_cpu(cpu, args, Some(gdb));
 }
 
-fn run_cpu<C: Cpu, H: Hypervisor>(mut cpu: C, args: &CpuArgs<H>) {
+fn run_cpu<H: Hypervisor>(
+    mut cpu: H::Cpu<'_>,
+    args: &CpuArgs<H>,
+    gdb: Option<GdbStubStateMachine<self::debug::Target, TcpStream>>,
+) {
+    // Build device contexts for this CPU.
     let mut devices = args
         .devices
         .map()
@@ -574,11 +611,16 @@ fn run_cpu<C: Cpu, H: Hypervisor>(mut cpu: C, args: &CpuArgs<H>) {
         })
         .collect::<BTreeMap<usize, (Box<dyn DeviceContext>, NonZero<usize>)>>();
 
+    // Dispatch CPU events until shutdown.
     while !args.shutdown.load(Ordering::Relaxed) {
         // Run the vCPU.
         let exit = match cpu.run() {
             Ok(v) => v,
-            Err(_) => todo!(),
+            Err(e) => {
+                let e = RustError::with_source("couldn't run CPU", e);
+                unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+                break;
+            }
         };
 
         // Check if HLT.
