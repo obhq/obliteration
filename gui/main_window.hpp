@@ -13,21 +13,27 @@ class GameListModel;
 class LaunchSettings;
 class LogsViewer;
 class ProfileList;
+class QCommandLineOption;
+class QCommandLineParser;
 class QStackedWidget;
 class Screen;
 
 class MainWindow final : public QMainWindow {
 public:
 #ifdef __APPLE__
-    MainWindow();
+    MainWindow(const QCommandLineParser &args);
 #else
-    MainWindow(QVulkanInstance *vulkan, QList<VkPhysicalDevice> &&vkDevices);
+    MainWindow(
+        const QCommandLineParser &args,
+        QVulkanInstance *vulkan,
+        QList<VkPhysicalDevice> &&vkDevices);
 #endif
     ~MainWindow() override;
 
     bool loadProfiles();
     bool loadGames();
     void restoreGeometry();
+    void startVmm(const QString &debugAddr);
 protected:
     void closeEvent(QCloseEvent *event) override;
 
@@ -38,7 +44,6 @@ private slots:
     void reportIssue();
     void aboutObliteration();
     void saveProfile(Profile *p);
-    void startVmm(const QString &debugAddr);
     void updateScreen();
 private:
     void vmmError(const QString &msg);
@@ -50,6 +55,7 @@ private:
 
     static void vmmHandler(const VmmEvent *ev, void *cx);
 
+    const QCommandLineParser &m_args;
     QStackedWidget *m_main;
     ProfileList *m_profiles;
     GameListModel *m_games;
@@ -58,3 +64,7 @@ private:
     QPointer<LogsViewer> m_logs;
     Rust<Vmm> m_vmm; // Destroy first.
 };
+
+namespace Args {
+    extern const QCommandLineOption debug;
+}

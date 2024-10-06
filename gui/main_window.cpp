@@ -14,6 +14,8 @@
 #include <QAction>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QCommandLineOption>
+#include <QCommandLineParser>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFile>
@@ -35,11 +37,19 @@
 
 #include <string.h>
 
+namespace Args {
+    const QCommandLineOption debug("debug", "Immediate launch the VMM in debug mode.", "addr", "127.0.0.1:1234");
+}
+
 #ifdef __APPLE__
-MainWindow::MainWindow() :
+MainWindow::MainWindow(const QCommandLineParser &args) :
 #else
-MainWindow::MainWindow(QVulkanInstance *vulkan, QList<VkPhysicalDevice> &&vkDevices) :
+MainWindow::MainWindow(
+    const QCommandLineParser &args,
+    QVulkanInstance *vulkan,
+    QList<VkPhysicalDevice> &&vkDevices) :
 #endif
+    m_args(args),
     m_main(nullptr),
     m_profiles(nullptr),
     m_games(nullptr),
@@ -341,95 +351,6 @@ void MainWindow::saveProfile(Profile *p)
     }
 }
 
-void MainWindow::startVmm(const QString &debugAddr)
-{
-    // Get full path to kernel binary.
-    std::string kernel;
-
-    if (QFile::exists(".obliteration-development")) {
-        auto b = std::filesystem::current_path();
-#ifdef _WIN32
-        auto target = L"x86_64-unknown-none";
-#elif defined(__aarch64__)
-        auto target = "aarch64-unknown-none-softfloat";
-#else
-        auto target = "x86_64-unknown-none";
-#endif
-
-#if defined(_WIN32) && defined(NDEBUG)
-        kernel = (b / L"target" / target / L"release" / L"obkrnl").u8string();
-#elif defined(_WIN32) && !defined(NDEBUG)
-        kernel = (b / L"target" / target / L"debug" / L"obkrnl").u8string();
-#elif defined(NDEBUG)
-        kernel = (b / "target" / target / "release" / "obkrnl").u8string();
-#else
-        kernel = (b / "target" / target / "debug" / "obkrnl").u8string();
-#endif
-    } else {
-#ifdef _WIN32
-        std::filesystem::path b(QCoreApplication::applicationDirPath().toStdString(), std::filesystem::path::native_format);
-        b /= L"share";
-        b /= L"obkrnl";
-        kernel = b.u8string();
-#else
-        auto b = std::filesystem::path(QCoreApplication::applicationDirPath().toStdString(), std::filesystem::path::native_format).parent_path();
-#ifdef __APPLE__
-        b /= "Resources";
-#else
-        b /= "share";
-#endif
-        b /= "obkrnl";
-        kernel = b.u8string();
-#endif
-    }
-
-    // Swap launch settings with the screen before getting a Vulkan surface otherwise it will fail.
-    m_main->setCurrentIndex(1);
-
-    // Run.
-    auto debug = debugAddr.toStdString();
-    VmmScreen screen;
-    Rust<RustError> error;
-    Rust<Vmm> vmm;
-
-    memset(&screen, 0, sizeof(screen));
-
-#ifdef __APPLE__
-    screen.view = m_screen->winId();
-#else
-    screen.vk_instance = reinterpret_cast<size_t>(m_screen->vulkanInstance()->vkInstance());
-    screen.vk_device = reinterpret_cast<size_t>(m_launch->currentDisplayDevice()->handle());
-    screen.vk_surface = reinterpret_cast<size_t>(QVulkanInstance::surfaceForWindow(m_screen));
-
-    if (!screen.vk_surface) {
-        m_main->setCurrentIndex(0);
-        QMessageBox::critical(this, "Error", "Couldn't create VkSurfaceKHR.");
-        return;
-    }
-#endif
-
-    vmm = vmm_run(
-        kernel.c_str(),
-        &screen,
-        m_launch->currentProfile(),
-        debug.empty() ? nullptr : debug.c_str(),
-        MainWindow::vmmHandler,
-        this,
-        &error);
-
-    if (!vmm) {
-        m_main->setCurrentIndex(0);
-        QMessageBox::critical(
-            this,
-            "Error",
-            QString("Couldn't run %1: %2").arg(kernel.c_str()).arg(error_message(error)));
-        return;
-    }
-
-    m_vmm = std::move(vmm);
-    m_screen->requestUpdate();
-}
-
 void MainWindow::updateScreen()
 {
     // Do nothing if the VMM is not running.
@@ -462,15 +383,21 @@ void MainWindow::vmmError(const QString &msg)
 
     QMessageBox::critical(this, "Error", msg);
 
-    m_main->setCurrentIndex(0);
+    if (m_args.isSet(Args::debug)) {
+        close();
+    } else {
+        m_main->setCurrentIndex(0);
+    }
 }
 
 void MainWindow::waitingDebugger(const QString &addr)
 {
-    QMessageBox::information(
-        this,
-        "Debug",
-        QString("The VMM are waiting for a debugger at %1.").arg(addr));
+    if (!m_args.isSet(Args::debug)) {
+        QMessageBox::information(
+            this,
+            "Debug",
+            QString("The VMM are waiting for a debugger at %1.").arg(addr));
+    }
 }
 
 void MainWindow::waitKernelExit(bool success)
@@ -562,6 +489,95 @@ void MainWindow::restoreGeometry()
 
         show();
     }
+}
+
+void MainWindow::startVmm(const QString &debugAddr)
+{
+    // Get full path to kernel binary.
+    std::string kernel;
+
+    if (QFile::exists(".obliteration-development")) {
+        auto b = std::filesystem::current_path();
+#ifdef _WIN32
+        auto target = L"x86_64-unknown-none";
+#elif defined(__aarch64__)
+        auto target = "aarch64-unknown-none-softfloat";
+#else
+        auto target = "x86_64-unknown-none";
+#endif
+
+#if defined(_WIN32) && defined(NDEBUG)
+        kernel = (b / L"target" / target / L"release" / L"obkrnl").u8string();
+#elif defined(_WIN32) && !defined(NDEBUG)
+        kernel = (b / L"target" / target / L"debug" / L"obkrnl").u8string();
+#elif defined(NDEBUG)
+        kernel = (b / "target" / target / "release" / "obkrnl").u8string();
+#else
+        kernel = (b / "target" / target / "debug" / "obkrnl").u8string();
+#endif
+    } else {
+#ifdef _WIN32
+        std::filesystem::path b(QCoreApplication::applicationDirPath().toStdString(), std::filesystem::path::native_format);
+        b /= L"share";
+        b /= L"obkrnl";
+        kernel = b.u8string();
+#else
+        auto b = std::filesystem::path(QCoreApplication::applicationDirPath().toStdString(), std::filesystem::path::native_format).parent_path();
+#ifdef __APPLE__
+        b /= "Resources";
+#else
+        b /= "share";
+#endif
+        b /= "obkrnl";
+        kernel = b.u8string();
+#endif
+    }
+
+    // Swap launch settings with the screen before getting a Vulkan surface otherwise it will fail.
+    m_main->setCurrentIndex(1);
+
+    // Run.
+    auto debug = debugAddr.toStdString();
+    VmmScreen screen;
+    Rust<RustError> error;
+    Rust<Vmm> vmm;
+
+    memset(&screen, 0, sizeof(screen));
+
+#ifdef __APPLE__
+    screen.view = m_screen->winId();
+#else
+    screen.vk_instance = reinterpret_cast<size_t>(m_screen->vulkanInstance()->vkInstance());
+    screen.vk_device = reinterpret_cast<size_t>(m_launch->currentDisplayDevice()->handle());
+    screen.vk_surface = reinterpret_cast<size_t>(QVulkanInstance::surfaceForWindow(m_screen));
+
+    if (!screen.vk_surface) {
+        m_main->setCurrentIndex(0);
+        QMessageBox::critical(this, "Error", "Couldn't create VkSurfaceKHR.");
+        return;
+    }
+#endif
+
+    vmm = vmm_run(
+        kernel.c_str(),
+        &screen,
+        m_launch->currentProfile(),
+        debug.empty() ? nullptr : debug.c_str(),
+        MainWindow::vmmHandler,
+        this,
+        &error);
+
+    if (!vmm) {
+        m_main->setCurrentIndex(0);
+        QMessageBox::critical(
+            this,
+            "Error",
+            QString("Couldn't run %1: %2").arg(kernel.c_str()).arg(error_message(error)));
+        return;
+    }
+
+    m_vmm = std::move(vmm);
+    m_screen->requestUpdate();
 }
 
 bool MainWindow::requireVmmStopped()

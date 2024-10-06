@@ -23,6 +23,7 @@
       "name": "Kernel",
       "type": "lldb",
       "request": "custom",
+      "preLaunchTask": "Launch VMM (Debug)",
       "initCommands": [
         "platform select remote-gdb-server",
         "platform connect connect://localhost:1234"
