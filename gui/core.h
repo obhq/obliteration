@@ -87,6 +87,7 @@ struct VmmScreen {
 enum VmmEvent_Tag {
     VmmEvent_Error,
     VmmEvent_WaitingDebugger,
+    VmmEvent_DebuggerDisconnected,
     VmmEvent_Exiting,
     VmmEvent_Log,
 };

@@ -24,9 +24,11 @@
       "type": "lldb",
       "request": "custom",
       "preLaunchTask": "Launch VMM (Debug)",
-      "initCommands": [
-        "platform select remote-gdb-server",
-        "platform connect connect://localhost:1234"
+      "targetCreateCommands": [
+        "target create ${workspaceFolder}/target/x86_64-unknown-none/debug/obkrnl"
+      ],
+      "processCreateCommands": [
+        "gdb-remote 1234"
       ]
     },
     {

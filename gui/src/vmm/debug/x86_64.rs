@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+use gdbstub::common::Tid;
+use gdbstub::target::ext::base::multithread::MultiThreadBase;
 use gdbstub::target::ext::base::BaseOps;
+use gdbstub::target::ext::breakpoints::{
+    Breakpoints, BreakpointsOps, SwBreakpoint, SwBreakpointOps,
+};
+use gdbstub::target::TargetResult;
 use thiserror::Error;
 
 /// Implementation of [`gdbstub::target::Target`] for x86-64.
@@ -16,6 +22,60 @@ impl gdbstub::target::Target for Target {
     type Error = TargetError;
 
     fn base_ops(&mut self) -> BaseOps<'_, Self::Arch, Self::Error> {
+        BaseOps::MultiThread(self)
+    }
+
+    fn support_breakpoints(&mut self) -> Option<BreakpointsOps<'_, Self>> {
+        Some(self)
+    }
+}
+
+impl MultiThreadBase for Target {
+    fn read_registers(&mut self, regs: &mut Registers, tid: Tid) -> TargetResult<(), Self> {
+        todo!()
+    }
+
+    fn write_registers(&mut self, regs: &Registers, tid: Tid) -> TargetResult<(), Self> {
+        todo!()
+    }
+
+    fn read_addrs(
+        &mut self,
+        start_addr: u64,
+        data: &mut [u8],
+        tid: Tid,
+    ) -> TargetResult<usize, Self> {
+        todo!()
+    }
+
+    fn write_addrs(&mut self, start_addr: u64, data: &[u8], tid: Tid) -> TargetResult<(), Self> {
+        todo!()
+    }
+
+    fn list_active_threads(
+        &mut self,
+        thread_is_active: &mut dyn FnMut(Tid),
+    ) -> Result<(), Self::Error> {
+        todo!()
+    }
+}
+
+impl Breakpoints for Target {
+    fn support_sw_breakpoint(&mut self) -> Option<SwBreakpointOps<'_, Self>> {
+        Some(self)
+    }
+}
+
+impl SwBreakpoint for Target {
+    fn add_sw_breakpoint(&mut self, addr: u64, kind: BreakpointKind) -> TargetResult<bool, Self> {
+        todo!()
+    }
+
+    fn remove_sw_breakpoint(
+        &mut self,
+        addr: u64,
+        kind: BreakpointKind,
+    ) -> TargetResult<bool, Self> {
         todo!()
     }
 }
