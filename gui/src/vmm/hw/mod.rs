@@ -8,9 +8,11 @@ use std::sync::Arc;
 use thiserror::Error;
 
 pub use self::console::*;
+pub use self::debugger::*;
 pub use self::vmm::*;
 
 mod console;
+mod debugger;
 mod vmm;
 
 pub fn setup_devices<H: Hypervisor>(
@@ -25,10 +27,12 @@ pub fn setup_devices<H: Hypervisor>(
 
     let vmm = b.push(|addr| Vmm::new(addr, block_size, event));
     let console = b.push(|addr| Console::new(addr, block_size, event));
+    let debugger = b.push(|addr| Debugger::new(addr, block_size, event));
 
     DeviceTree {
         vmm,
         console,
+        debugger,
         map: b.map,
     }
 }
@@ -91,6 +95,7 @@ fn read_bin<'b>(
 pub struct DeviceTree<H: Hypervisor> {
     vmm: Arc<Vmm>,
     console: Arc<Console>,
+    debugger: Arc<Debugger>,
     map: BTreeMap<usize, Arc<dyn Device<H>>>,
 }
 
@@ -101,6 +106,10 @@ impl<H: Hypervisor> DeviceTree<H> {
 
     pub fn console(&self) -> &impl Device<H> {
         self.console.as_ref()
+    }
+
+    pub fn debugger(&self) -> &impl Device<H> {
+        self.debugger.as_ref()
     }
 
     /// Returns iterator ordered by physical address.

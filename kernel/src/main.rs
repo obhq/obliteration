@@ -1,6 +1,7 @@
 #![no_std]
 #![cfg_attr(not(test), no_main)]
 
+use crate::config::boot_env;
 use crate::context::Context;
 use crate::malloc::KernelHeap;
 use crate::proc::{ProcMgr, Thread};
@@ -16,6 +17,7 @@ mod arch;
 mod config;
 mod console;
 mod context;
+mod debug;
 mod imgfmt;
 mod lock;
 mod malloc;
@@ -66,6 +68,11 @@ unsafe extern "C" fn _start(env: &'static BootEnv, conf: &'static Config) -> ! {
 }
 
 fn main(pmgr: Arc<ProcMgr>) -> ! {
+    // Wait for debugger.
+    match boot_env() {
+        BootEnv::Vm(vm) => crate::debug::wait_debugger(vm),
+    }
+
     // Activate stage 2 heap.
     info!("Activating stage 2 heap.");
 

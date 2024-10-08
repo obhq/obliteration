@@ -8,22 +8,19 @@ use self::ram::{Ram, RamMap};
 use self::screen::Screen;
 use crate::error::RustError;
 use crate::profile::Profile;
-use gdbstub::stub::state_machine::state::Running;
-use gdbstub::stub::state_machine::{GdbStubStateMachine, GdbStubStateMachineInner};
+use gdbstub::stub::state_machine::GdbStubStateMachine;
 use gdbstub::stub::{GdbStub, MultiThreadStopReason};
 use obconf::{BootEnv, ConsoleType, Vm};
 use std::cmp::max;
 use std::collections::BTreeMap;
 use std::error::Error;
-use std::ffi::{c_char, c_void, CStr};
+use std::ffi::{c_char, c_int, c_void, CStr};
 use std::io::Read;
-use std::net::TcpListener;
 use std::num::NonZero;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::thread::{sleep, JoinHandle};
-use std::time::Duration;
+use std::thread::JoinHandle;
 use thiserror::Error;
 
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
@@ -37,29 +34,15 @@ mod ram;
 mod screen;
 
 #[no_mangle]
-pub unsafe extern "C" fn vmm_free(vmm: *mut Vmm) {
-    drop(Box::from_raw(vmm));
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn vmm_run(
+pub unsafe extern "C" fn vmm_start(
     kernel: *const c_char,
     screen: *const VmmScreen,
     profile: *const Profile,
-    debug: *const c_char,
+    debug: Option<unsafe extern "C" fn(*mut c_void, *const u8, usize, *mut c_int) -> bool>,
     event: unsafe extern "C" fn(*const VmmEvent, *mut c_void),
     cx: *mut c_void,
     err: *mut *mut RustError,
 ) -> *mut Vmm {
-    // Setup debug server.
-    let debug = match setup_debug_server(debug) {
-        Ok(v) => v,
-        Err(e) => {
-            *err = e.into_c();
-            return null_mut();
-        }
-    };
-
     // Check if path UTF-8.
     let path = match CStr::from_ptr(kernel).to_str() {
         Ok(v) => v,
@@ -424,6 +407,11 @@ pub unsafe extern "C" fn vmm_run(
     let env = BootEnv::Vm(Vm {
         vmm: devices.vmm().addr(),
         console: devices.console().addr(),
+        debugger: if debug.is_some() {
+            devices.debugger().addr()
+        } else {
+            0
+        },
         host_page_size,
     });
 
@@ -450,6 +438,29 @@ pub unsafe extern "C" fn vmm_run(
         }
     };
 
+    // Setup GDB stub.
+    let debugger = match debug
+        .map(move |fp| -> Result<Debugger, RustError> {
+            let mut target = self::debug::Target::new();
+            let client = self::debug::Client::new(fp, cx);
+            let state = GdbStub::new(client)
+                .run_state_machine(&mut target)
+                .map_err(|e| RustError::with_source("couldn't setup a GDB stub", e))?;
+
+            Ok(Debugger {
+                target,
+                state: Some(state),
+            })
+        })
+        .transpose()
+    {
+        Ok(v) => v,
+        Err(e) => {
+            *err = e.into_c();
+            return null_mut();
+        }
+    };
+
     // Setup arguments for main CPU.
     let shutdown = Arc::new(AtomicBool::new(false));
     let args = CpuArgs {
@@ -463,7 +474,7 @@ pub unsafe extern "C" fn vmm_run(
 
     // Spawn a thread to drive main CPU.
     let e_entry = file.entry();
-    let main = move || main_cpu(&args, e_entry, map, debug);
+    let main = move || main_cpu(&args, e_entry, map);
     let main = match std::thread::Builder::new().spawn(main) {
         Ok(v) => v,
         Err(e) => {
@@ -476,10 +487,17 @@ pub unsafe extern "C" fn vmm_run(
     let vmm = Vmm {
         cpus: vec![main],
         screen,
+        debugger,
         shutdown,
+        cx,
     };
 
     Box::into_raw(vmm.into())
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vmm_free(vmm: *mut Vmm) {
+    drop(Box::from_raw(vmm));
 }
 
 #[no_mangle]
@@ -490,33 +508,68 @@ pub unsafe extern "C" fn vmm_draw(vmm: *mut Vmm) -> *mut RustError {
     }
 }
 
-/// # Safety
-/// `addr` cannot be null and must point to a null-terminated string.
-unsafe fn setup_debug_server(addr: *const c_char) -> Result<Option<TcpListener>, RustError> {
-    // Get listen address.
-    let addr = match addr.is_null() {
-        true => return Ok(None),
-        false => CStr::from_ptr(addr)
-            .to_str()
-            .map_err(|_| RustError::new("address to listen for a debugger is not UTF-8"))?,
+#[no_mangle]
+pub unsafe extern "C" fn vmm_dispatch_debug(
+    vmm: *mut Vmm,
+    stop: *mut KernelStop,
+    read: unsafe extern "C" fn(*mut u8, *mut c_void) -> bool,
+) -> DebugResult {
+    let vmm = &mut *vmm;
+    let debug = vmm.debugger.as_mut().unwrap();
+    let stop = match stop.is_null() {
+        true => None,
+        false => Some(Box::from_raw(stop)),
     };
 
-    // Setup server.
-    let sock = TcpListener::bind(addr)
-        .map_err(|e| RustError::with_source("couldn't listen for a debugger", e))?;
+    loop {
+        // Check current state.
+        let s = match debug.state.take().unwrap() {
+            GdbStubStateMachine::Idle(s) => s,
+            GdbStubStateMachine::Running(s) => {
+                debug.state = Some(s.into());
+                return DebugResult::Ok;
+            }
+            GdbStubStateMachine::CtrlCInterrupt(s) => {
+                match s.interrupt_handled(&mut debug.target, None::<MultiThreadStopReason<u64>>) {
+                    Ok(v) => debug.state = Some(v),
+                    Err(e) => {
+                        let r = RustError::with_source("couldn't handle CTRL+C from a debugger", e);
+                        return DebugResult::Error { reason: r.into_c() };
+                    }
+                }
+                continue;
+            }
+            GdbStubStateMachine::Disconnected(_) => return DebugResult::Disconnected,
+        };
 
-    sock.set_nonblocking(true)
-        .map(|_| Some(sock))
-        .map_err(|e| RustError::with_source("couldn't enable non-blocking on a debug server", e))
+        // Read data from the client.
+        let mut b = 0;
+
+        if !read(&mut b, vmm.cx) {
+            return DebugResult::ReadFailed;
+        }
+
+        match s.incoming_data(&mut debug.target, b) {
+            Ok(v) => debug.state = Some(v),
+            Err(e) => {
+                let r = RustError::with_source("couldn't process data from a debugger", e);
+                return DebugResult::Error { reason: r.into_c() };
+            }
+        }
+    }
 }
 
-fn main_cpu<H: Hypervisor>(
-    args: &CpuArgs<H>,
-    entry: usize,
-    map: RamMap,
-    debug: Option<TcpListener>,
-) {
-    // Create vCPU.
+#[no_mangle]
+pub unsafe extern "C" fn vmm_shutdown(vmm: *mut Vmm) {
+    (*vmm).shutdown.store(true, Ordering::Relaxed);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vmm_shutting_down(vmm: *mut Vmm) -> bool {
+    (*vmm).shutdown.load(Ordering::Relaxed)
+}
+
+fn main_cpu<H: Hypervisor>(args: &CpuArgs<H>, entry: usize, map: RamMap) {
     let mut cpu = match args.hv.create_cpu(0) {
         Ok(v) => v,
         Err(e) => {
@@ -532,81 +585,10 @@ fn main_cpu<H: Hypervisor>(
         return;
     }
 
-    // Check if debug.
-    let debug = match debug {
-        Some(v) => v,
-        None => {
-            run_cpu(cpu, args, None);
-            return;
-        }
-    };
-
-    // Get server address.
-    let addr = match debug.local_addr() {
-        Ok(v) => v.to_string(),
-        Err(e) => {
-            let e = RustError::with_source("couldn't get debug server address", e);
-            unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
-            return;
-        }
-    };
-
-    // Tell the user to connect a debugger.
-    let len = addr.len();
-    let addr = addr.as_ptr().cast();
-
-    unsafe { args.event.invoke(VmmEvent::WaitingDebugger { addr, len }) };
-
-    // Wait for a debugger.
-    let client = loop {
-        use std::io::ErrorKind;
-
-        if args.shutdown.load(Ordering::Relaxed) {
-            return;
-        }
-
-        // Try accept a connection.
-        let e = match debug.accept() {
-            Ok(v) => break self::debug::Client::new(v.0),
-            Err(e) => e,
-        };
-
-        match e.kind() {
-            ErrorKind::WouldBlock => sleep(Duration::from_millis(500)),
-            ErrorKind::Interrupted => {}
-            _ => {
-                let e = RustError::with_source("couldn't accept a debugger connection", e);
-                unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
-                return;
-            }
-        }
-    };
-
-    // Setup GDB stub.
-    let mut target = self::debug::Target::new();
-    let gdb = match GdbStub::new(client).run_state_machine(&mut target) {
-        Ok(v) => v,
-        Err(e) => {
-            let e = RustError::with_source("couldn't setup a GDB stub", e);
-            unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
-            return;
-        }
-    };
-
-    // Run GDB until the client is waiting for the target to report a stop reason.
-    let gdb = match run_gdb(args, &mut target, gdb) {
-        Some(v) => v,
-        None => return,
-    };
-
-    run_cpu(cpu, args, Some(gdb));
+    run_cpu(cpu, args);
 }
 
-fn run_cpu<H: Hypervisor>(
-    mut cpu: H::Cpu<'_>,
-    args: &CpuArgs<H>,
-    gdb: Option<GdbStubStateMachineInner<Running, self::debug::Target, self::debug::Client>>,
-) {
+fn run_cpu<H: Hypervisor>(mut cpu: H::Cpu<'_>, args: &CpuArgs<H>) {
     // Build device contexts for this CPU.
     let mut devices = args
         .devices
@@ -667,55 +649,6 @@ fn exec_io<'a>(
     dev.exec(&mut io)
 }
 
-fn run_gdb<'a, H: Hypervisor>(
-    args: &CpuArgs<H>,
-    target: &mut self::debug::Target,
-    mut state: GdbStubStateMachine<'a, self::debug::Target, self::debug::Client>,
-) -> Option<GdbStubStateMachineInner<'a, Running, self::debug::Target, self::debug::Client>> {
-    loop {
-        // Check current state.
-        let mut s = match state {
-            GdbStubStateMachine::Idle(s) => s,
-            GdbStubStateMachine::Running(s) => return Some(s),
-            GdbStubStateMachine::CtrlCInterrupt(s) => {
-                state = match s.interrupt_handled(target, None::<MultiThreadStopReason<u64>>) {
-                    Ok(v) => v,
-                    Err(e) => {
-                        let e = RustError::with_source("couldn't handle CTRL+C from a debugger", e);
-                        unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
-                        return None;
-                    }
-                };
-
-                continue;
-            }
-            GdbStubStateMachine::Disconnected(_) => {
-                unsafe { args.event.invoke(VmmEvent::DebuggerDisconnected) };
-                return None;
-            }
-        };
-
-        // Read data from the client.
-        let b = match s.borrow_conn().read() {
-            Ok(v) => v,
-            Err(e) => {
-                let e = RustError::with_source("couldn't read data from a debugger", e);
-                unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
-                return None;
-            }
-        };
-
-        state = match s.incoming_data(target, b) {
-            Ok(v) => v,
-            Err(e) => {
-                let e = RustError::with_source("couldn't process data from a debugger", e);
-                unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
-                return None;
-            }
-        };
-    }
-}
-
 #[cfg(unix)]
 fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
     let v = unsafe { libc::sysconf(libc::_SC_PAGE_SIZE) };
@@ -742,7 +675,9 @@ fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
 pub struct Vmm {
     cpus: Vec<JoinHandle<()>>,
     screen: self::screen::Default,
+    debugger: Option<Debugger>,
     shutdown: Arc<AtomicBool>,
+    cx: *mut c_void,
 }
 
 impl Drop for Vmm {
@@ -792,11 +727,6 @@ pub enum VmmEvent {
     Error {
         reason: *const RustError,
     },
-    WaitingDebugger {
-        addr: *const c_char,
-        len: usize,
-    },
-    DebuggerDisconnected,
     Exiting {
         success: bool,
     },
@@ -804,6 +734,9 @@ pub enum VmmEvent {
         ty: VmmLog,
         data: *const c_char,
         len: usize,
+    },
+    Breakpoint {
+        stop: *mut KernelStop,
     },
 }
 
@@ -830,6 +763,20 @@ impl From<ConsoleType> for VmmLog {
     }
 }
 
+/// Reason for [`VmmEvent::Breakpoint`].
+#[allow(dead_code)]
+pub struct KernelStop(MultiThreadStopReason<u64>);
+
+/// Result of [`vmm_dispatch_debug()`].
+#[allow(dead_code)]
+#[repr(C)]
+pub enum DebugResult {
+    Ok,
+    Disconnected,
+    ReadFailed,
+    Error { reason: *mut RustError },
+}
+
 /// Encapsulates arguments for a function to run a CPU.
 struct CpuArgs<H: Hypervisor> {
     hv: H,
@@ -838,6 +785,12 @@ struct CpuArgs<H: Hypervisor> {
     devices: Arc<DeviceTree<H>>,
     event: VmmEventHandler,
     shutdown: Arc<AtomicBool>,
+}
+
+/// Contains data for a debugger.
+struct Debugger {
+    target: self::debug::Target,
+    state: Option<GdbStubStateMachine<'static, self::debug::Target, self::debug::Client>>,
 }
 
 /// Represents an error when [`vmm_new()`] fails.
