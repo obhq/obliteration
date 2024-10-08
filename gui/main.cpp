@@ -222,10 +222,8 @@ int main(int argc, char *argv[])
     win.restoreGeometry();
 
     // Run main window.
-    auto debug = args.value(Args::debug);
-
-    if (!debug.isEmpty()) {
-        win.startVmm(debug);
+    if (args.isSet(Args::debug)) {
+        win.startDebug(args.value(Args::debug));
     }
 
     return QApplication::exec();

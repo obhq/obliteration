@@ -45,6 +45,11 @@ enum VmmLog {
 };
 
 /**
+ * Reason for [`VmmEvent::Breakpoint`].
+ */
+struct KernelStop;
+
+/**
  * Contains settings to launch the kernel.
  */
 struct Profile;
@@ -86,19 +91,13 @@ struct VmmScreen {
  */
 enum VmmEvent_Tag {
     VmmEvent_Error,
-    VmmEvent_WaitingDebugger,
-    VmmEvent_DebuggerDisconnected,
     VmmEvent_Exiting,
     VmmEvent_Log,
+    VmmEvent_Breakpoint,
 };
 
 struct VmmEvent_Error_Body {
     const struct RustError *reason;
-};
-
-struct VmmEvent_WaitingDebugger_Body {
-    const char *addr;
-    size_t len;
 };
 
 struct VmmEvent_Exiting_Body {
@@ -111,13 +110,38 @@ struct VmmEvent_Log_Body {
     size_t len;
 };
 
+struct VmmEvent_Breakpoint_Body {
+    struct KernelStop *stop;
+};
+
 struct VmmEvent {
     enum VmmEvent_Tag tag;
     union {
         struct VmmEvent_Error_Body error;
-        struct VmmEvent_WaitingDebugger_Body waiting_debugger;
         struct VmmEvent_Exiting_Body exiting;
         struct VmmEvent_Log_Body log;
+        struct VmmEvent_Breakpoint_Body breakpoint;
+    };
+};
+
+/**
+ * Result of [`vmm_dispatch_debug()`].
+ */
+enum DebugResult_Tag {
+    DebugResult_Ok,
+    DebugResult_Disconnected,
+    DebugResult_ReadFailed,
+    DebugResult_Error,
+};
+
+struct DebugResult_Error_Body {
+    struct RustError *reason;
+};
+
+struct DebugResult {
+    enum DebugResult_Tag tag;
+    union {
+        struct DebugResult_Error_Body error;
     };
 };
 
@@ -183,17 +207,25 @@ struct RustError *update_firmware(const char *root,
                                   void *cx,
                                   void (*status)(const char*, uint64_t, uint64_t, void*));
 
+struct Vmm *vmm_start(const char *kernel,
+                      const struct VmmScreen *screen,
+                      const struct Profile *profile,
+                      bool (*debug)(void*, const uint8_t*, size_t, int*),
+                      void (*event)(const struct VmmEvent*, void*),
+                      void *cx,
+                      struct RustError **err);
+
 void vmm_free(struct Vmm *vmm);
 
-struct Vmm *vmm_run(const char *kernel,
-                    const struct VmmScreen *screen,
-                    const struct Profile *profile,
-                    const char *debug,
-                    void (*event)(const struct VmmEvent*, void*),
-                    void *cx,
-                    struct RustError **err);
-
 struct RustError *vmm_draw(struct Vmm *vmm);
+
+struct DebugResult vmm_dispatch_debug(struct Vmm *vmm,
+                                      struct KernelStop *stop,
+                                      bool (*read)(uint8_t*, void*));
+
+void vmm_shutdown(struct Vmm *vmm);
+
+bool vmm_shutting_down(struct Vmm *vmm);
 
 #ifdef __cplusplus
 } // extern "C"

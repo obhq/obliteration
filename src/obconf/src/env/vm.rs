@@ -7,6 +7,8 @@ pub struct Vm {
     pub vmm: usize,
     /// Address of [ConsoleMemory].
     pub console: usize,
+    /// Address of [DebuggerMemory].
+    pub debugger: usize,
     /// Page size on the host.
     pub host_page_size: NonZero<usize>,
 }
@@ -55,4 +57,19 @@ pub enum ConsoleType {
     Info,
     Warn,
     Error,
+}
+
+/// Layout of a memory for Memory-mapped I/O to communicate with a debugger.
+#[cfg(feature = "virt")]
+#[repr(C)]
+pub struct DebuggerMemory {
+    pub stop: StopReason,
+}
+
+/// Reason why the kernel stopped the execution.
+#[cfg(feature = "virt")]
+#[repr(u8)]
+#[derive(Clone, Copy, PartialEq, Eq, num_enum::IntoPrimitive, num_enum::TryFromPrimitive)]
+pub enum StopReason {
+    WaitForDebugger,
 }

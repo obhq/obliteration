@@ -20,6 +20,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
+#include <QHostAddress>
 #include <QIcon>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -28,6 +29,8 @@
 #include <QScrollBar>
 #include <QSettings>
 #include <QStackedWidget>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QToolBar>
 #include <QUrl>
 
@@ -54,7 +57,8 @@ MainWindow::MainWindow(
     m_profiles(nullptr),
     m_games(nullptr),
     m_launch(nullptr),
-    m_screen(nullptr)
+    m_screen(nullptr),
+    m_debug(nullptr)
 {
     setWindowTitle("Obliteration");
 
@@ -111,7 +115,13 @@ MainWindow::MainWindow(
 #endif
 
     connect(m_launch, &LaunchSettings::saveClicked, this, &MainWindow::saveProfile);
-    connect(m_launch, &LaunchSettings::startClicked, this, &MainWindow::startVmm);
+    connect(m_launch, &LaunchSettings::startClicked, [this](const QString &debug) {
+        if (debug.isEmpty()) {
+            startVmm();
+        } else {
+            startDebug(debug);
+        }
+    });
 
     m_main->addWidget(m_launch);
 
@@ -224,19 +234,22 @@ void MainWindow::closeEvent(QCloseEvent *event)
 
     // Ask user to confirm.
     if (m_vmm) {
-        QMessageBox confirm(this);
+        // Ask user to confirm only if we did not shutdown the VMM programmatically.
+        if (!vmm_shutting_down(m_vmm)) {
+            QMessageBox confirm(this);
 
-        confirm.setText("Do you want to exit?");
-        confirm.setInformativeText("The running game will be terminated.");
-        confirm.setStandardButtons(QMessageBox::Cancel | QMessageBox::Yes);
-        confirm.setDefaultButton(QMessageBox::Cancel);
-        confirm.setIcon(QMessageBox::Warning);
+            confirm.setText("Do you want to exit?");
+            confirm.setInformativeText("The running game will be terminated.");
+            confirm.setStandardButtons(QMessageBox::Cancel | QMessageBox::Yes);
+            confirm.setDefaultButton(QMessageBox::Cancel);
+            confirm.setIcon(QMessageBox::Warning);
 
-        if (confirm.exec() != QMessageBox::Yes) {
-            return;
+            if (confirm.exec() != QMessageBox::Yes) {
+                return;
+            }
         }
 
-        m_vmm.free();
+        killVmm();
     }
 
     // Close child windows.
@@ -364,7 +377,7 @@ void MainWindow::updateScreen()
     error = vmm_draw(m_vmm);
 
     if (error) {
-        m_vmm.free();
+        killVmm();
 
         QMessageBox::critical(
             this,
@@ -379,7 +392,7 @@ void MainWindow::updateScreen()
 
 void MainWindow::vmmError(const QString &msg)
 {
-    m_vmm.free();
+    killVmm();
 
     QMessageBox::critical(this, "Error", msg);
 
@@ -390,26 +403,9 @@ void MainWindow::vmmError(const QString &msg)
     }
 }
 
-void MainWindow::waitingDebugger(const QString &addr)
-{
-    if (!m_args.isSet(Args::debug)) {
-        QMessageBox::information(
-            this,
-            "Debug",
-            QString("The VMM are waiting for a debugger at %1.").arg(addr));
-    }
-}
-
-void MainWindow::debuggerDisconnected()
-{
-    if (m_args.isSet(Args::debug)) {
-        close();
-    }
-}
-
 void MainWindow::waitKernelExit(bool success)
 {
-    m_vmm.free();
+    killVmm();
 
     if (!success) {
         QMessageBox::critical(
@@ -436,6 +432,92 @@ void MainWindow::log(VmmLog type, const QString &msg)
             break;
         }
     }
+}
+
+void MainWindow::breakpoint(KernelStop *stop)
+{
+    // Do nothing if the previous thread already trigger the shutdown.
+    if (vmm_shutting_down(m_vmm)) {
+        return;
+    }
+
+    // Dispatch debug events.
+    auto r = vmm_dispatch_debug(m_vmm, stop, [](uint8_t *buf, void *cx) -> bool {
+        auto w = reinterpret_cast<MainWindow *>(cx);
+
+        while (w->m_debug->bytesAvailable() == 0) {
+            QCoreApplication::processEvents();
+        }
+
+        return w->m_debug->getChar(reinterpret_cast<char *>(buf));
+    });
+
+    switch (r.tag) {
+    case DebugResult_Ok:
+        break;
+    case DebugResult_Disconnected:
+        // It is not safe to let the kernel running since it is assume there are a debugger.
+        vmm_shutdown(m_vmm);
+        break;
+    case DebugResult_ReadFailed:
+        QMessageBox::critical(
+            this,
+            "Error",
+            QString("Failed to read data from the debugger: %1").arg(m_debug->errorString()));
+        vmm_shutdown(m_vmm);
+        break;
+    case DebugResult_Error:
+        {
+            Rust<RustError> e(r.error.reason);
+
+            QMessageBox::critical(
+                this,
+                "Error",
+                QString("Failed to dispatch debug events: %1").arg(error_message(e)));
+        }
+
+        vmm_shutdown(m_vmm);
+        break;
+    }
+
+    if (!vmm_shutting_down(m_vmm)) {
+        return;
+    }
+
+    // We can't free the VMM here because the thread that trigger this method are waiting
+    // for us to return.
+    if (m_args.isSet(Args::debug)) {
+        QMetaObject::invokeMethod(
+            this,
+            &MainWindow::close,
+            Qt::QueuedConnection);
+    } else {
+        QMetaObject::invokeMethod(
+            this,
+            &MainWindow::waitKernelExit,
+            Qt::QueuedConnection,
+            true);
+    }
+}
+
+std::optional<QAbstractSocket::SocketError> MainWindow::sendDebug(const uint8_t *data, size_t len)
+{
+    while (len) {
+        auto r = m_debug->write(reinterpret_cast<const char *>(data), len);
+
+        if (r < 0) {
+            return m_debug->error();
+        }
+
+        data += r;
+        len -= r;
+
+        while (m_debug->bytesToWrite() != 0) {
+            QCoreApplication::processEvents();
+        }
+    }
+
+    return {};
 }
 
 bool MainWindow::loadGame(const QString &gameId)
@@ -498,7 +580,103 @@ void MainWindow::restoreGeometry()
     }
 }
 
-void MainWindow::startVmm(const QString &debugAddr)
+void MainWindow::startDebug(const QString &addr)
+{
+    // Check address format.
+    auto parts = addr.split(':');
+
+    if (parts.size() > 2) {
+        QMessageBox::critical(
+            this,
+            "Error",
+            QString("%1 is not a valid debug server address").arg(addr));
+        return;
+    }
+
+    // Parse IP address.
+    QHostAddress ip(parts[0]);
+
+    if (ip.isNull()) {
+        QMessageBox::critical(
+            this,
+            "Error",
+            QString("%1 is not a valid debug server address").arg(addr));
+        return;
+    }
+
+    // Parse port.
+    unsigned short port = 0;
+
+    if (parts.size() == 2) {
+        bool ok;
+
+        port = parts[1].toUShort(&ok);
+
+        if (!ok) {
+            QMessageBox::critical(
+                this,
+                "Error",
+                QString("%1 is not a valid debug server address").arg(addr));
+            return;
+        }
+    }
+
+    // Start server.
+    auto server = new QTcpServer(this);
+
+    server->setListenBacklogSize(1);
+    server->setMaxPendingConnections(1);
+
+    connect(
+        server,
+        &QTcpServer::acceptError,
+        [this](QAbstractSocket::SocketError e) {
+            QMessageBox::critical(
+                this,
+                "Error",
+                QString("Failed to accept a debugger connection (%1).").arg(e));
+        });
+
+    connect(
+        server,
+        &QTcpServer::pendingConnectionAvailable,
+        this, [this, server]() {
+            m_debug = server->nextPendingConnection();
+            m_debug->setParent(this);
+            m_debug->setSocketOption(QAbstractSocket::LowDelayOption, 1);
+
+            startVmm();
+
+            server->deleteLater();
+        },
+        Qt::SingleShotConnection);
+
+    if (!server->listen(ip, port)) {
+        auto msg = QString("Failed to start a debug server on %1: %2")
+            .arg(addr)
+            .arg(server->errorString());
+
+        QMessageBox::critical(this, "Error", msg);
+        delete server;
+        return;
+    }
+
+    // Swap launch settings with the screen now to prevent user update settings.
+    m_main->setCurrentIndex(1);
+
+    // Tell the user to connect a debugger.
+    if (!m_args.isSet(Args::debug)) {
+        auto addr = server->serverAddress();
+        auto port = server->serverPort();
+
+        QMessageBox::information(
+            this,
+            "Debug",
+            QString("Waiting for a debugger at %1:%2.").arg(addr.toString()).arg(port));
+    }
+}
+
+void MainWindow::startVmm()
 {
     // Get full path to kernel binary.
     std::string kernel;
@@ -543,8 +721,7 @@ void MainWindow::startVmm(const QString &debugAddr)
     // Swap launch settings with the screen before getting a Vulkan surface otherwise it will fail.
     m_main->setCurrentIndex(1);
 
-    // Run.
-    auto debug = debugAddr.toStdString();
+    // Setup the screen.
     VmmScreen screen;
     Rust<RustError> error;
     Rust<Vmm> vmm;
@@ -559,27 +736,38 @@ void MainWindow::startVmm(const QString &debugAddr)
     screen.vk_surface = reinterpret_cast<size_t>(QVulkanInstance::surfaceForWindow(m_screen));
 
     if (!screen.vk_surface) {
-        m_main->setCurrentIndex(0);
         QMessageBox::critical(this, "Error", "Couldn't create VkSurfaceKHR.");
+
+        m_main->setCurrentIndex(0);
+
+        delete m_debug;
+        m_debug = nullptr;
         return;
     }
 #endif
 
-    vmm = vmm_run(
+    // Run.
+    vmm = vmm_start(
         kernel.c_str(),
         &screen,
         m_launch->currentProfile(),
-        debug.empty() ? nullptr : debug.c_str(),
+        m_debug
+            ? qOverload<void *, const uint8_t *, size_t, int *>(MainWindow::sendDebug)
+            : nullptr,
         MainWindow::vmmHandler,
         this,
         &error);
 
     if (!vmm) {
-        m_main->setCurrentIndex(0);
         QMessageBox::critical(
             this,
             "Error",
             QString("Couldn't run %1: %2").arg(kernel.c_str()).arg(error_message(error)));
+
+        m_main->setCurrentIndex(0);
+
+        delete m_debug;
+        m_debug = nullptr;
         return;
     }
 
@@ -602,10 +790,18 @@ bool MainWindow::requireVmmStopped()
             return false;
         }
 
-        m_vmm.free();
+        killVmm();
     }
 
     return true;
+}
+
+void MainWindow::killVmm()
+{
+    m_vmm.free();
+
+    delete m_debug;
+    m_debug = nullptr;
 }
 
 void MainWindow::vmmHandler(const VmmEvent *ev, void *cx)
@@ -620,19 +816,6 @@ void MainWindow::vmmHandler(const VmmEvent *ev, void *cx)
             &MainWindow::vmmError,
             Qt::QueuedConnection,
             QString(error_message(ev->error.reason)));
-        break;
-    case VmmEvent_WaitingDebugger:
-        QMetaObject::invokeMethod(
-            w,
-            &MainWindow::waitingDebugger,
-            Qt::QueuedConnection,
-            QString::fromUtf8(ev->waiting_debugger.addr, ev->waiting_debugger.len));
-        break;
-    case VmmEvent_DebuggerDisconnected:
-        QMetaObject::invokeMethod(
-            w,
-            &MainWindow::debuggerDisconnected,
-            Qt::QueuedConnection);
         break;
     case VmmEvent_Exiting:
         QMetaObject::invokeMethod(
@@ -649,5 +832,26 @@ void MainWindow::vmmHandler(const VmmEvent *ev, void *cx)
             ev->log.ty,
             QString::fromUtf8(ev->log.data, ev->log.len));
         break;
+    case VmmEvent_Breakpoint:
+        QMetaObject::invokeMethod(
+            w,
+            &MainWindow::breakpoint,
+            Qt::BlockingQueuedConnection,
+            ev->breakpoint.stop);
+        break;
+    }
+}
+
+bool MainWindow::sendDebug(void *cx, const uint8_t *data, size_t len, int *err)
+{
+    // This method always be called from a main thread.
+    auto w = reinterpret_cast<MainWindow *>(cx);
+    auto r = w->sendDebug(data, len);
+
+    if (r) {
+        *err = *r;
+        return false;
+    } else {
+        return true;
     }
 }
