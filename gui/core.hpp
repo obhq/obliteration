@@ -51,6 +51,13 @@ public:
 
     T *get() const { return m_ptr; }
     void free();
+
+    T *release()
+    {
+        auto p = m_ptr;
+        m_ptr = nullptr;
+        return p;
+    }
 private:
     T *m_ptr;
 };
@@ -60,6 +67,24 @@ inline void Rust<char>::free()
 {
     ::free(m_ptr);
     m_ptr = nullptr;
+}
+
+template<>
+inline void Rust<Debugger>::free()
+{
+    if (m_ptr) {
+        debugger_free(m_ptr);
+        m_ptr = nullptr;
+    }
+}
+
+template<>
+inline void Rust<DebugServer>::free()
+{
+    if (m_ptr) {
+        debug_server_free(m_ptr);
+        m_ptr = nullptr;
+    }
 }
 
 template<>
