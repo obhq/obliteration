@@ -591,7 +591,7 @@ fn main_cpu<H: Hypervisor>(args: &CpuArgs<H>, entry: usize, map: RamMap) {
     run_cpu(cpu, args);
 }
 
-fn run_cpu<H: Hypervisor>(mut cpu: H::Cpu<'_>, args: &CpuArgs<H>) {
+fn run_cpu<'a, H: Hypervisor>(mut cpu: H::Cpu<'a>, args: &'a CpuArgs<H>) {
     // Build device contexts for this CPU.
     let mut devices = args
         .devices
@@ -601,7 +601,7 @@ fn run_cpu<H: Hypervisor>(mut cpu: H::Cpu<'_>, args: &CpuArgs<H>) {
 
             (addr, (dev.create_context(&args.hv), end))
         })
-        .collect::<BTreeMap<usize, (Box<dyn DeviceContext>, NonZero<usize>)>>();
+        .collect::<BTreeMap<usize, (Box<dyn DeviceContext<H::Cpu<'a>>>, NonZero<usize>)>>();
 
     // Dispatch CPU events until shutdown.
     while !args.shutdown.load(Ordering::Relaxed) {
@@ -639,9 +639,9 @@ fn run_cpu<H: Hypervisor>(mut cpu: H::Cpu<'_>, args: &CpuArgs<H>) {
     }
 }
 
-fn exec_io<'a>(
-    devices: &mut BTreeMap<usize, (Box<dyn DeviceContext + 'a>, NonZero<usize>)>,
-    mut io: impl CpuIo,
+fn exec_io<'a, C: Cpu>(
+    devices: &mut BTreeMap<usize, (Box<dyn DeviceContext<C> + 'a>, NonZero<usize>)>,
+    mut io: <C::Exit<'_> as CpuExit>::Io,
 ) -> Result<bool, Box<dyn Error>> {
     // Get target device.
     let addr = io.addr();

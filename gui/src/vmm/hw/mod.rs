@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use super::hv::{CpuIo, Hypervisor, IoBuf};
+use super::hv::{Cpu, CpuExit, CpuIo, Hypervisor, IoBuf};
 use super::VmmEventHandler;
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -37,7 +37,7 @@ pub fn setup_devices<H: Hypervisor>(
     }
 }
 
-fn read_u8(exit: &mut dyn CpuIo) -> Result<u8, MmioError> {
+fn read_u8(exit: &mut impl CpuIo) -> Result<u8, MmioError> {
     // Get data.
     let data = match exit.buffer() {
         IoBuf::Write(v) => v,
@@ -52,7 +52,7 @@ fn read_u8(exit: &mut dyn CpuIo) -> Result<u8, MmioError> {
     }
 }
 
-fn read_usize(exit: &mut dyn CpuIo) -> Result<usize, MmioError> {
+fn read_usize(exit: &mut impl CpuIo) -> Result<usize, MmioError> {
     // Get data.
     let data = match exit.buffer() {
         IoBuf::Write(v) => v,
@@ -66,7 +66,7 @@ fn read_usize(exit: &mut dyn CpuIo) -> Result<usize, MmioError> {
 }
 
 fn read_bin<'b>(
-    exit: &'b mut dyn CpuIo,
+    exit: &'b mut impl CpuIo,
     len: usize,
     hv: &impl Hypervisor,
 ) -> Result<&'b [u8], MmioError> {
@@ -83,7 +83,7 @@ fn read_bin<'b>(
         .map_err(|_| MmioError::InvalidData)?;
     let paddr = exit
         .translate(vaddr)
-        .map_err(|e| MmioError::TranslateVaddrFailed(vaddr, e))?;
+        .map_err(|e| MmioError::TranslateVaddrFailed(vaddr, Box::new(e)))?;
 
     // Get data.
     let data = unsafe { hv.ram().host_addr().add(paddr) };
@@ -126,12 +126,12 @@ pub trait Device<H: Hypervisor>: Send + Sync {
     /// Total size of device memory, in bytes.
     fn len(&self) -> NonZero<usize>;
 
-    fn create_context<'a>(&'a self, hv: &'a H) -> Box<dyn DeviceContext + 'a>;
+    fn create_context<'a>(&'a self, hv: &'a H) -> Box<dyn DeviceContext<H::Cpu<'a>> + 'a>;
 }
 
 /// Context to execute memory-mapped I/O operations on a virtual device.
-pub trait DeviceContext {
-    fn exec(&mut self, exit: &mut dyn CpuIo) -> Result<bool, Box<dyn Error>>;
+pub trait DeviceContext<C: Cpu> {
+    fn exec(&mut self, exit: &mut <C::Exit<'_> as CpuExit>::Io) -> Result<bool, Box<dyn Error>>;
 }
 
 /// Struct to build virtual device map.

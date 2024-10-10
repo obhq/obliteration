@@ -37,6 +37,8 @@ impl<'a, 'b> CpuExit for HfExit<'a, 'b> {
 pub struct HfIo {}
 
 impl CpuIo for HfIo {
+    type TranslateErr = std::io::Error;
+
     fn addr(&self) -> usize {
         todo!();
     }
@@ -45,7 +47,7 @@ impl CpuIo for HfIo {
         todo!();
     }
 
-    fn translate(&self, vaddr: usize) -> Result<usize, Box<dyn Error>> {
+    fn translate(&self, vaddr: usize) -> Result<usize, std::io::Error> {
         todo!();
     }
 }
