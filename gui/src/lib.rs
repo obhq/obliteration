@@ -1,5 +1,7 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 use std::ffi::{c_char, c_void};
 
+mod debug;
 mod error;
 mod param;
 mod pkg;

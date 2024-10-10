@@ -20,7 +20,6 @@
 #include <QDir>
 #include <QFile>
 #include <QFileDialog>
-#include <QHostAddress>
 #include <QIcon>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -29,8 +28,6 @@
 #include <QScrollBar>
 #include <QSettings>
 #include <QStackedWidget>
-#include <QTcpServer>
-#include <QTcpSocket>
 #include <QToolBar>
 #include <QUrl>
 
@@ -117,7 +114,7 @@ MainWindow::MainWindow(
     connect(m_launch, &LaunchSettings::saveClicked, this, &MainWindow::saveProfile);
     connect(m_launch, &LaunchSettings::startClicked, [this](const QString &debug) {
         if (debug.isEmpty()) {
-            startVmm();
+            startVmm(nullptr);
         } else {
             startDebug(debug);
         }
@@ -390,6 +387,15 @@ void MainWindow::updateScreen()
     m_screen->requestUpdate();
 }
 
+void MainWindow::acceptDebuggerFailed(const QString &msg)
+{
+    QMessageBox::critical(
+        this,
+        "Error",
+        QString("Failed to accept a debugger connection: %1.").arg(msg));
+    m_debug.free();
+}
+
 void MainWindow::vmmError(const QString &msg)
 {
     killVmm();
@@ -442,28 +448,13 @@ void MainWindow::breakpoint(KernelStop *stop)
     }
 
     // Dispatch debug events.
-    auto r = vmm_dispatch_debug(m_vmm, stop, [](uint8_t *buf, void *cx) -> bool {
-        auto w = reinterpret_cast<MainWindow *>(cx);
-
-        while (w->m_debug->bytesAvailable() == 0) {
-            QCoreApplication::processEvents();
-        }
-
-        return w->m_debug->getChar(reinterpret_cast<char *>(buf));
-    });
+    auto r = vmm_dispatch_debug(m_vmm, stop);
 
     switch (r.tag) {
     case DebugResult_Ok:
         break;
     case DebugResult_Disconnected:
         // It is not safe to let the kernel running since it is assume there are a debugger.
-        vmm_shutdown(m_vmm);
-        break;
-    case DebugResult_ReadFailed:
-        QMessageBox::critical(
-            this,
-            "Error",
-            QString("Failed to read data from the debugger: %1").arg(m_debug->errorString()));
         vmm_shutdown(m_vmm);
         break;
     case DebugResult_Error:
@@ -498,26 +489,6 @@ void MainWindow::breakpoint(KernelStop *stop)
             Qt::QueuedConnection,
             true);
     }
-}
-
-std::optional<QAbstractSocket::SocketError> MainWindow::sendDebug(const uint8_t *data, size_t len)
-{
-    while (len) {
-        auto r = m_debug->write(reinterpret_cast<const char *>(data), len);
-
-        if (r < 0) {
-            return m_debug->error();
-        }
-
-        data += r;
-        len -= r;
-
-        while (m_debug->bytesToWrite() != 0) {
-            QCoreApplication::processEvents();
-        }
-    }
-
-    return {};
 }
 
 bool MainWindow::loadGame(const QString &gameId)
@@ -582,82 +553,42 @@ void MainWindow::restoreGeometry()
 
 void MainWindow::startDebug(const QString &addr)
 {
-    // Check address format.
-    auto parts = addr.split(':');
+    // Start debug server.
+    Rust<RustError> error;
 
-    if (parts.size() > 2) {
-        QMessageBox::critical(
-            this,
-            "Error",
-            QString("%1 is not a valid debug server address").arg(addr));
-        return;
-    }
+    m_debug = debug_server_start(
+        this,
+        addr.toStdString().c_str(),
+        &error,
+        [](const DebuggerAccept *r, void *cx) {
+            // This will be called from non-main thread.
+            auto w = reinterpret_cast<MainWindow *>(cx);
 
-    // Parse IP address.
-    QHostAddress ip(parts[0]);
-
-    if (ip.isNull()) {
-        QMessageBox::critical(
-            this,
-            "Error",
-            QString("%1 is not a valid debug server address").arg(addr));
-        return;
-    }
-
-    // Parse port.
-    unsigned short port = 0;
-
-    if (parts.size() == 2) {
-        bool ok;
-
-        port = parts[1].toUShort(&ok);
-
-        if (!ok) {
-            QMessageBox::critical(
-                this,
-                "Error",
-                QString("%1 is not a valid debug server address").arg(addr));
-            return;
-        }
-    }
-
-    // Start server.
-    auto server = new QTcpServer(this);
-
-    server->setListenBacklogSize(1);
-    server->setMaxPendingConnections(1);
-
-    connect(
-        server,
-        &QTcpServer::acceptError,
-        [this](QAbstractSocket::SocketError e) {
-            QMessageBox::critical(
-                this,
-                "Error",
-                QString("Failed to accept a debugger connection (%1).").arg(e));
+            switch (r->tag) {
+            case DebuggerAccept_Ok:
+                QMetaObject::invokeMethod(
+                    w,
+                    &MainWindow::startVmm,
+                    Qt::QueuedConnection,
+                    r->ok.debugger);
+                break;
+            case DebuggerAccept_Err:
+                QMetaObject::invokeMethod(
+                    w,
+                    &MainWindow::acceptDebuggerFailed,
+                    Qt::QueuedConnection,
+                    QString(error_message(r->err.reason)));
+                error_free(r->err.reason);
+                break;
+            }
         });
 
-    connect(
-        server,
-        &QTcpServer::pendingConnectionAvailable,
-        this, [this, server]() {
-            m_debug = server->nextPendingConnection();
-            m_debug->setParent(this);
-            m_debug->setSocketOption(QAbstractSocket::LowDelayOption, 1);
-
-            startVmm();
-
-            server->deleteLater();
-        },
-        Qt::SingleShotConnection);
-
-    if (!server->listen(ip, port)) {
+    if (!m_debug) {
         auto msg = QString("Failed to start a debug server on %1: %2")
             .arg(addr)
-            .arg(server->errorString());
+            .arg(error_message(error));
 
         QMessageBox::critical(this, "Error", msg);
-        delete server;
         return;
     }
 
@@ -666,20 +597,20 @@ void MainWindow::startDebug(const QString &addr)
 
     // Tell the user to connect a debugger.
     if (!m_args.isSet(Args::debug)) {
-        auto addr = server->serverAddress();
-        auto port = server->serverPort();
-
         QMessageBox::information(
             this,
             "Debug",
-            QString("Waiting for a debugger at %1:%2.").arg(addr.toString()).arg(port));
+            QString("Waiting for a debugger at %1.").arg(debug_server_addr(m_debug)));
     }
 }
 
-void MainWindow::startVmm()
+void MainWindow::startVmm(Debugger *d)
 {
     // Get full path to kernel binary.
+    Rust<Debugger> debug(d);
     std::string kernel;
+
+    m_debug.free();
 
     if (QFile::exists(".obliteration-development")) {
         auto b = std::filesystem::current_path();
@@ -737,11 +668,7 @@ void MainWindow::startVmm()
 
     if (!screen.vk_surface) {
         QMessageBox::critical(this, "Error", "Couldn't create VkSurfaceKHR.");
-
         m_main->setCurrentIndex(0);
-
-        delete m_debug;
-        m_debug = nullptr;
         return;
     }
 #endif
@@ -751,9 +678,7 @@ void MainWindow::startVmm()
         kernel.c_str(),
         &screen,
         m_launch->currentProfile(),
-        m_debug
-            ? qOverload<void *, const uint8_t *, size_t, int *>(MainWindow::sendDebug)
-            : nullptr,
+        debug.release(),
         MainWindow::vmmHandler,
         this,
         &error);
@@ -763,11 +688,7 @@ void MainWindow::startVmm()
             this,
             "Error",
             QString("Couldn't run %1: %2").arg(kernel.c_str()).arg(error_message(error)));
-
         m_main->setCurrentIndex(0);
-
-        delete m_debug;
-        m_debug = nullptr;
         return;
     }
 
@@ -799,9 +720,6 @@ bool MainWindow::requireVmmStopped()
 void MainWindow::killVmm()
 {
     m_vmm.free();
-
-    delete m_debug;
-    m_debug = nullptr;
 }
 
 void MainWindow::vmmHandler(const VmmEvent *ev, void *cx)
@@ -839,19 +757,5 @@ void MainWindow::vmmHandler(const VmmEvent *ev, void *cx)
             Qt::BlockingQueuedConnection,
             ev->breakpoint.stop);
         break;
-    }
-}
-
-bool MainWindow::sendDebug(void *cx, const uint8_t *data, size_t len, int *err)
-{
-    // This method always be called from a main thread.
-    auto w = reinterpret_cast<MainWindow *>(cx);
-    auto r = w->sendDebug(data, len);
-
-    if (r) {
-        *err = *r;
-        return false;
-    } else {
-        return true;
     }
 }

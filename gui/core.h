@@ -45,6 +45,16 @@ enum VmmLog {
 };
 
 /**
+ * TCP listener to accept a debugger connection.
+ */
+struct DebugServer;
+
+/**
+ * Encapsulate a debugger connection.
+ */
+struct Debugger;
+
+/**
  * Reason for [`VmmEvent::Breakpoint`].
  */
 struct KernelStop;
@@ -63,6 +73,30 @@ struct RustError;
  * Manage a virtual machine that run the kernel.
  */
 struct Vmm;
+
+/**
+ * Status of debugger connection acception.
+ */
+enum DebuggerAccept_Tag {
+    DebuggerAccept_Ok,
+    DebuggerAccept_Err,
+};
+
+struct DebuggerAccept_Ok_Body {
+    struct Debugger *debugger;
+};
+
+struct DebuggerAccept_Err_Body {
+    struct RustError *reason;
+};
+
+struct DebuggerAccept {
+    enum DebuggerAccept_Tag tag;
+    union {
+        struct DebuggerAccept_Ok_Body ok;
+        struct DebuggerAccept_Err_Body err;
+    };
+};
 
 /**
  * Contains objects required to render the screen.
@@ -130,7 +164,6 @@ struct VmmEvent {
 enum DebugResult_Tag {
     DebugResult_Ok,
     DebugResult_Disconnected,
-    DebugResult_ReadFailed,
     DebugResult_Error,
 };
 
@@ -151,6 +184,17 @@ extern "C" {
 
 void set_panic_hook(void *cx,
                     void (*hook)(const char*, size_t, uint32_t, const char*, size_t, void*));
+
+struct DebugServer *debug_server_start(void *cx,
+                                       const char *addr,
+                                       struct RustError **err,
+                                       void (*cb)(const struct DebuggerAccept*, void*));
+
+void debug_server_free(struct DebugServer *s);
+
+const char *debug_server_addr(struct DebugServer *s);
+
+void debugger_free(struct Debugger *d);
 
 void error_free(struct RustError *e);
 
@@ -210,7 +254,7 @@ struct RustError *update_firmware(const char *root,
 struct Vmm *vmm_start(const char *kernel,
                       const struct VmmScreen *screen,
                       const struct Profile *profile,
-                      bool (*debug)(void*, const uint8_t*, size_t, int*),
+                      struct Debugger *debugger,
                       void (*event)(const struct VmmEvent*, void*),
                       void *cx,
                       struct RustError **err);
@@ -219,9 +263,7 @@ void vmm_free(struct Vmm *vmm);
 
 struct RustError *vmm_draw(struct Vmm *vmm);
 
-struct DebugResult vmm_dispatch_debug(struct Vmm *vmm,
-                                      struct KernelStop *stop,
-                                      bool (*read)(uint8_t*, void*));
+struct DebugResult vmm_dispatch_debug(struct Vmm *vmm, struct KernelStop *stop);
 
 void vmm_shutdown(struct Vmm *vmm);
 

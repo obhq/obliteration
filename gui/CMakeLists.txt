@@ -1,5 +1,5 @@
 # External dependencies.
-find_package(Qt6 REQUIRED COMPONENTS Network Svg Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Svg Widgets)
 find_package(Threads REQUIRED)
 
 if(WIN32 OR (UNIX AND NOT APPLE))
@@ -64,7 +64,7 @@ endif()
 
 target_compile_features(obliteration PRIVATE cxx_std_17)
 
-target_link_libraries(obliteration PRIVATE Qt6::Network Qt6::Svg Qt6::Widgets)
+target_link_libraries(obliteration PRIVATE Qt6::Svg Qt6::Widgets)
 target_link_libraries(obliteration PRIVATE Threads::Threads)
 target_link_libraries(obliteration PRIVATE ${LIBGUI})
 
