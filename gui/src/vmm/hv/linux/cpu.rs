@@ -4,7 +4,6 @@ use super::ffi::kvm_run;
 use super::run::KvmRun;
 use crate::vmm::hv::{Cpu, CpuExit, CpuIo, IoBuf};
 use libc::munmap;
-use std::error::Error;
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::sync::MutexGuard;
 
@@ -81,6 +80,8 @@ impl<'a, 'b> CpuExit for KvmExit<'a, 'b> {
 pub struct KvmIo<'a, 'b>(&'a mut KvmCpu<'b>);
 
 impl<'a, 'b> CpuIo for KvmIo<'a, 'b> {
+    type TranslateErr = std::io::Error;
+
     fn addr(&self) -> usize {
         unsafe { (*self.0.cx.0).exit.mmio.phys_addr }
     }
@@ -97,12 +98,12 @@ impl<'a, 'b> CpuIo for KvmIo<'a, 'b> {
     }
 
     #[cfg(target_arch = "aarch64")]
-    fn translate(&self, vaddr: usize) -> Result<usize, Box<dyn Error>> {
+    fn translate(&self, vaddr: usize) -> Result<usize, std::io::Error> {
         todo!()
     }
 
     #[cfg(target_arch = "x86_64")]
-    fn translate(&self, vaddr: usize) -> Result<usize, Box<dyn Error>> {
+    fn translate(&self, vaddr: usize) -> Result<usize, std::io::Error> {
         let mut data = KvmTranslation {
             linear_address: vaddr,
             physical_address: 0,
@@ -114,7 +115,7 @@ impl<'a, 'b> CpuIo for KvmIo<'a, 'b> {
 
         match unsafe { kvm_translate(self.0.fd.as_raw_fd(), &mut data) } {
             0 => Ok(data.physical_address),
-            _ => return Err(Box::new(std::io::Error::last_os_error())),
+            _ => return Err(std::io::Error::last_os_error()),
         }
     }
 }

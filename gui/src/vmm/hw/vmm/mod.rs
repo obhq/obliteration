@@ -35,7 +35,7 @@ impl<H: Hypervisor> Device<H> for Vmm {
         self.len
     }
 
-    fn create_context<'a>(&'a self, _: &'a H) -> Box<dyn DeviceContext + 'a> {
+    fn create_context<'a>(&'a self, _: &'a H) -> Box<dyn DeviceContext<H::Cpu<'a>> + 'a> {
         Box::new(Context::new(self))
     }
 }

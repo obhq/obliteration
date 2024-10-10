@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::Console;
-use crate::vmm::hv::{CpuIo, Hypervisor};
+use crate::vmm::hv::{Cpu, CpuExit, CpuIo, Hypervisor};
 use crate::vmm::hw::{read_bin, read_u8, read_usize, DeviceContext, MmioError};
 use crate::vmm::VmmEvent;
 use obconf::{ConsoleMemory, ConsoleType};
@@ -27,8 +27,8 @@ impl<'a, H: Hypervisor> Context<'a, H> {
     }
 }
 
-impl<'a, H: Hypervisor> DeviceContext for Context<'a, H> {
-    fn exec(&mut self, exit: &mut dyn CpuIo) -> Result<bool, Box<dyn Error>> {
+impl<'a, H: Hypervisor, C: Cpu> DeviceContext<C> for Context<'a, H> {
+    fn exec(&mut self, exit: &mut <C::Exit<'_> as CpuExit>::Io) -> Result<bool, Box<dyn Error>> {
         // Check field.
         let off = exit.addr() - self.dev.addr;
 
