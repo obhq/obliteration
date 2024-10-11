@@ -10,8 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event.workflow_run.conclusion == 'success'
     steps:
-    - name: Install Python modules
-      run: pip install PyGithub
+    - name: Install System Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-github
     - name: Update PR
       run: |
         from github import Auth, Github
