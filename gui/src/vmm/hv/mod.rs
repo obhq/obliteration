@@ -13,8 +13,17 @@ mod arch;
 #[cfg_attr(target_os = "windows", path = "windows/mod.rs")]
 mod os;
 
+#[cfg(target_os = "linux")]
+pub type Default = self::os::Kvm;
+
+#[cfg(target_os = "macos")]
+pub type Default = self::os::Hvf;
+
+#[cfg(target_os = "windows")]
+pub type Default = self::os::Whp;
+
 /// Underlying hypervisor (e.g. KVM on Linux).
-pub trait Hypervisor: Send + Sync {
+pub trait Hypervisor: Send + Sync + 'static {
     type Cpu<'a>: Cpu
     where
         Self: 'a;

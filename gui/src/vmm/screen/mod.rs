@@ -14,7 +14,7 @@ pub type Default = self::vulkan::Vulkan;
 pub type Default = self::metal::Metal;
 
 /// Encapsulates a platform-specific surface for drawing a VM screen.
-pub trait Screen {
+pub trait Screen: 'static {
     type Buffer: ScreenBuffer;
     type UpdateErr: Error;
 

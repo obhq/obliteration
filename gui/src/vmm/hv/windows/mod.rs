@@ -10,7 +10,7 @@ use windows_sys::core::HRESULT;
 mod cpu;
 mod partition;
 
-pub fn new(cpu: usize, ram: Ram) -> Result<impl Hypervisor, VmmError> {
+pub fn new(cpu: usize, ram: Ram) -> Result<Whp, VmmError> {
     // Setup a partition.
     let mut part = Partition::new().map_err(VmmError::CreatePartitionFailed)?;
 
@@ -28,7 +28,7 @@ pub fn new(cpu: usize, ram: Ram) -> Result<impl Hypervisor, VmmError> {
 /// Implementation of [`Hypervisor`] using Windows Hypervisor Platform.
 ///
 /// Fields in this struct need to drop in a correct order.
-struct Whp {
+pub struct Whp {
     part: Partition,
     ram: Ram,
 }

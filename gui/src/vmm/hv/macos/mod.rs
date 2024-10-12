@@ -12,12 +12,12 @@ use thiserror::Error;
 mod arch;
 mod cpu;
 
-pub fn new(_: usize, ram: Ram) -> Result<impl Hypervisor, VmmError> {
+pub fn new(_: usize, ram: Ram) -> Result<Hvf, VmmError> {
     Hvf::new(ram)
 }
 
 /// Implementation of [`Hypervisor`] using Hypervisor Framework.
-struct Hvf {
+pub struct Hvf {
     ram: Ram,
     #[cfg(target_arch = "aarch64")]
     cpu_config: hv_sys::hv_vcpu_config_t,

@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use self::hv::{Cpu, CpuExit, CpuFeats, CpuIo, Hypervisor};
-use self::hw::{setup_devices, Device, DeviceContext, DeviceTree};
+use self::cpu::CpuManager;
+use self::hv::Hypervisor;
+use self::hw::{setup_devices, Device};
 use self::kernel::{
     Kernel, PT_DYNAMIC, PT_GNU_EH_FRAME, PT_GNU_RELRO, PT_GNU_STACK, PT_LOAD, PT_NOTE, PT_PHDR,
 };
-use self::ram::{Ram, RamMap};
+use self::ram::Ram;
 use self::screen::Screen;
 use crate::debug::Debugger;
 use crate::error::RustError;
@@ -13,7 +14,6 @@ use gdbstub::stub::state_machine::GdbStubStateMachine;
 use gdbstub::stub::MultiThreadStopReason;
 use obconf::{BootEnv, ConsoleType, Vm};
 use std::cmp::max;
-use std::collections::BTreeMap;
 use std::error::Error;
 use std::ffi::{c_char, c_void, CStr};
 use std::io::Read;
@@ -21,12 +21,12 @@ use std::num::NonZero;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::thread::JoinHandle;
 use thiserror::Error;
 
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
 mod arch;
+mod cpu;
 mod debug;
 mod hv;
 mod hw;
@@ -445,13 +445,22 @@ pub unsafe extern "C" fn vmm_start(
         }
     };
 
+    // Setup CPU manager.
+    let shutdown = Arc::new(AtomicBool::new(false));
+    let mut cpu = CpuManager::new(
+        Arc::new(hv),
+        screen.buffer().clone(),
+        feats,
+        devices,
+        event,
+        shutdown.clone(),
+    );
+
     // Setup GDB stub.
     let gdb = match debugger
-        .map(move |client| {
-            let mut target = self::debug::Target::new();
-
+        .map(|client| {
             gdbstub::stub::GdbStub::new(*client)
-                .run_state_machine(&mut target)
+                .run_state_machine(&mut cpu)
                 .map_err(|e| RustError::with_source("couldn't setup a GDB stub", e))
         })
         .transpose()
@@ -463,31 +472,12 @@ pub unsafe extern "C" fn vmm_start(
         }
     };
 
-    // Setup arguments for main CPU.
-    let shutdown = Arc::new(AtomicBool::new(false));
-    let args = CpuArgs {
-        hv,
-        screen: screen.buffer().clone(),
-        feats,
-        devices,
-        event,
-        shutdown: shutdown.clone(),
-    };
-
-    // Spawn a thread to drive main CPU.
-    let e_entry = file.entry();
-    let main = move || main_cpu(&args, e_entry, map);
-    let main = match std::thread::Builder::new().spawn(main) {
-        Ok(v) => v,
-        Err(e) => {
-            *err = RustError::with_source("couldn't spawn main CPU", e).into_c();
-            return null_mut();
-        }
-    };
+    // Spawn main CPU.
+    cpu.spawn(map.kern_vaddr + file.entry(), Some(map));
 
     // Create VMM.
     let vmm = Vmm {
-        cpus: vec![CpuController { thread: main }],
+        cpu,
         screen,
         gdb,
         shutdown,
@@ -519,14 +509,14 @@ pub unsafe extern "C" fn vmm_dispatch_debug(vmm: *mut Vmm, stop: *mut KernelStop
 
     // Setup target object.
     let vmm = &mut *vmm;
-    let mut target = self::debug::Target::new();
+    let target = &mut vmm.cpu;
 
     loop {
         // Check current state.
         let r = match vmm.gdb.take().unwrap() {
-            GdbStubStateMachine::Idle(s) => self::debug::dispatch_idle(&mut target, s),
+            GdbStubStateMachine::Idle(s) => self::debug::dispatch_idle(target, s),
             GdbStubStateMachine::Running(s) => {
-                match self::debug::dispatch_running(&mut target, s, stop.take()) {
+                match self::debug::dispatch_running(target, s, stop.take()) {
                     Ok(Ok(v)) => Ok(v),
                     Ok(Err(v)) => {
                         // No pending data from the debugger.
@@ -537,7 +527,7 @@ pub unsafe extern "C" fn vmm_dispatch_debug(vmm: *mut Vmm, stop: *mut KernelStop
                 }
             }
             GdbStubStateMachine::CtrlCInterrupt(s) => {
-                match s.interrupt_handled(&mut target, None::<MultiThreadStopReason<u64>>) {
+                match s.interrupt_handled(target, None::<MultiThreadStopReason<u64>>) {
                     Ok(v) => vmm.gdb = Some(v),
                     Err(e) => {
                         let r = RustError::with_source("couldn't handle CTRL+C from a debugger", e);
@@ -581,86 +571,6 @@ pub unsafe extern "C" fn vmm_shutting_down(vmm: *mut Vmm) -> bool {
     (*vmm).shutdown.load(Ordering::Relaxed)
 }
 
-fn main_cpu<H: Hypervisor>(args: &CpuArgs<H>, entry: usize, map: RamMap) {
-    let mut cpu = match args.hv.create_cpu(0) {
-        Ok(v) => v,
-        Err(e) => {
-            let e = RustError::with_source("couldn't create main CPU", e);
-            unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
-            return;
-        }
-    };
-
-    if let Err(e) = self::arch::setup_main_cpu(&mut cpu, entry, map, &args.feats) {
-        let e = RustError::with_source("couldn't setup main CPU", e);
-        unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
-        return;
-    }
-
-    run_cpu(cpu, args);
-}
-
-fn run_cpu<'a, H: Hypervisor>(mut cpu: H::Cpu<'a>, args: &'a CpuArgs<H>) {
-    // Build device contexts for this CPU.
-    let mut devices = args
-        .devices
-        .map()
-        .map(|(addr, dev)| {
-            let end = dev.len().checked_add(addr).unwrap();
-
-            (addr, (dev.create_context(&args.hv), end))
-        })
-        .collect::<BTreeMap<usize, (Box<dyn DeviceContext<H::Cpu<'a>>>, NonZero<usize>)>>();
-
-    // Dispatch CPU events until shutdown.
-    while !args.shutdown.load(Ordering::Relaxed) {
-        // Run the vCPU.
-        let exit = match cpu.run() {
-            Ok(v) => v,
-            Err(e) => {
-                let e = RustError::with_source("couldn't run CPU", e);
-                unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
-                break;
-            }
-        };
-
-        // Check if HLT.
-        #[cfg(target_arch = "x86_64")]
-        let exit = match exit.into_hlt() {
-            Ok(_) => continue,
-            Err(v) => v,
-        };
-
-        // Check if I/O.
-        match exit.into_io() {
-            Ok(io) => match exec_io(&mut devices, io) {
-                Ok(status) => {
-                    if !status {
-                        args.shutdown.store(true, Ordering::Relaxed);
-                    }
-
-                    continue;
-                }
-                Err(_) => todo!(),
-            },
-            Err(_) => todo!(),
-        }
-    }
-}
-
-fn exec_io<'a, C: Cpu>(
-    devices: &mut BTreeMap<usize, (Box<dyn DeviceContext<C> + 'a>, NonZero<usize>)>,
-    mut io: <C::Exit<'_> as CpuExit>::Io,
-) -> Result<bool, Box<dyn Error>> {
-    // Get target device.
-    let addr = io.addr();
-    let (_, (dev, end)) = devices.range_mut(..=addr).last().unwrap();
-
-    assert!(addr < end.get());
-
-    dev.exec(&mut io)
-}
-
 #[cfg(unix)]
 fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
     let v = unsafe { libc::sysconf(libc::_SC_PAGE_SIZE) };
@@ -685,20 +595,23 @@ fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
 
 /// Manage a virtual machine that run the kernel.
 pub struct Vmm {
-    cpus: Vec<CpuController>,
+    cpu: CpuManager<self::hv::Default, self::screen::Default>, // Drop first.
     screen: self::screen::Default,
-    gdb: Option<GdbStubStateMachine<'static, self::debug::Target, Debugger>>,
+    gdb: Option<
+        GdbStubStateMachine<
+            'static,
+            CpuManager<self::hv::Default, self::screen::Default>,
+            Debugger,
+        >,
+    >,
     shutdown: Arc<AtomicBool>,
 }
 
 impl Drop for Vmm {
     fn drop(&mut self) {
-        // Cancel all CPU threads.
+        // Set shutdown flag before dropping the other fields so their background thread can stop
+        // before they try to join with it.
         self.shutdown.store(true, Ordering::Relaxed);
-
-        for cpu in self.cpus.drain(..) {
-            cpu.thread.join().unwrap();
-        }
     }
 }
 
@@ -785,21 +698,6 @@ pub enum DebugResult {
     Ok,
     Disconnected,
     Error { reason: *mut RustError },
-}
-
-/// Encapsulates arguments for a function to run a CPU.
-struct CpuArgs<H: Hypervisor> {
-    hv: H,
-    screen: Arc<<self::screen::Default as Screen>::Buffer>,
-    feats: CpuFeats,
-    devices: Arc<DeviceTree<H>>,
-    event: VmmEventHandler,
-    shutdown: Arc<AtomicBool>,
-}
-
-/// Contains objects to control a CPU from a GUI.
-struct CpuController {
-    thread: JoinHandle<()>,
 }
 
 /// Represents an error when [`vmm_new()`] fails.

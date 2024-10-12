@@ -1,17 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+use super::CpuManager;
+use crate::vmm::hv::Hypervisor;
+use crate::vmm::screen::Screen;
 use gdbstub::target::ext::base::BaseOps;
 use thiserror::Error;
 
-/// Implementation of [`gdbstub::target::Target`] for AArch64.
-pub struct Target {}
-
-impl Target {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl gdbstub::target::Target for Target {
+impl<H: Hypervisor, S: Screen> gdbstub::target::Target for CpuManager<H, S> {
     type Arch = Arch;
     type Error = TargetError;
 
