@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+use super::CpuManager;
+use crate::vmm::hv::Hypervisor;
+use crate::vmm::screen::Screen;
 use gdbstub::common::Tid;
 use gdbstub::target::ext::base::multithread::MultiThreadBase;
 use gdbstub::target::ext::base::BaseOps;
@@ -8,16 +11,7 @@ use gdbstub::target::ext::breakpoints::{
 use gdbstub::target::TargetResult;
 use thiserror::Error;
 
-/// Implementation of [`gdbstub::target::Target`] for x86-64.
-pub struct Target {}
-
-impl Target {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl gdbstub::target::Target for Target {
+impl<H: Hypervisor, S: Screen> gdbstub::target::Target for CpuManager<H, S> {
     type Arch = Arch;
     type Error = TargetError;
 
@@ -30,7 +24,7 @@ impl gdbstub::target::Target for Target {
     }
 }
 
-impl MultiThreadBase for Target {
+impl<H: Hypervisor, S: Screen> MultiThreadBase for CpuManager<H, S> {
     fn read_registers(&mut self, regs: &mut Registers, tid: Tid) -> TargetResult<(), Self> {
         todo!()
     }
@@ -60,13 +54,13 @@ impl MultiThreadBase for Target {
     }
 }
 
-impl Breakpoints for Target {
+impl<H: Hypervisor, S: Screen> Breakpoints for CpuManager<H, S> {
     fn support_sw_breakpoint(&mut self) -> Option<SwBreakpointOps<'_, Self>> {
         Some(self)
     }
 }
 
-impl SwBreakpoint for Target {
+impl<H: Hypervisor, S: Screen> SwBreakpoint for CpuManager<H, S> {
     fn add_sw_breakpoint(&mut self, addr: u64, kind: BreakpointKind) -> TargetResult<bool, Self> {
         todo!()
     }

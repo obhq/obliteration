@@ -1,20 +1,22 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-pub use self::arch::*;
-
+use super::cpu::CpuManager;
+use super::hv::Hypervisor;
+use super::screen::Screen;
 use crate::debug::Debugger;
 use crate::error::RustError;
 use gdbstub::stub::state_machine::state::{Idle, Running};
 use gdbstub::stub::state_machine::{GdbStubStateMachine, GdbStubStateMachineInner};
 use gdbstub::stub::MultiThreadStopReason;
 
-#[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
-#[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
-mod arch;
-
-pub fn dispatch_idle(
-    target: &mut Target,
-    mut state: GdbStubStateMachineInner<'static, Idle<Target>, Target, Debugger>,
-) -> Result<GdbStubStateMachine<'static, Target, Debugger>, RustError> {
+pub fn dispatch_idle<H: Hypervisor, S: Screen>(
+    target: &mut CpuManager<H, S>,
+    mut state: GdbStubStateMachineInner<
+        'static,
+        Idle<CpuManager<H, S>>,
+        CpuManager<H, S>,
+        Debugger,
+    >,
+) -> Result<GdbStubStateMachine<'static, CpuManager<H, S>, Debugger>, RustError> {
     let b = state
         .borrow_conn()
         .read()
@@ -25,14 +27,14 @@ pub fn dispatch_idle(
         .map_err(|e| RustError::with_source("couldn't process data from the debugger", e))
 }
 
-pub fn dispatch_running(
-    target: &mut Target,
-    mut state: GdbStubStateMachineInner<'static, Running, Target, Debugger>,
+pub fn dispatch_running<H: Hypervisor, S: Screen>(
+    target: &mut CpuManager<H, S>,
+    mut state: GdbStubStateMachineInner<'static, Running, CpuManager<H, S>, Debugger>,
     stop: Option<MultiThreadStopReason<u64>>,
 ) -> Result<
     Result<
-        GdbStubStateMachine<'static, Target, Debugger>,
-        GdbStubStateMachineInner<'static, Running, Target, Debugger>,
+        GdbStubStateMachine<'static, CpuManager<H, S>, Debugger>,
+        GdbStubStateMachineInner<'static, Running, CpuManager<H, S>, Debugger>,
     >,
     RustError,
 > {

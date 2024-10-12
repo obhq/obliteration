@@ -56,7 +56,7 @@ pub fn setup_main_cpu(
     states.set_rdi(map.env_vaddr);
     states.set_rsi(map.conf_vaddr);
     states.set_rsp(map.stack_vaddr + map.stack_len); // Top-down.
-    states.set_rip(map.kern_vaddr + entry);
+    states.set_rip(entry);
 
     states
         .commit()

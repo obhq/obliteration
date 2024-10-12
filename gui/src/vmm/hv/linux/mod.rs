@@ -21,7 +21,7 @@ mod cpu;
 mod ffi;
 mod run;
 
-pub fn new(cpu: usize, ram: Ram) -> Result<impl Hypervisor, VmmError> {
+pub fn new(cpu: usize, ram: Ram) -> Result<Kvm, VmmError> {
     // Open KVM device.
     let kvm = unsafe { open(b"/dev/kvm\0".as_ptr().cast(), O_RDWR) };
 
@@ -220,7 +220,7 @@ fn load_feats(_: BorrowedFd) -> Result<CpuFeats, VmmError> {
 /// Implementation of [`Hypervisor`] using KVM.
 ///
 /// Fields in this struct need to drop in a correct order (e.g. vm must be dropped before ram).
-struct Kvm {
+pub struct Kvm {
     feats: CpuFeats,
     cpus: Vec<Mutex<OwnedFd>>,
     vcpu_mmap_size: usize,
