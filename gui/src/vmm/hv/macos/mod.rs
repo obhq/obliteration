@@ -1,62 +1,76 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use self::cpu::HfCpu;
+use self::cpu::HvfCpu;
 use super::{CpuFeats, Hypervisor};
 use crate::vmm::ram::Ram;
 use crate::vmm::VmmError;
-use hv_sys::{hv_return_t, hv_vcpu_create, hv_vm_create, hv_vm_destroy, hv_vm_map};
+use applevisor_sys::hv_feature_reg_t::{
+    HV_FEATURE_REG_ID_AA64MMFR0_EL1, HV_FEATURE_REG_ID_AA64MMFR1_EL1,
+    HV_FEATURE_REG_ID_AA64MMFR2_EL1,
+};
+use applevisor_sys::{
+    hv_feature_reg_t, hv_return_t, hv_vcpu_config_create, hv_vcpu_config_get_feature_reg,
+    hv_vcpu_config_t, hv_vcpu_create, hv_vm_create, hv_vm_destroy, hv_vm_map, HV_MEMORY_EXEC,
+    HV_MEMORY_READ, HV_MEMORY_WRITE,
+};
 use std::num::NonZero;
+use std::ptr::{null, null_mut};
 use thiserror::Error;
 
-#[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
-#[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
-mod arch;
 mod cpu;
 
 pub fn new(_: usize, ram: Ram) -> Result<Hvf, VmmError> {
-    Hvf::new(ram)
+    // Create a VM.
+    let ret = unsafe { hv_vm_create(null_mut()) };
+    let mut hv = match NonZero::new(ret) {
+        Some(ret) => return Err(VmmError::CreateVmFailed(ret)),
+        None => Hvf {
+            ram,
+            cpu_config: unsafe { hv_vcpu_config_create() },
+            feats: CpuFeats::default(),
+        },
+    };
+
+    // Load PE features.
+    hv.feats.mmfr0 = hv
+        .read_feature_reg(HV_FEATURE_REG_ID_AA64MMFR0_EL1)
+        .map_err(VmmError::ReadMmfr0Failed)?
+        .into();
+    hv.feats.mmfr1 = hv
+        .read_feature_reg(HV_FEATURE_REG_ID_AA64MMFR1_EL1)
+        .map_err(VmmError::ReadMmfr1Failed)?
+        .into();
+    hv.feats.mmfr2 = hv
+        .read_feature_reg(HV_FEATURE_REG_ID_AA64MMFR2_EL1)
+        .map_err(VmmError::ReadMmfr2Failed)?
+        .into();
+
+    // Set RAM.
+    let host = hv.ram.host_addr().cast_mut().cast();
+    let len = hv.ram.len().try_into().unwrap();
+    let ret = unsafe {
+        hv_vm_map(
+            host,
+            0,
+            len,
+            HV_MEMORY_READ | HV_MEMORY_WRITE | HV_MEMORY_EXEC,
+        )
+    };
+
+    match NonZero::new(ret) {
+        Some(ret) => Err(VmmError::MapRamFailed(ret)),
+        None => Ok(hv),
+    }
 }
 
 /// Implementation of [`Hypervisor`] using Hypervisor Framework.
 pub struct Hvf {
     ram: Ram,
-    #[cfg(target_arch = "aarch64")]
-    cpu_config: hv_sys::hv_vcpu_config_t,
+    cpu_config: hv_vcpu_config_t,
+    feats: CpuFeats,
 }
 
 impl Hvf {
-    fn new(ram: Ram) -> Result<Self, VmmError> {
-        // Create a VM.
-        #[cfg(target_arch = "aarch64")]
-        let ret = unsafe { hv_vm_create(std::ptr::null_mut()) };
-        #[cfg(target_arch = "x86_64")]
-        let ret = unsafe { hv_vm_create(0) };
-        let hv = match NonZero::new(ret) {
-            Some(ret) => return Err(VmmError::CreateVmFailed(ret)),
-            None => Self {
-                ram,
-                #[cfg(target_arch = "aarch64")]
-                cpu_config: unsafe { hv_sys::hv_vcpu_config_create() },
-            },
-        };
-
-        // Set RAM.
-        let host = hv.ram.host_addr().cast_mut().cast();
-        let len = hv.ram.len().try_into().unwrap();
-        let ret = unsafe { hv_vm_map(host, 0, len, 1 | 2 | 4) };
-
-        match NonZero::new(ret) {
-            Some(ret) => Err(VmmError::MapRamFailed(ret)),
-            None => Ok(hv),
-        }
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    fn read_feature_reg(
-        &mut self,
-        reg: hv_sys::hv_feature_reg_t,
-    ) -> Result<u64, NonZero<hv_return_t>> {
-        use hv_sys::hv_vcpu_config_get_feature_reg;
-
+    fn read_feature_reg(&self, reg: hv_feature_reg_t) -> Result<u64, NonZero<hv_return_t>> {
         let mut val = 0;
         let ret = unsafe { hv_vcpu_config_get_feature_reg(self.cpu_config, reg, &mut val) };
 
@@ -70,10 +84,7 @@ impl Hvf {
 impl Drop for Hvf {
     fn drop(&mut self) {
         // Free CPU config.
-        #[cfg(target_arch = "aarch64")]
-        unsafe {
-            os_release(self.cpu_config.cast())
-        };
+        unsafe { os_release(self.cpu_config.cast()) };
 
         // Destroy VM.
         let status = unsafe { hv_vm_destroy() };
@@ -85,37 +96,11 @@ impl Drop for Hvf {
 }
 
 impl Hypervisor for Hvf {
-    type Cpu<'a> = HfCpu<'a>;
+    type Cpu<'a> = HvfCpu<'a>;
     type CpuErr = HvfCpuError;
 
-    #[cfg(target_arch = "aarch64")]
-    fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr> {
-        use hv_sys::{
-            hv_feature_reg_t_HV_FEATURE_REG_ID_AA64MMFR0_EL1 as HV_FEATURE_REG_ID_AA64MMFR0_EL1,
-            hv_feature_reg_t_HV_FEATURE_REG_ID_AA64MMFR1_EL1 as HV_FEATURE_REG_ID_AA64MMFR1_EL1,
-            hv_feature_reg_t_HV_FEATURE_REG_ID_AA64MMFR2_EL1 as HV_FEATURE_REG_ID_AA64MMFR2_EL1,
-        };
-
-        let mmfr0 = self
-            .read_feature_reg(HV_FEATURE_REG_ID_AA64MMFR0_EL1)
-            .map_err(HvfCpuError::ReadMmfr0Failed)?;
-        let mmfr1 = self
-            .read_feature_reg(HV_FEATURE_REG_ID_AA64MMFR1_EL1)
-            .map_err(HvfCpuError::ReadMmfr1Failed)?;
-        let mmfr2 = self
-            .read_feature_reg(HV_FEATURE_REG_ID_AA64MMFR2_EL1)
-            .map_err(HvfCpuError::ReadMmfr2Failed)?;
-
-        Ok(CpuFeats {
-            mmfr0: mmfr0.into(),
-            mmfr1: mmfr1.into(),
-            mmfr2: mmfr2.into(),
-        })
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr> {
-        Ok(CpuFeats {})
+    fn cpu_features(&self) -> &CpuFeats {
+        &self.feats
     }
 
     fn ram(&self) -> &Ram {
@@ -126,26 +111,14 @@ impl Hypervisor for Hvf {
         &mut self.ram
     }
 
-    #[cfg(target_arch = "aarch64")]
     fn create_cpu(&self, _: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {
         let mut instance = 0;
-        let mut exit = std::ptr::null_mut();
+        let mut exit = null();
         let ret = unsafe { hv_vcpu_create(&mut instance, &mut exit, self.cpu_config) };
 
         match NonZero::new(ret) {
             Some(e) => Err(HvfCpuError::CreateVcpuFailed(e)),
-            None => Ok(HfCpu::new_aarch64(instance, exit)),
-        }
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    fn create_cpu(&self, _: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {
-        let mut instance = 0;
-        let ret = unsafe { hv_vcpu_create(&mut instance, 0) };
-
-        match NonZero::new(ret) {
-            Some(e) => Err(HvfCpuError::CreateVcpuFailed(e)),
-            None => Ok(HfCpu::new_x64(instance)),
+            None => Ok(HvfCpu::new(instance, exit)),
         }
     }
 }
@@ -158,21 +131,8 @@ unsafe impl Sync for Hvf {}
 pub enum HvfCpuError {
     #[error("couldn't create a vCPU ({0:#x})")]
     CreateVcpuFailed(NonZero<hv_return_t>),
-
-    #[cfg(target_arch = "aarch64")]
-    #[error("couldn't read ID_AA64MMFR0_EL1 ({0:#x})")]
-    ReadMmfr0Failed(NonZero<hv_return_t>),
-
-    #[cfg(target_arch = "aarch64")]
-    #[error("couldn't read ID_AA64MMFR1_EL1 ({0:#x})")]
-    ReadMmfr1Failed(NonZero<hv_return_t>),
-
-    #[cfg(target_arch = "aarch64")]
-    #[error("couldn't read ID_AA64MMFR2_EL1 ({0:#x})")]
-    ReadMmfr2Failed(NonZero<hv_return_t>),
 }
 
-#[cfg(target_arch = "aarch64")]
 extern "C" {
     fn os_release(object: *mut std::ffi::c_void);
 }
