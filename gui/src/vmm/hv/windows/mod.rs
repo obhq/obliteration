@@ -22,7 +22,11 @@ pub fn new(cpu: usize, ram: Ram) -> Result<Whp, VmmError> {
     part.map_gpa(ram.host_addr().cast(), 0, ram.len().try_into().unwrap())
         .map_err(VmmError::MapRamFailed)?;
 
-    Ok(Whp { part, ram })
+    Ok(Whp {
+        part,
+        feats: CpuFeats {},
+        ram,
+    })
 }
 
 /// Implementation of [`Hypervisor`] using Windows Hypervisor Platform.
@@ -30,6 +34,7 @@ pub fn new(cpu: usize, ram: Ram) -> Result<Whp, VmmError> {
 /// Fields in this struct need to drop in a correct order.
 pub struct Whp {
     part: Partition,
+    feats: CpuFeats,
     ram: Ram,
 }
 
@@ -37,8 +42,8 @@ impl Hypervisor for Whp {
     type Cpu<'a> = WhpCpu<'a>;
     type CpuErr = WhpCpuError;
 
-    fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr> {
-        Ok(CpuFeats {})
+    fn cpu_features(&self) -> &CpuFeats {
+        &self.feats
     }
 
     fn ram(&self) -> &Ram {

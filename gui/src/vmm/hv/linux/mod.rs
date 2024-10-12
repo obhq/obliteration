@@ -235,8 +235,8 @@ impl Hypervisor for Kvm {
     type Cpu<'a> = KvmCpu<'a>;
     type CpuErr = KvmCpuError;
 
-    fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr> {
-        Ok(self.feats.clone())
+    fn cpu_features(&self) -> &CpuFeats {
+        &self.feats
     }
 
     fn ram(&self) -> &Ram {

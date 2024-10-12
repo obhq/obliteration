@@ -21,16 +21,7 @@ jobs:
     name: Build
     uses: ./.github/workflows/ci-linux.yml
     needs: prebuild
-  build-mac-intel:
-    name: Build
-    uses: ./.github/workflows/ci-mac.yml
-    needs: prebuild
-    with:
-      name: Mac Intel
-      macos: macos-12
-      kernel-target: x86_64-unknown-none
-      artifact-name: obliteration-mac-intel
-  build-mac-m1:
+  build-mac:
     name: Build
     uses: ./.github/workflows/ci-mac.yml
     needs: prebuild
@@ -42,7 +33,7 @@ jobs:
   postbuild:
     name: Post build
     runs-on: ubuntu-latest
-    needs: [build-windows, build-linux, build-mac-intel, build-mac-m1]
+    needs: [build-windows, build-linux, build-mac]
     steps:
     - name: Generate build information
       run: |

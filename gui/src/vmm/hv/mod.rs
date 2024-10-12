@@ -29,7 +29,7 @@ pub trait Hypervisor: Send + Sync + 'static {
         Self: 'a;
     type CpuErr: Error + Send + 'static;
 
-    fn cpu_features(&mut self) -> Result<CpuFeats, Self::CpuErr>;
+    fn cpu_features(&self) -> &CpuFeats;
     fn ram(&self) -> &Ram;
     fn ram_mut(&mut self) -> &mut Ram;
 

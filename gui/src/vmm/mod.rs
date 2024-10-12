@@ -346,16 +346,8 @@ pub unsafe extern "C" fn vmm_start(
         }
     };
 
-    // Load CPU features.
-    let feats = match hv.cpu_features() {
-        Ok(v) => v,
-        Err(e) => {
-            *err = RustError::with_source("couldn't get available vCPU features", e).into_c();
-            return null_mut();
-        }
-    };
-
     // Map the kernel.
+    let feats = hv.cpu_features().clone();
     let mut ram = hv.ram_mut().builder();
     let kern = match ram.alloc_kernel(len) {
         Ok(v) => v,
@@ -793,11 +785,23 @@ enum VmmError {
 
     #[cfg(target_os = "macos")]
     #[error("couldn't create a VM ({0:#x})")]
-    CreateVmFailed(std::num::NonZero<std::ffi::c_int>),
+    CreateVmFailed(NonZero<applevisor_sys::hv_return_t>),
 
     #[cfg(target_os = "macos")]
-    #[error("couldn't map memory to the VM")]
-    MapRamFailed(std::num::NonZero<std::ffi::c_int>),
+    #[error("couldn't read ID_AA64MMFR0_EL1 ({0:#x})")]
+    ReadMmfr0Failed(NonZero<applevisor_sys::hv_return_t>),
+
+    #[cfg(target_os = "macos")]
+    #[error("couldn't read ID_AA64MMFR1_EL1 ({0:#x})")]
+    ReadMmfr1Failed(NonZero<applevisor_sys::hv_return_t>),
+
+    #[cfg(target_os = "macos")]
+    #[error("couldn't read ID_AA64MMFR2_EL1 ({0:#x})")]
+    ReadMmfr2Failed(NonZero<applevisor_sys::hv_return_t>),
+
+    #[cfg(target_os = "macos")]
+    #[error("couldn't map memory to the VM ({0:#x})")]
+    MapRamFailed(NonZero<applevisor_sys::hv_return_t>),
 
     #[cfg(target_os = "macos")]
     #[error("couldn't get default MTLDevice")]

@@ -2,7 +2,7 @@
 use bitfield_struct::bitfield;
 
 /// Features available on a PE.
-#[derive(Clone)]
+#[derive(Default, Clone)]
 pub struct CpuFeats {
     /// Raw value of `ID_AA64MMFR0_EL1`.
     pub mmfr0: Mmfr0,
