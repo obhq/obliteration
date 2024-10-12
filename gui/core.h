@@ -265,6 +265,8 @@ struct RustError *vmm_draw(struct Vmm *vmm);
 
 struct DebugResult vmm_dispatch_debug(struct Vmm *vmm, struct KernelStop *stop);
 
+ptrdiff_t vmm_debug_socket(struct Vmm *vmm);
+
 void vmm_shutdown(struct Vmm *vmm);
 
 bool vmm_shutting_down(struct Vmm *vmm);

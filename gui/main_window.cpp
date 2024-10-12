@@ -27,6 +27,7 @@
 #include <QResizeEvent>
 #include <QScrollBar>
 #include <QSettings>
+#include <QSocketNotifier>
 #include <QStackedWidget>
 #include <QToolBar>
 #include <QUrl>
@@ -35,6 +36,9 @@
 #include <iostream>
 #include <utility>
 
+#ifndef _WIN32
+#include <fcntl.h>
+#endif
 #include <string.h>
 
 namespace Args {
@@ -55,7 +59,7 @@ MainWindow::MainWindow(
     m_games(nullptr),
     m_launch(nullptr),
     m_screen(nullptr),
-    m_debug(nullptr)
+    m_debugNoti(nullptr)
 {
     setWindowTitle("Obliteration");
 
@@ -393,7 +397,7 @@ void MainWindow::acceptDebuggerFailed(const QString &msg)
         this,
         "Error",
         QString("Failed to accept a debugger connection: %1.").arg(msg));
-    m_debug.free();
+    m_debugServer.free();
 }
 
 void MainWindow::vmmError(const QString &msg)
@@ -440,7 +444,48 @@ void MainWindow::log(VmmLog type, const QString &msg)
     }
 }
 
-void MainWindow::breakpoint(KernelStop *stop)
+void MainWindow::setupDebugger()
+{
+    // Setup GDB session.
+    dispatchDebug(nullptr);
+
+    if (vmm_shutting_down(m_vmm)) {
+        return;
+    }
+
+    // Enable non-blocking on debug socket. On Windows QSocketNotifier will do this for us.
+    auto sock = vmm_debug_socket(m_vmm);
+
+#ifndef _WIN32
+    auto flags = fcntl(sock, F_GETFL);
+
+    if (flags < 0) {
+        QMessageBox::critical(
+            this,
+            "Error",
+            "Couldn't get file flags from debug socket.");
+        stopDebug();
+        return;
+    } else if (fcntl(sock, F_SETFL, flags | O_NONBLOCK) < 0) {
+        QMessageBox::critical(
+            this,
+            "Error",
+            "Couldn't enable non-blocking mode on debug socket.");
+        stopDebug();
+        return;
+    }
+#endif
+
+    // Watch for incoming data.
+    m_debugNoti = new QSocketNotifier(QSocketNotifier::Read, this);
+    m_debugNoti->setSocket(sock);
+
+    connect(m_debugNoti, &QSocketNotifier::activated, [this] { dispatchDebug(nullptr); });
+
+    m_debugNoti->setEnabled(true);
+}
+
+void MainWindow::dispatchDebug(KernelStop *stop)
 {
     // Do nothing if the previous thread already trigger the shutdown.
     if (vmm_shutting_down(m_vmm)) {
@@ -471,23 +516,8 @@ void MainWindow::breakpoint(KernelStop *stop)
         break;
     }
 
-    if (!vmm_shutting_down(m_vmm)) {
-        return;
-    }
-
-    // We can't free the VMM here because the thread that trigger this method are waiting
-    // for us to return.
-    if (m_args.isSet(Args::debug)) {
-        QMetaObject::invokeMethod(
-            this,
-            &MainWindow::close,
-            Qt::QueuedConnection);
-    } else {
-        QMetaObject::invokeMethod(
-            this,
-            &MainWindow::waitKernelExit,
-            Qt::QueuedConnection,
-            true);
+    if (vmm_shutting_down(m_vmm)) {
+        stopDebug();
     }
 }
 
@@ -556,7 +586,7 @@ void MainWindow::startDebug(const QString &addr)
     // Start debug server.
     Rust<RustError> error;
 
-    m_debug = debug_server_start(
+    m_debugServer = debug_server_start(
         this,
         addr.toStdString().c_str(),
         &error,
@@ -583,7 +613,7 @@ void MainWindow::startDebug(const QString &addr)
             }
         });
 
-    if (!m_debug) {
+    if (!m_debugServer) {
         auto msg = QString("Failed to start a debug server on %1: %2")
             .arg(addr)
             .arg(error_message(error));
@@ -600,7 +630,7 @@ void MainWindow::startDebug(const QString &addr)
         QMessageBox::information(
             this,
             "Debug",
-            QString("Waiting for a debugger at %1.").arg(debug_server_addr(m_debug)));
+            QString("Waiting for a debugger at %1.").arg(debug_server_addr(m_debugServer)));
     }
 }
 
@@ -610,7 +640,7 @@ void MainWindow::startVmm(Debugger *d)
     Rust<Debugger> debug(d);
     std::string kernel;
 
-    m_debug.free();
+    m_debugServer.free();
 
     if (QFile::exists(".obliteration-development")) {
         auto b = std::filesystem::current_path();
@@ -717,9 +747,30 @@ bool MainWindow::requireVmmStopped()
     return true;
 }
 
+void MainWindow::stopDebug()
+{
+    // We can't free the VMM here because the thread that trigger this method are waiting
+    // for us to return.
+    if (m_args.isSet(Args::debug)) {
+        QMetaObject::invokeMethod(
+            this,
+            &MainWindow::close,
+            Qt::QueuedConnection);
+    } else {
+        QMetaObject::invokeMethod(
+            this,
+            &MainWindow::waitKernelExit,
+            Qt::QueuedConnection,
+            true);
+    }
+}
+
 void MainWindow::killVmm()
 {
     m_vmm.free();
+
+    delete m_debugNoti;
+    m_debugNoti = nullptr;
 }
 
 void MainWindow::vmmHandler(const VmmEvent *ev, void *cx)
@@ -751,11 +802,18 @@ void MainWindow::vmmHandler(const VmmEvent *ev, void *cx)
             QString::fromUtf8(ev->log.data, ev->log.len));
         break;
     case VmmEvent_Breakpoint:
-        QMetaObject::invokeMethod(
-            w,
-            &MainWindow::breakpoint,
-            Qt::BlockingQueuedConnection,
-            ev->breakpoint.stop);
+        if (auto stop = ev->breakpoint.stop; stop) {
+            QMetaObject::invokeMethod(
+                w,
+                &MainWindow::dispatchDebug,
+                Qt::BlockingQueuedConnection,
+                stop);
+        } else {
+            QMetaObject::invokeMethod(
+                w,
+                &MainWindow::setupDebugger,
+                Qt::BlockingQueuedConnection);
+        }
         break;
     }
 }
