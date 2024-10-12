@@ -15,6 +15,7 @@ class LogsViewer;
 class ProfileList;
 class QCommandLineOption;
 class QCommandLineParser;
+class QSocketNotifier;
 class QStackedWidget;
 class Screen;
 
@@ -50,9 +51,11 @@ private:
     void vmmError(const QString &msg);
     void waitKernelExit(bool success);
     void log(VmmLog type, const QString &msg);
-    void breakpoint(KernelStop *stop);
+    void setupDebugger();
+    void dispatchDebug(KernelStop *stop);
     bool loadGame(const QString &gameId);
     bool requireVmmStopped();
+    void stopDebug();
     void killVmm();
 
     static void vmmHandler(const VmmEvent *ev, void *cx);
@@ -64,7 +67,8 @@ private:
     LaunchSettings *m_launch;
     Screen *m_screen;
     QPointer<LogsViewer> m_logs;
-    Rust<DebugServer> m_debug;
+    Rust<DebugServer> m_debugServer;
+    QSocketNotifier *m_debugNoti;
     Rust<Vmm> m_vmm; // Destroy first.
 };
 

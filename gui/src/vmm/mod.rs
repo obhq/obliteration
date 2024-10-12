@@ -447,16 +447,12 @@ pub unsafe extern "C" fn vmm_start(
 
     // Setup GDB stub.
     let gdb = match debugger
-        .map(move |client| -> Result<GdbStub, RustError> {
+        .map(move |client| {
             let mut target = self::debug::Target::new();
-            let state = gdbstub::stub::GdbStub::new(*client)
-                .run_state_machine(&mut target)
-                .map_err(|e| RustError::with_source("couldn't setup a GDB stub", e))?;
 
-            Ok(GdbStub {
-                target,
-                state: Some(state),
-            })
+            gdbstub::stub::GdbStub::new(*client)
+                .run_state_machine(&mut target)
+                .map_err(|e| RustError::with_source("couldn't setup a GDB stub", e))
         })
         .transpose()
     {
@@ -491,7 +487,7 @@ pub unsafe extern "C" fn vmm_start(
 
     // Create VMM.
     let vmm = Vmm {
-        cpus: vec![main],
+        cpus: vec![CpuController { thread: main }],
         screen,
         gdb,
         shutdown,
@@ -515,24 +511,34 @@ pub unsafe extern "C" fn vmm_draw(vmm: *mut Vmm) -> *mut RustError {
 
 #[no_mangle]
 pub unsafe extern "C" fn vmm_dispatch_debug(vmm: *mut Vmm, stop: *mut KernelStop) -> DebugResult {
-    let vmm = &mut *vmm;
-    let gdb = vmm.gdb.as_mut().unwrap();
-    let stop = match stop.is_null() {
+    // Consume stop reason now to prevent memory leak.
+    let mut stop = match stop.is_null() {
         true => None,
-        false => Some(Box::from_raw(stop)),
+        false => Some(Box::from_raw(stop).0),
     };
+
+    // Setup target object.
+    let vmm = &mut *vmm;
+    let mut target = self::debug::Target::new();
 
     loop {
         // Check current state.
-        let mut s = match gdb.state.take().unwrap() {
-            GdbStubStateMachine::Idle(s) => s,
+        let r = match vmm.gdb.take().unwrap() {
+            GdbStubStateMachine::Idle(s) => self::debug::dispatch_idle(&mut target, s),
             GdbStubStateMachine::Running(s) => {
-                gdb.state = Some(s.into());
-                return DebugResult::Ok;
+                match self::debug::dispatch_running(&mut target, s, stop.take()) {
+                    Ok(Ok(v)) => Ok(v),
+                    Ok(Err(v)) => {
+                        // No pending data from the debugger.
+                        vmm.gdb = Some(v.into());
+                        return DebugResult::Ok;
+                    }
+                    Err(e) => Err(e),
+                }
             }
             GdbStubStateMachine::CtrlCInterrupt(s) => {
-                match s.interrupt_handled(&mut gdb.target, None::<MultiThreadStopReason<u64>>) {
-                    Ok(v) => gdb.state = Some(v),
+                match s.interrupt_handled(&mut target, None::<MultiThreadStopReason<u64>>) {
+                    Ok(v) => vmm.gdb = Some(v),
                     Err(e) => {
                         let r = RustError::with_source("couldn't handle CTRL+C from a debugger", e);
                         return DebugResult::Error { reason: r.into_c() };
@@ -543,22 +549,25 @@ pub unsafe extern "C" fn vmm_dispatch_debug(vmm: *mut Vmm, stop: *mut KernelStop
             GdbStubStateMachine::Disconnected(_) => return DebugResult::Disconnected,
         };
 
-        // Read data from the client.
-        let b = match s.borrow_conn().read() {
-            Ok(v) => v,
-            Err(e) => {
-                let r = RustError::with_source("couldn't read data from a debugger", e);
-                return DebugResult::Error { reason: r.into_c() };
-            }
-        };
-
-        match s.incoming_data(&mut gdb.target, b) {
-            Ok(v) => gdb.state = Some(v),
-            Err(e) => {
-                let r = RustError::with_source("couldn't process data from a debugger", e);
-                return DebugResult::Error { reason: r.into_c() };
-            }
+        match r {
+            Ok(v) => vmm.gdb = Some(v),
+            Err(e) => return DebugResult::Error { reason: e.into_c() },
         }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vmm_debug_socket(vmm: *mut Vmm) -> isize {
+    let s = match &mut (*vmm).gdb {
+        Some(v) => v,
+        None => return -1,
+    };
+
+    match s {
+        GdbStubStateMachine::Idle(s) => s.borrow_conn().socket() as _,
+        GdbStubStateMachine::Running(s) => s.borrow_conn().socket() as _,
+        GdbStubStateMachine::CtrlCInterrupt(s) => s.borrow_conn().socket() as _,
+        GdbStubStateMachine::Disconnected(s) => s.borrow_conn().socket() as _,
     }
 }
 
@@ -676,9 +685,9 @@ fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
 
 /// Manage a virtual machine that run the kernel.
 pub struct Vmm {
-    cpus: Vec<JoinHandle<()>>,
+    cpus: Vec<CpuController>,
     screen: self::screen::Default,
-    gdb: Option<GdbStub>,
+    gdb: Option<GdbStubStateMachine<'static, self::debug::Target, Debugger>>,
     shutdown: Arc<AtomicBool>,
 }
 
@@ -688,7 +697,7 @@ impl Drop for Vmm {
         self.shutdown.store(true, Ordering::Relaxed);
 
         for cpu in self.cpus.drain(..) {
-            cpu.join().unwrap();
+            cpu.thread.join().unwrap();
         }
     }
 }
@@ -788,10 +797,9 @@ struct CpuArgs<H: Hypervisor> {
     shutdown: Arc<AtomicBool>,
 }
 
-/// States for GDB stub.
-struct GdbStub {
-    target: self::debug::Target,
-    state: Option<GdbStubStateMachine<'static, self::debug::Target, Debugger>>,
+/// Contains objects to control a CPU from a GUI.
+struct CpuController {
+    thread: JoinHandle<()>,
 }
 
 /// Represents an error when [`vmm_new()`] fails.

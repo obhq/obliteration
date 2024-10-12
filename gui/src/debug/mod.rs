@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use crate::error::RustError;
 use std::ffi::{c_char, c_void, CStr, CString};
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -65,7 +65,7 @@ pub unsafe extern "C" fn debug_server_start(
                             next: 0,
                         })),
                     },
-                    Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    Err(e) if e.kind() == ErrorKind::WouldBlock => {
                         sleep(Duration::from_millis(500));
                         continue;
                     }
@@ -138,11 +138,19 @@ pub struct Debugger {
 }
 
 impl Debugger {
+    #[cfg(unix)]
+    pub fn socket(&self) -> std::os::fd::RawFd {
+        std::os::fd::AsRawFd::as_raw_fd(&self.sock)
+    }
+
+    #[cfg(windows)]
+    pub fn socket(&self) -> std::os::windows::io::RawSocket {
+        std::os::windows::io::AsRawSocket::as_raw_socket(&self.sock)
+    }
+
     pub fn read(&mut self) -> Result<u8, std::io::Error> {
         // Fill the buffer if needed.
         while self.next == self.buf.len() {
-            use std::io::ErrorKind;
-
             // Clear previous data.
             self.buf.clear();
             self.next = 0;
@@ -175,15 +183,40 @@ impl gdbstub::conn::Connection for Debugger {
     type Error = std::io::Error;
 
     fn write(&mut self, byte: u8) -> Result<(), Self::Error> {
-        Write::write_all(&mut self.sock, std::slice::from_ref(&byte))
+        self.write_all(std::slice::from_ref(&byte))
     }
 
-    fn write_all(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
-        Write::write_all(&mut self.sock, buf)
+    fn write_all(&mut self, mut buf: &[u8]) -> Result<(), Self::Error> {
+        while !buf.is_empty() {
+            let written = match Write::write(&mut self.sock, buf) {
+                Ok(v) => v,
+                Err(e) => {
+                    if matches!(e.kind(), ErrorKind::Interrupted | ErrorKind::WouldBlock) {
+                        continue;
+                    } else {
+                        return Err(e);
+                    }
+                }
+            };
+
+            if written == 0 {
+                return Err(std::io::Error::from(ErrorKind::WriteZero));
+            }
+
+            buf = &buf[written..];
+        }
+
+        Ok(())
     }
 
     fn flush(&mut self) -> Result<(), Self::Error> {
-        Write::flush(&mut self.sock)
+        while let Err(e) = Write::flush(&mut self.sock) {
+            if !matches!(e.kind(), ErrorKind::Interrupted | ErrorKind::WouldBlock) {
+                return Err(e);
+            }
+        }
+
+        Ok(())
     }
 
     fn on_session_start(&mut self) -> Result<(), Self::Error> {
