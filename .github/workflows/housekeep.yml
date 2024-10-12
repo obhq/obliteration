@@ -7,8 +7,10 @@ jobs:
     name: Housekeep
     runs-on: ubuntu-latest
     steps:
-    - name: Install Python modules
-      run: pip install PyGithub
+    - name: Install System Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-github
     - name: Update PRs
       run: |
         from datetime import datetime, timezone
