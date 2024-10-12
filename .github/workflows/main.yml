@@ -16,7 +16,7 @@ jobs:
     uses: ./.github/workflows/ci-mac.yml
     with:
       name: Mac Intel
-      macos: macos-12
+      macos: macos-13
       kernel-target: x86_64-unknown-none
       artifact-name: obliteration-mac-intel
   build-mac-m1:
