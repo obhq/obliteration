@@ -8,6 +8,7 @@ use gdbstub::target::ext::base::BaseOps;
 use gdbstub::target::ext::breakpoints::{
     Breakpoints, BreakpointsOps, SwBreakpoint, SwBreakpointOps,
 };
+use gdbstub::target::ext::thread_extra_info::{ThreadExtraInfo, ThreadExtraInfoOps};
 use gdbstub::target::TargetResult;
 use thiserror::Error;
 
@@ -46,11 +47,20 @@ impl<H: Hypervisor, S: Screen> MultiThreadBase for CpuManager<H, S> {
         todo!()
     }
 
+    fn is_thread_alive(&mut self, tid: Tid) -> Result<bool, Self::Error> {
+        todo!()
+    }
+
     fn list_active_threads(
         &mut self,
         thread_is_active: &mut dyn FnMut(Tid),
     ) -> Result<(), Self::Error> {
         todo!()
+    }
+
+    #[inline(always)]
+    fn support_thread_extra_info(&mut self) -> Option<ThreadExtraInfoOps<'_, Self>> {
+        Some(self)
     }
 }
 
@@ -70,6 +80,12 @@ impl<H: Hypervisor, S: Screen> SwBreakpoint for CpuManager<H, S> {
         addr: u64,
         kind: BreakpointKind,
     ) -> TargetResult<bool, Self> {
+        todo!()
+    }
+}
+
+impl<H: Hypervisor, S: Screen> ThreadExtraInfo for CpuManager<H, S> {
+    fn thread_extra_info(&self, tid: Tid, buf: &mut [u8]) -> Result<usize, Self::Error> {
         todo!()
     }
 }
