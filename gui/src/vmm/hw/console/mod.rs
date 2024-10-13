@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::context::Context;
 use super::{Device, DeviceContext};
-use crate::vmm::cpu::CpuState;
+use crate::vmm::cpu::DebugStates;
 use crate::vmm::hv::Hypervisor;
 use crate::vmm::VmmEventHandler;
 use obconf::ConsoleMemory;
 use std::num::NonZero;
-use std::sync::Mutex;
+use std::sync::{Condvar, Mutex};
 
 mod context;
 
@@ -40,7 +40,7 @@ impl<H: Hypervisor> Device<H> for Console {
     fn create_context<'a>(
         &'a self,
         hv: &'a H,
-        _: &'a Mutex<CpuState>,
+        _: &'a (Mutex<DebugStates>, Condvar),
     ) -> Box<dyn DeviceContext<H::Cpu<'a>> + 'a> {
         Box::new(Context::new(self, hv))
     }

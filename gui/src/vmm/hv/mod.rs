@@ -24,7 +24,7 @@ pub type Default = self::os::Whp;
 
 /// Underlying hypervisor (e.g. KVM on Linux).
 pub trait Hypervisor: Send + Sync + 'static {
-    type Cpu<'a>: Cpu
+    type Cpu<'a>: CpuRun
     where
         Self: 'a;
     type CpuErr: Error + Send + 'static;
@@ -45,12 +45,17 @@ pub trait Cpu {
     where
         Self: 'a;
     type GetStatesErr: Error + Send + 'static;
-    type Exit<'a>: CpuExit
+    type Exit<'a>: CpuExit<Cpu = Self>
     where
         Self: 'a;
-    type RunErr: Error + Send + 'static;
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr>;
+}
+
+/// Provides a method to run the CPU.
+pub trait CpuRun: Cpu {
+    type RunErr: Error + Send + 'static;
+
     fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr>;
 }
 
@@ -139,7 +144,8 @@ pub trait CpuStates {
 
 /// Contains information when VM exited.
 pub trait CpuExit: Sized {
-    type Io: CpuIo;
+    type Cpu: Cpu;
+    type Io: CpuIo<Cpu = Self::Cpu>;
 
     #[cfg(target_arch = "x86_64")]
     fn into_hlt(self) -> Result<(), Self>;
@@ -149,12 +155,14 @@ pub trait CpuExit: Sized {
 
 /// Contains information when a VM exited because of memory-mapped I/O.
 pub trait CpuIo {
+    type Cpu: Cpu;
     type TranslateErr: Error + Send + 'static;
 
     /// Returns physical address where the VM try to access.
     fn addr(&self) -> usize;
     fn buffer(&mut self) -> IoBuf;
     fn translate(&self, vaddr: usize) -> Result<usize, Self::TranslateErr>;
+    fn cpu(&mut self) -> &mut Self::Cpu;
 }
 
 /// Encapsulates a buffer for memory-mapped I/O.

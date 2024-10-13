@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-pub use self::controller::CpuState;
+pub use self::controller::DebugStates;
 
 use self::controller::CpuController;
-use super::hv::{Cpu, CpuExit, CpuIo, Hypervisor};
+use super::hv::{Cpu, CpuExit, CpuIo, CpuRun, Hypervisor};
 use super::hw::{DeviceContext, DeviceTree};
 use super::ram::RamMap;
 use super::screen::Screen;
@@ -13,7 +13,7 @@ use std::error::Error;
 use std::num::NonZero;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
@@ -59,24 +59,29 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
         };
 
         // Spawn thread to drive vCPU.
-        let state = Arc::new(Mutex::new(CpuState::Running));
+        let debug = Arc::new((Mutex::default(), Condvar::new()));
         let t = match map {
             Some(map) => std::thread::spawn({
-                let state = state.clone();
+                let debug = debug.clone();
 
-                move || Self::main_cpu(args, state, start, map)
+                move || Self::main_cpu(args, debug, start, map)
             }),
             None => todo!(),
         };
 
-        self.cpus.push(CpuController::new(t, state));
+        self.cpus.push(CpuController::new(t, debug));
     }
 
     pub fn debug_lock(&mut self) -> DebugLock<H, S> {
         DebugLock(self)
     }
 
-    fn main_cpu(args: Args<H, S>, state: Arc<Mutex<CpuState>>, entry: usize, map: RamMap) {
+    fn main_cpu(
+        args: Args<H, S>,
+        debug: Arc<(Mutex<DebugStates>, Condvar)>,
+        entry: usize,
+        map: RamMap,
+    ) {
         let mut cpu = match args.hv.create_cpu(0) {
             Ok(v) => v,
             Err(e) => {
@@ -92,10 +97,14 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
             return;
         }
 
-        Self::run_cpu(&args, &state, cpu);
+        Self::run_cpu(&args, &debug, cpu);
     }
 
-    fn run_cpu<'a>(args: &'a Args<H, S>, state: &'a Mutex<CpuState>, mut cpu: H::Cpu<'a>) {
+    fn run_cpu<'a>(
+        args: &'a Args<H, S>,
+        debug: &'a (Mutex<DebugStates>, Condvar),
+        mut cpu: H::Cpu<'a>,
+    ) {
         // Build device contexts for this CPU.
         let mut devices = args
             .devices
@@ -103,7 +112,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
             .map(|(addr, dev)| {
                 let end = dev.len().checked_add(addr).unwrap();
 
-                (addr, (dev.create_context(&args.hv, state), end))
+                (addr, (dev.create_context(&args.hv, debug), end))
             })
             .collect::<BTreeMap<usize, (Box<dyn DeviceContext<H::Cpu<'a>>>, NonZero<usize>)>>();
 
