@@ -1,4 +1,4 @@
-use crate::vmm::hv::{Cpu, CpuExit, CpuIo, CpuStates, IoBuf};
+use crate::vmm::hv::{Cpu, CpuExit, CpuIo, CpuRun, CpuStates, IoBuf};
 use std::error::Error;
 use std::marker::PhantomData;
 use std::mem::{size_of, zeroed, MaybeUninit};
@@ -46,7 +46,6 @@ impl<'a> Cpu for WhpCpu<'a> {
     type States<'b> = WhpStates<'b, 'a> where Self: 'b;
     type GetStatesErr = StatesError;
     type Exit<'b> = WhpExit<'b, 'a> where Self: 'b;
-    type RunErr = RunError;
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
         let mut values: [WHV_REGISTER_VALUE; REGISTERS] = unsafe { zeroed() };
@@ -70,6 +69,10 @@ impl<'a> Cpu for WhpCpu<'a> {
             })
         }
     }
+}
+
+impl<'a> CpuRun for WhpCpu<'a> {
+    type RunErr = RunError;
 
     fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr> {
         let mut cx = MaybeUninit::<WHV_RUN_VP_EXIT_CONTEXT>::uninit();
@@ -279,6 +282,7 @@ pub struct WhpExit<'a, 'b> {
 }
 
 impl<'a, 'b> CpuExit for WhpExit<'a, 'b> {
+    type Cpu = WhpCpu<'b>;
     type Io = WhpIo<'a, 'b>;
 
     #[cfg(target_arch = "x86_64")]
@@ -301,6 +305,7 @@ pub struct WhpIo<'a, 'b> {
 }
 
 impl<'a, 'b> CpuIo for WhpIo<'a, 'b> {
+    type Cpu = WhpCpu<'b>;
     type TranslateErr = std::io::Error;
 
     fn addr(&self) -> usize {
@@ -313,6 +318,10 @@ impl<'a, 'b> CpuIo for WhpIo<'a, 'b> {
 
     fn translate(&self, vaddr: usize) -> Result<usize, std::io::Error> {
         todo!()
+    }
+
+    fn cpu(&mut self) -> &mut Self::Cpu {
+        todo!();
     }
 }
 

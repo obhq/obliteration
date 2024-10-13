@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use crate::vmm::hv::{Cpu, CpuExit, CpuIo, CpuStates, IoBuf};
+use crate::vmm::hv::{Cpu, CpuExit, CpuIo, CpuRun, CpuStates, IoBuf};
 use applevisor_sys::hv_reg_t::{HV_REG_CPSR, HV_REG_PC, HV_REG_X0, HV_REG_X1};
 use applevisor_sys::hv_sys_reg_t::{
     HV_SYS_REG_MAIR_EL1, HV_SYS_REG_SCTLR_EL1, HV_SYS_REG_SP_EL1, HV_SYS_REG_TCR_EL1,
@@ -30,11 +30,20 @@ impl<'a> HvfCpu<'a> {
     }
 }
 
+impl<'a> Drop for HvfCpu<'a> {
+    fn drop(&mut self) {
+        let ret = unsafe { hv_vcpu_destroy(self.instance) };
+
+        if ret != 0 {
+            panic!("hv_vcpu_destroy() fails with {ret:#x}");
+        }
+    }
+}
+
 impl<'a> Cpu for HvfCpu<'a> {
     type States<'b> = HvfStates<'b, 'a> where Self: 'b;
     type GetStatesErr = StatesError;
     type Exit<'b> = HvfExit<'b, 'a> where Self: 'b;
-    type RunErr = RunError;
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
         Ok(HvfStates {
@@ -51,21 +60,15 @@ impl<'a> Cpu for HvfCpu<'a> {
             x1: State::None,
         })
     }
+}
+
+impl<'a> CpuRun for HvfCpu<'a> {
+    type RunErr = RunError;
 
     fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr> {
         match NonZero::new(unsafe { hv_vcpu_run(self.instance) }) {
             Some(v) => Err(RunError::HypervisorFailed(v)),
             None => Ok(HvfExit::new(self)),
-        }
-    }
-}
-
-impl<'a> Drop for HvfCpu<'a> {
-    fn drop(&mut self) {
-        let ret = unsafe { hv_vcpu_destroy(self.instance) };
-
-        if ret != 0 {
-            panic!("hv_vcpu_destroy() fails with {ret:#x}");
         }
     }
 }
@@ -207,7 +210,8 @@ impl<'a, 'b> HvfExit<'a, 'b> {
 }
 
 impl<'a, 'b> CpuExit for HvfExit<'a, 'b> {
-    type Io = HvfIo;
+    type Cpu = HvfCpu<'b>;
+    type Io = HvfIo<'a, 'b>;
 
     fn into_io(self) -> Result<Self::Io, Self> {
         todo!();
@@ -215,9 +219,10 @@ impl<'a, 'b> CpuExit for HvfExit<'a, 'b> {
 }
 
 /// Implementation of [`CpuIo`] for Hypervisor Framework.
-pub struct HvfIo {}
+pub struct HvfIo<'a, 'b>(&'a mut HvfCpu<'b>);
 
-impl CpuIo for HvfIo {
+impl<'a, 'b> CpuIo for HvfIo<'a, 'b> {
+    type Cpu = HvfCpu<'b>;
     type TranslateErr = std::io::Error;
 
     fn addr(&self) -> usize {
@@ -230,6 +235,10 @@ impl CpuIo for HvfIo {
 
     fn translate(&self, vaddr: usize) -> Result<usize, std::io::Error> {
         todo!();
+    }
+
+    fn cpu(&mut self) -> &mut Self::Cpu {
+        self.0
     }
 }
 

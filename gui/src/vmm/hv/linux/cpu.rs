@@ -2,7 +2,7 @@
 use super::arch::{KvmStates, StatesError};
 use super::ffi::kvm_run;
 use super::run::KvmRun;
-use crate::vmm::hv::{Cpu, CpuExit, CpuIo, IoBuf};
+use crate::vmm::hv::{Cpu, CpuExit, CpuIo, CpuRun, IoBuf};
 use libc::munmap;
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::sync::MutexGuard;
@@ -38,11 +38,14 @@ impl<'a> Cpu for KvmCpu<'a> {
     type States<'b> = KvmStates<'b> where Self: 'b;
     type GetStatesErr = StatesError;
     type Exit<'b> = KvmExit<'b, 'a> where Self: 'b;
-    type RunErr = std::io::Error;
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
         KvmStates::from_cpu(&mut self.fd)
     }
+}
+
+impl<'a> CpuRun for KvmCpu<'a> {
+    type RunErr = std::io::Error;
 
     fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr> {
         match unsafe { kvm_run(self.fd.as_raw_fd()) } {
@@ -56,6 +59,7 @@ impl<'a> Cpu for KvmCpu<'a> {
 pub struct KvmExit<'a, 'b>(&'a mut KvmCpu<'b>);
 
 impl<'a, 'b> CpuExit for KvmExit<'a, 'b> {
+    type Cpu = KvmCpu<'b>;
     type Io = KvmIo<'a, 'b>;
 
     #[cfg(target_arch = "x86_64")]
@@ -80,6 +84,7 @@ impl<'a, 'b> CpuExit for KvmExit<'a, 'b> {
 pub struct KvmIo<'a, 'b>(&'a mut KvmCpu<'b>);
 
 impl<'a, 'b> CpuIo for KvmIo<'a, 'b> {
+    type Cpu = KvmCpu<'b>;
     type TranslateErr = std::io::Error;
 
     fn addr(&self) -> usize {
@@ -117,6 +122,10 @@ impl<'a, 'b> CpuIo for KvmIo<'a, 'b> {
             0 => Ok(data.physical_address),
             _ => return Err(std::io::Error::last_os_error()),
         }
+    }
+
+    fn cpu(&mut self) -> &mut Self::Cpu {
+        self.0
     }
 }
 

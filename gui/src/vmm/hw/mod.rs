@@ -3,13 +3,13 @@ pub use self::console::*;
 pub use self::debugger::*;
 pub use self::vmm::*;
 
-use super::cpu::CpuState;
+use super::cpu::DebugStates;
 use super::hv::{Cpu, CpuExit, CpuIo, Hypervisor, IoBuf};
 use super::VmmEventHandler;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::num::NonZero;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use thiserror::Error;
 
 mod console;
@@ -130,7 +130,7 @@ pub trait Device<H: Hypervisor>: Send + Sync {
     fn create_context<'a>(
         &'a self,
         hv: &'a H,
-        state: &'a Mutex<CpuState>,
+        debug: &'a (Mutex<DebugStates>, Condvar),
     ) -> Box<dyn DeviceContext<H::Cpu<'a>> + 'a>;
 }
 
@@ -139,7 +139,7 @@ pub trait DeviceContext<C: Cpu> {
     fn exec(&mut self, exit: &mut <C::Exit<'_> as CpuExit>::Io) -> Result<bool, Box<dyn Error>>;
 }
 
-/// Struct to build virtual device map.
+/// Struct to build a map of virtual device.
 struct MapBuilder<H: Hypervisor> {
     map: BTreeMap<usize, Arc<dyn Device<H>>>,
     next: usize,
