@@ -442,7 +442,6 @@ pub unsafe extern "C" fn vmm_start(
     let mut cpu = CpuManager::new(
         Arc::new(hv),
         screen.buffer().clone(),
-        feats,
         devices,
         event,
         shutdown.clone(),
@@ -501,14 +500,14 @@ pub unsafe extern "C" fn vmm_dispatch_debug(vmm: *mut Vmm, stop: *mut KernelStop
 
     // Setup target object.
     let vmm = &mut *vmm;
-    let target = &mut vmm.cpu;
+    let mut target = vmm.cpu.debug_lock();
 
     loop {
         // Check current state.
         let r = match vmm.gdb.take().unwrap() {
-            GdbStubStateMachine::Idle(s) => self::debug::dispatch_idle(target, s),
+            GdbStubStateMachine::Idle(s) => self::debug::dispatch_idle(&mut target, s),
             GdbStubStateMachine::Running(s) => {
-                match self::debug::dispatch_running(target, s, stop.take()) {
+                match self::debug::dispatch_running(&mut target, s, stop.take()) {
                     Ok(Ok(v)) => Ok(v),
                     Ok(Err(v)) => {
                         // No pending data from the debugger.
@@ -519,7 +518,7 @@ pub unsafe extern "C" fn vmm_dispatch_debug(vmm: *mut Vmm, stop: *mut KernelStop
                 }
             }
             GdbStubStateMachine::CtrlCInterrupt(s) => {
-                match s.interrupt_handled(target, None::<MultiThreadStopReason<u64>>) {
+                match s.interrupt_handled(&mut target, None::<MultiThreadStopReason<u64>>) {
                     Ok(v) => vmm.gdb = Some(v),
                     Err(e) => {
                         let r = RustError::with_source("couldn't handle CTRL+C from a debugger", e);

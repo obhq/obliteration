@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+pub use self::console::*;
+pub use self::debugger::*;
+pub use self::vmm::*;
+
+use super::cpu::CpuState;
 use super::hv::{Cpu, CpuExit, CpuIo, Hypervisor, IoBuf};
 use super::VmmEventHandler;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::num::NonZero;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use thiserror::Error;
-
-pub use self::console::*;
-pub use self::debugger::*;
-pub use self::vmm::*;
 
 mod console;
 mod debugger;
@@ -126,7 +127,11 @@ pub trait Device<H: Hypervisor>: Send + Sync {
     /// Total size of device memory, in bytes.
     fn len(&self) -> NonZero<usize>;
 
-    fn create_context<'a>(&'a self, hv: &'a H) -> Box<dyn DeviceContext<H::Cpu<'a>> + 'a>;
+    fn create_context<'a>(
+        &'a self,
+        hv: &'a H,
+        state: &'a Mutex<CpuState>,
+    ) -> Box<dyn DeviceContext<H::Cpu<'a>> + 'a>;
 }
 
 /// Context to execute memory-mapped I/O operations on a virtual device.
