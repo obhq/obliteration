@@ -10,10 +10,13 @@ use gdbstub::target::ext::breakpoints::{
 };
 use gdbstub::target::ext::thread_extra_info::{ThreadExtraInfo, ThreadExtraInfoOps};
 use gdbstub::target::TargetResult;
+use gdbstub_arch::x86::reg::X86_64CoreRegs;
+use gdbstub_arch::x86::X86_64_SSE;
+use std::num::NonZero;
 use thiserror::Error;
 
 impl<H: Hypervisor, S: Screen> gdbstub::target::Target for CpuManager<H, S> {
-    type Arch = Arch;
+    type Arch = X86_64_SSE;
     type Error = TargetError;
 
     fn base_ops(&mut self) -> BaseOps<'_, Self::Arch, Self::Error> {
@@ -26,11 +29,11 @@ impl<H: Hypervisor, S: Screen> gdbstub::target::Target for CpuManager<H, S> {
 }
 
 impl<H: Hypervisor, S: Screen> MultiThreadBase for CpuManager<H, S> {
-    fn read_registers(&mut self, regs: &mut Registers, tid: Tid) -> TargetResult<(), Self> {
+    fn read_registers(&mut self, regs: &mut X86_64CoreRegs, tid: Tid) -> TargetResult<(), Self> {
         todo!()
     }
 
-    fn write_registers(&mut self, regs: &Registers, tid: Tid) -> TargetResult<(), Self> {
+    fn write_registers(&mut self, regs: &X86_64CoreRegs, tid: Tid) -> TargetResult<(), Self> {
         todo!()
     }
 
@@ -55,7 +58,11 @@ impl<H: Hypervisor, S: Screen> MultiThreadBase for CpuManager<H, S> {
         &mut self,
         thread_is_active: &mut dyn FnMut(Tid),
     ) -> Result<(), Self::Error> {
-        todo!()
+        for id in (0..self.cpus.len()).map(|v| unsafe { NonZero::new_unchecked(v + 1) }) {
+            thread_is_active(id);
+        }
+
+        Ok(())
     }
 
     #[inline(always)]
@@ -71,71 +78,17 @@ impl<H: Hypervisor, S: Screen> Breakpoints for CpuManager<H, S> {
 }
 
 impl<H: Hypervisor, S: Screen> SwBreakpoint for CpuManager<H, S> {
-    fn add_sw_breakpoint(&mut self, addr: u64, kind: BreakpointKind) -> TargetResult<bool, Self> {
+    fn add_sw_breakpoint(&mut self, addr: u64, kind: usize) -> TargetResult<bool, Self> {
         todo!()
     }
 
-    fn remove_sw_breakpoint(
-        &mut self,
-        addr: u64,
-        kind: BreakpointKind,
-    ) -> TargetResult<bool, Self> {
+    fn remove_sw_breakpoint(&mut self, addr: u64, kind: usize) -> TargetResult<bool, Self> {
         todo!()
     }
 }
 
 impl<H: Hypervisor, S: Screen> ThreadExtraInfo for CpuManager<H, S> {
     fn thread_extra_info(&self, tid: Tid, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        todo!()
-    }
-}
-
-/// Implementation of [`gdbstub::arch::Arch`] for x86-64.
-pub enum Arch {}
-
-impl gdbstub::arch::Arch for Arch {
-    type Usize = u64;
-    type Registers = Registers;
-    type BreakpointKind = BreakpointKind;
-    type RegId = RegId;
-}
-
-/// Implementation of [`gdbstub::arch::Registers`] for x86-64.
-#[derive(Default, Debug, Clone, PartialEq)]
-pub struct Registers {}
-
-impl gdbstub::arch::Registers for Registers {
-    type ProgramCounter = u64;
-
-    fn pc(&self) -> Self::ProgramCounter {
-        todo!()
-    }
-
-    fn gdb_serialize(&self, write_byte: impl FnMut(Option<u8>)) {
-        todo!()
-    }
-
-    fn gdb_deserialize(&mut self, bytes: &[u8]) -> Result<(), ()> {
-        todo!()
-    }
-}
-
-/// Implementation of [`gdbstub::arch::BreakpointKind`] for x86-64.
-#[derive(Debug)]
-pub struct BreakpointKind {}
-
-impl gdbstub::arch::BreakpointKind for BreakpointKind {
-    fn from_usize(kind: usize) -> Option<Self> {
-        todo!()
-    }
-}
-
-/// Implementation of [`gdbstub::arch::RegId`] for x86-64.
-#[derive(Debug)]
-pub struct RegId {}
-
-impl gdbstub::arch::RegId for RegId {
-    fn from_raw_id(id: usize) -> Option<(Self, Option<std::num::NonZeroUsize>)> {
         todo!()
     }
 }
