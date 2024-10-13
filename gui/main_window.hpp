@@ -35,7 +35,7 @@ public:
     bool loadGames();
     void restoreGeometry();
     void startDebug(const QString &addr);
-    void startVmm(Debugger *d);
+    void startVmm(Rust<Debugger> &&debug);
 protected:
     void closeEvent(QCloseEvent *event) override;
 private slots:
@@ -47,7 +47,7 @@ private slots:
     void saveProfile(Profile *p);
     void updateScreen();
 private:
-    void acceptDebuggerFailed(const QString &msg);
+    void debuggerConnected();
     void vmmError(const QString &msg);
     void waitKernelExit(bool success);
     void log(VmmLog type, const QString &msg);

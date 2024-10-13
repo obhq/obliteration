@@ -75,30 +75,6 @@ struct RustError;
 struct Vmm;
 
 /**
- * Status of debugger connection acception.
- */
-enum DebuggerAccept_Tag {
-    DebuggerAccept_Ok,
-    DebuggerAccept_Err,
-};
-
-struct DebuggerAccept_Ok_Body {
-    struct Debugger *debugger;
-};
-
-struct DebuggerAccept_Err_Body {
-    struct RustError *reason;
-};
-
-struct DebuggerAccept {
-    enum DebuggerAccept_Tag tag;
-    union {
-        struct DebuggerAccept_Ok_Body ok;
-        struct DebuggerAccept_Err_Body err;
-    };
-};
-
-/**
  * Contains objects required to render the screen.
  */
 struct VmmScreen {
@@ -185,14 +161,15 @@ extern "C" {
 void set_panic_hook(void *cx,
                     void (*hook)(const char*, size_t, uint32_t, const char*, size_t, void*));
 
-struct DebugServer *debug_server_start(void *cx,
-                                       const char *addr,
-                                       struct RustError **err,
-                                       void (*cb)(const struct DebuggerAccept*, void*));
+struct DebugServer *debug_server_start(const char *addr, struct RustError **err);
 
 void debug_server_free(struct DebugServer *s);
 
 const char *debug_server_addr(struct DebugServer *s);
+
+ptrdiff_t debug_server_socket(struct DebugServer *s);
+
+struct Debugger *debug_server_accept(struct DebugServer *s, struct RustError **err);
 
 void debugger_free(struct Debugger *d);
 
