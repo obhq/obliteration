@@ -285,6 +285,10 @@ impl<'a, 'b> CpuExit for WhpExit<'a, 'b> {
     type Cpu = WhpCpu<'b>;
     type Io = WhpIo<'a, 'b>;
 
+    fn cpu(&mut self) -> &mut Self::Cpu {
+        todo!();
+    }
+
     #[cfg(target_arch = "x86_64")]
     fn into_hlt(self) -> Result<(), Self> {
         if self.cx.ExitReason == WHvRunVpExitReasonX64Halt {

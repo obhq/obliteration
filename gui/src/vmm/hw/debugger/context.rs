@@ -104,7 +104,7 @@ impl<'a> Context<'a> {
 }
 
 impl<'a, C: Cpu> DeviceContext<C> for Context<'a> {
-    fn exec(&mut self, exit: &mut <C::Exit<'_> as CpuExit>::Io) -> Result<bool, Box<dyn Error>> {
+    fn mmio(&mut self, exit: &mut <C::Exit<'_> as CpuExit>::Io) -> Result<bool, Box<dyn Error>> {
         // Check field.
         let off = exit.addr() - self.dev.addr;
 

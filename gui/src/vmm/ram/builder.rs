@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::{Ram, RamError};
-use crate::vmm::hv::{CpuFeats, Hypervisor};
+use crate::vmm::hv::CpuFeats;
 use crate::vmm::hw::DeviceTree;
 use crate::vmm::kernel::ProgramHeader;
 use obconf::{BootEnv, Config};
@@ -173,11 +173,11 @@ impl<'a> RamBuilder<'a> {
 
 #[cfg(target_arch = "x86_64")]
 impl<'a> RamBuilder<'a> {
-    pub fn build<H: Hypervisor>(
+    pub fn build(
         mut self,
         _: &CpuFeats,
         page_size: NonZero<usize>,
-        devices: &DeviceTree<H>,
+        devices: &DeviceTree,
         dynamic: ProgramHeader,
     ) -> Result<RamMap, RamBuilderError> {
         // Allocate page-map level-4 table. We use 4K 4-Level Paging here. You may wonder about this
@@ -196,7 +196,7 @@ impl<'a> RamBuilder<'a> {
         // Setup page tables to map virtual devices. We use identity mapping for virtual devices.
         let mut dev_end = 0;
 
-        for (addr, dev) in devices.map() {
+        for (addr, dev) in devices.all() {
             let len = dev.len().get();
             self.setup_4k_page_tables(pml4t, addr, addr, len)?;
             dev_end = addr + len;
@@ -359,11 +359,11 @@ impl<'a> RamBuilder<'a> {
     const MA_NOR: u8 = 1; // MEMORY_ATTRS[1]
     const MEMORY_ATTRS: [u8; 8] = [0, 0b11111111, 0, 0, 0, 0, 0, 0];
 
-    pub fn build<H: Hypervisor>(
+    pub fn build(
         mut self,
         feats: &CpuFeats,
         page_size: NonZero<usize>,
-        devices: &DeviceTree<H>,
+        devices: &DeviceTree,
         dynamic: ProgramHeader,
     ) -> Result<RamMap, RamBuilderError> {
         // Setup page tables.
@@ -381,10 +381,10 @@ impl<'a> RamBuilder<'a> {
         Ok(map)
     }
 
-    fn build_16k_page_tables<H: Hypervisor>(
+    fn build_16k_page_tables(
         &mut self,
         feats: &CpuFeats,
-        devices: &DeviceTree<H>,
+        devices: &DeviceTree,
     ) -> Result<RamMap, RamBuilderError> {
         // Allocate page table level 0.
         let page_table = self.next;
@@ -399,7 +399,7 @@ impl<'a> RamBuilder<'a> {
         // Map virtual devices. We use identity mapping for virtual devices.
         let mut dev_end = 0;
 
-        for (addr, dev) in devices.map() {
+        for (addr, dev) in devices.all() {
             let len = dev.len().get();
             self.setup_16k_page_tables(feats, l0t, addr, addr, len, Self::MA_DEV_NG_NR_NE)?;
             dev_end = addr + len;

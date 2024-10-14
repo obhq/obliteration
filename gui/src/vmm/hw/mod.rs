@@ -3,24 +3,23 @@ pub use self::console::*;
 pub use self::debugger::*;
 pub use self::vmm::*;
 
-use super::cpu::DebugStates;
 use super::hv::{Cpu, CpuExit, CpuIo, Hypervisor, IoBuf};
 use super::VmmEventHandler;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::num::NonZero;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::Arc;
 use thiserror::Error;
 
 mod console;
 mod debugger;
 mod vmm;
 
-pub fn setup_devices<H: Hypervisor>(
+pub fn setup_devices(
     start_addr: usize,
     block_size: NonZero<usize>,
     event: VmmEventHandler,
-) -> DeviceTree<H> {
+) -> DeviceTree {
     let mut b = MapBuilder {
         map: BTreeMap::new(),
         next: start_addr,
@@ -92,61 +91,73 @@ fn read_bin<'b>(
     Ok(unsafe { std::slice::from_raw_parts(data, len) })
 }
 
-/// Contains all virtual devices, except RAM; for the VM.
-pub struct DeviceTree<H: Hypervisor> {
+/// Contains all virtual devices (except RAM) for the VM.
+///
+/// All devices guarantee to not overlapped.
+pub struct DeviceTree {
     vmm: Arc<Vmm>,
     console: Arc<Console>,
     debugger: Arc<Debugger>,
-    map: BTreeMap<usize, Arc<dyn Device<H>>>,
+    map: BTreeMap<usize, Arc<dyn Device>>,
 }
 
-impl<H: Hypervisor> DeviceTree<H> {
-    pub fn vmm(&self) -> &impl Device<H> {
+impl DeviceTree {
+    pub fn vmm(&self) -> &Vmm {
         self.vmm.as_ref()
     }
 
-    pub fn console(&self) -> &impl Device<H> {
+    pub fn console(&self) -> &Console {
         self.console.as_ref()
     }
 
-    pub fn debugger(&self) -> &impl Device<H> {
+    pub fn debugger(&self) -> &Debugger {
         self.debugger.as_ref()
     }
 
     /// Returns iterator ordered by physical address.
-    pub fn map(&self) -> impl Iterator<Item = (usize, &dyn Device<H>)> + '_ {
+    pub fn all(&self) -> impl Iterator<Item = (usize, &dyn Device)> + '_ {
         self.map.iter().map(|(addr, dev)| (*addr, dev.as_ref()))
     }
 }
 
 /// Virtual device that has a physical address in the virtual machine.
-pub trait Device<H: Hypervisor>: Send + Sync {
+pub trait Device: Send + Sync {
+    /// Display name of this device.
+    fn name(&self) -> &str;
+
     /// Physical address in the virtual machine.
     fn addr(&self) -> usize;
 
     /// Total size of device memory, in bytes.
     fn len(&self) -> NonZero<usize>;
-
-    fn create_context<'a>(
-        &'a self,
-        hv: &'a H,
-        debug: &'a (Mutex<DebugStates>, Condvar),
-    ) -> Box<dyn DeviceContext<H::Cpu<'a>> + 'a>;
 }
 
-/// Context to execute memory-mapped I/O operations on a virtual device.
+/// Context for a CPU to execute operations on a virtual device.
 pub trait DeviceContext<C: Cpu> {
-    fn exec(&mut self, exit: &mut <C::Exit<'_> as CpuExit>::Io) -> Result<bool, Box<dyn Error>>;
+    /// Execute immeditately after the VM exited.
+    fn exited(&mut self, cpu: &mut C) -> Result<bool, Box<dyn Error>> {
+        let _ = cpu;
+        Ok(true)
+    }
+
+    /// Execute only if the CPU read or write into this device address.
+    fn mmio(&mut self, exit: &mut <C::Exit<'_> as CpuExit>::Io) -> Result<bool, Box<dyn Error>>;
+
+    /// Always execute after the exited event has been handled (before enter the VM again).
+    fn post(&mut self, cpu: &mut C) -> Result<bool, Box<dyn Error>> {
+        let _ = cpu;
+        Ok(true)
+    }
 }
 
 /// Struct to build a map of virtual device.
-struct MapBuilder<H: Hypervisor> {
-    map: BTreeMap<usize, Arc<dyn Device<H>>>,
+struct MapBuilder {
+    map: BTreeMap<usize, Arc<dyn Device>>,
     next: usize,
 }
 
-impl<H: Hypervisor> MapBuilder<H> {
-    fn push<T: Device<H> + 'static>(&mut self, f: impl FnOnce(usize) -> T) -> Arc<T> {
+impl MapBuilder {
+    fn push<T: Device + 'static>(&mut self, f: impl FnOnce(usize) -> T) -> Arc<T> {
         let d = Arc::new(f(self.next));
 
         assert!(self.map.insert(self.next, d.clone()).is_none());

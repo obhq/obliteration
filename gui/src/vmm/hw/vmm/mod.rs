@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::context::Context;
 use super::{Device, DeviceContext};
-use crate::vmm::cpu::DebugStates;
-use crate::vmm::hv::Hypervisor;
+use crate::vmm::hv::Cpu;
 use crate::vmm::VmmEventHandler;
 use obconf::VmmMemory;
 use std::num::NonZero;
-use std::sync::{Condvar, Mutex};
 
 mod context;
 
@@ -26,22 +24,22 @@ impl Vmm {
 
         Self { addr, len, event }
     }
+
+    pub fn create_context<C: Cpu>(&self) -> Box<dyn DeviceContext<C> + '_> {
+        Box::new(Context::new(self))
+    }
 }
 
-impl<H: Hypervisor> Device<H> for Vmm {
+impl Device for Vmm {
+    fn name(&self) -> &str {
+        "VMM"
+    }
+
     fn addr(&self) -> usize {
         self.addr
     }
 
     fn len(&self) -> NonZero<usize> {
         self.len
-    }
-
-    fn create_context<'a>(
-        &'a self,
-        _: &'a H,
-        _: &'a (Mutex<DebugStates>, Condvar),
-    ) -> Box<dyn DeviceContext<H::Cpu<'a>> + 'a> {
-        Box::new(Context::new(self))
     }
 }

@@ -9,7 +9,6 @@ use super::screen::Screen;
 use super::{VmmEvent, VmmEventHandler};
 use crate::error::RustError;
 use std::collections::BTreeMap;
-use std::error::Error;
 use std::num::NonZero;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -24,7 +23,7 @@ mod controller;
 pub struct CpuManager<H: Hypervisor, S: Screen> {
     hv: Arc<H>,
     screen: Arc<S::Buffer>,
-    devices: Arc<DeviceTree<H>>,
+    devices: Arc<DeviceTree>,
     event: VmmEventHandler,
     cpus: Vec<CpuController>,
     shutdown: Arc<AtomicBool>,
@@ -34,7 +33,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
     pub fn new(
         hv: Arc<H>,
         screen: Arc<S::Buffer>,
-        devices: Arc<DeviceTree<H>>,
+        devices: Arc<DeviceTree>,
         event: VmmEventHandler,
         shutdown: Arc<AtomicBool>,
     ) -> Self {
@@ -106,20 +105,17 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
         mut cpu: H::Cpu<'a>,
     ) {
         // Build device contexts for this CPU.
-        let mut devices = args
-            .devices
-            .map()
-            .map(|(addr, dev)| {
-                let end = dev.len().checked_add(addr).unwrap();
+        let mut devices = BTreeMap::<usize, Device<'a, H::Cpu<'a>>>::new();
+        let t = &args.devices;
 
-                (addr, (dev.create_context(&args.hv, debug), end))
-            })
-            .collect::<BTreeMap<usize, (Box<dyn DeviceContext<H::Cpu<'a>>>, NonZero<usize>)>>();
+        Device::insert(&mut devices, t.console(), |d| d.create_context(&*args.hv));
+        Device::insert(&mut devices, t.debugger(), |d| d.create_context(debug));
+        Device::insert(&mut devices, t.vmm(), |d| d.create_context());
 
         // Dispatch CPU events until shutdown.
-        while !args.shutdown.load(Ordering::Relaxed) {
+        'main: while !args.shutdown.load(Ordering::Relaxed) {
             // Run the vCPU.
-            let exit = match cpu.run() {
+            let mut exit = match cpu.run() {
                 Ok(v) => v,
                 Err(e) => {
                     let e = RustError::with_source("couldn't run CPU", e);
@@ -128,41 +124,112 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                 }
             };
 
-            // Check if HLT.
-            #[cfg(target_arch = "x86_64")]
-            let exit = match exit.into_hlt() {
-                Ok(_) => continue,
-                Err(v) => v,
+            // Execute VM exited event.
+            for d in devices.values_mut() {
+                let r = match d.context.exited(exit.cpu()) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let e = RustError::with_source(
+                            format!("couldn't execute a VM exited event on a {}", d.name),
+                            e.deref(),
+                        );
+
+                        unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+                        break 'main;
+                    }
+                };
+
+                if !r {
+                    break 'main;
+                }
+            }
+
+            // Handle exit.
+            let r = match Self::handle_exit(&mut devices, exit) {
+                Ok(v) => v,
+                Err(e) => {
+                    unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+                    break;
+                }
             };
 
-            // Check if I/O.
-            match exit.into_io() {
-                Ok(io) => match Self::exec_io(&mut devices, io) {
-                    Ok(status) => {
-                        if !status {
-                            args.shutdown.store(true, Ordering::Relaxed);
-                        }
-
-                        continue;
-                    }
-                    Err(_) => todo!(),
-                },
-                Err(_) => todo!(),
+            if !r {
+                break;
             }
+
+            // Execute post exit event.
+            for d in devices.values_mut() {
+                let r = match d.context.post(&mut cpu) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        let e = RustError::with_source(
+                            format!("couldn't execute a post VM exit on a {}", d.name),
+                            e.deref(),
+                        );
+
+                        unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+                        break 'main;
+                    }
+                };
+
+                if !r {
+                    break 'main;
+                }
+            }
+        }
+
+        // Shutdown other CPUs.
+        args.shutdown.store(true, Ordering::Relaxed);
+    }
+
+    fn handle_exit<'a, C: Cpu>(
+        devices: &mut BTreeMap<usize, Device<'a, C>>,
+        exit: C::Exit<'_>,
+    ) -> Result<bool, RustError> {
+        // Check if HLT.
+        #[cfg(target_arch = "x86_64")]
+        let exit = match exit.into_hlt() {
+            Ok(_) => return Ok(true),
+            Err(v) => v,
+        };
+
+        // Check if I/O.
+        match exit.into_io() {
+            Ok(io) => return Self::handle_io(devices, io),
+            Err(_) => todo!(),
         }
     }
 
-    fn exec_io<'a, C: Cpu>(
-        devices: &mut BTreeMap<usize, (Box<dyn DeviceContext<C> + 'a>, NonZero<usize>)>,
+    fn handle_io<'a, C: Cpu>(
+        devices: &mut BTreeMap<usize, Device<'a, C>>,
         mut io: <C::Exit<'_> as CpuExit>::Io,
-    ) -> Result<bool, Box<dyn Error>> {
+    ) -> Result<bool, RustError> {
         // Get target device.
         let addr = io.addr();
-        let (_, (dev, end)) = devices.range_mut(..=addr).last().unwrap();
+        let dev = match devices
+            .range_mut(..=addr)
+            .last()
+            .map(|v| v.1)
+            .filter(move |d| addr < d.end.get())
+        {
+            Some(v) => v,
+            None => {
+                let m = format!(
+                    "the CPU attempt to execute a memory-mapped I/O on a non-mapped address {:#x}",
+                    addr
+                );
 
-        assert!(addr < end.get());
+                return Err(RustError::new(m));
+            }
+        };
 
-        dev.exec(&mut io)
+        // Execute.
+        dev.context.mmio(&mut io).map_err(|e| {
+            RustError::with_source(
+                format!("couldn't execute a memory-mapped I/O on a {}", dev.name),
+                e.deref(),
+            )
+        })
     }
 }
 
@@ -193,7 +260,31 @@ impl<'a, H: Hypervisor, S: Screen> DerefMut for DebugLock<'a, H, S> {
 struct Args<H: Hypervisor, S: Screen> {
     hv: Arc<H>,
     screen: Arc<S::Buffer>,
-    devices: Arc<DeviceTree<H>>,
+    devices: Arc<DeviceTree>,
     event: VmmEventHandler,
     shutdown: Arc<AtomicBool>,
+}
+
+/// Contains instantiated device context for a CPU.
+struct Device<'a, C: Cpu> {
+    context: Box<dyn DeviceContext<C> + 'a>,
+    end: NonZero<usize>,
+    name: &'a str,
+}
+
+impl<'a, C: Cpu> Device<'a, C> {
+    fn insert<T: super::hw::Device>(
+        tree: &mut BTreeMap<usize, Self>,
+        dev: &'a T,
+        f: impl FnOnce(&'a T) -> Box<dyn DeviceContext<C> + 'a>,
+    ) {
+        let addr = dev.addr();
+        let dev = Self {
+            context: f(dev),
+            end: dev.len().checked_add(addr).unwrap(),
+            name: dev.name(),
+        };
+
+        assert!(tree.insert(addr, dev).is_none());
+    }
 }
