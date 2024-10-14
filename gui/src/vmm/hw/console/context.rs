@@ -28,7 +28,7 @@ impl<'a, H: Hypervisor> Context<'a, H> {
 }
 
 impl<'a, H: Hypervisor, C: Cpu> DeviceContext<C> for Context<'a, H> {
-    fn exec(&mut self, exit: &mut <C::Exit<'_> as CpuExit>::Io) -> Result<bool, Box<dyn Error>> {
+    fn mmio(&mut self, exit: &mut <C::Exit<'_> as CpuExit>::Io) -> Result<bool, Box<dyn Error>> {
         // Check field.
         let off = exit.addr() - self.dev.addr;
 

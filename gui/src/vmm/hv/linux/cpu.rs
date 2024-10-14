@@ -62,6 +62,10 @@ impl<'a, 'b> CpuExit for KvmExit<'a, 'b> {
     type Cpu = KvmCpu<'b>;
     type Io = KvmIo<'a, 'b>;
 
+    fn cpu(&mut self) -> &mut Self::Cpu {
+        self.0
+    }
+
     #[cfg(target_arch = "x86_64")]
     fn into_hlt(self) -> Result<(), Self> {
         if unsafe { (*self.0.cx.0).exit_reason == 5 } {

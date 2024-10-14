@@ -213,6 +213,10 @@ impl<'a, 'b> CpuExit for HvfExit<'a, 'b> {
     type Cpu = HvfCpu<'b>;
     type Io = HvfIo<'a, 'b>;
 
+    fn cpu(&mut self) -> &mut Self::Cpu {
+        self.0
+    }
+
     fn into_io(self) -> Result<Self::Io, Self> {
         todo!();
     }

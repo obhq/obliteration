@@ -147,6 +147,8 @@ pub trait CpuExit: Sized {
     type Cpu: Cpu;
     type Io: CpuIo<Cpu = Self::Cpu>;
 
+    fn cpu(&mut self) -> &mut Self::Cpu;
+
     #[cfg(target_arch = "x86_64")]
     fn into_hlt(self) -> Result<(), Self>;
 
