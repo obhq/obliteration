@@ -3,18 +3,18 @@ use std::io::{Error, ErrorKind, Read, Write};
 use std::net::TcpStream;
 
 #[no_mangle]
-pub unsafe extern "C" fn debugger_free(d: *mut Debugger) {
+pub unsafe extern "C" fn debug_client_free(d: *mut DebugClient) {
     drop(Box::from_raw(d));
 }
 
 /// Encapsulate a debugger connection.
-pub struct Debugger {
+pub struct DebugClient {
     sock: TcpStream,
     buf: Vec<u8>,
     next: usize,
 }
 
-impl Debugger {
+impl DebugClient {
     pub(super) fn new(sock: TcpStream) -> Self {
         Self {
             sock,
@@ -64,7 +64,7 @@ impl Debugger {
     }
 }
 
-impl gdbstub::conn::Connection for Debugger {
+impl gdbstub::conn::Connection for DebugClient {
     type Error = Error;
 
     fn write(&mut self, byte: u8) -> Result<(), Self::Error> {

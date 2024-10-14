@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-pub use self::controller::DebugStates;
+pub use self::arch::*;
 
 use self::controller::CpuController;
+use super::debug::{debug_controller, Debugger};
 use super::hv::{Cpu, CpuExit, CpuIo, CpuRun, Hypervisor};
 use super::hw::{DeviceContext, DeviceTree};
 use super::ram::RamMap;
@@ -12,7 +13,7 @@ use std::collections::BTreeMap;
 use std::num::NonZero;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::Arc;
 
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
@@ -58,29 +59,20 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
         };
 
         // Spawn thread to drive vCPU.
-        let debug = Arc::new((Mutex::default(), Condvar::new()));
+        let (debuggee, debugger) = debug_controller();
         let t = match map {
-            Some(map) => std::thread::spawn({
-                let debug = debug.clone();
-
-                move || Self::main_cpu(args, debug, start, map)
-            }),
+            Some(map) => std::thread::spawn(move || Self::main_cpu(args, debugger, start, map)),
             None => todo!(),
         };
 
-        self.cpus.push(CpuController::new(t, debug));
+        self.cpus.push(CpuController::new(t, debuggee));
     }
 
     pub fn debug_lock(&mut self) -> DebugLock<H, S> {
         DebugLock(self)
     }
 
-    fn main_cpu(
-        args: Args<H, S>,
-        debug: Arc<(Mutex<DebugStates>, Condvar)>,
-        entry: usize,
-        map: RamMap,
-    ) {
+    fn main_cpu(args: Args<H, S>, debug: Debugger<GdbRegs>, entry: usize, map: RamMap) {
         let mut cpu = match args.hv.create_cpu(0) {
             Ok(v) => v,
             Err(e) => {
@@ -96,14 +88,10 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
             return;
         }
 
-        Self::run_cpu(&args, &debug, cpu);
+        Self::run_cpu(&args, debug, cpu);
     }
 
-    fn run_cpu<'a>(
-        args: &'a Args<H, S>,
-        debug: &'a (Mutex<DebugStates>, Condvar),
-        mut cpu: H::Cpu<'a>,
-    ) {
+    fn run_cpu<'a>(args: &'a Args<H, S>, debug: Debugger<GdbRegs>, mut cpu: H::Cpu<'a>) {
         // Build device contexts for this CPU.
         let mut devices = BTreeMap::<usize, Device<'a, H::Cpu<'a>>>::new();
         let t = &args.devices;

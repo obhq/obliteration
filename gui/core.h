@@ -45,14 +45,14 @@ enum VmmLog {
 };
 
 /**
+ * Encapsulate a debugger connection.
+ */
+struct DebugClient;
+
+/**
  * TCP listener to accept a debugger connection.
  */
 struct DebugServer;
-
-/**
- * Encapsulate a debugger connection.
- */
-struct Debugger;
 
 /**
  * Reason for [`VmmEvent::Breakpoint`].
@@ -169,9 +169,9 @@ const char *debug_server_addr(struct DebugServer *s);
 
 ptrdiff_t debug_server_socket(struct DebugServer *s);
 
-struct Debugger *debug_server_accept(struct DebugServer *s, struct RustError **err);
+struct DebugClient *debug_server_accept(struct DebugServer *s, struct RustError **err);
 
-void debugger_free(struct Debugger *d);
+void debug_client_free(struct DebugClient *d);
 
 void error_free(struct RustError *e);
 
@@ -231,7 +231,7 @@ struct RustError *update_firmware(const char *root,
 struct Vmm *vmm_start(const char *kernel,
                       const struct VmmScreen *screen,
                       const struct Profile *profile,
-                      struct Debugger *debugger,
+                      struct DebugClient *debugger,
                       void (*event)(const struct VmmEvent*, void*),
                       void *cx,
                       struct RustError **err);

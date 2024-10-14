@@ -15,6 +15,8 @@ use gdbstub_arch::x86::X86_64_SSE;
 use std::num::NonZero;
 use thiserror::Error;
 
+pub type GdbRegs = gdbstub_arch::x86::reg::X86_64CoreRegs;
+
 impl<H: Hypervisor, S: Screen> gdbstub::target::Target for CpuManager<H, S> {
     type Arch = X86_64_SSE;
     type Error = TargetError;

@@ -399,7 +399,7 @@ void MainWindow::debuggerConnected()
 
     // Accept a connection.
     Rust<RustError> error;
-    Rust<Debugger> debugger;
+    Rust<DebugClient> debugger;
 
     debugger = debug_server_accept(m_debugServer, &error);
 
@@ -639,7 +639,7 @@ void MainWindow::startDebug(const QString &addr)
     }
 }
 
-void MainWindow::startVmm(Rust<Debugger> &&debug)
+void MainWindow::startVmm(Rust<DebugClient> &&debug)
 {
     // Get full path to kernel binary.
     std::string kernel;
