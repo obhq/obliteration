@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+pub use self::controller::*;
+
 use super::cpu::CpuManager;
 use super::hv::Hypervisor;
 use super::screen::Screen;
-use crate::debug::Debugger;
+use crate::debug::DebugClient;
 use crate::error::RustError;
 use gdbstub::stub::state_machine::state::{Idle, Running};
 use gdbstub::stub::state_machine::{GdbStubStateMachine, GdbStubStateMachineInner};
 use gdbstub::stub::MultiThreadStopReason;
+
+mod controller;
 
 pub fn dispatch_idle<H: Hypervisor, S: Screen>(
     target: &mut CpuManager<H, S>,
@@ -14,9 +18,9 @@ pub fn dispatch_idle<H: Hypervisor, S: Screen>(
         'static,
         Idle<CpuManager<H, S>>,
         CpuManager<H, S>,
-        Debugger,
+        DebugClient,
     >,
-) -> Result<GdbStubStateMachine<'static, CpuManager<H, S>, Debugger>, RustError> {
+) -> Result<GdbStubStateMachine<'static, CpuManager<H, S>, DebugClient>, RustError> {
     let b = state
         .borrow_conn()
         .read()
@@ -29,12 +33,12 @@ pub fn dispatch_idle<H: Hypervisor, S: Screen>(
 
 pub fn dispatch_running<H: Hypervisor, S: Screen>(
     target: &mut CpuManager<H, S>,
-    mut state: GdbStubStateMachineInner<'static, Running, CpuManager<H, S>, Debugger>,
+    mut state: GdbStubStateMachineInner<'static, Running, CpuManager<H, S>, DebugClient>,
     stop: Option<MultiThreadStopReason<u64>>,
 ) -> Result<
     Result<
-        GdbStubStateMachine<'static, CpuManager<H, S>, Debugger>,
-        GdbStubStateMachineInner<'static, Running, CpuManager<H, S>, Debugger>,
+        GdbStubStateMachine<'static, CpuManager<H, S>, DebugClient>,
+        GdbStubStateMachineInner<'static, Running, CpuManager<H, S>, DebugClient>,
     >,
     RustError,
 > {

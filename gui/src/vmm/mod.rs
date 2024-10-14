@@ -7,7 +7,7 @@ use self::kernel::{
 };
 use self::ram::Ram;
 use self::screen::Screen;
-use crate::debug::Debugger;
+use crate::debug::DebugClient;
 use crate::error::RustError;
 use crate::profile::Profile;
 use gdbstub::stub::state_machine::GdbStubStateMachine;
@@ -39,7 +39,7 @@ pub unsafe extern "C" fn vmm_start(
     kernel: *const c_char,
     screen: *const VmmScreen,
     profile: *const Profile,
-    debugger: *mut Debugger,
+    debugger: *mut DebugClient,
     event: unsafe extern "C" fn(*const VmmEvent, *mut c_void),
     cx: *mut c_void,
     err: *mut *mut RustError,
@@ -592,7 +592,7 @@ pub struct Vmm {
         GdbStubStateMachine<
             'static,
             CpuManager<self::hv::Default, self::screen::Default>,
-            Debugger,
+            DebugClient,
         >,
     >,
     shutdown: Arc<AtomicBool>,

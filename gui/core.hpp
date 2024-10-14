@@ -70,10 +70,10 @@ inline void Rust<char>::free()
 }
 
 template<>
-inline void Rust<Debugger>::free()
+inline void Rust<DebugClient>::free()
 {
     if (m_ptr) {
-        debugger_free(m_ptr);
+        debug_client_free(m_ptr);
         m_ptr = nullptr;
     }
 }

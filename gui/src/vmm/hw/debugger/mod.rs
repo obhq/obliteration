@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::context::Context;
 use super::{Device, DeviceContext};
-use crate::vmm::cpu::DebugStates;
+use crate::vmm::cpu::GdbRegs;
 use crate::vmm::hv::Cpu;
 use crate::vmm::VmmEventHandler;
 use obconf::DebuggerMemory;
 use std::num::NonZero;
-use std::sync::{Condvar, Mutex};
 
 mod context;
 
@@ -27,10 +26,10 @@ impl Debugger {
         Self { addr, len, event }
     }
 
-    pub fn create_context<'a, C: Cpu>(
-        &'a self,
-        debug: &'a (Mutex<DebugStates>, Condvar),
-    ) -> Box<dyn DeviceContext<C> + 'a> {
+    pub fn create_context<C: Cpu>(
+        &self,
+        debug: crate::vmm::debug::Debugger<GdbRegs>,
+    ) -> Box<dyn DeviceContext<C> + '_> {
         Box::new(Context::new(self, debug))
     }
 }

@@ -67,9 +67,9 @@ pub unsafe extern "C" fn debug_server_socket(s: *mut DebugServer) -> isize {
 pub unsafe extern "C" fn debug_server_accept(
     s: *mut DebugServer,
     err: *mut *mut RustError,
-) -> *mut Debugger {
+) -> *mut DebugClient {
     match (*s).sock.accept() {
-        Ok((sock, _)) => Box::into_raw(Box::new(Debugger::new(sock))),
+        Ok((sock, _)) => Box::into_raw(Box::new(DebugClient::new(sock))),
         Err(e) => {
             *err = RustError::wrap(e).into_c();
             null_mut()
