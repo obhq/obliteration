@@ -92,7 +92,11 @@ impl<T> Debugger<T> {
 
         if matches!(s.deref(), DataState::None) {
             *s = DataState::DebuggerOwned(v);
-            return ResponseHandle(&self.0);
+
+            return ResponseHandle {
+                data: &self.0,
+                taken: false,
+            };
         }
 
         // Once the debugger has been requested the data it will wait for the data and a signal from
@@ -121,27 +125,47 @@ impl<T> Debugger<T> {
         // wake them up. Condvar::notify_one do nothing if there are no any thread waiting on it.
         self.0.signal.notify_one();
 
-        ResponseHandle(&self.0)
+        ResponseHandle {
+            data: &self.0,
+            taken: false,
+        }
     }
 }
 
 /// Provides method to get a response from the debugger.
-pub struct ResponseHandle<'a, T>(&'a Data<T>);
+pub struct ResponseHandle<'a, T> {
+    data: &'a Data<T>,
+    taken: bool,
+}
 
 impl<'a, T> ResponseHandle<'a, T> {
-    pub fn into_response(self) -> T {
-        let mut s = self.0.state.lock().unwrap();
+    pub fn into_response(mut self) -> T {
+        let mut s = self.data.state.lock().unwrap();
         let v = match std::mem::take(s.deref_mut()) {
             DataState::DebuggeeOwned(v) => v,
             _ => panic!("the debugger did not release the data"),
         };
 
+        self.taken = true;
+
+        v
+    }
+}
+
+impl<'a, T> Drop for ResponseHandle<'a, T> {
+    fn drop(&mut self) {
+        if !self.taken {
+            let mut s = self.data.state.lock().unwrap();
+
+            if !matches!(std::mem::take(s.deref_mut()), DataState::DebuggeeOwned(_)) {
+                panic!("the debugger did not release the data");
+            }
+        }
+
         // It is possible for this method to get called after the debugger has reacquired the lock
         // so we need to wake them up. Condvar::notify_one do nothing if there are no any thread
         // waiting on it.
-        self.0.signal.notify_one();
-
-        v
+        self.data.signal.notify_one();
     }
 }
 

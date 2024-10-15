@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::KvmCpu;
 use self::ffi::{
-    kvm_set_user_memory_region, KVM_API_VERSION, KVM_CAP_MAX_VCPUS, KVM_CHECK_EXTENSION,
+    KvmUserspaceMemoryRegion, KVM_API_VERSION, KVM_CAP_MAX_VCPUS, KVM_CHECK_EXTENSION,
     KVM_CREATE_VCPU, KVM_CREATE_VM, KVM_GET_API_VERSION, KVM_GET_VCPU_MMAP_SIZE,
+    KVM_SET_USER_MEMORY_REGION,
 };
 use super::{CpuFeats, Hypervisor};
 use crate::vmm::ram::Ram;
@@ -81,13 +82,16 @@ pub fn new(cpu: usize, ram: Ram) -> Result<Kvm, VmmError> {
     };
 
     // Set RAM.
-    let slot = 0;
-    let len = ram.len().try_into().unwrap();
-    let mem = ram.host_addr().cast_mut().cast();
+    let mr = KvmUserspaceMemoryRegion {
+        slot: 0,
+        flags: 0,
+        guest_phys_addr: 0,
+        memory_size: ram.len().get().try_into().unwrap(),
+        userspace_addr: (ram.host_addr() as usize).try_into().unwrap(),
+    };
 
-    match unsafe { kvm_set_user_memory_region(vm.as_raw_fd(), slot, 0, len, mem) } {
-        0 => {}
-        v => return Err(VmmError::MapRamFailed(Error::from_raw_os_error(v))),
+    if unsafe { ioctl(vm.as_raw_fd(), KVM_SET_USER_MEMORY_REGION, &mr) } < 0 {
+        return Err(VmmError::MapRamFailed(Error::last_os_error()));
     }
 
     // AArch64 require all CPU to be created before calling KVM_ARM_VCPU_INIT.
