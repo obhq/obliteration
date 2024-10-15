@@ -16,15 +16,14 @@ mod builder;
 /// RAM always started at address 0.
 pub struct Ram {
     mem: *mut u8,
+    len: NonZero<usize>,
     block_size: NonZero<usize>,
 }
 
 impl Ram {
-    pub(crate) const SIZE: usize = 1024 * 1024 * 1024 * 8; // 8GB
-
     /// # Safety
     /// `block_size` must be greater or equal host page size.
-    pub unsafe fn new(block_size: NonZero<usize>) -> Result<Self, Error> {
+    pub unsafe fn new(len: NonZero<usize>, block_size: NonZero<usize>) -> Result<Self, Error> {
         use std::io::Error;
 
         // Reserve memory range.
@@ -35,7 +34,7 @@ impl Ram {
 
             let mem = mmap(
                 null_mut(),
-                Self::SIZE,
+                len.get(),
                 PROT_NONE,
                 MAP_PRIVATE | MAP_ANON,
                 -1,
@@ -54,7 +53,7 @@ impl Ram {
             use std::ptr::null;
             use windows_sys::Win32::System::Memory::{VirtualAlloc, MEM_RESERVE, PAGE_NOACCESS};
 
-            let mem = VirtualAlloc(null(), Self::SIZE, MEM_RESERVE, PAGE_NOACCESS);
+            let mem = VirtualAlloc(null(), len.get(), MEM_RESERVE, PAGE_NOACCESS);
 
             if mem.is_null() {
                 return Err(Error::last_os_error());
@@ -63,15 +62,19 @@ impl Ram {
             mem.cast()
         };
 
-        Ok(Self { mem, block_size })
+        Ok(Self {
+            mem,
+            len,
+            block_size,
+        })
     }
 
     pub fn host_addr(&self) -> *const u8 {
         self.mem
     }
 
-    pub fn len(&self) -> usize {
-        Self::SIZE
+    pub fn len(&self) -> NonZero<usize> {
+        self.len
     }
 
     pub fn builder(&mut self) -> RamBuilder {
@@ -88,7 +91,10 @@ impl Ram {
         assert_eq!(addr % self.block_size, 0);
         assert_eq!(len.get() % self.block_size, 0);
 
-        if !addr.checked_add(len.get()).is_some_and(|v| v <= Self::SIZE) {
+        if !addr
+            .checked_add(len.get())
+            .is_some_and(|v| v <= self.len.get())
+        {
             return Err(RamError::InvalidAddr);
         }
 
@@ -106,7 +112,10 @@ impl Ram {
         assert_eq!(addr % self.block_size, 0);
         assert_eq!(len.get() % self.block_size, 0);
 
-        if !addr.checked_add(len.get()).is_some_and(|v| v <= Self::SIZE) {
+        if !addr
+            .checked_add(len.get())
+            .is_some_and(|v| v <= self.len.get())
+        {
             return Err(RamError::InvalidAddr);
         }
 
@@ -174,7 +183,7 @@ impl Drop for Ram {
     fn drop(&mut self) {
         use libc::munmap;
 
-        if unsafe { munmap(self.mem.cast(), Self::SIZE) } < 0 {
+        if unsafe { munmap(self.mem.cast(), self.len.get()) } < 0 {
             panic!(
                 "failed to unmap RAM at {:p}: {}",
                 self.mem,

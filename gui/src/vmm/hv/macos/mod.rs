@@ -46,7 +46,7 @@ pub fn new(_: usize, ram: Ram) -> Result<Hvf, VmmError> {
 
     // Set RAM.
     let host = hv.ram.host_addr().cast_mut().cast();
-    let len = hv.ram.len().try_into().unwrap();
+    let len = hv.ram.len().get().try_into().unwrap();
     let ret = unsafe {
         hv_vm_map(
             host,

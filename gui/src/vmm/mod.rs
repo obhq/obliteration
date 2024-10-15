@@ -329,13 +329,17 @@ pub unsafe extern "C" fn vmm_start(
     };
 
     // Setup RAM.
-    let ram = match Ram::new(block_size) {
+    let ram = match Ram::new(NonZero::new(1024 * 1024 * 1024 * 8).unwrap(), block_size) {
         Ok(v) => v,
         Err(e) => {
             *err = RustError::with_source("couldn't create a RAM", e).into_c();
             return null_mut();
         }
     };
+
+    // Setup virtual devices.
+    let event = VmmEventHandler { fp: event, cx };
+    let devices = Arc::new(setup_devices(ram.len().get(), block_size, event));
 
     // Setup hypervisor.
     let mut hv = match self::hv::new(8, ram) {
@@ -401,8 +405,6 @@ pub unsafe extern "C" fn vmm_start(
     }
 
     // Allocate arguments.
-    let event = VmmEventHandler { fp: event, cx };
-    let devices = Arc::new(setup_devices(Ram::SIZE, block_size, event));
     let env = BootEnv::Vm(Vm {
         vmm: devices.vmm().addr(),
         console: devices.console().addr(),

@@ -19,8 +19,12 @@ pub fn new(cpu: usize, ram: Ram) -> Result<Whp, VmmError> {
     part.setup().map_err(VmmError::SetupPartitionFailed)?;
 
     // Map memory.
-    part.map_gpa(ram.host_addr().cast(), 0, ram.len().try_into().unwrap())
-        .map_err(VmmError::MapRamFailed)?;
+    part.map_gpa(
+        ram.host_addr().cast(),
+        0,
+        ram.len().get().try_into().unwrap(),
+    )
+    .map_err(VmmError::MapRamFailed)?;
 
     Ok(Whp {
         part,

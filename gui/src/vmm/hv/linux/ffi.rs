@@ -1,10 +1,11 @@
-use std::ffi::{c_int, c_ulong, c_void};
+use std::ffi::{c_int, c_ulong};
 
 pub const KVM_GET_API_VERSION: c_ulong = _IO(KVMIO, 0x00);
 pub const KVM_CREATE_VM: c_ulong = _IO(KVMIO, 0x01);
 pub const KVM_CHECK_EXTENSION: c_ulong = _IO(KVMIO, 0x03);
 pub const KVM_GET_VCPU_MMAP_SIZE: c_ulong = _IO(KVMIO, 0x04);
 pub const KVM_CREATE_VCPU: c_ulong = _IO(KVMIO, 0x41);
+pub const KVM_SET_USER_MEMORY_REGION: c_ulong = _IOW::<KvmUserspaceMemoryRegion>(KVMIO, 0x46);
 #[cfg(target_arch = "aarch64")]
 pub const KVM_GET_ONE_REG: c_ulong = _IOW::<KvmOneReg<()>>(KVMIO, 0xab);
 #[cfg(target_arch = "aarch64")]
@@ -78,6 +79,15 @@ const fn _IOC(dir: c_ulong, ty: c_ulong, nr: c_ulong, size: c_ulong) -> c_ulong 
         | (size << _IOC_SIZESHIFT)
 }
 
+#[repr(C)]
+pub struct KvmUserspaceMemoryRegion {
+    pub slot: u32,
+    pub flags: u32,
+    pub guest_phys_addr: u64,
+    pub memory_size: u64,
+    pub userspace_addr: u64,
+}
+
 #[cfg(target_arch = "aarch64")]
 #[repr(C)]
 pub struct KvmOneReg<'a, T> {
@@ -93,12 +103,5 @@ pub struct KvmVcpuInit {
 }
 
 extern "C" {
-    pub fn kvm_set_user_memory_region(
-        vm: c_int,
-        slot: u32,
-        addr: u64,
-        len: u64,
-        mem: *mut c_void,
-    ) -> c_int;
     pub fn kvm_run(vcpu: c_int) -> c_int;
 }
