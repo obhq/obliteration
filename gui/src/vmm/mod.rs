@@ -342,7 +342,7 @@ pub unsafe extern "C" fn vmm_start(
     let devices = Arc::new(setup_devices(ram.len().get(), block_size, event));
 
     // Setup hypervisor.
-    let mut hv = match self::hv::new(8, ram) {
+    let mut hv = match self::hv::new(8, ram, debugger.is_some()) {
         Ok(v) => v,
         Err(e) => {
             *err = RustError::with_source("couldn't setup a hypervisor", e).into_c();
@@ -696,74 +696,6 @@ pub enum DebugResult {
 /// Represents an error when [`vmm_new()`] fails.
 #[derive(Debug, Error)]
 enum VmmError {
-    #[cfg(target_os = "linux")]
-    #[error("couldn't get maximum number of CPU for a VM")]
-    GetMaxCpuFailed(#[source] std::io::Error),
-
-    #[cfg(not(target_os = "macos"))]
-    #[error("your OS does not support 8 vCPU on a VM")]
-    MaxCpuTooLow,
-
-    #[cfg(target_os = "linux")]
-    #[error("couldn't open /dev/kvm")]
-    OpenKvmFailed(#[source] std::io::Error),
-
-    #[cfg(target_os = "linux")]
-    #[error("couldn't get KVM version")]
-    GetKvmVersionFailed(#[source] std::io::Error),
-
-    #[cfg(target_os = "linux")]
-    #[error("unexpected KVM version")]
-    KvmVersionMismatched,
-
-    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-    #[error("your OS does not support KVM_CAP_ONE_REG")]
-    NoKvmOneReg,
-
-    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-    #[error("your OS does not support KVM_CAP_ARM_VM_IPA_SIZE")]
-    NoVmIpaSize,
-
-    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-    #[error("physical address supported by your CPU too small")]
-    PhysicalAddressTooSmall,
-
-    #[cfg(target_os = "linux")]
-    #[error("couldn't create a VM")]
-    CreateVmFailed(#[source] std::io::Error),
-
-    #[cfg(target_os = "linux")]
-    #[error("couldn't map the RAM to the VM")]
-    MapRamFailed(#[source] std::io::Error),
-
-    #[cfg(target_os = "linux")]
-    #[error("couldn't create vCPU #{0}")]
-    CreateCpuFailed(usize, #[source] std::io::Error),
-
-    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-    #[error("couldn't initialize vCPU #{0}")]
-    InitCpuFailed(usize, #[source] std::io::Error),
-
-    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-    #[error("couldn't read ID_AA64MMFR0_EL1")]
-    ReadMmfr0Failed(#[source] std::io::Error),
-
-    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-    #[error("couldn't read ID_AA64MMFR1_EL1")]
-    ReadMmfr1Failed(#[source] std::io::Error),
-
-    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-    #[error("couldn't read ID_AA64MMFR2_EL1")]
-    ReadMmfr2Failed(#[source] std::io::Error),
-
-    #[cfg(target_os = "linux")]
-    #[error("couldn't get the size of vCPU mmap")]
-    GetMmapSizeFailed(#[source] std::io::Error),
-
-    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-    #[error("couldn't get preferred CPU target")]
-    GetPreferredTargetFailed(#[source] std::io::Error),
-
     #[cfg(not(target_os = "macos"))]
     #[error("couldn't create Vulkan device")]
     CreateVulkanDeviceFailed(#[source] ash::vk::Result),

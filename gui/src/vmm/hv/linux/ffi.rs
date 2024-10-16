@@ -17,6 +17,7 @@ pub const KVM_ARM_PREFERRED_TARGET: c_ulong = _IOR::<KvmVcpuInit>(KVMIO, 0xaf);
 
 pub const KVM_API_VERSION: c_int = 12;
 
+pub const KVM_CAP_SET_GUEST_DEBUG: c_int = 23;
 pub const KVM_CAP_MAX_VCPUS: c_int = 66;
 #[cfg(target_arch = "aarch64")]
 pub const KVM_CAP_ONE_REG: c_int = 70;

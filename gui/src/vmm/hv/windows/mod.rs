@@ -10,7 +10,7 @@ use windows_sys::core::HRESULT;
 mod cpu;
 mod partition;
 
-pub fn new(cpu: usize, ram: Ram) -> Result<Whp, VmmError> {
+pub fn new(cpu: usize, ram: Ram, debug: bool) -> Result<Whp, VmmError> {
     // Setup a partition.
     let mut part = Partition::new().map_err(VmmError::CreatePartitionFailed)?;
 
