@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::KvmCpu;
 use self::ffi::{
-    KvmUserspaceMemoryRegion, KVM_API_VERSION, KVM_CAP_MAX_VCPUS, KVM_CHECK_EXTENSION,
-    KVM_CREATE_VCPU, KVM_CREATE_VM, KVM_GET_API_VERSION, KVM_GET_VCPU_MMAP_SIZE,
-    KVM_SET_USER_MEMORY_REGION,
+    KvmUserspaceMemoryRegion, KVM_API_VERSION, KVM_CAP_MAX_VCPUS, KVM_CAP_SET_GUEST_DEBUG,
+    KVM_CHECK_EXTENSION, KVM_CREATE_VCPU, KVM_CREATE_VM, KVM_GET_API_VERSION,
+    KVM_GET_VCPU_MMAP_SIZE, KVM_SET_USER_MEMORY_REGION,
 };
 use super::{CpuFeats, Hypervisor};
 use crate::vmm::ram::Ram;
-use crate::vmm::VmmError;
 use libc::{ioctl, mmap, open, MAP_FAILED, MAP_PRIVATE, O_RDWR, PROT_READ, PROT_WRITE};
 use std::io::Error;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd};
@@ -22,12 +21,12 @@ mod cpu;
 mod ffi;
 mod run;
 
-pub fn new(cpu: usize, ram: Ram) -> Result<Kvm, VmmError> {
+pub fn new(cpu: usize, ram: Ram, debug: bool) -> Result<Kvm, KvmError> {
     // Open KVM device.
     let kvm = unsafe { open(b"/dev/kvm\0".as_ptr().cast(), O_RDWR) };
 
     if kvm < 0 {
-        return Err(VmmError::OpenKvmFailed(Error::last_os_error()));
+        return Err(KvmError::OpenKvmFailed(Error::last_os_error()));
     }
 
     // Check KVM version.
@@ -35,18 +34,18 @@ pub fn new(cpu: usize, ram: Ram) -> Result<Kvm, VmmError> {
     let version = unsafe { ioctl(kvm.as_raw_fd(), KVM_GET_API_VERSION) };
 
     if version < 0 {
-        return Err(VmmError::GetKvmVersionFailed(Error::last_os_error()));
+        return Err(KvmError::GetKvmVersionFailed(Error::last_os_error()));
     } else if version != KVM_API_VERSION {
-        return Err(VmmError::KvmVersionMismatched);
+        return Err(KvmError::KvmVersionMismatched);
     }
 
     // Check max CPU.
     let max = unsafe { ioctl(kvm.as_raw_fd(), KVM_CHECK_EXTENSION, KVM_CAP_MAX_VCPUS) };
 
     if max < 0 {
-        return Err(VmmError::GetMaxCpuFailed(Error::last_os_error()));
+        return Err(KvmError::GetMaxCpuFailed(Error::last_os_error()));
     } else if TryInto::<usize>::try_into(max).unwrap() < cpu {
-        return Err(VmmError::MaxCpuTooLow);
+        return Err(KvmError::MaxCpuTooLow(cpu));
     }
 
     // On AArch64 we need KVM_SET_ONE_REG and KVM_GET_ONE_REG.
@@ -58,14 +57,27 @@ pub fn new(cpu: usize, ram: Ram) -> Result<Kvm, VmmError> {
             self::ffi::KVM_CAP_ONE_REG,
         ) <= 0
     } {
-        return Err(VmmError::NoKvmOneReg);
+        return Err(KvmError::NoKvmOneReg);
+    }
+
+    // Check if debug supported.
+    if debug
+        && unsafe {
+            ioctl(
+                kvm.as_raw_fd(),
+                KVM_CHECK_EXTENSION,
+                KVM_CAP_SET_GUEST_DEBUG,
+            ) <= 0
+        }
+    {
+        return Err(KvmError::DebugNotSupported);
     }
 
     // Get size of CPU context.
     let vcpu_mmap_size = unsafe { ioctl(kvm.as_raw_fd(), KVM_GET_VCPU_MMAP_SIZE, 0) };
 
     if vcpu_mmap_size < 0 {
-        return Err(VmmError::GetMmapSizeFailed(Error::last_os_error()));
+        return Err(KvmError::GetMmapSizeFailed(Error::last_os_error()));
     }
 
     // Create a VM.
@@ -75,7 +87,7 @@ pub fn new(cpu: usize, ram: Ram) -> Result<Kvm, VmmError> {
         let mut v: self::ffi::KvmVcpuInit = std::mem::zeroed();
 
         if ioctl(vm.as_raw_fd(), self::ffi::KVM_ARM_PREFERRED_TARGET, &mut v) < 0 {
-            return Err(VmmError::GetPreferredTargetFailed(Error::last_os_error()));
+            return Err(KvmError::GetPreferredTargetFailed(Error::last_os_error()));
         }
 
         v
@@ -91,7 +103,7 @@ pub fn new(cpu: usize, ram: Ram) -> Result<Kvm, VmmError> {
     };
 
     if unsafe { ioctl(vm.as_raw_fd(), KVM_SET_USER_MEMORY_REGION, &mr) } < 0 {
-        return Err(VmmError::MapRamFailed(Error::last_os_error()));
+        return Err(KvmError::MapRamFailed(Error::last_os_error()));
     }
 
     // AArch64 require all CPU to be created before calling KVM_ARM_VCPU_INIT.
@@ -101,7 +113,7 @@ pub fn new(cpu: usize, ram: Ram) -> Result<Kvm, VmmError> {
         let cpu = unsafe { ioctl(vm.as_raw_fd(), KVM_CREATE_VCPU, id) };
 
         if cpu < 0 {
-            return Err(VmmError::CreateCpuFailed(id, Error::last_os_error()));
+            return Err(KvmError::CreateCpuFailed(id, Error::last_os_error()));
         }
 
         cpus.push(Mutex::new(unsafe { OwnedFd::from_raw_fd(cpu) }));
@@ -115,7 +127,7 @@ pub fn new(cpu: usize, ram: Ram) -> Result<Kvm, VmmError> {
         let cpu = cpu.get_mut().unwrap();
 
         if unsafe { ioctl(cpu.as_raw_fd(), KVM_ARM_VCPU_INIT, &preferred_target) < 0 } {
-            return Err(VmmError::InitCpuFailed(i, Error::last_os_error()));
+            return Err(KvmError::InitCpuFailed(i, Error::last_os_error()));
         }
     }
 
@@ -130,7 +142,7 @@ pub fn new(cpu: usize, ram: Ram) -> Result<Kvm, VmmError> {
 }
 
 #[cfg(target_arch = "aarch64")]
-fn create_vm(kvm: BorrowedFd) -> Result<OwnedFd, VmmError> {
+fn create_vm(kvm: BorrowedFd) -> Result<OwnedFd, KvmError> {
     use self::ffi::{KVM_CAP_ARM_VM_IPA_SIZE, KVM_VM_TYPE_ARM_IPA_SIZE};
 
     // Check KVM_CAP_ARM_VM_IPA_SIZE. We cannot use default machine type on AArch64 otherwise
@@ -145,34 +157,34 @@ fn create_vm(kvm: BorrowedFd) -> Result<OwnedFd, VmmError> {
     };
 
     if limit <= 0 {
-        return Err(VmmError::NoVmIpaSize);
+        return Err(KvmError::NoVmIpaSize);
     } else if limit < 36 {
-        return Err(VmmError::PhysicalAddressTooSmall);
+        return Err(KvmError::PhysicalAddressTooSmall);
     }
 
     // Create a VM.
     let vm = unsafe { ioctl(kvm.as_raw_fd(), KVM_CREATE_VM, KVM_VM_TYPE_ARM_IPA_SIZE(36)) };
 
     if vm < 0 {
-        Err(VmmError::CreateVmFailed(Error::last_os_error()))
+        Err(KvmError::CreateVmFailed(Error::last_os_error()))
     } else {
         Ok(unsafe { OwnedFd::from_raw_fd(vm) })
     }
 }
 
 #[cfg(target_arch = "x86_64")]
-fn create_vm(kvm: BorrowedFd) -> Result<OwnedFd, VmmError> {
+fn create_vm(kvm: BorrowedFd) -> Result<OwnedFd, KvmError> {
     let vm = unsafe { ioctl(kvm.as_raw_fd(), KVM_CREATE_VM, 0) };
 
     if vm < 0 {
-        Err(VmmError::CreateVmFailed(Error::last_os_error()))
+        Err(KvmError::CreateVmFailed(Error::last_os_error()))
     } else {
         Ok(unsafe { OwnedFd::from_raw_fd(vm) })
     }
 }
 
 #[cfg(target_arch = "aarch64")]
-fn load_feats(cpu: BorrowedFd) -> Result<CpuFeats, VmmError> {
+fn load_feats(cpu: BorrowedFd) -> Result<CpuFeats, KvmError> {
     use self::ffi::{KvmOneReg, ARM64_SYS_REG, KVM_GET_ONE_REG};
     use crate::vmm::hv::{Mmfr0, Mmfr1, Mmfr2};
 
@@ -184,7 +196,7 @@ fn load_feats(cpu: BorrowedFd) -> Result<CpuFeats, VmmError> {
     };
 
     if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_ONE_REG, &mut req) < 0 } {
-        return Err(VmmError::ReadMmfr0Failed(Error::last_os_error()));
+        return Err(KvmError::ReadMmfr0Failed(Error::last_os_error()));
     }
 
     // ID_AA64MMFR1_EL1.
@@ -195,7 +207,7 @@ fn load_feats(cpu: BorrowedFd) -> Result<CpuFeats, VmmError> {
     };
 
     if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_ONE_REG, &mut req) < 0 } {
-        return Err(VmmError::ReadMmfr1Failed(Error::last_os_error()));
+        return Err(KvmError::ReadMmfr1Failed(Error::last_os_error()));
     }
 
     // ID_AA64MMFR2_EL1.
@@ -206,7 +218,7 @@ fn load_feats(cpu: BorrowedFd) -> Result<CpuFeats, VmmError> {
     };
 
     if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_ONE_REG, &mut req) < 0 } {
-        return Err(VmmError::ReadMmfr2Failed(Error::last_os_error()));
+        return Err(KvmError::ReadMmfr2Failed(Error::last_os_error()));
     }
 
     Ok(CpuFeats {
@@ -217,7 +229,7 @@ fn load_feats(cpu: BorrowedFd) -> Result<CpuFeats, VmmError> {
 }
 
 #[cfg(target_arch = "x86_64")]
-fn load_feats(_: BorrowedFd) -> Result<CpuFeats, VmmError> {
+fn load_feats(_: BorrowedFd) -> Result<CpuFeats, KvmError> {
     Ok(CpuFeats {})
 }
 
@@ -274,6 +286,72 @@ impl Hypervisor for Kvm {
 
         Ok(unsafe { KvmCpu::new(cpu, cx.cast(), self.vcpu_mmap_size) })
     }
+}
+
+/// Represents an error when [`Kvm`] fails to initialize.
+#[derive(Debug, Error)]
+pub enum KvmError {
+    #[error("couldn't open /dev/kvm")]
+    OpenKvmFailed(#[source] Error),
+
+    #[error("couldn't get KVM version")]
+    GetKvmVersionFailed(#[source] Error),
+
+    #[error("unexpected KVM version")]
+    KvmVersionMismatched,
+
+    #[error("couldn't get maximum number of vCPU for a VM")]
+    GetMaxCpuFailed(#[source] Error),
+
+    #[error("your OS does not support {0} vCPU on a VM")]
+    MaxCpuTooLow(usize),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("your OS does not support KVM_CAP_ONE_REG")]
+    NoKvmOneReg,
+
+    #[error("your OS does not support KVM_CAP_SET_GUEST_DEBUG")]
+    DebugNotSupported,
+
+    #[error("couldn't get the size of vCPU mmap")]
+    GetMmapSizeFailed(#[source] Error),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("your OS does not support KVM_CAP_ARM_VM_IPA_SIZE")]
+    NoVmIpaSize,
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("physical address supported by your CPU too small")]
+    PhysicalAddressTooSmall,
+
+    #[error("couldn't create a VM")]
+    CreateVmFailed(#[source] Error),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't get preferred CPU target")]
+    GetPreferredTargetFailed(#[source] Error),
+
+    #[error("couldn't map the RAM to the VM")]
+    MapRamFailed(#[source] Error),
+
+    #[error("couldn't create vCPU #{0}")]
+    CreateCpuFailed(usize, #[source] Error),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't initialize vCPU #{0}")]
+    InitCpuFailed(usize, #[source] Error),
+
+    #[cfg(all(target_arch = "aarch64"))]
+    #[error("couldn't read ID_AA64MMFR0_EL1")]
+    ReadMmfr0Failed(#[source] Error),
+
+    #[cfg(all(target_arch = "aarch64"))]
+    #[error("couldn't read ID_AA64MMFR1_EL1")]
+    ReadMmfr1Failed(#[source] Error),
+
+    #[cfg(target_arch = "aarch64")]
+    #[error("couldn't read ID_AA64MMFR2_EL1")]
+    ReadMmfr2Failed(#[source] Error),
 }
 
 /// Implementation of [`Hypervisor::CpuErr`].

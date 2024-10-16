@@ -18,7 +18,7 @@ use thiserror::Error;
 
 mod cpu;
 
-pub fn new(_: usize, ram: Ram) -> Result<Hvf, VmmError> {
+pub fn new(_: usize, ram: Ram, debug: bool) -> Result<Hvf, VmmError> {
     // Create a VM.
     let ret = unsafe { hv_vm_create(null_mut()) };
     let mut hv = match NonZero::new(ret) {
