@@ -408,11 +408,6 @@ pub unsafe extern "C" fn vmm_start(
     let env = BootEnv::Vm(Vm {
         vmm: devices.vmm().addr(),
         console: devices.console().addr(),
-        debugger: if debugger.is_some() {
-            devices.debugger().addr()
-        } else {
-            0
-        },
         host_page_size,
     });
 
@@ -466,7 +461,7 @@ pub unsafe extern "C" fn vmm_start(
     };
 
     // Spawn main CPU.
-    cpu.spawn(map.kern_vaddr + file.entry(), Some(map));
+    cpu.spawn(map.kern_vaddr + file.entry(), Some(map), gdb.is_some());
 
     // Create VMM.
     let vmm = Vmm {

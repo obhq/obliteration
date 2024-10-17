@@ -18,13 +18,14 @@ impl Stage1 {
     /// # Safety
     /// The specified memory must be valid for reads and writes and it must be exclusively available
     /// to [`Stage1`].
-    pub const unsafe fn new(buf: *mut u8, len: usize) -> Self {
-        let engine = Talc::new(ClaimOnOom::new(Span::from_base_size(buf, len)));
+    pub const unsafe fn new<const L: usize>(buf: *mut [u8; L]) -> Self {
+        let engine = Talc::new(ClaimOnOom::new(Span::from_array(buf)));
+        let buf_ptr = buf.cast();
 
         Self {
             engine: spin::Mutex::new(engine),
-            buf_ptr: buf,
-            buf_end: buf.add(len),
+            buf_ptr,
+            buf_end: buf_ptr.add(L),
         }
     }
 

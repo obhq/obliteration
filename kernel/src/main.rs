@@ -1,7 +1,6 @@
 #![no_std]
 #![cfg_attr(not(test), no_main)]
 
-use crate::config::boot_env;
 use crate::context::Context;
 use crate::malloc::KernelHeap;
 use crate::proc::{ProcMgr, Thread};
@@ -17,7 +16,6 @@ mod arch;
 mod config;
 mod console;
 mod context;
-mod debug;
 mod imgfmt;
 mod lock;
 mod malloc;
@@ -68,11 +66,6 @@ unsafe extern "C" fn _start(env: &'static BootEnv, conf: &'static Config) -> ! {
 }
 
 fn main(pmgr: Arc<ProcMgr>) -> ! {
-    // Wait for debugger.
-    match boot_env() {
-        BootEnv::Vm(vm) => crate::debug::wait_debugger(vm),
-    }
-
     // Activate stage 2 heap.
     info!("Activating stage 2 heap.");
 
@@ -117,6 +110,5 @@ fn panic(i: &PanicInfo) -> ! {
 // long as no one access STAGE1_HEAP.
 #[allow(dead_code)]
 #[cfg_attr(target_os = "none", global_allocator)]
-static mut KERNEL_HEAP: KernelHeap =
-    unsafe { KernelHeap::new(STAGE1_HEAP.as_mut_ptr(), STAGE1_HEAP.len()) };
+static mut KERNEL_HEAP: KernelHeap = unsafe { KernelHeap::new(&raw mut STAGE1_HEAP) };
 static mut STAGE1_HEAP: [u8; 1024 * 1024] = unsafe { zeroed() };

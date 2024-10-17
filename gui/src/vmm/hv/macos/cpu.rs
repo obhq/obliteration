@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use crate::vmm::hv::{Cpu, CpuExit, CpuIo, CpuRun, CpuStates, IoBuf};
+use crate::vmm::hv::{Cpu, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, IoBuf};
 use applevisor_sys::hv_reg_t::{HV_REG_CPSR, HV_REG_PC, HV_REG_X0, HV_REG_X1};
 use applevisor_sys::hv_sys_reg_t::{
     HV_SYS_REG_MAIR_EL1, HV_SYS_REG_SCTLR_EL1, HV_SYS_REG_SP_EL1, HV_SYS_REG_TCR_EL1,
@@ -212,6 +212,7 @@ impl<'a, 'b> HvfExit<'a, 'b> {
 impl<'a, 'b> CpuExit for HvfExit<'a, 'b> {
     type Cpu = HvfCpu<'b>;
     type Io = HvfIo<'a, 'b>;
+    type Debug = HvfDebug<'a, 'b>;
 
     fn cpu(&mut self) -> &mut Self::Cpu {
         self.0
@@ -219,6 +220,10 @@ impl<'a, 'b> CpuExit for HvfExit<'a, 'b> {
 
     fn into_io(self) -> Result<Self::Io, Self> {
         todo!();
+    }
+
+    fn into_debug(self) -> Result<Self::Debug, Self> {
+        todo!()
     }
 }
 
@@ -245,6 +250,11 @@ impl<'a, 'b> CpuIo for HvfIo<'a, 'b> {
         self.0
     }
 }
+
+/// Implementation of [`CpuDebug`] for Hypervisor Framework.
+pub struct HvfDebug<'a, 'b>(&'a mut HvfCpu<'b>);
+
+impl<'a, 'b> CpuDebug for HvfDebug<'a, 'b> {}
 
 /// Implementation of [`Cpu::RunErr`].
 #[derive(Debug, Error)]
