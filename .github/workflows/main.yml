@@ -21,7 +21,7 @@ jobs:
       artifact-name: obliteration-mac-m1
   pr:
     name: Update PRs
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
     - name: Install System Packages
       run: |
