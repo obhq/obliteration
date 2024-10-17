@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::arch::{KvmStates, StatesError};
-use super::ffi::kvm_run;
+use super::ffi::{kvm_run, KVM_EXIT_DEBUG};
 use super::run::KvmRun;
-use crate::vmm::hv::{Cpu, CpuExit, CpuIo, CpuRun, IoBuf};
+use crate::vmm::hv::{Cpu, CpuDebug, CpuExit, CpuIo, CpuRun, IoBuf};
 use libc::munmap;
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::sync::MutexGuard;
@@ -61,6 +61,7 @@ pub struct KvmExit<'a, 'b>(&'a mut KvmCpu<'b>);
 impl<'a, 'b> CpuExit for KvmExit<'a, 'b> {
     type Cpu = KvmCpu<'b>;
     type Io = KvmIo<'a, 'b>;
+    type Debug = KvmDebug<'a, 'b>;
 
     fn cpu(&mut self) -> &mut Self::Cpu {
         self.0
@@ -78,6 +79,14 @@ impl<'a, 'b> CpuExit for KvmExit<'a, 'b> {
     fn into_io(self) -> Result<Self::Io, Self> {
         if unsafe { (*self.0.cx.0).exit_reason } == 6 {
             Ok(KvmIo(self.0))
+        } else {
+            Err(self)
+        }
+    }
+
+    fn into_debug(self) -> Result<Self::Debug, Self> {
+        if unsafe { (*self.0.cx.0).exit_reason } == KVM_EXIT_DEBUG {
+            Ok(KvmDebug(self.0))
         } else {
             Err(self)
         }
@@ -132,6 +141,11 @@ impl<'a, 'b> CpuIo for KvmIo<'a, 'b> {
         self.0
     }
 }
+
+/// Implementation of [`CpuDebug`] for KVM.
+pub struct KvmDebug<'a, 'b>(&'a mut KvmCpu<'b>);
+
+impl<'a, 'b> CpuDebug for KvmDebug<'a, 'b> {}
 
 #[cfg(target_arch = "x86_64")]
 #[repr(C)]

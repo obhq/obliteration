@@ -22,9 +22,9 @@ impl KernelHeap {
     /// # Safety
     /// The specified memory must be valid for reads and writes and it must be exclusively available
     /// to [`KernelHeap`].
-    pub const unsafe fn new(stage1: *mut u8, len: usize) -> Self {
+    pub const unsafe fn new<const L: usize>(stage1: *mut [u8; L]) -> Self {
         Self {
-            stage1: Stage1::new(stage1, len),
+            stage1: Stage1::new(stage1),
             stage2: AtomicPtr::new(null_mut()),
         }
     }

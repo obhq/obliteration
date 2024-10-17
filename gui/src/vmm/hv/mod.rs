@@ -146,13 +146,13 @@ pub trait CpuStates {
 pub trait CpuExit: Sized {
     type Cpu: Cpu;
     type Io: CpuIo<Cpu = Self::Cpu>;
+    type Debug: CpuDebug;
 
     fn cpu(&mut self) -> &mut Self::Cpu;
-
     #[cfg(target_arch = "x86_64")]
     fn into_hlt(self) -> Result<(), Self>;
-
     fn into_io(self) -> Result<Self::Io, Self>;
+    fn into_debug(self) -> Result<Self::Debug, Self>;
 }
 
 /// Contains information when a VM exited because of memory-mapped I/O.
@@ -172,3 +172,6 @@ pub enum IoBuf<'a> {
     Write(&'a [u8]),
     Read(&'a mut [u8]),
 }
+
+/// Contains information when a VM exited because of debug event.
+pub trait CpuDebug {}

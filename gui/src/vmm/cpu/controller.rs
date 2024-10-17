@@ -7,19 +7,19 @@ use std::thread::JoinHandle;
 /// Contains objects to control a CPU from outside.
 pub struct CpuController {
     thread: ManuallyDrop<JoinHandle<()>>,
-    debug: Debuggee<GdbRegs>,
+    debug: Option<Debuggee<GdbRegs>>,
 }
 
 impl CpuController {
-    pub fn new(thread: JoinHandle<()>, debug: Debuggee<GdbRegs>) -> Self {
+    pub fn new(thread: JoinHandle<()>, debug: Option<Debuggee<GdbRegs>>) -> Self {
         Self {
             thread: ManuallyDrop::new(thread),
             debug,
         }
     }
 
-    pub fn debug_mut(&mut self) -> &mut Debuggee<GdbRegs> {
-        &mut self.debug
+    pub fn debug_mut(&mut self) -> Option<&mut Debuggee<GdbRegs>> {
+        self.debug.as_mut()
     }
 }
 

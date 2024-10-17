@@ -3,7 +3,7 @@ pub use self::arch::*;
 
 use self::controller::CpuController;
 use super::debug::{debug_controller, Debugger};
-use super::hv::{Cpu, CpuExit, CpuIo, CpuRun, Hypervisor};
+use super::hv::{Cpu, CpuExit, CpuIo, CpuRun, CpuStates, Hypervisor};
 use super::hw::{DeviceContext, DeviceTree};
 use super::ram::RamMap;
 use super::screen::Screen;
@@ -12,6 +12,7 @@ use crate::error::RustError;
 use std::collections::BTreeMap;
 use std::num::NonZero;
 use std::ops::{Deref, DerefMut};
+use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -48,7 +49,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
         }
     }
 
-    pub fn spawn(&mut self, start: usize, map: Option<RamMap>) {
+    pub fn spawn(&mut self, start: usize, map: Option<RamMap>, debug: bool) {
         // Setup arguments.
         let args = Args {
             hv: self.hv.clone(),
@@ -58,8 +59,14 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
             shutdown: self.shutdown.clone(),
         };
 
+        // Setup debug controller.
+        let (debuggee, debugger) = if debug {
+            Some(debug_controller()).unzip()
+        } else {
+            None.unzip()
+        };
+
         // Spawn thread to drive vCPU.
-        let (debuggee, debugger) = debug_controller();
         let t = match map {
             Some(map) => std::thread::spawn(move || Self::main_cpu(args, debugger, start, map)),
             None => todo!(),
@@ -72,7 +79,8 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
         DebugLock(self)
     }
 
-    fn main_cpu(args: Args<H, S>, debug: Debugger<GdbRegs>, entry: usize, map: RamMap) {
+    fn main_cpu(args: Args<H, S>, mut debug: Option<Debugger<GdbRegs>>, entry: usize, map: RamMap) {
+        // Create CPU.
         let mut cpu = match args.hv.create_cpu(0) {
             Ok(v) => v,
             Err(e) => {
@@ -88,28 +96,63 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
             return;
         }
 
+        // Wait for debugger.
+        if let Some(debug) = &mut debug {
+            // Get states.
+            let mut states = match cpu.states() {
+                Ok(v) => v,
+                Err(e) => {
+                    let e = RustError::with_source("couldn't get CPU states", e);
+                    unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+                    return;
+                }
+            };
+
+            // Get registers.
+            let regs = match Self::get_debug_regs(&mut states) {
+                Ok(v) => v,
+                Err(e) => {
+                    unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+                    return;
+                }
+            };
+
+            // Notify GUI. This will block until the debugger has completed their works.
+            let resp = debug.send(regs);
+            let stop = null_mut();
+
+            unsafe { args.event.invoke(VmmEvent::Breakpoint { stop }) };
+
+            // Update registers from debugger.
+            if let Err(e) = Self::set_debug_regs(&mut states, resp.into_response()) {
+                unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+                return;
+            }
+        }
+
+        // Run.
         Self::run_cpu(&args, debug, cpu);
     }
 
-    fn run_cpu<'a>(args: &'a Args<H, S>, debug: Debugger<GdbRegs>, mut cpu: H::Cpu<'a>) {
+    fn run_cpu<'a>(args: &'a Args<H, S>, debug: Option<Debugger<GdbRegs>>, mut cpu: H::Cpu<'a>) {
         // Build device contexts for this CPU.
         let mut devices = BTreeMap::<usize, Device<'a, H::Cpu<'a>>>::new();
         let t = &args.devices;
 
         Device::insert(&mut devices, t.console(), |d| d.create_context(&*args.hv));
-        Device::insert(&mut devices, t.debugger(), |d| d.create_context(debug));
         Device::insert(&mut devices, t.vmm(), |d| d.create_context());
 
         // Dispatch CPU events until shutdown.
-        'main: while !args.shutdown.load(Ordering::Relaxed) {
+        let e = 'main: loop {
+            // Check for shutdown signal.
+            if args.shutdown.load(Ordering::Relaxed) {
+                break None;
+            }
+
             // Run the vCPU.
             let mut exit = match cpu.run() {
                 Ok(v) => v,
-                Err(e) => {
-                    let e = RustError::with_source("couldn't run CPU", e);
-                    unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
-                    break;
-                }
+                Err(e) => break Some(RustError::with_source("couldn't run CPU", e)),
             };
 
             // Execute VM exited event.
@@ -117,32 +160,26 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                 let r = match d.context.exited(exit.cpu()) {
                     Ok(v) => v,
                     Err(e) => {
-                        let e = RustError::with_source(
+                        break 'main Some(RustError::with_source(
                             format!("couldn't execute a VM exited event on a {}", d.name),
                             e.deref(),
-                        );
-
-                        unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
-                        break 'main;
+                        ));
                     }
                 };
 
                 if !r {
-                    break 'main;
+                    break 'main None;
                 }
             }
 
             // Handle exit.
             let r = match Self::handle_exit(&mut devices, exit) {
                 Ok(v) => v,
-                Err(e) => {
-                    unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
-                    break;
-                }
+                Err(e) => break Some(e),
             };
 
             if !r {
-                break;
+                break None;
             }
 
             // Execute post exit event.
@@ -150,20 +187,21 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                 let r = match d.context.post(&mut cpu) {
                     Ok(v) => v,
                     Err(e) => {
-                        let e = RustError::with_source(
+                        break 'main Some(RustError::with_source(
                             format!("couldn't execute a post VM exit on a {}", d.name),
                             e.deref(),
-                        );
-
-                        unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
-                        break 'main;
+                        ));
                     }
                 };
 
                 if !r {
-                    break 'main;
+                    break 'main None;
                 }
             }
+        };
+
+        if let Some(e) = e {
+            unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
         }
 
         // Shutdown other CPUs.
@@ -182,8 +220,14 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
         };
 
         // Check if I/O.
-        match exit.into_io() {
+        let exit = match exit.into_io() {
             Ok(io) => return Self::handle_io(devices, io),
+            Err(v) => v,
+        };
+
+        // Check if debug.
+        match exit.into_debug() {
+            Ok(_) => todo!(),
             Err(_) => todo!(),
         }
     }
@@ -218,6 +262,26 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                 e.deref(),
             )
         })
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    fn get_debug_regs(_: &mut impl CpuStates) -> Result<GdbRegs, RustError> {
+        todo!()
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn get_debug_regs(_: &mut impl CpuStates) -> Result<GdbRegs, RustError> {
+        todo!()
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    fn set_debug_regs(_: &mut impl CpuStates, _: GdbRegs) -> Result<(), RustError> {
+        todo!()
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn set_debug_regs(_: &mut impl CpuStates, _: GdbRegs) -> Result<(), RustError> {
+        todo!()
     }
 }
 

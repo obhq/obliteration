@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::KvmCpu;
 use self::ffi::{
-    KvmUserspaceMemoryRegion, KVM_API_VERSION, KVM_CAP_MAX_VCPUS, KVM_CAP_SET_GUEST_DEBUG,
-    KVM_CHECK_EXTENSION, KVM_CREATE_VCPU, KVM_CREATE_VM, KVM_GET_API_VERSION,
-    KVM_GET_VCPU_MMAP_SIZE, KVM_SET_USER_MEMORY_REGION,
+    KvmGuestDebug, KvmUserspaceMemoryRegion, KVM_API_VERSION, KVM_CAP_MAX_VCPUS,
+    KVM_CAP_SET_GUEST_DEBUG, KVM_CHECK_EXTENSION, KVM_CREATE_VCPU, KVM_CREATE_VM,
+    KVM_GET_API_VERSION, KVM_GET_VCPU_MMAP_SIZE, KVM_GUESTDBG_ENABLE, KVM_GUESTDBG_USE_SW_BP,
+    KVM_SET_GUEST_DEBUG, KVM_SET_USER_MEMORY_REGION,
 };
 use super::{CpuFeats, Hypervisor};
 use crate::vmm::ram::Ram;
 use libc::{ioctl, mmap, open, MAP_FAILED, MAP_PRIVATE, O_RDWR, PROT_READ, PROT_WRITE};
 use std::io::Error;
+use std::mem::zeroed;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd};
 use std::ptr::null_mut;
 use std::sync::Mutex;
@@ -120,14 +122,30 @@ pub fn new(cpu: usize, ram: Ram, debug: bool) -> Result<Kvm, KvmError> {
     }
 
     // Init CPU.
-    #[cfg(target_arch = "aarch64")]
     for (i, cpu) in cpus.iter_mut().enumerate() {
-        use self::ffi::KVM_ARM_VCPU_INIT;
-
         let cpu = cpu.get_mut().unwrap();
 
-        if unsafe { ioctl(cpu.as_raw_fd(), KVM_ARM_VCPU_INIT, &preferred_target) < 0 } {
+        #[cfg(target_arch = "aarch64")]
+        if unsafe {
+            ioctl(
+                cpu.as_raw_fd(),
+                self::ffi::KVM_ARM_VCPU_INIT,
+                &preferred_target,
+            ) < 0
+        } {
             return Err(KvmError::InitCpuFailed(i, Error::last_os_error()));
+        }
+
+        if debug {
+            let arg = KvmGuestDebug {
+                control: KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_USE_SW_BP,
+                pad: 0,
+                arch: unsafe { zeroed() },
+            };
+
+            if unsafe { ioctl(cpu.as_raw_fd(), KVM_SET_GUEST_DEBUG, &arg) } < 0 {
+                return Err(KvmError::EnableDebugFailed(i, Error::last_os_error()));
+            }
         }
     }
 
@@ -340,6 +358,9 @@ pub enum KvmError {
     #[cfg(target_arch = "aarch64")]
     #[error("couldn't initialize vCPU #{0}")]
     InitCpuFailed(usize, #[source] Error),
+
+    #[error("couldn't enable debugging on vCPU #{0}")]
+    EnableDebugFailed(usize, #[source] Error),
 
     #[cfg(all(target_arch = "aarch64"))]
     #[error("couldn't read ID_AA64MMFR0_EL1")]

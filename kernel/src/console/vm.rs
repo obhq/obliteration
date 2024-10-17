@@ -1,7 +1,7 @@
 use core::cmp::min;
 use core::fmt::{Display, Write};
 use core::num::NonZero;
-use core::ptr::{addr_of_mut, write_volatile};
+use core::ptr::write_volatile;
 use obconf::{ConsoleMemory, ConsoleType, Vm};
 
 /// # Context safety
@@ -22,7 +22,7 @@ pub fn print(env: &Vm, ty: ConsoleType, msg: impl Display) {
     writeln!(w, "{msg}").unwrap();
     drop(w);
 
-    unsafe { write_volatile(addr_of_mut!((*c).commit), ty) };
+    unsafe { write_volatile(&raw mut (*c).commit, ty) };
 }
 
 /// [Write] implementation to write the message to the VMM console.
@@ -42,8 +42,8 @@ impl Writer {
             None => return,
         };
 
-        unsafe { write_volatile(addr_of_mut!((*self.con).msg_len), len) };
-        unsafe { write_volatile(addr_of_mut!((*self.con).msg_addr), self.buf.as_ptr() as _) };
+        unsafe { write_volatile(&raw mut (*self.con).msg_len, len) };
+        unsafe { write_volatile(&raw mut (*self.con).msg_addr, self.buf.as_ptr() as _) };
 
         self.len = 0;
     }

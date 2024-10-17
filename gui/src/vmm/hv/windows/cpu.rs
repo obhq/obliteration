@@ -1,4 +1,4 @@
-use crate::vmm::hv::{Cpu, CpuExit, CpuIo, CpuRun, CpuStates, IoBuf};
+use crate::vmm::hv::{Cpu, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, IoBuf};
 use std::error::Error;
 use std::marker::PhantomData;
 use std::mem::{size_of, zeroed, MaybeUninit};
@@ -284,6 +284,7 @@ pub struct WhpExit<'a, 'b> {
 impl<'a, 'b> CpuExit for WhpExit<'a, 'b> {
     type Cpu = WhpCpu<'b>;
     type Io = WhpIo<'a, 'b>;
+    type Debug = WhpDebug<'a, 'b>;
 
     fn cpu(&mut self) -> &mut Self::Cpu {
         todo!();
@@ -300,6 +301,10 @@ impl<'a, 'b> CpuExit for WhpExit<'a, 'b> {
 
     fn into_io(self) -> Result<Self::Io, Self> {
         todo!();
+    }
+
+    fn into_debug(self) -> Result<Self::Debug, Self> {
+        todo!()
     }
 }
 
@@ -328,6 +333,13 @@ impl<'a, 'b> CpuIo for WhpIo<'a, 'b> {
         todo!();
     }
 }
+
+/// Implementation of [`CpuDebug`] for Windows Hypervisor Platform.
+pub struct WhpDebug<'a, 'b> {
+    cpu: PhantomData<&'a mut WhpCpu<'b>>,
+}
+
+impl<'a, 'b> CpuDebug for WhpDebug<'a, 'b> {}
 
 /// Implementation of [`Cpu::GetStatesErr`] and [`CpuStates::Err`].
 #[derive(Debug, Error)]
