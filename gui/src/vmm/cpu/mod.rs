@@ -270,8 +270,40 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
     }
 
     #[cfg(target_arch = "x86_64")]
-    fn get_debug_regs(_: &mut impl CpuStates) -> Result<GdbRegs, RustError> {
-        todo!()
+    fn get_debug_regs<C: CpuStates>(states: &mut C) -> Result<GdbRegs, RustError> {
+        let mut load = |name: &str, func: fn(&mut C) -> Result<usize, C::Err>| {
+            func(states)
+                .map(|v| TryInto::<u64>::try_into(v).unwrap())
+                .map_err(|e| RustError::with_source(format_args!("couldn't get {name}"), e))
+        };
+
+        Ok(GdbRegs {
+            regs: [
+                load("rax", |s| s.get_rax())?,
+                load("rbx", |s| s.get_rbx())?,
+                load("rcx", |s| s.get_rcx())?,
+                load("rdx", |s| s.get_rdx())?,
+                load("rsi", |s| s.get_rsi())?,
+                load("rdi", |s| s.get_rdi())?,
+                load("rbp", |s| s.get_rbp())?,
+                load("rsp", |s| s.get_rsp())?,
+                load("r8", |s| s.get_r8())?,
+                load("r9", |s| s.get_r9())?,
+                load("r10", |s| s.get_r10())?,
+                load("r11", |s| s.get_r11())?,
+                load("r12", |s| s.get_r12())?,
+                load("r13", |s| s.get_r13())?,
+                load("r14", |s| s.get_r14())?,
+                load("r15", |s| s.get_r15())?,
+            ],
+            eflags: todo!(),
+            rip: todo!(),
+            segments: todo!(),
+            st: todo!(),
+            fpu: todo!(),
+            xmm: todo!(),
+            mxcsr: todo!(),
+        })
     }
 
     #[cfg(target_arch = "aarch64")]

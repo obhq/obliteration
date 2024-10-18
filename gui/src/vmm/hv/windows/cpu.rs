@@ -123,53 +123,108 @@ impl<'a, 'b> WhpStates<'a, 'b> {
 impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
     type Err = StatesError;
 
-    #[cfg(target_arch = "x86_64")]
+    fn get_rax(&mut self) -> Result<usize, Self::Err> {
+        todo!()
+    }
+
+    fn get_rbx(&mut self) -> Result<usize, Self::Err> {
+        todo!()
+    }
+
+    fn get_rcx(&mut self) -> Result<usize, Self::Err> {
+        todo!()
+    }
+
+    fn get_rdx(&mut self) -> Result<usize, Self::Err> {
+        todo!()
+    }
+
+    fn get_rbp(&mut self) -> Result<usize, Self::Err> {
+        todo!()
+    }
+
+    fn get_r8(&mut self) -> Result<usize, Self::Err> {
+        todo!()
+    }
+
+    fn get_r9(&mut self) -> Result<usize, Self::Err> {
+        todo!()
+    }
+
+    fn get_r10(&mut self) -> Result<usize, Self::Err> {
+        todo!()
+    }
+
+    fn get_r11(&mut self) -> Result<usize, Self::Err> {
+        todo!()
+    }
+
+    fn get_r12(&mut self) -> Result<usize, Self::Err> {
+        todo!()
+    }
+
+    fn get_r13(&mut self) -> Result<usize, Self::Err> {
+        todo!()
+    }
+
+    fn get_r14(&mut self) -> Result<usize, Self::Err> {
+        todo!()
+    }
+
+    fn get_r15(&mut self) -> Result<usize, Self::Err> {
+        todo!()
+    }
+
+    fn get_rdi(&mut self) -> Result<usize, Self::Err> {
+        todo!()
+    }
+
     fn set_rdi(&mut self, v: usize) {
         todo!()
     }
 
-    #[cfg(target_arch = "x86_64")]
+    fn get_rsi(&mut self) -> Result<usize, Self::Err> {
+        todo!()
+    }
+
     fn set_rsi(&mut self, v: usize) {
         todo!();
     }
 
-    #[cfg(target_arch = "x86_64")]
+    fn get_rsp(&mut self) -> Result<usize, Self::Err> {
+        todo!()
+    }
+
     fn set_rsp(&mut self, v: usize) {
         self.values[0].Reg64 = v.try_into().unwrap();
         self.dirty = true;
     }
 
-    #[cfg(target_arch = "x86_64")]
     fn set_rip(&mut self, v: usize) {
         self.values[1].Reg64 = v.try_into().unwrap();
         self.dirty = true;
     }
 
-    #[cfg(target_arch = "x86_64")]
     fn set_cr0(&mut self, v: usize) {
         self.values[2].Reg64 = v.try_into().unwrap();
         self.dirty = true;
     }
 
-    #[cfg(target_arch = "x86_64")]
     fn set_cr3(&mut self, v: usize) {
         self.values[3].Reg64 = v.try_into().unwrap();
         self.dirty = true;
     }
 
-    #[cfg(target_arch = "x86_64")]
     fn set_cr4(&mut self, v: usize) {
         self.values[4].Reg64 = v.try_into().unwrap();
         self.dirty = true;
     }
 
-    #[cfg(target_arch = "x86_64")]
     fn set_efer(&mut self, v: usize) {
         self.values[5].Reg64 = v.try_into().unwrap();
         self.dirty = true;
     }
 
-    #[cfg(target_arch = "x86_64")]
     fn set_cs(&mut self, ty: u8, dpl: u8, p: bool, l: bool, d: bool) {
         // Rust binding does not provides a way to set bit fields so we need to do this manually.
         // See https://learn.microsoft.com/en-us/virtualization/api/hypervisor-platform/funcs/whvvirtualprocessordatatypes
@@ -192,7 +247,6 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
         self.dirty = true;
     }
 
-    #[cfg(target_arch = "x86_64")]
     fn set_ds(&mut self, p: bool) {
         let v = unsafe { &mut self.values[7].Segment.Anonymous.Attributes };
         let p: u16 = p.into();
@@ -202,7 +256,6 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
         self.dirty = true;
     }
 
-    #[cfg(target_arch = "x86_64")]
     fn set_es(&mut self, p: bool) {
         let v = unsafe { &mut self.values[8].Segment.Anonymous.Attributes };
         let p: u16 = p.into();
@@ -212,7 +265,6 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
         self.dirty = true;
     }
 
-    #[cfg(target_arch = "x86_64")]
     fn set_fs(&mut self, p: bool) {
         let v = unsafe { &mut self.values[9].Segment.Anonymous.Attributes };
         let p: u16 = p.into();
@@ -222,7 +274,6 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
         self.dirty = true;
     }
 
-    #[cfg(target_arch = "x86_64")]
     fn set_gs(&mut self, p: bool) {
         let v = unsafe { &mut self.values[10].Segment.Anonymous.Attributes };
         let p: u16 = p.into();
@@ -232,7 +283,6 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
         self.dirty = true;
     }
 
-    #[cfg(target_arch = "x86_64")]
     fn set_ss(&mut self, p: bool) {
         let v = unsafe { &mut self.values[11].Segment.Anonymous.Attributes };
         let p: u16 = p.into();
@@ -240,16 +290,6 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
         *v = p << 7;
 
         self.dirty = true;
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    fn set_sp_el1(&mut self, v: usize) {
-        todo!()
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    fn set_pc(&mut self, v: usize) {
-        todo!()
     }
 
     fn commit(self) -> Result<(), Self::Err> {
