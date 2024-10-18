@@ -5,7 +5,7 @@ use std::mem::MaybeUninit;
 use std::os::fd::{AsRawFd, OwnedFd};
 use thiserror::Error;
 
-/// Implementation of [`Cpu::States`] for KVM.
+/// Implementation of [`CpuStates`] for KVM.
 pub struct KvmStates<'a> {
     cpu: &'a mut OwnedFd,
     gregs: GeneralRegs,
@@ -45,14 +45,78 @@ impl<'a> KvmStates<'a> {
 impl<'a> CpuStates for KvmStates<'a> {
     type Err = StatesError;
 
+    fn get_rax(&mut self) -> Result<usize, Self::Err> {
+        Ok(self.gregs.rax)
+    }
+
+    fn get_rbx(&mut self) -> Result<usize, Self::Err> {
+        Ok(self.gregs.rbx)
+    }
+
+    fn get_rcx(&mut self) -> Result<usize, Self::Err> {
+        Ok(self.gregs.rcx)
+    }
+
+    fn get_rdx(&mut self) -> Result<usize, Self::Err> {
+        Ok(self.gregs.rdx)
+    }
+
+    fn get_rbp(&mut self) -> Result<usize, Self::Err> {
+        Ok(self.gregs.rbp)
+    }
+
+    fn get_r8(&mut self) -> Result<usize, Self::Err> {
+        Ok(self.gregs.r8)
+    }
+
+    fn get_r9(&mut self) -> Result<usize, Self::Err> {
+        Ok(self.gregs.r9)
+    }
+
+    fn get_r10(&mut self) -> Result<usize, Self::Err> {
+        Ok(self.gregs.r10)
+    }
+
+    fn get_r11(&mut self) -> Result<usize, Self::Err> {
+        Ok(self.gregs.r11)
+    }
+
+    fn get_r12(&mut self) -> Result<usize, Self::Err> {
+        Ok(self.gregs.r12)
+    }
+
+    fn get_r13(&mut self) -> Result<usize, Self::Err> {
+        Ok(self.gregs.r13)
+    }
+
+    fn get_r14(&mut self) -> Result<usize, Self::Err> {
+        Ok(self.gregs.r14)
+    }
+
+    fn get_r15(&mut self) -> Result<usize, Self::Err> {
+        Ok(self.gregs.r15)
+    }
+
+    fn get_rdi(&mut self) -> Result<usize, Self::Err> {
+        Ok(self.gregs.rdi)
+    }
+
     fn set_rdi(&mut self, v: usize) {
         self.gregs.rdi = v;
         self.gdirty = true;
     }
 
+    fn get_rsi(&mut self) -> Result<usize, Self::Err> {
+        Ok(self.gregs.rsi)
+    }
+
     fn set_rsi(&mut self, v: usize) {
         self.gregs.rsi = v;
         self.gdirty = true;
+    }
+
+    fn get_rsp(&mut self) -> Result<usize, Self::Err> {
+        Ok(self.gregs.rsp)
     }
 
     fn set_rsp(&mut self, v: usize) {

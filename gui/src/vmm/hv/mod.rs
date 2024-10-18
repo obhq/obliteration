@@ -64,10 +64,58 @@ pub trait CpuStates {
     type Err: Error + Send + 'static;
 
     #[cfg(target_arch = "x86_64")]
+    fn get_rax(&mut self) -> Result<usize, Self::Err>;
+
+    #[cfg(target_arch = "x86_64")]
+    fn get_rbx(&mut self) -> Result<usize, Self::Err>;
+
+    #[cfg(target_arch = "x86_64")]
+    fn get_rcx(&mut self) -> Result<usize, Self::Err>;
+
+    #[cfg(target_arch = "x86_64")]
+    fn get_rdx(&mut self) -> Result<usize, Self::Err>;
+
+    #[cfg(target_arch = "x86_64")]
+    fn get_rbp(&mut self) -> Result<usize, Self::Err>;
+
+    #[cfg(target_arch = "x86_64")]
+    fn get_r8(&mut self) -> Result<usize, Self::Err>;
+
+    #[cfg(target_arch = "x86_64")]
+    fn get_r9(&mut self) -> Result<usize, Self::Err>;
+
+    #[cfg(target_arch = "x86_64")]
+    fn get_r10(&mut self) -> Result<usize, Self::Err>;
+
+    #[cfg(target_arch = "x86_64")]
+    fn get_r11(&mut self) -> Result<usize, Self::Err>;
+
+    #[cfg(target_arch = "x86_64")]
+    fn get_r12(&mut self) -> Result<usize, Self::Err>;
+
+    #[cfg(target_arch = "x86_64")]
+    fn get_r13(&mut self) -> Result<usize, Self::Err>;
+
+    #[cfg(target_arch = "x86_64")]
+    fn get_r14(&mut self) -> Result<usize, Self::Err>;
+
+    #[cfg(target_arch = "x86_64")]
+    fn get_r15(&mut self) -> Result<usize, Self::Err>;
+
+    #[cfg(target_arch = "x86_64")]
+    fn get_rdi(&mut self) -> Result<usize, Self::Err>;
+
+    #[cfg(target_arch = "x86_64")]
     fn set_rdi(&mut self, v: usize);
 
     #[cfg(target_arch = "x86_64")]
+    fn get_rsi(&mut self) -> Result<usize, Self::Err>;
+
+    #[cfg(target_arch = "x86_64")]
     fn set_rsi(&mut self, v: usize);
+
+    #[cfg(target_arch = "x86_64")]
+    fn get_rsp(&mut self) -> Result<usize, Self::Err>;
 
     #[cfg(target_arch = "x86_64")]
     fn set_rsp(&mut self, v: usize);
