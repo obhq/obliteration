@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use crate::vmm::hv::{Cpu, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, IoBuf};
+use crate::vmm::hv::{Cpu, CpuCommit, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, IoBuf};
 use applevisor_sys::hv_reg_t::{HV_REG_CPSR, HV_REG_PC, HV_REG_X0, HV_REG_X1};
 use applevisor_sys::hv_sys_reg_t::{
     HV_SYS_REG_MAIR_EL1, HV_SYS_REG_SCTLR_EL1, HV_SYS_REG_SP_EL1, HV_SYS_REG_TCR_EL1,
@@ -134,7 +134,9 @@ impl<'a, 'b> CpuStates for HvfStates<'a, 'b> {
     fn set_x1(&mut self, v: usize) {
         self.x1 = State::Dirty(v.try_into().unwrap());
     }
+}
 
+impl<'a, 'b> CpuCommit for HvfStates<'a, 'b> {
     fn commit(self) -> Result<(), Self::Err> {
         // Set PSTATE. Hypervisor Framework use CPSR to represent PSTATE.
         let cpu = self.cpu.instance;

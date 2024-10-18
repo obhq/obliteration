@@ -1,5 +1,29 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use bitfield_struct::bitfield;
+use std::error::Error;
+
+/// States of a PE.
+pub trait CpuStates {
+    type Err: Error + Send + 'static;
+
+    fn set_pstate(&mut self, v: Pstate);
+    fn set_sctlr(&mut self, v: Sctlr);
+    fn set_mair_el1(&mut self, attrs: u64);
+    fn set_tcr(&mut self, v: Tcr);
+
+    /// # Panics
+    /// If `baddr` has non-zero on bit 0 or 48:64.
+    fn set_ttbr0_el1(&mut self, baddr: usize);
+
+    /// # Panics
+    /// If `baddr` has non-zero on bit 0 or 48:64.
+    fn set_ttbr1_el1(&mut self, baddr: usize);
+
+    fn set_sp_el1(&mut self, v: usize);
+    fn set_pc(&mut self, v: usize);
+    fn set_x0(&mut self, v: usize);
+    fn set_x1(&mut self, v: usize);
+}
 
 /// Features available on a PE.
 #[derive(Default, Clone)]
