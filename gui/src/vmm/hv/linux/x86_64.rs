@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use crate::vmm::hv::CpuStates;
+use crate::vmm::hv::{CpuCommit, CpuStates};
 use std::ffi::c_int;
 use std::mem::MaybeUninit;
 use std::os::fd::{AsRawFd, OwnedFd};
@@ -182,7 +182,9 @@ impl<'a> CpuStates for KvmStates<'a> {
         self.sregs.ss.present = p.into();
         self.sdirty = true;
     }
+}
 
+impl<'a> CpuCommit for KvmStates<'a> {
     fn commit(self) -> Result<(), Self::Err> {
         use std::io::Error;
 

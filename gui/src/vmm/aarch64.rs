@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use super::hv::{Cpu, CpuFeats, CpuStates, Pstate, Sctlr, Tcr};
+use super::hv::{Cpu, CpuCommit, CpuFeats, CpuStates, Pstate, Sctlr, Tcr};
 use super::ram::RamMap;
 use super::MainCpuError;
 use std::sync::atomic::Ordering;
