@@ -16,6 +16,8 @@ use gdbstub_arch::x86::X86_64_SSE;
 use std::num::NonZero;
 use thiserror::Error;
 
+const ENOENT: u8 = 2;
+
 pub type GdbRegs = gdbstub_arch::x86::reg::X86_64CoreRegs;
 
 impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
@@ -23,10 +25,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
         let cpu = self
             .cpus
             .get_mut(tid.get() as usize - 1)
-            .ok_or(GdbTargetError::Io(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                TargetError::CpuNotFound(tid),
-            )))?;
+            .ok_or(GdbTargetError::Errno(ENOENT))?;
 
         Ok(cpu)
     }
@@ -124,7 +123,4 @@ impl<H: Hypervisor, S: Screen> ThreadExtraInfo for CpuManager<H, S> {
 
 /// Implementation of [`gdbstub::target::Target::Error`] for x86-64.
 #[derive(Debug, Error)]
-pub enum TargetError {
-    #[error("cpu not found for tid: {0}")]
-    CpuNotFound(Tid),
-}
+pub enum TargetError {}
