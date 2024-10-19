@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+use bitfield_struct::bitfield;
 use std::error::Error;
 
 /// States of a CPU.
@@ -28,6 +29,7 @@ pub trait CpuStates {
     fn set_cr0(&mut self, v: usize);
     fn set_cr3(&mut self, v: usize);
     fn set_cr4(&mut self, v: usize);
+    fn get_rflags(&mut self) -> Result<Rflags, Self::Err>;
     fn set_efer(&mut self, v: usize);
     fn set_cs(&mut self, ty: u8, dpl: u8, p: bool, l: bool, d: bool);
     fn set_ds(&mut self, p: bool);
@@ -40,3 +42,35 @@ pub trait CpuStates {
 /// Features available on a CPU.
 #[derive(Clone)]
 pub struct CpuFeats {}
+
+/// Represents a value of `RFLAGS`.
+///
+/// See RFLAGS Register section on AMD64 Architecture Programmer's Manual Volume 2 for more details.
+#[bitfield(u64)]
+pub struct Rflags {
+    pub cf: bool,
+    #[bits(default = true)]
+    __: bool,
+    pub pf: bool,
+    __: bool,
+    pub af: bool,
+    __: bool,
+    pub zf: bool,
+    pub sf: bool,
+    pub tf: bool,
+    pub r#if: bool,
+    pub df: bool,
+    pub of: bool,
+    #[bits(2)]
+    pub iopl: u8,
+    pub nt: bool,
+    __: bool,
+    pub rf: bool,
+    pub vm: bool,
+    pub ac: bool,
+    pub vif: bool,
+    pub vip: bool,
+    pub id: bool,
+    #[bits(42)]
+    __: u64,
+}

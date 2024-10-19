@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use crate::vmm::hv::{Cpu, CpuCommit, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, IoBuf};
+use crate::vmm::hv::{Cpu, CpuCommit, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, IoBuf, Rflags};
 use std::error::Error;
 use std::marker::PhantomData;
 use std::mem::{size_of, zeroed, MaybeUninit};
@@ -219,6 +219,10 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
     fn set_cr4(&mut self, v: usize) {
         self.values[4].Reg64 = v.try_into().unwrap();
         self.dirty = true;
+    }
+
+    fn get_rflags(&mut self) -> Result<Rflags, Self::Err> {
+        todo!()
     }
 
     fn set_efer(&mut self, v: usize) {
