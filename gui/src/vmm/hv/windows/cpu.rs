@@ -201,6 +201,10 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
         self.dirty = true;
     }
 
+    fn get_rip(&mut self) -> Result<usize, Self::Err> {
+        todo!()
+    }
+
     fn set_rip(&mut self, v: usize) {
         self.values[1].Reg64 = v.try_into().unwrap();
         self.dirty = true;
