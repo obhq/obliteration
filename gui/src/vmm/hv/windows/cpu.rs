@@ -324,6 +324,38 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
 
         self.dirty = true;
     }
+
+    fn get_st0(&mut self) -> Result<[u8; 10], Self::Err> {
+        todo!()
+    }
+
+    fn get_st1(&mut self) -> Result<[u8; 10], Self::Err> {
+        todo!()
+    }
+
+    fn get_st2(&mut self) -> Result<[u8; 10], Self::Err> {
+        todo!()
+    }
+
+    fn get_st3(&mut self) -> Result<[u8; 10], Self::Err> {
+        todo!()
+    }
+
+    fn get_st4(&mut self) -> Result<[u8; 10], Self::Err> {
+        todo!()
+    }
+
+    fn get_st5(&mut self) -> Result<[u8; 10], Self::Err> {
+        todo!()
+    }
+
+    fn get_st6(&mut self) -> Result<[u8; 10], Self::Err> {
+        todo!()
+    }
+
+    fn get_st7(&mut self) -> Result<[u8; 10], Self::Err> {
+        todo!()
+    }
 }
 
 impl<'a, 'b> CpuCommit for WhpStates<'a, 'b> {
