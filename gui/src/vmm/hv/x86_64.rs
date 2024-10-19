@@ -80,7 +80,6 @@ pub trait CpuStates {
     fn get_xmm13(&mut self) -> Result<u128, Self::Err>;
     fn get_xmm14(&mut self) -> Result<u128, Self::Err>;
     fn get_xmm15(&mut self) -> Result<u128, Self::Err>;
-
 }
 
 /// Features available on a CPU.

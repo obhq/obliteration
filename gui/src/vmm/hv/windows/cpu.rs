@@ -44,9 +44,15 @@ impl<'a> Drop for WhpCpu<'a> {
 }
 
 impl<'a> Cpu for WhpCpu<'a> {
-    type States<'b> = WhpStates<'b, 'a> where Self: 'b;
+    type States<'b>
+        = WhpStates<'b, 'a>
+    where
+        Self: 'b;
     type GetStatesErr = StatesError;
-    type Exit<'b> = WhpExit<'b, 'a> where Self: 'b;
+    type Exit<'b>
+        = WhpExit<'b, 'a>
+    where
+        Self: 'b;
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
         let mut values: [WHV_REGISTER_VALUE; REGISTERS] = unsafe { zeroed() };

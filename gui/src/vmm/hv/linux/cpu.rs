@@ -35,9 +35,15 @@ impl<'a> Drop for KvmCpu<'a> {
 }
 
 impl<'a> Cpu for KvmCpu<'a> {
-    type States<'b> = KvmStates<'b> where Self: 'b;
+    type States<'b>
+        = KvmStates<'b>
+    where
+        Self: 'b;
     type GetStatesErr = StatesError;
-    type Exit<'b> = KvmExit<'b, 'a> where Self: 'b;
+    type Exit<'b>
+        = KvmExit<'b, 'a>
+    where
+        Self: 'b;
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
         KvmStates::from_cpu(&mut self.fd)
