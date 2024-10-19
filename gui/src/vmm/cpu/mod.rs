@@ -328,8 +328,8 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                 ftag: states.get_ftwx().map_err(|e| error("ftwx", e))?,
                 fiseg: states.get_fiseg().map_err(|e| error("fiseg", e))?,
                 fioff: states.get_fioff().map_err(|e| error("fioff", e))?,
-                foseg: states.get_fiseg().map_err(|e| error("foseg", e))?,
-                fooff: states.get_fioff().map_err(|e| error("fooff", e))?,
+                foseg: states.get_foseg().map_err(|e| error("foseg", e))?,
+                fooff: states.get_fooff().map_err(|e| error("fooff", e))?,
                 fop: states.get_fop().map_err(|e| error("fop", e))?,
             },
             xmm: [
