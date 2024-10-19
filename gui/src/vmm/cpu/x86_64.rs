@@ -13,10 +13,24 @@ use gdbstub::target::{TargetError as GdbTargetError, TargetResult};
 use gdbstub_arch::x86::reg::X86_64CoreRegs;
 use gdbstub_arch::x86::X86_64_SSE;
 use std::num::NonZero;
-use std::ops::Deref;
 use thiserror::Error;
+use super::controller::CpuController;
 
 pub type GdbRegs = gdbstub_arch::x86::reg::X86_64CoreRegs;
+
+impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
+    fn get_cpu(&mut self, tid: Tid) -> TargetResult<&mut CpuController, Self> {
+        let cpu = self
+            .cpus
+            .get_mut(tid.get() as usize - 1)
+            .ok_or(GdbTargetError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                TargetError::CpuNotFound(tid),
+            )))?;
+
+        Ok(cpu)
+    }
+}
 
 impl<H: Hypervisor, S: Screen> gdbstub::target::Target for CpuManager<H, S> {
     type Arch = X86_64_SSE;
@@ -33,13 +47,7 @@ impl<H: Hypervisor, S: Screen> gdbstub::target::Target for CpuManager<H, S> {
 
 impl<H: Hypervisor, S: Screen> MultiThreadBase for CpuManager<H, S> {
     fn read_registers(&mut self, regs: &mut X86_64CoreRegs, tid: Tid) -> TargetResult<(), Self> {
-        let mut cpu = self
-            .cpus
-            .get_mut(tid.get() as usize - 1)
-            .ok_or(GdbTargetError::Io(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                TargetError::CpuNotFound(tid),
-            )))?;
+        let mut cpu = self.get_cpu(tid)?;
 
         let current_regs = cpu.debug_mut().unwrap().lock();
 
@@ -49,6 +57,8 @@ impl<H: Hypervisor, S: Screen> MultiThreadBase for CpuManager<H, S> {
     }
 
     fn write_registers(&mut self, regs: &X86_64CoreRegs, tid: Tid) -> TargetResult<(), Self> {
+        let mut _cpu = self.get_cpu(tid)?;
+
         todo!()
     }
 
@@ -58,10 +68,14 @@ impl<H: Hypervisor, S: Screen> MultiThreadBase for CpuManager<H, S> {
         data: &mut [u8],
         tid: Tid,
     ) -> TargetResult<usize, Self> {
+        let mut _cpu = self.get_cpu(tid)?;
+
         todo!()
     }
 
     fn write_addrs(&mut self, start_addr: u64, data: &[u8], tid: Tid) -> TargetResult<(), Self> {
+        let mut _cpu = self.get_cpu(tid)?;
+
         todo!()
     }
 
