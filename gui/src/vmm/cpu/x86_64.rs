@@ -9,10 +9,11 @@ use gdbstub::target::ext::breakpoints::{
     Breakpoints, BreakpointsOps, SwBreakpoint, SwBreakpointOps,
 };
 use gdbstub::target::ext::thread_extra_info::{ThreadExtraInfo, ThreadExtraInfoOps};
-use gdbstub::target::TargetResult;
+use gdbstub::target::{TargetError as GdbTargetError, TargetResult};
 use gdbstub_arch::x86::reg::X86_64CoreRegs;
 use gdbstub_arch::x86::X86_64_SSE;
 use std::num::NonZero;
+use std::ops::Deref;
 use thiserror::Error;
 
 pub type GdbRegs = gdbstub_arch::x86::reg::X86_64CoreRegs;
@@ -32,7 +33,19 @@ impl<H: Hypervisor, S: Screen> gdbstub::target::Target for CpuManager<H, S> {
 
 impl<H: Hypervisor, S: Screen> MultiThreadBase for CpuManager<H, S> {
     fn read_registers(&mut self, regs: &mut X86_64CoreRegs, tid: Tid) -> TargetResult<(), Self> {
-        todo!()
+        let mut cpu = self
+            .cpus
+            .get_mut(tid.get() as usize - 1)
+            .ok_or(GdbTargetError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                TargetError::CpuNotFound(tid),
+            )))?;
+
+        let current_regs = cpu.debug_mut().unwrap().lock();
+
+        *regs = current_regs.clone();
+
+        Ok(())
     }
 
     fn write_registers(&mut self, regs: &X86_64CoreRegs, tid: Tid) -> TargetResult<(), Self> {
@@ -97,4 +110,7 @@ impl<H: Hypervisor, S: Screen> ThreadExtraInfo for CpuManager<H, S> {
 
 /// Implementation of [`gdbstub::target::Target::Error`] for x86-64.
 #[derive(Debug, Error)]
-pub enum TargetError {}
+pub enum TargetError {
+    #[error("cpu not found for tid: {0}")]
+    CpuNotFound(Tid),
+}
