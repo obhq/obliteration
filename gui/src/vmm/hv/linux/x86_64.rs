@@ -276,19 +276,19 @@ impl<'a> CpuStates for KvmStates<'a> {
     }
 
     fn get_fiseg(&mut self) -> Result<u32, Self::Err> {
-        Ok((self.fregs.last_ip & 0xFFFFFFFF) as u32)
-    }
-
-    fn get_fioff(&mut self) -> Result<u32, Self::Err> {
         Ok(((self.fregs.last_ip >> 32) & 0xFFFF) as u32)
     }
 
+    fn get_fioff(&mut self) -> Result<u32, Self::Err> {
+        Ok((self.fregs.last_ip & 0xFFFFFFFF) as u32)
+    }
+
     fn get_foseg(&mut self) -> Result<u32, Self::Err> {
-        Ok((self.fregs.last_dp & 0xFFFFFFFF) as u32)
+        Ok(((self.fregs.last_dp >> 32) & 0xFFFF) as u32)
     }
 
     fn get_fooff(&mut self) -> Result<u32, Self::Err> {
-        Ok(((self.fregs.last_dp >> 32) & 0xFFFF) as u32)
+        Ok((self.fregs.last_dp & 0xFFFFFFFF) as u32)
     }
 
     fn get_fop(&mut self) -> Result<u32, Self::Err> {
