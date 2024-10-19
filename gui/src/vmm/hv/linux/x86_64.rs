@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use super::ffi::{KvmRegs, KVM_GET_REGS, KVM_SET_REGS};
+use super::ffi::{
+    KvmFpu, KvmRegs, KvmSregs, KVM_GET_FPU, KVM_GET_REGS, KVM_GET_SREGS, KVM_SET_REGS,
+};
 use crate::vmm::hv::{CpuCommit, CpuStates, Rflags};
 use libc::ioctl;
 use std::ffi::c_int;
@@ -12,8 +14,9 @@ pub struct KvmStates<'a> {
     cpu: &'a mut OwnedFd,
     gregs: KvmRegs,
     gdirty: bool,
-    sregs: SpecialRegs,
+    sregs: KvmSregs,
     sdirty: bool,
+    fregs: KvmFpu,
 }
 
 impl<'a> KvmStates<'a> {
@@ -22,7 +25,7 @@ impl<'a> KvmStates<'a> {
 
         // Load general purpose registers.
         let mut gregs = MaybeUninit::uninit();
-        let gregs = if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_REGS, gregs.as_mut_ptr()) } < 0 {
+        let gregs = if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_REGS, gregs.as_mut_ptr()) < 0 } {
             return Err(StatesError::GetGRegsFailed(Error::last_os_error()));
         } else {
             unsafe { gregs.assume_init() }
@@ -30,9 +33,18 @@ impl<'a> KvmStates<'a> {
 
         // Get special registers.
         let mut sregs = MaybeUninit::uninit();
-        let sregs = match unsafe { kvm_get_sregs(cpu.as_raw_fd(), sregs.as_mut_ptr()) } {
-            0 => unsafe { sregs.assume_init() },
-            _ => return Err(StatesError::GetSRegsFailed(Error::last_os_error())),
+        let sregs = if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_SREGS, sregs.as_mut_ptr()) < 0 } {
+            return Err(StatesError::GetSRegsFailed(Error::last_os_error()));
+        } else {
+            unsafe { sregs.assume_init() }
+        };
+
+        // Get FPU registers.
+        let mut fregs = MaybeUninit::uninit();
+        let fregs = if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_FPU, fregs.as_mut_ptr()) < 0 } {
+            return Err(StatesError::GetFRegsFailed(Error::last_os_error()));
+        } else {
+            unsafe { fregs.assume_init() }
         };
 
         Ok(KvmStates {
@@ -41,6 +53,7 @@ impl<'a> KvmStates<'a> {
             gdirty: false,
             sregs,
             sdirty: false,
+            fregs,
         })
     }
 }
@@ -137,17 +150,17 @@ impl<'a> CpuStates for KvmStates<'a> {
     }
 
     fn set_cr0(&mut self, v: usize) {
-        self.sregs.cr0 = v;
+        self.sregs.cr0 = v.try_into().unwrap();
         self.sdirty = true;
     }
 
     fn set_cr3(&mut self, v: usize) {
-        self.sregs.cr3 = v;
+        self.sregs.cr3 = v.try_into().unwrap();
         self.sdirty = true;
     }
 
     fn set_cr4(&mut self, v: usize) {
-        self.sregs.cr4 = v;
+        self.sregs.cr4 = v.try_into().unwrap();
         self.sdirty = true;
     }
 
@@ -156,7 +169,7 @@ impl<'a> CpuStates for KvmStates<'a> {
     }
 
     fn set_efer(&mut self, v: usize) {
-        self.sregs.efer = v;
+        self.sregs.efer = v.try_into().unwrap();
         self.sdirty = true;
     }
 
@@ -217,6 +230,38 @@ impl<'a> CpuStates for KvmStates<'a> {
         self.sregs.ss.present = p.into();
         self.sdirty = true;
     }
+
+    fn get_st0(&mut self) -> Result<[u8; 10], Self::Err> {
+        Ok(self.fregs.fpr[0][..10].try_into().unwrap())
+    }
+
+    fn get_st1(&mut self) -> Result<[u8; 10], Self::Err> {
+        Ok(self.fregs.fpr[1][..10].try_into().unwrap())
+    }
+
+    fn get_st2(&mut self) -> Result<[u8; 10], Self::Err> {
+        Ok(self.fregs.fpr[2][..10].try_into().unwrap())
+    }
+
+    fn get_st3(&mut self) -> Result<[u8; 10], Self::Err> {
+        Ok(self.fregs.fpr[3][..10].try_into().unwrap())
+    }
+
+    fn get_st4(&mut self) -> Result<[u8; 10], Self::Err> {
+        Ok(self.fregs.fpr[4][..10].try_into().unwrap())
+    }
+
+    fn get_st5(&mut self) -> Result<[u8; 10], Self::Err> {
+        Ok(self.fregs.fpr[5][..10].try_into().unwrap())
+    }
+
+    fn get_st6(&mut self) -> Result<[u8; 10], Self::Err> {
+        Ok(self.fregs.fpr[6][..10].try_into().unwrap())
+    }
+
+    fn get_st7(&mut self) -> Result<[u8; 10], Self::Err> {
+        Ok(self.fregs.fpr[7][..10].try_into().unwrap())
+    }
 }
 
 impl<'a> CpuCommit for KvmStates<'a> {
@@ -237,55 +282,6 @@ impl<'a> CpuCommit for KvmStates<'a> {
     }
 }
 
-/// Implementation of `kvm_sregs` structure.
-#[repr(C)]
-struct SpecialRegs {
-    pub cs: Segment,
-    pub ds: Segment,
-    pub es: Segment,
-    pub fs: Segment,
-    pub gs: Segment,
-    pub ss: Segment,
-    pub tr: Segment,
-    pub ldt: Segment,
-    pub gdt: DTable,
-    pub idt: DTable,
-    pub cr0: usize,
-    pub cr2: u64,
-    pub cr3: usize,
-    pub cr4: usize,
-    pub cr8: u64,
-    pub efer: usize,
-    pub apic_base: u64,
-    pub interrupt_bitmap: [u64; 4],
-}
-
-/// Implementation of `kvm_segment` structure.
-#[repr(C)]
-pub struct Segment {
-    pub base: u64,
-    pub limit: u32,
-    pub selector: u16,
-    pub ty: u8,
-    pub present: u8,
-    pub dpl: u8,
-    pub db: u8,
-    pub s: u8,
-    pub l: u8,
-    pub g: u8,
-    pub avl: u8,
-    pub unusable: u8,
-    pub padding: u8,
-}
-
-/// Implementation of `kvm_dtable` structure.
-#[repr(C)]
-struct DTable {
-    base: u64,
-    limit: u16,
-    padding: [u16; 3],
-}
-
 /// Implementation of [`CpuStates::Err`].
 #[derive(Debug, Error)]
 pub enum StatesError {
@@ -295,6 +291,9 @@ pub enum StatesError {
     #[error("couldn't get special registers")]
     GetSRegsFailed(#[source] std::io::Error),
 
+    #[error("couldn't get floating point registers")]
+    GetFRegsFailed(#[source] std::io::Error),
+
     #[error("couldn't set general purpose registers")]
     SetGRegsFailed(#[source] std::io::Error),
 
@@ -303,6 +302,5 @@ pub enum StatesError {
 }
 
 extern "C" {
-    fn kvm_get_sregs(vcpu: c_int, regs: *mut SpecialRegs) -> c_int;
-    fn kvm_set_sregs(vcpu: c_int, regs: *const SpecialRegs) -> c_int;
+    fn kvm_set_sregs(vcpu: c_int, regs: *const KvmSregs) -> c_int;
 }

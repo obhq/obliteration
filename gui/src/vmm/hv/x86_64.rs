@@ -44,6 +44,14 @@ pub trait CpuStates {
     fn set_gs(&mut self, p: bool);
     fn get_ss(&mut self) -> Result<u16, Self::Err>;
     fn set_ss(&mut self, p: bool);
+    fn get_st0(&mut self) -> Result<[u8; 10], Self::Err>;
+    fn get_st1(&mut self) -> Result<[u8; 10], Self::Err>;
+    fn get_st2(&mut self) -> Result<[u8; 10], Self::Err>;
+    fn get_st3(&mut self) -> Result<[u8; 10], Self::Err>;
+    fn get_st4(&mut self) -> Result<[u8; 10], Self::Err>;
+    fn get_st5(&mut self) -> Result<[u8; 10], Self::Err>;
+    fn get_st6(&mut self) -> Result<[u8; 10], Self::Err>;
+    fn get_st7(&mut self) -> Result<[u8; 10], Self::Err>;
 }
 
 /// Features available on a CPU.

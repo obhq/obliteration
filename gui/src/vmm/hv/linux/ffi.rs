@@ -11,6 +11,10 @@ pub const KVM_RUN: c_ulong = _IO(KVMIO, 0x80);
 pub const KVM_GET_REGS: c_ulong = _IOR::<KvmRegs>(KVMIO, 0x81);
 #[cfg(not(target_arch = "aarch64"))]
 pub const KVM_SET_REGS: c_ulong = _IOW::<KvmRegs>(KVMIO, 0x82);
+#[cfg(target_arch = "x86_64")]
+pub const KVM_GET_SREGS: c_ulong = _IOR::<KvmSregs>(KVMIO, 0x83);
+#[cfg(target_arch = "x86_64")]
+pub const KVM_GET_FPU: c_ulong = _IOR::<KvmFpu>(KVMIO, 0x8c);
 pub const KVM_SET_GUEST_DEBUG: c_ulong = _IOW::<KvmGuestDebug>(KVMIO, 0x9b);
 #[cfg(target_arch = "aarch64")]
 pub const KVM_GET_ONE_REG: c_ulong = _IOW::<KvmOneReg<()>>(KVMIO, 0xab);
@@ -22,6 +26,7 @@ pub const KVM_ARM_VCPU_INIT: c_ulong = _IOW::<KvmVcpuInit>(KVMIO, 0xae);
 pub const KVM_ARM_PREFERRED_TARGET: c_ulong = _IOR::<KvmVcpuInit>(KVMIO, 0xaf);
 
 pub const KVM_API_VERSION: c_int = 12;
+pub const KVM_NR_INTERRUPTS: usize = 256;
 
 pub const KVM_CAP_SET_GUEST_DEBUG: c_int = 23;
 pub const KVM_CAP_MAX_VCPUS: c_int = 66;
@@ -121,6 +126,71 @@ pub struct KvmRegs {
     pub r15: u64,
     pub rip: u64,
     pub rflags: u64,
+}
+
+#[cfg(target_arch = "x86_64")]
+#[repr(C)]
+pub struct KvmSregs {
+    pub cs: KvmSegment,
+    pub ds: KvmSegment,
+    pub es: KvmSegment,
+    pub fs: KvmSegment,
+    pub gs: KvmSegment,
+    pub ss: KvmSegment,
+    pub tr: KvmSegment,
+    pub ldt: KvmSegment,
+    pub gdt: KvmDtable,
+    pub idt: KvmDtable,
+    pub cr0: u64,
+    pub cr2: u64,
+    pub cr3: u64,
+    pub cr4: u64,
+    pub cr8: u64,
+    pub efer: u64,
+    pub apic_base: u64,
+    pub interrupt_bitmap: [u64; (KVM_NR_INTERRUPTS + 63) / 64],
+}
+
+#[cfg(target_arch = "x86_64")]
+#[repr(C)]
+pub struct KvmSegment {
+    pub base: u64,
+    pub limit: u32,
+    pub selector: u16,
+    pub ty: u8,
+    pub present: u8,
+    pub dpl: u8,
+    pub db: u8,
+    pub s: u8,
+    pub l: u8,
+    pub g: u8,
+    pub avl: u8,
+    pub unusable: u8,
+    pub padding: u8,
+}
+
+#[cfg(target_arch = "x86_64")]
+#[repr(C)]
+pub struct KvmDtable {
+    pub base: u64,
+    pub limit: u16,
+    pub padding: [u16; 3],
+}
+
+#[cfg(target_arch = "x86_64")]
+#[repr(C)]
+pub struct KvmFpu {
+    pub fpr: [[u8; 16]; 8],
+    pub fcw: u16,
+    pub fsw: u16,
+    pub ftwx: u8,
+    pub pad1: u8,
+    pub last_opcode: u16,
+    pub last_ip: u64,
+    pub last_dp: u64,
+    pub xmm: [[u8; 16]; 16],
+    pub mxcsr: u32,
+    pub pad2: u32,
 }
 
 #[repr(C)]
