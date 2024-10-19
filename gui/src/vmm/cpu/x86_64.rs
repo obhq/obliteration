@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+use super::controller::CpuController;
 use super::CpuManager;
 use crate::vmm::hv::Hypervisor;
 use crate::vmm::screen::Screen;
@@ -14,7 +15,6 @@ use gdbstub_arch::x86::reg::X86_64CoreRegs;
 use gdbstub_arch::x86::X86_64_SSE;
 use std::num::NonZero;
 use thiserror::Error;
-use super::controller::CpuController;
 
 pub type GdbRegs = gdbstub_arch::x86::reg::X86_64CoreRegs;
 
