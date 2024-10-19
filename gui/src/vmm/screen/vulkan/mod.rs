@@ -120,7 +120,7 @@ impl Screen for Vulkan {
     }
 
     fn update(&mut self) -> Result<(), Self::UpdateErr> {
-        todo!()
+        Ok(())
     }
 }
 

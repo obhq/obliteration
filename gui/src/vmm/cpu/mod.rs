@@ -271,7 +271,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
 
     #[cfg(target_arch = "x86_64")]
     fn get_debug_regs<C: CpuStates>(states: &mut C) -> Result<GdbRegs, RustError> {
-        use gdbstub_arch::x86::reg::X86SegmentRegs;
+        use gdbstub_arch::x86::reg::{X86SegmentRegs, X87FpuInternalRegs};
 
         let error = |n: &str, e: C::Err| RustError::with_source(format!("couldn't get {n}"), e);
         let mut load_greg = |name: &str, func: fn(&mut C) -> Result<usize, C::Err>| {
@@ -322,8 +322,34 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                 states.get_st6().map_err(|e| error("st6", e))?,
                 states.get_st7().map_err(|e| error("st7", e))?,
             ],
-            fpu: todo!(),
-            xmm: todo!(),
+            fpu: X87FpuInternalRegs {
+                fctrl: states.get_fcw().map_err(|e| error("fcw", e))?,
+                fstat: states.get_fsw().map_err(|e| error("fsw", e))?,
+                ftag: states.get_ftwx().map_err(|e| error("ftwx", e))?,
+                fiseg: states.get_fiseg().map_err(|e| error("fiseg", e))?,
+                fioff: states.get_fioff().map_err(|e| error("fioff", e))?,
+                foseg: states.get_fiseg().map_err(|e| error("foseg", e))?,
+                fooff: states.get_fioff().map_err(|e| error("fooff", e))?,
+                fop: states.get_fop().map_err(|e| error("fop", e))?,
+            },
+            xmm: [
+                states.get_xmm0().map_err(|e| error("xmm0", e))?,
+                states.get_xmm1().map_err(|e| error("xmm1", e))?,
+                states.get_xmm2().map_err(|e| error("xmm2", e))?,
+                states.get_xmm3().map_err(|e| error("xmm3", e))?,
+                states.get_xmm4().map_err(|e| error("xmm4", e))?,
+                states.get_xmm5().map_err(|e| error("xmm5", e))?,
+                states.get_xmm6().map_err(|e| error("xmm6", e))?,
+                states.get_xmm7().map_err(|e| error("xmm7", e))?,
+                states.get_xmm8().map_err(|e| error("xmm8", e))?,
+                states.get_xmm9().map_err(|e| error("xmm9", e))?,
+                states.get_xmm10().map_err(|e| error("xmm10", e))?,
+                states.get_xmm11().map_err(|e| error("xmm11", e))?,
+                states.get_xmm12().map_err(|e| error("xmm12", e))?,
+                states.get_xmm13().map_err(|e| error("xmm13", e))?,
+                states.get_xmm14().map_err(|e| error("xmm14", e))?,
+                states.get_xmm15().map_err(|e| error("xmm15", e))?,
+            ],
             mxcsr: todo!(),
         })
     }

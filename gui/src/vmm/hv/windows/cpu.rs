@@ -356,6 +356,102 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
     fn get_st7(&mut self) -> Result<[u8; 10], Self::Err> {
         todo!()
     }
+
+    fn get_fcw(&mut self) -> Result<u32, Self::Err> {
+        todo!()
+    }
+
+    fn get_fsw(&mut self) -> Result<u32, Self::Err> {
+        todo!()
+    }
+
+    fn get_ftwx(&mut self) -> Result<u32, Self::Err> {
+        todo!()
+    }
+
+    fn get_fiseg(&mut self) -> Result<u32, Self::Err> {
+        todo!()
+    }
+
+    fn get_fioff(&mut self) -> Result<u32, Self::Err> {
+        todo!()
+    }
+
+    fn get_foseg(&mut self) -> Result<u32, Self::Err> {
+        todo!()
+    }
+
+    fn get_fooff(&mut self) -> Result<u32, Self::Err> {
+        todo!()
+    }
+
+    fn get_fop(&mut self) -> Result<u32, Self::Err> {
+        todo!()
+    }
+
+    fn get_xmm0(&mut self) -> Result<u128, Self::Err> {
+        todo!()
+    }
+
+    fn get_xmm1(&mut self) -> Result<u128, Self::Err> {
+        todo!()
+    }
+
+    fn get_xmm2(&mut self) -> Result<u128, Self::Err> {
+        todo!()
+    }
+
+    fn get_xmm3(&mut self) -> Result<u128, Self::Err> {
+        todo!()
+    }
+
+    fn get_xmm4(&mut self) -> Result<u128, Self::Err> {
+        todo!()
+    }
+
+    fn get_xmm5(&mut self) -> Result<u128, Self::Err> {
+        todo!()
+    }
+
+    fn get_xmm6(&mut self) -> Result<u128, Self::Err> {
+        todo!()
+    }
+
+    fn get_xmm7(&mut self) -> Result<u128, Self::Err> {
+        todo!()
+    }
+
+    fn get_xmm8(&mut self) -> Result<u128, Self::Err> {
+        todo!()
+    }
+
+    fn get_xmm9(&mut self) -> Result<u128, Self::Err> {
+        todo!()
+    }
+
+    fn get_xmm10(&mut self) -> Result<u128, Self::Err> {
+        todo!()
+    }
+
+    fn get_xmm11(&mut self) -> Result<u128, Self::Err> {
+        todo!()
+    }
+
+    fn get_xmm12(&mut self) -> Result<u128, Self::Err> {
+        todo!()
+    }
+
+    fn get_xmm13(&mut self) -> Result<u128, Self::Err> {
+        todo!()
+    }
+
+    fn get_xmm14(&mut self) -> Result<u128, Self::Err> {
+        todo!()
+    }
+
+    fn get_xmm15(&mut self) -> Result<u128, Self::Err> {
+        todo!()
+    }
 }
 
 impl<'a, 'b> CpuCommit for WhpStates<'a, 'b> {
