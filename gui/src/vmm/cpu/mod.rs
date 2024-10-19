@@ -350,7 +350,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                 states.get_xmm14().map_err(|e| error("xmm14", e))?,
                 states.get_xmm15().map_err(|e| error("xmm15", e))?,
             ],
-            mxcsr: todo!(),
+            mxcsr: states.get_mxcsr().map_err(|e| error("mxcsr", e))?,
         })
     }
 

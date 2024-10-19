@@ -358,6 +358,10 @@ impl<'a> CpuStates for KvmStates<'a> {
     fn get_xmm15(&mut self) -> Result<u128, Self::Err> {
         Ok(u128::from_le_bytes(self.fregs.xmm[15]))
     }
+
+    fn get_mxcsr(&mut self) -> Result<u32, Self::Err> {
+        Ok(self.fregs.mxcsr.into())
+    }
 }
 
 impl<'a> CpuCommit for KvmStates<'a> {

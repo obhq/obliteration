@@ -458,6 +458,10 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
     fn get_xmm15(&mut self) -> Result<u128, Self::Err> {
         todo!()
     }
+
+    fn get_mxcsr(&mut self) -> Result<u32, Self::Err> {
+        todo!()
+    }
 }
 
 impl<'a, 'b> CpuCommit for WhpStates<'a, 'b> {
