@@ -6,6 +6,7 @@ pub const KVM_CHECK_EXTENSION: c_ulong = _IO(KVMIO, 0x03);
 pub const KVM_GET_VCPU_MMAP_SIZE: c_ulong = _IO(KVMIO, 0x04);
 pub const KVM_CREATE_VCPU: c_ulong = _IO(KVMIO, 0x41);
 pub const KVM_SET_USER_MEMORY_REGION: c_ulong = _IOW::<KvmUserspaceMemoryRegion>(KVMIO, 0x46);
+pub const KVM_RUN: c_ulong = _IO(KVMIO, 0x80);
 pub const KVM_SET_GUEST_DEBUG: c_ulong = _IOW::<KvmGuestDebug>(KVMIO, 0x9b);
 #[cfg(target_arch = "aarch64")]
 pub const KVM_GET_ONE_REG: c_ulong = _IOW::<KvmOneReg<()>>(KVMIO, 0xab);
@@ -120,8 +121,4 @@ pub struct KvmOneReg<'a, T> {
 pub struct KvmVcpuInit {
     pub target: u32,
     pub features: [u32; 7],
-}
-
-extern "C" {
-    pub fn kvm_run(vcpu: c_int) -> c_int;
 }

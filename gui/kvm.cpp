@@ -9,11 +9,6 @@
 #include <stdint.h>
 #include <string.h>
 
-extern "C" int kvm_run(int vcpu)
-{
-    return ioctl(vcpu, KVM_RUN, 0);
-}
-
 #ifndef __aarch64__
 extern "C" int kvm_get_regs(int vcpu, kvm_regs *regs)
 {

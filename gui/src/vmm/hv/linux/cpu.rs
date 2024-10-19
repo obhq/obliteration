@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::arch::{KvmStates, StatesError};
-use super::ffi::{kvm_run, KVM_EXIT_DEBUG};
+use super::ffi::{KVM_EXIT_DEBUG, KVM_RUN};
 use super::run::KvmRun;
 use crate::vmm::hv::{Cpu, CpuDebug, CpuExit, CpuIo, CpuRun, IoBuf};
-use libc::munmap;
+use libc::{ioctl, munmap};
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::sync::MutexGuard;
 
@@ -48,9 +48,10 @@ impl<'a> CpuRun for KvmCpu<'a> {
     type RunErr = std::io::Error;
 
     fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr> {
-        match unsafe { kvm_run(self.fd.as_raw_fd()) } {
-            0 => Ok(KvmExit(self)),
-            _ => Err(std::io::Error::last_os_error()),
+        if unsafe { ioctl(self.fd.as_raw_fd(), KVM_RUN, 0) } < 0 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(KvmExit(self))
         }
     }
 }

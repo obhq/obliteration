@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use crate::vmm::hv::{CpuCommit, CpuStates};
+use crate::vmm::hv::{CpuCommit, CpuStates, Rflags};
 use std::ffi::c_int;
 use std::mem::MaybeUninit;
 use std::os::fd::{AsRawFd, OwnedFd};
@@ -142,6 +142,10 @@ impl<'a> CpuStates for KvmStates<'a> {
     fn set_cr4(&mut self, v: usize) {
         self.sregs.cr4 = v;
         self.sdirty = true;
+    }
+
+    fn get_rflags(&mut self) -> Result<Rflags, Self::Err> {
+        Ok(self.gregs.rflags.into())
     }
 
     fn set_efer(&mut self, v: usize) {
