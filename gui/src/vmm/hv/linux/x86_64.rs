@@ -160,6 +160,10 @@ impl<'a> CpuStates for KvmStates<'a> {
         self.sdirty = true;
     }
 
+    fn get_cs(&mut self) -> Result<u16, Self::Err> {
+        Ok(self.sregs.cs.selector)
+    }
+
     fn set_cs(&mut self, ty: u8, dpl: u8, p: bool, l: bool, d: bool) {
         self.sregs.cs.ty = ty;
         self.sregs.cs.dpl = dpl;
@@ -169,9 +173,17 @@ impl<'a> CpuStates for KvmStates<'a> {
         self.sdirty = true;
     }
 
+    fn get_ds(&mut self) -> Result<u16, Self::Err> {
+        Ok(self.sregs.ds.selector)
+    }
+
     fn set_ds(&mut self, p: bool) {
         self.sregs.ds.present = p.into();
         self.sdirty = true;
+    }
+
+    fn get_es(&mut self) -> Result<u16, Self::Err> {
+        Ok(self.sregs.es.selector)
     }
 
     fn set_es(&mut self, p: bool) {
@@ -179,14 +191,26 @@ impl<'a> CpuStates for KvmStates<'a> {
         self.sdirty = true;
     }
 
+    fn get_fs(&mut self) -> Result<u16, Self::Err> {
+        Ok(self.sregs.fs.selector)
+    }
+
     fn set_fs(&mut self, p: bool) {
         self.sregs.fs.present = p.into();
         self.sdirty = true;
     }
 
+    fn get_gs(&mut self) -> Result<u16, Self::Err> {
+        Ok(self.sregs.gs.selector)
+    }
+
     fn set_gs(&mut self, p: bool) {
         self.sregs.gs.present = p.into();
         self.sdirty = true;
+    }
+
+    fn get_ss(&mut self) -> Result<u16, Self::Err> {
+        Ok(self.sregs.ss.selector)
     }
 
     fn set_ss(&mut self, p: bool) {
