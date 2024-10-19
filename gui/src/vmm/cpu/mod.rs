@@ -296,11 +296,11 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                 load("r14", |s| s.get_r14())?,
                 load("r15", |s| s.get_r15())?,
             ],
+            rip: load("rip", |s| s.get_rip())?,
             eflags: states
                 .get_rflags()
                 .map(|v| v.into_bits().try_into().unwrap())
                 .map_err(|e| RustError::with_source("couldn't get rflags", e))?,
-            rip: todo!(),
             segments: todo!(),
             st: todo!(),
             fpu: todo!(),

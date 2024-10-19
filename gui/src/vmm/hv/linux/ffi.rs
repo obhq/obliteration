@@ -7,6 +7,10 @@ pub const KVM_GET_VCPU_MMAP_SIZE: c_ulong = _IO(KVMIO, 0x04);
 pub const KVM_CREATE_VCPU: c_ulong = _IO(KVMIO, 0x41);
 pub const KVM_SET_USER_MEMORY_REGION: c_ulong = _IOW::<KvmUserspaceMemoryRegion>(KVMIO, 0x46);
 pub const KVM_RUN: c_ulong = _IO(KVMIO, 0x80);
+#[cfg(not(target_arch = "aarch64"))]
+pub const KVM_GET_REGS: c_ulong = _IOR::<KvmRegs>(KVMIO, 0x81);
+#[cfg(not(target_arch = "aarch64"))]
+pub const KVM_SET_REGS: c_ulong = _IOW::<KvmRegs>(KVMIO, 0x82);
 pub const KVM_SET_GUEST_DEBUG: c_ulong = _IOW::<KvmGuestDebug>(KVMIO, 0x9b);
 #[cfg(target_arch = "aarch64")]
 pub const KVM_GET_ONE_REG: c_ulong = _IOW::<KvmOneReg<()>>(KVMIO, 0xab);
@@ -94,6 +98,29 @@ pub struct KvmUserspaceMemoryRegion {
     pub guest_phys_addr: u64,
     pub memory_size: u64,
     pub userspace_addr: u64,
+}
+
+#[cfg(target_arch = "x86_64")]
+#[repr(C)]
+pub struct KvmRegs {
+    pub rax: u64,
+    pub rbx: u64,
+    pub rcx: u64,
+    pub rdx: u64,
+    pub rsi: u64,
+    pub rdi: u64,
+    pub rsp: u64,
+    pub rbp: u64,
+    pub r8: u64,
+    pub r9: u64,
+    pub r10: u64,
+    pub r11: u64,
+    pub r12: u64,
+    pub r13: u64,
+    pub r14: u64,
+    pub r15: u64,
+    pub rip: u64,
+    pub rflags: u64,
 }
 
 #[repr(C)]

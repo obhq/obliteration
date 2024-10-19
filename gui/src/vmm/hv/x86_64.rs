@@ -25,6 +25,7 @@ pub trait CpuStates {
     fn set_rsi(&mut self, v: usize);
     fn get_rsp(&mut self) -> Result<usize, Self::Err>;
     fn set_rsp(&mut self, v: usize);
+    fn get_rip(&mut self) -> Result<usize, Self::Err>;
     fn set_rip(&mut self, v: usize);
     fn set_cr0(&mut self, v: usize);
     fn set_cr3(&mut self, v: usize);
