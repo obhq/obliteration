@@ -32,11 +32,17 @@ pub trait CpuStates {
     fn set_cr4(&mut self, v: usize);
     fn get_rflags(&mut self) -> Result<Rflags, Self::Err>;
     fn set_efer(&mut self, v: usize);
+    fn get_cs(&mut self) -> Result<u16, Self::Err>;
     fn set_cs(&mut self, ty: u8, dpl: u8, p: bool, l: bool, d: bool);
+    fn get_ds(&mut self) -> Result<u16, Self::Err>;
     fn set_ds(&mut self, p: bool);
+    fn get_es(&mut self) -> Result<u16, Self::Err>;
     fn set_es(&mut self, p: bool);
+    fn get_fs(&mut self) -> Result<u16, Self::Err>;
     fn set_fs(&mut self, p: bool);
+    fn get_gs(&mut self) -> Result<u16, Self::Err>;
     fn set_gs(&mut self, p: bool);
+    fn get_ss(&mut self) -> Result<u16, Self::Err>;
     fn set_ss(&mut self, p: bool);
 }
 

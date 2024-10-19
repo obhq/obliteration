@@ -271,37 +271,47 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
 
     #[cfg(target_arch = "x86_64")]
     fn get_debug_regs<C: CpuStates>(states: &mut C) -> Result<GdbRegs, RustError> {
-        let mut load = |name: &str, func: fn(&mut C) -> Result<usize, C::Err>| {
+        use gdbstub_arch::x86::reg::X86SegmentRegs;
+
+        let error = |n: &str, e: C::Err| RustError::with_source(format!("couldn't get {n}"), e);
+        let mut load_greg = |name: &str, func: fn(&mut C) -> Result<usize, C::Err>| {
             func(states)
                 .map(|v| TryInto::<u64>::try_into(v).unwrap())
-                .map_err(|e| RustError::with_source(format_args!("couldn't get {name}"), e))
+                .map_err(|e| error(name, e))
         };
 
         Ok(GdbRegs {
             regs: [
-                load("rax", |s| s.get_rax())?,
-                load("rbx", |s| s.get_rbx())?,
-                load("rcx", |s| s.get_rcx())?,
-                load("rdx", |s| s.get_rdx())?,
-                load("rsi", |s| s.get_rsi())?,
-                load("rdi", |s| s.get_rdi())?,
-                load("rbp", |s| s.get_rbp())?,
-                load("rsp", |s| s.get_rsp())?,
-                load("r8", |s| s.get_r8())?,
-                load("r9", |s| s.get_r9())?,
-                load("r10", |s| s.get_r10())?,
-                load("r11", |s| s.get_r11())?,
-                load("r12", |s| s.get_r12())?,
-                load("r13", |s| s.get_r13())?,
-                load("r14", |s| s.get_r14())?,
-                load("r15", |s| s.get_r15())?,
+                load_greg("rax", |s| s.get_rax())?,
+                load_greg("rbx", |s| s.get_rbx())?,
+                load_greg("rcx", |s| s.get_rcx())?,
+                load_greg("rdx", |s| s.get_rdx())?,
+                load_greg("rsi", |s| s.get_rsi())?,
+                load_greg("rdi", |s| s.get_rdi())?,
+                load_greg("rbp", |s| s.get_rbp())?,
+                load_greg("rsp", |s| s.get_rsp())?,
+                load_greg("r8", |s| s.get_r8())?,
+                load_greg("r9", |s| s.get_r9())?,
+                load_greg("r10", |s| s.get_r10())?,
+                load_greg("r11", |s| s.get_r11())?,
+                load_greg("r12", |s| s.get_r12())?,
+                load_greg("r13", |s| s.get_r13())?,
+                load_greg("r14", |s| s.get_r14())?,
+                load_greg("r15", |s| s.get_r15())?,
             ],
-            rip: load("rip", |s| s.get_rip())?,
+            rip: load_greg("rip", |s| s.get_rip())?,
             eflags: states
                 .get_rflags()
                 .map(|v| v.into_bits().try_into().unwrap())
-                .map_err(|e| RustError::with_source("couldn't get rflags", e))?,
-            segments: todo!(),
+                .map_err(|e| error("rflags", e))?,
+            segments: X86SegmentRegs {
+                cs: states.get_cs().map_err(|e| error("cs", e))?.into(),
+                ss: states.get_ss().map_err(|e| error("ss", e))?.into(),
+                ds: states.get_ds().map_err(|e| error("ds", e))?.into(),
+                es: states.get_es().map_err(|e| error("es", e))?.into(),
+                fs: states.get_fs().map_err(|e| error("fs", e))?.into(),
+                gs: states.get_gs().map_err(|e| error("gs", e))?.into(),
+            },
             st: todo!(),
             fpu: todo!(),
             xmm: todo!(),

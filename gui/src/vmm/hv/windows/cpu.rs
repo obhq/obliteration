@@ -234,6 +234,10 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
         self.dirty = true;
     }
 
+    fn get_cs(&mut self) -> Result<u16, Self::Err> {
+        todo!()
+    }
+
     fn set_cs(&mut self, ty: u8, dpl: u8, p: bool, l: bool, d: bool) {
         // Rust binding does not provides a way to set bit fields so we need to do this manually.
         // See https://learn.microsoft.com/en-us/virtualization/api/hypervisor-platform/funcs/whvvirtualprocessordatatypes
@@ -256,6 +260,10 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
         self.dirty = true;
     }
 
+    fn get_ds(&mut self) -> Result<u16, Self::Err> {
+        todo!()
+    }
+
     fn set_ds(&mut self, p: bool) {
         let v = unsafe { &mut self.values[7].Segment.Anonymous.Attributes };
         let p: u16 = p.into();
@@ -263,6 +271,10 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
         *v = p << 7;
 
         self.dirty = true;
+    }
+
+    fn get_es(&mut self) -> Result<u16, Self::Err> {
+        todo!()
     }
 
     fn set_es(&mut self, p: bool) {
@@ -274,6 +286,10 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
         self.dirty = true;
     }
 
+    fn get_fs(&mut self) -> Result<u16, Self::Err> {
+        todo!()
+    }
+
     fn set_fs(&mut self, p: bool) {
         let v = unsafe { &mut self.values[9].Segment.Anonymous.Attributes };
         let p: u16 = p.into();
@@ -283,6 +299,10 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
         self.dirty = true;
     }
 
+    fn get_gs(&mut self) -> Result<u16, Self::Err> {
+        todo!()
+    }
+
     fn set_gs(&mut self, p: bool) {
         let v = unsafe { &mut self.values[10].Segment.Anonymous.Attributes };
         let p: u16 = p.into();
@@ -290,6 +310,10 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
         *v = p << 7;
 
         self.dirty = true;
+    }
+
+    fn get_ss(&mut self) -> Result<u16, Self::Err> {
+        todo!()
     }
 
     fn set_ss(&mut self, p: bool) {
