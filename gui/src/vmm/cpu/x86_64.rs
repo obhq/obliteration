@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+use super::controller::CpuController;
 use super::CpuManager;
 use crate::vmm::hv::Hypervisor;
 use crate::vmm::screen::Screen;
@@ -9,13 +10,26 @@ use gdbstub::target::ext::breakpoints::{
     Breakpoints, BreakpointsOps, SwBreakpoint, SwBreakpointOps,
 };
 use gdbstub::target::ext::thread_extra_info::{ThreadExtraInfo, ThreadExtraInfoOps};
-use gdbstub::target::TargetResult;
+use gdbstub::target::{TargetError as GdbTargetError, TargetResult};
 use gdbstub_arch::x86::reg::X86_64CoreRegs;
 use gdbstub_arch::x86::X86_64_SSE;
 use std::num::NonZero;
 use thiserror::Error;
 
+const ENOENT: u8 = 2;
+
 pub type GdbRegs = gdbstub_arch::x86::reg::X86_64CoreRegs;
+
+impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
+    fn get_cpu(&mut self, tid: Tid) -> TargetResult<&mut CpuController, Self> {
+        let cpu = self
+            .cpus
+            .get_mut(tid.get() as usize - 1)
+            .ok_or(GdbTargetError::Errno(ENOENT))?;
+
+        Ok(cpu)
+    }
+}
 
 impl<H: Hypervisor, S: Screen> gdbstub::target::Target for CpuManager<H, S> {
     type Arch = X86_64_SSE;
@@ -32,10 +46,18 @@ impl<H: Hypervisor, S: Screen> gdbstub::target::Target for CpuManager<H, S> {
 
 impl<H: Hypervisor, S: Screen> MultiThreadBase for CpuManager<H, S> {
     fn read_registers(&mut self, regs: &mut X86_64CoreRegs, tid: Tid) -> TargetResult<(), Self> {
-        todo!()
+        let mut cpu = self.get_cpu(tid)?;
+
+        let current_regs = cpu.debug_mut().unwrap().lock();
+
+        *regs = current_regs.clone();
+
+        Ok(())
     }
 
     fn write_registers(&mut self, regs: &X86_64CoreRegs, tid: Tid) -> TargetResult<(), Self> {
+        let mut _cpu = self.get_cpu(tid)?;
+
         todo!()
     }
 
@@ -45,10 +67,14 @@ impl<H: Hypervisor, S: Screen> MultiThreadBase for CpuManager<H, S> {
         data: &mut [u8],
         tid: Tid,
     ) -> TargetResult<usize, Self> {
+        let mut _cpu = self.get_cpu(tid)?;
+
         todo!()
     }
 
     fn write_addrs(&mut self, start_addr: u64, data: &[u8], tid: Tid) -> TargetResult<(), Self> {
+        let mut _cpu = self.get_cpu(tid)?;
+
         todo!()
     }
 
