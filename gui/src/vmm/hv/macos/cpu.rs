@@ -41,9 +41,15 @@ impl<'a> Drop for HvfCpu<'a> {
 }
 
 impl<'a> Cpu for HvfCpu<'a> {
-    type States<'b> = HvfStates<'b, 'a> where Self: 'b;
+    type States<'b>
+        = HvfStates<'b, 'a>
+    where
+        Self: 'b;
     type GetStatesErr = StatesError;
-    type Exit<'b> = HvfExit<'b, 'a> where Self: 'b;
+    type Exit<'b>
+        = HvfExit<'b, 'a>
+    where
+        Self: 'b;
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
         Ok(HvfStates {

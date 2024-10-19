@@ -27,6 +27,7 @@ pub trait CpuStates {
     fn set_rsp(&mut self, v: usize);
     fn get_rip(&mut self) -> Result<usize, Self::Err>;
     fn set_rip(&mut self, v: usize);
+
     fn set_cr0(&mut self, v: usize);
     fn set_cr3(&mut self, v: usize);
     fn set_cr4(&mut self, v: usize);
@@ -44,6 +45,7 @@ pub trait CpuStates {
     fn set_gs(&mut self, p: bool);
     fn get_ss(&mut self) -> Result<u16, Self::Err>;
     fn set_ss(&mut self, p: bool);
+
     fn get_st0(&mut self) -> Result<[u8; 10], Self::Err>;
     fn get_st1(&mut self) -> Result<[u8; 10], Self::Err>;
     fn get_st2(&mut self) -> Result<[u8; 10], Self::Err>;
@@ -52,6 +54,34 @@ pub trait CpuStates {
     fn get_st5(&mut self) -> Result<[u8; 10], Self::Err>;
     fn get_st6(&mut self) -> Result<[u8; 10], Self::Err>;
     fn get_st7(&mut self) -> Result<[u8; 10], Self::Err>;
+
+    fn get_fcw(&mut self) -> Result<u32, Self::Err>;
+    fn get_fsw(&mut self) -> Result<u32, Self::Err>;
+    fn get_ftwx(&mut self) -> Result<u32, Self::Err>;
+    fn get_fiseg(&mut self) -> Result<u32, Self::Err>;
+    fn get_fioff(&mut self) -> Result<u32, Self::Err>;
+    fn get_foseg(&mut self) -> Result<u32, Self::Err>;
+    fn get_fooff(&mut self) -> Result<u32, Self::Err>;
+    fn get_fop(&mut self) -> Result<u32, Self::Err>;
+
+    fn get_xmm0(&mut self) -> Result<u128, Self::Err>;
+    fn get_xmm1(&mut self) -> Result<u128, Self::Err>;
+    fn get_xmm2(&mut self) -> Result<u128, Self::Err>;
+    fn get_xmm3(&mut self) -> Result<u128, Self::Err>;
+    fn get_xmm4(&mut self) -> Result<u128, Self::Err>;
+    fn get_xmm5(&mut self) -> Result<u128, Self::Err>;
+    fn get_xmm6(&mut self) -> Result<u128, Self::Err>;
+    fn get_xmm7(&mut self) -> Result<u128, Self::Err>;
+    fn get_xmm8(&mut self) -> Result<u128, Self::Err>;
+    fn get_xmm9(&mut self) -> Result<u128, Self::Err>;
+    fn get_xmm10(&mut self) -> Result<u128, Self::Err>;
+    fn get_xmm11(&mut self) -> Result<u128, Self::Err>;
+    fn get_xmm12(&mut self) -> Result<u128, Self::Err>;
+    fn get_xmm13(&mut self) -> Result<u128, Self::Err>;
+    fn get_xmm14(&mut self) -> Result<u128, Self::Err>;
+    fn get_xmm15(&mut self) -> Result<u128, Self::Err>;
+
+    fn get_mxcsr(&mut self) -> Result<u32, Self::Err>;
 }
 
 /// Features available on a CPU.

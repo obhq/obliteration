@@ -262,6 +262,106 @@ impl<'a> CpuStates for KvmStates<'a> {
     fn get_st7(&mut self) -> Result<[u8; 10], Self::Err> {
         Ok(self.fregs.fpr[7][..10].try_into().unwrap())
     }
+
+    fn get_fcw(&mut self) -> Result<u32, Self::Err> {
+        Ok(self.fregs.fcw.into())
+    }
+
+    fn get_fsw(&mut self) -> Result<u32, Self::Err> {
+        Ok(self.fregs.fsw.into())
+    }
+
+    fn get_ftwx(&mut self) -> Result<u32, Self::Err> {
+        Ok(self.fregs.ftwx.into())
+    }
+
+    fn get_fiseg(&mut self) -> Result<u32, Self::Err> {
+        Ok(((self.fregs.last_ip >> 32) & 0xFFFF) as u32)
+    }
+
+    fn get_fioff(&mut self) -> Result<u32, Self::Err> {
+        Ok((self.fregs.last_ip & 0xFFFFFFFF) as u32)
+    }
+
+    fn get_foseg(&mut self) -> Result<u32, Self::Err> {
+        Ok(((self.fregs.last_dp >> 32) & 0xFFFF) as u32)
+    }
+
+    fn get_fooff(&mut self) -> Result<u32, Self::Err> {
+        Ok((self.fregs.last_dp & 0xFFFFFFFF) as u32)
+    }
+
+    fn get_fop(&mut self) -> Result<u32, Self::Err> {
+        Ok(self.fregs.last_opcode.into())
+    }
+
+    fn get_xmm0(&mut self) -> Result<u128, Self::Err> {
+        Ok(u128::from_le_bytes(self.fregs.xmm[0]))
+    }
+
+    fn get_xmm1(&mut self) -> Result<u128, Self::Err> {
+        Ok(u128::from_le_bytes(self.fregs.xmm[1]))
+    }
+
+    fn get_xmm2(&mut self) -> Result<u128, Self::Err> {
+        Ok(u128::from_le_bytes(self.fregs.xmm[2]))
+    }
+
+    fn get_xmm3(&mut self) -> Result<u128, Self::Err> {
+        Ok(u128::from_le_bytes(self.fregs.xmm[3]))
+    }
+
+    fn get_xmm4(&mut self) -> Result<u128, Self::Err> {
+        Ok(u128::from_le_bytes(self.fregs.xmm[4]))
+    }
+
+    fn get_xmm5(&mut self) -> Result<u128, Self::Err> {
+        Ok(u128::from_le_bytes(self.fregs.xmm[5]))
+    }
+
+    fn get_xmm6(&mut self) -> Result<u128, Self::Err> {
+        Ok(u128::from_le_bytes(self.fregs.xmm[6]))
+    }
+
+    fn get_xmm7(&mut self) -> Result<u128, Self::Err> {
+        Ok(u128::from_le_bytes(self.fregs.xmm[7]))
+    }
+
+    fn get_xmm8(&mut self) -> Result<u128, Self::Err> {
+        Ok(u128::from_le_bytes(self.fregs.xmm[8]))
+    }
+
+    fn get_xmm9(&mut self) -> Result<u128, Self::Err> {
+        Ok(u128::from_le_bytes(self.fregs.xmm[9]))
+    }
+
+    fn get_xmm10(&mut self) -> Result<u128, Self::Err> {
+        Ok(u128::from_le_bytes(self.fregs.xmm[10]))
+    }
+
+    fn get_xmm11(&mut self) -> Result<u128, Self::Err> {
+        Ok(u128::from_le_bytes(self.fregs.xmm[11]))
+    }
+
+    fn get_xmm12(&mut self) -> Result<u128, Self::Err> {
+        Ok(u128::from_le_bytes(self.fregs.xmm[12]))
+    }
+
+    fn get_xmm13(&mut self) -> Result<u128, Self::Err> {
+        Ok(u128::from_le_bytes(self.fregs.xmm[13]))
+    }
+
+    fn get_xmm14(&mut self) -> Result<u128, Self::Err> {
+        Ok(u128::from_le_bytes(self.fregs.xmm[14]))
+    }
+
+    fn get_xmm15(&mut self) -> Result<u128, Self::Err> {
+        Ok(u128::from_le_bytes(self.fregs.xmm[15]))
+    }
+
+    fn get_mxcsr(&mut self) -> Result<u32, Self::Err> {
+        Ok(self.fregs.mxcsr.into())
+    }
 }
 
 impl<'a> CpuCommit for KvmStates<'a> {
