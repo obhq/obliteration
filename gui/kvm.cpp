@@ -9,18 +9,6 @@
 #include <stdint.h>
 #include <string.h>
 
-#ifndef __aarch64__
-extern "C" int kvm_get_regs(int vcpu, kvm_regs *regs)
-{
-    return ioctl(vcpu, KVM_GET_REGS, regs);
-}
-
-extern "C" int kvm_set_regs(int vcpu, const kvm_regs *regs)
-{
-    return ioctl(vcpu, KVM_SET_REGS, regs);
-}
-#endif
-
 #ifdef __x86_64__
 extern "C" int kvm_get_sregs(int vcpu, kvm_sregs *regs)
 {

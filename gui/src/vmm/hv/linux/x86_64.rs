@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+use super::ffi::{KvmRegs, KVM_GET_REGS, KVM_SET_REGS};
 use crate::vmm::hv::{CpuCommit, CpuStates, Rflags};
+use libc::ioctl;
 use std::ffi::c_int;
 use std::mem::MaybeUninit;
 use std::os::fd::{AsRawFd, OwnedFd};
@@ -8,7 +10,7 @@ use thiserror::Error;
 /// Implementation of [`CpuStates`] for KVM.
 pub struct KvmStates<'a> {
     cpu: &'a mut OwnedFd,
-    gregs: GeneralRegs,
+    gregs: KvmRegs,
     gdirty: bool,
     sregs: SpecialRegs,
     sdirty: bool,
@@ -20,9 +22,10 @@ impl<'a> KvmStates<'a> {
 
         // Load general purpose registers.
         let mut gregs = MaybeUninit::uninit();
-        let gregs = match unsafe { kvm_get_regs(cpu.as_raw_fd(), gregs.as_mut_ptr()) } {
-            0 => unsafe { gregs.assume_init() },
-            _ => return Err(StatesError::GetGRegsFailed(Error::last_os_error())),
+        let gregs = if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_REGS, gregs.as_mut_ptr()) } < 0 {
+            return Err(StatesError::GetGRegsFailed(Error::last_os_error()));
+        } else {
+            unsafe { gregs.assume_init() }
         };
 
         // Get special registers.
@@ -46,86 +49,90 @@ impl<'a> CpuStates for KvmStates<'a> {
     type Err = StatesError;
 
     fn get_rax(&mut self) -> Result<usize, Self::Err> {
-        Ok(self.gregs.rax)
+        Ok(self.gregs.rax.try_into().unwrap())
     }
 
     fn get_rbx(&mut self) -> Result<usize, Self::Err> {
-        Ok(self.gregs.rbx)
+        Ok(self.gregs.rbx.try_into().unwrap())
     }
 
     fn get_rcx(&mut self) -> Result<usize, Self::Err> {
-        Ok(self.gregs.rcx)
+        Ok(self.gregs.rcx.try_into().unwrap())
     }
 
     fn get_rdx(&mut self) -> Result<usize, Self::Err> {
-        Ok(self.gregs.rdx)
+        Ok(self.gregs.rdx.try_into().unwrap())
     }
 
     fn get_rbp(&mut self) -> Result<usize, Self::Err> {
-        Ok(self.gregs.rbp)
+        Ok(self.gregs.rbp.try_into().unwrap())
     }
 
     fn get_r8(&mut self) -> Result<usize, Self::Err> {
-        Ok(self.gregs.r8)
+        Ok(self.gregs.r8.try_into().unwrap())
     }
 
     fn get_r9(&mut self) -> Result<usize, Self::Err> {
-        Ok(self.gregs.r9)
+        Ok(self.gregs.r9.try_into().unwrap())
     }
 
     fn get_r10(&mut self) -> Result<usize, Self::Err> {
-        Ok(self.gregs.r10)
+        Ok(self.gregs.r10.try_into().unwrap())
     }
 
     fn get_r11(&mut self) -> Result<usize, Self::Err> {
-        Ok(self.gregs.r11)
+        Ok(self.gregs.r11.try_into().unwrap())
     }
 
     fn get_r12(&mut self) -> Result<usize, Self::Err> {
-        Ok(self.gregs.r12)
+        Ok(self.gregs.r12.try_into().unwrap())
     }
 
     fn get_r13(&mut self) -> Result<usize, Self::Err> {
-        Ok(self.gregs.r13)
+        Ok(self.gregs.r13.try_into().unwrap())
     }
 
     fn get_r14(&mut self) -> Result<usize, Self::Err> {
-        Ok(self.gregs.r14)
+        Ok(self.gregs.r14.try_into().unwrap())
     }
 
     fn get_r15(&mut self) -> Result<usize, Self::Err> {
-        Ok(self.gregs.r15)
+        Ok(self.gregs.r15.try_into().unwrap())
     }
 
     fn get_rdi(&mut self) -> Result<usize, Self::Err> {
-        Ok(self.gregs.rdi)
+        Ok(self.gregs.rdi.try_into().unwrap())
     }
 
     fn set_rdi(&mut self, v: usize) {
-        self.gregs.rdi = v;
+        self.gregs.rdi = v.try_into().unwrap();
         self.gdirty = true;
     }
 
     fn get_rsi(&mut self) -> Result<usize, Self::Err> {
-        Ok(self.gregs.rsi)
+        Ok(self.gregs.rsi.try_into().unwrap())
     }
 
     fn set_rsi(&mut self, v: usize) {
-        self.gregs.rsi = v;
+        self.gregs.rsi = v.try_into().unwrap();
         self.gdirty = true;
     }
 
     fn get_rsp(&mut self) -> Result<usize, Self::Err> {
-        Ok(self.gregs.rsp)
+        Ok(self.gregs.rsp.try_into().unwrap())
     }
 
     fn set_rsp(&mut self, v: usize) {
-        self.gregs.rsp = v;
+        self.gregs.rsp = v.try_into().unwrap();
         self.gdirty = true;
     }
 
+    fn get_rip(&mut self) -> Result<usize, Self::Err> {
+        Ok(self.gregs.rip.try_into().unwrap())
+    }
+
     fn set_rip(&mut self, v: usize) {
-        self.gregs.rip = v;
+        self.gregs.rip = v.try_into().unwrap();
         self.gdirty = true;
     }
 
@@ -193,7 +200,7 @@ impl<'a> CpuCommit for KvmStates<'a> {
         use std::io::Error;
 
         // Set general purpose registers.
-        if unsafe { self.gdirty && kvm_set_regs(self.cpu.as_raw_fd(), &self.gregs) != 0 } {
+        if unsafe { self.gdirty && ioctl(self.cpu.as_raw_fd(), KVM_SET_REGS, &self.gregs) < 0 } {
             return Err(StatesError::SetGRegsFailed(Error::last_os_error()));
         }
 
@@ -204,29 +211,6 @@ impl<'a> CpuCommit for KvmStates<'a> {
 
         Ok(())
     }
-}
-
-/// Implementation of `kvm_regs` structure.
-#[repr(C)]
-struct GeneralRegs {
-    pub rax: usize,
-    pub rbx: usize,
-    pub rcx: usize,
-    pub rdx: usize,
-    pub rsi: usize,
-    pub rdi: usize,
-    pub rsp: usize,
-    pub rbp: usize,
-    pub r8: usize,
-    pub r9: usize,
-    pub r10: usize,
-    pub r11: usize,
-    pub r12: usize,
-    pub r13: usize,
-    pub r14: usize,
-    pub r15: usize,
-    pub rip: usize,
-    pub rflags: u64,
 }
 
 /// Implementation of `kvm_sregs` structure.
@@ -295,8 +279,6 @@ pub enum StatesError {
 }
 
 extern "C" {
-    fn kvm_get_regs(vcpu: c_int, regs: *mut GeneralRegs) -> c_int;
-    fn kvm_set_regs(vcpu: c_int, regs: *const GeneralRegs) -> c_int;
     fn kvm_get_sregs(vcpu: c_int, regs: *mut SpecialRegs) -> c_int;
     fn kvm_set_sregs(vcpu: c_int, regs: *const SpecialRegs) -> c_int;
 }
