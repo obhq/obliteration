@@ -6,10 +6,10 @@ use self::kernel::{
     Kernel, PT_DYNAMIC, PT_GNU_EH_FRAME, PT_GNU_RELRO, PT_GNU_STACK, PT_LOAD, PT_NOTE, PT_PHDR,
 };
 use self::ram::{Ram, RamBuilder};
-use self::screen::Screen;
 use crate::debug::DebugClient;
 use crate::error::RustError;
 use crate::profile::Profile;
+use crate::screen::Screen;
 use gdbstub::common::Signal;
 use gdbstub::stub::state_machine::GdbStubStateMachine;
 use gdbstub::stub::MultiThreadStopReason;
@@ -33,7 +33,6 @@ mod hv;
 mod hw;
 mod kernel;
 mod ram;
-mod screen;
 
 #[no_mangle]
 pub unsafe extern "C" fn vmm_start(
@@ -427,7 +426,7 @@ pub unsafe extern "C" fn vmm_start(
     };
 
     // Setup screen.
-    let screen = match self::screen::Default::new(&*screen) {
+    let screen = match crate::screen::Default::new(&*screen) {
         Ok(v) => v,
         Err(e) => {
             *err = RustError::with_source("couldn't setup a screen", e).into_c();
@@ -589,12 +588,12 @@ fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
 
 /// Manage a virtual machine that run the kernel.
 pub struct Vmm {
-    cpu: CpuManager<self::hv::Default, self::screen::Default>, // Drop first.
-    screen: self::screen::Default,
+    cpu: CpuManager<self::hv::Default, crate::screen::Default>, // Drop first.
+    screen: crate::screen::Default,
     gdb: Option<
         GdbStubStateMachine<
             'static,
-            CpuManager<self::hv::Default, self::screen::Default>,
+            CpuManager<self::hv::Default, crate::screen::Default>,
             DebugClient,
         >,
     >,
