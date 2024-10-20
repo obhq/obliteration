@@ -35,7 +35,7 @@ impl<'a> Drop for HvfCpu<'a> {
         let ret = unsafe { hv_vcpu_destroy(self.instance) };
 
         if ret != 0 {
-            panic!("hv_vcpu_destroy() fails with {ret:#x}");
+            panic!("hv_vcpu_destroy() failed with {ret:#x}");
         }
     }
 }
@@ -74,7 +74,7 @@ impl<'a> CpuRun for HvfCpu<'a> {
     fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr> {
         match NonZero::new(unsafe { hv_vcpu_run(self.instance) }) {
             Some(v) => Err(RunError::HypervisorFailed(v)),
-            None => Ok(HvfExit::new(self)),
+            None => Ok(HvfExit(self)),
         }
     }
 }
@@ -90,6 +90,7 @@ pub struct HvfStates<'a, 'b> {
     ttbr1_el1: State<u64>,
     sp_el1: State<u64>,
     pc: State<u64>,
+
     x0: State<u64>,
     x1: State<u64>,
 }
@@ -210,12 +211,6 @@ enum State<T> {
 
 /// Implementation of [`CpuExit`] for Hypervisor Framework.
 pub struct HvfExit<'a, 'b>(&'a mut HvfCpu<'b>);
-
-impl<'a, 'b> HvfExit<'a, 'b> {
-    pub fn new(cpu: &'a mut HvfCpu<'b>) -> Self {
-        Self(cpu)
-    }
-}
 
 impl<'a, 'b> CpuExit for HvfExit<'a, 'b> {
     type Cpu = HvfCpu<'b>;

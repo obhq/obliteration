@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::arch::{KvmStates, StatesError};
-use super::ffi::{KVM_EXIT_DEBUG, KVM_RUN};
+use super::ffi::{KVM_EXIT_DEBUG, KVM_EXIT_HLT, KVM_EXIT_IO, KVM_RUN};
 use super::run::KvmRun;
 use crate::vmm::hv::{Cpu, CpuDebug, CpuExit, CpuIo, CpuRun, IoBuf};
 use libc::{ioctl, munmap};
@@ -76,7 +76,7 @@ impl<'a, 'b> CpuExit for KvmExit<'a, 'b> {
 
     #[cfg(target_arch = "x86_64")]
     fn into_hlt(self) -> Result<(), Self> {
-        if unsafe { (*self.0.cx.0).exit_reason == 5 } {
+        if unsafe { (*self.0.cx.0).exit_reason == KVM_EXIT_HLT } {
             Ok(())
         } else {
             Err(self)
@@ -84,7 +84,7 @@ impl<'a, 'b> CpuExit for KvmExit<'a, 'b> {
     }
 
     fn into_io(self) -> Result<Self::Io, Self> {
-        if unsafe { (*self.0.cx.0).exit_reason } == 6 {
+        if unsafe { (*self.0.cx.0).exit_reason } == KVM_EXIT_IO {
             Ok(KvmIo(self.0))
         } else {
             Err(self)
