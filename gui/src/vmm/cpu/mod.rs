@@ -2,13 +2,14 @@
 pub use self::arch::*;
 
 use self::controller::CpuController;
-use super::debug::{debug_controller, Debugger};
+use self::debug::{DebugReq, DebugRes, Debugger};
 use super::hv::{Cpu, CpuExit, CpuIo, CpuRun, CpuStates, Hypervisor};
 use super::hw::{DeviceContext, DeviceTree};
 use super::ram::RamMap;
 use super::screen::Screen;
 use super::{VmmEvent, VmmEventHandler};
 use crate::error::RustError;
+use gdbstub::stub::MultiThreadStopReason;
 use std::collections::BTreeMap;
 use std::num::NonZero;
 use std::ops::Deref;
@@ -20,6 +21,7 @@ use std::sync::{Arc, Mutex};
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
 mod arch;
 mod controller;
+mod debug;
 
 /// Manage all virtual CPUs.
 pub struct CpuManager<H: Hypervisor, S: Screen> {
@@ -62,9 +64,9 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
             shutdown: self.shutdown.clone(),
         };
 
-        // Setup debug controller.
+        // Setup debug channel.
         let (debuggee, debugger) = if debug {
-            Some(debug_controller()).unzip()
+            Some(self::debug::channel()).unzip()
         } else {
             None.unzip()
         };
@@ -90,7 +92,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
         }
     }
 
-    fn main_cpu(args: Args<H, S>, mut debug: Option<Debugger<GdbRegs>>, entry: usize, map: RamMap) {
+    fn main_cpu(args: Args<H, S>, debug: Option<Debugger>, entry: usize, map: RamMap) {
         // Create CPU.
         let mut cpu = match args.hv.create_cpu(0) {
             Ok(v) => v,
@@ -108,47 +110,17 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
         }
 
         // Wait for debugger.
-        if let Some(debug) = &mut debug {
-            // Get states.
-            let mut states = match cpu.states() {
-                Ok(v) => v,
-                Err(e) => {
-                    let e = RustError::with_source("couldn't get CPU states", e);
-                    unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
-                    return;
-                }
-            };
-
-            // Get registers.
-            let regs = match Self::get_debug_regs(&mut states) {
-                Ok(v) => v,
-                Err(e) => {
-                    unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
-                    return;
-                }
-            };
-
-            // Notify GUI.
-            let resp = debug.send(regs);
-            let lock = args.breakpoint.lock().unwrap();
-            let stop = null_mut();
-
-            unsafe { args.event.invoke(VmmEvent::Breakpoint { stop }) };
-
-            // Update registers from debugger.
-            if let Err(e) = Self::set_debug_regs(&mut states, resp.into_response()) {
-                unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+        if let Some(debug) = &debug {
+            if !Self::handle_breakpoint(&args, debug, &mut cpu, None) {
                 return;
             }
-
-            drop(lock);
         }
 
         // Run.
         Self::run_cpu(&args, debug, cpu);
     }
 
-    fn run_cpu<'a>(args: &'a Args<H, S>, debug: Option<Debugger<GdbRegs>>, mut cpu: H::Cpu<'a>) {
+    fn run_cpu<'a>(args: &'a Args<H, S>, debug: Option<Debugger>, mut cpu: H::Cpu<'a>) {
         // Build device contexts for this CPU.
         let mut devices = BTreeMap::<usize, Device<'a, H::Cpu<'a>>>::new();
         let t = &args.devices;
@@ -276,6 +248,57 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                 e.deref(),
             )
         })
+    }
+
+    fn handle_breakpoint(
+        args: &Args<H, S>,
+        debug: &Debugger,
+        cpu: &mut impl Cpu,
+        stop: Option<MultiThreadStopReason<u64>>,
+    ) -> bool {
+        // Get states.
+        let mut states = match cpu.states() {
+            Ok(v) => v,
+            Err(e) => {
+                let e = RustError::with_source("couldn't get CPU states", e);
+                unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+                return false;
+            }
+        };
+
+        // Convert stop reason.
+        let stop = match stop {
+            Some(_) => todo!(),
+            None => null_mut(),
+        };
+
+        // Notify GUI. We need to allow only one CPU to enter the debugger dispatch loop.
+        let lock = args.breakpoint.lock().unwrap();
+
+        unsafe { args.event.invoke(VmmEvent::Breakpoint { stop }) };
+
+        // Wait for command from debugger thread.
+        loop {
+            let req = match debug.recv() {
+                Some(v) => v,
+                None => return false,
+            };
+
+            match req {
+                DebugReq::GetRegs => match Self::get_debug_regs(&mut states) {
+                    Ok(v) => debug.send(DebugRes::Regs(v)),
+                    Err(e) => {
+                        unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+                        return false;
+                    }
+                },
+                DebugReq::Lock => {} // We already in a locked loop.
+                DebugReq::Release => break,
+            }
+        }
+
+        drop(lock);
+        true
     }
 
     #[cfg(target_arch = "aarch64")]

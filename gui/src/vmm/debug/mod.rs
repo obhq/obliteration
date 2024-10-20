@@ -1,6 +1,4 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-pub use self::controller::*;
-
 use super::cpu::CpuManager;
 use super::hv::Hypervisor;
 use super::screen::Screen;
@@ -9,8 +7,6 @@ use crate::error::RustError;
 use gdbstub::stub::state_machine::state::{Idle, Running};
 use gdbstub::stub::state_machine::{GdbStubStateMachine, GdbStubStateMachineInner};
 use gdbstub::stub::MultiThreadStopReason;
-
-mod controller;
 
 pub fn dispatch_idle<H: Hypervisor, S: Screen>(
     target: &mut CpuManager<H, S>,

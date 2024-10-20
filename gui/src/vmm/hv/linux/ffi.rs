@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 use std::ffi::{c_int, c_ulong};
 
 pub const KVM_GET_API_VERSION: c_ulong = _IO(KVMIO, 0x00);
