@@ -1,17 +1,16 @@
-use super::VmmError;
+// SPDX-License-Identifier: MIT OR Apache-2.0
 use std::error::Error;
 use std::sync::Arc;
 
-#[cfg(target_os = "macos")]
-mod metal;
-#[cfg(not(target_os = "macos"))]
-mod vulkan;
+#[cfg_attr(target_os = "macos", path = "metal/mod.rs")]
+#[cfg_attr(not(target_os = "macos"), path = "vulkan/mod.rs")]
+mod engine;
 
 #[cfg(not(target_os = "macos"))]
-pub type Default = self::vulkan::Vulkan;
+pub type Default = self::engine::Vulkan;
 
 #[cfg(target_os = "macos")]
-pub type Default = self::metal::Metal;
+pub type Default = self::engine::Metal;
 
 /// Encapsulates a platform-specific surface for drawing a VM screen.
 pub trait Screen: 'static {

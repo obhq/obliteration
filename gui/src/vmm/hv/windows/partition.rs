@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 use super::cpu::WhpCpu;
 use std::ffi::c_void;
 use std::mem::size_of;

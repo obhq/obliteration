@@ -14,7 +14,7 @@ use self::ffi::{
     get_physical_device_sparse_image_format_properties,
     get_physical_device_sparse_image_format_properties2, get_physical_device_tool_properties,
 };
-use super::{Screen, ScreenBuffer, VmmError};
+use super::{Screen, ScreenBuffer};
 use crate::vmm::VmmScreen;
 use ash::vk::{DeviceCreateInfo, DeviceQueueCreateInfo, Handle, QueueFlags};
 use ash::{Device, Instance, InstanceFnV1_0, InstanceFnV1_1, InstanceFnV1_3};
@@ -31,7 +31,7 @@ pub struct Vulkan {
 }
 
 impl Vulkan {
-    pub fn new(screen: &VmmScreen) -> Result<Self, VmmError> {
+    pub fn new(screen: &VmmScreen) -> Result<Self, VulkanError> {
         // Wrap VkInstance.
         let instance = screen.vk_instance.try_into().unwrap();
         let instance = ash::vk::Instance::from_raw(instance);
@@ -87,7 +87,7 @@ impl Vulkan {
         let device = DeviceCreateInfo::default().queue_create_infos(&queues);
         let device = match unsafe { instance.create_device(physical, &device, None) } {
             Ok(v) => v,
-            Err(e) => return Err(VmmError::CreateVulkanDeviceFailed(e)),
+            Err(e) => return Err(VulkanError::CreateDeviceFailed(e)),
         };
 
         Ok(Self {
@@ -100,7 +100,7 @@ impl Vulkan {
         _: ash::vk::Instance,
         _: *const ash::vk::AllocationCallbacks<'_>,
     ) {
-        unreachable!();
+        unimplemented!()
     }
 }
 
@@ -122,6 +122,13 @@ impl Screen for Vulkan {
     fn update(&mut self) -> Result<(), Self::UpdateErr> {
         Ok(())
     }
+}
+
+/// Represents an error when [`Vulkan::new()`] fails.
+#[derive(Debug, Error)]
+pub enum VulkanError {
+    #[error("couldn't create a logical device")]
+    CreateDeviceFailed(#[source] ash::vk::Result),
 }
 
 /// Implementation of [`Screen::UpdateErr`].
