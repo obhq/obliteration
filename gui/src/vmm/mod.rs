@@ -5,7 +5,7 @@ use self::hw::{setup_devices, Device};
 use self::kernel::{
     Kernel, PT_DYNAMIC, PT_GNU_EH_FRAME, PT_GNU_RELRO, PT_GNU_STACK, PT_LOAD, PT_NOTE, PT_PHDR,
 };
-use self::ram::Ram;
+use self::ram::{Ram, RamBuilder};
 use self::screen::Screen;
 use crate::debug::DebugClient;
 use crate::error::RustError;
@@ -352,7 +352,7 @@ pub unsafe extern "C" fn vmm_start(
 
     // Map the kernel.
     let feats = hv.cpu_features().clone();
-    let mut ram = hv.ram_mut().builder();
+    let mut ram = RamBuilder::new(hv.ram_mut());
     let kern = match ram.alloc_kernel(len) {
         Ok(v) => v,
         Err(e) => {
