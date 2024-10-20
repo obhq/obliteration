@@ -20,14 +20,28 @@ pub fn dispatch_idle<H: Hypervisor, S: Screen>(
         CpuManager<H, S>,
         DebugClient,
     >,
-) -> Result<GdbStubStateMachine<'static, CpuManager<H, S>, DebugClient>, RustError> {
-    let b = state
-        .borrow_conn()
-        .read()
-        .map_err(|e| RustError::with_source("couldn't read data from the debugger", e))?;
+) -> Result<
+    Result<
+        GdbStubStateMachine<'static, CpuManager<H, S>, DebugClient>,
+        GdbStubStateMachineInner<'static, Idle<CpuManager<H, S>>, CpuManager<H, S>, DebugClient>,
+    >,
+    RustError,
+> {
+    // Check for pending command.
+    let b = match state.borrow_conn().read() {
+        Ok(v) => v,
+        Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(Err(state)),
+        Err(e) => {
+            return Err(RustError::with_source(
+                "couldn't read data from the debugger",
+                e,
+            ));
+        }
+    };
 
     state
         .incoming_data(target, b)
+        .map(Ok)
         .map_err(|e| RustError::with_source("couldn't process data from the debugger", e))
 }
 

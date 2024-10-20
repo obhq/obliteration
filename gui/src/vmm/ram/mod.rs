@@ -1,30 +1,37 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+pub use self::builder::*;
+
+use std::collections::BTreeSet;
 use std::io::Error;
 use std::num::NonZero;
+use std::sync::{Mutex, MutexGuard};
 use thiserror::Error;
-
-pub use self::builder::*;
 
 mod builder;
 
 /// Represents main memory of the PS4.
 ///
-/// This struct will allocate a 8GB of memory immediately but not commit any parts of it until there
-/// is an allocation request. That mean the actual memory usage is not fixed at 8GB but will be
-/// dependent on what PS4 applications currently running. If it is a simple game the memory usage
-/// might be just a hundred of megabytes.
+/// This struct will immediate reserve a range of memory for its size but not commit any parts of it
+/// until there is an allocation request.
 ///
 /// RAM always started at address 0.
 pub struct Ram {
     mem: *mut u8,
     len: NonZero<usize>,
     block_size: NonZero<usize>,
+    allocated: Mutex<BTreeSet<usize>>,
 }
 
 impl Ram {
+    /// Panics
+    /// If `len` is not multiply by `block_size`.
+    ///
     /// # Safety
     /// `block_size` must be greater or equal host page size.
     pub unsafe fn new(len: NonZero<usize>, block_size: NonZero<usize>) -> Result<Self, Error> {
         use std::io::Error;
+
+        assert_eq!(len.get() % block_size, 0);
 
         // Reserve memory range.
         #[cfg(unix)]
@@ -66,6 +73,7 @@ impl Ram {
             mem,
             len,
             block_size,
+            allocated: Mutex::default(),
         })
     }
 
@@ -77,30 +85,36 @@ impl Ram {
         self.len
     }
 
-    pub fn builder(&mut self) -> RamBuilder {
-        RamBuilder::new(self)
-    }
-
     /// # Panics
     /// If `addr` or `len` is not multiply by block size.
-    ///
-    /// # Safety
-    /// This method does not check if `addr` is already allocated. It is undefined behavior if
-    /// `addr` + `len` is overlapped with the previous allocation.
-    pub unsafe fn alloc(&self, addr: usize, len: NonZero<usize>) -> Result<&mut [u8], RamError> {
+    pub fn alloc(&self, addr: usize, len: NonZero<usize>) -> Result<&mut [u8], RamError> {
         assert_eq!(addr % self.block_size, 0);
         assert_eq!(len.get() % self.block_size, 0);
 
-        if !addr
-            .checked_add(len.get())
-            .is_some_and(|v| v <= self.len.get())
-        {
+        // Check if the requested range valid.
+        let end = addr.checked_add(len.get()).ok_or(RamError::InvalidAddr)?;
+
+        if end > self.len.get() {
             return Err(RamError::InvalidAddr);
         }
 
-        Self::commit(self.mem.add(addr), len.get())
-            .map(|v| std::slice::from_raw_parts_mut(v, len.get()))
-            .map_err(RamError::HostFailed)
+        // Check if the requested range already allocated.
+        let mut allocated = self.allocated.lock().unwrap();
+
+        if allocated.range(addr..end).next().is_some() {
+            return Err(RamError::InvalidAddr);
+        }
+
+        // Commit.
+        let start = unsafe { self.mem.add(addr) };
+        let mem = unsafe { Self::commit(start, len.get()).map_err(RamError::HostFailed)? };
+
+        // Add range to allocated list.
+        for addr in (addr..end).step_by(self.block_size.get()) {
+            assert!(allocated.insert(addr));
+        }
+
+        Ok(unsafe { std::slice::from_raw_parts_mut(mem, len.get()) })
     }
 
     /// # Panics
@@ -112,14 +126,54 @@ impl Ram {
         assert_eq!(addr % self.block_size, 0);
         assert_eq!(len.get() % self.block_size, 0);
 
-        if !addr
-            .checked_add(len.get())
-            .is_some_and(|v| v <= self.len.get())
-        {
+        // Check if the requested range valid.
+        let end = addr.checked_add(len.get()).ok_or(RamError::InvalidAddr)?;
+
+        if end > self.len.get() {
             return Err(RamError::InvalidAddr);
         }
 
-        Self::decommit(self.mem.add(addr), len.get()).map_err(RamError::HostFailed)
+        // Decommit the whole range. No need to check if the range already allocated since it will
+        // be no-op anyway.
+        let mut allocated = self.allocated.lock().unwrap();
+
+        Self::decommit(self.mem.add(addr), len.get()).map_err(RamError::HostFailed)?;
+
+        for addr in (addr..end).step_by(self.block_size.get()) {
+            allocated.remove(&addr);
+        }
+
+        Ok(())
+    }
+
+    /// Return [`None`] if some part of the requested range is not allocated.
+    pub fn lock(&self, addr: usize, len: NonZero<usize>) -> Option<LockedAddr> {
+        // Get allocated range.
+        let end = addr.checked_add(len.get())?;
+        let off = addr % self.block_size;
+        let mut next = addr - off;
+        let allocated = self.allocated.lock().unwrap();
+        let range = allocated.range(next..end);
+
+        // Check if the whole range valid.
+        for addr in range {
+            if *addr != next {
+                return None;
+            }
+
+            // This block has been allocated successfully, which mean this addition will never
+            // overflow.
+            next += self.block_size.get();
+        }
+
+        if next < end {
+            return None;
+        }
+
+        Some(LockedAddr {
+            lock: allocated,
+            ptr: unsafe { self.mem.add(addr) },
+        })
     }
 
     #[cfg(unix)]
@@ -208,6 +262,22 @@ impl Drop for Ram {
 
 unsafe impl Send for Ram {}
 unsafe impl Sync for Ram {}
+
+/// RAII struct to prevent a range of memory from deallocated.
+pub struct LockedAddr<'a> {
+    #[allow(dead_code)]
+    lock: MutexGuard<'a, BTreeSet<usize>>,
+    ptr: *mut u8,
+}
+
+impl<'a> LockedAddr<'a> {
+    /// # Safety
+    /// Although the whole memory range guarantee to be valid for the whole lifetime of this struct
+    /// but the data is subject to race condition due to the other vCPU may write into this range.
+    pub fn as_ptr(&self) -> *const u8 {
+        self.ptr
+    }
+}
 
 /// Represents an error when an operation on [`Ram`] fails.
 #[derive(Debug, Error)]
