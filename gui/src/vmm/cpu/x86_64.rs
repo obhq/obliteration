@@ -22,12 +22,9 @@ pub type GdbRegs = gdbstub_arch::x86::reg::X86_64CoreRegs;
 
 impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
     fn get_cpu(&mut self, tid: Tid) -> TargetResult<&mut CpuController, Self> {
-        let cpu = self
-            .cpus
-            .get_mut(tid.get() as usize - 1)
-            .ok_or(GdbTargetError::Errno(ENOENT))?;
-
-        Ok(cpu)
+        self.cpus
+            .get_mut(tid.get() - 1)
+            .ok_or(GdbTargetError::Errno(ENOENT))
     }
 }
 
@@ -46,11 +43,13 @@ impl<H: Hypervisor, S: Screen> gdbstub::target::Target for CpuManager<H, S> {
 
 impl<H: Hypervisor, S: Screen> MultiThreadBase for CpuManager<H, S> {
     fn read_registers(&mut self, regs: &mut X86_64CoreRegs, tid: Tid) -> TargetResult<(), Self> {
-        let mut cpu = self.get_cpu(tid)?;
+        let cpu = self.get_cpu(tid)?;
 
-        let current_regs = cpu.debug_mut().unwrap().lock();
-
-        *regs = current_regs.clone();
+        *regs = cpu
+            .debug_mut()
+            .unwrap()
+            .get_regs()
+            .ok_or(GdbTargetError::Errno(ENOENT))?; // The CPU thread just stopped.
 
         Ok(())
     }
