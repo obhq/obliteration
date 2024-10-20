@@ -697,10 +697,6 @@ pub enum DebugResult {
 /// Represents an error when [`vmm_new()`] fails.
 #[derive(Debug, Error)]
 enum VmmError {
-    #[cfg(not(target_os = "macos"))]
-    #[error("couldn't create Vulkan device")]
-    CreateVulkanDeviceFailed(#[source] ash::vk::Result),
-
     #[cfg(target_os = "windows")]
     #[error("couldn't create WHP partition object ({0:#x})")]
     CreatePartitionFailed(windows_sys::core::HRESULT),
@@ -736,10 +732,6 @@ enum VmmError {
     #[cfg(target_os = "macos")]
     #[error("couldn't map memory to the VM ({0:#x})")]
     MapRamFailed(NonZero<applevisor_sys::hv_return_t>),
-
-    #[cfg(target_os = "macos")]
-    #[error("couldn't get default MTLDevice")]
-    GetMetalDeviceFailed,
 }
 
 /// Represents an error when [`main_cpu()`] fails to reach event loop.

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::WhpCpu;
 use self::partition::Partition;
 use super::{CpuFeats, Hypervisor};

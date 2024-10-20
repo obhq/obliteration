@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::buffer::MetalBuffer;
-use super::{Screen, ScreenBuffer, VmmError};
+use super::{Screen, ScreenBuffer};
 use crate::vmm::VmmScreen;
 use metal::{CAMetalLayer, Device, MetalLayer};
 use objc::runtime::{Object, NO, YES};
@@ -22,11 +22,11 @@ pub struct Metal {
 }
 
 impl Metal {
-    pub fn new(screen: &VmmScreen) -> Result<Self, VmmError> {
+    pub fn new(screen: &VmmScreen) -> Result<Self, MetalError> {
         // Get Metal device.
         let device = match Device::system_default() {
             Some(v) => v,
-            None => return Err(VmmError::GetMetalDeviceFailed),
+            None => return Err(MetalError::GetDeviceFailed),
         };
 
         // Setup Metal layer.
@@ -68,6 +68,13 @@ impl Screen for Metal {
     fn update(&mut self) -> Result<(), Self::UpdateErr> {
         todo!()
     }
+}
+
+/// Represents an error when [`Metal::new()`] fails.
+#[derive(Debug, Error)]
+pub enum MetalError {
+    #[error("couldn't get default MTLDevice")]
+    GetDeviceFailed,
 }
 
 /// Implementation of [`Screen::UpdateErr`].

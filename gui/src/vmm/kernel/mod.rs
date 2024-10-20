@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom, Take};
 use std::path::Path;
