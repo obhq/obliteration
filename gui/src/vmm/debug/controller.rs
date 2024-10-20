@@ -7,36 +7,28 @@ pub fn debug_controller<T>() -> (Debuggee<T>, Debugger<T>) {
     let state = Mutex::default();
     let signal = Condvar::new();
     let data = Arc::new(Data { state, signal });
-    let debuggee = Debuggee {
-        data: data.clone(),
-        wakeup: false,
-    };
 
-    (debuggee, Debugger(data))
+    (Debuggee(data.clone()), Debugger(data))
 }
 
 /// Provides methods for a debugger thread to interrupt a debuggee thread.
-pub struct Debuggee<T> {
-    data: Arc<Data<T>>,
-    wakeup: bool,
-}
+pub struct Debuggee<T>(Arc<Data<T>>);
 
 impl<T> Debuggee<T> {
     pub fn lock(&mut self) -> LockedData<T> {
-        let mut s = self.data.state.lock().unwrap();
+        let mut s = self.0.state.lock().unwrap();
 
         loop {
             s = match s.deref() {
                 DataState::None => {
                     *s = DataState::Request;
-                    self.wakeup = true;
-                    self.data.signal.wait(s).unwrap()
+                    self.0.signal.wait(s).unwrap()
                 }
-                DataState::Request => self.data.signal.wait(s).unwrap(),
+                DataState::Request => self.0.signal.wait(s).unwrap(),
                 DataState::DebuggerOwned(_) => break,
                 DataState::DebuggeeOwned(_) => {
-                    // The debugge is not pickup the previous value yet.
-                    self.data.signal.wait(s).unwrap()
+                    // The debugge has not pickup the previous value yet.
+                    self.0.signal.wait(s).unwrap()
                 }
             };
         }
@@ -45,16 +37,15 @@ impl<T> Debuggee<T> {
     }
 
     pub fn release(&mut self) {
-        let mut s = self.data.state.lock().unwrap();
+        let mut s = self.0.state.lock().unwrap();
 
         match std::mem::take(s.deref_mut()) {
+            DataState::None => return,
             DataState::DebuggerOwned(v) => *s = DataState::DebuggeeOwned(v),
-            _ => panic!("attempt to release a lock that is not owned"),
+            _ => unreachable!(),
         }
 
-        if std::mem::take(&mut self.wakeup) {
-            self.data.signal.notify_one();
-        }
+        self.0.signal.notify_one();
     }
 }
 
@@ -140,13 +131,28 @@ pub struct ResponseHandle<'a, T> {
 
 impl<'a, T> ResponseHandle<'a, T> {
     pub fn into_response(mut self) -> T {
+        let v = self.take();
+        self.taken = true;
+        v
+    }
+
+    fn take(&mut self) -> T {
         let mut s = self.data.state.lock().unwrap();
-        let v = match std::mem::take(s.deref_mut()) {
-            DataState::DebuggeeOwned(v) => v,
-            _ => panic!("the debugger did not release the data"),
+        let v = loop {
+            s = match s.deref() {
+                DataState::DebuggerOwned(_) => self.data.signal.wait(s).unwrap(),
+                DataState::DebuggeeOwned(_) => match std::mem::take(s.deref_mut()) {
+                    DataState::DebuggeeOwned(v) => break v,
+                    _ => unsafe { unreachable_unchecked() },
+                },
+                _ => unreachable!(),
+            };
         };
 
-        self.taken = true;
+        // It is possible for this method to get called after the debugger has reacquired the lock
+        // so we need to wake them up. Condvar::notify_one do nothing if there are no any thread
+        // waiting on it.
+        self.data.signal.notify_one();
 
         v
     }
@@ -155,17 +161,8 @@ impl<'a, T> ResponseHandle<'a, T> {
 impl<'a, T> Drop for ResponseHandle<'a, T> {
     fn drop(&mut self) {
         if !self.taken {
-            let mut s = self.data.state.lock().unwrap();
-
-            if !matches!(std::mem::take(s.deref_mut()), DataState::DebuggeeOwned(_)) {
-                panic!("the debugger did not release the data");
-            }
+            self.take();
         }
-
-        // It is possible for this method to get called after the debugger has reacquired the lock
-        // so we need to wake them up. Condvar::notify_one do nothing if there are no any thread
-        // waiting on it.
-        self.data.signal.notify_one();
     }
 }
 

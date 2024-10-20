@@ -11,10 +11,10 @@ use super::{VmmEvent, VmmEventHandler};
 use crate::error::RustError;
 use std::collections::BTreeMap;
 use std::num::NonZero;
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
@@ -28,6 +28,7 @@ pub struct CpuManager<H: Hypervisor, S: Screen> {
     devices: Arc<DeviceTree>,
     event: VmmEventHandler,
     cpus: Vec<CpuController>,
+    breakpoint: Arc<Mutex<()>>,
     shutdown: Arc<AtomicBool>,
 }
 
@@ -45,6 +46,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
             devices,
             event,
             cpus: Vec::new(),
+            breakpoint: Arc::default(),
             shutdown,
         }
     }
@@ -56,6 +58,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
             screen: self.screen.clone(),
             devices: self.devices.clone(),
             event: self.event,
+            breakpoint: self.breakpoint.clone(),
             shutdown: self.shutdown.clone(),
         };
 
@@ -75,8 +78,16 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
         self.cpus.push(CpuController::new(t, debuggee));
     }
 
-    pub fn debug_lock(&mut self) -> DebugLock<H, S> {
-        DebugLock(self)
+    pub fn lock(&mut self) {
+        for cpu in &mut self.cpus {
+            cpu.debug_mut().unwrap().lock();
+        }
+    }
+
+    pub fn release(&mut self) {
+        for cpu in &mut self.cpus {
+            cpu.debug_mut().unwrap().release();
+        }
     }
 
     fn main_cpu(args: Args<H, S>, mut debug: Option<Debugger<GdbRegs>>, entry: usize, map: RamMap) {
@@ -117,8 +128,9 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                 }
             };
 
-            // Notify GUI. This will block until the debugger has completed their works.
+            // Notify GUI.
             let resp = debug.send(regs);
+            let lock = args.breakpoint.lock().unwrap();
             let stop = null_mut();
 
             unsafe { args.event.invoke(VmmEvent::Breakpoint { stop }) };
@@ -128,6 +140,8 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                 unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
                 return;
             }
+
+            drop(lock);
         }
 
         // Run.
@@ -365,35 +379,13 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
     }
 }
 
-/// RAII struct to unlock all CPUs when dropped.
-pub struct DebugLock<'a, H: Hypervisor, S: Screen>(&'a mut CpuManager<H, S>);
-
-impl<'a, H: Hypervisor, S: Screen> Drop for DebugLock<'a, H, S> {
-    fn drop(&mut self) {
-        todo!()
-    }
-}
-
-impl<'a, H: Hypervisor, S: Screen> Deref for DebugLock<'a, H, S> {
-    type Target = CpuManager<H, S>;
-
-    fn deref(&self) -> &Self::Target {
-        self.0
-    }
-}
-
-impl<'a, H: Hypervisor, S: Screen> DerefMut for DebugLock<'a, H, S> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        self.0
-    }
-}
-
 /// Encapsulates arguments for a function to run a CPU.
 struct Args<H: Hypervisor, S: Screen> {
     hv: Arc<H>,
     screen: Arc<S::Buffer>,
     devices: Arc<DeviceTree>,
     event: VmmEventHandler,
+    breakpoint: Arc<Mutex<()>>,
     shutdown: Arc<AtomicBool>,
 }
 
