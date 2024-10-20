@@ -18,7 +18,7 @@ pub struct RamBuilder<'a> {
 }
 
 impl<'a> RamBuilder<'a> {
-    pub(super) fn new(ram: &'a mut Ram) -> Self {
+    pub fn new(ram: &'a mut Ram) -> Self {
         Self {
             ram,
             next: 0,

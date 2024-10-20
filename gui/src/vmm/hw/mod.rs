@@ -3,6 +3,7 @@ pub use self::console::*;
 pub use self::vmm::*;
 
 use super::hv::{Cpu, CpuExit, CpuIo, Hypervisor, IoBuf};
+use super::ram::LockedAddr;
 use super::VmmEventHandler;
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -61,11 +62,11 @@ fn read_usize(exit: &mut impl CpuIo) -> Result<usize, MmioError> {
         .map_err(|_| MmioError::InvalidData)
 }
 
-fn read_bin<'b>(
-    exit: &'b mut impl CpuIo,
-    len: usize,
-    hv: &impl Hypervisor,
-) -> Result<&'b [u8], MmioError> {
+fn read_ptr<'a>(
+    exit: &mut impl CpuIo,
+    len: NonZero<usize>,
+    hv: &'a impl Hypervisor,
+) -> Result<LockedAddr<'a>, MmioError> {
     // Get data.
     let buf = match exit.buffer() {
         IoBuf::Write(v) => v,
@@ -82,9 +83,9 @@ fn read_bin<'b>(
         .map_err(|e| MmioError::TranslateVaddrFailed(vaddr, Box::new(e)))?;
 
     // Get data.
-    let data = unsafe { hv.ram().host_addr().add(paddr) };
-
-    Ok(unsafe { std::slice::from_raw_parts(data, len) })
+    hv.ram()
+        .lock(paddr, len)
+        .ok_or(MmioError::InvalidAddr { vaddr, paddr })
 }
 
 /// Contains all virtual devices (except RAM) for the VM.
@@ -169,4 +170,7 @@ enum MmioError {
 
     #[error("couldn't translate {0:#x} to physical address")]
     TranslateVaddrFailed(usize, #[source] Box<dyn Error>),
+
+    #[error("address {vaddr:#x} ({paddr:#x}) is not allocated")]
+    InvalidAddr { vaddr: usize, paddr: usize },
 }
