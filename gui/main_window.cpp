@@ -463,13 +463,6 @@ void MainWindow::log(VmmLog type, const QString &msg)
 
 void MainWindow::setupDebugger()
 {
-    // Setup GDB session.
-    dispatchDebug(nullptr);
-
-    if (vmm_shutting_down(m_vmm)) {
-        return;
-    }
-
     // Enable non-blocking on debug socket. On Windows QSocketNotifier will do this for us.
     auto sock = vmm_debug_socket(m_vmm);
 
@@ -500,6 +493,9 @@ void MainWindow::setupDebugger()
     connect(m_debugNoti, &QSocketNotifier::activated, [this] { dispatchDebug(nullptr); });
 
     m_debugNoti->setEnabled(true);
+
+    // Setup GDB session.
+    dispatchDebug(nullptr);
 }
 
 void MainWindow::dispatchDebug(KernelStop *stop)
@@ -810,13 +806,13 @@ void MainWindow::vmmHandler(const VmmEvent *ev, void *cx)
             QMetaObject::invokeMethod(
                 w,
                 &MainWindow::dispatchDebug,
-                Qt::BlockingQueuedConnection,
+                Qt::QueuedConnection,
                 stop);
         } else {
             QMetaObject::invokeMethod(
                 w,
                 &MainWindow::setupDebugger,
-                Qt::BlockingQueuedConnection);
+                Qt::QueuedConnection);
         }
         break;
     }

@@ -10,6 +10,7 @@ use self::screen::Screen;
 use crate::debug::DebugClient;
 use crate::error::RustError;
 use crate::profile::Profile;
+use gdbstub::common::Signal;
 use gdbstub::stub::state_machine::GdbStubStateMachine;
 use gdbstub::stub::MultiThreadStopReason;
 use obconf::{BootEnv, ConsoleType, Vm};
@@ -490,39 +491,44 @@ pub unsafe extern "C" fn vmm_draw(vmm: *mut Vmm) -> *mut RustError {
 #[no_mangle]
 pub unsafe extern "C" fn vmm_dispatch_debug(vmm: *mut Vmm, stop: *mut KernelStop) -> DebugResult {
     // Consume stop reason now to prevent memory leak.
+    let vmm = &mut *vmm;
     let mut stop = match stop.is_null() {
         true => None,
         false => Some(Box::from_raw(stop).0),
     };
 
-    // Setup target object.
-    let vmm = &mut *vmm;
-    let mut target = vmm.cpu.debug_lock();
-
     loop {
         // Check current state.
         let r = match vmm.gdb.take().unwrap() {
-            GdbStubStateMachine::Idle(s) => self::debug::dispatch_idle(&mut target, s),
+            GdbStubStateMachine::Idle(s) => match self::debug::dispatch_idle(&mut vmm.cpu, s) {
+                Ok(Ok(v)) => Ok(v),
+                Ok(Err(v)) => {
+                    // No pending data from the debugger.
+                    vmm.gdb = Some(v.into());
+                    return DebugResult::Ok;
+                }
+                Err(e) => Err(e),
+            },
             GdbStubStateMachine::Running(s) => {
-                match self::debug::dispatch_running(&mut target, s, stop.take()) {
+                match self::debug::dispatch_running(&mut vmm.cpu, s, stop.take()) {
                     Ok(Ok(v)) => Ok(v),
                     Ok(Err(v)) => {
                         // No pending data from the debugger.
                         vmm.gdb = Some(v.into());
+                        vmm.cpu.release();
                         return DebugResult::Ok;
                     }
                     Err(e) => Err(e),
                 }
             }
             GdbStubStateMachine::CtrlCInterrupt(s) => {
-                match s.interrupt_handled(&mut target, None::<MultiThreadStopReason<u64>>) {
-                    Ok(v) => vmm.gdb = Some(v),
-                    Err(e) => {
-                        let r = RustError::with_source("couldn't handle CTRL+C from a debugger", e);
-                        return DebugResult::Error { reason: r.into_c() };
-                    }
-                }
-                continue;
+                vmm.cpu.lock();
+
+                s.interrupt_handled(
+                    &mut vmm.cpu,
+                    Some(MultiThreadStopReason::Signal(Signal::SIGINT)),
+                )
+                .map_err(|e| RustError::with_source("couldn't handle CTRL+C from a debugger", e))
             }
             GdbStubStateMachine::Disconnected(_) => return DebugResult::Disconnected,
         };

@@ -25,6 +25,10 @@ impl CpuController {
 
 impl Drop for CpuController {
     fn drop(&mut self) {
+        if let Some(d) = &mut self.debug {
+            d.release();
+        }
+
         unsafe { ManuallyDrop::take(&mut self.thread).join().unwrap() };
     }
 }
