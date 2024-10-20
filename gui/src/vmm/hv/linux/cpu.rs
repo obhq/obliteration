@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::arch::{KvmStates, StatesError};
-use super::ffi::{KVM_EXIT_DEBUG, KVM_RUN};
+use super::ffi::{KVM_EXIT_DEBUG, KVM_EXIT_HLT, KVM_EXIT_IO, KVM_RUN};
 use super::run::KvmRun;
 use crate::vmm::hv::{Cpu, CpuDebug, CpuExit, CpuIo, CpuRun, IoBuf};
 use libc::{ioctl, munmap};
@@ -44,9 +44,32 @@ impl<'a> Cpu for KvmCpu<'a> {
         = KvmExit<'b, 'a>
     where
         Self: 'b;
+    type TranslateErr = std::io::Error;
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
         KvmStates::from_cpu(&mut self.fd)
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    fn translate(&self, vaddr: usize) -> Result<usize, std::io::Error> {
+        todo!()
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn translate(&self, vaddr: usize) -> Result<usize, std::io::Error> {
+        let mut data = KvmTranslation {
+            linear_address: vaddr,
+            physical_address: 0,
+            valid: 0,
+            writeable: 0,
+            usermode: 0,
+            pad: [0; 5],
+        };
+
+        match unsafe { kvm_translate(self.fd.as_raw_fd(), &mut data) } {
+            0 => Ok(data.physical_address),
+            _ => return Err(std::io::Error::last_os_error()),
+        }
     }
 }
 
@@ -76,7 +99,7 @@ impl<'a, 'b> CpuExit for KvmExit<'a, 'b> {
 
     #[cfg(target_arch = "x86_64")]
     fn into_hlt(self) -> Result<(), Self> {
-        if unsafe { (*self.0.cx.0).exit_reason == 5 } {
+        if unsafe { (*self.0.cx.0).exit_reason == KVM_EXIT_HLT } {
             Ok(())
         } else {
             Err(self)
@@ -84,7 +107,7 @@ impl<'a, 'b> CpuExit for KvmExit<'a, 'b> {
     }
 
     fn into_io(self) -> Result<Self::Io, Self> {
-        if unsafe { (*self.0.cx.0).exit_reason } == 6 {
+        if unsafe { (*self.0.cx.0).exit_reason } == KVM_EXIT_IO {
             Ok(KvmIo(self.0))
         } else {
             Err(self)
@@ -105,7 +128,6 @@ pub struct KvmIo<'a, 'b>(&'a mut KvmCpu<'b>);
 
 impl<'a, 'b> CpuIo for KvmIo<'a, 'b> {
     type Cpu = KvmCpu<'b>;
-    type TranslateErr = std::io::Error;
 
     fn addr(&self) -> usize {
         unsafe { (*self.0.cx.0).exit.mmio.phys_addr }
@@ -119,28 +141,6 @@ impl<'a, 'b> CpuIo for KvmIo<'a, 'b> {
         match io.is_write {
             0 => IoBuf::Read(buf),
             _ => IoBuf::Write(buf),
-        }
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    fn translate(&self, vaddr: usize) -> Result<usize, std::io::Error> {
-        todo!()
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    fn translate(&self, vaddr: usize) -> Result<usize, std::io::Error> {
-        let mut data = KvmTranslation {
-            linear_address: vaddr,
-            physical_address: 0,
-            valid: 0,
-            writeable: 0,
-            usermode: 0,
-            pad: [0; 5],
-        };
-
-        match unsafe { kvm_translate(self.0.fd.as_raw_fd(), &mut data) } {
-            0 => Ok(data.physical_address),
-            _ => return Err(std::io::Error::last_os_error()),
         }
     }
 

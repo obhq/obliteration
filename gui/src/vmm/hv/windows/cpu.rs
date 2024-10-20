@@ -54,6 +54,8 @@ impl<'a> Cpu for WhpCpu<'a> {
     where
         Self: 'b;
 
+    type TranslateErr = std::io::Error;
+
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
         let mut values: [WHV_REGISTER_VALUE; REGISTERS] = unsafe { zeroed() };
         let status = unsafe {
@@ -75,6 +77,10 @@ impl<'a> Cpu for WhpCpu<'a> {
                 dirty: false,
             })
         }
+    }
+
+    fn translate(&self, vaddr: usize) -> Result<usize, std::io::Error> {
+        todo!()
     }
 }
 
@@ -528,7 +534,6 @@ pub struct WhpIo<'a, 'b> {
 
 impl<'a, 'b> CpuIo for WhpIo<'a, 'b> {
     type Cpu = WhpCpu<'b>;
-    type TranslateErr = std::io::Error;
 
     fn addr(&self) -> usize {
         todo!();
@@ -536,10 +541,6 @@ impl<'a, 'b> CpuIo for WhpIo<'a, 'b> {
 
     fn buffer(&mut self) -> IoBuf {
         todo!();
-    }
-
-    fn translate(&self, vaddr: usize) -> Result<usize, std::io::Error> {
-        todo!()
     }
 
     fn cpu(&mut self) -> &mut Self::Cpu {

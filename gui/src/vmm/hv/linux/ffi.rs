@@ -36,6 +36,8 @@ pub const KVM_CAP_ONE_REG: c_int = 70;
 pub const KVM_CAP_ARM_VM_IPA_SIZE: c_int = 165;
 
 pub const KVM_EXIT_DEBUG: u32 = 4;
+pub const KVM_EXIT_HLT: u32 = 5;
+pub const KVM_EXIT_IO: u32 = 6;
 
 pub const KVM_GUESTDBG_ENABLE: u32 = 0x00000001;
 pub const KVM_GUESTDBG_USE_SW_BP: u32 = 0x00010000;

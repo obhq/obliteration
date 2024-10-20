@@ -69,6 +69,8 @@ impl<H: Hypervisor, S: Screen> MultiThreadBase for CpuManager<H, S> {
     ) -> TargetResult<usize, Self> {
         let mut _cpu = self.get_cpu(tid)?;
 
+        let ram = self.hv.ram();
+
         todo!()
     }
 

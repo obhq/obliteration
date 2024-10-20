@@ -36,9 +36,8 @@ pub fn setup_devices(
 
 fn read_u8(exit: &mut impl CpuIo) -> Result<u8, MmioError> {
     // Get data.
-    let data = match exit.buffer() {
-        IoBuf::Write(v) => v,
-        IoBuf::Read(_) => return Err(MmioError::InvalidOperation),
+    let IoBuf::Write(data) = exit.buffer() else {
+        return Err(MmioError::InvalidOperation);
     };
 
     // Parse data.
@@ -51,9 +50,8 @@ fn read_u8(exit: &mut impl CpuIo) -> Result<u8, MmioError> {
 
 fn read_usize(exit: &mut impl CpuIo) -> Result<usize, MmioError> {
     // Get data.
-    let data = match exit.buffer() {
-        IoBuf::Write(v) => v,
-        IoBuf::Read(_) => return Err(MmioError::InvalidOperation),
+    let IoBuf::Write(data) = exit.buffer() else {
+        return Err(MmioError::InvalidOperation);
     };
 
     // Parse data.
@@ -68,9 +66,8 @@ fn read_ptr<'a>(
     hv: &'a impl Hypervisor,
 ) -> Result<LockedAddr<'a>, MmioError> {
     // Get data.
-    let buf = match exit.buffer() {
-        IoBuf::Write(v) => v,
-        IoBuf::Read(_) => return Err(MmioError::InvalidOperation),
+    let IoBuf::Write(buf) = exit.buffer() else {
+        return Err(MmioError::InvalidOperation);
     };
 
     // Get address.
@@ -78,7 +75,9 @@ fn read_ptr<'a>(
         .try_into()
         .map(|v| usize::from_ne_bytes(v))
         .map_err(|_| MmioError::InvalidData)?;
+
     let paddr = exit
+        .cpu()
         .translate(vaddr)
         .map_err(|e| MmioError::TranslateVaddrFailed(vaddr, Box::new(e)))?;
 

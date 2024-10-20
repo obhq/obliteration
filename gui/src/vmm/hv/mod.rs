@@ -48,8 +48,11 @@ pub trait Cpu {
     type Exit<'a>: CpuExit<Cpu = Self>
     where
         Self: 'a;
+    type TranslateErr: Error + Send + 'static;
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr>;
+
+    fn translate(&self, vaddr: usize) -> Result<usize, Self::TranslateErr>;
 }
 
 /// Provides a method to run the CPU.
@@ -80,12 +83,10 @@ pub trait CpuExit: Sized {
 /// Contains information when a VM exited because of memory-mapped I/O.
 pub trait CpuIo {
     type Cpu: Cpu;
-    type TranslateErr: Error + Send + 'static;
 
     /// Returns physical address where the VM try to access.
     fn addr(&self) -> usize;
     fn buffer(&mut self) -> IoBuf;
-    fn translate(&self, vaddr: usize) -> Result<usize, Self::TranslateErr>;
     fn cpu(&mut self) -> &mut Self::Cpu;
 }
 
