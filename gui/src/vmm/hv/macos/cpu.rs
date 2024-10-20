@@ -50,6 +50,7 @@ impl<'a> Cpu for HvfCpu<'a> {
         = HvfExit<'b, 'a>
     where
         Self: 'b;
+    type TranslateErr = std::io::Error;
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
         Ok(HvfStates {
@@ -65,6 +66,10 @@ impl<'a> Cpu for HvfCpu<'a> {
             x0: State::None,
             x1: State::None,
         })
+    }
+
+    fn translate(&self, vaddr: usize) -> Result<usize, std::io::Error> {
+        todo!();
     }
 }
 
@@ -235,17 +240,12 @@ pub struct HvfIo<'a, 'b>(&'a mut HvfCpu<'b>);
 
 impl<'a, 'b> CpuIo for HvfIo<'a, 'b> {
     type Cpu = HvfCpu<'b>;
-    type TranslateErr = std::io::Error;
 
     fn addr(&self) -> usize {
         todo!();
     }
 
     fn buffer(&mut self) -> IoBuf {
-        todo!();
-    }
-
-    fn translate(&self, vaddr: usize) -> Result<usize, std::io::Error> {
         todo!();
     }
 
