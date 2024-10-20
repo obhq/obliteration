@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::controller::CpuController;
 use super::CpuManager;
+use crate::screen::Screen;
 use crate::vmm::hv::Hypervisor;
-use crate::vmm::screen::Screen;
 use gdbstub::common::Tid;
 use gdbstub::target::ext::base::multithread::MultiThreadBase;
 use gdbstub::target::ext::base::BaseOps;
