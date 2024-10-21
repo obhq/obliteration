@@ -66,3 +66,24 @@ corrosion_import_crate(MANIFEST_PATH Cargo.toml CRATES gui)
 
 # Add GUI.
 add_subdirectory(gui)
+
+# Setup installation.
+if(WIN32)
+    install(TARGETS obliteration DESTINATION .)
+else()
+    install(TARGETS obliteration BUNDLE DESTINATION . RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
+
+qt_generate_deploy_app_script(
+    TARGET obliteration
+    OUTPUT_SCRIPT QT_DEPLOY_SCRIPT
+    NO_TRANSLATIONS
+    NO_COMPILER_RUNTIME)
+
+install(SCRIPT ${QT_DEPLOY_SCRIPT})
+
+if(APPLE)
+    install(FILES ${KERNEL} DESTINATION obliteration.app/Contents/Resources)
+else()
+    install(FILES ${KERNEL} TYPE DATA)
+endif()
