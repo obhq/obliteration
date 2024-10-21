@@ -14,7 +14,7 @@ FetchContent_Declare(
     GIT_TAG v0.11.0
 )
 
-FetchContent_MakeAvailable(corrosion msvc)
+FetchContent_MakeAvailable(msvc corrosion)
 
 # Set project properties.
 project(obliteration)
