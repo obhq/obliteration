@@ -80,3 +80,28 @@ if(APPLE)
     add_custom_command(TARGET obliteration POST_BUILD
         COMMAND codesign -s - --entitlements ${CMAKE_SOURCE_DIR}/entitlements.plist obliteration.app)
 endif()
+
+# Setup installation.
+if(WIN32)
+    install(TARGETS obliteration DESTINATION .)
+else()
+    install(TARGETS obliteration BUNDLE DESTINATION . RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
+
+if(WIN32)
+    install(SCRIPT deploy-win32.cmake)
+elseif(APPLE)
+    qt_generate_deploy_app_script(
+        TARGET obliteration
+        OUTPUT_SCRIPT QT_DEPLOY_SCRIPT
+        NO_TRANSLATIONS
+        NO_COMPILER_RUNTIME)
+
+    install(SCRIPT ${QT_DEPLOY_SCRIPT})
+endif()
+
+if(APPLE)
+    install(FILES ${KERNEL} DESTINATION obliteration.app/Contents/Resources)
+else()
+    install(FILES ${KERNEL} TYPE DATA)
+endif()
