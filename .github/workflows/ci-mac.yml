@@ -84,7 +84,7 @@ jobs:
       working-directory: src
     - name: Create Application Bundle
       run: |
-        cmake --install build --prefix .
+        cmake --install build --prefix "$(pwd)"
         mkdir dist
         mv obliteration.app dist/Obliteration.app
     - name: Fix library paths
