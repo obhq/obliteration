@@ -10,7 +10,7 @@ if(APPLE)
     find_library(HYPERVISOR Hypervisor REQUIRED)
 endif()
 
-# Setup application target.
+# Setup GUI.
 add_executable(obliteration WIN32 MACOSX_BUNDLE
     ansi_escape.cpp
     app_data.cpp
@@ -43,7 +43,7 @@ elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
     target_sources(obliteration PRIVATE kvm.cpp vulkan.cpp)
 endif()
 
-add_dependencies(obliteration libgui)
+add_dependencies(obliteration kernel)
 
 set_target_properties(obliteration PROPERTIES AUTOMOC ON AUTORCC ON)
 
@@ -66,7 +66,7 @@ target_compile_features(obliteration PRIVATE cxx_std_17)
 
 target_link_libraries(obliteration PRIVATE Qt6::Svg Qt6::Widgets)
 target_link_libraries(obliteration PRIVATE Threads::Threads)
-target_link_libraries(obliteration PRIVATE ${LIBGUI})
+target_link_libraries(obliteration PRIVATE gui)
 
 if(WIN32)
     target_link_libraries(obliteration PRIVATE bcrypt imm32 ntdll setupapi userenv version winhvplatform winmm ws2_32)
