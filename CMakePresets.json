@@ -12,7 +12,7 @@
       "name": "windows",
       "inherits": "default",
       "generator": "Ninja",
-      "toolchainFile": "cmake/Windows.MSVC.toolchain.cmake",
+      "toolchainFile": "_deps/msvc-src/Windows.MSVC.toolchain.cmake",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",

@@ -1,5 +1,17 @@
 cmake_minimum_required(VERSION 3.21)
 
+include(FetchContent)
+
+# Fetch external CMake scripts.
+FetchContent_Declare(
+    msvc
+    GIT_REPOSITORY https://github.com/MarkSchofield/WindowsToolchain.git
+    GIT_TAG v0.11.0
+)
+
+FetchContent_MakeAvailable(msvc)
+
+# Set project properties.
 project(obliteration)
 
 # Set warning level to highest. This will propagate to sub-directories too.
