@@ -4,12 +4,18 @@ include(FetchContent)
 
 # Fetch external CMake scripts.
 FetchContent_Declare(
+    corrosion
+    GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
+    GIT_TAG v0.5.0
+)
+
+FetchContent_Declare(
     msvc
     GIT_REPOSITORY https://github.com/MarkSchofield/WindowsToolchain.git
     GIT_TAG v0.11.0
 )
 
-FetchContent_MakeAvailable(msvc)
+FetchContent_MakeAvailable(corrosion msvc)
 
 # Set project properties.
 project(obliteration)
@@ -50,25 +56,13 @@ endif()
 
 set(KERNEL_OUTPUTS $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/${KERNEL_TARGET}/debug,${CMAKE_CURRENT_SOURCE_DIR}/target/${KERNEL_TARGET}/release>)
 set(KERNEL ${KERNEL_OUTPUTS}/obkrnl)
-set(HOST_OUTPUTS $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/debug,${CMAKE_CURRENT_SOURCE_DIR}/target/release>)
-
-if(WIN32)
-    set(LIBGUI ${HOST_OUTPUTS}/gui.lib)
-else()
-    set(LIBGUI ${HOST_OUTPUTS}/libgui.a)
-endif()
-
-add_custom_target(libgui
-    COMMAND cargo build $<IF:$<CONFIG:Debug>,--profile=dev,--release>
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/gui
-    BYPRODUCTS ${LIBGUI})
 
 add_custom_target(kernel
     COMMAND cargo ${KERNEL_TOOLCHAIN} build $<IF:$<CONFIG:Debug>,--profile=dev,--release> --target ${KERNEL_TARGET} ${KERNEL_OPTS}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/kernel
     BYPRODUCTS ${KERNEL})
 
-add_dependencies(libgui kernel)
+corrosion_import_crate(MANIFEST_PATH Cargo.toml CRATES gui)
 
 # Add GUI.
 add_subdirectory(gui)
