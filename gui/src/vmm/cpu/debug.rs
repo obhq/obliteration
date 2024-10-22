@@ -35,12 +35,21 @@ impl Debuggee {
     pub fn get_regs(&mut self) -> Option<GdbRegs> {
         self.sender.send(DebugReq::GetRegs).ok()?;
         self.locked = true;
-        self.receiver
-            .recv()
-            .map(|v| match v {
-                DebugRes::Regs(v) => v,
-            })
-            .ok()
+        self.receiver.recv().ok().and_then(|v| match v {
+            DebugRes::Regs(v) => Some(v),
+            _ => None,
+        })
+    }
+
+    pub fn translate_address(&mut self, addr: usize) -> Option<usize> {
+        self.sender.send(DebugReq::TranslateAddress(addr)).ok()?;
+
+        self.locked = true;
+
+        self.receiver.recv().ok().and_then(|v| match v {
+            DebugRes::TranslatedAddress(v) => Some(v),
+            _ => None,
+        })
     }
 
     pub fn lock(&mut self) {
@@ -67,7 +76,7 @@ impl Debugger {
     }
 
     pub fn send(&self, r: DebugRes) {
-        self.sender.send(r).ok();
+        let _ = self.sender.send(r);
     }
 }
 
@@ -76,9 +85,11 @@ pub enum DebugReq {
     GetRegs,
     Lock,
     Release,
+    TranslateAddress(usize),
 }
 
 /// Debug response from a debuggee to a debugger.
 pub enum DebugRes {
     Regs(GdbRegs),
+    TranslatedAddress(usize),
 }
