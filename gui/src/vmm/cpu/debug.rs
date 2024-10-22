@@ -35,8 +35,8 @@ impl Debuggee {
     pub fn get_regs(&mut self) -> Option<GdbRegs> {
         self.sender.send(DebugReq::GetRegs).ok()?;
         self.locked = true;
-        self.receiver.recv().ok().and_then(|v| match v {
-            DebugRes::Regs(v) => Some(v),
+        self.receiver.recv().ok().map(|v| match v {
+            DebugRes::Regs(v) => v,
             _ => panic!("unexpected response when getting registers {v:?}"),
         })
     }
@@ -46,8 +46,8 @@ impl Debuggee {
 
         self.locked = true;
 
-        self.receiver.recv().ok().and_then(|v| match v {
-            DebugRes::TranslatedAddress(v) => Some(v),
+        self.receiver.recv().ok().map(|v| match v {
+            DebugRes::TranslatedAddress(v) => v,
             _ => panic!("unexpected response when translating address {v:?}"),
         })
     }
