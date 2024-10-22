@@ -4,25 +4,37 @@ use core::arch::{asm, global_asm};
 use core::mem::{transmute, zeroed};
 use core::ptr::addr_of;
 
+pub const GDT_KERNEL_CS: SegmentSelector = SegmentSelector::new().with_si(3);
+pub const GDT_KERNEL_DS: SegmentSelector = SegmentSelector::new().with_si(4);
+pub const GDT_USER_CS32: SegmentSelector = SegmentSelector::new().with_si(5).with_rpl(Dpl::Ring3);
+
 /// # Safety
 /// This function can be called only once and must be called by main CPU entry point.
 pub unsafe fn setup_main_cpu() {
     // Setup GDT.
-    static mut GDT: [SegmentDescriptor; 6] = [
+    static mut GDT: [SegmentDescriptor; 10] = [
         // Null descriptor.
         SegmentDescriptor::new(),
-        // Code segment.
+        // 32-bit GS for user.
+        SegmentDescriptor::new(),
+        // 32-bit FS for user.
+        SegmentDescriptor::new(),
+        // CS for kernel.
         SegmentDescriptor::new()
             .with_ty(0b1000) // This required somehow although the docs said it is ignored.
             .with_s(true) // Same here.
             .with_p(true)
             .with_l(true), // 64-bit mode.
-        // Data segment.
+        // DS for kernel.
         SegmentDescriptor::new()
             .with_ty(0b0010) // This required somehow although the docs said it is ignored.
             .with_s(true) // Same here.
             .with_p(true),
-        // Null descriptor to make TSS descriptor 16 bytes alignment.
+        // 32-bit CS for user.
+        SegmentDescriptor::new(),
+        // DS for user.
+        SegmentDescriptor::new(),
+        // 64-bit CS for user.
         SegmentDescriptor::new(),
         // TSS descriptor.
         SegmentDescriptor::new(),
@@ -36,7 +48,7 @@ pub unsafe fn setup_main_cpu() {
     TSS.rsp0 = TSS_RSP0.as_mut_ptr().add(TSS_RSP0.len()) as _; // Top-down.
 
     // Setup TSS descriptor.
-    let tss: &'static mut TssDescriptor = transmute(&mut GDT[4]);
+    let tss: &'static mut TssDescriptor = transmute(&mut GDT[8]);
     let base = addr_of!(TSS) as usize;
 
     tss.set_limit1((size_of::<Tss>() - 1).try_into().unwrap());
@@ -46,8 +58,6 @@ pub unsafe fn setup_main_cpu() {
     tss.set_p(true);
 
     // Switch GDT from bootloader GDT to our own.
-    let cs = SegmentSelector::new().with_si(1);
-    let ds = SegmentSelector::new().with_si(2);
     let limit = (size_of::<SegmentDescriptor>() * GDT.len() - 1)
         .try_into()
         .unwrap();
@@ -57,14 +67,14 @@ pub unsafe fn setup_main_cpu() {
             limit,
             addr: GDT.as_ptr(),
         },
-        cs,
-        ds,
+        GDT_KERNEL_CS,
+        GDT_KERNEL_DS,
     );
 
     // Set Task Register (TR).
     asm!(
         "ltr {v:x}",
-        v = in(reg) SegmentSelector::new().with_si(4).into_bits(),
+        v = in(reg) SegmentSelector::new().with_si(8).into_bits(),
         options(preserves_flags, nostack)
     );
 
@@ -76,7 +86,7 @@ pub unsafe fn setup_main_cpu() {
 
         IDT[n] = GateDescriptor::new()
             .with_offset1(f as u16)
-            .with_selector(cs)
+            .with_selector(GDT_KERNEL_CS)
             .with_ist(ist)
             .with_ty(ty)
             .with_dpl(dpl)
@@ -98,11 +108,51 @@ pub unsafe fn setup_main_cpu() {
         v = in(reg) &idtr,
         options(preserves_flags, nostack)
     );
+
+    // Set CS and SS for syscall and sysret instruction.
+    let star = Star::new()
+        .with_syscall_sel(GDT_KERNEL_CS)
+        .with_sysret_sel(GDT_USER_CS32)
+        .into_bits();
+
+    asm!(
+        "wrmsr",
+        in("ecx") 0xC0000081u32,
+        in("edx") star >> 32,
+        in("eax") star,
+        options(nomem, preserves_flags, nostack)
+    );
+
+    // Set entry point for 64-bit syscall instruction.
+    let addr = syscall_entry64 as usize;
+
+    asm!(
+        "wrmsr",
+        in("ecx") 0xC0000082u32,
+        in("edx") addr >> 32,
+        in("eax") addr,
+        options(nomem, preserves_flags, nostack)
+    );
+
+    // Set entry point for 32-bit syscall instruction.
+    let addr = syscall_entry32 as usize;
+
+    asm!(
+        "wrmsr",
+        in("ecx") 0xC0000083u32,
+        in("edx") addr >> 32,
+        in("eax") addr,
+        options(nomem, preserves_flags, nostack)
+    );
+
+    // TODO: Set SFMASK.
 }
 
-extern "C" {
+unsafe extern "C" {
     fn set_gdtr(v: &Gdtr, code: SegmentSelector, data: SegmentSelector);
     fn Xbpt() -> !;
+    fn syscall_entry64() -> !;
+    fn syscall_entry32() -> !;
 }
 
 // See lgdt on the PS4 for a reference.
@@ -129,6 +179,12 @@ global_asm!(
     "call {f}",
     f = sym interrupt_handler
 );
+
+// See Xfast_syscall on the PS4 for a reference.
+global_asm!("syscall_entry64:", "ud2");
+
+// See fast_syscall32 on the PS4 for a reference.
+global_asm!("syscall_entry32:", "ud2");
 
 /// Raw value of a Global Descriptor-Table Register.
 ///
@@ -246,12 +302,37 @@ impl Dpl {
 /// See Segment Selectors section on AMD64 Architecture Programmer's Manual Volume 2 for more
 /// details.
 #[bitfield(u16)]
-struct SegmentSelector {
+pub struct SegmentSelector {
     #[bits(2)]
     rpl: Dpl,
-    ti: bool,
+    #[bits(1)]
+    ti: Ti,
     #[bits(13)]
     si: u16,
+}
+
+/// Raw value of Table Indicator field.
+#[repr(u8)]
+#[derive(Debug, Clone, Copy)]
+enum Ti {
+    Gdt,
+    Ldt,
+}
+
+impl Ti {
+    /// # Panics
+    /// If `v` is greater than 2.
+    const fn from_bits(v: u8) -> Self {
+        match v {
+            0 => Self::Gdt,
+            1 => Self::Ldt,
+            _ => panic!("invalid value"),
+        }
+    }
+
+    const fn into_bits(self) -> u8 {
+        self as _
+    }
 }
 
 /// Raw value of a Interrupt Descriptor-Table Register.
@@ -286,4 +367,17 @@ struct GateDescriptor {
     #[bits(48)]
     offset2: u64,
     __: u32,
+}
+
+/// Raw value of STAR register.
+///
+/// See SYSCALL and SYSRET section on AMD64 Architecture Programmer's Manual Volume 2 for more
+/// details.
+#[bitfield(u64)]
+struct Star {
+    syscall_eip: u32,
+    #[bits(16)]
+    syscall_sel: SegmentSelector,
+    #[bits(16)]
+    sysret_sel: SegmentSelector,
 }

@@ -2,7 +2,7 @@
 use super::ffi::{
     KvmFpu, KvmRegs, KvmSregs, KVM_GET_FPU, KVM_GET_REGS, KVM_GET_SREGS, KVM_SET_REGS,
 };
-use crate::vmm::hv::{CpuCommit, CpuStates, Rflags};
+use crate::vmm::hv::{CpuCommit, CpuStates, Efer, Rflags};
 use libc::ioctl;
 use std::ffi::c_int;
 use std::mem::MaybeUninit;
@@ -168,8 +168,8 @@ impl<'a> CpuStates for KvmStates<'a> {
         Ok(self.gregs.rflags.into())
     }
 
-    fn set_efer(&mut self, v: usize) {
-        self.sregs.efer = v.try_into().unwrap();
+    fn set_efer(&mut self, v: Efer) {
+        self.sregs.efer = v.into_bits();
         self.sdirty = true;
     }
 

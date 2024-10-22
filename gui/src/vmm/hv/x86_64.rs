@@ -32,7 +32,7 @@ pub trait CpuStates {
     fn set_cr3(&mut self, v: usize);
     fn set_cr4(&mut self, v: usize);
     fn get_rflags(&mut self) -> Result<Rflags, Self::Err>;
-    fn set_efer(&mut self, v: usize);
+    fn set_efer(&mut self, v: Efer);
     fn get_cs(&mut self) -> Result<u16, Self::Err>;
     fn set_cs(&mut self, ty: u8, dpl: u8, p: bool, l: bool, d: bool);
     fn get_ds(&mut self) -> Result<u16, Self::Err>;
@@ -116,6 +116,33 @@ pub struct Rflags {
     pub vif: bool,
     pub vip: bool,
     pub id: bool,
+    #[bits(42)]
+    __: u64,
+}
+
+/// Raw value of `EFER` register.
+///
+/// See Extended Feature Enable Register (EFER) section on AMD64 Architecture Programmer's Manual
+/// Volume 2 for more details.
+#[bitfield(u64)]
+pub struct Efer {
+    pub sce: bool,
+    #[bits(7)]
+    __: u8,
+    pub lme: bool,
+    __: bool,
+    pub lma: bool,
+    pub nxe: bool,
+    pub svme: bool,
+    pub lmsle: bool,
+    pub ffxsr: bool,
+    pub tce: bool,
+    __: bool,
+    pub mcommit: bool,
+    pub intwb: bool,
+    __: bool,
+    pub uaie: bool,
+    pub aibrse: bool,
     #[bits(42)]
     __: u64,
 }
