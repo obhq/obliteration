@@ -35,7 +35,7 @@ impl<'a> RamBuilder<'a> {
         assert!(self.kern.is_none());
 
         let addr = self.next;
-        let mem = unsafe { self.ram.alloc(addr, len)? };
+        let mem = self.ram.alloc(addr, len)?;
 
         self.kern = Some(addr..(addr + len.get()));
         self.next += len.get();
@@ -51,7 +51,7 @@ impl<'a> RamBuilder<'a> {
 
         let addr = self.next;
 
-        unsafe { self.ram.alloc(addr, len) }?;
+        self.ram.alloc(addr, len)?;
 
         self.stack = Some(addr..(addr + len.get()));
         self.next += len.get();
@@ -73,7 +73,8 @@ impl<'a> RamBuilder<'a> {
             .and_then(|len| len.checked_next_multiple_of(self.ram.block_size.get()))
             .and_then(NonZero::new)
             .unwrap();
-        let args = unsafe { self.ram.alloc(addr, len)? };
+
+        let args = self.ram.alloc(addr, len)?;
         let mut w = ArgsWriter { mem: args, next: 0 };
 
         // Write arguments.
@@ -345,7 +346,7 @@ impl<'a> RamBuilder<'a> {
         assert_eq!(addr % 4096, 0);
 
         // Allocate.
-        let tab = unsafe { self.ram.alloc(addr, len).map(|v| v.as_mut_ptr().cast())? };
+        let tab = self.ram.alloc(addr, len).map(|v| v.as_mut_ptr().cast())?;
 
         self.next += len.get();
 
