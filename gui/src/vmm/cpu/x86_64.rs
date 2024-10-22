@@ -86,7 +86,9 @@ impl<H: Hypervisor, S: Screen> MultiThreadBase for CpuManager<H, S> {
             .lock(translated, len)
             .ok_or(GdbTargetError::Errno(ENOENT))?; // The CPU thread just stopped.
 
-        data.copy_from_slice(unsafe { std::slice::from_raw_parts(locked_addr.as_ptr(), len.get()) });
+        data.copy_from_slice(unsafe {
+            std::slice::from_raw_parts(locked_addr.as_ptr(), len.get())
+        });
 
         Ok(len.get())
     }
