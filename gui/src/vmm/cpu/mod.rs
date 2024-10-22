@@ -297,7 +297,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                 DebugReq::TranslateAddress(addr) => match cpu.translate(addr) {
                     Ok(v) => debug.send(DebugRes::TranslatedAddress(v)),
                     Err(e) => {
-                        let err = RustError::with_source("couldn't translate address", e);
+                        let err = RustError::with_source(format!{"couldn't translate address {addr}"}, e);
 
                         unsafe { args.event.invoke(VmmEvent::Error { reason: &err }) };
                         return false;

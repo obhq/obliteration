@@ -17,6 +17,7 @@ use std::num::NonZero;
 use thiserror::Error;
 
 const ENOENT: u8 = 2;
+const EFAULT: u8 = 14;
 
 pub type GdbRegs = gdbstub_arch::x86::reg::X86_64CoreRegs;
 
@@ -84,7 +85,7 @@ impl<H: Hypervisor, S: Screen> MultiThreadBase for CpuManager<H, S> {
 
         let locked_addr = ram
             .lock(translated, len)
-            .ok_or(GdbTargetError::Errno(ENOENT))?;
+            .ok_or(GdbTargetError::Errno(EFAULT))?;
 
         data.copy_from_slice(unsafe {
             std::slice::from_raw_parts(locked_addr.as_ptr(), len.get())

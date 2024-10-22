@@ -37,7 +37,7 @@ impl Debuggee {
         self.locked = true;
         self.receiver.recv().ok().and_then(|v| match v {
             DebugRes::Regs(v) => Some(v),
-            _ => None,
+            _ => panic!("unexpected response when getting registers {v:?}"),
         })
     }
 
@@ -48,7 +48,7 @@ impl Debuggee {
 
         self.receiver.recv().ok().and_then(|v| match v {
             DebugRes::TranslatedAddress(v) => Some(v),
-            _ => None,
+            _ => panic!("unexpected response when translating address {v:?}"),
         })
     }
 
@@ -81,6 +81,7 @@ impl Debugger {
 }
 
 /// Debug request from a debugger to a debuggee.
+#[derive(Debug)]
 pub enum DebugReq {
     GetRegs,
     Lock,
@@ -89,6 +90,7 @@ pub enum DebugReq {
 }
 
 /// Debug response from a debuggee to a debugger.
+#[derive(Debug)]
 pub enum DebugRes {
     Regs(GdbRegs),
     TranslatedAddress(usize),
