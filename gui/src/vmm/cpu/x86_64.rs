@@ -17,6 +17,7 @@ use std::num::NonZero;
 use thiserror::Error;
 
 const ENOENT: u8 = 2;
+const EFAULT: u8 = 14;
 
 pub type GdbRegs = gdbstub_arch::x86::reg::X86_64CoreRegs;
 
@@ -66,11 +67,31 @@ impl<H: Hypervisor, S: Screen> MultiThreadBase for CpuManager<H, S> {
         data: &mut [u8],
         tid: Tid,
     ) -> TargetResult<usize, Self> {
-        let mut _cpu = self.get_cpu(tid)?;
+        let Some(len) = NonZero::new(data.len()) else {
+            return Ok(0);
+        };
+
+        let cpu = self.get_cpu(tid)?;
+
+        let translated = cpu
+            .debug_mut()
+            .unwrap()
+            .translate_address(start_addr.try_into().unwrap())
+            .ok_or(GdbTargetError::Errno(ENOENT))?;
+
+        drop(cpu);
 
         let ram = self.hv.ram();
 
-        todo!()
+        let locked_addr = ram
+            .lock(translated, len)
+            .ok_or(GdbTargetError::Errno(EFAULT))?;
+
+        data.copy_from_slice(unsafe {
+            std::slice::from_raw_parts(locked_addr.as_ptr(), len.get())
+        });
+
+        Ok(len.get())
     }
 
     fn write_addrs(&mut self, start_addr: u64, data: &[u8], tid: Tid) -> TargetResult<(), Self> {

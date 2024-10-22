@@ -256,16 +256,6 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
         cpu: &mut impl Cpu,
         stop: Option<MultiThreadStopReason<u64>>,
     ) -> bool {
-        // Get states.
-        let mut states = match cpu.states() {
-            Ok(v) => v,
-            Err(e) => {
-                let e = RustError::with_source("couldn't get CPU states", e);
-                unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
-                return false;
-            }
-        };
-
         // Convert stop reason.
         let stop = match stop {
             Some(_) => todo!(),
@@ -285,10 +275,34 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
             };
 
             match req {
-                DebugReq::GetRegs => match Self::get_debug_regs(&mut states) {
-                    Ok(v) => debug.send(DebugRes::Regs(v)),
+                DebugReq::GetRegs => {
+                    // Get states.
+                    let mut states = match cpu.states() {
+                        Ok(v) => v,
+                        Err(e) => {
+                            let e = RustError::with_source("couldn't get CPU states", e);
+                            unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+                            return false;
+                        }
+                    };
+
+                    match Self::get_debug_regs(&mut states) {
+                        Ok(v) => debug.send(DebugRes::Regs(v)),
+                        Err(e) => {
+                            unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+                            return false;
+                        }
+                    }
+                }
+                DebugReq::TranslateAddress(addr) => match cpu.translate(addr) {
+                    Ok(v) => debug.send(DebugRes::TranslatedAddress(v)),
                     Err(e) => {
-                        unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+                        let err = RustError::with_source(
+                            format! {"couldn't translate address {addr}"},
+                            e,
+                        );
+
+                        unsafe { args.event.invoke(VmmEvent::Error { reason: &err }) };
                         return false;
                     }
                 },
