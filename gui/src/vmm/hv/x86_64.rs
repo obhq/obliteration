@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use bitfield_struct::bitfield;
 use std::error::Error;
+use x86_64::Efer;
 
 /// States of a CPU.
 pub trait CpuStates {
@@ -116,33 +117,6 @@ pub struct Rflags {
     pub vif: bool,
     pub vip: bool,
     pub id: bool,
-    #[bits(42)]
-    __: u64,
-}
-
-/// Raw value of `EFER` register.
-///
-/// See Extended Feature Enable Register (EFER) section on AMD64 Architecture Programmer's Manual
-/// Volume 2 for more details.
-#[bitfield(u64)]
-pub struct Efer {
-    pub sce: bool,
-    #[bits(7)]
-    __: u8,
-    pub lme: bool,
-    __: bool,
-    pub lma: bool,
-    pub nxe: bool,
-    pub svme: bool,
-    pub lmsle: bool,
-    pub ffxsr: bool,
-    pub tce: bool,
-    __: bool,
-    pub mcommit: bool,
-    pub intwb: bool,
-    __: bool,
-    pub uaie: bool,
-    pub aibrse: bool,
     #[bits(42)]
     __: u64,
 }

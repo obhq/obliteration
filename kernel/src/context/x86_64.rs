@@ -1,4 +1,5 @@
 use super::Context;
+use crate::arch::wrmsr;
 use crate::proc::Thread;
 use core::arch::asm;
 use core::mem::offset_of;
@@ -8,32 +9,11 @@ use core::mem::offset_of;
 /// This also set user-mode `FS` and `GS` to null.
 pub unsafe fn activate(cx: *mut Context) {
     // Set GS for kernel mode.
-    let cx = cx as usize;
-
-    asm!(
-        "wrmsr",
-        in("ecx") 0xc0000101u32,
-        in("edx") cx >> 32,
-        in("eax") cx,
-        options(nomem, preserves_flags, nostack)
-    );
+    wrmsr(0xc0000101, cx as usize);
 
     // Clear FS and GS for user mode.
-    asm!(
-        "wrmsr",
-        in("ecx") 0xc0000100u32,
-        in("edx") 0,
-        in("eax") 0,
-        options(nomem, preserves_flags, nostack)
-    );
-
-    asm!(
-        "wrmsr",
-        in("ecx") 0xc0000102u32,
-        in("edx") 0,
-        in("eax") 0,
-        options(nomem, preserves_flags, nostack)
-    );
+    wrmsr(0xc0000100, 0);
+    wrmsr(0xc0000102, 0);
 }
 
 pub unsafe fn thread() -> *const Thread {
@@ -43,7 +23,7 @@ pub unsafe fn thread() -> *const Thread {
 
     asm!(
         "mov {out}, gs:[{off}]",
-        off = in(reg) offset_of!(Context, thread), // TODO: Use const from Rust 1.82.
+        off = const offset_of!(Context, thread),
         out = out(reg) td,
         options(pure, nomem, preserves_flags, nostack)
     );
@@ -58,7 +38,7 @@ pub unsafe fn cpu() -> usize {
 
     asm!(
         "mov {out}, gs:[{off}]",
-        off = in(reg) offset_of!(Context, cpu), // TODO: Use const from Rust 1.82.
+        off = const offset_of!(Context, cpu),
         out = out(reg) cpu,
         options(preserves_flags, nostack)
     );

@@ -11,3 +11,6 @@ macros = { path = "../src/macros" }
 obconf = { path = "../src/obconf", features = ["virt"] }
 spin = { version = "0.9.8", features = ["spin_mutex"], default-features = false }
 talc = { version = "4.4.1", default-features = false }
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+x86-64 = { path = "../arch/x86-64" }

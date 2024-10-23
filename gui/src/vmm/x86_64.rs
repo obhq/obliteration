@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use super::hv::{Cpu, CpuCommit, CpuFeats, CpuStates, Efer};
+use super::hv::{Cpu, CpuCommit, CpuFeats, CpuStates};
 use super::ram::RamMap;
 use super::MainCpuError;
+use x86_64::Efer;
 
 pub fn setup_main_cpu(
     cpu: &mut impl Cpu,
@@ -25,8 +26,8 @@ pub fn setup_main_cpu(
 
     states.set_cr4(cr4);
 
-    // Set EFER to enable long mode and syscall/sysret.
-    states.set_efer(Efer::new().with_sce(true).with_lme(true).with_lma(true));
+    // Set EFER to enable long mode with 64-bit.
+    states.set_efer(Efer::new().with_lme(true).with_lma(true));
 
     // Set CR0.
     let mut cr0 = 0;

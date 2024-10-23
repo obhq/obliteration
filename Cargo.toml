@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+    "arch/x86-64",
     "gui",
     "kernel",
     "src/fs",
