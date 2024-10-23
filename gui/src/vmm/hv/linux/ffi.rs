@@ -5,6 +5,8 @@ pub const KVM_GET_API_VERSION: c_ulong = _IO(KVMIO, 0x00);
 pub const KVM_CREATE_VM: c_ulong = _IO(KVMIO, 0x01);
 pub const KVM_CHECK_EXTENSION: c_ulong = _IO(KVMIO, 0x03);
 pub const KVM_GET_VCPU_MMAP_SIZE: c_ulong = _IO(KVMIO, 0x04);
+#[cfg(target_arch = "x86_64")]
+pub const KVM_GET_SUPPORTED_CPUID: c_ulong = _IOC(_IOC_READ | _IOC_WRITE, KVMIO, 0x05, 8);
 pub const KVM_CREATE_VCPU: c_ulong = _IO(KVMIO, 0x41);
 pub const KVM_SET_USER_MEMORY_REGION: c_ulong = _IOW::<KvmUserspaceMemoryRegion>(KVMIO, 0x46);
 pub const KVM_RUN: c_ulong = _IO(KVMIO, 0x80);
@@ -16,6 +18,8 @@ pub const KVM_SET_REGS: c_ulong = _IOW::<KvmRegs>(KVMIO, 0x82);
 pub const KVM_GET_SREGS: c_ulong = _IOR::<KvmSregs>(KVMIO, 0x83);
 #[cfg(target_arch = "x86_64")]
 pub const KVM_GET_FPU: c_ulong = _IOR::<KvmFpu>(KVMIO, 0x8c);
+#[cfg(target_arch = "x86_64")]
+pub const KVM_SET_CPUID2: c_ulong = _IOC(_IOC_WRITE, KVMIO, 0x90, 8);
 pub const KVM_SET_GUEST_DEBUG: c_ulong = _IOW::<KvmGuestDebug>(KVMIO, 0x9b);
 #[cfg(target_arch = "aarch64")]
 pub const KVM_GET_ONE_REG: c_ulong = _IOW::<KvmOneReg<()>>(KVMIO, 0xab);
@@ -29,6 +33,7 @@ pub const KVM_ARM_PREFERRED_TARGET: c_ulong = _IOR::<KvmVcpuInit>(KVMIO, 0xaf);
 pub const KVM_API_VERSION: c_int = 12;
 pub const KVM_NR_INTERRUPTS: usize = 256;
 
+pub const KVM_CAP_EXT_CPUID: c_int = 7;
 pub const KVM_CAP_SET_GUEST_DEBUG: c_int = 23;
 pub const KVM_CAP_MAX_VCPUS: c_int = 66;
 #[cfg(target_arch = "aarch64")]
@@ -97,6 +102,27 @@ const fn _IOC(dir: c_ulong, ty: c_ulong, nr: c_ulong, size: c_ulong) -> c_ulong 
         | (ty << _IOC_TYPESHIFT)
         | (nr << _IOC_NRSHIFT)
         | (size << _IOC_SIZESHIFT)
+}
+
+#[cfg(target_arch = "x86_64")]
+#[repr(C)]
+pub struct KvmCpuid2 {
+    pub nent: u32,
+    pub padding: u32,
+    pub entries: [KvmCpuidEntry2],
+}
+
+#[cfg(target_arch = "x86_64")]
+#[repr(C)]
+pub struct KvmCpuidEntry2 {
+    pub function: u32,
+    pub index: u32,
+    pub flags: u32,
+    pub eax: u32,
+    pub ebx: u32,
+    pub ecx: u32,
+    pub edx: u32,
+    pub padding: [u32; 3],
 }
 
 #[repr(C)]

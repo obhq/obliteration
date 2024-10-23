@@ -9,6 +9,7 @@ use self::ffi::{
 use super::{CpuFeats, Hypervisor};
 use crate::vmm::ram::Ram;
 use libc::{ioctl, mmap, open, MAP_FAILED, MAP_PRIVATE, O_RDWR, PROT_READ, PROT_WRITE};
+use std::ffi::{c_int, c_uint};
 use std::io::Error;
 use std::mem::zeroed;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd};
@@ -42,36 +43,71 @@ pub fn new(cpu: usize, ram: Ram, debug: bool) -> Result<Kvm, KvmError> {
     }
 
     // Check max CPU.
-    let max = unsafe { ioctl(kvm.as_raw_fd(), KVM_CHECK_EXTENSION, KVM_CAP_MAX_VCPUS) };
+    let max = get_ext(kvm.as_fd(), KVM_CAP_MAX_VCPUS).map_err(KvmError::GetMaxCpuFailed)?;
 
-    if max < 0 {
-        return Err(KvmError::GetMaxCpuFailed(Error::last_os_error()));
-    } else if TryInto::<usize>::try_into(max).unwrap() < cpu {
+    if TryInto::<usize>::try_into(max).unwrap() < cpu {
         return Err(KvmError::MaxCpuTooLow(cpu));
     }
 
     // On AArch64 we need KVM_SET_ONE_REG and KVM_GET_ONE_REG.
     #[cfg(target_arch = "aarch64")]
-    if unsafe {
-        ioctl(
-            kvm.as_raw_fd(),
-            KVM_CHECK_EXTENSION,
-            self::ffi::KVM_CAP_ONE_REG,
-        ) <= 0
-    } {
+    if !get_ext(kvm.as_fd(), self::ffi::KVM_CAP_ONE_REG).is_ok_and(|v| v != 0) {
         return Err(KvmError::NoKvmOneReg);
     }
 
-    // Check if debug supported.
-    if debug
-        && unsafe {
-            ioctl(
-                kvm.as_raw_fd(),
-                KVM_CHECK_EXTENSION,
-                KVM_CAP_SET_GUEST_DEBUG,
-            ) <= 0
+    // On x86 we need KVM_GET_SUPPORTED_CPUID.
+    #[cfg(target_arch = "x86_64")]
+    let cpuid = if !get_ext(kvm.as_fd(), self::ffi::KVM_CAP_EXT_CPUID).is_ok_and(|v| v != 0) {
+        return Err(KvmError::NoKvmExtCpuid);
+    } else {
+        use self::ffi::{KvmCpuid2, KvmCpuidEntry2, KVM_GET_SUPPORTED_CPUID};
+        use libc::E2BIG;
+        use std::alloc::{handle_alloc_error, Layout};
+
+        let layout = Layout::from_size_align(8, 4).unwrap();
+        let mut count = 1;
+
+        loop {
+            // Allocate kvm_cpuid2.
+            let layout = layout
+                .extend(Layout::array::<KvmCpuidEntry2>(count).unwrap())
+                .map(|v| v.0.pad_to_align())
+                .unwrap();
+            let data = unsafe { std::alloc::alloc_zeroed(layout) };
+
+            if data.is_null() {
+                handle_alloc_error(layout);
+            }
+
+            unsafe { data.cast::<u32>().write(count.try_into().unwrap()) };
+
+            // Execute KVM_GET_SUPPORTED_CPUID.
+            let e = if unsafe { ioctl(kvm.as_raw_fd(), KVM_GET_SUPPORTED_CPUID, data) } < 0 {
+                Some(Error::last_os_error())
+            } else {
+                None
+            };
+
+            // Wrap data in a box. Pointer casting here may looks weird but it is how unsized type
+            // works in Rust. See https://stackoverflow.com/a/64121094 for more details.
+            let data = std::ptr::slice_from_raw_parts_mut(data.cast::<KvmCpuidEntry2>(), count);
+            let data = unsafe { Box::from_raw(data as *mut KvmCpuid2) };
+            let e = match e {
+                Some(v) => v,
+                None => break data,
+            };
+
+            // Check if E2BIG.
+            if e.raw_os_error().unwrap() != E2BIG {
+                return Err(KvmError::GetSupportedCpuidFailed(e));
+            }
+
+            count += 1;
         }
-    {
+    };
+
+    // Check if debug supported.
+    if debug && !get_ext(kvm.as_fd(), KVM_CAP_SET_GUEST_DEBUG).is_ok_and(|v| v != 0) {
         return Err(KvmError::DebugNotSupported);
     }
 
@@ -136,6 +172,17 @@ pub fn new(cpu: usize, ram: Ram, debug: bool) -> Result<Kvm, KvmError> {
             return Err(KvmError::InitCpuFailed(i, Error::last_os_error()));
         }
 
+        #[cfg(target_arch = "x86_64")]
+        if unsafe {
+            ioctl(
+                cpu.as_raw_fd(),
+                self::ffi::KVM_SET_CPUID2,
+                cpuid.as_ref() as *const self::ffi::KvmCpuid2 as *const u8,
+            ) < 0
+        } {
+            return Err(KvmError::SetCpuidFailed(i, Error::last_os_error()));
+        }
+
         if debug {
             let arg = KvmGuestDebug {
                 control: KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_USE_SW_BP,
@@ -166,15 +213,9 @@ fn create_vm(kvm: BorrowedFd) -> Result<OwnedFd, KvmError> {
     // Check KVM_CAP_ARM_VM_IPA_SIZE. We cannot use default machine type on AArch64 otherwise
     // KVM_CREATE_VM will fails on Apple M1 due to the default IPA size is 40-bits, which M1 does
     // not support.
-    let limit = unsafe {
-        ioctl(
-            kvm.as_raw_fd(),
-            KVM_CHECK_EXTENSION,
-            KVM_CAP_ARM_VM_IPA_SIZE,
-        )
-    };
+    let limit = get_ext(kvm.as_fd(), KVM_CAP_ARM_VM_IPA_SIZE).unwrap_or(0);
 
-    if limit <= 0 {
+    if limit == 0 {
         return Err(KvmError::NoVmIpaSize);
     } else if limit < 36 {
         return Err(KvmError::PhysicalAddressTooSmall);
@@ -249,6 +290,16 @@ fn load_feats(cpu: BorrowedFd) -> Result<CpuFeats, KvmError> {
 #[cfg(target_arch = "x86_64")]
 fn load_feats(_: BorrowedFd) -> Result<CpuFeats, KvmError> {
     Ok(CpuFeats {})
+}
+
+fn get_ext(kvm: BorrowedFd, id: c_int) -> Result<c_uint, Error> {
+    let v = unsafe { ioctl(kvm.as_raw_fd(), KVM_CHECK_EXTENSION, id) };
+
+    if v < 0 {
+        Err(Error::last_os_error())
+    } else {
+        Ok(v.try_into().unwrap())
+    }
 }
 
 /// Implementation of [`Hypervisor`] using KVM.
@@ -328,6 +379,14 @@ pub enum KvmError {
     #[error("your OS does not support KVM_CAP_ONE_REG")]
     NoKvmOneReg,
 
+    #[cfg(target_arch = "x86_64")]
+    #[error("your OS does not support KVM_CAP_EXT_CPUID")]
+    NoKvmExtCpuid,
+
+    #[cfg(target_arch = "x86_64")]
+    #[error("couldn't get CPUID supported by KVM")]
+    GetSupportedCpuidFailed(#[source] Error),
+
     #[error("your OS does not support KVM_CAP_SET_GUEST_DEBUG")]
     DebugNotSupported,
 
@@ -358,6 +417,10 @@ pub enum KvmError {
     #[cfg(target_arch = "aarch64")]
     #[error("couldn't initialize vCPU #{0}")]
     InitCpuFailed(usize, #[source] Error),
+
+    #[cfg(target_arch = "x86_64")]
+    #[error("couldn't set CPUID for vCPU #{0}")]
+    SetCpuidFailed(usize, #[source] Error),
 
     #[error("couldn't enable debugging on vCPU #{0}")]
     EnableDebugFailed(usize, #[source] Error),
