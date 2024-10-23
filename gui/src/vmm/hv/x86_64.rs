@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use bitfield_struct::bitfield;
 use std::error::Error;
-use x86_64::Efer;
+use x86_64::{Efer, Rflags};
 
 /// States of a CPU.
 pub trait CpuStates {
@@ -88,35 +87,3 @@ pub trait CpuStates {
 /// Features available on a CPU.
 #[derive(Clone)]
 pub struct CpuFeats {}
-
-/// Represents a value of `RFLAGS`.
-///
-/// See RFLAGS Register section on AMD64 Architecture Programmer's Manual Volume 2 for more details.
-#[bitfield(u64)]
-pub struct Rflags {
-    pub cf: bool,
-    #[bits(default = true)]
-    __: bool,
-    pub pf: bool,
-    __: bool,
-    pub af: bool,
-    __: bool,
-    pub zf: bool,
-    pub sf: bool,
-    pub tf: bool,
-    pub r#if: bool,
-    pub df: bool,
-    pub of: bool,
-    #[bits(2)]
-    pub iopl: u8,
-    pub nt: bool,
-    __: bool,
-    pub rf: bool,
-    pub vm: bool,
-    pub ac: bool,
-    pub vif: bool,
-    pub vip: bool,
-    pub id: bool,
-    #[bits(42)]
-    __: u64,
-}

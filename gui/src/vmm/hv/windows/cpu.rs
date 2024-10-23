@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use crate::vmm::hv::{Cpu, CpuCommit, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, IoBuf, Rflags};
+use crate::vmm::hv::{Cpu, CpuCommit, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, IoBuf};
 use std::error::Error;
 use std::marker::PhantomData;
 use std::mem::{size_of, zeroed, MaybeUninit};
@@ -13,7 +13,7 @@ use windows_sys::Win32::System::Hypervisor::{
     WHvX64RegisterSs, WHV_PARTITION_HANDLE, WHV_REGISTER_NAME, WHV_REGISTER_VALUE,
     WHV_RUN_VP_EXIT_CONTEXT,
 };
-use x86_64::Efer;
+use x86_64::{Efer, Rflags};
 
 const REGISTERS: usize = 12;
 
