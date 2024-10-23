@@ -2,12 +2,13 @@
 use super::ffi::{
     KvmFpu, KvmRegs, KvmSregs, KVM_GET_FPU, KVM_GET_REGS, KVM_GET_SREGS, KVM_SET_REGS,
 };
-use crate::vmm::hv::{CpuCommit, CpuStates, Efer, Rflags};
+use crate::vmm::hv::{CpuCommit, CpuStates, Rflags};
 use libc::ioctl;
 use std::ffi::c_int;
 use std::mem::MaybeUninit;
 use std::os::fd::{AsRawFd, OwnedFd};
 use thiserror::Error;
+use x86_64::Efer;
 
 /// Implementation of [`CpuStates`] for KVM.
 pub struct KvmStates<'a> {

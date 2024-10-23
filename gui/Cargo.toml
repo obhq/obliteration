@@ -20,6 +20,7 @@ ciborium = "0.2.2"
 serde = { version = "1.0.209", features = ["derive"] }
 thiserror = "1.0"
 uuid = { version = "1.10.0", features = ["serde", "v4"] }
+x86-64 = { path = "../arch/x86-64" }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 ash = "0.38.0"

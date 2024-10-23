@@ -3,6 +3,7 @@ use bitfield_struct::bitfield;
 use core::arch::{asm, global_asm};
 use core::mem::{transmute, zeroed};
 use core::ptr::addr_of;
+use x86_64::{Dpl, Efer, SegmentSelector, Star};
 
 pub const GDT_KERNEL_CS: SegmentSelector = SegmentSelector::new().with_si(3);
 pub const GDT_KERNEL_DS: SegmentSelector = SegmentSelector::new().with_si(4);
@@ -113,39 +114,37 @@ pub unsafe fn setup_main_cpu() {
     let star = Star::new()
         .with_syscall_sel(GDT_KERNEL_CS)
         .with_sysret_sel(GDT_USER_CS32)
-        .into_bits();
+        .into_bits()
+        .try_into()
+        .unwrap();
 
-    asm!(
-        "wrmsr",
-        in("ecx") 0xC0000081u32,
-        in("edx") star >> 32,
-        in("eax") star,
-        options(nomem, preserves_flags, nostack)
-    );
+    wrmsr(0xC0000081, star);
 
-    // Set entry point for 64-bit syscall instruction.
-    let addr = syscall_entry64 as usize;
-
-    asm!(
-        "wrmsr",
-        in("ecx") 0xC0000082u32,
-        in("edx") addr >> 32,
-        in("eax") addr,
-        options(nomem, preserves_flags, nostack)
-    );
-
-    // Set entry point for 32-bit syscall instruction.
-    let addr = syscall_entry32 as usize;
-
-    asm!(
-        "wrmsr",
-        in("ecx") 0xC0000083u32,
-        in("edx") addr >> 32,
-        in("eax") addr,
-        options(nomem, preserves_flags, nostack)
-    );
+    // Set entry point for syscall instruction.
+    wrmsr(0xC0000082, syscall_entry64 as usize);
+    wrmsr(0xC0000083, syscall_entry32 as usize);
 
     // TODO: Set SFMASK.
+    // Switch EFER from bootloader to our own.
+    let efer = Efer::new()
+        .with_sce(true) // Enable syscall and sysret instruction.
+        .with_lme(true) // Long Mode Enable.
+        .with_lma(true) // Long Mode Active.
+        .into_bits()
+        .try_into()
+        .unwrap();
+
+    wrmsr(0xC0000080, efer);
+}
+
+pub unsafe fn wrmsr(reg: u32, val: usize) {
+    asm!(
+        "wrmsr",
+        in("ecx") reg,
+        in("edx") val >> 32,
+        in("eax") val,
+        options(nomem, preserves_flags, nostack)
+    );
 }
 
 unsafe extern "C" {
@@ -269,72 +268,6 @@ struct Tss {
     io_map_base_address: u16,
 }
 
-/// Raw value of Descriptor Privilege-Level field.
-#[repr(u8)]
-#[derive(Debug, Clone, Copy)]
-enum Dpl {
-    Ring0,
-    Ring1,
-    Ring2,
-    Ring3,
-}
-
-impl Dpl {
-    /// # Panics
-    /// If `v` is greater than 3.
-    const fn from_bits(v: u8) -> Self {
-        match v {
-            0 => Self::Ring0,
-            1 => Self::Ring1,
-            2 => Self::Ring2,
-            3 => Self::Ring3,
-            _ => panic!("invalid value"),
-        }
-    }
-
-    const fn into_bits(self) -> u8 {
-        self as _
-    }
-}
-
-/// Raw value of a Segment Selector (e.g. `CS` and `DS` register).
-///
-/// See Segment Selectors section on AMD64 Architecture Programmer's Manual Volume 2 for more
-/// details.
-#[bitfield(u16)]
-pub struct SegmentSelector {
-    #[bits(2)]
-    rpl: Dpl,
-    #[bits(1)]
-    ti: Ti,
-    #[bits(13)]
-    si: u16,
-}
-
-/// Raw value of Table Indicator field.
-#[repr(u8)]
-#[derive(Debug, Clone, Copy)]
-enum Ti {
-    Gdt,
-    Ldt,
-}
-
-impl Ti {
-    /// # Panics
-    /// If `v` is greater than 2.
-    const fn from_bits(v: u8) -> Self {
-        match v {
-            0 => Self::Gdt,
-            1 => Self::Ldt,
-            _ => panic!("invalid value"),
-        }
-    }
-
-    const fn into_bits(self) -> u8 {
-        self as _
-    }
-}
-
 /// Raw value of a Interrupt Descriptor-Table Register.
 ///
 /// See Interrupt Descriptor-Table Register section on AMD64 Architecture Programmer's Manual Volume
@@ -367,17 +300,4 @@ struct GateDescriptor {
     #[bits(48)]
     offset2: u64,
     __: u32,
-}
-
-/// Raw value of STAR register.
-///
-/// See SYSCALL and SYSRET section on AMD64 Architecture Programmer's Manual Volume 2 for more
-/// details.
-#[bitfield(u64)]
-struct Star {
-    syscall_eip: u32,
-    #[bits(16)]
-    syscall_sel: SegmentSelector,
-    #[bits(16)]
-    sysret_sel: SegmentSelector,
 }
