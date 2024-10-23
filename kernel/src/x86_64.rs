@@ -3,7 +3,7 @@ use bitfield_struct::bitfield;
 use core::arch::{asm, global_asm};
 use core::mem::{transmute, zeroed};
 use core::ptr::addr_of;
-use x86_64::{Dpl, Efer, SegmentSelector, Star};
+use x86_64::{Dpl, Efer, Rflags, SegmentSelector, Star};
 
 pub const GDT_KERNEL_CS: SegmentSelector = SegmentSelector::new().with_si(3);
 pub const GDT_KERNEL_DS: SegmentSelector = SegmentSelector::new().with_si(4);
@@ -124,7 +124,19 @@ pub unsafe fn setup_main_cpu() {
     wrmsr(0xC0000082, syscall_entry64 as usize);
     wrmsr(0xC0000083, syscall_entry32 as usize);
 
-    // TODO: Set SFMASK.
+    // Set SFMASK for syscall.
+    let mask = Rflags::new()
+        .with_cf(true)
+        .with_tf(true)
+        .with_if(true)
+        .with_df(true)
+        .with_nt(true)
+        .into_bits()
+        .try_into()
+        .unwrap();
+
+    wrmsr(0xC0000084, mask);
+
     // Switch EFER from bootloader to our own.
     let efer = Efer::new()
         .with_sce(true) // Enable syscall and sysret instruction.
