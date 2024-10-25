@@ -9,8 +9,8 @@ use applevisor_sys::hv_feature_reg_t::{
 };
 use applevisor_sys::{
     hv_feature_reg_t, hv_return_t, hv_vcpu_config_create, hv_vcpu_config_get_feature_reg,
-    hv_vcpu_config_t, hv_vcpu_create, hv_vm_create, hv_vm_destroy, hv_vm_map, HV_MEMORY_EXEC,
-    HV_MEMORY_READ, HV_MEMORY_WRITE,
+    hv_vcpu_config_t, hv_vcpu_create, hv_vcpu_set_trap_debug_exceptions, hv_vm_create,
+    hv_vm_destroy, hv_vm_map, HV_MEMORY_EXEC, HV_MEMORY_READ, HV_MEMORY_WRITE,
 };
 use std::num::NonZero;
 use std::ptr::{null, null_mut};
@@ -25,6 +25,7 @@ pub fn new(_: usize, ram: Ram, debug: bool) -> Result<Hvf, VmmError> {
         Some(ret) => return Err(VmmError::CreateVmFailed(ret)),
         None => Hvf {
             ram,
+            debug,
             cpu_config: unsafe { hv_vcpu_config_create() },
             feats: CpuFeats::default(),
         },
@@ -65,6 +66,7 @@ pub fn new(_: usize, ram: Ram, debug: bool) -> Result<Hvf, VmmError> {
 /// Implementation of [`Hypervisor`] using Hypervisor Framework.
 pub struct Hvf {
     ram: Ram,
+    debug: bool,
     cpu_config: hv_vcpu_config_t,
     feats: CpuFeats,
 }
@@ -112,14 +114,25 @@ impl Hypervisor for Hvf {
     }
 
     fn create_cpu(&self, _: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {
+        // Create vCPU.
         let mut instance = 0;
         let mut exit = null();
         let ret = unsafe { hv_vcpu_create(&mut instance, &mut exit, self.cpu_config) };
+        let cpu = match NonZero::new(ret) {
+            Some(e) => return Err(HvfCpuError::CreateVcpuFailed(e)),
+            None => HvfCpu::new(instance, exit),
+        };
 
-        match NonZero::new(ret) {
-            Some(e) => Err(HvfCpuError::CreateVcpuFailed(e)),
-            None => Ok(HvfCpu::new(instance, exit)),
+        // Trap debug exception.
+        if self.debug {
+            let ret = unsafe { hv_vcpu_set_trap_debug_exceptions(instance, true) };
+
+            if let Some(e) = NonZero::new(ret) {
+                return Err(HvfCpuError::EnableDebugFailed(e));
+            }
         }
+
+        Ok(cpu)
     }
 }
 
@@ -131,6 +144,9 @@ unsafe impl Sync for Hvf {}
 pub enum HvfCpuError {
     #[error("couldn't create a vCPU ({0:#x})")]
     CreateVcpuFailed(NonZero<hv_return_t>),
+
+    #[error("couldn't enable debug on a vCPU ({0:#x})")]
+    EnableDebugFailed(NonZero<hv_return_t>),
 }
 
 extern "C" {
