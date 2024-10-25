@@ -27,6 +27,11 @@
       "targetCreateCommands": [
         "target create ${workspaceFolder}/target/x86_64-unknown-none/debug/obkrnl"
       ],
+      "osx": {
+        "targetCreateCommands": [
+          "target create ${workspaceFolder}/target/aarch64-unknown-none-softfloat/debug/obkrnl"
+        ]
+      },
       "processCreateCommands": [
         "gdb-remote 1234"
       ]

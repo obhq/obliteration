@@ -173,6 +173,7 @@ impl Ram {
         Some(LockedAddr {
             lock: allocated,
             ptr: unsafe { self.mem.add(addr) },
+            len,
         })
     }
 
@@ -268,6 +269,7 @@ pub struct LockedAddr<'a> {
     #[allow(dead_code)]
     lock: MutexGuard<'a, BTreeSet<usize>>,
     ptr: *mut u8,
+    len: NonZero<usize>,
 }
 
 impl<'a> LockedAddr<'a> {
@@ -276,6 +278,10 @@ impl<'a> LockedAddr<'a> {
     /// but the data is subject to race condition due to the other vCPU may write into this range.
     pub fn as_ptr(&self) -> *const u8 {
         self.ptr
+    }
+
+    pub fn len(&self) -> NonZero<usize> {
+        self.len
     }
 }
 
