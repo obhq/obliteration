@@ -520,7 +520,6 @@ impl<H: Hypervisor, S: Screen> MultiThreadResume for CpuManager<H, S> {
         todo!()
     }
 
-    /// Clear all previously set resume actions.
     fn clear_resume_actions(&mut self) -> Result<(), Self::Error> {
         todo!()
     }
