@@ -1,21 +1,40 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use super::CpuManager;
+use super::{CpuManager, GdbError};
 use crate::screen::Screen;
 use crate::vmm::hv::Hypervisor;
 use gdbstub::target::ext::base::BaseOps;
-use thiserror::Error;
+use gdbstub::target::ext::breakpoints::{
+    Breakpoints, BreakpointsOps, SwBreakpoint, SwBreakpointOps,
+};
+use gdbstub::target::TargetResult;
 
 pub type GdbRegs = gdbstub_arch::aarch64::reg::AArch64CoreRegs;
 
 impl<H: Hypervisor, S: Screen> gdbstub::target::Target for CpuManager<H, S> {
     type Arch = gdbstub_arch::aarch64::AArch64;
-    type Error = TargetError;
+    type Error = GdbError;
 
     fn base_ops(&mut self) -> BaseOps<'_, Self::Arch, Self::Error> {
-        todo!()
+        BaseOps::MultiThread(self)
+    }
+
+    fn support_breakpoints(&mut self) -> Option<BreakpointsOps<'_, Self>> {
+        Some(self)
     }
 }
 
-/// Implementation of [`gdbstub::target::Target::Error`] for AArch64.
-#[derive(Debug, Error)]
-pub enum TargetError {}
+impl<H: Hypervisor, S: Screen> Breakpoints for CpuManager<H, S> {
+    fn support_sw_breakpoint(&mut self) -> Option<SwBreakpointOps<'_, Self>> {
+        Some(self)
+    }
+}
+
+impl<H: Hypervisor, S: Screen> SwBreakpoint for CpuManager<H, S> {
+    fn add_sw_breakpoint(&mut self, addr: u64, kind: usize) -> TargetResult<bool, Self> {
+        todo!()
+    }
+
+    fn remove_sw_breakpoint(&mut self, addr: u64, kind: usize) -> TargetResult<bool, Self> {
+        todo!()
+    }
+}

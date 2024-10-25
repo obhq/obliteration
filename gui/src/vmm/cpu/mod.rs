@@ -9,13 +9,18 @@ use super::ram::RamMap;
 use super::{VmmEvent, VmmEventHandler};
 use crate::error::RustError;
 use crate::screen::Screen;
+use gdbstub::common::Tid;
 use gdbstub::stub::MultiThreadStopReason;
+use gdbstub::target::ext::base::multithread::MultiThreadBase;
+use gdbstub::target::ext::thread_extra_info::{ThreadExtraInfo, ThreadExtraInfoOps};
+use gdbstub::target::{TargetError, TargetResult};
 use std::collections::BTreeMap;
 use std::num::NonZero;
 use std::ops::Deref;
 use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use thiserror::Error;
 
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
@@ -35,6 +40,9 @@ pub struct CpuManager<H: Hypervisor, S: Screen> {
 }
 
 impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
+    const GDB_ENOENT: u8 = 2;
+    const GDB_EFAULT: u8 = 14;
+
     pub fn new(
         hv: Arc<H>,
         screen: Arc<S::Buffer>,
@@ -416,6 +424,90 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
     }
 }
 
+impl<H: Hypervisor, S: Screen> MultiThreadBase for CpuManager<H, S> {
+    fn read_registers(&mut self, regs: &mut GdbRegs, tid: Tid) -> TargetResult<(), Self> {
+        let cpu = self
+            .cpus
+            .get_mut(tid.get() - 1)
+            .ok_or(TargetError::Errno(Self::GDB_ENOENT))?;
+
+        *regs = cpu
+            .debug_mut()
+            .unwrap()
+            .get_regs()
+            .ok_or(TargetError::Errno(Self::GDB_ENOENT))?; // The CPU thread just stopped.
+
+        Ok(())
+    }
+
+    fn write_registers(&mut self, regs: &GdbRegs, tid: Tid) -> TargetResult<(), Self> {
+        todo!()
+    }
+
+    fn read_addrs(
+        &mut self,
+        start_addr: u64,
+        data: &mut [u8],
+        tid: Tid,
+    ) -> TargetResult<usize, Self> {
+        let Some(len) = NonZero::new(data.len()) else {
+            return Ok(0);
+        };
+
+        // Translate virtual address to physical address.
+        let cpu = self
+            .cpus
+            .get_mut(tid.get() - 1)
+            .ok_or(TargetError::Errno(Self::GDB_ENOENT))?;
+        let addr = cpu
+            .debug_mut()
+            .unwrap()
+            .translate_address(start_addr.try_into().unwrap())
+            .ok_or(TargetError::Errno(Self::GDB_ENOENT))?;
+
+        // Get data.
+        let src = self
+            .hv
+            .ram()
+            .lock(addr, len)
+            .ok_or(TargetError::Errno(Self::GDB_EFAULT))?;
+
+        data.copy_from_slice(unsafe { std::slice::from_raw_parts(src.as_ptr(), src.len().get()) });
+
+        Ok(len.get())
+    }
+
+    fn write_addrs(&mut self, start_addr: u64, data: &[u8], tid: Tid) -> TargetResult<(), Self> {
+        todo!()
+    }
+
+    fn is_thread_alive(&mut self, tid: Tid) -> Result<bool, Self::Error> {
+        todo!()
+    }
+
+    fn list_active_threads(
+        &mut self,
+        thread_is_active: &mut dyn FnMut(Tid),
+    ) -> Result<(), Self::Error> {
+        for id in (0..self.cpus.len()).map(|v| NonZero::new(v + 1).unwrap()) {
+            thread_is_active(id);
+        }
+
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn support_thread_extra_info(&mut self) -> Option<ThreadExtraInfoOps<'_, Self>> {
+        Some(self)
+    }
+}
+
+impl<H: Hypervisor, S: Screen> ThreadExtraInfo for CpuManager<H, S> {
+    fn thread_extra_info(&self, tid: Tid, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        todo!()
+    }
+}
+
 /// Encapsulates arguments for a function to run a CPU.
 struct Args<H: Hypervisor, S: Screen> {
     hv: Arc<H>,
@@ -449,3 +541,7 @@ impl<'a, C: Cpu> Device<'a, C> {
         assert!(tree.insert(addr, dev).is_none());
     }
 }
+
+/// Implementation of [`gdbstub::target::Target::Error`].
+#[derive(Debug, Error)]
+pub enum GdbError {}
