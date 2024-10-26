@@ -14,7 +14,7 @@ gmtx = { path = "../gmtx" }
 iced-x86 = { version = "1.18", features = ["code_asm"] }
 libc = "0.2"
 llt = { path = "../llt" }
-macros = { path = "../macros" }
+macros = { path = "../../macros" }
 param = { path = "../param" }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"

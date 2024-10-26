@@ -7,7 +7,7 @@ edition = "2021"
 anstyle = { version = "1.0.8", default-features = false }
 bitfield-struct = "0.8.0"
 hashbrown = "0.14.5"
-macros = { path = "../src/macros" }
+macros = { path = "../macros" }
 obconf = { path = "../src/obconf", features = ["virt"] }
 spin = { version = "0.9.8", features = ["spin_mutex"], default-features = false }
 talc = { version = "4.4.1", default-features = false }
