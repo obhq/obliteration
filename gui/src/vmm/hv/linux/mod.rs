@@ -26,7 +26,7 @@ mod run;
 
 pub fn new(cpu: usize, ram: Ram, debug: bool) -> Result<Kvm, KvmError> {
     // Open KVM device.
-    let kvm = unsafe { open(b"/dev/kvm\0".as_ptr().cast(), O_RDWR) };
+    let kvm = unsafe { open("/dev/kvm\0".as_ptr().cast(), O_RDWR) };
 
     if kvm < 0 {
         return Err(KvmError::OpenKvmFailed(Error::last_os_error()));
@@ -45,7 +45,7 @@ pub fn new(cpu: usize, ram: Ram, debug: bool) -> Result<Kvm, KvmError> {
     // Check max CPU.
     let max = get_ext(kvm.as_fd(), KVM_CAP_MAX_VCPUS).map_err(KvmError::GetMaxCpuFailed)?;
 
-    if TryInto::<usize>::try_into(max).unwrap() < cpu {
+    if usize::try_from(max).unwrap() < cpu {
         return Err(KvmError::MaxCpuTooLow(cpu));
     }
 

@@ -9,9 +9,11 @@ use super::ram::RamMap;
 use super::{VmmEvent, VmmEventHandler};
 use crate::error::RustError;
 use crate::screen::Screen;
-use gdbstub::common::Tid;
+use gdbstub::common::{Signal, Tid};
 use gdbstub::stub::MultiThreadStopReason;
-use gdbstub::target::ext::base::multithread::MultiThreadBase;
+use gdbstub::target::ext::base::multithread::{
+    MultiThreadBase, MultiThreadResume, MultiThreadResumeOps,
+};
 use gdbstub::target::ext::thread_extra_info::{ThreadExtraInfo, ThreadExtraInfoOps};
 use gdbstub::target::{TargetError, TargetResult};
 use std::collections::BTreeMap;
@@ -497,6 +499,11 @@ impl<H: Hypervisor, S: Screen> MultiThreadBase for CpuManager<H, S> {
     }
 
     #[inline(always)]
+    fn support_resume(&mut self) -> Option<MultiThreadResumeOps<'_, Self>> {
+        Some(self)
+    }
+
+    #[inline(always)]
     fn support_thread_extra_info(&mut self) -> Option<ThreadExtraInfoOps<'_, Self>> {
         Some(self)
     }
@@ -504,6 +511,24 @@ impl<H: Hypervisor, S: Screen> MultiThreadBase for CpuManager<H, S> {
 
 impl<H: Hypervisor, S: Screen> ThreadExtraInfo for CpuManager<H, S> {
     fn thread_extra_info(&self, tid: Tid, buf: &mut [u8]) -> Result<usize, Self::Error> {
+        todo!()
+    }
+}
+
+impl<H: Hypervisor, S: Screen> MultiThreadResume for CpuManager<H, S> {
+    fn resume(&mut self) -> Result<(), Self::Error> {
+        todo!()
+    }
+
+    fn clear_resume_actions(&mut self) -> Result<(), Self::Error> {
+        todo!()
+    }
+
+    fn set_resume_action_continue(
+        &mut self,
+        tid: Tid,
+        signal: Option<Signal>,
+    ) -> Result<(), Self::Error> {
         todo!()
     }
 }

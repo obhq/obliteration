@@ -1,19 +1,13 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use super::controller::CpuController;
 use super::{CpuManager, GdbError};
 use crate::screen::Screen;
 use crate::vmm::hv::Hypervisor;
-use gdbstub::common::Tid;
-use gdbstub::target::ext::base::multithread::MultiThreadBase;
 use gdbstub::target::ext::base::BaseOps;
 use gdbstub::target::ext::breakpoints::{
     Breakpoints, BreakpointsOps, SwBreakpoint, SwBreakpointOps,
 };
-use gdbstub::target::ext::thread_extra_info::{ThreadExtraInfo, ThreadExtraInfoOps};
-use gdbstub::target::{TargetError as GdbTargetError, TargetResult};
-use gdbstub_arch::x86::reg::X86_64CoreRegs;
+use gdbstub::target::TargetResult;
 use gdbstub_arch::x86::X86_64_SSE;
-use std::num::NonZero;
 
 pub type GdbRegs = gdbstub_arch::x86::reg::X86_64CoreRegs;
 
