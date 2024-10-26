@@ -128,7 +128,7 @@ pub unsafe fn setup_main_cpu() {
     let mask = Rflags::new()
         .with_cf(true)
         .with_tf(true)
-        .with_if(true)
+        .with_if(true) // https://wiki.osdev.org/SWAPGS#Complications,_Part_2
         .with_df(true)
         .with_nt(true)
         .into_bits()
@@ -192,9 +192,9 @@ global_asm!(
 );
 
 // See Xfast_syscall on the PS4 for a reference.
-global_asm!("syscall_entry64:", "ud2");
+global_asm!("syscall_entry64:", "swapgs", "ud2");
 
-// See fast_syscall32 on the PS4 for a reference.
+// See Xfast_syscall32 on the PS4 for a reference.
 global_asm!("syscall_entry32:", "ud2");
 
 /// Raw value of a Global Descriptor-Table Register.
