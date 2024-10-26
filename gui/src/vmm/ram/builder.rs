@@ -390,7 +390,7 @@ impl<'a> RamBuilder<'a> {
         // Allocate page table level 0.
         let page_table = self.next;
         let len = self.ram.block_size;
-        let l0t: &mut [usize; 32] = match unsafe { self.ram.alloc(page_table, len) } {
+        let l0t: &mut [usize; 32] = match self.ram.alloc(page_table, len) {
             Ok(v) => unsafe { &mut *v.as_mut_ptr().cast() },
             Err(e) => return Err(RamBuilderError::AllocPageTableLevel0Failed(e)),
         };
@@ -561,7 +561,7 @@ impl<'a> RamBuilder<'a> {
             .unwrap();
 
         // Allocate.
-        let tab = unsafe { self.ram.alloc(addr, len).map(|v| v.as_mut_ptr().cast())? };
+        let tab = self.ram.alloc(addr, len).map(|v| v.as_mut_ptr().cast())?;
 
         self.next += len.get();
 

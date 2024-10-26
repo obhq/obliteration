@@ -7,8 +7,11 @@ use gdbstub::target::ext::breakpoints::{
     Breakpoints, BreakpointsOps, SwBreakpoint, SwBreakpointOps,
 };
 use gdbstub::target::TargetResult;
+use std::num::NonZero;
 
 pub type GdbRegs = gdbstub_arch::aarch64::reg::AArch64CoreRegs;
+
+pub(super) const BREAKPOINT_SIZE: NonZero<usize> = unsafe { NonZero::new_unchecked(4) };
 
 impl<H: Hypervisor, S: Screen> gdbstub::target::Target for CpuManager<H, S> {
     type Arch = gdbstub_arch::aarch64::AArch64;
