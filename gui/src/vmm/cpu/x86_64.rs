@@ -70,7 +70,6 @@ impl<H: Hypervisor, S: Screen> SwBreakpoint for CpuManager<H, S> {
         self.sw_breakpoints.insert(addr, bytes.into_boxed_slice());
 
         Ok(true)
-
     }
 
     fn remove_sw_breakpoint(&mut self, addr: u64, kind: usize) -> TargetResult<bool, Self> {
