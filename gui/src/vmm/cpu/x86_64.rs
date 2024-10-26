@@ -61,10 +61,7 @@ impl<H: Hypervisor, S: Screen> SwBreakpoint for CpuManager<H, S> {
 
         let mut code_bytes = [0; BREAKPOINT_SIZE.get()];
 
-        code_bytes.copy_from_slice(code_slice);
-
-        // INT3
-        code_slice.copy_from_slice(&BREAKPOINT_BYTES);
+        std::mem::swap(code_slice, &mut code_bytes);;
 
         entry.insert(code_bytes);
 
