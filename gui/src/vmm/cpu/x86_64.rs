@@ -14,7 +14,6 @@ use std::num::NonZero;
 pub type GdbRegs = gdbstub_arch::x86::reg::X86_64CoreRegs;
 
 pub(super) const BREAKPOINT_SIZE: NonZero<usize> = unsafe { NonZero::new_unchecked(1) };
-const BREAKPOINT_BYTES: [u8; BREAKPOINT_SIZE.get()] = [0xCC];
 
 impl<H: Hypervisor, S: Screen> gdbstub::target::Target for CpuManager<H, S> {
     type Arch = X86_64_SSE;
@@ -56,11 +55,11 @@ impl<H: Hypervisor, S: Screen> SwBreakpoint for CpuManager<H, S> {
             .lock(translated_addr, BREAKPOINT_SIZE)
             .ok_or(TargetError::Errno(Self::GDB_EFAULT))?;
 
-        let code_slice = src.as_mut_ptr().cast();
+        let code_slice = src.as_mut_ptr();
 
-        let mut code_bytes = std::mem::replace(&mut unsafe { *code_slice }, BREAKPOINT_BYTES);
+        let mut code_bytes = std::mem::replace( code_slice, 0xcc);
 
-        entry.insert(code_bytes);
+        entry.insert([code_bytes]);
 
         Ok(true)
     }
