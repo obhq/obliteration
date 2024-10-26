@@ -7,6 +7,7 @@ use gdbstub::target::ext::breakpoints::{
     Breakpoints, BreakpointsOps, SwBreakpoint, SwBreakpointOps,
 };
 use gdbstub::target::TargetResult;
+use std::num::NonZero;
 
 pub type GdbRegs = gdbstub_arch::aarch64::reg::AArch64CoreRegs;
 
