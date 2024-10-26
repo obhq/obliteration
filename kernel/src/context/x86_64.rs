@@ -1,8 +1,17 @@
-use super::Context;
 use crate::arch::wrmsr;
-use crate::proc::Thread;
 use core::arch::asm;
-use core::mem::offset_of;
+
+/// Extended [Context](super::Context) for x86-64.
+#[repr(C)]
+pub struct Context {
+    base: super::Context, // Must be first field.
+}
+
+impl Context {
+    pub fn new(base: super::Context) -> Self {
+        Self { base }
+    }
+}
 
 /// Set kernel `GS` segment register to `cx`.
 ///
@@ -16,32 +25,28 @@ pub unsafe fn activate(cx: *mut Context) {
     wrmsr(0xc0000102, 0);
 }
 
-pub unsafe fn thread() -> *const Thread {
-    // SAFETY: "mov" is atomic if the memory has correct alignment. We can use "nomem" here since
-    // the value never changed.
-    let mut td;
+pub unsafe fn load_fixed_ptr<const O: usize, T>() -> *const T {
+    let mut v;
 
     asm!(
         "mov {out}, gs:[{off}]",
-        off = const offset_of!(Context, thread),
-        out = out(reg) td,
+        off = const O,
+        out = out(reg) v,
         options(pure, nomem, preserves_flags, nostack)
     );
 
-    td
+    v
 }
 
-pub unsafe fn cpu() -> usize {
-    // SAFETY: This load need to synchronize with a critical section. That mean we cannot use
-    // "pure" + "readonly" options here.
-    let mut cpu;
+pub unsafe fn load_usize<const O: usize>() -> usize {
+    let mut v;
 
     asm!(
         "mov {out}, gs:[{off}]",
-        off = const offset_of!(Context, cpu),
-        out = out(reg) cpu,
+        off = const O,
+        out = out(reg) v,
         options(preserves_flags, nostack)
     );
 
-    cpu
+    v
 }

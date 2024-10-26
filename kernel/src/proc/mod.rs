@@ -24,7 +24,7 @@ impl ProcMgr {
         })
     }
 
-    pub fn procs(&self) -> MappedMutex<impl ExactSizeIterator<Item = &Weak<Proc>> + '_> {
+    pub fn list(&self) -> MappedMutex<impl ExactSizeIterator<Item = &Weak<Proc>> + '_> {
         MutexGuard::map(self.procs.lock(), |procs| procs.values())
     }
 }
