@@ -38,7 +38,7 @@ pub struct CpuManager<H: Hypervisor, S: Screen> {
     event: VmmEventHandler,
     cpus: Vec<CpuController>,
     breakpoint: Arc<Mutex<()>>,
-    sw_breakpoints: HashMap<u64, Box<[u8]>>,
+    sw_breakpoints: HashMap<u64, [u8; arch::BREAKPOINT_SIZE.get()]>,
     shutdown: Arc<AtomicBool>,
 }
 
@@ -572,4 +572,7 @@ impl<'a, C: Cpu> Device<'a, C> {
 
 /// Implementation of [`gdbstub::target::Target::Error`].
 #[derive(Debug, Error)]
-pub enum GdbError {}
+pub enum GdbError {
+    #[error("the main CPU exited")]
+    MainCpuExited
+}

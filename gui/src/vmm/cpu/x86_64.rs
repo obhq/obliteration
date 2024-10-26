@@ -8,9 +8,13 @@ use gdbstub::target::ext::breakpoints::{
 };
 use gdbstub::target::{TargetError, TargetResult};
 use gdbstub_arch::x86::X86_64_SSE;
+use std::collections::hash_map::Entry;
 use std::num::NonZero;
 
 pub type GdbRegs = gdbstub_arch::x86::reg::X86_64CoreRegs;
+
+pub(super) const BREAKPOINT_SIZE: NonZero<usize> = unsafe { NonZero::new_unchecked(1) };
+const BREAKPOINT_BYTES: [u8; BREAKPOINT_SIZE.get()] = [0xCC];
 
 impl<H: Hypervisor, S: Screen> gdbstub::target::Target for CpuManager<H, S> {
     type Arch = X86_64_SSE;
@@ -32,77 +36,63 @@ impl<H: Hypervisor, S: Screen> Breakpoints for CpuManager<H, S> {
 }
 
 impl<H: Hypervisor, S: Screen> SwBreakpoint for CpuManager<H, S> {
-    fn add_sw_breakpoint(&mut self, addr: u64, kind: usize) -> TargetResult<bool, Self> {
-        if self.sw_breakpoints.contains_key(&addr) {
+    fn add_sw_breakpoint(&mut self, addr: u64, _kind: usize) -> TargetResult<bool, Self> {
+        let Entry::Vacant(entry) = self.sw_breakpoints.entry(addr) else {
             return Ok(false);
-        }
+        };
 
-        let breakpoint_size = NonZero::new(kind).unwrap();
-
-        let cpu = self
-            .cpus
-            .first_mut()
-            .ok_or(TargetError::Errno(Self::GDB_ENOENT))?;
+        let cpu = self.cpus.first_mut().unwrap();
 
         let translated_addr = cpu
             .debug_mut()
             .unwrap()
             .translate_address(addr.try_into().unwrap())
-            .ok_or(TargetError::Errno(Self::GDB_ENOENT))?;
+            .ok_or(TargetError::Fatal(GdbError::MainCpuExited))?;
 
         // Get data.
-        let src = self
+        let mut src = self
             .hv
             .ram()
-            .lock(translated_addr, breakpoint_size)
-            .ok_or(TargetError::Errno(Self::GDB_EFAULT))?
-            .as_mut_ptr();
+            .lock(translated_addr, BREAKPOINT_SIZE)
+            .ok_or(TargetError::Errno(Self::GDB_EFAULT))?;
 
-        let code_slice = unsafe { std::slice::from_raw_parts_mut(src, breakpoint_size.get()) };
+        let code_slice =
+            unsafe { std::slice::from_raw_parts_mut(src.as_mut_ptr(), BREAKPOINT_SIZE.get()) };
 
-        let mut bytes = Vec::new();
+        let mut code_bytes = [0; BREAKPOINT_SIZE.get()];
 
-        bytes.extend_from_slice(code_slice);
+        code_bytes.copy_from_slice(code_slice);
 
         // INT3
         code_slice.fill(0xCC);
 
-        self.sw_breakpoints.insert(addr, bytes.into_boxed_slice());
+        entry.insert(code_bytes);
 
         Ok(true)
     }
 
-    fn remove_sw_breakpoint(&mut self, addr: u64, kind: usize) -> TargetResult<bool, Self> {
+    fn remove_sw_breakpoint(&mut self, addr: u64, _kind: usize) -> TargetResult<bool, Self> {
         let Some(breakpoint) = self.sw_breakpoints.remove(&addr) else {
             return Ok(false);
         };
 
-        let breakpoint_size = NonZero::new(kind).unwrap();
-
-        if breakpoint.len() != breakpoint_size.get() {
-            todo!();
-        }
-
-        let cpu = self
-            .cpus
-            .first_mut()
-            .ok_or(TargetError::Errno(Self::GDB_ENOENT))?;
+        let cpu = self.cpus.first_mut().unwrap();
 
         let translated_addr = cpu
             .debug_mut()
             .unwrap()
             .translate_address(addr.try_into().unwrap())
-            .ok_or(TargetError::Errno(Self::GDB_ENOENT))?;
+            .ok_or(TargetError::Fatal(GdbError::MainCpuExited))?;
 
         // Get data.
-        let src = self
+        let mut src = self
             .hv
             .ram()
-            .lock(translated_addr, breakpoint_size)
-            .ok_or(TargetError::Errno(Self::GDB_EFAULT))?
-            .as_mut_ptr();
+            .lock(translated_addr, BREAKPOINT_SIZE)
+            .ok_or(TargetError::Errno(Self::GDB_EFAULT))?;
 
-        let code_slice = unsafe { std::slice::from_raw_parts_mut(src, breakpoint_size.get()) };
+        let code_slice =
+            unsafe { std::slice::from_raw_parts_mut(src.as_mut_ptr(), BREAKPOINT_SIZE.get()) };
 
         code_slice.copy_from_slice(&breakpoint);
 
