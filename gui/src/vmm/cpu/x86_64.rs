@@ -56,10 +56,9 @@ impl<H: Hypervisor, S: Screen> SwBreakpoint for CpuManager<H, S> {
             .lock(translated_addr, BREAKPOINT_SIZE)
             .ok_or(TargetError::Errno(Self::GDB_EFAULT))?;
 
-        let code_slice =
-            unsafe { std::slice::from_raw_parts_mut(src.as_mut_ptr(), BREAKPOINT_SIZE.get()) };
+        let code_slice = src.as_mut_ptr().cast();
 
-        let mut code_bytes = std::mem::replace(code_slice, BREAKPOINT_BYTES);
+        let mut code_bytes = std::mem::replace(&mut unsafe { *code_slice }, BREAKPOINT_BYTES);
 
         entry.insert(code_bytes);
 
