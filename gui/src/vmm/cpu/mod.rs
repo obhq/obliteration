@@ -16,7 +16,7 @@ use gdbstub::target::ext::base::multithread::{
 };
 use gdbstub::target::ext::thread_extra_info::{ThreadExtraInfo, ThreadExtraInfoOps};
 use gdbstub::target::{TargetError, TargetResult};
-use std::collections::{HashMap, BTreeMap};
+use std::collections::{BTreeMap, HashMap};
 use std::num::NonZero;
 use std::ops::Deref;
 use std::ptr::null_mut;
