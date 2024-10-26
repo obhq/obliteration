@@ -26,7 +26,7 @@ mod run;
 
 pub fn new(cpu: usize, ram: Ram, debug: bool) -> Result<Kvm, KvmError> {
     // Open KVM device.
-    let kvm = unsafe { open(c"/dev/kvm".as_ptr(), O_RDWR) };
+    let kvm = unsafe { open("/dev/kvm\0".as_ptr().cast(), O_RDWR) };
 
     if kvm < 0 {
         return Err(KvmError::OpenKvmFailed(Error::last_os_error()));
