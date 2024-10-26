@@ -64,7 +64,7 @@ impl<H: Hypervisor, S: Screen> SwBreakpoint for CpuManager<H, S> {
         code_bytes.copy_from_slice(code_slice);
 
         // INT3
-        code_slice.fill(0xCC);
+        code_slice.copy_from_slice(&BREAKPOINT_BYTES);
 
         entry.insert(code_bytes);
 
