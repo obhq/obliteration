@@ -574,5 +574,5 @@ impl<'a, C: Cpu> Device<'a, C> {
 #[derive(Debug, Error)]
 pub enum GdbError {
     #[error("the main CPU exited")]
-    MainCpuExited
+    MainCpuExited,
 }
