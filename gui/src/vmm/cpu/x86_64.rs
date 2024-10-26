@@ -41,7 +41,7 @@ impl<H: Hypervisor, S: Screen> SwBreakpoint for CpuManager<H, S> {
 
         let cpu = self
             .cpus
-            .get_mut(0)
+            .first_mut()
             .ok_or(TargetError::Errno(Self::GDB_ENOENT))?;
 
         let translated_addr = cpu
@@ -85,7 +85,7 @@ impl<H: Hypervisor, S: Screen> SwBreakpoint for CpuManager<H, S> {
 
         let cpu = self
             .cpus
-            .get_mut(0)
+            .first_mut()
             .ok_or(TargetError::Errno(Self::GDB_ENOENT))?;
 
         let translated_addr = cpu
