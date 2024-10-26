@@ -55,17 +55,14 @@ unsafe extern "C" fn _start(env: &'static BootEnv, conf: &'static Config) -> ! {
     // Initialize foundations.
     let pmgr = ProcMgr::new();
 
-    // Activate CPU context. We use a different mechanism here. The PS4 put all of pcpu at a global
-    // level but we put it on each CPU stack instead.
+    // Activate CPU context.
     let thread0 = Arc::new(thread0);
-    let mut cx = Context::new(0, thread0, pmgr.clone());
 
-    cx.activate();
-
-    main(pmgr);
+    self::context::run_with_context(0, thread0, pmgr, main);
 }
 
-fn main(pmgr: Arc<ProcMgr>) -> ! {
+#[inline(never)] // See self::context::run_with_context docs.
+fn main() -> ! {
     // Activate stage 2 heap.
     info!("Activating stage 2 heap.");
 
@@ -76,7 +73,8 @@ fn main(pmgr: Arc<ProcMgr>) -> ! {
     // TODO: Subscribe to "system_suspend_phase2_pre_sync" and "system_resume_phase2" event.
     loop {
         // TODO: Implement a call to vm_page_count_min().
-        let procs = pmgr.procs();
+        let procs = Context::procs();
+        let procs = procs.list();
 
         if procs.len() == 0 {
             // TODO: The PS4 check for some value for non-zero but it seems like that value always

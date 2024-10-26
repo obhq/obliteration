@@ -10,8 +10,8 @@ mod cell;
 /// All thread **must** run to completion once execution has been started otherwise resource will be
 /// leak if the thread is dropped while its execution currently in the kernel space.
 ///
-/// We subtitute `TDP_NOSLEEPING` with `td_intr_nesting_level` since the only cases the thread
-/// should not allow to sleep is when it being handle an interupt.
+/// We subtitute `TDP_NOSLEEPING` with `td_intr_nesting_level` and `td_critnest` since it is the
+/// only cases the thread should not allow to sleep.
 pub struct Thread {
     critical_sections: PrivateCell<u32>, // td_critnest
     active_interrupts: usize,            // td_intr_nesting_level
