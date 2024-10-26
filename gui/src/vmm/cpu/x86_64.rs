@@ -66,7 +66,7 @@ impl<H: Hypervisor, S: Screen> SwBreakpoint for CpuManager<H, S> {
     }
 
     fn remove_sw_breakpoint(&mut self, addr: u64, _kind: usize) -> TargetResult<bool, Self> {
-        let Some(breakpoint) = self.sw_breakpoints.remove(&addr) else {
+        let Some(code_bytes) = self.sw_breakpoints.remove(&addr) else {
             return Ok(false);
         };
 
@@ -88,7 +88,7 @@ impl<H: Hypervisor, S: Screen> SwBreakpoint for CpuManager<H, S> {
         let code_slice =
             unsafe { std::slice::from_raw_parts_mut(src.as_mut_ptr(), BREAKPOINT_SIZE.get()) };
 
-        code_slice.copy_from_slice(&breakpoint);
+        code_slice.copy_from_slice(&code_bytes);
 
         Ok(true)
     }
