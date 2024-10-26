@@ -16,7 +16,7 @@ use gdbstub::target::ext::base::multithread::{
 };
 use gdbstub::target::ext::thread_extra_info::{ThreadExtraInfo, ThreadExtraInfoOps};
 use gdbstub::target::{TargetError, TargetResult};
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::num::NonZero;
 use std::ops::Deref;
 use std::ptr::null_mut;
@@ -38,6 +38,7 @@ pub struct CpuManager<H: Hypervisor, S: Screen> {
     event: VmmEventHandler,
     cpus: Vec<CpuController>,
     breakpoint: Arc<Mutex<()>>,
+    sw_breakpoints: HashMap<u64, Box<[u8]>>,
     shutdown: Arc<AtomicBool>,
 }
 
@@ -59,6 +60,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
             event,
             cpus: Vec::new(),
             breakpoint: Arc::default(),
+            sw_breakpoints: HashMap::new(),
             shutdown,
         }
     }
@@ -461,6 +463,7 @@ impl<H: Hypervisor, S: Screen> MultiThreadBase for CpuManager<H, S> {
             .cpus
             .get_mut(tid.get() - 1)
             .ok_or(TargetError::Errno(Self::GDB_ENOENT))?;
+
         let addr = cpu
             .debug_mut()
             .unwrap()
