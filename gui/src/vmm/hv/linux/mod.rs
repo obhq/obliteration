@@ -353,7 +353,7 @@ impl Hypervisor for Kvm {
             return Err(KvmCpuError::GetKvmRunFailed(Error::last_os_error()));
         }
 
-        Ok(unsafe { KvmCpu::new(cpu, cx.cast(), self.vcpu_mmap_size) })
+        Ok(unsafe { KvmCpu::new(id, cpu, cx.cast(), self.vcpu_mmap_size) })
     }
 }
 

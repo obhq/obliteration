@@ -23,7 +23,7 @@ pub union Exit {
     fail_entry: ManuallyDrop<FailEntry>,
     ex: ManuallyDrop<Ex>,
     pub io: Io,
-    debug: ManuallyDrop<Debug>,
+    pub debug: ManuallyDrop<Debug>,
     pub mmio: Mmio,
     iocsr_io: ManuallyDrop<IocsrIo>,
     hypercall: ManuallyDrop<Hypercall>,
@@ -79,17 +79,19 @@ pub struct Io {
 }
 
 #[repr(C)]
-struct Debug {
-    arch: KvmDebugExitArch,
+#[derive(Clone, Copy)]
+pub struct Debug {
+    pub arch: KvmDebugExitArch,
 }
 
 #[repr(C)]
-struct KvmDebugExitArch {
-    exception: u32,
+#[derive(Clone, Copy)]
+pub struct KvmDebugExitArch {
+    pub exception: u32,
     pad: u32,
-    pc: u64,
-    dr6: u64,
-    dr7: u64,
+    pub pc: u64,
+    pub dr6: u64,
+    pub dr7: u64,
 }
 
 #[repr(C)]

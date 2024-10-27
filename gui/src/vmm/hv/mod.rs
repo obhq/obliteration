@@ -4,6 +4,7 @@ use std::error::Error;
 
 pub use self::arch::*;
 pub use self::os::new;
+use gdbstub::stub::MultiThreadStopReason;
 
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
@@ -49,6 +50,8 @@ pub trait Cpu {
     where
         Self: 'a;
     type TranslateErr: Error + Send + 'static;
+
+    fn id(&self) -> usize;
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr>;
 
@@ -97,4 +100,10 @@ pub enum IoBuf<'a> {
 }
 
 /// Contains information when a VM exited because of debug event.
-pub trait CpuDebug {}
+pub trait CpuDebug {
+    type Cpu: Cpu;
+
+    fn reason(&mut self) -> MultiThreadStopReason<u64>;
+
+    fn cpu(&mut self) -> &mut Self::Cpu;
+}

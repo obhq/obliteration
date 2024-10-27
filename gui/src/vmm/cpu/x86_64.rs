@@ -57,7 +57,7 @@ impl<H: Hypervisor, S: Screen> SwBreakpoint for CpuManager<H, S> {
 
         let code_slice = src.as_mut_ptr();
 
-        let mut code_bytes = std::mem::replace(unsafe { &mut *code_slice }, 0xcc);
+        let code_bytes = std::mem::replace(unsafe { &mut *code_slice }, 0xcc);
 
         entry.insert([code_bytes]);
 
