@@ -3,20 +3,34 @@ use crate::arch::wrmsr;
 use core::arch::asm;
 use core::mem::offset_of;
 
+pub const fn current_trap_rsp_offset() -> usize {
+    offset_of!(Context, trap_rsp)
+}
+
 pub const fn current_user_rsp_offset() -> usize {
     offset_of!(Context, user_rsp)
+}
+
+/// Contains data passed from CPU setup function for context activation.
+pub struct ContextArgs {
+    pub trap_rsp: *mut u8,
 }
 
 /// Extended [Base] for x86-64.
 #[repr(C)]
 pub(super) struct Context {
-    base: Base,      // Must be first field.
-    user_rsp: usize, // pc_scratch_rsp
+    base: Base,        // Must be first field.
+    trap_rsp: *mut u8, // pc_rsp0
+    user_rsp: usize,   // pc_scratch_rsp
 }
 
 impl Context {
-    pub fn new(base: Base) -> Self {
-        Self { base, user_rsp: 0 }
+    pub fn new(base: Base, args: ContextArgs) -> Self {
+        Self {
+            base,
+            trap_rsp: args.trap_rsp,
+            user_rsp: 0,
+        }
     }
 
     /// Set kernel `GS` segment register to `cx`.

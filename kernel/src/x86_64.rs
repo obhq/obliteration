@@ -1,4 +1,4 @@
-use crate::context::current_user_rsp_offset;
+use crate::context::{current_trap_rsp_offset, current_user_rsp_offset, ContextArgs};
 use crate::trap::interrupt_handler;
 use bitfield_struct::bitfield;
 use core::arch::{asm, global_asm};
@@ -12,7 +12,7 @@ pub const GDT_USER_CS32: SegmentSelector = SegmentSelector::new().with_si(5).wit
 
 /// # Safety
 /// This function can be called only once and must be called by main CPU entry point.
-pub unsafe fn setup_main_cpu() {
+pub unsafe fn setup_main_cpu() -> ContextArgs {
     // Setup GDT.
     static mut GDT: [SegmentDescriptor; 10] = [
         // Null descriptor.
@@ -148,6 +148,10 @@ pub unsafe fn setup_main_cpu() {
         .unwrap();
 
     wrmsr(0xC0000080, efer);
+
+    ContextArgs {
+        trap_rsp: TSS.rsp0 as _,
+    }
 }
 
 pub unsafe fn wrmsr(reg: u32, val: usize) {
@@ -196,9 +200,11 @@ global_asm!(
 global_asm!(
     "syscall_entry64:",
     "swapgs",
-    "mov gs:[{user_rsp}], rsp",
+    "mov gs:[{user_rsp}], rsp", // Save user RSP.
+    "mov rsp, gs:[{trap_rsp}]",
     "ud2",
-    user_rsp = const current_user_rsp_offset()
+    user_rsp = const current_user_rsp_offset(),
+    trap_rsp = const current_trap_rsp_offset()
 );
 
 // See Xfast_syscall32 on the PS4 for a reference.

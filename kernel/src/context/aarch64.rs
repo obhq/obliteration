@@ -1,6 +1,9 @@
 use super::Base;
 use crate::proc::Thread;
 
+/// Contains data passed from CPU setup function for context activation.
+pub struct ContextArgs {}
+
 /// Extended [Base] for AArch64.
 #[repr(C)]
 pub(super) struct Context {
@@ -8,7 +11,7 @@ pub(super) struct Context {
 }
 
 impl Context {
-    pub fn new(base: Base) -> Self {
+    pub fn new(base: Base, args: ContextArgs) -> Self {
         Self { base }
     }
 
