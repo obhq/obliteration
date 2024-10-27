@@ -24,7 +24,6 @@ pub struct VProc {
     threads: Gutex<Vec<Arc<VThread>>>,     // p_threads
     cred: Arc<Ucred>,                      // p_ucred
     group: Gutex<Option<Arc<VProcGroup>>>, // p_pgrp
-    abi: ProcAbi,                          // p_sysent
     vm_space: Arc<VmSpace>,                // p_vmspace
     sigacts: Gutex<SignalActs>,            // p_sigacts
     files: Arc<FileDesc>,                  // p_fd
@@ -45,7 +44,6 @@ impl VProc {
         id: Pid,
         name: impl Into<String>,
         cred: Arc<Ucred>,
-        abi: ProcAbi,
         budget_id: Option<usize>,
         budget_ptype: Option<ProcType>,
         dmem_container: DmemContainer,
@@ -63,7 +61,6 @@ impl VProc {
             threads: gg.spawn(Vec::new()),
             cred,
             group: gg.spawn(None),
-            abi,
             vm_space,
             sigacts: gg.spawn(SignalActs::new()),
             files: FileDesc::new(root),
@@ -117,10 +114,6 @@ impl VProc {
 
     pub fn group_mut(&self) -> GutexWriteGuard<Option<Arc<VProcGroup>>> {
         self.group.write()
-    }
-
-    pub fn abi(&self) -> &ProcAbi {
-        &self.abi
     }
 
     pub fn vm_space(&self) -> &Arc<VmSpace> {

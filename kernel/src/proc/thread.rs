@@ -1,5 +1,7 @@
 use self::cell::PrivateCell;
+use super::Proc;
 use crate::lock::{Gutex, GutexGroup, GutexWriteGuard};
+use alloc::sync::Arc;
 use core::cell::RefMut;
 use core::sync::atomic::{AtomicU8, Ordering};
 
@@ -16,6 +18,7 @@ mod cell;
 /// Do not try to access any [`PrivateCell`] fields from interrupt handler because it might
 /// currently locked, which will can cause a panic.
 pub struct Thread {
+    proc: Arc<Proc>,                   // td_proc
     active_pins: AtomicU8,             // td_critnest
     active_interrupts: AtomicU8,       // td_intr_nesting_level
     active_mutexes: PrivateCell<u16>,  // td_locks
@@ -30,12 +33,13 @@ impl Thread {
     ///
     /// # Context safety
     /// This function does not require a CPU context.
-    pub fn new_bare() -> Self {
+    pub fn new_bare(proc: Arc<Proc>) -> Self {
         // td_critnest on the PS4 started with 1 but this does not work in our case because we use
         // RAII to increase and decrease it.
         let gg = GutexGroup::new();
 
         Self {
+            proc,
             active_pins: AtomicU8::new(0),
             active_interrupts: AtomicU8::new(0),
             active_mutexes: PrivateCell::new(0),
@@ -49,6 +53,10 @@ impl Thread {
         let active_interrupts = self.active_interrupts.load(Ordering::Relaxed);
 
         active_pins == 0 && active_interrupts == 0
+    }
+
+    pub fn proc(&self) -> &Arc<Proc> {
+        &self.proc
     }
 
     /// See [`crate::context::pin_cpu()`] for a safe wrapper.

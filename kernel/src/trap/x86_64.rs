@@ -1,6 +1,5 @@
 use crate::config::boot_env;
-use crate::context::{current_thread, BorrowedArc};
-use crate::proc::Thread;
+use crate::context::current_thread;
 use core::sync::atomic::Ordering;
 use obconf::BootEnv;
 
@@ -28,8 +27,15 @@ pub extern "C" fn interrupt_handler(frame: &mut TrapFrame) {
 /// This will be called by an inline assembly.
 ///
 /// See `amd64_syscall` function on the PS4 for a reference.
-pub extern "C" fn syscall_handler(td: BorrowedArc<Thread>) {
+pub extern "C" fn syscall_handler() {
+    // TODO: Implement pc_cnt.v_syscall increment.
+    let td = current_thread();
+    let p = td.proc();
+
     *td.profiling_ticks_mut() = 0;
+
+    // We merge sv_fetch_syscall_args and the code to invoke each syscall handler together.
+    p.abi().syscall_handler();
 
     todo!()
 }

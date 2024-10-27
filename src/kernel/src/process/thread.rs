@@ -14,7 +14,6 @@ use tls::{Local, Tls};
 
 /// An implementation of `thread` structure.
 pub struct VThread {
-    proc: Arc<VProc>,            // td_proc
     id: NonZeroI32,              // td_tid
     cred: Arc<Ucred>,            // td_ucred
     sigmask: Gutex<SignalSet>,   // td_sigmask
@@ -35,7 +34,6 @@ impl VThread {
         let gg = GutexGroup::new();
         let cred = proc.cred().clone();
         let mut td = Self {
-            proc: proc.clone(),
             id,
             cred,
             sigmask: gg.spawn(SignalSet::default()),
@@ -70,10 +68,6 @@ impl VThread {
     /// Return [`None`] if the calling thread is not a PS4 thread.
     pub fn current() -> Option<Local<'static, Arc<Self>>> {
         VTHREAD.get()
-    }
-
-    pub fn proc(&self) -> &Arc<VProc> {
-        &self.proc
     }
 
     pub fn id(&self) -> NonZeroI32 {
