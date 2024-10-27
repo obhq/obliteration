@@ -514,7 +514,6 @@ pub unsafe extern "C" fn vmm_dispatch_debug(vmm: *mut Vmm, stop: *mut KernelStop
                     Ok(Err(v)) => {
                         // No pending data from the debugger.
                         vmm.gdb = Some(v.into());
-                        vmm.cpu.release();
                         return DebugResult::Ok;
                     }
                     Err(e) => Err(e),
