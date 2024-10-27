@@ -16,10 +16,11 @@ mod cell;
 /// Do not try to access any [`PrivateCell`] fields from interrupt handler because it might
 /// currently locked, which will can cause a panic.
 pub struct Thread {
-    active_pins: AtomicU8,            // td_critnest
-    active_interrupts: AtomicU8,      // td_intr_nesting_level
-    active_mutexes: PrivateCell<u16>, // td_locks
-    sleeping: Gutex<usize>,           // td_wchan
+    active_pins: AtomicU8,             // td_critnest
+    active_interrupts: AtomicU8,       // td_intr_nesting_level
+    active_mutexes: PrivateCell<u16>,  // td_locks
+    sleeping: Gutex<usize>,            // td_wchan
+    profiling_ticks: PrivateCell<u32>, // td_pticks
 }
 
 impl Thread {
@@ -39,6 +40,7 @@ impl Thread {
             active_interrupts: AtomicU8::new(0),
             active_mutexes: PrivateCell::new(0),
             sleeping: gg.spawn(0),
+            profiling_ticks: PrivateCell::new(0),
         }
     }
 
@@ -75,5 +77,9 @@ impl Thread {
     /// Sleeping address. Zero if this thread is not in a sleep queue.
     pub fn sleeping_mut(&self) -> GutexWriteGuard<usize> {
         self.sleeping.write()
+    }
+
+    pub fn profiling_ticks_mut(&self) -> RefMut<u32> {
+        unsafe { self.profiling_ticks.borrow_mut(self) }
     }
 }

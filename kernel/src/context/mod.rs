@@ -52,7 +52,11 @@ pub unsafe fn run_with_context(
 pub fn current_thread() -> BorrowedArc<Thread> {
     // It does not matter if we are on a different CPU after we load the Context::thread because it
     // is going to be the same one since it represent the current thread.
-    unsafe { BorrowedArc::new(Context::load_fixed_ptr::<{ offset_of!(Base, thread) }, _>()) }
+    unsafe { BorrowedArc::new(Context::load_fixed_ptr::<{ current_thread_offset() }, _>()) }
+}
+
+pub const fn current_thread_offset() -> usize {
+    offset_of!(Base, thread)
 }
 
 /// # Interrupt safety
