@@ -232,7 +232,6 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
             Ok(mut debug) => {
                 let reason = debug.reason();
 
-
                 if let Some(debugger) = debugger {
                     let res = Self::handle_breakpoint(args, debugger, debug.cpu(), Some(reason));
 
