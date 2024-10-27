@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use crate::vmm::hv::{Cpu, CpuCommit, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, IoBuf};
+use gdbstub::stub::MultiThreadStopReason;
 use std::error::Error;
 use std::marker::PhantomData;
 use std::mem::{size_of, zeroed, MaybeUninit};
@@ -56,6 +57,10 @@ impl<'a> Cpu for WhpCpu<'a> {
         Self: 'b;
 
     type TranslateErr = std::io::Error;
+
+    fn id(&self) -> usize {
+        todo!()
+    }
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
         let mut values: [WHV_REGISTER_VALUE; REGISTERS] = unsafe { zeroed() };
@@ -554,7 +559,17 @@ pub struct WhpDebug<'a, 'b> {
     cpu: PhantomData<&'a mut WhpCpu<'b>>,
 }
 
-impl<'a, 'b> CpuDebug for WhpDebug<'a, 'b> {}
+impl<'a, 'b> CpuDebug for WhpDebug<'a, 'b> {
+    type Cpu = WhpCpu<'b>;
+
+    fn reason(&mut self) -> MultiThreadStopReason<u64> {
+        todo!()
+    }
+
+    fn cpu(&mut self) -> &mut Self::Cpu {
+        todo!()
+    }
+}
 
 /// Implementation of [`Cpu::GetStatesErr`] and [`CpuStates::Err`].
 #[derive(Debug, Error)]

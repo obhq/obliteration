@@ -3,12 +3,15 @@ use super::arch::{KvmStates, StatesError};
 use super::ffi::{KVM_EXIT_DEBUG, KVM_EXIT_HLT, KVM_EXIT_IO, KVM_RUN};
 use super::run::KvmRun;
 use crate::vmm::hv::{Cpu, CpuDebug, CpuExit, CpuIo, CpuRun, IoBuf};
+use gdbstub::stub::MultiThreadStopReason;
 use libc::{ioctl, munmap};
+use std::num::NonZero;
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::sync::MutexGuard;
 
 /// Implementation of [`Cpu`] for KVM.
 pub struct KvmCpu<'a> {
+    id: usize,
     fd: MutexGuard<'a, OwnedFd>,
     cx: (*mut KvmRun, usize),
 }
@@ -17,10 +20,14 @@ impl<'a> KvmCpu<'a> {
     /// # Safety
     /// - `cx` cannot be null and must be obtained from `mmap` on `fd`.
     /// - `len` must be the same value that used on `mmap`.
-    pub unsafe fn new(fd: MutexGuard<'a, OwnedFd>, cx: *mut KvmRun, len: usize) -> Self {
+    pub unsafe fn new(id: usize, fd: MutexGuard<'a, OwnedFd>, cx: *mut KvmRun, len: usize) -> Self {
         assert!(len >= size_of::<KvmRun>());
 
-        Self { fd, cx: (cx, len) }
+        Self {
+            id,
+            fd,
+            cx: (cx, len),
+        }
     }
 }
 
@@ -45,6 +52,10 @@ impl<'a> Cpu for KvmCpu<'a> {
     where
         Self: 'b;
     type TranslateErr = std::io::Error;
+
+    fn id(&self) -> usize {
+        self.id
+    }
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
         KvmStates::from_cpu(&mut self.fd)
@@ -152,7 +163,26 @@ impl<'a, 'b> CpuIo for KvmIo<'a, 'b> {
 /// Implementation of [`CpuDebug`] for KVM.
 pub struct KvmDebug<'a, 'b>(&'a mut KvmCpu<'b>);
 
-impl<'a, 'b> CpuDebug for KvmDebug<'a, 'b> {}
+impl<'a, 'b> CpuDebug for KvmDebug<'a, 'b> {
+    type Cpu = KvmCpu<'b>;
+
+    fn reason(&mut self) -> MultiThreadStopReason<u64> {
+        let debug = unsafe { (*self.0.cx.0).exit.debug.arch };
+
+        match debug.exception {
+            3 => {
+                let tid = NonZero::new(self.0.id + 1).unwrap();
+
+                MultiThreadStopReason::SwBreak(tid)
+            }
+            exception => todo!("unhandled exception {exception}"),
+        }
+    }
+
+    fn cpu(&mut self) -> &mut Self::Cpu {
+        self.0
+    }
+}
 
 #[cfg(target_arch = "x86_64")]
 #[repr(C)]

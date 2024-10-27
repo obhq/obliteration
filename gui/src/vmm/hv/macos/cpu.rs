@@ -9,6 +9,7 @@ use applevisor_sys::{
     hv_return_t, hv_vcpu_destroy, hv_vcpu_exit_t, hv_vcpu_run, hv_vcpu_set_reg,
     hv_vcpu_set_sys_reg, hv_vcpu_t,
 };
+use gdbstub::stub::MultiThreadStopReason;
 use std::marker::PhantomData;
 use std::num::NonZero;
 use thiserror::Error;
@@ -51,6 +52,10 @@ impl<'a> Cpu for HvfCpu<'a> {
     where
         Self: 'b;
     type TranslateErr = std::io::Error;
+
+    fn id(&self) -> usize {
+        todo!()
+    }
 
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr> {
         Ok(HvfStates {
@@ -257,7 +262,17 @@ impl<'a, 'b> CpuIo for HvfIo<'a, 'b> {
 /// Implementation of [`CpuDebug`] for Hypervisor Framework.
 pub struct HvfDebug<'a, 'b>(&'a mut HvfCpu<'b>);
 
-impl<'a, 'b> CpuDebug for HvfDebug<'a, 'b> {}
+impl<'a, 'b> CpuDebug for HvfDebug<'a, 'b> {
+    type Cpu = HvfCpu<'b>;
+
+    fn reason(&mut self) -> MultiThreadStopReason<u64> {
+        todo!()
+    }
+
+    fn cpu(&mut self) -> &mut Self::Cpu {
+        todo!()
+    }
+}
 
 /// Implementation of [`Cpu::RunErr`].
 #[derive(Debug, Error)]

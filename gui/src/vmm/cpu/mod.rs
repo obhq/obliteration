@@ -3,16 +3,18 @@ pub use self::arch::*;
 
 use self::controller::CpuController;
 use self::debug::{DebugReq, DebugRes, Debugger};
-use super::hv::{Cpu, CpuExit, CpuIo, CpuRun, CpuStates, Hypervisor};
+use super::hv::{Cpu, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, Hypervisor};
 use super::hw::{DeviceContext, DeviceTree};
 use super::ram::RamMap;
 use super::{VmmEvent, VmmEventHandler};
 use crate::error::RustError;
 use crate::screen::Screen;
+use controller::ResumeAction;
 use gdbstub::common::{Signal, Tid};
 use gdbstub::stub::MultiThreadStopReason;
 use gdbstub::target::ext::base::multithread::{
-    MultiThreadBase, MultiThreadResume, MultiThreadResumeOps,
+    MultiThreadBase, MultiThreadResume, MultiThreadResumeOps, MultiThreadSingleStep,
+    MultiThreadSingleStepOps,
 };
 use gdbstub::target::ext::thread_extra_info::{ThreadExtraInfo, ThreadExtraInfoOps};
 use gdbstub::target::{TargetError, TargetResult};
@@ -171,7 +173,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
             }
 
             // Handle exit.
-            let r = match Self::handle_exit(&mut devices, exit) {
+            let r = match Self::handle_exit(args, debug.as_ref(), &mut devices, exit) {
                 Ok(v) => v,
                 Err(e) => break Some(e),
             };
@@ -207,6 +209,8 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
     }
 
     fn handle_exit<'a, C: Cpu>(
+        args: &'a Args<H, S>,
+        debugger: Option<&Debugger>,
         devices: &mut BTreeMap<usize, Device<'a, C>>,
         exit: C::Exit<'_>,
     ) -> Result<bool, RustError> {
@@ -225,7 +229,18 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
 
         // Check if debug.
         match exit.into_debug() {
-            Ok(_) => todo!(),
+            Ok(mut debug) => {
+                let reason = debug.reason();
+
+
+                if let Some(debugger) = debugger {
+                    let res = Self::handle_breakpoint(args, debugger, debug.cpu(), Some(reason));
+
+                    Ok(res)
+                } else {
+                    todo!()
+                }
+            }
             Err(_) => todo!(),
         }
     }
@@ -520,11 +535,17 @@ impl<H: Hypervisor, S: Screen> ThreadExtraInfo for CpuManager<H, S> {
 
 impl<H: Hypervisor, S: Screen> MultiThreadResume for CpuManager<H, S> {
     fn resume(&mut self) -> Result<(), Self::Error> {
-        todo!()
+        self.release();
+
+        Ok(())
     }
 
     fn clear_resume_actions(&mut self) -> Result<(), Self::Error> {
-        todo!()
+        for cpu in &mut self.cpus {
+            cpu.resume_action = None;
+        }
+
+        Ok(())
     }
 
     fn set_resume_action_continue(
@@ -532,7 +553,36 @@ impl<H: Hypervisor, S: Screen> MultiThreadResume for CpuManager<H, S> {
         tid: Tid,
         signal: Option<Signal>,
     ) -> Result<(), Self::Error> {
-        todo!()
+        let cpu = self
+            .cpus
+            .get_mut(tid.get() - 1)
+            .ok_or(GdbError::CpuNotFound)?;
+
+        cpu.resume_action = Some(ResumeAction::Continue);
+
+        Ok(())
+    }
+
+    #[inline(always)]
+    fn support_single_step(&mut self) -> Option<MultiThreadSingleStepOps<'_, Self>> {
+        Some(self)
+    }
+}
+
+impl<H: Hypervisor, S: Screen> MultiThreadSingleStep for CpuManager<H, S> {
+    fn set_resume_action_step(
+        &mut self,
+        tid: Tid,
+        signal: Option<Signal>,
+    ) -> Result<(), Self::Error> {
+        let cpu = self
+            .cpus
+            .get_mut(tid.get() - 1)
+            .ok_or(GdbError::CpuNotFound)?;
+
+        cpu.resume_action = Some(ResumeAction::SingleStep);
+
+        Ok(())
     }
 }
 
@@ -575,4 +625,7 @@ impl<'a, C: Cpu> Device<'a, C> {
 pub enum GdbError {
     #[error("the main CPU exited")]
     MainCpuExited,
+
+    #[error("CPU not found")]
+    CpuNotFound,
 }
