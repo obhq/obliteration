@@ -9,12 +9,10 @@ use super::ram::RamMap;
 use super::{VmmEvent, VmmEventHandler};
 use crate::error::RustError;
 use crate::screen::Screen;
-use controller::ResumeAction;
 use gdbstub::common::{Signal, Tid};
 use gdbstub::stub::MultiThreadStopReason;
 use gdbstub::target::ext::base::multithread::{
-    MultiThreadBase, MultiThreadResume, MultiThreadResumeOps, MultiThreadSingleStep,
-    MultiThreadSingleStepOps,
+    MultiThreadBase, MultiThreadResume, MultiThreadResumeOps,
 };
 use gdbstub::target::ext::thread_extra_info::{ThreadExtraInfo, ThreadExtraInfoOps};
 use gdbstub::target::{TargetError, TargetResult};
@@ -540,10 +538,6 @@ impl<H: Hypervisor, S: Screen> MultiThreadResume for CpuManager<H, S> {
     }
 
     fn clear_resume_actions(&mut self) -> Result<(), Self::Error> {
-        for cpu in &mut self.cpus {
-            cpu.resume_action = None;
-        }
-
         Ok(())
     }
 
@@ -552,12 +546,9 @@ impl<H: Hypervisor, S: Screen> MultiThreadResume for CpuManager<H, S> {
         tid: Tid,
         signal: Option<Signal>,
     ) -> Result<(), Self::Error> {
-        let cpu = self
-            .cpus
-            .get_mut(tid.get() - 1)
-            .ok_or(GdbError::CpuNotFound)?;
-
-        cpu.resume_action = Some(ResumeAction::Continue);
+        if let Some(signal) = signal {
+            todo!("set_resume_action_continue with signal {signal:?}");
+        }
 
         Ok(())
     }

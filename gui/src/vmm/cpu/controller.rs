@@ -7,7 +7,6 @@ use std::thread::JoinHandle;
 pub struct CpuController {
     thread: ManuallyDrop<JoinHandle<()>>,
     debug: ManuallyDrop<Option<Debuggee>>,
-    pub resume_action: Option<ResumeAction>,
 }
 
 impl CpuController {
@@ -15,7 +14,6 @@ impl CpuController {
         Self {
             thread: ManuallyDrop::new(thread),
             debug: ManuallyDrop::new(debug),
-            resume_action: None,
         }
     }
 
@@ -31,8 +29,4 @@ impl Drop for CpuController {
         unsafe { ManuallyDrop::drop(&mut self.debug) };
         unsafe { ManuallyDrop::take(&mut self.thread).join().unwrap() };
     }
-}
-
-pub(super) enum ResumeAction {
-    Continue,
 }
