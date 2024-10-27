@@ -80,28 +80,6 @@ mod umtx;
 mod vm;
 
 fn main() -> ExitCode {
-    // Load arguments.
-    let args = if std::env::args_os().any(|a| a == "--debug") {
-        let path = Path::new(".kernel-debug");
-        let file = match File::open(path) {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("Failed to open {}: {}.", path.display(), e);
-                return ExitCode::FAILURE;
-            }
-        };
-
-        match Args::from_file(file) {
-            Ok(v) => v,
-            Err(e) => {
-                eprintln!("Failed to parse {}: {}.", path.display(), e);
-                return ExitCode::FAILURE;
-            }
-        }
-    } else {
-        Args::from_command_line()
-    };
-
     // Run the kernel.
     log::init();
 

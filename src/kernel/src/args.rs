@@ -8,13 +8,6 @@ use std::path::PathBuf;
 #[derive(Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct Args {
-    pub system: PathBuf,
-    pub game: PathBuf,
-    pub debug_dump: Option<PathBuf>,
-    #[serde(default)]
-    pub clear_debug_dump: bool,
-    #[serde(default)]
-    pub pro: bool,
     #[serde(default)]
     pub idps: ConsoleId,
 }

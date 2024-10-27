@@ -1,7 +1,6 @@
 .DS_Store
 /.cache/
 /.flatpak-builder/
-/.kernel-debug
 /Cargo.lock
 /build/
 /target/

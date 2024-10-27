@@ -3,7 +3,7 @@
 
 use crate::context::current_procmgr;
 use crate::malloc::KernelHeap;
-use crate::proc::{ProcMgr, Thread};
+use crate::proc::{Proc, ProcAbi, ProcMgr, Thread};
 use crate::sched::sleep;
 use alloc::sync::Arc;
 use core::mem::zeroed;
@@ -51,8 +51,12 @@ unsafe extern "C" fn _start(env: &'static BootEnv, conf: &'static Config) -> ! {
     // are working.
     let cx = self::arch::setup_main_cpu();
 
+    // Setup proc0 to represent the kernel.
+    let proc0 = Proc::new_bare(Arc::new(Proc0Abi));
+
     // Setup thread0 to represent this thread.
-    let thread0 = Thread::new_bare();
+    let proc0 = Arc::new(proc0);
+    let thread0 = Thread::new_bare(proc0);
 
     // Initialize foundations.
     let pmgr = ProcMgr::new();
@@ -106,6 +110,18 @@ fn panic(i: &PanicInfo) -> ! {
     // Print the message.
     crate::console::error(file, line, i.message());
     crate::panic::panic();
+}
+
+/// Implementation of [`ProcAbi`] for kernel process.
+///
+/// See `null_sysvec` on the PS4 for a reference.
+struct Proc0Abi;
+
+impl ProcAbi for Proc0Abi {
+    /// See `null_fetch_syscall_args` on the PS4 for a reference.
+    fn syscall_handler(&self) {
+        unimplemented!()
+    }
 }
 
 // SAFETY: STAGE1_HEAP is a mutable static so it valid for reads and writes. This will be safe as

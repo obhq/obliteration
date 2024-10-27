@@ -1,6 +1,4 @@
-use crate::context::{
-    current_thread_offset, current_trap_rsp_offset, current_user_rsp_offset, ContextArgs,
-};
+use crate::context::{current_trap_rsp_offset, current_user_rsp_offset, ContextArgs};
 use crate::trap::{interrupt_handler, syscall_handler};
 use bitfield_struct::bitfield;
 use core::arch::{asm, global_asm};
@@ -204,12 +202,10 @@ global_asm!(
     "swapgs",
     "mov gs:[{user_rsp}], rsp", // Save user RSP.
     "mov rsp, gs:[{trap_rsp}]",
-    "mov rdi, gs:[{td}]",
     "call {handler}",
     "ud2",
     user_rsp = const current_user_rsp_offset(),
     trap_rsp = const current_trap_rsp_offset(),
-    td = const current_thread_offset(),
     handler = sym syscall_handler
 );
 

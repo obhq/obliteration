@@ -7,7 +7,6 @@ members = [
     "macros",
     "src/fs",
     "src/gmtx",
-    "src/kernel",
     "src/llt",
     "src/obconf",
     "src/param",
