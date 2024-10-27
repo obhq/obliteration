@@ -34,6 +34,5 @@ impl Drop for CpuController {
 }
 
 pub(super) enum ResumeAction {
-    Continue,
-    SingleStep,
+    Continue
 }

@@ -561,28 +561,6 @@ impl<H: Hypervisor, S: Screen> MultiThreadResume for CpuManager<H, S> {
 
         Ok(())
     }
-
-    #[inline(always)]
-    fn support_single_step(&mut self) -> Option<MultiThreadSingleStepOps<'_, Self>> {
-        Some(self)
-    }
-}
-
-impl<H: Hypervisor, S: Screen> MultiThreadSingleStep for CpuManager<H, S> {
-    fn set_resume_action_step(
-        &mut self,
-        tid: Tid,
-        signal: Option<Signal>,
-    ) -> Result<(), Self::Error> {
-        let cpu = self
-            .cpus
-            .get_mut(tid.get() - 1)
-            .ok_or(GdbError::CpuNotFound)?;
-
-        cpu.resume_action = Some(ResumeAction::SingleStep);
-
-        Ok(())
-    }
 }
 
 /// Encapsulates arguments for a function to run a CPU.
