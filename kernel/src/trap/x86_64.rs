@@ -1,4 +1,6 @@
 use crate::config::boot_env;
+use crate::context::current_thread;
+use core::sync::atomic::Ordering;
 use obconf::BootEnv;
 
 /// Main entry point for interrupt.
@@ -7,11 +9,17 @@ use obconf::BootEnv;
 ///
 /// See `trap` function on the PS4 for a reference.
 pub extern "C" fn interrupt_handler(frame: &mut TrapFrame) {
+    let td = current_thread();
+
+    unsafe { td.active_interrupts().fetch_add(1, Ordering::Relaxed) };
+
     match frame.num {
         TrapNo::Breakpoint => match boot_env() {
             BootEnv::Vm(vm) => super::vm::interrupt_handler(vm, frame),
         },
     }
+
+    unsafe { td.active_interrupts().fetch_sub(1, Ordering::Relaxed) };
 }
 
 /// Predefined interrupt vector number.

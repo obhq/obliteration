@@ -1,13 +1,13 @@
-use super::{Context, PinnedContext};
+use super::{pin_cpu, PinnedContext};
 use crate::config::config;
 use alloc::vec::Vec;
 use core::ops::Deref;
 
 /// Encapsulates per-CPU value.
 ///
-/// In theory you can use `RefCell` to have a mutable access to the value but it is prone to panic
-/// because the CPU is allowed to switch to the other thread, which will panic if the new thread
-/// attemp to lock the same `RefCell`.
+/// Use `RefCell` if you need interior mutability but it will make that code not safe to call from
+/// any interrupt handler. You can't use mutex here because once the thread is pinned to a CPU it
+/// cannot go to sleep.
 pub struct CpuLocal<T>(Vec<T>);
 
 impl<T> CpuLocal<T> {
@@ -22,13 +22,18 @@ impl<T> CpuLocal<T> {
         Self(vec)
     }
 
+    /// The calling thread cannot go to sleep until the returned [`CpuLock`] is dropped. Attempt to
+    /// call any function that can put the thread to sleep will be panic.
     pub fn lock(&self) -> CpuLock<T> {
-        let pin = Context::pin();
+        let pin = pin_cpu();
         let val = &self.0[unsafe { pin.cpu() }];
 
         CpuLock { val, pin }
     }
 }
+
+unsafe impl<T: Send> Send for CpuLocal<T> {}
+unsafe impl<T: Send> Sync for CpuLocal<T> {}
 
 /// RAII struct to access per-CPU value in [`CpuLocal`].
 pub struct CpuLock<'a, T> {

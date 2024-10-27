@@ -1,3 +1,4 @@
+use crate::context::current_user_rsp_offset;
 use crate::trap::interrupt_handler;
 use bitfield_struct::bitfield;
 use core::arch::{asm, global_asm};
@@ -192,7 +193,13 @@ global_asm!(
 );
 
 // See Xfast_syscall on the PS4 for a reference.
-global_asm!("syscall_entry64:", "swapgs", "ud2");
+global_asm!(
+    "syscall_entry64:",
+    "swapgs",
+    "mov gs:[{user_rsp}], rsp",
+    "ud2",
+    user_rsp = const current_user_rsp_offset()
+);
 
 // See Xfast_syscall32 on the PS4 for a reference.
 global_asm!("syscall_entry32:", "ud2");

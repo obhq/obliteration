@@ -1,12 +1,12 @@
-use crate::config::{config, PAGE_SIZE};
-use crate::context::Context;
+use crate::config::PAGE_SIZE;
+use crate::context::{current_thread, CpuLocal};
 use crate::uma::UmaZone;
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::alloc::Layout;
+use core::cell::RefCell;
 use core::num::NonZero;
-use core::sync::atomic::{AtomicU64, Ordering};
 
 /// Stage 2 kernel heap.
 ///
@@ -14,7 +14,7 @@ use core::sync::atomic::{AtomicU64, Ordering};
 /// `malloc_type` and `malloc_type_internal` structure.
 pub struct Stage2 {
     zones: [Vec<Arc<UmaZone>>; (usize::BITS - 1) as usize], // kmemsize + kmemzones
-    stats: Vec<Stats>,                                      // mti_stats
+    stats: CpuLocal<RefCell<Stats>>,                        // mti_stats
 }
 
 impl Stage2 {
@@ -57,14 +57,10 @@ impl Stage2 {
             zones
         });
 
-        // TODO: Is there a better way than this?
-        let mut stats = Vec::with_capacity(config().max_cpu.get());
-
-        for _ in 0..config().max_cpu.get() {
-            stats.push(Stats::default());
+        Self {
+            zones,
+            stats: CpuLocal::new(|_| RefCell::default()),
         }
-
-        Self { zones, stats }
     }
 
     /// Returns null on failure.
@@ -75,10 +71,10 @@ impl Stage2 {
     /// `layout` must be nonzero.
     pub unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         // Our implementation imply M_WAITOK.
-        let td = Context::thread();
+        let td = current_thread();
 
-        if td.active_interrupts() != 0 {
-            panic!("heap allocation in an interrupt handler is not supported");
+        if !td.can_sleep() {
+            panic!("heap allocation in a non-sleeping context is not supported");
         }
 
         // Determine how to allocate.
@@ -99,15 +95,16 @@ impl Stage2 {
             let mem = zone.alloc();
 
             // Update stats.
-            let cx = Context::pin();
-            let stats = &self.stats[cx.cpu()];
+            let stats = self.stats.lock();
+            let mut stats = stats.borrow_mut();
             let size = if mem.is_null() { 0 } else { zone.size().get() };
 
             if size != 0 {
-                stats
+                stats.alloc_bytes = stats
                     .alloc_bytes
-                    .fetch_add(size.try_into().unwrap(), Ordering::Relaxed);
-                stats.alloc_count.fetch_add(1, Ordering::Relaxed);
+                    .checked_add(size.try_into().unwrap())
+                    .unwrap();
+                stats.alloc_count += 1;
             }
 
             // TODO: How to update mts_size here since our zone table also indexed by alignment?
@@ -128,6 +125,6 @@ impl Stage2 {
 /// Implementation of `malloc_type_stats` structure.
 #[derive(Default)]
 struct Stats {
-    alloc_bytes: AtomicU64, // mts_memalloced
-    alloc_count: AtomicU64, // mts_numallocs
+    alloc_bytes: u64, // mts_memalloced
+    alloc_count: u64, // mts_numallocs
 }

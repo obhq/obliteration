@@ -1,7 +1,7 @@
 use self::cache::UmaCache;
-use crate::context::{Context, CpuLocal};
-use crate::lock::Mutex;
+use crate::context::{current_thread, CpuLocal};
 use alloc::borrow::Cow;
+use core::cell::RefCell;
 use core::num::NonZero;
 
 mod bucket;
@@ -9,8 +9,8 @@ mod cache;
 
 /// Implementation of `uma_zone` structure.
 pub struct UmaZone {
-    size: NonZero<usize>,              // uz_size
-    caches: CpuLocal<Mutex<UmaCache>>, // uz_cpu
+    size: NonZero<usize>,                // uz_size
+    caches: CpuLocal<RefCell<UmaCache>>, // uz_cpu
 }
 
 impl UmaZone {
@@ -20,7 +20,7 @@ impl UmaZone {
         // basically an implementation of zone_ctor.
         Self {
             size,
-            caches: CpuLocal::new(|_| Mutex::new(UmaCache::default())),
+            caches: CpuLocal::new(|_| RefCell::default()),
         }
     }
 
@@ -31,15 +31,15 @@ impl UmaZone {
     /// See `uma_zalloc_arg` on the PS4 for a reference.
     pub fn alloc(&self) -> *mut u8 {
         // Our implementation imply M_WAITOK and M_ZERO.
-        let td = Context::thread();
+        let td = current_thread();
 
-        if td.active_interrupts() != 0 {
-            panic!("heap allocation in an interrupt handler is not supported");
+        if !td.can_sleep() {
+            panic!("heap allocation in a non-sleeping context is not supported");
         }
 
         // Try to allocate from per-CPU cache.
         let pin = self.caches.lock();
-        let mut cache = pin.lock();
+        let mut cache = pin.borrow_mut();
         let bucket = cache.alloc_mut();
 
         while let Some(bucket) = bucket {
