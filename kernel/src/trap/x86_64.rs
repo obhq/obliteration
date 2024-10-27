@@ -1,5 +1,6 @@
 use crate::config::boot_env;
-use crate::context::current_thread;
+use crate::context::{current_thread, BorrowedArc};
+use crate::proc::Thread;
 use core::sync::atomic::Ordering;
 use obconf::BootEnv;
 
@@ -20,6 +21,17 @@ pub extern "C" fn interrupt_handler(frame: &mut TrapFrame) {
     }
 
     unsafe { td.active_interrupts().fetch_sub(1, Ordering::Relaxed) };
+}
+
+/// Main entry point for `syscall` instruction.
+///
+/// This will be called by an inline assembly.
+///
+/// See `amd64_syscall` function on the PS4 for a reference.
+pub extern "C" fn syscall_handler(td: BorrowedArc<Thread>) {
+    *td.profiling_ticks_mut() = 0;
+
+    todo!()
 }
 
 /// Predefined interrupt vector number.

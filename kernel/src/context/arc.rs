@@ -11,6 +11,7 @@ use core::ops::Deref;
 ///
 /// This type work by making itself not [Send] and [Sync], which prevent the caller from storing it
 /// at a global level.
+#[repr(transparent)]
 pub struct BorrowedArc<T>(*const T); // A pointer make this type automatically !Send and !Sync.
 
 impl<T> BorrowedArc<T> {
