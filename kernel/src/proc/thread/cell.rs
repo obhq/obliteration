@@ -1,5 +1,5 @@
 use super::Thread;
-use crate::context::{BorrowedArc, Context};
+use crate::context::{current_thread, BorrowedArc};
 use core::cell::{RefCell, RefMut};
 
 /// Encapsulates a field of [Thread] that can only be accessed by the CPU that currently executing
@@ -22,7 +22,7 @@ impl<T> PrivateCell<T> {
     }
 
     fn validate(&self, owner: &Thread) {
-        let current = Context::thread();
+        let current = current_thread();
 
         if !core::ptr::eq(BorrowedArc::as_ptr(&current), owner) {
             panic!("accessing a private cell from the other thread is not supported");

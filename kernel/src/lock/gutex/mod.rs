@@ -1,5 +1,5 @@
 use super::MTX_UNOWNED;
-use crate::context::{BorrowedArc, Context};
+use crate::context::{current_thread, BorrowedArc};
 use alloc::rc::Rc;
 use alloc::sync::Arc;
 use core::cell::UnsafeCell;
@@ -87,20 +87,20 @@ pub struct GutexGroup {
 }
 
 impl GutexGroup {
+    /// # Context safety
+    /// This function does not require a CPU context.
     pub fn new() -> Arc<Self> {
-        // This function is not allowed to access the CPU context due to it can be called before the
-        // context has been activated.
         Arc::new(Self {
             owning: AtomicUsize::new(MTX_UNOWNED),
             active: UnsafeCell::new(0),
         })
     }
 
-    pub fn spawn<T>(self: &Arc<Self>, value: T) -> Gutex<T> {
-        // This function is not allowed to access the CPU context due to it can be called before the
-        // context has been activated.
+    /// # Context safety
+    /// This function does not require a CPU context.
+    pub fn spawn<T>(self: Arc<Self>, value: T) -> Gutex<T> {
         Gutex {
-            group: self.clone(),
+            group: self,
             active: UnsafeCell::new(0),
             value: UnsafeCell::new(value),
         }
@@ -109,7 +109,7 @@ impl GutexGroup {
     #[inline(never)]
     fn lock(&self) -> GroupGuard {
         // Check if the calling thread already own the lock.
-        let td = Context::thread();
+        let td = current_thread();
         let id = BorrowedArc::as_ptr(&td) as usize;
 
         if id == self.owning.load(Ordering::Relaxed) {

@@ -1,5 +1,5 @@
 use super::MTX_UNOWNED;
-use crate::context::{BorrowedArc, Context};
+use crate::context::{current_thread, BorrowedArc};
 use alloc::rc::Rc;
 use core::cell::UnsafeCell;
 use core::marker::PhantomData;
@@ -27,11 +27,11 @@ impl<T> Mutex<T> {
 
     /// See `_mtx_lock_flags` on the PS4 for a reference.
     pub fn lock(&self) -> MutexGuard<T> {
-        // Disallow locking in an interupt handler.
-        let td = Context::thread();
+        // Check if the current thread can sleep.
+        let td = current_thread();
 
-        if td.active_interrupts() != 0 {
-            panic!("locking a mutex in an interupt handler is not supported");
+        if !td.can_sleep() {
+            panic!("locking a mutex in a non-sleeping context is not supported");
         }
 
         // Take ownership.
@@ -48,7 +48,7 @@ impl<T> Mutex<T> {
             todo!()
         }
 
-        td.active_mutexes().fetch_add(1, Ordering::Relaxed);
+        *td.active_mutexes_mut() += 1;
 
         MutexGuard {
             data: self.data.get(),
@@ -62,9 +62,9 @@ impl<T> Mutex<T> {
     /// # Safety
     /// Must be called by the thread that own `lock`.
     unsafe fn unlock(lock: &AtomicUsize) {
-        let td = Context::thread();
+        let td = current_thread();
 
-        td.active_mutexes().fetch_sub(1, Ordering::Relaxed);
+        *td.active_mutexes_mut() -= 1;
 
         // TODO: There is a check for (m->lock_object).lo_data == 0 on the PS4.
         if lock

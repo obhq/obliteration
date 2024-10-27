@@ -1,7 +1,7 @@
 #![no_std]
 #![cfg_attr(not(test), no_main)]
 
-use crate::context::Context;
+use crate::context::current_procmgr;
 use crate::malloc::KernelHeap;
 use crate::proc::{ProcMgr, Thread};
 use crate::sched::sleep;
@@ -71,9 +71,10 @@ fn main() -> ! {
     // See scheduler() function on the PS4 for a reference. Actually it should be called swapper
     // instead.
     // TODO: Subscribe to "system_suspend_phase2_pre_sync" and "system_resume_phase2" event.
+    let procs = current_procmgr();
+
     loop {
         // TODO: Implement a call to vm_page_count_min().
-        let procs = Context::procs();
         let procs = procs.list();
 
         if procs.len() == 0 {

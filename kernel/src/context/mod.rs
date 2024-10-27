@@ -1,12 +1,13 @@
 pub use self::arc::*;
+pub use self::arch::*;
 pub use self::local::*;
 
-use self::arch::{load_fixed_ptr, load_usize};
 use crate::proc::{ProcMgr, Thread};
 use alloc::rc::Rc;
 use alloc::sync::Arc;
 use core::marker::PhantomData;
 use core::mem::offset_of;
+use core::sync::atomic::Ordering;
 
 mod arc;
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
@@ -27,22 +28,58 @@ mod local;
 pub unsafe fn run_with_context(cpu: usize, td: Arc<Thread>, pmgr: Arc<ProcMgr>, f: fn() -> !) -> ! {
     // We use a different mechanism here. The PS4 put all of pcpu at a global level but we put it on
     // each CPU stack instead.
-    let mut cx = self::arch::Context::new(Context {
+    let mut cx = Context::new(Base {
         cpu,
         thread: Arc::into_raw(td),
         pmgr: Arc::into_raw(pmgr),
     });
 
-    self::arch::activate(&mut cx);
+    cx.activate();
     f();
+}
+
+/// # Interrupt safety
+/// This function is interrupt safe.
+pub fn current_thread() -> BorrowedArc<Thread> {
+    // It does not matter if we are on a different CPU after we load the Context::thread because it
+    // is going to be the same one since it represent the current thread.
+    unsafe { BorrowedArc::new(Context::load_fixed_ptr::<{ offset_of!(Base, thread) }, _>()) }
+}
+
+/// # Interrupt safety
+/// This function is interrupt safe.
+pub fn current_procmgr() -> BorrowedArc<ProcMgr> {
+    // It does not matter if we are on a different CPU after we load the Context::pmgr because it is
+    // always the same for all CPU.
+    unsafe { BorrowedArc::new(Context::load_fixed_ptr::<{ offset_of!(Base, pmgr) }, _>()) }
+}
+
+/// Pin the calling thread to one CPU.
+///
+/// This thread will never switch to a different CPU until the returned [`PinnedContext`] is dropped
+/// and it is not allowed to sleep.
+///
+/// See `critical_enter` and `critical_exit` on the PS4 for a reference. Beware that our
+/// implementation a bit different. The PS4 **allow the thread to sleep but we don't**.
+pub fn pin_cpu() -> PinnedContext {
+    let td = current_thread();
+
+    // Prevent all operations after this to get executed before this line. See
+    // https://github.com/rust-lang/rust/issues/130655#issuecomment-2365189317 for the explanation.
+    unsafe { td.active_pins().fetch_add(1, Ordering::Acquire) };
+
+    PinnedContext {
+        td,
+        phantom: PhantomData,
+    }
 }
 
 /// Implementation of `pcpu` structure.
 ///
 /// Access to this structure must be done by **atomic reading or writing its field directly**. It is
 /// not safe to have a temporary a pointer or reference to this struct or its field because the CPU
-/// might get interupted, which mean it is possible for the next instruction to get executed on
-/// a different CPU if the interupt cause the CPU to switch the task.
+/// might get interrupted, which mean it is possible for the next instruction to get executed on
+/// a different CPU if the interrupt cause the CPU to switch the task.
 ///
 /// The activation of this struct is a minimum requirements for a new CPU to call most of the other
 /// functions. The new CPU should call [`run_with_context()`] as soon as possible. We don't make the
@@ -56,47 +93,13 @@ pub unsafe fn run_with_context(cpu: usize, td: Arc<Thread>, pmgr: Arc<ProcMgr>, 
 /// main CPU** because the only kernel functions it can call into is either stage 1 allocator or
 /// panic handler, both of them does not require a CPU context.
 #[repr(C)]
-pub struct Context {
+struct Base {
     cpu: usize,            // pc_cpuid
     thread: *const Thread, // pc_curthread
     pmgr: *const ProcMgr,
 }
 
-impl Context {
-    /// # Interupt safety
-    /// This function is interupt safe.
-    pub fn thread() -> BorrowedArc<Thread> {
-        // It does not matter if we are on a different CPU after we load the Context::thread because
-        // it is going to be the same one since it represent the current thread.
-        unsafe { BorrowedArc::new(load_fixed_ptr::<{ offset_of!(Self, thread) }, _>()) }
-    }
-
-    pub fn procs() -> BorrowedArc<ProcMgr> {
-        // It does not matter if we are on a different CPU after we load the Context::pmgr because
-        // it is always the same for all CPU.
-        unsafe { BorrowedArc::new(load_fixed_ptr::<{ offset_of!(Self, pmgr) }, _>()) }
-    }
-
-    /// Pin the calling thread to one CPU.
-    ///
-    /// This thread will never switch to a different CPU until the returned [`PinnedContext`] is
-    /// dropped and it is not allowed to sleep.
-    ///
-    /// See `critical_enter` and `critical_exit` on the PS4 for a reference. Beware that our
-    /// implementation a bit different. The PS4 **allow the thread to sleep but we don't**.
-    pub fn pin() -> PinnedContext {
-        let td = Self::thread();
-
-        unsafe { *td.critical_sections_mut() += 1 };
-
-        PinnedContext {
-            td,
-            phantom: PhantomData,
-        }
-    }
-}
-
-impl Drop for Context {
+impl Drop for Base {
     fn drop(&mut self) {
         panic!("dropping Context can cause a bug so it is not supported");
     }
@@ -107,7 +110,7 @@ impl Drop for Context {
 /// This struct must not implement [`Send`] and [`Sync`].
 pub struct PinnedContext {
     td: BorrowedArc<Thread>,
-    phantom: PhantomData<Rc<()>>, // For !Send and !Sync.
+    phantom: PhantomData<Rc<()>>, // Make sure we are !Send and !Sync.
 }
 
 impl PinnedContext {
@@ -117,13 +120,15 @@ impl PinnedContext {
     /// Anything that derive from the returned value will invalid when this [`PinnedContext`]
     /// dropped.
     pub unsafe fn cpu(&self) -> usize {
-        load_usize::<{ offset_of!(Context, cpu) }>()
+        Context::load_usize::<{ offset_of!(Base, cpu) }>()
     }
 }
 
 impl Drop for PinnedContext {
     fn drop(&mut self) {
-        unsafe { *self.td.critical_sections_mut() -= 1 };
+        // Prevent all operations before this to get executed after this line. See
+        // https://github.com/rust-lang/rust/issues/130655#issuecomment-2365189317 for the explanation.
+        unsafe { self.td.active_pins().fetch_sub(1, Ordering::Release) };
 
         // TODO: Implement td_owepreempt.
     }
