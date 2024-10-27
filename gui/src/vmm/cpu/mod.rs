@@ -6,7 +6,7 @@ use self::debug::{DebugReq, DebugRes, Debugger};
 use super::hv::{Cpu, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, Hypervisor};
 use super::hw::{DeviceContext, DeviceTree};
 use super::ram::RamMap;
-use super::{VmmEvent, VmmEventHandler};
+use super::{KernelStop, VmmEvent, VmmEventHandler};
 use crate::error::RustError;
 use crate::screen::Screen;
 use gdbstub::common::{Signal, Tid};
@@ -281,10 +281,10 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
         stop: Option<MultiThreadStopReason<u64>>,
     ) -> bool {
         // Convert stop reason.
-        let stop = match stop {
-            Some(_) => todo!(),
-            None => null_mut(),
-        };
+        let mut stop = stop
+            .map(KernelStop)
+            .map(Box::new)
+            .map_or(null_mut(), Box::into_raw);
 
         // Notify GUI. We need to allow only one CPU to enter the debugger dispatch loop.
         let lock = args.breakpoint.lock().unwrap();
