@@ -281,7 +281,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
         stop: Option<MultiThreadStopReason<u64>>,
     ) -> bool {
         // Convert stop reason.
-        let mut stop = stop
+        let stop = stop
             .map(KernelStop)
             .map(Box::new)
             .map_or(null_mut(), Box::into_raw);
