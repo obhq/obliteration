@@ -47,7 +47,9 @@ unsafe extern "C" fn _start(env: &'static BootEnv, conf: &'static Config) -> ! {
 
     info!("Starting Obliteration Kernel.");
 
-    self::arch::setup_main_cpu();
+    // Setup the CPU after the first print to let the bootloader developer know (some of) their code
+    // are working.
+    let cx = self::arch::setup_main_cpu();
 
     // Setup thread0 to represent this thread.
     let thread0 = Thread::new_bare();
@@ -58,7 +60,7 @@ unsafe extern "C" fn _start(env: &'static BootEnv, conf: &'static Config) -> ! {
     // Activate CPU context.
     let thread0 = Arc::new(thread0);
 
-    self::context::run_with_context(0, thread0, pmgr, main);
+    self::context::run_with_context(0, thread0, pmgr, cx, main);
 }
 
 #[inline(never)] // See self::context::run_with_context docs.
@@ -88,13 +90,14 @@ fn main() -> ! {
     }
 }
 
-/// # Interupt safety
-/// This function is interupt safe.
+/// # Context safety
+/// This function does not require a CPU context.
+///
+/// # Interrupt safety
+/// This function is interrupt safe.
 #[allow(dead_code)]
 #[cfg_attr(target_os = "none", panic_handler)]
 fn panic(i: &PanicInfo) -> ! {
-    // This function is not allowed to access the CPU context due to it can be called before the
-    // context has been activated.
     let (file, line) = match i.location() {
         Some(v) => (v.file(), v.line()),
         None => ("unknown", 0),

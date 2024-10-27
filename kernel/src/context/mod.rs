@@ -25,14 +25,23 @@ mod local;
 /// - `cpu` must be unique and valid.
 /// - `pmgr` must be the same for all context.
 /// - `f` must not get inlined.
-pub unsafe fn run_with_context(cpu: usize, td: Arc<Thread>, pmgr: Arc<ProcMgr>, f: fn() -> !) -> ! {
+pub unsafe fn run_with_context(
+    cpu: usize,
+    td: Arc<Thread>,
+    pmgr: Arc<ProcMgr>,
+    args: ContextArgs,
+    f: fn() -> !,
+) -> ! {
     // We use a different mechanism here. The PS4 put all of pcpu at a global level but we put it on
     // each CPU stack instead.
-    let mut cx = Context::new(Base {
-        cpu,
-        thread: Arc::into_raw(td),
-        pmgr: Arc::into_raw(pmgr),
-    });
+    let mut cx = Context::new(
+        Base {
+            cpu,
+            thread: Arc::into_raw(td),
+            pmgr: Arc::into_raw(pmgr),
+        },
+        args,
+    );
 
     cx.activate();
     f();
