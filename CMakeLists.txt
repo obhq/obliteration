@@ -1,20 +1,16 @@
 cmake_minimum_required(VERSION 3.22)
 
 include(FetchContent)
+include(cmake/cargo.cmake)
 
 # Fetch external CMake scripts.
-FetchContent_Declare(
-    corrosion
-    GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
-)
-
 FetchContent_Declare(
     msvc
     GIT_REPOSITORY https://github.com/MarkSchofield/WindowsToolchain.git
     GIT_TAG v0.11.0
 )
 
-FetchContent_MakeAvailable(msvc corrosion)
+FetchContent_MakeAvailable(msvc)
 
 # Set project properties.
 project(obliteration)
@@ -61,7 +57,7 @@ add_custom_target(kernel
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/kernel
     BYPRODUCTS ${KERNEL})
 
-corrosion_import_crate(MANIFEST_PATH Cargo.toml CRATES gui)
+add_cargo(MANIFEST ${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml CRATES gui)
 
 # Add GUI.
 add_subdirectory(gui)
