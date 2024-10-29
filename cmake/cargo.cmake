@@ -23,6 +23,14 @@ function(add_cargo)
         set(manifest ${arg_MANIFEST})
     endif()
 
+    # Generate Cargo.lock.
+    cmake_path(REPLACE_FILENAME manifest Cargo.lock OUTPUT_VARIABLE cargo_lock)
+
+    if(NOT EXISTS ${cargo_lock})
+        execute_process(
+            COMMAND cargo generate-lockfile --manifest-path ${manifest}
+            COMMAND_ERROR_IS_FATAL ANY)
+    endif()
 
     # Get crate ID.
     foreach(crate ${arg_CRATES})
