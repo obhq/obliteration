@@ -57,7 +57,7 @@ add_custom_target(kernel
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/kernel
     BYPRODUCTS ${KERNEL})
 
-add_cargo(MANIFEST ${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml CRATES gui)
+add_cargo(MANIFEST Cargo.toml CRATES gui)
 
 # Add GUI.
 add_subdirectory(gui)

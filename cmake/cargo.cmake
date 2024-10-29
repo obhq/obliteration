@@ -14,10 +14,20 @@ function(add_cargo)
         message(FATAL_ERROR "missing CRATES option")
     endif()
 
+    # Get absolute path to Cargo manifest.
+    cmake_path(IS_RELATIVE arg_MANIFEST relative)
+
+    if(relative)
+        set(manifest ${CMAKE_CURRENT_SOURCE_DIR}/${arg_MANIFEST})
+    else()
+        set(manifest ${arg_MANIFEST})
+    endif()
+
+
     # Get crate ID.
     foreach(crate ${arg_CRATES})
         execute_process(
-            COMMAND cargo pkgid --manifest-path ${arg_MANIFEST} -p ${crate}
+            COMMAND cargo pkgid --manifest-path ${manifest} -p ${crate}
             OUTPUT_VARIABLE pkgid
             COMMAND_ERROR_IS_FATAL ANY)
         string(STRIP ${pkgid} pkgid)
@@ -26,7 +36,7 @@ function(add_cargo)
 
     # Get metadata.
     execute_process(
-        COMMAND cargo metadata --manifest-path ${arg_MANIFEST} --format-version 1
+        COMMAND cargo metadata --manifest-path ${manifest} --format-version 1
         OUTPUT_VARIABLE meta
         COMMAND_ERROR_IS_FATAL ANY)
 
@@ -86,7 +96,7 @@ function(add_cargo)
 
             # Add build target.
             add_custom_target(${build_target}
-                COMMAND cargo build --manifest-path ${arg_MANIFEST} -p ${crate} --profile ${profile}
+                COMMAND cargo build --manifest-path ${manifest} -p ${crate} --profile ${profile}
                 BYPRODUCTS ${output})
         endforeach()
     endforeach()
