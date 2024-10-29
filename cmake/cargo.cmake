@@ -68,18 +68,26 @@ function(add_cargo)
 
         list(GET arg_CRATES ${i} crate)
 
+        set(debug_outputs ${meta_target_directory}/debug)
+        set(release_outputs ${meta_target_directory}/release)
+
         # Create targets.
         string(JSON targets GET ${pkg} "targets")
         string(JSON len LENGTH ${targets})
         math(EXPR len "${len}-1")
 
-        set(debug_outputs ${meta_target_directory}/debug)
-        set(release_outputs ${meta_target_directory}/release)
-
         foreach(i RANGE ${len})
-            # Create imported target.
+            # Skip if build script.
             string(JSON target GET ${targets} ${i})
             string(JSON kind GET ${target} "kind" "0")
+
+            if(${kind} STREQUAL "custom-build")
+                continue()
+            elseif(TARGET ${crate})
+                message(FATAL_ERROR "multiple crate types is not supported")
+            endif()
+
+            # Create imported target.
             set(build_target "${crate}-artifact")
 
             if(${kind} STREQUAL "staticlib")
@@ -99,8 +107,6 @@ function(add_cargo)
                     IMPORTED_LOCATION_RELEASE ${release_artifact}
                     MAP_IMPORTED_CONFIG_MINSIZEREL Release
                     MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release)
-            elseif(${kind} STREQUAL "custom-build")
-                continue()
             else()
                 message(FATAL_ERROR "${kind} crate is not supported")
             endif()
