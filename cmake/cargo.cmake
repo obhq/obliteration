@@ -27,6 +27,7 @@ function(add_cargo)
     cmake_path(REPLACE_FILENAME manifest Cargo.lock OUTPUT_VARIABLE cargo_lock)
 
     if(NOT EXISTS ${cargo_lock})
+        message(STATUS "Generating Cargo.lock")
         execute_process(
             COMMAND cargo generate-lockfile --manifest-path ${manifest}
             COMMAND_ERROR_IS_FATAL ANY)
@@ -52,14 +53,6 @@ function(add_cargo)
     string(JSON meta_packages GET ${meta} "packages")
     string(JSON len LENGTH ${meta_packages})
 
-    if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
-        set(build_type "debug")
-        set(profile "dev")
-    else()
-        set(build_type "release")
-        set(profile "release")
-    endif()
-
     # Create CMake targets.
     math(EXPR len "${len}-1")
 
@@ -80,6 +73,9 @@ function(add_cargo)
         string(JSON len LENGTH ${targets})
         math(EXPR len "${len}-1")
 
+        set(debug_outputs ${meta_target_directory}/debug)
+        set(release_outputs ${meta_target_directory}/release)
+
         foreach(i RANGE ${len})
             # Create imported target.
             string(JSON target GET ${targets} ${i})
@@ -88,14 +84,21 @@ function(add_cargo)
 
             if(${kind} STREQUAL "staticlib")
                 if(WIN32)
-                    set(output ${meta_target_directory}/${build_type}/${crate}.lib)
+                    set(debug_artifact ${debug_outputs}/${crate}.lib)
+                    set(release_artifact ${release_outputs}/${crate}.lib)
                 else()
-                    set(output ${meta_target_directory}/${build_type}/lib${crate}.a)
+                    set(debug_artifact ${debug_outputs}/lib${crate}.a)
+                    set(release_artifact ${release_outputs}/lib${crate}.a)
                 endif()
 
                 add_library(${crate} STATIC IMPORTED)
-                set_target_properties(${crate} PROPERTIES IMPORTED_LOCATION ${output})
                 add_dependencies(${crate} ${build_target})
+                set_target_properties(${crate} PROPERTIES
+                    IMPORTED_CONFIGURATIONS "DEBUG;RELEASE"
+                    IMPORTED_LOCATION_DEBUG ${debug_artifact}
+                    IMPORTED_LOCATION_RELEASE ${release_artifact}
+                    MAP_IMPORTED_CONFIG_MINSIZEREL Release
+                    MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release)
             elseif(${kind} STREQUAL "custom-build")
                 continue()
             else()
@@ -104,8 +107,8 @@ function(add_cargo)
 
             # Add build target.
             add_custom_target(${build_target}
-                COMMAND cargo build --manifest-path ${manifest} -p ${crate} --profile ${profile}
-                BYPRODUCTS ${output})
+                COMMAND cargo build --manifest-path ${manifest} -p ${crate} $<IF:$<CONFIG:Debug>,--profile=dev,--release>
+                BYPRODUCTS $<IF:$<CONFIG:Debug>,${debug_artifact},${release_artifact}>)
         endforeach()
     endforeach()
 endfunction()
