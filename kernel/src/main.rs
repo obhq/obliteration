@@ -2,6 +2,7 @@
 #![cfg_attr(not(test), no_main)]
 
 use crate::context::current_procmgr;
+use crate::imgact::Ps4Abi;
 use crate::malloc::KernelHeap;
 use crate::proc::{Fork, Proc, ProcAbi, ProcMgr, Thread};
 use crate::sched::sleep;
@@ -16,6 +17,8 @@ mod arch;
 mod config;
 mod console;
 mod context;
+mod event;
+mod imgact;
 mod imgfmt;
 mod lock;
 mod malloc;
@@ -23,6 +26,7 @@ mod panic;
 mod proc;
 mod sched;
 mod signal;
+mod subsystem;
 mod trap;
 mod uma;
 
@@ -85,9 +89,10 @@ fn main() -> ! {
 /// See `create_init` function on the PS4 for a reference.
 fn create_init() {
     let pmgr = current_procmgr();
-    let flags = Fork::new().with_copy_fd(true);
+    let abi = Arc::new(Ps4Abi);
+    let flags = Fork::new().with_copy_fd(true).with_create_process(true);
 
-    pmgr.fork(flags).unwrap();
+    pmgr.fork(abi, flags).unwrap();
 
     todo!()
 }

@@ -49,7 +49,6 @@ impl VProc {
         dmem_container: DmemContainer,
         root: Arc<Vnode>,
         system_path: impl Into<String>,
-        events: &Arc<EventSet<ProcEvents>>,
     ) -> Result<Arc<Self>, SpawnError> {
         let gg = GutexGroup::new();
         let limits = Limits::load()?;
@@ -75,13 +74,6 @@ impl VProc {
             ptc: 0,
             uptc: AtomicPtr::new(null_mut()),
         };
-
-        // Trigger process_init event.
-        let mut et = events.trigger();
-
-        for h in et.select(|s| &s.process_init) {
-            h(&mut proc);
-        }
 
         // Trigger process_ctor event.
         let proc = Arc::new(proc);

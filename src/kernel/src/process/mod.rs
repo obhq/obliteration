@@ -66,7 +66,6 @@ pub struct ProcManager {
     groups: Gutex<HashMap<Pid, Weak<VProcGroup>>>, // pgrphashtbl
     last_pid: Gutex<i32>,                          // lastpid
     random_pid: Gutex<bool>,                       // randompid
-    events: Arc<EventSet<ProcEvents>>,
 }
 
 impl ProcManager {
@@ -80,7 +79,6 @@ impl ProcManager {
     ) -> Result<Arc<Self>, ProcManagerError> {
         // Setup proc0.
         let root = fs.root();
-        let events = Arc::default();
         let proc0 = VProc::new(
             Pid::KERNEL,
             "kernel",
@@ -136,7 +134,6 @@ impl ProcManager {
             groups: gg.spawn(HashMap::new()),
             last_pid: gg.spawn(last_pid),
             random_pid: gg.spawn(false),
-            events,
         });
 
         sys.register(20, &mgr, Self::sys_getpid);
@@ -167,10 +164,6 @@ impl ProcManager {
 
     pub fn idle(&self) -> &Arc<VProc> {
         &self.idle
-    }
-
-    pub fn events(&self) -> RwLockWriteGuard<ProcEvents> {
-        self.events.lock()
     }
 
     pub fn spawn(
@@ -853,7 +846,6 @@ impl ProcManager {
 /// Events that related to a process.
 #[derive(Default)]
 pub struct ProcEvents {
-    pub process_init: Event<fn(&mut VProc)>,
     pub process_ctor: Event<fn(&Weak<VProc>)>,
     pub thread_init: Event<fn(&mut VThread)>,
     pub thread_ctor: Event<fn(&Weak<VThread>)>,
