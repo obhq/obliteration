@@ -16,9 +16,9 @@ mod vm;
 /// This macro does not require a CPU context as long as [`Display`] implementation on all arguments
 /// does not.
 ///
-/// # Interupt safety
-/// This macro is interupt safe as long as [`Display`] implementation on all arguments are interupt
-/// safe (e.g. no heap allocation).
+/// # Interrupt safety
+/// This macro is interrupt safe as long as [`Display`] implementation on all arguments are
+/// interrupt safe (e.g. no heap allocation).
 #[macro_export]
 macro_rules! info {
     ($($args:tt)*) => {

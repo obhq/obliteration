@@ -173,7 +173,6 @@ impl ProcManager {
         self.events.lock()
     }
 
-    /// See `fork1` on the PS4 for a reference.
     pub fn spawn(
         &self,
         abi: ProcAbi,
