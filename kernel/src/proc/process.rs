@@ -1,4 +1,5 @@
-use super::ProcAbi;
+use super::{ProcAbi, ProcEvents};
+use crate::event::EventSet;
 use alloc::sync::Arc;
 
 /// Implementation of `proc` structure.
@@ -7,6 +8,19 @@ pub struct Proc {
 }
 
 impl Proc {
+    pub fn new(abi: Arc<dyn ProcAbi>, events: &Arc<EventSet<ProcEvents>>) -> Arc<Self> {
+        let mut proc = Self { abi };
+
+        // Trigger process_init event.
+        let mut et = events.trigger();
+
+        for h in et.select(|s| &s.process_init) {
+            h(&mut proc);
+        }
+
+        todo!()
+    }
+
     /// This function does not do anything except initialize the struct memory. It is the caller
     /// responsibility to configure the process after this so it have a proper states and trigger
     /// necessary events.

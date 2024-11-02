@@ -15,9 +15,10 @@ pub struct Mutex<T> {
 
 impl<T> Mutex<T> {
     /// See `mtx_init` on the PS4 for a reference.
+    ///
+    /// # Context safety
+    /// This function does not require a CPU context.
     pub fn new(data: T) -> Self {
-        // This function is not allowed to access the CPU context due to it can be called before the
-        // context has been activated.
         Self {
             data: UnsafeCell::new(data),
             owning: AtomicUsize::new(MTX_UNOWNED),
@@ -78,6 +79,15 @@ impl<T> Mutex<T> {
         {
             todo!()
         }
+    }
+}
+
+impl<T: Default> Default for Mutex<T> {
+    /// # Context safety
+    /// This function does not require a CPU context as long as [`Default`] implementation on `T`
+    /// does not.
+    fn default() -> Self {
+        Self::new(T::default())
     }
 }
 
