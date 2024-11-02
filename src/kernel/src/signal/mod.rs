@@ -82,9 +82,6 @@ impl SignalManager {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Signal(NonZeroI32);
-
 impl Signal {
     pub const fn new(raw: i32) -> Option<Self> {
         match raw {
@@ -159,7 +156,6 @@ pub fn strsignal(sig: Signal) -> Cow<'static, str> {
     strsignal_impl(sig)
 }
 
-pub const SIG_MAXSIG: i32 = 128;
 pub const SIG_IGN: usize = 1;
 pub const SIG_DFL: usize = 0;
 
