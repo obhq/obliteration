@@ -1,5 +1,3 @@
-define_property(TARGET PROPERTY CARGO_TOOLCHAIN)
-
 function(add_cargo)
     # Parse arguments.
     cmake_parse_arguments(
@@ -81,15 +79,12 @@ function(add_crate crate)
     set(meta ${CARGO_${crate}_META})
     set(outputs ${CARGO_${crate}_OUTPUTS})
 
-    string(JSON manifest GET ${meta} "manifest_path")
-    string(JSON targets GET ${meta} "targets")
-
     # Parse arguments.
     cmake_parse_arguments(
         PARSE_ARGV 1 arg
         ""
-        "ARCHITECTURE;VENDOR;OPERATING_SYSTEM;ENVIRONMENT"
-        "")
+        "TOOLCHAIN;ARCHITECTURE;VENDOR;OPERATING_SYSTEM;ENVIRONMENT;OUTPUT_EXTENSION"
+        "ARGS")
 
     # Get default target architecture.
     if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "AMD64" OR ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
@@ -144,7 +139,20 @@ function(add_crate crate)
     set(debug_outputs "${outputs}/${triple}/debug")
     set(release_outputs "${outputs}/${triple}/release")
 
+    # Setup build arguments.
+    if(DEFINED arg_TOOLCHAIN)
+        set(build_args "+${arg_TOOLCHAIN}")
+    endif()
+
+    list(APPEND build_args "build")
+    list(APPEND build_args "--target" ${triple})
+    list(APPEND build_args "$<IF:$<CONFIG:Debug>,--profile=dev,--release>")
+    list(APPEND build_args ${arg_ARGS})
+
     # Create targets.
+    string(JSON manifest GET ${meta} "manifest_path")
+    cmake_path(GET manifest PARENT_PATH working_directory)
+    string(JSON targets GET ${meta} "targets")
     string(JSON len LENGTH ${targets})
     math(EXPR len "${len}-1")
 
@@ -171,6 +179,17 @@ function(add_crate crate)
                 set(debug_artifact "${debug_outputs}/lib${crate}.a")
                 set(release_artifact "${release_outputs}/lib${crate}.a")
             endif()
+        elseif(${kind} STREQUAL "bin")
+            add_executable(${crate} IMPORTED)
+
+            if(DEFINED arg_OUTPUT_EXTENSION)
+                set(output_ext ${arg_OUTPUT_EXTENSION})
+            elseif(${target_os} STREQUAL "windows")
+                set(output_ext ".exe")
+            endif()
+
+            set(debug_artifact "${debug_outputs}/${crate}${output_ext}")
+            set(release_artifact "${release_outputs}/${crate}${output_ext}")
         else()
             message(FATAL_ERROR "${kind} crate is not supported")
         endif()
@@ -186,10 +205,9 @@ function(add_crate crate)
             IMPORTED_LOCATION_RELEASE ${release_artifact})
 
         # Add build target.
-        set(profile "$<IF:$<CONFIG:Debug>,--profile=dev,--release>")
-
         add_custom_target(${build_target}
-            COMMAND cargo build --manifest-path ${manifest} --target ${triple} ${profile}
+            COMMAND cargo ${build_args}
+            WORKING_DIRECTORY ${working_directory}
             BYPRODUCTS $<IF:$<CONFIG:Debug>,${debug_artifact},${release_artifact}>)
     endforeach()
 endfunction()
