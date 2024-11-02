@@ -22,6 +22,7 @@ mod malloc;
 mod panic;
 mod proc;
 mod sched;
+mod signal;
 mod trap;
 mod uma;
 
@@ -87,6 +88,8 @@ fn create_init() {
     let flags = Fork::new().with_copy_fd(true);
 
     pmgr.fork(flags).unwrap();
+
+    todo!()
 }
 
 /// See `scheduler` function on the PS4 for a reference.
