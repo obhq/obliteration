@@ -3,7 +3,7 @@
 
 use crate::context::current_procmgr;
 use crate::malloc::KernelHeap;
-use crate::proc::{Proc, ProcAbi, ProcMgr, Thread};
+use crate::proc::{Fork, Proc, ProcAbi, ProcMgr, Thread};
 use crate::sched::sleep;
 use alloc::sync::Arc;
 use core::mem::zeroed;
@@ -67,15 +67,30 @@ unsafe extern "C" fn _start(env: &'static BootEnv, conf: &'static Config) -> ! {
     self::context::run_with_context(0, thread0, pmgr, cx, main);
 }
 
-#[inline(never)] // See self::context::run_with_context docs.
 fn main() -> ! {
     // Activate stage 2 heap.
     info!("Activating stage 2 heap.");
 
     unsafe { KERNEL_HEAP.activate_stage2() };
 
-    // See scheduler() function on the PS4 for a reference. Actually it should be called swapper
-    // instead.
+    // Run sysinit vector. The PS4 use linker to put all sysinit functions in a list then loop the
+    // list to execute all of it. We manually execute those functions instead for readability. This
+    // also allow us to pass data from one function to another function. See mi_startup function on
+    // the PS4 for a reference.
+    create_init(); // 659 on 11.00.
+    swapper(); // 1119 on 11.00.
+}
+
+/// See `create_init` function on the PS4 for a reference.
+fn create_init() {
+    let pmgr = current_procmgr();
+    let flags = Fork::new().with_copy_fd(true);
+
+    pmgr.fork(flags).unwrap();
+}
+
+/// See `scheduler` function on the PS4 for a reference.
+fn swapper() -> ! {
     // TODO: Subscribe to "system_suspend_phase2_pre_sync" and "system_resume_phase2" event.
     let procs = current_procmgr();
 
@@ -98,7 +113,7 @@ fn main() -> ! {
 /// This function does not require a CPU context.
 ///
 /// # Interrupt safety
-/// This function is interrupt safe.
+/// This function can be called from interrupt handler.
 #[allow(dead_code)]
 #[cfg_attr(target_os = "none", panic_handler)]
 fn panic(i: &PanicInfo) -> ! {

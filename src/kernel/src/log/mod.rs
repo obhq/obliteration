@@ -19,7 +19,6 @@ pub fn init() {
     // Setup global instance.
     LOGGER
         .set(Logger {
-            stdout: BufferWriter::stdout(ColorChoice::Auto),
             file: Mutex::new(None),
             start_time: Instant::now(),
         })
@@ -60,11 +59,8 @@ pub fn print(e: LogEntry) {
 }
 
 /// Logger for Obliteration Kernel.
-///
-/// This logger will write to stdout and a file, stderr is for the PS4.
 #[derive(Debug)]
 pub struct Logger {
-    stdout: BufferWriter,
     file: Mutex<Option<File>>,
     start_time: Instant,
 }

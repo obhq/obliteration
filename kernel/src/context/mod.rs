@@ -24,7 +24,6 @@ mod local;
 /// - This function can be called only once per CPU.
 /// - `cpu` must be unique and valid.
 /// - `pmgr` must be the same for all context.
-/// - `f` must not get inlined.
 pub unsafe fn run_with_context(
     cpu: usize,
     td: Arc<Thread>,
@@ -44,6 +43,10 @@ pub unsafe fn run_with_context(
     );
 
     cx.activate();
+
+    // Prevent any code before and after this line to cross this line.
+    core::sync::atomic::fence(Ordering::AcqRel);
+
     f();
 }
 
