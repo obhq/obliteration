@@ -1,60 +1,72 @@
 {
-  "configurations": [
-    {
-      "name": "GUI",
-      "type": "lldb",
-      "request": "launch",
-      "args": [],
-      "cwd": "${workspaceFolder}",
-      "windows": {
-        "program": "${workspaceFolder}/build/gui/Obliteration.exe",
-        "env": {
-          "Path": "${env:Path};${env:CMAKE_PREFIX_PATH}\\bin"
-        }
-      },
-      "linux": {
-        "program": "${workspaceFolder}/build/gui/obliteration"
-      },
-      "osx": {
-        "program": "${workspaceFolder}/build/gui/obliteration.app/Contents/MacOS/obliteration"
-      }
-    },
-    {
-      "name": "Kernel",
-      "type": "lldb",
-      "request": "custom",
-      "preLaunchTask": "Launch VMM (Debug)",
-      "targetCreateCommands": [
-        "target create ${workspaceFolder}/target/x86_64-unknown-none/debug/obkrnl"
-      ],
-      "osx": {
-        "targetCreateCommands": [
-          "target create ${workspaceFolder}/target/aarch64-unknown-none-softfloat/debug/obkrnl"
-        ]
-      },
-      "processCreateCommands": [
-        "gdb-remote 1234"
-      ]
-    },
-    {
-      "name": "Legacy Kernel",
-      "type": "lldb",
-      "request": "launch",
-      "cargo": {
-        "args": [
-          "build",
-          "--manifest-path",
-          "${workspaceFolder}/src/kernel/Cargo.toml"
-        ],
-        "filter": {
-          "kind": "bin"
-        }
-      },
-      "args": [
-        "--debug"
-      ],
-      "cwd": "${workspaceFolder}"
-    }
-  ],
-  "version": "2.0.0"
+	"configurations": [
+		{
+			"name": "GUI (Qt)",
+			"type": "lldb",
+			"request": "launch",
+			"args": [],
+			"cwd": "${workspaceFolder}",
+			"windows": {
+				"program": "${workspaceFolder}/build/gui/Obliteration.exe",
+				"env": {
+					"Path": "${env:Path};${env:CMAKE_PREFIX_PATH}\\bin"
+				}
+			},
+			"linux": {
+				"program": "${workspaceFolder}/build/gui/obliteration"
+			},
+			"osx": {
+				"program": "${workspaceFolder}/build/gui/obliteration.app/Contents/MacOS/obliteration"
+			}
+		},
+		{
+			"name": "GUI (Slint)",
+			"type": "lldb",
+			"request": "launch",
+			"cargo": {
+				"args": [
+					"build",
+					"--manifest-path",
+					"${workspaceFolder}/gui/Cargo.toml"
+				],
+				"filter": {
+					"kind": "bin"
+				}
+			},
+			"cwd": "${workspaceFolder}"
+		},
+		{
+			"name": "Kernel",
+			"type": "lldb",
+			"request": "custom",
+			"preLaunchTask": "Launch VMM (Debug)",
+			"targetCreateCommands": [
+				"target create ${workspaceFolder}/target/x86_64-unknown-none/debug/obkrnl"
+			],
+			"osx": {
+				"targetCreateCommands": [
+					"target create ${workspaceFolder}/target/aarch64-unknown-none-softfloat/debug/obkrnl"
+				]
+			},
+			"processCreateCommands": ["gdb-remote 1234"]
+		},
+		{
+			"name": "Legacy Kernel",
+			"type": "lldb",
+			"request": "launch",
+			"cargo": {
+				"args": [
+					"build",
+					"--manifest-path",
+					"${workspaceFolder}/src/kernel/Cargo.toml"
+				],
+				"filter": {
+					"kind": "bin"
+				}
+			},
+			"args": ["--debug"],
+			"cwd": "${workspaceFolder}"
+		}
+	],
+	"version": "2.0.0"
 }

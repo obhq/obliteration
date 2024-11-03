@@ -4,6 +4,7 @@ use std::error::Error;
 
 pub use self::arch::*;
 pub use self::os::new;
+
 use gdbstub::stub::MultiThreadStopReason;
 
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
@@ -22,6 +23,15 @@ pub type Default = self::os::Hvf;
 
 #[cfg(target_os = "windows")]
 pub type Default = self::os::Whp;
+
+#[cfg(target_os = "linux")]
+pub type DefaultError = self::os::KvmError;
+
+#[cfg(target_os = "macos")]
+pub type DefaultError = crate::vmm::VmmError;
+
+#[cfg(target_os = "windows")]
+pub type DefaultError = crate::vmm::VmmError;
 
 /// Underlying hypervisor (e.g. KVM on Linux).
 pub trait Hypervisor: Send + Sync + 'static {

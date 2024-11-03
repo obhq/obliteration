@@ -1,0 +1,43 @@
+
+import { TabWidget } from "std-widgets.slint";
+import { DisplayTab } from "tabs/display.slint";
+import { CpuTab } from "tabs/cpu.slint";
+import { GamesTab } from "tabs/games.slint";
+import { Game } from "../structs.slint";
+
+export component Tabs {
+    in property <[string]> devices: [];
+    in property <[Game]> games: [];
+
+    pure callback select_game(int);
+
+    TabWidget {
+        Tab {
+            title: "Display";
+            //icon: @image-url("resources/darkmode/card-text-outline.svg");
+            VerticalLayout {
+                alignment: start;
+
+                DisplayTab { devices: devices; }
+            }
+        }
+        Tab {
+            title: "CPU";
+            //icon: @image-url("resources/darkmode/card-text-outline.svg");
+            VerticalLayout {
+                alignment: start;
+
+                CpuTab {}
+            }
+        }
+        Tab {
+            title: "Games";
+            //icon: @image-url("resources/darkmode/view-comfy.png");
+            VerticalLayout {
+                alignment: start;
+
+                GamesTab { games: games; }
+            }
+        }
+    }
+}

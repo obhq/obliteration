@@ -114,7 +114,7 @@ pub unsafe extern "C" fn profile_save(p: *const Profile, path: *const c_char) ->
 }
 
 /// Contains settings to launch the kernel.
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[serde(default)]
 pub struct Profile {
     id: Uuid,
@@ -125,6 +125,10 @@ pub struct Profile {
 }
 
 impl Profile {
+    pub fn name(&self) -> &CStr {
+        &self.name
+    }
+
     pub fn kernel_config(&self) -> &Config {
         &self.kernel_config
     }

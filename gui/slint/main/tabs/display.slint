@@ -1,0 +1,37 @@
+import { ComboBox } from "std-widgets.slint";
+
+export component DisplayTab {
+    in property <[string]> devices: [];
+
+    HorizontalLayout {
+        padding: 10px;
+        spacing: 10px;
+        VerticalLayout {
+            vertical-stretch: 0;
+            spacing: 10px;
+            alignment: start;
+
+            Text {
+                text: "Device";
+            }
+            ComboBox {
+                model: devices;
+            }
+        }
+        VerticalLayout {
+            VerticalLayout {
+                vertical-stretch: 0;
+                spacing: 10px;
+                alignment: start;
+
+                Text {
+                    text: "Resolution";
+                }
+                ComboBox {
+                    model: ["1280 × 720", "1920 × 1080", "3840 × 2160"];
+                    current-value: "1920 × 1080";
+                }
+            }   
+        }
+    }
+}

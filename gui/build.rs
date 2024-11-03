@@ -1,4 +1,5 @@
 use cbindgen::{Builder, Config, Language, Style};
+use slint_build::CompilerConfiguration;
 use std::path::PathBuf;
 
 const LINUX_INCLUDE: &str = r#"
@@ -8,6 +9,29 @@ const LINUX_INCLUDE: &str = r#"
 "#;
 
 fn main() {
+    //TODO: branch there based on a feature flag
+
+    build_lib();
+    build_bin();
+}
+
+fn build_bin() {
+    // Compile installer
+    slint_build::compile_with_config(
+        "slint/installer.slint",
+        CompilerConfiguration::new().with_style(String::from("fluent-dark")),
+    )
+    .unwrap();
+
+    // Compile main
+    slint_build::compile_with_config(
+        "slint/main.slint",
+        CompilerConfiguration::new().with_style(String::from("fluent-dark")),
+    )
+    .unwrap();
+}
+
+fn build_lib() {
     let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let mut conf = Config::default();
     let mut buf = String::new();
