@@ -9,7 +9,7 @@ const LINUX_INCLUDE: &str = r#"
 "#;
 
 fn main() {
-    //TODO: branch there based on a feature flag
+    //TODO: branch here based on a feature flag
 
     build_lib();
     build_bin();
