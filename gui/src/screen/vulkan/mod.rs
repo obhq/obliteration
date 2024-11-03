@@ -31,7 +31,7 @@ pub struct Vulkan {
 }
 
 impl Vulkan {
-    pub fn new(screen: &VmmScreen) -> Result<Self, VulkanError> {
+    pub fn from_screen(screen: &VmmScreen) -> Result<Self, VulkanError> {
         // Wrap VkInstance.
         let instance = screen.vk_instance.try_into().unwrap();
         let instance = ash::vk::Instance::from_raw(instance);
@@ -94,6 +94,10 @@ impl Vulkan {
             buffer: Arc::new(VulkanBuffer::new()),
             device,
         })
+    }
+
+    pub fn new() -> Result<Self, VulkanError> {
+        todo!()
     }
 
     unsafe extern "system" fn destroy_instance(

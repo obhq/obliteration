@@ -41,7 +41,7 @@ else()
 endif()
 
 add_cargo(MANIFEST Cargo.toml)
-add_crate(gui)
+add_crate(gui LIBRARY)
 add_crate(obkrnl
     TOOLCHAIN ${kernel_toolchain}
     VENDOR "unknown"
