@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.21)
 
 include(FetchContent)
 include(cmake/cargo.cmake)
@@ -8,6 +8,7 @@ FetchContent_Declare(
     msvc
     GIT_REPOSITORY https://github.com/MarkSchofield/WindowsToolchain.git
     GIT_TAG v0.11.0
+    GIT_SHALLOW ON
 )
 
 FetchContent_MakeAvailable(msvc)
@@ -28,37 +29,27 @@ if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
 endif()
 
 # Setup Rust targets.
-if(WIN32)
-    if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "AMD64")
-        set(KERNEL_TARGET x86_64-unknown-none)
-    else()
-        message(FATAL_ERROR "Target CPU is not supported")
-    endif()
+if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "arm64" OR ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64")
+    # Pre-compiled core crate for aarch64-unknown-none-softfloat does not support
+    # Position-Independent Executable so we need nightly toolchain for build-std feature to
+    # re-build core crate to support Position-Independent Executable.
+    set(kernel_env "softfloat")
+    set(kernel_toolchain "nightly")
+    set(kernel_opts -Z build-std=core,alloc)
 else()
-    if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
-        set(KERNEL_TARGET x86_64-unknown-none)
-    elseif(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "arm64" OR ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "aarch64")
-        # Pre-compiled core crate for aarch64-unknown-none-softfloat does not support
-        # Position-Independent Executable so we need nightly toolchain for build-std feature to
-        # re-build core crate to support Position-Independent Executable.
-        set(KERNEL_TARGET aarch64-unknown-none-softfloat)
-        set(KERNEL_TOOLCHAIN +nightly)
-        set(KERNEL_OPTS -Z build-std=core,alloc)
-    else()
-        message(FATAL_ERROR "Target CPU is not supported")
-    endif()
+    set(kernel_env "")
 endif()
-
-set(KERNEL_OUTPUTS $<IF:$<CONFIG:Debug>,${CMAKE_CURRENT_SOURCE_DIR}/target/${KERNEL_TARGET}/debug,${CMAKE_CURRENT_SOURCE_DIR}/target/${KERNEL_TARGET}/release>)
-set(KERNEL ${KERNEL_OUTPUTS}/obkrnl)
-
-add_custom_target(kernel
-    COMMAND cargo ${KERNEL_TOOLCHAIN} build $<IF:$<CONFIG:Debug>,--profile=dev,--release> --target ${KERNEL_TARGET} ${KERNEL_OPTS}
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/kernel
-    BYPRODUCTS ${KERNEL})
 
 add_cargo(MANIFEST Cargo.toml)
 add_crate(gui)
+add_crate(obkrnl
+    TOOLCHAIN ${kernel_toolchain}
+    VENDOR "unknown"
+    OPERATING_SYSTEM "none"
+    ENVIRONMENT "${kernel_env}"
+    ARGS ${kernel_opts})
+
+add_dependencies(gui obkrnl)
 
 # Add GUI.
 add_subdirectory(gui)

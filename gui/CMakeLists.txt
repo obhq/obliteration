@@ -43,8 +43,6 @@ elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
     target_sources(obliteration PRIVATE kvm.cpp vulkan.cpp)
 endif()
 
-add_dependencies(obliteration kernel)
-
 set_target_properties(obliteration PROPERTIES AUTOMOC ON AUTORCC ON)
 
 if(WIN32)
@@ -101,7 +99,7 @@ elseif(APPLE)
 endif()
 
 if(APPLE)
-    install(FILES ${KERNEL} DESTINATION obliteration.app/Contents/Resources)
+    install(IMPORTED_RUNTIME_ARTIFACTS obkrnl DESTINATION obliteration.app/Contents/Resources)
 else()
-    install(FILES ${KERNEL} TYPE DATA)
+    install(IMPORTED_RUNTIME_ARTIFACTS obkrnl DESTINATION share)
 endif()
