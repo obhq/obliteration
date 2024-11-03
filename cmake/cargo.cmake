@@ -81,7 +81,7 @@ function(add_crate crate)
     # TODO: Enable CMP0174 to support passing ENVIRONMENT as an empty string.
     cmake_parse_arguments(
         PARSE_ARGV 1 arg
-        ""
+        "LIBRARY"
         "TOOLCHAIN;ARCHITECTURE;VENDOR;OPERATING_SYSTEM"
         "ARGS")
 
@@ -171,8 +171,6 @@ function(add_crate crate)
 
         if(${kind} STREQUAL "custom-build")
             continue()
-        elseif(TARGET ${crate})
-            message(FATAL_ERROR "multiple crate types is not supported")
         endif()
 
         # Create imported target.
@@ -187,6 +185,8 @@ function(add_crate crate)
                 set(debug_artifact "${debug_outputs}/lib${crate}.a")
                 set(release_artifact "${release_outputs}/lib${crate}.a")
             endif()
+        elseif(arg_LIBRARY)
+            continue()
         elseif(${kind} STREQUAL "bin")
             add_executable(${crate} IMPORTED)
             set(debug_artifact "${debug_outputs}/${crate}${bin_ext}")
