@@ -64,6 +64,7 @@ int main(int argc, char *argv[])
     args.setApplicationDescription("Virtualization stack for Obliteration");
     args.addHelpOption();
     args.addOption(Args::debug);
+    args.addOption(Args::kernel);
     args.process(app);
 
     // Hook Rust panic.

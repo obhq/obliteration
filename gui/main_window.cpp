@@ -43,6 +43,7 @@
 
 namespace Args {
     const QCommandLineOption debug("debug", "Immediate launch the VMM in debug mode.", "addr", "127.0.0.1:1234");
+    const QCommandLineOption kernel("kernel", "Use this kernel instead of default one.", "path");
 }
 
 #ifdef __APPLE__
@@ -642,25 +643,8 @@ void MainWindow::startVmm(Rust<DebugClient> &&debug)
 
     m_debugServer.free();
 
-    if (QFile::exists(".obliteration-development")) {
-        auto b = std::filesystem::current_path();
-#ifdef _WIN32
-        auto target = L"x86_64-unknown-none";
-#elif defined(__aarch64__)
-        auto target = "aarch64-unknown-none-softfloat";
-#else
-        auto target = "x86_64-unknown-none";
-#endif
-
-#if defined(_WIN32) && defined(NDEBUG)
-        kernel = (b / L"target" / target / L"release" / L"obkrnl").u8string();
-#elif defined(_WIN32) && !defined(NDEBUG)
-        kernel = (b / L"target" / target / L"debug" / L"obkrnl").u8string();
-#elif defined(NDEBUG)
-        kernel = (b / "target" / target / "release" / "obkrnl").u8string();
-#else
-        kernel = (b / "target" / target / "debug" / "obkrnl").u8string();
-#endif
+    if (m_args.isSet(Args::kernel)) {
+        kernel = m_args.value(Args::kernel).toStdString();
     } else {
 #ifdef _WIN32
         std::filesystem::path b(QCoreApplication::applicationDirPath().toStdString(), std::filesystem::path::native_format);

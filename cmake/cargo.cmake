@@ -144,7 +144,7 @@ function(add_crate crate)
     set(release_outputs "${outputs}/${triple}/release")
 
     if(${target_os} STREQUAL "windows")
-        set(bin_ext ".exe")
+        set(bin_suffix ".exe")
     endif()
 
     # Setup build arguments.
@@ -189,8 +189,8 @@ function(add_crate crate)
             continue()
         elseif(${kind} STREQUAL "bin")
             add_executable(${crate} IMPORTED)
-            set(debug_artifact "${debug_outputs}/${crate}${bin_ext}")
-            set(release_artifact "${release_outputs}/${crate}${bin_ext}")
+            set(debug_artifact "${debug_outputs}/${crate}${bin_suffix}")
+            set(release_artifact "${release_outputs}/${crate}${bin_suffix}")
         else()
             message(FATAL_ERROR "${kind} crate is not supported")
         endif()
@@ -206,9 +206,12 @@ function(add_crate crate)
             IMPORTED_LOCATION_RELEASE ${release_artifact})
 
         # Add build target.
+        set(output "$<IF:$<CONFIG:Debug>,${debug_artifact},${release_artifact}>")
+
         add_custom_target(${build_target}
             COMMAND cargo ${build_args}
+            COMMAND ${CMAKE_COMMAND} -E copy -t ${CMAKE_CURRENT_BINARY_DIR} ${output}
             WORKING_DIRECTORY ${working_directory}
-            BYPRODUCTS $<IF:$<CONFIG:Debug>,${debug_artifact},${release_artifact}>)
+            BYPRODUCTS ${output})
     endforeach()
 endfunction()

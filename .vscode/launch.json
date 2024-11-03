@@ -4,7 +4,10 @@
       "name": "GUI",
       "type": "lldb",
       "request": "launch",
-      "args": [],
+      "args": [
+        "--kernel",
+        "${workspaceFolder}/build/obkrnl"
+      ],
       "cwd": "${workspaceFolder}",
       "windows": {
         "program": "${workspaceFolder}/build/gui/Obliteration.exe",
@@ -25,35 +28,12 @@
       "request": "custom",
       "preLaunchTask": "Launch VMM (Debug)",
       "targetCreateCommands": [
-        "target create ${workspaceFolder}/target/x86_64-unknown-none/debug/obkrnl"
+        "target create ${workspaceFolder}/build/obkrnl",
+        "target modules load --file ${workspaceFolder}/build/obkrnl -s 0xffffffff82200000"
       ],
-      "osx": {
-        "targetCreateCommands": [
-          "target create ${workspaceFolder}/target/aarch64-unknown-none-softfloat/debug/obkrnl"
-        ]
-      },
       "processCreateCommands": [
         "gdb-remote 1234"
       ]
-    },
-    {
-      "name": "Legacy Kernel",
-      "type": "lldb",
-      "request": "launch",
-      "cargo": {
-        "args": [
-          "build",
-          "--manifest-path",
-          "${workspaceFolder}/src/kernel/Cargo.toml"
-        ],
-        "filter": {
-          "kind": "bin"
-        }
-      },
-      "args": [
-        "--debug"
-      ],
-      "cwd": "${workspaceFolder}"
     }
   ],
   "version": "2.0.0"
