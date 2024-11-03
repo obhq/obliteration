@@ -74,4 +74,5 @@ private:
 
 namespace Args {
     extern const QCommandLineOption debug;
+    extern const QCommandLineOption kernel;
 }
