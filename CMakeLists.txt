@@ -46,9 +46,8 @@ add_crate(obkrnl
     TOOLCHAIN ${kernel_toolchain}
     VENDOR "unknown"
     OPERATING_SYSTEM "none"
-    ENVIRONMENT ${kernel_env}
-    ARGS ${kernel_opts}
-    OUTPUT_EXTENSION "")
+    ENVIRONMENT "${kernel_env}"
+    ARGS ${kernel_opts})
 
 add_dependencies(gui obkrnl)
 

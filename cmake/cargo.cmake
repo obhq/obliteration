@@ -56,9 +56,8 @@ function(add_cargo)
         # Skip if not a member.
         string(JSON pkg GET ${meta_packages} ${i})
         string(JSON id GET ${pkg} "id")
-        list(FIND members ${id} i)
 
-        if(${i} STREQUAL "-1")
+        if(NOT id IN_LIST members)
             continue()
         endif()
 
@@ -79,11 +78,11 @@ function(add_crate crate)
     set(meta ${CARGO_${crate}_META})
     set(outputs ${CARGO_${crate}_OUTPUTS})
 
-    # Parse arguments.
+    # TODO: Enable CMP0174 to support passing ENVIRONMENT as an empty string.
     cmake_parse_arguments(
         PARSE_ARGV 1 arg
         ""
-        "TOOLCHAIN;ARCHITECTURE;VENDOR;OPERATING_SYSTEM;ENVIRONMENT;OUTPUT_EXTENSION"
+        "TOOLCHAIN;ARCHITECTURE;VENDOR;OPERATING_SYSTEM"
         "ARGS")
 
     # Get default target architecture.
@@ -124,8 +123,13 @@ function(add_crate crate)
         set(target_os ${arg_OPERATING_SYSTEM})
     endif()
 
-    if(DEFINED arg_ENVIRONMENT)
-        set(target_env ${arg_ENVIRONMENT})
+    if(DEFINED arg_UNPARSED_ARGUMENTS)
+        list(FIND arg_UNPARSED_ARGUMENTS "ENVIRONMENT" i)
+
+        if(NOT ${i} STREQUAL "-1")
+            math(EXPR i "${i}+1")
+            list(GET arg_UNPARSED_ARGUMENTS ${i} target_env)
+        endif()
     endif()
 
     # Build triple.
@@ -138,6 +142,10 @@ function(add_crate crate)
     # Get artifact locations.
     set(debug_outputs "${outputs}/${triple}/debug")
     set(release_outputs "${outputs}/${triple}/release")
+
+    if(${target_os} STREQUAL "windows")
+        set(bin_ext ".exe")
+    endif()
 
     # Setup build arguments.
     if(DEFINED arg_TOOLCHAIN)
@@ -181,15 +189,8 @@ function(add_crate crate)
             endif()
         elseif(${kind} STREQUAL "bin")
             add_executable(${crate} IMPORTED)
-
-            if(DEFINED arg_OUTPUT_EXTENSION)
-                set(output_ext ${arg_OUTPUT_EXTENSION})
-            elseif(${target_os} STREQUAL "windows")
-                set(output_ext ".exe")
-            endif()
-
-            set(debug_artifact "${debug_outputs}/${crate}${output_ext}")
-            set(release_artifact "${release_outputs}/${crate}${output_ext}")
+            set(debug_artifact "${debug_outputs}/${crate}${bin_ext}")
+            set(release_artifact "${release_outputs}/${crate}${bin_ext}")
         else()
             message(FATAL_ERROR "${kind} crate is not supported")
         endif()
