@@ -33,19 +33,21 @@ if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "arm64" OR ${CMAKE_SYSTEM_PROCESSOR} STREQ
     # Pre-compiled core crate for aarch64-unknown-none-softfloat does not support
     # Position-Independent Executable so we need nightly toolchain for build-std feature to
     # re-build core crate to support Position-Independent Executable.
-    set(KERNEL_ENV "softfloat")
-    set(KERNEL_TOOLCHAIN "nightly")
-    set(KERNEL_OPTS -Z build-std=core,alloc)
+    set(kernel_env "softfloat")
+    set(kernel_toolchain "nightly")
+    set(kernel_opts -Z build-std=core,alloc)
+else()
+    set(kernel_env "")
 endif()
 
 add_cargo(MANIFEST Cargo.toml)
 add_crate(gui)
 add_crate(obkrnl
-    TOOLCHAIN ${KERNEL_TOOLCHAIN}
+    TOOLCHAIN ${kernel_toolchain}
     VENDOR "unknown"
     OPERATING_SYSTEM "none"
-    ENVIRONMENT ${KERNEL_ENV}
-    ARGS ${KERNEL_OPTS}
+    ENVIRONMENT ${kernel_env}
+    ARGS ${kernel_opts}
     OUTPUT_EXTENSION "")
 
 add_dependencies(gui obkrnl)

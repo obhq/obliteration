@@ -131,7 +131,7 @@ function(add_crate crate)
     # Build triple.
     set(triple "${target_arch}-${target_vendor}-${target_os}")
 
-    if(DEFINED target_env)
+    if(NOT "${target_env}" STREQUAL "")
         set(triple "${triple}-${target_env}")
     endif()
 
