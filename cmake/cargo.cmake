@@ -1,5 +1,3 @@
-define_property(TARGET PROPERTY CARGO_TOOLCHAIN)
-
 function(add_cargo)
     # Parse arguments.
     cmake_parse_arguments(
@@ -58,9 +56,8 @@ function(add_cargo)
         # Skip if not a member.
         string(JSON pkg GET ${meta_packages} ${i})
         string(JSON id GET ${pkg} "id")
-        list(FIND members ${id} i)
 
-        if(${i} STREQUAL "-1")
+        if(NOT id IN_LIST members)
             continue()
         endif()
 
@@ -81,15 +78,12 @@ function(add_crate crate)
     set(meta ${CARGO_${crate}_META})
     set(outputs ${CARGO_${crate}_OUTPUTS})
 
-    string(JSON manifest GET ${meta} "manifest_path")
-    string(JSON targets GET ${meta} "targets")
-
-    # Parse arguments.
+    # TODO: Enable CMP0174 to support passing ENVIRONMENT as an empty string.
     cmake_parse_arguments(
         PARSE_ARGV 1 arg
-        ""
-        "ARCHITECTURE;VENDOR;OPERATING_SYSTEM;ENVIRONMENT"
-        "")
+        "LIBRARY"
+        "TOOLCHAIN;ARCHITECTURE;VENDOR;OPERATING_SYSTEM"
+        "ARGS")
 
     # Get default target architecture.
     if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "AMD64" OR ${CMAKE_SYSTEM_PROCESSOR} STREQUAL "x86_64")
@@ -129,14 +123,19 @@ function(add_crate crate)
         set(target_os ${arg_OPERATING_SYSTEM})
     endif()
 
-    if(DEFINED arg_ENVIRONMENT)
-        set(target_env ${arg_ENVIRONMENT})
+    if(DEFINED arg_UNPARSED_ARGUMENTS)
+        list(FIND arg_UNPARSED_ARGUMENTS "ENVIRONMENT" i)
+
+        if(NOT ${i} STREQUAL "-1")
+            math(EXPR i "${i}+1")
+            list(GET arg_UNPARSED_ARGUMENTS ${i} target_env)
+        endif()
     endif()
 
     # Build triple.
     set(triple "${target_arch}-${target_vendor}-${target_os}")
 
-    if(DEFINED target_env)
+    if(NOT "${target_env}" STREQUAL "")
         set(triple "${triple}-${target_env}")
     endif()
 
@@ -144,7 +143,24 @@ function(add_crate crate)
     set(debug_outputs "${outputs}/${triple}/debug")
     set(release_outputs "${outputs}/${triple}/release")
 
+    if(${target_os} STREQUAL "windows")
+        set(bin_ext ".exe")
+    endif()
+
+    # Setup build arguments.
+    if(DEFINED arg_TOOLCHAIN)
+        set(build_args "+${arg_TOOLCHAIN}")
+    endif()
+
+    list(APPEND build_args "build")
+    list(APPEND build_args "--target" ${triple})
+    list(APPEND build_args "$<IF:$<CONFIG:Debug>,--profile=dev,--release>")
+    list(APPEND build_args ${arg_ARGS})
+
     # Create targets.
+    string(JSON manifest GET ${meta} "manifest_path")
+    cmake_path(GET manifest PARENT_PATH working_directory)
+    string(JSON targets GET ${meta} "targets")
     string(JSON len LENGTH ${targets})
     math(EXPR len "${len}-1")
 
@@ -155,8 +171,6 @@ function(add_crate crate)
 
         if(${kind} STREQUAL "custom-build")
             continue()
-        elseif(TARGET ${crate})
-            message(FATAL_ERROR "multiple crate types is not supported")
         endif()
 
         # Create imported target.
@@ -171,6 +185,12 @@ function(add_crate crate)
                 set(debug_artifact "${debug_outputs}/lib${crate}.a")
                 set(release_artifact "${release_outputs}/lib${crate}.a")
             endif()
+        elseif(arg_LIBRARY)
+            continue()
+        elseif(${kind} STREQUAL "bin")
+            add_executable(${crate} IMPORTED)
+            set(debug_artifact "${debug_outputs}/${crate}${bin_ext}")
+            set(release_artifact "${release_outputs}/${crate}${bin_ext}")
         else()
             message(FATAL_ERROR "${kind} crate is not supported")
         endif()
@@ -186,10 +206,9 @@ function(add_crate crate)
             IMPORTED_LOCATION_RELEASE ${release_artifact})
 
         # Add build target.
-        set(profile "$<IF:$<CONFIG:Debug>,--profile=dev,--release>")
-
         add_custom_target(${build_target}
-            COMMAND cargo build --manifest-path ${manifest} --target ${triple} ${profile}
+            COMMAND cargo ${build_args}
+            WORKING_DIRECTORY ${working_directory}
             BYPRODUCTS $<IF:$<CONFIG:Debug>,${debug_artifact},${release_artifact}>)
     endforeach()
 endfunction()
