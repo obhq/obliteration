@@ -1,14 +1,17 @@
 import { ComboBox, Button } from "std-widgets.slint";
 
 export component Actions {
+    in property <[string]> profiles: [];
+
     pure callback start_game();
 
     HorizontalLayout {
+
         alignment: stretch;
         spacing: 5px;
 
         ComboBox {
-            model: ["Default"];
+            model: profiles;
             horizontal-stretch: 1;
         }
         Button {

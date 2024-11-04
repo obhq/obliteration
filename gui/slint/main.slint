@@ -1,4 +1,4 @@
-import { Game, Profile } from "structs.slint";
+import { Game } from "structs.slint";
 import { Tabs } from "main/tabs.slint";
 import { Menu } from "main/menu.slint";
 import { Actions } from "main/actions.slint";
@@ -10,10 +10,10 @@ export component MainWindow inherits Window {
     title: "Obliteration";
 
     in property <[Game]> games: [];
-    in property <[Profile]> profiles: [];
+    in property <[string]> profiles: [];
     in property <[string]> devices: [];
 
-    pure callback start_game(Game);
+    pure callback start_game(int);
 
     pure callback clear_log();
     pure callback get_log_text() -> string;
@@ -43,7 +43,12 @@ export component MainWindow inherits Window {
             select_game(index) => {  }
         }
         Actions {
-            start_game => {}
+            profiles: profiles;
+            start_game => {
+                start_game(0)
+            }
         }
     }
 }
+
+export component Screen inherits Window {}

@@ -2,6 +2,7 @@ use ::slint::{ComponentHandle, ModelExt, ModelRc, SharedString, VecModel};
 use args::CliArgs;
 use clap::Parser;
 use debug::DebugServer;
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle};
 use std::process::{ExitCode, Termination};
 use thiserror::Error;
 use vmm::Vmm;
@@ -54,7 +55,7 @@ struct App {
     main_window: slint::MainWindow,
 
     games: ModelRc<slint::Game>,
-    profiles: ModelRc<slint::Profile>,
+    profiles: ModelRc<SharedString>,
 }
 
 impl App {
@@ -65,13 +66,37 @@ impl App {
 
         main_window.set_games(games.clone());
 
-        let profiles = ModelRc::new(VecModel::from(vec![profile::Profile::default()]).map(|p| {
-            slint::Profile {
-                name: SharedString::from(String::from(p.name().to_string_lossy())),
-            }
-        }));
+        let profiles = ModelRc::new(
+            VecModel::from(vec![profile::Profile::default()])
+                .map(|p| SharedString::from(String::from(p.name().to_string_lossy()))),
+        );
 
         main_window.set_profiles(profiles.clone());
+
+        main_window.on_start_game(|index| {
+            let Ok(screen) = slint::Screen::new() else {
+                eprintln!("failed to create screen");
+                return;
+            };
+
+            let handle = screen.window().window_handle();
+
+            let Some((window_handle, display_handle)) = handle
+                .window_handle()
+                .ok()
+                .zip(handle.display_handle().ok())
+            else {
+                return;
+            };
+
+            match (window_handle.as_raw(), display_handle.as_raw()) {
+                #[cfg(target_os = "linux")]
+                (RawWindowHandle::Xlib(window_handle), RawDisplayHandle::Xlib(display_handle)) => {}
+                _ => todo!(),
+            }
+
+            screen.show().unwrap();
+        });
 
         Ok(Self {
             main_window,

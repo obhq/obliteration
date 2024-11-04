@@ -25,12 +25,13 @@ serde = { version = "1.0.209", features = ["derive"] }
 thiserror = "1.0"
 uuid = { version = "1.10.0", features = ["serde", "v4"] }
 x86-64 = { path = "../arch/x86-64" }
+raw-window-handle = "0.6"
 clap = { version = "4.5.20", features = ["derive"] }
 
 [dependencies.slint]
 git = "https://github.com/slint-ui/slint"
 rev = "875ca075fb5b2dfe4c3ab0a499d5759412fc1395"
-features = ["compat-1-2", "std", "accessibility", "raw-window-handle-06", "backend-winit", "renderer-skia"]
+features = ["compat-1-2", "std", "accessibility", "raw-window-handle-06", "backend-winit", "renderer-skia-vulkan"]
 default-features = false
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
