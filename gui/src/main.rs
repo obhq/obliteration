@@ -67,7 +67,7 @@ impl App {
         main_window.set_games(games.clone());
 
         let profiles = ModelRc::new(
-            VecModel::from(vec![profile::Profile::default()])
+            VecModel::from(Vec::new())
                 .map(|p| SharedString::from(String::from(p.name().to_string_lossy()))),
         );
 
