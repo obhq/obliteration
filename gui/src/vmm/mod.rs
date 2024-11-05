@@ -48,9 +48,10 @@ pub unsafe extern "C" fn vmm_start(
     err: *mut *mut RustError,
 ) -> *mut Vmm {
     // Consume the debugger now to prevent memory leak in case of error.
-    let debugger = match debugger.is_null() {
-        true => None,
-        false => Some(*Box::from_raw(debugger)),
+    let debugger = if debugger.is_null() {
+        None
+    } else {
+        Some(*Box::from_raw(debugger))
     };
 
     // Check if path UTF-8.

@@ -10,6 +10,9 @@ crate-type = ["staticlib"]
 name = "gui"
 path = "src/main.rs"
 
+[features]
+gui_slint = []
+
 [dependencies]
 bitfield-struct = "0.8.0"
 gdbstub = "0.7.2"
@@ -31,7 +34,7 @@ clap = { version = "4.5.20", features = ["derive"] }
 [dependencies.slint]
 git = "https://github.com/slint-ui/slint"
 rev = "875ca075fb5b2dfe4c3ab0a499d5759412fc1395"
-features = ["compat-1-2", "std", "accessibility", "raw-window-handle-06", "backend-winit", "renderer-skia-vulkan"]
+features = ["compat-1-2", "std", "accessibility", "raw-window-handle-06", "backend-winit", "renderer-skia"]
 default-features = false
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]

@@ -9,10 +9,11 @@ const LINUX_INCLUDE: &str = r#"
 "#;
 
 fn main() {
-    //TODO: branch here based on a feature flag
-
-    build_lib();
-    build_bin();
+    if std::env::var("CARGO_FEATURE_GUI_SLINT").is_ok() {
+        build_bin();
+    } else {
+        build_lib();
+    }
 }
 
 fn build_bin() {

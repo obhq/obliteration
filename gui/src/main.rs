@@ -79,22 +79,6 @@ impl App {
                 return;
             };
 
-            let handle = screen.window().window_handle();
-
-            let Some((window_handle, display_handle)) = handle
-                .window_handle()
-                .ok()
-                .zip(handle.display_handle().ok())
-            else {
-                return;
-            };
-
-            match (window_handle.as_raw(), display_handle.as_raw()) {
-                #[cfg(target_os = "linux")]
-                (RawWindowHandle::Xlib(window_handle), RawDisplayHandle::Xlib(display_handle)) => {}
-                _ => todo!(),
-            }
-
             screen.show().unwrap();
         });
 

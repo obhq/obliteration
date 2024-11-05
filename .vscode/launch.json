@@ -1,28 +1,25 @@
 {
-  "configurations": [
-    {
-      "name": "GUI",
-      "type": "lldb",
-      "request": "launch",
-      "args": [
-        "--kernel",
-        "${workspaceFolder}/build/obkrnl"
-      ],
-      "cwd": "${workspaceFolder}",
-      "windows": {
-        "program": "${workspaceFolder}/build/gui/Obliteration.exe",
-        "env": {
-          "Path": "${env:Path};${env:CMAKE_PREFIX_PATH}\\bin"
-        }
-      },
-      "linux": {
-        "program": "${workspaceFolder}/build/gui/obliteration"
-      },
-      "osx": {
-        "program": "${workspaceFolder}/build/gui/obliteration.app/Contents/MacOS/obliteration"
-      }
-    },
-    {
+	"configurations": [
+		{
+			"name": "GUI",
+			"type": "lldb",
+			"request": "launch",
+			"args": ["--kernel", "${workspaceFolder}/build/obkrnl"],
+			"cwd": "${workspaceFolder}",
+			"windows": {
+				"program": "${workspaceFolder}/build/gui/Obliteration.exe",
+				"env": {
+					"Path": "${env:Path};${env:CMAKE_PREFIX_PATH}\\bin"
+				}
+			},
+			"linux": {
+				"program": "${workspaceFolder}/build/gui/obliteration"
+			},
+			"osx": {
+				"program": "${workspaceFolder}/build/gui/obliteration.app/Contents/MacOS/obliteration"
+			}
+		},
+		{
 			"name": "GUI (Slint)",
 			"type": "lldb",
 			"request": "launch",
@@ -30,7 +27,9 @@
 				"args": [
 					"build",
 					"--manifest-path",
-					"${workspaceFolder}/gui/Cargo.toml"
+					"${workspaceFolder}/gui/Cargo.toml",
+					"--features",
+					"gui_slint"
 				],
 				"filter": {
 					"kind": "bin"
@@ -38,19 +37,17 @@
 			},
 			"cwd": "${workspaceFolder}"
 		},
-    {
-      "name": "Kernel",
-      "type": "lldb",
-      "request": "custom",
-      "preLaunchTask": "Launch VMM (Debug)",
-      "targetCreateCommands": [
-        "target create ${workspaceFolder}/build/obkrnl",
-        "target modules load --file ${workspaceFolder}/build/obkrnl -s 0xffffffff82200000"
-      ],
-      "processCreateCommands": [
-        "gdb-remote 1234"
-      ]
-    }
-  ],
-  "version": "2.0.0"
+		{
+			"name": "Kernel",
+			"type": "lldb",
+			"request": "custom",
+			"preLaunchTask": "Launch VMM (Debug)",
+			"targetCreateCommands": [
+				"target create ${workspaceFolder}/build/obkrnl",
+				"target modules load --file ${workspaceFolder}/build/obkrnl -s 0xffffffff82200000"
+			],
+			"processCreateCommands": ["gdb-remote 1234"]
+		}
+	],
+	"version": "2.0.0"
 }
