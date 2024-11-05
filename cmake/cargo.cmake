@@ -157,6 +157,10 @@ function(add_crate crate)
     list(APPEND build_args "$<IF:$<CONFIG:Debug>,--profile=dev,--release>")
     list(APPEND build_args ${arg_ARGS})
 
+    if(arg_LIBRARY)
+        list(APPEND build_args "--lib")
+    endif()
+
     # Create targets.
     string(JSON manifest GET ${meta} "manifest_path")
     cmake_path(GET manifest PARENT_PATH working_directory)
