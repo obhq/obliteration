@@ -9,11 +9,8 @@ const LINUX_INCLUDE: &str = r#"
 "#;
 
 fn main() {
-    if std::env::var("CARGO_FEATURE_GUI_SLINT").is_ok() {
-        build_bin();
-    } else {
-        build_lib();
-    }
+    build_bin();
+    build_lib();
 }
 
 fn build_bin() {

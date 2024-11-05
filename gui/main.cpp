@@ -166,7 +166,7 @@ int main(int argc, char *argv[])
         QMessageBox::critical(
             nullptr,
             "Error",
-            "No any Vulkan device supports Vulkan 1.3.");
+            "No Vulkan device supports Vulkan 1.3.");
         return 1;
     }
 
