@@ -233,7 +233,7 @@ impl Vmm {
             // Process the header.
             match hdr.p_type {
                 PT_LOAD => {
-                    if hdr.p_filesz > TryInto::<u64>::try_into(hdr.p_memsz).unwrap() {
+                    if hdr.p_filesz > u64::try_from(hdr.p_memsz).unwrap() {
                         return Err(StartVmmError::InvalidFilesz(index));
                     }
 
@@ -371,13 +371,11 @@ impl Vmm {
 
         // Round kernel memory size.
         let block_size = max(vm_page_size, host_page_size);
-        let len = match len {
-            0 => return Err(StartVmmError::ZeroLengthLoadSegment),
-            v => v
-                .checked_next_multiple_of(block_size.get())
-                .map(|v| unsafe { NonZero::new_unchecked(v) })
-                .ok_or(StartVmmError::TotalSizeTooLarge)?,
-        };
+        let len = NonZero::len(len)
+            .ok_or(StartVmmError::ZeroLengthLoadSegment)
+            .get()
+            .checked_next_multiple_of(block_size.get())
+            .ok_or(StartVmmError::TotalSizeTooLarge)?;
 
         // Setup RAM.
         let ram = unsafe { Ram::new(NonZero::new(1024 * 1024 * 1024 * 8).unwrap(), block_size) }
