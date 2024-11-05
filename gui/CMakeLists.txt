@@ -36,11 +36,11 @@ add_executable(obliteration WIN32 MACOSX_BUNDLE
     system.cpp)
 
 if(WIN32)
-    target_sources(obliteration PRIVATE resources.rc vulkan.cpp)
+    target_sources(obliteration PRIVATE resources.rc)
 elseif(APPLE)
     target_sources(obliteration PRIVATE resources/obliteration.icns)
 elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
-    target_sources(obliteration PRIVATE kvm.cpp vulkan.cpp)
+    target_sources(obliteration PRIVATE kvm.cpp)
 endif()
 
 set_target_properties(obliteration PROPERTIES AUTOMOC ON AUTORCC ON)
