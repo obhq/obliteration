@@ -394,6 +394,7 @@ impl Vmm {
         // Map the kernel.
         let feats = hv.cpu_features().clone();
         let mut ram = RamBuilder::new(hv.ram_mut());
+
         let kern = ram
             .alloc_kernel(len)
             .map_err(StartVmmError::AllocateRamForKernel)?;
