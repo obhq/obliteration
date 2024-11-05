@@ -28,7 +28,7 @@ impl Vulkan {
 
         let create_info = InstanceCreateInfo::default().application_info(&appinfo);
 
-        let entry =  ash::Entry::linked();
+        let entry = ash::Entry::linked();
 
         let instance = unsafe { entry.create_instance(&create_info, None) }
             .map_err(VulkanError::CreateInstanceFailed)?;
