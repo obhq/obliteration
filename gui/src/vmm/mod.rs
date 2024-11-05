@@ -261,13 +261,10 @@ impl Vmm {
         segments.sort_unstable_by_key(|i| i.p_vaddr);
 
         // Make sure the first PT_LOAD includes the ELF header.
-        match segments.first() {
-            Some(hdr) => {
-                if hdr.p_offset != 0 {
-                    return Err(StartVmmError::ElfHeaderNotInFirstLoadSegment);
-                }
-            }
-            None => return Err(StartVmmError::NoLoadSegment),
+        let hdr = segments.first().ok_or(StartVmmError::NoLoadSegment)?;
+
+        if hdr.p_offset != 0 {
+            return Err(StartVmmError::ElfHeaderNotInFirstLoadSegment);
         }
 
         // Check if PT_DYNAMIC exists.
