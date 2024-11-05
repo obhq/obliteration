@@ -371,8 +371,8 @@ impl Vmm {
 
         // Round kernel memory size.
         let block_size = max(vm_page_size, host_page_size);
-        let len = NonZero::len(len)
-            .ok_or(StartVmmError::ZeroLengthLoadSegment)
+        let len = NonZero::new(len)
+            .ok_or(StartVmmError::ZeroLengthLoadSegment)?
             .get()
             .checked_next_multiple_of(block_size.get())
             .ok_or(StartVmmError::TotalSizeTooLarge)?;
@@ -394,7 +394,7 @@ impl Vmm {
         let mut ram = RamBuilder::new(hv.ram_mut());
 
         let kern = ram
-            .alloc_kernel(len)
+            .alloc_kernel(NonZero::new(len).unwrap())
             .map_err(StartVmmError::AllocateRamForKernel)?;
 
         for hdr in &segments {

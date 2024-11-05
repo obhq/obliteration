@@ -2,10 +2,8 @@ use ::slint::{ComponentHandle, ModelExt, ModelRc, SharedString, VecModel};
 use args::CliArgs;
 use clap::Parser;
 use debug::DebugServer;
-use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle};
 use std::process::{ExitCode, Termination};
 use thiserror::Error;
-use vmm::Vmm;
 
 mod args;
 mod debug;
@@ -67,7 +65,7 @@ impl App {
         main_window.set_games(games.clone());
 
         let profiles = ModelRc::new(
-            VecModel::from(Vec::new())
+            VecModel::from(vec![profile::Profile::default()])
                 .map(|p| SharedString::from(String::from(p.name().to_string_lossy()))),
         );
 
