@@ -49,19 +49,13 @@ impl Vulkan {
 
         // Create logical device.
         let device = DeviceCreateInfo::default().queue_create_infos(&queues);
-        let device = match unsafe { instance.create_device(physical, &device, None) } {
-            Ok(v) => v,
-            Err(e) => return Err(VulkanError::CreateDeviceFailed(e)),
-        };
+        let device = unsafe { instance.create_device(physical, &device, None) }
+            .map_err(VulkanError::CreateDeviceFailed)?;
 
         Ok(Self {
             buffer: Arc::new(VulkanBuffer::new()),
             device,
         })
-    }
-
-    pub fn new() -> Result<Self, VulkanError> {
-        todo!()
     }
 
     unsafe extern "system" fn destroy_instance(
