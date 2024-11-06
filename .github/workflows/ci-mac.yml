@@ -25,10 +25,6 @@ jobs:
       QT_URL_BASE: https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_672/qt.qt6.672.clang_64/6.7.2-0-202406110330qtbase-MacOS-MacOS_13-Clang-MacOS-MacOS_13-X86_64-ARM64.7z
       QT_URL_SVG: https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_672/qt.qt6.672.clang_64/6.7.2-0-202406110330qtsvg-MacOS-MacOS_13-Clang-MacOS-MacOS_13-X86_64-ARM64.7z
     steps:
-    - name: Set up Python 3.12
-    - uses: actions/setup-python@v4
-    - with:
-      python-version: "3.12"
     - name: Set up Python 3.12 (the latest version that is able to build skia-bindings)
       uses: actions/setup-python@v4
       with:
