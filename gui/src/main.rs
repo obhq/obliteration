@@ -1,7 +1,7 @@
-use slint::{ComponentHandle, ModelExt, ModelRc, SharedString, VecModel};
 use args::CliArgs;
 use clap::Parser;
 use debug::DebugServer;
+use slint::{ComponentHandle, ModelExt, ModelRc, SharedString, VecModel};
 use std::process::{ExitCode, Termination};
 use thiserror::Error;
 
@@ -14,9 +14,9 @@ mod profile;
 #[cfg(unix)]
 mod rlim;
 mod screen;
-mod ui;
 mod string;
 mod system;
+mod ui;
 mod vmm;
 
 fn main() -> AppExit {
