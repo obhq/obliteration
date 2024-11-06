@@ -38,8 +38,6 @@ fn run() -> Result<(), ApplicationError> {
         let debug_client = debug_server
             .accept()
             .map_err(ApplicationError::CreateDebugClient)?;
-
-        //let vmm = Vmm::new(kernel_path, screen, profile, Some(debug_client), event, cx)
     }
 
     let app = App::new()?;
@@ -71,11 +69,8 @@ impl App {
 
         main_window.set_profiles(profiles.clone());
 
-        main_window.on_start_game(|index| {
-            let Ok(screen) = ui::Screen::new() else {
-                eprintln!("failed to create screen");
-                return;
-            };
+        main_window.on_start_game(|_index| {
+            let screen = ui::Screen::new().unwrap();
 
             screen.show().unwrap();
         });
@@ -135,8 +130,8 @@ pub enum ApplicationError {
     CreateDebugClient(#[source] std::io::Error),
 
     #[error("failed to create main window -> {0}")]
-    CreateMainWindow(#[source] ::slint::PlatformError),
+    CreateMainWindow(#[source] slint::PlatformError),
 
     #[error("failed to run main window -> {0}")]
-    RunMainWindow(#[source] ::slint::PlatformError),
+    RunMainWindow(#[source] slint::PlatformError),
 }
