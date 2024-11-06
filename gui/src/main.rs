@@ -1,4 +1,4 @@
-use ::slint::{ComponentHandle, ModelExt, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, ModelExt, ModelRc, SharedString, VecModel};
 use args::CliArgs;
 use clap::Parser;
 use debug::DebugServer;
@@ -14,7 +14,7 @@ mod profile;
 #[cfg(unix)]
 mod rlim;
 mod screen;
-mod slint;
+mod ui;
 mod string;
 mod system;
 mod vmm;
@@ -50,15 +50,15 @@ fn run() -> Result<(), ApplicationError> {
 }
 
 struct App {
-    main_window: slint::MainWindow,
+    main_window: ui::MainWindow,
 
-    games: ModelRc<slint::Game>,
+    games: ModelRc<ui::Game>,
     profiles: ModelRc<SharedString>,
 }
 
 impl App {
     fn new() -> Result<Self, ApplicationError> {
-        let main_window = slint::MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
+        let main_window = ui::MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
 
         let games = ModelRc::new(VecModel::from(Vec::new()));
 
@@ -72,7 +72,7 @@ impl App {
         main_window.set_profiles(profiles.clone());
 
         main_window.on_start_game(|index| {
-            let Ok(screen) = slint::Screen::new() else {
+            let Ok(screen) = ui::Screen::new() else {
                 eprintln!("failed to create screen");
                 return;
             };
