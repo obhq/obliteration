@@ -57,13 +57,6 @@ impl Vulkan {
             device,
         })
     }
-
-    unsafe extern "system" fn destroy_instance(
-        _: ash::vk::Instance,
-        _: *const ash::vk::AllocationCallbacks<'_>,
-    ) {
-        unimplemented!()
-    }
 }
 
 impl Drop for Vulkan {
