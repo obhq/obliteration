@@ -9,6 +9,7 @@ crate-type = ["staticlib"]
 [[bin]]
 name = "gui"
 path = "src/main.rs"
+required-features = ["gui_slint"]
 
 [features]
 gui_slint = [
