@@ -5,6 +5,7 @@ edition = "2021"
 
 [lib]
 crate-type = ["staticlib"]
+required-features = ["qt_ffi"]
 
 [[bin]]
 name = "gui"
@@ -13,8 +14,9 @@ required-features = ["gui_slint"]
 
 [features]
 gui_slint = [
-    "slint"
+    "slint",
 ]
+qt_ffi = []
 
 [dependencies]
 bitfield-struct = "0.8.0"

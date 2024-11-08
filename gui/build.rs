@@ -17,13 +17,6 @@ fn main() {
 }
 
 fn build_bin() {
-    // Compile installer
-    slint_build::compile_with_config(
-        "slint/installer.slint",
-        CompilerConfiguration::new().with_style(String::from("fluent-dark")),
-    )
-    .unwrap();
-
     // Compile main
     slint_build::compile_with_config(
         "slint/main.slint",

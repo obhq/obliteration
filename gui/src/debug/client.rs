@@ -2,6 +2,7 @@
 use std::io::{Error, ErrorKind, Read, Write};
 use std::net::TcpStream;
 
+#[cfg(feature = "qt_ffi")]
 #[no_mangle]
 pub unsafe extern "C" fn debug_client_free(d: *mut DebugClient) {
     drop(Box::from_raw(d));

@@ -1,7 +1,7 @@
 {
   "configurations": [
     {
-      "name": "GUI",
+      "name": "GUI (Qt)",
       "type": "lldb",
       "request": "launch",
       "args": [
