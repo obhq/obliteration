@@ -1,9 +1,9 @@
+use crate::error::RustError;
 use crate::string::strdup;
 use param::Param;
 use std::ffi::{c_char, CStr};
-use std::ptr::null_mut;
 use std::fs::File;
-use crate::error::RustError;
+use std::ptr::null_mut;
 
 #[no_mangle]
 pub unsafe extern "C" fn param_open(file: *const c_char, error: *mut *mut RustError) -> *mut Param {
