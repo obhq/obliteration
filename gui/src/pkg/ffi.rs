@@ -8,16 +8,15 @@ use std::ptr::null_mut;
 
 #[no_mangle]
 pub unsafe extern "C" fn pkg_open(file: *const c_char, error: *mut *mut RustError) -> *mut Pkg {
-    let path = CStr::from_ptr(file);
-    let pkg = match Pkg::open(path.to_str().unwrap()) {
-        Ok(v) => Box::new(v),
+    let path = CStr::from_ptr(file).to_str().unwrap();
+
+    match Pkg::open(path) {
+        Ok(pkg) => Box::into_raw(Box::new(pkg)),
         Err(e) => {
             *error = RustError::wrap(e).into_c();
-            return null_mut();
+            null_mut()
         }
-    };
-
-    Box::into_raw(pkg)
+    }
 }
 
 #[no_mangle]
@@ -27,15 +26,13 @@ pub unsafe extern "C" fn pkg_close(pkg: *mut Pkg) {
 
 #[no_mangle]
 pub unsafe extern "C" fn pkg_get_param(pkg: *const Pkg, error: *mut *mut RustError) -> *mut Param {
-    let param = match (*pkg).get_param() {
-        Ok(v) => Box::new(v),
+    match (*pkg).get_param() {
+        Ok(param) => Box::into_raw(Box::new(param)),
         Err(e) => {
             *error = RustError::wrap(e).into_c();
-            return null_mut();
+            null_mut()
         }
-    };
-
-    Box::into_raw(param)
+    }
 }
 
 #[no_mangle]

@@ -18,10 +18,8 @@ pub unsafe extern "C" fn debug_server_start(
     };
 
     // Start server.
-    let debug_server = DebugServer::new(addr);
-
-    match debug_server {
-        Ok(v) => Box::into_raw(Box::new(v)),
+    match DebugServer::new(addr) {
+        Ok(server) => Box::into_raw(Box::new(server)),
         Err(e) => {
             *err = RustError::wrap(e).into_c();
             null_mut()
@@ -60,4 +58,9 @@ pub unsafe extern "C" fn debug_server_accept(
             null_mut()
         }
     }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn debug_client_free(d: *mut DebugClient) {
+    drop(Box::from_raw(d));
 }

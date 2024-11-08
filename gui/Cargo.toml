@@ -15,6 +15,7 @@ required-features = ["gui_slint"]
 [features]
 gui_slint = [
     "slint",
+    "clap"
 ]
 qt_ffi = []
 
@@ -34,7 +35,7 @@ thiserror = "1.0"
 uuid = { version = "1.10.0", features = ["serde", "v4"] }
 x86-64 = { path = "../arch/x86-64" }
 raw-window-handle = "0.6"
-clap = { version = "4.5.20", features = ["derive"] }
+clap = { version = "4.5.20", features = ["derive"], optional = true }
 
 [dependencies.slint]
 git = "https://github.com/slint-ui/slint"

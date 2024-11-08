@@ -2,12 +2,6 @@
 use std::io::{Error, ErrorKind, Read, Write};
 use std::net::TcpStream;
 
-#[cfg(feature = "qt_ffi")]
-#[no_mangle]
-pub unsafe extern "C" fn debug_client_free(d: *mut DebugClient) {
-    drop(Box::from_raw(d));
-}
-
 /// Encapsulate a debugger connection.
 pub struct DebugClient {
     sock: TcpStream,
@@ -76,13 +70,10 @@ impl gdbstub::conn::Connection for DebugClient {
         while !buf.is_empty() {
             let written = match Write::write(&mut self.sock, buf) {
                 Ok(v) => v,
-                Err(e) => {
-                    if matches!(e.kind(), ErrorKind::Interrupted | ErrorKind::WouldBlock) {
-                        continue;
-                    } else {
-                        return Err(e);
-                    }
+                Err(e) if matches!(e.kind(), ErrorKind::Interrupted | ErrorKind::WouldBlock) => {
+                    continue;
                 }
+                Err(e) => return Err(e),
             };
 
             if written == 0 {

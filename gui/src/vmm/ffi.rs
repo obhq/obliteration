@@ -65,9 +65,10 @@ pub unsafe extern "C" fn vmm_draw(vmm: *mut Vmm) -> *mut RustError {
 pub unsafe extern "C" fn vmm_dispatch_debug(vmm: *mut Vmm, stop: *mut KernelStop) -> DebugResult {
     // Consume stop reason now to prevent memory leak.
     let vmm = &mut *vmm;
-    let mut stop = match stop.is_null() {
-        true => None,
-        false => Some(Box::from_raw(stop).0),
+    let mut stop = if stop.is_null() {
+        None
+    } else {
+        Some(Box::from_raw(stop).0)
     };
 
     loop {

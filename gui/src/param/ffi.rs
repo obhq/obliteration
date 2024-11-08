@@ -2,30 +2,19 @@ use crate::error::RustError;
 use crate::string::strdup;
 use param::Param;
 use std::ffi::{c_char, CStr};
-use std::fs::File;
 use std::ptr::null_mut;
 
 #[no_mangle]
 pub unsafe extern "C" fn param_open(file: *const c_char, error: *mut *mut RustError) -> *mut Param {
-    // Open file.
-    let file = match File::open(CStr::from_ptr(file).to_str().unwrap()) {
-        Ok(v) => v,
-        Err(e) => {
-            *error = RustError::with_source("couldn't open the specified file", e).into_c();
-            return null_mut();
-        }
-    };
+    let path = CStr::from_ptr(file).to_str().unwrap();
 
-    // Parse.
-    let param = match Param::read(file) {
-        Ok(v) => v,
+    match Param::open(path) {
+        Ok(param) => Box::into_raw(Box::new(param)),
         Err(e) => {
-            *error = RustError::with_source("couldn't read the specified file", e).into_c();
-            return null_mut();
+            *error = RustError::wrap(e).into_c();
+            null_mut()
         }
-    };
-
-    Box::into_raw(param.into())
+    }
 }
 
 #[no_mangle]

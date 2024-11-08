@@ -161,8 +161,6 @@ extern "C" {
 void set_panic_hook(void *cx,
                     void (*hook)(const char*, size_t, uint32_t, const char*, size_t, void*));
 
-void debug_client_free(struct DebugClient *d);
-
 struct DebugServer *debug_server_start(const char *addr, struct RustError **err);
 
 void debug_server_free(struct DebugServer *s);
@@ -172,6 +170,8 @@ const char *debug_server_addr(struct DebugServer *s);
 ptrdiff_t debug_server_socket(struct DebugServer *s);
 
 struct DebugClient *debug_server_accept(struct DebugServer *s, struct RustError **err);
+
+void debug_client_free(struct DebugClient *d);
 
 void error_free(struct RustError *e);
 

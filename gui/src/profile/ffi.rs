@@ -2,7 +2,6 @@ use super::{DisplayResolution, Profile};
 use crate::error::RustError;
 use crate::string::strdup;
 use std::ffi::{c_char, CStr};
-use std::fs::File;
 use std::path::Path;
 use std::ptr::null_mut;
 
@@ -28,28 +27,14 @@ pub unsafe extern "C" fn profile_load(
         }
     };
 
-    // Open profile.bin.
-    let path = root.join("profile.bin");
-    let file = match File::open(&path) {
-        Ok(v) => v,
+    match Profile::load(root) {
+        Ok(v) => Box::into_raw(Box::new(v)),
         Err(e) => {
-            *err = RustError::with_source(format_args!("couldn't open {}", path.display()), e)
-                .into_c();
-            return null_mut();
-        }
-    };
+            *err = RustError::wrap(e).into_c();
 
-    // Load profile.bin.
-    let p = match ciborium::from_reader(file) {
-        Ok(v) => v,
-        Err(e) => {
-            *err = RustError::with_source(format_args!("couldn't load {}", path.display()), e)
-                .into_c();
-            return null_mut();
+            null_mut()
         }
-    };
-
-    Box::into_raw(Box::new(p))
+    }
 }
 
 #[no_mangle]
@@ -85,26 +70,8 @@ pub unsafe extern "C" fn profile_save(p: *const Profile, path: *const c_char) ->
         Err(_) => return RustError::new("the specified path is not UTF-8").into_c(),
     };
 
-    // Create a directory.
-    if let Err(e) = std::fs::create_dir_all(root) {
-        return RustError::with_source("couldn't create the specified path", e).into_c();
+    match (*p).save(root) {
+        Ok(_) => null_mut(),
+        Err(e) => RustError::wrap(e).into_c(),
     }
-
-    // Create profile.bin.
-    let path = root.join("profile.bin");
-    let file = match File::create(&path) {
-        Ok(v) => v,
-        Err(e) => {
-            return RustError::with_source(format_args!("couldn't create {}", path.display()), e)
-                .into_c()
-        }
-    };
-
-    // Write profile.bin.
-    if let Err(e) = ciborium::into_writer(&*p, file) {
-        return RustError::with_source(format_args!("couldn't write {}", path.display()), e)
-            .into_c();
-    }
-
-    null_mut()
 }

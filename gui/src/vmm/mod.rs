@@ -79,7 +79,7 @@ impl Vmm {
         screen: &VmmScreen,
         profile: &Profile,
         debugger: Option<DebugClient>,
-        event: unsafe extern "C" fn(*const VmmEvent, *mut c_void),
+        event_handler: unsafe extern "C" fn(*const VmmEvent, *mut c_void),
         cx: *mut c_void,
     ) -> Result<Self, StartVmmError> {
         let path = kernel_path.as_ref();
@@ -255,7 +255,10 @@ impl Vmm {
             .map_err(StartVmmError::CreateRam)?;
 
         // Setup virtual devices.
-        let event = VmmEventHandler { event, cx };
+        let event = VmmEventHandler {
+            event: event_handler,
+            cx,
+        };
         let devices = Arc::new(setup_devices(ram.len().get(), block_size, event));
 
         // Setup hypervisor.
