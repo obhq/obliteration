@@ -2,10 +2,7 @@
 use self::buffer::VulkanBuffer;
 use super::{Screen, ScreenBuffer};
 use crate::vmm::VmmScreen;
-use ash::vk::{
-    ApplicationInfo, DeviceCreateInfo, DeviceQueueCreateInfo, Handle, InstanceCreateInfo,
-    QueueFlags,
-};
+use ash::vk::{DeviceCreateInfo, DeviceQueueCreateInfo, Handle, QueueFlags};
 use ash::Device;
 use std::sync::Arc;
 use thiserror::Error;
@@ -20,18 +17,14 @@ pub struct Vulkan {
 
 impl Vulkan {
     pub fn from_screen(screen: &VmmScreen) -> Result<Self, VulkanError> {
-        // Wrap VkInstance.
-        let appinfo = ApplicationInfo::default()
-            .application_name(c"Obliteration")
-            .application_version(0)
-            .api_version(ash::vk::make_api_version(0, 1, 0, 0));
-
-        let create_info = InstanceCreateInfo::default().application_info(&appinfo);
-
         let entry = ash::Entry::linked();
 
-        let instance = unsafe { entry.create_instance(&create_info, None) }
-            .map_err(VulkanError::CreateInstanceFailed)?;
+        let instance = unsafe {
+            ash::Instance::load(
+                entry.static_fn(),
+                ash::vk::Instance::from_raw(screen.vk_instance.try_into().unwrap()),
+            )
+        };
 
         // Wrap VkPhysicalDevice.
         let physical = screen.vk_device.try_into().unwrap();
@@ -84,9 +77,6 @@ impl Screen for Vulkan {
 pub enum VulkanError {
     #[error("couldn't create a logical device")]
     CreateDeviceFailed(#[source] ash::vk::Result),
-
-    #[error("couldn't create a Vulkan instance")]
-    CreateInstanceFailed(#[source] ash::vk::Result),
 }
 
 /// Implementation of [`Screen::UpdateErr`].
