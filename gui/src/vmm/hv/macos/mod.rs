@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::HvfCpu;
-use super::{CpuFeats, Hypervisor};
-use crate::vmm::ram::Ram;
+use super::{CpuFeats, Hypervisor, Ram};
 use crate::vmm::VmmError;
 use applevisor_sys::hv_feature_reg_t::{
     HV_FEATURE_REG_ID_AA64MMFR0_EL1, HV_FEATURE_REG_ID_AA64MMFR1_EL1,

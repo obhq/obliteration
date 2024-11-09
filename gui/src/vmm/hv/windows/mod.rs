@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::WhpCpu;
 use self::partition::Partition;
-use super::{CpuFeats, Hypervisor};
-use crate::vmm::ram::Ram;
+use super::{CpuFeats, Hypervisor, Ram};
 use crate::vmm::VmmError;
 use std::sync::Arc;
 use thiserror::Error;

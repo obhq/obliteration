@@ -6,8 +6,7 @@ use self::ffi::{
     KVM_GET_API_VERSION, KVM_GET_VCPU_MMAP_SIZE, KVM_GUESTDBG_ENABLE, KVM_GUESTDBG_USE_SW_BP,
     KVM_SET_GUEST_DEBUG, KVM_SET_USER_MEMORY_REGION,
 };
-use super::{CpuFeats, Hypervisor};
-use crate::vmm::ram::Ram;
+use super::{CpuFeats, Hypervisor, Ram};
 use libc::{ioctl, mmap, open, MAP_FAILED, MAP_PRIVATE, O_RDWR, PROT_READ, PROT_WRITE};
 use std::ffi::{c_int, c_uint};
 use std::io::Error;

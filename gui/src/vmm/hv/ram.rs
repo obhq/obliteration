@@ -1,13 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-pub use self::builder::*;
-
 use std::collections::BTreeSet;
 use std::io::Error;
 use std::num::NonZero;
 use std::sync::{Mutex, MutexGuard};
 use thiserror::Error;
-
-mod builder;
 
 /// Represents main memory of the PS4.
 ///
@@ -83,6 +79,10 @@ impl Ram {
 
     pub fn len(&self) -> NonZero<usize> {
         self.len
+    }
+
+    pub fn block_size(&self) -> NonZero<usize> {
+        self.block_size
     }
 
     /// # Panics

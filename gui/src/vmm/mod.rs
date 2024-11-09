@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::CpuManager;
-use self::hv::Hypervisor;
+use self::hv::{Hypervisor, Ram};
 use self::hw::{setup_devices, Device};
 use self::kernel::{
     Kernel, PT_DYNAMIC, PT_GNU_EH_FRAME, PT_GNU_RELRO, PT_GNU_STACK, PT_LOAD, PT_NOTE, PT_PHDR,
 };
-use self::ram::{Ram, RamBuilder};
+use self::ram::RamBuilder;
 use crate::debug::DebugClient;
 use crate::error::RustError;
 use crate::profile::Profile;
