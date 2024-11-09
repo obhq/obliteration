@@ -8,7 +8,7 @@ crate-type = ["staticlib"]
 required-features = ["qt"]
 
 [[bin]]
-name = "gui"
+name = "obliteration"
 path = "src/main.rs"
 required-features = ["slint"]
 
