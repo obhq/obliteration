@@ -40,12 +40,12 @@ impl Vulkan {
             .try_into()
             .map_err(|_| VulkanError::QueueOutOfBounds(queue))?;
 
-        let queues = [DeviceQueueCreateInfo::default()
+        let queues = DeviceQueueCreateInfo::default()
             .queue_family_index(queue)
-            .queue_priorities(&[1.0])];
+            .queue_priorities(&[1.0]);
 
         // Create logical device.
-        let device = DeviceCreateInfo::default().queue_create_infos(&queues);
+        let device = DeviceCreateInfo::default().queue_create_infos(std::slice::from_ref(&queues));
         let device = unsafe { instance.create_device(physical, &device, None) }
             .map_err(VulkanError::CreateDeviceFailed)?;
 
