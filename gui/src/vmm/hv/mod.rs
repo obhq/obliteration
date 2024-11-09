@@ -28,10 +28,10 @@ pub type Default = self::os::Whp;
 pub type DefaultError = self::os::KvmError;
 
 #[cfg(target_os = "macos")]
-pub type DefaultError = crate::vmm::VmmError;
+pub type DefaultError = self::os::HvfError;
 
 #[cfg(target_os = "windows")]
-pub type DefaultError = crate::vmm::VmmError;
+pub type DefaultError = self::os::WhpError;
 
 /// Underlying hypervisor (e.g. KVM on Linux).
 pub trait Hypervisor: Send + Sync + 'static {
