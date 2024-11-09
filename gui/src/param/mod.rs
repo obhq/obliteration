@@ -1,2 +1,2 @@
-#[cfg(feature = "qt_ffi")]
+#[cfg(feature = "qt")]
 mod ffi;

@@ -6,7 +6,7 @@ use std::net::{TcpListener, ToSocketAddrs};
 use thiserror::Error;
 
 mod client;
-#[cfg(feature = "qt_ffi")]
+#[cfg(feature = "qt")]
 mod ffi;
 
 /// TCP listener to accept a debugger connection.

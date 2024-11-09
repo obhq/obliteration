@@ -5,7 +5,7 @@ edition = "2021"
 
 [lib]
 crate-type = ["staticlib"]
-required-features = ["qt_ffi"]
+required-features = ["qt"]
 
 [[bin]]
 name = "gui"
@@ -14,10 +14,9 @@ required-features = ["slint"]
 
 [features]
 slint = [
-    "slint",
-    "clap"
+    "dep:slint",
 ]
-qt_ffi = []
+qt = []
 
 [dependencies]
 bitfield-struct = "0.8.0"
@@ -37,7 +36,7 @@ uuid = { version = "1.10.0", features = ["serde", "v4"] }
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 x86-64 = { path = "../arch/x86-64" }
 raw-window-handle = "0.6"
-clap = { version = "4.5.20", features = ["derive"], optional = true }
+clap = { version = "4.5.20", features = ["derive"] }
 
 [dependencies.slint]
 git = "https://github.com/slint-ui/slint"

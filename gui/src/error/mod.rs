@@ -3,7 +3,7 @@ use std::error::Error;
 use std::ffi::CString;
 use std::fmt::{Display, Write};
 
-#[cfg(feature = "qt_ffi")]
+#[cfg(feature = "qt")]
 mod ffi;
 
 /// Error object managed by Rust side.

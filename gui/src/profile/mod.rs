@@ -8,7 +8,7 @@ use std::time::SystemTime;
 use thiserror::Error;
 use uuid::Uuid;
 
-#[cfg(feature = "qt_ffi")]
+#[cfg(feature = "qt")]
 mod ffi;
 
 /// Contains settings to launch the kernel.

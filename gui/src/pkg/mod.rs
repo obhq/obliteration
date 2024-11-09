@@ -4,7 +4,7 @@ use std::ffi::{c_char, c_void, CString};
 use std::path::Path;
 use std::ptr::null;
 
-#[cfg(feature = "qt_ffi")]
+#[cfg(feature = "qt")]
 mod ffi;
 
 struct ExtractProgress<'a> {

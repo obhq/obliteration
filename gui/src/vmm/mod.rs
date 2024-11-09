@@ -30,7 +30,7 @@ use thiserror::Error;
 mod arch;
 mod cpu;
 mod debug;
-#[cfg(feature = "qt_ffi")]
+#[cfg(feature = "qt")]
 mod ffi;
 mod hv;
 mod hw;

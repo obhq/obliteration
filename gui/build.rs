@@ -13,7 +13,7 @@ fn main() {
         build_bin();
     }
 
-    if std::env::var("CARGO_FEATURE_QT_FFI").is_ok_and(|var| var == "1") {
+    if std::env::var("CARGO_FEATURE_QT").is_ok_and(|var| var == "1") {
         build_lib();
     }
 }
