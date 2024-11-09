@@ -30,7 +30,7 @@ fn run() -> Result<(), ApplicationError> {
     if let Err(e) = rlim::set_rlimit_nofile() {
         let _ = ui::ErrorDialog::new()
             .and_then(|error_dialog| {
-                error_dialog.set_message(SharedString::from(format!("Error setting rlimit: {e}")));
+                error_dialog.set_message(SharedString::from(format!("Error setting rlimit: {}", full_error_reason(e))));
 
                 error_dialog.run()
             })
@@ -95,6 +95,23 @@ impl App {
             .run()
             .map_err(ApplicationError::RunMainWindow)
     }
+}
+
+fn full_error_reason<T>(e: T) -> String
+where
+    T: std::error::Error,
+{
+    use std::fmt::Write;
+
+    let mut msg = format!("{e}");
+    let mut src = e.source();
+
+    while let Some(e) = src {
+        write!(&mut msg, " -> {e}").unwrap();
+        src = e.source();
+    }
+
+    msg
 }
 
 pub enum AppExit {
