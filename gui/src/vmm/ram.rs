@@ -269,6 +269,8 @@ impl<'a, M: RamMapper> RamBuilder<'a, M> {
         paddr: usize,
         len: usize,
     ) -> Result<(), RamBuilderError> {
+        let ram = self.ram.host_addr().cast_mut(); // TODO: Make this safer.
+
         assert_eq!(len % 4096, 0);
 
         fn set_page_entry(entry: &mut usize, addr: usize) {
@@ -294,7 +296,7 @@ impl<'a, M: RamMapper> RamBuilder<'a, M> {
 
                     unsafe { &mut *pdpt }
                 }
-                v => unsafe { &mut *self.ram.mem.add(v & 0xFFFFFFFFFF000).cast() },
+                v => unsafe { &mut *ram.add(v & 0xFFFFFFFFFF000).cast() },
             };
 
             // Get page-directory table.
@@ -309,7 +311,7 @@ impl<'a, M: RamMapper> RamBuilder<'a, M> {
 
                     unsafe { &mut *pdt }
                 }
-                v => unsafe { &mut *self.ram.mem.add(v & 0xFFFFFFFFFF000).cast() },
+                v => unsafe { &mut *ram.add(v & 0xFFFFFFFFFF000).cast() },
             };
 
             // Get page table.
@@ -324,7 +326,7 @@ impl<'a, M: RamMapper> RamBuilder<'a, M> {
 
                     unsafe { &mut *pt }
                 }
-                v => unsafe { &mut *self.ram.mem.add(v & 0xFFFFFFFFFF000).cast() },
+                v => unsafe { &mut *ram.add(v & 0xFFFFFFFFFF000).cast() },
             };
 
             // Set page table entry.
@@ -343,7 +345,7 @@ impl<'a, M: RamMapper> RamBuilder<'a, M> {
         // Get address and length.
         let addr = self.next;
         let len = (512usize * 8)
-            .checked_next_multiple_of(self.ram.block_size.get())
+            .checked_next_multiple_of(self.ram.block_size().get())
             .and_then(NonZero::new)
             .unwrap();
 

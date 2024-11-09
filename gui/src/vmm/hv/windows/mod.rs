@@ -17,7 +17,7 @@ mod partition;
 ///
 /// # Safety
 /// `ram_block` must be greater or equal host page size.
-pub fn new(
+pub unsafe fn new(
     cpu: usize,
     ram_size: NonZero<usize>,
     ram_block: NonZero<usize>,
