@@ -30,7 +30,10 @@ fn run() -> Result<(), ApplicationError> {
     if let Err(e) = rlim::set_rlimit_nofile() {
         let _ = ui::ErrorDialog::new()
             .and_then(|error_dialog| {
-                error_dialog.set_message(SharedString::from(format!("Error setting rlimit: {}", full_error_reason(e))));
+                error_dialog.set_message(SharedString::from(format!(
+                    "Error setting rlimit: {}",
+                    full_error_reason(e)
+                )));
 
                 error_dialog.run()
             })
