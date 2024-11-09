@@ -34,7 +34,7 @@ impl<'a> PkgProgress for ExtractProgress<'a> {
         let total = total.try_into().unwrap();
 
         (self.status)(
-            c"Entries extraction completed".as_ptr(),
+            b"Entries extraction completed\0".as_ptr().cast(),
             0,
             total,
             total,
@@ -75,7 +75,7 @@ impl<'a> PkgProgress for ExtractProgress<'a> {
 
     fn pfs_completed(&mut self) {
         (self.status)(
-            c"PFS extraction completed".as_ptr(),
+            b"PFS extraction completed\0".as_ptr().cast(),
             0,
             self.total,
             self.total,
