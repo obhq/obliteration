@@ -9,7 +9,7 @@ use applevisor_sys::hv_feature_reg_t::{
 use applevisor_sys::{
     hv_feature_reg_t, hv_return_t, hv_vcpu_config_create, hv_vcpu_config_get_feature_reg,
     hv_vcpu_config_t, hv_vcpu_create, hv_vcpu_set_trap_debug_exceptions, hv_vm_create,
-    hv_vm_destroy,
+    hv_vm_destroy, hv_vm_get_max_vcpu_count,
 };
 use std::num::NonZero;
 use std::ptr::{null, null_mut};
@@ -24,7 +24,7 @@ mod mapper;
 /// # Safety
 /// `ram_block` must be greater or equal host page size.
 pub unsafe fn new(
-    _: usize,
+    cpu: usize,
     ram_size: NonZero<usize>,
     ram_block: NonZero<usize>,
     debug: bool,
@@ -43,6 +43,16 @@ pub unsafe fn new(
             feats: CpuFeats::default(),
         },
     };
+
+    // Get max vCPU count.
+    let mut max = 0;
+    let ret = hv_vm_get_max_vcpu_count(&mut max);
+
+    if let Some(v) = NonZero::new(ret) {
+        return Err(HvfError::GetMaxCpuFailed(v));
+    } else if usize::try_from(max).unwrap() < cpu {
+        return Err(HvfError::MaxCpuTooLow(cpu));
+    }
 
     // Load PE features.
     hv.feats.mmfr0 = hv
@@ -146,6 +156,12 @@ pub enum HvfError {
 
     #[error("couldn't create a VM ({0:#x})")]
     CreateVmFailed(NonZero<hv_return_t>),
+
+    #[error("couldn't get maximum number of vCPU for a VM")]
+    GetMaxCpuFailed(NonZero<hv_return_t>),
+
+    #[error("your OS does not support {0} vCPU on a VM")]
+    MaxCpuTooLow(usize),
 
     #[error("couldn't read ID_AA64MMFR0_EL1 ({0:#x})")]
     ReadMmfr0Failed(NonZero<hv_return_t>),

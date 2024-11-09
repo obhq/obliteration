@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use crate::vmm::hv::{Cpu, CpuCommit, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, IoBuf};
+use aarch64::Esr;
+use applevisor_sys::hv_exit_reason_t::HV_EXIT_REASON_EXCEPTION;
 use applevisor_sys::hv_reg_t::{HV_REG_CPSR, HV_REG_PC, HV_REG_X0, HV_REG_X1};
 use applevisor_sys::hv_sys_reg_t::{
     HV_SYS_REG_MAIR_EL1, HV_SYS_REG_SCTLR_EL1, HV_SYS_REG_SP_EL1, HV_SYS_REG_TCR_EL1,
@@ -232,7 +234,21 @@ impl<'a, 'b> CpuExit for HvfExit<'a, 'b> {
     }
 
     fn into_io(self) -> Result<Self::Io, Self> {
-        todo!();
+        // Check reason.
+        let e = unsafe { &*self.0.exit };
+
+        if e.reason != HV_EXIT_REASON_EXCEPTION {
+            return Err(self);
+        }
+
+        // Check if Data Abort exception from a lower Exception level.
+        let s = Esr::from_bits(e.exception.syndrome);
+
+        if s.ec() != 0b100100 {
+            return Err(self);
+        }
+
+        todo!()
     }
 
     fn into_debug(self) -> Result<Self::Debug, Self> {
