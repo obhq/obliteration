@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use super::hv::RamError;
+use super::hv::{RamError, RamMapper};
 use super::Ram;
 use crate::vmm::hv::CpuFeats;
 use crate::vmm::hw::DeviceTree;
@@ -10,16 +10,16 @@ use std::ops::Range;
 use thiserror::Error;
 
 /// Struct to build [`Ram`].
-pub struct RamBuilder<'a> {
-    ram: &'a mut Ram,
+pub struct RamBuilder<'a, M: RamMapper> {
+    ram: &'a mut Ram<M>,
     next: usize,
     kern: Option<Range<usize>>,
     stack: Option<Range<usize>>,
     args: Option<KernelArgs>,
 }
 
-impl<'a> RamBuilder<'a> {
-    pub fn new(ram: &'a mut Ram) -> Self {
+impl<'a, M: RamMapper> RamBuilder<'a, M> {
+    pub fn new(ram: &'a mut Ram<M>) -> Self {
         Self {
             ram,
             next: 0,
@@ -178,7 +178,7 @@ impl<'a> RamBuilder<'a> {
 }
 
 #[cfg(target_arch = "x86_64")]
-impl<'a> RamBuilder<'a> {
+impl<'a, M: RamMapper> RamBuilder<'a, M> {
     pub fn build(
         mut self,
         _: &CpuFeats,
@@ -360,7 +360,7 @@ impl<'a> RamBuilder<'a> {
 }
 
 #[cfg(target_arch = "aarch64")]
-impl<'a> RamBuilder<'a> {
+impl<'a, M: RamMapper> RamBuilder<'a, M> {
     const MA_DEV_NG_NR_NE: u8 = 0; // MEMORY_ATTRS[0]
     const MA_NOR: u8 = 1; // MEMORY_ATTRS[1]
     const MEMORY_ATTRS: [u8; 8] = [0, 0b11111111, 0, 0, 0, 0, 0, 0];

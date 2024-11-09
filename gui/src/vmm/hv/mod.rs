@@ -26,14 +26,15 @@ pub type Default = self::os::Whp;
 
 /// Underlying hypervisor (e.g. KVM on Linux).
 pub trait Hypervisor: Send + Sync + 'static {
+    type Mapper: RamMapper;
     type Cpu<'a>: CpuRun
     where
         Self: 'a;
     type CpuErr: Error + Send + 'static;
 
     fn cpu_features(&self) -> &CpuFeats;
-    fn ram(&self) -> &Ram;
-    fn ram_mut(&mut self) -> &mut Ram;
+    fn ram(&self) -> &Ram<Self::Mapper>;
+    fn ram_mut(&mut self) -> &mut Ram<Self::Mapper>;
 
     /// This method must be called by a thread that is going to drive the returned CPU.
     fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, Self::CpuErr>;
