@@ -250,19 +250,18 @@ impl Vmm {
             .ok_or(StartVmmError::TotalSizeTooLarge)?;
 
         // Setup RAM.
-        let ram = unsafe { Ram::new(NonZero::new(1024 * 1024 * 1024 * 8).unwrap(), block_size) }
-            .map_err(StartVmmError::CreateRam)?;
+        let ram_size = NonZero::new(1024 * 1024 * 1024 * 8).unwrap();
 
         // Setup virtual devices.
         let event = VmmEventHandler {
             event: event_handler,
             cx,
         };
-        let devices = Arc::new(setup_devices(ram.len().get(), block_size, event));
+        let devices = Arc::new(setup_devices(ram_size.get(), block_size, event));
 
         // Setup hypervisor.
-        let mut hv =
-            self::hv::new(8, ram, debugger.is_some()).map_err(StartVmmError::SetupHypervisor)?;
+        let mut hv = unsafe { self::hv::new(8, ram_size, block_size, debugger.is_some()) }
+            .map_err(StartVmmError::SetupHypervisor)?;
 
         // Map the kernel.
         let feats = hv.cpu_features().clone();
@@ -443,6 +442,116 @@ pub enum DebugResult {
     Ok,
     Disconnected,
     Error { reason: *mut RustError },
+}
+
+#[derive(Debug, Error)]
+pub enum StartVmmError {
+    #[error("couldn't open kernel path {1}")]
+    OpenKernel(#[source] KernelError, PathBuf),
+
+    #[error("couldn't start enumerating program headers of {1}")]
+    EnumerateProgramHeaders(#[source] std::io::Error, PathBuf),
+
+    #[error("couldn't read program header #{1} on {2}")]
+    ReadProgramHeader(#[source] ProgramHeaderError, usize, PathBuf),
+
+    #[error("invalid p_filesz on on PT_LOAD {0}")]
+    InvalidFilesz(usize),
+
+    #[error("multiple PT_DYNAMIC is not supported")]
+    MultipleDynamic,
+
+    #[error("multiple PT_NOTE is not supported")]
+    MultipleNote,
+
+    #[error("unknown p_type {0} on program header {1}")]
+    UnknownProgramHeaderType(u32, usize),
+
+    #[error("the first PT_LOAD does not include ELF header")]
+    ElfHeaderNotInFirstLoadSegment,
+
+    #[error("no PT_LOAD on the kernel")]
+    NoLoadSegment,
+
+    #[error("no PT_DYNAMIC on the kernel")]
+    NoDynamicSegment,
+
+    #[error("no PT_NOTE on the kernel")]
+    NoNoteSegment,
+
+    #[error("couldn't seek to PT_NOTE on {1}")]
+    SeekToNote(#[source] std::io::Error, PathBuf),
+
+    #[error("couldn't read kernel note #{1}")]
+    ReadKernelNote(#[source] std::io::Error, u32),
+
+    #[error("name on kernel note #{0} is too large")]
+    NoteNameTooLarge(u32),
+
+    #[error("invalid description on kernel note #{0}")]
+    InvalidNoteDescription(u32),
+
+    #[error("couldn't read kernel note #{1} data")]
+    ReadKernelNoteData(#[source] std::io::Error, u32),
+
+    #[error("kernel note #{0} has invalid name")]
+    InvalidNoteName(u32),
+
+    #[error("kernel note #{0} is duplicated")]
+    DuplicateKernelNote(u32),
+
+    #[error("unknown type {0} on kernel note #{1}")]
+    UnknownKernelNoteType(u32, u32),
+
+    #[error("no page size in kernel note")]
+    NoPageSizeInKernelNote,
+
+    #[error("couldn't get host page size")]
+    GetHostPageSize(#[source] std::io::Error),
+
+    #[error("PT_LOAD at {0:#} is overlapped with the previous PT_LOAD")]
+    OverlappedLoadSegment(usize),
+
+    #[error("invalid p_memsz on PT_LOAD at {0:#}")]
+    InvalidPmemsz(usize),
+
+    #[error("the kernel has PT_LOAD with zero length")]
+    ZeroLengthLoadSegment,
+
+    #[error("total size of PT_LOAD is too large")]
+    TotalSizeTooLarge,
+
+    #[error("couldn't setup a hypervisor")]
+    SetupHypervisor(#[source] hv::DefaultError),
+
+    #[error("couldn't allocate RAM for the kernel")]
+    AllocateRamForKernel(#[source] hv::RamError),
+
+    #[error("couldn't seek to offset")]
+    SeekToOffset(#[source] std::io::Error),
+
+    #[error("{0} is incomplete")]
+    IncompleteKernel(PathBuf),
+
+    #[error("couldn't read kernel at offset {1}")]
+    ReadKernel(#[source] std::io::Error, u64),
+
+    #[error("couldn't allocate RAM for stack")]
+    AllocateRamForStack(#[source] hv::RamError),
+
+    #[error("couldn't allocate RAM for arguments")]
+    AllocateRamForArgs(#[source] hv::RamError),
+
+    #[error("couldn't build RAM")]
+    BuildRam(#[source] ram::RamBuilderError),
+
+    #[error("couldn't setup a screen")]
+    SetupScreen(#[source] crate::screen::ScreenError),
+
+    #[error("couldn't setup a GDB stub")]
+    SetupGdbStub(
+        #[source] GdbStubError<GdbError, <DebugClient as gdbstub::conn::Connection>::Error>,
+    ),
 }
 
 /// Represents an error when [`main_cpu()`] fails to reach event loop.
