@@ -32,7 +32,7 @@
 	  "--manifest-path",
 	  "${workspaceFolder}/gui/Cargo.toml",
 	  "--features",
-	  "gui_slint"
+	  "slint"
 	],
 	"filter": {
 	  "kind": "bin"

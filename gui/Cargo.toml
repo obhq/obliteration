@@ -10,10 +10,10 @@ required-features = ["qt_ffi"]
 [[bin]]
 name = "gui"
 path = "src/main.rs"
-required-features = ["gui_slint"]
+required-features = ["slint"]
 
 [features]
-gui_slint = [
+slint = [
     "slint",
     "clap"
 ]
