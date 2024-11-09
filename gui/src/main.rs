@@ -28,11 +28,13 @@ fn main() -> AppExit {
 fn run() -> Result<(), ApplicationError> {
     #[cfg(unix)]
     if let Err(e) = rlim::set_rlimit_nofile() {
-        let error_dialog = ui::ErrorDialog::new().unwrap();
+        let _ = ui::ErrorDialog::new()
+            .and_then(|error_dialog| {
+                error_dialog.set_message(SharedString::from(format!("Error setting rlimit: {e}",)));
 
-        error_dialog.set_message(SharedString::from(format!("Error setting rlimit: {e}",)));
-
-        error_dialog.run().unwrap();
+                error_dialog.run()
+            })
+            .inspect_err(|e| eprintln!("Error displaying error dialog: {e}"));
     }
 
     let args = CliArgs::try_parse()?;
