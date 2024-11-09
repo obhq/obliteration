@@ -26,9 +26,9 @@ pub(crate) fn set_rlimit_nofile() -> Result<(), RlimitError> {
 
 #[derive(Debug, Error)]
 pub(crate) enum RlimitError {
-    #[error("failed to get RLIMIT_NOFILE -> {0}")]
+    #[error("failed to get RLIMIT_NOFILE")]
     GetRlimitFailed(#[source] std::io::Error),
 
-    #[error("failed to set RLIMIT_NOFILE -> {0}")]
+    #[error("failed to set RLIMIT_NOFILE")]
     SetRlimitFailed(#[source] std::io::Error),
 }
