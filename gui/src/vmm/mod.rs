@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::CpuManager;
-use self::hv::Hypervisor;
+use self::hv::{Hypervisor, Ram};
 use self::hw::{setup_devices, Device};
 use self::kernel::{
     Kernel, PT_DYNAMIC, PT_GNU_EH_FRAME, PT_GNU_RELRO, PT_GNU_STACK, PT_LOAD, PT_NOTE, PT_PHDR,
 };
-use self::ram::{Ram, RamBuilder};
+use self::ram::RamBuilder;
 use crate::debug::DebugClient;
 use crate::error::RustError;
 use crate::profile::Profile;
@@ -328,21 +328,13 @@ pub unsafe extern "C" fn vmm_start(
         },
     };
 
-    // Setup RAM.
-    let ram = match Ram::new(NonZero::new(1024 * 1024 * 1024 * 8).unwrap(), block_size) {
-        Ok(v) => v,
-        Err(e) => {
-            *err = RustError::with_source("couldn't create a RAM", e).into_c();
-            return null_mut();
-        }
-    };
-
     // Setup virtual devices.
+    let ram = NonZero::new(1024 * 1024 * 1024 * 8).unwrap();
     let event = VmmEventHandler { fp: event, cx };
-    let devices = Arc::new(setup_devices(ram.len().get(), block_size, event));
+    let devices = Arc::new(setup_devices(ram.get(), block_size, event));
 
     // Setup hypervisor.
-    let mut hv = match self::hv::new(8, ram, debugger.is_some()) {
+    let mut hv = match self::hv::new(8, ram, block_size, debugger.is_some()) {
         Ok(v) => v,
         Err(e) => {
             *err = RustError::with_source("couldn't setup a hypervisor", e).into_c();
@@ -690,46 +682,6 @@ pub enum DebugResult {
     Ok,
     Disconnected,
     Error { reason: *mut RustError },
-}
-
-/// Represents an error when [`vmm_new()`] fails.
-#[derive(Debug, Error)]
-enum VmmError {
-    #[cfg(target_os = "windows")]
-    #[error("couldn't create WHP partition object ({0:#x})")]
-    CreatePartitionFailed(windows_sys::core::HRESULT),
-
-    #[cfg(target_os = "windows")]
-    #[error("couldn't set number of CPU ({0:#x})")]
-    SetCpuCountFailed(windows_sys::core::HRESULT),
-
-    #[cfg(target_os = "windows")]
-    #[error("couldn't setup WHP partition ({0:#x})")]
-    SetupPartitionFailed(windows_sys::core::HRESULT),
-
-    #[cfg(target_os = "windows")]
-    #[error("couldn't map the RAM to WHP partition ({0:#x})")]
-    MapRamFailed(windows_sys::core::HRESULT),
-
-    #[cfg(target_os = "macos")]
-    #[error("couldn't create a VM ({0:#x})")]
-    CreateVmFailed(NonZero<applevisor_sys::hv_return_t>),
-
-    #[cfg(target_os = "macos")]
-    #[error("couldn't read ID_AA64MMFR0_EL1 ({0:#x})")]
-    ReadMmfr0Failed(NonZero<applevisor_sys::hv_return_t>),
-
-    #[cfg(target_os = "macos")]
-    #[error("couldn't read ID_AA64MMFR1_EL1 ({0:#x})")]
-    ReadMmfr1Failed(NonZero<applevisor_sys::hv_return_t>),
-
-    #[cfg(target_os = "macos")]
-    #[error("couldn't read ID_AA64MMFR2_EL1 ({0:#x})")]
-    ReadMmfr2Failed(NonZero<applevisor_sys::hv_return_t>),
-
-    #[cfg(target_os = "macos")]
-    #[error("couldn't map memory to the VM ({0:#x})")]
-    MapRamFailed(NonZero<applevisor_sys::hv_return_t>),
 }
 
 /// Represents an error when [`main_cpu()`] fails to reach event loop.

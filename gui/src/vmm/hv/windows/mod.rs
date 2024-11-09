@@ -1,23 +1,37 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::WhpCpu;
+use self::mapper::WhpMapper;
 use self::partition::Partition;
-use super::{CpuFeats, Hypervisor};
-use crate::vmm::ram::Ram;
-use crate::vmm::VmmError;
+use super::{CpuFeats, Hypervisor, Ram};
+use std::num::NonZero;
 use std::sync::Arc;
 use thiserror::Error;
 use windows_sys::core::HRESULT;
 
 mod cpu;
+mod mapper;
 mod partition;
 
-pub fn new(cpu: usize, ram: Ram, debug: bool) -> Result<Whp, VmmError> {
+/// Panics
+/// If `ram_size` is not multiply by `ram_block`.
+///
+/// # Safety
+/// `ram_block` must be greater or equal host page size.
+pub unsafe fn new(
+    cpu: usize,
+    ram_size: NonZero<usize>,
+    ram_block: NonZero<usize>,
+    debug: bool,
+) -> Result<Whp, WhpError> {
+    // Create RAM.
+    let ram = Ram::new(ram_size, ram_block, WhpMapper).map_err(WhpError::CreateRamFailed)?;
+
     // Setup a partition.
-    let mut part = Partition::new().map_err(VmmError::CreatePartitionFailed)?;
+    let mut part = Partition::new().map_err(WhpError::CreatePartitionFailed)?;
 
     part.set_processor_count(cpu)
-        .map_err(VmmError::SetCpuCountFailed)?;
-    part.setup().map_err(VmmError::SetupPartitionFailed)?;
+        .map_err(WhpError::SetCpuCountFailed)?;
+    part.setup().map_err(WhpError::SetupPartitionFailed)?;
 
     // Map memory.
     part.map_gpa(
@@ -25,7 +39,7 @@ pub fn new(cpu: usize, ram: Ram, debug: bool) -> Result<Whp, VmmError> {
         0,
         ram.len().get().try_into().unwrap(),
     )
-    .map_err(VmmError::MapRamFailed)?;
+    .map_err(WhpError::MapRamFailed)?;
 
     Ok(Whp {
         part,
@@ -40,10 +54,11 @@ pub fn new(cpu: usize, ram: Ram, debug: bool) -> Result<Whp, VmmError> {
 pub struct Whp {
     part: Partition,
     feats: CpuFeats,
-    ram: Ram,
+    ram: Ram<WhpMapper>,
 }
 
 impl Hypervisor for Whp {
+    type Mapper = WhpMapper;
     type Cpu<'a> = WhpCpu<'a>;
     type CpuErr = WhpCpuError;
 
@@ -51,11 +66,11 @@ impl Hypervisor for Whp {
         &self.feats
     }
 
-    fn ram(&self) -> &Ram {
+    fn ram(&self) -> &Ram<Self::Mapper> {
         &self.ram
     }
 
-    fn ram_mut(&mut self) -> &mut Ram {
+    fn ram_mut(&mut self) -> &mut Ram<Self::Mapper> {
         &mut self.ram
     }
 
@@ -66,6 +81,25 @@ impl Hypervisor for Whp {
             .create_virtual_processor(id)
             .map_err(WhpCpuError::CreateVirtualProcessorFailed)
     }
+}
+
+/// Represents an error when [`Whp`] fails to initialize.
+#[derive(Debug, Error)]
+pub enum WhpError {
+    #[error("couldn't create a RAM")]
+    CreateRamFailed(#[source] std::io::Error),
+
+    #[error("couldn't create WHP partition object ({0:#x})")]
+    CreatePartitionFailed(HRESULT),
+
+    #[error("couldn't set number of CPU ({0:#x})")]
+    SetCpuCountFailed(HRESULT),
+
+    #[error("couldn't setup WHP partition ({0:#x})")]
+    SetupPartitionFailed(HRESULT),
+
+    #[error("couldn't map the RAM to WHP partition ({0:#x})")]
+    MapRamFailed(HRESULT),
 }
 
 /// Implementation of [`Hypervisor::CpuErr`].

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use super::ram::Ram;
-use std::error::Error;
-
 pub use self::arch::*;
 pub use self::os::new;
+pub use self::ram::*;
+
 use gdbstub::stub::MultiThreadStopReason;
+use std::error::Error;
 
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
@@ -13,6 +13,7 @@ mod arch;
 #[cfg_attr(target_os = "macos", path = "macos/mod.rs")]
 #[cfg_attr(target_os = "windows", path = "windows/mod.rs")]
 mod os;
+mod ram;
 
 #[cfg(target_os = "linux")]
 pub type Default = self::os::Kvm;
@@ -25,14 +26,15 @@ pub type Default = self::os::Whp;
 
 /// Underlying hypervisor (e.g. KVM on Linux).
 pub trait Hypervisor: Send + Sync + 'static {
+    type Mapper: RamMapper;
     type Cpu<'a>: CpuRun
     where
         Self: 'a;
     type CpuErr: Error + Send + 'static;
 
     fn cpu_features(&self) -> &CpuFeats;
-    fn ram(&self) -> &Ram;
-    fn ram_mut(&mut self) -> &mut Ram;
+    fn ram(&self) -> &Ram<Self::Mapper>;
+    fn ram_mut(&mut self) -> &mut Ram<Self::Mapper>;
 
     /// This method must be called by a thread that is going to drive the returned CPU.
     fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, Self::CpuErr>;
