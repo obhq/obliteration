@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::CpuManager;
-use self::hv::Hypervisor;
+use self::hv::{Hypervisor, Ram};
 use self::hw::{setup_devices, Device};
 use self::kernel::{
     Kernel, PT_DYNAMIC, PT_GNU_EH_FRAME, PT_GNU_RELRO, PT_GNU_STACK, PT_LOAD, PT_NOTE, PT_PHDR,
 };
-use self::ram::{Ram, RamBuilder};
+use self::ram::RamBuilder;
 use crate::debug::DebugClient;
 use crate::error::RustError;
 use crate::profile::Profile;
@@ -206,7 +206,6 @@ impl Vmm {
                     if vm_page_size.is_some() {
                         return Err(StartVmmError::DuplicateKernelNote(i));
                     }
-
                     vm_page_size = buf[nalign..]
                         .try_into()
                         .map(usize::from_ne_bytes)
@@ -444,159 +443,6 @@ pub enum DebugResult {
     Ok,
     Disconnected,
     Error { reason: *mut RustError },
-}
-
-#[derive(Debug, Error)]
-pub enum StartVmmError {
-    #[error("couldn't open kernel path {1}")]
-    OpenKernel(#[source] KernelError, PathBuf),
-
-    #[error("couldn't start enumerating program headers of {1}")]
-    EnumerateProgramHeaders(#[source] std::io::Error, PathBuf),
-
-    #[error("couldn't read program header #{1} on {2}")]
-    ReadProgramHeader(#[source] ProgramHeaderError, usize, PathBuf),
-
-    #[error("invalid p_filesz on on PT_LOAD {0}")]
-    InvalidFilesz(usize),
-
-    #[error("multiple PT_DYNAMIC is not supported")]
-    MultipleDynamic,
-
-    #[error("multiple PT_NOTE is not supported")]
-    MultipleNote,
-
-    #[error("unknown p_type {0} on program header {1}")]
-    UnknownProgramHeaderType(u32, usize),
-
-    #[error("the first PT_LOAD does not include ELF header")]
-    ElfHeaderNotInFirstLoadSegment,
-
-    #[error("no PT_LOAD on the kernel")]
-    NoLoadSegment,
-
-    #[error("no PT_DYNAMIC on the kernel")]
-    NoDynamicSegment,
-
-    #[error("no PT_NOTE on the kernel")]
-    NoNoteSegment,
-
-    #[error("couldn't seek to PT_NOTE on {1}")]
-    SeekToNote(#[source] std::io::Error, PathBuf),
-
-    #[error("couldn't read kernel note #{1}")]
-    ReadKernelNote(#[source] std::io::Error, u32),
-
-    #[error("name on kernel note #{0} is too large")]
-    NoteNameTooLarge(u32),
-
-    #[error("invalid description on kernel note #{0}")]
-    InvalidNoteDescription(u32),
-
-    #[error("couldn't read kernel note #{1} data")]
-    ReadKernelNoteData(#[source] std::io::Error, u32),
-
-    #[error("kernel note #{0} has invalid name")]
-    InvalidNoteName(u32),
-
-    #[error("kernel note #{0} is duplicated")]
-    DuplicateKernelNote(u32),
-
-    #[error("unknown type {0} on kernel note #{1}")]
-    UnknownKernelNoteType(u32, u32),
-
-    #[error("no page size in kernel note")]
-    NoPageSizeInKernelNote,
-
-    #[error("couldn't get host page size")]
-    GetHostPageSize(#[source] std::io::Error),
-
-    #[error("PT_LOAD at {0:#} is overlapped with the previous PT_LOAD")]
-    OverlappedLoadSegment(usize),
-
-    #[error("invalid p_memsz on PT_LOAD at {0:#}")]
-    InvalidPmemsz(usize),
-
-    #[error("the kernel has PT_LOAD with zero length")]
-    ZeroLengthLoadSegment,
-
-    #[error("total size of PT_LOAD is too large")]
-    TotalSizeTooLarge,
-
-    #[error("couldn't create a RAM")]
-    CreateRam(#[source] std::io::Error),
-
-    #[error("couldn't setup a hypervisor")]
-    SetupHypervisor(#[source] hv::DefaultError),
-
-    #[error("couldn't allocate RAM for the kernel")]
-    AllocateRamForKernel(#[source] ram::RamError),
-
-    #[error("couldn't seek to offset")]
-    SeekToOffset(#[source] std::io::Error),
-
-    #[error("{0} is incomplete")]
-    IncompleteKernel(PathBuf),
-
-    #[error("couldn't read kernel at offset {1}")]
-    ReadKernel(#[source] std::io::Error, u64),
-
-    #[error("couldn't allocate RAM for stack")]
-    AllocateRamForStack(#[source] ram::RamError),
-
-    #[error("couldn't allocate RAM for arguments")]
-    AllocateRamForArgs(#[source] ram::RamError),
-
-    #[error("couldn't build RAM")]
-    BuildRam(#[source] ram::RamBuilderError),
-
-    #[error("couldn't setup a screen")]
-    SetupScreen(#[source] crate::screen::ScreenError),
-
-    #[error("couldn't setup a GDB stub")]
-    SetupGdbStub(
-        #[source] GdbStubError<GdbError, <DebugClient as gdbstub::conn::Connection>::Error>,
-    ),
-}
-
-/// Represents an error when [`vmm_new()`] fails.
-#[derive(Debug, Error)]
-enum VmmError {
-    #[cfg(target_os = "windows")]
-    #[error("couldn't create WHP partition object ({0:#x})")]
-    CreatePartitionFailed(windows_sys::core::HRESULT),
-
-    #[cfg(target_os = "windows")]
-    #[error("couldn't set number of CPU ({0:#x})")]
-    SetCpuCountFailed(windows_sys::core::HRESULT),
-
-    #[cfg(target_os = "windows")]
-    #[error("couldn't setup WHP partition ({0:#x})")]
-    SetupPartitionFailed(windows_sys::core::HRESULT),
-
-    #[cfg(target_os = "windows")]
-    #[error("couldn't map the RAM to WHP partition ({0:#x})")]
-    MapRamFailed(windows_sys::core::HRESULT),
-
-    #[cfg(target_os = "macos")]
-    #[error("couldn't create a VM ({0:#x})")]
-    CreateVmFailed(NonZero<applevisor_sys::hv_return_t>),
-
-    #[cfg(target_os = "macos")]
-    #[error("couldn't read ID_AA64MMFR0_EL1 ({0:#x})")]
-    ReadMmfr0Failed(NonZero<applevisor_sys::hv_return_t>),
-
-    #[cfg(target_os = "macos")]
-    #[error("couldn't read ID_AA64MMFR1_EL1 ({0:#x})")]
-    ReadMmfr1Failed(NonZero<applevisor_sys::hv_return_t>),
-
-    #[cfg(target_os = "macos")]
-    #[error("couldn't read ID_AA64MMFR2_EL1 ({0:#x})")]
-    ReadMmfr2Failed(NonZero<applevisor_sys::hv_return_t>),
-
-    #[cfg(target_os = "macos")]
-    #[error("couldn't map memory to the VM ({0:#x})")]
-    MapRamFailed(NonZero<applevisor_sys::hv_return_t>),
 }
 
 /// Represents an error when [`main_cpu()`] fails to reach event loop.

@@ -1,13 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-pub use self::builder::*;
-
 use std::collections::BTreeSet;
 use std::io::Error;
 use std::num::NonZero;
 use std::sync::{Mutex, MutexGuard};
 use thiserror::Error;
-
-mod builder;
 
 /// Represents main memory of the PS4.
 ///
@@ -15,22 +11,20 @@ mod builder;
 /// until there is an allocation request.
 ///
 /// RAM always started at address 0.
-pub struct Ram {
+pub struct Ram<M: RamMapper> {
     mem: *mut u8,
     len: NonZero<usize>,
     block_size: NonZero<usize>,
     allocated: Mutex<BTreeSet<usize>>,
+    mapper: M,
 }
 
-impl Ram {
-    /// Panics
-    /// If `len` is not multiply by `block_size`.
-    ///
-    /// # Safety
-    /// `block_size` must be greater or equal host page size.
-    pub unsafe fn new(len: NonZero<usize>, block_size: NonZero<usize>) -> Result<Self, Error> {
-        use std::io::Error;
-
+impl<M: RamMapper> Ram<M> {
+    pub(super) unsafe fn new(
+        len: NonZero<usize>,
+        block_size: NonZero<usize>,
+        mapper: M,
+    ) -> Result<Self, Error> {
         assert_eq!(len.get() % block_size, 0);
 
         // Reserve memory range.
@@ -74,6 +68,7 @@ impl Ram {
             len,
             block_size,
             allocated: Mutex::default(),
+            mapper,
         })
     }
 
@@ -83,6 +78,10 @@ impl Ram {
 
     pub fn len(&self) -> NonZero<usize> {
         self.len
+    }
+
+    pub fn block_size(&self) -> NonZero<usize> {
+        self.block_size
     }
 
     /// # Panics
@@ -109,6 +108,10 @@ impl Ram {
         let start = unsafe { self.mem.add(addr) };
         let mem = unsafe { Self::commit(start, len.get()).map_err(RamError::HostFailed)? };
 
+        self.mapper
+            .map(start, addr, len)
+            .map_err(|e| RamError::MapFailed(Box::new(e)))?;
+
         // Add range to allocated list.
         for addr in (addr..end).step_by(self.block_size.get()) {
             assert!(allocated.insert(addr));
@@ -126,7 +129,7 @@ impl Ram {
         assert_eq!(addr % self.block_size, 0);
         assert_eq!(len.get() % self.block_size, 0);
 
-        // Check if the requested range valid.
+        // Check if the requested range valid so we don't end up unmap non-VM memory.
         let end = addr.checked_add(len.get()).ok_or(RamError::InvalidAddr)?;
 
         if end > self.len.get() {
@@ -137,6 +140,7 @@ impl Ram {
         // be no-op anyway.
         let mut allocated = self.allocated.lock().unwrap();
 
+        // TODO: Unmap this portion from the VM if the OS does not do for us.
         Self::decommit(self.mem.add(addr), len.get()).map_err(RamError::HostFailed)?;
 
         for addr in (addr..end).step_by(self.block_size.get()) {
@@ -233,11 +237,12 @@ impl Ram {
     }
 }
 
-impl Drop for Ram {
+impl<M: RamMapper> Drop for Ram<M> {
     #[cfg(unix)]
     fn drop(&mut self) {
         use libc::munmap;
 
+        // TODO: Unmap this portion from the VM if the OS does not do for us.
         if unsafe { munmap(self.mem.cast(), self.len.get()) } < 0 {
             panic!(
                 "failed to unmap RAM at {:p}: {}",
@@ -251,6 +256,7 @@ impl Drop for Ram {
     fn drop(&mut self) {
         use windows_sys::Win32::System::Memory::{VirtualFree, MEM_RELEASE};
 
+        // TODO: Unmap this portion from the VM if the OS does not do for us.
         if unsafe { VirtualFree(self.mem.cast(), 0, MEM_RELEASE) } == 0 {
             panic!(
                 "failed to free RAM at {:p}: {}",
@@ -261,8 +267,15 @@ impl Drop for Ram {
     }
 }
 
-unsafe impl Send for Ram {}
-unsafe impl Sync for Ram {}
+unsafe impl<M: RamMapper> Send for Ram<M> {}
+unsafe impl<M: RamMapper> Sync for Ram<M> {}
+
+/// Provides methods to map a portion of RAM dynamically.
+pub trait RamMapper: Send + Sync {
+    type Err: std::error::Error + 'static;
+
+    fn map(&self, host: *mut u8, vm: usize, len: NonZero<usize>) -> Result<(), Self::Err>;
+}
 
 /// RAII struct to prevent a range of memory from deallocated.
 pub struct LockedAddr<'a> {
@@ -297,4 +310,7 @@ pub enum RamError {
 
     #[error("host failed")]
     HostFailed(#[source] std::io::Error),
+
+    #[error("couldn't map the memory to the VM")]
+    MapFailed(#[source] Box<dyn std::error::Error>),
 }

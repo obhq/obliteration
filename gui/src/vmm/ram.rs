@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use super::{Ram, RamError};
+use super::hv::{RamError, RamMapper};
+use super::Ram;
 use crate::vmm::hv::CpuFeats;
 use crate::vmm::hw::DeviceTree;
 use crate::vmm::kernel::ProgramHeader;
@@ -9,16 +10,16 @@ use std::ops::Range;
 use thiserror::Error;
 
 /// Struct to build [`Ram`].
-pub struct RamBuilder<'a> {
-    ram: &'a mut Ram,
+pub struct RamBuilder<'a, M: RamMapper> {
+    ram: &'a mut Ram<M>,
     next: usize,
     kern: Option<Range<usize>>,
     stack: Option<Range<usize>>,
     args: Option<KernelArgs>,
 }
 
-impl<'a> RamBuilder<'a> {
-    pub fn new(ram: &'a mut Ram) -> Self {
+impl<'a, M: RamMapper> RamBuilder<'a, M> {
+    pub fn new(ram: &'a mut Ram<M>) -> Self {
         Self {
             ram,
             next: 0,
@@ -63,14 +64,14 @@ impl<'a> RamBuilder<'a> {
     /// If called a second time.
     pub fn alloc_args(&mut self, env: BootEnv, conf: Config) -> Result<(), RamError> {
         assert!(self.args.is_none());
-        assert!(align_of::<BootEnv>() <= self.ram.block_size.get());
+        assert!(align_of::<BootEnv>() <= self.ram.block_size().get());
 
         // Allocate RAM for all arguments.
         let addr = self.next;
         let len = size_of::<BootEnv>()
             .checked_next_multiple_of(align_of::<Config>())
             .and_then(|off| off.checked_add(size_of::<Config>()))
-            .and_then(|len| len.checked_next_multiple_of(self.ram.block_size.get()))
+            .and_then(|len| len.checked_next_multiple_of(self.ram.block_size().get()))
             .and_then(NonZero::new)
             .unwrap();
 
@@ -111,7 +112,11 @@ impl<'a> RamBuilder<'a> {
 
         // Get PT_DYNAMIC.
         let paddr = map.kern_paddr;
-        let kern = unsafe { std::slice::from_raw_parts_mut(self.ram.mem.add(paddr), map.kern_len) };
+        let mut kern = self
+            .ram
+            .lock(paddr, map.kern_len.try_into().unwrap())
+            .unwrap();
+        let kern = unsafe { std::slice::from_raw_parts_mut(kern.as_mut_ptr(), kern.len().get()) };
         let dynamic = p_vaddr
             .checked_add(p_memsz)
             .and_then(|end| kern.get(p_vaddr..end))
@@ -173,7 +178,7 @@ impl<'a> RamBuilder<'a> {
 }
 
 #[cfg(target_arch = "x86_64")]
-impl<'a> RamBuilder<'a> {
+impl<'a, M: RamMapper> RamBuilder<'a, M> {
     pub fn build(
         mut self,
         _: &CpuFeats,
@@ -264,6 +269,8 @@ impl<'a> RamBuilder<'a> {
         paddr: usize,
         len: usize,
     ) -> Result<(), RamBuilderError> {
+        let ram = self.ram.host_addr().cast_mut(); // TODO: Make this safer.
+
         assert_eq!(len % 4096, 0);
 
         fn set_page_entry(entry: &mut usize, addr: usize) {
@@ -289,7 +296,7 @@ impl<'a> RamBuilder<'a> {
 
                     unsafe { &mut *pdpt }
                 }
-                v => unsafe { &mut *self.ram.mem.add(v & 0xFFFFFFFFFF000).cast() },
+                v => unsafe { &mut *ram.add(v & 0xFFFFFFFFFF000).cast() },
             };
 
             // Get page-directory table.
@@ -304,7 +311,7 @@ impl<'a> RamBuilder<'a> {
 
                     unsafe { &mut *pdt }
                 }
-                v => unsafe { &mut *self.ram.mem.add(v & 0xFFFFFFFFFF000).cast() },
+                v => unsafe { &mut *ram.add(v & 0xFFFFFFFFFF000).cast() },
             };
 
             // Get page table.
@@ -319,7 +326,7 @@ impl<'a> RamBuilder<'a> {
 
                     unsafe { &mut *pt }
                 }
-                v => unsafe { &mut *self.ram.mem.add(v & 0xFFFFFFFFFF000).cast() },
+                v => unsafe { &mut *ram.add(v & 0xFFFFFFFFFF000).cast() },
             };
 
             // Set page table entry.
@@ -338,7 +345,7 @@ impl<'a> RamBuilder<'a> {
         // Get address and length.
         let addr = self.next;
         let len = (512usize * 8)
-            .checked_next_multiple_of(self.ram.block_size.get())
+            .checked_next_multiple_of(self.ram.block_size().get())
             .and_then(NonZero::new)
             .unwrap();
 
@@ -355,7 +362,7 @@ impl<'a> RamBuilder<'a> {
 }
 
 #[cfg(target_arch = "aarch64")]
-impl<'a> RamBuilder<'a> {
+impl<'a, M: RamMapper> RamBuilder<'a, M> {
     const MA_DEV_NG_NR_NE: u8 = 0; // MEMORY_ATTRS[0]
     const MA_NOR: u8 = 1; // MEMORY_ATTRS[1]
     const MEMORY_ATTRS: [u8; 8] = [0, 0b11111111, 0, 0, 0, 0, 0, 0];
@@ -389,7 +396,7 @@ impl<'a> RamBuilder<'a> {
     ) -> Result<RamMap, RamBuilderError> {
         // Allocate page table level 0.
         let page_table = self.next;
-        let len = self.ram.block_size;
+        let len = self.ram.block_size();
         let l0t: &mut [usize; 32] = match self.ram.alloc(page_table, len) {
             Ok(v) => unsafe { &mut *v.as_mut_ptr().cast() },
             Err(e) => return Err(RamBuilderError::AllocPageTableLevel0Failed(e)),
@@ -473,6 +480,7 @@ impl<'a> RamBuilder<'a> {
         attr: u8,
     ) -> Result<(), RamBuilderError> {
         let attr: usize = attr.into();
+        let ram = self.ram.host_addr().cast_mut(); // TODO: Make this safer.
 
         assert_eq!(len % 0x4000, 0);
         assert_eq!(attr & 0b11111000, 0);
@@ -499,7 +507,7 @@ impl<'a> RamBuilder<'a> {
 
                     unsafe { &mut *l1t }
                 }
-                v => unsafe { &mut *self.ram.mem.add(v & 0xFFFFFFFFC000).cast() },
+                v => unsafe { &mut *ram.add(v & 0xFFFFFFFFC000).cast() },
             };
 
             // Get level 2 table.
@@ -514,7 +522,7 @@ impl<'a> RamBuilder<'a> {
 
                     unsafe { &mut *l2t }
                 }
-                v => unsafe { &mut *self.ram.mem.add(v & 0xFFFFFFFFC000).cast() },
+                v => unsafe { &mut *ram.add(v & 0xFFFFFFFFC000).cast() },
             };
 
             // Get level 3 table.
@@ -529,7 +537,7 @@ impl<'a> RamBuilder<'a> {
 
                     unsafe { &mut *l3t }
                 }
-                v => unsafe { &mut *self.ram.mem.add(v & 0xFFFFFFFFC000).cast() },
+                v => unsafe { &mut *ram.add(v & 0xFFFFFFFFC000).cast() },
             };
 
             // Set page descriptor.
@@ -556,7 +564,7 @@ impl<'a> RamBuilder<'a> {
         // Get address and length.
         let addr = self.next;
         let len = (2048usize * 8)
-            .checked_next_multiple_of(self.ram.block_size.get())
+            .checked_next_multiple_of(self.ram.block_size().get())
             .and_then(NonZero::new)
             .unwrap();
 

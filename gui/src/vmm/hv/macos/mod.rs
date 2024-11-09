@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::HvfCpu;
-use super::{CpuFeats, Hypervisor};
-use crate::vmm::ram::Ram;
-use crate::vmm::VmmError;
+use self::mapper::HvfMapper;
+use super::{CpuFeats, Hypervisor, Ram};
 use applevisor_sys::hv_feature_reg_t::{
     HV_FEATURE_REG_ID_AA64MMFR0_EL1, HV_FEATURE_REG_ID_AA64MMFR1_EL1,
     HV_FEATURE_REG_ID_AA64MMFR2_EL1,
@@ -10,19 +9,33 @@ use applevisor_sys::hv_feature_reg_t::{
 use applevisor_sys::{
     hv_feature_reg_t, hv_return_t, hv_vcpu_config_create, hv_vcpu_config_get_feature_reg,
     hv_vcpu_config_t, hv_vcpu_create, hv_vcpu_set_trap_debug_exceptions, hv_vm_create,
-    hv_vm_destroy, hv_vm_map, HV_MEMORY_EXEC, HV_MEMORY_READ, HV_MEMORY_WRITE,
+    hv_vm_destroy,
 };
 use std::num::NonZero;
 use std::ptr::{null, null_mut};
 use thiserror::Error;
 
 mod cpu;
+mod mapper;
 
-pub fn new(_: usize, ram: Ram, debug: bool) -> Result<Hvf, VmmError> {
+/// Panics
+/// If `ram_size` is not multiply by `ram_block`.
+///
+/// # Safety
+/// `ram_block` must be greater or equal host page size.
+pub unsafe fn new(
+    _: usize,
+    ram_size: NonZero<usize>,
+    ram_block: NonZero<usize>,
+    debug: bool,
+) -> Result<Hvf, HvfError> {
+    // Create RAM.
+    let ram = Ram::new(ram_size, ram_block, HvfMapper).map_err(HvfError::CreateRamFailed)?;
+
     // Create a VM.
     let ret = unsafe { hv_vm_create(null_mut()) };
     let mut hv = match NonZero::new(ret) {
-        Some(ret) => return Err(VmmError::CreateVmFailed(ret)),
+        Some(ret) => return Err(HvfError::CreateVmFailed(ret)),
         None => Hvf {
             ram,
             debug,
@@ -34,38 +47,23 @@ pub fn new(_: usize, ram: Ram, debug: bool) -> Result<Hvf, VmmError> {
     // Load PE features.
     hv.feats.mmfr0 = hv
         .read_feature_reg(HV_FEATURE_REG_ID_AA64MMFR0_EL1)
-        .map_err(VmmError::ReadMmfr0Failed)?
+        .map_err(HvfError::ReadMmfr0Failed)?
         .into();
     hv.feats.mmfr1 = hv
         .read_feature_reg(HV_FEATURE_REG_ID_AA64MMFR1_EL1)
-        .map_err(VmmError::ReadMmfr1Failed)?
+        .map_err(HvfError::ReadMmfr1Failed)?
         .into();
     hv.feats.mmfr2 = hv
         .read_feature_reg(HV_FEATURE_REG_ID_AA64MMFR2_EL1)
-        .map_err(VmmError::ReadMmfr2Failed)?
+        .map_err(HvfError::ReadMmfr2Failed)?
         .into();
 
-    // Set RAM.
-    let host = hv.ram.host_addr().cast_mut().cast();
-    let len = hv.ram.len().get().try_into().unwrap();
-    let ret = unsafe {
-        hv_vm_map(
-            host,
-            0,
-            len,
-            HV_MEMORY_READ | HV_MEMORY_WRITE | HV_MEMORY_EXEC,
-        )
-    };
-
-    match NonZero::new(ret) {
-        Some(ret) => Err(VmmError::MapRamFailed(ret)),
-        None => Ok(hv),
-    }
+    Ok(hv)
 }
 
 /// Implementation of [`Hypervisor`] using Hypervisor Framework.
 pub struct Hvf {
-    ram: Ram,
+    ram: Ram<HvfMapper>,
     debug: bool,
     cpu_config: hv_vcpu_config_t,
     feats: CpuFeats,
@@ -98,6 +96,7 @@ impl Drop for Hvf {
 }
 
 impl Hypervisor for Hvf {
+    type Mapper = HvfMapper;
     type Cpu<'a> = HvfCpu<'a>;
     type CpuErr = HvfCpuError;
 
@@ -105,11 +104,11 @@ impl Hypervisor for Hvf {
         &self.feats
     }
 
-    fn ram(&self) -> &Ram {
+    fn ram(&self) -> &Ram<Self::Mapper> {
         &self.ram
     }
 
-    fn ram_mut(&mut self) -> &mut Ram {
+    fn ram_mut(&mut self) -> &mut Ram<Self::Mapper> {
         &mut self.ram
     }
 
@@ -138,6 +137,25 @@ impl Hypervisor for Hvf {
 
 unsafe impl Send for Hvf {}
 unsafe impl Sync for Hvf {}
+
+/// Represents an error when [`Hvf`] fails to initialize.
+#[derive(Debug, Error)]
+pub enum HvfError {
+    #[error("couldn't create a RAM")]
+    CreateRamFailed(#[source] std::io::Error),
+
+    #[error("couldn't create a VM ({0:#x})")]
+    CreateVmFailed(NonZero<hv_return_t>),
+
+    #[error("couldn't read ID_AA64MMFR0_EL1 ({0:#x})")]
+    ReadMmfr0Failed(NonZero<hv_return_t>),
+
+    #[error("couldn't read ID_AA64MMFR1_EL1 ({0:#x})")]
+    ReadMmfr1Failed(NonZero<hv_return_t>),
+
+    #[error("couldn't read ID_AA64MMFR2_EL1 ({0:#x})")]
+    ReadMmfr2Failed(NonZero<hv_return_t>),
+}
 
 /// Implementation of [`Hypervisor::CpuErr`].
 #[derive(Debug, Error)]

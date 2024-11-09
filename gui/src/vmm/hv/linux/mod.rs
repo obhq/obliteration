@@ -6,12 +6,13 @@ use self::ffi::{
     KVM_GET_API_VERSION, KVM_GET_VCPU_MMAP_SIZE, KVM_GUESTDBG_ENABLE, KVM_GUESTDBG_USE_SW_BP,
     KVM_SET_GUEST_DEBUG, KVM_SET_USER_MEMORY_REGION,
 };
-use super::{CpuFeats, Hypervisor};
-use crate::vmm::ram::Ram;
+use self::mapper::KvmMapper;
+use super::{CpuFeats, Hypervisor, Ram};
 use libc::{ioctl, mmap, open, MAP_FAILED, MAP_PRIVATE, O_RDWR, PROT_READ, PROT_WRITE};
 use std::ffi::{c_int, c_uint};
 use std::io::Error;
 use std::mem::zeroed;
+use std::num::NonZero;
 use std::os::fd::{AsFd, AsRawFd, BorrowedFd, FromRawFd, OwnedFd};
 use std::ptr::null_mut;
 use std::sync::Mutex;
@@ -22,9 +23,23 @@ use thiserror::Error;
 mod arch;
 mod cpu;
 mod ffi;
+mod mapper;
 mod run;
 
-pub fn new(cpu: usize, ram: Ram, debug: bool) -> Result<Kvm, KvmError> {
+/// Panics
+/// If `ram_size` is not multiply by `ram_block`.
+///
+/// # Safety
+/// `ram_block` must be greater or equal host page size.
+pub unsafe fn new(
+    cpu: usize,
+    ram_size: NonZero<usize>,
+    ram_block: NonZero<usize>,
+    debug: bool,
+) -> Result<Kvm, KvmError> {
+    // Create RAM.
+    let ram = Ram::new(ram_size, ram_block, KvmMapper).map_err(KvmError::CreateRamFailed)?;
+
     // Open KVM device.
     let kvm = unsafe { open("/dev/kvm\0".as_ptr().cast(), O_RDWR) };
 
@@ -311,12 +326,13 @@ pub struct Kvm {
     vcpu_mmap_size: usize,
     #[allow(dead_code)]
     vm: OwnedFd,
-    ram: Ram,
+    ram: Ram<KvmMapper>,
     #[allow(dead_code)] // kvm are needed by vm.
     kvm: OwnedFd,
 }
 
 impl Hypervisor for Kvm {
+    type Mapper = KvmMapper;
     type Cpu<'a> = KvmCpu<'a>;
     type CpuErr = KvmCpuError;
 
@@ -324,11 +340,11 @@ impl Hypervisor for Kvm {
         &self.feats
     }
 
-    fn ram(&self) -> &Ram {
+    fn ram(&self) -> &Ram<Self::Mapper> {
         &self.ram
     }
 
-    fn ram_mut(&mut self) -> &mut Ram {
+    fn ram_mut(&mut self) -> &mut Ram<Self::Mapper> {
         &mut self.ram
     }
 
@@ -360,6 +376,9 @@ impl Hypervisor for Kvm {
 /// Represents an error when [`Kvm`] fails to initialize.
 #[derive(Debug, Error)]
 pub enum KvmError {
+    #[error("couldn't create a RAM")]
+    CreateRamFailed(#[source] Error),
+
     #[error("couldn't open /dev/kvm")]
     OpenKvmFailed(#[source] Error),
 
