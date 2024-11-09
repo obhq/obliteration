@@ -157,10 +157,6 @@ function(add_crate crate)
     list(APPEND build_args "$<IF:$<CONFIG:Debug>,--profile=dev,--release>")
     list(APPEND build_args ${arg_ARGS})
 
-    if(arg_LIBRARY)
-        list(APPEND build_args "--lib")
-    endif()
-
     # Create targets.
     string(JSON manifest GET ${meta} "manifest_path")
     cmake_path(GET manifest PARENT_PATH working_directory)
@@ -182,6 +178,11 @@ function(add_crate crate)
 
         if(${kind} STREQUAL "staticlib")
             add_library(${crate} STATIC IMPORTED)
+
+            if(arg_LIBRARY)
+                list(APPEND build_args "--lib")
+            endif()
+
             if(WIN32)
                 set(debug_artifact "${debug_outputs}/${crate}.lib")
                 set(release_artifact "${release_outputs}/${crate}.lib")
