@@ -11,7 +11,9 @@ const LINUX_INCLUDE: &str = r#"
 fn main() {
     if std::env::var("CARGO_FEATURE_GUI_SLINT").is_ok_and(|var| var == "1") {
         build_bin();
-    } else if std::env::var("CARGO_FEATURE_QT_FFI").is_ok_and(|var| var == "1") {
+    }
+
+    if std::env::var("CARGO_FEATURE_QT_FFI").is_ok_and(|var| var == "1") {
         build_lib();
     }
 }
