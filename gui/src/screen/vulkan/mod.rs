@@ -34,10 +34,14 @@ impl Vulkan {
         let queue = unsafe { instance.get_physical_device_queue_family_properties(physical) }
             .into_iter()
             .position(|p| p.queue_flags.contains(QueueFlags::GRAPHICS))
-            .unwrap();
+            .ok_or(VulkanError::NoQueue)?;
+
+        let queue = queue
+            .try_into()
+            .map_err(|_| VulkanError::QueueOutOfBounds(queue))?;
 
         let queues = [DeviceQueueCreateInfo::default()
-            .queue_family_index(queue.try_into().unwrap())
+            .queue_family_index(queue)
             .queue_priorities(&[1.0])];
 
         // Create logical device.
@@ -75,6 +79,12 @@ impl Screen for Vulkan {
 /// Represents an error when [`Vulkan::new()`] fails.
 #[derive(Debug, Error)]
 pub enum VulkanError {
+    #[error("couldn't find suitable queue")]
+    NoQueue,
+
+    #[error("queue index #{0} out of bounds")]
+    QueueOutOfBounds(usize),
+
     #[error("couldn't create a logical device")]
     CreateDeviceFailed(#[source] ash::vk::Result),
 }
