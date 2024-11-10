@@ -28,7 +28,7 @@ fn main() -> AppExit {
 fn run() -> Result<(), ApplicationError> {
     #[cfg(unix)]
     if let Err(e) = rlim::set_rlimit_nofile() {
-        let _ = ui::ErrorDialog::new()
+        ui::ErrorDialog::new()
             .and_then(|error_dialog| {
                 error_dialog.set_message(SharedString::from(format!(
                     "Error setting rlimit: {}",
@@ -37,7 +37,7 @@ fn run() -> Result<(), ApplicationError> {
 
                 error_dialog.run()
             })
-            .inspect_err(|e| eprintln!("Error displaying error dialog: {e}"));
+            .inspect_err(|e| eprintln!("Error displaying error dialog: {e}")).unwrap();
     }
 
     let args = CliArgs::try_parse().map_err(ApplicationError::ParseArgs)?;
@@ -127,16 +127,16 @@ impl Termination for AppExit {
         match self {
             AppExit::Ok => ExitCode::SUCCESS,
             AppExit::Err(e) => {
-                let _ = ui::ErrorDialog::new()
+                ui::ErrorDialog::new()
                     .and_then(|error_dialog| {
                         error_dialog.set_message(SharedString::from(format!(
-                            "Error setting rlimit: {}",
+                            "Error running application: {}",
                             full_error_reason(e)
                         )));
 
                         error_dialog.run()
                     })
-                    .inspect_err(|e| eprintln!("Error displaying error dialog: {e}"));
+                    .inspect_err(|e| eprintln!("Error displaying error dialog: {e}")).unwrap();
 
                 ExitCode::FAILURE
             }
