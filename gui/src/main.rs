@@ -37,7 +37,8 @@ fn run() -> Result<(), ApplicationError> {
 
                 error_dialog.run()
             })
-            .inspect_err(|e| eprintln!("Error displaying error dialog: {e}")).unwrap();
+            .inspect_err(|e| eprintln!("Error displaying error dialog: {e}"))
+            .unwrap();
     }
 
     let args = CliArgs::try_parse().map_err(ApplicationError::ParseArgs)?;
@@ -136,7 +137,8 @@ impl Termination for AppExit {
 
                         error_dialog.run()
                     })
-                    .inspect_err(|e| eprintln!("Error displaying error dialog: {e}")).unwrap();
+                    .inspect_err(|e| eprintln!("Error displaying error dialog: {e}"))
+                    .unwrap();
 
                 ExitCode::FAILURE
             }
