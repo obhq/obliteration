@@ -310,8 +310,7 @@ impl Vmm {
             .map_err(VmmError::BuildRam)?;
 
         // Setup screen.
-        let screen =
-            crate::screen::Default::from_screen(screen).map_err(VmmError::SetupScreen)?;
+        let screen = crate::screen::Default::from_screen(screen).map_err(VmmError::SetupScreen)?;
 
         // Setup CPU manager.
         let shutdown = Arc::new(AtomicBool::new(false));
