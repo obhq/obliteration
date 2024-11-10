@@ -81,17 +81,17 @@ impl Vmm {
         debugger: Option<DebugClient>,
         event_handler: unsafe extern "C" fn(*const VmmEvent, *mut c_void),
         cx: *mut c_void,
-    ) -> Result<Self, StartVmmError> {
+    ) -> Result<Self, VmmError> {
         let path = kernel_path.as_ref();
 
         // Open kernel image.
         let mut kernel_img =
-            Kernel::open(path).map_err(|e| StartVmmError::OpenKernel(e, path.to_path_buf()))?;
+            Kernel::open(path).map_err(|e| VmmError::OpenKernel(e, path.to_path_buf()))?;
 
         // Get program header enumerator.
         let hdrs = kernel_img
             .program_headers()
-            .map_err(|e| StartVmmError::EnumerateProgramHeaders(e, path.to_path_buf()))?;
+            .map_err(|e| VmmError::EnumerateProgramHeaders(e, path.to_path_buf()))?;
 
         // Parse program headers.
         let mut segments = Vec::new();
@@ -101,55 +101,55 @@ impl Vmm {
         for (index, item) in hdrs.enumerate() {
             // Check if success.
             let hdr =
-                item.map_err(|e| StartVmmError::ReadProgramHeader(e, index, path.to_path_buf()))?;
+                item.map_err(|e| VmmError::ReadProgramHeader(e, index, path.to_path_buf()))?;
 
             // Process the header.
             match hdr.p_type {
                 PT_LOAD => {
                     if hdr.p_filesz > u64::try_from(hdr.p_memsz).unwrap() {
-                        return Err(StartVmmError::InvalidFilesz(index));
+                        return Err(VmmError::InvalidFilesz(index));
                     }
 
                     segments.push(hdr);
                 }
                 PT_DYNAMIC => {
                     if dynamic.is_some() {
-                        return Err(StartVmmError::MultipleDynamic);
+                        return Err(VmmError::MultipleDynamic);
                     }
 
                     dynamic = Some(hdr);
                 }
                 PT_NOTE => {
                     if note.is_some() {
-                        return Err(StartVmmError::MultipleNote);
+                        return Err(VmmError::MultipleNote);
                     }
 
                     note = Some(hdr);
                 }
                 PT_PHDR | PT_GNU_EH_FRAME | PT_GNU_STACK | PT_GNU_RELRO => {}
-                v => return Err(StartVmmError::UnknownProgramHeaderType(v, index)),
+                v => return Err(VmmError::UnknownProgramHeaderType(v, index)),
             }
         }
 
         segments.sort_unstable_by_key(|i| i.p_vaddr);
 
         // Make sure the first PT_LOAD includes the ELF header.
-        let hdr = segments.first().ok_or(StartVmmError::NoLoadSegment)?;
+        let hdr = segments.first().ok_or(VmmError::NoLoadSegment)?;
 
         if hdr.p_offset != 0 {
-            return Err(StartVmmError::ElfHeaderNotInFirstLoadSegment);
+            return Err(VmmError::ElfHeaderNotInFirstLoadSegment);
         }
 
         // Check if PT_DYNAMIC exists.
-        let dynamic = dynamic.ok_or(StartVmmError::NoDynamicSegment)?;
+        let dynamic = dynamic.ok_or(VmmError::NoDynamicSegment)?;
 
         // Check if PT_NOTE exists.
-        let note = note.ok_or(StartVmmError::NoNoteSegment)?;
+        let note = note.ok_or(VmmError::NoNoteSegment)?;
 
         // Seek to PT_NOTE.
         let mut data: std::io::Take<&mut std::fs::File> = kernel_img
             .segment_data(&note)
-            .map_err(|e| StartVmmError::SeekToNote(e, path.to_path_buf()))?;
+            .map_err(|e| VmmError::SeekToNote(e, path.to_path_buf()))?;
 
         // Parse PT_NOTE.
         let mut vm_page_size = None;
@@ -164,7 +164,7 @@ impl Vmm {
             let mut buf = [0u8; 4 * 3];
 
             data.read_exact(&mut buf)
-                .map_err(|e| StartVmmError::ReadKernelNote(e, i))?;
+                .map_err(|e| VmmError::ReadKernelNote(e, i))?;
 
             // Parse note header.
             let nlen: usize = u32::from_ne_bytes(buf[..4].try_into().unwrap())
@@ -176,11 +176,11 @@ impl Vmm {
             let ty = u32::from_ne_bytes(buf[8..].try_into().unwrap());
 
             if nlen > 0xff {
-                return Err(StartVmmError::NoteNameTooLarge(i));
+                return Err(VmmError::NoteNameTooLarge(i));
             }
 
             if dlen > 0xff {
-                return Err(StartVmmError::InvalidNoteDescription(i));
+                return Err(VmmError::InvalidNoteDescription(i));
             }
 
             // Read note name + description.
@@ -188,12 +188,12 @@ impl Vmm {
             let mut buf = vec![0u8; nalign + dlen];
 
             data.read_exact(&mut buf)
-                .map_err(|e| StartVmmError::ReadKernelNoteData(e, i))?;
+                .map_err(|e| VmmError::ReadKernelNoteData(e, i))?;
 
             // Check name.
             let name = match CStr::from_bytes_until_nul(&buf) {
                 Ok(v) if v.to_bytes_with_nul().len() == nlen => v,
-                _ => return Err(StartVmmError::InvalidNoteName(i)),
+                _ => return Err(VmmError::InvalidNoteName(i)),
             };
 
             if name.to_bytes() != b"obkrnl" {
@@ -204,7 +204,7 @@ impl Vmm {
             match ty {
                 0 => {
                     if vm_page_size.is_some() {
-                        return Err(StartVmmError::DuplicateKernelNote(i));
+                        return Err(VmmError::DuplicateKernelNote(i));
                     }
                     vm_page_size = buf[nalign..]
                         .try_into()
@@ -214,40 +214,40 @@ impl Vmm {
                         .filter(|v| v.is_power_of_two());
 
                     if vm_page_size.is_none() {
-                        return Err(StartVmmError::InvalidNoteDescription(i));
+                        return Err(VmmError::InvalidNoteDescription(i));
                     }
                 }
-                v => return Err(StartVmmError::UnknownKernelNoteType(v, i)),
+                v => return Err(VmmError::UnknownKernelNoteType(v, i)),
             }
         }
 
         // Check if page size exists.
-        let vm_page_size = vm_page_size.ok_or(StartVmmError::NoPageSizeInKernelNote)?;
+        let vm_page_size = vm_page_size.ok_or(VmmError::NoPageSizeInKernelNote)?;
 
         // Get page size on the host.
-        let host_page_size = get_page_size().map_err(StartVmmError::GetHostPageSize)?;
+        let host_page_size = get_page_size().map_err(VmmError::GetHostPageSize)?;
 
         // Get kernel memory size.
         let mut len = 0;
 
         for hdr in &segments {
             if hdr.p_vaddr < len {
-                return Err(StartVmmError::OverlappedLoadSegment(hdr.p_vaddr));
+                return Err(VmmError::OverlappedLoadSegment(hdr.p_vaddr));
             }
 
             len = hdr
                 .p_vaddr
                 .checked_add(hdr.p_memsz)
-                .ok_or(StartVmmError::InvalidPmemsz(hdr.p_vaddr))?;
+                .ok_or(VmmError::InvalidPmemsz(hdr.p_vaddr))?;
         }
 
         // Round kernel memory size.
         let block_size = max(vm_page_size, host_page_size);
         let len = NonZero::new(len)
-            .ok_or(StartVmmError::ZeroLengthLoadSegment)?
+            .ok_or(VmmError::ZeroLengthLoadSegment)?
             .get()
             .checked_next_multiple_of(block_size.get())
-            .ok_or(StartVmmError::TotalSizeTooLarge)?;
+            .ok_or(VmmError::TotalSizeTooLarge)?;
 
         // Setup RAM.
         let ram_size = NonZero::new(1024 * 1024 * 1024 * 8).unwrap();
@@ -261,7 +261,7 @@ impl Vmm {
 
         // Setup hypervisor.
         let mut hv = unsafe { self::hv::new(8, ram_size, block_size, debugger.is_some()) }
-            .map_err(StartVmmError::SetupHypervisor)?;
+            .map_err(VmmError::SetupHypervisor)?;
 
         // Map the kernel.
         let feats = hv.cpu_features().clone();
@@ -269,13 +269,13 @@ impl Vmm {
 
         let kern = ram
             .alloc_kernel(NonZero::new(len).unwrap())
-            .map_err(StartVmmError::AllocateRamForKernel)?;
+            .map_err(VmmError::AllocateRamForKernel)?;
 
         for hdr in &segments {
             // Seek to segment data.
             let mut data = kernel_img
                 .segment_data(hdr)
-                .map_err(StartVmmError::SeekToOffset)?;
+                .map_err(VmmError::SeekToOffset)?;
 
             // Read segment data.
             let mut seg = &mut kern[hdr.p_vaddr..(hdr.p_vaddr + hdr.p_memsz)];
@@ -283,16 +283,16 @@ impl Vmm {
             match std::io::copy(&mut data, &mut seg) {
                 Ok(v) => {
                     if v != hdr.p_filesz {
-                        return Err(StartVmmError::IncompleteKernel(path.to_path_buf()));
+                        return Err(VmmError::IncompleteKernel(path.to_path_buf()));
                     }
                 }
-                Err(e) => return Err(StartVmmError::ReadKernel(e, hdr.p_offset)),
+                Err(e) => return Err(VmmError::ReadKernel(e, hdr.p_offset)),
             }
         }
 
         // Allocate stack.
         ram.alloc_stack(NonZero::new(1024 * 1024 * 2).unwrap())
-            .map_err(StartVmmError::AllocateRamForStack)?;
+            .map_err(VmmError::AllocateRamForStack)?;
 
         // Allocate arguments.
         let env = BootEnv::Vm(Vm {
@@ -302,16 +302,16 @@ impl Vmm {
         });
 
         ram.alloc_args(env, profile.kernel_config().clone())
-            .map_err(StartVmmError::AllocateRamForArgs)?;
+            .map_err(VmmError::AllocateRamForArgs)?;
 
         // Build RAM.
         let map = ram
             .build(&feats, vm_page_size, &devices, dynamic)
-            .map_err(StartVmmError::BuildRam)?;
+            .map_err(VmmError::BuildRam)?;
 
         // Setup screen.
         let screen =
-            crate::screen::Default::from_screen(screen).map_err(StartVmmError::SetupScreen)?;
+            crate::screen::Default::from_screen(screen).map_err(VmmError::SetupScreen)?;
 
         // Setup CPU manager.
         let shutdown = Arc::new(AtomicBool::new(false));
@@ -328,7 +328,7 @@ impl Vmm {
             .map(|client| {
                 gdbstub::stub::GdbStub::new(client)
                     .run_state_machine(&mut cpu_manager)
-                    .map_err(StartVmmError::SetupGdbStub)
+                    .map_err(VmmError::SetupGdbStub)
             })
             .transpose()?;
 
@@ -445,7 +445,7 @@ pub enum DebugResult {
 }
 
 #[derive(Debug, Error)]
-pub enum StartVmmError {
+pub enum VmmError {
     #[error("couldn't open kernel path {1}")]
     OpenKernel(#[source] KernelError, PathBuf),
 
