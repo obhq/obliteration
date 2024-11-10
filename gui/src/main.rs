@@ -40,7 +40,7 @@ fn run() -> Result<(), ApplicationError> {
             .inspect_err(|e| eprintln!("Error displaying error dialog: {e}"));
     }
 
-    let args = CliArgs::try_parse()?;
+    let args = CliArgs::try_parse().map_err(ApplicationError::ParseArgs)?;
 
     if let Some(debug_addr) = args.debug_addr() {
         let debug_server = DebugServer::new(debug_addr)
@@ -127,7 +127,17 @@ impl Termination for AppExit {
         match self {
             AppExit::Ok => ExitCode::SUCCESS,
             AppExit::Err(e) => {
-                eprintln!("{}", e);
+                let _ = ui::ErrorDialog::new()
+                    .and_then(|error_dialog| {
+                        error_dialog.set_message(SharedString::from(format!(
+                            "Error setting rlimit: {}",
+                            full_error_reason(e)
+                        )));
+
+                        error_dialog.run()
+                    })
+                    .inspect_err(|e| eprintln!("Error displaying error dialog: {e}"));
+
                 ExitCode::FAILURE
             }
         }
@@ -146,20 +156,20 @@ impl From<Result<(), ApplicationError>> for AppExit {
 #[derive(Debug, Error)]
 pub enum ApplicationError {
     #[error(transparent)]
-    ParseArgs(#[from] clap::Error),
+    ParseArgs(clap::Error),
 
-    #[error("failed to start debug server on {1} -> {0}")]
+    #[error("failed to start debug server on {1}")]
     StartDebugServer(
         #[source] debug::StartDebugServerError,
         std::net::SocketAddrV4,
     ),
 
-    #[error("failed to accept debug client -> {0}")]
+    #[error("failed to accept debug client")]
     CreateDebugClient(#[source] std::io::Error),
 
-    #[error("failed to create main window -> {0}")]
+    #[error("failed to create main window")]
     CreateMainWindow(#[source] slint::PlatformError),
 
-    #[error("failed to run main window -> {0}")]
+    #[error("failed to run main window")]
     RunMainWindow(#[source] slint::PlatformError),
 }
