@@ -522,7 +522,7 @@ pub enum StartVmmError {
     TotalSizeTooLarge,
 
     #[error("couldn't setup a hypervisor")]
-    SetupHypervisor(#[source] hv::DefaultError),
+    SetupHypervisor(#[source] hv::HypervisorError),
 
     #[error("couldn't allocate RAM for the kernel")]
     AllocateRamForKernel(#[source] hv::RamError),

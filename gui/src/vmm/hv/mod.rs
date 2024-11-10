@@ -25,13 +25,13 @@ pub type Default = self::os::Hvf;
 pub type Default = self::os::Whp;
 
 #[cfg(target_os = "linux")]
-pub type DefaultError = self::os::KvmError;
+pub type HypervisorError = self::os::KvmError;
 
 #[cfg(target_os = "macos")]
-pub type DefaultError = self::os::HvfError;
+pub type HypervisorError = self::os::HvfError;
 
 #[cfg(target_os = "windows")]
-pub type DefaultError = self::os::WhpError;
+pub type HypervisorError = self::os::WhpError;
 
 /// Underlying hypervisor (e.g. KVM on Linux).
 pub trait Hypervisor: Send + Sync + 'static {
