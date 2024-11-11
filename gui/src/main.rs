@@ -1,6 +1,7 @@
 use args::CliArgs;
 use clap::Parser;
 use debug::DebugServer;
+use screen::{GraphicsApi, PhysicalDevice};
 use slint::{ComponentHandle, ModelExt, ModelRc, SharedString, VecModel};
 use std::process::{ExitCode, Termination};
 use thiserror::Error;
@@ -69,6 +70,16 @@ struct App {
 impl App {
     fn new() -> Result<Self, ApplicationError> {
         let main_window = ui::MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
+
+        let graphics_api = screen::DefaultApi::init().map_err(ApplicationError::InitGraphicsApi)?;
+
+        let devices: Vec<SharedString> = graphics_api
+            .enumerate_physical_devices()
+            .into_iter()
+            .map(|d| SharedString::from(d.name()))
+            .collect();
+
+        main_window.set_devices(ModelRc::new(VecModel::from(devices)));
 
         let games = ModelRc::new(VecModel::from(Vec::new()));
 
@@ -171,6 +182,9 @@ pub enum ApplicationError {
 
     #[error("failed to create main window")]
     CreateMainWindow(#[source] slint::PlatformError),
+
+    #[error("failed to initialize graphics API")]
+    InitGraphicsApi(#[source] <screen::DefaultApi as GraphicsApi>::InitError),
 
     #[error("failed to run main window")]
     RunMainWindow(#[source] slint::PlatformError),
