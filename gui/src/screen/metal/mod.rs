@@ -11,7 +11,9 @@ use thiserror::Error;
 
 mod buffer;
 
-pub struct Metal {}
+pub struct Metal {
+    devices: Vec<metal::Device>,
+}
 
 impl super::GraphicsApi for Metal {
     type PhysicalDevice = metal::Device;
@@ -19,17 +21,17 @@ impl super::GraphicsApi for Metal {
     type InitError = MetalInitError;
 
     fn init() -> Result<Self, Self::InitError> {
-        todo!()
+        Ok(Self { devices: Device::all()})
     }
 
     fn enumerate_physical_devices(&self) -> &[Self::PhysicalDevice] {
-        todo!()
+        &self.devices
     }
 }
 
 impl super::PhysicalDevice for metal::Device {
     fn name(&self) -> &str {
-        todo!()
+        self.name()
     }
 }
 
