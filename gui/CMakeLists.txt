@@ -66,6 +66,10 @@ target_link_libraries(obliteration PRIVATE Qt6::Svg Qt6::Widgets)
 target_link_libraries(obliteration PRIVATE Threads::Threads)
 target_link_libraries(obliteration PRIVATE gui)
 
+if(WIN32 OR (UNIX AND NOT APPLE))
+    target_link_libraries(obliteration PRIVATE Vulkan::Vulkan)
+endif()
+
 if(WIN32)
     target_link_libraries(obliteration PRIVATE bcrypt imm32 ntdll setupapi userenv version winhvplatform winmm ws2_32)
 elseif(APPLE)

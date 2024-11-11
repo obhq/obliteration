@@ -1,0 +1,178 @@
+import { Button, StandardButton, AboutSlint } from "std-widgets.slint";
+export component Menu {
+    in property <brush> background;
+    in property <length> popup_width;
+    in property <length> popup_height;
+    in property <length> popup_x;
+    in property <length> popup_y;
+
+    pure callback quit();
+    pure callback open_new_issue_link();
+    pure callback open_system_folder();
+    pure callback install_pkg();
+
+    install_pkg_dialog := PopupWindow {
+        width: popup_width;
+        height: popup_height;
+        x: popup_x;
+        y: popup_y;
+        
+        Dialog {
+            Text {
+                text: "This is a dialog box";
+            }
+            StandardButton { kind: ok; }
+            StandardButton { kind: cancel; }
+        }
+    }
+
+    about_dialog := PopupWindow {
+        width: popup_width;
+        height: popup_height;
+        x: popup_x;
+        y: popup_y;
+
+        Rectangle { 
+            Dialog {
+                Text {
+                    text: "Obliteration is a free and open-source software for playing your PlayStation 4 titles on PC.";
+                }
+                StandardButton { kind: ok; }
+            }
+        }
+    }
+
+    about_slint := PopupWindow {
+        width: popup_width;
+        height: popup_height;
+        x: popup_x;
+        y: popup_y;
+
+        Rectangle { 
+            Dialog {
+                AboutSlint {}
+                StandardButton { kind: ok;  }
+            }
+        }
+    }
+
+    logs := PopupWindow {
+        width: popup_width;
+        height: popup_height;
+        x: popup_x;
+        y: popup_y;
+
+        Rectangle { 
+            Text {
+                text: "Obliteration is a free and open-source software for playing your PlayStation 4 titles on PC.";
+            }
+        }
+    }
+
+    HorizontalLayout {
+        alignment: start;
+        spacing: 5px;
+        padding-left: 5px;
+
+        VerticalLayout {
+            TouchArea {
+                clicked => { files_popup.show(); }
+
+                Rectangle {
+                    Text {
+                        text: "File";
+                    }
+                }
+            } 
+
+            files_popup := PopupWindow {
+                y: parent.y + parent.height;
+
+                Rectangle {
+                    background: background;
+
+                    VerticalLayout {
+                        spacing: 0px;
+
+                        Button {
+                            text: "Install PKG";
+                            clicked => { install_pkg(); }
+                        }
+                        Button {
+                            text: "Open System Folder";
+                            clicked => { open_system_folder(); }
+                        }
+                        Button {
+                            text: "Quit";
+                            clicked => { quit() }
+                        }
+                    }
+                }
+            }
+        }
+        VerticalLayout {
+            TouchArea {
+                clicked => { view_popup.show(); }
+
+                Rectangle {
+                    Text {
+                        text: "View";
+                    }
+                }
+            }  
+            
+            view_popup := PopupWindow {
+                y: parent.y + parent.height;
+
+                Rectangle {
+                    background: background;
+
+                    VerticalLayout {
+                        spacing: 0px;
+                        
+                        Button {
+                            text: "Logs";
+                            clicked => { logs.show(); }
+                        }
+                    }
+                }
+            }
+        }
+        VerticalLayout {
+            TouchArea {
+                clicked => { help_popup.show(); }
+
+                Rectangle {
+                    Text {
+                        text: "Help";
+                    }
+                }
+            }  
+            
+            help_popup := PopupWindow {
+                y: parent.y + parent.height;
+
+                Rectangle {
+                    background: background;
+
+                    VerticalLayout {
+                        spacing: 0px;
+
+                        Button {
+                            text: "Report an Issue";
+                            clicked => { open_new_issue_link(); }
+                        }
+                        Button {
+                            text: "About Slint";
+                            clicked => { about_slint.show(); }
+                        }
+                        Button {
+                            text: "About Obliteration";
+                            clicked => { about_dialog.show(); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

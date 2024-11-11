@@ -1,4 +1,5 @@
 use cbindgen::{Builder, Config, Language, Style};
+use slint_build::CompilerConfiguration;
 use std::path::PathBuf;
 
 const LINUX_INCLUDE: &str = r#"
@@ -8,6 +9,25 @@ const LINUX_INCLUDE: &str = r#"
 "#;
 
 fn main() {
+    if std::env::var("CARGO_FEATURE_SLINT").is_ok_and(|var| var == "1") {
+        build_bin();
+    }
+
+    if std::env::var("CARGO_FEATURE_QT").is_ok_and(|var| var == "1") {
+        build_lib();
+    }
+}
+
+fn build_bin() {
+    // Compile main
+    slint_build::compile_with_config(
+        "slint/main.slint",
+        CompilerConfiguration::new().with_style(String::from("fluent-dark")),
+    )
+    .unwrap();
+}
+
+fn build_lib() {
     let root = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let mut conf = Config::default();
     let mut buf = String::new();

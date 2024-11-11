@@ -1,7 +1,7 @@
 {
   "configurations": [
     {
-      "name": "GUI",
+      "name": "GUI (Qt)",
       "type": "lldb",
       "request": "launch",
       "args": [
@@ -23,6 +23,24 @@
       }
     },
     {
+      "name": "GUI (Slint)",
+      "type": "lldb",
+      "request": "launch",
+      "cargo": {
+	"args": [
+	  "build",
+	  "--manifest-path",
+	  "${workspaceFolder}/gui/Cargo.toml",
+	  "--features",
+	  "slint"
+	],
+	"filter": {
+	  "kind": "bin"
+	}
+      },
+      "cwd": "${workspaceFolder}"
+    },
+    {
       "name": "Kernel",
       "type": "lldb",
       "request": "custom",
@@ -31,10 +49,10 @@
         "target create ${workspaceFolder}/build/obkrnl",
         "target modules load --file ${workspaceFolder}/build/obkrnl -s 0xffffffff82200000"
       ],
-      "processCreateCommands": [
-        "gdb-remote 1234"
-      ]
+      "processCreateCommands": ["gdb-remote 1234"]
     }
   ],
   "version": "2.0.0"
 }
+
+

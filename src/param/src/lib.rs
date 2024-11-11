@@ -1,5 +1,7 @@
 use byteorder::{ByteOrder, BE, LE};
+use std::fs::File;
 use std::io::{ErrorKind, Read, Seek, SeekFrom};
+use std::path::Path;
 use thiserror::Error;
 
 /// A loaded param.sfo.
@@ -16,6 +18,12 @@ pub struct Param {
 }
 
 impl Param {
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, OpenError> {
+        let file = File::open(path).map_err(OpenError::OpenFailed)?;
+
+        Self::read(file).map_err(OpenError::ReadFailed)
+    }
+
     pub fn read<R: Read + Seek>(mut raw: R) -> Result<Self, ReadError> {
         // Seek to the beginning.
         if let Err(e) = raw.seek(SeekFrom::Start(0)) {
@@ -236,6 +244,15 @@ impl Param {
             .map(String::into_boxed_str)
             .map_err(|_| ReadError::InvalidValue(i.try_into().unwrap()))
     }
+}
+
+#[derive(Debug, Error)]
+pub enum OpenError {
+    #[error("couldn't open the file")]
+    OpenFailed(#[source] std::io::Error),
+
+    #[error("couldn't read the file")]
+    ReadFailed(#[source] ReadError),
 }
 
 /// Errors for reading param.sfo.

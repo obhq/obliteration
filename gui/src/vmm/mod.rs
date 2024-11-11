@@ -10,16 +10,17 @@ use crate::debug::DebugClient;
 use crate::error::RustError;
 use crate::profile::Profile;
 use crate::screen::Screen;
-use gdbstub::common::Signal;
+use cpu::GdbError;
 use gdbstub::stub::state_machine::GdbStubStateMachine;
-use gdbstub::stub::MultiThreadStopReason;
+use gdbstub::stub::{GdbStubError, MultiThreadStopReason};
+use kernel::{KernelError, ProgramHeaderError};
 use obconf::{BootEnv, ConsoleType, Vm};
 use std::cmp::max;
 use std::error::Error;
 use std::ffi::{c_char, c_void, CStr};
 use std::io::Read;
 use std::num::NonZero;
-use std::ptr::null_mut;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
@@ -29,531 +30,12 @@ use thiserror::Error;
 mod arch;
 mod cpu;
 mod debug;
+#[cfg(feature = "qt")]
+mod ffi;
 mod hv;
 mod hw;
 mod kernel;
 mod ram;
-
-#[no_mangle]
-pub unsafe extern "C" fn vmm_start(
-    kernel: *const c_char,
-    screen: *const VmmScreen,
-    profile: *const Profile,
-    debugger: *mut DebugClient,
-    event: unsafe extern "C" fn(*const VmmEvent, *mut c_void),
-    cx: *mut c_void,
-    err: *mut *mut RustError,
-) -> *mut Vmm {
-    // Consume the debugger now to prevent memory leak in case of error.
-    let debugger = match debugger.is_null() {
-        true => None,
-        false => Some(Box::from_raw(debugger)),
-    };
-
-    // Check if path UTF-8.
-    let path = match CStr::from_ptr(kernel).to_str() {
-        Ok(v) => v,
-        Err(_) => {
-            *err = RustError::new("path of the kernel is not UTF-8").into_c();
-            return null_mut();
-        }
-    };
-
-    // Open kernel image.
-    let mut file = match Kernel::open(path) {
-        Ok(v) => v,
-        Err(e) => {
-            *err = RustError::with_source(format_args!("couldn't open {path}"), e).into_c();
-            return null_mut();
-        }
-    };
-
-    // Get program header enumerator.
-    let hdrs = match file.program_headers() {
-        Ok(v) => v,
-        Err(e) => {
-            *err = RustError::with_source(
-                format_args!("couldn't start enumerating program headers of {path}"),
-                e,
-            )
-            .into_c();
-
-            return null_mut();
-        }
-    };
-
-    // Parse program headers.
-    let mut segments = Vec::new();
-    let mut dynamic = None;
-    let mut note = None;
-
-    for (index, item) in hdrs.enumerate() {
-        // Check if success.
-        let hdr = match item {
-            Ok(v) => v,
-            Err(e) => {
-                *err = RustError::with_source(
-                    format_args!("couldn't read program header #{index} on {path}"),
-                    e,
-                )
-                .into_c();
-
-                return null_mut();
-            }
-        };
-
-        // Process the header.
-        match hdr.p_type {
-            PT_LOAD => {
-                if hdr.p_filesz > TryInto::<u64>::try_into(hdr.p_memsz).unwrap() {
-                    *err =
-                        RustError::new(format!("invalid p_filesz on on PT_LOAD {index}")).into_c();
-                    return null_mut();
-                }
-
-                segments.push(hdr);
-            }
-            PT_DYNAMIC => {
-                if dynamic.is_some() {
-                    *err = RustError::new("multiple PT_DYNAMIC is not supported").into_c();
-                    return null_mut();
-                }
-
-                dynamic = Some(hdr);
-            }
-            PT_NOTE => {
-                if note.is_some() {
-                    *err = RustError::new("multiple PT_NOTE is not supported").into_c();
-                    return null_mut();
-                }
-
-                note = Some(hdr);
-            }
-            PT_PHDR | PT_GNU_EH_FRAME | PT_GNU_STACK | PT_GNU_RELRO => {}
-            v => {
-                *err = RustError::new(format!("unknown p_type {v} on program header {index}"))
-                    .into_c();
-                return null_mut();
-            }
-        }
-    }
-
-    segments.sort_unstable_by_key(|i| i.p_vaddr);
-
-    // Make sure the first PT_LOAD includes the ELF header.
-    match segments.first() {
-        Some(hdr) => {
-            if hdr.p_offset != 0 {
-                *err = RustError::new("the first PT_LOAD does not includes ELF header").into_c();
-                return null_mut();
-            }
-        }
-        None => {
-            *err = RustError::new("no any PT_LOAD on the kernel").into_c();
-            return null_mut();
-        }
-    }
-
-    // Check if PT_DYNAMIC exists.
-    let dynamic = match dynamic {
-        Some(v) => v,
-        None => {
-            *err = RustError::new("no PT_DYNAMIC segment on the kernel").into_c();
-            return null_mut();
-        }
-    };
-
-    // Check if PT_NOTE exists.
-    let note = match note {
-        Some(v) => v,
-        None => {
-            *err = RustError::new("no PT_NOTE segment on the kernel").into_c();
-            return null_mut();
-        }
-    };
-
-    // Seek to PT_NOTE.
-    let mut data = match file.segment_data(&note) {
-        Ok(v) => v,
-        Err(e) => {
-            *err = RustError::with_source(format_args!("couldn't seek to PT_NOTE on {path}"), e)
-                .into_c();
-            return null_mut();
-        }
-    };
-
-    // Parse PT_NOTE.
-    let mut vm_page_size = None;
-
-    for i in 0.. {
-        // Check remaining data.
-        if data.limit() == 0 {
-            break;
-        }
-
-        // Read note header.
-        let mut buf = [0u8; 4 * 3];
-
-        if let Err(e) = data.read_exact(&mut buf) {
-            *err = RustError::with_source(format_args!("couldn't read kernel note #{i} header"), e)
-                .into_c();
-            return null_mut();
-        }
-
-        // Parse note header.
-        let nlen: usize = u32::from_ne_bytes(buf[..4].try_into().unwrap())
-            .try_into()
-            .unwrap();
-        let dlen: usize = u32::from_ne_bytes(buf[4..8].try_into().unwrap())
-            .try_into()
-            .unwrap();
-        let ty = u32::from_ne_bytes(buf[8..].try_into().unwrap());
-
-        if nlen > 0xff {
-            *err = RustError::new(format!("name on kernel note #{i} is too large")).into_c();
-            return null_mut();
-        }
-
-        if dlen > 0xff {
-            *err = RustError::new(format!("description on kernel note #{i} is too large")).into_c();
-            return null_mut();
-        }
-
-        // Read note name + description.
-        let nalign = nlen.next_multiple_of(4);
-        let mut buf = vec![0u8; nalign + dlen];
-
-        if let Err(e) = data.read_exact(&mut buf) {
-            *err = RustError::with_source(format_args!("couldn't read kernel note #{i} data"), e)
-                .into_c();
-            return null_mut();
-        }
-
-        // Check name.
-        let name = match CStr::from_bytes_until_nul(&buf) {
-            Ok(v) if v.to_bytes_with_nul().len() == nlen => v,
-            _ => {
-                *err = RustError::new(format!("kernel note #{i} has invalid name")).into_c();
-                return null_mut();
-            }
-        };
-
-        if name.to_bytes() != b"obkrnl" {
-            continue;
-        }
-
-        // Parse description.
-        match ty {
-            0 => {
-                if vm_page_size.is_some() {
-                    *err = RustError::new(format!("kernel note #{i} is duplicated")).into_c();
-                    return null_mut();
-                }
-
-                vm_page_size = buf[nalign..]
-                    .try_into()
-                    .map(usize::from_ne_bytes)
-                    .ok()
-                    .and_then(NonZero::new)
-                    .filter(|v| v.is_power_of_two());
-
-                if vm_page_size.is_none() {
-                    *err =
-                        RustError::new(format!("invalid description on kernel note #{i}")).into_c();
-                    return null_mut();
-                }
-            }
-            v => {
-                *err = RustError::new(format!("unknown type {v} on kernel note #{i}")).into_c();
-                return null_mut();
-            }
-        }
-    }
-
-    // Check if page size exists.
-    let vm_page_size = match vm_page_size {
-        Some(v) => v,
-        None => {
-            *err = RustError::new("no page size in kernel note").into_c();
-            return null_mut();
-        }
-    };
-
-    // Get page size on the host.
-    let host_page_size = match get_page_size() {
-        Ok(v) => v,
-        Err(e) => {
-            *err = RustError::with_source("couldn't get host page size", e).into_c();
-            return null_mut();
-        }
-    };
-
-    // Get kernel memory size.
-    let mut len = 0;
-
-    for hdr in &segments {
-        if hdr.p_vaddr < len {
-            *err = RustError::new(format!(
-                "PT_LOAD at {:#x} is overlapped with the previous PT_LOAD",
-                hdr.p_vaddr
-            ))
-            .into_c();
-
-            return null_mut();
-        }
-
-        len = match hdr.p_vaddr.checked_add(hdr.p_memsz) {
-            Some(v) => v,
-            None => {
-                *err = RustError::new(format!("invalid p_memsz on PT_LOAD at {:#x}", hdr.p_vaddr))
-                    .into_c();
-                return null_mut();
-            }
-        };
-    }
-
-    // Round kernel memory size.
-    let block_size = max(vm_page_size, host_page_size);
-    let len = match len {
-        0 => {
-            *err = RustError::new("the kernel has PT_LOAD with zero length").into_c();
-            return null_mut();
-        }
-        v => match v.checked_next_multiple_of(block_size.get()) {
-            Some(v) => NonZero::new_unchecked(v),
-            None => {
-                *err = RustError::new("total size of PT_LOAD is too large").into_c();
-                return null_mut();
-            }
-        },
-    };
-
-    // Setup virtual devices.
-    let ram = NonZero::new(1024 * 1024 * 1024 * 8).unwrap();
-    let event = VmmEventHandler { fp: event, cx };
-    let devices = Arc::new(setup_devices(ram.get(), block_size, event));
-
-    // Setup hypervisor.
-    let mut hv = match self::hv::new(8, ram, block_size, debugger.is_some()) {
-        Ok(v) => v,
-        Err(e) => {
-            *err = RustError::with_source("couldn't setup a hypervisor", e).into_c();
-            return null_mut();
-        }
-    };
-
-    // Map the kernel.
-    let feats = hv.cpu_features().clone();
-    let mut ram = RamBuilder::new(hv.ram_mut());
-    let kern = match ram.alloc_kernel(len) {
-        Ok(v) => v,
-        Err(e) => {
-            *err = RustError::with_source("couldn't allocate RAM for the kernel", e).into_c();
-            return null_mut();
-        }
-    };
-
-    for hdr in &segments {
-        // Seek to segment data.
-        let mut data = match file.segment_data(hdr) {
-            Ok(v) => v,
-            Err(e) => {
-                *err = RustError::with_source(
-                    format_args!("couldn't seek to offset {}", hdr.p_offset),
-                    e,
-                )
-                .into_c();
-
-                return null_mut();
-            }
-        };
-
-        // Read segment data.
-        let mut seg = &mut kern[hdr.p_vaddr..(hdr.p_vaddr + hdr.p_memsz)];
-
-        match std::io::copy(&mut data, &mut seg) {
-            Ok(v) => {
-                if v != hdr.p_filesz {
-                    *err = RustError::new(format!("{path} is incomplete")).into_c();
-                    return null_mut();
-                }
-            }
-            Err(e) => {
-                *err = RustError::with_source(
-                    format_args!("couldn't read kernet at offset {}", hdr.p_offset),
-                    e,
-                )
-                .into_c();
-
-                return null_mut();
-            }
-        }
-    }
-
-    // Allocate stack.
-    if let Err(e) = ram.alloc_stack(NonZero::new(1024 * 1024 * 2).unwrap()) {
-        *err = RustError::with_source("couldn't allocate RAM for stack", e).into_c();
-        return null_mut();
-    }
-
-    // Allocate arguments.
-    let env = BootEnv::Vm(Vm {
-        vmm: devices.vmm().addr(),
-        console: devices.console().addr(),
-        host_page_size,
-    });
-
-    if let Err(e) = ram.alloc_args(env, (*profile).kernel_config().clone()) {
-        *err = RustError::with_source("couldn't allocate RAM for arguments", e).into_c();
-        return null_mut();
-    }
-
-    // Build RAM.
-    let map = match ram.build(&feats, vm_page_size, &devices, dynamic) {
-        Ok(v) => v,
-        Err(e) => {
-            *err = RustError::with_source("couldn't build RAM", e).into_c();
-            return null_mut();
-        }
-    };
-
-    // Setup screen.
-    let screen = match crate::screen::Default::new(&*screen) {
-        Ok(v) => v,
-        Err(e) => {
-            *err = RustError::with_source("couldn't setup a screen", e).into_c();
-            return null_mut();
-        }
-    };
-
-    // Setup CPU manager.
-    let shutdown = Arc::new(AtomicBool::new(false));
-    let mut cpu = CpuManager::new(
-        Arc::new(hv),
-        screen.buffer().clone(),
-        devices,
-        event,
-        shutdown.clone(),
-    );
-
-    // Setup GDB stub.
-    let gdb = match debugger
-        .map(|client| {
-            gdbstub::stub::GdbStub::new(*client)
-                .run_state_machine(&mut cpu)
-                .map_err(|e| RustError::with_source("couldn't setup a GDB stub", e))
-        })
-        .transpose()
-    {
-        Ok(v) => v,
-        Err(e) => {
-            *err = e.into_c();
-            return null_mut();
-        }
-    };
-
-    // Spawn main CPU.
-    cpu.spawn(map.kern_vaddr + file.entry(), Some(map), gdb.is_some());
-
-    // Create VMM.
-    let vmm = Vmm {
-        cpu,
-        screen,
-        gdb,
-        shutdown,
-    };
-
-    Box::into_raw(vmm.into())
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn vmm_free(vmm: *mut Vmm) {
-    drop(Box::from_raw(vmm));
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn vmm_draw(vmm: *mut Vmm) -> *mut RustError {
-    match (*vmm).screen.update() {
-        Ok(_) => null_mut(),
-        Err(e) => RustError::wrap(e).into_c(),
-    }
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn vmm_dispatch_debug(vmm: *mut Vmm, stop: *mut KernelStop) -> DebugResult {
-    // Consume stop reason now to prevent memory leak.
-    let vmm = &mut *vmm;
-    let mut stop = match stop.is_null() {
-        true => None,
-        false => Some(Box::from_raw(stop).0),
-    };
-
-    loop {
-        // Check current state.
-        let r = match vmm.gdb.take().unwrap() {
-            GdbStubStateMachine::Idle(s) => match self::debug::dispatch_idle(&mut vmm.cpu, s) {
-                Ok(Ok(v)) => Ok(v),
-                Ok(Err(v)) => {
-                    // No pending data from the debugger.
-                    vmm.gdb = Some(v.into());
-                    return DebugResult::Ok;
-                }
-                Err(e) => Err(e),
-            },
-            GdbStubStateMachine::Running(s) => {
-                match self::debug::dispatch_running(&mut vmm.cpu, s, stop.take()) {
-                    Ok(Ok(v)) => Ok(v),
-                    Ok(Err(v)) => {
-                        // No pending data from the debugger.
-                        vmm.gdb = Some(v.into());
-                        return DebugResult::Ok;
-                    }
-                    Err(e) => Err(e),
-                }
-            }
-            GdbStubStateMachine::CtrlCInterrupt(s) => {
-                vmm.cpu.lock();
-
-                s.interrupt_handled(
-                    &mut vmm.cpu,
-                    Some(MultiThreadStopReason::Signal(Signal::SIGINT)),
-                )
-                .map_err(|e| RustError::with_source("couldn't handle CTRL+C from a debugger", e))
-            }
-            GdbStubStateMachine::Disconnected(_) => return DebugResult::Disconnected,
-        };
-
-        match r {
-            Ok(v) => vmm.gdb = Some(v),
-            Err(e) => return DebugResult::Error { reason: e.into_c() },
-        }
-    }
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn vmm_debug_socket(vmm: *mut Vmm) -> isize {
-    let s = match &mut (*vmm).gdb {
-        Some(v) => v,
-        None => return -1,
-    };
-
-    match s {
-        GdbStubStateMachine::Idle(s) => s.borrow_conn().socket() as _,
-        GdbStubStateMachine::Running(s) => s.borrow_conn().socket() as _,
-        GdbStubStateMachine::CtrlCInterrupt(s) => s.borrow_conn().socket() as _,
-        GdbStubStateMachine::Disconnected(s) => s.borrow_conn().socket() as _,
-    }
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn vmm_shutdown(vmm: *mut Vmm) {
-    (*vmm).shutdown.store(true, Ordering::Relaxed);
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn vmm_shutting_down(vmm: *mut Vmm) -> bool {
-    (*vmm).shutdown.load(Ordering::Relaxed)
-}
 
 #[cfg(unix)]
 fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
@@ -591,6 +73,283 @@ pub struct Vmm {
     shutdown: Arc<AtomicBool>,
 }
 
+impl Vmm {
+    pub fn new(
+        kernel_path: impl AsRef<Path>,
+        screen: &VmmScreen,
+        profile: &Profile,
+        debugger: Option<DebugClient>,
+        event_handler: unsafe extern "C" fn(*const VmmEvent, *mut c_void),
+        cx: *mut c_void,
+    ) -> Result<Self, VmmError> {
+        let path = kernel_path.as_ref();
+
+        // Open kernel image.
+        let mut kernel_img =
+            Kernel::open(path).map_err(|e| VmmError::OpenKernel(e, path.to_path_buf()))?;
+
+        // Get program header enumerator.
+        let hdrs = kernel_img
+            .program_headers()
+            .map_err(|e| VmmError::EnumerateProgramHeaders(e, path.to_path_buf()))?;
+
+        // Parse program headers.
+        let mut segments = Vec::new();
+        let mut dynamic = None;
+        let mut note = None;
+
+        for (index, item) in hdrs.enumerate() {
+            // Check if success.
+            let hdr =
+                item.map_err(|e| VmmError::ReadProgramHeader(e, index, path.to_path_buf()))?;
+
+            // Process the header.
+            match hdr.p_type {
+                PT_LOAD => {
+                    if hdr.p_filesz > u64::try_from(hdr.p_memsz).unwrap() {
+                        return Err(VmmError::InvalidFilesz(index));
+                    }
+
+                    segments.push(hdr);
+                }
+                PT_DYNAMIC => {
+                    if dynamic.is_some() {
+                        return Err(VmmError::MultipleDynamic);
+                    }
+
+                    dynamic = Some(hdr);
+                }
+                PT_NOTE => {
+                    if note.is_some() {
+                        return Err(VmmError::MultipleNote);
+                    }
+
+                    note = Some(hdr);
+                }
+                PT_PHDR | PT_GNU_EH_FRAME | PT_GNU_STACK | PT_GNU_RELRO => {}
+                v => return Err(VmmError::UnknownProgramHeaderType(v, index)),
+            }
+        }
+
+        segments.sort_unstable_by_key(|i| i.p_vaddr);
+
+        // Make sure the first PT_LOAD includes the ELF header.
+        let hdr = segments.first().ok_or(VmmError::NoLoadSegment)?;
+
+        if hdr.p_offset != 0 {
+            return Err(VmmError::ElfHeaderNotInFirstLoadSegment);
+        }
+
+        // Check if PT_DYNAMIC exists.
+        let dynamic = dynamic.ok_or(VmmError::NoDynamicSegment)?;
+
+        // Check if PT_NOTE exists.
+        let note = note.ok_or(VmmError::NoNoteSegment)?;
+
+        // Seek to PT_NOTE.
+        let mut data: std::io::Take<&mut std::fs::File> = kernel_img
+            .segment_data(&note)
+            .map_err(|e| VmmError::SeekToNote(e, path.to_path_buf()))?;
+
+        // Parse PT_NOTE.
+        let mut vm_page_size = None;
+
+        for i in 0u32.. {
+            // Check remaining data.
+            if data.limit() == 0 {
+                break;
+            }
+
+            // Read note header.
+            let mut buf = [0u8; 4 * 3];
+
+            data.read_exact(&mut buf)
+                .map_err(|e| VmmError::ReadKernelNote(e, i))?;
+
+            // Parse note header.
+            let nlen: usize = u32::from_ne_bytes(buf[..4].try_into().unwrap())
+                .try_into()
+                .unwrap();
+            let dlen: usize = u32::from_ne_bytes(buf[4..8].try_into().unwrap())
+                .try_into()
+                .unwrap();
+            let ty = u32::from_ne_bytes(buf[8..].try_into().unwrap());
+
+            if nlen > 0xff {
+                return Err(VmmError::NoteNameTooLarge(i));
+            }
+
+            if dlen > 0xff {
+                return Err(VmmError::InvalidNoteDescription(i));
+            }
+
+            // Read note name + description.
+            let nalign = nlen.next_multiple_of(4);
+            let mut buf = vec![0u8; nalign + dlen];
+
+            data.read_exact(&mut buf)
+                .map_err(|e| VmmError::ReadKernelNoteData(e, i))?;
+
+            // Check name.
+            let name = match CStr::from_bytes_until_nul(&buf) {
+                Ok(v) if v.to_bytes_with_nul().len() == nlen => v,
+                _ => return Err(VmmError::InvalidNoteName(i)),
+            };
+
+            if name.to_bytes() != b"obkrnl" {
+                continue;
+            }
+
+            // Parse description.
+            match ty {
+                0 => {
+                    if vm_page_size.is_some() {
+                        return Err(VmmError::DuplicateKernelNote(i));
+                    }
+                    vm_page_size = buf[nalign..]
+                        .try_into()
+                        .map(usize::from_ne_bytes)
+                        .ok()
+                        .and_then(NonZero::new)
+                        .filter(|v| v.is_power_of_two());
+
+                    if vm_page_size.is_none() {
+                        return Err(VmmError::InvalidNoteDescription(i));
+                    }
+                }
+                v => return Err(VmmError::UnknownKernelNoteType(v, i)),
+            }
+        }
+
+        // Check if page size exists.
+        let vm_page_size = vm_page_size.ok_or(VmmError::NoPageSizeInKernelNote)?;
+
+        // Get page size on the host.
+        let host_page_size = get_page_size().map_err(VmmError::GetHostPageSize)?;
+
+        // Get kernel memory size.
+        let mut len = 0;
+
+        for hdr in &segments {
+            if hdr.p_vaddr < len {
+                return Err(VmmError::OverlappedLoadSegment(hdr.p_vaddr));
+            }
+
+            len = hdr
+                .p_vaddr
+                .checked_add(hdr.p_memsz)
+                .ok_or(VmmError::InvalidPmemsz(hdr.p_vaddr))?;
+        }
+
+        // Round kernel memory size.
+        let block_size = max(vm_page_size, host_page_size);
+        let len = NonZero::new(len)
+            .ok_or(VmmError::ZeroLengthLoadSegment)?
+            .get()
+            .checked_next_multiple_of(block_size.get())
+            .ok_or(VmmError::TotalSizeTooLarge)?;
+
+        // Setup RAM.
+        let ram_size = NonZero::new(1024 * 1024 * 1024 * 8).unwrap();
+
+        // Setup virtual devices.
+        let event = VmmEventHandler {
+            event: event_handler,
+            cx,
+        };
+        let devices = Arc::new(setup_devices(ram_size.get(), block_size, event));
+
+        // Setup hypervisor.
+        let mut hv = unsafe { self::hv::new(8, ram_size, block_size, debugger.is_some()) }
+            .map_err(VmmError::SetupHypervisor)?;
+
+        // Map the kernel.
+        let feats = hv.cpu_features().clone();
+        let mut ram = RamBuilder::new(hv.ram_mut());
+
+        let kern = ram
+            .alloc_kernel(NonZero::new(len).unwrap())
+            .map_err(VmmError::AllocateRamForKernel)?;
+
+        for hdr in &segments {
+            // Seek to segment data.
+            let mut data = kernel_img
+                .segment_data(hdr)
+                .map_err(VmmError::SeekToOffset)?;
+
+            // Read segment data.
+            let mut seg = &mut kern[hdr.p_vaddr..(hdr.p_vaddr + hdr.p_memsz)];
+
+            match std::io::copy(&mut data, &mut seg) {
+                Ok(v) => {
+                    if v != hdr.p_filesz {
+                        return Err(VmmError::IncompleteKernel(path.to_path_buf()));
+                    }
+                }
+                Err(e) => return Err(VmmError::ReadKernel(e, hdr.p_offset)),
+            }
+        }
+
+        // Allocate stack.
+        ram.alloc_stack(NonZero::new(1024 * 1024 * 2).unwrap())
+            .map_err(VmmError::AllocateRamForStack)?;
+
+        // Allocate arguments.
+        let env = BootEnv::Vm(Vm {
+            vmm: devices.vmm().addr(),
+            console: devices.console().addr(),
+            host_page_size,
+        });
+
+        ram.alloc_args(env, profile.kernel_config().clone())
+            .map_err(VmmError::AllocateRamForArgs)?;
+
+        // Build RAM.
+        let map = ram
+            .build(&feats, vm_page_size, &devices, dynamic)
+            .map_err(VmmError::BuildRam)?;
+
+        // Setup screen.
+        let screen = crate::screen::Default::from_screen(screen).map_err(VmmError::SetupScreen)?;
+
+        // Setup CPU manager.
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let mut cpu_manager = CpuManager::new(
+            Arc::new(hv),
+            screen.buffer().clone(),
+            devices,
+            event,
+            shutdown.clone(),
+        );
+
+        // Setup GDB stub.
+        let gdb = debugger
+            .map(|client| {
+                gdbstub::stub::GdbStub::new(client)
+                    .run_state_machine(&mut cpu_manager)
+                    .map_err(VmmError::SetupGdbStub)
+            })
+            .transpose()?;
+
+        // Spawn main CPU.
+        cpu_manager.spawn(
+            map.kern_vaddr + kernel_img.entry(),
+            Some(map),
+            gdb.is_some(),
+        );
+
+        // Create VMM.
+        let vmm = Vmm {
+            cpu: cpu_manager,
+            screen,
+            gdb,
+            shutdown,
+        };
+
+        Ok(vmm)
+    }
+}
+
 impl Drop for Vmm {
     fn drop(&mut self) {
         // Set shutdown flag before dropping the other fields so their background thread can stop
@@ -615,13 +374,13 @@ pub struct VmmScreen {
 /// Encapsulates a function to handle VMM events.
 #[derive(Clone, Copy)]
 struct VmmEventHandler {
-    fp: unsafe extern "C" fn(*const VmmEvent, *mut c_void),
+    event: unsafe extern "C" fn(*const VmmEvent, *mut c_void),
     cx: *mut c_void,
 }
 
 impl VmmEventHandler {
     unsafe fn invoke(self, e: VmmEvent) {
-        (self.fp)(&e, self.cx)
+        (self.event)(&e, self.cx);
     }
 }
 
@@ -682,6 +441,116 @@ pub enum DebugResult {
     Ok,
     Disconnected,
     Error { reason: *mut RustError },
+}
+
+#[derive(Debug, Error)]
+pub enum VmmError {
+    #[error("couldn't open kernel path {1}")]
+    OpenKernel(#[source] KernelError, PathBuf),
+
+    #[error("couldn't start enumerating program headers of {1}")]
+    EnumerateProgramHeaders(#[source] std::io::Error, PathBuf),
+
+    #[error("couldn't read program header #{1} on {2}")]
+    ReadProgramHeader(#[source] ProgramHeaderError, usize, PathBuf),
+
+    #[error("invalid p_filesz on on PT_LOAD {0}")]
+    InvalidFilesz(usize),
+
+    #[error("multiple PT_DYNAMIC is not supported")]
+    MultipleDynamic,
+
+    #[error("multiple PT_NOTE is not supported")]
+    MultipleNote,
+
+    #[error("unknown p_type {0} on program header {1}")]
+    UnknownProgramHeaderType(u32, usize),
+
+    #[error("the first PT_LOAD does not include ELF header")]
+    ElfHeaderNotInFirstLoadSegment,
+
+    #[error("no PT_LOAD on the kernel")]
+    NoLoadSegment,
+
+    #[error("no PT_DYNAMIC on the kernel")]
+    NoDynamicSegment,
+
+    #[error("no PT_NOTE on the kernel")]
+    NoNoteSegment,
+
+    #[error("couldn't seek to PT_NOTE on {1}")]
+    SeekToNote(#[source] std::io::Error, PathBuf),
+
+    #[error("couldn't read kernel note #{1}")]
+    ReadKernelNote(#[source] std::io::Error, u32),
+
+    #[error("name on kernel note #{0} is too large")]
+    NoteNameTooLarge(u32),
+
+    #[error("invalid description on kernel note #{0}")]
+    InvalidNoteDescription(u32),
+
+    #[error("couldn't read kernel note #{1} data")]
+    ReadKernelNoteData(#[source] std::io::Error, u32),
+
+    #[error("kernel note #{0} has invalid name")]
+    InvalidNoteName(u32),
+
+    #[error("kernel note #{0} is duplicated")]
+    DuplicateKernelNote(u32),
+
+    #[error("unknown type {0} on kernel note #{1}")]
+    UnknownKernelNoteType(u32, u32),
+
+    #[error("no page size in kernel note")]
+    NoPageSizeInKernelNote,
+
+    #[error("couldn't get host page size")]
+    GetHostPageSize(#[source] std::io::Error),
+
+    #[error("PT_LOAD at {0:#} is overlapped with the previous PT_LOAD")]
+    OverlappedLoadSegment(usize),
+
+    #[error("invalid p_memsz on PT_LOAD at {0:#}")]
+    InvalidPmemsz(usize),
+
+    #[error("the kernel has PT_LOAD with zero length")]
+    ZeroLengthLoadSegment,
+
+    #[error("total size of PT_LOAD is too large")]
+    TotalSizeTooLarge,
+
+    #[error("couldn't setup a hypervisor")]
+    SetupHypervisor(#[source] hv::HypervisorError),
+
+    #[error("couldn't allocate RAM for the kernel")]
+    AllocateRamForKernel(#[source] hv::RamError),
+
+    #[error("couldn't seek to offset")]
+    SeekToOffset(#[source] std::io::Error),
+
+    #[error("{0} is incomplete")]
+    IncompleteKernel(PathBuf),
+
+    #[error("couldn't read kernel at offset {1}")]
+    ReadKernel(#[source] std::io::Error, u64),
+
+    #[error("couldn't allocate RAM for stack")]
+    AllocateRamForStack(#[source] hv::RamError),
+
+    #[error("couldn't allocate RAM for arguments")]
+    AllocateRamForArgs(#[source] hv::RamError),
+
+    #[error("couldn't build RAM")]
+    BuildRam(#[source] ram::RamBuilderError),
+
+    #[error("couldn't setup a screen")]
+    SetupScreen(#[source] crate::screen::ScreenError),
+
+    #[error("couldn't setup a GDB stub")]
+    SetupGdbStub(
+        #[source] GdbStubError<GdbError, <DebugClient as gdbstub::conn::Connection>::Error>,
+    ),
 }
 
 /// Represents an error when [`main_cpu()`] fails to reach event loop.

@@ -1,0 +1,57 @@
+import { Game } from "../../structs.slint";
+
+export component GamesTab {
+    in-out property <[Game]> games: [];
+
+    VerticalLayout {
+        alignment: start;
+
+        HorizontalLayout {
+            alignment: stretch;
+            height: 30px;
+
+            Text {
+                text: "Name";
+                horizontal-alignment: center;
+            }
+            Text {
+                text: "ID";
+                width: 100px;
+                horizontal-alignment: center;
+            }
+        }
+
+        for game[i] in games: HorizontalLayout {
+            alignment: stretch;
+
+            HorizontalLayout {
+                alignment: stretch;
+                height: 30px;
+
+                Rectangle {
+                    width: 15px;
+
+                    Text {
+                        text: i;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+                Image {
+                    source: game.icon;
+                    width: 30px;
+                }
+                Text {
+                    padding-left: 10px;
+                    text: game.name;
+                    vertical-alignment: center;
+                }
+            }
+            Text {
+                text: game.id;
+                vertical-alignment: center;
+                width: 80px;
+            }
+        }
+    }
+}

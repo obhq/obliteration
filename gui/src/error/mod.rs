@@ -1,17 +1,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use std::error::Error;
-use std::ffi::{c_char, CString};
+use std::ffi::CString;
 use std::fmt::{Display, Write};
 
-#[no_mangle]
-pub unsafe extern "C" fn error_free(e: *mut RustError) {
-    drop(Box::from_raw(e));
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn error_message(e: *const RustError) -> *const c_char {
-    (*e).0.as_ptr()
-}
+#[cfg(feature = "qt")]
+mod ffi;
 
 /// Error object managed by Rust side.
 pub struct RustError(CString);

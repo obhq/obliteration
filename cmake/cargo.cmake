@@ -178,6 +178,9 @@ function(add_crate crate)
 
         if(${kind} STREQUAL "staticlib")
             add_library(${crate} STATIC IMPORTED)
+
+            list(APPEND build_args "--lib")
+
             if(WIN32)
                 set(debug_artifact "${debug_outputs}/${crate}.lib")
                 set(release_artifact "${release_outputs}/${crate}.lib")

@@ -5,6 +5,20 @@ edition = "2021"
 
 [lib]
 crate-type = ["staticlib"]
+required-features = ["qt"]
+
+[[bin]]
+name = "obliteration"
+path = "src/main.rs"
+required-features = ["slint"]
+
+[features]
+slint = [
+    "dep:slint",
+    "dep:clap",
+    "dep:raw-window-handle",
+]
+qt = []
 
 [dependencies]
 bitfield-struct = "0.8.0"
@@ -26,9 +40,18 @@ aarch64 = { path = "../arch/aarch64" }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 x86-64 = { path = "../arch/x86-64" }
+raw-window-handle = { version = "0.6", optional = true }
+clap = { version = "4.5.20", features = ["derive"], optional = true }
+
+[dependencies.slint]
+git = "https://github.com/slint-ui/slint"
+rev = "875ca075fb5b2dfe4c3ab0a499d5759412fc1395"
+features = ["compat-1-2", "std", "accessibility", "raw-window-handle-06", "backend-winit", "renderer-skia"]
+default-features = false
+optional = true
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-ash = "0.38.0"
+ash = { version = "0.38.0", features = ["linked", "std"], default-features = false }
 
 [target.'cfg(windows)'.dependencies.windows-sys]
 version = "0.52.0"
@@ -49,3 +72,4 @@ objc = "0.2.7"
 
 [build-dependencies]
 cbindgen = "0.26.0"
+slint-build = { git = "https://github.com/slint-ui/slint", rev = "875ca075fb5b2dfe4c3ab0a499d5759412fc1395" }

@@ -1,0 +1,49 @@
+import { Button, Slider, LineEdit } from "std-widgets.slint";
+
+export component CpuTab {
+    HorizontalLayout {
+        VerticalLayout {
+            padding: 10px;
+            vertical-stretch: 0;
+            alignment: start;
+
+            Text {
+                text: "Count";
+            }
+            Slider {
+                value: 8;
+                minimum: 1;
+                maximum: 16;
+            }
+            Text {
+                text: "Changing this value to other than 8 may crash the game.";
+            }
+        }  
+        VerticalLayout {
+            padding: 10px;
+            vertical-stretch: 0;
+            alignment: start;
+
+            Text {
+                text: "Debug";
+            }
+            HorizontalLayout {
+                spacing: 5px;
+                Text {
+                    text: "Listen address";
+                    vertical-alignment: center;
+                }
+                LineEdit {
+                    text: "127.0.0.1";
+                    max-height: 30px;
+                }
+                Button {
+                    text: "Start";
+                }
+            }
+            Text {
+                text: "Specify a TCP address to listen for a debugger. The kernel will wait for a debugger to connect before start.";
+            }
+        }  
+    }
+}

@@ -11,6 +11,7 @@ mod string;
 mod system;
 mod vmm;
 
+#[cfg(feature = "qt")]
 #[no_mangle]
 pub unsafe extern "C-unwind" fn set_panic_hook(
     cx: *mut c_void,

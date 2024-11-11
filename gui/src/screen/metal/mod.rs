@@ -22,7 +22,7 @@ pub struct Metal {
 }
 
 impl Metal {
-    pub fn new(screen: &VmmScreen) -> Result<Self, MetalError> {
+    pub fn from_screen(screen: &VmmScreen) -> Result<Self, MetalError> {
         // Get Metal device.
         let device = match Device::system_default() {
             Some(v) => v,

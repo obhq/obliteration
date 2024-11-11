@@ -12,6 +12,12 @@ pub type Default = self::engine::Vulkan;
 #[cfg(target_os = "macos")]
 pub type Default = self::engine::Metal;
 
+#[cfg(not(target_os = "macos"))]
+pub type ScreenError = self::engine::VulkanError;
+
+#[cfg(target_os = "macos")]
+pub type ScreenError = self::engine::MetalError;
+
 /// Encapsulates a platform-specific surface for drawing a VM screen.
 pub trait Screen: 'static {
     type Buffer: ScreenBuffer;

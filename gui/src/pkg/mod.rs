@@ -1,64 +1,11 @@
-use crate::error::RustError;
 use humansize::{SizeFormatter, DECIMAL};
-use param::Param;
-use pkg::{Pkg, PkgProgress};
-use std::ffi::{c_char, c_void, CStr, CString};
+use pkg::PkgProgress;
+use std::ffi::{c_char, c_void, CString};
 use std::path::Path;
-use std::ptr::{null, null_mut};
+use std::ptr::null;
 
-#[no_mangle]
-pub unsafe extern "C" fn pkg_open(file: *const c_char, error: *mut *mut RustError) -> *mut Pkg {
-    let path = CStr::from_ptr(file);
-    let pkg = match Pkg::open(path.to_str().unwrap()) {
-        Ok(v) => Box::new(v),
-        Err(e) => {
-            *error = RustError::wrap(e).into_c();
-            return null_mut();
-        }
-    };
-
-    Box::into_raw(pkg)
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn pkg_close(pkg: *mut Pkg) {
-    drop(Box::from_raw(pkg));
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn pkg_get_param(pkg: *const Pkg, error: *mut *mut RustError) -> *mut Param {
-    let param = match (*pkg).get_param() {
-        Ok(v) => Box::new(v),
-        Err(e) => {
-            *error = RustError::wrap(e).into_c();
-            return null_mut();
-        }
-    };
-
-    Box::into_raw(param)
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn pkg_extract(
-    pkg: *const Pkg,
-    dir: *const c_char,
-    status: extern "C" fn(*const c_char, usize, u64, u64, *mut c_void),
-    ud: *mut c_void,
-) -> *mut RustError {
-    let root: &Path = CStr::from_ptr(dir).to_str().unwrap().as_ref();
-    let progress = ExtractProgress {
-        status,
-        ud,
-        root,
-        total: 0,
-        progress: 0,
-    };
-
-    match (*pkg).extract(root, progress) {
-        Ok(_) => null_mut(),
-        Err(e) => RustError::wrap(e).into_c(),
-    }
-}
+#[cfg(feature = "qt")]
+mod ffi;
 
 struct ExtractProgress<'a> {
     status: extern "C" fn(*const c_char, usize, u64, u64, *mut c_void),
@@ -87,7 +34,7 @@ impl<'a> PkgProgress for ExtractProgress<'a> {
         let total = total.try_into().unwrap();
 
         (self.status)(
-            b"Entries extraction completed\0".as_ptr().cast(), // https://github.com/mozilla/cbindgen/issues/927
+            b"Entries extraction completed\0".as_ptr().cast(),
             0,
             total,
             total,
@@ -128,7 +75,7 @@ impl<'a> PkgProgress for ExtractProgress<'a> {
 
     fn pfs_completed(&mut self) {
         (self.status)(
-            b"PFS extraction completed\0".as_ptr().cast(), // https://github.com/mozilla/cbindgen/issues/927
+            b"PFS extraction completed\0".as_ptr().cast(),
             0,
             self.total,
             self.total,
