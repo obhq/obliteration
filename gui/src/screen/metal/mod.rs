@@ -21,7 +21,9 @@ impl super::GraphicsApi for Metal {
     type InitError = MetalInitError;
 
     fn init() -> Result<Self, Self::InitError> {
-        Ok(Self { devices: Device::all()})
+        Ok(Self {
+            devices: Device::all(),
+        })
     }
 
     fn enumerate_physical_devices(&self) -> &[Self::PhysicalDevice] {
