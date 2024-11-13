@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
 use ash::vk::{ApplicationInfo, InstanceCreateInfo};
 use std::ffi::CStr;
 use thiserror::Error;

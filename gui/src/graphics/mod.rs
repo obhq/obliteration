@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
 #[cfg_attr(target_os = "macos", path = "metal.rs")]
 #[cfg_attr(not(target_os = "macos"), path = "vulkan.rs")]
 mod api;
