@@ -17,6 +17,7 @@ mod rlim;
 mod screen;
 mod string;
 mod system;
+mod graphics;
 mod ui;
 mod vmm;
 
