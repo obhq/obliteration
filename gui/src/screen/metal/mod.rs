@@ -11,32 +11,6 @@ use thiserror::Error;
 
 mod buffer;
 
-pub struct Metal {
-    devices: Vec<metal::Device>,
-}
-
-impl super::GraphicsApi for Metal {
-    type PhysicalDevice = metal::Device;
-
-    type InitError = MetalInitError;
-
-    fn init() -> Result<Self, Self::InitError> {
-        Ok(Self {
-            devices: Device::all(),
-        })
-    }
-
-    fn enumerate_physical_devices(&self) -> &[Self::PhysicalDevice] {
-        &self.devices
-    }
-}
-
-impl super::PhysicalDevice for metal::Device {
-    fn name(&self) -> &str {
-        self.name()
-    }
-}
-
 /// Implementation of [`Screen`] using Metal.
 ///
 /// Fields in this struct need to be dropped in a correct order.
@@ -95,10 +69,6 @@ impl Screen for MetalScreen {
         todo!()
     }
 }
-
-/// Represents an error when [`Metal::init()`] fails.
-#[derive(Debug, Error)]
-pub enum MetalInitError {}
 
 /// Represents an error when [`MetalScreen::new()`] fails.
 #[derive(Debug, Error)]

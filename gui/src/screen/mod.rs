@@ -7,12 +7,6 @@ use std::sync::Arc;
 mod engine;
 
 #[cfg(not(target_os = "macos"))]
-pub type DefaultApi = self::engine::Vulkan;
-
-#[cfg(target_os = "macos")]
-pub type DefaultApi = self::engine::Metal;
-
-#[cfg(not(target_os = "macos"))]
 pub type Default = self::engine::VulkanScreen;
 
 #[cfg(target_os = "macos")]
@@ -23,20 +17,6 @@ pub type ScreenError = self::engine::VulkanScreenError;
 
 #[cfg(target_os = "macos")]
 pub type ScreenError = self::engine::MetalError;
-
-pub trait GraphicsApi: Sized + 'static {
-    type PhysicalDevice: PhysicalDevice;
-
-    type InitError: Error;
-
-    fn init() -> Result<Self, Self::InitError>;
-
-    fn enumerate_physical_devices(&self) -> &[Self::PhysicalDevice];
-}
-
-pub trait PhysicalDevice: Sized {
-    fn name(&self) -> &str;
-}
 
 /// Encapsulates a platform-specific surface for drawing a VM screen.
 pub trait Screen: 'static {

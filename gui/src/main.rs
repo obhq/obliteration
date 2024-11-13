@@ -1,7 +1,7 @@
 use args::CliArgs;
 use clap::Parser;
 use debug::DebugServer;
-use screen::{GraphicsApi, PhysicalDevice};
+use graphics::{GraphicsApi, PhysicalDevice};
 use slint::{ComponentHandle, ModelExt, ModelRc, SharedString, VecModel};
 use std::process::{ExitCode, Termination};
 use thiserror::Error;
@@ -71,7 +71,7 @@ impl App {
     fn new() -> Result<Self, ApplicationError> {
         let main_window = ui::MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
 
-        let graphics_api = screen::DefaultApi::init().map_err(ApplicationError::InitGraphicsApi)?;
+        let graphics_api = graphics::DefaultApi::init().map_err(ApplicationError::InitGraphicsApi)?;
 
         let devices: Vec<SharedString> = graphics_api
             .enumerate_physical_devices()
@@ -184,7 +184,7 @@ pub enum ApplicationError {
     CreateMainWindow(#[source] slint::PlatformError),
 
     #[error("failed to initialize graphics API")]
-    InitGraphicsApi(#[source] <screen::DefaultApi as GraphicsApi>::InitError),
+    InitGraphicsApi(#[source] <graphics::DefaultApi as GraphicsApi>::InitError),
 
     #[error("failed to run main window")]
     RunMainWindow(#[source] slint::PlatformError),

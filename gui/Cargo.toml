@@ -30,6 +30,7 @@ obconf = { path = "../src/obconf", features = ["serde", "virt"] }
 obfw = { git = "https://github.com/obhq/firmware-dumper.git", features = ["read", "std"] }
 param = { path = "../src/param" }
 pkg = { path = "../src/pkg" }
+graphics = { path = "../src/graphics" }
 ciborium = "0.2.2"
 serde = { version = "1.0.209", features = ["derive"] }
 thiserror = "1.0"
