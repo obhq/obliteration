@@ -9,6 +9,7 @@ use thiserror::Error;
 mod args;
 mod debug;
 mod error;
+mod graphics;
 mod param;
 mod pkg;
 mod profile;
@@ -17,7 +18,6 @@ mod rlim;
 mod screen;
 mod string;
 mod system;
-mod graphics;
 mod ui;
 mod vmm;
 
