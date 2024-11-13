@@ -2,10 +2,7 @@
 use self::buffer::VulkanBuffer;
 use super::{Screen, ScreenBuffer};
 use crate::vmm::VmmScreen;
-use ash::vk::{
-    DeviceCreateInfo, DeviceQueueCreateInfo, Handle,
-    QueueFlags,
-};
+use ash::vk::{DeviceCreateInfo, DeviceQueueCreateInfo, Handle, QueueFlags};
 use ash::Device;
 use std::sync::Arc;
 use thiserror::Error;

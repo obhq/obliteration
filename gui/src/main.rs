@@ -71,7 +71,8 @@ impl App {
     fn new() -> Result<Self, ApplicationError> {
         let main_window = ui::MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
 
-        let graphics_api = graphics::DefaultApi::init().map_err(ApplicationError::InitGraphicsApi)?;
+        let graphics_api =
+            graphics::DefaultApi::init().map_err(ApplicationError::InitGraphicsApi)?;
 
         let devices: Vec<SharedString> = graphics_api
             .enumerate_physical_devices()
