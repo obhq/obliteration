@@ -76,7 +76,7 @@ impl App {
             graphics::DefaultApi::new().map_err(ApplicationError::InitGraphicsApi)?;
 
         let devices: Vec<SharedString> = graphics_api
-            .enumerate_physical_devices()
+            .physical_devices()
             .into_iter()
             .map(|d| SharedString::from(d.name()))
             .collect();

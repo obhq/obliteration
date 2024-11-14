@@ -17,7 +17,7 @@ pub trait GraphicsApi: Sized + 'static {
 
     fn new() -> Result<Self, Self::CreateError>;
 
-    fn enumerate_physical_devices(&self) -> &[Self::PhysicalDevice];
+    fn physical_devices(&self) -> &[Self::PhysicalDevice];
 }
 
 pub trait PhysicalDevice: Sized {

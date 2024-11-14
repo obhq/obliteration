@@ -24,7 +24,7 @@ impl super::GraphicsApi for Metal {
         })
     }
 
-    fn enumerate_physical_devices(&self) -> &[Self::PhysicalDevice] {
+    fn physical_devices(&self) -> &[Self::PhysicalDevice] {
         &self.devices
     }
 }

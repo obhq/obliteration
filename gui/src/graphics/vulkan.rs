@@ -51,7 +51,7 @@ impl super::GraphicsApi for Vulkan {
         })
     }
 
-    fn enumerate_physical_devices(&self) -> &[Self::PhysicalDevice] {
+    fn physical_devices(&self) -> &[Self::PhysicalDevice] {
         &self.devices
     }
 }
