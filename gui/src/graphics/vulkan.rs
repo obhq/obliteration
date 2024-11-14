@@ -12,9 +12,9 @@ pub struct Vulkan {
 impl super::GraphicsApi for Vulkan {
     type PhysicalDevice = VulkanPhysicalDevice;
 
-    type InitError = VulkanInitError;
+    type CreateError = VulkanCreateError;
 
-    fn init() -> Result<Self, Self::InitError> {
+    fn new() -> Result<Self, Self::CreateError> {
         let entry = ash::Entry::linked();
 
         let app_info = ApplicationInfo::default().application_name(c"Obliteration");
@@ -22,25 +22,25 @@ impl super::GraphicsApi for Vulkan {
         let create_info = InstanceCreateInfo::default().application_info(&app_info);
 
         let instance = unsafe { entry.create_instance(&create_info, None) }
-            .map_err(VulkanInitError::CreateInstanceFailed)?;
+            .map_err(VulkanCreateError::CreateInstanceFailed)?;
 
         let devices = unsafe { instance.enumerate_physical_devices() }
-            .map_err(VulkanInitError::EnumeratePhysicalDevicesFailed)?
+            .map_err(VulkanCreateError::EnumeratePhysicalDevicesFailed)?
             .into_iter()
-            .map(|device| -> Result<VulkanPhysicalDevice, VulkanInitError> {
+            .map(|device| -> Result<VulkanPhysicalDevice, VulkanCreateError> {
                 let properties = unsafe { instance.get_physical_device_properties(device) };
 
                 let name = CStr::from_bytes_until_nul(unsafe {
                     std::slice::from_raw_parts(properties.device_name.as_ptr().cast(), 256)
                 })
-                .map_err(|_| VulkanInitError::DeviceNameInvalid)?
+                .map_err(|_| VulkanCreateError::DeviceNameInvalid)?
                 .to_str()
-                .map_err(VulkanInitError::DeviceNameInvalidUtf8)?
+                .map_err(VulkanCreateError::DeviceNameInvalidUtf8)?
                 .to_owned();
 
                 Ok(VulkanPhysicalDevice { device, name })
             })
-            .collect::<Result<_, VulkanInitError>>()?;
+            .collect::<Result<_, VulkanCreateError>>()?;
 
         Ok(Self {
             entry,
@@ -71,9 +71,9 @@ impl super::PhysicalDevice for VulkanPhysicalDevice {
     }
 }
 
-/// Represents an error when [`Vulkan::init()`] fails.
+/// Represents an error when [`Vulkan::new()`] fails.
 #[derive(Debug, Error)]
-pub enum VulkanInitError {
+pub enum VulkanCreateError {
     #[error("couldn't create Vulkan instance")]
     CreateInstanceFailed(#[source] ash::vk::Result),
 

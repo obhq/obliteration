@@ -16,9 +16,9 @@ pub struct Metal {
 impl super::GraphicsApi for Metal {
     type PhysicalDevice = metal::Device;
 
-    type InitError = MetalInitError;
+    type CreateError = MetalCreateError;
 
-    fn init() -> Result<Self, Self::InitError> {
+    fn new() -> Result<Self, Self::CreateError> {
         Ok(Self {
             devices: Device::all(),
         })
@@ -35,6 +35,6 @@ impl super::PhysicalDevice for metal::Device {
     }
 }
 
-/// Represents an error when [`Metal::init()`] fails.
+/// Represents an error when [`Metal::new()`] fails.
 #[derive(Debug, Error)]
-pub enum MetalInitError {}
+pub enum MetalCreateError {}

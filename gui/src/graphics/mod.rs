@@ -13,9 +13,9 @@ pub type DefaultApi = self::api::Metal;
 pub trait GraphicsApi: Sized + 'static {
     type PhysicalDevice: PhysicalDevice;
 
-    type InitError: core::error::Error;
+    type CreateError: core::error::Error;
 
-    fn init() -> Result<Self, Self::InitError>;
+    fn new() -> Result<Self, Self::CreateError>;
 
     fn enumerate_physical_devices(&self) -> &[Self::PhysicalDevice];
 }
