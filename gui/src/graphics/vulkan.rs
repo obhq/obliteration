@@ -32,7 +32,7 @@ impl super::GraphicsApi for Vulkan {
                     let properties = unsafe { instance.get_physical_device_properties(device) };
 
                     let name = CStr::from_bytes_until_nul(unsafe {
-                        std::slice::from_raw_parts(properties.device_name.as_ptr().cast(), 256)
+                        std::slice::from_raw_parts(properties.device_name.as_ptr().cast(), properties.device_name.len())
                     })
                     .map_err(|_| VulkanCreateError::DeviceNameInvalid)?
                     .to_str()
