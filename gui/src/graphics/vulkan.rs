@@ -27,19 +27,21 @@ impl super::GraphicsApi for Vulkan {
         let devices = unsafe { instance.enumerate_physical_devices() }
             .map_err(VulkanCreateError::EnumeratePhysicalDevicesFailed)?
             .into_iter()
-            .map(|device| -> Result<VulkanPhysicalDevice, VulkanCreateError> {
-                let properties = unsafe { instance.get_physical_device_properties(device) };
+            .map(
+                |device| -> Result<VulkanPhysicalDevice, VulkanCreateError> {
+                    let properties = unsafe { instance.get_physical_device_properties(device) };
 
-                let name = CStr::from_bytes_until_nul(unsafe {
-                    std::slice::from_raw_parts(properties.device_name.as_ptr().cast(), 256)
-                })
-                .map_err(|_| VulkanCreateError::DeviceNameInvalid)?
-                .to_str()
-                .map_err(VulkanCreateError::DeviceNameInvalidUtf8)?
-                .to_owned();
+                    let name = CStr::from_bytes_until_nul(unsafe {
+                        std::slice::from_raw_parts(properties.device_name.as_ptr().cast(), 256)
+                    })
+                    .map_err(|_| VulkanCreateError::DeviceNameInvalid)?
+                    .to_str()
+                    .map_err(VulkanCreateError::DeviceNameInvalidUtf8)?
+                    .to_owned();
 
-                Ok(VulkanPhysicalDevice { device, name })
-            })
+                    Ok(VulkanPhysicalDevice { device, name })
+                },
+            )
             .collect::<Result<_, VulkanCreateError>>()?;
 
         Ok(Self {

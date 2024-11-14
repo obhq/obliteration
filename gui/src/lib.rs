@@ -26,6 +26,7 @@ pub unsafe extern "C-unwind" fn set_panic_hook(
         let line = loc.line();
 
         // Get message.
+        //TODO: use payload_as_str() when https://github.com/rust-lang/rust/issues/125175 is stable.
         let msg = if let Some(&p) = info.payload().downcast_ref::<&str>() {
             p
         } else if let Some(p) = info.payload().downcast_ref::<String>() {
