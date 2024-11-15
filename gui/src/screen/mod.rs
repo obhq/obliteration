@@ -7,13 +7,13 @@ use std::sync::Arc;
 mod engine;
 
 #[cfg(not(target_os = "macos"))]
-pub type Default = self::engine::Vulkan;
+pub type Default = self::engine::VulkanScreen;
 
 #[cfg(target_os = "macos")]
-pub type Default = self::engine::Metal;
+pub type Default = self::engine::MetalScreen;
 
 #[cfg(not(target_os = "macos"))]
-pub type ScreenError = self::engine::VulkanError;
+pub type ScreenError = self::engine::VulkanScreenError;
 
 #[cfg(target_os = "macos")]
 pub type ScreenError = self::engine::MetalError;

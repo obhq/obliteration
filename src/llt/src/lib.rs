@@ -17,7 +17,7 @@ mod unix;
 ///
 /// The reason this function accept an [`FnMut`] instead of [`FnOnce`] to support exiting the
 /// thread without returning from the `entry` (e.g. using `pthread_exit`). [`FnOnce`] requires the
-/// function to live on the stack while [`FnMut`] is not. The caller still need to make sure no
+/// function to live on the stack while [`FnMut`] does not. The caller still need to make sure no
 /// other variables need to be dropped before exiting the thread.
 ///
 /// # Safety

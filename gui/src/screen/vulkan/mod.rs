@@ -10,13 +10,13 @@ use thiserror::Error;
 mod buffer;
 
 /// Implementation of [`Screen`] using Vulkan.
-pub struct Vulkan {
+pub struct VulkanScreen {
     buffer: Arc<VulkanBuffer>,
     device: Device,
 }
 
-impl Vulkan {
-    pub fn from_screen(screen: &VmmScreen) -> Result<Self, VulkanError> {
+impl VulkanScreen {
+    pub fn from_screen(screen: &VmmScreen) -> Result<Self, VulkanScreenError> {
         let entry = ash::Entry::linked();
 
         let instance = unsafe {
@@ -34,11 +34,11 @@ impl Vulkan {
         let queue = unsafe { instance.get_physical_device_queue_family_properties(physical) }
             .into_iter()
             .position(|p| p.queue_flags.contains(QueueFlags::GRAPHICS))
-            .ok_or(VulkanError::NoQueue)?;
+            .ok_or(VulkanScreenError::NoQueue)?;
 
         let queue = queue
             .try_into()
-            .map_err(|_| VulkanError::QueueOutOfBounds(queue))?;
+            .map_err(|_| VulkanScreenError::QueueOutOfBounds(queue))?;
 
         let queues = DeviceQueueCreateInfo::default()
             .queue_family_index(queue)
@@ -47,7 +47,7 @@ impl Vulkan {
         // Create logical device.
         let device = DeviceCreateInfo::default().queue_create_infos(std::slice::from_ref(&queues));
         let device = unsafe { instance.create_device(physical, &device, None) }
-            .map_err(VulkanError::CreateDeviceFailed)?;
+            .map_err(VulkanScreenError::CreateDeviceFailed)?;
 
         Ok(Self {
             buffer: Arc::new(VulkanBuffer::new()),
@@ -56,14 +56,14 @@ impl Vulkan {
     }
 }
 
-impl Drop for Vulkan {
+impl Drop for VulkanScreen {
     fn drop(&mut self) {
         unsafe { self.device.device_wait_idle().unwrap() };
         unsafe { self.device.destroy_device(None) };
     }
 }
 
-impl Screen for Vulkan {
+impl Screen for VulkanScreen {
     type Buffer = VulkanBuffer;
     type UpdateErr = UpdateError;
 
@@ -76,9 +76,9 @@ impl Screen for Vulkan {
     }
 }
 
-/// Represents an error when [`Vulkan::new()`] fails.
+/// Represents an error when [`VulkanScreen::new()`] fails.
 #[derive(Debug, Error)]
-pub enum VulkanError {
+pub enum VulkanScreenError {
     #[error("couldn't find suitable queue")]
     NoQueue,
 

@@ -1,6 +1,7 @@
 use args::CliArgs;
 use clap::Parser;
 use debug::DebugServer;
+use graphics::{GraphicsApi, PhysicalDevice};
 use slint::{ComponentHandle, ModelExt, ModelRc, SharedString, VecModel};
 use std::process::{ExitCode, Termination};
 use thiserror::Error;
@@ -8,6 +9,7 @@ use thiserror::Error;
 mod args;
 mod debug;
 mod error;
+mod graphics;
 mod param;
 mod pkg;
 mod profile;
@@ -69,6 +71,17 @@ struct App {
 impl App {
     fn new() -> Result<Self, ApplicationError> {
         let main_window = ui::MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
+
+        let graphics_api =
+            graphics::DefaultApi::new().map_err(ApplicationError::InitGraphicsApi)?;
+
+        let devices: Vec<SharedString> = graphics_api
+            .physical_devices()
+            .into_iter()
+            .map(|d| SharedString::from(d.name()))
+            .collect();
+
+        main_window.set_devices(ModelRc::new(VecModel::from(devices)));
 
         let games = ModelRc::new(VecModel::from(Vec::new()));
 
@@ -171,6 +184,9 @@ pub enum ApplicationError {
 
     #[error("failed to create main window")]
     CreateMainWindow(#[source] slint::PlatformError),
+
+    #[error("failed to initialize graphics API")]
+    InitGraphicsApi(#[source] <graphics::DefaultApi as GraphicsApi>::CreateError),
 
     #[error("failed to run main window")]
     RunMainWindow(#[source] slint::PlatformError),

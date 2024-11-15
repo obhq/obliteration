@@ -14,14 +14,14 @@ mod buffer;
 /// Implementation of [`Screen`] using Metal.
 ///
 /// Fields in this struct need to be dropped in a correct order.
-pub struct Metal {
+pub struct MetalScreen {
     view: *mut Object,
     buffer: Arc<MetalBuffer>,
     layer: MetalLayer,
     device: Device,
 }
 
-impl Metal {
+impl MetalScreen {
     pub fn from_screen(screen: &VmmScreen) -> Result<Self, MetalError> {
         // Get Metal device.
         let device = match Device::system_default() {
@@ -49,7 +49,7 @@ impl Metal {
     }
 }
 
-impl Drop for Metal {
+impl Drop for MetalScreen {
     fn drop(&mut self) {
         let l: *mut CAMetalLayer = null_mut();
         let _: () = unsafe { msg_send![self.view, setWantsLayer:NO] };
@@ -57,7 +57,7 @@ impl Drop for Metal {
     }
 }
 
-impl Screen for Metal {
+impl Screen for MetalScreen {
     type Buffer = MetalBuffer;
     type UpdateErr = UpdateError;
 
@@ -70,7 +70,7 @@ impl Screen for Metal {
     }
 }
 
-/// Represents an error when [`Metal::new()`] fails.
+/// Represents an error when [`MetalScreen::new()`] fails.
 #[derive(Debug, Error)]
 pub enum MetalError {
     #[error("couldn't get default MTLDevice")]
