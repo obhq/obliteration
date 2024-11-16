@@ -3,6 +3,7 @@ use clap::Parser;
 use debug::DebugServer;
 use graphics::{GraphicsApi, PhysicalDevice};
 use slint::{ComponentHandle, ModelExt, ModelRc, SharedString, VecModel};
+use std::path::Path;
 use std::process::{ExitCode, Termination};
 use thiserror::Error;
 
@@ -42,6 +43,9 @@ fn run() -> Result<(), ApplicationError> {
             .inspect_err(|e| eprintln!("Error displaying error dialog: {e}"))
             .unwrap();
     }
+
+    // TODO: check if already configured an skip wizard
+    run_wizard().map_err(ApplicationError::RunWizard)?;
 
     let args = CliArgs::try_parse().map_err(ApplicationError::ParseArgs)?;
 
@@ -107,6 +111,53 @@ impl App {
     }
 }
 
+fn run_wizard() -> Result<(), slint::PlatformError> {
+    use ui::FileValidationResult;
+
+    ui::Wizard::new().and_then(|wizard| {
+        wizard.on_validate_system_dir(|path: SharedString| {
+            let path = AsRef::<Path>::as_ref(path.as_str());
+
+            if !path.is_absolute() {
+                return FileValidationResult::NotAbsolutePath;
+            }
+
+            let Ok(metadata) = path.metadata() else {
+                return FileValidationResult::DoesNotExist;
+            };
+
+            if !metadata.is_dir() {
+                FileValidationResult::NotDirectory
+            } else {
+                FileValidationResult::Ok
+            }
+        });
+
+        wizard.on_validate_games_dir(|system_path, games_path| {
+            let system_path = AsRef::<Path>::as_ref(system_path.as_str());
+            let games_path = AsRef::<Path>::as_ref(games_path.as_str());
+
+            if !games_path.is_absolute() {
+                return FileValidationResult::NotAbsolutePath;
+            }
+
+            let Ok(metadata) = games_path.metadata() else {
+                return FileValidationResult::DoesNotExist;
+            };
+
+            if !metadata.is_dir() {
+                FileValidationResult::NotDirectory
+            } else if games_path == system_path {
+                FileValidationResult::SameAsSystemDir
+            } else {
+                FileValidationResult::Ok
+            }
+        });
+
+        wizard.run()
+    })
+}
+
 fn full_error_reason<T>(e: T) -> String
 where
     T: std::error::Error,
@@ -165,6 +216,9 @@ impl From<Result<(), ApplicationError>> for AppExit {
 pub enum ApplicationError {
     #[error(transparent)]
     ParseArgs(clap::Error),
+
+    #[error("failed to run wizard")]
+    RunWizard(#[source] slint::PlatformError),
 
     #[error("failed to start debug server on {1}")]
     StartDebugServer(

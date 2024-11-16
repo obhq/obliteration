@@ -1,0 +1,223 @@
+
+import { Button, LineEdit } from "std-widgets.slint";
+
+enum WizardPage {
+    Intro,
+    System,
+    Game,
+    Firmware,
+    Conclusion
+}
+
+export enum FileValidationResult {
+    Ok,
+    NotAbsolutePath,
+    DoesNotExist,
+    NotDirectory,
+    SameAsSystemDir
+}
+
+export component Wizard inherits Window {
+    min-width: 1000px;
+    min-height: 500px;
+
+    pure callback validate_system_dir(string) -> FileValidationResult;
+    pure callback validate_games_dir(string, string) -> FileValidationResult;
+
+    property <WizardPage> page: WizardPage.Intro;
+    property <string> system_dir: "";
+    property <string> games_dir: "";
+
+    VerticalLayout {
+        vertical-stretch: 1;
+
+        if page == WizardPage.Intro: VerticalLayout {
+            padding: 10px;
+            vertical-stretch: 1;
+
+            Text {
+                text: "Introduction";
+                font-size: 30px;
+            }
+            Text {
+                text: "This wizard will help you setup Obliteration. "
+                    + "To ensure you're ready, make sure you have a firmware dumped from your PS4 using "
+                    + "the Firmware Dumper (https://github.com/obhq/firmware-dumper)";
+                vertical-stretch: 1;
+            }
+            HorizontalLayout {
+                alignment: end;
+
+                Button {
+                    enabled: false;
+                    text: "Previous";
+                }
+                Button {
+                    enabled: true;
+                    text: "Next";
+                    clicked => { page = WizardPage.System; }
+                }
+                Button {
+                    text: "Cancel";
+                    clicked => { }
+                }
+            }
+        }
+
+        if page == WizardPage.System: VerticalLayout {
+            padding: 10px;
+            vertical-stretch: 1;
+
+            VerticalLayout {
+                vertical-stretch: 1;
+                alignment: start;
+
+                Text {
+                    text: "Location for system files";
+                    font-weight: 700;
+                }
+                HorizontalLayout {
+                    spacing: 5px;
+
+                    Text {
+                        text: "File:";
+                        vertical-alignment: center;
+                    }
+                    LineEdit {
+                        text <=> system_dir;
+                        max-height: 30px;
+                    }
+                    Button {
+                        text: " ... ";
+                    }
+                }
+            }
+            HorizontalLayout {
+                alignment: end;
+
+                Button {
+                    enabled: true;
+                    text: "Previous";
+                    clicked => { page = WizardPage.Intro; }
+                }
+                Button {
+                    enabled: validate_system_dir(system_dir) == FileValidationResult.Ok;
+                    text: "Next";
+                    clicked => { page = WizardPage.Game; }
+                }
+                Button {
+                    text: "Cancel";
+                    clicked => { }
+                }
+            }
+        }
+
+        if page == WizardPage.Game: VerticalLayout {
+            padding: 10px;
+            vertical-stretch: 1;
+
+            VerticalLayout {
+                vertical-stretch: 1;
+                alignment: start;
+
+                Text {
+                    text: "Location to install games";
+                    font-weight: 700;
+                }
+                HorizontalLayout {
+                    spacing: 5px;
+
+                    Text {
+                        text: "File:";
+                        vertical-alignment: center;
+                    }
+                    LineEdit {
+                        text <=> games_dir;
+                        max-height: 30px;
+                    }
+                    Button {
+                        text: " ... ";
+                    }
+                }
+            }
+            HorizontalLayout {
+                alignment: end;
+
+                Button {
+                    enabled: true;
+                    text: "Previous";
+                    clicked => { page = WizardPage.System; }
+                }
+                Button {
+                    enabled: validate_games_dir(system_dir, games_dir) == FileValidationResult.Ok;
+                    text: "Next";
+                    clicked => { page = WizardPage.Firmware; }
+                }
+                Button {
+                    text: "Cancel";
+                    clicked => { }
+                }
+            }
+        }
+
+        if page == WizardPage.Firmware: VerticalLayout {
+            padding: 10px;
+            vertical-stretch: 1;
+
+            Text {
+                text: "Install Firmware";
+                font-weight: 700;
+            }
+            Text {
+                text: "Select a firmware dump that you got from Firmware Dumper.";
+                vertical-stretch: 1;
+            }
+            HorizontalLayout {
+                alignment: end;
+
+                Button {
+                    enabled: true;
+                    text: "Previous";
+                    clicked => { page = WizardPage.Game; }
+                }
+                Button {
+                    enabled: true;
+                    text: "Next";
+                    clicked => { page = WizardPage.Conclusion; }
+                }
+                Button {
+                    text: "Cancel";
+                    clicked => { }
+                }
+            }
+        }
+
+        if page == WizardPage.Conclusion: VerticalLayout {
+            padding: 10px;
+            vertical-stretch: 1;
+
+            Text {
+                text: "Setup complete";
+                font-weight: 700;
+            }
+            HorizontalLayout {
+                alignment: end;
+
+                Button {
+                    enabled: true;
+                    text: "Previous";
+                    clicked => { page = WizardPage.Intro; }
+                }
+                Button {
+                    enabled: true;
+                    text: "Finish";
+                    clicked => {  }
+                }
+                Button {
+                    text: "Cancel";
+                    clicked => { }
+                }
+            }
+        }
+    }
+}
