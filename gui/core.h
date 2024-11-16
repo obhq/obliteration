@@ -249,5 +249,5 @@ void vmm_shutdown(struct Vmm *vmm);
 bool vmm_shutting_down(struct Vmm *vmm);
 
 #ifdef __cplusplus
-} // extern "C"
-#endif // __cplusplus
+}  // extern "C"
+#endif  // __cplusplus
