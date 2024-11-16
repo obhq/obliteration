@@ -17,7 +17,6 @@ jobs:
     with:
       macos: macos-14
       kernel-target: aarch64-unknown-none-softfloat
-      artifact-name: obliteration-mac-m1
   build-docs:
     name: Build
     uses: ./.github/workflows/ci-docs.yml
