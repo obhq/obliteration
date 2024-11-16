@@ -101,11 +101,11 @@ fn run_wizard() -> Result<(), slint::PlatformError> {
         let wizard_weak = wizard.as_weak();
 
         wizard.on_cancel(move || {
-            wizard_weak.upgrade().inspect(|wiz| wiz.hide().unwrap());
+            wizard_weak.upgrade().inspect(|w| w.hide().unwrap());
         });
 
         wizard.on_validate_system_dir(|path: SharedString| {
-            let path = AsRef::<Path>::as_ref(path.as_str());
+            let path: &Path = path.as_str().as_ref();
 
             if !path.is_absolute() {
                 return FileValidationResult::NotAbsolutePath;
@@ -123,8 +123,8 @@ fn run_wizard() -> Result<(), slint::PlatformError> {
         });
 
         wizard.on_validate_games_dir(|system_path, games_path| {
-            let system_path = AsRef::<Path>::as_ref(system_path.as_str());
-            let games_path = AsRef::<Path>::as_ref(games_path.as_str());
+            let system_path: &Path = system_path.as_str().as_ref();
+            let games_path: &Path = games_path.as_str().as_ref();
 
             if !games_path.is_absolute() {
                 return FileValidationResult::NotAbsolutePath;

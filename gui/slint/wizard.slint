@@ -31,8 +31,6 @@ export component Wizard inherits Window {
     property <string> games_dir: "";
 
     VerticalLayout {
-        vertical-stretch: 1;
-
         if page == WizardPage.Intro: VerticalLayout {
             padding: 10px;
             vertical-stretch: 1;
@@ -208,12 +206,12 @@ export component Wizard inherits Window {
                 Button {
                     enabled: true;
                     text: "Previous";
-                    clicked => { page = WizardPage.Intro; }
+                    clicked => { page = WizardPage.Firmware; }
                 }
                 Button {
                     enabled: true;
                     text: "Finish";
-                    clicked => {  }
+                    clicked => { cancel(); }
                 }
                 Button {
                     text: "Cancel";
