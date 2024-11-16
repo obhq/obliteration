@@ -24,6 +24,8 @@ export component Wizard inherits Window {
     pure callback validate_system_dir(string) -> FileValidationResult;
     pure callback validate_games_dir(string, string) -> FileValidationResult;
 
+    pure callback cancel();
+
     property <WizardPage> page: WizardPage.Intro;
     property <string> system_dir: "";
     property <string> games_dir: "";
@@ -59,7 +61,7 @@ export component Wizard inherits Window {
                 }
                 Button {
                     text: "Cancel";
-                    clicked => { }
+                    clicked => { cancel(); }
                 }
             }
         }
@@ -107,7 +109,7 @@ export component Wizard inherits Window {
                 }
                 Button {
                     text: "Cancel";
-                    clicked => { }
+                    clicked => { cancel(); }
                 }
             }
         }
@@ -155,7 +157,7 @@ export component Wizard inherits Window {
                 }
                 Button {
                     text: "Cancel";
-                    clicked => { }
+                    clicked => { cancel(); }
                 }
             }
         }
@@ -187,7 +189,7 @@ export component Wizard inherits Window {
                 }
                 Button {
                     text: "Cancel";
-                    clicked => { }
+                    clicked => { cancel(); }
                 }
             }
         }
@@ -215,7 +217,7 @@ export component Wizard inherits Window {
                 }
                 Button {
                     text: "Cancel";
-                    clicked => { }
+                    clicked => { cancel(); }
                 }
             }
         }

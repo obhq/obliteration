@@ -98,6 +98,12 @@ fn run_wizard() -> Result<(), slint::PlatformError> {
     use ui::FileValidationResult;
 
     ui::Wizard::new().and_then(|wizard| {
+        let wizard_weak = wizard.as_weak();
+
+        wizard.on_cancel(move || {
+            wizard_weak.upgrade().inspect(|wiz| wiz.hide().unwrap());
+        });
+
         wizard.on_validate_system_dir(|path: SharedString| {
             let path = AsRef::<Path>::as_ref(path.as_str());
 
