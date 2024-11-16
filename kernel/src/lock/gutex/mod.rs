@@ -88,7 +88,7 @@ pub struct GutexGroup {
 
 impl GutexGroup {
     /// # Context safety
-    /// This function does not require a CPU context.
+    /// This function does not require a CPU context on **stage 1** heap.
     pub fn new() -> Arc<Self> {
         Arc::new(Self {
             owning: AtomicUsize::new(MTX_UNOWNED),
@@ -108,21 +108,25 @@ impl GutexGroup {
 
     #[inline(never)]
     fn lock(&self) -> GroupGuard {
-        // Check if the calling thread already own the lock.
+        // Acquire the lock.
         let td = current_thread();
         let id = BorrowedArc::as_ptr(&td) as usize;
 
-        if id == self.owning.load(Ordering::Relaxed) {
-            // SAFETY: This is safe because the current thread own the lock.
-            return unsafe { GroupGuard::new(self) };
-        }
+        loop {
+            let owning = match self.owning.compare_exchange(
+                MTX_UNOWNED,
+                id,
+                Ordering::Acquire,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break,
+                Err(v) => v,
+            };
 
-        // Acquire the lock.
-        while self
-            .owning
-            .compare_exchange(MTX_UNOWNED, id, Ordering::Acquire, Ordering::Relaxed)
-            .is_err()
-        {
+            if owning == id {
+                break;
+            }
+
             todo!()
         }
 

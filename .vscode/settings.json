@@ -20,5 +20,6 @@
   ],
   "rust-analyzer.cargo.features": "all",
   "rust-analyzer.imports.granularity.group": "module",
-  "rust-analyzer.imports.group.enable": false
+  "rust-analyzer.imports.group.enable": false,
+  "rust-analyzer.imports.prefix": "self"
 }

@@ -17,11 +17,12 @@ pub fn boot_env() -> &'static BootEnv {
     unsafe { &*BOOT_ENV }
 }
 
-/// # Interupt safety
-/// This function is interupt safe.
+/// # Context safety
+/// This function does not require a CPU context.
+///
+/// # Interrupt safety
+/// This function can be called from interrupt handler.
 pub fn config() -> &'static Config {
-    // This function is not allowed to access the CPU context due to it can be called before the
-    // context has been activated.
     // SAFETY: This is safe because the setup() requirements.
     unsafe { &*CONFIG }
 }
