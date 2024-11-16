@@ -16,7 +16,7 @@ pub struct BorrowedArc<T>(*const T); // A pointer make this type automatically !
 
 impl<T> BorrowedArc<T> {
     /// # Safety
-    /// `v` must be owned by [Arc].
+    /// `v` must be owned by [Arc](alloc::sync::Arc).
     pub(super) unsafe fn new(v: *const T) -> Self {
         Self(v)
     }

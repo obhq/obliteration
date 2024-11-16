@@ -15,11 +15,27 @@ jobs:
     name: Build
     uses: ./.github/workflows/ci-mac.yml
     with:
-      name: Mac M1
       macos: macos-14
       kernel-target: aarch64-unknown-none-softfloat
       artifact-name: obliteration-mac-m1
-  pr:
+  build-docs:
+    name: Build
+    uses: ./.github/workflows/ci-docs.yml
+  deploy-docs:
+    name: Deploy documentation
+    runs-on: ubuntu-24.04
+    needs: build-docs
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+    - name: Deploy to GitHub Pages
+      uses: actions/deploy-pages@v4
+      id: deployment
+  update-prs:
     name: Update PRs
     runs-on: ubuntu-24.04
     steps:
