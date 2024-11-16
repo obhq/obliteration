@@ -1,15 +1,12 @@
-import { Game } from "structs.slint";
 import { Tabs } from "main/tabs.slint";
-import { Menu } from "main/menu.slint";
 import { Actions } from "main/actions.slint";
 
 export component MainWindow inherits Window {
-    preferred-width: 1920px;
-    preferred-height: 1080px;
     icon: @image-url("../resources/obliteration-icon.png");
     title: "Obliteration";
+    min-width: 1000px;
+    min-height: 500px;
 
-    in property <[Game]> games: [];
     in property <[string]> profiles: [];
     in property <[string]> devices: [];
 
@@ -25,23 +22,10 @@ export component MainWindow inherits Window {
     pure callback quit();
 
     VerticalLayout {
-        Menu {
-            background: root.background;
-            popup_width: root.width / 2;
-            popup_height: root.height / 2;
-            popup_x: root.width / 4;
-            popup_y: root.height / 4;
-
-            quit => { quit(); }
-            open_new_issue_link => { open_new_issue_link(); }
-            install_pkg => { install_pkg(); }
-            open_system_folder => { open_system_folder(); }
-        }
         Tabs {
             devices: devices;
-            games: games;
-            select_game(index) => {  }
         }
+
         Actions {
             profiles: profiles;
             start_game => {

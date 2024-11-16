@@ -5,6 +5,7 @@
     "ms-vscode.hexeditor",
     "redhat.vscode-yaml",
     "rust-lang.rust-analyzer",
+    "Slint.slint",
     "tamasfe.even-better-toml",
     "vadimcn.vscode-lldb"
   ]
