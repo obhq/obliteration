@@ -4,46 +4,52 @@ import { DisplayTab } from "tabs/display.slint";
 import { CpuTab } from "tabs/cpu.slint";
 import { Menu } from "menu.slint";
 
+enum Tab {
+    Menu,
+    Display,
+    Cpu
+}
+
 export component Tabs {
     in property <[string]> devices: [];
 
-    property <int> tab: 1;
+    property <Tab> tab: Tab.Menu;
 
     VerticalLayout {
         HorizontalBox {
             Button {
                 icon: @image-url("menu.svg");
-                primary: root.tab == 0;
-                clicked => { root.tab = 0 }
+                primary: root.tab == Tab.Menu;
+                clicked => { root.tab = Tab.Menu }
             }
 
             Button {
                 text: "Display";
                 icon: @image-url("../../resources/monitor.svg");
                 horizontal-stretch: 1;
-                primary: root.tab == 1;
-                clicked => { root.tab = 1 }
+                primary: root.tab == Tab.Display;
+                clicked => { root.tab = Tab.Display }
             }
 
             Button {
                 text: "CPU";
                 icon: @image-url("../../resources/cpu-64-bit.svg");
                 horizontal-stretch: 1;
-                primary: root.tab == 2;
-                clicked => { root.tab = 2 }
+                primary: root.tab == Tab.Cpu;
+                clicked => { root.tab = Tab.Cpu }
             }
         }
 
-        if root.tab == 0: Menu {
+        if root.tab == Tab.Menu: Menu {
             vertical-stretch: 1;
         }
 
-        if root.tab == 1: DisplayTab {
+        if root.tab == Tab.Display: DisplayTab {
             devices: devices;
             vertical-stretch: 1;
         }
 
-        if root.tab == 2: CpuTab {
+        if root.tab == Tab.Cpu: CpuTab {
             vertical-stretch: 1;
         }
     }

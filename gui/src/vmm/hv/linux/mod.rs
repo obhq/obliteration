@@ -41,7 +41,7 @@ pub unsafe fn new(
     let ram = Ram::new(ram_size, ram_block, KvmMapper).map_err(KvmError::CreateRamFailed)?;
 
     // Open KVM device.
-    let kvm = unsafe { open("/dev/kvm\0".as_ptr().cast(), O_RDWR) };
+    let kvm = unsafe { open(c"/dev/kvm".as_ptr(), O_RDWR) };
 
     if kvm < 0 {
         return Err(KvmError::OpenKvmFailed(Error::last_os_error()));
