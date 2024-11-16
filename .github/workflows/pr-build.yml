@@ -7,9 +7,9 @@ concurrency: pr-${{ github.ref }}
 jobs:
   prebuild:
     name: Pre build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-    - name: Checkout source
+    - name: Checkout repository
       uses: actions/checkout@v4
     - name: Check Rust styles
       run: cargo fmt --check
@@ -26,14 +26,17 @@ jobs:
     uses: ./.github/workflows/ci-mac.yml
     needs: prebuild
     with:
-      name: Mac M1
       macos: macos-14
       kernel-target: aarch64-unknown-none-softfloat
       artifact-name: obliteration-mac-m1
+  build-docs:
+    name: Build
+    uses: ./.github/workflows/ci-docs.yml
+    needs: prebuild
   postbuild:
     name: Post build
-    runs-on: ubuntu-latest
-    needs: [build-windows, build-linux, build-mac]
+    runs-on: ubuntu-24.04
+    needs: [build-windows, build-linux, build-mac, build-docs]
     steps:
     - name: Generate build information
       run: |

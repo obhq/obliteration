@@ -2,9 +2,6 @@ name: CI (Mac)
 on:
   workflow_call:
     inputs:
-      name:
-        type: string
-        required: true
       macos:
         type: string
         required: true
@@ -18,7 +15,7 @@ env:
   CMAKE_BUILD_PARALLEL_LEVEL: "3"
 jobs:
   build:
-    name: ${{ inputs.name }}
+    name: Mac M1
     runs-on: ${{ inputs.macos }}
     env:
       CMAKE_PREFIX_PATH: qt/6.7.2/macos
