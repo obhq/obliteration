@@ -5,9 +5,12 @@ use core::ops::Deref;
 
 /// Encapsulates per-CPU value.
 ///
-/// Use `RefCell` if you need interior mutability but it will make that code not safe to call from
-/// any interrupt handler. You can't use mutex here because once the thread is pinned to a CPU it
-/// cannot go to sleep.
+/// `T` need to implement [Send] for this type to implement [Send] and [Sync] because its value
+/// created by one thread then access from another thread.
+///
+/// Use [RefCell](core::cell::RefCell) if you need interior mutability but it will make that value
+/// not safe to access from any interrupt handler. You can't use mutex here because once the thread
+/// is pinned it cannot go to sleep.
 pub struct CpuLocal<T>(Vec<T>);
 
 impl<T> CpuLocal<T> {
