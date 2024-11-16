@@ -8,9 +8,6 @@ on:
       kernel-target:
         type: string
         required: true
-      artifact-name:
-        type: string
-        required: true
 env:
   CMAKE_BUILD_PARALLEL_LEVEL: "3"
 jobs:
@@ -43,6 +40,7 @@ jobs:
         open(my $output, '>>', $ENV{GITHUB_OUTPUT}) || die "Cannot open GITHUB_OUTPUT: $!";
         print $output "cargo=${{ runner.os }}-${{ runner.arch }}-cargo\n";
         print $output "qt=${{ runner.os }}-${{ runner.arch }}-qt-".$qt->hexdigest."\n";
+        print $output "target=${{ runner.os }}-${{ runner.arch }}-target\n";
       shell: perl {0}
       id: cache-keys
     - name: Restore Cargo home
@@ -68,6 +66,11 @@ jobs:
           fi
         done
       if: ${{ steps.qt-cache.outputs.cache-hit != 'true' }}
+    - name: Restore target directory
+      uses: actions/cache/restore@v4
+      with:
+        path: target
+        key: ${{ steps.cache-keys.outputs.target }}
     - name: Update Rust
       run: rustup update stable
     - name: Install Rust nightly
@@ -106,8 +109,14 @@ jobs:
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ inputs.artifact-name }}
+        name: obliteration-mac-m1
         path: Obliteration.dmg
+    - name: Cache target directory
+      uses: actions/cache/save@v4
+      with:
+        path: target
+        key: ${{ steps.cache-keys.outputs.target }}-${{ github.run_id }}
+      if: startsWith(github.ref, 'refs/heads/')
     - name: Cache Cargo home
       uses: actions/cache/save@v4
       with:

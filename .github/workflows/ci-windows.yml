@@ -16,6 +16,7 @@ jobs:
       run: |
         echo "cargo=${{ runner.os }}-cargo" >> $env:GITHUB_OUTPUT
         echo "qt=${{ runner.os }}-qt-6.7.2" >> $env:GITHUB_OUTPUT
+        echo "target=${{ runner.os }}-target" >> $env:GITHUB_OUTPUT
         echo "vulkan=${{ runner.os }}-vulkan-1.3.290.0" >> $env:GITHUB_OUTPUT
       id: cache-keys
     - name: Restore Vulkan SDK
@@ -62,6 +63,11 @@ jobs:
       with:
         path: ~/.cargo
         key: ${{ steps.cache-keys.outputs.cargo }}
+    - name: Restore target directory
+      uses: actions/cache/restore@v4
+      with:
+        path: target
+        key: ${{ steps.cache-keys.outputs.target }}
     - name: Update Rust
       run: rustup update stable
     - name: Add additional Rust targets
@@ -82,6 +88,12 @@ jobs:
       with:
         name: obliteration-win-x64
         path: dist
+    - name: Cache target directory
+      uses: actions/cache/save@v4
+      with:
+        path: target
+        key: ${{ steps.cache-keys.outputs.target }}-${{ github.run_id }}
+      if: startsWith(github.ref, 'refs/heads/')
     - name: Cache Vulkan SDK
       uses: actions/cache/save@v4
       with:
