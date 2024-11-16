@@ -2,6 +2,7 @@ use self::bucket::UmaBucket;
 use crate::context::{current_thread, CpuLocal};
 use crate::lock::{Gutex, GutexGroup};
 use alloc::borrow::Cow;
+use alloc::collections::VecDeque;
 use core::cell::RefCell;
 use core::num::NonZero;
 use core::ops::DerefMut;
@@ -11,10 +12,12 @@ mod bucket;
 
 /// Implementation of `uma_zone` structure.
 pub struct UmaZone {
-    size: NonZero<usize>,                // uz_size
-    caches: CpuLocal<RefCell<UmaCache>>, // uz_cpu
-    allocs: Gutex<u64>,                  // uz_allocs
-    frees: Gutex<u64>,                   // uz_frees
+    size: NonZero<usize>,                     // uz_size
+    caches: CpuLocal<RefCell<UmaCache>>,      // uz_cpu
+    full_buckets: Gutex<VecDeque<UmaBucket>>, // uz_full_bucket
+    free_buckets: Gutex<VecDeque<UmaBucket>>, // uz_free_bucket
+    alloc_count: Gutex<u64>,                  // uz_allocs
+    free_count: Gutex<u64>,                   // uz_frees
 }
 
 impl UmaZone {
@@ -30,8 +33,10 @@ impl UmaZone {
         Self {
             size,
             caches: CpuLocal::new(|_| RefCell::default()),
-            allocs: gg.clone().spawn(0),
-            frees: gg.spawn(0),
+            full_buckets: gg.clone().spawn(VecDeque::new()),
+            free_buckets: gg.clone().spawn(VecDeque::new()),
+            alloc_count: gg.clone().spawn(0),
+            free_count: gg.spawn(0),
         }
     }
 
@@ -60,8 +65,7 @@ impl UmaZone {
 
         // Cache not found, allocate from the zone. We need to re-check the cache again because we
         // may on a different CPU since we drop the CPU pinning on the above.
-        let mut allocs = self.allocs.write();
-        let mut frees = self.frees.write();
+        let mut frees = self.free_buckets.write();
         let caches = self.caches.lock();
         let mut cache = caches.borrow_mut();
         let mem = Self::alloc_from_cache(&mut cache);
@@ -70,8 +74,30 @@ impl UmaZone {
             return mem;
         }
 
-        *allocs += core::mem::take(&mut cache.allocs);
-        *frees += core::mem::take(&mut cache.frees);
+        // TODO: What actually we are doing here?
+        *self.alloc_count.write() += core::mem::take(&mut cache.allocs);
+        *self.free_count.write() += core::mem::take(&mut cache.frees);
+
+        if let Some(b) = cache.alloc.take() {
+            frees.push_front(b);
+        }
+
+        if let Some(b) = self.full_buckets.write().pop_front() {
+            cache.alloc = Some(b);
+
+            // Seems like this should never fail.
+            let m = Self::alloc_from_cache(&mut cache);
+
+            assert!(!m.is_null());
+
+            return m;
+        }
+
+        drop(cache);
+        drop(caches);
+
+        // TODO: Why the PS4 check if this zone is zone_pack, zone_jumbop, zone_mbuf or zone_clust?
+        self.alloc_bucket();
 
         todo!()
     }
@@ -91,6 +117,11 @@ impl UmaZone {
         }
 
         null_mut()
+    }
+
+    /// See `zone_alloc_bucket` on the PS4 for a reference.
+    fn alloc_bucket(&self) -> bool {
+        todo!()
     }
 }
 
