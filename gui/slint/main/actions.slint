@@ -1,28 +1,24 @@
-import { ComboBox, Button } from "std-widgets.slint";
+import { Button, ComboBox, HorizontalBox } from "std-widgets.slint";
 
 export component Actions {
     in property <[string]> profiles: [];
 
     pure callback start_game();
 
-    HorizontalLayout {
-
-        alignment: stretch;
-        spacing: 5px;
-
+    HorizontalBox {
         ComboBox {
             model: profiles;
             horizontal-stretch: 1;
         }
+
         Button {
             text: "Start";
-            horizontal-stretch: 0;
             icon: @image-url("../../resources/play.svg");
             clicked => { start_game(); }
         }
+
         Button {
             text: "Save";
-            horizontal-stretch: 0;
             icon: @image-url("../../resources/content-save.svg");
         }
     }

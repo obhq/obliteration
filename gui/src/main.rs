@@ -63,8 +63,6 @@ fn run() -> Result<(), ApplicationError> {
 
 struct App {
     main_window: ui::MainWindow,
-
-    games: ModelRc<ui::Game>,
     profiles: ModelRc<SharedString>,
 }
 
@@ -83,10 +81,6 @@ impl App {
 
         main_window.set_devices(ModelRc::new(VecModel::from(devices)));
 
-        let games = ModelRc::new(VecModel::from(Vec::new()));
-
-        main_window.set_games(games.clone());
-
         let profiles = ModelRc::new(
             VecModel::from(vec![profile::Profile::default()])
                 .map(|p| SharedString::from(String::from(p.name().to_string_lossy()))),
@@ -102,7 +96,6 @@ impl App {
 
         Ok(Self {
             main_window,
-            games,
             profiles,
         })
     }
