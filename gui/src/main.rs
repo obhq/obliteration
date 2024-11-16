@@ -58,57 +58,40 @@ fn run() -> Result<(), ApplicationError> {
             .map_err(ApplicationError::CreateDebugClient)?;
     }
 
-    let app = App::new()?;
-
-    app.run()?;
+    run_main_app()?;
 
     Ok(())
 }
 
-struct App {
-    main_window: ui::MainWindow,
-    profiles: ModelRc<SharedString>,
-}
+fn run_main_app() -> Result<(), ApplicationError> {
+    let main_window = ui::MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
 
-impl App {
-    fn new() -> Result<Self, ApplicationError> {
-        let main_window = ui::MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
+    let graphics_api = graphics::DefaultApi::new().map_err(ApplicationError::InitGraphicsApi)?;
 
-        let graphics_api =
-            graphics::DefaultApi::new().map_err(ApplicationError::InitGraphicsApi)?;
+    let devices: Vec<SharedString> = graphics_api
+        .physical_devices()
+        .into_iter()
+        .map(|d| SharedString::from(d.name()))
+        .collect();
 
-        let devices: Vec<SharedString> = graphics_api
-            .physical_devices()
-            .into_iter()
-            .map(|d| SharedString::from(d.name()))
-            .collect();
+    main_window.set_devices(ModelRc::new(VecModel::from(devices)));
 
-        main_window.set_devices(ModelRc::new(VecModel::from(devices)));
+    let profiles = ModelRc::new(
+        VecModel::from(vec![profile::Profile::default()])
+            .map(|p| SharedString::from(String::from(p.name().to_string_lossy()))),
+    );
 
-        let profiles = ModelRc::new(
-            VecModel::from(vec![profile::Profile::default()])
-                .map(|p| SharedString::from(String::from(p.name().to_string_lossy()))),
-        );
+    main_window.set_profiles(profiles.clone());
 
-        main_window.set_profiles(profiles.clone());
+    main_window.on_start_game(|_index| {
+        let screen = ui::Screen::new().unwrap();
 
-        main_window.on_start_game(|_index| {
-            let screen = ui::Screen::new().unwrap();
+        screen.show().unwrap();
+    });
 
-            screen.show().unwrap();
-        });
+    main_window.run().map_err(ApplicationError::RunMainWindow)?;
 
-        Ok(Self {
-            main_window,
-            profiles,
-        })
-    }
-
-    fn run(&self) -> Result<(), ApplicationError> {
-        self.main_window
-            .run()
-            .map_err(ApplicationError::RunMainWindow)
-    }
+    Ok(())
 }
 
 fn run_wizard() -> Result<(), slint::PlatformError> {
