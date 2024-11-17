@@ -326,8 +326,8 @@ void MainWindow::viewLogs()
 
 void MainWindow::reportIssue()
 {
-    if (!QDesktopServices::openUrl(QUrl("https://github.com/obhq/obliteration/issues"))) {
-        QMessageBox::critical(this, "Error", "Failed to open https://github.com/obhq/obliteration/issues.");
+    if (!QDesktopServices::openUrl(QUrl("https://github.com/obhq/obliteration/issues/new"))) {
+        QMessageBox::critical(this, "Error", "Failed to open https://github.com/obhq/obliteration/issues/new.");
     }
 }
 
