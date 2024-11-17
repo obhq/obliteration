@@ -2,4 +2,5 @@
 /.cache/
 /.flatpak-builder/
 /build/
+/site/
 /target/

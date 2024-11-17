@@ -8,43 +8,21 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
-    - name: Build kernel documentation
+    - name: Install system packages
       run: |
-        import json
-        import os
-        from os.path import dirname
-        from subprocess import Popen, PIPE
-        import sys
-
-        # Build.
-        args = [
-          'cargo', 'doc',
-          '-p', 'obkrnl',
-          '--all-features',
-          '--document-private-items',
-          '--no-deps',
-          '--message-format', 'json-render-diagnostics'
-        ]
-
-        with Popen(args, env=dict(os.environ, RUSTDOCFLAGS='-D warnings'), stdout=PIPE) as proc:
-          for line in proc.stdout:
-            line = json.loads(line)
-            reason = line['reason']
-            if reason == 'build-finished':
-              if line['success']:
-                break
-              else:
-                sys.exit(1)
-            elif reason == 'compiler-artifact':
-              if line['target']['name'] == 'obkrnl':
-                out = dirname(line['filenames'][0])
-
-        # Set docs location.
-        with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-          print(f'location={out}', file=f)
-      shell: python
-      id: kernel
+        sudo apt-get update
+        sudo apt-get install -y mkdocs-material
+    - name: Disable PEP 668
+      run: pip config set global.break-system-packages true
+    - name: Install Python packages
+      run: pip install mdx_truly_sane_lists
+    - name: Build MkDocs
+      run: mkdocs build
+    - name: Build Kernel APIs
+      run: |
+        cargo doc -p obkrnl --all-features --document-private-items --no-deps
+        mv target/doc site/crates
     - name: Upload artifacts
       uses: actions/upload-pages-artifact@v3
       with:
-        path: ${{ steps.kernel.outputs.location }}
+        path: site
