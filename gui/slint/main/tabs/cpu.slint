@@ -1,34 +1,40 @@
-import { Button, Slider, LineEdit } from "std-widgets.slint";
+import { Button, Slider, LineEdit, HorizontalBox, VerticalBox } from "std-widgets.slint";
 
 export component CpuTab {
-    HorizontalLayout {
-        VerticalLayout {
-            padding: 10px;
-            vertical-stretch: 0;
+    HorizontalBox {
+        VerticalBox {
             alignment: start;
+
+            property <float> cpus: 8;
 
             Text {
                 text: "Count";
             }
-            Slider {
-                value: 8;
-                minimum: 1;
-                maximum: 16;
+            HorizontalBox {
+                Slider {
+                    value <=> cpus;
+                    minimum: 1;
+                    maximum: 16;
+                    changed => {
+                        cpus = Math.round(cpus);
+                    }
+                }
+                Text {
+                    vertical-alignment: center;
+                    text: cpus;
+                }
             }
             Text {
                 text: "Changing this value to other than 8 may crash the game.";
             }
-        }  
-        VerticalLayout {
-            padding: 10px;
-            vertical-stretch: 0;
+        }
+        VerticalBox {
             alignment: start;
 
             Text {
                 text: "Debug";
             }
-            HorizontalLayout {
-                spacing: 5px;
+            HorizontalBox {
                 Text {
                     text: "Listen address";
                     vertical-alignment: center;
@@ -44,6 +50,6 @@ export component CpuTab {
             Text {
                 text: "Specify a TCP address to listen for a debugger. The kernel will wait for a debugger to connect before start.";
             }
-        }  
+        }
     }
 }

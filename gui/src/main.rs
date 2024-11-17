@@ -2,7 +2,8 @@ use args::CliArgs;
 use clap::Parser;
 use debug::DebugServer;
 use graphics::{GraphicsApi, PhysicalDevice};
-use slint::{ComponentHandle, ModelExt, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Global, ModelExt, ModelRc, SharedString, VecModel};
+use std::path::Path;
 use std::process::{ExitCode, Termination};
 use thiserror::Error;
 
@@ -22,12 +23,25 @@ mod ui;
 mod vmm;
 
 fn main() -> AppExit {
-    let res = run();
+    let res = run().inspect_err(|e| {
+        ui::ErrorDialog::new()
+            .and_then(|error_dialog| {
+                error_dialog.set_message(SharedString::from(format!(
+                    "Error running application: {}",
+                    full_error_reason(e)
+                )));
+
+                error_dialog.run()
+            })
+            .unwrap();
+    });
 
     AppExit::from(res)
 }
 
 fn run() -> Result<(), ApplicationError> {
+    let args = CliArgs::try_parse().map_err(ApplicationError::ParseArgs)?;
+
     #[cfg(unix)]
     if let Err(e) = rlim::set_rlimit_nofile() {
         ui::ErrorDialog::new()
@@ -39,72 +53,110 @@ fn run() -> Result<(), ApplicationError> {
 
                 error_dialog.run()
             })
-            .inspect_err(|e| eprintln!("Error displaying error dialog: {e}"))
             .unwrap();
     }
 
-    let args = CliArgs::try_parse().map_err(ApplicationError::ParseArgs)?;
+    // TODO: check if already configured and skip wizard
+    run_wizard().map_err(ApplicationError::RunWizard)?;
 
     if let Some(debug_addr) = args.debug_addr() {
         let debug_server = DebugServer::new(debug_addr)
             .map_err(|e| ApplicationError::StartDebugServer(e, debug_addr))?;
 
-        let debug_client = debug_server
+        let _debug_client = debug_server
             .accept()
             .map_err(ApplicationError::CreateDebugClient)?;
     }
 
-    let app = App::new()?;
-
-    app.run()?;
+    run_main_app()?;
 
     Ok(())
 }
 
-struct App {
-    main_window: ui::MainWindow,
-    profiles: ModelRc<SharedString>,
+fn run_main_app() -> Result<(), ApplicationError> {
+    let main_window = ui::MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
+
+    let graphics_api = graphics::DefaultApi::new().map_err(ApplicationError::InitGraphicsApi)?;
+
+    let devices: Vec<SharedString> = graphics_api
+        .physical_devices()
+        .into_iter()
+        .map(|d| SharedString::from(d.name()))
+        .collect();
+
+    main_window.set_devices(ModelRc::new(VecModel::from(devices)));
+
+    let profiles = ModelRc::new(
+        VecModel::from(vec![profile::Profile::default()])
+            .map(|p| SharedString::from(String::from(p.name().to_string_lossy()))),
+    );
+
+    main_window.set_profiles(profiles.clone());
+
+    main_window.on_start_game(|_index| {
+        // TODO: reuse the same window if possible
+        let screen = ui::Screen::new().unwrap();
+
+        screen.show().unwrap();
+    });
+
+    main_window.run().map_err(ApplicationError::RunMainWindow)?;
+
+    Ok(())
 }
 
-impl App {
-    fn new() -> Result<Self, ApplicationError> {
-        let main_window = ui::MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
+fn setup_global_callbacks<'a, T>(component: &'a T)
+where
+    ui::GlobalCallbacks<'a>: Global<'a, T>,
+{
+    let global_callbacks = ui::GlobalCallbacks::get(component);
 
-        let graphics_api =
-            graphics::DefaultApi::new().map_err(ApplicationError::InitGraphicsApi)?;
+    global_callbacks.on_select_file(|title, filter_name, filter| {
+        let dialog = rfd::FileDialog::new()
+            .set_title(title)
+            .add_filter(filter_name, &[filter]);
 
-        let devices: Vec<SharedString> = graphics_api
-            .physical_devices()
-            .into_iter()
-            .map(|d| SharedString::from(d.name()))
-            .collect();
+        let path = dialog
+            .pick_file()
+            .and_then(|p| p.into_os_string().into_string().ok())
+            .unwrap_or_default();
 
-        main_window.set_devices(ModelRc::new(VecModel::from(devices)));
+        SharedString::from(path)
+    });
+}
 
-        let profiles = ModelRc::new(
-            VecModel::from(vec![profile::Profile::default()])
-                .map(|p| SharedString::from(String::from(p.name().to_string_lossy()))),
-        );
+fn run_wizard() -> Result<(), slint::PlatformError> {
+    use ui::FileValidationResult;
 
-        main_window.set_profiles(profiles.clone());
+    ui::Wizard::new().and_then(|wizard| {
+        setup_global_callbacks(&wizard);
 
-        main_window.on_start_game(|_index| {
-            let screen = ui::Screen::new().unwrap();
+        let wizard_weak = wizard.as_weak();
 
-            screen.show().unwrap();
+        wizard.on_cancel(move || {
+            wizard_weak.upgrade().inspect(|w| w.hide().unwrap());
         });
 
-        Ok(Self {
-            main_window,
-            profiles,
-        })
-    }
+        wizard.on_validate_firmware_path(|path| {
+            let path: &Path = path.as_str().as_ref();
 
-    fn run(&self) -> Result<(), ApplicationError> {
-        self.main_window
-            .run()
-            .map_err(ApplicationError::RunMainWindow)
-    }
+            if !path.is_absolute() {
+                return FileValidationResult::NotAbsolutePath;
+            }
+
+            let Ok(metadata) = path.metadata() else {
+                return FileValidationResult::DoesNotExist;
+            };
+
+            if !metadata.is_file() {
+                FileValidationResult::NotFile
+            } else {
+                FileValidationResult::Ok
+            }
+        });
+
+        wizard.run()
+    })
 }
 
 fn full_error_reason<T>(e: T) -> String
@@ -133,21 +185,7 @@ impl Termination for AppExit {
     fn report(self) -> ExitCode {
         match self {
             AppExit::Ok => ExitCode::SUCCESS,
-            AppExit::Err(e) => {
-                ui::ErrorDialog::new()
-                    .and_then(|error_dialog| {
-                        error_dialog.set_message(SharedString::from(format!(
-                            "Error running application: {}",
-                            full_error_reason(e)
-                        )));
-
-                        error_dialog.run()
-                    })
-                    .inspect_err(|e| eprintln!("Error displaying error dialog: {e}"))
-                    .unwrap();
-
-                ExitCode::FAILURE
-            }
+            AppExit::Err(e) => ExitCode::FAILURE,
         }
     }
 }
@@ -165,6 +203,9 @@ impl From<Result<(), ApplicationError>> for AppExit {
 pub enum ApplicationError {
     #[error(transparent)]
     ParseArgs(clap::Error),
+
+    #[error("failed to run wizard")]
+    RunWizard(#[source] slint::PlatformError),
 
     #[error("failed to start debug server on {1}")]
     StartDebugServer(
