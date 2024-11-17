@@ -1,3 +1,4 @@
 export global GlobalCallbacks {
-    pure callback select_folder() -> string;
+    pure callback select_folder(string) -> string;
+    pure callback select_file(string, string, string) -> string;
 }

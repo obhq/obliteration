@@ -110,12 +110,27 @@ fn setup_global_callbacks<'a, T>(component: &'a T)
 where
     ui::GlobalCallbacks<'a>: Global<'a, T>,
 {
-    use ui::GlobalCallbacks;
+    let global_callbacks = ui::GlobalCallbacks::get(component);
 
-    let global_callbacks = GlobalCallbacks::get(component);
+    global_callbacks.on_select_folder(|title| {
+        let dialog = rfd::FileDialog::new().set_title(title);
 
-    // TODO: implement (probably with rfd)
-    global_callbacks.on_select_folder(|| SharedString::new());
+        let path = dialog.pick_folder();
+        let path = path.as_ref().and_then(|p| p.to_str()).unwrap_or_default();
+
+        SharedString::from(path)
+    });
+
+    global_callbacks.on_select_file(|title, filter_name, filter| {
+        let dialog = rfd::FileDialog::new()
+            .set_title(title)
+            .add_filter(filter_name, &[filter]);
+
+        let path = dialog.pick_file();
+        let path = path.as_ref().and_then(|p| p.to_str()).unwrap_or_default();
+
+        SharedString::from(path)
+    });
 }
 
 fn run_wizard() -> Result<(), slint::PlatformError> {
@@ -164,6 +179,24 @@ fn run_wizard() -> Result<(), slint::PlatformError> {
                 FileValidationResult::NotDirectory
             } else if games_path == system_path {
                 FileValidationResult::SameAsSystemDir
+            } else {
+                FileValidationResult::Ok
+            }
+        });
+
+        wizard.on_validate_firmware_path(|path| {
+            let path: &Path = path.as_str().as_ref();
+
+            if !path.is_absolute() {
+                return FileValidationResult::NotAbsolutePath;
+            }
+
+            let Ok(metadata) = path.metadata() else {
+                return FileValidationResult::DoesNotExist;
+            };
+
+            if !metadata.is_file() {
+                FileValidationResult::NotFile
             } else {
                 FileValidationResult::Ok
             }

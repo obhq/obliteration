@@ -15,6 +15,7 @@ export enum FileValidationResult {
     NotAbsolutePath,
     DoesNotExist,
     NotDirectory,
+    NotFile,
     SameAsSystemDir
 }
 
@@ -24,12 +25,14 @@ export component Wizard inherits Window {
 
     pure callback validate_system_dir(string) -> FileValidationResult;
     pure callback validate_games_dir(string, string) -> FileValidationResult;
+    pure callback validate_firmware_path(string) -> FileValidationResult;
 
     pure callback cancel();
 
     property <WizardPage> page: WizardPage.Intro;
-    property <string> system_dir: "";
-    property <string> games_dir: "";
+    property <string> system_dir;
+    property <string> games_dir;
+    property <string> firmware_path;
 
     VerticalLayout {
         if page == WizardPage.Intro: VerticalLayout {
@@ -54,7 +57,6 @@ export component Wizard inherits Window {
                     text: "Previous";
                 }
                 Button {
-                    enabled: true;
                     text: "Next";
                     clicked => { page = WizardPage.System; }
                 }
@@ -90,7 +92,7 @@ export component Wizard inherits Window {
                     }
                     Button {
                         text: " ... ";
-                        clicked => { system_dir = GlobalCallbacks.select_folder()}
+                        clicked => { system_dir = GlobalCallbacks.select_folder("Location for system files")}
                     }
                 }
             }
@@ -98,7 +100,6 @@ export component Wizard inherits Window {
                 alignment: end;
 
                 Button {
-                    enabled: true;
                     text: "Previous";
                     clicked => { page = WizardPage.Intro; }
                 }
@@ -139,6 +140,7 @@ export component Wizard inherits Window {
                     }
                     Button {
                         text: " ... ";
+                        clicked => { games_dir = GlobalCallbacks.select_folder("Location to install games")}
                     }
                 }
             }
@@ -146,7 +148,6 @@ export component Wizard inherits Window {
                 alignment: end;
 
                 Button {
-                    enabled: true;
                     text: "Previous";
                     clicked => { page = WizardPage.System; }
                 }
@@ -166,24 +167,44 @@ export component Wizard inherits Window {
             padding: 10px;
             vertical-stretch: 1;
 
-            Text {
-                text: "Install Firmware";
-                font-weight: 700;
-            }
-            Text {
-                text: "Select a firmware dump that you got from Firmware Dumper.";
+            VerticalLayout {
                 vertical-stretch: 1;
+                alignment: start;
+
+                Text {
+                    text: "Install Firmware";
+                    font-weight: 700;
+                }
+                Text {
+                    text: "Select a firmware dump that you got from Firmware Dumper.";
+                    vertical-stretch: 1;
+                }
+                HorizontalLayout {
+                    spacing: 5px;
+
+                    Text {
+                        text: "File:";
+                        vertical-alignment: center;
+                    }
+                    LineEdit {
+                        text <=> firmware_path;
+                        max-height: 30px;
+                    }
+                    Button {
+                        text: " ... ";
+                        clicked => { firmware_path = GlobalCallbacks.select_file("Select a firmware dump", "Firmware Dump (*.obf)", "obf")}
+                    }
+                }
             }
             HorizontalLayout {
                 alignment: end;
 
                 Button {
-                    enabled: true;
                     text: "Previous";
                     clicked => { page = WizardPage.Game; }
                 }
                 Button {
-                    enabled: true;
+                    enabled: validate_firmware_path(firmware_path) == FileValidationResult.Ok;
                     text: "Next";
                     clicked => { page = WizardPage.Conclusion; }
                 }
@@ -210,12 +231,10 @@ export component Wizard inherits Window {
                 alignment: end;
 
                 Button {
-                    enabled: true;
                     text: "Previous";
                     clicked => { page = WizardPage.Firmware; }
                 }
                 Button {
-                    enabled: true;
                     text: "Finish";
                     clicked => { cancel(); }
                 }
