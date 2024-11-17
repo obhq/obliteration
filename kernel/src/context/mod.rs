@@ -24,12 +24,16 @@ mod local;
 /// - This function can be called only once per CPU.
 /// - `cpu` must be unique and valid.
 /// - `pmgr` must be the same for all context.
-pub unsafe fn run_with_context(
+///
+/// # Panics
+/// If `f` return. The reason we don't use `!` for a return type of `F` because it requires nightly
+/// Rust.
+pub unsafe fn run_with_context<R, F: FnOnce() -> R>(
     cpu: usize,
     td: Arc<Thread>,
     pmgr: Arc<ProcMgr>,
     args: ContextArgs,
-    f: fn() -> !,
+    f: F,
 ) -> ! {
     // We use a different mechanism here. The PS4 put all of pcpu at a global level but we put it on
     // each CPU stack instead.
@@ -48,6 +52,8 @@ pub unsafe fn run_with_context(
     core::sync::atomic::fence(Ordering::AcqRel);
 
     f();
+
+    panic!("return from a function passed to run_with_context() is not supported");
 }
 
 /// # Interrupt safety

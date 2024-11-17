@@ -7,10 +7,14 @@ use core::cell::{RefCell, RefMut};
 pub struct PrivateCell<T>(RefCell<T>);
 
 impl<T> PrivateCell<T> {
+    /// # Context safety
+    /// This function does not require a CPU context.
     pub fn new(v: T) -> Self {
         Self(RefCell::new(v))
     }
 
+    /// See [borrow_mut] for a safe wrapper.
+    ///
     /// # Safety
     /// `owner` must be an owner of this field.
     ///
@@ -22,6 +26,8 @@ impl<T> PrivateCell<T> {
     }
 
     fn validate(&self, owner: &Thread) {
+        // This check will optimized out for most of the time due to the implementation of
+        // current_thread() use "pure" + "nomem" on inline assembly.
         let current = current_thread();
 
         if !core::ptr::eq(BorrowedArc::as_ptr(&current), owner) {
@@ -31,3 +37,12 @@ impl<T> PrivateCell<T> {
 }
 
 unsafe impl<T> Sync for PrivateCell<T> {}
+
+/// Safe wrapper of [PrivateCell::borrow_mut()].
+macro_rules! borrow_mut {
+    ($t:ident, $f:ident) => {
+        unsafe { $t.$f.borrow_mut($t) }
+    };
+}
+
+pub(super) use borrow_mut;

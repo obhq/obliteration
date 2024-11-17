@@ -57,7 +57,7 @@ pub struct Gutex<T> {
 impl<T> Gutex<T> {
     /// # Panics
     /// If there are any active reader or writer.
-    pub fn write(&self) -> GutexWriteGuard<T> {
+    pub fn write(&self) -> GutexWrite<T> {
         // Check if there are active reader or writer.
         let lock = self.group.lock();
         let active = self.active.get();
@@ -72,7 +72,7 @@ impl<T> Gutex<T> {
 
             *active = usize::MAX;
 
-            GutexWriteGuard::new(lock, active, self.value.get())
+            GutexWrite::new(lock, active, self.value.get())
         }
     }
 }
