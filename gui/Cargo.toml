@@ -17,6 +17,7 @@ slint = [
     "dep:slint",
     "dep:clap",
     "dep:rfd",
+    "dep:open",
 ]
 qt = []
 
