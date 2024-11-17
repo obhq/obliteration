@@ -1,4 +1,26 @@
-import { Button, StandardButton, AboutSlint } from "std-widgets.slint";
+import { Button, StandardButton, AboutSlint, HorizontalBox, Palette } from "std-widgets.slint";
+
+component MenuItem inherits Rectangle {
+    background: Palette.background;
+
+    in property <string> title;
+
+    Button {
+        text: title;
+        clicked => { submenu.show(); }
+    }
+
+    submenu := PopupWindow {
+        x: parent.x + parent.width;
+
+        VerticalLayout {
+            spacing: 0;
+
+            @children
+        }
+    }
+}
+
 export component Menu {
     in property <brush> background;
     in property <length> popup_width;
@@ -16,7 +38,7 @@ export component Menu {
         height: popup_height;
         x: popup_x;
         y: popup_y;
-        
+
         Dialog {
             Text {
                 text: "This is a dialog box";
@@ -32,7 +54,7 @@ export component Menu {
         x: popup_x;
         y: popup_y;
 
-        Rectangle { 
+        Rectangle {
             Dialog {
                 Text {
                     text: "Obliteration is a free and open-source software for playing your PlayStation 4 titles on PC.";
@@ -48,7 +70,7 @@ export component Menu {
         x: popup_x;
         y: popup_y;
 
-        Rectangle { 
+        Rectangle {
             Dialog {
                 AboutSlint {}
                 StandardButton { kind: ok;  }
@@ -62,114 +84,61 @@ export component Menu {
         x: popup_x;
         y: popup_y;
 
-        Rectangle { 
+        Rectangle {
             Text {
                 text: "Obliteration is a free and open-source software for playing your PlayStation 4 titles on PC.";
             }
         }
     }
 
-    HorizontalLayout {
+    HorizontalBox {
         alignment: start;
-        spacing: 5px;
-        padding-left: 5px;
 
-        VerticalLayout {
-            TouchArea {
-                clicked => { files_popup.show(); }
+        Rectangle {
+            background: Palette.background;
 
-                Rectangle {
-                    Text {
-                        text: "File";
+            VerticalLayout {
+                alignment: start;
+                spacing: 0;
+
+                MenuItem {
+                    title: "File";
+
+                    Button {
+                        text: "Install PKG";
+                        clicked => { install_pkg(); }
+                    }
+                    Button {
+                        text: "Open System Folder";
+                        clicked => { open_system_folder(); }
+                    }
+                    Button {
+                        text: "Quit";
+                        clicked => { quit() }
                     }
                 }
-            } 
+                MenuItem {
+                    title: "View";
 
-            files_popup := PopupWindow {
-                y: parent.y + parent.height;
-
-                Rectangle {
-                    background: background;
-
-                    VerticalLayout {
-                        spacing: 0px;
-
-                        Button {
-                            text: "Install PKG";
-                            clicked => { install_pkg(); }
-                        }
-                        Button {
-                            text: "Open System Folder";
-                            clicked => { open_system_folder(); }
-                        }
-                        Button {
-                            text: "Quit";
-                            clicked => { quit() }
-                        }
+                    Button {
+                        text: "Logs";
+                        clicked => { logs.show(); }
                     }
                 }
-            }
-        }
-        VerticalLayout {
-            TouchArea {
-                clicked => { view_popup.show(); }
+                MenuItem {
+                    title: "Help";
 
-                Rectangle {
-                    Text {
-                        text: "View";
+                    Button {
+                        text: "Report an Issue";
+                        clicked => { open_new_issue_link(); }
                     }
-                }
-            }  
-            
-            view_popup := PopupWindow {
-                y: parent.y + parent.height;
-
-                Rectangle {
-                    background: background;
-
-                    VerticalLayout {
-                        spacing: 0px;
-                        
-                        Button {
-                            text: "Logs";
-                            clicked => { logs.show(); }
-                        }
+                    Button {
+                        text: "About Slint";
+                        clicked => { about_slint.show(); }
                     }
-                }
-            }
-        }
-        VerticalLayout {
-            TouchArea {
-                clicked => { help_popup.show(); }
-
-                Rectangle {
-                    Text {
-                        text: "Help";
-                    }
-                }
-            }  
-            
-            help_popup := PopupWindow {
-                y: parent.y + parent.height;
-
-                Rectangle {
-                    background: background;
-
-                    VerticalLayout {
-                        spacing: 0px;
-
-                        Button {
-                            text: "Report an Issue";
-                            clicked => { open_new_issue_link(); }
-                        }
-                        Button {
-                            text: "About Slint";
-                            clicked => { about_slint.show(); }
-                        }
-                        Button {
-                            text: "About Obliteration";
-                            clicked => { about_dialog.show(); }
-                        }
+                    Button {
+                        text: "About Obliteration";
+                        clicked => { about_dialog.show(); }
                     }
                 }
             }

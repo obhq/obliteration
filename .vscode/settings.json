@@ -1,25 +1,22 @@
 {
-  "[rust]": {
-    "editor.formatOnSave": true,
-    "editor.rulers": [
-      100
-    ]
-  },
-  "clangd.arguments": [
-    "--header-insertion=never"
-  ],
-  "cmake.configureOnOpen": true,
-  "cmake.debugConfig": {
-    "cwd": "${workspaceFolder}"
-  },
-  "files.insertFinalNewline": true,
-  "files.trimFinalNewlines": true,
-  "files.trimTrailingWhitespace": true,
-  "lldb.launch.initCommands": [
-    "settings set target.x86-disassembly-flavor intel"
-  ],
-  "rust-analyzer.cargo.features": "all",
-  "rust-analyzer.imports.granularity.group": "module",
-  "rust-analyzer.imports.group.enable": false,
-  "rust-analyzer.imports.prefix": "self"
+	"[rust]": {
+		"editor.formatOnSave": true,
+		"editor.rulers": [100]
+	},
+	"slint.preview.style": "fluent-dark",
+	"clangd.arguments": ["--header-insertion=never"],
+	"cmake.configureOnOpen": true,
+	"cmake.debugConfig": {
+		"cwd": "${workspaceFolder}"
+	},
+	"files.insertFinalNewline": true,
+	"files.trimFinalNewlines": true,
+	"files.trimTrailingWhitespace": true,
+	"lldb.launch.initCommands": [
+		"settings set target.x86-disassembly-flavor intel"
+	],
+	"rust-analyzer.cargo.features": "all",
+	"rust-analyzer.imports.granularity.group": "module",
+	"rust-analyzer.imports.group.enable": false,
+	"rust-analyzer.imports.prefix": "self"
 }
