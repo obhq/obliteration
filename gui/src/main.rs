@@ -100,6 +100,7 @@ fn run_wizard() -> Result<(), slint::PlatformError> {
     ui::Wizard::new().and_then(|wizard| {
         let global_callbacks = wizard.global::<GlobalCallbacks>();
 
+        // TODO: implement
         global_callbacks.on_select_folder(|| {
             SharedString::new()
         });
