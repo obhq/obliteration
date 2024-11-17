@@ -23,12 +23,26 @@ mod ui;
 mod vmm;
 
 fn main() -> AppExit {
-    let res = run();
+    let res = run().inspect_err(|e| {
+        ui::ErrorDialog::new()
+            .and_then(|error_dialog| {
+                error_dialog.set_message(SharedString::from(format!(
+                    "Error running application: {}",
+                    full_error_reason(e)
+                )));
+
+                error_dialog.run()
+            })
+            .inspect_err(|e| eprintln!("Error displaying error dialog: {e}"))
+            .unwrap();
+    });
 
     AppExit::from(res)
 }
 
 fn run() -> Result<(), ApplicationError> {
+    let args = CliArgs::try_parse().map_err(ApplicationError::ParseArgs)?;
+
     #[cfg(unix)]
     if let Err(e) = rlim::set_rlimit_nofile() {
         ui::ErrorDialog::new()
@@ -47,13 +61,11 @@ fn run() -> Result<(), ApplicationError> {
     // TODO: check if already configured an skip wizard
     run_wizard().map_err(ApplicationError::RunWizard)?;
 
-    let args = CliArgs::try_parse().map_err(ApplicationError::ParseArgs)?;
-
     if let Some(debug_addr) = args.debug_addr() {
         let debug_server = DebugServer::new(debug_addr)
             .map_err(|e| ApplicationError::StartDebugServer(e, debug_addr))?;
 
-        let debug_client = debug_server
+        let _debug_client = debug_server
             .accept()
             .map_err(ApplicationError::CreateDebugClient)?;
     }
@@ -187,21 +199,7 @@ impl Termination for AppExit {
     fn report(self) -> ExitCode {
         match self {
             AppExit::Ok => ExitCode::SUCCESS,
-            AppExit::Err(e) => {
-                ui::ErrorDialog::new()
-                    .and_then(|error_dialog| {
-                        error_dialog.set_message(SharedString::from(format!(
-                            "Error running application: {}",
-                            full_error_reason(e)
-                        )));
-
-                        error_dialog.run()
-                    })
-                    .inspect_err(|e| eprintln!("Error displaying error dialog: {e}"))
-                    .unwrap();
-
-                ExitCode::FAILURE
-            }
+            AppExit::Err(e) => ExitCode::FAILURE,
         }
     }
 }
