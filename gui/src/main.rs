@@ -58,7 +58,7 @@ fn run() -> Result<(), ApplicationError> {
             .unwrap();
     }
 
-    // TODO: check if already configured an skip wizard
+    // TODO: check if already configured and skip wizard
     run_wizard().map_err(ApplicationError::RunWizard)?;
 
     if let Some(debug_addr) = args.debug_addr() {
