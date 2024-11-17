@@ -118,7 +118,7 @@ fn run_wizard() -> Result<(), slint::PlatformError> {
             wizard_weak.upgrade().inspect(|w| w.hide().unwrap());
         });
 
-        wizard.on_validate_system_dir(|path: SharedString| {
+        wizard.on_validate_system_dir(|path| {
             let path: &Path = path.as_str().as_ref();
 
             if !path.is_absolute() {
