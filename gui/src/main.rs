@@ -109,9 +109,9 @@ fn run_main_app() -> Result<(), ApplicationError> {
 
 fn setup_global_callbacks<'a, T>(component: &'a T)
 where
-    ui::GlobalCallbacks<'a>: Global<'a, T>,
+    ui::Globals<'a>: Global<'a, T>,
 {
-    let global_callbacks = ui::GlobalCallbacks::get(component);
+    let global_callbacks = ui::Globals::get(component);
 
     global_callbacks.on_select_file(|title, filter_name, filter| {
         let dialog = rfd::FileDialog::new()

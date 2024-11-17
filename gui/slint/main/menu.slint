@@ -1,5 +1,5 @@
-import { Button, StandardButton, AboutSlint, HorizontalBox, Palette } from "std-widgets.slint";
-import { GlobalCallbacks } from "../globals.slint";
+import { Button, StandardButton, AboutSlint, HorizontalBox, Palette, VerticalBox } from "std-widgets.slint";
+import { Globals } from "../globals.slint";
 
 component MenuItem inherits Rectangle {
     background: Palette.background;
@@ -24,6 +24,30 @@ component MenuItem inherits Rectangle {
     }
 }
 
+component BaseDialog inherits PopupWindow {
+    Rectangle {
+        background: Palette.background;
+
+        VerticalBox {
+            @children
+
+            HorizontalBox {
+                StandardButton {
+                    kind: ok;
+                }
+            }
+        }
+    }
+}
+
+component AboutDialog inherits BaseDialog {
+    Text {
+        text: "Obliteration is a free and open-source software for playing your PlayStation 4 titles on PC.";
+    }
+}
+
+component LogsDialog inherits BaseDialog { }
+
 export component Menu {
     in property <length> popup_width;
     in property <length> popup_height;
@@ -34,25 +58,11 @@ export component Menu {
     pure callback open_new_issue_link();
     pure callback open_system_folder();
 
-    about_dialog := PopupWindow {
+    about_dialog := AboutDialog {
         width: popup_width;
         height: popup_height;
         x: popup_x;
         y: popup_y;
-
-        Rectangle {
-            background: Palette.background;
-
-            Dialog {
-                Text {
-                    text: "Obliteration is a free and open-source software for playing your PlayStation 4 titles on PC.";
-                }
-
-                StandardButton {
-                    kind: ok;
-                }
-            }
-        }
     }
 
     about_slint := PopupWindow {
@@ -68,19 +78,11 @@ export component Menu {
         }
     }
 
-    logs := PopupWindow {
+    logs := LogsDialog {
         width: popup_width;
         height: popup_height;
         x: popup_x;
         y: popup_y;
-
-        Rectangle {
-            background: Palette.background;
-
-            Text {
-                text: "Obliteration is a free and open-source software for playing your PlayStation 4 titles on PC.";
-            }
-        }
     }
 
     HorizontalBox {
@@ -128,7 +130,7 @@ export component Menu {
                     Button {
                         text: "Report an Issue";
                         clicked => {
-                            GlobalCallbacks.open_url("https://github.com/obhq/obliteration/issues/new");
+                            Globals.open_url("https://github.com/obhq/obliteration/issues/new");
                         }
                     }
 

@@ -1,6 +1,6 @@
 
 import { Button, LineEdit, VerticalBox, HorizontalBox } from "std-widgets.slint";
-import { GlobalCallbacks } from "globals.slint";
+import { Globals } from "globals.slint";
 
 enum WizardPage {
     Intro,
@@ -16,6 +16,7 @@ export enum FileValidationResult {
 }
 
 export component Wizard inherits Window {
+    icon: Globals.icon;
     min-width: 1000px;
     min-height: 500px;
 
@@ -93,7 +94,7 @@ export component Wizard inherits Window {
                 Button {
                     text: " ... ";
                     clicked => {
-                        firmware_path = GlobalCallbacks.select_file("Select a firmware dump", "Firmware Dump (*.obf)", "obf")
+                        firmware_path = Globals.select_file("Select a firmware dump", "Firmware Dump (*.obf)", "obf")
                     }
                 }
             }
