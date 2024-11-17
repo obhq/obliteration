@@ -115,8 +115,10 @@ where
     global_callbacks.on_select_folder(|title| {
         let dialog = rfd::FileDialog::new().set_title(title);
 
-        let path = dialog.pick_folder();
-        let path = path.as_ref().and_then(|p| p.to_str()).unwrap_or_default();
+        let path = dialog
+            .pick_file()
+            .and_then(|p| p.into_os_string().into_string().ok())
+            .unwrap_or_default();
 
         SharedString::from(path)
     });
@@ -126,8 +128,10 @@ where
             .set_title(title)
             .add_filter(filter_name, &[filter]);
 
-        let path = dialog.pick_file();
-        let path = path.as_ref().and_then(|p| p.to_str()).unwrap_or_default();
+        let path = dialog
+            .pick_file()
+            .and_then(|p| p.into_os_string().into_string().ok())
+            .unwrap_or_default();
 
         SharedString::from(path)
     });
