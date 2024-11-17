@@ -4,8 +4,6 @@ import { GlobalCallbacks } from "globals.slint";
 
 enum WizardPage {
     Intro,
-    System,
-    Game,
     Firmware,
     Conclusion
 }
@@ -14,17 +12,13 @@ export enum FileValidationResult {
     Ok,
     NotAbsolutePath,
     DoesNotExist,
-    NotDirectory,
-    NotFile,
-    SameAsSystemDir
+    NotFile
 }
 
 export component Wizard inherits Window {
     min-width: 1000px;
     min-height: 500px;
 
-    pure callback validate_system_dir(string) -> FileValidationResult;
-    pure callback validate_games_dir(string, string) -> FileValidationResult;
     pure callback validate_firmware_path(string) -> FileValidationResult;
 
     pure callback cancel();
@@ -57,102 +51,6 @@ export component Wizard inherits Window {
                     text: "Previous";
                 }
                 Button {
-                    text: "Next";
-                    clicked => { page = WizardPage.System; }
-                }
-                Button {
-                    text: "Cancel";
-                    clicked => { cancel(); }
-                }
-            }
-        }
-
-        if page == WizardPage.System: VerticalLayout {
-            padding: 10px;
-            vertical-stretch: 1;
-
-            VerticalLayout {
-                vertical-stretch: 1;
-                alignment: start;
-
-                Text {
-                    text: "Location for system files";
-                    font-weight: 700;
-                }
-                HorizontalLayout {
-                    spacing: 5px;
-
-                    Text {
-                        text: "File:";
-                        vertical-alignment: center;
-                    }
-                    LineEdit {
-                        text <=> system_dir;
-                        max-height: 30px;
-                    }
-                    Button {
-                        text: " ... ";
-                        clicked => { system_dir = GlobalCallbacks.select_folder("Location for system files")}
-                    }
-                }
-            }
-            HorizontalLayout {
-                alignment: end;
-
-                Button {
-                    text: "Previous";
-                    clicked => { page = WizardPage.Intro; }
-                }
-                Button {
-                    enabled: validate_system_dir(system_dir) == FileValidationResult.Ok;
-                    text: "Next";
-                    clicked => { page = WizardPage.Game; }
-                }
-                Button {
-                    text: "Cancel";
-                    clicked => { cancel(); }
-                }
-            }
-        }
-
-        if page == WizardPage.Game: VerticalLayout {
-            padding: 10px;
-            vertical-stretch: 1;
-
-            VerticalLayout {
-                vertical-stretch: 1;
-                alignment: start;
-
-                Text {
-                    text: "Location to install games";
-                    font-weight: 700;
-                }
-                HorizontalLayout {
-                    spacing: 5px;
-
-                    Text {
-                        text: "File:";
-                        vertical-alignment: center;
-                    }
-                    LineEdit {
-                        text <=> games_dir;
-                        max-height: 30px;
-                    }
-                    Button {
-                        text: " ... ";
-                        clicked => { games_dir = GlobalCallbacks.select_folder("Location to install games")}
-                    }
-                }
-            }
-            HorizontalLayout {
-                alignment: end;
-
-                Button {
-                    text: "Previous";
-                    clicked => { page = WizardPage.System; }
-                }
-                Button {
-                    enabled: validate_games_dir(system_dir, games_dir) == FileValidationResult.Ok;
                     text: "Next";
                     clicked => { page = WizardPage.Firmware; }
                 }
@@ -201,7 +99,7 @@ export component Wizard inherits Window {
 
                 Button {
                     text: "Previous";
-                    clicked => { page = WizardPage.Game; }
+                    clicked => { page = WizardPage.Intro; }
                 }
                 Button {
                     enabled: validate_firmware_path(firmware_path) == FileValidationResult.Ok;

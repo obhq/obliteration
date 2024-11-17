@@ -111,17 +111,6 @@ where
 {
     let global_callbacks = ui::GlobalCallbacks::get(component);
 
-    global_callbacks.on_select_folder(|title| {
-        let dialog = rfd::FileDialog::new().set_title(title);
-
-        let path = dialog
-            .pick_file()
-            .and_then(|p| p.into_os_string().into_string().ok())
-            .unwrap_or_default();
-
-        SharedString::from(path)
-    });
-
     global_callbacks.on_select_file(|title, filter_name, filter| {
         let dialog = rfd::FileDialog::new()
             .set_title(title)
@@ -146,45 +135,6 @@ fn run_wizard() -> Result<(), slint::PlatformError> {
 
         wizard.on_cancel(move || {
             wizard_weak.upgrade().inspect(|w| w.hide().unwrap());
-        });
-
-        wizard.on_validate_system_dir(|path| {
-            let path: &Path = path.as_str().as_ref();
-
-            if !path.is_absolute() {
-                return FileValidationResult::NotAbsolutePath;
-            }
-
-            let Ok(metadata) = path.metadata() else {
-                return FileValidationResult::DoesNotExist;
-            };
-
-            if !metadata.is_dir() {
-                FileValidationResult::NotDirectory
-            } else {
-                FileValidationResult::Ok
-            }
-        });
-
-        wizard.on_validate_games_dir(|system_path, games_path| {
-            let system_path: &Path = system_path.as_str().as_ref();
-            let games_path: &Path = games_path.as_str().as_ref();
-
-            if !games_path.is_absolute() {
-                return FileValidationResult::NotAbsolutePath;
-            }
-
-            let Ok(metadata) = games_path.metadata() else {
-                return FileValidationResult::DoesNotExist;
-            };
-
-            if !metadata.is_dir() {
-                FileValidationResult::NotDirectory
-            } else if games_path == system_path {
-                FileValidationResult::SameAsSystemDir
-            } else {
-                FileValidationResult::Ok
-            }
         });
 
         wizard.on_validate_firmware_path(|path| {
