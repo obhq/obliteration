@@ -1,4 +1,8 @@
 {
+	"[jsonc]": {
+		"editor.tabSize": 2,
+		"editor.insertSpaces": true
+	},
 	"[rust]": {
 		"editor.formatOnSave": true,
 		"editor.rulers": [100]
