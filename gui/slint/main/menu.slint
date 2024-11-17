@@ -31,22 +31,6 @@ export component Menu {
     pure callback quit();
     pure callback open_new_issue_link();
     pure callback open_system_folder();
-    pure callback install_pkg();
-
-    install_pkg_dialog := PopupWindow {
-        width: popup_width;
-        height: popup_height;
-        x: popup_x;
-        y: popup_y;
-
-        Dialog {
-            Text {
-                text: "This is a dialog box";
-            }
-            StandardButton { kind: ok; }
-            StandardButton { kind: cancel; }
-        }
-    }
 
     about_dialog := PopupWindow {
         width: popup_width;
@@ -104,10 +88,6 @@ export component Menu {
                 MenuItem {
                     title: "File";
 
-                    Button {
-                        text: "Install PKG";
-                        clicked => { install_pkg(); }
-                    }
                     Button {
                         text: "Open System Folder";
                         clicked => { open_system_folder(); }
