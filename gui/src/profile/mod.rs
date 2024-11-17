@@ -32,6 +32,7 @@ impl Profile {
 
         Ok(profile)
     }
+
     pub fn save(&self, path: impl AsRef<Path>) -> Result<(), SaveError> {
         let path = path.as_ref();
 
