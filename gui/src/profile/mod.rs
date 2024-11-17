@@ -60,7 +60,7 @@ impl Default for Profile {
     fn default() -> Self {
         Self {
             id: Uuid::new_v4(),
-            name: CString::new("Default").unwrap(),
+            name: CString::from(c"Default"),
             display_resolution: DisplayResolution::Hd,
             kernel_config: Config {
                 max_cpu: NonZero::new(8).unwrap(),
