@@ -3153,7 +3153,6 @@ dependencies = [
  "hashbrown",
  "macros",
  "obconf",
- "spin",
  "talc",
  "x86-64",
 ]

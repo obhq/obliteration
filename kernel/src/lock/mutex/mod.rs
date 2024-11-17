@@ -18,7 +18,7 @@ impl<T> Mutex<T> {
     ///
     /// # Context safety
     /// This function does not require a CPU context.
-    pub fn new(data: T) -> Self {
+    pub const fn new(data: T) -> Self {
         Self {
             data: UnsafeCell::new(data),
             owning: AtomicUsize::new(MTX_UNOWNED),

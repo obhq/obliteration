@@ -1,6 +1,6 @@
-use self::cell::PrivateCell;
+use self::cell::{borrow_mut, PrivateCell};
 use super::Proc;
-use crate::lock::{Gutex, GutexGroup, GutexWriteGuard};
+use crate::lock::{Gutex, GutexGroup, GutexWrite};
 use alloc::sync::Arc;
 use core::cell::RefMut;
 use core::sync::atomic::{AtomicU8, Ordering};
@@ -49,6 +49,7 @@ impl Thread {
     }
 
     pub fn can_sleep(&self) -> bool {
+        // Both of the values here can only modified by this thread so no race condition here.
         let active_pins = self.active_pins.load(Ordering::Relaxed);
         let active_interrupts = self.active_interrupts.load(Ordering::Relaxed);
 
@@ -79,15 +80,17 @@ impl Thread {
     /// # Panics
     /// If called from the other thread.
     pub fn active_mutexes_mut(&self) -> RefMut<u16> {
-        unsafe { self.active_mutexes.borrow_mut(self) }
+        borrow_mut!(self, active_mutexes)
     }
 
     /// Sleeping address. Zero if this thread is not in a sleep queue.
-    pub fn sleeping_mut(&self) -> GutexWriteGuard<usize> {
+    pub fn sleeping_mut(&self) -> GutexWrite<usize> {
         self.sleeping.write()
     }
 
+    /// # Panics
+    /// If called from the other thread.
     pub fn profiling_ticks_mut(&self) -> RefMut<u32> {
-        unsafe { self.profiling_ticks.borrow_mut(self) }
+        borrow_mut!(self, profiling_ticks)
     }
 }
