@@ -1,4 +1,4 @@
-import { Button, Slider, LineEdit } from "std-widgets.slint";
+import { Button, Slider, LineEdit, HorizontalBox } from "std-widgets.slint";
 
 export component CpuTab {
     HorizontalLayout {
@@ -12,9 +12,7 @@ export component CpuTab {
             Text {
                 text: "Count";
             }
-            HorizontalLayout {
-                spacing: 5px;
-
+            HorizontalBox {
                 Slider {
                     value <=> cpus;
                     minimum: 1;
@@ -40,8 +38,7 @@ export component CpuTab {
             Text {
                 text: "Debug";
             }
-            HorizontalLayout {
-                spacing: 5px;
+            HorizontalBox {
                 Text {
                     text: "Listen address";
                     vertical-alignment: center;

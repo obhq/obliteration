@@ -33,7 +33,6 @@ fn main() -> AppExit {
 
                 error_dialog.run()
             })
-            .inspect_err(|e| eprintln!("Error displaying error dialog: {e}"))
             .unwrap();
     });
 
@@ -54,7 +53,6 @@ fn run() -> Result<(), ApplicationError> {
 
                 error_dialog.run()
             })
-            .inspect_err(|e| eprintln!("Error displaying error dialog: {e}"))
             .unwrap();
     }
 
@@ -96,6 +94,7 @@ fn run_main_app() -> Result<(), ApplicationError> {
     main_window.set_profiles(profiles.clone());
 
     main_window.on_start_game(|_index| {
+        // TODO: reuse the same window if possible
         let screen = ui::Screen::new().unwrap();
 
         screen.show().unwrap();
