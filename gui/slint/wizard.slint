@@ -1,5 +1,5 @@
 
-import { Button, LineEdit } from "std-widgets.slint";
+import { Button, LineEdit, VerticalBox, HorizontalBox } from "std-widgets.slint";
 import { GlobalCallbacks } from "globals.slint";
 
 enum WizardPage {
@@ -24,122 +24,113 @@ export component Wizard inherits Window {
     pure callback cancel();
 
     property <WizardPage> page: WizardPage.Intro;
-    property <string> system_dir;
-    property <string> games_dir;
     property <string> firmware_path;
 
-    VerticalLayout {
-        if page == WizardPage.Intro: VerticalLayout {
-            padding: 10px;
+    if page == WizardPage.Intro: VerticalBox {
+        vertical-stretch: 1;
+
+        Text {
+            text: "Introduction";
+            font-size: 30px;
+        }
+        Text {
+            text: "This wizard will help you setup Obliteration. "
+                + "To ensure you're ready, make sure you have a firmware dumped from your PS4 using "
+                + "the Firmware Dumper (https://github.com/obhq/firmware-dumper)";
             vertical-stretch: 1;
+        }
+        HorizontalLayout {
+            alignment: end;
 
-            Text {
-                text: "Introduction";
-                font-size: 30px;
+            Button {
+                enabled: false;
+                text: "Previous";
             }
-            Text {
-                text: "This wizard will help you setup Obliteration. "
-                    + "To ensure you're ready, make sure you have a firmware dumped from your PS4 using "
-                    + "the Firmware Dumper (https://github.com/obhq/firmware-dumper)";
-                vertical-stretch: 1;
+            Button {
+                text: "Next";
+                clicked => { page = WizardPage.Firmware; }
             }
-            HorizontalLayout {
-                alignment: end;
-
-                Button {
-                    enabled: false;
-                    text: "Previous";
-                }
-                Button {
-                    text: "Next";
-                    clicked => { page = WizardPage.Firmware; }
-                }
-                Button {
-                    text: "Cancel";
-                    clicked => { cancel(); }
-                }
+            Button {
+                text: "Cancel";
+                clicked => { cancel(); }
             }
         }
+    }
 
-        if page == WizardPage.Firmware: VerticalLayout {
-            padding: 10px;
+    if page == WizardPage.Firmware: VerticalBox {
+        vertical-stretch: 1;
+
+        VerticalLayout {
             vertical-stretch: 1;
-
-            VerticalLayout {
-                vertical-stretch: 1;
-                alignment: start;
-
-                Text {
-                    text: "Install Firmware";
-                    font-weight: 700;
-                }
-                Text {
-                    text: "Select a firmware dump that you got from Firmware Dumper.";
-                    vertical-stretch: 1;
-                }
-                HorizontalLayout {
-                    spacing: 5px;
-
-                    Text {
-                        text: "File:";
-                        vertical-alignment: center;
-                    }
-                    LineEdit {
-                        text <=> firmware_path;
-                        max-height: 30px;
-                    }
-                    Button {
-                        text: " ... ";
-                        clicked => { firmware_path = GlobalCallbacks.select_file("Select a firmware dump", "Firmware Dump (*.obf)", "obf")}
-                    }
-                }
-            }
-            HorizontalLayout {
-                alignment: end;
-
-                Button {
-                    text: "Previous";
-                    clicked => { page = WizardPage.Intro; }
-                }
-                Button {
-                    enabled: validate_firmware_path(firmware_path) == FileValidationResult.Ok;
-                    text: "Next";
-                    clicked => { page = WizardPage.Conclusion; }
-                }
-                Button {
-                    text: "Cancel";
-                    clicked => { cancel(); }
-                }
-            }
-        }
-
-        if page == WizardPage.Conclusion: VerticalLayout {
-            padding: 10px;
-            vertical-stretch: 1;
+            alignment: start;
 
             Text {
-                text: "Setup complete";
+                text: "Install Firmware";
                 font-weight: 700;
             }
             Text {
-                text: "You can now install your games and play them using Obliteration.";
+                text: "Select a firmware dump that you got from Firmware Dumper.";
                 vertical-stretch: 1;
             }
-            HorizontalLayout {
-                alignment: end;
+            HorizontalBox {
+                Text {
+                    text: "File:";
+                    vertical-alignment: center;
+                }
+                LineEdit {
+                    text <=> firmware_path;
+                    max-height: 30px;
+                }
+                Button {
+                    text: " ... ";
+                    clicked => { firmware_path = GlobalCallbacks.select_file("Select a firmware dump", "Firmware Dump (*.obf)", "obf")}
+                }
+            }
+        }
+        HorizontalLayout {
+            alignment: end;
 
-                Button {
-                    text: "Previous";
-                    clicked => { page = WizardPage.Firmware; }
-                }
-                Button {
-                    text: "Finish";
-                    clicked => { cancel(); }
-                }
-                Button {
-                    text: "Cancel";
-                    clicked => { cancel(); }
-                }
+            Button {
+                text: "Previous";
+                clicked => { page = WizardPage.Intro; }
+            }
+            Button {
+                enabled: validate_firmware_path(firmware_path) == FileValidationResult.Ok;
+                text: "Next";
+                clicked => { page = WizardPage.Conclusion; }
+            }
+            Button {
+                text: "Cancel";
+                clicked => { cancel(); }
+            }
+        }
+    }
+
+    if page == WizardPage.Conclusion: VerticalBox {
+        vertical-stretch: 1;
+
+        Text {
+            text: "Setup complete";
+            font-weight: 700;
+        }
+        Text {
+            text: "You can now install your games and play them using Obliteration.";
+            vertical-stretch: 1;
+        }
+        HorizontalLayout {
+            alignment: end;
+
+            Button {
+                text: "Previous";
+                clicked => { page = WizardPage.Firmware; }
+            }
+            Button {
+                text: "Finish";
+                clicked => { cancel(); }
+            }
+            Button {
+                text: "Cancel";
+                clicked => { cancel(); }
             }
         }
     }
