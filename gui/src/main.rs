@@ -95,9 +95,15 @@ fn run_main_app() -> Result<(), ApplicationError> {
 }
 
 fn run_wizard() -> Result<(), slint::PlatformError> {
-    use ui::FileValidationResult;
+    use ui::{FileValidationResult, GlobalCallbacks};
 
     ui::Wizard::new().and_then(|wizard| {
+        let global_callbacks = wizard.global::<GlobalCallbacks>();
+
+        global_callbacks.on_select_folder(|| {
+            SharedString::new()
+        });
+
         let wizard_weak = wizard.as_weak();
 
         wizard.on_cancel(move || {

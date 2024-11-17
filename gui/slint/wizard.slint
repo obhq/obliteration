@@ -1,5 +1,6 @@
 
 import { Button, LineEdit } from "std-widgets.slint";
+import { GlobalCallbacks } from "globals.slint";
 
 enum WizardPage {
     Intro,
@@ -89,6 +90,7 @@ export component Wizard inherits Window {
                     }
                     Button {
                         text: " ... ";
+                        clicked => { system_dir = GlobalCallbacks.select_folder()}
                     }
                 }
             }
