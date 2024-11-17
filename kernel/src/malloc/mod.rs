@@ -1,5 +1,6 @@
 pub use self::stage2::Stage2;
 use crate::lock::Mutex;
+use alloc::boxed::Box;
 use core::alloc::{GlobalAlloc, Layout};
 use core::cell::{RefCell, UnsafeCell};
 use core::hint::unreachable_unchecked;
@@ -38,7 +39,7 @@ impl KernelHeap {
 
     /// # Safety
     /// This must be called by main CPU and can be called only once.
-    pub unsafe fn activate_stage2(&self, stage2: Stage2) {
+    pub unsafe fn activate_stage2(&self, stage2: Box<Stage2>) {
         // What we are going here is highly unsafe. Do not edit this code unless you know what you
         // are doing!
         let stage = self.stage.get();
@@ -96,5 +97,5 @@ unsafe impl Sync for KernelHeap {}
 /// Stage of [KernelHeap].
 enum Stage {
     One(RefCell<Talc<ClaimOnOom>>),
-    Two(Stage2, Mutex<Talc<ClaimOnOom>>),
+    Two(Box<Stage2>, Mutex<Talc<ClaimOnOom>>),
 }

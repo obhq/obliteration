@@ -7,6 +7,7 @@ use self::malloc::{KernelHeap, Stage2};
 use self::proc::{Fork, Proc, ProcAbi, ProcMgr, Thread};
 use self::sched::sleep;
 use self::uma::Uma;
+use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::mem::zeroed;
 use core::panic::PanicInfo;
@@ -78,7 +79,7 @@ fn main(mut uma: Uma) -> ! {
     // Activate stage 2 heap.
     info!("Activating stage 2 heap.");
 
-    unsafe { KERNEL_HEAP.activate_stage2(Stage2::new(&mut uma)) };
+    unsafe { KERNEL_HEAP.activate_stage2(Box::new(Stage2::new(&mut uma))) };
 
     // Run sysinit vector. The PS4 use linker to put all sysinit functions in a list then loop the
     // list to execute all of it. We manually execute those functions instead for readability. This
