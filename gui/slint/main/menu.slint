@@ -1,4 +1,5 @@
 import { Button, StandardButton, AboutSlint, HorizontalBox, Palette } from "std-widgets.slint";
+import { GlobalCallbacks } from "../globals.slint";
 
 component MenuItem inherits Rectangle {
     background: Palette.background;
@@ -7,7 +8,9 @@ component MenuItem inherits Rectangle {
 
     Button {
         text: title;
-        clicked => { submenu.show(); }
+        clicked => {
+            submenu.show();
+        }
     }
 
     submenu := PopupWindow {
@@ -22,7 +25,6 @@ component MenuItem inherits Rectangle {
 }
 
 export component Menu {
-    in property <brush> background;
     in property <length> popup_width;
     in property <length> popup_height;
     in property <length> popup_x;
@@ -39,11 +41,16 @@ export component Menu {
         y: popup_y;
 
         Rectangle {
+            background: Palette.background;
+
             Dialog {
                 Text {
                     text: "Obliteration is a free and open-source software for playing your PlayStation 4 titles on PC.";
                 }
-                StandardButton { kind: ok; }
+
+                StandardButton {
+                    kind: ok;
+                }
             }
         }
     }
@@ -55,9 +62,14 @@ export component Menu {
         y: popup_y;
 
         Rectangle {
+            background: Palette.background;
+
             Dialog {
-                AboutSlint {}
-                StandardButton { kind: ok;  }
+                AboutSlint { }
+
+                StandardButton {
+                    kind: ok;
+                }
             }
         }
     }
@@ -69,6 +81,8 @@ export component Menu {
         y: popup_y;
 
         Rectangle {
+            background: Palette.background;
+
             Text {
                 text: "Obliteration is a free and open-source software for playing your PlayStation 4 titles on PC.";
             }
@@ -90,35 +104,52 @@ export component Menu {
 
                     Button {
                         text: "Open System Folder";
-                        clicked => { open_system_folder(); }
+                        clicked => {
+                            open_system_folder();
+                        }
                     }
+
                     Button {
                         text: "Quit";
-                        clicked => { quit() }
+                        clicked => {
+                            quit()
+                        }
                     }
                 }
+
                 MenuItem {
                     title: "View";
 
                     Button {
                         text: "Logs";
-                        clicked => { logs.show(); }
+                        clicked => {
+                            logs.show();
+                        }
                     }
                 }
+
                 MenuItem {
                     title: "Help";
 
                     Button {
                         text: "Report an Issue";
-                        clicked => { open_new_issue_link(); }
+                        clicked => {
+                            GlobalCallbacks.open_url("https://github.com/obhq/obliteration/issues/new");
+                        }
                     }
+
                     Button {
                         text: "About Slint";
-                        clicked => { about_slint.show(); }
+                        clicked => {
+                            about_slint.show();
+                        }
                     }
+
                     Button {
                         text: "About Obliteration";
-                        clicked => { about_dialog.show(); }
+                        clicked => {
+                            about_dialog.show();
+                        }
                     }
                 }
             }

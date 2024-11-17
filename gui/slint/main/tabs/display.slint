@@ -10,16 +10,19 @@ export component DisplayTab {
             Text {
                 text: "Device";
             }
+
             ComboBox {
                 model: devices;
             }
         }
+
         VerticalBox {
             alignment: start;
 
             Text {
                 text: "Resolution";
             }
+
             ComboBox {
                 model: ["1280 × 720", "1920 × 1080", "3840 × 2160"];
                 current-value: "1920 × 1080";

@@ -76,6 +76,8 @@ fn run() -> Result<(), ApplicationError> {
 fn run_main_app() -> Result<(), ApplicationError> {
     let main_window = ui::MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
 
+    setup_global_callbacks(&main_window);
+
     let graphics_api = graphics::DefaultApi::new().map_err(ApplicationError::InitGraphicsApi)?;
 
     let devices: Vec<SharedString> = graphics_api
@@ -122,6 +124,23 @@ where
             .unwrap_or_default();
 
         SharedString::from(path)
+    });
+
+    global_callbacks.on_open_url(|url| {
+        let url = url.as_str();
+
+        if let Err(e) = open::that(url) {
+            ui::ErrorDialog::new()
+                .and_then(|error_dialog| {
+                    error_dialog.set_message(SharedString::from(format!(
+                        "Error opening {url}: {}",
+                        full_error_reason(e)
+                    )));
+
+                    error_dialog.show()
+                })
+                .unwrap();
+        }
     });
 }
 
