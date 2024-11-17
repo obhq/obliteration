@@ -32,6 +32,6 @@
   "rust-analyzer.cargo.features": "all",
   "rust-analyzer.imports.granularity.group": "module",
   "rust-analyzer.imports.group.enable": false,
-  "rust-analyzer.imports.prefix": "self"
+  "rust-analyzer.imports.prefix": "self",
   "slint.preview.style": "fluent-dark"
 }
