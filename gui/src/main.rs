@@ -2,7 +2,7 @@ use args::CliArgs;
 use clap::Parser;
 use debug::DebugServer;
 use graphics::{GraphicsApi, PhysicalDevice};
-use slint::{ComponentHandle, ModelExt, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Global, ModelExt, ModelRc, SharedString, VecModel};
 use std::path::Path;
 use std::process::{ExitCode, Termination};
 use thiserror::Error;
@@ -94,14 +94,23 @@ fn run_main_app() -> Result<(), ApplicationError> {
     Ok(())
 }
 
+fn setup_global_callbacks<'a, T>(component: &'a T)
+where
+    ui::GlobalCallbacks<'a>: Global<'a, T>,
+{
+    use ui::GlobalCallbacks;
+
+    let global_callbacks = GlobalCallbacks::get(component);
+
+    // TODO: implement (probably with rfd)
+    global_callbacks.on_select_folder(|| SharedString::new());
+}
+
 fn run_wizard() -> Result<(), slint::PlatformError> {
-    use ui::{FileValidationResult, GlobalCallbacks};
+    use ui::FileValidationResult;
 
     ui::Wizard::new().and_then(|wizard| {
-        let global_callbacks = wizard.global::<GlobalCallbacks>();
-
-        // TODO: implement
-        global_callbacks.on_select_folder(|| SharedString::new());
+        setup_global_callbacks(&wizard);
 
         let wizard_weak = wizard.as_weak();
 
