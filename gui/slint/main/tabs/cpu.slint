@@ -1,9 +1,8 @@
-import { Button, Slider, LineEdit, HorizontalBox } from "std-widgets.slint";
+import { Button, Slider, LineEdit, HorizontalBox, VerticalBox } from "std-widgets.slint";
 
 export component CpuTab {
-    HorizontalLayout {
-        VerticalLayout {
-            padding: 10px;
+    HorizontalBox {
+        VerticalBox {
             vertical-stretch: 0;
             alignment: start;
 
@@ -30,8 +29,7 @@ export component CpuTab {
                 text: "Changing this value to other than 8 may crash the game.";
             }
         }
-        VerticalLayout {
-            padding: 10px;
+        VerticalBox {
             vertical-stretch: 0;
             alignment: start;
 
