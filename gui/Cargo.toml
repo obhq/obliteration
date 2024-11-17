@@ -16,6 +16,7 @@ required-features = ["slint"]
 slint = [
     "dep:slint",
     "dep:clap",
+    "dep:rfd",
 ]
 qt = []
 
@@ -34,7 +35,7 @@ ciborium = "0.2.2"
 serde = { version = "1.0.209", features = ["derive"] }
 thiserror = "1.0"
 uuid = { version = "1.10.0", features = ["serde", "v4"] }
-rfd = "0.14.0"
+rfd = { version = "0.14.0", optional = true}
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 aarch64 = { path = "../arch/aarch64" }
