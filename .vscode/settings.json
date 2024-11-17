@@ -1,9 +1,20 @@
 {
+  "[json]": {
+    "editor.formatOnSave": true
+  },
   "[rust]": {
+    "editor.defaultFormatter": "rust-lang.rust-analyzer",
     "editor.formatOnSave": true,
     "editor.rulers": [
       100
     ]
+  },
+  "[slint]": {
+    "editor.defaultFormatter": "Slint.slint",
+    "editor.formatOnSave": true
+  },
+  "[toml]": {
+    "editor.formatOnSave": true
   },
   "clangd.arguments": [
     "--header-insertion=never"

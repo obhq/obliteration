@@ -1,11 +1,12 @@
 #![no_std]
 #![cfg_attr(not(test), no_main)]
 
-use crate::context::current_procmgr;
-use crate::imgact::Ps4Abi;
-use crate::malloc::KernelHeap;
-use crate::proc::{Fork, Proc, ProcAbi, ProcMgr, Thread};
-use crate::sched::sleep;
+use self::context::current_procmgr;
+use self::imgact::Ps4Abi;
+use self::malloc::{KernelHeap, Stage2};
+use self::proc::{Fork, Proc, ProcAbi, ProcMgr, Thread};
+use self::sched::sleep;
+use self::uma::Uma;
 use alloc::sync::Arc;
 use core::mem::zeroed;
 use core::panic::PanicInfo;
@@ -64,19 +65,20 @@ unsafe extern "C" fn _start(env: &'static BootEnv, conf: &'static Config) -> ! {
     let thread0 = Thread::new_bare(proc0);
 
     // Initialize foundations.
+    let uma = Uma::new();
     let pmgr = ProcMgr::new();
 
     // Activate CPU context.
     let thread0 = Arc::new(thread0);
 
-    self::context::run_with_context(0, thread0, pmgr, cx, main);
+    self::context::run_with_context(0, thread0, pmgr, cx, move || main(uma));
 }
 
-fn main() -> ! {
+fn main(mut uma: Uma) -> ! {
     // Activate stage 2 heap.
     info!("Activating stage 2 heap.");
 
-    unsafe { KERNEL_HEAP.activate_stage2() };
+    unsafe { KERNEL_HEAP.activate_stage2(Stage2::new(&mut uma)) };
 
     // Run sysinit vector. The PS4 use linker to put all sysinit functions in a list then loop the
     // list to execute all of it. We manually execute those functions instead for readability. This

@@ -1,14 +1,11 @@
-use self::bucket::UmaBucket;
+use super::bucket::UmaBucket;
 use crate::context::{current_thread, CpuLocal};
-use crate::lock::{Gutex, GutexGroup};
-use alloc::borrow::Cow;
+use crate::lock::Gutex;
 use alloc::collections::VecDeque;
 use core::cell::RefCell;
 use core::num::NonZero;
 use core::ops::DerefMut;
 use core::ptr::null_mut;
-
-mod bucket;
 
 /// Implementation of `uma_zone` structure.
 pub struct UmaZone {
@@ -21,25 +18,6 @@ pub struct UmaZone {
 }
 
 impl UmaZone {
-    /// See `uma_zcreate` on the PS4 for a reference.
-    ///
-    /// # Context safety
-    /// This function does not require a CPU context on **stage 1** heap.
-    pub fn new(_: Cow<'static, str>, size: NonZero<usize>, _: usize) -> Self {
-        // Ths PS4 allocate a new uma_zone from masterzone_z but we don't have that. This method
-        // basically an implementation of zone_ctor.
-        let gg = GutexGroup::new();
-
-        Self {
-            size,
-            caches: CpuLocal::new(|_| RefCell::default()),
-            full_buckets: gg.clone().spawn(VecDeque::new()),
-            free_buckets: gg.clone().spawn(VecDeque::new()),
-            alloc_count: gg.clone().spawn(0),
-            free_count: gg.spawn(0),
-        }
-    }
-
     pub fn size(&self) -> NonZero<usize> {
         self.size
     }
