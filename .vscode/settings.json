@@ -1,13 +1,12 @@
 {
 	"[jsonc]": {
-		"editor.tabSize": 2,
-		"editor.insertSpaces": true
+		"editor.insertSpaces": true,
+		"editor.tabSize": 2
 	},
 	"[rust]": {
 		"editor.formatOnSave": true,
 		"editor.rulers": [100]
 	},
-	"slint.preview.style": "fluent-dark",
 	"clangd.arguments": ["--header-insertion=never"],
 	"cmake.configureOnOpen": true,
 	"cmake.debugConfig": {
@@ -22,5 +21,6 @@
 	"rust-analyzer.cargo.features": "all",
 	"rust-analyzer.imports.granularity.group": "module",
 	"rust-analyzer.imports.group.enable": false,
-	"rust-analyzer.imports.prefix": "self"
+	"rust-analyzer.imports.prefix": "self",
+	"slint.preview.style": "fluent-dark"
 }
