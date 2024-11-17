@@ -101,9 +101,7 @@ fn run_wizard() -> Result<(), slint::PlatformError> {
         let global_callbacks = wizard.global::<GlobalCallbacks>();
 
         // TODO: implement
-        global_callbacks.on_select_folder(|| {
-            SharedString::new()
-        });
+        global_callbacks.on_select_folder(|| SharedString::new());
 
         let wizard_weak = wizard.as_weak();
 
