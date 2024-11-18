@@ -1,10 +1,11 @@
+use self::ui::ErrorDialog;
 use args::CliArgs;
 use clap::Parser;
 use debug::DebugServer;
 use graphics::{GraphicsApi, PhysicalDevice};
 use slint::{ComponentHandle, Global, ModelExt, ModelRc, SharedString, VecModel};
 use std::path::Path;
-use std::process::{ExitCode, Termination};
+use std::process::ExitCode;
 use thiserror::Error;
 
 mod args;
@@ -22,39 +23,21 @@ mod system;
 mod ui;
 mod vmm;
 
-fn main() -> AppExit {
-    let res = run().inspect_err(|e| {
-        ui::ErrorDialog::new()
-            .and_then(|error_dialog| {
-                error_dialog.set_message(SharedString::from(format!(
-                    "Error running application: {}",
-                    full_error_reason(e)
-                )));
-
-                error_dialog.run()
-            })
-            .unwrap();
-    });
-
-    AppExit::from(res)
+fn main() -> ExitCode {
+    match run() {
+        Ok(_) => ExitCode::SUCCESS,
+        Err(e) => {
+            display_error(e);
+            ExitCode::FAILURE
+        }
+    }
 }
 
 fn run() -> Result<(), ApplicationError> {
     let args = CliArgs::try_parse().map_err(ApplicationError::ParseArgs)?;
 
     #[cfg(unix)]
-    if let Err(e) = rlim::set_rlimit_nofile() {
-        ui::ErrorDialog::new()
-            .and_then(|error_dialog| {
-                error_dialog.set_message(SharedString::from(format!(
-                    "Error setting rlimit: {}",
-                    full_error_reason(e)
-                )));
-
-                error_dialog.run()
-            })
-            .unwrap();
-    }
+    rlim::set_rlimit_nofile().map_err(ApplicationError::FdLimit)?;
 
     // TODO: check if already configured and skip wizard
     run_wizard().map_err(ApplicationError::RunWizard)?;
@@ -107,6 +90,25 @@ fn run_main_app() -> Result<(), ApplicationError> {
     Ok(())
 }
 
+fn display_error(e: impl std::error::Error) {
+    use std::fmt::Write;
+
+    // Get full message.
+    let mut msg = e.to_string();
+    let mut src = e.source();
+
+    while let Some(e) = src {
+        write!(&mut msg, " -> {e}").unwrap();
+        src = e.source();
+    }
+
+    // Show error window.
+    let win = ErrorDialog::new().unwrap();
+
+    win.set_message(format!("An unexpected error has occurred: {msg}.").into());
+    win.run().unwrap();
+}
+
 fn setup_global_callbacks<'a, T>(component: &'a T)
 where
     ui::Globals<'a>: Global<'a, T>,
@@ -130,16 +132,7 @@ where
         let url = url.as_str();
 
         if let Err(e) = open::that(url) {
-            ui::ErrorDialog::new()
-                .and_then(|error_dialog| {
-                    error_dialog.set_message(SharedString::from(format!(
-                        "Error opening {url}: {}",
-                        full_error_reason(e)
-                    )));
-
-                    error_dialog.show()
-                })
-                .unwrap();
+            // TODO: Show a modal dialog.
         }
     });
 }
@@ -178,50 +171,13 @@ fn run_wizard() -> Result<(), slint::PlatformError> {
     })
 }
 
-fn full_error_reason<T>(e: T) -> String
-where
-    T: std::error::Error,
-{
-    use std::fmt::Write;
-
-    let mut msg = format!("{e}");
-    let mut src = e.source();
-
-    while let Some(e) = src {
-        write!(&mut msg, " -> {e}").unwrap();
-        src = e.source();
-    }
-
-    msg
-}
-
-pub enum AppExit {
-    Ok,
-    Err(ApplicationError),
-}
-
-impl Termination for AppExit {
-    fn report(self) -> ExitCode {
-        match self {
-            AppExit::Ok => ExitCode::SUCCESS,
-            AppExit::Err(e) => ExitCode::FAILURE,
-        }
-    }
-}
-
-impl From<Result<(), ApplicationError>> for AppExit {
-    fn from(v: Result<(), ApplicationError>) -> Self {
-        match v {
-            Ok(_) => AppExit::Ok,
-            Err(e) => AppExit::Err(e),
-        }
-    }
-}
-
 #[derive(Debug, Error)]
-pub enum ApplicationError {
+enum ApplicationError {
     #[error(transparent)]
     ParseArgs(clap::Error),
+
+    #[error("couldn't increase file descriptor limit")]
+    FdLimit(#[source] self::rlim::RlimitError),
 
     #[error("failed to run wizard")]
     RunWizard(#[source] slint::PlatformError),

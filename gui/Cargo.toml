@@ -13,12 +13,7 @@ path = "src/main.rs"
 required-features = ["slint"]
 
 [features]
-slint = [
-    "dep:slint",
-    "dep:clap",
-    "dep:rfd",
-    "dep:open",
-]
+slint = ["dep:slint", "dep:clap", "dep:rfd", "dep:open"]
 qt = []
 
 [dependencies]
@@ -29,7 +24,10 @@ gdbstub_arch = "0.3.1"
 humansize = "2.1.3"
 libc = "0.2.155"
 obconf = { path = "../src/obconf", features = ["serde", "virt"] }
-obfw = { git = "https://github.com/obhq/firmware-dumper.git", features = ["read", "std"] }
+obfw = { git = "https://github.com/obhq/firmware-dumper.git", features = [
+    "read",
+    "std",
+] }
 param = { path = "../src/param" }
 pkg = { path = "../src/pkg" }
 ciborium = "0.2.2"
@@ -48,12 +46,22 @@ x86-64 = { path = "../arch/x86-64" }
 [dependencies.slint]
 git = "https://github.com/slint-ui/slint"
 rev = "875ca075fb5b2dfe4c3ab0a499d5759412fc1395"
-features = ["compat-1-2", "std", "accessibility", "raw-window-handle-06", "backend-winit", "renderer-skia"]
+features = [
+    "compat-1-2",
+    "std",
+    "accessibility",
+    "raw-window-handle-06",
+    "backend-winit",
+    "renderer-skia",
+]
 default-features = false
 optional = true
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]
-ash = { version = "0.38.0", features = ["linked", "std"], default-features = false }
+ash = { version = "0.38.0", features = [
+    "linked",
+    "std",
+], default-features = false }
 
 [target.'cfg(windows)'.dependencies.windows-sys]
 version = "0.52.0"
