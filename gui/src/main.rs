@@ -176,6 +176,7 @@ enum ApplicationError {
     #[error(transparent)]
     ParseArgs(clap::Error),
 
+    #[cfg(unix)]
     #[error("couldn't increase file descriptor limit")]
     FdLimit(#[source] self::rlim::RlimitError),
 
