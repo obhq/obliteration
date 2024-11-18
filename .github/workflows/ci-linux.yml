@@ -27,7 +27,6 @@ jobs:
     - name: Generate cache keys
       run: |
         echo "flatpak-runtime=${{ runner.os }}-flatpak-runtime-${{ hashFiles('flatpak.yml') }}" >> $GITHUB_OUTPUT
-        echo "flatpak-build=${{ runner.os }}-flatpak-build-${{ hashFiles('flatpak.yml') }}" >> $GITHUB_OUTPUT
       id: cache-keys
     - name: Restore Flatpak runtimes
       uses: actions/cache/restore@v4
@@ -41,11 +40,6 @@ jobs:
           org.kde.Platform//6.7 org.kde.Sdk//6.7 \
           org.freedesktop.Sdk.Extension.rust-stable//23.08
       if: ${{ steps.flatpak-runtime.outputs.cache-hit != 'true' }}
-    - name: Restore build files
-      uses: actions/cache/restore@v4
-      with:
-        path: .flatpak-builder
-        key: ${{ steps.cache-keys.outputs.flatpak-build }}
     - name: Generate Flatpak branch
       run: |
         my $name;
@@ -68,12 +62,6 @@ jobs:
       run: flatpak build-export flatpak build
     - name: Bundle Flatpak
       run: flatpak build-bundle flatpak obliteration.flatpak io.github.obhq.Obliteration --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo
-    - name: Cache build files
-      uses: actions/cache/save@v4
-      with:
-        path: .flatpak-builder
-        key: ${{ steps.cache-keys.outputs.flatpak-build }}-${{ github.run_id }}
-      if: startsWith(github.ref, 'refs/heads/')
     - name: Cache Flatpak runtimes
       uses: actions/cache/save@v4
       with:
