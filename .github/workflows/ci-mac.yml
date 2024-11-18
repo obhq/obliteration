@@ -38,16 +38,10 @@ jobs:
         }
 
         open(my $output, '>>', $ENV{GITHUB_OUTPUT}) || die "Cannot open GITHUB_OUTPUT: $!";
-        print $output "cargo=${{ runner.os }}-${{ runner.arch }}-cargo\n";
         print $output "qt=${{ runner.os }}-${{ runner.arch }}-qt-".$qt->hexdigest."\n";
         print $output "target=${{ runner.os }}-${{ runner.arch }}-target\n";
       shell: perl {0}
       id: cache-keys
-    - name: Restore Cargo home
-      uses: actions/cache/restore@v4
-      with:
-        path: ~/.cargo
-        key: ${{ steps.cache-keys.outputs.cargo }}
     - name: Restore Qt
       uses: actions/cache/restore@v4
       with:
@@ -116,12 +110,6 @@ jobs:
       with:
         path: target
         key: ${{ steps.cache-keys.outputs.target }}-${{ github.run_id }}
-      if: startsWith(github.ref, 'refs/heads/')
-    - name: Cache Cargo home
-      uses: actions/cache/save@v4
-      with:
-        path: ~/.cargo
-        key: ${{ steps.cache-keys.outputs.cargo }}-${{ github.run_id }}
       if: startsWith(github.ref, 'refs/heads/')
     - name: Cache Qt
       uses: actions/cache/save@v4
