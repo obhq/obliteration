@@ -19,9 +19,9 @@ fn main() {
 }
 
 fn build_bin() {
-    // Compile main
+    // Compile Slint.
     slint_build::compile_with_config(
-        "slint/main.slint",
+        "ui/main.slint",
         CompilerConfiguration::new().with_style(String::from("fluent-dark")),
     )
     .unwrap();
