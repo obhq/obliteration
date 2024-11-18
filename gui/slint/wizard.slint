@@ -1,6 +1,6 @@
 
 import { Button, LineEdit, VerticalBox, HorizontalBox } from "std-widgets.slint";
-import { GlobalCallbacks } from "globals.slint";
+import { Globals } from "globals.slint";
 
 enum WizardPage {
     Intro,
@@ -16,6 +16,7 @@ export enum FileValidationResult {
 }
 
 export component Wizard inherits Window {
+    icon: Globals.icon;
     min-width: 1000px;
     min-height: 500px;
 
@@ -33,12 +34,12 @@ export component Wizard inherits Window {
             text: "Introduction";
             font-size: 30px;
         }
+
         Text {
-            text: "This wizard will help you setup Obliteration. "
-                + "To ensure you're ready, make sure you have a firmware dumped from your PS4 using "
-                + "the Firmware Dumper (https://github.com/obhq/firmware-dumper)";
+            text: "This wizard will help you setup Obliteration. To ensure you're ready, make sure you have a firmware dumped from your PS4 using the Firmware Dumper (https://github.com/obhq/firmware-dumper)";
             vertical-stretch: 1;
         }
+
         HorizontalLayout {
             alignment: end;
 
@@ -46,13 +47,19 @@ export component Wizard inherits Window {
                 enabled: false;
                 text: "Previous";
             }
+
             Button {
                 text: "Next";
-                clicked => { page = WizardPage.Firmware; }
+                clicked => {
+                    page = WizardPage.Firmware;
+                }
             }
+
             Button {
                 text: "Cancel";
-                clicked => { cancel(); }
+                clicked => {
+                    cancel();
+                }
             }
         }
     }
@@ -68,39 +75,54 @@ export component Wizard inherits Window {
                 text: "Install Firmware";
                 font-weight: 700;
             }
+
             Text {
                 text: "Select a firmware dump that you got from Firmware Dumper.";
                 vertical-stretch: 1;
             }
+
             HorizontalBox {
                 Text {
                     text: "File:";
                     vertical-alignment: center;
                 }
+
                 LineEdit {
                     text <=> firmware_path;
                 }
+
                 Button {
                     text: " ... ";
-                    clicked => { firmware_path = GlobalCallbacks.select_file("Select a firmware dump", "Firmware Dump (*.obf)", "obf")}
+                    clicked => {
+                        firmware_path = Globals.select_file("Select a firmware dump", "Firmware Dump (*.obf)", "obf")
+                    }
                 }
             }
         }
+
         HorizontalLayout {
             alignment: end;
 
             Button {
                 text: "Previous";
-                clicked => { page = WizardPage.Intro; }
+                clicked => {
+                    page = WizardPage.Intro;
+                }
             }
+
             Button {
                 enabled: validate_firmware_path(firmware_path) == FileValidationResult.Ok;
                 text: "Next";
-                clicked => { page = WizardPage.Conclusion; }
+                clicked => {
+                    page = WizardPage.Conclusion;
+                }
             }
+
             Button {
                 text: "Cancel";
-                clicked => { cancel(); }
+                clicked => {
+                    cancel();
+                }
             }
         }
     }
@@ -112,24 +134,34 @@ export component Wizard inherits Window {
             text: "Setup complete";
             font-weight: 700;
         }
+
         Text {
             text: "Firmware successully installed!";
             vertical-stretch: 1;
         }
+
         HorizontalLayout {
             alignment: end;
 
             Button {
                 text: "Previous";
-                clicked => { page = WizardPage.Firmware; }
+                clicked => {
+                    page = WizardPage.Firmware;
+                }
             }
+
             Button {
                 text: "Finish";
-                clicked => { cancel(); }
+                clicked => {
+                    cancel();
+                }
             }
+
             Button {
                 text: "Cancel";
-                clicked => { cancel(); }
+                clicked => {
+                    cancel();
+                }
             }
         }
     }

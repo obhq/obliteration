@@ -1,4 +1,5 @@
-import { Button, StandardButton, AboutSlint, HorizontalBox, Palette } from "std-widgets.slint";
+import { Button, StandardButton, AboutSlint, HorizontalBox, Palette, VerticalBox } from "std-widgets.slint";
+import { Globals } from "../globals.slint";
 
 component MenuItem inherits Rectangle {
     background: Palette.background;
@@ -7,7 +8,9 @@ component MenuItem inherits Rectangle {
 
     Button {
         text: title;
-        clicked => { submenu.show(); }
+        clicked => {
+            submenu.show();
+        }
     }
 
     submenu := PopupWindow {
@@ -21,8 +24,31 @@ component MenuItem inherits Rectangle {
     }
 }
 
+component BaseDialog inherits PopupWindow {
+    Rectangle {
+        background: Palette.background;
+
+        VerticalBox {
+            @children
+
+            HorizontalBox {
+                StandardButton {
+                    kind: ok;
+                }
+            }
+        }
+    }
+}
+
+component AboutDialog inherits BaseDialog {
+    Text {
+        text: "Obliteration is a free and open-source software for playing your PlayStation 4 titles on PC.";
+    }
+}
+
+component LogsDialog inherits BaseDialog { }
+
 export component Menu {
-    in property <brush> background;
     in property <length> popup_width;
     in property <length> popup_height;
     in property <length> popup_x;
@@ -32,20 +58,11 @@ export component Menu {
     pure callback open_new_issue_link();
     pure callback open_system_folder();
 
-    about_dialog := PopupWindow {
+    about_dialog := AboutDialog {
         width: popup_width;
         height: popup_height;
         x: popup_x;
         y: popup_y;
-
-        Rectangle {
-            Dialog {
-                Text {
-                    text: "Obliteration is a free and open-source software for playing your PlayStation 4 titles on PC.";
-                }
-                StandardButton { kind: ok; }
-            }
-        }
     }
 
     about_slint := PopupWindow {
@@ -55,24 +72,17 @@ export component Menu {
         y: popup_y;
 
         Rectangle {
-            Dialog {
-                AboutSlint {}
-                StandardButton { kind: ok;  }
-            }
+            background: Palette.background;
+
+            AboutSlint { }
         }
     }
 
-    logs := PopupWindow {
+    logs := LogsDialog {
         width: popup_width;
         height: popup_height;
         x: popup_x;
         y: popup_y;
-
-        Rectangle {
-            Text {
-                text: "Obliteration is a free and open-source software for playing your PlayStation 4 titles on PC.";
-            }
-        }
     }
 
     HorizontalBox {
@@ -90,35 +100,52 @@ export component Menu {
 
                     Button {
                         text: "Open System Folder";
-                        clicked => { open_system_folder(); }
+                        clicked => {
+                            open_system_folder();
+                        }
                     }
+
                     Button {
                         text: "Quit";
-                        clicked => { quit() }
+                        clicked => {
+                            quit()
+                        }
                     }
                 }
+
                 MenuItem {
                     title: "View";
 
                     Button {
                         text: "Logs";
-                        clicked => { logs.show(); }
+                        clicked => {
+                            logs.show();
+                        }
                     }
                 }
+
                 MenuItem {
                     title: "Help";
 
                     Button {
                         text: "Report an Issue";
-                        clicked => { open_new_issue_link(); }
+                        clicked => {
+                            Globals.open_url("https://github.com/obhq/obliteration/issues/new");
+                        }
                     }
+
                     Button {
                         text: "About Slint";
-                        clicked => { about_slint.show(); }
+                        clicked => {
+                            about_slint.show();
+                        }
                     }
+
                     Button {
                         text: "About Obliteration";
-                        clicked => { about_dialog.show(); }
+                        clicked => {
+                            about_dialog.show();
+                        }
                     }
                 }
             }

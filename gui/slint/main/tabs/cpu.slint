@@ -10,6 +10,7 @@ export component CpuTab {
             Text {
                 text: "Count";
             }
+
             HorizontalBox {
                 Slider {
                     value <=> cpus;
@@ -19,33 +20,40 @@ export component CpuTab {
                         cpus = Math.round(cpus);
                     }
                 }
+
                 Text {
                     vertical-alignment: center;
                     text: cpus;
                 }
             }
+
             Text {
                 text: "Changing this value to other than 8 may crash the game.";
             }
         }
+
         VerticalBox {
             alignment: start;
 
             Text {
                 text: "Debug";
             }
+
             HorizontalBox {
                 Text {
                     text: "Listen address";
                     vertical-alignment: center;
                 }
+
                 LineEdit {
                     text: "127.0.0.1:1234";
                 }
+
                 Button {
                     text: "Start";
                 }
             }
+
             Text {
                 text: "Specify a TCP address to listen for a debugger. The kernel will wait for a debugger to connect before start.";
             }

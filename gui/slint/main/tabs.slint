@@ -20,7 +20,9 @@ export component Tabs {
             Button {
                 icon: @image-url("menu.svg");
                 primary: root.tab == Tab.Menu;
-                clicked => { root.tab = Tab.Menu }
+                clicked => {
+                    root.tab = Tab.Menu
+                }
             }
 
             Button {
@@ -28,7 +30,9 @@ export component Tabs {
                 icon: @image-url("../../resources/monitor.svg");
                 horizontal-stretch: 1;
                 primary: root.tab == Tab.Display;
-                clicked => { root.tab = Tab.Display }
+                clicked => {
+                    root.tab = Tab.Display
+                }
             }
 
             Button {
@@ -36,7 +40,9 @@ export component Tabs {
                 icon: @image-url("../../resources/cpu-64-bit.svg");
                 horizontal-stretch: 1;
                 primary: root.tab == Tab.Cpu;
-                clicked => { root.tab = Tab.Cpu }
+                clicked => {
+                    root.tab = Tab.Cpu
+                }
             }
         }
 

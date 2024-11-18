@@ -1,3 +1,6 @@
-export global GlobalCallbacks {
+export global Globals {
+    in property <image> icon: @image-url("../resources/obliteration-icon.png");
+
+    pure callback open_url(string);
     pure callback select_file(string, string, string) -> string;
 }
