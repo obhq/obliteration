@@ -55,15 +55,22 @@ fn run() -> Result<(), ApplicationError> {
             .accept()
             .map_err(ApplicationError::CreateDebugClient)?;
 
-        let graphics_api =
+        let _graphics_api =
             graphics::DefaultApi::new().map_err(ApplicationError::InitGraphicsApi)?;
 
         let screen = ui::Screen::new().map_err(ApplicationError::CreateScreen)?;
 
+        // TODO: get profile from the filesystem
         let profiles = vec![profile::Profile::default()];
 
-        let vmm = Vmm::new(kernel_path, todo!(), todo!(), Some(debug_client), todo!())
-            .map_err(ApplicationError::RunVmm)?;
+        let vmm = Vmm::new(
+            kernel_path,
+            todo!(),
+            &profiles[0],
+            Some(debug_client),
+            todo!(),
+        )
+        .map_err(ApplicationError::RunVmm)?;
     }
 
     run_main_app()?;
