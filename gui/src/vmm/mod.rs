@@ -373,7 +373,7 @@ pub struct VmmEventHandler {
 }
 
 impl VmmEventHandler {
-    pub fn new(handler: impl Fn(VmmEvent) + 'static) -> Self {
+    pub unsafe fn new(handler: impl Fn(VmmEvent) + 'static) -> Self {
         Self {
             handler: Arc::new(handler),
         }

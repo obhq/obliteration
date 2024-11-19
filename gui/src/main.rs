@@ -63,7 +63,7 @@ fn run() -> Result<(), ApplicationError> {
         // TODO: get profile from the filesystem
         let profiles = vec![profile::Profile::default()];
 
-        let event_handler = VmmEventHandler::new(|event| {});
+        let event_handler = unsafe { VmmEventHandler::new(|event| {}) };
 
         let vmm = Vmm::new(
             kernel_path,
