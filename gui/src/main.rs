@@ -62,8 +62,7 @@ fn run() -> Result<(), ApplicationError> {
 
         let profiles = vec![profile::Profile::default()];
 
-        setup_global_models(&screen, &profiles, graphics_api.physical_devices())
-            .map_err(ApplicationError::SetupGlobalModels)?;
+        setup_global_models(&screen, &profiles, graphics_api.physical_devices());
 
         let vmm = Vmm::new(kernel_path, todo!(), todo!(), Some(debug_client), todo!())
             .map_err(ApplicationError::RunVmm)?;
@@ -82,8 +81,7 @@ fn run_main_app() -> Result<(), ApplicationError> {
     let profiles = vec![profile::Profile::default()];
 
     setup_globals(&main_window);
-    setup_global_models(&main_window, &profiles, graphics_api.physical_devices())
-        .map_err(ApplicationError::SetupGlobalModels)?;
+    setup_global_models(&main_window, &profiles, graphics_api.physical_devices());
 
     main_window.on_start_game(|_index| {
         // TODO: reuse the same window if possible
@@ -153,8 +151,7 @@ fn setup_global_models<'a, T>(
     component: &'a T,
     profiles: &[Profile],
     physical_devices: &[impl PhysicalDevice],
-) -> Result<(), SetupGlobalModelsError>
-where
+) where
     ui::GlobalModels<'a>: Global<'a, T>,
 {
     let global_models = ui::GlobalModels::get(component);
@@ -174,8 +171,6 @@ where
     ));
 
     global_models.set_devices(physical_devices);
-
-    Ok(())
 }
 
 fn setup_globals<'a, T>(component: &'a T)
@@ -267,9 +262,6 @@ enum ApplicationError {
     #[error("failed to create screen")]
     CreateScreen(#[source] slint::PlatformError),
 
-    #[error("failed to setup global models")]
-    SetupGlobalModels(#[source] SetupGlobalModelsError),
-
     #[error("failed to create main window")]
     CreateMainWindow(#[source] slint::PlatformError),
 
@@ -282,6 +274,3 @@ enum ApplicationError {
     #[error("failed to run main window")]
     RunMainWindow(#[source] slint::PlatformError),
 }
-
-#[derive(Debug, Error)]
-enum SetupGlobalModelsError {}
