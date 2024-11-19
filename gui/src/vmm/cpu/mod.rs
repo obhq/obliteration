@@ -3,11 +3,11 @@ pub use self::arch::*;
 
 use self::controller::CpuController;
 use self::debug::{DebugReq, DebugRes, Debugger};
-use super::hv::{Cpu, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, Hypervisor};
 use super::hw::{DeviceContext, DeviceTree};
 use super::ram::RamMap;
 use super::{KernelStop, VmmEvent, VmmEventHandler};
 use crate::error::RustError;
+use crate::hv::{Cpu, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, Hypervisor};
 use crate::screen::Screen;
 use gdbstub::common::{Signal, Tid};
 use gdbstub::stub::MultiThreadStopReason;

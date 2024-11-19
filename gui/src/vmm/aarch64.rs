@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use super::hv::{Cpu, CpuCommit, CpuFeats, CpuStates, Pstate, Sctlr, Tcr};
 use super::ram::RamMap;
 use super::MainCpuError;
+use crate::hv::{Cpu, CpuCommit, CpuFeats, CpuStates, Pstate, Sctlr, Tcr};
 use std::sync::atomic::Ordering;
 
 pub fn setup_main_cpu(

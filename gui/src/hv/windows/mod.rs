@@ -4,7 +4,6 @@ use self::mapper::WhpMapper;
 use self::partition::Partition;
 use super::{CpuFeats, Hypervisor, Ram};
 use std::num::NonZero;
-use std::sync::Arc;
 use thiserror::Error;
 use windows_sys::core::HRESULT;
 

@@ -2,8 +2,8 @@
 pub use self::console::*;
 pub use self::vmm::*;
 
-use super::hv::{Cpu, CpuExit, CpuIo, Hypervisor, IoBuf, LockedAddr};
 use super::VmmEventHandler;
+use crate::hv::{Cpu, CpuExit, CpuIo, Hypervisor, IoBuf, LockedAddr};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::num::NonZero;

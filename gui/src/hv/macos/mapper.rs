@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use crate::vmm::hv::RamMapper;
+use crate::hv::RamMapper;
 use applevisor_sys::{hv_return_t, hv_vm_map, HV_MEMORY_EXEC, HV_MEMORY_READ, HV_MEMORY_WRITE};
 use std::num::NonZero;
 use thiserror::Error;
