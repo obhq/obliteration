@@ -44,7 +44,7 @@ fn run() -> Result<(), ApplicationError> {
     run_wizard().map_err(ApplicationError::RunWizard)?;
 
     if let Some(debug_addr) = args.debug_addr() {
-        let kernel_path = get_kernel_path(&args).map_err(ApplicationError::GetCurrentExe)?;
+        let kernel_path = get_kernel_path(&args).map_err(ApplicationError::GetCurrentExePath)?;
 
         let debug_server = DebugServer::new(debug_addr)
             .map_err(|e| ApplicationError::StartDebugServer(e, debug_addr))?;
