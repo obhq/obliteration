@@ -62,8 +62,6 @@ fn run() -> Result<(), ApplicationError> {
 
         let profiles = vec![profile::Profile::default()];
 
-        setup_global_models(&screen, &profiles, graphics_api.physical_devices());
-
         let vmm = Vmm::new(kernel_path, todo!(), todo!(), Some(debug_client), todo!())
             .map_err(ApplicationError::RunVmm)?;
     }
@@ -78,10 +76,26 @@ fn run_main_app() -> Result<(), ApplicationError> {
 
     let graphics_api = graphics::DefaultApi::new().map_err(ApplicationError::InitGraphicsApi)?;
 
-    let profiles = vec![profile::Profile::default()];
+    let profiles = vec![Profile::default()];
 
     setup_globals(&main_window);
-    setup_global_models(&main_window, &profiles, graphics_api.physical_devices());
+
+    let profiles = ModelRc::new(VecModel::from_iter(
+        profiles
+            .iter()
+            .map(|p| SharedString::from(p.name().to_str().unwrap_or_default())),
+    ));
+
+    main_window.set_profiles(profiles);
+
+    let physical_devices = ModelRc::new(VecModel::from_iter(
+        graphics_api
+            .physical_devices()
+            .iter()
+            .map(|p| SharedString::from(p.name())),
+    ));
+
+    main_window.set_devices(physical_devices);
 
     main_window.on_start_game(|_index| {
         // TODO: reuse the same window if possible
@@ -145,32 +159,6 @@ fn display_error(e: impl std::error::Error) {
 
     win.set_message(format!("An unexpected error has occurred: {msg}.").into());
     win.run().unwrap();
-}
-
-fn setup_global_models<'a, T>(
-    component: &'a T,
-    profiles: &[Profile],
-    physical_devices: &[impl PhysicalDevice],
-) where
-    ui::GlobalModels<'a>: Global<'a, T>,
-{
-    let global_models = ui::GlobalModels::get(component);
-
-    let profiles = ModelRc::new(VecModel::from_iter(
-        profiles
-            .iter()
-            .map(|p| SharedString::from(p.name().to_str().unwrap_or_default())),
-    ));
-
-    global_models.set_profiles(profiles);
-
-    let physical_devices = ModelRc::new(VecModel::from_iter(
-        physical_devices
-            .iter()
-            .map(|p| SharedString::from(p.name())),
-    ));
-
-    global_models.set_devices(physical_devices);
 }
 
 fn setup_globals<'a, T>(component: &'a T)

@@ -1,7 +1,8 @@
 import { ComboBox, HorizontalBox, VerticalBox } from "std-widgets.slint";
-import { GlobalModels } from "../../globals.slint";
 
 export component DisplayTab {
+    in property <[string]> devices;
+
     HorizontalBox {
         padding: 0;
 
@@ -13,7 +14,7 @@ export component DisplayTab {
             }
 
             ComboBox {
-                model: GlobalModels.devices;
+                model: devices;
             }
         }
 

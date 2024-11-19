@@ -1,16 +1,19 @@
 import { Tabs } from "main/tabs.slint";
 import { Actions } from "main/actions.slint";
 import { Wizard, FileValidationResult } from "wizard.slint";
-import { Globals, GlobalModels } from "globals.slint";
+import { Globals } from "globals.slint";
 import { VerticalBox } from "std-widgets.slint";
 
-export { Wizard, FileValidationResult, Globals, GlobalModels }
+export { Wizard, FileValidationResult, Globals }
 
 export component MainWindow inherits Window {
     icon: Globals.icon;
     title: "Obliteration";
     min-width: 1000px;
     min-height: 500px;
+
+    in property <[string]> devices;
+    in property <[string]> profiles;
 
     pure callback start_game(int);
 
@@ -23,9 +26,12 @@ export component MainWindow inherits Window {
     pure callback quit();
 
     VerticalBox {
-        Tabs {}
+        Tabs {
+            devices: devices;
+        }
 
         Actions {
+            profiles: profiles;
             start_game => {
                 start_game(0)
             }
