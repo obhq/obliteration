@@ -76,7 +76,7 @@ pub struct Vmm {
 impl Vmm {
     pub fn new(
         kernel_path: impl AsRef<Path>,
-        screen: &VmmScreen,
+        screen: crate::screen::Default,
         profile: &Profile,
         debugger: Option<DebugClient>,
         event_handler: unsafe extern "C" fn(*const VmmEvent, *mut c_void),
@@ -309,9 +309,6 @@ impl Vmm {
             .build(&feats, vm_page_size, &devices, dynamic)
             .map_err(VmmError::BuildRam)?;
 
-        // Setup screen.
-        let screen = crate::screen::Default::from_screen(screen).map_err(VmmError::SetupScreen)?;
-
         // Setup CPU manager.
         let shutdown = Arc::new(AtomicBool::new(false));
         let mut cpu_manager = CpuManager::new(
@@ -543,9 +540,6 @@ pub enum VmmError {
 
     #[error("couldn't build RAM")]
     BuildRam(#[source] ram::RamBuilderError),
-
-    #[error("couldn't setup a screen")]
-    SetupScreen(#[source] crate::screen::ScreenError),
 
     #[error("couldn't setup a GDB stub")]
     SetupGdbStub(

@@ -36,8 +36,16 @@ pub unsafe extern "C" fn vmm_start(
         }
     };
 
-    let screen = unsafe { &*screen };
     let profile = unsafe { &*profile };
+    let screen = unsafe { &*screen };
+
+    let screen = match crate::screen::Default::from_screen(screen) {
+        Ok(v) => v,
+        Err(e) => {
+            *err = RustError::with_source("couldn't setup a screen", e).into_c();
+            return null_mut();
+        }
+    };
 
     match Vmm::new(path, screen, profile, debugger, event, cx) {
         Ok(vmm) => Box::into_raw(Box::new(vmm)),
