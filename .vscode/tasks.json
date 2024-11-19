@@ -2,7 +2,7 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Launch VMM (Debug)",
+      "label": "Launch VMM (Debug & Qt)",
       "detail": "Launch the GUI then start the VMM in debug mode",
       "type": "process",
       "isBackground": true,
@@ -29,6 +29,33 @@
         "--kernel",
         "${workspaceFolder}/build/obkrnl"
       ]
+    },
+    {
+      "label": "Launch VMM (Debug & Slint)",
+      "detail": "Launch the Slint GUI then start the VMM in debug mode",
+      "type": "shell",
+      "isBackground": true,
+      "runOptions": {
+        "instanceLimit": 1
+      },
+      "command": "cargo",
+      "args": [
+        "run",
+        "-p",
+        "gui",
+        "--features",
+        "slint",
+        "--bin",
+        "obliteration",
+        "--",
+        "--debug",
+        "127.0.0.1:1234",
+        "--kernel",
+        "${workspaceFolder}/build/obkrnl"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
     }
   ]
 }

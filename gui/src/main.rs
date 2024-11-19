@@ -1,10 +1,11 @@
 use self::ui::ErrorDialog;
+use self::vmm::Vmm;
 use args::CliArgs;
 use clap::Parser;
 use debug::DebugServer;
 use graphics::{GraphicsApi, PhysicalDevice};
 use slint::{ComponentHandle, Global, ModelExt, ModelRc, SharedString, VecModel};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use thiserror::Error;
 
@@ -44,12 +45,29 @@ fn run() -> Result<(), ApplicationError> {
     run_wizard().map_err(ApplicationError::RunWizard)?;
 
     if let Some(debug_addr) = args.debug_addr() {
+        let kernel_path = get_kernel_path(&args)?;
+
         let debug_server = DebugServer::new(debug_addr)
             .map_err(|e| ApplicationError::StartDebugServer(e, debug_addr))?;
 
-        let _debug_client = debug_server
+        let debug_client = debug_server
             .accept()
             .map_err(ApplicationError::CreateDebugClient)?;
+
+        let graphics_api =
+            graphics::DefaultApi::new().map_err(ApplicationError::InitGraphicsApi)?;
+
+        let screen = ui::Screen::new().map_err(ApplicationError::CreateScreen)?;
+
+        let vmm = Vmm::new(
+            kernel_path,
+            todo!(),
+            todo!(),
+            Some(debug_client),
+            todo!(),
+            todo!(),
+        )
+        .map_err(ApplicationError::RunVmm)?;
     }
 
     run_main_app()?;
@@ -89,6 +107,39 @@ fn run_main_app() -> Result<(), ApplicationError> {
     main_window.run().map_err(ApplicationError::RunMainWindow)?;
 
     Ok(())
+}
+
+fn get_kernel_path(args: &CliArgs) -> Result<PathBuf, ApplicationError> {
+    let kernel_path = if let Some(kernel_path) = args.kernel_path() {
+        kernel_path.to_path_buf()
+    } else {
+        let mut pathbuf = std::env::current_exe().map_err(ApplicationError::GetCurrentExePath)?;
+        pathbuf.pop();
+
+        #[cfg(target_os = "windows")]
+        {
+            pathbuf.push("share");
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            pathbuf.pop();
+
+            #[cfg(target_os = "macos")]
+            {
+                pathbuf.push("Resources");
+            }
+            #[cfg(not(target_os = "macos"))]
+            {
+                pathbuf.push("share");
+            }
+        }
+        pathbuf.push("obkrnl");
+
+        pathbuf
+    };
+
+    Ok(kernel_path)
 }
 
 fn display_error(e: impl std::error::Error) {
@@ -132,7 +183,7 @@ where
     global_callbacks.on_open_url(|url| {
         let url = url.as_str();
 
-        if let Err(e) = open::that(url) {
+        if let Err(_e) = open::that(url) {
             // TODO: Show a modal dialog.
         }
     });
@@ -184,20 +235,29 @@ enum ApplicationError {
     #[error("failed to run wizard")]
     RunWizard(#[source] slint::PlatformError),
 
+    #[error("get current executable path")]
+    GetCurrentExePath(#[source] std::io::Error),
+
     #[error("failed to start debug server on {1}")]
     StartDebugServer(
         #[source] debug::StartDebugServerError,
         std::net::SocketAddrV4,
     ),
 
-    #[error("failed to accept debug client")]
+    #[error("failed to accept debug connection")]
     CreateDebugClient(#[source] std::io::Error),
+
+    #[error("failed to create screen")]
+    CreateScreen(#[source] slint::PlatformError),
 
     #[error("failed to create main window")]
     CreateMainWindow(#[source] slint::PlatformError),
 
     #[error("failed to initialize graphics API")]
     InitGraphicsApi(#[source] <graphics::DefaultApi as GraphicsApi>::CreateError),
+
+    #[error("failed to run vmm")]
+    RunVmm(#[source] vmm::VmmError),
 
     #[error("failed to run main window")]
     RunMainWindow(#[source] slint::PlatformError),
