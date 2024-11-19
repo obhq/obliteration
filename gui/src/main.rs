@@ -235,7 +235,7 @@ enum ApplicationError {
     RunWizard(#[source] slint::PlatformError),
 
     #[error("get current executable path")]
-    GetCurrentExe(#[source] std::io::Error),
+    GetCurrentExePath(#[source] std::io::Error),
 
     #[error("failed to start debug server on {1}")]
     StartDebugServer(
