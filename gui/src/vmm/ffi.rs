@@ -1,4 +1,4 @@
-use super::{DebugResult, KernelStop, Vmm, VmmEvent, VmmScreen};
+use super::{DebugResult, KernelStop, Vmm, VmmEvent, VmmEventHandler, VmmScreen};
 use crate::debug::DebugClient;
 use crate::error::RustError;
 use crate::profile::Profile;
@@ -47,7 +47,9 @@ pub unsafe extern "C" fn vmm_start(
         }
     };
 
-    match Vmm::new(path, screen, profile, debugger, event, cx) {
+    let event_handler = VmmEventHandler { event, cx };
+
+    match Vmm::new(path, screen, profile, debugger, event_handler) {
         Ok(vmm) => Box::into_raw(Box::new(vmm)),
         Err(e) => {
             *err = RustError::wrap(e).into_c();

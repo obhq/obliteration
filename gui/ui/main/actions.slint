@@ -1,13 +1,12 @@
 import { Button, ComboBox, HorizontalBox } from "std-widgets.slint";
+import { Globals, GlobalModels } from "../globals.slint";
 
 export component Actions {
-    in property <[string]> profiles: [];
-
     pure callback start_game();
 
     HorizontalBox {
         ComboBox {
-            model: profiles;
+            model: GlobalModels.profiles;
             horizontal-stretch: 1;
         }
 

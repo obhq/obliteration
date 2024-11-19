@@ -78,14 +78,13 @@ impl Vmm {
         screen: crate::screen::Default,
         profile: &Profile,
         debugger: Option<DebugClient>,
-        event_handler: unsafe extern "C" fn(*const VmmEvent, *mut c_void),
-        cx: *mut c_void,
+        event_handler: VmmEventHandler,
     ) -> Result<Self, VmmError> {
         let path = kernel_path.as_ref();
 
         // Open kernel image.
         let mut kernel_img =
-            Kernel::open(path).map_err(|e| VmmError::OpenKernel(e, path.to_path_buf()))?;
+            Kernel::open(&path).map_err(|e| VmmError::OpenKernel(e, path.to_path_buf()))?;
 
         // Get program header enumerator.
         let hdrs = kernel_img
@@ -252,11 +251,11 @@ impl Vmm {
         let ram_size = NonZero::new(1024 * 1024 * 1024 * 8).unwrap();
 
         // Setup virtual devices.
-        let event = VmmEventHandler {
-            event: event_handler,
-            cx,
-        };
-        let devices = Arc::new(setup_devices(ram_size.get(), block_size, event));
+        let devices = Arc::new(setup_devices(
+            ram_size.get(),
+            block_size,
+            event_handler.clone(),
+        ));
 
         // Setup hypervisor.
         let mut hv = unsafe { crate::hv::new(8, ram_size, block_size, debugger.is_some()) }
@@ -314,7 +313,7 @@ impl Vmm {
             Arc::new(hv),
             screen.buffer().clone(),
             devices,
-            event,
+            event_handler,
             shutdown.clone(),
         );
 
@@ -368,14 +367,14 @@ pub struct VmmScreen {
 }
 
 /// Encapsulates a function to handle VMM events.
-#[derive(Clone, Copy)]
-struct VmmEventHandler {
+#[derive(Clone)]
+pub struct VmmEventHandler {
     event: unsafe extern "C" fn(*const VmmEvent, *mut c_void),
     cx: *mut c_void,
 }
 
 impl VmmEventHandler {
-    unsafe fn invoke(self, e: VmmEvent) {
+    unsafe fn invoke(&self, e: VmmEvent) {
         (self.event)(&e, self.cx);
     }
 }

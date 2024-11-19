@@ -23,8 +23,8 @@ pub fn setup_devices(
         next: start_addr,
     };
 
-    let vmm = b.push(|addr| Vmm::new(addr, block_size, event));
-    let console = b.push(|addr| Console::new(addr, block_size, event));
+    let vmm = b.push(|addr| Vmm::new(addr, block_size, event.clone()));
+    let console = b.push(|addr| Console::new(addr, block_size, event.clone()));
 
     DeviceTree {
         vmm,

@@ -12,7 +12,7 @@ use uuid::Uuid;
 mod ffi;
 
 /// Contains settings to launch the kernel.
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(default)]
 pub struct Profile {
     id: Uuid,

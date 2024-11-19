@@ -71,7 +71,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
             hv: self.hv.clone(),
             screen: self.screen.clone(),
             devices: self.devices.clone(),
-            event: self.event,
+            event: self.event.clone(),
             breakpoint: self.breakpoint.clone(),
             shutdown: self.shutdown.clone(),
         };

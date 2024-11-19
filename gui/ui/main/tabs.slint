@@ -11,8 +11,6 @@ enum Tab {
 }
 
 export component Tabs {
-    in property <[string]> devices: [];
-
     property <Tab> tab: Tab.Display;
 
     VerticalLayout {
@@ -51,7 +49,6 @@ export component Tabs {
         }
 
         if root.tab == Tab.Display: DisplayTab {
-            devices: devices;
             vertical-stretch: 1;
         }
 

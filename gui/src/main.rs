@@ -1,10 +1,11 @@
+use self::profile::Profile;
 use self::ui::ErrorDialog;
 use self::vmm::Vmm;
 use args::CliArgs;
 use clap::Parser;
 use debug::DebugServer;
 use graphics::{GraphicsApi, PhysicalDevice};
-use slint::{ComponentHandle, Global, ModelExt, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Global, ModelRc, SharedString, VecModel};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use thiserror::Error;
@@ -59,15 +60,13 @@ fn run() -> Result<(), ApplicationError> {
 
         let screen = ui::Screen::new().map_err(ApplicationError::CreateScreen)?;
 
-        let vmm = Vmm::new(
-            kernel_path,
-            todo!(),
-            todo!(),
-            Some(debug_client),
-            todo!(),
-            todo!(),
-        )
-        .map_err(ApplicationError::RunVmm)?;
+        let profiles = vec![profile::Profile::default()];
+
+        setup_global_models(&screen, &profiles, graphics_api.physical_devices())
+            .map_err(ApplicationError::SetupGlobalModels)?;
+
+        let vmm = Vmm::new(kernel_path, todo!(), todo!(), Some(debug_client), todo!())
+            .map_err(ApplicationError::RunVmm)?;
     }
 
     run_main_app()?;
@@ -78,24 +77,13 @@ fn run() -> Result<(), ApplicationError> {
 fn run_main_app() -> Result<(), ApplicationError> {
     let main_window = ui::MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
 
-    setup_global_callbacks(&main_window);
-
     let graphics_api = graphics::DefaultApi::new().map_err(ApplicationError::InitGraphicsApi)?;
 
-    let devices: Vec<SharedString> = graphics_api
-        .physical_devices()
-        .into_iter()
-        .map(|d| SharedString::from(d.name()))
-        .collect();
+    let profiles = vec![profile::Profile::default()];
 
-    main_window.set_devices(ModelRc::new(VecModel::from(devices)));
-
-    let profiles = ModelRc::new(
-        VecModel::from(vec![profile::Profile::default()])
-            .map(|p| SharedString::from(String::from(p.name().to_string_lossy()))),
-    );
-
-    main_window.set_profiles(profiles.clone());
+    setup_globals(&main_window);
+    setup_global_models(&main_window, &profiles, graphics_api.physical_devices())
+        .map_err(ApplicationError::SetupGlobalModels)?;
 
     main_window.on_start_game(|_index| {
         // TODO: reuse the same window if possible
@@ -161,13 +149,42 @@ fn display_error(e: impl std::error::Error) {
     win.run().unwrap();
 }
 
-fn setup_global_callbacks<'a, T>(component: &'a T)
+fn setup_global_models<'a, T>(
+    component: &'a T,
+    profiles: &[Profile],
+    physical_devices: &[impl PhysicalDevice],
+) -> Result<(), SetupGlobalModelsError>
+where
+    ui::GlobalModels<'a>: Global<'a, T>,
+{
+    let global_models = ui::GlobalModels::get(component);
+
+    let profiles = ModelRc::new(VecModel::from_iter(
+        profiles
+            .iter()
+            .map(|p| SharedString::from(p.name().to_str().unwrap_or_default())),
+    ));
+
+    global_models.set_profiles(profiles);
+
+    let physical_devices = ModelRc::new(VecModel::from_iter(
+        physical_devices
+            .iter()
+            .map(|p| SharedString::from(p.name())),
+    ));
+
+    global_models.set_devices(physical_devices);
+
+    Ok(())
+}
+
+fn setup_globals<'a, T>(component: &'a T)
 where
     ui::Globals<'a>: Global<'a, T>,
 {
-    let global_callbacks = ui::Globals::get(component);
+    let globals = ui::Globals::get(component);
 
-    global_callbacks.on_select_file(|title, filter_name, filter| {
+    globals.on_select_file(|title, filter_name, filter| {
         let dialog = rfd::FileDialog::new()
             .set_title(title)
             .add_filter(filter_name, &[filter]);
@@ -180,7 +197,7 @@ where
         SharedString::from(path)
     });
 
-    global_callbacks.on_open_url(|url| {
+    globals.on_open_url(|url| {
         let url = url.as_str();
 
         if let Err(_e) = open::that(url) {
@@ -193,7 +210,7 @@ fn run_wizard() -> Result<(), slint::PlatformError> {
     use ui::FileValidationResult;
 
     ui::Wizard::new().and_then(|wizard| {
-        setup_global_callbacks(&wizard);
+        setup_globals(&wizard);
 
         let wizard_weak = wizard.as_weak();
 
@@ -250,6 +267,9 @@ enum ApplicationError {
     #[error("failed to create screen")]
     CreateScreen(#[source] slint::PlatformError),
 
+    #[error("failed to setup global models")]
+    SetupGlobalModels(#[source] SetupGlobalModelsError),
+
     #[error("failed to create main window")]
     CreateMainWindow(#[source] slint::PlatformError),
 
@@ -262,3 +282,6 @@ enum ApplicationError {
     #[error("failed to run main window")]
     RunMainWindow(#[source] slint::PlatformError),
 }
+
+#[derive(Debug, Error)]
+enum SetupGlobalModelsError {}
