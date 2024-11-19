@@ -47,7 +47,7 @@
       "cwd": "${workspaceFolder}"
     },
     {
-      "name": "Kernel (Qt)",
+      "name": "Kernel | Qt",
       "type": "lldb",
       "request": "custom",
       "preLaunchTask": "Launch VMM (Debug & Qt)",
@@ -60,7 +60,7 @@
       ]
     },
     {
-      "name": "Kernel (Slint)",
+      "name": "Kernel | Slint",
       "type": "lldb",
       "request": "custom",
       "preLaunchTask": "Launch VMM (Debug & Slint)",
