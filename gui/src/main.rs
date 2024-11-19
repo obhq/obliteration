@@ -117,7 +117,7 @@ fn get_kernel_path(args: &CliArgs) -> Result<PathBuf, std::io::Error> {
 
         #[cfg(target_os = "windows")]
         {
-            b.push("share");
+            pathbuf.push("share");
         }
 
         #[cfg(not(target_os = "windows"))]
