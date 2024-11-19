@@ -2,7 +2,7 @@
 use super::ffi::{
     KvmFpu, KvmRegs, KvmSregs, KVM_GET_FPU, KVM_GET_REGS, KVM_GET_SREGS, KVM_SET_REGS,
 };
-use crate::vmm::hv::{CpuCommit, CpuStates};
+use crate::hv::{CpuCommit, CpuStates};
 use libc::ioctl;
 use std::ffi::c_int;
 use std::mem::MaybeUninit;

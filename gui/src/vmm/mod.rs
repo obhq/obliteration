@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::CpuManager;
-use self::hv::{Hypervisor, Ram};
 use self::hw::{setup_devices, Device};
 use self::kernel::{
     Kernel, PT_DYNAMIC, PT_GNU_EH_FRAME, PT_GNU_RELRO, PT_GNU_STACK, PT_LOAD, PT_NOTE, PT_PHDR,
@@ -8,6 +7,7 @@ use self::kernel::{
 use self::ram::RamBuilder;
 use crate::debug::DebugClient;
 use crate::error::RustError;
+use crate::hv::{Hypervisor, Ram};
 use crate::profile::Profile;
 use crate::screen::Screen;
 use cpu::GdbError;
@@ -32,7 +32,6 @@ mod cpu;
 mod debug;
 #[cfg(feature = "qt")]
 mod ffi;
-mod hv;
 mod hw;
 mod kernel;
 mod ram;
@@ -61,12 +60,12 @@ fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
 
 /// Manage a virtual machine that run the kernel.
 pub struct Vmm {
-    cpu: CpuManager<self::hv::Default, crate::screen::Default>, // Drop first.
+    cpu: CpuManager<crate::hv::Default, crate::screen::Default>, // Drop first.
     screen: crate::screen::Default,
     gdb: Option<
         GdbStubStateMachine<
             'static,
-            CpuManager<self::hv::Default, crate::screen::Default>,
+            CpuManager<crate::hv::Default, crate::screen::Default>,
             DebugClient,
         >,
     >,
@@ -260,7 +259,7 @@ impl Vmm {
         let devices = Arc::new(setup_devices(ram_size.get(), block_size, event));
 
         // Setup hypervisor.
-        let mut hv = unsafe { self::hv::new(8, ram_size, block_size, debugger.is_some()) }
+        let mut hv = unsafe { crate::hv::new(8, ram_size, block_size, debugger.is_some()) }
             .map_err(VmmError::SetupHypervisor)?;
 
         // Map the kernel.
@@ -521,10 +520,10 @@ pub enum VmmError {
     TotalSizeTooLarge,
 
     #[error("couldn't setup a hypervisor")]
-    SetupHypervisor(#[source] hv::HypervisorError),
+    SetupHypervisor(#[source] crate::hv::HypervisorError),
 
     #[error("couldn't allocate RAM for the kernel")]
-    AllocateRamForKernel(#[source] hv::RamError),
+    AllocateRamForKernel(#[source] crate::hv::RamError),
 
     #[error("couldn't seek to offset")]
     SeekToOffset(#[source] std::io::Error),
@@ -536,10 +535,10 @@ pub enum VmmError {
     ReadKernel(#[source] std::io::Error, u64),
 
     #[error("couldn't allocate RAM for stack")]
-    AllocateRamForStack(#[source] hv::RamError),
+    AllocateRamForStack(#[source] crate::hv::RamError),
 
     #[error("couldn't allocate RAM for arguments")]
-    AllocateRamForArgs(#[source] hv::RamError),
+    AllocateRamForArgs(#[source] crate::hv::RamError),
 
     #[error("couldn't build RAM")]
     BuildRam(#[source] ram::RamBuilderError),

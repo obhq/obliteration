@@ -2,7 +2,7 @@
 use super::arch::{KvmStates, StatesError};
 use super::ffi::{KVM_EXIT_DEBUG, KVM_EXIT_HLT, KVM_EXIT_IO, KVM_RUN};
 use super::run::KvmRun;
-use crate::vmm::hv::{Cpu, CpuDebug, CpuExit, CpuIo, CpuRun, IoBuf};
+use crate::hv::{Cpu, CpuDebug, CpuExit, CpuIo, CpuRun, IoBuf};
 use gdbstub::stub::MultiThreadStopReason;
 use libc::{ioctl, munmap};
 use std::num::NonZero;

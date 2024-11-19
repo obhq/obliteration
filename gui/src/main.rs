@@ -12,6 +12,7 @@ mod args;
 mod debug;
 mod error;
 mod graphics;
+mod hv;
 mod param;
 mod pkg;
 mod profile;

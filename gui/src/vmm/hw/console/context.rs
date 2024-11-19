@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::Console;
-use crate::vmm::hv::{Cpu, CpuExit, CpuIo, Hypervisor};
+use crate::hv::{Cpu, CpuExit, CpuIo, Hypervisor};
 use crate::vmm::hw::{read_ptr, read_u8, read_usize, DeviceContext, MmioError};
 use crate::vmm::VmmEvent;
 use obconf::{ConsoleMemory, ConsoleType};

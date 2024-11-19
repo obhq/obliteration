@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use super::hv::{RamError, RamMapper};
 use super::Ram;
-use crate::vmm::hv::CpuFeats;
+use crate::hv::{CpuFeats, RamError, RamMapper};
 use crate::vmm::hw::DeviceTree;
 use crate::vmm::kernel::ProgramHeader;
 use obconf::{BootEnv, Config};

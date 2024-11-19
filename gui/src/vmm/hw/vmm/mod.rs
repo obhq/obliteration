@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::context::Context;
 use super::{Device, DeviceContext};
-use crate::vmm::hv::Cpu;
+use crate::hv::Cpu;
 use crate::vmm::VmmEventHandler;
 use obconf::VmmMemory;
 use std::num::NonZero;
