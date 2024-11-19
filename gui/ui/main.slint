@@ -2,6 +2,7 @@ import { Tabs } from "main/tabs.slint";
 import { Actions } from "main/actions.slint";
 import { Wizard, FileValidationResult } from "wizard.slint";
 import { Globals, GlobalModels } from "globals.slint";
+import { VerticalBox } from "std-widgets.slint";
 
 export { Wizard, FileValidationResult, Globals, GlobalModels }
 
@@ -21,8 +22,8 @@ export component MainWindow inherits Window {
     pure callback open_system_folder();
     pure callback quit();
 
-    VerticalLayout {
-        Tabs { }
+    VerticalBox {
+        Tabs {}
 
         Actions {
             start_game => {
