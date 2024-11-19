@@ -1,5 +1,4 @@
-
-import { TabWidget, Button, HorizontalBox } from "std-widgets.slint";
+import { Button, HorizontalBox, VerticalBox } from "std-widgets.slint";
 import { DisplayTab } from "tabs/display.slint";
 import { CpuTab } from "tabs/cpu.slint";
 import { Menu } from "menu.slint";
@@ -15,8 +14,12 @@ export component Tabs {
 
     property <Tab> tab: Tab.Display;
 
-    VerticalLayout {
+    VerticalBox {
+        padding: 0;
+
         HorizontalBox {
+            padding: 0;
+
             Button {
                 icon: @image-url("menu.svg");
                 primary: root.tab == Tab.Menu;
