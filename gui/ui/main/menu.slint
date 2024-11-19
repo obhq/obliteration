@@ -1,52 +1,97 @@
 import { Button, StandardButton, AboutSlint, HorizontalBox, Palette, VerticalBox } from "std-widgets.slint";
 import { Globals } from "../globals.slint";
 
-component MenuItem inherits Rectangle {
-    background: Palette.background;
+enum Page {
+    Help,
+    About
+}
 
-    in property <string> title;
+component SideBarItem {
+    in property <bool> selected;
+    in-out property <string> text <=> label.text;
 
-    Button {
-        text: title;
-        clicked => {
-            submenu.show();
+    callback clicked <=> touch.clicked;
+
+    min-height: l.preferred-height;
+
+    states [
+        pressed when touch.pressed: {
+            state.opacity: 0.8;
         }
+        hover when touch.has-hover: {
+            state.opacity: 0.6;
+        }
+        selected when root.selected: {
+            state.opacity: 1;
+        }
+    ]
+
+    state := Rectangle {
+        opacity: 0;
+        background: Palette.background;
+
+        animate opacity { duration: 150ms; }
     }
 
-    submenu := PopupWindow {
-        x: parent.x + parent.width;
+    l := HorizontalBox {
+        label := Text { }
+    }
 
-        VerticalLayout {
-            spacing: 0;
-
-            @children
-        }
+    touch := TouchArea {
+        width: 100%;
+        height: 100%;
     }
 }
 
-component BaseDialog inherits PopupWindow {
+component SideBar {
+    out property <Page> current-page;
+
+    width: 180px;
+
     Rectangle {
-        background: Palette.background;
+        background: Palette.background.darker(0.2);
+    }
 
-        VerticalBox {
-            @children
+    VerticalLayout {
+        alignment: start;
 
-            HorizontalBox {
-                StandardButton {
-                    kind: ok;
-                }
+        SideBarItem {
+            text: "Help";
+            selected: root.current-page == Page.Help;
+            clicked => {
+                root.current-page = Page.Help;
+            }
+        }
+
+        SideBarItem {
+            text: "About";
+            selected: root.current-page == Page.About;
+            clicked => {
+                root.current-page = Page.About;
             }
         }
     }
 }
 
-component AboutDialog inherits BaseDialog {
-    Text {
-        text: "Obliteration is a free and open-source software for playing your PlayStation 4 titles on PC.";
+component Help {
+    Button {
+        text: "Report an Issue";
+        clicked => {
+            Globals.open_url("https://github.com/obhq/obliteration/issues/new");
+        }
     }
 }
 
-component LogsDialog inherits BaseDialog { }
+component About {
+    VerticalLayout {
+        Text {
+            text: "Obliteration is a free and open-source software for playing your PlayStation 4 titles on PC.";
+            horizontal-alignment: center;
+        }
+
+        AboutSlint { }
+    }
+}
 
 export component Menu {
     in property <length> popup_width;
@@ -54,101 +99,12 @@ export component Menu {
     in property <length> popup_x;
     in property <length> popup_y;
 
-    pure callback quit();
-    pure callback open_new_issue_link();
-    pure callback open_system_folder();
-
-    about_dialog := AboutDialog {
-        width: popup_width;
-        height: popup_height;
-        x: popup_x;
-        y: popup_y;
-    }
-
-    about_slint := PopupWindow {
-        width: popup_width;
-        height: popup_height;
-        x: popup_x;
-        y: popup_y;
-
-        Rectangle {
-            background: Palette.background;
-
-            AboutSlint { }
-        }
-    }
-
-    logs := LogsDialog {
-        width: popup_width;
-        height: popup_height;
-        x: popup_x;
-        y: popup_y;
-    }
-
     HorizontalBox {
-        alignment: start;
+        padding: 0;
 
-        Rectangle {
-            background: Palette.background;
+        nav := SideBar { }
 
-            VerticalLayout {
-                alignment: start;
-                spacing: 0;
-
-                MenuItem {
-                    title: "File";
-
-                    Button {
-                        text: "Open System Folder";
-                        clicked => {
-                            open_system_folder();
-                        }
-                    }
-
-                    Button {
-                        text: "Quit";
-                        clicked => {
-                            quit()
-                        }
-                    }
-                }
-
-                MenuItem {
-                    title: "View";
-
-                    Button {
-                        text: "Logs";
-                        clicked => {
-                            logs.show();
-                        }
-                    }
-                }
-
-                MenuItem {
-                    title: "Help";
-
-                    Button {
-                        text: "Report an Issue";
-                        clicked => {
-                            Globals.open_url("https://github.com/obhq/obliteration/issues/new");
-                        }
-                    }
-
-                    Button {
-                        text: "About Slint";
-                        clicked => {
-                            about_slint.show();
-                        }
-                    }
-
-                    Button {
-                        text: "About Obliteration";
-                        clicked => {
-                            about_dialog.show();
-                        }
-                    }
-                }
-            }
-        }
+        if nav.current-page == Page.Help: Help { }
+        if nav.current-page == Page.About: About { }
     }
 }

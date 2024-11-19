@@ -2,6 +2,7 @@ import { Tabs } from "main/tabs.slint";
 import { Actions } from "main/actions.slint";
 import { Wizard, FileValidationResult } from "wizard.slint";
 import { Globals } from "globals.slint";
+import { VerticalBox } from "std-widgets.slint";
 
 export { Wizard, FileValidationResult, Globals }
 
@@ -24,7 +25,7 @@ export component MainWindow inherits Window {
     pure callback open_system_folder();
     pure callback quit();
 
-    VerticalLayout {
+    VerticalBox {
         Tabs {
             devices: devices;
         }
