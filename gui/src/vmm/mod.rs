@@ -17,7 +17,7 @@ use kernel::{KernelError, ProgramHeaderError};
 use obconf::{BootEnv, ConsoleType, Vm};
 use std::cmp::max;
 use std::error::Error;
-use std::ffi::{c_char, c_void, CStr};
+use std::ffi::{c_char, CStr};
 use std::io::Read;
 use std::num::NonZero;
 use std::path::{Path, PathBuf};
@@ -369,13 +369,18 @@ pub struct VmmScreen {
 /// Encapsulates a function to handle VMM events.
 #[derive(Clone)]
 pub struct VmmEventHandler {
-    event: unsafe extern "C" fn(*const VmmEvent, *mut c_void),
-    cx: *mut c_void,
+    handler: Arc<dyn Fn(VmmEvent)>,
 }
 
 impl VmmEventHandler {
-    unsafe fn invoke(&self, e: VmmEvent) {
-        (self.event)(&e, self.cx);
+    pub fn new(handler: impl Fn(VmmEvent) + 'static) -> Self {
+        Self {
+            handler: Arc::new(handler),
+        }
+    }
+
+    fn invoke(&self, e: VmmEvent) {
+        (self.handler)(e);
     }
 }
 

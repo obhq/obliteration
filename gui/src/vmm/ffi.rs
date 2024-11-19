@@ -16,7 +16,7 @@ pub unsafe extern "C" fn vmm_start(
     screen: *const VmmScreen,
     profile: *const Profile,
     debugger: *mut DebugClient,
-    event: unsafe extern "C" fn(*const VmmEvent, *mut c_void),
+    event_handler: unsafe extern "C" fn(*const VmmEvent, *mut c_void),
     cx: *mut c_void,
     err: *mut *mut RustError,
 ) -> *mut Vmm {
@@ -47,7 +47,7 @@ pub unsafe extern "C" fn vmm_start(
         }
     };
 
-    let event_handler = VmmEventHandler { event, cx };
+    let event_handler = VmmEventHandler::new(move |event| event_handler(&event, cx));
 
     match Vmm::new(path, screen, profile, debugger, event_handler) {
         Ok(vmm) => Box::into_raw(Box::new(vmm)),

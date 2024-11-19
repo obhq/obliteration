@@ -1,6 +1,6 @@
 use self::profile::Profile;
 use self::ui::ErrorDialog;
-use self::vmm::Vmm;
+use self::vmm::{Vmm, VmmEventHandler};
 use args::CliArgs;
 use clap::Parser;
 use debug::DebugServer;
@@ -63,12 +63,14 @@ fn run() -> Result<(), ApplicationError> {
         // TODO: get profile from the filesystem
         let profiles = vec![profile::Profile::default()];
 
+        let event_handler = VmmEventHandler::new(|event| {});
+
         let vmm = Vmm::new(
             kernel_path,
             todo!(),
             &profiles[0],
             Some(debug_client),
-            todo!(),
+            event_handler,
         )
         .map_err(ApplicationError::RunVmm)?;
     }
