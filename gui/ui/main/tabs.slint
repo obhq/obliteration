@@ -10,9 +10,9 @@ enum Tab {
 }
 
 export component Tabs {
-    in property <[string]> devices: [];
-
     property <Tab> tab: Tab.Display;
+
+    in property <[string]> devices;
 
     VerticalBox {
         padding: 0;
@@ -54,7 +54,7 @@ export component Tabs {
         }
 
         if root.tab == Tab.Display: DisplayTab {
-            devices: devices;
+            devices: root.devices;
             vertical-stretch: 1;
         }
 

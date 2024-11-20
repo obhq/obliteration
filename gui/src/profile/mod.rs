@@ -12,7 +12,7 @@ use uuid::Uuid;
 mod ffi;
 
 /// Contains settings to launch the kernel.
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(default)]
 pub struct Profile {
     id: Uuid,
@@ -45,6 +45,10 @@ impl Profile {
         ciborium::into_writer(self, file).map_err(SaveError::WriteFile)?;
 
         Ok(())
+    }
+
+    pub fn id(&self) -> Uuid {
+        self.id
     }
 
     pub fn name(&self) -> &CStr {

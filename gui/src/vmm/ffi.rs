@@ -16,7 +16,7 @@ pub unsafe extern "C" fn vmm_start(
     screen: *const VmmScreen,
     profile: *const Profile,
     debugger: *mut DebugClient,
-    event: unsafe extern "C" fn(*const VmmEvent, *mut c_void),
+    event_handler: unsafe extern "C" fn(*const VmmEvent, *mut c_void),
     cx: *mut c_void,
     err: *mut *mut RustError,
 ) -> *mut Vmm {
@@ -47,7 +47,12 @@ pub unsafe extern "C" fn vmm_start(
         }
     };
 
-    match Vmm::new(path, screen, profile, debugger, event, cx) {
+    // Cast to make the closure Send + Sync.
+    let cx_usize = cx as usize;
+
+    match Vmm::new(path, screen, profile, debugger, move |event| {
+        event_handler(&event, cx_usize as *mut c_void)
+    }) {
         Ok(vmm) => Box::into_raw(Box::new(vmm)),
         Err(e) => {
             *err = RustError::wrap(e).into_c();

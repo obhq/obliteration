@@ -12,8 +12,8 @@ export component MainWindow inherits Window {
     min-width: 1000px;
     min-height: 500px;
 
-    in property <[string]> profiles: [];
-    in property <[string]> devices: [];
+    in property <[string]> devices;
+    in property <[string]> profiles;
 
     pure callback start_game(int);
 

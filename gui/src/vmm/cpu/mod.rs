@@ -71,7 +71,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
             hv: self.hv.clone(),
             screen: self.screen.clone(),
             devices: self.devices.clone(),
-            event: self.event,
+            event: self.event.clone(),
             breakpoint: self.breakpoint.clone(),
             shutdown: self.shutdown.clone(),
         };
@@ -110,14 +110,14 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
             Ok(v) => v,
             Err(e) => {
                 let e = RustError::with_source("couldn't create main CPU", e);
-                unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+                (args.event)(VmmEvent::Error { reason: &e });
                 return;
             }
         };
 
         if let Err(e) = super::arch::setup_main_cpu(&mut cpu, entry, map, args.hv.cpu_features()) {
             let e = RustError::with_source("couldn't setup main CPU", e);
-            unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+            (args.event)(VmmEvent::Error { reason: &e });
             return;
         }
 
@@ -199,7 +199,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
         };
 
         if let Some(e) = e {
-            unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+            (args.event)(VmmEvent::Error { reason: &e });
         }
 
         // Shutdown other CPUs.
@@ -289,7 +289,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
         // Notify GUI. We need to allow only one CPU to enter the debugger dispatch loop.
         let lock = args.breakpoint.lock().unwrap();
 
-        unsafe { args.event.invoke(VmmEvent::Breakpoint { stop }) };
+        (args.event)(VmmEvent::Breakpoint { stop });
 
         // Wait for command from debugger thread.
         loop {
@@ -305,7 +305,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                         Ok(v) => v,
                         Err(e) => {
                             let e = RustError::with_source("couldn't get CPU states", e);
-                            unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+                            (args.event)(VmmEvent::Error { reason: &e });
                             return false;
                         }
                     };
@@ -313,7 +313,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                     match Self::get_debug_regs(&mut states) {
                         Ok(v) => debug.send(DebugRes::Regs(v)),
                         Err(e) => {
-                            unsafe { args.event.invoke(VmmEvent::Error { reason: &e }) };
+                            (args.event)(VmmEvent::Error { reason: &e });
                             return false;
                         }
                     }
@@ -326,7 +326,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                             e,
                         );
 
-                        unsafe { args.event.invoke(VmmEvent::Error { reason: &err }) };
+                        (args.event)(VmmEvent::Error { reason: &err });
                         return false;
                     }
                 },

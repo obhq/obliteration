@@ -17,7 +17,7 @@ use kernel::{KernelError, ProgramHeaderError};
 use obconf::{BootEnv, ConsoleType, Vm};
 use std::cmp::max;
 use std::error::Error;
-use std::ffi::{c_char, c_void, CStr};
+use std::ffi::{c_char, CStr};
 use std::io::Read;
 use std::num::NonZero;
 use std::path::{Path, PathBuf};
@@ -78,14 +78,15 @@ impl Vmm {
         screen: crate::screen::Default,
         profile: &Profile,
         debugger: Option<DebugClient>,
-        event_handler: unsafe extern "C" fn(*const VmmEvent, *mut c_void),
-        cx: *mut c_void,
+        event_handler: impl Fn(VmmEvent) + Send + Sync + 'static,
     ) -> Result<Self, VmmError> {
+        let event_handler = Arc::new(event_handler);
+
         let path = kernel_path.as_ref();
 
         // Open kernel image.
         let mut kernel_img =
-            Kernel::open(path).map_err(|e| VmmError::OpenKernel(e, path.to_path_buf()))?;
+            Kernel::open(&path).map_err(|e| VmmError::OpenKernel(e, path.to_path_buf()))?;
 
         // Get program header enumerator.
         let hdrs = kernel_img
@@ -252,11 +253,11 @@ impl Vmm {
         let ram_size = NonZero::new(1024 * 1024 * 1024 * 8).unwrap();
 
         // Setup virtual devices.
-        let event = VmmEventHandler {
-            event: event_handler,
-            cx,
-        };
-        let devices = Arc::new(setup_devices(ram_size.get(), block_size, event));
+        let devices = Arc::new(setup_devices(
+            ram_size.get(),
+            block_size,
+            event_handler.clone(),
+        ));
 
         // Setup hypervisor.
         let mut hv = unsafe { crate::hv::new(8, ram_size, block_size, debugger.is_some()) }
@@ -314,7 +315,7 @@ impl Vmm {
             Arc::new(hv),
             screen.buffer().clone(),
             devices,
-            event,
+            event_handler,
             shutdown.clone(),
         );
 
@@ -368,20 +369,7 @@ pub struct VmmScreen {
 }
 
 /// Encapsulates a function to handle VMM events.
-#[derive(Clone, Copy)]
-struct VmmEventHandler {
-    event: unsafe extern "C" fn(*const VmmEvent, *mut c_void),
-    cx: *mut c_void,
-}
-
-impl VmmEventHandler {
-    unsafe fn invoke(self, e: VmmEvent) {
-        (self.event)(&e, self.cx);
-    }
-}
-
-unsafe impl Send for VmmEventHandler {}
-unsafe impl Sync for VmmEventHandler {}
+pub type VmmEventHandler = Arc<dyn Fn(VmmEvent) + Send + Sync + 'static>;
 
 /// Contains VMM event information.
 #[repr(C)]
