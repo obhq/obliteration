@@ -247,21 +247,6 @@ enum ApplicationError {
     #[error("couldn't increase file descriptor limit")]
     FdLimit(#[source] self::rlim::RlimitError),
 
-    #[error("failed to get project directories")]
-    GetProjectDirs,
-
-    #[error("failed to open directory with profiles ({1})")]
-    OpenProfilesDir(#[source] std::io::Error, PathBuf),
-
-    #[error("failed to read profile directory")]
-    ReadProfileDir(#[source] std::io::Error),
-
-    #[error("failed to load profile from {1}")]
-    LoadProfile(#[source] profile::LoadError, PathBuf),
-
-    #[error("failed to save profile to {1}")]
-    SaveProfile(#[source] profile::SaveError, PathBuf),
-
     #[error("failed to run wizard")]
     RunWizard(#[source] slint::PlatformError),
 
