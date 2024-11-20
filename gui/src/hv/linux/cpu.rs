@@ -68,6 +68,8 @@ impl<'a> Cpu for KvmCpu<'a> {
 
     #[cfg(target_arch = "x86_64")]
     fn translate(&self, vaddr: usize) -> Result<usize, std::io::Error> {
+        use super::ffi::{KvmTranslation, KVM_TRANSLATE};
+
         let mut data = KvmTranslation {
             linear_address: vaddr,
             physical_address: 0,
@@ -77,7 +79,7 @@ impl<'a> Cpu for KvmCpu<'a> {
             pad: [0; 5],
         };
 
-        match unsafe { kvm_translate(self.fd.as_raw_fd(), &mut data) } {
+        match unsafe { ioctl(self.fd.as_raw_fd(), KVM_TRANSLATE, &mut data) } {
             0 => Ok(data.physical_address),
             _ => return Err(std::io::Error::last_os_error()),
         }
@@ -182,20 +184,4 @@ impl<'a, 'b> CpuDebug for KvmDebug<'a, 'b> {
     fn cpu(&mut self) -> &mut Self::Cpu {
         self.0
     }
-}
-
-#[cfg(target_arch = "x86_64")]
-#[repr(C)]
-struct KvmTranslation {
-    linear_address: usize,
-    physical_address: usize,
-    valid: u8,
-    writeable: u8,
-    usermode: u8,
-    pad: [u8; 5],
-}
-
-extern "C" {
-    #[cfg(target_arch = "x86_64")]
-    fn kvm_translate(vcpu: std::ffi::c_int, arg: *mut KvmTranslation) -> std::ffi::c_int;
 }
