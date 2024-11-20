@@ -60,8 +60,7 @@ fn run() -> Result<(), ApplicationError> {
 
         let screen = ui::Screen::new().map_err(ApplicationError::CreateScreen)?;
 
-        // TODO: load profiles from filesystem
-        let profiles = vec![Profile::default()];
+        let profiles = load_profiles()?;
 
         // TODO: handle events
         let event_handler = |event| match event {
@@ -86,19 +85,26 @@ fn run() -> Result<(), ApplicationError> {
     Ok(())
 }
 
+fn load_profiles() -> Result<Vec<Profile>, ApplicationError> {
+    // TODO: load profiles from filesystem
+    let profiles = vec![Profile::default()];
+
+    Ok(profiles)
+}
+
 fn run_main_app() -> Result<(), ApplicationError> {
     let main_window = ui::MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
 
     let graphics_api = graphics::DefaultApi::new().map_err(ApplicationError::InitGraphicsApi)?;
 
-    let profiles = vec![Profile::default()];
+    let profiles = load_profiles()?;
 
     setup_globals(&main_window);
 
     let profiles = ModelRc::new(VecModel::from_iter(
         profiles
             .iter()
-            .map(|p| SharedString::from(p.name().to_str().unwrap_or_default())),
+            .map(|p| SharedString::from(p.name().to_str().unwrap())),
     ));
 
     main_window.set_profiles(profiles);
