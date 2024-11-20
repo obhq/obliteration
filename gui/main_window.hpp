@@ -47,15 +47,12 @@ private:
     void debuggerConnected();
     void vmmError(const QString &msg);
     void waitKernelExit(bool success);
-    void log(VmmLog type, const QString &msg);
     void setupDebugger();
     void dispatchDebug(KernelStop *stop);
     bool loadGame(const QString &gameId);
     bool requireVmmStopped();
     void stopDebug();
     void killVmm();
-
-    static void vmmHandler(const VmmEvent *ev, void *cx);
 
     const QCommandLineParser &m_args;
     QStackedWidget *m_main;

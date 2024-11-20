@@ -32,19 +32,6 @@ enum DisplayResolution {
 };
 
 /**
- * Log category.
- *
- * The reason we need this because cbindgen is not good at exporting dependency types so we can't
- * use [`ConsoleType`] directly. See https://github.com/mozilla/cbindgen/issues/667 for an example
- * of the problem.
- */
-enum VmmLog {
-    VmmLog_Info,
-    VmmLog_Warn,
-    VmmLog_Error,
-};
-
-/**
  * Encapsulate a debugger connection.
  */
 struct DebugClient;
@@ -73,66 +60,6 @@ struct RustError;
  * Manage a virtual machine that run the kernel.
  */
 struct Vmm;
-
-/**
- * Contains objects required to render the screen.
- */
-struct VmmScreen {
-#if !defined(__APPLE__)
-    size_t vk_instance
-#endif
-    ;
-#if !defined(__APPLE__)
-    size_t vk_device
-#endif
-    ;
-#if !defined(__APPLE__)
-    size_t vk_surface
-#endif
-    ;
-#if defined(__APPLE__)
-    size_t view
-#endif
-    ;
-};
-
-/**
- * Contains VMM event information.
- */
-enum VmmEvent_Tag {
-    VmmEvent_Error,
-    VmmEvent_Exiting,
-    VmmEvent_Log,
-    VmmEvent_Breakpoint,
-};
-
-struct VmmEvent_Error_Body {
-    const struct RustError *reason;
-};
-
-struct VmmEvent_Exiting_Body {
-    bool success;
-};
-
-struct VmmEvent_Log_Body {
-    enum VmmLog ty;
-    const char *data;
-    size_t len;
-};
-
-struct VmmEvent_Breakpoint_Body {
-    struct KernelStop *stop;
-};
-
-struct VmmEvent {
-    enum VmmEvent_Tag tag;
-    union {
-        struct VmmEvent_Error_Body error;
-        struct VmmEvent_Exiting_Body exiting;
-        struct VmmEvent_Log_Body log;
-        struct VmmEvent_Breakpoint_Body breakpoint;
-    };
-};
 
 /**
  * Result of [`vmm_dispatch_debug()`].
@@ -227,14 +154,6 @@ struct RustError *update_firmware(const char *root,
                                   const char *fw,
                                   void *cx,
                                   void (*status)(const char*, uint64_t, uint64_t, void*));
-
-struct Vmm *vmm_start(const char *kernel,
-                      const struct VmmScreen *screen,
-                      const struct Profile *profile,
-                      struct DebugClient *debugger,
-                      void (*event_handler)(const struct VmmEvent*, void*),
-                      void *cx,
-                      struct RustError **err);
 
 void vmm_free(struct Vmm *vmm);
 

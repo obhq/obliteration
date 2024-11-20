@@ -1,6 +1,5 @@
 #include "main_window.hpp"
 #include "app_data.hpp"
-#include "display_settings.hpp"
 #include "game_models.hpp"
 #include "launch_settings.hpp"
 #include "path.hpp"
@@ -32,13 +31,11 @@
 #include <QUrl>
 
 #include <filesystem>
-#include <iostream>
 #include <utility>
 
 #ifndef _WIN32
 #include <fcntl.h>
 #endif
-#include <string.h>
 
 namespace Args {
     const QCommandLineOption debug("debug", "Immediate launch the VMM in debug mode.", "addr", "127.0.0.1:1234");
@@ -419,19 +416,6 @@ void MainWindow::waitKernelExit(bool success)
     m_main->setCurrentIndex(0);
 }
 
-void MainWindow::log(VmmLog type, const QString &msg)
-{
-    switch (type) {
-    case VmmLog_Info:
-        std::cout << msg.toStdString();
-        break;
-    case VmmLog_Warn:
-    case VmmLog_Error:
-        std::cerr << msg.toStdString();
-        break;
-    }
-}
-
 void MainWindow::setupDebugger()
 {
     // Enable non-blocking on debug socket. On Windows QSocketNotifier will do this for us.
@@ -635,49 +619,6 @@ void MainWindow::startVmm(Rust<DebugClient> &&debug)
 
     // Swap launch settings with the screen before getting a Vulkan surface otherwise it will fail.
     m_main->setCurrentIndex(1);
-
-    // Setup the screen.
-    VmmScreen screen;
-    Rust<RustError> error;
-    Rust<Vmm> vmm;
-
-    memset(&screen, 0, sizeof(screen));
-
-#ifdef __APPLE__
-    screen.view = m_screen->winId();
-#else
-    screen.vk_instance = reinterpret_cast<size_t>(m_screen->vulkanInstance()->vkInstance());
-    screen.vk_device = reinterpret_cast<size_t>(m_launch->currentDisplayDevice()->handle());
-    screen.vk_surface = reinterpret_cast<size_t>(QVulkanInstance::surfaceForWindow(m_screen));
-
-    if (!screen.vk_surface) {
-        QMessageBox::critical(this, "Error", "Couldn't create VkSurfaceKHR.");
-        m_main->setCurrentIndex(0);
-        return;
-    }
-#endif
-
-    // Run.
-    vmm = vmm_start(
-        kernel.c_str(),
-        &screen,
-        m_launch->currentProfile(),
-        debug.release(),
-        MainWindow::vmmHandler,
-        this,
-        &error);
-
-    if (!vmm) {
-        QMessageBox::critical(
-            this,
-            "Error",
-            QString("Couldn't run %1: %2").arg(kernel.c_str()).arg(error_message(error)));
-        m_main->setCurrentIndex(0);
-        return;
-    }
-
-    m_vmm = std::move(vmm);
-    m_screen->requestUpdate();
 }
 
 bool MainWindow::requireVmmStopped()
@@ -725,49 +666,4 @@ void MainWindow::killVmm()
 
     delete m_debugNoti;
     m_debugNoti = nullptr;
-}
-
-void MainWindow::vmmHandler(const VmmEvent *ev, void *cx)
-{
-    // This method will be called from non-main thread.
-    auto w = reinterpret_cast<MainWindow *>(cx);
-
-    switch (ev->tag) {
-    case VmmEvent_Error:
-        QMetaObject::invokeMethod(
-            w,
-            &MainWindow::vmmError,
-            Qt::QueuedConnection,
-            QString(error_message(ev->error.reason)));
-        break;
-    case VmmEvent_Exiting:
-        QMetaObject::invokeMethod(
-            w,
-            &MainWindow::waitKernelExit,
-            Qt::QueuedConnection,
-            ev->exiting.success);
-        break;
-    case VmmEvent_Log:
-        QMetaObject::invokeMethod(
-            w,
-            &MainWindow::log,
-            Qt::QueuedConnection,
-            ev->log.ty,
-            QString::fromUtf8(ev->log.data, ev->log.len));
-        break;
-    case VmmEvent_Breakpoint:
-        if (auto stop = ev->breakpoint.stop; stop) {
-            QMetaObject::invokeMethod(
-                w,
-                &MainWindow::dispatchDebug,
-                Qt::QueuedConnection,
-                stop);
-        } else {
-            QMetaObject::invokeMethod(
-                w,
-                &MainWindow::setupDebugger,
-                Qt::QueuedConnection);
-        }
-        break;
-    }
 }
