@@ -60,6 +60,7 @@ fn run() -> Result<(), ApplicationError> {
 
         let screen = ui::Screen::new().map_err(ApplicationError::CreateScreen)?;
 
+        // TODO: load profiles from filesystem
         let profiles = vec![Profile::default()];
 
         // TODO: handle events
