@@ -24,7 +24,6 @@ We use icons from https://materialdesignicons.com for UI.
 
 ## License
 
-- `src/ansi_escape.hpp`, `src/ansi_escape.cpp`, `src/log_formatter.hpp` and `src/log_formatter.cpp` are licensed under GPL-3.0 only.
 - `src/param`, `src/pfs` and `src/pkg` are licensed under LGPL-3.0.
 - All other source code are licensed under either MIT License or Apache License, Version 2.0; or both.
 - All release binaries are under GPL-3.0.

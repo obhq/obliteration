@@ -3,7 +3,6 @@
 #include "display_settings.hpp"
 #include "game_models.hpp"
 #include "launch_settings.hpp"
-#include "logs_viewer.hpp"
 #include "path.hpp"
 #include "pkg_installer.hpp"
 #include "profile_models.hpp"
@@ -78,14 +77,6 @@ MainWindow::MainWindow(
     fileMenu->addAction(openSystemFolder);
     fileMenu->addSeparator();
     fileMenu->addAction(quit);
-
-    // View menu.
-    auto viewMenu = menuBar()->addMenu("&View");
-    auto logs = new QAction("&Logs", this);
-
-    connect(logs, &QAction::triggered, this, &MainWindow::viewLogs);
-
-    viewMenu->addAction(logs);
 
     // Help menu.
     auto helpMenu = menuBar()->addMenu("&Help");
@@ -254,11 +245,6 @@ void MainWindow::closeEvent(QCloseEvent *event)
         killVmm();
     }
 
-    // Close child windows.
-    if (m_logs && !m_logs->close()) {
-        return;
-    }
-
     // Save geometry.
     QSettings settings;
 
@@ -310,18 +296,6 @@ void MainWindow::openSystemFolder()
 {
     QString folderPath = readSystemDirectorySetting();
     QDesktopServices::openUrl(QUrl::fromLocalFile(folderPath));
-}
-
-void MainWindow::viewLogs()
-{
-    if (m_logs) {
-        m_logs->activateWindow();
-        m_logs->raise();
-    } else {
-        m_logs = new LogsViewer();
-        m_logs->setAttribute(Qt::WA_DeleteOnClose);
-        m_logs->show();
-    }
 }
 
 void MainWindow::reportIssue()
@@ -447,18 +421,14 @@ void MainWindow::waitKernelExit(bool success)
 
 void MainWindow::log(VmmLog type, const QString &msg)
 {
-    if (m_logs) {
-        m_logs->append(msg);
-    } else {
-        switch (type) {
-        case VmmLog_Info:
-            std::cout << msg.toStdString();
-            break;
-        case VmmLog_Warn:
-        case VmmLog_Error:
-            std::cerr << msg.toStdString();
-            break;
-        }
+    switch (type) {
+    case VmmLog_Info:
+        std::cout << msg.toStdString();
+        break;
+    case VmmLog_Warn:
+    case VmmLog_Error:
+        std::cerr << msg.toStdString();
+        break;
     }
 }
 
