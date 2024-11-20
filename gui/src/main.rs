@@ -1,6 +1,6 @@
 use self::profile::Profile;
 use self::ui::ErrorDialog;
-use self::vmm::{Vmm, VmmEventHandler};
+use self::vmm::{Vmm, VmmEvent};
 use args::CliArgs;
 use clap::Parser;
 use debug::DebugServer;
@@ -60,10 +60,15 @@ fn run() -> Result<(), ApplicationError> {
 
         let screen = ui::Screen::new().map_err(ApplicationError::CreateScreen)?;
 
-        // TODO: get profile from the filesystem
-        let profiles = vec![profile::Profile::default()];
+        let profiles = vec![Profile::default()];
 
-        let event_handler = unsafe { VmmEventHandler::new(|event| {}) };
+        // TODO: handle events
+        let event_handler = |event| match event {
+            VmmEvent::Breakpoint { stop } => {}
+            VmmEvent::Log { ty, data, len } => {}
+            VmmEvent::Exiting { success } => {}
+            VmmEvent::Error { reason } => {}
+        };
 
         let vmm = Vmm::new(
             kernel_path,
@@ -240,6 +245,21 @@ enum ApplicationError {
     #[cfg(unix)]
     #[error("couldn't increase file descriptor limit")]
     FdLimit(#[source] self::rlim::RlimitError),
+
+    #[error("failed to get project directories")]
+    GetProjectDirs,
+
+    #[error("failed to open directory with profiles ({1})")]
+    OpenProfilesDir(#[source] std::io::Error, PathBuf),
+
+    #[error("failed to read profile directory")]
+    ReadProfileDir(#[source] std::io::Error),
+
+    #[error("failed to load profile from {1}")]
+    LoadProfile(#[source] profile::LoadError, PathBuf),
+
+    #[error("failed to save profile to {1}")]
+    SaveProfile(#[source] profile::SaveError, PathBuf),
 
     #[error("failed to run wizard")]
     RunWizard(#[source] slint::PlatformError),

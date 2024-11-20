@@ -30,11 +30,9 @@ impl<'a, C: Cpu> DeviceContext<C> for Context<'a> {
                 .try_into()
                 .map_err(|_| Box::new(ExecError::InvalidExit(exit)))?;
 
-            unsafe {
-                self.dev.event.invoke(VmmEvent::Exiting {
-                    success: exit == KernelExit::Success,
-                })
-            };
+            (self.dev.event)(VmmEvent::Exiting {
+                success: exit == KernelExit::Success,
+            });
 
             return Ok(false);
         } else {

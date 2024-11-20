@@ -232,7 +232,7 @@ struct Vmm *vmm_start(const char *kernel,
                       const struct VmmScreen *screen,
                       const struct Profile *profile,
                       struct DebugClient *debugger,
-                      void (*event)(const struct VmmEvent*, void*),
+                      void (*event_handler)(const struct VmmEvent*, void*),
                       void *cx,
                       struct RustError **err);
 

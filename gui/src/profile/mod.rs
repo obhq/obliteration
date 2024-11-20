@@ -47,6 +47,10 @@ impl Profile {
         Ok(())
     }
 
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+
     pub fn name(&self) -> &CStr {
         &self.name
     }

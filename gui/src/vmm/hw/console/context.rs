@@ -63,13 +63,11 @@ impl<'a, H: Hypervisor, C: Cpu> DeviceContext<C> for Context<'a, H> {
             // Trigger event.
             let msg = std::mem::take(&mut self.msg);
 
-            unsafe {
-                self.dev.event.invoke(VmmEvent::Log {
-                    ty: ty.into(),
-                    data: msg.as_ptr().cast(),
-                    len: msg.len(),
-                })
-            };
+            (self.dev.event)(VmmEvent::Log {
+                ty: ty.into(),
+                data: msg.as_ptr().cast(),
+                len: msg.len(),
+            });
         } else {
             return Err(Box::new(ExecError::UnknownField(off)));
         }

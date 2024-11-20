@@ -78,8 +78,10 @@ impl Vmm {
         screen: crate::screen::Default,
         profile: &Profile,
         debugger: Option<DebugClient>,
-        event_handler: VmmEventHandler,
+        event_handler: impl Fn(VmmEvent) + Send + Sync + 'static,
     ) -> Result<Self, VmmError> {
+        let event_handler = Arc::new(event_handler);
+
         let path = kernel_path.as_ref();
 
         // Open kernel image.
@@ -367,25 +369,7 @@ pub struct VmmScreen {
 }
 
 /// Encapsulates a function to handle VMM events.
-#[derive(Clone)]
-pub struct VmmEventHandler {
-    handler: Arc<dyn Fn(VmmEvent)>,
-}
-
-impl VmmEventHandler {
-    pub unsafe fn new(handler: impl Fn(VmmEvent) + 'static) -> Self {
-        Self {
-            handler: Arc::new(handler),
-        }
-    }
-
-    fn invoke(&self, e: VmmEvent) {
-        (self.handler)(e);
-    }
-}
-
-unsafe impl Send for VmmEventHandler {}
-unsafe impl Sync for VmmEventHandler {}
+pub type VmmEventHandler = Arc<dyn Fn(VmmEvent) + Send + Sync + 'static>;
 
 /// Contains VMM event information.
 #[repr(C)]
