@@ -11,6 +11,7 @@ use crate::hv::{Hypervisor, Ram};
 use crate::profile::Profile;
 use crate::screen::Screen;
 use cpu::GdbError;
+use gdbstub::common::Signal;
 use gdbstub::stub::state_machine::GdbStubStateMachine;
 use gdbstub::stub::{GdbStubError, MultiThreadStopReason};
 use kernel::{KernelError, ProgramHeaderError};
@@ -344,6 +345,53 @@ impl Vmm {
         };
 
         Ok(vmm)
+    }
+
+    fn dispatch_debug(&mut self, mut stop: Option<MultiThreadStopReason<u64>>) -> DebugResult {
+        loop {
+            // Check current state.
+            let r = match self.gdb.take().unwrap() {
+                GdbStubStateMachine::Idle(s) => {
+                    match debug::dispatch_idle(&mut self.cpu, s) {
+                        Ok(Ok(v)) => Ok(v),
+                        Ok(Err(v)) => {
+                            // No pending data from the debugger.
+                            self.gdb = Some(v.into());
+                            return DebugResult::Ok;
+                        }
+                        Err(e) => Err(e),
+                    }
+                }
+                GdbStubStateMachine::Running(s) => {
+                    match debug::dispatch_running(&mut self.cpu, s, stop.take()) {
+                        Ok(Ok(v)) => Ok(v),
+                        Ok(Err(v)) => {
+                            // No pending data from the debugger.
+                            self.gdb = Some(v.into());
+                            return DebugResult::Ok;
+                        }
+                        Err(e) => Err(e),
+                    }
+                }
+                GdbStubStateMachine::CtrlCInterrupt(s) => {
+                    self.cpu.lock();
+
+                    s.interrupt_handled(
+                        &mut self.cpu,
+                        Some(MultiThreadStopReason::Signal(Signal::SIGINT)),
+                    )
+                    .map_err(|e| {
+                        RustError::with_source("couldn't handle CTRL+C from a debugger", e)
+                    })
+                }
+                GdbStubStateMachine::Disconnected(_) => return DebugResult::Disconnected,
+            };
+
+            match r {
+                Ok(v) => self.gdb = Some(v),
+                Err(e) => return DebugResult::Error { reason: e.into_c() },
+            }
+        }
     }
 }
 
