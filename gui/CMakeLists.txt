@@ -13,7 +13,6 @@ endif()
 # Setup GUI.
 add_executable(obliteration WIN32 MACOSX_BUNDLE
     app_data.cpp
-    core.cpp
     cpu_settings.cpp
     display_settings.cpp
     game_models.cpp
@@ -37,7 +36,7 @@ if(WIN32)
 elseif(APPLE)
     target_sources(obliteration PRIVATE resources/obliteration.icns)
 elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
-    target_sources(obliteration PRIVATE kvm.cpp vulkan.cpp)
+    target_sources(obliteration PRIVATE vulkan.cpp)
 endif()
 
 set_target_properties(obliteration PROPERTIES AUTOMOC ON AUTORCC ON)

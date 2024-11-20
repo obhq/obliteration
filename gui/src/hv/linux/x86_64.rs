@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::ffi::{
     KvmFpu, KvmRegs, KvmSregs, KVM_GET_FPU, KVM_GET_REGS, KVM_GET_SREGS, KVM_SET_REGS,
+    KVM_SET_SREGS,
 };
 use crate::hv::{CpuCommit, CpuStates};
 use libc::ioctl;
-use std::ffi::c_int;
 use std::mem::MaybeUninit;
 use std::os::fd::{AsRawFd, OwnedFd};
 use thiserror::Error;
@@ -375,7 +375,7 @@ impl<'a> CpuCommit for KvmStates<'a> {
         }
 
         // Set special registers.
-        if unsafe { self.sdirty && kvm_set_sregs(self.cpu.as_raw_fd(), &self.sregs) != 0 } {
+        if unsafe { self.sdirty && ioctl(self.cpu.as_raw_fd(), KVM_SET_SREGS, &self.sregs) < 0 } {
             return Err(StatesError::SetSRegsFailed(Error::last_os_error()));
         }
 
@@ -400,8 +400,4 @@ pub enum StatesError {
 
     #[error("couldn't set special registers")]
     SetSRegsFailed(#[source] std::io::Error),
-}
-
-extern "C" {
-    fn kvm_set_sregs(vcpu: c_int, regs: *const KvmSregs) -> c_int;
 }
