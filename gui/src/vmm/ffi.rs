@@ -3,9 +3,7 @@ use crate::debug::DebugClient;
 use crate::error::RustError;
 use crate::profile::Profile;
 use crate::screen::Screen;
-use gdbstub::common::Signal;
 use gdbstub::stub::state_machine::GdbStubStateMachine;
-use gdbstub::stub::MultiThreadStopReason;
 use std::ffi::{c_char, c_void, CStr};
 use std::ptr::null_mut;
 use std::sync::atomic::Ordering;
@@ -78,52 +76,13 @@ pub unsafe extern "C" fn vmm_draw(vmm: *mut Vmm) -> *mut RustError {
 pub unsafe extern "C" fn vmm_dispatch_debug(vmm: *mut Vmm, stop: *mut KernelStop) -> DebugResult {
     // Consume stop reason now to prevent memory leak.
     let vmm = &mut *vmm;
-    let mut stop = if stop.is_null() {
+    let stop = if stop.is_null() {
         None
     } else {
         Some(Box::from_raw(stop).0)
     };
 
-    loop {
-        // Check current state.
-        let r = match vmm.gdb.take().unwrap() {
-            GdbStubStateMachine::Idle(s) => match super::debug::dispatch_idle(&mut vmm.cpu, s) {
-                Ok(Ok(v)) => Ok(v),
-                Ok(Err(v)) => {
-                    // No pending data from the debugger.
-                    vmm.gdb = Some(v.into());
-                    return DebugResult::Ok;
-                }
-                Err(e) => Err(e),
-            },
-            GdbStubStateMachine::Running(s) => {
-                match super::debug::dispatch_running(&mut vmm.cpu, s, stop.take()) {
-                    Ok(Ok(v)) => Ok(v),
-                    Ok(Err(v)) => {
-                        // No pending data from the debugger.
-                        vmm.gdb = Some(v.into());
-                        return DebugResult::Ok;
-                    }
-                    Err(e) => Err(e),
-                }
-            }
-            GdbStubStateMachine::CtrlCInterrupt(s) => {
-                vmm.cpu.lock();
-
-                s.interrupt_handled(
-                    &mut vmm.cpu,
-                    Some(MultiThreadStopReason::Signal(Signal::SIGINT)),
-                )
-                .map_err(|e| RustError::with_source("couldn't handle CTRL+C from a debugger", e))
-            }
-            GdbStubStateMachine::Disconnected(_) => return DebugResult::Disconnected,
-        };
-
-        match r {
-            Ok(v) => vmm.gdb = Some(v),
-            Err(e) => return DebugResult::Error { reason: e.into_c() },
-        }
-    }
+    vmm.dispatch_debug(stop)
 }
 
 #[no_mangle]
