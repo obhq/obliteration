@@ -1,4 +1,4 @@
-use super::{DebugResult, KernelStop, Vmm, VmmEvent, VmmScreen};
+use super::{DebugResult, DispatchDebugResult, KernelStop, Vmm, VmmEvent, VmmScreen};
 use crate::debug::DebugClient;
 use crate::error::RustError;
 use crate::profile::Profile;
@@ -82,7 +82,14 @@ pub unsafe extern "C" fn vmm_dispatch_debug(vmm: *mut Vmm, stop: *mut KernelStop
         Some(Box::from_raw(stop).0)
     };
 
-    vmm.dispatch_debug(stop)
+    match vmm.dispatch_debug(stop) {
+        Ok(DispatchDebugResult::Ok) => DebugResult::Ok,
+        Ok(DispatchDebugResult::Disconnected) => DebugResult::Disconnected,
+        Err(e) => {
+            let e = RustError::wrap(e).into_c();
+            DebugResult::Error { reason: e }
+        }
+    }
 }
 
 #[no_mangle]
