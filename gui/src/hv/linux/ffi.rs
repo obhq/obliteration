@@ -17,6 +17,10 @@ pub const KVM_SET_REGS: c_ulong = _IOW::<KvmRegs>(KVMIO, 0x82);
 #[cfg(target_arch = "x86_64")]
 pub const KVM_GET_SREGS: c_ulong = _IOR::<KvmSregs>(KVMIO, 0x83);
 #[cfg(target_arch = "x86_64")]
+pub const KVM_SET_SREGS: c_ulong = _IOW::<KvmSregs>(KVMIO, 0x84);
+#[cfg(target_arch = "x86_64")]
+pub const KVM_TRANSLATE: c_ulong = _IOWR::<KvmTranslation>(KVMIO, 0x85);
+#[cfg(target_arch = "x86_64")]
 pub const KVM_GET_FPU: c_ulong = _IOR::<KvmFpu>(KVMIO, 0x8c);
 #[cfg(target_arch = "x86_64")]
 pub const KVM_SET_CPUID2: c_ulong = _IOC(_IOC_WRITE, KVMIO, 0x90, 8);
@@ -94,6 +98,11 @@ const fn _IOR<T>(ty: c_ulong, nr: c_ulong) -> c_ulong {
 #[allow(non_snake_case)]
 const fn _IOW<T>(ty: c_ulong, nr: c_ulong) -> c_ulong {
     _IOC(_IOC_WRITE, ty, nr, size_of::<T>() as _)
+}
+
+#[allow(non_snake_case)]
+const fn _IOWR<T>(ty: c_ulong, nr: c_ulong) -> c_ulong {
+    _IOC(_IOC_READ | _IOC_WRITE, ty, nr, size_of::<T>() as _)
 }
 
 #[allow(non_snake_case)]
@@ -178,6 +187,17 @@ pub struct KvmSregs {
     pub efer: u64,
     pub apic_base: u64,
     pub interrupt_bitmap: [u64; (KVM_NR_INTERRUPTS + 63) / 64],
+}
+
+#[cfg(target_arch = "x86_64")]
+#[repr(C)]
+pub struct KvmTranslation {
+    pub linear_address: usize,
+    pub physical_address: usize,
+    pub valid: u8,
+    pub writeable: u8,
+    pub usermode: u8,
+    pub pad: [u8; 5],
 }
 
 #[cfg(target_arch = "x86_64")]
