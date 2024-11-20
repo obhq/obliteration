@@ -12,7 +12,6 @@ endif()
 
 # Setup GUI.
 add_executable(obliteration WIN32 MACOSX_BUNDLE
-    ansi_escape.cpp
     app_data.cpp
     core.cpp
     cpu_settings.cpp
@@ -20,8 +19,6 @@ add_executable(obliteration WIN32 MACOSX_BUNDLE
     game_models.cpp
     initialize_wizard.cpp
     launch_settings.cpp
-    log_formatter.cpp
-    logs_viewer.cpp
     main.cpp
     main_window.cpp
     path.cpp

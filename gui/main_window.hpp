@@ -4,14 +4,12 @@
 
 #include <QList>
 #include <QMainWindow>
-#include <QPointer>
 #ifndef __APPLE__
 #include <QVulkanInstance>
 #endif
 
 class GameListModel;
 class LaunchSettings;
-class LogsViewer;
 class ProfileList;
 class QCommandLineOption;
 class QCommandLineParser;
@@ -41,7 +39,6 @@ protected:
 private slots:
     void installPkg();
     void openSystemFolder();
-    void viewLogs();
     void reportIssue();
     void aboutObliteration();
     void saveProfile(Profile *p);
@@ -66,7 +63,6 @@ private:
     GameListModel *m_games;
     LaunchSettings *m_launch;
     Screen *m_screen;
-    QPointer<LogsViewer> m_logs;
     Rust<DebugServer> m_debugServer;
     QSocketNotifier *m_debugNoti;
     Rust<Vmm> m_vmm; // Destroy first.
