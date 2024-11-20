@@ -347,7 +347,7 @@ impl Vmm {
         Ok(vmm)
     }
 
-    pub fn dispatch_debug(
+    fn dispatch_debug(
         &mut self,
         mut stop: Option<MultiThreadStopReason<u64>>,
     ) -> Result<DispatchDebugResult, DispatchDebugError> {
@@ -355,7 +355,7 @@ impl Vmm {
             // Check current state.
             let r = match self.gdb.take().unwrap() {
                 GdbStubStateMachine::Idle(s) => {
-                    match self.cpu.dispatch_idle(s) {
+                    match self.cpu.dispatch_gdb_idle(s) {
                         Ok(Ok(v)) => Ok(v),
                         Ok(Err(v)) => {
                             // No pending data from the debugger.
@@ -366,7 +366,7 @@ impl Vmm {
                     }
                 }
                 GdbStubStateMachine::Running(s) => {
-                    match self.cpu.dispatch_running(s, stop.take()) {
+                    match self.cpu.dispatch_gdb_running(s, stop.take()) {
                         Ok(Ok(v)) => Ok(v),
                         Ok(Err(v)) => {
                             // No pending data from the debugger.
@@ -412,12 +412,12 @@ pub enum DispatchDebugResult {
 }
 
 #[derive(Debug, Error)]
-pub enum DispatchDebugError {
+enum DispatchDebugError {
     #[error("couldn't dispatch idle state")]
-    DispatchIdle(#[source] debug::DispatchIdleError),
+    DispatchIdle(#[source] debug::DispatchGdbIdleError),
 
     #[error("couldn't dispatch running state")]
-    DispatchRunning(#[source] debug::DispatchRunningError),
+    DispatchRunning(#[source] debug::DispatchGdbRunningError),
 
     #[error("couldn't handle CTRL+C interrupt")]
     HandleInterrupt(#[source] gdbstub::stub::GdbStubError<GdbError, std::io::Error>),

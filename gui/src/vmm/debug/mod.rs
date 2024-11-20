@@ -9,7 +9,7 @@ use gdbstub::stub::MultiThreadStopReason;
 use thiserror::Error;
 
 impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
-    pub fn dispatch_idle(
+    pub(super) fn dispatch_gdb_idle(
         &mut self,
         mut state: GdbStubStateMachineInner<
             'static,
@@ -27,21 +27,21 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                 DebugClient,
             >,
         >,
-        DispatchIdleError,
+        DispatchGdbIdleError,
     > {
         let b = match state.borrow_conn().read() {
             Ok(v) => v,
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(Err(state)),
-            Err(e) => return Err(DispatchIdleError::ReadData(e)),
+            Err(e) => return Err(DispatchGdbIdleError::ReadData(e)),
         };
 
         state
             .incoming_data(self, b)
             .map(Ok)
-            .map_err(DispatchIdleError::ProcessData)
+            .map_err(DispatchGdbIdleError::ProcessData)
     }
 
-    pub fn dispatch_running(
+    pub(super) fn dispatch_gdb_running(
         &mut self,
         mut state: GdbStubStateMachineInner<'static, Running, CpuManager<H, S>, DebugClient>,
         stop: Option<MultiThreadStopReason<u64>>,
@@ -50,32 +50,32 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
             GdbStubStateMachine<'static, CpuManager<H, S>, DebugClient>,
             GdbStubStateMachineInner<'static, Running, CpuManager<H, S>, DebugClient>,
         >,
-        DispatchRunningError,
+        DispatchGdbRunningError,
     > {
         // Check If we are here because of a breakpoint.
         if let Some(r) = stop {
             return state
                 .report_stop(self, r)
                 .map(Ok)
-                .map_err(DispatchRunningError::ReportStopReason);
+                .map_err(DispatchGdbRunningError::ReportStopReason);
         }
 
         // Check for pending command.
         let b = match state.borrow_conn().read() {
             Ok(v) => v,
             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => return Ok(Err(state)),
-            Err(e) => return Err(DispatchRunningError::ReadData(e)),
+            Err(e) => return Err(DispatchGdbRunningError::ReadData(e)),
         };
 
         state
             .incoming_data(self, b)
             .map(Ok)
-            .map_err(DispatchRunningError::ProcessData)
+            .map_err(DispatchGdbRunningError::ProcessData)
     }
 }
 
 #[derive(Debug, Error)]
-pub enum DispatchIdleError {
+pub(super) enum DispatchGdbIdleError {
     #[error("couldn't read data from the debugger")]
     ReadData(#[source] std::io::Error),
 
@@ -84,7 +84,7 @@ pub enum DispatchIdleError {
 }
 
 #[derive(Debug, Error)]
-pub enum DispatchRunningError {
+pub(super) enum DispatchGdbRunningError {
     #[error("couldn't report stop reason to the debugger")]
     ReportStopReason(#[source] gdbstub::stub::GdbStubError<GdbError, std::io::Error>),
 
