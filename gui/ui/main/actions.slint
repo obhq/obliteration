@@ -2,9 +2,9 @@ import { Button, ComboBox, HorizontalBox } from "std-widgets.slint";
 import { Globals } from "../globals.slint";
 
 export component Actions {
-    pure callback start_game();
-
     in property <[string]> profiles;
+
+    pure callback start();
 
     HorizontalBox {
         padding: 0;
@@ -15,16 +15,16 @@ export component Actions {
         }
 
         Button {
-            text: "Start";
-            icon: @image-url("../../resources/play.svg");
-            clicked => {
-                start_game();
-            }
+            text: "Save";
+            icon: @image-url("actions/save.svg");
         }
 
         Button {
-            text: "Save";
-            icon: @image-url("../../resources/content-save.svg");
+            text: "Start";
+            icon: @image-url("actions/start.svg");
+            clicked => {
+                start();
+            }
         }
     }
 }
