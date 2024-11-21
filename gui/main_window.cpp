@@ -122,8 +122,6 @@ MainWindow::MainWindow(
     m_screen->setVulkanInstance(vulkan);
 #endif
 
-    connect(m_screen, &Screen::updateRequestReceived, this, &MainWindow::updateScreen);
-
     m_main->addWidget(createWindowContainer(m_screen));
 }
 
@@ -335,32 +333,6 @@ void MainWindow::saveProfile(Profile *p)
 
         QMessageBox::critical(this, "Error", text);
     }
-}
-
-void MainWindow::updateScreen()
-{
-    // Do nothing if the VMM is not running.
-    if (!m_vmm) {
-        return;
-    }
-
-    // Draw the screen.
-    Rust<RustError> error;
-
-    error = vmm_draw(m_vmm);
-
-    if (error) {
-        killVmm();
-
-        QMessageBox::critical(
-            this,
-            "Error",
-            QString("Couldn't draw the screen: %1").arg(error_message(error)));
-        return;
-    }
-
-    // Queue next update.
-    m_screen->requestUpdate();
 }
 
 void MainWindow::debuggerConnected()

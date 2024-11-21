@@ -42,7 +42,6 @@ private slots:
     void reportIssue();
     void aboutObliteration();
     void saveProfile(Profile *p);
-    void updateScreen();
 private:
     void debuggerConnected();
     void vmmError(const QString &msg);
