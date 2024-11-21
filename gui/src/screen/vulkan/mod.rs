@@ -16,6 +16,10 @@ pub struct VulkanScreen {
 }
 
 impl VulkanScreen {
+    pub fn new() -> Result<Self, VulkanScreenError> {
+        todo!()
+    }
+
     pub fn from_screen(screen: &VmmScreen) -> Result<Self, VulkanScreenError> {
         let entry = ash::Entry::linked();
 
@@ -65,14 +69,14 @@ impl Drop for VulkanScreen {
 
 impl Screen for VulkanScreen {
     type Buffer = VulkanBuffer;
-    type UpdateErr = UpdateError;
+    type RunErr = RunError;
 
     fn buffer(&self) -> &Arc<Self::Buffer> {
         &self.buffer
     }
 
-    fn update(&mut self) -> Result<(), Self::UpdateErr> {
-        Ok(())
+    fn run(&mut self) -> Result<(), Self::RunErr> {
+        todo!()
     }
 }
 
@@ -89,6 +93,6 @@ pub enum VulkanScreenError {
     CreateDeviceFailed(#[source] ash::vk::Result),
 }
 
-/// Implementation of [`Screen::UpdateErr`].
+/// Implementation of [`Screen::RunErr`].
 #[derive(Debug, Error)]
-pub enum UpdateError {}
+pub enum RunError {}

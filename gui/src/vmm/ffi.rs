@@ -1,21 +1,11 @@
-use super::{DebugResult, DispatchDebugResult, KernelStop, Vmm, VmmEvent, VmmScreen};
+use super::{DebugResult, DispatchDebugResult, KernelStop, Vmm};
 use crate::error::RustError;
-use crate::screen::Screen;
 use gdbstub::stub::state_machine::GdbStubStateMachine;
-use std::ptr::null_mut;
 use std::sync::atomic::Ordering;
 
 #[no_mangle]
 pub unsafe extern "C" fn vmm_free(vmm: *mut Vmm) {
     drop(Box::from_raw(vmm));
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn vmm_draw(vmm: *mut Vmm) -> *mut RustError {
-    match (*vmm).screen.update() {
-        Ok(_) => null_mut(),
-        Err(e) => RustError::wrap(e).into_c(),
-    }
 }
 
 #[no_mangle]

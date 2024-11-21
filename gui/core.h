@@ -157,8 +157,6 @@ struct RustError *update_firmware(const char *root,
 
 void vmm_free(struct Vmm *vmm);
 
-struct RustError *vmm_draw(struct Vmm *vmm);
-
 struct DebugResult vmm_dispatch_debug(struct Vmm *vmm, struct KernelStop *stop);
 
 ptrdiff_t vmm_debug_socket(struct Vmm *vmm);

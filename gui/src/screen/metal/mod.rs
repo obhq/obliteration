@@ -22,6 +22,10 @@ pub struct MetalScreen {
 }
 
 impl MetalScreen {
+    pub fn new() -> Result<Self, MetalError> {
+        todo!()
+    }
+
     pub fn from_screen(screen: &VmmScreen) -> Result<Self, MetalError> {
         // Get Metal device.
         let device = match Device::system_default() {
@@ -59,13 +63,13 @@ impl Drop for MetalScreen {
 
 impl Screen for MetalScreen {
     type Buffer = MetalBuffer;
-    type UpdateErr = UpdateError;
+    type RunErr = RunError;
 
     fn buffer(&self) -> &Arc<Self::Buffer> {
         &self.buffer
     }
 
-    fn update(&mut self) -> Result<(), Self::UpdateErr> {
+    fn run(&mut self) -> Result<(), Self::RunErr> {
         todo!()
     }
 }
@@ -77,6 +81,6 @@ pub enum MetalError {
     GetDeviceFailed,
 }
 
-/// Implementation of [`Screen::UpdateErr`].
+/// Implementation of [`Screen::RunErr`].
 #[derive(Debug, Error)]
-pub enum UpdateError {}
+pub enum RunError {}

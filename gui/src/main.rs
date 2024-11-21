@@ -1,4 +1,5 @@
 use self::profile::Profile;
+use self::screen::{DefaultScreen, Screen};
 use self::ui::ErrorDialog;
 use self::vmm::{Vmm, VmmEvent};
 use args::CliArgs;
@@ -58,8 +59,6 @@ fn run() -> Result<(), ApplicationError> {
         let _graphics_api =
             graphics::DefaultApi::new().map_err(ApplicationError::InitGraphicsApi)?;
 
-        let screen = ui::Screen::new().map_err(ApplicationError::CreateScreen)?;
-
         let profiles = load_profiles()?;
 
         // TODO: handle events
@@ -80,7 +79,17 @@ fn run() -> Result<(), ApplicationError> {
         .map_err(ApplicationError::RunVmm)?;
     }
 
+    // Run VMM launcher.
     run_main_app()?;
+
+    // Setup VMM screen.
+    let mut screen =
+        DefaultScreen::new().map_err(|e| ApplicationError::CreateScreen(Box::new(e)))?;
+
+    // TODO: Start VMM.
+    screen
+        .run()
+        .map_err(|e| ApplicationError::RunScreen(Box::new(e)))?;
 
     Ok(())
 }
@@ -117,13 +126,6 @@ fn run_main_app() -> Result<(), ApplicationError> {
     ));
 
     main_window.set_devices(physical_devices);
-
-    main_window.on_start_game(|_index| {
-        // TODO: reuse the same window if possible
-        let screen = ui::Screen::new().unwrap();
-
-        screen.show().unwrap();
-    });
 
     main_window.run().map_err(ApplicationError::RunMainWindow)?;
 
@@ -268,9 +270,6 @@ enum ApplicationError {
     #[error("failed to accept debug connection")]
     CreateDebugClient(#[source] std::io::Error),
 
-    #[error("failed to create screen")]
-    CreateScreen(#[source] slint::PlatformError),
-
     #[error("failed to create main window")]
     CreateMainWindow(#[source] slint::PlatformError),
 
@@ -282,4 +281,10 @@ enum ApplicationError {
 
     #[error("failed to run main window")]
     RunMainWindow(#[source] slint::PlatformError),
+
+    #[error("couldn't create VMM screen")]
+    CreateScreen(#[source] Box<dyn std::error::Error>),
+
+    #[error("couldn't run VMM screen")]
+    RunScreen(#[source] Box<dyn std::error::Error>),
 }

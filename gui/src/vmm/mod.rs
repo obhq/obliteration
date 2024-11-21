@@ -61,12 +61,12 @@ fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
 
 /// Manage a virtual machine that run the kernel.
 pub struct Vmm {
-    cpu: CpuManager<crate::hv::Default, crate::screen::Default>, // Drop first.
-    screen: crate::screen::Default,
+    cpu: CpuManager<crate::hv::Default, crate::screen::DefaultScreen>, // Drop first.
+    screen: crate::screen::DefaultScreen,
     gdb: Option<
         GdbStubStateMachine<
             'static,
-            CpuManager<crate::hv::Default, crate::screen::Default>,
+            CpuManager<crate::hv::Default, crate::screen::DefaultScreen>,
             DebugClient,
         >,
     >,
@@ -76,7 +76,7 @@ pub struct Vmm {
 impl Vmm {
     pub fn new(
         kernel_path: impl AsRef<Path>,
-        screen: crate::screen::Default,
+        screen: crate::screen::DefaultScreen,
         profile: &Profile,
         debugger: Option<DebugClient>,
         event_handler: impl Fn(VmmEvent) + Send + Sync + 'static,
