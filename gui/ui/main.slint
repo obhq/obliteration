@@ -7,23 +7,15 @@ import { VerticalBox } from "std-widgets.slint";
 export { Wizard, FileValidationResult, Globals }
 
 export component MainWindow inherits Window {
-    icon: Globals.icon;
     title: "Obliteration";
+    icon: @image-url("icon.png");
     min-width: 1000px;
     min-height: 500px;
 
     in property <[string]> devices;
     in property <[string]> profiles;
 
-    pure callback start_game(int);
-
-    pure callback clear_log();
-    pure callback get_log_text() -> string;
-
-    pure callback open_new_issue_link();
-
-    pure callback open_system_folder();
-    pure callback quit();
+    pure callback start-vmm();
 
     VerticalBox {
         Tabs {
@@ -32,8 +24,8 @@ export component MainWindow inherits Window {
 
         Actions {
             profiles: profiles;
-            start_game => {
-                start_game(0)
+            start => {
+                start-vmm();
             }
         }
     }

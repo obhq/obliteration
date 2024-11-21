@@ -7,8 +7,10 @@ use clap::Parser;
 use debug::DebugServer;
 use graphics::{GraphicsApi, PhysicalDevice};
 use slint::{ComponentHandle, Global, ModelRc, SharedString, VecModel};
+use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::rc::Rc;
 use thiserror::Error;
 
 mod args;
@@ -80,7 +82,10 @@ fn run() -> Result<(), ApplicationError> {
     }
 
     // Run VMM launcher.
-    run_main_app()?;
+    let vmm = match run_launcher()? {
+        Some(v) => v,
+        None => return Ok(()),
+    };
 
     // Setup VMM screen.
     let mut screen =
@@ -101,14 +106,26 @@ fn load_profiles() -> Result<Vec<Profile>, ApplicationError> {
     Ok(profiles)
 }
 
-fn run_main_app() -> Result<(), ApplicationError> {
-    let main_window = ui::MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
+fn run_launcher() -> Result<Option<Vmm>, ApplicationError> {
+    // Create window and register callback handlers.
+    let win = ui::MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
+    let start = Rc::new(RefCell::new(false));
+
+    win.on_start_vmm({
+        let win = win.as_weak();
+        let start = start.clone();
+
+        move || {
+            win.unwrap().hide().unwrap();
+            *start.borrow_mut() = true;
+        }
+    });
 
     let graphics_api = graphics::DefaultApi::new().map_err(ApplicationError::InitGraphicsApi)?;
 
     let profiles = load_profiles()?;
 
-    setup_globals(&main_window);
+    setup_globals(&win);
 
     let profiles = ModelRc::new(VecModel::from_iter(
         profiles
@@ -116,7 +133,7 @@ fn run_main_app() -> Result<(), ApplicationError> {
             .map(|p| SharedString::from(p.name().to_str().unwrap())),
     ));
 
-    main_window.set_profiles(profiles);
+    win.set_profiles(profiles);
 
     let physical_devices = ModelRc::new(VecModel::from_iter(
         graphics_api
@@ -125,11 +142,21 @@ fn run_main_app() -> Result<(), ApplicationError> {
             .map(|p| SharedString::from(p.name())),
     ));
 
-    main_window.set_devices(physical_devices);
+    win.set_devices(physical_devices);
 
-    main_window.run().map_err(ApplicationError::RunMainWindow)?;
+    // Run the window.
+    win.run().map_err(ApplicationError::RunMainWindow)?;
 
-    Ok(())
+    drop(win);
+
+    // Extract GUI states.
+    let start = Rc::into_inner(start).unwrap().into_inner();
+
+    if !start {
+        return Ok(None);
+    }
+
+    todo!()
 }
 
 fn get_kernel_path(args: &CliArgs) -> Result<PathBuf, ApplicationError> {
