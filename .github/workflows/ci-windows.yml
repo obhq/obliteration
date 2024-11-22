@@ -1,21 +1,15 @@
 name: CI (Windows)
 on:
   workflow_call:
-env:
-  CMAKE_BUILD_PARALLEL_LEVEL: '4'
 jobs:
   build:
     name: Windows
     runs-on: windows-2022
     steps:
-    - name: Checkout source
+    - name: Checkout repository
       uses: actions/checkout@v4
-    - name: Install Ninja
-      run: choco install ninja
     - name: Generate cache keys
       run: |
-        echo "qt=${{ runner.os }}-qt-6.7.2" >> $env:GITHUB_OUTPUT
-        echo "target=${{ runner.os }}-target" >> $env:GITHUB_OUTPUT
         echo "vulkan=${{ runner.os }}-vulkan-1.3.290.0" >> $env:GITHUB_OUTPUT
       id: cache-keys
     - name: Restore Vulkan SDK
@@ -33,70 +27,22 @@ jobs:
       if: ${{ steps.restore-vulkan.outputs.cache-hit != 'true' }}
     - name: Set Vulkan SDK path
       run: echo "VULKAN_SDK=C:\VulkanSDK" >> $env:GITHUB_ENV
-    - name: Restore Qt
-      uses: actions/cache/restore@v4
-      with:
-        path: qt
-        key: ${{ steps.cache-keys.outputs.qt }}
-      id: restore-qt
-    - name: Download Qt
-      run: |
-        Invoke-WebRequest `
-          -Uri "https://download.qt.io/official_releases/qt/6.7/6.7.2/single/qt-everywhere-src-6.7.2.tar.xz" `
-          -OutFile qt.tar.xz
-        7z x -so qt.tar.xz | 7z x -si -ttar
-        rm qt.tar.xz
-        mkdir qt-build
-      if: ${{ steps.restore-qt.outputs.cache-hit != 'true' }}
-    - name: Build Qt
-      run: |
-        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" amd64
-        ${{ github.workspace }}\qt-everywhere-src-6.7.2\configure.bat -prefix "${{ github.workspace }}\qt" -no-openssl && cmake --build . --parallel && cmake --install .
-      shell: cmd
-      working-directory: qt-build
-      if: ${{ steps.restore-qt.outputs.cache-hit != 'true' }}
-    - name: Set Qt path
-      run: echo "CMAKE_PREFIX_PATH=qt" >> $env:GITHUB_ENV
-    - name: Restore target directory
-      uses: actions/cache/restore@v4
-      with:
-        path: target
-        key: ${{ steps.cache-keys.outputs.target }}
     - name: Update Rust
       run: rustup update stable
     - name: Add additional Rust targets
       run: rustup target add x86_64-unknown-none
-    - name: Run CMake
-      run: cmake --preset windows-release .
     - name: Build
-      run: cmake --build --preset windows-release
-    - name: Build Slint
-      run: cargo build -p gui --bin obliteration -F slint -r
+      run: python3 build.py -r
     - name: Run tests
       run: cargo test --workspace --exclude gui --exclude kernel
-      working-directory: src
-    - name: Export artifacts
-      run: cmake --install build --prefix dist
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: obliteration-win-x64
         path: dist
-    - name: Cache target directory
-      uses: actions/cache/save@v4
-      with:
-        path: target
-        key: ${{ steps.cache-keys.outputs.target }}-${{ github.run_id }}
-      if: startsWith(github.ref, 'refs/heads/')
     - name: Cache Vulkan SDK
       uses: actions/cache/save@v4
       with:
         path: C:\VulkanSDK
         key: ${{ steps.cache-keys.outputs.vulkan }}
       if: startsWith(github.ref, 'refs/heads/') && steps.install-vulkan.outputs.new-install == 'true'
-    - name: Cache Qt
-      uses: actions/cache/save@v4
-      with:
-        path: qt
-        key: ${{ steps.cache-keys.outputs.qt }}
-      if: startsWith(github.ref, 'refs/heads/') && steps.restore-qt.outputs.cache-hit != 'true'

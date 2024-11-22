@@ -33,7 +33,6 @@ public:
     bool loadGames();
     void restoreGeometry();
     void startDebug(const QString &addr);
-    void startVmm(Rust<DebugClient> &&debug);
 protected:
     void closeEvent(QCloseEvent *event) override;
 private slots:

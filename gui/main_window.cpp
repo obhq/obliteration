@@ -30,7 +30,6 @@
 #include <QToolBar>
 #include <QUrl>
 
-#include <filesystem>
 #include <utility>
 
 #ifndef _WIN32
@@ -107,7 +106,6 @@ MainWindow::MainWindow(
     connect(m_launch, &LaunchSettings::saveClicked, this, &MainWindow::saveProfile);
     connect(m_launch, &LaunchSettings::startClicked, [this](const QString &debug) {
         if (debug.isEmpty()) {
-            startVmm({});
         } else {
             startDebug(debug);
         }
@@ -356,9 +354,6 @@ void MainWindow::debuggerConnected()
             QString("Failed to accept a debugger connection: %1.").arg(error_message(error)));
         return;
     }
-
-    // Start VMM.
-    startVmm(std::move(debugger));
 }
 
 void MainWindow::vmmError(const QString &msg)
@@ -560,37 +555,6 @@ void MainWindow::startDebug(const QString &addr)
             "Debug",
             QString("Waiting for a debugger at %1.").arg(debug_server_addr(m_debugServer)));
     }
-}
-
-void MainWindow::startVmm(Rust<DebugClient> &&debug)
-{
-    // Get full path to kernel binary.
-    std::string kernel;
-
-    m_debugServer.free();
-
-    if (m_args.isSet(Args::kernel)) {
-        kernel = m_args.value(Args::kernel).toStdString();
-    } else {
-#ifdef _WIN32
-        std::filesystem::path b(QCoreApplication::applicationDirPath().toStdString(), std::filesystem::path::native_format);
-        b /= L"share";
-        b /= L"obkrnl";
-        kernel = b.u8string();
-#else
-        auto b = std::filesystem::path(QCoreApplication::applicationDirPath().toStdString(), std::filesystem::path::native_format).parent_path();
-#ifdef __APPLE__
-        b /= "Resources";
-#else
-        b /= "share";
-#endif
-        b /= "obkrnl";
-        kernel = b.u8string();
-#endif
-    }
-
-    // Swap launch settings with the screen before getting a Vulkan surface otherwise it will fail.
-    m_main->setCurrentIndex(1);
 }
 
 bool MainWindow::requireVmmStopped()
