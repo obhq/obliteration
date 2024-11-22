@@ -12,7 +12,7 @@ members = [
     "src/param",
     "src/pfs",
     "src/pkg",
-    "src/tls"
+    "src/tls",
 ]
 
 [profile.dev]
@@ -20,5 +20,4 @@ panic = "abort"
 
 [profile.release]
 panic = "abort"
-debug = "full"
 lto = true

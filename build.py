@@ -28,9 +28,7 @@ def cargo(package, toolchain=None, target=None, release=False, args=None):
     if args is not None:
         cmd.extend(args)
 
-    cmd.extend([
-        '--message-format', 'json-render-diagnostics'
-    ])
+    cmd.extend(['--message-format', 'json-render-diagnostics'])
 
     # Run.
     with Popen(cmd, stdout=PIPE) as proc:
@@ -48,42 +46,43 @@ def cargo(package, toolchain=None, target=None, release=False, args=None):
 
     return artifact
 
-def export_darwin(root, kern):
-    # Create bundle directory.
+def export_darwin(root, kern, gui):
+    # Create directories.
     bundle = os.path.join(root, 'Obliteration.app')
-
-    os.mkdir(bundle)
-
-    # Create Contents directory.
     contents = os.path.join(bundle, 'Contents')
-
-    os.mkdir(contents)
-
-    # Create Resources directory.
+    macos = os.path.join(contents, 'MacOS')
     resources = os.path.join(contents, 'Resources')
 
+    os.mkdir(bundle)
+    os.mkdir(contents)
+    os.mkdir(macos)
     os.mkdir(resources)
 
-    # Copy kernel.
+    # Export files
     shutil.copy(kern['executable'], resources)
+    shutil.copy(gui['executable'], macos)
 
-def export_linux(root, kern):
+def export_linux(root, kern, gui):
+    # Create directories.
+    bin = os.path.join(root, 'bin')
+    share = os.path.join(root, 'share')
+
+    os.mkdir(bin)
+    os.mkdir(share)
+
+    # Export files.
+    shutil.copy(kern['executable'], share)
+    shutil.copy(gui['executable'], bin)
+
+def export_windows(root, kern, gui):
     # Create share directory.
     share = os.path.join(root, 'share')
 
     os.mkdir(share)
 
-    # Copy kernel.
+    # Export files.
     shutil.copy(kern['executable'], share)
-
-def export_windows(root, kern):
-    # Create share directory.
-    share = os.path.join(root, 'share')
-
-    os.mkdir(share)
-
-    # Copy kernel.
-    shutil.copy(kern['executable'], share)
+    shutil.copy(gui['executable'], root)
 
 def main():
     # Setup argument parser.
@@ -114,6 +113,9 @@ def main():
         print(f'Architecture {m} is not supported.', file=sys.stderr)
         sys.exit(1)
 
+    # Build GUI.
+    gui = cargo('gui', release=args.release, args=['--bin', 'obliteration', '-F', 'slint'])
+
     # Create output directory.
     dest = 'dist'
 
@@ -126,11 +128,11 @@ def main():
     s = platform.system()
 
     if s == 'Darwin':
-        export_darwin(dest, kern)
+        export_darwin(dest, kern, gui)
     elif s == 'Linux':
-        export_linux(dest, kern)
+        export_linux(dest, kern, gui)
     elif s == 'Windows':
-        export_windows(dest, kern)
+        export_windows(dest, kern, gui)
     else:
         print(f'OS {s} is not supported.', file=sys.stderr)
         sys.exit(1)
