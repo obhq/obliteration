@@ -88,13 +88,10 @@ fn run() -> Result<(), ApplicationError> {
     };
 
     // Setup VMM screen.
-    let mut screen =
-        DefaultScreen::new().map_err(|e| ApplicationError::CreateScreen(Box::new(e)))?;
+    let mut screen = DefaultScreen::new().map_err(ApplicationError::CreateScreen)?;
 
     // TODO: Start VMM.
-    screen
-        .run()
-        .map_err(|e| ApplicationError::RunScreen(Box::new(e)))?;
+    screen.run().map_err(ApplicationError::RunScreen)?;
 
     Ok(())
 }
@@ -310,8 +307,8 @@ enum ApplicationError {
     RunMainWindow(#[source] slint::PlatformError),
 
     #[error("couldn't create VMM screen")]
-    CreateScreen(#[source] Box<dyn std::error::Error>),
+    CreateScreen(#[source] screen::ScreenError),
 
     #[error("couldn't run VMM screen")]
-    RunScreen(#[source] Box<dyn std::error::Error>),
+    RunScreen(#[source] <DefaultScreen as Screen>::RunErr),
 }
