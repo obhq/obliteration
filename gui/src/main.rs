@@ -66,7 +66,7 @@ fn run() -> Result<(), ApplicationError> {
         // TODO: handle events
         let event_handler = |event| match event {
             VmmEvent::Breakpoint { stop } => {}
-            VmmEvent::Log { ty, data, len } => {}
+            VmmEvent::Log { ty, msg } => {}
             VmmEvent::Exiting { success } => {}
             VmmEvent::Error { reason } => {}
         };

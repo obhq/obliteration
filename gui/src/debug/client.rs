@@ -60,7 +60,7 @@ impl DebugClient {
 }
 
 impl gdbstub::conn::Connection for DebugClient {
-    type Error = Error;
+    type Error = std::io::Error;
 
     fn write(&mut self, byte: u8) -> Result<(), Self::Error> {
         self.write_all(std::slice::from_ref(&byte))
@@ -77,7 +77,7 @@ impl gdbstub::conn::Connection for DebugClient {
             };
 
             if written == 0 {
-                return Err(Error::from(ErrorKind::WriteZero));
+                return Err(std::io::Error::from(ErrorKind::WriteZero));
             }
 
             buf = &buf[written..];

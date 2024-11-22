@@ -19,7 +19,6 @@ use gdbstub::target::{TargetError, TargetResult};
 use std::collections::{BTreeMap, HashMap};
 use std::num::NonZero;
 use std::ops::Deref;
-use std::ptr::null_mut;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
@@ -110,14 +109,14 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
             Ok(v) => v,
             Err(e) => {
                 let e = RustError::with_source("couldn't create main CPU", e);
-                (args.event)(VmmEvent::Error { reason: &e });
+                (args.event)(VmmEvent::Error { reason: e });
                 return;
             }
         };
 
         if let Err(e) = super::arch::setup_main_cpu(&mut cpu, entry, map, args.hv.cpu_features()) {
             let e = RustError::with_source("couldn't setup main CPU", e);
-            (args.event)(VmmEvent::Error { reason: &e });
+            (args.event)(VmmEvent::Error { reason: e });
             return;
         }
 
@@ -199,7 +198,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
         };
 
         if let Some(e) = e {
-            (args.event)(VmmEvent::Error { reason: &e });
+            (args.event)(VmmEvent::Error { reason: e });
         }
 
         // Shutdown other CPUs.
@@ -281,10 +280,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
         stop: Option<MultiThreadStopReason<u64>>,
     ) -> bool {
         // Convert stop reason.
-        let stop = stop
-            .map(KernelStop)
-            .map(Box::new)
-            .map_or(null_mut(), Box::into_raw);
+        let stop = stop.map(KernelStop);
 
         // Notify GUI. We need to allow only one CPU to enter the debugger dispatch loop.
         let lock = args.breakpoint.lock().unwrap();
@@ -305,7 +301,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                         Ok(v) => v,
                         Err(e) => {
                             let e = RustError::with_source("couldn't get CPU states", e);
-                            (args.event)(VmmEvent::Error { reason: &e });
+                            (args.event)(VmmEvent::Error { reason: e });
                             return false;
                         }
                     };
@@ -313,7 +309,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                     match Self::get_debug_regs(&mut states) {
                         Ok(v) => debug.send(DebugRes::Regs(v)),
                         Err(e) => {
-                            (args.event)(VmmEvent::Error { reason: &e });
+                            (args.event)(VmmEvent::Error { reason: e });
                             return false;
                         }
                     }
@@ -326,7 +322,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                             e,
                         );
 
-                        (args.event)(VmmEvent::Error { reason: &err });
+                        (args.event)(VmmEvent::Error { reason: err });
                         return false;
                     }
                 },
