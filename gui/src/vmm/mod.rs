@@ -440,11 +440,10 @@ pub struct VmmScreen {
 pub type VmmEventHandler = Arc<dyn Fn(VmmEvent) + Send + Sync + 'static>;
 
 /// Contains VMM event information.
-#[allow(dead_code)] // TODO: Figure out why Rust think fields in each enum are not used.
 pub enum VmmEvent {
     Error { reason: RustError },
     Exiting { success: bool },
-    Log { ty: VmmLog, msg: Box<[u8]> },
+    Log { ty: VmmLog, msg: String },
     Breakpoint { stop: Option<KernelStop> },
 }
 
