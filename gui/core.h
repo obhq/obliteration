@@ -42,11 +42,6 @@ struct DebugClient;
 struct DebugServer;
 
 /**
- * Reason for [`VmmEvent::Breakpoint`].
- */
-struct KernelStop;
-
-/**
  * Contains settings to launch the kernel.
  */
 struct Profile;
@@ -60,26 +55,6 @@ struct RustError;
  * Manage a virtual machine that run the kernel.
  */
 struct Vmm;
-
-/**
- * Result of [`vmm_dispatch_debug()`].
- */
-enum DebugResult_Tag {
-    DebugResult_Ok,
-    DebugResult_Disconnected,
-    DebugResult_Error,
-};
-
-struct DebugResult_Error_Body {
-    struct RustError *reason;
-};
-
-struct DebugResult {
-    enum DebugResult_Tag tag;
-    union {
-        struct DebugResult_Error_Body error;
-    };
-};
 
 #ifdef __cplusplus
 extern "C" {
@@ -156,8 +131,6 @@ struct RustError *update_firmware(const char *root,
                                   void (*status)(const char*, uint64_t, uint64_t, void*));
 
 void vmm_free(struct Vmm *vmm);
-
-struct DebugResult vmm_dispatch_debug(struct Vmm *vmm, struct KernelStop *stop);
 
 ptrdiff_t vmm_debug_socket(struct Vmm *vmm);
 

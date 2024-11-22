@@ -1,31 +1,10 @@
-use super::{DebugResult, DispatchDebugResult, KernelStop, Vmm};
-use crate::error::RustError;
+use super::Vmm;
 use gdbstub::stub::state_machine::GdbStubStateMachine;
 use std::sync::atomic::Ordering;
 
 #[no_mangle]
 pub unsafe extern "C" fn vmm_free(vmm: *mut Vmm) {
     drop(Box::from_raw(vmm));
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn vmm_dispatch_debug(vmm: *mut Vmm, stop: *mut KernelStop) -> DebugResult {
-    // Consume stop reason now to prevent memory leak.
-    let vmm = &mut *vmm;
-    let stop = if stop.is_null() {
-        None
-    } else {
-        Some(Box::from_raw(stop).0)
-    };
-
-    match vmm.dispatch_debug(stop) {
-        Ok(DispatchDebugResult::Ok) => DebugResult::Ok,
-        Ok(DispatchDebugResult::Disconnected) => DebugResult::Disconnected,
-        Err(e) => {
-            let e = RustError::wrap(e).into_c();
-            DebugResult::Error { reason: e }
-        }
-    }
 }
 
 #[no_mangle]

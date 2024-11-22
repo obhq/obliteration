@@ -407,53 +407,6 @@ void MainWindow::setupDebugger()
         return;
     }
 #endif
-
-    // Watch for incoming data.
-    m_debugNoti = new QSocketNotifier(QSocketNotifier::Read, this);
-    m_debugNoti->setSocket(sock);
-
-    connect(m_debugNoti, &QSocketNotifier::activated, [this] { dispatchDebug(nullptr); });
-
-    m_debugNoti->setEnabled(true);
-
-    // Setup GDB session.
-    dispatchDebug(nullptr);
-}
-
-void MainWindow::dispatchDebug(KernelStop *stop)
-{
-    // Do nothing if the previous thread already trigger the shutdown.
-    if (vmm_shutting_down(m_vmm)) {
-        return;
-    }
-
-    // Dispatch debug events.
-    auto r = vmm_dispatch_debug(m_vmm, stop);
-
-    switch (r.tag) {
-    case DebugResult_Ok:
-        break;
-    case DebugResult_Disconnected:
-        // It is not safe to let the kernel running since it is assume there are a debugger.
-        vmm_shutdown(m_vmm);
-        break;
-    case DebugResult_Error:
-        {
-            Rust<RustError> e(r.error.reason);
-
-            QMessageBox::critical(
-                this,
-                "Error",
-                QString("Failed to dispatch debug events: %1").arg(error_message(e)));
-        }
-
-        vmm_shutdown(m_vmm);
-        break;
-    }
-
-    if (vmm_shutting_down(m_vmm)) {
-        stopDebug();
-    }
 }
 
 bool MainWindow::loadGame(const QString &gameId)

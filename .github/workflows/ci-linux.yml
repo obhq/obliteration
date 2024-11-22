@@ -6,7 +6,7 @@ jobs:
     name: Linux
     runs-on: ubuntu-22.04
     steps:
-    - name: Checkout source
+    - name: Checkout repository
       uses: actions/checkout@v4
     - name: Install System Packages
       run: |
@@ -18,10 +18,8 @@ jobs:
       run: rustup target add x86_64-unknown-none
     - name: Lint Rust sources
       run: cargo clippy --package obkrnl --target x86_64-unknown-none -- -D warnings
-      working-directory: src
     - name: Run tests
       run: cargo test --workspace --exclude gui --exclude kernel
-      working-directory: src
     - name: Add Flathub
       run: flatpak remote-add --user flathub https://flathub.org/repo/flathub.flatpakrepo
     - name: Generate cache keys
@@ -37,8 +35,7 @@ jobs:
     - name: Install Flatpak runtimes
       run: |
         flatpak install --noninteractive flathub \
-          org.kde.Platform//6.7 org.kde.Sdk//6.7 \
-          org.freedesktop.Sdk.Extension.rust-stable//23.08
+          org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
       if: ${{ steps.flatpak-runtime.outputs.cache-hit != 'true' }}
     - name: Generate Flatpak branch
       run: |
