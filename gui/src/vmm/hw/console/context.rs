@@ -58,7 +58,7 @@ impl<'a, H: Hypervisor, C: Cpu> DeviceContext<C> for Context<'a, H> {
             let commit = read_u8(exit).map_err(|e| ExecError::ReadFailed(off, e))?;
             let ty: ConsoleType = commit
                 .try_into()
-                .map_err(|_| Box::new(ExecError::InvalidCommit(commit)))?;
+                .map_err(|_| ExecError::InvalidCommit(commit))?;
 
             // Trigger event.
             let msg = std::mem::take(&mut self.msg);
