@@ -50,10 +50,7 @@ impl<'a, H: Hypervisor, C: Cpu> DeviceContext<C> for Context<'a, H> {
             // Check if state valid.
             if self.msg_len.is_some() || self.msg.is_empty() {
                 return Err(Box::new(ExecError::InvalidSequence));
-            } else if std::str::from_utf8(&self.msg).is_err() {
-                return Err(Box::new(ExecError::InvalidMsg));
             }
-
             // Parse data.
             let commit = read_u8(exit).map_err(|e| ExecError::ReadFailed(off, e))?;
             let ty: ConsoleType = commit
@@ -63,7 +60,7 @@ impl<'a, H: Hypervisor, C: Cpu> DeviceContext<C> for Context<'a, H> {
             // Trigger event.
             let msg = std::mem::take(&mut self.msg);
 
-            let msg = String::from_utf8(msg).unwrap();
+            let msg = String::from_utf8(msg).map_err(ExecError::InvalidMsg)?;
 
             (self.dev.event)(VmmEvent::Log { ty: ty.into(), msg });
         } else {
@@ -87,7 +84,7 @@ enum ExecError {
     InvalidLen,
 
     #[error("invalid message")]
-    InvalidMsg,
+    InvalidMsg(#[from] std::string::FromUtf8Error),
 
     #[error("{0:#x} is not a valid commit")]
     InvalidCommit(u8),
