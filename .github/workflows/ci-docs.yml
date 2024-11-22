@@ -11,7 +11,7 @@ jobs:
     - name: Install system packages
       run: |
         sudo apt-get update
-        sudo apt-get install -y mkdocs-material
+        sudo apt-get install -y mkdocs
     - name: Disable PEP 668
       run: pip config set global.break-system-packages true
     - name: Install Python packages
