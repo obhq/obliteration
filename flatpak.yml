@@ -1,10 +1,10 @@
 app-id: io.github.obhq.Obliteration
 default-branch: stable
-runtime: org.kde.Platform
-runtime-version: '6.7'
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
 platform-extensions:
 - org.freedesktop.Platform.GL.default
-sdk: org.kde.Sdk
+sdk: org.freedesktop.Sdk
 command: obliteration
 build-options:
   build-args:
@@ -32,9 +32,7 @@ modules:
     if [ ${FLATPAK_ARCH} == 'x86_64' ]; then
       rustup target add x86_64-unknown-none
     fi
-  - cmake --preset linux-release
-  - cmake --build --preset linux-release
-  - cmake --install build --prefix "$FLATPAK_DEST"
+  - ./build.py -r --root "$FLATPAK_DEST"
   sources:
   - type: dir
     path: .

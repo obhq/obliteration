@@ -90,6 +90,10 @@ def main():
         description='Script to build Obliteration and create distribution file')
 
     p.add_argument('-r', '--release', action='store_true', help='enable optimization')
+    p.add_argument(
+        '--root',
+        metavar='PATH',
+        help='directory to store build outputs')
 
     # Parse arguments.
     args = p.parse_args()
@@ -117,12 +121,15 @@ def main():
     gui = cargo('gui', release=args.release, args=['--bin', 'obliteration', '-F', 'slint'])
 
     # Create output directory.
-    dest = 'dist'
+    dest = args.root
 
-    if os.path.exists(dest):
-        shutil.rmtree(dest)
+    if dest is None:
+        dest = 'dist'
 
-    os.mkdir(dest)
+        if os.path.exists(dest):
+            shutil.rmtree(dest)
+
+        os.mkdir(dest)
 
     # Export artifacts.
     s = platform.system()
