@@ -97,14 +97,14 @@ def main():
     # Build kernel.
     m = platform.machine()
 
-    if m == 'arm64' or m == 'aarch64':
+    if m == 'aarch64' or m == 'arm64':
         kern = cargo(
             'obkrnl',
             toolchain='nightly',
             target='aarch64-unknown-none-softfloat',
             release=args.release,
             args=['-Z', 'build-std=core,alloc'])
-    elif m == 'x86_64':
+    elif m == 'x86_64' or m == 'AMD64':
         kern = cargo(
             'obkrnl',
             target='x86_64-unknown-none',
