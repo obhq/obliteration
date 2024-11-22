@@ -48,7 +48,7 @@ fn run() -> Result<(), ApplicationError> {
     // TODO: check if already configured and skip wizard
     run_wizard().map_err(ApplicationError::RunWizard)?;
 
-    if let Some(debug_addr) = args.debug_addr() {
+    let vmm = if let Some(debug_addr) = args.debug_addr() {
         let kernel_path = get_kernel_path(&args)?;
 
         let debug_server = DebugServer::new(debug_addr)
@@ -79,12 +79,10 @@ fn run() -> Result<(), ApplicationError> {
             event_handler,
         )
         .map_err(ApplicationError::RunVmm)?;
-    }
 
-    // Run VMM launcher.
-    let vmm = match run_launcher()? {
-        Some(v) => v,
-        None => return Ok(()),
+        todo!()
+    } else {
+        run_launcher()?
     };
 
     // Setup VMM screen.
