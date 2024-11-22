@@ -44,13 +44,16 @@ impl<'a, H: Hypervisor, C: Cpu> DeviceContext<C> for Context<'a, H> {
             let len = self.msg_len.take().ok_or(ExecError::InvalidSequence)?;
             let data = read_ptr(exit, len, self.hv).map_err(|e| ExecError::ReadFailed(off, e))?;
 
-            self.msg
-                .extend_from_slice(unsafe { std::slice::from_raw_parts(data.as_ptr(), len.get()) });
+            self.msg.extend_from_slice(data.as_ref());
         } else if off == offset_of!(ConsoleMemory, commit) {
             // Check if state valid.
             if self.msg_len.is_some() || self.msg.is_empty() {
                 return Err(Box::new(ExecError::InvalidSequence));
             }
+
+            // Check if valid UTF-8.
+            let _ = std::str::from_utf8(&self.msg).map_err(ExecError::InvalidMsg)?;
+
             // Parse data.
             let commit = read_u8(exit).map_err(|e| ExecError::ReadFailed(off, e))?;
             let ty: ConsoleType = commit
@@ -60,7 +63,8 @@ impl<'a, H: Hypervisor, C: Cpu> DeviceContext<C> for Context<'a, H> {
             // Trigger event.
             let msg = std::mem::take(&mut self.msg);
 
-            let msg = String::from_utf8(msg).map_err(ExecError::InvalidMsg)?;
+            // Safety: We check the message is valid UTF-8 above.
+            let msg = unsafe { String::from_utf8_unchecked(msg) };
 
             (self.dev.event)(VmmEvent::Log { ty: ty.into(), msg });
         } else {
@@ -84,7 +88,7 @@ enum ExecError {
     InvalidLen,
 
     #[error("invalid message")]
-    InvalidMsg(#[from] std::string::FromUtf8Error),
+    InvalidMsg(#[from] std::str::Utf8Error),
 
     #[error("{0:#x} is not a valid commit")]
     InvalidCommit(u8),
