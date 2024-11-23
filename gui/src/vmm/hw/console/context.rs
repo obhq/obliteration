@@ -85,7 +85,7 @@ enum ExecError {
     InvalidLen,
 
     #[error("invalid message")]
-    InvalidMsg(#[from] std::string::FromUtf8Error),
+    InvalidMsg(#[source] std::string::FromUtf8Error),
 
     #[error("{0:#x} is not a valid commit")]
     InvalidCommit(u8),
