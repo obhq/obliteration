@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::buffer::MetalBuffer;
-use super::{Screen, ScreenBuffer};
+use crate::graphics::{Screen, ScreenBuffer};
 use crate::vmm::VmmScreen;
 use metal::{CAMetalLayer, Device, MetalLayer};
 use objc::runtime::{Object, NO, YES};

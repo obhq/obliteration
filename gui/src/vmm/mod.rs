@@ -7,9 +7,9 @@ use self::kernel::{
 use self::ram::RamBuilder;
 use crate::debug::DebugClient;
 use crate::error::RustError;
+use crate::graphics::Screen;
 use crate::hv::{Hypervisor, Ram};
 use crate::profile::Profile;
-use crate::screen::Screen;
 use cpu::GdbError;
 use gdbstub::common::Signal;
 use gdbstub::stub::state_machine::GdbStubStateMachine;

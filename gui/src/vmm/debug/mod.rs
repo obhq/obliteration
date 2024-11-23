@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::cpu::{CpuManager, GdbError};
 use crate::debug::DebugClient;
+use crate::graphics::Screen;
 use crate::hv::Hypervisor;
-use crate::screen::Screen;
 use gdbstub::stub::state_machine::state::{Idle, Running};
 use gdbstub::stub::state_machine::{GdbStubStateMachine, GdbStubStateMachineInner};
 use gdbstub::stub::MultiThreadStopReason;
