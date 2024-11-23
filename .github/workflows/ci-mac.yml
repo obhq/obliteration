@@ -2,9 +2,6 @@ name: CI (Mac)
 on:
   workflow_call:
     inputs:
-      macos:
-        type: string
-        required: true
       kernel-target:
         type: string
         required: true
@@ -13,58 +10,10 @@ env:
 jobs:
   build:
     name: Mac M1
-    runs-on: ${{ inputs.macos }}
-    env:
-      CMAKE_PREFIX_PATH: qt/6.7.2/macos
-      QT_URL_BASE: https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_672/qt.qt6.672.clang_64/6.7.2-0-202406110330qtbase-MacOS-MacOS_13-Clang-MacOS-MacOS_13-X86_64-ARM64.7z
-      QT_URL_SVG: https://download.qt.io/online/qtsdkrepository/mac_x64/desktop/qt6_672/qt.qt6.672.clang_64/6.7.2-0-202406110330qtsvg-MacOS-MacOS_13-Clang-MacOS-MacOS_13-X86_64-ARM64.7z
+    runs-on: macos-14
     steps:
-    - name: Set up Python 3.12 (the latest version that is able to build skia-bindings)
-      uses: actions/setup-python@v4
-      with:
-        python-version: "3.12"
-    - name: Checkout source
+    - name: Checkout repository
       uses: actions/checkout@v4
-    - name: Generate cache keys
-      run: |
-        require Digest::MD5;
-
-        my $qt = Digest::MD5->new();
-
-        foreach my $name (sort keys %ENV) {
-          if ($name =~ /^QT_URL_/) {
-            $qt->add($ENV{$name});
-          }
-        }
-
-        open(my $output, '>>', $ENV{GITHUB_OUTPUT}) || die "Cannot open GITHUB_OUTPUT: $!";
-        print $output "qt=${{ runner.os }}-${{ runner.arch }}-qt-".$qt->hexdigest."\n";
-        print $output "target=${{ runner.os }}-${{ runner.arch }}-target\n";
-      shell: perl {0}
-      id: cache-keys
-    - name: Restore Qt
-      uses: actions/cache/restore@v4
-      with:
-        path: qt
-        key: ${{ steps.cache-keys.outputs.qt }}
-      id: qt-cache
-    - name: Install Qt
-      run: |
-        env | while IFS= read -r line; do
-          name=${line%%=*}
-          value=${line#*=}
-
-          if [[ $name == QT_URL_* ]]; then
-            curl -Lo qt.7z "$value"
-            7za x qt.7z -oqt
-          fi
-        done
-      if: ${{ steps.qt-cache.outputs.cache-hit != 'true' }}
-    - name: Restore target directory
-      uses: actions/cache/restore@v4
-      with:
-        path: target
-        key: ${{ steps.cache-keys.outputs.target }}
     - name: Update Rust
       run: rustup update stable
     - name: Install Rust nightly
@@ -73,31 +22,10 @@ jobs:
       run: rustup component add rust-src --toolchain nightly
     - name: Install additional Rust targets
       run: rustup target add ${{ inputs.kernel-target }}
-    - name: Run CMake
-      run: cmake --preset mac-release .
     - name: Build
-      run: cmake --build --preset mac-release
-    - name: Build Slint
-      run: cargo build -p gui --bin obliteration -F slint -r
+      run: ./build.py -r
     - name: Run tests
       run: cargo test --workspace --exclude gui --exclude kernel
-      working-directory: src
-    - name: Create Application Bundle
-      run: |
-        cmake --install build --prefix "$(pwd)"
-        mkdir dist
-        mv obliteration.app dist/Obliteration.app
-    - name: Fix library paths
-      run: |
-        app="dist/Obliteration.app/Contents/MacOS/obliteration"
-
-        install_name_tool -change '@rpath/QtWidgets.framework/Versions/A/QtWidgets' '@executable_path/../Frameworks/QtWidgets.framework/Versions/A/QtWidgets' "$app"
-        install_name_tool -change '@rpath/QtGui.framework/Versions/A/QtGui' '@executable_path/../Frameworks/QtGui.framework/Versions/A/QtGui' "$app"
-        install_name_tool -change '@rpath/QtCore.framework/Versions/A/QtCore' '@executable_path/../Frameworks/QtCore.framework/Versions/A/QtCore' "$app"
-
-        otool -L "$app"
-    - name: Sign application
-      run: codesign -s - --entitlements entitlements.plist --deep --force dist/Obliteration.app
     - name: Create Apple Disk Image
       run: hdiutil create -volname Obliteration -srcfolder dist Obliteration.dmg
     - name: Upload artifacts
@@ -105,15 +33,3 @@ jobs:
       with:
         name: obliteration-mac-m1
         path: Obliteration.dmg
-    - name: Cache target directory
-      uses: actions/cache/save@v4
-      with:
-        path: target
-        key: ${{ steps.cache-keys.outputs.target }}-${{ github.run_id }}
-      if: startsWith(github.ref, 'refs/heads/')
-    - name: Cache Qt
-      uses: actions/cache/save@v4
-      with:
-        path: qt
-        key: ${{ steps.cache-keys.outputs.qt }}
-      if: startsWith(github.ref, 'refs/heads/') && steps.qt-cache.outputs.cache-hit != 'true'

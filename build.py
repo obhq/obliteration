@@ -6,6 +6,7 @@ import platform
 import shutil
 from subprocess import PIPE, Popen, run
 import sys
+from urllib.parse import urlparse
 
 def cargo(package, toolchain=None, target=None, release=False, args=None):
     # Get package ID.
@@ -15,6 +16,10 @@ def cargo(package, toolchain=None, target=None, release=False, args=None):
         cmd.append(f'+{toolchain}')
 
     id = run(cmd + ['pkgid', '-p', package], stdout=PIPE, check=True).stdout.decode('utf-8').strip()
+
+    # Parse package ID.
+    url = urlparse(id)
+    path = url.path
 
     # Setup command and its argument.
     cmd.extend(['build', '-p', package])
@@ -31,7 +36,7 @@ def cargo(package, toolchain=None, target=None, release=False, args=None):
     cmd.extend(['--message-format', 'json-render-diagnostics'])
 
     # Run.
-    with Popen(cmd, stdout=PIPE) as proc:
+    with Popen(cmd, stdout=PIPE, cwd=path) as proc:
         for line in proc.stdout:
             line = json.loads(line)
             reason = line['reason']
@@ -61,6 +66,11 @@ def export_darwin(root, kern, gui):
     # Export files
     shutil.copy(kern['executable'], resources)
     shutil.copy(gui['executable'], macos)
+    shutil.copyfile('bundle.icns', os.path.join(resources, 'obliteration.icns'))
+    shutil.copy('Info.plist', contents)
+
+    # Sign bundle.
+    run(['codesign', '-s', '-', '--entitlements', 'entitlements.plist', bundle], check=True)
 
 def export_linux(root, kern, gui):
     # Create directories.
