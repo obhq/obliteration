@@ -6,8 +6,6 @@ use self::kernel::{
 };
 use self::ram::RamBuilder;
 use crate::debug::DebugClient;
-use crate::error::RustError;
-use crate::graphics::Screen;
 use crate::hv::{Hypervisor, Ram};
 use crate::profile::Profile;
 use cpu::GdbError;
@@ -58,23 +56,19 @@ fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
 }
 
 /// Manage a virtual machine that run the kernel.
-pub struct Vmm<S: Screen> {
-    cpu: CpuManager<crate::hv::Default, S>, // Drop first.
-    screen: S,
-    gdb: Option<GdbStubStateMachine<'static, CpuManager<crate::hv::Default, S>, DebugClient>>,
+pub struct Vmm<E: VmmHandler> {
+    cpu: CpuManager<crate::hv::Default, E>, // Drop first.
+    gdb: Option<GdbStubStateMachine<'static, CpuManager<crate::hv::Default, E>, DebugClient>>,
     shutdown: Arc<AtomicBool>,
 }
 
-impl<S: Screen> Vmm<S> {
+impl<E: VmmHandler> Vmm<E> {
     pub fn new(
         kernel_path: impl AsRef<Path>,
-        screen: S,
+        handler: E,
         profile: &Profile,
         debugger: Option<DebugClient>,
-        event_handler: impl Fn(VmmEvent) + Send + Sync + 'static,
     ) -> Result<Self, VmmError> {
-        let event_handler = Arc::new(event_handler);
-
         let path = kernel_path.as_ref();
 
         // Open kernel image.
@@ -246,11 +240,7 @@ impl<S: Screen> Vmm<S> {
         let ram_size = NonZero::new(1024 * 1024 * 1024 * 8).unwrap();
 
         // Setup virtual devices.
-        let devices = Arc::new(setup_devices(
-            ram_size.get(),
-            block_size,
-            event_handler.clone(),
-        ));
+        let devices = Arc::new(setup_devices(ram_size.get(), block_size));
 
         // Setup hypervisor.
         let mut hv = unsafe { crate::hv::new(8, ram_size, block_size, debugger.is_some()) }
@@ -304,39 +294,26 @@ impl<S: Screen> Vmm<S> {
 
         // Setup CPU manager.
         let shutdown = Arc::new(AtomicBool::new(false));
-        let mut cpu_manager = CpuManager::new(
-            Arc::new(hv),
-            screen.buffer().clone(),
-            devices,
-            event_handler,
-            shutdown.clone(),
-        );
+        let mut cpu = CpuManager::new(Arc::new(hv), Arc::new(handler), devices, shutdown.clone());
 
         // Setup GDB stub.
         let gdb = debugger
             .map(|client| {
                 gdbstub::stub::GdbStub::new(client)
-                    .run_state_machine(&mut cpu_manager)
+                    .run_state_machine(&mut cpu)
                     .map_err(VmmError::SetupGdbStub)
             })
             .transpose()?;
 
         // Spawn main CPU.
-        cpu_manager.spawn(
+        cpu.spawn(
             map.kern_vaddr + kernel_img.entry(),
             Some(map),
             gdb.is_some(),
         );
 
         // Create VMM.
-        let vmm = Vmm {
-            cpu: cpu_manager,
-            screen,
-            gdb,
-            shutdown,
-        };
-
-        Ok(vmm)
+        Ok(Self { cpu, gdb, shutdown })
     }
 
     fn dispatch_debug(
@@ -390,12 +367,20 @@ impl<S: Screen> Vmm<S> {
     }
 }
 
-impl<S: Screen> Drop for Vmm<S> {
+impl<E: VmmHandler> Drop for Vmm<E> {
     fn drop(&mut self) {
         // Set shutdown flag before dropping the other fields so their background thread can stop
         // before they try to join with it.
         self.shutdown.store(true, Ordering::Relaxed);
     }
+}
+
+/// Provides methods to handle VMM events.
+pub trait VmmHandler: Send + Sync + 'static {
+    fn error(&self, cpu: usize, reason: impl Into<Box<dyn std::error::Error>>);
+    fn exiting(&self, success: bool);
+    fn log(&self, ty: ConsoleType, msg: &str);
+    fn breakpoint(&self, stop: Option<MultiThreadStopReason<u64>>);
 }
 
 pub enum DispatchDebugResult {
@@ -427,44 +412,6 @@ pub struct VmmScreen {
     #[cfg(target_os = "macos")]
     pub view: usize,
 }
-
-/// Encapsulates a function to handle VMM events.
-pub type VmmEventHandler = Arc<dyn Fn(VmmEvent) + Send + Sync + 'static>;
-
-/// Contains VMM event information.
-pub enum VmmEvent {
-    Error { reason: RustError },
-    Exiting { success: bool },
-    Log { ty: VmmLog, msg: String },
-    Breakpoint { stop: Option<KernelStop> },
-}
-
-/// Log category.
-///
-/// The reason we need this because cbindgen is not good at exporting dependency types so we can't
-/// use [`ConsoleType`] directly. See https://github.com/mozilla/cbindgen/issues/667 for an example
-/// of the problem.
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub enum VmmLog {
-    Info,
-    Warn,
-    Error,
-}
-
-impl From<ConsoleType> for VmmLog {
-    fn from(value: ConsoleType) -> Self {
-        match value {
-            ConsoleType::Info => Self::Info,
-            ConsoleType::Warn => Self::Warn,
-            ConsoleType::Error => Self::Error,
-        }
-    }
-}
-
-/// Reason for [`VmmEvent::Breakpoint`].
-#[allow(dead_code)]
-pub struct KernelStop(MultiThreadStopReason<u64>);
 
 #[derive(Debug, Error)]
 pub enum VmmError {

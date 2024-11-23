@@ -2,7 +2,7 @@
 use self::context::Context;
 use super::{Device, DeviceContext};
 use crate::hv::Hypervisor;
-use crate::vmm::VmmEventHandler;
+use crate::vmm::VmmHandler;
 use obconf::ConsoleMemory;
 use std::num::NonZero;
 
@@ -12,24 +12,24 @@ mod context;
 pub struct Console {
     addr: usize,
     len: NonZero<usize>,
-    event: VmmEventHandler,
 }
 
 impl Console {
-    pub fn new(addr: usize, block_size: NonZero<usize>, event: VmmEventHandler) -> Self {
+    pub fn new(addr: usize, block_size: NonZero<usize>) -> Self {
         let len = size_of::<ConsoleMemory>()
             .checked_next_multiple_of(block_size.get())
             .and_then(NonZero::new)
             .unwrap();
 
-        Self { addr, len, event }
+        Self { addr, len }
     }
 
-    pub fn create_context<'a, H: Hypervisor>(
+    pub fn create_context<'a, H: Hypervisor, E: VmmHandler>(
         &'a self,
         hv: &'a H,
+        handler: &'a E,
     ) -> Box<dyn DeviceContext<H::Cpu<'a>> + 'a> {
-        Box::new(Context::new(self, hv))
+        Box::new(Context::new(self, hv, handler))
     }
 }
 

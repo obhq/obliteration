@@ -3,7 +3,6 @@
 use self::graphics::{Graphics, PhysicalDevice, Screen};
 use self::profile::Profile;
 use self::ui::ErrorDialog;
-use self::vmm::VmmEvent;
 use args::CliArgs;
 use clap::Parser;
 use debug::DebugServer;
@@ -54,6 +53,7 @@ fn run() -> Result<(), ApplicationError> {
     // TODO: check if already configured and skip wizard
     run_wizard().map_err(ApplicationError::RunWizard)?;
 
+    // Get VMM arguments.
     let args = if let Some(debug_addr) = args.debug_addr() {
         let kernel_path = get_kernel_path(&args)?;
 
@@ -66,21 +66,12 @@ fn run() -> Result<(), ApplicationError> {
 
         let profiles = load_profiles()?;
 
-        // TODO: handle events
-        let event_handler = |event| match event {
-            VmmEvent::Breakpoint { stop } => {}
-            VmmEvent::Log { ty, msg } => {}
-            VmmEvent::Exiting { success } => {}
-            VmmEvent::Error { reason } => {}
-        };
-
         todo!()
     } else {
-        run_launcher(&graphics)?
-    };
-
-    let Some(args) = args else {
-        return Ok(());
+        match run_launcher(&graphics)? {
+            Some(v) => v,
+            None => return Ok(()),
+        }
     };
 
     // Setup VMM screen.
