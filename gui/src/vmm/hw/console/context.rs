@@ -53,20 +53,15 @@ impl<'a, H: Hypervisor, C: Cpu> DeviceContext<C> for Context<'a, H> {
                 return Err(Box::new(ExecError::InvalidSequence));
             }
 
-            // Check if valid UTF-8.
-            let _ = std::str::from_utf8(&self.msg).map_err(ExecError::InvalidMsg)?;
-
             // Parse data.
             let commit = read_u8(exit).map_err(|e| ExecError::ReadFailed(off, e))?;
             let ty: ConsoleType = commit
                 .try_into()
                 .map_err(|_| ExecError::InvalidCommit(commit))?;
 
-            // Trigger event.
-            let msg = std::mem::take(&mut self.msg);
-
-            // Safety: We check the message is valid UTF-8 above.
-            let msg = unsafe { String::from_utf8_unchecked(msg) };
+            // Trigger event.s
+            let bytes = std::mem::take(&mut self.msg);
+            let msg = String::from_utf8(bytes).map_err(ExecError::InvalidMsg)?;
 
             (self.dev.event)(VmmEvent::Log { ty: ty.into(), msg });
         } else {
@@ -90,7 +85,7 @@ enum ExecError {
     InvalidLen,
 
     #[error("invalid message")]
-    InvalidMsg(#[from] std::str::Utf8Error),
+    InvalidMsg(#[from] std::string::FromUtf8Error),
 
     #[error("{0:#x} is not a valid commit")]
     InvalidCommit(u8),
