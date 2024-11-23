@@ -1,4 +1,4 @@
-use super::ScreenBuffer;
+use crate::graphics::ScreenBuffer;
 
 /// Manages Vulkan off-screen buffers.
 pub struct VulkanBuffer {}

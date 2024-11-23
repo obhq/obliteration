@@ -1,10 +1,9 @@
 #![windows_subsystem = "windows"]
 
-use self::graphics::{GraphicsApi, PhysicalDevice, Screen};
+use self::graphics::{Graphics, PhysicalDevice, Screen};
 use self::profile::Profile;
-use self::screen::DefaultScreen;
 use self::ui::ErrorDialog;
-use self::vmm::{Vmm, VmmEvent};
+use self::vmm::VmmEvent;
 use args::CliArgs;
 use clap::Parser;
 use debug::DebugServer;
@@ -25,7 +24,6 @@ mod pkg;
 mod profile;
 #[cfg(unix)]
 mod rlim;
-mod screen;
 mod string;
 mod system;
 mod ui;
@@ -47,10 +45,16 @@ fn run() -> Result<(), ApplicationError> {
     #[cfg(unix)]
     rlim::set_rlimit_nofile().map_err(ApplicationError::FdLimit)?;
 
+    // Initialize graphics engine.
+    let mut graphics = match graphics::DefaultApi::new() {
+        Ok(v) => v,
+        Err(e) => return Err(ApplicationError::InitGraphics(Box::new(e))),
+    };
+
     // TODO: check if already configured and skip wizard
     run_wizard().map_err(ApplicationError::RunWizard)?;
 
-    let vmm = if let Some(debug_addr) = args.debug_addr() {
+    let args = if let Some(debug_addr) = args.debug_addr() {
         let kernel_path = get_kernel_path(&args)?;
 
         let debug_server = DebugServer::new(debug_addr)
@@ -59,9 +63,6 @@ fn run() -> Result<(), ApplicationError> {
         let debug_client = debug_server
             .accept()
             .map_err(ApplicationError::CreateDebugClient)?;
-
-        let _graphics_api =
-            graphics::DefaultApi::new().map_err(ApplicationError::InitGraphicsApi)?;
 
         let profiles = load_profiles()?;
 
@@ -73,29 +74,24 @@ fn run() -> Result<(), ApplicationError> {
             VmmEvent::Error { reason } => {}
         };
 
-        let vmm = Vmm::new(
-            kernel_path,
-            todo!(),
-            &profiles[0],
-            Some(debug_client),
-            event_handler,
-        )
-        .map_err(ApplicationError::RunVmm)?;
-
         todo!()
     } else {
-        run_launcher()?
+        run_launcher(&graphics)?
     };
 
-    let Some(vmm) = vmm else {
+    let Some(args) = args else {
         return Ok(());
     };
 
     // Setup VMM screen.
-    let mut screen = DefaultScreen::new().map_err(ApplicationError::CreateScreen)?;
+    let mut screen = graphics
+        .create_screen()
+        .map_err(|e| ApplicationError::CreateScreen(Box::new(e)))?;
 
     // TODO: Start VMM.
-    screen.run().map_err(ApplicationError::RunScreen)?;
+    screen
+        .run()
+        .map_err(|e| ApplicationError::RunScreen(Box::new(e)))?;
 
     Ok(())
 }
@@ -107,7 +103,7 @@ fn load_profiles() -> Result<Vec<Profile>, ApplicationError> {
     Ok(profiles)
 }
 
-fn run_launcher() -> Result<Option<Vmm>, ApplicationError> {
+fn run_launcher(graphics: &impl Graphics) -> Result<Option<VmmArgs>, ApplicationError> {
     // Create window and register callback handlers.
     let win = ui::MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
     let start = Rc::new(RefCell::new(false));
@@ -122,8 +118,6 @@ fn run_launcher() -> Result<Option<Vmm>, ApplicationError> {
         }
     });
 
-    let graphics_api = graphics::DefaultApi::new().map_err(ApplicationError::InitGraphicsApi)?;
-
     let profiles = load_profiles()?;
 
     setup_globals(&win);
@@ -137,7 +131,7 @@ fn run_launcher() -> Result<Option<Vmm>, ApplicationError> {
     win.set_profiles(profiles);
 
     let physical_devices = ModelRc::new(VecModel::from_iter(
-        graphics_api
+        graphics
             .physical_devices()
             .iter()
             .map(|p| SharedString::from(p.name())),
@@ -274,6 +268,10 @@ fn run_wizard() -> Result<(), slint::PlatformError> {
     })
 }
 
+/// Encapsulates arguments for [`Vmm::new()`].
+struct VmmArgs {}
+
+/// Represents an error when [`run()`] fails.
 #[derive(Debug, Error)]
 enum ApplicationError {
     #[error(transparent)]
@@ -301,18 +299,15 @@ enum ApplicationError {
     #[error("failed to create main window")]
     CreateMainWindow(#[source] slint::PlatformError),
 
-    #[error("failed to initialize graphics API")]
-    InitGraphicsApi(#[source] <graphics::DefaultApi as GraphicsApi>::CreateError),
-
-    #[error("failed to run vmm")]
-    RunVmm(#[source] vmm::VmmError),
+    #[error("couldn't initialize graphics engine")]
+    InitGraphics(#[source] Box<dyn std::error::Error>),
 
     #[error("failed to run main window")]
     RunMainWindow(#[source] slint::PlatformError),
 
     #[error("couldn't create VMM screen")]
-    CreateScreen(#[source] screen::ScreenError),
+    CreateScreen(#[source] Box<dyn std::error::Error>),
 
     #[error("couldn't run VMM screen")]
-    RunScreen(#[source] <DefaultScreen as Screen>::RunErr),
+    RunScreen(#[source] Box<dyn std::error::Error>),
 }

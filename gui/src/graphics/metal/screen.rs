@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use self::buffer::MetalBuffer;
-use crate::graphics::{Screen, ScreenBuffer};
+use super::buffer::MetalBuffer;
+use crate::graphics::Screen;
 use crate::vmm::VmmScreen;
 use metal::{CAMetalLayer, Device, MetalLayer};
 use objc::runtime::{Object, NO, YES};
@@ -8,8 +8,6 @@ use objc::{msg_send, sel, sel_impl};
 use std::ptr::null_mut;
 use std::sync::Arc;
 use thiserror::Error;
-
-mod buffer;
 
 /// Implementation of [`Screen`] using Metal.
 ///

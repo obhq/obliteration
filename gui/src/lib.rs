@@ -8,7 +8,6 @@ mod hv;
 mod param;
 mod pkg;
 mod profile;
-mod screen;
 mod string;
 mod system;
 mod vmm;

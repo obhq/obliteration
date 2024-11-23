@@ -51,11 +51,6 @@ struct Profile;
  */
 struct RustError;
 
-/**
- * Manage a virtual machine that run the kernel.
- */
-struct Vmm;
-
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -129,12 +124,6 @@ struct RustError *update_firmware(const char *root,
                                   const char *fw,
                                   void *cx,
                                   void (*status)(const char*, uint64_t, uint64_t, void*));
-
-void vmm_free(struct Vmm *vmm);
-
-void vmm_shutdown(struct Vmm *vmm);
-
-bool vmm_shutting_down(struct Vmm *vmm);
 
 #ifdef __cplusplus
 }  // extern "C"

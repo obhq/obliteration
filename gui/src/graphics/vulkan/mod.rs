@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+use self::screen::VulkanScreen;
+use super::Graphics;
 use ash::vk::{ApplicationInfo, InstanceCreateInfo};
 use std::ffi::CStr;
 use thiserror::Error;
+
+mod buffer;
+mod screen;
 
 pub struct Vulkan {
     entry: ash::Entry,
@@ -9,12 +14,12 @@ pub struct Vulkan {
     devices: Vec<VulkanPhysicalDevice>,
 }
 
-impl super::GraphicsApi for Vulkan {
+impl Graphics for Vulkan {
+    type Err = VulkanError;
     type PhysicalDevice = VulkanPhysicalDevice;
+    type Screen = VulkanScreen;
 
-    type CreateError = VulkanCreateError;
-
-    fn new() -> Result<Self, Self::CreateError> {
+    fn new() -> Result<Self, Self::Err> {
         let entry = ash::Entry::linked();
 
         let app_info = ApplicationInfo::default().application_name(c"Obliteration");
@@ -22,30 +27,28 @@ impl super::GraphicsApi for Vulkan {
         let create_info = InstanceCreateInfo::default().application_info(&app_info);
 
         let instance = unsafe { entry.create_instance(&create_info, None) }
-            .map_err(VulkanCreateError::CreateInstanceFailed)?;
+            .map_err(VulkanError::CreateInstanceFailed)?;
 
         let devices = unsafe { instance.enumerate_physical_devices() }
-            .map_err(VulkanCreateError::EnumeratePhysicalDevicesFailed)?
+            .map_err(VulkanError::EnumeratePhysicalDevicesFailed)?
             .into_iter()
-            .map(
-                |device| -> Result<VulkanPhysicalDevice, VulkanCreateError> {
-                    let properties = unsafe { instance.get_physical_device_properties(device) };
+            .map(|device| -> Result<VulkanPhysicalDevice, VulkanError> {
+                let properties = unsafe { instance.get_physical_device_properties(device) };
 
-                    let name = CStr::from_bytes_until_nul(unsafe {
-                        std::slice::from_raw_parts(
-                            properties.device_name.as_ptr().cast(),
-                            properties.device_name.len(),
-                        )
-                    })
-                    .map_err(|_| VulkanCreateError::DeviceNameInvalid)?
-                    .to_str()
-                    .map_err(VulkanCreateError::DeviceNameInvalidUtf8)?
-                    .to_owned();
+                let name = CStr::from_bytes_until_nul(unsafe {
+                    std::slice::from_raw_parts(
+                        properties.device_name.as_ptr().cast(),
+                        properties.device_name.len(),
+                    )
+                })
+                .map_err(|_| VulkanError::DeviceNameInvalid)?
+                .to_str()
+                .map_err(VulkanError::DeviceNameInvalidUtf8)?
+                .to_owned();
 
-                    Ok(VulkanPhysicalDevice { device, name })
-                },
-            )
-            .collect::<Result<_, VulkanCreateError>>()?;
+                Ok(VulkanPhysicalDevice { device, name })
+            })
+            .collect::<Result<_, VulkanError>>()?;
 
         Ok(Self {
             entry,
@@ -56,6 +59,10 @@ impl super::GraphicsApi for Vulkan {
 
     fn physical_devices(&self) -> &[Self::PhysicalDevice] {
         &self.devices
+    }
+
+    fn create_screen(&mut self) -> Result<Self::Screen, Self::Err> {
+        todo!()
     }
 }
 
@@ -76,9 +83,9 @@ impl super::PhysicalDevice for VulkanPhysicalDevice {
     }
 }
 
-/// Represents an error when [`Vulkan::new()`] fails.
+/// Implementation of [`Graphics::Err`] for Vulkan.
 #[derive(Debug, Error)]
-pub enum VulkanCreateError {
+pub enum VulkanError {
     #[error("couldn't create Vulkan instance")]
     CreateInstanceFailed(#[source] ash::vk::Result),
 

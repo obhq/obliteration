@@ -122,12 +122,3 @@ inline void Rust<RustError>::free()
         m_ptr = nullptr;
     }
 }
-
-template<>
-inline void Rust<Vmm>::free()
-{
-    if (m_ptr) {
-        vmm_free(m_ptr);
-        m_ptr = nullptr;
-    }
-}

@@ -1,4 +1,4 @@
-use super::ScreenBuffer;
+use crate::graphics::ScreenBuffer;
 
 /// Manages Metal off-screen buffers.
 pub struct MetalBuffer {}

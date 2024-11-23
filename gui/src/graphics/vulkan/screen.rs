@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use self::buffer::VulkanBuffer;
-use crate::graphics::{Screen, ScreenBuffer};
+use super::buffer::VulkanBuffer;
+use crate::graphics::Screen;
 use crate::vmm::VmmScreen;
 use ash::vk::{DeviceCreateInfo, DeviceQueueCreateInfo, Handle, QueueFlags};
 use ash::Device;
 use std::sync::Arc;
 use thiserror::Error;
-
-mod buffer;
 
 /// Implementation of [`Screen`] using Vulkan.
 pub struct VulkanScreen {
