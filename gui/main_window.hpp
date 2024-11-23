@@ -32,7 +32,6 @@ public:
     bool loadProfiles();
     bool loadGames();
     void restoreGeometry();
-    void startDebug(const QString &addr);
 protected:
     void closeEvent(QCloseEvent *event) override;
 private slots:
@@ -42,7 +41,6 @@ private slots:
     void aboutObliteration();
     void saveProfile(Profile *p);
 private:
-    void debuggerConnected();
     void vmmError(const QString &msg);
     void waitKernelExit(bool success);
     bool loadGame(const QString &gameId);
@@ -55,7 +53,6 @@ private:
     GameListModel *m_games;
     LaunchSettings *m_launch;
     Screen *m_screen;
-    Rust<DebugServer> m_debugServer;
     QSocketNotifier *m_debugNoti;
 };
 

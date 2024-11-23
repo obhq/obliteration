@@ -2,7 +2,6 @@
 pub use self::console::*;
 pub use self::vmm::*;
 
-use super::VmmEventHandler;
 use crate::hv::{Cpu, CpuExit, CpuIo, Hypervisor, IoBuf, LockedAddr};
 use std::collections::BTreeMap;
 use std::error::Error;
@@ -13,18 +12,14 @@ use thiserror::Error;
 mod console;
 mod vmm;
 
-pub fn setup_devices(
-    start_addr: usize,
-    block_size: NonZero<usize>,
-    event: VmmEventHandler,
-) -> DeviceTree {
+pub fn setup_devices(start_addr: usize, block_size: NonZero<usize>) -> DeviceTree {
     let mut b = MapBuilder {
         map: BTreeMap::new(),
         next: start_addr,
     };
 
-    let vmm = b.push(|addr| Vmm::new(addr, block_size, event.clone()));
-    let console = b.push(|addr| Console::new(addr, block_size, event.clone()));
+    let vmm = b.push(|addr| Vmm::new(addr, block_size));
+    let console = b.push(|addr| Console::new(addr, block_size));
 
     DeviceTree {
         vmm,

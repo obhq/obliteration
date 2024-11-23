@@ -70,24 +70,6 @@ inline void Rust<char>::free()
 }
 
 template<>
-inline void Rust<DebugClient>::free()
-{
-    if (m_ptr) {
-        debug_client_free(m_ptr);
-        m_ptr = nullptr;
-    }
-}
-
-template<>
-inline void Rust<DebugServer>::free()
-{
-    if (m_ptr) {
-        debug_server_free(m_ptr);
-        m_ptr = nullptr;
-    }
-}
-
-template<>
 inline void Rust<Param>::free()
 {
     if (m_ptr) {

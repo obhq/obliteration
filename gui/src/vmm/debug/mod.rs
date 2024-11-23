@@ -1,29 +1,29 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::cpu::{CpuManager, GdbError};
+use super::VmmHandler;
 use crate::debug::DebugClient;
-use crate::graphics::Screen;
 use crate::hv::Hypervisor;
 use gdbstub::stub::state_machine::state::{Idle, Running};
 use gdbstub::stub::state_machine::{GdbStubStateMachine, GdbStubStateMachineInner};
 use gdbstub::stub::MultiThreadStopReason;
 use thiserror::Error;
 
-impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
+impl<H: Hypervisor, E: VmmHandler> CpuManager<H, E> {
     pub(super) fn dispatch_gdb_idle(
         &mut self,
         mut state: GdbStubStateMachineInner<
             'static,
-            Idle<CpuManager<H, S>>,
-            CpuManager<H, S>,
+            Idle<CpuManager<H, E>>,
+            CpuManager<H, E>,
             DebugClient,
         >,
     ) -> Result<
         Result<
-            GdbStubStateMachine<'static, CpuManager<H, S>, DebugClient>,
+            GdbStubStateMachine<'static, CpuManager<H, E>, DebugClient>,
             GdbStubStateMachineInner<
                 'static,
-                Idle<CpuManager<H, S>>,
-                CpuManager<H, S>,
+                Idle<CpuManager<H, E>>,
+                CpuManager<H, E>,
                 DebugClient,
             >,
         >,
@@ -43,12 +43,12 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
 
     pub(super) fn dispatch_gdb_running(
         &mut self,
-        mut state: GdbStubStateMachineInner<'static, Running, CpuManager<H, S>, DebugClient>,
+        mut state: GdbStubStateMachineInner<'static, Running, CpuManager<H, E>, DebugClient>,
         stop: Option<MultiThreadStopReason<u64>>,
     ) -> Result<
         Result<
-            GdbStubStateMachine<'static, CpuManager<H, S>, DebugClient>,
-            GdbStubStateMachineInner<'static, Running, CpuManager<H, S>, DebugClient>,
+            GdbStubStateMachine<'static, CpuManager<H, E>, DebugClient>,
+            GdbStubStateMachineInner<'static, Running, CpuManager<H, E>, DebugClient>,
         >,
         DispatchGdbRunningError,
     > {

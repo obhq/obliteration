@@ -104,12 +104,6 @@ MainWindow::MainWindow(
 #endif
 
     connect(m_launch, &LaunchSettings::saveClicked, this, &MainWindow::saveProfile);
-    connect(m_launch, &LaunchSettings::startClicked, [this](const QString &debug) {
-        if (debug.isEmpty()) {
-        } else {
-            startDebug(debug);
-        }
-    });
 
     m_main->addWidget(m_launch);
 
@@ -313,29 +307,6 @@ void MainWindow::saveProfile(Profile *p)
     }
 }
 
-void MainWindow::debuggerConnected()
-{
-    // Free QSocketNotifier.
-    delete m_debugNoti;
-    m_debugNoti = nullptr;
-
-    // Accept a connection.
-    Rust<RustError> error;
-    Rust<DebugClient> debugger;
-
-    debugger = debug_server_accept(m_debugServer, &error);
-
-    m_debugServer.free();
-
-    if (!debugger) {
-        QMessageBox::critical(
-            this,
-            "Error",
-            QString("Failed to accept a debugger connection: %1.").arg(error_message(error)));
-        return;
-    }
-}
-
 void MainWindow::vmmError(const QString &msg)
 {
     killVmm();
@@ -420,47 +391,6 @@ void MainWindow::restoreGeometry()
         }
 
         show();
-    }
-}
-
-void MainWindow::startDebug(const QString &addr)
-{
-    // Start debug server.
-    Rust<RustError> error;
-
-    m_debugServer = debug_server_start(addr.toStdString().c_str(), &error);
-
-    if (!m_debugServer) {
-        auto msg = QString("Failed to start a debug server on %1: %2")
-            .arg(addr)
-            .arg(error_message(error));
-
-        QMessageBox::critical(this, "Error", msg);
-        return;
-    }
-
-    // Watch for connection.
-    m_debugNoti = new QSocketNotifier(QSocketNotifier::Read, this);
-    m_debugNoti->setSocket(debug_server_socket(m_debugServer));
-
-    connect(
-        m_debugNoti,
-        &QSocketNotifier::activated,
-        this,
-        &MainWindow::debuggerConnected,
-        Qt::SingleShotConnection);
-
-    m_debugNoti->setEnabled(true);
-
-    // Swap launch settings with the screen now to prevent user update settings.
-    m_main->setCurrentIndex(1);
-
-    // Tell the user to connect a debugger.
-    if (!m_args.isSet(Args::debug)) {
-        QMessageBox::information(
-            this,
-            "Debug",
-            QString("Waiting for a debugger at %1.").arg(debug_server_addr(m_debugServer)));
     }
 }
 
