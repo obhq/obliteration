@@ -218,26 +218,6 @@ void MainWindow::closeEvent(QCloseEvent *event)
     // This will set to accept by QMainWindow::closeEvent.
     event->ignore();
 
-    // Ask user to confirm.
-    if (m_vmm) {
-        // Ask user to confirm only if we did not shutdown the VMM programmatically.
-        if (!vmm_shutting_down(m_vmm)) {
-            QMessageBox confirm(this);
-
-            confirm.setText("Do you want to exit?");
-            confirm.setInformativeText("The running game will be terminated.");
-            confirm.setStandardButtons(QMessageBox::Cancel | QMessageBox::Yes);
-            confirm.setDefaultButton(QMessageBox::Cancel);
-            confirm.setIcon(QMessageBox::Warning);
-
-            if (confirm.exec() != QMessageBox::Yes) {
-                return;
-            }
-        }
-
-        killVmm();
-    }
-
     // Save geometry.
     QSettings settings;
 
@@ -484,27 +464,6 @@ void MainWindow::startDebug(const QString &addr)
     }
 }
 
-bool MainWindow::requireVmmStopped()
-{
-    if (m_vmm) {
-        QMessageBox prompt(this);
-
-        prompt.setText("Action requires VMM to be stopped to continue.");
-        prompt.setInformativeText("Do you want to kill the VMM?");
-        prompt.setStandardButtons(QMessageBox::Cancel | QMessageBox::Yes);
-        prompt.setDefaultButton(QMessageBox::Cancel);
-        prompt.setIcon(QMessageBox::Warning);
-
-        if (prompt.exec() != QMessageBox::Yes) {
-            return false;
-        }
-
-        killVmm();
-    }
-
-    return true;
-}
-
 void MainWindow::stopDebug()
 {
     // We can't free the VMM here because the thread that trigger this method are waiting
@@ -525,8 +484,6 @@ void MainWindow::stopDebug()
 
 void MainWindow::killVmm()
 {
-    m_vmm.free();
-
     delete m_debugNoti;
     m_debugNoti = nullptr;
 }

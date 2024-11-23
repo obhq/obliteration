@@ -46,7 +46,6 @@ private:
     void vmmError(const QString &msg);
     void waitKernelExit(bool success);
     bool loadGame(const QString &gameId);
-    bool requireVmmStopped();
     void stopDebug();
     void killVmm();
 
@@ -58,7 +57,6 @@ private:
     Screen *m_screen;
     Rust<DebugServer> m_debugServer;
     QSocketNotifier *m_debugNoti;
-    Rust<Vmm> m_vmm; // Destroy first.
 };
 
 namespace Args {

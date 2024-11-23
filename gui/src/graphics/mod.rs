@@ -13,14 +13,14 @@ pub type DefaultApi = self::engine::Vulkan;
 pub type DefaultApi = self::engine::Metal;
 
 /// The underlying graphics engine (e.g. Vulkan).
-pub trait GraphicsApi: Sized + 'static {
+pub trait Graphics: Sized + 'static {
+    type Err: Error;
     type PhysicalDevice: PhysicalDevice;
+    type Screen: Screen;
 
-    type CreateError: core::error::Error;
-
-    fn new() -> Result<Self, Self::CreateError>;
-
+    fn new() -> Result<Self, Self::Err>;
     fn physical_devices(&self) -> &[Self::PhysicalDevice];
+    fn create_screen(&mut self) -> Result<Self::Screen, Self::Err>;
 }
 
 pub trait PhysicalDevice: Sized {

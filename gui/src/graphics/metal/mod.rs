@@ -1,18 +1,23 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+use self::screen::MetalScreen;
+use super::Graphics;
 use metal::Device;
 use std::ops::Deref;
 use thiserror::Error;
+
+mod buffer;
+mod screen;
 
 pub struct Metal {
     devices: Vec<metal::Device>,
 }
 
-impl super::GraphicsApi for Metal {
+impl Graphics for Metal {
+    type Err = MetalError;
     type PhysicalDevice = metal::Device;
+    type Screen = MetalScreen;
 
-    type CreateError = MetalCreateError;
-
-    fn new() -> Result<Self, Self::CreateError> {
+    fn new() -> Result<Self, Self::Err> {
         Ok(Self {
             devices: Device::all(),
         })
@@ -20,6 +25,10 @@ impl super::GraphicsApi for Metal {
 
     fn physical_devices(&self) -> &[Self::PhysicalDevice] {
         &self.devices
+    }
+
+    fn create_screen(&mut self) -> Result<Self::Screen, Self::Err> {
+        todo!()
     }
 }
 
@@ -29,6 +38,6 @@ impl super::PhysicalDevice for metal::Device {
     }
 }
 
-/// Represents an error when [`Metal::new()`] fails.
+/// Implementation of [`Graphics::Err`] for Metal.
 #[derive(Debug, Error)]
-pub enum MetalCreateError {}
+pub enum MetalError {}

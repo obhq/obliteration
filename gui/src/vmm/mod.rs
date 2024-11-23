@@ -18,7 +18,7 @@ use kernel::{KernelError, ProgramHeaderError};
 use obconf::{BootEnv, ConsoleType, Vm};
 use std::cmp::max;
 use std::error::Error;
-use std::ffi::{c_char, CStr};
+use std::ffi::CStr;
 use std::io::Read;
 use std::num::NonZero;
 use std::path::{Path, PathBuf};
@@ -31,8 +31,6 @@ use thiserror::Error;
 mod arch;
 mod cpu;
 mod debug;
-#[cfg(feature = "qt")]
-mod ffi;
 mod hw;
 mod kernel;
 mod ram;
@@ -60,23 +58,17 @@ fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
 }
 
 /// Manage a virtual machine that run the kernel.
-pub struct Vmm {
-    cpu: CpuManager<crate::hv::Default, crate::screen::DefaultScreen>, // Drop first.
-    screen: crate::screen::DefaultScreen,
-    gdb: Option<
-        GdbStubStateMachine<
-            'static,
-            CpuManager<crate::hv::Default, crate::screen::DefaultScreen>,
-            DebugClient,
-        >,
-    >,
+pub struct Vmm<S: Screen> {
+    cpu: CpuManager<crate::hv::Default, S>, // Drop first.
+    screen: S,
+    gdb: Option<GdbStubStateMachine<'static, CpuManager<crate::hv::Default, S>, DebugClient>>,
     shutdown: Arc<AtomicBool>,
 }
 
-impl Vmm {
+impl<S: Screen> Vmm<S> {
     pub fn new(
         kernel_path: impl AsRef<Path>,
-        screen: crate::screen::DefaultScreen,
+        screen: S,
         profile: &Profile,
         debugger: Option<DebugClient>,
         event_handler: impl Fn(VmmEvent) + Send + Sync + 'static,
@@ -398,7 +390,7 @@ impl Vmm {
     }
 }
 
-impl Drop for Vmm {
+impl<S: Screen> Drop for Vmm<S> {
     fn drop(&mut self) {
         // Set shutdown flag before dropping the other fields so their background thread can stop
         // before they try to join with it.
