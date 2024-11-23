@@ -1,6 +1,7 @@
 site_name: Obliteration Developer
 nav:
   - 'index.md'
+  - 'building.md'
   - 'Reference':
     - 'Kernel': 'https://dev.obliteration.net/crates/obkrnl'
 repo_url: https://github.com/obhq/obliteration
