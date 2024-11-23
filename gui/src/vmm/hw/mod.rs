@@ -34,16 +34,10 @@ pub fn setup_devices(
 }
 
 fn read_u8(exit: &mut impl CpuIo) -> Result<u8, MmioError> {
-    // Get data.
-    let IoBuf::Write(data) = exit.buffer() else {
-        return Err(MmioError::InvalidOperation);
-    };
-
-    // Parse data.
-    if data.len() != 1 {
-        Err(MmioError::InvalidData)
-    } else {
-        Ok(data[0])
+    match exit.buffer() {
+        IoBuf::Write(&[v]) => Ok(v),
+        IoBuf::Write(_) => Err(MmioError::InvalidData),
+        _ => Err(MmioError::InvalidOperation),
     }
 }
 

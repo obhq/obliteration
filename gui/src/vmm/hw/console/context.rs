@@ -44,30 +44,26 @@ impl<'a, H: Hypervisor, C: Cpu> DeviceContext<C> for Context<'a, H> {
             let len = self.msg_len.take().ok_or(ExecError::InvalidSequence)?;
             let data = read_ptr(exit, len, self.hv).map_err(|e| ExecError::ReadFailed(off, e))?;
 
-            self.msg
-                .extend_from_slice(unsafe { std::slice::from_raw_parts(data.as_ptr(), len.get()) });
+            self.msg.extend_from_slice(unsafe {
+                std::slice::from_raw_parts(data.as_ptr(), data.len().get())
+            });
         } else if off == offset_of!(ConsoleMemory, commit) {
             // Check if state valid.
             if self.msg_len.is_some() || self.msg.is_empty() {
                 return Err(Box::new(ExecError::InvalidSequence));
-            } else if std::str::from_utf8(&self.msg).is_err() {
-                return Err(Box::new(ExecError::InvalidMsg));
             }
 
             // Parse data.
             let commit = read_u8(exit).map_err(|e| ExecError::ReadFailed(off, e))?;
             let ty: ConsoleType = commit
                 .try_into()
-                .map_err(|_| Box::new(ExecError::InvalidCommit(commit)))?;
+                .map_err(|_| ExecError::InvalidCommit(commit))?;
 
-            // Trigger event.
-            let msg = std::mem::take(&mut self.msg);
+            // Trigger event.s
+            let bytes = std::mem::take(&mut self.msg);
+            let msg = String::from_utf8(bytes).map_err(ExecError::InvalidMsg)?;
 
-            (self.dev.event)(VmmEvent::Log {
-                ty: ty.into(),
-                data: msg.as_ptr().cast(),
-                len: msg.len(),
-            });
+            (self.dev.event)(VmmEvent::Log { ty: ty.into(), msg });
         } else {
             return Err(Box::new(ExecError::UnknownField(off)));
         }
@@ -89,7 +85,7 @@ enum ExecError {
     InvalidLen,
 
     #[error("invalid message")]
-    InvalidMsg,
+    InvalidMsg(#[source] std::string::FromUtf8Error),
 
     #[error("{0:#x} is not a valid commit")]
     InvalidCommit(u8),

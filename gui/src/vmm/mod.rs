@@ -440,23 +440,11 @@ pub struct VmmScreen {
 pub type VmmEventHandler = Arc<dyn Fn(VmmEvent) + Send + Sync + 'static>;
 
 /// Contains VMM event information.
-#[repr(C)]
-#[allow(dead_code)] // TODO: Figure out why Rust think fields in each enum are not used.
 pub enum VmmEvent {
-    Error {
-        reason: *const RustError,
-    },
-    Exiting {
-        success: bool,
-    },
-    Log {
-        ty: VmmLog,
-        data: *const c_char,
-        len: usize,
-    },
-    Breakpoint {
-        stop: *mut KernelStop,
-    },
+    Error { reason: RustError },
+    Exiting { success: bool },
+    Log { ty: VmmLog, msg: String },
+    Breakpoint { stop: Option<KernelStop> },
 }
 
 /// Log category.
@@ -485,15 +473,6 @@ impl From<ConsoleType> for VmmLog {
 /// Reason for [`VmmEvent::Breakpoint`].
 #[allow(dead_code)]
 pub struct KernelStop(MultiThreadStopReason<u64>);
-
-/// Result of [`vmm_dispatch_debug()`].
-#[allow(dead_code)]
-#[repr(C)]
-pub enum DebugResult {
-    Ok,
-    Disconnected,
-    Error { reason: *mut RustError },
-}
 
 #[derive(Debug, Error)]
 pub enum VmmError {
