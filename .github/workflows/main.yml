@@ -15,7 +15,6 @@ jobs:
     name: Build
     uses: ./.github/workflows/ci-mac.yml
     with:
-      macos: macos-14
       kernel-target: aarch64-unknown-none-softfloat
   build-docs:
     name: Build
