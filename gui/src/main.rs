@@ -87,6 +87,10 @@ fn run() -> Result<(), ApplicationError> {
         run_launcher()?
     };
 
+    let Some(vmm) = vmm else {
+        return Ok(());
+    };
+
     // Setup VMM screen.
     let mut screen = DefaultScreen::new().map_err(ApplicationError::CreateScreen)?;
 
