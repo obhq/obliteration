@@ -302,12 +302,6 @@ impl<'a> LockedAddr<'a> {
     }
 }
 
-impl AsRef<[u8]> for LockedAddr<'_> {
-    fn as_ref(&self) -> &[u8] {
-        unsafe { std::slice::from_raw_parts(self.ptr, self.len.get()) }
-    }
-}
-
 /// Represents an error when an operation on [`Ram`] fails.
 #[derive(Debug, Error)]
 pub enum RamError {

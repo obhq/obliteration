@@ -44,7 +44,9 @@ impl<'a, H: Hypervisor, C: Cpu> DeviceContext<C> for Context<'a, H> {
             let len = self.msg_len.take().ok_or(ExecError::InvalidSequence)?;
             let data = read_ptr(exit, len, self.hv).map_err(|e| ExecError::ReadFailed(off, e))?;
 
-            self.msg.extend_from_slice(data.as_ref());
+            self.msg.extend_from_slice(unsafe {
+                std::slice::from_raw_parts(data.as_ptr(), data.len().get())
+            });
         } else if off == offset_of!(ConsoleMemory, commit) {
             // Check if state valid.
             if self.msg_len.is_some() || self.msg.is_empty() {
