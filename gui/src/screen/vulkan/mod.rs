@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::buffer::VulkanBuffer;
-use super::{Screen, ScreenBuffer};
+use crate::graphics::{Screen, ScreenBuffer};
 use crate::vmm::VmmScreen;
 use ash::vk::{DeviceCreateInfo, DeviceQueueCreateInfo, Handle, QueueFlags};
 use ash::Device;

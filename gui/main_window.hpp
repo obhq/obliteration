@@ -45,7 +45,6 @@ private:
     void debuggerConnected();
     void vmmError(const QString &msg);
     void waitKernelExit(bool success);
-    void setupDebugger();
     bool loadGame(const QString &gameId);
     bool requireVmmStopped();
     void stopDebug();

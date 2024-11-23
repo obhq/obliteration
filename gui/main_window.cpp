@@ -383,32 +383,6 @@ void MainWindow::waitKernelExit(bool success)
     m_main->setCurrentIndex(0);
 }
 
-void MainWindow::setupDebugger()
-{
-    // Enable non-blocking on debug socket. On Windows QSocketNotifier will do this for us.
-    auto sock = vmm_debug_socket(m_vmm);
-
-#ifndef _WIN32
-    auto flags = fcntl(sock, F_GETFL);
-
-    if (flags < 0) {
-        QMessageBox::critical(
-            this,
-            "Error",
-            "Couldn't get file flags from debug socket.");
-        stopDebug();
-        return;
-    } else if (fcntl(sock, F_SETFL, flags | O_NONBLOCK) < 0) {
-        QMessageBox::critical(
-            this,
-            "Error",
-            "Couldn't enable non-blocking mode on debug socket.");
-        stopDebug();
-        return;
-    }
-#endif
-}
-
 bool MainWindow::loadGame(const QString &gameId)
 {
     auto gamesDirectory = readGamesDirectorySetting();
