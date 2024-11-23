@@ -72,26 +72,6 @@ int main(int argc, char *argv[])
 
     set_panic_hook(&panic, panicHook);
 
-    // Increase number of file descriptors to maximum allowed.
-#ifndef _WIN32
-    rlimit limit;
-
-    if (getrlimit(RLIMIT_NOFILE, &limit) == 0) {
-        if (limit.rlim_cur < limit.rlim_max) {
-            limit.rlim_cur = limit.rlim_max;
-
-            if (setrlimit(RLIMIT_NOFILE, &limit) < 0) {
-                QMessageBox::warning(
-                    nullptr,
-                    "Warning",
-                    "Failed to set file descriptor limit to maximum allowed.");
-            }
-        }
-    } else {
-        QMessageBox::warning(nullptr, "Warning", "Failed to get file descriptor limit.");
-    }
-#endif
-
     // Initialize Vulkan.
 #ifndef __APPLE__
     QVulkanInstance vulkan;
@@ -223,9 +203,5 @@ int main(int argc, char *argv[])
     win.restoreGeometry();
 
     // Run main window.
-    if (args.isSet(Args::debug)) {
-        win.startDebug(args.value(Args::debug));
-    }
-
     return QApplication::exec();
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::{CpuManager, GdbError};
-use crate::graphics::Screen;
 use crate::hv::Hypervisor;
+use crate::vmm::VmmHandler;
 use gdbstub::target::ext::base::BaseOps;
 use gdbstub::target::ext::breakpoints::{
     Breakpoints, BreakpointsOps, SwBreakpoint, SwBreakpointOps,
@@ -15,7 +15,7 @@ pub type GdbRegs = gdbstub_arch::x86::reg::X86_64CoreRegs;
 
 pub(super) const BREAKPOINT_SIZE: NonZero<usize> = unsafe { NonZero::new_unchecked(1) };
 
-impl<H: Hypervisor, S: Screen> gdbstub::target::Target for CpuManager<H, S> {
+impl<H: Hypervisor, E: VmmHandler> gdbstub::target::Target for CpuManager<H, E> {
     type Arch = X86_64_SSE;
     type Error = GdbError;
 
@@ -28,13 +28,13 @@ impl<H: Hypervisor, S: Screen> gdbstub::target::Target for CpuManager<H, S> {
     }
 }
 
-impl<H: Hypervisor, S: Screen> Breakpoints for CpuManager<H, S> {
+impl<H: Hypervisor, E: VmmHandler> Breakpoints for CpuManager<H, E> {
     fn support_sw_breakpoint(&mut self) -> Option<SwBreakpointOps<'_, Self>> {
         Some(self)
     }
 }
 
-impl<H: Hypervisor, S: Screen> SwBreakpoint for CpuManager<H, S> {
+impl<H: Hypervisor, E: VmmHandler> SwBreakpoint for CpuManager<H, E> {
     fn add_sw_breakpoint(&mut self, addr: u64, _kind: usize) -> TargetResult<bool, Self> {
         let Entry::Vacant(entry) = self.sw_breakpoints.entry(addr) else {
             return Ok(false);

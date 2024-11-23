@@ -5,9 +5,7 @@ use self::controller::CpuController;
 use self::debug::{DebugReq, DebugRes, Debugger};
 use super::hw::{DeviceContext, DeviceTree};
 use super::ram::RamMap;
-use super::{KernelStop, VmmEvent, VmmEventHandler};
-use crate::error::RustError;
-use crate::graphics::Screen;
+use super::VmmHandler;
 use crate::hv::{Cpu, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, Hypervisor};
 use gdbstub::common::{Signal, Tid};
 use gdbstub::stub::MultiThreadStopReason;
@@ -17,6 +15,7 @@ use gdbstub::target::ext::base::multithread::{
 use gdbstub::target::ext::thread_extra_info::{ThreadExtraInfo, ThreadExtraInfoOps};
 use gdbstub::target::{TargetError, TargetResult};
 use std::collections::{BTreeMap, HashMap};
+use std::error::Error;
 use std::num::NonZero;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -30,33 +29,30 @@ mod controller;
 mod debug;
 
 /// Manage all virtual CPUs.
-pub struct CpuManager<H: Hypervisor, S: Screen> {
+pub struct CpuManager<H, E> {
     hv: Arc<H>,
-    screen: Arc<S::Buffer>,
+    handler: Arc<E>,
     devices: Arc<DeviceTree>,
-    event: VmmEventHandler,
     cpus: Vec<CpuController>,
     breakpoint: Arc<Mutex<()>>,
     sw_breakpoints: HashMap<u64, [u8; arch::BREAKPOINT_SIZE.get()]>,
     shutdown: Arc<AtomicBool>,
 }
 
-impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
+impl<H: Hypervisor, E: VmmHandler> CpuManager<H, E> {
     const GDB_ENOENT: u8 = 2;
     const GDB_EFAULT: u8 = 14;
 
     pub fn new(
         hv: Arc<H>,
-        screen: Arc<S::Buffer>,
+        handler: Arc<E>,
         devices: Arc<DeviceTree>,
-        event: VmmEventHandler,
         shutdown: Arc<AtomicBool>,
     ) -> Self {
         Self {
             hv,
-            screen,
+            handler,
             devices,
-            event,
             cpus: Vec::new(),
             breakpoint: Arc::default(),
             sw_breakpoints: HashMap::new(),
@@ -68,9 +64,8 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
         // Setup arguments.
         let args = Args {
             hv: self.hv.clone(),
-            screen: self.screen.clone(),
+            handler: self.handler.clone(),
             devices: self.devices.clone(),
-            event: self.event.clone(),
             breakpoint: self.breakpoint.clone(),
             shutdown: self.shutdown.clone(),
         };
@@ -103,41 +98,46 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
         }
     }
 
-    fn main_cpu(args: Args<H, S>, debug: Option<Debugger>, entry: usize, map: RamMap) {
+    fn main_cpu(args: Args<H, E>, debug: Option<Debugger>, entry: usize, map: RamMap) {
         // Create CPU.
         let mut cpu = match args.hv.create_cpu(0) {
             Ok(v) => v,
             Err(e) => {
-                let e = RustError::with_source("couldn't create main CPU", e);
-                (args.event)(VmmEvent::Error { reason: e });
+                args.handler.error(0, CpuError::Create(Box::new(e)));
                 return;
             }
         };
 
         if let Err(e) = super::arch::setup_main_cpu(&mut cpu, entry, map, args.hv.cpu_features()) {
-            let e = RustError::with_source("couldn't setup main CPU", e);
-            (args.event)(VmmEvent::Error { reason: e });
+            args.handler.error(0, CpuError::Setup(Box::new(e)));
             return;
         }
 
         // Wait for debugger.
         if let Some(debug) = &debug {
-            if !Self::handle_breakpoint(&args, debug, &mut cpu, None) {
-                return;
+            match Self::handle_breakpoint(&args, debug, &mut cpu, None) {
+                Ok(true) => {}
+                Ok(false) => return,
+                Err(e) => {
+                    args.handler.error(0, e);
+                    return;
+                }
             }
         }
 
         // Run.
-        Self::run_cpu(&args, debug, cpu);
+        Self::run_cpu(&args, debug, cpu, 0);
     }
 
-    fn run_cpu<'a>(args: &'a Args<H, S>, debug: Option<Debugger>, mut cpu: H::Cpu<'a>) {
+    fn run_cpu<'a>(args: &'a Args<H, E>, debug: Option<Debugger>, mut cpu: H::Cpu<'a>, id: usize) {
         // Build device contexts for this CPU.
+        let hv = args.hv.deref();
+        let handler = args.handler.deref();
         let mut devices = BTreeMap::<usize, Device<'a, H::Cpu<'a>>>::new();
         let t = &args.devices;
 
-        Device::insert(&mut devices, t.console(), |d| d.create_context(&*args.hv));
-        Device::insert(&mut devices, t.vmm(), |d| d.create_context());
+        Device::insert(&mut devices, t.console(), |d| d.create_context(hv, handler));
+        Device::insert(&mut devices, t.vmm(), |d| d.create_context(handler));
 
         // Dispatch CPU events until shutdown.
         let e = 'main: loop {
@@ -149,19 +149,14 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
             // Run the vCPU.
             let mut exit = match cpu.run() {
                 Ok(v) => v,
-                Err(e) => break Some(RustError::with_source("couldn't run CPU", e)),
+                Err(e) => break Some(CpuError::Run(Box::new(e))),
             };
 
             // Execute VM exited event.
             for d in devices.values_mut() {
                 let r = match d.context.exited(exit.cpu()) {
                     Ok(v) => v,
-                    Err(e) => {
-                        break 'main Some(RustError::with_source(
-                            format!("couldn't execute a VM exited event on a {}", d.name),
-                            e.deref(),
-                        ));
-                    }
+                    Err(e) => break 'main Some(CpuError::DeviceExitHandler(d.name.to_owned(), e)),
                 };
 
                 if !r {
@@ -184,10 +179,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                 let r = match d.context.post(&mut cpu) {
                     Ok(v) => v,
                     Err(e) => {
-                        break 'main Some(RustError::with_source(
-                            format!("couldn't execute a post VM exit on a {}", d.name),
-                            e.deref(),
-                        ));
+                        break 'main Some(CpuError::DevicePostExitHandler(d.name.to_owned(), e));
                     }
                 };
 
@@ -198,7 +190,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
         };
 
         if let Some(e) = e {
-            (args.event)(VmmEvent::Error { reason: e });
+            args.handler.error(id, e);
         }
 
         // Shutdown other CPUs.
@@ -206,11 +198,11 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
     }
 
     fn handle_exit<'a, C: Cpu>(
-        args: &'a Args<H, S>,
+        args: &'a Args<H, E>,
         debugger: Option<&Debugger>,
         devices: &mut BTreeMap<usize, Device<'a, C>>,
         exit: C::Exit<'_>,
-    ) -> Result<bool, RustError> {
+    ) -> Result<bool, CpuError> {
         // Check if HLT.
         #[cfg(target_arch = "x86_64")]
         let exit = match exit.into_hlt() {
@@ -230,9 +222,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                 let reason = debug.reason();
 
                 if let Some(debugger) = debugger {
-                    let res = Self::handle_breakpoint(args, debugger, debug.cpu(), Some(reason));
-
-                    Ok(res)
+                    Self::handle_breakpoint(args, debugger, debug.cpu(), Some(reason))
                 } else {
                     todo!()
                 }
@@ -244,7 +234,7 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
     fn handle_io<'a, C: Cpu>(
         devices: &mut BTreeMap<usize, Device<'a, C>>,
         mut io: <C::Exit<'_> as CpuExit>::Io,
-    ) -> Result<bool, RustError> {
+    ) -> Result<bool, CpuError> {
         // Get target device.
         let addr = io.addr();
         let dev = match devices
@@ -254,44 +244,31 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
             .filter(move |d| addr < d.end.get())
         {
             Some(v) => v,
-            None => {
-                let m = format!(
-                    "the CPU attempt to execute a memory-mapped I/O on a non-mapped address {:#x}",
-                    addr
-                );
-
-                return Err(RustError::new(m));
-            }
+            None => return Err(CpuError::MmioAddr(addr)),
         };
 
         // Execute.
-        dev.context.mmio(&mut io).map_err(|e| {
-            RustError::with_source(
-                format!("couldn't execute a memory-mapped I/O on a {}", dev.name),
-                e.deref(),
-            )
-        })
+        dev.context
+            .mmio(&mut io)
+            .map_err(|e| CpuError::Mmio(dev.name.to_owned(), e))
     }
 
     fn handle_breakpoint(
-        args: &Args<H, S>,
+        args: &Args<H, E>,
         debug: &Debugger,
         cpu: &mut impl Cpu,
         stop: Option<MultiThreadStopReason<u64>>,
-    ) -> bool {
-        // Convert stop reason.
-        let stop = stop.map(KernelStop);
-
+    ) -> Result<bool, CpuError> {
         // Notify GUI. We need to allow only one CPU to enter the debugger dispatch loop.
         let lock = args.breakpoint.lock().unwrap();
 
-        (args.event)(VmmEvent::Breakpoint { stop });
+        args.handler.breakpoint(stop);
 
         // Wait for command from debugger thread.
         loop {
             let req = match debug.recv() {
                 Some(v) => v,
-                None => return false,
+                None => return Ok(false),
             };
 
             match req {
@@ -299,32 +276,14 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
                     // Get states.
                     let mut states = match cpu.states() {
                         Ok(v) => v,
-                        Err(e) => {
-                            let e = RustError::with_source("couldn't get CPU states", e);
-                            (args.event)(VmmEvent::Error { reason: e });
-                            return false;
-                        }
+                        Err(e) => return Err(CpuError::GetStates(Box::new(e))),
                     };
 
-                    match Self::get_debug_regs(&mut states) {
-                        Ok(v) => debug.send(DebugRes::Regs(v)),
-                        Err(e) => {
-                            (args.event)(VmmEvent::Error { reason: e });
-                            return false;
-                        }
-                    }
+                    debug.send(DebugRes::Regs(Self::get_debug_regs(&mut states)?));
                 }
                 DebugReq::TranslateAddress(addr) => match cpu.translate(addr) {
                     Ok(v) => debug.send(DebugRes::TranslatedAddress(v)),
-                    Err(e) => {
-                        let err = RustError::with_source(
-                            format! {"couldn't translate address {addr}"},
-                            e,
-                        );
-
-                        (args.event)(VmmEvent::Error { reason: err });
-                        return false;
-                    }
+                    Err(e) => return Err(CpuError::TranslateAddr(addr, Box::new(e))),
                 },
                 DebugReq::Lock => {} // We already in a locked loop.
                 DebugReq::Release => break,
@@ -332,20 +291,21 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
         }
 
         drop(lock);
-        true
+
+        Ok(true)
     }
 
     #[cfg(target_arch = "aarch64")]
-    fn get_debug_regs(_: &mut impl CpuStates) -> Result<GdbRegs, RustError> {
+    fn get_debug_regs(_: &mut impl CpuStates) -> Result<GdbRegs, CpuError> {
         todo!()
     }
 
     #[cfg(target_arch = "x86_64")]
-    fn get_debug_regs<C: CpuStates>(states: &mut C) -> Result<GdbRegs, RustError> {
+    fn get_debug_regs<C: CpuStates>(states: &mut C) -> Result<GdbRegs, CpuError> {
         use gdbstub_arch::x86::reg::{X86SegmentRegs, X87FpuInternalRegs};
 
-        let error = |n: &str, e: C::Err| RustError::with_source(format!("couldn't get {n}"), e);
-        let mut load_greg = |name: &str, func: fn(&mut C) -> Result<usize, C::Err>| {
+        let error = |n: &'static str, e: C::Err| CpuError::ReadReg(n, Box::new(e));
+        let mut load_greg = |name: &'static str, func: fn(&mut C) -> Result<usize, C::Err>| {
             func(states)
                 .map(|v| TryInto::<u64>::try_into(v).unwrap())
                 .map_err(|e| error(name, e))
@@ -426,17 +386,17 @@ impl<H: Hypervisor, S: Screen> CpuManager<H, S> {
     }
 
     #[cfg(target_arch = "aarch64")]
-    fn set_debug_regs(_: &mut impl CpuStates, _: GdbRegs) -> Result<(), RustError> {
+    fn set_debug_regs(_: &mut impl CpuStates, _: GdbRegs) -> Result<(), CpuError> {
         todo!()
     }
 
     #[cfg(target_arch = "x86_64")]
-    fn set_debug_regs(_: &mut impl CpuStates, _: GdbRegs) -> Result<(), RustError> {
+    fn set_debug_regs(_: &mut impl CpuStates, _: GdbRegs) -> Result<(), CpuError> {
         todo!()
     }
 }
 
-impl<H: Hypervisor, S: Screen> MultiThreadBase for CpuManager<H, S> {
+impl<H: Hypervisor, E: VmmHandler> MultiThreadBase for CpuManager<H, E> {
     fn read_registers(&mut self, regs: &mut GdbRegs, tid: Tid) -> TargetResult<(), Self> {
         let cpu = self
             .cpus
@@ -520,13 +480,13 @@ impl<H: Hypervisor, S: Screen> MultiThreadBase for CpuManager<H, S> {
     }
 }
 
-impl<H: Hypervisor, S: Screen> ThreadExtraInfo for CpuManager<H, S> {
+impl<H: Hypervisor, E: VmmHandler> ThreadExtraInfo for CpuManager<H, E> {
     fn thread_extra_info(&self, tid: Tid, buf: &mut [u8]) -> Result<usize, Self::Error> {
         todo!()
     }
 }
 
-impl<H: Hypervisor, S: Screen> MultiThreadResume for CpuManager<H, S> {
+impl<H: Hypervisor, E: VmmHandler> MultiThreadResume for CpuManager<H, E> {
     fn resume(&mut self) -> Result<(), Self::Error> {
         self.release();
 
@@ -551,11 +511,10 @@ impl<H: Hypervisor, S: Screen> MultiThreadResume for CpuManager<H, S> {
 }
 
 /// Encapsulates arguments for a function to run a CPU.
-struct Args<H: Hypervisor, S: Screen> {
+struct Args<H, E> {
     hv: Arc<H>,
-    screen: Arc<S::Buffer>,
+    handler: Arc<E>,
     devices: Arc<DeviceTree>,
-    event: VmmEventHandler,
     breakpoint: Arc<Mutex<()>>,
     shutdown: Arc<AtomicBool>,
 }
@@ -582,6 +541,40 @@ impl<'a, C: Cpu> Device<'a, C> {
 
         assert!(tree.insert(addr, dev).is_none());
     }
+}
+
+/// Represents an error when a vCPU fails.
+#[derive(Debug, Error)]
+pub enum CpuError {
+    #[error("couldn't create vCPU")]
+    Create(#[source] Box<dyn Error>),
+
+    #[error("couldn't setup vCPU")]
+    Setup(#[source] Box<dyn Error>),
+
+    #[error("couldn't run vCPU")]
+    Run(#[source] Box<dyn Error>),
+
+    #[error("couldn't execute a VM exited event on a {0}")]
+    DeviceExitHandler(String, #[source] Box<dyn Error>),
+
+    #[error("the vCPU attempt to execute a memory-mapped I/O on a non-mapped address {0:#x}")]
+    MmioAddr(usize),
+
+    #[error("couldn't execute a memory-mapped I/O on a {0}")]
+    Mmio(String, #[source] Box<dyn Error>),
+
+    #[error("couldn't get vCPU states")]
+    GetStates(#[source] Box<dyn Error>),
+
+    #[error("couldn't read {0} register")]
+    ReadReg(&'static str, #[source] Box<dyn Error>),
+
+    #[error("couldn't translate address {0:#x}")]
+    TranslateAddr(usize, #[source] Box<dyn Error>),
+
+    #[error("couldn't execute a post VM exit on a {0}")]
+    DevicePostExitHandler(String, #[source] Box<dyn Error>),
 }
 
 /// Implementation of [`gdbstub::target::Target::Error`].

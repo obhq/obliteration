@@ -2,7 +2,7 @@
 use self::context::Context;
 use super::{Device, DeviceContext};
 use crate::hv::Cpu;
-use crate::vmm::VmmEventHandler;
+use crate::vmm::VmmHandler;
 use obconf::VmmMemory;
 use std::num::NonZero;
 
@@ -12,21 +12,23 @@ mod context;
 pub struct Vmm {
     addr: usize,
     len: NonZero<usize>,
-    event: VmmEventHandler,
 }
 
 impl Vmm {
-    pub fn new(addr: usize, block_size: NonZero<usize>, event: VmmEventHandler) -> Self {
+    pub fn new(addr: usize, block_size: NonZero<usize>) -> Self {
         let len = size_of::<VmmMemory>()
             .checked_next_multiple_of(block_size.get())
             .and_then(NonZero::new)
             .unwrap();
 
-        Self { addr, len, event }
+        Self { addr, len }
     }
 
-    pub fn create_context<C: Cpu>(&self) -> Box<dyn DeviceContext<C> + '_> {
-        Box::new(Context::new(self))
+    pub fn create_context<'a, C: Cpu, E: VmmHandler>(
+        &'a self,
+        handler: &'a E,
+    ) -> Box<dyn DeviceContext<C> + 'a> {
+        Box::new(Context::new(self, handler))
     }
 }
 

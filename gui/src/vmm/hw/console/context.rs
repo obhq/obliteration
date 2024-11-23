@@ -2,7 +2,7 @@
 use super::Console;
 use crate::hv::{Cpu, CpuExit, CpuIo, Hypervisor};
 use crate::vmm::hw::{read_ptr, read_u8, read_usize, DeviceContext, MmioError};
-use crate::vmm::VmmEvent;
+use crate::vmm::VmmHandler;
 use obconf::{ConsoleMemory, ConsoleType};
 use std::error::Error;
 use std::mem::offset_of;
@@ -10,25 +10,27 @@ use std::num::NonZero;
 use thiserror::Error;
 
 /// Implementation of [`DeviceContext`].
-pub struct Context<'a, H> {
+pub struct Context<'a, H, E> {
     dev: &'a Console,
     hv: &'a H,
+    handler: &'a E,
     msg_len: Option<NonZero<usize>>,
     msg: Vec<u8>,
 }
 
-impl<'a, H: Hypervisor> Context<'a, H> {
-    pub fn new(dev: &'a Console, hv: &'a H) -> Self {
+impl<'a, H, E> Context<'a, H, E> {
+    pub fn new(dev: &'a Console, hv: &'a H, handler: &'a E) -> Self {
         Self {
             dev,
             hv,
+            handler,
             msg_len: None,
             msg: Vec::new(),
         }
     }
 }
 
-impl<'a, H: Hypervisor, C: Cpu> DeviceContext<C> for Context<'a, H> {
+impl<'a, H: Hypervisor, C: Cpu, E: VmmHandler> DeviceContext<C> for Context<'a, H, E> {
     fn mmio(&mut self, exit: &mut <C::Exit<'_> as CpuExit>::Io) -> Result<bool, Box<dyn Error>> {
         // Check field.
         let off = exit.addr() - self.dev.addr;
@@ -59,11 +61,14 @@ impl<'a, H: Hypervisor, C: Cpu> DeviceContext<C> for Context<'a, H> {
                 .try_into()
                 .map_err(|_| ExecError::InvalidCommit(commit))?;
 
-            // Trigger event.s
-            let bytes = std::mem::take(&mut self.msg);
-            let msg = String::from_utf8(bytes).map_err(ExecError::InvalidMsg)?;
+            // Trigger event. We don't take the Vec and convert it into String here because it
+            // likely to cause multiple re-allocation next time the kernel write the data due to its
+            // capacity was reset. With our current approach most of the times it will be only a
+            // single allocation when the handler clone the string.
+            let msg = std::str::from_utf8(&self.msg).map_err(|_| ExecError::InvalidMsg)?;
 
-            (self.dev.event)(VmmEvent::Log { ty: ty.into(), msg });
+            self.handler.log(ty, msg);
+            self.msg.clear();
         } else {
             return Err(Box::new(ExecError::UnknownField(off)));
         }
@@ -85,7 +90,7 @@ enum ExecError {
     InvalidLen,
 
     #[error("invalid message")]
-    InvalidMsg(#[source] std::string::FromUtf8Error),
+    InvalidMsg,
 
     #[error("{0:#x} is not a valid commit")]
     InvalidCommit(u8),
