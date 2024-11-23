@@ -19,7 +19,10 @@ def cargo(package, toolchain=None, target=None, release=False, args=None):
 
     # Parse package ID.
     url = urlparse(id)
-    path = url.netloc + url.path
+    path = url.path
+
+    if platform.system() == 'Windows':
+        path = path[1:] # Remove '/' in front of drive letter.
 
     # Setup command and its argument.
     cmd.extend(['build', '-p', package])
