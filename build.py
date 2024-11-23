@@ -19,7 +19,7 @@ def cargo(package, toolchain=None, target=None, release=False, args=None):
 
     # Parse package ID.
     url = urlparse(id)
-    path = url.path
+    path = url.netloc + url.path
 
     # Setup command and its argument.
     cmd.extend(['build', '-p', package])
