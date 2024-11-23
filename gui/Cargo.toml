@@ -39,12 +39,7 @@ uuid = { version = "1.11.0", features = ["serde", "v4"] }
 
 [dependencies.slint]
 version = "1.8.0"
-features = [
-    "compat-1-2",
-    "std",
-    "backend-winit",
-    "renderer-femtovg",
-]
+features = ["compat-1-2", "std", "backend-winit", "renderer-femtovg"]
 default-features = false
 optional = true
 
@@ -56,10 +51,7 @@ x86-64 = { path = "../arch/x86-64" }
 
 [target.'cfg(not(target_os = "macos"))'.dependencies.ash]
 version = "0.38.0"
-features = [
-    "linked",
-    "std",
-]
+features = ["linked", "std"]
 default-features = false
 
 [target.'cfg(windows)'.dependencies.windows-sys]

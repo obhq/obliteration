@@ -1,11 +1,13 @@
+#![windows_subsystem = "windows"]
+
+use self::graphics::{GraphicsApi, PhysicalDevice, Screen};
 use self::profile::Profile;
-use self::screen::{DefaultScreen, Screen};
+use self::screen::DefaultScreen;
 use self::ui::ErrorDialog;
 use self::vmm::{Vmm, VmmEvent};
 use args::CliArgs;
 use clap::Parser;
 use debug::DebugServer;
-use graphics::{GraphicsApi, PhysicalDevice};
 use slint::{ComponentHandle, Global, ModelRc, SharedString, VecModel};
 use std::cell::RefCell;
 use std::path::{Path, PathBuf};

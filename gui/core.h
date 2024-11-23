@@ -132,8 +132,6 @@ struct RustError *update_firmware(const char *root,
 
 void vmm_free(struct Vmm *vmm);
 
-ptrdiff_t vmm_debug_socket(struct Vmm *vmm);
-
 void vmm_shutdown(struct Vmm *vmm);
 
 bool vmm_shutting_down(struct Vmm *vmm);

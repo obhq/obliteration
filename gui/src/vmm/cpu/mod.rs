@@ -7,8 +7,8 @@ use super::hw::{DeviceContext, DeviceTree};
 use super::ram::RamMap;
 use super::{KernelStop, VmmEvent, VmmEventHandler};
 use crate::error::RustError;
+use crate::graphics::Screen;
 use crate::hv::{Cpu, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, Hypervisor};
-use crate::screen::Screen;
 use gdbstub::common::{Signal, Tid};
 use gdbstub::stub::MultiThreadStopReason;
 use gdbstub::target::ext::base::multithread::{
