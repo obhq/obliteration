@@ -7,7 +7,6 @@ mod graphics;
 mod hv;
 mod profile;
 mod string;
-mod system;
 mod vmm;
 
 #[cfg(feature = "qt")]
