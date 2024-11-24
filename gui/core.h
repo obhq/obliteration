@@ -70,18 +70,6 @@ char *param_title_id_get(const Param *p);
 
 char *param_version_get(const Param *p);
 
-Pkg *pkg_open(const char *file, struct RustError **error);
-
-void pkg_close(Pkg *pkg);
-
-Param *pkg_get_param(const Pkg *pkg, struct RustError **error);
-
-struct RustError *pkg_extract(const Pkg *pkg, const char *dir, void (*status)(const char*,
-                                                                              size_t,
-                                                                              uint64_t,
-                                                                              uint64_t,
-                                                                              void*), void *ud);
-
 struct Profile *profile_new(const char *name);
 
 struct Profile *profile_load(const char *path, struct RustError **err);

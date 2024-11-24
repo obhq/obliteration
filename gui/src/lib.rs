@@ -6,7 +6,6 @@ mod error;
 mod graphics;
 mod hv;
 mod param;
-mod pkg;
 mod profile;
 mod string;
 mod system;

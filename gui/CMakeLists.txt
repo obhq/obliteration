@@ -21,8 +21,6 @@ add_executable(obliteration WIN32 MACOSX_BUNDLE
     main.cpp
     main_window.cpp
     path.cpp
-    pkg_extractor.cpp
-    pkg_installer.cpp
     profile_models.cpp
     progress_dialog.cpp
     resources.cpp

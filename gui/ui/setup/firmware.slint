@@ -1,0 +1,28 @@
+import { VerticalBox, HorizontalBox, LineEdit, Button } from "std-widgets.slint";
+import { Header } from "header.slint";
+
+export component Firmware {
+    VerticalBox {
+        padding: 0;
+
+        Header {
+            title: "Install Firmware";
+        }
+
+        Text {
+            text: "Select a firmware dump that you got from Firmware Dumper.";
+        }
+
+        HorizontalBox {
+            padding: 0;
+
+            LineEdit { }
+
+            Button {
+                text: "...";
+            }
+        }
+
+        Rectangle { }
+    }
+}
