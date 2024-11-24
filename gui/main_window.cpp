@@ -172,37 +172,6 @@ bool MainWindow::loadProfiles()
     return true;
 }
 
-bool MainWindow::loadGames()
-{
-    // Get game counts.
-    auto directory = readGamesDirectorySetting();
-    auto games = QDir(directory).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-
-    // Setup loading progress.
-    QProgressDialog progress(this);
-    int step = -1;
-
-    progress.setMaximum(games.size());
-    progress.setCancelButtonText("Cancel");
-    progress.setWindowModality(Qt::WindowModal);
-    progress.setValue(++step);
-
-    // Load games
-    progress.setLabelText("Loading games...");
-
-    for (auto &gameId : games) {
-        if (progress.wasCanceled() || !loadGame(gameId)) {
-            return false;
-        }
-
-        progress.setValue(++step);
-    }
-
-    m_games->sort(0);
-
-    return true;
-}
-
 void MainWindow::closeEvent(QCloseEvent *event)
 {
     // This will set to accept by QMainWindow::closeEvent.
@@ -297,47 +266,6 @@ void MainWindow::waitKernelExit(bool success)
     }
 
     m_main->setCurrentIndex(0);
-}
-
-bool MainWindow::loadGame(const QString &gameId)
-{
-    auto gamesDirectory = readGamesDirectorySetting();
-    auto gamePath = joinPath(gamesDirectory, gameId);
-
-    // Ignore entry if it is DLC or Patch.
-    auto lastSlashPos = gamePath.find_last_of("/\\");
-    auto lastFolder = (lastSlashPos != std::string::npos) ? gamePath.substr(lastSlashPos + 1) : gamePath;
-    bool isPatch = lastFolder.find("-PATCH-") != std::string::npos;
-    bool isAddCont = lastFolder.size() >= 8 && lastFolder.substr(lastFolder.size() - 8) == "-ADDCONT";
-
-    if (!isPatch && !isAddCont) {
-
-        // Read game information from param.sfo.
-        auto paramDir = joinPath(gamePath.c_str(), "sce_sys");
-        auto paramPath = joinPath(paramDir.c_str(), "param.sfo");
-        Rust<RustError> error;
-        Rust<Param> param;
-
-        param = param_open(paramPath.c_str(), &error);
-
-        if (!param) {
-            QMessageBox::critical(
-                this,
-                "Error",
-                QString("Cannot open %1: %2").arg(paramPath.c_str()).arg(error_message(error)));
-            return false;
-        }
-
-        // Add to list.
-        Rust<char> titleId, title;
-
-        titleId = param_title_id_get(param);
-        title = param_title_get(param);
-
-        m_games->add(new Game(titleId.get(), title.get(), gamePath.c_str()));
-    }
-
-    return true;
 }
 
 void MainWindow::restoreGeometry()
