@@ -215,25 +215,6 @@ public:
 
         setLayout(layout);
     }
-
-    bool validatePage() override
-    {
-        // Check file path.
-        QFileInfo path(m_input->text());
-
-        if (!path.isFile()) {
-            QMessageBox::critical(this, "Error", "The specified file does not exist.");
-            return false;
-        }
-
-        // Get system path.
-        auto systemPath = wizard()->hasVisitedPage(PageSystem)
-            ? field(FIELD_SYSTEM_LOCATION).toString()
-            : readSystemDirectorySetting();
-
-        // Install.
-        return initSystem(systemPath, path.canonicalFilePath(), this);
-    }
 private:
     QLayout *setupInputRow()
     {

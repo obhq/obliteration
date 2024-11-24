@@ -68,11 +68,6 @@ void profile_set_display_resolution(struct Profile *p, enum DisplayResolution v)
 
 struct RustError *profile_save(const struct Profile *p, const char *path);
 
-struct RustError *update_firmware(const char *root,
-                                  const char *fw,
-                                  void *cx,
-                                  void (*status)(const char*, uint64_t, uint64_t, void*));
-
 #ifdef __cplusplus
 }  // extern "C"
 #endif  // __cplusplus

@@ -4,69 +4,39 @@ on:
 jobs:
   build:
     name: Linux
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-22.04 # Lowest version that support Vulkan 1.3.
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
     - name: Install System Packages
       run: |
         sudo apt-get update
-        sudo apt-get install -y flatpak flatpak-builder
+        sudo apt-get install -y libvulkan-dev
     - name: Update Rust
       run: rustup update stable
     - name: Add additional Rust targets
       run: rustup target add x86_64-unknown-none
     - name: Lint Rust sources
       run: cargo clippy --package obkrnl --target x86_64-unknown-none -- -D warnings
+    - name: Build
+      run: ./build.py -r
     - name: Run tests
       run: cargo test --workspace --exclude gui --exclude kernel
-    - name: Add Flathub
-      run: flatpak remote-add --user flathub https://flathub.org/repo/flathub.flatpakrepo
-    - name: Generate cache keys
+    - name: Generate launch script
       run: |
-        echo "flatpak-runtime=${{ runner.os }}-flatpak-runtime-${{ hashFiles('flatpak.yml') }}" >> $GITHUB_OUTPUT
-      id: cache-keys
-    - name: Restore Flatpak runtimes
-      uses: actions/cache/restore@v4
-      with:
-        path: ~/.local/share/flatpak/runtime
-        key: ${{ steps.cache-keys.outputs.flatpak-runtime }}
-      id: flatpak-runtime
-    - name: Install Flatpak runtimes
-      run: |
-        flatpak install --noninteractive flathub \
-          org.freedesktop.Platform//24.08 org.freedesktop.Sdk//24.08
-      if: ${{ steps.flatpak-runtime.outputs.cache-hit != 'true' }}
-    - name: Generate Flatpak branch
-      run: |
-        my $name;
+        #!/bin/sh -e
+        this=$(readlink -f "$0")
+        root=$(dirname "$this")
 
-        if ($ENV{GITHUB_REF} =~ /^refs\/pull\/(\d+)\//) {
-          $name = "pr-$1";
-        } else {
-          $name = 'dev';
-        }
-
-        open(my $fh, '>>', $ENV{GITHUB_OUTPUT}) || die "Cannot open $ENV{GITHUB_OUTPUT}: $!\n";
-        print $fh "flatpak-branch=$name\n";
-      shell: perl {0}
-      id: flatpak-branch
-    - name: Change KVM permission
-      run: sudo chmod o+rw /dev/kvm
-    - name: Build Flatpak
-      run: flatpak-builder --default-branch ${{ steps.flatpak-branch.outputs.flatpak-branch }} build flatpak.yml
-    - name: Export Flatpak
-      run: flatpak build-export flatpak build
-    - name: Bundle Flatpak
-      run: flatpak build-bundle flatpak obliteration.flatpak io.github.obhq.Obliteration --runtime-repo=https://flathub.org/repo/flathub.flatpakrepo
-    - name: Cache Flatpak runtimes
-      uses: actions/cache/save@v4
-      with:
-        path: ~/.local/share/flatpak/runtime
-        key: ${{ steps.cache-keys.outputs.flatpak-runtime }}-${{ github.run_id }}
-      if: startsWith(github.ref, 'refs/heads/')
-    - name: Upload Flatpak
+        exec "$root/bin/obliteration"
+      shell: cp {0} dist/obliteration.sh
+    - name: Create distribution tarball
+      run: |
+        mv dist obliteration
+        chmod +x obliteration/obliteration.sh
+        tar -cvf obliteration.tar obliteration
+    - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: obliteration-linux-amd64
-        path: obliteration.flatpak
+        path: obliteration.tar
