@@ -4,7 +4,7 @@ on:
 jobs:
   build:
     name: Linux
-    runs-on: ubuntu-20.04 # Use lowest version to support wide range of distro.
+    runs-on: ubuntu-22.04 # Lowest version that support Vulkan 1.3.
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
