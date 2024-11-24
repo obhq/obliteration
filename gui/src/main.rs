@@ -2,13 +2,14 @@
 
 use self::graphics::{Graphics, PhysicalDevice, Screen};
 use self::profile::Profile;
+use self::setup::{run_setup, SetupError};
 use self::ui::ErrorDialog;
 use args::CliArgs;
 use clap::Parser;
 use debug::DebugServer;
 use slint::{ComponentHandle, Global, ModelRc, SharedString, VecModel};
 use std::cell::RefCell;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::ExitCode;
 use std::rc::Rc;
 use thiserror::Error;
@@ -19,10 +20,10 @@ mod error;
 mod graphics;
 mod hv;
 mod param;
-mod pkg;
 mod profile;
 #[cfg(unix)]
 mod rlim;
+mod setup;
 mod string;
 mod system;
 mod ui;
@@ -50,8 +51,8 @@ fn run() -> Result<(), ApplicationError> {
         Err(e) => return Err(ApplicationError::InitGraphics(Box::new(e))),
     };
 
-    // TODO: check if already configured and skip wizard
-    run_wizard().map_err(ApplicationError::RunWizard)?;
+    // Run setup wizard. This will do nothing if the user already has required settings.
+    run_setup().map_err(ApplicationError::Setup)?;
 
     // Get VMM arguments.
     let args = if let Some(debug_addr) = args.debug_addr() {
@@ -203,19 +204,6 @@ where
 {
     let globals = ui::Globals::get(component);
 
-    globals.on_select_file(|title, filter_name, filter| {
-        let dialog = rfd::FileDialog::new()
-            .set_title(title)
-            .add_filter(filter_name, &[filter]);
-
-        let path = dialog
-            .pick_file()
-            .and_then(|p| p.into_os_string().into_string().ok())
-            .unwrap_or_default();
-
-        SharedString::from(path)
-    });
-
     globals.on_open_url(|url| {
         let url = url.as_str();
 
@@ -223,40 +211,6 @@ where
             // TODO: Show a modal dialog.
         }
     });
-}
-
-fn run_wizard() -> Result<(), slint::PlatformError> {
-    use ui::FileValidationResult;
-
-    ui::Wizard::new().and_then(|wizard| {
-        setup_globals(&wizard);
-
-        let wizard_weak = wizard.as_weak();
-
-        wizard.on_cancel(move || {
-            wizard_weak.upgrade().inspect(|w| w.hide().unwrap());
-        });
-
-        wizard.on_validate_firmware_path(|path| {
-            let path: &Path = path.as_str().as_ref();
-
-            if !path.is_absolute() {
-                return FileValidationResult::NotAbsolutePath;
-            }
-
-            let Ok(metadata) = path.metadata() else {
-                return FileValidationResult::DoesNotExist;
-            };
-
-            if !metadata.is_file() {
-                FileValidationResult::NotFile
-            } else {
-                FileValidationResult::Ok
-            }
-        });
-
-        wizard.run()
-    })
 }
 
 /// Encapsulates arguments for [`Vmm::new()`].
@@ -272,8 +226,8 @@ enum ApplicationError {
     #[error("couldn't increase file descriptor limit")]
     FdLimit(#[source] self::rlim::RlimitError),
 
-    #[error("failed to run wizard")]
-    RunWizard(#[source] slint::PlatformError),
+    #[error("couldn't run setup wizard")]
+    Setup(#[source] SetupError),
 
     #[error("get current executable path")]
     GetCurrentExePath(#[source] std::io::Error),

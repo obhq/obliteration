@@ -79,15 +79,6 @@ inline void Rust<Param>::free()
 }
 
 template<>
-inline void Rust<Pkg>::free()
-{
-    if (m_ptr) {
-        pkg_close(m_ptr);
-        m_ptr = nullptr;
-    }
-}
-
-template<>
 inline void Rust<Profile>::free()
 {
     if (m_ptr) {

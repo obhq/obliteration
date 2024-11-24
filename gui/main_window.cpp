@@ -3,7 +3,6 @@
 #include "game_models.hpp"
 #include "launch_settings.hpp"
 #include "path.hpp"
-#include "pkg_installer.hpp"
 #include "profile_models.hpp"
 #include "resources.hpp"
 #include "screen.hpp"
@@ -61,15 +60,12 @@ MainWindow::MainWindow(
 
     // File menu.
     auto fileMenu = menuBar()->addMenu("&File");
-    auto installPkg = new QAction("&Install PKG", this);
     auto openSystemFolder = new QAction("Open System &Folder", this);
     auto quit = new QAction("&Quit", this);
 
-    connect(installPkg, &QAction::triggered, this, &MainWindow::installPkg);
     connect(openSystemFolder, &QAction::triggered, this, &MainWindow::openSystemFolder);
     connect(quit, &QAction::triggered, this, &MainWindow::close);
 
-    fileMenu->addAction(installPkg);
     fileMenu->addAction(openSystemFolder);
     fileMenu->addSeparator();
     fileMenu->addAction(quit);
@@ -226,37 +222,6 @@ void MainWindow::closeEvent(QCloseEvent *event)
     }
 
     QMainWindow::closeEvent(event);
-}
-
-void MainWindow::installPkg()
-{
-    // Browse a PKG.
-    auto path = QDir::toNativeSeparators(QFileDialog::getOpenFileName(this, "Install PKG", QString(), "PKG Files (*.pkg)"));
-
-    if (path.isEmpty()) {
-        return;
-    }
-
-    // Run installer.
-    PkgInstaller installer(readGamesDirectorySetting(), path, this);
-
-    if (!installer.exec()) {
-        return;
-    }
-
-    // Add to game list if new game.
-    auto &id = installer.gameId();
-    bool success = false;
-
-    if (!id.isEmpty()) {
-        success = loadGame(id);
-    } else {
-        success = true;
-    }
-
-    if (success) {
-        QMessageBox::information(this, "Success", "Package installed successfully.");
-    }
 }
 
 void MainWindow::openSystemFolder()

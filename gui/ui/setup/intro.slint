@@ -1,0 +1,35 @@
+import { VerticalBox, Button } from "std-widgets.slint";
+import { Header } from "header.slint";
+
+export component Intro {
+    pure callback get-dumper();
+
+    VerticalBox {
+        padding: 0;
+
+        Header {
+            title: "Introduction";
+        }
+
+        Text {
+            text: "This wizard will help you setup Obliteration. To ensure you're ready, make sure you have a firmware dumped from your PlayStation 4 using the Firmware Dumper.";
+            wrap: word-wrap;
+        }
+
+        VerticalLayout {
+            vertical-stretch: 1;
+            alignment: center;
+
+            HorizontalLayout {
+                alignment: center;
+
+                Button {
+                    text: "Get Firmware Dumper";
+                    clicked => {
+                        get-dumper();
+                    }
+                }
+            }
+        }
+    }
+}

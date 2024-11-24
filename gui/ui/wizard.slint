@@ -1,160 +1,67 @@
+import { VerticalBox, HorizontalBox, Button } from "std-widgets.slint";
+import { Intro } from "setup/intro.slint";
+import { Firmware } from "setup/firmware.slint";
+import { Conclusion } from "setup/conclusion.slint";
 
-import { Button, LineEdit, VerticalBox, HorizontalBox } from "std-widgets.slint";
-import { Globals } from "globals.slint";
-
+// https://github.com/slint-ui/slint/issues/6880
 enum WizardPage {
     Intro,
     Firmware,
     Conclusion
 }
 
-export enum FileValidationResult {
-    Ok,
-    NotAbsolutePath,
-    DoesNotExist,
-    NotFile
-}
-
-export component Wizard inherits Window {
+export component SetupWizard inherits Window {
     title: "Setup Obliteration";
     icon: @image-url("icon.png");
-    min-width: 1000px;
-    min-height: 500px;
-
-    pure callback validate_firmware_path(string) -> FileValidationResult;
+    min-width: 500px;
+    min-height: 400px;
+    preferred-width: 500px; // Force word-wrap instead of expand the window.
 
     pure callback cancel();
 
     property <WizardPage> page: WizardPage.Intro;
-    property <string> firmware_path;
 
-    if page == WizardPage.Intro: VerticalBox {
-        vertical-stretch: 1;
-
-        Text {
-            text: "Introduction";
-            font-size: 30px;
+    states [
+        finished when page == WizardPage.Conclusion: {
+            next.text: "Finish";
         }
+    ]
 
-        Text {
-            text: "This wizard will help you setup Obliteration. To ensure you're ready, make sure you have a firmware dumped from your PS4 using the Firmware Dumper (https://github.com/obhq/firmware-dumper)";
+    VerticalBox {
+        if page == WizardPage.Intro: Intro {
             vertical-stretch: 1;
         }
 
-        HorizontalLayout {
+        if page == WizardPage.Firmware: Firmware {
+            vertical-stretch: 1;
+        }
+
+        if page == WizardPage.Conclusion: Conclusion {
+            vertical-stretch: 1;
+        }
+
+        HorizontalBox {
+            padding: 0;
             alignment: end;
 
             Button {
-                enabled: false;
-                text: "Previous";
-            }
-
-            Button {
-                text: "Next";
+                text: "＜ Back";
+                enabled: root.page != WizardPage.Intro && root.page != WizardPage.Conclusion;
                 clicked => {
-                    page = WizardPage.Firmware;
-                }
-            }
-
-            Button {
-                text: "Cancel";
-                clicked => {
-                    cancel();
-                }
-            }
-        }
-    }
-
-    if page == WizardPage.Firmware: VerticalBox {
-        vertical-stretch: 1;
-
-        VerticalLayout {
-            vertical-stretch: 1;
-            alignment: start;
-
-            Text {
-                text: "Install Firmware";
-                font-weight: 700;
-            }
-
-            Text {
-                text: "Select a firmware dump that you got from Firmware Dumper.";
-                vertical-stretch: 1;
-            }
-
-            HorizontalBox {
-                Text {
-                    text: "File:";
-                    vertical-alignment: center;
-                }
-
-                LineEdit {
-                    text <=> firmware_path;
-                }
-
-                Button {
-                    text: " ... ";
-                    clicked => {
-                        firmware_path = Globals.select_file("Select a firmware dump", "Firmware Dump (*.obf)", "obf")
+                    if root.page == WizardPage.Firmware {
+                        root.page = WizardPage.Intro;
                     }
                 }
             }
-        }
 
-        HorizontalLayout {
-            alignment: end;
-
-            Button {
-                text: "Previous";
+            next := Button {
+                text: "Next ＞";
                 clicked => {
-                    page = WizardPage.Intro;
-                }
-            }
-
-            Button {
-                enabled: validate_firmware_path(firmware_path) == FileValidationResult.Ok;
-                text: "Next";
-                clicked => {
-                    page = WizardPage.Conclusion;
-                }
-            }
-
-            Button {
-                text: "Cancel";
-                clicked => {
-                    cancel();
-                }
-            }
-        }
-    }
-
-    if page == WizardPage.Conclusion: VerticalBox {
-        vertical-stretch: 1;
-
-        Text {
-            text: "Setup complete";
-            font-weight: 700;
-        }
-
-        Text {
-            text: "Firmware successully installed!";
-            vertical-stretch: 1;
-        }
-
-        HorizontalLayout {
-            alignment: end;
-
-            Button {
-                text: "Previous";
-                clicked => {
-                    page = WizardPage.Firmware;
-                }
-            }
-
-            Button {
-                text: "Finish";
-                clicked => {
-                    cancel();
+                    if root.page == WizardPage.Intro {
+                        root.page = WizardPage.Firmware;
+                    } else if root.page == WizardPage.Firmware {
+                        root.page = WizardPage.Conclusion;
+                    }
                 }
             }
 

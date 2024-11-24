@@ -21,7 +21,7 @@ fn main() {
 fn build_bin() {
     // Compile Slint.
     slint_build::compile_with_config(
-        "ui/main.slint",
+        PathBuf::from_iter(["ui", "main.slint"]),
         CompilerConfiguration::new().with_style(String::from("fluent-dark")),
     )
     .unwrap();

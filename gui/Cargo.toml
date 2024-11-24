@@ -13,7 +13,7 @@ path = "src/main.rs"
 required-features = ["slint"]
 
 [features]
-slint = ["dep:slint", "dep:clap", "dep:rfd", "dep:open"]
+slint = ["dep:slint", "dep:clap", "dep:open"]
 qt = []
 
 [dependencies]
@@ -31,8 +31,6 @@ obfw = { git = "https://github.com/obhq/firmware-dumper.git", features = [
 ] }
 open = { version = "5.3.1", optional = true }
 param = { path = "../src/param" }
-pkg = { path = "../src/pkg" }
-rfd = { version = "0.14.0", optional = true }
 serde = { version = "1.0.209", features = ["derive"] }
 thiserror = "1.0"
 uuid = { version = "1.11.0", features = ["serde", "v4"] }

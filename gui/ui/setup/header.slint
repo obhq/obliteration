@@ -1,0 +1,14 @@
+import { VerticalBox } from "std-widgets.slint";
+
+export component Header {
+    in property <string> title;
+
+    VerticalBox {
+        padding: 0;
+
+        Text {
+            text: root.title;
+            font-size: 30px;
+        }
+    }
+}
