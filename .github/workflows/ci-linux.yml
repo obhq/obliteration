@@ -8,6 +8,10 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+    - name: Install System Packages
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libvulkan-dev
     - name: Update Rust
       run: rustup update stable
     - name: Add additional Rust targets
