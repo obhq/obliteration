@@ -16,10 +16,10 @@ use thiserror::Error;
 
 mod args;
 mod debug;
+mod dialogs;
 mod error;
 mod graphics;
 mod hv;
-mod param;
 mod profile;
 #[cfg(unix)]
 mod rlim;

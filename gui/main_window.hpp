@@ -30,7 +30,6 @@ public:
     ~MainWindow() override;
 
     bool loadProfiles();
-    bool loadGames();
     void restoreGeometry();
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -42,7 +41,6 @@ private slots:
 private:
     void vmmError(const QString &msg);
     void waitKernelExit(bool success);
-    bool loadGame(const QString &gameId);
     void stopDebug();
     void killVmm();
 

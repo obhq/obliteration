@@ -52,24 +52,6 @@ void error_free(struct RustError *e);
 
 const char *error_message(const struct RustError *e);
 
-Param *param_open(const char *file, struct RustError **error);
-
-void param_close(Param *p);
-
-char *param_app_ver_get(const Param *p);
-
-char *param_category_get(const Param *p);
-
-char *param_content_id_get(const Param *p);
-
-char *param_short_content_id_get(const Param *p);
-
-char *param_title_get(const Param *p);
-
-char *param_title_id_get(const Param *p);
-
-char *param_version_get(const Param *p);
-
 struct Profile *profile_new(const char *name);
 
 struct Profile *profile_load(const char *path, struct RustError **err);

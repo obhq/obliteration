@@ -196,7 +196,7 @@ int main(int argc, char *argv[])
     MainWindow win(args, &vulkan, std::move(vkDevices));
 #endif
 
-    if (!win.loadProfiles() || !win.loadGames()) {
+    if (!win.loadProfiles()) {
         return 1;
     }
 

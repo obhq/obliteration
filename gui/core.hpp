@@ -70,15 +70,6 @@ inline void Rust<char>::free()
 }
 
 template<>
-inline void Rust<Param>::free()
-{
-    if (m_ptr) {
-        param_close(m_ptr);
-        m_ptr = nullptr;
-    }
-}
-
-template<>
 inline void Rust<Profile>::free()
 {
     if (m_ptr) {

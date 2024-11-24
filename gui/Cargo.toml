@@ -30,14 +30,20 @@ obfw = { git = "https://github.com/obhq/firmware-dumper.git", features = [
     "std",
 ] }
 open = { version = "5.3.1", optional = true }
-param = { path = "../src/param" }
+raw-window-handle = "0.6.2"
 serde = { version = "1.0.209", features = ["derive"] }
 thiserror = "1.0"
 uuid = { version = "1.11.0", features = ["serde", "v4"] }
 
 [dependencies.slint]
 version = "1.8.0"
-features = ["compat-1-2", "std", "backend-winit", "renderer-femtovg"]
+features = [
+    "backend-winit",
+    "compat-1-2",
+    "raw-window-handle-06",
+    "renderer-femtovg",
+    "std",
+]
 default-features = false
 optional = true
 
@@ -62,6 +68,11 @@ features = [
     "Win32_System_Memory",
     "Win32_System_SystemInformation",
 ]
+
+[target.'cfg(target_os = "linux")'.dependencies.ashpd]
+version = "0.10.2"
+features = ["async-std", "raw_handle"]
+default-features = false
 
 [target.'cfg(target_os = "macos")'.dependencies]
 applevisor-sys = "0.1.3"

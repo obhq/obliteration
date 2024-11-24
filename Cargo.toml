@@ -9,7 +9,6 @@ members = [
     "src/fs",
     "src/llt",
     "src/obconf",
-    "src/param",
     "src/pfs",
     "src/tls",
 ]

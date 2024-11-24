@@ -1,8 +1,0 @@
-[package]
-name = "param"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-byteorder = "1.4"
-thiserror = "1.0"

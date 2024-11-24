@@ -18,6 +18,7 @@ export component SetupWizard inherits Window {
     preferred-width: 500px; // Force word-wrap instead of expand the window.
 
     pure callback cancel();
+    pure callback browse-firmware();
 
     property <WizardPage> page: WizardPage.Intro;
 
@@ -34,6 +35,10 @@ export component SetupWizard inherits Window {
 
         if page == WizardPage.Firmware: Firmware {
             vertical-stretch: 1;
+
+            browse => {
+                browse-firmware();
+            }
         }
 
         if page == WizardPage.Conclusion: Conclusion {
