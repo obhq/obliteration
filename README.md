@@ -10,7 +10,7 @@ This project started as a hard-fork from [Kyty](https://github.com/InoriRus/Kyty
 
 Our ultimate goal is to become a permissive free and open-source operating system optimized for gaming that can run on a variety of hardware. The reason we want to built this because:
 
-- Windows is boated and Microsoft keep pushing too many things into it.
+- Windows is bloated and Microsoft keep pushing too many things into it.
 - Linux is a nightmare for beginners. Its license also making it not an ideal choice for a proprietary hardware.
 - macOS has a limited set of hardware and its price too expensive. You can get a PC with high-end graphic card at the same price.
 - FreeBSD and the others was not designed for gaming. Their goal are either a server or a general desktop.
