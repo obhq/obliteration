@@ -8,7 +8,6 @@
 #include <QVulkanInstance>
 #endif
 
-class GameListModel;
 class LaunchSettings;
 class ProfileList;
 class QCommandLineOption;
@@ -47,7 +46,6 @@ private:
     const QCommandLineParser &m_args;
     QStackedWidget *m_main;
     ProfileList *m_profiles;
-    GameListModel *m_games;
     LaunchSettings *m_launch;
     Screen *m_screen;
     QSocketNotifier *m_debugNoti;

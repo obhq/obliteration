@@ -1,6 +1,5 @@
 #include "main_window.hpp"
 #include "app_data.hpp"
-#include "game_models.hpp"
 #include "launch_settings.hpp"
 #include "path.hpp"
 #include "profile_models.hpp"
@@ -51,7 +50,6 @@ MainWindow::MainWindow(
     m_args(args),
     m_main(nullptr),
     m_profiles(nullptr),
-    m_games(nullptr),
     m_launch(nullptr),
     m_screen(nullptr),
     m_debugNoti(nullptr)
@@ -92,11 +90,10 @@ MainWindow::MainWindow(
 
     // Launch settings.
     m_profiles = new ProfileList(this);
-    m_games = new GameListModel(this);
 #ifdef __APPLE__
-    m_launch = new LaunchSettings(m_profiles, m_games);
+    m_launch = new LaunchSettings(m_profiles);
 #else
-    m_launch = new LaunchSettings(m_profiles, m_games, std::move(vkDevices));
+    m_launch = new LaunchSettings(m_profiles, std::move(vkDevices));
 #endif
 
     connect(m_launch, &LaunchSettings::saveClicked, this, &MainWindow::saveProfile);

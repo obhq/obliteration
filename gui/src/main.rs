@@ -4,17 +4,21 @@ use self::graphics::{Graphics, PhysicalDevice, Screen};
 use self::profile::Profile;
 use self::setup::{run_setup, SetupError};
 use self::ui::ErrorDialog;
-use args::CliArgs;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use debug::DebugServer;
+use serde::{Deserialize, Serialize};
 use slint::{ComponentHandle, Global, ModelRc, SharedString, VecModel};
 use std::cell::RefCell;
-use std::path::PathBuf;
-use std::process::ExitCode;
+use std::error::Error;
+use std::io::Write;
+use std::net::SocketAddrV4;
+use std::panic::PanicHookInfo;
+use std::path::Path;
+use std::process::{Child, Command, ExitCode, Stdio};
 use std::rc::Rc;
+use std::sync::{Arc, Mutex, Weak};
 use thiserror::Error;
 
-mod args;
 mod debug;
 mod dialogs;
 mod error;
@@ -29,17 +33,57 @@ mod ui;
 mod vmm;
 
 fn main() -> ExitCode {
-    match run() {
-        Ok(_) => ExitCode::SUCCESS,
-        Err(e) => {
-            display_error(e);
-            ExitCode::FAILURE
-        }
+    use std::fmt::Write;
+
+    // Check program mode.
+    let args = Args::parse();
+    let r = match &args.mode {
+        Some(ProgramMode::PanicHandler) => run_panic_handler(),
+        None => run_vmm(&args),
+    };
+
+    // Check program result.
+    let e = match r {
+        Ok(_) => return ExitCode::SUCCESS,
+        Err(e) => e,
+    };
+
+    // Get full message.
+    let mut msg = e.to_string();
+    let mut src = e.source();
+
+    while let Some(e) = src {
+        write!(msg, " -> {e}").unwrap();
+        src = e.source();
     }
+
+    // Show error window.
+    let win = ErrorDialog::new().unwrap();
+
+    win.set_message(format!("An unexpected error has occurred: {msg}.").into());
+    win.run().unwrap();
+
+    ExitCode::FAILURE
 }
 
-fn run() -> Result<(), ApplicationError> {
-    let args = CliArgs::try_parse().map_err(ApplicationError::ParseArgs)?;
+fn run_vmm(args: &Args) -> Result<(), ApplicationError> {
+    // Resolve our executable path.
+    let exe = std::env::current_exe()
+        .and_then(|v| std::fs::canonicalize(v))
+        .map_err(ApplicationError::GetCurrentExePath)?;
+
+    // Spawn panic handler.
+    let ph = Command::new(&exe)
+        .args(["--mode", "panic-handler"])
+        .stdin(Stdio::piped())
+        .spawn()
+        .map_err(ApplicationError::SpawnPanicHandler)?;
+
+    // Set panic handler.
+    let ph = Arc::new(Mutex::new(Some(PanicHandler(ph))));
+    let ph = Arc::downgrade(&ph);
+
+    std::panic::set_hook(Box::new(move |i| panic_hook(i, &ph)));
 
     #[cfg(unix)]
     rlim::set_rlimit_nofile().map_err(ApplicationError::FdLimit)?;
@@ -53,12 +97,37 @@ fn run() -> Result<(), ApplicationError> {
     // Run setup wizard. This will do nothing if the user already has required settings.
     run_setup().map_err(ApplicationError::Setup)?;
 
-    // Get VMM arguments.
-    let args = if let Some(debug_addr) = args.debug_addr() {
-        let kernel_path = get_kernel_path(&args)?;
+    // Get kernel path.
+    let kernel = match &args.kernel {
+        Some(v) => v.to_path_buf(),
+        None => {
+            // Get kernel directory.
+            let mut path = exe.parent().unwrap().to_owned();
 
+            #[cfg(target_os = "windows")]
+            path.push("share");
+
+            #[cfg(not(target_os = "windows"))]
+            {
+                path.pop();
+
+                #[cfg(target_os = "macos")]
+                path.push("Resources");
+
+                #[cfg(not(target_os = "macos"))]
+                path.push("share");
+            }
+
+            // Append kernel.
+            path.push("obkrnl");
+            path
+        }
+    };
+
+    // Get VMM arguments.
+    let args = if let Some(debug_addr) = &args.debug {
         let debug_server = DebugServer::new(debug_addr)
-            .map_err(|e| ApplicationError::StartDebugServer(e, debug_addr))?;
+            .map_err(|e| ApplicationError::StartDebugServer(e, *debug_addr))?;
 
         let debug_client = debug_server
             .accept()
@@ -84,6 +153,22 @@ fn run() -> Result<(), ApplicationError> {
         .run()
         .map_err(|e| ApplicationError::RunScreen(Box::new(e)))?;
 
+    Ok(())
+}
+
+fn run_panic_handler() -> Result<(), ApplicationError> {
+    use std::io::ErrorKind;
+
+    // Wait for panic info.
+    let stdin = std::io::stdin();
+    let mut stdin = stdin.lock();
+    let info: PanicInfo = match ciborium::from_reader(&mut stdin) {
+        Ok(v) => v,
+        Err(ciborium::de::Error::Io(e)) if e.kind() == ErrorKind::UnexpectedEof => return Ok(()),
+        Err(e) => return Err(ApplicationError::ReadPanicInfo(e)),
+    };
+
+    // TODO: Display panic info.
     Ok(())
 }
 
@@ -145,58 +230,6 @@ fn run_launcher(graphics: &impl Graphics) -> Result<Option<VmmArgs>, Application
     todo!()
 }
 
-fn get_kernel_path(args: &CliArgs) -> Result<PathBuf, ApplicationError> {
-    let kernel_path = if let Some(kernel_path) = args.kernel_path() {
-        kernel_path.to_path_buf()
-    } else {
-        let mut pathbuf = std::env::current_exe().map_err(ApplicationError::GetCurrentExePath)?;
-        pathbuf.pop();
-
-        #[cfg(target_os = "windows")]
-        {
-            pathbuf.push("share");
-        }
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            pathbuf.pop();
-
-            #[cfg(target_os = "macos")]
-            {
-                pathbuf.push("Resources");
-            }
-            #[cfg(not(target_os = "macos"))]
-            {
-                pathbuf.push("share");
-            }
-        }
-        pathbuf.push("obkrnl");
-
-        pathbuf
-    };
-
-    Ok(kernel_path)
-}
-
-fn display_error(e: impl std::error::Error) {
-    use std::fmt::Write;
-
-    // Get full message.
-    let mut msg = e.to_string();
-    let mut src = e.source();
-
-    while let Some(e) = src {
-        write!(&mut msg, " -> {e}").unwrap();
-        src = e.source();
-    }
-
-    // Show error window.
-    let win = ErrorDialog::new().unwrap();
-
-    win.set_message(format!("An unexpected error has occurred: {msg}.").into());
-    win.run().unwrap();
-}
-
 fn setup_globals<'a, T>(component: &'a T)
 where
     ui::Globals<'a>: Global<'a, T>,
@@ -212,14 +245,84 @@ where
     });
 }
 
+fn panic_hook(i: &PanicHookInfo, ph: &Weak<Mutex<Option<PanicHandler>>>) {
+    // Check if panic handler still alive.
+    let ph = match ph.upgrade() {
+        Some(v) => v,
+        None => {
+            // The only cases for us to be here is we panic after returned from run_vmm().
+            eprintln!("{i}");
+            return;
+        }
+    };
+
+    // Allow only one thread to report the panic.
+    let mut ph = ph.lock().unwrap();
+    let mut ph = match ph.take() {
+        Some(v) => v,
+        None => {
+            // There are another thread already panicked when we are here. The process will be
+            // aborted once the previous thread has return from this hook. The only possible cases
+            // for the other thread to be here is because the abortion from the previous panic is
+            // not finished yet. So better to not print the panic here because it may not work.
+            return;
+        }
+    };
+
+    // Send panic information.
+    let mut stdin = ph.0.stdin.take().unwrap();
+    let info = PanicInfo {};
+
+    ciborium::into_writer(&info, &mut stdin).unwrap();
+    stdin.flush().unwrap();
+
+    drop(stdin); // Close the stdin to notify panic handler that no more data.
+}
+
+/// Program arguments parsed from command line.
+#[derive(Parser)]
+#[command(about = None)]
+struct Args {
+    #[arg(long, value_enum, hide = true)]
+    mode: Option<ProgramMode>,
+
+    /// Immediate launch the VMM in debug mode.
+    #[arg(long)]
+    debug: Option<SocketAddrV4>,
+
+    /// Use the kernel image at the specified path instead of the default one.
+    #[arg(long)]
+    kernel: Option<Box<Path>>,
+}
+
 /// Encapsulates arguments for [`Vmm::new()`].
 struct VmmArgs {}
+
+/// Mode of our program.
+#[derive(Clone, ValueEnum)]
+enum ProgramMode {
+    PanicHandler,
+}
+
+/// Provide [`Drop`] implementation to shutdown panic handler.
+struct PanicHandler(Child);
+
+impl Drop for PanicHandler {
+    fn drop(&mut self) {
+        // wait() will close stdin for us before waiting.
+        self.0.wait().unwrap();
+    }
+}
+
+/// Contains panic information from the VMM process.
+#[derive(Serialize, Deserialize)]
+struct PanicInfo {}
 
 /// Represents an error when [`run()`] fails.
 #[derive(Debug, Error)]
 enum ApplicationError {
-    #[error(transparent)]
-    ParseArgs(clap::Error),
+    #[error("couldn't spawn panic handler process")]
+    SpawnPanicHandler(#[source] std::io::Error),
 
     #[cfg(unix)]
     #[error("couldn't increase file descriptor limit")]
@@ -254,4 +357,7 @@ enum ApplicationError {
 
     #[error("couldn't run VMM screen")]
     RunScreen(#[source] Box<dyn std::error::Error>),
+
+    #[error("couldn't read panic info")]
+    ReadPanicInfo(#[source] ciborium::de::Error<std::io::Error>),
 }

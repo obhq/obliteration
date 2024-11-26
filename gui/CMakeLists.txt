@@ -11,7 +11,6 @@ add_executable(obliteration WIN32 MACOSX_BUNDLE
     app_data.cpp
     cpu_settings.cpp
     display_settings.cpp
-    game_models.cpp
     initialize_wizard.cpp
     launch_settings.cpp
     main.cpp

@@ -24,29 +24,6 @@
 #include <sys/resource.h>
 #endif
 
-static void panicHook(
-    const char *file,
-    size_t flen,
-    uint32_t line,
-    const char *msg,
-    size_t mlen,
-    void *cx)
-{
-    auto main = reinterpret_cast<QObject *>(cx);
-    auto type = QThread::currentThread() == main->thread()
-        ? Qt::DirectConnection
-        : Qt::BlockingQueuedConnection;
-
-    QMetaObject::invokeMethod(main, [=]() {
-        auto text = QString("An unexpected error occurred at %1:%2: %3")
-            .arg(QString::fromUtf8(file, flen))
-            .arg(line)
-            .arg(QString::fromUtf8(msg, mlen));
-
-        QMessageBox::critical(nullptr, "Fatal Error", text);
-    }, type);
-}
-
 int main(int argc, char *argv[])
 {
     // Setup application.
@@ -66,11 +43,6 @@ int main(int argc, char *argv[])
     args.addOption(Args::debug);
     args.addOption(Args::kernel);
     args.process(app);
-
-    // Hook Rust panic.
-    QObject panic;
-
-    set_panic_hook(&panic, panicHook);
 
     // Initialize Vulkan.
 #ifndef __APPLE__
