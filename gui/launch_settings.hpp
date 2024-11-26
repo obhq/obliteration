@@ -23,11 +23,10 @@ class LaunchSettings final : public QWidget {
     Q_OBJECT
 public:
 #ifdef __APPLE__
-    LaunchSettings(ProfileList *profiles, GameListModel *games, QWidget *parent = nullptr);
+    LaunchSettings(ProfileList *profiles, QWidget *parent = nullptr);
 #else
     LaunchSettings(
         ProfileList *profiles,
-        GameListModel *games,
         QList<VkPhysicalDevice> &&vkDevices,
         QWidget *parent = nullptr);
 #endif
@@ -42,13 +41,12 @@ signals:
     void startClicked(const QString &debugAddr);
 private:
 #ifdef __APPLE__
-    QWidget *buildSettings(GameListModel *games);
+    QWidget *buildSettings();
 #else
-    QWidget *buildSettings(GameListModel *games, QList<VkPhysicalDevice> &&vkDevices);
+    QWidget *buildSettings(QList<VkPhysicalDevice> &&vkDevices);
 #endif
     QLayout *buildActions(ProfileList *profiles);
 
-    void requestGamesContextMenu(const QPoint &pos);
     void profileChanged(int index);
 
     DisplaySettings *m_display;

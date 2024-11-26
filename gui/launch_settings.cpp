@@ -1,7 +1,6 @@
 #include "launch_settings.hpp"
 #include "cpu_settings.hpp"
 #include "display_settings.hpp"
-#include "game_models.hpp"
 #include "profile_models.hpp"
 #include "resources.hpp"
 
@@ -20,11 +19,10 @@
 #include <utility>
 
 #ifdef __APPLE__
-LaunchSettings::LaunchSettings(ProfileList *profiles, GameListModel *games, QWidget *parent) :
+LaunchSettings::LaunchSettings(ProfileList *profiles, QWidget *parent) :
 #else
 LaunchSettings::LaunchSettings(
     ProfileList *profiles,
-    GameListModel *games,
     QList<VkPhysicalDevice> &&vkDevices,
     QWidget *parent) :
 #endif
@@ -37,9 +35,9 @@ LaunchSettings::LaunchSettings(
     auto layout = new QVBoxLayout();
 
 #ifdef __APPLE__
-    layout->addWidget(buildSettings(games));
+    layout->addWidget(buildSettings());
 #else
-    layout->addWidget(buildSettings(games, std::move(vkDevices)));
+    layout->addWidget(buildSettings(std::move(vkDevices)));
 #endif
     layout->addLayout(buildActions(profiles));
 
@@ -73,9 +71,9 @@ DisplayDevice *LaunchSettings::currentDisplayDevice() const
 #endif
 
 #ifdef __APPLE__
-QWidget *LaunchSettings::buildSettings(GameListModel *games)
+QWidget *LaunchSettings::buildSettings()
 #else
-QWidget *LaunchSettings::buildSettings(GameListModel *games, QList<VkPhysicalDevice> &&vkDevices)
+QWidget *LaunchSettings::buildSettings(QList<VkPhysicalDevice> &&vkDevices)
 #endif
 {
     // Tab.
@@ -105,13 +103,10 @@ QWidget *LaunchSettings::buildSettings(GameListModel *games, QList<VkPhysicalDev
     m_games->setContextMenuPolicy(Qt::CustomContextMenu);
     m_games->setSortingEnabled(true);
     m_games->setWordWrap(false);
-    m_games->setModel(games);
     m_games->horizontalHeader()->setSortIndicator(0, Qt::AscendingOrder);
     m_games->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     m_games->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     m_games->verticalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
-
-    connect(m_games, &QWidget::customContextMenuRequested, this, &LaunchSettings::requestGamesContextMenu);
 
     tab->addTab(m_games, loadIcon(":/resources/view-comfy.svg", iconSize), "Games");
 
@@ -162,36 +157,6 @@ QLayout *LaunchSettings::buildActions(ProfileList *profiles)
     actions->addButton(start, QDialogButtonBox::AcceptRole);
 
     return layout;
-}
-
-void LaunchSettings::requestGamesContextMenu(const QPoint &pos)
-{
-    // Get item index.
-    auto index = m_games->indexAt(pos);
-
-    if (!index.isValid()) {
-        return;
-    }
-
-    auto model = reinterpret_cast<GameListModel *>(m_games->model());
-    auto game = model->get(index.row());
-
-    // Setup menu.
-    QMenu menu(this);
-    QAction openFolder("Open &Folder", this);
-
-    menu.addAction(&openFolder);
-
-    // Show menu.
-    auto selected = menu.exec(m_games->viewport()->mapToGlobal(pos));
-
-    if (!selected) {
-        return;
-    }
-
-    if (selected == &openFolder) {
-        QDesktopServices::openUrl(QUrl::fromLocalFile(game->directory()));
-    }
 }
 
 void LaunchSettings::profileChanged(int index)
