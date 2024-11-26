@@ -22,18 +22,10 @@ jobs:
       run: ./build.py -r
     - name: Run tests
       run: cargo test --workspace --exclude gui --exclude kernel
-    - name: Generate launch script
-      run: |
-        #!/bin/sh -e
-        this=$(readlink -f "$0")
-        root=$(dirname "$this")
-
-        exec "$root/bin/obliteration"
-      shell: cp {0} dist/obliteration.sh
     - name: Create distribution tarball
       run: |
+        ln -sr dist/bin/obliteration dist/obliteration
         mv dist obliteration
-        chmod +x obliteration/obliteration.sh
         tar -cvf obliteration.tar obliteration
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
