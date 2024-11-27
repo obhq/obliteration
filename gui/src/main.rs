@@ -3,11 +3,12 @@
 use self::graphics::{Graphics, PhysicalDevice, Screen};
 use self::profile::Profile;
 use self::setup::{run_setup, SetupError};
-use self::ui::ErrorDialog;
+use self::ui::ErrorWindow;
 use clap::{Parser, ValueEnum};
 use debug::DebugServer;
 use serde::{Deserialize, Serialize};
 use slint::{ComponentHandle, Global, ModelRc, SharedString, VecModel};
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::error::Error;
 use std::io::Write;
@@ -58,9 +59,15 @@ fn main() -> ExitCode {
     }
 
     // Show error window.
-    let win = ErrorDialog::new().unwrap();
+    let win = ErrorWindow::new().unwrap();
 
     win.set_message(format!("An unexpected error has occurred: {msg}.").into());
+    win.on_close({
+        let win = win.as_weak();
+
+        move || win.unwrap().hide().unwrap()
+    });
+
     win.run().unwrap();
 
     ExitCode::FAILURE
@@ -168,7 +175,22 @@ fn run_panic_handler() -> Result<(), ApplicationError> {
         Err(e) => return Err(ApplicationError::ReadPanicInfo(e)),
     };
 
-    // TODO: Display panic info.
+    // Display panic info.
+    let win = ErrorWindow::new().unwrap();
+    let msg = format!(
+        "An unexpected error has occurred at {}:{}: {}.",
+        info.file, info.line, info.message
+    );
+
+    win.set_message(msg.into());
+    win.on_close({
+        let win = win.as_weak();
+
+        move || win.unwrap().hide().unwrap()
+    });
+
+    win.run().unwrap();
+
     Ok(())
 }
 
@@ -271,7 +293,18 @@ fn panic_hook(i: &PanicHookInfo, ph: &Weak<Mutex<Option<PanicHandler>>>) {
 
     // Send panic information.
     let mut stdin = ph.0.stdin.take().unwrap();
-    let info = PanicInfo {};
+    let loc = i.location().unwrap();
+    let info = PanicInfo {
+        message: if let Some(&s) = i.payload().downcast_ref::<&str>() {
+            s.into()
+        } else if let Some(s) = i.payload().downcast_ref::<String>() {
+            s.into()
+        } else {
+            "unknown panic payload".into()
+        },
+        file: loc.file().into(),
+        line: loc.line(),
+    };
 
     ciborium::into_writer(&info, &mut stdin).unwrap();
     stdin.flush().unwrap();
@@ -316,7 +349,11 @@ impl Drop for PanicHandler {
 
 /// Contains panic information from the VMM process.
 #[derive(Serialize, Deserialize)]
-struct PanicInfo {}
+struct PanicInfo<'a> {
+    message: Cow<'a, str>,
+    file: Cow<'a, str>,
+    line: u32,
+}
 
 /// Represents an error when [`run()`] fails.
 #[derive(Debug, Error)]

@@ -51,6 +51,5 @@ private:
 
     DisplaySettings *m_display;
     CpuSettings *m_cpu;
-    QTableView *m_games;
     QComboBox *m_profiles;
 };

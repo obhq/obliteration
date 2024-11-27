@@ -29,7 +29,6 @@ LaunchSettings::LaunchSettings(
     QWidget(parent),
     m_display(nullptr),
     m_cpu(nullptr),
-    m_games(nullptr),
     m_profiles(nullptr)
 {
     auto layout = new QVBoxLayout();
@@ -97,18 +96,6 @@ QWidget *LaunchSettings::buildSettings(QList<VkPhysicalDevice> &&vkDevices)
     });
 
     tab->addTab(m_cpu, loadIcon(":/resources/cpu-64-bit.svg", iconSize), "CPU");
-
-    // Game list.
-    m_games = new QTableView();
-    m_games->setContextMenuPolicy(Qt::CustomContextMenu);
-    m_games->setSortingEnabled(true);
-    m_games->setWordWrap(false);
-    m_games->horizontalHeader()->setSortIndicator(0, Qt::AscendingOrder);
-    m_games->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-    m_games->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-    m_games->verticalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
-
-    tab->addTab(m_games, loadIcon(":/resources/view-comfy.svg", iconSize), "Games");
 
     return tab;
 }

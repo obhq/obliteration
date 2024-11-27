@@ -1,0 +1,64 @@
+import { Palette, HorizontalBox, StandardButton, VerticalBox } from "std-widgets.slint";
+
+component Content {
+    in property <string> message;
+
+    HorizontalBox {
+        VerticalLayout {
+            alignment: start;
+
+            Image {
+                source: @image-url("close-octagon-outline.svg");
+                colorize: Palette.foreground;
+                width: 50px;
+                height: 50px;
+            }
+        }
+
+        Text {
+            text: message;
+            wrap: word-wrap;
+        }
+    }
+}
+
+component ActionBar inherits Rectangle {
+    pure callback close();
+
+    background: Palette.background.darker(0.2);
+
+    HorizontalBox {
+        alignment: end;
+
+        StandardButton {
+            kind: StandardButtonKind.close;
+            clicked => {
+                close();
+            }
+        }
+    }
+}
+
+export component ErrorWindow inherits Window {
+    in property <string> message;
+
+    pure callback close();
+
+    title: "Obliteration";
+    icon: @image-url("icon.png");
+    min-width: 400px;
+    preferred-width: 400px; // Force word-wrap instead of expand the window.
+
+    VerticalLayout {
+        Content {
+            message: message;
+            vertical-stretch: 1;
+        }
+
+        ActionBar {
+            close => {
+                close();
+            }
+        }
+    }
+}
