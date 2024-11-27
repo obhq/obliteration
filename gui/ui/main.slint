@@ -3,7 +3,8 @@ import { Actions } from "main/actions.slint";
 import { Globals } from "globals.slint";
 import { VerticalBox } from "std-widgets.slint";
 
-export { SetupWizard } from "wizard.slint";
+export { ErrorWindow } from "error.slint";
+export { SetupWizard } from "setup.slint";
 export { Globals }
 
 export component MainWindow inherits Window {
@@ -28,14 +29,5 @@ export component MainWindow inherits Window {
                 start-vmm();
             }
         }
-    }
-}
-
-export component ErrorDialog inherits Window {
-    in property <string> message;
-
-    Text {
-        padding: 10px;
-        text: message;
     }
 }

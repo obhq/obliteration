@@ -7,6 +7,5 @@
     <file>resources/monitor.svg</file>
     <file>resources/obliteration-icon.png</file>
     <file>resources/play.svg</file>
-    <file>resources/view-comfy.svg</file>
   </qresource>
 </RCC>
