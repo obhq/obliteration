@@ -70,15 +70,6 @@ inline void Rust<char>::free()
 }
 
 template<>
-inline void Rust<Profile>::free()
-{
-    if (m_ptr) {
-        profile_free(m_ptr);
-        m_ptr = nullptr;
-    }
-}
-
-template<>
 inline void Rust<RustError>::free()
 {
     if (m_ptr) {

@@ -33,7 +33,7 @@ pub trait Screen: 'static {
     type RunErr: Error;
 
     fn buffer(&self) -> &Arc<Self::Buffer>;
-    fn run(&mut self) -> Result<(), Self::RunErr>;
+    fn run(self) -> Result<(), Self::RunErr>;
 }
 
 /// Manages off-screen buffers for [`Screen`].

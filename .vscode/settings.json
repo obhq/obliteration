@@ -41,5 +41,8 @@
   "rust-analyzer.imports.granularity.group": "module",
   "rust-analyzer.imports.group.enable": false,
   "rust-analyzer.imports.prefix": "self",
+  "slint.libraryPaths": {
+    "root": "gui/ui"
+  },
   "slint.preview.style": "fluent-dark"
 }

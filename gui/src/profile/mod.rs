@@ -1,6 +1,8 @@
+pub use self::ui::*;
+
 use obconf::Config;
 use serde::{Deserialize, Serialize};
-use std::ffi::{CStr, CString};
+use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::num::NonZero;
 use std::path::Path;
@@ -8,15 +10,14 @@ use std::time::SystemTime;
 use thiserror::Error;
 use uuid::Uuid;
 
-#[cfg(feature = "qt")]
-mod ffi;
+mod ui;
 
 /// Contains settings to launch the kernel.
 #[derive(Deserialize, Serialize)]
 #[serde(default)]
 pub struct Profile {
     id: Uuid,
-    name: CString,
+    name: String,
     display_resolution: DisplayResolution,
     kernel_config: Config,
     created: SystemTime,
@@ -51,10 +52,6 @@ impl Profile {
         self.id
     }
 
-    pub fn name(&self) -> &CStr {
-        &self.name
-    }
-
     pub fn kernel_config(&self) -> &Config {
         &self.kernel_config
     }
@@ -64,7 +61,7 @@ impl Default for Profile {
     fn default() -> Self {
         Self {
             id: Uuid::new_v4(),
-            name: CString::from(c"Default"),
+            name: String::from("Default"),
             display_resolution: DisplayResolution::Hd,
             kernel_config: Config {
                 max_cpu: NonZero::new(8).unwrap(),
@@ -75,7 +72,6 @@ impl Default for Profile {
 }
 
 /// Display resolution to report to the kernel.
-#[repr(C)]
 #[derive(Clone, Copy, Deserialize, Serialize)]
 pub enum DisplayResolution {
     /// 1280 × 720.
@@ -86,6 +82,19 @@ pub enum DisplayResolution {
     UltraHd,
 }
 
+impl Display for DisplayResolution {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let v = match self {
+            Self::Hd => "1280 × 720",
+            Self::FullHd => "1920 × 1080",
+            Self::UltraHd => "3840 × 2160",
+        };
+
+        f.write_str(v)
+    }
+}
+
+/// Represents an error when [`Profile::load()`] fails.
 #[derive(Debug, Error)]
 pub enum LoadError {
     #[error("couldn't open the profile file")]

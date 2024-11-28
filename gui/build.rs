@@ -1,5 +1,6 @@
 use cbindgen::{Builder, Config, Language, Style};
 use slint_build::CompilerConfiguration;
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 const LINUX_INCLUDE: &str = r#"
@@ -9,22 +10,21 @@ const LINUX_INCLUDE: &str = r#"
 "#;
 
 fn main() {
-    if std::env::var("CARGO_FEATURE_SLINT").is_ok_and(|var| var == "1") {
-        build_bin();
-    }
+    // Build path for @root.
+    let mut root = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").unwrap());
+
+    root.push("ui");
+
+    // Compile Slint.
+    let config = CompilerConfiguration::new()
+        .with_style(String::from("fluent-dark"))
+        .with_library_paths(HashMap::from([("root".into(), root)]));
+
+    slint_build::compile_with_config(PathBuf::from_iter(["ui", "main.slint"]), config).unwrap();
 
     if std::env::var("CARGO_FEATURE_QT").is_ok_and(|var| var == "1") {
         build_lib();
     }
-}
-
-fn build_bin() {
-    // Compile Slint.
-    slint_build::compile_with_config(
-        PathBuf::from_iter(["ui", "main.slint"]),
-        CompilerConfiguration::new().with_style(String::from("fluent-dark")),
-    )
-    .unwrap();
 }
 
 fn build_lib() {

@@ -5,4 +5,5 @@ mod graphics;
 mod hv;
 mod profile;
 mod string;
+mod ui;
 mod vmm;

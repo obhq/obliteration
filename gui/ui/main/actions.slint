@@ -1,10 +1,10 @@
 import { Button, ComboBox, HorizontalBox } from "std-widgets.slint";
-import { Globals } from "../globals.slint";
 
 export component Actions {
     in property <[string]> profiles;
 
     pure callback start();
+    pure callback profile-selected(string);
 
     HorizontalBox {
         padding: 0;
@@ -12,16 +12,21 @@ export component Actions {
         ComboBox {
             model: root.profiles;
             horizontal-stretch: 1;
+            selected(v) => {
+                profile-selected(v);
+            }
         }
 
         Button {
             text: "Save";
             icon: @image-url("actions/save.svg");
+            colorize-icon: true;
         }
 
         Button {
             text: "Start";
             icon: @image-url("actions/start.svg");
+            colorize-icon: true;
             clicked => {
                 start();
             }
