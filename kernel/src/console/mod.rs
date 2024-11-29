@@ -94,7 +94,7 @@ struct Log<'a, M: Display> {
     msg: M,
 }
 
-impl<'a, M: Display> Display for Log<'a, M> {
+impl<M: Display> Display for Log<'_, M> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         writeln!(
             f,

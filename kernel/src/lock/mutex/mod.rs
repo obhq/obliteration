@@ -122,14 +122,14 @@ impl<'a, T> MutexGuard<'a, T> {
     }
 }
 
-impl<'a, T> Drop for MutexGuard<'a, T> {
+impl<T> Drop for MutexGuard<'_, T> {
     fn drop(&mut self) {
         // SAFETY: This struct does not implement Send.
         unsafe { Mutex::<T>::unlock(&*self.lock) };
     }
 }
 
-impl<'a, T> Deref for MutexGuard<'a, T> {
+impl<T> Deref for MutexGuard<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -137,13 +137,13 @@ impl<'a, T> Deref for MutexGuard<'a, T> {
     }
 }
 
-impl<'a, T> DerefMut for MutexGuard<'a, T> {
+impl<T> DerefMut for MutexGuard<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *self.data }
     }
 }
 
-unsafe impl<'a, T: Sync> Sync for MutexGuard<'a, T> {}
+unsafe impl<T: Sync> Sync for MutexGuard<'_, T> {}
 
 /// An RAII mutex guard returned by [`MutexGuard::map()`].
 ///
@@ -154,14 +154,14 @@ pub struct MappedMutex<'a, T> {
     phantom: PhantomData<&'a Mutex<T>>,
 }
 
-impl<'a, T> Drop for MappedMutex<'a, T> {
+impl<T> Drop for MappedMutex<'_, T> {
     fn drop(&mut self) {
         // SAFETY: This struct does not implement Send.
         unsafe { Mutex::<T>::unlock(&*self.lock) };
     }
 }
 
-impl<'a, T> Deref for MappedMutex<'a, T> {
+impl<T> Deref for MappedMutex<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -169,10 +169,10 @@ impl<'a, T> Deref for MappedMutex<'a, T> {
     }
 }
 
-impl<'a, T> DerefMut for MappedMutex<'a, T> {
+impl<T> DerefMut for MappedMutex<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.data
     }
 }
 
-unsafe impl<'a, T: Sync> Sync for MappedMutex<'a, T> {}
+unsafe impl<T: Sync> Sync for MappedMutex<'_, T> {}

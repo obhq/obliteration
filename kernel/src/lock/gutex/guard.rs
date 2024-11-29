@@ -22,13 +22,13 @@ impl<'a, T> GutexWrite<'a, T> {
     }
 }
 
-impl<'a, T> Drop for GutexWrite<'a, T> {
+impl<T> Drop for GutexWrite<'_, T> {
     fn drop(&mut self) {
         unsafe { *self.active = 0 };
     }
 }
 
-impl<'a, T> Deref for GutexWrite<'a, T> {
+impl<T> Deref for GutexWrite<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -36,16 +36,16 @@ impl<'a, T> Deref for GutexWrite<'a, T> {
     }
 }
 
-impl<'a, T> DerefMut for GutexWrite<'a, T> {
+impl<T> DerefMut for GutexWrite<'_, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *self.value }
     }
 }
 
-impl<'a, T: Display> Display for GutexWrite<'a, T> {
+impl<T: Display> Display for GutexWrite<'_, T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         self.deref().fmt(f)
     }
 }
 
-unsafe impl<'a, T: Sync> Sync for GutexWrite<'a, T> {}
+unsafe impl<T: Sync> Sync for GutexWrite<'_, T> {}

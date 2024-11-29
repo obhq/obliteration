@@ -14,7 +14,8 @@ pub const GDT_USER_CS32: SegmentSelector = SegmentSelector::new().with_si(5).wit
 /// This function can be called only once and must be called by main CPU entry point.
 pub unsafe fn setup_main_cpu() -> ContextArgs {
     // Setup GDT.
-    static mut GDT: [SegmentDescriptor; 10] = [
+    const GDT_LEN: usize = 10;
+    static mut GDT: [SegmentDescriptor; GDT_LEN] = [
         // Null descriptor.
         SegmentDescriptor::new(),
         // 32-bit GS for user.
@@ -44,10 +45,11 @@ pub unsafe fn setup_main_cpu() -> ContextArgs {
     ];
 
     // Setup Task State Segment (TSS).
-    static mut TSS_RSP0: [u8; 1024 * 128] = unsafe { zeroed() };
+    const TSS_RSP0_LEN: usize = 1024 * 128;
+    static mut TSS_RSP0: [u8; TSS_RSP0_LEN] = unsafe { zeroed() };
     static mut TSS: Tss = unsafe { zeroed() };
 
-    TSS.rsp0 = TSS_RSP0.as_mut_ptr().add(TSS_RSP0.len()) as _; // Top-down.
+    TSS.rsp0 = (&raw mut TSS_RSP0).byte_add(TSS_RSP0_LEN) as usize; // Top-down.
 
     // Setup TSS descriptor.
     let tss: &'static mut TssDescriptor = transmute(&mut GDT[8]);
@@ -60,14 +62,14 @@ pub unsafe fn setup_main_cpu() -> ContextArgs {
     tss.set_p(true);
 
     // Switch GDT from bootloader GDT to our own.
-    let limit = (size_of::<SegmentDescriptor>() * GDT.len() - 1)
+    let limit = (size_of::<SegmentDescriptor>() * GDT_LEN - 1)
         .try_into()
         .unwrap();
 
     set_gdtr(
         &Gdtr {
             limit,
-            addr: GDT.as_ptr(),
+            addr: (&raw const GDT).cast(),
         },
         GDT_KERNEL_CS,
         GDT_KERNEL_DS,
@@ -81,7 +83,8 @@ pub unsafe fn setup_main_cpu() -> ContextArgs {
     );
 
     // See idt0 on the PS4 for a reference.
-    static mut IDT: [GateDescriptor; 256] = unsafe { zeroed() };
+    const IDT_LEN: usize = 256;
+    static mut IDT: [GateDescriptor; IDT_LEN] = unsafe { zeroed() };
 
     let set_idt = |n: usize, f: unsafe extern "C" fn() -> !, ty, dpl, ist| {
         let f = f as usize;
@@ -99,10 +102,10 @@ pub unsafe fn setup_main_cpu() -> ContextArgs {
     set_idt(3, Xbpt, 0b1110, Dpl::Ring3, 0);
 
     // Set IDT.
-    let limit = (size_of::<GateDescriptor>() * IDT.len() - 1)
+    let limit = (size_of::<GateDescriptor>() * IDT_LEN - 1)
         .try_into()
         .unwrap();
-    let addr = IDT.as_ptr();
+    let addr = (&raw const IDT).cast();
     let idtr = Idtr { limit, addr };
 
     asm!(
