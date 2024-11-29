@@ -1,15 +1,15 @@
 #![windows_subsystem = "windows"]
 
 use self::graphics::{Graphics, PhysicalDevice, Screen};
-use self::profile::Profile;
+use self::profile::{Profile, ProfileModel};
 use self::setup::{run_setup, SetupError};
-use self::ui::ErrorWindow;
+use self::ui::{ErrorWindow, MainWindow};
 use clap::{Parser, ValueEnum};
 use debug::DebugServer;
 use serde::{Deserialize, Serialize};
-use slint::{ComponentHandle, Global, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, Global, ModelExt, ModelRc, SharedString, VecModel};
 use std::borrow::Cow;
-use std::cell::RefCell;
+use std::cell::Cell;
 use std::error::Error;
 use std::io::Write;
 use std::net::SocketAddrV4;
@@ -131,6 +131,9 @@ fn run_vmm(args: &Args) -> Result<(), ApplicationError> {
         }
     };
 
+    // TODO: load profiles from filesystem
+    let profiles = vec![Profile::default()];
+
     // Get VMM arguments.
     let args = if let Some(debug_addr) = &args.debug {
         let debug_server = DebugServer::new(debug_addr)
@@ -140,18 +143,16 @@ fn run_vmm(args: &Args) -> Result<(), ApplicationError> {
             .accept()
             .map_err(ApplicationError::CreateDebugClient)?;
 
-        let profiles = load_profiles()?;
-
         todo!()
     } else {
-        match run_launcher(&graphics)? {
+        match run_launcher(&graphics, profiles)? {
             Some(v) => v,
             None => return Ok(()),
         }
     };
 
     // Setup VMM screen.
-    let mut screen = graphics
+    let screen = graphics
         .create_screen()
         .map_err(|e| ApplicationError::CreateScreen(Box::new(e)))?;
 
@@ -194,17 +195,16 @@ fn run_panic_handler() -> Result<(), ApplicationError> {
     Ok(())
 }
 
-fn load_profiles() -> Result<Vec<Profile>, ApplicationError> {
-    // TODO: load profiles from filesystem
-    let profiles = vec![Profile::default()];
-
-    Ok(profiles)
-}
-
-fn run_launcher(graphics: &impl Graphics) -> Result<Option<VmmArgs>, ApplicationError> {
+fn run_launcher(
+    graphics: &impl Graphics,
+    profiles: Vec<Profile>,
+) -> Result<Option<VmmArgs>, ApplicationError> {
     // Create window and register callback handlers.
-    let win = ui::MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
-    let start = Rc::new(RefCell::new(false));
+    let win = MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
+    let profiles = Rc::new(ProfileModel::new(profiles));
+    let start = Rc::new(Cell::new(false));
+
+    win.on_profile_names(|profiles| ModelRc::new(profiles.map(|p| p.name)));
 
     win.on_start_vmm({
         let win = win.as_weak();
@@ -212,21 +212,9 @@ fn run_launcher(graphics: &impl Graphics) -> Result<Option<VmmArgs>, Application
 
         move || {
             win.unwrap().hide().unwrap();
-            *start.borrow_mut() = true;
+            start.set(true);
         }
     });
-
-    let profiles = load_profiles()?;
-
-    setup_globals(&win);
-
-    let profiles = ModelRc::new(VecModel::from_iter(
-        profiles
-            .iter()
-            .map(|p| SharedString::from(p.name().to_str().unwrap())),
-    ));
-
-    win.set_profiles(profiles);
 
     let physical_devices = ModelRc::new(VecModel::from_iter(
         graphics
@@ -236,6 +224,7 @@ fn run_launcher(graphics: &impl Graphics) -> Result<Option<VmmArgs>, Application
     ));
 
     win.set_devices(physical_devices);
+    win.set_profiles(profiles.into());
 
     // Run the window.
     win.run().map_err(ApplicationError::RunMainWindow)?;
@@ -249,7 +238,7 @@ fn run_launcher(graphics: &impl Graphics) -> Result<Option<VmmArgs>, Application
         return Ok(None);
     }
 
-    todo!()
+    Ok(Some(VmmArgs {}))
 }
 
 fn setup_globals<'a, T>(component: &'a T)

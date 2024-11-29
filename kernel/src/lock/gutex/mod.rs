@@ -160,7 +160,7 @@ impl<'a> GroupGuard<'a> {
     }
 }
 
-impl<'a> Drop for GroupGuard<'a> {
+impl Drop for GroupGuard<'_> {
     #[inline(never)]
     fn drop(&mut self) {
         // Decrease the active lock.

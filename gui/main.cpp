@@ -168,10 +168,6 @@ int main(int argc, char *argv[])
     MainWindow win(args, &vulkan, std::move(vkDevices));
 #endif
 
-    if (!win.loadProfiles()) {
-        return 1;
-    }
-
     win.restoreGeometry();
 
     // Run main window.

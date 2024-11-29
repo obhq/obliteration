@@ -50,7 +50,7 @@ impl<T: EventType> Default for Event<T> {
 /// has been dropped.
 pub struct EventTrigger<'a, S>(MutexGuard<'a, S>);
 
-impl<'a, S> EventTrigger<'a, S> {
+impl<S> EventTrigger<'_, S> {
     pub fn select<E, T>(&mut self, event: E) -> impl Iterator<Item = &T::Wrapper>
     where
         E: FnOnce(&S) -> &Event<T>,

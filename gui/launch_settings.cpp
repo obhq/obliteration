@@ -1,7 +1,6 @@
 #include "launch_settings.hpp"
 #include "cpu_settings.hpp"
 #include "display_settings.hpp"
-#include "profile_models.hpp"
 #include "resources.hpp"
 
 #include <QComboBox>
@@ -19,10 +18,9 @@
 #include <utility>
 
 #ifdef __APPLE__
-LaunchSettings::LaunchSettings(ProfileList *profiles, QWidget *parent) :
+LaunchSettings::LaunchSettings(QWidget *parent) :
 #else
 LaunchSettings::LaunchSettings(
-    ProfileList *profiles,
     QList<VkPhysicalDevice> &&vkDevices,
     QWidget *parent) :
 #endif
@@ -38,28 +36,13 @@ LaunchSettings::LaunchSettings(
 #else
     layout->addWidget(buildSettings(std::move(vkDevices)));
 #endif
-    layout->addLayout(buildActions(profiles));
+    layout->addLayout(buildActions());
 
     setLayout(layout);
 }
 
 LaunchSettings::~LaunchSettings()
 {
-}
-
-Profile *LaunchSettings::currentProfile() const
-{
-    // Check if profile list is not empty.
-    auto index = m_profiles->currentIndex();
-
-    if (index < 0) {
-        return nullptr;
-    }
-
-    // Get profile.
-    auto profiles = reinterpret_cast<ProfileList *>(m_profiles->model());
-
-    return profiles->get(index);
 }
 
 #ifndef __APPLE__
@@ -100,15 +83,12 @@ QWidget *LaunchSettings::buildSettings(QList<VkPhysicalDevice> &&vkDevices)
     return tab;
 }
 
-QLayout *LaunchSettings::buildActions(ProfileList *profiles)
+QLayout *LaunchSettings::buildActions()
 {
     auto layout = new QHBoxLayout();
 
     // Profile list.
     m_profiles = new QComboBox();
-    m_profiles->setModel(profiles);
-
-    connect(m_profiles, &QComboBox::currentIndexChanged, this, &LaunchSettings::profileChanged);
 
     layout->addWidget(m_profiles, 1);
 
@@ -122,16 +102,6 @@ QLayout *LaunchSettings::buildActions(ProfileList *profiles)
 
     save->setIcon(loadIcon(":/resources/content-save.svg", save->iconSize()));
 
-    connect(save, &QAbstractButton::clicked, [this]() {
-        auto index = m_profiles->currentIndex();
-
-        if (index >= 0) {
-            auto profiles = reinterpret_cast<ProfileList *>(m_profiles->model());
-
-            emit saveClicked(profiles->get(index));
-        }
-    });
-
     actions->addButton(save, QDialogButtonBox::ApplyRole);
 
     // Start button.
@@ -144,14 +114,4 @@ QLayout *LaunchSettings::buildActions(ProfileList *profiles)
     actions->addButton(start, QDialogButtonBox::AcceptRole);
 
     return layout;
-}
-
-void LaunchSettings::profileChanged(int index)
-{
-    assert(index >= 0);
-
-    auto profiles = reinterpret_cast<ProfileList *>(m_profiles->model());
-    auto p = profiles->get(index);
-
-    m_display->setProfile(p);
 }

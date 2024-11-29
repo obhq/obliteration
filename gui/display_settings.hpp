@@ -1,7 +1,5 @@
 #pragma once
 
-#include "core.h"
-
 #ifndef __APPLE__
 #include <QVulkanInstance>
 #endif
@@ -21,8 +19,6 @@ public:
 #endif
     ~DisplaySettings() override;
 
-    void setProfile(Profile *p);
-
 #ifndef __APPLE__
     DisplayDevice *currentDevice() const;
 #endif
@@ -30,13 +26,11 @@ private:
 #ifndef __APPLE__
     QWidget *buildDevice(QList<VkPhysicalDevice> &&vkDevices);
 #endif
-    QWidget *buildResolution();
 
 #ifndef __APPLE__
     QComboBox *m_devices;
 #endif
     QComboBox *m_resolutions;
-    Profile *m_profile;
 };
 
 #ifndef __APPLE__

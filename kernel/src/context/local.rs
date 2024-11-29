@@ -47,7 +47,7 @@ pub struct CpuLock<'a, T> {
     pin: PinnedContext, // Must be dropped last.
 }
 
-impl<'a, T> Deref for CpuLock<'a, T> {
+impl<T> Deref for CpuLock<'_, T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {

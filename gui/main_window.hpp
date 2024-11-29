@@ -1,7 +1,5 @@
 #pragma once
 
-#include "core.hpp"
-
 #include <QList>
 #include <QMainWindow>
 #ifndef __APPLE__
@@ -28,7 +26,6 @@ public:
 #endif
     ~MainWindow() override;
 
-    bool loadProfiles();
     void restoreGeometry();
 protected:
     void closeEvent(QCloseEvent *event) override;
@@ -36,7 +33,6 @@ private slots:
     void openSystemFolder();
     void reportIssue();
     void aboutObliteration();
-    void saveProfile(Profile *p);
 private:
     void vmmError(const QString &msg);
     void waitKernelExit(bool success);
@@ -45,7 +41,6 @@ private:
 
     const QCommandLineParser &m_args;
     QStackedWidget *m_main;
-    ProfileList *m_profiles;
     LaunchSettings *m_launch;
     Screen *m_screen;
     QSocketNotifier *m_debugNoti;

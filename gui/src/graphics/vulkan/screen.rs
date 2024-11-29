@@ -73,7 +73,7 @@ impl Screen for VulkanScreen {
         &self.buffer
     }
 
-    fn run(&mut self) -> Result<(), Self::RunErr> {
+    fn run(self) -> Result<(), Self::RunErr> {
         todo!()
     }
 }
