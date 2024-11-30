@@ -35,7 +35,6 @@ target_compile_features(obliteration PRIVATE cxx_std_17)
 
 target_link_libraries(obliteration PRIVATE Qt6::Svg Qt6::Widgets)
 target_link_libraries(obliteration PRIVATE Threads::Threads)
-target_link_libraries(obliteration PRIVATE gui)
 
 if(WIN32 OR (UNIX AND NOT APPLE))
     target_link_libraries(obliteration PRIVATE Vulkan::Vulkan)

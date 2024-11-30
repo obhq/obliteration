@@ -3,18 +3,9 @@ name = "gui"
 version = "0.1.0"
 edition = "2021"
 
-[lib]
-crate-type = ["staticlib"]
-required-features = ["qt"]
-
 [[bin]]
 name = "obliteration"
 path = "src/main.rs"
-required-features = ["slint"]
-
-[features]
-slint = []
-qt = []
 
 [dependencies]
 bitfield-struct = "0.9.2"
@@ -80,5 +71,4 @@ metal = "0.29.0"
 objc = "0.2.7"
 
 [build-dependencies]
-cbindgen = "0.27.0"
 slint-build = "1.8.0"

@@ -131,7 +131,7 @@ def main():
         sys.exit(1)
 
     # Build GUI.
-    gui = cargo('gui', release=args.release, args=['--bin', 'obliteration', '-F', 'slint'])
+    gui = cargo('gui', release=args.release, args=['--bin', 'obliteration'])
 
     # Create output directory.
     dest = args.root
