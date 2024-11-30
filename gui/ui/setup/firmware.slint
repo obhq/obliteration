@@ -1,4 +1,4 @@
-import { VerticalBox, HorizontalBox, LineEdit, Button } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox, LineEdit, Button, Palette, ProgressIndicator } from "std-widgets.slint";
 import { Header } from "header.slint";
 
 export component Firmware {
@@ -31,5 +31,30 @@ export component Firmware {
         }
 
         Rectangle { }
+    }
+}
+
+export component InstallFirmware inherits PopupWindow {
+    close-on-click: false;
+
+    Rectangle {
+        background: Palette.alternate-background;
+        border-color: Palette.border;
+        border-width: 1px;
+
+        VerticalBox {
+            alignment: center;
+
+            Text {
+                text: "Installing firmware...";
+                horizontal-alignment: center;
+            }
+
+            ProgressIndicator { }
+
+            Text {
+                horizontal-alignment: center;
+            }
+        }
     }
 }

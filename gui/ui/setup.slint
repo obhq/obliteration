@@ -1,7 +1,8 @@
-import { HorizontalBox, Button, Palette, StandardButton } from "std-widgets.slint";
 import { Intro } from "setup/intro.slint";
-import { Firmware } from "setup/firmware.slint";
+import { Firmware, InstallFirmware } from "setup/firmware.slint";
 import { Conclusion } from "setup/conclusion.slint";
+import { NavBar } from "setup/nav.slint";
+import { Palette } from "std-widgets.slint";
 
 // https://github.com/slint-ui/slint/issues/6880
 enum WizardPage {
@@ -13,20 +14,20 @@ enum WizardPage {
 export component SetupWizard inherits Window {
     title: "Setup Obliteration";
     icon: @image-url("icon.png");
-    min-width: 500px;
-    min-height: 400px;
-    preferred-width: 500px; // Force word-wrap instead of expand the window.
+    width: 500px; // PopupWindow does not resize with the window somehow.
+    height: 400px; // Same here.
 
     in-out property <string> firmware-dump;
 
-    pure callback cancel();
+    pure callback cancel <=> nav.cancel;
     pure callback browse-firmware();
+    pure callback finish();
 
     private property <WizardPage> page: WizardPage.Intro;
 
     states [
         finished when page == WizardPage.Conclusion: {
-            next.text: "Finish";
+            nav.next-text: "Finish";
         }
     ]
 
@@ -48,40 +49,31 @@ export component SetupWizard inherits Window {
             vertical-stretch: 1;
         }
 
-        Rectangle {
-            background: Palette.alternate-background;
-
-            HorizontalBox {
-                alignment: end;
-
-                Button {
-                    text: "＜ Back";
-                    enabled: root.page != WizardPage.Intro && root.page != WizardPage.Conclusion;
-                    clicked => {
-                        if root.page == WizardPage.Firmware {
-                            root.page = WizardPage.Intro;
-                        }
-                    }
+        nav := NavBar {
+            back-text: "＜ Back";
+            back-enabled: root.page != WizardPage.Intro && root.page != WizardPage.Conclusion;
+            next-text: "Next ＞";
+            back-clicked => {
+                if root.page == WizardPage.Firmware {
+                    root.page = WizardPage.Intro;
                 }
-
-                next := Button {
-                    text: "Next ＞";
-                    clicked => {
-                        if root.page == WizardPage.Intro {
-                            root.page = WizardPage.Firmware;
-                        } else if root.page == WizardPage.Firmware {
-                            root.page = WizardPage.Conclusion;
-                        }
-                    }
-                }
-
-                StandardButton {
-                    kind: StandardButtonKind.cancel;
-                    clicked => {
-                        cancel();
-                    }
+            }
+            next-clicked => {
+                if root.page == WizardPage.Intro {
+                    root.page = WizardPage.Firmware;
+                } else if root.page == WizardPage.Firmware {
+                    install-firmware.show();
+                } else if root.page == WizardPage.Conclusion {
+                    finish();
                 }
             }
         }
+    }
+
+    install-firmware := InstallFirmware {
+        x: 10px;
+        y: 150px;
+        width: parent.width - 20px;
+        height: parent.height - 300px;
     }
 }

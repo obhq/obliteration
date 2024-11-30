@@ -1,6 +1,6 @@
 use crate::dialogs::{open_file, FileType};
 use crate::ui::SetupWizard;
-use slint::{CloseRequestResponse, ComponentHandle, PlatformError};
+use slint::{ComponentHandle, PlatformError};
 use std::cell::Cell;
 use std::rc::Rc;
 use thiserror::Error;
@@ -8,28 +8,12 @@ use thiserror::Error;
 pub fn run_setup() -> Result<bool, SetupError> {
     // TODO: Check if already configured and skip wizard.
     let win = SetupWizard::new().map_err(SetupError::CreateWindow)?;
-    let cancel = Rc::new(Cell::new(false));
+    let finish = Rc::new(Cell::new(false));
 
     win.on_cancel({
         let win = win.as_weak();
-        let cancel = cancel.clone();
 
-        move || {
-            win.unwrap().hide().unwrap();
-            cancel.set(true);
-        }
-    });
-
-    win.window().on_close_requested({
-        let win = win.as_weak();
-        let cancel = cancel.clone();
-
-        move || {
-            win.unwrap().hide().unwrap();
-            cancel.set(true);
-
-            CloseRequestResponse::HideWindow
-        }
+        move || win.unwrap().hide().unwrap()
     });
 
     win.on_browse_firmware({
@@ -40,15 +24,25 @@ pub fn run_setup() -> Result<bool, SetupError> {
         }
     });
 
+    win.on_finish({
+        let win = win.as_weak();
+        let finish = finish.clone();
+
+        move || {
+            win.unwrap().hide().unwrap();
+            finish.set(true);
+        }
+    });
+
     // Run the window.
     win.run().map_err(SetupError::RunWindow)?;
 
     drop(win);
 
     // Extract GUI states.
-    let cancel = Rc::into_inner(cancel).unwrap().into_inner();
+    let finish = Rc::into_inner(finish).unwrap().into_inner();
 
-    Ok(!cancel)
+    Ok(finish)
 }
 
 async fn browse_firmware(win: SetupWizard) {
