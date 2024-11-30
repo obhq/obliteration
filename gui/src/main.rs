@@ -76,7 +76,7 @@ fn main() -> ExitCode {
 fn run_vmm(args: &Args) -> Result<(), ApplicationError> {
     // Resolve our executable path.
     let exe = std::env::current_exe()
-        .and_then(|v| std::fs::canonicalize(v))
+        .and_then(std::fs::canonicalize)
         .map_err(ApplicationError::GetCurrentExePath)?;
 
     // Spawn panic handler.
