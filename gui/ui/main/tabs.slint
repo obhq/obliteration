@@ -1,6 +1,6 @@
 import { Button, HorizontalBox, VerticalBox } from "std-widgets.slint";
-import { DisplayTab } from "tabs/display.slint";
-import { CpuTab } from "tabs/cpu.slint";
+import { DisplayTab } from "display.slint";
+import { CpuTab } from "cpu.slint";
 import { Menu } from "menu.slint";
 
 enum Tab {
@@ -10,9 +10,9 @@ enum Tab {
 }
 
 export component Tabs {
-    property <Tab> tab: Tab.Display;
-
     in property <[string]> devices;
+
+    private property <Tab> tab: Tab.Display;
 
     VerticalBox {
         padding: 0;
@@ -40,9 +40,10 @@ export component Tabs {
 
             Button {
                 text: "CPU";
-                icon: @image-url("../../resources/cpu-64-bit.svg");
-                horizontal-stretch: 1;
+                icon: @image-url("cpu-64-bit.svg");
+                colorize-icon: true;
                 primary: root.tab == Tab.Cpu;
+                horizontal-stretch: 1;
                 clicked => {
                     root.tab = Tab.Cpu
                 }
