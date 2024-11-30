@@ -37,11 +37,11 @@ impl Profile {
     pub fn save(&self, path: impl AsRef<Path>) -> Result<(), SaveError> {
         let path = path.as_ref();
 
-        std::fs::create_dir_all(&path).map_err(SaveError::CreateDir)?;
+        std::fs::create_dir_all(path).map_err(SaveError::CreateDir)?;
 
         let path = path.join("profile.bin");
 
-        let file = File::create(&path).map_err(SaveError::CreateFile)?;
+        let file = File::create(path).map_err(SaveError::CreateFile)?;
 
         ciborium::into_writer(self, file).map_err(SaveError::WriteFile)?;
 

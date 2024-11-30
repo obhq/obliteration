@@ -20,7 +20,7 @@ impl<'a, E> Context<'a, E> {
     }
 }
 
-impl<'a, C: Cpu, E: VmmHandler> DeviceContext<C> for Context<'a, E> {
+impl<C: Cpu, E: VmmHandler> DeviceContext<C> for Context<'_, E> {
     fn mmio(&mut self, exit: &mut <C::Exit<'_> as CpuExit>::Io) -> Result<bool, Box<dyn Error>> {
         // Check field.
         let off = exit.addr() - self.dev.addr;
@@ -33,9 +33,9 @@ impl<'a, C: Cpu, E: VmmHandler> DeviceContext<C> for Context<'a, E> {
 
             self.handler.exiting(exit == KernelExit::Success);
 
-            return Ok(false);
+            Ok(false)
         } else {
-            return Err(Box::new(ExecError::UnknownField(off)));
+            Err(Box::new(ExecError::UnknownField(off)))
         }
     }
 }

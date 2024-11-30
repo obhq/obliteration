@@ -3,9 +3,6 @@ use std::error::Error;
 use std::ffi::{CStr, CString};
 use std::fmt::{Display, Write};
 
-#[cfg(feature = "qt")]
-mod ffi;
-
 /// Error object managed by Rust side.
 pub struct RustError(Box<CStr>);
 

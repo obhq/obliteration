@@ -31,7 +31,7 @@ impl<'a> ProgramHeaders<'a> {
     }
 }
 
-impl<'a> Iterator for ProgramHeaders<'a> {
+impl Iterator for ProgramHeaders<'_> {
     type Item = Result<ProgramHeader, ProgramHeaderError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -69,7 +69,7 @@ impl<'a> Iterator for ProgramHeaders<'a> {
     }
 }
 
-impl<'a> FusedIterator for ProgramHeaders<'a> {}
+impl FusedIterator for ProgramHeaders<'_> {}
 
 /// Parsed ELF program header.
 pub struct ProgramHeader {

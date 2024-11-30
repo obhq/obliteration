@@ -73,7 +73,7 @@ impl<E: VmmHandler> Vmm<E> {
 
         // Open kernel image.
         let mut kernel_img =
-            Kernel::open(&path).map_err(|e| VmmError::OpenKernel(e, path.to_path_buf()))?;
+            Kernel::open(path).map_err(|e| VmmError::OpenKernel(e, path.to_path_buf()))?;
 
         // Get program header enumerator.
         let hdrs = kernel_img

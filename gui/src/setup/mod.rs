@@ -1,6 +1,6 @@
 use crate::dialogs::{open_file, FileType};
 use crate::ui::SetupWizard;
-use slint::{ComponentHandle, PlatformError};
+use slint::{CloseRequestResponse, ComponentHandle, PlatformError};
 use std::cell::Cell;
 use std::rc::Rc;
 use thiserror::Error;
@@ -17,6 +17,18 @@ pub fn run_setup() -> Result<bool, SetupError> {
         move || {
             win.unwrap().hide().unwrap();
             cancel.set(true);
+        }
+    });
+
+    win.window().on_close_requested({
+        let win = win.as_weak();
+        let cancel = cancel.clone();
+
+        move || {
+            win.unwrap().hide().unwrap();
+            cancel.set(true);
+
+            CloseRequestResponse::HideWindow
         }
     });
 
