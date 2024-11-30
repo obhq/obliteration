@@ -1,5 +1,4 @@
 #include "launch_settings.hpp"
-#include "cpu_settings.hpp"
 #include "display_settings.hpp"
 #include "resources.hpp"
 
@@ -26,7 +25,6 @@ LaunchSettings::LaunchSettings(
 #endif
     QWidget(parent),
     m_display(nullptr),
-    m_cpu(nullptr),
     m_profiles(nullptr)
 {
     auto layout = new QVBoxLayout();
@@ -70,15 +68,6 @@ QWidget *LaunchSettings::buildSettings(QList<VkPhysicalDevice> &&vkDevices)
 #endif
 
     tab->addTab(m_display, loadIcon(":/resources/monitor.svg", iconSize), "Display");
-
-    // CPU settings.
-    m_cpu = new CpuSettings();
-
-    connect(m_cpu, &CpuSettings::debugClicked, [this](const QString &addr) {
-        emit startClicked(addr);
-    });
-
-    tab->addTab(m_cpu, loadIcon(":/resources/cpu-64-bit.svg", iconSize), "CPU");
 
     return tab;
 }

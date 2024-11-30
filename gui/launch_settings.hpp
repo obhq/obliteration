@@ -6,13 +6,10 @@
 #endif
 #include <QWidget>
 
-class CpuSettings;
 #ifndef __APPLE__
 class DisplayDevice;
 #endif
 class DisplaySettings;
-class GameListModel;
-class ProfileList;
 class QComboBox;
 class QLayout;
 class QTableView;
@@ -43,6 +40,5 @@ private:
     QLayout *buildActions();
 
     DisplaySettings *m_display;
-    CpuSettings *m_cpu;
     QComboBox *m_profiles;
 };

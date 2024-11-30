@@ -1,0 +1,33 @@
+import { HorizontalBox, Button, StandardButton, Palette } from "std-widgets.slint";
+
+export component NavBar inherits Rectangle {
+    in property <string> back-text;
+    in property <bool> back-enabled;
+    in property <string> next-text;
+
+    callback back-clicked <=> back.clicked;
+    callback next-clicked <=> next.clicked;
+    pure callback cancel();
+
+    background: Palette.alternate-background;
+
+    HorizontalBox {
+        alignment: end;
+
+        back := Button {
+            text: root.back-text;
+            enabled: root.back-enabled;
+        }
+
+        next := Button {
+            text: root.next-text;
+        }
+
+        StandardButton {
+            kind: StandardButtonKind.cancel;
+            clicked => {
+                cancel();
+            }
+        }
+    }
+}
