@@ -8,6 +8,7 @@ use self::ram::RamBuilder;
 use crate::debug::DebugClient;
 use crate::hv::{Hypervisor, Ram};
 use crate::profile::Profile;
+use crate::VmmArgs;
 use cpu::GdbError;
 use gdbstub::common::Signal;
 use gdbstub::stub::state_machine::GdbStubStateMachine;
@@ -19,7 +20,7 @@ use std::error::Error;
 use std::ffi::CStr;
 use std::io::Read;
 use std::num::NonZero;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
@@ -63,13 +64,9 @@ pub struct Vmm<E: VmmHandler> {
 }
 
 impl<E: VmmHandler> Vmm<E> {
-    pub fn new(
-        kernel_path: impl AsRef<Path>,
-        handler: E,
-        profile: &Profile,
-        debugger: Option<DebugClient>,
-    ) -> Result<Self, VmmError> {
-        let path = kernel_path.as_ref();
+    pub fn new(args: VmmArgs, handler: E, profile: &Profile) -> Result<Self, VmmError> {
+        let path = &args.kernel_path;
+        let debugger = args.debugger;
 
         // Open kernel image.
         let mut kernel_img =

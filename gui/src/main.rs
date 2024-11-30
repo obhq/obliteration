@@ -1,5 +1,6 @@
 #![windows_subsystem = "windows"]
 
+use self::debug::DebugClient;
 use self::graphics::{Graphics, PhysicalDevice, Screen};
 use self::profile::{Profile, ProfileModel};
 use self::setup::{run_setup, SetupError};
@@ -14,7 +15,7 @@ use std::error::Error;
 use std::io::Write;
 use std::net::SocketAddrV4;
 use std::panic::PanicHookInfo;
-use std::path::Path;
+use std::path::PathBuf;
 use std::process::{Child, Command, ExitCode, Stdio};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex, Weak};
@@ -37,7 +38,7 @@ fn main() -> ExitCode {
     use std::fmt::Write;
 
     // Check program mode.
-    let args = Args::parse();
+    let args = CliArgs::parse();
     let r = match &args.mode {
         Some(ProgramMode::PanicHandler) => run_panic_handler(),
         None => run_vmm(&args),
@@ -73,7 +74,7 @@ fn main() -> ExitCode {
     ExitCode::FAILURE
 }
 
-fn run_vmm(args: &Args) -> Result<(), ApplicationError> {
+fn run_vmm(cli_args: &CliArgs) -> Result<(), ApplicationError> {
     // Resolve our executable path.
     let exe = std::env::current_exe()
         .and_then(std::fs::canonicalize)
@@ -107,37 +108,34 @@ fn run_vmm(args: &Args) -> Result<(), ApplicationError> {
     }
 
     // Get kernel path.
-    let kernel = match &args.kernel {
-        Some(v) => v.to_path_buf(),
-        None => {
-            // Get kernel directory.
-            let mut path = exe.parent().unwrap().to_owned();
+    let kernel_path = cli_args.kernel.as_ref().cloned().unwrap_or_else(|| {
+        // Get kernel directory.
+        let mut path = exe.parent().unwrap().to_owned();
 
-            #[cfg(target_os = "windows")]
+        #[cfg(target_os = "windows")]
+        path.push("share");
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            path.pop();
+
+            #[cfg(target_os = "macos")]
+            path.push("Resources");
+
+            #[cfg(not(target_os = "macos"))]
             path.push("share");
-
-            #[cfg(not(target_os = "windows"))]
-            {
-                path.pop();
-
-                #[cfg(target_os = "macos")]
-                path.push("Resources");
-
-                #[cfg(not(target_os = "macos"))]
-                path.push("share");
-            }
-
-            // Append kernel.
-            path.push("obkrnl");
-            path
         }
-    };
+
+        // Append kernel.
+        path.push("obkrnl");
+        path
+    });
 
     // TODO: load profiles from filesystem
     let profiles = vec![Profile::default()];
 
     // Get VMM arguments.
-    let args = if let Some(debug_addr) = args.debug {
+    let vmm_args = if let Some(debug_addr) = cli_args.debug {
         let debug_server = DebugServer::new(debug_addr)
             .map_err(|e| ApplicationError::StartDebugServer(e, debug_addr))?;
 
@@ -147,8 +145,13 @@ fn run_vmm(args: &Args) -> Result<(), ApplicationError> {
 
         todo!()
     } else {
-        match run_launcher(&graphics, profiles)? {
-            Some(v) => v,
+        let vmm_args = run_launcher(&graphics, profiles)?.then_some(VmmArgs {
+            kernel_path,
+            debugger: None,
+        });
+
+        match vmm_args {
+            Some(vmm_args) => vmm_args,
             None => return Ok(()),
         }
     };
@@ -200,7 +203,7 @@ fn run_panic_handler() -> Result<(), ApplicationError> {
 fn run_launcher(
     graphics: &impl Graphics,
     profiles: Vec<Profile>,
-) -> Result<Option<VmmArgs>, ApplicationError> {
+) -> Result<bool, ApplicationError> {
     // Create window and register callback handlers.
     let win = MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
     let profiles = Rc::new(ProfileModel::new(profiles));
@@ -234,10 +237,7 @@ fn run_launcher(
     drop(win);
 
     // Extract GUI states.
-    let start = Rc::into_inner(start)
-        .unwrap()
-        .into_inner()
-        .then_some(VmmArgs {});
+    let start = Rc::into_inner(start).unwrap().into_inner();
 
     Ok(start)
 }
@@ -305,7 +305,7 @@ fn panic_hook(i: &PanicHookInfo, ph: &Weak<Mutex<Option<PanicHandler>>>) {
 /// Program arguments parsed from command line.
 #[derive(Parser)]
 #[command(about = None)]
-struct Args {
+struct CliArgs {
     #[arg(long, value_enum, hide = true)]
     mode: Option<ProgramMode>,
 
@@ -315,11 +315,14 @@ struct Args {
 
     /// Use the kernel image at the specified path instead of the default one.
     #[arg(long)]
-    kernel: Option<Box<Path>>,
+    kernel: Option<PathBuf>,
 }
 
 /// Encapsulates arguments for [`Vmm::new()`].
-struct VmmArgs {}
+struct VmmArgs {
+    kernel_path: PathBuf,
+    debugger: Option<DebugClient>,
+}
 
 /// Mode of our program.
 #[derive(Clone, ValueEnum)]
