@@ -102,7 +102,9 @@ fn run_vmm(args: &Args) -> Result<(), ApplicationError> {
     };
 
     // Run setup wizard. This will do nothing if the user already has required settings.
-    run_setup().map_err(ApplicationError::Setup)?;
+    if !run_setup().map_err(ApplicationError::Setup)? {
+        return Ok(());
+    }
 
     // Get kernel path.
     let kernel = match &args.kernel {

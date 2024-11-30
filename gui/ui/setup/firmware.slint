@@ -2,11 +2,11 @@ import { VerticalBox, HorizontalBox, LineEdit, Button } from "std-widgets.slint"
 import { Header } from "header.slint";
 
 export component Firmware {
+    in-out property <string> firmware-dump <=> input.text;
+
     pure callback browse();
 
     VerticalBox {
-        padding: 0;
-
         Header {
             title: "Install Firmware";
         }
@@ -18,7 +18,9 @@ export component Firmware {
         HorizontalBox {
             padding: 0;
 
-            LineEdit { }
+            input := LineEdit {
+                placeholder-text: "Path to a firmware dump";
+            }
 
             Button {
                 text: "...";

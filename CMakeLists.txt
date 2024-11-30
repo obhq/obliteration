@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
 include(FetchContent)
-include(cmake/cargo.cmake)
 
 # Fetch external CMake scripts.
 FetchContent_Declare(
@@ -39,17 +38,6 @@ if(${CMAKE_SYSTEM_PROCESSOR} STREQUAL "arm64" OR ${CMAKE_SYSTEM_PROCESSOR} STREQ
 else()
     set(kernel_env "")
 endif()
-
-add_cargo(MANIFEST Cargo.toml)
-add_crate(gui LIBRARY ARGS --features "qt")
-add_crate(obkrnl
-    TOOLCHAIN ${kernel_toolchain}
-    VENDOR "unknown"
-    OPERATING_SYSTEM "none"
-    ENVIRONMENT "${kernel_env}"
-    ARGS ${kernel_opts})
-
-add_dependencies(gui obkrnl)
 
 # Add GUI.
 add_subdirectory(gui)

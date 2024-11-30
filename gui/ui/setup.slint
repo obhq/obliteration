@@ -1,4 +1,4 @@
-import { VerticalBox, HorizontalBox, Button } from "std-widgets.slint";
+import { HorizontalBox, Button, Palette, StandardButton } from "std-widgets.slint";
 import { Intro } from "setup/intro.slint";
 import { Firmware } from "setup/firmware.slint";
 import { Conclusion } from "setup/conclusion.slint";
@@ -17,10 +17,12 @@ export component SetupWizard inherits Window {
     min-height: 400px;
     preferred-width: 500px; // Force word-wrap instead of expand the window.
 
+    in-out property <string> firmware-dump;
+
     pure callback cancel();
     pure callback browse-firmware();
 
-    property <WizardPage> page: WizardPage.Intro;
+    private property <WizardPage> page: WizardPage.Intro;
 
     states [
         finished when page == WizardPage.Conclusion: {
@@ -28,12 +30,13 @@ export component SetupWizard inherits Window {
         }
     ]
 
-    VerticalBox {
+    VerticalLayout {
         if page == WizardPage.Intro: Intro {
             vertical-stretch: 1;
         }
 
         if page == WizardPage.Firmware: Firmware {
+            firmware-dump: root.firmware-dump;
             vertical-stretch: 1;
 
             browse => {
@@ -45,35 +48,38 @@ export component SetupWizard inherits Window {
             vertical-stretch: 1;
         }
 
-        HorizontalBox {
-            padding: 0;
-            alignment: end;
+        Rectangle {
+            background: Palette.alternate-background;
 
-            Button {
-                text: "＜ Back";
-                enabled: root.page != WizardPage.Intro && root.page != WizardPage.Conclusion;
-                clicked => {
-                    if root.page == WizardPage.Firmware {
-                        root.page = WizardPage.Intro;
+            HorizontalBox {
+                alignment: end;
+
+                Button {
+                    text: "＜ Back";
+                    enabled: root.page != WizardPage.Intro && root.page != WizardPage.Conclusion;
+                    clicked => {
+                        if root.page == WizardPage.Firmware {
+                            root.page = WizardPage.Intro;
+                        }
                     }
                 }
-            }
 
-            next := Button {
-                text: "Next ＞";
-                clicked => {
-                    if root.page == WizardPage.Intro {
-                        root.page = WizardPage.Firmware;
-                    } else if root.page == WizardPage.Firmware {
-                        root.page = WizardPage.Conclusion;
+                next := Button {
+                    text: "Next ＞";
+                    clicked => {
+                        if root.page == WizardPage.Intro {
+                            root.page = WizardPage.Firmware;
+                        } else if root.page == WizardPage.Firmware {
+                            root.page = WizardPage.Conclusion;
+                        }
                     }
                 }
-            }
 
-            Button {
-                text: "Cancel";
-                clicked => {
-                    cancel();
+                StandardButton {
+                    kind: StandardButtonKind.cancel;
+                    clicked => {
+                        cancel();
+                    }
                 }
             }
         }

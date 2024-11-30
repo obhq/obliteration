@@ -32,9 +32,7 @@
           "-p",
           "gui",
           "--bin",
-          "obliteration",
-          "--features",
-          "slint"
+          "obliteration"
         ],
         "filter": {
           "kind": "bin"
