@@ -145,7 +145,7 @@ impl<'a, M: RamMapper> RamBuilder<'a, M> {
         };
 
         // Check if size valid.
-        if (len % 24) != 0 || !relocs.checked_add(len).is_some_and(|end| end <= kern.len()) {
+        if (len % 24) != 0 || relocs.checked_add(len).is_none_or(|end| end > kern.len()) {
             return Err(RamBuilderError::InvalidDynamicLinking);
         }
 
@@ -177,7 +177,7 @@ impl<'a, M: RamMapper> RamBuilder<'a, M> {
 }
 
 #[cfg(target_arch = "x86_64")]
-impl<'a, M: RamMapper> RamBuilder<'a, M> {
+impl<M: RamMapper> RamBuilder<'_, M> {
     pub fn build(
         mut self,
         _: &CpuFeats,
@@ -589,7 +589,7 @@ struct ArgsWriter<'a> {
     next: usize,
 }
 
-impl<'a> ArgsWriter<'a> {
+impl ArgsWriter<'_> {
     fn write<T>(&mut self, v: T) -> usize {
         let off = self.next.next_multiple_of(align_of::<T>());
         let len = size_of::<T>();

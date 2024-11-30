@@ -137,9 +137,9 @@ fn run_vmm(args: &Args) -> Result<(), ApplicationError> {
     let profiles = vec![Profile::default()];
 
     // Get VMM arguments.
-    let args = if let Some(debug_addr) = &args.debug {
+    let args = if let Some(debug_addr) = args.debug {
         let debug_server = DebugServer::new(debug_addr)
-            .map_err(|e| ApplicationError::StartDebugServer(e, *debug_addr))?;
+            .map_err(|e| ApplicationError::StartDebugServer(e, debug_addr))?;
 
         let debug_client = debug_server
             .accept()
@@ -234,13 +234,12 @@ fn run_launcher(
     drop(win);
 
     // Extract GUI states.
-    let start = Rc::into_inner(start).unwrap().into_inner();
+    let start = Rc::into_inner(start)
+        .unwrap()
+        .into_inner()
+        .then_some(VmmArgs {});
 
-    if !start {
-        return Ok(None);
-    }
-
-    Ok(Some(VmmArgs {}))
+    Ok(start)
 }
 
 fn setup_globals<'a, T>(component: &'a T)

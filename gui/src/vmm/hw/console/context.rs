@@ -30,7 +30,7 @@ impl<'a, H, E> Context<'a, H, E> {
     }
 }
 
-impl<'a, H: Hypervisor, C: Cpu, E: VmmHandler> DeviceContext<C> for Context<'a, H, E> {
+impl<H: Hypervisor, C: Cpu, E: VmmHandler> DeviceContext<C> for Context<'_, H, E> {
     fn mmio(&mut self, exit: &mut <C::Exit<'_> as CpuExit>::Io) -> Result<bool, Box<dyn Error>> {
         // Check field.
         let off = exit.addr() - self.dev.addr;

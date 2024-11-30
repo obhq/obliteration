@@ -231,8 +231,8 @@ impl<H: Hypervisor, E: VmmHandler> CpuManager<H, E> {
         }
     }
 
-    fn handle_io<'a, C: Cpu>(
-        devices: &mut BTreeMap<usize, Device<'a, C>>,
+    fn handle_io<C: Cpu>(
+        devices: &mut BTreeMap<usize, Device<'_, C>>,
         mut io: <C::Exit<'_> as CpuExit>::Io,
     ) -> Result<bool, CpuError> {
         // Get target device.

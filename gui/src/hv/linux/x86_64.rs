@@ -59,7 +59,7 @@ impl<'a> KvmStates<'a> {
     }
 }
 
-impl<'a> CpuStates for KvmStates<'a> {
+impl CpuStates for KvmStates<'_> {
     type Err = StatesError;
 
     fn get_rax(&mut self) -> Result<usize, Self::Err> {
@@ -361,11 +361,11 @@ impl<'a> CpuStates for KvmStates<'a> {
     }
 
     fn get_mxcsr(&mut self) -> Result<u32, Self::Err> {
-        Ok(self.fregs.mxcsr.into())
+        Ok(self.fregs.mxcsr)
     }
 }
 
-impl<'a> CpuCommit for KvmStates<'a> {
+impl CpuCommit for KvmStates<'_> {
     fn commit(self) -> Result<(), Self::Err> {
         use std::io::Error;
 

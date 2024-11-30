@@ -31,7 +31,7 @@ impl<'a> KvmCpu<'a> {
     }
 }
 
-impl<'a> Drop for KvmCpu<'a> {
+impl Drop for KvmCpu<'_> {
     fn drop(&mut self) {
         use std::io::Error;
 
@@ -81,12 +81,12 @@ impl<'a> Cpu for KvmCpu<'a> {
 
         match unsafe { ioctl(self.fd.as_raw_fd(), KVM_TRANSLATE, &mut data) } {
             0 => Ok(data.physical_address),
-            _ => return Err(std::io::Error::last_os_error()),
+            _ => Err(std::io::Error::last_os_error()),
         }
     }
 }
 
-impl<'a> CpuRun for KvmCpu<'a> {
+impl CpuRun for KvmCpu<'_> {
     type RunErr = std::io::Error;
 
     fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr> {
@@ -139,7 +139,7 @@ impl<'a, 'b> CpuExit for KvmExit<'a, 'b> {
 /// Implementation of [`CpuIo`] for KVM.
 pub struct KvmIo<'a, 'b>(&'a mut KvmCpu<'b>);
 
-impl<'a, 'b> CpuIo for KvmIo<'a, 'b> {
+impl<'b> CpuIo for KvmIo<'_, 'b> {
     type Cpu = KvmCpu<'b>;
 
     fn addr(&self) -> usize {
@@ -165,7 +165,7 @@ impl<'a, 'b> CpuIo for KvmIo<'a, 'b> {
 /// Implementation of [`CpuDebug`] for KVM.
 pub struct KvmDebug<'a, 'b>(&'a mut KvmCpu<'b>);
 
-impl<'a, 'b> CpuDebug for KvmDebug<'a, 'b> {
+impl<'b> CpuDebug for KvmDebug<'_, 'b> {
     type Cpu = KvmCpu<'b>;
 
     fn reason(&mut self) -> MultiThreadStopReason<u64> {

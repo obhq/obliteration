@@ -44,7 +44,7 @@ fn read_usize(exit: &mut impl CpuIo) -> Result<usize, MmioError> {
 
     // Parse data.
     data.try_into()
-        .map(|v| usize::from_ne_bytes(v))
+        .map(usize::from_ne_bytes)
         .map_err(|_| MmioError::InvalidData)
 }
 
@@ -61,7 +61,7 @@ fn read_ptr<'a>(
     // Get address.
     let vaddr = buf
         .try_into()
-        .map(|v| usize::from_ne_bytes(v))
+        .map(usize::from_ne_bytes)
         .map_err(|_| MmioError::InvalidData)?;
 
     let paddr = exit

@@ -285,7 +285,7 @@ pub struct LockedAddr<'a> {
     len: NonZero<usize>,
 }
 
-impl<'a> LockedAddr<'a> {
+impl LockedAddr<'_> {
     /// # Safety
     /// Although the whole memory range guarantee to be valid for the whole lifetime of this struct
     /// but the data is subject to race condition due to the other vCPU may write into this range.
