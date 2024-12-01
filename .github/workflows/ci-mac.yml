@@ -14,6 +14,10 @@ jobs:
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+    - name: Use Python 3.12 # https://github.com/slint-ui/slint/issues/6615
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
     - name: Update Rust
       run: rustup update stable
     - name: Install Rust nightly
