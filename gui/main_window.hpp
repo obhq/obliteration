@@ -7,12 +7,10 @@
 #endif
 
 class LaunchSettings;
-class ProfileList;
 class QCommandLineOption;
 class QCommandLineParser;
 class QSocketNotifier;
 class QStackedWidget;
-class Screen;
 
 class MainWindow final : public QMainWindow {
 public:
@@ -21,7 +19,6 @@ public:
 #else
     MainWindow(
         const QCommandLineParser &args,
-        QVulkanInstance *vulkan,
         QList<VkPhysicalDevice> &&vkDevices);
 #endif
     ~MainWindow() override;
@@ -42,7 +39,6 @@ private:
     const QCommandLineParser &m_args;
     QStackedWidget *m_main;
     LaunchSettings *m_launch;
-    Screen *m_screen;
     QSocketNotifier *m_debugNoti;
 };
 

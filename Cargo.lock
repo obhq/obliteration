@@ -1122,6 +1122,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
 
 [[package]]
+name = "erdp"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2a235af404df0c0ceef5b773e9d641731dccea25f02e4e2714b4841df10f6c1c"
+
+[[package]]
 name = "errno"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1567,6 +1573,7 @@ dependencies = [
  "ciborium",
  "clap",
  "core-graphics-types 0.1.3",
+ "erdp",
  "gdbstub",
  "gdbstub_arch",
  "humansize",

@@ -11,6 +11,7 @@ path = "src/main.rs"
 bitfield-struct = "0.9.2"
 ciborium = "0.2.2"
 clap = { version = "4.5.21", features = ["derive"] }
+erdp = "0.1.1"
 gdbstub = "0.7.3"
 gdbstub_arch = "0.3.1"
 humansize = "2.1.3"
