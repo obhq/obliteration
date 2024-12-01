@@ -16,5 +16,6 @@ fn main() {
     #[cfg(windows)]
     winres::WindowsResource::new()
         .set_resource_file(root.join("resources.rc").to_str().unwrap())
-        .compile();
+        .compile()
+        .unwrap();
 }
