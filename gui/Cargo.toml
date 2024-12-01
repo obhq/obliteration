@@ -72,3 +72,6 @@ objc = "0.2.7"
 
 [build-dependencies]
 slint-build = "1.8.0"
+
+[target.'cfg(windows)'.build-dependencies]
+winres = "0.1.12"
