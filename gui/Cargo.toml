@@ -32,7 +32,7 @@ features = [
     "backend-winit",
     "compat-1-2",
     "raw-window-handle-06",
-    "renderer-femtovg",
+    "renderer-skia",
     "std",
 ]
 default-features = false
