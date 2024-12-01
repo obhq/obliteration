@@ -18,6 +18,15 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.12'
+    - name: Generate cache keys
+      run: |
+        echo "target=${{ runner.os }}-${{ runner.arch }}-target" >> $GITHUB_OUTPUT
+      id: cache-keys
+    - name: Restore target directory
+      uses: actions/cache/restore@v4
+      with:
+        path: target
+        key: ${{ steps.cache-keys.outputs.target }}
     - name: Update Rust
       run: rustup update stable
     - name: Install Rust nightly
@@ -37,3 +46,9 @@ jobs:
       with:
         name: obliteration-mac-m1
         path: Obliteration.dmg
+    - name: Cache target directory
+      uses: actions/cache/save@v4
+      with:
+        path: target
+        key: ${{ steps.cache-keys.outputs.target }}-${{ github.run_id }}
+      if: startsWith(github.ref, 'refs/heads/')
