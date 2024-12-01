@@ -35,6 +35,9 @@ export component Firmware {
 }
 
 export component InstallFirmware inherits PopupWindow {
+    in property <string> status;
+    in property <float> progress;
+
     close-on-click: false;
 
     Rectangle {
@@ -50,9 +53,12 @@ export component InstallFirmware inherits PopupWindow {
                 horizontal-alignment: center;
             }
 
-            ProgressIndicator { }
+            ProgressIndicator {
+                progress: progress;
+            }
 
             Text {
+                text: status;
                 horizontal-alignment: center;
             }
         }

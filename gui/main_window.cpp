@@ -1,7 +1,6 @@
 #include "main_window.hpp"
 #include "launch_settings.hpp"
 #include "resources.hpp"
-#include "screen.hpp"
 #include "settings.hpp"
 
 #include <QAction>
@@ -41,13 +40,11 @@ MainWindow::MainWindow(const QCommandLineParser &args) :
 #else
 MainWindow::MainWindow(
     const QCommandLineParser &args,
-    QVulkanInstance *vulkan,
     QList<VkPhysicalDevice> &&vkDevices) :
 #endif
     m_args(args),
     m_main(nullptr),
     m_launch(nullptr),
-    m_screen(nullptr),
     m_debugNoti(nullptr)
 {
     setWindowTitle("Obliteration");
@@ -92,15 +89,6 @@ MainWindow::MainWindow(
 #endif
 
     m_main->addWidget(m_launch);
-
-    // Screen.
-    m_screen = new Screen();
-
-#ifndef __APPLE__
-    m_screen->setVulkanInstance(vulkan);
-#endif
-
-    m_main->addWidget(createWindowContainer(m_screen));
 }
 
 MainWindow::~MainWindow()

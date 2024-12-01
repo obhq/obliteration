@@ -38,8 +38,6 @@ int main(int argc, char *argv[])
     // Parse arguments.
     QCommandLineParser args;
 
-    args.setApplicationDescription("Virtualization stack for Obliteration");
-    args.addHelpOption();
     args.addOption(Args::debug);
     args.addOption(Args::kernel);
     args.process(app);
@@ -165,7 +163,7 @@ int main(int argc, char *argv[])
 #ifdef __APPLE__
     MainWindow win(args);
 #else
-    MainWindow win(args, &vulkan, std::move(vkDevices));
+    MainWindow win(args, std::move(vkDevices));
 #endif
 
     win.restoreGeometry();

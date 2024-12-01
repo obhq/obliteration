@@ -1,7 +1,9 @@
 use crate::dialogs::{open_file, FileType};
 use crate::ui::SetupWizard;
+use erdp::ErrorDisplay;
 use slint::{ComponentHandle, PlatformError};
 use std::cell::Cell;
+use std::fs::File;
 use std::rc::Rc;
 use thiserror::Error;
 
@@ -22,6 +24,12 @@ pub fn run_setup() -> Result<bool, SetupError> {
         move || {
             slint::spawn_local(browse_firmware(win.unwrap())).unwrap();
         }
+    });
+
+    win.on_install_firmware({
+        let win = win.as_weak();
+
+        move || install_firmware(win.unwrap())
     });
 
     win.on_finish({
@@ -54,6 +62,18 @@ async fn browse_firmware(win: SetupWizard) {
 
     // Set path.
     win.set_firmware_dump(path.into_os_string().into_string().unwrap().into());
+}
+
+fn install_firmware(win: SetupWizard) {
+    // Open firmware dump.
+    let dump = win.get_firmware_dump();
+    let dump = match File::open(dump.as_str()) {
+        Ok(v) => v,
+        Err(e) => {
+            win.set_error_message(format!("Failed to open {}: {}.", dump, e.display()).into());
+            return;
+        }
+    };
 }
 
 /// Represents an error when [`run_setup()`] fails.
