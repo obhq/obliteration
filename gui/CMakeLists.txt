@@ -23,7 +23,7 @@ add_executable(obliteration WIN32 MACOSX_BUNDLE
     system.cpp)
 
 if(WIN32)
-    target_sources(obliteration PRIVATE resources.rc vulkan.cpp)
+    target_sources(obliteration PRIVATE vulkan.cpp)
 elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
     target_sources(obliteration PRIVATE vulkan.cpp)
 endif()
