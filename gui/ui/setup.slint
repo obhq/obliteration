@@ -3,6 +3,7 @@ import { Firmware, InstallFirmware } from "setup/firmware.slint";
 import { Conclusion } from "setup/conclusion.slint";
 import { NavBar } from "setup/nav.slint";
 import { Palette } from "std-widgets.slint";
+import { ErrorPopup } from "error.slint";
 
 // https://github.com/slint-ui/slint/issues/6880
 enum WizardPage {
@@ -11,17 +12,27 @@ enum WizardPage {
     Conclusion
 }
 
+export enum FirmwareInstaller {
+    Stopped,
+    Running
+}
+
 export component SetupWizard inherits Window {
+    in-out property <string> firmware-dump;
+    in-out property <FirmwareInstaller> firmware-installer;
+    in property <string> firmware-status;
+    in property <float> firmware-progress;
+    in-out property <string> error-message;
+
+    pure callback cancel <=> nav.cancel;
+    pure callback browse-firmware();
+    pure callback install-firmware();
+    pure callback finish();
+
     title: "Setup Obliteration";
     icon: @image-url("icon.png");
     width: 500px; // PopupWindow does not resize with the window somehow.
     height: 400px; // Same here.
-
-    in-out property <string> firmware-dump;
-
-    pure callback cancel <=> nav.cancel;
-    pure callback browse-firmware();
-    pure callback finish();
 
     private property <WizardPage> page: WizardPage.Intro;
 
@@ -37,11 +48,15 @@ export component SetupWizard inherits Window {
         }
 
         if page == WizardPage.Firmware: Firmware {
-            firmware-dump: root.firmware-dump;
+            firmware-dump: firmware-dump;
             vertical-stretch: 1;
 
             browse => {
                 browse-firmware();
+            }
+
+            changed firmware-dump => {
+                firmware-dump = self.firmware-dump;
             }
         }
 
@@ -62,7 +77,7 @@ export component SetupWizard inherits Window {
                 if root.page == WizardPage.Intro {
                     root.page = WizardPage.Firmware;
                 } else if root.page == WizardPage.Firmware {
-                    install-firmware.show();
+                    install-firmware();
                 } else if root.page == WizardPage.Conclusion {
                     finish();
                 }
@@ -70,10 +85,36 @@ export component SetupWizard inherits Window {
         }
     }
 
-    install-firmware := InstallFirmware {
+    firmware-popup := InstallFirmware {
         x: 10px;
         y: 150px;
         width: parent.width - 20px;
         height: parent.height - 300px;
+        status: firmware-status;
+        progress: firmware-progress;
+    }
+
+    error-popup := ErrorPopup {
+        x: 10px;
+        y: (parent.height / 2) - 50px;
+        width: parent.width - 20px;
+        message: error-message;
+        close-clicked => {
+            error-message = "";
+        }
+    }
+
+    changed firmware-installer => {
+        if firmware-installer == FirmwareInstaller.Running {
+            firmware-popup.show();
+        }
+    }
+
+    changed error-message => {
+        if error-message == "" {
+            error-popup.close();
+        } else {
+            error-popup.show();
+        }
     }
 }
