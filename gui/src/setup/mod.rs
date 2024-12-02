@@ -1,3 +1,5 @@
+use self::data::read_data_root;
+use crate::data::{DataError, DataMgr};
 use crate::dialogs::{open_file, FileType};
 use crate::ui::SetupWizard;
 use erdp::ErrorDisplay;
@@ -6,11 +8,26 @@ use slint::{ComponentHandle, PlatformError};
 use std::cell::Cell;
 use std::error::Error;
 use std::fs::File;
+use std::path::PathBuf;
 use std::rc::Rc;
 use thiserror::Error;
 
-pub fn run_setup() -> Result<bool, SetupError> {
-    // TODO: Check if already configured and skip wizard.
+mod data;
+
+pub fn run_setup() -> Result<Option<DataMgr>, SetupError> {
+    // Load data root.
+    let root = read_data_root()?;
+
+    if let Some(p) = root.as_ref().filter(|p| p.is_dir()) {
+        // Check if root partition exists.
+        let mgr = DataMgr::new(p).map_err(|e| SetupError::DataManager(p.to_owned(), e))?;
+
+        if mgr.part().meta("md0").is_file() {
+            return Ok(Some(mgr));
+        }
+    }
+
+    // Create setup wizard.
     let win = SetupWizard::new().map_err(SetupError::CreateWindow)?;
     let finish = Rc::new(Cell::new(false));
 
@@ -44,15 +61,19 @@ pub fn run_setup() -> Result<bool, SetupError> {
         }
     });
 
-    // Run the window.
+    // Run the wizard.
     win.run().map_err(SetupError::RunWindow)?;
 
     drop(win);
 
-    // Extract GUI states.
+    // Check how the user exit the wizard.
     let finish = Rc::into_inner(finish).unwrap().into_inner();
 
-    Ok(finish)
+    if !finish {
+        return Ok(None);
+    }
+
+    todo!()
 }
 
 async fn browse_firmware(win: SetupWizard) {
@@ -94,9 +115,12 @@ fn install_firmware(win: SetupWizard) {
 /// Represents an error when [`run_setup()`] fails.
 #[derive(Debug, Error)]
 pub enum SetupError {
-    #[error("couldn't create window")]
+    #[error("couldn't create data manager on {0}")]
+    DataManager(PathBuf, #[source] DataError),
+
+    #[error("couldn't create setup wizard")]
     CreateWindow(#[source] PlatformError),
 
-    #[error("couldn't run window")]
+    #[error("couldn't run setup wizard")]
     RunWindow(#[source] PlatformError),
 }
