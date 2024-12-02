@@ -1,8 +1,10 @@
 use crate::dialogs::{open_file, FileType};
 use crate::ui::SetupWizard;
 use erdp::ErrorDisplay;
+use obfw::DumpReader;
 use slint::{ComponentHandle, PlatformError};
 use std::cell::Cell;
+use std::error::Error;
 use std::fs::File;
 use std::rc::Rc;
 use thiserror::Error;
@@ -65,15 +67,28 @@ async fn browse_firmware(win: SetupWizard) {
 }
 
 fn install_firmware(win: SetupWizard) {
-    // Open firmware dump.
+    // Get dump path.
     let dump = win.get_firmware_dump();
-    let dump = match File::open(dump.as_str()) {
+
+    if dump.is_empty() {
+        win.set_error_message("You need to select a firmware dump before proceed.".into());
+        return;
+    }
+
+    // Open firmware dump.
+    let dump = match File::open(dump.as_str())
+        .map_err::<Box<dyn Error>, _>(|e| e.into())
+        .and_then(|f| DumpReader::new(f).map_err(|e| e.into()))
+    {
         Ok(v) => v,
         Err(e) => {
             win.set_error_message(format!("Failed to open {}: {}.", dump, e.display()).into());
             return;
         }
     };
+
+    // TODO: Spawn a thread to extract the dump.
+    win.invoke_show_firmware_installer();
 }
 
 /// Represents an error when [`run_setup()`] fails.

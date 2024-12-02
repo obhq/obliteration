@@ -17,34 +17,10 @@
 #define FIELD_GAMES_LOCATION "gamesLocation"
 
 enum PageId {
-    PageIntro,
     PageSystem,
     PageGame,
     PageFirmware,
     PageConclusion
-};
-
-class IntroPage : public QWizardPage {
-public:
-    IntroPage()
-    {
-        auto layout = new QVBoxLayout();
-
-        // Page properties.
-        setTitle("Introduction");
-
-        // Introduction.
-        auto intro = new QLabel(
-            "This wizard will help you setup Obliteration. To ensure you're ready, make sure you "
-            "have a firmware dumped from your PS4 using "
-            "<a href=\"https://github.com/obhq/firmware-dumper\">Firmware Dumper</a>.");
-        intro->setWordWrap(true);
-        intro->setOpenExternalLinks(true);
-
-        layout->addWidget(intro);
-
-        setLayout(layout);
-    }
 };
 
 class SystemPage : public QWizardPage {
@@ -297,7 +273,6 @@ InitializeWizard::InitializeWizard()
 #endif
 
     // Pages.
-    setPage(PageIntro, new IntroPage());
     setPage(PageSystem, new SystemPage());
     setPage(PageGame, new GamePage());
     setPage(PageFirmware, new FirmwarePage());
@@ -311,12 +286,6 @@ InitializeWizard::~InitializeWizard()
 int InitializeWizard::nextId() const
 {
     switch (currentId()) {
-    case PageIntro:
-        if (!hasSystemDirectorySetting()) {
-            return PageSystem;
-        }
-
-        [[fallthrough]];
     case PageSystem:
         if (!hasGamesDirectorySetting()) {
             return PageGame;
