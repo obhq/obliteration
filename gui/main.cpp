@@ -1,7 +1,6 @@
 #include "initialize_wizard.hpp"
 #include "main_window.hpp"
 #include "settings.hpp"
-#include "system.hpp"
 #ifndef __APPLE__
 #include "vulkan.hpp"
 #endif
@@ -151,7 +150,7 @@ int main(int argc, char *argv[])
 #endif
 
     // Check if no any required settings.
-    if (!hasRequiredUserSettings() || !isSystemInitialized()) {
+    if (!hasRequiredUserSettings()) {
         InitializeWizard init;
 
         if (!init.exec()) {

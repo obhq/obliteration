@@ -20,9 +20,9 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex, Weak};
 use thiserror::Error;
 
+mod data;
 mod debug;
 mod dialogs;
-mod error;
 mod graphics;
 mod hv;
 mod profile;
@@ -101,10 +101,12 @@ fn run_vmm(args: &Args) -> Result<(), ApplicationError> {
         Err(e) => return Err(ApplicationError::InitGraphics(Box::new(e))),
     };
 
-    // Run setup wizard. This will do nothing if the user already has required settings.
-    if !run_setup().map_err(ApplicationError::Setup)? {
-        return Ok(());
-    }
+    // Run setup wizard. This will simply return the data manager if the user already has required
+    // settings.
+    let data = match run_setup().map_err(ApplicationError::Setup)? {
+        Some(v) => v,
+        None => return Ok(()),
+    };
 
     // Get kernel path.
     let kernel = match &args.kernel {

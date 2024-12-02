@@ -1,6 +1,5 @@
 #include "initialize_wizard.hpp"
 #include "settings.hpp"
-#include "system.hpp"
 
 #include <QDir>
 #include <QFileDialog>
@@ -293,16 +292,7 @@ int InitializeWizard::nextId() const
 
         [[fallthrough]];
     case PageGame:
-        if (hasVisitedPage(PageSystem)) {
-            // No system path has been configured before.
-            if (!isSystemInitialized(field(FIELD_SYSTEM_LOCATION).toString())) {
-                return PageFirmware;
-            }
-        } else if (!isSystemInitialized()) {
-            return PageFirmware;
-        }
-
-        [[fallthrough]];
+        return PageFirmware;
     case PageFirmware:
         return PageConclusion;
     case PageConclusion:

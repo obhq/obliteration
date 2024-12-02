@@ -18,8 +18,7 @@ add_executable(obliteration WIN32 MACOSX_BUNDLE
     progress_dialog.cpp
     resources.cpp
     resources.qrc
-    settings.cpp
-    system.cpp)
+    settings.cpp)
 
 if(WIN32)
     target_sources(obliteration PRIVATE vulkan.cpp)
