@@ -4,27 +4,24 @@ import { Conclusion } from "setup/conclusion.slint";
 import { NavBar } from "setup/nav.slint";
 import { Palette } from "std-widgets.slint";
 import { ErrorPopup } from "error.slint";
+import { SystemRoot } from "setup/root.slint";
 
 // https://github.com/slint-ui/slint/issues/6880
 enum WizardPage {
     Intro,
+    SystemRoot,
     Firmware,
     Conclusion
 }
 
-export enum FirmwareInstaller {
-    Stopped,
-    Running
-}
-
 export component SetupWizard inherits Window {
     in-out property <string> firmware-dump;
-    in-out property <FirmwareInstaller> firmware-installer;
     in property <string> firmware-status;
     in property <float> firmware-progress;
     in-out property <string> error-message;
 
     pure callback cancel <=> nav.cancel;
+    pure callback set-system-root() -> bool;
     pure callback browse-firmware();
     pure callback install-firmware();
     pure callback finish();
@@ -44,6 +41,10 @@ export component SetupWizard inherits Window {
 
     VerticalLayout {
         if page == WizardPage.Intro: Intro {
+            vertical-stretch: 1;
+        }
+
+        if page == WizardPage.SystemRoot: SystemRoot {
             vertical-stretch: 1;
         }
 
@@ -69,16 +70,25 @@ export component SetupWizard inherits Window {
             back-enabled: root.page != WizardPage.Intro && root.page != WizardPage.Conclusion;
             next-text: "Next ＞";
             back-clicked => {
-                if root.page == WizardPage.Firmware {
-                    root.page = WizardPage.Intro;
+                if page == WizardPage.SystemRoot {
+                    page = WizardPage.Intro;
+                } else if page == WizardPage.Firmware {
+                    page = WizardPage.SystemRoot;
                 }
             }
             next-clicked => {
-                if root.page == WizardPage.Intro {
-                    root.page = WizardPage.Firmware;
-                } else if root.page == WizardPage.Firmware {
+                if page == WizardPage.Intro {
+                    page = WizardPage.SystemRoot;
+                } else if page == WizardPage.SystemRoot {
+                    // https://github.com/slint-ui/slint/issues/2752
+                    if set-system-root() {
+                        page = WizardPage.Conclusion;
+                    } else {
+                        page = WizardPage.Firmware;
+                    }
+                } else if page == WizardPage.Firmware {
                     install-firmware();
-                } else if root.page == WizardPage.Conclusion {
+                } else if page == WizardPage.Conclusion {
                     finish();
                 }
             }
@@ -104,10 +114,13 @@ export component SetupWizard inherits Window {
         }
     }
 
-    changed firmware-installer => {
-        if firmware-installer == FirmwareInstaller.Running {
-            firmware-popup.show();
-        }
+    public function show-firmware-installer() {
+        firmware-popup.show();
+    }
+
+    public function set-firmware-finished() {
+        firmware-popup.close();
+        page = WizardPage.Conclusion;
     }
 
     changed error-message => {

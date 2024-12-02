@@ -17,15 +17,16 @@ gdbstub_arch = "0.3.1"
 humansize = "2.1.3"
 libc = "0.2.164"
 obconf = { path = "../src/obconf", features = ["serde", "virt"] }
-obfw = { git = "https://github.com/obhq/firmware-dumper.git", features = [
-    "read",
-    "std",
-] }
 open = { version = "5.3.1" }
 raw-window-handle = "0.6.2"
 serde = { version = "1.0.209", features = ["derive"] }
-thiserror = "1.0"
+thiserror = "2.0.3"
 uuid = { version = "1.11.0", features = ["serde", "v4"] }
+
+[dependencies.obfw]
+git = "https://github.com/obhq/firmware-dumper.git"
+rev = "1953715b15dd3284d4188a9afff6a462dc47f47e"
+features = ["read"]
 
 [dependencies.slint]
 version = "1.8.0"

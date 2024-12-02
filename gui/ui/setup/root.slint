@@ -1,0 +1,29 @@
+import { VerticalBox, HorizontalBox, LineEdit, Button } from "std-widgets.slint";
+import { Header } from "header.slint";
+
+export component SystemRoot {
+    VerticalBox {
+        Header {
+            title: "Data Location";
+        }
+
+        Text {
+            text: "Select a directory to store Obliteration data. This directory will be used to store everything, including firmware and games.";
+            wrap: word-wrap;
+        }
+
+        HorizontalBox {
+            padding: 0;
+
+            LineEdit {
+                placeholder-text: "Path to a directory";
+            }
+
+            Button {
+                text: "...";
+            }
+        }
+
+        Rectangle { }
+    }
+}
