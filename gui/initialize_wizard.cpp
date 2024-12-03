@@ -16,84 +16,9 @@
 #define FIELD_GAMES_LOCATION "gamesLocation"
 
 enum PageId {
-    PageSystem,
     PageGame,
     PageFirmware,
     PageConclusion
-};
-
-class SystemPage : public QWizardPage {
-public:
-    SystemPage() : m_input(nullptr)
-    {
-        auto layout = new QVBoxLayout();
-
-        // Page properties.
-        setTitle("Location for system files");
-        setSubTitle(
-            "The selected directory will be used for everything except games (e.g. save "
-            "data and firmware files).");
-
-        // Widgets.
-        layout->addLayout(setupInputRow());
-
-        setLayout(layout);
-    }
-
-    bool validatePage() override
-    {
-        auto path = m_input->text();
-
-        if (!QDir::isAbsolutePath(path)) {
-            QMessageBox::critical(this, "Error", "The location must be an absolute path.");
-            return false;
-        }
-
-        if (!QDir(path).exists()) {
-            QMessageBox::critical(this, "Error", "The location does not exist.");
-            return false;
-        }
-
-        return true;
-    }
-private:
-    QLayout *setupInputRow()
-    {
-        auto layout = new QHBoxLayout();
-
-        // Label.
-        auto label = new QLabel("&Location:");
-        layout->addWidget(label);
-
-        // Input.
-        m_input = new QLineEdit();
-        m_input->setText(readSystemDirectorySetting());
-
-        label->setBuddy(m_input);
-        layout->addWidget(m_input);
-
-        registerField(FIELD_SYSTEM_LOCATION "*", m_input);
-
-        // Browse.
-        auto browse = new QPushButton("...");
-
-        connect(browse, &QPushButton::clicked, this, &SystemPage::browseDirectory);
-
-        layout->addWidget(browse);
-
-        return layout;
-    }
-
-    void browseDirectory()
-    {
-        auto path = QFileDialog::getExistingDirectory(this, "Location for system files");
-
-        if (!path.isEmpty()) {
-            m_input->setText(QDir::toNativeSeparators(path));
-        }
-    }
-
-    QLineEdit *m_input;
 };
 
 class GamePage : public QWizardPage {
@@ -247,11 +172,6 @@ public:
     {
         auto wizard = this->wizard();
 
-        if (wizard->hasVisitedPage(PageSystem)) {
-            auto path = field(FIELD_SYSTEM_LOCATION).toString();
-            writeSystemDirectorySetting(QDir::toNativeSeparators(path));
-        }
-
         if (wizard->hasVisitedPage(PageGame)) {
             auto path = field(FIELD_GAMES_LOCATION).toString();
             writeGamesDirectorySetting(QDir::toNativeSeparators(path));
@@ -272,7 +192,6 @@ InitializeWizard::InitializeWizard()
 #endif
 
     // Pages.
-    setPage(PageSystem, new SystemPage());
     setPage(PageGame, new GamePage());
     setPage(PageFirmware, new FirmwarePage());
     setPage(PageConclusion, new ConclusionPage());
@@ -285,12 +204,6 @@ InitializeWizard::~InitializeWizard()
 int InitializeWizard::nextId() const
 {
     switch (currentId()) {
-    case PageSystem:
-        if (!hasGamesDirectorySetting()) {
-            return PageGame;
-        }
-
-        [[fallthrough]];
     case PageGame:
         return PageFirmware;
     case PageFirmware:

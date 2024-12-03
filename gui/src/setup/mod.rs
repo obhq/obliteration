@@ -1,3 +1,5 @@
+pub use self::data::DataRootError;
+
 use self::data::read_data_root;
 use crate::data::{DataError, DataMgr};
 use crate::dialogs::{open_file, FileType};
@@ -12,11 +14,14 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use thiserror::Error;
 
+#[cfg_attr(target_os = "linux", path = "linux.rs")]
+#[cfg_attr(target_os = "macos", path = "macos.rs")]
+#[cfg_attr(target_os = "windows", path = "windows.rs")]
 mod data;
 
 pub fn run_setup() -> Result<Option<DataMgr>, SetupError> {
     // Load data root.
-    let root = read_data_root()?;
+    let root = read_data_root().map_err(SetupError::ReadDataRoot)?;
 
     if let Some(p) = root.as_ref().filter(|p| p.is_dir()) {
         // Check if root partition exists.
@@ -115,6 +120,9 @@ fn install_firmware(win: SetupWizard) {
 /// Represents an error when [`run_setup()`] fails.
 #[derive(Debug, Error)]
 pub enum SetupError {
+    #[error("couldn't read data location")]
+    ReadDataRoot(#[source] DataRootError),
+
     #[error("couldn't create data manager on {0}")]
     DataManager(PathBuf, #[source] DataError),
 
