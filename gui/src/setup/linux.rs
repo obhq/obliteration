@@ -1,16 +1,49 @@
+use std::ffi::OsString;
 use std::io::ErrorKind;
-use std::path::PathBuf;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 use xdg::BaseDirectories;
 
 pub fn read_data_root() -> Result<Option<PathBuf>, DataRootError> {
+    // Read config file.
     let file = get_config_path()?;
+    let mut path = match std::fs::read(&file) {
+        Ok(v) => v,
+        Err(e) if e.kind() == ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(DataRootError::ReadFile(file, e)),
+    };
 
-    match std::fs::read_to_string(&file) {
-        Ok(v) => Ok(Some(v.trim().into())),
-        Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(DataRootError::ReadFile(file, e)),
+    // Trim leading whitespaces.
+    let mut len = 0;
+
+    for b in &path {
+        if !b.is_ascii_whitespace() {
+            break;
+        }
+
+        len += 1;
     }
+
+    path.drain(..len);
+
+    // Trim trailing whitespaces.
+    while path.last().is_some_and(|b| b.is_ascii_whitespace()) {
+        path.pop();
+    }
+
+    Ok(Some(OsString::from_vec(path).into()))
+}
+
+pub fn write_data_root(path: impl AsRef<Path>) -> Result<(), DataRootError> {
+    let file = get_config_path()?;
+    let path = path.as_ref().as_os_str();
+
+    if let Err(e) = std::fs::write(&file, path.as_bytes()) {
+        return Err(DataRootError::WriteFile(file, e));
+    }
+
+    Ok(())
 }
 
 fn get_config_path() -> Result<PathBuf, DataRootError> {
@@ -31,4 +64,7 @@ pub enum DataRootError {
 
     #[error("couldn't read {0}")]
     ReadFile(PathBuf, #[source] std::io::Error),
+
+    #[error("couldn't write {0}")]
+    WriteFile(PathBuf, #[source] std::io::Error),
 }

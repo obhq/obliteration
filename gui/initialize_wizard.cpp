@@ -1,5 +1,4 @@
 #include "initialize_wizard.hpp"
-#include "settings.hpp"
 
 #include <QDir>
 #include <QFileDialog>
@@ -16,87 +15,7 @@
 #define FIELD_GAMES_LOCATION "gamesLocation"
 
 enum PageId {
-    PageGame,
     PageFirmware,
-};
-
-class GamePage : public QWizardPage {
-public:
-    GamePage() : m_input(nullptr)
-    {
-        auto layout = new QVBoxLayout();
-
-        // Page properties.
-        setTitle("Location to install games");
-        setSubTitle(
-            "The selected directory will be used for game installation. The directory "
-            "cannot be the same as the system directory.");
-
-        // Widgets.
-        layout->addLayout(setupInputRow());
-
-        setLayout(layout);
-    }
-
-    bool validatePage() override
-    {
-        auto path = m_input->text();
-
-        if (!QDir::isAbsolutePath(path)) {
-            QMessageBox::critical(this, "Error", "The specified location must be an absolute path.");
-            return false;
-        }
-
-        if (!QDir(path).exists()) {
-            QMessageBox::critical(this, "Error", "The specified location does not exist.");
-            return false;
-        }
-
-        if (path == field(FIELD_SYSTEM_LOCATION).toString()) {
-            QMessageBox::critical(this, "Error", "The specified location cannot be the same as the system directory.");
-            return false;
-        }
-
-        return true;
-    }
-private:
-    QLayout *setupInputRow()
-    {
-        auto layout = new QHBoxLayout();
-
-        // Label.
-        auto label = new QLabel("&Location:");
-        layout->addWidget(label);
-
-        // Input.
-        m_input = new QLineEdit();
-        m_input->setText(readGamesDirectorySetting());
-
-        label->setBuddy(m_input);
-        layout->addWidget(m_input);
-
-        registerField(FIELD_GAMES_LOCATION "*", m_input);
-
-        // Browse button.
-        auto browse = new QPushButton("...");
-
-        connect(browse, &QPushButton::clicked, this, &GamePage::browseDirectory);
-
-        layout->addWidget(browse);
-
-        return layout;
-    }
-
-    void browseDirectory()
-    {
-        auto path = QFileDialog::getExistingDirectory(this, "Location to install games");
-
-        if (!path.isEmpty()) {
-            m_input->setText(QDir::toNativeSeparators(path));
-        }
-    }
-
-    QLineEdit *m_input;
 };
 
 class FirmwarePage : public QWizardPage {
@@ -162,7 +81,6 @@ InitializeWizard::InitializeWizard()
 #endif
 
     // Pages.
-    setPage(PageGame, new GamePage());
     setPage(PageFirmware, new FirmwarePage());
 }
 

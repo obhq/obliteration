@@ -1,6 +1,6 @@
 pub use self::data::DataRootError;
 
-use self::data::read_data_root;
+use self::data::{read_data_root, write_data_root};
 use crate::data::{DataError, DataMgr};
 use crate::dialogs::{open_dir, open_file, FileType};
 use crate::ui::SetupWizard;
@@ -10,7 +10,7 @@ use slint::{ComponentHandle, PlatformError};
 use std::cell::Cell;
 use std::error::Error;
 use std::fs::File;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use thiserror::Error;
 
@@ -48,6 +48,12 @@ pub fn run_setup() -> Result<Option<DataMgr>, SetupError> {
         move || {
             slint::spawn_local(browse_data_root(win.unwrap())).unwrap();
         }
+    });
+
+    win.on_set_data_root({
+        let win = win.as_weak();
+
+        move || set_data_root(win.unwrap())
     });
 
     win.on_browse_firmware({
@@ -102,6 +108,46 @@ async fn browse_data_root(win: SetupWizard) {
 
     // Set path.
     win.set_data_root(path.into_os_string().into_string().unwrap().into());
+}
+
+fn set_data_root(win: SetupWizard) {
+    // Get path.
+    let path = win.get_data_root();
+
+    if path.is_empty() {
+        win.set_error_message("You need to choose where to store data before proceed.".into());
+        return;
+    }
+
+    // Check if absolute path.
+    let path = Path::new(path.as_str());
+
+    if !path.is_absolute() {
+        win.set_error_message("Path must be absolute.".into());
+        return;
+    } else if !path.is_dir() {
+        win.set_error_message("Path must be a directory.".into());
+        return;
+    }
+
+    // Create data manager to see if path is writable.
+    let mgr = match DataMgr::new(path) {
+        Ok(v) => v,
+        Err(e) => {
+            win.set_error_message(
+                format!("Failed to create data manager: {}.", e.display()).into(),
+            );
+            return;
+        }
+    };
+
+    // Save.
+    if let Err(e) = write_data_root(path) {
+        win.set_error_message(format!("Failed to save data location: {}.", e.display()).into());
+        return;
+    }
+
+    win.invoke_set_data_root_ok(mgr.part().meta("md0").is_file());
 }
 
 async fn browse_firmware(win: SetupWizard) {
