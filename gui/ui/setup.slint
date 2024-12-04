@@ -4,24 +4,26 @@ import { Conclusion } from "setup/conclusion.slint";
 import { NavBar } from "setup/nav.slint";
 import { Palette } from "std-widgets.slint";
 import { ErrorPopup } from "error.slint";
-import { SystemRoot } from "setup/root.slint";
+import { DataRoot } from "setup/root.slint";
 
 // https://github.com/slint-ui/slint/issues/6880
 enum WizardPage {
     Intro,
-    SystemRoot,
+    DataRoot,
     Firmware,
     Conclusion
 }
 
 export component SetupWizard inherits Window {
+    in-out property <string> data-root;
     in-out property <string> firmware-dump;
     in property <string> firmware-status;
     in property <float> firmware-progress;
     in-out property <string> error-message;
 
     pure callback cancel <=> nav.cancel;
-    pure callback set-system-root() -> bool;
+    pure callback browse-data-root();
+    pure callback set-data-root() -> bool;
     pure callback browse-firmware();
     pure callback install-firmware();
     pure callback finish();
@@ -44,8 +46,17 @@ export component SetupWizard inherits Window {
             vertical-stretch: 1;
         }
 
-        if page == WizardPage.SystemRoot: SystemRoot {
+        if page == WizardPage.DataRoot: DataRoot {
+            path: data-root;
             vertical-stretch: 1;
+
+            browse => {
+                browse-data-root();
+            }
+
+            changed path => {
+                data-root = self.path;
+            }
         }
 
         if page == WizardPage.Firmware: Firmware {
@@ -70,18 +81,18 @@ export component SetupWizard inherits Window {
             back-enabled: root.page != WizardPage.Intro && root.page != WizardPage.Conclusion;
             next-text: "Next ＞";
             back-clicked => {
-                if page == WizardPage.SystemRoot {
+                if page == WizardPage.DataRoot {
                     page = WizardPage.Intro;
                 } else if page == WizardPage.Firmware {
-                    page = WizardPage.SystemRoot;
+                    page = WizardPage.DataRoot;
                 }
             }
             next-clicked => {
                 if page == WizardPage.Intro {
-                    page = WizardPage.SystemRoot;
-                } else if page == WizardPage.SystemRoot {
+                    page = WizardPage.DataRoot;
+                } else if page == WizardPage.DataRoot {
                     // https://github.com/slint-ui/slint/issues/2752
-                    if set-system-root() {
+                    if set-data-root() {
                         page = WizardPage.Conclusion;
                     } else {
                         page = WizardPage.Firmware;

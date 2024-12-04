@@ -2,7 +2,7 @@ pub use self::data::DataRootError;
 
 use self::data::read_data_root;
 use crate::data::{DataError, DataMgr};
-use crate::dialogs::{open_file, FileType};
+use crate::dialogs::{open_dir, open_file, FileType};
 use crate::ui::SetupWizard;
 use erdp::ErrorDisplay;
 use obfw::DumpReader;
@@ -42,6 +42,14 @@ pub fn run_setup() -> Result<Option<DataMgr>, SetupError> {
         move || win.unwrap().hide().unwrap()
     });
 
+    win.on_browse_data_root({
+        let win = win.as_weak();
+
+        move || {
+            slint::spawn_local(browse_data_root(win.unwrap())).unwrap();
+        }
+    });
+
     win.on_browse_firmware({
         let win = win.as_weak();
 
@@ -66,6 +74,10 @@ pub fn run_setup() -> Result<Option<DataMgr>, SetupError> {
         }
     });
 
+    if let Some(v) = root {
+        win.set_data_root(v.into_os_string().into_string().unwrap().into());
+    }
+
     // Run the wizard.
     win.run().map_err(SetupError::RunWindow)?;
 
@@ -81,8 +93,19 @@ pub fn run_setup() -> Result<Option<DataMgr>, SetupError> {
     todo!()
 }
 
+async fn browse_data_root(win: SetupWizard) {
+    // Ask the user to browse for a directory.
+    let path = match open_dir(&win, "Data location").await {
+        Some(v) => v,
+        None => return,
+    };
+
+    // Set path.
+    win.set_data_root(path.into_os_string().into_string().unwrap().into());
+}
+
 async fn browse_firmware(win: SetupWizard) {
-    // Ask the user to browse a file.
+    // Ask the user to browse for a file.
     let path = match open_file(&win, "Select a firmware dump", FileType::Firmware).await {
         Some(v) => v,
         None => return,

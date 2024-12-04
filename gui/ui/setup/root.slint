@@ -1,7 +1,11 @@
 import { VerticalBox, HorizontalBox, LineEdit, Button } from "std-widgets.slint";
 import { Header } from "header.slint";
 
-export component SystemRoot {
+export component DataRoot {
+    in-out property <string> path <=> input.text;
+
+    callback browse();
+
     VerticalBox {
         Header {
             title: "Data Location";
@@ -15,12 +19,15 @@ export component SystemRoot {
         HorizontalBox {
             padding: 0;
 
-            LineEdit {
+            input := LineEdit {
                 placeholder-text: "Path to a directory";
             }
 
             Button {
                 text: "...";
+                clicked => {
+                    browse();
+                }
             }
         }
 
