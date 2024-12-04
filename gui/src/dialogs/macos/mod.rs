@@ -9,3 +9,7 @@ pub async fn open_file<T: ComponentHandle>(
 ) -> Option<PathBuf> {
     todo!();
 }
+
+pub async fn open_dir<T: ComponentHandle>(parent: &T, title: impl AsRef<str>) -> Option<PathBuf> {
+    todo!()
+}

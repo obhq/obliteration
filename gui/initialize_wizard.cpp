@@ -18,7 +18,6 @@
 enum PageId {
     PageGame,
     PageFirmware,
-    PageConclusion
 };
 
 class GamePage : public QWizardPage {
@@ -152,35 +151,6 @@ private:
     QLineEdit *m_input;
 };
 
-class ConclusionPage : public QWizardPage {
-public:
-    ConclusionPage()
-    {
-        auto layout = new QVBoxLayout();
-
-        // Page properties.
-        setTitle("Setup complete");
-
-        // Introduction.
-        auto intro = new QLabel("You can now install your games and play them using Obliteration.");
-        layout->addWidget(intro);
-
-        setLayout(layout);
-    }
-
-    bool validatePage() override
-    {
-        auto wizard = this->wizard();
-
-        if (wizard->hasVisitedPage(PageGame)) {
-            auto path = field(FIELD_GAMES_LOCATION).toString();
-            writeGamesDirectorySetting(QDir::toNativeSeparators(path));
-        }
-
-        return true;
-    }
-};
-
 InitializeWizard::InitializeWizard()
 {
     // Window properties.
@@ -194,22 +164,8 @@ InitializeWizard::InitializeWizard()
     // Pages.
     setPage(PageGame, new GamePage());
     setPage(PageFirmware, new FirmwarePage());
-    setPage(PageConclusion, new ConclusionPage());
 }
 
 InitializeWizard::~InitializeWizard()
 {
-}
-
-int InitializeWizard::nextId() const
-{
-    switch (currentId()) {
-    case PageGame:
-        return PageFirmware;
-    case PageFirmware:
-        return PageConclusion;
-    case PageConclusion:
-    default:
-        return -1;
-    }
 }

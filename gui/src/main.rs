@@ -29,7 +29,6 @@ mod profile;
 #[cfg(unix)]
 mod rlim;
 mod setup;
-mod string;
 mod ui;
 mod vmm;
 
