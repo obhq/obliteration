@@ -1,7 +1,11 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use thiserror::Error;
 
 pub fn read_data_root() -> Result<Option<PathBuf>, DataRootError> {
+    todo!()
+}
+
+pub fn write_data_root(path: impl AsRef<Path>) -> Result<(), DataRootError> {
     todo!()
 }
 
