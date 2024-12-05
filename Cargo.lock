@@ -2546,7 +2546,7 @@ dependencies = [
 [[package]]
 name = "obfw"
 version = "0.1.0"
-source = "git+https://github.com/obhq/firmware-dumper.git?rev=1953715b15dd3284d4188a9afff6a462dc47f47e#1953715b15dd3284d4188a9afff6a462dc47f47e"
+source = "git+https://github.com/obhq/firmware-dumper.git?rev=64787fdc0489724f0914356d925be014a2f1bf3e#64787fdc0489724f0914356d925be014a2f1bf3e"
 dependencies = [
  "num_enum",
  "thiserror 2.0.3",

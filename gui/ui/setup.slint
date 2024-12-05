@@ -50,29 +50,21 @@ export component SetupWizard inherits Window {
 
         // Data root.
         if page == SetupPage.DataRoot: DataRoot {
-            path: data-root;
+            path <=> data-root;
             vertical-stretch: 1;
 
             browse => {
                 browse-data-root();
             }
-
-            changed path => {
-                data-root = self.path;
-            }
         }
 
         // Firmware.
         if page == SetupPage.Firmware: Firmware {
-            firmware-dump: firmware-dump;
+            firmware-dump <=> firmware-dump;
             vertical-stretch: 1;
 
             browse => {
                 browse-firmware();
-            }
-
-            changed firmware-dump => {
-                firmware-dump = self.firmware-dump;
             }
         }
 
@@ -141,9 +133,12 @@ export component SetupWizard inherits Window {
         firmware-popup.show();
     }
 
-    public function set-firmware-finished() {
+    public function set-firmware-finished(success: bool) {
         firmware-popup.close();
-        page = SetupPage.Conclusion;
+
+        if success {
+            page = SetupPage.Conclusion;
+        }
     }
 
     // Change callbacks.

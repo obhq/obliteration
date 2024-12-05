@@ -5,7 +5,8 @@ use crate::data::{DataError, DataMgr};
 use crate::dialogs::{open_dir, open_file, FileType};
 use crate::ui::SetupWizard;
 use erdp::ErrorDisplay;
-use obfw::DumpReader;
+use obfw::ps4::PartReader;
+use obfw::{DumpReader, ItemReader};
 use slint::{ComponentHandle, PlatformError};
 use std::cell::Cell;
 use std::error::Error;
@@ -23,7 +24,7 @@ pub fn run_setup() -> Result<Option<DataMgr>, SetupError> {
     // Load data root.
     let root = read_data_root().map_err(SetupError::ReadDataRoot)?;
 
-    if let Some(p) = root.as_ref().filter(|p| p.is_dir()) {
+    if let Some(p) = root.as_ref().map(Path::new).filter(|p| p.is_dir()) {
         // Check if root partition exists.
         let mgr = DataMgr::new(p).map_err(|e| SetupError::DataManager(p.to_owned(), e))?;
 
@@ -81,7 +82,7 @@ pub fn run_setup() -> Result<Option<DataMgr>, SetupError> {
     });
 
     if let Some(v) = root {
-        win.set_data_root(v.into_os_string().into_string().unwrap().into());
+        win.set_data_root(v.into());
     }
 
     // Run the wizard.
@@ -106,21 +107,30 @@ async fn browse_data_root(win: SetupWizard) {
         None => return,
     };
 
+    // Allow only valid unicode path.
+    let path = match path.into_os_string().into_string() {
+        Ok(v) => v,
+        Err(_) => {
+            win.set_error_message("Path to selected directory must be unicode.".into());
+            return;
+        }
+    };
+
     // Set path.
-    win.set_data_root(path.into_os_string().into_string().unwrap().into());
+    win.set_data_root(path.into());
 }
 
 fn set_data_root(win: SetupWizard) {
-    // Get path.
-    let path = win.get_data_root();
+    // Get user input.
+    let input = win.get_data_root();
 
-    if path.is_empty() {
+    if input.is_empty() {
         win.set_error_message("You need to choose where to store data before proceed.".into());
         return;
     }
 
     // Check if absolute path.
-    let path = Path::new(path.as_str());
+    let path = Path::new(input.as_str());
 
     if !path.is_absolute() {
         win.set_error_message("Path must be absolute.".into());
@@ -142,7 +152,7 @@ fn set_data_root(win: SetupWizard) {
     };
 
     // Save.
-    if let Err(e) = write_data_root(path) {
+    if let Err(e) = write_data_root(input) {
         win.set_error_message(format!("Failed to save data location: {}.", e.display()).into());
         return;
     }
@@ -157,33 +167,123 @@ async fn browse_firmware(win: SetupWizard) {
         None => return,
     };
 
+    // Allow only valid unicode path.
+    let path = match path.into_os_string().into_string() {
+        Ok(v) => v,
+        Err(_) => {
+            win.set_error_message("Path to a firmware dump must be unicode.".into());
+            return;
+        }
+    };
+
     // Set path.
-    win.set_firmware_dump(path.into_os_string().into_string().unwrap().into());
+    win.set_firmware_dump(path.into());
 }
 
 fn install_firmware(win: SetupWizard) {
     // Get dump path.
-    let dump = win.get_firmware_dump();
+    let path = win.get_firmware_dump();
 
-    if dump.is_empty() {
+    if path.is_empty() {
         win.set_error_message("You need to select a firmware dump before proceed.".into());
         return;
     }
 
     // Open firmware dump.
-    let dump = match File::open(dump.as_str())
+    let mut dump = match File::open(path.as_str())
         .map_err::<Box<dyn Error>, _>(|e| e.into())
         .and_then(|f| DumpReader::new(f).map_err(|e| e.into()))
     {
         Ok(v) => v,
         Err(e) => {
-            win.set_error_message(format!("Failed to open {}: {}.", dump, e.display()).into());
+            win.set_error_message(format!("Failed to open {}: {}.", path, e.display()).into());
             return;
         }
     };
 
-    // TODO: Spawn a thread to extract the dump.
     win.invoke_show_firmware_installer();
+    win.set_firmware_status("Initializing...".into());
+
+    // Spawn thread to extract the dump.
+    let win = win.as_weak();
+
+    std::thread::spawn(move || {
+        // Extract.
+        let n = dump.items();
+        let mut p = 0u32;
+        let e =
+            match extract_firmware_dump(
+                &mut dump,
+                |v| drop(win.upgrade_in_event_loop(move |w| w.set_firmware_status(v.into()))),
+                || {
+                    p += 1;
+
+                    drop(win.upgrade_in_event_loop(move |w| {
+                        w.set_firmware_progress(p as f32 / n as f32)
+                    }));
+                },
+            ) {
+                Ok(_) => {
+                    drop(win.upgrade_in_event_loop(|w| w.invoke_set_firmware_finished(true)));
+                    return;
+                }
+                Err(e) => e,
+            };
+
+        // Show error.
+        let m = format!("Failed to install {}: {}.", path, e.display());
+
+        drop(win.upgrade_in_event_loop(move |w| {
+            w.invoke_set_firmware_finished(false);
+            w.set_error_message(m.into());
+        }));
+    });
+}
+
+fn extract_firmware_dump(
+    dump: &mut DumpReader<File>,
+    mut status: impl FnMut(String),
+    mut step: impl FnMut(),
+) -> Result<(), FirmwareError> {
+    loop {
+        // Get next item.
+        let mut item = match dump.next_item().map_err(FirmwareError::NextItem)? {
+            Some(v) => v,
+            None => break,
+        };
+
+        // Update status.
+        let name = item.to_string();
+
+        status(format!("Extracting {name}..."));
+
+        // Extract item.
+        let r = match &mut item {
+            ItemReader::Ps4Part(r) => extract_partition(r),
+        };
+
+        if let Err(e) = r {
+            return Err(FirmwareError::ExtractItem(name, e));
+        }
+
+        step();
+    }
+
+    Ok(())
+}
+
+fn extract_partition(part: &mut PartReader<File>) -> Result<(), Box<dyn Error>> {
+    todo!()
+}
+
+/// Represents an error when [`extract_firmware_dump()`] fails.
+#[derive(Debug, Error)]
+enum FirmwareError {
+    #[error("couldn't get dumped item")]
+    NextItem(#[source] obfw::ReaderError),
+
+    #[error("couldn't extract {0}")]
+    ExtractItem(String, #[source] Box<dyn Error>),
 }
 
 /// Represents an error when [`run_setup()`] fails.

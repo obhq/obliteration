@@ -25,7 +25,7 @@ uuid = { version = "1.11.0", features = ["serde", "v4"] }
 
 [dependencies.obfw]
 git = "https://github.com/obhq/firmware-dumper.git"
-rev = "1953715b15dd3284d4188a9afff6a462dc47f47e"
+rev = "64787fdc0489724f0914356d925be014a2f1bf3e"
 features = ["read"]
 
 [dependencies.slint]
