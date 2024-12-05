@@ -14,7 +14,6 @@ add_executable(obliteration WIN32 MACOSX_BUNDLE
     main.cpp
     main_window.cpp
     path.cpp
-    progress_dialog.cpp
     resources.cpp
     resources.qrc
     settings.cpp)
