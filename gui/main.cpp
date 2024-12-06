@@ -15,8 +15,6 @@
 #include <QVulkanInstance>
 #endif
 
-#include <utility>
-
 #ifndef _WIN32
 #include <sys/resource.h>
 #endif
@@ -148,11 +146,7 @@ int main(int argc, char *argv[])
 #endif
 
     // Setup main window.
-#ifdef __APPLE__
     MainWindow win(args);
-#else
-    MainWindow win(args, std::move(vkDevices));
-#endif
 
     win.restoreGeometry();
 

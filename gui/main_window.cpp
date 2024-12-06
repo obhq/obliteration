@@ -24,8 +24,6 @@
 #include <QToolBar>
 #include <QUrl>
 
-#include <utility>
-
 #ifndef _WIN32
 #include <fcntl.h>
 #endif
@@ -35,13 +33,7 @@ namespace Args {
     const QCommandLineOption kernel("kernel", "Use this kernel instead of default one.", "path");
 }
 
-#ifdef __APPLE__
 MainWindow::MainWindow(const QCommandLineParser &args) :
-#else
-MainWindow::MainWindow(
-    const QCommandLineParser &args,
-    QList<VkPhysicalDevice> &&vkDevices) :
-#endif
     m_args(args),
     m_main(nullptr),
     m_launch(nullptr),
@@ -82,11 +74,7 @@ MainWindow::MainWindow(
     setCentralWidget(m_main);
 
     // Launch settings.
-#ifdef __APPLE__
     m_launch = new LaunchSettings();
-#else
-    m_launch = new LaunchSettings(std::move(vkDevices));
-#endif
 
     m_main->addWidget(m_launch);
 }

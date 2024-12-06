@@ -1579,11 +1579,13 @@ dependencies = [
  "humansize",
  "libc",
  "metal 0.29.0",
+ "num_enum",
  "obconf",
  "obfw",
  "objc",
  "open",
  "raw-window-handle",
+ "redb",
  "serde",
  "slint",
  "slint-build",
@@ -3107,6 +3109,15 @@ checksum = "1465873a3dfdaa8ae7cb14b4383657caab0b3e8a0aa9ae8e04b044854c8dfce2"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
+]
+
+[[package]]
+name = "redb"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "84b1de48a7cf7ba193e81e078d17ee2b786236eed1d3f7c60f8a09545efc4925"
+dependencies = [
+ "libc",
 ]
 
 [[package]]

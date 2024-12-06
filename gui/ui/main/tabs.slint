@@ -22,6 +22,7 @@ export component Tabs {
 
             Button {
                 icon: @image-url("menu.svg");
+                colorize-icon: true;
                 primary: root.tab == Tab.Menu;
                 clicked => {
                     root.tab = Tab.Menu
@@ -30,9 +31,10 @@ export component Tabs {
 
             Button {
                 text: "Display";
-                icon: @image-url("../../resources/monitor.svg");
-                horizontal-stretch: 1;
+                icon: @image-url("monitor.svg");
+                colorize-icon: true;
                 primary: root.tab == Tab.Display;
+                horizontal-stretch: 1;
                 clicked => {
                     root.tab = Tab.Display
                 }

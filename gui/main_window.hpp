@@ -14,13 +14,7 @@ class QStackedWidget;
 
 class MainWindow final : public QMainWindow {
 public:
-#ifdef __APPLE__
     MainWindow(const QCommandLineParser &args);
-#else
-    MainWindow(
-        const QCommandLineParser &args,
-        QList<VkPhysicalDevice> &&vkDevices);
-#endif
     ~MainWindow() override;
 
     void restoreGeometry();
