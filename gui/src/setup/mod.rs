@@ -4,9 +4,11 @@ use self::data::{read_data_root, write_data_root};
 use crate::data::{DataError, DataMgr};
 use crate::dialogs::{open_dir, open_file, FileType};
 use crate::ui::SetupWizard;
+use crate::vfs::{FsType, FS_TYPE};
 use erdp::ErrorDisplay;
 use obfw::ps4::{PartData, PartReader};
 use obfw::{DumpReader, ItemReader};
+use redb::{Database, DatabaseError};
 use slint::{ComponentHandle, PlatformError};
 use std::cell::Cell;
 use std::error::Error;
@@ -298,6 +300,15 @@ fn extract_partition(
     status: &mut impl FnMut(String),
     step: &mut impl FnMut(),
 ) -> Result<(), PartitionError> {
+    // Get FS type.
+    let fs = match part.fs() {
+        b"exfatfs" => FsType::ExFat,
+        n => {
+            let n = String::from_utf8_lossy(n);
+            return Err(PartitionError::UnexpectedFs(n.into_owned()));
+        }
+    };
+
     // Get device path.
     let dev = part.dev();
     let dev = match std::str::from_utf8(dev) {
@@ -320,6 +331,37 @@ fn extract_partition(
     } else {
         return Err(PartitionError::UnexpectedDevice(dev.into()));
     };
+
+    // Create database file for file/directory metadata.
+    let mp = dmgr.part().meta(dev);
+    let meta = match File::create_new(&mp) {
+        Ok(v) => v,
+        Err(e) => return Err(PartitionError::CreateFile(mp, e)),
+    };
+
+    // Create metadata database.
+    let meta = match Database::builder().create_file(meta) {
+        Ok(v) => v,
+        Err(e) => return Err(PartitionError::CreateMeta(mp, e)),
+    };
+
+    // Start metadata transaction.
+    let meta = match meta.begin_write() {
+        Ok(v) => v,
+        Err(e) => return Err(PartitionError::MetaTransaction(mp, e)),
+    };
+
+    // Write FS type.
+    let mut tab = match meta.open_table(FS_TYPE) {
+        Ok(v) => v,
+        Err(e) => return Err(PartitionError::MetaTable(mp, FS_TYPE.to_string(), e)),
+    };
+
+    if let Err(e) = tab.insert((), fs) {
+        return Err(PartitionError::WriteFs(mp, e));
+    }
+
+    drop(tab);
 
     // Extract items.
     let root = dmgr.part().data(dev);
@@ -383,6 +425,13 @@ fn extract_partition(
         step();
     }
 
+    // Commit metadata transaction.
+    status("Committing metadata database...".into());
+
+    if let Err(e) = meta.commit() {
+        return Err(PartitionError::MetaCommit(mp, e));
+    }
+
     Ok(())
 }
 
@@ -399,8 +448,23 @@ enum FirmwareError {
 /// Represents an error when [`extract_partition()`] fails.
 #[derive(Debug, Error)]
 enum PartitionError {
+    #[error("unexpected filesystem {0}")]
+    UnexpectedFs(String),
+
     #[error("unexpected device {0}")]
     UnexpectedDevice(String),
+
+    #[error("couldn't create metadata database on {0}")]
+    CreateMeta(PathBuf, #[source] DatabaseError),
+
+    #[error("couldn't start metadata transaction on {0}")]
+    MetaTransaction(PathBuf, #[source] redb::TransactionError),
+
+    #[error("couldn't open table {1} on {0}")]
+    MetaTable(PathBuf, String, #[source] redb::TableError),
+
+    #[error("couldn't write filesystem type to {0}")]
+    WriteFs(PathBuf, #[source] redb::StorageError),
 
     #[error("couldn't get partition item")]
     NextItem(#[source] obfw::ps4::PartError),
@@ -416,6 +480,9 @@ enum PartitionError {
 
     #[error("couldn't extract {0} to {1}")]
     ExtractFile(String, PathBuf, #[source] std::io::Error),
+
+    #[error("couldn't commit metadata transaction to {0}")]
+    MetaCommit(PathBuf, #[source] redb::CommitError),
 }
 
 /// Represents an error when [`run_setup()`] fails.

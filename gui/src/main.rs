@@ -30,6 +30,7 @@ mod profile;
 mod rlim;
 mod setup;
 mod ui;
+mod vfs;
 mod vmm;
 
 fn main() -> ExitCode {
