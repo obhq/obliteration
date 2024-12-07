@@ -76,7 +76,7 @@ fn main() -> ExitCode {
     ExitCode::FAILURE
 }
 
-fn run_vmm(cli_args: &CliArgs) -> Result<(), ApplicationError> {
+fn run_vmm(args: &CliArgs) -> Result<(), ApplicationError> {
     // Resolve our executable path.
     let exe = std::env::current_exe()
         .and_then(std::fs::canonicalize)
@@ -112,7 +112,7 @@ fn run_vmm(cli_args: &CliArgs) -> Result<(), ApplicationError> {
     };
 
     // Get kernel path.
-    let kernel_path = cli_args.kernel.as_ref().cloned().unwrap_or_else(|| {
+    let kernel_path = args.kernel.as_ref().cloned().unwrap_or_else(|| {
         // Get kernel directory.
         let mut path = exe.parent().unwrap().to_owned();
 
@@ -162,7 +162,7 @@ fn run_vmm(cli_args: &CliArgs) -> Result<(), ApplicationError> {
     }
 
     // Get VMM arguments.
-    let vmm_args = if let Some(debug_addr) = cli_args.debug {
+    let vmm_args = if let Some(debug_addr) = args.debug {
         let debug_server = DebugServer::new(debug_addr)
             .map_err(|e| ApplicationError::StartDebugServer(e, debug_addr))?;
 
