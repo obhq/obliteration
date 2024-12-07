@@ -8,7 +8,7 @@ use self::ui::{ErrorWindow, MainWindow};
 use clap::{Parser, ValueEnum};
 use debug::DebugServer;
 use serde::{Deserialize, Serialize};
-use slint::{ComponentHandle, Global, ModelExt, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, ModelExt, ModelRc, SharedString, VecModel};
 use std::borrow::Cow;
 use std::cell::Cell;
 use std::error::Error;
@@ -213,6 +213,11 @@ fn run_launcher(
 
     win.on_profile_names(|profiles| ModelRc::new(profiles.map(|p| p.name)));
 
+    win.on_report_issue(|| {
+        // TODO: Display error instead of panic.
+        open::that_detached("https://github.com/obhq/obliteration/issues/new").unwrap();
+    });
+
     win.on_start_vmm({
         let win = win.as_weak();
         let start = start.clone();
@@ -242,21 +247,6 @@ fn run_launcher(
     let start = Rc::into_inner(start).unwrap().into_inner();
 
     Ok(start)
-}
-
-fn setup_globals<'a, T>(component: &'a T)
-where
-    ui::Globals<'a>: Global<'a, T>,
-{
-    let globals = ui::Globals::get(component);
-
-    globals.on_open_url(|url| {
-        let url = url.as_str();
-
-        if let Err(_e) = open::that(url) {
-            // TODO: Show a modal dialog.
-        }
-    });
 }
 
 fn panic_hook(i: &PanicHookInfo, ph: &Weak<Mutex<Option<PanicHandler>>>) {

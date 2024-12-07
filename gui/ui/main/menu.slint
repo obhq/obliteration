@@ -1,9 +1,8 @@
 import { Button, StandardButton, AboutSlint, HorizontalBox, Palette, VerticalBox } from "std-widgets.slint";
-import { Globals } from "../globals.slint";
 
 enum Page {
-    Help,
-    About
+    help,
+    about
 }
 
 component SideBarItem {
@@ -49,7 +48,7 @@ component SideBar {
     width: 180px;
 
     Rectangle {
-        background: Palette.background.darker(0.2);
+        background: Palette.alternate-background;
     }
 
     VerticalLayout {
@@ -57,27 +56,29 @@ component SideBar {
 
         SideBarItem {
             text: "Help";
-            selected: root.current-page == Page.Help;
+            selected: root.current-page == Page.help;
             clicked => {
-                root.current-page = Page.Help;
+                root.current-page = Page.help;
             }
         }
 
         SideBarItem {
             text: "About";
-            selected: root.current-page == Page.About;
+            selected: root.current-page == Page.about;
             clicked => {
-                root.current-page = Page.About;
+                root.current-page = Page.about;
             }
         }
     }
 }
 
 component Help {
+    pure callback report-issue();
+
     Button {
         text: "Report an Issue";
         clicked => {
-            Globals.open_url("https://github.com/obhq/obliteration/issues/new");
+            report-issue();
         }
     }
 }
@@ -85,7 +86,7 @@ component Help {
 component About {
     VerticalLayout {
         Text {
-            text: "Obliteration is a free and open-source software for playing your PlayStation 4 titles on PC.";
+            text: "Obliteration is a free and open-source software to run PlayStation 4 system software on PC.";
             horizontal-alignment: center;
         }
 
@@ -94,17 +95,19 @@ component About {
 }
 
 export component Menu {
-    in property <length> popup_width;
-    in property <length> popup_height;
-    in property <length> popup_x;
-    in property <length> popup_y;
+    pure callback report-issue();
 
     HorizontalBox {
         padding: 0;
 
         nav := SideBar { }
 
-        if nav.current-page == Page.Help: Help { }
-        if nav.current-page == Page.About: About { }
+        if nav.current-page == Page.help: Help {
+            report-issue => {
+                report-issue();
+            }
+        }
+
+        if nav.current-page == Page.about: About { }
     }
 }

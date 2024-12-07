@@ -22,6 +22,7 @@ export component SetupWizard inherits Window {
     in-out property <string> error-message;
 
     pure callback cancel <=> nav.cancel;
+    pure callback get-dumper();
     pure callback browse-data-root();
     pure callback set-data-root();
     pure callback browse-firmware();
@@ -46,6 +47,9 @@ export component SetupWizard inherits Window {
         // Intro.
         if page == SetupPage.Intro: Intro {
             vertical-stretch: 1;
+            get-dumper => {
+                get-dumper();
+            }
         }
 
         // Data root.

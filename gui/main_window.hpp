@@ -6,7 +6,6 @@
 #include <QVulkanInstance>
 #endif
 
-class LaunchSettings;
 class QCommandLineOption;
 class QCommandLineParser;
 class QSocketNotifier;
@@ -32,7 +31,6 @@ private:
 
     const QCommandLineParser &m_args;
     QStackedWidget *m_main;
-    LaunchSettings *m_launch;
     QSocketNotifier *m_debugNoti;
 };
 

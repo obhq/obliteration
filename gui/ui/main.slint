@@ -1,12 +1,10 @@
 import { Tabs } from "main/tabs.slint";
 import { Actions } from "main/actions.slint";
-import { Globals } from "globals.slint";
 import { Profile } from "profile.slint";
 import { VerticalBox } from "std-widgets.slint";
 
 export { ErrorWindow } from "error.slint";
 export { SetupWizard } from "setup.slint";
-export { Globals }
 
 export component MainWindow inherits Window {
     in property <[string]> devices;
@@ -15,6 +13,7 @@ export component MainWindow inherits Window {
 
     pure callback profile-names([Profile]) -> [string];
     pure callback profile-selected <=> actions.profile-selected;
+    pure callback report-issue();
     pure callback start-vmm <=> actions.start;
 
     title: "Obliteration";
@@ -25,6 +24,9 @@ export component MainWindow inherits Window {
     VerticalBox {
         Tabs {
             devices: devices;
+            report-issue => {
+                report-issue();
+            }
         }
 
         actions := Actions {
