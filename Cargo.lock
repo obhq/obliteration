@@ -77,7 +77,7 @@ dependencies = [
  "ndk-context",
  "ndk-sys",
  "num_enum",
- "thiserror",
+ "thiserror 1.0.66",
 ]
 
 [[package]]
@@ -536,7 +536,7 @@ dependencies = [
  "polling",
  "rustix",
  "slab",
- "thiserror",
+ "thiserror 1.0.66",
 ]
 
 [[package]]
@@ -1312,7 +1312,7 @@ dependencies = [
  "bitflags 2.6.0",
  "serde",
  "serde_yaml",
- "thiserror",
+ "thiserror 1.0.66",
 ]
 
 [[package]]
@@ -1579,19 +1579,22 @@ dependencies = [
  "humansize",
  "libc",
  "metal 0.29.0",
+ "num_enum",
  "obconf",
  "obfw",
  "objc",
  "open",
  "raw-window-handle",
+ "redb",
  "serde",
  "slint",
  "slint-build",
- "thiserror",
+ "thiserror 2.0.3",
  "uuid",
  "windows-sys 0.52.0",
  "winres",
  "x86-64",
+ "xdg",
 ]
 
 [[package]]
@@ -1757,7 +1760,7 @@ dependencies = [
  "rowan",
  "smol_str 0.3.2",
  "strum",
- "thiserror",
+ "thiserror 1.0.66",
  "url",
 ]
 
@@ -2145,7 +2148,7 @@ dependencies = [
  "combine",
  "jni-sys",
  "log",
- "thiserror",
+ "thiserror 1.0.66",
  "walkdir",
  "windows-sys 0.45.0",
 ]
@@ -2304,7 +2307,7 @@ name = "llt"
 version = "0.1.0"
 dependencies = [
  "libc",
- "thiserror",
+ "thiserror 1.0.66",
  "tls",
  "windows-sys 0.52.0",
 ]
@@ -2332,7 +2335,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ca94c7bf1e2557c2798989c43416822c12fc5dcc5e17cc3307ef0e71894a955"
 dependencies = [
  "lyon_path",
- "thiserror",
+ "thiserror 1.0.66",
 ]
 
 [[package]]
@@ -2462,7 +2465,7 @@ dependencies = [
  "ndk-sys",
  "num_enum",
  "raw-window-handle",
- "thiserror",
+ "thiserror 1.0.66",
 ]
 
 [[package]]
@@ -2545,7 +2548,11 @@ dependencies = [
 [[package]]
 name = "obfw"
 version = "0.1.0"
-source = "git+https://github.com/obhq/firmware-dumper.git#093f4117db5ec339bf704f92ac669adeb681dc69"
+source = "git+https://github.com/obhq/firmware-dumper.git?rev=64787fdc0489724f0914356d925be014a2f1bf3e#64787fdc0489724f0914356d925be014a2f1bf3e"
+dependencies = [
+ "num_enum",
+ "thiserror 2.0.3",
+]
 
 [[package]]
 name = "objc"
@@ -3105,6 +3112,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "redb"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "84b1de48a7cf7ba193e81e078d17ee2b786236eed1d3f7c60f8a09545efc4925"
+dependencies = [
+ "libc",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3458,7 +3474,7 @@ checksum = "ec068281021ccd3a69dbe36a0caf207d88aa5b50945ced9000f17a5d2b139003"
 dependencies = [
  "i-slint-compiler",
  "spin_on",
- "thiserror",
+ "thiserror 1.0.66",
  "toml_edit",
 ]
 
@@ -3503,7 +3519,7 @@ dependencies = [
  "log",
  "memmap2",
  "rustix",
- "thiserror",
+ "thiserror 1.0.66",
  "wayland-backend",
  "wayland-client",
  "wayland-csd-frame",
@@ -3717,7 +3733,16 @@ version = "1.0.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5d171f59dbaa811dbbb1aee1e73db92ec2b122911a48e1390dfe327a821ddede"
 dependencies = [
- "thiserror-impl",
+ "thiserror-impl 1.0.66",
+]
+
+[[package]]
+name = "thiserror"
+version = "2.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c006c85c7651b3cf2ada4584faa36773bd07bac24acfb39f3c431b36d7e667aa"
+dependencies = [
+ "thiserror-impl 2.0.3",
 ]
 
 [[package]]
@@ -3725,6 +3750,17 @@ name = "thiserror-impl"
 version = "1.0.66"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b08be0f17bd307950653ce45db00cd31200d82b624b36e181337d9c7d92765b5"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "2.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f077553d607adc1caf65430528a576c757a71ed73944b66ebb58ef2bbd243568"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4775,6 +4811,12 @@ name = "xcursor"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0ef33da6b1660b4ddbfb3aef0ade110c8b8a781a3b6382fa5f2b5b040fd55f61"
+
+[[package]]
+name = "xdg"
+version = "2.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "213b7324336b53d2414b2db8537e56544d981803139155afa84f76eeebb7a546"
 
 [[package]]
 name = "xdg-home"

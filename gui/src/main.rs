@@ -21,17 +21,17 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex, Weak};
 use thiserror::Error;
 
+mod data;
 mod debug;
 mod dialogs;
-mod error;
 mod graphics;
 mod hv;
 mod profile;
 #[cfg(unix)]
 mod rlim;
 mod setup;
-mod string;
 mod ui;
+mod vfs;
 mod vmm;
 
 fn main() -> ExitCode {
@@ -102,10 +102,12 @@ fn run_vmm(cli_args: &CliArgs) -> Result<(), ApplicationError> {
         Err(e) => return Err(ApplicationError::InitGraphics(Box::new(e))),
     };
 
-    // Run setup wizard. This will do nothing if the user already has required settings.
-    if !run_setup().map_err(ApplicationError::Setup)? {
-        return Ok(());
-    }
+    // Run setup wizard. This will simply return the data manager if the user already has required
+    // settings.
+    let data = match run_setup().map_err(ApplicationError::Setup)? {
+        Some(v) => v,
+        None => return Ok(()),
+    };
 
     // Get kernel path.
     let kernel_path = cli_args.kernel.as_ref().cloned().unwrap_or_else(|| {

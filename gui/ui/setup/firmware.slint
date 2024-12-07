@@ -49,7 +49,7 @@ export component InstallFirmware inherits PopupWindow {
             alignment: center;
 
             Text {
-                text: "Installing firmware...";
+                text: "Installing firmware, please wait.";
                 horizontal-alignment: center;
             }
 
@@ -60,6 +60,8 @@ export component InstallFirmware inherits PopupWindow {
             Text {
                 text: status;
                 horizontal-alignment: center;
+                wrap: no-wrap;
+                overflow: elide;
             }
         }
     }

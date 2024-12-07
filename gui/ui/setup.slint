@@ -4,27 +4,26 @@ import { Conclusion } from "setup/conclusion.slint";
 import { NavBar } from "setup/nav.slint";
 import { Palette } from "std-widgets.slint";
 import { ErrorPopup } from "error.slint";
+import { DataRoot } from "setup/root.slint";
 
 // https://github.com/slint-ui/slint/issues/6880
-enum WizardPage {
+enum SetupPage {
     Intro,
+    DataRoot,
     Firmware,
     Conclusion
 }
 
-export enum FirmwareInstaller {
-    Stopped,
-    Running
-}
-
 export component SetupWizard inherits Window {
+    in-out property <string> data-root;
     in-out property <string> firmware-dump;
-    in-out property <FirmwareInstaller> firmware-installer;
     in property <string> firmware-status;
     in property <float> firmware-progress;
     in-out property <string> error-message;
 
     pure callback cancel <=> nav.cancel;
+    pure callback browse-data-root();
+    pure callback set-data-root();
     pure callback browse-firmware();
     pure callback install-firmware();
     pure callback finish();
@@ -34,57 +33,74 @@ export component SetupWizard inherits Window {
     width: 500px; // PopupWindow does not resize with the window somehow.
     height: 400px; // Same here.
 
-    private property <WizardPage> page: WizardPage.Intro;
+    private property <SetupPage> page: SetupPage.Intro;
 
     states [
-        finished when page == WizardPage.Conclusion: {
+        finished when page == SetupPage.Conclusion: {
             nav.next-text: "Finish";
         }
     ]
 
+    // Content.
     VerticalLayout {
-        if page == WizardPage.Intro: Intro {
+        // Intro.
+        if page == SetupPage.Intro: Intro {
             vertical-stretch: 1;
         }
 
-        if page == WizardPage.Firmware: Firmware {
-            firmware-dump: firmware-dump;
+        // Data root.
+        if page == SetupPage.DataRoot: DataRoot {
+            path <=> data-root;
+            vertical-stretch: 1;
+
+            browse => {
+                browse-data-root();
+            }
+        }
+
+        // Firmware.
+        if page == SetupPage.Firmware: Firmware {
+            firmware-dump <=> firmware-dump;
             vertical-stretch: 1;
 
             browse => {
                 browse-firmware();
             }
-
-            changed firmware-dump => {
-                firmware-dump = self.firmware-dump;
-            }
         }
 
-        if page == WizardPage.Conclusion: Conclusion {
+        // Conclusion.
+        if page == SetupPage.Conclusion: Conclusion {
             vertical-stretch: 1;
         }
 
+        // Navigation.
         nav := NavBar {
             back-text: "＜ Back";
-            back-enabled: root.page != WizardPage.Intro && root.page != WizardPage.Conclusion;
+            back-enabled: root.page != SetupPage.Intro && root.page != SetupPage.Conclusion;
             next-text: "Next ＞";
             back-clicked => {
-                if root.page == WizardPage.Firmware {
-                    root.page = WizardPage.Intro;
+                if page == SetupPage.DataRoot {
+                    page = SetupPage.Intro;
+                } else if page == SetupPage.Firmware {
+                    page = SetupPage.DataRoot;
                 }
             }
             next-clicked => {
-                if root.page == WizardPage.Intro {
-                    root.page = WizardPage.Firmware;
-                } else if root.page == WizardPage.Firmware {
+                if page == SetupPage.Intro {
+                    page = SetupPage.DataRoot;
+                } else if page == SetupPage.DataRoot {
+                    // https://github.com/slint-ui/slint/issues/2752
+                    set-data-root();
+                } else if page == SetupPage.Firmware {
                     install-firmware();
-                } else if root.page == WizardPage.Conclusion {
+                } else if page == SetupPage.Conclusion {
                     finish();
                 }
             }
         }
     }
 
+    // Popups.
     firmware-popup := InstallFirmware {
         x: 10px;
         y: 150px;
@@ -104,12 +120,28 @@ export component SetupWizard inherits Window {
         }
     }
 
-    changed firmware-installer => {
-        if firmware-installer == FirmwareInstaller.Running {
-            firmware-popup.show();
+    // Functions.
+    public function set-data-root-ok(has-firmware: bool) {
+        if has-firmware {
+            page = SetupPage.Conclusion;
+        } else {
+            page = SetupPage.Firmware;
         }
     }
 
+    public function show-firmware-installer() {
+        firmware-popup.show();
+    }
+
+    public function set-firmware-finished(success: bool) {
+        firmware-popup.close();
+
+        if success {
+            page = SetupPage.Conclusion;
+        }
+    }
+
+    // Change callbacks.
     changed error-message => {
         if error-message == "" {
             error-popup.close();

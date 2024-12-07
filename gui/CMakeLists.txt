@@ -9,17 +9,13 @@ endif()
 # Setup GUI.
 add_executable(obliteration WIN32 MACOSX_BUNDLE
     app_data.cpp
-    display_settings.cpp
-    initialize_wizard.cpp
     launch_settings.cpp
     main.cpp
     main_window.cpp
     path.cpp
-    progress_dialog.cpp
     resources.cpp
     resources.qrc
-    settings.cpp
-    system.cpp)
+    settings.cpp)
 
 if(WIN32)
     target_sources(obliteration PRIVATE vulkan.cpp)

@@ -1,0 +1,36 @@
+import { VerticalBox, HorizontalBox, LineEdit, Button } from "std-widgets.slint";
+import { Header } from "header.slint";
+
+export component DataRoot {
+    in-out property <string> path <=> input.text;
+
+    callback browse();
+
+    VerticalBox {
+        Header {
+            title: "Data Location";
+        }
+
+        Text {
+            text: "Select a directory to store Obliteration data. This directory will be used to store everything, including firmware and games. If you have data from the previous usage you can reuse those data.";
+            wrap: word-wrap;
+        }
+
+        HorizontalBox {
+            padding: 0;
+
+            input := LineEdit {
+                placeholder-text: "Path to a directory";
+            }
+
+            Button {
+                text: "...";
+                clicked => {
+                    browse();
+                }
+            }
+        }
+
+        Rectangle { }
+    }
+}

@@ -1,7 +1,4 @@
-#include "initialize_wizard.hpp"
 #include "main_window.hpp"
-#include "settings.hpp"
-#include "system.hpp"
 #ifndef __APPLE__
 #include "vulkan.hpp"
 #endif
@@ -17,8 +14,6 @@
 #include <QVulkanFunctions>
 #include <QVulkanInstance>
 #endif
-
-#include <utility>
 
 #ifndef _WIN32
 #include <sys/resource.h>
@@ -150,21 +145,8 @@ int main(int argc, char *argv[])
     }
 #endif
 
-    // Check if no any required settings.
-    if (!hasRequiredUserSettings() || !isSystemInitialized()) {
-        InitializeWizard init;
-
-        if (!init.exec()) {
-            return 1;
-        }
-    }
-
     // Setup main window.
-#ifdef __APPLE__
     MainWindow win(args);
-#else
-    MainWindow win(args, std::move(vkDevices));
-#endif
 
     win.restoreGeometry();
 
