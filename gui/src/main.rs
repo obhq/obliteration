@@ -1,7 +1,7 @@
 #![windows_subsystem = "windows"]
 
-use self::debug::DebugClient;
 use self::data::DataError;
+use self::debug::DebugClient;
 use self::graphics::{Graphics, PhysicalDevice, Screen};
 use self::profile::{Profile, ProfileModel};
 use self::setup::{run_setup, SetupError};
