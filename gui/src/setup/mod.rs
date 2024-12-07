@@ -45,6 +45,20 @@ pub fn run_setup() -> Result<Option<DataMgr>, SetupError> {
         move || win.unwrap().hide().unwrap()
     });
 
+    win.on_get_dumper({
+        let win = win.as_weak();
+
+        move || {
+            let url = "https://github.com/obhq/firmware-dumper";
+
+            if let Err(e) = open::that_detached(url) {
+                let m = format!("Failed to open {}: {}.", url, e.display());
+
+                win.unwrap().set_error_message(m.into());
+            }
+        }
+    });
+
     win.on_browse_data_root({
         let win = win.as_weak();
 

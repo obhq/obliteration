@@ -1,8 +1,6 @@
 <!DOCTYPE RCC>
 <RCC version="1.0">
   <qresource>
-    <file>resources/content-save.svg</file>
     <file>resources/obliteration-icon.png</file>
-    <file>resources/play.svg</file>
   </qresource>
 </RCC>

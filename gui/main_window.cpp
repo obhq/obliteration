@@ -1,5 +1,4 @@
 #include "main_window.hpp"
-#include "launch_settings.hpp"
 #include "resources.hpp"
 #include "settings.hpp"
 
@@ -36,7 +35,6 @@ namespace Args {
 MainWindow::MainWindow(const QCommandLineParser &args) :
     m_args(args),
     m_main(nullptr),
-    m_launch(nullptr),
     m_debugNoti(nullptr)
 {
     setWindowTitle("Obliteration");
@@ -72,11 +70,6 @@ MainWindow::MainWindow(const QCommandLineParser &args) :
     m_main = new QStackedWidget();
 
     setCentralWidget(m_main);
-
-    // Launch settings.
-    m_launch = new LaunchSettings();
-
-    m_main->addWidget(m_launch);
 }
 
 MainWindow::~MainWindow()

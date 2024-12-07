@@ -4,15 +4,17 @@ import { CpuTab } from "cpu.slint";
 import { Menu } from "menu.slint";
 
 enum Tab {
-    Menu,
-    Display,
-    Cpu
+    menu,
+    display,
+    cpu
 }
 
 export component Tabs {
     in property <[string]> devices;
 
-    private property <Tab> tab: Tab.Display;
+    pure callback report-issue();
+
+    private property <Tab> tab: Tab.display;
 
     VerticalBox {
         padding: 0;
@@ -23,9 +25,9 @@ export component Tabs {
             Button {
                 icon: @image-url("menu.svg");
                 colorize-icon: true;
-                primary: root.tab == Tab.Menu;
+                primary: root.tab == Tab.menu;
                 clicked => {
-                    root.tab = Tab.Menu
+                    root.tab = Tab.menu
                 }
             }
 
@@ -33,10 +35,10 @@ export component Tabs {
                 text: "Display";
                 icon: @image-url("monitor.svg");
                 colorize-icon: true;
-                primary: root.tab == Tab.Display;
+                primary: root.tab == Tab.display;
                 horizontal-stretch: 1;
                 clicked => {
-                    root.tab = Tab.Display
+                    root.tab = Tab.display
                 }
             }
 
@@ -44,24 +46,28 @@ export component Tabs {
                 text: "CPU";
                 icon: @image-url("cpu-64-bit.svg");
                 colorize-icon: true;
-                primary: root.tab == Tab.Cpu;
+                primary: root.tab == Tab.cpu;
                 horizontal-stretch: 1;
                 clicked => {
-                    root.tab = Tab.Cpu
+                    root.tab = Tab.cpu
                 }
             }
         }
 
-        if root.tab == Tab.Menu: Menu {
+        if root.tab == Tab.menu: Menu {
             vertical-stretch: 1;
+
+            report-issue => {
+                report-issue();
+            }
         }
 
-        if root.tab == Tab.Display: DisplayTab {
+        if root.tab == Tab.display: DisplayTab {
             devices: root.devices;
             vertical-stretch: 1;
         }
 
-        if root.tab == Tab.Cpu: CpuTab {
+        if root.tab == Tab.cpu: CpuTab {
             vertical-stretch: 1;
         }
     }
