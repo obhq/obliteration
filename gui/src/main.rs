@@ -168,7 +168,8 @@ fn run_vmm(args: &CliArgs) -> Result<(), ApplicationError> {
 
         match exit_action {
             None => return Ok(()),
-            Some(debug_addr) => debug_addr,
+            Some(ExitAction::Run) => None,
+            Some(ExitAction::RunDebug(addr)) => Some(addr),
         }
     };
 
@@ -237,7 +238,7 @@ fn run_panic_handler() -> Result<(), ApplicationError> {
 fn run_launcher(
     graphics: &impl Graphics,
     profiles: Vec<Profile>,
-) -> Result<Option<Option<SocketAddrV4>>, ApplicationError> {
+) -> Result<Option<ExitAction>, ApplicationError> {
     // Create window and register callback handlers.
     let win = MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
     let profiles = Rc::new(ProfileModel::new(profiles));
@@ -256,7 +257,7 @@ fn run_launcher(
 
         move || {
             win.unwrap().hide().unwrap();
-            debug_addr.set(Some(None));
+            debug_addr.set(Some(ExitAction::Run));
         }
     });
 
@@ -272,7 +273,7 @@ fn run_launcher(
 
             win.unwrap().hide().unwrap();
 
-            debug_addr.set(Some(Some(addr)));
+            debug_addr.set(Some(ExitAction::RunDebug(addr)));
         }
     });
 
@@ -356,6 +357,12 @@ struct CliArgs {
     /// Use the kernel image at the specified path instead of the default one.
     #[arg(long)]
     kernel: Option<PathBuf>,
+}
+
+/// Action to be performed after the main window is closed.
+enum ExitAction {
+    Run,
+    RunDebug(SocketAddrV4),
 }
 
 /// Encapsulates arguments for [`Vmm::new()`].
