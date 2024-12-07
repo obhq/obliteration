@@ -17,7 +17,6 @@ use std::io::Write;
 use std::net::SocketAddrV4;
 use std::panic::PanicHookInfo;
 use std::path::PathBuf;
-use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitCode, Stdio};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex, Weak};
@@ -162,25 +161,33 @@ fn run_vmm(args: &CliArgs) -> Result<(), ApplicationError> {
     }
 
     // Get VMM arguments.
-    let vmm_args = if let Some(debug_addr) = args.debug {
+    let debug_addr = if let Some(debug_addr) = args.debug {
+        Some(debug_addr)
+    } else {
+        let exit_action = run_launcher(&graphics, profiles)?;
+
+        match exit_action {
+            None => return Ok(()),
+            Some(debug_addr) => debug_addr,
+        }
+    };
+
+    let debugger = if let Some(debug_addr) = debug_addr {
         let debug_server = DebugServer::new(debug_addr)
             .map_err(|e| ApplicationError::StartDebugServer(e, debug_addr))?;
 
-        let debug_client = debug_server
+        let debugger = debug_server
             .accept()
             .map_err(ApplicationError::CreateDebugClient)?;
 
-        todo!()
+        Some(debugger)
     } else {
-        let vmm_args = run_launcher(&graphics, profiles)?.then_some(VmmArgs {
-            kernel_path,
-            debugger: None,
-        });
+        None
+    };
 
-        match vmm_args {
-            Some(vmm_args) => vmm_args,
-            None => return Ok(()),
-        }
+    let _vmm_args = VmmArgs {
+        kernel_path,
+        debugger,
     };
 
     // Setup VMM screen.
@@ -230,11 +237,11 @@ fn run_panic_handler() -> Result<(), ApplicationError> {
 fn run_launcher(
     graphics: &impl Graphics,
     profiles: Vec<Profile>,
-) -> Result<bool, ApplicationError> {
+) -> Result<Option<Option<SocketAddrV4>>, ApplicationError> {
     // Create window and register callback handlers.
     let win = MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
     let profiles = Rc::new(ProfileModel::new(profiles));
-    let start = Rc::new(Cell::new(false));
+    let start = Rc::new(Cell::new(None));
 
     win.on_profile_names(|profiles| ModelRc::new(profiles.map(|p| p.name)));
 
@@ -249,7 +256,7 @@ fn run_launcher(
 
         move || {
             win.unwrap().hide().unwrap();
-            start.set(true);
+            start.set(Some(None));
         }
     });
 
