@@ -1,6 +1,7 @@
 #![windows_subsystem = "windows"]
 
 use self::debug::DebugClient;
+use self::data::DataError;
 use self::graphics::{Graphics, PhysicalDevice, Screen};
 use self::profile::{Profile, ProfileModel};
 use self::setup::{run_setup, SetupError};
@@ -16,6 +17,7 @@ use std::io::Write;
 use std::net::SocketAddrV4;
 use std::panic::PanicHookInfo;
 use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitCode, Stdio};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex, Weak};
@@ -133,8 +135,31 @@ fn run_vmm(cli_args: &CliArgs) -> Result<(), ApplicationError> {
         path
     });
 
-    // TODO: load profiles from filesystem
-    let profiles = vec![Profile::default()];
+    // Load profiles.
+    let mut profiles = Vec::new();
+
+    for l in data.prof().list().map_err(ApplicationError::ListProfile)? {
+        let l = l.map_err(ApplicationError::ListProfile)?;
+        let p = Profile::load(&l).map_err(ApplicationError::LoadProfile)?;
+
+        profiles.push(p);
+    }
+
+    // Create default profile if user does not have any profiles.
+    if profiles.is_empty() {
+        // Create directory.
+        let p = Profile::default();
+        let l = data.prof().data(p.id());
+
+        if let Err(e) = std::fs::create_dir(&l) {
+            return Err(ApplicationError::CreateDirectory(l, e));
+        }
+
+        // Save.
+        p.save(&l).map_err(ApplicationError::SaveDefaultProfile)?;
+
+        profiles.push(p);
+    }
 
     // Get VMM arguments.
     let vmm_args = if let Some(debug_addr) = cli_args.debug {
@@ -353,7 +378,19 @@ enum ApplicationError {
     #[error("couldn't run setup wizard")]
     Setup(#[source] SetupError),
 
-    #[error("get current executable path")]
+    #[error("couldn't list available profiles")]
+    ListProfile(#[source] DataError),
+
+    #[error("couldn't load profile")]
+    LoadProfile(#[source] self::profile::LoadError),
+
+    #[error("couldn't create {0}")]
+    CreateDirectory(PathBuf, #[source] std::io::Error),
+
+    #[error("couldn't save default profile")]
+    SaveDefaultProfile(#[source] self::profile::SaveError),
+
+    #[error("couldn't get application executable path")]
     GetCurrentExePath(#[source] std::io::Error),
 
     #[error("failed to start debug server on {1}")]
