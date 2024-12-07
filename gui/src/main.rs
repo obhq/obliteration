@@ -260,6 +260,22 @@ fn run_launcher(
         }
     });
 
+    win.on_start_debug({
+        let win = win.as_weak();
+        let debug_addr = debug_addr.clone();
+
+        move |addr| {
+            let addr = match addr.parse() {
+                Ok(addr) => addr,
+                Err(_e) => todo!(),
+            };
+
+            win.unwrap().hide().unwrap();
+
+            debug_addr.set(Some(Some(addr)));
+        }
+    });
+
     let physical_devices = ModelRc::new(VecModel::from_iter(
         graphics
             .physical_devices()
