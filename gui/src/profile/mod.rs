@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::num::NonZero;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use thiserror::Error;
 use uuid::Uuid;
@@ -24,26 +24,36 @@ pub struct Profile {
 }
 
 impl Profile {
-    pub fn load(path: impl AsRef<Path>) -> Result<Self, LoadError> {
-        let path = path.as_ref().join("profile.bin");
+    pub fn load(root: impl AsRef<Path>) -> Result<Self, LoadError> {
+        // Open profile.
+        let root = root.as_ref();
+        let path = root.join("profile.bin");
+        let file = match File::open(&path) {
+            Ok(v) => v,
+            Err(e) => return Err(LoadError::OpenFile(path, e)),
+        };
 
-        let file = File::open(&path).map_err(LoadError::Open)?;
-
-        let profile = ciborium::from_reader(file).map_err(LoadError::Load)?;
+        // Read profile.
+        let profile = match ciborium::from_reader(file) {
+            Ok(v) => v,
+            Err(e) => return Err(LoadError::ReadProfile(path, e)),
+        };
 
         Ok(profile)
     }
 
-    pub fn save(&self, path: impl AsRef<Path>) -> Result<(), SaveError> {
-        let path = path.as_ref();
+    pub fn save(&self, root: impl AsRef<Path>) -> Result<(), SaveError> {
+        // Write profile.
+        let root = root.as_ref();
+        let path = root.join("profile.bin");
+        let file = match File::create(&path) {
+            Ok(v) => v,
+            Err(e) => return Err(SaveError::CreateFile(path, e)),
+        };
 
-        std::fs::create_dir_all(path).map_err(SaveError::CreateDir)?;
-
-        let path = path.join("profile.bin");
-
-        let file = File::create(path).map_err(SaveError::CreateFile)?;
-
-        ciborium::into_writer(self, file).map_err(SaveError::WriteFile)?;
+        if let Err(e) = ciborium::into_writer(self, file) {
+            return Err(SaveError::WriteProfile(path, e));
+        }
 
         Ok(())
     }
@@ -97,21 +107,19 @@ impl Display for DisplayResolution {
 /// Represents an error when [`Profile::load()`] fails.
 #[derive(Debug, Error)]
 pub enum LoadError {
-    #[error("couldn't open the profile file")]
-    Open(#[source] std::io::Error),
+    #[error("couldn't open {0}")]
+    OpenFile(PathBuf, #[source] std::io::Error),
 
-    #[error("couldn't load the profile file")]
-    Load(#[source] ciborium::de::Error<std::io::Error>),
+    #[error("couldn't read {0}")]
+    ReadProfile(PathBuf, #[source] ciborium::de::Error<std::io::Error>),
 }
 
+/// Represents an error when [`Profile::save()`] fails.
 #[derive(Debug, Error)]
 pub enum SaveError {
-    #[error("couldn't create the directory")]
-    CreateDir(#[source] std::io::Error),
+    #[error("couldn't create {0}")]
+    CreateFile(PathBuf, #[source] std::io::Error),
 
-    #[error("couldn't create the profile file")]
-    CreateFile(#[source] std::io::Error),
-
-    #[error("couldn't write the profile file")]
-    WriteFile(#[source] ciborium::ser::Error<std::io::Error>),
+    #[error("couldn't write {0}")]
+    WriteProfile(PathBuf, #[source] ciborium::ser::Error<std::io::Error>),
 }

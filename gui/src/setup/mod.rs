@@ -113,7 +113,14 @@ pub fn run_setup() -> Result<Option<DataMgr>, SetupError> {
         return Ok(None);
     }
 
-    todo!()
+    // Load data root.
+    let root = read_data_root().map_err(SetupError::ReadDataRoot)?.unwrap();
+    let mgr = match DataMgr::new(root.as_str()) {
+        Ok(v) => v,
+        Err(e) => return Err(SetupError::DataManager(root.into(), e)),
+    };
+
+    Ok(Some(mgr))
 }
 
 async fn browse_data_root(win: SetupWizard) {

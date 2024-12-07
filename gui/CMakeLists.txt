@@ -8,7 +8,6 @@ endif()
 
 # Setup GUI.
 add_executable(obliteration WIN32 MACOSX_BUNDLE
-    app_data.cpp
     main.cpp
     main_window.cpp
     path.cpp
