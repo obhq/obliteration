@@ -252,11 +252,11 @@ fn run_launcher(
 
     win.on_start_vmm({
         let win = win.as_weak();
-        let start = debug_addr.clone();
+        let debug_addr = debug_addr.clone();
 
         move || {
             win.unwrap().hide().unwrap();
-            start.set(Some(None));
+            debug_addr.set(Some(None));
         }
     });
 
