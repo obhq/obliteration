@@ -242,7 +242,7 @@ fn run_launcher(
     // Create window and register callback handlers.
     let win = MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
     let profiles = Rc::new(ProfileModel::new(profiles));
-    let debug_addr = Rc::new(Cell::new(None));
+    let exit = Rc::new(Cell::new(None));
 
     win.on_profile_names(|profiles| ModelRc::new(profiles.map(|p| p.name)));
 
@@ -253,17 +253,17 @@ fn run_launcher(
 
     win.on_start_vmm({
         let win = win.as_weak();
-        let debug_addr = debug_addr.clone();
+        let exit = exit.clone();
 
         move || {
             win.unwrap().hide().unwrap();
-            debug_addr.set(Some(ExitAction::Run));
+            exit.set(Some(ExitAction::Run));
         }
     });
 
     win.on_start_debug({
         let win = win.as_weak();
-        let debug_addr = debug_addr.clone();
+        let exit = exit.clone();
 
         move |addr| {
             let addr = match addr.parse() {
@@ -273,7 +273,7 @@ fn run_launcher(
 
             win.unwrap().hide().unwrap();
 
-            debug_addr.set(Some(ExitAction::RunDebug(addr)));
+            exit.set(Some(ExitAction::RunDebug(addr)));
         }
     });
 
@@ -293,7 +293,7 @@ fn run_launcher(
     drop(win);
 
     // Extract GUI states.
-    let start = Rc::into_inner(debug_addr).unwrap().into_inner();
+    let start = Rc::into_inner(exit).unwrap().into_inner();
 
     Ok(start)
 }
