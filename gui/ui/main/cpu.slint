@@ -1,7 +1,7 @@
 import { Button, Slider, LineEdit, HorizontalBox, VerticalBox } from "std-widgets.slint";
 
 export component CpuTab {
-    property <string> debug_address: "127.0.0.1:1234";
+    property <string> debug-address: "127.0.0.1:1234";
 
     pure callback start-debug(string);
 
@@ -52,13 +52,13 @@ export component CpuTab {
                 }
 
                 LineEdit {
-                    text <=> debug_address;
+                    text <=> debug-address;
                 }
 
                 Button {
                     text: "Start";
                     clicked => {
-                        start-debug(debug_address);
+                        start-debug(debug-address);
                     }
                 }
             }

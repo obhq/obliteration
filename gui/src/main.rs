@@ -268,6 +268,7 @@ fn run_launcher(
         move |addr| {
             let addr = match addr.parse() {
                 Ok(addr) => addr,
+                // TODO: Display error instead of panic.
                 Err(_e) => todo!(),
             };
 
