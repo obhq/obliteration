@@ -241,7 +241,7 @@ fn run_launcher(
     // Create window and register callback handlers.
     let win = MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
     let profiles = Rc::new(ProfileModel::new(profiles));
-    let start = Rc::new(Cell::new(None));
+    let debug_addr = Rc::new(Cell::new(None));
 
     win.on_profile_names(|profiles| ModelRc::new(profiles.map(|p| p.name)));
 
@@ -252,7 +252,7 @@ fn run_launcher(
 
     win.on_start_vmm({
         let win = win.as_weak();
-        let start = start.clone();
+        let start = debug_addr.clone();
 
         move || {
             win.unwrap().hide().unwrap();
@@ -276,7 +276,7 @@ fn run_launcher(
     drop(win);
 
     // Extract GUI states.
-    let start = Rc::into_inner(start).unwrap().into_inner();
+    let start = Rc::into_inner(debug_addr).unwrap().into_inner();
 
     Ok(start)
 }
