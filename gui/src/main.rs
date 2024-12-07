@@ -1,6 +1,7 @@
 #![windows_subsystem = "windows"]
 
 use self::data::DataError;
+use self::debug::DebugClient;
 use self::graphics::{Graphics, PhysicalDevice, Screen};
 use self::profile::{Profile, ProfileModel};
 use self::setup::{run_setup, SetupError};
@@ -15,7 +16,7 @@ use std::error::Error;
 use std::io::Write;
 use std::net::SocketAddrV4;
 use std::panic::PanicHookInfo;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Child, Command, ExitCode, Stdio};
 use std::rc::Rc;
 use std::sync::{Arc, Mutex, Weak};
@@ -38,7 +39,7 @@ fn main() -> ExitCode {
     use std::fmt::Write;
 
     // Check program mode.
-    let args = Args::parse();
+    let args = CliArgs::parse();
     let r = match &args.mode {
         Some(ProgramMode::PanicHandler) => run_panic_handler(),
         None => run_vmm(&args),
@@ -74,7 +75,7 @@ fn main() -> ExitCode {
     ExitCode::FAILURE
 }
 
-fn run_vmm(args: &Args) -> Result<(), ApplicationError> {
+fn run_vmm(args: &CliArgs) -> Result<(), ApplicationError> {
     // Resolve our executable path.
     let exe = std::env::current_exe()
         .and_then(std::fs::canonicalize)
@@ -110,31 +111,28 @@ fn run_vmm(args: &Args) -> Result<(), ApplicationError> {
     };
 
     // Get kernel path.
-    let kernel = match &args.kernel {
-        Some(v) => v.to_path_buf(),
-        None => {
-            // Get kernel directory.
-            let mut path = exe.parent().unwrap().to_owned();
+    let kernel_path = args.kernel.as_ref().cloned().unwrap_or_else(|| {
+        // Get kernel directory.
+        let mut path = exe.parent().unwrap().to_owned();
 
-            #[cfg(target_os = "windows")]
+        #[cfg(target_os = "windows")]
+        path.push("share");
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            path.pop();
+
+            #[cfg(target_os = "macos")]
+            path.push("Resources");
+
+            #[cfg(not(target_os = "macos"))]
             path.push("share");
-
-            #[cfg(not(target_os = "windows"))]
-            {
-                path.pop();
-
-                #[cfg(target_os = "macos")]
-                path.push("Resources");
-
-                #[cfg(not(target_os = "macos"))]
-                path.push("share");
-            }
-
-            // Append kernel.
-            path.push("obkrnl");
-            path
         }
-    };
+
+        // Append kernel.
+        path.push("obkrnl");
+        path
+    });
 
     // Load profiles.
     let mut profiles = Vec::new();
@@ -163,20 +161,34 @@ fn run_vmm(args: &Args) -> Result<(), ApplicationError> {
     }
 
     // Get VMM arguments.
-    let args = if let Some(debug_addr) = args.debug {
+    let debug_addr = if let Some(debug_addr) = args.debug {
+        Some(debug_addr)
+    } else {
+        let exit_action = run_launcher(&graphics, profiles)?;
+
+        match exit_action {
+            None => return Ok(()),
+            Some(ExitAction::Run) => None,
+            Some(ExitAction::RunDebug(addr)) => Some(addr),
+        }
+    };
+
+    let debugger = if let Some(debug_addr) = debug_addr {
         let debug_server = DebugServer::new(debug_addr)
             .map_err(|e| ApplicationError::StartDebugServer(e, debug_addr))?;
 
-        let debug_client = debug_server
+        let debugger = debug_server
             .accept()
             .map_err(ApplicationError::CreateDebugClient)?;
 
-        todo!()
+        Some(debugger)
     } else {
-        match run_launcher(&graphics, profiles)? {
-            Some(v) => v,
-            None => return Ok(()),
-        }
+        None
+    };
+
+    let _vmm_args = VmmArgs {
+        kernel_path,
+        debugger,
     };
 
     // Setup VMM screen.
@@ -226,11 +238,11 @@ fn run_panic_handler() -> Result<(), ApplicationError> {
 fn run_launcher(
     graphics: &impl Graphics,
     profiles: Vec<Profile>,
-) -> Result<Option<VmmArgs>, ApplicationError> {
+) -> Result<Option<ExitAction>, ApplicationError> {
     // Create window and register callback handlers.
     let win = MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
     let profiles = Rc::new(ProfileModel::new(profiles));
-    let start = Rc::new(Cell::new(false));
+    let exit = Rc::new(Cell::new(None));
 
     win.on_profile_names(|profiles| ModelRc::new(profiles.map(|p| p.name)));
 
@@ -241,11 +253,28 @@ fn run_launcher(
 
     win.on_start_vmm({
         let win = win.as_weak();
-        let start = start.clone();
+        let exit = exit.clone();
 
         move || {
             win.unwrap().hide().unwrap();
-            start.set(true);
+            exit.set(Some(ExitAction::Run));
+        }
+    });
+
+    win.on_start_debug({
+        let win = win.as_weak();
+        let exit = exit.clone();
+
+        move |addr| {
+            let addr = match addr.parse() {
+                Ok(addr) => addr,
+                // TODO: Display error instead of panic.
+                Err(_e) => todo!(),
+            };
+
+            win.unwrap().hide().unwrap();
+
+            exit.set(Some(ExitAction::RunDebug(addr)));
         }
     });
 
@@ -265,10 +294,7 @@ fn run_launcher(
     drop(win);
 
     // Extract GUI states.
-    let start = Rc::into_inner(start)
-        .unwrap()
-        .into_inner()
-        .then_some(VmmArgs {});
+    let start = Rc::into_inner(exit).unwrap().into_inner();
 
     Ok(start)
 }
@@ -321,7 +347,7 @@ fn panic_hook(i: &PanicHookInfo, ph: &Weak<Mutex<Option<PanicHandler>>>) {
 /// Program arguments parsed from command line.
 #[derive(Parser)]
 #[command(about = None)]
-struct Args {
+struct CliArgs {
     #[arg(long, value_enum, hide = true)]
     mode: Option<ProgramMode>,
 
@@ -331,11 +357,20 @@ struct Args {
 
     /// Use the kernel image at the specified path instead of the default one.
     #[arg(long)]
-    kernel: Option<Box<Path>>,
+    kernel: Option<PathBuf>,
+}
+
+/// Action to be performed after the main window is closed.
+enum ExitAction {
+    Run,
+    RunDebug(SocketAddrV4),
 }
 
 /// Encapsulates arguments for [`Vmm::new()`].
-struct VmmArgs {}
+struct VmmArgs {
+    kernel_path: PathBuf,
+    debugger: Option<DebugClient>,
+}
 
 /// Mode of our program.
 #[derive(Clone, ValueEnum)]

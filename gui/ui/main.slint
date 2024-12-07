@@ -15,6 +15,7 @@ export component MainWindow inherits Window {
     pure callback profile-selected <=> actions.profile-selected;
     pure callback report-issue();
     pure callback start-vmm <=> actions.start;
+    pure callback start-debug <=> tabs.start-debug;
 
     title: "Obliteration";
     icon: @image-url("icon.png");
@@ -22,7 +23,7 @@ export component MainWindow inherits Window {
     min-height: 500px;
 
     VerticalBox {
-        Tabs {
+        tabs := Tabs {
             devices: devices;
             report-issue => {
                 report-issue();
