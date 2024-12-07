@@ -1,6 +1,5 @@
 import { Tabs } from "main/tabs.slint";
 import { Actions } from "main/actions.slint";
-import { Profile } from "profile.slint";
 import { VerticalBox } from "std-widgets.slint";
 
 export { ErrorWindow } from "error.slint";
@@ -8,11 +7,11 @@ export { SetupWizard } from "setup.slint";
 
 export component MainWindow inherits Window {
     in property <[string]> devices;
-    in property <[Profile]> profiles;
-    in property <Profile> profile;
+    in property <[string]> profiles;
+    in-out property <int> selected-profile <=> actions.selected-profile;
 
-    pure callback profile-names([Profile]) -> [string];
-    pure callback profile-selected <=> actions.profile-selected;
+    callback profile-selected <=> actions.profile-selected;
+    pure callback save-profile <=> actions.save;
     pure callback report-issue();
     pure callback start-vmm <=> actions.start;
     pure callback start-debug <=> tabs.start-debug;
@@ -31,7 +30,7 @@ export component MainWindow inherits Window {
         }
 
         actions := Actions {
-            profiles: profile-names(profiles);
+            profiles: profiles;
         }
     }
 }

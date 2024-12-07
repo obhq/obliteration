@@ -1,15 +1,15 @@
 #![windows_subsystem = "windows"]
 
-use self::data::DataError;
+use self::data::{DataError, DataMgr};
 use self::debug::DebugClient;
 use self::graphics::{Graphics, PhysicalDevice, Screen};
-use self::profile::{Profile, ProfileModel};
+use self::profile::Profile;
 use self::setup::{run_setup, SetupError};
-use self::ui::{ErrorWindow, MainWindow};
+use self::ui::{ErrorWindow, MainWindow, ProfileModel};
 use clap::{Parser, ValueEnum};
 use debug::DebugServer;
 use serde::{Deserialize, Serialize};
-use slint::{ComponentHandle, ModelExt, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use std::borrow::Cow;
 use std::cell::Cell;
 use std::error::Error;
@@ -106,7 +106,7 @@ fn run_vmm(args: &CliArgs) -> Result<(), ApplicationError> {
     // Run setup wizard. This will simply return the data manager if the user already has required
     // settings.
     let data = match run_setup().map_err(ApplicationError::Setup)? {
-        Some(v) => v,
+        Some(v) => Arc::new(v),
         None => return Ok(()),
     };
 
@@ -164,9 +164,7 @@ fn run_vmm(args: &CliArgs) -> Result<(), ApplicationError> {
     let debug_addr = if let Some(debug_addr) = args.debug {
         Some(debug_addr)
     } else {
-        let exit_action = run_launcher(&graphics, profiles)?;
-
-        match exit_action {
+        match run_launcher(&graphics, &data, profiles)? {
             None => return Ok(()),
             Some(ExitAction::Run) => None,
             Some(ExitAction::RunDebug(addr)) => Some(addr),
@@ -237,6 +235,7 @@ fn run_panic_handler() -> Result<(), ApplicationError> {
 
 fn run_launcher(
     graphics: &impl Graphics,
+    data: &Arc<DataMgr>,
     profiles: Vec<Profile>,
 ) -> Result<Option<ExitAction>, ApplicationError> {
     // Create window and register callback handlers.
@@ -244,7 +243,34 @@ fn run_launcher(
     let profiles = Rc::new(ProfileModel::new(profiles));
     let exit = Rc::new(Cell::new(None));
 
-    win.on_profile_names(|profiles| ModelRc::new(profiles.map(|p| p.name)));
+    win.on_profile_selected({
+        let win = win.as_weak();
+        let profiles = profiles.clone();
+
+        move || {
+            // TODO: Check if previous profile has unsaved data before switch the profile.
+            let win = win.unwrap();
+            let row: usize = win.get_selected_profile().try_into().unwrap();
+
+            profiles.select(row, &win);
+        }
+    });
+
+    win.on_save_profile({
+        let data = data.clone();
+        let win = win.as_weak();
+        let profiles = profiles.clone();
+
+        move || {
+            let win = win.unwrap();
+            let row: usize = win.get_selected_profile().try_into().unwrap();
+            let pro = profiles.update(row, &win);
+            let loc = data.prof().data(pro.id());
+
+            // TODO: Display error instead of panic.
+            pro.save(loc).unwrap();
+        }
+    });
 
     win.on_report_issue(|| {
         // TODO: Display error instead of panic.
@@ -278,6 +304,7 @@ fn run_launcher(
         }
     });
 
+    // Set window properties.
     let physical_devices = ModelRc::new(VecModel::from_iter(
         graphics
             .physical_devices()
@@ -286,10 +313,20 @@ fn run_launcher(
     ));
 
     win.set_devices(physical_devices);
-    win.set_profiles(profiles.into());
+    win.set_profiles(profiles.clone().into());
+
+    // Load selected profile.
+    let row: usize = win.get_selected_profile().try_into().unwrap();
+
+    profiles.select(row, &win);
 
     // Run the window.
     win.run().map_err(ApplicationError::RunMainWindow)?;
+
+    // Update selected profile.
+    let row: usize = win.get_selected_profile().try_into().unwrap();
+
+    profiles.update(row, &win);
 
     drop(win);
 

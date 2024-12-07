@@ -1,5 +1,3 @@
-pub use self::ui::*;
-
 use obconf::Config;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
@@ -9,8 +7,6 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use thiserror::Error;
 use uuid::Uuid;
-
-mod ui;
 
 /// Contains settings to launch the kernel.
 #[derive(Deserialize, Serialize)]
@@ -42,6 +38,18 @@ impl Profile {
         Ok(profile)
     }
 
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn kernel_config(&self) -> &Config {
+        &self.kernel_config
+    }
+
     pub fn save(&self, root: impl AsRef<Path>) -> Result<(), SaveError> {
         // Write profile.
         let root = root.as_ref();
@@ -56,14 +64,6 @@ impl Profile {
         }
 
         Ok(())
-    }
-
-    pub fn id(&self) -> Uuid {
-        self.id
-    }
-
-    pub fn kernel_config(&self) -> &Config {
-        &self.kernel_config
     }
 }
 
