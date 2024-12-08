@@ -7,7 +7,6 @@ use self::kernel::{
 use self::ram::RamBuilder;
 use crate::debug::DebugClient;
 use crate::hv::{Hypervisor, Ram};
-use crate::profile::Profile;
 use crate::VmmArgs;
 use cpu::GdbError;
 use gdbstub::common::Signal;
@@ -64,8 +63,8 @@ pub struct Vmm<E: VmmHandler> {
 }
 
 impl<E: VmmHandler> Vmm<E> {
-    pub fn new(args: VmmArgs, handler: E, profile: &Profile) -> Result<Self, VmmError> {
-        let path = &args.kernel_path;
+    pub fn new(args: VmmArgs, handler: E) -> Result<Self, VmmError> {
+        let path = &args.kernel;
         let debugger = args.debugger;
 
         // Open kernel image.
@@ -281,7 +280,7 @@ impl<E: VmmHandler> Vmm<E> {
             host_page_size,
         });
 
-        ram.alloc_args(env, profile.kernel_config().clone())
+        ram.alloc_args(env, args.profile.kernel_config().clone())
             .map_err(VmmError::AllocateRamForArgs)?;
 
         // Build RAM.

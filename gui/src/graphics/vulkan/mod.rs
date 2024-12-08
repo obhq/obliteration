@@ -1,67 +1,99 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::screen::VulkanScreen;
 use super::Graphics;
-use ash::vk::{ApplicationInfo, InstanceCreateInfo};
-use std::ffi::CStr;
+use crate::profile::Profile;
+use ash::vk::{ApplicationInfo, InstanceCreateInfo, QueueFlags, API_VERSION_1_3};
 use thiserror::Error;
 
 mod buffer;
 mod screen;
 
-pub struct Vulkan {
-    entry: ash::Entry,
+pub fn new() -> Result<impl Graphics, GraphicsError> {
+    // Setup application info.
+    let info = ApplicationInfo::default()
+        .application_name(c"Obliteration")
+        .api_version(API_VERSION_1_3);
+
+    // Setup validation layers.
+    let layers = [
+        #[cfg(debug_assertions)]
+        c"VK_LAYER_KHRONOS_validation".as_ptr(),
+    ];
+
+    // Setup VkInstanceCreateInfo.
+    let info = InstanceCreateInfo::default()
+        .application_info(&info)
+        .enabled_layer_names(&layers);
+
+    // Create Vulkan instance.
+    let api = ash::Entry::linked();
+    let mut vk = match unsafe { api.create_instance(&info, None) } {
+        Ok(instance) => Vulkan {
+            instance,
+            devices: Vec::new(),
+        },
+        Err(e) => return Err(GraphicsError::CreateInstance(e)),
+    };
+
+    // List available devices.
+    let all = match unsafe { vk.instance.enumerate_physical_devices() } {
+        Ok(v) => v,
+        Err(e) => return Err(GraphicsError::EnumeratePhysicalDevices(e)),
+    };
+
+    if all.is_empty() {
+        return Err(GraphicsError::NoPhysicalDevice);
+    }
+
+    for dev in all {
+        // Filter out devices without Vulkan 1.3.
+        let p = unsafe { vk.instance.get_physical_device_properties(dev) };
+
+        if p.api_version < API_VERSION_1_3 {
+            continue;
+        }
+
+        // Skip if device does not support graphics operations.
+        if !unsafe { vk.instance.get_physical_device_queue_family_properties(dev) }
+            .iter()
+            .any(|p| p.queue_flags.contains(QueueFlags::GRAPHICS))
+        {
+            continue;
+        }
+
+        // Add to list.
+        let name = p
+            .device_name_as_c_str()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned();
+
+        vk.devices.push(PhysicalDevice { device: dev, name });
+    }
+
+    if vk.devices.is_empty() {
+        return Err(GraphicsError::NoSuitableDevice);
+    }
+
+    Ok(vk)
+}
+
+/// Implementation of [`Graphics`] using Vulkan.
+struct Vulkan {
     instance: ash::Instance,
-    devices: Vec<VulkanPhysicalDevice>,
+    devices: Vec<PhysicalDevice>,
 }
 
 impl Graphics for Vulkan {
-    type Err = VulkanError;
-    type PhysicalDevice = VulkanPhysicalDevice;
+    type PhysicalDevice = PhysicalDevice;
     type Screen = VulkanScreen;
-
-    fn new() -> Result<Self, Self::Err> {
-        let entry = ash::Entry::linked();
-
-        let app_info = ApplicationInfo::default().application_name(c"Obliteration");
-
-        let create_info = InstanceCreateInfo::default().application_info(&app_info);
-
-        let instance = unsafe { entry.create_instance(&create_info, None) }
-            .map_err(VulkanError::CreateInstanceFailed)?;
-
-        let devices = unsafe { instance.enumerate_physical_devices() }
-            .map_err(VulkanError::EnumeratePhysicalDevicesFailed)?
-            .into_iter()
-            .map(|device| -> Result<VulkanPhysicalDevice, VulkanError> {
-                let properties = unsafe { instance.get_physical_device_properties(device) };
-
-                let name = CStr::from_bytes_until_nul(unsafe {
-                    std::slice::from_raw_parts(
-                        properties.device_name.as_ptr().cast(),
-                        properties.device_name.len(),
-                    )
-                })
-                .map_err(|_| VulkanError::DeviceNameInvalid)?
-                .to_str()
-                .map_err(VulkanError::DeviceNameInvalidUtf8)?
-                .to_owned();
-
-                Ok(VulkanPhysicalDevice { device, name })
-            })
-            .collect::<Result<_, VulkanError>>()?;
-
-        Ok(Self {
-            entry,
-            instance,
-            devices,
-        })
-    }
 
     fn physical_devices(&self) -> &[Self::PhysicalDevice] {
         &self.devices
     }
 
-    fn create_screen(&mut self) -> Result<Self::Screen, Self::Err> {
+    fn create_screen(&mut self, profile: &Profile) -> Result<Self::Screen, GraphicsError> {
         todo!()
     }
 }
@@ -72,29 +104,29 @@ impl Drop for Vulkan {
     }
 }
 
-pub struct VulkanPhysicalDevice {
+pub struct PhysicalDevice {
     device: ash::vk::PhysicalDevice,
     name: String,
 }
 
-impl super::PhysicalDevice for VulkanPhysicalDevice {
+impl super::PhysicalDevice for PhysicalDevice {
     fn name(&self) -> &str {
         &self.name
     }
 }
 
-/// Implementation of [`Graphics::Err`] for Vulkan.
+/// Represents an error when operation on Vulkan fails.
 #[derive(Debug, Error)]
-pub enum VulkanError {
+pub enum GraphicsError {
     #[error("couldn't create Vulkan instance")]
-    CreateInstanceFailed(#[source] ash::vk::Result),
+    CreateInstance(#[source] ash::vk::Result),
 
     #[error("couldn't enumerate physical devices")]
-    EnumeratePhysicalDevicesFailed(#[source] ash::vk::Result),
+    EnumeratePhysicalDevices(#[source] ash::vk::Result),
 
-    #[error("no null byte in device name")]
-    DeviceNameInvalid,
+    #[error("no any Vulkan physical device available")]
+    NoPhysicalDevice,
 
-    #[error("device name is not valid UTF-8")]
-    DeviceNameInvalidUtf8(#[source] std::str::Utf8Error),
+    #[error("no Vulkan device supports graphics operations with Vulkan 1.3")]
+    NoSuitableDevice,
 }

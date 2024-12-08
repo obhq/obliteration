@@ -78,13 +78,18 @@ impl ProfileModel {
 
     /// # Panics
     /// If `row` is not valid.
-    pub fn update(&self, row: usize, src: &MainWindow) -> RefMut<Profile> {
+    pub fn update(&self, row: i32, src: &MainWindow) -> RefMut<Profile> {
+        let row = usize::try_from(row).unwrap();
         let mut profiles = self.profiles.borrow_mut();
         let p = &mut profiles[row];
 
         p.set_display_resolution(self.resolutions.get(src.get_selected_resolution()).unwrap());
 
         RefMut::map(profiles, move |v| &mut v[row])
+    }
+
+    pub fn into_inner(self) -> Vec<Profile> {
+        self.profiles.into_inner()
     }
 }
 
