@@ -13,7 +13,7 @@ pub type GdbRegs = gdbstub_arch::aarch64::reg::AArch64CoreRegs;
 
 pub(super) const BREAKPOINT_SIZE: NonZero<usize> = unsafe { NonZero::new_unchecked(4) };
 
-impl<H: Hypervisor, E: VmmHandler> gdbstub::target::Target for CpuManager<H, E> {
+impl<'a, 'b, H: Hypervisor, E: VmmHandler> gdbstub::target::Target for CpuManager<'a, 'b, H, E> {
     type Arch = gdbstub_arch::aarch64::AArch64;
     type Error = GdbError;
 
@@ -26,13 +26,13 @@ impl<H: Hypervisor, E: VmmHandler> gdbstub::target::Target for CpuManager<H, E> 
     }
 }
 
-impl<H: Hypervisor, E: VmmHandler> Breakpoints for CpuManager<H, E> {
+impl<'a, 'b, H: Hypervisor, E: VmmHandler> Breakpoints for CpuManager<'a, 'b, H, E> {
     fn support_sw_breakpoint(&mut self) -> Option<SwBreakpointOps<'_, Self>> {
         Some(self)
     }
 }
 
-impl<H: Hypervisor, E: VmmHandler> SwBreakpoint for CpuManager<H, E> {
+impl<'a, 'b, H: Hypervisor, E: VmmHandler> SwBreakpoint for CpuManager<'a, 'b, H, E> {
     fn add_sw_breakpoint(&mut self, addr: u64, kind: usize) -> TargetResult<bool, Self> {
         todo!()
     }

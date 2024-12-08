@@ -8,22 +8,22 @@ use gdbstub::stub::state_machine::{GdbStubStateMachine, GdbStubStateMachineInner
 use gdbstub::stub::MultiThreadStopReason;
 use thiserror::Error;
 
-impl<H: Hypervisor, E: VmmHandler> CpuManager<H, E> {
+impl<'a, 'b, H: Hypervisor, E: VmmHandler> CpuManager<'a, 'b, H, E> {
     pub(super) fn dispatch_gdb_idle(
         &mut self,
         mut state: GdbStubStateMachineInner<
             'static,
-            Idle<CpuManager<H, E>>,
-            CpuManager<H, E>,
+            Idle<CpuManager<'a, 'b, H, E>>,
+            CpuManager<'a, 'b, H, E>,
             DebugClient,
         >,
     ) -> Result<
         Result<
-            GdbStubStateMachine<'static, CpuManager<H, E>, DebugClient>,
+            GdbStubStateMachine<'static, CpuManager<'a, 'b, H, E>, DebugClient>,
             GdbStubStateMachineInner<
                 'static,
-                Idle<CpuManager<H, E>>,
-                CpuManager<H, E>,
+                Idle<CpuManager<'a, 'b, H, E>>,
+                CpuManager<'a, 'b, H, E>,
                 DebugClient,
             >,
         >,
@@ -43,12 +43,17 @@ impl<H: Hypervisor, E: VmmHandler> CpuManager<H, E> {
 
     pub(super) fn dispatch_gdb_running(
         &mut self,
-        mut state: GdbStubStateMachineInner<'static, Running, CpuManager<H, E>, DebugClient>,
+        mut state: GdbStubStateMachineInner<
+            'static,
+            Running,
+            CpuManager<'a, 'b, H, E>,
+            DebugClient,
+        >,
         stop: Option<MultiThreadStopReason<u64>>,
     ) -> Result<
         Result<
-            GdbStubStateMachine<'static, CpuManager<H, E>, DebugClient>,
-            GdbStubStateMachineInner<'static, Running, CpuManager<H, E>, DebugClient>,
+            GdbStubStateMachine<'static, CpuManager<'a, 'b, H, E>, DebugClient>,
+            GdbStubStateMachineInner<'static, Running, CpuManager<'a, 'b, H, E>, DebugClient>,
         >,
         DispatchGdbRunningError,
     > {
