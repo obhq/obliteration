@@ -26,42 +26,16 @@
       "name": "Slint",
       "type": "lldb",
       "request": "launch",
-      "cargo": {
-        "args": [
-          "build",
-          "-p",
-          "gui",
-          "--bin",
-          "obliteration"
-        ],
-        "filter": {
-          "kind": "bin"
-        }
-      },
-      "args": [
-        "--kernel",
-        "${workspaceFolder}/build/obkrnl"
-      ],
-      "cwd": "${workspaceFolder}"
+      "preLaunchTask": "Build",
+      "osx": {
+        "program": "${workspaceFolder}/dist/Obliteration.app/Contents/MacOS/Obliteration"
+      }
     },
     {
-      "name": "Kernel | Qt",
+      "name": "Kernel",
       "type": "lldb",
       "request": "custom",
-      "preLaunchTask": "Launch VMM (Debug & Qt)",
-      "targetCreateCommands": [
-        "target create ${workspaceFolder}/build/obkrnl",
-        "target modules load --file ${workspaceFolder}/build/obkrnl -s 0xffffffff82200000"
-      ],
-      "processCreateCommands": [
-        "gdb-remote 1234"
-      ]
-    },
-    {
-      "name": "Kernel | Slint",
-      "type": "lldb",
-      "request": "custom",
-      "preLaunchTask": "Launch VMM (Debug & Slint)",
+      "preLaunchTask": "Launch VMM",
       "targetCreateCommands": [
         "target create ${workspaceFolder}/build/obkrnl",
         "target modules load --file ${workspaceFolder}/build/obkrnl -s 0xffffffff82200000"
