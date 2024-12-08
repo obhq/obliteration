@@ -1,4 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+pub use self::engine::{new, GraphicsError};
+
+use crate::profile::Profile;
 use std::error::Error;
 use std::sync::Arc;
 
@@ -6,21 +9,13 @@ use std::sync::Arc;
 #[cfg_attr(not(target_os = "macos"), path = "vulkan/mod.rs")]
 mod engine;
 
-#[cfg(not(target_os = "macos"))]
-pub type DefaultApi = self::engine::Vulkan;
-
-#[cfg(target_os = "macos")]
-pub type DefaultApi = self::engine::Metal;
-
 /// The underlying graphics engine (e.g. Vulkan).
 pub trait Graphics: Sized + 'static {
-    type Err: Error;
     type PhysicalDevice: PhysicalDevice;
     type Screen: Screen;
 
-    fn new() -> Result<Self, Self::Err>;
     fn physical_devices(&self) -> &[Self::PhysicalDevice];
-    fn create_screen(&mut self) -> Result<Self::Screen, Self::Err>;
+    fn create_screen(&mut self, profile: &Profile) -> Result<Self::Screen, GraphicsError>;
 }
 
 pub trait PhysicalDevice: Sized {

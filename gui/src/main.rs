@@ -2,7 +2,7 @@
 
 use self::data::{DataError, DataMgr};
 use self::debug::DebugClient;
-use self::graphics::{Graphics, PhysicalDevice, Screen};
+use self::graphics::{Graphics, GraphicsError, PhysicalDevice, Screen};
 use self::profile::Profile;
 use self::setup::{run_setup, SetupError};
 use self::ui::{ErrorWindow, MainWindow, ProfileModel, ResolutionModel};
@@ -98,10 +98,7 @@ fn run_vmm(args: &CliArgs) -> Result<(), ApplicationError> {
     rlim::set_rlimit_nofile().map_err(ApplicationError::FdLimit)?;
 
     // Initialize graphics engine.
-    let mut graphics = match graphics::DefaultApi::new() {
-        Ok(v) => v,
-        Err(e) => return Err(ApplicationError::InitGraphics(Box::new(e))),
-    };
+    let mut graphics = graphics::new().map_err(ApplicationError::InitGraphics)?;
 
     // Run setup wizard. This will simply return the data manager if the user already has required
     // settings.
@@ -160,20 +157,26 @@ fn run_vmm(args: &CliArgs) -> Result<(), ApplicationError> {
         profiles.push(p);
     }
 
-    // Get VMM arguments.
-    let debug_addr = if let Some(debug_addr) = args.debug {
-        Some(debug_addr)
+    // Get profile to use.
+    let (profile, debug) = if let Some(v) = args.debug {
+        // TODO: Select last used profile.
+        (profiles.pop().unwrap(), Some(v))
     } else {
-        match run_launcher(&graphics, &data, profiles)? {
+        let (profile, exit) = match run_launcher(&graphics, &data, profiles)? {
+            Some(v) => v,
             None => return Ok(()),
-            Some(ExitAction::Run) => None,
-            Some(ExitAction::RunDebug(addr)) => Some(addr),
+        };
+
+        match exit {
+            ExitAction::Run => (profile, None),
+            ExitAction::RunDebug(v) => (profile, Some(v)),
         }
     };
 
-    let debugger = if let Some(debug_addr) = debug_addr {
-        let debug_server = DebugServer::new(debug_addr)
-            .map_err(|e| ApplicationError::StartDebugServer(e, debug_addr))?;
+    // Wait for debugger.
+    let debugger = if let Some(listen) = debug {
+        let debug_server =
+            DebugServer::new(listen).map_err(|e| ApplicationError::StartDebugServer(e, listen))?;
 
         let debugger = debug_server
             .accept()
@@ -184,14 +187,9 @@ fn run_vmm(args: &CliArgs) -> Result<(), ApplicationError> {
         None
     };
 
-    let _vmm_args = VmmArgs {
-        kernel_path,
-        debugger,
-    };
-
     // Setup VMM screen.
     let screen = graphics
-        .create_screen()
+        .create_screen(&profile)
         .map_err(|e| ApplicationError::CreateScreen(Box::new(e)))?;
 
     // TODO: Start VMM.
@@ -237,7 +235,7 @@ fn run_launcher(
     graphics: &impl Graphics,
     data: &Arc<DataMgr>,
     profiles: Vec<Profile>,
-) -> Result<Option<ExitAction>, ApplicationError> {
+) -> Result<Option<(Profile, ExitAction)>, ApplicationError> {
     // Create window and register callback handlers.
     let win = MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
     let resolutions = Rc::new(ResolutionModel::default());
@@ -264,7 +262,7 @@ fn run_launcher(
 
         move || {
             let win = win.unwrap();
-            let row: usize = win.get_selected_profile().try_into().unwrap();
+            let row = win.get_selected_profile();
             let pro = profiles.update(row, &win);
             let loc = data.prof().data(pro.id());
 
@@ -326,16 +324,23 @@ fn run_launcher(
     win.run().map_err(ApplicationError::RunMainWindow)?;
 
     // Update selected profile.
-    let row: usize = win.get_selected_profile().try_into().unwrap();
+    let profile = win.get_selected_profile();
 
-    profiles.update(row, &win);
+    profiles.update(profile, &win);
 
     drop(win);
 
-    // Extract GUI states.
-    let start = Rc::into_inner(exit).unwrap().into_inner();
+    // Check how we exit.
+    let exit = match Rc::into_inner(exit).unwrap().into_inner() {
+        Some(v) => v,
+        None => return Ok(None),
+    };
 
-    Ok(start)
+    // Get selected profile.
+    let mut profiles = Rc::into_inner(profiles).unwrap().into_inner();
+    let profile = profiles.remove(profile.try_into().unwrap());
+
+    Ok(Some((profile, exit)))
 }
 
 fn panic_hook(i: &PanicHookInfo, ph: &Weak<Mutex<Option<PanicHandler>>>) {
@@ -406,8 +411,9 @@ enum ExitAction {
 }
 
 /// Encapsulates arguments for [`Vmm::new()`].
-struct VmmArgs {
-    kernel_path: PathBuf,
+struct VmmArgs<'a> {
+    profile: &'a Profile,
+    kernel: PathBuf,
     debugger: Option<DebugClient>,
 }
 
@@ -476,7 +482,7 @@ enum ApplicationError {
     CreateMainWindow(#[source] slint::PlatformError),
 
     #[error("couldn't initialize graphics engine")]
-    InitGraphics(#[source] Box<dyn std::error::Error>),
+    InitGraphics(#[source] GraphicsError),
 
     #[error("failed to run main window")]
     RunMainWindow(#[source] slint::PlatformError),
