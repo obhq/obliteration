@@ -56,14 +56,20 @@ fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
 }
 
 /// Manage a virtual machine that run the kernel.
-pub struct Vmm<E: VmmHandler> {
-    cpu: CpuManager<crate::hv::Default, E>, // Drop first.
-    gdb: Option<GdbStubStateMachine<'static, CpuManager<crate::hv::Default, E>, DebugClient>>,
+pub struct Vmm<'a, 'b, E: VmmHandler> {
+    cpu: CpuManager<'a, 'b, crate::hv::Default, E>, // Drop first.
+    gdb: Option<
+        GdbStubStateMachine<'static, CpuManager<'a, 'b, crate::hv::Default, E>, DebugClient>,
+    >,
     shutdown: Arc<AtomicBool>,
 }
 
-impl<E: VmmHandler> Vmm<E> {
-    pub fn new(args: VmmArgs, handler: E) -> Result<Self, VmmError> {
+impl<'a, 'b, E: VmmHandler> Vmm<'a, 'b, E> {
+    pub fn new(
+        args: VmmArgs<'b>,
+        handler: E,
+        scope: &'a std::thread::Scope<'a, 'b>,
+    ) -> Result<Self, VmmError> {
         let path = &args.kernel;
         let debugger = args.debugger;
 
@@ -290,7 +296,13 @@ impl<E: VmmHandler> Vmm<E> {
 
         // Setup CPU manager.
         let shutdown = Arc::new(AtomicBool::new(false));
-        let mut cpu = CpuManager::new(Arc::new(hv), Arc::new(handler), devices, shutdown.clone());
+        let mut cpu = CpuManager::new(
+            Arc::new(hv),
+            Arc::new(handler),
+            scope,
+            devices,
+            shutdown.clone(),
+        );
 
         // Setup GDB stub.
         let gdb = debugger
@@ -363,7 +375,7 @@ impl<E: VmmHandler> Vmm<E> {
     }
 }
 
-impl<E: VmmHandler> Drop for Vmm<E> {
+impl<'a, 'b, E: VmmHandler> Drop for Vmm<'a, 'b, E> {
     fn drop(&mut self) {
         // Set shutdown flag before dropping the other fields so their background thread can stop
         // before they try to join with it.

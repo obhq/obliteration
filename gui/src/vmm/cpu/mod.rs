@@ -29,29 +29,32 @@ mod controller;
 mod debug;
 
 /// Manage all virtual CPUs.
-pub struct CpuManager<H, E> {
+pub struct CpuManager<'a, 'b, H, E> {
     hv: Arc<H>,
     handler: Arc<E>,
+    scope: &'a std::thread::Scope<'a, 'b>,
     devices: Arc<DeviceTree>,
-    cpus: Vec<CpuController>,
+    cpus: Vec<CpuController<'a>>,
     breakpoint: Arc<Mutex<()>>,
     sw_breakpoints: HashMap<u64, [u8; arch::BREAKPOINT_SIZE.get()]>,
     shutdown: Arc<AtomicBool>,
 }
 
-impl<H: Hypervisor, E: VmmHandler> CpuManager<H, E> {
+impl<'a, 'b, H: Hypervisor, E: VmmHandler> CpuManager<'a, 'b, H, E> {
     const GDB_ENOENT: u8 = 2;
     const GDB_EFAULT: u8 = 14;
 
     pub fn new(
         hv: Arc<H>,
         handler: Arc<E>,
+        scope: &'a std::thread::Scope<'a, 'b>,
         devices: Arc<DeviceTree>,
         shutdown: Arc<AtomicBool>,
     ) -> Self {
         Self {
             hv,
             handler,
+            scope,
             devices,
             cpus: Vec::new(),
             breakpoint: Arc::default(),
@@ -79,7 +82,9 @@ impl<H: Hypervisor, E: VmmHandler> CpuManager<H, E> {
 
         // Spawn thread to drive vCPU.
         let t = match map {
-            Some(map) => std::thread::spawn(move || Self::main_cpu(args, debugger, start, map)),
+            Some(map) => self
+                .scope
+                .spawn(move || Self::main_cpu(args, debugger, start, map)),
             None => todo!(),
         };
 
@@ -129,11 +134,11 @@ impl<H: Hypervisor, E: VmmHandler> CpuManager<H, E> {
         Self::run_cpu(&args, debug, cpu, 0);
     }
 
-    fn run_cpu<'a>(args: &'a Args<H, E>, debug: Option<Debugger>, mut cpu: H::Cpu<'a>, id: usize) {
+    fn run_cpu<'c>(args: &'c Args<H, E>, debug: Option<Debugger>, mut cpu: H::Cpu<'c>, id: usize) {
         // Build device contexts for this CPU.
         let hv = args.hv.deref();
         let handler = args.handler.deref();
-        let mut devices = BTreeMap::<usize, Device<'a, H::Cpu<'a>>>::new();
+        let mut devices = BTreeMap::<usize, Device<'c, H::Cpu<'c>>>::new();
         let t = &args.devices;
 
         Device::insert(&mut devices, t.console(), |d| d.create_context(hv, handler));
@@ -197,10 +202,10 @@ impl<H: Hypervisor, E: VmmHandler> CpuManager<H, E> {
         args.shutdown.store(true, Ordering::Relaxed);
     }
 
-    fn handle_exit<'a, C: Cpu>(
-        args: &'a Args<H, E>,
+    fn handle_exit<'c, C: Cpu>(
+        args: &'c Args<H, E>,
         debugger: Option<&Debugger>,
-        devices: &mut BTreeMap<usize, Device<'a, C>>,
+        devices: &mut BTreeMap<usize, Device<'c, C>>,
         exit: C::Exit<'_>,
     ) -> Result<bool, CpuError> {
         // Check if HLT.
@@ -396,7 +401,7 @@ impl<H: Hypervisor, E: VmmHandler> CpuManager<H, E> {
     }
 }
 
-impl<H: Hypervisor, E: VmmHandler> MultiThreadBase for CpuManager<H, E> {
+impl<'a, 'b, H: Hypervisor, E: VmmHandler> MultiThreadBase for CpuManager<'a, 'b, H, E> {
     fn read_registers(&mut self, regs: &mut GdbRegs, tid: Tid) -> TargetResult<(), Self> {
         let cpu = self
             .cpus
@@ -480,13 +485,13 @@ impl<H: Hypervisor, E: VmmHandler> MultiThreadBase for CpuManager<H, E> {
     }
 }
 
-impl<H: Hypervisor, E: VmmHandler> ThreadExtraInfo for CpuManager<H, E> {
+impl<'a, 'b, H: Hypervisor, E: VmmHandler> ThreadExtraInfo for CpuManager<'a, 'b, H, E> {
     fn thread_extra_info(&self, tid: Tid, buf: &mut [u8]) -> Result<usize, Self::Error> {
         todo!()
     }
 }
 
-impl<H: Hypervisor, E: VmmHandler> MultiThreadResume for CpuManager<H, E> {
+impl<'a, 'b, H: Hypervisor, E: VmmHandler> MultiThreadResume for CpuManager<'a, 'b, H, E> {
     fn resume(&mut self) -> Result<(), Self::Error> {
         self.release();
 

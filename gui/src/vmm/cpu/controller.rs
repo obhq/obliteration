@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::debug::Debuggee;
 use std::mem::ManuallyDrop;
-use std::thread::JoinHandle;
+use std::thread::ScopedJoinHandle;
 
 /// Contains objects to control a CPU from outside.
-pub struct CpuController {
-    thread: ManuallyDrop<JoinHandle<()>>,
+pub struct CpuController<'a> {
+    thread: ManuallyDrop<ScopedJoinHandle<'a, ()>>,
     debug: ManuallyDrop<Option<Debuggee>>,
 }
 
-impl CpuController {
-    pub fn new(thread: JoinHandle<()>, debug: Option<Debuggee>) -> Self {
+impl<'a> CpuController<'a> {
+    pub fn new(thread: ScopedJoinHandle<'a, ()>, debug: Option<Debuggee>) -> Self {
         Self {
             thread: ManuallyDrop::new(thread),
             debug: ManuallyDrop::new(debug),
@@ -22,7 +22,7 @@ impl CpuController {
     }
 }
 
-impl Drop for CpuController {
+impl<'a> Drop for CpuController<'a> {
     fn drop(&mut self) {
         // We need to drop the debug channel first so it will unblock the CPU thread if it is
         // waiting for a request.

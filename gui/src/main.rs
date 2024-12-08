@@ -6,8 +6,11 @@ use self::graphics::{Graphics, GraphicsError, PhysicalDevice, Screen};
 use self::profile::Profile;
 use self::setup::{run_setup, SetupError};
 use self::ui::{ErrorWindow, MainWindow, ProfileModel, ResolutionModel};
+use self::vmm::{Vmm, VmmError};
 use clap::{Parser, ValueEnum};
 use debug::DebugServer;
+use gdbstub::stub::MultiThreadStopReason;
+use obconf::ConsoleType;
 use serde::{Deserialize, Serialize};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use std::borrow::Cow;
@@ -108,7 +111,7 @@ fn run_vmm(args: &CliArgs) -> Result<(), ApplicationError> {
     };
 
     // Get kernel path.
-    let kernel_path = args.kernel.as_ref().cloned().unwrap_or_else(|| {
+    let kernel = args.kernel.as_ref().cloned().unwrap_or_else(|| {
         // Get kernel directory.
         let mut path = exe.parent().unwrap().to_owned();
 
@@ -192,12 +195,26 @@ fn run_vmm(args: &CliArgs) -> Result<(), ApplicationError> {
         .create_screen(&profile)
         .map_err(|e| ApplicationError::CreateScreen(Box::new(e)))?;
 
-    // TODO: Start VMM.
-    screen
-        .run()
-        .map_err(|e| ApplicationError::RunScreen(Box::new(e)))?;
+    // Start VMM.
+    std::thread::scope(|scope| {
+        let vmm = Vmm::new(
+            VmmArgs {
+                profile: &profile,
+                kernel,
+                debugger,
+            },
+            VmmHandler {},
+            scope,
+        )
+        .map_err(ApplicationError::StartVmm)?;
 
-    Ok(())
+        // Run the screen.
+        screen
+            .run()
+            .map_err(|e| ApplicationError::RunScreen(Box::new(e)))?;
+
+        Ok(())
+    })
 }
 
 fn run_panic_handler() -> Result<(), ApplicationError> {
@@ -417,6 +434,27 @@ struct VmmArgs<'a> {
     debugger: Option<DebugClient>,
 }
 
+/// Provides method to handle VMM event.
+struct VmmHandler {}
+
+impl self::vmm::VmmHandler for VmmHandler {
+    fn error(&self, cpu: usize, reason: impl Into<Box<dyn Error>>) {
+        todo!()
+    }
+
+    fn exiting(&self, success: bool) {
+        todo!()
+    }
+
+    fn log(&self, ty: ConsoleType, msg: &str) {
+        todo!()
+    }
+
+    fn breakpoint(&self, stop: Option<MultiThreadStopReason<u64>>) {
+        todo!()
+    }
+}
+
 /// Mode of our program.
 #[derive(Clone, ValueEnum)]
 enum ProgramMode {
@@ -489,6 +527,9 @@ enum ApplicationError {
 
     #[error("couldn't create VMM screen")]
     CreateScreen(#[source] Box<dyn std::error::Error>),
+
+    #[error("couldn't start VMM")]
+    StartVmm(#[source] VmmError),
 
     #[error("couldn't run VMM screen")]
     RunScreen(#[source] Box<dyn std::error::Error>),
