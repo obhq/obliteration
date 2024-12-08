@@ -6,8 +6,7 @@ find_package(Threads REQUIRED)
 add_executable(obliteration WIN32 MACOSX_BUNDLE
     main.cpp
     main_window.cpp
-    resources.qrc
-    settings.cpp)
+    resources.qrc)
 
 set_target_properties(obliteration PROPERTIES AUTOMOC ON AUTORCC ON)
 

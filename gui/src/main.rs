@@ -11,18 +11,14 @@ use clap::{Parser, ValueEnum};
 use debug::DebugServer;
 use gdbstub::stub::MultiThreadStopReason;
 use obconf::ConsoleType;
-use serde::{Deserialize, Serialize};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
-use std::borrow::Cow;
 use std::cell::Cell;
 use std::error::Error;
-use std::io::Write;
 use std::net::SocketAddrV4;
-use std::panic::PanicHookInfo;
 use std::path::PathBuf;
-use std::process::{Child, Command, ExitCode, Stdio};
+use std::process::ExitCode;
 use std::rc::Rc;
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::Arc;
 use thiserror::Error;
 
 mod data;
@@ -30,6 +26,7 @@ mod debug;
 mod dialogs;
 mod graphics;
 mod hv;
+mod panic;
 mod profile;
 #[cfg(unix)]
 mod rlim;
@@ -44,7 +41,7 @@ fn main() -> ExitCode {
     // Check program mode.
     let args = CliArgs::parse();
     let r = match &args.mode {
-        Some(ProgramMode::PanicHandler) => run_panic_handler(),
+        Some(ProgramMode::PanicHandler) => self::panic::run_handler(),
         None => run_vmm(&args),
     };
 
@@ -79,23 +76,12 @@ fn main() -> ExitCode {
 }
 
 fn run_vmm(args: &CliArgs) -> Result<(), ApplicationError> {
-    // Resolve our executable path.
+    // Spawn panic handler.
     let exe = std::env::current_exe()
         .and_then(std::fs::canonicalize)
         .map_err(ApplicationError::GetCurrentExePath)?;
 
-    // Spawn panic handler.
-    let ph = Command::new(&exe)
-        .args(["--mode", "panic-handler"])
-        .stdin(Stdio::piped())
-        .spawn()
-        .map_err(ApplicationError::SpawnPanicHandler)?;
-
-    // Set panic handler.
-    let ph = Arc::new(Mutex::new(Some(PanicHandler(ph))));
-    let ph = Arc::downgrade(&ph);
-
-    std::panic::set_hook(Box::new(move |i| panic_hook(i, &ph)));
+    self::panic::spawn_handler(&exe)?;
 
     #[cfg(unix)]
     rlim::set_rlimit_nofile().map_err(ApplicationError::FdLimit)?;
@@ -217,37 +203,6 @@ fn run_vmm(args: &CliArgs) -> Result<(), ApplicationError> {
     })
 }
 
-fn run_panic_handler() -> Result<(), ApplicationError> {
-    use std::io::ErrorKind;
-
-    // Wait for panic info.
-    let stdin = std::io::stdin();
-    let mut stdin = stdin.lock();
-    let info: PanicInfo = match ciborium::from_reader(&mut stdin) {
-        Ok(v) => v,
-        Err(ciborium::de::Error::Io(e)) if e.kind() == ErrorKind::UnexpectedEof => return Ok(()),
-        Err(e) => return Err(ApplicationError::ReadPanicInfo(e)),
-    };
-
-    // Display panic info.
-    let win = ErrorWindow::new().unwrap();
-    let msg = format!(
-        "An unexpected error has occurred at {}:{}: {}.",
-        info.file, info.line, info.message
-    );
-
-    win.set_message(msg.into());
-    win.on_close({
-        let win = win.as_weak();
-
-        move || win.unwrap().hide().unwrap()
-    });
-
-    win.run().unwrap();
-
-    Ok(())
-}
-
 fn run_launcher(
     graphics: &impl Graphics,
     data: &Arc<DataMgr>,
@@ -360,51 +315,6 @@ fn run_launcher(
     Ok(Some((profile, exit)))
 }
 
-fn panic_hook(i: &PanicHookInfo, ph: &Weak<Mutex<Option<PanicHandler>>>) {
-    // Check if panic handler still alive.
-    let ph = match ph.upgrade() {
-        Some(v) => v,
-        None => {
-            // The only cases for us to be here is we panic after returned from run_vmm().
-            eprintln!("{i}");
-            return;
-        }
-    };
-
-    // Allow only one thread to report the panic.
-    let mut ph = ph.lock().unwrap();
-    let mut ph = match ph.take() {
-        Some(v) => v,
-        None => {
-            // There are another thread already panicked when we are here. The process will be
-            // aborted once the previous thread has return from this hook. The only possible cases
-            // for the other thread to be here is because the abortion from the previous panic is
-            // not finished yet. So better to not print the panic here because it may not work.
-            return;
-        }
-    };
-
-    // Send panic information.
-    let mut stdin = ph.0.stdin.take().unwrap();
-    let loc = i.location().unwrap();
-    let info = PanicInfo {
-        message: if let Some(&s) = i.payload().downcast_ref::<&str>() {
-            s.into()
-        } else if let Some(s) = i.payload().downcast_ref::<String>() {
-            s.into()
-        } else {
-            "unknown panic payload".into()
-        },
-        file: loc.file().into(),
-        line: loc.line(),
-    };
-
-    ciborium::into_writer(&info, &mut stdin).unwrap();
-    stdin.flush().unwrap();
-
-    drop(stdin); // Close the stdin to notify panic handler that no more data.
-}
-
 /// Program arguments parsed from command line.
 #[derive(Parser)]
 #[command(about = None)]
@@ -459,24 +369,6 @@ impl self::vmm::VmmHandler for VmmHandler {
 #[derive(Clone, ValueEnum)]
 enum ProgramMode {
     PanicHandler,
-}
-
-/// Provide [`Drop`] implementation to shutdown panic handler.
-struct PanicHandler(Child);
-
-impl Drop for PanicHandler {
-    fn drop(&mut self) {
-        // wait() will close stdin for us before waiting.
-        self.0.wait().unwrap();
-    }
-}
-
-/// Contains panic information from the VMM process.
-#[derive(Serialize, Deserialize)]
-struct PanicInfo<'a> {
-    message: Cow<'a, str>,
-    file: Cow<'a, str>,
-    line: u32,
 }
 
 /// Represents an error when [`run()`] fails.

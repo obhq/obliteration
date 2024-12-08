@@ -1,5 +1,4 @@
 #include "main_window.hpp"
-#include "settings.hpp"
 
 #include <QAction>
 #include <QApplication>
@@ -33,22 +32,13 @@ namespace Args {
 
 MainWindow::MainWindow(const QCommandLineParser &args) :
     m_args(args),
-    m_main(nullptr),
-    m_debugNoti(nullptr)
+    m_main(nullptr)
 {
-    setWindowTitle("Obliteration");
-
     // File menu.
     auto fileMenu = menuBar()->addMenu("&File");
     auto openSystemFolder = new QAction("Open System &Folder", this);
-    auto quit = new QAction("&Quit", this);
-
-    connect(openSystemFolder, &QAction::triggered, this, &MainWindow::openSystemFolder);
-    connect(quit, &QAction::triggered, this, &MainWindow::close);
 
     fileMenu->addAction(openSystemFolder);
-    fileMenu->addSeparator();
-    fileMenu->addAction(quit);
 
     // Help menu.
     auto helpMenu = menuBar()->addMenu("&Help");
@@ -75,33 +65,6 @@ MainWindow::~MainWindow()
 {
 }
 
-void MainWindow::closeEvent(QCloseEvent *event)
-{
-    // This will set to accept by QMainWindow::closeEvent.
-    event->ignore();
-
-    // Save geometry.
-    QSettings settings;
-
-    settings.beginGroup(SettingGroups::mainWindow);
-
-    settings.setValue("size", size());
-    settings.setValue("maximized", isMaximized());
-
-    if (qGuiApp->platformName() != "wayland") {
-        // Wayland does not allow application to position itself.
-        settings.setValue("pos", pos());
-    }
-
-    QMainWindow::closeEvent(event);
-}
-
-void MainWindow::openSystemFolder()
-{
-    QString folderPath = readSystemDirectorySetting();
-    QDesktopServices::openUrl(QUrl::fromLocalFile(folderPath));
-}
-
 void MainWindow::reportIssue()
 {
     if (!QDesktopServices::openUrl(QUrl("https://github.com/obhq/obliteration/issues/new"))) {
@@ -122,8 +85,6 @@ void MainWindow::aboutObliteration()
 
 void MainWindow::vmmError(const QString &msg)
 {
-    killVmm();
-
     QMessageBox::critical(this, "Error", msg);
 
     if (m_args.isSet(Args::debug)) {
@@ -135,8 +96,6 @@ void MainWindow::vmmError(const QString &msg)
 
 void MainWindow::waitKernelExit(bool success)
 {
-    killVmm();
-
     if (!success) {
         QMessageBox::critical(
             this,
@@ -145,25 +104,6 @@ void MainWindow::waitKernelExit(bool success)
     }
 
     m_main->setCurrentIndex(0);
-}
-
-void MainWindow::restoreGeometry()
-{
-    QSettings settings;
-
-    settings.beginGroup(SettingGroups::mainWindow);
-
-    if (settings.value("maximized", false).toBool()) {
-        showMaximized();
-    } else {
-        resize(settings.value("size", QSize(1000, 500)).toSize());
-
-        if (qGuiApp->platformName() != "wayland") {
-            move(settings.value("pos", QPoint(200, 200)).toPoint());
-        }
-
-        show();
-    }
 }
 
 void MainWindow::stopDebug()
@@ -182,10 +122,4 @@ void MainWindow::stopDebug()
             Qt::QueuedConnection,
             true);
     }
-}
-
-void MainWindow::killVmm()
-{
-    delete m_debugNoti;
-    m_debugNoti = nullptr;
 }
