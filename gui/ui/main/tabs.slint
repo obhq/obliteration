@@ -11,6 +11,8 @@ enum Tab {
 
 export component Tabs {
     in property <[string]> devices;
+    in property <[string]> resolutions;
+    in-out property <int> selected-resolution;
 
     pure callback report-issue();
     pure callback start-debug(string);
@@ -64,7 +66,9 @@ export component Tabs {
         }
 
         if root.tab == Tab.display: DisplayTab {
-            devices: root.devices;
+            devices: devices;
+            resolutions: resolutions;
+            selected-resolution <=> selected-resolution;
             vertical-stretch: 1;
         }
 

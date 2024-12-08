@@ -46,6 +46,14 @@ impl Profile {
         &self.name
     }
 
+    pub fn display_resolution(&self) -> DisplayResolution {
+        self.display_resolution
+    }
+
+    pub fn set_display_resolution(&mut self, v: DisplayResolution) {
+        self.display_resolution = v;
+    }
+
     pub fn kernel_config(&self) -> &Config {
         &self.kernel_config
     }
@@ -82,7 +90,7 @@ impl Default for Profile {
 }
 
 /// Display resolution to report to the kernel.
-#[derive(Clone, Copy, Deserialize, Serialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 pub enum DisplayResolution {
     /// 1280 × 720.
     Hd,

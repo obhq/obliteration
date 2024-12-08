@@ -5,7 +5,7 @@ use self::debug::DebugClient;
 use self::graphics::{Graphics, PhysicalDevice, Screen};
 use self::profile::Profile;
 use self::setup::{run_setup, SetupError};
-use self::ui::{ErrorWindow, MainWindow, ProfileModel};
+use self::ui::{ErrorWindow, MainWindow, ProfileModel, ResolutionModel};
 use clap::{Parser, ValueEnum};
 use debug::DebugServer;
 use serde::{Deserialize, Serialize};
@@ -240,7 +240,8 @@ fn run_launcher(
 ) -> Result<Option<ExitAction>, ApplicationError> {
     // Create window and register callback handlers.
     let win = MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
-    let profiles = Rc::new(ProfileModel::new(profiles));
+    let resolutions = Rc::new(ResolutionModel::default());
+    let profiles = Rc::new(ProfileModel::new(profiles, resolutions.clone()));
     let exit = Rc::new(Cell::new(None));
 
     win.on_profile_selected({
@@ -313,6 +314,7 @@ fn run_launcher(
     ));
 
     win.set_devices(physical_devices);
+    win.set_resolutions(resolutions.into());
     win.set_profiles(profiles.clone().into());
 
     // Load selected profile.

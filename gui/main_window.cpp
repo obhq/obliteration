@@ -1,5 +1,4 @@
 #include "main_window.hpp"
-#include "resources.hpp"
 #include "settings.hpp"
 
 #include <QAction>

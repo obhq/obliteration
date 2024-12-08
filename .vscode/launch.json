@@ -27,6 +27,9 @@
       "type": "lldb",
       "request": "launch",
       "preLaunchTask": "Build",
+      "linux": {
+        "program": "${workspaceFolder}/dist/bin/obliteration"
+      },
       "osx": {
         "program": "${workspaceFolder}/dist/Obliteration.app/Contents/MacOS/Obliteration"
       }

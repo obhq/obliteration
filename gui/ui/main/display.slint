@@ -1,33 +1,32 @@
-import { ComboBox, HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { ComboBox, HorizontalBox, VerticalBox, GroupBox } from "std-widgets.slint";
 
 export component DisplayTab {
     in property <[string]> devices;
+    in property <[string]> resolutions;
+    in-out property <int> selected-resolution;
 
-    HorizontalBox {
+    VerticalBox {
         padding: 0;
+        alignment: start;
 
-        VerticalBox {
-            alignment: start;
+        HorizontalBox {
+            padding: 0;
 
-            Text {
-                text: "Device";
+            GroupBox {
+                title: "Device";
+                ComboBox {
+                    model: devices;
+                    preferred-width: 0; // Override content-based width.
+                }
             }
 
-            ComboBox {
-                model: devices;
-            }
-        }
-
-        VerticalBox {
-            alignment: start;
-
-            Text {
-                text: "Resolution";
-            }
-
-            ComboBox {
-                model: ["1280 × 720", "1920 × 1080", "3840 × 2160"];
-                current-value: "1920 × 1080";
+            GroupBox {
+                title: "Resolution";
+                ComboBox {
+                    model: resolutions;
+                    current-index <=> selected-resolution;
+                    preferred-width: 0; // Same here.
+                }
             }
         }
     }
