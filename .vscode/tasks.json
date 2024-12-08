@@ -23,6 +23,9 @@
       "runOptions": {
         "instanceLimit": 1
       },
+      "linux": {
+        "command": "${workspaceFolder}/dist/bin/obliteration"
+      },
       "osx": {
         "command": "${workspaceFolder}/dist/Obliteration.app/Contents/MacOS/Obliteration"
       },

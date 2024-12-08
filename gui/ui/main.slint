@@ -7,6 +7,8 @@ export { SetupWizard } from "setup.slint";
 
 export component MainWindow inherits Window {
     in property <[string]> devices;
+    in property <[string]> resolutions;
+    in-out property <int> selected-resolution;
     in property <[string]> profiles;
     in-out property <int> selected-profile <=> actions.selected-profile;
 
@@ -24,6 +26,9 @@ export component MainWindow inherits Window {
     VerticalBox {
         tabs := Tabs {
             devices: devices;
+            resolutions: resolutions;
+            selected-resolution <=> selected-resolution;
+            vertical-stretch: 1;
             report-issue => {
                 report-issue();
             }
