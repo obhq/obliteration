@@ -30,14 +30,8 @@ int main(int argc, char *argv[])
     // Parse arguments.
     QCommandLineParser args;
 
-    args.addOption(Args::debug);
-    args.addOption(Args::kernel);
-    args.process(app);
-
     // Setup main window.
     MainWindow win(args);
-
-    win.restoreGeometry();
 
     // Run main window.
     return QApplication::exec();
