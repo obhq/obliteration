@@ -2,26 +2,30 @@
 use super::Vmm;
 use crate::hv::{Cpu, CpuExit, CpuIo};
 use crate::vmm::hw::{read_u8, DeviceContext, MmioError};
-use crate::vmm::VmmHandler;
+use crate::vmm::VmmEvent;
 use obconf::{KernelExit, VmmMemory};
 use std::error::Error;
 use std::mem::offset_of;
 use thiserror::Error;
+use winit::event_loop::EventLoopProxy;
 
 /// Implementation of [`DeviceContext`].
-pub struct Context<'a, E> {
+pub struct Context<'a> {
     dev: &'a Vmm,
-    handler: &'a E,
+    el: EventLoopProxy<VmmEvent>,
 }
 
-impl<'a, E> Context<'a, E> {
-    pub fn new(dev: &'a Vmm, handler: &'a E) -> Self {
-        Self { dev, handler }
+impl<'a> Context<'a> {
+    pub fn new(dev: &'a Vmm, el: EventLoopProxy<VmmEvent>) -> Self {
+        Self { dev, el }
     }
 }
 
-impl<C: Cpu, E: VmmHandler> DeviceContext<C> for Context<'_, E> {
-    fn mmio(&mut self, exit: &mut <C::Exit<'_> as CpuExit>::Io) -> Result<bool, Box<dyn Error>> {
+impl<C: Cpu> DeviceContext<C> for Context<'_> {
+    fn mmio(
+        &mut self,
+        exit: &mut <C::Exit<'_> as CpuExit>::Io,
+    ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         // Check field.
         let off = exit.addr() - self.dev.addr;
 
@@ -31,7 +35,11 @@ impl<C: Cpu, E: VmmHandler> DeviceContext<C> for Context<'_, E> {
                 .try_into()
                 .map_err(|_| Box::new(ExecError::InvalidExit(exit)))?;
 
-            self.handler.exiting(exit == KernelExit::Success);
+            self.el
+                .send_event(VmmEvent::Exiting {
+                    success: exit == KernelExit::Success,
+                })
+                .unwrap();
 
             Ok(false)
         } else {

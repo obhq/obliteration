@@ -50,7 +50,7 @@ pub struct ConsoleMemory {
 /// Type of console message.
 #[cfg(feature = "virt")]
 #[repr(u8)]
-#[derive(Clone, Copy, num_enum::IntoPrimitive, num_enum::TryFromPrimitive)]
+#[derive(Debug, Clone, Copy, num_enum::IntoPrimitive, num_enum::TryFromPrimitive)]
 pub enum ConsoleType {
     Info,
     Warn,

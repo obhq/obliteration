@@ -24,6 +24,7 @@ redb = "2.2.0"
 serde = { version = "1.0.209", features = ["derive"] }
 thiserror = "2.0.3"
 uuid = { version = "1.11.0", features = ["serde", "v4"] }
+winit = "0.30.5"
 
 [dependencies.obfw]
 git = "https://github.com/obhq/firmware-dumper.git"

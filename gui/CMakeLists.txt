@@ -5,8 +5,7 @@ find_package(Threads REQUIRED)
 # Setup GUI.
 add_executable(obliteration WIN32 MACOSX_BUNDLE
     main.cpp
-    main_window.cpp
-    resources.qrc)
+    main_window.cpp)
 
 set_target_properties(obliteration PROPERTIES AUTOMOC ON AUTORCC ON)
 

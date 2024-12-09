@@ -2,36 +2,40 @@
 use super::Console;
 use crate::hv::{Cpu, CpuExit, CpuIo, Hypervisor};
 use crate::vmm::hw::{read_ptr, read_u8, read_usize, DeviceContext, MmioError};
-use crate::vmm::VmmHandler;
+use crate::vmm::VmmEvent;
 use obconf::{ConsoleMemory, ConsoleType};
 use std::error::Error;
 use std::mem::offset_of;
 use std::num::NonZero;
 use thiserror::Error;
+use winit::event_loop::EventLoopProxy;
 
 /// Implementation of [`DeviceContext`].
-pub struct Context<'a, H, E> {
+pub struct Context<'a, H> {
     dev: &'a Console,
     hv: &'a H,
-    handler: &'a E,
+    el: EventLoopProxy<VmmEvent>,
     msg_len: Option<NonZero<usize>>,
     msg: Vec<u8>,
 }
 
-impl<'a, H, E> Context<'a, H, E> {
-    pub fn new(dev: &'a Console, hv: &'a H, handler: &'a E) -> Self {
+impl<'a, H> Context<'a, H> {
+    pub fn new(dev: &'a Console, hv: &'a H, el: EventLoopProxy<VmmEvent>) -> Self {
         Self {
             dev,
             hv,
-            handler,
+            el,
             msg_len: None,
             msg: Vec::new(),
         }
     }
 }
 
-impl<H: Hypervisor, C: Cpu, E: VmmHandler> DeviceContext<C> for Context<'_, H, E> {
-    fn mmio(&mut self, exit: &mut <C::Exit<'_> as CpuExit>::Io) -> Result<bool, Box<dyn Error>> {
+impl<H: Hypervisor, C: Cpu> DeviceContext<C> for Context<'_, H> {
+    fn mmio(
+        &mut self,
+        exit: &mut <C::Exit<'_> as CpuExit>::Io,
+    ) -> Result<bool, Box<dyn Error + Send + Sync>> {
         // Check field.
         let off = exit.addr() - self.dev.addr;
 
@@ -67,7 +71,7 @@ impl<H: Hypervisor, C: Cpu, E: VmmHandler> DeviceContext<C> for Context<'_, H, E
             // single allocation when the handler clone the string.
             let msg = std::str::from_utf8(&self.msg).map_err(|_| ExecError::InvalidMsg)?;
 
-            self.handler.log(ty, msg);
+            self.el.send_event(VmmEvent::Log(ty, msg.into())).unwrap();
             self.msg.clear();
         } else {
             return Err(Box::new(ExecError::UnknownField(off)));

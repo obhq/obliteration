@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::cpu::{CpuManager, GdbError};
-use super::VmmHandler;
 use crate::debug::DebugClient;
 use crate::hv::Hypervisor;
 use gdbstub::stub::state_machine::state::{Idle, Running};
@@ -8,22 +7,22 @@ use gdbstub::stub::state_machine::{GdbStubStateMachine, GdbStubStateMachineInner
 use gdbstub::stub::MultiThreadStopReason;
 use thiserror::Error;
 
-impl<'a, 'b, H: Hypervisor, E: VmmHandler> CpuManager<'a, 'b, H, E> {
+impl<'a, 'b, H: Hypervisor> CpuManager<'a, 'b, H> {
     pub(super) fn dispatch_gdb_idle(
         &mut self,
         mut state: GdbStubStateMachineInner<
             'static,
-            Idle<CpuManager<'a, 'b, H, E>>,
-            CpuManager<'a, 'b, H, E>,
+            Idle<CpuManager<'a, 'b, H>>,
+            CpuManager<'a, 'b, H>,
             DebugClient,
         >,
     ) -> Result<
         Result<
-            GdbStubStateMachine<'static, CpuManager<'a, 'b, H, E>, DebugClient>,
+            GdbStubStateMachine<'static, CpuManager<'a, 'b, H>, DebugClient>,
             GdbStubStateMachineInner<
                 'static,
-                Idle<CpuManager<'a, 'b, H, E>>,
-                CpuManager<'a, 'b, H, E>,
+                Idle<CpuManager<'a, 'b, H>>,
+                CpuManager<'a, 'b, H>,
                 DebugClient,
             >,
         >,
@@ -43,17 +42,12 @@ impl<'a, 'b, H: Hypervisor, E: VmmHandler> CpuManager<'a, 'b, H, E> {
 
     pub(super) fn dispatch_gdb_running(
         &mut self,
-        mut state: GdbStubStateMachineInner<
-            'static,
-            Running,
-            CpuManager<'a, 'b, H, E>,
-            DebugClient,
-        >,
+        mut state: GdbStubStateMachineInner<'static, Running, CpuManager<'a, 'b, H>, DebugClient>,
         stop: Option<MultiThreadStopReason<u64>>,
     ) -> Result<
         Result<
-            GdbStubStateMachine<'static, CpuManager<'a, 'b, H, E>, DebugClient>,
-            GdbStubStateMachineInner<'static, Running, CpuManager<'a, 'b, H, E>, DebugClient>,
+            GdbStubStateMachine<'static, CpuManager<'a, 'b, H>, DebugClient>,
+            GdbStubStateMachineInner<'static, Running, CpuManager<'a, 'b, H>, DebugClient>,
         >,
         DispatchGdbRunningError,
     > {

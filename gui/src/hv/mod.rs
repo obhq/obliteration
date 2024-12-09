@@ -60,7 +60,7 @@ pub trait Cpu {
     type Exit<'a>: CpuExit<Cpu = Self>
     where
         Self: 'a;
-    type TranslateErr: Error + Send + 'static;
+    type TranslateErr: Error + Send + Sync + 'static;
 
     fn id(&self) -> usize;
 
