@@ -1,5 +1,5 @@
 use crate::ui::ErrorWindow;
-use crate::ApplicationError;
+use crate::ProgramError;
 use serde::{Deserialize, Serialize};
 use slint::ComponentHandle;
 use std::borrow::Cow;
@@ -9,13 +9,13 @@ use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 
-pub fn spawn_handler(exe: &Path) -> Result<(), ApplicationError> {
+pub fn spawn_handler(exe: &Path) -> Result<(), ProgramError> {
     // Spawn the process in panic handler mode.
     let ph = Command::new(exe)
         .args(["--mode", "panic-handler"])
         .stdin(Stdio::piped())
         .spawn()
-        .map_err(ApplicationError::SpawnPanicHandler)?;
+        .map_err(ProgramError::SpawnPanicHandler)?;
 
     // Set panic hook to send panic to the handler.
     let ph = Mutex::new(Some(PanicHandler(ph)));
@@ -25,7 +25,7 @@ pub fn spawn_handler(exe: &Path) -> Result<(), ApplicationError> {
     Ok(())
 }
 
-pub fn run_handler() -> Result<(), ApplicationError> {
+pub fn run_handler() -> Result<(), ProgramError> {
     use std::io::ErrorKind;
 
     // Wait for panic info.
@@ -34,7 +34,7 @@ pub fn run_handler() -> Result<(), ApplicationError> {
     let info: PanicInfo = match ciborium::from_reader(&mut stdin) {
         Ok(v) => v,
         Err(ciborium::de::Error::Io(e)) if e.kind() == ErrorKind::UnexpectedEof => return Ok(()),
-        Err(e) => return Err(ApplicationError::ReadPanicInfo(e)),
+        Err(e) => return Err(ProgramError::ReadPanicInfo(e)),
     };
 
     // Display panic info.

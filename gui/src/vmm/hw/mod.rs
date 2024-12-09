@@ -114,16 +114,19 @@ pub trait Device: Send + Sync {
 /// Context for a CPU to execute operations on a virtual device.
 pub trait DeviceContext<C: Cpu> {
     /// Execute immeditately after the VM exited.
-    fn exited(&mut self, cpu: &mut C) -> Result<bool, Box<dyn Error>> {
+    fn exited(&mut self, cpu: &mut C) -> Result<bool, Box<dyn Error + Send>> {
         let _ = cpu;
         Ok(true)
     }
 
     /// Execute only if the CPU read or write into this device address.
-    fn mmio(&mut self, exit: &mut <C::Exit<'_> as CpuExit>::Io) -> Result<bool, Box<dyn Error>>;
+    fn mmio(
+        &mut self,
+        exit: &mut <C::Exit<'_> as CpuExit>::Io,
+    ) -> Result<bool, Box<dyn Error + Send + Sync>>;
 
     /// Always execute after the exited event has been handled (before enter the VM again).
-    fn post(&mut self, cpu: &mut C) -> Result<bool, Box<dyn Error>> {
+    fn post(&mut self, cpu: &mut C) -> Result<bool, Box<dyn Error + Send>> {
         let _ = cpu;
         Ok(true)
     }
@@ -156,7 +159,7 @@ enum MmioError {
     InvalidData,
 
     #[error("couldn't translate {0:#x} to physical address")]
-    TranslateVaddrFailed(usize, #[source] Box<dyn Error>),
+    TranslateVaddrFailed(usize, #[source] Box<dyn Error + Send + Sync>),
 
     #[error("address {vaddr:#x} ({paddr:#x}) is not allocated")]
     InvalidAddr { vaddr: usize, paddr: usize },

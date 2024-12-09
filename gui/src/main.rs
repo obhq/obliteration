@@ -1,16 +1,13 @@
 #![windows_subsystem = "windows"]
 
 use self::data::{DataError, DataMgr};
-use self::debug::DebugClient;
 use self::graphics::{Graphics, GraphicsError, PhysicalDevice, Screen};
 use self::profile::Profile;
 use self::setup::{run_setup, SetupError};
 use self::ui::{ErrorWindow, MainWindow, ProfileModel, ResolutionModel};
-use self::vmm::{Vmm, VmmError};
+use self::vmm::{Vmm, VmmArgs, VmmError, VmmEvent};
 use clap::{Parser, ValueEnum};
 use debug::DebugServer;
-use gdbstub::stub::MultiThreadStopReason;
-use obconf::ConsoleType;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use std::cell::Cell;
 use std::error::Error;
@@ -20,6 +17,8 @@ use std::process::ExitCode;
 use std::rc::Rc;
 use std::sync::Arc;
 use thiserror::Error;
+use winit::error::EventLoopError;
+use winit::event_loop::EventLoop;
 
 mod data;
 mod debug;
@@ -39,7 +38,7 @@ fn main() -> ExitCode {
     use std::fmt::Write;
 
     // Check program mode.
-    let args = CliArgs::parse();
+    let args = ProgramArgs::parse();
     let r = match &args.mode {
         Some(ProgramMode::PanicHandler) => self::panic::run_handler(),
         None => run_vmm(&args),
@@ -75,23 +74,23 @@ fn main() -> ExitCode {
     ExitCode::FAILURE
 }
 
-fn run_vmm(args: &CliArgs) -> Result<(), ApplicationError> {
+fn run_vmm(args: &ProgramArgs) -> Result<(), ProgramError> {
     // Spawn panic handler.
     let exe = std::env::current_exe()
         .and_then(std::fs::canonicalize)
-        .map_err(ApplicationError::GetCurrentExePath)?;
+        .map_err(ProgramError::GetCurrentExePath)?;
 
     self::panic::spawn_handler(&exe)?;
 
     #[cfg(unix)]
-    rlim::set_rlimit_nofile().map_err(ApplicationError::FdLimit)?;
+    rlim::set_rlimit_nofile().map_err(ProgramError::FdLimit)?;
 
     // Initialize graphics engine.
-    let mut graphics = graphics::new().map_err(ApplicationError::InitGraphics)?;
+    let mut graphics = graphics::new().map_err(ProgramError::InitGraphics)?;
 
     // Run setup wizard. This will simply return the data manager if the user already has required
     // settings.
-    let data = match run_setup().map_err(ApplicationError::Setup)? {
+    let data = match run_setup().map_err(ProgramError::Setup)? {
         Some(v) => Arc::new(v),
         None => return Ok(()),
     };
@@ -123,9 +122,9 @@ fn run_vmm(args: &CliArgs) -> Result<(), ApplicationError> {
     // Load profiles.
     let mut profiles = Vec::new();
 
-    for l in data.prof().list().map_err(ApplicationError::ListProfile)? {
-        let l = l.map_err(ApplicationError::ListProfile)?;
-        let p = Profile::load(&l).map_err(ApplicationError::LoadProfile)?;
+    for l in data.prof().list().map_err(ProgramError::ListProfile)? {
+        let l = l.map_err(ProgramError::ListProfile)?;
+        let p = Profile::load(&l).map_err(ProgramError::LoadProfile)?;
 
         profiles.push(p);
     }
@@ -137,11 +136,11 @@ fn run_vmm(args: &CliArgs) -> Result<(), ApplicationError> {
         let l = data.prof().data(p.id());
 
         if let Err(e) = std::fs::create_dir(&l) {
-            return Err(ApplicationError::CreateDirectory(l, e));
+            return Err(ProgramError::CreateDirectory(l, e));
         }
 
         // Save.
-        p.save(&l).map_err(ApplicationError::SaveDefaultProfile)?;
+        p.save(&l).map_err(ProgramError::SaveDefaultProfile)?;
 
         profiles.push(p);
     }
@@ -165,11 +164,11 @@ fn run_vmm(args: &CliArgs) -> Result<(), ApplicationError> {
     // Wait for debugger.
     let debugger = if let Some(listen) = debug {
         let debug_server =
-            DebugServer::new(listen).map_err(|e| ApplicationError::StartDebugServer(e, listen))?;
+            DebugServer::new(listen).map_err(|e| ProgramError::StartDebugServer(e, listen))?;
 
         let debugger = debug_server
             .accept()
-            .map_err(ApplicationError::CreateDebugClient)?;
+            .map_err(ProgramError::CreateDebugClient)?;
 
         Some(debugger)
     } else {
@@ -177,27 +176,31 @@ fn run_vmm(args: &CliArgs) -> Result<(), ApplicationError> {
     };
 
     // Setup VMM screen.
+    let mut el = EventLoop::<VmmEvent>::with_user_event();
+
     let screen = graphics
         .create_screen(&profile)
-        .map_err(|e| ApplicationError::CreateScreen(Box::new(e)))?;
+        .map_err(|e| ProgramError::CreateScreen(Box::new(e)))?;
 
     // Start VMM.
+    let el = el.build().map_err(ProgramError::CreateVmmEventLoop)?;
+
     std::thread::scope(|scope| {
         let vmm = Vmm::new(
             VmmArgs {
                 profile: &profile,
                 kernel,
                 debugger,
+                el: el.create_proxy(),
             },
-            VmmHandler {},
             scope,
         )
-        .map_err(ApplicationError::StartVmm)?;
+        .map_err(ProgramError::StartVmm)?;
 
         // Run the screen.
         screen
             .run()
-            .map_err(|e| ApplicationError::RunScreen(Box::new(e)))?;
+            .map_err(|e| ProgramError::RunScreen(Box::new(e)))?;
 
         Ok(())
     })
@@ -207,9 +210,9 @@ fn run_launcher(
     graphics: &impl Graphics,
     data: &Arc<DataMgr>,
     profiles: Vec<Profile>,
-) -> Result<Option<(Profile, ExitAction)>, ApplicationError> {
+) -> Result<Option<(Profile, ExitAction)>, ProgramError> {
     // Create window and register callback handlers.
-    let win = MainWindow::new().map_err(ApplicationError::CreateMainWindow)?;
+    let win = MainWindow::new().map_err(ProgramError::CreateMainWindow)?;
     let resolutions = Rc::new(ResolutionModel::default());
     let profiles = Rc::new(ProfileModel::new(profiles, resolutions.clone()));
     let exit = Rc::new(Cell::new(None));
@@ -293,7 +296,7 @@ fn run_launcher(
     profiles.select(row, &win);
 
     // Run the window.
-    win.run().map_err(ApplicationError::RunMainWindow)?;
+    win.run().map_err(ProgramError::RunMainWindow)?;
 
     // Update selected profile.
     let profile = win.get_selected_profile();
@@ -318,7 +321,7 @@ fn run_launcher(
 /// Program arguments parsed from command line.
 #[derive(Parser)]
 #[command(about = None)]
-struct CliArgs {
+struct ProgramArgs {
     #[arg(long, value_enum, hide = true)]
     mode: Option<ProgramMode>,
 
@@ -337,43 +340,15 @@ enum ExitAction {
     RunDebug(SocketAddrV4),
 }
 
-/// Encapsulates arguments for [`Vmm::new()`].
-struct VmmArgs<'a> {
-    profile: &'a Profile,
-    kernel: PathBuf,
-    debugger: Option<DebugClient>,
-}
-
-/// Provides method to handle VMM event.
-struct VmmHandler {}
-
-impl self::vmm::VmmHandler for VmmHandler {
-    fn error(&self, cpu: usize, reason: impl Into<Box<dyn Error>>) {
-        todo!()
-    }
-
-    fn exiting(&self, success: bool) {
-        todo!()
-    }
-
-    fn log(&self, ty: ConsoleType, msg: &str) {
-        todo!()
-    }
-
-    fn breakpoint(&self, stop: Option<MultiThreadStopReason<u64>>) {
-        todo!()
-    }
-}
-
 /// Mode of our program.
 #[derive(Clone, ValueEnum)]
 enum ProgramMode {
     PanicHandler,
 }
 
-/// Represents an error when [`run()`] fails.
+/// Represents an error when our program fails.
 #[derive(Debug, Error)]
-enum ApplicationError {
+enum ProgramError {
     #[error("couldn't spawn panic handler process")]
     SpawnPanicHandler(#[source] std::io::Error),
 
@@ -419,6 +394,9 @@ enum ApplicationError {
 
     #[error("couldn't create VMM screen")]
     CreateScreen(#[source] Box<dyn std::error::Error>),
+
+    #[error("couldn't create VMM event loop")]
+    CreateVmmEventLoop(#[source] EventLoopError),
 
     #[error("couldn't start VMM")]
     StartVmm(#[source] VmmError),

@@ -7,7 +7,7 @@ use self::kernel::{
 use self::ram::RamBuilder;
 use crate::debug::DebugClient;
 use crate::hv::{Hypervisor, Ram};
-use crate::VmmArgs;
+use crate::profile::Profile;
 use cpu::GdbError;
 use gdbstub::common::Signal;
 use gdbstub::stub::state_machine::GdbStubStateMachine;
@@ -23,6 +23,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
+use winit::event_loop::EventLoopProxy;
 
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
@@ -56,20 +57,14 @@ fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
 }
 
 /// Manage a virtual machine that run the kernel.
-pub struct Vmm<'a, 'b, E: VmmHandler> {
-    cpu: CpuManager<'a, 'b, crate::hv::Default, E>, // Drop first.
-    gdb: Option<
-        GdbStubStateMachine<'static, CpuManager<'a, 'b, crate::hv::Default, E>, DebugClient>,
-    >,
+pub struct Vmm<'a, 'b> {
+    cpu: CpuManager<'a, 'b, crate::hv::Default>, // Drop first.
+    gdb: Option<GdbStubStateMachine<'static, CpuManager<'a, 'b, crate::hv::Default>, DebugClient>>,
     shutdown: Arc<AtomicBool>,
 }
 
-impl<'a, 'b, E: VmmHandler> Vmm<'a, 'b, E> {
-    pub fn new(
-        args: VmmArgs<'b>,
-        handler: E,
-        scope: &'a std::thread::Scope<'a, 'b>,
-    ) -> Result<Self, VmmError> {
+impl<'a, 'b> Vmm<'a, 'b> {
+    pub fn new(args: VmmArgs<'b>, scope: &'a std::thread::Scope<'a, 'b>) -> Result<Self, VmmError> {
         let path = &args.kernel;
         let debugger = args.debugger;
 
@@ -296,13 +291,7 @@ impl<'a, 'b, E: VmmHandler> Vmm<'a, 'b, E> {
 
         // Setup CPU manager.
         let shutdown = Arc::new(AtomicBool::new(false));
-        let mut cpu = CpuManager::new(
-            Arc::new(hv),
-            Arc::new(handler),
-            scope,
-            devices,
-            shutdown.clone(),
-        );
+        let mut cpu = CpuManager::new(Arc::new(hv), args.el, scope, devices, shutdown.clone());
 
         // Setup GDB stub.
         let gdb = debugger
@@ -375,7 +364,7 @@ impl<'a, 'b, E: VmmHandler> Vmm<'a, 'b, E> {
     }
 }
 
-impl<'a, 'b, E: VmmHandler> Drop for Vmm<'a, 'b, E> {
+impl<'a, 'b> Drop for Vmm<'a, 'b> {
     fn drop(&mut self) {
         // Set shutdown flag before dropping the other fields so their background thread can stop
         // before they try to join with it.
@@ -383,12 +372,35 @@ impl<'a, 'b, E: VmmHandler> Drop for Vmm<'a, 'b, E> {
     }
 }
 
-/// Provides methods to handle VMM events.
-pub trait VmmHandler: Send + Sync + 'static {
-    fn error(&self, cpu: usize, reason: impl Into<Box<dyn std::error::Error>>);
-    fn exiting(&self, success: bool);
-    fn log(&self, ty: ConsoleType, msg: &str);
-    fn breakpoint(&self, stop: Option<MultiThreadStopReason<u64>>);
+/// Encapsulates arguments for [`Vmm::new()`].
+pub struct VmmArgs<'a> {
+    pub profile: &'a Profile,
+    pub kernel: PathBuf,
+    pub debugger: Option<DebugClient>,
+    pub el: EventLoopProxy<VmmEvent>,
+}
+
+/// Event from VMM.
+#[derive(Debug)]
+pub enum VmmEvent {
+    Error {
+        cpu: usize,
+        reason: Box<dyn Error + Send>,
+    },
+    Exiting {
+        success: bool,
+    },
+    Log(ConsoleType, String),
+    Breakpoint(Option<MultiThreadStopReason<u64>>),
+}
+
+impl VmmEvent {
+    fn error(cpu: usize, reason: impl Error + Send + 'static) -> Self {
+        Self::Error {
+            cpu,
+            reason: Box::new(reason),
+        }
+    }
 }
 
 pub enum DispatchDebugResult {
