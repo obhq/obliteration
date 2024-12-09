@@ -1593,7 +1593,7 @@ dependencies = [
  "slint-build",
  "thiserror 2.0.3",
  "uuid",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
  "winres",
  "x86-64",
  "xdg",
