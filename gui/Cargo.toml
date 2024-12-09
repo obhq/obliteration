@@ -60,6 +60,7 @@ features = [
     "Win32_System",
     "Win32_System_Hypervisor",
     "Win32_System_Memory",
+    "Win32_System_Registry",
     "Win32_System_SystemInformation",
 ]
 

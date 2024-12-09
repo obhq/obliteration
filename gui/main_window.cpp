@@ -25,13 +25,7 @@
 #include <fcntl.h>
 #endif
 
-namespace Args {
-    const QCommandLineOption debug("debug", "Immediate launch the VMM in debug mode.", "addr", "127.0.0.1:1234");
-    const QCommandLineOption kernel("kernel", "Use this kernel instead of default one.", "path");
-}
-
-MainWindow::MainWindow(const QCommandLineParser &args) :
-    m_args(args),
+MainWindow::MainWindow() :
     m_main(nullptr)
 {
     // File menu.
@@ -83,17 +77,6 @@ void MainWindow::aboutObliteration()
         "working in the future.");
 }
 
-void MainWindow::vmmError(const QString &msg)
-{
-    QMessageBox::critical(this, "Error", msg);
-
-    if (m_args.isSet(Args::debug)) {
-        close();
-    } else {
-        m_main->setCurrentIndex(0);
-    }
-}
-
 void MainWindow::waitKernelExit(bool success)
 {
     if (!success) {
@@ -104,22 +87,4 @@ void MainWindow::waitKernelExit(bool success)
     }
 
     m_main->setCurrentIndex(0);
-}
-
-void MainWindow::stopDebug()
-{
-    // We can't free the VMM here because the thread that trigger this method are waiting
-    // for us to return.
-    if (m_args.isSet(Args::debug)) {
-        QMetaObject::invokeMethod(
-            this,
-            &MainWindow::close,
-            Qt::QueuedConnection);
-    } else {
-        QMetaObject::invokeMethod(
-            this,
-            &MainWindow::waitKernelExit,
-            Qt::QueuedConnection,
-            true);
-    }
 }

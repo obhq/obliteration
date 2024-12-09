@@ -27,11 +27,8 @@ int main(int argc, char *argv[])
 
     QGuiApplication::setWindowIcon(QIcon(":/resources/obliteration-icon.png"));
 
-    // Parse arguments.
-    QCommandLineParser args;
-
     // Setup main window.
-    MainWindow win(args);
+    MainWindow win;
 
     // Run main window.
     return QApplication::exec();
