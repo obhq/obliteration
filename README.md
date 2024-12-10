@@ -23,6 +23,8 @@ The project logo and icon was designed by [VocalFan](https://github.com/VocalFan
 
 Please note that we cannot run any games yet as stated on the above. But if you want to try or help on testing you can download binaries from the latest commits [here](https://github.com/obhq/obliteration/actions/workflows/main.yml). You **MUST** sign in to GitHub otherwise you will not be able to download files.
 
+Our developers are using Linux so Windows and macOS users may encountered some unimplemented functions. A PR to implement those functions is welcome or you can report an issue if you would like to be a tester so we can try implement it for you to test.
+
 ## Building and Development
 
 Information related to Obliteration development and building from source can be found on our [developer documentation](https://dev.obliteration.net).
