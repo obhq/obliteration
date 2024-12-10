@@ -13,7 +13,5 @@ private slots:
     void reportIssue();
     void aboutObliteration();
 private:
-    void waitKernelExit(bool success);
-
     QStackedWidget *m_main;
 };

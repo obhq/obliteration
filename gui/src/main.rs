@@ -1,24 +1,25 @@
 #![windows_subsystem = "windows"]
 
 use self::data::{DataError, DataMgr};
-use self::graphics::{Graphics, GraphicsError, PhysicalDevice, Screen};
+use self::graphics::{Graphics, GraphicsError, PhysicalDevice};
 use self::profile::Profile;
 use self::setup::{run_setup, SetupError};
-use self::ui::{ErrorWindow, MainWindow, ProfileModel, ResolutionModel};
-use self::vmm::{Vmm, VmmArgs, VmmError, VmmEvent};
+use self::ui::{ErrorWindow, MainWindow, ProfileModel, ResolutionModel, SlintBackend};
 use clap::{Parser, ValueEnum};
 use debug::DebugServer;
+use erdp::ErrorDisplay;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use std::cell::Cell;
-use std::error::Error;
 use std::net::SocketAddrV4;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::rc::Rc;
 use std::sync::Arc;
 use thiserror::Error;
-use winit::error::EventLoopError;
-use winit::event_loop::EventLoop;
+use winit::application::ApplicationHandler;
+use winit::event::WindowEvent;
+use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::window::WindowId;
 
 mod data;
 mod debug;
@@ -35,53 +36,73 @@ mod vfs;
 mod vmm;
 
 fn main() -> ExitCode {
-    use std::fmt::Write;
-
     // Check program mode.
     let args = ProgramArgs::parse();
-    let r = match &args.mode {
-        Some(ProgramMode::PanicHandler) => self::panic::run_handler(),
-        None => run_vmm(&args),
-    };
 
-    // Check program result.
-    let e = match r {
-        Ok(_) => return ExitCode::SUCCESS,
-        Err(e) => e,
-    };
-
-    // Get full message.
-    let mut msg = e.to_string();
-    let mut src = e.source();
-
-    while let Some(e) = src {
-        write!(msg, " -> {e}").unwrap();
-        src = e.source();
+    match &args.mode {
+        Some(ProgramMode::PanicHandler) => return self::panic::run_handler(),
+        None => {}
     }
 
-    // Show error window.
-    let win = ErrorWindow::new().unwrap();
+    #[cfg(target_os = "windows")]
+    fn error(msg: impl AsRef<str>) {
+        todo!()
+    }
 
-    win.set_message(format!("An unexpected error has occurred: {msg}.").into());
-    win.on_close({
-        let win = win.as_weak();
+    #[cfg(not(target_os = "windows"))]
+    fn error(msg: impl AsRef<str>) {
+        eprintln!("{}", msg.as_ref());
+    }
 
-        move || win.unwrap().hide().unwrap()
-    });
+    // Spawn panic handler.
+    let exe = match std::env::current_exe().and_then(std::fs::canonicalize) {
+        Ok(v) => v,
+        Err(e) => {
+            error(format!(
+                "Failed to get application executable path: {}.",
+                e.display()
+            ));
 
-    win.run().unwrap();
+            return ExitCode::FAILURE;
+        }
+    };
 
-    ExitCode::FAILURE
+    if let Err(e) = self::panic::spawn_handler(&exe) {
+        error(format!(
+            "Failed to spawn panic handler process: {}.",
+            e.display()
+        ));
+
+        return ExitCode::FAILURE;
+    }
+
+    // Setup UI event loop.
+    let mut el = EventLoop::<ProgramEvent>::with_user_event();
+    let el = match el.build() {
+        Ok(v) => v,
+        Err(e) => {
+            error(format!(
+                "Failed to create winit event loop: {}.",
+                e.display()
+            ));
+
+            return ExitCode::FAILURE;
+        }
+    };
+
+    // Run.
+    let mut prog = Program { args };
+
+    match el.run_app(&mut prog) {
+        Ok(_) => ExitCode::SUCCESS,
+        Err(e) => {
+            error(format!("Failed to run winit event loop: {}.", e.display()));
+            ExitCode::FAILURE
+        }
+    }
 }
 
-fn run_vmm(args: &ProgramArgs) -> Result<(), ProgramError> {
-    // Spawn panic handler.
-    let exe = std::env::current_exe()
-        .and_then(std::fs::canonicalize)
-        .map_err(ProgramError::GetCurrentExePath)?;
-
-    self::panic::spawn_handler(&exe)?;
-
+fn run_vmm(args: &ProgramArgs, exe: &PathBuf) -> Result<(), ProgramError> {
     #[cfg(unix)]
     rlim::set_rlimit_nofile().map_err(ProgramError::FdLimit)?;
 
@@ -176,34 +197,11 @@ fn run_vmm(args: &ProgramArgs) -> Result<(), ProgramError> {
     };
 
     // Setup VMM screen.
-    let mut el = EventLoop::<VmmEvent>::with_user_event();
-
     let screen = graphics
         .create_screen(&profile)
         .map_err(|e| ProgramError::CreateScreen(Box::new(e)))?;
 
-    // Start VMM.
-    let el = el.build().map_err(ProgramError::CreateVmmEventLoop)?;
-
-    std::thread::scope(|scope| {
-        let vmm = Vmm::new(
-            VmmArgs {
-                profile: &profile,
-                kernel,
-                debugger,
-                el: el.create_proxy(),
-            },
-            scope,
-        )
-        .map_err(ProgramError::StartVmm)?;
-
-        // Run the screen.
-        screen
-            .run()
-            .map_err(|e| ProgramError::RunScreen(Box::new(e)))?;
-
-        Ok(())
-    })
+    todo!()
 }
 
 fn run_launcher(
@@ -318,6 +316,49 @@ fn run_launcher(
     Ok(Some((profile, exit)))
 }
 
+/// Implementation of [`ApplicationHandler`] for main program mode.
+struct Program {
+    args: ProgramArgs,
+}
+
+impl Program {
+    async fn error(&self, msg: impl Into<SharedString>) {
+        // Show error window.
+        let win = ErrorWindow::new().unwrap();
+
+        win.set_message(msg.into());
+        win.on_close({
+            let win = win.as_weak();
+
+            move || win.unwrap().hide().unwrap()
+        });
+
+        win.show();
+
+        todo!()
+    }
+}
+
+impl ApplicationHandler<ProgramEvent> for Program {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        slint::platform::set_platform(Box::new(SlintBackend::new())).unwrap();
+
+        todo!()
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        window_id: WindowId,
+        event: WindowEvent,
+    ) {
+        todo!()
+    }
+}
+
+/// Event to wakeup UI event loop.
+enum ProgramEvent {}
+
 /// Program arguments parsed from command line.
 #[derive(Parser)]
 #[command(about = None)]
@@ -349,9 +390,6 @@ enum ProgramMode {
 /// Represents an error when our program fails.
 #[derive(Debug, Error)]
 enum ProgramError {
-    #[error("couldn't spawn panic handler process")]
-    SpawnPanicHandler(#[source] std::io::Error),
-
     #[cfg(unix)]
     #[error("couldn't increase file descriptor limit")]
     FdLimit(#[source] self::rlim::RlimitError),
@@ -370,9 +408,6 @@ enum ProgramError {
 
     #[error("couldn't save default profile")]
     SaveDefaultProfile(#[source] self::profile::SaveError),
-
-    #[error("couldn't get application executable path")]
-    GetCurrentExePath(#[source] std::io::Error),
 
     #[error("failed to start debug server on {1}")]
     StartDebugServer(
@@ -394,16 +429,4 @@ enum ProgramError {
 
     #[error("couldn't create VMM screen")]
     CreateScreen(#[source] Box<dyn std::error::Error>),
-
-    #[error("couldn't create VMM event loop")]
-    CreateVmmEventLoop(#[source] EventLoopError),
-
-    #[error("couldn't start VMM")]
-    StartVmm(#[source] VmmError),
-
-    #[error("couldn't run VMM screen")]
-    RunScreen(#[source] Box<dyn std::error::Error>),
-
-    #[error("couldn't read panic info")]
-    ReadPanicInfo(#[source] ciborium::de::Error<std::io::Error>),
 }

@@ -76,15 +76,3 @@ void MainWindow::aboutObliteration()
         "PC. This will allows you to play your games forever even if your PlayStation 4 stopped "
         "working in the future.");
 }
-
-void MainWindow::waitKernelExit(bool success)
-{
-    if (!success) {
-        QMessageBox::critical(
-            this,
-            "Error",
-            "The kernel was stopped unexpectedly. See the kernel logs for more details.");
-    }
-
-    m_main->setCurrentIndex(0);
-}
