@@ -1,21 +1,20 @@
 use crate::ui::ErrorWindow;
-use crate::ProgramError;
+use erdp::ErrorDisplay;
 use serde::{Deserialize, Serialize};
 use slint::ComponentHandle;
 use std::borrow::Cow;
 use std::io::Write;
 use std::panic::PanicHookInfo;
 use std::path::Path;
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command, ExitCode, Stdio};
 use std::sync::Mutex;
 
-pub fn spawn_handler(exe: &Path) -> Result<(), ProgramError> {
+pub fn spawn_handler(exe: &Path) -> Result<(), std::io::Error> {
     // Spawn the process in panic handler mode.
     let ph = Command::new(exe)
         .args(["--mode", "panic-handler"])
         .stdin(Stdio::piped())
-        .spawn()
-        .map_err(ProgramError::SpawnPanicHandler)?;
+        .spawn()?;
 
     // Set panic hook to send panic to the handler.
     let ph = Mutex::new(Some(PanicHandler(ph)));
@@ -25,24 +24,33 @@ pub fn spawn_handler(exe: &Path) -> Result<(), ProgramError> {
     Ok(())
 }
 
-pub fn run_handler() -> Result<(), ProgramError> {
+pub fn run_handler() -> ExitCode {
     use std::io::ErrorKind;
 
     // Wait for panic info.
     let stdin = std::io::stdin();
     let mut stdin = stdin.lock();
-    let info: PanicInfo = match ciborium::from_reader(&mut stdin) {
-        Ok(v) => v,
-        Err(ciborium::de::Error::Io(e)) if e.kind() == ErrorKind::UnexpectedEof => return Ok(()),
-        Err(e) => return Err(ProgramError::ReadPanicInfo(e)),
+    let (msg, exit) = match ciborium::from_reader::<PanicInfo, _>(&mut stdin) {
+        Ok(v) => {
+            let m = format!(
+                "An unexpected error has occurred at {}:{}: {}.",
+                v.file, v.line, v.message
+            );
+
+            (m, ExitCode::SUCCESS)
+        }
+        Err(ciborium::de::Error::Io(e)) if e.kind() == ErrorKind::UnexpectedEof => {
+            return ExitCode::SUCCESS;
+        }
+        Err(e) => {
+            let m = format!("Failed to read panic info: {}.", e.display());
+
+            (m, ExitCode::FAILURE)
+        }
     };
 
-    // Display panic info.
+    // Display error window.
     let win = ErrorWindow::new().unwrap();
-    let msg = format!(
-        "An unexpected error has occurred at {}:{}: {}.",
-        info.file, info.line, info.message
-    );
 
     win.set_message(msg.into());
     win.on_close({
@@ -53,7 +61,7 @@ pub fn run_handler() -> Result<(), ProgramError> {
 
     win.run().unwrap();
 
-    Ok(())
+    exit
 }
 
 fn panic_hook(i: &PanicHookInfo, ph: &Mutex<Option<PanicHandler>>) {
