@@ -36,16 +36,12 @@ MainWindow::MainWindow() :
 
     // Help menu.
     auto helpMenu = menuBar()->addMenu("&Help");
-    auto reportIssue = new QAction("&Report Issue", this);
     auto aboutQt = new QAction("About &Qt", this);
     auto about = new QAction("&About Obliteration", this);
 
-    connect(reportIssue, &QAction::triggered, this, &MainWindow::reportIssue);
     connect(aboutQt, &QAction::triggered, &QApplication::aboutQt);
     connect(about, &QAction::triggered, this, &MainWindow::aboutObliteration);
 
-    helpMenu->addAction(reportIssue);
-    helpMenu->addSeparator();
     helpMenu->addAction(aboutQt);
     helpMenu->addAction(about);
 
@@ -57,13 +53,6 @@ MainWindow::MainWindow() :
 
 MainWindow::~MainWindow()
 {
-}
-
-void MainWindow::reportIssue()
-{
-    if (!QDesktopServices::openUrl(QUrl("https://github.com/obhq/obliteration/issues/new"))) {
-        QMessageBox::critical(this, "Error", "Failed to open https://github.com/obhq/obliteration/issues/new.");
-    }
 }
 
 void MainWindow::aboutObliteration()

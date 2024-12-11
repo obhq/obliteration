@@ -4,7 +4,7 @@ use self::data::{DataError, DataMgr};
 use self::graphics::{Graphics, GraphicsError, PhysicalDevice};
 use self::profile::Profile;
 use self::setup::{run_setup, SetupError};
-use self::ui::{ErrorWindow, MainWindow, ProfileModel, ResolutionModel, SlintBackend};
+use self::ui::{ErrorWindow, MainWindow, ProfileModel, ResolutionModel, RuntimeExt, SlintBackend};
 use clap::{Parser, ValueEnum};
 use debug::DebugServer;
 use erdp::ErrorDisplay;
@@ -16,10 +16,6 @@ use std::process::ExitCode;
 use std::rc::Rc;
 use std::sync::Arc;
 use thiserror::Error;
-use winit::application::ApplicationHandler;
-use winit::event::WindowEvent;
-use winit::event_loop::{ActiveEventLoop, EventLoop};
-use winit::window::WindowId;
 
 mod data;
 mod debug;
@@ -30,6 +26,7 @@ mod panic;
 mod profile;
 #[cfg(unix)]
 mod rlim;
+mod rt;
 mod setup;
 mod ui;
 mod vfs;
@@ -76,33 +73,44 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
-    // Setup UI event loop.
-    let mut el = EventLoop::<ProgramEvent>::with_user_event();
-    let el = match el.build() {
-        Ok(v) => v,
+    // Run.
+    let run = async move {
+        // Setup Slint back-end. This need to be done before using any Slint API.
+        slint::platform::set_platform(Box::new(SlintBackend::new())).unwrap();
+
+        // Run.
+        let e = match run(args, exe).await {
+            Ok(_) => return,
+            Err(e) => e,
+        };
+
+        // Show error window.
+        let win = ErrorWindow::new().unwrap();
+
+        win.set_message(format!("An unexpected error has occurred: {}.", e.display()).into());
+        win.on_close({
+            let win = win.as_weak();
+
+            move || win.unwrap().hide().unwrap()
+        });
+
+        win.exec().await.unwrap();
+    };
+
+    match self::rt::block_on(run) {
+        Ok(_) => ExitCode::SUCCESS,
         Err(e) => {
             error(format!(
-                "Failed to create winit event loop: {}.",
+                "Failed to run application runtime: {}.",
                 e.display()
             ));
 
-            return ExitCode::FAILURE;
-        }
-    };
-
-    // Run.
-    let mut prog = Program { args };
-
-    match el.run_app(&mut prog) {
-        Ok(_) => ExitCode::SUCCESS,
-        Err(e) => {
-            error(format!("Failed to run winit event loop: {}.", e.display()));
             ExitCode::FAILURE
         }
     }
 }
 
-fn run_vmm(args: &ProgramArgs, exe: &PathBuf) -> Result<(), ProgramError> {
+async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
     #[cfg(unix)]
     rlim::set_rlimit_nofile().map_err(ProgramError::FdLimit)?;
 
@@ -315,49 +323,6 @@ fn run_launcher(
 
     Ok(Some((profile, exit)))
 }
-
-/// Implementation of [`ApplicationHandler`] for main program mode.
-struct Program {
-    args: ProgramArgs,
-}
-
-impl Program {
-    async fn error(&self, msg: impl Into<SharedString>) {
-        // Show error window.
-        let win = ErrorWindow::new().unwrap();
-
-        win.set_message(msg.into());
-        win.on_close({
-            let win = win.as_weak();
-
-            move || win.unwrap().hide().unwrap()
-        });
-
-        win.show();
-
-        todo!()
-    }
-}
-
-impl ApplicationHandler<ProgramEvent> for Program {
-    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        slint::platform::set_platform(Box::new(SlintBackend::new())).unwrap();
-
-        todo!()
-    }
-
-    fn window_event(
-        &mut self,
-        event_loop: &ActiveEventLoop,
-        window_id: WindowId,
-        event: WindowEvent,
-    ) {
-        todo!()
-    }
-}
-
-/// Event to wakeup UI event loop.
-enum ProgramEvent {}
 
 /// Program arguments parsed from command line.
 #[derive(Parser)]

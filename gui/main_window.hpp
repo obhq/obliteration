@@ -10,7 +10,6 @@ public:
     MainWindow();
     ~MainWindow() override;
 private slots:
-    void reportIssue();
     void aboutObliteration();
 private:
     QStackedWidget *m_main;
