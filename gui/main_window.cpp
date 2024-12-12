@@ -25,8 +25,7 @@
 #include <fcntl.h>
 #endif
 
-MainWindow::MainWindow() :
-    m_main(nullptr)
+MainWindow::MainWindow()
 {
     // File menu.
     auto fileMenu = menuBar()->addMenu("&File");
@@ -36,19 +35,11 @@ MainWindow::MainWindow() :
 
     // Help menu.
     auto helpMenu = menuBar()->addMenu("&Help");
-    auto aboutQt = new QAction("About &Qt", this);
     auto about = new QAction("&About Obliteration", this);
 
-    connect(aboutQt, &QAction::triggered, &QApplication::aboutQt);
     connect(about, &QAction::triggered, this, &MainWindow::aboutObliteration);
 
-    helpMenu->addAction(aboutQt);
     helpMenu->addAction(about);
-
-    // Central widget.
-    m_main = new QStackedWidget();
-
-    setCentralWidget(m_main);
 }
 
 MainWindow::~MainWindow()
