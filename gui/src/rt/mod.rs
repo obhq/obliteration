@@ -1,3 +1,5 @@
+pub use self::context::*;
+
 use futures::executor::LocalPool;
 use futures::task::LocalSpawnExt;
 use std::future::Future;
@@ -8,6 +10,8 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::WindowId;
 
+mod context;
+
 pub fn block_on(main: impl Future<Output = ()> + 'static) -> Result<(), RuntimeError> {
     // Setup winit event loop.
     let mut el = EventLoop::<Event>::with_user_event();
@@ -17,7 +21,7 @@ pub fn block_on(main: impl Future<Output = ()> + 'static) -> Result<(), RuntimeE
     exe.spawner()
         .spawn_local(async move {
             main.await;
-            todo!()
+            RuntimeContext::with(|cx| cx.event_loop().exit());
         })
         .unwrap();
 
@@ -31,7 +35,9 @@ struct AsyncExecutor(LocalPool);
 
 impl ApplicationHandler<Event> for AsyncExecutor {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        self.0.run_until_stalled();
+        let cx = RuntimeContext::new(event_loop);
+
+        cx.run(|| self.0.run_until_stalled());
     }
 
     fn window_event(
