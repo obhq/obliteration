@@ -1,6 +1,9 @@
 pub use self::backend::*;
 pub use self::profile::*;
 
+use crate::rt::RuntimeContext;
+use i_slint_core::window::WindowInner;
+use i_slint_core::InternalToken;
 use slint::ComponentHandle;
 
 mod backend;
@@ -13,7 +16,19 @@ pub trait RuntimeExt: ComponentHandle {
 
 impl<T: ComponentHandle> RuntimeExt for T {
     async fn exec(&self) -> Result<(), slint::PlatformError> {
-        todo!()
+        let win = WindowInner::from_pub(self.window()).window_adapter();
+        let win = win
+            .internal(InternalToken)
+            .unwrap()
+            .as_any()
+            .downcast_ref::<Window>()
+            .unwrap();
+
+        self.show()?;
+        RuntimeContext::with(|cx| cx.on_close(win.id())).await;
+        self.hide()?;
+
+        Ok(())
     }
 }
 

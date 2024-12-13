@@ -1608,6 +1608,7 @@ dependencies = [
  "gdbstub",
  "gdbstub_arch",
  "humansize",
+ "i-slint-core",
  "i-slint-renderer-skia",
  "libc",
  "metal 0.29.0",
