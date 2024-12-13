@@ -16,6 +16,7 @@ futures = "0.3.31"
 gdbstub = "0.7.3"
 gdbstub_arch = "0.3.1"
 humansize = "2.1.3"
+i-slint-core = "=1.8.0"
 i-slint-renderer-skia = { version = "=1.8.0", features = ["wayland", "x11"] }
 libc = "0.2.164"
 num_enum = "0.7.3"

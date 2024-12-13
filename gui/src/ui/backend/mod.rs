@@ -1,4 +1,5 @@
-use self::window::Window;
+pub(super) use self::window::Window;
+
 use crate::rt::RuntimeContext;
 use i_slint_renderer_skia::SkiaRenderer;
 use slint::platform::WindowAdapter;

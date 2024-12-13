@@ -1,37 +1,49 @@
+use super::event::WindowEvent;
 use std::cell::Cell;
+use std::future::Future;
 use std::mem::transmute;
-use std::ptr::null;
+use std::ptr::null_mut;
 use winit::event_loop::ActiveEventLoop;
+use winit::window::WindowId;
 
 /// Execution context of the runtime.
 pub struct RuntimeContext<'a> {
-    el: &'a ActiveEventLoop,
+    pub(super) el: &'a ActiveEventLoop,
+    pub(super) on_close: &'a mut WindowEvent<()>,
 }
 
 impl<'a> RuntimeContext<'a> {
-    pub(super) fn new(el: &'a ActiveEventLoop) -> Self {
-        Self { el }
-    }
-
     /// # Panics
-    /// If called from the other thread than main thread.
-    pub fn with<R>(f: impl FnOnce(&Self) -> R) -> R {
-        let cx = CONTEXT.get();
+    /// - If called from the other thread than main thread.
+    /// - If this call has been nested.
+    pub fn with<R>(f: impl FnOnce(&mut RuntimeContext) -> R) -> R {
+        // Take context to achieve exclusive access.
+        let cx = CONTEXT.replace(null_mut());
+
         assert!(!cx.is_null());
-        unsafe { f(&*cx) }
+
+        // Execute action then put context back.
+        let r = unsafe { f(&mut *cx) };
+
+        CONTEXT.set(cx);
+        r
     }
 
     pub fn event_loop(&self) -> &ActiveEventLoop {
         self.el
     }
 
-    pub(super) fn run(&self, f: impl FnOnce()) {
+    pub fn on_close(&mut self, win: WindowId) -> impl Future<Output = ()> {
+        self.on_close.wait(win)
+    }
+
+    pub(super) fn run(&mut self, f: impl FnOnce()) {
         assert!(CONTEXT.replace(unsafe { transmute(self) }).is_null());
         f();
-        CONTEXT.set(null());
+        CONTEXT.set(null_mut());
     }
 }
 
 thread_local! {
-    static CONTEXT: Cell<*const RuntimeContext<'static>> = Cell::new(null());
+    static CONTEXT: Cell<*mut RuntimeContext<'static>> = Cell::new(null_mut());
 }

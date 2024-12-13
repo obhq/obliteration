@@ -1,7 +1,11 @@
+use i_slint_core::window::WindowAdapterInternal;
+use i_slint_core::InternalToken;
 use i_slint_renderer_skia::SkiaRenderer;
 use slint::platform::{Renderer, WindowAdapter};
-use slint::PhysicalSize;
+use slint::{PhysicalSize, PlatformError};
+use std::any::Any;
 use std::rc::Rc;
+use winit::window::WindowId;
 
 /// Implementation of [`WindowAdapter`].
 pub struct Window {
@@ -22,11 +26,19 @@ impl Window {
             renderer,
         }
     }
+
+    pub fn id(&self) -> WindowId {
+        self.winit.id()
+    }
 }
 
 impl WindowAdapter for Window {
     fn window(&self) -> &slint::Window {
         &self.slint
+    }
+
+    fn set_visible(&self, visible: bool) -> Result<(), PlatformError> {
+        todo!()
     }
 
     fn size(&self) -> PhysicalSize {
@@ -37,5 +49,15 @@ impl WindowAdapter for Window {
 
     fn renderer(&self) -> &dyn Renderer {
         &self.renderer
+    }
+
+    fn internal(&self, _: InternalToken) -> Option<&dyn WindowAdapterInternal> {
+        Some(self)
+    }
+}
+
+impl WindowAdapterInternal for Window {
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
