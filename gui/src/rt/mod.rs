@@ -1,35 +1,38 @@
 pub use self::context::*;
 
 use self::event::WindowEvent;
-use futures::executor::LocalPool;
-use futures::task::LocalSpawnExt;
+use self::task::TaskList;
+use self::waker::Waker;
 use std::future::Future;
+use std::sync::Arc;
 use thiserror::Error;
 use winit::application::ApplicationHandler;
 use winit::error::EventLoopError;
-use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
 use winit::window::WindowId;
 
 mod context;
 mod event;
+mod task;
+mod waker;
 
 pub fn block_on(main: impl Future<Output = ()> + 'static) -> Result<(), RuntimeError> {
     // Setup winit event loop.
     let mut el = EventLoop::<Event>::with_user_event();
     let el = el.build().map_err(RuntimeError::CreateEventLoop)?;
-    let executor = LocalPool::new();
-
-    executor
-        .spawner()
-        .spawn_local(async move {
-            main.await;
-            RuntimeContext::with(|cx| cx.event_loop().exit());
-        })
-        .unwrap();
+    let main = async move {
+        main.await;
+        RuntimeContext::with(|cx| cx.event_loop().exit());
+    };
 
     // Run event loop.
+    let mut tasks = TaskList::default();
+    let main: Box<dyn Future<Output = ()>> = Box::new(main);
+    let main = tasks.insert(Box::into_pin(main));
     let mut rt = Runtime {
-        executor,
+        el: el.create_proxy(),
+        tasks,
+        main,
         on_close: WindowEvent::default(),
     };
 
@@ -38,18 +41,55 @@ pub fn block_on(main: impl Future<Output = ()> + 'static) -> Result<(), RuntimeE
 
 /// Implementation of [`ApplicationHandler`] to drive [`Future`].
 struct Runtime {
-    executor: LocalPool,
+    el: EventLoopProxy<Event>,
+    tasks: TaskList,
+    main: u64,
     on_close: WindowEvent<()>,
+}
+
+impl Runtime {
+    pub fn dispatch(&mut self, el: &ActiveEventLoop, task: u64) -> bool {
+        // Get target task.
+        let mut task = match self.tasks.get(task) {
+            Some(v) => v,
+            None => {
+                // It is possible for the waker to wake the same task multiple times. In this case
+                // the previous wake may complete the task.
+                return false;
+            }
+        };
+
+        // Poll the task.
+        let waker = Arc::new(Waker::new(self.el.clone(), *task.key()));
+        let mut cx = RuntimeContext {
+            el,
+            on_close: &mut self.on_close,
+        };
+
+        cx.run(|| {
+            let waker = std::task::Waker::from(waker);
+            let mut cx = std::task::Context::from_waker(&waker);
+
+            if task.get_mut().as_mut().poll(&mut cx).is_ready() {
+                drop(task.remove());
+            }
+        });
+
+        true
+    }
 }
 
 impl ApplicationHandler<Event> for Runtime {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let mut cx = RuntimeContext {
-            el: event_loop,
-            on_close: &mut self.on_close,
-        };
+        assert!(self.dispatch(event_loop, self.main));
+    }
 
-        cx.run(|| self.executor.run_until_stalled());
+    fn user_event(&mut self, event_loop: &ActiveEventLoop, event: Event) {
+        match event {
+            Event::TaskReady(task) => {
+                self.dispatch(event_loop, task);
+            }
+        }
     }
 
     fn window_event(
@@ -69,7 +109,9 @@ impl ApplicationHandler<Event> for Runtime {
 }
 
 /// Event to wakeup winit event loop.
-enum Event {}
+enum Event {
+    TaskReady(u64),
+}
 
 /// Represents an error when [`block_on()`] fails.
 #[derive(Debug, Error)]
