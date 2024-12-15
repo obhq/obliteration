@@ -6,6 +6,7 @@ use slint::platform::{Renderer, WindowAdapter};
 use slint::{PhysicalSize, PlatformError};
 use std::any::Any;
 use std::cell::Cell;
+use std::error::Error;
 use std::rc::Rc;
 use winit::window::WindowId;
 
@@ -36,7 +37,17 @@ impl Window {
     }
 }
 
-impl RuntimeWindow for Window {}
+impl RuntimeWindow for Window {
+    fn redraw(&self) -> Result<(), Box<dyn Error>> {
+        // Wayland will show the window on the first render so we need to check visibility flag
+        // here.
+        if self.visible.get().is_some_and(|v| v) {
+            self.renderer.render()?;
+        }
+
+        Ok(())
+    }
+}
 
 impl WindowAdapter for Window {
     fn window(&self) -> &slint::Window {

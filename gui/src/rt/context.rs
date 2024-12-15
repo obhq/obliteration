@@ -59,12 +59,14 @@ impl<'a> RuntimeContext<'a> {
 
     /// # Panics
     /// If this call has been nested.
-    pub(super) fn run(&mut self, f: impl FnOnce()) {
+    pub(super) fn run<R>(&mut self, f: impl FnOnce() -> R) -> R {
         assert!(CONTEXT.get().is_null());
 
         CONTEXT.set(unsafe { transmute(self) });
-        f();
+        let r = f();
         CONTEXT.set(null_mut());
+
+        r
     }
 }
 
