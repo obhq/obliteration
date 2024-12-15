@@ -71,7 +71,7 @@ struct Runtime {
 }
 
 impl Runtime {
-    fn dispatch(&mut self, el: &ActiveEventLoop, task: u64) -> bool {
+    fn dispatch_task(&mut self, el: &ActiveEventLoop, task: u64) -> bool {
         // Get target task.
         let mut task = match self.tasks.get(task) {
             Some(v) => v,
@@ -102,7 +102,12 @@ impl Runtime {
         true
     }
 
-    fn redraw(&mut self, el: &ActiveEventLoop, win: WindowId) {
+    fn dispatch_window(
+        &mut self,
+        el: &ActiveEventLoop,
+        win: WindowId,
+        f: impl FnOnce(&dyn RuntimeWindow) -> Result<(), Box<dyn Error>>,
+    ) {
         // Get target window.
         let win = match self.windows.get(&win).unwrap().upgrade() {
             Some(v) => v,
@@ -116,8 +121,8 @@ impl Runtime {
             on_close: &mut self.on_close,
         };
 
-        // Redraw.
-        let e = match cx.run(move || win.redraw()) {
+        // Dispatch the event.
+        let e = match cx.run(move || f(win.as_ref())) {
             Ok(_) => return,
             Err(e) => e,
         };
@@ -128,29 +133,33 @@ impl Runtime {
 
 impl ApplicationHandler<Event> for Runtime {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        assert!(self.dispatch(event_loop, self.main));
+        assert!(self.dispatch_task(event_loop, self.main));
     }
 
     fn user_event(&mut self, event_loop: &ActiveEventLoop, event: Event) {
         match event {
             Event::TaskReady(task) => {
-                self.dispatch(event_loop, task);
+                self.dispatch_task(event_loop, task);
             }
         }
     }
 
     fn window_event(
         &mut self,
-        event_loop: &ActiveEventLoop,
-        window_id: WindowId,
+        el: &ActiveEventLoop,
+        id: WindowId,
         event: winit::event::WindowEvent,
     ) {
         use winit::event::WindowEvent;
 
         match event {
-            WindowEvent::CloseRequested => self.on_close.raise(window_id, ()),
-            WindowEvent::Destroyed => drop(self.windows.remove(&window_id)),
-            WindowEvent::RedrawRequested => self.redraw(event_loop, window_id),
+            WindowEvent::CloseRequested => self.on_close.raise(id, ()),
+            WindowEvent::Destroyed => drop(self.windows.remove(&id)),
+            WindowEvent::ScaleFactorChanged {
+                scale_factor,
+                inner_size_writer: _,
+            } => self.dispatch_window(el, id, move |w| w.update_scale_factor(scale_factor)),
+            WindowEvent::RedrawRequested => self.dispatch_window(el, id, |w| w.redraw()),
             _ => {}
         }
     }
