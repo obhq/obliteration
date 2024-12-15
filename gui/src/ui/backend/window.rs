@@ -2,8 +2,8 @@ use crate::rt::RuntimeWindow;
 use i_slint_core::window::WindowAdapterInternal;
 use i_slint_core::InternalToken;
 use i_slint_renderer_skia::SkiaRenderer;
-use slint::platform::{Renderer, WindowAdapter, WindowEvent};
-use slint::{PhysicalSize, PlatformError};
+use slint::platform::{Renderer, WindowAdapter, WindowEvent, WindowProperties};
+use slint::{LogicalSize, PhysicalSize, PlatformError, WindowSize};
 use std::any::Any;
 use std::cell::Cell;
 use std::error::Error;
@@ -38,10 +38,20 @@ impl Window {
 }
 
 impl RuntimeWindow for Window {
+    fn update_size(&self, v: winit::dpi::PhysicalSize<u32>) -> Result<(), Box<dyn Error>> {
+        let size = PhysicalSize::new(v.width, v.height);
+        let size = LogicalSize::from_physical(size, self.winit.scale_factor() as f32);
+
+        self.slint.dispatch_event(WindowEvent::Resized { size });
+
+        Ok(())
+    }
+
     fn update_scale_factor(&self, v: f64) -> Result<(), Box<dyn Error>> {
-        self.slint.dispatch_event(WindowEvent::ScaleFactorChanged {
-            scale_factor: v as f32,
-        });
+        let scale_factor = v as f32;
+
+        self.slint
+            .dispatch_event(WindowEvent::ScaleFactorChanged { scale_factor });
 
         Ok(())
     }
@@ -78,6 +88,10 @@ impl WindowAdapter for Window {
         Ok(())
     }
 
+    fn set_size(&self, size: WindowSize) {
+        todo!()
+    }
+
     fn size(&self) -> PhysicalSize {
         let s = self.winit.inner_size();
 
@@ -86,6 +100,23 @@ impl WindowAdapter for Window {
 
     fn renderer(&self) -> &dyn Renderer {
         &self.renderer
+    }
+
+    fn update_window_properties(&self, properties: WindowProperties) {
+        // Set window size.
+        let size = properties.layout_constraints();
+        let scale = self.winit.scale_factor() as f32;
+        let map = move |v: LogicalSize| {
+            let v = v.to_physical(scale);
+            let v = winit::dpi::PhysicalSize::new(v.width, v.height);
+
+            winit::dpi::Size::from(v)
+        };
+
+        self.winit.set_min_inner_size(size.min.map(&map));
+        self.winit.set_max_inner_size(size.max.map(&map));
+
+        let _ = self.winit.request_inner_size(map(size.preferred));
     }
 
     fn internal(&self, _: InternalToken) -> Option<&dyn WindowAdapterInternal> {
