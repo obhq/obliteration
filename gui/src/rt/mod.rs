@@ -153,6 +153,7 @@ impl ApplicationHandler<Event> for Runtime {
         use winit::event::WindowEvent;
 
         match event {
+            WindowEvent::Resized(v) => self.dispatch_window(el, id, move |w| w.update_size(v)),
             WindowEvent::CloseRequested => self.on_close.raise(id, ()),
             WindowEvent::Destroyed => drop(self.windows.remove(&id)),
             WindowEvent::ScaleFactorChanged {
