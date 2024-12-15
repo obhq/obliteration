@@ -1,3 +1,4 @@
+pub use self::app::*;
 pub use self::context::*;
 pub use self::window::*;
 
@@ -7,7 +8,7 @@ use self::waker::Waker;
 use std::collections::HashMap;
 use std::error::Error;
 use std::future::Future;
-use std::rc::Weak;
+use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use thiserror::Error;
 use winit::application::ApplicationHandler;
@@ -15,19 +16,34 @@ use winit::error::{EventLoopError, OsError};
 use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
 use winit::window::WindowId;
 
+mod app;
 mod context;
 mod event;
 mod task;
 mod waker;
 mod window;
 
-pub fn block_on(main: impl Future<Output = ()> + 'static) -> Result<(), RuntimeError> {
+pub fn run<E, A>(
+    app: Rc<A>,
+    main: impl Future<Output = Result<(), E>> + 'static,
+) -> Result<(), RuntimeError>
+where
+    E: Error,
+    A: App,
+{
     // Setup winit event loop.
     let mut el = EventLoop::<Event>::with_user_event();
     let el = el.build().map_err(RuntimeError::CreateEventLoop)?;
-    let main = async move {
-        main.await;
-        RuntimeContext::with(|cx| cx.el.exit());
+    let main = {
+        let app = app.clone();
+
+        async move {
+            if let Err(e) = main.await {
+                app.error(e).await;
+            }
+
+            RuntimeContext::with(|cx| cx.el.exit());
+        }
     };
 
     // Run event loop.
