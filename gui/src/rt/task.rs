@@ -1,4 +1,3 @@
-use std::collections::hash_map::OccupiedEntry;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
@@ -11,24 +10,23 @@ pub struct TaskList {
 }
 
 impl TaskList {
-    pub fn insert(&mut self, f: Pin<Box<dyn Future<Output = ()>>>) -> u64 {
-        let id = self.next;
+    pub fn insert(&mut self, id: Option<u64>, task: Pin<Box<dyn Future<Output = ()>>>) -> u64 {
+        // Get ID.
+        let id = match id {
+            Some(v) => v,
+            None => {
+                let v = self.next;
+                self.next = self.next.checked_add(1).unwrap();
+                v
+            }
+        };
 
-        assert!(self.list.insert(id, f).is_none());
-        self.next = self.next.checked_add(1).unwrap();
+        assert!(self.list.insert(id, task).is_none());
 
         id
     }
 
-    pub fn get(
-        &mut self,
-        id: u64,
-    ) -> Option<OccupiedEntry<u64, Pin<Box<dyn Future<Output = ()>>>>> {
-        use std::collections::hash_map::Entry;
-
-        match self.list.entry(id) {
-            Entry::Occupied(e) => Some(e),
-            Entry::Vacant(_) => None,
-        }
+    pub fn remove(&mut self, id: u64) -> Option<Pin<Box<dyn Future<Output = ()>>>> {
+        self.list.remove(&id)
     }
 }

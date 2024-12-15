@@ -1,6 +1,5 @@
 pub(super) use self::window::Window;
 
-use crate::rt::RuntimeContext;
 use i_slint_renderer_skia::SkiaRenderer;
 use slint::platform::WindowAdapter;
 use slint::{PhysicalSize, PlatformError};
@@ -26,7 +25,7 @@ impl SlintBackend {
 impl slint::platform::Platform for SlintBackend {
     fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, PlatformError> {
         let attrs = winit::window::Window::default_attributes().with_visible(false);
-        let win = RuntimeContext::create_window(attrs, move |win| {
+        let win = crate::rt::create_window(attrs, move |win| {
             // Create renderer.
             let win = Rc::new(win);
             let size = win.inner_size();
