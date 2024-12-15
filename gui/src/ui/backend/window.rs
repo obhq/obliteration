@@ -2,7 +2,7 @@ use crate::rt::RuntimeWindow;
 use i_slint_core::window::WindowAdapterInternal;
 use i_slint_core::InternalToken;
 use i_slint_renderer_skia::SkiaRenderer;
-use slint::platform::{Renderer, WindowAdapter};
+use slint::platform::{Renderer, WindowAdapter, WindowEvent};
 use slint::{PhysicalSize, PlatformError};
 use std::any::Any;
 use std::cell::Cell;
@@ -38,6 +38,14 @@ impl Window {
 }
 
 impl RuntimeWindow for Window {
+    fn update_scale_factor(&self, v: f64) -> Result<(), Box<dyn Error>> {
+        self.slint.dispatch_event(WindowEvent::ScaleFactorChanged {
+            scale_factor: v as f32,
+        });
+
+        Ok(())
+    }
+
     fn redraw(&self) -> Result<(), Box<dyn Error>> {
         // Wayland will show the window on the first render so we need to check visibility flag
         // here.
