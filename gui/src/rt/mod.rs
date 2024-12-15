@@ -111,7 +111,7 @@ impl ApplicationHandler<Event> for Runtime {
         match event {
             WindowEvent::CloseRequested => self.on_close.raise(window_id, ()),
             WindowEvent::Destroyed => drop(self.windows.remove(&window_id)),
-            WindowEvent::RedrawRequested => todo!(),
+            WindowEvent::RedrawRequested => {}
             _ => {}
         }
     }
