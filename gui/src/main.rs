@@ -10,6 +10,7 @@ use debug::DebugServer;
 use erdp::ErrorDisplay;
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use std::cell::Cell;
+use std::error::Error;
 use std::net::SocketAddrV4;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -74,30 +75,9 @@ fn main() -> ExitCode {
     }
 
     // Run.
-    let run = async move {
-        // Setup Slint back-end. This need to be done before using any Slint API.
-        slint::platform::set_platform(Box::new(SlintBackend::new())).unwrap();
+    let app = Rc::new(App { args, exe });
 
-        // Run.
-        let e = match run(args, exe).await {
-            Ok(_) => return,
-            Err(e) => e,
-        };
-
-        // Show error window.
-        let win = ErrorWindow::new().unwrap();
-
-        win.set_message(format!("An unexpected error has occurred: {}.", e.display()).into());
-        win.on_close({
-            let win = win.as_weak();
-
-            move || win.unwrap().hide().unwrap()
-        });
-
-        win.exec().await.unwrap();
-    };
-
-    match self::rt::block_on(run) {
+    match self::rt::run(app.clone(), run(app)) {
         Ok(_) => ExitCode::SUCCESS,
         Err(e) => {
             error(format!(
@@ -110,7 +90,10 @@ fn main() -> ExitCode {
     }
 }
 
-async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
+async fn run(app: Rc<App>) -> Result<(), ProgramError> {
+    // Setup Slint back-end. This need to be done before using any Slint API.
+    slint::platform::set_platform(Box::new(SlintBackend::new())).unwrap();
+
     #[cfg(unix)]
     rlim::set_rlimit_nofile().map_err(ProgramError::FdLimit)?;
 
@@ -125,9 +108,9 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
     };
 
     // Get kernel path.
-    let kernel = args.kernel.as_ref().cloned().unwrap_or_else(|| {
+    let kernel = app.args.kernel.as_ref().cloned().unwrap_or_else(|| {
         // Get kernel directory.
-        let mut path = exe.parent().unwrap().to_owned();
+        let mut path = app.exe.parent().unwrap().to_owned();
 
         #[cfg(target_os = "windows")]
         path.push("share");
@@ -175,7 +158,7 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
     }
 
     // Get profile to use.
-    let (profile, debug) = if let Some(v) = args.debug {
+    let (profile, debug) = if let Some(v) = app.args.debug {
         // TODO: Select last used profile.
         (profiles.pop().unwrap(), Some(v))
     } else {
@@ -352,6 +335,28 @@ enum ProgramMode {
     PanicHandler,
 }
 
+/// Implementation of [`self::rt::App`] for main program mode.
+struct App {
+    args: ProgramArgs,
+    exe: PathBuf,
+}
+
+impl self::rt::App for App {
+    async fn error(&self, e: impl Error) {
+        // Show error window.
+        let win = ErrorWindow::new().unwrap();
+
+        win.set_message(format!("An unexpected error has occurred: {}.", e.display()).into());
+        win.on_close({
+            let win = win.as_weak();
+
+            move || win.unwrap().hide().unwrap()
+        });
+
+        win.exec().await.unwrap();
+    }
+}
+
 /// Represents an error when our program fails.
 #[derive(Debug, Error)]
 enum ProgramError {
@@ -393,5 +398,5 @@ enum ProgramError {
     RunMainWindow(#[source] slint::PlatformError),
 
     #[error("couldn't create VMM screen")]
-    CreateScreen(#[source] Box<dyn std::error::Error>),
+    CreateScreen(#[source] Box<dyn Error>),
 }
