@@ -1,7 +1,6 @@
 pub use self::backend::*;
 pub use self::profile::*;
 
-use crate::rt::RuntimeContext;
 use i_slint_core::window::WindowInner;
 use i_slint_core::InternalToken;
 use slint::ComponentHandle;
@@ -25,7 +24,7 @@ impl<T: ComponentHandle> RuntimeExt for T {
             .unwrap();
 
         self.show()?;
-        RuntimeContext::with(|cx| cx.on_close(win.id())).await;
+        crate::rt::on_close(win.id()).await;
         self.hide()?;
 
         Ok(())

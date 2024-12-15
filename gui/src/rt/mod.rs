@@ -1,7 +1,7 @@
 pub use self::app::*;
-pub use self::context::*;
 pub use self::window::*;
 
+use self::context::Context;
 use self::event::WindowEvent;
 use self::task::TaskList;
 use self::waker::Waker;
@@ -14,7 +14,7 @@ use thiserror::Error;
 use winit::application::ApplicationHandler;
 use winit::error::{EventLoopError, OsError};
 use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
-use winit::window::WindowId;
+use winit::window::{Window, WindowAttributes, WindowId};
 
 mod app;
 mod context;
@@ -42,14 +42,14 @@ where
                 app.error(e).await;
             }
 
-            RuntimeContext::with(|cx| cx.el.exit());
+            Context::with(|cx| cx.el.exit());
         }
     };
 
     // Run event loop.
     let mut tasks = TaskList::default();
     let main: Box<dyn Future<Output = ()>> = Box::new(main);
-    let main = tasks.insert(Box::into_pin(main));
+    let main = tasks.insert(None, Box::into_pin(main));
     let mut rt = Runtime {
         el: el.create_proxy(),
         tasks,
@@ -59,6 +59,47 @@ where
     };
 
     el.run_app(&mut rt).map_err(RuntimeError::RunEventLoop)
+}
+
+/// # Panics
+/// If called from the other thread than main thread.
+pub fn spawn(task: impl Future<Output = ()> + 'static) {
+    let task: Box<dyn Future<Output = ()>> = Box::new(task);
+
+    Context::with(move |cx| {
+        let id = cx.tasks.insert(None, Box::into_pin(task));
+
+        // We have a context so there is an event loop for sure.
+        assert!(cx.proxy.send_event(Event::TaskReady(id)).is_ok());
+    })
+}
+
+/// # Panics
+/// - If called from the other thread than main thread.
+/// - If called from `f`.
+pub fn create_window<T: RuntimeWindow + 'static>(
+    attrs: WindowAttributes,
+    f: impl FnOnce(Window) -> Result<Rc<T>, Box<dyn Error + Send + Sync>>,
+) -> Result<Rc<T>, RuntimeError> {
+    Context::with(move |cx| {
+        let win = cx
+            .el
+            .create_window(attrs)
+            .map_err(RuntimeError::CreateWinitWindow)?;
+        let id = win.id();
+        let win = f(win).map_err(RuntimeError::CreateRuntimeWindow)?;
+        let weak = Rc::downgrade(&win);
+
+        assert!(cx.windows.insert(id, weak).is_none());
+
+        Ok(win)
+    })
+}
+
+/// # Panics
+/// If called from the other thread than main thread.
+pub fn on_close(win: WindowId) -> impl Future<Output = ()> {
+    Context::with(move |cx| cx.on_close.wait(win))
 }
 
 /// Implementation of [`ApplicationHandler`] to drive [`Future`].
@@ -71,9 +112,9 @@ struct Runtime {
 }
 
 impl Runtime {
-    fn dispatch_task(&mut self, el: &ActiveEventLoop, task: u64) -> bool {
-        // Get target task.
-        let mut task = match self.tasks.get(task) {
+    fn dispatch_task(&mut self, el: &ActiveEventLoop, id: u64) -> bool {
+        // Take target task so can mutable borrow the task list for context.
+        let mut task = match self.tasks.remove(id) {
             Some(v) => v,
             None => {
                 // It is possible for the waker to wake the same task multiple times. In this case
@@ -82,22 +123,27 @@ impl Runtime {
             }
         };
 
-        // Poll the task.
-        let waker = Arc::new(Waker::new(self.el.clone(), *task.key()));
-        let mut cx = RuntimeContext {
+        // Setup context.
+        let waker = Arc::new(Waker::new(self.el.clone(), id));
+        let mut cx = Context {
             el,
+            proxy: &self.el,
+            tasks: &mut self.tasks,
             windows: &mut self.windows,
             on_close: &mut self.on_close,
         };
 
-        cx.run(|| {
+        // Poll the task.
+        let r = cx.run(|| {
             let waker = std::task::Waker::from(waker);
             let mut cx = std::task::Context::from_waker(&waker);
 
-            if task.get_mut().as_mut().poll(&mut cx).is_ready() {
-                drop(task.remove());
-            }
+            task.as_mut().poll(&mut cx)
         });
+
+        if r.is_pending() {
+            self.tasks.insert(Some(id), task);
+        }
 
         true
     }
@@ -115,8 +161,10 @@ impl Runtime {
         };
 
         // Setup context.
-        let mut cx = RuntimeContext {
+        let mut cx = Context {
             el,
+            proxy: &self.el,
+            tasks: &mut self.tasks,
             windows: &mut self.windows,
             on_close: &mut self.on_close,
         };

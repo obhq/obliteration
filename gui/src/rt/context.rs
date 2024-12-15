@@ -1,27 +1,28 @@
 use super::event::WindowEvent;
-use super::{RuntimeError, RuntimeWindow};
+use super::task::TaskList;
+use super::{Event, RuntimeWindow};
 use std::cell::Cell;
 use std::collections::HashMap;
-use std::error::Error;
-use std::future::Future;
 use std::mem::transmute;
 use std::ptr::null_mut;
-use std::rc::{Rc, Weak};
-use winit::event_loop::ActiveEventLoop;
-use winit::window::{Window, WindowAttributes, WindowId};
+use std::rc::Weak;
+use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
+use winit::window::WindowId;
 
 /// Execution context of the runtime.
-pub struct RuntimeContext<'a> {
-    pub(super) el: &'a ActiveEventLoop,
-    pub(super) windows: &'a mut HashMap<WindowId, Weak<dyn RuntimeWindow>>,
-    pub(super) on_close: &'a mut WindowEvent<()>,
+pub struct Context<'a> {
+    pub el: &'a ActiveEventLoop,
+    pub proxy: &'a EventLoopProxy<Event>,
+    pub tasks: &'a mut TaskList,
+    pub windows: &'a mut HashMap<WindowId, Weak<dyn RuntimeWindow>>,
+    pub on_close: &'a mut WindowEvent<()>,
 }
 
-impl<'a> RuntimeContext<'a> {
+impl<'a> Context<'a> {
     /// # Panics
     /// - If called from the other thread than main thread.
     /// - If this call has been nested.
-    pub fn with<R>(f: impl FnOnce(&mut RuntimeContext) -> R) -> R {
+    pub fn with<R>(f: impl FnOnce(&mut Context) -> R) -> R {
         // Take context to achieve exclusive access.
         let cx = CONTEXT.replace(null_mut());
 
@@ -34,32 +35,9 @@ impl<'a> RuntimeContext<'a> {
         r
     }
 
-    pub fn create_window<T: RuntimeWindow + 'static>(
-        attrs: WindowAttributes,
-        f: impl FnOnce(Window) -> Result<Rc<T>, Box<dyn Error + Send + Sync>>,
-    ) -> Result<Rc<T>, RuntimeError> {
-        Self::with(move |cx| {
-            let win = cx
-                .el
-                .create_window(attrs)
-                .map_err(RuntimeError::CreateWinitWindow)?;
-            let id = win.id();
-            let win = f(win).map_err(RuntimeError::CreateRuntimeWindow)?;
-            let weak = Rc::downgrade(&win);
-
-            assert!(cx.windows.insert(id, weak).is_none());
-
-            Ok(win)
-        })
-    }
-
-    pub fn on_close(&mut self, win: WindowId) -> impl Future<Output = ()> {
-        self.on_close.wait(win)
-    }
-
     /// # Panics
     /// If this call has been nested.
-    pub(super) fn run<R>(&mut self, f: impl FnOnce() -> R) -> R {
+    pub fn run<R>(&mut self, f: impl FnOnce() -> R) -> R {
         assert!(CONTEXT.get().is_null());
 
         CONTEXT.set(unsafe { transmute(self) });
@@ -71,5 +49,5 @@ impl<'a> RuntimeContext<'a> {
 }
 
 thread_local! {
-    static CONTEXT: Cell<*mut RuntimeContext<'static>> = Cell::new(null_mut());
+    static CONTEXT: Cell<*mut Context<'static>> = Cell::new(null_mut());
 }
