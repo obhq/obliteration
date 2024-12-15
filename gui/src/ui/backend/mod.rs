@@ -10,7 +10,11 @@ mod window;
 
 /// Back-end for Slint to run on top of winit event loop.
 ///
-/// This back-end does not supports [`slint::run_event_loop()`].
+/// The following are caveats of this back-end:
+///
+/// - [`slint::run_event_loop()`] and its related functions is not supported.
+/// - [`slint::Window::show()`] and [`slint::Window::hide()`] can be called only once.
+/// - [`slint::Window::hide()`] will not hide the window on Wayland. You need to drop it instead.
 pub struct SlintBackend {}
 
 impl SlintBackend {
@@ -21,23 +25,24 @@ impl SlintBackend {
 
 impl slint::platform::Platform for SlintBackend {
     fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, PlatformError> {
-        // Create winit window.
-        let attrs = winit::window::Window::default_attributes();
-        let win = match RuntimeContext::with(move |cx| cx.event_loop().create_window(attrs)) {
-            Ok(v) => Rc::new(v),
-            Err(e) => return Err(PlatformError::OtherError(Box::new(e))),
-        };
+        let attrs = winit::window::Window::default_attributes().with_visible(false);
+        let win = RuntimeContext::create_window(attrs, move |win| {
+            // Create renderer.
+            let win = Rc::new(win);
+            let size = win.inner_size();
+            let renderer = SkiaRenderer::new(
+                win.clone(),
+                win.clone(),
+                PhysicalSize::new(size.width, size.height),
+            )?;
 
-        // Create WindowAdapter.
-        let size = win.inner_size();
-        let renderer = SkiaRenderer::new(
-            win.clone(),
-            win.clone(),
-            PhysicalSize::new(size.width, size.height),
-        )?;
+            // Create WindowAdapter.
+            Ok(Rc::<Window>::new_cyclic(move |weak| {
+                Window::new(win, slint::Window::new(weak.clone()), renderer)
+            }))
+        })
+        .map_err(|e| PlatformError::OtherError(Box::new(e)))?;
 
-        Ok(Rc::<Window>::new_cyclic(move |weak| {
-            Window::new(win, slint::Window::new(weak.clone()), renderer)
-        }))
+        Ok(win)
     }
 }
