@@ -101,6 +101,29 @@ impl Runtime {
 
         true
     }
+
+    fn redraw(&mut self, el: &ActiveEventLoop, win: WindowId) {
+        // Get target window.
+        let win = match self.windows.get(&win).unwrap().upgrade() {
+            Some(v) => v,
+            None => return,
+        };
+
+        // Setup context.
+        let mut cx = RuntimeContext {
+            el,
+            windows: &mut self.windows,
+            on_close: &mut self.on_close,
+        };
+
+        // Redraw.
+        let e = match cx.run(move || win.redraw()) {
+            Ok(_) => return,
+            Err(e) => e,
+        };
+
+        todo!()
+    }
 }
 
 impl ApplicationHandler<Event> for Runtime {
@@ -127,7 +150,7 @@ impl ApplicationHandler<Event> for Runtime {
         match event {
             WindowEvent::CloseRequested => self.on_close.raise(window_id, ()),
             WindowEvent::Destroyed => drop(self.windows.remove(&window_id)),
-            WindowEvent::RedrawRequested => todo!(),
+            WindowEvent::RedrawRequested => self.redraw(event_loop, window_id),
             _ => {}
         }
     }
