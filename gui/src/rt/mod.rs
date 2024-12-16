@@ -56,9 +56,15 @@ where
         main,
         windows: HashMap::default(),
         on_close: WindowEvent::default(),
+        error: None,
     };
 
-    el.run_app(&mut rt).map_err(RuntimeError::RunEventLoop)
+    el.run_app(&mut rt).map_err(RuntimeError::RunEventLoop)?;
+
+    match rt.error {
+        Some(e) => Err(e),
+        None => Ok(()),
+    }
 }
 
 /// # Panics
@@ -109,6 +115,7 @@ struct Runtime {
     main: u64,
     windows: HashMap<WindowId, Weak<dyn RuntimeWindow>>,
     on_close: WindowEvent<()>,
+    error: Option<RuntimeError>,
 }
 
 impl Runtime {
@@ -148,16 +155,16 @@ impl Runtime {
         true
     }
 
-    fn dispatch_window(
+    fn dispatch_window<R>(
         &mut self,
         el: &ActiveEventLoop,
         win: WindowId,
-        f: impl FnOnce(&dyn RuntimeWindow) -> Result<(), Box<dyn Error>>,
-    ) {
+        f: impl FnOnce(&dyn RuntimeWindow) -> R,
+    ) -> Option<R> {
         // Get target window.
         let win = match self.windows.get(&win).unwrap().upgrade() {
             Some(v) => v,
-            None => return,
+            None => return None,
         };
 
         // Setup context.
@@ -170,12 +177,7 @@ impl Runtime {
         };
 
         // Dispatch the event.
-        let e = match cx.run(move || f(win.as_ref())) {
-            Ok(_) => return,
-            Err(e) => e,
-        };
-
-        todo!()
+        Some(cx.run(move || f(win.as_ref())))
     }
 }
 
@@ -200,17 +202,40 @@ impl ApplicationHandler<Event> for Runtime {
     ) {
         use winit::event::WindowEvent;
 
-        match event {
-            WindowEvent::Resized(v) => self.dispatch_window(el, id, move |w| w.update_size(v)),
-            WindowEvent::CloseRequested => self.on_close.raise(id, ()),
-            WindowEvent::Destroyed => drop(self.windows.remove(&id)),
+        // Process the event.
+        let e = match event {
+            WindowEvent::Resized(v) => match self.dispatch_window(el, id, |w| w.update_size(v)) {
+                Some(Err(e)) => RuntimeError::UpdateWindowSize(e),
+                _ => return,
+            },
+            WindowEvent::CloseRequested => {
+                self.on_close.raise(id, ());
+                return;
+            }
+            WindowEvent::Destroyed => {
+                // It is possible for the window to not in the list if the function passed to
+                // create_window() fails.
+                self.windows.remove(&id);
+                return;
+            }
             WindowEvent::ScaleFactorChanged {
                 scale_factor,
                 inner_size_writer: _,
-            } => self.dispatch_window(el, id, move |w| w.update_scale_factor(scale_factor)),
-            WindowEvent::RedrawRequested => self.dispatch_window(el, id, |w| w.redraw()),
-            _ => {}
-        }
+            } => match self.dispatch_window(el, id, move |w| w.update_scale_factor(scale_factor)) {
+                Some(Err(e)) => RuntimeError::UpdateWindowScaleFactor(e),
+                _ => return,
+            },
+            WindowEvent::RedrawRequested => match self.dispatch_window(el, id, |w| w.redraw()) {
+                Some(Err(e)) => RuntimeError::RedrawWindow(e),
+                _ => return,
+            },
+            _ => return,
+        };
+
+        // Store error then exit.
+        self.error = Some(e);
+
+        el.exit();
     }
 }
 
@@ -233,4 +258,13 @@ pub enum RuntimeError {
 
     #[error("couldn't create runtime window")]
     CreateRuntimeWindow(#[source] Box<dyn Error + Send + Sync>),
+
+    #[error("couldn't update window size")]
+    UpdateWindowSize(#[source] Box<dyn Error + Send + Sync>),
+
+    #[error("couldn't update window scale factor")]
+    UpdateWindowScaleFactor(#[source] Box<dyn Error + Send + Sync>),
+
+    #[error("couldn't redraw the window")]
+    RedrawWindow(#[source] Box<dyn Error + Send + Sync>),
 }
