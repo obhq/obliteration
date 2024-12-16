@@ -38,7 +38,10 @@ impl Window {
 }
 
 impl RuntimeWindow for Window {
-    fn update_size(&self, v: winit::dpi::PhysicalSize<u32>) -> Result<(), Box<dyn Error>> {
+    fn update_size(
+        &self,
+        v: winit::dpi::PhysicalSize<u32>,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let size = PhysicalSize::new(v.width, v.height);
         let size = LogicalSize::from_physical(size, self.winit.scale_factor() as f32);
 
@@ -47,7 +50,7 @@ impl RuntimeWindow for Window {
         Ok(())
     }
 
-    fn update_scale_factor(&self, v: f64) -> Result<(), Box<dyn Error>> {
+    fn update_scale_factor(&self, v: f64) -> Result<(), Box<dyn Error + Send + Sync>> {
         let scale_factor = v as f32;
 
         self.slint
@@ -56,7 +59,7 @@ impl RuntimeWindow for Window {
         Ok(())
     }
 
-    fn redraw(&self) -> Result<(), Box<dyn Error>> {
+    fn redraw(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         // Wayland will show the window on the first render so we need to check visibility flag
         // here.
         if self.visible.get().is_some_and(|v| v) {
