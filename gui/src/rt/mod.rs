@@ -1,10 +1,10 @@
-pub use self::app::*;
 pub use self::window::*;
 
 use self::context::Context;
 use self::event::WindowEvent;
 use self::task::TaskList;
 use self::waker::Waker;
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::error::Error;
 use std::future::Future;
@@ -16,32 +16,22 @@ use winit::error::{EventLoopError, OsError};
 use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
 use winit::window::{Window, WindowAttributes, WindowId};
 
-mod app;
 mod context;
 mod event;
 mod task;
 mod waker;
 mod window;
 
-pub fn run<E, A>(
-    app: Rc<A>,
-    main: impl Future<Output = Result<(), E>> + 'static,
-) -> Result<(), RuntimeError>
-where
-    E: Error,
-    A: App,
-{
+pub fn run<T: 'static>(main: impl Future<Output = T> + 'static) -> Result<T, RuntimeError> {
     // Setup winit event loop.
     let mut el = EventLoop::<Event>::with_user_event();
     let el = el.build().map_err(RuntimeError::CreateEventLoop)?;
+    let exit: Rc<Cell<Option<Result<T, RuntimeError>>>> = Rc::default();
     let main = {
-        let app = app.clone();
+        let exit = exit.clone();
 
         async move {
-            if let Err(e) = main.await {
-                app.error(e).await;
-            }
-
+            exit.set(Some(Ok(main.await)));
             Context::with(|cx| cx.el.exit());
         }
     };
@@ -56,15 +46,12 @@ where
         main,
         windows: HashMap::default(),
         on_close: WindowEvent::default(),
-        error: None,
+        exit,
     };
 
     el.run_app(&mut rt).map_err(RuntimeError::RunEventLoop)?;
 
-    match rt.error {
-        Some(e) => Err(e),
-        None => Ok(()),
-    }
+    rt.exit.take().unwrap()
 }
 
 /// # Panics
@@ -109,16 +96,16 @@ pub fn on_close(win: WindowId) -> impl Future<Output = ()> {
 }
 
 /// Implementation of [`ApplicationHandler`] to drive [`Future`].
-struct Runtime {
+struct Runtime<T> {
     el: EventLoopProxy<Event>,
     tasks: TaskList,
     main: u64,
     windows: HashMap<WindowId, Weak<dyn RuntimeWindow>>,
     on_close: WindowEvent<()>,
-    error: Option<RuntimeError>,
+    exit: Rc<Cell<Option<Result<T, RuntimeError>>>>,
 }
 
-impl Runtime {
+impl<T> Runtime<T> {
     fn dispatch_task(&mut self, el: &ActiveEventLoop, id: u64) -> bool {
         // Take target task so can mutable borrow the task list for context.
         let mut task = match self.tasks.remove(id) {
@@ -181,7 +168,7 @@ impl Runtime {
     }
 }
 
-impl ApplicationHandler<Event> for Runtime {
+impl<T> ApplicationHandler<Event> for Runtime<T> {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         assert!(self.dispatch_task(event_loop, self.main));
     }
@@ -233,7 +220,7 @@ impl ApplicationHandler<Event> for Runtime {
         };
 
         // Store error then exit.
-        self.error = Some(e);
+        self.exit.set(Some(Err(e)));
 
         el.exit();
     }

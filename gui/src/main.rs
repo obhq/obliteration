@@ -4,11 +4,11 @@ use self::data::{DataError, DataMgr};
 use self::graphics::{Graphics, GraphicsError, PhysicalDevice};
 use self::profile::Profile;
 use self::setup::{run_setup, SetupError};
-use self::ui::{ErrorWindow, MainWindow, ProfileModel, ResolutionModel, RuntimeExt, SlintBackend};
+use self::ui::{MainWindow, ProfileModel, ResolutionModel, RuntimeExt, SlintBackend};
 use clap::{Parser, ValueEnum};
 use debug::DebugServer;
 use erdp::ErrorDisplay;
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel, WindowHandle};
 use std::cell::Cell;
 use std::error::Error;
 use std::net::SocketAddrV4;
@@ -75,10 +75,22 @@ fn main() -> ExitCode {
     }
 
     // Run.
-    let app = Rc::new(App { args, exe });
+    let main = async move {
+        let e = match run(args, exe).await {
+            Ok(_) => return ExitCode::SUCCESS,
+            Err(e) => e,
+        };
 
-    match self::rt::run(app.clone(), run(app)) {
-        Ok(_) => ExitCode::SUCCESS,
+        // Show error window.
+        let msg = format!("An unexpected error has occurred: {}.", e.display());
+
+        self::ui::error::<WindowHandle>(None, msg).await;
+
+        ExitCode::FAILURE
+    };
+
+    match self::rt::run(main) {
+        Ok(v) => v,
         Err(e) => {
             error(format!(
                 "Failed to run application runtime: {}.",
@@ -90,7 +102,7 @@ fn main() -> ExitCode {
     }
 }
 
-async fn run(app: Rc<App>) -> Result<(), ProgramError> {
+async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
     // Setup Slint back-end. This need to be done before using any Slint API.
     slint::platform::set_platform(Box::new(SlintBackend::new())).unwrap();
 
@@ -108,9 +120,9 @@ async fn run(app: Rc<App>) -> Result<(), ProgramError> {
     };
 
     // Get kernel path.
-    let kernel = app.args.kernel.as_ref().cloned().unwrap_or_else(|| {
+    let kernel = args.kernel.as_ref().cloned().unwrap_or_else(|| {
         // Get kernel directory.
-        let mut path = app.exe.parent().unwrap().to_owned();
+        let mut path = exe.parent().unwrap().to_owned();
 
         #[cfg(target_os = "windows")]
         path.push("share");
@@ -158,11 +170,11 @@ async fn run(app: Rc<App>) -> Result<(), ProgramError> {
     }
 
     // Get profile to use.
-    let (profile, debug) = if let Some(v) = app.args.debug {
+    let (profile, debug) = if let Some(v) = args.debug {
         // TODO: Select last used profile.
         (profiles.pop().unwrap(), Some(v))
     } else {
-        let (profile, exit) = match run_launcher(&graphics, &data, profiles)? {
+        let (profile, exit) = match run_launcher(&graphics, &data, profiles).await? {
             Some(v) => v,
             None => return Ok(()),
         };
@@ -195,7 +207,7 @@ async fn run(app: Rc<App>) -> Result<(), ProgramError> {
     todo!()
 }
 
-fn run_launcher(
+async fn run_launcher(
     graphics: &impl Graphics,
     data: &Arc<DataMgr>,
     profiles: Vec<Profile>,
@@ -285,7 +297,7 @@ fn run_launcher(
     profiles.select(row, &win);
 
     // Run the window.
-    win.run().map_err(ProgramError::RunMainWindow)?;
+    win.exec().await.map_err(ProgramError::RunMainWindow)?;
 
     // Update selected profile.
     let profile = win.get_selected_profile();
@@ -333,28 +345,6 @@ enum ExitAction {
 #[derive(Clone, ValueEnum)]
 enum ProgramMode {
     PanicHandler,
-}
-
-/// Implementation of [`self::rt::App`] for main program mode.
-struct App {
-    args: ProgramArgs,
-    exe: PathBuf,
-}
-
-impl self::rt::App for App {
-    async fn error(&self, e: impl Error) {
-        // Show error window.
-        let win = ErrorWindow::new().unwrap();
-
-        win.set_message(format!("An unexpected error has occurred: {}.", e.display()).into());
-        win.on_close({
-            let win = win.as_weak();
-
-            move || win.unwrap().hide().unwrap()
-        });
-
-        win.exec().await.unwrap();
-    }
 }
 
 /// Represents an error when our program fails.

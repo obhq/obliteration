@@ -3,10 +3,27 @@ pub use self::profile::*;
 
 use i_slint_core::window::WindowInner;
 use i_slint_core::InternalToken;
-use slint::ComponentHandle;
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
+use slint::{ComponentHandle, SharedString};
 
 mod backend;
 mod profile;
+
+pub async fn error<T>(parent: Option<&T>, msg: impl Into<SharedString>)
+where
+    T: HasDisplayHandle + HasWindowHandle,
+{
+    let win = ErrorWindow::new().unwrap();
+
+    win.set_message(msg.into());
+    win.on_close({
+        let win = win.as_weak();
+
+        move || win.unwrap().hide().unwrap()
+    });
+
+    win.exec().await.unwrap();
+}
 
 /// Provides methods for [`ComponentHandle`] to work with our async runtime.
 pub trait RuntimeExt: ComponentHandle {
