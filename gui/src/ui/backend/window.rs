@@ -3,7 +3,7 @@ use i_slint_core::window::WindowAdapterInternal;
 use i_slint_core::InternalToken;
 use i_slint_renderer_skia::SkiaRenderer;
 use slint::platform::{Renderer, WindowAdapter, WindowEvent, WindowProperties};
-use slint::{LogicalSize, PhysicalSize, PlatformError, WindowSize};
+use slint::{LogicalPosition, LogicalSize, PhysicalSize, PlatformError, WindowSize};
 use std::any::Any;
 use std::cell::Cell;
 use std::error::Error;
@@ -46,6 +46,19 @@ impl RuntimeWindow for Window {
         let size = LogicalSize::from_physical(size, self.winit.scale_factor() as f32);
 
         self.slint.dispatch_event(WindowEvent::Resized { size });
+
+        Ok(())
+    }
+
+    fn update_cursor(
+        &self,
+        v: winit::dpi::PhysicalPosition<f64>,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let v = v.to_logical(self.winit.scale_factor());
+        let position = LogicalPosition::new(v.x, v.y);
+
+        self.slint
+            .dispatch_event(WindowEvent::PointerMoved { position });
 
         Ok(())
     }
@@ -99,6 +112,10 @@ impl WindowAdapter for Window {
         let s = self.winit.inner_size();
 
         PhysicalSize::new(s.width, s.height)
+    }
+
+    fn request_redraw(&self) {
+        self.winit.request_redraw();
     }
 
     fn renderer(&self) -> &dyn Renderer {

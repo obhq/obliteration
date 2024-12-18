@@ -205,6 +205,13 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
                 self.windows.remove(&id);
                 return;
             }
+            WindowEvent::CursorMoved {
+                device_id: _,
+                position,
+            } => match self.dispatch_window(el, id, move |w| w.update_cursor(position)) {
+                Some(Err(e)) => RuntimeError::UpdateWindowCursor(e),
+                _ => return,
+            },
             WindowEvent::ScaleFactorChanged {
                 scale_factor,
                 inner_size_writer: _,
@@ -248,6 +255,9 @@ pub enum RuntimeError {
 
     #[error("couldn't update window size")]
     UpdateWindowSize(#[source] Box<dyn Error + Send + Sync>),
+
+    #[error("couldn't update window cursor")]
+    UpdateWindowCursor(#[source] Box<dyn Error + Send + Sync>),
 
     #[error("couldn't update window scale factor")]
     UpdateWindowScaleFactor(#[source] Box<dyn Error + Send + Sync>),
