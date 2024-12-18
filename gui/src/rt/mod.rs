@@ -22,6 +22,12 @@ mod task;
 mod waker;
 mod window;
 
+/// Run the specified future to completion then return.
+///
+/// Note that our async executor only dispatch a pending future when it is wakeup by
+/// [`std::task::Waker`]. Any pending futures that need to wakeup by an external event like I/O need
+/// a dedicated thread to invoke [`std::task::Waker::wake()`] when the I/O is ready. That mean our
+/// async executor will not work with Tokio by default.
 pub fn run<T: 'static>(main: impl Future<Output = T> + 'static) -> Result<T, RuntimeError> {
     // Setup winit event loop.
     let mut el = EventLoop::<Event>::with_user_event();
@@ -205,6 +211,10 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
                 self.windows.remove(&id);
                 return;
             }
+            WindowEvent::Focused(v) => match self.dispatch_window(el, id, |w| w.set_active(v)) {
+                Some(Err(e)) => RuntimeError::ChangeActiveWindow(e),
+                _ => return,
+            },
             WindowEvent::CursorMoved {
                 device_id: _,
                 position,
@@ -255,6 +265,9 @@ pub enum RuntimeError {
 
     #[error("couldn't update window size")]
     UpdateWindowSize(#[source] Box<dyn Error + Send + Sync>),
+
+    #[error("couldn't change active window")]
+    ChangeActiveWindow(#[source] Box<dyn Error + Send + Sync>),
 
     #[error("couldn't update window cursor")]
     UpdateWindowCursor(#[source] Box<dyn Error + Send + Sync>),

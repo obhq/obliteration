@@ -50,6 +50,13 @@ impl RuntimeWindow for Window {
         Ok(())
     }
 
+    fn set_active(&self, v: bool) -> Result<(), Box<dyn Error + Send + Sync>> {
+        self.slint
+            .dispatch_event(WindowEvent::WindowActiveChanged(v));
+
+        Ok(())
+    }
+
     fn update_cursor(
         &self,
         v: winit::dpi::PhysicalPosition<f64>,
