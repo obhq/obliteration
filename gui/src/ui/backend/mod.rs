@@ -35,6 +35,12 @@ impl slint::platform::Platform for SlintBackend {
                 PhysicalSize::new(size.width, size.height),
             )?;
 
+            renderer.set_pre_present_callback(Some(Box::new({
+                let win = win.clone();
+
+                move || win.pre_present_notify()
+            })));
+
             // Create WindowAdapter.
             Ok(Rc::<Window>::new_cyclic(move |weak| {
                 Window::new(win, slint::Window::new(weak.clone()), renderer)
