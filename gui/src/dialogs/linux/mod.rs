@@ -81,5 +81,5 @@ where
     let parent = parent.as_ref().map(|v| v.as_ref()).unwrap();
     let parent = WindowIdentifier::from_raw_handle(parent, display).await;
 
-    f(parent).await
+    f(Some(parent)).await
 }

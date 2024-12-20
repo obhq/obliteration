@@ -3,6 +3,7 @@ use self::screen::VulkanScreen;
 use super::Graphics;
 use crate::profile::Profile;
 use ash::vk::{ApplicationInfo, InstanceCreateInfo, QueueFlags, API_VERSION_1_3};
+use std::ffi::CStr;
 use thiserror::Error;
 
 mod buffer;
@@ -10,9 +11,10 @@ mod screen;
 
 pub fn new() -> Result<impl Graphics, GraphicsError> {
     // Setup application info.
-    let info = ApplicationInfo::default()
-        .application_name(c"Obliteration")
-        .api_version(API_VERSION_1_3);
+    let mut app = ApplicationInfo::default();
+
+    app.p_application_name = c"Obliteration".as_ptr();
+    app.api_version = API_VERSION_1_3;
 
     // Setup validation layers.
     let layers = [
@@ -21,9 +23,11 @@ pub fn new() -> Result<impl Graphics, GraphicsError> {
     ];
 
     // Setup VkInstanceCreateInfo.
-    let info = InstanceCreateInfo::default()
-        .application_info(&info)
-        .enabled_layer_names(&layers);
+    let mut info = InstanceCreateInfo::default();
+
+    info.p_application_info = &app;
+    info.pp_enabled_layer_names = layers.as_ptr();
+    info.enabled_layer_count = layers.len().try_into().unwrap();
 
     // Create Vulkan instance.
     let api = ash::Entry::linked();
@@ -62,9 +66,7 @@ pub fn new() -> Result<impl Graphics, GraphicsError> {
         }
 
         // Add to list.
-        let name = p
-            .device_name_as_c_str()
-            .unwrap()
+        let name = unsafe { CStr::from_ptr(p.device_name.as_ptr()) }
             .to_str()
             .unwrap()
             .to_owned();

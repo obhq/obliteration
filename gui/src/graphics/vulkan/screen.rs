@@ -37,17 +37,23 @@ impl VulkanScreen {
             .into_iter()
             .position(|p| p.queue_flags.contains(QueueFlags::GRAPHICS))
             .ok_or(VulkanScreenError::NoQueue)?;
-
         let queue = queue
             .try_into()
             .map_err(|_| VulkanScreenError::QueueOutOfBounds(queue))?;
+        let mut queues = DeviceQueueCreateInfo::default();
+        let priorities = [1.0];
 
-        let queues = DeviceQueueCreateInfo::default()
-            .queue_family_index(queue)
-            .queue_priorities(&[1.0]);
+        queues.queue_family_index = queue;
+        queues.queue_count = 1;
+        queues.p_queue_priorities = priorities.as_ptr();
+
+        // Setup VkDeviceCreateInfo.
+        let mut device = DeviceCreateInfo::default();
+
+        device.p_queue_create_infos = &queues;
+        device.queue_create_info_count = 1;
 
         // Create logical device.
-        let device = DeviceCreateInfo::default().queue_create_infos(std::slice::from_ref(&queues));
         let device = unsafe { instance.create_device(physical, &device, None) }
             .map_err(VulkanScreenError::CreateDeviceFailed)?;
 

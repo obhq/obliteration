@@ -1,7 +1,4 @@
 .DS_Store
-/.cache/
-/.flatpak-builder/
-/build/
 /dist/
 /site/
 /target/
