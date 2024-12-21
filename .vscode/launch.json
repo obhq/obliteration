@@ -1,29 +1,7 @@
 {
   "configurations": [
     {
-      "name": "Qt",
-      "type": "lldb",
-      "request": "launch",
-      "args": [
-        "--kernel",
-        "${workspaceFolder}/build/obkrnl"
-      ],
-      "cwd": "${workspaceFolder}",
-      "windows": {
-        "program": "${workspaceFolder}/build/gui/Obliteration.exe",
-        "env": {
-          "Path": "${env:Path};${env:CMAKE_PREFIX_PATH}\\bin"
-        }
-      },
-      "linux": {
-        "program": "${workspaceFolder}/build/gui/obliteration"
-      },
-      "osx": {
-        "program": "${workspaceFolder}/build/gui/obliteration.app/Contents/MacOS/obliteration"
-      }
-    },
-    {
-      "name": "Slint",
+      "name": "GUI",
       "type": "lldb",
       "request": "launch",
       "preLaunchTask": "Build",
