@@ -198,7 +198,7 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
         // Process the event.
         let e = match event {
             WindowEvent::Resized(v) => match self.dispatch_window(el, id, |w| w.on_resized(v)) {
-                Some(Err(e)) => RuntimeError::UpdateWindowSize(e),
+                Some(Err(e)) => RuntimeError::Resized(e),
                 _ => return,
             },
             WindowEvent::CloseRequested => {
@@ -212,27 +212,32 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
                 return;
             }
             WindowEvent::Focused(v) => match self.dispatch_window(el, id, |w| w.on_focused(v)) {
-                Some(Err(e)) => RuntimeError::ChangeActiveWindow(e),
+                Some(Err(e)) => RuntimeError::Focused(e),
                 _ => return,
             },
             WindowEvent::CursorMoved {
                 device_id: dev,
                 position: pos,
             } => match self.dispatch_window(el, id, move |w| w.on_cursor_moved(dev, pos)) {
-                Some(Err(e)) => RuntimeError::UpdateWindowCursor(e),
+                Some(Err(e)) => RuntimeError::CursorMoved(e),
                 _ => return,
             },
-            WindowEvent::CursorLeft { device_id } => todo!(),
+            WindowEvent::CursorLeft { device_id: dev } => {
+                match self.dispatch_window(el, id, move |w| w.on_cursor_left(dev)) {
+                    Some(Err(e)) => RuntimeError::CursorLeft(e),
+                    _ => return,
+                }
+            }
             WindowEvent::ScaleFactorChanged {
                 scale_factor: new,
                 inner_size_writer: sw,
             } => match self.dispatch_window(el, id, move |w| w.on_scale_factor_changed(new, sw)) {
-                Some(Err(e)) => RuntimeError::UpdateWindowScaleFactor(e),
+                Some(Err(e)) => RuntimeError::ScaleFactorChanged(e),
                 _ => return,
             },
             WindowEvent::RedrawRequested => {
                 match self.dispatch_window(el, id, |w| w.on_redraw_requested()) {
-                    Some(Err(e)) => RuntimeError::RedrawWindow(e),
+                    Some(Err(e)) => RuntimeError::RedrawRequested(e),
                     _ => return,
                 }
             }
@@ -266,18 +271,21 @@ pub enum RuntimeError {
     #[error("couldn't create runtime window")]
     CreateRuntimeWindow(#[source] Box<dyn Error + Send + Sync>),
 
-    #[error("couldn't update window size")]
-    UpdateWindowSize(#[source] Box<dyn Error + Send + Sync>),
+    #[error("couldn't handle window resized")]
+    Resized(#[source] Box<dyn Error + Send + Sync>),
 
-    #[error("couldn't change active window")]
-    ChangeActiveWindow(#[source] Box<dyn Error + Send + Sync>),
+    #[error("couldn't handle window focused")]
+    Focused(#[source] Box<dyn Error + Send + Sync>),
 
-    #[error("couldn't update window cursor")]
-    UpdateWindowCursor(#[source] Box<dyn Error + Send + Sync>),
+    #[error("couldn't handle cursor moved")]
+    CursorMoved(#[source] Box<dyn Error + Send + Sync>),
 
-    #[error("couldn't update window scale factor")]
-    UpdateWindowScaleFactor(#[source] Box<dyn Error + Send + Sync>),
+    #[error("couldn't handle cursor left")]
+    CursorLeft(#[source] Box<dyn Error + Send + Sync>),
 
-    #[error("couldn't redraw the window")]
-    RedrawWindow(#[source] Box<dyn Error + Send + Sync>),
+    #[error("couldn't handle scale factor changed")]
+    ScaleFactorChanged(#[source] Box<dyn Error + Send + Sync>),
+
+    #[error("couldn't handle redraw requested")]
+    RedrawRequested(#[source] Box<dyn Error + Send + Sync>),
 }

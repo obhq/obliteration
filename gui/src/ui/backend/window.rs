@@ -72,6 +72,11 @@ impl RuntimeWindow for Window {
         Ok(())
     }
 
+    fn on_cursor_left(&self, _: DeviceId) -> Result<(), Box<dyn Error + Send + Sync>> {
+        self.slint.dispatch_event(WindowEvent::PointerExited);
+        Ok(())
+    }
+
     fn on_scale_factor_changed(
         &self,
         new: f64,

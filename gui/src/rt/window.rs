@@ -13,6 +13,7 @@ pub trait RuntimeWindow {
         dev: DeviceId,
         pos: PhysicalPosition<f64>,
     ) -> Result<(), Box<dyn Error + Send + Sync>>;
+    fn on_cursor_left(&self, dev: DeviceId) -> Result<(), Box<dyn Error + Send + Sync>>;
     fn on_scale_factor_changed(
         &self,
         new: f64,
