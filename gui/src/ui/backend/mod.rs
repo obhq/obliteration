@@ -1,5 +1,6 @@
 pub(super) use self::window::Window;
 
+use i_slint_core::graphics::RequestedGraphicsAPI;
 use i_slint_renderer_skia::SkiaRenderer;
 use slint::platform::WindowAdapter;
 use slint::{PhysicalSize, PlatformError};
@@ -29,12 +30,15 @@ impl slint::platform::Platform for SlintBackend {
             // Create renderer.
             let win = Rc::new(win);
             let size = win.inner_size();
-            let renderer = SkiaRenderer::new(
-                win.clone(),
-                win.clone(),
-                PhysicalSize::new(size.width, size.height),
-            )?;
+            let size = PhysicalSize::new(size.width, size.height);
+            let renderer = SkiaRenderer::default();
+            let api = if cfg!(target_os = "macos") {
+                RequestedGraphicsAPI::Metal
+            } else {
+                RequestedGraphicsAPI::Vulkan
+            };
 
+            renderer.set_window_handle(win.clone(), win.clone(), size, Some(api))?;
             renderer.set_pre_present_callback(Some(Box::new({
                 let win = win.clone();
 
