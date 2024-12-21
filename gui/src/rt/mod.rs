@@ -113,7 +113,7 @@ struct Runtime<T> {
 
 impl<T> Runtime<T> {
     fn dispatch_task(&mut self, el: &ActiveEventLoop, id: u64) -> bool {
-        // Take target task so can mutable borrow the task list for context.
+        // Take target task so can mutable borrow the task list for the context.
         let mut task = match self.tasks.remove(id) {
             Some(v) => v,
             None => {
@@ -197,7 +197,7 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
 
         // Process the event.
         let e = match event {
-            WindowEvent::Resized(v) => match self.dispatch_window(el, id, |w| w.update_size(v)) {
+            WindowEvent::Resized(v) => match self.dispatch_window(el, id, |w| w.on_resized(v)) {
                 Some(Err(e)) => RuntimeError::UpdateWindowSize(e),
                 _ => return,
             },
@@ -211,32 +211,35 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
                 self.windows.remove(&id);
                 return;
             }
-            WindowEvent::Focused(v) => match self.dispatch_window(el, id, |w| w.set_active(v)) {
+            WindowEvent::Focused(v) => match self.dispatch_window(el, id, |w| w.on_focused(v)) {
                 Some(Err(e)) => RuntimeError::ChangeActiveWindow(e),
                 _ => return,
             },
             WindowEvent::CursorMoved {
-                device_id: _,
-                position,
-            } => match self.dispatch_window(el, id, move |w| w.update_cursor(position)) {
+                device_id: dev,
+                position: pos,
+            } => match self.dispatch_window(el, id, move |w| w.on_cursor_moved(dev, pos)) {
                 Some(Err(e)) => RuntimeError::UpdateWindowCursor(e),
                 _ => return,
             },
+            WindowEvent::CursorLeft { device_id } => todo!(),
             WindowEvent::ScaleFactorChanged {
-                scale_factor,
-                inner_size_writer: _,
-            } => match self.dispatch_window(el, id, move |w| w.update_scale_factor(scale_factor)) {
+                scale_factor: new,
+                inner_size_writer: sw,
+            } => match self.dispatch_window(el, id, move |w| w.on_scale_factor_changed(new, sw)) {
                 Some(Err(e)) => RuntimeError::UpdateWindowScaleFactor(e),
                 _ => return,
             },
-            WindowEvent::RedrawRequested => match self.dispatch_window(el, id, |w| w.redraw()) {
-                Some(Err(e)) => RuntimeError::RedrawWindow(e),
-                _ => return,
-            },
+            WindowEvent::RedrawRequested => {
+                match self.dispatch_window(el, id, |w| w.on_redraw_requested()) {
+                    Some(Err(e)) => RuntimeError::RedrawWindow(e),
+                    _ => return,
+                }
+            }
             _ => return,
         };
 
-        // Store error then exit.
+        // Store the error then exit.
         self.exit.set(Some(Err(e)));
 
         el.exit();

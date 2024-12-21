@@ -8,6 +8,7 @@ use std::any::Any;
 use std::cell::Cell;
 use std::error::Error;
 use std::rc::Rc;
+use winit::event::{DeviceId, InnerSizeWriter};
 use winit::window::WindowId;
 
 /// Implementation of [`WindowAdapter`].
@@ -38,11 +39,11 @@ impl Window {
 }
 
 impl RuntimeWindow for Window {
-    fn update_size(
+    fn on_resized(
         &self,
-        v: winit::dpi::PhysicalSize<u32>,
+        new: winit::dpi::PhysicalSize<u32>,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let size = PhysicalSize::new(v.width, v.height);
+        let size = PhysicalSize::new(new.width, new.height);
         let size = LogicalSize::from_physical(size, self.winit.scale_factor() as f32);
 
         self.slint.dispatch_event(WindowEvent::Resized { size });
@@ -50,19 +51,20 @@ impl RuntimeWindow for Window {
         Ok(())
     }
 
-    fn set_active(&self, v: bool) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn on_focused(&self, gained: bool) -> Result<(), Box<dyn Error + Send + Sync>> {
         self.slint
-            .dispatch_event(WindowEvent::WindowActiveChanged(v));
+            .dispatch_event(WindowEvent::WindowActiveChanged(gained));
 
         Ok(())
     }
 
-    fn update_cursor(
+    fn on_cursor_moved(
         &self,
-        v: winit::dpi::PhysicalPosition<f64>,
+        _: DeviceId,
+        pos: winit::dpi::PhysicalPosition<f64>,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let v = v.to_logical(self.winit.scale_factor());
-        let position = LogicalPosition::new(v.x, v.y);
+        let pos = pos.to_logical(self.winit.scale_factor());
+        let position = LogicalPosition::new(pos.x, pos.y);
 
         self.slint
             .dispatch_event(WindowEvent::PointerMoved { position });
@@ -70,8 +72,12 @@ impl RuntimeWindow for Window {
         Ok(())
     }
 
-    fn update_scale_factor(&self, v: f64) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let scale_factor = v as f32;
+    fn on_scale_factor_changed(
+        &self,
+        new: f64,
+        _: InnerSizeWriter,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let scale_factor = new as f32;
 
         self.slint
             .dispatch_event(WindowEvent::ScaleFactorChanged { scale_factor });
@@ -79,7 +85,7 @@ impl RuntimeWindow for Window {
         Ok(())
     }
 
-    fn redraw(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn on_redraw_requested(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         // Wayland will show the window on the first render so we need to check visibility flag
         // here.
         if self.visible.get().is_some_and(|v| v) {
