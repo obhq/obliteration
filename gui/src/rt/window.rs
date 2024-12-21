@@ -1,6 +1,6 @@
 use std::error::Error;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
-use winit::event::{DeviceId, InnerSizeWriter};
+use winit::event::{DeviceId, ElementState, InnerSizeWriter, MouseButton};
 
 /// Encapsulates winit window with window-specific logic.
 ///
@@ -14,6 +14,12 @@ pub trait RuntimeWindow {
         pos: PhysicalPosition<f64>,
     ) -> Result<(), Box<dyn Error + Send + Sync>>;
     fn on_cursor_left(&self, dev: DeviceId) -> Result<(), Box<dyn Error + Send + Sync>>;
+    fn on_mouse_input(
+        &self,
+        dev: DeviceId,
+        st: ElementState,
+        btn: MouseButton,
+    ) -> Result<(), Box<dyn Error + Send + Sync>>;
     fn on_scale_factor_changed(
         &self,
         new: f64,

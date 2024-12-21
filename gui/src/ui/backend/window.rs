@@ -2,13 +2,13 @@ use crate::rt::RuntimeWindow;
 use i_slint_core::window::WindowAdapterInternal;
 use i_slint_core::InternalToken;
 use i_slint_renderer_skia::SkiaRenderer;
-use slint::platform::{Renderer, WindowAdapter, WindowEvent, WindowProperties};
+use slint::platform::{PointerEventButton, Renderer, WindowAdapter, WindowEvent, WindowProperties};
 use slint::{LogicalPosition, LogicalSize, PhysicalSize, PlatformError, WindowSize};
 use std::any::Any;
 use std::cell::Cell;
 use std::error::Error;
 use std::rc::Rc;
-use winit::event::{DeviceId, InnerSizeWriter};
+use winit::event::{DeviceId, ElementState, InnerSizeWriter, MouseButton};
 use winit::window::WindowId;
 
 /// Implementation of [`WindowAdapter`].
@@ -17,6 +17,7 @@ pub struct Window {
     slint: slint::Window,
     renderer: SkiaRenderer,
     visible: Cell<Option<bool>>, // Wayland does not support this so we need to emulate it.
+    pointer: Cell<LogicalPosition>,
 }
 
 impl Window {
@@ -30,6 +31,7 @@ impl Window {
             slint,
             renderer,
             visible: Cell::new(None),
+            pointer: Cell::default(),
         }
     }
 
@@ -68,12 +70,41 @@ impl RuntimeWindow for Window {
 
         self.slint
             .dispatch_event(WindowEvent::PointerMoved { position });
+        self.pointer.set(position);
 
         Ok(())
     }
 
     fn on_cursor_left(&self, _: DeviceId) -> Result<(), Box<dyn Error + Send + Sync>> {
         self.slint.dispatch_event(WindowEvent::PointerExited);
+        Ok(())
+    }
+
+    fn on_mouse_input(
+        &self,
+        _: DeviceId,
+        st: ElementState,
+        btn: MouseButton,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        // Map button.
+        let button = match btn {
+            MouseButton::Left => PointerEventButton::Left,
+            MouseButton::Right => PointerEventButton::Right,
+            MouseButton::Middle => PointerEventButton::Middle,
+            MouseButton::Back => PointerEventButton::Back,
+            MouseButton::Forward => PointerEventButton::Forward,
+            MouseButton::Other(_) => PointerEventButton::Other,
+        };
+
+        // Dispatch to Slint.
+        let position = self.pointer.get();
+        let ev = match st {
+            ElementState::Pressed => WindowEvent::PointerPressed { position, button },
+            ElementState::Released => WindowEvent::PointerReleased { position, button },
+        };
+
+        self.slint.dispatch_event(ev);
+
         Ok(())
     }
 

@@ -228,6 +228,14 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
                     _ => return,
                 }
             }
+            WindowEvent::MouseInput {
+                device_id: dev,
+                state: st,
+                button: btn,
+            } => match self.dispatch_window(el, id, move |w| w.on_mouse_input(dev, st, btn)) {
+                Some(Err(e)) => RuntimeError::MouseInput(e),
+                _ => return,
+            },
             WindowEvent::ScaleFactorChanged {
                 scale_factor: new,
                 inner_size_writer: sw,
@@ -282,6 +290,9 @@ pub enum RuntimeError {
 
     #[error("couldn't handle cursor left")]
     CursorLeft(#[source] Box<dyn Error + Send + Sync>),
+
+    #[error("couldn't handle mouse input")]
+    MouseInput(#[source] Box<dyn Error + Send + Sync>),
 
     #[error("couldn't handle scale factor changed")]
     ScaleFactorChanged(#[source] Box<dyn Error + Send + Sync>),
