@@ -1,6 +1,6 @@
 use super::event::WindowEvent;
 use super::task::TaskList;
-use super::{Event, RuntimeWindow};
+use super::{Event, Hook, RuntimeWindow};
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::mem::transmute;
@@ -14,6 +14,7 @@ pub struct Context<'a> {
     pub el: &'a ActiveEventLoop,
     pub proxy: &'a EventLoopProxy<Event>,
     pub tasks: &'a mut TaskList,
+    pub hooks: Option<&'a mut Vec<Box<dyn Hook>>>,
     pub windows: &'a mut HashMap<WindowId, Weak<dyn RuntimeWindow>>,
     pub on_close: &'a mut WindowEvent<()>,
 }
