@@ -103,8 +103,8 @@ fn main() -> ExitCode {
 }
 
 async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
-    // Setup Slint back-end. This need to be done before using any Slint API.
-    slint::platform::set_platform(Box::new(SlintBackend::new())).unwrap();
+    // Setup Slint custom back-end. This need to be done before using any Slint API.
+    Rc::new(SlintBackend::new()).install().unwrap();
 
     #[cfg(unix)]
     rlim::set_rlimit_nofile().map_err(ProgramError::FdLimit)?;

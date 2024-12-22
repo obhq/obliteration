@@ -1,11 +1,13 @@
 pub(super) use self::window::Window;
 
+use self::hook::Hook;
 use i_slint_core::graphics::RequestedGraphicsAPI;
 use i_slint_renderer_skia::SkiaRenderer;
-use slint::platform::WindowAdapter;
+use slint::platform::{SetPlatformError, WindowAdapter};
 use slint::{PhysicalSize, PlatformError};
 use std::rc::Rc;
 
+mod hook;
 mod window;
 
 /// Back-end for Slint to run on top of winit event loop.
@@ -21,9 +23,18 @@ impl SlintBackend {
     pub fn new() -> Self {
         Self {}
     }
+
+    pub fn install(self: Rc<Self>) -> Result<(), SetPlatformError> {
+        slint::platform::set_platform(Box::new(Platform))?;
+        crate::rt::set_hook(Hook);
+        Ok(())
+    }
 }
 
-impl slint::platform::Platform for SlintBackend {
+/// Implementation of [`slint::platform::Platform`] for [`SlintBackend`].
+struct Platform;
+
+impl slint::platform::Platform for Platform {
     fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, PlatformError> {
         let attrs = winit::window::Window::default_attributes().with_visible(false);
         let win = crate::rt::create_window(attrs, move |win| {

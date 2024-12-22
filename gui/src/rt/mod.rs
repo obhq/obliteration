@@ -1,3 +1,4 @@
+pub use self::hook::*;
 pub use self::window::*;
 
 use self::context::Context;
@@ -13,11 +14,13 @@ use std::sync::Arc;
 use thiserror::Error;
 use winit::application::ApplicationHandler;
 use winit::error::{EventLoopError, OsError};
-use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
+use winit::event::StartCause;
+use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::window::{Window, WindowAttributes, WindowId};
 
 mod context;
 mod event;
+mod hook;
 mod task;
 mod waker;
 mod window;
@@ -50,6 +53,7 @@ pub fn run<T: 'static>(main: impl Future<Output = T> + 'static) -> Result<T, Run
         el: el.create_proxy(),
         tasks,
         main,
+        hooks: Vec::new(),
         windows: HashMap::default(),
         on_close: WindowEvent::default(),
         exit,
@@ -101,11 +105,18 @@ pub fn on_close(win: WindowId) -> impl Future<Output = ()> {
     Context::with(move |cx| cx.on_close.wait(win))
 }
 
+/// # Panics
+/// If called from outside `main` task that passed to [`run()`].
+pub fn set_hook(hook: impl Hook + 'static) {
+    Context::with(move |cx| cx.hooks.as_mut().unwrap().push(Box::new(hook)));
+}
+
 /// Implementation of [`ApplicationHandler`] to drive [`Future`].
 struct Runtime<T> {
     el: EventLoopProxy<Event>,
     tasks: TaskList,
     main: u64,
+    hooks: Vec<Box<dyn Hook>>,
     windows: HashMap<WindowId, Weak<dyn RuntimeWindow>>,
     on_close: WindowEvent<()>,
     exit: Rc<Cell<Option<Result<T, RuntimeError>>>>,
@@ -129,6 +140,11 @@ impl<T> Runtime<T> {
             el,
             proxy: &self.el,
             tasks: &mut self.tasks,
+            hooks: if id == self.main {
+                Some(&mut self.hooks)
+            } else {
+                None
+            },
             windows: &mut self.windows,
             on_close: &mut self.on_close,
         };
@@ -148,33 +164,34 @@ impl<T> Runtime<T> {
         true
     }
 
-    fn dispatch_window<R>(
-        &mut self,
-        el: &ActiveEventLoop,
-        win: WindowId,
-        f: impl FnOnce(&dyn RuntimeWindow) -> R,
-    ) -> Option<R> {
-        // Get target window.
-        let win = match self.windows.get(&win).unwrap().upgrade() {
-            Some(v) => v,
-            None => return None,
-        };
-
-        // Setup context.
-        let mut cx = Context {
-            el,
-            proxy: &self.el,
-            tasks: &mut self.tasks,
-            windows: &mut self.windows,
-            on_close: &mut self.on_close,
-        };
-
-        // Dispatch the event.
-        Some(cx.run(move || f(win.as_ref())))
+    fn exit(&mut self, el: &ActiveEventLoop, r: Result<T, RuntimeError>) {
+        self.exit.set(Some(r));
+        el.exit();
     }
 }
 
 impl<T> ApplicationHandler<Event> for Runtime<T> {
+    fn new_events(&mut self, el: &ActiveEventLoop, cause: StartCause) {
+        let mut cx = Context {
+            el,
+            proxy: &self.el,
+            tasks: &mut self.tasks,
+            hooks: None,
+            windows: &mut self.windows,
+            on_close: &mut self.on_close,
+        };
+
+        if let Err(e) = cx.run(|| {
+            for h in &mut self.hooks {
+                h.new_events(&cause)?;
+            }
+
+            Ok(())
+        }) {
+            self.exit(el, Err(RuntimeError::NewEvents(e)));
+        }
+    }
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         assert!(self.dispatch_task(event_loop, self.main));
     }
@@ -195,67 +212,163 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
     ) {
         use winit::event::WindowEvent;
 
+        // Run pre-hooks.
+        let win = self.windows.get(&id).and_then(|v| v.upgrade());
+        let mut cx = Context {
+            el,
+            proxy: &self.el,
+            tasks: &mut self.tasks,
+            hooks: None,
+            windows: &mut self.windows,
+            on_close: &mut self.on_close,
+        };
+
+        if let Err(e) = cx.run(|| {
+            for h in &mut self.hooks {
+                h.pre_window_event()?;
+            }
+
+            Ok(())
+        }) {
+            self.exit(el, Err(RuntimeError::PreWindowEvent(e)));
+            return;
+        }
+
+        // Setup macro to dispatch event.
+        macro_rules! dispatch {
+            ($w:ident => $h:block) => {
+                match win {
+                    Some($w) => cx.run(|| $h),
+                    None => Ok(()),
+                }
+            };
+        }
+
         // Process the event.
-        let e = match event {
-            WindowEvent::Resized(v) => match self.dispatch_window(el, id, |w| w.on_resized(v)) {
-                Some(Err(e)) => RuntimeError::Resized(e),
-                _ => return,
-            },
+        let r = match event {
+            WindowEvent::Resized(v) => {
+                dispatch!(w => { w.on_resized(v).map_err(RuntimeError::Resized) })
+            }
             WindowEvent::CloseRequested => {
                 self.on_close.raise(id, ());
-                return;
+                Ok(())
             }
             WindowEvent::Destroyed => {
+                // Run hook.
+                let r = cx.run(|| {
+                    for h in &mut self.hooks {
+                        h.window_destroyed(id).map_err(RuntimeError::Destroyed)?;
+                    }
+
+                    Ok(())
+                });
+
                 // It is possible for the window to not in the list if the function passed to
                 // create_window() fails.
                 self.windows.remove(&id);
-                return;
+
+                r
             }
-            WindowEvent::Focused(v) => match self.dispatch_window(el, id, |w| w.on_focused(v)) {
-                Some(Err(e)) => RuntimeError::Focused(e),
-                _ => return,
-            },
+            WindowEvent::Focused(v) => {
+                dispatch!(w => { w.on_focused(v).map_err(RuntimeError::Focused) })
+            }
             WindowEvent::CursorMoved {
                 device_id: dev,
                 position: pos,
-            } => match self.dispatch_window(el, id, move |w| w.on_cursor_moved(dev, pos)) {
-                Some(Err(e)) => RuntimeError::CursorMoved(e),
-                _ => return,
-            },
+            } => dispatch!(w => { w.on_cursor_moved(dev, pos).map_err(RuntimeError::CursorMoved) }),
             WindowEvent::CursorLeft { device_id: dev } => {
-                match self.dispatch_window(el, id, move |w| w.on_cursor_left(dev)) {
-                    Some(Err(e)) => RuntimeError::CursorLeft(e),
-                    _ => return,
-                }
+                dispatch!(w => { w.on_cursor_left(dev).map_err(RuntimeError::CursorLeft) })
             }
             WindowEvent::MouseInput {
                 device_id: dev,
                 state: st,
                 button: btn,
-            } => match self.dispatch_window(el, id, move |w| w.on_mouse_input(dev, st, btn)) {
-                Some(Err(e)) => RuntimeError::MouseInput(e),
-                _ => return,
-            },
+            } => {
+                dispatch!(w => { w.on_mouse_input(dev, st, btn).map_err(RuntimeError::MouseInput) })
+            }
             WindowEvent::ScaleFactorChanged {
                 scale_factor: new,
                 inner_size_writer: sw,
-            } => match self.dispatch_window(el, id, move |w| w.on_scale_factor_changed(new, sw)) {
-                Some(Err(e)) => RuntimeError::ScaleFactorChanged(e),
-                _ => return,
-            },
-            WindowEvent::RedrawRequested => {
-                match self.dispatch_window(el, id, |w| w.on_redraw_requested()) {
-                    Some(Err(e)) => RuntimeError::RedrawRequested(e),
-                    _ => return,
-                }
+            } => {
+                dispatch!(w => { w.on_scale_factor_changed(new, sw).map_err(RuntimeError::ScaleFactorChanged) })
             }
-            _ => return,
+            WindowEvent::RedrawRequested => {
+                dispatch!(w => { w.on_redraw_requested().map_err(RuntimeError::RedrawRequested) })
+            }
+            _ => Ok(()),
         };
 
-        // Store the error then exit.
-        self.exit.set(Some(Err(e)));
+        if let Err(e) = r {
+            self.exit(el, Err(e));
+            return;
+        }
 
-        el.exit();
+        // Rust post-hooks.
+        let mut cx = Context {
+            el,
+            proxy: &self.el,
+            tasks: &mut self.tasks,
+            hooks: None,
+            windows: &mut self.windows,
+            on_close: &mut self.on_close,
+        };
+
+        if let Err(e) = cx.run(|| {
+            for h in &mut self.hooks {
+                h.post_window_event()?;
+            }
+
+            Ok(())
+        }) {
+            self.exit(el, Err(RuntimeError::PostWindowEvent(e)));
+        }
+    }
+
+    fn about_to_wait(&mut self, el: &ActiveEventLoop) {
+        // Run all hooks.
+        let mut flow = el.control_flow();
+        let mut cx = Context {
+            el,
+            proxy: &self.el,
+            tasks: &mut self.tasks,
+            hooks: None,
+            windows: &mut self.windows,
+            on_close: &mut self.on_close,
+        };
+
+        if let Err(e) = cx.run(|| {
+            for h in &mut self.hooks {
+                let new = h.about_to_wait()?;
+
+                match flow {
+                    ControlFlow::Poll => (),
+                    ControlFlow::Wait => match new {
+                        ControlFlow::Poll => flow = ControlFlow::Poll,
+                        ControlFlow::Wait => (),
+                        ControlFlow::WaitUntil(new) => flow = ControlFlow::WaitUntil(new),
+                    },
+                    ControlFlow::WaitUntil(current) => match new {
+                        ControlFlow::Poll => flow = ControlFlow::Poll,
+                        ControlFlow::Wait => (),
+                        ControlFlow::WaitUntil(new) => {
+                            if new < current {
+                                flow = ControlFlow::WaitUntil(new);
+                            }
+                        }
+                    },
+                }
+            }
+
+            Ok(())
+        }) {
+            self.exit(el, Err(RuntimeError::AboutToWait(e)));
+            return;
+        }
+
+        // Update flow.
+        if flow != el.control_flow() {
+            el.set_control_flow(flow);
+        }
     }
 }
 
@@ -279,8 +392,17 @@ pub enum RuntimeError {
     #[error("couldn't create runtime window")]
     CreateRuntimeWindow(#[source] Box<dyn Error + Send + Sync>),
 
+    #[error("couldn't handle event loop wakeup event")]
+    NewEvents(#[source] Box<dyn Error + Send + Sync>),
+
+    #[error("couldn't handle window event")]
+    PreWindowEvent(#[source] Box<dyn Error + Send + Sync>),
+
     #[error("couldn't handle window resized")]
     Resized(#[source] Box<dyn Error + Send + Sync>),
+
+    #[error("couldn't handle window destroyed")]
+    Destroyed(#[source] Box<dyn Error + Send + Sync>),
 
     #[error("couldn't handle window focused")]
     Focused(#[source] Box<dyn Error + Send + Sync>),
@@ -299,4 +421,10 @@ pub enum RuntimeError {
 
     #[error("couldn't handle redraw requested")]
     RedrawRequested(#[source] Box<dyn Error + Send + Sync>),
+
+    #[error("couldn't handle window event")]
+    PostWindowEvent(#[source] Box<dyn Error + Send + Sync>),
+
+    #[error("couldn't handle about to wait event")]
+    AboutToWait(#[source] Box<dyn Error + Send + Sync>),
 }

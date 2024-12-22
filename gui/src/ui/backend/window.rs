@@ -3,7 +3,7 @@ use i_slint_core::window::WindowAdapterInternal;
 use i_slint_core::InternalToken;
 use i_slint_renderer_skia::SkiaRenderer;
 use slint::platform::{PointerEventButton, Renderer, WindowAdapter, WindowEvent, WindowProperties};
-use slint::{LogicalPosition, LogicalSize, PhysicalSize, PlatformError, WindowSize};
+use slint::{LogicalPosition, LogicalSize, PhysicalSize, PlatformError, SharedString, WindowSize};
 use std::any::Any;
 use std::cell::Cell;
 use std::error::Error;
@@ -18,6 +18,10 @@ pub struct Window {
     renderer: SkiaRenderer,
     visible: Cell<Option<bool>>, // Wayland does not support this so we need to emulate it.
     pointer: Cell<LogicalPosition>,
+    title: Cell<SharedString>,
+    minimum_size: Cell<Option<winit::dpi::PhysicalSize<u32>>>,
+    maximum_size: Cell<Option<winit::dpi::PhysicalSize<u32>>>,
+    preferred_size: Cell<Option<winit::dpi::PhysicalSize<u32>>>,
 }
 
 impl Window {
@@ -32,6 +36,10 @@ impl Window {
             renderer,
             visible: Cell::new(None),
             pointer: Cell::default(),
+            title: Cell::default(),
+            minimum_size: Cell::default(),
+            maximum_size: Cell::default(),
+            preferred_size: Cell::default(),
         }
     }
 
@@ -126,6 +134,10 @@ impl RuntimeWindow for Window {
         // here.
         if self.visible.get().is_some_and(|v| v) {
             self.renderer.render()?;
+
+            if self.slint.has_active_animations() {
+                self.winit.request_redraw();
+            }
         }
 
         Ok(())
@@ -172,20 +184,39 @@ impl WindowAdapter for Window {
     }
 
     fn update_window_properties(&self, properties: WindowProperties) {
-        // Set window size.
-        let size = properties.layout_constraints();
+        // Set window title.
+        let title = properties.title();
+
+        if self.title.replace(title.clone()) != title {
+            self.winit.set_title(&title);
+        }
+
+        // Setup mapper.
         let scale = self.winit.scale_factor() as f32;
         let map = move |v: LogicalSize| {
             let v = v.to_physical(scale);
-            let v = winit::dpi::PhysicalSize::new(v.width, v.height);
 
-            winit::dpi::Size::from(v)
+            winit::dpi::PhysicalSize::new(v.width, v.height)
         };
 
-        self.winit.set_min_inner_size(size.min.map(&map));
-        self.winit.set_max_inner_size(size.max.map(&map));
+        // Set window size.
+        let size = properties.layout_constraints();
+        let min = size.min.map(&map);
+        let max = size.max.map(&map);
+        let preferred = map(size.preferred);
 
-        let _ = self.winit.request_inner_size(map(size.preferred));
+        if self.minimum_size.replace(min) != min {
+            self.winit.set_min_inner_size(min);
+        }
+
+        if self.maximum_size.replace(max) != max {
+            self.winit.set_max_inner_size(max);
+        }
+
+        // TODO: Not sure why Slint also update the preferred size when window size is changed.
+        if self.preferred_size.replace(Some(preferred)).is_none() {
+            let _ = self.winit.request_inner_size(preferred);
+        }
     }
 
     fn internal(&self, _: InternalToken) -> Option<&dyn WindowAdapterInternal> {
