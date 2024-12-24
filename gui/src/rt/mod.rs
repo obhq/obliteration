@@ -4,13 +4,11 @@ pub use self::window::*;
 use self::context::Context;
 use self::event::WindowEvent;
 use self::task::TaskList;
-use self::waker::Waker;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::error::Error;
 use std::future::Future;
 use std::rc::{Rc, Weak};
-use std::sync::Arc;
 use thiserror::Error;
 use winit::application::ApplicationHandler;
 use winit::error::{EventLoopError, OsError};
@@ -22,7 +20,6 @@ mod context;
 mod event;
 mod hook;
 mod task;
-mod waker;
 mod window;
 
 /// Run the specified future to completion then return.
@@ -46,11 +43,12 @@ pub fn run<T: 'static>(main: impl Future<Output = T> + 'static) -> Result<T, Run
     };
 
     // Run event loop.
-    let mut tasks = TaskList::default();
-    let main: Box<dyn Future<Output = ()>> = Box::new(main);
-    let main = tasks.insert(None, Box::into_pin(main));
+    let proxy = el.create_proxy();
+    let mut tasks = TaskList::new(proxy.clone());
+    let main = tasks.create(main);
+    let main = tasks.insert(main);
     let mut rt = Runtime {
-        el: el.create_proxy(),
+        el: proxy,
         tasks,
         main,
         hooks: Vec::new(),
@@ -67,10 +65,9 @@ pub fn run<T: 'static>(main: impl Future<Output = T> + 'static) -> Result<T, Run
 /// # Panics
 /// If called from the other thread than main thread.
 pub fn spawn(task: impl Future<Output = ()> + 'static) {
-    let task: Box<dyn Future<Output = ()>> = Box::new(task);
-
     Context::with(move |cx| {
-        let id = cx.tasks.insert(None, Box::into_pin(task));
+        let task = cx.tasks.create(task);
+        let id = cx.tasks.insert(task);
 
         // We have a context so there is an event loop for sure.
         assert!(cx.proxy.send_event(Event::TaskReady(id)).is_ok());
@@ -135,7 +132,6 @@ impl<T> Runtime<T> {
         };
 
         // Setup context.
-        let waker = Arc::new(Waker::new(self.el.clone(), id));
         let mut cx = Context {
             el,
             proxy: &self.el,
@@ -151,14 +147,14 @@ impl<T> Runtime<T> {
 
         // Poll the task.
         let r = cx.run(|| {
-            let waker = std::task::Waker::from(waker);
+            let waker = std::task::Waker::from(task.waker().clone());
             let mut cx = std::task::Context::from_waker(&waker);
 
-            task.as_mut().poll(&mut cx)
+            task.future_mut().poll(&mut cx)
         });
 
         if r.is_pending() {
-            self.tasks.insert(Some(id), task);
+            self.tasks.insert(task);
         }
 
         true
