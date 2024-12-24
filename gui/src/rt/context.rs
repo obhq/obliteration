@@ -1,4 +1,3 @@
-use super::event::WindowEvent;
 use super::task::TaskList;
 use super::{Event, Hook, RuntimeWindow};
 use std::cell::Cell;
@@ -16,7 +15,6 @@ pub struct Context<'a> {
     pub tasks: &'a mut TaskList,
     pub hooks: Option<&'a mut Vec<Box<dyn Hook>>>,
     pub windows: &'a mut HashMap<WindowId, Weak<dyn RuntimeWindow>>,
-    pub on_close: &'a mut WindowEvent<()>,
 }
 
 impl<'a> Context<'a> {

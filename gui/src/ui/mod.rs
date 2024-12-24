@@ -22,16 +22,17 @@ where
         move || win.unwrap().hide().unwrap()
     });
 
-    win.exec().await.unwrap();
+    win.show().unwrap();
+    win.wait().await;
 }
 
 /// Provides methods for [`ComponentHandle`] to work with our async runtime.
 pub trait RuntimeExt: ComponentHandle {
-    async fn exec(&self) -> Result<(), slint::PlatformError>;
+    async fn wait(&self);
 }
 
 impl<T: ComponentHandle> RuntimeExt for T {
-    async fn exec(&self) -> Result<(), slint::PlatformError> {
+    async fn wait(&self) {
         let win = WindowInner::from_pub(self.window()).window_adapter();
         let win = win
             .internal(InternalToken)
@@ -40,11 +41,7 @@ impl<T: ComponentHandle> RuntimeExt for T {
             .downcast_ref::<Window>()
             .unwrap();
 
-        self.show()?;
-        crate::rt::on_close(win.id()).await;
-        self.hide()?;
-
-        Ok(())
+        win.hidden().wait().await;
     }
 }
 
