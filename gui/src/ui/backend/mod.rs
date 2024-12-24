@@ -15,7 +15,7 @@ mod window;
 /// The following are caveats of this back-end:
 ///
 /// - [`slint::run_event_loop()`] and its related functions is not supported.
-/// - [`slint::Window::show()`] and [`slint::Window::hide()`] can be called only once.
+/// - [`slint::Window::show()`] can be called only once per window.
 /// - [`slint::Window::hide()`] will not hide the window on Wayland. You need to drop it instead.
 pub struct SlintBackend {}
 

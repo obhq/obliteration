@@ -1,8 +1,8 @@
 pub use self::hook::*;
+pub use self::signal::*;
 pub use self::window::*;
 
 use self::context::Context;
-use self::event::WindowEvent;
 use self::task::TaskList;
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -17,8 +17,8 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy}
 use winit::window::{Window, WindowAttributes, WindowId};
 
 mod context;
-mod event;
 mod hook;
+mod signal;
 mod task;
 mod window;
 
@@ -53,7 +53,6 @@ pub fn run<T: 'static>(main: impl Future<Output = T> + 'static) -> Result<T, Run
         main,
         hooks: Vec::new(),
         windows: HashMap::default(),
-        on_close: WindowEvent::default(),
         exit,
     };
 
@@ -97,12 +96,6 @@ pub fn create_window<T: RuntimeWindow + 'static>(
 }
 
 /// # Panics
-/// If called from the other thread than main thread.
-pub fn on_close(win: WindowId) -> impl Future<Output = ()> {
-    Context::with(move |cx| cx.on_close.wait(win))
-}
-
-/// # Panics
 /// If called from outside `main` task that passed to [`run()`].
 pub fn set_hook(hook: impl Hook + 'static) {
     Context::with(move |cx| cx.hooks.as_mut().unwrap().push(Box::new(hook)));
@@ -115,7 +108,6 @@ struct Runtime<T> {
     main: u64,
     hooks: Vec<Box<dyn Hook>>,
     windows: HashMap<WindowId, Weak<dyn RuntimeWindow>>,
-    on_close: WindowEvent<()>,
     exit: Rc<Cell<Option<Result<T, RuntimeError>>>>,
 }
 
@@ -142,11 +134,11 @@ impl<T> Runtime<T> {
                 None
             },
             windows: &mut self.windows,
-            on_close: &mut self.on_close,
         };
 
         // Poll the task.
         let r = cx.run(|| {
+            // TODO: Use RawWaker so we don't need to clone Arc here.
             let waker = std::task::Waker::from(task.waker().clone());
             let mut cx = std::task::Context::from_waker(&waker);
 
@@ -174,7 +166,6 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
             tasks: &mut self.tasks,
             hooks: None,
             windows: &mut self.windows,
-            on_close: &mut self.on_close,
         };
 
         if let Err(e) = cx.run(|| {
@@ -216,7 +207,6 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
             tasks: &mut self.tasks,
             hooks: None,
             windows: &mut self.windows,
-            on_close: &mut self.on_close,
         };
 
         if let Err(e) = cx.run(|| {
@@ -246,8 +236,7 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
                 dispatch!(w => { w.on_resized(v).map_err(RuntimeError::Resized) })
             }
             WindowEvent::CloseRequested => {
-                self.on_close.raise(id, ());
-                Ok(())
+                dispatch!(w => { w.on_close_requested().map_err(RuntimeError::CloseRequested) })
             }
             WindowEvent::Destroyed => {
                 // Run hook.
@@ -306,7 +295,6 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
             tasks: &mut self.tasks,
             hooks: None,
             windows: &mut self.windows,
-            on_close: &mut self.on_close,
         };
 
         if let Err(e) = cx.run(|| {
@@ -329,7 +317,6 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
             tasks: &mut self.tasks,
             hooks: None,
             windows: &mut self.windows,
-            on_close: &mut self.on_close,
         };
 
         if let Err(e) = cx.run(|| {
@@ -396,6 +383,9 @@ pub enum RuntimeError {
 
     #[error("couldn't handle window resized")]
     Resized(#[source] Box<dyn Error + Send + Sync>),
+
+    #[error("couldn't handle window close requested")]
+    CloseRequested(#[source] Box<dyn Error + Send + Sync>),
 
     #[error("couldn't handle window destroyed")]
     Destroyed(#[source] Box<dyn Error + Send + Sync>),

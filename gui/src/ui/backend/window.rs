@@ -1,4 +1,4 @@
-use crate::rt::RuntimeWindow;
+use crate::rt::{RuntimeWindow, Signal};
 use i_slint_core::window::WindowAdapterInternal;
 use i_slint_core::InternalToken;
 use i_slint_renderer_skia::SkiaRenderer;
@@ -17,6 +17,7 @@ pub struct Window {
     slint: slint::Window,
     renderer: SkiaRenderer,
     visible: Cell<Option<bool>>, // Wayland does not support this so we need to emulate it.
+    hidden: Signal<()>,
     pointer: Cell<LogicalPosition>,
     title: Cell<SharedString>,
     minimum_size: Cell<Option<winit::dpi::PhysicalSize<u32>>>,
@@ -35,6 +36,7 @@ impl Window {
             slint,
             renderer,
             visible: Cell::new(None),
+            hidden: Signal::default(),
             pointer: Cell::default(),
             title: Cell::default(),
             minimum_size: Cell::default(),
@@ -45,6 +47,10 @@ impl Window {
 
     pub fn id(&self) -> WindowId {
         self.winit.id()
+    }
+
+    pub fn hidden(&self) -> &Signal<()> {
+        &self.hidden
     }
 }
 
@@ -58,6 +64,11 @@ impl RuntimeWindow for Window {
 
         self.slint.dispatch_event(WindowEvent::Resized { size });
 
+        Ok(())
+    }
+
+    fn on_close_requested(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
+        self.slint.dispatch_event(WindowEvent::CloseRequested);
         Ok(())
     }
 
@@ -155,11 +166,10 @@ impl WindowAdapter for Window {
 
             self.winit.set_visible(true);
             self.visible.set(Some(true));
-        } else {
-            assert_eq!(self.visible.get(), Some(true));
-
+        } else if self.visible.get().is_some_and(|v| v) {
             self.winit.set_visible(false);
             self.visible.set(Some(false));
+            self.hidden.set(()).unwrap();
         }
 
         Ok(())

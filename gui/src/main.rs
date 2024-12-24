@@ -297,7 +297,8 @@ async fn run_launcher(
     profiles.select(row, &win);
 
     // Run the window.
-    win.exec().await.map_err(ProgramError::RunMainWindow)?;
+    win.show().map_err(ProgramError::ShowMainWindow)?;
+    win.wait().await;
 
     // Update selected profile.
     let profile = win.get_selected_profile();
@@ -384,8 +385,8 @@ enum ProgramError {
     #[error("couldn't initialize graphics engine")]
     InitGraphics(#[source] GraphicsError),
 
-    #[error("failed to run main window")]
-    RunMainWindow(#[source] slint::PlatformError),
+    #[error("couldn't show main window")]
+    ShowMainWindow(#[source] slint::PlatformError),
 
     #[error("couldn't create VMM screen")]
     CreateScreen(#[source] Box<dyn Error>),

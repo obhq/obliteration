@@ -7,6 +7,7 @@ use winit::event::{DeviceId, ElementState, InnerSizeWriter, MouseButton};
 /// The event loop will exit immediately if any method return an error.
 pub trait RuntimeWindow {
     fn on_resized(&self, new: PhysicalSize<u32>) -> Result<(), Box<dyn Error + Send + Sync>>;
+    fn on_close_requested(&self) -> Result<(), Box<dyn Error + Send + Sync>>;
     fn on_focused(&self, gained: bool) -> Result<(), Box<dyn Error + Send + Sync>>;
     fn on_cursor_moved(
         &self,
