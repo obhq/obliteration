@@ -2,9 +2,13 @@
 use self::screen::VulkanScreen;
 use super::Graphics;
 use crate::profile::Profile;
-use crate::rt::{create_window, RuntimeError};
+use crate::rt::{create_window, raw_display_handle, RuntimeError};
+use ash::extensions::khr::Surface;
 use ash::vk::{ApplicationInfo, InstanceCreateInfo, QueueFlags, API_VERSION_1_3};
+use ash::{Entry, Instance};
+use ash_window::enumerate_required_extensions;
 use std::ffi::CStr;
+use std::mem::ManuallyDrop;
 use std::rc::Rc;
 use thiserror::Error;
 use winit::window::WindowAttributes;
@@ -12,6 +16,10 @@ use winit::window::WindowAttributes;
 mod screen;
 
 pub fn new() -> Result<impl Graphics, GraphicsError> {
+    // Get required extensions for window.
+    let exts = enumerate_required_extensions(raw_display_handle())
+        .map_err(GraphicsError::GetExtensionsForWindow)?;
+
     // Setup application info.
     let mut app = ApplicationInfo::default();
 
@@ -25,18 +33,19 @@ pub fn new() -> Result<impl Graphics, GraphicsError> {
     ];
 
     // Setup VkInstanceCreateInfo.
-    let mut info = InstanceCreateInfo::default();
-
-    info.p_application_info = &app;
-    info.pp_enabled_layer_names = layers.as_ptr();
-    info.enabled_layer_count = layers.len().try_into().unwrap();
+    let info = InstanceCreateInfo::builder()
+        .application_info(&app)
+        .enabled_layer_names(&layers)
+        .enabled_extension_names(exts);
 
     // Create Vulkan instance.
-    let api = ash::Entry::linked();
-    let mut vk = match unsafe { api.create_instance(&info, None) } {
+    let entry = Entry::linked();
+    let mut vk = match unsafe { entry.create_instance(&info, None) } {
         Ok(instance) => Vulkan {
+            devices: ManuallyDrop::new(Vec::new()),
+            surface: ManuallyDrop::new(Surface::new(&entry, &instance)),
             instance,
-            devices: Vec::new(),
+            entry,
         },
         Err(e) => return Err(GraphicsError::CreateInstance(e)),
     };
@@ -84,9 +93,13 @@ pub fn new() -> Result<impl Graphics, GraphicsError> {
 }
 
 /// Implementation of [`Graphics`] using Vulkan.
+///
+/// Fields in this struct need to drop in a correct order.
 struct Vulkan {
-    instance: ash::Instance,
-    devices: Vec<PhysicalDevice>,
+    devices: ManuallyDrop<Vec<PhysicalDevice>>,
+    surface: ManuallyDrop<Surface>,
+    instance: Instance,
+    entry: Entry,
 }
 
 impl Graphics for Vulkan {
@@ -98,17 +111,19 @@ impl Graphics for Vulkan {
     }
 
     fn create_screen(
-        &mut self,
+        self,
         profile: &Profile,
         attrs: WindowAttributes,
     ) -> Result<Rc<Self::Screen>, GraphicsError> {
-        create_window(attrs, move |w| VulkanScreen::new(profile, w))
+        create_window(attrs, move |w| VulkanScreen::new(self, profile, w))
             .map_err(GraphicsError::CreateWindow)
     }
 }
 
 impl Drop for Vulkan {
     fn drop(&mut self) {
+        unsafe { ManuallyDrop::drop(&mut self.devices) };
+        unsafe { ManuallyDrop::drop(&mut self.surface) };
         unsafe { self.instance.destroy_instance(None) };
     }
 }
@@ -127,6 +142,9 @@ impl super::PhysicalDevice for PhysicalDevice {
 /// Represents an error when operation on Vulkan fails.
 #[derive(Debug, Error)]
 pub enum GraphicsError {
+    #[error("couldn't get required Vulkan extensions for window")]
+    GetExtensionsForWindow(#[source] ash::vk::Result),
+
     #[error("couldn't create Vulkan instance")]
     CreateInstance(#[source] ash::vk::Result),
 
@@ -138,6 +156,15 @@ pub enum GraphicsError {
 
     #[error("no Vulkan device supports graphics operations with Vulkan 1.3")]
     NoSuitableDevice,
+
+    #[error("couldn't find suitable queue")]
+    NoQueue,
+
+    #[error("couldn't create a logical device")]
+    CreateDevice(#[source] ash::vk::Result),
+
+    #[error("couldn't create Vulkan surface")]
+    CreateSurface(#[source] ash::vk::Result),
 
     #[error("couldn't create window")]
     CreateWindow(#[source] RuntimeError),

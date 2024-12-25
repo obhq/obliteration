@@ -1,54 +1,48 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+use super::{GraphicsError, Vulkan};
 use crate::graphics::Screen;
 use crate::profile::Profile;
 use crate::rt::{Hook, RuntimeWindow};
-use crate::vmm::VmmScreen;
-use ash::vk::{DeviceCreateInfo, DeviceQueueCreateInfo, Handle, QueueFlags};
+use ash::vk::{DeviceCreateInfo, DeviceQueueCreateInfo, QueueFlags, SurfaceKHR};
 use ash::Device;
+use ash_window::create_surface;
+use rwh05::{HasRawDisplayHandle, HasRawWindowHandle};
 use std::error::Error;
 use std::rc::Rc;
-use thiserror::Error;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{DeviceId, ElementState, InnerSizeWriter, MouseButton, StartCause};
 use winit::event_loop::ControlFlow;
 use winit::window::{Window, WindowId};
 
 /// Implementation of [`Screen`] using Vulkan.
+///
+/// Fields in this struct must be dropped in a correct order.
 pub struct VulkanScreen {
     device: Device,
+    surface: SurfaceKHR,
+    glob: Vulkan,
+    window: Window,
 }
 
 impl VulkanScreen {
-    pub fn new(profile: &Profile, win: Window) -> Result<Rc<Self>, Box<dyn Error + Send + Sync>> {
-        todo!()
-    }
-
-    pub fn from_screen(screen: &VmmScreen) -> Result<Self, VulkanScreenError> {
-        let entry = ash::Entry::linked();
-
-        let instance = unsafe {
-            ash::Instance::load(
-                entry.static_fn(),
-                ash::vk::Instance::from_raw(screen.vk_instance.try_into().unwrap()),
-            )
-        };
-
-        // Wrap VkPhysicalDevice.
-        let physical = screen.vk_device.try_into().unwrap();
-        let physical = ash::vk::PhysicalDevice::from_raw(physical);
+    pub fn new(
+        glob: Vulkan,
+        profile: &Profile,
+        window: Window,
+    ) -> Result<Rc<Self>, Box<dyn Error + Send + Sync>> {
+        // TODO: Use selected device.
+        let physical = glob.devices.first().unwrap().device;
 
         // Setup VkDeviceQueueCreateInfo.
+        let instance = &glob.instance;
         let queue = unsafe { instance.get_physical_device_queue_family_properties(physical) }
             .into_iter()
             .position(|p| p.queue_flags.contains(QueueFlags::GRAPHICS))
-            .ok_or(VulkanScreenError::NoQueue)?;
-        let queue = queue
-            .try_into()
-            .map_err(|_| VulkanScreenError::QueueOutOfBounds(queue))?;
+            .ok_or(GraphicsError::NoQueue)?;
         let mut queues = DeviceQueueCreateInfo::default();
         let priorities = [1.0];
 
-        queues.queue_family_index = queue;
+        queues.queue_family_index = queue.try_into().unwrap();
         queues.queue_count = 1;
         queues.p_queue_priorities = priorities.as_ptr();
 
@@ -59,17 +53,35 @@ impl VulkanScreen {
         device.queue_create_info_count = 1;
 
         // Create logical device.
-        let device = unsafe { instance.create_device(physical, &device, None) }
-            .map_err(VulkanScreenError::CreateDeviceFailed)?;
+        let mut s = Self {
+            device: unsafe { instance.create_device(physical, &device, None) }
+                .map_err(GraphicsError::CreateDevice)?,
+            surface: SurfaceKHR::null(),
+            glob,
+            window,
+        };
 
-        Ok(Self { device })
+        // Create VkSurfaceKHR.
+        let dh = s.window.raw_display_handle();
+        let wh = s.window.raw_window_handle();
+
+        s.surface = unsafe { create_surface(&s.glob.entry, &s.glob.instance, dh, wh, None) }
+            .map_err(GraphicsError::CreateSurface)?;
+
+        Ok(Rc::new(s))
     }
 }
 
 impl Drop for VulkanScreen {
     fn drop(&mut self) {
+        // Free device.
         unsafe { self.device.device_wait_idle().unwrap() };
         unsafe { self.device.destroy_device(None) };
+
+        // Free surface.
+        if self.surface != SurfaceKHR::null() {
+            unsafe { self.glob.surface.destroy_surface(self.surface, None) };
+        }
     }
 }
 
@@ -143,16 +155,3 @@ impl Hook for VulkanScreen {
 }
 
 impl Screen for VulkanScreen {}
-
-/// Represents an error when [`VulkanScreen::new()`] fails.
-#[derive(Debug, Error)]
-pub enum VulkanScreenError {
-    #[error("couldn't find suitable queue")]
-    NoQueue,
-
-    #[error("queue index #{0} out of bounds")]
-    QueueOutOfBounds(usize),
-
-    #[error("couldn't create a logical device")]
-    CreateDeviceFailed(#[source] ash::vk::Result),
-}
