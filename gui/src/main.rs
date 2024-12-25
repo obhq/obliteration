@@ -2,7 +2,7 @@
 
 use self::data::{DataError, DataMgr};
 use self::graphics::{Graphics, GraphicsError, PhysicalDevice};
-use self::profile::Profile;
+use self::profile::{DisplayResolution, Profile};
 use self::setup::{run_setup, SetupError};
 use self::ui::{MainWindow, ProfileModel, ResolutionModel, RuntimeExt, SlintBackend};
 use clap::{Parser, ValueEnum};
@@ -17,6 +17,8 @@ use std::process::ExitCode;
 use std::rc::Rc;
 use std::sync::Arc;
 use thiserror::Error;
+use winit::dpi::PhysicalSize;
+use winit::window::Window;
 
 mod data;
 mod debug;
@@ -199,10 +201,22 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
         None
     };
 
-    // Setup VMM screen.
+    // Setup WindowAttributes for VMM screen.
+    let attrs = Window::default_attributes()
+        .with_inner_size(match profile.display_resolution() {
+            DisplayResolution::Hd => PhysicalSize::new(1280, 720),
+            DisplayResolution::FullHd => PhysicalSize::new(1920, 1080),
+            DisplayResolution::UltraHd => PhysicalSize::new(3840, 2160),
+        })
+        .with_resizable(false)
+        .with_title("Obliteration");
+
+    // Create VMM screen.
     let screen = graphics
-        .create_screen(&profile)
+        .create_screen(&profile, attrs)
         .map_err(|e| ProgramError::CreateScreen(Box::new(e)))?;
+
+    self::rt::push_hook(screen);
 
     todo!()
 }

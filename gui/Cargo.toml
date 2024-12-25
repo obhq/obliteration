@@ -23,6 +23,7 @@ obconf = { path = "../src/obconf", features = ["serde", "virt"] }
 open = { version = "5.3.1" }
 raw-window-handle = "0.6.2"
 redb = "2.2.0"
+rustc-hash = "2.1.0"
 serde = { version = "1.0.209", features = ["derive"] }
 thiserror = "2.0.3"
 uuid = { version = "1.11.0", features = ["serde", "v4"] }
