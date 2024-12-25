@@ -17,7 +17,7 @@ pub trait Graphics: Sized + 'static {
 
     fn physical_devices(&self) -> &[Self::PhysicalDevice];
     fn create_screen(
-        &mut self,
+        self,
         profile: &Profile,
         attrs: WindowAttributes,
     ) -> Result<Rc<Self::Screen>, GraphicsError>;

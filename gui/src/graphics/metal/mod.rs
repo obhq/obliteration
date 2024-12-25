@@ -30,7 +30,7 @@ impl Graphics for Metal {
     }
 
     fn create_screen(
-        &mut self,
+        self,
         profile: &Profile,
         attrs: WindowAttributes,
     ) -> Result<Rc<Self::Screen>, GraphicsError> {

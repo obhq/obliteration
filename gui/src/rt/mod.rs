@@ -4,6 +4,7 @@ pub use self::window::*;
 
 use self::context::Context;
 use self::task::TaskList;
+use rwh05::{HasRawDisplayHandle, RawDisplayHandle};
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::error::Error;
@@ -71,6 +72,12 @@ pub fn spawn(task: impl Future<Output = ()> + 'static) {
         // We have a context so there is an event loop for sure.
         assert!(cx.proxy.send_event(Event::TaskReady(id)).is_ok());
     })
+}
+
+/// # Panics
+/// If called from the other thread than main thread.
+pub fn raw_display_handle() -> RawDisplayHandle {
+    Context::with(|cx| cx.el.raw_display_handle())
 }
 
 /// # Panics
