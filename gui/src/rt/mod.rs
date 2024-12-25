@@ -97,8 +97,8 @@ pub fn create_window<T: RuntimeWindow + 'static>(
 
 /// # Panics
 /// If called from outside `main` task that passed to [`run()`].
-pub fn set_hook(hook: impl Hook + 'static) {
-    Context::with(move |cx| cx.hooks.as_mut().unwrap().push(Box::new(hook)));
+pub fn push_hook(hook: Rc<dyn Hook>) {
+    Context::with(move |cx| cx.hooks.as_mut().unwrap().push(hook));
 }
 
 /// Implementation of [`ApplicationHandler`] to drive [`Future`].
@@ -106,7 +106,7 @@ struct Runtime<T> {
     el: EventLoopProxy<Event>,
     tasks: TaskList,
     main: u64,
-    hooks: Vec<Box<dyn Hook>>,
+    hooks: Vec<Rc<dyn Hook>>,
     windows: HashMap<WindowId, Weak<dyn RuntimeWindow>>,
     exit: Rc<Cell<Option<Result<T, RuntimeError>>>>,
 }
@@ -309,8 +309,13 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
     }
 
     fn about_to_wait(&mut self, el: &ActiveEventLoop) {
+        // Do nothing if we don't have any hook to run.
+        if self.hooks.is_empty() {
+            return;
+        }
+
         // Run all hooks.
-        let mut flow = el.control_flow();
+        let mut flow = ControlFlow::Wait;
         let mut cx = Context {
             el,
             proxy: &self.el,
@@ -320,7 +325,7 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
         };
 
         if let Err(e) = cx.run(|| {
-            for h in &mut self.hooks {
+            for h in &self.hooks {
                 let new = h.about_to_wait()?;
 
                 match flow {
@@ -349,9 +354,7 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
         }
 
         // Update flow.
-        if flow != el.control_flow() {
-            el.set_control_flow(flow);
-        }
+        el.set_control_flow(flow);
     }
 }
 

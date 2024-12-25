@@ -4,7 +4,7 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::mem::transmute;
 use std::ptr::null_mut;
-use std::rc::Weak;
+use std::rc::{Rc, Weak};
 use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
 use winit::window::WindowId;
 
@@ -13,7 +13,7 @@ pub struct Context<'a> {
     pub el: &'a ActiveEventLoop,
     pub proxy: &'a EventLoopProxy<Event>,
     pub tasks: &'a mut TaskList,
-    pub hooks: Option<&'a mut Vec<Box<dyn Hook>>>,
+    pub hooks: Option<&'a mut Vec<Rc<dyn Hook>>>,
     pub windows: &'a mut HashMap<WindowId, Weak<dyn RuntimeWindow>>,
 }
 

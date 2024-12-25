@@ -9,9 +9,9 @@ use winit::window::WindowId;
 pub trait Hook {
     /// Note that `cause` will never be [`StartCause::Init`] since the hook is not installed at the
     /// time when [`StartCause::Init`] delivered.
-    fn new_events(&mut self, cause: &StartCause) -> Result<(), Box<dyn Error + Send + Sync>>;
-    fn pre_window_event(&mut self) -> Result<(), Box<dyn Error + Send + Sync>>;
-    fn window_destroyed(&mut self, id: WindowId) -> Result<(), Box<dyn Error + Send + Sync>>;
-    fn post_window_event(&mut self) -> Result<(), Box<dyn Error + Send + Sync>>;
-    fn about_to_wait(&mut self) -> Result<ControlFlow, Box<dyn Error + Send + Sync>>;
+    fn new_events(&self, cause: &StartCause) -> Result<(), Box<dyn Error + Send + Sync>>;
+    fn pre_window_event(&self) -> Result<(), Box<dyn Error + Send + Sync>>;
+    fn window_destroyed(&self, id: WindowId) -> Result<(), Box<dyn Error + Send + Sync>>;
+    fn post_window_event(&self) -> Result<(), Box<dyn Error + Send + Sync>>;
+    fn about_to_wait(&self) -> Result<ControlFlow, Box<dyn Error + Send + Sync>>;
 }

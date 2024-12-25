@@ -4,9 +4,10 @@ use super::Graphics;
 use crate::profile::Profile;
 use metal::Device;
 use std::ops::Deref;
+use std::rc::Rc;
 use thiserror::Error;
+use winit::window::WindowAttributes;
 
-mod buffer;
 mod screen;
 
 pub fn new() -> Result<impl Graphics, GraphicsError> {
@@ -28,7 +29,11 @@ impl Graphics for Metal {
         &self.devices
     }
 
-    fn create_screen(&mut self, profile: &Profile) -> Result<Self::Screen, GraphicsError> {
+    fn create_screen(
+        &mut self,
+        profile: &Profile,
+        attrs: WindowAttributes,
+    ) -> Result<Rc<Self::Screen>, GraphicsError> {
         todo!()
     }
 }

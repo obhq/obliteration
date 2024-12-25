@@ -2,11 +2,13 @@
 use self::screen::VulkanScreen;
 use super::Graphics;
 use crate::profile::Profile;
+use crate::rt::{create_window, RuntimeError};
 use ash::vk::{ApplicationInfo, InstanceCreateInfo, QueueFlags, API_VERSION_1_3};
 use std::ffi::CStr;
+use std::rc::Rc;
 use thiserror::Error;
+use winit::window::WindowAttributes;
 
-mod buffer;
 mod screen;
 
 pub fn new() -> Result<impl Graphics, GraphicsError> {
@@ -95,8 +97,13 @@ impl Graphics for Vulkan {
         &self.devices
     }
 
-    fn create_screen(&mut self, profile: &Profile) -> Result<Self::Screen, GraphicsError> {
-        todo!()
+    fn create_screen(
+        &mut self,
+        profile: &Profile,
+        attrs: WindowAttributes,
+    ) -> Result<Rc<Self::Screen>, GraphicsError> {
+        create_window(attrs, move |w| VulkanScreen::new(profile, w))
+            .map_err(GraphicsError::CreateWindow)
     }
 }
 
@@ -131,4 +138,7 @@ pub enum GraphicsError {
 
     #[error("no Vulkan device supports graphics operations with Vulkan 1.3")]
     NoSuitableDevice,
+
+    #[error("couldn't create window")]
+    CreateWindow(#[source] RuntimeError),
 }

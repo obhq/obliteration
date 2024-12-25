@@ -1,20 +1,25 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use super::buffer::VulkanBuffer;
 use crate::graphics::Screen;
+use crate::profile::Profile;
+use crate::rt::{Hook, RuntimeWindow};
 use crate::vmm::VmmScreen;
 use ash::vk::{DeviceCreateInfo, DeviceQueueCreateInfo, Handle, QueueFlags};
 use ash::Device;
-use std::sync::Arc;
+use std::error::Error;
+use std::rc::Rc;
 use thiserror::Error;
+use winit::dpi::{PhysicalPosition, PhysicalSize};
+use winit::event::{DeviceId, ElementState, InnerSizeWriter, MouseButton, StartCause};
+use winit::event_loop::ControlFlow;
+use winit::window::{Window, WindowId};
 
 /// Implementation of [`Screen`] using Vulkan.
 pub struct VulkanScreen {
-    buffer: Arc<VulkanBuffer>,
     device: Device,
 }
 
 impl VulkanScreen {
-    pub fn new() -> Result<Self, VulkanScreenError> {
+    pub fn new(profile: &Profile, win: Window) -> Result<Rc<Self>, Box<dyn Error + Send + Sync>> {
         todo!()
     }
 
@@ -57,10 +62,7 @@ impl VulkanScreen {
         let device = unsafe { instance.create_device(physical, &device, None) }
             .map_err(VulkanScreenError::CreateDeviceFailed)?;
 
-        Ok(Self {
-            buffer: Arc::new(VulkanBuffer::new()),
-            device,
-        })
+        Ok(Self { device })
     }
 }
 
@@ -71,18 +73,76 @@ impl Drop for VulkanScreen {
     }
 }
 
-impl Screen for VulkanScreen {
-    type Buffer = VulkanBuffer;
-    type RunErr = RunError;
-
-    fn buffer(&self) -> &Arc<Self::Buffer> {
-        &self.buffer
+impl RuntimeWindow for VulkanScreen {
+    fn on_resized(&self, new: PhysicalSize<u32>) -> Result<(), Box<dyn Error + Send + Sync>> {
+        todo!()
     }
 
-    fn run(self) -> Result<(), Self::RunErr> {
+    fn on_close_requested(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
+        todo!()
+    }
+
+    fn on_focused(&self, gained: bool) -> Result<(), Box<dyn Error + Send + Sync>> {
+        todo!()
+    }
+
+    fn on_cursor_moved(
+        &self,
+        dev: DeviceId,
+        pos: PhysicalPosition<f64>,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        todo!()
+    }
+
+    fn on_cursor_left(&self, dev: DeviceId) -> Result<(), Box<dyn Error + Send + Sync>> {
+        todo!()
+    }
+
+    fn on_mouse_input(
+        &self,
+        dev: DeviceId,
+        st: ElementState,
+        btn: MouseButton,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        todo!()
+    }
+
+    fn on_scale_factor_changed(
+        &self,
+        new: f64,
+        sw: InnerSizeWriter,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        todo!()
+    }
+
+    fn on_redraw_requested(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         todo!()
     }
 }
+
+impl Hook for VulkanScreen {
+    fn new_events(&self, cause: &StartCause) -> Result<(), Box<dyn Error + Send + Sync>> {
+        todo!()
+    }
+
+    fn pre_window_event(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
+        todo!()
+    }
+
+    fn window_destroyed(&self, id: WindowId) -> Result<(), Box<dyn Error + Send + Sync>> {
+        todo!()
+    }
+
+    fn post_window_event(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
+        todo!()
+    }
+
+    fn about_to_wait(&self) -> Result<ControlFlow, Box<dyn Error + Send + Sync>> {
+        todo!()
+    }
+}
+
+impl Screen for VulkanScreen {}
 
 /// Represents an error when [`VulkanScreen::new()`] fails.
 #[derive(Debug, Error)]
@@ -96,7 +156,3 @@ pub enum VulkanScreenError {
     #[error("couldn't create a logical device")]
     CreateDeviceFailed(#[source] ash::vk::Result),
 }
-
-/// Implementation of [`Screen::RunErr`].
-#[derive(Debug, Error)]
-pub enum RunError {}
