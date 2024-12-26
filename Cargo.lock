@@ -1714,6 +1714,7 @@ dependencies = [
  "ash",
  "ash-window",
  "ashpd",
+ "async-net",
  "bitfield-struct",
  "ciborium",
  "clap",

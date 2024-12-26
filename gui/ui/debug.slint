@@ -1,0 +1,19 @@
+import { VerticalBox } from "std-widgets.slint";
+
+export component WaitForDebugger inherits Window {
+    in property <string> address;
+
+    title: "Obliteration";
+    icon: @image-url("icon.png");
+    width: 400px;
+    height: 50px;
+
+    VerticalBox {
+        alignment: center;
+
+        Text {
+            text: "Waiting for debugger at \{address}.";
+            horizontal-alignment: center;
+        }
+    }
+}

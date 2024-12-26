@@ -213,7 +213,7 @@ impl WindowAdapter for Window {
         let size = properties.layout_constraints();
         let min = size.min.map(&map);
         let max = size.max.map(&map);
-        let preferred = map(size.preferred);
+        let pre = map(size.preferred);
 
         if self.minimum_size.replace(min) != min {
             self.winit.set_min_inner_size(min);
@@ -223,9 +223,14 @@ impl WindowAdapter for Window {
             self.winit.set_max_inner_size(max);
         }
 
+        // Winit on Wayland will panic if either width or height is zero.
         // TODO: Not sure why Slint also update the preferred size when window size is changed.
-        if self.preferred_size.replace(Some(preferred)).is_none() {
-            let _ = self.winit.request_inner_size(preferred);
+        if self.preferred_size.replace(Some(pre)).is_none() && pre.width != 0 && pre.height != 0 {
+            let _ = self.winit.request_inner_size(pre);
+
+            if matches!((min, max), (Some(min), Some(max)) if min == max && pre == max) {
+                self.winit.set_resizable(false);
+            }
         }
     }
 

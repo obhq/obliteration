@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+pub use self::channel::*;
+
 use self::cpu::CpuManager;
 use self::hw::{setup_devices, Device};
 use self::kernel::{
     Kernel, PT_DYNAMIC, PT_GNU_EH_FRAME, PT_GNU_RELRO, PT_GNU_STACK, PT_LOAD, PT_NOTE, PT_PHDR,
 };
 use self::ram::RamBuilder;
-use crate::debug::DebugClient;
+use crate::gdb::DebugClient;
 use crate::hv::{Hypervisor, Ram};
 use crate::profile::Profile;
 use cpu::GdbError;
@@ -28,6 +30,7 @@ use winit::event_loop::EventLoopProxy;
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
 mod arch;
+mod channel;
 mod cpu;
 mod debug;
 mod hw;
