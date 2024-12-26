@@ -4,11 +4,14 @@ use self::data::{DataError, DataMgr};
 use self::graphics::{Graphics, GraphicsError, PhysicalDevice};
 use self::profile::{DisplayResolution, Profile};
 use self::setup::{run_setup, SetupError};
-use self::ui::{MainWindow, ProfileModel, ResolutionModel, RuntimeExt, SlintBackend};
+use self::ui::{
+    MainWindow, ProfileModel, ResolutionModel, RuntimeExt, SlintBackend, WaitForDebugger,
+};
+use async_net::{TcpListener, TcpStream};
 use clap::{Parser, ValueEnum};
-use debug::DebugServer;
 use erdp::ErrorDisplay;
-use slint::{ComponentHandle, ModelRc, SharedString, VecModel, WindowHandle};
+use futures::{select_biased, FutureExt};
+use slint::{ComponentHandle, ModelRc, SharedString, ToSharedString, VecModel, WindowHandle};
 use std::cell::Cell;
 use std::error::Error;
 use std::net::SocketAddrV4;
@@ -21,8 +24,8 @@ use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
 mod data;
-mod debug;
 mod dialogs;
+mod gdb;
 mod graphics;
 mod hv;
 mod panic;
@@ -112,7 +115,7 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
     rlim::set_rlimit_nofile().map_err(ProgramError::FdLimit)?;
 
     // Initialize graphics engine.
-    let mut graphics = graphics::new().map_err(ProgramError::InitGraphics)?;
+    let graphics = graphics::new().map_err(ProgramError::InitGraphics)?;
 
     // Run setup wizard. This will simply return the data manager if the user already has required
     // settings.
@@ -188,15 +191,14 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
     };
 
     // Wait for debugger.
-    let debugger = if let Some(listen) = debug {
-        let debug_server =
-            DebugServer::new(listen).map_err(|e| ProgramError::StartDebugServer(e, listen))?;
+    let debugger = if let Some(addr) = debug {
+        let v = wait_for_debugger(addr).await?;
 
-        let debugger = debug_server
-            .accept()
-            .map_err(ProgramError::CreateDebugClient)?;
+        if v.is_none() {
+            return Ok(());
+        }
 
-        Some(debugger)
+        v
     } else {
         None
     };
@@ -334,6 +336,31 @@ async fn run_launcher(
     Ok(Some((profile, exit)))
 }
 
+async fn wait_for_debugger(addr: SocketAddrV4) -> Result<Option<TcpStream>, ProgramError> {
+    // Start server.
+    let server = TcpListener::bind(addr)
+        .await
+        .map_err(|e| ProgramError::StartDebugServer(addr, e))?;
+    let addr = server.local_addr().map_err(ProgramError::GetDebugAddr)?;
+
+    // Tell the user that we are waiting for a debugger.
+    let win = WaitForDebugger::new().map_err(ProgramError::CreateDebugWindow)?;
+
+    win.set_address(addr.to_shared_string());
+    win.show().map_err(ProgramError::ShowDebugWindow)?;
+
+    // Wait for connection.
+    let client = select_biased! {
+        _ = win.wait().fuse() => None,
+        v = server.accept().fuse() => match v {
+            Ok(v) => Some(v.0),
+            Err(e) => return Err(ProgramError::AcceptDebugger(e)),
+        }
+    };
+
+    Ok(client)
+}
+
 /// Program arguments parsed from command line.
 #[derive(Parser)]
 #[command(about = None)]
@@ -384,14 +411,20 @@ enum ProgramError {
     #[error("couldn't save default profile")]
     SaveDefaultProfile(#[source] self::profile::SaveError),
 
-    #[error("failed to start debug server on {1}")]
-    StartDebugServer(
-        #[source] debug::StartDebugServerError,
-        std::net::SocketAddrV4,
-    ),
+    #[error("couldn't start debug server on {0}")]
+    StartDebugServer(SocketAddrV4, #[source] std::io::Error),
 
-    #[error("failed to accept debug connection")]
-    CreateDebugClient(#[source] std::io::Error),
+    #[error("couldn't get debug server address")]
+    GetDebugAddr(#[source] std::io::Error),
+
+    #[error("couldn't create debug server window")]
+    CreateDebugWindow(#[source] slint::PlatformError),
+
+    #[error("couldn't show debug server window")]
+    ShowDebugWindow(#[source] slint::PlatformError),
+
+    #[error("couldn't accept a connection from debugger")]
+    AcceptDebugger(#[source] std::io::Error),
 
     #[error("failed to create main window")]
     CreateMainWindow(#[source] slint::PlatformError),
