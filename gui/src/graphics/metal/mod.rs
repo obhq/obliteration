@@ -4,11 +4,12 @@ use super::Graphics;
 use crate::profile::Profile;
 use metal::Device;
 use std::ops::Deref;
-use std::rc::Rc;
+use std::sync::Arc;
 use thiserror::Error;
 use winit::window::WindowAttributes;
 
 mod screen;
+mod window;
 
 pub fn new() -> Result<impl Graphics, GraphicsError> {
     Ok(Metal {
@@ -33,7 +34,7 @@ impl Graphics for Metal {
         self,
         profile: &Profile,
         attrs: WindowAttributes,
-    ) -> Result<Rc<Self::Screen>, GraphicsError> {
+    ) -> Result<Arc<Self::Screen>, GraphicsError> {
         todo!()
     }
 }

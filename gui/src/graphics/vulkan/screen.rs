@@ -2,34 +2,22 @@
 use super::{GraphicsError, Vulkan};
 use crate::graphics::Screen;
 use crate::profile::Profile;
-use crate::rt::{Hook, RuntimeWindow};
 use ash::vk::{DeviceCreateInfo, DeviceQueueCreateInfo, QueueFlags, SurfaceKHR};
 use ash::Device;
 use ash_window::create_surface;
 use rwh05::{HasRawDisplayHandle, HasRawWindowHandle};
-use std::error::Error;
-use std::rc::Rc;
-use winit::dpi::{PhysicalPosition, PhysicalSize};
-use winit::event::{DeviceId, ElementState, InnerSizeWriter, MouseButton, StartCause};
-use winit::event_loop::ControlFlow;
-use winit::window::{Window, WindowId};
+use winit::window::Window;
 
 /// Implementation of [`Screen`] using Vulkan.
 ///
 /// Fields in this struct must be dropped in a correct order.
 pub struct VulkanScreen {
     device: Device,
-    surface: SurfaceKHR,
     glob: Vulkan,
-    window: Window,
 }
 
 impl VulkanScreen {
-    pub fn new(
-        glob: Vulkan,
-        profile: &Profile,
-        window: Window,
-    ) -> Result<Rc<Self>, Box<dyn Error + Send + Sync>> {
+    pub fn new(glob: Vulkan, profile: &Profile) -> Result<Self, GraphicsError> {
         // TODO: Use selected device.
         let physical = glob.devices.first().unwrap().device;
 
@@ -38,7 +26,7 @@ impl VulkanScreen {
         let queue = unsafe { instance.get_physical_device_queue_family_properties(physical) }
             .into_iter()
             .position(|p| p.queue_flags.contains(QueueFlags::GRAPHICS))
-            .ok_or(GraphicsError::NoQueue)?;
+            .unwrap(); // We required all selectable devices to supports graphics operations.
         let mut queues = DeviceQueueCreateInfo::default();
         let priorities = [1.0];
 
@@ -53,22 +41,25 @@ impl VulkanScreen {
         device.queue_create_info_count = 1;
 
         // Create logical device.
-        let mut s = Self {
-            device: unsafe { instance.create_device(physical, &device, None) }
-                .map_err(GraphicsError::CreateDevice)?,
-            surface: SurfaceKHR::null(),
-            glob,
-            window,
-        };
+        let device = unsafe { instance.create_device(physical, &device, None) }
+            .map_err(GraphicsError::CreateDevice)?;
 
-        // Create VkSurfaceKHR.
-        let dh = s.window.raw_display_handle();
-        let wh = s.window.raw_window_handle();
+        Ok(Self { device, glob })
+    }
 
-        s.surface = unsafe { create_surface(&s.glob.entry, &s.glob.instance, dh, wh, None) }
-            .map_err(GraphicsError::CreateSurface)?;
+    /// # Safety
+    /// The returned [`SurfaceKHR`] must be destroyed before `win` and this [`VulkanScreen`].
+    pub unsafe fn create_surface(&self, win: &Window) -> Result<SurfaceKHR, ash::vk::Result> {
+        let dh = win.raw_display_handle();
+        let wh = win.raw_window_handle();
 
-        Ok(Rc::new(s))
+        create_surface(&self.glob.entry, &self.glob.instance, dh, wh, None)
+    }
+
+    /// # Safety
+    /// See `vkDestroySurfaceKHR` docs for valid usage.
+    pub unsafe fn destroy_surface(&self, surface: SurfaceKHR) {
+        self.glob.surface.destroy_surface(surface, None);
     }
 }
 
@@ -77,80 +68,6 @@ impl Drop for VulkanScreen {
         // Free device.
         unsafe { self.device.device_wait_idle().unwrap() };
         unsafe { self.device.destroy_device(None) };
-
-        // Free surface.
-        if self.surface != SurfaceKHR::null() {
-            unsafe { self.glob.surface.destroy_surface(self.surface, None) };
-        }
-    }
-}
-
-impl RuntimeWindow for VulkanScreen {
-    fn on_resized(&self, new: PhysicalSize<u32>) -> Result<(), Box<dyn Error + Send + Sync>> {
-        todo!()
-    }
-
-    fn on_close_requested(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
-        todo!()
-    }
-
-    fn on_focused(&self, gained: bool) -> Result<(), Box<dyn Error + Send + Sync>> {
-        todo!()
-    }
-
-    fn on_cursor_moved(
-        &self,
-        dev: DeviceId,
-        pos: PhysicalPosition<f64>,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        todo!()
-    }
-
-    fn on_cursor_left(&self, dev: DeviceId) -> Result<(), Box<dyn Error + Send + Sync>> {
-        todo!()
-    }
-
-    fn on_mouse_input(
-        &self,
-        dev: DeviceId,
-        st: ElementState,
-        btn: MouseButton,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        todo!()
-    }
-
-    fn on_scale_factor_changed(
-        &self,
-        new: f64,
-        sw: InnerSizeWriter,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        todo!()
-    }
-
-    fn on_redraw_requested(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
-        todo!()
-    }
-}
-
-impl Hook for VulkanScreen {
-    fn new_events(&self, cause: &StartCause) -> Result<(), Box<dyn Error + Send + Sync>> {
-        todo!()
-    }
-
-    fn pre_window_event(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
-        todo!()
-    }
-
-    fn window_destroyed(&self, id: WindowId) -> Result<(), Box<dyn Error + Send + Sync>> {
-        todo!()
-    }
-
-    fn post_window_event(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
-        todo!()
-    }
-
-    fn about_to_wait(&self) -> Result<ControlFlow, Box<dyn Error + Send + Sync>> {
-        todo!()
     }
 }
 

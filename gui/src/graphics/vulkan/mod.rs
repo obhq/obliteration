@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::screen::VulkanScreen;
+use self::window::VulkanWindow;
 use super::Graphics;
 use crate::profile::Profile;
 use crate::rt::{create_window, raw_display_handle, RuntimeError};
@@ -9,11 +10,12 @@ use ash::{Entry, Instance};
 use ash_window::enumerate_required_extensions;
 use std::ffi::CStr;
 use std::mem::ManuallyDrop;
-use std::rc::Rc;
+use std::sync::Arc;
 use thiserror::Error;
 use winit::window::WindowAttributes;
 
 mod screen;
+mod window;
 
 pub fn new() -> Result<impl Graphics, GraphicsError> {
     // Get required extensions for window.
@@ -114,9 +116,14 @@ impl Graphics for Vulkan {
         self,
         profile: &Profile,
         attrs: WindowAttributes,
-    ) -> Result<Rc<Self::Screen>, GraphicsError> {
-        create_window(attrs, move |w| VulkanScreen::new(self, profile, w))
-            .map_err(GraphicsError::CreateWindow)
+    ) -> Result<Arc<Self::Screen>, GraphicsError> {
+        let screen = VulkanScreen::new(self, profile).map(Arc::new)?;
+        let window = create_window(attrs, |w| VulkanWindow::new(&screen, w))
+            .map_err(GraphicsError::CreateWindow)?;
+
+        crate::rt::push_hook(window);
+
+        Ok(screen)
     }
 }
 
@@ -156,9 +163,6 @@ pub enum GraphicsError {
 
     #[error("no Vulkan device supports graphics operations with Vulkan 1.3")]
     NoSuitableDevice,
-
-    #[error("couldn't find suitable queue")]
-    NoQueue,
 
     #[error("couldn't create a logical device")]
     CreateDevice(#[source] ash::vk::Result),

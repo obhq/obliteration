@@ -30,8 +30,6 @@ mod graphics;
 mod hv;
 mod panic;
 mod profile;
-#[cfg(unix)]
-mod rlim;
 mod rt;
 mod setup;
 mod ui;
@@ -111,8 +109,31 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
     // Setup Slint custom back-end. This need to be done before using any Slint API.
     Rc::new(SlintBackend::new()).install().unwrap();
 
+    // Increase number of file descriptor to maximum allowed.
     #[cfg(unix)]
-    rlim::set_rlimit_nofile().map_err(ProgramError::FdLimit)?;
+    unsafe {
+        use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
+        use std::io::Error;
+        use std::mem::MaybeUninit;
+
+        // Get current value.
+        let mut val = MaybeUninit::uninit();
+
+        if getrlimit(RLIMIT_NOFILE, val.as_mut_ptr()) < 0 {
+            return Err(ProgramError::GetFdLimit(Error::last_os_error()));
+        }
+
+        // Check if we need to increase the limit.
+        let mut val = val.assume_init();
+
+        if val.rlim_cur < val.rlim_max {
+            val.rlim_cur = val.rlim_max;
+
+            if setrlimit(RLIMIT_NOFILE, &val) < 0 {
+                return Err(ProgramError::SetFdLimit(Error::last_os_error()));
+            }
+        }
+    }
 
     // Initialize graphics engine.
     let graphics = graphics::new().map_err(ProgramError::InitGraphics)?;
@@ -217,8 +238,6 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
     let screen = graphics
         .create_screen(&profile, attrs)
         .map_err(|e| ProgramError::CreateScreen(Box::new(e)))?;
-
-    self::rt::push_hook(screen);
 
     todo!()
 }
@@ -393,8 +412,12 @@ enum ProgramMode {
 #[derive(Debug, Error)]
 enum ProgramError {
     #[cfg(unix)]
+    #[error("couldn't get file descriptor limit")]
+    GetFdLimit(#[source] std::io::Error),
+
+    #[cfg(unix)]
     #[error("couldn't increase file descriptor limit")]
-    FdLimit(#[source] self::rlim::RlimitError),
+    SetFdLimit(#[source] std::io::Error),
 
     #[error("couldn't run setup wizard")]
     Setup(#[source] SetupError),
