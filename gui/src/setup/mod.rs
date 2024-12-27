@@ -3,7 +3,7 @@ pub use self::data::DataRootError;
 use self::data::{read_data_root, write_data_root};
 use crate::data::{DataError, DataMgr};
 use crate::dialogs::{open_dir, open_file, FileType};
-use crate::ui::SetupWizard;
+use crate::ui::{PlatformExt, RuntimeExt, SetupWizard};
 use crate::vfs::{FsType, FS_TYPE};
 use erdp::ErrorDisplay;
 use obfw::ps4::{PartData, PartReader};
@@ -22,7 +22,7 @@ use thiserror::Error;
 #[cfg_attr(target_os = "windows", path = "windows.rs")]
 mod data;
 
-pub fn run_setup() -> Result<Option<DataMgr>, SetupError> {
+pub async fn run_setup() -> Result<Option<DataMgr>, SetupError> {
     // Load data root.
     let root = read_data_root().map_err(SetupError::ReadDataRoot)?;
 
@@ -62,9 +62,7 @@ pub fn run_setup() -> Result<Option<DataMgr>, SetupError> {
     win.on_browse_data_root({
         let win = win.as_weak();
 
-        move || {
-            slint::spawn_local(browse_data_root(win.unwrap())).unwrap();
-        }
+        move || crate::rt::spawn(browse_data_root(win.unwrap()))
     });
 
     win.on_set_data_root({
@@ -76,9 +74,7 @@ pub fn run_setup() -> Result<Option<DataMgr>, SetupError> {
     win.on_browse_firmware({
         let win = win.as_weak();
 
-        move || {
-            slint::spawn_local(browse_firmware(win.unwrap())).unwrap();
-        }
+        move || crate::rt::spawn(browse_firmware(win.unwrap()))
     });
 
     win.on_install_firmware({
@@ -102,7 +98,9 @@ pub fn run_setup() -> Result<Option<DataMgr>, SetupError> {
     }
 
     // Run the wizard.
-    win.run().map_err(SetupError::RunWindow)?;
+    win.set_center().map_err(SetupError::CenterWindow)?;
+    win.show().map_err(SetupError::ShowWindow)?;
+    win.wait().await;
 
     drop(win);
 
@@ -518,6 +516,9 @@ pub enum SetupError {
     #[error("couldn't create setup wizard")]
     CreateWindow(#[source] PlatformError),
 
-    #[error("couldn't run setup wizard")]
-    RunWindow(#[source] PlatformError),
+    #[error("couldn't center setup wizard")]
+    CenterWindow(#[source] crate::ui::PlatformError),
+
+    #[error("couldn't show setup wizard")]
+    ShowWindow(#[source] PlatformError),
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use self::engine::MetalScreen;
+use self::engine::Metal;
 use super::EngineBuilder;
 use crate::profile::Profile;
 use metal::Device;
@@ -24,7 +24,7 @@ struct MetalBuilder {
 
 impl EngineBuilder for MetalBuilder {
     type PhysicalDevice = metal::Device;
-    type Engine = MetalScreen;
+    type Engine = Metal;
 
     fn physical_devices(&self) -> &[Self::PhysicalDevice] {
         &self.devices

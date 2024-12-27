@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use self::engine::VulkanScreen;
+use self::engine::Vulkan;
 use self::window::VulkanWindow;
 use super::EngineBuilder;
 use crate::profile::Profile;
@@ -106,7 +106,7 @@ struct VulkanBuilder {
 
 impl EngineBuilder for VulkanBuilder {
     type PhysicalDevice = PhysicalDevice;
-    type Engine = VulkanScreen;
+    type Engine = Vulkan;
 
     fn physical_devices(&self) -> &[Self::PhysicalDevice] {
         &self.devices
@@ -117,7 +117,7 @@ impl EngineBuilder for VulkanBuilder {
         profile: &Profile,
         screen: WindowAttributes,
     ) -> Result<Arc<Self::Engine>, GraphicsError> {
-        let engine = VulkanScreen::new(self, profile).map(Arc::new)?;
+        let engine = Vulkan::new(self, profile).map(Arc::new)?;
         let window = create_window(screen, |w| VulkanWindow::new(&engine, w))
             .map_err(GraphicsError::CreateWindow)?;
 

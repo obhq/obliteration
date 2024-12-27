@@ -1,4 +1,4 @@
-use super::MetalScreen;
+use super::Metal;
 use crate::rt::{Hook, RuntimeWindow};
 use metal::{CAMetalLayer, MetalLayer};
 use objc::runtime::{Object, NO, YES};
@@ -18,15 +18,15 @@ pub struct MetalWindow {
     view: *mut Object,
     layer: MetalLayer,
     window: Window,
-    screen: Arc<MetalScreen>,
+    engine: Arc<Metal>,
 }
 
 impl MetalWindow {
     pub fn new(
-        screen: &Arc<MetalScreen>,
+        engine: &Arc<Metal>,
         window: Window,
     ) -> Result<Rc<Self>, Box<dyn Error + Send + Sync>> {
-        let layer = unsafe { screen.create_layer() };
+        let layer = unsafe { engine.create_layer() };
         let view = match window.raw_window_handle() {
             RawWindowHandle::AppKit(v) => v.ns_view as *mut Object,
             _ => unreachable!(),
@@ -39,7 +39,7 @@ impl MetalWindow {
             view,
             layer,
             window,
-            screen: screen.clone(),
+            engine: engine.clone(),
         }))
     }
 }
