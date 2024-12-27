@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use self::screen::MetalScreen;
-use super::Graphics;
+use self::engine::MetalScreen;
+use super::EngineBuilder;
 use crate::profile::Profile;
 use metal::Device;
 use std::ops::Deref;
@@ -8,33 +8,33 @@ use std::sync::Arc;
 use thiserror::Error;
 use winit::window::WindowAttributes;
 
-mod screen;
+mod engine;
 mod window;
 
-pub fn new() -> Result<impl Graphics, GraphicsError> {
-    Ok(Metal {
+pub fn builder() -> Result<impl EngineBuilder, GraphicsError> {
+    Ok(MetalBuilder {
         devices: Device::all(),
     })
 }
 
-/// Implementation of [`Graphics`] using Metal.
-struct Metal {
+/// Implementation of [`EngineBuilder`] for Metal.
+struct MetalBuilder {
     devices: Vec<metal::Device>,
 }
 
-impl Graphics for Metal {
+impl EngineBuilder for MetalBuilder {
     type PhysicalDevice = metal::Device;
-    type Screen = MetalScreen;
+    type Engine = MetalScreen;
 
     fn physical_devices(&self) -> &[Self::PhysicalDevice] {
         &self.devices
     }
 
-    fn create_screen(
+    fn build(
         self,
         profile: &Profile,
-        attrs: WindowAttributes,
-    ) -> Result<Arc<Self::Screen>, GraphicsError> {
+        screen: WindowAttributes,
+    ) -> Result<Arc<Self::Engine>, GraphicsError> {
         todo!()
     }
 }

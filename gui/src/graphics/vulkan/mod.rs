@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use self::screen::VulkanScreen;
+use self::engine::VulkanScreen;
 use self::window::VulkanWindow;
-use super::Graphics;
+use super::EngineBuilder;
 use crate::profile::Profile;
 use crate::rt::{create_window, raw_display_handle, RuntimeError};
 use ash::extensions::khr::Surface;
@@ -14,10 +14,10 @@ use std::sync::Arc;
 use thiserror::Error;
 use winit::window::WindowAttributes;
 
-mod screen;
+mod engine;
 mod window;
 
-pub fn new() -> Result<impl Graphics, GraphicsError> {
+pub fn builder() -> Result<impl EngineBuilder, GraphicsError> {
     // Get required extensions for window.
     let exts = enumerate_required_extensions(raw_display_handle())
         .map_err(GraphicsError::GetExtensionsForWindow)?;
@@ -42,8 +42,8 @@ pub fn new() -> Result<impl Graphics, GraphicsError> {
 
     // Create Vulkan instance.
     let entry = Entry::linked();
-    let mut vk = match unsafe { entry.create_instance(&info, None) } {
-        Ok(instance) => Vulkan {
+    let mut b = match unsafe { entry.create_instance(&info, None) } {
+        Ok(instance) => VulkanBuilder {
             devices: ManuallyDrop::new(Vec::new()),
             surface: ManuallyDrop::new(Surface::new(&entry, &instance)),
             instance,
@@ -53,7 +53,7 @@ pub fn new() -> Result<impl Graphics, GraphicsError> {
     };
 
     // List available devices.
-    let all = match unsafe { vk.instance.enumerate_physical_devices() } {
+    let all = match unsafe { b.instance.enumerate_physical_devices() } {
         Ok(v) => v,
         Err(e) => return Err(GraphicsError::EnumeratePhysicalDevices(e)),
     };
@@ -64,14 +64,14 @@ pub fn new() -> Result<impl Graphics, GraphicsError> {
 
     for dev in all {
         // Filter out devices without Vulkan 1.3.
-        let p = unsafe { vk.instance.get_physical_device_properties(dev) };
+        let p = unsafe { b.instance.get_physical_device_properties(dev) };
 
         if p.api_version < API_VERSION_1_3 {
             continue;
         }
 
         // Skip if device does not support graphics operations.
-        if !unsafe { vk.instance.get_physical_device_queue_family_properties(dev) }
+        if !unsafe { b.instance.get_physical_device_queue_family_properties(dev) }
             .iter()
             .any(|p| p.queue_flags.contains(QueueFlags::GRAPHICS))
         {
@@ -84,50 +84,50 @@ pub fn new() -> Result<impl Graphics, GraphicsError> {
             .unwrap()
             .to_owned();
 
-        vk.devices.push(PhysicalDevice { device: dev, name });
+        b.devices.push(PhysicalDevice { device: dev, name });
     }
 
-    if vk.devices.is_empty() {
+    if b.devices.is_empty() {
         return Err(GraphicsError::NoSuitableDevice);
     }
 
-    Ok(vk)
+    Ok(b)
 }
 
-/// Implementation of [`Graphics`] using Vulkan.
+/// Implementation of [`EngineBuilder`] for Vulkan.
 ///
 /// Fields in this struct need to drop in a correct order.
-struct Vulkan {
+struct VulkanBuilder {
     devices: ManuallyDrop<Vec<PhysicalDevice>>,
     surface: ManuallyDrop<Surface>,
     instance: Instance,
     entry: Entry,
 }
 
-impl Graphics for Vulkan {
+impl EngineBuilder for VulkanBuilder {
     type PhysicalDevice = PhysicalDevice;
-    type Screen = VulkanScreen;
+    type Engine = VulkanScreen;
 
     fn physical_devices(&self) -> &[Self::PhysicalDevice] {
         &self.devices
     }
 
-    fn create_screen(
+    fn build(
         self,
         profile: &Profile,
-        attrs: WindowAttributes,
-    ) -> Result<Arc<Self::Screen>, GraphicsError> {
-        let screen = VulkanScreen::new(self, profile).map(Arc::new)?;
-        let window = create_window(attrs, |w| VulkanWindow::new(&screen, w))
+        screen: WindowAttributes,
+    ) -> Result<Arc<Self::Engine>, GraphicsError> {
+        let engine = VulkanScreen::new(self, profile).map(Arc::new)?;
+        let window = create_window(screen, |w| VulkanWindow::new(&engine, w))
             .map_err(GraphicsError::CreateWindow)?;
 
         crate::rt::push_hook(window);
 
-        Ok(screen)
+        Ok(engine)
     }
 }
 
-impl Drop for Vulkan {
+impl Drop for VulkanBuilder {
     fn drop(&mut self) {
         unsafe { ManuallyDrop::drop(&mut self.devices) };
         unsafe { ManuallyDrop::drop(&mut self.surface) };

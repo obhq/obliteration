@@ -1,7 +1,7 @@
 #![windows_subsystem = "windows"]
 
 use self::data::{DataError, DataMgr};
-use self::graphics::{Graphics, GraphicsError, PhysicalDevice};
+use self::graphics::{EngineBuilder, GraphicsError, PhysicalDevice};
 use self::profile::{DisplayResolution, Profile};
 use self::setup::{run_setup, SetupError};
 use self::ui::{
@@ -13,7 +13,6 @@ use erdp::ErrorDisplay;
 use futures::{select_biased, FutureExt};
 use slint::{ComponentHandle, ModelRc, SharedString, ToSharedString, VecModel, WindowHandle};
 use std::cell::Cell;
-use std::error::Error;
 use std::net::SocketAddrV4;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -136,7 +135,7 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
     }
 
     // Initialize graphics engine.
-    let graphics = graphics::new().map_err(ProgramError::InitGraphics)?;
+    let graphics = graphics::builder().map_err(ProgramError::InitGraphics)?;
 
     // Run setup wizard. This will simply return the data manager if the user already has required
     // settings.
@@ -234,16 +233,16 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
         .with_resizable(false)
         .with_title("Obliteration");
 
-    // Create VMM screen.
-    let screen = graphics
-        .create_screen(&profile, attrs)
-        .map_err(|e| ProgramError::CreateScreen(Box::new(e)))?;
+    // Build graphics engine.
+    let graphics = graphics
+        .build(&profile, attrs)
+        .map_err(ProgramError::BuildGraphicsEngine)?;
 
     todo!()
 }
 
 async fn run_launcher(
-    graphics: &impl Graphics,
+    graphics: &impl EngineBuilder,
     data: &Arc<DataMgr>,
     profiles: Vec<Profile>,
 ) -> Result<Option<(Profile, ExitAction)>, ProgramError> {
@@ -458,6 +457,6 @@ enum ProgramError {
     #[error("couldn't show main window")]
     ShowMainWindow(#[source] slint::PlatformError),
 
-    #[error("couldn't create VMM screen")]
-    CreateScreen(#[source] Box<dyn Error>),
+    #[error("couldn't build graphics engine")]
+    BuildGraphicsEngine(#[source] GraphicsError),
 }
