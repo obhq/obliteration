@@ -2,8 +2,7 @@
 pub use self::engine::{new, GraphicsError};
 
 use crate::profile::Profile;
-use crate::rt::Hook;
-use std::rc::Rc;
+use std::sync::Arc;
 use winit::window::WindowAttributes;
 
 #[cfg_attr(target_os = "macos", path = "metal/mod.rs")]
@@ -16,11 +15,13 @@ pub trait Graphics: Sized + 'static {
     type Screen: Screen;
 
     fn physical_devices(&self) -> &[Self::PhysicalDevice];
+
+    /// Currently this method was designed to run only once per application lifetime.
     fn create_screen(
         self,
         profile: &Profile,
         attrs: WindowAttributes,
-    ) -> Result<Rc<Self::Screen>, GraphicsError>;
+    ) -> Result<Arc<Self::Screen>, GraphicsError>;
 }
 
 pub trait PhysicalDevice: Sized {
@@ -28,4 +29,7 @@ pub trait PhysicalDevice: Sized {
 }
 
 /// Encapsulates a platform-specific window for drawing a VM screen.
-pub trait Screen: Hook {}
+///
+/// This trait act as a thin layer for graphics engine for the VMM to use. At compile-time this
+/// layer will be optimized out and aggressively inlined the same as Hypervisor trait.
+pub trait Screen: Send + Sync + 'static {}

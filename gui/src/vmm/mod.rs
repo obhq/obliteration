@@ -423,19 +423,6 @@ enum DispatchDebugError {
     HandleInterrupt(#[source] gdbstub::stub::GdbStubError<GdbError, std::io::Error>),
 }
 
-/// Contains objects required to render the screen.
-#[repr(C)]
-pub struct VmmScreen {
-    #[cfg(not(target_os = "macos"))]
-    pub vk_instance: usize,
-    #[cfg(not(target_os = "macos"))]
-    pub vk_device: usize,
-    #[cfg(not(target_os = "macos"))]
-    pub vk_surface: usize,
-    #[cfg(target_os = "macos")]
-    pub view: usize,
-}
-
 #[derive(Debug, Error)]
 pub enum VmmError {
     #[error("couldn't open kernel path {1}")]

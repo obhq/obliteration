@@ -1,7 +1,7 @@
 use super::task::TaskList;
 use super::{Event, Hook, RuntimeWindow};
+use rustc_hash::FxHashMap;
 use std::cell::Cell;
-use std::collections::HashMap;
 use std::mem::transmute;
 use std::ptr::null_mut;
 use std::rc::{Rc, Weak};
@@ -14,7 +14,7 @@ pub struct Context<'a> {
     pub proxy: &'a EventLoopProxy<Event>,
     pub tasks: &'a mut TaskList,
     pub hooks: Option<&'a mut Vec<Rc<dyn Hook>>>,
-    pub windows: &'a mut HashMap<WindowId, Weak<dyn RuntimeWindow>>,
+    pub windows: &'a mut FxHashMap<WindowId, Weak<dyn RuntimeWindow>>,
 }
 
 impl<'a> Context<'a> {
@@ -48,5 +48,5 @@ impl<'a> Context<'a> {
 }
 
 thread_local! {
-    static CONTEXT: Cell<*mut Context<'static>> = Cell::new(null_mut());
+    static CONTEXT: Cell<*mut Context<'static>> = const { Cell::new(null_mut()) };
 }

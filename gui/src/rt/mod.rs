@@ -4,6 +4,7 @@ pub use self::window::*;
 
 use self::context::Context;
 use self::task::TaskList;
+use rustc_hash::FxHashMap;
 use rwh05::{HasRawDisplayHandle, RawDisplayHandle};
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -80,6 +81,9 @@ pub fn raw_display_handle() -> RawDisplayHandle {
     Context::with(|cx| cx.el.raw_display_handle())
 }
 
+/// Note that the runtime do **not** hold a strong reference to the [`RuntimeWindow`] returned from
+/// `f`.
+///
 /// # Panics
 /// - If called from the other thread than main thread.
 /// - If called from `f`.
@@ -114,7 +118,7 @@ struct Runtime<T> {
     tasks: TaskList,
     main: u64,
     hooks: Vec<Rc<dyn Hook>>,
-    windows: HashMap<WindowId, Weak<dyn RuntimeWindow>>,
+    windows: FxHashMap<WindowId, Weak<dyn RuntimeWindow>>,
     exit: Rc<Cell<Option<Result<T, RuntimeError>>>>,
 }
 
@@ -362,6 +366,12 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
 
         // Update flow.
         el.set_control_flow(flow);
+    }
+
+    fn exiting(&mut self, _: &ActiveEventLoop) {
+        // Drop all hooks before exit the event loop so if it own any windows it will get closed
+        // before the event loop exits.
+        self.hooks.clear();
     }
 }
 
