@@ -1,4 +1,4 @@
-use super::screen::VulkanScreen;
+use super::engine::VulkanScreen;
 use super::GraphicsError;
 use crate::rt::{Hook, RuntimeWindow};
 use ash::vk::SurfaceKHR;
@@ -16,29 +16,29 @@ use winit::window::{Window, WindowId};
 pub struct VulkanWindow {
     surface: SurfaceKHR,
     window: Window,
-    screen: Arc<VulkanScreen>,
+    engine: Arc<VulkanScreen>,
 }
 
 impl VulkanWindow {
     pub fn new(
-        screen: &Arc<VulkanScreen>,
+        engine: &Arc<VulkanScreen>,
         window: Window,
     ) -> Result<Rc<Self>, Box<dyn Error + Send + Sync>> {
         // Create VkSurfaceKHR.
         let surface =
-            unsafe { screen.create_surface(&window) }.map_err(GraphicsError::CreateSurface)?;
+            unsafe { engine.create_surface(&window) }.map_err(GraphicsError::CreateSurface)?;
 
         Ok(Rc::new(Self {
             surface,
             window,
-            screen: screen.clone(),
+            engine: engine.clone(),
         }))
     }
 }
 
 impl Drop for VulkanWindow {
     fn drop(&mut self) {
-        unsafe { self.screen.destroy_surface(self.surface) };
+        unsafe { self.engine.destroy_surface(self.surface) };
     }
 }
 

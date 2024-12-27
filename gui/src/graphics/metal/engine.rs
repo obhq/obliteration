@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use crate::graphics::Screen;
+use crate::graphics::Graphics;
 use metal::{Device, MetalLayer};
 use thiserror::Error;
 
-/// Implementation of [`Screen`] using Metal.
+/// Implementation of [`Graphics`] using Metal.
 ///
 /// Fields in this struct need to be dropped in a correct order.
 pub struct MetalScreen {
@@ -31,7 +31,7 @@ impl MetalScreen {
     }
 }
 
-impl Screen for MetalScreen {}
+impl Graphics for MetalScreen {}
 
 /// Represents an error when [`MetalScreen::new()`] fails.
 #[derive(Debug, Error)]

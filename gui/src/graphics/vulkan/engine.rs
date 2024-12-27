@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use super::{GraphicsError, Vulkan};
-use crate::graphics::Screen;
+use super::{GraphicsError, VulkanBuilder};
+use crate::graphics::Graphics;
 use crate::profile::Profile;
 use ash::vk::{DeviceCreateInfo, DeviceQueueCreateInfo, QueueFlags, SurfaceKHR};
 use ash::Device;
@@ -8,21 +8,21 @@ use ash_window::create_surface;
 use rwh05::{HasRawDisplayHandle, HasRawWindowHandle};
 use winit::window::Window;
 
-/// Implementation of [`Screen`] using Vulkan.
+/// Implementation of [`Graphics`] using Vulkan.
 ///
 /// Fields in this struct must be dropped in a correct order.
 pub struct VulkanScreen {
     device: Device,
-    glob: Vulkan,
+    builder: VulkanBuilder,
 }
 
 impl VulkanScreen {
-    pub fn new(glob: Vulkan, profile: &Profile) -> Result<Self, GraphicsError> {
+    pub fn new(b: VulkanBuilder, profile: &Profile) -> Result<Self, GraphicsError> {
         // TODO: Use selected device.
-        let physical = glob.devices.first().unwrap().device;
+        let physical = b.devices.first().unwrap().device;
 
         // Setup VkDeviceQueueCreateInfo.
-        let instance = &glob.instance;
+        let instance = &b.instance;
         let queue = unsafe { instance.get_physical_device_queue_family_properties(physical) }
             .into_iter()
             .position(|p| p.queue_flags.contains(QueueFlags::GRAPHICS))
@@ -44,7 +44,7 @@ impl VulkanScreen {
         let device = unsafe { instance.create_device(physical, &device, None) }
             .map_err(GraphicsError::CreateDevice)?;
 
-        Ok(Self { device, glob })
+        Ok(Self { device, builder: b })
     }
 
     /// # Safety
@@ -53,13 +53,13 @@ impl VulkanScreen {
         let dh = win.raw_display_handle();
         let wh = win.raw_window_handle();
 
-        create_surface(&self.glob.entry, &self.glob.instance, dh, wh, None)
+        create_surface(&self.builder.entry, &self.builder.instance, dh, wh, None)
     }
 
     /// # Safety
     /// See `vkDestroySurfaceKHR` docs for valid usage.
     pub unsafe fn destroy_surface(&self, surface: SurfaceKHR) {
-        self.glob.surface.destroy_surface(surface, None);
+        self.builder.surface.destroy_surface(surface, None);
     }
 }
 
@@ -71,4 +71,4 @@ impl Drop for VulkanScreen {
     }
 }
 
-impl Screen for VulkanScreen {}
+impl Graphics for VulkanScreen {}
