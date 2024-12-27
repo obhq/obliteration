@@ -27,7 +27,11 @@ where
         move || win.unwrap().hide().unwrap()
     });
 
-    win.set_center().unwrap();
+    match parent {
+        Some(_) => todo!(),
+        None => win.set_center().unwrap(),
+    }
+
     win.show().unwrap();
     win.wait().await;
 }

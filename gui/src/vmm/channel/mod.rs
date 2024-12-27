@@ -1,14 +1,14 @@
-pub use self::screen::*;
+pub use self::main::*;
 pub use self::vmm::*;
 
-mod screen;
+mod main;
 mod vmm;
 
 /// Create a new channel to communicate with the VMM.
 pub fn create_channel() -> (VmmStream, ScreenStream) {
     // Create streams.
     let vmm = VmmStream::new();
-    let screen = ScreenStream::new();
+    let main = ScreenStream::new();
 
-    (vmm, screen)
+    (vmm, main)
 }

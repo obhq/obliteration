@@ -6,7 +6,7 @@ use raw_window_handle::{
     DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, WindowHandle,
 };
 use slint::platform::{PointerEventButton, Renderer, WindowAdapter, WindowEvent, WindowProperties};
-use slint::{LogicalPosition, LogicalSize, PhysicalSize, PlatformError, SharedString, WindowSize};
+use slint::{LogicalPosition, LogicalSize, PhysicalSize, PlatformError, SharedString};
 use std::any::Any;
 use std::cell::Cell;
 use std::error::Error;
@@ -176,10 +176,6 @@ impl WindowAdapter for Window {
         }
 
         Ok(())
-    }
-
-    fn set_size(&self, size: WindowSize) {
-        todo!()
     }
 
     fn size(&self) -> PhysicalSize {

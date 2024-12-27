@@ -4,6 +4,7 @@ use super::EngineBuilder;
 use crate::profile::Profile;
 use metal::Device;
 use std::ops::Deref;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use thiserror::Error;
 use winit::window::WindowAttributes;
@@ -34,6 +35,7 @@ impl EngineBuilder for MetalBuilder {
         self,
         profile: &Profile,
         screen: WindowAttributes,
+        shutdown: &Arc<AtomicBool>,
     ) -> Result<Arc<Self::Engine>, GraphicsError> {
         todo!()
     }
