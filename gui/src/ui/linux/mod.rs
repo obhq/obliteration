@@ -9,8 +9,8 @@ impl<T: ComponentHandle> PlatformExt for T {
         let win = win.window_handle().unwrap();
 
         match win.as_ref() {
-            RawWindowHandle::Xlib(xlib_window_handle) => todo!(),
-            RawWindowHandle::Xcb(xcb_window_handle) => todo!(),
+            RawWindowHandle::Xlib(_) => todo!(),
+            RawWindowHandle::Xcb(_) => todo!(),
             RawWindowHandle::Wayland(_) => (), // Wayland don't allow window to position itself.
             RawWindowHandle::Drm(_) | RawWindowHandle::Gbm(_) => unimplemented!(),
             _ => unreachable!(),

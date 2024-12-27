@@ -4,6 +4,7 @@ use crate::rt::{Hook, RuntimeWindow};
 use ash::vk::SurfaceKHR;
 use std::error::Error;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{DeviceId, ElementState, InnerSizeWriter, MouseButton, StartCause};
@@ -17,12 +18,14 @@ pub struct VulkanWindow {
     surface: SurfaceKHR,
     window: Window,
     engine: Arc<Vulkan>,
+    shutdown: Arc<AtomicBool>,
 }
 
 impl VulkanWindow {
     pub fn new(
         engine: &Arc<Vulkan>,
         window: Window,
+        shutdown: &Arc<AtomicBool>,
     ) -> Result<Rc<Self>, Box<dyn Error + Send + Sync>> {
         // Create VkSurfaceKHR.
         let surface =
@@ -32,6 +35,7 @@ impl VulkanWindow {
             surface,
             window,
             engine: engine.clone(),
+            shutdown: shutdown.clone(),
         }))
     }
 }
@@ -48,7 +52,8 @@ impl RuntimeWindow for VulkanWindow {
     }
 
     fn on_close_requested(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
-        todo!()
+        self.shutdown.store(true, Ordering::Relaxed);
+        Ok(())
     }
 
     fn on_focused(&self, gained: bool) -> Result<(), Box<dyn Error + Send + Sync>> {

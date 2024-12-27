@@ -10,6 +10,7 @@ use ash::{Entry, Instance};
 use ash_window::enumerate_required_extensions;
 use std::ffi::CStr;
 use std::mem::ManuallyDrop;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use thiserror::Error;
 use winit::window::WindowAttributes;
@@ -116,9 +117,10 @@ impl EngineBuilder for VulkanBuilder {
         self,
         profile: &Profile,
         screen: WindowAttributes,
+        shutdown: &Arc<AtomicBool>,
     ) -> Result<Arc<Self::Engine>, GraphicsError> {
         let engine = Vulkan::new(self, profile).map(Arc::new)?;
-        let window = create_window(screen, |w| VulkanWindow::new(&engine, w))
+        let window = create_window(screen, |w| VulkanWindow::new(&engine, w, shutdown))
             .map_err(GraphicsError::CreateWindow)?;
 
         crate::rt::push_hook(window);

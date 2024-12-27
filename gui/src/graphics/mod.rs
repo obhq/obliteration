@@ -2,6 +2,7 @@
 pub use self::engine::{builder, GraphicsError};
 
 use crate::profile::Profile;
+use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use winit::window::WindowAttributes;
 
@@ -21,6 +22,7 @@ pub trait EngineBuilder {
         self,
         profile: &Profile,
         screen: WindowAttributes,
+        shutdown: &Arc<AtomicBool>,
     ) -> Result<Arc<Self::Engine>, GraphicsError>;
 }
 

@@ -11,14 +11,17 @@ use self::ui::{
 use async_net::{TcpListener, TcpStream};
 use clap::{Parser, ValueEnum};
 use erdp::ErrorDisplay;
-use futures::{select_biased, FutureExt};
+use futures::{select_biased, AsyncReadExt, FutureExt};
 use slint::{ComponentHandle, ModelRc, SharedString, ToSharedString, VecModel, WindowHandle};
 use std::cell::Cell;
+use std::future::Future;
 use std::net::SocketAddrV4;
 use std::path::PathBuf;
+use std::pin::pin;
 use std::process::ExitCode;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::task::Poll;
 use thiserror::Error;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
@@ -212,7 +215,7 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
     };
 
     // Wait for debugger.
-    let debugger = if let Some(addr) = debug {
+    let mut debugger = if let Some(addr) = debug {
         let v = wait_for_debugger(addr).await?;
 
         if v.is_none() {
@@ -234,12 +237,38 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
         .with_resizable(false)
         .with_title("Obliteration");
 
-    // Build graphics engine.
+    // Prepare to launch VMM.
+    let shutdown = Arc::default();
     let graphics = graphics
-        .build(&profile, attrs)
+        .build(&profile, attrs, &shutdown)
         .map_err(ProgramError::BuildGraphicsEngine)?;
+    let (mut vmm, main) = self::vmm::create_channel();
+    let mut buf = [0; 1024];
 
-    todo!()
+    loop {
+        // Prepare futures to poll.
+        let mut vmm = pin!(vmm.recv());
+        let mut debugger = debugger.as_mut().map(|v| v.read(&mut buf));
+
+        // Poll all futures.
+        let (vmm, debug) = std::future::poll_fn(move |cx| {
+            let vmm = vmm.as_mut().poll(cx);
+            let debug = match &mut debugger {
+                Some(v) => v.poll_unpin(cx),
+                None => Poll::Pending,
+            };
+
+            match (vmm, debug) {
+                (Poll::Ready(v), Poll::Ready(d)) => Poll::Ready((Some(v), Some(d))),
+                (Poll::Ready(v), Poll::Pending) => Poll::Ready((Some(v), None)),
+                (Poll::Pending, Poll::Ready(d)) => Poll::Ready((None, Some(d))),
+                (Poll::Pending, Poll::Pending) => Poll::Pending,
+            }
+        })
+        .await;
+
+        todo!()
+    }
 }
 
 async fn run_launcher(
@@ -371,14 +400,19 @@ async fn wait_for_debugger(addr: SocketAddrV4) -> Result<Option<TcpStream>, Prog
 
     // Wait for connection.
     let client = select_biased! {
-        _ = win.wait().fuse() => None,
+        _ = win.wait().fuse() => return Ok(None),
         v = server.accept().fuse() => match v {
-            Ok(v) => Some(v.0),
+            Ok(v) => v.0,
             Err(e) => return Err(ProgramError::AcceptDebugger(e)),
         }
     };
 
-    Ok(client)
+    // Disable Nagle algorithm since it does not work well with GDB remote protocol.
+    client
+        .set_nodelay(true)
+        .map_err(ProgramError::DisableDebuggerNagle)?;
+
+    Ok(Some(client))
 }
 
 /// Program arguments parsed from command line.
@@ -450,7 +484,10 @@ enum ProgramError {
     #[error("couldn't accept a connection from debugger")]
     AcceptDebugger(#[source] std::io::Error),
 
-    #[error("failed to create main window")]
+    #[error("couldn't disable Nagle algorithm on debugger connection")]
+    DisableDebuggerNagle(#[source] std::io::Error),
+
+    #[error("couldn't create main window")]
     CreateMainWindow(#[source] slint::PlatformError),
 
     #[error("couldn't initialize graphics engine")]
