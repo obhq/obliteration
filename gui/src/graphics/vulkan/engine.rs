@@ -11,12 +11,12 @@ use winit::window::Window;
 /// Implementation of [`Graphics`] using Vulkan.
 ///
 /// Fields in this struct must be dropped in a correct order.
-pub struct VulkanScreen {
+pub struct Vulkan {
     device: Device,
     builder: VulkanBuilder,
 }
 
-impl VulkanScreen {
+impl Vulkan {
     pub fn new(b: VulkanBuilder, profile: &Profile) -> Result<Self, GraphicsError> {
         // TODO: Use selected device.
         let physical = b.devices.first().unwrap().device;
@@ -48,7 +48,7 @@ impl VulkanScreen {
     }
 
     /// # Safety
-    /// The returned [`SurfaceKHR`] must be destroyed before `win` and this [`VulkanScreen`].
+    /// The returned [`SurfaceKHR`] must be destroyed before `win` and this [`Vulkan`].
     pub unsafe fn create_surface(&self, win: &Window) -> Result<SurfaceKHR, ash::vk::Result> {
         let dh = win.raw_display_handle();
         let wh = win.raw_window_handle();
@@ -63,7 +63,7 @@ impl VulkanScreen {
     }
 }
 
-impl Drop for VulkanScreen {
+impl Drop for Vulkan {
     fn drop(&mut self) {
         // Free device.
         unsafe { self.device.device_wait_idle().unwrap() };
@@ -71,4 +71,4 @@ impl Drop for VulkanScreen {
     }
 }
 
-impl Graphics for VulkanScreen {}
+impl Graphics for Vulkan {}

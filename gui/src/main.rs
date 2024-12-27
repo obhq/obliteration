@@ -5,7 +5,8 @@ use self::graphics::{EngineBuilder, GraphicsError, PhysicalDevice};
 use self::profile::{DisplayResolution, Profile};
 use self::setup::{run_setup, SetupError};
 use self::ui::{
-    MainWindow, ProfileModel, ResolutionModel, RuntimeExt, SlintBackend, WaitForDebugger,
+    MainWindow, PlatformExt, ProfileModel, ResolutionModel, RuntimeExt, SlintBackend,
+    WaitForDebugger,
 };
 use async_net::{TcpListener, TcpStream};
 use clap::{Parser, ValueEnum};
@@ -139,7 +140,7 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
 
     // Run setup wizard. This will simply return the data manager if the user already has required
     // settings.
-    let data = match run_setup().map_err(ProgramError::Setup)? {
+    let data = match run_setup().await.map_err(ProgramError::Setup)? {
         Some(v) => Arc::new(v),
         None => return Ok(()),
     };
@@ -331,6 +332,7 @@ async fn run_launcher(
     profiles.select(row, &win);
 
     // Run the window.
+    win.set_center().map_err(ProgramError::CenterMainWindow)?;
     win.show().map_err(ProgramError::ShowMainWindow)?;
     win.wait().await;
 
@@ -453,6 +455,9 @@ enum ProgramError {
 
     #[error("couldn't initialize graphics engine")]
     InitGraphics(#[source] GraphicsError),
+
+    #[error("couldn't center main window")]
+    CenterMainWindow(#[source] self::ui::PlatformError),
 
     #[error("couldn't show main window")]
     ShowMainWindow(#[source] slint::PlatformError),

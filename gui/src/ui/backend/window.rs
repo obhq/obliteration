@@ -2,6 +2,9 @@ use crate::rt::{RuntimeWindow, Signal};
 use i_slint_core::window::WindowAdapterInternal;
 use i_slint_core::InternalToken;
 use i_slint_renderer_skia::SkiaRenderer;
+use raw_window_handle::{
+    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, WindowHandle,
+};
 use slint::platform::{PointerEventButton, Renderer, WindowAdapter, WindowEvent, WindowProperties};
 use slint::{LogicalPosition, LogicalSize, PhysicalSize, PlatformError, SharedString, WindowSize};
 use std::any::Any;
@@ -236,6 +239,14 @@ impl WindowAdapter for Window {
 
     fn internal(&self, _: InternalToken) -> Option<&dyn WindowAdapterInternal> {
         Some(self)
+    }
+
+    fn window_handle_06(&self) -> Result<WindowHandle<'_>, HandleError> {
+        self.winit.window_handle()
+    }
+
+    fn display_handle_06(&self) -> Result<DisplayHandle<'_>, HandleError> {
+        self.winit.display_handle()
     }
 }
 
