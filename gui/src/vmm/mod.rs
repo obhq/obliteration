@@ -33,36 +33,14 @@ mod hw;
 mod kernel;
 mod ram;
 
-#[cfg(unix)]
-fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
-    let v = unsafe { libc::sysconf(libc::_SC_PAGE_SIZE) };
-
-    if v < 0 {
-        Err(std::io::Error::last_os_error())
-    } else {
-        Ok(v.try_into().ok().and_then(NonZero::new).unwrap())
-    }
-}
-
-#[cfg(windows)]
-fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
-    use std::mem::zeroed;
-    use windows_sys::Win32::System::SystemInformation::GetSystemInfo;
-    let mut i = unsafe { zeroed() };
-
-    unsafe { GetSystemInfo(&mut i) };
-
-    Ok(i.dwPageSize.try_into().ok().and_then(NonZero::new).unwrap())
-}
-
 /// Manage a virtual machine that run the kernel.
-pub struct Vmm<'a, 'b> {
-    cpu: CpuManager<'a, 'b, crate::hv::Default>, // Drop first.
+pub struct Vmm {
+    cpu: CpuManager<crate::hv::Default>, // Drop first.
     shutdown: Arc<AtomicBool>,
 }
 
-impl<'a, 'b> Vmm<'a, 'b> {
-    pub fn new(args: VmmArgs<'b>, scope: &'a std::thread::Scope<'a, 'b>) -> Result<Self, VmmError> {
+impl Vmm {
+    pub fn new(args: VmmArgs, shutdown: Arc<AtomicBool>) -> Result<Self, VmmError> {
         let path = &args.kernel;
         let debugger = args.debugger;
 
@@ -207,7 +185,7 @@ impl<'a, 'b> Vmm<'a, 'b> {
         let vm_page_size = vm_page_size.ok_or(VmmError::NoPageSizeInKernelNote)?;
 
         // Get page size on the host.
-        let host_page_size = get_page_size().map_err(VmmError::GetHostPageSize)?;
+        let host_page_size = Self::get_page_size().map_err(VmmError::GetHostPageSize)?;
 
         // Get kernel memory size.
         let mut len = 0;
@@ -287,11 +265,9 @@ impl<'a, 'b> Vmm<'a, 'b> {
             .build(&feats, vm_page_size, &devices, dynamic)
             .map_err(VmmError::BuildRam)?;
 
-        // Setup CPU manager.
-        let shutdown = Arc::new(AtomicBool::new(false));
-        let mut cpu = CpuManager::new(Arc::new(hv), args.el, scope, devices, shutdown.clone());
-
         // Spawn main CPU.
+        let mut cpu = CpuManager::new(Arc::new(hv), args.el, devices, shutdown.clone());
+
         cpu.spawn(
             map.kern_vaddr + kernel_img.entry(),
             Some(map),
@@ -301,9 +277,31 @@ impl<'a, 'b> Vmm<'a, 'b> {
         // Create VMM.
         Ok(Self { cpu, shutdown })
     }
+
+    #[cfg(unix)]
+    fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
+        let v = unsafe { libc::sysconf(libc::_SC_PAGE_SIZE) };
+
+        if v < 0 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(v.try_into().ok().and_then(NonZero::new).unwrap())
+        }
+    }
+
+    #[cfg(windows)]
+    fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
+        use std::mem::zeroed;
+        use windows_sys::Win32::System::SystemInformation::GetSystemInfo;
+        let mut i = unsafe { zeroed() };
+
+        unsafe { GetSystemInfo(&mut i) };
+
+        Ok(i.dwPageSize.try_into().ok().and_then(NonZero::new).unwrap())
+    }
 }
 
-impl<'a, 'b> Drop for Vmm<'a, 'b> {
+impl Drop for Vmm {
     fn drop(&mut self) {
         // Set shutdown flag before dropping the other fields so their background thread can stop
         // before they try to join with it.
