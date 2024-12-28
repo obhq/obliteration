@@ -2,10 +2,9 @@
 use self::context::Context;
 use super::{Device, DeviceContext};
 use crate::hv::Hypervisor;
-use crate::vmm::VmmEvent;
+use crate::vmm::channel::MainStream;
 use obconf::ConsoleMemory;
 use std::num::NonZero;
-use winit::event_loop::EventLoopProxy;
 
 mod context;
 
@@ -28,9 +27,9 @@ impl Console {
     pub fn create_context<'a, H: Hypervisor>(
         &'a self,
         hv: &'a H,
-        el: EventLoopProxy<VmmEvent>,
+        main: &'a MainStream,
     ) -> Box<dyn DeviceContext<H::Cpu<'a>> + 'a> {
-        Box::new(Context::new(self, hv, el))
+        Box::new(Context::new(self, hv, main))
     }
 }
 

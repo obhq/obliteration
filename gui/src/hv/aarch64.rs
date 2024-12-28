@@ -4,7 +4,7 @@ use std::error::Error;
 
 /// States of a PE.
 pub trait CpuStates {
-    type Err: Error + Send + 'static;
+    type Err: Error + Send + Sync + 'static;
 
     fn set_pstate(&mut self, v: Pstate);
     fn set_sctlr(&mut self, v: Sctlr);

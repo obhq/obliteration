@@ -1,30 +1,29 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::Console;
 use crate::hv::{Cpu, CpuExit, CpuIo, Hypervisor};
+use crate::vmm::channel::MainStream;
 use crate::vmm::hw::{read_ptr, read_u8, read_usize, DeviceContext, MmioError};
-use crate::vmm::VmmEvent;
 use obconf::{ConsoleMemory, ConsoleType};
 use std::error::Error;
 use std::mem::offset_of;
 use std::num::NonZero;
 use thiserror::Error;
-use winit::event_loop::EventLoopProxy;
 
 /// Implementation of [`DeviceContext`].
 pub struct Context<'a, H> {
     dev: &'a Console,
     hv: &'a H,
-    el: EventLoopProxy<VmmEvent>,
+    main: &'a MainStream,
     msg_len: Option<NonZero<usize>>,
     msg: Vec<u8>,
 }
 
 impl<'a, H> Context<'a, H> {
-    pub fn new(dev: &'a Console, hv: &'a H, el: EventLoopProxy<VmmEvent>) -> Self {
+    pub fn new(dev: &'a Console, hv: &'a H, main: &'a MainStream) -> Self {
         Self {
             dev,
             hv,
-            el,
+            main,
             msg_len: None,
             msg: Vec::new(),
         }
@@ -71,7 +70,7 @@ impl<H: Hypervisor, C: Cpu> DeviceContext<C> for Context<'_, H> {
             // single allocation when the handler clone the string.
             let msg = std::str::from_utf8(&self.msg).map_err(|_| ExecError::InvalidMsg)?;
 
-            self.el.send_event(VmmEvent::Log(ty, msg.into())).unwrap();
+            self.main.log(ty, msg);
             self.msg.clear();
         } else {
             return Err(Box::new(ExecError::UnknownField(off)));

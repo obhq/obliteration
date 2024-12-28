@@ -39,7 +39,7 @@ pub trait Hypervisor: Send + Sync + 'static {
     type Cpu<'a>: CpuRun
     where
         Self: 'a;
-    type CpuErr: Error + Send + 'static;
+    type CpuErr: Error + Send + Sync + 'static;
 
     fn cpu_features(&self) -> &CpuFeats;
     fn ram(&self) -> &Ram<Self::Mapper>;
@@ -56,7 +56,7 @@ pub trait Cpu {
     type States<'a>: CpuCommit
     where
         Self: 'a;
-    type GetStatesErr: Error + Send + 'static;
+    type GetStatesErr: Error + Send + Sync + 'static;
     type Exit<'a>: CpuExit<Cpu = Self>
     where
         Self: 'a;
@@ -71,7 +71,7 @@ pub trait Cpu {
 
 /// Provides a method to run the CPU.
 pub trait CpuRun: Cpu {
-    type RunErr: Error + Send + 'static;
+    type RunErr: Error + Send + Sync + 'static;
 
     fn run(&mut self) -> Result<Self::Exit<'_>, Self::RunErr>;
 }
