@@ -215,7 +215,7 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
     };
 
     // Wait for debugger.
-    let mut debugger = if let Some(addr) = debug {
+    let mut gdb_con = if let Some(addr) = debug {
         let v = wait_for_debugger(addr).await?;
 
         if v.is_none() {
@@ -243,17 +243,17 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
         .build(&profile, attrs, &shutdown)
         .map_err(ProgramError::BuildGraphicsEngine)?;
     let (mut vmm, main) = self::vmm::create_channel();
-    let mut buf = [0; 1024];
+    let mut gdb_in = [0; 1024];
 
     loop {
         // Prepare futures to poll.
         let mut vmm = pin!(vmm.recv());
-        let mut debugger = debugger.as_mut().map(|v| v.read(&mut buf));
+        let mut debug = gdb_con.as_mut().map(|v| v.read(&mut gdb_in));
 
         // Poll all futures.
         let (vmm, debug) = std::future::poll_fn(move |cx| {
             let vmm = vmm.as_mut().poll(cx);
-            let debug = match &mut debugger {
+            let debug = match &mut debug {
                 Some(v) => v.poll_unpin(cx),
                 None => Poll::Pending,
             };
@@ -267,8 +267,23 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
         })
         .await;
 
-        todo!()
+        // Process VMM event.
+        if let Some(vmm) = vmm {
+            let vmm = match vmm {
+                Some(v) => v,
+                None => break,
+            };
+
+            todo!()
+        }
+
+        // Process debugger requests.
+        if let Some(debug) = debug {
+            todo!()
+        }
     }
+
+    Ok(())
 }
 
 async fn run_launcher(

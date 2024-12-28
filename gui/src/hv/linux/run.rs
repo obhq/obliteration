@@ -23,7 +23,7 @@ pub union Exit {
     fail_entry: ManuallyDrop<FailEntry>,
     ex: ManuallyDrop<Ex>,
     pub io: Io,
-    pub debug: ManuallyDrop<Debug>,
+    pub debug: Debug,
     pub mmio: Mmio,
     iocsr_io: ManuallyDrop<IocsrIo>,
     hypercall: ManuallyDrop<Hypercall>,
