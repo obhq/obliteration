@@ -10,10 +10,7 @@ use self::ram::RamBuilder;
 use crate::gdb::DebugClient;
 use crate::hv::{Hypervisor, Ram};
 use crate::profile::Profile;
-use cpu::GdbError;
-use gdbstub::common::Signal;
-use gdbstub::stub::state_machine::GdbStubStateMachine;
-use gdbstub::stub::{GdbStubError, MultiThreadStopReason};
+use gdbstub::stub::MultiThreadStopReason;
 use kernel::{KernelError, ProgramHeaderError};
 use obconf::{BootEnv, ConsoleType, Vm};
 use std::cmp::max;
@@ -32,7 +29,6 @@ use winit::event_loop::EventLoopProxy;
 mod arch;
 mod channel;
 mod cpu;
-mod debug;
 mod hw;
 mod kernel;
 mod ram;
@@ -62,7 +58,6 @@ fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
 /// Manage a virtual machine that run the kernel.
 pub struct Vmm<'a, 'b> {
     cpu: CpuManager<'a, 'b, crate::hv::Default>, // Drop first.
-    gdb: Option<GdbStubStateMachine<'static, CpuManager<'a, 'b, crate::hv::Default>, DebugClient>>,
     shutdown: Arc<AtomicBool>,
 }
 
@@ -296,74 +291,15 @@ impl<'a, 'b> Vmm<'a, 'b> {
         let shutdown = Arc::new(AtomicBool::new(false));
         let mut cpu = CpuManager::new(Arc::new(hv), args.el, scope, devices, shutdown.clone());
 
-        // Setup GDB stub.
-        let gdb = debugger
-            .map(|client| {
-                gdbstub::stub::GdbStub::new(client)
-                    .run_state_machine(&mut cpu)
-                    .map_err(VmmError::SetupGdbStub)
-            })
-            .transpose()?;
-
         // Spawn main CPU.
         cpu.spawn(
             map.kern_vaddr + kernel_img.entry(),
             Some(map),
-            gdb.is_some(),
+            debugger.is_some(),
         );
 
         // Create VMM.
-        Ok(Self { cpu, gdb, shutdown })
-    }
-
-    fn dispatch_debug(
-        &mut self,
-        mut stop: Option<MultiThreadStopReason<u64>>,
-    ) -> Result<DispatchDebugResult, DispatchDebugError> {
-        loop {
-            // Check current state.
-            let r = match self.gdb.take().unwrap() {
-                GdbStubStateMachine::Idle(s) => {
-                    match self.cpu.dispatch_gdb_idle(s) {
-                        Ok(Ok(v)) => Ok(v),
-                        Ok(Err(v)) => {
-                            // No pending data from the debugger.
-                            self.gdb = Some(v.into());
-                            return Ok(DispatchDebugResult::Ok);
-                        }
-                        Err(e) => Err(DispatchDebugError::DispatchIdle(e)),
-                    }
-                }
-                GdbStubStateMachine::Running(s) => {
-                    match self.cpu.dispatch_gdb_running(s, stop.take()) {
-                        Ok(Ok(v)) => Ok(v),
-                        Ok(Err(v)) => {
-                            // No pending data from the debugger.
-                            self.gdb = Some(v.into());
-                            return Ok(DispatchDebugResult::Ok);
-                        }
-                        Err(e) => Err(DispatchDebugError::DispatchRunning(e)),
-                    }
-                }
-                GdbStubStateMachine::CtrlCInterrupt(s) => {
-                    self.cpu.lock();
-
-                    s.interrupt_handled(
-                        &mut self.cpu,
-                        Some(MultiThreadStopReason::Signal(Signal::SIGINT)),
-                    )
-                    .map_err(DispatchDebugError::HandleInterrupt)
-                }
-                GdbStubStateMachine::Disconnected(_) => {
-                    return Ok(DispatchDebugResult::Disconnected)
-                }
-            };
-
-            match r {
-                Ok(v) => self.gdb = Some(v),
-                Err(e) => return Err(e),
-            }
-        }
+        Ok(Self { cpu, shutdown })
     }
 }
 
@@ -404,23 +340,6 @@ impl VmmEvent {
             reason: Box::new(reason),
         }
     }
-}
-
-pub enum DispatchDebugResult {
-    Ok,
-    Disconnected,
-}
-
-#[derive(Debug, Error)]
-enum DispatchDebugError {
-    #[error("couldn't dispatch idle state")]
-    DispatchIdle(#[source] debug::DispatchGdbIdleError),
-
-    #[error("couldn't dispatch running state")]
-    DispatchRunning(#[source] debug::DispatchGdbRunningError),
-
-    #[error("couldn't handle CTRL+C interrupt")]
-    HandleInterrupt(#[source] gdbstub::stub::GdbStubError<GdbError, std::io::Error>),
 }
 
 #[derive(Debug, Error)]
@@ -523,11 +442,6 @@ pub enum VmmError {
 
     #[error("couldn't build RAM")]
     BuildRam(#[source] ram::RamBuilderError),
-
-    #[error("couldn't setup a GDB stub")]
-    SetupGdbStub(
-        #[source] GdbStubError<GdbError, <DebugClient as gdbstub::conn::Connection>::Error>,
-    ),
 }
 
 /// Represents an error when [`main_cpu()`] fails to reach event loop.
