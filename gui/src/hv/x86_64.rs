@@ -4,7 +4,7 @@ use x86_64::{Efer, Rflags};
 
 /// States of a CPU.
 pub trait CpuStates {
-    type Err: Error + Send + 'static;
+    type Err: Error + Send + Sync + 'static;
 
     fn get_rax(&mut self) -> Result<usize, Self::Err>;
     fn get_rbx(&mut self) -> Result<usize, Self::Err>;

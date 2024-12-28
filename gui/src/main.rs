@@ -8,6 +8,7 @@ use self::ui::{
     MainWindow, PlatformExt, ProfileModel, ResolutionModel, RuntimeExt, SlintBackend,
     WaitForDebugger,
 };
+use self::vmm::{Vmm, VmmError};
 use async_net::{TcpListener, TcpStream};
 use clap::{Parser, ValueEnum};
 use erdp::ErrorDisplay;
@@ -242,8 +243,10 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
     let graphics = graphics
         .build(&profile, attrs, &shutdown)
         .map_err(ProgramError::BuildGraphicsEngine)?;
-    let (mut vmm, main) = self::vmm::create_channel();
     let mut gdb_in = [0; 1024];
+
+    // Start VMM.
+    let mut vmm = Vmm::new(&profile, &kernel, None, &shutdown).map_err(ProgramError::StartVmm)?;
 
     loop {
         // Prepare futures to poll.
@@ -516,4 +519,7 @@ enum ProgramError {
 
     #[error("couldn't build graphics engine")]
     BuildGraphicsEngine(#[source] GraphicsError),
+
+    #[error("couldn't start VMM")]
+    StartVmm(#[source] VmmError),
 }

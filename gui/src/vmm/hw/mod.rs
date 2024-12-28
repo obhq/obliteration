@@ -114,7 +114,7 @@ pub trait Device: Send + Sync {
 /// Context for a CPU to execute operations on a virtual device.
 pub trait DeviceContext<C: Cpu> {
     /// Execute immeditately after the VM exited.
-    fn exited(&mut self, cpu: &mut C) -> Result<bool, Box<dyn Error + Send>> {
+    fn exited(&mut self, cpu: &mut C) -> Result<bool, Box<dyn Error + Send + Sync>> {
         let _ = cpu;
         Ok(true)
     }
@@ -126,7 +126,7 @@ pub trait DeviceContext<C: Cpu> {
     ) -> Result<bool, Box<dyn Error + Send + Sync>>;
 
     /// Always execute after the exited event has been handled (before enter the VM again).
-    fn post(&mut self, cpu: &mut C) -> Result<bool, Box<dyn Error + Send>> {
+    fn post(&mut self, cpu: &mut C) -> Result<bool, Box<dyn Error + Send + Sync>> {
         let _ = cpu;
         Ok(true)
     }

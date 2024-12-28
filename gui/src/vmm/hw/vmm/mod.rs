@@ -2,10 +2,9 @@
 use self::context::Context;
 use super::{Device, DeviceContext};
 use crate::hv::Cpu;
-use crate::vmm::VmmEvent;
+use crate::vmm::channel::MainStream;
 use obconf::VmmMemory;
 use std::num::NonZero;
-use winit::event_loop::EventLoopProxy;
 
 mod context;
 
@@ -27,9 +26,9 @@ impl Vmm {
 
     pub fn create_context<'a, C: Cpu>(
         &'a self,
-        el: EventLoopProxy<VmmEvent>,
+        main: &'a MainStream,
     ) -> Box<dyn DeviceContext<C> + 'a> {
-        Box::new(Context::new(self, el))
+        Box::new(Context::new(self, main))
     }
 }
 

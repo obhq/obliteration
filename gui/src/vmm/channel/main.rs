@@ -1,17 +1,29 @@
 use gdbstub::stub::MultiThreadStopReason;
+use obconf::ConsoleType;
+use std::error::Error;
 
-/// Provides method to send and receive events from the screen.
-pub struct ScreenStream {}
+/// Provides method to send and receive events from the main thread.
+pub struct MainStream {}
 
-impl ScreenStream {
+impl MainStream {
     pub(super) fn new() -> Self {
         Self {}
     }
 
-    pub fn recv(&self) {}
+    pub fn error(&self, reason: impl Error + Send + Sync + 'static) {
+        todo!()
+    }
+
+    pub fn log(&self, ty: ConsoleType, msg: impl Into<String>) {
+        todo!()
+    }
 
     pub fn breakpoint(&self, stop: Option<MultiThreadStopReason<u64>>) -> BreakpointLock {
-        BreakpointLock {}
+        todo!()
+    }
+
+    pub fn exit(&self, success: bool) {
+        todo!()
     }
 }
 

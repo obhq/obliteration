@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-pub use self::channel::*;
-
+use self::channel::{create_channel, VmmStream};
 use self::cpu::CpuManager;
 use self::hw::{setup_devices, Device};
 use self::kernel::{
@@ -16,13 +15,13 @@ use obconf::{BootEnv, ConsoleType, Vm};
 use std::cmp::max;
 use std::error::Error;
 use std::ffi::CStr;
+use std::future::Future;
 use std::io::Read;
 use std::num::NonZero;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
-use winit::event_loop::EventLoopProxy;
 
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
@@ -37,21 +36,24 @@ mod ram;
 pub struct Vmm {
     cpu: CpuManager<crate::hv::Default>, // Drop first.
     shutdown: Arc<AtomicBool>,
+    events: VmmStream,
 }
 
 impl Vmm {
-    pub fn new(args: VmmArgs, shutdown: Arc<AtomicBool>) -> Result<Self, VmmError> {
-        let path = &args.kernel;
-        let debugger = args.debugger;
-
+    pub fn new(
+        profile: &Profile,
+        kernel: &Path,
+        debugger: Option<DebugClient>,
+        shutdown: &Arc<AtomicBool>,
+    ) -> Result<Self, VmmError> {
         // Open kernel image.
         let mut kernel_img =
-            Kernel::open(path).map_err(|e| VmmError::OpenKernel(e, path.to_path_buf()))?;
+            Kernel::open(kernel).map_err(|e| VmmError::OpenKernel(e, kernel.into()))?;
 
         // Get program header enumerator.
         let hdrs = kernel_img
             .program_headers()
-            .map_err(|e| VmmError::EnumerateProgramHeaders(e, path.to_path_buf()))?;
+            .map_err(|e| VmmError::EnumerateProgramHeaders(e, kernel.into()))?;
 
         // Parse program headers.
         let mut segments = Vec::new();
@@ -60,8 +62,7 @@ impl Vmm {
 
         for (index, item) in hdrs.enumerate() {
             // Check if success.
-            let hdr =
-                item.map_err(|e| VmmError::ReadProgramHeader(e, index, path.to_path_buf()))?;
+            let hdr = item.map_err(|e| VmmError::ReadProgramHeader(e, index, kernel.into()))?;
 
             // Process the header.
             match hdr.p_type {
@@ -109,7 +110,7 @@ impl Vmm {
         // Seek to PT_NOTE.
         let mut data: std::io::Take<&mut std::fs::File> = kernel_img
             .segment_data(&note)
-            .map_err(|e| VmmError::SeekToNote(e, path.to_path_buf()))?;
+            .map_err(|e| VmmError::SeekToNote(e, kernel.into()))?;
 
         // Parse PT_NOTE.
         let mut vm_page_size = None;
@@ -239,7 +240,7 @@ impl Vmm {
             match std::io::copy(&mut data, &mut seg) {
                 Ok(v) => {
                     if v != hdr.p_filesz {
-                        return Err(VmmError::IncompleteKernel(path.to_path_buf()));
+                        return Err(VmmError::IncompleteKernel(kernel.into()));
                     }
                 }
                 Err(e) => return Err(VmmError::ReadKernel(e, hdr.p_offset)),
@@ -257,7 +258,7 @@ impl Vmm {
             host_page_size,
         });
 
-        ram.alloc_args(env, args.profile.kernel_config().clone())
+        ram.alloc_args(env, profile.kernel_config().clone())
             .map_err(VmmError::AllocateRamForArgs)?;
 
         // Build RAM.
@@ -266,7 +267,8 @@ impl Vmm {
             .map_err(VmmError::BuildRam)?;
 
         // Spawn main CPU.
-        let mut cpu = CpuManager::new(Arc::new(hv), args.el, devices, shutdown.clone());
+        let (events, main) = create_channel();
+        let mut cpu = CpuManager::new(Arc::new(hv), main, devices, shutdown.clone());
 
         cpu.spawn(
             map.kern_vaddr + kernel_img.entry(),
@@ -274,8 +276,15 @@ impl Vmm {
             debugger.is_some(),
         );
 
-        // Create VMM.
-        Ok(Self { cpu, shutdown })
+        Ok(Self {
+            cpu,
+            shutdown: shutdown.clone(),
+            events,
+        })
+    }
+
+    pub fn recv(&mut self) -> impl Future<Output = Option<VmmEvent>> + '_ {
+        self.events.recv()
     }
 
     #[cfg(unix)]
@@ -307,14 +316,6 @@ impl Drop for Vmm {
         // before they try to join with it.
         self.shutdown.store(true, Ordering::Relaxed);
     }
-}
-
-/// Encapsulates arguments for [`Vmm::new()`].
-pub struct VmmArgs<'a> {
-    pub profile: &'a Profile,
-    pub kernel: PathBuf,
-    pub debugger: Option<DebugClient>,
-    pub el: EventLoopProxy<VmmEvent>,
 }
 
 /// Event from VMM.
@@ -446,7 +447,7 @@ pub enum VmmError {
 #[derive(Debug, Error)]
 enum MainCpuError {
     #[error("couldn't get vCPU states")]
-    GetCpuStatesFailed(#[source] Box<dyn Error + Send>),
+    GetCpuStatesFailed(#[source] Box<dyn Error + Send + Sync>),
 
     #[cfg(target_arch = "aarch64")]
     #[error("vCPU does not support {0:#x} page size")]
@@ -457,5 +458,5 @@ enum MainCpuError {
     PhysicalAddressTooSmall,
 
     #[error("couldn't commit vCPU states")]
-    CommitCpuStatesFailed(#[source] Box<dyn Error + Send>),
+    CommitCpuStatesFailed(#[source] Box<dyn Error + Send + Sync>),
 }

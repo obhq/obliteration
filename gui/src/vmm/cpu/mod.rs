@@ -3,9 +3,9 @@ pub use self::arch::*;
 
 use self::controller::CpuController;
 use self::debug::{DebugReq, DebugRes, Debugger};
+use super::channel::MainStream;
 use super::hw::{DeviceContext, DeviceTree};
 use super::ram::RamMap;
-use super::VmmEvent;
 use crate::hv::{Cpu, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, Hypervisor};
 use gdbstub::common::{Signal, Tid};
 use gdbstub::stub::MultiThreadStopReason;
@@ -21,7 +21,6 @@ use std::ops::Deref;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use thiserror::Error;
-use winit::event_loop::EventLoopProxy;
 
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
@@ -32,7 +31,7 @@ mod debug;
 /// Manage all virtual CPUs.
 pub struct CpuManager<H> {
     hv: Arc<H>,
-    el: EventLoopProxy<VmmEvent>,
+    main: Arc<MainStream>,
     devices: Arc<DeviceTree>,
     cpus: Vec<CpuController>,
     breakpoint: Arc<Mutex<()>>,
@@ -46,13 +45,13 @@ impl<H: Hypervisor> CpuManager<H> {
 
     pub fn new(
         hv: Arc<H>,
-        el: EventLoopProxy<VmmEvent>,
+        main: MainStream,
         devices: Arc<DeviceTree>,
         shutdown: Arc<AtomicBool>,
     ) -> Self {
         Self {
             hv,
-            el,
+            main: Arc::new(main),
             devices,
             cpus: Vec::new(),
             breakpoint: Arc::default(),
@@ -65,7 +64,7 @@ impl<H: Hypervisor> CpuManager<H> {
         // Setup arguments.
         let args = Args {
             hv: self.hv.clone(),
-            el: self.el.clone(),
+            main: self.main.clone(),
             devices: self.devices.clone(),
             breakpoint: self.breakpoint.clone(),
             shutdown: self.shutdown.clone(),
@@ -104,17 +103,13 @@ impl<H: Hypervisor> CpuManager<H> {
         let mut cpu = match args.hv.create_cpu(0) {
             Ok(v) => v,
             Err(e) => {
-                args.el
-                    .send_event(VmmEvent::error(0, CpuError::Create(Box::new(e))))
-                    .unwrap();
+                args.main.error(CpuError::Create(Box::new(e)));
                 return;
             }
         };
 
         if let Err(e) = super::arch::setup_main_cpu(&mut cpu, entry, map, args.hv.cpu_features()) {
-            args.el
-                .send_event(VmmEvent::error(0, CpuError::Setup(Box::new(e))))
-                .unwrap();
+            args.main.error(CpuError::Setup(Box::new(e)));
             return;
         }
 
@@ -124,27 +119,25 @@ impl<H: Hypervisor> CpuManager<H> {
                 Ok(true) => {}
                 Ok(false) => return,
                 Err(e) => {
-                    args.el.send_event(VmmEvent::error(0, e)).unwrap();
+                    args.main.error(e);
                     return;
                 }
             }
         }
 
         // Run.
-        Self::run_cpu(&args, debug, cpu, 0);
+        Self::run_cpu(&args, debug, cpu);
     }
 
-    fn run_cpu<'c>(args: &'c Args<H>, debug: Option<Debugger>, mut cpu: H::Cpu<'c>, id: usize) {
+    fn run_cpu<'c>(args: &'c Args<H>, debug: Option<Debugger>, mut cpu: H::Cpu<'c>) {
         // Build device contexts for this CPU.
         let hv = args.hv.deref();
-        let el = &args.el;
+        let main = args.main.as_ref();
         let mut devices = BTreeMap::<usize, Device<'c, H::Cpu<'c>>>::new();
         let t = &args.devices;
 
-        Device::insert(&mut devices, t.console(), |d| {
-            d.create_context(hv, el.clone())
-        });
-        Device::insert(&mut devices, t.vmm(), |d| d.create_context(el.clone()));
+        Device::insert(&mut devices, t.console(), |d| d.create_context(hv, main));
+        Device::insert(&mut devices, t.vmm(), |d| d.create_context(main));
 
         // Dispatch CPU events until shutdown.
         let e = 'main: loop {
@@ -197,7 +190,7 @@ impl<H: Hypervisor> CpuManager<H> {
         };
 
         if let Some(e) = e {
-            args.el.send_event(VmmEvent::error(id, e)).unwrap();
+            args.main.error(e);
         }
 
         // Shutdown other CPUs.
@@ -269,7 +262,7 @@ impl<H: Hypervisor> CpuManager<H> {
         // Notify GUI. We need to allow only one CPU to enter the debugger dispatch loop.
         let lock = args.breakpoint.lock().unwrap();
 
-        args.el.send_event(VmmEvent::Breakpoint(stop)).unwrap();
+        args.main.breakpoint(stop);
 
         // Wait for command from debugger thread.
         loop {
@@ -520,7 +513,7 @@ impl<H: Hypervisor> MultiThreadResume for CpuManager<H> {
 /// Encapsulates arguments for a function to run a CPU.
 struct Args<H> {
     hv: Arc<H>,
-    el: EventLoopProxy<VmmEvent>,
+    main: Arc<MainStream>,
     devices: Arc<DeviceTree>,
     breakpoint: Arc<Mutex<()>>,
     shutdown: Arc<AtomicBool>,
@@ -554,34 +547,34 @@ impl<'a, C: Cpu> Device<'a, C> {
 #[derive(Debug, Error)]
 pub enum CpuError {
     #[error("couldn't create vCPU")]
-    Create(#[source] Box<dyn Error + Send>),
+    Create(#[source] Box<dyn Error + Send + Sync>),
 
     #[error("couldn't setup vCPU")]
-    Setup(#[source] Box<dyn Error + Send>),
+    Setup(#[source] Box<dyn Error + Send + Sync>),
 
     #[error("couldn't run vCPU")]
-    Run(#[source] Box<dyn Error + Send>),
+    Run(#[source] Box<dyn Error + Send + Sync>),
 
     #[error("couldn't execute a VM exited event on a {0}")]
-    DeviceExitHandler(String, #[source] Box<dyn Error + Send>),
+    DeviceExitHandler(String, #[source] Box<dyn Error + Send + Sync>),
 
     #[error("the vCPU attempt to execute a memory-mapped I/O on a non-mapped address {0:#x}")]
     MmioAddr(usize),
 
     #[error("couldn't execute a memory-mapped I/O on a {0}")]
-    Mmio(String, #[source] Box<dyn Error + Send>),
+    Mmio(String, #[source] Box<dyn Error + Send + Sync>),
 
     #[error("couldn't get vCPU states")]
-    GetStates(#[source] Box<dyn Error + Send>),
+    GetStates(#[source] Box<dyn Error + Send + Sync>),
 
     #[error("couldn't read {0} register")]
-    ReadReg(&'static str, #[source] Box<dyn Error + Send>),
+    ReadReg(&'static str, #[source] Box<dyn Error + Send + Sync>),
 
     #[error("couldn't translate address {0:#x}")]
-    TranslateAddr(usize, #[source] Box<dyn Error + Send>),
+    TranslateAddr(usize, #[source] Box<dyn Error + Send + Sync>),
 
     #[error("couldn't execute a post VM exit on a {0}")]
-    DevicePostExitHandler(String, #[source] Box<dyn Error + Send>),
+    DevicePostExitHandler(String, #[source] Box<dyn Error + Send + Sync>),
 }
 
 /// Implementation of [`gdbstub::target::Target::Error`].
