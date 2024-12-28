@@ -21,7 +21,7 @@ pub unsafe fn new(
     ram_size: NonZero<usize>,
     ram_block: NonZero<usize>,
     debug: bool,
-) -> Result<Whp, WhpError> {
+) -> Result<impl Hypervisor, WhpError> {
     // Create RAM.
     let ram = Ram::new(ram_size, ram_block, WhpMapper).map_err(WhpError::CreateRamFailed)?;
 
@@ -50,7 +50,7 @@ pub unsafe fn new(
 /// Implementation of [`Hypervisor`] using Windows Hypervisor Platform.
 ///
 /// Fields in this struct need to drop in a correct order.
-pub struct Whp {
+struct Whp {
     part: Partition,
     feats: CpuFeats,
     ram: Ram<WhpMapper>,

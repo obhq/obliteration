@@ -28,7 +28,7 @@ pub unsafe fn new(
     ram_size: NonZero<usize>,
     ram_block: NonZero<usize>,
     debug: bool,
-) -> Result<Hvf, HvfError> {
+) -> Result<impl Hypervisor, HvfError> {
     // Create RAM.
     let ram = Ram::new(ram_size, ram_block, HvfMapper).map_err(HvfError::CreateRamFailed)?;
 
@@ -72,7 +72,7 @@ pub unsafe fn new(
 }
 
 /// Implementation of [`Hypervisor`] using Hypervisor Framework.
-pub struct Hvf {
+struct Hvf {
     ram: Ram<HvfMapper>,
     debug: bool,
     cpu_config: hv_vcpu_config_t,

@@ -3,7 +3,8 @@ use self::channel::{create_channel, VmmStream};
 use self::cpu::CpuManager;
 use self::hw::{setup_devices, Device};
 use self::kernel::{
-    Kernel, PT_DYNAMIC, PT_GNU_EH_FRAME, PT_GNU_RELRO, PT_GNU_STACK, PT_LOAD, PT_NOTE, PT_PHDR,
+    Kernel, NoteError, PT_DYNAMIC, PT_GNU_EH_FRAME, PT_GNU_RELRO, PT_GNU_STACK, PT_LOAD, PT_NOTE,
+    PT_PHDR,
 };
 use self::ram::RamBuilder;
 use crate::gdb::DebugClient;
@@ -14,11 +15,9 @@ use kernel::{KernelError, ProgramHeaderError};
 use obconf::{BootEnv, ConsoleType, Vm};
 use std::cmp::max;
 use std::error::Error;
-use std::ffi::CStr;
 use std::future::Future;
-use std::io::Read;
 use std::num::NonZero;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
@@ -33,27 +32,24 @@ mod kernel;
 mod ram;
 
 /// Manage a virtual machine that run the kernel.
-pub struct Vmm {
-    cpu: CpuManager<crate::hv::Default>, // Drop first.
+pub struct Vmm<H> {
+    cpu: CpuManager<H>, // Drop first.
     shutdown: Arc<AtomicBool>,
     events: VmmStream,
 }
 
-impl Vmm {
+impl Vmm<()> {
     pub fn new(
         profile: &Profile,
         kernel: &Path,
         debugger: Option<DebugClient>,
         shutdown: &Arc<AtomicBool>,
-    ) -> Result<Self, VmmError> {
-        // Open kernel image.
-        let mut kernel_img =
-            Kernel::open(kernel).map_err(|e| VmmError::OpenKernel(e, kernel.into()))?;
-
+    ) -> Result<Vmm<impl Hypervisor>, VmmError> {
         // Get program header enumerator.
-        let hdrs = kernel_img
+        let mut img = Kernel::open(kernel).map_err(|e| VmmError::OpenKernel(e))?;
+        let hdrs = img
             .program_headers()
-            .map_err(|e| VmmError::EnumerateProgramHeaders(e, kernel.into()))?;
+            .map_err(|e| VmmError::EnumerateProgramHeaders(e))?;
 
         // Parse program headers.
         let mut segments = Vec::new();
@@ -61,13 +57,11 @@ impl Vmm {
         let mut note = None;
 
         for (index, item) in hdrs.enumerate() {
-            // Check if success.
-            let hdr = item.map_err(|e| VmmError::ReadProgramHeader(e, index, kernel.into()))?;
+            let hdr = item.map_err(|e| VmmError::ReadProgramHeader(index, e))?;
 
-            // Process the header.
             match hdr.p_type {
                 PT_LOAD => {
-                    if hdr.p_filesz > u64::try_from(hdr.p_memsz).unwrap() {
+                    if hdr.p_filesz > hdr.p_memsz {
                         return Err(VmmError::InvalidFilesz(index));
                     }
 
@@ -87,7 +81,7 @@ impl Vmm {
 
                     note = Some(hdr);
                 }
-                PT_PHDR | PT_GNU_EH_FRAME | PT_GNU_STACK | PT_GNU_RELRO => {}
+                PT_PHDR | PT_GNU_EH_FRAME | PT_GNU_STACK | PT_GNU_RELRO => (),
                 v => return Err(VmmError::UnknownProgramHeaderType(v, index)),
             }
         }
@@ -101,73 +95,33 @@ impl Vmm {
             return Err(VmmError::ElfHeaderNotInFirstLoadSegment);
         }
 
-        // Check if PT_DYNAMIC exists.
+        // Check if PT_DYNAMIC and PT_NOTE exists.
         let dynamic = dynamic.ok_or(VmmError::NoDynamicSegment)?;
-
-        // Check if PT_NOTE exists.
         let note = note.ok_or(VmmError::NoNoteSegment)?;
-
-        // Seek to PT_NOTE.
-        let mut data: std::io::Take<&mut std::fs::File> = kernel_img
-            .segment_data(&note)
-            .map_err(|e| VmmError::SeekToNote(e, kernel.into()))?;
 
         // Parse PT_NOTE.
         let mut vm_page_size = None;
 
-        for i in 0u32.. {
-            // Check remaining data.
-            if data.limit() == 0 {
-                break;
-            }
+        if note.p_filesz > 1024 * 1024 {
+            return Err(VmmError::NoteSegmentTooLarge);
+        }
 
-            // Read note header.
-            let mut buf = [0u8; 4 * 3];
+        for (i, note) in img.notes(&note).map_err(VmmError::SeekToNote)?.enumerate() {
+            let note = note.map_err(move |e| VmmError::ReadKernelNote(i, e))?;
 
-            data.read_exact(&mut buf)
-                .map_err(|e| VmmError::ReadKernelNote(e, i))?;
-
-            // Parse note header.
-            let nlen: usize = u32::from_ne_bytes(buf[..4].try_into().unwrap())
-                .try_into()
-                .unwrap();
-            let dlen: usize = u32::from_ne_bytes(buf[4..8].try_into().unwrap())
-                .try_into()
-                .unwrap();
-            let ty = u32::from_ne_bytes(buf[8..].try_into().unwrap());
-
-            if nlen > 0xff {
-                return Err(VmmError::NoteNameTooLarge(i));
-            }
-
-            if dlen > 0xff {
-                return Err(VmmError::InvalidNoteDescription(i));
-            }
-
-            // Read note name + description.
-            let nalign = nlen.next_multiple_of(4);
-            let mut buf = vec![0u8; nalign + dlen];
-
-            data.read_exact(&mut buf)
-                .map_err(|e| VmmError::ReadKernelNoteData(e, i))?;
-
-            // Check name.
-            let name = match CStr::from_bytes_until_nul(&buf) {
-                Ok(v) if v.to_bytes_with_nul().len() == nlen => v,
-                _ => return Err(VmmError::InvalidNoteName(i)),
-            };
-
-            if name.to_bytes() != b"obkrnl" {
+            if note.name.as_ref() != b"obkrnl" {
                 continue;
             }
 
-            // Parse description.
-            match ty {
+            match note.ty {
                 0 => {
                     if vm_page_size.is_some() {
                         return Err(VmmError::DuplicateKernelNote(i));
                     }
-                    vm_page_size = buf[nalign..]
+
+                    vm_page_size = note
+                        .desc
+                        .as_ref()
                         .try_into()
                         .map(usize::from_ne_bytes)
                         .ok()
@@ -182,11 +136,8 @@ impl Vmm {
             }
         }
 
-        // Check if page size exists.
+        // Check if required notes exists.
         let vm_page_size = vm_page_size.ok_or(VmmError::NoPageSizeInKernelNote)?;
-
-        // Get page size on the host.
-        let host_page_size = Self::get_page_size().map_err(VmmError::GetHostPageSize)?;
 
         // Get kernel memory size.
         let mut len = 0;
@@ -203,6 +154,7 @@ impl Vmm {
         }
 
         // Round kernel memory size.
+        let host_page_size = Self::get_page_size().map_err(VmmError::GetHostPageSize)?;
         let block_size = max(vm_page_size, host_page_size);
         let len = NonZero::new(len)
             .ok_or(VmmError::ZeroLengthLoadSegment)?
@@ -229,18 +181,15 @@ impl Vmm {
             .map_err(VmmError::AllocateRamForKernel)?;
 
         for hdr in &segments {
-            // Seek to segment data.
-            let mut data = kernel_img
+            let mut src = img
                 .segment_data(hdr)
-                .map_err(VmmError::SeekToOffset)?;
+                .map_err(|e| VmmError::SeekToOffset(hdr.p_offset, e))?;
+            let mut dst = &mut kern[hdr.p_vaddr..(hdr.p_vaddr + hdr.p_memsz)];
 
-            // Read segment data.
-            let mut seg = &mut kern[hdr.p_vaddr..(hdr.p_vaddr + hdr.p_memsz)];
-
-            match std::io::copy(&mut data, &mut seg) {
+            match std::io::copy(&mut src, &mut dst) {
                 Ok(v) => {
-                    if v != hdr.p_filesz {
-                        return Err(VmmError::IncompleteKernel(kernel.into()));
+                    if v != u64::try_from(hdr.p_filesz).unwrap() {
+                        return Err(VmmError::IncompleteKernel);
                     }
                 }
                 Err(e) => return Err(VmmError::ReadKernel(e, hdr.p_offset)),
@@ -270,19 +219,17 @@ impl Vmm {
         let (events, main) = create_channel();
         let mut cpu = CpuManager::new(Arc::new(hv), main, devices, shutdown.clone());
 
-        cpu.spawn(
-            map.kern_vaddr + kernel_img.entry(),
-            Some(map),
-            debugger.is_some(),
-        );
+        cpu.spawn(map.kern_vaddr + img.entry(), Some(map), debugger.is_some());
 
-        Ok(Self {
+        Ok(Vmm {
             cpu,
             shutdown: shutdown.clone(),
             events,
         })
     }
+}
 
+impl<H> Vmm<H> {
     pub fn recv(&mut self) -> impl Future<Output = Option<VmmEvent>> + '_ {
         self.events.recv()
     }
@@ -310,7 +257,7 @@ impl Vmm {
     }
 }
 
-impl Drop for Vmm {
+impl<H> Drop for Vmm<H> {
     fn drop(&mut self) {
         // Set shutdown flag before dropping the other fields so their background thread can stop
         // before they try to join with it.
@@ -332,25 +279,17 @@ pub enum VmmEvent {
     Breakpoint(Option<MultiThreadStopReason<u64>>),
 }
 
-impl VmmEvent {
-    fn error(cpu: usize, reason: impl Error + Send + 'static) -> Self {
-        Self::Error {
-            cpu,
-            reason: Box::new(reason),
-        }
-    }
-}
-
+/// Represents an error when [`Vmm::new()`] fails.
 #[derive(Debug, Error)]
 pub enum VmmError {
-    #[error("couldn't open kernel path {1}")]
-    OpenKernel(#[source] KernelError, PathBuf),
+    #[error("couldn't open the kernel")]
+    OpenKernel(#[source] KernelError),
 
-    #[error("couldn't start enumerating program headers of {1}")]
-    EnumerateProgramHeaders(#[source] std::io::Error, PathBuf),
+    #[error("couldn't start enumerating program headers")]
+    EnumerateProgramHeaders(#[source] std::io::Error),
 
-    #[error("couldn't read program header #{1} on {2}")]
-    ReadProgramHeader(#[source] ProgramHeaderError, usize, PathBuf),
+    #[error("couldn't read program header #{0}")]
+    ReadProgramHeader(usize, #[source] ProgramHeaderError),
 
     #[error("invalid p_filesz on on PT_LOAD {0}")]
     InvalidFilesz(usize),
@@ -376,29 +315,23 @@ pub enum VmmError {
     #[error("no PT_NOTE on the kernel")]
     NoNoteSegment,
 
-    #[error("couldn't seek to PT_NOTE on {1}")]
-    SeekToNote(#[source] std::io::Error, PathBuf),
+    #[error("PT_NOTE is too large")]
+    NoteSegmentTooLarge,
 
-    #[error("couldn't read kernel note #{1}")]
-    ReadKernelNote(#[source] std::io::Error, u32),
+    #[error("couldn't seek to PT_NOTE")]
+    SeekToNote(#[source] std::io::Error),
 
-    #[error("name on kernel note #{0} is too large")]
-    NoteNameTooLarge(u32),
+    #[error("couldn't read kernel note #{0}")]
+    ReadKernelNote(usize, #[source] NoteError),
 
     #[error("invalid description on kernel note #{0}")]
-    InvalidNoteDescription(u32),
-
-    #[error("couldn't read kernel note #{1} data")]
-    ReadKernelNoteData(#[source] std::io::Error, u32),
-
-    #[error("kernel note #{0} has invalid name")]
-    InvalidNoteName(u32),
+    InvalidNoteDescription(usize),
 
     #[error("kernel note #{0} is duplicated")]
-    DuplicateKernelNote(u32),
+    DuplicateKernelNote(usize),
 
     #[error("unknown type {0} on kernel note #{1}")]
-    UnknownKernelNoteType(u32, u32),
+    UnknownKernelNoteType(u32, usize),
 
     #[error("no page size in kernel note")]
     NoPageSizeInKernelNote,
@@ -424,11 +357,11 @@ pub enum VmmError {
     #[error("couldn't allocate RAM for the kernel")]
     AllocateRamForKernel(#[source] crate::hv::RamError),
 
-    #[error("couldn't seek to offset")]
-    SeekToOffset(#[source] std::io::Error),
+    #[error("couldn't seek to offset {0:#x}")]
+    SeekToOffset(u64, #[source] std::io::Error),
 
-    #[error("{0} is incomplete")]
-    IncompleteKernel(PathBuf),
+    #[error("the kernel is incomplete")]
+    IncompleteKernel,
 
     #[error("couldn't read kernel at offset {1}")]
     ReadKernel(#[source] std::io::Error, u64),

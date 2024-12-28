@@ -36,7 +36,7 @@ pub unsafe fn new(
     ram_size: NonZero<usize>,
     ram_block: NonZero<usize>,
     debug: bool,
-) -> Result<Kvm, KvmError> {
+) -> Result<impl Hypervisor, KvmError> {
     // Create RAM.
     let ram = Ram::new(ram_size, ram_block, KvmMapper).map_err(KvmError::CreateRamFailed)?;
 
@@ -320,7 +320,7 @@ fn get_ext(kvm: BorrowedFd, id: c_int) -> Result<c_uint, Error> {
 /// Implementation of [`Hypervisor`] using KVM.
 ///
 /// Fields in this struct need to drop in a correct order (e.g. vm must be dropped before ram).
-pub struct Kvm {
+struct Kvm {
     feats: CpuFeats,
     cpus: Vec<Mutex<OwnedFd>>,
     vcpu_mmap_size: usize,

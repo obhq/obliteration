@@ -16,15 +16,6 @@ mod os;
 mod ram;
 
 #[cfg(target_os = "linux")]
-pub type Default = self::os::Kvm;
-
-#[cfg(target_os = "macos")]
-pub type Default = self::os::Hvf;
-
-#[cfg(target_os = "windows")]
-pub type Default = self::os::Whp;
-
-#[cfg(target_os = "linux")]
 pub type HypervisorError = self::os::KvmError;
 
 #[cfg(target_os = "macos")]
