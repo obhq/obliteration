@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+pub use self::note::*;
+pub use self::segment::*;
+
 use std::fs::File;
-use std::io::{Read, Seek, SeekFrom, Take};
+use std::io::{Error, ErrorKind, Read, Seek, SeekFrom};
 use std::path::Path;
 use thiserror::Error;
 
-pub use self::segment::*;
-
+mod note;
 mod segment;
 
 /// Encapsulates a kernel ELF file.
@@ -66,23 +68,33 @@ impl Kernel {
         self.e_entry
     }
 
-    pub fn program_headers(&mut self) -> Result<ProgramHeaders, std::io::Error> {
+    pub fn program_headers(&mut self) -> Result<ProgramHeaders, Error> {
         let off = self.file.seek(SeekFrom::Start(self.e_phoff))?;
 
         if off != self.e_phoff {
-            Err(std::io::Error::from(std::io::ErrorKind::UnexpectedEof))
+            Err(Error::from(ErrorKind::UnexpectedEof))
         } else {
             Ok(ProgramHeaders::new(&mut self.file, off, self.e_phnum))
         }
     }
 
-    pub fn segment_data(&mut self, hdr: &ProgramHeader) -> Result<Take<&mut File>, std::io::Error> {
+    /// Note that this will load the whole segment into the memory so you need to check
+    /// [`ProgramHeader::p_filesz`] before calling this method.
+    pub fn notes(&mut self, hdr: &ProgramHeader) -> Result<Notes, Error> {
+        let mut data = Vec::with_capacity(hdr.p_filesz);
+
+        self.segment_data(hdr)?.read_to_end(&mut data)?;
+
+        Ok(Notes::new(data))
+    }
+
+    pub fn segment_data(&mut self, hdr: &ProgramHeader) -> Result<impl Read + '_, Error> {
         let off = self.file.seek(SeekFrom::Start(hdr.p_offset))?;
 
         if off != hdr.p_offset {
-            Err(std::io::Error::from(std::io::ErrorKind::UnexpectedEof))
+            Err(Error::from(ErrorKind::UnexpectedEof))
         } else {
-            Ok(self.file.by_ref().take(hdr.p_filesz))
+            Ok(self.file.by_ref().take(hdr.p_filesz.try_into().unwrap()))
         }
     }
 }
@@ -96,10 +108,10 @@ const ELF_MACHINE: u16 = 183;
 #[derive(Debug, Error)]
 pub enum KernelError {
     #[error("couldn't open kernel file")]
-    OpenImageFailed(#[source] std::io::Error),
+    OpenImageFailed(#[source] Error),
 
     #[error("couldn't read ELF header")]
-    ReadElfHeaderFailed(#[source] std::io::Error),
+    ReadElfHeaderFailed(#[source] Error),
 
     #[error("the kernel is not an ELF file")]
     NotElf,

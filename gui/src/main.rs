@@ -246,7 +246,10 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
     let mut gdb_in = [0; 1024];
 
     // Start VMM.
-    let mut vmm = Vmm::new(&profile, &kernel, None, &shutdown).map_err(ProgramError::StartVmm)?;
+    let mut vmm = match Vmm::new(&profile, &kernel, None, &shutdown) {
+        Ok(v) => v,
+        Err(e) => return Err(ProgramError::StartVmm(kernel, e)),
+    };
 
     loop {
         // Prepare futures to poll.
@@ -520,6 +523,6 @@ enum ProgramError {
     #[error("couldn't build graphics engine")]
     BuildGraphicsEngine(#[source] GraphicsError),
 
-    #[error("couldn't start VMM")]
-    StartVmm(#[source] VmmError),
+    #[error("couldn't start VMM for {0}")]
+    StartVmm(PathBuf, #[source] VmmError),
 }

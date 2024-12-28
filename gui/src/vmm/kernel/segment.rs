@@ -4,13 +4,13 @@ use std::io::Read;
 use std::iter::FusedIterator;
 use thiserror::Error;
 
-pub(crate) const PT_LOAD: u32 = 1;
-pub(crate) const PT_DYNAMIC: u32 = 2;
-pub(crate) const PT_NOTE: u32 = 4;
-pub(crate) const PT_PHDR: u32 = 6;
-pub(crate) const PT_GNU_EH_FRAME: u32 = 0x6474e550;
-pub(crate) const PT_GNU_STACK: u32 = 0x6474e551;
-pub(crate) const PT_GNU_RELRO: u32 = 0x6474e552;
+pub const PT_LOAD: u32 = 1;
+pub const PT_DYNAMIC: u32 = 2;
+pub const PT_NOTE: u32 = 4;
+pub const PT_PHDR: u32 = 6;
+pub const PT_GNU_EH_FRAME: u32 = 0x6474e550;
+pub const PT_GNU_STACK: u32 = 0x6474e551;
+pub const PT_GNU_RELRO: u32 = 0x6474e552;
 
 /// Iterator to enumerate ELF program headers.
 pub struct ProgramHeaders<'a> {
@@ -54,7 +54,7 @@ impl Iterator for ProgramHeaders<'_> {
         let p_type = u32::from_ne_bytes(data[..4].try_into().unwrap());
         let p_offset = u64::from_ne_bytes(data[8..16].try_into().unwrap());
         let p_vaddr = usize::from_ne_bytes(data[16..24].try_into().unwrap());
-        let p_filesz = u64::from_ne_bytes(data[32..40].try_into().unwrap());
+        let p_filesz = usize::from_ne_bytes(data[32..40].try_into().unwrap());
         let p_memsz = usize::from_ne_bytes(data[40..48].try_into().unwrap());
 
         self.parsed += 1;
@@ -76,7 +76,7 @@ pub struct ProgramHeader {
     pub p_type: u32,
     pub p_offset: u64,
     pub p_vaddr: usize,
-    pub p_filesz: u64,
+    pub p_filesz: usize,
     pub p_memsz: usize,
 }
 
