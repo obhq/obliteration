@@ -30,32 +30,29 @@ mod controller;
 mod debug;
 
 /// Manage all virtual CPUs.
-pub struct CpuManager<'a, 'b, H> {
+pub struct CpuManager<H> {
     hv: Arc<H>,
     el: EventLoopProxy<VmmEvent>,
-    scope: &'a std::thread::Scope<'a, 'b>,
     devices: Arc<DeviceTree>,
-    cpus: Vec<CpuController<'a>>,
+    cpus: Vec<CpuController>,
     breakpoint: Arc<Mutex<()>>,
     sw_breakpoints: HashMap<u64, [u8; arch::BREAKPOINT_SIZE.get()]>,
     shutdown: Arc<AtomicBool>,
 }
 
-impl<'a, 'b, H: Hypervisor> CpuManager<'a, 'b, H> {
+impl<H: Hypervisor> CpuManager<H> {
     const GDB_ENOENT: u8 = 2;
     const GDB_EFAULT: u8 = 14;
 
     pub fn new(
         hv: Arc<H>,
         el: EventLoopProxy<VmmEvent>,
-        scope: &'a std::thread::Scope<'a, 'b>,
         devices: Arc<DeviceTree>,
         shutdown: Arc<AtomicBool>,
     ) -> Self {
         Self {
             hv,
             el,
-            scope,
             devices,
             cpus: Vec::new(),
             breakpoint: Arc::default(),
@@ -83,9 +80,7 @@ impl<'a, 'b, H: Hypervisor> CpuManager<'a, 'b, H> {
 
         // Spawn thread to drive vCPU.
         let t = match map {
-            Some(map) => self
-                .scope
-                .spawn(move || Self::main_cpu(args, debugger, start, map)),
+            Some(map) => std::thread::spawn(move || Self::main_cpu(args, debugger, start, map)),
             None => todo!(),
         };
 
@@ -408,7 +403,7 @@ impl<'a, 'b, H: Hypervisor> CpuManager<'a, 'b, H> {
     }
 }
 
-impl<'a, 'b, H: Hypervisor> MultiThreadBase for CpuManager<'a, 'b, H> {
+impl<H: Hypervisor> MultiThreadBase for CpuManager<H> {
     fn read_registers(&mut self, regs: &mut GdbRegs, tid: Tid) -> TargetResult<(), Self> {
         let cpu = self
             .cpus
@@ -492,13 +487,13 @@ impl<'a, 'b, H: Hypervisor> MultiThreadBase for CpuManager<'a, 'b, H> {
     }
 }
 
-impl<'a, 'b, H: Hypervisor> ThreadExtraInfo for CpuManager<'a, 'b, H> {
+impl<H: Hypervisor> ThreadExtraInfo for CpuManager<H> {
     fn thread_extra_info(&self, tid: Tid, buf: &mut [u8]) -> Result<usize, Self::Error> {
         todo!()
     }
 }
 
-impl<'a, 'b, H: Hypervisor> MultiThreadResume for CpuManager<'a, 'b, H> {
+impl<H: Hypervisor> MultiThreadResume for CpuManager<H> {
     fn resume(&mut self) -> Result<(), Self::Error> {
         self.release();
 
