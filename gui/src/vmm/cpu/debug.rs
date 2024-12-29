@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use super::GdbRegs;
+use crate::vmm::arch::GdbRegs;
 use std::sync::mpsc::{Receiver, Sender};
 
 pub fn channel() -> (Debuggee, Debugger) {
