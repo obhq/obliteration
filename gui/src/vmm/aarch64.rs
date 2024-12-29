@@ -1,8 +1,19 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+use super::cpu::GdbError;
 use super::ram::RamMap;
-use super::MainCpuError;
-use crate::hv::{Cpu, CpuCommit, CpuFeats, CpuStates, Pstate, Sctlr, Tcr};
+use super::{MainCpuError, Vmm};
+use crate::hv::{Cpu, CpuCommit, CpuFeats, CpuStates, Hypervisor, Pstate, Sctlr, Tcr};
+use gdbstub::target::ext::base::BaseOps;
+use gdbstub::target::ext::breakpoints::{
+    Breakpoints, BreakpointsOps, SwBreakpoint, SwBreakpointOps,
+};
+use gdbstub::target::TargetResult;
+use std::num::NonZero;
 use std::sync::atomic::Ordering;
+
+pub type GdbRegs = gdbstub_arch::aarch64::reg::AArch64CoreRegs;
+
+pub const BREAKPOINT_SIZE: NonZero<usize> = NonZero::new(4).unwrap();
 
 pub fn setup_main_cpu(
     cpu: &mut impl Cpu,
@@ -90,4 +101,33 @@ pub fn setup_main_cpu(
     states
         .commit()
         .map_err(|e| MainCpuError::CommitCpuStatesFailed(Box::new(e)))
+}
+
+impl<H: Hypervisor> gdbstub::target::Target for Vmm<H> {
+    type Arch = gdbstub_arch::aarch64::AArch64;
+    type Error = GdbError;
+
+    fn base_ops(&mut self) -> BaseOps<'_, Self::Arch, Self::Error> {
+        BaseOps::MultiThread(self)
+    }
+
+    fn support_breakpoints(&mut self) -> Option<BreakpointsOps<'_, Self>> {
+        Some(self)
+    }
+}
+
+impl<H: Hypervisor> Breakpoints for Vmm<H> {
+    fn support_sw_breakpoint(&mut self) -> Option<SwBreakpointOps<'_, Self>> {
+        Some(self)
+    }
+}
+
+impl<H: Hypervisor> SwBreakpoint for Vmm<H> {
+    fn add_sw_breakpoint(&mut self, addr: u64, kind: usize) -> TargetResult<bool, Self> {
+        todo!()
+    }
+
+    fn remove_sw_breakpoint(&mut self, addr: u64, kind: usize) -> TargetResult<bool, Self> {
+        todo!()
+    }
 }
