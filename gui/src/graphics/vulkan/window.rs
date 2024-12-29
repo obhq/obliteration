@@ -47,8 +47,9 @@ impl Drop for VulkanWindow {
 }
 
 impl RuntimeWindow for VulkanWindow {
-    fn on_resized(&self, new: PhysicalSize<u32>) -> Result<(), Box<dyn Error + Send + Sync>> {
-        todo!()
+    fn on_resized(&self, _: PhysicalSize<u32>) -> Result<(), Box<dyn Error + Send + Sync>> {
+        // Vulkan windows does not allowed to resize.
+        Ok(())
     }
 
     fn on_close_requested(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
@@ -83,35 +84,39 @@ impl RuntimeWindow for VulkanWindow {
 
     fn on_scale_factor_changed(
         &self,
-        new: f64,
-        sw: InnerSizeWriter,
+        _: f64,
+        _: InnerSizeWriter,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        todo!()
+        Ok(())
     }
 
     fn on_redraw_requested(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
-        todo!()
+        self.window.request_redraw();
+        Ok(())
     }
 }
 
 impl Hook for VulkanWindow {
-    fn new_events(&self, cause: &StartCause) -> Result<(), Box<dyn Error + Send + Sync>> {
-        todo!()
+    fn new_events(&self, _: &StartCause) -> Result<(), Box<dyn Error + Send + Sync>> {
+        Ok(())
     }
 
     fn pre_window_event(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
-        todo!()
+        Ok(())
     }
 
-    fn window_destroyed(&self, id: WindowId) -> Result<(), Box<dyn Error + Send + Sync>> {
-        todo!()
+    fn window_destroyed(&self, _: WindowId) -> Result<(), Box<dyn Error + Send + Sync>> {
+        // This never be our window since we live forever until the event loop exit.
+        Ok(())
     }
 
     fn post_window_event(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
-        todo!()
+        Ok(())
     }
 
     fn about_to_wait(&self) -> Result<ControlFlow, Box<dyn Error + Send + Sync>> {
-        todo!()
+        // TODO: Not sure if we need Poll here since we always request a redraw when we received
+        // redraw requested.
+        Ok(ControlFlow::Wait)
     }
 }
