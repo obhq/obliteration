@@ -40,7 +40,7 @@ pub trait Hypervisor: Send + Sync + 'static {
     fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, Self::CpuErr>;
 }
 
-/// Represents a core of the PS4 CPU.
+/// Represents a core of the CPU.
 ///
 /// On AArch64 this represent one Processing Element (PE).
 pub trait Cpu {
@@ -54,9 +54,7 @@ pub trait Cpu {
     type TranslateErr: Error + Send + Sync + 'static;
 
     fn id(&self) -> usize;
-
     fn states(&mut self) -> Result<Self::States<'_>, Self::GetStatesErr>;
-
     fn translate(&self, vaddr: usize) -> Result<usize, Self::TranslateErr>;
 }
 

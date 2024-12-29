@@ -97,10 +97,11 @@ impl<H: Hypervisor> SwBreakpoint for Vmm<H> {
             return Ok(false);
         };
 
-        let cpu = self.cpus.first_mut().unwrap();
+        let cpu = self.cpus.get_mut(&0).unwrap();
 
         let translated_addr = cpu
-            .debug_mut()
+            .debug
+            .as_mut()
             .unwrap()
             .translate_address(addr.try_into().unwrap())
             .ok_or(TargetError::Fatal(GdbError::MainCpuExited))?;
@@ -126,10 +127,11 @@ impl<H: Hypervisor> SwBreakpoint for Vmm<H> {
             return Ok(false);
         };
 
-        let cpu = self.cpus.first_mut().unwrap();
+        let cpu = self.cpus.get_mut(&0).unwrap();
 
         let translated_addr = cpu
-            .debug_mut()
+            .debug
+            .as_mut()
             .unwrap()
             .translate_address(addr.try_into().unwrap())
             .ok_or(TargetError::Fatal(GdbError::MainCpuExited))?;

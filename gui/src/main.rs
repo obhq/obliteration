@@ -8,7 +8,7 @@ use self::ui::{
     MainWindow, PlatformExt, ProfileModel, ResolutionModel, RuntimeExt, SlintBackend,
     WaitForDebugger,
 };
-use self::vmm::{Vmm, VmmError};
+use self::vmm::{Vmm, VmmError, VmmEvent};
 use async_net::{TcpListener, TcpStream};
 use clap::{Parser, ValueEnum};
 use erdp::ErrorDisplay;
@@ -275,12 +275,11 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
 
         // Process VMM event.
         if let Some(vmm) = vmm {
-            let vmm = match vmm {
-                Some(v) => v,
-                None => break,
-            };
-
-            todo!()
+            match vmm {
+                VmmEvent::Exit(_, _) => todo!(),
+                VmmEvent::Log(console_type, _) => todo!(),
+                VmmEvent::Breakpoint(base_stop_reason) => todo!(),
+            }
         }
 
         // Process debugger requests.
