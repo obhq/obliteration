@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::Vmm;
 use crate::hv::{Cpu, CpuExit, CpuIo};
-use crate::vmm::channel::MainStream;
 use crate::vmm::hw::{read_u8, DeviceContext, MmioError};
 use obconf::{KernelExit, VmmMemory};
 use std::error::Error;
@@ -11,12 +10,11 @@ use thiserror::Error;
 /// Implementation of [`DeviceContext`].
 pub struct Context<'a> {
     dev: &'a Vmm,
-    main: &'a MainStream,
 }
 
 impl<'a> Context<'a> {
-    pub fn new(dev: &'a Vmm, main: &'a MainStream) -> Self {
-        Self { dev, main }
+    pub fn new(dev: &'a Vmm) -> Self {
+        Self { dev }
     }
 }
 
@@ -24,7 +22,7 @@ impl<C: Cpu> DeviceContext<C> for Context<'_> {
     fn mmio(
         &mut self,
         exit: &mut <C::Exit<'_> as CpuExit>::Io,
-    ) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    ) -> Result<Option<bool>, Box<dyn Error + Send + Sync>> {
         // Check field.
         let off = exit.addr() - self.dev.addr;
 
@@ -34,9 +32,7 @@ impl<C: Cpu> DeviceContext<C> for Context<'_> {
                 .try_into()
                 .map_err(|_| Box::new(ExecError::InvalidExit(exit)))?;
 
-            self.main.exit(exit == KernelExit::Success);
-
-            Ok(false)
+            Ok(Some(exit == KernelExit::Success))
         } else {
             Err(Box::new(ExecError::UnknownField(off)))
         }

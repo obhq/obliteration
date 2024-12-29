@@ -34,7 +34,7 @@ impl<H: Hypervisor, C: Cpu> DeviceContext<C> for Context<'_, H> {
     fn mmio(
         &mut self,
         exit: &mut <C::Exit<'_> as CpuExit>::Io,
-    ) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    ) -> Result<Option<bool>, Box<dyn Error + Send + Sync>> {
         // Check field.
         let off = exit.addr() - self.dev.addr;
 
@@ -76,7 +76,7 @@ impl<H: Hypervisor, C: Cpu> DeviceContext<C> for Context<'_, H> {
             return Err(Box::new(ExecError::UnknownField(off)));
         }
 
-        Ok(true)
+        Ok(None)
     }
 }
 

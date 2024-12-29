@@ -114,21 +114,21 @@ pub trait Device: Send + Sync {
 /// Context for a CPU to execute operations on a virtual device.
 pub trait DeviceContext<C: Cpu> {
     /// Execute immeditately after the VM exited.
-    fn exited(&mut self, cpu: &mut C) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    fn exited(&mut self, cpu: &mut C) -> Result<Option<bool>, Box<dyn Error + Send + Sync>> {
         let _ = cpu;
-        Ok(true)
+        Ok(None)
     }
 
     /// Execute only if the CPU read or write into this device address.
     fn mmio(
         &mut self,
         exit: &mut <C::Exit<'_> as CpuExit>::Io,
-    ) -> Result<bool, Box<dyn Error + Send + Sync>>;
+    ) -> Result<Option<bool>, Box<dyn Error + Send + Sync>>;
 
     /// Always execute after the exited event has been handled (before enter the VM again).
-    fn post(&mut self, cpu: &mut C) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    fn post(&mut self, cpu: &mut C) -> Result<Option<bool>, Box<dyn Error + Send + Sync>> {
         let _ = cpu;
-        Ok(true)
+        Ok(None)
     }
 }
 

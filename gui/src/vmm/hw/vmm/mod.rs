@@ -2,7 +2,6 @@
 use self::context::Context;
 use super::{Device, DeviceContext};
 use crate::hv::Cpu;
-use crate::vmm::channel::MainStream;
 use obconf::VmmMemory;
 use std::num::NonZero;
 
@@ -24,11 +23,8 @@ impl Vmm {
         Self { addr, len }
     }
 
-    pub fn create_context<'a, C: Cpu>(
-        &'a self,
-        main: &'a MainStream,
-    ) -> Box<dyn DeviceContext<C> + 'a> {
-        Box::new(Context::new(self, main))
+    pub fn create_context<'a, C: Cpu>(&'a self) -> Box<dyn DeviceContext<C> + 'a> {
+        Box::new(Context::new(self))
     }
 }
 
