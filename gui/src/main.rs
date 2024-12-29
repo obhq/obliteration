@@ -13,9 +13,11 @@ use async_net::{TcpListener, TcpStream};
 use clap::{Parser, ValueEnum};
 use erdp::ErrorDisplay;
 use futures::{select_biased, AsyncReadExt, FutureExt};
+use obconf::ConsoleType;
 use slint::{ComponentHandle, ModelRc, SharedString, ToSharedString, VecModel, WindowHandle};
 use std::cell::Cell;
 use std::future::Future;
+use std::io::{stderr, stdout, Write};
 use std::net::SocketAddrV4;
 use std::path::PathBuf;
 use std::pin::pin;
@@ -277,8 +279,14 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
         if let Some(vmm) = vmm {
             match vmm {
                 VmmEvent::Exit(_, _) => todo!(),
-                VmmEvent::Log(console_type, _) => todo!(),
-                VmmEvent::Breakpoint(base_stop_reason) => todo!(),
+                VmmEvent::Log(t, m) => {
+                    let m = m.as_bytes();
+
+                    match t {
+                        ConsoleType::Info => stdout().write_all(m).unwrap(),
+                        ConsoleType::Warn | ConsoleType::Error => stderr().write_all(m).unwrap(),
+                    }
+                }
             }
         }
 

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::arch::{GdbRegs, BREAKPOINT_SIZE};
-use self::channel::{create_channel, MainStream, VmmStream};
+use self::channel::VmmStream;
 use self::hw::{setup_devices, Device, DeviceTree};
 use self::kernel::{
     Kernel, NoteError, PT_DYNAMIC, PT_GNU_EH_FRAME, PT_GNU_RELRO, PT_GNU_STACK, PT_LOAD, PT_NOTE,
@@ -10,7 +10,7 @@ use self::ram::{RamBuilder, RamMap};
 use crate::gdb::DebugClient;
 use crate::hv::{CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, Hypervisor, Ram};
 use crate::profile::Profile;
-use futures::FutureExt;
+use futures::{select_biased, FutureExt};
 use gdbstub::common::{Signal, Tid};
 use gdbstub::stub::MultiThreadStopReason;
 use gdbstub::target::ext::base::multithread::{
@@ -24,9 +24,7 @@ use rustc_hash::FxHashMap;
 use std::cmp::max;
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
-use std::future::Future;
 use std::num::NonZero;
-use std::ops::Deref;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -46,14 +44,13 @@ mod ram;
 /// Manage a virtual machine that run the kernel.
 pub struct Vmm<H> {
     hv: Arc<H>,
-    main: Arc<MainStream>,
     devices: Arc<DeviceTree>,
     cpus: FxHashMap<usize, Cpu>,
     next: usize,
     breakpoint: Arc<Mutex<()>>,
     sw_breakpoints: HashMap<u64, [u8; BREAKPOINT_SIZE.get()]>,
+    logs: Arc<VmmStream<(ConsoleType, String)>>,
     shutdown: Arc<AtomicBool>,
-    events: VmmStream,
 }
 
 impl Vmm<()> {
@@ -233,17 +230,15 @@ impl Vmm<()> {
             .map_err(VmmError::BuildRam)?;
 
         // Spawn main CPU.
-        let (events, main) = create_channel();
         let mut vmm = Vmm {
             hv: Arc::new(hv),
-            main: Arc::new(main),
             devices,
             cpus: FxHashMap::default(),
             next: 0,
             breakpoint: Arc::default(),
             sw_breakpoints: HashMap::new(),
+            logs: Arc::new(VmmStream::new(const { NonZero::new(100).unwrap() })),
             shutdown: shutdown.clone(),
-            events,
         };
 
         vmm.spawn(map.kern_vaddr + img.entry(), Some(map), debugger.is_some());
@@ -253,20 +248,27 @@ impl Vmm<()> {
 }
 
 impl<H> Vmm<H> {
-    pub fn recv(&mut self) -> impl Future<Output = VmmEvent> + '_ {
-        std::future::poll_fn(|cx| {
+    pub async fn recv(&mut self) -> VmmEvent {
+        // Prepare futures to poll.
+        let exit = std::future::poll_fn(|cx| {
             for (&id, cpu) in &mut self.cpus {
                 // The sender side will never close without sending the value.
                 if cpu.exiting.poll_unpin(cx).is_ready() {
                     let c = self.cpus.remove(&id).unwrap();
                     let r = c.thread.join().unwrap();
 
-                    return Poll::Ready(VmmEvent::Exit(id, r));
+                    return Poll::Ready((id, r));
                 }
             }
 
             Poll::Pending
-        })
+        });
+
+        // Poll.
+        select_biased! {
+            v = self.logs.recv().fuse() => VmmEvent::Log(v.0, v.1),
+            v = exit.fuse() => VmmEvent::Exit(v.0, v.1)
+        }
     }
 
     pub fn lock(&mut self) {
@@ -312,9 +314,9 @@ impl<H: Hypervisor> Vmm<H> {
         // Setup arguments.
         let args = CpuArgs {
             hv: self.hv.clone(),
-            main: self.main.clone(),
             devices: self.devices.clone(),
             breakpoint: self.breakpoint.clone(),
+            logs: self.logs.clone(),
             shutdown: self.shutdown.clone(),
         };
 
@@ -385,12 +387,12 @@ impl<H: Hypervisor> Vmm<H> {
         mut cpu: H::Cpu<'c>,
     ) -> Result<bool, CpuError> {
         // Build device contexts for this CPU.
-        let hv = args.hv.deref();
-        let main = args.main.as_ref();
-        let mut devices = BTreeMap::<usize, self::cpu::Device<'c, H::Cpu<'c>>>::new();
+        let hv = args.hv.as_ref();
         let t = &args.devices;
+        let logs = args.logs.as_ref();
+        let mut devices = BTreeMap::<usize, self::cpu::Device<'c, H::Cpu<'c>>>::new();
 
-        self::cpu::Device::insert(&mut devices, t.console(), |d| d.create_context(hv, main));
+        self::cpu::Device::insert(&mut devices, t.console(), |d| d.create_context(hv, logs));
         self::cpu::Device::insert(&mut devices, t.vmm(), |d| d.create_context());
 
         // Dispatch CPU events until shutdown.
@@ -496,7 +498,7 @@ impl<H: Hypervisor> Vmm<H> {
         // Notify GUI. We need to allow only one CPU to enter the debugger dispatch loop.
         let lock = args.breakpoint.lock().unwrap();
 
-        args.main.breakpoint(stop);
+        todo!();
 
         // Wait for command from debugger thread.
         loop {
@@ -774,9 +776,9 @@ struct Cpu {
 /// Encapsulates arguments for a function to run a CPU.
 struct CpuArgs<H> {
     hv: Arc<H>,
-    main: Arc<MainStream>,
     devices: Arc<DeviceTree>,
     breakpoint: Arc<Mutex<()>>,
+    logs: Arc<VmmStream<(ConsoleType, String)>>,
     shutdown: Arc<AtomicBool>,
 }
 
@@ -784,7 +786,6 @@ struct CpuArgs<H> {
 pub enum VmmEvent {
     Exit(usize, Result<bool, CpuError>),
     Log(ConsoleType, String),
-    Breakpoint(Option<MultiThreadStopReason<u64>>),
 }
 
 /// Represents an error when [`Vmm::new()`] fails.

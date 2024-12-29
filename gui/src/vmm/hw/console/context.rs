@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::Console;
 use crate::hv::{Cpu, CpuExit, CpuIo, Hypervisor};
-use crate::vmm::channel::MainStream;
+use crate::vmm::channel::VmmStream;
 use crate::vmm::hw::{read_ptr, read_u8, read_usize, DeviceContext, MmioError};
 use obconf::{ConsoleMemory, ConsoleType};
 use std::error::Error;
@@ -13,17 +13,17 @@ use thiserror::Error;
 pub struct Context<'a, H> {
     dev: &'a Console,
     hv: &'a H,
-    main: &'a MainStream,
+    logs: &'a VmmStream<(ConsoleType, String)>,
     msg_len: Option<NonZero<usize>>,
     msg: Vec<u8>,
 }
 
 impl<'a, H> Context<'a, H> {
-    pub fn new(dev: &'a Console, hv: &'a H, main: &'a MainStream) -> Self {
+    pub fn new(dev: &'a Console, hv: &'a H, logs: &'a VmmStream<(ConsoleType, String)>) -> Self {
         Self {
             dev,
             hv,
-            main,
+            logs,
             msg_len: None,
             msg: Vec::new(),
         }
@@ -70,7 +70,7 @@ impl<H: Hypervisor, C: Cpu> DeviceContext<C> for Context<'_, H> {
             // single allocation when the handler clone the string.
             let msg = std::str::from_utf8(&self.msg).map_err(|_| ExecError::InvalidMsg)?;
 
-            self.main.log(ty, msg);
+            self.logs.send((ty, msg.to_owned()));
             self.msg.clear();
         } else {
             return Err(Box::new(ExecError::UnknownField(off)));
