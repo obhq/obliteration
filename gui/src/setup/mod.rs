@@ -30,7 +30,7 @@ pub async fn run_setup() -> Result<Option<DataMgr>, SetupError> {
         // Check if root partition exists.
         let mgr = DataMgr::new(p).map_err(|e| SetupError::DataManager(p.to_owned(), e))?;
 
-        if mgr.part().meta("md0").is_file() {
+        if mgr.partitions().meta("md0").is_file() {
             return Ok(Some(mgr));
         }
     }
@@ -178,7 +178,7 @@ fn set_data_root(win: SetupWizard) {
         return;
     }
 
-    win.invoke_set_data_root_ok(mgr.part().meta("md0").is_file());
+    win.invoke_set_data_root_ok(mgr.partitions().meta("md0").is_file());
 }
 
 async fn browse_firmware(win: SetupWizard) {
@@ -352,7 +352,7 @@ fn extract_partition(
     };
 
     // Create database file for file/directory metadata.
-    let mp = dmgr.part().meta(dev);
+    let mp = dmgr.partitions().meta(dev);
     let meta = match File::create_new(&mp) {
         Ok(v) => v,
         Err(e) => return Err(PartitionError::CreateFile(mp, e)),
@@ -383,7 +383,7 @@ fn extract_partition(
     drop(tab);
 
     // Extract items.
-    let root = dmgr.part().data(dev);
+    let root = dmgr.partitions().data(dev);
 
     loop {
         // Get next item.

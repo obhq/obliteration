@@ -1710,6 +1710,7 @@ name = "gui"
 version = "0.1.0"
 dependencies = [
  "aarch64",
+ "anstyle-parse",
  "applevisor-sys",
  "ash",
  "ash-window",

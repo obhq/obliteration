@@ -9,9 +9,12 @@ mod part;
 mod prof;
 
 /// Manages all files and directories that stored in the data root.
+///
+/// This does not manage file content. Its job is to organize filesystem hierarchy.
 pub struct DataMgr {
     part: Part,
     prof: Prof,
+    logs: PathBuf,
 }
 
 impl DataMgr {
@@ -20,6 +23,7 @@ impl DataMgr {
         let root: PathBuf = root.into();
         let part = root.join("part");
         let prof = root.join("prof");
+        let logs = root.join("kernel.txt");
 
         // Create top-level directories.
         Self::create_dir(&part)?;
@@ -28,15 +32,20 @@ impl DataMgr {
         Ok(Self {
             part: Part::new(part),
             prof: Prof::new(prof),
+            logs,
         })
     }
 
-    pub fn part(&self) -> &Part {
+    pub fn partitions(&self) -> &Part {
         &self.part
     }
 
-    pub fn prof(&self) -> &Prof {
+    pub fn profiles(&self) -> &Prof {
         &self.prof
+    }
+
+    pub fn logs(&self) -> &Path {
+        &self.logs
     }
 
     fn create_dir(path: &Path) -> Result<(), DataError> {

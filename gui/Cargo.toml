@@ -8,6 +8,7 @@ name = "obliteration"
 path = "src/main.rs"
 
 [dependencies]
+anstyle-parse = "0.2.6"
 async-net = "2.0.0"
 bitfield-struct = "0.9.2"
 bytes = "1.9.0"

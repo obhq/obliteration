@@ -2,6 +2,7 @@
 
 use self::data::{DataError, DataMgr};
 use self::graphics::{EngineBuilder, GraphicsError, PhysicalDevice};
+use self::log::LogWriter;
 use self::profile::{DisplayResolution, Profile};
 use self::setup::{run_setup, SetupError};
 use self::ui::{
@@ -13,11 +14,9 @@ use async_net::{TcpListener, TcpStream};
 use clap::{Parser, ValueEnum};
 use erdp::ErrorDisplay;
 use futures::{select_biased, AsyncReadExt, FutureExt};
-use obconf::ConsoleType;
 use slint::{ComponentHandle, ModelRc, SharedString, ToSharedString, VecModel, WindowHandle};
 use std::cell::Cell;
 use std::future::Future;
-use std::io::{stderr, stdout, Write};
 use std::net::SocketAddrV4;
 use std::path::PathBuf;
 use std::pin::pin;
@@ -34,6 +33,7 @@ mod dialogs;
 mod gdb;
 mod graphics;
 mod hv;
+mod log;
 mod panic;
 mod profile;
 mod rt;
@@ -178,7 +178,7 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
     // Load profiles.
     let mut profiles = Vec::new();
 
-    for l in data.prof().list().map_err(ProgramError::ListProfile)? {
+    for l in data.profiles().list().map_err(ProgramError::ListProfile)? {
         let l = l.map_err(ProgramError::ListProfile)?;
         let p = Profile::load(&l).map_err(ProgramError::LoadProfile)?;
 
@@ -189,7 +189,7 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
     if profiles.is_empty() {
         // Create directory.
         let p = Profile::default();
-        let l = data.prof().data(p.id());
+        let l = data.profiles().data(p.id());
 
         if let Err(e) = std::fs::create_dir(&l) {
             return Err(ProgramError::CreateDirectory(l, e));
@@ -241,6 +241,9 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
         .with_title("Obliteration");
 
     // Prepare to launch VMM.
+    let logs = data.logs();
+    let mut logs =
+        LogWriter::new(logs).map_err(|e| ProgramError::CreateKernelLog(logs.into(), e))?;
     let shutdown = Arc::default();
     let graphics = graphics
         .build(&profile, attrs, &shutdown)
@@ -279,14 +282,7 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
         if let Some(vmm) = vmm {
             match vmm {
                 VmmEvent::Exit(_, _) => todo!(),
-                VmmEvent::Log(t, m) => {
-                    let m = m.as_bytes();
-
-                    match t {
-                        ConsoleType::Info => stdout().write_all(m).unwrap(),
-                        ConsoleType::Warn | ConsoleType::Error => stderr().write_all(m).unwrap(),
-                    }
-                }
+                VmmEvent::Log(t, m) => logs.write(t, m),
             }
         }
 
@@ -332,7 +328,7 @@ async fn run_launcher(
             let win = win.unwrap();
             let row = win.get_selected_profile();
             let pro = profiles.update(row, &win);
-            let loc = data.prof().data(pro.id());
+            let loc = data.profiles().data(pro.id());
 
             // TODO: Display error instead of panic.
             pro.save(loc).unwrap();
@@ -526,6 +522,9 @@ enum ProgramError {
 
     #[error("couldn't show main window")]
     ShowMainWindow(#[source] slint::PlatformError),
+
+    #[error("couldn't create {0}")]
+    CreateKernelLog(PathBuf, #[source] std::io::Error),
 
     #[error("couldn't build graphics engine")]
     BuildGraphicsEngine(#[source] GraphicsError),
