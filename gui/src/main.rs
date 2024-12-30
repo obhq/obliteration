@@ -9,7 +9,7 @@ use self::ui::{
     MainWindow, PlatformExt, ProfileModel, ResolutionModel, RuntimeExt, SlintBackend,
     WaitForDebugger,
 };
-use self::vmm::{Vmm, VmmError, VmmEvent};
+use self::vmm::{CpuError, Vmm, VmmError, VmmEvent};
 use async_net::{TcpListener, TcpStream};
 use clap::{Parser, ValueEnum};
 use erdp::ErrorDisplay;
@@ -281,7 +281,13 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
         // Process VMM event.
         if let Some(vmm) = vmm {
             match vmm {
-                VmmEvent::Exit(_, _) => todo!(),
+                VmmEvent::Exit(id, r) => {
+                    if !r.map_err(ProgramError::CpuThread)? {
+                        return Err(ProgramError::CpuPanic(id, logs.path().into()));
+                    } else if id == 0 {
+                        break;
+                    }
+                }
                 VmmEvent::Log(t, m) => logs.write(t, m),
             }
         }
@@ -531,4 +537,10 @@ enum ProgramError {
 
     #[error("couldn't start VMM for {0}")]
     StartVmm(PathBuf, #[source] VmmError),
+
+    #[error("thread for vCPU #{0} was stopped unexpectedly")]
+    CpuThread(#[source] CpuError),
+
+    #[error("vCPU #{0} was panic, see {1} for more information")]
+    CpuPanic(usize, PathBuf),
 }
