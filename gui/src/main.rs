@@ -391,8 +391,8 @@ async fn run_launcher(
     profiles.select(row, &win);
 
     // Run the window.
-    win.set_center().map_err(ProgramError::CenterMainWindow)?;
     win.show().map_err(ProgramError::ShowMainWindow)?;
+    win.set_center().map_err(ProgramError::CenterMainWindow)?;
     win.wait().await;
 
     // Update selected profile.

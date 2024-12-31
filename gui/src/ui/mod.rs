@@ -27,17 +27,20 @@ where
         move || win.unwrap().hide().unwrap()
     });
 
+    win.show().unwrap();
+
     match parent {
         Some(_) => todo!(),
         None => win.set_center().unwrap(),
     }
 
-    win.show().unwrap();
     win.wait().await;
 }
 
 /// Provides platform-specific methods for [`ComponentHandle`].
 pub trait PlatformExt: ComponentHandle {
+    /// Center window on the screen. This need to call after [`ComponentHandle::show()`] otherwise
+    /// it won't work on macOS.
     fn set_center(&self) -> Result<(), PlatformError>;
 }
 

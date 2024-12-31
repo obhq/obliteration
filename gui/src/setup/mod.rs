@@ -98,8 +98,8 @@ pub async fn run_setup() -> Result<Option<DataMgr>, SetupError> {
     }
 
     // Run the wizard.
-    win.set_center().map_err(SetupError::CenterWindow)?;
     win.show().map_err(SetupError::ShowWindow)?;
+    win.set_center().map_err(SetupError::CenterWindow)?;
     win.wait().await;
 
     drop(win);

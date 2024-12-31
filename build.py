@@ -67,8 +67,10 @@ def export_darwin(root, kern, gui):
     os.mkdir(resources)
 
     # Export files
+    out, gui = os.path.split(gui['executable'])
+
     shutil.copy(kern['executable'], resources)
-    shutil.copy(gui['executable'], macos)
+    shutil.copy(os.path.join(out, gui.capitalize()), macos)
     shutil.copyfile('bundle.icns', os.path.join(resources, 'obliteration.icns'))
     shutil.copy('Info.plist', contents)
 
