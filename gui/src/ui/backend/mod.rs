@@ -1,9 +1,11 @@
+pub(super) use self::wayland::*;
 pub(super) use self::window::Window;
 
-use crate::rt::create_window;
+use crate::rt::{create_window, raw_display_handle, RuntimeWindow};
 use i_slint_core::graphics::RequestedGraphicsAPI;
 use i_slint_renderer_skia::SkiaRenderer;
 use rustc_hash::FxHashMap;
+use rwh05::RawDisplayHandle;
 use slint::platform::{
     duration_until_next_timer_update, update_timers_and_animations, SetPlatformError, WindowAdapter,
 };
@@ -12,10 +14,12 @@ use std::cell::RefCell;
 use std::error::Error;
 use std::rc::{Rc, Weak};
 use std::time::Instant;
+use thiserror::Error;
 use winit::event::StartCause;
 use winit::event_loop::ControlFlow;
 use winit::window::WindowId;
 
+mod wayland;
 mod window;
 
 /// Back-end for Slint to run on top of winit event loop.
@@ -26,20 +30,45 @@ mod window;
 /// - [`slint::Window::show()`] can be called only once per window.
 /// - [`slint::Window::hide()`] will not hide the window on Wayland. You need to drop it instead.
 pub struct SlintBackend {
+    wayland: Option<Wayland>,
     windows: RefCell<FxHashMap<WindowId, Weak<Window>>>,
 }
 
 impl SlintBackend {
-    pub fn new() -> Self {
-        Self {
+    /// # Safety
+    /// The returned [`SlintBackend`] must not outlive the event loop.
+    pub unsafe fn new() -> Result<Self, BackendError> {
+        let mut b = Self {
+            wayland: None,
             windows: RefCell::default(),
+        };
+
+        match raw_display_handle() {
+            RawDisplayHandle::Wayland(d) => b.wayland = Wayland::new(d).map(Some)?,
+            _ => (),
         }
+
+        Ok(b)
     }
 
-    pub fn install(self: Rc<Self>) -> Result<(), SetPlatformError> {
-        slint::platform::set_platform(Box::new(Platform(self.clone())))?;
-        crate::rt::push_hook(self);
+    pub fn install(self) -> Result<(), SetPlatformError> {
+        // We can't keep a strong reference in the Platform since it will live forever. Our object
+        // must be destroyed before the event loop exit.
+        let b = Rc::new(self);
+
+        slint::platform::set_platform(Box::new(Platform(Rc::downgrade(&b))))?;
+        crate::rt::register(b.clone());
+        crate::rt::push_hook(b.clone());
+
+        if b.wayland.is_some() {
+            crate::rt::spawn(async move { b.wayland.as_ref().unwrap().run().await });
+        }
+
         Ok(())
+    }
+
+    pub(super) fn wayland(&self) -> Option<&Wayland> {
+        self.wayland.as_ref()
     }
 }
 
@@ -95,7 +124,7 @@ impl crate::rt::Hook for SlintBackend {
 }
 
 /// Implementation of [`slint::platform::Platform`] for [`SlintBackend`].
-struct Platform(Rc<SlintBackend>);
+struct Platform(Weak<SlintBackend>);
 
 impl Platform {
     fn create_window(
@@ -132,8 +161,11 @@ impl slint::platform::Platform for Platform {
         let win = create_window(attrs, Self::create_window)
             .map_err(|e| PlatformError::OtherError(Box::new(e)))?;
 
+        // Just panic if people try to create the window when the event loop already exited.
         assert!(self
             .0
+            .upgrade()
+            .unwrap()
             .windows
             .borrow_mut()
             .insert(win.id(), Rc::downgrade(&win))
@@ -141,4 +173,24 @@ impl slint::platform::Platform for Platform {
 
         Ok(win)
     }
+}
+
+/// Represents an error when [`SlintBackend`] fails to construct.
+#[derive(Debug, Error)]
+pub enum BackendError {
+    #[cfg(target_os = "linux")]
+    #[error("couldn't get global objects from Wayland compositor")]
+    RetrieveWaylandGlobals(#[source] wayland_client::globals::GlobalError),
+
+    #[cfg(target_os = "linux")]
+    #[error("couldn't bind xdg_wm_base")]
+    BindXdgWmBase(#[source] wayland_client::globals::BindError),
+
+    #[cfg(target_os = "linux")]
+    #[error("couldn't bind xdg_wm_dialog_v1")]
+    BindXdgWmDialogV1(#[source] wayland_client::globals::BindError),
+
+    #[cfg(target_os = "linux")]
+    #[error("couldn't dispatch Wayland request")]
+    DispatchWayland(#[source] wayland_client::DispatchError),
 }

@@ -1,4 +1,5 @@
 use super::PlatformExt;
+use crate::rt::RuntimeWindow;
 use objc::runtime::Object;
 use objc::{msg_send, sel, sel_impl};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -20,6 +21,13 @@ impl<T: ComponentHandle> PlatformExt for T {
         let _: () = unsafe { msg_send![win, center] };
 
         Ok(())
+    }
+
+    fn set_modal<P>(&self, parent: &P) -> Result<(), PlatformError>
+    where
+        P: RuntimeWindow + ?Sized,
+    {
+        todo!()
     }
 }
 

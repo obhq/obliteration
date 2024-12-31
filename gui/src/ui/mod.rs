@@ -2,9 +2,9 @@ pub use self::backend::*;
 pub use self::os::PlatformError;
 pub use self::profile::*;
 
+use crate::rt::{active_window, RuntimeWindow};
 use i_slint_core::window::WindowInner;
 use i_slint_core::InternalToken;
-use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use slint::{ComponentHandle, SharedString};
 
 mod backend;
@@ -14,10 +14,8 @@ mod backend;
 mod os;
 mod profile;
 
-pub async fn error<T>(parent: Option<&T>, msg: impl Into<SharedString>)
-where
-    T: HasDisplayHandle + HasWindowHandle,
-{
+pub async fn error(msg: impl Into<SharedString>) {
+    let parent = active_window();
     let win = ErrorWindow::new().unwrap();
 
     win.set_message(msg.into());
@@ -30,7 +28,7 @@ where
     win.show().unwrap();
 
     match parent {
-        Some(_) => todo!(),
+        Some(p) => win.set_modal(p.as_ref()).unwrap(),
         None => win.set_center().unwrap(),
     }
 
@@ -42,6 +40,9 @@ pub trait PlatformExt: ComponentHandle {
     /// Center window on the screen. This need to call after [`ComponentHandle::show()`] otherwise
     /// it won't work on macOS.
     fn set_center(&self) -> Result<(), PlatformError>;
+    fn set_modal<P>(&self, parent: &P) -> Result<(), PlatformError>
+    where
+        P: RuntimeWindow + ?Sized;
 }
 
 /// Provides methods for [`ComponentHandle`] to work with our async runtime.

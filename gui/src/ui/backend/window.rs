@@ -48,16 +48,16 @@ impl Window {
         }
     }
 
-    pub fn id(&self) -> WindowId {
-        self.winit.id()
-    }
-
     pub fn hidden(&self) -> &Signal<()> {
         &self.hidden
     }
 }
 
 impl RuntimeWindow for Window {
+    fn id(&self) -> WindowId {
+        self.winit.id()
+    }
+
     fn on_resized(
         &self,
         new: winit::dpi::PhysicalSize<u32>,
@@ -155,6 +155,18 @@ impl RuntimeWindow for Window {
         }
 
         Ok(())
+    }
+}
+
+impl HasDisplayHandle for Window {
+    fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
+        self.winit.display_handle()
+    }
+}
+
+impl HasWindowHandle for Window {
+    fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
+        self.winit.window_handle()
     }
 }
 
