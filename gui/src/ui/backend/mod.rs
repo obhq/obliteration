@@ -1,3 +1,4 @@
+#[cfg(target_os = "linux")]
 pub(super) use self::wayland::*;
 pub(super) use self::window::Window;
 
@@ -19,6 +20,7 @@ use winit::event::StartCause;
 use winit::event_loop::ControlFlow;
 use winit::window::WindowId;
 
+#[cfg(target_os = "linux")]
 mod wayland;
 mod window;
 
@@ -30,6 +32,7 @@ mod window;
 /// - [`slint::Window::show()`] can be called only once per window.
 /// - [`slint::Window::hide()`] will not hide the window on Wayland. You need to drop it instead.
 pub struct SlintBackend {
+    #[cfg(target_os = "linux")]
     wayland: Option<Wayland>,
     windows: RefCell<FxHashMap<WindowId, Weak<Window>>>,
 }
@@ -39,11 +42,13 @@ impl SlintBackend {
     /// The returned [`SlintBackend`] must not outlive the event loop.
     pub unsafe fn new() -> Result<Self, BackendError> {
         let mut b = Self {
+            #[cfg(target_os = "linux")]
             wayland: None,
             windows: RefCell::default(),
         };
 
         match raw_display_handle() {
+            #[cfg(target_os = "linux")]
             RawDisplayHandle::Wayland(d) => b.wayland = Wayland::new(d).map(Some)?,
             _ => (),
         }
@@ -60,6 +65,7 @@ impl SlintBackend {
         crate::rt::register(b.clone());
         crate::rt::push_hook(b.clone());
 
+        #[cfg(target_os = "linux")]
         if b.wayland.is_some() {
             crate::rt::spawn(async move { b.wayland.as_ref().unwrap().run().await });
         }
@@ -67,6 +73,7 @@ impl SlintBackend {
         Ok(())
     }
 
+    #[cfg(target_os = "linux")]
     pub(super) fn wayland(&self) -> Option<&Wayland> {
         self.wayland.as_ref()
     }
