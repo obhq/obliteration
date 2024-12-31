@@ -3,13 +3,13 @@ pub use self::data::DataRootError;
 use self::data::{read_data_root, write_data_root};
 use crate::data::{DataError, DataMgr};
 use crate::dialogs::{open_dir, open_file, FileType};
-use crate::ui::{PlatformExt, RuntimeExt, SetupWizard};
+use crate::ui::{error, PlatformExt, RuntimeExt, SetupWizard};
 use crate::vfs::{FsType, FS_TYPE};
 use erdp::ErrorDisplay;
 use obfw::ps4::{PartData, PartReader};
 use obfw::{DumpReader, ItemReader};
 use redb::{Database, DatabaseError};
-use slint::{ComponentHandle, PlatformError};
+use slint::{ComponentHandle, PlatformError, SharedString};
 use std::cell::Cell;
 use std::error::Error;
 use std::fs::File;
@@ -146,7 +146,8 @@ fn set_data_root(win: SetupWizard) {
     let input = win.get_data_root();
 
     if input.is_empty() {
-        win.set_error_message("You need to choose where to store data before proceed.".into());
+        let msg = SharedString::from("You need to choose where to store data before proceed.");
+        crate::rt::spawn(error(msg));
         return;
     }
 

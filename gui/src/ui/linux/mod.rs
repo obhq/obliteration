@@ -1,7 +1,10 @@
-use super::PlatformExt;
+use super::{PlatformExt, SlintBackend};
+use crate::rt::{global, RuntimeWindow};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use slint::ComponentHandle;
 use thiserror::Error;
+
+mod wayland;
 
 impl<T: ComponentHandle> PlatformExt for T {
     fn set_center(&self) -> Result<(), PlatformError> {
@@ -17,6 +20,20 @@ impl<T: ComponentHandle> PlatformExt for T {
         }
 
         Ok(())
+    }
+
+    fn set_modal<P>(&self, parent: &P) -> Result<(), PlatformError>
+    where
+        P: RuntimeWindow + ?Sized,
+    {
+        let win = self.window().window_handle();
+        let back = global::<SlintBackend>().unwrap();
+
+        if let Some(v) = back.wayland() {
+            self::wayland::set_modal(v, &win, parent)
+        } else {
+            todo!()
+        }
     }
 }
 

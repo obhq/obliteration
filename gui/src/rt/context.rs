@@ -1,6 +1,7 @@
 use super::task::TaskList;
 use super::{Event, Hook, RuntimeWindow};
 use rustc_hash::FxHashMap;
+use std::any::{Any, TypeId};
 use std::cell::Cell;
 use std::mem::transmute;
 use std::ptr::null_mut;
@@ -13,8 +14,10 @@ pub struct Context<'a> {
     pub el: &'a ActiveEventLoop,
     pub proxy: &'a EventLoopProxy<Event>,
     pub tasks: &'a mut TaskList,
+    pub objects: &'a mut FxHashMap<TypeId, Rc<dyn Any>>,
     pub hooks: Option<&'a mut Vec<Rc<dyn Hook>>>,
     pub windows: &'a mut FxHashMap<WindowId, Weak<dyn RuntimeWindow>>,
+    pub active: Option<&'a WindowId>,
 }
 
 impl<'a> Context<'a> {

@@ -1,11 +1,14 @@
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 use std::error::Error;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{DeviceId, ElementState, InnerSizeWriter, MouseButton};
+use winit::window::WindowId;
 
 /// Encapsulates winit window with window-specific logic.
 ///
 /// The event loop will exit immediately if any method return an error.
-pub trait RuntimeWindow {
+pub trait RuntimeWindow: HasDisplayHandle + HasWindowHandle + 'static {
+    fn id(&self) -> WindowId;
     fn on_resized(&self, new: PhysicalSize<u32>) -> Result<(), Box<dyn Error + Send + Sync>>;
     fn on_close_requested(&self) -> Result<(), Box<dyn Error + Send + Sync>>;
     fn on_focused(&self, gained: bool) -> Result<(), Box<dyn Error + Send + Sync>>;

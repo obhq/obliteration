@@ -14,7 +14,7 @@ use async_net::{TcpListener, TcpStream};
 use clap::{Parser, ValueEnum};
 use erdp::ErrorDisplay;
 use futures::{select_biased, AsyncReadExt, FutureExt};
-use slint::{ComponentHandle, ModelRc, SharedString, ToSharedString, VecModel, WindowHandle};
+use slint::{ComponentHandle, ModelRc, SharedString, ToSharedString, VecModel};
 use std::cell::Cell;
 use std::future::Future;
 use std::net::SocketAddrV4;
@@ -85,6 +85,20 @@ fn main() -> ExitCode {
 
     // Run.
     let main = async move {
+        // Setup Slint custom back-end. This need to be done before using any Slint API.
+        match unsafe { SlintBackend::new() } {
+            Ok(v) => v.install().unwrap(), // This should never fail.
+            Err(e) => {
+                error(format!(
+                    "Failed to initialize Slint back-end: {}.",
+                    e.display()
+                ));
+
+                return ExitCode::FAILURE;
+            }
+        }
+
+        // Run.
         let e = match run(args, exe).await {
             Ok(_) => return ExitCode::SUCCESS,
             Err(e) => e,
@@ -93,7 +107,7 @@ fn main() -> ExitCode {
         // Show error window.
         let msg = format!("An unexpected error has occurred: {}.", e.display());
 
-        self::ui::error::<WindowHandle>(None, msg).await;
+        self::ui::error(msg).await;
 
         ExitCode::FAILURE
     };
@@ -112,9 +126,6 @@ fn main() -> ExitCode {
 }
 
 async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
-    // Setup Slint custom back-end. This need to be done before using any Slint API.
-    Rc::new(SlintBackend::new()).install().unwrap();
-
     // Increase number of file descriptor to maximum allowed.
     #[cfg(unix)]
     unsafe {

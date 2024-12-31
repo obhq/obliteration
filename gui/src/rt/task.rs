@@ -1,4 +1,5 @@
 use super::Event;
+use rustc_hash::FxHashMap;
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
@@ -9,7 +10,7 @@ use winit::event_loop::EventLoopProxy;
 /// List of pending tasks.
 pub struct TaskList {
     el: EventLoopProxy<Event>,
-    list: HashMap<u64, Task>,
+    list: FxHashMap<u64, Task>,
     next: u64,
 }
 
@@ -44,6 +45,10 @@ impl TaskList {
 
     pub fn remove(&mut self, id: u64) -> Option<Task> {
         self.list.remove(&id)
+    }
+
+    pub fn clear(&mut self) {
+        self.list.clear();
     }
 }
 

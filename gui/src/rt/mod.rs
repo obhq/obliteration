@@ -6,6 +6,7 @@ use self::context::Context;
 use self::task::TaskList;
 use rustc_hash::FxHashMap;
 use rwh05::{HasRawDisplayHandle, RawDisplayHandle};
+use std::any::{Any, TypeId};
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::error::Error;
@@ -53,8 +54,10 @@ pub fn run<T: 'static>(main: impl Future<Output = T> + 'static) -> Result<T, Run
         el: proxy,
         tasks,
         main,
+        objects: HashMap::default(),
         hooks: Vec::new(),
         windows: HashMap::default(),
+        active: None,
         exit,
     };
 
@@ -75,6 +78,8 @@ pub fn spawn(task: impl Future<Output = ()> + 'static) {
     })
 }
 
+/// The returned handle will be valid until the event loop exited.
+///
 /// # Panics
 /// If called from the other thread than main thread.
 pub fn raw_display_handle() -> RawDisplayHandle {
@@ -107,6 +112,41 @@ pub fn create_window<T: RuntimeWindow + 'static>(
 }
 
 /// # Panics
+/// If called from the other thread than main thread.
+pub fn active_window() -> Option<Rc<dyn RuntimeWindow>> {
+    Context::with(|cx| {
+        cx.active
+            .and_then(|i| cx.windows.get(i))
+            .and_then(|w| w.upgrade())
+    })
+}
+
+/// All objects will be destroyed before event loop exit.
+///
+/// # Panics
+/// - If called from the other thread than main thread.
+/// - If object with the same type as `obj` already registered.
+pub fn register(obj: Rc<dyn Any>) {
+    let id = obj.as_ref().type_id();
+
+    Context::with(move |cx| assert!(cx.objects.insert(id, obj).is_none()))
+}
+
+/// Returns object that was registered with [`register()`].
+///
+/// # Panics
+/// If called from the other thread than main thread.
+pub fn global<T: 'static>() -> Option<Rc<T>> {
+    let id = TypeId::of::<T>();
+
+    Context::with(move |cx| cx.objects.get(&id).and_then(|v| v.clone().downcast().ok()))
+}
+
+/// Once a hook has been installed there is no way to remove it.
+///
+/// All hooks will be destroyed before event loop exit.
+///
+/// # Panics
 /// If called from outside `main` task that passed to [`run()`].
 pub fn push_hook(hook: Rc<dyn Hook>) {
     Context::with(move |cx| cx.hooks.as_mut().unwrap().push(hook));
@@ -117,8 +157,10 @@ struct Runtime<T> {
     el: EventLoopProxy<Event>,
     tasks: TaskList,
     main: u64,
+    objects: FxHashMap<TypeId, Rc<dyn Any>>,
     hooks: Vec<Rc<dyn Hook>>,
     windows: FxHashMap<WindowId, Weak<dyn RuntimeWindow>>,
+    active: Option<WindowId>,
     exit: Rc<Cell<Option<Result<T, RuntimeError>>>>,
 }
 
@@ -139,12 +181,14 @@ impl<T> Runtime<T> {
             el,
             proxy: &self.el,
             tasks: &mut self.tasks,
+            objects: &mut self.objects,
             hooks: if id == self.main {
                 Some(&mut self.hooks)
             } else {
                 None
             },
             windows: &mut self.windows,
+            active: self.active.as_ref(),
         };
 
         // Poll the task.
@@ -175,8 +219,10 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
             el,
             proxy: &self.el,
             tasks: &mut self.tasks,
+            objects: &mut self.objects,
             hooks: None,
             windows: &mut self.windows,
+            active: self.active.as_ref(),
         };
 
         if let Err(e) = cx.run(|| {
@@ -216,8 +262,10 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
             el,
             proxy: &self.el,
             tasks: &mut self.tasks,
+            objects: &mut self.objects,
             hooks: None,
             windows: &mut self.windows,
+            active: self.active.as_ref(),
         };
 
         if let Err(e) = cx.run(|| {
@@ -266,7 +314,17 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
                 r
             }
             WindowEvent::Focused(v) => {
-                dispatch!(w => { w.on_focused(v).map_err(RuntimeError::Focused) })
+                let r = dispatch!(w => { w.on_focused(v).map_err(RuntimeError::Focused) });
+
+                // TODO: Is it possible for the lost focus to deliver to the previous window after
+                // the new window got focused?
+                if v {
+                    self.active = Some(id);
+                } else {
+                    self.active = None;
+                }
+
+                r
             }
             WindowEvent::CursorMoved {
                 device_id: dev,
@@ -304,8 +362,10 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
             el,
             proxy: &self.el,
             tasks: &mut self.tasks,
+            objects: &mut self.objects,
             hooks: None,
             windows: &mut self.windows,
+            active: self.active.as_ref(),
         };
 
         if let Err(e) = cx.run(|| {
@@ -331,8 +391,10 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
             el,
             proxy: &self.el,
             tasks: &mut self.tasks,
+            objects: &mut self.objects,
             hooks: None,
             windows: &mut self.windows,
+            active: self.active.as_ref(),
         };
 
         if let Err(e) = cx.run(|| {
@@ -369,9 +431,11 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
     }
 
     fn exiting(&mut self, _: &ActiveEventLoop) {
-        // Drop all hooks before exit the event loop so if it own any windows it will get closed
-        // before the event loop exits.
+        // Drop all user objects before exit the event loop so if it own any resources it will get
+        // destroyed before the event loop exits.
+        self.tasks.clear();
         self.hooks.clear();
+        self.objects.clear();
     }
 }
 
