@@ -3,6 +3,9 @@ use crate::rt::{Hook, RuntimeWindow};
 use metal::{CAMetalLayer, MetalLayer};
 use objc::runtime::{Object, NO, YES};
 use objc::{msg_send, sel, sel_impl};
+use raw_window_handle::{
+    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, WindowHandle,
+};
 use rwh05::{HasRawWindowHandle, RawWindowHandle};
 use std::error::Error;
 use std::ptr::null_mut;
@@ -53,6 +56,10 @@ impl Drop for MetalWindow {
 }
 
 impl RuntimeWindow for MetalWindow {
+    fn id(&self) -> WindowId {
+        self.window.id()
+    }
+
     fn on_resized(&self, new: PhysicalSize<u32>) -> Result<(), Box<dyn Error + Send + Sync>> {
         todo!()
     }
@@ -96,6 +103,18 @@ impl RuntimeWindow for MetalWindow {
 
     fn on_redraw_requested(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         todo!()
+    }
+}
+
+impl HasDisplayHandle for MetalWindow {
+    fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
+        self.window.display_handle()
+    }
+}
+
+impl HasWindowHandle for MetalWindow {
+    fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
+        self.window.window_handle()
     }
 }
 
