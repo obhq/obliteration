@@ -81,15 +81,15 @@ impl<T: ComponentHandle> PlatformExt for T {
 
 #[derive(Debug, Error)]
 pub enum PlatformError {
-    #[error("Failed to get window rect")]
+    #[error("failed to get window rect")]
     GetWindowRectFailed(#[source] std::io::Error),
 
-    #[error("Failed to get screen width")]
+    #[error("failed to get screen width")]
     GetScreenWidthFailed(#[source] std::io::Error),
 
-    #[error("Failed to get screen height")]
+    #[error("failed to get screen height")]
     GetScreenHeightFailed(#[source] std::io::Error),
 
-    #[error("Failed to set window position")]
+    #[error("failed to set window position")]
     SetWindowPosFailed(#[source] std::io::Error),
 }
