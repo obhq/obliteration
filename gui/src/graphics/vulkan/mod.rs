@@ -163,7 +163,7 @@ pub enum GraphicsError {
     #[error("no any Vulkan physical device available")]
     NoPhysicalDevice,
 
-    #[error("no Vulkan device supports graphics operations with Vulkan 1.3")]
+    #[error("no Vulkan device support graphics operations with Vulkan 1.3")]
     NoSuitableDevice,
 
     #[error("couldn't create a logical device")]

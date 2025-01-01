@@ -241,7 +241,8 @@ impl Vmm<()> {
             shutdown: shutdown.clone(),
         };
 
-        vmm.spawn(map.kern_vaddr + img.entry(), Some(map), debugger.is_some());
+        vmm.spawn(map.kern_vaddr + img.entry(), Some(map), debugger.is_some())
+            .map_err(VmmError::SpawnMainCpu)?;
 
         Ok(vmm)
     }
@@ -310,7 +311,12 @@ impl<H: Hypervisor> Vmm<H> {
     const GDB_ENOENT: u8 = 2;
     const GDB_EFAULT: u8 = 14;
 
-    pub fn spawn(&mut self, start: usize, map: Option<RamMap>, debug: bool) {
+    pub fn spawn(
+        &mut self,
+        start: usize,
+        map: Option<RamMap>,
+        debug: bool,
+    ) -> Result<(), std::io::Error> {
         // Setup arguments.
         let args = CpuArgs {
             hv: self.hv.clone(),
@@ -331,13 +337,13 @@ impl<H: Hypervisor> Vmm<H> {
         let id = self.next;
         let (tx, exiting) = futures::channel::oneshot::channel();
         let thread = match map {
-            Some(map) => std::thread::spawn(move || {
+            Some(map) => std::thread::Builder::new().spawn(move || {
                 let r = Self::main_cpu(args, debugger, start, map);
                 tx.send(()).unwrap();
                 r
             }),
             None => todo!(),
-        };
+        }?;
 
         self.next += 1;
 
@@ -352,6 +358,8 @@ impl<H: Hypervisor> Vmm<H> {
                 },
             )
             .is_none());
+
+        Ok(())
     }
 
     fn main_cpu(
@@ -883,6 +891,9 @@ pub enum VmmError {
 
     #[error("couldn't build RAM")]
     BuildRam(#[source] ram::RamBuilderError),
+
+    #[error("couldn't spawn the main CPU")]
+    SpawnMainCpu(#[source] std::io::Error),
 }
 
 /// Represents an error when a vCPU fails.
