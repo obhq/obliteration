@@ -26,7 +26,8 @@ impl Vulkan {
         let queue = unsafe { instance.get_physical_device_queue_family_properties(physical) }
             .into_iter()
             .position(|p| p.queue_flags.contains(QueueFlags::GRAPHICS))
-            .unwrap(); // We required all selectable devices to supports graphics operations.
+            .unwrap(); // We required all selectable devices to support graphics operations.
+
         let mut queues = DeviceQueueCreateInfo::default();
         let priorities = [1.0];
 

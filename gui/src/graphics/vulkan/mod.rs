@@ -160,7 +160,7 @@ pub enum GraphicsError {
     #[error("couldn't enumerate physical devices")]
     EnumeratePhysicalDevices(#[source] ash::vk::Result),
 
-    #[error("no any Vulkan physical device available")]
+    #[error("no Vulkan physical devices available")]
     NoPhysicalDevice,
 
     #[error("no Vulkan device supports graphics operations with Vulkan 1.3")]

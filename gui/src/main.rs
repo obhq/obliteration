@@ -275,10 +275,7 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
         // Poll all futures.
         let (vmm, debug) = std::future::poll_fn(move |cx| {
             let vmm = vmm.as_mut().poll(cx);
-            let debug = match &mut debug {
-                Some(v) => v.poll_unpin(cx),
-                None => Poll::Pending,
-            };
+            let debug = debug.as_mut().map_or(Poll::Pending, |d| d.poll_unpin(cx));
 
             match (vmm, debug) {
                 (Poll::Ready(v), Poll::Ready(d)) => Poll::Ready((Some(v), Some(d))),
@@ -552,6 +549,6 @@ enum ProgramError {
     #[error("thread for vCPU #{0} was stopped unexpectedly")]
     CpuThread(#[source] CpuError),
 
-    #[error("vCPU #{0} was panic, see {1} for more information")]
+    #[error("vCPU #{0} panicked, see {1} for more information")]
     CpuPanic(usize, PathBuf),
 }

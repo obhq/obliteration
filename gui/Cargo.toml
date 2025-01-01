@@ -79,6 +79,8 @@ windows-sys = { version = "0.59.0", features = [
     "Win32_System_Memory",
     "Win32_System_Registry",
     "Win32_System_SystemInformation",
+    "Win32_UI",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
