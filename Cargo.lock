@@ -1717,6 +1717,7 @@ dependencies = [
  "ashpd",
  "async-net",
  "bitfield-struct",
+ "block",
  "bytes",
  "ciborium",
  "clap",
