@@ -180,6 +180,20 @@ impl WindowAdapter for Window {
             assert!(self.visible.get().is_none());
 
             self.winit.set_visible(true);
+
+            // Render initial frame. Without this the modal on macOS will show a blank window until
+            // show animation is complete.
+            let scale_factor = self.winit.scale_factor() as f32;
+            let size = self.winit.inner_size();
+            let size = PhysicalSize::new(size.width, size.height);
+            let size = LogicalSize::from_physical(size, scale_factor);
+
+            self.slint
+                .dispatch_event(WindowEvent::ScaleFactorChanged { scale_factor });
+            self.slint.dispatch_event(WindowEvent::Resized { size });
+
+            self.renderer.render()?;
+
             self.visible.set(Some(true));
         } else if self.visible.get().is_some_and(|v| v) {
             self.winit.set_visible(false);
