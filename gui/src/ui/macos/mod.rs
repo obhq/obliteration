@@ -1,10 +1,7 @@
 use self::view::with_window;
 use super::{Modal, PlatformExt, PlatformWindow};
-use crate::rt::WindowHandler;
 use block::ConcreteBlock;
 use objc::{msg_send, sel, sel_impl};
-use raw_window_handle::HasWindowHandle;
-use slint::ComponentHandle;
 use std::ffi::c_long;
 use std::ops::Deref;
 use thiserror::Error;
@@ -28,8 +25,8 @@ impl<T: PlatformWindow> PlatformExt for T {
 
         // Show the sheet.
         let win = self.handle();
-        let win = with_window(&win, |w| w);
-        let _: () = with_window(parent, |w| unsafe {
+        let win = with_window(win, |w| w);
+        let _: () = with_window(parent.handle(), |w| unsafe {
             msg_send![w, beginSheet:win completionHandler:cb.deref()]
         });
 
