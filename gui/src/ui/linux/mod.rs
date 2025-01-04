@@ -1,14 +1,13 @@
-use super::{PlatformExt, SlintBackend};
-use crate::rt::{global, RuntimeWindow};
+use super::{Modal, PlatformExt, PlatformWindow, SlintBackend};
+use crate::rt::global;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use slint::ComponentHandle;
 use thiserror::Error;
 
 mod wayland;
 
-impl<T: ComponentHandle> PlatformExt for T {
+impl<T: PlatformWindow> PlatformExt for T {
     fn set_center(&self) -> Result<(), PlatformError> {
-        let win = self.window().window_handle();
+        let win = self.handle();
         let win = win.window_handle().unwrap();
 
         match win.as_ref() {
@@ -22,18 +21,21 @@ impl<T: ComponentHandle> PlatformExt for T {
         Ok(())
     }
 
-    fn set_modal<P>(&self, parent: &P) -> Result<(), PlatformError>
+    fn set_modal<P>(self, parent: &P) -> Result<Modal<Self, P>, PlatformError>
     where
-        P: RuntimeWindow + ?Sized,
+        P: PlatformWindow,
+        Self: Sized,
     {
-        let win = self.window().window_handle();
+        let win = self.handle();
         let back = global::<SlintBackend>().unwrap();
 
         if let Some(v) = back.wayland() {
-            self::wayland::set_modal(v, &win, parent)
+            self::wayland::set_modal(v, win, parent.handle())?;
         } else {
             todo!()
         }
+
+        Ok(Modal::new(self, parent))
     }
 }
 

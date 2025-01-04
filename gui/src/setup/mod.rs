@@ -147,7 +147,7 @@ fn set_data_root(win: SetupWizard) {
 
     if input.is_empty() {
         let msg = SharedString::from("You need to choose where to store data before proceed.");
-        crate::rt::spawn(error(msg));
+        crate::rt::spawn(async move { error(Some(&win), msg).await });
         return;
     }
 

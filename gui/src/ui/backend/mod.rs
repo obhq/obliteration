@@ -2,7 +2,7 @@
 pub(super) use self::wayland::*;
 pub(super) use self::window::Window;
 
-use crate::rt::{create_window, raw_display_handle, RuntimeWindow};
+use crate::rt::{create_window, raw_display_handle, WindowHandler};
 use i_slint_core::graphics::RequestedGraphicsAPI;
 use i_slint_renderer_skia::SkiaRenderer;
 use rustc_hash::FxHashMap;
@@ -62,7 +62,7 @@ impl SlintBackend {
         let b = Rc::new(self);
 
         slint::platform::set_platform(Box::new(Platform(Rc::downgrade(&b))))?;
-        crate::rt::register(b.clone());
+        crate::rt::register_global(b.clone());
         crate::rt::push_hook(b.clone());
 
         #[cfg(target_os = "linux")]
@@ -133,10 +133,12 @@ impl crate::rt::Hook for SlintBackend {
 /// Implementation of [`slint::platform::Platform`] for [`SlintBackend`].
 struct Platform(Weak<SlintBackend>);
 
-impl Platform {
-    fn create_window(
-        win: winit::window::Window,
-    ) -> Result<Rc<Window>, Box<dyn Error + Send + Sync>> {
+impl slint::platform::Platform for Platform {
+    fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, PlatformError> {
+        // Create winit window.
+        let attrs = winit::window::Window::default_attributes().with_visible(false);
+        let win = create_window(attrs).map_err(|e| PlatformError::OtherError(Box::new(e)))?;
+
         // Create renderer.
         let win = Rc::new(win);
         let size = win.inner_size();
@@ -155,28 +157,21 @@ impl Platform {
             move || win.pre_present_notify()
         })));
 
-        // Create WindowAdapter.
-        Ok(Rc::<Window>::new_cyclic(move |weak| {
-            Window::new(win, slint::Window::new(weak.clone()), renderer)
-        }))
-    }
-}
-
-impl slint::platform::Platform for Platform {
-    fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, PlatformError> {
-        let attrs = winit::window::Window::default_attributes().with_visible(false);
-        let win = create_window(attrs, Self::create_window)
-            .map_err(|e| PlatformError::OtherError(Box::new(e)))?;
-
         // Just panic if people try to create the window when the event loop already exited.
+        let win = Rc::<Window>::new_cyclic(move |weak| {
+            Window::new(win, slint::Window::new(weak.clone()), renderer)
+        });
+
         assert!(self
             .0
             .upgrade()
             .unwrap()
             .windows
             .borrow_mut()
-            .insert(win.id(), Rc::downgrade(&win))
+            .insert(win.window_id(), Rc::downgrade(&win))
             .is_none());
+
+        crate::rt::register_window(&win);
 
         Ok(win)
     }

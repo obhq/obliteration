@@ -89,7 +89,7 @@ block = "0.1.6"
 core-foundation = "0.10.0"
 core-foundation-sys = "0.8.7"
 core-graphics-types = "0.1.3"
-i-slint-renderer-skia = { version = "=1.9.0" }
+i-slint-renderer-skia = "=1.9.0"
 metal = "0.29.0"
 objc = "0.2.7"
 

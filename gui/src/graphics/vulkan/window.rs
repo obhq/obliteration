@@ -1,12 +1,8 @@
 use super::engine::Vulkan;
 use super::GraphicsError;
-use crate::rt::{Hook, RuntimeWindow};
+use crate::rt::{Hook, WindowHandler};
 use ash::vk::SurfaceKHR;
-use raw_window_handle::{
-    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, WindowHandle,
-};
 use std::error::Error;
-use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
@@ -14,7 +10,7 @@ use winit::event::{DeviceId, ElementState, InnerSizeWriter, MouseButton, StartCa
 use winit::event_loop::ControlFlow;
 use winit::window::{Window, WindowId};
 
-/// Implementation of [`RuntimeWindow`] and [`Hook`] for Vulkan.
+/// Implementation of [`WindowHandler`] and [`Hook`] for Vulkan.
 ///
 /// Fields in this struct must be dropped in a correct order.
 pub struct VulkanWindow {
@@ -29,17 +25,17 @@ impl VulkanWindow {
         engine: &Arc<Vulkan>,
         window: Window,
         shutdown: &Arc<AtomicBool>,
-    ) -> Result<Rc<Self>, Box<dyn Error + Send + Sync>> {
+    ) -> Result<Self, GraphicsError> {
         // Create VkSurfaceKHR.
         let surface =
             unsafe { engine.create_surface(&window) }.map_err(GraphicsError::CreateSurface)?;
 
-        Ok(Rc::new(Self {
+        Ok(Self {
             surface,
             window,
             engine: engine.clone(),
             shutdown: shutdown.clone(),
-        }))
+        })
     }
 }
 
@@ -49,8 +45,8 @@ impl Drop for VulkanWindow {
     }
 }
 
-impl RuntimeWindow for VulkanWindow {
-    fn id(&self) -> WindowId {
+impl WindowHandler for VulkanWindow {
+    fn window_id(&self) -> WindowId {
         self.window.id()
     }
 
@@ -100,18 +96,6 @@ impl RuntimeWindow for VulkanWindow {
     fn on_redraw_requested(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         self.window.request_redraw();
         Ok(())
-    }
-}
-
-impl HasDisplayHandle for VulkanWindow {
-    fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
-        self.window.display_handle()
-    }
-}
-
-impl HasWindowHandle for VulkanWindow {
-    fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
-        self.window.window_handle()
     }
 }
 

@@ -3,13 +3,14 @@ use self::engine::Vulkan;
 use self::window::VulkanWindow;
 use super::EngineBuilder;
 use crate::profile::Profile;
-use crate::rt::{create_window, raw_display_handle, RuntimeError};
+use crate::rt::{create_window, raw_display_handle};
 use ash::extensions::khr::Surface;
 use ash::vk::{ApplicationInfo, InstanceCreateInfo, QueueFlags, API_VERSION_1_3};
 use ash::{Entry, Instance};
 use ash_window::enumerate_required_extensions;
 use std::ffi::CStr;
 use std::mem::ManuallyDrop;
+use std::rc::Rc;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use thiserror::Error;
@@ -120,9 +121,10 @@ impl EngineBuilder for VulkanBuilder {
         shutdown: &Arc<AtomicBool>,
     ) -> Result<Arc<Self::Engine>, GraphicsError> {
         let engine = Vulkan::new(self, profile).map(Arc::new)?;
-        let window = create_window(screen, |w| VulkanWindow::new(&engine, w, shutdown))
-            .map_err(GraphicsError::CreateWindow)?;
+        let window = create_window(screen).map_err(GraphicsError::CreateWindow)?;
+        let window = VulkanWindow::new(&engine, window, shutdown).map(Rc::new)?;
 
+        crate::rt::register_window(&window);
         crate::rt::push_hook(window);
 
         Ok(engine)
@@ -173,5 +175,5 @@ pub enum GraphicsError {
     CreateSurface(#[source] ash::vk::Result),
 
     #[error("couldn't create window")]
-    CreateWindow(#[source] RuntimeError),
+    CreateWindow(#[source] winit::error::OsError),
 }

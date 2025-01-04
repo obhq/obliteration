@@ -1,11 +1,8 @@
 use super::Metal;
-use crate::rt::{Hook, RuntimeWindow};
+use crate::rt::{Hook, WindowHandler};
 use metal::{CAMetalLayer, MetalLayer};
 use objc::runtime::{Object, NO, YES};
 use objc::{msg_send, sel, sel_impl};
-use raw_window_handle::{
-    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, WindowHandle,
-};
 use rwh05::{HasRawWindowHandle, RawWindowHandle};
 use std::error::Error;
 use std::ptr::null_mut;
@@ -16,7 +13,7 @@ use winit::event::{DeviceId, ElementState, InnerSizeWriter, MouseButton, StartCa
 use winit::event_loop::ControlFlow;
 use winit::window::{Window, WindowId};
 
-/// Implementation of [`RuntimeWindow`] and [`Hook`] for Metal.
+/// Implementation of [`WindowHandler`] and [`Hook`] for Metal.
 pub struct MetalWindow {
     view: *mut Object,
     layer: MetalLayer,
@@ -55,8 +52,8 @@ impl Drop for MetalWindow {
     }
 }
 
-impl RuntimeWindow for MetalWindow {
-    fn id(&self) -> WindowId {
+impl WindowHandler for MetalWindow {
+    fn window_id(&self) -> WindowId {
         self.window.id()
     }
 
@@ -103,18 +100,6 @@ impl RuntimeWindow for MetalWindow {
 
     fn on_redraw_requested(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
         todo!()
-    }
-}
-
-impl HasDisplayHandle for MetalWindow {
-    fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
-        self.window.display_handle()
-    }
-}
-
-impl HasWindowHandle for MetalWindow {
-    fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
-        self.window.window_handle()
     }
 }
 
