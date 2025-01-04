@@ -107,7 +107,7 @@ fn main() -> ExitCode {
         // Show error window.
         let msg = format!("An unexpected error has occurred: {}.", e.display());
 
-        self::ui::error(msg).await;
+        self::ui::error::<MainWindow>(None, msg).await;
 
         ExitCode::FAILURE
     };

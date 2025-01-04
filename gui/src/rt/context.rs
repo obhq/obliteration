@@ -1,5 +1,5 @@
 use super::task::TaskList;
-use super::{Event, Hook, RuntimeWindow};
+use super::{Event, Hook, WindowHandler};
 use rustc_hash::FxHashMap;
 use std::any::{Any, TypeId};
 use std::cell::Cell;
@@ -16,8 +16,7 @@ pub struct Context<'a> {
     pub tasks: &'a mut TaskList,
     pub objects: &'a mut FxHashMap<TypeId, Rc<dyn Any>>,
     pub hooks: Option<&'a mut Vec<Rc<dyn Hook>>>,
-    pub windows: &'a mut FxHashMap<WindowId, Weak<dyn RuntimeWindow>>,
-    pub active: Option<&'a WindowId>,
+    pub windows: &'a mut FxHashMap<WindowId, Weak<dyn WindowHandler>>,
 }
 
 impl<'a> Context<'a> {

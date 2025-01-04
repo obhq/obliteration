@@ -31,6 +31,8 @@ mod window;
 /// [`std::task::Waker`]. Any pending futures that need to wakeup by an external event like I/O need
 /// a dedicated thread to invoke [`std::task::Waker::wake()`] when the I/O is ready. That mean our
 /// async executor will not work with Tokio by default.
+///
+/// To create a window, call [`create_window()`] from `main` future.
 pub fn run<T: 'static>(main: impl Future<Output = T> + 'static) -> Result<T, RuntimeError> {
     // Setup winit event loop.
     let mut el = EventLoop::<Event>::with_user_event();
@@ -57,7 +59,6 @@ pub fn run<T: 'static>(main: impl Future<Output = T> + 'static) -> Result<T, Run
         objects: HashMap::default(),
         hooks: Vec::new(),
         windows: HashMap::default(),
-        active: None,
         exit,
     };
 
@@ -86,39 +87,26 @@ pub fn raw_display_handle() -> RawDisplayHandle {
     Context::with(|cx| cx.el.raw_display_handle())
 }
 
-/// Note that the runtime do **not** hold a strong reference to the [`RuntimeWindow`] returned from
-/// `f`.
+/// You need to call [`register_window()`] after this to receive events for the created window and
+/// you should do it before the first `await` otherwise you may missed some initial events.
+///
+/// # Panics
+/// If called from the other thread than main thread.
+pub fn create_window(attrs: WindowAttributes) -> Result<Window, OsError> {
+    Context::with(move |cx| cx.el.create_window(attrs))
+}
+
+/// Note that the runtime **do not** hold a strong reference to `win` and it will automatically
+/// removed when the underlying winit window destroyed.
 ///
 /// # Panics
 /// - If called from the other thread than main thread.
-/// - If called from `f`.
-pub fn create_window<T: RuntimeWindow + 'static>(
-    attrs: WindowAttributes,
-    f: impl FnOnce(Window) -> Result<Rc<T>, Box<dyn Error + Send + Sync>>,
-) -> Result<Rc<T>, RuntimeError> {
-    Context::with(move |cx| {
-        let win = cx
-            .el
-            .create_window(attrs)
-            .map_err(RuntimeError::CreateWinitWindow)?;
-        let id = win.id();
-        let win = f(win).map_err(RuntimeError::CreateRuntimeWindow)?;
-        let weak = Rc::downgrade(&win);
+/// - If the underlying winit window on `win` already registered.
+pub fn register_window<T: WindowHandler + 'static>(win: &Rc<T>) {
+    let id = win.window_id();
+    let win = Rc::downgrade(win);
 
-        assert!(cx.windows.insert(id, weak).is_none());
-
-        Ok(win)
-    })
-}
-
-/// # Panics
-/// If called from the other thread than main thread.
-pub fn active_window() -> Option<Rc<dyn RuntimeWindow>> {
-    Context::with(|cx| {
-        cx.active
-            .and_then(|i| cx.windows.get(i))
-            .and_then(|w| w.upgrade())
-    })
+    Context::with(move |cx| assert!(cx.windows.insert(id, win).is_none()));
 }
 
 /// All objects will be destroyed before event loop exit.
@@ -126,7 +114,7 @@ pub fn active_window() -> Option<Rc<dyn RuntimeWindow>> {
 /// # Panics
 /// - If called from the other thread than main thread.
 /// - If object with the same type as `obj` already registered.
-pub fn register(obj: Rc<dyn Any>) {
+pub fn register_global(obj: Rc<dyn Any>) {
     let id = obj.as_ref().type_id();
 
     Context::with(move |cx| assert!(cx.objects.insert(id, obj).is_none()))
@@ -159,8 +147,7 @@ struct Runtime<T> {
     main: u64,
     objects: FxHashMap<TypeId, Rc<dyn Any>>,
     hooks: Vec<Rc<dyn Hook>>,
-    windows: FxHashMap<WindowId, Weak<dyn RuntimeWindow>>,
-    active: Option<WindowId>,
+    windows: FxHashMap<WindowId, Weak<dyn WindowHandler>>,
     exit: Rc<Cell<Option<Result<T, RuntimeError>>>>,
 }
 
@@ -188,7 +175,6 @@ impl<T> Runtime<T> {
                 None
             },
             windows: &mut self.windows,
-            active: self.active.as_ref(),
         };
 
         // Poll the task.
@@ -222,7 +208,6 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
             objects: &mut self.objects,
             hooks: None,
             windows: &mut self.windows,
-            active: self.active.as_ref(),
         };
 
         if let Err(e) = cx.run(|| {
@@ -265,7 +250,6 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
             objects: &mut self.objects,
             hooks: None,
             windows: &mut self.windows,
-            active: self.active.as_ref(),
         };
 
         if let Err(e) = cx.run(|| {
@@ -314,17 +298,7 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
                 r
             }
             WindowEvent::Focused(v) => {
-                let r = dispatch!(w => { w.on_focused(v).map_err(RuntimeError::Focused) });
-
-                // TODO: Is it possible for the lost focus to deliver to the previous window after
-                // the new window got focused?
-                if v {
-                    self.active = Some(id);
-                } else {
-                    self.active = None;
-                }
-
-                r
+                dispatch!(w => { w.on_focused(v).map_err(RuntimeError::Focused) })
             }
             WindowEvent::CursorMoved {
                 device_id: dev,
@@ -365,7 +339,6 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
             objects: &mut self.objects,
             hooks: None,
             windows: &mut self.windows,
-            active: self.active.as_ref(),
         };
 
         if let Err(e) = cx.run(|| {
@@ -394,7 +367,6 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
             objects: &mut self.objects,
             hooks: None,
             windows: &mut self.windows,
-            active: self.active.as_ref(),
         };
 
         if let Err(e) = cx.run(|| {
@@ -452,12 +424,6 @@ pub enum RuntimeError {
 
     #[error("couldn't run event loop")]
     RunEventLoop(#[source] EventLoopError),
-
-    #[error("couldn't create winit window")]
-    CreateWinitWindow(#[source] OsError),
-
-    #[error("couldn't create runtime window")]
-    CreateRuntimeWindow(#[source] Box<dyn Error + Send + Sync>),
 
     #[error("couldn't handle event loop wakeup event")]
     NewEvents(#[source] Box<dyn Error + Send + Sync>),

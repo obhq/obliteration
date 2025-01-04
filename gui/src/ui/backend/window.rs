@@ -1,4 +1,4 @@
-use crate::rt::{RuntimeWindow, Signal};
+use crate::rt::{Signal, WindowHandler};
 use i_slint_core::window::WindowAdapterInternal;
 use i_slint_core::InternalToken;
 use i_slint_renderer_skia::SkiaRenderer;
@@ -53,8 +53,8 @@ impl Window {
     }
 }
 
-impl RuntimeWindow for Window {
-    fn id(&self) -> WindowId {
+impl WindowHandler for Window {
+    fn window_id(&self) -> WindowId {
         self.winit.id()
     }
 
@@ -158,18 +158,6 @@ impl RuntimeWindow for Window {
     }
 }
 
-impl HasDisplayHandle for Window {
-    fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
-        self.winit.display_handle()
-    }
-}
-
-impl HasWindowHandle for Window {
-    fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
-        self.winit.window_handle()
-    }
-}
-
 impl WindowAdapter for Window {
     fn window(&self) -> &slint::Window {
         &self.slint
@@ -181,18 +169,22 @@ impl WindowAdapter for Window {
 
             self.winit.set_visible(true);
 
-            // Render initial frame. Without this the modal on macOS will show a blank window until
-            // show animation is complete.
-            let scale_factor = self.winit.scale_factor() as f32;
-            let size = self.winit.inner_size();
-            let size = PhysicalSize::new(size.width, size.height);
-            let size = LogicalSize::from_physical(size, scale_factor);
+            // Render initial frame on macOS. Without this the modal will show a blank window until
+            // show animation is complete. On Wayland there are some problems when another window is
+            // showing so we need to to disable it.
+            #[cfg(target_os = "macos")]
+            {
+                let scale_factor = self.winit.scale_factor() as f32;
+                let size = self.winit.inner_size();
+                let size = PhysicalSize::new(size.width, size.height);
+                let size = LogicalSize::from_physical(size, scale_factor);
 
-            self.slint
-                .dispatch_event(WindowEvent::ScaleFactorChanged { scale_factor });
-            self.slint.dispatch_event(WindowEvent::Resized { size });
+                self.slint
+                    .dispatch_event(WindowEvent::ScaleFactorChanged { scale_factor });
+                self.slint.dispatch_event(WindowEvent::Resized { size });
 
-            self.renderer.render()?;
+                self.renderer.render()?;
+            }
 
             self.visible.set(Some(true));
         } else if self.visible.get().is_some_and(|v| v) {
