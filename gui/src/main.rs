@@ -29,7 +29,6 @@ use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
 mod data;
-mod dialogs;
 mod gdb;
 mod graphics;
 mod hv;
