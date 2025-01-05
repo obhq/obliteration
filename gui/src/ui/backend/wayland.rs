@@ -3,12 +3,15 @@ use std::cell::RefCell;
 use std::future::Future;
 use std::hint::unreachable_unchecked;
 use std::pin::Pin;
+use std::sync::{Arc, OnceLock};
 use std::task::{ready, Context, Poll};
 use wayland_backend::sys::client::Backend;
 use wayland_client::globals::{registry_queue_init, GlobalListContents};
 use wayland_client::protocol::wl_registry::WlRegistry;
 use wayland_client::{Connection, Dispatch, EventQueue, Proxy, QueueHandle};
 use wayland_protocols::xdg::dialog::v1::client::xdg_wm_dialog_v1::XdgWmDialogV1;
+use wayland_protocols::xdg::foreign::zv2::client::zxdg_exported_v2::ZxdgExportedV2;
+use wayland_protocols::xdg::foreign::zv2::client::zxdg_exporter_v2::ZxdgExporterV2;
 use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
 
 /// Contains global objects for Wayland.
@@ -47,8 +50,20 @@ impl Wayland {
             }
         };
 
+        // Get zxdg_exporter_v2.
+        let v = ZxdgExporterV2::interface().version;
+        let xdg_exporter: ZxdgExporterV2 = match globals.bind(&qh, v..=v, ()) {
+            Ok(v) => v,
+            Err(e) => {
+                xdg_dialog.destroy();
+                xdg_base.destroy();
+                return Err(BackendError::BindZxdgExporterV2(e));
+            }
+        };
+
         // Dispatch initial requests.
         let mut state = WaylandState {
+            xdg_exporter,
             xdg_dialog,
             xdg_base,
         };
@@ -83,12 +98,20 @@ impl Wayland {
 
 /// Provides [`Dispatch`] implementation to handle Wayland events.
 pub struct WaylandState {
+    xdg_exporter: ZxdgExporterV2,
     xdg_dialog: XdgWmDialogV1,
     xdg_base: XdgWmBase,
 }
 
+impl WaylandState {
+    pub fn xdg_exporter(&self) -> &ZxdgExporterV2 {
+        &self.xdg_exporter
+    }
+}
+
 impl Drop for WaylandState {
     fn drop(&mut self) {
+        self.xdg_exporter.destroy();
         self.xdg_dialog.destroy();
         self.xdg_base.destroy();
     }
@@ -133,6 +156,36 @@ impl Dispatch<XdgWmDialogV1, ()> for WaylandState {
         _: &Connection,
         _: &QueueHandle<Self>,
     ) {
+    }
+}
+
+impl Dispatch<ZxdgExporterV2, ()> for WaylandState {
+    fn event(
+        _: &mut Self,
+        _: &ZxdgExporterV2,
+        _: <ZxdgExporterV2 as Proxy>::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
+}
+
+impl Dispatch<ZxdgExportedV2, Arc<OnceLock<String>>> for WaylandState {
+    fn event(
+        _: &mut Self,
+        _: &ZxdgExportedV2,
+        event: <ZxdgExportedV2 as Proxy>::Event,
+        data: &Arc<OnceLock<String>>,
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+        use wayland_protocols::xdg::foreign::zv2::client::zxdg_exported_v2::Event;
+
+        match event {
+            Event::Handle { handle } => data.set(handle).unwrap(),
+            _ => (),
+        }
     }
 }
 

@@ -195,6 +195,10 @@ pub enum BackendError {
     BindXdgWmDialogV1(#[source] wayland_client::globals::BindError),
 
     #[cfg(target_os = "linux")]
+    #[error("couldn't bind zxdg_exporter_v2")]
+    BindZxdgExporterV2(#[source] wayland_client::globals::BindError),
+
+    #[cfg(target_os = "linux")]
     #[error("couldn't dispatch Wayland request")]
     DispatchWayland(#[source] wayland_client::DispatchError),
 }
