@@ -48,6 +48,19 @@ impl Window {
         }
     }
 
+    pub fn from_adapter(adapter: &dyn WindowAdapter) -> &Self {
+        adapter
+            .internal(InternalToken)
+            .unwrap()
+            .as_any()
+            .downcast_ref::<Self>()
+            .unwrap()
+    }
+
+    pub fn winit(&self) -> &winit::window::Window {
+        &self.winit
+    }
+
     pub fn hidden(&self) -> &Signal<()> {
         &self.hidden
     }

@@ -1,3 +1,4 @@
+pub use self::blocker::*;
 pub use self::hook::*;
 pub use self::signal::*;
 pub use self::window::*;
@@ -11,7 +12,9 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::error::Error;
 use std::future::Future;
+use std::num::NonZero;
 use std::rc::{Rc, Weak};
+use std::task::Poll;
 use thiserror::Error;
 use winit::application::ApplicationHandler;
 use winit::error::{EventLoopError, OsError};
@@ -19,6 +22,7 @@ use winit::event::StartCause;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy};
 use winit::window::{Window, WindowAttributes, WindowId};
 
+mod blocker;
 mod context;
 mod hook;
 mod signal;
@@ -59,6 +63,7 @@ pub fn run<T: 'static>(main: impl Future<Output = T> + 'static) -> Result<T, Run
         objects: HashMap::default(),
         hooks: Vec::new(),
         windows: HashMap::default(),
+        blocking: HashMap::default(),
         exit,
     };
 
@@ -67,12 +72,51 @@ pub fn run<T: 'static>(main: impl Future<Output = T> + 'static) -> Result<T, Run
     rt.exit.take().unwrap()
 }
 
+/// Spawn a new task and blocks all user inputs from deliver to `target` while the task is still
+/// alive.
+///
+/// See [`block()`] for more information.
+///
 /// # Panics
-/// If called from the other thread than main thread.
+/// - If called from the other thread than main thread.
+/// - If called from [`Drop`] implementation.
+/// - If the counter overflow.
+pub fn spawn_blocker<W, F>(target: W, task: F)
+where
+    W: WinitWindow + 'static,
+    F: Future<Output = ()> + 'static,
+{
+    Context::with(move |cx| {
+        use std::collections::hash_map::Entry;
+
+        // Add to block list now so it will effective immediately.
+        match cx.blocking.entry(target.id()) {
+            Entry::Occupied(mut e) => {
+                *e.get_mut() = e.get().checked_add(1).unwrap();
+            }
+            Entry::Vacant(e) => {
+                e.insert(NonZero::new(1).unwrap());
+            }
+        }
+
+        // Spawn task.
+        let tasks = cx.tasks.as_mut().unwrap();
+        let task = tasks.create(AsyncBlocker::new(target, task));
+        let id = tasks.insert(task);
+
+        // We have a context so there is an event loop for sure.
+        assert!(cx.proxy.send_event(Event::TaskReady(id)).is_ok());
+    })
+}
+
+/// # Panics
+/// - If called from the other thread than main thread.
+/// - If called from [`Drop`] implementation.
 pub fn spawn(task: impl Future<Output = ()> + 'static) {
     Context::with(move |cx| {
-        let task = cx.tasks.create(task);
-        let id = cx.tasks.insert(task);
+        let tasks = cx.tasks.as_mut().unwrap();
+        let task = tasks.create(task);
+        let id = tasks.insert(task);
 
         // We have a context so there is an event loop for sure.
         assert!(cx.proxy.send_event(Event::TaskReady(id)).is_ok());
@@ -91,9 +135,13 @@ pub fn raw_display_handle() -> RawDisplayHandle {
 /// you should do it before the first `await` otherwise you may miss some initial events.
 ///
 /// # Panics
-/// If called from the other thread than main thread.
+/// - If called from the other thread than main thread.
+/// - If called from [`Drop`] implementation.
 pub fn create_window(attrs: WindowAttributes) -> Result<Window, OsError> {
-    Context::with(move |cx| cx.el.create_window(attrs))
+    Context::with(move |cx| {
+        assert!(!cx.el.exiting());
+        cx.el.create_window(attrs)
+    })
 }
 
 /// Note that the runtime **does not** hold a strong reference to `win` and it will automatically
@@ -102,11 +150,15 @@ pub fn create_window(attrs: WindowAttributes) -> Result<Window, OsError> {
 /// # Panics
 /// - If called from the other thread than main thread.
 /// - If the underlying winit window on `win` already registered.
+/// - If called from [`Drop`] implementation.
 pub fn register_window<T: WindowHandler + 'static>(win: &Rc<T>) {
     let id = win.window_id();
     let win = Rc::downgrade(win);
 
-    Context::with(move |cx| assert!(cx.windows.insert(id, win).is_none()));
+    Context::with(move |cx| {
+        assert!(!cx.el.exiting());
+        assert!(cx.windows.insert(id, win).is_none());
+    });
 }
 
 /// All objects will be destroyed before event loop exit.
@@ -114,20 +166,58 @@ pub fn register_window<T: WindowHandler + 'static>(win: &Rc<T>) {
 /// # Panics
 /// - If called from the other thread than main thread.
 /// - If object with the same type as `obj` already registered.
+/// - If called from [`Drop`] implementation.
 pub fn register_global(obj: Rc<dyn Any>) {
     let id = obj.as_ref().type_id();
 
-    Context::with(move |cx| assert!(cx.objects.insert(id, obj).is_none()))
+    Context::with(move |cx| assert!(cx.objects.as_mut().unwrap().insert(id, obj).is_none()))
 }
 
 /// Returns an object that was registered with [`register()`].
 ///
 /// # Panics
-/// If called from the other thread than main thread.
+/// - If called from the other thread than main thread.
+/// - If called from [`Drop`] implementation of any registered object.
 pub fn global<T: 'static>() -> Option<Rc<T>> {
     let id = TypeId::of::<T>();
 
-    Context::with(move |cx| cx.objects.get(&id).and_then(|v| v.clone().downcast().ok()))
+    Context::with(move |cx| {
+        cx.objects
+            .as_mut()
+            .unwrap()
+            .get(&id)
+            .map(|v| v.clone().downcast().unwrap())
+    })
+}
+
+/// Blocks all user inputs from deliver to `win`.
+///
+/// Each call will increase a counter for `win` and each drop of the returned [`Blocker`] will
+/// decrease the counter. Once the counter is zero the inputs will be unblock.
+///
+/// Use [`spawn_blocker()`] if you want to block the inputs while a future still alive.
+///
+/// # Panics
+/// - If called from the other thread than main thread.
+/// - If the counter overflow.
+/// - If called from [`Drop`] implementation.
+pub fn block<W: WinitWindow>(win: &W) -> Blocker<W> {
+    use std::collections::hash_map::Entry;
+
+    Context::with(|cx| {
+        assert!(!cx.el.exiting());
+
+        match cx.blocking.entry(win.id()) {
+            Entry::Occupied(mut e) => {
+                *e.get_mut() = e.get().checked_add(1).unwrap();
+            }
+            Entry::Vacant(e) => {
+                e.insert(NonZero::new(1).unwrap());
+            }
+        }
+    });
+
+    Blocker::new(win)
 }
 
 /// Once a hook has been installed there is no way to remove it.
@@ -148,6 +238,7 @@ struct Runtime<T> {
     objects: FxHashMap<TypeId, Rc<dyn Any>>,
     hooks: Vec<Rc<dyn Hook>>,
     windows: FxHashMap<WindowId, Weak<dyn WindowHandler>>,
+    blocking: FxHashMap<WindowId, NonZero<usize>>,
     exit: Rc<Cell<Option<Result<T, RuntimeError>>>>,
 }
 
@@ -167,26 +258,33 @@ impl<T> Runtime<T> {
         let mut cx = Context {
             el,
             proxy: &self.el,
-            tasks: &mut self.tasks,
-            objects: &mut self.objects,
+            tasks: Some(&mut self.tasks),
+            objects: Some(&mut self.objects),
             hooks: if id == self.main {
                 Some(&mut self.hooks)
             } else {
                 None
             },
             windows: &mut self.windows,
+            blocking: &mut self.blocking,
         };
 
         // Poll the task.
-        let r = cx.run(|| {
+        let task = cx.run(|| {
             // TODO: Use RawWaker so we don't need to clone Arc here.
             let waker = std::task::Waker::from(task.waker().clone());
             let mut cx = std::task::Context::from_waker(&waker);
 
-            task.future_mut().poll(&mut cx)
+            match task.future_mut().poll(&mut cx) {
+                Poll::Ready(_) => {
+                    drop(task);
+                    None
+                }
+                Poll::Pending => Some(task),
+            }
         });
 
-        if r.is_pending() {
+        if let Some(task) = task {
             self.tasks.insert(task);
         }
 
@@ -204,10 +302,11 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
         let mut cx = Context {
             el,
             proxy: &self.el,
-            tasks: &mut self.tasks,
-            objects: &mut self.objects,
+            tasks: Some(&mut self.tasks),
+            objects: Some(&mut self.objects),
             hooks: None,
             windows: &mut self.windows,
+            blocking: &mut self.blocking,
         };
 
         if let Err(e) = cx.run(|| {
@@ -246,10 +345,11 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
         let mut cx = Context {
             el,
             proxy: &self.el,
-            tasks: &mut self.tasks,
-            objects: &mut self.objects,
+            tasks: Some(&mut self.tasks),
+            objects: Some(&mut self.objects),
             hooks: None,
             windows: &mut self.windows,
+            blocking: &mut self.blocking,
         };
 
         if let Err(e) = cx.run(|| {
@@ -267,7 +367,19 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
         macro_rules! dispatch {
             ($w:ident => $h:block) => {
                 match win {
-                    Some($w) => cx.run(|| $h),
+                    Some($w) => {
+                        let mut cx = Context {
+                            el,
+                            proxy: &self.el,
+                            tasks: Some(&mut self.tasks),
+                            objects: Some(&mut self.objects),
+                            hooks: None,
+                            windows: &mut self.windows,
+                            blocking: &mut self.blocking,
+                        };
+
+                        cx.run(|| $h)
+                    }
                     None => Ok(()),
                 }
             };
@@ -278,9 +390,12 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
             WindowEvent::Resized(v) => {
                 dispatch!(w => { w.on_resized(v).map_err(RuntimeError::Resized) })
             }
-            WindowEvent::CloseRequested => {
-                dispatch!(w => { w.on_close_requested().map_err(RuntimeError::CloseRequested) })
-            }
+            WindowEvent::CloseRequested => match self.blocking.contains_key(&id) {
+                true => Ok(()),
+                false => {
+                    dispatch!(w => { w.on_close_requested().map_err(RuntimeError::CloseRequested) })
+                }
+            },
             WindowEvent::Destroyed => {
                 // Run hook.
                 let r = cx.run(|| {
@@ -291,9 +406,13 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
                     Ok(())
                 });
 
-                // It is possible for the window to not in the list if the function passed to
-                // create_window() fails.
-                self.windows.remove(&id);
+                // It is possible for the window to not in the list if the user did not call
+                // register_window().
+                if self.windows.remove(&id).is_some() {
+                    // Both Blocker and AsyncBlocker prevents the window from dropping. Once we are
+                    // here all blockers should already dropped.
+                    assert!(!self.blocking.contains_key(&id));
+                }
 
                 r
             }
@@ -311,9 +430,12 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
                 device_id: dev,
                 state: st,
                 button: btn,
-            } => {
-                dispatch!(w => { w.on_mouse_input(dev, st, btn).map_err(RuntimeError::MouseInput) })
-            }
+            } => match self.blocking.contains_key(&id) {
+                true => Ok(()),
+                false => {
+                    dispatch!(w => { w.on_mouse_input(dev, st, btn).map_err(RuntimeError::MouseInput) })
+                }
+            },
             WindowEvent::ScaleFactorChanged {
                 scale_factor: new,
                 inner_size_writer: sw,
@@ -335,10 +457,11 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
         let mut cx = Context {
             el,
             proxy: &self.el,
-            tasks: &mut self.tasks,
-            objects: &mut self.objects,
+            tasks: Some(&mut self.tasks),
+            objects: Some(&mut self.objects),
             hooks: None,
             windows: &mut self.windows,
+            blocking: &mut self.blocking,
         };
 
         if let Err(e) = cx.run(|| {
@@ -363,10 +486,11 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
         let mut cx = Context {
             el,
             proxy: &self.el,
-            tasks: &mut self.tasks,
-            objects: &mut self.objects,
+            tasks: Some(&mut self.tasks),
+            objects: Some(&mut self.objects),
             hooks: None,
             windows: &mut self.windows,
+            blocking: &mut self.blocking,
         };
 
         if let Err(e) = cx.run(|| {
@@ -402,12 +526,36 @@ impl<T> ApplicationHandler<Event> for Runtime<T> {
         el.set_control_flow(flow);
     }
 
-    fn exiting(&mut self, _: &ActiveEventLoop) {
+    fn exiting(&mut self, el: &ActiveEventLoop) {
         // Drop all user objects before exit the event loop so if it own any resources it will get
         // destroyed before the event loop exits.
-        self.tasks.clear();
-        self.hooks.clear();
-        self.objects.clear();
+        let mut cx = Context {
+            el,
+            proxy: &self.el,
+            tasks: None,
+            objects: Some(&mut self.objects),
+            hooks: None,
+            windows: &mut self.windows,
+            blocking: &mut self.blocking,
+        };
+
+        cx.run(|| {
+            self.tasks.clear();
+            self.hooks.clear();
+        });
+
+        // Drop global objects as the last one.
+        let mut cx = Context {
+            el,
+            proxy: &self.el,
+            tasks: None,
+            objects: None,
+            hooks: None,
+            windows: &mut self.windows,
+            blocking: &mut self.blocking,
+        };
+
+        cx.run(|| self.objects.clear());
     }
 }
 

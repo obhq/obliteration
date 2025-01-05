@@ -1,5 +1,6 @@
 use self::view::with_window;
-use super::{Modal, PlatformExt, PlatformWindow};
+use super::{Modal, PlatformExt};
+use crate::rt::WinitWindow;
 use block::ConcreteBlock;
 use objc::{msg_send, sel, sel_impl};
 use std::ffi::c_long;
@@ -8,7 +9,7 @@ use thiserror::Error;
 
 mod view;
 
-impl<T: PlatformWindow> PlatformExt for T {
+impl<T: WinitWindow> PlatformExt for T {
     fn set_center(&self) -> Result<(), PlatformError> {
         with_window::<()>(self.handle(), |win| unsafe { msg_send![win, center] });
 
@@ -17,7 +18,7 @@ impl<T: PlatformWindow> PlatformExt for T {
 
     fn set_modal<P>(self, parent: &P) -> Result<Modal<Self, P>, PlatformError>
     where
-        P: PlatformWindow,
+        P: WinitWindow,
         Self: Sized,
     {
         // Setup completionHandler.

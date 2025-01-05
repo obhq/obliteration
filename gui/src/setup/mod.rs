@@ -3,6 +3,7 @@ pub use self::data::DataRootError;
 use self::data::{read_data_root, write_data_root};
 use crate::data::{DataError, DataMgr};
 use crate::dialogs::{open_dir, open_file, FileType};
+use crate::rt::spawn_blocker;
 use crate::ui::{error, PlatformExt, RuntimeExt, SetupWizard};
 use crate::vfs::{FsType, FS_TYPE};
 use erdp::ErrorDisplay;
@@ -68,7 +69,12 @@ pub async fn run_setup() -> Result<Option<DataMgr>, SetupError> {
     win.on_set_data_root({
         let win = win.as_weak();
 
-        move || set_data_root(win.unwrap())
+        move || {
+            let win = win.unwrap();
+            let task = set_data_root(win.clone_strong());
+
+            spawn_blocker(win, task);
+        }
     });
 
     win.on_browse_firmware({
@@ -141,13 +147,13 @@ async fn browse_data_root(win: SetupWizard) {
     win.set_data_root(path.into());
 }
 
-fn set_data_root(win: SetupWizard) {
+async fn set_data_root(win: SetupWizard) {
     // Get user input.
     let input = win.get_data_root();
 
     if input.is_empty() {
         let msg = SharedString::from("You need to choose where to store data before proceed.");
-        crate::rt::spawn(async move { error(Some(&win), msg).await });
+        error(Some(&win), msg).await;
         return;
     }
 

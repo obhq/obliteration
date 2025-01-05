@@ -1,3 +1,4 @@
+use raw_window_handle::HasWindowHandle;
 use std::error::Error;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{DeviceId, ElementState, InnerSizeWriter, MouseButton};
@@ -29,4 +30,10 @@ pub trait WindowHandler {
         sw: InnerSizeWriter,
     ) -> Result<(), Box<dyn Error + Send + Sync>>;
     fn on_redraw_requested(&self) -> Result<(), Box<dyn Error + Send + Sync>>;
+}
+
+/// Provides method to return winit properties.
+pub trait WinitWindow {
+    fn id(&self) -> WindowId;
+    fn handle(&self) -> impl HasWindowHandle + '_;
 }

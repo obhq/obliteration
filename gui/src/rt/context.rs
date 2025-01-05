@@ -4,6 +4,7 @@ use rustc_hash::FxHashMap;
 use std::any::{Any, TypeId};
 use std::cell::Cell;
 use std::mem::transmute;
+use std::num::NonZero;
 use std::ptr::null_mut;
 use std::rc::{Rc, Weak};
 use winit::event_loop::{ActiveEventLoop, EventLoopProxy};
@@ -13,10 +14,11 @@ use winit::window::WindowId;
 pub struct Context<'a> {
     pub el: &'a ActiveEventLoop,
     pub proxy: &'a EventLoopProxy<Event>,
-    pub tasks: &'a mut TaskList,
-    pub objects: &'a mut FxHashMap<TypeId, Rc<dyn Any>>,
+    pub tasks: Option<&'a mut TaskList>,
+    pub objects: Option<&'a mut FxHashMap<TypeId, Rc<dyn Any>>>,
     pub hooks: Option<&'a mut Vec<Rc<dyn Hook>>>,
     pub windows: &'a mut FxHashMap<WindowId, Weak<dyn WindowHandler>>,
+    pub blocking: &'a mut FxHashMap<WindowId, NonZero<usize>>,
 }
 
 impl<'a> Context<'a> {
