@@ -3,10 +3,11 @@ pub use self::modal::*;
 pub use self::os::PlatformError;
 pub use self::profile::*;
 
+use crate::rt::WinitWindow;
 use i_slint_core::window::WindowInner;
-use i_slint_core::InternalToken;
 use raw_window_handle::HasWindowHandle;
 use slint::{ComponentHandle, SharedString};
+use winit::window::WindowId;
 
 mod backend;
 mod modal;
@@ -16,7 +17,7 @@ mod modal;
 mod os;
 mod profile;
 
-pub async fn error<P: PlatformWindow>(parent: Option<&P>, msg: impl Into<SharedString>) {
+pub async fn error<P: WinitWindow>(parent: Option<&P>, msg: impl Into<SharedString>) {
     let win = ErrorWindow::new().unwrap();
 
     win.set_message(msg.into());
@@ -37,19 +38,20 @@ pub async fn error<P: PlatformWindow>(parent: Option<&P>, msg: impl Into<SharedS
     }
 }
 
-/// Provides method to return [`HasWindowHandle`].
-pub trait PlatformWindow {
-    fn handle(&self) -> impl HasWindowHandle + '_;
-}
+impl<T: ComponentHandle> WinitWindow for T {
+    fn id(&self) -> WindowId {
+        let win = WindowInner::from_pub(self.window()).window_adapter();
 
-impl<T: ComponentHandle> PlatformWindow for T {
+        Window::from_adapter(win.as_ref()).winit().id()
+    }
+
     fn handle(&self) -> impl HasWindowHandle + '_ {
         self.window().window_handle()
     }
 }
 
-/// Provides methods to operate on [`PlatformWindow`].
-pub trait PlatformExt: PlatformWindow {
+/// Provides platform-specific methods to operate on [`WinitWindow`].
+pub trait PlatformExt: WinitWindow {
     /// Center window on the screen.
     ///
     /// For [`slint::Window`] this need to call after [`slint::Window::show()`] otherwise it won't
@@ -57,7 +59,7 @@ pub trait PlatformExt: PlatformWindow {
     fn set_center(&self) -> Result<(), PlatformError>;
     fn set_modal<P>(self, parent: &P) -> Result<Modal<Self, P>, PlatformError>
     where
-        P: PlatformWindow,
+        P: WinitWindow,
         Self: Sized;
 }
 
@@ -69,12 +71,7 @@ pub trait RuntimeExt: ComponentHandle {
 impl<T: ComponentHandle> RuntimeExt for T {
     async fn wait(&self) {
         let win = WindowInner::from_pub(self.window()).window_adapter();
-        let win = win
-            .internal(InternalToken)
-            .unwrap()
-            .as_any()
-            .downcast_ref::<Window>()
-            .unwrap();
+        let win = Window::from_adapter(win.as_ref());
 
         win.hidden().wait().await;
     }

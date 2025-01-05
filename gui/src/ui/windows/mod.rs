@@ -1,4 +1,5 @@
-use super::{Modal, PlatformExt, PlatformWindow};
+use super::{Modal, PlatformExt};
+use crate::rt::WinitWindow;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::io::Error;
 use thiserror::Error;
@@ -8,7 +9,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     SWP_NOZORDER,
 };
 
-impl<T: PlatformWindow> PlatformExt for T {
+impl<T: WinitWindow> PlatformExt for T {
     fn set_center(&self) -> Result<(), PlatformError> {
         let win = self.handle();
         let raw_handle = win.window_handle().unwrap();
@@ -62,7 +63,7 @@ impl<T: PlatformWindow> PlatformExt for T {
 
     fn set_modal<P>(self, parent: &P) -> Result<Modal<Self, P>, PlatformError>
     where
-        P: PlatformWindow,
+        P: WinitWindow,
         Self: Sized,
     {
         todo!()

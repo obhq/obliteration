@@ -1,11 +1,11 @@
-use super::{Modal, PlatformExt, PlatformWindow, SlintBackend};
-use crate::rt::global;
+use super::{Modal, PlatformExt, SlintBackend};
+use crate::rt::{global, WinitWindow};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use thiserror::Error;
 
 mod wayland;
 
-impl<T: PlatformWindow> PlatformExt for T {
+impl<T: WinitWindow> PlatformExt for T {
     fn set_center(&self) -> Result<(), PlatformError> {
         let win = self.handle();
         let win = win.window_handle().unwrap();
@@ -23,7 +23,7 @@ impl<T: PlatformWindow> PlatformExt for T {
 
     fn set_modal<P>(self, parent: &P) -> Result<Modal<Self, P>, PlatformError>
     where
-        P: PlatformWindow,
+        P: WinitWindow,
         Self: Sized,
     {
         let win = self.handle();
