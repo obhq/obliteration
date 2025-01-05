@@ -1,85 +1,132 @@
-use crate::ui::FileType;
+use crate::rt::{global, WinitWindow};
+use crate::ui::{FileType, SlintBackend};
 use ashpd::desktop::file_chooser::{FileFilter, SelectedFiles};
 use ashpd::desktop::ResponseError;
 use ashpd::WindowIdentifier;
-use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
-use slint::ComponentHandle;
-use std::future::Future;
+use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::path::PathBuf;
+use std::sync::{Arc, OnceLock};
+use wayland_backend::sys::client::ObjectId;
+use wayland_client::protocol::wl_surface::WlSurface;
+use wayland_client::Proxy;
+use wayland_protocols::xdg::foreign::zv2::client::zxdg_exported_v2::ZxdgExportedV2;
 
-pub async fn open_file<T: ComponentHandle>(
+pub async fn open_file<T: WinitWindow>(
     parent: &T,
     title: impl AsRef<str>,
     ty: FileType,
 ) -> Option<PathBuf> {
-    with_window_id(parent, move |parent| async move {
-        // Build filter.
-        let filter = match ty {
-            FileType::Firmware => FileFilter::new("Firmware Dump").glob("*.obf"),
-        };
+    // Build filter.
+    let filter = match ty {
+        FileType::Firmware => FileFilter::new("Firmware Dump").glob("*.obf"),
+    };
 
-        // Send the request
-        let resp = match SelectedFiles::open_file()
-            .identifier(parent)
-            .title(title.as_ref())
-            .modal(true)
-            .filter(filter)
-            .send()
-            .await
-            .unwrap()
-            .response()
-        {
-            Ok(v) => v,
-            Err(ashpd::Error::Response(ResponseError::Cancelled)) => return None,
-            Err(_) => unimplemented!(),
-        };
+    // Send the request.
+    let parent = get_parent_id(parent);
+    let req = SelectedFiles::open_file()
+        .identifier(parent.id)
+        .title(title.as_ref())
+        .modal(true)
+        .filter(filter)
+        .send()
+        .await;
 
-        // Get file path.
-        Some(resp.uris().first().unwrap().to_file_path().unwrap())
-    })
-    .await
+    if let Some(v) = parent.surface {
+        v.destroy();
+    }
+
+    // Get response.
+    let resp = match req.unwrap().response() {
+        Ok(v) => v,
+        Err(ashpd::Error::Response(ResponseError::Cancelled)) => return None,
+        Err(_) => unimplemented!(),
+    };
+
+    // Get file path.
+    Some(resp.uris().first().unwrap().to_file_path().unwrap())
 }
 
-pub async fn open_dir<T: ComponentHandle>(parent: &T, title: impl AsRef<str>) -> Option<PathBuf> {
-    with_window_id(parent, move |parent| async move {
-        // Send the request
-        let resp = match SelectedFiles::open_file()
-            .identifier(parent)
-            .title(title.as_ref())
-            .modal(true)
-            .directory(true)
-            .send()
-            .await
-            .unwrap()
-            .response()
-        {
-            Ok(v) => v,
-            Err(ashpd::Error::Response(ResponseError::Cancelled)) => return None,
-            Err(_) => unimplemented!(),
-        };
+pub async fn open_dir<T: WinitWindow>(parent: &T, title: impl AsRef<str>) -> Option<PathBuf> {
+    // Send the request
+    let parent = get_parent_id(parent);
+    let req = SelectedFiles::open_file()
+        .identifier(parent.id)
+        .title(title.as_ref())
+        .modal(true)
+        .directory(true)
+        .send()
+        .await;
 
-        // Get directory path.
-        Some(resp.uris().first().unwrap().to_file_path().unwrap())
-    })
-    .await
+    if let Some(v) = parent.surface {
+        v.destroy();
+    }
+
+    // Get response.
+    let resp = match req.unwrap().response() {
+        Ok(v) => v,
+        Err(ashpd::Error::Response(ResponseError::Cancelled)) => return None,
+        Err(_) => unimplemented!(),
+    };
+
+    // Get directory path.
+    Some(resp.uris().first().unwrap().to_file_path().unwrap())
 }
 
-async fn with_window_id<R, P, F>(parent: &P, f: F) -> R::Output
+fn get_parent_id<P>(parent: &P) -> Parent
 where
-    R: Future,
-    P: ComponentHandle,
-    F: FnOnce(Option<WindowIdentifier>) -> R,
+    P: WinitWindow,
 {
-    // Get display handle. All local variable here must not get dropped until the operation is
-    // complete.
-    let parent = parent.window().window_handle();
-    let display = parent.display_handle();
-    let display = display.as_ref().map(|v| v.as_ref()).ok();
+    // Check window type.
+    let parent = parent.handle();
+    let parent = parent.window_handle().unwrap();
+    let surface = match parent.as_ref() {
+        RawWindowHandle::Xlib(v) => {
+            return Parent {
+                id: WindowIdentifier::from_xid(v.window),
+                surface: None,
+            }
+        }
+        RawWindowHandle::Xcb(v) => {
+            return Parent {
+                id: WindowIdentifier::from_xid(v.window.get().into()),
+                surface: None,
+            }
+        }
+        RawWindowHandle::Wayland(v) => v.surface.as_ptr(),
+        RawWindowHandle::Drm(_) | RawWindowHandle::Gbm(_) => unimplemented!(),
+        _ => unreachable!(),
+    };
 
-    // Get parent handle.
-    let parent = parent.window_handle();
-    let parent = parent.as_ref().map(|v| v.as_ref()).unwrap();
-    let parent = WindowIdentifier::from_raw_handle(parent, display).await;
+    // Get WlSurface.
+    let backend = global::<SlintBackend>().unwrap();
+    let wayland = backend.wayland().unwrap();
+    let surface = unsafe { ObjectId::from_ptr(WlSurface::interface(), surface.cast()).unwrap() };
+    let surface = WlSurface::from_id(wayland.connection(), surface).unwrap();
 
-    f(Some(parent)).await
+    // Export surface.
+    let mut queue = wayland.queue().borrow_mut();
+    let mut state = wayland.state().borrow_mut();
+    let qh = queue.handle();
+    let handle = Arc::new(OnceLock::<String>::new());
+    let surface = state
+        .xdg_exporter()
+        .export_toplevel(&surface, &qh, handle.clone());
+
+    queue.roundtrip(&mut state).unwrap();
+
+    // Construct WindowIdentifier. We need some hack here since we can't construct
+    // WindowIdentifier::Wayland.
+    let id = format!("wayland:{}", handle.get().unwrap());
+    let id = WindowIdentifier::X11(id.parse().unwrap());
+
+    Parent {
+        id,
+        surface: Some(surface),
+    }
+}
+
+/// Encapsulates [`WindowIdentifier`] for parent window.
+struct Parent {
+    id: WindowIdentifier,
+    surface: Option<ZxdgExportedV2>,
 }
