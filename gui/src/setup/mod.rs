@@ -2,9 +2,9 @@ pub use self::data::DataRootError;
 
 use self::data::{read_data_root, write_data_root};
 use crate::data::{DataError, DataMgr};
-use crate::dialogs::{open_dir, open_file, FileType};
-use crate::rt::spawn_blocker;
-use crate::ui::{error, PlatformExt, RuntimeExt, SetupWizard};
+use crate::ui::{
+    error, open_dir, open_file, spawn_handler, FileType, PlatformExt, RuntimeExt, SetupWizard,
+};
 use crate::vfs::{FsType, FS_TYPE};
 use erdp::ErrorDisplay;
 use obfw::ps4::{PartData, PartReader};
@@ -49,32 +49,19 @@ pub async fn run_setup() -> Result<Option<DataMgr>, SetupError> {
     win.on_get_dumper({
         let win = win.as_weak();
 
-        move || {
-            let url = "https://github.com/obhq/firmware-dumper";
-
-            if let Err(e) = open::that_detached(url) {
-                let m = format!("Failed to open {}: {}.", url, e.display());
-
-                win.unwrap().set_error_message(m.into());
-            }
-        }
+        move || spawn_handler(&win, |w| get_dumper(w))
     });
 
     win.on_browse_data_root({
         let win = win.as_weak();
 
-        move || crate::rt::spawn(browse_data_root(win.unwrap()))
+        move || spawn_handler(&win, |w| browse_data_root(w))
     });
 
     win.on_set_data_root({
         let win = win.as_weak();
 
-        move || {
-            let win = win.unwrap();
-            let task = set_data_root(win.clone_strong());
-
-            spawn_blocker(win, task);
-        }
+        move || spawn_handler(&win, |w| set_data_root(w))
     });
 
     win.on_browse_firmware({
@@ -127,6 +114,20 @@ pub async fn run_setup() -> Result<Option<DataMgr>, SetupError> {
     Ok(Some(mgr))
 }
 
+async fn get_dumper(win: SetupWizard) {
+    // Open web browser.
+    let url = "https://github.com/obhq/firmware-dumper";
+    let e = match open::that_detached(url) {
+        Ok(_) => return,
+        Err(e) => e,
+    };
+
+    // Show error.
+    let m = slint::format!("Failed to open {}: {}.", url, e.display());
+
+    error(Some(&win), m).await;
+}
+
 async fn browse_data_root(win: SetupWizard) {
     // Ask the user to browse for a directory.
     let path = match open_dir(&win, "Data location").await {
@@ -138,7 +139,7 @@ async fn browse_data_root(win: SetupWizard) {
     let path = match path.into_os_string().into_string() {
         Ok(v) => v,
         Err(_) => {
-            win.set_error_message("Path to selected directory must be unicode.".into());
+            error(Some(&win), "Path to selected directory must be unicode.").await;
             return;
         }
     };

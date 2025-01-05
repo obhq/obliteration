@@ -1,4 +1,4 @@
-use super::FileType;
+use crate::ui::FileType;
 use slint::ComponentHandle;
 use std::path::PathBuf;
 

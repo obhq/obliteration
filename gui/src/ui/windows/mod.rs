@@ -1,3 +1,5 @@
+pub use self::dialogs::*;
+
 use super::{Modal, PlatformExt};
 use crate::rt::WinitWindow;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -9,17 +11,19 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     SWP_NOZORDER,
 };
 
+mod dialogs;
+
 impl<T: WinitWindow> PlatformExt for T {
     fn set_center(&self) -> Result<(), PlatformError> {
+        // Get HWND.
         let win = self.handle();
-        let raw_handle = win.window_handle().unwrap();
-
-        let RawWindowHandle::Win32(h) = raw_handle.as_ref() else {
-            unreachable!("Unsupported handle type on Windows");
+        let win = win.window_handle().unwrap();
+        let RawWindowHandle::Win32(win) = win.as_ref() else {
+            unreachable!();
         };
 
         unsafe {
-            let hwnd = h.hwnd.get() as HWND;
+            let hwnd = win.hwnd.get() as HWND;
             let mut rect = std::mem::zeroed();
 
             let ret = GetWindowRect(hwnd, &mut rect);

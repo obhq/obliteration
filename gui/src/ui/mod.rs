@@ -1,12 +1,13 @@
 pub use self::backend::*;
 pub use self::modal::*;
-pub use self::os::PlatformError;
+pub use self::os::*;
 pub use self::profile::*;
 
-use crate::rt::WinitWindow;
+use crate::rt::{spawn_blocker, WinitWindow};
 use i_slint_core::window::WindowInner;
 use raw_window_handle::HasWindowHandle;
-use slint::{ComponentHandle, SharedString};
+use slint::{ComponentHandle, SharedString, Weak};
+use std::future::Future;
 use winit::window::WindowId;
 
 mod backend;
@@ -16,6 +17,20 @@ mod modal;
 #[cfg_attr(target_os = "windows", path = "windows/mod.rs")]
 mod os;
 mod profile;
+
+/// Blocks user inputs from deliver to `w` then spawn a future returned from `f`.
+///
+/// All user inputs for `w` will be discarded while the future still alive.
+pub fn spawn_handler<W, F>(w: &Weak<W>, f: impl FnOnce(W) -> F)
+where
+    W: ComponentHandle + 'static,
+    F: Future<Output = ()> + 'static,
+{
+    let w = w.unwrap();
+    let f = f(w.clone_strong());
+
+    spawn_blocker(w, f);
+}
 
 pub async fn error<P: WinitWindow>(parent: Option<&P>, msg: impl Into<SharedString>) {
     let win = ErrorWindow::new().unwrap();
@@ -75,6 +90,11 @@ impl<T: ComponentHandle> RuntimeExt for T {
 
         win.hidden().wait().await;
     }
+}
+
+/// File type to use open from [`open_file()`].
+pub enum FileType {
+    Firmware,
 }
 
 // This macro includes the generated Rust code from .slint files

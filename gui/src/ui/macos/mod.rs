@@ -1,3 +1,5 @@
+pub use self::dialogs::*;
+
 use self::view::with_window;
 use super::{Modal, PlatformExt};
 use crate::rt::WinitWindow;
@@ -7,6 +9,7 @@ use std::ffi::c_long;
 use std::ops::Deref;
 use thiserror::Error;
 
+mod dialogs;
 mod view;
 
 impl<T: WinitWindow> PlatformExt for T {

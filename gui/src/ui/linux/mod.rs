@@ -1,8 +1,11 @@
+pub use self::dialogs::*;
+
 use super::{Modal, PlatformExt, SlintBackend};
 use crate::rt::{global, WinitWindow};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use thiserror::Error;
 
+mod dialogs;
 mod wayland;
 
 impl<T: WinitWindow> PlatformExt for T {
