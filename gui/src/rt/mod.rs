@@ -29,7 +29,7 @@ mod window;
 ///
 /// Note that our async executor only dispatch a pending future when it is wakeup by
 /// [`std::task::Waker`]. Any pending futures that need to wakeup by an external event like I/O need
-/// a dedicated thread to invoke [`std::task::Waker::wake()`] when the I/O is ready. That mean our
+/// a dedicated thread to invoke [`std::task::Waker::wake()`] when the I/O is ready. That means our
 /// async executor will not work with Tokio by default.
 ///
 /// To create a window, call [`create_window()`] from `main` future.
@@ -88,7 +88,7 @@ pub fn raw_display_handle() -> RawDisplayHandle {
 }
 
 /// You need to call [`register_window()`] after this to receive events for the created window and
-/// you should do it before the first `await` otherwise you may missed some initial events.
+/// you should do it before the first `await` otherwise you may miss some initial events.
 ///
 /// # Panics
 /// If called from the other thread than main thread.
@@ -96,8 +96,8 @@ pub fn create_window(attrs: WindowAttributes) -> Result<Window, OsError> {
     Context::with(move |cx| cx.el.create_window(attrs))
 }
 
-/// Note that the runtime **do not** hold a strong reference to `win` and it will automatically
-/// removed when the underlying winit window destroyed.
+/// Note that the runtime **does not** hold a strong reference to `win` and it will automatically
+/// be removed when the underlying winit window is destroyed.
 ///
 /// # Panics
 /// - If called from the other thread than main thread.
@@ -120,7 +120,7 @@ pub fn register_global(obj: Rc<dyn Any>) {
     Context::with(move |cx| assert!(cx.objects.insert(id, obj).is_none()))
 }
 
-/// Returns object that was registered with [`register()`].
+/// Returns an object that was registered with [`register()`].
 ///
 /// # Panics
 /// If called from the other thread than main thread.

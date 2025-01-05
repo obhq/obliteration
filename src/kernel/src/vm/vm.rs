@@ -468,8 +468,8 @@ impl VmSpace {
 
         // Determine how to allocate.
         let (addr, len, storage) = if self.allocation_granularity < Self::VIRTUAL_PAGE_SIZE {
-            // If allocation granularity is smaller than the virtual page that mean the result of
-            // mmap may not aligned correctly. In this case we need to do 2 allocations. The first
+            // If allocation granularity is smaller than the virtual page that means the result of
+            // mmap may not be aligned correctly. In this case we need to do 2 allocations. The first
             // allocation will be large enough for a second allocation with fixed address.
             // The whole idea is coming from: https://stackoverflow.com/a/31411825/1829232
             let len = len + (Self::VIRTUAL_PAGE_SIZE - self.allocation_granularity);
@@ -481,8 +481,8 @@ impl VmSpace {
 
             (addr, len, storage)
         } else {
-            // If allocation granularity is equal or larger than the virtual page that mean the
-            // result of mmap will always aligned correctly.
+            // If allocation granularity is equal or larger than the virtual page, that means the
+            // result of mmap will always be aligned correctly.
             let storage = Memory::new(addr, len)?;
             let addr = storage.addr();
 

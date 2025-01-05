@@ -80,7 +80,7 @@ impl VPath {
     }
 
     pub fn components(&self) -> Components<'_> {
-        // SAFETY: The path always is an absolute path that mean we have at least / in the
+        // SAFETY: The path always is an absolute path that means we have at least / in the
         // beginning.
         Components(unsafe { self.0.get_unchecked(1..) })
     }

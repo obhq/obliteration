@@ -13,8 +13,8 @@ pub struct Event<T: EventType> {
 impl<T: EventType> Event<T> {
     /// See `eventhandler_register` on the PS4 for a reference.
     ///
-    /// `handler` must not call into any function that going to trigger any event in the same
-    /// [`EventSet`] because it can cause a deadlock. That mean what `handler` can do is limited.
+    /// `handler` must not call into any function that is going to trigger any event in the same
+    /// [`EventSet`] because it can cause a deadlock. That means what `handler` can do is limited.
     pub fn subscribe<S: Subsystem>(
         &mut self,
         subsys: &Arc<S>,

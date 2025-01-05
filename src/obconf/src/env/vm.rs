@@ -37,8 +37,8 @@ pub enum KernelExit {
 ///
 /// Beware that each write to [`Self::msg_len`] except the last one may not cover the full message.
 /// The consequence of this is [`Self::msg_addr`] may point to an incomplete UTF-8 byte sequence.
-/// That mean you should buffer the message until [`Self::commit`] has been written before validate
-/// if it is a valid UTF-8.
+/// That means you should buffer the message until [`Self::commit`] has been written before validating
+/// if it is valid UTF-8.
 #[cfg(feature = "virt")]
 #[repr(C)]
 pub struct ConsoleMemory {

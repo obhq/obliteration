@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use crate::hv::{Cpu, CpuCommit, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, IoBuf};
 use gdbstub::stub::MultiThreadStopReason;
-use std::error::Error;
 use std::marker::PhantomData;
 use std::mem::{size_of, zeroed, MaybeUninit};
 use thiserror::Error;

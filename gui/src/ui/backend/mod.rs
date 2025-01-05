@@ -6,7 +6,6 @@ use crate::rt::{create_window, raw_display_handle, WindowHandler};
 use i_slint_core::graphics::RequestedGraphicsAPI;
 use i_slint_renderer_skia::SkiaRenderer;
 use rustc_hash::FxHashMap;
-use rwh05::RawDisplayHandle;
 use slint::platform::{
     duration_until_next_timer_update, update_timers_and_animations, SetPlatformError, WindowAdapter,
 };
@@ -41,6 +40,9 @@ impl SlintBackend {
     /// # Safety
     /// The returned [`SlintBackend`] must not outlive the event loop.
     pub unsafe fn new() -> Result<Self, BackendError> {
+        #[cfg(target_os = "linux")]
+        use rwh05::RawDisplayHandle;
+
         let mut b = Self {
             #[cfg(target_os = "linux")]
             wayland: None,

@@ -159,9 +159,9 @@ impl<T> Drop for Tls<T> {
             None => return,
         };
 
-        // Destroy the value for the current thread. When we are here that mean all other threads
-        // that are borrowed us has been terminated, which imply that the values for those thread
-        // has already been destroyed by storage destructor.
+        // Destroy the value for the current thread. When we are here that means all other threads
+        // that have borrowed us have been terminated, which implies that the values for those threads
+        // have already been destroyed by storage destructor.
         #[cfg(unix)]
         unsafe {
             // On Windows the FlsFree() will call the destructor so we don't need to destroy the

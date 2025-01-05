@@ -1,7 +1,5 @@
 use super::{Modal, PlatformExt, PlatformWindow};
-use crate::rt::WindowHandler;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use slint::ComponentHandle;
 use std::io::Error;
 use thiserror::Error;
 use windows_sys::Win32::Foundation::HWND;
