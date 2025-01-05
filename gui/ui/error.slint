@@ -46,7 +46,7 @@ export component ErrorPopup inherits PopupWindow {
 
     callback close-clicked <=> ab.close;
 
-    close-on-click: false;
+    close-policy: PopupClosePolicy.no-auto-close;
 
     Rectangle {
         border-color: Palette.border;

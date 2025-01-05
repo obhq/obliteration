@@ -96,7 +96,7 @@ impl LogEntry {
             None => return,
         };
 
-        // Do not strip "kernel/src/" due to we also set a panic hook. That mean the file path may
+        // Do not strip "kernel/src/" due to us also setting a panic hook. That means the file path may
         // be from another crate.
         write!(stdout, ": {file}").unwrap();
         write!(self.plain, ": {file}").unwrap();

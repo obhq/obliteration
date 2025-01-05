@@ -38,7 +38,7 @@ export component InstallFirmware inherits PopupWindow {
     in property <string> status;
     in property <float> progress;
 
-    close-on-click: false;
+    close-policy: PopupClosePolicy.no-auto-close;
 
     Rectangle {
         background: Palette.alternate-background;

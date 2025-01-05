@@ -37,7 +37,7 @@ impl Context {
     ///
     /// At a glance this may looks incorrect due to `0xc0000102` is `KERNEL_GS_BAS` according to the
     /// docs. The problem is the CPU always use the value from `0xc0000101` regardless the current
-    /// privilege level. That mean `KERNEL_GS_BAS` is the name when the CPU currently on the user
+    /// privilege level. That means `KERNEL_GS_BAS` is the name when the CPU currently on the user
     /// space.
     ///
     /// This also set user-mode `FS` and `GS` to null.

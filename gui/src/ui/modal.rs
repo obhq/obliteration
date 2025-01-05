@@ -2,7 +2,7 @@ use std::ops::Deref;
 
 /// Encapsulates a modal window and its parent.
 ///
-/// This struct force the modal window to be dropped before its parent.
+/// This struct forces the modal window to be dropped before its parent.
 pub struct Modal<'a, W, P> {
     window: W,
     parent: &'a P,

@@ -10,7 +10,10 @@
       },
       "osx": {
         "program": "${workspaceFolder}/dist/Obliteration.app/Contents/MacOS/Obliteration"
-      }
+      },
+      "windows": {
+        "program": "${workspaceFolder}/dist/obliteration.exe"
+      },
     },
     {
       "name": "Kernel",

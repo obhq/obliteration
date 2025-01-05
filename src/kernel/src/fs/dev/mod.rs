@@ -108,7 +108,7 @@ impl DevFs {
             let dirents = dev.dirents();
 
             if let Some(dirent) = dirents.get(self.index).and_then(|e| e.as_ref()) {
-                // If there is a strong reference that mean it is our dirent.
+                // If there is a strong reference that means it is our dirent.
                 if dirent.strong_count() != 0 {
                     continue;
                 }
