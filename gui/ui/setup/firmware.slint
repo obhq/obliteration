@@ -34,35 +34,34 @@ export component Firmware {
     }
 }
 
-export component InstallFirmware inherits PopupWindow {
+export component InstallFirmware inherits Window {
     in property <string> status;
     in property <float> progress;
 
-    close-policy: PopupClosePolicy.no-auto-close;
+    title: "Installing Firmware";
+    icon: @image-url("@root/icon.png");
+    min-width: 400px;
+    preferred-width: 400px;
+    min-height: 100px;
+    preferred-height: 100px;
 
-    Rectangle {
-        background: Palette.alternate-background;
-        border-color: Palette.border;
-        border-width: 1px;
+    VerticalBox {
+        alignment: center;
 
-        VerticalBox {
-            alignment: center;
+        Text {
+            text: "Installing firmware, please wait.";
+            horizontal-alignment: center;
+        }
 
-            Text {
-                text: "Installing firmware, please wait.";
-                horizontal-alignment: center;
-            }
+        ProgressIndicator {
+            progress: progress;
+        }
 
-            ProgressIndicator {
-                progress: progress;
-            }
-
-            Text {
-                text: status;
-                horizontal-alignment: center;
-                wrap: no-wrap;
-                overflow: elide;
-            }
+        Text {
+            text: status;
+            horizontal-alignment: center;
+            wrap: no-wrap;
+            overflow: elide;
         }
     }
 }

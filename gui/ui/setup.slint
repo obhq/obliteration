@@ -3,8 +3,9 @@ import { Firmware, InstallFirmware } from "setup/firmware.slint";
 import { Conclusion } from "setup/conclusion.slint";
 import { NavBar } from "setup/nav.slint";
 import { Palette } from "std-widgets.slint";
-import { ErrorPopup } from "error.slint";
 import { DataRoot } from "setup/root.slint";
+
+export { InstallFirmware }
 
 // https://github.com/slint-ui/slint/issues/6880
 enum SetupPage {
@@ -17,9 +18,6 @@ enum SetupPage {
 export component SetupWizard inherits Window {
     in-out property <string> data-root;
     in-out property <string> firmware-dump;
-    in property <string> firmware-status;
-    in property <float> firmware-progress;
-    in-out property <string> error-message;
 
     pure callback cancel <=> nav.cancel;
     pure callback get-dumper();
@@ -31,8 +29,10 @@ export component SetupWizard inherits Window {
 
     title: "Setup Obliteration";
     icon: @image-url("icon.png");
-    width: 500px; // PopupWindow does not resize with the window somehow.
-    height: 400px; // Same here.
+    min-width: 500px;
+    preferred-width: 500px;
+    min-height: 400px;
+    preferred-height: 400px;
 
     private property <SetupPage> page: SetupPage.Intro;
 
@@ -104,26 +104,6 @@ export component SetupWizard inherits Window {
         }
     }
 
-    // Popups.
-    firmware-popup := InstallFirmware {
-        x: 10px;
-        y: 150px;
-        width: parent.width - 20px;
-        height: parent.height - 300px;
-        status: firmware-status;
-        progress: firmware-progress;
-    }
-
-    error-popup := ErrorPopup {
-        x: 10px;
-        y: (parent.height / 2) - 50px;
-        width: parent.width - 20px;
-        message: error-message;
-        close-clicked => {
-            error-message = "";
-        }
-    }
-
     // Functions.
     public function set-data-root-ok(has-firmware: bool) {
         if has-firmware {
@@ -133,24 +113,7 @@ export component SetupWizard inherits Window {
         }
     }
 
-    public function show-firmware-installer() {
-        firmware-popup.show();
-    }
-
-    public function set-firmware-finished(success: bool) {
-        firmware-popup.close();
-
-        if success {
-            page = SetupPage.Conclusion;
-        }
-    }
-
-    // Change callbacks.
-    changed error-message => {
-        if error-message == "" {
-            error-popup.close();
-        } else {
-            error-popup.show();
-        }
+    public function set-firmware-finished() {
+        page = SetupPage.Conclusion;
     }
 }
