@@ -2,18 +2,23 @@ pub use self::data::DataRootError;
 
 use self::data::{read_data_root, write_data_root};
 use crate::data::{DataError, DataMgr};
+use crate::rt::yield_now;
 use crate::ui::{
-    error, open_dir, open_file, spawn_handler, FileType, PlatformExt, RuntimeExt, SetupWizard,
+    error, open_dir, open_file, spawn_handler, FileType, InstallFirmware, PlatformExt, RuntimeExt,
+    SetupWizard,
 };
 use crate::vfs::{FsType, FS_TYPE};
 use erdp::ErrorDisplay;
 use obfw::ps4::{PartData, PartReader};
 use obfw::{DumpReader, ItemReader};
 use redb::{Database, DatabaseError};
-use slint::{ComponentHandle, PlatformError, SharedString};
+use slint::{CloseRequestResponse, ComponentHandle, PlatformError, SharedString};
 use std::cell::Cell;
 use std::error::Error;
 use std::fs::File;
+use std::future::Future;
+use std::io::{ErrorKind, Write};
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use thiserror::Error;
@@ -67,13 +72,13 @@ pub async fn run_setup() -> Result<Option<DataMgr>, SetupError> {
     win.on_browse_firmware({
         let win = win.as_weak();
 
-        move || crate::rt::spawn(browse_firmware(win.unwrap()))
+        move || spawn_handler(&win, |w| browse_firmware(w))
     });
 
     win.on_install_firmware({
         let win = win.as_weak();
 
-        move || install_firmware(win.unwrap())
+        move || spawn_handler(&win, |w| install_firmware(w))
     });
 
     win.on_finish({
@@ -162,10 +167,10 @@ async fn set_data_root(win: SetupWizard) {
     let path = Path::new(input.as_str());
 
     if !path.is_absolute() {
-        win.set_error_message("Path must be absolute.".into());
+        error(Some(&win), "Path must be absolute.").await;
         return;
     } else if !path.is_dir() {
-        win.set_error_message("Path must be a directory.".into());
+        error(Some(&win), "Path must be a directory.").await;
         return;
     }
 
@@ -173,16 +178,16 @@ async fn set_data_root(win: SetupWizard) {
     let mgr = match DataMgr::new(path) {
         Ok(v) => v,
         Err(e) => {
-            win.set_error_message(
-                format!("Failed to create data manager: {}.", e.display()).into(),
-            );
+            let m = slint::format!("Failed to create data manager: {}.", e.display());
+            error(Some(&win), m).await;
             return;
         }
     };
 
     // Save.
     if let Err(e) = write_data_root(input) {
-        win.set_error_message(format!("Failed to save data location: {}.", e.display()).into());
+        let m = slint::format!("Failed to save data location: {}.", e.display());
+        error(Some(&win), m).await;
         return;
     }
 
@@ -200,7 +205,7 @@ async fn browse_firmware(win: SetupWizard) {
     let path = match path.into_os_string().into_string() {
         Ok(v) => v,
         Err(_) => {
-            win.set_error_message("Path to a firmware dump must be unicode.".into());
+            error(Some(&win), "Path to a firmware dump must be unicode.").await;
             return;
         }
     };
@@ -209,12 +214,13 @@ async fn browse_firmware(win: SetupWizard) {
     win.set_firmware_dump(path.into());
 }
 
-fn install_firmware(win: SetupWizard) {
+async fn install_firmware(win: SetupWizard) {
     // Get dump path.
     let path = win.get_firmware_dump();
 
     if path.is_empty() {
-        win.set_error_message("You need to select a firmware dump before proceed.".into());
+        let m = "You need to select a firmware dump before proceed.";
+        error(Some(&win), m).await;
         return;
     }
 
@@ -225,7 +231,8 @@ fn install_firmware(win: SetupWizard) {
     {
         Ok(v) => v,
         Err(e) => {
-            win.set_error_message(format!("Failed to open {}: {}.", path, e.display()).into());
+            let m = slint::format!("Failed to open {}: {}.", path, e.display());
+            error(Some(&win), m).await;
             return;
         }
     };
@@ -235,97 +242,119 @@ fn install_firmware(win: SetupWizard) {
     let dmgr = match DataMgr::new(root.as_str()) {
         Ok(v) => v,
         Err(e) => {
-            let m = format!(
+            let m = slint::format!(
                 "Failed to create data manager on {}: {}.",
                 root,
                 e.display()
             );
 
-            win.set_error_message(m.into());
+            error(Some(&win), m).await;
             return;
         }
     };
 
-    win.invoke_show_firmware_installer();
-    win.set_firmware_status("Initializing...".into());
+    // Setup progress window.
+    let pw = match InstallFirmware::new() {
+        Ok(v) => v,
+        Err(e) => {
+            let m = slint::format!(
+                "Failed to create firmware progress window: {}.",
+                e.display()
+            );
 
-    // Spawn thread to extract the dump.
-    let win = win.as_weak();
+            error(Some(&win), m).await;
+            return;
+        }
+    };
 
-    std::thread::spawn(move || {
-        // Extract.
-        let n = dump.items();
-        let mut p = 0u32;
-        let e =
-            match extract_firmware_dump(
-                &mut dump,
-                &dmgr,
-                |v| drop(win.upgrade_in_event_loop(move |w| w.set_firmware_status(v.into()))),
-                || {
-                    p += 1;
+    pw.set_status("Initializing...".into());
+    pw.window()
+        .on_close_requested(|| CloseRequestResponse::KeepWindowShown);
 
-                    drop(win.upgrade_in_event_loop(move |w| {
-                        w.set_firmware_progress(p as f32 / n as f32)
-                    }));
-                },
-            ) {
-                Ok(_) => {
-                    drop(win.upgrade_in_event_loop(|w| w.invoke_set_firmware_finished(true)));
-                    return;
-                }
-                Err(e) => e,
-            };
+    if let Err(e) = pw.show() {
+        let m = slint::format!("Failed to show firmware progress window: {}.", e.display());
+        error(Some(&win), m).await;
+        return;
+    }
 
-        // Show error.
-        let m = format!("Failed to install {}: {}.", path, e.display());
+    // Make progress window modal.
+    let pw = match pw.set_modal(&win) {
+        Ok(v) => v,
+        Err(e) => {
+            let m = slint::format!(
+                "Failed to make firmware progress window modal: {}.",
+                e.display()
+            );
 
-        drop(win.upgrade_in_event_loop(move |w| {
-            w.invoke_set_firmware_finished(false);
-            w.set_error_message(m.into());
-        }));
-    });
-}
+            error(Some(&win), m).await;
+            return;
+        }
+    };
 
-fn extract_firmware_dump(
-    dump: &mut DumpReader<File>,
-    dmgr: &DataMgr,
-    mut status: impl FnMut(String),
-    mut step: impl FnMut(),
-) -> Result<(), FirmwareError> {
-    loop {
+    // Setup progress updater.
+    let n = dump.items();
+    let mut p = 0u32;
+    let mut step = || {
+        p += 1;
+        pw.set_progress(p as f32 / n as f32);
+        yield_now()
+    };
+
+    yield_now().await;
+
+    // Extract.
+    let e = loop {
         // Get next item.
-        let mut item = match dump.next_item().map_err(FirmwareError::NextItem)? {
-            Some(v) => v,
-            None => break,
+        let mut item = match dump.next_item() {
+            Ok(Some(v)) => v,
+            Ok(None) => break None,
+            Err(e) => break Some(FirmwareError::NextItem(e)),
         };
 
         // Update status.
         let name = item.to_string();
 
-        status(format!("Extracting {name}..."));
+        pw.set_status(slint::format!("Extracting {name}..."));
+
+        yield_now().await;
 
         // Extract item.
         let r: Result<(), Box<dyn Error>> = match &mut item {
-            ItemReader::Ps4Part(r) => {
-                extract_partition(dmgr, r, &mut status, &mut step).map_err(|e| e.into())
-            }
+            ItemReader::Ps4Part(r) => extract_partition(&pw, &dmgr, r, &mut step)
+                .await
+                .map_err(|e| e.into()),
         };
 
         if let Err(e) = r {
-            return Err(FirmwareError::ExtractItem(name, e));
+            break Some(FirmwareError::ExtractItem(name, e));
         }
 
-        step();
+        step().await;
+    };
+
+    // Check status.
+    if let Err(e) = pw.hide() {
+        let m = slint::format!("Failed to close firmware progress window: {}.", e.display());
+        error(Some(pw.deref()), m).await;
     }
 
-    Ok(())
+    drop(pw);
+    yield_now().await;
+
+    match e {
+        Some(e) => {
+            let m = slint::format!("Failed to install {}: {}.", path, e.display());
+            error(Some(&win), m).await;
+        }
+        None => win.invoke_set_firmware_finished(),
+    }
 }
 
-fn extract_partition(
+async fn extract_partition<F: Future<Output = ()>>(
+    pw: &InstallFirmware,
     dmgr: &DataMgr,
-    part: &mut PartReader<File>,
-    status: &mut impl FnMut(String),
-    step: &mut impl FnMut(),
+    part: &mut PartReader<'_, File>,
+    step: &mut impl FnMut() -> F,
 ) -> Result<(), PartitionError> {
     // Get FS type.
     let fs = match part.fs() {
@@ -392,6 +421,7 @@ fn extract_partition(
 
     // Extract items.
     let root = dmgr.partitions().data(dev);
+    let mut buf = vec![0u8; 0xFFFF];
 
     loop {
         // Get next item.
@@ -429,7 +459,9 @@ fn extract_partition(
         // Extract item.
         match data {
             Some(mut data) => {
-                status(format!("Extracting {name}..."));
+                pw.set_status(slint::format!("Extracting {name}..."));
+
+                yield_now().await;
 
                 // Create only if not exists.
                 let mut file = match File::create_new(&path) {
@@ -437,8 +469,24 @@ fn extract_partition(
                     Err(e) => return Err(PartitionError::CreateFile(path, e)),
                 };
 
-                if let Err(e) = std::io::copy(&mut data, &mut file) {
-                    return Err(PartitionError::ExtractFile(name, path, e));
+                // Copy data.
+                loop {
+                    let n = match data.read(&mut buf) {
+                        Ok(v) => v,
+                        Err(e) if e.kind() == ErrorKind::Interrupted => continue,
+                        Err(e) => return Err(PartitionError::ExtractFile(name, path, e)),
+                    };
+
+                    if n == 0 {
+                        break;
+                    }
+
+                    // Write file.
+                    if let Err(e) = file.write_all(&buf[..n]) {
+                        return Err(PartitionError::ExtractFile(name, path, e));
+                    }
+
+                    yield_now().await;
                 }
             }
             None => {
@@ -449,11 +497,13 @@ fn extract_partition(
             }
         }
 
-        step();
+        step().await;
     }
 
     // Commit metadata transaction.
-    status("Committing metadata database...".into());
+    pw.set_status("Committing metadata database...".into());
+
+    yield_now().await;
 
     if let Err(e) = meta.commit() {
         return Err(PartitionError::MetaCommit(mp, e));

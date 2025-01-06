@@ -123,6 +123,19 @@ pub fn spawn(task: impl Future<Output = ()> + 'static) {
     })
 }
 
+/// Yields execution back to the runtime to process pending events.
+pub fn yield_now() -> impl Future<Output = ()> {
+    let mut yielded = false;
+
+    std::future::poll_fn(move |cx| match std::mem::replace(&mut yielded, true) {
+        true => Poll::Ready(()),
+        false => {
+            cx.waker().wake_by_ref();
+            Poll::Pending
+        }
+    })
+}
+
 /// The returned handle will be valid until the event loop exited.
 ///
 /// # Panics
