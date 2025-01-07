@@ -1,6 +1,6 @@
 use crate::config::PAGE_SIZE;
 use crate::context::{current_thread, CpuLocal};
-use crate::uma::{Uma, UmaZone};
+use crate::uma::{Uma, UmaFlags, UmaZone};
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -23,7 +23,12 @@ impl Stage2 {
     const KMEM_ZMASK: usize = Self::KMEM_ZBASE - 1;
     const KMEM_ZSIZE: usize = PAGE_SIZE.get() >> Self::KMEM_ZSHIFT;
 
-    /// See `kmeminit` on the PS4 for a reference.
+    /// See `kmeminit` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x1A4B80|
     pub fn new(uma: &mut Uma) -> Self {
         // The possible of maximum alignment that Layout allowed is a bit before the most
         // significant bit of isize (e.g. 0x4000000000000000 on 64 bit system). So we can use
@@ -46,7 +51,12 @@ impl Stage2 {
                 }
 
                 // Create zone.
-                let zone = Arc::new(uma.create_zone(size.to_string().into(), size, align - 1));
+                let zone = Arc::new(uma.create_zone(
+                    size.to_string().into(),
+                    size,
+                    align - 1,
+                    UmaFlags::new().with_malloc(true),
+                ));
 
                 while last <= size.get() {
                     zones.push(zone.clone());

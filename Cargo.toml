@@ -11,7 +11,6 @@ members = [
     "src/obconf",
     "src/tls",
 ]
-default-members = ["gui"]
 
 [profile.dev]
 panic = "abort"

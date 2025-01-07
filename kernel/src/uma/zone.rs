@@ -18,6 +18,19 @@ pub struct UmaZone {
 }
 
 impl UmaZone {
+    /// See `zone_ctor` on Orbis for a reference.
+    ///
+    /// # Context safety
+    /// This function does not require a CPU context on **stage 1** heap.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x13D490|
+    pub(super) fn new() -> Self {
+        todo!()
+    }
+
     pub fn size(&self) -> NonZero<usize> {
         self.size
     }
