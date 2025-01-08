@@ -1,5 +1,5 @@
 use crate::config::boot_env;
-use anstyle::{AnsiColor, Color, Style};
+use anstyle::{AnsiColor, Color, Effects, Style};
 use core::fmt::{Display, Formatter};
 use obconf::{BootEnv, ConsoleType};
 
@@ -30,49 +30,47 @@ macro_rules! info {
 /// This function does not require a CPU context as long as [`Display`] implementation on `msg` does
 /// not.
 ///
-/// # Interupt safety
+/// # Interrupt safety
 /// This function is interupt safe as long as [`Display`] implementation on `msg` are interupt safe
 /// (e.g. no heap allocation).
 #[inline(never)]
 pub fn info(file: &str, line: u32, msg: impl Display) {
-    print(
-        ConsoleType::Info,
-        Log {
-            style: Style::new().fg_color(Some(Color::Ansi(AnsiColor::BrightCyan))),
-            cat: 'I',
-            file,
-            line,
-            msg,
-        },
-    );
+    let msg = Log {
+        style: Style::new().effects(Effects::DIMMED),
+        cat: 'I',
+        file,
+        line,
+        msg,
+    };
+
+    print(ConsoleType::Info, msg);
 }
 
 /// # Context safety
 /// This function does not require a CPU context as long as [`Display`] implementation on `msg` does
 /// not.
 ///
-/// # Interupt safety
+/// # Interrupt safety
 /// This function is interupt safe as long as [`Display`] implementation on `msg` are interupt safe
 /// (e.g. no heap allocation).
 #[inline(never)]
 pub fn error(file: &str, line: u32, msg: impl Display) {
-    print(
-        ConsoleType::Error,
-        Log {
-            style: Style::new().fg_color(Some(Color::Ansi(AnsiColor::BrightRed))),
-            cat: 'E',
-            file,
-            line,
-            msg,
-        },
-    )
+    let msg = Log {
+        style: Style::new().fg_color(Some(Color::Ansi(AnsiColor::BrightRed))),
+        cat: 'E',
+        file,
+        line,
+        msg,
+    };
+
+    print(ConsoleType::Error, msg)
 }
 
 /// # Context safety
 /// This function does not require a CPU context as long as [`Display`] implementation on `msg` does
 /// not.
 ///
-/// # Interupt safety
+/// # Interrupt safety
 /// This function is interupt safe as long as [`Display`] implementation on `msg` are interupt safe
 /// (e.g. no heap allocation).
 fn print(ty: ConsoleType, msg: impl Display) {
@@ -96,12 +94,11 @@ struct Log<'a, M: Display> {
 
 impl<M: Display> Display for Log<'_, M> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        writeln!(
-            f,
-            "{}++++++++++++++++++ {} {}:{}{0:#}",
-            self.style, self.cat, self.file, self.line
-        )?;
-        self.msg.fmt(f)?;
+        let info = Style::new().effects(Effects::DIMMED);
+
+        writeln!(f, "{}[{}]:{0:#} {}", self.style, self.cat, self.msg)?;
+        write!(f, "     {}{}:{}{0:#}", info, self.file, self.line)?;
+
         Ok(())
     }
 }

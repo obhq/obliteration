@@ -1,4 +1,6 @@
 use super::bucket::UmaBucket;
+use super::keg::UmaKeg;
+use super::UmaFlags;
 use crate::context::{current_thread, CpuLocal};
 use crate::lock::Gutex;
 use alloc::collections::VecDeque;
@@ -27,8 +29,15 @@ impl UmaZone {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13D490|
-    pub(super) fn new() -> Self {
-        todo!()
+    pub(super) fn new(keg: Option<UmaKeg>, flags: UmaFlags) -> Self {
+        if flags.secondary() {
+            todo!()
+        } else {
+            match keg {
+                Some(_) => todo!(),
+                None => todo!(),
+            }
+        }
     }
 
     pub fn size(&self) -> NonZero<usize> {
