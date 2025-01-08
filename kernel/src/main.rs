@@ -134,7 +134,7 @@ fn panic(i: &PanicInfo) -> ! {
     };
 
     // Print the message.
-    crate::console::error(file, line, i.message());
+    crate::console::error(file, line, format_args!("Kernel panic - {}.", i.message()));
     crate::panic::panic();
 }
 
