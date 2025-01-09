@@ -1,13 +1,12 @@
 #![no_std]
 #![cfg_attr(not(test), no_main)]
 
-use self::context::current_procmgr;
+use self::context::{current_procmgr, ContextSetup};
 use self::imgact::Ps4Abi;
-use self::malloc::{KernelHeap, Stage2};
+use self::malloc::KernelHeap;
 use self::proc::{Fork, Proc, ProcAbi, ProcMgr, Thread};
 use self::sched::sleep;
 use self::uma::Uma;
-use alloc::boxed::Box;
 use alloc::sync::Arc;
 use core::mem::zeroed;
 use core::panic::PanicInfo;
@@ -45,7 +44,7 @@ extern crate alloc;
 /// 2. Interrupt is disabled.
 /// 3. Only main CPU can execute this function.
 ///
-/// See PS4 kernel entry point for a reference.
+/// See Orbis kernel entry point for a reference.
 #[allow(dead_code)]
 #[cfg_attr(target_os = "none", no_mangle)]
 unsafe extern "C" fn _start(env: &'static BootEnv, conf: &'static Config) -> ! {
@@ -65,21 +64,24 @@ unsafe extern "C" fn _start(env: &'static BootEnv, conf: &'static Config) -> ! {
     let proc0 = Arc::new(proc0);
     let thread0 = Thread::new_bare(proc0);
 
-    // Initialize foundations.
-    let uma = Uma::new();
-    let pmgr = ProcMgr::new();
-
     // Activate CPU context.
     let thread0 = Arc::new(thread0);
 
-    self::context::run_with_context(0, thread0, pmgr, cx, move || main(uma));
+    self::context::run_with_context(0, thread0, cx, setup, main);
 }
 
-fn main(mut uma: Uma) -> ! {
+fn setup() -> ContextSetup {
+    let uma = Uma::new();
+    let pmgr = ProcMgr::new();
+
+    ContextSetup { uma, pmgr }
+}
+
+fn main() -> ! {
     // Activate stage 2 heap.
     info!("Activating stage 2 heap.");
 
-    unsafe { KERNEL_HEAP.activate_stage2(Box::new(Stage2::new(&mut uma))) };
+    unsafe { KERNEL_HEAP.activate_stage2() };
 
     // Run sysinit vector. The PS4 use linker to put all sysinit functions in a list then loop the
     // list to execute all of it. We manually execute those functions instead for readability. This
@@ -91,7 +93,7 @@ fn main(mut uma: Uma) -> ! {
 
 /// See `create_init` function on the PS4 for a reference.
 fn create_init() {
-    let pmgr = current_procmgr();
+    let pmgr = current_procmgr().unwrap();
     let abi = Arc::new(Ps4Abi);
     let flags = Fork::new().with_copy_fd(true).with_create_process(true);
 
@@ -103,7 +105,7 @@ fn create_init() {
 /// See `scheduler` function on the PS4 for a reference.
 fn swapper() -> ! {
     // TODO: Subscribe to "system_suspend_phase2_pre_sync" and "system_resume_phase2" event.
-    let procs = current_procmgr();
+    let procs = current_procmgr().unwrap();
 
     loop {
         // TODO: Implement a call to vm_page_count_min().

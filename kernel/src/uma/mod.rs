@@ -1,6 +1,7 @@
 pub use self::zone::*;
 
 use alloc::string::String;
+use alloc::sync::Arc;
 use bitfield_struct::bitfield;
 use core::num::NonZero;
 
@@ -15,28 +16,22 @@ impl Uma {
     /// See `uma_startup` on the Orbis for a reference. Beware that our implementation cannot access
     /// the CPU context due to this function can be called before context activation.
     ///
-    /// # Context safety
-    /// This function does not require a CPU context on **stage 1** heap.
-    ///
     /// # Reference offsets
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13CA70|
-    pub fn new() -> Self {
-        Self {}
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {})
     }
 
     /// See `uma_zcreate` on the Orbis for a reference.
-    ///
-    /// # Context safety
-    /// This function does not require a CPU context on **stage 1** heap.
     ///
     /// # Reference offsets
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13DC80|
     pub fn create_zone(
-        &mut self,
+        &self,
         name: impl Into<String>,
         size: NonZero<usize>,
         align: Option<usize>,

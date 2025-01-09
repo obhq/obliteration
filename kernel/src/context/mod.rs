@@ -3,10 +3,12 @@ pub use self::arch::*;
 pub use self::local::*;
 
 use crate::proc::{ProcMgr, Thread};
+use crate::uma::Uma;
 use alloc::rc::Rc;
 use alloc::sync::Arc;
 use core::marker::PhantomData;
 use core::mem::offset_of;
+use core::ptr::null;
 use core::sync::atomic::Ordering;
 
 mod arc;
@@ -15,33 +17,32 @@ mod arc;
 mod arch;
 mod local;
 
-/// See `pcpu_init` on the PS4 for a reference.
-///
-/// # Context safety
-/// This function does not require a CPU context.
+/// See `pcpu_init` on the Orbis for a reference.
 ///
 /// # Safety
 /// - This function can be called only once per CPU.
 /// - `cpu` must be unique and valid.
-/// - `pmgr` must be the same for all context.
+/// - `setup` must return the same objects for all context.
 ///
-/// # Panics
-/// If `f` return. The reason we don't use `!` for a return type of `F` because it requires nightly
-/// Rust.
-pub unsafe fn run_with_context<R, F: FnOnce() -> R>(
+/// # Reference offsets
+/// | Version | Offset |
+/// |---------|--------|
+/// |PS4 11.00|0x08DA70|
+pub unsafe fn run_with_context(
     cpu: usize,
     td: Arc<Thread>,
-    pmgr: Arc<ProcMgr>,
     args: ContextArgs,
-    f: F,
+    setup: fn() -> ContextSetup,
+    main: fn() -> !,
 ) -> ! {
-    // We use a different mechanism here. The PS4 put all of pcpu at a global level but we put it on
-    // each CPU stack instead.
+    // We use a different mechanism here. The Orbis put all of pcpu at a global level but we put it
+    // on each CPU stack instead.
     let mut cx = Context::new(
         Base {
             cpu,
             thread: Arc::into_raw(td),
-            pmgr: Arc::into_raw(pmgr),
+            uma: null(),
+            pmgr: null(),
         },
         args,
     );
@@ -51,9 +52,13 @@ pub unsafe fn run_with_context<R, F: FnOnce() -> R>(
     // Prevent any code before and after this line to cross this line.
     core::sync::atomic::fence(Ordering::AcqRel);
 
-    f();
+    // Setup.
+    let r = setup();
 
-    panic!("return from a function passed to run_with_context() is not supported");
+    cx.base.uma = Arc::into_raw(r.uma);
+    cx.base.pmgr = Arc::into_raw(r.pmgr);
+
+    main();
 }
 
 /// # Interrupt safety
@@ -61,19 +66,33 @@ pub unsafe fn run_with_context<R, F: FnOnce() -> R>(
 pub fn current_thread() -> BorrowedArc<Thread> {
     // It does not matter if we are on a different CPU after we load the Context::thread because it
     // is going to be the same one since it represent the current thread.
-    unsafe { BorrowedArc::new(Context::load_fixed_ptr::<{ current_thread_offset() }, _>()) }
+    unsafe {
+        BorrowedArc::from_non_null(Context::load_static_ptr::<{ current_thread_offset() }, _>())
+    }
 }
 
 pub const fn current_thread_offset() -> usize {
     offset_of!(Base, thread)
 }
 
+/// Returns [`None`] if called from context setup function.
+///
 /// # Interrupt safety
-/// This function is interrupt safe.
-pub fn current_procmgr() -> BorrowedArc<ProcMgr> {
+/// This function can be called from interrupt handler.
+pub fn current_uma() -> Option<BorrowedArc<Uma>> {
+    // It does not matter if we are on a different CPU after we load the Context::uma because it is
+    // always the same for all CPU.
+    unsafe { BorrowedArc::new(Context::load_ptr::<{ offset_of!(Base, uma) }, _>()) }
+}
+
+/// Returns [`None`] if called from context setup function.
+///
+/// # Interrupt safety
+/// This function can be called from interrupt handle.
+pub fn current_procmgr() -> Option<BorrowedArc<ProcMgr>> {
     // It does not matter if we are on a different CPU after we load the Context::pmgr because it is
     // always the same for all CPU.
-    unsafe { BorrowedArc::new(Context::load_fixed_ptr::<{ offset_of!(Base, pmgr) }, _>()) }
+    unsafe { BorrowedArc::new(Context::load_ptr::<{ offset_of!(Base, pmgr) }, _>()) }
 }
 
 /// Pin the calling thread to one CPU.
@@ -94,6 +113,12 @@ pub fn pin_cpu() -> PinnedContext {
         td,
         phantom: PhantomData,
     }
+}
+
+/// Output of the context setup function.
+pub struct ContextSetup {
+    pub uma: Arc<Uma>,
+    pub pmgr: Arc<ProcMgr>,
 }
 
 /// Implementation of `pcpu` structure.
@@ -118,6 +143,7 @@ pub fn pin_cpu() -> PinnedContext {
 struct Base {
     cpu: usize,            // pc_cpuid
     thread: *const Thread, // pc_curthread
+    uma: *const Uma,
     pmgr: *const ProcMgr,
 }
 
@@ -142,7 +168,7 @@ impl PinnedContext {
     /// Anything that derive from the returned value will invalid when this [`PinnedContext`]
     /// dropped.
     pub unsafe fn cpu(&self) -> usize {
-        Context::load_usize::<{ offset_of!(Base, cpu) }>()
+        Context::load_volatile_usize::<{ offset_of!(Base, cpu) }>()
     }
 }
 

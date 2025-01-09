@@ -15,9 +15,6 @@ pub struct Mutex<T> {
 
 impl<T> Mutex<T> {
     /// See `mtx_init` on the PS4 for a reference.
-    ///
-    /// # Context safety
-    /// This function does not require a CPU context.
     pub const fn new(data: T) -> Self {
         Self {
             data: UnsafeCell::new(data),
@@ -83,9 +80,6 @@ impl<T> Mutex<T> {
 }
 
 impl<T: Default> Default for Mutex<T> {
-    /// # Context safety
-    /// This function does not require a CPU context as long as [`Default`] implementation on `T`
-    /// does not.
     fn default() -> Self {
         Self::new(T::default())
     }

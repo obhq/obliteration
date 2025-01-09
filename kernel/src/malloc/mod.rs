@@ -1,4 +1,4 @@
-pub use self::stage2::Stage2;
+use self::stage2::Stage2;
 use crate::lock::Mutex;
 use alloc::boxed::Box;
 use core::alloc::{GlobalAlloc, Layout};
@@ -39,16 +39,20 @@ impl KernelHeap {
 
     /// # Safety
     /// This must be called by main CPU and can be called only once.
-    pub unsafe fn activate_stage2(&self, stage2: Box<Stage2>) {
-        // What we are going here is highly unsafe. Do not edit this code unless you know what you
-        // are doing!
+    pub unsafe fn activate_stage2(&self) {
+        // Setup stage 2 using stage 1 heap.
+        let stage2 = Box::new(Stage2::new());
+
+        // What we are doing here is highly unsafe. Do not edit the code after this unless you know
+        // what you are doing!
         let stage = self.stage.get();
         let stage1 = match stage.read() {
             Stage::One(v) => Mutex::new(v.into_inner()),
             Stage::Two(_, _) => unreachable_unchecked(),
         };
 
-        // Switch to stage 2 WITHOUT dropping the value contained in Stage::One.
+        // Switch to stage 2 WITHOUT dropping the value contained in Stage::One. What we did here is
+        // moving the value from Stage::One to Stage::Two.
         stage.write(Stage::Two(stage2, stage1));
     }
 }
