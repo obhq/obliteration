@@ -14,8 +14,6 @@ use core::ops::Deref;
 pub struct CpuLocal<T>(Vec<T>);
 
 impl<T> CpuLocal<T> {
-    /// # Context safety
-    /// This function does not require a CPU context on **stage 1** heap as long as `f` does not.
     pub fn new(mut f: impl FnMut(usize) -> T) -> Self {
         let len = config().max_cpu.get();
         let mut vec = Vec::with_capacity(len);

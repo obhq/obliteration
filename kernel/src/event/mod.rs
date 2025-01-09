@@ -19,9 +19,6 @@ impl<S> EventSet<S> {
 }
 
 impl<S: Default> Default for EventSet<S> {
-    /// # Context safety
-    /// This function does not require a CPU context as long as [`Default`] implementation on `S`
-    /// does not.
     fn default() -> Self {
         Self(Mutex::default())
     }
@@ -35,8 +32,6 @@ pub struct Event<T: EventType> {
 }
 
 impl<T: EventType> Default for Event<T> {
-    /// # Context safety
-    /// This function does not require a CPU context.
     fn default() -> Self {
         Self {
             subscribers: BTreeMap::new(),

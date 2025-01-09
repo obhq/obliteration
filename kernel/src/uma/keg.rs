@@ -4,9 +4,6 @@ pub struct UmaKeg {}
 impl UmaKeg {
     /// See `keg_ctor` on the Orbis for a reference.
     ///
-    /// # Context safety
-    /// This function does not require a CPU context on **stage 1** heap.
-    ///
     /// # Reference offsets
     /// | Version | Offset |
     /// |---------|--------|

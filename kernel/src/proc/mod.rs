@@ -25,8 +25,6 @@ pub struct ProcMgr {
 }
 
 impl ProcMgr {
-    /// # Context safety
-    /// This function does not require a CPU context.
     pub fn new() -> Arc<Self> {
         let events = Arc::default();
 

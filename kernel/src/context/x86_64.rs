@@ -19,9 +19,9 @@ pub struct ContextArgs {
 /// Extended [Base] for x86-64.
 #[repr(C)]
 pub(super) struct Context {
-    base: Base,        // Must be first field.
-    trap_rsp: *mut u8, // pc_rsp0
-    user_rsp: usize,   // pc_scratch_rsp
+    pub base: Base,        // Must be first field.
+    pub trap_rsp: *mut u8, // pc_rsp0
+    pub user_rsp: usize,   // pc_scratch_rsp
 }
 
 impl Context {
@@ -50,7 +50,7 @@ impl Context {
         wrmsr(0xc0000102, 0);
     }
 
-    pub unsafe fn load_fixed_ptr<const O: usize, T>() -> *const T {
+    pub unsafe fn load_static_ptr<const O: usize, T>() -> *const T {
         let mut v;
 
         asm!(
@@ -63,7 +63,20 @@ impl Context {
         v
     }
 
-    pub unsafe fn load_usize<const O: usize>() -> usize {
+    pub unsafe fn load_ptr<const O: usize, T>() -> *const T {
+        let mut v;
+
+        asm!(
+            "mov {out}, gs:[{off}]",
+            off = const O,
+            out = out(reg) v,
+            options(pure, readonly, preserves_flags, nostack)
+        );
+
+        v
+    }
+
+    pub unsafe fn load_volatile_usize<const O: usize>() -> usize {
         let mut v;
 
         asm!(

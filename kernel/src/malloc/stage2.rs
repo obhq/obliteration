@@ -1,6 +1,6 @@
 use crate::config::PAGE_SIZE;
-use crate::context::{current_thread, CpuLocal};
-use crate::uma::{Uma, UmaFlags, UmaZone};
+use crate::context::{current_thread, current_uma, CpuLocal};
+use crate::uma::{UmaFlags, UmaZone};
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -29,10 +29,11 @@ impl Stage2 {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x1A4B80|
-    pub fn new(uma: &mut Uma) -> Self {
+    pub fn new() -> Self {
         // The possible of maximum alignment that Layout allowed is a bit before the most
         // significant bit of isize (e.g. 0x4000000000000000 on 64 bit system). So we can use
         // "size_of::<usize>() * 8 - 1" to get the size of array for all possible alignment.
+        let uma = current_uma().unwrap();
         let zones = core::array::from_fn(|align| {
             let mut zones = Vec::with_capacity(Self::KMEM_ZSIZE + 1);
             let mut last = 0;
