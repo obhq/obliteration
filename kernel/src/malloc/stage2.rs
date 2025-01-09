@@ -54,7 +54,7 @@ impl Stage2 {
                 let zone = Arc::new(uma.create_zone(
                     size.to_string(),
                     size,
-                    align - 1,
+                    Some(align - 1),
                     UmaFlags::new().with_malloc(true),
                 ));
 

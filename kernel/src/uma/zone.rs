@@ -4,6 +4,7 @@ use super::UmaFlags;
 use crate::context::{current_thread, CpuLocal};
 use crate::lock::Gutex;
 use alloc::collections::VecDeque;
+use alloc::string::String;
 use core::cell::RefCell;
 use core::num::NonZero;
 use core::ops::DerefMut;
@@ -20,6 +21,8 @@ pub struct UmaZone {
 }
 
 impl UmaZone {
+    const ALIGN_CACHE: usize = 63; // uma_align_cache
+
     /// See `zone_ctor` on Orbis for a reference.
     ///
     /// # Context safety
@@ -29,14 +32,22 @@ impl UmaZone {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13D490|
-    pub(super) fn new(keg: Option<UmaKeg>, flags: UmaFlags) -> Self {
+    pub(super) fn new(
+        _: impl Into<String>,
+        keg: Option<UmaKeg>,
+        _: NonZero<usize>,
+        align: Option<usize>,
+        flags: UmaFlags,
+    ) -> Self {
         if flags.secondary() {
             todo!()
         } else {
-            match keg {
-                Some(_) => todo!(),
-                None => todo!(),
-            }
+            // We use a different approach here to make it idiomatic to Rust. On Orbis it will
+            // construct a keg here if it is passed from the caller. If not it will allocate a new
+            // keg from masterzone_k.
+            keg.unwrap_or_else(|| UmaKeg::new(align.unwrap_or(Self::ALIGN_CACHE)));
+
+            todo!()
         }
     }
 

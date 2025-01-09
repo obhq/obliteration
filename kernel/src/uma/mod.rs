@@ -16,7 +16,7 @@ impl Uma {
     /// the CPU context due to this function can be called before context activation.
     ///
     /// # Context safety
-    /// This function does not require a CPU context.
+    /// This function does not require a CPU context on **stage 1** heap.
     ///
     /// # Reference offsets
     /// | Version | Offset |
@@ -37,14 +37,14 @@ impl Uma {
     /// |PS4 11.00|0x13DC80|
     pub fn create_zone(
         &mut self,
-        _: impl Into<String>,
-        _: NonZero<usize>,
-        _: usize,
+        name: impl Into<String>,
+        size: NonZero<usize>,
+        align: Option<usize>,
         flags: UmaFlags,
     ) -> UmaZone {
         // The Orbis will allocate a new zone from masterzone_z. We choose to remove this since it
         // does not idomatic to Rust, which mean our uma_zone itself can live on the stack.
-        UmaZone::new(None, flags)
+        UmaZone::new(name, None, size, align, flags)
     }
 }
 
@@ -59,6 +59,10 @@ pub struct UmaFlags {
     __: u8,
     /// `UMA_ZONE_SECONDARY`.
     pub secondary: bool,
-    #[bits(22)]
+    #[bits(19)]
     __: u32,
+    /// `UMA_ZFLAG_INTERNAL`.
+    pub internal: bool,
+    __: bool,
+    __: bool,
 }
