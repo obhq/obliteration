@@ -8,6 +8,7 @@ use alloc::rc::Rc;
 use alloc::sync::Arc;
 use core::marker::PhantomData;
 use core::mem::offset_of;
+use core::pin::pin;
 use core::ptr::null;
 use core::sync::atomic::Ordering;
 
@@ -37,7 +38,7 @@ pub unsafe fn run_with_context(
 ) -> ! {
     // We use a different mechanism here. The Orbis put all of pcpu at a global level but we put it
     // on each CPU stack instead.
-    let mut cx = Context::new(
+    let mut cx = pin!(Context::new(
         Base {
             cpu,
             thread: Arc::into_raw(td),
@@ -45,9 +46,9 @@ pub unsafe fn run_with_context(
             pmgr: null(),
         },
         args,
-    );
+    ));
 
-    cx.activate();
+    cx.as_mut().activate();
 
     // Prevent any code before and after this line to cross this line.
     core::sync::atomic::fence(Ordering::AcqRel);
@@ -55,8 +56,8 @@ pub unsafe fn run_with_context(
     // Setup.
     let r = setup();
 
-    cx.base.uma = Arc::into_raw(r.uma);
-    cx.base.pmgr = Arc::into_raw(r.pmgr);
+    cx.as_mut().get_unchecked_mut().base.uma = Arc::into_raw(r.uma);
+    cx.as_mut().get_unchecked_mut().base.pmgr = Arc::into_raw(r.pmgr);
 
     main();
 }

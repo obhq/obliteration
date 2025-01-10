@@ -1,5 +1,7 @@
 use super::Base;
 use crate::proc::Thread;
+use core::marker::PhantomPinned;
+use core::pin::Pin;
 
 /// Contains data passed from CPU setup function for context activation.
 pub struct ContextArgs {}
@@ -8,14 +10,18 @@ pub struct ContextArgs {}
 #[repr(C)]
 pub(super) struct Context {
     pub base: Base, // Must be first field.
+    phantom: PhantomPinned,
 }
 
 impl Context {
     pub fn new(base: Base, args: ContextArgs) -> Self {
-        Self { base }
+        Self {
+            base,
+            phantom: PhantomPinned,
+        }
     }
 
-    pub unsafe fn activate(&mut self) {
+    pub unsafe fn activate(self: Pin<&mut Self>) {
         todo!();
     }
 
