@@ -1,7 +1,9 @@
 use super::Base;
 use crate::arch::wrmsr;
 use core::arch::asm;
+use core::marker::PhantomPinned;
 use core::mem::offset_of;
+use core::pin::Pin;
 
 pub const fn current_trap_rsp_offset() -> usize {
     offset_of!(Context, trap_rsp)
@@ -22,6 +24,7 @@ pub(super) struct Context {
     pub base: Base,        // Must be first field.
     pub trap_rsp: *mut u8, // pc_rsp0
     pub user_rsp: usize,   // pc_scratch_rsp
+    phantom: PhantomPinned,
 }
 
 impl Context {
@@ -30,10 +33,11 @@ impl Context {
             base,
             trap_rsp: args.trap_rsp,
             user_rsp: 0,
+            phantom: PhantomPinned,
         }
     }
 
-    /// Set kernel `GS` segment register to `cx`.
+    /// Set kernel `GS` segment register to `self`.
     ///
     /// At a glance this may looks incorrect due to `0xc0000102` is `KERNEL_GS_BAS` according to the
     /// docs. The problem is the CPU always use the value from `0xc0000101` regardless the current
@@ -41,9 +45,9 @@ impl Context {
     /// space.
     ///
     /// This also set user-mode `FS` and `GS` to null.
-    pub unsafe fn activate(&mut self) {
+    pub unsafe fn activate(self: Pin<&mut Self>) {
         // Set GS for kernel mode.
-        wrmsr(0xc0000101, self as *mut Self as usize);
+        wrmsr(0xc0000101, self.get_unchecked_mut() as *mut Self as usize);
 
         // Clear FS and GS for user mode.
         wrmsr(0xc0000100, 0);
