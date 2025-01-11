@@ -1,16 +1,9 @@
+use config::{ConsoleMemory, ConsoleType, Vm};
 use core::cmp::min;
 use core::fmt::{Display, Write};
 use core::num::NonZero;
 use core::ptr::write_volatile;
-use obconf::{ConsoleMemory, ConsoleType, Vm};
 
-/// # Context safety
-/// This function does not require a CPU context as long as [`Display`] implementation on `msg` does
-/// not.
-///
-/// # Interupt safety
-/// This function is interupt safe as long as [`Display`] implementation on `msg` are interupt safe
-/// (e.g. no heap allocation).
 pub fn print(env: &Vm, ty: ConsoleType, msg: impl Display) {
     let c = env.console as *mut ConsoleMemory;
     let mut w = Writer {
@@ -26,9 +19,6 @@ pub fn print(env: &Vm, ty: ConsoleType, msg: impl Display) {
 }
 
 /// [Write] implementation to write the message to the VMM console.
-///
-/// # Context safety
-/// [Write] implementation on this type does not require a CPU context.
 struct Writer {
     con: *mut ConsoleMemory,
     buf: [u8; 1024],

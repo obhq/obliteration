@@ -3,7 +3,7 @@ use self::context::Context;
 use super::{Device, DeviceContext};
 use crate::hv::Hypervisor;
 use crate::vmm::channel::VmmStream;
-use obconf::{ConsoleMemory, ConsoleType};
+use config::{ConsoleMemory, ConsoleType};
 use std::num::NonZero;
 
 mod context;

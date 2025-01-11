@@ -3,13 +3,11 @@ resolver = "2"
 members = [
     "arch/aarch64",
     "arch/x86-64",
+    "config",
     "gui",
     "kernel",
+    "lib/krt",
     "macros",
-    "src/fs",
-    "src/llt",
-    "src/obconf",
-    "src/tls",
 ]
 
 [profile.dev]

@@ -1,7 +1,7 @@
-use crate::config::boot_env;
 use crate::context::current_thread;
+use config::BootEnv;
 use core::sync::atomic::Ordering;
-use obconf::BootEnv;
+use krt::boot_env;
 
 /// Main entry point for interrupt.
 ///

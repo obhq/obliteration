@@ -1,4 +1,4 @@
-use obconf::Config;
+use config::Config;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::fs::File;

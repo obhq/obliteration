@@ -10,6 +10,7 @@ use self::ram::{RamBuilder, RamMap};
 use crate::gdb::DebugClient;
 use crate::hv::{CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, Hypervisor, Ram};
 use crate::profile::Profile;
+use config::{BootEnv, ConsoleType, Vm};
 use futures::{select_biased, FutureExt};
 use gdbstub::common::{Signal, Tid};
 use gdbstub::stub::MultiThreadStopReason;
@@ -19,7 +20,6 @@ use gdbstub::target::ext::base::multithread::{
 use gdbstub::target::ext::thread_extra_info::{ThreadExtraInfo, ThreadExtraInfoOps};
 use gdbstub::target::{TargetError, TargetResult};
 use kernel::{KernelError, ProgramHeaderError};
-use obconf::{BootEnv, ConsoleType, Vm};
 use rustc_hash::FxHashMap;
 use std::cmp::max;
 use std::collections::{BTreeMap, HashMap};

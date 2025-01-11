@@ -2,7 +2,7 @@
 use super::Vmm;
 use crate::hv::{Cpu, CpuExit, CpuIo};
 use crate::vmm::hw::{read_u8, DeviceContext, MmioError};
-use obconf::{KernelExit, VmmMemory};
+use config::{KernelExit, VmmMemory};
 use std::error::Error;
 use std::mem::offset_of;
 use thiserror::Error;
