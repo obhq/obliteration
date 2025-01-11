@@ -1,0 +1,8 @@
+[package]
+name = "krt"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anstyle = { version = "1.0.10", default-features = false }
+config = { path = "../../config", features = ["virt"] }

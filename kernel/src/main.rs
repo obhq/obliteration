@@ -9,21 +9,18 @@ use self::sched::sleep;
 use self::uma::Uma;
 use alloc::sync::Arc;
 use core::mem::zeroed;
-use core::panic::PanicInfo;
-use obconf::{BootEnv, Config};
+use krt::info;
 
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
 mod arch;
 mod config;
-mod console;
 mod context;
 mod event;
 mod imgact;
 mod imgfmt;
 mod lock;
 mod malloc;
-mod panic;
 mod proc;
 mod sched;
 mod signal;
@@ -33,29 +30,17 @@ mod uma;
 
 extern crate alloc;
 
-/// Entry point of the kernel.
-///
-/// This will be called by a bootloader or a hypervisor. The following are requirements to call this
-/// function:
-///
-/// 1. The kernel does not remap itself so it must be mapped at a desired virtual address and all
-///    relocations must be applied. This imply that the kernel can only be run in a virtual address
-///    space.
-/// 2. Interrupt is disabled.
-/// 3. Only main CPU can execute this function.
+/// This will be called by [`krt`] crate.
 ///
 /// See Orbis kernel entry point for a reference.
-#[allow(dead_code)]
 #[cfg_attr(target_os = "none", no_mangle)]
-unsafe extern "C" fn _start(env: &'static BootEnv, conf: &'static Config) -> ! {
+fn main() -> ! {
     // SAFETY: This function has a lot of restrictions. See Context documentation for more details.
-    crate::config::setup(env, conf);
-
     info!("Starting Obliteration Kernel.");
 
     // Setup the CPU after the first print to let the bootloader developer know (some of) their code
     // are working.
-    let cx = self::arch::setup_main_cpu();
+    let cx = unsafe { self::arch::setup_main_cpu() };
 
     // Setup proc0 to represent the kernel.
     let proc0 = Proc::new_bare(Arc::new(Proc0Abi));
@@ -67,7 +52,7 @@ unsafe extern "C" fn _start(env: &'static BootEnv, conf: &'static Config) -> ! {
     // Activate CPU context.
     let thread0 = Arc::new(thread0);
 
-    self::context::run_with_context(0, thread0, cx, setup, main);
+    unsafe { self::context::run_with_context(0, thread0, cx, setup, run) };
 }
 
 fn setup() -> ContextSetup {
@@ -77,7 +62,7 @@ fn setup() -> ContextSetup {
     ContextSetup { uma, pmgr }
 }
 
-fn main() -> ! {
+fn run() -> ! {
     // Activate stage 2 heap.
     info!("Activating stage 2 heap.");
 
@@ -120,24 +105,6 @@ fn swapper() -> ! {
 
         todo!();
     }
-}
-
-/// # Context safety
-/// This function does not require a CPU context.
-///
-/// # Interrupt safety
-/// This function can be called from interrupt handler.
-#[allow(dead_code)]
-#[cfg_attr(target_os = "none", panic_handler)]
-fn panic(i: &PanicInfo) -> ! {
-    let (file, line) = match i.location() {
-        Some(v) => (v.file(), v.line()),
-        None => ("unknown", 0),
-    };
-
-    // Print the message.
-    crate::console::error(file, line, format_args!("Kernel panic - {}.", i.message()));
-    crate::panic::panic();
 }
 
 /// Implementation of [`ProcAbi`] for kernel process.
