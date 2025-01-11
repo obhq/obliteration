@@ -1,7 +1,8 @@
 pub use self::dialogs::*;
 
+use self::modal::Modal;
 use self::view::with_window;
-use super::{Modal, PlatformExt};
+use super::PlatformExt;
 use crate::rt::WinitWindow;
 use block::ConcreteBlock;
 use objc::{msg_send, sel, sel_impl};
@@ -10,9 +11,15 @@ use std::ops::Deref;
 use thiserror::Error;
 
 mod dialogs;
+mod modal;
 mod view;
 
 impl<T: WinitWindow> PlatformExt for T {
+    type Modal<'a, P>
+        = Modal<'a, Self, P>
+    where
+        P: WinitWindow + 'a;
+
     fn set_center(&self) -> Result<(), PlatformError> {
         with_window::<()>(self.handle(), |win| unsafe { msg_send![win, center] });
 

@@ -1,5 +1,4 @@
 pub use self::backend::*;
-pub use self::modal::*;
 pub use self::os::*;
 pub use self::profile::*;
 
@@ -8,10 +7,10 @@ use i_slint_core::window::WindowInner;
 use raw_window_handle::HasWindowHandle;
 use slint::{ComponentHandle, SharedString, Weak};
 use std::future::Future;
+use std::ops::Deref;
 use winit::window::WindowId;
 
 mod backend;
-mod modal;
 #[cfg_attr(target_os = "linux", path = "linux/mod.rs")]
 #[cfg_attr(target_os = "macos", path = "macos/mod.rs")]
 #[cfg_attr(target_os = "windows", path = "windows/mod.rs")]
@@ -63,16 +62,29 @@ impl<T: ComponentHandle> WinitWindow for T {
     fn handle(&self) -> impl HasWindowHandle + '_ {
         self.window().window_handle()
     }
+
+    #[cfg(target_os = "linux")]
+    fn xdg_toplevel(&self) -> *mut std::ffi::c_void {
+        use winit::platform::wayland::WindowExtWayland;
+
+        let win = WindowInner::from_pub(self.window()).window_adapter();
+
+        Window::from_adapter(win.as_ref()).winit().xdg_toplevel()
+    }
 }
 
 /// Provides platform-specific methods to operate on [`WinitWindow`].
 pub trait PlatformExt: WinitWindow {
+    type Modal<'a, P>: Deref<Target = Self>
+    where
+        P: WinitWindow + 'a;
+
     /// Center window on the screen.
     ///
     /// For [`slint::Window`] this need to call after [`slint::Window::show()`] otherwise it won't
     /// work on macOS.
     fn set_center(&self) -> Result<(), PlatformError>;
-    fn set_modal<P>(self, parent: &P) -> Result<Modal<Self, P>, PlatformError>
+    fn set_modal<P>(self, parent: &P) -> Result<Self::Modal<'_, P>, PlatformError>
     where
         P: WinitWindow,
         Self: Sized;

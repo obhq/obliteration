@@ -9,6 +9,7 @@ use wayland_backend::sys::client::Backend;
 use wayland_client::globals::{registry_queue_init, GlobalListContents};
 use wayland_client::protocol::wl_registry::WlRegistry;
 use wayland_client::{Connection, Dispatch, EventQueue, Proxy, QueueHandle};
+use wayland_protocols::xdg::dialog::v1::client::xdg_dialog_v1::XdgDialogV1;
 use wayland_protocols::xdg::dialog::v1::client::xdg_wm_dialog_v1::XdgWmDialogV1;
 use wayland_protocols::xdg::foreign::zv2::client::zxdg_exported_v2::ZxdgExportedV2;
 use wayland_protocols::xdg::foreign::zv2::client::zxdg_exporter_v2::ZxdgExporterV2;
@@ -107,6 +108,10 @@ impl WaylandState {
     pub fn xdg_exporter(&self) -> &ZxdgExporterV2 {
         &self.xdg_exporter
     }
+
+    pub fn xdg_dialog(&self) -> &XdgWmDialogV1 {
+        &self.xdg_dialog
+    }
 }
 
 impl Drop for WaylandState {
@@ -152,6 +157,18 @@ impl Dispatch<XdgWmDialogV1, ()> for WaylandState {
         _: &mut Self,
         _: &XdgWmDialogV1,
         _: <XdgWmDialogV1 as Proxy>::Event,
+        _: &(),
+        _: &Connection,
+        _: &QueueHandle<Self>,
+    ) {
+    }
+}
+
+impl Dispatch<XdgDialogV1, ()> for WaylandState {
+    fn event(
+        _: &mut Self,
+        _: &XdgDialogV1,
+        _: <XdgDialogV1 as Proxy>::Event,
         _: &(),
         _: &Connection,
         _: &QueueHandle<Self>,
