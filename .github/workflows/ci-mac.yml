@@ -38,7 +38,7 @@ jobs:
     - name: Build
       run: ./build.py -r
     - name: Run tests
-      run: cargo test --workspace --exclude gui --exclude kernel
+      run: cargo test
     - name: Create Apple Disk Image
       run: hdiutil create -volname Obliteration -srcfolder dist Obliteration.dmg
     - name: Upload artifacts

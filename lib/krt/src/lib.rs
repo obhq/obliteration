@@ -8,7 +8,6 @@
 pub use self::config::*;
 pub use self::console::*;
 
-use ::config::{BootEnv, Config};
 use core::panic::PanicInfo;
 
 mod config;
@@ -25,8 +24,8 @@ mod panic;
 ///    space.
 /// 2. Interrupt is disabled.
 /// 3. Only main CPU can execute this function.
-#[no_mangle]
-extern "C" fn _start(env: &'static BootEnv, conf: &'static Config) -> ! {
+#[cfg(target_os = "none")]
+extern "C" fn _start(env: &'static ::config::BootEnv, conf: &'static ::config::Config) -> ! {
     // SAFETY: We call it as the first thing here.
     unsafe { self::config::setup(env, conf) };
     main();
@@ -45,6 +44,7 @@ fn panic(i: &PanicInfo) -> ! {
     self::panic::panic();
 }
 
+#[cfg(target_os = "none")]
 unsafe extern "Rust" {
     safe fn main() -> !;
 }

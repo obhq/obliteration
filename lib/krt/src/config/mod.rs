@@ -14,6 +14,7 @@ pub fn config() -> &'static Config {
 /// # Safety
 /// This function must be called immediately in the [_start](super::_start) function. After that it
 /// must never be called again.
+#[allow(dead_code)]
 pub(super) unsafe fn setup(env: &'static BootEnv, conf: &'static Config) {
     BOOT_ENV = env;
     CONFIG = conf;
