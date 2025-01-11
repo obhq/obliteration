@@ -1,9 +1,11 @@
 pub use self::dialogs::*;
 
-use super::{Modal, PlatformExt};
+use self::modal::Modal;
+use super::PlatformExt;
 use crate::rt::WinitWindow;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::io::Error;
+use std::mem::zeroed;
 use thiserror::Error;
 use windows_sys::Win32::Foundation::HWND;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
@@ -12,8 +14,14 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 };
 
 mod dialogs;
+mod modal;
 
 impl<T: WinitWindow> PlatformExt for T {
+    type Modal<'a, P>
+        = Modal<'a, Self, P>
+    where
+        P: WinitWindow + 'a;
+
     fn set_center(&self) -> Result<(), PlatformError> {
         // Get HWND.
         let win = self.handle();
@@ -22,16 +30,16 @@ impl<T: WinitWindow> PlatformExt for T {
             unreachable!();
         };
 
+        // Get window rectangle.
+        let win = win.hwnd.get() as HWND;
+        let mut rect = unsafe { zeroed() };
+        let ret = unsafe { GetWindowRect(win, &mut rect) };
+
+        if ret == 0 {
+            return Err(PlatformError::GetWindowRect(Error::last_os_error()));
+        }
+
         unsafe {
-            let hwnd = win.hwnd.get() as HWND;
-            let mut rect = std::mem::zeroed();
-
-            let ret = GetWindowRect(hwnd, &mut rect);
-
-            if ret == 0 {
-                return Err(PlatformError::GetWindowRect(Error::last_os_error()));
-            }
-
             let win_width = rect.right - rect.left;
             let win_height = rect.bottom - rect.top;
 
@@ -48,7 +56,7 @@ impl<T: WinitWindow> PlatformExt for T {
             }
 
             let ret = SetWindowPos(
-                hwnd,
+                win,
                 HWND_TOP,
                 (screen_width - win_width) / 2,
                 (screen_height - win_height) / 2,

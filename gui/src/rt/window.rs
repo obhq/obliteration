@@ -36,4 +36,6 @@ pub trait WindowHandler {
 pub trait WinitWindow {
     fn id(&self) -> WindowId;
     fn handle(&self) -> impl HasWindowHandle + '_;
+    #[cfg(target_os = "linux")]
+    fn xdg_toplevel(&self) -> *mut std::ffi::c_void;
 }
