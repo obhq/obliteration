@@ -25,6 +25,7 @@ mod panic;
 /// 2. Interrupt is disabled.
 /// 3. Only main CPU can execute this function.
 #[cfg(target_os = "none")]
+#[no_mangle]
 extern "C" fn _start(env: &'static ::config::BootEnv, conf: &'static ::config::Config) -> ! {
     // SAFETY: We call it as the first thing here.
     unsafe { self::config::setup(env, conf) };
