@@ -56,7 +56,11 @@ fn main() -> ! {
 }
 
 fn setup() -> ContextSetup {
-    let uma = Uma::new();
+    // Run sysinit vector for subsystem. The Orbis use linker to put all sysinit functions in a list
+    // then loop the list to execute all of it. We manually execute those functions instead for
+    // readability. This also allow us to pass data from one function to another function. See
+    // mi_startup function on the Orbis for a reference.
+    let uma = init_vm(); // 161 on PS4 11.00.
     let pmgr = ProcMgr::new();
 
     ContextSetup { uma, pmgr }
@@ -68,12 +72,19 @@ fn run() -> ! {
 
     unsafe { KERNEL_HEAP.activate_stage2() };
 
-    // Run sysinit vector. The PS4 use linker to put all sysinit functions in a list then loop the
-    // list to execute all of it. We manually execute those functions instead for readability. This
-    // also allow us to pass data from one function to another function. See mi_startup function on
-    // the PS4 for a reference.
-    create_init(); // 659 on 11.00.
-    swapper(); // 1119 on 11.00.
+    // Run remaining sysinit vector.
+    create_init(); // 659 on PS4 11.00.
+    swapper(); // 1119 on PS4 11.00.
+}
+
+/// See `vm_mem_init` function on the Orbis for a reference.
+///
+/// # Reference offsets
+/// | Version | Offset |
+/// |---------|--------|
+/// |PS4 11.00|0x39A390|
+fn init_vm() -> Arc<Uma> {
+    Uma::new()
 }
 
 /// See `create_init` function on the PS4 for a reference.

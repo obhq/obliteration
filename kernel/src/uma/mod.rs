@@ -7,6 +7,7 @@ use core::num::NonZero;
 
 mod bucket;
 mod keg;
+mod slab;
 mod zone;
 
 /// Implementation of UMA system.
@@ -46,15 +47,27 @@ impl Uma {
 /// Flags for [`Uma::create_zone()`].
 #[bitfield(u32)]
 pub struct UmaFlags {
-    #[bits(4)]
+    __: bool,
+    pub zinit: bool,
+    #[bits(2)]
     __: u8,
     /// `UMA_ZONE_MALLOC`.
     pub malloc: bool,
-    #[bits(4)]
+    #[bits(2)]
     __: u8,
+    /// `UMA_ZONE_VM`.
+    pub vm: bool,
+    __: bool,
     /// `UMA_ZONE_SECONDARY`.
     pub secondary: bool,
-    #[bits(19)]
+    /// `UMA_ZONE_REFCNT`.
+    pub refcnt: bool,
+    __: bool,
+    /// `UMA_ZONE_CACHESPREAD`.
+    pub cache_spread: bool,
+    /// `UMA_ZONE_VTOSLAB`.
+    pub vtoslab: bool,
+    #[bits(15)]
     __: u32,
     /// `UMA_ZFLAG_INTERNAL`.
     pub internal: bool,
