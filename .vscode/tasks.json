@@ -29,6 +29,9 @@
       "osx": {
         "command": "${workspaceFolder}/dist/Obliteration.app/Contents/MacOS/Obliteration"
       },
+      "windows": {
+        "command": "${workspaceFolder}/dist/obliteration.exe"
+      },
       "args": [
         "--debug",
         "127.0.0.1:1234"
