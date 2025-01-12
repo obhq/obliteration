@@ -40,49 +40,7 @@ pub async fn open_file<T: WinitWindow>(
     title: impl AsRef<str>,
     ty: FileType,
 ) -> Option<PathBuf> {
-    let hwnd = get_hwnd(parent);
-
-    let title_wide: Vec<u16> = title
-        .as_ref()
-        .encode_utf16()
-        .chain(std::iter::once(0))
-        .collect();
-
-    spawn_dialog(move || unsafe {
-        let mut ofn: OPENFILENAMEW = std::mem::zeroed();
-        ofn.lStructSize = std::mem::size_of::<OPENFILENAMEW>() as u32;
-        ofn.hwndOwner = hwnd.get() as _;
-
-        ofn.lpstrTitle = title_wide.as_ptr();
-
-        const MAX_PATH: usize = 260;
-        let mut file_buffer = [0u16; MAX_PATH];
-        ofn.lpstrFile = file_buffer.as_mut_ptr();
-        ofn.nMaxFile = file_buffer.len() as u32;
-
-        // Filter
-        match ty {
-            FileType::Firmware => {
-                let filter_str = "Firmware Dump\0*.obf\0\0"
-                    .encode_utf16()
-                    .collect::<Vec<u16>>();
-                ofn.lpstrFilter = filter_str.as_ptr();
-            }
-        }
-
-        let ret = GetOpenFileNameW(&mut ofn);
-        if ret != 0 {
-            let len = file_buffer
-                .iter()
-                .position(|&c| c == 0)
-                .unwrap_or(file_buffer.len());
-            let path = String::from_utf16_lossy(&file_buffer[..len]);
-            Some(PathBuf::from(path))
-        } else {
-            None
-        }
-    })
-    .await
+    todo!()
 }
 
 pub async fn open_dir<T: WinitWindow>(parent: &T, title: impl AsRef<str>) -> Option<PathBuf> {
