@@ -16,24 +16,24 @@ impl UmaKeg {
     /// |---------|--------|
     /// |PS4 11.00|0x13CF40|
     pub(super) fn new(size: NonZero<usize>, _: usize, mut flags: UmaFlags) -> Self {
-        if flags.vm() {
+        if flags.has(UmaFlags::Vm) {
             todo!()
         }
 
-        if flags.zinit() {
+        if flags.has(UmaFlags::ZInit) {
             todo!()
         }
 
-        if flags.malloc() || flags.refcnt() {
-            flags.set_vtoslab(true);
+        if flags.has(UmaFlags::Malloc | UmaFlags::RefCnt) {
+            flags |= UmaFlags::VToSlab;
         }
 
-        if flags.cache_spread() {
+        if flags.has(UmaFlags::CacheSpread) {
             todo!()
         } else {
             // Check if item size exceed slab size.
             let min = Layout::new::<SlabHdr>();
-            let (mut min, off) = if flags.refcnt() {
+            let (mut min, off) = if flags.has(UmaFlags::RefCnt) {
                 min.extend(Layout::new::<RcFree>()).unwrap()
             } else {
                 min.extend(Layout::new::<Free>()).unwrap()

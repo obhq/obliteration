@@ -36,7 +36,7 @@ impl UmaZone {
         align: Option<usize>,
         flags: UmaFlags,
     ) -> Self {
-        if flags.secondary() {
+        if flags.has(UmaFlags::Secondary) {
             todo!()
         } else {
             // We use a different approach here to make it idiomatic to Rust. On Orbis it will

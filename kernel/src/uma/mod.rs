@@ -2,8 +2,8 @@ pub use self::zone::*;
 
 use alloc::string::String;
 use alloc::sync::Arc;
-use bitfield_struct::bitfield;
 use core::num::NonZero;
+use macros::bitflag;
 
 mod bucket;
 mod keg;
@@ -45,32 +45,22 @@ impl Uma {
 }
 
 /// Flags for [`Uma::create_zone()`].
-#[bitfield(u32)]
-pub struct UmaFlags {
-    __: bool,
-    pub zinit: bool,
-    #[bits(2)]
-    __: u8,
+#[bitflag(u32)]
+pub enum UmaFlags {
+    /// `UMA_ZONE_ZINIT`.
+    ZInit = 0x2,
     /// `UMA_ZONE_MALLOC`.
-    pub malloc: bool,
-    #[bits(2)]
-    __: u8,
+    Malloc = 0x10,
     /// `UMA_ZONE_VM`.
-    pub vm: bool,
-    __: bool,
+    Vm = 0x80,
     /// `UMA_ZONE_SECONDARY`.
-    pub secondary: bool,
+    Secondary = 0x200,
     /// `UMA_ZONE_REFCNT`.
-    pub refcnt: bool,
-    __: bool,
+    RefCnt = 0x400,
     /// `UMA_ZONE_CACHESPREAD`.
-    pub cache_spread: bool,
+    CacheSpread = 0x1000,
     /// `UMA_ZONE_VTOSLAB`.
-    pub vtoslab: bool,
-    #[bits(15)]
-    __: u32,
+    VToSlab = 0x2000,
     /// `UMA_ZFLAG_INTERNAL`.
-    pub internal: bool,
-    __: bool,
-    __: bool,
+    Internal = 0x20000000,
 }
