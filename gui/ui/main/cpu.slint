@@ -1,70 +1,97 @@
-import { Button, Slider, LineEdit, HorizontalBox, VerticalBox } from "std-widgets.slint";
+import { Button, Slider, LineEdit, HorizontalBox, VerticalBox, GroupBox } from "std-widgets.slint";
 
-export component CpuTab {
-    property <string> debug-address: "127.0.0.1:1234";
+component CpuCount {
+    in-out property <float> value;
 
-    pure callback start-debug(string);
-
-    HorizontalBox {
+    VerticalBox {
         padding: 0;
+        alignment: start;
 
-        VerticalBox {
-            alignment: start;
+        HorizontalBox {
+            padding: 0;
 
-            property <float> cpus: 8;
-
-            Text {
-                text: "Count";
-            }
-
-            HorizontalBox {
-                Slider {
-                    value <=> cpus;
-                    minimum: 1;
-                    maximum: 16;
-                    changed => {
-                        cpus = Math.round(cpus);
-                    }
-                }
-
-                Text {
-                    vertical-alignment: center;
-                    text: cpus;
+            Slider {
+                value: value;
+                minimum: 1;
+                maximum: 16;
+                changed(v) => {
+                    value = Math.round(v);
                 }
             }
 
             Text {
-                text: "Changing this value to other than 8 may crash the game.";
+                text: value;
+                width: 20px;
             }
         }
 
-        VerticalBox {
-            alignment: start;
+        Text {
+            text: "Changing this value to other than 8 may crash the game.";
+            wrap: word-wrap;
+        }
+    }
+}
 
-            Text {
-                text: "Debug";
+component DebugAddr {
+    in-out property <string> value;
+
+    pure callback start();
+
+    VerticalBox {
+        padding: 0;
+        alignment: LayoutAlignment.start;
+
+        HorizontalBox {
+            padding: 0;
+
+            LineEdit {
+                text <=> value;
             }
 
-            HorizontalBox {
-                Text {
-                    text: "Listen address";
-                    vertical-alignment: center;
+            Button {
+                text: "Start";
+                clicked => {
+                    start();
                 }
+            }
+        }
 
-                LineEdit {
-                    text <=> debug-address;
+        Text {
+            text: "Specify a TCP address to listen for a debugger. The VMM will wait for a debugger to connect before start.";
+            wrap: word-wrap;
+        }
+    }
+}
+
+export component CpuTab {
+    in-out property <float> cpu-count: 8;
+    in-out property <string> debug-address: "127.0.0.1:1234";
+
+    pure callback start-debug();
+
+    VerticalBox {
+        padding: 0;
+        alignment: start;
+
+        HorizontalBox {
+            padding: 0;
+
+            GroupBox {
+                title: "Count";
+                width: 50%;
+                CpuCount {
+                    value <=> cpu-count;
                 }
+            }
 
-                Button {
-                    text: "Start";
-                    clicked => {
-                        start-debug(debug-address);
+            GroupBox {
+                title: "GDB Server";
+                DebugAddr {
+                    value <=> debug-address;
+                    start => {
+                        start-debug();
                     }
                 }
-            }
-
-            Text {
-                text: "Specify a TCP address to listen for a debugger. The kernel will wait for a debugger to connect before start.";
             }
         }
     }
