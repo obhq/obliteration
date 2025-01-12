@@ -49,10 +49,14 @@ impl Uma {
 pub enum UmaFlags {
     /// `UMA_ZONE_ZINIT`.
     ZInit = 0x2,
+    /// `UMA_ZONE_OFFPAGE`.
+    Offpage = 0x8,
     /// `UMA_ZONE_MALLOC`.
     Malloc = 0x10,
     /// `UMA_ZONE_VM`.
     Vm = 0x80,
+    /// `UMA_ZONE_HASH`.
+    Hash = 0x100,
     /// `UMA_ZONE_SECONDARY`.
     Secondary = 0x200,
     /// `UMA_ZONE_REFCNT`.

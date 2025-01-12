@@ -45,8 +45,24 @@ impl UmaKeg {
             if (size.get() + (min.size() - off)) > (PAGE_SIZE.get() - min.size()) {
                 todo!()
             } else {
-                todo!()
+                if !flags.has(UmaFlags::Internal) {
+                    flags |= UmaFlags::Offpage;
+
+                    if !flags.has(UmaFlags::VToSlab) {
+                        flags |= UmaFlags::Hash;
+                    }
+                }
             }
         }
+
+        if flags.has(UmaFlags::Offpage) {
+            if flags.has(UmaFlags::RefCnt) {
+                // TODO: Set uk_slabzone to slabrefzone.
+            } else {
+                // TODO: Set uk_slabzone to slabzone.
+            }
+        }
+
+        todo!()
     }
 }
