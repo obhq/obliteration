@@ -45,6 +45,7 @@ impl UmaKeg {
             if (size.get() + (min.size() - off)) > (PAGE_SIZE.get() - min.size()) {
                 todo!()
             } else {
+                // TODO: Set uk_ppera, uk_ipers and uk_rsize.
                 if !flags.has(UmaFlags::Internal) {
                     flags |= UmaFlags::Offpage;
 
