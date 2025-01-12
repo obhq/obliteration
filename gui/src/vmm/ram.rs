@@ -3,7 +3,7 @@ use super::Ram;
 use crate::hv::{CpuFeats, RamError, RamMapper};
 use crate::vmm::hw::DeviceTree;
 use crate::vmm::kernel::ProgramHeader;
-use obconf::{BootEnv, Config};
+use config::{BootEnv, Config};
 use std::num::NonZero;
 use std::ops::Range;
 use thiserror::Error;

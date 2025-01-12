@@ -56,7 +56,7 @@ impl Stage2 {
                     size.to_string(),
                     size,
                     Some(align - 1),
-                    UmaFlags::new().with_malloc(true),
+                    UmaFlags::Malloc,
                 ));
 
                 while last <= size.get() {

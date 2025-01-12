@@ -40,7 +40,7 @@ jobs:
     - name: Build
       run: python3 build.py -r
     - name: Run tests
-      run: cargo test --workspace --exclude gui --exclude kernel
+      run: cargo test
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:

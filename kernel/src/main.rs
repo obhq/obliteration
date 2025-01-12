@@ -9,21 +9,18 @@ use self::sched::sleep;
 use self::uma::Uma;
 use alloc::sync::Arc;
 use core::mem::zeroed;
-use core::panic::PanicInfo;
-use obconf::{BootEnv, Config};
+use krt::info;
 
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
 mod arch;
 mod config;
-mod console;
 mod context;
 mod event;
 mod imgact;
 mod imgfmt;
 mod lock;
 mod malloc;
-mod panic;
 mod proc;
 mod sched;
 mod signal;
@@ -33,29 +30,17 @@ mod uma;
 
 extern crate alloc;
 
-/// Entry point of the kernel.
-///
-/// This will be called by a bootloader or a hypervisor. The following are requirements to call this
-/// function:
-///
-/// 1. The kernel does not remap itself so it must be mapped at a desired virtual address and all
-///    relocations must be applied. This imply that the kernel can only be run in a virtual address
-///    space.
-/// 2. Interrupt is disabled.
-/// 3. Only main CPU can execute this function.
+/// This will be called by [`krt`] crate.
 ///
 /// See Orbis kernel entry point for a reference.
-#[allow(dead_code)]
 #[cfg_attr(target_os = "none", no_mangle)]
-unsafe extern "C" fn _start(env: &'static BootEnv, conf: &'static Config) -> ! {
+fn main() -> ! {
     // SAFETY: This function has a lot of restrictions. See Context documentation for more details.
-    crate::config::setup(env, conf);
-
     info!("Starting Obliteration Kernel.");
 
     // Setup the CPU after the first print to let the bootloader developer know (some of) their code
     // are working.
-    let cx = self::arch::setup_main_cpu();
+    let cx = unsafe { self::arch::setup_main_cpu() };
 
     // Setup proc0 to represent the kernel.
     let proc0 = Proc::new_bare(Arc::new(Proc0Abi));
@@ -67,28 +52,39 @@ unsafe extern "C" fn _start(env: &'static BootEnv, conf: &'static Config) -> ! {
     // Activate CPU context.
     let thread0 = Arc::new(thread0);
 
-    self::context::run_with_context(0, thread0, cx, setup, main);
+    unsafe { self::context::run_with_context(0, thread0, cx, setup, run) };
 }
 
 fn setup() -> ContextSetup {
-    let uma = Uma::new();
+    // Run sysinit vector for subsystem. The Orbis use linker to put all sysinit functions in a list
+    // then loop the list to execute all of it. We manually execute those functions instead for
+    // readability. This also allow us to pass data from one function to another function. See
+    // mi_startup function on the Orbis for a reference.
+    let uma = init_vm(); // 161 on PS4 11.00.
     let pmgr = ProcMgr::new();
 
     ContextSetup { uma, pmgr }
 }
 
-fn main() -> ! {
+fn run() -> ! {
     // Activate stage 2 heap.
     info!("Activating stage 2 heap.");
 
     unsafe { KERNEL_HEAP.activate_stage2() };
 
-    // Run sysinit vector. The PS4 use linker to put all sysinit functions in a list then loop the
-    // list to execute all of it. We manually execute those functions instead for readability. This
-    // also allow us to pass data from one function to another function. See mi_startup function on
-    // the PS4 for a reference.
-    create_init(); // 659 on 11.00.
-    swapper(); // 1119 on 11.00.
+    // Run remaining sysinit vector.
+    create_init(); // 659 on PS4 11.00.
+    swapper(); // 1119 on PS4 11.00.
+}
+
+/// See `vm_mem_init` function on the Orbis for a reference.
+///
+/// # Reference offsets
+/// | Version | Offset |
+/// |---------|--------|
+/// |PS4 11.00|0x39A390|
+fn init_vm() -> Arc<Uma> {
+    Uma::new()
 }
 
 /// See `create_init` function on the PS4 for a reference.
@@ -120,24 +116,6 @@ fn swapper() -> ! {
 
         todo!();
     }
-}
-
-/// # Context safety
-/// This function does not require a CPU context.
-///
-/// # Interrupt safety
-/// This function can be called from interrupt handler.
-#[allow(dead_code)]
-#[cfg_attr(target_os = "none", panic_handler)]
-fn panic(i: &PanicInfo) -> ! {
-    let (file, line) = match i.location() {
-        Some(v) => (v.file(), v.line()),
-        None => ("unknown", 0),
-    };
-
-    // Print the message.
-    crate::console::error(file, line, format_args!("Kernel panic - {}.", i.message()));
-    crate::panic::panic();
 }
 
 /// Implementation of [`ProcAbi`] for kernel process.

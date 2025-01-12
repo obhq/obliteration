@@ -1,7 +1,7 @@
 use super::{pin_cpu, PinnedContext};
-use crate::config::config;
 use alloc::vec::Vec;
 use core::ops::Deref;
+use krt::config;
 
 /// Encapsulates per-CPU value.
 ///

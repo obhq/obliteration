@@ -2,7 +2,7 @@
 use self::context::Context;
 use super::{Device, DeviceContext};
 use crate::hv::Cpu;
-use obconf::VmmMemory;
+use config::VmmMemory;
 use std::num::NonZero;
 
 mod context;

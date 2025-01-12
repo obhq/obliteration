@@ -1,6 +1,6 @@
 use self::file::LogFile;
 use anstyle_parse::Parser;
-use obconf::ConsoleType;
+use config::ConsoleType;
 use std::fs::File;
 use std::io::{stderr, stdout, Write};
 use std::path::{Path, PathBuf};

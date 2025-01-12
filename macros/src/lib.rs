@@ -1,10 +1,26 @@
 use proc_macro::TokenStream;
 use syn::{parse_macro_input, Error, ItemEnum, ItemStatic, LitStr};
 
+mod bitflag;
 mod elf;
 mod enum_conversions;
 mod errno;
 mod vpath;
+
+/// The reason we use `bitflag` as a name instead of `bitflags` is to make it matched with
+/// `bitfield-struct` crate.
+#[proc_macro_attribute]
+pub fn bitflag(args: TokenStream, item: TokenStream) -> TokenStream {
+    let item = parse_macro_input!(item as ItemEnum);
+    let mut opts = self::bitflag::Options::default();
+    let parser = syn::meta::parser(|m| opts.parse(m));
+
+    parse_macro_input!(args with parser);
+
+    self::bitflag::transform(opts, item)
+        .unwrap_or_else(Error::into_compile_error)
+        .into()
+}
 
 /// Note will not produced for test target.
 #[proc_macro_attribute]

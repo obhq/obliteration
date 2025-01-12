@@ -21,7 +21,7 @@ jobs:
     - name: Build
       run: ./build.py -r
     - name: Run tests
-      run: cargo test --workspace --exclude gui --exclude kernel
+      run: cargo test
     - name: Create distribution tarball
       run: |
         ln -sr dist/bin/obliteration dist/obliteration

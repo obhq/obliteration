@@ -32,17 +32,17 @@ impl UmaZone {
     pub(super) fn new(
         _: impl Into<String>,
         keg: Option<UmaKeg>,
-        _: NonZero<usize>,
+        size: NonZero<usize>,
         align: Option<usize>,
         flags: UmaFlags,
     ) -> Self {
-        if flags.secondary() {
+        if flags.has(UmaFlags::Secondary) {
             todo!()
         } else {
             // We use a different approach here to make it idiomatic to Rust. On Orbis it will
             // construct a keg here if it is passed from the caller. If not it will allocate a new
             // keg from masterzone_k.
-            keg.unwrap_or_else(|| UmaKeg::new(align.unwrap_or(Self::ALIGN_CACHE)));
+            keg.unwrap_or_else(|| UmaKeg::new(size, align.unwrap_or(Self::ALIGN_CACHE), flags));
 
             todo!()
         }
