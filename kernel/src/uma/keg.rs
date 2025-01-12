@@ -2,7 +2,9 @@ use super::slab::RcFree;
 use super::UmaFlags;
 use crate::config::PAGE_SIZE;
 use crate::uma::slab::{Free, SlabHdr};
+use crate::uma::Uma;
 use core::alloc::Layout;
+use core::cmp::max;
 use core::num::NonZero;
 
 /// Implementation of `uma_keg` structure.
@@ -15,7 +17,7 @@ impl UmaKeg {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13CF40|
-    pub(super) fn new(size: NonZero<usize>, _: usize, mut flags: UmaFlags) -> Self {
+    pub(super) fn new(size: NonZero<usize>, align: usize, mut flags: UmaFlags) -> Self {
         if flags.has(UmaFlags::Vm) {
             todo!()
         }
@@ -41,10 +43,12 @@ impl UmaKeg {
 
             min = min.pad_to_align();
 
+            // Get UMA_FRITM_SZ and UMA_FRITMREF_SZ.
+            let free_item = min.size() - off;
+            let available = PAGE_SIZE.get() - min.size();
+
             // TODO: Not sure why we need space at least for 2 free item?
-            if (size.get() + (min.size() - off)) > (PAGE_SIZE.get() - min.size()) {
-                todo!()
-            } else {
+            if (size.get() + free_item) > available {
                 // TODO: Set uk_ppera, uk_ipers and uk_rsize.
                 if !flags.has(UmaFlags::Internal) {
                     flags |= UmaFlags::Offpage;
@@ -52,6 +56,26 @@ impl UmaKeg {
                     if !flags.has(UmaFlags::VToSlab) {
                         flags |= UmaFlags::Hash;
                     }
+                }
+            } else {
+                // Get uk_rsize.
+                let rsize = max(size, Uma::SMALLEST_UNIT);
+                let rsize = if (align & rsize.get()) == 0 {
+                    rsize.get()
+                } else {
+                    // Size is not multiple of alignment, align up.
+                    align + 1 + (!align & rsize.get())
+                };
+
+                // Get uk_ipers.
+                let ipers = available / (rsize + free_item);
+
+                // TODO: Verify if this valid for PAGE_SIZE < 0x4000.
+                if !flags.has(UmaFlags::Internal | UmaFlags::Cacheonly)
+                    && (available % (rsize + free_item)) >= Uma::MAX_WASTE.get()
+                    && (PAGE_SIZE.get() / rsize) > ipers
+                {
+                    todo!()
                 }
             }
         }
