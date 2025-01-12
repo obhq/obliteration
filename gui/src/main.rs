@@ -367,17 +367,7 @@ async fn run_launcher(
         let win = win.as_weak();
         let exit = exit.clone();
 
-        move |addr| {
-            let addr = match addr.parse() {
-                Ok(addr) => addr,
-                // TODO: Display error instead of panic.
-                Err(_e) => todo!(),
-            };
-
-            win.unwrap().hide().unwrap();
-
-            exit.set(Some(ExitAction::RunDebug(addr)));
-        }
+        move || todo!()
     });
 
     // Set window properties.

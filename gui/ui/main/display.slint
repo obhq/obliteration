@@ -14,9 +14,9 @@ export component DisplayTab {
 
             GroupBox {
                 title: "Device";
+                width: 50%;
                 ComboBox {
                     model: devices;
-                    preferred-width: 0; // Override content-based width.
                 }
             }
 
@@ -25,7 +25,6 @@ export component DisplayTab {
                 ComboBox {
                     model: resolutions;
                     current-index <=> selected-resolution;
-                    preferred-width: 0; // Same here.
                 }
             }
         }

@@ -14,8 +14,8 @@ export component Tabs {
     in property <[string]> resolutions;
     in-out property <int> selected-resolution;
 
+    pure callback start-debug();
     pure callback report-issue();
-    pure callback start-debug(string);
 
     private property <Tab> tab: Tab.display;
 
@@ -74,8 +74,8 @@ export component Tabs {
 
         if root.tab == Tab.cpu: CpuTab {
             vertical-stretch: 1;
-            start-debug(addr) => {
-                start-debug(addr);
+            start-debug => {
+                start-debug();
             }
         }
     }
