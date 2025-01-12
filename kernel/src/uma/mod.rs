@@ -1,5 +1,6 @@
 pub use self::zone::*;
 
+use crate::config::PAGE_SIZE;
 use alloc::string::String;
 use alloc::sync::Arc;
 use core::num::NonZero;
@@ -14,8 +15,13 @@ mod zone;
 pub struct Uma {}
 
 impl Uma {
-    /// See `uma_startup` on the Orbis for a reference. Beware that our implementation cannot access
-    /// the CPU context due to this function can be called before context activation.
+    /// `UMA_SMALLEST_UNIT`.
+    const SMALLEST_UNIT: NonZero<usize> = NonZero::new(PAGE_SIZE.get() / 256).unwrap();
+
+    /// `UMA_MAX_WASTE`.
+    const MAX_WASTE: NonZero<usize> = NonZero::new(PAGE_SIZE.get() / 10).unwrap();
+
+    /// See `uma_startup` on the Orbis for a reference.
     ///
     /// # Reference offsets
     /// | Version | Offset |
@@ -67,4 +73,6 @@ pub enum UmaFlags {
     VToSlab = 0x2000,
     /// `UMA_ZFLAG_INTERNAL`.
     Internal = 0x20000000,
+    /// `UMA_ZFLAG_CACHEONLY`.
+    Cacheonly = 0x80000000,
 }
