@@ -1,42 +1,128 @@
-import { Tabs } from "main/tabs.slint";
-import { Actions } from "main/actions.slint";
-import { VerticalBox } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox, Button, ComboBox } from "std-widgets.slint";
+import { Menu } from "main/menu.slint";
+import { DisplayTab } from "main/display.slint";
+import { CpuTab } from "main/cpu.slint";
 
 export { WaitForDebugger } from "debug.slint";
 export { ErrorWindow } from "error.slint";
 export { InstallFirmware, SetupWizard } from "setup.slint";
+
+enum Tab {
+    menu,
+    display,
+    cpu
+}
 
 export component MainWindow inherits Window {
     in property <[string]> devices;
     in property <[string]> resolutions;
     in-out property <int> selected-resolution;
     in property <[string]> profiles;
-    in-out property <int> selected-profile <=> actions.selected-profile;
+    in-out property <int> selected-profile;
 
-    callback profile-selected <=> actions.profile-selected;
-    pure callback save-profile <=> actions.save;
+    callback profile-selected();
+    pure callback save-profile();
     pure callback report-issue();
-    pure callback start-vmm <=> actions.start;
-    pure callback start-debug <=> tabs.start-debug;
+    pure callback start-vmm();
+    pure callback start-debug();
 
     title: "Obliteration";
     icon: @image-url("icon.png");
     min-width: 1000px;
     min-height: 500px;
 
+    private property <Tab> tab: Tab.display;
+
     VerticalBox {
-        tabs := Tabs {
-            devices: devices;
-            resolutions: resolutions;
-            selected-resolution <=> selected-resolution;
+        // Tab bar.
+        HorizontalBox {
+            padding: 0;
+
+            Button {
+                icon: @image-url("main/menu.svg");
+                colorize-icon: true;
+                primary: tab == Tab.menu;
+                clicked => {
+                    tab = Tab.menu
+                }
+            }
+
+            Button {
+                text: "Display";
+                icon: @image-url("main/monitor.svg");
+                colorize-icon: true;
+                primary: tab == Tab.display;
+                horizontal-stretch: 1;
+                clicked => {
+                    tab = Tab.display
+                }
+            }
+
+            Button {
+                text: "CPU";
+                icon: @image-url("main/cpu-64-bit.svg");
+                colorize-icon: true;
+                primary: tab == Tab.cpu;
+                horizontal-stretch: 1;
+                clicked => {
+                    tab = Tab.cpu
+                }
+            }
+        }
+
+        // Tab content.
+        if tab == Tab.menu: Menu {
             vertical-stretch: 1;
+
             report-issue => {
                 report-issue();
             }
         }
 
-        actions := Actions {
-            profiles: profiles;
+        if tab == Tab.display: DisplayTab {
+            devices: devices;
+            resolutions: resolutions;
+            selected-resolution <=> selected-resolution;
+            vertical-stretch: 1;
+        }
+
+        if tab == Tab.cpu: CpuTab {
+            vertical-stretch: 1;
+            start-debug => {
+                start-debug();
+            }
+        }
+
+        // Profile + actions.
+        HorizontalBox {
+            padding: 0;
+
+            ComboBox {
+                model: profiles;
+                current-index <=> selected-profile;
+                horizontal-stretch: 1;
+                selected => {
+                    profile-selected();
+                }
+            }
+
+            Button {
+                text: "Save";
+                icon: @image-url("main/save.svg");
+                colorize-icon: true;
+                clicked => {
+                    save-profile();
+                }
+            }
+
+            Button {
+                text: "Start";
+                icon: @image-url("main/start.svg");
+                colorize-icon: true;
+                clicked => {
+                    start-vmm();
+                }
+            }
         }
     }
 }
