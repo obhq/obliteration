@@ -59,6 +59,8 @@ pub enum UmaFlags {
     Offpage = 0x8,
     /// `UMA_ZONE_MALLOC`.
     Malloc = 0x10,
+    /// `UMA_ZONE_MTXCLASS`.
+    MtxClass = 0x40,
     /// `UMA_ZONE_VM`.
     Vm = 0x80,
     /// `UMA_ZONE_HASH`.
