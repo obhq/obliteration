@@ -1,10 +1,10 @@
 use super::slab::RcFree;
 use super::UmaFlags;
-use crate::config::PAGE_SIZE;
+use crate::config::{PAGE_MASK, PAGE_SHIFT, PAGE_SIZE};
 use crate::uma::slab::{Free, SlabHdr};
 use crate::uma::Uma;
 use core::alloc::Layout;
-use core::cmp::max;
+use core::cmp::{max, min};
 use core::num::NonZero;
 
 /// Implementation of `uma_keg` structure.
@@ -30,8 +30,28 @@ impl UmaKeg {
             flags |= UmaFlags::VToSlab;
         }
 
-        if flags.has(UmaFlags::CacheSpread) {
-            todo!()
+        // Get uk_ppera.
+        let ppera = if flags.has(UmaFlags::CacheSpread) {
+            // Round size.
+            let size = if (size.get() & align) == 0 {
+                size.get()
+            } else {
+                (size.get() & !align) + align + 1
+            };
+
+            // Get uk_rsize.
+            let align = align + 1;
+            let rsize = if (size & align) == 0 {
+                // TODO: What is this?
+                size + align
+            } else {
+                size
+            };
+
+            // Get uk_ppera.
+            let pages = (PAGE_SIZE.get() / align * rsize) >> PAGE_SHIFT;
+
+            min(pages, (128 * 1024) / PAGE_SIZE)
         } else {
             // Check if item size exceed slab size.
             let min = Layout::new::<SlabHdr>();
@@ -57,6 +77,15 @@ impl UmaKeg {
                         flags |= UmaFlags::Hash;
                     }
                 }
+
+                // Get uk_ppera.
+                let mut ppera = size.get() >> PAGE_SHIFT;
+
+                if size.get() > (size.get() & !PAGE_MASK.get()) {
+                    ppera += 1;
+                }
+
+                ppera
             } else {
                 // Get uk_rsize.
                 let rsize = max(size, Uma::SMALLEST_UNIT);
@@ -77,8 +106,10 @@ impl UmaKeg {
                 {
                     todo!()
                 }
+
+                1
             }
-        }
+        };
 
         if flags.has(UmaFlags::Offpage) {
             if flags.has(UmaFlags::RefCnt) {
@@ -86,6 +117,18 @@ impl UmaKeg {
             } else {
                 // TODO: Set uk_slabzone to slabzone.
             }
+        }
+
+        if ppera == 1 {
+            // TODO: Set uk_allocf and uk_freef.
+        }
+
+        if flags.has(UmaFlags::MtxClass) {
+            todo!()
+        }
+
+        if !flags.has(UmaFlags::Offpage) {
+            todo!()
         }
 
         todo!()
