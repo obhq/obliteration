@@ -40,7 +40,7 @@ slint = { version = "=1.9.0", features = [
 ], default-features = false }
 thiserror = "2.0.3"
 uuid = { version = "1.11.0", features = ["serde", "v4"] }
-winit = { version = "0.30.5", features = ["rwh_05"] }
+winit = { version = "0.30.5", features = ["rwh_06"] }
 
 [target.'cfg(target_arch = "aarch64")'.dependencies]
 aarch64 = { path = "../arch/aarch64" }
