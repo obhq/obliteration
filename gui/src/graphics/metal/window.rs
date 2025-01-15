@@ -3,7 +3,7 @@ use crate::rt::{Hook, WindowHandler};
 use metal::{CAMetalLayer, MetalLayer};
 use objc::runtime::{Object, NO, YES};
 use objc::{msg_send, sel, sel_impl};
-use rwh05::{HasRawWindowHandle, RawWindowHandle};
+use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::error::Error;
 use std::ptr::null_mut;
 use std::rc::Rc;
@@ -27,8 +27,8 @@ impl MetalWindow {
         window: Window,
     ) -> Result<Rc<Self>, Box<dyn Error + Send + Sync>> {
         let layer = unsafe { engine.create_layer() };
-        let view = match window.raw_window_handle() {
-            RawWindowHandle::AppKit(v) => v.ns_view as *mut Object,
+        let view = match window.window_handle().unwrap().as_raw() {
+            RawWindowHandle::AppKit(v) => v.ns_view.as_ptr() as *mut Object,
             _ => unreachable!(),
         };
 
