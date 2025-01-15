@@ -1,4 +1,5 @@
 use super::BackendError;
+use raw_window_handle::WaylandDisplayHandle;
 use std::cell::RefCell;
 use std::future::Future;
 use std::hint::unreachable_unchecked;
@@ -25,9 +26,9 @@ pub struct Wayland {
 impl Wayland {
     /// # Safety
     /// `display` must outlive the returned [`Wayland`].
-    pub unsafe fn new(display: rwh05::WaylandDisplayHandle) -> Result<Self, BackendError> {
+    pub unsafe fn new(display: WaylandDisplayHandle) -> Result<Self, BackendError> {
         // Get wayland connection.
-        let backend = Backend::from_foreign_display(display.display.cast());
+        let backend = Backend::from_foreign_display(display.display.as_ptr().cast());
         let conn = Connection::from_backend(backend);
 
         // Get global objects.

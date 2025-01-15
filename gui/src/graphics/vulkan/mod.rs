@@ -7,7 +7,7 @@ use crate::rt::{create_window, raw_display_handle};
 use ash::extensions::khr::Surface;
 use ash::vk::{ApplicationInfo, InstanceCreateInfo, QueueFlags, API_VERSION_1_3};
 use ash::{Entry, Instance};
-use ash_window::enumerate_required_extensions;
+use raw_window_handle::RawDisplayHandle;
 use std::ffi::CStr;
 use std::mem::ManuallyDrop;
 use std::rc::Rc;
@@ -21,8 +21,18 @@ mod window;
 
 pub fn builder() -> Result<impl EngineBuilder, GraphicsError> {
     // Get required extensions for window.
-    let exts = enumerate_required_extensions(raw_display_handle())
-        .map_err(GraphicsError::GetExtensionsForWindow)?;
+    let mut exts = vec![c"VK_KHR_surface".as_ptr()];
+
+    match raw_display_handle() {
+        RawDisplayHandle::UiKit(_) | RawDisplayHandle::AppKit(_) | RawDisplayHandle::Web(_) => {
+            unreachable!()
+        }
+        RawDisplayHandle::Xlib(_) => exts.push(c"VK_KHR_xlib_surface".as_ptr()),
+        RawDisplayHandle::Xcb(_) => exts.push(c"VK_KHR_xcb_surface".as_ptr()),
+        RawDisplayHandle::Wayland(_) => exts.push(c"VK_KHR_wayland_surface".as_ptr()),
+        RawDisplayHandle::Windows(_) => exts.push(c"VK_KHR_win32_surface".as_ptr()),
+        _ => todo!(),
+    }
 
     // Setup application info.
     let mut app = ApplicationInfo::default();
@@ -40,7 +50,7 @@ pub fn builder() -> Result<impl EngineBuilder, GraphicsError> {
     let info = InstanceCreateInfo::builder()
         .application_info(&app)
         .enabled_layer_names(&layers)
-        .enabled_extension_names(exts);
+        .enabled_extension_names(&exts);
 
     // Create Vulkan instance.
     let entry = Entry::linked();
@@ -153,9 +163,6 @@ impl super::PhysicalDevice for PhysicalDevice {
 /// Represents an error when operation on Vulkan fails.
 #[derive(Debug, Error)]
 pub enum GraphicsError {
-    #[error("couldn't get required Vulkan extensions for window")]
-    GetExtensionsForWindow(#[source] ash::vk::Result),
-
     #[error("couldn't create Vulkan instance")]
     CreateInstance(#[source] ash::vk::Result),
 

@@ -5,8 +5,8 @@ pub use self::window::*;
 
 use self::context::Context;
 use self::task::TaskList;
+use raw_window_handle::{HasDisplayHandle, RawDisplayHandle};
 use rustc_hash::FxHashMap;
-use rwh05::{HasRawDisplayHandle, RawDisplayHandle};
 use std::any::{Any, TypeId};
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -141,7 +141,7 @@ pub fn yield_now() -> impl Future<Output = ()> {
 /// # Panics
 /// If called from the other thread than main thread.
 pub fn raw_display_handle() -> RawDisplayHandle {
-    Context::with(|cx| cx.el.raw_display_handle())
+    Context::with(|cx| cx.el.display_handle().unwrap().as_raw())
 }
 
 /// You need to call [`register_window()`] after this to receive events for the created window and

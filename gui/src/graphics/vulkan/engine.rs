@@ -2,10 +2,13 @@
 use super::{GraphicsError, VulkanBuilder};
 use crate::graphics::Graphics;
 use crate::profile::Profile;
-use ash::vk::{DeviceCreateInfo, DeviceQueueCreateInfo, QueueFlags, SurfaceKHR};
+use ash::extensions::khr::{WaylandSurface, Win32Surface, XcbSurface, XlibSurface};
+use ash::vk::{
+    DeviceCreateInfo, DeviceQueueCreateInfo, QueueFlags, SurfaceKHR, WaylandSurfaceCreateInfoKHR,
+    Win32SurfaceCreateInfoKHR, XcbSurfaceCreateInfoKHR, XlibSurfaceCreateInfoKHR,
+};
 use ash::Device;
-use ash_window::create_surface;
-use rwh05::{HasRawDisplayHandle, HasRawWindowHandle};
+use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle};
 use winit::window::Window;
 
 /// Implementation of [`Graphics`] using Vulkan.
@@ -51,10 +54,57 @@ impl Vulkan {
     /// # Safety
     /// The returned [`SurfaceKHR`] must be destroyed before `win` and this [`Vulkan`].
     pub unsafe fn create_surface(&self, win: &Window) -> Result<SurfaceKHR, ash::vk::Result> {
-        let dh = win.raw_display_handle();
-        let wh = win.raw_window_handle();
+        let e = &self.builder.entry;
+        let i = &self.builder.instance;
+        let w = win.window_handle().unwrap();
 
-        create_surface(&self.builder.entry, &self.builder.instance, dh, wh, None)
+        match w.as_ref() {
+            RawWindowHandle::UiKit(_)
+            | RawWindowHandle::AppKit(_)
+            | RawWindowHandle::Web(_)
+            | RawWindowHandle::WebCanvas(_)
+            | RawWindowHandle::WebOffscreenCanvas(_) => {
+                unreachable!()
+            }
+            RawWindowHandle::Xlib(v) => {
+                let c = XlibSurfaceCreateInfoKHR::builder()
+                    .dpy(match win.display_handle().unwrap().as_ref() {
+                        RawDisplayHandle::Xlib(v) => v.display.unwrap().as_ptr().cast(),
+                        _ => unreachable!(),
+                    })
+                    .window(v.window);
+
+                XlibSurface::new(e, i).create_xlib_surface(&c, None)
+            }
+            RawWindowHandle::Xcb(v) => {
+                let c = XcbSurfaceCreateInfoKHR::builder()
+                    .connection(match win.display_handle().unwrap().as_ref() {
+                        RawDisplayHandle::Xcb(v) => v.connection.unwrap().as_ptr(),
+                        _ => unreachable!(),
+                    })
+                    .window(v.window.get());
+
+                XcbSurface::new(e, i).create_xcb_surface(&c, None)
+            }
+            RawWindowHandle::Wayland(v) => {
+                let c = WaylandSurfaceCreateInfoKHR::builder()
+                    .display(match win.display_handle().unwrap().as_ref() {
+                        RawDisplayHandle::Wayland(v) => v.display.as_ptr(),
+                        _ => unreachable!(),
+                    })
+                    .surface(v.surface.as_ptr());
+
+                WaylandSurface::new(e, i).create_wayland_surface(&c, None)
+            }
+            RawWindowHandle::Win32(v) => {
+                let c = Win32SurfaceCreateInfoKHR::builder()
+                    .hinstance(v.hinstance.unwrap().get() as _)
+                    .hwnd(v.hwnd.get() as _);
+
+                Win32Surface::new(e, i).create_win32_surface(&c, None)
+            }
+            _ => todo!(),
+        }
     }
 
     /// # Safety

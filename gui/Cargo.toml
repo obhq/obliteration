@@ -28,7 +28,6 @@ obfw = { git = "https://github.com/obhq/firmware-dumper.git", rev = "64787fdc048
 ] }
 open = { version = "5.3.1" }
 raw-window-handle = "0.6.2"
-rwh05 = { package = "raw-window-handle", version = "0.5.2" }
 redb = "2.2.0"
 rustc-hash = "2.1.0"
 serde = { version = "1.0.209", features = ["derive"] }
@@ -51,7 +50,6 @@ x86-64 = { path = "../arch/x86-64" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ash = { version = "0.37.3", features = ["linked"], default-features = false }
-ash-window = "=0.12.0"
 ashpd = { version = "0.9.2", features = [
     "async-std",
     "raw_handle",
@@ -68,7 +66,6 @@ xdg = "2.5.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 ash = { version = "0.37.3", features = ["linked"], default-features = false }
-ash-window = "=0.12.0"
 i-slint-renderer-skia = { version = "=1.9.0", features = ["vulkan"] }
 windows-sys = { version = "0.59.0", features = [
     "Win32",
