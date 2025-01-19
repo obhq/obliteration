@@ -30,10 +30,24 @@ impl UmaKeg {
             flags |= UmaFlags::VToSlab;
         }
 
-        // Get uk_ppera.
-        let ppera = if flags.has(UmaFlags::CacheSpread) {
+        // Get header layout.
+        let hdr = Layout::new::<SlabHdr>();
+        let (mut hdr, off) = if flags.has(UmaFlags::RefCnt) {
+            hdr.extend(Layout::new::<RcFree>()).unwrap()
+        } else {
+            hdr.extend(Layout::new::<Free>()).unwrap()
+        };
+
+        hdr = hdr.pad_to_align();
+
+        // Get UMA_FRITM_SZ and UMA_FRITMREF_SZ.
+        let free_item = hdr.size() - off;
+        let available = PAGE_SIZE.get() - hdr.size();
+
+        // Get uk_ppera and uk_ipers.
+        let (ppera, ipers) = if flags.has(UmaFlags::CacheSpread) {
             // Round size.
-            let size = if (size.get() & align) == 0 {
+            let rsize = if (size.get() & align) == 0 {
                 size.get()
             } else {
                 (size.get() & !align) + align + 1
@@ -41,35 +55,25 @@ impl UmaKeg {
 
             // Get uk_rsize.
             let align = align + 1;
-            let rsize = if (size & align) == 0 {
+            let rsize = if (rsize & align) == 0 {
                 // TODO: What is this?
-                size + align
+                rsize + align
             } else {
-                size
+                rsize
             };
 
             // Get uk_ppera.
             let pages = (PAGE_SIZE.get() / align * rsize) >> PAGE_SHIFT;
+            let ppera = min(pages, (128 * 1024) / PAGE_SIZE);
 
-            min(pages, (128 * 1024) / PAGE_SIZE)
+            // Get uk_ipers.
+            let ipers = (ppera * PAGE_SIZE.get() + (rsize - size.get())) / rsize;
+
+            (ppera, ipers)
         } else {
-            // Check if item size exceed slab size.
-            let min = Layout::new::<SlabHdr>();
-            let (mut min, off) = if flags.has(UmaFlags::RefCnt) {
-                min.extend(Layout::new::<RcFree>()).unwrap()
-            } else {
-                min.extend(Layout::new::<Free>()).unwrap()
-            };
-
-            min = min.pad_to_align();
-
-            // Get UMA_FRITM_SZ and UMA_FRITMREF_SZ.
-            let free_item = min.size() - off;
-            let available = PAGE_SIZE.get() - min.size();
-
             // TODO: Not sure why we need space at least for 2 free item?
             if (size.get() + free_item) > available {
-                // TODO: Set uk_ppera, uk_ipers and uk_rsize.
+                // TODO: Set uk_ppera and uk_rsize.
                 if !flags.has(UmaFlags::Internal) {
                     flags |= UmaFlags::Offpage;
 
@@ -85,7 +89,7 @@ impl UmaKeg {
                     ppera += 1;
                 }
 
-                ppera
+                (ppera, 1)
             } else {
                 // Get uk_rsize.
                 let rsize = max(size, Uma::SMALLEST_UNIT);
@@ -107,7 +111,7 @@ impl UmaKeg {
                     todo!()
                 }
 
-                1
+                (1, ipers)
             }
         };
 
@@ -128,7 +132,13 @@ impl UmaKeg {
         }
 
         if !flags.has(UmaFlags::Offpage) {
-            todo!()
+            let space = ppera * PAGE_SIZE.get();
+            let pgoff = (space - hdr.size()) - ipers * free_item;
+
+            // TODO: What is this?
+            if space < pgoff + hdr.size() + ipers * free_item {
+                panic!("UMA slab won't fit");
+            }
         }
 
         todo!()
