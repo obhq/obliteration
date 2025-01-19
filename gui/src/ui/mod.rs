@@ -56,7 +56,7 @@ impl<T: ComponentHandle> WinitWindow for T {
     fn id(&self) -> WindowId {
         let win = WindowInner::from_pub(self.window()).window_adapter();
 
-        Window::from_adapter(win.as_ref()).winit().id()
+        Window::from_adapter(win.as_ref()).id()
     }
 
     fn handle(&self) -> impl HasWindowHandle + '_ {
@@ -65,11 +65,9 @@ impl<T: ComponentHandle> WinitWindow for T {
 
     #[cfg(target_os = "linux")]
     fn xdg_toplevel(&self) -> *mut std::ffi::c_void {
-        use winit::platform::wayland::WindowExtWayland;
-
         let win = WindowInner::from_pub(self.window()).window_adapter();
 
-        Window::from_adapter(win.as_ref()).winit().xdg_toplevel()
+        Window::from_adapter(win.as_ref()).xdg_toplevel()
     }
 }
 

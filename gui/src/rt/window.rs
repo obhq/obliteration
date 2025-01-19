@@ -7,8 +7,7 @@ use winit::window::WindowId;
 /// Encapsulates winit window with window-specific logic.
 ///
 /// The event loop will exit immediately if any method return an error.
-pub trait WindowHandler {
-    fn window_id(&self) -> WindowId;
+pub trait WindowHandler: WinitWindow {
     fn on_resized(&self, new: PhysicalSize<u32>) -> Result<(), Box<dyn Error + Send + Sync>>;
     fn on_close_requested(&self) -> Result<(), Box<dyn Error + Send + Sync>>;
     fn on_focused(&self, gained: bool) -> Result<(), Box<dyn Error + Send + Sync>>;
@@ -35,7 +34,9 @@ pub trait WindowHandler {
 /// Provides method to return winit properties.
 pub trait WinitWindow {
     fn id(&self) -> WindowId;
-    fn handle(&self) -> impl HasWindowHandle + '_;
+    fn handle(&self) -> impl HasWindowHandle + '_
+    where
+        Self: Sized;
     #[cfg(target_os = "linux")]
     fn xdg_toplevel(&self) -> *mut std::ffi::c_void;
 }

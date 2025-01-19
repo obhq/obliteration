@@ -165,7 +165,7 @@ pub fn create_window(attrs: WindowAttributes) -> Result<Window, OsError> {
 /// - If the underlying winit window on `win` already registered.
 /// - If called from [`Drop`] implementation.
 pub fn register_window<T: WindowHandler + 'static>(win: &Rc<T>) {
-    let id = win.window_id();
+    let id = win.id();
     let win = Rc::downgrade(win);
 
     Context::with(move |cx| {

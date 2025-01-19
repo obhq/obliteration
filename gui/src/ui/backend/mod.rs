@@ -2,7 +2,7 @@
 pub(super) use self::wayland::*;
 pub(super) use self::window::Window;
 
-use crate::rt::{create_window, raw_display_handle, WindowHandler};
+use crate::rt::{create_window, raw_display_handle, WinitWindow};
 use i_slint_core::graphics::RequestedGraphicsAPI;
 use i_slint_renderer_skia::SkiaRenderer;
 #[cfg(target_os = "linux")]
@@ -169,7 +169,7 @@ impl slint::platform::Platform for Platform {
             .unwrap()
             .windows
             .borrow_mut()
-            .insert(win.window_id(), Rc::downgrade(&win))
+            .insert(win.id(), Rc::downgrade(&win))
             .is_none());
 
         crate::rt::register_window(&win);

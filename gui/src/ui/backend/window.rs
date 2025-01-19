@@ -1,4 +1,4 @@
-use crate::rt::{Signal, WindowHandler};
+use crate::rt::{Signal, WindowHandler, WinitWindow};
 use i_slint_core::window::WindowAdapterInternal;
 use i_slint_core::InternalToken;
 use i_slint_renderer_skia::SkiaRenderer;
@@ -66,11 +66,27 @@ impl Window {
     }
 }
 
-impl WindowHandler for Window {
-    fn window_id(&self) -> WindowId {
+impl WinitWindow for Window {
+    fn id(&self) -> WindowId {
         self.winit.id()
     }
 
+    fn handle(&self) -> impl HasWindowHandle + '_
+    where
+        Self: Sized,
+    {
+        &self.winit
+    }
+
+    #[cfg(target_os = "linux")]
+    fn xdg_toplevel(&self) -> *mut std::ffi::c_void {
+        use winit::platform::wayland::WindowExtWayland;
+
+        self.winit.xdg_toplevel()
+    }
+}
+
+impl WindowHandler for Window {
     fn on_resized(
         &self,
         new: winit::dpi::PhysicalSize<u32>,
