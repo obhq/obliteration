@@ -52,7 +52,7 @@ impl Drop for MetalWindow {
     }
 }
 
-impl WinitWindow for VulkanWindow {
+impl WinitWindow for MetalWindow {
     fn id(&self) -> WindowId {
         self.window.id()
     }
