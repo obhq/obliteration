@@ -1,7 +1,8 @@
 use super::engine::Vulkan;
 use super::GraphicsError;
-use crate::rt::{Hook, WindowHandler};
+use crate::rt::{Hook, WindowHandler, WinitWindow};
 use ash::vk::SurfaceKHR;
+use raw_window_handle::HasWindowHandle;
 use std::error::Error;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -45,11 +46,27 @@ impl Drop for VulkanWindow {
     }
 }
 
-impl WindowHandler for VulkanWindow {
-    fn window_id(&self) -> WindowId {
+impl WinitWindow for VulkanWindow {
+    fn id(&self) -> WindowId {
         self.window.id()
     }
 
+    fn handle(&self) -> impl HasWindowHandle + '_
+    where
+        Self: Sized,
+    {
+        &self.window
+    }
+
+    #[cfg(target_os = "linux")]
+    fn xdg_toplevel(&self) -> *mut std::ffi::c_void {
+        use winit::platform::wayland::WindowExtWayland;
+
+        self.window.xdg_toplevel()
+    }
+}
+
+impl WindowHandler for VulkanWindow {
     fn on_resized(&self, _: PhysicalSize<u32>) -> Result<(), Box<dyn Error + Send + Sync>> {
         // Vulkan windows does not allowed to resize.
         Ok(())

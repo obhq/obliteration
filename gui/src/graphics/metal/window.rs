@@ -1,5 +1,5 @@
 use super::Metal;
-use crate::rt::{Hook, WindowHandler};
+use crate::rt::{Hook, WindowHandler, WinitWindow};
 use metal::{CAMetalLayer, MetalLayer};
 use objc::runtime::{Object, NO, YES};
 use objc::{msg_send, sel, sel_impl};
@@ -52,11 +52,20 @@ impl Drop for MetalWindow {
     }
 }
 
-impl WindowHandler for MetalWindow {
-    fn window_id(&self) -> WindowId {
+impl WinitWindow for MetalWindow {
+    fn id(&self) -> WindowId {
         self.window.id()
     }
 
+    fn handle(&self) -> impl HasWindowHandle + '_
+    where
+        Self: Sized,
+    {
+        &self.window
+    }
+}
+
+impl WindowHandler for MetalWindow {
     fn on_resized(&self, new: PhysicalSize<u32>) -> Result<(), Box<dyn Error + Send + Sync>> {
         todo!()
     }
