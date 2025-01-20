@@ -12,7 +12,6 @@ use crate::ee::EntryArg;
 use crate::errno::EEXIST;
 use crate::fs::{Fs, FsInitError, MkdirError, MountError, MountFlags, MountOpts, VPath, VPathBuf};
 use crate::kqueue::KernelQueueManager;
-use crate::log::{print, LOGGER};
 use crate::namedobj::NamedObjManager;
 use crate::net::NetManager;
 use crate::osem::OsemManager;
@@ -58,7 +57,6 @@ mod idt;
 mod imgact;
 mod ipmi;
 mod kqueue;
-mod log;
 mod namedobj;
 mod net;
 mod osem;
@@ -79,19 +77,6 @@ mod ucred;
 mod umtx;
 mod vm;
 
-fn main() -> ExitCode {
-    // Run the kernel.
-    log::init();
-
-    match run(args) {
-        Ok(_) => ExitCode::SUCCESS,
-        Err(e) => {
-            error!(e, "Error while running kernel");
-            ExitCode::FAILURE
-        }
-    }
-}
-
 fn run(args: Args) -> Result<(), KernelError> {
     // Initialize debug dump.
     if let Some(path) = &args.debug_dump {
@@ -108,57 +93,15 @@ fn run(args: Args) -> Result<(), KernelError> {
         if let Err(e) = create_dir_all(path) {
             warn!(e, "Failed to create {}", path.display());
         }
-
-        // Create log file for us.
-        let log = path.join("obliteration.log");
-
-        match File::create(&log) {
-            Ok(v) => LOGGER.get().unwrap().set_file(v),
-            Err(e) => warn!(e, "Failed to create {}", log.display()),
-        }
     }
 
-    // Get path to param.sfo.
-    let mut path = args.game.join("sce_sys");
-
-    path.push("param.sfo");
-
-    // Load param.sfo.
-    let param = File::open(&path).map_err(KernelError::FailedToOpenGameParam)?;
-    let param = Arc::new(Param::read(param).map_err(KernelError::FailedToReadGameParam)?);
-
-    // Get auth info for the process.
-    let auth =
-        AuthInfo::from_title_id(param.title_id()).ok_or(KernelError::InvalidTitleId(path))?;
-
     // Show basic information.
-    let mut log = info!();
     let mut hwinfo = System::new_with_specifics(
         sysinfo::RefreshKind::new()
             .with_memory(sysinfo::MemoryRefreshKind::new())
             .with_cpu(sysinfo::CpuRefreshKind::new()),
     );
     hwinfo.refresh_memory_specifics(MemoryRefreshKind::new().with_ram());
-
-    // Init information
-    writeln!(log, "Starting Obliteration Kernel.").unwrap();
-    writeln!(log, "System directory    : {}", args.system.display()).unwrap();
-    writeln!(log, "Game directory      : {}", args.game.display()).unwrap();
-
-    if let Some(v) = &args.debug_dump {
-        writeln!(log, "Debug dump directory: {}", v.display()).unwrap();
-    }
-
-    // Param information
-    writeln!(log, "Application Title   : {}", param.title().unwrap()).unwrap();
-    writeln!(log, "Application ID      : {}", param.title_id()).unwrap();
-    writeln!(log, "Application Category: {}", param.category()).unwrap();
-    writeln!(
-        log,
-        "Application Version : {}",
-        param.app_ver().unwrap_or("UNKNOWN")
-    )
-    .unwrap();
 
     // Hardware information
     writeln!(
@@ -180,9 +123,6 @@ fn run(args: Args) -> Result<(), KernelError> {
         hwinfo.total_memory() / 1048576
     )
     .unwrap();
-    writeln!(log, "Pro mode            : {}", args.pro).unwrap();
-
-    print(log);
 
     // Setup kernel credential.
     let cred = Arc::new(Ucred::new(
