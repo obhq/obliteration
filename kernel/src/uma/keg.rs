@@ -11,6 +11,9 @@ use core::num::NonZero;
 pub struct UmaKeg {}
 
 impl UmaKeg {
+    /// `align` is the actual alignment **minus** one, which mean if you want each item to be 8
+    /// bytes alignment this value will be 7.
+    ///
     /// See `keg_ctor` on the Orbis for a reference.
     ///
     /// # Reference offsets
@@ -141,6 +144,12 @@ impl UmaKeg {
             }
         }
 
-        todo!()
+        if flags.has(UmaFlags::Hash) {
+            todo!()
+        }
+
+        // TODO: Add uk_zones.
+        // TODO: Add uma_kegs.
+        Self {}
     }
 }
