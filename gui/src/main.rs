@@ -1,7 +1,9 @@
 #![windows_subsystem = "windows"]
 
 use self::data::{DataError, DataMgr};
+use self::gdb::{GdbError, GdbExecutor, GdbSession};
 use self::graphics::{EngineBuilder, GraphicsError, PhysicalDevice};
+use self::hv::Hypervisor;
 use self::log::LogWriter;
 use self::profile::{DisplayResolution, Profile};
 use self::setup::{run_setup, SetupError};
@@ -13,17 +15,16 @@ use self::vmm::{CpuError, Vmm, VmmError, VmmEvent};
 use async_net::{TcpListener, TcpStream};
 use clap::{Parser, ValueEnum};
 use erdp::ErrorDisplay;
-use futures::{select_biased, AsyncReadExt, FutureExt};
+use futures::{
+    select_biased, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, FutureExt, TryStreamExt,
+};
 use slint::{ComponentHandle, ModelRc, SharedString, ToSharedString, VecModel};
 use std::cell::Cell;
-use std::future::Future;
 use std::net::SocketAddrV4;
 use std::path::PathBuf;
-use std::pin::pin;
 use std::process::ExitCode;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::task::Poll;
 use thiserror::Error;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
@@ -228,17 +229,24 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
     };
 
     // Wait for debugger.
-    let mut gdb_con = if let Some(addr) = debug {
-        let v = wait_for_debugger(addr).await?;
+    let mut gdb_read: Box<dyn AsyncRead + Unpin>;
+    let mut gdb_write: Box<dyn AsyncWrite + Unpin>;
 
-        if v.is_none() {
-            return Ok(());
+    match debug {
+        Some(addr) => {
+            let (r, w) = match wait_for_debugger(addr).await? {
+                Some(v) => v.split(),
+                None => return Ok(()),
+            };
+
+            gdb_read = Box::new(r);
+            gdb_write = Box::new(w);
         }
-
-        v
-    } else {
-        None
-    };
+        None => {
+            gdb_read = Box::new(futures::stream::pending::<Result<&[u8], _>>().into_async_read());
+            gdb_write = Box::new(futures::io::sink());
+        }
+    }
 
     // Setup WindowAttributes for VMM screen.
     let attrs = Window::default_attributes()
@@ -258,50 +266,26 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
     let graphics = graphics
         .build(&profile, attrs, &shutdown)
         .map_err(ProgramError::BuildGraphicsEngine)?;
-    let mut gdb_in = [0; 1024];
+    let mut gdb = GdbSession::default();
+    let mut gdb_buf = [0; 1024];
 
     // Start VMM.
-    let mut vmm = match Vmm::new(&profile, &kernel, None, &shutdown) {
+    let mut vmm = match Vmm::new(&profile, &kernel, &shutdown) {
         Ok(v) => v,
         Err(e) => return Err(ProgramError::StartVmm(kernel, e)),
     };
 
     loop {
-        // Prepare futures to poll.
-        let mut vmm = pin!(vmm.recv());
-        let mut debug = gdb_con.as_mut().map(|v| v.read(&mut gdb_in));
-
-        // Poll all futures.
-        let (vmm, debug) = std::future::poll_fn(move |cx| {
-            let vmm = vmm.as_mut().poll(cx);
-            let debug = debug.as_mut().map_or(Poll::Pending, |d| d.poll_unpin(cx));
-
-            match (vmm, debug) {
-                (Poll::Ready(v), Poll::Ready(d)) => Poll::Ready((Some(v), Some(d))),
-                (Poll::Ready(v), Poll::Pending) => Poll::Ready((Some(v), None)),
-                (Poll::Pending, Poll::Ready(d)) => Poll::Ready((None, Some(d))),
-                (Poll::Pending, Poll::Pending) => Poll::Pending,
+        // Wait for event.
+        let r = select_biased! {
+            v = gdb_read.read(&mut gdb_buf).fuse() => {
+                dispatch_gdb(v, &mut gdb, &gdb_buf, &mut vmm, &mut gdb_write).await?
             }
-        })
-        .await;
+            v = vmm.recv().fuse() => dispatch_vmm(v, &mut logs).await?,
+        };
 
-        // Process VMM event.
-        if let Some(vmm) = vmm {
-            match vmm {
-                VmmEvent::Exit(id, r) => {
-                    if !r.map_err(ProgramError::CpuThread)? {
-                        return Err(ProgramError::CpuPanic(id, logs.path().into()));
-                    } else if id == 0 {
-                        break;
-                    }
-                }
-                VmmEvent::Log(t, m) => logs.write(t, m),
-            }
-        }
-
-        // Process debugger requests.
-        if let Some(debug) = debug {
-            todo!()
+        if !r {
+            break;
         }
     }
 
@@ -442,6 +426,51 @@ async fn wait_for_debugger(addr: SocketAddrV4) -> Result<Option<TcpStream>, Prog
     Ok(Some(client))
 }
 
+async fn dispatch_gdb<H: Hypervisor>(
+    res: Result<usize, std::io::Error>,
+    gdb: &mut GdbSession,
+    buf: &[u8],
+    vmm: &mut Vmm<H>,
+    con: &mut (dyn AsyncWrite + Unpin),
+) -> Result<bool, ProgramError> {
+    // Check status.
+    let len = res.map_err(ProgramError::ReadDebuggerSocket)?;
+
+    if len == 0 {
+        return Ok(false);
+    }
+
+    // Dispatch the requests.
+    let mut exe = gdb.dispatch_client(&buf[..len], vmm);
+
+    while let Some(res) = exe.pump().map_err(ProgramError::DispatchDebugger)? {
+        let res = res.as_ref();
+
+        if !res.is_empty() {
+            con.write_all(res)
+                .await
+                .map_err(ProgramError::WriteDebuggerSocket)?;
+        }
+    }
+
+    Ok(true)
+}
+
+async fn dispatch_vmm(ev: VmmEvent, logs: &mut LogWriter) -> Result<bool, ProgramError> {
+    match ev {
+        VmmEvent::Exit(id, r) => {
+            if !r.map_err(ProgramError::CpuThread)? {
+                return Err(ProgramError::CpuPanic(id, logs.path().into()));
+            } else if id == 0 {
+                return Ok(false);
+            }
+        }
+        VmmEvent::Log(t, m) => logs.write(t, m),
+    }
+
+    Ok(true)
+}
+
 /// Program arguments parsed from command line.
 #[derive(Parser)]
 #[command(about = None)]
@@ -540,4 +569,13 @@ enum ProgramError {
 
     #[error("vCPU #{0} panicked, see {1} for more information")]
     CpuPanic(usize, PathBuf),
+
+    #[error("couldn't read debugger connection")]
+    ReadDebuggerSocket(#[source] std::io::Error),
+
+    #[error("couldn't dispatch debugger requests")]
+    DispatchDebugger(#[source] GdbError),
+
+    #[error("couldn't write debugger connection")]
+    WriteDebuggerSocket(#[source] std::io::Error),
 }
