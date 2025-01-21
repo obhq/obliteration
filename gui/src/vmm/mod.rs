@@ -7,7 +7,7 @@ use self::kernel::{
     PT_PHDR,
 };
 use self::ram::{RamBuilder, RamMap};
-use crate::gdb::DebugClient;
+use crate::gdb::GdbHandler;
 use crate::hv::{CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, Hypervisor, Ram};
 use crate::profile::Profile;
 use config::{BootEnv, ConsoleType, Vm};
@@ -17,7 +17,6 @@ use gdbstub::stub::MultiThreadStopReason;
 use gdbstub::target::ext::base::multithread::{
     MultiThreadBase, MultiThreadResume, MultiThreadResumeOps,
 };
-use gdbstub::target::ext::thread_extra_info::{ThreadExtraInfo, ThreadExtraInfoOps};
 use gdbstub::target::{TargetError, TargetResult};
 use kernel::{KernelError, ProgramHeaderError};
 use rustc_hash::FxHashMap;
@@ -57,7 +56,6 @@ impl Vmm<()> {
     pub fn new(
         profile: &Profile,
         kernel: &Path,
-        debugger: Option<DebugClient>,
         shutdown: &Arc<AtomicBool>,
     ) -> Result<Vmm<impl Hypervisor>, VmmError> {
         // Get program header enumerator.
@@ -184,7 +182,7 @@ impl Vmm<()> {
         let devices = Arc::new(setup_devices(ram_size.get(), block_size));
 
         // Setup hypervisor.
-        let mut hv = unsafe { crate::hv::new(8, ram_size, block_size, debugger.is_some()) }
+        let mut hv = unsafe { crate::hv::new(8, ram_size, block_size, false) }
             .map_err(VmmError::SetupHypervisor)?;
 
         // Map the kernel.
@@ -241,7 +239,7 @@ impl Vmm<()> {
             shutdown: shutdown.clone(),
         };
 
-        vmm.spawn(map.kern_vaddr + img.entry(), Some(map), debugger.is_some())
+        vmm.spawn(map.kern_vaddr + img.entry(), Some(map), false)
             .map_err(VmmError::SpawnMainCpu)?;
 
         Ok(vmm)
@@ -658,6 +656,8 @@ impl<H> Drop for Vmm<H> {
     }
 }
 
+impl<H: Hypervisor> GdbHandler for Vmm<H> {}
+
 impl<H: Hypervisor> MultiThreadBase for Vmm<H> {
     fn read_registers(&mut self, regs: &mut GdbRegs, tid: Tid) -> TargetResult<(), Self> {
         let cpu = self
@@ -718,10 +718,6 @@ impl<H: Hypervisor> MultiThreadBase for Vmm<H> {
         todo!()
     }
 
-    fn is_thread_alive(&mut self, tid: Tid) -> Result<bool, Self::Error> {
-        todo!()
-    }
-
     fn list_active_threads(
         &mut self,
         thread_is_active: &mut dyn FnMut(Tid),
@@ -736,17 +732,6 @@ impl<H: Hypervisor> MultiThreadBase for Vmm<H> {
     #[inline(always)]
     fn support_resume(&mut self) -> Option<MultiThreadResumeOps<'_, Self>> {
         Some(self)
-    }
-
-    #[inline(always)]
-    fn support_thread_extra_info(&mut self) -> Option<ThreadExtraInfoOps<'_, Self>> {
-        Some(self)
-    }
-}
-
-impl<H: Hypervisor> ThreadExtraInfo for Vmm<H> {
-    fn thread_extra_info(&self, tid: Tid, buf: &mut [u8]) -> Result<usize, Self::Error> {
-        todo!()
     }
 }
 
