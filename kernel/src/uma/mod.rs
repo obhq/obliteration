@@ -69,6 +69,8 @@ pub enum UmaFlags {
     Secondary = 0x200,
     /// `UMA_ZONE_REFCNT`.
     RefCnt = 0x400,
+    /// `UMA_ZONE_MAXBUCKET`.
+    MaxBucket = 0x800,
     /// `UMA_ZONE_CACHESPREAD`.
     CacheSpread = 0x1000,
     /// `UMA_ZONE_VTOSLAB`.

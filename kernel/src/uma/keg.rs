@@ -8,7 +8,10 @@ use core::cmp::{max, min};
 use core::num::NonZero;
 
 /// Implementation of `uma_keg` structure.
-pub struct UmaKeg {}
+pub struct UmaKeg {
+    size: NonZero<usize>, // uk_size
+    flags: UmaFlags,      // uk_flags
+}
 
 impl UmaKeg {
     /// `align` is the actual alignment **minus** one, which mean if you want each item to be 8
@@ -150,6 +153,14 @@ impl UmaKeg {
 
         // TODO: Add uk_zones.
         // TODO: Add uma_kegs.
-        Self {}
+        Self { size, flags }
+    }
+
+    pub fn size(&self) -> NonZero<usize> {
+        self.size
+    }
+
+    pub fn flags(&self) -> UmaFlags {
+        self.flags
     }
 }
