@@ -1,3 +1,5 @@
+pub use self::guard::*;
+
 use super::MTX_UNOWNED;
 use crate::context::{current_thread, BorrowedArc};
 use alloc::rc::Rc;
@@ -5,8 +7,6 @@ use alloc::sync::Arc;
 use core::cell::UnsafeCell;
 use core::marker::PhantomData;
 use core::sync::atomic::{AtomicUsize, Ordering};
-
-pub use self::guard::*;
 
 mod guard;
 
@@ -94,6 +94,12 @@ impl GutexGroup {
             owning: AtomicUsize::new(MTX_UNOWNED),
             active: UnsafeCell::new(0),
         })
+    }
+
+    /// # Context safety
+    /// This function does not require a CPU context if [`Default`] implementation on `T` does not.
+    pub fn spawn_default<T: Default>(self: Arc<Self>) -> Gutex<T> {
+        self.spawn(T::default())
     }
 
     /// # Context safety

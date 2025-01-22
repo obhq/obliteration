@@ -2,7 +2,7 @@ use super::bucket::UmaBucket;
 use super::keg::UmaKeg;
 use super::UmaFlags;
 use crate::context::{current_thread, CpuLocal};
-use crate::lock::Gutex;
+use crate::lock::{Gutex, GutexGroup};
 use alloc::collections::VecDeque;
 use alloc::string::String;
 use core::cell::RefCell;
@@ -30,21 +30,47 @@ impl UmaZone {
     /// |---------|--------|
     /// |PS4 11.00|0x13D490|
     pub(super) fn new(
-        _: impl Into<String>,
+        name: impl Into<String>,
         keg: Option<UmaKeg>,
         size: NonZero<usize>,
         align: Option<usize>,
         flags: UmaFlags,
     ) -> Self {
-        if flags.has(UmaFlags::Secondary) {
+        let name = name.into();
+        let keg = if flags.has(UmaFlags::Secondary) {
             todo!()
         } else {
             // We use a different approach here to make it idiomatic to Rust. On Orbis it will
             // construct a keg here if it is passed from the caller. If not it will allocate a new
             // keg from masterzone_k.
-            keg.unwrap_or_else(|| UmaKeg::new(size, align.unwrap_or(Self::ALIGN_CACHE), flags));
+            keg.unwrap_or_else(|| UmaKeg::new(size, align.unwrap_or(Self::ALIGN_CACHE), flags))
+        };
 
-            todo!()
+        if !keg.flags().has(UmaFlags::Internal) {
+            if !keg.flags().has(UmaFlags::MaxBucket) {
+                // TODO: Get uz_count.
+            }
+
+            match name.as_str() {
+                "mbuf_packet" => todo!(),
+                "mbuf_cluster_pack" => todo!(),
+                "mbuf_jumbo_page" => todo!(),
+                "mbuf" => todo!(),
+                "mbuf_cluster" => todo!(),
+                _ => (),
+            }
+        }
+
+        // Construct uma_zone.
+        let gg = GutexGroup::new();
+
+        Self {
+            size: keg.size(),
+            caches: CpuLocal::new(|_| RefCell::default()),
+            full_buckets: gg.clone().spawn_default(),
+            free_buckets: gg.clone().spawn_default(),
+            alloc_count: gg.clone().spawn_default(),
+            free_count: gg.spawn_default(),
         }
     }
 
@@ -52,7 +78,12 @@ impl UmaZone {
         self.size
     }
 
-    /// See `uma_zalloc_arg` on the PS4 for a reference.
+    /// See `uma_zalloc_arg` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x13E750|
     pub fn alloc(&self) -> *mut u8 {
         // Our implementation imply M_WAITOK and M_ZERO.
         let td = current_thread();
