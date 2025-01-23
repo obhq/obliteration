@@ -1,7 +1,7 @@
 #![windows_subsystem = "windows"]
 
 use self::data::{DataError, DataMgr};
-use self::gdb::{GdbError, GdbExecutor, GdbSession};
+use self::gdb::{GdbDispatcher, GdbError, GdbSession};
 use self::graphics::{EngineBuilder, GraphicsError, PhysicalDevice};
 use self::hv::Hypervisor;
 use self::log::LogWriter;
@@ -441,9 +441,9 @@ async fn dispatch_gdb<H: Hypervisor>(
     }
 
     // Dispatch the requests.
-    let mut exe = gdb.dispatch_client(&buf[..len], vmm);
+    let mut dis = gdb.dispatch_client(&buf[..len], vmm);
 
-    while let Some(res) = exe.pump().map_err(ProgramError::DispatchDebugger)? {
+    while let Some(res) = dis.pump().map_err(ProgramError::DispatchDebugger)? {
         let res = res.as_ref();
 
         if !res.is_empty() {

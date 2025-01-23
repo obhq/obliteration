@@ -1681,6 +1681,7 @@ dependencies = [
  "futures",
  "gdbstub",
  "gdbstub_arch",
+ "hex",
  "humansize",
  "i-slint-core",
  "i-slint-renderer-skia",

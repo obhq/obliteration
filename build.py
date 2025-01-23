@@ -68,14 +68,17 @@ def export_darwin(root, kern, gui):
 
     # Export files
     out, gui = os.path.split(gui['executable'])
+    gui = gui.capitalize()
 
     shutil.copy(kern['executable'], resources)
-    shutil.copy(os.path.join(out, gui.capitalize()), macos)
+    shutil.copy(os.path.join(out, gui), macos)
     shutil.copyfile('bundle.icns', os.path.join(resources, 'obliteration.icns'))
     shutil.copy('Info.plist', contents)
 
     # Sign bundle.
     run(['codesign', '-s', '-', '--entitlements', 'entitlements.plist', bundle], check=True)
+
+    return os.path.join(macos, gui)
 
 def export_linux(root, kern, gui):
     # Create directories.
@@ -89,6 +92,11 @@ def export_linux(root, kern, gui):
     shutil.copy(kern['executable'], share)
     shutil.copy(gui['executable'], bin)
 
+    # Get path to GUI.
+    gui = os.path.basename(gui['executable'])
+
+    return os.path.join(bin, gui)
+
 def export_windows(root, kern, gui):
     # Create share directory.
     share = os.path.join(root, 'share')
@@ -98,6 +106,11 @@ def export_windows(root, kern, gui):
     # Export files.
     shutil.copy(kern['executable'], share)
     shutil.copy(gui['executable'], root)
+
+    # Get path to GUI.
+    gui = os.path.basename(gui['executable'])
+
+    return os.path.join(root, gui)
 
 def main():
     # Setup argument parser.
@@ -109,6 +122,12 @@ def main():
         '--root',
         metavar='PATH',
         help='directory to store build outputs')
+    p.add_argument(
+        '--debug',
+        metavar='ADDR',
+        help='immediate launch the VMM in debug mode',
+        nargs='?',
+        const='127.0.0.1:1234')
 
     # Parse arguments.
     args = p.parse_args()
@@ -150,14 +169,22 @@ def main():
     s = platform.system()
 
     if s == 'Darwin':
-        export_darwin(dest, kern, gui)
+        gui = export_darwin(dest, kern, gui)
     elif s == 'Linux':
-        export_linux(dest, kern, gui)
+        gui = export_linux(dest, kern, gui)
     elif s == 'Windows':
-        export_windows(dest, kern, gui)
+        gui = export_windows(dest, kern, gui)
     else:
         print(f'OS {s} is not supported.', file=sys.stderr)
         sys.exit(1)
+
+    # Start VMM.
+    addr = args.debug
+
+    if addr is None:
+        return
+
+    run([gui, '--debug', addr], check=True)
 
 if __name__ == '__main__':
     main()
