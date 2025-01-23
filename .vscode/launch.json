@@ -13,20 +13,33 @@
       },
       "windows": {
         "program": "${workspaceFolder}/dist/obliteration.exe"
-      },
+      }
     },
     {
       "name": "Kernel",
       "type": "lldb",
-      "request": "custom",
-      "preLaunchTask": "Launch VMM",
-      "targetCreateCommands": [
-        "target create ${workspaceFolder}/build/obkrnl",
-        "target modules load --file ${workspaceFolder}/build/obkrnl -s 0xffffffff82200000"
-      ],
+      "request": "launch",
       "processCreateCommands": [
         "gdb-remote 1234"
-      ]
+      ],
+      "linux": {
+        "targetCreateCommands": [
+          "target create ${workspaceFolder}/dist/share/obkrnl",
+          "target modules load --file ${workspaceFolder}/dist/share/obkrnl -s 0xffffffff82200000"
+        ]
+      },
+      "osx": {
+        "targetCreateCommands": [
+          "target create ${workspaceFolder}/dist/Obliteration.app/Contents/Resources/obkrnl",
+          "target modules load --file ${workspaceFolder}/dist/Obliteration.app/Contents/Resources/obkrnl -s 0xffffffff82200000"
+        ]
+      },
+      "windows": {
+        "targetCreateCommands": [
+          "target create ${workspaceFolder}/dist/share/obkrnl",
+          "target modules load --file ${workspaceFolder}/dist/share/obkrnl -s 0xffffffff82200000"
+        ]
+      }
     }
   ],
   "version": "2.0.0"
