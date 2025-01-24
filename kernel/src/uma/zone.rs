@@ -6,22 +6,26 @@ use crate::lock::{Gutex, GutexGroup};
 use alloc::collections::VecDeque;
 use alloc::string::String;
 use core::cell::RefCell;
+use core::cmp::min;
 use core::num::NonZero;
 use core::ops::DerefMut;
 use core::ptr::null_mut;
 
 /// Implementation of `uma_zone` structure.
 pub struct UmaZone {
+    ty: ZoneType,
     size: NonZero<usize>,                     // uz_size
     caches: CpuLocal<RefCell<UmaCache>>,      // uz_cpu
     full_buckets: Gutex<VecDeque<UmaBucket>>, // uz_full_bucket
     free_buckets: Gutex<VecDeque<UmaBucket>>, // uz_free_bucket
     alloc_count: Gutex<u64>,                  // uz_allocs
     free_count: Gutex<u64>,                   // uz_frees
+    count: Gutex<usize>,                      // uz_count
 }
 
 impl UmaZone {
     const ALIGN_CACHE: usize = 63; // uma_align_cache
+    const BUCKET_MAX: usize = 128;
 
     /// See `zone_ctor` on Orbis for a reference.
     ///
@@ -46,17 +50,38 @@ impl UmaZone {
             keg.unwrap_or_else(|| UmaKeg::new(size, align.unwrap_or(Self::ALIGN_CACHE), flags))
         };
 
+        // Get type and uz_count.
+        let mut ty = ZoneType::Other;
+        let mut count = 0;
+
         if !keg.flags().has(UmaFlags::Internal) {
-            if !keg.flags().has(UmaFlags::MaxBucket) {
-                // TODO: Get uz_count.
-            }
+            count = if !keg.flags().has(UmaFlags::MaxBucket) {
+                min(keg.item_per_slab(), Self::BUCKET_MAX)
+            } else {
+                Self::BUCKET_MAX
+            };
 
             match name.as_str() {
-                "mbuf_packet" => todo!(),
-                "mbuf_cluster_pack" => todo!(),
-                "mbuf_jumbo_page" => todo!(),
-                "mbuf" => todo!(),
-                "mbuf_cluster" => todo!(),
+                "mbuf_packet" => {
+                    ty = ZoneType::MBufPacket;
+                    count = 4;
+                }
+                "mbuf_cluster_pack" => {
+                    ty = ZoneType::MBufClusterPack;
+                    count = Self::BUCKET_MAX;
+                }
+                "mbuf_jumbo_page" => {
+                    ty = ZoneType::MBufJumboPage;
+                    count = 1;
+                }
+                "mbuf" => {
+                    ty = ZoneType::MBuf;
+                    count = 16;
+                }
+                "mbuf_cluster" => {
+                    ty = ZoneType::MBufCluster;
+                    count = 1;
+                }
                 _ => (),
             }
         }
@@ -65,12 +90,14 @@ impl UmaZone {
         let gg = GutexGroup::new();
 
         Self {
+            ty,
             size: keg.size(),
             caches: CpuLocal::new(|_| RefCell::default()),
             full_buckets: gg.clone().spawn_default(),
             free_buckets: gg.clone().spawn_default(),
             alloc_count: gg.clone().spawn_default(),
-            free_count: gg.spawn_default(),
+            free_count: gg.clone().spawn_default(),
+            count: gg.spawn(count),
         }
     }
 
@@ -105,6 +132,7 @@ impl UmaZone {
         // Cache not found, allocate from the zone. We need to re-check the cache again because we
         // may on a different CPU since we drop the CPU pinning on the above.
         let mut frees = self.free_buckets.write();
+        let mut count = self.count.write();
         let caches = self.caches.lock();
         let mut cache = caches.borrow_mut();
         let mem = Self::alloc_from_cache(&mut cache);
@@ -135,7 +163,27 @@ impl UmaZone {
         drop(cache);
         drop(caches);
 
-        // TODO: Why the PS4 check if this zone is zone_pack, zone_jumbop, zone_mbuf or zone_clust?
+        // TODO: What is this?
+        if matches!(
+            self.ty,
+            ZoneType::MBufPacket | ZoneType::MBufJumboPage | ZoneType::MBuf | ZoneType::MBufCluster
+        ) {
+            todo!()
+        }
+
+        // TODO: What is this?
+        if !matches!(
+            self.ty,
+            ZoneType::MBufCluster
+                | ZoneType::MBuf
+                | ZoneType::MBufJumboPage
+                | ZoneType::MBufPacket
+                | ZoneType::MBufClusterPack
+        ) && *count < Self::BUCKET_MAX
+        {
+            *count += 1;
+        }
+
         self.alloc_bucket();
 
         todo!()
@@ -158,10 +206,31 @@ impl UmaZone {
         null_mut()
     }
 
-    /// See `zone_alloc_bucket` on the PS4 for a reference.
+    /// See `zone_alloc_bucket` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x13EBA0|
     fn alloc_bucket(&self) -> bool {
         todo!()
     }
+}
+
+/// Type of [`UmaZone`].
+#[derive(Clone, Copy)]
+enum ZoneType {
+    Other,
+    /// `zone_pack`.
+    MBufPacket,
+    /// `zone_jumbop`.
+    MBufJumboPage,
+    /// `zone_mbuf`.
+    MBuf,
+    /// `zone_clust`.
+    MBufCluster,
+    /// `zone_clust_pack`.
+    MBufClusterPack,
 }
 
 /// Implementation of `uma_cache` structure.

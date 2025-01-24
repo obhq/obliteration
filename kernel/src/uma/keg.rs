@@ -10,6 +10,7 @@ use core::num::NonZero;
 /// Implementation of `uma_keg` structure.
 pub struct UmaKeg {
     size: NonZero<usize>, // uk_size
+    ipers: usize,         // uk_ipers
     flags: UmaFlags,      // uk_flags
 }
 
@@ -153,7 +154,7 @@ impl UmaKeg {
 
         // TODO: Add uk_zones.
         // TODO: Add uma_kegs.
-        Self { size, flags }
+        Self { size, ipers, flags }
     }
 
     pub fn size(&self) -> NonZero<usize> {
@@ -162,5 +163,9 @@ impl UmaKeg {
 
     pub fn flags(&self) -> UmaFlags {
         self.flags
+    }
+
+    pub fn item_per_slab(&self) -> usize {
+        self.ipers
     }
 }
