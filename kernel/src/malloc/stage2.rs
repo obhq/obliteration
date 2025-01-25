@@ -52,7 +52,7 @@ impl Stage2 {
                 }
 
                 // Create zone.
-                let zone = Arc::new(uma.create_zone(
+                let zone = Arc::new(uma.into_owned().create_zone(
                     size.to_string(),
                     size,
                     Some(align - 1),

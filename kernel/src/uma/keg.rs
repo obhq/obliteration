@@ -111,7 +111,7 @@ impl UmaKeg {
                 let ipers = available / (rsize + free_item);
 
                 // TODO: Verify if this valid for PAGE_SIZE < 0x4000.
-                if !flags.has(UmaFlags::Internal | UmaFlags::Cacheonly)
+                if !flags.has(UmaFlags::Internal | UmaFlags::CacheOnly)
                     && (available % (rsize + free_item)) >= Uma::MAX_WASTE.get()
                     && (PAGE_SIZE.get() / rsize) > ipers
                 {
