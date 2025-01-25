@@ -71,8 +71,8 @@ impl<T: ComponentHandle> WinitWindow for T {
     }
 }
 
-/// Provides platform-specific methods to operate on [`WinitWindow`].
-pub trait PlatformExt: WinitWindow {
+/// Provides methods to operate on a desktop window.
+pub trait DesktopWindow: WinitWindow {
     type Modal<'a, P>: Deref<Target = Self>
     where
         P: WinitWindow + 'a;

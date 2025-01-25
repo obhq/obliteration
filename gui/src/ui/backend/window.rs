@@ -57,10 +57,6 @@ impl Window {
             .unwrap()
     }
 
-    pub fn winit(&self) -> &winit::window::Window {
-        &self.winit
-    }
-
     pub fn hidden(&self) -> &Signal<()> {
         &self.hidden
     }

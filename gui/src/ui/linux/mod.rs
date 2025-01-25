@@ -1,7 +1,7 @@
 pub use self::dialogs::*;
 
 use self::modal::Modal;
-use super::{PlatformExt, SlintBackend};
+use super::{DesktopWindow, SlintBackend};
 use crate::rt::{global, WinitWindow};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use thiserror::Error;
@@ -10,7 +10,7 @@ mod dialogs;
 mod modal;
 mod wayland;
 
-impl<T: WinitWindow> PlatformExt for T {
+impl<T: WinitWindow> DesktopWindow for T {
     type Modal<'a, P>
         = Modal<'a, Self, P>
     where

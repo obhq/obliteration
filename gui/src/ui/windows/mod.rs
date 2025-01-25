@@ -1,7 +1,7 @@
 pub use self::dialogs::*;
 
 use self::modal::Modal;
-use super::PlatformExt;
+use super::DesktopWindow;
 use crate::rt::WinitWindow;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::io::Error;
@@ -16,7 +16,7 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 mod dialogs;
 mod modal;
 
-impl<T: WinitWindow> PlatformExt for T {
+impl<T: WinitWindow> DesktopWindow for T {
     type Modal<'a, P>
         = Modal<'a, Self, P>
     where
@@ -39,35 +39,29 @@ impl<T: WinitWindow> PlatformExt for T {
             return Err(PlatformError::GetWindowRect(Error::last_os_error()));
         }
 
-        unsafe {
-            let win_width = rect.right - rect.left;
-            let win_height = rect.bottom - rect.top;
+        // TODO: Get width of the screen where the window belong to.
+        let sw = unsafe { GetSystemMetrics(SM_CXSCREEN) };
 
-            let screen_width = GetSystemMetrics(SM_CXSCREEN);
+        if sw == 0 {
+            return Err(PlatformError::GetScreenWidth(Error::last_os_error()));
+        }
 
-            if screen_width == 0 {
-                return Err(PlatformError::GetScreenWidth(Error::last_os_error()));
-            }
+        // TODO: Get height of the screen where the window belong to.
+        let sh = unsafe { GetSystemMetrics(SM_CYSCREEN) };
 
-            let screen_height = GetSystemMetrics(SM_CYSCREEN);
+        if sh == 0 {
+            return Err(PlatformError::GetScreenHeight(Error::last_os_error()));
+        }
 
-            if screen_height == 0 {
-                return Err(PlatformError::GetScreenHeight(Error::last_os_error()));
-            }
+        // TODO: Make this monitor aware.
+        let ww = rect.right - rect.left;
+        let wh = rect.bottom - rect.top;
+        let x = (sw - ww) / 2;
+        let y = (sh - wh) / 2;
+        let ret = unsafe { SetWindowPos(win, HWND_TOP, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER) };
 
-            let ret = SetWindowPos(
-                win,
-                HWND_TOP,
-                (screen_width - win_width) / 2,
-                (screen_height - win_height) / 2,
-                0,
-                0,
-                SWP_NOSIZE | SWP_NOZORDER,
-            );
-
-            if ret == 0 {
-                return Err(PlatformError::SetWindowPos(Error::last_os_error()));
-            }
+        if ret == 0 {
+            return Err(PlatformError::SetWindowPos(Error::last_os_error()));
         }
 
         Ok(())
@@ -82,7 +76,7 @@ impl<T: WinitWindow> PlatformExt for T {
     }
 }
 
-/// Windows-specific error for [`PlatformExt`].
+/// Windows-specific error for [`DesktopWindow`].
 #[derive(Debug, Error)]
 pub enum PlatformError {
     #[error("couldn't get window rectangle")]
