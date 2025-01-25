@@ -48,3 +48,5 @@ We use icons from https://materialdesignicons.com for UI.
 All source code are licensed under either MIT License or Apache License, Version 2.0; or both.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in Obliteration by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
+
+Note that we can't accept any code from the other PlayStation 4 emulators if they are licensed under other license than MIT or Apache-2.0 unless you are the author of that code.

@@ -2,7 +2,7 @@ pub use self::dialogs::*;
 
 use self::modal::Modal;
 use self::view::with_window;
-use super::PlatformExt;
+use super::DesktopWindow;
 use crate::rt::WinitWindow;
 use block::ConcreteBlock;
 use objc::{msg_send, sel, sel_impl};
@@ -14,7 +14,7 @@ mod dialogs;
 mod modal;
 mod view;
 
-impl<T: WinitWindow> PlatformExt for T {
+impl<T: WinitWindow> DesktopWindow for T {
     type Modal<'a, P>
         = Modal<'a, Self, P>
     where
@@ -45,6 +45,6 @@ impl<T: WinitWindow> PlatformExt for T {
     }
 }
 
-/// macOS-specific error for [`PlatformExt`].
+/// macOS-specific error for [`DesktopWindow`].
 #[derive(Debug, Error)]
 pub enum PlatformError {}
