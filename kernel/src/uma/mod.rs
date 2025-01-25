@@ -4,6 +4,7 @@ use crate::config::PAGE_SIZE;
 use alloc::string::String;
 use alloc::sync::Arc;
 use core::num::NonZero;
+use core::sync::atomic::AtomicBool;
 use macros::bitflag;
 
 mod bucket;
@@ -12,7 +13,9 @@ mod slab;
 mod zone;
 
 /// Implementation of UMA system.
-pub struct Uma {}
+pub struct Uma {
+    bucket_enable: AtomicBool,
+}
 
 impl Uma {
     /// `UMA_SMALLEST_UNIT`.
@@ -28,7 +31,9 @@ impl Uma {
     /// |---------|--------|
     /// |PS4 11.00|0x13CA70|
     pub fn new() -> Arc<Self> {
-        Arc::new(Self {})
+        Arc::new(Self {
+            bucket_enable: AtomicBool::new(true), // TODO: Use a proper value.
+        })
     }
 
     /// See `uma_zcreate` on the Orbis for a reference.
@@ -38,7 +43,7 @@ impl Uma {
     /// |---------|--------|
     /// |PS4 11.00|0x13DC80|
     pub fn create_zone(
-        &self,
+        self: Arc<Self>,
         name: impl Into<String>,
         size: NonZero<usize>,
         align: Option<usize>,
@@ -46,7 +51,7 @@ impl Uma {
     ) -> UmaZone {
         // The Orbis will allocate a new zone from masterzone_z. We choose to remove this since it
         // does not idomatic to Rust, which mean our uma_zone itself can live on the stack.
-        UmaZone::new(name, None, size, align, flags)
+        UmaZone::new(self, name, None, size, align, flags)
     }
 }
 
@@ -78,5 +83,5 @@ pub enum UmaFlags {
     /// `UMA_ZFLAG_INTERNAL`.
     Internal = 0x20000000,
     /// `UMA_ZFLAG_CACHEONLY`.
-    Cacheonly = 0x80000000,
+    CacheOnly = 0x80000000,
 }

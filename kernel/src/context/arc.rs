@@ -1,3 +1,4 @@
+use alloc::sync::Arc;
 use core::ops::Deref;
 
 /// Provides an access to the value of [Arc](alloc::sync::Arc) on [Context](super::Context) without
@@ -37,7 +38,21 @@ impl<T> BorrowedArc<T> {
     pub fn as_ptr(this: &Self) -> *const T {
         this.0
     }
+
+    pub fn into_owned(self) -> Arc<T> {
+        // SAFETY: This is safe because the requirement of new() and from_non_null().
+        unsafe { Arc::increment_strong_count(self.0) };
+        unsafe { Arc::from_raw(self.0) }
+    }
 }
+
+impl<T> Clone for BorrowedArc<T> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<T> Copy for BorrowedArc<T> {}
 
 impl<T> Deref for BorrowedArc<T> {
     type Target = T;

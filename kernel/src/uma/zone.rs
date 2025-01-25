@@ -1,18 +1,21 @@
 use super::bucket::UmaBucket;
 use super::keg::UmaKeg;
-use super::UmaFlags;
+use super::{Uma, UmaFlags};
 use crate::context::{current_thread, CpuLocal};
-use crate::lock::{Gutex, GutexGroup};
+use crate::lock::{Gutex, GutexGroup, GutexWrite};
 use alloc::collections::VecDeque;
 use alloc::string::String;
+use alloc::sync::Arc;
 use core::cell::RefCell;
 use core::cmp::min;
 use core::num::NonZero;
 use core::ops::DerefMut;
 use core::ptr::null_mut;
+use core::sync::atomic::Ordering;
 
 /// Implementation of `uma_zone` structure.
 pub struct UmaZone {
+    uma: Arc<Uma>,
     ty: ZoneType,
     size: NonZero<usize>,                     // uz_size
     caches: CpuLocal<RefCell<UmaCache>>,      // uz_cpu
@@ -34,6 +37,7 @@ impl UmaZone {
     /// |---------|--------|
     /// |PS4 11.00|0x13D490|
     pub(super) fn new(
+        uma: Arc<Uma>,
         name: impl Into<String>,
         keg: Option<UmaKeg>,
         size: NonZero<usize>,
@@ -90,6 +94,7 @@ impl UmaZone {
         let gg = GutexGroup::new();
 
         Self {
+            uma,
             ty,
             size: keg.size(),
             caches: CpuLocal::new(|_| RefCell::default()),
@@ -119,74 +124,79 @@ impl UmaZone {
             panic!("heap allocation in a non-sleeping context is not supported");
         }
 
-        // Try allocate from per-CPU cache first so we don't need to acquire a mutex lock.
-        let caches = self.caches.lock();
-        let mem = Self::alloc_from_cache(caches.borrow_mut().deref_mut());
+        loop {
+            // Try allocate from per-CPU cache first so we don't need to acquire a mutex lock.
+            let caches = self.caches.lock();
+            let mem = Self::alloc_from_cache(caches.borrow_mut().deref_mut());
 
-        if !mem.is_null() {
-            return mem;
+            if !mem.is_null() {
+                return mem;
+            }
+
+            drop(caches); // Exit from non-sleeping context before acquire the mutex.
+
+            // Cache not found, allocate from the zone. We need to re-check the cache again because
+            // we may on a different CPU since we drop the CPU pinning on the above.
+            let mut frees = self.free_buckets.write();
+            let mut count = self.count.write();
+            let caches = self.caches.lock();
+            let mut cache = caches.borrow_mut();
+            let mem = Self::alloc_from_cache(&mut cache);
+
+            if !mem.is_null() {
+                return mem;
+            }
+
+            // TODO: What actually we are doing here?
+            *self.alloc_count.write() += core::mem::take(&mut cache.allocs);
+            *self.free_count.write() += core::mem::take(&mut cache.frees);
+
+            if let Some(b) = cache.alloc.take() {
+                frees.push_front(b);
+            }
+
+            if let Some(b) = self.full_buckets.write().pop_front() {
+                cache.alloc = Some(b);
+
+                // Seems like this should never fail.
+                let m = Self::alloc_from_cache(&mut cache);
+
+                assert!(!m.is_null());
+
+                return m;
+            }
+
+            drop(cache);
+            drop(caches);
+
+            // TODO: What is this?
+            if matches!(
+                self.ty,
+                ZoneType::MBufPacket
+                    | ZoneType::MBufJumboPage
+                    | ZoneType::MBuf
+                    | ZoneType::MBufCluster
+            ) {
+                todo!()
+            }
+
+            // TODO: What is this?
+            if !matches!(
+                self.ty,
+                ZoneType::MBufCluster
+                    | ZoneType::MBuf
+                    | ZoneType::MBufJumboPage
+                    | ZoneType::MBufPacket
+                    | ZoneType::MBufClusterPack
+            ) && *count < Self::BUCKET_MAX
+            {
+                *count += 1;
+            }
+
+            if self.alloc_bucket(frees) {
+                return self.alloc_item();
+            }
         }
-
-        drop(caches); // Exit from non-sleeping context before acquire the mutex.
-
-        // Cache not found, allocate from the zone. We need to re-check the cache again because we
-        // may on a different CPU since we drop the CPU pinning on the above.
-        let mut frees = self.free_buckets.write();
-        let mut count = self.count.write();
-        let caches = self.caches.lock();
-        let mut cache = caches.borrow_mut();
-        let mem = Self::alloc_from_cache(&mut cache);
-
-        if !mem.is_null() {
-            return mem;
-        }
-
-        // TODO: What actually we are doing here?
-        *self.alloc_count.write() += core::mem::take(&mut cache.allocs);
-        *self.free_count.write() += core::mem::take(&mut cache.frees);
-
-        if let Some(b) = cache.alloc.take() {
-            frees.push_front(b);
-        }
-
-        if let Some(b) = self.full_buckets.write().pop_front() {
-            cache.alloc = Some(b);
-
-            // Seems like this should never fail.
-            let m = Self::alloc_from_cache(&mut cache);
-
-            assert!(!m.is_null());
-
-            return m;
-        }
-
-        drop(cache);
-        drop(caches);
-
-        // TODO: What is this?
-        if matches!(
-            self.ty,
-            ZoneType::MBufPacket | ZoneType::MBufJumboPage | ZoneType::MBuf | ZoneType::MBufCluster
-        ) {
-            todo!()
-        }
-
-        // TODO: What is this?
-        if !matches!(
-            self.ty,
-            ZoneType::MBufCluster
-                | ZoneType::MBuf
-                | ZoneType::MBufJumboPage
-                | ZoneType::MBufPacket
-                | ZoneType::MBufClusterPack
-        ) && *count < Self::BUCKET_MAX
-        {
-            *count += 1;
-        }
-
-        self.alloc_bucket();
-
-        todo!()
     }
 
     fn alloc_from_cache(c: &mut UmaCache) -> *mut u8 {
@@ -212,7 +222,26 @@ impl UmaZone {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13EBA0|
-    fn alloc_bucket(&self) -> bool {
+    fn alloc_bucket(&self, frees: GutexWrite<VecDeque<UmaBucket>>) -> bool {
+        match frees.front() {
+            Some(_) => todo!(),
+            None => {
+                if self.uma.bucket_enable.load(Ordering::Relaxed) {
+                    todo!()
+                }
+            }
+        }
+
+        true
+    }
+
+    /// See `zone_alloc_item` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x13DD50|
+    fn alloc_item(&self) -> *mut u8 {
         todo!()
     }
 }
