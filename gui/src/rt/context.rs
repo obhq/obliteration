@@ -3,6 +3,7 @@ use super::{Event, Hook, WindowHandler};
 use rustc_hash::FxHashMap;
 use std::any::{Any, TypeId};
 use std::cell::Cell;
+use std::marker::PhantomData;
 use std::mem::transmute;
 use std::num::NonZero;
 use std::ptr::null_mut;
@@ -39,18 +40,40 @@ impl<'a> Context<'a> {
     }
 
     /// # Panics
-    /// If this call has been nested.
+    /// If there are another active context.
     pub fn run<R>(&mut self, f: impl FnOnce() -> R) -> R {
-        assert!(CONTEXT.get().is_null());
-
-        CONTEXT.set(unsafe { transmute(self) });
+        let l = Lock::new(self);
         let r = f();
-        CONTEXT.set(null_mut());
 
+        drop(l);
         r
+    }
+}
+
+/// RAII struct to clear active [`Context`].
+struct Lock<'a, 'b>(PhantomData<&'a mut Context<'b>>);
+
+impl<'a, 'b> Lock<'a, 'b> {
+    fn new(cx: &'a mut Context<'b>) -> Self {
+        // We need a dedicated flag to prevent calling from Context::with().
+        if LOCK.replace(true) {
+            panic!("multiple active context is not supported");
+        }
+
+        CONTEXT.set(unsafe { transmute(cx) });
+
+        Self(PhantomData)
+    }
+}
+
+impl<'a, 'b> Drop for Lock<'a, 'b> {
+    fn drop(&mut self) {
+        CONTEXT.set(null_mut());
+        LOCK.set(false);
     }
 }
 
 thread_local! {
     static CONTEXT: Cell<*mut Context<'static>> = const { Cell::new(null_mut()) };
+    static LOCK: Cell<bool> = const { Cell::new(false) };
 }
