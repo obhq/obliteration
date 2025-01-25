@@ -48,7 +48,7 @@ impl<T> BorrowedArc<T> {
 
 impl<T> Clone for BorrowedArc<T> {
     fn clone(&self) -> Self {
-        Self(self.0)
+        *self
     }
 }
 
