@@ -24,6 +24,7 @@ pub struct UmaZone {
     alloc_count: Gutex<u64>,                  // uz_allocs
     free_count: Gutex<u64>,                   // uz_frees
     count: Gutex<usize>,                      // uz_count
+    flags: UmaFlags,                          // uz_flags
 }
 
 impl UmaZone {
@@ -45,13 +46,18 @@ impl UmaZone {
         flags: UmaFlags,
     ) -> Self {
         let name = name.into();
-        let keg = if flags.has(UmaFlags::Secondary) {
+        let (keg, flags) = if flags.has(UmaFlags::Secondary) {
             todo!()
         } else {
             // We use a different approach here to make it idiomatic to Rust. On Orbis it will
             // construct a keg here if it is passed from the caller. If not it will allocate a new
             // keg from masterzone_k.
-            keg.unwrap_or_else(|| UmaKeg::new(size, align.unwrap_or(Self::ALIGN_CACHE), flags))
+            let keg = match keg {
+                Some(v) => v,
+                None => UmaKeg::new(size, align.unwrap_or(Self::ALIGN_CACHE), flags),
+            };
+
+            (keg, UmaFlags::zeroed())
         };
 
         // Get type and uz_count.
@@ -67,23 +73,23 @@ impl UmaZone {
 
             match name.as_str() {
                 "mbuf_packet" => {
-                    ty = ZoneType::MBufPacket;
+                    ty = ZoneType::MbufPacket;
                     count = 4;
                 }
                 "mbuf_cluster_pack" => {
-                    ty = ZoneType::MBufClusterPack;
+                    ty = ZoneType::MbufClusterPack;
                     count = Self::BUCKET_MAX;
                 }
                 "mbuf_jumbo_page" => {
-                    ty = ZoneType::MBufJumboPage;
+                    ty = ZoneType::MbufJumboPage;
                     count = 1;
                 }
                 "mbuf" => {
-                    ty = ZoneType::MBuf;
+                    ty = ZoneType::Mbuf;
                     count = 16;
                 }
                 "mbuf_cluster" => {
-                    ty = ZoneType::MBufCluster;
+                    ty = ZoneType::MbufCluster;
                     count = 1;
                 }
                 _ => (),
@@ -103,6 +109,7 @@ impl UmaZone {
             alloc_count: gg.clone().spawn_default(),
             free_count: gg.clone().spawn_default(),
             count: gg.spawn(count),
+            flags: flags | (keg.flags() & UmaFlags::from(0xa2002518)), // TODO: Use named flags.
         }
     }
 
@@ -172,10 +179,10 @@ impl UmaZone {
             // TODO: What is this?
             if matches!(
                 self.ty,
-                ZoneType::MBufPacket
-                    | ZoneType::MBufJumboPage
-                    | ZoneType::MBuf
-                    | ZoneType::MBufCluster
+                ZoneType::MbufPacket
+                    | ZoneType::MbufJumboPage
+                    | ZoneType::Mbuf
+                    | ZoneType::MbufCluster
             ) {
                 todo!()
             }
@@ -183,11 +190,11 @@ impl UmaZone {
             // TODO: What is this?
             if !matches!(
                 self.ty,
-                ZoneType::MBufCluster
-                    | ZoneType::MBuf
-                    | ZoneType::MBufJumboPage
-                    | ZoneType::MBufPacket
-                    | ZoneType::MBufClusterPack
+                ZoneType::MbufCluster
+                    | ZoneType::Mbuf
+                    | ZoneType::MbufJumboPage
+                    | ZoneType::MbufPacket
+                    | ZoneType::MbufClusterPack
             ) && *count < Self::BUCKET_MAX
             {
                 *count += 1;
@@ -227,7 +234,11 @@ impl UmaZone {
             Some(_) => todo!(),
             None => {
                 if self.uma.bucket_enable.load(Ordering::Relaxed) {
-                    todo!()
+                    if self.flags.has(UmaFlags::CacheOnly) {
+                        todo!()
+                    } else {
+                        todo!()
+                    }
                 }
             }
         }
@@ -251,15 +262,15 @@ impl UmaZone {
 enum ZoneType {
     Other,
     /// `zone_pack`.
-    MBufPacket,
+    MbufPacket,
     /// `zone_jumbop`.
-    MBufJumboPage,
+    MbufJumboPage,
     /// `zone_mbuf`.
-    MBuf,
+    Mbuf,
     /// `zone_clust`.
-    MBufCluster,
+    MbufCluster,
     /// `zone_clust_pack`.
-    MBufClusterPack,
+    MbufClusterPack,
 }
 
 /// Implementation of `uma_cache` structure.

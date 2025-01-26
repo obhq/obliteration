@@ -28,6 +28,7 @@ Currently we cannot run any games yet. The reason it take so long is because we 
 - Cross-platform with native binary for each platform.
 - On-demand memory allocation instead of pre-allocated 8 GB at startup.
 - Near-native performance by using [Windows Hypervisor Platform](https://learn.microsoft.com/en-us/virtualization/api/#windows-hypervisor-platform), [KVM](https://en.wikipedia.org/wiki/Kernel-based_Virtual_Machine) or [Hypervisor Framework](https://developer.apple.com/documentation/hypervisor) directly with custom made virtual devices for optimized MMIO.
+- Kernel behavior is near-identical to the PlayStation 4 kernel. Although we can't run any game yet but we believe the choice we made here will allows us to have very high compatibility.
 
 ## Get a daily build
 

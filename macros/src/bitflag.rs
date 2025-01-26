@@ -43,6 +43,11 @@ pub fn transform(opts: Options, item: ItemEnum) -> syn::Result<TokenStream> {
 
     // Generate methods.
     body.extend(quote! {
+        /// Returns a new set with all bits of the backed-storage set to zero.
+        pub const fn zeroed() -> Self {
+            Self(0)
+        }
+
         /// Returns `true` if this set contains **any** flags in the `rhs` set.
         ///
         /// This performs the `&` operation on the underlying value and check if the results is
@@ -77,6 +82,12 @@ pub fn transform(opts: Options, item: ItemEnum) -> syn::Result<TokenStream> {
             #body
         }
 
+        impl From<#ty> for #impl_ident {
+            fn from(value: #ty) -> Self {
+                Self(value)
+            }
+        }
+
         impl ::core::ops::BitOr for #impl_ident {
             type Output = Self;
 
@@ -88,6 +99,14 @@ pub fn transform(opts: Options, item: ItemEnum) -> syn::Result<TokenStream> {
         impl ::core::ops::BitOrAssign for #impl_ident {
             fn bitor_assign(&mut self, rhs: Self) {
                 self.0 |= rhs.0;
+            }
+        }
+
+        impl ::core::ops::BitAnd for #impl_ident {
+            type Output = Self;
+
+            fn bitand(self, rhs: Self) -> Self::Output {
+                Self(self.0 & rhs.0)
             }
         }
     })
