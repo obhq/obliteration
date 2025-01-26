@@ -1,6 +1,7 @@
 use super::engine::Vulkan;
 use super::GraphicsError;
 use crate::rt::{Hook, WindowHandler, WinitWindow};
+use crate::ui::DesktopWindow;
 use ash::vk::SurfaceKHR;
 use raw_window_handle::HasWindowHandle;
 use std::error::Error;
@@ -50,11 +51,10 @@ impl WinitWindow for VulkanWindow {
     fn id(&self) -> WindowId {
         self.window.id()
     }
+}
 
-    fn handle(&self) -> impl HasWindowHandle + '_
-    where
-        Self: Sized,
-    {
+impl DesktopWindow for VulkanWindow {
+    fn handle(&self) -> impl HasWindowHandle + '_ {
         &self.window
     }
 

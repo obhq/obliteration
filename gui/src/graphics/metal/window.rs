@@ -1,5 +1,6 @@
 use super::Metal;
 use crate::rt::{Hook, WindowHandler, WinitWindow};
+use crate::ui::DesktopWindow;
 use metal::{CAMetalLayer, MetalLayer};
 use objc::runtime::{Object, NO, YES};
 use objc::{msg_send, sel, sel_impl};
@@ -56,11 +57,10 @@ impl WinitWindow for MetalWindow {
     fn id(&self) -> WindowId {
         self.window.id()
     }
+}
 
-    fn handle(&self) -> impl HasWindowHandle + '_
-    where
-        Self: Sized,
-    {
+impl DesktopWindow for MetalWindow {
+    fn handle(&self) -> impl HasWindowHandle + '_ {
         &self.window
     }
 }

@@ -1,8 +1,7 @@
 pub use self::dialogs::*;
 
 use self::modal::Modal;
-use super::DesktopWindow;
-use crate::rt::WinitWindow;
+use super::{DesktopExt, DesktopWindow};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::io::Error;
 use std::mem::zeroed;
@@ -16,11 +15,11 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
 mod dialogs;
 mod modal;
 
-impl<T: WinitWindow> DesktopWindow for T {
+impl<T: DesktopWindow> DesktopExt for T {
     type Modal<'a, P>
         = Modal<'a, Self, P>
     where
-        P: WinitWindow + 'a;
+        P: DesktopWindow + 'a;
 
     fn set_center(&self) -> Result<(), PlatformError> {
         // Get HWND.
@@ -69,14 +68,14 @@ impl<T: WinitWindow> DesktopWindow for T {
 
     fn set_modal<P>(self, parent: &P) -> Result<Modal<Self, P>, PlatformError>
     where
-        P: WinitWindow,
+        P: DesktopWindow,
         Self: Sized,
     {
         todo!()
     }
 }
 
-/// Windows-specific error for [`DesktopWindow`].
+/// Windows-specific error for [`DesktopExt`].
 #[derive(Debug, Error)]
 pub enum PlatformError {
     #[error("couldn't get window rectangle")]

@@ -2,8 +2,7 @@ pub use self::dialogs::*;
 
 use self::modal::Modal;
 use self::view::with_window;
-use super::DesktopWindow;
-use crate::rt::WinitWindow;
+use super::{DesktopExt, DesktopWindow};
 use block::ConcreteBlock;
 use objc::{msg_send, sel, sel_impl};
 use std::ffi::c_long;
@@ -14,11 +13,11 @@ mod dialogs;
 mod modal;
 mod view;
 
-impl<T: WinitWindow> DesktopWindow for T {
+impl<T: DesktopWindow> DesktopExt for T {
     type Modal<'a, P>
         = Modal<'a, Self, P>
     where
-        P: WinitWindow + 'a;
+        P: DesktopWindow + 'a;
 
     fn set_center(&self) -> Result<(), PlatformError> {
         with_window::<()>(self.handle(), |win| unsafe { msg_send![win, center] });
@@ -28,7 +27,7 @@ impl<T: WinitWindow> DesktopWindow for T {
 
     fn set_modal<P>(self, parent: &P) -> Result<Modal<Self, P>, PlatformError>
     where
-        P: WinitWindow,
+        P: DesktopWindow,
         Self: Sized,
     {
         // Setup completionHandler.
@@ -45,6 +44,6 @@ impl<T: WinitWindow> DesktopWindow for T {
     }
 }
 
-/// macOS-specific error for [`DesktopWindow`].
+/// macOS-specific error for [`DesktopExt`].
 #[derive(Debug, Error)]
 pub enum PlatformError {}

@@ -1,5 +1,5 @@
-use crate::rt::{global, WinitWindow};
-use crate::ui::{FileType, SlintBackend};
+use crate::rt::global;
+use crate::ui::{DesktopWindow, FileType, SlintBackend};
 use ashpd::desktop::file_chooser::{FileFilter, SelectedFiles};
 use ashpd::desktop::ResponseError;
 use ashpd::WindowIdentifier;
@@ -11,7 +11,7 @@ use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::Proxy;
 use wayland_protocols::xdg::foreign::zv2::client::zxdg_exported_v2::ZxdgExportedV2;
 
-pub async fn open_file<T: WinitWindow>(
+pub async fn open_file<T: DesktopWindow>(
     parent: &T,
     title: impl AsRef<str>,
     ty: FileType,
@@ -46,7 +46,7 @@ pub async fn open_file<T: WinitWindow>(
     Some(resp.uris().first().unwrap().to_file_path().unwrap())
 }
 
-pub async fn open_dir<T: WinitWindow>(parent: &T, title: impl AsRef<str>) -> Option<PathBuf> {
+pub async fn open_dir<T: DesktopWindow>(parent: &T, title: impl AsRef<str>) -> Option<PathBuf> {
     // Send the request
     let parent = get_parent_id(parent);
     let req = SelectedFiles::open_file()
@@ -74,7 +74,7 @@ pub async fn open_dir<T: WinitWindow>(parent: &T, title: impl AsRef<str>) -> Opt
 
 fn get_parent_id<P>(parent: &P) -> Parent
 where
-    P: WinitWindow,
+    P: DesktopWindow,
 {
     // Check window type.
     let parent = parent.handle();

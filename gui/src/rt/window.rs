@@ -1,4 +1,3 @@
-use raw_window_handle::HasWindowHandle;
 use std::error::Error;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{DeviceId, ElementState, InnerSizeWriter, MouseButton};
@@ -34,9 +33,4 @@ pub trait WindowHandler: WinitWindow {
 /// Provides method to return winit properties.
 pub trait WinitWindow {
     fn id(&self) -> WindowId;
-    fn handle(&self) -> impl HasWindowHandle + '_
-    where
-        Self: Sized;
-    #[cfg(target_os = "linux")]
-    fn xdg_toplevel(&self) -> *mut std::ffi::c_void;
 }

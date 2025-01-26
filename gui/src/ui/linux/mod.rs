@@ -1,8 +1,8 @@
 pub use self::dialogs::*;
 
 use self::modal::Modal;
-use super::{DesktopWindow, SlintBackend};
-use crate::rt::{global, WinitWindow};
+use super::{DesktopExt, DesktopWindow, SlintBackend};
+use crate::rt::global;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use thiserror::Error;
 
@@ -10,11 +10,11 @@ mod dialogs;
 mod modal;
 mod wayland;
 
-impl<T: WinitWindow> DesktopWindow for T {
+impl<T: DesktopWindow> DesktopExt for T {
     type Modal<'a, P>
         = Modal<'a, Self, P>
     where
-        P: WinitWindow + 'a;
+        P: DesktopWindow + 'a;
 
     fn set_center(&self) -> Result<(), PlatformError> {
         let win = self.handle();
@@ -33,7 +33,7 @@ impl<T: WinitWindow> DesktopWindow for T {
 
     fn set_modal<P>(self, parent: &P) -> Result<Modal<Self, P>, PlatformError>
     where
-        P: WinitWindow,
+        P: DesktopWindow,
         Self: Sized,
     {
         let back = global::<SlintBackend>().unwrap();
@@ -49,7 +49,7 @@ impl<T: WinitWindow> DesktopWindow for T {
     }
 }
 
-/// Linux-specific error for [`PlatformExt`].
+/// Linux-specific error for [`DesktopExt`].
 #[derive(Debug, Error)]
 pub enum PlatformError {
     #[error("couldn't create xdg_dialog_v1")]

@@ -1,6 +1,5 @@
 use super::PlatformError;
-use crate::rt::WinitWindow;
-use crate::ui::Wayland;
+use crate::ui::{DesktopWindow, Wayland};
 use wayland_backend::sys::client::ObjectId;
 use wayland_client::Proxy;
 use wayland_protocols::xdg::dialog::v1::client::xdg_dialog_v1::XdgDialogV1;
@@ -10,8 +9,8 @@ use wayland_protocols::xdg::shell::client::xdg_toplevel::XdgToplevel;
 /// `parent` must outlive `target`.
 pub unsafe fn set_modal(
     wayland: &Wayland,
-    target: &impl WinitWindow,
-    parent: &impl WinitWindow,
+    target: &impl DesktopWindow,
+    parent: &impl DesktopWindow,
 ) -> Result<XdgDialogV1, PlatformError> {
     // Get xdg_toplevel for parent.
     let mut queue = wayland.queue().borrow_mut();
@@ -40,7 +39,7 @@ pub unsafe fn set_modal(
 
 /// # Safety
 /// `win` must outlive the returned [`XdgToplevel`].
-unsafe fn get_xdg_toplevel(wayland: &Wayland, win: &impl WinitWindow) -> XdgToplevel {
+unsafe fn get_xdg_toplevel(wayland: &Wayland, win: &impl DesktopWindow) -> XdgToplevel {
     let obj = win.xdg_toplevel();
     let obj = ObjectId::from_ptr(XdgToplevel::interface(), obj.cast()).unwrap();
 

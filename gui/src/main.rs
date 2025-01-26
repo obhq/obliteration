@@ -8,7 +8,7 @@ use self::log::LogWriter;
 use self::profile::{DisplayResolution, Profile};
 use self::setup::{run_setup, SetupError};
 use self::ui::{
-    DesktopWindow, MainWindow, ProfileModel, ResolutionModel, RuntimeExt, SlintBackend,
+    DesktopExt, MainWindow, ProfileModel, ResolutionModel, RuntimeExt, SlintBackend,
     WaitForDebugger,
 };
 use self::vmm::{CpuError, Vmm, VmmError, VmmEvent};

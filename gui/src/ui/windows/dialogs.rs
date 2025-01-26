@@ -1,5 +1,4 @@
-use crate::rt::WinitWindow;
-use crate::ui::FileType;
+use crate::ui::{DesktopWindow, FileType};
 use futures::channel::oneshot;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::future::Future;
@@ -11,31 +10,7 @@ use windows_sys::Win32::UI::Shell::{
     SHBrowseForFolderW, SHGetPathFromIDListW, BIF_NEWDIALOGSTYLE, BIF_RETURNONLYFSDIRS, BROWSEINFOW,
 };
 
-fn get_hwnd<T: WinitWindow>(parent: &T) -> NonZero<isize> {
-    let parent = parent.handle();
-    let parent = parent.window_handle().unwrap();
-    let RawWindowHandle::Win32(win) = parent.as_ref() else {
-        unreachable!();
-    };
-
-    win.hwnd
-}
-
-fn spawn_dialog<F>(dialog_fn: F) -> impl Future<Output = Option<PathBuf>>
-where
-    F: Send + 'static + FnOnce() -> Option<PathBuf>,
-{
-    let (tx, rx) = oneshot::channel();
-
-    std::thread::spawn(move || {
-        let res = dialog_fn();
-        tx.send(res).unwrap();
-    });
-
-    async move { rx.await.unwrap_or(None) }
-}
-
-pub async fn open_file<T: WinitWindow>(
+pub async fn open_file<T: DesktopWindow>(
     parent: &T,
     title: impl AsRef<str>,
     ty: FileType,
@@ -43,7 +18,7 @@ pub async fn open_file<T: WinitWindow>(
     todo!()
 }
 
-pub async fn open_dir<T: WinitWindow>(parent: &T, title: impl AsRef<str>) -> Option<PathBuf> {
+pub async fn open_dir<T: DesktopWindow>(parent: &T, title: impl AsRef<str>) -> Option<PathBuf> {
     let hwnd = get_hwnd(parent);
 
     let title_wide: Vec<u16> = title
@@ -80,4 +55,28 @@ pub async fn open_dir<T: WinitWindow>(parent: &T, title: impl AsRef<str>) -> Opt
         }
     })
     .await
+}
+
+fn get_hwnd<T: DesktopWindow>(parent: &T) -> NonZero<isize> {
+    let parent = parent.handle();
+    let parent = parent.window_handle().unwrap();
+    let RawWindowHandle::Win32(win) = parent.as_ref() else {
+        unreachable!();
+    };
+
+    win.hwnd
+}
+
+fn spawn_dialog<F>(dialog_fn: F) -> impl Future<Output = Option<PathBuf>>
+where
+    F: Send + 'static + FnOnce() -> Option<PathBuf>,
+{
+    let (tx, rx) = oneshot::channel();
+
+    std::thread::spawn(move || {
+        let res = dialog_fn();
+        tx.send(res).unwrap();
+    });
+
+    async move { rx.await.unwrap_or(None) }
 }
