@@ -57,6 +57,10 @@ impl Window {
             .unwrap()
     }
 
+    pub fn winit(&self) -> &winit::window::Window {
+        &self.winit
+    }
+
     pub fn hidden(&self) -> &Signal<()> {
         &self.hidden
     }
@@ -65,20 +69,6 @@ impl Window {
 impl WinitWindow for Window {
     fn id(&self) -> WindowId {
         self.winit.id()
-    }
-
-    fn handle(&self) -> impl HasWindowHandle + '_
-    where
-        Self: Sized,
-    {
-        &self.winit
-    }
-
-    #[cfg(target_os = "linux")]
-    fn xdg_toplevel(&self) -> *mut std::ffi::c_void {
-        use winit::platform::wayland::WindowExtWayland;
-
-        self.winit.xdg_toplevel()
     }
 }
 

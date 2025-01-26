@@ -31,7 +31,7 @@ where
     spawn_blocker(w, f);
 }
 
-pub async fn error<P: WinitWindow>(parent: Option<&P>, msg: impl Into<SharedString>) {
+pub async fn error<P: DesktopWindow>(parent: Option<&P>, msg: impl Into<SharedString>) {
     let win = ErrorWindow::new().unwrap();
 
     win.set_message(msg.into());
@@ -55,27 +55,40 @@ pub async fn error<P: WinitWindow>(parent: Option<&P>, msg: impl Into<SharedStri
 impl<T: ComponentHandle> WinitWindow for T {
     fn id(&self) -> WindowId {
         let win = WindowInner::from_pub(self.window()).window_adapter();
+        let win = Window::from_adapter(win.as_ref());
 
-        Window::from_adapter(win.as_ref()).id()
+        win.id()
     }
+}
 
+impl<T: ComponentHandle> DesktopWindow for T {
     fn handle(&self) -> impl HasWindowHandle + '_ {
         self.window().window_handle()
     }
 
     #[cfg(target_os = "linux")]
     fn xdg_toplevel(&self) -> *mut std::ffi::c_void {
-        let win = WindowInner::from_pub(self.window()).window_adapter();
+        use winit::platform::wayland::WindowExtWayland;
 
-        Window::from_adapter(win.as_ref()).xdg_toplevel()
+        let win = WindowInner::from_pub(self.window()).window_adapter();
+        let win = Window::from_adapter(win.as_ref());
+
+        win.winit().xdg_toplevel()
     }
 }
 
-/// Provides methods to operate on a desktop window.
+/// Provides methods to return platform-specific handle for a desktop window.
 pub trait DesktopWindow: WinitWindow {
+    fn handle(&self) -> impl HasWindowHandle + '_;
+    #[cfg(target_os = "linux")]
+    fn xdg_toplevel(&self) -> *mut std::ffi::c_void;
+}
+
+/// Provides methods to operate on a [`DesktopWindow`].
+pub trait DesktopExt: DesktopWindow {
     type Modal<'a, P>: Deref<Target = Self>
     where
-        P: WinitWindow + 'a;
+        P: DesktopWindow + 'a;
 
     /// Center window on the screen.
     ///
@@ -84,7 +97,7 @@ pub trait DesktopWindow: WinitWindow {
     fn set_center(&self) -> Result<(), PlatformError>;
     fn set_modal<P>(self, parent: &P) -> Result<Self::Modal<'_, P>, PlatformError>
     where
-        P: WinitWindow,
+        P: DesktopWindow,
         Self: Sized;
 }
 
