@@ -1,11 +1,10 @@
 use crate::ui::{DesktopWindow, FileType};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::ffi::OsString;
-use std::future::Future;
 use std::num::NonZero;
 use std::os::windows::ffi::OsStringExt;
 use std::path::PathBuf;
-use windows::core::w;
+use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
@@ -47,7 +46,7 @@ pub async fn open_file<T: DesktopWindow>(
 
         browser.SetFileTypes(&[filter]).unwrap();
         browser.SetOptions(opts).unwrap();
-        browser.SetTitle(title.as_ptr()).unwrap();
+        browser.SetTitle(PCWSTR(title.as_ptr())).unwrap();
 
         // Show CLSID_FileOpenDialog.
         let item = match browser.Show(HWND(parent.get() as _)) {
@@ -57,17 +56,9 @@ pub async fn open_file<T: DesktopWindow>(
 
         // Get file path.
         let buf = item.GetDisplayName(SIGDN_FILESYSPATH).unwrap();
-        let path = {
-            let mut len = 0;
+        let path = OsString::from_wide(buf.as_wide());
 
-            while *buf.add(len) != 0 {
-                len += 1;
-            }
-
-            OsString::from_wide(std::slice::from_raw_parts(buf, len))
-        };
-
-        CoTaskMemFree(buf as _);
+        CoTaskMemFree(buf.0 as _);
 
         Some(PathBuf::from(path))
     };
