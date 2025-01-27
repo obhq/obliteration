@@ -115,6 +115,7 @@ fn get_hwnd<T: DesktopWindow>(win: &T) -> NonZero<isize> {
 
 async fn spawn_modal<R, F>(f: F) -> R
 where
+    R: Send + 'static,
     F: FnOnce() -> R + Send + 'static,
 {
     let (tx, rx) = futures::channel::oneshot::channel();
