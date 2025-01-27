@@ -34,7 +34,7 @@ pub async fn open_file<T: DesktopWindow>(
         .collect();
     let browse = move || unsafe {
         // Setup CLSID_FileOpenDialog.
-        let browser: FileOpenDialog = CoCreateInstance(&FileOpenDialog, None, CLSCTX_ALL).unwrap();
+        let browser: IFileOpenDialog = CoCreateInstance(&FileOpenDialog, None, CLSCTX_ALL).unwrap();
         let mut opts = browser.GetOptions().unwrap();
         let filter = match ty {
             FileType::Firmware => COMDLG_FILTERSPEC {
