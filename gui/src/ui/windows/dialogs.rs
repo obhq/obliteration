@@ -130,7 +130,7 @@ where
 
     std::thread::spawn(move || unsafe {
         CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_SPEED_OVER_MEMORY).unwrap();
-        tx.send(f()).unwrap();
+        assert!(tx.send(f()).is_ok());
         CoUninitialize();
     });
 
