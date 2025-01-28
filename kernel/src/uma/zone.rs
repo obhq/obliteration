@@ -11,11 +11,11 @@ use core::cmp::min;
 use core::num::NonZero;
 use core::ops::DerefMut;
 use core::ptr::null_mut;
-use core::sync::atomic::Ordering;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 /// Implementation of `uma_zone` structure.
 pub struct UmaZone {
-    uma: Arc<Uma>,
+    bucket_enable: Arc<AtomicBool>,
     ty: ZoneType,
     size: NonZero<usize>,                     // uz_size
     caches: CpuLocal<RefCell<UmaCache>>,      // uz_cpu
@@ -29,7 +29,6 @@ pub struct UmaZone {
 
 impl UmaZone {
     const ALIGN_CACHE: usize = 63; // uma_align_cache
-    const BUCKET_MAX: usize = 128;
 
     /// See `zone_ctor` on Orbis for a reference.
     ///
@@ -38,7 +37,7 @@ impl UmaZone {
     /// |---------|--------|
     /// |PS4 11.00|0x13D490|
     pub(super) fn new(
-        uma: Arc<Uma>,
+        bucket_enable: Arc<AtomicBool>,
         name: impl Into<String>,
         keg: Option<UmaKeg>,
         size: NonZero<usize>,
@@ -66,9 +65,9 @@ impl UmaZone {
 
         if !keg.flags().has(UmaFlags::Internal) {
             count = if !keg.flags().has(UmaFlags::MaxBucket) {
-                min(keg.item_per_slab(), Self::BUCKET_MAX)
+                min(keg.item_per_slab(), Uma::BUCKET_MAX)
             } else {
-                Self::BUCKET_MAX
+                Uma::BUCKET_MAX
             };
 
             match name.as_str() {
@@ -78,7 +77,7 @@ impl UmaZone {
                 }
                 "mbuf_cluster_pack" => {
                     ty = ZoneType::MbufClusterPack;
-                    count = Self::BUCKET_MAX;
+                    count = Uma::BUCKET_MAX;
                 }
                 "mbuf_jumbo_page" => {
                     ty = ZoneType::MbufJumboPage;
@@ -100,7 +99,7 @@ impl UmaZone {
         let gg = GutexGroup::new();
 
         Self {
-            uma,
+            bucket_enable,
             ty,
             size: keg.size(),
             caches: CpuLocal::new(|_| RefCell::default()),
@@ -124,7 +123,8 @@ impl UmaZone {
     /// |---------|--------|
     /// |PS4 11.00|0x13E750|
     pub fn alloc(&self) -> *mut u8 {
-        // Our implementation imply M_WAITOK and M_ZERO.
+        // Our implementation imply M_WAITOK and M_ZERO. Beware that we can't call into global
+        // allocator here otherwise it will cause a recursive call, which will end up panic.
         let td = current_thread();
 
         if !td.can_sleep() {
@@ -195,7 +195,7 @@ impl UmaZone {
                     | ZoneType::MbufJumboPage
                     | ZoneType::MbufPacket
                     | ZoneType::MbufClusterPack
-            ) && *count < Self::BUCKET_MAX
+            ) && *count < Uma::BUCKET_MAX
             {
                 *count += 1;
             }
@@ -233,7 +233,7 @@ impl UmaZone {
         match frees.front() {
             Some(_) => todo!(),
             None => {
-                if self.uma.bucket_enable.load(Ordering::Relaxed) {
+                if self.bucket_enable.load(Ordering::Relaxed) {
                     if self.flags.has(UmaFlags::CacheOnly) {
                         todo!()
                     } else {
