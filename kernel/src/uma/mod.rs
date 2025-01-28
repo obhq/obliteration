@@ -14,7 +14,7 @@ mod zone;
 
 /// Implementation of UMA system.
 pub struct Uma {
-    bucket_enable: AtomicBool,
+    bucket_enable: Arc<AtomicBool>,
 }
 
 impl Uma {
@@ -23,6 +23,12 @@ impl Uma {
 
     /// `UMA_MAX_WASTE`.
     const MAX_WASTE: NonZero<usize> = NonZero::new(PAGE_SIZE.get() / 10).unwrap();
+    const BUCKET_MAX: usize = 128;
+    const BUCKET_SHIFT: usize = 4;
+    const BUCKET_ZONES: usize = ((Self::BUCKET_MAX >> Self::BUCKET_SHIFT) + 1);
+
+    /// `bucket_zones`.
+    const BUCKET_SIZES: [usize; 4] = [16, 32, 64, 128];
 
     /// See `uma_startup` on the Orbis for a reference.
     ///
@@ -31,9 +37,19 @@ impl Uma {
     /// |---------|--------|
     /// |PS4 11.00|0x13CA70|
     pub fn new() -> Arc<Self> {
-        Arc::new(Self {
-            bucket_enable: AtomicBool::new(true), // TODO: Use a proper value.
-        })
+        let bucket_enable = Arc::new(AtomicBool::new(true)); // TODO: Use a proper value.
+        let mut bucket_keys = [0; Self::BUCKET_ZONES];
+        let mut ki = 0;
+
+        // Create bucket zones.
+        for (si, size) in Self::BUCKET_SIZES.into_iter().enumerate() {
+            while ki <= size {
+                bucket_keys[ki >> Self::BUCKET_SHIFT] = si;
+                ki += 1 << Self::BUCKET_SHIFT;
+            }
+        }
+
+        Arc::new(Self { bucket_enable })
     }
 
     /// See `uma_zcreate` on the Orbis for a reference.
@@ -43,7 +59,7 @@ impl Uma {
     /// |---------|--------|
     /// |PS4 11.00|0x13DC80|
     pub fn create_zone(
-        self: Arc<Self>,
+        &self,
         name: impl Into<String>,
         size: NonZero<usize>,
         align: Option<usize>,
@@ -51,7 +67,7 @@ impl Uma {
     ) -> UmaZone {
         // The Orbis will allocate a new zone from masterzone_z. We choose to remove this since it
         // does not idomatic to Rust, which mean our uma_zone itself can live on the stack.
-        UmaZone::new(self, name, None, size, align, flags)
+        UmaZone::new(self.bucket_enable.clone(), name, None, size, align, flags)
     }
 }
 
