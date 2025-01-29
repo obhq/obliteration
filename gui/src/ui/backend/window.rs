@@ -1,4 +1,3 @@
-use crate::rt::{Signal, WindowHandler, WinitWindow};
 use i_slint_core::window::WindowAdapterInternal;
 use i_slint_core::InternalToken;
 use i_slint_renderer_skia::SkiaRenderer;
@@ -11,6 +10,7 @@ use std::any::Any;
 use std::cell::Cell;
 use std::error::Error;
 use std::rc::Rc;
+use wae::{Signal, WindowHandler, WinitWindow};
 use winit::event::{DeviceId, ElementState, InnerSizeWriter, MouseButton};
 use winit::window::WindowId;
 

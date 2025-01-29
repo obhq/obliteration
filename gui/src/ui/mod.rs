@@ -2,12 +2,12 @@ pub use self::backend::*;
 pub use self::os::*;
 pub use self::profile::*;
 
-use crate::rt::{spawn_blocker, WinitWindow};
 use i_slint_core::window::WindowInner;
 use raw_window_handle::HasWindowHandle;
 use slint::{ComponentHandle, SharedString, Weak};
 use std::future::Future;
 use std::ops::Deref;
+use wae::WinitWindow;
 use winit::window::WindowId;
 
 mod backend;
@@ -22,13 +22,13 @@ mod profile;
 /// All user inputs for `w` will be discarded while the future still alive.
 pub fn spawn_handler<W, F>(w: &Weak<W>, f: impl FnOnce(W) -> F)
 where
-    W: ComponentHandle + 'static,
+    W: ComponentHandle + WinitWindow + 'static,
     F: Future<Output = ()> + 'static,
 {
     let w = w.unwrap();
     let f = f(w.clone_strong());
 
-    spawn_blocker(w, f);
+    wae::spawn_blocker(w, f);
 }
 
 pub async fn error<P: DesktopWindow>(parent: Option<&P>, msg: impl Into<SharedString>) {
@@ -52,16 +52,7 @@ pub async fn error<P: DesktopWindow>(parent: Option<&P>, msg: impl Into<SharedSt
     }
 }
 
-impl<T: ComponentHandle> WinitWindow for T {
-    fn id(&self) -> WindowId {
-        let win = WindowInner::from_pub(self.window()).window_adapter();
-        let win = Window::from_adapter(win.as_ref());
-
-        win.id()
-    }
-}
-
-impl<T: ComponentHandle> DesktopWindow for T {
+impl<T: ComponentHandle + WinitWindow> DesktopWindow for T {
     fn handle(&self) -> impl HasWindowHandle + '_ {
         self.window().window_handle()
     }
@@ -122,3 +113,21 @@ pub enum FileType {
 
 // This macro includes the generated Rust code from .slint files
 slint::include_modules!();
+
+macro_rules! impl_wae {
+    ($ty:ident) => {
+        impl WinitWindow for $ty {
+            fn id(&self) -> WindowId {
+                let win = WindowInner::from_pub(self.window()).window_adapter();
+                let win = Window::from_adapter(win.as_ref());
+
+                win.id()
+            }
+        }
+    };
+}
+
+impl_wae!(ErrorWindow);
+impl_wae!(InstallFirmware);
+impl_wae!(MainWindow);
+impl_wae!(SetupWizard);

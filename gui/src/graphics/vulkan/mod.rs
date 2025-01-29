@@ -3,7 +3,6 @@ use self::engine::Vulkan;
 use self::window::VulkanWindow;
 use super::EngineBuilder;
 use crate::profile::Profile;
-use crate::rt::{create_window, raw_display_handle};
 use ash::extensions::khr::Surface;
 use ash::vk::{ApplicationInfo, InstanceCreateInfo, QueueFlags, API_VERSION_1_3};
 use ash::{Entry, Instance};
@@ -23,7 +22,7 @@ pub fn builder() -> Result<impl EngineBuilder, GraphicsError> {
     // Get required extensions for window.
     let mut exts = vec![c"VK_KHR_surface".as_ptr()];
 
-    match raw_display_handle() {
+    match wae::raw_display_handle() {
         RawDisplayHandle::UiKit(_) | RawDisplayHandle::AppKit(_) | RawDisplayHandle::Web(_) => {
             unreachable!()
         }
@@ -131,11 +130,11 @@ impl EngineBuilder for VulkanBuilder {
         shutdown: &Arc<AtomicBool>,
     ) -> Result<Arc<Self::Engine>, GraphicsError> {
         let engine = Vulkan::new(self, profile).map(Arc::new)?;
-        let window = create_window(screen).map_err(GraphicsError::CreateWindow)?;
+        let window = wae::create_window(screen).map_err(GraphicsError::CreateWindow)?;
         let window = VulkanWindow::new(&engine, window, shutdown).map(Rc::new)?;
 
-        crate::rt::register_window(&window);
-        crate::rt::push_hook(window);
+        wae::register_window(&window);
+        wae::push_hook(window);
 
         Ok(engine)
     }

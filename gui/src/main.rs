@@ -36,7 +36,6 @@ mod hv;
 mod log;
 mod panic;
 mod profile;
-mod rt;
 mod setup;
 mod ui;
 mod vfs;
@@ -112,7 +111,7 @@ fn main() -> ExitCode {
         ExitCode::FAILURE
     };
 
-    match self::rt::run(main) {
+    match wae::run(main) {
         Ok(v) => v,
         Err(e) => {
             error(format!(

@@ -1,5 +1,4 @@
 use super::Metal;
-use crate::rt::{Hook, WindowHandler, WinitWindow};
 use crate::ui::DesktopWindow;
 use metal::{CAMetalLayer, MetalLayer};
 use objc::runtime::{Object, NO, YES};
@@ -9,6 +8,7 @@ use std::error::Error;
 use std::ptr::null_mut;
 use std::rc::Rc;
 use std::sync::Arc;
+use wae::{Hook, WindowHandler, WinitWindow};
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{DeviceId, ElementState, InnerSizeWriter, MouseButton, StartCause};
 use winit::event_loop::ControlFlow;

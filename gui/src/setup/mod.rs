@@ -2,7 +2,6 @@ pub use self::data::DataRootError;
 
 use self::data::{read_data_root, write_data_root};
 use crate::data::{DataError, DataMgr};
-use crate::rt::yield_now;
 use crate::ui::{
     error, open_dir, open_file, spawn_handler, DesktopExt, FileType, InstallFirmware, RuntimeExt,
     SetupWizard,
@@ -297,10 +296,10 @@ async fn install_firmware(win: SetupWizard) {
     let mut step = || {
         p += 1;
         pw.set_progress(p as f32 / n as f32);
-        yield_now()
+        wae::yield_now()
     };
 
-    yield_now().await;
+    wae::yield_now().await;
 
     // Extract.
     let e = loop {
@@ -316,7 +315,7 @@ async fn install_firmware(win: SetupWizard) {
 
         pw.set_status(slint::format!("Extracting {name}..."));
 
-        yield_now().await;
+        wae::yield_now().await;
 
         // Extract item.
         let r: Result<(), Box<dyn Error>> = match &mut item {
@@ -339,7 +338,7 @@ async fn install_firmware(win: SetupWizard) {
     }
 
     drop(pw);
-    yield_now().await;
+    wae::yield_now().await;
 
     match e {
         Some(e) => {
@@ -461,7 +460,7 @@ async fn extract_partition<F: Future<Output = ()>>(
             Some(mut data) => {
                 pw.set_status(slint::format!("Extracting {name}..."));
 
-                yield_now().await;
+                wae::yield_now().await;
 
                 // Create only if not exists.
                 let mut file = match File::create_new(&path) {
@@ -486,7 +485,7 @@ async fn extract_partition<F: Future<Output = ()>>(
                         return Err(PartitionError::ExtractFile(name, path, e));
                     }
 
-                    yield_now().await;
+                    wae::yield_now().await;
                 }
             }
             None => {
@@ -503,7 +502,7 @@ async fn extract_partition<F: Future<Output = ()>>(
     // Commit metadata transaction.
     pw.set_status("Committing metadata database...".into());
 
-    yield_now().await;
+    wae::yield_now().await;
 
     if let Err(e) = meta.commit() {
         return Err(PartitionError::MetaCommit(mp, e));
