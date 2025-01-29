@@ -1,6 +1,6 @@
-use crate::rt::{block, Blocker};
 use crate::ui::DesktopWindow;
 use std::ops::Deref;
+use wae::Blocker;
 use wayland_protocols::xdg::dialog::v1::client::xdg_dialog_v1::XdgDialogV1;
 
 /// Encapsulates a modal window and its parent.
@@ -18,7 +18,7 @@ impl<'a, W, P: DesktopWindow> Modal<'a, W, P> {
         Self {
             window,
             wayland,
-            blocker: block(parent),
+            blocker: wae::block(parent),
         }
     }
 }

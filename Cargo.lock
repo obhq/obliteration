@@ -1697,8 +1697,9 @@ dependencies = [
  "serde",
  "slint",
  "slint-build",
- "thiserror 2.0.3",
+ "thiserror 2.0.11",
  "uuid",
+ "wae",
  "wayland-backend",
  "wayland-client",
  "wayland-protocols",
@@ -2683,7 +2684,7 @@ version = "0.1.0"
 source = "git+https://github.com/obhq/firmware-dumper.git?rev=64787fdc0489724f0914356d925be014a2f1bf3e#64787fdc0489724f0914356d925be014a2f1bf3e"
 dependencies = [
  "num_enum",
- "thiserror 2.0.3",
+ "thiserror 2.0.11",
 ]
 
 [[package]]
@@ -3915,11 +3916,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.3"
+version = "2.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c006c85c7651b3cf2ada4584faa36773bd07bac24acfb39f3c431b36d7e667aa"
+checksum = "d452f284b73e6d76dd36758a0c8684b1d5be31f92b89d07fd5822175732206fc"
 dependencies = [
- "thiserror-impl 2.0.3",
+ "thiserror-impl 2.0.11",
 ]
 
 [[package]]
@@ -3935,9 +3936,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.3"
+version = "2.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f077553d607adc1caf65430528a576c757a71ed73944b66ebb58ef2bbd243568"
+checksum = "26afc1baea8a989337eeb52b6e72a039780ce45c3edfcc9c5b9d112feeb173c2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4346,6 +4347,18 @@ dependencies = [
  "smallvec",
  "thread_local",
  "vk-parse",
+]
+
+[[package]]
+name = "wae"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d7914181a9037894935d7a3153a63adc868ed9a40f6d82fd59a0a66fe36f497c"
+dependencies = [
+ "raw-window-handle 0.6.2",
+ "rustc-hash 2.1.0",
+ "thiserror 2.0.11",
+ "winit",
 ]
 
 [[package]]

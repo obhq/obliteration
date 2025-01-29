@@ -2,7 +2,6 @@
 pub(super) use self::wayland::*;
 pub(super) use self::window::Window;
 
-use crate::rt::{create_window, raw_display_handle, WinitWindow};
 use i_slint_core::graphics::RequestedGraphicsAPI;
 use i_slint_renderer_skia::SkiaRenderer;
 #[cfg(target_os = "linux")]
@@ -17,6 +16,7 @@ use std::error::Error;
 use std::rc::{Rc, Weak};
 use std::time::Instant;
 use thiserror::Error;
+use wae::WinitWindow;
 use winit::event::StartCause;
 use winit::event_loop::ControlFlow;
 use winit::window::WindowId;
@@ -48,7 +48,7 @@ impl SlintBackend {
             windows: RefCell::default(),
         };
 
-        match raw_display_handle() {
+        match wae::raw_display_handle() {
             #[cfg(target_os = "linux")]
             RawDisplayHandle::Wayland(d) => b.wayland = Wayland::new(d).map(Some)?,
             _ => (),
@@ -63,12 +63,12 @@ impl SlintBackend {
         let b = Rc::new(self);
 
         slint::platform::set_platform(Box::new(Platform(Rc::downgrade(&b))))?;
-        crate::rt::register_global(b.clone());
-        crate::rt::push_hook(b.clone());
+        wae::register_global(b.clone());
+        wae::push_hook(b.clone());
 
         #[cfg(target_os = "linux")]
         if b.wayland.is_some() {
-            crate::rt::spawn(async move { b.wayland.as_ref().unwrap().run().await });
+            wae::spawn(async move { b.wayland.as_ref().unwrap().run().await });
         }
 
         Ok(())
@@ -80,7 +80,7 @@ impl SlintBackend {
     }
 }
 
-impl crate::rt::Hook for SlintBackend {
+impl wae::Hook for SlintBackend {
     fn new_events(&self, cause: &StartCause) -> Result<(), Box<dyn Error + Send + Sync>> {
         // The pre_window_event will run after StartCause::WaitCancelled to we don't need to do its
         // work here.
@@ -138,7 +138,7 @@ impl slint::platform::Platform for Platform {
     fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, PlatformError> {
         // Create winit window.
         let attrs = winit::window::Window::default_attributes().with_visible(false);
-        let win = create_window(attrs).map_err(|e| PlatformError::OtherError(Box::new(e)))?;
+        let win = wae::create_window(attrs).map_err(|e| PlatformError::OtherError(Box::new(e)))?;
 
         // Create renderer.
         let win = Rc::new(win);
@@ -172,7 +172,7 @@ impl slint::platform::Platform for Platform {
             .insert(win.id(), Rc::downgrade(&win))
             .is_none());
 
-        crate::rt::register_window(&win);
+        wae::register_window(&win);
 
         Ok(win)
     }

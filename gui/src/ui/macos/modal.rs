@@ -1,6 +1,6 @@
-use crate::rt::{block, Blocker};
 use crate::ui::DesktopWindow;
 use std::ops::Deref;
+use wae::Blocker;
 
 /// Encapsulates a modal window and its parent.
 ///
@@ -15,7 +15,7 @@ impl<'a, W, P: DesktopWindow> Modal<'a, W, P> {
     pub(super) fn new(window: W, parent: &'a P) -> Self {
         Self {
             window,
-            blocker: block(parent),
+            blocker: wae::block(parent),
         }
     }
 }

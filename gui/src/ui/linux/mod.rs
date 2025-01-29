@@ -2,7 +2,6 @@ pub use self::dialogs::*;
 
 use self::modal::Modal;
 use super::{DesktopExt, DesktopWindow, SlintBackend};
-use crate::rt::global;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use thiserror::Error;
 
@@ -36,7 +35,7 @@ impl<T: DesktopWindow> DesktopExt for T {
         P: DesktopWindow,
         Self: Sized,
     {
-        let back = global::<SlintBackend>().unwrap();
+        let back = wae::global::<SlintBackend>().unwrap();
         let wayland = if let Some(v) = back.wayland() {
             // SAFETY: The Modal struct we construct below force the parent to outlive the modal
             // window.

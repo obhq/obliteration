@@ -1,4 +1,3 @@
-use crate::rt::global;
 use crate::ui::{DesktopWindow, FileType, SlintBackend};
 use ashpd::desktop::file_chooser::{FileFilter, SelectedFiles};
 use ashpd::desktop::ResponseError;
@@ -98,7 +97,7 @@ where
     };
 
     // Get WlSurface.
-    let backend = global::<SlintBackend>().unwrap();
+    let backend = wae::global::<SlintBackend>().unwrap();
     let wayland = backend.wayland().unwrap();
     let surface = unsafe { ObjectId::from_ptr(WlSurface::interface(), surface.cast()).unwrap() };
     let surface = WlSurface::from_id(wayland.connection(), surface).unwrap();
