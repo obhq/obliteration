@@ -32,7 +32,7 @@ pub extern "C" fn syscall_handler() {
     let td = current_thread();
     let p = td.proc();
 
-    *td.profiling_ticks_mut() = 0;
+    td.set_profiling_ticks(0);
 
     // We merge sv_fetch_syscall_args and the code to invoke each syscall handler together.
     p.abi().syscall_handler();

@@ -46,7 +46,7 @@ impl<T> Mutex<T> {
             todo!()
         }
 
-        *td.active_mutexes_mut() += 1;
+        td.set_active_mutexes(td.active_mutexes() + 1);
 
         MutexGuard {
             data: self.data.get(),
@@ -62,7 +62,7 @@ impl<T> Mutex<T> {
     unsafe fn unlock(lock: &AtomicUsize) {
         let td = current_thread();
 
-        *td.active_mutexes_mut() -= 1;
+        td.set_active_mutexes(td.active_mutexes() - 1);
 
         // TODO: There is a check for (m->lock_object).lo_data == 0 on the PS4.
         if lock

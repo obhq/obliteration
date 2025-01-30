@@ -1,8 +1,8 @@
-use self::cell::{borrow_mut, PrivateCell};
+use self::cell::{get, set, PrivateCell};
 use super::Proc;
 use crate::lock::{Gutex, GutexGroup, GutexWrite};
 use alloc::sync::Arc;
-use core::cell::RefMut;
+use core::cell::Cell;
 use core::sync::atomic::{AtomicU8, Ordering};
 
 mod cell;
@@ -18,12 +18,12 @@ mod cell;
 /// Do not try to access any [`PrivateCell`] fields from interrupt handler because it might
 /// currently locked, which will can cause a panic.
 pub struct Thread {
-    proc: Arc<Proc>,                   // td_proc
-    active_pins: AtomicU8,             // td_critnest
-    active_interrupts: AtomicU8,       // td_intr_nesting_level
-    active_mutexes: PrivateCell<u16>,  // td_locks
-    sleeping: Gutex<usize>,            // td_wchan
-    profiling_ticks: PrivateCell<u32>, // td_pticks
+    proc: Arc<Proc>,                         // td_proc
+    active_pins: AtomicU8,                   // td_critnest
+    active_interrupts: AtomicU8,             // td_intr_nesting_level
+    active_mutexes: PrivateCell<Cell<u16>>,  // td_locks
+    sleeping: Gutex<usize>,                  // td_wchan
+    profiling_ticks: PrivateCell<Cell<u32>>, // td_pticks
 }
 
 impl Thread {
@@ -42,9 +42,9 @@ impl Thread {
             proc,
             active_pins: AtomicU8::new(0),
             active_interrupts: AtomicU8::new(0),
-            active_mutexes: PrivateCell::new(0),
+            active_mutexes: PrivateCell::default(),
             sleeping: gg.spawn(0),
-            profiling_ticks: PrivateCell::new(0),
+            profiling_ticks: PrivateCell::default(),
         }
     }
 
@@ -79,8 +79,14 @@ impl Thread {
 
     /// # Panics
     /// If called from the other thread.
-    pub fn active_mutexes_mut(&self) -> RefMut<u16> {
-        borrow_mut!(self, active_mutexes)
+    pub fn active_mutexes(&self) -> u16 {
+        get!(self, active_mutexes)
+    }
+
+    /// # Panics
+    /// If called from the other thread.
+    pub fn set_active_mutexes(&self, v: u16) {
+        set!(self, active_mutexes, v)
     }
 
     /// Sleeping address. Zero if this thread is not in a sleep queue.
@@ -90,7 +96,7 @@ impl Thread {
 
     /// # Panics
     /// If called from the other thread.
-    pub fn profiling_ticks_mut(&self) -> RefMut<u32> {
-        borrow_mut!(self, profiling_ticks)
+    pub fn set_profiling_ticks(&self, v: u32) {
+        set!(self, profiling_ticks, v)
     }
 }
