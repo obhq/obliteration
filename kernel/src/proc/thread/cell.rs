@@ -1,30 +1,17 @@
 use super::Thread;
 use crate::context::{current_thread, BorrowedArc};
-use core::cell::{RefCell, RefMut};
+use core::cell::Cell;
 
 /// Encapsulates a field of [Thread] that can only be accessed by the CPU that currently executing
 /// the thread.
-pub struct PrivateCell<T>(RefCell<T>);
+///
+/// # Context safety
+/// [`Default`] implementation of this type does not require a CPU context as long as implementation
+/// on `T` does not.
+#[derive(Default)]
+pub struct PrivateCell<T>(T);
 
 impl<T> PrivateCell<T> {
-    /// # Context safety
-    /// This function does not require a CPU context.
-    pub fn new(v: T) -> Self {
-        Self(RefCell::new(v))
-    }
-
-    /// See [borrow_mut] for a safe wrapper.
-    ///
-    /// # Safety
-    /// `owner` must be an owner of this field.
-    ///
-    /// # Panics
-    /// If `owner` is not the current thread.
-    pub unsafe fn borrow_mut(&self, owner: &Thread) -> RefMut<T> {
-        self.validate(owner);
-        self.0.borrow_mut()
-    }
-
     fn validate(&self, owner: &Thread) {
         // This check will optimized out for most of the time due to the implementation of
         // current_thread() use "pure" + "nomem" on inline assembly.
@@ -36,13 +23,51 @@ impl<T> PrivateCell<T> {
     }
 }
 
-unsafe impl<T> Sync for PrivateCell<T> {}
+impl<T> PrivateCell<Cell<T>> {
+    /// See [set] for a safe wrapper.
+    ///
+    /// # Safety
+    /// `owner` must be an owner of this field.
+    ///
+    /// # Panics
+    /// If `owner` is not the current thread.
+    pub unsafe fn set(&self, owner: &Thread, v: T) {
+        self.validate(owner);
+        self.0.set(v);
+    }
+}
 
-/// Safe wrapper of [PrivateCell::borrow_mut()].
-macro_rules! borrow_mut {
-    ($t:ident, $f:ident) => {
-        unsafe { $t.$f.borrow_mut($t) }
+impl<T: Copy> PrivateCell<Cell<T>> {
+    /// See [get] for a safe wrapper.
+    ///
+    /// # Safety
+    /// `owner` must be an owner of this field.
+    ///
+    /// # Panics
+    /// If `owner` is not the current thread.
+    pub unsafe fn get(&self, owner: &Thread) -> T {
+        self.validate(owner);
+        self.0.get()
+    }
+}
+
+unsafe impl<T: Send> Sync for PrivateCell<T> {}
+
+/// Safe wrapper of [PrivateCell::set()].
+macro_rules! set {
+    ($t:ident, $f:ident, $v:expr) => {
+        // SAFETY: $t is an owner of $f.
+        unsafe { $t.$f.set($t, $v) }
     };
 }
 
-pub(super) use borrow_mut;
+/// Safe wrapper of [PrivateCell::get()].
+macro_rules! get {
+    ($t:ident, $f:ident) => {
+        // SAFETY: $t is an owner of $f.
+        unsafe { $t.$f.get($t) }
+    };
+}
+
+pub(super) use get;
+pub(super) use set;
