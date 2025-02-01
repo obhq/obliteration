@@ -65,7 +65,7 @@ component DebugAddr {
 
 export component CpuTab {
     in-out property <float> cpu-count: 8;
-    in-out property <string> debug-address: "127.0.0.1:1234";
+    in-out property <string> debug-address;
 
     pure callback start-debug();
 

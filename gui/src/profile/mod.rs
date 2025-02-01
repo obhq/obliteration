@@ -2,6 +2,7 @@ use config::Config;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 use std::fs::File;
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::num::NonZero;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -15,6 +16,7 @@ pub struct Profile {
     id: Uuid,
     name: String,
     display_resolution: DisplayResolution,
+    debug_addr: SocketAddr,
     kernel_config: Config,
     created: SystemTime,
 }
@@ -54,6 +56,14 @@ impl Profile {
         self.display_resolution = v;
     }
 
+    pub fn debug_addr(&self) -> &SocketAddr {
+        &self.debug_addr
+    }
+
+    pub fn set_debug_addr(&mut self, v: SocketAddr) {
+        self.debug_addr = v;
+    }
+
     pub fn kernel_config(&self) -> &Config {
         &self.kernel_config
     }
@@ -81,6 +91,7 @@ impl Default for Profile {
             id: Uuid::new_v4(),
             name: String::from("Default"),
             display_resolution: DisplayResolution::Hd,
+            debug_addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 1234)),
             kernel_config: Config {
                 max_cpu: NonZero::new(8).unwrap(),
             },

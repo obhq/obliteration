@@ -17,6 +17,7 @@ export component MainWindow inherits Window {
     in property <[string]> devices;
     in property <[string]> resolutions;
     in-out property <int> selected-resolution;
+    in-out property <string> debug-address;
     in property <[string]> profiles;
     in-out property <int> selected-profile;
 
@@ -87,6 +88,7 @@ export component MainWindow inherits Window {
         }
 
         if tab == Tab.cpu: CpuTab {
+            debug-address <=> debug-address;
             vertical-stretch: 1;
             start-debug => {
                 start-debug();
