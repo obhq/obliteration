@@ -8,16 +8,14 @@ use core::alloc::Layout;
 use core::cell::RefCell;
 use core::num::NonZero;
 
-/// Stage 2 kernel heap.
-///
-/// This stage allocate a memory from a virtual memory management system. This struct is a merge of
-/// `malloc_type` and `malloc_type_internal` structure.
-pub struct Stage2 {
+/// Kernel heap that allocate a memory from a virtual memory management system. This struct is a
+/// merge of `malloc_type` and `malloc_type_internal` structure.
+pub struct VmHeap {
     zones: [Vec<Arc<UmaZone>>; (usize::BITS - 1) as usize], // kmemsize + kmemzones
     stats: CpuLocal<RefCell<Stats>>,                        // mti_stats
 }
 
-impl Stage2 {
+impl VmHeap {
     const KMEM_ZSHIFT: usize = 4;
     const KMEM_ZBASE: usize = 16;
     const KMEM_ZMASK: usize = Self::KMEM_ZBASE - 1;
@@ -76,10 +74,15 @@ impl Stage2 {
 
     /// Returns null on failure.
     ///
-    /// See `malloc` on the PS4 for a reference.
+    /// See `malloc` on the Orbis for a reference.
     ///
     /// # Safety
     /// `layout` must be nonzero.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x1A4220|
     pub unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         // Our implementation imply M_WAITOK.
         let td = current_thread();
@@ -89,9 +92,9 @@ impl Stage2 {
         }
 
         // Determine how to allocate.
+        let lock = td.disable_vm_heap();
         let size = layout.size();
-
-        if size <= PAGE_SIZE.get() {
+        let mem = if size <= PAGE_SIZE.get() {
             // Get zone to allocate from.
             let align = layout.align().trailing_zeros() as usize;
             let size = if (size & Self::KMEM_ZMASK) != 0 {
@@ -122,7 +125,11 @@ impl Stage2 {
             mem
         } else {
             todo!()
-        }
+        };
+
+        drop(lock);
+
+        mem
     }
 
     /// # Safety
