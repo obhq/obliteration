@@ -127,7 +127,7 @@ pub struct HeapGuard<'a> {
     phantom: PhantomData<*const ()>, // For !Send and !Sync.
 }
 
-impl<'a> Drop for HeapGuard<'a> {
+impl Drop for HeapGuard<'_> {
     fn drop(&mut self) {
         let td = self.td;
         let v = get!(td, active_heap_guard) - 1;
