@@ -130,9 +130,9 @@ impl ProcAbi for Proc0Abi {
     }
 }
 
-// SAFETY: STAGE1_HEAP is a mutable static so it valid for reads and writes. This will be safe as
-// long as no one access STAGE1_HEAP.
+// SAFETY: PRIMITIVE_HEAP is a mutable static so it valid for reads and writes. This will be safe as
+// long as no one access PRIMITIVE_HEAP.
 #[allow(dead_code)]
 #[cfg_attr(target_os = "none", global_allocator)]
-static KERNEL_HEAP: KernelHeap = unsafe { KernelHeap::new(&raw mut STAGE1_HEAP) };
-static mut STAGE1_HEAP: [u8; 1024 * 1024] = unsafe { zeroed() };
+static KERNEL_HEAP: KernelHeap = unsafe { KernelHeap::new(&raw mut PRIMITIVE_HEAP) };
+static mut PRIMITIVE_HEAP: [u8; 1024 * 1024] = unsafe { zeroed() };

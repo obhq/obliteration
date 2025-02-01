@@ -3,6 +3,7 @@ use super::Proc;
 use crate::lock::{Gutex, GutexGroup, GutexWrite};
 use alloc::sync::Arc;
 use core::cell::Cell;
+use core::marker::PhantomData;
 use core::sync::atomic::{AtomicU8, Ordering};
 
 mod cell;
@@ -15,8 +16,8 @@ mod cell;
 /// We subtitute `TDP_NOSLEEPING` with `td_intr_nesting_level` and `td_critnest` since it is the
 /// only cases the thread should not allow to sleep.
 ///
-/// Do not try to access any [`PrivateCell`] fields from interrupt handler because it might
-/// currently locked, which will can cause a panic.
+/// Do not try to access any [RefCell](core::cell::RefCell) fields from interrupt handler because it
+/// might currently locked.
 pub struct Thread {
     proc: Arc<Proc>,                         // td_proc
     active_pins: AtomicU8,                   // td_critnest
@@ -24,6 +25,7 @@ pub struct Thread {
     active_mutexes: PrivateCell<Cell<u16>>,  // td_locks
     sleeping: Gutex<usize>,                  // td_wchan
     profiling_ticks: PrivateCell<Cell<u32>>, // td_pticks
+    active_heap_guard: PrivateCell<Cell<usize>>,
 }
 
 impl Thread {
@@ -45,6 +47,7 @@ impl Thread {
             active_mutexes: PrivateCell::default(),
             sleeping: gg.spawn(0),
             profiling_ticks: PrivateCell::default(),
+            active_heap_guard: PrivateCell::default(),
         }
     }
 
@@ -98,5 +101,37 @@ impl Thread {
     /// If called from the other thread.
     pub fn set_profiling_ticks(&self, v: u32) {
         set!(self, profiling_ticks, v)
+    }
+
+    /// # Panics
+    /// If called from the other thread.
+    pub fn active_heap_guard(&self) -> usize {
+        get!(self, active_heap_guard)
+    }
+
+    pub fn disable_vm_heap(&self) -> HeapGuard {
+        let v = get!(self, active_heap_guard).checked_add(1).unwrap();
+
+        set!(self, active_heap_guard, v);
+
+        HeapGuard {
+            td: self,
+            phantom: PhantomData,
+        }
+    }
+}
+
+/// RAII struct to disable VM heap for the thread.
+pub struct HeapGuard<'a> {
+    td: &'a Thread,
+    phantom: PhantomData<*const ()>, // For !Send and !Sync.
+}
+
+impl Drop for HeapGuard<'_> {
+    fn drop(&mut self) {
+        let td = self.td;
+        let v = get!(td, active_heap_guard) - 1;
+
+        set!(td, active_heap_guard, v);
     }
 }
