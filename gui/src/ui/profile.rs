@@ -1,9 +1,10 @@
 use super::MainWindow;
 use crate::profile::{DisplayResolution, Profile};
-use slint::{Model, ModelNotify, ModelTracker, SharedString};
+use slint::{Model, ModelNotify, ModelTracker, SharedString, ToSharedString};
 use std::any::Any;
 use std::cell::{RefCell, RefMut};
 use std::rc::Rc;
+use thiserror::Error;
 
 /// Implementation of [`Model`] for [`DisplayResolution`].
 pub struct ResolutionModel([DisplayResolution; 3]);
@@ -74,18 +75,24 @@ impl ProfileModel {
         let p = &profiles[row];
 
         dst.set_selected_resolution(self.resolutions.position(p.display_resolution()).unwrap());
+        dst.set_debug_address(p.debug_addr().to_shared_string());
     }
 
     /// # Panics
     /// If `row` is not valid.
-    pub fn update(&self, row: i32, src: &MainWindow) -> RefMut<Profile> {
+    pub fn update(&self, row: i32, src: &MainWindow) -> Result<RefMut<Profile>, ProfileError> {
         let row = usize::try_from(row).unwrap();
         let mut profiles = self.profiles.borrow_mut();
         let p = &mut profiles[row];
 
         p.set_display_resolution(self.resolutions.get(src.get_selected_resolution()).unwrap());
 
-        RefMut::map(profiles, move |v| &mut v[row])
+        match src.get_debug_address().parse() {
+            Ok(v) => p.set_debug_addr(v),
+            Err(_) => return Err(ProfileError::InvalidDebugAddress),
+        }
+
+        Ok(RefMut::map(profiles, move |v| &mut v[row]))
     }
 
     pub fn into_inner(self) -> Vec<Profile> {
@@ -111,4 +118,11 @@ impl Model for ProfileModel {
     fn as_any(&self) -> &dyn Any {
         self
     }
+}
+
+/// Represents an error when [`ProfileModel::update()`] fails.
+#[derive(Debug, Error)]
+pub enum ProfileError {
+    #[error("invalid debug address")]
+    InvalidDebugAddress,
 }

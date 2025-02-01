@@ -8,8 +8,8 @@ use self::log::LogWriter;
 use self::profile::{DisplayResolution, Profile};
 use self::setup::{run_setup, SetupError};
 use self::ui::{
-    DesktopExt, MainWindow, ProfileModel, ResolutionModel, RuntimeExt, SlintBackend,
-    WaitForDebugger,
+    error, spawn_handler, DesktopExt, MainWindow, ProfileModel, ResolutionModel, RuntimeExt,
+    SlintBackend, WaitForDebugger,
 };
 use self::vmm::{CpuError, Vmm, VmmError, VmmEvent};
 use async_net::{TcpListener, TcpStream};
@@ -18,7 +18,9 @@ use erdp::ErrorDisplay;
 use futures::{
     select_biased, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, FutureExt, TryStreamExt,
 };
-use slint::{ComponentHandle, ModelRc, SharedString, ToSharedString, VecModel};
+use slint::{
+    CloseRequestResponse, ComponentHandle, ModelRc, SharedString, ToSharedString, VecModel,
+};
 use std::cell::Cell;
 use std::net::SocketAddrV4;
 use std::path::PathBuf;
@@ -320,15 +322,7 @@ async fn run_launcher(
         let win = win.as_weak();
         let profiles = profiles.clone();
 
-        move || {
-            let win = win.unwrap();
-            let row = win.get_selected_profile();
-            let pro = profiles.update(row, &win);
-            let loc = data.profiles().data(pro.id());
-
-            // TODO: Display error instead of panic.
-            pro.save(loc).unwrap();
-        }
+        move || spawn_handler(&win, |w| save_profile(w, data.clone(), profiles.clone()))
     });
 
     win.on_report_issue(|| {
@@ -353,6 +347,29 @@ async fn run_launcher(
         move || todo!()
     });
 
+    win.window().on_close_requested({
+        let win = win.as_weak();
+        let profiles = profiles.clone();
+
+        move || {
+            let win = win.unwrap();
+            let profile = win.get_selected_profile();
+
+            if let Err(e) = profiles.update(profile, &win) {
+                let m = slint::format!("Failed to update profile: {}.", e.display());
+
+                wae::spawn_blocker(
+                    win.clone_strong(),
+                    async move { error(Some(&win), m).await },
+                );
+
+                return CloseRequestResponse::KeepWindowShown;
+            }
+
+            CloseRequestResponse::HideWindow
+        }
+    });
+
     // Set window properties.
     let physical_devices = ModelRc::new(VecModel::from_iter(
         graphics
@@ -375,10 +392,8 @@ async fn run_launcher(
     win.set_center().map_err(ProgramError::CenterMainWindow)?;
     win.wait().await;
 
-    // Update selected profile.
+    // Extract window states.
     let profile = win.get_selected_profile();
-
-    profiles.update(profile, &win);
 
     drop(win);
 
@@ -468,6 +483,27 @@ async fn dispatch_vmm(ev: VmmEvent, logs: &mut LogWriter) -> Result<bool, Progra
     }
 
     Ok(true)
+}
+
+async fn save_profile(win: MainWindow, data: Arc<DataMgr>, profiles: Rc<ProfileModel>) {
+    // Update profile.
+    let row = win.get_selected_profile();
+    let pro = match profiles.update(row, &win) {
+        Ok(v) => v,
+        Err(e) => {
+            let m = slint::format!("Failed to update profile: {}.", e.display());
+            error(Some(&win), m).await;
+            return;
+        }
+    };
+
+    // Save.
+    let loc = data.profiles().data(pro.id());
+
+    if let Err(e) = pro.save(loc) {
+        let m = slint::format!("Failed to save profile: {}.", e.display());
+        error(Some(&win), m).await;
+    }
 }
 
 /// Program arguments parsed from command line.
