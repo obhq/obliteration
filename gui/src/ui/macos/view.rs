@@ -1,15 +1,20 @@
-use objc::runtime::Object;
-use objc::{msg_send, sel, sel_impl};
+use objc2::msg_send;
+use objc2::runtime::NSObject;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
-pub fn with_window<T>(win: impl HasWindowHandle, f: impl FnOnce(*mut Object) -> T) -> T {
-    // Get NSView.
-    let win = win.window_handle().unwrap();
-    let win = match win.as_ref() {
-        RawWindowHandle::AppKit(v) => v.ns_view.as_ptr().cast::<Object>(),
-        _ => unreachable!(),
-    };
+/// The returned `NSWindow` will be valid while `win` still alive.
+pub fn get_window(win: impl HasWindowHandle) -> *mut NSObject {
+    let win = get_view(win);
 
-    // Get NSWindow.
-    f(unsafe { msg_send![win, window] })
+    unsafe { msg_send![win, window] }
+}
+
+/// The returned `NSView` will be valid while `win` still alive.
+pub fn get_view(win: impl HasWindowHandle) -> *mut NSObject {
+    let win = win.window_handle().unwrap();
+
+    match win.as_ref() {
+        RawWindowHandle::AppKit(v) => v.ns_view.as_ptr().cast(),
+        _ => unreachable!(),
+    }
 }

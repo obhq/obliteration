@@ -1,12 +1,12 @@
+use super::view::get_window;
 use crate::ui::{DesktopWindow, FileType};
-use block::ConcreteBlock;
-use core_foundation::array::CFArrayGetValueAtIndex;
-use core_foundation::base::TCFType;
-use core_foundation::url::CFURL;
+use block2::RcBlock;
 use futures::StreamExt;
-use objc::runtime::{Object, NO, YES};
-use objc::{class, msg_send, sel, sel_impl};
-use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+use objc2::ffi::{NO, YES};
+use objc2::rc::{autoreleasepool, Retained};
+use objc2::runtime::NSObject;
+use objc2::{class, msg_send, msg_send_id};
+use objc2_foundation::{NSArray, NSString, NSURL};
 use std::ffi::c_long;
 use std::ops::Deref;
 use std::path::PathBuf;
@@ -23,38 +23,33 @@ pub async fn open_file<T: DesktopWindow>(
 }
 
 pub async fn open_dir<T: DesktopWindow>(parent: &T, title: impl AsRef<str>) -> Option<PathBuf> {
-    // Get NSView of the parent window.
-    let parent = parent.handle();
-    let parent = parent.window_handle().unwrap();
-    let parent = match parent.as_ref() {
-        RawWindowHandle::AppKit(v) => v.ns_view.as_ptr() as *mut Object,
-        _ => unreachable!(),
-    };
-
     // Create NSOpenPanel.
-    let panel: *mut Object = unsafe { msg_send![class!(NSOpenPanel), openPanel] };
+    let title = NSString::from_str(title.as_ref());
+    let panel: *mut NSObject = unsafe { msg_send![class!(NSOpenPanel), openPanel] };
 
     let _: () = unsafe { msg_send![panel, setCanChooseFiles:NO] };
     let _: () = unsafe { msg_send![panel, setCanChooseDirectories:YES] };
+    let _: () = unsafe { msg_send![panel, setMessage:title.deref()] };
 
     // Setup handler.
     let (tx, mut rx) = futures::channel::mpsc::unbounded();
-    let cb = ConcreteBlock::new(move |result: c_long| unsafe {
+    let cb = RcBlock::new(move |result: c_long| unsafe {
         if result != NSModalResponseOK {
             tx.unbounded_send(None).unwrap();
             return;
         }
 
         // Get selected URL.
-        let url = CFArrayGetValueAtIndex(msg_send![panel, URLs], 0);
-        let url: CFURL = CFURL::wrap_under_get_rule(url.cast());
+        let urls: Retained<NSArray<NSURL>> = msg_send_id![panel, URLs];
+        let url = &urls[0];
+        let path = url.path().unwrap();
+        let path = autoreleasepool(move |p| path.as_str(p).to_owned());
 
-        tx.unbounded_send(Some(url.to_path().unwrap())).unwrap();
+        tx.unbounded_send(Some(path.into())).unwrap();
     });
 
     // Show NSOpenPanel. It seems like beginSheetModalForWindow will take an onwership of the panel.
-    let parent: *mut Object = unsafe { msg_send![parent, window] };
-    let cb = cb.copy();
+    let parent = get_window(parent.handle());
 
     let _: () =
         unsafe { msg_send![panel, beginSheetModalForWindow:parent completionHandler:cb.deref()] };
