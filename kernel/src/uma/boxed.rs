@@ -10,3 +10,6 @@ impl<T: ?Sized> Deref for UmaBox<T> {
         unsafe { &*self.0 }
     }
 }
+
+unsafe impl<T: Send + ?Sized> Send for UmaBox<T> {}
+unsafe impl<T: Sync + ?Sized> Sync for UmaBox<T> {}
