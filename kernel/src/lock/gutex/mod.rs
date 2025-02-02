@@ -112,7 +112,6 @@ impl GutexGroup {
         }
     }
 
-    #[inline(never)]
     fn lock(&self) -> GroupGuard {
         // Acquire the lock.
         let td = current_thread();
@@ -133,12 +132,17 @@ impl GutexGroup {
                 break;
             }
 
-            todo!()
+            self.wait();
         }
 
         // SAFETY: This is safe because the current thread acquire the lock successfully by the
         // above compare_exchange().
         unsafe { GroupGuard::new(self) }
+    }
+
+    #[inline(never)]
+    fn wait(&self) {
+        todo!()
     }
 }
 
@@ -164,12 +168,17 @@ impl<'a> GroupGuard<'a> {
             phantom: PhantomData,
         }
     }
+
+    #[inline(never)]
+    fn release(&mut self) {
+        self.group.owning.store(MTX_UNOWNED, Ordering::Release);
+
+        todo!("wakeup waiting thread");
+    }
 }
 
 impl Drop for GroupGuard<'_> {
-    #[inline(never)]
     fn drop(&mut self) {
-        // Decrease the active lock.
         unsafe {
             let active = self.group.active.get();
 
@@ -180,9 +189,6 @@ impl Drop for GroupGuard<'_> {
             }
         }
 
-        // Release the lock.
-        self.group.owning.store(MTX_UNOWNED, Ordering::Release);
-
-        todo!("wakeup waiting thread");
+        self.release();
     }
 }
