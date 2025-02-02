@@ -109,6 +109,14 @@ pub fn transform(opts: Options, item: ItemEnum) -> syn::Result<TokenStream> {
                 Self(self.0 & rhs.0)
             }
         }
+
+        impl ::core::ops::Not for #impl_ident {
+            type Output = Self;
+
+            fn not(self) -> Self::Output {
+                Self(!self.0)
+            }
+        }
     })
 }
 

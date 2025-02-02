@@ -1,11 +1,12 @@
-use super::bucket::UmaBucket;
+use super::bucket::{BucketItem, UmaBucket};
 use super::keg::UmaKeg;
-use super::{Uma, UmaFlags};
+use super::{Alloc, Uma, UmaBox, UmaFlags};
 use crate::context::{current_thread, CpuLocal};
 use crate::lock::{Gutex, GutexGroup, GutexWrite};
 use alloc::collections::VecDeque;
 use alloc::string::String;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::cmp::min;
 use core::num::NonZero;
@@ -16,15 +17,17 @@ use core::sync::atomic::{AtomicBool, Ordering};
 /// Implementation of `uma_zone` structure.
 pub struct UmaZone {
     bucket_enable: Arc<AtomicBool>,
+    bucket_keys: Arc<Vec<usize>>,
+    bucket_zones: Arc<Vec<UmaZone>>,
     ty: ZoneType,
-    size: NonZero<usize>,                     // uz_size
-    caches: CpuLocal<RefCell<UmaCache>>,      // uz_cpu
-    full_buckets: Gutex<VecDeque<UmaBucket>>, // uz_full_bucket
-    free_buckets: Gutex<VecDeque<UmaBucket>>, // uz_free_bucket
-    alloc_count: Gutex<u64>,                  // uz_allocs
-    free_count: Gutex<u64>,                   // uz_frees
-    count: Gutex<usize>,                      // uz_count
-    flags: UmaFlags,                          // uz_flags
+    size: NonZero<usize>,                                           // uz_size
+    caches: CpuLocal<RefCell<UmaCache>>,                            // uz_cpu
+    full_buckets: Gutex<VecDeque<UmaBox<UmaBucket<[BucketItem]>>>>, // uz_full_bucket
+    free_buckets: Gutex<VecDeque<UmaBox<UmaBucket<[BucketItem]>>>>, // uz_free_bucket
+    alloc_count: Gutex<u64>,                                        // uz_allocs
+    free_count: Gutex<u64>,                                         // uz_frees
+    count: Gutex<usize>,                                            // uz_count
+    flags: UmaFlags,                                                // uz_flags
 }
 
 impl UmaZone {
@@ -36,8 +39,11 @@ impl UmaZone {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13D490|
+    #[allow(clippy::too_many_arguments)] // TODO: Find a better way.
     pub(super) fn new(
         bucket_enable: Arc<AtomicBool>,
+        bucket_keys: Arc<Vec<usize>>,
+        bucket_zones: Arc<Vec<UmaZone>>,
         name: impl Into<String>,
         keg: Option<UmaKeg>,
         size: NonZero<usize>,
@@ -100,6 +106,8 @@ impl UmaZone {
 
         Self {
             bucket_enable,
+            bucket_keys,
+            bucket_zones,
             ty,
             size: keg.size(),
             caches: CpuLocal::new(|_| RefCell::default()),
@@ -122,13 +130,14 @@ impl UmaZone {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13E750|
-    pub fn alloc(&self) -> *mut u8 {
-        // Our implementation imply M_WAITOK and M_ZERO. Beware that we can't call into global
-        // allocator here otherwise it will cause a recursive call, which will end up panic.
-        let td = current_thread();
+    pub fn alloc(&self, flags: Alloc) -> *mut u8 {
+        if flags.has(Alloc::Wait) {
+            // TODO: The Orbis also modify td_pflags on a certain condition.
+            let td = current_thread();
 
-        if !td.can_sleep() {
-            panic!("heap allocation in a non-sleeping context is not supported");
+            if !td.can_sleep() {
+                panic!("attempt to do waitable heap allocation in a non-sleeping context");
+            }
         }
 
         loop {
@@ -184,6 +193,10 @@ impl UmaZone {
                     | ZoneType::Mbuf
                     | ZoneType::MbufCluster
             ) {
+                if flags.has(Alloc::Wait) {
+                    todo!()
+                }
+
                 todo!()
             }
 
@@ -200,8 +213,8 @@ impl UmaZone {
                 *count += 1;
             }
 
-            if self.alloc_bucket(frees) {
-                return self.alloc_item();
+            if self.alloc_bucket(frees, count, flags) {
+                return self.alloc_item(flags);
             }
         }
     }
@@ -229,16 +242,30 @@ impl UmaZone {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13EBA0|
-    fn alloc_bucket(&self, frees: GutexWrite<VecDeque<UmaBucket>>) -> bool {
+    fn alloc_bucket(
+        &self,
+        frees: GutexWrite<VecDeque<UmaBox<UmaBucket<[BucketItem]>>>>,
+        count: GutexWrite<usize>,
+        flags: Alloc,
+    ) -> bool {
         match frees.front() {
             Some(_) => todo!(),
             None => {
                 if self.bucket_enable.load(Ordering::Relaxed) {
+                    // Get allocation flags.
+                    let mut flags = flags & !Alloc::Zero;
+
                     if self.flags.has(UmaFlags::CacheOnly) {
-                        todo!()
-                    } else {
-                        todo!()
+                        flags |= Alloc::NoVm;
                     }
+
+                    // Alloc a bucket.
+                    let i = (*count + 15) >> Uma::BUCKET_SHIFT;
+                    let k = self.bucket_keys[i];
+
+                    self.bucket_zones[k].alloc_item(flags);
+
+                    todo!()
                 }
             }
         }
@@ -252,7 +279,7 @@ impl UmaZone {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13DD50|
-    fn alloc_item(&self) -> *mut u8 {
+    fn alloc_item(&self, _: Alloc) -> *mut u8 {
         todo!()
     }
 }
@@ -276,8 +303,8 @@ enum ZoneType {
 /// Implementation of `uma_cache` structure.
 #[derive(Default)]
 struct UmaCache {
-    alloc: Option<UmaBucket>, // uc_allocbucket
-    free: Option<UmaBucket>,  // uc_freebucket
-    allocs: u64,              // uc_allocs
-    frees: u64,               // uc_frees
+    alloc: Option<UmaBox<UmaBucket<[BucketItem]>>>, // uc_allocbucket
+    free: Option<UmaBox<UmaBucket<[BucketItem]>>>,  // uc_freebucket
+    allocs: u64,                                    // uc_allocs
+    frees: u64,                                     // uc_frees
 }
