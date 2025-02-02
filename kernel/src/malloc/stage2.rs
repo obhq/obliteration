@@ -1,6 +1,6 @@
 use crate::config::PAGE_SIZE;
 use crate::context::{current_thread, current_uma, CpuLocal};
-use crate::uma::{UmaFlags, UmaZone};
+use crate::uma::{Alloc, UmaFlags, UmaZone};
 use alloc::string::ToString;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -106,7 +106,7 @@ impl VmHeap {
 
             // Allocate a memory from UMA zone.
             let zone = &self.zones[align][size >> Self::KMEM_ZSHIFT];
-            let mem = zone.alloc();
+            let mem = zone.alloc(Alloc::Wait | Alloc::Zero);
 
             // Update stats.
             let stats = self.stats.lock();
