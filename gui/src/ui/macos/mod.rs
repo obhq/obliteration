@@ -1,10 +1,10 @@
 pub use self::dialogs::*;
 
 use self::modal::Modal;
-use self::view::with_window;
+use self::view::get_window;
 use super::{DesktopExt, DesktopWindow};
-use block::ConcreteBlock;
-use objc::{msg_send, sel, sel_impl};
+use block2::RcBlock;
+use objc2::msg_send;
 use std::ffi::c_long;
 use std::ops::Deref;
 use thiserror::Error;
@@ -20,8 +20,8 @@ impl<T: DesktopWindow> DesktopExt for T {
         P: DesktopWindow + 'a;
 
     fn set_center(&self) -> Result<(), PlatformError> {
-        with_window::<()>(self.handle(), |win| unsafe { msg_send![win, center] });
-
+        let win = get_window(self.handle());
+        let _: () = unsafe { msg_send![win, center] };
         Ok(())
     }
 
@@ -31,14 +31,12 @@ impl<T: DesktopWindow> DesktopExt for T {
         Self: Sized,
     {
         // Setup completionHandler.
-        let cb = ConcreteBlock::new(move |_: c_long| {}).copy();
+        let cb = RcBlock::new(move |_: c_long| {});
 
         // Show the sheet.
-        let win = self.handle();
-        let win = with_window(win, |w| w);
-        let _: () = with_window(parent.handle(), |w| unsafe {
-            msg_send![w, beginSheet:win completionHandler:cb.deref()]
-        });
+        let w = get_window(self.handle());
+        let p = get_window(parent.handle());
+        let _: () = unsafe { msg_send![p, beginSheet:w completionHandler:cb.deref()] };
 
         Ok(Modal::new(self, parent))
     }

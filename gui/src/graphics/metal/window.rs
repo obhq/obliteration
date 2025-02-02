@@ -1,11 +1,13 @@
 use super::Metal;
 use crate::ui::DesktopWindow;
-use metal::{CAMetalLayer, MetalLayer};
-use objc::runtime::{Object, NO, YES};
-use objc::{msg_send, sel, sel_impl};
+use metal::foreign_types::ForeignType;
+use metal::MetalLayer;
+use objc2::ffi::YES;
+use objc2::msg_send;
+use objc2::runtime::NSObject;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::error::Error;
-use std::ptr::null_mut;
+use std::ffi::c_void;
 use std::rc::Rc;
 use std::sync::Arc;
 use wae::{Hook, WindowHandler, WinitWindow};
@@ -15,8 +17,9 @@ use winit::event_loop::ControlFlow;
 use winit::window::{Window, WindowId};
 
 /// Implementation of [`WindowHandler`] and [`Hook`] for Metal.
+///
+/// Fields in this struct must be dropped in a correct order.
 pub struct MetalWindow {
-    view: *mut Object,
     layer: MetalLayer,
     window: Window,
     engine: Arc<Metal>,
@@ -28,28 +31,19 @@ impl MetalWindow {
         window: Window,
     ) -> Result<Rc<Self>, Box<dyn Error + Send + Sync>> {
         let layer = unsafe { engine.create_layer() };
-        let view = match window.window_handle().unwrap().as_raw() {
-            RawWindowHandle::AppKit(v) => v.ns_view.as_ptr() as *mut Object,
+        let view = match window.window_handle().unwrap().as_ref() {
+            RawWindowHandle::AppKit(v) => v.ns_view.as_ptr() as *mut NSObject,
             _ => unreachable!(),
         };
 
-        let _: () = unsafe { msg_send![view, setLayer:layer.as_ref()] };
+        let _: () = unsafe { msg_send![view, setLayer:layer.as_ptr() as *mut c_void] };
         let _: () = unsafe { msg_send![view, setWantsLayer:YES] };
 
         Ok(Rc::new(Self {
-            view,
             layer,
             window,
             engine: engine.clone(),
         }))
-    }
-}
-
-impl Drop for MetalWindow {
-    fn drop(&mut self) {
-        let l: *mut CAMetalLayer = null_mut();
-        let _: () = unsafe { msg_send![self.view, setWantsLayer:NO] };
-        let _: () = unsafe { msg_send![self.view, setLayer:l] };
     }
 }
 
