@@ -39,6 +39,7 @@ impl UmaZone {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13D490|
+    #[allow(clippy::too_many_arguments)] // TODO: Find a better way.
     pub(super) fn new(
         bucket_enable: Arc<AtomicBool>,
         bucket_keys: Arc<Vec<usize>>,
