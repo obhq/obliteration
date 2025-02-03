@@ -3,6 +3,7 @@ use super::keg::UmaKeg;
 use super::{Alloc, Uma, UmaBox, UmaFlags};
 use crate::context::{current_thread, CpuLocal};
 use crate::lock::{Gutex, GutexGroup, GutexWrite};
+use alloc::collections::linked_list::LinkedList;
 use alloc::collections::VecDeque;
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -21,6 +22,8 @@ pub struct UmaZone {
     bucket_zones: Arc<Vec<UmaZone>>,
     ty: ZoneType,
     size: NonZero<usize>,                                           // uz_size
+    kegs: LinkedList<UmaKeg>,                                       // uz_kegs + uz_klink
+    slab: fn(&Self, Option<&UmaKeg>, Alloc) -> Option<()>,          // uz_slab
     caches: CpuLocal<RefCell<UmaCache>>,                            // uz_cpu
     full_buckets: Gutex<VecDeque<UmaBox<UmaBucket<[BucketItem]>>>>, // uz_full_bucket
     free_buckets: Gutex<VecDeque<UmaBox<UmaBucket<[BucketItem]>>>>, // uz_free_bucket
@@ -51,7 +54,7 @@ impl UmaZone {
         flags: UmaFlags,
     ) -> Self {
         let name = name.into();
-        let (keg, flags) = if flags.has(UmaFlags::Secondary) {
+        let (keg, mut flags) = if flags.has(UmaFlags::Secondary) {
             todo!()
         } else {
             // We use a different approach here to make it idiomatic to Rust. On Orbis it will
@@ -103,6 +106,16 @@ impl UmaZone {
 
         // Construct uma_zone.
         let gg = GutexGroup::new();
+        let inherit = UmaFlags::Offpage
+            | UmaFlags::Malloc
+            | UmaFlags::Hash
+            | UmaFlags::RefCnt
+            | UmaFlags::VToSlab
+            | UmaFlags::Bucket
+            | UmaFlags::Internal
+            | UmaFlags::CacheOnly;
+
+        flags |= keg.flags() & inherit;
 
         Self {
             bucket_enable,
@@ -110,13 +123,15 @@ impl UmaZone {
             bucket_zones,
             ty,
             size: keg.size(),
+            kegs: LinkedList::from([keg]),
+            slab: Self::fetch_slab,
             caches: CpuLocal::new(|_| RefCell::default()),
             full_buckets: gg.clone().spawn_default(),
             free_buckets: gg.clone().spawn_default(),
             alloc_count: gg.clone().spawn_default(),
             free_count: gg.clone().spawn_default(),
             count: gg.spawn(count),
-            flags: flags | (keg.flags() & UmaFlags::from(0xa2002518)), // TODO: Use named flags.
+            flags,
         }
     }
 
@@ -279,8 +294,39 @@ impl UmaZone {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13DD50|
-    fn alloc_item(&self, _: Alloc) -> *mut u8 {
+    fn alloc_item(&self, flags: Alloc) -> *mut u8 {
+        // Get a slab.
+        let slab = (self.slab)(self, None, flags);
+
+        if slab.is_some() {
+            todo!()
+        }
+
         todo!()
+    }
+
+    /// See `zone_fetch_slab` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x141DB0|
+    fn fetch_slab(&self, keg: Option<&UmaKeg>, flags: Alloc) -> Option<()> {
+        let keg = keg.unwrap_or(self.kegs.front().unwrap());
+
+        if !keg.flags().has(UmaFlags::Bucket) || keg.recurse() == 0 {
+            loop {
+                if let Some(v) = keg.fetch_slab(self, flags) {
+                    return Some(v);
+                }
+
+                if flags.has(Alloc::NoWait | Alloc::NoVm) {
+                    break;
+                }
+            }
+        }
+
+        None
     }
 }
 

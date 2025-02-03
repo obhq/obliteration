@@ -1,8 +1,6 @@
-use super::slab::RcFree;
-use super::UmaFlags;
+use super::slab::{Free, RcFree, Slab};
+use super::{Alloc, Uma, UmaFlags, UmaZone};
 use crate::config::{PAGE_MASK, PAGE_SHIFT, PAGE_SIZE};
-use crate::uma::slab::{Free, SlabHdr};
-use crate::uma::Uma;
 use core::alloc::Layout;
 use core::cmp::{max, min};
 use core::num::NonZero;
@@ -11,6 +9,7 @@ use core::num::NonZero;
 pub struct UmaKeg {
     size: NonZero<usize>, // uk_size
     ipers: usize,         // uk_ipers
+    recurse: u32,         // uk_recurse
     flags: UmaFlags,      // uk_flags
 }
 
@@ -38,7 +37,7 @@ impl UmaKeg {
         }
 
         // Get header layout.
-        let hdr = Layout::new::<SlabHdr>();
+        let hdr = Layout::new::<Slab<()>>();
         let (mut hdr, off) = if flags.has(UmaFlags::RefCnt) {
             hdr.extend(Layout::new::<RcFree>()).unwrap()
         } else {
@@ -154,18 +153,37 @@ impl UmaKeg {
 
         // TODO: Add uk_zones.
         // TODO: Add uma_kegs.
-        Self { size, ipers, flags }
+        Self {
+            size,
+            ipers,
+            recurse: 0,
+            flags,
+        }
     }
 
     pub fn size(&self) -> NonZero<usize> {
         self.size
     }
 
+    pub fn item_per_slab(&self) -> usize {
+        self.ipers
+    }
+
+    pub fn recurse(&self) -> u32 {
+        self.recurse
+    }
+
     pub fn flags(&self) -> UmaFlags {
         self.flags
     }
 
-    pub fn item_per_slab(&self) -> usize {
-        self.ipers
+    /// See `keg_fetch_slab` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x141E20|
+    pub fn fetch_slab(&self, _: &UmaZone, _: Alloc) -> Option<()> {
+        todo!()
     }
 }

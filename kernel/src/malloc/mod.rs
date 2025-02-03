@@ -1,4 +1,4 @@
-use self::stage2::VmHeap;
+use self::vm::VmHeap;
 use crate::context::current_thread;
 use crate::lock::Mutex;
 use alloc::boxed::Box;
@@ -8,7 +8,7 @@ use core::hint::unreachable_unchecked;
 use core::ptr::{null_mut, NonNull};
 use talc::{ClaimOnOom, Span, Talc};
 
-mod stage2;
+mod vm;
 
 /// Implementation of [`GlobalAlloc`] for objects belong to kernel space.
 ///
@@ -42,19 +42,19 @@ impl KernelHeap {
     /// This must be called by main CPU and can be called only once.
     pub unsafe fn activate_stage2(&self) {
         // Setup VM  heap using primitive heap.
-        let stage2 = Box::new(VmHeap::new());
+        let vm = Box::new(VmHeap::new());
 
         // What we are doing here is highly unsafe. Do not edit the code after this unless you know
         // what you are doing!
         let stage = self.stage.get();
-        let stage1 = match stage.read() {
+        let primitive = match stage.read() {
             Stage::One(v) => Mutex::new(v.into_inner()),
             Stage::Two(_, _) => unreachable_unchecked(),
         };
 
         // Switch to stage 2 WITHOUT dropping the value contained in Stage::One. What we did here is
         // moving the value from Stage::One to Stage::Two.
-        stage.write(Stage::Two(stage2, stage1));
+        stage.write(Stage::Two(vm, primitive));
     }
 }
 
