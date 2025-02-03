@@ -146,6 +146,8 @@ pub enum UmaFlags {
 /// Implementation of `malloc` flags.
 #[bitflag(u32)]
 pub enum Alloc {
+    /// `M_NOWAIT`.
+    NoWait = 0x1,
     /// `M_WAITOK`.
     Wait = 0x2,
     /// `M_ZERO`.
