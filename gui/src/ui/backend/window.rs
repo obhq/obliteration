@@ -4,7 +4,9 @@ use i_slint_renderer_skia::SkiaRenderer;
 use raw_window_handle::{
     DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, WindowHandle,
 };
-use slint::platform::{PointerEventButton, Renderer, WindowAdapter, WindowEvent, WindowProperties};
+use slint::platform::{
+    Key, PointerEventButton, Renderer, WindowAdapter, WindowEvent, WindowProperties,
+};
 use slint::{LogicalPosition, LogicalSize, PhysicalSize, PlatformError, SharedString};
 use std::any::Any;
 use std::cell::Cell;
@@ -103,10 +105,66 @@ impl WindowHandler for Window {
         event: winit::event::KeyEvent,
         _: bool,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        use winit::keyboard::{KeyCode, PhysicalKey};
+
         // Get text.
-        let text = match event.text {
-            Some(v) => v.as_str().into(),
-            None => return Ok(()),
+        let text = match event.physical_key {
+            PhysicalKey::Code(KeyCode::Backspace) => Key::Backspace.into(),
+            PhysicalKey::Code(KeyCode::Tab) => Key::Tab.into(),
+            PhysicalKey::Code(KeyCode::Enter) => Key::Return.into(),
+            PhysicalKey::Code(KeyCode::Escape) => Key::Escape.into(),
+            PhysicalKey::Code(KeyCode::Delete) => Key::Delete.into(),
+            PhysicalKey::Code(KeyCode::ShiftLeft) => Key::Shift.into(),
+            PhysicalKey::Code(KeyCode::ShiftRight) => Key::ShiftR.into(),
+            PhysicalKey::Code(KeyCode::ControlLeft) => Key::Control.into(),
+            PhysicalKey::Code(KeyCode::ControlRight) => Key::ControlR.into(),
+            PhysicalKey::Code(KeyCode::AltLeft) => Key::Alt.into(),
+            PhysicalKey::Code(KeyCode::AltRight) => Key::AltGr.into(),
+            PhysicalKey::Code(KeyCode::CapsLock) => Key::CapsLock.into(),
+            PhysicalKey::Code(KeyCode::SuperLeft) => Key::Meta.into(),
+            PhysicalKey::Code(KeyCode::SuperRight) => Key::MetaR.into(),
+            PhysicalKey::Code(KeyCode::Space) => Key::Space.into(),
+            PhysicalKey::Code(KeyCode::ArrowUp) => Key::UpArrow.into(),
+            PhysicalKey::Code(KeyCode::ArrowDown) => Key::DownArrow.into(),
+            PhysicalKey::Code(KeyCode::ArrowLeft) => Key::LeftArrow.into(),
+            PhysicalKey::Code(KeyCode::ArrowRight) => Key::RightArrow.into(),
+            PhysicalKey::Code(KeyCode::F1) => Key::F1.into(),
+            PhysicalKey::Code(KeyCode::F2) => Key::F2.into(),
+            PhysicalKey::Code(KeyCode::F3) => Key::F3.into(),
+            PhysicalKey::Code(KeyCode::F4) => Key::F4.into(),
+            PhysicalKey::Code(KeyCode::F5) => Key::F5.into(),
+            PhysicalKey::Code(KeyCode::F6) => Key::F6.into(),
+            PhysicalKey::Code(KeyCode::F7) => Key::F7.into(),
+            PhysicalKey::Code(KeyCode::F8) => Key::F8.into(),
+            PhysicalKey::Code(KeyCode::F9) => Key::F9.into(),
+            PhysicalKey::Code(KeyCode::F10) => Key::F10.into(),
+            PhysicalKey::Code(KeyCode::F11) => Key::F11.into(),
+            PhysicalKey::Code(KeyCode::F12) => Key::F12.into(),
+            PhysicalKey::Code(KeyCode::F13) => Key::F13.into(),
+            PhysicalKey::Code(KeyCode::F14) => Key::F14.into(),
+            PhysicalKey::Code(KeyCode::F15) => Key::F15.into(),
+            PhysicalKey::Code(KeyCode::F16) => Key::F16.into(),
+            PhysicalKey::Code(KeyCode::F17) => Key::F17.into(),
+            PhysicalKey::Code(KeyCode::F18) => Key::F18.into(),
+            PhysicalKey::Code(KeyCode::F19) => Key::F19.into(),
+            PhysicalKey::Code(KeyCode::F20) => Key::F20.into(),
+            PhysicalKey::Code(KeyCode::F21) => Key::F21.into(),
+            PhysicalKey::Code(KeyCode::F22) => Key::F22.into(),
+            PhysicalKey::Code(KeyCode::F23) => Key::F23.into(),
+            PhysicalKey::Code(KeyCode::F24) => Key::F24.into(),
+            PhysicalKey::Code(KeyCode::Insert) => Key::Insert.into(),
+            PhysicalKey::Code(KeyCode::Home) => Key::Home.into(),
+            PhysicalKey::Code(KeyCode::End) => Key::End.into(),
+            PhysicalKey::Code(KeyCode::PageUp) => Key::PageUp.into(),
+            PhysicalKey::Code(KeyCode::PageDown) => Key::PageDown.into(),
+            PhysicalKey::Code(KeyCode::ScrollLock) => Key::ScrollLock.into(),
+            PhysicalKey::Code(KeyCode::Pause) => Key::Pause.into(),
+            PhysicalKey::Code(KeyCode::PrintScreen) => Key::SysReq.into(),
+            PhysicalKey::Code(KeyCode::ContextMenu) => Key::Menu.into(),
+            _ => match event.text {
+                Some(v) => v.as_str().into(),
+                None => return Ok(()),
+            },
         };
 
         // Map to Slint event.
