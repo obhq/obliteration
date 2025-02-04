@@ -97,6 +97,35 @@ impl WindowHandler for Window {
         Ok(())
     }
 
+    fn on_keyboard_input(
+        &self,
+        _: DeviceId,
+        event: winit::event::KeyEvent,
+        _: bool,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        // Get text.
+        let text = match event.text {
+            Some(v) => v.as_str().into(),
+            None => return Ok(()),
+        };
+
+        // Map to Slint event.
+        let ev = match event.state {
+            ElementState::Pressed => {
+                if event.repeat {
+                    WindowEvent::KeyPressRepeated { text }
+                } else {
+                    WindowEvent::KeyPressed { text }
+                }
+            }
+            ElementState::Released => WindowEvent::KeyReleased { text },
+        };
+
+        self.slint.dispatch_event(ev);
+
+        Ok(())
+    }
+
     fn on_cursor_moved(
         &self,
         _: DeviceId,

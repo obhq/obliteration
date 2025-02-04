@@ -4352,9 +4352,9 @@ dependencies = [
 
 [[package]]
 name = "wae"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7914181a9037894935d7a3153a63adc868ed9a40f6d82fd59a0a66fe36f497c"
+checksum = "b333ba4075d7117ea4df4385524d02447ddfee52c1f17721b54d757458017863"
 dependencies = [
  "raw-window-handle 0.6.2",
  "rustc-hash 2.1.0",

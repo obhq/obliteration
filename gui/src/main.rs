@@ -18,10 +18,8 @@ use erdp::ErrorDisplay;
 use futures::{
     select_biased, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, FutureExt, TryStreamExt,
 };
-use slint::{
-    CloseRequestResponse, ComponentHandle, ModelRc, SharedString, ToSharedString, VecModel,
-};
-use std::cell::Cell;
+use slint::{ComponentHandle, ModelRc, SharedString, ToSharedString, VecModel};
+use std::cell::{Cell, RefMut};
 use std::net::SocketAddrV4;
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -325,19 +323,18 @@ async fn run_launcher(
         move || spawn_handler(&win, |w| save_profile(w, data.clone(), profiles.clone()))
     });
 
-    win.on_report_issue(|| {
-        // TODO: Display error instead of panic.
-        open::that_detached("https://github.com/obhq/obliteration/issues/new").unwrap();
+    win.on_report_issue({
+        let win = win.as_weak();
+
+        move || spawn_handler(&win, |w| report_issue(w))
     });
 
     win.on_start_vmm({
         let win = win.as_weak();
+        let profiles = profiles.clone();
         let exit = exit.clone();
 
-        move || {
-            win.unwrap().hide().unwrap();
-            exit.set(Some(ExitAction::Run));
-        }
+        move || spawn_handler(&win, |w| start_vmm(w, profiles.clone(), exit.clone()))
     });
 
     win.on_start_debug({
@@ -345,29 +342,6 @@ async fn run_launcher(
         let exit = exit.clone();
 
         move || todo!()
-    });
-
-    win.window().on_close_requested({
-        let win = win.as_weak();
-        let profiles = profiles.clone();
-
-        move || {
-            let win = win.unwrap();
-            let profile = win.get_selected_profile();
-
-            if let Err(e) = profiles.update(profile, &win) {
-                let m = slint::format!("Failed to update profile: {}.", e.display());
-
-                wae::spawn_blocker(
-                    win.clone_strong(),
-                    async move { error(Some(&win), m).await },
-                );
-
-                return CloseRequestResponse::KeepWindowShown;
-            }
-
-            CloseRequestResponse::HideWindow
-        }
     });
 
     // Set window properties.
@@ -487,14 +461,9 @@ async fn dispatch_vmm(ev: VmmEvent, logs: &mut LogWriter) -> Result<bool, Progra
 
 async fn save_profile(win: MainWindow, data: Arc<DataMgr>, profiles: Rc<ProfileModel>) {
     // Update profile.
-    let row = win.get_selected_profile();
-    let pro = match profiles.update(row, &win) {
-        Ok(v) => v,
-        Err(e) => {
-            let m = slint::format!("Failed to update profile: {}.", e.display());
-            error(Some(&win), m).await;
-            return;
-        }
+    let pro = match update_profile(&win, &profiles).await {
+        Some(v) => v,
+        None => return,
     };
 
     // Save.
@@ -504,6 +473,45 @@ async fn save_profile(win: MainWindow, data: Arc<DataMgr>, profiles: Rc<ProfileM
         let m = slint::format!("Failed to save profile: {}.", e.display());
         error(Some(&win), m).await;
     }
+}
+
+async fn report_issue(win: MainWindow) {
+    let url = "https://github.com/obhq/obliteration/issues/new";
+
+    if let Err(e) = open::that_detached(url) {
+        let m = slint::format!("Failed to open {}: {}.", url, e.display());
+        error(Some(&win), m).await;
+    }
+}
+
+async fn start_vmm(
+    win: MainWindow,
+    profiles: Rc<ProfileModel>,
+    exit: Rc<Cell<Option<ExitAction>>>,
+) {
+    if update_profile(&win, &profiles).await.is_none() {
+        return;
+    }
+
+    win.hide().unwrap();
+    exit.set(Some(ExitAction::Run));
+}
+
+async fn update_profile<'a>(
+    win: &MainWindow,
+    profiles: &'a ProfileModel,
+) -> Option<RefMut<'a, Profile>> {
+    let row = win.get_selected_profile();
+    let pro = match profiles.update(row, win) {
+        Ok(v) => v,
+        Err(e) => {
+            let m = slint::format!("Failed to update profile: {}.", e.display());
+            error(Some(win), m).await;
+            return None;
+        }
+    };
+
+    Some(pro)
 }
 
 /// Program arguments parsed from command line.
