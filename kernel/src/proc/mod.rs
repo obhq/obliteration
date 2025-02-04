@@ -14,6 +14,7 @@ use core::fmt::{Display, Formatter};
 use hashbrown::HashMap;
 
 mod abi;
+mod cell;
 mod pid;
 mod process;
 mod thread;

@@ -1,12 +1,10 @@
-use self::cell::{get, set, PrivateCell};
+use super::cell::{get, set, PrivateCell};
 use super::Proc;
 use crate::lock::{Gutex, GutexGroup, GutexWrite};
 use alloc::sync::Arc;
 use core::cell::Cell;
 use core::marker::PhantomData;
 use core::sync::atomic::{AtomicU8, Ordering};
-
-mod cell;
 
 /// Implementation of `thread` structure.
 ///
