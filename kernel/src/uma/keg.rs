@@ -195,6 +195,7 @@ impl UmaKeg {
                 return None;
             }
 
+            #[allow(clippy::while_immutable_condition)] // TODO: Remove this.
             while self.max_pages != 0 && self.max_pages <= self.pages {
                 todo!()
             }
