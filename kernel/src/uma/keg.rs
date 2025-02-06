@@ -9,6 +9,9 @@ use core::num::NonZero;
 pub struct UmaKeg {
     size: NonZero<usize>, // uk_size
     ipers: usize,         // uk_ipers
+    max_pages: u32,       // uk_maxpages
+    pages: u32,           // uk_pages
+    free: u32,            // uk_free
     recurse: u32,         // uk_recurse
     flags: UmaFlags,      // uk_flags
 }
@@ -156,6 +159,9 @@ impl UmaKeg {
         Self {
             size,
             ipers,
+            max_pages: 0,
+            pages: 0,
+            free: 0,
             recurse: 0,
             flags,
         }
@@ -183,7 +189,38 @@ impl UmaKeg {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x141E20|
-    pub fn fetch_slab(&self, _: &UmaZone, _: Alloc) -> Option<()> {
+    pub fn fetch_slab(&mut self, _: &UmaZone, flags: Alloc) -> Option<()> {
+        while self.free == 0 {
+            if flags.has(Alloc::NoVm) {
+                return None;
+            }
+
+            #[allow(clippy::while_immutable_condition)] // TODO: Remove this.
+            while self.max_pages != 0 && self.max_pages <= self.pages {
+                todo!()
+            }
+
+            self.recurse += 1;
+            self.alloc_slab();
+            self.recurse -= 1;
+
+            todo!()
+        }
+
         todo!()
+    }
+
+    /// See `keg_alloc_slab` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x13FBA0|
+    fn alloc_slab(&self) {
+        if self.flags.has(UmaFlags::Offpage) {
+            todo!()
+        } else {
+            todo!()
+        }
     }
 }

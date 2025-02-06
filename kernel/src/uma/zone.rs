@@ -22,8 +22,8 @@ pub struct UmaZone {
     bucket_zones: Arc<Vec<UmaZone>>,
     ty: ZoneType,
     size: NonZero<usize>,                                           // uz_size
-    kegs: LinkedList<UmaKeg>,                                       // uz_kegs + uz_klink
-    slab: fn(&Self, Option<&UmaKeg>, Alloc) -> Option<()>,          // uz_slab
+    kegs: Gutex<LinkedList<UmaKeg>>,                                // uz_kegs + uz_klink
+    slab: fn(&Self, Option<&mut UmaKeg>, Alloc) -> Option<()>,      // uz_slab
     caches: CpuLocal<RefCell<UmaCache>>,                            // uz_cpu
     full_buckets: Gutex<VecDeque<UmaBox<UmaBucket<[BucketItem]>>>>, // uz_full_bucket
     free_buckets: Gutex<VecDeque<UmaBox<UmaBucket<[BucketItem]>>>>, // uz_free_bucket
@@ -123,7 +123,7 @@ impl UmaZone {
             bucket_zones,
             ty,
             size: keg.size(),
-            kegs: LinkedList::from([keg]),
+            kegs: gg.clone().spawn(LinkedList::from([keg])),
             slab: Self::fetch_slab,
             caches: CpuLocal::new(|_| RefCell::default()),
             full_buckets: gg.clone().spawn_default(),
@@ -311,8 +311,9 @@ impl UmaZone {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x141DB0|
-    fn fetch_slab(&self, keg: Option<&UmaKeg>, flags: Alloc) -> Option<()> {
-        let keg = keg.unwrap_or(self.kegs.front().unwrap());
+    fn fetch_slab(&self, keg: Option<&mut UmaKeg>, flags: Alloc) -> Option<()> {
+        let mut kegs = self.kegs.write();
+        let keg = keg.unwrap_or(kegs.front_mut().unwrap());
 
         if !keg.flags().has(UmaFlags::Bucket) || keg.recurse() == 0 {
             loop {
