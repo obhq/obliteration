@@ -27,6 +27,7 @@ mod signal;
 mod subsystem;
 mod trap;
 mod uma;
+mod vm;
 
 extern crate alloc;
 
