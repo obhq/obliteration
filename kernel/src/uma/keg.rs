@@ -1,3 +1,4 @@
+use super::arch::small_alloc;
 use super::slab::{Free, RcFree, Slab};
 use super::{Alloc, Uma, UmaFlags, UmaZone};
 use crate::config::{PAGE_MASK, PAGE_SHIFT, PAGE_SIZE};
@@ -9,6 +10,7 @@ use core::num::NonZero;
 pub struct UmaKeg {
     size: NonZero<usize>, // uk_size
     ipers: usize,         // uk_ipers
+    alloc: fn(),          // uk_allocf
     max_pages: u32,       // uk_maxpages
     pages: u32,           // uk_pages
     free: u32,            // uk_free
@@ -132,9 +134,13 @@ impl UmaKeg {
             }
         }
 
-        if ppera == 1 {
-            // TODO: Set uk_allocf and uk_freef.
-        }
+        // Get allocator.
+        let alloc = if ppera == 1 {
+            // TODO: Get uk_freef.
+            small_alloc
+        } else {
+            Self::page_alloc
+        };
 
         if flags.has(UmaFlags::MtxClass) {
             todo!()
@@ -159,6 +165,7 @@ impl UmaKeg {
         Self {
             size,
             ipers,
+            alloc,
             max_pages: 0,
             pages: 0,
             free: 0,
@@ -220,7 +227,18 @@ impl UmaKeg {
         if self.flags.has(UmaFlags::Offpage) {
             todo!()
         } else {
+            (self.alloc)();
             todo!()
         }
+    }
+
+    /// See `page_alloc` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x1402F0|
+    fn page_alloc() {
+        todo!()
     }
 }
