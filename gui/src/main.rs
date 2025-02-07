@@ -20,7 +20,7 @@ use futures::{
 };
 use slint::{ComponentHandle, ModelRc, SharedString, ToSharedString, VecModel};
 use std::cell::{Cell, RefMut};
-use std::net::SocketAddrV4;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::rc::Rc;
@@ -223,7 +223,11 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
 
         match exit {
             ExitAction::Run => (profile, None),
-            ExitAction::RunDebug(v) => (profile, Some(v)),
+            ExitAction::Debug => {
+                let addr = profile.debug_addr().clone();
+
+                (profile, Some(addr))
+            }
         }
     };
 
@@ -333,15 +337,18 @@ async fn run_launcher(
         let win = win.as_weak();
         let profiles = profiles.clone();
         let exit = exit.clone();
+        let ty = ExitAction::Run;
 
-        move || spawn_handler(&win, |w| start_vmm(w, profiles.clone(), exit.clone()))
+        move || spawn_handler(&win, |w| start_vmm(w, profiles.clone(), exit.clone(), ty))
     });
 
     win.on_start_debug({
         let win = win.as_weak();
+        let profiles = profiles.clone();
         let exit = exit.clone();
+        let ty = ExitAction::Debug;
 
-        move || todo!()
+        move || spawn_handler(&win, |w| start_vmm(w, profiles.clone(), exit.clone(), ty))
     });
 
     // Set window properties.
@@ -384,7 +391,7 @@ async fn run_launcher(
     Ok(Some((profile, exit)))
 }
 
-async fn wait_for_debugger(addr: SocketAddrV4) -> Result<Option<TcpStream>, ProgramError> {
+async fn wait_for_debugger(addr: SocketAddr) -> Result<Option<TcpStream>, ProgramError> {
     // Start server.
     let server = TcpListener::bind(addr)
         .await
@@ -488,13 +495,14 @@ async fn start_vmm(
     win: MainWindow,
     profiles: Rc<ProfileModel>,
     exit: Rc<Cell<Option<ExitAction>>>,
+    ty: ExitAction,
 ) {
     if update_profile(&win, &profiles).await.is_none() {
         return;
     }
 
     win.hide().unwrap();
-    exit.set(Some(ExitAction::Run));
+    exit.set(Some(ty));
 }
 
 async fn update_profile<'a>(
@@ -523,7 +531,7 @@ struct ProgramArgs {
 
     /// Immediate launch the VMM in debug mode.
     #[arg(long)]
-    debug: Option<SocketAddrV4>,
+    debug: Option<SocketAddr>,
 
     /// Use the kernel image at the specified path instead of the default one.
     #[arg(long)]
@@ -531,9 +539,10 @@ struct ProgramArgs {
 }
 
 /// Action to be performed after the main window is closed.
+#[derive(Clone, Copy)]
 enum ExitAction {
     Run,
-    RunDebug(SocketAddrV4),
+    Debug,
 }
 
 /// Mode of our program.
@@ -569,7 +578,7 @@ enum ProgramError {
     SaveDefaultProfile(#[source] self::profile::SaveError),
 
     #[error("couldn't start debug server on {0}")]
-    StartDebugServer(SocketAddrV4, #[source] std::io::Error),
+    StartDebugServer(SocketAddr, #[source] std::io::Error),
 
     #[error("couldn't get debug server address")]
     GetDebugAddr(#[source] std::io::Error),
