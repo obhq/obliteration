@@ -135,8 +135,13 @@ async fn get_dumper(win: SetupWizard) {
 async fn browse_data_root(win: SetupWizard) {
     // Ask the user to browse for a directory.
     let path = match open_dir(&win, "Data location").await {
-        Some(v) => v,
-        None => return,
+        Ok(Some(v)) => v,
+        Ok(None) => return,
+        Err(e) => {
+            let m = slint::format!("Failed to browse for data location: {}.", e.display());
+            error(Some(&win), m).await;
+            return;
+        }
     };
 
     // Allow only valid unicode path.
@@ -196,8 +201,13 @@ async fn set_data_root(win: SetupWizard) {
 async fn browse_firmware(win: SetupWizard) {
     // Ask the user to browse for a file.
     let path = match open_file(&win, "Select a firmware dump", FileType::Firmware).await {
-        Some(v) => v,
-        None => return,
+        Ok(Some(v)) => v,
+        Ok(None) => return,
+        Err(e) => {
+            let m = slint::format!("Failed to browse for a firmware dump: {}.", e.display());
+            error(Some(&win), m).await;
+            return;
+        }
     };
 
     // Allow only valid unicode path.

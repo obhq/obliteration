@@ -1,6 +1,6 @@
 #[cfg(target_os = "linux")]
 pub(super) use self::wayland::*;
-pub(super) use self::window::Window;
+pub(super) use self::window::*;
 
 use i_slint_core::graphics::RequestedGraphicsAPI;
 use i_slint_renderer_skia::SkiaRenderer;
@@ -25,7 +25,7 @@ use winit::window::WindowId;
 mod wayland;
 mod window;
 
-/// Back-end for Slint to run on top of winit event loop.
+/// Back-end for Slint to run on top of [`wae`].
 ///
 /// The following are caveats of this back-end:
 ///
@@ -35,7 +35,7 @@ mod window;
 pub struct SlintBackend {
     #[cfg(target_os = "linux")]
     wayland: Option<Wayland>,
-    windows: RefCell<FxHashMap<WindowId, Weak<Window>>>,
+    windows: RefCell<FxHashMap<WindowId, Weak<SlintWindow>>>,
 }
 
 impl SlintBackend {
@@ -159,8 +159,8 @@ impl slint::platform::Platform for Platform {
         })));
 
         // Just panic if people try to create the window when the event loop already exited.
-        let win = Rc::<Window>::new_cyclic(move |weak| {
-            Window::new(win, slint::Window::new(weak.clone()), renderer)
+        let win = Rc::<SlintWindow>::new_cyclic(move |weak| {
+            SlintWindow::new(win, slint::Window::new(weak.clone()), renderer)
         });
 
         assert!(self
@@ -184,10 +184,6 @@ pub enum BackendError {
     #[cfg(target_os = "linux")]
     #[error("couldn't get global objects from Wayland compositor")]
     RetrieveWaylandGlobals(#[source] wayland_client::globals::GlobalError),
-
-    #[cfg(target_os = "linux")]
-    #[error("couldn't bind xdg_wm_base")]
-    BindXdgWmBase(#[source] wayland_client::globals::BindError),
 
     #[cfg(target_os = "linux")]
     #[error("couldn't bind xdg_wm_dialog_v1")]

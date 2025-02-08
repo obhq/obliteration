@@ -20,7 +20,7 @@ use wayland_protocols::xdg::shell::client::xdg_wm_base::XdgWmBase;
 pub struct Wayland {
     queue: RefCell<EventQueue<WaylandState>>,
     state: RefCell<WaylandState>,
-    conn: Connection,
+    connection: Connection,
 }
 
 impl Wayland {
@@ -29,27 +29,18 @@ impl Wayland {
     pub unsafe fn new(display: WaylandDisplayHandle) -> Result<Self, BackendError> {
         // Get wayland connection.
         let backend = Backend::from_foreign_display(display.display.as_ptr().cast());
-        let conn = Connection::from_backend(backend);
+        let connection = Connection::from_backend(backend);
 
         // Get global objects.
-        let (globals, mut queue) = registry_queue_init::<WaylandState>(&conn)
+        let (globals, mut queue) = registry_queue_init::<WaylandState>(&connection)
             .map_err(BackendError::RetrieveWaylandGlobals)?;
         let qh = queue.handle();
-
-        // Get xdg_wm_base.
-        let v = XdgWmBase::interface().version;
-        let xdg_base: XdgWmBase = globals
-            .bind(&qh, v..=v, ())
-            .map_err(BackendError::BindXdgWmBase)?;
 
         // Get xdg_wm_dialog_v1.
         let v = XdgWmDialogV1::interface().version;
         let xdg_dialog: XdgWmDialogV1 = match globals.bind(&qh, v..=v, ()) {
             Ok(v) => v,
-            Err(e) => {
-                xdg_base.destroy();
-                return Err(BackendError::BindXdgWmDialogV1(e));
-            }
+            Err(e) => return Err(BackendError::BindXdgWmDialogV1(e)),
         };
 
         // Get zxdg_exporter_v2.
@@ -58,7 +49,6 @@ impl Wayland {
             Ok(v) => v,
             Err(e) => {
                 xdg_dialog.destroy();
-                xdg_base.destroy();
                 return Err(BackendError::BindZxdgExporterV2(e));
             }
         };
@@ -67,7 +57,6 @@ impl Wayland {
         let mut state = WaylandState {
             xdg_exporter,
             xdg_dialog,
-            xdg_base,
         };
 
         queue
@@ -77,7 +66,7 @@ impl Wayland {
         Ok(Self {
             queue: RefCell::new(queue),
             state: RefCell::new(state),
-            conn,
+            connection,
         })
     }
 
@@ -90,7 +79,7 @@ impl Wayland {
     }
 
     pub fn connection(&self) -> &Connection {
-        &self.conn
+        &self.connection
     }
 
     pub fn run(&self) -> impl Future<Output = ()> + '_ {
@@ -102,7 +91,6 @@ impl Wayland {
 pub struct WaylandState {
     xdg_exporter: ZxdgExporterV2,
     xdg_dialog: XdgWmDialogV1,
-    xdg_base: XdgWmBase,
 }
 
 impl WaylandState {
@@ -119,7 +107,6 @@ impl Drop for WaylandState {
     fn drop(&mut self) {
         self.xdg_exporter.destroy();
         self.xdg_dialog.destroy();
-        self.xdg_base.destroy();
     }
 }
 

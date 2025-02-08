@@ -1,3 +1,4 @@
+use super::PlatformError;
 use crate::ui::{DesktopWindow, FileType, SlintBackend};
 use ashpd::desktop::file_chooser::{FileFilter, SelectedFiles};
 use ashpd::desktop::ResponseError;
@@ -14,7 +15,7 @@ pub async fn open_file<T: DesktopWindow>(
     parent: &T,
     title: impl AsRef<str>,
     ty: FileType,
-) -> Option<PathBuf> {
+) -> Result<Option<PathBuf>, PlatformError> {
     // Build filter.
     let filter = match ty {
         FileType::Firmware => FileFilter::new("Firmware Dump").glob("*.obf"),
@@ -37,15 +38,18 @@ pub async fn open_file<T: DesktopWindow>(
     // Get response.
     let resp = match req.unwrap().response() {
         Ok(v) => v,
-        Err(ashpd::Error::Response(ResponseError::Cancelled)) => return None,
+        Err(ashpd::Error::Response(ResponseError::Cancelled)) => return Ok(None),
         Err(_) => unimplemented!(),
     };
 
     // Get file path.
-    Some(resp.uris().first().unwrap().to_file_path().unwrap())
+    Ok(Some(resp.uris().first().unwrap().to_file_path().unwrap()))
 }
 
-pub async fn open_dir<T: DesktopWindow>(parent: &T, title: impl AsRef<str>) -> Option<PathBuf> {
+pub async fn open_dir<T: DesktopWindow>(
+    parent: &T,
+    title: impl AsRef<str>,
+) -> Result<Option<PathBuf>, PlatformError> {
     // Send the request
     let parent = get_parent_id(parent);
     let req = SelectedFiles::open_file()
@@ -63,12 +67,12 @@ pub async fn open_dir<T: DesktopWindow>(parent: &T, title: impl AsRef<str>) -> O
     // Get response.
     let resp = match req.unwrap().response() {
         Ok(v) => v,
-        Err(ashpd::Error::Response(ResponseError::Cancelled)) => return None,
+        Err(ashpd::Error::Response(ResponseError::Cancelled)) => return Ok(None),
         Err(_) => unimplemented!(),
     };
 
     // Get directory path.
-    Some(resp.uris().first().unwrap().to_file_path().unwrap())
+    Ok(Some(resp.uris().first().unwrap().to_file_path().unwrap()))
 }
 
 fn get_parent_id<P>(parent: &P) -> Parent

@@ -16,8 +16,8 @@ use wae::{Signal, WindowHandler, WinitWindow};
 use winit::event::{DeviceId, ElementState, InnerSizeWriter, MouseButton};
 use winit::window::WindowId;
 
-/// Implementation of [`WindowAdapter`].
-pub struct Window {
+/// Implementation of [`slint::platform::WindowAdapter`].
+pub struct SlintWindow {
     winit: Rc<winit::window::Window>,
     slint: slint::Window,
     renderer: SkiaRenderer,
@@ -30,7 +30,7 @@ pub struct Window {
     preferred_size: Cell<Option<winit::dpi::PhysicalSize<u32>>>,
 }
 
-impl Window {
+impl SlintWindow {
     pub fn new(
         winit: Rc<winit::window::Window>,
         slint: slint::Window,
@@ -68,13 +68,13 @@ impl Window {
     }
 }
 
-impl WinitWindow for Window {
+impl WinitWindow for SlintWindow {
     fn id(&self) -> WindowId {
         self.winit.id()
     }
 }
 
-impl WindowHandler for Window {
+impl WindowHandler for SlintWindow {
     fn on_resized(
         &self,
         new: winit::dpi::PhysicalSize<u32>,
@@ -260,7 +260,7 @@ impl WindowHandler for Window {
     }
 }
 
-impl WindowAdapter for Window {
+impl WindowAdapter for SlintWindow {
     fn window(&self) -> &slint::Window {
         &self.slint
     }
@@ -366,7 +366,7 @@ impl WindowAdapter for Window {
     }
 }
 
-impl WindowAdapterInternal for Window {
+impl WindowAdapterInternal for SlintWindow {
     fn as_any(&self) -> &dyn Any {
         self
     }

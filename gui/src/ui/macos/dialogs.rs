@@ -1,4 +1,5 @@
 use super::view::get_window;
+use super::PlatformError;
 use crate::ui::{DesktopWindow, FileType};
 use block2::RcBlock;
 use futures::StreamExt;
@@ -18,11 +19,14 @@ pub async fn open_file<T: DesktopWindow>(
     parent: &T,
     title: impl AsRef<str>,
     ty: FileType,
-) -> Option<PathBuf> {
+) -> Result<Option<PathBuf>, PlatformError> {
     todo!();
 }
 
-pub async fn open_dir<T: DesktopWindow>(parent: &T, title: impl AsRef<str>) -> Option<PathBuf> {
+pub async fn open_dir<T: DesktopWindow>(
+    parent: &T,
+    title: impl AsRef<str>,
+) -> Result<Option<PathBuf>, PlatformError> {
     // Create NSOpenPanel.
     let title = NSString::from_str(title.as_ref());
     let panel: *mut NSObject = unsafe { msg_send![class!(NSOpenPanel), openPanel] };
@@ -55,5 +59,5 @@ pub async fn open_dir<T: DesktopWindow>(parent: &T, title: impl AsRef<str>) -> O
         unsafe { msg_send![panel, beginSheetModalForWindow:parent completionHandler:cb.deref()] };
 
     // The beginSheetModalForWindow will return immediately so we need a channel here.
-    rx.next().await.flatten()
+    Ok(rx.next().await.flatten())
 }
