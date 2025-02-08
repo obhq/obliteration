@@ -1,3 +1,4 @@
+use super::PlatformError;
 use crate::ui::{DesktopWindow, FileType};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::ffi::OsString;
@@ -24,7 +25,7 @@ pub async fn open_file<T: DesktopWindow>(
     parent: &T,
     title: impl AsRef<str>,
     ty: FileType,
-) -> Option<PathBuf> {
+) -> Result<Option<PathBuf>, PlatformError> {
     let parent = get_hwnd(parent);
     let title: Vec<u16> = title
         .as_ref()
@@ -32,7 +33,7 @@ pub async fn open_file<T: DesktopWindow>(
         .chain(std::iter::once(0))
         .collect();
     let browse = move || unsafe {
-        // Setup CLSID_FileOpenDialog.
+        // Setup FileOpenDialog.
         let browser: IFileOpenDialog = CoCreateInstance(&FileOpenDialog, None, CLSCTX_ALL).unwrap();
         let mut opts = browser.GetOptions().unwrap();
         let filter = match ty {
@@ -48,10 +49,10 @@ pub async fn open_file<T: DesktopWindow>(
         browser.SetOptions(opts).unwrap();
         browser.SetTitle(PCWSTR(title.as_ptr())).unwrap();
 
-        // Show CLSID_FileOpenDialog.
+        // Show FileOpenDialog.
         let item = match browser.Show(HWND(parent.get() as _)) {
             Ok(_) => browser.GetResult().unwrap(),
-            Err(_) => return None,
+            Err(_) => return Ok(None),
         };
 
         // Get file path.
@@ -60,13 +61,16 @@ pub async fn open_file<T: DesktopWindow>(
 
         CoTaskMemFree(buf.0 as _);
 
-        Some(PathBuf::from(path))
+        Ok(Some(PathBuf::from(path)))
     };
 
     spawn_modal(browse).await
 }
 
-pub async fn open_dir<T: DesktopWindow>(parent: &T, title: impl AsRef<str>) -> Option<PathBuf> {
+pub async fn open_dir<T: DesktopWindow>(
+    parent: &T,
+    title: impl AsRef<str>,
+) -> Result<Option<PathBuf>, PlatformError> {
     let parent = get_hwnd(parent);
     let title: Vec<u16> = title
         .as_ref()
@@ -74,30 +78,35 @@ pub async fn open_dir<T: DesktopWindow>(parent: &T, title: impl AsRef<str>) -> O
         .chain(std::iter::once(0))
         .collect();
     let browse = move || unsafe {
+        // TODO: Use IFileDialog instead.
         let mut bi: BROWSEINFOW = std::mem::zeroed();
 
         bi.hwndOwner = parent.get() as _;
         bi.lpszTitle = title.as_ptr();
         bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
 
+        // Show the browser.
         let pidl = SHBrowseForFolderW(&mut bi);
-        if !pidl.is_null() {
-            let mut buffer = [0u16; 260];
-            if SHGetPathFromIDListW(pidl, buffer.as_mut_ptr()) != 0 {
-                let len = buffer.iter().position(|&c| c == 0).unwrap_or(buffer.len());
-                let path_str = String::from_utf16_lossy(&buffer[..len]);
-                let dir_path = PathBuf::from(path_str);
 
-                CoTaskMemFree(pidl as _);
-
-                Some(dir_path)
-            } else {
-                CoTaskMemFree(pidl as _);
-                None
-            }
-        } else {
-            None
+        if pidl.is_null() {
+            return Ok(None);
         }
+
+        // Get directory path.
+        let mut buf = [0u16; 260];
+        let r = SHGetPathFromIDListW(pidl, buf.as_mut_ptr());
+
+        CoTaskMemFree(pidl as _);
+
+        if r == 0 {
+            return Ok(None);
+        }
+
+        // Construct PathBuf.
+        let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+        let path = OsString::from_wide(&buf[..len]);
+
+        Ok(Some(PathBuf::from(path)))
     };
 
     spawn_modal(browse).await

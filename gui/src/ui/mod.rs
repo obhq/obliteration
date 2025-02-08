@@ -62,7 +62,7 @@ impl<T: ComponentHandle + WinitWindow> DesktopWindow for T {
         use winit::platform::wayland::WindowExtWayland;
 
         let win = WindowInner::from_pub(self.window()).window_adapter();
-        let win = Window::from_adapter(win.as_ref());
+        let win = SlintWindow::from_adapter(win.as_ref());
 
         win.winit().xdg_toplevel()
     }
@@ -100,7 +100,7 @@ pub trait RuntimeExt: ComponentHandle {
 impl<T: ComponentHandle> RuntimeExt for T {
     async fn wait(&self) {
         let win = WindowInner::from_pub(self.window()).window_adapter();
-        let win = Window::from_adapter(win.as_ref());
+        let win = SlintWindow::from_adapter(win.as_ref());
 
         win.hidden().wait().await;
     }
@@ -119,7 +119,7 @@ macro_rules! impl_wae {
         impl WinitWindow for $ty {
             fn id(&self) -> WindowId {
                 let win = WindowInner::from_pub(self.window()).window_adapter();
-                let win = Window::from_adapter(win.as_ref());
+                let win = SlintWindow::from_adapter(win.as_ref());
 
                 win.id()
             }
