@@ -1,3 +1,5 @@
-pub fn small_alloc() {
+use crate::vm::Vm;
+
+pub fn small_alloc(vm: &Vm) {
     todo!()
 }

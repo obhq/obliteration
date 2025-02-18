@@ -7,6 +7,7 @@ use self::malloc::KernelHeap;
 use self::proc::{Fork, Proc, ProcAbi, ProcMgr, Thread};
 use self::sched::sleep;
 use self::uma::Uma;
+use self::vm::Vm;
 use alloc::sync::Arc;
 use core::mem::zeroed;
 use krt::info;
@@ -85,7 +86,9 @@ fn run() -> ! {
 /// |---------|--------|
 /// |PS4 11.00|0x39A390|
 fn init_vm() -> Arc<Uma> {
-    Uma::new()
+    let vm = Vm::new();
+
+    Uma::new(vm)
 }
 
 /// See `create_init` function on the PS4 for a reference.

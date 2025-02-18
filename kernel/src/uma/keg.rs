@@ -2,15 +2,18 @@ use super::arch::small_alloc;
 use super::slab::{Free, RcFree, Slab};
 use super::{Alloc, Uma, UmaFlags, UmaZone};
 use crate::config::{PAGE_MASK, PAGE_SHIFT, PAGE_SIZE};
+use crate::vm::Vm;
+use alloc::sync::Arc;
 use core::alloc::Layout;
 use core::cmp::{max, min};
 use core::num::NonZero;
 
 /// Implementation of `uma_keg` structure.
 pub struct UmaKeg {
+    vm: Arc<Vm>,
     size: NonZero<usize>, // uk_size
     ipers: usize,         // uk_ipers
-    alloc: fn(),          // uk_allocf
+    alloc: fn(&Vm),       // uk_allocf
     max_pages: u32,       // uk_maxpages
     pages: u32,           // uk_pages
     free: u32,            // uk_free
@@ -28,7 +31,12 @@ impl UmaKeg {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13CF40|
-    pub(super) fn new(size: NonZero<usize>, align: usize, mut flags: UmaFlags) -> Self {
+    pub(super) fn new(
+        vm: Arc<Vm>,
+        size: NonZero<usize>,
+        align: usize,
+        mut flags: UmaFlags,
+    ) -> Self {
         if flags.has(UmaFlags::Vm) {
             todo!()
         }
@@ -163,6 +171,7 @@ impl UmaKeg {
         // TODO: Add uk_zones.
         // TODO: Add uma_kegs.
         Self {
+            vm,
             size,
             ipers,
             alloc,
@@ -227,7 +236,7 @@ impl UmaKeg {
         if self.flags.has(UmaFlags::Offpage) {
             todo!()
         } else {
-            (self.alloc)();
+            (self.alloc)(&self.vm);
             todo!()
         }
     }
@@ -238,7 +247,7 @@ impl UmaKeg {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x1402F0|
-    fn page_alloc() {
+    fn page_alloc(_: &Vm) {
         todo!()
     }
 }

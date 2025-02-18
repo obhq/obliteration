@@ -3,6 +3,7 @@ use super::keg::UmaKeg;
 use super::{Alloc, Uma, UmaBox, UmaFlags};
 use crate::context::{current_thread, CpuLocal};
 use crate::lock::{Gutex, GutexGroup, GutexWrite};
+use crate::vm::Vm;
 use alloc::collections::linked_list::LinkedList;
 use alloc::collections::VecDeque;
 use alloc::string::String;
@@ -44,6 +45,7 @@ impl UmaZone {
     /// |PS4 11.00|0x13D490|
     #[allow(clippy::too_many_arguments)] // TODO: Find a better way.
     pub(super) fn new(
+        vm: Arc<Vm>,
         bucket_enable: Arc<AtomicBool>,
         bucket_keys: Arc<Vec<usize>>,
         bucket_zones: Arc<Vec<UmaZone>>,
@@ -62,7 +64,7 @@ impl UmaZone {
             // keg from masterzone_k.
             let keg = match keg {
                 Some(v) => v,
-                None => UmaKeg::new(size, align.unwrap_or(Self::ALIGN_CACHE), flags),
+                None => UmaKeg::new(vm, size, align.unwrap_or(Self::ALIGN_CACHE), flags),
             };
 
             (keg, UmaFlags::zeroed())
