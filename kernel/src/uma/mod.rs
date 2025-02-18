@@ -3,6 +3,7 @@ pub use self::zone::*;
 
 use self::bucket::{BucketItem, UmaBucket};
 use crate::config::PAGE_SIZE;
+use crate::vm::Vm;
 use alloc::format;
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -23,6 +24,7 @@ mod zone;
 
 /// Implementation of UMA system.
 pub struct Uma {
+    vm: Arc<Vm>,
     bucket_enable: Arc<AtomicBool>,
     bucket_keys: Arc<Vec<usize>>,    // bucket_size
     bucket_zones: Arc<Vec<UmaZone>>, // bucket_zones
@@ -46,7 +48,7 @@ impl Uma {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13CA70|
-    pub fn new() -> Arc<Self> {
+    pub fn new(vm: Arc<Vm>) -> Arc<Self> {
         let bucket_enable = Arc::new(AtomicBool::new(true)); // TODO: Use a proper value.
         let mut bucket_keys = Vec::new();
         let mut bucket_zones = Vec::with_capacity(Self::BUCKET_SIZES.len());
@@ -62,6 +64,7 @@ impl Uma {
                 .pad_to_align();
 
             bucket_zones.push(UmaZone::new(
+                vm.clone(),
                 bucket_enable.clone(),
                 Arc::default(),
                 Arc::default(),
@@ -79,6 +82,7 @@ impl Uma {
         }
 
         Arc::new(Self {
+            vm,
             bucket_enable,
             bucket_keys: Arc::new(bucket_keys),
             bucket_zones: Arc::new(bucket_zones),
@@ -101,6 +105,7 @@ impl Uma {
         // The Orbis will allocate a new zone from masterzone_z. We choose to remove this since it
         // does not idomatic to Rust, which mean our uma_zone itself can live on the stack.
         UmaZone::new(
+            self.vm.clone(),
             self.bucket_enable.clone(),
             self.bucket_keys.clone(),
             self.bucket_zones.clone(),
