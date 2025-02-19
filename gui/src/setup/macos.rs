@@ -1,17 +1,17 @@
 use core_foundation::base::TCFType;
-use core_foundation::propertylist::CFPropertyList;
+use core_foundation::propertylist::{CFPropertyList, CFPropertyListSubClass};
 use core_foundation::string::CFString;
 use core_foundation_sys::preferences::{
-    kCFPreferencesCurrentApplication, CFPreferencesCopyAppValue,
+    kCFPreferencesCurrentApplication, CFPreferencesAppSynchronize, CFPreferencesCopyAppValue,
+    CFPreferencesSetAppValue,
 };
 use thiserror::Error;
 
 pub fn read_data_root() -> Result<Option<String>, DataRootError> {
     // Read value.
-    let key = CFString::from_static_string("DataRoot");
-    let val = unsafe {
-        CFPreferencesCopyAppValue(key.as_concrete_TypeRef(), kCFPreferencesCurrentApplication)
-    };
+    let val = KEY.with(|k| unsafe {
+        CFPreferencesCopyAppValue(k.as_concrete_TypeRef(), kCFPreferencesCurrentApplication)
+    });
 
     if val.is_null() {
         return Ok(None);
@@ -21,12 +21,28 @@ pub fn read_data_root() -> Result<Option<String>, DataRootError> {
     let val = unsafe { CFPropertyList::wrap_under_create_rule(val) };
 
     val.downcast_into::<CFString>()
-        .ok_or_else(|| DataRootError::InvalidPreferenceValue(key.to_string()))
+        .ok_or_else(|| KEY.with(|k| DataRootError::InvalidPreferenceValue(k.to_string())))
         .map(|v| Some(v.to_string()))
 }
 
 pub fn write_data_root(path: impl AsRef<str>) -> Result<(), DataRootError> {
-    todo!()
+    // Write value.
+    let v = CFString::new(path.as_ref()).into_CFPropertyList();
+
+    KEY.with(|k| unsafe {
+        CFPreferencesSetAppValue(
+            k.as_concrete_TypeRef(),
+            v.as_concrete_TypeRef(),
+            kCFPreferencesCurrentApplication,
+        )
+    });
+
+    // Writes to permanent storage.
+    if unsafe { CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication) == 0 } {
+        return Err(DataRootError::SynchronizePreferences);
+    }
+
+    Ok(())
 }
 
 /// Represents an error when read or write data root fails.
@@ -34,4 +50,11 @@ pub fn write_data_root(path: impl AsRef<str>) -> Result<(), DataRootError> {
 pub enum DataRootError {
     #[error("invalid value for preference {0}")]
     InvalidPreferenceValue(String),
+
+    #[error("couldn't synchronize preferences")]
+    SynchronizePreferences,
+}
+
+thread_local! {
+    static KEY: CFString = CFString::from_static_string("DataRoot");
 }
