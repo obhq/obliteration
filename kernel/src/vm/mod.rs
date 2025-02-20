@@ -25,6 +25,7 @@ impl Vm {
                 free_count: gg.clone().spawn_default(),
             },
             VmStats {
+                #[allow(clippy::identity_op)]
                 free_reserved: pageout_page_count + 0, // TODO: Same here.
                 cache_count: gg.clone().spawn_default(),
                 free_count: gg.clone().spawn_default(),
