@@ -55,6 +55,32 @@ pub struct Gutex<T> {
 }
 
 impl<T> Gutex<T> {
+    /// Locks this [`Gutex`] with read-only access.
+    ///
+    /// Multiple read-only accesses can be taken out at the same time.
+    ///
+    /// # Panics
+    /// If there are an active write access to this [`Gutex`].
+    pub fn read(&self) -> GutexRead<T> {
+        // Check if there are an active writer.
+        let lock = self.group.lock();
+        let active = self.active.get();
+
+        // SAFETY: This is safe because we own the lock that protect both active and value.
+        unsafe {
+            if *active == usize::MAX {
+                panic!("attempt to acquire the read lock while there are an active write lock");
+            } else if *active == (usize::MAX - 1) {
+                // This should never happen because stack overflow should be triggering first.
+                panic!("maximum number of active readers has been reached");
+            }
+
+            *active += 1;
+
+            GutexRead::new(lock, active, self.value.get())
+        }
+    }
+
     /// # Panics
     /// If there are any active reader or writer.
     pub fn write(&self) -> GutexWrite<T> {
