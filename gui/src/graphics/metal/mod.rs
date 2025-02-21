@@ -4,8 +4,8 @@ use super::EngineBuilder;
 use crate::profile::Profile;
 use metal::Device;
 use std::ops::Deref;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use thiserror::Error;
 use winit::window::WindowAttributes;
 

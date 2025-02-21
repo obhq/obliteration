@@ -1,4 +1,4 @@
-use crate::context::{current_trap_rsp_offset, current_user_rsp_offset, ContextArgs};
+use crate::context::{ContextArgs, current_trap_rsp_offset, current_user_rsp_offset};
 use crate::trap::{interrupt_handler, syscall_handler};
 use bitfield_struct::bitfield;
 use core::arch::{asm, global_asm};

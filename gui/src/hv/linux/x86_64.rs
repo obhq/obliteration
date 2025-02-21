@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::ffi::{
-    KvmFpu, KvmRegs, KvmSregs, KVM_GET_FPU, KVM_GET_REGS, KVM_GET_SREGS, KVM_SET_REGS,
-    KVM_SET_SREGS,
+    KVM_GET_FPU, KVM_GET_REGS, KVM_GET_SREGS, KVM_SET_REGS, KVM_SET_SREGS, KvmFpu, KvmRegs,
+    KvmSregs,
 };
 use crate::hv::{CpuCommit, CpuStates};
 use libc::ioctl;

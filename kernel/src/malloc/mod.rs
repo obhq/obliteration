@@ -5,7 +5,7 @@ use alloc::boxed::Box;
 use core::alloc::{GlobalAlloc, Layout};
 use core::cell::{RefCell, UnsafeCell};
 use core::hint::unreachable_unchecked;
-use core::ptr::{null_mut, NonNull};
+use core::ptr::{NonNull, null_mut};
 use talc::{ClaimOnOom, Span, Talc};
 
 mod vm;

@@ -4,14 +4,14 @@ use self::window::VulkanWindow;
 use super::EngineBuilder;
 use crate::profile::Profile;
 use ash::extensions::khr::Surface;
-use ash::vk::{ApplicationInfo, InstanceCreateInfo, QueueFlags, API_VERSION_1_3};
+use ash::vk::{API_VERSION_1_3, ApplicationInfo, InstanceCreateInfo, QueueFlags};
 use ash::{Entry, Instance};
 use raw_window_handle::RawDisplayHandle;
 use std::ffi::CStr;
 use std::mem::ManuallyDrop;
 use std::rc::Rc;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use thiserror::Error;
 use winit::window::WindowAttributes;
 

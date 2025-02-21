@@ -1,5 +1,5 @@
-use i_slint_core::window::WindowAdapterInternal;
 use i_slint_core::InternalToken;
+use i_slint_core::window::WindowAdapterInternal;
 use i_slint_renderer_skia::SkiaRenderer;
 use raw_window_handle::{
     DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, WindowHandle,

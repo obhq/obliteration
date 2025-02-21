@@ -1,7 +1,7 @@
 use super::Metal;
 use crate::ui::DesktopWindow;
-use metal::foreign_types::ForeignType;
 use metal::MetalLayer;
+use metal::foreign_types::ForeignType;
 use objc2::ffi::YES;
 use objc2::msg_send;
 use objc2::runtime::NSObject;

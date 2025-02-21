@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::Vmm;
 use crate::hv::{Cpu, CpuExit, CpuIo};
-use crate::vmm::hw::{read_u8, DeviceContext, MmioError};
+use crate::vmm::hw::{DeviceContext, MmioError, read_u8};
 use config::{KernelExit, VmmMemory};
 use std::error::Error;
 use std::mem::offset_of;

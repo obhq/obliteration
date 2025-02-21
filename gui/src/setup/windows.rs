@@ -1,11 +1,11 @@
 use std::ptr::{null, null_mut};
 use thiserror::Error;
-use windows_sys::w;
 use windows_sys::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
 use windows_sys::Win32::System::Registry::{
-    RegCloseKey, RegCreateKeyExW, RegQueryValueExW, RegSetValueExW, HKEY, HKEY_CURRENT_USER,
-    KEY_ALL_ACCESS, REG_OPTION_NON_VOLATILE, REG_SZ,
+    HKEY, HKEY_CURRENT_USER, KEY_ALL_ACCESS, REG_OPTION_NON_VOLATILE, REG_SZ, RegCloseKey,
+    RegCreateKeyExW, RegQueryValueExW, RegSetValueExW,
 };
+use windows_sys::w;
 
 const FQVN: &str = "HKEY_CURRENT_USER\\Software\\OBHQ\\Obliteration\\DataRoot";
 

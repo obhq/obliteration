@@ -8,8 +8,8 @@ use std::mem::zeroed;
 use thiserror::Error;
 use windows_sys::Win32::Foundation::HWND;
 use windows_sys::Win32::UI::WindowsAndMessaging::{
-    GetSystemMetrics, GetWindowRect, SetWindowPos, HWND_TOP, SM_CXSCREEN, SM_CYSCREEN, SWP_NOSIZE,
-    SWP_NOZORDER,
+    GetSystemMetrics, GetWindowRect, HWND_TOP, SM_CXSCREEN, SM_CYSCREEN, SWP_NOSIZE, SWP_NOZORDER,
+    SetWindowPos,
 };
 
 mod dialogs;

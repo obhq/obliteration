@@ -30,7 +30,7 @@ impl<M: RamMapper> Ram<M> {
         // Reserve memory range.
         #[cfg(unix)]
         let mem = {
-            use libc::{mmap, MAP_ANON, MAP_FAILED, MAP_PRIVATE, PROT_NONE};
+            use libc::{MAP_ANON, MAP_FAILED, MAP_PRIVATE, PROT_NONE, mmap};
             use std::ptr::null_mut;
 
             let mem = mmap(
@@ -52,7 +52,7 @@ impl<M: RamMapper> Ram<M> {
         #[cfg(windows)]
         let mem = {
             use std::ptr::null;
-            use windows_sys::Win32::System::Memory::{VirtualAlloc, MEM_RESERVE, PAGE_NOACCESS};
+            use windows_sys::Win32::System::Memory::{MEM_RESERVE, PAGE_NOACCESS, VirtualAlloc};
 
             let mem = VirtualAlloc(null(), len.get(), MEM_RESERVE, PAGE_NOACCESS);
 
@@ -183,7 +183,7 @@ impl<M: RamMapper> Ram<M> {
 
     #[cfg(unix)]
     unsafe fn commit(addr: *const u8, len: usize) -> Result<*mut u8, Error> {
-        use libc::{mmap, MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, PROT_READ, PROT_WRITE};
+        use libc::{MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, PROT_READ, PROT_WRITE, mmap};
 
         let ptr = mmap(
             addr.cast_mut().cast(),
@@ -203,7 +203,7 @@ impl<M: RamMapper> Ram<M> {
 
     #[cfg(windows)]
     unsafe fn commit(addr: *const u8, len: usize) -> Result<*mut u8, Error> {
-        use windows_sys::Win32::System::Memory::{VirtualAlloc, MEM_COMMIT, PAGE_READWRITE};
+        use windows_sys::Win32::System::Memory::{MEM_COMMIT, PAGE_READWRITE, VirtualAlloc};
 
         let ptr = VirtualAlloc(addr.cast(), len, MEM_COMMIT, PAGE_READWRITE);
 
@@ -216,7 +216,7 @@ impl<M: RamMapper> Ram<M> {
 
     #[cfg(unix)]
     unsafe fn decommit(addr: *mut u8, len: usize) -> Result<(), Error> {
-        use libc::{mprotect, PROT_NONE};
+        use libc::{PROT_NONE, mprotect};
 
         if mprotect(addr.cast(), len, PROT_NONE) < 0 {
             Err(Error::last_os_error())
@@ -227,7 +227,7 @@ impl<M: RamMapper> Ram<M> {
 
     #[cfg(windows)]
     unsafe fn decommit(addr: *mut u8, len: usize) -> Result<(), Error> {
-        use windows_sys::Win32::System::Memory::{VirtualFree, MEM_DECOMMIT};
+        use windows_sys::Win32::System::Memory::{MEM_DECOMMIT, VirtualFree};
 
         if VirtualFree(addr.cast(), len, MEM_DECOMMIT) == 0 {
             Err(Error::last_os_error())
@@ -254,7 +254,7 @@ impl<M: RamMapper> Drop for Ram<M> {
 
     #[cfg(windows)]
     fn drop(&mut self) {
-        use windows_sys::Win32::System::Memory::{VirtualFree, MEM_RELEASE};
+        use windows_sys::Win32::System::Memory::{MEM_RELEASE, VirtualFree};
 
         // TODO: Unmap this portion from the VM if the OS does not do for us.
         if unsafe { VirtualFree(self.mem.cast(), 0, MEM_RELEASE) } == 0 {

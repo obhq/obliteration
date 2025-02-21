@@ -1,11 +1,11 @@
-use super::engine::Vulkan;
 use super::GraphicsError;
+use super::engine::Vulkan;
 use crate::ui::DesktopWindow;
 use ash::vk::SurfaceKHR;
 use raw_window_handle::HasWindowHandle;
 use std::error::Error;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use wae::{Hook, WindowHandler, WinitWindow};
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{DeviceId, ElementState, InnerSizeWriter, MouseButton, StartCause};

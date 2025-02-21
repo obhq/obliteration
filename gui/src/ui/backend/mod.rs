@@ -8,7 +8,7 @@ use i_slint_renderer_skia::SkiaRenderer;
 use raw_window_handle::RawDisplayHandle;
 use rustc_hash::FxHashMap;
 use slint::platform::{
-    duration_until_next_timer_update, update_timers_and_animations, SetPlatformError, WindowAdapter,
+    SetPlatformError, WindowAdapter, duration_until_next_timer_update, update_timers_and_animations,
 };
 use slint::{PhysicalSize, PlatformError};
 use std::cell::RefCell;
@@ -163,14 +163,15 @@ impl slint::platform::Platform for Platform {
             SlintWindow::new(win, slint::Window::new(weak.clone()), renderer)
         });
 
-        assert!(self
-            .0
-            .upgrade()
-            .unwrap()
-            .windows
-            .borrow_mut()
-            .insert(win.id(), Rc::downgrade(&win))
-            .is_none());
+        assert!(
+            self.0
+                .upgrade()
+                .unwrap()
+                .windows
+                .borrow_mut()
+                .insert(win.id(), Rc::downgrade(&win))
+                .is_none()
+        );
 
         wae::register_window(&win);
 

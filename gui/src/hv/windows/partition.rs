@@ -2,13 +2,13 @@
 use super::cpu::WhpCpu;
 use std::ffi::c_void;
 use std::mem::size_of;
-use windows_sys::core::HRESULT;
 use windows_sys::Win32::System::Hypervisor::{
-    WHvCreatePartition, WHvCreateVirtualProcessor, WHvDeletePartition, WHvMapGpaRange,
-    WHvMapGpaRangeFlagExecute, WHvMapGpaRangeFlagRead, WHvMapGpaRangeFlagWrite,
-    WHvPartitionPropertyCodeProcessorCount, WHvSetPartitionProperty, WHvSetupPartition,
-    WHV_PARTITION_HANDLE, WHV_PARTITION_PROPERTY, WHV_PARTITION_PROPERTY_CODE,
+    WHV_PARTITION_HANDLE, WHV_PARTITION_PROPERTY, WHV_PARTITION_PROPERTY_CODE, WHvCreatePartition,
+    WHvCreateVirtualProcessor, WHvDeletePartition, WHvMapGpaRange, WHvMapGpaRangeFlagExecute,
+    WHvMapGpaRangeFlagRead, WHvMapGpaRangeFlagWrite, WHvPartitionPropertyCodeProcessorCount,
+    WHvSetPartitionProperty, WHvSetupPartition,
 };
+use windows_sys::core::HRESULT;
 
 /// Encapsulate a WHP partition.
 pub struct Partition(WHV_PARTITION_HANDLE);
@@ -35,21 +35,13 @@ impl Partition {
             )
         };
 
-        if status < 0 {
-            Err(status)
-        } else {
-            Ok(())
-        }
+        if status < 0 { Err(status) } else { Ok(()) }
     }
 
     pub fn setup(&mut self) -> Result<(), HRESULT> {
         let status = unsafe { WHvSetupPartition(self.0) };
 
-        if status < 0 {
-            Err(status)
-        } else {
-            Ok(())
-        }
+        if status < 0 { Err(status) } else { Ok(()) }
     }
 
     pub fn map_gpa(&self, host: *const c_void, guest: u64, len: u64) -> Result<(), HRESULT> {
@@ -63,11 +55,7 @@ impl Partition {
             )
         };
 
-        if status < 0 {
-            Err(status)
-        } else {
-            Ok(())
-        }
+        if status < 0 { Err(status) } else { Ok(()) }
     }
 
     pub fn create_virtual_processor(&self, index: u32) -> Result<WhpCpu<'_>, HRESULT> {

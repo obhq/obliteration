@@ -1,5 +1,5 @@
 use crate::config::PAGE_SIZE;
-use crate::context::{current_thread, current_uma, CpuLocal};
+use crate::context::{CpuLocal, current_thread, current_uma};
 use crate::uma::{Alloc, UmaFlags, UmaZone};
 use alloc::string::ToString;
 use alloc::sync::Arc;

@@ -1,5 +1,5 @@
 use proc_macro::TokenStream;
-use syn::{parse_macro_input, Error, ItemEnum, ItemStatic, LitStr};
+use syn::{Error, ItemEnum, ItemStatic, LitStr, parse_macro_input};
 
 mod bitflag;
 mod elf;
