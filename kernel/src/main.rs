@@ -1,7 +1,7 @@
 #![no_std]
 #![cfg_attr(not(test), no_main)]
 
-use self::context::{current_procmgr, ContextSetup};
+use self::context::{ContextSetup, current_procmgr};
 use self::imgact::Ps4Abi;
 use self::malloc::KernelHeap;
 use self::proc::{Fork, Proc, ProcAbi, ProcMgr, Thread};
@@ -35,7 +35,7 @@ extern crate alloc;
 /// This will be called by [`krt`] crate.
 ///
 /// See Orbis kernel entry point for a reference.
-#[cfg_attr(target_os = "none", no_mangle)]
+#[cfg_attr(target_os = "none", unsafe(no_mangle))]
 fn main() -> ! {
     // SAFETY: This function has a lot of restrictions. See Context documentation for more details.
     info!("Starting Obliteration Kernel.");

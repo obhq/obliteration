@@ -1,7 +1,7 @@
 use proc_macro2::{Span, TokenStream};
-use quote::{quote, ToTokens};
+use quote::{ToTokens, quote};
 use syn::meta::ParseNestedMeta;
-use syn::{parse_quote, Error, ItemStatic, LitInt, LitStr, Meta, StaticMutability, Type};
+use syn::{Error, ItemStatic, LitInt, LitStr, Meta, StaticMutability, Type, parse_quote};
 
 const OPT_SECTION: &str = "section";
 const OPT_NAME: &str = "name";
@@ -101,7 +101,7 @@ pub fn transform_note(opts: Options, mut item: ItemStatic) -> syn::Result<TokenS
     // Compose.
     Ok(quote! {
         #[used]
-        #[cfg_attr(not(test), link_section = #section)]
+        #[cfg_attr(not(test), unsafe(link_section = #section))]
         #item
     })
 }
