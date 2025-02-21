@@ -6,7 +6,7 @@ jobs:
     name: Documentation
     runs-on: ubuntu-24.04
     steps:
-    - name: Checkout repository
+    - name: Check out repository
       uses: actions/checkout@v4
     - name: Install system packages
       run: |
@@ -16,6 +16,8 @@ jobs:
       run: pip config set global.break-system-packages true
     - name: Install Python packages
       run: pip install mdx_truly_sane_lists
+    - name: Update Rust
+      run: rustup update stable
     - name: Build MkDocs
       run: mkdocs build
     - name: Build Kernel APIs
