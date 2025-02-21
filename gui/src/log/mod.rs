@@ -2,7 +2,7 @@ use self::file::LogFile;
 use anstyle_parse::Parser;
 use config::ConsoleType;
 use std::fs::File;
-use std::io::{stderr, stdout, Write};
+use std::io::{Write, stderr, stdout};
 use std::path::{Path, PathBuf};
 
 mod file;

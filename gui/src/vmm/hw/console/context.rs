@@ -2,7 +2,7 @@
 use super::Console;
 use crate::hv::{Cpu, CpuExit, CpuIo, Hypervisor};
 use crate::vmm::channel::VmmStream;
-use crate::vmm::hw::{read_ptr, read_u8, read_usize, DeviceContext, MmioError};
+use crate::vmm::hw::{DeviceContext, MmioError, read_ptr, read_u8, read_usize};
 use config::{ConsoleMemory, ConsoleType};
 use std::error::Error;
 use std::mem::offset_of;

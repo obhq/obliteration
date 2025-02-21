@@ -1,5 +1,5 @@
-use super::cell::{get, set, PrivateCell};
 use super::Proc;
+use super::cell::{PrivateCell, get, set};
 use crate::lock::{Gutex, GutexGroup, GutexWrite};
 use alloc::sync::Arc;
 use core::cell::Cell;

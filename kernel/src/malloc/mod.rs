@@ -5,7 +5,7 @@ use alloc::boxed::Box;
 use core::alloc::{GlobalAlloc, Layout};
 use core::cell::{RefCell, UnsafeCell};
 use core::hint::unreachable_unchecked;
-use core::ptr::{null_mut, NonNull};
+use core::ptr::{NonNull, null_mut};
 use talc::{ClaimOnOom, Span, Talc};
 
 mod vm;
@@ -29,12 +29,16 @@ impl KernelHeap {
     /// to [`KernelHeap`].
     pub const unsafe fn new<const L: usize>(primitive: *mut [u8; L]) -> Self {
         let primitive_ptr = primitive.cast();
-        let primitive = Talc::new(ClaimOnOom::new(Span::from_array(primitive)));
+
+        // SAFETY: The safety requirement of our function satify the safety requirement of
+        // ClaimOnOom::new().
+        let primitive = unsafe { Talc::new(ClaimOnOom::new(Span::from_array(primitive))) };
 
         Self {
             stage: UnsafeCell::new(Stage::One(RefCell::new(primitive))),
             primitive_ptr,
-            primitive_end: primitive_ptr.add(L),
+            // SAFETY: L is a length of primitive_ptr so the resulting pointer is valid.
+            primitive_end: unsafe { primitive_ptr.add(L) },
         }
     }
 
@@ -47,14 +51,15 @@ impl KernelHeap {
         // What we are doing here is highly unsafe. Do not edit the code after this unless you know
         // what you are doing!
         let stage = self.stage.get();
-        let primitive = match stage.read() {
+        let primitive = match unsafe { stage.read() } {
             Stage::One(v) => Mutex::new(v.into_inner()),
-            Stage::Two(_, _) => unreachable_unchecked(),
+            // SAFETY: The safety requirement of our function make this unreachable.
+            Stage::Two(_, _) => unsafe { unreachable_unchecked() },
         };
 
         // Switch to stage 2 WITHOUT dropping the value contained in Stage::One. What we did here is
         // moving the value from Stage::One to Stage::Two.
-        stage.write(Stage::Two(vm, primitive));
+        unsafe { stage.write(Stage::Two(vm, primitive)) };
     }
 }
 
@@ -63,20 +68,25 @@ unsafe impl GlobalAlloc for KernelHeap {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         // If stage 2 has not activated yet then this function is not allowed to access the CPU
         // context due to it can be called before the context has been activated.
+
         // SAFETY: GlobalAlloc::alloc required layout to be non-zero.
-        match &*self.stage.get() {
-            Stage::One(primitive) => primitive
-                .borrow_mut()
-                .malloc(layout)
-                .map(|v| v.as_ptr())
-                .unwrap_or(null_mut()),
-            Stage::Two(vm, primitive) => match current_thread().active_heap_guard() {
-                0 => vm.alloc(layout),
-                _ => primitive
-                    .lock()
+        match unsafe { &*self.stage.get() } {
+            Stage::One(primitive) => unsafe {
+                primitive
+                    .borrow_mut()
                     .malloc(layout)
                     .map(|v| v.as_ptr())
-                    .unwrap_or(null_mut()),
+                    .unwrap_or(null_mut())
+            },
+            Stage::Two(vm, primitive) => match current_thread().active_heap_guard() {
+                0 => unsafe { vm.alloc(layout) },
+                _ => unsafe {
+                    primitive
+                        .lock()
+                        .malloc(layout)
+                        .map(|v| v.as_ptr())
+                        .unwrap_or(null_mut())
+                },
             },
         }
     }
@@ -85,19 +95,22 @@ unsafe impl GlobalAlloc for KernelHeap {
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
         // If stage 2 has not activated yet then this function is not allowed to access the CPU
         // context due to it can be called before the context has been activated.
-        match &*self.stage.get() {
-            Stage::One(primitive) => primitive
-                .borrow_mut()
-                .free(NonNull::new_unchecked(ptr), layout),
+
+        // SAFETY: GlobalAlloc::dealloc required ptr to be the same one that returned
+        // from our GlobalAlloc::alloc and layout to be the same one that passed to it.
+        match unsafe { &*self.stage.get() } {
+            Stage::One(primitive) => unsafe {
+                primitive
+                    .borrow_mut()
+                    .free(NonNull::new_unchecked(ptr), layout)
+            },
             Stage::Two(vm, primitive) => {
                 if ptr.cast_const() >= self.primitive_ptr && ptr.cast_const() < self.primitive_end {
-                    // SAFETY: GlobalAlloc::dealloc required ptr to be the same one that returned
-                    // from our GlobalAlloc::alloc and layout to be the same one that passed to it.
-                    primitive.lock().free(NonNull::new_unchecked(ptr), layout)
+                    unsafe { primitive.lock().free(NonNull::new_unchecked(ptr), layout) }
                 } else {
                     // SAFETY: ptr is not owned by primitive heap so with the requirements of
                     // GlobalAlloc::dealloc the ptr will be owned by VM heap for sure.
-                    vm.dealloc(ptr, layout);
+                    unsafe { vm.dealloc(ptr, layout) };
                 }
             }
         }

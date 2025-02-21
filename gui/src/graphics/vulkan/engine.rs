@@ -2,12 +2,12 @@
 use super::{GraphicsError, VulkanBuilder};
 use crate::graphics::Graphics;
 use crate::profile::Profile;
+use ash::Device;
 use ash::extensions::khr::{WaylandSurface, Win32Surface, XcbSurface, XlibSurface};
 use ash::vk::{
     DeviceCreateInfo, DeviceQueueCreateInfo, QueueFlags, SurfaceKHR, WaylandSurfaceCreateInfoKHR,
     Win32SurfaceCreateInfoKHR, XcbSurfaceCreateInfoKHR, XlibSurfaceCreateInfoKHR,
 };
-use ash::Device;
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle};
 use winit::window::Window;
 

@@ -1,5 +1,5 @@
 use super::Thread;
-use crate::context::{current_thread, BorrowedArc};
+use crate::context::{BorrowedArc, current_thread};
 use core::cell::Cell;
 
 /// Encapsulates a field of [Thread] that can only be accessed by the CPU that currently executing

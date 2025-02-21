@@ -68,7 +68,7 @@ impl<'a> Cpu for KvmCpu<'a> {
 
     #[cfg(target_arch = "x86_64")]
     fn translate(&self, vaddr: usize) -> Result<usize, std::io::Error> {
-        use super::ffi::{KvmTranslation, KVM_TRANSLATE};
+        use super::ffi::{KVM_TRANSLATE, KvmTranslation};
 
         let mut data = KvmTranslation {
             linear_address: vaddr,

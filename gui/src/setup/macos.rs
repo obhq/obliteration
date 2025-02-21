@@ -2,8 +2,8 @@ use core_foundation::base::TCFType;
 use core_foundation::propertylist::{CFPropertyList, CFPropertyListSubClass};
 use core_foundation::string::CFString;
 use core_foundation_sys::preferences::{
-    kCFPreferencesCurrentApplication, CFPreferencesAppSynchronize, CFPreferencesCopyAppValue,
-    CFPreferencesSetAppValue,
+    CFPreferencesAppSynchronize, CFPreferencesCopyAppValue, CFPreferencesSetAppValue,
+    kCFPreferencesCurrentApplication,
 };
 use thiserror::Error;
 

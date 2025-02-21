@@ -2,17 +2,17 @@
 use crate::hv::{Cpu, CpuCommit, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, IoBuf};
 use gdbstub::stub::MultiThreadStopReason;
 use std::marker::PhantomData;
-use std::mem::{size_of, zeroed, MaybeUninit};
+use std::mem::{MaybeUninit, size_of, zeroed};
 use thiserror::Error;
-use windows_sys::core::HRESULT;
 use windows_sys::Win32::System::Hypervisor::{
+    WHV_PARTITION_HANDLE, WHV_REGISTER_NAME, WHV_REGISTER_VALUE, WHV_RUN_VP_EXIT_CONTEXT,
     WHvDeleteVirtualProcessor, WHvGetVirtualProcessorRegisters, WHvRunVirtualProcessor,
     WHvRunVpExitReasonX64Halt, WHvSetVirtualProcessorRegisters, WHvX64RegisterCr0,
     WHvX64RegisterCr3, WHvX64RegisterCr4, WHvX64RegisterCs, WHvX64RegisterDs, WHvX64RegisterEfer,
     WHvX64RegisterEs, WHvX64RegisterFs, WHvX64RegisterGs, WHvX64RegisterRip, WHvX64RegisterRsp,
-    WHvX64RegisterSs, WHV_PARTITION_HANDLE, WHV_REGISTER_NAME, WHV_REGISTER_VALUE,
-    WHV_RUN_VP_EXIT_CONTEXT,
+    WHvX64RegisterSs,
 };
+use windows_sys::core::HRESULT;
 use x86_64::{Efer, Rflags};
 
 const REGISTERS: usize = 12;

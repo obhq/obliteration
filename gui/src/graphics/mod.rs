@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-pub use self::engine::{builder, GraphicsError};
+pub use self::engine::{GraphicsError, builder};
 
 use crate::profile::Profile;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use winit::window::WindowAttributes;
 
 #[cfg_attr(target_os = "macos", path = "metal/mod.rs")]

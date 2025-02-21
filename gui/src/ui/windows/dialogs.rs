@@ -5,20 +5,20 @@ use std::ffi::OsString;
 use std::num::NonZero;
 use std::os::windows::ffi::OsStringExt;
 use std::path::PathBuf;
-use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::HWND;
 use windows::Win32::System::Com::{
-    CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_ALL, COINIT_APARTMENTTHREADED,
-    COINIT_SPEED_OVER_MEMORY,
+    CLSCTX_ALL, COINIT_APARTMENTTHREADED, COINIT_SPEED_OVER_MEMORY, CoCreateInstance,
+    CoInitializeEx, CoUninitialize,
 };
 use windows::Win32::UI::Shell::Common::COMDLG_FILTERSPEC;
 use windows::Win32::UI::Shell::{
-    FileOpenDialog, IFileOpenDialog, FOS_NOCHANGEDIR, SIGDN_FILESYSPATH,
+    FOS_NOCHANGEDIR, FileOpenDialog, IFileOpenDialog, SIGDN_FILESYSPATH,
 };
+use windows::core::{PCWSTR, w};
 use windows_sys::Win32::System::Com::CoTaskMemFree;
 use windows_sys::Win32::UI::Controls::Dialogs::{GetOpenFileNameW, OPENFILENAMEW};
 use windows_sys::Win32::UI::Shell::{
-    SHBrowseForFolderW, SHGetPathFromIDListW, BIF_NEWDIALOGSTYLE, BIF_RETURNONLYFSDIRS, BROWSEINFOW,
+    BIF_NEWDIALOGSTYLE, BIF_RETURNONLYFSDIRS, BROWSEINFOW, SHBrowseForFolderW, SHGetPathFromIDListW,
 };
 
 pub async fn open_file<T: DesktopWindow>(

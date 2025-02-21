@@ -6,17 +6,17 @@ use self::graphics::{EngineBuilder, GraphicsError, PhysicalDevice};
 use self::hv::Hypervisor;
 use self::log::LogWriter;
 use self::profile::{DisplayResolution, Profile};
-use self::setup::{run_setup, SetupError};
+use self::setup::{SetupError, run_setup};
 use self::ui::{
-    error, spawn_handler, DesktopExt, MainWindow, ProfileModel, ResolutionModel, RuntimeExt,
-    SlintBackend, WaitForDebugger,
+    DesktopExt, MainWindow, ProfileModel, ResolutionModel, RuntimeExt, SlintBackend,
+    WaitForDebugger, error, spawn_handler,
 };
 use self::vmm::{CpuError, Vmm, VmmError, VmmEvent};
 use async_net::{TcpListener, TcpStream};
 use clap::{Parser, ValueEnum};
 use erdp::ErrorDisplay;
 use futures::{
-    select_biased, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, FutureExt, TryStreamExt,
+    AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, FutureExt, TryStreamExt, select_biased,
 };
 use slint::{ComponentHandle, ModelRc, SharedString, ToSharedString, VecModel};
 use std::cell::{Cell, RefMut};
@@ -128,7 +128,7 @@ async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
     // Increase number of file descriptor to maximum allowed.
     #[cfg(unix)]
     unsafe {
-        use libc::{getrlimit, setrlimit, RLIMIT_NOFILE};
+        use libc::{RLIMIT_NOFILE, getrlimit, setrlimit};
         use std::io::Error;
         use std::mem::MaybeUninit;
 

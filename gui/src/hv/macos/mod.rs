@@ -183,6 +183,6 @@ pub enum HvfCpuError {
     EnableDebugFailed(NonZero<hv_return_t>),
 }
 
-extern "C" {
+unsafe extern "C" {
     fn os_release(object: *mut std::ffi::c_void);
 }

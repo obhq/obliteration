@@ -3,10 +3,10 @@ pub use self::data::DataRootError;
 use self::data::{read_data_root, write_data_root};
 use crate::data::{DataError, DataMgr};
 use crate::ui::{
-    error, open_dir, open_file, spawn_handler, DesktopExt, FileType, InstallFirmware, RuntimeExt,
-    SetupWizard,
+    DesktopExt, FileType, InstallFirmware, RuntimeExt, SetupWizard, error, open_dir, open_file,
+    spawn_handler,
 };
-use crate::vfs::{FsType, FS_TYPE};
+use crate::vfs::{FS_TYPE, FsType};
 use erdp::ErrorDisplay;
 use obfw::ps4::{PartData, PartReader};
 use obfw::{DumpReader, ItemReader};

@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::KvmCpu;
 use self::ffi::{
-    KvmGuestDebug, KvmUserspaceMemoryRegion, KVM_API_VERSION, KVM_CAP_MAX_VCPUS,
-    KVM_CAP_SET_GUEST_DEBUG, KVM_CHECK_EXTENSION, KVM_CREATE_VCPU, KVM_CREATE_VM,
-    KVM_GET_API_VERSION, KVM_GET_VCPU_MMAP_SIZE, KVM_GUESTDBG_ENABLE, KVM_GUESTDBG_USE_SW_BP,
-    KVM_SET_GUEST_DEBUG, KVM_SET_USER_MEMORY_REGION,
+    KVM_API_VERSION, KVM_CAP_MAX_VCPUS, KVM_CAP_SET_GUEST_DEBUG, KVM_CHECK_EXTENSION,
+    KVM_CREATE_VCPU, KVM_CREATE_VM, KVM_GET_API_VERSION, KVM_GET_VCPU_MMAP_SIZE,
+    KVM_GUESTDBG_ENABLE, KVM_GUESTDBG_USE_SW_BP, KVM_SET_GUEST_DEBUG, KVM_SET_USER_MEMORY_REGION,
+    KvmGuestDebug, KvmUserspaceMemoryRegion,
 };
 use self::mapper::KvmMapper;
 use super::{CpuFeats, Hypervisor, Ram};
-use libc::{ioctl, mmap, open, MAP_FAILED, MAP_PRIVATE, O_RDWR, PROT_READ, PROT_WRITE};
+use libc::{MAP_FAILED, MAP_PRIVATE, O_RDWR, PROT_READ, PROT_WRITE, ioctl, mmap, open};
 use std::ffi::{c_int, c_uint};
 use std::io::Error;
 use std::mem::zeroed;
@@ -75,9 +75,9 @@ pub unsafe fn new(
     let cpuid = if !get_ext(kvm.as_fd(), self::ffi::KVM_CAP_EXT_CPUID).is_ok_and(|v| v != 0) {
         return Err(KvmError::NoKvmExtCpuid);
     } else {
-        use self::ffi::{KvmCpuid2, KvmCpuidEntry2, KVM_GET_SUPPORTED_CPUID};
+        use self::ffi::{KVM_GET_SUPPORTED_CPUID, KvmCpuid2, KvmCpuidEntry2};
         use libc::E2BIG;
-        use std::alloc::{handle_alloc_error, Layout};
+        use std::alloc::{Layout, handle_alloc_error};
 
         let layout = Layout::from_size_align(8, 4).unwrap();
         let mut count = 1;
@@ -259,7 +259,7 @@ fn create_vm(kvm: BorrowedFd) -> Result<OwnedFd, KvmError> {
 
 #[cfg(target_arch = "aarch64")]
 fn load_feats(cpu: BorrowedFd) -> Result<CpuFeats, KvmError> {
-    use self::ffi::{KvmOneReg, ARM64_SYS_REG, KVM_GET_ONE_REG};
+    use self::ffi::{ARM64_SYS_REG, KVM_GET_ONE_REG, KvmOneReg};
     use crate::vmm::hv::{Mmfr0, Mmfr1, Mmfr2};
 
     // ID_AA64MMFR0_EL1.

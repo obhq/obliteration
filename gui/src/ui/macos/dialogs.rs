@@ -1,10 +1,10 @@
-use super::view::get_window;
 use super::PlatformError;
+use super::view::get_window;
 use crate::ui::{DesktopWindow, FileType};
 use block2::RcBlock;
 use futures::StreamExt;
 use objc2::ffi::{NO, YES};
-use objc2::rc::{autoreleasepool, Retained};
+use objc2::rc::{Retained, autoreleasepool};
 use objc2::runtime::NSObject;
 use objc2::{class, msg_send, msg_send_id};
 use objc2_foundation::{NSArray, NSString, NSURL};

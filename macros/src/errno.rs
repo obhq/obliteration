@@ -1,6 +1,6 @@
 use proc_macro2::{Ident, TokenStream};
 use quote::quote;
-use syn::{punctuated::Punctuated, Fields, Index, ItemEnum, Meta, Token, Variant};
+use syn::{Fields, Index, ItemEnum, Meta, Token, Variant, punctuated::Punctuated};
 
 pub fn transform(arg: ItemEnum) -> syn::Result<TokenStream> {
     let enum_name = &arg.ident;
@@ -63,7 +63,7 @@ fn process_variant(variant: &Variant, enum_name: &Ident) -> syn::Result<TokenStr
                     return Err(syn::Error::new_spanned(
                         attr,
                         "incorrect errno usage. Correct is #[errno(...)]",
-                    ))
+                    ));
                 }
             }
         }

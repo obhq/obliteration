@@ -12,11 +12,7 @@ impl Pid {
 
     /// Returns [`None`] if `v` is negative.
     pub const fn new(v: c_int) -> Option<Self> {
-        if v >= 0 {
-            Some(Self(v))
-        } else {
-            None
-        }
+        if v >= 0 { Some(Self(v)) } else { None }
     }
 }
 

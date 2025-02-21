@@ -19,11 +19,7 @@ impl<T> BorrowedArc<T> {
     /// # Safety
     /// `v` must be owned by [Arc](alloc::sync::Arc) if not null.
     pub(super) const unsafe fn new(v: *const T) -> Option<Self> {
-        if v.is_null() {
-            None
-        } else {
-            Some(Self(v))
-        }
+        if v.is_null() { None } else { Some(Self(v)) }
     }
 
     /// # Safety

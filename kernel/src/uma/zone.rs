@@ -1,11 +1,11 @@
 use super::bucket::{BucketItem, UmaBucket};
 use super::keg::UmaKeg;
 use super::{Alloc, Uma, UmaBox, UmaFlags};
-use crate::context::{current_thread, CpuLocal};
+use crate::context::{CpuLocal, current_thread};
 use crate::lock::{Gutex, GutexGroup, GutexWrite};
 use crate::vm::Vm;
-use alloc::collections::linked_list::LinkedList;
 use alloc::collections::VecDeque;
+use alloc::collections::linked_list::LinkedList;
 use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;

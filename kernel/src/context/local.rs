@@ -1,4 +1,4 @@
-use super::{pin_cpu, PinnedContext};
+use super::{PinnedContext, pin_cpu};
 use alloc::vec::Vec;
 use core::ops::Deref;
 use krt::config;

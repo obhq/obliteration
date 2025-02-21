@@ -1,5 +1,5 @@
 use super::MTX_UNOWNED;
-use crate::context::{current_thread, BorrowedArc};
+use crate::context::{BorrowedArc, current_thread};
 use alloc::rc::Rc;
 use core::cell::UnsafeCell;
 use core::marker::PhantomData;

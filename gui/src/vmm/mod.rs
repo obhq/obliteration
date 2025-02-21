@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use self::arch::{GdbRegs, BREAKPOINT_SIZE};
+use self::arch::{BREAKPOINT_SIZE, GdbRegs};
 use self::channel::VmmStream;
-use self::hw::{setup_devices, Device, DeviceTree};
+use self::hw::{Device, DeviceTree, setup_devices};
 use self::kernel::{
     Kernel, NoteError, PT_DYNAMIC, PT_GNU_EH_FRAME, PT_GNU_RELRO, PT_GNU_STACK, PT_LOAD, PT_NOTE,
     PT_PHDR,
@@ -11,7 +11,7 @@ use crate::gdb::GdbHandler;
 use crate::hv::{CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, Hypervisor, Ram};
 use crate::profile::Profile;
 use config::{BootEnv, ConsoleType, Vm};
-use futures::{select_biased, FutureExt};
+use futures::{FutureExt, select_biased};
 use gdbstub::common::{Signal, Tid};
 use gdbstub::stub::MultiThreadStopReason;
 use gdbstub::target::ext::base::multithread::{
@@ -345,17 +345,18 @@ impl<H: Hypervisor> Vmm<H> {
 
         self.next += 1;
 
-        assert!(self
-            .cpus
-            .insert(
-                id,
-                Cpu {
-                    thread,
-                    exiting,
-                    debug,
-                },
-            )
-            .is_none());
+        assert!(
+            self.cpus
+                .insert(
+                    id,
+                    Cpu {
+                        thread,
+                        exiting,
+                        debug,
+                    },
+                )
+                .is_none()
+        );
 
         Ok(())
     }

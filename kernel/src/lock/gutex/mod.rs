@@ -1,7 +1,7 @@
 pub use self::guard::*;
 
 use super::MTX_UNOWNED;
-use crate::context::{current_thread, BorrowedArc};
+use crate::context::{BorrowedArc, current_thread};
 use alloc::rc::Rc;
 use alloc::sync::Arc;
 use core::cell::UnsafeCell;
@@ -187,7 +187,7 @@ impl<'a> GroupGuard<'a> {
     /// The group must be locked by the calling thread with no active references to any of its
     /// field.
     unsafe fn new(group: &'a GutexGroup) -> Self {
-        *group.active.get() += 1;
+        unsafe { *group.active.get() += 1 };
 
         Self {
             group,

@@ -1,14 +1,14 @@
 use super::PlatformError;
 use crate::ui::{DesktopWindow, FileType, SlintBackend};
-use ashpd::desktop::file_chooser::{FileFilter, SelectedFiles};
-use ashpd::desktop::ResponseError;
 use ashpd::WindowIdentifier;
+use ashpd::desktop::ResponseError;
+use ashpd::desktop::file_chooser::{FileFilter, SelectedFiles};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::path::PathBuf;
 use std::sync::{Arc, OnceLock};
 use wayland_backend::sys::client::ObjectId;
-use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_client::Proxy;
+use wayland_client::protocol::wl_surface::WlSurface;
 use wayland_protocols::xdg::foreign::zv2::client::zxdg_exported_v2::ZxdgExportedV2;
 
 pub async fn open_file<T: DesktopWindow>(
@@ -87,13 +87,13 @@ where
             return Parent {
                 id: WindowIdentifier::from_xid(v.window),
                 surface: None,
-            }
+            };
         }
         RawWindowHandle::Xcb(v) => {
             return Parent {
                 id: WindowIdentifier::from_xid(v.window.get().into()),
                 surface: None,
-            }
+            };
         }
         RawWindowHandle::Wayland(v) => v.surface.as_ptr(),
         RawWindowHandle::Drm(_) | RawWindowHandle::Gbm(_) => unimplemented!(),
