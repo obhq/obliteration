@@ -49,10 +49,10 @@ pub unsafe fn setup_main_cpu() -> ContextArgs {
     static mut TSS_RSP0: [u8; TSS_RSP0_LEN] = unsafe { zeroed() };
     static mut TSS: Tss = unsafe { zeroed() };
 
-    TSS.rsp0 = (&raw mut TSS_RSP0).byte_add(TSS_RSP0_LEN) as usize; // Top-down.
+    unsafe { TSS.rsp0 = (&raw mut TSS_RSP0).byte_add(TSS_RSP0_LEN) as usize }; // Top-down.
 
     // Setup TSS descriptor.
-    let tss: &'static mut TssDescriptor = transmute(&mut GDT[8]);
+    let tss: &'static mut TssDescriptor = unsafe { transmute(&mut GDT[8]) };
     let base = addr_of!(TSS) as usize;
 
     tss.set_limit1((size_of::<Tss>() - 1).try_into().unwrap());
@@ -66,21 +66,25 @@ pub unsafe fn setup_main_cpu() -> ContextArgs {
         .try_into()
         .unwrap();
 
-    set_gdtr(
-        &Gdtr {
-            limit,
-            addr: (&raw const GDT).cast(),
-        },
-        GDT_KERNEL_CS,
-        GDT_KERNEL_DS,
-    );
+    unsafe {
+        set_gdtr(
+            &Gdtr {
+                limit,
+                addr: (&raw const GDT).cast(),
+            },
+            GDT_KERNEL_CS,
+            GDT_KERNEL_DS,
+        )
+    };
 
     // Set Task Register (TR).
-    asm!(
-        "ltr {v:x}",
-        v = in(reg) SegmentSelector::new().with_si(8).into_bits(),
-        options(preserves_flags, nostack)
-    );
+    unsafe {
+        asm!(
+            "ltr {v:x}",
+            v = in(reg) SegmentSelector::new().with_si(8).into_bits(),
+            options(preserves_flags, nostack)
+        )
+    };
 
     // See idt0 on the PS4 for a reference.
     const IDT_LEN: usize = 256;
@@ -88,8 +92,7 @@ pub unsafe fn setup_main_cpu() -> ContextArgs {
 
     let set_idt = |n: usize, f: unsafe extern "C" fn() -> !, ty, dpl, ist| {
         let f = f as usize;
-
-        IDT[n] = GateDescriptor::new()
+        let d = GateDescriptor::new()
             .with_offset1(f as u16)
             .with_selector(GDT_KERNEL_CS)
             .with_ist(ist)
@@ -97,6 +100,8 @@ pub unsafe fn setup_main_cpu() -> ContextArgs {
             .with_dpl(dpl)
             .with_p(true)
             .with_offset2((f >> 16).try_into().unwrap());
+
+        unsafe { IDT[n] = d };
     };
 
     set_idt(3, Xbpt, 0b1110, Dpl::Ring3, 0);
@@ -108,11 +113,13 @@ pub unsafe fn setup_main_cpu() -> ContextArgs {
     let addr = (&raw const IDT).cast();
     let idtr = Idtr { limit, addr };
 
-    asm!(
-        "lidt qword ptr [{v}]",
-        v = in(reg) &idtr,
-        options(preserves_flags, nostack)
-    );
+    unsafe {
+        asm!(
+            "lidt qword ptr [{v}]",
+            v = in(reg) &idtr,
+            options(preserves_flags, nostack)
+        )
+    };
 
     // Set CS and SS for syscall and sysret instruction.
     let star = Star::new()
@@ -122,11 +129,11 @@ pub unsafe fn setup_main_cpu() -> ContextArgs {
         .try_into()
         .unwrap();
 
-    wrmsr(0xC0000081, star);
+    unsafe { wrmsr(0xC0000081, star) };
 
     // Set entry point for syscall instruction.
-    wrmsr(0xC0000082, syscall_entry64 as usize);
-    wrmsr(0xC0000083, syscall_entry32 as usize);
+    unsafe { wrmsr(0xC0000082, syscall_entry64 as usize) };
+    unsafe { wrmsr(0xC0000083, syscall_entry32 as usize) };
 
     // Set SFMASK for syscall.
     let mask = Rflags::new()
@@ -139,7 +146,7 @@ pub unsafe fn setup_main_cpu() -> ContextArgs {
         .try_into()
         .unwrap();
 
-    wrmsr(0xC0000084, mask);
+    unsafe { wrmsr(0xC0000084, mask) };
 
     // Switch EFER from bootloader to our own.
     let efer = Efer::new()
@@ -150,21 +157,23 @@ pub unsafe fn setup_main_cpu() -> ContextArgs {
         .try_into()
         .unwrap();
 
-    wrmsr(0xC0000080, efer);
+    unsafe { wrmsr(0xC0000080, efer) };
 
     ContextArgs {
-        trap_rsp: TSS.rsp0 as _,
+        trap_rsp: unsafe { TSS.rsp0 as _ },
     }
 }
 
 pub unsafe fn wrmsr(reg: u32, val: usize) {
-    asm!(
-        "wrmsr",
-        in("ecx") reg,
-        in("edx") val >> 32,
-        in("eax") val,
-        options(nomem, preserves_flags, nostack)
-    );
+    unsafe {
+        asm!(
+            "wrmsr",
+            in("ecx") reg,
+            in("edx") val >> 32,
+            in("eax") val,
+            options(nomem, preserves_flags, nostack)
+        )
+    };
 }
 
 unsafe extern "C" {

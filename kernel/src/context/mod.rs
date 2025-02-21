@@ -48,7 +48,7 @@ pub unsafe fn run_with_context(
         args,
     ));
 
-    cx.as_mut().activate();
+    unsafe { cx.as_mut().activate() };
 
     // Prevent any code before and after this line to cross this line.
     core::sync::atomic::fence(Ordering::AcqRel);
@@ -56,8 +56,9 @@ pub unsafe fn run_with_context(
     // Setup.
     let r = setup();
 
-    cx.as_mut().get_unchecked_mut().base.uma = Arc::into_raw(r.uma);
-    cx.as_mut().get_unchecked_mut().base.pmgr = Arc::into_raw(r.pmgr);
+    // SAFETY: We did not move out the value.
+    unsafe { cx.as_mut().get_unchecked_mut().base.uma = Arc::into_raw(r.uma) };
+    unsafe { cx.as_mut().get_unchecked_mut().base.pmgr = Arc::into_raw(r.pmgr) };
 
     main();
 }
@@ -169,7 +170,7 @@ impl PinnedContext {
     /// Anything that derive from the returned value will invalid when this [`PinnedContext`]
     /// dropped.
     pub unsafe fn cpu(&self) -> usize {
-        Context::load_volatile_usize::<{ offset_of!(Base, cpu) }>()
+        unsafe { Context::load_volatile_usize::<{ offset_of!(Base, cpu) }>() }
     }
 }
 

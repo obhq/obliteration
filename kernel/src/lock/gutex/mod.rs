@@ -187,7 +187,7 @@ impl<'a> GroupGuard<'a> {
     /// The group must be locked by the calling thread with no active references to any of its
     /// field.
     unsafe fn new(group: &'a GutexGroup) -> Self {
-        *group.active.get() += 1;
+        unsafe { *group.active.get() += 1 };
 
         Self {
             group,
