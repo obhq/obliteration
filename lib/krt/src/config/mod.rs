@@ -16,8 +16,8 @@ pub fn config() -> &'static Config {
 /// must never be called again.
 #[allow(dead_code)]
 pub(super) unsafe fn setup(env: &'static BootEnv, conf: &'static Config) {
-    BOOT_ENV = env;
-    CONFIG = conf;
+    unsafe { BOOT_ENV = env };
+    unsafe { CONFIG = conf };
 }
 
 static mut BOOT_ENV: *const BootEnv = null();
