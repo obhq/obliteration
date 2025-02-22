@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+use super::HvError;
+use std::cmp::max;
 use std::collections::BTreeSet;
 use std::io::Error;
 use std::num::NonZero;
 use std::sync::{Mutex, MutexGuard};
 use thiserror::Error;
 
-/// Represents main memory of the PS4.
+/// RAM of the VM.
 ///
 /// This struct will immediate reserve a range of memory for its size but not commit any parts of it
 /// until there is an allocation request.
@@ -15,21 +17,28 @@ pub struct Ram<M: RamMapper> {
     mem: *mut u8,
     len: NonZero<usize>,
     block_size: NonZero<usize>,
+    host_page_size: NonZero<usize>,
     allocated: Mutex<BTreeSet<usize>>,
     mapper: M,
 }
 
 impl<M: RamMapper> Ram<M> {
-    pub(super) unsafe fn new(
+    pub(super) fn new(
         len: NonZero<usize>,
-        block_size: NonZero<usize>,
+        mbs: NonZero<usize>,
         mapper: M,
-    ) -> Result<Self, Error> {
-        assert_eq!(len.get() % block_size, 0);
+    ) -> Result<Self, HvError> {
+        // Get block size.
+        let host_page_size = Self::get_page_size().map_err(HvError::GetHostPageSize)?;
+        let block_size = max(mbs, host_page_size);
+
+        if len.get() % block_size != 0 {
+            return Err(HvError::InvalidRamSize);
+        }
 
         // Reserve memory range.
         #[cfg(unix)]
-        let mem = {
+        let mem = unsafe {
             use libc::{MAP_ANON, MAP_FAILED, MAP_PRIVATE, PROT_NONE, mmap};
             use std::ptr::null_mut;
 
@@ -43,21 +52,21 @@ impl<M: RamMapper> Ram<M> {
             );
 
             if mem == MAP_FAILED {
-                return Err(Error::last_os_error());
+                return Err(HvError::CreateRamFailed(Error::last_os_error()));
             }
 
             mem.cast()
         };
 
         #[cfg(windows)]
-        let mem = {
+        let mem = unsafe {
             use std::ptr::null;
             use windows_sys::Win32::System::Memory::{MEM_RESERVE, PAGE_NOACCESS, VirtualAlloc};
 
             let mem = VirtualAlloc(null(), len.get(), MEM_RESERVE, PAGE_NOACCESS);
 
             if mem.is_null() {
-                return Err(Error::last_os_error());
+                return Err(HvError::CreateRamFailed(Error::last_os_error()));
             }
 
             mem.cast()
@@ -67,6 +76,7 @@ impl<M: RamMapper> Ram<M> {
             mem,
             len,
             block_size,
+            host_page_size,
             allocated: Mutex::default(),
             mapper,
         })
@@ -82,6 +92,10 @@ impl<M: RamMapper> Ram<M> {
 
     pub fn block_size(&self) -> NonZero<usize> {
         self.block_size
+    }
+
+    pub fn host_page_size(&self) -> NonZero<usize> {
+        self.host_page_size
     }
 
     /// # Panics
@@ -234,6 +248,29 @@ impl<M: RamMapper> Ram<M> {
         } else {
             Ok(())
         }
+    }
+
+    #[cfg(unix)]
+    fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
+        let v = unsafe { libc::sysconf(libc::_SC_PAGE_SIZE) };
+
+        if v < 0 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(v.try_into().ok().and_then(NonZero::new).unwrap())
+        }
+    }
+
+    #[cfg(windows)]
+    fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
+        use std::mem::zeroed;
+        use windows_sys::Win32::System::SystemInformation::GetSystemInfo;
+
+        let mut i = unsafe { zeroed() };
+
+        unsafe { GetSystemInfo(&mut i) };
+
+        Ok(i.dwPageSize.try_into().ok().and_then(NonZero::new).unwrap())
     }
 }
 

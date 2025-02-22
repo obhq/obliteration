@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 pub use self::arch::*;
-pub use self::os::new;
+pub use self::os::{HvError, new};
 pub use self::ram::*;
 
 use gdbstub::stub::MultiThreadStopReason;
@@ -14,15 +14,6 @@ mod arch;
 #[cfg_attr(target_os = "windows", path = "windows/mod.rs")]
 mod os;
 mod ram;
-
-#[cfg(target_os = "linux")]
-pub type HypervisorError = self::os::KvmError;
-
-#[cfg(target_os = "macos")]
-pub type HypervisorError = self::os::HvfError;
-
-#[cfg(target_os = "windows")]
-pub type HypervisorError = self::os::WhpError;
 
 /// Underlying hypervisor (e.g. KVM on Linux).
 pub trait Hypervisor: Send + Sync + 'static {
@@ -104,6 +95,5 @@ pub trait CpuDebug {
     type Cpu: Cpu;
 
     fn reason(&mut self) -> MultiThreadStopReason<u64>;
-
     fn cpu(&mut self) -> &mut Self::Cpu;
 }

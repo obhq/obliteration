@@ -18,24 +18,24 @@ use thiserror::Error;
 mod cpu;
 mod mapper;
 
-/// Panics
-/// If `ram_size` is not multiply by `ram_block`.
+/// `ram_mbs` is a minimum block size of the RAM. Usually it will be page size on the VM. This value
+/// will be used as a block size if it is larger than page size on the host otherwise block size
+/// will be page size on the host.
 ///
-/// # Safety
-/// `ram_block` must be greater or equal host page size.
-pub unsafe fn new(
+/// `ram_size` must be multiply by the block size calculated from the above.
+pub fn new(
     cpu: usize,
     ram_size: NonZero<usize>,
-    ram_block: NonZero<usize>,
+    ram_mbs: NonZero<usize>,
     debug: bool,
-) -> Result<impl Hypervisor, HvfError> {
+) -> Result<impl Hypervisor, HvError> {
     // Create RAM.
-    let ram = Ram::new(ram_size, ram_block, HvfMapper).map_err(HvfError::CreateRamFailed)?;
+    let ram = Ram::new(ram_size, ram_mbs, HvfMapper)?;
 
     // Create a VM.
     let ret = unsafe { hv_vm_create(null_mut()) };
     let mut hv = match NonZero::new(ret) {
-        Some(ret) => return Err(HvfError::CreateVmFailed(ret)),
+        Some(ret) => return Err(HvError::CreateVmFailed(ret)),
         None => Hvf {
             ram,
             debug,
@@ -46,26 +46,26 @@ pub unsafe fn new(
 
     // Get max vCPU count.
     let mut max = 0;
-    let ret = hv_vm_get_max_vcpu_count(&mut max);
+    let ret = unsafe { hv_vm_get_max_vcpu_count(&mut max) };
 
     if let Some(v) = NonZero::new(ret) {
-        return Err(HvfError::GetMaxCpuFailed(v));
+        return Err(HvError::GetMaxCpuFailed(v));
     } else if usize::try_from(max).unwrap() < cpu {
-        return Err(HvfError::MaxCpuTooLow(cpu));
+        return Err(HvError::MaxCpuTooLow(cpu));
     }
 
     // Load PE features.
     hv.feats.mmfr0 = hv
         .read_feature_reg(HV_FEATURE_REG_ID_AA64MMFR0_EL1)
-        .map_err(HvfError::ReadMmfr0Failed)?
+        .map_err(HvError::ReadMmfr0Failed)?
         .into();
     hv.feats.mmfr1 = hv
         .read_feature_reg(HV_FEATURE_REG_ID_AA64MMFR1_EL1)
-        .map_err(HvfError::ReadMmfr1Failed)?
+        .map_err(HvError::ReadMmfr1Failed)?
         .into();
     hv.feats.mmfr2 = hv
         .read_feature_reg(HV_FEATURE_REG_ID_AA64MMFR2_EL1)
-        .map_err(HvfError::ReadMmfr2Failed)?
+        .map_err(HvError::ReadMmfr2Failed)?
         .into();
 
     Ok(hv)
@@ -148,9 +148,16 @@ impl Hypervisor for Hvf {
 unsafe impl Send for Hvf {}
 unsafe impl Sync for Hvf {}
 
-/// Represents an error when [`Hvf`] fails to initialize.
+/// Represents an error when operation on Hypervisor Framework fails.
+#[non_exhaustive]
 #[derive(Debug, Error)]
-pub enum HvfError {
+pub enum HvError {
+    #[error("couldn't get host page size")]
+    GetHostPageSize(#[source] std::io::Error),
+
+    #[error("size of RAM is not valid")]
+    InvalidRamSize,
+
     #[error("couldn't create a RAM")]
     CreateRamFailed(#[source] std::io::Error),
 

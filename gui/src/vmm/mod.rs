@@ -8,7 +8,7 @@ use self::kernel::{
 };
 use self::ram::{RamBuilder, RamMap};
 use crate::gdb::GdbHandler;
-use crate::hv::{CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, Hypervisor, Ram};
+use crate::hv::{CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, HvError, Hypervisor, Ram};
 use crate::profile::Profile;
 use config::{BootEnv, ConsoleType, Vm};
 use futures::{FutureExt, select_biased};
@@ -20,7 +20,6 @@ use gdbstub::target::ext::base::multithread::{
 use gdbstub::target::{TargetError, TargetResult};
 use kernel::{KernelError, ProgramHeaderError};
 use rustc_hash::FxHashMap;
-use std::cmp::max;
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
 use std::num::NonZero;
@@ -166,27 +165,24 @@ impl Vmm<()> {
                 .ok_or(VmmError::InvalidPmemsz(hdr.p_vaddr))?;
         }
 
-        // Round kernel memory size.
-        let host_page_size = Self::get_page_size().map_err(VmmError::GetHostPageSize)?;
-        let block_size = max(vm_page_size, host_page_size);
-        let len = NonZero::new(len)
-            .ok_or(VmmError::ZeroLengthLoadSegment)?
-            .get()
-            .checked_next_multiple_of(block_size.get())
-            .ok_or(VmmError::TotalSizeTooLarge)?;
-
-        // Setup RAM.
-        let ram_size = NonZero::new(1024 * 1024 * 1024 * 8).unwrap();
-
-        // Setup virtual devices.
-        let devices = Arc::new(setup_devices(ram_size.get(), block_size));
+        // Check if we have a non-empty segment to map.
+        let len = NonZero::new(len).ok_or(VmmError::ZeroLengthLoadSegment)?;
 
         // Setup hypervisor.
-        let mut hv = unsafe { crate::hv::new(8, ram_size, block_size, false) }
-            .map_err(VmmError::SetupHypervisor)?;
+        let ram_size = NonZero::new(1024 * 1024 * 1024 * 8).unwrap();
+        let mut hv =
+            crate::hv::new(8, ram_size, vm_page_size, false).map_err(VmmError::SetupHypervisor)?;
+        let devices = Arc::new(setup_devices(ram_size.get(), hv.ram().block_size()));
+
+        // Round kernel memory size.
+        let len = len
+            .get()
+            .checked_next_multiple_of(hv.ram().block_size().get())
+            .ok_or(VmmError::TotalSizeTooLarge)?;
 
         // Map the kernel.
         let feats = hv.cpu_features().clone();
+        let host_page_size = hv.ram().host_page_size();
         let mut ram = RamBuilder::new(hv.ram_mut());
 
         let kern = ram
@@ -280,28 +276,6 @@ impl<H> Vmm<H> {
         for cpu in self.cpus.values_mut() {
             cpu.debug.as_mut().unwrap().release();
         }
-    }
-
-    #[cfg(unix)]
-    fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
-        let v = unsafe { libc::sysconf(libc::_SC_PAGE_SIZE) };
-
-        if v < 0 {
-            Err(std::io::Error::last_os_error())
-        } else {
-            Ok(v.try_into().ok().and_then(NonZero::new).unwrap())
-        }
-    }
-
-    #[cfg(windows)]
-    fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
-        use std::mem::zeroed;
-        use windows_sys::Win32::System::SystemInformation::GetSystemInfo;
-        let mut i = unsafe { zeroed() };
-
-        unsafe { GetSystemInfo(&mut i) };
-
-        Ok(i.dwPageSize.try_into().ok().and_then(NonZero::new).unwrap())
     }
 }
 
@@ -839,9 +813,6 @@ pub enum VmmError {
     #[error("no page size in kernel note")]
     NoPageSizeInKernelNote,
 
-    #[error("couldn't get host page size")]
-    GetHostPageSize(#[source] std::io::Error),
-
     #[error("PT_LOAD at {0:#} is overlapped with the previous PT_LOAD")]
     OverlappedLoadSegment(usize),
 
@@ -855,7 +826,7 @@ pub enum VmmError {
     TotalSizeTooLarge,
 
     #[error("couldn't setup a hypervisor")]
-    SetupHypervisor(#[source] crate::hv::HypervisorError),
+    SetupHypervisor(#[source] HvError),
 
     #[error("couldn't allocate RAM for the kernel")]
     AllocateRamForKernel(#[source] crate::hv::RamError),
