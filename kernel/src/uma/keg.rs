@@ -11,14 +11,14 @@ use core::num::NonZero;
 /// Implementation of `uma_keg` structure.
 pub struct UmaKeg {
     vm: Arc<Vm>,
-    size: NonZero<usize>, // uk_size
-    ipers: usize,         // uk_ipers
-    alloc: fn(&Vm),       // uk_allocf
-    max_pages: u32,       // uk_maxpages
-    pages: u32,           // uk_pages
-    free: u32,            // uk_free
-    recurse: u32,         // uk_recurse
-    flags: UmaFlags,      // uk_flags
+    size: NonZero<usize>,  // uk_size
+    ipers: usize,          // uk_ipers
+    alloc: fn(&Vm, Alloc), // uk_allocf
+    max_pages: u32,        // uk_maxpages
+    pages: u32,            // uk_pages
+    free: u32,             // uk_free
+    recurse: u32,          // uk_recurse
+    flags: UmaFlags,       // uk_flags
 }
 
 impl UmaKeg {
@@ -217,7 +217,7 @@ impl UmaKeg {
             }
 
             self.recurse += 1;
-            self.alloc_slab();
+            self.alloc_slab(flags);
             self.recurse -= 1;
 
             todo!()
@@ -232,11 +232,17 @@ impl UmaKeg {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x13FBA0|
-    fn alloc_slab(&self) {
+    fn alloc_slab(&self, flags: Alloc) {
         if self.flags.has(UmaFlags::Offpage) {
             todo!()
         } else {
-            (self.alloc)(&self.vm);
+            let flags = if self.flags.has(UmaFlags::Malloc) {
+                flags & !Alloc::Zero
+            } else {
+                flags | Alloc::Zero
+            };
+
+            (self.alloc)(&self.vm, flags);
             todo!()
         }
     }
@@ -247,7 +253,7 @@ impl UmaKeg {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x1402F0|
-    fn page_alloc(_: &Vm) {
+    fn page_alloc(_: &Vm, _: Alloc) {
         todo!()
     }
 }

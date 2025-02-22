@@ -1,19 +1,23 @@
 pub use self::object::*;
 
 use self::stats::VmStats;
+use crate::context::current_thread;
 use crate::lock::GutexGroup;
+use crate::proc::ProcMgr;
 use alloc::sync::Arc;
+use macros::bitflag;
 
 mod object;
 mod stats;
 
 /// Implementation of Virtual Memory system.
 pub struct Vm {
+    procs: Arc<ProcMgr>,
     stats: [VmStats; 3],
 }
 
 impl Vm {
-    pub fn new() -> Arc<Self> {
+    pub fn new(procs: &Arc<ProcMgr>) -> Arc<Self> {
         // Initializes stats. The Orbis initialize these data in vm_pageout function but it is
         // possible for data race.
         let pageout_page_count = 0x10; // TODO: Figure out where this value come from.
@@ -37,7 +41,10 @@ impl Vm {
             },
         ];
 
-        Arc::new(Self { stats })
+        Arc::new(Self {
+            procs: procs.clone(),
+            stats,
+        })
     }
 
     /// See `vm_page_alloc` on the Orbis for a reference.
@@ -46,21 +53,33 @@ impl Vm {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x02B030|
-    pub fn alloc_page(&self, obj: Option<VmObject>) {
+    pub fn alloc_page(&self, obj: Option<VmObject>, _: VmAlloc) {
         // Get target VM.
         let vm = match obj {
             Some(_) => todo!(),
             None => 0,
         };
 
+        let td = current_thread();
         let stats = &self.stats[vm];
         let cache_count = stats.cache_count.read();
         let free_count = stats.free_count.read();
 
         if *cache_count + *free_count <= stats.free_reserved {
-            todo!()
+            // Page daemon should never die so we use unwrap to catch that here.
+            let p = td.proc();
+
+            if Arc::ptr_eq(p, &self.procs.pager(p.pager()).upgrade().unwrap()) {
+                todo!()
+            } else {
+                todo!()
+            }
         }
 
         todo!()
     }
 }
+
+/// Flags for [`Vm::alloc_page()`].
+#[bitflag(u32)]
+pub enum VmAlloc {}

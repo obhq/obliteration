@@ -75,16 +75,6 @@ impl VProc {
             uptc: AtomicPtr::new(null_mut()),
         };
 
-        // Trigger process_ctor event.
-        let proc = Arc::new(proc);
-        let weak = Arc::downgrade(&proc);
-
-        for h in et.select(|s| &s.process_ctor) {
-            h(&weak);
-        }
-
-        drop(et);
-
         Ok(proc)
     }
 
