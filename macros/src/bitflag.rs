@@ -117,6 +117,12 @@ pub fn transform(opts: Options, item: ItemEnum) -> syn::Result<TokenStream> {
                 Self(!self.0)
             }
         }
+
+        impl From<#impl_ident> for #ty {
+            fn from(value: #impl_ident) -> Self {
+                value.0
+            }
+        }
     })
 }
 

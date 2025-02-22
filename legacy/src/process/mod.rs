@@ -61,7 +61,6 @@ pub struct ProcManager {
     proc0: Arc<VProc>,     // proc0
     thread0: Arc<VThread>, // thread0
     idle: Arc<VProc>,
-    procs: Gutex<HashMap<Pid, Weak<VProc>>>, // allproc + pidhashtbl + zombproc
     sessions: Gutex<HashMap<Pid, Weak<VSession>>>,
     groups: Gutex<HashMap<Pid, Weak<VProcGroup>>>, // pgrphashtbl
     last_pid: Gutex<i32>,                          // lastpid
@@ -846,7 +845,6 @@ impl ProcManager {
 /// Events that related to a process.
 #[derive(Default)]
 pub struct ProcEvents {
-    pub process_ctor: Event<fn(&Weak<VProc>)>,
     pub thread_init: Event<fn(&mut VThread)>,
     pub thread_ctor: Event<fn(&Weak<VThread>)>,
 }

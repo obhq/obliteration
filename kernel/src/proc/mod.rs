@@ -22,17 +22,26 @@ mod thread;
 /// Manage all processes in the system.
 pub struct ProcMgr {
     procs: Mutex<HashMap<Pid, Weak<Proc>>>, // allproc + pidhashtbl + zombproc
+    pagers: [Weak<Proc>; 2],                // pageproc
     events: Arc<EventSet<ProcEvents>>,
 }
 
 impl ProcMgr {
     pub fn new() -> Arc<Self> {
+        let pagers = Self::spawn_pagers();
         let events = Arc::default();
 
         Arc::new(Self {
             procs: Mutex::new(HashMap::new()),
+            pagers,
             events,
         })
+    }
+
+    /// # Panics
+    /// If `i` is not valid.
+    pub fn pager(&self, i: usize) -> &Weak<Proc> {
+        &self.pagers[i]
     }
 
     pub fn list(&self) -> MappedMutex<impl ExactSizeIterator<Item = &Weak<Proc>> + '_> {
@@ -58,6 +67,16 @@ impl ProcMgr {
         // Create process.
         Ok(Proc::new(abi, &self.events))
     }
+
+    /// See `kick_pagedaemons` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x3E0E40|
+    fn spawn_pagers() -> [Weak<Proc>; 2] {
+        todo!()
+    }
 }
 
 impl Subsystem for ProcMgr {}
@@ -66,6 +85,7 @@ impl Subsystem for ProcMgr {}
 #[derive(Default)]
 pub struct ProcEvents {
     pub process_init: Event<fn(&mut Proc)>,
+    pub process_ctor: Event<fn(&Weak<Proc>)>,
 }
 
 /// Flags to control behavior of [`ProcMgr::fork()`].
