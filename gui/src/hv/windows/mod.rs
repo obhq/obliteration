@@ -11,26 +11,26 @@ mod cpu;
 mod mapper;
 mod partition;
 
-/// Panics
-/// If `ram_size` is not multiply by `ram_block`.
+/// `ram_mbs` is a minimum block size of the RAM. Usually it will be page size on the VM. This value
+/// will be used as a block size if it is larger than page size on the host otherwise block size
+/// will be page size on the host.
 ///
-/// # Safety
-/// `ram_block` must be greater or equal host page size.
-pub unsafe fn new(
+/// `ram_size` must be multiply by the block size calculated from the above.
+pub fn new(
     cpu: usize,
     ram_size: NonZero<usize>,
-    ram_block: NonZero<usize>,
+    ram_mbs: NonZero<usize>,
     debug: bool,
-) -> Result<impl Hypervisor, WhpError> {
+) -> Result<impl Hypervisor, HvError> {
     // Create RAM.
-    let ram = Ram::new(ram_size, ram_block, WhpMapper).map_err(WhpError::CreateRamFailed)?;
+    let ram = Ram::new(ram_size, ram_mbs, WhpMapper)?;
 
     // Setup a partition.
-    let mut part = Partition::new().map_err(WhpError::CreatePartitionFailed)?;
+    let mut part = Partition::new().map_err(HvError::CreatePartitionFailed)?;
 
     part.set_processor_count(cpu)
-        .map_err(WhpError::SetCpuCountFailed)?;
-    part.setup().map_err(WhpError::SetupPartitionFailed)?;
+        .map_err(HvError::SetCpuCountFailed)?;
+    part.setup().map_err(HvError::SetupPartitionFailed)?;
 
     // Map memory.
     part.map_gpa(
@@ -38,7 +38,7 @@ pub unsafe fn new(
         0,
         ram.len().get().try_into().unwrap(),
     )
-    .map_err(WhpError::MapRamFailed)?;
+    .map_err(HvError::MapRamFailed)?;
 
     Ok(Whp {
         part,
@@ -82,9 +82,16 @@ impl Hypervisor for Whp {
     }
 }
 
-/// Represents an error when [`Whp`] fails to initialize.
+/// Represents an error when operation on WHP fails.
+#[non_exhaustive]
 #[derive(Debug, Error)]
-pub enum WhpError {
+pub enum HvError {
+    #[error("couldn't get host page size")]
+    GetHostPageSize(#[source] std::io::Error),
+
+    #[error("size of RAM is not valid")]
+    InvalidRamSize,
+
     #[error("couldn't create a RAM")]
     CreateRamFailed(#[source] std::io::Error),
 
