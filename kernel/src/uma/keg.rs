@@ -37,21 +37,21 @@ impl UmaKeg {
         align: usize,
         mut flags: UmaFlags,
     ) -> Self {
-        if flags.has(UmaFlags::Vm) {
+        if flags.has_any(UmaFlags::Vm) {
             todo!()
         }
 
-        if flags.has(UmaFlags::ZInit) {
+        if flags.has_any(UmaFlags::ZInit) {
             todo!()
         }
 
-        if flags.has(UmaFlags::Malloc | UmaFlags::RefCnt) {
+        if flags.has_any(UmaFlags::Malloc | UmaFlags::RefCnt) {
             flags |= UmaFlags::VToSlab;
         }
 
         // Get header layout.
         let hdr = Layout::new::<Slab<()>>();
-        let (mut hdr, off) = if flags.has(UmaFlags::RefCnt) {
+        let (mut hdr, off) = if flags.has_any(UmaFlags::RefCnt) {
             hdr.extend(Layout::new::<RcFree>()).unwrap()
         } else {
             hdr.extend(Layout::new::<Free>()).unwrap()
@@ -64,7 +64,7 @@ impl UmaKeg {
         let available = PAGE_SIZE.get() - hdr.size();
 
         // Get uk_ppera and uk_ipers.
-        let (ppera, ipers) = if flags.has(UmaFlags::CacheSpread) {
+        let (ppera, ipers) = if flags.has_any(UmaFlags::CacheSpread) {
             // Round size.
             let rsize = if (size.get() & align) == 0 {
                 size.get()
@@ -93,10 +93,10 @@ impl UmaKeg {
             // TODO: Not sure why we need space at least for 2 free item?
             if (size.get() + free_item) > available {
                 // TODO: Set uk_ppera and uk_rsize.
-                if !flags.has(UmaFlags::Internal) {
+                if !flags.has_any(UmaFlags::Internal) {
                     flags |= UmaFlags::Offpage;
 
-                    if !flags.has(UmaFlags::VToSlab) {
+                    if !flags.has_any(UmaFlags::VToSlab) {
                         flags |= UmaFlags::Hash;
                     }
                 }
@@ -123,7 +123,7 @@ impl UmaKeg {
                 let ipers = available / (rsize + free_item);
 
                 // TODO: Verify if this valid for PAGE_SIZE < 0x4000.
-                if !flags.has(UmaFlags::Internal | UmaFlags::CacheOnly)
+                if !flags.has_any(UmaFlags::Internal | UmaFlags::CacheOnly)
                     && (available % (rsize + free_item)) >= Uma::MAX_WASTE.get()
                     && (PAGE_SIZE.get() / rsize) > ipers
                 {
@@ -134,8 +134,8 @@ impl UmaKeg {
             }
         };
 
-        if flags.has(UmaFlags::Offpage) {
-            if flags.has(UmaFlags::RefCnt) {
+        if flags.has_any(UmaFlags::Offpage) {
+            if flags.has_any(UmaFlags::RefCnt) {
                 // TODO: Set uk_slabzone to slabrefzone.
             } else {
                 // TODO: Set uk_slabzone to slabzone.
@@ -150,11 +150,11 @@ impl UmaKeg {
             Self::page_alloc
         };
 
-        if flags.has(UmaFlags::MtxClass) {
+        if flags.has_any(UmaFlags::MtxClass) {
             todo!()
         }
 
-        if !flags.has(UmaFlags::Offpage) {
+        if !flags.has_any(UmaFlags::Offpage) {
             let space = ppera * PAGE_SIZE.get();
             let pgoff = (space - hdr.size()) - ipers * free_item;
 
@@ -164,7 +164,7 @@ impl UmaKeg {
             }
         }
 
-        if flags.has(UmaFlags::Hash) {
+        if flags.has_any(UmaFlags::Hash) {
             todo!()
         }
 
@@ -207,7 +207,7 @@ impl UmaKeg {
     /// |PS4 11.00|0x141E20|
     pub fn fetch_slab(&mut self, _: &UmaZone, flags: Alloc) -> Option<()> {
         while self.free == 0 {
-            if flags.has(Alloc::NoVm) {
+            if flags.has_any(Alloc::NoVm) {
                 return None;
             }
 
@@ -233,10 +233,10 @@ impl UmaKeg {
     /// |---------|--------|
     /// |PS4 11.00|0x13FBA0|
     fn alloc_slab(&self, flags: Alloc) {
-        if self.flags.has(UmaFlags::Offpage) {
+        if self.flags.has_any(UmaFlags::Offpage) {
             todo!()
         } else {
-            let flags = if self.flags.has(UmaFlags::Malloc) {
+            let flags = if self.flags.has_any(UmaFlags::Malloc) {
                 flags & !Alloc::Zero
             } else {
                 flags | Alloc::Zero

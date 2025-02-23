@@ -53,10 +53,11 @@ impl UmaZone {
         keg: Option<UmaKeg>,
         size: NonZero<usize>,
         align: Option<usize>,
-        flags: UmaFlags,
+        flags: impl Into<UmaFlags>,
     ) -> Self {
         let name = name.into();
-        let (keg, mut flags) = if flags.has(UmaFlags::Secondary) {
+        let flags = flags.into();
+        let (keg, mut flags) = if flags.has_any(UmaFlags::Secondary) {
             todo!()
         } else {
             // We use a different approach here to make it idiomatic to Rust. On Orbis it will
@@ -74,8 +75,8 @@ impl UmaZone {
         let mut ty = ZoneType::Other;
         let mut count = 0;
 
-        if !keg.flags().has(UmaFlags::Internal) {
-            count = if !keg.flags().has(UmaFlags::MaxBucket) {
+        if !keg.flags().has_any(UmaFlags::Internal) {
+            count = if !keg.flags().has_any(UmaFlags::MaxBucket) {
                 min(keg.item_per_slab(), Uma::BUCKET_MAX)
             } else {
                 Uma::BUCKET_MAX
@@ -148,7 +149,7 @@ impl UmaZone {
     /// |---------|--------|
     /// |PS4 11.00|0x13E750|
     pub fn alloc(&self, flags: Alloc) -> *mut u8 {
-        if flags.has(Alloc::Wait) {
+        if flags.has_any(Alloc::Wait) {
             // TODO: The Orbis also modify td_pflags on a certain condition.
             let td = current_thread();
 
@@ -210,7 +211,7 @@ impl UmaZone {
                     | ZoneType::Mbuf
                     | ZoneType::MbufCluster
             ) {
-                if flags.has(Alloc::Wait) {
+                if flags.has_any(Alloc::Wait) {
                     todo!()
                 }
 
@@ -272,7 +273,7 @@ impl UmaZone {
                     // Get allocation flags.
                     let mut flags = flags & !Alloc::Zero;
 
-                    if self.flags.has(UmaFlags::CacheOnly) {
+                    if self.flags.has_any(UmaFlags::CacheOnly) {
                         flags |= Alloc::NoVm;
                     }
 
@@ -317,13 +318,13 @@ impl UmaZone {
         let mut kegs = self.kegs.write();
         let keg = keg.unwrap_or(kegs.front_mut().unwrap());
 
-        if !keg.flags().has(UmaFlags::Bucket) || keg.recurse() == 0 {
+        if !keg.flags().has_any(UmaFlags::Bucket) || keg.recurse() == 0 {
             loop {
                 if let Some(v) = keg.fetch_slab(self, flags) {
                     return Some(v);
                 }
 
-                if flags.has(Alloc::NoWait | Alloc::NoVm) {
+                if flags.has_any(Alloc::NoWait | Alloc::NoVm) {
                     break;
                 }
             }

@@ -91,11 +91,16 @@ fn init_vm(procs: &Arc<ProcMgr>) -> Arc<Uma> {
     Uma::new(vm)
 }
 
-/// See `create_init` function on the PS4 for a reference.
+/// See `create_init` function on the Orbis for a reference.
+///
+/// # Reference offsets
+/// | Version | Offset |
+/// |---------|--------|
+/// |PS4 11.00|0x2BEF30|
 fn create_init() {
     let pmgr = current_procmgr().unwrap();
     let abi = Arc::new(Ps4Abi);
-    let flags = Fork::new().with_copy_fd(true).with_create_process(true);
+    let flags = Fork::CopyFd | Fork::CreateProcess;
 
     pmgr.fork(abi, flags).unwrap();
 

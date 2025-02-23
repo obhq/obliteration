@@ -100,7 +100,7 @@ impl Uma {
         name: impl Into<String>,
         size: NonZero<usize>,
         align: Option<usize>,
-        flags: UmaFlags,
+        flags: impl Into<UmaFlags>,
     ) -> UmaZone {
         // The Orbis will allocate a new zone from masterzone_z. We choose to remove this since it
         // does not idomatic to Rust, which mean our uma_zone itself can live on the stack.
