@@ -26,10 +26,7 @@ impl<T: Type, V> Mask<T, V> {
 
 impl<T: Type, V> Clone for Mask<T, V> {
     fn clone(&self) -> Self {
-        Self {
-            mask: self.mask,
-            phantom: PhantomData,
-        }
+        *self
     }
 }
 
