@@ -6,6 +6,7 @@ members = [
     "config",
     "gui",
     "kernel",
+    "lib/bitflag",
     "lib/krt",
     "macros",
 ]

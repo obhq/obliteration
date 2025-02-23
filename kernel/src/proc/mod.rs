@@ -8,10 +8,10 @@ use crate::lock::{MappedMutex, Mutex, MutexGuard};
 use crate::signal::Signal;
 use crate::subsystem::Subsystem;
 use alloc::sync::{Arc, Weak};
-use bitfield_struct::bitfield;
 use core::error::Error;
 use core::fmt::{Display, Formatter};
 use hashbrown::HashMap;
+use macros::bitflag;
 
 mod abi;
 mod cell;
@@ -48,19 +48,24 @@ impl ProcMgr {
         MutexGuard::map(self.procs.lock(), |procs| procs.values())
     }
 
-    /// We imply `RFSTOPPED` to make [`ProcMgr`] not depend on a scheduler.
+    /// We imply `RFSTOPPED` to make [`ProcMgr`] not depend on the scheduler.
     ///
-    /// See `fork1` on the PS4 for a reference.
+    /// See `fork1` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x14B830|
     pub fn fork(&self, abi: Arc<dyn ProcAbi>, flags: Fork) -> Result<Arc<Proc>, ForkError> {
         // TODO: Refactor this for readability.
-        if (flags.into_bits() & 0x60008f8b) != 0
-            || flags.copy_fd() && flags.clear_fd()
-            || flags.parent_signal().into_bits() != 0 && !flags.custom_signal()
+        if (u32::from(flags) & 0x60008f8b) != 0
+            || flags.has_all(Fork::CopyFd | Fork::ClearFd)
+            || flags.has_any(Fork::ParentSignal.mask()) && !flags.has_any(Fork::CustomSignal)
         {
             return Err(ForkError::InvalidFlags);
         }
 
-        if !flags.create_process() {
+        if !flags.has_any(Fork::CreateProcess) {
             todo!()
         }
 
@@ -89,52 +94,31 @@ pub struct ProcEvents {
 }
 
 /// Flags to control behavior of [`ProcMgr::fork()`].
-#[bitfield(u32)]
-pub struct Fork {
-    __: bool,
-    __: bool,
+#[bitflag(u32)]
+pub enum Fork {
     /// Duplicate file descriptor table to the child instead of sharing it with the parent. Cannot
     /// used together with [`Self::clear_fd()`].
     ///
     /// This has the same value as `RFFDG`.
-    pub copy_fd: bool,
-    __: bool,
+    CopyFd = 0x4,
     /// Create a child process.
     ///
     /// This has the same value as `RFPROC`.
-    pub create_process: bool,
-    __: bool,
-    __: bool,
-    __: bool,
-    __: bool,
-    __: bool,
-    __: bool,
-    __: bool,
+    CreateProcess = 0x10,
     /// Create an empty file descriptor table for the child. Cannot used together with
     /// [`Self::copy_fd()`].
     ///
     /// This has the same value as `RFCFDG`.
-    pub clear_fd: bool,
-    __: bool,
-    __: bool,
-    __: bool,
-    __: bool,
-    __: bool,
-    __: bool,
+    ClearFd = 0x1000,
     /// Enable [`Self::parent_signal()`].
     ///
     /// This has the same value as `RFTSIGZMB`.
-    pub custom_signal: bool,
+    CustomSignal = 0x80000,
     /// Use this signal instead of `SIGCHLD` to notify the parent. Requires
     /// [`Self::custom_signal()`] to be enabled.
     ///
     /// This has the same value produced by `RFTSIGNUM` macro.
-    #[bits(8)]
-    pub parent_signal: Signal,
-    __: bool,
-    __: bool,
-    __: bool,
-    __: bool,
+    ParentSignal(Signal) = 0xFF00000,
 }
 
 /// Represents an error when [`ProcMgr::fork()`] fails.
