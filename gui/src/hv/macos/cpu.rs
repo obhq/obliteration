@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use crate::hv::{Cpu, CpuCommit, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, IoBuf};
+use crate::hv::{Cpu, CpuCommit, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, IoBuf};
 use aarch64::Esr;
 use applevisor_sys::hv_exit_reason_t::HV_EXIT_REASON_EXCEPTION;
 use applevisor_sys::hv_reg_t::{HV_REG_CPSR, HV_REG_PC, HV_REG_X0, HV_REG_X1};
@@ -11,7 +11,6 @@ use applevisor_sys::{
     hv_return_t, hv_vcpu_destroy, hv_vcpu_exit_t, hv_vcpu_run, hv_vcpu_set_reg,
     hv_vcpu_set_sys_reg, hv_vcpu_t,
 };
-use gdbstub::stub::MultiThreadStopReason;
 use std::marker::PhantomData;
 use std::num::NonZero;
 use thiserror::Error;
@@ -281,7 +280,7 @@ pub struct HvfDebug<'a, 'b>(&'a mut HvfCpu<'b>);
 impl<'a, 'b> CpuDebug for HvfDebug<'a, 'b> {
     type Cpu = HvfCpu<'b>;
 
-    fn reason(&mut self) -> MultiThreadStopReason<u64> {
+    fn reason(&mut self) -> DebugEvent {
         todo!()
     }
 

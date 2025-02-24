@@ -3,7 +3,6 @@ pub use self::arch::*;
 pub use self::os::{HvError, new};
 pub use self::ram::*;
 
-use gdbstub::stub::MultiThreadStopReason;
 use std::error::Error;
 
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
@@ -94,6 +93,11 @@ pub enum IoBuf<'a> {
 pub trait CpuDebug {
     type Cpu: Cpu;
 
-    fn reason(&mut self) -> MultiThreadStopReason<u64>;
+    fn reason(&mut self) -> DebugEvent;
     fn cpu(&mut self) -> &mut Self::Cpu;
+}
+
+/// The debug event that cause the VM to exit.
+pub enum DebugEvent {
+    SwBreak,
 }

@@ -8,12 +8,13 @@ use self::kernel::{
 };
 use self::ram::{RamBuilder, RamMap};
 use crate::gdb::GdbHandler;
-use crate::hv::{CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, HvError, Hypervisor, Ram};
+use crate::hv::{
+    CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, HvError, Hypervisor, Ram,
+};
 use crate::profile::Profile;
 use config::{BootEnv, ConsoleType, Vm};
 use futures::{FutureExt, select_biased};
 use gdbstub::common::{Signal, Tid};
-use gdbstub::stub::MultiThreadStopReason;
 use gdbstub::target::ext::base::multithread::{
     MultiThreadBase, MultiThreadResume, MultiThreadResumeOps,
 };
@@ -474,7 +475,7 @@ impl<H: Hypervisor> Vmm<H> {
         args: &CpuArgs<H>,
         debug: &self::cpu::debug::Debugger,
         cpu: &mut impl crate::hv::Cpu,
-        stop: Option<MultiThreadStopReason<u64>>,
+        stop: Option<DebugEvent>,
     ) -> Result<Option<bool>, CpuError> {
         // Notify GUI. We need to allow only one CPU to enter the debugger dispatch loop.
         let lock = args.breakpoint.lock().unwrap();
