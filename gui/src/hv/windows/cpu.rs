@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use crate::hv::{Cpu, CpuCommit, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, IoBuf};
-use gdbstub::stub::MultiThreadStopReason;
+use crate::hv::{Cpu, CpuCommit, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, IoBuf};
 use std::marker::PhantomData;
 use std::mem::{MaybeUninit, size_of, zeroed};
 use thiserror::Error;
@@ -561,7 +560,7 @@ pub struct WhpDebug<'a, 'b> {
 impl<'a, 'b> CpuDebug for WhpDebug<'a, 'b> {
     type Cpu = WhpCpu<'b>;
 
-    fn reason(&mut self) -> MultiThreadStopReason<u64> {
+    fn reason(&mut self) -> DebugEvent {
         todo!()
     }
 

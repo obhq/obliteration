@@ -2,10 +2,8 @@
 use super::arch::{KvmStates, StatesError};
 use super::ffi::{KVM_EXIT_DEBUG, KVM_EXIT_HLT, KVM_EXIT_IO, KVM_RUN};
 use super::run::KvmRun;
-use crate::hv::{Cpu, CpuDebug, CpuExit, CpuIo, CpuRun, IoBuf};
-use gdbstub::stub::MultiThreadStopReason;
+use crate::hv::{Cpu, CpuDebug, CpuExit, CpuIo, CpuRun, DebugEvent, IoBuf};
 use libc::{ioctl, munmap};
-use std::num::NonZero;
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::sync::MutexGuard;
 
@@ -168,15 +166,11 @@ pub struct KvmDebug<'a, 'b>(&'a mut KvmCpu<'b>);
 impl<'b> CpuDebug for KvmDebug<'_, 'b> {
     type Cpu = KvmCpu<'b>;
 
-    fn reason(&mut self) -> MultiThreadStopReason<u64> {
+    fn reason(&mut self) -> DebugEvent {
         let debug = unsafe { (*self.0.cx.0).exit.debug.arch };
 
         match debug.exception {
-            3 => {
-                let tid = NonZero::new(self.0.id + 1).unwrap();
-
-                MultiThreadStopReason::SwBreak(tid)
-            }
+            3 => DebugEvent::SwBreak,
             exception => todo!("unhandled exception {exception}"),
         }
     }
