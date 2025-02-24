@@ -63,7 +63,7 @@ fn setup() -> ContextSetup {
     // readability. This also allow us to pass data from one function to another function. See
     // mi_startup function on the Orbis for a reference.
     let procs = ProcMgr::new();
-    let uma = init_vm(&procs); // 161 on PS4 11.00.
+    let uma = init_vm(); // 161 on PS4 11.00.
 
     ContextSetup { uma, pmgr: procs }
 }
@@ -85,8 +85,8 @@ fn run() -> ! {
 /// | Version | Offset |
 /// |---------|--------|
 /// |PS4 11.00|0x39A390|
-fn init_vm(procs: &Arc<ProcMgr>) -> Arc<Uma> {
-    let vm = Vm::new(procs);
+fn init_vm() -> Arc<Uma> {
+    let vm = Vm::new();
 
     Uma::new(vm)
 }

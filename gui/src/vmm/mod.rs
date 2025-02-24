@@ -12,7 +12,7 @@ use crate::hv::{
     CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, HvError, Hypervisor, Ram,
 };
 use crate::profile::Profile;
-use config::{BootEnv, ConsoleType, Vm};
+use config::{BootEnv, ConsoleType, MapType, PhysMap, Vm};
 use futures::{FutureExt, select_biased};
 use gdbstub::common::{Signal, Tid};
 use gdbstub::target::ext::base::multithread::{
@@ -209,14 +209,24 @@ impl Vmm<()> {
         ram.alloc_stack(NonZero::new(1024 * 1024 * 2).unwrap())
             .map_err(VmmError::AllocateRamForStack)?;
 
-        // Allocate arguments.
-        let env = BootEnv::Vm(Vm {
+        // Setup boot info.
+        let mut env = Vm {
             vmm: devices.vmm().addr(),
             console: devices.console().addr(),
             host_page_size,
-        });
+            memory_map: std::array::from_fn(|_| PhysMap {
+                base: 0,
+                len: 0,
+                ty: MapType::None,
+                attrs: 0,
+            }),
+        };
 
-        ram.alloc_args(env, profile.kernel_config().clone())
+        env.memory_map[0].base = 0;
+        env.memory_map[0].len = ram_size.get().try_into().unwrap();
+        env.memory_map[0].ty = MapType::Ram;
+
+        ram.alloc_args(BootEnv::Vm(env), profile.kernel_config().clone())
             .map_err(VmmError::AllocateRamForArgs)?;
 
         // Build RAM.
