@@ -1,3 +1,4 @@
+use super::PhysMap;
 use core::num::NonZero;
 
 /// Provides boot information when booting on a Virtual Machine.
@@ -9,6 +10,9 @@ pub struct Vm {
     pub console: usize,
     /// Page size on the host.
     pub host_page_size: NonZero<usize>,
+    /// Memory map. Set [PhysMap::ty] to [MapType::None](super::MapType::None) to mark the end of
+    /// the list.
+    pub memory_map: [PhysMap; 64],
 }
 
 /// Layout of a memory for Memory-mapped I/O to communicate with VMM.
