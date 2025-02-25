@@ -2,13 +2,13 @@
 use super::cpu::GdbError;
 use super::ram::RamMap;
 use super::{MainCpuError, Vmm};
-use crate::hv::{Cpu, CpuCommit, CpuFeats, CpuStates, Hypervisor};
 use gdbstub::target::ext::base::BaseOps;
 use gdbstub::target::ext::breakpoints::{
     Breakpoints, BreakpointsOps, SwBreakpoint, SwBreakpointOps,
 };
 use gdbstub::target::{TargetError, TargetResult};
 use gdbstub_arch::x86::X86_64_SSE;
+use hv::{Cpu, CpuCommit, CpuFeats, CpuStates, Hypervisor};
 use std::num::NonZero;
 use x86_64::Efer;
 

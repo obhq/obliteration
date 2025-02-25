@@ -1,13 +1,14 @@
 [workspace]
 resolver = "2"
 members = [
-    "arch/aarch64",
-    "arch/x86-64",
     "config",
     "gui",
     "kernel",
+    "lib/aarch64",
     "lib/bitflag",
+    "lib/hv",
     "lib/krt",
+    "lib/x86-64",
     "macros",
 ]
 

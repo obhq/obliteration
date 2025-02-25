@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::ffi::{ARM64_SYS_REG, KVM_SET_ONE_REG, KvmOneReg};
-use crate::vmm::hv::{CpuStates, Pstate, Sctlr, Tcr};
+use crate::{CpuStates, Pstate, Sctlr, Tcr};
 use libc::ioctl;
 use std::io::Error;
 use std::os::fd::{AsRawFd, OwnedFd};

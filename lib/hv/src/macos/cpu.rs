@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use crate::hv::{Cpu, CpuCommit, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, IoBuf};
+use crate::{Cpu, CpuCommit, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, IoBuf};
 use aarch64::Esr;
 use applevisor_sys::hv_exit_reason_t::HV_EXIT_REASON_EXCEPTION;
 use applevisor_sys::hv_reg_t::{HV_REG_CPSR, HV_REG_PC, HV_REG_X0, HV_REG_X1};

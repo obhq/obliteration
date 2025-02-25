@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::Console;
-use crate::hv::{Cpu, CpuExit, CpuIo, Hypervisor};
 use crate::vmm::channel::VmmStream;
 use crate::vmm::hw::{DeviceContext, MmioError, read_ptr, read_u8, read_usize};
 use config::{ConsoleMemory, ConsoleType};
+use hv::{Cpu, CpuExit, CpuIo, Hypervisor};
 use std::error::Error;
 use std::mem::offset_of;
 use std::num::NonZero;

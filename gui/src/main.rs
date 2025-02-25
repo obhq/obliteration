@@ -3,7 +3,6 @@
 use self::data::{DataError, DataMgr};
 use self::gdb::{GdbDispatcher, GdbError, GdbSession};
 use self::graphics::{EngineBuilder, GraphicsError, PhysicalDevice};
-use self::hv::Hypervisor;
 use self::log::LogWriter;
 use self::profile::{DisplayResolution, Profile};
 use self::setup::{SetupError, run_setup};
@@ -18,6 +17,7 @@ use erdp::ErrorDisplay;
 use futures::{
     AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, FutureExt, TryStreamExt, select_biased,
 };
+use hv::Hypervisor;
 use slint::{ComponentHandle, ModelRc, SharedString, ToSharedString, VecModel};
 use std::cell::{Cell, RefMut};
 use std::net::SocketAddr;
@@ -32,7 +32,6 @@ use winit::window::Window;
 mod data;
 mod gdb;
 mod graphics;
-mod hv;
 mod log;
 mod panic;
 mod profile;

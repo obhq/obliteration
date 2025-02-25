@@ -8,9 +8,6 @@ use self::kernel::{
 };
 use self::ram::{RamBuilder, RamMap};
 use crate::gdb::GdbHandler;
-use crate::hv::{
-    CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, HvError, Hypervisor, Ram,
-};
 use crate::profile::Profile;
 use config::{BootEnv, ConsoleType, MapType, PhysMap, Vm};
 use futures::{FutureExt, select_biased};
@@ -19,6 +16,9 @@ use gdbstub::target::ext::base::multithread::{
     MultiThreadBase, MultiThreadResume, MultiThreadResumeOps,
 };
 use gdbstub::target::{TargetError, TargetResult};
+use hv::{
+    CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, HvError, Hypervisor, Ram, RamError,
+};
 use kernel::{KernelError, ProgramHeaderError};
 use rustc_hash::FxHashMap;
 use std::collections::{BTreeMap, HashMap};
@@ -172,7 +172,7 @@ impl Vmm<()> {
         // Setup hypervisor.
         let ram_size = NonZero::new(1024 * 1024 * 1024 * 8).unwrap();
         let mut hv =
-            crate::hv::new(8, ram_size, vm_page_size, false).map_err(VmmError::SetupHypervisor)?;
+            hv::new(8, ram_size, vm_page_size, false).map_err(VmmError::SetupHypervisor)?;
         let devices = Arc::new(setup_devices(ram_size.get(), hv.ram().block_size()));
 
         // Round kernel memory size.
@@ -425,7 +425,7 @@ impl<H: Hypervisor> Vmm<H> {
         }
     }
 
-    fn handle_exit<'c, C: crate::hv::Cpu>(
+    fn handle_exit<'c, C: hv::Cpu>(
         args: &'c CpuArgs<H>,
         debugger: Option<&self::cpu::debug::Debugger>,
         devices: &mut BTreeMap<usize, self::cpu::Device<'c, C>>,
@@ -459,7 +459,7 @@ impl<H: Hypervisor> Vmm<H> {
         }
     }
 
-    fn handle_io<C: crate::hv::Cpu>(
+    fn handle_io<C: hv::Cpu>(
         devices: &mut BTreeMap<usize, self::cpu::Device<'_, C>>,
         mut io: <C::Exit<'_> as CpuExit>::Io,
     ) -> Result<Option<bool>, CpuError> {
@@ -484,7 +484,7 @@ impl<H: Hypervisor> Vmm<H> {
     fn handle_breakpoint(
         args: &CpuArgs<H>,
         debug: &self::cpu::debug::Debugger,
-        cpu: &mut impl crate::hv::Cpu,
+        cpu: &mut impl hv::Cpu,
         stop: Option<DebugEvent>,
     ) -> Result<Option<bool>, CpuError> {
         // Notify GUI. We need to allow only one CPU to enter the debugger dispatch loop.
@@ -840,7 +840,7 @@ pub enum VmmError {
     SetupHypervisor(#[source] HvError),
 
     #[error("couldn't allocate RAM for the kernel")]
-    AllocateRamForKernel(#[source] crate::hv::RamError),
+    AllocateRamForKernel(#[source] RamError),
 
     #[error("couldn't seek to offset {0:#x}")]
     SeekToOffset(u64, #[source] std::io::Error),
@@ -852,10 +852,10 @@ pub enum VmmError {
     ReadKernel(#[source] std::io::Error, u64),
 
     #[error("couldn't allocate RAM for stack")]
-    AllocateRamForStack(#[source] crate::hv::RamError),
+    AllocateRamForStack(#[source] RamError),
 
     #[error("couldn't allocate RAM for arguments")]
-    AllocateRamForArgs(#[source] crate::hv::RamError),
+    AllocateRamForArgs(#[source] RamError),
 
     #[error("couldn't build RAM")]
     BuildRam(#[source] ram::RamBuilderError),

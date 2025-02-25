@@ -2,12 +2,12 @@
 use super::cpu::GdbError;
 use super::ram::RamMap;
 use super::{MainCpuError, Vmm};
-use crate::hv::{Cpu, CpuCommit, CpuFeats, CpuStates, Hypervisor, Pstate, Sctlr, Tcr};
 use gdbstub::target::TargetResult;
 use gdbstub::target::ext::base::BaseOps;
 use gdbstub::target::ext::breakpoints::{
     Breakpoints, BreakpointsOps, SwBreakpoint, SwBreakpointOps,
 };
+use hv::{Cpu, CpuCommit, CpuFeats, CpuStates, Hypervisor, Pstate, Sctlr, Tcr};
 use std::num::NonZero;
 use std::sync::atomic::Ordering;
 
