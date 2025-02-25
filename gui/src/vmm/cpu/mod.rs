@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::hw::DeviceContext;
-use crate::hv::Cpu;
+use hv::Cpu;
 use std::collections::BTreeMap;
 use std::num::NonZero;
 use thiserror::Error;

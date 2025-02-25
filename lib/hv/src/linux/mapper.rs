@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use crate::hv::RamMapper;
+use crate::RamMapper;
 use std::num::NonZero;
 use thiserror::Error;
 

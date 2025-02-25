@@ -2,7 +2,7 @@
 use super::arch::{KvmStates, StatesError};
 use super::ffi::{KVM_EXIT_DEBUG, KVM_EXIT_HLT, KVM_EXIT_IO, KVM_RUN};
 use super::run::KvmRun;
-use crate::hv::{Cpu, CpuDebug, CpuExit, CpuIo, CpuRun, DebugEvent, IoBuf};
+use crate::{Cpu, CpuDebug, CpuExit, CpuIo, CpuRun, DebugEvent, IoBuf};
 use libc::{ioctl, munmap};
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::sync::MutexGuard;

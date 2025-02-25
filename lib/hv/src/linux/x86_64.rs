@@ -3,7 +3,7 @@ use super::ffi::{
     KVM_GET_FPU, KVM_GET_REGS, KVM_GET_SREGS, KVM_SET_REGS, KVM_SET_SREGS, KvmFpu, KvmRegs,
     KvmSregs,
 };
-use crate::hv::{CpuCommit, CpuStates};
+use crate::{CpuCommit, CpuStates};
 use libc::ioctl;
 use std::mem::MaybeUninit;
 use std::os::fd::{AsRawFd, OwnedFd};
