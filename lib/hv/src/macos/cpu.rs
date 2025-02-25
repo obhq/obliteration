@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use crate::{Cpu, CpuCommit, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, IoBuf};
+use crate::{
+    Cpu, CpuCommit, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, IoBuf, Pstate, Sctlr,
+    Tcr,
+};
 use aarch64::Esr;
 use applevisor_sys::hv_exit_reason_t::HV_EXIT_REASON_EXCEPTION;
 use applevisor_sys::hv_reg_t::{HV_REG_CPSR, HV_REG_PC, HV_REG_X0, HV_REG_X1};
@@ -109,11 +112,11 @@ pub struct HvfStates<'a, 'b> {
 impl<'a, 'b> CpuStates for HvfStates<'a, 'b> {
     type Err = StatesError;
 
-    fn set_pstate(&mut self, v: crate::hv::Pstate) {
+    fn set_pstate(&mut self, v: Pstate) {
         self.pstate = State::Dirty(v.into_bits());
     }
 
-    fn set_sctlr(&mut self, v: crate::hv::Sctlr) {
+    fn set_sctlr(&mut self, v: Sctlr) {
         self.sctlr = State::Dirty(v.into_bits());
     }
 
@@ -121,7 +124,7 @@ impl<'a, 'b> CpuStates for HvfStates<'a, 'b> {
         self.mair_el1 = State::Dirty(attrs);
     }
 
-    fn set_tcr(&mut self, v: crate::hv::Tcr) {
+    fn set_tcr(&mut self, v: Tcr) {
         self.tcr = State::Dirty(v.into_bits());
     }
 
