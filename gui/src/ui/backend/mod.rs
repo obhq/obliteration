@@ -147,6 +147,8 @@ impl slint::platform::Platform for Platform {
         let renderer = SkiaRenderer::default();
         let api = if cfg!(target_os = "macos") {
             RequestedGraphicsAPI::Metal
+        } else if cfg!(target_os = "windows") {
+            RequestedGraphicsAPI::Direct3D
         } else {
             RequestedGraphicsAPI::Vulkan
         };
