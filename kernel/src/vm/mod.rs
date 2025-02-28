@@ -151,6 +151,7 @@ impl Vm {
 
                     // This loop does not make sense on the Orbis. It seems like if this loop once
                     // entered it will never exit.
+                    #[allow(clippy::while_immutable_condition)]
                     while insert_idx < i {
                         todo!()
                     }
