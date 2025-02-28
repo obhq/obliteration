@@ -18,6 +18,19 @@ macro_rules! info {
     };
 }
 
+/// Write warning log.
+///
+/// When running inside a VM each call will cause a VM to exit multiple times so don't do this in a
+/// performance critical path.
+///
+/// The LF character will be automatically appended.
+#[macro_export]
+macro_rules! warn {
+    ($($args:tt)*) => {
+        $crate::warn(file!(), line!(), format_args!($($args)*))
+    };
+}
+
 pub fn info(file: &str, line: u32, msg: impl Display) {
     let msg = Log {
         style: Style::new().effects(Effects::DIMMED),
@@ -28,6 +41,18 @@ pub fn info(file: &str, line: u32, msg: impl Display) {
     };
 
     print(ConsoleType::Info, msg);
+}
+
+pub fn warn(file: &str, line: u32, msg: impl Display) {
+    let msg = Log {
+        style: Style::new().fg_color(Some(Color::Ansi(AnsiColor::BrightYellow))),
+        cat: 'W',
+        file,
+        line,
+        msg,
+    };
+
+    print(ConsoleType::Warn, msg);
 }
 
 pub fn error(file: &str, line: u32, msg: impl Display) {
