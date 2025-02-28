@@ -68,7 +68,7 @@ xdg = "2.5.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 ash = { version = "0.37.3", features = ["linked"], default-features = false }
-i-slint-renderer-skia = { version = "=1.10.0", features = ["vulkan"] }
+i-slint-renderer-skia = "=1.10.0"
 windows = { version = "0.58.0", features = [
     "Win32_System_Com",
     "Win32_UI_Shell",
