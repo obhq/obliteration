@@ -1,13 +1,14 @@
-use crate::ui::ErrorWindow;
+use crate::ui::{App, ErrorWindow, RuntimeExt};
 use erdp::ErrorDisplay;
 use serde::{Deserialize, Serialize};
-use slint::ComponentHandle;
+use slint::{ComponentHandle, SharedString};
 use std::borrow::Cow;
 use std::io::Write;
 use std::panic::PanicHookInfo;
 use std::path::Path;
 use std::process::{Child, Command, ExitCode, Stdio};
 use std::sync::Mutex;
+use thiserror::Error;
 
 pub fn spawn_handler(exe: &Path) -> Result<(), std::io::Error> {
     // Spawn the process in panic handler mode.
@@ -17,7 +18,7 @@ pub fn spawn_handler(exe: &Path) -> Result<(), std::io::Error> {
         .spawn()?;
 
     // Set panic hook to send panic to the handler.
-    let ph = Mutex::new(Some(PanicHandler(ph)));
+    let ph = Mutex::new(Some(HandlerProcess(ph)));
 
     std::panic::set_hook(Box::new(move |i| panic_hook(i, &ph)));
 
@@ -32,9 +33,11 @@ pub fn run_handler() -> ExitCode {
     let mut stdin = stdin.lock();
     let (msg, exit) = match ciborium::from_reader::<PanicInfo, _>(&mut stdin) {
         Ok(v) => {
-            let m = format!(
+            let m = slint::format!(
                 "An unexpected error has occurred at {}:{}: {}.",
-                v.file, v.line, v.message
+                v.file,
+                v.line,
+                v.message
             );
 
             (m, ExitCode::SUCCESS)
@@ -43,28 +46,19 @@ pub fn run_handler() -> ExitCode {
             return ExitCode::SUCCESS;
         }
         Err(e) => {
-            let m = format!("Failed to read panic info: {}.", e.display());
+            let m = slint::format!("Failed to read panic info: {}.", e.display());
 
             (m, ExitCode::FAILURE)
         }
     };
 
-    // Display error window.
-    let win = ErrorWindow::new().unwrap();
-
-    win.set_message(msg.into());
-    win.on_close({
-        let win = win.as_weak();
-
-        move || win.unwrap().hide().unwrap()
-    });
-
-    win.run().unwrap();
-
-    exit
+    match crate::ui::run::<PanicHandler>(msg) {
+        ExitCode::SUCCESS => exit,
+        v => v,
+    }
 }
 
-fn panic_hook(i: &PanicHookInfo, ph: &Mutex<Option<PanicHandler>>) {
+fn panic_hook(i: &PanicHookInfo, ph: &Mutex<Option<HandlerProcess>>) {
     // Allow only one thread to report the panic.
     let mut ph = ph.lock().unwrap();
     let mut ph = match ph.take() {
@@ -100,12 +94,46 @@ fn panic_hook(i: &PanicHookInfo, ph: &Mutex<Option<PanicHandler>>) {
 }
 
 /// Provide [`Drop`] implementation to shutdown panic handler.
-struct PanicHandler(Child);
+struct HandlerProcess(Child);
 
-impl Drop for PanicHandler {
+impl Drop for HandlerProcess {
     fn drop(&mut self) {
         // wait() will close stdin for us before waiting.
         self.0.wait().unwrap();
+    }
+}
+
+/// Implementation of [`App`] for panic handler process.
+struct PanicHandler {
+    msg: SharedString,
+}
+
+impl App for PanicHandler {
+    type Err = PanicError;
+    type Args = SharedString;
+
+    const NAME: &str = "panic handler";
+
+    fn new(args: Self::Args) -> Result<Self, Self::Err> {
+        Ok(Self { msg: args })
+    }
+
+    async fn run(self) -> Result<(), Self::Err> {
+        // Setup error window.
+        let win = ErrorWindow::new().map_err(PanicError::CreateErrorWindow)?;
+
+        win.set_message(self.msg);
+        win.on_close({
+            let win = win.as_weak();
+
+            move || win.unwrap().hide().unwrap()
+        });
+
+        // Run the window.
+        win.show().map_err(PanicError::ShowErrorWindow)?;
+        win.wait().await;
+
+        Ok(())
     }
 }
 
@@ -115,4 +143,14 @@ struct PanicInfo<'a> {
     message: Cow<'a, str>,
     file: Cow<'a, str>,
     line: u32,
+}
+
+/// Represents an error when [`PanicHandler`] fails.
+#[derive(Debug, Error)]
+enum PanicError {
+    #[error("couldn't create error window")]
+    CreateErrorWindow(#[source] slint::PlatformError),
+
+    #[error("couldn't show error window")]
+    ShowErrorWindow(#[source] slint::PlatformError),
 }
