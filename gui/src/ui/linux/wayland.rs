@@ -1,5 +1,6 @@
 use super::PlatformError;
-use crate::ui::{DesktopWindow, Wayland};
+use crate::ui::DesktopWindow;
+use crate::ui::backend::Wayland;
 use wayland_backend::sys::client::ObjectId;
 use wayland_client::Proxy;
 use wayland_protocols::xdg::dialog::v1::client::xdg_dialog_v1::XdgDialogV1;
