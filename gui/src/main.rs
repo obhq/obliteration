@@ -7,8 +7,8 @@ use self::log::LogWriter;
 use self::profile::{DisplayResolution, Profile};
 use self::setup::{SetupError, run_setup};
 use self::ui::{
-    DesktopExt, MainWindow, ProfileModel, ResolutionModel, RuntimeExt, SlintBackend,
-    WaitForDebugger, error, spawn_handler,
+    App, DesktopExt, MainWindow, ProfileModel, ResolutionModel, RuntimeExt, WaitForDebugger, error,
+    spawn_handler,
 };
 use self::vmm::{CpuError, Vmm, VmmError, VmmEvent};
 use async_net::{TcpListener, TcpStream};
@@ -49,249 +49,204 @@ fn main() -> ExitCode {
         None => {}
     }
 
-    #[cfg(target_os = "windows")]
-    fn error(msg: impl AsRef<str>) {
-        todo!()
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    fn error(msg: impl AsRef<str>) {
-        eprintln!("{}", msg.as_ref());
-    }
-
-    // Spawn panic handler.
-    let exe = match std::env::current_exe().and_then(std::fs::canonicalize) {
-        Ok(v) => v,
-        Err(e) => {
-            error(format!(
-                "Failed to get application executable path: {}.",
-                e.display()
-            ));
-
-            return ExitCode::FAILURE;
-        }
-    };
-
-    if let Err(e) = self::panic::spawn_handler(&exe) {
-        error(format!(
-            "Failed to spawn panic handler process: {}.",
-            e.display()
-        ));
-
-        return ExitCode::FAILURE;
-    }
-
     // Run.
-    let main = async move {
-        // Setup Slint custom back-end. This need to be done before using any Slint API.
-        match unsafe { SlintBackend::new() } {
-            Ok(v) => v.install().unwrap(), // This should never fail.
-            Err(e) => {
-                error(format!(
-                    "Failed to initialize Slint back-end: {}.",
-                    e.display()
-                ));
-
-                return ExitCode::FAILURE;
-            }
-        }
-
-        // Run.
-        let e = match run(args, exe).await {
-            Ok(_) => return ExitCode::SUCCESS,
-            Err(e) => e,
-        };
-
-        // Show error window.
-        let msg = format!("An unexpected error has occurred: {}.", e.display());
-
-        self::ui::error::<MainWindow>(None, msg).await;
-
-        ExitCode::FAILURE
-    };
-
-    match wae::run(main) {
-        Ok(v) => v,
-        Err(e) => {
-            error(format!(
-                "Failed to run application runtime: {}.",
-                e.display()
-            ));
-
-            ExitCode::FAILURE
-        }
-    }
+    self::ui::run::<MainProgram>(args)
 }
 
-async fn run(args: ProgramArgs, exe: PathBuf) -> Result<(), ProgramError> {
-    // Increase number of file descriptor to maximum allowed.
-    #[cfg(unix)]
-    unsafe {
-        use libc::{RLIMIT_NOFILE, getrlimit, setrlimit};
-        use std::io::Error;
-        use std::mem::MaybeUninit;
+/// Implementation of [`App`] for main program.
+struct MainProgram {
+    args: ProgramArgs,
+    exe: PathBuf,
+}
 
-        // Get current value.
-        let mut val = MaybeUninit::uninit();
+impl App for MainProgram {
+    type Err = ProgramError;
+    type Args = ProgramArgs;
 
-        if getrlimit(RLIMIT_NOFILE, val.as_mut_ptr()) < 0 {
-            return Err(ProgramError::GetFdLimit(Error::last_os_error()));
-        }
+    const NAME: &str = "main program";
 
-        // Check if we need to increase the limit.
-        let mut val = val.assume_init();
+    fn new(args: Self::Args) -> Result<Self, Self::Err> {
+        // Spawn panic handler.
+        let exe = std::env::current_exe()
+            .and_then(std::fs::canonicalize)
+            .map_err(ProgramError::GetExePath)?;
 
-        if val.rlim_cur < val.rlim_max {
-            val.rlim_cur = val.rlim_max;
+        self::panic::spawn_handler(&exe).map_err(ProgramError::SpawnPanicHandler)?;
 
-            if setrlimit(RLIMIT_NOFILE, &val) < 0 {
-                return Err(ProgramError::SetFdLimit(Error::last_os_error()));
+        Ok(Self { args, exe })
+    }
+
+    async fn run(self) -> Result<(), Self::Err> {
+        // Increase number of file descriptor to maximum allowed.
+        #[cfg(unix)]
+        unsafe {
+            use libc::{RLIMIT_NOFILE, getrlimit, setrlimit};
+            use std::io::Error;
+            use std::mem::MaybeUninit;
+
+            // Get current value.
+            let mut val = MaybeUninit::uninit();
+
+            if getrlimit(RLIMIT_NOFILE, val.as_mut_ptr()) < 0 {
+                return Err(ProgramError::GetFdLimit(Error::last_os_error()));
+            }
+
+            // Check if we need to increase the limit.
+            let mut val = val.assume_init();
+
+            if val.rlim_cur < val.rlim_max {
+                val.rlim_cur = val.rlim_max;
+
+                if setrlimit(RLIMIT_NOFILE, &val) < 0 {
+                    return Err(ProgramError::SetFdLimit(Error::last_os_error()));
+                }
             }
         }
-    }
 
-    // Initialize graphics engine.
-    let graphics = graphics::builder().map_err(ProgramError::InitGraphics)?;
+        // Initialize graphics engine.
+        let graphics = graphics::builder().map_err(ProgramError::InitGraphics)?;
 
-    // Run setup wizard. This will simply return the data manager if the user already has required
-    // settings.
-    let data = match run_setup().await.map_err(ProgramError::Setup)? {
-        Some(v) => Arc::new(v),
-        None => return Ok(()),
-    };
-
-    // Get kernel path.
-    let kernel = args.kernel.as_ref().cloned().unwrap_or_else(|| {
-        // Get kernel directory.
-        let mut path = exe.parent().unwrap().to_owned();
-
-        #[cfg(target_os = "windows")]
-        path.push("share");
-
-        #[cfg(not(target_os = "windows"))]
-        {
-            path.pop();
-
-            #[cfg(target_os = "macos")]
-            path.push("Resources");
-
-            #[cfg(not(target_os = "macos"))]
-            path.push("share");
-        }
-
-        // Append kernel.
-        path.push("obkrnl");
-        path
-    });
-
-    // Load profiles.
-    let mut profiles = Vec::new();
-
-    for l in data.profiles().list().map_err(ProgramError::ListProfile)? {
-        let l = l.map_err(ProgramError::ListProfile)?;
-        let p = Profile::load(&l).map_err(ProgramError::LoadProfile)?;
-
-        profiles.push(p);
-    }
-
-    // Create default profile if user does not have any profiles.
-    if profiles.is_empty() {
-        // Create directory.
-        let p = Profile::default();
-        let l = data.profiles().data(p.id());
-
-        if let Err(e) = std::fs::create_dir(&l) {
-            return Err(ProgramError::CreateDirectory(l, e));
-        }
-
-        // Save.
-        p.save(&l).map_err(ProgramError::SaveDefaultProfile)?;
-
-        profiles.push(p);
-    }
-
-    // Get profile to use.
-    let (profile, debug) = if let Some(v) = args.debug {
-        // TODO: Select last used profile.
-        (profiles.pop().unwrap(), Some(v))
-    } else {
-        let (profile, exit) = match run_launcher(&graphics, &data, profiles).await? {
-            Some(v) => v,
+        // Run setup wizard. This will simply return the data manager if the user already has required
+        // settings.
+        let data = match run_setup().await.map_err(ProgramError::Setup)? {
+            Some(v) => Arc::new(v),
             None => return Ok(()),
         };
 
-        match exit {
-            ExitAction::Run => (profile, None),
-            ExitAction::Debug => {
-                let addr = profile.debug_addr().clone();
+        // Get kernel path.
+        let kernel = self.args.kernel.as_ref().cloned().unwrap_or_else(|| {
+            // Get kernel directory.
+            let mut path = self.exe.parent().unwrap().to_owned();
 
-                (profile, Some(addr))
+            #[cfg(target_os = "windows")]
+            path.push("share");
+
+            #[cfg(not(target_os = "windows"))]
+            {
+                path.pop();
+
+                #[cfg(target_os = "macos")]
+                path.push("Resources");
+
+                #[cfg(not(target_os = "macos"))]
+                path.push("share");
             }
+
+            // Append kernel.
+            path.push("obkrnl");
+            path
+        });
+
+        // Load profiles.
+        let mut profiles = Vec::new();
+
+        for l in data.profiles().list().map_err(ProgramError::ListProfile)? {
+            let l = l.map_err(ProgramError::ListProfile)?;
+            let p = Profile::load(&l).map_err(ProgramError::LoadProfile)?;
+
+            profiles.push(p);
         }
-    };
 
-    // Wait for debugger.
-    let mut gdb_read: Box<dyn AsyncRead + Unpin>;
-    let mut gdb_write: Box<dyn AsyncWrite + Unpin>;
+        // Create default profile if user does not have any profiles.
+        if profiles.is_empty() {
+            // Create directory.
+            let p = Profile::default();
+            let l = data.profiles().data(p.id());
 
-    match debug {
-        Some(addr) => {
-            let (r, w) = match wait_for_debugger(addr).await? {
-                Some(v) => v.split(),
+            if let Err(e) = std::fs::create_dir(&l) {
+                return Err(ProgramError::CreateDirectory(l, e));
+            }
+
+            // Save.
+            p.save(&l).map_err(ProgramError::SaveDefaultProfile)?;
+
+            profiles.push(p);
+        }
+
+        // Get profile to use.
+        let (profile, debug) = if let Some(v) = self.args.debug {
+            // TODO: Select last used profile.
+            (profiles.pop().unwrap(), Some(v))
+        } else {
+            let (profile, exit) = match run_launcher(&graphics, &data, profiles).await? {
+                Some(v) => v,
                 None => return Ok(()),
             };
 
-            gdb_read = Box::new(r);
-            gdb_write = Box::new(w);
-        }
-        None => {
-            gdb_read = Box::new(futures::stream::pending::<Result<&[u8], _>>().into_async_read());
-            gdb_write = Box::new(futures::io::sink());
-        }
-    }
+            match exit {
+                ExitAction::Run => (profile, None),
+                ExitAction::Debug => {
+                    let addr = profile.debug_addr().clone();
 
-    // Setup WindowAttributes for VMM screen.
-    let attrs = Window::default_attributes()
-        .with_inner_size(match profile.display_resolution() {
-            DisplayResolution::Hd => PhysicalSize::new(1280, 720),
-            DisplayResolution::FullHd => PhysicalSize::new(1920, 1080),
-            DisplayResolution::UltraHd => PhysicalSize::new(3840, 2160),
-        })
-        .with_resizable(false)
-        .with_title("Obliteration");
-
-    // Prepare to launch VMM.
-    let logs = data.logs();
-    let mut logs =
-        LogWriter::new(logs).map_err(|e| ProgramError::CreateKernelLog(logs.into(), e))?;
-    let shutdown = Arc::default();
-    let graphics = graphics
-        .build(&profile, attrs, &shutdown)
-        .map_err(ProgramError::BuildGraphicsEngine)?;
-    let mut gdb = GdbSession::default();
-    let mut gdb_buf = [0; 1024];
-
-    // Start VMM.
-    let mut vmm = match Vmm::new(&profile, &kernel, &shutdown) {
-        Ok(v) => v,
-        Err(e) => return Err(ProgramError::StartVmm(kernel, e)),
-    };
-
-    loop {
-        // Wait for event.
-        let r = select_biased! {
-            v = gdb_read.read(&mut gdb_buf).fuse() => {
-                dispatch_gdb(v, &mut gdb, &gdb_buf, &mut vmm, &mut gdb_write).await?
+                    (profile, Some(addr))
+                }
             }
-            v = vmm.recv().fuse() => dispatch_vmm(v, &mut logs).await?,
         };
 
-        if !r {
-            break;
-        }
-    }
+        // Wait for debugger.
+        let mut gdb_read: Box<dyn AsyncRead + Unpin>;
+        let mut gdb_write: Box<dyn AsyncWrite + Unpin>;
 
-    Ok(())
+        match debug {
+            Some(addr) => {
+                let (r, w) = match wait_for_debugger(addr).await? {
+                    Some(v) => v.split(),
+                    None => return Ok(()),
+                };
+
+                gdb_read = Box::new(r);
+                gdb_write = Box::new(w);
+            }
+            None => {
+                gdb_read =
+                    Box::new(futures::stream::pending::<Result<&[u8], _>>().into_async_read());
+                gdb_write = Box::new(futures::io::sink());
+            }
+        }
+
+        // Setup WindowAttributes for VMM screen.
+        let attrs = Window::default_attributes()
+            .with_inner_size(match profile.display_resolution() {
+                DisplayResolution::Hd => PhysicalSize::new(1280, 720),
+                DisplayResolution::FullHd => PhysicalSize::new(1920, 1080),
+                DisplayResolution::UltraHd => PhysicalSize::new(3840, 2160),
+            })
+            .with_resizable(false)
+            .with_title("Obliteration");
+
+        // Prepare to launch VMM.
+        let logs = data.logs();
+        let mut logs =
+            LogWriter::new(logs).map_err(|e| ProgramError::CreateKernelLog(logs.into(), e))?;
+        let shutdown = Arc::default();
+        let graphics = graphics
+            .build(&profile, attrs, &shutdown)
+            .map_err(ProgramError::BuildGraphicsEngine)?;
+        let mut gdb = GdbSession::default();
+        let mut gdb_buf = [0; 1024];
+
+        // Start VMM.
+        let mut vmm = match Vmm::new(&profile, &kernel, &shutdown) {
+            Ok(v) => v,
+            Err(e) => return Err(ProgramError::StartVmm(kernel, e)),
+        };
+
+        loop {
+            // Wait for event.
+            let r = select_biased! {
+                v = gdb_read.read(&mut gdb_buf).fuse() => {
+                    dispatch_gdb(v, &mut gdb, &gdb_buf, &mut vmm, &mut gdb_write).await?
+                }
+                v = vmm.recv().fuse() => dispatch_vmm(v, &mut logs).await?,
+            };
+
+            if !r {
+                break;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 async fn run_launcher(
@@ -550,9 +505,15 @@ enum ProgramMode {
     PanicHandler,
 }
 
-/// Represents an error when our program fails.
+/// Represents an error when [`MainProgram`] fails.
 #[derive(Debug, Error)]
 enum ProgramError {
+    #[error("couldn't get application executable path")]
+    GetExePath(#[source] std::io::Error),
+
+    #[error("couldn't spawn panic handler process")]
+    SpawnPanicHandler(#[source] std::io::Error),
+
     #[cfg(unix)]
     #[error("couldn't get file descriptor limit")]
     GetFdLimit(#[source] std::io::Error),

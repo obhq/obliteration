@@ -1,12 +1,14 @@
-pub use self::backend::*;
 pub use self::os::*;
 pub use self::profile::*;
 
+use self::backend::{SlintBackend, SlintWindow};
+use erdp::ErrorDisplay;
 use i_slint_core::window::WindowInner;
 use raw_window_handle::HasWindowHandle;
 use slint::{ComponentHandle, SharedString, Weak};
 use std::future::Future;
 use std::ops::Deref;
+use std::process::ExitCode;
 use wae::WinitWindow;
 use winit::window::WindowId;
 
@@ -16,6 +18,77 @@ mod backend;
 #[cfg_attr(target_os = "windows", path = "windows/mod.rs")]
 mod os;
 mod profile;
+
+pub fn run<A: App>(args: A::Args) -> ExitCode {
+    #[cfg(target_os = "windows")]
+    fn error(msg: impl AsRef<str>) {
+        todo!()
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    fn error(msg: impl AsRef<str>) {
+        eprintln!("{}", msg.as_ref());
+    }
+
+    // Create application.
+    let app = match A::new(args) {
+        Ok(v) => v,
+        Err(e) => {
+            error(format!("Failed to create {}: {}.", A::NAME, e.display()));
+            return ExitCode::FAILURE;
+        }
+    };
+
+    // Run.
+    let main = async move {
+        // Setup Slint custom back-end. This need to be done before using any Slint API.
+        let backend = match unsafe { SlintBackend::new() } {
+            Ok(v) => v,
+            Err(e) => {
+                error(format!(
+                    "Failed to initialize Slint back-end: {}.",
+                    e.display()
+                ));
+
+                return ExitCode::FAILURE;
+            }
+        };
+
+        if let Err(e) = backend.install() {
+            error(format!(
+                "Failed to install Slint back-end: {}.",
+                e.display()
+            ));
+
+            return ExitCode::FAILURE;
+        }
+
+        // Run application.
+        let e = match app.run().await {
+            Ok(_) => return ExitCode::SUCCESS,
+            Err(e) => e,
+        };
+
+        // Show error window.
+        let msg = slint::format!("An unexpected error has occurred: {}.", e.display());
+
+        crate::error::<ErrorWindow>(None, msg).await;
+
+        ExitCode::FAILURE
+    };
+
+    match wae::run(main) {
+        Ok(v) => v,
+        Err(e) => {
+            error(format!(
+                "Failed to run application runtime: {}.",
+                e.display()
+            ));
+
+            ExitCode::FAILURE
+        }
+    }
+}
 
 /// Blocks user inputs from deliver to `w` then spawn a future returned from `f`.
 ///
@@ -66,6 +139,17 @@ impl<T: ComponentHandle + WinitWindow> DesktopWindow for T {
 
         win.winit().xdg_toplevel()
     }
+}
+
+/// Provides application logic to run on our Slint back-end.
+pub trait App: Sized + 'static {
+    type Err: std::error::Error;
+    type Args;
+
+    const NAME: &str;
+
+    fn new(args: Self::Args) -> Result<Self, Self::Err>;
+    fn run(self) -> impl Future<Output = Result<(), Self::Err>>;
 }
 
 /// Provides methods to return platform-specific handle for a desktop window.
