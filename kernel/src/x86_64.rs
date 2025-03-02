@@ -1,10 +1,11 @@
 use crate::context::{ContextArgs, current_trap_rsp_offset, current_user_rsp_offset};
 use crate::trap::{interrupt_handler, syscall_handler};
+use alloc::vec;
 use bitfield_struct::bitfield;
 use core::arch::{asm, global_asm};
 use core::mem::{transmute, zeroed};
 use core::ptr::addr_of;
-use x86_64::{Dpl, Efer, Rflags, SegmentSelector, Star};
+use x86_64::{Dpl, Efer, Rflags, SegmentDescriptor, SegmentSelector, Star};
 
 pub const GDT_KERNEL_CS: SegmentSelector = SegmentSelector::new().with_si(3);
 pub const GDT_KERNEL_DS: SegmentSelector = SegmentSelector::new().with_si(4);
@@ -14,8 +15,7 @@ pub const GDT_USER_CS32: SegmentSelector = SegmentSelector::new().with_si(5).wit
 /// This function can be called only once and must be called by main CPU entry point.
 pub unsafe fn setup_main_cpu() -> ContextArgs {
     // Setup GDT.
-    const GDT_LEN: usize = 10;
-    static mut GDT: [SegmentDescriptor; GDT_LEN] = [
+    let mut gdt = vec![
         // Null descriptor.
         SegmentDescriptor::new(),
         // 32-bit GS for user.
@@ -39,9 +39,6 @@ pub unsafe fn setup_main_cpu() -> ContextArgs {
         SegmentDescriptor::new(),
         // 64-bit CS for user.
         SegmentDescriptor::new(),
-        // TSS descriptor.
-        SegmentDescriptor::new(),
-        SegmentDescriptor::new(),
     ];
 
     // Setup Task State Segment (TSS).
@@ -51,26 +48,34 @@ pub unsafe fn setup_main_cpu() -> ContextArgs {
 
     unsafe { TSS.rsp0 = (&raw mut TSS_RSP0).byte_add(TSS_RSP0_LEN) as usize }; // Top-down.
 
+    // Add placeholder for TSS descriptor.
+    let tss = gdt.len();
+
+    gdt.push(SegmentDescriptor::new());
+    gdt.push(SegmentDescriptor::new());
+
     // Setup TSS descriptor.
-    let tss: &'static mut TssDescriptor = unsafe { transmute(&mut GDT[8]) };
+    let desc: &mut TssDescriptor = unsafe { transmute(&mut gdt[tss]) };
     let base = addr_of!(TSS) as usize;
 
-    tss.set_limit1((size_of::<Tss>() - 1).try_into().unwrap());
-    tss.set_base1((base & 0xFFFFFF).try_into().unwrap());
-    tss.set_base2((base >> 24).try_into().unwrap());
-    tss.set_ty(0b1001); // Available 64-bit TSS.
-    tss.set_p(true);
+    desc.set_limit1((size_of::<Tss>() - 1).try_into().unwrap());
+    desc.set_base1((base & 0xFFFFFF).try_into().unwrap());
+    desc.set_base2((base >> 24).try_into().unwrap());
+    desc.set_ty(0b1001); // Available 64-bit TSS.
+    desc.set_p(true);
 
     // Switch GDT from bootloader GDT to our own.
-    let limit = (size_of::<SegmentDescriptor>() * GDT_LEN - 1)
+    let limit = (size_of::<SegmentDescriptor>() * gdt.len() - 1)
         .try_into()
         .unwrap();
+
+    gdt.shrink_to_fit();
 
     unsafe {
         set_gdtr(
             &Gdtr {
                 limit,
-                addr: (&raw const GDT).cast(),
+                addr: gdt.leak().as_ptr(),
             },
             GDT_KERNEL_CS,
             GDT_KERNEL_DS,
@@ -78,10 +83,14 @@ pub unsafe fn setup_main_cpu() -> ContextArgs {
     };
 
     // Set Task Register (TR).
+    let sel = SegmentSelector::new()
+        .with_si(tss.try_into().unwrap())
+        .into_bits();
+
     unsafe {
         asm!(
             "ltr {v:x}",
-            v = in(reg) SegmentSelector::new().with_si(8).into_bits(),
+            v = in(reg) sel,
             options(preserves_flags, nostack)
         )
     };
@@ -232,30 +241,6 @@ global_asm!("syscall_entry32:", "ud2");
 struct Gdtr {
     limit: u16,
     addr: *const SegmentDescriptor,
-}
-
-/// Raw value of a Segment Descriptor.
-///
-/// See Legacy Segment Descriptors section on AMD64 Architecture Programmer's Manual Volume 2 for
-/// more details.
-#[bitfield(u64)]
-struct SegmentDescriptor {
-    limit1: u16,
-    #[bits(24)]
-    base1: u32,
-    #[bits(4)]
-    ty: u8,
-    s: bool,
-    #[bits(2)]
-    dpl: Dpl,
-    p: bool,
-    #[bits(4)]
-    limit2: u8,
-    avl: bool,
-    l: bool,
-    db: bool,
-    g: bool,
-    base2: u8,
 }
 
 /// Raw value of a TSS descriptor.

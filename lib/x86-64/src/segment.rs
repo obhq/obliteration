@@ -1,5 +1,29 @@
 use bitfield_struct::bitfield;
 
+/// Raw value of a Segment Descriptor.
+///
+/// See Legacy Segment Descriptors section on AMD64 Architecture Programmer's Manual Volume 2 for
+/// more details.
+#[bitfield(u64)]
+pub struct SegmentDescriptor {
+    pub limit1: u16,
+    #[bits(24)]
+    pub base1: u32,
+    #[bits(4)]
+    pub ty: u8,
+    pub s: bool,
+    #[bits(2)]
+    pub dpl: Dpl,
+    pub p: bool,
+    #[bits(4)]
+    pub limit2: u8,
+    pub avl: bool,
+    pub l: bool,
+    pub db: bool,
+    pub g: bool,
+    pub base2: u8,
+}
+
 /// Raw value of a Segment Selector (e.g. `CS` and `DS` register).
 ///
 /// See Segment Selectors section on AMD64 Architecture Programmer's Manual Volume 2 for more
