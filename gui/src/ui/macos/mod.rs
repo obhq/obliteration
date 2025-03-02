@@ -36,7 +36,7 @@ impl<T: DesktopWindow> DesktopExt for T {
         // Show the sheet.
         let w = get_window(self.handle());
         let p = get_window(parent.handle());
-        let _: () = unsafe { msg_send![p, beginSheet:w completionHandler:cb.deref()] };
+        let _: () = unsafe { msg_send![p, beginSheet:w, completionHandler:cb.deref()] };
 
         Ok(Modal::new(self, parent))
     }

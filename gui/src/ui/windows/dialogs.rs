@@ -47,8 +47,8 @@ pub async fn open_file<T: DesktopWindow>(
         let browser: IFileOpenDialog = CoCreateInstance(&FileOpenDialog, None, CLSCTX_ALL).unwrap();
         let mut opts = browser.GetOptions().unwrap();
         let filter = COMDLG_FILTERSPEC {
-            pszName: file_desc.as_ptr(),
-            pszSpec: file_ext.as_ptr(),
+            pszName: PCWSTR(file_desc.as_ptr()),
+            pszSpec: PCWSTR(file_ext.as_ptr()),
         };
 
         opts |= FOS_NOCHANGEDIR;
