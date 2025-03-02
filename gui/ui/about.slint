@@ -1,0 +1,44 @@
+import { AboutSlint, VerticalBox, TabWidget } from "std-widgets.slint";
+
+component Obliteration {
+    VerticalBox {
+        Image {
+            source: @image-url("about/logo.png");
+        }
+
+        Text {
+            text: "Obliteration is a free and open-source software to run PlayStation 4 system software on PC.";
+            wrap: word-wrap;
+        }
+    }
+}
+
+component Slint {
+    AboutSlint { }
+}
+
+export component AboutWindow inherits Window {
+    title: "About";
+    width: 400px;
+    height: 200px;
+
+    TabWidget {
+        Tab {
+            title: "Obliteration";
+
+            Obliteration {
+                width: 100%;
+                height: 100%;
+            }
+        }
+
+        Tab {
+            title: "Slint";
+
+            Slint {
+                width: 100%;
+                height: 100%;
+            }
+        }
+    }
+}

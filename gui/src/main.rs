@@ -7,8 +7,8 @@ use self::log::LogWriter;
 use self::profile::{DisplayResolution, Profile};
 use self::setup::{SetupError, run_setup};
 use self::ui::{
-    App, DesktopExt, MainWindow, ProfileModel, ResolutionModel, RuntimeExt, WaitForDebugger, error,
-    spawn_handler,
+    AboutWindow, App, DesktopExt, MainWindow, ProfileModel, ResolutionModel, RuntimeExt,
+    WaitForDebugger, error, spawn_handler,
 };
 use self::vmm::{CpuError, Vmm, VmmError, VmmEvent};
 use async_net::{TcpListener, TcpStream};
@@ -57,6 +57,44 @@ fn main() -> ExitCode {
 struct MainProgram {
     args: ProgramArgs,
     exe: PathBuf,
+}
+
+impl MainProgram {
+    async fn report_issue(win: MainWindow) {
+        let url = "https://github.com/obhq/obliteration/issues/new";
+
+        if let Err(e) = open::that_detached(url) {
+            let m = slint::format!("Failed to open {}: {}.", url, e.display());
+            error(Some(&win), m).await;
+        }
+    }
+
+    async fn about(main: MainWindow) {
+        // Setup window.
+        let win = match AboutWindow::new() {
+            Ok(v) => v,
+            Err(e) => {
+                let m = slint::format!("Failed to create about window: {}.", e.display());
+                error(Some(&main), m).await;
+                return;
+            }
+        };
+
+        // Run the window.
+        if let Err(e) = win.show() {
+            let m = slint::format!("Failed to show about window: {}.", e.display());
+            error(Some(&main), m).await;
+            return;
+        }
+
+        match win.set_modal(&main) {
+            Ok(w) => w.wait().await,
+            Err(e) => {
+                let m = slint::format!("Failed to enable modal on about window: {}.", e.display());
+                error(Some(&main), m).await;
+            }
+        }
+    }
 }
 
 impl App for MainProgram {
@@ -260,6 +298,18 @@ async fn run_launcher(
     let profiles = Rc::new(ProfileModel::new(profiles, resolutions.clone()));
     let exit = Rc::new(Cell::new(None));
 
+    win.on_report_issue({
+        let win = win.as_weak();
+
+        move || spawn_handler(&win, |w| MainProgram::report_issue(w))
+    });
+
+    win.on_about({
+        let win = win.as_weak();
+
+        move || spawn_handler(&win, |w| MainProgram::about(w))
+    });
+
     win.on_profile_selected({
         let win = win.as_weak();
         let profiles = profiles.clone();
@@ -279,12 +329,6 @@ async fn run_launcher(
         let profiles = profiles.clone();
 
         move || spawn_handler(&win, |w| save_profile(w, data.clone(), profiles.clone()))
-    });
-
-    win.on_report_issue({
-        let win = win.as_weak();
-
-        move || spawn_handler(&win, |w| report_issue(w))
     });
 
     win.on_start_vmm({
@@ -432,15 +476,6 @@ async fn save_profile(win: MainWindow, data: Arc<DataMgr>, profiles: Rc<ProfileM
 
     if let Err(e) = pro.save(loc) {
         let m = slint::format!("Failed to save profile: {}.", e.display());
-        error(Some(&win), m).await;
-    }
-}
-
-async fn report_issue(win: MainWindow) {
-    let url = "https://github.com/obhq/obliteration/issues/new";
-
-    if let Err(e) = open::that_detached(url) {
-        let m = slint::format!("Failed to open {}: {}.", url, e.display());
         error(Some(&win), m).await;
     }
 }

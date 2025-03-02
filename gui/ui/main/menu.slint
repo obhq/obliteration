@@ -1,8 +1,7 @@
-import { Button, StandardButton, AboutSlint, HorizontalBox, Palette, VerticalBox } from "std-widgets.slint";
+import { Button, StandardButton, HorizontalBox, Palette, VerticalBox } from "std-widgets.slint";
 
 enum Page {
     help,
-    about
 }
 
 component SideBarItem {
@@ -61,14 +60,6 @@ component SideBar {
                 root.current-page = Page.help;
             }
         }
-
-        SideBarItem {
-            text: "About";
-            selected: root.current-page == Page.about;
-            clicked => {
-                root.current-page = Page.about;
-            }
-        }
     }
 }
 
@@ -80,17 +71,6 @@ component Help {
         clicked => {
             report-issue();
         }
-    }
-}
-
-component About {
-    VerticalLayout {
-        Text {
-            text: "Obliteration is a free and open-source software to run PlayStation 4 system software on PC.";
-            horizontal-alignment: center;
-        }
-
-        AboutSlint { }
     }
 }
 
@@ -107,7 +87,5 @@ export component Menu {
                 report-issue();
             }
         }
-
-        if nav.current-page == Page.about: About { }
     }
 }
