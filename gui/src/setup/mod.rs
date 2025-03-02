@@ -3,8 +3,7 @@ pub use self::data::DataRootError;
 use self::data::{read_data_root, write_data_root};
 use crate::data::{DataError, DataMgr};
 use crate::ui::{
-    DesktopExt, FileType, InstallFirmware, RuntimeExt, SetupWizard, error, open_dir, open_file,
-    spawn_handler,
+    DesktopExt, InstallFirmware, RuntimeExt, SetupWizard, error, open_dir, open_file, spawn_handler,
 };
 use crate::vfs::{FS_TYPE, FsType};
 use erdp::ErrorDisplay;
@@ -200,7 +199,7 @@ async fn set_data_root(win: SetupWizard) {
 
 async fn browse_firmware(win: SetupWizard) {
     // Ask the user to browse for a file.
-    let path = match open_file(&win, "Select a firmware dump", FileType::Firmware).await {
+    let path = match open_file(&win, "Select a firmware dump", "Firmware Dump", "obf").await {
         Ok(Some(v)) => v,
         Ok(None) => return,
         Err(e) => {

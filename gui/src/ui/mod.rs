@@ -190,11 +190,6 @@ impl<T: ComponentHandle> RuntimeExt for T {
     }
 }
 
-/// File type to use open from [`open_file()`].
-pub enum FileType {
-    Firmware,
-}
-
 // This macro includes the generated Rust code from .slint files
 slint::include_modules!();
 
