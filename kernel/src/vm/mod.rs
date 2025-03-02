@@ -184,7 +184,7 @@ impl Vm {
             let start = e[0].next_multiple_of(page_size);
             let end = e[1] & page_mask;
 
-            self.initial_memory_size += if start <= end { end - start } else { 0 };
+            self.initial_memory_size += end.saturating_sub(start);
         }
     }
 
