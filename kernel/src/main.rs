@@ -86,8 +86,12 @@ fn run() -> ! {
 /// |---------|--------|
 /// |PS4 11.00|0x39A390|
 fn init_vm() -> Arc<Uma> {
+    // Initialize VM.
     let vm = Vm::new();
 
+    info!("Initial memory size is {}.", vm.initial_memory_size());
+
+    // Initialize UMA.
     Uma::new(vm)
 }
 
