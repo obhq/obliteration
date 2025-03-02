@@ -3,6 +3,7 @@ import { Menu } from "main/menu.slint";
 import { DisplayTab } from "main/display.slint";
 import { CpuTab } from "main/cpu.slint";
 
+export { AboutWindow } from "about.slint";
 export { WaitForDebugger } from "debug.slint";
 export { ErrorWindow } from "error.slint";
 export { InstallFirmware, SetupWizard } from "setup.slint";
@@ -21,6 +22,7 @@ export component MainWindow inherits Window {
     in property <[string]> profiles;
     in-out property <int> selected-profile;
 
+    pure callback about();
     callback profile-selected();
     pure callback save-profile();
     pure callback report-issue();
@@ -34,6 +36,22 @@ export component MainWindow inherits Window {
 
     private property <Tab> tab: Tab.display;
 
+    // Menu.
+    MenuBar {
+        // Help.
+        Menu {
+            title: "Help";
+
+            MenuItem {
+                title: "About";
+                activated => {
+                    about();
+                }
+            }
+        }
+    }
+
+    // Content.
     VerticalBox {
         // Tab bar.
         HorizontalBox {
