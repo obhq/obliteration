@@ -1901,7 +1901,7 @@ dependencies = [
  "ash",
  "ashpd",
  "async-net",
- "block2 0.5.1",
+ "block2 0.6.0",
  "bytes",
  "ciborium",
  "clap",
@@ -1922,8 +1922,9 @@ dependencies = [
  "metal",
  "num_enum",
  "obfw",
- "objc2 0.5.2",
- "objc2-foundation 0.2.2",
+ "objc2 0.6.0",
+ "objc2-foundation 0.3.0",
+ "objc2-uniform-type-identifiers 0.3.0",
  "open",
  "raw-window-handle 0.6.2",
  "redb",
@@ -3232,6 +3233,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a21c6c9014b82c39515db5b396f91645182611c97d24637cf56ac01e5f8d998"
 dependencies = [
  "bitflags 2.6.0",
+ "block2 0.6.0",
+ "libc",
  "objc2 0.6.0",
  "objc2-core-foundation",
 ]
@@ -3335,7 +3338,7 @@ dependencies = [
  "objc2-link-presentation",
  "objc2-quartz-core 0.2.2",
  "objc2-symbols",
- "objc2-uniform-type-identifiers",
+ "objc2-uniform-type-identifiers 0.2.2",
  "objc2-user-notifications",
 ]
 
@@ -3348,6 +3351,17 @@ dependencies = [
  "block2 0.5.1",
  "objc2 0.5.2",
  "objc2-foundation 0.2.2",
+]
+
+[[package]]
+name = "objc2-uniform-type-identifiers"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f19470158260851c3210cfbdbf8f8cebc5fa17d0880e5882eed4b57c7d095a44"
+dependencies = [
+ "block2 0.6.0",
+ "objc2 0.6.0",
+ "objc2-foundation 0.3.0",
 ]
 
 [[package]]

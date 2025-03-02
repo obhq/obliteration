@@ -1,5 +1,5 @@
 use super::PlatformError;
-use crate::ui::{DesktopWindow, FileType};
+use crate::ui::DesktopWindow;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use std::ffi::OsString;
 use std::num::NonZero;
@@ -24,23 +24,31 @@ use windows_sys::Win32::UI::Shell::{
 pub async fn open_file<T: DesktopWindow>(
     parent: &T,
     title: impl AsRef<str>,
-    ty: FileType,
+    file_desc: impl AsRef<str>,
+    file_ext: impl AsRef<str>,
 ) -> Result<Option<PathBuf>, PlatformError> {
     let parent = get_hwnd(parent);
-    let title: Vec<u16> = title
+    let title = title
         .as_ref()
         .encode_utf16()
         .chain(std::iter::once(0))
-        .collect();
+        .collect::<Vec<u16>>();
+    let file_desc = file_desc
+        .as_ref()
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect::<Vec<u16>>();
+    let file_ext = format!("*.{}", file_ext.as_ref())
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect::<Vec<u16>>();
     let browse = move || unsafe {
         // Setup FileOpenDialog.
         let browser: IFileOpenDialog = CoCreateInstance(&FileOpenDialog, None, CLSCTX_ALL).unwrap();
         let mut opts = browser.GetOptions().unwrap();
-        let filter = match ty {
-            FileType::Firmware => COMDLG_FILTERSPEC {
-                pszName: w!("Firmware Dump"),
-                pszSpec: w!("*.obf"),
-            },
+        let filter = COMDLG_FILTERSPEC {
+            pszName: PCWSTR(file_desc.as_ptr()),
+            pszSpec: PCWSTR(file_ext.as_ptr()),
         };
 
         opts |= FOS_NOCHANGEDIR;

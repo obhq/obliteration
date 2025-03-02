@@ -1,5 +1,5 @@
 use super::PlatformError;
-use crate::ui::{DesktopWindow, FileType, SlintBackend};
+use crate::ui::{DesktopWindow, SlintBackend};
 use ashpd::WindowIdentifier;
 use ashpd::desktop::ResponseError;
 use ashpd::desktop::file_chooser::{FileFilter, SelectedFiles};
@@ -14,12 +14,12 @@ use wayland_protocols::xdg::foreign::zv2::client::zxdg_exported_v2::ZxdgExported
 pub async fn open_file<T: DesktopWindow>(
     parent: &T,
     title: impl AsRef<str>,
-    ty: FileType,
+    file_desc: impl AsRef<str>,
+    file_ext: impl AsRef<str>,
 ) -> Result<Option<PathBuf>, PlatformError> {
     // Build filter.
-    let filter = match ty {
-        FileType::Firmware => FileFilter::new("Firmware Dump").glob("*.obf"),
-    };
+    let file_ext = format!("*.{}", file_ext.as_ref());
+    let filter = FileFilter::new(file_desc.as_ref()).glob(&file_ext);
 
     // Send the request.
     let parent = get_parent_id(parent);
