@@ -1,18 +1,12 @@
 import { VerticalBox, HorizontalBox, Button, ComboBox } from "std-widgets.slint";
-import { Menu } from "main/menu.slint";
 import { DisplayTab } from "main/display.slint";
 import { CpuTab } from "main/cpu.slint";
+import { TabBar, TabContainer } from "main/tab.slint";
 
 export { AboutWindow } from "about.slint";
 export { WaitForDebugger } from "debug.slint";
 export { ErrorWindow } from "error.slint";
 export { InstallFirmware, SetupWizard } from "setup.slint";
-
-enum Tab {
-    menu,
-    display,
-    cpu
-}
 
 export component MainWindow inherits Window {
     in property <[string]> devices;
@@ -34,13 +28,18 @@ export component MainWindow inherits Window {
     min-width: 1000px;
     min-height: 500px;
 
-    private property <Tab> tab: Tab.display;
-
     // Menu.
     MenuBar {
         // Help.
         Menu {
             title: "Help";
+
+            MenuItem {
+                title: "Report Issue";
+                activated => {
+                    report-issue();
+                }
+            }
 
             MenuItem {
                 title: "About";
@@ -53,63 +52,28 @@ export component MainWindow inherits Window {
 
     // Content.
     VerticalBox {
-        // Tab bar.
-        HorizontalBox {
-            padding: 0;
-
-            Button {
-                icon: @image-url("main/menu.svg");
-                colorize-icon: true;
-                primary: tab == Tab.menu;
-                clicked => {
-                    tab = Tab.menu
-                }
-            }
-
-            Button {
-                text: "Display";
-                icon: @image-url("main/monitor.svg");
-                colorize-icon: true;
-                primary: tab == Tab.display;
-                horizontal-stretch: 1;
-                clicked => {
-                    tab = Tab.display
-                }
-            }
-
-            Button {
-                text: "CPU";
-                icon: @image-url("main/cpu-64-bit.svg");
-                colorize-icon: true;
-                primary: tab == Tab.cpu;
-                horizontal-stretch: 1;
-                clicked => {
-                    tab = Tab.cpu
-                }
-            }
-        }
-
-        // Tab content.
-        if tab == Tab.menu: Menu {
+        // Tab.
+        TabContainer {
             vertical-stretch: 1;
 
-            report-issue => {
-                report-issue();
+            tab := TabBar {
+                tabs: [
+                    { text: "Display", icon: @image-url("main/monitor.svg") },
+                    { text: "CPU", icon: @image-url("main/cpu-64-bit.svg") }
+                ];
             }
-        }
 
-        if tab == Tab.display: DisplayTab {
-            devices: devices;
-            resolutions: resolutions;
-            selected-resolution <=> selected-resolution;
-            vertical-stretch: 1;
-        }
+            if tab.current-page == 0: DisplayTab {
+                devices: devices;
+                resolutions: resolutions;
+                selected-resolution <=> selected-resolution;
+            }
 
-        if tab == Tab.cpu: CpuTab {
-            debug-address <=> debug-address;
-            vertical-stretch: 1;
-            start-debug => {
-                start-debug();
+            if tab.current-page == 1: CpuTab {
+                debug-address <=> debug-address;
+                start-debug => {
+                    start-debug();
+                }
             }
         }
 
