@@ -4,7 +4,7 @@ use std::num::NonZero;
 use std::ptr::null;
 use windows_sys::Win32::System::Memory::{
     MEM_COMMIT, MEM_DECOMMIT, MEM_RELEASE, MEM_RESERVE, PAGE_NOACCESS, PAGE_READWRITE,
-    VirtualAlloc, VirtualAlloc, VirtualFree,
+    VirtualAlloc, VirtualFree,
 };
 use windows_sys::Win32::System::SystemInformation::GetSystemInfo;
 
@@ -23,7 +23,7 @@ pub fn reserve(len: NonZero<usize>) -> Result<*mut u8, Error> {
         return Err(Error::last_os_error());
     }
 
-    mem.cast()
+    Ok(mem.cast())
 }
 
 pub unsafe fn free(addr: *const u8, _: NonZero<usize>) -> Result<(), Error> {
