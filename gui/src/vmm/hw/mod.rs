@@ -2,7 +2,7 @@
 pub use self::console::*;
 pub use self::vmm::*;
 
-use hv::{Cpu, CpuExit, CpuIo, Hypervisor, IoBuf, LockedAddr};
+use hv::{Cpu, CpuExit, CpuIo, Hypervisor, IoBuf, LockedMem};
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::num::NonZero;
@@ -48,11 +48,11 @@ fn read_usize(exit: &mut impl CpuIo) -> Result<usize, MmioError> {
         .map_err(|_| MmioError::InvalidData)
 }
 
-fn read_ptr<'a>(
+fn read_ptr<'a, H: Hypervisor>(
     exit: &mut impl CpuIo,
     len: NonZero<usize>,
-    hv: &'a impl Hypervisor,
-) -> Result<LockedAddr<'a>, MmioError> {
+    hv: &'a H,
+) -> Result<LockedMem<'a, H::Mapper>, MmioError> {
     // Get data.
     let IoBuf::Write(buf) = exit.buffer() else {
         return Err(MmioError::InvalidOperation);

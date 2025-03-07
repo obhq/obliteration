@@ -3,7 +3,7 @@ use super::Ram;
 use crate::vmm::hw::DeviceTree;
 use crate::vmm::kernel::ProgramHeader;
 use config::{BootEnv, Config};
-use hv::{CpuFeats, RamError, RamMapper};
+use hv::{CpuFeats, LockedMem, RamError, RamMapper};
 use std::num::NonZero;
 use std::ops::Range;
 use thiserror::Error;
@@ -31,7 +31,7 @@ impl<'a, M: RamMapper> RamBuilder<'a, M> {
     /// # Panics
     /// - If `len` is not multiplied by block size.
     /// - If called a second time.
-    pub fn alloc_kernel(&mut self, len: NonZero<usize>) -> Result<&mut [u8], RamError> {
+    pub fn alloc_kernel(&mut self, len: NonZero<usize>) -> Result<LockedMem<M>, RamError> {
         assert!(self.kern.is_none());
 
         let addr = self.next;
@@ -352,7 +352,10 @@ impl<M: RamMapper> RamBuilder<'_, M> {
         assert_eq!(addr % 4096, 0);
 
         // Allocate.
-        let tab = self.ram.alloc(addr, len).map(|v| v.as_mut_ptr().cast())?;
+        let tab = self
+            .ram
+            .alloc(addr, len)
+            .map(|mut v| v.as_mut_ptr().cast())?;
 
         self.next += len.get();
 
@@ -584,19 +587,17 @@ struct KernelArgs {
 }
 
 /// Struct to write all kernel arguments into a single block of memory.
-struct ArgsWriter<'a> {
-    mem: &'a mut [u8],
+struct ArgsWriter<'a, M: RamMapper> {
+    mem: LockedMem<'a, M>,
     next: usize,
 }
 
-impl ArgsWriter<'_> {
+impl<M: RamMapper> ArgsWriter<'_, M> {
     fn write<T>(&mut self, v: T) -> usize {
         let off = self.next.next_multiple_of(align_of::<T>());
-        let len = size_of::<T>();
-        let mem = &mut self.mem[off..(off + len)];
 
-        unsafe { std::ptr::write(mem.as_mut_ptr().cast(), v) };
-        self.next = off + len;
+        self.mem.write(off, v);
+        self.next = off + size_of::<T>();
 
         off
     }

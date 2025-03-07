@@ -10,15 +10,11 @@ pub struct HvfMapper;
 impl RamMapper for HvfMapper {
     type Err = HvfMapperError;
 
-    fn map(&self, host: *mut u8, vm: usize, len: NonZero<usize>) -> Result<(), Self::Err> {
-        let ret = unsafe {
-            hv_vm_map(
-                host.cast(),
-                vm.try_into().unwrap(),
-                len.get(),
-                HV_MEMORY_READ | HV_MEMORY_WRITE | HV_MEMORY_EXEC,
-            )
-        };
+    unsafe fn map(&self, host: *mut u8, vm: usize, len: NonZero<usize>) -> Result<(), Self::Err> {
+        let host = host.cast();
+        let vm = vm.try_into().unwrap();
+        let prot = HV_MEMORY_READ | HV_MEMORY_WRITE | HV_MEMORY_EXEC;
+        let ret = unsafe { hv_vm_map(host, vm, len.get(), prot) };
 
         match NonZero::new(ret) {
             Some(ret) => Err(HvfMapperError::MapFailed(ret)),

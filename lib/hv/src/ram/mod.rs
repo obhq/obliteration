@@ -1,11 +1,19 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+pub use self::lock::*;
+pub use self::mapper::*;
+
 use super::HvError;
 use std::cmp::max;
-use std::collections::BTreeSet;
-use std::io::Error;
+use std::collections::BTreeMap;
 use std::num::NonZero;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Condvar, Mutex};
 use thiserror::Error;
+
+mod lock;
+mod mapper;
+#[cfg_attr(unix, path = "unix.rs")]
+#[cfg_attr(windows, path = "windows.rs")]
+mod os;
 
 /// RAM of the VM.
 ///
@@ -18,7 +26,8 @@ pub struct Ram<M: RamMapper> {
     len: NonZero<usize>,
     block_size: NonZero<usize>,
     host_page_size: NonZero<usize>,
-    allocated: Mutex<BTreeSet<usize>>,
+    allocated: Mutex<BTreeMap<usize, State>>,
+    cv: Condvar,
     mapper: M,
 }
 
@@ -29,7 +38,7 @@ impl<M: RamMapper> Ram<M> {
         mapper: M,
     ) -> Result<Self, HvError> {
         // Get block size.
-        let host_page_size = Self::get_page_size().map_err(HvError::GetHostPageSize)?;
+        let host_page_size = self::os::get_page_size().map_err(HvError::GetHostPageSize)?;
         let block_size = max(mbs, host_page_size);
 
         if len.get() % block_size != 0 {
@@ -37,40 +46,7 @@ impl<M: RamMapper> Ram<M> {
         }
 
         // Reserve memory range.
-        #[cfg(unix)]
-        let mem = unsafe {
-            use libc::{MAP_ANON, MAP_FAILED, MAP_PRIVATE, PROT_NONE, mmap};
-            use std::ptr::null_mut;
-
-            let mem = mmap(
-                null_mut(),
-                len.get(),
-                PROT_NONE,
-                MAP_PRIVATE | MAP_ANON,
-                -1,
-                0,
-            );
-
-            if mem == MAP_FAILED {
-                return Err(HvError::CreateRamFailed(Error::last_os_error()));
-            }
-
-            mem.cast()
-        };
-
-        #[cfg(windows)]
-        let mem = unsafe {
-            use std::ptr::null;
-            use windows_sys::Win32::System::Memory::{MEM_RESERVE, PAGE_NOACCESS, VirtualAlloc};
-
-            let mem = VirtualAlloc(null(), len.get(), MEM_RESERVE, PAGE_NOACCESS);
-
-            if mem.is_null() {
-                return Err(HvError::CreateRamFailed(Error::last_os_error()));
-            }
-
-            mem.cast()
-        };
+        let mem = self::os::reserve(len).map_err(HvError::CreateRamFailed)?;
 
         Ok(Self {
             mem,
@@ -78,6 +54,7 @@ impl<M: RamMapper> Ram<M> {
             block_size,
             host_page_size,
             allocated: Mutex::default(),
+            cv: Condvar::new(),
             mapper,
         })
     }
@@ -100,7 +77,7 @@ impl<M: RamMapper> Ram<M> {
 
     /// # Panics
     /// If `addr` or `len` is not multiply by block size.
-    pub fn alloc(&self, addr: usize, len: NonZero<usize>) -> Result<&mut [u8], RamError> {
+    pub fn alloc(&self, addr: usize, len: NonZero<usize>) -> Result<LockedMem<M>, RamError> {
         assert_eq!(addr % self.block_size, 0);
         assert_eq!(len.get() % self.block_size, 0);
 
@@ -115,31 +92,34 @@ impl<M: RamMapper> Ram<M> {
         let mut allocated = self.allocated.lock().unwrap();
 
         if allocated.range(addr..end).next().is_some() {
-            return Err(RamError::InvalidAddr);
+            return Err(RamError::AlreadyAllocated);
         }
 
         // Commit.
         let start = unsafe { self.mem.add(addr) };
-        let mem = unsafe { Self::commit(start, len.get()).map_err(RamError::HostFailed)? };
 
-        self.mapper
-            .map(start, addr, len)
-            .map_err(|e| RamError::MapFailed(Box::new(e)))?;
+        unsafe { self::os::commit(start, len).map_err(RamError::Commit)? };
+
+        if let Err(e) = unsafe { self.mapper.map(start, addr, len) } {
+            return Err(RamError::Map(Box::new(e)));
+        }
 
         // Add range to allocated list.
         for addr in (addr..end).step_by(self.block_size.get()) {
-            assert!(allocated.insert(addr));
+            assert!(allocated.insert(addr, State::Locked).is_none());
         }
 
-        Ok(unsafe { std::slice::from_raw_parts_mut(mem, len.get()) })
+        // Drop the mutex guard before construct the LockedMem otherwise deadlock is possible.
+        drop(allocated);
+
+        Ok(LockedMem::new(self, addr, len))
     }
 
+    /// Attempt to dealloc a range locked by the calling thread will result in a deadlock.
+    ///
     /// # Panics
     /// If `addr` or `len` is not multiply by block size.
-    ///
-    /// # Safety
-    /// Accessing the deallocated memory on the host after this will be undefined behavior.
-    pub unsafe fn dealloc(&self, addr: usize, len: NonZero<usize>) -> Result<(), RamError> {
+    pub fn dealloc(&self, mut addr: usize, len: NonZero<usize>) -> Result<(), RamError> {
         assert_eq!(addr % self.block_size, 0);
         assert_eq!(len.get() % self.block_size, 0);
 
@@ -150,193 +130,125 @@ impl<M: RamMapper> Ram<M> {
             return Err(RamError::InvalidAddr);
         }
 
-        // Decommit the whole range. No need to check if the range already allocated since it will
-        // be no-op anyway.
+        // Decommit the whole range.
         let mut allocated = self.allocated.lock().unwrap();
 
-        // TODO: Unmap this portion from the VM if the OS does not do for us.
-        Self::decommit(self.mem.add(addr), len.get()).map_err(RamError::HostFailed)?;
+        loop {
+            // Get starting address.
+            let mut range = allocated.range(addr..end);
 
-        for addr in (addr..end).step_by(self.block_size.get()) {
-            allocated.remove(&addr);
+            addr = match range.next() {
+                Some((&addr, &state)) => {
+                    if state == State::Locked {
+                        allocated = self.cv.wait(allocated).unwrap();
+                        continue;
+                    }
+
+                    addr
+                }
+                None => return Ok(()),
+            };
+
+            // Get length of contiguous unlocked region.
+            let mut end = addr;
+            let mut locked = false;
+
+            for (&addr, &state) in range {
+                if state == State::Locked {
+                    locked = true;
+                    break;
+                }
+
+                end = addr;
+            }
+
+            end += self.block_size.get();
+
+            // TODO: Unmap this portion from the VM if the OS does not do for us.
+            let len = end - addr;
+
+            unsafe { self::os::decommit(self.mem.add(addr), len).map_err(RamError::Decommit)? };
+
+            // Remove decommitted range.
+            for addr in (addr..end).step_by(self.block_size.get()) {
+                allocated.remove(&addr);
+            }
+
+            if !locked {
+                return Ok(());
+            }
+
+            allocated = self.cv.wait(allocated).unwrap();
+            addr = end;
         }
-
-        Ok(())
     }
 
     /// Return [`None`] if some part of the requested range is not allocated.
-    pub fn lock(&self, addr: usize, len: NonZero<usize>) -> Option<LockedAddr> {
-        // Get allocated range.
+    ///
+    /// Attempt to lock a range that already locked by the calling thread will result in a deadlock.
+    pub fn lock(&self, addr: usize, len: NonZero<usize>) -> Option<LockedMem<M>> {
+        // Round the address down to block size.
         let end = addr.checked_add(len.get())?;
         let off = addr % self.block_size;
-        let mut next = addr - off;
-        let allocated = self.allocated.lock().unwrap();
-        let range = allocated.range(next..end);
+        let begin = addr - off;
 
-        // Check if the whole range valid.
-        for addr in range {
-            if *addr != next {
-                return None;
+        // Lock the whole range.
+        let mut next = begin;
+        let mut allocated = self.allocated.lock().unwrap();
+        let ok = 'top: loop {
+            let range = allocated.range_mut(next..end);
+
+            for (&addr, state) in range {
+                if addr != next {
+                    // There is an unallocated block in the range.
+                    break 'top false;
+                } else if *state == State::Locked {
+                    allocated = self.cv.wait(allocated).unwrap();
+                    continue 'top;
+                }
+
+                *state = State::Locked;
+
+                // This block has been allocated successfully, which mean this addition will never
+                // overflow.
+                next += self.block_size.get();
             }
 
-            // This block has been allocated successfully, which mean this addition will never
-            // overflow.
-            next += self.block_size.get();
-        }
+            break true;
+        };
 
-        if next < end {
+        // Check if the whole range has been locked.
+        if !ok || next < end {
+            for (_, state) in allocated.range_mut(begin..next) {
+                *state = State::Unlocked;
+            }
+
+            if next != begin {
+                self.cv.notify_one();
+            }
+
             return None;
         }
 
-        Some(LockedAddr {
-            lock: allocated,
-            ptr: unsafe { self.mem.add(addr) },
-            len,
-        })
-    }
-
-    #[cfg(unix)]
-    unsafe fn commit(addr: *const u8, len: usize) -> Result<*mut u8, Error> {
-        use libc::{MAP_ANON, MAP_FAILED, MAP_FIXED, MAP_PRIVATE, PROT_READ, PROT_WRITE, mmap};
-
-        let ptr = mmap(
-            addr.cast_mut().cast(),
-            len,
-            PROT_READ | PROT_WRITE,
-            MAP_PRIVATE | MAP_ANON | MAP_FIXED,
-            -1,
-            0,
-        );
-
-        if ptr == MAP_FAILED {
-            Err(Error::last_os_error())
-        } else {
-            Ok(ptr.cast())
-        }
-    }
-
-    #[cfg(windows)]
-    unsafe fn commit(addr: *const u8, len: usize) -> Result<*mut u8, Error> {
-        use windows_sys::Win32::System::Memory::{MEM_COMMIT, PAGE_READWRITE, VirtualAlloc};
-
-        let ptr = VirtualAlloc(addr.cast(), len, MEM_COMMIT, PAGE_READWRITE);
-
-        if ptr.is_null() {
-            Err(Error::last_os_error())
-        } else {
-            Ok(ptr.cast())
-        }
-    }
-
-    #[cfg(unix)]
-    unsafe fn decommit(addr: *mut u8, len: usize) -> Result<(), Error> {
-        use libc::{PROT_NONE, mprotect};
-
-        if mprotect(addr.cast(), len, PROT_NONE) < 0 {
-            Err(Error::last_os_error())
-        } else {
-            Ok(())
-        }
-    }
-
-    #[cfg(windows)]
-    unsafe fn decommit(addr: *mut u8, len: usize) -> Result<(), Error> {
-        use windows_sys::Win32::System::Memory::{MEM_DECOMMIT, VirtualFree};
-
-        if VirtualFree(addr.cast(), len, MEM_DECOMMIT) == 0 {
-            Err(Error::last_os_error())
-        } else {
-            Ok(())
-        }
-    }
-
-    #[cfg(unix)]
-    fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
-        let v = unsafe { libc::sysconf(libc::_SC_PAGE_SIZE) };
-
-        if v < 0 {
-            Err(std::io::Error::last_os_error())
-        } else {
-            Ok(v.try_into().ok().and_then(NonZero::new).unwrap())
-        }
-    }
-
-    #[cfg(windows)]
-    fn get_page_size() -> Result<NonZero<usize>, std::io::Error> {
-        use std::mem::zeroed;
-        use windows_sys::Win32::System::SystemInformation::GetSystemInfo;
-
-        let mut i = unsafe { zeroed() };
-
-        unsafe { GetSystemInfo(&mut i) };
-
-        Ok(i.dwPageSize.try_into().ok().and_then(NonZero::new).unwrap())
+        Some(LockedMem::new(self, addr, len))
     }
 }
 
 impl<M: RamMapper> Drop for Ram<M> {
-    #[cfg(unix)]
     fn drop(&mut self) {
-        use libc::munmap;
-
         // TODO: Unmap this portion from the VM if the OS does not do for us.
-        if unsafe { munmap(self.mem.cast(), self.len.get()) } < 0 {
-            panic!(
-                "failed to unmap RAM at {:p}: {}",
-                self.mem,
-                Error::last_os_error()
-            );
-        }
-    }
-
-    #[cfg(windows)]
-    fn drop(&mut self) {
-        use windows_sys::Win32::System::Memory::{MEM_RELEASE, VirtualFree};
-
-        // TODO: Unmap this portion from the VM if the OS does not do for us.
-        if unsafe { VirtualFree(self.mem.cast(), 0, MEM_RELEASE) } == 0 {
-            panic!(
-                "failed to free RAM at {:p}: {}",
-                self.mem,
-                Error::last_os_error()
-            );
-        }
+        unsafe { self::os::free(self.mem, self.len).unwrap() };
     }
 }
 
 unsafe impl<M: RamMapper> Send for Ram<M> {}
 unsafe impl<M: RamMapper> Sync for Ram<M> {}
 
-/// Provides methods to map a portion of RAM dynamically.
-pub trait RamMapper: Send + Sync {
-    type Err: std::error::Error + 'static;
-
-    fn map(&self, host: *mut u8, vm: usize, len: NonZero<usize>) -> Result<(), Self::Err>;
-}
-
-/// RAII struct to prevent a range of memory from deallocated.
-pub struct LockedAddr<'a> {
-    #[allow(dead_code)]
-    lock: MutexGuard<'a, BTreeSet<usize>>,
-    ptr: *mut u8,
-    len: NonZero<usize>,
-}
-
-impl LockedAddr<'_> {
-    /// # Safety
-    /// Although the whole memory range guarantee to be valid for the whole lifetime of this struct
-    /// but the data is subject to race condition due to the other vCPU may write into this range.
-    pub fn as_ptr(&self) -> *const u8 {
-        self.ptr
-    }
-
-    pub fn as_mut_ptr(&mut self) -> *mut u8 {
-        self.ptr
-    }
-
-    pub fn len(&self) -> NonZero<usize> {
-        self.len
-    }
+/// State of allocated block.
+#[derive(Clone, Copy, PartialEq)]
+enum State {
+    Locked,
+    Unlocked,
 }
 
 /// Represents an error when an operation on [`Ram`] fails.
@@ -345,9 +257,15 @@ pub enum RamError {
     #[error("invalid address")]
     InvalidAddr,
 
-    #[error("host failed")]
-    HostFailed(#[source] std::io::Error),
+    #[error("already allocated")]
+    AlreadyAllocated,
+
+    #[error("couldn't commit the memory")]
+    Commit(#[source] std::io::Error),
 
     #[error("couldn't map the memory to the VM")]
-    MapFailed(#[source] Box<dyn std::error::Error>),
+    Map(#[source] Box<dyn std::error::Error + Send + Sync>),
+
+    #[error("couldn't decommit the memory")]
+    Decommit(#[source] std::io::Error),
 }

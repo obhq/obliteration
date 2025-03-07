@@ -451,11 +451,11 @@ pub enum HvError {
     #[error("couldn't enable debugging on vCPU #{0}")]
     EnableDebugFailed(usize, #[source] Error),
 
-    #[cfg(all(target_arch = "aarch64"))]
+    #[cfg(target_arch = "aarch64")]
     #[error("couldn't read ID_AA64MMFR0_EL1")]
     ReadMmfr0Failed(#[source] Error),
 
-    #[cfg(all(target_arch = "aarch64"))]
+    #[cfg(target_arch = "aarch64")]
     #[error("couldn't read ID_AA64MMFR1_EL1")]
     ReadMmfr1Failed(#[source] Error),
 

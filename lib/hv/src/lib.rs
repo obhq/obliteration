@@ -14,7 +14,7 @@ mod arch;
 mod os;
 mod ram;
 
-/// Underlying hypervisor (e.g. KVM on Linux).
+/// Encapsulates platform hypervisor (e.g. KVM on Linux).
 pub trait Hypervisor: Send + Sync + 'static {
     type Mapper: RamMapper;
     type Cpu<'a>: CpuRun
