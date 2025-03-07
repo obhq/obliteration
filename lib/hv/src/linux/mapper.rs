@@ -9,7 +9,7 @@ pub struct KvmMapper;
 impl RamMapper for KvmMapper {
     type Err = KvmMapperError;
 
-    fn map(&self, _: *mut u8, _: usize, _: NonZero<usize>) -> Result<(), Self::Err> {
+    unsafe fn map(&self, _: *mut u8, _: usize, _: NonZero<usize>) -> Result<(), Self::Err> {
         Ok(())
     }
 }

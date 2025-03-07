@@ -27,7 +27,7 @@ impl<'a> KvmStates<'a> {
         // Load general purpose registers.
         let mut gregs = MaybeUninit::uninit();
         let gregs = if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_REGS, gregs.as_mut_ptr()) < 0 } {
-            return Err(StatesError::GetGRegsFailed(Error::last_os_error()));
+            return Err(StatesError::GetGeneral(Error::last_os_error()));
         } else {
             unsafe { gregs.assume_init() }
         };
@@ -35,7 +35,7 @@ impl<'a> KvmStates<'a> {
         // Get special registers.
         let mut sregs = MaybeUninit::uninit();
         let sregs = if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_SREGS, sregs.as_mut_ptr()) < 0 } {
-            return Err(StatesError::GetSRegsFailed(Error::last_os_error()));
+            return Err(StatesError::GetSpecial(Error::last_os_error()));
         } else {
             unsafe { sregs.assume_init() }
         };
@@ -43,7 +43,7 @@ impl<'a> KvmStates<'a> {
         // Get FPU registers.
         let mut fregs = MaybeUninit::uninit();
         let fregs = if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_FPU, fregs.as_mut_ptr()) < 0 } {
-            return Err(StatesError::GetFRegsFailed(Error::last_os_error()));
+            return Err(StatesError::GetFp(Error::last_os_error()));
         } else {
             unsafe { fregs.assume_init() }
         };
@@ -371,12 +371,12 @@ impl CpuCommit for KvmStates<'_> {
 
         // Set general purpose registers.
         if unsafe { self.gdirty && ioctl(self.cpu.as_raw_fd(), KVM_SET_REGS, &self.gregs) < 0 } {
-            return Err(StatesError::SetGRegsFailed(Error::last_os_error()));
+            return Err(StatesError::SetGeneral(Error::last_os_error()));
         }
 
         // Set special registers.
         if unsafe { self.sdirty && ioctl(self.cpu.as_raw_fd(), KVM_SET_SREGS, &self.sregs) < 0 } {
-            return Err(StatesError::SetSRegsFailed(Error::last_os_error()));
+            return Err(StatesError::SetSpecial(Error::last_os_error()));
         }
 
         Ok(())
@@ -387,17 +387,17 @@ impl CpuCommit for KvmStates<'_> {
 #[derive(Debug, Error)]
 pub enum StatesError {
     #[error("couldn't get general purpose registers")]
-    GetGRegsFailed(#[source] std::io::Error),
+    GetGeneral(#[source] std::io::Error),
 
     #[error("couldn't get special registers")]
-    GetSRegsFailed(#[source] std::io::Error),
+    GetSpecial(#[source] std::io::Error),
 
     #[error("couldn't get floating point registers")]
-    GetFRegsFailed(#[source] std::io::Error),
+    GetFp(#[source] std::io::Error),
 
     #[error("couldn't set general purpose registers")]
-    SetGRegsFailed(#[source] std::io::Error),
+    SetGeneral(#[source] std::io::Error),
 
     #[error("couldn't set special registers")]
-    SetSRegsFailed(#[source] std::io::Error),
+    SetSpecial(#[source] std::io::Error),
 }

@@ -185,8 +185,7 @@ impl Vmm<()> {
         let feats = hv.cpu_features().clone();
         let host_page_size = hv.ram().host_page_size();
         let mut ram = RamBuilder::new(hv.ram_mut());
-
-        let kern = ram
+        let mut kern = ram
             .alloc_kernel(NonZero::new(len).unwrap())
             .map_err(VmmError::AllocateRamForKernel)?;
 
@@ -194,7 +193,7 @@ impl Vmm<()> {
             let mut src = img
                 .segment_data(hdr)
                 .map_err(|e| VmmError::SeekToOffset(hdr.p_offset, e))?;
-            let mut dst = &mut kern[hdr.p_vaddr..(hdr.p_vaddr + hdr.p_memsz)];
+            let mut dst = kern.writer(hdr.p_vaddr, Some(hdr.p_memsz)).unwrap();
 
             match std::io::copy(&mut src, &mut dst) {
                 Ok(v) => {
@@ -205,6 +204,8 @@ impl Vmm<()> {
                 Err(e) => return Err(VmmError::ReadKernel(e, hdr.p_offset)),
             }
         }
+
+        drop(kern);
 
         ram.alloc_stack(NonZero::new(1024 * 1024 * 2).unwrap())
             .map_err(VmmError::AllocateRamForStack)?;
