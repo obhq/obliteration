@@ -16,15 +16,14 @@ mod ram;
 
 /// Encapsulates platform hypervisor (e.g. KVM on Linux).
 pub trait Hypervisor: Send + Sync + 'static {
-    type Mapper: RamMapper;
     type Cpu<'a>: CpuRun
     where
         Self: 'a;
     type CpuErr: Error + Send + Sync + 'static;
 
     fn cpu_features(&self) -> &CpuFeats;
-    fn ram(&self) -> &Ram<Self::Mapper>;
-    fn ram_mut(&mut self) -> &mut Ram<Self::Mapper>;
+    fn ram(&self) -> &Ram;
+    fn ram_mut(&mut self) -> &mut Ram;
 
     /// This method must be called by a thread that is going to drive the returned CPU.
     fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, Self::CpuErr>;

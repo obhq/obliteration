@@ -1,18 +1,18 @@
-use super::{Ram, RamMapper, State};
+use super::{Ram, State};
 use std::cmp::min;
 use std::io::Write;
 use std::marker::PhantomData;
 use std::num::NonZero;
 
 /// RAII struct to prevent a range of memory from deallocated.
-pub struct LockedMem<'a, M: RamMapper> {
-    ram: &'a Ram<M>,
+pub struct LockedMem<'a> {
+    ram: &'a Ram,
     addr: usize,
     len: NonZero<usize>,
 }
 
-impl<'a, M: RamMapper> LockedMem<'a, M> {
-    pub(super) fn new(ram: &'a Ram<M>, addr: usize, len: NonZero<usize>) -> Self {
+impl<'a> LockedMem<'a> {
+    pub(super) fn new(ram: &'a Ram, addr: usize, len: NonZero<usize>) -> Self {
         Self { ram, addr, len }
     }
 
@@ -78,7 +78,7 @@ impl<'a, M: RamMapper> LockedMem<'a, M> {
     }
 }
 
-impl<M: RamMapper> Drop for LockedMem<'_, M> {
+impl Drop for LockedMem<'_> {
     fn drop(&mut self) {
         // Round the address down to block size.
         let off = self.addr % self.ram.block_size;

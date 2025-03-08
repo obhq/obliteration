@@ -6,7 +6,6 @@ use self::ffi::{
     KVM_GUESTDBG_ENABLE, KVM_GUESTDBG_USE_SW_BP, KVM_SET_GUEST_DEBUG, KVM_SET_USER_MEMORY_REGION,
     KvmGuestDebug, KvmUserspaceMemoryRegion,
 };
-use self::mapper::KvmMapper;
 use super::{CpuFeats, Hypervisor, Ram};
 use libc::{MAP_FAILED, MAP_PRIVATE, O_RDWR, PROT_READ, PROT_WRITE, ioctl, mmap, open};
 use std::ffi::{c_int, c_uint};
@@ -23,7 +22,6 @@ use thiserror::Error;
 mod arch;
 mod cpu;
 mod ffi;
-mod mapper;
 mod run;
 
 /// `ram_mbs` is a minimum block size of the RAM. Usually it will be page size on the VM. This value
@@ -38,7 +36,7 @@ pub fn new(
     debug: bool,
 ) -> Result<impl Hypervisor, HvError> {
     // Create RAM.
-    let ram = Ram::new(ram_size, ram_mbs, KvmMapper)?;
+    let ram = Ram::new(ram_size, ram_mbs, ())?;
 
     // Open KVM device.
     let kvm = unsafe { open(c"/dev/kvm".as_ptr(), O_RDWR) };
@@ -326,13 +324,12 @@ struct Kvm {
     vcpu_mmap_size: usize,
     #[allow(dead_code)]
     vm: OwnedFd,
-    ram: Ram<KvmMapper>,
+    ram: Ram,
     #[allow(dead_code)] // kvm are needed by vm.
     kvm: OwnedFd,
 }
 
 impl Hypervisor for Kvm {
-    type Mapper = KvmMapper;
     type Cpu<'a> = KvmCpu<'a>;
     type CpuErr = KvmCpuError;
 
@@ -340,11 +337,11 @@ impl Hypervisor for Kvm {
         &self.feats
     }
 
-    fn ram(&self) -> &Ram<Self::Mapper> {
+    fn ram(&self) -> &Ram {
         &self.ram
     }
 
-    fn ram_mut(&mut self) -> &mut Ram<Self::Mapper> {
+    fn ram_mut(&mut self) -> &mut Ram {
         &mut self.ram
     }
 

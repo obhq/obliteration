@@ -73,7 +73,7 @@ pub fn new(
 
 /// Implementation of [`Hypervisor`] using Hypervisor Framework.
 struct Hvf {
-    ram: Ram<HvfMapper>,
+    ram: Ram,
     debug: bool,
     cpu_config: hv_vcpu_config_t,
     feats: CpuFeats,
@@ -106,7 +106,6 @@ impl Drop for Hvf {
 }
 
 impl Hypervisor for Hvf {
-    type Mapper = HvfMapper;
     type Cpu<'a> = HvfCpu<'a>;
     type CpuErr = HvfCpuError;
 
@@ -114,11 +113,11 @@ impl Hypervisor for Hvf {
         &self.feats
     }
 
-    fn ram(&self) -> &Ram<Self::Mapper> {
+    fn ram(&self) -> &Ram {
         &self.ram
     }
 
-    fn ram_mut(&mut self) -> &mut Ram<Self::Mapper> {
+    fn ram_mut(&mut self) -> &mut Ram {
         &mut self.ram
     }
 
