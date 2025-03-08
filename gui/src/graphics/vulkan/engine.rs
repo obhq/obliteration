@@ -74,7 +74,7 @@ impl Vulkan {
                     })
                     .window(v.window);
 
-                XlibSurface::new(e, i).create_xlib_surface(&c, None)
+                unsafe { XlibSurface::new(e, i).create_xlib_surface(&c, None) }
             }
             RawWindowHandle::Xcb(v) => {
                 let c = XcbSurfaceCreateInfoKHR::builder()
@@ -84,7 +84,7 @@ impl Vulkan {
                     })
                     .window(v.window.get());
 
-                XcbSurface::new(e, i).create_xcb_surface(&c, None)
+                unsafe { XcbSurface::new(e, i).create_xcb_surface(&c, None) }
             }
             RawWindowHandle::Wayland(v) => {
                 let c = WaylandSurfaceCreateInfoKHR::builder()
@@ -94,14 +94,14 @@ impl Vulkan {
                     })
                     .surface(v.surface.as_ptr());
 
-                WaylandSurface::new(e, i).create_wayland_surface(&c, None)
+                unsafe { WaylandSurface::new(e, i).create_wayland_surface(&c, None) }
             }
             RawWindowHandle::Win32(v) => {
                 let c = Win32SurfaceCreateInfoKHR::builder()
                     .hinstance(v.hinstance.unwrap().get() as _)
                     .hwnd(v.hwnd.get() as _);
 
-                Win32Surface::new(e, i).create_win32_surface(&c, None)
+                unsafe { Win32Surface::new(e, i).create_win32_surface(&c, None) }
             }
             _ => todo!(),
         }
@@ -110,7 +110,7 @@ impl Vulkan {
     /// # Safety
     /// See `vkDestroySurfaceKHR` docs for valid usage.
     pub unsafe fn destroy_surface(&self, surface: SurfaceKHR) {
-        self.builder.surface.destroy_surface(surface, None);
+        unsafe { self.builder.surface.destroy_surface(surface, None) }
     }
 }
 
