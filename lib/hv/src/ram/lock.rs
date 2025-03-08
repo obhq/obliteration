@@ -35,11 +35,11 @@ impl<'a, M: RamMapper> LockedMem<'a, M> {
     }
 
     /// Returns `val` if the space at `off` is not enough for it.
-    pub fn write<T>(&mut self, off: usize, val: T) -> Option<T> {
+    pub fn put<T>(&mut self, off: usize, val: T) -> Option<T> {
         // Check if the value can fit within a locked range.
-        if !off
+        if off
             .checked_add(size_of::<T>())
-            .is_some_and(|end| end <= self.len.get())
+            .is_none_or(|end| end > self.len.get())
         {
             return Some(val);
         }
@@ -103,7 +103,7 @@ struct Writer<'a> {
     phantom: PhantomData<&'a ()>,
 }
 
-impl<'a> Write for Writer<'a> {
+impl Write for Writer<'_> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let available = unsafe { self.end.offset_from(self.ptr).try_into().unwrap() };
         let len = min(buf.len(), available);

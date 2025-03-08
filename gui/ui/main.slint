@@ -6,6 +6,7 @@ import { TabBar, TabContainer } from "main/tab.slint";
 export { AboutWindow } from "about.slint";
 export { WaitForDebugger } from "debug.slint";
 export { ErrorWindow } from "error.slint";
+export { SettingsWindow } from "settings.slint";
 export { InstallFirmware, SetupWizard } from "setup.slint";
 
 export component MainWindow inherits Window {
@@ -16,10 +17,11 @@ export component MainWindow inherits Window {
     in property <[string]> profiles;
     in-out property <int> selected-profile;
 
+    callback settings();
+    callback report-issue();
     pure callback about();
     callback profile-selected();
     pure callback save-profile();
-    pure callback report-issue();
     pure callback start-vmm();
     pure callback start-debug();
 
@@ -30,6 +32,18 @@ export component MainWindow inherits Window {
 
     // Menu.
     MenuBar {
+        // Edit
+        Menu {
+            title: "Edit";
+
+            MenuItem {
+                title: "Settings";
+                activated => {
+                    settings();
+                }
+            }
+        }
+
         // Help.
         Menu {
             title: "Help";

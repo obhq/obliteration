@@ -8,7 +8,7 @@ use self::profile::{DisplayResolution, Profile};
 use self::setup::{SetupError, run_setup};
 use self::ui::{
     AboutWindow, App, DesktopExt, MainWindow, ProfileModel, ResolutionModel, RuntimeExt,
-    WaitForDebugger, error, spawn_handler,
+    SettingsWindow, WaitForDebugger, error, spawn_handler,
 };
 use self::vmm::{CpuError, Vmm, VmmError, VmmEvent};
 use async_net::{TcpListener, TcpStream};
@@ -60,6 +60,37 @@ struct MainProgram {
 }
 
 impl MainProgram {
+    async fn settings(main: MainWindow) {
+        // Setup window.
+        let win = match SettingsWindow::new() {
+            Ok(v) => v,
+            Err(e) => {
+                let m = slint::format!("Failed to create settings window: {}.", e.display());
+                error(Some(&main), m).await;
+                return;
+            }
+        };
+
+        // Run the window.
+        if let Err(e) = win.show() {
+            let m = slint::format!("Failed to show settings window: {}.", e.display());
+            error(Some(&main), m).await;
+            return;
+        }
+
+        match win.set_modal(&main) {
+            Ok(w) => w.wait().await,
+            Err(e) => {
+                let m = slint::format!(
+                    "Failed to enable modal on settings window: {}.",
+                    e.display()
+                );
+
+                error(Some(&main), m).await;
+            }
+        }
+    }
+
     async fn report_issue(win: MainWindow) {
         let url = "https://github.com/obhq/obliteration/issues/new";
 
@@ -297,6 +328,12 @@ async fn run_launcher(
     let resolutions = Rc::new(ResolutionModel::default());
     let profiles = Rc::new(ProfileModel::new(profiles, resolutions.clone()));
     let exit = Rc::new(Cell::new(None));
+
+    win.on_settings({
+        let win = win.as_weak();
+
+        move || spawn_handler(&win, |w| MainProgram::settings(w))
+    });
 
     win.on_report_issue({
         let win = win.as_weak();
