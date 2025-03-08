@@ -52,7 +52,7 @@ fn read_ptr<'a, H: Hypervisor>(
     exit: &mut impl CpuIo,
     len: NonZero<usize>,
     hv: &'a H,
-) -> Result<LockedMem<'a, H::Mapper>, MmioError> {
+) -> Result<LockedMem<'a>, MmioError> {
     // Get data.
     let IoBuf::Write(buf) = exit.buffer() else {
         return Err(MmioError::InvalidOperation);

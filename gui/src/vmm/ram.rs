@@ -3,22 +3,22 @@ use super::Ram;
 use crate::vmm::hw::DeviceTree;
 use crate::vmm::kernel::ProgramHeader;
 use config::{BootEnv, Config};
-use hv::{CpuFeats, LockedMem, RamError, RamMapper};
+use hv::{CpuFeats, LockedMem, RamError};
 use std::num::NonZero;
 use std::ops::Range;
 use thiserror::Error;
 
 /// Struct to build [`Ram`].
-pub struct RamBuilder<'a, M: RamMapper> {
-    ram: &'a mut Ram<M>,
+pub struct RamBuilder<'a> {
+    ram: &'a mut Ram,
     next: usize,
     kern: Option<Range<usize>>,
     stack: Option<Range<usize>>,
     args: Option<KernelArgs>,
 }
 
-impl<'a, M: RamMapper> RamBuilder<'a, M> {
-    pub fn new(ram: &'a mut Ram<M>) -> Self {
+impl<'a> RamBuilder<'a> {
+    pub fn new(ram: &'a mut Ram) -> Self {
         Self {
             ram,
             next: 0,
@@ -31,7 +31,7 @@ impl<'a, M: RamMapper> RamBuilder<'a, M> {
     /// # Panics
     /// - If `len` is not multiplied by block size.
     /// - If called a second time.
-    pub fn alloc_kernel(&mut self, len: NonZero<usize>) -> Result<LockedMem<M>, RamError> {
+    pub fn alloc_kernel(&mut self, len: NonZero<usize>) -> Result<LockedMem, RamError> {
         assert!(self.kern.is_none());
 
         let addr = self.next;
@@ -177,7 +177,7 @@ impl<'a, M: RamMapper> RamBuilder<'a, M> {
 }
 
 #[cfg(target_arch = "x86_64")]
-impl<M: RamMapper> RamBuilder<'_, M> {
+impl RamBuilder<'_> {
     pub fn build(
         mut self,
         _: &CpuFeats,
@@ -364,7 +364,7 @@ impl<M: RamMapper> RamBuilder<'_, M> {
 }
 
 #[cfg(target_arch = "aarch64")]
-impl<'a, M: RamMapper> RamBuilder<'a, M> {
+impl<'a> RamBuilder<'a> {
     const MA_DEV_NG_NR_NE: u8 = 0; // MEMORY_ATTRS[0]
     const MA_NOR: u8 = 1; // MEMORY_ATTRS[1]
     const MEMORY_ATTRS: [u8; 8] = [0, 0b11111111, 0, 0, 0, 0, 0, 0];
@@ -590,12 +590,12 @@ struct KernelArgs {
 }
 
 /// Struct to write all kernel arguments into a single block of memory.
-struct ArgsWriter<'a, M: RamMapper> {
-    mem: LockedMem<'a, M>,
+struct ArgsWriter<'a> {
+    mem: LockedMem<'a>,
     next: usize,
 }
 
-impl<M: RamMapper> ArgsWriter<'_, M> {
+impl ArgsWriter<'_> {
     fn write<T>(&mut self, v: T) -> usize {
         let off = self.next.next_multiple_of(align_of::<T>());
 

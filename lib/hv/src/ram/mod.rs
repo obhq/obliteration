@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 pub use self::lock::*;
-pub use self::mapper::*;
+pub(crate) use self::mapper::*;
 
 use super::HvError;
 use std::cmp::max;
@@ -21,21 +21,21 @@ mod os;
 /// until there is an allocation request.
 ///
 /// RAM always started at address 0.
-pub struct Ram<M: RamMapper> {
+pub struct Ram {
     mem: *mut u8,
     len: NonZero<usize>,
     block_size: NonZero<usize>,
     host_page_size: NonZero<usize>,
     allocated: Mutex<BTreeMap<usize, State>>,
     cv: Condvar,
-    mapper: M,
+    mapper: Box<dyn RamMapper>,
 }
 
-impl<M: RamMapper> Ram<M> {
+impl Ram {
     pub(super) fn new(
         len: NonZero<usize>,
         mbs: NonZero<usize>,
-        mapper: M,
+        mapper: impl RamMapper,
     ) -> Result<Self, HvError> {
         // Get block size.
         let host_page_size = self::os::get_page_size().map_err(HvError::GetHostPageSize)?;
@@ -55,7 +55,7 @@ impl<M: RamMapper> Ram<M> {
             host_page_size,
             allocated: Mutex::default(),
             cv: Condvar::new(),
-            mapper,
+            mapper: Box::new(mapper),
         })
     }
 
@@ -77,7 +77,7 @@ impl<M: RamMapper> Ram<M> {
 
     /// # Panics
     /// If `addr` or `len` is not multiply by block size.
-    pub fn alloc(&self, addr: usize, len: NonZero<usize>) -> Result<LockedMem<M>, RamError> {
+    pub fn alloc(&self, addr: usize, len: NonZero<usize>) -> Result<LockedMem, RamError> {
         assert_eq!(addr % self.block_size, 0);
         assert_eq!(len.get() % self.block_size, 0);
 
@@ -101,7 +101,7 @@ impl<M: RamMapper> Ram<M> {
         unsafe { self::os::commit(start, len).map_err(RamError::Commit)? };
 
         if let Err(e) = unsafe { self.mapper.map(start, addr, len) } {
-            return Err(RamError::Map(Box::new(e)));
+            return Err(RamError::Map(e));
         }
 
         // Add range to allocated list.
@@ -186,7 +186,7 @@ impl<M: RamMapper> Ram<M> {
     /// Return [`None`] if some part of the requested range is not allocated.
     ///
     /// Attempt to lock a range that already locked by the calling thread will result in a deadlock.
-    pub fn lock(&self, addr: usize, len: NonZero<usize>) -> Option<LockedMem<M>> {
+    pub fn lock(&self, addr: usize, len: NonZero<usize>) -> Option<LockedMem> {
         // Round the address down to block size.
         let end = addr.checked_add(len.get())?;
         let off = addr % self.block_size;
@@ -234,15 +234,15 @@ impl<M: RamMapper> Ram<M> {
     }
 }
 
-impl<M: RamMapper> Drop for Ram<M> {
+impl Drop for Ram {
     fn drop(&mut self) {
         // TODO: Unmap this portion from the VM if the OS does not do for us.
         unsafe { self::os::free(self.mem, self.len).unwrap() };
     }
 }
 
-unsafe impl<M: RamMapper> Send for Ram<M> {}
-unsafe impl<M: RamMapper> Sync for Ram<M> {}
+unsafe impl Send for Ram {}
+unsafe impl Sync for Ram {}
 
 /// State of allocated block.
 #[derive(Clone, Copy, PartialEq)]

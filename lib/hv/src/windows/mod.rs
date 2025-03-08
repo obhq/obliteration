@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::WhpCpu;
-use self::mapper::WhpMapper;
 use self::partition::Partition;
 use super::{CpuFeats, Hypervisor, Ram};
 use std::num::NonZero;
@@ -8,7 +7,6 @@ use thiserror::Error;
 use windows_sys::core::HRESULT;
 
 mod cpu;
-mod mapper;
 mod partition;
 
 /// `ram_mbs` is a minimum block size of the RAM. Usually it will be page size on the VM. This value
@@ -23,7 +21,7 @@ pub fn new(
     debug: bool,
 ) -> Result<impl Hypervisor, HvError> {
     // Create RAM.
-    let ram = Ram::new(ram_size, ram_mbs, WhpMapper)?;
+    let ram = Ram::new(ram_size, ram_mbs, ())?;
 
     // Setup a partition.
     let mut part = Partition::new().map_err(HvError::CreatePartitionFailed)?;
@@ -53,11 +51,10 @@ pub fn new(
 struct Whp {
     part: Partition,
     feats: CpuFeats,
-    ram: Ram<WhpMapper>,
+    ram: Ram,
 }
 
 impl Hypervisor for Whp {
-    type Mapper = WhpMapper;
     type Cpu<'a> = WhpCpu<'a>;
     type CpuErr = WhpCpuError;
 
@@ -65,11 +62,11 @@ impl Hypervisor for Whp {
         &self.feats
     }
 
-    fn ram(&self) -> &Ram<Self::Mapper> {
+    fn ram(&self) -> &Ram {
         &self.ram
     }
 
-    fn ram_mut(&mut self) -> &mut Ram<Self::Mapper> {
+    fn ram_mut(&mut self) -> &mut Ram {
         &mut self.ram
     }
 
