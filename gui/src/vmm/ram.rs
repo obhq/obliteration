@@ -599,7 +599,7 @@ impl<M: RamMapper> ArgsWriter<'_, M> {
     fn write<T>(&mut self, v: T) -> usize {
         let off = self.next.next_multiple_of(align_of::<T>());
 
-        self.mem.write(off, v);
+        self.mem.put(off, v);
         self.next = off + size_of::<T>();
 
         off

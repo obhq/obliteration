@@ -1,4 +1,4 @@
-import { Palette, HorizontalBox, StandardButton, VerticalBox } from "std-widgets.slint";
+import { Palette, HorizontalBox, StandardButton } from "std-widgets.slint";
 
 component Content inherits Rectangle {
     in property <string> message;
@@ -37,29 +37,6 @@ component ActionBar inherits Rectangle {
             clicked => {
                 close();
             }
-        }
-    }
-}
-
-export component ErrorPopup inherits PopupWindow {
-    in property <string> message;
-
-    callback close-clicked <=> ab.close;
-
-    close-policy: PopupClosePolicy.no-auto-close;
-
-    Rectangle {
-        border-color: Palette.border;
-        border-width: 1px;
-        clip: true;
-
-        VerticalLayout {
-            Content {
-                message: message;
-                vertical-stretch: 1;
-            }
-
-            ab := ActionBar { }
         }
     }
 }
