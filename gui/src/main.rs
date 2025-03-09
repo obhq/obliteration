@@ -60,6 +60,114 @@ struct MainProgram {
 }
 
 impl MainProgram {
+    async fn run_launcher(
+        graphics: &impl EngineBuilder,
+        data: &Arc<DataMgr>,
+        profiles: Vec<Profile>,
+    ) -> Result<Option<(Profile, ExitAction)>, ProgramError> {
+        // Create window and register callback handlers.
+        let win = MainWindow::new().map_err(ProgramError::CreateMainWindow)?;
+        let resolutions = Rc::new(ResolutionModel::default());
+        let profiles = Rc::new(ProfileModel::new(profiles, resolutions.clone()));
+        let exit = Rc::new(Cell::new(None));
+
+        win.on_settings({
+            let win = win.as_weak();
+
+            move || spawn_handler(&win, |w| MainProgram::settings(w))
+        });
+
+        win.on_report_issue({
+            let win = win.as_weak();
+
+            move || spawn_handler(&win, |w| MainProgram::report_issue(w))
+        });
+
+        win.on_about({
+            let win = win.as_weak();
+
+            move || spawn_handler(&win, |w| MainProgram::about(w))
+        });
+
+        win.on_profile_selected({
+            let win = win.as_weak();
+            let profiles = profiles.clone();
+
+            move || {
+                // TODO: Check if previous profile has unsaved data before switch the profile.
+                let win = win.unwrap();
+                let row: usize = win.get_selected_profile().try_into().unwrap();
+
+                profiles.select(row, &win);
+            }
+        });
+
+        win.on_save_profile({
+            let data = data.clone();
+            let win = win.as_weak();
+            let profiles = profiles.clone();
+
+            move || spawn_handler(&win, |w| save_profile(w, data.clone(), profiles.clone()))
+        });
+
+        win.on_start_vmm({
+            let win = win.as_weak();
+            let profiles = profiles.clone();
+            let exit = exit.clone();
+            let ty = ExitAction::Run;
+
+            move || spawn_handler(&win, |w| start_vmm(w, profiles.clone(), exit.clone(), ty))
+        });
+
+        win.on_start_debug({
+            let win = win.as_weak();
+            let profiles = profiles.clone();
+            let exit = exit.clone();
+            let ty = ExitAction::Debug;
+
+            move || spawn_handler(&win, |w| start_vmm(w, profiles.clone(), exit.clone(), ty))
+        });
+
+        // Set window properties.
+        let physical_devices = ModelRc::new(VecModel::from_iter(
+            graphics
+                .physical_devices()
+                .iter()
+                .map(|p| SharedString::from(p.name())),
+        ));
+
+        win.set_devices(physical_devices);
+        win.set_resolutions(resolutions.into());
+        win.set_profiles(profiles.clone().into());
+
+        // Load selected profile.
+        let row: usize = win.get_selected_profile().try_into().unwrap();
+
+        profiles.select(row, &win);
+
+        // Run the window.
+        win.show().map_err(ProgramError::ShowMainWindow)?;
+        win.set_center().map_err(ProgramError::CenterMainWindow)?;
+        win.wait().await;
+
+        // Extract window states.
+        let profile = win.get_selected_profile();
+
+        drop(win);
+
+        // Check how we exit.
+        let exit = match Rc::into_inner(exit).unwrap().into_inner() {
+            Some(v) => v,
+            None => return Ok(None),
+        };
+
+        // Get selected profile.
+        let mut profiles = Rc::into_inner(profiles).unwrap().into_inner();
+        let profile = profiles.remove(profile.try_into().unwrap());
+
+        Ok(Some((profile, exit)))
+    }
+
     async fn settings(main: MainWindow) {
         // Setup window.
         let win = match SettingsWindow::new() {
@@ -70,6 +178,12 @@ impl MainProgram {
                 return;
             }
         };
+
+        #[cfg(target_os = "macos")]
+        win.set_graphics_debug_layer_name("MTL_DEBUG_LAYER".into());
+
+        #[cfg(not(target_os = "macos"))]
+        win.set_graphics_debug_layer_name("VK_LAYER_KHRONOS_validation".into());
 
         // Run the window.
         if let Err(e) = win.show() {
@@ -237,7 +351,7 @@ impl App for MainProgram {
             // TODO: Select last used profile.
             (profiles.pop().unwrap(), Some(v))
         } else {
-            let (profile, exit) = match run_launcher(&graphics, &data, profiles).await? {
+            let (profile, exit) = match Self::run_launcher(&graphics, &data, profiles).await? {
                 Some(v) => v,
                 None => return Ok(()),
             };
@@ -316,114 +430,6 @@ impl App for MainProgram {
 
         Ok(())
     }
-}
-
-async fn run_launcher(
-    graphics: &impl EngineBuilder,
-    data: &Arc<DataMgr>,
-    profiles: Vec<Profile>,
-) -> Result<Option<(Profile, ExitAction)>, ProgramError> {
-    // Create window and register callback handlers.
-    let win = MainWindow::new().map_err(ProgramError::CreateMainWindow)?;
-    let resolutions = Rc::new(ResolutionModel::default());
-    let profiles = Rc::new(ProfileModel::new(profiles, resolutions.clone()));
-    let exit = Rc::new(Cell::new(None));
-
-    win.on_settings({
-        let win = win.as_weak();
-
-        move || spawn_handler(&win, |w| MainProgram::settings(w))
-    });
-
-    win.on_report_issue({
-        let win = win.as_weak();
-
-        move || spawn_handler(&win, |w| MainProgram::report_issue(w))
-    });
-
-    win.on_about({
-        let win = win.as_weak();
-
-        move || spawn_handler(&win, |w| MainProgram::about(w))
-    });
-
-    win.on_profile_selected({
-        let win = win.as_weak();
-        let profiles = profiles.clone();
-
-        move || {
-            // TODO: Check if previous profile has unsaved data before switch the profile.
-            let win = win.unwrap();
-            let row: usize = win.get_selected_profile().try_into().unwrap();
-
-            profiles.select(row, &win);
-        }
-    });
-
-    win.on_save_profile({
-        let data = data.clone();
-        let win = win.as_weak();
-        let profiles = profiles.clone();
-
-        move || spawn_handler(&win, |w| save_profile(w, data.clone(), profiles.clone()))
-    });
-
-    win.on_start_vmm({
-        let win = win.as_weak();
-        let profiles = profiles.clone();
-        let exit = exit.clone();
-        let ty = ExitAction::Run;
-
-        move || spawn_handler(&win, |w| start_vmm(w, profiles.clone(), exit.clone(), ty))
-    });
-
-    win.on_start_debug({
-        let win = win.as_weak();
-        let profiles = profiles.clone();
-        let exit = exit.clone();
-        let ty = ExitAction::Debug;
-
-        move || spawn_handler(&win, |w| start_vmm(w, profiles.clone(), exit.clone(), ty))
-    });
-
-    // Set window properties.
-    let physical_devices = ModelRc::new(VecModel::from_iter(
-        graphics
-            .physical_devices()
-            .iter()
-            .map(|p| SharedString::from(p.name())),
-    ));
-
-    win.set_devices(physical_devices);
-    win.set_resolutions(resolutions.into());
-    win.set_profiles(profiles.clone().into());
-
-    // Load selected profile.
-    let row: usize = win.get_selected_profile().try_into().unwrap();
-
-    profiles.select(row, &win);
-
-    // Run the window.
-    win.show().map_err(ProgramError::ShowMainWindow)?;
-    win.set_center().map_err(ProgramError::CenterMainWindow)?;
-    win.wait().await;
-
-    // Extract window states.
-    let profile = win.get_selected_profile();
-
-    drop(win);
-
-    // Check how we exit.
-    let exit = match Rc::into_inner(exit).unwrap().into_inner() {
-        Some(v) => v,
-        None => return Ok(None),
-    };
-
-    // Get selected profile.
-    let mut profiles = Rc::into_inner(profiles).unwrap().into_inner();
-    let profile = profiles.remove(profile.try_into().unwrap());
-
-    Ok(Some((profile, exit)))
 }
 
 async fn wait_for_debugger(addr: SocketAddr) -> Result<Option<TcpStream>, ProgramError> {

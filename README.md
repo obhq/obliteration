@@ -1,4 +1,4 @@
-<p align="center"><img alt="Logo" src="logo.png"></p>
+<p align="center"><img alt="Logo" src="gui/ui/assets/logo.png"></p>
 
 ## About
 [![CI](https://github.com/obhq/obliteration/actions/workflows/main.yml/badge.svg)](https://github.com/obhq/obliteration/actions/workflows/main.yml)
