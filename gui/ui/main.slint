@@ -1,13 +1,7 @@
 import { VerticalBox, HorizontalBox, Button, ComboBox } from "std-widgets.slint";
+import { TabBar, TabContainer } from "@root/widgets/tab.slint";
 import { DisplayTab } from "main/display.slint";
 import { CpuTab } from "main/cpu.slint";
-import { TabBar, TabContainer } from "main/tab.slint";
-
-export { AboutWindow } from "about.slint";
-export { WaitForDebugger } from "debug.slint";
-export { ErrorWindow } from "error.slint";
-export { SettingsWindow } from "settings.slint";
-export { InstallFirmware, SetupWizard } from "setup.slint";
 
 export component MainWindow inherits Window {
     in property <[string]> devices;
@@ -72,7 +66,7 @@ export component MainWindow inherits Window {
 
             tab := TabBar {
                 tabs: [
-                    { text: "Display", icon: @image-url("main/monitor.svg") },
+                    { text: "Display", icon: @image-url("@root/assets/monitor.svg") },
                     { text: "CPU", icon: @image-url("main/cpu-64-bit.svg") }
                 ];
             }

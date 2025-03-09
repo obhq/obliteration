@@ -1,3 +1,27 @@
-export component SettingsWindow inherits Window {
+import { StandardButton } from "std-widgets.slint";
+import { TabBar, TabContainer } from "@root/widgets/tab.slint";
+import { GraphicsTab } from "settings/graphics.slint";
+
+export component SettingsWindow inherits Dialog {
+    in property <string> graphics-debug-layer-name: "VK_LAYER_KHRONOS_validation";
+
     title: "Settings";
+
+    TabContainer {
+        tab := TabBar {
+            tabs: [{ text: "Graphics", icon: @image-url("@root/assets/monitor.svg") }];
+        }
+
+        if tab.current-page == 0: GraphicsTab {
+            debug-layer-name: root.graphics-debug-layer-name;
+        }
+    }
+
+    StandardButton {
+        kind: ok;
+    }
+
+    StandardButton {
+        kind: cancel;
+    }
 }

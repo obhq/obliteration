@@ -10,7 +10,7 @@ fn main() {
         .with_style(String::from("fluent-dark"))
         .with_library_paths(HashMap::from([("root".into(), root.join("ui"))]));
 
-    slint_build::compile_with_config(PathBuf::from_iter(["ui", "main.slint"]), config).unwrap();
+    slint_build::compile_with_config(PathBuf::from_iter(["ui", "lib.slint"]), config).unwrap();
 
     // Compile resources.rc.
     #[cfg(windows)]
