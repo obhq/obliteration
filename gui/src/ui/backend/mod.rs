@@ -50,7 +50,7 @@ impl SlintBackend {
 
         match wae::raw_display_handle() {
             #[cfg(target_os = "linux")]
-            RawDisplayHandle::Wayland(d) => b.wayland = Wayland::new(d).map(Some)?,
+            RawDisplayHandle::Wayland(d) => b.wayland = unsafe { Wayland::new(d) }.map(Some)?,
             _ => (),
         }
 

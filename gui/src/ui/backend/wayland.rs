@@ -28,7 +28,7 @@ impl Wayland {
     /// `display` must outlive the returned [`Wayland`].
     pub unsafe fn new(display: WaylandDisplayHandle) -> Result<Self, BackendError> {
         // Get wayland connection.
-        let backend = Backend::from_foreign_display(display.display.as_ptr().cast());
+        let backend = unsafe { Backend::from_foreign_display(display.display.as_ptr().cast()) };
         let connection = Connection::from_backend(backend);
 
         // Get global objects.

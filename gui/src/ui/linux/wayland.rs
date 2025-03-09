@@ -17,10 +17,10 @@ pub unsafe fn set_modal(
     let mut queue = wayland.queue().borrow_mut();
     let mut state = wayland.state().borrow_mut();
     let qh = queue.handle();
-    let parent = get_xdg_toplevel(wayland, parent);
+    let parent = unsafe { get_xdg_toplevel(wayland, parent) };
 
     // Get xdg_dialog_v1.
-    let target = get_xdg_toplevel(wayland, target);
+    let target = unsafe { get_xdg_toplevel(wayland, target) };
     let dialog = state.xdg_dialog().get_xdg_dialog(&target, &qh, ());
 
     queue
@@ -42,7 +42,7 @@ pub unsafe fn set_modal(
 /// `win` must outlive the returned [`XdgToplevel`].
 unsafe fn get_xdg_toplevel(wayland: &Wayland, win: &impl DesktopWindow) -> XdgToplevel {
     let obj = win.xdg_toplevel();
-    let obj = ObjectId::from_ptr(XdgToplevel::interface(), obj.cast()).unwrap();
+    let obj = unsafe { ObjectId::from_ptr(XdgToplevel::interface(), obj.cast()).unwrap() };
 
     XdgToplevel::from_id(wayland.connection(), obj).unwrap()
 }
