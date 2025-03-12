@@ -66,6 +66,45 @@ impl SlintWindow {
     pub fn hidden(&self) -> &Signal<()> {
         &self.hidden
     }
+
+    #[cfg(target_os = "macos")]
+    fn build_menu(
+        mtm: objc2::MainThreadMarker,
+        bar: &vtable::VBox<i_slint_core::menus::MenuVTable>,
+        menu: &objc2_app_kit::NSMenu,
+        items: slint::SharedVector<i_slint_core::items::MenuEntry>,
+    ) {
+        use objc2::MainThreadOnly;
+        use objc2_app_kit::{NSMenu, NSMenuItem};
+        use objc2_foundation::{NSString, ns_string};
+        use slint::SharedVector;
+
+        for item in items {
+            // Get sub-menu.
+            let mut items = SharedVector::default();
+
+            bar.sub_menu(Some(&item), &mut items);
+
+            // Create NSMenuItem.
+            let title = NSString::from_str(&item.title);
+            let item = NSMenuItem::alloc(mtm);
+            let item = unsafe {
+                NSMenuItem::initWithTitle_action_keyEquivalent(item, &title, None, ns_string!(""))
+            };
+
+            // Create sub-menu.
+            if !items.is_empty() {
+                let menu = NSMenu::alloc(mtm);
+                let menu = unsafe { NSMenu::initWithTitle(menu, &title) };
+
+                Self::build_menu(mtm, bar, &menu, items);
+
+                item.setSubmenu(Some(&menu));
+            }
+
+            menu.addItem(&item);
+        }
+    }
 }
 
 impl WinitWindow for SlintWindow {
@@ -369,5 +408,26 @@ impl WindowAdapter for SlintWindow {
 impl WindowAdapterInternal for SlintWindow {
     fn as_any(&self) -> &dyn Any {
         self
+    }
+
+    fn supports_native_menu_bar(&self) -> bool {
+        cfg!(target_os = "macos")
+    }
+
+    #[cfg(target_os = "macos")]
+    fn setup_menubar(&self, bar: vtable::VBox<i_slint_core::menus::MenuVTable>) {
+        use objc2::MainThreadMarker;
+        use objc2_app_kit::NSApp;
+        use slint::SharedVector;
+
+        // Get menus on the menu bar.
+        let mtm = MainThreadMarker::new().unwrap();
+        let app = NSApp(mtm);
+        let menu = unsafe { app.mainMenu().unwrap() };
+        let mut items = SharedVector::default();
+
+        bar.sub_menu(None, &mut items);
+
+        Self::build_menu(mtm, &bar, &menu, items);
     }
 }

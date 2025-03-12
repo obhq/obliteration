@@ -1,12 +1,6 @@
 name: CI (Mac)
 on:
   workflow_call:
-    inputs:
-      kernel-target:
-        type: string
-        required: true
-env:
-  CMAKE_BUILD_PARALLEL_LEVEL: "3"
 jobs:
   build:
     name: Mac M1
@@ -34,7 +28,14 @@ jobs:
     - name: Install additional Rust components
       run: rustup component add rust-src --toolchain nightly
     - name: Install additional Rust targets
-      run: rustup target add ${{ inputs.kernel-target }}
+      run: rustup target add aarch64-unknown-none-softfloat
+    - name: Lint Rust sources
+      run: |
+        cargo clippy --package aarch64 --no-deps --target aarch64-unknown-none-softfloat -- -D warnings
+        cargo clippy --package bitflag --no-deps --target aarch64-unknown-none-softfloat -- -D warnings
+        cargo clippy --package config --no-deps --target aarch64-unknown-none-softfloat -- -D warnings
+        cargo clippy --package krt --no-deps --target aarch64-unknown-none-softfloat -- -D warnings
+        cargo clippy --package macros --no-deps -- -D warnings
     - name: Build
       run: ./build.py -r
     - name: Run tests

@@ -1923,6 +1923,7 @@ dependencies = [
  "num_enum",
  "obfw",
  "objc2 0.6.0",
+ "objc2-app-kit 0.3.0",
  "objc2-foundation 0.3.0",
  "objc2-uniform-type-identifiers 0.3.0",
  "open",
@@ -1934,6 +1935,7 @@ dependencies = [
  "slint-build",
  "thiserror 2.0.11",
  "uuid",
+ "vtable",
  "wae",
  "wayland-backend",
  "wayland-client",
@@ -4965,9 +4967,9 @@ dependencies = [
 
 [[package]]
 name = "vtable"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "379cd4a9d99f35bcf1687282268b94b59f14b098cba210632605f39709230963"
+checksum = "20b14a049c8d5d1ff811a00f65ac1454335487ed769a943c7bad89ead3573335"
 dependencies = [
  "const-field-offset",
  "portable-atomic",
@@ -4977,9 +4979,9 @@ dependencies = [
 
 [[package]]
 name = "vtable-macro"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68c1b85ec843d3bc60e9d65fa7e00ce6549416a25c267b5ea93e6c81e3aa66e5"
+checksum = "d8502f961cf2f1359fed21a70f67c831ccb3ab9e4c0b4dd3ad40387fbe8875db"
 dependencies = [
  "proc-macro2",
  "quote",
