@@ -27,8 +27,6 @@ jobs:
     name: Build
     uses: ./.github/workflows/ci-mac.yml
     needs: prebuild
-    with:
-      kernel-target: aarch64-unknown-none-softfloat
   build-docs:
     name: Build
     uses: ./.github/workflows/ci-docs.yml
