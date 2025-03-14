@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+pub use self::builder::*;
 pub use self::lock::*;
 pub(crate) use self::mapper::*;
 
@@ -9,6 +10,7 @@ use std::num::NonZero;
 use std::sync::{Condvar, Mutex};
 use thiserror::Error;
 
+mod builder;
 mod lock;
 mod mapper;
 #[cfg_attr(unix, path = "unix.rs")]
@@ -24,7 +26,7 @@ mod os;
 pub struct Ram {
     mem: *mut u8,
     len: NonZero<usize>,
-    block_size: NonZero<usize>,
+    vm_page_size: NonZero<usize>,
     host_page_size: NonZero<usize>,
     allocated: Mutex<BTreeMap<usize, State>>,
     cv: Condvar,
@@ -33,13 +35,13 @@ pub struct Ram {
 
 impl Ram {
     pub(super) fn new(
+        vm_page_size: NonZero<usize>,
         len: NonZero<usize>,
-        mbs: NonZero<usize>,
         mapper: impl RamMapper,
     ) -> Result<Self, HvError> {
-        // Get block size.
+        // Check block size.
         let host_page_size = self::os::get_page_size().map_err(HvError::GetHostPageSize)?;
-        let block_size = max(mbs, host_page_size);
+        let block_size = max(vm_page_size, host_page_size);
 
         if len.get() % block_size != 0 {
             return Err(HvError::InvalidRamSize);
@@ -51,7 +53,7 @@ impl Ram {
         Ok(Self {
             mem,
             len,
-            block_size,
+            vm_page_size,
             host_page_size,
             allocated: Mutex::default(),
             cv: Condvar::new(),
@@ -68,7 +70,11 @@ impl Ram {
     }
 
     pub fn block_size(&self) -> NonZero<usize> {
-        self.block_size
+        max(self.vm_page_size, self.host_page_size)
+    }
+
+    pub fn vm_page_size(&self) -> NonZero<usize> {
+        self.vm_page_size
     }
 
     pub fn host_page_size(&self) -> NonZero<usize> {
@@ -78,8 +84,8 @@ impl Ram {
     /// # Panics
     /// If `addr` or `len` is not multiply by block size.
     pub fn alloc(&self, addr: usize, len: NonZero<usize>) -> Result<LockedMem, RamError> {
-        assert_eq!(addr % self.block_size, 0);
-        assert_eq!(len.get() % self.block_size, 0);
+        assert_eq!(addr % self.block_size(), 0);
+        assert_eq!(len.get() % self.block_size(), 0);
 
         // Check if the requested range valid.
         let end = addr.checked_add(len.get()).ok_or(RamError::InvalidAddr)?;
@@ -105,7 +111,7 @@ impl Ram {
         }
 
         // Add range to allocated list.
-        for addr in (addr..end).step_by(self.block_size.get()) {
+        for addr in (addr..end).step_by(self.block_size().get()) {
             assert!(allocated.insert(addr, State::Locked).is_none());
         }
 
@@ -120,8 +126,8 @@ impl Ram {
     /// # Panics
     /// If `addr` or `len` is not multiply by block size.
     pub fn dealloc(&self, mut addr: usize, len: NonZero<usize>) -> Result<(), RamError> {
-        assert_eq!(addr % self.block_size, 0);
-        assert_eq!(len.get() % self.block_size, 0);
+        assert_eq!(addr % self.block_size(), 0);
+        assert_eq!(len.get() % self.block_size(), 0);
 
         // Check if the requested range valid so we don't end up unmap non-VM memory.
         let end = addr.checked_add(len.get()).ok_or(RamError::InvalidAddr)?;
@@ -162,7 +168,7 @@ impl Ram {
                 end = addr;
             }
 
-            end += self.block_size.get();
+            end += self.block_size().get();
 
             // TODO: Unmap this portion from the VM if the OS does not do for us.
             let len = end - addr;
@@ -170,7 +176,7 @@ impl Ram {
             unsafe { self::os::decommit(self.mem.add(addr), len).map_err(RamError::Decommit)? };
 
             // Remove decommitted range.
-            for addr in (addr..end).step_by(self.block_size.get()) {
+            for addr in (addr..end).step_by(self.block_size().get()) {
                 allocated.remove(&addr);
             }
 
@@ -189,7 +195,7 @@ impl Ram {
     pub fn lock(&self, addr: usize, len: NonZero<usize>) -> Option<LockedMem> {
         // Round the address down to block size.
         let end = addr.checked_add(len.get())?;
-        let off = addr % self.block_size;
+        let off = addr % self.block_size();
         let begin = addr - off;
 
         // Lock the whole range.
@@ -211,7 +217,7 @@ impl Ram {
 
                 // This block has been allocated successfully, which mean this addition will never
                 // overflow.
-                next += self.block_size.get();
+                next += self.block_size().get();
             }
 
             break true;
@@ -229,6 +235,9 @@ impl Ram {
 
             return None;
         }
+
+        // Drop the mutex guard before construct the LockedMem otherwise deadlock is possible.
+        drop(allocated);
 
         Some(LockedMem::new(self, addr, len))
     }

@@ -18,19 +18,18 @@ use thiserror::Error;
 mod cpu;
 mod mapper;
 
-/// `ram_mbs` is a minimum block size of the RAM. Usually it will be page size on the VM. This value
-/// will be used as a block size if it is larger than page size on the host otherwise block size
-/// will be page size on the host.
+/// `page_size` is a page size on the VM. This value will be used as a block size if it is larger
+/// than page size on the host otherwise block size will be page size on the host.
 ///
 /// `ram_size` must be multiply by the block size calculated from the above.
 pub fn new(
     cpu: usize,
     ram_size: NonZero<usize>,
-    ram_mbs: NonZero<usize>,
+    page_size: NonZero<usize>,
     debug: bool,
 ) -> Result<impl Hypervisor, HvError> {
     // Create RAM.
-    let ram = Ram::new(ram_size, ram_mbs, HvfMapper)?;
+    let ram = Ram::new(page_size, ram_size, HvfMapper)?;
 
     // Create a VM.
     let ret = unsafe { hv_vm_create(null_mut()) };

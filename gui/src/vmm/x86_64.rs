@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::cpu::GdbError;
-use super::ram::RamMap;
-use super::{MainCpuError, Vmm};
+use super::{MainCpuError, RamMap, Vmm};
 use gdbstub::target::ext::base::BaseOps;
 use gdbstub::target::ext::breakpoints::{
     Breakpoints, BreakpointsOps, SwBreakpoint, SwBreakpointOps,
@@ -63,7 +62,7 @@ pub fn setup_main_cpu(
     // Set entry point, its argument and stack pointer.
     states.set_rdi(map.env_vaddr);
     states.set_rsi(map.conf_vaddr);
-    states.set_rsp(map.stack_vaddr + map.stack_len); // Top-down.
+    states.set_rsp(map.stack_vaddr.checked_add(map.stack_len.get()).unwrap()); // Top-down.
     states.set_rip(entry);
 
     states

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::cpu::GdbError;
-use super::ram::RamMap;
-use super::{MainCpuError, Vmm};
+use super::{MainCpuError, RamMap, Vmm};
 use gdbstub::target::TargetResult;
 use gdbstub::target::ext::base::BaseOps;
 use gdbstub::target::ext::breakpoints::{
@@ -65,7 +64,7 @@ pub fn setup_main_cpu(
             .with_ntlsmd(true)
             .with_lsmaoe(true),
     );
-    states.set_mair_el1(map.memory_attrs);
+    states.set_mair_el1(u64::from_le_bytes([0, 0b11111111, 0, 0, 0, 0, 0, 0]));
     states.set_tcr(
         Tcr::new()
             .with_ips(feats.mmfr0.pa_range())
