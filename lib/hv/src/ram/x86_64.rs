@@ -188,7 +188,7 @@ struct Context4K<'a> {
 /// Encapsulates a [`LockedMem`] containing a page table.
 struct PageTable<'a>(LockedMem<'a>);
 
-impl<'a> Deref for PageTable<'a> {
+impl Deref for PageTable<'_> {
     type Target = [usize; 512];
 
     fn deref(&self) -> &Self::Target {
@@ -196,7 +196,7 @@ impl<'a> Deref for PageTable<'a> {
     }
 }
 
-impl<'a> DerefMut for PageTable<'a> {
+impl DerefMut for PageTable<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *self.0.as_mut_ptr().cast() }
     }
