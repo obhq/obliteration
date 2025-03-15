@@ -185,7 +185,13 @@ impl Vmm<()> {
             .unwrap();
         let mut ram = RamBuilder::new(&mut hv, 0);
 
-        ram.alloc(None, boot_len).map_err(VmmError::AllocBootMem)?;
+        ram.alloc(
+            None,
+            boot_len,
+            #[cfg(target_arch = "aarch64")]
+            self::arch::MEMORY_NORMAL,
+        )
+        .map_err(VmmError::AllocBootMem)?;
 
         // TODO: Implement ASLR.
         let mut vaddr = 0xffffffff82200000;
