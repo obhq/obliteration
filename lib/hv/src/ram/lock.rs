@@ -1,4 +1,4 @@
-use super::{Ram, State};
+use super::{Ram, RamError, State};
 use std::cmp::min;
 use std::io::Write;
 use std::marker::PhantomData;
@@ -14,6 +14,21 @@ pub struct LockedMem<'a> {
 impl<'a> LockedMem<'a> {
     pub(super) fn new(ram: &'a Ram, addr: usize, len: NonZero<usize>) -> Self {
         Self { ram, addr, len }
+    }
+
+    pub fn fill(&mut self, v: u8) {
+        let ptr = self.as_mut_ptr();
+
+        for i in 0..self.len.get() {
+            unsafe { ptr.add(i).write(v) };
+        }
+    }
+
+    /// # Safety
+    /// This memory range must be initialized and the VM must not access this range for the lifetime
+    /// of this struct.
+    pub unsafe fn as_mut_slice(&mut self) -> &mut [u8] {
+        unsafe { std::slice::from_raw_parts_mut(self.as_mut_ptr(), self.len.get()) }
     }
 
     /// # Safety
@@ -34,22 +49,28 @@ impl<'a> LockedMem<'a> {
         self.len
     }
 
-    /// Returns `val` if the space at `off` is not enough for it.
-    pub fn put<T>(&mut self, off: usize, val: T) -> Option<T> {
+    /// Returns `val` if the space at `off` is not enough for it or [`RamError::InvalidAddr`] if the
+    /// address to put `val` is not align correctly.
+    pub fn put<T>(&mut self, off: usize, val: T) -> Result<Option<T>, RamError> {
         // Check if the value can fit within a locked range.
         if off
             .checked_add(size_of::<T>())
             .is_none_or(|end| end > self.len.get())
         {
-            return Some(val);
+            return Ok(Some(val));
         }
 
-        // Write.
-        let ptr = unsafe { self.as_mut_ptr().add(off) };
+        // Check alignment. This check valid for both physical and virtual address since each page
+        // always has the same alignment.
+        let ptr = unsafe { self.as_mut_ptr().add(off).cast::<T>() };
 
-        unsafe { ptr.cast::<T>().write_unaligned(val) };
+        if !ptr.is_aligned() {
+            return Err(RamError::InvalidAddr);
+        }
 
-        None
+        unsafe { ptr.write(val) };
+
+        Ok(None)
     }
 
     pub fn writer(&mut self, off: usize, len: Option<usize>) -> Option<impl Write + '_> {
@@ -81,7 +102,7 @@ impl<'a> LockedMem<'a> {
 impl Drop for LockedMem<'_> {
     fn drop(&mut self) {
         // Round the address down to block size.
-        let off = self.addr % self.ram.block_size;
+        let off = self.addr % self.ram.block_size();
         let begin = self.addr - off;
         let end = self.addr + self.len.get();
 

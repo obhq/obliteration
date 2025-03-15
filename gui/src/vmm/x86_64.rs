@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::cpu::GdbError;
-use super::ram::RamMap;
-use super::{MainCpuError, Vmm};
+use super::{MainCpuError, RamMap, Vmm};
 use gdbstub::target::ext::base::BaseOps;
 use gdbstub::target::ext::breakpoints::{
     Breakpoints, BreakpointsOps, SwBreakpoint, SwBreakpointOps,
 };
 use gdbstub::target::{TargetError, TargetResult};
 use gdbstub_arch::x86::X86_64_SSE;
-use hv::{Cpu, CpuCommit, CpuFeats, CpuStates, Hypervisor};
+use hv::{Cpu, CpuCommit, CpuStates, Hypervisor};
 use std::num::NonZero;
 use x86_64::Efer;
 
@@ -16,11 +15,11 @@ pub type GdbRegs = gdbstub_arch::x86::reg::X86_64CoreRegs;
 
 pub const BREAKPOINT_SIZE: NonZero<usize> = NonZero::new(1).unwrap();
 
-pub fn setup_main_cpu(
-    cpu: &mut impl Cpu,
+pub fn setup_main_cpu<H: Hypervisor>(
+    _: &H,
+    cpu: &mut H::Cpu<'_>,
     entry: usize,
     map: RamMap,
-    _: &CpuFeats,
 ) -> Result<(), MainCpuError> {
     // Set CR3 to page-map level-4 table.
     let mut states = cpu
@@ -63,7 +62,7 @@ pub fn setup_main_cpu(
     // Set entry point, its argument and stack pointer.
     states.set_rdi(map.env_vaddr);
     states.set_rsi(map.conf_vaddr);
-    states.set_rsp(map.stack_vaddr + map.stack_len); // Top-down.
+    states.set_rsp(map.stack_vaddr.checked_add(map.stack_len.get()).unwrap()); // Top-down.
     states.set_rip(entry);
 
     states

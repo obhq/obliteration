@@ -4,9 +4,8 @@ use self::channel::VmmStream;
 use self::hw::{Device, DeviceTree, setup_devices};
 use self::kernel::{
     Kernel, NoteError, PT_DYNAMIC, PT_GNU_EH_FRAME, PT_GNU_RELRO, PT_GNU_STACK, PT_LOAD, PT_NOTE,
-    PT_PHDR,
+    PT_PHDR, ProgramHeader,
 };
-use self::ram::{RamBuilder, RamMap};
 use crate::gdb::GdbHandler;
 use crate::profile::Profile;
 use config::{BootEnv, ConsoleType, MapType, PhysMap, Vm};
@@ -17,7 +16,8 @@ use gdbstub::target::ext::base::multithread::{
 };
 use gdbstub::target::{TargetError, TargetResult};
 use hv::{
-    CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, HvError, Hypervisor, Ram, RamError,
+    AllocInfo, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, HvError, Hypervisor,
+    RamBuilder, RamBuilderError, RamError,
 };
 use kernel::{KernelError, ProgramHeaderError};
 use rustc_hash::FxHashMap;
@@ -38,7 +38,6 @@ mod channel;
 mod cpu;
 mod hw;
 mod kernel;
-mod ram;
 
 /// Manage a virtual machine that run the kernel.
 pub struct Vmm<H> {
@@ -153,21 +152,21 @@ impl Vmm<()> {
         let vm_page_size = vm_page_size.ok_or(VmmError::NoPageSizeInKernelNote)?;
 
         // Get kernel memory size.
-        let mut len = 0;
+        let mut kern_len = 0;
 
         for hdr in &segments {
-            if hdr.p_vaddr < len {
+            if hdr.p_vaddr < kern_len {
                 return Err(VmmError::OverlappedLoadSegment(hdr.p_vaddr));
             }
 
-            len = hdr
+            kern_len = hdr
                 .p_vaddr
                 .checked_add(hdr.p_memsz)
                 .ok_or(VmmError::InvalidPmemsz(hdr.p_vaddr))?;
         }
 
         // Check if we have a non-empty segment to map.
-        let len = NonZero::new(len).ok_or(VmmError::ZeroLengthLoadSegment)?;
+        let kern_len = NonZero::new(kern_len).ok_or(VmmError::ZeroLengthLoadSegment)?;
 
         // Setup hypervisor.
         let ram_size = NonZero::new(1024 * 1024 * 1024 * 8).unwrap();
@@ -175,18 +174,18 @@ impl Vmm<()> {
             hv::new(8, ram_size, vm_page_size, false).map_err(VmmError::SetupHypervisor)?;
         let devices = Arc::new(setup_devices(ram_size.get(), hv.ram().block_size()));
 
-        // Round kernel memory size.
-        let len = len
-            .get()
-            .checked_next_multiple_of(hv.ram().block_size().get())
-            .ok_or(VmmError::TotalSizeTooLarge)?;
-
-        // Map the kernel.
-        let feats = hv.cpu_features().clone();
+        // TODO: Implement ASLR.
         let host_page_size = hv.ram().host_page_size();
-        let mut ram = RamBuilder::new(hv.ram_mut());
-        let mut kern = ram
-            .alloc_kernel(NonZero::new(len).unwrap())
+        let mut ram = RamBuilder::new(&mut hv, 0);
+        let mut vaddr = 0xffffffff82200000;
+        let kern_vaddr = vaddr;
+        let (kern_paddr, mut kern) = ram
+            .alloc(
+                Some(kern_vaddr),
+                kern_len,
+                #[cfg(target_arch = "aarch64")]
+                self::arch::MEMORY_NORMAL,
+            )
             .map_err(VmmError::AllocateRamForKernel)?;
 
         for hdr in &segments {
@@ -207,10 +206,12 @@ impl Vmm<()> {
 
         drop(kern);
 
-        ram.alloc_stack(NonZero::new(1024 * 1024 * 2).unwrap())
-            .map_err(VmmError::AllocateRamForStack)?;
+        vaddr = vaddr
+            .checked_add(kern_len.get())
+            .and_then(move |v| v.checked_next_multiple_of(vm_page_size.get()))
+            .unwrap();
 
-        // Setup boot info.
+        // Setup boot environment.
         let mut env = Vm {
             vmm: devices.vmm().addr(),
             console: devices.console().addr(),
@@ -227,13 +228,89 @@ impl Vmm<()> {
         env.memory_map[0].len = ram_size.get().try_into().unwrap();
         env.memory_map[0].ty = MapType::Ram;
 
-        ram.alloc_args(BootEnv::Vm(env), profile.kernel_config().clone())
-            .map_err(VmmError::AllocateRamForArgs)?;
+        // Allocate boot environment.
+        let env = BootEnv::Vm(env);
+        let len = size_of_val(&env).try_into().unwrap();
+        let env_vaddr = vaddr;
 
-        // Build RAM.
-        let map = ram
-            .build(&feats, vm_page_size, &devices, dynamic)
-            .map_err(VmmError::BuildRam)?;
+        match ram.alloc(
+            Some(env_vaddr),
+            len,
+            #[cfg(target_arch = "aarch64")]
+            self::arch::MEMORY_NORMAL,
+        ) {
+            Ok((_, mut m)) => assert!(m.put(0, env).unwrap().is_none()),
+            Err(e) => return Err(VmmError::AllocBootEnv(e)),
+        }
+
+        vaddr = vaddr
+            .checked_add(len.get())
+            .and_then(move |v| v.checked_next_multiple_of(vm_page_size.get()))
+            .unwrap();
+
+        // Allocate kernel config.
+        let config = profile.kernel_config();
+        let len = size_of_val(config).try_into().unwrap();
+        let conf_vaddr = vaddr;
+
+        match ram.alloc(
+            Some(conf_vaddr),
+            len,
+            #[cfg(target_arch = "aarch64")]
+            self::arch::MEMORY_NORMAL,
+        ) {
+            Ok((_, mut m)) => assert!(m.put(0, config.clone()).unwrap().is_none()),
+            Err(e) => return Err(VmmError::AllocKernelConfig(e)),
+        }
+
+        vaddr = vaddr
+            .checked_add(len.get())
+            .and_then(move |v| v.checked_next_multiple_of(vm_page_size.get()))
+            .unwrap();
+
+        // TODO: Allocate guard pages.
+        let stack_len = NonZero::new(1024 * 1024 * 1).unwrap();
+        let stack_vaddr = vaddr;
+
+        ram.alloc(
+            Some(stack_vaddr),
+            stack_len,
+            #[cfg(target_arch = "aarch64")]
+            self::arch::MEMORY_NORMAL,
+        )
+        .map_err(VmmError::AllocStack)?;
+
+        // Build page table.
+        let page_table = ram
+            .build_page_table(devices.all().map(|(addr, dev)| AllocInfo {
+                paddr: addr,
+                vaddr: addr,
+                len: dev.len(),
+                #[cfg(target_arch = "aarch64")]
+                attr: self::arch::MEMORY_DEV_NG_NR_NE,
+            }))
+            .map_err(VmmError::BuildPageTable)?;
+        let map = RamMap {
+            page_table,
+            kern_paddr,
+            kern_vaddr,
+            kern_len,
+            stack_vaddr,
+            stack_len,
+            env_vaddr,
+            conf_vaddr,
+        };
+
+        // Relocate the kernel to virtual address.
+        let ty = if cfg!(target_arch = "x86_64") {
+            8
+        } else if cfg!(target_arch = "aarch64") {
+            1027
+        } else {
+            todo!()
+        };
+
+        Self::relocate_kernel(&mut hv, &map, dynamic, ty)?;
 
         // Spawn main CPU.
         let mut vmm = Vmm {
@@ -251,6 +328,85 @@ impl Vmm<()> {
             .map_err(VmmError::SpawnMainCpu)?;
 
         Ok(vmm)
+    }
+
+    fn relocate_kernel<H: Hypervisor>(
+        hv: &mut H,
+        map: &RamMap,
+        dynamic: ProgramHeader,
+        ty: usize,
+    ) -> Result<(), VmmError> {
+        // Check if PT_DYNAMIC valid.
+        let p_vaddr = dynamic.p_vaddr;
+        let p_memsz = dynamic.p_memsz;
+
+        if p_memsz % 16 != 0 {
+            return Err(VmmError::InvalidDynamicLinking);
+        }
+
+        // Get PT_DYNAMIC.
+        let mut kern = hv.ram().lock(map.kern_paddr, map.kern_len).unwrap();
+        let kern = unsafe { kern.as_mut_slice() };
+        let dynamic = p_vaddr
+            .checked_add(p_memsz)
+            .and_then(|end| kern.get(p_vaddr..end))
+            .ok_or(VmmError::InvalidDynamicLinking)?;
+
+        // Parse PT_DYNAMIC.
+        let mut rela = None;
+        let mut relasz = None;
+
+        for entry in dynamic.chunks_exact(16) {
+            let tag = usize::from_ne_bytes(entry[..8].try_into().unwrap());
+            let val = usize::from_ne_bytes(entry[8..].try_into().unwrap());
+
+            match tag {
+                0 => break,              // DT_NULL
+                7 => rela = Some(val),   // DT_RELA
+                8 => relasz = Some(val), // DT_RELASZ
+                _ => {}
+            }
+        }
+
+        // Check DT_RELA and DT_RELASZ.
+        let (relocs, len) = match (rela, relasz) {
+            (None, None) => return Ok(()),
+            (Some(rela), Some(relasz)) => (rela, relasz),
+            _ => return Err(VmmError::InvalidDynamicLinking),
+        };
+
+        // Check if size valid.
+        if (len % 24) != 0 {
+            return Err(VmmError::InvalidDynamicLinking);
+        }
+
+        // Apply relocations.
+        for off in (0..len).step_by(24).map(|v| relocs + v) {
+            let data = kern
+                .get(off..(off + 24))
+                .ok_or(VmmError::InvalidDynamicLinking)?;
+            let r_offset = usize::from_ne_bytes(data[..8].try_into().unwrap());
+            let r_info = usize::from_ne_bytes(data[8..16].try_into().unwrap());
+            let r_addend = isize::from_ne_bytes(data[16..].try_into().unwrap());
+
+            match r_info & 0xffffffff {
+                // R_<ARCH>_NONE
+                0 => break,
+                // R_<ARCH>_RELATIVE
+                v if v == ty => {
+                    let dst = r_offset
+                        .checked_add(8)
+                        .and_then(|end| kern.get_mut(r_offset..end))
+                        .ok_or(VmmError::InvalidDynamicLinking)?;
+                    let val = map.kern_vaddr.wrapping_add_signed(r_addend);
+
+                    dst.copy_from_slice(&val.to_ne_bytes());
+                }
+                _ => (),
+            }
+        }
+
+        Ok(())
     }
 }
 
@@ -354,12 +510,13 @@ impl<H: Hypervisor> Vmm<H> {
         map: RamMap,
     ) -> Result<bool, CpuError> {
         // Create CPU.
-        let mut cpu = match args.hv.create_cpu(0) {
+        let hv = args.hv.as_ref();
+        let mut cpu = match hv.create_cpu(0) {
             Ok(v) => v,
             Err(e) => return Err(CpuError::Create(Box::new(e))),
         };
 
-        if let Err(e) = self::arch::setup_main_cpu(&mut cpu, entry, map, args.hv.cpu_features()) {
+        if let Err(e) = self::arch::setup_main_cpu(hv, &mut cpu, entry, map) {
             return Err(CpuError::Setup(Box::new(e)));
         }
 
@@ -762,6 +919,18 @@ struct CpuArgs<H> {
     shutdown: Arc<AtomicBool>,
 }
 
+/// Finalized layout of the RAM before execute the kernel entry point.
+struct RamMap {
+    page_table: usize,
+    kern_paddr: usize,
+    kern_vaddr: usize,
+    kern_len: NonZero<usize>,
+    stack_vaddr: usize,
+    stack_len: NonZero<usize>,
+    env_vaddr: usize,
+    conf_vaddr: usize,
+}
+
 /// Event from VMM.
 pub enum VmmEvent {
     Exit(usize, Result<bool, CpuError>),
@@ -834,9 +1003,6 @@ pub enum VmmError {
     #[error("the kernel has PT_LOAD with zero length")]
     ZeroLengthLoadSegment,
 
-    #[error("total size of PT_LOAD is too large")]
-    TotalSizeTooLarge,
-
     #[error("couldn't setup a hypervisor")]
     SetupHypervisor(#[source] HvError),
 
@@ -852,14 +1018,20 @@ pub enum VmmError {
     #[error("couldn't read kernel at offset {1}")]
     ReadKernel(#[source] std::io::Error, u64),
 
+    #[error("couldn't allocate RAM for boot environment")]
+    AllocBootEnv(#[source] RamError),
+
+    #[error("couldn't allocate RAM for kernel config")]
+    AllocKernelConfig(#[source] RamError),
+
     #[error("couldn't allocate RAM for stack")]
-    AllocateRamForStack(#[source] RamError),
+    AllocStack(#[source] RamError),
 
-    #[error("couldn't allocate RAM for arguments")]
-    AllocateRamForArgs(#[source] RamError),
+    #[error("couldn't build page table")]
+    BuildPageTable(#[source] RamBuilderError),
 
-    #[error("couldn't build RAM")]
-    BuildRam(#[source] ram::RamBuilderError),
+    #[error("the kernel has invalid PT_DYNAMIC")]
+    InvalidDynamicLinking,
 
     #[error("couldn't spawn the main CPU")]
     SpawnMainCpu(#[source] std::io::Error),
@@ -904,14 +1076,6 @@ pub enum CpuError {
 enum MainCpuError {
     #[error("couldn't get vCPU states")]
     GetCpuStatesFailed(#[source] Box<dyn Error + Send + Sync>),
-
-    #[cfg(target_arch = "aarch64")]
-    #[error("vCPU does not support {0:#x} page size")]
-    PageSizeNotSupported(NonZero<usize>),
-
-    #[cfg(target_arch = "aarch64")]
-    #[error("physical address supported by vCPU too small")]
-    PhysicalAddressTooSmall,
 
     #[error("couldn't commit vCPU states")]
     CommitCpuStatesFailed(#[source] Box<dyn Error + Send + Sync>),
