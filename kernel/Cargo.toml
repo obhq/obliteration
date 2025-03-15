@@ -11,6 +11,7 @@ hashbrown = "0.14.5"
 krt = { path = "../lib/krt" }
 macros = { path = "../macros" }
 talc = { version = "4.4.1", default-features = false }
+thiserror = { version = "2.0.12", default-features = false }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 x86-64 = { path = "../lib/x86-64" }

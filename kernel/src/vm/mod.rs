@@ -9,6 +9,7 @@ use alloc::sync::{Arc, Weak};
 use config::{BootEnv, MapType};
 use krt::{boot_env, warn};
 use macros::bitflag;
+use thiserror::Error;
 
 mod object;
 mod stats;
@@ -27,7 +28,7 @@ impl Vm {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x029200|
-    pub fn new() -> Arc<Self> {
+    pub fn new() -> Result<Arc<Self>, VmError> {
         // Initializes stats. The Orbis initialize these data in vm_pageout function but it is
         // possible for data race so we do it here instead.
         let pageout_page_count = 0x10; // TODO: Figure out where this value come from.
@@ -59,13 +60,13 @@ impl Vm {
             pagers: Default::default(),
         };
 
-        vm.load_memory_map();
+        vm.load_memory_map()?;
 
         // Spawn page daemons. The Orbis do this in a separated sysinit but we do it here instead to
         // keep it in the VM subsystem.
         vm.spawn_pagers();
 
-        Arc::new(vm)
+        Ok(Arc::new(vm))
     }
 
     pub fn initial_memory_size(&self) -> u64 {
@@ -110,7 +111,7 @@ impl Vm {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x25CF00|
-    fn load_memory_map(&mut self) {
+    fn load_memory_map(&mut self) -> Result<(), VmError> {
         // TODO: Some of the logic around physmap does not make sense.
         let mut physmap = [0u64; 60];
         let mut i = 0usize;
@@ -123,6 +124,7 @@ impl Vm {
             match m.ty {
                 MapType::None => break,
                 MapType::Ram => (),
+                MapType::Reserved => continue,
             }
 
             // TODO: This should be possible only when booting from BIOS.
@@ -175,8 +177,14 @@ impl Vm {
             physmap[insert_idx + 1] = m.base + m.len;
         }
 
-        // Get initial memory size.
+        // Check if bootloader provide us a memory map.
         let physmap = &physmap[..i];
+
+        if physmap.is_empty() {
+            return Err(VmError::NoMemoryMap);
+        }
+
+        // Get initial memory size.
         let page_size = PAGE_SIZE.get().try_into().unwrap();
         let page_mask = !u64::try_from(PAGE_MASK.get()).unwrap();
 
@@ -186,6 +194,8 @@ impl Vm {
 
             self.initial_memory_size += end.saturating_sub(start);
         }
+
+        Ok(())
     }
 
     /// See `kick_pagedaemons` on the Orbis for a reference.
@@ -202,3 +212,10 @@ impl Vm {
 /// Flags for [`Vm::alloc_page()`].
 #[bitflag(u32)]
 pub enum VmAlloc {}
+
+/// Represents an error when [`Vm::new()`] fails.
+#[derive(Debug, Error)]
+pub enum VmError {
+    #[error("no memory map provided to the kernel")]
+    NoMemoryMap,
+}

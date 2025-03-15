@@ -14,6 +14,7 @@ use x86_64::Efer;
 pub type GdbRegs = gdbstub_arch::x86::reg::X86_64CoreRegs;
 
 pub const BREAKPOINT_SIZE: NonZero<usize> = NonZero::new(1).unwrap();
+pub const RELOCATE_TYPE: usize = 8;
 
 pub fn setup_main_cpu<H: Hypervisor>(
     _: &H,

@@ -38,6 +38,10 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
         }
     }
 
+    pub fn next_addr(&self) -> usize {
+        self.next
+    }
+
     /// Specify [`None`] for `vaddr` to use the same value as physical address (AKA identity
     /// mapping).
     ///
