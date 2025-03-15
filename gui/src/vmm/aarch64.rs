@@ -12,6 +12,7 @@ use std::num::NonZero;
 pub type GdbRegs = gdbstub_arch::aarch64::reg::AArch64CoreRegs;
 
 pub const BREAKPOINT_SIZE: NonZero<usize> = NonZero::new(4).unwrap();
+pub const RELOCATE_TYPE: usize = 1027;
 pub const MEMORY_ATTRS: [u8; 8] = [0, 0b11111111, 0, 0, 0, 0, 0, 0];
 pub const MEMORY_DEV_NG_NR_NE: u8 = 0; // MEMORY_ATTRS[0]
 pub const MEMORY_NORMAL: u8 = 1; // MEMORY_ATTRS[1]

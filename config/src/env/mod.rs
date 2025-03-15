@@ -19,4 +19,5 @@ pub struct PhysMap {
 pub enum MapType {
     None = 0,
     Ram = 1,
+    Reserved = 2,
 }
