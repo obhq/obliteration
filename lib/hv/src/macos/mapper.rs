@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use crate::RamMapper;
-use applevisor_sys::{HV_MEMORY_EXEC, HV_MEMORY_READ, HV_MEMORY_WRITE, hv_return_t, hv_vm_map};
+use applevisor_sys::{HV_MEMORY_EXEC, HV_MEMORY_READ, HV_MEMORY_WRITE, hv_vm_map};
 use std::error::Error;
 use std::num::NonZero;
-use thiserror::Error;
 
 /// Implementation of [`RamMapper`] for Hypervisor Framework.
 pub struct HvfMapper;

@@ -16,6 +16,14 @@ impl<'a> LockedMem<'a> {
         Self { ram, addr, len }
     }
 
+    pub fn fill(&mut self, v: u8) {
+        let ptr = self.as_mut_ptr();
+
+        for i in 0..self.len.get() {
+            unsafe { ptr.add(i).write(v) };
+        }
+    }
+
     /// # Safety
     /// This memory range must be initialized and the VM must not access this range for the lifetime
     /// of this struct.

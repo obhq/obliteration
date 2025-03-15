@@ -39,8 +39,13 @@ impl Ram {
         len: NonZero<usize>,
         mapper: impl RamMapper,
     ) -> Result<Self, HvError> {
-        // Check block size.
+        // Check page size.
         let host_page_size = self::os::get_page_size().map_err(HvError::GetHostPageSize)?;
+
+        assert!(host_page_size.is_power_of_two());
+        assert!(vm_page_size.is_power_of_two());
+
+        // Check block size.
         let block_size = max(vm_page_size, host_page_size);
 
         if len.get() % block_size != 0 {

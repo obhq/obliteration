@@ -13,6 +13,9 @@ mod partition;
 /// than page size on the host otherwise block size will be page size on the host.
 ///
 /// `ram_size` must be multiply by the block size calculated from the above.
+///
+/// # Panics
+/// If `page_size` is not power of two.
 pub fn new(
     cpu: usize,
     ram_size: NonZero<usize>,

@@ -1,4 +1,4 @@
-use super::RamBuilder;
+use super::{AllocInfo, RamBuilder};
 use crate::{Hypervisor, LockedMem, RamError};
 use rustc_hash::FxHashMap;
 use std::num::NonZero;
@@ -6,23 +6,9 @@ use std::ops::{Deref, DerefMut};
 use thiserror::Error;
 
 impl<'a, H: Hypervisor> RamBuilder<'a, H> {
-    /// # Panics
-    /// If any address in `devices` within RAM address or is not multiply by VM page size or its
-    /// size cannot round to VM page size. The latter case only happen when the value is too large
-    /// (e.g. 0xFFFFFFFFFFFFF000 for 4K page).
-    pub fn build_page_table(
-        self,
-        devices: impl IntoIterator<Item = (usize, NonZero<usize>)>,
-    ) -> Result<usize, RamBuilderError> {
-        match self.hv.ram().vm_page_size().get() {
-            0x1000 => self.build_4k_page_tables(devices),
-            _ => todo!(),
-        }
-    }
-
-    fn build_4k_page_tables(
+    pub(super) fn build_4k_page_tables(
         mut self,
-        devices: impl IntoIterator<Item = (usize, NonZero<usize>)>,
+        devices: impl IntoIterator<Item = AllocInfo>,
     ) -> Result<usize, RamBuilderError> {
         // Allocate page-map level-4 table.
         //
@@ -32,7 +18,7 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
             .alloc_page_table()
             .map_err(RamBuilderError::AllocPml4Table)?;
 
-        // Setup page tables for allocated blocks.
+        // Setup page tables for allocated RAM.
         let mut cx = Context4K {
             pml4t,
             pdpt: FxHashMap::default(),
@@ -46,13 +32,13 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
             self.setup_4k_page_tables(&mut cx, info.vaddr, info.paddr, len)?;
         }
 
-        // Setup page tables to map virtual devices. We use identity mapping for virtual devices.
-        for (addr, len) in devices {
-            let len = len.get().checked_next_multiple_of(4096).unwrap();
+        // Setup page tables to map virtual devices.
+        for dev in devices {
+            let len = dev.len.get().checked_next_multiple_of(4096).unwrap();
 
-            assert!(addr >= self.hv.ram().len().get());
+            assert!(dev.paddr >= self.hv.ram().len().get());
 
-            self.setup_4k_page_tables(&mut cx, addr, addr, len)?;
+            self.setup_4k_page_tables(&mut cx, dev.vaddr, dev.paddr, len)?;
         }
 
         Ok(page_table)
@@ -164,14 +150,9 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
         // Allocate.
         let mut tab = self.hv.ram().alloc(addr, len)?;
 
+        tab.fill(0);
+
         self.next += len.get();
-
-        // Fill with zeroes.
-        let ptr = tab.as_mut_ptr();
-
-        for i in 0..len.get() {
-            unsafe { ptr.add(i).write(0) };
-        }
 
         Ok((PageTable(tab), addr))
     }
@@ -202,7 +183,7 @@ impl DerefMut for PageTable<'_> {
     }
 }
 
-/// Represents an error when [`RamBuilder::build_page_table()`] fails
+/// Represents an error when [`RamBuilder::build_page_table()`] fails.
 #[derive(Debug, Error)]
 pub enum RamBuilderError {
     #[error("couldn't allocate page-map level-4 table")]

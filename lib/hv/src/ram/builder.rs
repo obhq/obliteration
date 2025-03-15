@@ -23,6 +23,9 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
     /// `start_addr` is a physical address to start allocate a block of memory, not a start address
     /// of the RAM itself!
     ///
+    /// This function need a mutable borrow to the hypervisor to make sure no any vCPU is currently
+    /// running.
+    ///
     /// # Panics
     /// If `start_addr` is not multiply by RAM block size.
     pub fn new(hv: &'a mut H, start_addr: usize) -> Self {
@@ -50,11 +53,18 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
         &mut self,
         vaddr: Option<usize>,
         len: NonZero<usize>,
+        #[cfg(target_arch = "aarch64")] attr: u8,
     ) -> Result<(usize, LockedMem<'a>), RamError> {
         // Build alloc info.
         let paddr = self.next;
         let vaddr = vaddr.unwrap_or(paddr);
-        let info = AllocInfo { paddr, vaddr, len };
+        let info = AllocInfo {
+            paddr,
+            vaddr,
+            len,
+            #[cfg(target_arch = "aarch64")]
+            attr,
+        };
 
         assert_eq!(vaddr % self.hv.ram().vm_page_size(), 0);
 
@@ -79,11 +89,30 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
 
         Ok((paddr, mem))
     }
+
+    /// # Panics
+    /// If any [`AllocInfo::paddr`] in `devices` within RAM address, [`AllocInfo::paddr`] or
+    /// [`AllocInfo::vaddr`] is not multiply by VM page size or [`AllocInfo::len`] size cannot round
+    /// to VM page size. The latter case only happen when the value is too large (e.g.
+    /// 0xFFFFFFFFFFFFF000 for 4K page).
+    pub fn build_page_table(
+        self,
+        devices: impl IntoIterator<Item = AllocInfo>,
+    ) -> Result<usize, RamBuilderError> {
+        match self.hv.ram().vm_page_size().get() {
+            0x1000 => self.build_4k_page_tables(devices),
+            #[cfg(target_arch = "aarch64")]
+            0x4000 => self.build_16k_page_tables(devices),
+            _ => todo!(),
+        }
+    }
 }
 
-/// Contains information for external allocations.
-struct AllocInfo {
-    paddr: usize,
-    vaddr: usize,
-    len: NonZero<usize>,
+/// Contains information for an allocation in a virtual address space.
+pub struct AllocInfo {
+    pub paddr: usize,
+    pub vaddr: usize,
+    pub len: NonZero<usize>,
+    #[cfg(target_arch = "aarch64")]
+    pub attr: u8,
 }

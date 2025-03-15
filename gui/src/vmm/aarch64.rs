@@ -6,41 +6,25 @@ use gdbstub::target::ext::base::BaseOps;
 use gdbstub::target::ext::breakpoints::{
     Breakpoints, BreakpointsOps, SwBreakpoint, SwBreakpointOps,
 };
-use hv::{Cpu, CpuCommit, CpuFeats, CpuStates, Hypervisor, Pstate, Sctlr, Tcr};
+use hv::{Cpu, CpuCommit, CpuStates, Hypervisor, Pstate, Sctlr, Tcr};
 use std::num::NonZero;
-use std::sync::atomic::Ordering;
 
 pub type GdbRegs = gdbstub_arch::aarch64::reg::AArch64CoreRegs;
 
 pub const BREAKPOINT_SIZE: NonZero<usize> = NonZero::new(4).unwrap();
+pub const MEMORY_ATTRS: [u8; 8] = [0, 0b11111111, 0, 0, 0, 0, 0, 0];
+pub const MEMORY_DEV_NG_NR_NE: u8 = 0; // MEMORY_ATTRS[0]
+pub const MEMORY_NORMAL: u8 = 1; // MEMORY_ATTRS[1]
 
-pub fn setup_main_cpu(
-    cpu: &mut impl Cpu,
+pub fn setup_main_cpu<H: Hypervisor>(
+    hv: &H,
+    cpu: &mut H::Cpu<'_>,
     entry: usize,
     map: RamMap,
-    feats: &CpuFeats,
 ) -> Result<(), MainCpuError> {
-    // Acquire the memory modified by RAM builder.
-    std::sync::atomic::fence(Ordering::Acquire);
-
-    // Check if CPU support VM page size.
     let mut states = cpu
         .states()
         .map_err(|e| MainCpuError::GetCpuStatesFailed(Box::new(e)))?;
-
-    match map.page_size.get() {
-        0x4000 => {
-            if feats.mmfr0.t_gran16() == 0b0000 {
-                return Err(MainCpuError::PageSizeNotSupported(map.page_size));
-            }
-        }
-        _ => todo!(),
-    }
-
-    // Check if CPU support at least 36 bits physical address.
-    if feats.mmfr0.pa_range() == 0 {
-        return Err(MainCpuError::PhysicalAddressTooSmall);
-    }
 
     // Set PSTATE.
     states.set_pstate(
@@ -64,11 +48,11 @@ pub fn setup_main_cpu(
             .with_ntlsmd(true)
             .with_lsmaoe(true),
     );
-    states.set_mair_el1(u64::from_le_bytes([0, 0b11111111, 0, 0, 0, 0, 0, 0]));
+    states.set_mair_el1(u64::from_le_bytes(MEMORY_ATTRS));
     states.set_tcr(
         Tcr::new()
-            .with_ips(feats.mmfr0.pa_range())
-            .with_tg1(match map.page_size.get() {
+            .with_ips(hv.cpu_features().mmfr0.pa_range())
+            .with_tg1(match hv.ram().vm_page_size().get() {
                 0x4000 => 0b01, // 16K page for TTBR1_EL1.
                 _ => todo!(),
             })
@@ -76,7 +60,7 @@ pub fn setup_main_cpu(
             .with_orgn1(0b01)
             .with_irgn1(0b01)
             .with_t1sz(16)
-            .with_tg0(match map.page_size.get() {
+            .with_tg0(match hv.ram().vm_page_size().get() {
                 0x4000 => 0b10, // 16K page for TTBR0_EL1.
                 _ => todo!(),
             })
@@ -94,7 +78,7 @@ pub fn setup_main_cpu(
     // Set entry point, its argument and stack pointer.
     states.set_x0(map.env_vaddr);
     states.set_x1(map.conf_vaddr);
-    states.set_sp_el1(map.stack_vaddr + map.stack_len); // Top-down.
+    states.set_sp_el1(map.stack_vaddr.checked_add(map.stack_len.get()).unwrap()); // Top-down.
     states.set_pc(entry);
 
     states

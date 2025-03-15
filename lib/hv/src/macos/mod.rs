@@ -22,6 +22,9 @@ mod mapper;
 /// than page size on the host otherwise block size will be page size on the host.
 ///
 /// `ram_size` must be multiply by the block size calculated from the above.
+///
+/// # Panics
+/// If `page_size` is not power of two.
 pub fn new(
     cpu: usize,
     ram_size: NonZero<usize>,
@@ -66,6 +69,33 @@ pub fn new(
         .read_feature_reg(HV_FEATURE_REG_ID_AA64MMFR2_EL1)
         .map_err(HvError::ReadMmfr2Failed)?
         .into();
+
+    // Check if PE support VM page size.
+    match page_size.get() {
+        0x4000 => {
+            if hv.feats.mmfr0.t_gran16() == 0b0000 {
+                return Err(HvError::PageSizeNotSupported(page_size));
+            }
+        }
+        _ => todo!(),
+    }
+
+    // Check if PE support RAM size.
+    let max = match hv.feats.mmfr0.pa_range() {
+        0b0000 => 1024usize.pow(3) * 4,
+        0b0001 => 1024usize.pow(3) * 64,
+        0b0010 => 1024usize.pow(4),
+        0b0011 => 1024usize.pow(4) * 4,
+        0b0100 => 1024usize.pow(4) * 16,
+        0b0101 => 1024usize.pow(4) * 256,
+        0b0110 => 1024usize.pow(5) * 4,
+        0b0111 => 1024usize.pow(5) * 64,
+        _ => unreachable!(),
+    };
+
+    if ram_size.get() > max {
+        return Err(HvError::RamSizeNotSupported(ram_size));
+    }
 
     Ok(hv)
 }
@@ -176,6 +206,12 @@ pub enum HvError {
 
     #[error("couldn't read ID_AA64MMFR2_EL1 ({0:#x})")]
     ReadMmfr2Failed(NonZero<hv_return_t>),
+
+    #[error("your CPU does not support {0:#x} page size on a VM")]
+    PageSizeNotSupported(NonZero<usize>),
+
+    #[error("your CPU does not support {0:#x} bytes of RAM on a VM")]
+    RamSizeNotSupported(NonZero<usize>),
 }
 
 /// Implementation of [`Hypervisor::CpuErr`].

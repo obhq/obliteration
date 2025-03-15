@@ -7,7 +7,7 @@ use gdbstub::target::ext::breakpoints::{
 };
 use gdbstub::target::{TargetError, TargetResult};
 use gdbstub_arch::x86::X86_64_SSE;
-use hv::{Cpu, CpuCommit, CpuFeats, CpuStates, Hypervisor};
+use hv::{Cpu, CpuCommit, CpuStates, Hypervisor};
 use std::num::NonZero;
 use x86_64::Efer;
 
@@ -15,11 +15,11 @@ pub type GdbRegs = gdbstub_arch::x86::reg::X86_64CoreRegs;
 
 pub const BREAKPOINT_SIZE: NonZero<usize> = NonZero::new(1).unwrap();
 
-pub fn setup_main_cpu(
-    cpu: &mut impl Cpu,
+pub fn setup_main_cpu<H: Hypervisor>(
+    _: &H,
+    cpu: &mut H::Cpu<'_>,
     entry: usize,
     map: RamMap,
-    _: &CpuFeats,
 ) -> Result<(), MainCpuError> {
     // Set CR3 to page-map level-4 table.
     let mut states = cpu

@@ -16,8 +16,8 @@ use gdbstub::target::ext::base::multithread::{
 };
 use gdbstub::target::{TargetError, TargetResult};
 use hv::{
-    CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, HvError, Hypervisor, RamBuilder,
-    RamBuilderError, RamError,
+    AllocInfo, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, HvError, Hypervisor,
+    RamBuilder, RamBuilderError, RamError,
 };
 use kernel::{KernelError, ProgramHeaderError};
 use rustc_hash::FxHashMap;
@@ -180,7 +180,12 @@ impl Vmm<()> {
         let mut vaddr = 0xffffffff82200000;
         let kern_vaddr = vaddr;
         let (kern_paddr, mut kern) = ram
-            .alloc(Some(kern_vaddr), kern_len)
+            .alloc(
+                Some(kern_vaddr),
+                kern_len,
+                #[cfg(target_arch = "aarch64")]
+                self::arch::MEMORY_NORMAL,
+            )
             .map_err(VmmError::AllocateRamForKernel)?;
 
         for hdr in &segments {
@@ -228,7 +233,12 @@ impl Vmm<()> {
         let len = size_of_val(&env).try_into().unwrap();
         let env_vaddr = vaddr;
 
-        match ram.alloc(Some(env_vaddr), len) {
+        match ram.alloc(
+            Some(env_vaddr),
+            len,
+            #[cfg(target_arch = "aarch64")]
+            self::arch::MEMORY_NORMAL,
+        ) {
             Ok((_, mut m)) => assert!(m.put(0, env).unwrap().is_none()),
             Err(e) => return Err(VmmError::AllocBootEnv(e)),
         }
@@ -243,7 +253,12 @@ impl Vmm<()> {
         let len = size_of_val(config).try_into().unwrap();
         let conf_vaddr = vaddr;
 
-        match ram.alloc(Some(conf_vaddr), len) {
+        match ram.alloc(
+            Some(conf_vaddr),
+            len,
+            #[cfg(target_arch = "aarch64")]
+            self::arch::MEMORY_NORMAL,
+        ) {
             Ok((_, mut m)) => assert!(m.put(0, config.clone()).unwrap().is_none()),
             Err(e) => return Err(VmmError::AllocKernelConfig(e)),
         }
@@ -257,12 +272,23 @@ impl Vmm<()> {
         let stack_len = NonZero::new(1024 * 1024 * 1).unwrap();
         let stack_vaddr = vaddr;
 
-        ram.alloc(Some(stack_vaddr), stack_len)
-            .map_err(VmmError::AllocStack)?;
+        ram.alloc(
+            Some(stack_vaddr),
+            stack_len,
+            #[cfg(target_arch = "aarch64")]
+            self::arch::MEMORY_NORMAL,
+        )
+        .map_err(VmmError::AllocStack)?;
 
         // Build page table.
         let page_table = ram
-            .build_page_table(devices.all().map(|(addr, dev)| (addr, dev.len())))
+            .build_page_table(devices.all().map(|(addr, dev)| AllocInfo {
+                paddr: addr,
+                vaddr: addr,
+                len: dev.len(),
+                #[cfg(target_arch = "aarch64")]
+                attr: self::arch::MEMORY_DEV_NG_NR_NE,
+            }))
             .map_err(VmmError::BuildPageTable)?;
         let map = RamMap {
             page_table,
@@ -484,12 +510,13 @@ impl<H: Hypervisor> Vmm<H> {
         map: RamMap,
     ) -> Result<bool, CpuError> {
         // Create CPU.
-        let mut cpu = match args.hv.create_cpu(0) {
+        let hv = args.hv.as_ref();
+        let mut cpu = match hv.create_cpu(0) {
             Ok(v) => v,
             Err(e) => return Err(CpuError::Create(Box::new(e))),
         };
 
-        if let Err(e) = self::arch::setup_main_cpu(&mut cpu, entry, map, args.hv.cpu_features()) {
+        if let Err(e) = self::arch::setup_main_cpu(hv, &mut cpu, entry, map) {
             return Err(CpuError::Setup(Box::new(e)));
         }
 
@@ -1049,14 +1076,6 @@ pub enum CpuError {
 enum MainCpuError {
     #[error("couldn't get vCPU states")]
     GetCpuStatesFailed(#[source] Box<dyn Error + Send + Sync>),
-
-    #[cfg(target_arch = "aarch64")]
-    #[error("vCPU does not support {0:#x} page size")]
-    PageSizeNotSupported(NonZero<usize>),
-
-    #[cfg(target_arch = "aarch64")]
-    #[error("physical address supported by vCPU too small")]
-    PhysicalAddressTooSmall,
 
     #[error("couldn't commit vCPU states")]
     CommitCpuStatesFailed(#[source] Box<dyn Error + Send + Sync>),
