@@ -89,7 +89,8 @@ fn init_vm() -> Arc<Uma> {
     // Initialize VM.
     let vm = Vm::new().unwrap();
 
-    info!("Initial memory size is {}.", vm.initial_memory_size());
+    info!("Initial memory size: {}", vm.initial_memory_size());
+    info!("Boot area          : {:#x}", vm.boot_area());
 
     // Initialize UMA.
     Uma::new(vm)
