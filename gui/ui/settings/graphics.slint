@@ -2,10 +2,12 @@ import { CheckBox, VerticalBox } from "std-widgets.slint";
 
 export component GraphicsTab {
     in property <string> debug-layer-name;
+    in-out property <bool> debug-layer-checked;
 
     VerticalBox {
         CheckBox {
             text: "Enable \{debug-layer-name}";
+            checked <=> root.debug-layer-checked;
         }
     }
 }
