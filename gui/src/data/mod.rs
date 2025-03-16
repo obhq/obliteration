@@ -12,6 +12,7 @@ mod prof;
 ///
 /// This does not manage file content. Its job is to organize filesystem hierarchy.
 pub struct DataMgr {
+    settings: PathBuf,
     part: Part,
     prof: Prof,
     logs: PathBuf,
@@ -21,6 +22,7 @@ impl DataMgr {
     pub fn new(root: impl Into<PathBuf>) -> Result<Self, DataError> {
         // Build path for top-level items.
         let root: PathBuf = root.into();
+        let settings = root.join("settings.bin");
         let part = root.join("part");
         let prof = root.join("prof");
         let logs = root.join("kernel.txt");
@@ -30,10 +32,15 @@ impl DataMgr {
         Self::create_dir(&prof)?;
 
         Ok(Self {
+            settings,
             part: Part::new(part),
             prof: Prof::new(prof),
             logs,
         })
+    }
+
+    pub fn settings(&self) -> &Path {
+        &self.settings
     }
 
     pub fn partitions(&self) -> &Part {

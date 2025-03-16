@@ -4,6 +4,7 @@ import { GraphicsTab } from "settings/graphics.slint";
 
 export component SettingsWindow inherits Dialog {
     in property <string> graphics-debug-layer-name: "VK_LAYER_KHRONOS_validation";
+    in-out property <bool> graphics-debug-layer-checked;
 
     title: "Settings";
 
@@ -14,6 +15,7 @@ export component SettingsWindow inherits Dialog {
 
         if tab.current-page == 0: GraphicsTab {
             debug-layer-name: root.graphics-debug-layer-name;
+            debug-layer-checked <=> root.graphics-debug-layer-checked;
         }
     }
 

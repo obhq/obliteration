@@ -5,6 +5,7 @@ use self::gdb::{GdbDispatcher, GdbError, GdbSession};
 use self::graphics::{EngineBuilder, GraphicsError, PhysicalDevice};
 use self::log::LogWriter;
 use self::profile::{DisplayResolution, Profile};
+use self::settings::{Settings, SettingsError};
 use self::setup::{SetupError, run_setup};
 use self::ui::{
     AboutWindow, App, DesktopExt, MainWindow, ProfileModel, ResolutionModel, RuntimeExt,
@@ -35,6 +36,7 @@ mod graphics;
 mod log;
 mod panic;
 mod profile;
+mod settings;
 mod setup;
 mod ui;
 mod vfs;
@@ -61,8 +63,9 @@ struct MainProgram {
 
 impl MainProgram {
     async fn run_launcher(
-        graphics: &impl EngineBuilder,
         data: &Arc<DataMgr>,
+        settings: &Rc<Settings>,
+        graphics: &impl EngineBuilder,
         profiles: Vec<Profile>,
     ) -> Result<Option<(Profile, ExitAction)>, ProgramError> {
         // Create window and register callback handlers.
@@ -73,20 +76,22 @@ impl MainProgram {
 
         win.on_settings({
             let win = win.as_weak();
+            let data = data.clone();
+            let settings = settings.clone();
 
-            move || spawn_handler(&win, |w| MainProgram::settings(w))
+            move || spawn_handler(&win, |w| Self::settings(w, data.clone(), settings.clone()))
         });
 
         win.on_report_issue({
             let win = win.as_weak();
 
-            move || spawn_handler(&win, |w| MainProgram::report_issue(w))
+            move || spawn_handler(&win, |w| Self::report_issue(w))
         });
 
         win.on_about({
             let win = win.as_weak();
 
-            move || spawn_handler(&win, |w| MainProgram::about(w))
+            move || spawn_handler(&win, |w| Self::about(w))
         });
 
         win.on_profile_selected({
@@ -168,7 +173,7 @@ impl MainProgram {
         Ok(Some((profile, exit)))
     }
 
-    async fn settings(main: MainWindow) {
+    async fn settings(main: MainWindow, data: Arc<DataMgr>, settings: Rc<Settings>) {
         // Setup window.
         let win = match SettingsWindow::new() {
             Ok(v) => v,
@@ -179,11 +184,31 @@ impl MainProgram {
             }
         };
 
-        #[cfg(target_os = "macos")]
-        win.set_graphics_debug_layer_name("MTL_DEBUG_LAYER".into());
+        win.on_cancel_clicked({
+            let win = win.as_weak();
 
-        #[cfg(not(target_os = "macos"))]
-        win.set_graphics_debug_layer_name("VK_LAYER_KHRONOS_validation".into());
+            move || win.unwrap().hide().unwrap()
+        });
+
+        win.on_ok_clicked({
+            let win = win.as_weak();
+            let data = data.clone();
+            let settings = settings.clone();
+
+            move || {
+                spawn_handler(&win, |w| {
+                    Self::save_settings(w, data.clone(), settings.clone())
+                })
+            }
+        });
+
+        win.set_graphics_debug_layer_name(if cfg!(target_os = "macos") {
+            "MTL_DEBUG_LAYER".into()
+        } else {
+            "VK_LAYER_KHRONOS_validation".into()
+        });
+
+        win.set_graphics_debug_layer_checked(settings.graphics_debug_layer());
 
         // Run the window.
         if let Err(e) = win.show() {
@@ -203,6 +228,28 @@ impl MainProgram {
                 error(Some(&main), m).await;
             }
         }
+    }
+
+    async fn save_settings(win: SettingsWindow, data: Arc<DataMgr>, settings: Rc<Settings>) {
+        // Load values from window.
+        settings.set_graphics_debug_layer(win.get_graphics_debug_layer_checked());
+
+        // Save.
+        let path = data.settings();
+
+        if let Err(e) = settings.save(path) {
+            let m = slint::format!(
+                "Failed to save settings to {}: {}.",
+                path.display(),
+                e.display()
+            );
+
+            error(Some(&win), m).await;
+            return;
+        }
+
+        // Close the window.
+        win.hide().unwrap();
     }
 
     async fn report_issue(win: MainWindow) {
@@ -286,17 +333,22 @@ impl App for MainProgram {
             }
         }
 
-        // Initialize graphics engine.
-        let graphics = graphics::builder().map_err(ProgramError::InitGraphics)?;
-
-        // Run setup wizard. This will simply return the data manager if the user already has required
-        // settings.
+        // Run setup wizard. This will simply return the data manager if the user already has
+        // required settings.
         let data = match run_setup().await.map_err(ProgramError::Setup)? {
             Some(v) => Arc::new(v),
             None => return Ok(()),
         };
 
-        // Get kernel path.
+        // Initialize the application.
+        let settings = data.settings();
+        let settings = match Settings::load(settings) {
+            Ok(v) => Rc::new(v),
+            Err(e) => return Err(ProgramError::LoadSettings(settings.into(), e)),
+        };
+
+        // Initialize graphics engine.
+        let graphics = graphics::builder().map_err(ProgramError::InitGraphics)?;
         let kernel = self.args.kernel.as_ref().cloned().unwrap_or_else(|| {
             // Get kernel directory.
             let mut path = self.exe.parent().unwrap().to_owned();
@@ -351,10 +403,11 @@ impl App for MainProgram {
             // TODO: Select last used profile.
             (profiles.pop().unwrap(), Some(v))
         } else {
-            let (profile, exit) = match Self::run_launcher(&graphics, &data, profiles).await? {
-                Some(v) => v,
-                None => return Ok(()),
-            };
+            let (profile, exit) =
+                match Self::run_launcher(&data, &settings, &graphics, profiles).await? {
+                    Some(v) => v,
+                    None => return Ok(()),
+                };
 
             match exit {
                 ExitAction::Run => (profile, None),
@@ -602,6 +655,9 @@ enum ProgramError {
 
     #[error("couldn't run setup wizard")]
     Setup(#[source] SetupError),
+
+    #[error("couldn't load settings from {0}")]
+    LoadSettings(PathBuf, #[source] SettingsError),
 
     #[error("couldn't list available profiles")]
     ListProfile(#[source] DataError),
