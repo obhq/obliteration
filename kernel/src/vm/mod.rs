@@ -16,6 +16,7 @@ mod stats;
 
 /// Implementation of Virtual Memory system.
 pub struct Vm {
+    boot_area: u64, // basemem
     initial_memory_size: u64,
     stats: [VmStats; 3],
     pagers: [Weak<Proc>; 2], // pageproc
@@ -55,6 +56,7 @@ impl Vm {
         // The Orbis invoke this in hammer_time but we do it here instead to keep it in the VM
         // subsystem.
         let mut vm = Self {
+            boot_area: 0,
             initial_memory_size: 0,
             stats,
             pagers: Default::default(),
@@ -67,6 +69,10 @@ impl Vm {
         vm.spawn_pagers();
 
         Ok(Arc::new(vm))
+    }
+
+    pub fn boot_area(&self) -> u64 {
+        self.boot_area
     }
 
     pub fn initial_memory_size(&self) -> u64 {
@@ -184,15 +190,26 @@ impl Vm {
             return Err(VmError::NoMemoryMap);
         }
 
-        // Get initial memory size.
+        // Get initial memory size and BIOS boot area.
         let page_size = PAGE_SIZE.get().try_into().unwrap();
         let page_mask = !u64::try_from(PAGE_MASK.get()).unwrap();
 
         for e in physmap.chunks(2) {
+            // Check if BIOS boot area.
+            if e[0] == 0 {
+                // TODO: Why 1024?
+                self.boot_area = e[1] / 1024;
+            }
+
+            // Add to initial memory size.
             let start = e[0].next_multiple_of(page_size);
             let end = e[1] & page_mask;
 
             self.initial_memory_size += end.saturating_sub(start);
+        }
+
+        if self.boot_area == 0 {
+            return Err(VmError::NoBootArea);
         }
 
         Ok(())
@@ -218,4 +235,7 @@ pub enum VmAlloc {}
 pub enum VmError {
     #[error("no memory map provided to the kernel")]
     NoMemoryMap,
+
+    #[error("no boot area provided to the kernel")]
+    NoBootArea,
 }
