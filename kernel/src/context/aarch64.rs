@@ -1,10 +1,8 @@
 use super::Base;
+use crate::arch::ArchConfig;
 use crate::proc::Thread;
 use core::marker::PhantomPinned;
 use core::pin::Pin;
-
-/// Contains data passed from CPU setup function for context activation.
-pub struct ContextArgs {}
 
 /// Extended [Base] for AArch64.
 #[repr(C)]
@@ -14,7 +12,7 @@ pub(super) struct Context {
 }
 
 impl Context {
-    pub fn new(base: Base, args: ContextArgs) -> Self {
+    pub fn new(base: Base, arch: &ArchConfig) -> Self {
         Self {
             base,
             phantom: PhantomPinned,
