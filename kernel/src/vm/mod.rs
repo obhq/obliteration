@@ -2,7 +2,7 @@ pub use self::object::*;
 
 use self::stats::VmStats;
 use crate::config::{PAGE_MASK, PAGE_SIZE};
-use crate::context::current_thread;
+use crate::context::{current_arch, current_thread};
 use crate::lock::GutexGroup;
 use crate::proc::Proc;
 use alloc::sync::{Arc, Weak};
@@ -16,7 +16,9 @@ mod stats;
 
 /// Implementation of Virtual Memory system.
 pub struct Vm {
-    boot_area: u64, // basemem
+    boot_area: u64,   // basemem
+    boot_addr: u64,   // boot_address
+    boot_tables: u64, // mptramp_pagetables
     initial_memory_size: u64,
     stats: [VmStats; 3],
     pagers: [Weak<Proc>; 2], // pageproc
@@ -57,6 +59,8 @@ impl Vm {
         // subsystem.
         let mut vm = Self {
             boot_area: 0,
+            boot_addr: 0,
+            boot_tables: 0,
             initial_memory_size: 0,
             stats,
             pagers: Default::default(),
@@ -184,7 +188,7 @@ impl Vm {
         }
 
         // Check if bootloader provide us a memory map.
-        let physmap = &physmap[..i];
+        let physmap = &mut physmap[..i];
 
         if physmap.is_empty() {
             return Err(VmError::NoMemoryMap);
@@ -212,6 +216,10 @@ impl Vm {
             return Err(VmError::NoBootArea);
         }
 
+        // TODO: This seems like it is assume the first physmap always a boot area. The problem is
+        // what is the point of the logic on the above to find boot_area?
+        physmap[1] = self.adjust_boot_area(physmap[1] / 1024);
+
         Ok(())
     }
 
@@ -223,6 +231,30 @@ impl Vm {
     /// |PS4 11.00|0x3E0E40|
     fn spawn_pagers(&mut self) {
         todo!()
+    }
+
+    /// See `mp_bootaddress` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x1B9D20|
+    fn adjust_boot_area(&mut self, original: u64) -> u64 {
+        // TODO: Most logic here does not make sense.
+        let page_size = u64::try_from(PAGE_SIZE.get()).unwrap();
+        let page_mask = !u64::try_from(PAGE_MASK.get()).unwrap();
+        let need = u64::try_from(current_arch().secondary_start.len()).unwrap();
+        let addr = (original * 1024) & page_mask;
+
+        // TODO: What is this?
+        self.boot_addr = if need <= ((original * 1024) & 0xC00) {
+            addr
+        } else {
+            addr - page_size
+        };
+
+        self.boot_tables = self.boot_addr - (page_size * 3);
+        self.boot_tables
     }
 }
 

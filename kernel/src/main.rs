@@ -42,7 +42,7 @@ fn main() -> ! {
 
     // Setup the CPU after the first print to let the bootloader developer know (some of) their code
     // are working.
-    let cx = unsafe { self::arch::setup_main_cpu() };
+    let arch = unsafe { self::arch::setup_main_cpu() };
 
     // Setup proc0 to represent the kernel.
     let proc0 = Proc::new_bare(Arc::new(Proc0Abi));
@@ -54,7 +54,7 @@ fn main() -> ! {
     // Activate CPU context.
     let thread0 = Arc::new(thread0);
 
-    unsafe { self::context::run_with_context(0, thread0, cx, setup, run) };
+    unsafe { self::context::run_with_context(arch, 0, thread0, setup, run) };
 }
 
 fn setup() -> ContextSetup {

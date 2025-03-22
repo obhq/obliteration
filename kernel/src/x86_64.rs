@@ -1,6 +1,9 @@
-use crate::context::{ContextArgs, current_trap_rsp_offset, current_user_rsp_offset};
+use crate::context::{current_trap_rsp_offset, current_user_rsp_offset};
 use crate::trap::{interrupt_handler, syscall_handler};
+use alloc::boxed::Box;
+use alloc::sync::Arc;
 use alloc::vec;
+use alloc::vec::Vec;
 use bitfield_struct::bitfield;
 use core::arch::{asm, global_asm};
 use core::mem::{transmute, zeroed};
@@ -13,7 +16,7 @@ pub const GDT_USER_CS32: SegmentSelector = SegmentSelector::new().with_si(5).wit
 
 /// # Safety
 /// This function can be called only once and must be called by main CPU entry point.
-pub unsafe fn setup_main_cpu() -> ContextArgs {
+pub unsafe fn setup_main_cpu() -> Arc<ArchConfig> {
     // Setup GDT.
     let mut gdt = vec![
         // Null descriptor.
@@ -42,27 +45,9 @@ pub unsafe fn setup_main_cpu() -> ContextArgs {
     ];
 
     // Setup Task State Segment (TSS).
-    const TSS_RSP0_LEN: usize = 1024 * 128;
-    static mut TSS_RSP0: [u8; TSS_RSP0_LEN] = unsafe { zeroed() };
-    static mut TSS: Tss = unsafe { zeroed() };
-
-    unsafe { TSS.rsp0 = (&raw mut TSS_RSP0).byte_add(TSS_RSP0_LEN) as usize }; // Top-down.
-
-    // Add placeholder for TSS descriptor.
-    let tss = gdt.len();
-
-    gdt.push(SegmentDescriptor::new());
-    gdt.push(SegmentDescriptor::new());
-
-    // Setup TSS descriptor.
-    let desc: &mut TssDescriptor = unsafe { transmute(&mut gdt[tss]) };
-    let base = addr_of!(TSS) as usize;
-
-    desc.set_limit1((size_of::<Tss>() - 1).try_into().unwrap());
-    desc.set_base1((base & 0xFFFFFF).try_into().unwrap());
-    desc.set_base2((base >> 24).try_into().unwrap());
-    desc.set_ty(0b1001); // Available 64-bit TSS.
-    desc.set_p(true);
+    let trap_rsp = Box::new([0u8; 1024 * 128]);
+    let trap_rsp = Box::leak(trap_rsp);
+    let tss = unsafe { push_tss(&mut gdt, trap_rsp) };
 
     // Switch GDT from bootloader GDT to our own.
     let limit = (size_of::<SegmentDescriptor>() * gdt.len() - 1)
@@ -83,14 +68,10 @@ pub unsafe fn setup_main_cpu() -> ContextArgs {
     };
 
     // Set Task Register (TR).
-    let sel = SegmentSelector::new()
-        .with_si(tss.try_into().unwrap())
-        .into_bits();
-
     unsafe {
         asm!(
             "ltr {v:x}",
-            v = in(reg) sel,
+            v = in(reg) tss.into_bits(),
             options(preserves_flags, nostack)
         )
     };
@@ -168,9 +149,15 @@ pub unsafe fn setup_main_cpu() -> ContextArgs {
 
     unsafe { wrmsr(0xC0000080, efer) };
 
-    ContextArgs {
-        trap_rsp: unsafe { TSS.rsp0 as _ },
-    }
+    // TODO: Find a better way.
+    let len = unsafe { secondary_end.as_ptr().offset_from(secondary_start.as_ptr()) }
+        .try_into()
+        .unwrap();
+
+    Arc::new(ArchConfig {
+        trap_rsp: trap_rsp.as_mut_ptr() as usize,
+        secondary_start: unsafe { core::slice::from_raw_parts(secondary_start.as_ptr(), len) },
+    })
 }
 
 pub unsafe fn wrmsr(reg: u32, val: usize) {
@@ -185,7 +172,40 @@ pub unsafe fn wrmsr(reg: u32, val: usize) {
     };
 }
 
+/// # Safety
+/// `trap_rsp` must live forever.
+unsafe fn push_tss<const L: usize>(
+    gdt: &mut Vec<SegmentDescriptor>,
+    trap_rsp: *mut [u8; L],
+) -> SegmentSelector {
+    // Setup Task State Segment (TSS).
+    static mut TSS: Tss = unsafe { zeroed() };
+
+    unsafe { TSS.rsp0 = trap_rsp.add(1) as usize }; // Top-down.
+
+    // Add placeholder for TSS descriptor.
+    let tss = gdt.len();
+
+    gdt.push(SegmentDescriptor::new());
+    gdt.push(SegmentDescriptor::new());
+
+    // Setup TSS descriptor.
+    let desc: &mut TssDescriptor = unsafe { transmute(&mut gdt[tss]) };
+    let base = addr_of!(TSS) as usize;
+
+    desc.set_limit1((size_of::<Tss>() - 1).try_into().unwrap());
+    desc.set_base1((base & 0xFFFFFF).try_into().unwrap());
+    desc.set_base2((base >> 24).try_into().unwrap());
+    desc.set_ty(0b1001); // Available 64-bit TSS.
+    desc.set_p(true);
+
+    SegmentSelector::new().with_si(tss.try_into().unwrap())
+}
+
 unsafe extern "C" {
+    safe static secondary_start: [u8; 0];
+    safe static secondary_end: [u8; 0];
+
     fn set_gdtr(v: &Gdtr, code: SegmentSelector, data: SegmentSelector);
     fn Xbpt() -> !;
     fn syscall_entry64() -> !;
@@ -230,8 +250,11 @@ global_asm!(
     handler = sym syscall_handler
 );
 
-// See Xfast_syscall32 on the PS4 for a reference.
+// See Xfast_syscall32 on the Orbis for a reference.
 global_asm!("syscall_entry32:", "ud2");
+
+// See mptramp_start and mptramp_end on the Orbis for a reference.
+global_asm!("secondary_start:", "ud2", "secondary_end:");
 
 /// Raw value of a Global Descriptor-Table Register.
 ///
@@ -274,6 +297,7 @@ struct TssDescriptor {
 /// See 64-Bit Task State Segment section on AMD64 Architecture Programmer's Manual Volume 2 for
 /// more details.
 #[repr(C, packed)]
+#[derive(Default)]
 struct Tss {
     reserved1: u32,
     rsp0: usize,
@@ -324,4 +348,10 @@ struct GateDescriptor {
     #[bits(48)]
     offset2: u64,
     __: u32,
+}
+
+/// Contains architecture-specific configurations obtained from [`setup_main_cpu()`].
+pub struct ArchConfig {
+    pub trap_rsp: usize,
+    pub secondary_start: &'static [u8],
 }
