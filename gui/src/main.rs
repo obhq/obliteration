@@ -340,31 +340,34 @@ impl App for MainProgram {
             None => return Ok(()),
         };
 
-        // Initialize the application.
-        let settings = data.settings();
-        let settings = match Settings::load(settings) {
-            Ok(v) => Rc::new(v),
-            Err(e) => return Err(ProgramError::LoadSettings(settings.into(), e)),
+        // Load application settings.
+        let settings = match self.args.use_default_settings {
+            true => Rc::new(Settings::default()),
+            false => {
+                let path = data.settings();
+                let data =
+                    Settings::load(path).map_err(|e| ProgramError::LoadSettings(path.into(), e))?;
+
+                Rc::new(data)
+            }
         };
 
         // Initialize graphics engine.
-        let graphics = graphics::builder().map_err(ProgramError::InitGraphics)?;
+        let graphics = graphics::builder(&settings).map_err(ProgramError::InitGraphics)?;
         let kernel = self.args.kernel.as_ref().cloned().unwrap_or_else(|| {
             // Get kernel directory.
             let mut path = self.exe.parent().unwrap().to_owned();
 
-            #[cfg(target_os = "windows")]
-            path.push("share");
-
-            #[cfg(not(target_os = "windows"))]
-            {
+            if cfg!(target_os = "windows") {
+                path.push("share");
+            } else {
                 path.pop();
 
-                #[cfg(target_os = "macos")]
-                path.push("Resources");
-
-                #[cfg(not(target_os = "macos"))]
-                path.push("share");
+                if cfg!(target_os = "macos") {
+                    path.push("Resources");
+                } else {
+                    path.push("share");
+                }
             }
 
             // Append kernel.
@@ -615,12 +618,16 @@ struct ProgramArgs {
     mode: Option<ProgramMode>,
 
     /// Immediate launch the VMM in debug mode.
-    #[arg(long)]
+    #[arg(long, value_name = "ADDR")]
     debug: Option<SocketAddr>,
 
     /// Use the kernel image at the specified path instead of the default one.
-    #[arg(long)]
+    #[arg(long, value_name = "PATH")]
     kernel: Option<PathBuf>,
+
+    /// Ignore saved settings and use default values instead.
+    #[arg(long)]
+    use_default_settings: bool,
 }
 
 /// Action to be performed after the main window is closed.

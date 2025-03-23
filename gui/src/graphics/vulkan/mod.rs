@@ -3,6 +3,7 @@ use self::engine::Vulkan;
 use self::window::VulkanWindow;
 use super::EngineBuilder;
 use crate::profile::Profile;
+use crate::settings::Settings;
 use ash::extensions::khr::Surface;
 use ash::vk::{API_VERSION_1_3, ApplicationInfo, InstanceCreateInfo, QueueFlags};
 use ash::{Entry, Instance};
@@ -18,7 +19,7 @@ use winit::window::WindowAttributes;
 mod engine;
 mod window;
 
-pub fn builder() -> Result<impl EngineBuilder, GraphicsError> {
+pub fn builder(settings: &Settings) -> Result<impl EngineBuilder, GraphicsError> {
     // Get required extensions for window.
     let mut exts = vec![c"VK_KHR_surface".as_ptr()];
 
@@ -40,10 +41,11 @@ pub fn builder() -> Result<impl EngineBuilder, GraphicsError> {
     app.api_version = API_VERSION_1_3;
 
     // Setup validation layers.
-    let layers = [
-        #[cfg(debug_assertions)]
-        c"VK_LAYER_KHRONOS_validation".as_ptr(),
-    ];
+    let mut layers = Vec::new();
+
+    if settings.graphics_debug_layer() {
+        layers.push(c"VK_LAYER_KHRONOS_validation".as_ptr());
+    }
 
     // Setup VkInstanceCreateInfo.
     let info = InstanceCreateInfo::builder()

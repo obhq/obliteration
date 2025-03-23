@@ -2,6 +2,7 @@
 use self::engine::Metal;
 use super::EngineBuilder;
 use crate::profile::Profile;
+use crate::settings::Settings;
 use metal::Device;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -12,7 +13,7 @@ use winit::window::WindowAttributes;
 mod engine;
 mod window;
 
-pub fn builder() -> Result<impl EngineBuilder, GraphicsError> {
+pub fn builder(settings: &Settings) -> Result<impl EngineBuilder, GraphicsError> {
     Ok(MetalBuilder {
         devices: Device::all(),
     })
