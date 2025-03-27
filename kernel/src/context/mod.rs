@@ -3,6 +3,7 @@ pub use self::arch::*;
 pub use self::local::*;
 
 use crate::arch::ArchConfig;
+use crate::config::Config;
 use crate::proc::{ProcMgr, Thread};
 use crate::uma::Uma;
 use alloc::rc::Rc;
@@ -23,6 +24,7 @@ mod local;
 ///
 /// # Safety
 /// - This function can be called only once per CPU.
+/// - `config` must be the same object for all context.
 /// - `arch` must be the same object for all context.
 /// - `cpu` must be unique and valid.
 /// - `setup` must return the same objects for all context.
@@ -32,6 +34,7 @@ mod local;
 /// |---------|--------|
 /// |PS4 11.00|0x08DA70|
 pub unsafe fn run_with_context(
+    config: Arc<Config>,
     arch: Arc<ArchConfig>,
     cpu: usize,
     td: Arc<Thread>,
@@ -42,6 +45,7 @@ pub unsafe fn run_with_context(
     // on each CPU stack instead.
     let mut cx = pin!(Context::new(
         Base {
+            config: Arc::into_raw(config),
             arch: Arc::into_raw(arch.clone()),
             cpu,
             thread: Arc::into_raw(td),
@@ -64,6 +68,16 @@ pub unsafe fn run_with_context(
     unsafe { cx.as_mut().get_unchecked_mut().base.pmgr = Arc::into_raw(r.pmgr) };
 
     main();
+}
+
+/// # Interrupt safety
+/// This function can be called from interrupt handler.
+pub fn current_config() -> BorrowedArc<Config> {
+    // It does not matter if we are on a different CPU after we load the Context::arch because it is
+    // always the same for all CPU.
+    unsafe {
+        BorrowedArc::from_non_null(Context::load_static_ptr::<{ offset_of!(Base, config) }, _>())
+    }
 }
 
 /// # Interrupt safety
@@ -156,6 +170,7 @@ pub struct ContextSetup {
 /// panic handler, both of them does not require a CPU context.
 #[repr(C)]
 struct Base {
+    config: *const Config,
     arch: *const ArchConfig,
     cpu: usize,            // pc_cpuid
     thread: *const Thread, // pc_curthread

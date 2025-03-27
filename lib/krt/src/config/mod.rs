@@ -1,4 +1,4 @@
-use config::{BootEnv, Config};
+use config::BootEnv;
 use core::ptr::null;
 
 pub fn boot_env() -> &'static BootEnv {
@@ -6,19 +6,12 @@ pub fn boot_env() -> &'static BootEnv {
     unsafe { &*BOOT_ENV }
 }
 
-pub fn config() -> &'static Config {
-    // SAFETY: This is safe because the setup() requirements.
-    unsafe { &*CONFIG }
-}
-
 /// # Safety
 /// This function must be called immediately in the [_start](super::_start) function. After that it
 /// must never be called again.
 #[allow(dead_code)]
-pub(super) unsafe fn setup(env: &'static BootEnv, conf: &'static Config) {
+pub(super) unsafe fn setup(env: &'static BootEnv) {
     unsafe { BOOT_ENV = env };
-    unsafe { CONFIG = conf };
 }
 
 static mut BOOT_ENV: *const BootEnv = null();
-static mut CONFIG: *const Config = null();

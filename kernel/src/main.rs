@@ -1,6 +1,7 @@
 #![no_std]
 #![cfg_attr(not(test), no_main)]
 
+use self::config::Config;
 use self::context::{ContextSetup, current_procmgr};
 use self::imgact::Ps4Abi;
 use self::malloc::KernelHeap;
@@ -36,12 +37,13 @@ extern crate alloc;
 ///
 /// See Orbis kernel entry point for a reference.
 #[cfg_attr(target_os = "none", unsafe(no_mangle))]
-fn main() -> ! {
+fn main(config: &'static ::config::Config) -> ! {
     // SAFETY: This function has a lot of restrictions. See Context documentation for more details.
     info!("Starting Obliteration Kernel.");
 
     // Setup the CPU after the first print to let the bootloader developer know (some of) their code
     // are working.
+    let config = Config::new(config);
     let arch = unsafe { self::arch::setup_main_cpu() };
 
     // Setup proc0 to represent the kernel.
@@ -54,7 +56,7 @@ fn main() -> ! {
     // Activate CPU context.
     let thread0 = Arc::new(thread0);
 
-    unsafe { self::context::run_with_context(arch, 0, thread0, setup, run) };
+    unsafe { self::context::run_with_context(config, arch, 0, thread0, setup, run) };
 }
 
 fn setup() -> ContextSetup {
