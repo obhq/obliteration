@@ -1,8 +1,8 @@
 pub use self::object::*;
 
 use self::stats::VmStats;
-use crate::config::{PAGE_MASK, PAGE_SIZE};
-use crate::context::{current_arch, current_thread};
+use crate::config::{PAGE_MASK, PAGE_SHIFT, PAGE_SIZE};
+use crate::context::{current_arch, current_config, current_thread};
 use crate::lock::GutexGroup;
 use crate::proc::Proc;
 use alloc::sync::{Arc, Weak};
@@ -16,10 +16,11 @@ mod stats;
 
 /// Implementation of Virtual Memory system.
 pub struct Vm {
-    boot_area: u64,   // basemem
-    boot_addr: u64,   // boot_address
-    boot_tables: u64, // mptramp_pagetables
-    initial_memory_size: u64,
+    boot_area: u64,           // basemem
+    boot_addr: u64,           // boot_address
+    boot_tables: u64,         // mptramp_pagetables
+    initial_memory_size: u64, // initial_memory_size
+    end_page: u64,            // Maxmem
     stats: [VmStats; 3],
     pagers: [Weak<Proc>; 2], // pageproc
 }
@@ -62,6 +63,7 @@ impl Vm {
             boot_addr: 0,
             boot_tables: 0,
             initial_memory_size: 0,
+            end_page: 0,
             stats,
             pagers: Default::default(),
         };
@@ -122,9 +124,9 @@ impl Vm {
     /// |---------|--------|
     /// |PS4 11.00|0x25CF00|
     fn load_memory_map(&mut self) -> Result<(), VmError> {
-        // TODO: Some of the logic around physmap does not make sense.
+        // TODO: Some of the logic around here are very hard to understand.
         let mut physmap = [0u64; 60];
-        let mut i = 0usize;
+        let mut last = 0usize;
         let map = match boot_env() {
             BootEnv::Vm(v) => v.memory_map.as_slice(),
         };
@@ -142,12 +144,14 @@ impl Vm {
                 break;
             }
 
-            let mut insert_idx = i + 2;
+            // Check if we need to insert before the previous entries.
+            let mut insert_idx = last + 2;
             let mut j = 0usize;
 
-            while j <= i {
+            while j <= last {
                 if m.base < physmap[j + 1] {
-                    if physmap[j] < m.base + m.len {
+                    // Check if end address overlapped.
+                    if m.base + m.len > physmap[j] {
                         warn!("Overlapping memory regions, ignoring second region.");
                         continue 'top;
                     }
@@ -159,19 +163,23 @@ impl Vm {
                 j += 2;
             }
 
-            if insert_idx <= i && m.base + m.len == physmap[insert_idx] {
+            // Check if end address is the start address of the next entry. If yes we just change
+            // base address of it to increase its size.
+            if insert_idx <= last && m.base + m.len == physmap[insert_idx] {
                 physmap[insert_idx] = m.base;
                 continue;
             }
 
+            // Check if start address is the end address of the previous entry. If yes we just
+            // increase the size of previous entry.
             if insert_idx > 0 && m.base == physmap[insert_idx - 1] {
                 physmap[insert_idx - 1] = m.base + m.len;
                 continue;
             }
 
-            i += 2;
+            last += 2;
 
-            if i == physmap.len() {
+            if last == physmap.len() {
                 warn!("Too many segments in the physical address map, giving up.");
                 break;
             }
@@ -179,7 +187,7 @@ impl Vm {
             // This loop does not make sense on the Orbis. It seems like if this loop once
             // entered it will never exit.
             #[allow(clippy::while_immutable_condition)]
-            while insert_idx < i {
+            while insert_idx < last {
                 todo!()
             }
 
@@ -187,10 +195,10 @@ impl Vm {
             physmap[insert_idx + 1] = m.base + m.len;
         }
 
-        // Check if bootloader provide us a memory map.
-        let physmap = &mut physmap[..i];
-
-        if physmap.is_empty() {
+        // Check if bootloader provide us a memory map. The Orbis will check if
+        // preload_search_info() return null but we can't do that since we use a static size array
+        // to pass this information.
+        if physmap[1] == 0 {
             return Err(VmError::NoMemoryMap);
         }
 
@@ -198,16 +206,16 @@ impl Vm {
         let page_size = PAGE_SIZE.get().try_into().unwrap();
         let page_mask = !u64::try_from(PAGE_MASK.get()).unwrap();
 
-        for e in physmap.chunks(2) {
+        for i in (0..=last).step_by(2) {
             // Check if BIOS boot area.
-            if e[0] == 0 {
+            if physmap[i] == 0 {
                 // TODO: Why 1024?
-                self.boot_area = e[1] / 1024;
+                self.boot_area = physmap[i + 1] / 1024;
             }
 
             // Add to initial memory size.
-            let start = e[0].next_multiple_of(page_size);
-            let end = e[1] & page_mask;
+            let start = physmap[i].next_multiple_of(page_size);
+            let end = physmap[i + 1] & page_mask;
 
             self.initial_memory_size += end.saturating_sub(start);
         }
@@ -219,6 +227,13 @@ impl Vm {
         // TODO: This seems like it is assume the first physmap always a boot area. The problem is
         // what is the point of the logic on the above to find boot_area?
         physmap[1] = self.adjust_boot_area(physmap[1] / 1024);
+
+        // Get end page.
+        self.end_page = physmap[last + 1] >> PAGE_SHIFT;
+
+        if let Some(v) = current_config().env("hw.physmem") {
+            self.end_page = v.parse::<u64>().unwrap() >> PAGE_SHIFT;
+        }
 
         Ok(())
     }
