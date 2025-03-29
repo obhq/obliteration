@@ -2,6 +2,7 @@ import { ComboBox, HorizontalBox, VerticalBox, GroupBox } from "std-widgets.slin
 
 export component DisplayTab {
     in property <[string]> devices;
+    in-out property <int> selected-device;
     in property <[string]> resolutions;
     in-out property <int> selected-resolution;
 
@@ -16,15 +17,16 @@ export component DisplayTab {
                 title: "Device";
                 width: 50%;
                 ComboBox {
-                    model: devices;
+                    model: root.devices;
+                    current-index <=> root.selected-device;
                 }
             }
 
             GroupBox {
                 title: "Resolution";
                 ComboBox {
-                    model: resolutions;
-                    current-index <=> selected-resolution;
+                    model: root.resolutions;
+                    current-index <=> root.selected-resolution;
                 }
             }
         }

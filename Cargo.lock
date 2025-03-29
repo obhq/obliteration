@@ -1931,6 +1931,7 @@ dependencies = [
  "redb",
  "rustc-hash 2.1.1",
  "serde",
+ "serde_bytes",
  "slint",
  "slint-build",
  "thiserror 2.0.12",
@@ -4101,6 +4102,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8e3592472072e6e22e0a54d5904d9febf8508f65fb8552499a1abc7d1078c3a"
 dependencies = [
  "serde_derive",
+]
+
+[[package]]
+name = "serde_bytes"
+version = "0.11.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8437fd221bde2d4ca316d61b90e337e9e702b3820b87d63caa9ba6c02bd06d96"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

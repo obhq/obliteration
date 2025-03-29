@@ -2,14 +2,14 @@
 
 use self::data::{DataError, DataMgr};
 use self::gdb::{GdbDispatcher, GdbError, GdbSession};
-use self::graphics::{EngineBuilder, GraphicsError, PhysicalDevice};
+use self::graphics::{EngineBuilder, GraphicsError};
 use self::log::LogWriter;
 use self::profile::{DisplayResolution, Profile};
 use self::settings::{Settings, SettingsError};
 use self::setup::{SetupError, run_setup};
 use self::ui::{
-    AboutWindow, App, DesktopExt, MainWindow, ProfileModel, ResolutionModel, RuntimeExt,
-    SettingsWindow, WaitForDebugger, error, spawn_handler,
+    AboutWindow, App, DesktopExt, DeviceModel, MainWindow, ProfileModel, ResolutionModel,
+    RuntimeExt, SettingsWindow, WaitForDebugger, error, spawn_handler,
 };
 use self::vmm::{CpuError, Vmm, VmmError, VmmEvent};
 use async_net::{TcpListener, TcpStream};
@@ -19,7 +19,7 @@ use futures::{
     AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, FutureExt, TryStreamExt, select_biased,
 };
 use hv::Hypervisor;
-use slint::{ComponentHandle, ModelRc, SharedString, ToSharedString, VecModel};
+use slint::{ComponentHandle, ToSharedString};
 use std::cell::{Cell, RefMut};
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -62,17 +62,23 @@ struct MainProgram {
 }
 
 impl MainProgram {
-    async fn run_launcher(
+    async fn run_launcher<G: EngineBuilder>(
         data: &Arc<DataMgr>,
         settings: &Rc<Settings>,
-        graphics: &impl EngineBuilder,
+        graphics: G,
         profiles: Vec<Profile>,
-    ) -> Result<Option<(Profile, ExitAction)>, ProgramError> {
+    ) -> Result<Option<Launch<G>>, ProgramError> {
         // Create window and register callback handlers.
         let win = MainWindow::new().map_err(ProgramError::CreateMainWindow)?;
-        let resolutions = Rc::new(ResolutionModel::default());
-        let profiles = Rc::new(ProfileModel::new(profiles, resolutions.clone()));
         let exit = Rc::new(Cell::new(None));
+        let graphics = Rc::new(graphics);
+        let devices = Rc::new(DeviceModel::new(graphics.clone()));
+        let resolutions = Rc::new(ResolutionModel::default());
+        let profiles = Rc::new(ProfileModel::new(
+            profiles,
+            devices.clone(),
+            resolutions.clone(),
+        ));
 
         win.on_settings({
             let win = win.as_weak();
@@ -134,14 +140,7 @@ impl MainProgram {
         });
 
         // Set window properties.
-        let physical_devices = ModelRc::new(VecModel::from_iter(
-            graphics
-                .physical_devices()
-                .iter()
-                .map(|p| SharedString::from(p.name())),
-        ));
-
-        win.set_devices(physical_devices);
+        win.set_devices(devices.into());
         win.set_resolutions(resolutions.into());
         win.set_profiles(profiles.clone().into());
 
@@ -170,7 +169,11 @@ impl MainProgram {
         let mut profiles = Rc::into_inner(profiles).unwrap().into_inner();
         let profile = profiles.remove(profile.try_into().unwrap());
 
-        Ok(Some((profile, exit)))
+        Ok(Some(Launch {
+            graphics: Rc::into_inner(graphics).unwrap(),
+            profile,
+            exit,
+        }))
     }
 
     async fn settings(main: MainWindow, data: Arc<DataMgr>, settings: Rc<Settings>) {
@@ -402,22 +405,21 @@ impl App for MainProgram {
         }
 
         // Get profile to use.
-        let (profile, debug) = if let Some(v) = self.args.debug {
+        let (graphics, profile, debug) = if let Some(v) = self.args.debug {
             // TODO: Select last used profile.
-            (profiles.pop().unwrap(), Some(v))
+            (graphics, profiles.pop().unwrap(), Some(v))
         } else {
-            let (profile, exit) =
-                match Self::run_launcher(&data, &settings, &graphics, profiles).await? {
-                    Some(v) => v,
-                    None => return Ok(()),
-                };
+            let r = match Self::run_launcher(&data, &settings, graphics, profiles).await? {
+                Some(v) => v,
+                None => return Ok(()),
+            };
 
-            match exit {
-                ExitAction::Run => (profile, None),
+            match r.exit {
+                ExitAction::Run => (r.graphics, r.profile, None),
                 ExitAction::Debug => {
-                    let addr = profile.debug_addr().clone();
+                    let addr = r.profile.debug_addr().clone();
 
-                    (profile, Some(addr))
+                    (r.graphics, r.profile, Some(addr))
                 }
             }
         };
@@ -563,25 +565,29 @@ async fn dispatch_vmm(ev: VmmEvent, logs: &mut LogWriter) -> Result<bool, Progra
     Ok(true)
 }
 
-async fn save_profile(win: MainWindow, data: Arc<DataMgr>, profiles: Rc<ProfileModel>) {
+async fn save_profile<G: EngineBuilder>(
+    win: MainWindow,
+    data: Arc<DataMgr>,
+    profiles: Rc<ProfileModel<G>>,
+) {
     // Update profile.
-    let pro = match update_profile(&win, &profiles).await {
+    let pf = match update_profile(&win, &profiles).await {
         Some(v) => v,
         None => return,
     };
 
     // Save.
-    let loc = data.profiles().data(pro.id());
+    let loc = data.profiles().data(pf.id());
 
-    if let Err(e) = pro.save(loc) {
+    if let Err(e) = pf.save(loc) {
         let m = slint::format!("Failed to save profile: {}.", e.display());
         error(Some(&win), m).await;
     }
 }
 
-async fn start_vmm(
+async fn start_vmm<G: EngineBuilder>(
     win: MainWindow,
-    profiles: Rc<ProfileModel>,
+    profiles: Rc<ProfileModel<G>>,
     exit: Rc<Cell<Option<ExitAction>>>,
     ty: ExitAction,
 ) {
@@ -593,9 +599,9 @@ async fn start_vmm(
     exit.set(Some(ty));
 }
 
-async fn update_profile<'a>(
+async fn update_profile<'a, G: EngineBuilder>(
     win: &MainWindow,
-    profiles: &'a ProfileModel,
+    profiles: &'a ProfileModel<G>,
 ) -> Option<RefMut<'a, Profile>> {
     let row = win.get_selected_profile();
     let pro = match profiles.update(row, win) {
@@ -628,6 +634,13 @@ struct ProgramArgs {
     /// Ignore saved settings and use default values instead.
     #[arg(long)]
     use_default_settings: bool,
+}
+
+/// Contains objects returned from [`MainProgram::run_launcher()`].
+struct Launch<G> {
+    graphics: G,
+    profile: Profile,
+    exit: ExitAction,
 }
 
 /// Action to be performed after the main window is closed.

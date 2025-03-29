@@ -5,6 +5,7 @@ import { CpuTab } from "main/cpu.slint";
 
 export component MainWindow inherits Window {
     in property <[string]> devices;
+    in-out property <int> selected-device;
     in property <[string]> resolutions;
     in-out property <int> selected-resolution;
     in-out property <string> debug-address;
@@ -72,9 +73,10 @@ export component MainWindow inherits Window {
             }
 
             if tab.current-page == 0: DisplayTab {
-                devices: devices;
-                resolutions: resolutions;
-                selected-resolution <=> selected-resolution;
+                devices: root.devices;
+                selected-device <=> root.selected-device;
+                resolutions: root.resolutions;
+                selected-resolution <=> root.selected-resolution;
             }
 
             if tab.current-page == 1: CpuTab {

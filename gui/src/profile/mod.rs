@@ -1,5 +1,6 @@
 use config::Config;
 use serde::{Deserialize, Serialize};
+use serde_bytes::ByteBuf;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
@@ -15,6 +16,7 @@ use uuid::Uuid;
 pub struct Profile {
     id: Uuid,
     name: String,
+    display_device: ByteBuf,
     display_resolution: DisplayResolution,
     debug_addr: SocketAddr,
     kernel_config: Config,
@@ -46,6 +48,14 @@ impl Profile {
 
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    pub fn display_device(&self) -> &[u8] {
+        &self.display_device
+    }
+
+    pub fn set_display_device(&mut self, v: impl Into<Vec<u8>>) {
+        self.display_device = v.into().into();
     }
 
     pub fn display_resolution(&self) -> DisplayResolution {
@@ -90,6 +100,7 @@ impl Default for Profile {
         Self {
             id: Uuid::new_v4(),
             name: String::from("Default"),
+            display_device: ByteBuf::new(),
             display_resolution: DisplayResolution::Hd,
             debug_addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 1234)),
             kernel_config: Config {

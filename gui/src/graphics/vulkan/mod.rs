@@ -5,7 +5,10 @@ use super::EngineBuilder;
 use crate::profile::Profile;
 use crate::settings::Settings;
 use ash::extensions::khr::Surface;
-use ash::vk::{API_VERSION_1_3, ApplicationInfo, InstanceCreateInfo, QueueFlags};
+use ash::vk::{
+    API_VERSION_1_3, ApplicationInfo, InstanceCreateInfo, PhysicalDeviceIDProperties,
+    PhysicalDeviceProperties2, QueueFlags,
+};
 use ash::{Entry, Instance};
 use raw_window_handle::RawDisplayHandle;
 use std::ffi::CStr;
@@ -77,9 +80,12 @@ pub fn builder(settings: &Settings) -> Result<impl EngineBuilder, GraphicsError>
 
     for dev in all {
         // Filter out devices without Vulkan 1.3.
-        let p = unsafe { b.instance.get_physical_device_properties(dev) };
+        let mut id = PhysicalDeviceIDProperties::builder();
+        let mut p2 = PhysicalDeviceProperties2::builder().push_next(&mut id);
 
-        if p.api_version < API_VERSION_1_3 {
+        unsafe { b.instance.get_physical_device_properties2(dev, &mut p2) };
+
+        if p2.properties.api_version < API_VERSION_1_3 {
             continue;
         }
 
@@ -92,12 +98,16 @@ pub fn builder(settings: &Settings) -> Result<impl EngineBuilder, GraphicsError>
         }
 
         // Add to list.
-        let name = unsafe { CStr::from_ptr(p.device_name.as_ptr()) }
+        let name = unsafe { CStr::from_ptr(p2.properties.device_name.as_ptr()) }
             .to_str()
             .unwrap()
             .to_owned();
 
-        b.devices.push(PhysicalDevice { device: dev, name });
+        b.devices.push(PhysicalDevice {
+            device: dev,
+            id: id.device_uuid,
+            name,
+        });
     }
 
     if b.devices.is_empty() {
@@ -150,12 +160,18 @@ impl Drop for VulkanBuilder {
     }
 }
 
+/// Implementation of [`super::PhysicalDevice`].
 pub struct PhysicalDevice {
     device: ash::vk::PhysicalDevice,
+    id: [u8; 16],
     name: String,
 }
 
 impl super::PhysicalDevice for PhysicalDevice {
+    fn id(&self) -> &[u8] {
+        &self.id
+    }
+
     fn name(&self) -> &str {
         &self.name
     }
