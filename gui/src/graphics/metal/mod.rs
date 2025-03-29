@@ -43,6 +43,10 @@ impl EngineBuilder for MetalBuilder {
 }
 
 impl super::PhysicalDevice for metal::Device {
+    fn id(&self) -> &[u8] {
+        todo!()
+    }
+
     fn name(&self) -> &str {
         self.deref().name()
     }

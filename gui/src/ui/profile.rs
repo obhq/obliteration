@@ -1,10 +1,57 @@
 use super::MainWindow;
+use crate::graphics::{EngineBuilder, PhysicalDevice};
 use crate::profile::{DisplayResolution, Profile};
 use slint::{Model, ModelNotify, ModelTracker, SharedString, ToSharedString};
 use std::any::Any;
 use std::cell::{RefCell, RefMut};
 use std::rc::Rc;
 use thiserror::Error;
+
+/// Implementation of [`Model`] for [`PhysicalDevice`].
+pub struct DeviceModel<G>(Rc<G>);
+
+impl<G: EngineBuilder> DeviceModel<G> {
+    pub fn new(g: Rc<G>) -> Self {
+        Self(g)
+    }
+
+    pub fn position(&self, id: &[u8]) -> Option<i32> {
+        self.0
+            .physical_devices()
+            .iter()
+            .position(move |d| d.id() == id)
+            .map(|i| i.try_into().unwrap())
+    }
+
+    pub fn get(&self, i: i32) -> Option<&impl PhysicalDevice> {
+        usize::try_from(i)
+            .ok()
+            .and_then(|i| self.0.physical_devices().get(i))
+    }
+}
+
+impl<G: EngineBuilder> Model for DeviceModel<G> {
+    type Data = SharedString;
+
+    fn row_count(&self) -> usize {
+        self.0.physical_devices().len()
+    }
+
+    fn row_data(&self, row: usize) -> Option<Self::Data> {
+        self.0
+            .physical_devices()
+            .get(row)
+            .map(|d| SharedString::from(d.name()))
+    }
+
+    fn model_tracker(&self) -> &dyn ModelTracker {
+        &()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
 
 /// Implementation of [`Model`] for [`DisplayResolution`].
 pub struct ResolutionModel([DisplayResolution; 3]);
@@ -53,16 +100,22 @@ impl Model for ResolutionModel {
 }
 
 /// Implementation of [`Model`] for [`Profile`].
-pub struct ProfileModel {
+pub struct ProfileModel<G> {
     profiles: RefCell<Vec<Profile>>,
+    devices: Rc<DeviceModel<G>>,
     resolutions: Rc<ResolutionModel>,
     noti: ModelNotify,
 }
 
-impl ProfileModel {
-    pub fn new(profiles: Vec<Profile>, resolutions: Rc<ResolutionModel>) -> Self {
+impl<G: EngineBuilder> ProfileModel<G> {
+    pub fn new(
+        profiles: Vec<Profile>,
+        devices: Rc<DeviceModel<G>>,
+        resolutions: Rc<ResolutionModel>,
+    ) -> Self {
         Self {
             profiles: RefCell::new(profiles),
+            devices,
             resolutions,
             noti: ModelNotify::default(),
         }
@@ -74,6 +127,7 @@ impl ProfileModel {
         let profiles = self.profiles.borrow();
         let p = &profiles[row];
 
+        dst.set_selected_device(self.devices.position(p.display_device()).unwrap_or(0));
         dst.set_selected_resolution(self.resolutions.position(p.display_resolution()).unwrap());
         dst.set_debug_address(p.debug_addr().to_shared_string());
     }
@@ -85,6 +139,7 @@ impl ProfileModel {
         let mut profiles = self.profiles.borrow_mut();
         let p = &mut profiles[row];
 
+        p.set_display_device(self.devices.get(src.get_selected_device()).unwrap().id());
         p.set_display_resolution(self.resolutions.get(src.get_selected_resolution()).unwrap());
 
         match src.get_debug_address().parse() {
@@ -100,7 +155,7 @@ impl ProfileModel {
     }
 }
 
-impl Model for ProfileModel {
+impl<G: 'static> Model for ProfileModel<G> {
     type Data = SharedString;
 
     fn row_count(&self) -> usize {

@@ -11,7 +11,7 @@ use winit::window::WindowAttributes;
 mod engine;
 
 /// Provides method to build [`Graphics`].
-pub trait EngineBuilder {
+pub trait EngineBuilder: 'static {
     type PhysicalDevice: PhysicalDevice;
     type Engine: Graphics;
 
@@ -26,7 +26,9 @@ pub trait EngineBuilder {
     ) -> Result<Arc<Self::Engine>, GraphicsError>;
 }
 
+/// Represents a graphics hardware.
 pub trait PhysicalDevice: Sized {
+    fn id(&self) -> &[u8];
     fn name(&self) -> &str;
 }
 
