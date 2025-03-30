@@ -70,8 +70,6 @@ pub unsafe fn set_modal(
             if let Some(err) = NonZero::new(ret) {
                 return Err(PlatformError::XlibSetWindowType(err));
             }
-
-            todo!()
         }
         (X11::Xcb(xcb), RawWindowHandle::Xcb(parent), RawWindowHandle::Xcb(target)) => {
             let connection = xcb.connection();
