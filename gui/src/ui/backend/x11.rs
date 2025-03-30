@@ -13,7 +13,7 @@ pub struct Xlib {
 
 impl Xlib {
     pub unsafe fn new(handle: XlibDisplayHandle) -> Result<Self, BackendError> {
-        Ok(Self { handle })
+        todo!()
     }
 }
 

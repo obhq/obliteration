@@ -16,7 +16,9 @@ pub unsafe fn set_modal(
     let target_handle = target.window_handle().unwrap();
 
     match (x11, parent_handle.as_raw(), target_handle.as_raw()) {
-        (X11::Xlib(xlib), RawWindowHandle::Xlib(parent), RawWindowHandle::Xlib(target)) => {}
+        (X11::Xlib(xlib), RawWindowHandle::Xlib(parent), RawWindowHandle::Xlib(target)) => {
+            todo!()
+        }
         (X11::Xcb(xcb), RawWindowHandle::Xcb(parent), RawWindowHandle::Xcb(target)) => {
             let connection = xcb.connection();
 
