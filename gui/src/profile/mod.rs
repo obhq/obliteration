@@ -105,6 +105,7 @@ impl Default for Profile {
             debug_addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 1234)),
             kernel_config: Config {
                 max_cpu: NonZero::new(8).unwrap(),
+                ..Default::default()
             },
             created: SystemTime::now(),
         }
