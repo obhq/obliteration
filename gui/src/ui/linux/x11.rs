@@ -22,7 +22,7 @@ pub unsafe fn set_modal(
         (X11::Xcb(xcb), RawWindowHandle::Xcb(parent), RawWindowHandle::Xcb(target)) => {
             let connection = xcb.connection();
 
-            connection.send_request(&xcb::x::ChangeProperty {
+            let cookie = connection.send_request_checked(&xcb::x::ChangeProperty {
                 mode: xcb::x::PropMode::Replace,
                 window: unsafe { xcb::x::Window::new(target.window.get()) },
                 property: xcb.window_type_atom(),
@@ -30,7 +30,11 @@ pub unsafe fn set_modal(
                 data: &[xcb.dialog_atom()],
             });
 
-            connection.send_request(&xcb::x::ChangeProperty {
+            connection
+                .check_request(cookie)
+                .map_err(PlatformError::SetWindowType)?;
+
+            let cookie = connection.send_request_checked(&xcb::x::ChangeProperty {
                 mode: xcb::x::PropMode::Append,
                 window: unsafe { xcb::x::Window::new(target.window.get()) },
                 property: xcb.wm_state_atom(),
@@ -38,13 +42,21 @@ pub unsafe fn set_modal(
                 data: &[xcb.wm_state_modal_atom()],
             });
 
-            connection.send_request(&xcb::x::ChangeProperty {
+            connection
+                .check_request(cookie)
+                .map_err(PlatformError::SetWmState)?;
+
+            let cookie = connection.send_request_checked(&xcb::x::ChangeProperty {
                 mode: xcb::x::PropMode::Replace,
                 window: unsafe { xcb::x::Window::new(target.window.get()) },
                 property: xcb.transient_for_atom(),
                 r#type: xcb::x::ATOM_WINDOW,
                 data: &[unsafe { xcb::x::Window::new(parent.window.get()) }],
             });
+
+            connection
+                .check_request(cookie)
+                .map_err(PlatformError::SetParent)?;
         }
         _ => unreachable!(),
     }

@@ -63,4 +63,13 @@ pub enum PlatformError {
 
     #[error("couldn't set window modal")]
     SetModal(#[source] wayland_client::DispatchError),
+
+    #[error("couldn't set window window type")]
+    SetWindowType(#[source] xcb::ProtocolError),
+
+    #[error("couldn't set window wm state")]
+    SetWmState(#[source] xcb::ProtocolError),
+
+    #[error("couldn't set window parent")]
+    SetParent(#[source] xcb::ProtocolError),
 }
