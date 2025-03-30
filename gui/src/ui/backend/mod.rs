@@ -1,6 +1,7 @@
 #[cfg(target_os = "linux")]
 pub(super) use self::wayland::*;
 pub(super) use self::window::*;
+pub(super) use self::x11::*;
 
 use i_slint_core::graphics::RequestedGraphicsAPI;
 use i_slint_renderer_skia::SkiaRenderer;
@@ -20,10 +21,14 @@ use wae::WinitWindow;
 use winit::event::StartCause;
 use winit::event_loop::ControlFlow;
 use winit::window::WindowId;
+use xcb::Connection;
+use xcb::x::InternAtom;
 
 #[cfg(target_os = "linux")]
 mod wayland;
 mod window;
+#[cfg(target_os = "linux")]
+mod x11;
 
 /// Back-end for Slint to run on top of [`wae`].
 ///
@@ -34,8 +39,25 @@ mod window;
 /// - [`slint::Window::hide()`] will not hide the window on Wayland. You need to drop it instead.
 pub struct SlintBackend {
     #[cfg(target_os = "linux")]
-    wayland: Option<Wayland>,
+    protocol_specific: Option<ProtocolSpecific>,
     windows: RefCell<FxHashMap<WindowId, Weak<SlintWindow>>>,
+}
+
+#[cfg(target_os = "linux")]
+pub enum ProtocolSpecific {
+    Wayland(Wayland),
+    X11(X11),
+}
+
+#[cfg(target_os = "linux")]
+impl ProtocolSpecific {
+    pub fn wayland(&self) -> Option<&Wayland> {
+        if let ProtocolSpecific::Wayland(v) = self {
+            Some(v)
+        } else {
+            None
+        }
+    }
 }
 
 impl SlintBackend {
@@ -44,13 +66,29 @@ impl SlintBackend {
     pub unsafe fn new() -> Result<Self, BackendError> {
         let mut b = Self {
             #[cfg(target_os = "linux")]
-            wayland: None,
+            protocol_specific: None,
             windows: RefCell::default(),
         };
 
         match wae::raw_display_handle() {
             #[cfg(target_os = "linux")]
-            RawDisplayHandle::Wayland(d) => b.wayland = unsafe { Wayland::new(d) }.map(Some)?,
+            RawDisplayHandle::Wayland(d) => {
+                b.protocol_specific = unsafe { Wayland::new(d) }
+                    .map(ProtocolSpecific::Wayland)
+                    .map(Some)?
+            }
+            #[cfg(target_os = "linux")]
+            RawDisplayHandle::Xlib(handle) => {
+                let xlib = unsafe { Xlib::new(handle) }?;
+
+                b.protocol_specific = Some(ProtocolSpecific::X11(X11::Xlib(xlib)));
+            }
+            #[cfg(target_os = "linux")]
+            RawDisplayHandle::Xcb(handle) => {
+                let xcb = unsafe { Xcb::new(handle) }?;
+
+                b.protocol_specific = Some(ProtocolSpecific::X11(X11::Xcb(xcb)));
+            }
             _ => (),
         }
 
@@ -67,16 +105,24 @@ impl SlintBackend {
         wae::push_hook(b.clone());
 
         #[cfg(target_os = "linux")]
-        if b.wayland.is_some() {
-            wae::spawn(async move { b.wayland.as_ref().unwrap().run().await });
+        if let Some(ProtocolSpecific::Wayland(_)) = &b.as_ref().protocol_specific {
+            let b = Rc::downgrade(&b);
+
+            wae::spawn(async move {
+                if let Some(b) = b.upgrade() {
+                    if let Some(ProtocolSpecific::Wayland(wayland)) = &b.protocol_specific {
+                        wayland.run().await;
+                    }
+                }
+            });
         }
 
         Ok(())
     }
 
     #[cfg(target_os = "linux")]
-    pub(super) fn wayland(&self) -> Option<&Wayland> {
-        self.wayland.as_ref()
+    pub(super) fn protocol_specific(&self) -> Option<&ProtocolSpecific> {
+        self.protocol_specific.as_ref()
     }
 }
 
@@ -199,4 +245,8 @@ pub enum BackendError {
     #[cfg(target_os = "linux")]
     #[error("couldn't dispatch Wayland request")]
     DispatchWayland(#[source] wayland_client::DispatchError),
+
+    #[cfg(target_os = "linux")]
+    #[error("couldn't dispatch X11 request")]
+    DispatchXcb(#[source] xcb::Error),
 }
