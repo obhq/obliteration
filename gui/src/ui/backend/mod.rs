@@ -15,6 +15,7 @@ use slint::platform::{
 use slint::{PhysicalSize, PlatformError};
 use std::cell::RefCell;
 use std::error::Error;
+use std::num::NonZero;
 use std::rc::{Rc, Weak};
 use std::time::Instant;
 use thiserror::Error;
@@ -244,6 +245,10 @@ pub enum BackendError {
     #[cfg(target_os = "linux")]
     #[error("couldn't dispatch Wayland request")]
     DispatchWayland(#[source] wayland_client::DispatchError),
+
+    #[cfg(target_os = "linux")]
+    #[error("couldn't intern X11 atoms: {0}")]
+    XlibInternAtomsFailed(NonZero<i32>),
 
     #[cfg(target_os = "linux")]
     #[error("couldn't dispatch X11 request")]

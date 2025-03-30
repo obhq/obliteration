@@ -4,6 +4,7 @@ use self::modal::Modal;
 use super::backend::ProtocolSpecific;
 use super::{DesktopExt, DesktopWindow, SlintBackend};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+use std::num::NonZero;
 use thiserror::Error;
 
 mod dialogs;
@@ -64,12 +65,21 @@ pub enum PlatformError {
     #[error("couldn't set window modal")]
     SetModal(#[source] wayland_client::DispatchError),
 
-    #[error("couldn't set window window type")]
-    SetWindowType(#[source] xcb::ProtocolError),
+    #[error("couldn't set window type")]
+    XcbSetWindowType(#[source] xcb::ProtocolError),
 
     #[error("couldn't set window wm state")]
-    SetWmState(#[source] xcb::ProtocolError),
+    XcbSetWmState(#[source] xcb::ProtocolError),
 
     #[error("couldn't set window parent")]
-    SetParent(#[source] xcb::ProtocolError),
+    XcbSetParent(#[source] xcb::ProtocolError),
+
+    #[error("couldn't set window type: {0}")]
+    XlibSetWindowType(NonZero<i32>),
+
+    #[error("couldn't set window wm state: {0}")]
+    XlibSetWmState(NonZero<i32>),
+
+    #[error("couldn't set window parent")]
+    XlibSetParent(NonZero<i32>),
 }

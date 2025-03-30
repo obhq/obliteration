@@ -63,9 +63,8 @@ i-slint-renderer-skia = { version = "=1.10.0", features = [
 wayland-backend = { version = "0.3.7", features = ["client_system"] }
 wayland-client = "0.31.7"
 wayland-protocols = "0.32.5"
-xcb = "1.5.0"
-xdg = "2.5.2"
 x11 = { version = "2.21.0", features = ["xlib"] }
+xcb = "1.5.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 ash = { version = "0.37.3", features = ["linked"], default-features = false }

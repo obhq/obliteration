@@ -2,6 +2,7 @@ use super::PlatformError;
 use crate::ui::DesktopWindow;
 use crate::ui::backend::X11;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+use std::num::NonZero;
 use xcb::XidNew;
 
 pub unsafe fn set_modal(
@@ -17,6 +18,59 @@ pub unsafe fn set_modal(
 
     match (x11, parent_handle.as_raw(), target_handle.as_raw()) {
         (X11::Xlib(xlib), RawWindowHandle::Xlib(parent), RawWindowHandle::Xlib(target)) => {
+            let display = xlib.display();
+
+            let ret = unsafe {
+                x11::xlib::XChangeProperty(
+                    display.as_ptr(),
+                    target.window,
+                    xlib.window_type_atom(),
+                    x11::xlib::XA_ATOM,
+                    32,
+                    x11::xlib::PropModeReplace,
+                    &xlib.dialog_atom() as *const _ as *const _,
+                    1,
+                )
+            };
+
+            if let Some(err) = NonZero::new(ret) {
+                return Err(PlatformError::XlibSetWindowType(err));
+            }
+
+            let ret = unsafe {
+                x11::xlib::XChangeProperty(
+                    display.as_ptr(),
+                    target.window,
+                    xlib.wm_state_atom(),
+                    x11::xlib::XA_ATOM,
+                    32,
+                    x11::xlib::PropModeAppend,
+                    &xlib.wm_state_modal_atom() as *const _ as *const _,
+                    1,
+                )
+            };
+
+            if let Some(err) = NonZero::new(ret) {
+                return Err(PlatformError::XlibSetWmState(err));
+            }
+
+            let ret = unsafe {
+                x11::xlib::XChangeProperty(
+                    display.as_ptr(),
+                    target.window,
+                    xlib.transient_for_atom(),
+                    x11::xlib::XA_WINDOW,
+                    32,
+                    x11::xlib::PropModeReplace,
+                    &parent.window as *const _ as *const _,
+                    1,
+                )
+            };
+
+            if let Some(err) = NonZero::new(ret) {
+                return Err(PlatformError::XlibSetWindowType(err));
+            }
+
             todo!()
         }
         (X11::Xcb(xcb), RawWindowHandle::Xcb(parent), RawWindowHandle::Xcb(target)) => {
@@ -32,7 +86,7 @@ pub unsafe fn set_modal(
 
             connection
                 .check_request(cookie)
-                .map_err(PlatformError::SetWindowType)?;
+                .map_err(PlatformError::XcbSetWindowType)?;
 
             let cookie = connection.send_request_checked(&xcb::x::ChangeProperty {
                 mode: xcb::x::PropMode::Append,
@@ -44,7 +98,7 @@ pub unsafe fn set_modal(
 
             connection
                 .check_request(cookie)
-                .map_err(PlatformError::SetWmState)?;
+                .map_err(PlatformError::XcbSetWmState)?;
 
             let cookie = connection.send_request_checked(&xcb::x::ChangeProperty {
                 mode: xcb::x::PropMode::Replace,
@@ -56,7 +110,7 @@ pub unsafe fn set_modal(
 
             connection
                 .check_request(cookie)
-                .map_err(PlatformError::SetParent)?;
+                .map_err(PlatformError::XcbSetParent)?;
         }
         _ => unreachable!(),
     }

@@ -1,5 +1,7 @@
 use super::BackendError;
 use raw_window_handle::{XcbDisplayHandle, XlibDisplayHandle};
+use std::num::NonZero;
+use std::ptr::NonNull;
 use xcb::x::InternAtom;
 
 pub enum X11 {
@@ -8,12 +10,63 @@ pub enum X11 {
 }
 
 pub struct Xlib {
-    handle: XlibDisplayHandle,
+    display: NonNull<x11::xlib::Display>,
+    atoms: [x11::xlib::Atom; 5],
 }
 
 impl Xlib {
     pub unsafe fn new(handle: XlibDisplayHandle) -> Result<Self, BackendError> {
-        todo!()
+        let display = handle.display.unwrap().cast();
+
+        let atom_names = [
+            c"_NET_WM_WINDOW_TYPE".as_ptr(),
+            c"_NET_WM_WINDOW_TYPE_DIALOG".as_ptr(),
+            c"WM_TRANSIENT_FOR".as_ptr(),
+            c"_NET_WM_STATE_MODAL".as_ptr(),
+            c"_NET_WM_STATE".as_ptr(),
+        ];
+
+        let mut atoms = [0; 5];
+
+        let ret = unsafe {
+            x11::xlib::XInternAtoms(
+                display.as_ptr(),
+                atom_names.as_ptr() as _,
+                atom_names.len() as i32,
+                true as _,
+                atoms.as_mut_ptr(),
+            )
+        };
+
+        if let Some(err) = NonZero::new(ret) {
+            return Err(BackendError::XlibInternAtomsFailed(err));
+        }
+
+        Ok(Self { display, atoms })
+    }
+
+    pub fn display(&self) -> NonNull<x11::xlib::Display> {
+        self.display
+    }
+
+    pub fn window_type_atom(&self) -> x11::xlib::Atom {
+        self.atoms[0]
+    }
+
+    pub fn dialog_atom(&self) -> x11::xlib::Atom {
+        self.atoms[1]
+    }
+
+    pub fn transient_for_atom(&self) -> x11::xlib::Atom {
+        self.atoms[2]
+    }
+
+    pub fn wm_state_modal_atom(&self) -> x11::xlib::Atom {
+        self.atoms[3]
+    }
+
+    pub fn wm_state_atom(&self) -> x11::xlib::Atom {
+        self.atoms[4]
     }
 }
 
