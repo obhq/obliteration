@@ -1,6 +1,7 @@
 #[cfg(target_os = "linux")]
 pub(super) use self::wayland::*;
 pub(super) use self::window::*;
+#[cfg(target_os = "linux")]
 pub(super) use self::x11::*;
 
 use i_slint_core::graphics::RequestedGraphicsAPI;
@@ -21,8 +22,6 @@ use wae::WinitWindow;
 use winit::event::StartCause;
 use winit::event_loop::ControlFlow;
 use winit::window::WindowId;
-use xcb::Connection;
-use xcb::x::InternAtom;
 
 #[cfg(target_os = "linux")]
 mod wayland;
