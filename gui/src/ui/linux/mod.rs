@@ -1,13 +1,16 @@
 pub use self::dialogs::*;
 
 use self::modal::Modal;
+use super::backend::ProtocolSpecific;
 use super::{DesktopExt, DesktopWindow, SlintBackend};
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+use std::num::NonZero;
 use thiserror::Error;
 
 mod dialogs;
 mod modal;
 mod wayland;
+mod x11;
 
 impl<T: DesktopWindow> DesktopExt for T {
     type Modal<'a, P>
@@ -36,12 +39,17 @@ impl<T: DesktopWindow> DesktopExt for T {
         Self: Sized,
     {
         let back = wae::global::<SlintBackend>().unwrap();
-        let wayland = if let Some(v) = back.wayland() {
-            // SAFETY: The Modal struct we construct below force the parent to outlive the modal
-            // window.
-            unsafe { self::wayland::set_modal(v, &self, parent).map(Some)? }
-        } else {
-            todo!()
+
+        let wayland = match back.protocol_specific() {
+            Some(ProtocolSpecific::Wayland(wayland)) => unsafe {
+                self::wayland::set_modal(wayland, &self, parent).map(Some)?
+            },
+            Some(ProtocolSpecific::X11(x11)) => unsafe {
+                self::x11::set_modal(&x11, &self, parent)?;
+
+                None
+            },
+            None => None,
         };
 
         Ok(Modal::new(self, parent, wayland))
@@ -56,4 +64,22 @@ pub enum PlatformError {
 
     #[error("couldn't set window modal")]
     SetModal(#[source] wayland_client::DispatchError),
+
+    #[error("couldn't set window type")]
+    XcbSetWindowType(#[source] xcb::ProtocolError),
+
+    #[error("couldn't set window wm state")]
+    XcbSetWmState(#[source] xcb::ProtocolError),
+
+    #[error("couldn't set window parent")]
+    XcbSetParent(#[source] xcb::ProtocolError),
+
+    #[error("couldn't set window type: {0}")]
+    XlibSetWindowType(NonZero<i32>),
+
+    #[error("couldn't set window wm state: {0}")]
+    XlibSetWmState(NonZero<i32>),
+
+    #[error("couldn't set window parent")]
+    XlibSetParent(NonZero<i32>),
 }

@@ -102,7 +102,7 @@ where
 
     // Get WlSurface.
     let backend = wae::global::<SlintBackend>().unwrap();
-    let wayland = backend.wayland().unwrap();
+    let wayland = backend.protocol_specific().unwrap().wayland().unwrap();
     let surface = unsafe { ObjectId::from_ptr(WlSurface::interface(), surface.cast()).unwrap() };
     let surface = WlSurface::from_id(wayland.connection(), surface).unwrap();
 
