@@ -2,18 +2,21 @@
 pub use self::handler::*;
 
 use self::client::ClientDispatcher;
+use self::state::SessionState;
 use thiserror::Error;
 
 mod client;
 mod handler;
+mod state;
 
-/// Contains states for a GDB remote session.
+/// Represents a GDB remote session.
 ///
 /// This type requires the client to be compatible with GDB >= 5.0.
 #[derive(Default)]
 pub struct GdbSession {
     req: Vec<u8>,
     res: Vec<u8>,
+    state: SessionState,
 }
 
 impl GdbSession {
@@ -40,4 +43,16 @@ pub trait GdbDispatcher {
 pub enum GdbError {
     #[error("unknown packet prefix {0:#x}")]
     UnknownPacketPrefix(u8),
+
+    #[error("unexpected acknowledgment packet from GDB")]
+    UnexpectedAck,
+
+    #[error("missing acknowledgment packet from GDB")]
+    MissingAck,
+
+    #[error("couldn't decode checksum {0:?}")]
+    DecodeChecksum([u8; 2], #[source] hex::FromHexError),
+
+    #[error("invalid checksum (expect {1}, got {0})")]
+    InvalidChecksum(u8, u8),
 }
