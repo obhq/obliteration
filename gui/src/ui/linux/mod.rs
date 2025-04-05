@@ -85,9 +85,6 @@ pub enum PlatformError {
     #[error("couldn't set window wm state: {0}")]
     XlibSetWmState(NonZero<i32>),
 
-    #[error("couldn't set window parent")]
-    XlibSetParent(NonZero<i32>),
-
     #[error("couldn't get window attributes: {0}")]
     XlibGetWindowAttributes(NonZero<i32>),
 
