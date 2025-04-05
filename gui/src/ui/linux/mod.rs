@@ -19,16 +19,15 @@ impl<T: DesktopWindow> DesktopExt for T {
         P: DesktopWindow + 'a;
 
     fn set_center(&self) -> Result<(), PlatformError> {
-        let win = self.handle();
-        let win = win.window_handle().unwrap();
+        let back = wae::global::<SlintBackend>().unwrap();
 
-        match win.as_ref() {
-            RawWindowHandle::Xlib(_) => todo!(),
-            RawWindowHandle::Xcb(_) => todo!(),
-            RawWindowHandle::Wayland(_) => (), // Wayland don't allow window to position itself.
-            RawWindowHandle::Drm(_) | RawWindowHandle::Gbm(_) => unimplemented!(),
-            _ => unreachable!(),
-        }
+        match back.protocol_specific() {
+            Some(ProtocolSpecific::Wayland(_)) => {} // Wayland doesn't allow windows to position themselves.
+            Some(ProtocolSpecific::X11(x11)) => unsafe {
+                self::x11::set_center(&x11, self)?;
+            },
+            None => unimplemented!(),
+        };
 
         Ok(())
     }
@@ -74,12 +73,21 @@ pub enum PlatformError {
     #[error("couldn't set window parent")]
     XcbSetParent(#[source] xcb::ProtocolError),
 
+    #[error("couldn't get window geometry")]
+    XcbGetGeometry(#[source] xcb::Error),
+
+    #[error("couldn't center window")]
+    XcbCenterWindow(#[source] xcb::ProtocolError),
+
     #[error("couldn't set window type: {0}")]
     XlibSetWindowType(NonZero<i32>),
 
     #[error("couldn't set window wm state: {0}")]
     XlibSetWmState(NonZero<i32>),
 
-    #[error("couldn't set window parent")]
-    XlibSetParent(NonZero<i32>),
+    #[error("couldn't get window attributes: {0}")]
+    XlibGetWindowAttributes(NonZero<i32>),
+
+    #[error("couldn't center window: {0}")]
+    XlibCenterWindow(NonZero<i32>),
 }
