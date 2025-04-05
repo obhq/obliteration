@@ -186,7 +186,7 @@ pub struct KvmSregs {
     pub cr8: u64,
     pub efer: u64,
     pub apic_base: u64,
-    pub interrupt_bitmap: [u64; (KVM_NR_INTERRUPTS + 63) / 64],
+    pub interrupt_bitmap: [u64; KVM_NR_INTERRUPTS.div_ceil(64)],
 }
 
 #[cfg(target_arch = "x86_64")]
