@@ -3,8 +3,6 @@ pub use self::dialogs::*;
 use self::modal::Modal;
 use super::backend::ProtocolSpecific;
 use super::{DesktopExt, DesktopWindow, SlintBackend};
-use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use std::num::NonZero;
 use thiserror::Error;
 
 mod dialogs;
