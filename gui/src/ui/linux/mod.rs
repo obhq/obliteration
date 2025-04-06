@@ -79,15 +79,6 @@ pub enum PlatformError {
     #[error("couldn't center window")]
     XcbCenterWindow(#[source] xcb::ProtocolError),
 
-    #[error("couldn't set window type: {0}")]
-    XlibSetWindowType(NonZero<i32>),
-
-    #[error("couldn't set window wm state: {0}")]
-    XlibSetWmState(NonZero<i32>),
-
     #[error("couldn't get window attributes")]
     XlibGetWindowAttributes,
-
-    #[error("couldn't center window: {0}")]
-    XlibCenterWindow(NonZero<i32>),
 }
