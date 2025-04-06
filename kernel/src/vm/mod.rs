@@ -7,6 +7,7 @@ use crate::lock::GutexGroup;
 use crate::proc::Proc;
 use alloc::sync::{Arc, Weak};
 use config::{BootEnv, MapType};
+use core::cmp::min;
 use krt::{boot_env, warn};
 use macros::bitflag;
 use thiserror::Error;
@@ -232,9 +233,10 @@ impl Vm {
         self.end_page = physmap[last + 1] >> PAGE_SHIFT;
 
         if let Some(v) = current_config().env("hw.physmem") {
-            self.end_page = v.parse::<u64>().unwrap() >> PAGE_SHIFT;
+            self.end_page = min(v.parse::<u64>().unwrap() >> PAGE_SHIFT, self.end_page);
         }
 
+        // TODO: There is some unknown calls here.
         Ok(())
     }
 

@@ -1,7 +1,8 @@
 import { VerticalBox, HorizontalBox, Button, ComboBox } from "std-widgets.slint";
 import { TabBar, TabContainer } from "@root/widgets/tab.slint";
-import { DisplayTab } from "main/display.slint";
 import { CpuTab } from "main/cpu.slint";
+import { DisplayTab } from "main/display.slint";
+import { IdpsTab } from "main/idps.slint";
 
 export component MainWindow inherits Window {
     in property <[string]> devices;
@@ -68,7 +69,8 @@ export component MainWindow inherits Window {
             tab := TabBar {
                 tabs: [
                     { text: "Display", icon: @image-url("@root/assets/monitor.svg") },
-                    { text: "CPU", icon: @image-url("main/cpu-64-bit.svg") }
+                    { text: "CPU", icon: @image-url("@root/assets/cpu-64-bit.svg") },
+                    { text: "IDPS", icon: @image-url("@root/assets/sony-playstation.svg") }
                 ];
             }
 
@@ -85,6 +87,8 @@ export component MainWindow inherits Window {
                     start-debug();
                 }
             }
+
+            if tab.current-page == 2: IdpsTab { }
         }
 
         // Profile + actions.
