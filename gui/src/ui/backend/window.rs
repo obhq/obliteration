@@ -318,6 +318,7 @@ impl WindowAdapter for SlintWindow {
             // Render initial frame on macOS. Without this the modal will show a blank window until
             // show animation is complete. On Wayland there are some problems when another window is
             // showing so we need to to disable it.
+            // On X11, this fixes the scaling.
             if !is_wayland || cfg!(target_os = "macos") {
                 let scale_factor = self.winit.scale_factor() as f32;
                 let size = self.winit.inner_size();
