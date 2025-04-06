@@ -3,8 +3,6 @@ pub use self::dialogs::*;
 use self::modal::Modal;
 use super::backend::ProtocolSpecific;
 use super::{DesktopExt, DesktopWindow, SlintBackend};
-use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use std::num::NonZero;
 use thiserror::Error;
 
 mod dialogs;
@@ -79,15 +77,6 @@ pub enum PlatformError {
     #[error("couldn't center window")]
     XcbCenterWindow(#[source] xcb::ProtocolError),
 
-    #[error("couldn't set window type: {0}")]
-    XlibSetWindowType(NonZero<i32>),
-
-    #[error("couldn't set window wm state: {0}")]
-    XlibSetWmState(NonZero<i32>),
-
-    #[error("couldn't get window attributes: {0}")]
-    XlibGetWindowAttributes(NonZero<i32>),
-
-    #[error("couldn't center window: {0}")]
-    XlibCenterWindow(NonZero<i32>),
+    #[error("couldn't get window attributes")]
+    XlibGetWindowAttributes,
 }

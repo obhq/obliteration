@@ -2,7 +2,7 @@ use i_slint_core::InternalToken;
 use i_slint_core::window::WindowAdapterInternal;
 use i_slint_renderer_skia::SkiaRenderer;
 use raw_window_handle::{
-    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, WindowHandle,
+    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, RawDisplayHandle, WindowHandle,
 };
 use slint::platform::{
     Key, PointerEventButton, Renderer, WindowAdapter, WindowEvent, WindowProperties,
@@ -310,11 +310,16 @@ impl WindowAdapter for SlintWindow {
 
             self.winit.set_visible(true);
 
+            let is_wayland = match self.winit.display_handle().unwrap().as_raw() {
+                RawDisplayHandle::Wayland(_) => true,
+                _ => false,
+            };
+
             // Render initial frame on macOS. Without this the modal will show a blank window until
             // show animation is complete. On Wayland there are some problems when another window is
             // showing so we need to to disable it.
-            #[cfg(target_os = "macos")]
-            {
+            // On X11, this fixes the scaling.
+            if !is_wayland || cfg!(target_os = "macos") {
                 let scale_factor = self.winit.scale_factor() as f32;
                 let size = self.winit.inner_size();
                 let size = PhysicalSize::new(size.width, size.height);

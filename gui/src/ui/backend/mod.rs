@@ -247,8 +247,8 @@ pub enum BackendError {
     DispatchWayland(#[source] wayland_client::DispatchError),
 
     #[cfg(target_os = "linux")]
-    #[error("couldn't intern X11 atoms: {0}")]
-    XlibInternAtomsFailed(NonZero<i32>),
+    #[error("couldn't intern X11 atoms")]
+    XlibInternAtomsFailed,
 
     #[cfg(target_os = "linux")]
     #[error("couldn't dispatch X11 request")]

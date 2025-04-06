@@ -1,6 +1,5 @@
 use super::BackendError;
 use raw_window_handle::{XcbDisplayHandle, XlibDisplayHandle};
-use std::num::NonZero;
 use std::ptr::NonNull;
 use xcb::x::InternAtom;
 
@@ -38,11 +37,10 @@ impl Xlib {
             )
         };
 
-        if let Some(err) = NonZero::new(ret) {
-            return Err(BackendError::XlibInternAtomsFailed(err));
+        match ret {
+            0 => Err(BackendError::XlibInternAtomsFailed),
+            _ => Ok(Self { display, atoms }),
         }
-
-        Ok(Self { display, atoms })
     }
 
     pub fn display(&self) -> NonNull<x11::xlib::Display> {
