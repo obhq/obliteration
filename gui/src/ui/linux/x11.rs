@@ -2,7 +2,6 @@ use super::PlatformError;
 use crate::ui::DesktopWindow;
 use crate::ui::backend::X11;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
-use std::num::NonZero;
 use xcb::XidNew;
 
 pub unsafe fn set_center(x11: &X11, target: &impl DesktopWindow) -> Result<(), PlatformError> {
@@ -19,8 +18,9 @@ pub unsafe fn set_center(x11: &X11, target: &impl DesktopWindow) -> Result<(), P
 
             let ret = unsafe { x11::xlib::XGetWindowAttributes(display, target.window, &mut attr) };
 
-            if let Some(err) = NonZero::new(ret) {
-                return Err(PlatformError::XlibGetWindowAttributes(err));
+            match ret {
+                0 => return Err(PlatformError::XlibGetWindowAttributes),
+                _ => {}
             }
 
             let screen_width = unsafe { x11::xlib::XDisplayWidth(display, screen) };
@@ -29,11 +29,7 @@ pub unsafe fn set_center(x11: &X11, target: &impl DesktopWindow) -> Result<(), P
             let x = (screen_width - attr.width) / 2;
             let y = (screen_height - attr.height) / 2;
 
-            let ret = unsafe { x11::xlib::XMoveWindow(display, target.window, x, y) };
-
-            if let Some(err) = NonZero::new(ret) {
-                return Err(PlatformError::XlibCenterWindow(err));
-            }
+            unsafe { x11::xlib::XMoveWindow(display, target.window, x, y) };
         }
         (X11::Xcb(xcb), RawWindowHandle::Xcb(target)) => {
             let connection = xcb.connection();
@@ -87,7 +83,7 @@ pub unsafe fn set_modal(
         (X11::Xlib(xlib), RawWindowHandle::Xlib(parent), RawWindowHandle::Xlib(target)) => {
             let display = xlib.display();
 
-            let ret = unsafe {
+            unsafe {
                 x11::xlib::XChangeProperty(
                     display.as_ptr(),
                     target.window,
@@ -100,11 +96,7 @@ pub unsafe fn set_modal(
                 )
             };
 
-            if let Some(err) = NonZero::new(ret) {
-                return Err(PlatformError::XlibSetWindowType(err));
-            }
-
-            let ret = unsafe {
+            unsafe {
                 x11::xlib::XChangeProperty(
                     display.as_ptr(),
                     target.window,
@@ -117,11 +109,7 @@ pub unsafe fn set_modal(
                 )
             };
 
-            if let Some(err) = NonZero::new(ret) {
-                return Err(PlatformError::XlibSetWmState(err));
-            }
-
-            let ret = unsafe {
+            unsafe {
                 x11::xlib::XChangeProperty(
                     display.as_ptr(),
                     target.window,
@@ -133,10 +121,6 @@ pub unsafe fn set_modal(
                     1,
                 )
             };
-
-            if let Some(err) = NonZero::new(ret) {
-                return Err(PlatformError::XlibSetWindowType(err));
-            }
         }
         (X11::Xcb(xcb), RawWindowHandle::Xcb(parent), RawWindowHandle::Xcb(target)) => {
             let connection = xcb.connection();

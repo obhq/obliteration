@@ -85,8 +85,8 @@ pub enum PlatformError {
     #[error("couldn't set window wm state: {0}")]
     XlibSetWmState(NonZero<i32>),
 
-    #[error("couldn't get window attributes: {0}")]
-    XlibGetWindowAttributes(NonZero<i32>),
+    #[error("couldn't get window attributes")]
+    XlibGetWindowAttributes,
 
     #[error("couldn't center window: {0}")]
     XlibCenterWindow(NonZero<i32>),
