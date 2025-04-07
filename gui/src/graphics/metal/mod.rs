@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::engine::Metal;
-use super::EngineBuilder;
+use super::GraphicsBuilder;
 use crate::profile::Profile;
 use crate::settings::Settings;
 use metal::Device;
@@ -13,18 +13,18 @@ use winit::window::WindowAttributes;
 mod engine;
 mod window;
 
-pub fn builder(settings: &Settings) -> Result<impl EngineBuilder, GraphicsError> {
+pub fn builder(settings: &Settings) -> Result<impl GraphicsBuilder, GraphicsError> {
     Ok(MetalBuilder {
         devices: Device::all(),
     })
 }
 
-/// Implementation of [`EngineBuilder`] for Metal.
+/// Implementation of [`GraphicsBuilder`] for Metal.
 struct MetalBuilder {
     devices: Vec<metal::Device>,
 }
 
-impl EngineBuilder for MetalBuilder {
+impl GraphicsBuilder for MetalBuilder {
     type PhysicalDevice = metal::Device;
     type Engine = Metal;
 

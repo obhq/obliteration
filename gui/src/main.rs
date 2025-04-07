@@ -2,14 +2,14 @@
 
 use self::data::{DataError, DataMgr};
 use self::gdb::{GdbDispatcher, GdbError, GdbSession};
-use self::graphics::{EngineBuilder, GraphicsError};
+use self::graphics::{GraphicsBuilder, GraphicsError};
 use self::log::LogWriter;
 use self::profile::{DisplayResolution, Profile};
 use self::settings::{Settings, SettingsError};
 use self::setup::{SetupError, run_setup};
 use self::ui::{
-    AboutWindow, App, DesktopExt, DeviceModel, MainWindow, ProfileModel, ResolutionModel,
-    RuntimeExt, SettingsWindow, WaitForDebugger, error, spawn_handler,
+    AboutWindow, App, DesktopExt, DeviceModel, MainWindow, NewProfile, ProfileModel,
+    ResolutionModel, RuntimeExt, SettingsWindow, WaitForDebugger, error, spawn_handler,
 };
 use self::vmm::{CpuError, Vmm, VmmError, VmmEvent};
 use async_net::{TcpListener, TcpStream};
@@ -19,7 +19,7 @@ use futures::{
     AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, FutureExt, TryStreamExt, select_biased,
 };
 use hv::Hypervisor;
-use slint::{ComponentHandle, ToSharedString};
+use slint::{ComponentHandle, SharedString, ToSharedString};
 use std::cell::{Cell, RefMut};
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -62,7 +62,7 @@ struct MainProgram {
 }
 
 impl MainProgram {
-    async fn run_launcher<G: EngineBuilder>(
+    async fn run_launcher<G: GraphicsBuilder>(
         data: &Arc<DataMgr>,
         settings: &Rc<Settings>,
         graphics: G,
@@ -88,10 +88,16 @@ impl MainProgram {
             move || spawn_handler(&win, |w| Self::settings(w, data.clone(), settings.clone()))
         });
 
+        win.on_new_profile({
+            let win = win.as_weak();
+
+            move || spawn_handler(&win, |w| Self::new_profile(w))
+        });
+
         win.on_report_issue({
             let win = win.as_weak();
 
-            move || spawn_handler(&win, |w| Self::report_issue(w))
+            move || spawn_handler(&win, |_| Self::report_issue())
         });
 
         win.on_about({
@@ -176,16 +182,14 @@ impl MainProgram {
         }))
     }
 
-    async fn settings(main: MainWindow, data: Arc<DataMgr>, settings: Rc<Settings>) {
+    async fn settings(
+        main: MainWindow,
+        data: Arc<DataMgr>,
+        settings: Rc<Settings>,
+    ) -> Result<(), SharedString> {
         // Setup window.
-        let win = match SettingsWindow::new() {
-            Ok(v) => v,
-            Err(e) => {
-                let m = slint::format!("Failed to create settings window: {}.", e.display());
-                error(Some(&main), m).await;
-                return;
-            }
-        };
+        let win = SettingsWindow::new()
+            .map_err(|e| slint::format!("Failed to create settings window: {}.", e.display()))?;
 
         win.on_cancel_clicked({
             let win = win.as_weak();
@@ -214,81 +218,90 @@ impl MainProgram {
         win.set_graphics_debug_layer_checked(settings.graphics_debug_layer());
 
         // Run the window.
-        if let Err(e) = win.show() {
-            let m = slint::format!("Failed to show settings window: {}.", e.display());
-            error(Some(&main), m).await;
-            return;
-        }
-
-        match win.set_modal(&main) {
-            Ok(w) => w.wait().await,
-            Err(e) => {
-                let m = slint::format!(
+        win.show()
+            .map_err(|e| slint::format!("Failed to show settings window: {}.", e.display()))?;
+        win.set_modal(&main)
+            .map_err(|e| {
+                slint::format!(
                     "Failed to enable modal on settings window: {}.",
                     e.display()
-                );
+                )
+            })?
+            .wait()
+            .await;
 
-                error(Some(&main), m).await;
-            }
-        }
+        Ok(())
     }
 
-    async fn save_settings(win: SettingsWindow, data: Arc<DataMgr>, settings: Rc<Settings>) {
+    async fn save_settings(
+        win: SettingsWindow,
+        data: Arc<DataMgr>,
+        settings: Rc<Settings>,
+    ) -> Result<(), SharedString> {
         // Load values from window.
         settings.set_graphics_debug_layer(win.get_graphics_debug_layer_checked());
 
         // Save.
         let path = data.settings();
 
-        if let Err(e) = settings.save(path) {
-            let m = slint::format!(
+        settings.save(path).map_err(|e| {
+            slint::format!(
                 "Failed to save settings to {}: {}.",
                 path.display(),
                 e.display()
-            );
-
-            error(Some(&win), m).await;
-            return;
-        }
+            )
+        })?;
 
         // Close the window.
-        win.hide().unwrap();
+        win.hide()
+            .map_err(|e| slint::format!("Failed to hide settings window: {}.", e.display()))?;
+
+        Ok(())
     }
 
-    async fn report_issue(win: MainWindow) {
-        let url = "https://github.com/obhq/obliteration/issues/new";
-
-        if let Err(e) = open::that_detached(url) {
-            let m = slint::format!("Failed to open {}: {}.", url, e.display());
-            error(Some(&win), m).await;
-        }
-    }
-
-    async fn about(main: MainWindow) {
+    async fn new_profile(main: MainWindow) -> Result<(), SharedString> {
         // Setup window.
-        let win = match AboutWindow::new() {
-            Ok(v) => v,
-            Err(e) => {
-                let m = slint::format!("Failed to create about window: {}.", e.display());
-                error(Some(&main), m).await;
-                return;
-            }
-        };
+        let win = NewProfile::new()
+            .map_err(|e| slint::format!("Failed to create window: {}.", e.display()))?;
+
+        win.on_cancel_clicked({
+            let win = win.as_weak();
+
+            move || win.unwrap().hide().unwrap()
+        });
 
         // Run the window.
-        if let Err(e) = win.show() {
-            let m = slint::format!("Failed to show about window: {}.", e.display());
-            error(Some(&main), m).await;
-            return;
-        }
+        win.show()
+            .map_err(|e| slint::format!("Failed to show window: {}.", e.display()))?;
+        win.set_modal(&main)
+            .map_err(|e| slint::format!("Failed to enable modal on window: {}.", e.display()))?
+            .wait()
+            .await;
 
-        match win.set_modal(&main) {
-            Ok(w) => w.wait().await,
-            Err(e) => {
-                let m = slint::format!("Failed to enable modal on about window: {}.", e.display());
-                error(Some(&main), m).await;
-            }
-        }
+        Ok(())
+    }
+
+    async fn report_issue() -> Result<(), SharedString> {
+        let url = "https://github.com/obhq/obliteration/issues/new";
+
+        open::that_detached(url)
+            .map_err(|e| slint::format!("Failed to open {}: {}.", url, e.display()))
+    }
+
+    async fn about(main: MainWindow) -> Result<(), SharedString> {
+        // Setup window.
+        let win = AboutWindow::new()
+            .map_err(|e| slint::format!("Failed to create window: {}.", e.display()))?;
+
+        // Run the window.
+        win.show()
+            .map_err(|e| slint::format!("Failed to show window: {}.", e.display()))?;
+        win.set_modal(&main)
+            .map_err(|e| slint::format!("Failed to enable modal on window: {}.", e.display()))?
+            .wait()
+            .await;
+
+        Ok(())
     }
 }
 
@@ -565,55 +578,43 @@ async fn dispatch_vmm(ev: VmmEvent, logs: &mut LogWriter) -> Result<bool, Progra
     Ok(true)
 }
 
-async fn save_profile<G: EngineBuilder>(
+async fn save_profile<G: GraphicsBuilder>(
     win: MainWindow,
     data: Arc<DataMgr>,
     profiles: Rc<ProfileModel<G>>,
-) {
-    // Update profile.
-    let pf = match update_profile(&win, &profiles).await {
-        Some(v) => v,
-        None => return,
-    };
-
-    // Save.
+) -> Result<(), SharedString> {
+    let pf = update_profile(&win, &profiles)?;
     let loc = data.profiles().data(pf.id());
 
-    if let Err(e) = pf.save(loc) {
-        let m = slint::format!("Failed to save profile: {}.", e.display());
-        error(Some(&win), m).await;
-    }
+    pf.save(loc)
+        .map_err(|e| slint::format!("Failed to save profile: {}.", e.display()))
 }
 
-async fn start_vmm<G: EngineBuilder>(
+async fn start_vmm<G: GraphicsBuilder>(
     win: MainWindow,
     profiles: Rc<ProfileModel<G>>,
     exit: Rc<Cell<Option<ExitAction>>>,
     ty: ExitAction,
-) {
-    if update_profile(&win, &profiles).await.is_none() {
-        return;
-    }
+) -> Result<(), SharedString> {
+    update_profile(&win, &profiles)?;
 
-    win.hide().unwrap();
+    win.hide()
+        .map_err(|e| slint::format!("Failed to hide window: {}.", e.display()))?;
     exit.set(Some(ty));
+
+    Ok(())
 }
 
-async fn update_profile<'a, G: EngineBuilder>(
+fn update_profile<'a, G: GraphicsBuilder>(
     win: &MainWindow,
     profiles: &'a ProfileModel<G>,
-) -> Option<RefMut<'a, Profile>> {
+) -> Result<RefMut<'a, Profile>, SharedString> {
     let row = win.get_selected_profile();
-    let pro = match profiles.update(row, win) {
-        Ok(v) => v,
-        Err(e) => {
-            let m = slint::format!("Failed to update profile: {}.", e.display());
-            error(Some(win), m).await;
-            return None;
-        }
-    };
+    let pro = profiles
+        .update(row, win)
+        .map_err(|e| slint::format!("Failed to update profile: {}.", e.display()))?;
 
-    Some(pro)
+    Ok(pro)
 }
 
 /// Program arguments parsed from command line.

@@ -1,5 +1,5 @@
 use super::MainWindow;
-use crate::graphics::{EngineBuilder, PhysicalDevice};
+use crate::graphics::{GraphicsBuilder, PhysicalDevice};
 use crate::profile::{DisplayResolution, Profile};
 use slint::{Model, ModelNotify, ModelTracker, SharedString, ToSharedString};
 use std::any::Any;
@@ -10,7 +10,7 @@ use thiserror::Error;
 /// Implementation of [`Model`] for [`PhysicalDevice`].
 pub struct DeviceModel<G>(Rc<G>);
 
-impl<G: EngineBuilder> DeviceModel<G> {
+impl<G: GraphicsBuilder> DeviceModel<G> {
     pub fn new(g: Rc<G>) -> Self {
         Self(g)
     }
@@ -30,7 +30,7 @@ impl<G: EngineBuilder> DeviceModel<G> {
     }
 }
 
-impl<G: EngineBuilder> Model for DeviceModel<G> {
+impl<G: GraphicsBuilder> Model for DeviceModel<G> {
     type Data = SharedString;
 
     fn row_count(&self) -> usize {
@@ -107,7 +107,7 @@ pub struct ProfileModel<G> {
     noti: ModelNotify,
 }
 
-impl<G: EngineBuilder> ProfileModel<G> {
+impl<G: GraphicsBuilder> ProfileModel<G> {
     pub fn new(
         profiles: Vec<Profile>,
         devices: Rc<DeviceModel<G>>,

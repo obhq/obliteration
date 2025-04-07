@@ -96,12 +96,16 @@ pub fn run<A: App>(args: A::Args) -> ExitCode {
 pub fn spawn_handler<W, F>(w: &Weak<W>, f: impl FnOnce(W) -> F)
 where
     W: ComponentHandle + WinitWindow + 'static,
-    F: Future<Output = ()> + 'static,
+    F: Future<Output = Result<(), SharedString>> + 'static,
 {
     let w = w.unwrap();
     let f = f(w.clone_strong());
 
-    wae::spawn_blocker(w, f);
+    wae::spawn_blocker(w.clone_strong(), async move {
+        if let Err(e) = f.await {
+            error(Some(&w), e).await;
+        }
+    });
 }
 
 pub async fn error<P: DesktopWindow>(parent: Option<&P>, msg: impl Into<SharedString>) {
@@ -210,5 +214,6 @@ impl_wae!(AboutWindow);
 impl_wae!(ErrorWindow);
 impl_wae!(InstallFirmware);
 impl_wae!(MainWindow);
+impl_wae!(NewProfile);
 impl_wae!(SettingsWindow);
 impl_wae!(SetupWizard);

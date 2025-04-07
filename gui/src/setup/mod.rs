@@ -52,7 +52,7 @@ pub async fn run_setup() -> Result<Option<DataMgr>, SetupError> {
     win.on_get_dumper({
         let win = win.as_weak();
 
-        move || spawn_handler(&win, |w| get_dumper(w))
+        move || spawn_handler(&win, |_| get_dumper())
     });
 
     win.on_browse_data_root({
@@ -117,187 +117,128 @@ pub async fn run_setup() -> Result<Option<DataMgr>, SetupError> {
     Ok(Some(mgr))
 }
 
-async fn get_dumper(win: SetupWizard) {
-    // Open web browser.
+async fn get_dumper() -> Result<(), SharedString> {
     let url = "https://github.com/obhq/firmware-dumper";
-    let e = match open::that_detached(url) {
-        Ok(_) => return,
-        Err(e) => e,
-    };
 
-    // Show error.
-    let m = slint::format!("Failed to open {}: {}.", url, e.display());
-
-    error(Some(&win), m).await;
+    open::that_detached(url).map_err(|e| slint::format!("Failed to open {}: {}.", url, e.display()))
 }
 
-async fn browse_data_root(win: SetupWizard) {
+async fn browse_data_root(win: SetupWizard) -> Result<(), SharedString> {
     // Ask the user to browse for a directory.
-    let path = match open_dir(&win, "Data location").await {
-        Ok(Some(v)) => v,
-        Ok(None) => return,
-        Err(e) => {
-            let m = slint::format!("Failed to browse for data location: {}.", e.display());
-            error(Some(&win), m).await;
-            return;
-        }
+    let path = match open_dir(&win, "Data location")
+        .await
+        .map_err(|e| slint::format!("Failed to browse for data location: {}.", e.display()))?
+    {
+        Some(v) => v,
+        None => return Ok(()),
     };
 
     // Allow only valid unicode path.
-    let path = match path.into_os_string().into_string() {
-        Ok(v) => v,
-        Err(_) => {
-            error(Some(&win), "Path to selected directory must be unicode.").await;
-            return;
-        }
-    };
+    let path = path
+        .into_os_string()
+        .into_string()
+        .map_err(|_| "Path to selected directory must be unicode.")?;
 
-    // Set path.
     win.set_data_root(path.into());
+
+    Ok(())
 }
 
-async fn set_data_root(win: SetupWizard) {
+async fn set_data_root(win: SetupWizard) -> Result<(), SharedString> {
     // Get user input.
     let input = win.get_data_root();
 
     if input.is_empty() {
-        let msg = SharedString::from("You need to choose where to store data before proceed.");
-        error(Some(&win), msg).await;
-        return;
+        return Err("You need to choose where to store data before proceed.".into());
     }
 
     // Check if absolute path.
     let path = Path::new(input.as_str());
 
     if !path.is_absolute() {
-        error(Some(&win), "Path must be absolute.").await;
-        return;
+        return Err("Path must be absolute.".into());
     } else if !path.is_dir() {
-        error(Some(&win), "Path must be a directory.").await;
-        return;
+        return Err("Path must be a directory.".into());
     }
 
     // Create data manager to see if path is writable.
-    let mgr = match DataMgr::new(path) {
-        Ok(v) => v,
-        Err(e) => {
-            let m = slint::format!("Failed to create data manager: {}.", e.display());
-            error(Some(&win), m).await;
-            return;
-        }
-    };
+    let mgr = DataMgr::new(path)
+        .map_err(|e| slint::format!("Failed to create data manager: {}.", e.display()))?;
 
-    // Save.
-    if let Err(e) = write_data_root(input) {
-        let m = slint::format!("Failed to save data location: {}.", e.display());
-        error(Some(&win), m).await;
-        return;
-    }
+    write_data_root(input)
+        .map_err(|e| slint::format!("Failed to save data location: {}.", e.display()))?;
 
     win.invoke_set_data_root_ok(mgr.partitions().meta("md0").is_file());
+
+    Ok(())
 }
 
-async fn browse_firmware(win: SetupWizard) {
+async fn browse_firmware(win: SetupWizard) -> Result<(), SharedString> {
     // Ask the user to browse for a file.
-    let path = match open_file(&win, "Select a firmware dump", "Firmware Dump", "obf").await {
-        Ok(Some(v)) => v,
-        Ok(None) => return,
-        Err(e) => {
-            let m = slint::format!("Failed to browse for a firmware dump: {}.", e.display());
-            error(Some(&win), m).await;
-            return;
-        }
+    let path = match open_file(&win, "Select a firmware dump", "Firmware Dump", "obf")
+        .await
+        .map_err(|e| slint::format!("Failed to browse for a firmware dump: {}.", e.display()))?
+    {
+        Some(v) => v,
+        None => return Ok(()),
     };
 
     // Allow only valid unicode path.
-    let path = match path.into_os_string().into_string() {
-        Ok(v) => v,
-        Err(_) => {
-            error(Some(&win), "Path to a firmware dump must be unicode.").await;
-            return;
-        }
-    };
+    let path = path
+        .into_os_string()
+        .into_string()
+        .map_err(|_| "Path to a firmware dump must be unicode.")?;
 
-    // Set path.
     win.set_firmware_dump(path.into());
+
+    Ok(())
 }
 
-async fn install_firmware(win: SetupWizard) {
+async fn install_firmware(win: SetupWizard) -> Result<(), SharedString> {
     // Get dump path.
     let path = win.get_firmware_dump();
 
     if path.is_empty() {
-        let m = "You need to select a firmware dump before proceed.";
-        error(Some(&win), m).await;
-        return;
+        return Err("You need to select a firmware dump before proceed.".into());
     }
 
     // Open firmware dump.
-    let mut dump = match File::open(path.as_str())
+    let mut dump = File::open(path.as_str())
         .map_err::<Box<dyn Error>, _>(|e| e.into())
         .and_then(|f| DumpReader::new(f).map_err(|e| e.into()))
-    {
-        Ok(v) => v,
-        Err(e) => {
-            let m = slint::format!("Failed to open {}: {}.", path, e.display());
-            error(Some(&win), m).await;
-            return;
-        }
-    };
+        .map_err(|e| slint::format!("Failed to open {}: {}.", path, e.display()))?;
 
     // Create data manager to see if path is writable.
     let root = win.get_data_root();
-    let dmgr = match DataMgr::new(root.as_str()) {
-        Ok(v) => v,
-        Err(e) => {
-            let m = slint::format!(
-                "Failed to create data manager on {}: {}.",
-                root,
-                e.display()
-            );
-
-            error(Some(&win), m).await;
-            return;
-        }
-    };
+    let dmgr = DataMgr::new(root.as_str()).map_err(|e| {
+        slint::format!(
+            "Failed to create data manager on {}: {}.",
+            root,
+            e.display()
+        )
+    })?;
 
     // Setup progress window.
-    let pw = match InstallFirmware::new() {
-        Ok(v) => v,
-        Err(e) => {
-            let m = slint::format!(
-                "Failed to create firmware progress window: {}.",
-                e.display()
-            );
-
-            error(Some(&win), m).await;
-            return;
-        }
-    };
+    let pw = InstallFirmware::new().map_err(|e| {
+        slint::format!(
+            "Failed to create firmware progress window: {}.",
+            e.display()
+        )
+    })?;
 
     pw.set_status("Initializing...".into());
     pw.window()
         .on_close_requested(|| CloseRequestResponse::KeepWindowShown);
-
-    if let Err(e) = pw.show() {
-        let m = slint::format!("Failed to show firmware progress window: {}.", e.display());
-        error(Some(&win), m).await;
-        return;
-    }
+    pw.show()
+        .map_err(|e| slint::format!("Failed to show firmware progress window: {}.", e.display()))?;
 
     // Make progress window modal.
-    let pw = match pw.set_modal(&win) {
-        Ok(v) => v,
-        Err(e) => {
-            let m = slint::format!(
-                "Failed to make firmware progress window modal: {}.",
-                e.display()
-            );
-
-            error(Some(&win), m).await;
-            return;
-        }
-    };
+    let pw = pw.set_modal(&win).map_err(|e| {
+        slint::format!(
+            "Failed to make firmware progress window modal: {}.",
+            e.display()
+        )
+    })?;
 
     // Setup progress updater.
     let n = dump.items();
@@ -349,13 +290,17 @@ async fn install_firmware(win: SetupWizard) {
     drop(pw);
     wae::yield_now().await;
 
-    match e {
-        Some(e) => {
-            let m = slint::format!("Failed to install {}: {}.", path, e.display());
-            error(Some(&win), m).await;
-        }
-        None => win.invoke_set_firmware_finished(),
+    if let Some(e) = e {
+        return Err(slint::format!(
+            "Failed to install {}: {}.",
+            path,
+            e.display()
+        ));
     }
+
+    win.invoke_set_firmware_finished();
+
+    Ok(())
 }
 
 async fn extract_partition<F: Future<Output = ()>>(
