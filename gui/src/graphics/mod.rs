@@ -11,7 +11,7 @@ use winit::window::WindowAttributes;
 mod engine;
 
 /// Provides method to build [`Graphics`].
-pub trait EngineBuilder: 'static {
+pub trait GraphicsBuilder: 'static {
     type PhysicalDevice: PhysicalDevice;
     type Engine: Graphics;
 

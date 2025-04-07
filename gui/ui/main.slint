@@ -14,6 +14,7 @@ export component MainWindow inherits Window {
     in-out property <int> selected-profile;
 
     callback settings();
+    callback new-profile();
     callback report-issue();
     pure callback about();
     callback profile-selected();
@@ -36,6 +37,18 @@ export component MainWindow inherits Window {
                 title: "Settings";
                 activated => {
                     settings();
+                }
+            }
+        }
+
+        // Profile
+        Menu {
+            title: "Profile";
+
+            MenuItem {
+                title: "New Profile...";
+                activated => {
+                    new-profile();
                 }
             }
         }

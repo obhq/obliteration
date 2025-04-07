@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::engine::Vulkan;
 use self::window::VulkanWindow;
-use super::EngineBuilder;
+use super::GraphicsBuilder;
 use crate::profile::Profile;
 use crate::settings::Settings;
 use ash::extensions::khr::Surface;
@@ -22,7 +22,7 @@ use winit::window::WindowAttributes;
 mod engine;
 mod window;
 
-pub fn builder(settings: &Settings) -> Result<impl EngineBuilder, GraphicsError> {
+pub fn builder(settings: &Settings) -> Result<impl GraphicsBuilder, GraphicsError> {
     // Get required extensions for window.
     let mut exts = vec![c"VK_KHR_surface".as_ptr()];
 
@@ -117,7 +117,7 @@ pub fn builder(settings: &Settings) -> Result<impl EngineBuilder, GraphicsError>
     Ok(b)
 }
 
-/// Implementation of [`EngineBuilder`] for Vulkan.
+/// Implementation of [`GraphicsBuilder`] for Vulkan.
 ///
 /// Fields in this struct need to drop in a correct order.
 struct VulkanBuilder {
@@ -127,7 +127,7 @@ struct VulkanBuilder {
     entry: Entry,
 }
 
-impl EngineBuilder for VulkanBuilder {
+impl GraphicsBuilder for VulkanBuilder {
     type PhysicalDevice = PhysicalDevice;
     type Engine = Vulkan;
 
