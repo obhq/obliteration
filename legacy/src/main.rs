@@ -78,23 +78,6 @@ mod umtx;
 mod vm;
 
 fn run(args: Args) -> Result<(), KernelError> {
-    // Initialize debug dump.
-    if let Some(path) = &args.debug_dump {
-        // Remove previous dump.
-        if args.clear_debug_dump {
-            if let Err(e) = remove_dir_all(path) {
-                if e.kind() != std::io::ErrorKind::NotFound {
-                    warn!(e, "Failed to remove {}", path.display());
-                }
-            }
-        }
-
-        // Create a directory.
-        if let Err(e) = create_dir_all(path) {
-            warn!(e, "Failed to create {}", path.display());
-        }
-    }
-
     // Show basic information.
     let mut hwinfo = System::new_with_specifics(
         sysinfo::RefreshKind::new()

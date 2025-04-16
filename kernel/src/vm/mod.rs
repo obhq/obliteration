@@ -1,7 +1,7 @@
 pub use self::object::*;
 
 use self::stats::VmStats;
-use crate::config::{PAGE_MASK, PAGE_SHIFT, PAGE_SIZE};
+use crate::config::{Dipsw, PAGE_MASK, PAGE_SHIFT, PAGE_SIZE};
 use crate::context::{current_arch, current_config, current_thread};
 use crate::lock::GutexGroup;
 use crate::proc::Proc;
@@ -237,6 +237,8 @@ impl Vm {
         }
 
         // TODO: There is some unknown calls here.
+        self.load_pmap();
+
         Ok(())
     }
 
@@ -272,6 +274,22 @@ impl Vm {
 
         self.boot_tables = self.boot_addr - (page_size * 3);
         self.boot_tables
+    }
+
+    /// See `pmap_bootstrap` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x1127C0|
+    fn load_pmap(&mut self) {
+        let config = current_config();
+
+        if config.is_allow_disabling_aslr() && config.dipsw(Dipsw::DisabledKaslr) {
+            todo!()
+        } else {
+            todo!()
+        }
     }
 }
 
