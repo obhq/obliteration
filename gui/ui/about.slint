@@ -1,4 +1,5 @@
-import { AboutSlint, VerticalBox, TabWidget } from "std-widgets.slint";
+import { AboutSlint, VerticalBox, StandardButton } from "std-widgets.slint";
+import { TabBar, TabContainer } from "@root/widgets/tab.slint";
 
 component Obliteration {
     VerticalBox {
@@ -17,28 +18,25 @@ component Slint {
     AboutSlint { }
 }
 
-export component AboutWindow inherits Window {
+export component AboutWindow inherits Dialog {
     title: "About";
     width: 500px;
-    height: 200px;
+    height: 245px;
 
-    TabWidget {
-        Tab {
-            title: "Obliteration";
-
-            Obliteration {
-                width: 100%;
-                height: 100%;
-            }
+    TabContainer {
+        tab := TabBar {
+            tabs: [
+                { text: "Obliteration", icon: @image-url("@root/assets/icon.png") },
+                { text: "Slint", icon: @image-url("@root/assets/slint-logo-small-dark.svg") }
+            ];
         }
 
-        Tab {
-            title: "Slint";
+        if tab.current-page == 0: Obliteration { }
 
-            Slint {
-                width: 100%;
-                height: 100%;
-            }
-        }
+        if tab.current-page == 1: Slint { }
+    }
+
+    StandardButton {
+        kind: close;
     }
 }

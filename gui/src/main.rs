@@ -293,6 +293,12 @@ impl MainProgram {
         let win = AboutWindow::new()
             .map_err(|e| slint::format!("Failed to create window: {}.", e.display()))?;
 
+        win.on_close_clicked({
+            let win = win.as_weak();
+
+            move || win.unwrap().hide().unwrap()
+        });
+
         // Run the window.
         win.show()
             .map_err(|e| slint::format!("Failed to show window: {}.", e.display()))?;
