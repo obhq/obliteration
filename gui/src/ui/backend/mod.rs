@@ -4,7 +4,7 @@ pub(super) use self::window::*;
 #[cfg(target_os = "linux")]
 pub(super) use self::x11::*;
 
-use i_slint_core::graphics::RequestedGraphicsAPI;
+use i_slint_core::graphics::{RequestedGraphicsAPI, RequestedOpenGLVersion};
 use i_slint_renderer_skia::SkiaRenderer;
 #[cfg(target_os = "linux")]
 use raw_window_handle::RawDisplayHandle;
@@ -15,7 +15,6 @@ use slint::platform::{
 use slint::{PhysicalSize, PlatformError};
 use std::cell::RefCell;
 use std::error::Error;
-use std::num::NonZero;
 use std::rc::{Rc, Weak};
 use std::time::Instant;
 use thiserror::Error;
@@ -196,7 +195,7 @@ impl slint::platform::Platform for Platform {
         } else if cfg!(target_os = "windows") {
             RequestedGraphicsAPI::Direct3D
         } else {
-            RequestedGraphicsAPI::Vulkan
+            RequestedGraphicsAPI::OpenGL(RequestedOpenGLVersion::OpenGL(None))
         };
 
         renderer.set_window_handle(win.clone(), win.clone(), size, Some(api))?;
