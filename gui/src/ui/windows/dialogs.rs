@@ -58,7 +58,7 @@ pub async fn open_file<T: DesktopWindow>(
         browser.SetTitle(PCWSTR(title.as_ptr())).unwrap();
 
         // Show FileOpenDialog.
-        let item = match browser.Show(HWND(parent.get() as _)) {
+        let item = match browser.Show(Some(HWND(parent.get() as _))) {
             Ok(_) => browser.GetResult().unwrap(),
             Err(_) => return Ok(None),
         };

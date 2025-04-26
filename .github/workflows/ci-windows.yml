@@ -6,11 +6,11 @@ jobs:
     name: Windows
     runs-on: windows-2022
     steps:
-    - name: Checkout repository
+    - name: Check out repository
       uses: actions/checkout@v4
     - name: Generate cache keys
       run: |
-        echo "target=${{ runner.os }}-target" >> $env:GITHUB_OUTPUT
+        echo "target=${{ runner.os }}-target-${{ hashFiles('Cargo.lock') }}" >> $env:GITHUB_OUTPUT
         echo "vulkan=${{ runner.os }}-vulkan-1.3.290.0" >> $env:GITHUB_OUTPUT
       id: cache-keys
     - name: Restore Vulkan SDK
