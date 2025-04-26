@@ -6,15 +6,11 @@ jobs:
     name: Mac M1
     runs-on: macos-14
     steps:
-    - name: Checkout repository
+    - name: Check out repository
       uses: actions/checkout@v4
-    - name: Use Python 3.12 # https://github.com/slint-ui/slint/issues/6615
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.12'
     - name: Generate cache keys
       run: |
-        echo "target=${{ runner.os }}-${{ runner.arch }}-target" >> $GITHUB_OUTPUT
+        echo "target=${{ runner.os }}-${{ runner.arch }}-target-${{ hashFiles('Cargo.lock') }}" >> $GITHUB_OUTPUT
       id: cache-keys
     - name: Restore target directory
       uses: actions/cache/restore@v4
