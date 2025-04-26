@@ -60,4 +60,5 @@ impl ProductId {
     pub const DEVKIT: Self = Self(0x8101);
     pub const TESTKIT: Self = Self(0x8201);
     pub const USA: Self = Self(0x8401);
+    pub const SOUTH_ASIA: Self = Self(0x8A01);
 }
