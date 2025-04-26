@@ -4,6 +4,7 @@ pub use self::dipsw::*;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use config::QaFlags;
 use core::num::NonZero;
 use krt::warn;
 use macros::elf_note;
@@ -19,6 +20,8 @@ pub const PAGE_MASK: NonZero<usize> = NonZero::new(PAGE_SIZE.get() - 1).unwrap()
 /// Runtime configurations for the kernel populated from [`config::Config`].
 pub struct Config {
     max_cpu: NonZero<usize>,
+    qa: bool,
+    qa_flags: &'static QaFlags,
     env_vars: Box<[&'static str]>, // kenvp
 }
 
@@ -28,6 +31,8 @@ impl Config {
 
         Arc::new(Self {
             max_cpu: src.max_cpu,
+            qa: src.qa,
+            qa_flags: &src.qa_flags,
             env_vars,
         })
     }
@@ -68,7 +73,7 @@ impl Config {
     /// |---------|--------|
     /// |PS4 11.00|0x3CA8F0|
     pub fn is_allow_disabling_aslr(&self) -> bool {
-        todo!()
+        self.qa && self.qa_flags.internal_dev()
     }
 
     /// See `sceKernelCheckDipsw` on the Orbis for a reference.
