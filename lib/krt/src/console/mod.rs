@@ -102,16 +102,19 @@ impl<M: Display> Display for Log<'_, M> {
 struct MsgWriter<'a, 'b>(&'a mut Formatter<'b>);
 
 impl Write for MsgWriter<'_, '_> {
-    fn write_str(&mut self, mut s: &str) -> core::fmt::Result {
-        while let Some(i) = s.bytes().position(|b| b == b'\n') {
-            let (l, r) = s.split_at(i + 1);
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        let mut iter = s.lines();
 
-            self.0.write_str(l)?;
-            self.0.write_str("     ")?;
-
-            s = r;
+        match iter.next() {
+            Some(l) => self.0.write_str(l)?,
+            None => return Ok(()),
         }
 
-        self.0.write_str(s)
+        for l in iter {
+            self.0.write_str("\n     ")?;
+            self.0.write_str(l)?;
+        }
+
+        Ok(())
     }
 }
