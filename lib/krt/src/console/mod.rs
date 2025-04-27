@@ -101,7 +101,7 @@ impl<M: Display> Display for Log<'_, M> {
 /// Struct to indent multi-line message.
 struct MsgWriter<'a, 'b>(&'a mut Formatter<'b>);
 
-impl<'a, 'b> Write for MsgWriter<'a, 'b> {
+impl Write for MsgWriter<'_, '_> {
     fn write_str(&mut self, mut s: &str) -> core::fmt::Result {
         while let Some(i) = s.bytes().position(|b| b == b'\n') {
             let (l, r) = s.split_at(i + 1);
