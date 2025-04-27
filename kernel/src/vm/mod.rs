@@ -249,7 +249,8 @@ impl Vm {
     /// |---------|--------|
     /// |PS4 11.00|0x3E0E40|
     fn spawn_pagers(&mut self) {
-        todo!()
+        // TODO: This requires v_page_count that populated by vm_page_startup. In order to populate
+        // this we need phys_avail that populated by getmemsize.
     }
 
     /// See `mp_bootaddress` on the Orbis for a reference.
@@ -288,7 +289,8 @@ impl Vm {
         if config.is_allow_disabling_aslr() && config.dipsw(Dipsw::DisabledKaslr) {
             todo!()
         } else {
-            todo!()
+            // TODO: There are a lot of unknown variables here so we skip implementing this until we
+            // run into the code that using them.
         }
     }
 }

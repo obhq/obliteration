@@ -11,6 +11,7 @@ use self::uma::Uma;
 use self::vm::Vm;
 use alloc::sync::Arc;
 use core::mem::zeroed;
+use humansize::{DECIMAL, SizeFormatter};
 use krt::info;
 
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
@@ -91,8 +92,15 @@ fn init_vm() -> Arc<Uma> {
     // Initialize VM.
     let vm = Vm::new().unwrap();
 
-    info!("Initial memory size: {}", vm.initial_memory_size());
-    info!("Boot area          : {:#x}", vm.boot_area());
+    info!(
+        concat!(
+            "Initial memory size: {} ({})\n",
+            "Boot area          : {:#x}"
+        ),
+        vm.initial_memory_size(),
+        SizeFormatter::new(vm.initial_memory_size(), DECIMAL),
+        vm.boot_area()
+    );
 
     // Initialize UMA.
     Uma::new(vm)
