@@ -1,7 +1,7 @@
 use crate::config::boot_env;
 use anstyle::{AnsiColor, Color, Effects, Style};
 use config::{BootEnv, ConsoleType};
-use core::fmt::{Display, Formatter};
+use core::fmt::{Display, Formatter, Write};
 
 mod vm;
 
@@ -86,9 +86,32 @@ impl<M: Display> Display for Log<'_, M> {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         let info = Style::new().effects(Effects::DIMMED);
 
-        writeln!(f, "{}[{}]:{0:#} {}", self.style, self.cat, self.msg)?;
+        // Write message.
+        write!(f, "{}[{}]:{0:#} ", self.style, self.cat)?;
+        write!(MsgWriter(f), "{}", self.msg)?;
+        writeln!(f)?;
+
+        // Write location.
         write!(f, "     {}{}:{}{0:#}", info, self.file, self.line)?;
 
         Ok(())
+    }
+}
+
+/// Struct to indent multi-line message.
+struct MsgWriter<'a, 'b>(&'a mut Formatter<'b>);
+
+impl<'a, 'b> Write for MsgWriter<'a, 'b> {
+    fn write_str(&mut self, mut s: &str) -> core::fmt::Result {
+        while let Some(i) = s.bytes().position(|b| b == b'\n') {
+            let (l, r) = s.split_at(i + 1);
+
+            self.0.write_str(l)?;
+            self.0.write_str("     ")?;
+
+            s = r;
+        }
+
+        self.0.write_str(s)
     }
 }
