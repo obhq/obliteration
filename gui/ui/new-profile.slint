@@ -1,9 +1,22 @@
-import { StandardButton, VerticalBox } from "std-widgets.slint";
+import { StandardButton, GroupBox, LineEdit } from "std-widgets.slint";
 
 export component NewProfile inherits Dialog {
-    title: "New Profile";
+    out property <string> name;
 
-    VerticalBox { }
+    title: "New Profile";
+    min-width: 400px;
+
+    VerticalLayout {
+        alignment: start;
+
+        GroupBox {
+            title: "Name";
+
+            LineEdit {
+                text <=> root.name;
+            }
+        }
+    }
 
     StandardButton {
         kind: ok;

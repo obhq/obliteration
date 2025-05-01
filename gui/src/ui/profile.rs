@@ -155,6 +155,18 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
     }
 }
 
+impl<G> ProfileModel<G> {
+    pub fn push(&self, pf: Profile) -> i32 {
+        let mut profiles = self.profiles.borrow_mut();
+        let index = profiles.len();
+
+        profiles.push(pf);
+        self.noti.row_added(index, profiles.len());
+
+        index.try_into().unwrap()
+    }
+}
+
 impl<G: 'static> Model for ProfileModel<G> {
     type Data = SharedString;
 
