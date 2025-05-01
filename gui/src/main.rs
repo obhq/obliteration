@@ -90,8 +90,14 @@ impl MainProgram {
 
         win.on_new_profile({
             let win = win.as_weak();
+            let data = data.clone();
+            let profiles = profiles.clone();
 
-            move || spawn_handler(&win, |w| Self::new_profile(w))
+            move || {
+                spawn_handler(&win, |w| {
+                    Self::new_profile(w, data.clone(), profiles.clone())
+                })
+            }
         });
 
         win.on_report_issue({
@@ -259,15 +265,33 @@ impl MainProgram {
         Ok(())
     }
 
-    async fn new_profile(main: MainWindow) -> Result<(), SharedString> {
+    async fn new_profile<G: GraphicsBuilder>(
+        main: MainWindow,
+        data: Arc<DataMgr>,
+        profiles: Rc<ProfileModel<G>>,
+    ) -> Result<(), SharedString> {
         // Setup window.
         let win = NewProfile::new()
             .map_err(|e| slint::format!("Failed to create window: {}.", e.display()))?;
+        let index = Rc::new(Cell::new(None));
 
         win.on_cancel_clicked({
             let win = win.as_weak();
 
             move || win.unwrap().hide().unwrap()
+        });
+
+        win.on_ok_clicked({
+            let win = win.as_weak();
+            let data = data.clone();
+            let profiles = profiles.clone();
+            let index = index.clone();
+
+            move || {
+                spawn_handler(&win, |w| {
+                    Self::create_profile(w, data.clone(), profiles.clone(), index.clone())
+                })
+            }
         });
 
         // Run the window.
@@ -277,6 +301,47 @@ impl MainProgram {
             .map_err(|e| slint::format!("Failed to enable modal on window: {}.", e.display()))?
             .wait()
             .await;
+
+        if let Some(i) = index.get() {
+            main.set_selected_profile(i);
+            main.invoke_profile_selected();
+        }
+
+        Ok(())
+    }
+
+    async fn create_profile<G>(
+        win: NewProfile,
+        data: Arc<DataMgr>,
+        profiles: Rc<ProfileModel<G>>,
+        index: Rc<Cell<Option<i32>>>,
+    ) -> Result<(), SharedString> {
+        // Get name.
+        let name = win.get_name();
+
+        if name.is_empty() {
+            return Err("Name cannot be empty.".into());
+        }
+
+        // Create profile.
+        let pf = Profile::new(name);
+        let path = data.profiles().data(pf.id());
+
+        std::fs::create_dir(&path)
+            .map_err(|e| slint::format!("Failed to create {}: {}.", path.display(), e.display()))?;
+
+        pf.save(&path).map_err(|e| {
+            slint::format!(
+                "Failed to save profile to {}: {}.",
+                path.display(),
+                e.display()
+            )
+        })?;
+
+        win.hide()
+            .map_err(|e| slint::format!("Failed to hide the window: {}.", e.display()))?;
+
+        index.set(Some(profiles.push(pf)));
 
         Ok(())
     }
