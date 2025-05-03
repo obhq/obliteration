@@ -22,7 +22,7 @@ pub struct Vm {
     boot_tables: u64,         // mptramp_pagetables
     initial_memory_size: u64, // initial_memory_size
     end_page: u64,            // Maxmem
-    stats: [VmStats; 3],
+    stats: [VmStats; 2],
     pagers: [Weak<Proc>; 2], // pageproc
 }
 
@@ -43,17 +43,14 @@ impl Vm {
                 free_reserved: pageout_page_count + 100 + 10, // TODO: Same here.
                 cache_count: gg.clone().spawn_default(),
                 free_count: gg.clone().spawn_default(),
+                interrupt_free_min: gg.clone().spawn(2),
             },
             VmStats {
                 #[allow(clippy::identity_op)]
                 free_reserved: pageout_page_count + 0, // TODO: Same here.
                 cache_count: gg.clone().spawn_default(),
                 free_count: gg.clone().spawn_default(),
-            },
-            VmStats {
-                free_reserved: 0,
-                cache_count: gg.clone().spawn_default(),
-                free_count: gg.spawn_default(),
+                interrupt_free_min: gg.clone().spawn(2),
             },
         ];
 
@@ -92,7 +89,7 @@ impl Vm {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x02B030|
-    pub fn alloc_page(&self, obj: Option<VmObject>, _: VmAlloc) {
+    pub fn alloc_page(&self, obj: Option<VmObject>, flags: VmAlloc) {
         // Get target VM.
         let vm = match obj {
             Some(_) => todo!(),
@@ -103,13 +100,26 @@ impl Vm {
         let stats = &self.stats[vm];
         let cache_count = stats.cache_count.read();
         let free_count = stats.free_count.read();
+        let available = *free_count + *cache_count;
 
-        if *cache_count + *free_count <= stats.free_reserved {
-            // Page daemon should never die so we use unwrap to catch that here.
+        if available <= stats.free_reserved {
             let p = td.proc();
+            let mut flags = if Arc::as_ptr(p) == self.pagers[p.pager()].as_ptr() {
+                VmAlloc::System.into()
+            } else {
+                flags & (VmAlloc::Interrupt | VmAlloc::System)
+            };
 
-            if Arc::ptr_eq(p, &self.pagers[p.pager()].upgrade().unwrap()) {
+            if (flags & (VmAlloc::Interrupt | VmAlloc::System)) == VmAlloc::Interrupt {
+                flags = VmAlloc::Interrupt.into();
+            }
+
+            if flags == VmAlloc::Interrupt {
                 todo!()
+            } else if flags == VmAlloc::System {
+                if available <= *stats.interrupt_free_min.read() {
+                    todo!()
+                }
             } else {
                 todo!()
             }
@@ -297,7 +307,12 @@ impl Vm {
 
 /// Flags for [`Vm::alloc_page()`].
 #[bitflag(u32)]
-pub enum VmAlloc {}
+pub enum VmAlloc {
+    /// `VM_ALLOC_INTERRUPT`.
+    Interrupt = 0x01,
+    /// `VM_ALLOC_SYSTEM`.
+    System = 0x02,
+}
 
 /// Represents an error when [`Vm::new()`] fails.
 #[derive(Debug, Error)]

@@ -149,6 +149,12 @@ pub fn transform(opts: Options, item: ItemEnum) -> syn::Result<TokenStream> {
             }
         }
 
+        impl ::core::cmp::PartialEq<::bitflag::Mask<Self, bool>> for #impl_ident {
+            fn eq(&self, other: &::bitflag::Mask<Self, bool>) -> bool {
+                self.0 == other.mask()
+            }
+        }
+
         impl ::core::ops::BitOr<::bitflag::Mask<Self, bool>> for #impl_ident {
             type Output = Self;
 
