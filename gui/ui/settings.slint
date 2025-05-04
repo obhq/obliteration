@@ -10,7 +10,9 @@ export component SettingsWindow inherits Dialog {
 
     TabContainer {
         tab := TabBar {
-            tabs: [{ text: "Graphics", icon: @image-url("@root/assets/monitor.svg") }];
+            tabs: [
+                { text: "Graphics", icon: @image-url("@root/assets/monitor.svg"), colorize-icon: true }
+            ];
         }
 
         if tab.current-page == 0: GraphicsTab {

@@ -1,6 +1,7 @@
 use super::PlatformError;
 use crate::ui::DesktopWindow;
 use crate::ui::backend::Wayland;
+use std::ptr::null_mut;
 use wayland_backend::sys::client::ObjectId;
 use wayland_client::Proxy;
 use wayland_protocols::xdg::dialog::v1::client::xdg_dialog_v1::XdgDialogV1;
@@ -41,7 +42,7 @@ pub unsafe fn set_modal(
 /// # Safety
 /// `win` must outlive the returned [`XdgToplevel`].
 unsafe fn get_xdg_toplevel(wayland: &Wayland, win: &impl DesktopWindow) -> XdgToplevel {
-    let obj = win.xdg_toplevel();
+    let obj = win.xdg_toplevel().map(|v| v.as_ptr()).unwrap_or(null_mut());
     let obj = unsafe { ObjectId::from_ptr(XdgToplevel::interface(), obj.cast()).unwrap() };
 
     XdgToplevel::from_id(wayland.connection(), obj).unwrap()

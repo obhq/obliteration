@@ -59,7 +59,7 @@ impl DesktopWindow for VulkanWindow {
     }
 
     #[cfg(target_os = "linux")]
-    fn xdg_toplevel(&self) -> *mut std::ffi::c_void {
+    fn xdg_toplevel(&self) -> Option<std::ptr::NonNull<std::ffi::c_void>> {
         use winit::platform::wayland::WindowExtWayland;
 
         self.window.xdg_toplevel()
