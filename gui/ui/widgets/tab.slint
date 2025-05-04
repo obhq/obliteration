@@ -3,6 +3,7 @@ import { HorizontalBox, Palette } from "std-widgets.slint";
 component Tab {
     in property <string> text;
     in property <image> icon;
+    in property <bool> colorize-icon;
     in property <bool> selected;
 
     callback clicked <=> touch.clicked;
@@ -36,7 +37,7 @@ component Tab {
         Image {
             source: root.icon;
             width: 15px;
-            colorize: Palette.control-foreground;
+            colorize: root.colorize-icon ? Palette.control-foreground : transparent;
         }
 
         Text {
@@ -66,7 +67,7 @@ export component TabContainer {
 }
 
 export component TabBar {
-    in property <[{text: string, icon: image}]> tabs;
+    in property <[{text: string, icon: image, colorize-icon: bool}]> tabs;
     out property <int> current-page;
 
     Rectangle {
@@ -79,6 +80,7 @@ export component TabBar {
         for tab[index] in root.tabs: Tab {
             text: tab.text;
             icon: tab.icon;
+            colorize-icon: tab.colorize-icon;
             selected: index == root.current-page;
             clicked => {
                 root.current-page = index;

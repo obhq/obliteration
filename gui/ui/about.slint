@@ -27,7 +27,11 @@ export component AboutWindow inherits Dialog {
         tab := TabBar {
             tabs: [
                 { text: "Obliteration", icon: @image-url("@root/assets/icon.png") },
-                { text: "Slint", icon: @image-url("@root/assets/slint-logo-small-dark.svg") }
+                {
+                    text: "Slint",
+                    icon: @image-url("@root/assets/slint-logo-small-dark.svg"),
+                    colorize-icon: true
+                }
             ];
         }
 

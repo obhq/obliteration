@@ -135,7 +135,7 @@ impl<T: ComponentHandle + WinitWindow> DesktopWindow for T {
     }
 
     #[cfg(target_os = "linux")]
-    fn xdg_toplevel(&self) -> *mut std::ffi::c_void {
+    fn xdg_toplevel(&self) -> Option<std::ptr::NonNull<std::ffi::c_void>> {
         use winit::platform::wayland::WindowExtWayland;
 
         let win = WindowInner::from_pub(self.window()).window_adapter();
@@ -160,7 +160,7 @@ pub trait App: Sized + 'static {
 pub trait DesktopWindow: WinitWindow {
     fn handle(&self) -> impl HasWindowHandle + '_;
     #[cfg(target_os = "linux")]
-    fn xdg_toplevel(&self) -> *mut std::ffi::c_void;
+    fn xdg_toplevel(&self) -> Option<std::ptr::NonNull<std::ffi::c_void>>;
 }
 
 /// Provides methods to operate on a [`DesktopWindow`].
