@@ -96,7 +96,7 @@ impl Vm {
     /// |---------|--------|
     /// |PS4 11.00|0x02B030|
     pub fn alloc_page(&self, obj: Option<VmObject>, flags: VmAlloc) -> Option<VmPage> {
-        let vm = obj.as_ref().map(|v| v.vm()).unwrap_or(0);
+        let vm = obj.as_ref().map_or(0, |v| v.vm());
         let td = current_thread();
         let stats = &self.stats[vm];
         let cache_count = stats.cache_count.read();
