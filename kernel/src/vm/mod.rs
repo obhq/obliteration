@@ -1,4 +1,5 @@
 pub use self::object::*;
+pub use self::page::*;
 
 use self::stats::VmStats;
 use crate::config::{Dipsw, PAGE_MASK, PAGE_SHIFT, PAGE_SIZE};
@@ -7,12 +8,15 @@ use crate::lock::GutexGroup;
 use crate::proc::Proc;
 use alloc::sync::{Arc, Weak};
 use config::{BootEnv, MapType};
-use core::cmp::min;
+use core::cmp::{max, min};
+use core::fmt::Debug;
+use core::sync::atomic::{AtomicUsize, Ordering};
 use krt::{boot_env, warn};
 use macros::bitflag;
 use thiserror::Error;
 
 mod object;
+mod page;
 mod stats;
 
 /// Implementation of Virtual Memory system.
@@ -23,7 +27,8 @@ pub struct Vm {
     initial_memory_size: u64, // initial_memory_size
     end_page: u64,            // Maxmem
     stats: [VmStats; 2],
-    pagers: [Weak<Proc>; 2], // pageproc
+    pagers: [Weak<Proc>; 2],         // pageproc
+    pages_deficit: [AtomicUsize; 2], // vm_pageout_deficit
 }
 
 impl Vm {
@@ -64,6 +69,7 @@ impl Vm {
             end_page: 0,
             stats,
             pagers: Default::default(),
+            pages_deficit: [AtomicUsize::new(0), AtomicUsize::new(0)],
         };
 
         vm.load_memory_map()?;
@@ -89,13 +95,8 @@ impl Vm {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x02B030|
-    pub fn alloc_page(&self, obj: Option<VmObject>, flags: VmAlloc) {
-        // Get target VM.
-        let vm = match obj {
-            Some(_) => todo!(),
-            None => 0,
-        };
-
+    pub fn alloc_page(&self, obj: Option<VmObject>, flags: VmAlloc) -> Option<VmPage> {
+        let vm = obj.as_ref().map(|v| v.vm()).unwrap_or(0);
         let td = current_thread();
         let stats = &self.stats[vm];
         let cache_count = stats.cache_count.read();
@@ -118,7 +119,15 @@ impl Vm {
                 todo!()
             } else if flags == VmAlloc::System {
                 if available <= *stats.interrupt_free_min.read() {
-                    todo!()
+                    let deficit = max(1, flags.get(VmAlloc::Count));
+
+                    drop(free_count);
+                    drop(cache_count);
+
+                    self.pages_deficit[vm].fetch_add(deficit.into(), Ordering::Relaxed);
+                    self.wake_pager(vm);
+
+                    return None;
                 }
             } else {
                 todo!()
@@ -263,6 +272,16 @@ impl Vm {
         // this we need phys_avail that populated by getmemsize.
     }
 
+    /// See `pagedaemon_wakeup` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x3E0690|
+    fn wake_pager(&self, _: usize) {
+        todo!()
+    }
+
     /// See `mp_bootaddress` on the Orbis for a reference.
     ///
     /// # Reference offsets
@@ -309,9 +328,11 @@ impl Vm {
 #[bitflag(u32)]
 pub enum VmAlloc {
     /// `VM_ALLOC_INTERRUPT`.
-    Interrupt = 0x01,
+    Interrupt = 0x00000001,
     /// `VM_ALLOC_SYSTEM`.
-    System = 0x02,
+    System = 0x00000002,
+    /// `VM_ALLOC_COUNT`.
+    Count(u16) = 0xFFFF0000,
 }
 
 /// Represents an error when [`Vm::new()`] fails.

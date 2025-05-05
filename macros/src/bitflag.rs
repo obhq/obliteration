@@ -83,6 +83,10 @@ pub fn transform(opts: Options, item: ItemEnum) -> syn::Result<TokenStream> {
                     "multiple bits for a boolean mask is not supported",
                 ));
             }
+
+            if t.qself.is_none() && t.path.is_ident("u16") && bits.get() > 16 {
+                return Err(Error::new_spanned(dis, "invalid mask for the value"));
+            }
         }
 
         body.extend(quote! {
@@ -113,6 +117,18 @@ pub fn transform(opts: Options, item: ItemEnum) -> syn::Result<TokenStream> {
         /// equal to `rhs`.
         pub const fn has_all(self, rhs: Self) -> bool {
             (self.0 & rhs.0) == rhs.0
+        }
+
+        /// # Panics
+        /// If `m` is not valid for `T`.
+        pub fn get<T>(self, m: ::bitflag::Mask<Self, T>) -> T
+        where
+            T: ::bitflag::FromRaw<#ty>,
+        {
+            let m = m.mask();
+            let v = (self.0 & m) >> m.trailing_zeros();
+
+            T::from_raw(v).unwrap()
         }
     });
 
