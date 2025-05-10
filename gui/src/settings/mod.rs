@@ -1,7 +1,8 @@
+use minicbor_serde::error::DecodeError;
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::fs::File;
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Write};
 use std::path::Path;
 use thiserror::Error;
 
@@ -15,16 +16,16 @@ impl Settings {
     pub fn load(path: impl AsRef<Path>) -> Result<Self, SettingsError> {
         // Open file.
         let path = path.as_ref();
-        let file = match File::open(&path) {
+        let data = match std::fs::read(path) {
             Ok(v) => v,
             Err(e) if e.kind() == ErrorKind::NotFound => return Ok(Self::default()),
-            Err(e) => return Err(SettingsError::OpenFile(e)),
+            Err(e) => return Err(SettingsError::ReadFile(e)),
         };
 
         // Read file.
-        let data = match ciborium::from_reader(file) {
+        let data = match minicbor_serde::from_slice(&data) {
             Ok(v) => v,
-            Err(e) => return Err(SettingsError::ReadFile(e)),
+            Err(e) => return Err(SettingsError::LoadFile(e)),
         };
 
         Ok(data)
@@ -40,27 +41,28 @@ impl Settings {
 
     pub fn save(&self, path: impl AsRef<Path>) -> Result<(), SettingsError> {
         let path = path.as_ref();
-        let file = match File::create(&path) {
+        let mut file = match File::create(&path) {
             Ok(v) => v,
             Err(e) => return Err(SettingsError::CreateFile(e)),
         };
 
-        ciborium::into_writer(self, file).map_err(SettingsError::WriteFile)
+        file.write_all(&minicbor_serde::to_vec(self).unwrap())
+            .map_err(SettingsError::WriteFile)
     }
 }
 
 /// Represents an error when [`Settings`] fails to load or save.
 #[derive(Debug, Error)]
 pub enum SettingsError {
-    #[error("couldn't open the file")]
-    OpenFile(#[source] std::io::Error),
+    #[error("couldn't read the file")]
+    ReadFile(#[source] std::io::Error),
 
     #[error("couldn't load the file")]
-    ReadFile(#[source] ciborium::de::Error<std::io::Error>),
+    LoadFile(#[source] DecodeError),
 
     #[error("couldn't create the file")]
     CreateFile(#[source] std::io::Error),
 
     #[error("couldn't write the file")]
-    WriteFile(#[source] ciborium::ser::Error<std::io::Error>),
+    WriteFile(#[source] std::io::Error),
 }

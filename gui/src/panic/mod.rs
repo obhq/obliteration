@@ -3,7 +3,7 @@ use erdp::ErrorDisplay;
 use serde::{Deserialize, Serialize};
 use slint::{ComponentHandle, SharedString};
 use std::borrow::Cow;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::panic::PanicHookInfo;
 use std::path::Path;
 use std::process::{Child, Command, ExitCode, Stdio};
@@ -26,25 +26,27 @@ pub fn spawn_handler(exe: &Path) -> Result<(), std::io::Error> {
 }
 
 pub fn run_handler() -> ExitCode {
-    use std::io::ErrorKind;
-
     // Wait for panic info.
-    let stdin = std::io::stdin();
-    let mut stdin = stdin.lock();
-    let (msg, exit) = match ciborium::from_reader::<PanicInfo, _>(&mut stdin) {
-        Ok(v) => {
-            let m = slint::format!(
-                "An unexpected error has occurred at {}:{}: {}.",
-                v.file,
-                v.line,
-                v.message
-            );
+    let mut buf = Vec::new();
+    let (msg, exit) = match std::io::stdin().read_to_end(&mut buf) {
+        Ok(0) => return ExitCode::SUCCESS,
+        Ok(_) => match minicbor_serde::from_slice::<PanicInfo>(&buf) {
+            Ok(v) => {
+                let m = slint::format!(
+                    "An unexpected error has occurred at {}:{}: {}.",
+                    v.file,
+                    v.line,
+                    v.message
+                );
 
-            (m, ExitCode::SUCCESS)
-        }
-        Err(ciborium::de::Error::Io(e)) if e.kind() == ErrorKind::UnexpectedEof => {
-            return ExitCode::SUCCESS;
-        }
+                (m, ExitCode::SUCCESS)
+            }
+            Err(e) => {
+                let m = slint::format!("Failed to decode panic info: {}.", e.display());
+
+                (m, ExitCode::FAILURE)
+            }
+        },
         Err(e) => {
             let m = slint::format!("Failed to read panic info: {}.", e.display());
 
@@ -87,7 +89,7 @@ fn panic_hook(i: &PanicHookInfo, ph: &Mutex<Option<HandlerProcess>>) {
         line: loc.line(),
     };
 
-    ciborium::into_writer(&info, &mut stdin).unwrap();
+    stdin.write_all(&minicbor_serde::to_vec(info).unwrap());
     stdin.flush().unwrap();
 
     drop(stdin); // Close the stdin to notify panic handler that no more data.
