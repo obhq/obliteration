@@ -1,8 +1,10 @@
 use config::Config;
+use minicbor_serde::error::DecodeError;
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 use std::fmt::{Display, Formatter};
 use std::fs::File;
+use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::num::NonZero;
 use std::path::{Path, PathBuf};
@@ -19,7 +21,7 @@ pub struct Profile {
     display_device: ByteBuf,
     display_resolution: DisplayResolution,
     debug_addr: SocketAddr,
-    kernel_config: Config,
+    kernel_config: Box<Config>,
     created: SystemTime,
 }
 
@@ -31,10 +33,10 @@ impl Profile {
             display_device: ByteBuf::new(),
             display_resolution: DisplayResolution::Hd,
             debug_addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 1234)),
-            kernel_config: Config {
+            kernel_config: Box::new(Config {
                 max_cpu: NonZero::new(8).unwrap(),
                 ..Default::default()
-            },
+            }),
             created: SystemTime::now(),
         }
     }
@@ -43,15 +45,15 @@ impl Profile {
         // Open profile.
         let root = root.as_ref();
         let path = root.join("profile.bin");
-        let file = match File::open(&path) {
+        let data = match std::fs::read(&path) {
             Ok(v) => v,
-            Err(e) => return Err(LoadError::OpenFile(path, e)),
+            Err(e) => return Err(LoadError::ReadFile(path, e)),
         };
 
         // Read profile.
-        let profile = match ciborium::from_reader(file) {
+        let profile = match minicbor_serde::from_slice(&data) {
             Ok(v) => v,
-            Err(e) => return Err(LoadError::ReadProfile(path, e)),
+            Err(e) => return Err(LoadError::LoadProfile(path, e)),
         };
 
         Ok(profile)
@@ -97,16 +99,13 @@ impl Profile {
         // Write profile.
         let root = root.as_ref();
         let path = root.join("profile.bin");
-        let file = match File::create(&path) {
+        let mut file = match File::create(&path) {
             Ok(v) => v,
             Err(e) => return Err(SaveError::CreateFile(path, e)),
         };
 
-        if let Err(e) = ciborium::into_writer(self, file) {
-            return Err(SaveError::WriteProfile(path, e));
-        }
-
-        Ok(())
+        file.write_all(&minicbor_serde::to_vec(self).unwrap())
+            .map_err(|e| SaveError::WriteProfile(path, e))
     }
 }
 
@@ -142,11 +141,11 @@ impl Display for DisplayResolution {
 /// Represents an error when [`Profile::load()`] fails.
 #[derive(Debug, Error)]
 pub enum LoadError {
-    #[error("couldn't open {0}")]
-    OpenFile(PathBuf, #[source] std::io::Error),
-
     #[error("couldn't read {0}")]
-    ReadProfile(PathBuf, #[source] ciborium::de::Error<std::io::Error>),
+    ReadFile(PathBuf, #[source] std::io::Error),
+
+    #[error("couldn't load {0}")]
+    LoadProfile(PathBuf, #[source] DecodeError),
 }
 
 /// Represents an error when [`Profile::save()`] fails.
@@ -156,5 +155,5 @@ pub enum SaveError {
     CreateFile(PathBuf, #[source] std::io::Error),
 
     #[error("couldn't write {0}")]
-    WriteProfile(PathBuf, #[source] ciborium::ser::Error<std::io::Error>),
+    WriteProfile(PathBuf, #[source] std::io::Error),
 }
