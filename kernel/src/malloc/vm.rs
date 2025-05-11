@@ -1,5 +1,5 @@
 use crate::config::PAGE_SIZE;
-use crate::context::{CpuLocal, current_thread, current_uma};
+use crate::context::{CpuLocal, current_thread, uma};
 use crate::uma::{Alloc, UmaFlags, UmaZone};
 use alloc::string::ToString;
 use alloc::sync::Arc;
@@ -31,7 +31,7 @@ impl VmHeap {
         // The possible of maximum alignment that Layout allowed is a bit before the most
         // significant bit of isize (e.g. 0x4000000000000000 on 64 bit system). So we can use
         // "size_of::<usize>() * 8 - 1" to get the size of array for all possible alignment.
-        let uma = current_uma().unwrap();
+        let uma = uma().unwrap();
         let zones = core::array::from_fn(|align| {
             let mut zones = Vec::with_capacity(Self::KMEM_ZSIZE + 1);
             let mut last = 0;

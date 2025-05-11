@@ -72,7 +72,7 @@ pub unsafe fn run_with_context(
 
 /// # Interrupt safety
 /// This function can be called from interrupt handler.
-pub fn current_config() -> BorrowedArc<Config> {
+pub fn config() -> BorrowedArc<Config> {
     // It does not matter if we are on a different CPU after we load the Context::arch because it is
     // always the same for all CPU.
     unsafe {
@@ -82,7 +82,7 @@ pub fn current_config() -> BorrowedArc<Config> {
 
 /// # Interrupt safety
 /// This function can be called from interrupt handler.
-pub fn current_arch() -> BorrowedArc<ArchConfig> {
+pub fn arch() -> BorrowedArc<ArchConfig> {
     // It does not matter if we are on a different CPU after we load the Context::arch because it is
     // always the same for all CPU.
     unsafe {
@@ -108,7 +108,7 @@ pub const fn current_thread_offset() -> usize {
 ///
 /// # Interrupt safety
 /// This function can be called from interrupt handler.
-pub fn current_uma() -> Option<BorrowedArc<Uma>> {
+pub fn uma() -> Option<BorrowedArc<Uma>> {
     // It does not matter if we are on a different CPU after we load the Context::uma because it is
     // always the same for all CPU.
     unsafe { BorrowedArc::new(Context::load_ptr::<{ offset_of!(Base, uma) }, _>()) }
@@ -118,7 +118,7 @@ pub fn current_uma() -> Option<BorrowedArc<Uma>> {
 ///
 /// # Interrupt safety
 /// This function can be called from interrupt handle.
-pub fn current_procmgr() -> Option<BorrowedArc<ProcMgr>> {
+pub fn pmgr() -> Option<BorrowedArc<ProcMgr>> {
     // It does not matter if we are on a different CPU after we load the Context::pmgr because it is
     // always the same for all CPU.
     unsafe { BorrowedArc::new(Context::load_ptr::<{ offset_of!(Base, pmgr) }, _>()) }
