@@ -1,4 +1,4 @@
-use super::{PinnedContext, current_config, pin_cpu};
+use super::{PinnedContext, config, pin_cpu};
 use alloc::vec::Vec;
 use core::ops::Deref;
 
@@ -14,7 +14,7 @@ pub struct CpuLocal<T>(Vec<T>);
 
 impl<T> CpuLocal<T> {
     pub fn new(mut f: impl FnMut(usize) -> T) -> Self {
-        let len = current_config().max_cpu().get();
+        let len = config().max_cpu().get();
         let mut vec = Vec::with_capacity(len);
 
         for i in 0..len {
