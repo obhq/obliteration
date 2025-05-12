@@ -11,6 +11,7 @@ use self::sched::sleep;
 use self::uma::Uma;
 use self::vm::Vm;
 use ::config::{BootEnv, MapType};
+use alloc::string::String;
 use alloc::sync::Arc;
 use core::cmp::min;
 use core::mem::zeroed;
@@ -44,7 +45,19 @@ extern crate alloc;
 #[cfg_attr(target_os = "none", unsafe(no_mangle))]
 fn main(config: &'static ::config::Config) -> ! {
     // SAFETY: This function has a lot of restrictions. See Context documentation for more details.
-    info!("Starting Obliteration Kernel.");
+    let hw = match boot_env() {
+        BootEnv::Vm(vm) => vm.hypervisor(),
+    };
+
+    info!(
+        concat!(
+            "Starting Obliteration Kernel.\n",
+            "CPU     : {}\n",
+            "Hardware: {}"
+        ),
+        self::arch::cpu_model(),
+        String::from_utf8_lossy(hw)
+    );
 
     // Setup the CPU after the first print to let the bootloader developer know (some of) their code
     // are working.

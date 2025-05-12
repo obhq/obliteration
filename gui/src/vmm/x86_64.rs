@@ -9,7 +9,7 @@ use gdbstub::target::{TargetError, TargetResult};
 use gdbstub_arch::x86::X86_64_SSE;
 use hv::{Cpu, CpuCommit, CpuStates, Hypervisor};
 use std::num::NonZero;
-use x86_64::Efer;
+use x86_64::{Efer, Rflags};
 
 pub type GdbRegs = gdbstub_arch::x86::reg::X86_64CoreRegs;
 
@@ -65,6 +65,7 @@ pub fn setup_main_cpu<H: Hypervisor>(
     states.set_rsi(map.conf_vaddr);
     states.set_rsp(map.stack_vaddr.checked_add(map.stack_len.get()).unwrap()); // Top-down.
     states.set_rip(entry);
+    states.set_rflags(Rflags::new().with_reserved(true).with_id(true));
 
     states
         .commit()

@@ -4,6 +4,10 @@ use core::num::NonZero;
 /// Provides boot information when booting on a Virtual Machine.
 #[repr(C)]
 pub struct Vm {
+    /// Name of the Hypervisor.
+    ///
+    /// This used for diagnostic only.
+    pub hypervisor: [u8; 128],
     /// Address of [VmmMemory].
     pub vmm: usize,
     /// Address of [ConsoleMemory].
@@ -13,6 +17,18 @@ pub struct Vm {
     /// Memory map. Set [PhysMap::ty] to [MapType::None](super::MapType::None) to mark the end of
     /// the list.
     pub memory_map: [PhysMap; 64],
+}
+
+impl Vm {
+    pub fn hypervisor(&self) -> &[u8] {
+        let len = self
+            .hypervisor
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(self.hypervisor.len());
+
+        &self.hypervisor[..len]
+    }
 }
 
 /// Layout of a memory for Memory-mapped I/O to communicate with VMM.

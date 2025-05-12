@@ -78,35 +78,6 @@ mod umtx;
 mod vm;
 
 fn run(args: Args) -> Result<(), KernelError> {
-    // Show basic information.
-    let mut hwinfo = System::new_with_specifics(
-        sysinfo::RefreshKind::new()
-            .with_memory(sysinfo::MemoryRefreshKind::new())
-            .with_cpu(sysinfo::CpuRefreshKind::new()),
-    );
-    hwinfo.refresh_memory_specifics(MemoryRefreshKind::new().with_ram());
-
-    // Hardware information
-    writeln!(
-        log,
-        "Operating System    : {} {}",
-        System::long_os_version().unwrap_or_else(|| "Unknown OS".to_string()),
-        if cfg!(target_os = "windows") {
-            System::kernel_version().unwrap_or_else(|| "Unknown Kernel".to_string())
-        } else {
-            "".to_string()
-        }
-    )
-    .unwrap();
-    writeln!(log, "CPU Information     : {}", hwinfo.cpus()[0].brand()).unwrap();
-    writeln!(
-        log,
-        "Memory Available    : {}/{} MB",
-        hwinfo.available_memory() / 1048576,
-        hwinfo.total_memory() / 1048576
-    )
-    .unwrap();
-
     // Setup kernel credential.
     let cred = Arc::new(Ucred::new(
         Uid::ROOT,
