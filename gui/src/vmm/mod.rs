@@ -23,6 +23,8 @@ use kernel::{KernelError, ProgramHeaderError};
 use rustc_hash::FxHashMap;
 use std::collections::{BTreeMap, HashMap};
 use std::error::Error;
+use std::io::Write;
+use std::mem::zeroed;
 use std::num::NonZero;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -283,10 +285,72 @@ impl Vmm<()> {
         )
         .map_err(VmmError::AllocStack)?;
 
+        // Get hypervisor name.
+        let mut hypervisor = [0; 128];
+        let mut w = hypervisor.as_mut_slice();
+
+        #[cfg(unix)]
+        unsafe {
+            use std::ffi::CStr;
+
+            // Use write to treat buffer full as non-error.
+            let hv: &[u8] = if cfg!(target_os = "linux") {
+                b"KVM"
+            } else if cfg!(target_os = "macos") {
+                b"Hypervisor Framework"
+            } else {
+                todo!()
+            };
+
+            w.write(hv).unwrap();
+            w.write(b" (").unwrap();
+
+            // Write OS name.
+            let mut uname = zeroed();
+
+            if libc::uname(&mut uname) < 0 {
+                w.write(b"Unknown").unwrap();
+            } else {
+                let m = CStr::from_ptr(uname.machine.as_ptr());
+                let r = CStr::from_ptr(uname.release.as_ptr());
+
+                w.write(m.to_bytes()).unwrap();
+                w.write(b" ").unwrap();
+                w.write(r.to_bytes()).unwrap();
+            }
+
+            w.write(b")").unwrap();
+        }
+
+        #[cfg(windows)]
+        unsafe {
+            use windows_sys::Win32::System::SystemInformation::{GetVersionExW, OSVERSIONINFOW};
+
+            let mut v = zeroed::<OSVERSIONINFOW>();
+
+            v.dwOSVersionInfoSize = size_of_val(&v).try_into().unwrap();
+            w.write(b"WHP (").unwrap();
+
+            if GetVersionExW(&mut v) != 0 {
+                // The buffer should never full here.
+                write!(
+                    w,
+                    "x86-64 {}.{}.{}",
+                    v.dwMajorVersion, v.dwMinorVersion, v.dwBuildNumber
+                )
+                .unwrap();
+            } else {
+                w.write(b"Unknown").unwrap();
+            }
+
+            w.write(b")").unwrap();
+        }
+
         // Write boot environment.
         let reserved_end = ram.next_addr();
         let mut mem = env;
         let mut env = Vm {
+            hypervisor,
             vmm: devices.vmm().addr(),
             console: devices.console().addr(),
             host_page_size,
@@ -944,7 +1008,7 @@ struct CpuArgs<H> {
 }
 
 /// Finalized layout of the RAM before execute the kernel entry point.
-struct RamMap {
+pub struct RamMap {
     page_table: usize,
     kern_paddr: usize,
     kern_vaddr: usize,

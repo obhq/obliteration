@@ -1,4 +1,9 @@
+use alloc::string::String;
 use alloc::sync::Arc;
+
+pub fn cpu_model() -> String {
+    todo!()
+}
 
 pub unsafe fn setup_main_cpu() -> Arc<ArchConfig> {
     todo!()

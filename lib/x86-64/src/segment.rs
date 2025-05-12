@@ -89,3 +89,27 @@ impl Ti {
         self as _
     }
 }
+
+/// Raw value of Long Mode TSS.
+///
+/// See 64-Bit Task State Segment section on AMD64 Architecture Programmer's Manual Volume 2 for
+/// more details.
+#[repr(C, packed)]
+#[derive(Default)]
+pub struct Tss64 {
+    pub reserved1: u32,
+    pub rsp0: u64,
+    pub rsp1: u64,
+    pub rsp2: u64,
+    pub reserved2: u64,
+    pub ist1: u64,
+    pub ist2: u64,
+    pub ist3: u64,
+    pub ist4: u64,
+    pub ist5: u64,
+    pub ist6: u64,
+    pub ist7: u64,
+    pub reserved3: u64,
+    pub reserved4: u16,
+    pub io_map_base_address: u16,
+}

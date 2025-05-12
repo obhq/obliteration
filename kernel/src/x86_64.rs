@@ -1,18 +1,47 @@
 use crate::context::{current_trap_rsp_offset, current_user_rsp_offset};
 use crate::trap::{interrupt_handler, syscall_handler};
 use alloc::boxed::Box;
+use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use bitfield_struct::bitfield;
 use core::arch::{asm, global_asm};
+use core::fmt::Write;
 use core::mem::{transmute, zeroed};
-use core::ptr::addr_of;
-use x86_64::{Dpl, Efer, Rflags, SegmentDescriptor, SegmentSelector, Star};
+use x86_64::{Dpl, Efer, Rflags, SegmentDescriptor, SegmentSelector, Star, Tss64};
 
 pub const GDT_KERNEL_CS: SegmentSelector = SegmentSelector::new().with_si(3);
 pub const GDT_KERNEL_DS: SegmentSelector = SegmentSelector::new().with_si(4);
 pub const GDT_USER_CS32: SegmentSelector = SegmentSelector::new().with_si(5).with_rpl(Dpl::Ring3);
+
+pub fn cpu_model() -> String {
+    // In order to activate long mode on a bare hardware it is required CPUID. However, it is
+    // possible for CPUID to not available on the VM so we need to check.
+    let mut flags: u64;
+
+    unsafe { asm!("pushfq", "pop {v}", v = out(reg) flags, options(nomem, preserves_flags)) };
+
+    // CPUID is essential so just panic.
+    let flags = Rflags::from_bits(flags);
+
+    if !flags.id() {
+        panic!("CPUID instruction is not available");
+    }
+
+    // Get highest leaf available.
+    let mut name = String::with_capacity(128);
+    let r = unsafe { core::arch::x86_64::__cpuid(0) };
+    let mut buf = [0u8; 12];
+
+    buf[..4].copy_from_slice(&r.ebx.to_le_bytes());
+    buf[4..8].copy_from_slice(&r.edx.to_le_bytes());
+    buf[8..].copy_from_slice(&r.ecx.to_le_bytes());
+
+    write!(name, "{}", core::str::from_utf8(&buf).unwrap()).unwrap();
+
+    name
+}
 
 /// # Safety
 /// This function can be called only once and must be called by main CPU entry point.
@@ -179,27 +208,28 @@ unsafe fn push_tss<const L: usize>(
     trap_rsp: *mut [u8; L],
 ) -> SegmentSelector {
     // Setup Task State Segment (TSS).
-    static mut TSS: Tss = unsafe { zeroed() };
+    let tss = Box::new(Tss64::default());
+    let tss = Box::leak(tss);
 
-    unsafe { TSS.rsp0 = trap_rsp.add(1) as usize }; // Top-down.
+    unsafe { tss.rsp0 = (trap_rsp.add(1) as usize).try_into().unwrap() }; // Top-down.
 
     // Add placeholder for TSS descriptor.
-    let tss = gdt.len();
+    let si = gdt.len();
 
     gdt.push(SegmentDescriptor::new());
     gdt.push(SegmentDescriptor::new());
 
     // Setup TSS descriptor.
-    let desc: &mut TssDescriptor = unsafe { transmute(&mut gdt[tss]) };
-    let base = addr_of!(TSS) as usize;
+    let desc: &mut TssDescriptor = unsafe { transmute(&mut gdt[si]) };
+    let base = tss as *mut Tss64 as usize;
 
-    desc.set_limit1((size_of::<Tss>() - 1).try_into().unwrap());
+    desc.set_limit1((size_of::<Tss64>() - 1).try_into().unwrap());
     desc.set_base1((base & 0xFFFFFF).try_into().unwrap());
     desc.set_base2((base >> 24).try_into().unwrap());
     desc.set_ty(0b1001); // Available 64-bit TSS.
     desc.set_p(true);
 
-    SegmentSelector::new().with_si(tss.try_into().unwrap())
+    SegmentSelector::new().with_si(si.try_into().unwrap())
 }
 
 unsafe extern "C" {
@@ -290,30 +320,6 @@ struct TssDescriptor {
     #[bits(40)]
     base2: u64,
     __: u32,
-}
-
-/// Raw value of Long Mode TSS.
-///
-/// See 64-Bit Task State Segment section on AMD64 Architecture Programmer's Manual Volume 2 for
-/// more details.
-#[repr(C, packed)]
-#[derive(Default)]
-struct Tss {
-    reserved1: u32,
-    rsp0: usize,
-    rsp1: usize,
-    rsp2: usize,
-    reserved2: u64,
-    ist1: usize,
-    ist2: usize,
-    ist3: usize,
-    ist4: usize,
-    ist5: usize,
-    ist6: usize,
-    ist7: usize,
-    reserved3: u64,
-    reserved4: u16,
-    io_map_base_address: u16,
 }
 
 /// Raw value of a Interrupt Descriptor-Table Register.

@@ -245,6 +245,10 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
         todo!()
     }
 
+    fn set_rflags(&mut self, v: Rflags) {
+        todo!()
+    }
+
     fn set_efer(&mut self, v: Efer) {
         self.values[5].Reg64 = v.into_bits();
         self.dirty = true;

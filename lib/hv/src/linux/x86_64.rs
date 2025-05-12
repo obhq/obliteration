@@ -169,6 +169,11 @@ impl CpuStates for KvmStates<'_> {
         Ok(self.gregs.rflags.into())
     }
 
+    fn set_rflags(&mut self, v: Rflags) {
+        self.gregs.rflags = v.into_bits();
+        self.gdirty = true;
+    }
+
     fn set_efer(&mut self, v: Efer) {
         self.sregs.efer = v.into_bits();
         self.sdirty = true;
