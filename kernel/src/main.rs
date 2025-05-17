@@ -230,7 +230,10 @@ fn load_memory_map() -> MemoryInfo {
     // TODO: There is some unknown calls here.
     load_pmap();
 
+    // The call to initialize_dmem is moved to the caller of this function.
     MemoryInfo {
+        physmap,
+        physmap_last: last,
         boot_area,
         boot_info,
         initial_memory_size,
@@ -366,6 +369,8 @@ impl ProcAbi for Proc0Abi {
 
 /// Contains memory information populated from memory map.
 struct MemoryInfo {
+    physmap: [u64; 60],
+    physmap_last: usize,
     boot_area: u64,
     boot_info: BootInfo,
     initial_memory_size: u64,
