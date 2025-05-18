@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::arch::{BREAKPOINT_SIZE, GdbRegs, RELOCATE_TYPE};
-use self::channel::VmmStream;
-use self::hw::{Device, DeviceTree, setup_devices};
 use self::kernel::{
     Kernel, NoteError, PT_DYNAMIC, PT_GNU_EH_FRAME, PT_GNU_RELRO, PT_GNU_STACK, PT_LOAD, PT_NOTE,
     PT_PHDR, ProgramHeader,
 };
 use crate::gdb::GdbHandler;
+use crate::hw::{Device, DeviceTree, setup_devices};
 use crate::profile::Profile;
+use crate::util::VmmStream;
 use config::{BootEnv, ConsoleType, MapType, PhysMap, Vm};
 use futures::{FutureExt, select_biased};
 use gdbstub::common::{Signal, Tid};
@@ -36,9 +36,7 @@ use thiserror::Error;
 #[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
 mod arch;
-mod channel;
 mod cpu;
-mod hw;
 mod kernel;
 
 /// Manage a virtual machine that run the kernel.

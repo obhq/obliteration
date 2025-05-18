@@ -33,12 +33,14 @@ use winit::window::Window;
 mod data;
 mod gdb;
 mod graphics;
+mod hw;
 mod log;
 mod panic;
 mod profile;
 mod settings;
 mod setup;
 mod ui;
+mod util;
 mod vfs;
 mod vmm;
 
@@ -374,6 +376,36 @@ impl MainProgram {
 
         Ok(())
     }
+
+    async fn wait_for_debugger(addr: SocketAddr) -> Result<Option<TcpStream>, ProgramError> {
+        // Start server.
+        let server = TcpListener::bind(addr)
+            .await
+            .map_err(|e| ProgramError::StartDebugServer(addr, e))?;
+        let addr = server.local_addr().map_err(ProgramError::GetDebugAddr)?;
+
+        // Tell the user that we are waiting for a debugger.
+        let win = WaitForDebugger::new().map_err(ProgramError::CreateDebugWindow)?;
+
+        win.set_address(addr.to_shared_string());
+        win.show().map_err(ProgramError::ShowDebugWindow)?;
+
+        // Wait for connection.
+        let client = select_biased! {
+            _ = win.wait().fuse() => return Ok(None),
+            v = server.accept().fuse() => match v {
+                Ok(v) => v.0,
+                Err(e) => return Err(ProgramError::AcceptDebugger(e)),
+            }
+        };
+
+        // Disable Nagle algorithm since it does not work well with GDB remote protocol.
+        client
+            .set_nodelay(true)
+            .map_err(ProgramError::DisableDebuggerNagle)?;
+
+        Ok(Some(client))
+    }
 }
 
 impl App for MainProgram {
@@ -514,7 +546,7 @@ impl App for MainProgram {
 
         match debug {
             Some(addr) => {
-                let (r, w) = match wait_for_debugger(addr).await? {
+                let (r, w) = match Self::wait_for_debugger(addr).await? {
                     Some(v) => v.split(),
                     None => return Ok(()),
                 };
@@ -572,36 +604,6 @@ impl App for MainProgram {
 
         Ok(())
     }
-}
-
-async fn wait_for_debugger(addr: SocketAddr) -> Result<Option<TcpStream>, ProgramError> {
-    // Start server.
-    let server = TcpListener::bind(addr)
-        .await
-        .map_err(|e| ProgramError::StartDebugServer(addr, e))?;
-    let addr = server.local_addr().map_err(ProgramError::GetDebugAddr)?;
-
-    // Tell the user that we are waiting for a debugger.
-    let win = WaitForDebugger::new().map_err(ProgramError::CreateDebugWindow)?;
-
-    win.set_address(addr.to_shared_string());
-    win.show().map_err(ProgramError::ShowDebugWindow)?;
-
-    // Wait for connection.
-    let client = select_biased! {
-        _ = win.wait().fuse() => return Ok(None),
-        v = server.accept().fuse() => match v {
-            Ok(v) => v.0,
-            Err(e) => return Err(ProgramError::AcceptDebugger(e)),
-        }
-    };
-
-    // Disable Nagle algorithm since it does not work well with GDB remote protocol.
-    client
-        .set_nodelay(true)
-        .map_err(ProgramError::DisableDebuggerNagle)?;
-
-    Ok(Some(client))
 }
 
 async fn dispatch_gdb<H: Hypervisor>(

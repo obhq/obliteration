@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use super::hw::DeviceContext;
+use crate::hw::DeviceContext;
 use hv::Cpu;
 use std::collections::BTreeMap;
 use std::num::NonZero;
@@ -15,7 +15,7 @@ pub struct Device<'a, C: Cpu> {
 }
 
 impl<'a, C: Cpu> Device<'a, C> {
-    pub fn insert<T: super::hw::Device>(
+    pub fn insert<T: crate::hw::Device>(
         tree: &mut BTreeMap<usize, Self>,
         dev: &'a T,
         f: impl FnOnce(&'a T) -> Box<dyn DeviceContext<C> + 'a>,

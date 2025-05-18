@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::context::Context;
 use super::{Device, DeviceContext};
-use crate::vmm::channel::VmmStream;
+use crate::util::VmmStream;
 use config::{ConsoleMemory, ConsoleType};
 use hv::Hypervisor;
 use std::num::NonZero;
