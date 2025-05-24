@@ -20,6 +20,7 @@ pub const PAGE_MASK: NonZero<usize> = NonZero::new(PAGE_SIZE.get() - 1).unwrap()
 /// Runtime configurations for the kernel populated from [`config::Config`].
 pub struct Config {
     max_cpu: NonZero<usize>,
+    unknown_dmem1: u8, // TODO: Figure out a correct name.
     qa: bool,
     qa_flags: &'static QaFlags,
     env_vars: Box<[&'static str]>, // kenvp
@@ -31,6 +32,7 @@ impl Config {
 
         Arc::new(Self {
             max_cpu: src.max_cpu,
+            unknown_dmem1: 0,
             qa: src.qa,
             qa_flags: &src.qa_flags,
             env_vars,
@@ -39,6 +41,10 @@ impl Config {
 
     pub fn max_cpu(&self) -> NonZero<usize> {
         self.max_cpu
+    }
+
+    pub fn unknown_dmem1(&self) -> u8 {
+        self.unknown_dmem1
     }
 
     /// See `getenv` on the Orbis for a reference.

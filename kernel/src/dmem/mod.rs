@@ -1,4 +1,5 @@
 use crate::MemoryInfo;
+use crate::context::config;
 use alloc::sync::Arc;
 
 /// Implementation of Direct Memory system.
@@ -15,6 +16,13 @@ impl Dmem {
         // TODO: Figure out what the purpose of this 16MB block of memory.
         if Self::reserve_phys(mi, 0x1000000, 1) == 0 {
             panic!("no available memory for high-address memory");
+        }
+
+        // TODO: Invoke bootparam_get_ddr3_capacity.
+        let mode = Self::load_mode(mi);
+
+        if (0x80c6c0c4u64 & (1 << mode)) != 0 {
+            panic!("Game DMEM size is not configured");
         }
 
         todo!()
@@ -71,5 +79,21 @@ impl Dmem {
 
             i -= 2;
         }
+    }
+
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x3F5B10|
+    fn load_mode(mi: &MemoryInfo) -> u32 {
+        // Ths PS4 cache the calculation of this value here but we move it to Dmem struct instead.
+        let v = if config().unknown_dmem1() == 0 {
+            todo!()
+        } else {
+            // TODO: Figure out the name of this constant.
+            5
+        };
+
+        v + mi.unk * 8
     }
 }

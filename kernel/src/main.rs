@@ -45,6 +45,7 @@ extern crate alloc;
 #[cfg_attr(target_os = "none", unsafe(no_mangle))]
 fn main(config: &'static ::config::Config) -> ! {
     // SAFETY: This function has a lot of restrictions. See Context documentation for more details.
+    let cpu = self::arch::identify_cpu();
     let hw = match boot_env() {
         BootEnv::Vm(vm) => vm.hypervisor(),
     };
@@ -55,14 +56,14 @@ fn main(config: &'static ::config::Config) -> ! {
             "CPU     : {}\n",
             "Hardware: {}"
         ),
-        self::arch::cpu_model(),
+        cpu.cpu_vendor,
         String::from_utf8_lossy(hw)
     );
 
     // Setup the CPU after the first print to let the bootloader developer know (some of) their code
     // are working.
     let config = Config::new(config);
-    let arch = unsafe { self::arch::setup_main_cpu() };
+    let arch = unsafe { self::arch::setup_main_cpu(cpu) };
 
     // Setup proc0 to represent the kernel.
     let proc0 = Proc::new_bare(Arc::new(Proc0Abi));
@@ -222,12 +223,33 @@ fn load_memory_map() -> MemoryInfo {
 
     // Get end page.
     let mut end_page = physmap[last + 1] >> PAGE_SHIFT;
+    let config = config();
 
-    if let Some(v) = config().env("hw.physmem") {
+    if let Some(v) = config.env("hw.physmem") {
         end_page = min(v.parse::<u64>().unwrap() >> PAGE_SHIFT, end_page);
     }
 
     // TODO: There is some unknown calls here.
+    let mut unk = 0;
+
+    for i in (0..=last).rev().step_by(2) {
+        unk = (unk + physmap[i + 1]) - physmap[i];
+    }
+
+    // TODO: Figure out the name of this variable.
+    let mut unk = u32::from((unk >> 33) != 0);
+
+    // TODO: We probably want to remove this CPU model checks but better to keep it for now so we
+    // don't have a headache when the other places rely on the effect of this check.
+    #[cfg(target_arch = "x86_64")]
+    let cpu_ok = (arch().cpu.cpu_id & 0xffffff80) == 0x740f00;
+    #[cfg(not(target_arch = "x86_64"))]
+    let cpu_ok = true;
+
+    if cpu_ok && !config.dipsw(Dipsw::Unk140) && !config.dipsw(Dipsw::Unk146) {
+        unk |= 2;
+    }
+
     load_pmap();
 
     // The call to initialize_dmem is moved to the caller of this function.
@@ -238,6 +260,7 @@ fn load_memory_map() -> MemoryInfo {
         boot_info,
         initial_memory_size,
         end_page,
+        unk,
     }
 }
 
@@ -375,6 +398,7 @@ struct MemoryInfo {
     boot_info: BootInfo,
     initial_memory_size: u64,
     end_page: u64,
+    unk: u32,
 }
 
 /// Contains information for memory to boot a secondary CPU.
