@@ -9,13 +9,19 @@ use bitfield_struct::bitfield;
 use core::arch::{asm, global_asm};
 use core::fmt::Write;
 use core::mem::{transmute, zeroed};
-use x86_64::{Dpl, Efer, Rflags, SegmentDescriptor, SegmentSelector, Star, Tss64};
+use x86_64::{Dpl, Efer, Gdtr, Rflags, SegmentDescriptor, SegmentSelector, Star, Tss64};
 
 pub const GDT_KERNEL_CS: SegmentSelector = SegmentSelector::new().with_si(3);
 pub const GDT_KERNEL_DS: SegmentSelector = SegmentSelector::new().with_si(4);
 pub const GDT_USER_CS32: SegmentSelector = SegmentSelector::new().with_si(5).with_rpl(Dpl::Ring3);
 
-pub fn cpu_model() -> String {
+/// See `identify_cpu` on the Orbis for a reference.
+///
+/// # Reference offsets
+/// | Version | Offset |
+/// |---------|--------|
+/// |PS4 11.00|0x2311E0|
+pub fn identify_cpu() -> CpuInfo {
     // In order to activate long mode on a bare hardware it is required CPUID. However, it is
     // possible for CPUID to not available on the VM so we need to check.
     let mut flags: u64;
@@ -29,23 +35,31 @@ pub fn cpu_model() -> String {
         panic!("CPUID instruction is not available");
     }
 
-    // Get highest leaf available.
-    let mut name = String::with_capacity(128);
+    // Get cpu_high.
+    let mut cpu_vendor = String::with_capacity(128);
     let r = unsafe { core::arch::x86_64::__cpuid(0) };
+    let cpu_high = r.eax;
     let mut buf = [0u8; 12];
+
+    assert!(cpu_high >= 1);
 
     buf[..4].copy_from_slice(&r.ebx.to_le_bytes());
     buf[4..8].copy_from_slice(&r.edx.to_le_bytes());
     buf[8..].copy_from_slice(&r.ecx.to_le_bytes());
 
-    write!(name, "{}", core::str::from_utf8(&buf).unwrap()).unwrap();
+    write!(cpu_vendor, "{}", core::str::from_utf8(&buf).unwrap()).unwrap();
 
-    name
+    // TODO: Get cpu_vendor_id.
+    let r = unsafe { core::arch::x86_64::__cpuid(1) };
+    let cpu_id = r.eax;
+
+    // TODO: Get cpu_feature.
+    CpuInfo { cpu_vendor, cpu_id }
 }
 
 /// # Safety
 /// This function can be called only once and must be called by main CPU entry point.
-pub unsafe fn setup_main_cpu() -> Arc<ArchConfig> {
+pub unsafe fn setup_main_cpu(cpu: CpuInfo) -> Arc<ArchConfig> {
     // Setup GDT.
     let mut gdt = vec![
         // Null descriptor.
@@ -184,6 +198,7 @@ pub unsafe fn setup_main_cpu() -> Arc<ArchConfig> {
         .unwrap();
 
     Arc::new(ArchConfig {
+        cpu,
         trap_rsp: trap_rsp.as_mut_ptr() as usize,
         secondary_start: unsafe { core::slice::from_raw_parts(secondary_start.as_ptr(), len) },
     })
@@ -286,16 +301,6 @@ global_asm!("syscall_entry32:", "ud2");
 // See mptramp_start and mptramp_end on the Orbis for a reference.
 global_asm!("secondary_start:", "ud2", "secondary_end:");
 
-/// Raw value of a Global Descriptor-Table Register.
-///
-/// See Global Descriptor-Table Register section on AMD64 Architecture Programmer's Manual Volume 2
-/// for details.
-#[repr(C, packed)]
-struct Gdtr {
-    limit: u16,
-    addr: *const SegmentDescriptor,
-}
-
 /// Raw value of a TSS descriptor.
 ///
 /// See TSS Descriptor section on AMD64 Architecture Programmer's Manual Volume 2 for more details.
@@ -356,8 +361,15 @@ struct GateDescriptor {
     __: u32,
 }
 
+/// Contains information for CPU on current machine.
+pub struct CpuInfo {
+    pub cpu_vendor: String, // cpu_vendor
+    pub cpu_id: u32,
+}
+
 /// Contains architecture-specific configurations obtained from [`setup_main_cpu()`].
 pub struct ArchConfig {
+    pub cpu: CpuInfo,
     pub trap_rsp: usize,
     pub secondary_start: &'static [u8],
 }

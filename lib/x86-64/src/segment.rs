@@ -1,5 +1,15 @@
 use bitfield_struct::bitfield;
 
+/// Raw value of a Global Descriptor-Table Register.
+///
+/// See Global Descriptor-Table Register section on AMD64 Architecture Programmer's Manual Volume 2
+/// for details.
+#[repr(C, packed)]
+pub struct Gdtr {
+    pub limit: u16,
+    pub addr: *const SegmentDescriptor,
+}
+
 /// Raw value of a Segment Descriptor.
 ///
 /// See Legacy Segment Descriptors section on AMD64 Architecture Programmer's Manual Volume 2 for
