@@ -249,7 +249,7 @@ impl Vmm<()> {
             .unwrap();
 
         // Allocate kernel config.
-        let config = profile.kernel_config();
+        let config = profile.kernel_config.as_ref();
         let len = size_of_val(config).try_into().unwrap();
         let conf_vaddr = vaddr;
 

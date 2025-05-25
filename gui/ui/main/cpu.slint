@@ -1,7 +1,27 @@
-import { Button, Slider, LineEdit, HorizontalBox, VerticalBox, GroupBox } from "std-widgets.slint";
+import { Button, Slider, LineEdit, HorizontalBox, VerticalBox, GroupBox, GridBox, ComboBox } from "std-widgets.slint";
+
+component CpuModel {
+    in property <[string]> models;
+    in-out property <int> selected;
+
+    VerticalBox {
+        padding: 0;
+        alignment: start;
+
+        ComboBox {
+            model: root.models;
+            current-index <=> root.selected;
+        }
+
+        Text {
+            text: "Using Host may cause the game running in non-Pro mode or crash the game. Note that this has no effect on non-x86 and the kernel always assume Pro.";
+            wrap: word-wrap;
+        }
+    }
+}
 
 component CpuCount {
-    in-out property <float> value;
+    in-out property <int> value;
 
     VerticalBox {
         padding: 0;
@@ -64,35 +84,56 @@ component DebugAddr {
 }
 
 export component CpuTab {
-    in-out property <float> cpu-count: 8;
+    in property <[string]> cpu-models;
+    in-out property <int> selected-cpu;
+    in-out property <int> cpu-count: 8;
     in-out property <string> debug-address;
 
     pure callback start-debug();
 
-    VerticalBox {
+    GridBox {
         padding-top: 0;
-        alignment: start;
+        spacing-vertical: 0;
 
-        HorizontalBox {
-            padding: 0;
+        GroupBox {
+            title: "Model";
+            row: 0;
+            col: 0;
+            vertical-stretch: 0;
+            CpuModel {
+                models: root.cpu-models;
+                selected <=> root.selected-cpu;
+            }
+        }
 
-            GroupBox {
-                title: "Count";
-                width: 50%;
-                CpuCount {
-                    value <=> cpu-count;
+        GroupBox {
+            title: "Cores";
+            row: 0;
+            col: 1;
+            vertical-stretch: 0;
+            width: 50%;
+            CpuCount {
+                value <=> root.cpu-count;
+            }
+        }
+
+        GroupBox {
+            title: "GDB Server";
+            row: 1;
+            col: 0;
+            vertical-stretch: 0;
+            DebugAddr {
+                value <=> root.debug-address;
+                start => {
+                    start-debug();
                 }
             }
+        }
 
-            GroupBox {
-                title: "GDB Server";
-                DebugAddr {
-                    value <=> debug-address;
-                    start => {
-                        start-debug();
-                    }
-                }
-            }
+        Rectangle {
+            row: 2;
+            col: 0;
+            colspan: 2;
         }
     }
 }

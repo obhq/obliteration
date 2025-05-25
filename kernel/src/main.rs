@@ -45,6 +45,7 @@ extern crate alloc;
 #[cfg_attr(target_os = "none", unsafe(no_mangle))]
 fn main(config: &'static ::config::Config) -> ! {
     // SAFETY: This function has a lot of restrictions. See Context documentation for more details.
+    let config = Config::new(config);
     let cpu = self::arch::identify_cpu();
     let hw = match boot_env() {
         BootEnv::Vm(vm) => vm.hypervisor(),
@@ -53,16 +54,16 @@ fn main(config: &'static ::config::Config) -> ! {
     info!(
         concat!(
             "Starting Obliteration Kernel.\n",
-            "CPU     : {}\n",
+            "CPU     : {} × {}\n",
             "Hardware: {}"
         ),
         cpu.cpu_vendor,
+        config.max_cpu(),
         String::from_utf8_lossy(hw)
     );
 
     // Setup the CPU after the first print to let the bootloader developer know (some of) their code
     // are working.
-    let config = Config::new(config);
     let arch = unsafe { self::arch::setup_main_cpu(cpu) };
 
     // Setup proc0 to represent the kernel.
