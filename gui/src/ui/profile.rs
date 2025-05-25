@@ -1,9 +1,11 @@
 use super::MainWindow;
 use crate::graphics::{GraphicsBuilder, PhysicalDevice};
-use crate::profile::{DisplayResolution, Profile};
+use crate::profile::{CpuModel, DisplayResolution, Profile};
+use serde_bytes::ByteBuf;
 use slint::{Model, ModelNotify, ModelTracker, SharedString, ToSharedString};
 use std::any::Any;
 use std::cell::{RefCell, RefMut};
+use std::num::NonZero;
 use std::rc::Rc;
 use thiserror::Error;
 
@@ -99,11 +101,54 @@ impl Model for ResolutionModel {
     }
 }
 
+/// Implementation of [`Model`] for [`CpuModel`].
+pub struct CpuList([CpuModel; 3]);
+
+impl CpuList {
+    pub fn position(&self, v: CpuModel) -> Option<i32> {
+        self.0
+            .iter()
+            .position(move |i| *i == v)
+            .map(|v| v.try_into().unwrap())
+    }
+
+    pub fn get(&self, i: i32) -> Option<CpuModel> {
+        usize::try_from(i).ok().and_then(|i| self.0.get(i)).copied()
+    }
+}
+
+impl Default for CpuList {
+    fn default() -> Self {
+        Self([CpuModel::Host, CpuModel::Pro, CpuModel::ProWithHost])
+    }
+}
+
+impl Model for CpuList {
+    type Data = SharedString;
+
+    fn row_count(&self) -> usize {
+        self.0.len()
+    }
+
+    fn row_data(&self, row: usize) -> Option<Self::Data> {
+        self.0.get(row).map(|v| v.to_string().into())
+    }
+
+    fn model_tracker(&self) -> &dyn ModelTracker {
+        &()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
 /// Implementation of [`Model`] for [`Profile`].
 pub struct ProfileModel<G> {
     profiles: RefCell<Vec<Profile>>,
     devices: Rc<DeviceModel<G>>,
     resolutions: Rc<ResolutionModel>,
+    cpus: Rc<CpuList>,
     noti: ModelNotify,
 }
 
@@ -112,11 +157,13 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
         profiles: Vec<Profile>,
         devices: Rc<DeviceModel<G>>,
         resolutions: Rc<ResolutionModel>,
+        cpus: Rc<CpuList>,
     ) -> Self {
         Self {
             profiles: RefCell::new(profiles),
             devices,
             resolutions,
+            cpus,
             noti: ModelNotify::default(),
         }
     }
@@ -127,9 +174,11 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
         let profiles = self.profiles.borrow();
         let p = &profiles[row];
 
-        dst.set_selected_device(self.devices.position(p.display_device()).unwrap_or(0));
-        dst.set_selected_resolution(self.resolutions.position(p.display_resolution()).unwrap());
-        dst.set_debug_address(p.debug_addr().to_shared_string());
+        dst.set_selected_device(self.devices.position(&p.display_device).unwrap_or(0));
+        dst.set_selected_resolution(self.resolutions.position(p.display_resolution).unwrap());
+        dst.set_selected_cpu(self.cpus.position(p.cpu_model).unwrap());
+        dst.set_cpu_count(p.kernel_config.max_cpu.get().try_into().unwrap());
+        dst.set_debug_address(p.debug_addr.to_shared_string());
     }
 
     /// # Panics
@@ -138,14 +187,21 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
         let row = usize::try_from(row).unwrap();
         let mut profiles = self.profiles.borrow_mut();
         let p = &mut profiles[row];
+        let debug_addr = src
+            .get_debug_address()
+            .parse()
+            .map_err(|_| ProfileError::InvalidDebugAddress)?;
 
-        p.set_display_device(self.devices.get(src.get_selected_device()).unwrap().id());
-        p.set_display_resolution(self.resolutions.get(src.get_selected_resolution()).unwrap());
-
-        match src.get_debug_address().parse() {
-            Ok(v) => p.set_debug_addr(v),
-            Err(_) => return Err(ProfileError::InvalidDebugAddress),
-        }
+        p.display_device = ByteBuf::from(self.devices.get(src.get_selected_device()).unwrap().id());
+        p.display_resolution = self.resolutions.get(src.get_selected_resolution()).unwrap();
+        p.cpu_model = self.cpus.get(src.get_selected_cpu()).unwrap();
+        p.kernel_config.max_cpu = src
+            .get_cpu_count()
+            .try_into()
+            .ok()
+            .and_then(NonZero::new)
+            .unwrap();
+        p.debug_addr = debug_addr;
 
         Ok(RefMut::map(profiles, move |v| &mut v[row]))
     }
@@ -175,7 +231,10 @@ impl<G: 'static> Model for ProfileModel<G> {
     }
 
     fn row_data(&self, row: usize) -> Option<Self::Data> {
-        self.profiles.borrow().get(row).map(|p| p.name().into())
+        self.profiles
+            .borrow()
+            .get(row)
+            .map(|p| p.name.to_shared_string())
     }
 
     fn model_tracker(&self) -> &dyn ModelTracker {

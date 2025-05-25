@@ -9,6 +9,9 @@ export component MainWindow inherits Window {
     in-out property <int> selected-device;
     in property <[string]> resolutions;
     in-out property <int> selected-resolution;
+    in property <[string]> cpu-models;
+    in-out property <int> selected-cpu;
+    in-out property <int> cpu-count;
     in-out property <string> debug-address;
     in property <[string]> profiles;
     in-out property <int> selected-profile;
@@ -99,7 +102,10 @@ export component MainWindow inherits Window {
             }
 
             if tab.current-page == 1: CpuTab {
-                debug-address <=> debug-address;
+                cpu-models: root.cpu-models;
+                selected-cpu <=> root.selected-cpu;
+                cpu-count <=> root.cpu-count;
+                debug-address <=> root.debug-address;
                 start-debug => {
                     start-debug();
                 }

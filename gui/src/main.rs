@@ -8,7 +8,7 @@ use self::profile::{DisplayResolution, Profile};
 use self::settings::{Settings, SettingsError};
 use self::setup::{SetupError, run_setup};
 use self::ui::{
-    AboutWindow, App, DesktopExt, DeviceModel, MainWindow, NewProfile, ProfileModel,
+    AboutWindow, App, CpuList, DesktopExt, DeviceModel, MainWindow, NewProfile, ProfileModel,
     ResolutionModel, RuntimeExt, SettingsWindow, WaitForDebugger, error, spawn_handler,
 };
 use self::vmm::{CpuError, Vmm, VmmError, VmmEvent};
@@ -76,10 +76,12 @@ impl MainProgram {
         let graphics = Rc::new(graphics);
         let devices = Rc::new(DeviceModel::new(graphics.clone()));
         let resolutions = Rc::new(ResolutionModel::default());
+        let cpus = Rc::new(CpuList::default());
         let profiles = Rc::new(ProfileModel::new(
             profiles,
             devices.clone(),
             resolutions.clone(),
+            cpus.clone(),
         ));
 
         win.on_settings({
@@ -156,6 +158,7 @@ impl MainProgram {
         // Set window properties.
         win.set_devices(devices.into());
         win.set_resolutions(resolutions.into());
+        win.set_cpu_models(cpus.into());
         win.set_profiles(profiles.clone().into());
 
         // Load selected profile.
@@ -533,7 +536,7 @@ impl App for MainProgram {
             match r.exit {
                 ExitAction::Run => (r.graphics, r.profile, None),
                 ExitAction::Debug => {
-                    let addr = r.profile.debug_addr().clone();
+                    let addr = r.profile.debug_addr.clone();
 
                     (r.graphics, r.profile, Some(addr))
                 }
@@ -563,7 +566,7 @@ impl App for MainProgram {
 
         // Setup WindowAttributes for VMM screen.
         let attrs = Window::default_attributes()
-            .with_inner_size(match profile.display_resolution() {
+            .with_inner_size(match profile.display_resolution {
                 DisplayResolution::Hd => PhysicalSize::new(1280, 720),
                 DisplayResolution::FullHd => PhysicalSize::new(1920, 1080),
                 DisplayResolution::UltraHd => PhysicalSize::new(3840, 2160),
