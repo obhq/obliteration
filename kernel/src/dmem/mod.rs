@@ -1,9 +1,12 @@
 use crate::MemoryInfo;
+use crate::config::Dipsw;
 use crate::context::config;
 use alloc::sync::Arc;
 
 /// Implementation of Direct Memory system.
-pub struct Dmem {}
+pub struct Dmem {
+    mode: u32,
+}
 
 impl Dmem {
     /// See `initialize_dmem` on the Orbis for a reference.
@@ -21,11 +24,15 @@ impl Dmem {
         // TODO: Invoke bootparam_get_ddr3_capacity.
         let mode = Self::load_mode(mi);
 
-        if (0x80c6c0c4u64 & (1 << mode)) != 0 {
+        if (0x80C6C0C4u64 & (1 << mode)) != 0 {
             panic!("Game DMEM size is not configured");
         }
 
         todo!()
+    }
+
+    pub fn mode(&self) -> u32 {
+        self.mode
     }
 
     /// # Reference offsets
@@ -87,8 +94,23 @@ impl Dmem {
     /// |PS4 11.00|0x3F5B10|
     fn load_mode(mi: &MemoryInfo) -> u32 {
         // Ths PS4 cache the calculation of this value here but we move it to Dmem struct instead.
-        let v = if config().unknown_dmem1() == 0 {
-            todo!()
+        let c = config();
+        let v = if c.unknown_dmem1() == 0 {
+            if c.dipsw(Dipsw::Unk97) {
+                // TODO: Figure out the name of this constant.
+                3
+            } else if c.dipsw(Dipsw::Unk0) && !c.dipsw(Dipsw::Unk24) {
+                // TODO: Figure out the name of 3 constant.
+                if c.dipsw(Dipsw::Unk16) && c.dipsw(Dipsw::Unk17) && (mi.unk & 3) == 3 {
+                    // TODO: Figure out the name of this constant.
+                    6
+                } else {
+                    todo!()
+                }
+            } else {
+                // TODO: Figure out the name of this constant.
+                4
+            }
         } else {
             // TODO: Figure out the name of this constant.
             5

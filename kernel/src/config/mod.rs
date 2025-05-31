@@ -4,7 +4,7 @@ pub use self::dipsw::*;
 use alloc::boxed::Box;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use config::QaFlags;
+use config::{ConsoleId, ProductId, QaFlags};
 use core::num::NonZero;
 use krt::warn;
 use macros::elf_note;
@@ -21,6 +21,7 @@ pub const PAGE_MASK: NonZero<usize> = NonZero::new(PAGE_SIZE.get() - 1).unwrap()
 pub struct Config {
     max_cpu: NonZero<usize>,
     unknown_dmem1: u8, // TODO: Figure out a correct name.
+    idps: &'static ConsoleId,
     qa: bool,
     qa_flags: &'static QaFlags,
     env_vars: Box<[&'static str]>, // kenvp
@@ -33,6 +34,7 @@ impl Config {
         Arc::new(Self {
             max_cpu: src.max_cpu,
             unknown_dmem1: 0,
+            idps: &src.idps,
             qa: src.qa,
             qa_flags: &src.qa_flags,
             env_vars,
@@ -45,6 +47,10 @@ impl Config {
 
     pub fn unknown_dmem1(&self) -> u8 {
         self.unknown_dmem1
+    }
+
+    pub fn idps(&self) -> &'static ConsoleId {
+        self.idps
     }
 
     /// See `getenv` on the Orbis for a reference.
@@ -82,6 +88,26 @@ impl Config {
         self.qa && self.qa_flags.internal_dev()
     }
 
+    /// See `sceSblAIMgrIsDevKit` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x078F50|
+    pub fn is_devkit(&self) -> bool {
+        self.idps.product() == ProductId::DEVKIT
+    }
+
+    /// See `sceSblAIMgrIsTestKit` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x0790A0|
+    pub fn is_testkit(&self) -> bool {
+        self.idps.product() == ProductId::TESTKIT
+    }
+
     /// See `sceKernelCheckDipsw` on the Orbis for a reference.
     ///
     /// # Reference offsets
@@ -89,6 +115,14 @@ impl Config {
     /// |---------|--------|
     /// |PS4 11.00|0x654D70|
     pub fn dipsw(&self, _: Dipsw) -> bool {
+        if !self.is_testkit() {
+            if !self.is_devkit() {
+                return false;
+            }
+        } else {
+            todo!()
+        }
+
         todo!()
     }
 

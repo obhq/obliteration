@@ -54,12 +54,14 @@ fn main(config: &'static ::config::Config) -> ! {
     info!(
         concat!(
             "Starting Obliteration Kernel.\n",
-            "CPU     : {} × {}\n",
-            "Hardware: {}"
+            "CPU         : {} × {}\n",
+            "Hardware    : {}\n",
+            "IDPS Product: {}"
         ),
         cpu.cpu_vendor,
         config.max_cpu(),
-        String::from_utf8_lossy(hw)
+        String::from_utf8_lossy(hw),
+        config.idps().product()
     );
 
     // Setup the CPU after the first print to let the bootloader developer know (some of) their code
@@ -80,9 +82,11 @@ fn main(config: &'static ::config::Config) -> ! {
 }
 
 fn setup() -> ContextSetup {
+    // Initialize physical memory.
     let mut mi = load_memory_map();
+    let dmem = Dmem::new(&mut mi);
 
-    Dmem::new(&mut mi);
+    info!("DMEM Mode: {}", dmem.mode());
 
     // Run sysinit vector for subsystem. The Orbis use linker to put all sysinit functions in a list
     // then loop the list to execute all of it. We manually execute those functions instead for
