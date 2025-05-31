@@ -1,3 +1,5 @@
+use core::fmt::{Display, Formatter};
+
 /// Implementation of [IDPS].
 ///
 /// All fields here are big-endian the same as PS3.
@@ -24,6 +26,10 @@ impl ConsoleId {
             prodsub,
             serial,
         }
+    }
+
+    pub fn product(&self) -> ProductId {
+        self.product
     }
 }
 
@@ -52,7 +58,7 @@ impl CompanyId {
 ///
 /// See https://www.psdevwiki.com/ps4/Console_ID for a list of known IDs.
 #[repr(transparent)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Deserialize, serde::Serialize))]
 pub struct ProductId(u16);
 
@@ -61,4 +67,18 @@ impl ProductId {
     pub const TESTKIT: Self = Self(0x8201);
     pub const USA: Self = Self(0x8401);
     pub const SOUTH_ASIA: Self = Self(0x8A01);
+}
+
+impl Display for ProductId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        let v = match *self {
+            Self::DEVKIT => "TOOL/DEVKIT",
+            Self::TESTKIT => "DEX/TESTKIT",
+            Self::USA => "UC2/USA/CANADA",
+            Self::SOUTH_ASIA => "E12/MALAYSIA",
+            _ => return write!(f, "{:#X}", self.0),
+        };
+
+        f.write_str(v)
+    }
 }
