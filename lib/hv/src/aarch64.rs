@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+use crate::Hypervisor;
 use bitfield_struct::bitfield;
 use std::error::Error;
 
