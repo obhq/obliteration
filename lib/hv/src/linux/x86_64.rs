@@ -3,12 +3,24 @@ use super::ffi::{
     KVM_GET_FPU, KVM_GET_REGS, KVM_GET_SREGS, KVM_SET_REGS, KVM_SET_SREGS, KvmFpu, KvmRegs,
     KvmSregs,
 };
-use crate::{CpuCommit, CpuStates};
+use super::{HvError, Kvm};
+use crate::{CpuCommit, CpuStates, FeatLeaf, HypervisorExt};
 use libc::ioctl;
 use std::mem::MaybeUninit;
 use std::os::fd::{AsRawFd, OwnedFd};
 use thiserror::Error;
 use x86_64::{Efer, Rflags};
+
+impl HypervisorExt for Kvm {
+    fn set_cpuid(&mut self, leaf: FeatLeaf) -> Result<(), HvError> {
+        match self.feats.iter_mut().find(|f| f.id == leaf.id) {
+            Some(f) => *f = leaf,
+            None => self.feats.push(leaf),
+        }
+
+        Ok(())
+    }
+}
 
 /// Implementation of [`CpuStates`] for KVM.
 pub struct KvmStates<'a> {

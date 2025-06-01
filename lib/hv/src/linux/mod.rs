@@ -7,6 +7,7 @@ use self::ffi::{
     KvmGuestDebug, KvmUserspaceMemoryRegion,
 };
 use super::{CpuFeats, Hypervisor, Ram};
+use crate::HypervisorExt;
 use libc::{MAP_FAILED, MAP_PRIVATE, O_RDWR, PROT_READ, PROT_WRITE, ioctl, mmap, open};
 use std::ffi::{c_int, c_uint};
 use std::io::Error;
@@ -36,7 +37,7 @@ pub fn new(
     ram_size: NonZero<usize>,
     page_size: NonZero<usize>,
     debug: bool,
-) -> Result<impl Hypervisor, HvError> {
+) -> Result<impl HypervisorExt, HvError> {
     // Create RAM.
     let ram = Ram::new(page_size, ram_size, ())?;
 
@@ -72,17 +73,19 @@ pub fn new(
 
     // On x86 we need KVM_GET_SUPPORTED_CPUID.
     #[cfg(target_arch = "x86_64")]
-    let cpuid = if !get_ext(kvm.as_fd(), self::ffi::KVM_CAP_EXT_CPUID).is_ok_and(|v| v != 0) {
+    let feats = if !get_ext(kvm.as_fd(), self::ffi::KVM_CAP_EXT_CPUID).is_ok_and(|v| v != 0) {
         return Err(HvError::NoKvmExtCpuid);
     } else {
-        use self::ffi::{KVM_GET_SUPPORTED_CPUID, KvmCpuid2, KvmCpuidEntry2};
+        use self::ffi::{
+            KVM_CPUID_FLAG_SIGNIFCANT_INDEX, KVM_GET_SUPPORTED_CPUID, KvmCpuid2, KvmCpuidEntry2,
+        };
+        use crate::FeatLeaf;
         use libc::E2BIG;
         use std::alloc::{Layout, handle_alloc_error};
 
         let layout = Layout::from_size_align(8, 4).unwrap();
         let mut count = 1;
-
-        loop {
+        let feats = loop {
             // Allocate kvm_cpuid2.
             let layout = layout
                 .extend(Layout::array::<KvmCpuidEntry2>(count).unwrap())
@@ -106,7 +109,7 @@ pub fn new(
             // Wrap data in a box. Pointer casting here may looks weird but it is how unsized type
             // works in Rust. See https://stackoverflow.com/a/64121094 for more details.
             let data = std::ptr::slice_from_raw_parts_mut(data.cast::<KvmCpuidEntry2>(), count);
-            let data = unsafe { Box::from_raw(data as *mut KvmCpuid2) };
+            let data = unsafe { Box::from_raw(data as *mut KvmCpuid2<[KvmCpuidEntry2]>) };
             let e = match e {
                 Some(v) => v,
                 None => break data,
@@ -118,7 +121,20 @@ pub fn new(
             }
 
             count += 1;
-        }
+        };
+
+        feats
+            .entries
+            .iter()
+            .filter(|e| (e.flags & KVM_CPUID_FLAG_SIGNIFCANT_INDEX) == 0)
+            .map(|e| FeatLeaf {
+                id: e.function,
+                eax: e.eax,
+                ebx: e.ebx,
+                ecx: e.ecx,
+                edx: e.edx,
+            })
+            .collect()
     };
 
     // Check if debug supported.
@@ -187,17 +203,6 @@ pub fn new(
             return Err(HvError::InitCpuFailed(i, Error::last_os_error()));
         }
 
-        #[cfg(target_arch = "x86_64")]
-        if unsafe {
-            ioctl(
-                cpu.as_raw_fd(),
-                self::ffi::KVM_SET_CPUID2,
-                cpuid.as_ref() as *const self::ffi::KvmCpuid2 as *const u8,
-            ) < 0
-        } {
-            return Err(HvError::SetCpuidFailed(i, Error::last_os_error()));
-        }
-
         if debug {
             let arg = KvmGuestDebug {
                 control: KVM_GUESTDBG_ENABLE | KVM_GUESTDBG_USE_SW_BP,
@@ -211,8 +216,55 @@ pub fn new(
         }
     }
 
+    // Load PE features after all PE is initialized.
+    #[cfg(target_arch = "aarch64")]
+    let feats = {
+        use self::ffi::{ARM64_SYS_REG, KVM_GET_ONE_REG, KvmOneReg};
+        use crate::vmm::hv::{Mmfr0, Mmfr1, Mmfr2};
+
+        // ID_AA64MMFR0_EL1.
+        let cpu = cpus[0].get_mut().unwrap().as_fd();
+        let mut mmfr0 = Mmfr0::default();
+        let mut req = KvmOneReg {
+            id: ARM64_SYS_REG(0b11, 0b000, 0b0000, 0b0111, 0b000),
+            addr: &mut mmfr0,
+        };
+
+        if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_ONE_REG, &mut req) < 0 } {
+            return Err(HvError::ReadMmfr0Failed(Error::last_os_error()));
+        }
+
+        // ID_AA64MMFR1_EL1.
+        let mut mmfr1 = Mmfr1::default();
+        let mut req = KvmOneReg {
+            id: ARM64_SYS_REG(0b11, 0b000, 0b0000, 0b0111, 0b001),
+            addr: &mut mmfr1,
+        };
+
+        if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_ONE_REG, &mut req) < 0 } {
+            return Err(HvError::ReadMmfr1Failed(Error::last_os_error()));
+        }
+
+        // ID_AA64MMFR2_EL1.
+        let mut mmfr2 = Mmfr2::default();
+        let mut req = KvmOneReg {
+            id: ARM64_SYS_REG(0b11, 0b000, 0b0000, 0b0111, 0b010),
+            addr: &mut mmfr2,
+        };
+
+        if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_ONE_REG, &mut req) < 0 } {
+            return Err(HvError::ReadMmfr2Failed(Error::last_os_error()));
+        }
+
+        CpuFeats {
+            mmfr0,
+            mmfr1,
+            mmfr2,
+        }
+    };
+
     Ok(Kvm {
-        feats: load_feats(cpus[0].get_mut().unwrap().as_fd())?,
+        feats,
         cpus,
         vcpu_mmap_size: vcpu_mmap_size.try_into().unwrap(),
         vm,
@@ -257,56 +309,6 @@ fn create_vm(kvm: BorrowedFd) -> Result<OwnedFd, HvError> {
     }
 }
 
-#[cfg(target_arch = "aarch64")]
-fn load_feats(cpu: BorrowedFd) -> Result<CpuFeats, HvError> {
-    use self::ffi::{ARM64_SYS_REG, KVM_GET_ONE_REG, KvmOneReg};
-    use crate::vmm::hv::{Mmfr0, Mmfr1, Mmfr2};
-
-    // ID_AA64MMFR0_EL1.
-    let mut mmfr0 = Mmfr0::default();
-    let mut req = KvmOneReg {
-        id: ARM64_SYS_REG(0b11, 0b000, 0b0000, 0b0111, 0b000),
-        addr: &mut mmfr0,
-    };
-
-    if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_ONE_REG, &mut req) < 0 } {
-        return Err(HvError::ReadMmfr0Failed(Error::last_os_error()));
-    }
-
-    // ID_AA64MMFR1_EL1.
-    let mut mmfr1 = Mmfr1::default();
-    let mut req = KvmOneReg {
-        id: ARM64_SYS_REG(0b11, 0b000, 0b0000, 0b0111, 0b001),
-        addr: &mut mmfr1,
-    };
-
-    if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_ONE_REG, &mut req) < 0 } {
-        return Err(HvError::ReadMmfr1Failed(Error::last_os_error()));
-    }
-
-    // ID_AA64MMFR2_EL1.
-    let mut mmfr2 = Mmfr2::default();
-    let mut req = KvmOneReg {
-        id: ARM64_SYS_REG(0b11, 0b000, 0b0000, 0b0111, 0b010),
-        addr: &mut mmfr2,
-    };
-
-    if unsafe { ioctl(cpu.as_raw_fd(), KVM_GET_ONE_REG, &mut req) < 0 } {
-        return Err(HvError::ReadMmfr2Failed(Error::last_os_error()));
-    }
-
-    Ok(CpuFeats {
-        mmfr0,
-        mmfr1,
-        mmfr2,
-    })
-}
-
-#[cfg(target_arch = "x86_64")]
-fn load_feats(_: BorrowedFd) -> Result<CpuFeats, HvError> {
-    Ok(CpuFeats {})
-}
-
 fn get_ext(kvm: BorrowedFd, id: c_int) -> Result<c_uint, Error> {
     let v = unsafe { ioctl(kvm.as_raw_fd(), KVM_CHECK_EXTENSION, id) };
 
@@ -347,10 +349,59 @@ impl Hypervisor for Kvm {
         &mut self.ram
     }
 
-    fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {
+    fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, HvError> {
         // Get CPU.
-        let cpu = self.cpus.get(id).ok_or(KvmCpuError::InvalidId)?;
-        let cpu = cpu.try_lock().map_err(|_| KvmCpuError::DuplicatedId)?;
+        let cpu = self.cpus.get(id).ok_or(HvError::InvalidCpuId)?;
+        let cpu = cpu.try_lock().map_err(|_| HvError::DuplicatedCpuId)?;
+
+        // Set CPUID.
+        #[cfg(target_arch = "x86_64")]
+        unsafe {
+            use self::ffi::{KVM_SET_CPUID2, KvmCpuidEntry2};
+            use std::alloc::{Layout, handle_alloc_error};
+
+            // Allocate kvm_cpuid2.
+            let len = self.feats.len();
+            let (layout, off) = Layout::from_size_align(8, 4)
+                .unwrap()
+                .extend(Layout::array::<KvmCpuidEntry2>(len).unwrap())
+                .unwrap();
+            let layout = layout.pad_to_align();
+            let data = std::alloc::alloc_zeroed(layout);
+
+            if data.is_null() {
+                handle_alloc_error(layout);
+            }
+
+            data.cast::<u32>().write(len.try_into().unwrap());
+
+            // Write kvm_cpuid2::entries.
+            let mut e = data.add(off).cast::<KvmCpuidEntry2>();
+
+            for f in &self.feats {
+                e.write(KvmCpuidEntry2 {
+                    function: f.id,
+                    index: 0,
+                    flags: 0,
+                    eax: f.eax,
+                    ebx: f.ebx,
+                    ecx: f.ecx,
+                    edx: f.edx,
+                    padding: [0; 3],
+                });
+
+                e = e.add(1);
+            }
+
+            // Invoke KVM_SET_CPUID2.
+            let r = ioctl(cpu.as_raw_fd(), KVM_SET_CPUID2, data);
+
+            std::alloc::dealloc(data, layout);
+
+            if r < 0 {
+                return Err(HvError::SetCpuFeats(Error::last_os_error()));
+            }
+        };
 
         // Get run context.
         let cx = unsafe {
@@ -365,7 +416,7 @@ impl Hypervisor for Kvm {
         };
 
         if cx == MAP_FAILED {
-            return Err(KvmCpuError::GetKvmRunFailed(Error::last_os_error()));
+            return Err(HvError::GetKvmRun(Error::last_os_error()));
         }
 
         Ok(unsafe { KvmCpu::new(id, cpu, cx.cast(), self.vcpu_mmap_size) })
@@ -444,8 +495,8 @@ pub enum HvError {
     InitCpuFailed(usize, #[source] Error),
 
     #[cfg(target_arch = "x86_64")]
-    #[error("couldn't set CPUID for vCPU #{0}")]
-    SetCpuidFailed(usize, #[source] Error),
+    #[error("couldn't set CPUID")]
+    SetCpuFeats(#[source] Error),
 
     #[error("couldn't enable debugging on vCPU #{0}")]
     EnableDebugFailed(usize, #[source] Error),
@@ -461,17 +512,17 @@ pub enum HvError {
     #[cfg(target_arch = "aarch64")]
     #[error("couldn't read ID_AA64MMFR2_EL1")]
     ReadMmfr2Failed(#[source] Error),
+
+    #[error("invalid CPU identifier")]
+    InvalidCpuId,
+
+    #[error("CPU identifier currently in use")]
+    DuplicatedCpuId,
+
+    #[error("couldn't get a pointer to kvm_run")]
+    GetKvmRun(#[source] Error),
 }
 
 /// Implementation of [`Hypervisor::CpuErr`].
 #[derive(Debug, Error)]
-pub enum KvmCpuError {
-    #[error("invalid CPU identifier")]
-    InvalidId,
-
-    #[error("CPU identifier currently in use")]
-    DuplicatedId,
-
-    #[error("couldn't get a pointer to kvm_run")]
-    GetKvmRunFailed(#[source] std::io::Error),
-}
+pub enum KvmCpuError {}

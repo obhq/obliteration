@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::HvfCpu;
 use self::mapper::HvfMapper;
-use super::{CpuFeats, Hypervisor, Ram};
+use super::{CpuFeats, Hypervisor, HypervisorExt, Ram};
 use applevisor_sys::hv_feature_reg_t::{
     HV_FEATURE_REG_ID_AA64MMFR0_EL1, HV_FEATURE_REG_ID_AA64MMFR1_EL1,
     HV_FEATURE_REG_ID_AA64MMFR2_EL1,
@@ -30,7 +30,7 @@ pub fn new(
     ram_size: NonZero<usize>,
     page_size: NonZero<usize>,
     debug: bool,
-) -> Result<impl Hypervisor, HvError> {
+) -> Result<impl HypervisorExt, HvError> {
     // Create RAM.
     let ram = Ram::new(page_size, ram_size, HvfMapper)?;
 
@@ -150,13 +150,13 @@ impl Hypervisor for Hvf {
         &mut self.ram
     }
 
-    fn create_cpu(&self, _: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {
+    fn create_cpu(&self, _: usize) -> Result<Self::Cpu<'_>, HvError> {
         // Create vCPU.
         let mut instance = 0;
         let mut exit = null();
         let ret = unsafe { hv_vcpu_create(&mut instance, &mut exit, self.cpu_config) };
         let cpu = match NonZero::new(ret) {
-            Some(e) => return Err(HvfCpuError::CreateVcpuFailed(e)),
+            Some(e) => return Err(HvError::CreateCpu(e)),
             None => HvfCpu::new(instance, exit),
         };
 
@@ -165,13 +165,15 @@ impl Hypervisor for Hvf {
             let ret = unsafe { hv_vcpu_set_trap_debug_exceptions(instance, true) };
 
             if let Some(e) = NonZero::new(ret) {
-                return Err(HvfCpuError::EnableDebugFailed(e));
+                return Err(HvError::EnableDebug(e));
             }
         }
 
         Ok(cpu)
     }
 }
+
+impl HypervisorExt for Hvf {}
 
 unsafe impl Send for Hvf {}
 unsafe impl Sync for Hvf {}
@@ -212,17 +214,17 @@ pub enum HvError {
 
     #[error("your CPU does not support {0:#x} bytes of RAM on a VM")]
     RamSizeNotSupported(NonZero<usize>),
+
+    #[error("couldn't create a vCPU ({0:#x})")]
+    CreateCpu(NonZero<hv_return_t>),
+
+    #[error("couldn't enable debug on a vCPU ({0:#x})")]
+    EnableDebug(NonZero<hv_return_t>),
 }
 
 /// Implementation of [`Hypervisor::CpuErr`].
 #[derive(Debug, Error)]
-pub enum HvfCpuError {
-    #[error("couldn't create a vCPU ({0:#x})")]
-    CreateVcpuFailed(NonZero<hv_return_t>),
-
-    #[error("couldn't enable debug on a vCPU ({0:#x})")]
-    EnableDebugFailed(NonZero<hv_return_t>),
-}
+pub enum HvfCpuError {}
 
 unsafe extern "C" {
     fn os_release(object: *mut std::ffi::c_void);

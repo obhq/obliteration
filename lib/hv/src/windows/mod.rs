@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::cpu::WhpCpu;
 use self::partition::Partition;
-use super::{CpuFeats, Hypervisor, Ram};
+use super::{CpuFeats, FeatLeaf, Hypervisor, HypervisorExt, Ram};
 use std::num::NonZero;
 use thiserror::Error;
 use windows_sys::core::HRESULT;
@@ -21,7 +21,7 @@ pub fn new(
     ram_size: NonZero<usize>,
     page_size: NonZero<usize>,
     debug: bool,
-) -> Result<impl Hypervisor, HvError> {
+) -> Result<impl HypervisorExt, HvError> {
     // Create RAM.
     let ram = Ram::new(page_size, ram_size, ())?;
 
@@ -42,7 +42,7 @@ pub fn new(
 
     Ok(Whp {
         part,
-        feats: CpuFeats {},
+        feats: Vec::new(),
         ram,
     })
 }
@@ -52,7 +52,7 @@ pub fn new(
 /// Fields in this struct need to drop in a correct order.
 struct Whp {
     part: Partition,
-    feats: CpuFeats,
+    feats: Vec<FeatLeaf>,
     ram: Ram,
 }
 
@@ -72,12 +72,18 @@ impl Hypervisor for Whp {
         &mut self.ram
     }
 
-    fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, Self::CpuErr> {
+    fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, HvError> {
         let id = id.try_into().unwrap();
 
         self.part
             .create_virtual_processor(id)
-            .map_err(WhpCpuError::CreateVirtualProcessorFailed)
+            .map_err(HvError::CreateVirtualProcessor)
+    }
+}
+
+impl HypervisorExt for Whp {
+    fn set_cpuid(&mut self, leaf: FeatLeaf) -> Result<(), HvError> {
+        todo!()
     }
 }
 
@@ -105,11 +111,11 @@ pub enum HvError {
 
     #[error("couldn't map the RAM to WHP partition ({0:#x})")]
     MapRamFailed(HRESULT),
+
+    #[error("couldn't create a virtual processor ({0:#x})")]
+    CreateVirtualProcessor(HRESULT),
 }
 
 /// Implementation of [`Hypervisor::CpuErr`].
 #[derive(Debug, Error)]
-pub enum WhpCpuError {
-    #[error("couldn't create a virtual processor ({0:#x})")]
-    CreateVirtualProcessorFailed(HRESULT),
-}
+pub enum WhpCpuError {}
