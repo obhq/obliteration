@@ -6,7 +6,7 @@ use self::kernel::{
 };
 use crate::gdb::GdbHandler;
 use crate::hw::{Device, DeviceTree, setup_devices};
-use crate::profile::Profile;
+use crate::profile::{CpuModel, Profile};
 use crate::util::VmmStream;
 use config::{BootEnv, ConsoleType, MapType, PhysMap, Vm};
 use futures::{FutureExt, select_biased};
@@ -172,6 +172,27 @@ impl Vmm<()> {
         let ram_size = NonZero::new(1024 * 1024 * 1024 * 8).unwrap();
         let mut hv =
             hv::new(8, ram_size, vm_page_size, false).map_err(VmmError::SetupHypervisor)?;
+
+        match profile.cpu_model {
+            CpuModel::Host => (), // hv::new() already set to host by default.
+            #[cfg(target_arch = "aarch64")]
+            CpuModel::Pro => (), // On non-x86 the kernel always assume Pro.
+            #[cfg(target_arch = "x86_64")]
+            CpuModel::Pro => {
+                use hv::{FeatLeaf, HypervisorExt};
+
+                hv.set_cpuid(FeatLeaf {
+                    id: 1,
+                    eax: 0x740F30,
+                    ebx: 0x80800,
+                    ecx: 0x36D8220B,
+                    edx: 0x78BFBFF,
+                })
+                .map_err(VmmError::SetProcessorInfo)?;
+            }
+            CpuModel::ProWithHost => todo!(),
+        }
+
         let devices = Arc::new(setup_devices(ram_size.get(), hv.ram().block_size()));
 
         // Reserve the beginning of the memory for kernel use. On BIOS this area is used as an entry
@@ -1091,6 +1112,10 @@ pub enum VmmError {
 
     #[error("couldn't setup a hypervisor")]
     SetupHypervisor(#[source] HvError),
+
+    #[cfg(target_arch = "x86_64")]
+    #[error("couldn't set processor info")]
+    SetProcessorInfo(#[source] HvError),
 
     #[error("couldn't allocate RAM for boot memory")]
     AllocBootMem(#[source] RamError),

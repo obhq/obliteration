@@ -52,6 +52,9 @@ pub const KVM_EXIT_IO: u32 = 6;
 pub const KVM_GUESTDBG_ENABLE: u32 = 0x00000001;
 pub const KVM_GUESTDBG_USE_SW_BP: u32 = 0x00010000;
 
+#[cfg(target_arch = "x86_64")]
+pub const KVM_CPUID_FLAG_SIGNIFCANT_INDEX: u32 = 1 << 0;
+
 const KVMIO: c_ulong = 0xAE;
 
 const _IOC_NONE: c_ulong = 0;
@@ -115,10 +118,10 @@ const fn _IOC(dir: c_ulong, ty: c_ulong, nr: c_ulong, size: c_ulong) -> c_ulong 
 
 #[cfg(target_arch = "x86_64")]
 #[repr(C)]
-pub struct KvmCpuid2 {
+pub struct KvmCpuid2<E: ?Sized> {
     pub nent: u32,
     pub padding: u32,
-    pub entries: [KvmCpuidEntry2],
+    pub entries: E,
 }
 
 #[cfg(target_arch = "x86_64")]

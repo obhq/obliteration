@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+use crate::Hypervisor;
 use bitfield_struct::bitfield;
 use std::error::Error;
+
+/// Provides processor specific methods.
+pub trait HypervisorExt: Hypervisor {}
 
 /// States of a PE.
 pub trait CpuStates {

@@ -1,6 +1,14 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
+use crate::{HvError, Hypervisor};
 use std::error::Error;
 use x86_64::{Efer, Rflags};
+
+pub type CpuFeats = Vec<FeatLeaf>;
+
+/// Provides processor specific methods.
+pub trait HypervisorExt: Hypervisor {
+    fn set_cpuid(&mut self, leaf: FeatLeaf) -> Result<(), HvError>;
+}
 
 /// States of a CPU.
 pub trait CpuStates {
@@ -85,6 +93,12 @@ pub trait CpuStates {
     fn get_mxcsr(&mut self) -> Result<u32, Self::Err>;
 }
 
-/// Features available on a CPU.
+/// Contains values for single CPUID leaf.
 #[derive(Clone)]
-pub struct CpuFeats {}
+pub struct FeatLeaf {
+    pub id: u32,
+    pub eax: u32,
+    pub ebx: u32,
+    pub ecx: u32,
+    pub edx: u32,
+}

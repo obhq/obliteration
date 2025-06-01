@@ -26,7 +26,7 @@ pub trait Hypervisor: Send + Sync + 'static {
     fn ram_mut(&mut self) -> &mut Ram;
 
     /// This method must be called by a thread that is going to drive the returned CPU.
-    fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, Self::CpuErr>;
+    fn create_cpu(&self, id: usize) -> Result<Self::Cpu<'_>, HvError>;
 }
 
 /// Represents a core of the CPU.
