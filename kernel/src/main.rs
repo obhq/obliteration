@@ -53,14 +53,15 @@ fn main(config: &'static ::config::Config) -> ! {
 
     info!(
         concat!(
-            "Starting Obliteration Kernel.\n",
-            "CPU         : {} × {}\n",
-            "Hardware    : {}\n",
-            "IDPS Product: {}"
+            "Starting Obliteration Kernel on {}.\n",
+            "cpu_vendor                 : {} × {}\n",
+            "cpu_id                     : {:#x}\n",
+            "boot_parameter.idps.product: {}"
         ),
+        String::from_utf8_lossy(hw),
         cpu.cpu_vendor,
         config.max_cpu(),
-        String::from_utf8_lossy(hw),
+        cpu.cpu_id,
         config.idps().product()
     );
 
@@ -86,7 +87,11 @@ fn setup() -> ContextSetup {
     let mut mi = load_memory_map();
     let dmem = Dmem::new(&mut mi);
 
-    info!("DMEM Mode: {}", dmem.mode());
+    info!(
+        concat!("DMEM Mode  : {}\n", "DMEM Config: {}"),
+        dmem.mode(),
+        dmem.config().name
+    );
 
     // Run sysinit vector for subsystem. The Orbis use linker to put all sysinit functions in a list
     // then loop the list to execute all of it. We manually execute those functions instead for
@@ -403,7 +408,7 @@ struct MemoryInfo {
     boot_info: BootInfo,
     initial_memory_size: u64,
     end_page: u64,
-    unk: u32,
+    unk: u32, // Seems like the only possible values are 0 - 3.
 }
 
 /// Contains information for memory to boot a secondary CPU.
