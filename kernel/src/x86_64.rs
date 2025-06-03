@@ -9,7 +9,9 @@ use bitfield_struct::bitfield;
 use core::arch::{asm, global_asm};
 use core::fmt::Write;
 use core::mem::{transmute, zeroed};
-use x86_64::{Dpl, Efer, Gdtr, Rflags, SegmentDescriptor, SegmentSelector, Star, Tss64};
+use x86_64::{
+    Dpl, Efer, Gdtr, Rflags, SegmentDescriptor, SegmentSelector, Star, Tss64, TssDescriptor,
+};
 
 pub const GDT_KERNEL_CS: SegmentSelector = SegmentSelector::new().with_si(3);
 pub const GDT_KERNEL_DS: SegmentSelector = SegmentSelector::new().with_si(4);
@@ -301,32 +303,6 @@ global_asm!("syscall_entry32:", "ud2");
 // See mptramp_start and mptramp_end on the Orbis for a reference.
 global_asm!("secondary_start:", "ud2", "secondary_end:");
 
-/// Raw value of a TSS descriptor.
-///
-/// See TSS Descriptor section on AMD64 Architecture Programmer's Manual Volume 2 for more details.
-#[bitfield(u128)]
-struct TssDescriptor {
-    limit1: u16,
-    #[bits(24)]
-    base1: u32,
-    #[bits(4)]
-    ty: u8,
-    #[bits(access = None)]
-    s: bool,
-    #[bits(2)]
-    dpl: Dpl,
-    p: bool,
-    #[bits(4)]
-    limit2: u8,
-    avl: bool,
-    #[bits(2)]
-    __: u8,
-    g: bool,
-    #[bits(40)]
-    base2: u64,
-    __: u32,
-}
-
 /// Raw value of a Interrupt Descriptor-Table Register.
 ///
 /// See Interrupt Descriptor-Table Register section on AMD64 Architecture Programmer's Manual Volume
@@ -364,7 +340,7 @@ struct GateDescriptor {
 /// Contains information for CPU on current machine.
 pub struct CpuInfo {
     pub cpu_vendor: String, // cpu_vendor
-    pub cpu_id: u32,
+    pub cpu_id: u32,        // cpu_id
 }
 
 /// Contains architecture-specific configurations obtained from [`setup_main_cpu()`].

@@ -100,6 +100,32 @@ impl Ti {
     }
 }
 
+/// Raw value of a TSS descriptor.
+///
+/// See TSS Descriptor section on AMD64 Architecture Programmer's Manual Volume 2 for more details.
+#[bitfield(u128)]
+pub struct TssDescriptor {
+    pub limit1: u16,
+    #[bits(24)]
+    pub base1: u32,
+    #[bits(4)]
+    pub ty: u8,
+    #[bits(access = None)]
+    s: bool,
+    #[bits(2)]
+    pub dpl: Dpl,
+    pub p: bool,
+    #[bits(4)]
+    pub limit2: u8,
+    pub avl: bool,
+    #[bits(2)]
+    __: u8,
+    pub g: bool,
+    #[bits(40)]
+    pub base2: u64,
+    __: u32,
+}
+
 /// Raw value of Long Mode TSS.
 ///
 /// See 64-Bit Task State Segment section on AMD64 Architecture Programmer's Manual Volume 2 for
