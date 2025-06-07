@@ -1,6 +1,7 @@
 use super::MainWindow;
 use crate::graphics::{GraphicsBuilder, PhysicalDevice};
 use crate::profile::{CpuModel, DisplayResolution, Profile};
+use config::ProductId;
 use serde_bytes::ByteBuf;
 use slint::{Model, ModelNotify, ModelTracker, SharedString, ToSharedString};
 use std::any::Any;
@@ -131,7 +132,41 @@ impl Model for CpuList {
     }
 
     fn row_data(&self, row: usize) -> Option<Self::Data> {
-        self.0.get(row).map(|v| v.to_string().into())
+        self.0.get(row).map(|v| v.to_shared_string())
+    }
+
+    fn model_tracker(&self) -> &dyn ModelTracker {
+        &()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// Implementation of [`Model`] for [`ProductId`].
+pub struct ProductList([ProductId; 4]);
+
+impl Default for ProductList {
+    fn default() -> Self {
+        Self([
+            ProductId::DEVKIT,
+            ProductId::TESTKIT,
+            ProductId::USA,
+            ProductId::SOUTH_ASIA,
+        ])
+    }
+}
+
+impl Model for ProductList {
+    type Data = SharedString;
+
+    fn row_count(&self) -> usize {
+        self.0.len()
+    }
+
+    fn row_data(&self, row: usize) -> Option<Self::Data> {
+        self.0.get(row).map(|v| v.to_shared_string())
     }
 
     fn model_tracker(&self) -> &dyn ModelTracker {

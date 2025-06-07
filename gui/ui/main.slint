@@ -13,6 +13,7 @@ export component MainWindow inherits Window {
     in-out property <int> selected-cpu;
     in-out property <int> cpu-count;
     in-out property <string> debug-address;
+    in property <[string]> idps-products;
     in property <[string]> profiles;
     in-out property <int> selected-profile;
 
@@ -111,7 +112,9 @@ export component MainWindow inherits Window {
                 }
             }
 
-            if tab.current-page == 2: IdpsTab { }
+            if tab.current-page == 2: IdpsTab {
+                products: root.idps-products;
+            }
         }
 
         // Profile + actions.
