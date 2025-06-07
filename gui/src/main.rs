@@ -8,8 +8,9 @@ use self::profile::{DisplayResolution, Profile};
 use self::settings::{Settings, SettingsError};
 use self::setup::{SetupError, run_setup};
 use self::ui::{
-    AboutWindow, App, CpuList, DesktopExt, DeviceModel, MainWindow, NewProfile, ProfileModel,
-    ResolutionModel, RuntimeExt, SettingsWindow, WaitForDebugger, error, spawn_handler,
+    AboutWindow, App, CpuList, DesktopExt, DeviceModel, MainWindow, NewProfile, ProductList,
+    ProfileModel, ResolutionModel, RuntimeExt, SettingsWindow, WaitForDebugger, error,
+    spawn_handler,
 };
 use self::vmm::{CpuError, Vmm, VmmError, VmmEvent};
 use async_net::{TcpListener, TcpStream};
@@ -77,6 +78,7 @@ impl MainProgram {
         let devices = Rc::new(DeviceModel::new(graphics.clone()));
         let resolutions = Rc::new(ResolutionModel::default());
         let cpus = Rc::new(CpuList::default());
+        let products = Rc::new(ProductList::default());
         let profiles = Rc::new(ProfileModel::new(
             profiles,
             devices.clone(),
@@ -159,6 +161,7 @@ impl MainProgram {
         win.set_devices(devices.into());
         win.set_resolutions(resolutions.into());
         win.set_cpu_models(cpus.into());
+        win.set_idps_products(products.into());
         win.set_profiles(profiles.clone().into());
 
         // Load selected profile.

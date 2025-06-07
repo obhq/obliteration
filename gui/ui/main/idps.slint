@@ -1,1 +1,43 @@
-export component IdpsTab { }
+import { GridBox, GroupBox, ComboBox, LineEdit } from "std-widgets.slint";
+
+export component IdpsTab {
+    in property <[string]> products;
+
+    GridBox {
+        padding-top: 0;
+        spacing-vertical: 0;
+
+        GroupBox {
+            title: "Product";
+            row: 0;
+            col: 0;
+            vertical-stretch: 0;
+            ComboBox {
+                model: root.products;
+            }
+        }
+
+        GroupBox {
+            title: "Sub-product";
+            row: 0;
+            col: 1;
+            vertical-stretch: 0;
+            width: 50%;
+            LineEdit { }
+        }
+
+        GroupBox {
+            title: "Serial";
+            row: 1;
+            col: 0;
+            vertical-stretch: 0;
+            LineEdit { }
+        }
+
+        Rectangle {
+            row: 2;
+            col: 0;
+            colspan: 2;
+        }
+    }
+}

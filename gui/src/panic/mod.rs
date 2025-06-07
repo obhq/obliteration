@@ -89,7 +89,9 @@ fn panic_hook(i: &PanicHookInfo, ph: &Mutex<Option<HandlerProcess>>) {
         line: loc.line(),
     };
 
-    stdin.write_all(&minicbor_serde::to_vec(info).unwrap());
+    stdin
+        .write_all(&minicbor_serde::to_vec(info).unwrap())
+        .unwrap();
     stdin.flush().unwrap();
 
     drop(stdin); // Close the stdin to notify panic handler that no more data.
