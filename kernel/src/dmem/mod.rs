@@ -31,11 +31,36 @@ impl Dmem {
         }
 
         // Allocate game DMEM.
-        let config = DMEM_CONFIGS[mode].as_ref().unwrap();
-        let game = Self::reserve_phys(mi, config.game_size, 0x8000000);
+        let dc = DMEM_CONFIGS[mode].as_ref().unwrap();
+        let game = Self::reserve_phys(mi, dc.game_size, 0x8000000);
 
         if game == 0 {
             panic!("not enough memory for game DMEM");
+        }
+
+        // TODO: There is an unknown call here.
+        let game_end = game + dc.game_size.get();
+
+        if (0x7F393733u64 & (1 << mode)) != 0 {
+            // Get alignment for mini-app DMEM.
+            let align = if config().unknown_dmem1() == 0 {
+                0x8000000i64
+            } else {
+                0x200000i64
+            };
+
+            // Allocate mini-app DMEM.
+            let size = dc.mini_size;
+            let mini = match dc.mini_shared {
+                true => (-align) as u64 & (game_end - (dc.fmem_max.get() + size)),
+                false => todo!(),
+            };
+
+            if mini == 0 {
+                panic!("not enough memory for mini-app DMEM");
+            }
+        } else {
+            todo!()
         }
 
         todo!()
@@ -138,6 +163,9 @@ impl Dmem {
 pub struct DmemConfig {
     pub name: &'static str,
     pub game_size: NonZero<u64>,
+    pub fmem_max: NonZero<u64>,
+    pub mini_size: u64,
+    pub mini_shared: bool,
 }
 
 // TODO: It is likely to be more than 21 entries on PS4 11.00.
@@ -145,64 +173,106 @@ static DMEM_CONFIGS: [Option<DmemConfig>; 21] = [
     Some(DmemConfig {
         name: "BC8 normal",
         game_size: NonZero::new(0x148000000).unwrap(),
+        fmem_max: NonZero::new(0x40000000).unwrap(),
+        mini_size: 0x30000000,
+        mini_shared: true,
     }),
     Some(DmemConfig {
         name: "BC8 large",
         game_size: NonZero::new(0x170000000).unwrap(),
+        fmem_max: NonZero::new(0x40000000).unwrap(),
+        mini_size: 0x30000000,
+        mini_shared: true,
     }),
     None,
     Some(DmemConfig {
         name: "BC8 kratos",
         game_size: NonZero::new(0x148000000).unwrap(),
+        fmem_max: NonZero::new(0x40000000).unwrap(),
+        mini_size: 0,
+        mini_shared: false,
     }),
     Some(DmemConfig {
         name: "BC8 release",
         game_size: NonZero::new(0x148000000).unwrap(),
+        fmem_max: NonZero::new(0x40000000).unwrap(),
+        mini_size: 0x30000000,
+        mini_shared: false,
     }),
     Some(DmemConfig {
         name: "BC8 CS",
         game_size: NonZero::new(0x124000000).unwrap(),
+        fmem_max: NonZero::new(0x4000000).unwrap(),
+        mini_size: 0x58800000,
+        mini_shared: false,
     }),
     None,
     None,
     Some(DmemConfig {
         name: "BC16 normal",
         game_size: NonZero::new(0x148000000).unwrap(),
+        fmem_max: NonZero::new(0x40000000).unwrap(),
+        mini_size: 0x30000000,
+        mini_shared: false,
     }),
     Some(DmemConfig {
         name: "BC16 large",
         game_size: NonZero::new(0x28C000000).unwrap(),
+        fmem_max: NonZero::new(0x5C000000).unwrap(),
+        mini_size: 0x30000000,
+        mini_shared: false,
     }),
     Some(DmemConfig {
         name: "BC16 mini-app large",
         game_size: NonZero::new(0x148000000).unwrap(),
+        fmem_max: NonZero::new(0x40000000).unwrap(),
+        mini_size: 0x48000000,
+        mini_shared: false,
     }),
     Some(DmemConfig {
         name: "BC16 kratos",
         game_size: NonZero::new(0x148000000).unwrap(),
+        fmem_max: NonZero::new(0x40000000).unwrap(),
+        mini_size: 0,
+        mini_shared: false,
     }),
     Some(DmemConfig {
         name: "BC16 release",
         game_size: NonZero::new(0x148000000).unwrap(),
+        fmem_max: NonZero::new(0x40000000).unwrap(),
+        mini_size: 0x30000000,
+        mini_shared: false,
     }),
     Some(DmemConfig {
         name: "BC16 CS",
         game_size: NonZero::new(0x324000000).unwrap(),
+        fmem_max: NonZero::new(0x4000000).unwrap(),
+        mini_size: 0x58000000,
+        mini_shared: false,
     }),
     None,
     None,
     Some(DmemConfig {
         name: "GL8 normal",
         game_size: NonZero::new(0x170000000).unwrap(),
+        fmem_max: NonZero::new(0x40000000).unwrap(),
+        mini_size: 0x70000000,
+        mini_shared: true,
     }),
     None,
     None,
     Some(DmemConfig {
         name: "GL8 kratos",
         game_size: NonZero::new(0x170000000).unwrap(),
+        fmem_max: NonZero::new(0x40000000).unwrap(),
+        mini_size: 0x70000000,
+        mini_shared: true,
     }),
     Some(DmemConfig {
         name: "GL8 release",
         game_size: NonZero::new(0x170000000).unwrap(),
+        fmem_max: NonZero::new(0x40000000).unwrap(),
+        mini_size: 0x70000000,
+        mini_shared: true,
     }),
 ];
