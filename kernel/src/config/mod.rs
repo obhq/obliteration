@@ -95,7 +95,7 @@ impl Config {
     /// |---------|--------|
     /// |PS4 11.00|0x078F50|
     pub fn is_devkit(&self) -> bool {
-        self.idps.product() == ProductId::DEVKIT
+        self.idps.product == ProductId::DEVKIT
     }
 
     /// See `sceSblAIMgrIsTestKit` on the Orbis for a reference.
@@ -105,7 +105,7 @@ impl Config {
     /// |---------|--------|
     /// |PS4 11.00|0x0790A0|
     pub fn is_testkit(&self) -> bool {
-        self.idps.product() == ProductId::TESTKIT
+        self.idps.product == ProductId::TESTKIT
     }
 
     /// See `sceKernelCheckDipsw` on the Orbis for a reference.

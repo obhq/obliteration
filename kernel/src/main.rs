@@ -62,7 +62,7 @@ fn main(config: &'static ::config::Config) -> ! {
         cpu.cpu_vendor,
         config.max_cpu(),
         cpu.cpu_id,
-        config.idps().product()
+        config.idps().product
     );
 
     // Setup the CPU after the first print to let the bootloader developer know (some of) their code
