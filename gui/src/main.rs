@@ -84,6 +84,7 @@ impl MainProgram {
             devices.clone(),
             resolutions.clone(),
             cpus.clone(),
+            products.clone(),
         ));
 
         win.on_settings({

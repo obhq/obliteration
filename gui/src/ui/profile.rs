@@ -147,6 +147,19 @@ impl Model for CpuList {
 /// Implementation of [`Model`] for [`ProductId`].
 pub struct ProductList([ProductId; 4]);
 
+impl ProductList {
+    pub fn position(&self, v: ProductId) -> Option<i32> {
+        self.0
+            .iter()
+            .position(move |i| *i == v)
+            .map(|v| v.try_into().unwrap())
+    }
+
+    pub fn get(&self, i: i32) -> Option<ProductId> {
+        usize::try_from(i).ok().and_then(|i| self.0.get(i)).copied()
+    }
+}
+
 impl Default for ProductList {
     fn default() -> Self {
         Self([
@@ -184,6 +197,7 @@ pub struct ProfileModel<G> {
     devices: Rc<DeviceModel<G>>,
     resolutions: Rc<ResolutionModel>,
     cpus: Rc<CpuList>,
+    products: Rc<ProductList>,
     noti: ModelNotify,
 }
 
@@ -193,12 +207,14 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
         devices: Rc<DeviceModel<G>>,
         resolutions: Rc<ResolutionModel>,
         cpus: Rc<CpuList>,
+        products: Rc<ProductList>,
     ) -> Self {
         Self {
             profiles: RefCell::new(profiles),
             devices,
             resolutions,
             cpus,
+            products,
             noti: ModelNotify::default(),
         }
     }
@@ -214,6 +230,11 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
         dst.set_selected_cpu(self.cpus.position(p.cpu_model).unwrap());
         dst.set_cpu_count(p.kernel_config.max_cpu.get().try_into().unwrap());
         dst.set_debug_address(p.debug_addr.to_shared_string());
+        dst.set_selected_idps_product(
+            self.products
+                .position(p.kernel_config.idps.product)
+                .unwrap(),
+        );
     }
 
     /// # Panics
@@ -237,6 +258,7 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
             .and_then(NonZero::new)
             .unwrap();
         p.debug_addr = debug_addr;
+        p.kernel_config.idps.product = self.products.get(src.get_selected_idps_product()).unwrap();
 
         Ok(RefMut::map(profiles, move |v| &mut v[row]))
     }

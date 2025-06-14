@@ -2,6 +2,7 @@ import { GridBox, GroupBox, ComboBox, LineEdit } from "std-widgets.slint";
 
 export component IdpsTab {
     in property <[string]> products;
+    in-out property <int> selected-product;
 
     GridBox {
         padding-top: 0;
@@ -14,6 +15,7 @@ export component IdpsTab {
             vertical-stretch: 0;
             ComboBox {
                 model: root.products;
+                current-index <=> root.selected-product;
             }
         }
 
