@@ -4,7 +4,7 @@ pub(super) use self::window::*;
 #[cfg(target_os = "linux")]
 pub(super) use self::x11::*;
 
-use i_slint_core::graphics::{RequestedGraphicsAPI, RequestedOpenGLVersion};
+use i_slint_core::graphics::RequestedGraphicsAPI;
 use i_slint_renderer_skia::{SkiaRenderer, SkiaSharedContext};
 #[cfg(target_os = "linux")]
 use raw_window_handle::RawDisplayHandle;
@@ -208,7 +208,7 @@ impl slint::platform::Platform for Platform {
         } else if cfg!(target_os = "windows") {
             RequestedGraphicsAPI::Direct3D
         } else {
-            RequestedGraphicsAPI::OpenGL(RequestedOpenGLVersion::OpenGL(None))
+            RequestedGraphicsAPI::Vulkan
         };
 
         renderer.set_window_handle(win.clone(), win.clone(), size, Some(api))?;
