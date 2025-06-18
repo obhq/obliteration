@@ -4,8 +4,8 @@ pub(super) use self::window::*;
 #[cfg(target_os = "linux")]
 pub(super) use self::x11::*;
 
-use i_slint_core::graphics::{RequestedGraphicsAPI, RequestedOpenGLVersion};
-use i_slint_renderer_skia::SkiaRenderer;
+use i_slint_core::graphics::RequestedGraphicsAPI;
+use i_slint_renderer_skia::{SkiaRenderer, SkiaSharedContext};
 #[cfg(target_os = "linux")]
 use raw_window_handle::RawDisplayHandle;
 use rustc_hash::FxHashMap;
@@ -16,6 +16,7 @@ use slint::{PhysicalSize, PlatformError};
 use std::cell::RefCell;
 use std::error::Error;
 use std::rc::{Rc, Weak};
+use std::sync::Arc;
 use std::time::Instant;
 use thiserror::Error;
 use wae::WinitWindow;
@@ -99,7 +100,7 @@ impl SlintBackend {
         // must be destroyed before the event loop exit.
         let b = Rc::new(self);
 
-        slint::platform::set_platform(Box::new(Platform(Rc::downgrade(&b))))?;
+        slint::platform::set_platform(Box::new(Platform::new(Rc::downgrade(&b))))?;
         wae::register_global(b.clone());
         wae::push_hook(b.clone());
 
@@ -177,7 +178,19 @@ impl wae::Hook for SlintBackend {
 }
 
 /// Implementation of [`slint::platform::Platform`] for [`SlintBackend`].
-struct Platform(Weak<SlintBackend>);
+struct Platform {
+    backend: Weak<SlintBackend>,
+    skia_shared_context: SkiaSharedContext,
+}
+
+impl Platform {
+    pub fn new(backend: Weak<SlintBackend>) -> Self {
+        Self {
+            backend,
+            skia_shared_context: Default::default(),
+        }
+    }
+}
 
 impl slint::platform::Platform for Platform {
     fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, PlatformError> {
@@ -186,16 +199,16 @@ impl slint::platform::Platform for Platform {
         let win = wae::create_window(attrs).map_err(|e| PlatformError::OtherError(Box::new(e)))?;
 
         // Create renderer.
-        let win = Rc::new(win);
+        let win = Arc::new(win);
         let size = win.inner_size();
         let size = PhysicalSize::new(size.width, size.height);
-        let renderer = SkiaRenderer::default();
+        let renderer = SkiaRenderer::default(&self.skia_shared_context);
         let api = if cfg!(target_os = "macos") {
             RequestedGraphicsAPI::Metal
         } else if cfg!(target_os = "windows") {
             RequestedGraphicsAPI::Direct3D
         } else {
-            RequestedGraphicsAPI::OpenGL(RequestedOpenGLVersion::OpenGL(None))
+            RequestedGraphicsAPI::Vulkan
         };
 
         renderer.set_window_handle(win.clone(), win.clone(), size, Some(api))?;
@@ -211,7 +224,7 @@ impl slint::platform::Platform for Platform {
         });
 
         assert!(
-            self.0
+            self.backend
                 .upgrade()
                 .unwrap()
                 .windows
