@@ -11,14 +11,14 @@ use slint::{LogicalPosition, LogicalSize, PhysicalSize, PlatformError, SharedStr
 use std::any::Any;
 use std::cell::Cell;
 use std::error::Error;
-use std::rc::Rc;
+use std::sync::Arc;
 use wae::{Signal, WindowHandler, WinitWindow};
 use winit::event::{DeviceId, ElementState, InnerSizeWriter, MouseButton};
 use winit::window::WindowId;
 
 /// Implementation of [`slint::platform::WindowAdapter`].
 pub struct SlintWindow {
-    winit: Rc<winit::window::Window>,
+    winit: Arc<winit::window::Window>,
     slint: slint::Window,
     renderer: SkiaRenderer,
     visible: Cell<Option<bool>>, // Wayland does not support this so we need to emulate it.
@@ -32,7 +32,7 @@ pub struct SlintWindow {
 
 impl SlintWindow {
     pub fn new(
-        winit: Rc<winit::window::Window>,
+        winit: Arc<winit::window::Window>,
         slint: slint::Window,
         renderer: SkiaRenderer,
     ) -> Self {
