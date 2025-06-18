@@ -1928,7 +1928,7 @@ dependencies = [
  "slint-build",
  "thiserror 2.0.12",
  "uuid",
- "vtable 0.2.1",
+ "vtable",
  "wae",
  "wayland-backend",
  "wayland-client",
@@ -2047,7 +2047,7 @@ dependencies = [
  "raw-window-handle",
  "scoped-tls-hkt",
  "scopeguard",
- "vtable 0.3.0",
+ "vtable",
  "wasm-bindgen",
  "web-sys",
  "winit",
@@ -2135,7 +2135,7 @@ dependencies = [
  "unicode-linebreak",
  "unicode-script",
  "unicode-segmentation",
- "vtable 0.3.0",
+ "vtable",
  "wasm-bindgen",
  "web-sys",
  "web-time",
@@ -2183,7 +2183,7 @@ dependencies = [
  "skia-safe",
  "softbuffer",
  "unicode-segmentation",
- "vtable 0.3.0",
+ "vtable",
  "vulkano",
  "windows",
 ]
@@ -4313,7 +4313,7 @@ dependencies = [
  "raw-window-handle",
  "slint-macros",
  "unicode-segmentation",
- "vtable 0.3.0",
+ "vtable",
 ]
 
 [[package]]
@@ -5025,18 +5025,6 @@ dependencies = [
 
 [[package]]
 name = "vtable"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20b14a049c8d5d1ff811a00f65ac1454335487ed769a943c7bad89ead3573335"
-dependencies = [
- "const-field-offset",
- "portable-atomic",
- "stable_deref_trait",
- "vtable-macro 0.2.1",
-]
-
-[[package]]
-name = "vtable"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "753be81c38dff787d177b5939af1fa16f72f0d0d21a6b7d74ae56e29cd26f2a6"
@@ -5044,18 +5032,7 @@ dependencies = [
  "const-field-offset",
  "portable-atomic",
  "stable_deref_trait",
- "vtable-macro 0.3.0",
-]
-
-[[package]]
-name = "vtable-macro"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d8502f961cf2f1359fed21a70f67c831ccb3ab9e4c0b4dd3ad40387fbe8875db"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.87",
+ "vtable-macro",
 ]
 
 [[package]]
