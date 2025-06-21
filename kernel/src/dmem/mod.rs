@@ -93,8 +93,32 @@ impl Dmem {
 
         // TODO: Invoke pmap_change_attr.
         // TODO: There are some write to unknown variables here.
+        let mut unk = dc.unk1;
+
         if ((0x80C6C0C4u64 + 0x20212022u64) & (1 << mode)) == 0 {
-            todo!()
+            loop {
+                let (size, align) = if unk < 0x200000 {
+                    // TODO: Verify if 0x4000 is actually a (virtual) page size.
+                    (unk, 0x4000)
+                } else {
+                    (0x200000, 0x200000)
+                };
+
+                // TODO: Invoke pmap_change_attr.
+                let addr = Self::reserve_phys(mi, size.try_into().unwrap(), align);
+
+                if addr == 0 {
+                    // TODO: Figure out the name of this memory.
+                    panic!("failed to reserve memory");
+                }
+
+                // Check if completed.
+                unk -= size;
+
+                if unk == 0 {
+                    break;
+                }
+            }
         }
 
         todo!()
@@ -201,6 +225,7 @@ pub struct DmemConfig {
     pub mini_size: u64,
     pub mini_shared: bool,
     pub vsh_size: NonZero<u64>,
+    pub unk1: u64,
 }
 
 // TODO: It is likely to be more than 21 entries on PS4 11.00.
@@ -212,6 +237,7 @@ static DMEM_CONFIGS: [Option<DmemConfig>; 21] = [
         mini_size: 0x30000000,
         mini_shared: true,
         vsh_size: NonZero::new(0x17C00000).unwrap(),
+        unk1: 0x13600000,
     }),
     Some(DmemConfig {
         name: "BC8 large",
@@ -220,6 +246,7 @@ static DMEM_CONFIGS: [Option<DmemConfig>; 21] = [
         mini_size: 0x30000000,
         mini_shared: true,
         vsh_size: NonZero::new(0x16C00000).unwrap(),
+        unk1: 0,
     }),
     None,
     Some(DmemConfig {
@@ -229,6 +256,7 @@ static DMEM_CONFIGS: [Option<DmemConfig>; 21] = [
         mini_size: 0,
         mini_shared: false,
         vsh_size: NonZero::new(0x1CA00000).unwrap(),
+        unk1: 0xA00000,
     }),
     Some(DmemConfig {
         name: "BC8 release",
@@ -237,6 +265,7 @@ static DMEM_CONFIGS: [Option<DmemConfig>; 21] = [
         mini_size: 0x30000000,
         mini_shared: false,
         vsh_size: NonZero::new(0x1A800000).unwrap(),
+        unk1: 0xA00000,
     }),
     Some(DmemConfig {
         name: "BC8 CS",
@@ -245,6 +274,7 @@ static DMEM_CONFIGS: [Option<DmemConfig>; 21] = [
         mini_size: 0x58800000,
         mini_shared: false,
         vsh_size: NonZero::new(0x28200000).unwrap(),
+        unk1: 0,
     }),
     None,
     None,
@@ -255,6 +285,7 @@ static DMEM_CONFIGS: [Option<DmemConfig>; 21] = [
         mini_size: 0x30000000,
         mini_shared: false,
         vsh_size: NonZero::new(0x1C200000).unwrap(),
+        unk1: 0x17FB00000,
     }),
     Some(DmemConfig {
         name: "BC16 large",
@@ -263,6 +294,7 @@ static DMEM_CONFIGS: [Option<DmemConfig>; 21] = [
         mini_size: 0x30000000,
         mini_shared: false,
         vsh_size: NonZero::new(0x1B200000).unwrap(),
+        unk1: 0x3CB00000,
     }),
     Some(DmemConfig {
         name: "BC16 mini-app large",
@@ -271,6 +303,7 @@ static DMEM_CONFIGS: [Option<DmemConfig>; 21] = [
         mini_size: 0x48000000,
         mini_shared: false,
         vsh_size: NonZero::new(0x19600000).unwrap(),
+        unk1: 0x13A700000,
     }),
     Some(DmemConfig {
         name: "BC16 kratos",
@@ -279,6 +312,7 @@ static DMEM_CONFIGS: [Option<DmemConfig>; 21] = [
         mini_size: 0,
         mini_shared: false,
         vsh_size: NonZero::new(0x1CA00000).unwrap(),
+        unk1: 0x1F3C00000,
     }),
     Some(DmemConfig {
         name: "BC16 release",
@@ -287,6 +321,7 @@ static DMEM_CONFIGS: [Option<DmemConfig>; 21] = [
         mini_size: 0x30000000,
         mini_shared: false,
         vsh_size: NonZero::new(0x1C200000).unwrap(),
+        unk1: 0x1FF600000,
     }),
     Some(DmemConfig {
         name: "BC16 CS",
@@ -295,6 +330,7 @@ static DMEM_CONFIGS: [Option<DmemConfig>; 21] = [
         mini_size: 0x58000000,
         mini_shared: false,
         vsh_size: NonZero::new(0x28000000).unwrap(),
+        unk1: 0,
     }),
     None,
     None,
@@ -305,6 +341,7 @@ static DMEM_CONFIGS: [Option<DmemConfig>; 21] = [
         mini_size: 0x70000000,
         mini_shared: true,
         vsh_size: NonZero::new(0x27C00000).unwrap(),
+        unk1: 0,
     }),
     None,
     None,
@@ -315,6 +352,7 @@ static DMEM_CONFIGS: [Option<DmemConfig>; 21] = [
         mini_size: 0x70000000,
         mini_shared: true,
         vsh_size: NonZero::new(0x27C00000).unwrap(),
+        unk1: 0xA00000,
     }),
     Some(DmemConfig {
         name: "GL8 release",
@@ -323,5 +361,6 @@ static DMEM_CONFIGS: [Option<DmemConfig>; 21] = [
         mini_size: 0x70000000,
         mini_shared: true,
         vsh_size: NonZero::new(0x28000000).unwrap(),
+        unk1: 0xA00000,
     }),
 ];
