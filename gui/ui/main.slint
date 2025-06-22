@@ -15,6 +15,7 @@ export component MainWindow inherits Window {
     in-out property <string> debug-address;
     in property <[string]> idps-products;
     in-out property <int> selected-idps-product;
+    in-out property <string> idps-sub-product;
     in property <[string]> profiles;
     in-out property <int> selected-profile;
 
@@ -116,6 +117,7 @@ export component MainWindow inherits Window {
             if tab.current-page == 2: IdpsTab {
                 products: root.idps-products;
                 selected-product <=> root.selected-idps-product;
+                sub-product <=> root.idps-sub-product;
             }
         }
 

@@ -12,7 +12,7 @@ pub struct ConsoleId {
     magic: u16,
     company: CompanyId,
     pub product: ProductId,
-    prodsub: u16,
+    pub prodsub: u16,
     #[cfg_attr(feature = "serde", serde(with = "serde_bytes"))]
     serial: [u8; 8],
 }
