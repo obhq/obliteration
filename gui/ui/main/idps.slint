@@ -3,6 +3,7 @@ import { GridBox, GroupBox, ComboBox, LineEdit } from "std-widgets.slint";
 export component IdpsTab {
     in property <[string]> products;
     in-out property <int> selected-product;
+    in-out property <string> sub-product;
 
     GridBox {
         padding-top: 0;
@@ -25,7 +26,9 @@ export component IdpsTab {
             col: 1;
             vertical-stretch: 0;
             width: 50%;
-            LineEdit { }
+            LineEdit {
+                text <=> root.sub-product;
+            }
         }
 
         GroupBox {

@@ -235,6 +235,7 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
                 .position(p.kernel_config.idps.product)
                 .unwrap(),
         );
+        dst.set_idps_sub_product(slint::format!("{:#x}", p.kernel_config.idps.prodsub));
     }
 
     /// # Panics
@@ -247,6 +248,15 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
             .get_debug_address()
             .parse()
             .map_err(|_| ProfileError::InvalidDebugAddress)?;
+        let idps_prodsub = src.get_idps_sub_product();
+        let idps_prodsub = match idps_prodsub.strip_prefix("0x") {
+            Some(v) => {
+                u16::from_str_radix(v, 16).map_err(|_| ProfileError::InvalidIdpsSubProduct)?
+            }
+            None => idps_prodsub
+                .parse()
+                .map_err(|_| ProfileError::InvalidIdpsSubProduct)?,
+        };
 
         p.display_device = ByteBuf::from(self.devices.get(src.get_selected_device()).unwrap().id());
         p.display_resolution = self.resolutions.get(src.get_selected_resolution()).unwrap();
@@ -259,6 +269,7 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
             .unwrap();
         p.debug_addr = debug_addr;
         p.kernel_config.idps.product = self.products.get(src.get_selected_idps_product()).unwrap();
+        p.kernel_config.idps.prodsub = idps_prodsub;
 
         Ok(RefMut::map(profiles, move |v| &mut v[row]))
     }
@@ -308,4 +319,7 @@ impl<G: 'static> Model for ProfileModel<G> {
 pub enum ProfileError {
     #[error("invalid debug address")]
     InvalidDebugAddress,
+
+    #[error("invalid IDPS sub-product")]
+    InvalidIdpsSubProduct,
 }
