@@ -42,7 +42,7 @@ pub unsafe fn set_modal(
 /// # Safety
 /// `win` must outlive the returned [`XdgToplevel`].
 unsafe fn get_xdg_toplevel(wayland: &Wayland, win: &impl DesktopWindow) -> XdgToplevel {
-    let obj = win.xdg_toplevel().map(|v| v.as_ptr()).unwrap_or(null_mut());
+    let obj = win.xdg_toplevel().map_or(null_mut(), |v| v.as_ptr());
     let obj = unsafe { ObjectId::from_ptr(XdgToplevel::interface(), obj.cast()).unwrap() };
 
     XdgToplevel::from_id(wayland.connection(), obj).unwrap()

@@ -75,8 +75,7 @@ unsafe impl GlobalAlloc for KernelHeap {
                 primitive
                     .borrow_mut()
                     .malloc(layout)
-                    .map(|v| v.as_ptr())
-                    .unwrap_or(null_mut())
+                    .map_or(null_mut(), |v| v.as_ptr())
             },
             Stage::Two(vm, primitive) => match current_thread().active_heap_guard() {
                 0 => unsafe { vm.alloc(layout) },
@@ -84,8 +83,7 @@ unsafe impl GlobalAlloc for KernelHeap {
                     primitive
                         .lock()
                         .malloc(layout)
-                        .map(|v| v.as_ptr())
-                        .unwrap_or(null_mut())
+                        .map_or(null_mut(), |v| v.as_ptr())
                 },
             },
         }
