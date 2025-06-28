@@ -1,5 +1,5 @@
 use crate::MemoryInfo;
-use crate::config::Dipsw;
+use crate::config::{Dipsw, PAGE_SHIFT};
 use crate::context::config;
 use alloc::sync::Arc;
 use core::num::NonZero;
@@ -19,7 +19,9 @@ impl Dmem {
     /// |PS4 11.00|0x3F5C20|
     pub fn new(mi: &mut MemoryInfo) -> Arc<Self> {
         // TODO: Figure out what the purpose of this 16MB block of memory.
-        if Self::reserve_phys(mi, 0x1000000.try_into().unwrap(), 1) == 0 {
+        let haddr = Self::reserve_phys(mi, 0x1000000.try_into().unwrap(), 1);
+
+        if haddr == 0 {
             panic!("no available memory for high-address memory");
         }
 
@@ -121,7 +123,16 @@ impl Dmem {
             }
         }
 
-        todo!()
+        Self::adjust_pmap(mi, game_end - dc.fmem_max.get(), game_end);
+        Self::adjust_pmap(
+            mi,
+            haddr,
+            haddr + 0xC00000 + if mi.unk != 0 { 0x400000 } else { 0 },
+        );
+
+        mi.end_page = mi.physmap[mi.physmap_last + 1] >> PAGE_SHIFT;
+
+        Arc::new(Self { mode, config: dc })
     }
 
     pub fn mode(&self) -> usize {
@@ -183,6 +194,64 @@ impl Dmem {
 
             i -= 2;
         }
+    }
+
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x3F65B0|
+    fn adjust_pmap(mi: &mut MemoryInfo, start: u64, end: u64) {
+        // Orbis also check if physmap_last + 2 is less than one. We don't do this because it is
+        // impossible for the value to be zero.
+        let mut idx = 0;
+
+        if start > mi.physmap[0] {
+            // Find the first map with address greater or equal start address.
+            let mut found = true;
+
+            for i in (2..).step_by(2) {
+                idx = i;
+
+                if idx > mi.physmap_last {
+                    found = false;
+                    break;
+                }
+
+                if mi.physmap[idx] >= start {
+                    break;
+                }
+            }
+
+            // TODO: What is this?
+            let mut empty = false;
+
+            if found {
+                empty = mi.physmap[idx] == end;
+
+                if (mi.physmap[idx - 1] == start) && (mi.physmap[idx] == end) {
+                    todo!()
+                }
+            }
+
+            if mi.physmap[idx - 1] == start {
+                todo!()
+            }
+
+            if !empty {
+                if !found {
+                    mi.physmap[idx] = start;
+                    mi.physmap[idx | 1] = end;
+                    mi.physmap_last += 2;
+                    return;
+                }
+
+                todo!()
+            }
+        } else {
+            todo!()
+        }
+
+        mi.physmap[idx] = start;
     }
 
     /// # Reference offsets
