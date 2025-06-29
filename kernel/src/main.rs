@@ -96,7 +96,7 @@ fn setup() -> ContextSetup {
             let end = mi.physmap[i + 1];
             let size = SizeFormatter::new(end - start, DECIMAL);
 
-            write!(buf, "\n{:#018x}-{:#018x} ({})", start, end, size).unwrap();
+            write!(buf, "\n{start:#018x}-{end:#018x} ({size})").unwrap();
         }
     }
 
