@@ -14,6 +14,7 @@ use ::config::{BootEnv, MapType};
 use alloc::string::String;
 use alloc::sync::Arc;
 use core::cmp::min;
+use core::fmt::Write;
 use core::mem::zeroed;
 use humansize::{DECIMAL, SizeFormatter};
 use krt::{boot_env, info, warn};
@@ -43,7 +44,7 @@ extern crate alloc;
 ///
 /// See Orbis kernel entry point for a reference.
 #[cfg_attr(target_os = "none", unsafe(no_mangle))]
-fn main(config: &'static ::config::Config) -> ! {
+fn main(map: &'static ::config::KernelMap, config: &'static ::config::Config) -> ! {
     // SAFETY: This function has a lot of restrictions. See Context documentation for more details.
     let config = Config::new(config);
     let cpu = self::arch::identify_cpu();
@@ -56,13 +57,15 @@ fn main(config: &'static ::config::Config) -> ! {
             "Starting Obliteration Kernel on {}.\n",
             "cpu_vendor                 : {} × {}\n",
             "cpu_id                     : {:#x}\n",
-            "boot_parameter.idps.product: {}"
+            "boot_parameter.idps.product: {}\n",
+            "virtual_avail              : {:#x}"
         ),
         String::from_utf8_lossy(hw),
         cpu.cpu_vendor,
         config.max_cpu(),
         cpu.cpu_id,
-        config.idps().product
+        config.idps().product,
+        map.free_vaddr
     );
 
     // Setup the CPU after the first print to let the bootloader developer know (some of) their code
@@ -85,20 +88,69 @@ fn main(config: &'static ::config::Config) -> ! {
 fn setup() -> ContextSetup {
     // Initialize physical memory.
     let mut mi = load_memory_map();
-    let dmem = Dmem::new(&mut mi);
+    let mut map = String::with_capacity(0x2000);
+
+    fn format_map(mi: &MemoryInfo, buf: &mut String) {
+        for i in (0..=mi.physmap_last).step_by(2) {
+            let start = mi.physmap[i];
+            let end = mi.physmap[i + 1];
+            let size = SizeFormatter::new(end - start, DECIMAL);
+
+            write!(buf, "\n{start:#018x}-{end:#018x} ({size})").unwrap();
+        }
+    }
+
+    format_map(&mi, &mut map);
 
     info!(
-        concat!("DMEM Mode  : {}\n", "DMEM Config: {}"),
-        dmem.mode(),
-        dmem.config().name
+        concat!(
+            "Memory map loaded with {} maps.\n",
+            "initial_memory_size: {} ({})\n",
+            "basemem            : {:#x}\n",
+            "boot_address       : {:#x}\n",
+            "mptramp_pagetables : {:#x}\n",
+            "Maxmem             : {:#x}",
+            "{}"
+        ),
+        mi.physmap_last,
+        mi.initial_memory_size,
+        SizeFormatter::new(mi.initial_memory_size, DECIMAL),
+        mi.boot_area,
+        mi.boot_info.addr,
+        mi.boot_info.page_tables,
+        mi.end_page,
+        map
     );
+
+    map.clear();
+
+    // Initialize DMEM system.
+    let dmem = Dmem::new(&mut mi);
+
+    format_map(&mi, &mut map);
+
+    info!(
+        concat!(
+            "DMEM initialized.\n",
+            "DMEM Mode  : {}\n",
+            "DMEM Config: {}\n",
+            "Maxmem     : {:#x}",
+            "{}"
+        ),
+        dmem.mode(),
+        dmem.config().name,
+        mi.end_page,
+        map
+    );
+
+    drop(map);
 
     // Run sysinit vector for subsystem. The Orbis use linker to put all sysinit functions in a list
     // then loop the list to execute all of it. We manually execute those functions instead for
     // readability. This also allow us to pass data from one function to another function. See
     // mi_startup function on the Orbis for a reference.
     let procs = ProcMgr::new();
-    let uma = init_vm(&mi); // 161 on PS4 11.00.
+    let uma = init_vm(); // 161 on PS4 11.00.
 
     ContextSetup { uma, pmgr: procs }
 }
@@ -323,25 +375,9 @@ fn load_pmap() {
 /// | Version | Offset |
 /// |---------|--------|
 /// |PS4 11.00|0x39A390|
-fn init_vm(mi: &MemoryInfo) -> Arc<Uma> {
+fn init_vm() -> Arc<Uma> {
     // Initialize VM.
-    let vm = unsafe { Vm::new(mi).unwrap() };
-
-    info!(
-        concat!(
-            "initial_memory_size: {} ({})\n",
-            "basemem            : {:#x}\n",
-            "boot_address       : {:#x}\n",
-            "mptramp_pagetables : {:#x}\n",
-            "Maxmem             : {:#x}"
-        ),
-        vm.initial_memory_size(),
-        SizeFormatter::new(vm.initial_memory_size(), DECIMAL),
-        vm.boot_area(),
-        vm.boot_addr(),
-        vm.boot_tables(),
-        vm.end_page()
-    );
+    let vm = Vm::new().unwrap();
 
     // Initialize UMA.
     Uma::new(vm)

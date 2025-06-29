@@ -18,6 +18,7 @@ pub trait CpuStates {
     fn get_rbx(&mut self) -> Result<usize, Self::Err>;
     fn get_rcx(&mut self) -> Result<usize, Self::Err>;
     fn get_rdx(&mut self) -> Result<usize, Self::Err>;
+    fn set_rdx(&mut self, v: usize);
     fn get_rbp(&mut self) -> Result<usize, Self::Err>;
     fn get_r8(&mut self) -> Result<usize, Self::Err>;
     fn get_r9(&mut self) -> Result<usize, Self::Err>;

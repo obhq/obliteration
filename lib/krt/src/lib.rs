@@ -20,16 +20,20 @@ mod panic;
 /// function:
 ///
 /// 1. The kernel does not remap itself so it must be mapped at a desired virtual address and all
-///    relocations must be applied. This imply that the kernel can only be run in a virtual address
-///    space.
+///    ELF relocations must be applied. This imply that the kernel can only be run in a virtual
+///    address space.
 /// 2. Interrupt is disabled.
 /// 3. Only main CPU can execute this function.
 #[cfg(target_os = "none")]
 #[unsafe(no_mangle)]
-extern "C" fn _start(env: &'static ::config::BootEnv, config: &'static ::config::Config) -> ! {
+extern "C" fn _start(
+    map: &'static ::config::KernelMap,
+    env: &'static ::config::BootEnv,
+    config: &'static ::config::Config,
+) -> ! {
     // SAFETY: We call it as the first thing here.
     unsafe { self::config::setup(env) };
-    main(config);
+    main(map, config);
 }
 
 #[allow(dead_code)]
@@ -47,5 +51,5 @@ fn panic(i: &PanicInfo) -> ! {
 
 #[cfg(target_os = "none")]
 unsafe extern "Rust" {
-    safe fn main(config: &'static ::config::Config) -> !;
+    safe fn main(map: &'static ::config::KernelMap, config: &'static ::config::Config) -> !;
 }

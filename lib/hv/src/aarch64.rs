@@ -27,6 +27,7 @@ pub trait CpuStates {
     fn set_pc(&mut self, v: usize);
     fn set_x0(&mut self, v: usize);
     fn set_x1(&mut self, v: usize);
+    fn set_x2(&mut self, v: usize);
 }
 
 /// Features available on a PE.

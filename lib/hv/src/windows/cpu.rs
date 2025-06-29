@@ -156,6 +156,10 @@ impl<'a, 'b> CpuStates for WhpStates<'a, 'b> {
         todo!()
     }
 
+    fn set_rdx(&mut self, v: usize) {
+        todo!();
+    }
+
     fn get_rbp(&mut self) -> Result<usize, Self::Err> {
         todo!()
     }
