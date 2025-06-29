@@ -155,6 +155,10 @@ impl<'a, 'b> CpuStates for HvfStates<'a, 'b> {
     fn set_x1(&mut self, v: usize) {
         self.x1 = State::Dirty(v.try_into().unwrap());
     }
+
+    fn set_x2(&mut self, v: usize) {
+        todo!();
+    }
 }
 
 impl<'a, 'b> CpuCommit for HvfStates<'a, 'b> {

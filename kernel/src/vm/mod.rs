@@ -2,7 +2,6 @@ pub use self::object::*;
 pub use self::page::*;
 
 use self::stats::VmStats;
-use crate::MemoryInfo;
 use crate::context::current_thread;
 use crate::lock::GutexGroup;
 use crate::proc::Proc;
@@ -19,11 +18,6 @@ mod stats;
 
 /// Implementation of Virtual Memory system.
 pub struct Vm {
-    boot_area: u64,           // basemem
-    boot_addr: u64,           // boot_address
-    boot_tables: u64,         // mptramp_pagetables
-    initial_memory_size: u64, // initial_memory_size
-    end_page: u64,            // Maxmem
     stats: [VmStats; 2],
     pagers: [Weak<Proc>; 2],         // pageproc
     pages_deficit: [AtomicUsize; 2], // vm_pageout_deficit
@@ -36,10 +30,7 @@ impl Vm {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x029200|
-    ///
-    /// # Safety
-    /// All fields in `mi` must be correct.
-    pub unsafe fn new(mi: &MemoryInfo) -> Result<Arc<Self>, VmError> {
+    pub fn new() -> Result<Arc<Self>, VmError> {
         // Initializes stats. The Orbis initialize these data in vm_pageout function but it is
         // possible for data race so we do it here instead.
         let pageout_page_count = 0x10; // TODO: Figure out where this value come from.
@@ -62,11 +53,6 @@ impl Vm {
         // Spawn page daemons. The Orbis do this in a separated sysinit but we do it here instead to
         // keep it in the VM subsystem.
         let mut vm = Self {
-            boot_area: mi.boot_area,
-            boot_addr: mi.boot_info.addr,
-            boot_tables: mi.boot_info.page_tables,
-            initial_memory_size: mi.initial_memory_size,
-            end_page: mi.end_page,
             stats,
             pagers: Default::default(),
             pages_deficit: [AtomicUsize::new(0), AtomicUsize::new(0)],
@@ -75,26 +61,6 @@ impl Vm {
         vm.spawn_pagers();
 
         Ok(Arc::new(vm))
-    }
-
-    pub fn boot_area(&self) -> u64 {
-        self.boot_area
-    }
-
-    pub fn boot_addr(&self) -> u64 {
-        self.boot_addr
-    }
-
-    pub fn boot_tables(&self) -> u64 {
-        self.boot_tables
-    }
-
-    pub fn initial_memory_size(&self) -> u64 {
-        self.initial_memory_size
-    }
-
-    pub fn end_page(&self) -> u64 {
-        self.end_page
     }
 
     /// See `vm_page_alloc` on the Orbis for a reference.

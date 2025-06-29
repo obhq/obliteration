@@ -77,8 +77,9 @@ pub fn setup_main_cpu<H: Hypervisor>(
     states.set_ttbr1_el1(map.page_table);
 
     // Set entry point, its argument and stack pointer.
-    states.set_x0(map.env_vaddr);
-    states.set_x1(map.conf_vaddr);
+    states.set_x0(map.map_vaddr);
+    states.set_x1(map.env_vaddr);
+    states.set_x2(map.conf_vaddr);
     states.set_sp_el1(map.stack_vaddr.checked_add(map.stack_len.get()).unwrap()); // Top-down.
     states.set_pc(entry);
 

@@ -61,8 +61,9 @@ pub fn setup_main_cpu<H: Hypervisor>(
     states.set_ss(true);
 
     // Set entry point, its argument and stack pointer.
-    states.set_rdi(map.env_vaddr);
-    states.set_rsi(map.conf_vaddr);
+    states.set_rdi(map.map_vaddr);
+    states.set_rsi(map.env_vaddr);
+    states.set_rdx(map.conf_vaddr);
     states.set_rsp(map.stack_vaddr.checked_add(map.stack_len.get()).unwrap()); // Top-down.
     states.set_rip(entry);
     states.set_rflags(Rflags::new().with_reserved(true).with_id(true));

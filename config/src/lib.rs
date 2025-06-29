@@ -10,6 +10,19 @@ mod env;
 mod idps;
 mod qa;
 
+/// Contains information how the kernel is mapped.
+#[repr(C)]
+pub struct KernelMap {
+    /// Virtual address of the kernel.
+    ///
+    /// This must be the address of ELF header of the kernel.
+    pub kern_vaddr: usize,
+    /// The beginning of free virtual address.
+    ///
+    /// All address after this must not contains any data.
+    pub free_vaddr: NonZero<usize>,
+}
+
 /// Contains information about the boot environment.
 #[repr(C)]
 pub enum BootEnv {

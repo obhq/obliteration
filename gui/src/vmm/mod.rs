@@ -8,7 +8,7 @@ use crate::gdb::GdbHandler;
 use crate::hw::{Device, DeviceTree, setup_devices};
 use crate::profile::{CpuModel, Profile};
 use crate::util::VmmStream;
-use config::{BootEnv, ConsoleType, MapType, PhysMap, Vm};
+use config::{BootEnv, ConsoleType, KernelMap, MapType, PhysMap, Vm};
 use futures::{FutureExt, select_biased};
 use gdbstub::common::{Signal, Tid};
 use gdbstub::target::ext::base::multithread::{
@@ -251,6 +251,24 @@ impl Vmm<()> {
             .and_then(move |v| v.checked_next_multiple_of(vm_page_size.get()))
             .unwrap();
 
+        // Allocate kernel map.
+        let len = size_of::<KernelMap>().try_into().unwrap();
+        let map_vaddr = vaddr;
+        let (_, mut map) = match ram.alloc(
+            Some(map_vaddr),
+            len,
+            #[cfg(target_arch = "aarch64")]
+            self::arch::MEMORY_NORMAL,
+        ) {
+            Ok(v) => v,
+            Err(e) => return Err(VmmError::AllocKernelMap(e)),
+        };
+
+        vaddr = vaddr
+            .checked_add(len.get())
+            .and_then(move |v| v.checked_next_multiple_of(vm_page_size.get()))
+            .unwrap();
+
         // Allocate boot environment.
         let len = size_of::<BootEnv>().try_into().unwrap();
         let env_vaddr = vaddr;
@@ -303,6 +321,11 @@ impl Vmm<()> {
             self::arch::MEMORY_NORMAL,
         )
         .map_err(VmmError::AllocStack)?;
+
+        vaddr = vaddr
+            .checked_add(stack_len.get())
+            .and_then(move |v| v.checked_next_multiple_of(vm_page_size.get()))
+            .unwrap();
 
         // Get hypervisor name.
         let mut hypervisor = [0; 128];
@@ -407,6 +430,22 @@ impl Vmm<()> {
                 attr: self::arch::MEMORY_DEV_NG_NR_NE,
             }))
             .map_err(VmmError::BuildPageTable)?;
+
+        assert!(
+            map.put(
+                0,
+                KernelMap {
+                    kern_vaddr,
+                    free_vaddr: vaddr.try_into().unwrap()
+                }
+            )
+            .unwrap()
+            .is_none()
+        );
+
+        drop(map);
+
+        // Relocate kernel to virtual address.
         let map = RamMap {
             page_table,
             kern_paddr,
@@ -414,6 +453,7 @@ impl Vmm<()> {
             kern_len,
             stack_vaddr,
             stack_len,
+            map_vaddr,
             env_vaddr,
             conf_vaddr,
         };
@@ -1034,6 +1074,7 @@ pub struct RamMap {
     kern_len: NonZero<usize>,
     stack_vaddr: usize,
     stack_len: NonZero<usize>,
+    map_vaddr: usize,
     env_vaddr: usize,
     conf_vaddr: usize,
 }
@@ -1131,6 +1172,9 @@ pub enum VmmError {
 
     #[error("couldn't read kernel at offset {1}")]
     ReadKernel(#[source] std::io::Error, u64),
+
+    #[error("couldn't allocate RAM for kernel map")]
+    AllocKernelMap(#[source] RamError),
 
     #[error("couldn't allocate RAM for boot environment")]
     AllocBootEnv(#[source] RamError),

@@ -90,6 +90,11 @@ impl CpuStates for KvmStates<'_> {
         Ok(self.gregs.rdx.try_into().unwrap())
     }
 
+    fn set_rdx(&mut self, v: usize) {
+        self.gregs.rdx = v.try_into().unwrap();
+        self.gdirty = true;
+    }
+
     fn get_rbp(&mut self) -> Result<usize, Self::Err> {
         Ok(self.gregs.rbp.try_into().unwrap())
     }
