@@ -4,6 +4,7 @@ export component IdpsTab {
     in property <[string]> products;
     in-out property <int> selected-product;
     in-out property <string> sub-product;
+    in-out property <string> serial;
 
     GridBox {
         padding-top: 0;
@@ -36,7 +37,9 @@ export component IdpsTab {
             row: 1;
             col: 0;
             vertical-stretch: 0;
-            LineEdit { }
+            LineEdit {
+                text <=> root.serial;
+            }
         }
 
         Rectangle {

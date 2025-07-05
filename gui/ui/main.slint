@@ -16,6 +16,7 @@ export component MainWindow inherits Window {
     in property <[string]> idps-products;
     in-out property <int> selected-idps-product;
     in-out property <string> idps-sub-product;
+    in-out property <string> idps-serial;
     in property <[string]> profiles;
     in-out property <int> selected-profile;
 
@@ -118,6 +119,7 @@ export component MainWindow inherits Window {
                 products: root.idps-products;
                 selected-product <=> root.selected-idps-product;
                 sub-product <=> root.idps-sub-product;
+                serial <=> root.idps-serial;
             }
         }
 
