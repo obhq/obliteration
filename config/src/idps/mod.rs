@@ -14,7 +14,7 @@ pub struct ConsoleId {
     pub product: ProductId,
     pub prodsub: u16,
     #[cfg_attr(feature = "serde", serde(with = "serde_bytes"))]
-    serial: [u8; 8],
+    pub serial: [u8; 8],
 }
 
 impl ConsoleId {

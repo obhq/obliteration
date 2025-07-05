@@ -236,6 +236,7 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
                 .unwrap(),
         );
         dst.set_idps_sub_product(slint::format!("{:#x}", p.kernel_config.idps.prodsub));
+        dst.set_idps_serial(hex::encode(&p.kernel_config.idps.serial).into());
     }
 
     /// # Panics
@@ -257,6 +258,11 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
                 .parse()
                 .map_err(|_| ProfileError::InvalidIdpsSubProduct)?,
         };
+        let mut idps_serial = [0; 8];
+
+        if hex::decode_to_slice(src.get_idps_serial(), &mut idps_serial).is_err() {
+            return Err(ProfileError::InvalidIdpsSerial);
+        }
 
         p.display_device = ByteBuf::from(self.devices.get(src.get_selected_device()).unwrap().id());
         p.display_resolution = self.resolutions.get(src.get_selected_resolution()).unwrap();
@@ -270,6 +276,7 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
         p.debug_addr = debug_addr;
         p.kernel_config.idps.product = self.products.get(src.get_selected_idps_product()).unwrap();
         p.kernel_config.idps.prodsub = idps_prodsub;
+        p.kernel_config.idps.serial = idps_serial;
 
         Ok(RefMut::map(profiles, move |v| &mut v[row]))
     }
@@ -322,4 +329,7 @@ pub enum ProfileError {
 
     #[error("invalid IDPS sub-product")]
     InvalidIdpsSubProduct,
+
+    #[error("invalid IDPS serial")]
+    InvalidIdpsSerial,
 }
