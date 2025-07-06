@@ -58,14 +58,14 @@ fn main(map: &'static ::config::KernelMap, config: &'static ::config::Config) ->
             "cpu_vendor                 : {} × {}\n",
             "cpu_id                     : {:#x}\n",
             "boot_parameter.idps.product: {}\n",
-            "virtual_avail              : {:#x}"
+            "physfree                   : {:#x}"
         ),
         String::from_utf8_lossy(hw),
         cpu.cpu_vendor,
         config.max_cpu(),
         cpu.cpu_id,
         config.idps().product,
-        map.free_vaddr
+        map.kern_vsize
     );
 
     // Setup the CPU after the first print to let the bootloader developer know (some of) their code
@@ -144,6 +144,21 @@ fn setup() -> ContextSetup {
     );
 
     drop(map);
+
+    // TODO: We probably want to remove hard-coded start address of the first map here.
+    let page_size = PAGE_SIZE.get().try_into().unwrap();
+    let page_mask = u64::try_from(PAGE_MASK.get()).unwrap();
+
+    mi.physmap[0] = page_size;
+
+    for i in (0..=mi.physmap_last).step_by(2) {
+        let begin = mi.physmap[i].checked_next_multiple_of(page_size).unwrap();
+        let end = min(mi.physmap[i + 1] & !page_mask, mi.end_page << PAGE_SHIFT);
+
+        for _ in (begin..end).step_by(PAGE_SIZE.get()) {
+            todo!()
+        }
+    }
 
     // Run sysinit vector for subsystem. The Orbis use linker to put all sysinit functions in a list
     // then loop the list to execute all of it. We manually execute those functions instead for

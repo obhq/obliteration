@@ -17,10 +17,10 @@ pub struct KernelMap {
     ///
     /// This must be the address of ELF header of the kernel.
     pub kern_vaddr: usize,
-    /// The beginning of free virtual address.
+    /// Size of virtual address the kernel is mapped.
     ///
-    /// All address after this must not contains any data.
-    pub free_vaddr: NonZero<usize>,
+    /// This include everything that need to be lived forever (e.g. stack for main CPU).
+    pub kern_vsize: NonZero<usize>,
 }
 
 /// Contains information about the boot environment.

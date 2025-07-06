@@ -436,7 +436,7 @@ impl Vmm<()> {
                 0,
                 KernelMap {
                     kern_vaddr,
-                    free_vaddr: vaddr.try_into().unwrap()
+                    kern_vsize: (vaddr - kern_vaddr).try_into().unwrap(),
                 }
             )
             .unwrap()
