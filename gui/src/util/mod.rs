@@ -1,3 +1,1 @@
-pub use self::channel::*;
-
-mod channel;
+pub mod channel;

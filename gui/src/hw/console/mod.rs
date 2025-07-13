@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use self::context::Context;
 use super::{Device, DeviceContext};
-use crate::util::VmmStream;
+use crate::util::channel::Sender;
 use config::{ConsoleMemory, ConsoleType};
 use hv::Hypervisor;
 use std::num::NonZero;
@@ -27,7 +27,7 @@ impl Console {
     pub fn create_context<'a, H: Hypervisor>(
         &'a self,
         hv: &'a H,
-        logs: &'a VmmStream<(ConsoleType, String)>,
+        logs: &'a Sender<(ConsoleType, String)>,
     ) -> Box<dyn DeviceContext<H::Cpu<'a>> + 'a> {
         Box::new(Context::new(self, hv, logs))
     }

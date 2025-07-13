@@ -7,7 +7,7 @@ use self::kernel::{
 use crate::gdb::GdbHandler;
 use crate::hw::{Device, DeviceTree, setup_devices};
 use crate::profile::{CpuModel, Profile};
-use crate::util::VmmStream;
+use crate::util::channel::{Receiver, Sender};
 use config::{BootEnv, ConsoleType, KernelMap, MapType, PhysMap, Vm};
 use futures::{FutureExt, select_biased};
 use gdbstub::common::{Signal, Tid};
@@ -47,7 +47,7 @@ pub struct Vmm<H> {
     next: usize,
     breakpoint: Arc<Mutex<()>>,
     sw_breakpoints: HashMap<u64, [u8; BREAKPOINT_SIZE.get()]>,
-    logs: Arc<VmmStream<(ConsoleType, String)>>,
+    logs: Receiver<(ConsoleType, String)>,
     shutdown: Arc<AtomicBool>,
 }
 
@@ -460,22 +460,54 @@ impl Vmm<()> {
 
         Self::relocate_kernel(&mut hv, &map, dynamic)?;
 
-        // Spawn main CPU.
-        let mut vmm = Vmm {
-            hv: Arc::new(hv),
-            devices,
-            cpus: FxHashMap::default(),
-            next: 0,
-            breakpoint: Arc::default(),
-            sw_breakpoints: HashMap::new(),
-            logs: Arc::new(VmmStream::new(const { NonZero::new(100).unwrap() })),
+        // Setup main CPU arguments.
+        let hv = Arc::new(hv);
+        let breakpoint = Arc::new(Mutex::default());
+        let (tx, logs) = crate::util::channel::new(const { NonZero::new(100).unwrap() });
+        let args = CpuArgs {
+            hv: hv.clone(),
+            devices: devices.clone(),
+            breakpoint: breakpoint.clone(),
+            logs: tx,
             shutdown: shutdown.clone(),
         };
 
-        vmm.spawn(map.kern_vaddr + img.entry(), Some(map), false)
+        // Setup debug channel.
+        let debug = false;
+        let (debug, debugger) = if debug {
+            Some(self::cpu::debug::channel()).unzip()
+        } else {
+            None.unzip()
+        };
+
+        // Spawn thread to drive main CPU.
+        let start = map.kern_vaddr + img.entry();
+        let (tx, exiting) = futures::channel::oneshot::channel();
+        let thread = std::thread::Builder::new()
+            .spawn(move || {
+                let r = Vmm::main_cpu(args, debugger, start, map);
+                tx.send(()).unwrap();
+                r
+            })
             .map_err(VmmError::SpawnMainCpu)?;
 
-        Ok(vmm)
+        Ok(Vmm {
+            hv,
+            devices,
+            cpus: FxHashMap::from_iter([(
+                0,
+                Cpu {
+                    thread,
+                    exiting,
+                    debug,
+                },
+            )]),
+            next: 1,
+            breakpoint,
+            sw_breakpoints: HashMap::new(),
+            logs,
+            shutdown: shutdown.clone(),
+        })
     }
 
     fn relocate_kernel<H: Hypervisor>(
@@ -598,58 +630,6 @@ impl<H: Hypervisor> Vmm<H> {
     const GDB_ENOENT: u8 = 2;
     const GDB_EFAULT: u8 = 14;
 
-    pub fn spawn(
-        &mut self,
-        start: usize,
-        map: Option<RamMap>,
-        debug: bool,
-    ) -> Result<(), std::io::Error> {
-        // Setup arguments.
-        let args = CpuArgs {
-            hv: self.hv.clone(),
-            devices: self.devices.clone(),
-            breakpoint: self.breakpoint.clone(),
-            logs: self.logs.clone(),
-            shutdown: self.shutdown.clone(),
-        };
-
-        // Setup debug channel.
-        let (debug, debugger) = if debug {
-            Some(self::cpu::debug::channel()).unzip()
-        } else {
-            None.unzip()
-        };
-
-        // Spawn thread to drive vCPU.
-        let id = self.next;
-        let (tx, exiting) = futures::channel::oneshot::channel();
-        let thread = match map {
-            Some(map) => std::thread::Builder::new().spawn(move || {
-                let r = Self::main_cpu(args, debugger, start, map);
-                tx.send(()).unwrap();
-                r
-            }),
-            None => todo!(),
-        }?;
-
-        self.next += 1;
-
-        assert!(
-            self.cpus
-                .insert(
-                    id,
-                    Cpu {
-                        thread,
-                        exiting,
-                        debug,
-                    },
-                )
-                .is_none()
-        );
-
-        Ok(())
-    }
-
     fn main_cpu(
         args: CpuArgs<H>,
         debug: Option<self::cpu::debug::Debugger>,
@@ -686,7 +666,7 @@ impl<H: Hypervisor> Vmm<H> {
         // Build device contexts for this CPU.
         let hv = args.hv.as_ref();
         let t = &args.devices;
-        let logs = args.logs.as_ref();
+        let logs = &args.logs;
         let mut devices = BTreeMap::<usize, self::cpu::Device<'c, H::Cpu<'c>>>::new();
 
         self::cpu::Device::insert(&mut devices, t.console(), |d| d.create_context(hv, logs));
@@ -1062,7 +1042,7 @@ struct CpuArgs<H> {
     hv: Arc<H>,
     devices: Arc<DeviceTree>,
     breakpoint: Arc<Mutex<()>>,
-    logs: Arc<VmmStream<(ConsoleType, String)>>,
+    logs: Sender<(ConsoleType, String)>,
     shutdown: Arc<AtomicBool>,
 }
 
