@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 use super::Console;
 use crate::hw::{DeviceContext, MmioError, read_ptr, read_u8, read_usize};
-use crate::util::VmmStream;
+use crate::util::channel::Sender;
 use config::{ConsoleMemory, ConsoleType};
 use hv::{Cpu, CpuExit, CpuIo, Hypervisor};
 use std::error::Error;
@@ -13,13 +13,13 @@ use thiserror::Error;
 pub struct Context<'a, H> {
     dev: &'a Console,
     hv: &'a H,
-    logs: &'a VmmStream<(ConsoleType, String)>,
+    logs: &'a Sender<(ConsoleType, String)>,
     msg_len: Option<NonZero<usize>>,
     msg: Vec<u8>,
 }
 
 impl<'a, H> Context<'a, H> {
-    pub fn new(dev: &'a Console, hv: &'a H, logs: &'a VmmStream<(ConsoleType, String)>) -> Self {
+    pub fn new(dev: &'a Console, hv: &'a H, logs: &'a Sender<(ConsoleType, String)>) -> Self {
         Self {
             dev,
             hv,
