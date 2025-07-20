@@ -19,6 +19,7 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
             .map_err(RamBuilderError::AllocPml4Table)?;
 
         // Setup page tables for allocated RAM.
+        let page_size = self.hv.ram().vm_page_size();
         let mut cx = Context4K {
             pml4t,
             pdpt: FxHashMap::default(),
@@ -27,14 +28,18 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
         };
 
         for info in std::mem::take(&mut self.allocated) {
-            let len = info.len.get().next_multiple_of(4096);
+            let len = info.len.get().next_multiple_of(page_size.get());
 
             self.setup_4k_page_tables(&mut cx, info.vaddr, info.paddr, len)?;
         }
 
         // Setup page tables to map virtual devices.
         for dev in devices {
-            let len = dev.len.get().checked_next_multiple_of(4096).unwrap();
+            let len = dev
+                .len
+                .get()
+                .checked_next_multiple_of(page_size.get())
+                .unwrap();
 
             assert!(dev.paddr >= self.hv.ram().len().get());
 

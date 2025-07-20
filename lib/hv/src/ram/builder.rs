@@ -107,6 +107,8 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
             0x1000 => self.build_4k_page_tables(devices),
             #[cfg(target_arch = "aarch64")]
             0x4000 => self.build_16k_page_tables(devices),
+            #[cfg(target_arch = "x86_64")]
+            0x4000 => self.build_4k_page_tables(devices),
             _ => todo!(),
         }
     }
