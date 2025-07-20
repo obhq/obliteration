@@ -1,4 +1,3 @@
-pub use self::arch::*;
 pub use self::dipsw::*;
 
 use alloc::boxed::Box;
@@ -9,11 +8,9 @@ use core::num::NonZero;
 use krt::warn;
 use macros::elf_note;
 
-#[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
-#[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
-mod arch;
 mod dipsw;
 
+pub const PAGE_SHIFT: usize = 14; // 16K
 pub const PAGE_SIZE: NonZero<usize> = NonZero::new(1 << PAGE_SHIFT).unwrap();
 pub const PAGE_MASK: NonZero<usize> = NonZero::new(PAGE_SIZE.get() - 1).unwrap();
 
