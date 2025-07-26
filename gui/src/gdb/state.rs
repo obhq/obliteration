@@ -18,4 +18,30 @@ impl SessionState {
     pub fn parse_ack_no_ack(&mut self) {
         self.no_ack = Some(true);
     }
+
+    pub fn parse_supported(&mut self, req: &[u8], res: &mut Vec<u8>) {
+        // Push features that we always supported.
+        res.extend_from_slice(b"QStartNoAckMode+");
+
+        // Parse GDB features.
+        let req = match req.strip_prefix(b":") {
+            Some(v) => v,
+            None => return,
+        };
+
+        for feat in req.split(|&b| b == b';') {
+            if let Some(_) = feat.strip_prefix(b"xmlRegisters=") {
+                res.extend_from_slice(b";xmlRegisters=");
+                res.extend_from_slice(if cfg!(target_arch = "aarch64") {
+                    b"arm"
+                } else if cfg!(target_arch = "x86_64") {
+                    b"i386"
+                } else {
+                    todo!()
+                });
+            } else {
+                todo!("{}", String::from_utf8_lossy(feat));
+            }
+        }
+    }
 }

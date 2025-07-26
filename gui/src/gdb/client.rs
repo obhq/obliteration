@@ -100,9 +100,13 @@ impl<'a, H: GdbHandler> GdbDispatcher for ClientDispatcher<'a, H> {
         // Execute command.
         let off = res.len();
 
-        match data {
-            b"QStartNoAckMode" => state.parse_start_no_ack_mode(res),
-            v => todo!("{}", String::from_utf8_lossy(v)),
+        if data == b"QStartNoAckMode" {
+            state.parse_start_no_ack_mode(res);
+        } else if let Some(data) = data.strip_prefix(b"qSupported") {
+            // It is unclear if qSupported can sent from GDB without additional payload.
+            state.parse_supported(data, res);
+        } else {
+            todo!("{}", String::from_utf8_lossy(data));
         }
 
         // Push checksum.
