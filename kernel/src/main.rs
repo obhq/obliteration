@@ -81,13 +81,14 @@ fn main(map: &'static ::config::KernelMap, config: &'static ::config::Config) ->
 
     // Activate CPU context.
     let thread0 = Arc::new(thread0);
+    let setup = move || setup(map);
 
     unsafe { self::context::run_with_context(config, arch, 0, thread0, setup, run) };
 }
 
-fn setup() -> ContextSetup {
+fn setup(map: &'static ::config::KernelMap) -> ContextSetup {
     // Initialize physical memory.
-    let mut mi = load_memory_map();
+    let mut mi = load_memory_map(u64::try_from(map.kern_vsize.get()).unwrap());
     let mut map = String::with_capacity(0x2000);
 
     fn format_map(mi: &MemoryInfo, buf: &mut String) {
@@ -132,9 +133,8 @@ fn setup() -> ContextSetup {
     info!(
         concat!(
             "DMEM initialized.\n",
-            "DMEM Mode  : {}\n",
-            "DMEM Config: {}\n",
-            "Maxmem     : {:#x}",
+            "Mode  : {} ({})\n",
+            "Maxmem: {:#x}",
             "{}"
         ),
         dmem.mode(),
@@ -148,6 +148,11 @@ fn setup() -> ContextSetup {
     // TODO: We probably want to remove hard-coded start address of the first map here.
     let page_size = PAGE_SIZE.get().try_into().unwrap();
     let page_mask = u64::try_from(PAGE_MASK.get()).unwrap();
+    let unk1 = 0xA494000 + 0x2200000; // TODO: What is this?
+    let paddr_free = match mi.unk {
+        0 => mi.paddr_free + 0x400000, // TODO: Why 0x400000?
+        _ => mi.paddr_free,
+    };
 
     mi.physmap[0] = page_size;
 
@@ -155,8 +160,12 @@ fn setup() -> ContextSetup {
         let begin = mi.physmap[i].checked_next_multiple_of(page_size).unwrap();
         let end = min(mi.physmap[i + 1] & !page_mask, mi.end_page << PAGE_SHIFT);
 
-        for _ in (begin..end).step_by(PAGE_SIZE.get()) {
-            todo!()
+        for addr in (begin..end).step_by(PAGE_SIZE.get()) {
+            if addr < (unk1 & 0xffffffffffe00000) || addr >= paddr_free {
+                todo!()
+            } else {
+                todo!()
+            }
         }
     }
 
@@ -187,7 +196,7 @@ fn run() -> ! {
 /// | Version | Offset |
 /// |---------|--------|
 /// |PS4 11.00|0x25CF00|
-fn load_memory_map() -> MemoryInfo {
+fn load_memory_map(mut paddr_free: u64) -> MemoryInfo {
     // TODO: Some of the logic around here are very hard to understand.
     let mut physmap = [0u64; 60];
     let mut last = 0usize;
@@ -327,7 +336,7 @@ fn load_memory_map() -> MemoryInfo {
         unk |= 2;
     }
 
-    load_pmap();
+    paddr_free = load_pmap(paddr_free);
 
     // The call to initialize_dmem is moved to the caller of this function.
     MemoryInfo {
@@ -338,6 +347,7 @@ fn load_memory_map() -> MemoryInfo {
         initial_memory_size,
         end_page,
         unk,
+        paddr_free,
     }
 }
 
@@ -373,7 +383,7 @@ fn adjust_boot_area(original: u64) -> BootInfo {
 /// | Version | Offset |
 /// |---------|--------|
 /// |PS4 11.00|0x1127C0|
-fn load_pmap() {
+fn load_pmap(paddr_free: u64) -> u64 {
     let config = config();
 
     if config.is_allow_disabling_aslr() && config.dipsw(Dipsw::DisabledKaslr) {
@@ -382,6 +392,8 @@ fn load_pmap() {
         // TODO: There are a lot of unknown variables here so we skip implementing this until we
         // run into the code that using them.
     }
+
+    paddr_free
 }
 
 /// See `vm_mem_init` function on the Orbis for a reference.
@@ -460,6 +472,7 @@ struct MemoryInfo {
     initial_memory_size: u64,
     end_page: u64,
     unk: u32, // Seems like the only possible values are 0 - 3.
+    paddr_free: u64,
 }
 
 /// Contains information for memory to boot a secondary CPU.

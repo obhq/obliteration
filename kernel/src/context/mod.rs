@@ -38,7 +38,7 @@ pub unsafe fn run_with_context(
     arch: Arc<ArchConfig>,
     cpu: usize,
     td: Arc<Thread>,
-    setup: fn() -> ContextSetup,
+    setup: impl FnOnce() -> ContextSetup,
     main: fn() -> !,
 ) -> ! {
     // We use a different mechanism here. The Orbis put all of pcpu at a global level but we put it

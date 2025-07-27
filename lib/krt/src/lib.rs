@@ -19,11 +19,12 @@ mod panic;
 /// This will be called by a bootloader or a hypervisor. The following are requirements to call this
 /// function:
 ///
-/// 1. The kernel does not remap itself so it must be mapped at a desired virtual address and all
+/// 1. The kernel must be mapped at address 0.
+/// 2. The kernel does not remap itself so it must be mapped at a desired virtual address and all
 ///    ELF relocations must be applied. This imply that the kernel can only be run in a virtual
 ///    address space.
-/// 2. Interrupt is disabled.
-/// 3. Only main CPU can execute this function.
+/// 3. Interrupt is disabled.
+/// 4. Only main CPU can execute this function.
 #[cfg(target_os = "none")]
 #[unsafe(no_mangle)]
 extern "C" fn _start(
