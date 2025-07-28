@@ -105,6 +105,9 @@ impl<'a, H: GdbHandler> GdbDispatcher for ClientDispatcher<'a, H> {
         } else if let Some(data) = data.strip_prefix(b"qSupported") {
             // It is unclear if qSupported can sent from GDB without additional payload.
             state.parse_supported(data, res);
+        } else if data == b"QThreadSuffixSupported" {
+            // https://lldb.llvm.org/resources/lldbgdbremote.html#qthreadsuffixsupported
+            state.parse_thread_suffix_supported(res);
         } else {
             todo!("{}", String::from_utf8_lossy(data));
         }

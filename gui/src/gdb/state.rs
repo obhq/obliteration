@@ -2,6 +2,7 @@
 #[derive(Default)]
 pub struct SessionState {
     no_ack: Option<bool>,
+    thread_suffix_supported: bool,
 }
 
 impl SessionState {
@@ -39,9 +40,23 @@ impl SessionState {
                 } else {
                     todo!()
                 });
+            } else if let Some(_) = feat.strip_prefix(b"multiprocess") {
+                // TODO: Maybe we can use this feature to debug both kernel and userspace process at
+                // the same time?
+            } else if let Some(_) = feat.strip_prefix(b"fork-events") {
+                // TODO: This maybe useful when we support debugging both kernel and userspace at
+                // the same time.
+            } else if let Some(_) = feat.strip_prefix(b"vfork-events") {
+                // TODO: Same here.
             } else {
                 todo!("{}", String::from_utf8_lossy(feat));
             }
         }
+    }
+
+    pub fn parse_thread_suffix_supported(&mut self, res: &mut Vec<u8>) {
+        self.thread_suffix_supported = true;
+
+        res.extend_from_slice(b"OK");
     }
 }
