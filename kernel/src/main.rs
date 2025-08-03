@@ -146,6 +146,9 @@ fn setup(map: &'static ::config::KernelMap) -> ContextSetup {
     drop(map);
 
     // TODO: We probably want to remove hard-coded start address of the first map here.
+    let mut phys_avail = [0u64; 61];
+    let mut pa_indx = 0;
+    let mut physmem = 0;
     let page_size = PAGE_SIZE.get().try_into().unwrap();
     let page_mask = u64::try_from(PAGE_MASK.get()).unwrap();
     let unk1 = 0xA494000 + 0x2200000; // TODO: What is this?
@@ -156,18 +159,49 @@ fn setup(map: &'static ::config::KernelMap) -> ContextSetup {
 
     mi.physmap[0] = page_size;
 
+    phys_avail[pa_indx] = mi.physmap[0];
+    pa_indx += 1;
+    phys_avail[pa_indx] = mi.physmap[0];
+
     for i in (0..=mi.physmap_last).step_by(2) {
         let begin = mi.physmap[i].checked_next_multiple_of(page_size).unwrap();
         let end = min(mi.physmap[i + 1] & !page_mask, mi.end_page << PAGE_SHIFT);
 
-        for addr in (begin..end).step_by(PAGE_SIZE.get()) {
-            if addr < (unk1 & 0xffffffffffe00000) || addr >= paddr_free {
-                todo!()
-            } else {
-                todo!()
+        for pa in (begin..end).step_by(PAGE_SIZE.get()) {
+            if (pa < (unk1 & 0xffffffffffe00000) || pa >= paddr_free)
+                && (mi.dcons_addr == 0
+                    || (pa < (mi.dcons_addr & 0xffffffffffffc000)
+                        || (mi.dcons_addr + mi.dcons_size <= pa)))
+            {
+                if mi.memtest == 0 {
+                    if pa == phys_avail[pa_indx] {
+                        phys_avail[pa_indx] = pa + page_size;
+                        physmem += 1;
+                    } else {
+                        let i = pa_indx + 1;
+
+                        if i == 60 {
+                            warn!("Too many holes in the physical address space, giving up.");
+                        } else {
+                            pa_indx += 2;
+                            phys_avail[i] = pa;
+                            phys_avail[pa_indx] = pa + page_size;
+                            physmem += 1;
+                        }
+                    }
+                } else {
+                    todo!()
+                }
             }
+
+            todo!()
         }
     }
+
+    info!(
+        concat!("Available physical memory populated.\n", "physmem: {}"),
+        physmem
+    );
 
     // Run sysinit vector for subsystem. The Orbis use linker to put all sysinit functions in a list
     // then loop the list to execute all of it. We manually execute those functions instead for
@@ -315,6 +349,12 @@ fn load_memory_map(mut paddr_free: u64) -> MemoryInfo {
         end_page = min(v.parse::<u64>().unwrap() >> PAGE_SHIFT, end_page);
     }
 
+    // Get memtest flags.
+    let memtest = config
+        .env("hw.memtest.tests")
+        .map(|v| v.parse().unwrap())
+        .unwrap_or(1);
+
     // TODO: There is some unknown calls here.
     let mut unk = 0;
 
@@ -338,16 +378,25 @@ fn load_memory_map(mut paddr_free: u64) -> MemoryInfo {
 
     paddr_free = load_pmap(paddr_free);
 
+    // Get dcons buffer address.
+    let (dcons_addr, dcons_size) = match (config.env("dcons.addr"), config.env("dcons.size")) {
+        (Some(addr), Some(size)) => (addr.parse().unwrap(), size.parse().unwrap()),
+        _ => (0, 0),
+    };
+
     // The call to initialize_dmem is moved to the caller of this function.
     MemoryInfo {
         physmap,
         physmap_last: last,
         boot_area,
         boot_info,
+        dcons_addr,
+        dcons_size,
         initial_memory_size,
         end_page,
         unk,
         paddr_free,
+        memtest,
     }
 }
 
@@ -469,10 +518,13 @@ struct MemoryInfo {
     physmap_last: usize,
     boot_area: u64,
     boot_info: BootInfo,
+    dcons_addr: u64,
+    dcons_size: u64,
     initial_memory_size: u64,
     end_page: u64,
     unk: u32, // Seems like the only possible values are 0 - 3.
     paddr_free: u64,
+    memtest: u64,
 }
 
 /// Contains information for memory to boot a secondary CPU.
