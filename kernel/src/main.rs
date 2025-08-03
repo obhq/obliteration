@@ -168,6 +168,7 @@ fn setup(map: &'static ::config::KernelMap) -> ContextSetup {
         let end = min(mi.physmap[i + 1] & !page_mask, mi.end_page << PAGE_SHIFT);
 
         for pa in (begin..end).step_by(PAGE_SIZE.get()) {
+            #[allow(unused_assignments)] // TODO: Remove this when implement below todo!.
             if (pa < (unk1 & 0xffffffffffe00000) || pa >= paddr_free)
                 && (mi.dcons_addr == 0
                     || (pa < (mi.dcons_addr & 0xffffffffffffc000)
