@@ -241,7 +241,7 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
 
     /// # Panics
     /// If `row` is not valid.
-    pub fn update(&self, row: i32, src: &MainWindow) -> Result<RefMut<Profile>, ProfileError> {
+    pub fn update(&self, row: i32, src: &MainWindow) -> Result<RefMut<'_, Profile>, ProfileError> {
         let row = usize::try_from(row).unwrap();
         let mut profiles = self.profiles.borrow_mut();
         let p = &mut profiles[row];

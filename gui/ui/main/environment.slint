@@ -1,0 +1,16 @@
+import { VerticalBox, StandardTableView, Button } from "std-widgets.slint";
+
+export component EnvironmentTab {
+    in property <[[StandardListViewItem]]> list;
+
+    VerticalBox {
+        StandardTableView {
+            columns: [{ title: "Name" }, { title: "Value" }];
+            rows: root.list;
+        }
+
+        Button {
+            text: "New";
+        }
+    }
+}
