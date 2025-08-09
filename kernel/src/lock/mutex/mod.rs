@@ -24,7 +24,7 @@ impl<T> Mutex<T> {
     }
 
     /// See `_mtx_lock_flags` on the PS4 for a reference.
-    pub fn lock(&self) -> MutexGuard<T> {
+    pub fn lock(&self) -> MutexGuard<'_, T> {
         // Check if the current thread can sleep.
         let td = current_thread();
 
