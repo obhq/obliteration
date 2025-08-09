@@ -88,7 +88,7 @@ impl Ram {
 
     /// # Panics
     /// If `addr` or `len` is not multiply by block size.
-    pub fn alloc(&self, addr: usize, len: NonZero<usize>) -> Result<LockedMem, RamError> {
+    pub fn alloc(&self, addr: usize, len: NonZero<usize>) -> Result<LockedMem<'_>, RamError> {
         assert_eq!(addr % self.block_size(), 0);
         assert_eq!(len.get() % self.block_size(), 0);
 
@@ -197,7 +197,7 @@ impl Ram {
     /// Return [`None`] if some part of the requested range is not allocated.
     ///
     /// Attempt to lock a range that already locked by the calling thread will result in a deadlock.
-    pub fn lock(&self, addr: usize, len: NonZero<usize>) -> Option<LockedMem> {
+    pub fn lock(&self, addr: usize, len: NonZero<usize>) -> Option<LockedMem<'_>> {
         // Round the address down to block size.
         let end = addr.checked_add(len.get())?;
         let off = addr % self.block_size();

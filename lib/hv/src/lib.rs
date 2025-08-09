@@ -78,7 +78,7 @@ pub trait CpuIo {
 
     /// Returns physical address where the VM try to access.
     fn addr(&self) -> usize;
-    fn buffer(&mut self) -> IoBuf;
+    fn buffer(&mut self) -> IoBuf<'_>;
     fn cpu(&mut self) -> &mut Self::Cpu;
 }
 
