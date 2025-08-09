@@ -144,7 +144,7 @@ impl<'b> CpuIo for KvmIo<'_, 'b> {
         unsafe { (*self.0.cx.0).exit.mmio.phys_addr }
     }
 
-    fn buffer(&mut self) -> IoBuf {
+    fn buffer(&mut self) -> IoBuf<'_> {
         let io = unsafe { &mut (*self.0.cx.0).exit.mmio };
         let len: usize = io.len.try_into().unwrap();
         let buf = &mut io.data[..len];

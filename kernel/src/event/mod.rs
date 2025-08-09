@@ -13,7 +13,7 @@ mod ty;
 pub struct EventSet<S>(Mutex<S>); // TODO: Change to RwLock.
 
 impl<S> EventSet<S> {
-    pub fn trigger(&self) -> EventTrigger<S> {
+    pub fn trigger(&self) -> EventTrigger<'_, S> {
         EventTrigger(self.0.lock())
     }
 }

@@ -61,7 +61,7 @@ impl<T> Gutex<T> {
     ///
     /// # Panics
     /// If there are an active write access to this [`Gutex`].
-    pub fn read(&self) -> GutexRead<T> {
+    pub fn read(&self) -> GutexRead<'_, T> {
         // Check if there are an active writer.
         let lock = self.group.lock();
         let active = self.active.get();
@@ -83,7 +83,7 @@ impl<T> Gutex<T> {
 
     /// # Panics
     /// If there are any active reader or writer.
-    pub fn write(&self) -> GutexWrite<T> {
+    pub fn write(&self) -> GutexWrite<'_, T> {
         // Check if there are active reader or writer.
         let lock = self.group.lock();
         let active = self.active.get();
@@ -138,7 +138,7 @@ impl GutexGroup {
         }
     }
 
-    fn lock(&self) -> GroupGuard {
+    fn lock(&self) -> GroupGuard<'_> {
         // Acquire the lock.
         let td = current_thread();
         let id = BorrowedArc::as_ptr(&td) as usize;

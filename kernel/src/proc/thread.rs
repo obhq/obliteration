@@ -91,7 +91,7 @@ impl Thread {
     }
 
     /// Sleeping address. Zero if this thread is not in a sleep queue.
-    pub fn sleeping_mut(&self) -> GutexWrite<usize> {
+    pub fn sleeping_mut(&self) -> GutexWrite<'_, usize> {
         self.sleeping.write()
     }
 
@@ -107,7 +107,7 @@ impl Thread {
         get!(self, active_heap_guard)
     }
 
-    pub fn disable_vm_heap(&self) -> HeapGuard {
+    pub fn disable_vm_heap(&self) -> HeapGuard<'_> {
         let v = get!(self, active_heap_guard).checked_add(1).unwrap();
 
         set!(self, active_heap_guard, v);

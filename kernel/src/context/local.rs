@@ -26,7 +26,7 @@ impl<T> CpuLocal<T> {
 
     /// The calling thread cannot go to sleep until the returned [`CpuLock`] is dropped. Attempt to
     /// call any function that can put the thread to sleep will be panic.
-    pub fn lock(&self) -> CpuLock<T> {
+    pub fn lock(&self) -> CpuLock<'_, T> {
         let pin = pin_cpu();
         let val = &self.0[unsafe { pin.cpu() }];
 
