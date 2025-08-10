@@ -91,17 +91,17 @@ fn setup(map: &'static ::config::KernelMap) -> ContextSetup {
     let mut mi = load_memory_map(u64::try_from(map.kern_vsize.get()).unwrap());
     let mut map = String::with_capacity(0x2000);
 
-    fn format_map(mi: &MemoryInfo, buf: &mut String) {
-        for i in (0..=mi.physmap_last).step_by(2) {
-            let start = mi.physmap[i];
-            let end = mi.physmap[i + 1];
+    fn format_map(tab: &[u64], last: usize, buf: &mut String) {
+        for i in (0..=last).step_by(2) {
+            let start = tab[i];
+            let end = tab[i + 1];
             let size = SizeFormatter::new(end - start, DECIMAL);
 
             write!(buf, "\n{start:#018x}-{end:#018x} ({size})").unwrap();
         }
     }
 
-    format_map(&mi, &mut map);
+    format_map(&mi.physmap, mi.physmap_last, &mut map);
 
     info!(
         concat!(
@@ -128,7 +128,7 @@ fn setup(map: &'static ::config::KernelMap) -> ContextSetup {
     // Initialize DMEM system.
     let dmem = Dmem::new(&mut mi);
 
-    format_map(&mi, &mut map);
+    format_map(&mi.physmap, mi.physmap_last, &mut map);
 
     info!(
         concat!(
@@ -148,6 +148,8 @@ fn setup(map: &'static ::config::KernelMap) -> ContextSetup {
     // TODO: We probably want to remove hard-coded start address of the first map here.
     let mut phys_avail = [0u64; 61];
     let mut pa_indx = 0;
+    let mut dump_avail = [0u64; 61];
+    let mut da_indx = 1;
     let mut physmem = 0;
     let page_size = PAGE_SIZE.get().try_into().unwrap();
     let page_mask = u64::try_from(PAGE_MASK.get()).unwrap();
@@ -162,13 +164,15 @@ fn setup(map: &'static ::config::KernelMap) -> ContextSetup {
     phys_avail[pa_indx] = mi.physmap[0];
     pa_indx += 1;
     phys_avail[pa_indx] = mi.physmap[0];
+    dump_avail[da_indx] = mi.physmap[0];
 
     for i in (0..=mi.physmap_last).step_by(2) {
         let begin = mi.physmap[i].checked_next_multiple_of(page_size).unwrap();
         let end = min(mi.physmap[i + 1] & !page_mask, mi.end_page << PAGE_SHIFT);
 
         for pa in (begin..end).step_by(PAGE_SIZE.get()) {
-            #[allow(unused_assignments)] // TODO: Remove this when implement below todo!.
+            let mut full = false;
+
             if (pa < (unk1 & 0xffffffffffe00000) || pa >= paddr_free)
                 && (mi.dcons_addr == 0
                     || (pa < (mi.dcons_addr & 0xffffffffffffc000)
@@ -183,6 +187,7 @@ fn setup(map: &'static ::config::KernelMap) -> ContextSetup {
 
                         if i == 60 {
                             warn!("Too many holes in the physical address space, giving up.");
+                            full = true;
                         } else {
                             pa_indx += 2;
                             phys_avail[i] = pa;
@@ -195,14 +200,41 @@ fn setup(map: &'static ::config::KernelMap) -> ContextSetup {
                 }
             }
 
-            todo!()
+            if pa == dump_avail[da_indx] {
+                dump_avail[da_indx] = pa + page_size;
+            } else if (da_indx + 1) != 60 {
+                dump_avail[da_indx + 1] = pa;
+                dump_avail[da_indx + 2] = pa + page_size;
+                da_indx += 2;
+            }
+
+            if full {
+                break;
+            }
         }
     }
 
+    // TODO: Why Orbis skip the first page?
+    let mut pa = String::with_capacity(0x2000);
+    let mut da = String::with_capacity(0x2000);
+
+    format_map(&phys_avail, pa_indx - 1, &mut pa);
+    format_map(&dump_avail, da_indx - 1, &mut da);
+
     info!(
-        concat!("Available physical memory populated.\n", "physmem: {}"),
-        physmem
+        concat!(
+            "Available physical memory populated.\n",
+            "physmem   : {}\n",
+            "phys_avail:",
+            "{}\n",
+            "dump_avail:",
+            "{}"
+        ),
+        physmem, pa, da
     );
+
+    drop(da);
+    drop(pa);
 
     // Run sysinit vector for subsystem. The Orbis use linker to put all sysinit functions in a list
     // then loop the list to execute all of it. We manually execute those functions instead for
