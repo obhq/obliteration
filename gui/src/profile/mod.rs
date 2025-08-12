@@ -33,19 +33,19 @@ pub struct Profile {
 
 impl Profile {
     pub fn new(name: impl Into<String>) -> Self {
-        Self {
+        let mut v = Self {
             id: Uuid::new_v4(),
             name: name.into(),
             display_device: ByteBuf::new(),
             display_resolution: DisplayResolution::Hd,
             cpu_model: CpuModel::Pro,
             debug_addr: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 1234)),
-            kernel_config: Box::new(Config {
-                max_cpu: NonZero::new(8).unwrap(),
-                ..Default::default()
-            }),
+            kernel_config: Box::default(),
             created: SystemTime::now(),
-        }
+        };
+
+        v.kernel_config.max_cpu = NonZero::new(8).unwrap();
+        v
     }
 
     pub fn load(root: impl AsRef<Path>) -> Result<Self, LoadError> {
