@@ -3,7 +3,10 @@ use crate::graphics::{GraphicsBuilder, PhysicalDevice};
 use crate::profile::{CpuModel, DisplayResolution, Profile};
 use config::ProductId;
 use serde_bytes::ByteBuf;
-use slint::{Model, ModelNotify, ModelTracker, SharedString, ToSharedString};
+use slint::{
+    Model, ModelNotify, ModelRc, ModelTracker, SharedString, StandardListViewItem, ToSharedString,
+    VecModel,
+};
 use std::any::Any;
 use std::cell::{RefCell, RefMut};
 use std::num::NonZero;
@@ -237,6 +240,17 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
         );
         dst.set_idps_sub_product(slint::format!("{:#x}", p.kernel_config.idps.prodsub));
         dst.set_idps_serial(hex::encode(&p.kernel_config.idps.serial).into());
+        dst.set_environments(ModelRc::new(
+            p.kernel_config
+                .env()
+                .map(|(k, v)| {
+                    ModelRc::new(VecModel::from(vec![
+                        StandardListViewItem::from(k),
+                        StandardListViewItem::from(v),
+                    ]))
+                })
+                .collect::<VecModel<ModelRc<StandardListViewItem>>>(),
+        ));
     }
 
     /// # Panics
