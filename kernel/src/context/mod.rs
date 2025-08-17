@@ -1,10 +1,11 @@
 pub use self::arc::*;
 pub use self::arch::*;
 pub use self::local::*;
+pub use self::setup::*;
 
 use crate::arch::ArchConfig;
 use crate::config::Config;
-use crate::proc::{ProcMgr, Thread};
+use crate::proc::Thread;
 use crate::uma::Uma;
 use alloc::rc::Rc;
 use alloc::sync::Arc;
@@ -19,6 +20,7 @@ mod arc;
 #[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
 mod arch;
 mod local;
+mod setup;
 
 /// See `pcpu_init` on the Orbis for a reference.
 ///
@@ -33,13 +35,13 @@ mod local;
 /// | Version | Offset |
 /// |---------|--------|
 /// |PS4 11.00|0x08DA70|
-pub unsafe fn run_with_context(
+pub unsafe fn run_with_context<T>(
     config: Arc<Config>,
     arch: Arc<ArchConfig>,
     cpu: usize,
     td: Arc<Thread>,
-    setup: impl FnOnce() -> ContextSetup,
-    main: fn() -> !,
+    setup: impl FnOnce(&mut ContextSetup) -> T,
+    main: fn(T) -> !,
 ) -> ! {
     // We use a different mechanism here. The Orbis put all of pcpu at a global level but we put it
     // on each CPU stack instead.
@@ -50,7 +52,6 @@ pub unsafe fn run_with_context(
             cpu,
             thread: Arc::into_raw(td),
             uma: null(),
-            pmgr: null(),
         },
         &arch,
     ));
@@ -60,14 +61,7 @@ pub unsafe fn run_with_context(
     // Prevent any code before and after this line to cross this line.
     core::sync::atomic::fence(Ordering::AcqRel);
 
-    // Setup.
-    let r = setup();
-
-    // SAFETY: We did not move out the value.
-    unsafe { cx.as_mut().get_unchecked_mut().base.uma = Arc::into_raw(r.uma) };
-    unsafe { cx.as_mut().get_unchecked_mut().base.pmgr = Arc::into_raw(r.pmgr) };
-
-    main();
+    main(setup(&mut ContextSetup::new()));
 }
 
 /// # Interrupt safety
@@ -114,16 +108,6 @@ pub fn uma() -> Option<BorrowedArc<Uma>> {
     unsafe { BorrowedArc::new(Context::load_ptr::<{ offset_of!(Base, uma) }, _>()) }
 }
 
-/// Returns [`None`] if called from context setup function.
-///
-/// # Interrupt safety
-/// This function can be called from interrupt handle.
-pub fn pmgr() -> Option<BorrowedArc<ProcMgr>> {
-    // It does not matter if we are on a different CPU after we load the Context::pmgr because it is
-    // always the same for all CPU.
-    unsafe { BorrowedArc::new(Context::load_ptr::<{ offset_of!(Base, pmgr) }, _>()) }
-}
-
 /// Pin the calling thread to one CPU.
 ///
 /// This thread will never switch to a different CPU until the returned [`PinnedContext`] is dropped
@@ -142,12 +126,6 @@ pub fn pin_cpu() -> PinnedContext {
         td,
         phantom: PhantomData,
     }
-}
-
-/// Output of the context setup function.
-pub struct ContextSetup {
-    pub uma: Arc<Uma>,
-    pub pmgr: Arc<ProcMgr>,
 }
 
 /// Implementation of `pcpu` structure.
@@ -175,7 +153,6 @@ struct Base {
     cpu: usize,            // pc_cpuid
     thread: *const Thread, // pc_curthread
     uma: *const Uma,
-    pmgr: *const ProcMgr,
 }
 
 impl Drop for Base {
