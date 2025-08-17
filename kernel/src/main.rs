@@ -1,8 +1,8 @@
 #![no_std]
 #![cfg_attr(not(test), no_main)]
 
-use self::config::{Config, Dipsw, PAGE_MASK, PAGE_SHIFT, PAGE_SIZE};
-use self::context::{ContextSetup, arch, config, pmgr};
+use self::config::{Config, Dipsw, PAGE_MASK, PAGE_SHIFT, PAGE_SIZE, Param1};
+use self::context::{ContextSetup, arch, config};
 use self::dmem::Dmem;
 use self::imgact::Ps4Abi;
 use self::malloc::KernelHeap;
@@ -47,6 +47,7 @@ extern crate alloc;
 fn main(map: &'static ::config::KernelMap, config: &'static ::config::Config) -> ! {
     // SAFETY: This function has a lot of restrictions. See Context documentation for more details.
     let config = Config::new(config);
+    let params1 = Param1::new(&config);
     let cpu = self::arch::identify_cpu();
     let hw = match boot_env() {
         BootEnv::Vm(vm) => vm.hypervisor(),
@@ -81,12 +82,24 @@ fn main(map: &'static ::config::KernelMap, config: &'static ::config::Config) ->
 
     // Activate CPU context.
     let thread0 = Arc::new(thread0);
-    let setup = move || setup(map);
 
-    unsafe { self::context::run_with_context(config, arch, 0, thread0, setup, run) };
+    unsafe {
+        self::context::run_with_context(
+            config,
+            arch,
+            0,
+            thread0,
+            move |s| setup(s, map, params1),
+            run,
+        )
+    };
 }
 
-fn setup(map: &'static ::config::KernelMap) -> ContextSetup {
+fn setup(
+    setup: &mut ContextSetup,
+    map: &'static ::config::KernelMap,
+    param1: Arc<Param1>,
+) -> SetupResult {
     // Initialize physical memory.
     let mut mi = load_memory_map(u64::try_from(map.kern_vsize.get()).unwrap());
     let mut map = String::with_capacity(0x2000);
@@ -214,6 +227,22 @@ fn setup(map: &'static ::config::KernelMap) -> ContextSetup {
         }
     }
 
+    if mi.memtest != 0 {
+        todo!()
+    }
+
+    // TODO: What is this?
+    let msgbuf_size: u64 = param1
+        .msgbuf_size()
+        .next_multiple_of(PAGE_SIZE.get())
+        .try_into()
+        .unwrap();
+
+    #[allow(clippy::while_immutable_condition)] // TODO: Remove this once implement below todo.
+    while phys_avail[pa_indx] <= (phys_avail[pa_indx - 1] + page_size + msgbuf_size) {
+        todo!()
+    }
+
     // TODO: Why Orbis skip the first page?
     let mut pa = String::with_capacity(0x2000);
     let mut da = String::with_capacity(0x2000);
@@ -240,21 +269,22 @@ fn setup(map: &'static ::config::KernelMap) -> ContextSetup {
     // then loop the list to execute all of it. We manually execute those functions instead for
     // readability. This also allow us to pass data from one function to another function. See
     // mi_startup function on the Orbis for a reference.
-    let procs = ProcMgr::new();
-    let uma = init_vm(); // 161 on PS4 11.00.
+    let pmgr = ProcMgr::new();
 
-    ContextSetup { uma, pmgr: procs }
+    setup.set_uma(init_vm()); // 161 on PS4 11.00.
+
+    SetupResult { pmgr }
 }
 
-fn run() -> ! {
+fn run(sr: SetupResult) -> ! {
     // Activate stage 2 heap.
     info!("Activating stage 2 heap.");
 
     unsafe { KERNEL_HEAP.activate_stage2() };
 
     // Run remaining sysinit vector.
-    create_init(); // 659 on PS4 11.00.
-    swapper(); // 1119 on PS4 11.00.
+    create_init(&sr); // 659 on PS4 11.00.
+    swapper(&sr); // 1119 on PS4 11.00.
 }
 
 /// See `getmemsize` on the Orbis for a reference.
@@ -498,12 +528,11 @@ fn init_vm() -> Arc<Uma> {
 /// | Version | Offset |
 /// |---------|--------|
 /// |PS4 11.00|0x2BEF30|
-fn create_init() {
-    let pmgr = pmgr().unwrap();
+fn create_init(sr: &SetupResult) {
     let abi = Arc::new(Ps4Abi);
     let flags = Fork::CopyFd | Fork::CreateProcess;
 
-    pmgr.fork(abi, flags).unwrap();
+    sr.pmgr.fork(abi, flags).unwrap();
 
     todo!()
 }
@@ -514,13 +543,11 @@ fn create_init() {
 /// | Version | Offset |
 /// |---------|--------|
 /// |PS4 11.00|0x437E00|
-fn swapper() -> ! {
+fn swapper(sr: &SetupResult) -> ! {
     // TODO: Subscribe to "system_suspend_phase2_pre_sync" and "system_resume_phase2" event.
-    let procs = pmgr().unwrap();
-
     loop {
         // TODO: Implement a call to vm_page_count_min().
-        let procs = procs.list();
+        let procs = sr.pmgr.list();
 
         if procs.len() == 0 {
             // TODO: The PS4 check for some value for non-zero but it seems like that value always
@@ -543,6 +570,11 @@ impl ProcAbi for Proc0Abi {
     fn syscall_handler(&self) {
         unimplemented!()
     }
+}
+
+/// Result of [`setup()`].
+struct SetupResult {
+    pmgr: Arc<ProcMgr>,
 }
 
 /// Contains memory information populated from memory map.

@@ -1,4 +1,5 @@
 pub use self::dipsw::*;
+pub use self::param1::*;
 
 use alloc::boxed::Box;
 use alloc::sync::Arc;
@@ -7,6 +8,7 @@ use core::num::NonZero;
 use macros::elf_note;
 
 mod dipsw;
+mod param1;
 
 pub const PAGE_SHIFT: usize = 14; // 16K
 pub const PAGE_SIZE: NonZero<usize> = NonZero::new(1 << PAGE_SHIFT).unwrap();

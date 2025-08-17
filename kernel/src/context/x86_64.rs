@@ -49,6 +49,12 @@ impl Context {
         unsafe { wrmsr(0xc0000102, 0) };
     }
 
+    pub(super) unsafe fn store_ptr<const O: usize, T>(v: *const T) {
+        unsafe {
+            asm!("mov gs:[{o}], {v}", o = const O, v = in(reg) v, options(preserves_flags, nostack))
+        };
+    }
+
     pub unsafe fn load_static_ptr<const O: usize, T>() -> *const T {
         let mut v;
 

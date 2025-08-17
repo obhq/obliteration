@@ -23,6 +23,10 @@ impl Context {
         todo!();
     }
 
+    pub(super) unsafe fn store_ptr<const O: usize, T>(v: *const T) {
+        todo!()
+    }
+
     pub unsafe fn load_static_ptr<const O: usize, T>() -> *const T {
         todo!()
     }
