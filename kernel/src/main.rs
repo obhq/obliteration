@@ -238,6 +238,7 @@ fn setup(
         .try_into()
         .unwrap();
 
+    #[allow(clippy::while_immutable_condition)] // TODO: Remove this once implement below todo.
     while phys_avail[pa_indx] <= (phys_avail[pa_indx - 1] + page_size + msgbuf_size) {
         todo!()
     }
