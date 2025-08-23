@@ -4,11 +4,11 @@ use crate::profile::{CpuModel, DisplayResolution, Profile};
 use config::ProductId;
 use serde_bytes::ByteBuf;
 use slint::{
-    Model, ModelNotify, ModelRc, ModelTracker, SharedString, StandardListViewItem, ToSharedString,
-    VecModel,
+    ComponentHandle, Model, ModelNotify, ModelRc, ModelTracker, SharedString, StandardListViewItem,
+    ToSharedString, VecModel, Weak,
 };
 use std::any::Any;
-use std::cell::{RefCell, RefMut};
+use std::cell::{Cell, RefCell, RefMut};
 use std::num::NonZero;
 use std::rc::Rc;
 use thiserror::Error;
@@ -196,37 +196,65 @@ impl Model for ProductList {
 
 /// Implementation of [`Model`] for [`Profile`].
 pub struct ProfileModel<G> {
+    window: Weak<MainWindow>,
+    selected: Cell<Option<usize>>,
     profiles: RefCell<Vec<Profile>>,
     devices: Rc<DeviceModel<G>>,
     resolutions: Rc<ResolutionModel>,
     cpus: Rc<CpuList>,
     products: Rc<ProductList>,
+    environments: Rc<VecModel<ModelRc<StandardListViewItem>>>,
     noti: ModelNotify,
 }
 
 impl<G: GraphicsBuilder> ProfileModel<G> {
     pub fn new(
+        window: &MainWindow,
         profiles: Vec<Profile>,
         devices: Rc<DeviceModel<G>>,
         resolutions: Rc<ResolutionModel>,
         cpus: Rc<CpuList>,
         products: Rc<ProductList>,
     ) -> Self {
+        let environments = Rc::new(VecModel::default());
+
+        window.set_environments(ModelRc::from(environments.clone()));
+
         Self {
+            window: window.as_weak(),
+            selected: Cell::new(None),
             profiles: RefCell::new(profiles),
             devices,
             resolutions,
             cpus,
             products,
+            environments,
             noti: ModelNotify::default(),
         }
     }
 
     /// # Panics
     /// If `row` is not valid.
-    pub fn select(&self, row: usize, dst: &MainWindow) {
+    pub fn select(&self, row: usize) {
+        // Do nothing if no window.
+        let dst = match self.window.upgrade() {
+            Some(v) => v,
+            None => return,
+        };
+
+        // Load profile.
         let profiles = self.profiles.borrow();
         let p = &profiles[row];
+        let environments = p
+            .kernel_config
+            .env()
+            .map(|(k, v)| {
+                ModelRc::new(VecModel::from(vec![
+                    StandardListViewItem::from(k),
+                    StandardListViewItem::from(v),
+                ]))
+            })
+            .collect::<Vec<ModelRc<StandardListViewItem>>>();
 
         dst.set_selected_device(self.devices.position(&p.display_device).unwrap_or(0));
         dst.set_selected_resolution(self.resolutions.position(p.display_resolution).unwrap());
@@ -240,23 +268,14 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
         );
         dst.set_idps_sub_product(slint::format!("{:#x}", p.kernel_config.idps.prodsub));
         dst.set_idps_serial(hex::encode(&p.kernel_config.idps.serial).into());
-        dst.set_environments(ModelRc::new(
-            p.kernel_config
-                .env()
-                .map(|(k, v)| {
-                    ModelRc::new(VecModel::from(vec![
-                        StandardListViewItem::from(k),
-                        StandardListViewItem::from(v),
-                    ]))
-                })
-                .collect::<VecModel<ModelRc<StandardListViewItem>>>(),
-        ));
+
+        self.environments.set_vec(environments);
+        self.selected.set(Some(row));
     }
 
-    /// # Panics
-    /// If `row` is not valid.
-    pub fn update(&self, row: i32, src: &MainWindow) -> Result<RefMut<'_, Profile>, ProfileError> {
-        let row = usize::try_from(row).unwrap();
+    pub fn update(&self) -> Result<RefMut<'_, Profile>, ProfileError> {
+        let row = self.selected.get().ok_or(ProfileError::NoSelectedProfile)?;
+        let src = self.window.upgrade().ok_or(ProfileError::NoWindow)?;
         let mut profiles = self.profiles.borrow_mut();
         let p = &mut profiles[row];
         let debug_addr = src
@@ -310,6 +329,13 @@ impl<G> ProfileModel<G> {
 
         index.try_into().unwrap()
     }
+
+    pub fn push_env(&self, name: impl Into<SharedString>, value: impl Into<SharedString>) {
+        self.environments.push(ModelRc::new(VecModel::from(vec![
+            StandardListViewItem::from(name.into()),
+            StandardListViewItem::from(value.into()),
+        ])));
+    }
 }
 
 impl<G: 'static> Model for ProfileModel<G> {
@@ -338,6 +364,12 @@ impl<G: 'static> Model for ProfileModel<G> {
 /// Represents an error when [`ProfileModel::update()`] fails.
 #[derive(Debug, Error)]
 pub enum ProfileError {
+    #[error("no profile is selected")]
+    NoSelectedProfile,
+
+    #[error("no window to load data")]
+    NoWindow,
+
     #[error("invalid debug address")]
     InvalidDebugAddress,
 

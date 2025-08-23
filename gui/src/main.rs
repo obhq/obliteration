@@ -8,8 +8,8 @@ use self::profile::{DisplayResolution, Profile};
 use self::settings::{Settings, SettingsError};
 use self::setup::{SetupError, run_setup};
 use self::ui::{
-    AboutWindow, App, CpuList, DesktopExt, DeviceModel, MainWindow, NewProfile, ProductList,
-    ProfileModel, ResolutionModel, RuntimeExt, SettingsWindow, WaitForDebugger, error,
+    AboutWindow, App, CpuList, DesktopExt, DeviceModel, MainWindow, NewEnvironment, NewProfile,
+    ProductList, ProfileModel, ResolutionModel, RuntimeExt, SettingsWindow, WaitForDebugger, error,
     spawn_handler,
 };
 use self::vmm::{CpuError, Vmm, VmmError, VmmEvent};
@@ -80,6 +80,7 @@ impl MainProgram {
         let cpus = Rc::new(CpuList::default());
         let products = Rc::new(ProductList::default());
         let profiles = Rc::new(ProfileModel::new(
+            &win,
             profiles,
             devices.clone(),
             resolutions.clone(),
@@ -128,7 +129,7 @@ impl MainProgram {
                 let win = win.unwrap();
                 let row: usize = win.get_selected_profile().try_into().unwrap();
 
-                profiles.select(row, &win);
+                profiles.select(row);
             }
         });
 
@@ -137,7 +138,7 @@ impl MainProgram {
             let win = win.as_weak();
             let profiles = profiles.clone();
 
-            move || spawn_handler(&win, |w| save_profile(w, data.clone(), profiles.clone()))
+            move || spawn_handler(&win, |_| Self::save_profile(data.clone(), profiles.clone()))
         });
 
         win.on_start_vmm({
@@ -146,7 +147,11 @@ impl MainProgram {
             let exit = exit.clone();
             let ty = ExitAction::Run;
 
-            move || spawn_handler(&win, |w| start_vmm(w, profiles.clone(), exit.clone(), ty))
+            move || {
+                spawn_handler(&win, |w| {
+                    Self::start_vmm(w, profiles.clone(), exit.clone(), ty)
+                })
+            }
         });
 
         win.on_start_debug({
@@ -155,7 +160,18 @@ impl MainProgram {
             let exit = exit.clone();
             let ty = ExitAction::Debug;
 
-            move || spawn_handler(&win, |w| start_vmm(w, profiles.clone(), exit.clone(), ty))
+            move || {
+                spawn_handler(&win, |w| {
+                    Self::start_vmm(w, profiles.clone(), exit.clone(), ty)
+                })
+            }
+        });
+
+        win.on_new_environment({
+            let win = win.as_weak();
+            let profiles = profiles.clone();
+
+            move || spawn_handler(&win, |w| Self::new_environment(w, profiles.clone()))
         });
 
         // Set window properties.
@@ -168,7 +184,7 @@ impl MainProgram {
         // Load selected profile.
         let row: usize = win.get_selected_profile().try_into().unwrap();
 
-        profiles.select(row, &win);
+        profiles.select(row);
 
         // Run the window.
         win.show().map_err(ProgramError::ShowMainWindow)?;
@@ -380,6 +396,97 @@ impl MainProgram {
             .map_err(|e| slint::format!("Failed to enable modal on window: {}.", e.display()))?
             .wait()
             .await;
+
+        Ok(())
+    }
+
+    async fn save_profile<G: GraphicsBuilder>(
+        data: Arc<DataMgr>,
+        profiles: Rc<ProfileModel<G>>,
+    ) -> Result<(), SharedString> {
+        let pf = Self::update_profile(&profiles)?;
+        let loc = data.profiles().data(pf.id());
+
+        pf.save(loc)
+            .map_err(|e| slint::format!("Failed to save profile: {}.", e.display()))
+    }
+
+    async fn start_vmm<G: GraphicsBuilder>(
+        win: MainWindow,
+        profiles: Rc<ProfileModel<G>>,
+        exit: Rc<Cell<Option<ExitAction>>>,
+        ty: ExitAction,
+    ) -> Result<(), SharedString> {
+        Self::update_profile(&profiles)?;
+
+        win.hide()
+            .map_err(|e| slint::format!("Failed to hide window: {}.", e.display()))?;
+        exit.set(Some(ty));
+
+        Ok(())
+    }
+
+    fn update_profile<'a, G: GraphicsBuilder>(
+        profiles: &'a ProfileModel<G>,
+    ) -> Result<RefMut<'a, Profile>, SharedString> {
+        let pro = profiles
+            .update()
+            .map_err(|e| slint::format!("Failed to update profile: {}.", e.display()))?;
+
+        Ok(pro)
+    }
+
+    async fn new_environment<G: 'static>(
+        main: MainWindow,
+        profiles: Rc<ProfileModel<G>>,
+    ) -> Result<(), SharedString> {
+        // Setup window.
+        let win = NewEnvironment::new()
+            .map_err(|e| slint::format!("Failed to create window: {}.", e.display()))?;
+
+        win.on_cancel_clicked({
+            let win = win.as_weak();
+
+            move || win.unwrap().hide().unwrap()
+        });
+
+        win.on_ok_clicked({
+            let win = win.as_weak();
+
+            move || spawn_handler(&win, |w| Self::create_environment(w, profiles.clone()))
+        });
+
+        // Run the window.
+        win.show()
+            .map_err(|e| slint::format!("Failed to show window: {}.", e.display()))?;
+        win.set_modal(&main)
+            .map_err(|e| slint::format!("Failed to enable modal on window: {}.", e.display()))?
+            .wait()
+            .await;
+
+        Ok(())
+    }
+
+    async fn create_environment<G>(
+        win: NewEnvironment,
+        profiles: Rc<ProfileModel<G>>,
+    ) -> Result<(), SharedString> {
+        // Get name.
+        let name = win.get_name();
+
+        if name.is_empty() {
+            return Err("Name cannot be empty.".into());
+        }
+
+        // Get value.
+        let value = win.get_value();
+
+        if value.is_empty() {
+            return Err("Value cannot be empty.".into());
+        }
+
+        profiles.push_env(name, value);
+        win.hide().unwrap();
 
         Ok(())
     }
@@ -656,45 +763,6 @@ async fn dispatch_vmm(ev: VmmEvent, logs: &mut LogWriter) -> Result<bool, Progra
     }
 
     Ok(true)
-}
-
-async fn save_profile<G: GraphicsBuilder>(
-    win: MainWindow,
-    data: Arc<DataMgr>,
-    profiles: Rc<ProfileModel<G>>,
-) -> Result<(), SharedString> {
-    let pf = update_profile(&win, &profiles)?;
-    let loc = data.profiles().data(pf.id());
-
-    pf.save(loc)
-        .map_err(|e| slint::format!("Failed to save profile: {}.", e.display()))
-}
-
-async fn start_vmm<G: GraphicsBuilder>(
-    win: MainWindow,
-    profiles: Rc<ProfileModel<G>>,
-    exit: Rc<Cell<Option<ExitAction>>>,
-    ty: ExitAction,
-) -> Result<(), SharedString> {
-    update_profile(&win, &profiles)?;
-
-    win.hide()
-        .map_err(|e| slint::format!("Failed to hide window: {}.", e.display()))?;
-    exit.set(Some(ty));
-
-    Ok(())
-}
-
-fn update_profile<'a, G: GraphicsBuilder>(
-    win: &MainWindow,
-    profiles: &'a ProfileModel<G>,
-) -> Result<RefMut<'a, Profile>, SharedString> {
-    let row = win.get_selected_profile();
-    let pro = profiles
-        .update(row, win)
-        .map_err(|e| slint::format!("Failed to update profile: {}.", e.display()))?;
-
-    Ok(pro)
 }
 
 /// Program arguments parsed from command line.

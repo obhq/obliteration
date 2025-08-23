@@ -3,6 +3,8 @@ import { VerticalBox, StandardTableView, Button } from "std-widgets.slint";
 export component EnvironmentTab {
     in property <[[StandardListViewItem]]> list;
 
+    callback new();
+
     VerticalBox {
         StandardTableView {
             columns: [{ title: "Name" }, { title: "Value" }];
@@ -11,6 +13,9 @@ export component EnvironmentTab {
 
         Button {
             text: "New";
+            clicked => {
+                new();
+            }
         }
     }
 }
