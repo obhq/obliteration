@@ -30,6 +30,7 @@ export component MainWindow inherits Window {
     pure callback save-profile();
     pure callback start-vmm();
     pure callback start-debug();
+    callback new-environment();
 
     title: "Obliteration";
     icon: @image-url("@root/assets/icon.png");
@@ -127,6 +128,9 @@ export component MainWindow inherits Window {
 
             if tab.current-page == 3: EnvironmentTab {
                 list: root.environments;
+                new => {
+                    new-environment();
+                }
             }
         }
 
