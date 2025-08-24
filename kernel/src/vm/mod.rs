@@ -37,7 +37,7 @@ impl Vm {
         // Get initial v_page_count and v_free_count.
         let page_size = u64::try_from(PAGE_SIZE.get()).unwrap();
         let config = config();
-        let block = config.env("vm.blacklist");
+        let blocked = config.env("vm.blacklist");
         let unk = dmem.game_end() - dmem.config().fmem_max.get();
         let mut page_count = [0; 2];
         let mut free_count = [0; 2];
@@ -52,7 +52,7 @@ impl Vm {
             }
 
             while addr < end {
-                if let Some(_) = block {
+                if blocked.is_some() {
                     todo!();
                 }
 
