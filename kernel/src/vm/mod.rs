@@ -2,13 +2,16 @@ pub use self::object::*;
 pub use self::page::*;
 
 use self::stats::VmStats;
-use crate::context::current_thread;
+use crate::config::PAGE_SIZE;
+use crate::context::{config, current_thread};
+use crate::dmem::Dmem;
 use crate::lock::GutexGroup;
 use crate::proc::Proc;
 use alloc::sync::{Arc, Weak};
 use core::cmp::max;
 use core::fmt::Debug;
 use core::sync::atomic::{AtomicUsize, Ordering};
+use krt::info;
 use macros::bitflag;
 use thiserror::Error;
 
@@ -30,7 +33,52 @@ impl Vm {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x029200|
-    pub fn new() -> Result<Arc<Self>, VmError> {
+    pub fn new(phys_avail: [u64; 61], dmem: &Dmem) -> Result<Arc<Self>, VmError> {
+        // Get initial v_page_count and v_free_count.
+        let page_size = u64::try_from(PAGE_SIZE.get()).unwrap();
+        let config = config();
+        let blocked = config.env("vm.blacklist");
+        let unk = dmem.game_end() - dmem.config().fmem_max.get();
+        let mut page_count = [0; 2];
+        let mut free_count = [0; 2];
+
+        for i in (0..).step_by(2) {
+            // Check if end entry.
+            let mut addr = phys_avail[i];
+            let end = phys_avail[i + 1];
+
+            if end == 0 {
+                break;
+            }
+
+            while addr < end {
+                if blocked.is_some() {
+                    todo!();
+                }
+
+                if addr < unk || dmem.game_end() <= addr {
+                    // TODO: Update vm_phys_segs.
+                    page_count[0] += 1;
+                    free_count[0] += 1;
+                } else {
+                    // TODO: Update vm_phys_segs.
+                    page_count[1] += 1;
+                }
+
+                addr += page_size;
+            }
+        }
+
+        info!(
+            concat!(
+                "VM stats initialized.\n",
+                "v_page_count[0]: {}\n",
+                "v_free_count[0]: {}\n",
+                "v_page_count[1]: {}"
+            ),
+            page_count[0], free_count[0], page_count[1]
+        );
+
         // Initializes stats. The Orbis initialize these data in vm_pageout function but it is
         // possible for data race so we do it here instead.
         let pageout_page_count = 0x10; // TODO: Figure out where this value come from.
@@ -39,13 +87,13 @@ impl Vm {
             VmStats {
                 free_reserved: pageout_page_count + 100 + 10,
                 cache_count: gg.clone().spawn_default(),
-                free_count: gg.clone().spawn_default(),
+                free_count: gg.clone().spawn(free_count[0]),
                 interrupt_free_min: gg.clone().spawn(2),
             },
             VmStats {
                 free_reserved: pageout_page_count,
                 cache_count: gg.clone().spawn_default(),
-                free_count: gg.clone().spawn_default(),
+                free_count: gg.clone().spawn(free_count[1]),
                 interrupt_free_min: gg.clone().spawn(2),
             },
         ];

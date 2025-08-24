@@ -243,6 +243,10 @@ fn setup(
         todo!()
     }
 
+    mi.end_page = phys_avail[pa_indx] >> PAGE_SHIFT;
+    phys_avail[pa_indx] -= msgbuf_size;
+
+    // TODO: Set msgbufp and validate DMEM addresses.
     // TODO: Why Orbis skip the first page?
     let mut pa = String::with_capacity(0x2000);
     let mut da = String::with_capacity(0x2000);
@@ -253,13 +257,14 @@ fn setup(
     info!(
         concat!(
             "Available physical memory populated.\n",
+            "Maxmem    : {:#x}\n",
             "physmem   : {}\n",
             "phys_avail:",
             "{}\n",
             "dump_avail:",
             "{}"
         ),
-        physmem, pa, da
+        mi.end_page, physmem, pa, da
     );
 
     drop(da);
@@ -271,7 +276,7 @@ fn setup(
     // mi_startup function on the Orbis for a reference.
     let pmgr = ProcMgr::new();
 
-    setup.set_uma(init_vm()); // 161 on PS4 11.00.
+    setup.set_uma(init_vm(phys_avail, &dmem)); // 161 on PS4 11.00.
 
     SetupResult { pmgr }
 }
@@ -514,9 +519,9 @@ fn load_pmap(paddr_free: u64) -> u64 {
 /// | Version | Offset |
 /// |---------|--------|
 /// |PS4 11.00|0x39A390|
-fn init_vm() -> Arc<Uma> {
+fn init_vm(phys_avail: [u64; 61], dmem: &Dmem) -> Arc<Uma> {
     // Initialize VM.
-    let vm = Vm::new().unwrap();
+    let vm = Vm::new(phys_avail, dmem).unwrap();
 
     // Initialize UMA.
     Uma::new(vm)
