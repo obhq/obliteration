@@ -8,6 +8,7 @@ use core::num::NonZero;
 pub struct Dmem {
     mode: usize,
     config: &'static DmemConfig,
+    game_end: u64,
 }
 
 impl Dmem {
@@ -18,7 +19,7 @@ impl Dmem {
     /// |---------|--------|
     /// |PS4 11.00|0x3F5C20|
     pub fn new(mi: &mut MemoryInfo) -> Arc<Self> {
-        // TODO: Figure out what the purpose of this 16MB block of memory.
+        // Reserve address for msgbuf.
         let haddr = Self::reserve_phys(mi, 0x1000000.try_into().unwrap(), 1);
 
         if haddr == 0 {
@@ -132,7 +133,11 @@ impl Dmem {
 
         mi.end_page = mi.physmap[mi.physmap_last + 1] >> PAGE_SHIFT;
 
-        Arc::new(Self { mode, config: dc })
+        Arc::new(Self {
+            mode,
+            config: dc,
+            game_end,
+        })
     }
 
     pub fn mode(&self) -> usize {
@@ -141,6 +146,10 @@ impl Dmem {
 
     pub fn config(&self) -> &'static DmemConfig {
         self.config
+    }
+
+    pub fn game_end(&self) -> u64 {
+        self.game_end
     }
 
     /// # Reference offsets
