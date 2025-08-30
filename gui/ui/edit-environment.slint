@@ -1,10 +1,11 @@
 import { StandardButton, GroupBox, LineEdit } from "std-widgets.slint";
 
-export component NewEnvironment inherits Dialog {
-    out property <string> name;
-    out property <string> value;
+export component EditEnvironment inherits Dialog {
+    in property <string> dialog-title;
+    in-out property <string> name;
+    in-out property <string> value;
 
-    title: "New Variable";
+    title: root.dialog-title;
     min-width: 400px;
 
     VerticalLayout {
