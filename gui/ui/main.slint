@@ -31,6 +31,7 @@ export component MainWindow inherits Window {
     pure callback start-vmm();
     pure callback start-debug();
     callback new-environment();
+    callback edit-environment(row: int);
 
     title: "Obliteration";
     icon: @image-url("@root/assets/icon.png");
@@ -130,6 +131,9 @@ export component MainWindow inherits Window {
                 list: root.environments;
                 new => {
                     new-environment();
+                }
+                edit(row) => {
+                    edit-environment(row);
                 }
             }
         }

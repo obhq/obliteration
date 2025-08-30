@@ -8,7 +8,7 @@ use self::profile::{DisplayResolution, Profile};
 use self::settings::{Settings, SettingsError};
 use self::setup::{SetupError, run_setup};
 use self::ui::{
-    AboutWindow, App, CpuList, DesktopExt, DeviceModel, MainWindow, NewEnvironment, NewProfile,
+    AboutWindow, App, CpuList, DesktopExt, DeviceModel, EditEnvironment, MainWindow, NewProfile,
     ProductList, ProfileModel, ResolutionModel, RuntimeExt, SettingsWindow, WaitForDebugger, error,
     spawn_handler,
 };
@@ -172,6 +172,13 @@ impl MainProgram {
             let profiles = profiles.clone();
 
             move || spawn_handler(&win, |w| Self::new_environment(w, profiles.clone()))
+        });
+
+        win.on_edit_environment({
+            let win = win.as_weak();
+            let profiles = profiles.clone();
+
+            move |row| spawn_handler(&win, |w| Self::edit_environment(w, profiles.clone(), row))
         });
 
         // Set window properties.
@@ -441,7 +448,7 @@ impl MainProgram {
         profiles: Rc<ProfileModel<G>>,
     ) -> Result<(), SharedString> {
         // Setup window.
-        let win = NewEnvironment::new()
+        let win = EditEnvironment::new()
             .map_err(|e| slint::format!("Failed to create window: {}.", e.display()))?;
 
         win.on_cancel_clicked({
@@ -456,6 +463,8 @@ impl MainProgram {
             move || spawn_handler(&win, |w| Self::create_environment(w, profiles.clone()))
         });
 
+        win.set_dialog_title("New Variable".into());
+
         // Run the window.
         win.show()
             .map_err(|e| slint::format!("Failed to show window: {}.", e.display()))?;
@@ -468,7 +477,7 @@ impl MainProgram {
     }
 
     async fn create_environment<G>(
-        win: NewEnvironment,
+        win: EditEnvironment,
         profiles: Rc<ProfileModel<G>>,
     ) -> Result<(), SharedString> {
         // Get name.
@@ -487,6 +496,32 @@ impl MainProgram {
 
         profiles.push_env(name, value);
         win.hide().unwrap();
+
+        Ok(())
+    }
+
+    async fn edit_environment<G>(
+        main: MainWindow,
+        profiles: Rc<ProfileModel<G>>,
+        row: i32,
+    ) -> Result<(), SharedString> {
+        // Setup window.
+        let (name, value) = profiles.get_env(row.try_into().unwrap());
+        let win = EditEnvironment::new().unwrap();
+
+        win.on_cancel_clicked({
+            let win = win.as_weak();
+
+            move || win.unwrap().hide().unwrap()
+        });
+
+        win.set_dialog_title("Edit Variable".into());
+        win.set_name(name);
+        win.set_value(value);
+
+        // Run the window.
+        win.show().unwrap();
+        win.set_modal(&main).unwrap().wait().await;
 
         Ok(())
     }

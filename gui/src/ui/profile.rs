@@ -320,6 +320,16 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
 }
 
 impl<G> ProfileModel<G> {
+    /// # Panics
+    /// If `row` is not valid.
+    pub fn get_env(&self, row: usize) -> (SharedString, SharedString) {
+        let row = self.environments.row_data(row).unwrap();
+        let name = row.row_data(0).unwrap();
+        let value = row.row_data(1).unwrap();
+
+        (name.text, value.text)
+    }
+
     pub fn push(&self, pf: Profile) -> i32 {
         let mut profiles = self.profiles.borrow_mut();
         let index = profiles.len();

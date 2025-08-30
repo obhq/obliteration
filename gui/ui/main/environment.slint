@@ -4,11 +4,41 @@ export component EnvironmentTab {
     in property <[[StandardListViewItem]]> list;
 
     callback new();
+    callback edit(row: int);
+    callback delete(row: int);
+
+    property <int> menu-target;
+
+    menu := ContextMenuArea {
+        enabled: false;
+        Menu {
+            // TODO: Replace this with double-click once https://github.com/slint-ui/slint/issues/8175 implemented.
+            MenuItem {
+                title: "Edit";
+                activated => {
+                    edit(root.menu-target);
+                }
+            }
+
+            MenuItem {
+                title: "Delete";
+                activated => {
+                    delete(root.menu-target);
+                }
+            }
+        }
+    }
 
     VerticalBox {
         StandardTableView {
             columns: [{ title: "Name" }, { title: "Value" }];
             rows: root.list;
+            row-pointer-event(row, event, position) => {
+                if event.button == PointerEventButton.right && event.kind == PointerEventKind.up {
+                    root.menu-target = row;
+                    menu.show(position);
+                }
+            }
         }
 
         Button {

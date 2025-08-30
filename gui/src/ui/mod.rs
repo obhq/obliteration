@@ -211,10 +211,10 @@ macro_rules! impl_wae {
 }
 
 impl_wae!(AboutWindow);
+impl_wae!(EditEnvironment);
 impl_wae!(ErrorWindow);
 impl_wae!(InstallFirmware);
 impl_wae!(MainWindow);
-impl_wae!(NewEnvironment);
 impl_wae!(NewProfile);
 impl_wae!(SettingsWindow);
 impl_wae!(SetupWizard);
