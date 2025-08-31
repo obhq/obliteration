@@ -156,6 +156,31 @@ impl Vm {
             }
         }
 
+        // Allocate VmPage.
+        let page = match obj {
+            Some(_) => todo!(),
+            None => {
+                if flags.has_any(VmAlloc::Cached) {
+                    return None;
+                }
+
+                self.alloc_phys()
+            }
+        };
+
+        match page.flags().has_any(PageFlags::Cached) {
+            true => todo!(),
+            false => todo!(),
+        }
+    }
+
+    /// See `vm_phys_alloc_pages` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x160520|
+    fn alloc_phys(&self) -> VmPage {
         todo!()
     }
 
@@ -188,6 +213,8 @@ pub enum VmAlloc {
     Interrupt = 0x00000001,
     /// `VM_ALLOC_SYSTEM`.
     System = 0x00000002,
+    /// `VM_ALLOC_IFCACHED`.
+    Cached = 0x00000400,
     /// `VM_ALLOC_COUNT`.
     Count(u16) = 0xFFFF0000,
 }
