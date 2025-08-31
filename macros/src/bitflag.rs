@@ -1,6 +1,8 @@
 use proc_macro2::{Span, TokenStream};
-use quote::{ToTokens, quote};
+use quote::quote;
+use std::fmt::Display;
 use std::num::NonZero;
+use std::str::FromStr;
 use syn::meta::ParseNestedMeta;
 use syn::punctuated::Pair;
 use syn::{Error, Expr, ExprLit, Fields, ItemEnum, Lit, LitInt, Path, Type, parse_quote};
@@ -22,14 +24,24 @@ pub fn transform(opts: Options, item: ItemEnum) -> syn::Result<TokenStream> {
     for v in item.variants {
         // Parse discriminant.
         let ident = v.ident;
-        let (mask, bits, dis) = match v.discriminant {
+        let (dis, bits) = match v.discriminant {
             Some((
                 _,
                 Expr::Lit(ExprLit {
                     attrs: _,
                     lit: Lit::Int(v),
                 }),
-            )) => parse_discriminant(ty, v)?,
+            )) => {
+                let bits = if ty.is_ident("u8") {
+                    parse_discriminant::<u8>(&v)?
+                } else if ty.is_ident("u32") {
+                    parse_discriminant::<u32>(&v)?
+                } else {
+                    return Err(Error::new_spanned(ty, "unsupported underlying type"));
+                };
+
+                (v, bits)
+            }
             Some((_, v)) => {
                 return Err(Error::new_spanned(
                     v,
@@ -92,7 +104,7 @@ pub fn transform(opts: Options, item: ItemEnum) -> syn::Result<TokenStream> {
         body.extend(quote! {
             #(#attrs)*
             #[allow(non_upper_case_globals)]
-            pub const #ident: ::bitflag::Mask<Self, #ty> = unsafe { ::bitflag::Mask::new(#mask) };
+            pub const #ident: ::bitflag::Mask<Self, #ty> = unsafe { ::bitflag::Mask::new(#dis) };
         });
     }
 
@@ -207,41 +219,38 @@ pub fn transform(opts: Options, item: ItemEnum) -> syn::Result<TokenStream> {
     })
 }
 
-fn parse_discriminant(ty: &Path, dis: LitInt) -> syn::Result<(TokenStream, NonZero<u32>, LitInt)> {
-    let v = if ty.is_ident("u32") {
-        let v = dis.base10_parse::<u32>()?;
-        let i = v.trailing_zeros();
-        let mut r = v >> i;
+fn parse_discriminant<T>(dis: &LitInt) -> syn::Result<NonZero<u32>>
+where
+    T: FromStr<Err: Display> + Into<u64>,
+{
+    let v = dis.base10_parse::<T>()?.into();
+    let i = v.trailing_zeros();
+    let mut r = v >> i;
 
-        // Disallow zero value.
-        if r == 0 {
+    // Disallow zero value.
+    if r == 0 {
+        return Err(Error::new_spanned(
+            dis,
+            "zero discriminant is not supported",
+        ));
+    }
+
+    // Disallow zero bit in the middle.
+    let mut n = 0;
+
+    while r != 0 {
+        if r & 1 == 0 {
             return Err(Error::new_spanned(
                 dis,
-                "zero discriminant is not supported",
+                "discriminant with non-contiguous bits is not supported",
             ));
         }
 
-        // Disallow zero bit in the middle.
-        let mut n = 0;
+        n += 1;
+        r >>= 1;
+    }
 
-        while r != 0 {
-            if r & 1 == 0 {
-                return Err(Error::new_spanned(
-                    dis,
-                    "discriminant with non-contiguous bits is not supported",
-                ));
-            }
-
-            n += 1;
-            r >>= 1;
-        }
-
-        (v.into_token_stream(), n.try_into().unwrap(), dis)
-    } else {
-        return Err(Error::new_spanned(ty, "unsupported underlying type"));
-    };
-
-    Ok(v)
+    Ok(n.try_into().unwrap())
 }
 
 #[derive(Default)]

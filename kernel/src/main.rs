@@ -15,7 +15,6 @@ use alloc::string::String;
 use alloc::sync::Arc;
 use core::cmp::min;
 use core::fmt::Write;
-use core::mem::zeroed;
 use humansize::{DECIMAL, SizeFormatter};
 use krt::{boot_env, info, warn};
 
@@ -537,6 +536,8 @@ fn create_init(sr: &SetupResult) {
     let abi = Arc::new(Ps4Abi);
     let flags = Fork::CopyFd | Fork::CreateProcess;
 
+    info!("Creating init process.");
+
     sr.pmgr.fork(abi, flags).unwrap();
 
     todo!()
@@ -608,4 +609,4 @@ struct BootInfo {
 #[allow(dead_code)]
 #[cfg_attr(target_os = "none", global_allocator)]
 static KERNEL_HEAP: KernelHeap = unsafe { KernelHeap::new(&raw mut PRIMITIVE_HEAP) };
-static mut PRIMITIVE_HEAP: [u8; 1024 * 1024] = unsafe { zeroed() };
+static mut PRIMITIVE_HEAP: [u8; 1024 * 1024 * 2] = [0; _];
