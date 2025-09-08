@@ -203,7 +203,7 @@ pub struct ProfileModel<G> {
     resolutions: Rc<ResolutionModel>,
     cpus: Rc<CpuList>,
     products: Rc<ProductList>,
-    environments: Rc<VecModel<ModelRc<StandardListViewItem>>>,
+    environments: Rc<EnvironmentList>,
     noti: ModelNotify,
 }
 
@@ -216,7 +216,7 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
         cpus: Rc<CpuList>,
         products: Rc<ProductList>,
     ) -> Self {
-        let environments = Rc::new(VecModel::default());
+        let environments = Rc::new(EnvironmentList::default());
 
         window.set_environments(ModelRc::from(environments.clone()));
 
@@ -245,16 +245,6 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
         // Load profile.
         let profiles = self.profiles.borrow();
         let p = &profiles[row];
-        let environments = p
-            .kernel_config
-            .env()
-            .map(|(k, v)| {
-                ModelRc::new(VecModel::from(vec![
-                    StandardListViewItem::from(k),
-                    StandardListViewItem::from(v),
-                ]))
-            })
-            .collect::<Vec<ModelRc<StandardListViewItem>>>();
 
         dst.set_selected_device(self.devices.position(&p.display_device).unwrap_or(0));
         dst.set_selected_resolution(self.resolutions.position(p.display_resolution).unwrap());
@@ -269,7 +259,7 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
         dst.set_idps_sub_product(slint::format!("{:#x}", p.kernel_config.idps.prodsub));
         dst.set_idps_serial(hex::encode(&p.kernel_config.idps.serial).into());
 
-        self.environments.set_vec(environments);
+        self.environments.reset(p);
         self.selected.set(Some(row));
     }
 
@@ -340,11 +330,8 @@ impl<G> ProfileModel<G> {
         index.try_into().unwrap()
     }
 
-    pub fn push_env(&self, name: impl Into<SharedString>, value: impl Into<SharedString>) {
-        self.environments.push(ModelRc::new(VecModel::from(vec![
-            StandardListViewItem::from(name.into()),
-            StandardListViewItem::from(value.into()),
-        ])));
+    pub fn environments(&self) -> &EnvironmentList {
+        &self.environments
     }
 }
 
@@ -364,6 +351,82 @@ impl<G: 'static> Model for ProfileModel<G> {
 
     fn model_tracker(&self) -> &dyn ModelTracker {
         &self.noti
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// Implementation of [`Model`] for environment variables.
+#[derive(Default)]
+pub struct EnvironmentList {
+    list: RefCell<Vec<ModelRc<StandardListViewItem>>>,
+    notify: ModelNotify,
+}
+
+impl EnvironmentList {
+    pub fn push(&self, name: impl Into<SharedString>, value: impl Into<SharedString>) {
+        let mut list = self.list.borrow_mut();
+        let index = list.len();
+
+        list.push(ModelRc::new(VecModel::from(vec![
+            StandardListViewItem::from(name.into()),
+            StandardListViewItem::from(value.into()),
+        ])));
+
+        self.notify.row_added(index, 1);
+    }
+
+    pub fn set(&self, row: usize, name: impl Into<SharedString>, value: impl Into<SharedString>) {
+        self.set_row_data(
+            row,
+            ModelRc::new(VecModel::from(vec![
+                StandardListViewItem::from(name.into()),
+                StandardListViewItem::from(value.into()),
+            ])),
+        );
+    }
+
+    fn reset(&self, p: &Profile) {
+        let mut list = self.list.borrow_mut();
+
+        list.clear();
+
+        for (k, v) in p.kernel_config.env() {
+            list.push(ModelRc::new(VecModel::from(vec![
+                StandardListViewItem::from(k),
+                StandardListViewItem::from(v),
+            ])));
+        }
+
+        self.notify.reset();
+    }
+}
+
+impl Model for EnvironmentList {
+    type Data = ModelRc<StandardListViewItem>;
+
+    fn row_count(&self) -> usize {
+        self.list.borrow().len()
+    }
+
+    fn row_data(&self, row: usize) -> Option<Self::Data> {
+        self.list.borrow().get(row).cloned()
+    }
+
+    fn set_row_data(&self, row: usize, data: Self::Data) {
+        let mut list = self.list.borrow_mut();
+
+        list[row] = data;
+
+        drop(list);
+
+        self.notify.row_changed(row);
+    }
+
+    fn model_tracker(&self) -> &dyn ModelTracker {
+        &self.notify
     }
 
     fn as_any(&self) -> &dyn Any {

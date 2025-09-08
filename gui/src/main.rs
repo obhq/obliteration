@@ -480,6 +480,67 @@ impl MainProgram {
         win: EditEnvironment,
         profiles: Rc<ProfileModel<G>>,
     ) -> Result<(), SharedString> {
+        let (name, value) = Self::validate_environment(&win)?;
+
+        profiles.environments().push(name, value);
+        win.hide().unwrap();
+
+        Ok(())
+    }
+
+    async fn edit_environment<G: 'static>(
+        main: MainWindow,
+        profiles: Rc<ProfileModel<G>>,
+        row: i32,
+    ) -> Result<(), SharedString> {
+        // Setup window.
+        let row = row.try_into().unwrap();
+        let (name, value) = profiles.get_env(row);
+        let win = EditEnvironment::new().unwrap();
+
+        win.on_cancel_clicked({
+            let win = win.as_weak();
+
+            move || win.unwrap().hide().unwrap()
+        });
+
+        win.on_ok_clicked({
+            let win = win.as_weak();
+
+            move || {
+                spawn_handler(&win, |w| {
+                    Self::apply_edited_environment(w, profiles.clone(), row)
+                })
+            }
+        });
+
+        win.set_dialog_title("Edit Variable".into());
+        win.set_name(name);
+        win.set_value(value);
+
+        // Run the window.
+        win.show().unwrap();
+        win.set_modal(&main).unwrap().wait().await;
+
+        Ok(())
+    }
+
+    async fn apply_edited_environment<G>(
+        win: EditEnvironment,
+        profiles: Rc<ProfileModel<G>>,
+        row: usize,
+    ) -> Result<(), SharedString> {
+        let (name, value) = Self::validate_environment(&win)?;
+
+        profiles.environments().set(row, name, value);
+        win.hide().unwrap();
+
+        Ok(())
+    }
+
+    fn validate_environment(
+        win: &EditEnvironment,
+    ) -> Result<(SharedString, SharedString), SharedString> {
         // Get name.
         let name = win.get_name();
 
@@ -494,36 +555,7 @@ impl MainProgram {
             return Err("Value cannot be empty.".into());
         }
 
-        profiles.push_env(name, value);
-        win.hide().unwrap();
-
-        Ok(())
-    }
-
-    async fn edit_environment<G>(
-        main: MainWindow,
-        profiles: Rc<ProfileModel<G>>,
-        row: i32,
-    ) -> Result<(), SharedString> {
-        // Setup window.
-        let (name, value) = profiles.get_env(row.try_into().unwrap());
-        let win = EditEnvironment::new().unwrap();
-
-        win.on_cancel_clicked({
-            let win = win.as_weak();
-
-            move || win.unwrap().hide().unwrap()
-        });
-
-        win.set_dialog_title("Edit Variable".into());
-        win.set_name(name);
-        win.set_value(value);
-
-        // Run the window.
-        win.show().unwrap();
-        win.set_modal(&main).unwrap().wait().await;
-
-        Ok(())
+        Ok((name, value))
     }
 
     async fn wait_for_debugger(addr: SocketAddr) -> Result<Option<TcpStream>, ProgramError> {
