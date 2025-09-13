@@ -1,6 +1,7 @@
 pub use self::object::*;
 pub use self::page::*;
 
+use self::phys::PhysAllocator;
 use self::stats::VmStats;
 use crate::config::PAGE_SIZE;
 use crate::context::{config, current_thread};
@@ -17,10 +18,12 @@ use thiserror::Error;
 
 mod object;
 mod page;
+mod phys;
 mod stats;
 
 /// Implementation of Virtual Memory system.
 pub struct Vm {
+    phys: PhysAllocator,
     stats: [VmStats; 2],
     pagers: [Weak<Proc>; 2],         // pageproc
     pages_deficit: [AtomicUsize; 2], // vm_pageout_deficit
@@ -34,6 +37,8 @@ impl Vm {
     /// |---------|--------|
     /// |PS4 11.00|0x029200|
     pub fn new(phys_avail: [u64; 61], dmem: &Dmem) -> Result<Arc<Self>, VmError> {
+        let phys = PhysAllocator::new(&phys_avail);
+
         // Get initial v_page_count and v_free_count.
         let page_size = u64::try_from(PAGE_SIZE.get()).unwrap();
         let config = config();
@@ -101,6 +106,7 @@ impl Vm {
         // Spawn page daemons. The Orbis do this in a separated sysinit but we do it here instead to
         // keep it in the VM subsystem.
         let mut vm = Self {
+            phys,
             stats,
             pagers: Default::default(),
             pages_deficit: [AtomicUsize::new(0), AtomicUsize::new(0)],
@@ -164,24 +170,17 @@ impl Vm {
                     return None;
                 }
 
-                self.alloc_phys()
+                self.phys.alloc_page()
             }
         };
+
+        // TODO: The Orbis assume page is never null here.
+        let page = page.unwrap();
 
         match page.flags().has_any(PageFlags::Cached) {
             true => todo!(),
             false => todo!(),
         }
-    }
-
-    /// See `vm_phys_alloc_pages` on the Orbis for a reference.
-    ///
-    /// # Reference offsets
-    /// | Version | Offset |
-    /// |---------|--------|
-    /// |PS4 11.00|0x160520|
-    fn alloc_phys(&self) -> VmPage {
-        todo!()
     }
 
     /// See `kick_pagedaemons` on the Orbis for a reference.
