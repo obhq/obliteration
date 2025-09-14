@@ -388,6 +388,13 @@ impl EnvironmentList {
         );
     }
 
+    /// # Panics
+    /// If `row` is not valid.
+    pub fn remove(&self, row: usize) {
+        self.list.borrow_mut().remove(row);
+        self.notify.row_removed(row, 1);
+    }
+
     fn reset(&self, p: &Profile) {
         let mut list = self.list.borrow_mut();
 

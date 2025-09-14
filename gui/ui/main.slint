@@ -32,6 +32,7 @@ export component MainWindow inherits Window {
     pure callback start-debug();
     callback new-environment();
     callback edit-environment(row: int);
+    callback delete-environment(row: int);
 
     title: "Obliteration";
     icon: @image-url("@root/assets/icon.png");
@@ -134,6 +135,9 @@ export component MainWindow inherits Window {
                 }
                 edit(row) => {
                     edit-environment(row);
+                }
+                delete(row) => {
+                    delete-environment(row);
                 }
             }
         }

@@ -181,6 +181,13 @@ impl MainProgram {
             move |row| spawn_handler(&win, |w| Self::edit_environment(w, profiles.clone(), row))
         });
 
+        win.on_delete_environment({
+            let win = win.as_weak();
+            let profiles = profiles.clone();
+
+            move |row| spawn_handler(&win, |_| Self::delete_environment(profiles.clone(), row))
+        });
+
         // Set window properties.
         win.set_devices(devices.into());
         win.set_resolutions(resolutions.into());
@@ -556,6 +563,17 @@ impl MainProgram {
         }
 
         Ok((name, value))
+    }
+
+    async fn delete_environment<G>(
+        profiles: Rc<ProfileModel<G>>,
+        row: i32,
+    ) -> Result<(), SharedString> {
+        let row = row.try_into().unwrap();
+
+        profiles.environments().remove(row);
+
+        Ok(())
     }
 
     async fn wait_for_debugger(addr: SocketAddr) -> Result<Option<TcpStream>, ProgramError> {
