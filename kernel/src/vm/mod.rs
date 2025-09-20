@@ -170,7 +170,7 @@ impl Vm {
                     return None;
                 }
 
-                self.phys.alloc_page()
+                self.phys.alloc_page(vm)
             }
         };
 

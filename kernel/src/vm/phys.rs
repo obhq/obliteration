@@ -1,8 +1,12 @@
 use super::VmPage;
+use alloc::collections::vec_deque::VecDeque;
+use alloc::sync::Arc;
 
 /// Provides methods to allocate physical memory.
 pub struct PhysAllocator {
-    nfree: u8, // vm_nfreelists
+    nfree: usize, // vm_nfreelists
+    #[allow(clippy::type_complexity)] // TODO: Remove this.
+    lookup_lists: [Arc<[[[VecDeque<VmPage>; 13]; 3]; 2]>; 2], // vm_phys_lookup_lists
 }
 
 impl PhysAllocator {
@@ -39,7 +43,20 @@ impl PhysAllocator {
             }
         }
 
-        Self { nfree }
+        // Populate vm_phys_free_queues. Do not use Clone to construct the array here since it will
+        // refer to the same object.
+        let free_queues = [
+            Arc::<[[[VecDeque<VmPage>; 13]; 3]; 2]>::default(),
+            Arc::<[[[VecDeque<VmPage>; 13]; 3]; 2]>::default(),
+        ];
+
+        // Populate vm_phys_lookup_lists.
+        let lookup_lists = [free_queues[0].clone(), free_queues[1].clone()];
+
+        Self {
+            nfree,
+            lookup_lists,
+        }
     }
 
     /// See `vm_phys_alloc_pages` on the Orbis for a reference.
@@ -48,12 +65,14 @@ impl PhysAllocator {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x160520|
-    pub fn alloc_page(&self) -> Option<VmPage> {
+    pub fn alloc_page(&self, vm: usize) -> Option<VmPage> {
         // TODO: There is an increasement on unknown variable here.
         let mut i = 0;
 
         loop {
-            if let Some(v) = self.alloc_freelist() {
+            let l = &self.lookup_lists[i];
+
+            if let Some(v) = self.alloc_freelist(&l[vm]) {
                 return Some(v);
             }
 
@@ -73,7 +92,7 @@ impl PhysAllocator {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x1605D0|
-    fn alloc_freelist(&self) -> Option<VmPage> {
+    fn alloc_freelist(&self, _: &[[VecDeque<VmPage>; 13]; 3]) -> Option<VmPage> {
         todo!()
     }
 }
