@@ -4,7 +4,8 @@ use alloc::sync::Arc;
 
 /// Provides methods to allocate physical memory.
 pub struct PhysAllocator {
-    nfree: usize,                                             // vm_nfreelists
+    nfree: usize, // vm_nfreelists
+    #[allow(clippy::type_complexity)] // TODO: Remove this.
     lookup_lists: [Arc<[[[VecDeque<VmPage>; 13]; 3]; 2]>; 2], // vm_phys_lookup_lists
 }
 
