@@ -282,6 +282,10 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
                 .map_err(|_| ProfileError::InvalidIdpsSubProduct)?,
         };
         let mut idps_serial = [0; 8];
+        let environments = src.get_environments();
+        let environments = environments
+            .iter()
+            .map(|e| (e.row_data(0).unwrap().text, e.row_data(1).unwrap().text));
 
         if hex::decode_to_slice(src.get_idps_serial(), &mut idps_serial).is_err() {
             return Err(ProfileError::InvalidIdpsSerial);
@@ -300,6 +304,8 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
         p.kernel_config.idps.product = self.products.get(src.get_selected_idps_product()).unwrap();
         p.kernel_config.idps.prodsub = idps_prodsub;
         p.kernel_config.idps.serial = idps_serial;
+        p.kernel_config.clear_env();
+        p.kernel_config.extend_env(environments);
 
         Ok(RefMut::map(profiles, move |v| &mut v[row]))
     }

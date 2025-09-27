@@ -102,6 +102,10 @@ impl Config {
 
         None
     }
+
+    pub fn clear_env(&mut self) {
+        self.env_vars.fill(Self::ENV_END);
+    }
 }
 
 impl Default for Config {
