@@ -163,14 +163,14 @@ impl Vm {
         }
 
         // Allocate VmPage.
-        let page = match obj {
+        let page = match &obj {
             Some(_) => todo!(),
             None => {
                 if flags.has_any(VmAlloc::Cached) {
                     return None;
                 }
 
-                self.phys.alloc_page(vm)
+                self.phys.alloc_page(vm, obj.is_none().into(), 0)
             }
         };
 
