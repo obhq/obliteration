@@ -65,14 +65,14 @@ impl PhysAllocator {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x160520|
-    pub fn alloc_page(&self, vm: usize) -> Option<VmPage> {
+    pub fn alloc_page(&self, vm: usize, pool: usize, order: usize) -> Option<VmPage> {
         // TODO: There is an increasement on unknown variable here.
         let mut i = 0;
 
         loop {
             let l = &self.lookup_lists[i];
 
-            if let Some(v) = self.alloc_freelist(&l[vm]) {
+            if let Some(v) = self.alloc_freelist(&l[vm], pool, order) {
                 return Some(v);
             }
 
@@ -92,7 +92,58 @@ impl PhysAllocator {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x1605D0|
-    fn alloc_freelist(&self, _: &[[VecDeque<VmPage>; 13]; 3]) -> Option<VmPage> {
-        todo!()
+    fn alloc_freelist(
+        &self,
+        list: &[[VecDeque<VmPage>; 13]; 3],
+        pool: usize,
+        order: usize,
+    ) -> Option<VmPage> {
+        if order >= 13 {
+            return None;
+        }
+
+        let mut i = 0;
+
+        loop {
+            match list[pool][order + i].front() {
+                Some(v) => v,
+                None => match (order + i) < 12 {
+                    true => {
+                        i += 1;
+                        continue;
+                    }
+                    false => break,
+                },
+            };
+
+            todo!()
+        }
+
+        let mut next = 11;
+
+        loop {
+            let mut found = None;
+
+            for f in list {
+                found = f[next + 1].front();
+
+                if found.is_some() {
+                    break;
+                }
+            }
+
+            match found {
+                Some(_) => todo!(),
+                None => {
+                    if next < order || next == 0 {
+                        break;
+                    }
+
+                    next -= 1;
+                }
+            }
+        }
+
+        None
     }
 }
