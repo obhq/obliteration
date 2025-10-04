@@ -48,6 +48,16 @@ impl SessionState {
                 // the same time.
             } else if let Some(_) = feat.strip_prefix(b"vfork-events") {
                 // TODO: Same here.
+            } else if let Some(v) = feat.strip_prefix(b"swbreak") {
+                if v == b"+" {
+                    if cfg!(target_arch = "aarch64") || cfg!(target_arch = "x86_64") {
+                        res.extend_from_slice(b";swbreak+");
+                    } else {
+                        todo!()
+                    }
+                }
+            } else if let Some(_) = feat.strip_prefix(b"hwbreak") {
+                // TODO: Implement this.
             } else {
                 todo!("{}", String::from_utf8_lossy(feat));
             }
