@@ -36,8 +36,12 @@ impl Vm {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x029200|
-    pub fn new(phys_avail: [u64; 61], dmem: &Dmem) -> Result<Arc<Self>, VmError> {
-        let phys = PhysAllocator::new(&phys_avail);
+    pub fn new(
+        phys_avail: [u64; 61],
+        ma: Option<&MemAffinity>,
+        dmem: &Dmem,
+    ) -> Result<Arc<Self>, VmError> {
+        let phys = PhysAllocator::new(&phys_avail, ma);
 
         // Get initial v_page_count and v_free_count.
         let page_size = u64::try_from(PAGE_SIZE.get()).unwrap();
@@ -204,6 +208,9 @@ impl Vm {
         todo!()
     }
 }
+
+/// Implementation of `mem_affinity` structure.
+pub struct MemAffinity {}
 
 /// Flags for [`Vm::alloc_page()`].
 #[bitflag(u32)]
