@@ -519,8 +519,8 @@ fn load_pmap(paddr_free: u64) -> u64 {
 /// |---------|--------|
 /// |PS4 11.00|0x39A390|
 fn init_vm(phys_avail: [u64; 61], dmem: &Dmem) -> Arc<Uma> {
-    // Initialize VM.
-    let vm = Vm::new(phys_avail, dmem).unwrap();
+    // TODO: Get ma from parse_srat.
+    let vm = Vm::new(phys_avail, None, dmem).unwrap();
 
     // Initialize UMA.
     Uma::new(vm)

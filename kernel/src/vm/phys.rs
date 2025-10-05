@@ -1,6 +1,7 @@
-use super::VmPage;
+use super::{MemAffinity, VmPage};
 use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 
 /// Provides methods to allocate physical memory.
 pub struct PhysAllocator {
@@ -16,7 +17,9 @@ impl PhysAllocator {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x15F410|
-    pub fn new(phys_avail: &[u64; 61]) -> Self {
+    pub fn new(phys_avail: &[u64; 61], ma: Option<&MemAffinity>) -> Self {
+        // Create segments.
+        let mut segs = Vec::new();
         let mut nfree = 0;
 
         for i in (0..).step_by(2) {
@@ -33,13 +36,14 @@ impl PhysAllocator {
                 let unk = end < 0x1000001;
 
                 if !unk {
-                    // TODO: Invoke vm_phys_create_seg.
+                    Self::create_seg(&mut segs, ma);
                 }
 
-                // TODO: Invoke vm_phys_create_seg.
+                Self::create_seg(&mut segs, ma);
+
                 nfree = 1;
             } else {
-                // TODO: Invoke vm_phys_create_seg.
+                Self::create_seg(&mut segs, ma);
             }
         }
 
@@ -146,4 +150,20 @@ impl PhysAllocator {
 
         None
     }
+
+    /// See `vm_phys_create_seg` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x15F8A0|
+    fn create_seg(segs: &mut Vec<PhysSeg>, ma: Option<&MemAffinity>) {
+        match ma {
+            Some(_) => todo!(),
+            None => segs.push(PhysSeg {}),
+        }
+    }
 }
+
+/// Implementation of `vm_phys_seg` structure.
+struct PhysSeg {}
