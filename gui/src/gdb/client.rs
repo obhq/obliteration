@@ -108,6 +108,9 @@ impl<'a, H: GdbHandler> GdbDispatcher for ClientDispatcher<'a, H> {
         } else if data == b"QThreadSuffixSupported" {
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qthreadsuffixsupported
             state.parse_thread_suffix_supported(res);
+        } else if data == b"QListThreadsInStopReply" {
+            // https://lldb.llvm.org/resources/lldbgdbremote.html#qlistthreadsinstopreply
+            state.parse_enable_threads_in_stop_reply(res);
         } else {
             todo!("{}", String::from_utf8_lossy(data));
         }
