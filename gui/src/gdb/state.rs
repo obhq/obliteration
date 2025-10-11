@@ -3,6 +3,7 @@
 pub struct SessionState {
     no_ack: Option<bool>,
     thread_suffix_supported: bool,
+    threads_in_stop_reply: bool,
 }
 
 impl SessionState {
@@ -66,6 +67,12 @@ impl SessionState {
 
     pub fn parse_thread_suffix_supported(&mut self, res: &mut Vec<u8>) {
         self.thread_suffix_supported = true;
+
+        res.extend_from_slice(b"OK");
+    }
+
+    pub fn parse_enable_threads_in_stop_reply(&mut self, res: &mut Vec<u8>) {
+        self.threads_in_stop_reply = true;
 
         res.extend_from_slice(b"OK");
     }
