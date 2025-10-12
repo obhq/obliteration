@@ -5,7 +5,8 @@ use alloc::vec::Vec;
 
 /// Provides methods to allocate physical memory.
 pub struct PhysAllocator {
-    nfree: usize, // vm_nfreelists
+    segs: Vec<PhysSeg>, // vm_phys_segs + vm_phys_nsegs
+    nfree: usize,       // vm_nfreelists
     #[allow(clippy::type_complexity)] // TODO: Remove this.
     lookup_lists: [Arc<[[[VecDeque<VmPage>; 13]; 3]; 2]>; 2], // vm_phys_lookup_lists
 }
@@ -24,26 +25,30 @@ impl PhysAllocator {
 
         for i in (0..).step_by(2) {
             // Check if end entry.
-            let addr = phys_avail[i];
+            let mut addr = phys_avail[i];
             let end = phys_avail[i + 1];
 
             if end == 0 {
                 break;
             }
 
-            // TODO: What is 16777216?
+            // TODO: Why Orbis need to create 16MB segment here?
             if addr < 16777216 {
                 let unk = end < 0x1000001;
 
                 if !unk {
-                    Self::create_seg(&mut segs, ma);
+                    Self::create_seg(&mut segs, ma, addr, 0x1000000);
+
+                    // The Orbis also update end address here but it seems like the value is always
+                    // the same as current value.
+                    addr = 0x1000000;
                 }
 
-                Self::create_seg(&mut segs, ma);
+                Self::create_seg(&mut segs, ma, addr, end);
 
                 nfree = 1;
             } else {
-                Self::create_seg(&mut segs, ma);
+                Self::create_seg(&mut segs, ma, addr, end);
             }
         }
 
@@ -58,9 +63,23 @@ impl PhysAllocator {
         let lookup_lists = [free_queues[0].clone(), free_queues[1].clone()];
 
         Self {
+            segs,
             nfree,
             lookup_lists,
         }
+    }
+
+    /// See `vm_phys_paddr_to_vm_page` on the Orbis for a reference.
+    pub fn page_for(&mut self, pa: u64) -> Option<&mut VmPage> {
+        for s in &mut self.segs {
+            if s.start > pa || s.end <= pa {
+                continue;
+            }
+
+            todo!()
+        }
+
+        None
     }
 
     /// See `vm_phys_alloc_pages` on the Orbis for a reference.
@@ -157,13 +176,16 @@ impl PhysAllocator {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x15F8A0|
-    fn create_seg(segs: &mut Vec<PhysSeg>, ma: Option<&MemAffinity>) {
+    fn create_seg(segs: &mut Vec<PhysSeg>, ma: Option<&MemAffinity>, start: u64, end: u64) {
         match ma {
             Some(_) => todo!(),
-            None => segs.push(PhysSeg {}),
+            None => segs.push(PhysSeg { start, end }),
         }
     }
 }
 
 /// Implementation of `vm_phys_seg` structure.
-struct PhysSeg {}
+struct PhysSeg {
+    start: u64,
+    end: u64,
+}

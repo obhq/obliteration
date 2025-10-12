@@ -41,7 +41,7 @@ impl Vm {
         ma: Option<&MemAffinity>,
         dmem: &Dmem,
     ) -> Result<Arc<Self>, VmError> {
-        let phys = PhysAllocator::new(&phys_avail, ma);
+        let mut phys = PhysAllocator::new(&phys_avail, ma);
 
         // Get initial v_page_count and v_free_count.
         let page_size = u64::try_from(PAGE_SIZE.get()).unwrap();
@@ -65,12 +65,14 @@ impl Vm {
                     todo!();
                 }
 
+                phys.page_for(addr);
+
                 if addr < unk || dmem.game_end() <= addr {
-                    // TODO: Update vm_phys_segs.
+                    // We inline a call to vm_phys_add_page() here.
                     page_count[0] += 1;
                     free_count[0] += 1;
                 } else {
-                    // TODO: Update vm_phys_segs.
+                    // We inline a call to unknown function here.
                     page_count[1] += 1;
                 }
 
