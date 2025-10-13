@@ -111,6 +111,9 @@ impl<'a, H: GdbHandler> GdbDispatcher for ClientDispatcher<'a, H> {
         } else if data == b"QListThreadsInStopReply" {
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qlistthreadsinstopreply
             state.parse_enable_threads_in_stop_reply(res);
+        } else if data == b"qHostInfo" {
+            // https://lldb.llvm.org/resources/lldbgdbremote.html#qhostinfo
+            state.parse_host_info(res);
         } else {
             todo!("{}", String::from_utf8_lossy(data));
         }
