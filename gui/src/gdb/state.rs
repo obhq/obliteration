@@ -76,4 +76,31 @@ impl SessionState {
 
         res.extend_from_slice(b"OK");
     }
+
+    pub fn parse_host_info(&mut self, res: &mut Vec<u8>) {
+        // https://en.wikipedia.org/wiki/Mach-O
+        if cfg!(target_arch = "aarch64") {
+            res.extend_from_slice(b"cputype:16777228;cpusubtype:0"); // 0x100000C
+            res.extend_from_slice(b";triple:aarch64-unknown-none");
+        } else if cfg!(target_arch = "x86_64") {
+            res.extend_from_slice(b"cputype:16777223;cpusubtype:3"); // 0x1000007
+            res.extend_from_slice(b";triple:x86_64-unknown-none");
+        } else {
+            todo!()
+        }
+
+        // We don't have any plan for support big-endian.
+        res.extend_from_slice(b";endian:little");
+
+        if cfg!(target_pointer_width = "32") {
+            res.extend_from_slice(b";ptrsize:4");
+        } else if cfg!(target_pointer_width = "64") {
+            res.extend_from_slice(b";ptrsize:8");
+        } else {
+            unreachable!();
+        }
+
+        // It is unlikely for us to support page size other than 16K in a near future.
+        res.extend_from_slice(b";vm-page-size:16384");
+    }
 }
