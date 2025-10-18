@@ -609,4 +609,4 @@ struct BootInfo {
 #[allow(dead_code)]
 #[cfg_attr(target_os = "none", global_allocator)]
 static KERNEL_HEAP: KernelHeap = unsafe { KernelHeap::new(&raw mut PRIMITIVE_HEAP) };
-static mut PRIMITIVE_HEAP: [u8; 1024 * 1024 * 2] = [0; _];
+static mut PRIMITIVE_HEAP: [u8; 1024 * 1024 * 8] = [0; _];
