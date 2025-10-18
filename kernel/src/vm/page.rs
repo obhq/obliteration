@@ -6,6 +6,12 @@ pub struct VmPage {
 }
 
 impl VmPage {
+    pub fn new() -> Self {
+        Self {
+            flags: PageFlags::zeroed(),
+        }
+    }
+
     pub fn flags(&self) -> PageFlags {
         self.flags
     }

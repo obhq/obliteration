@@ -1,4 +1,5 @@
 use super::{MemAffinity, VmPage};
+use crate::config::PAGE_SHIFT;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -19,6 +20,27 @@ impl PhysAllocator {
     /// |---------|--------|
     /// |PS4 11.00|0x15F410|
     pub fn new(phys_avail: &[u64; 61], ma: Option<&MemAffinity>) -> Self {
+        // Get vm_page_array_size. The orbis do this in vm_page_startup but we do it here instead.
+        let mut pages = 0;
+
+        for i in (0..).step_by(2) {
+            let end = phys_avail[i + 1];
+
+            if end == 0 {
+                break;
+            }
+
+            pages += (end - phys_avail[i]) >> PAGE_SHIFT;
+        }
+
+        // Populate vm_page_array. The orbis do this in vm_page_startup but we do it here instead.
+        let pages = pages.try_into().unwrap();
+        let mut all_pages = Vec::with_capacity(pages);
+
+        for _ in 0..pages {
+            all_pages.push(Arc::new(VmPage::new()));
+        }
+
         // Create segments.
         let mut segs = Vec::new();
         let mut nfree = 0;
@@ -37,18 +59,18 @@ impl PhysAllocator {
                 let unk = end < 0x1000001;
 
                 if !unk {
-                    Self::create_seg(&mut segs, ma, addr, 0x1000000);
+                    Self::create_seg(&mut segs, ma, &all_pages, addr, 0x1000000);
 
                     // The Orbis also update end address here but it seems like the value is always
                     // the same as current value.
                     addr = 0x1000000;
                 }
 
-                Self::create_seg(&mut segs, ma, addr, end);
+                Self::create_seg(&mut segs, ma, &all_pages, addr, end);
 
                 nfree = 1;
             } else {
-                Self::create_seg(&mut segs, ma, addr, end);
+                Self::create_seg(&mut segs, ma, &all_pages, addr, end);
             }
         }
 
@@ -176,7 +198,13 @@ impl PhysAllocator {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x15F8A0|
-    fn create_seg(segs: &mut Vec<PhysSeg>, ma: Option<&MemAffinity>, start: u64, end: u64) {
+    fn create_seg(
+        segs: &mut Vec<PhysSeg>,
+        ma: Option<&MemAffinity>,
+        _: &[Arc<VmPage>],
+        start: u64,
+        end: u64,
+    ) {
         match ma {
             Some(_) => todo!(),
             None => segs.push(PhysSeg { start, end }),
