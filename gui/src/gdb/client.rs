@@ -114,6 +114,8 @@ impl<'a, H: GdbHandler> GdbDispatcher for ClientDispatcher<'a, H> {
         } else if data == b"qHostInfo" {
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qhostinfo
             state.parse_host_info(res);
+        } else if data == b"vCont?" {
+            state.parse_vcont(res);
         } else {
             todo!("{}", String::from_utf8_lossy(data));
         }

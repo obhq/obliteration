@@ -103,4 +103,9 @@ impl SessionState {
         // It is unlikely for us to support page size other than 16K in a near future.
         res.extend_from_slice(b";vm-page-size:16384");
     }
+
+    pub fn parse_vcont(&mut self, res: &mut Vec<u8>) {
+        // Only Continue and Stop is supported at the moment.
+        res.extend_from_slice(b"vCont;c;t");
+    }
 }
