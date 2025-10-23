@@ -41,7 +41,7 @@ impl Vm {
         ma: Option<&MemAffinity>,
         dmem: &Dmem,
     ) -> Result<Arc<Self>, VmError> {
-        let mut phys = PhysAllocator::new(&phys_avail, ma);
+        let phys = PhysAllocator::new(&phys_avail, ma);
 
         // Get initial v_page_count and v_free_count.
         let page_size = u64::try_from(PAGE_SIZE.get()).unwrap();
@@ -65,7 +65,8 @@ impl Vm {
                     todo!();
                 }
 
-                phys.page_for(addr);
+                // TODO: Update vm_page.
+                phys.page_for(addr).unwrap(); // Orbis assume the return value never null.
 
                 if addr < unk || dmem.game_end() <= addr {
                     // We inline a call to vm_phys_add_page() here.
