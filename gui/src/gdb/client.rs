@@ -116,6 +116,8 @@ impl<'a, H: GdbHandler> GdbDispatcher for ClientDispatcher<'a, H> {
             state.parse_host_info(res);
         } else if data == b"vCont?" {
             state.parse_vcont(res);
+        } else if data == b"qVAttachOrWaitSupported" {
+            // TODO: Figure out how to implement this.
         } else {
             todo!("{}", String::from_utf8_lossy(data));
         }
