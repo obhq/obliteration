@@ -6,9 +6,8 @@ use alloc::vec::Vec;
 
 /// Provides methods to allocate physical memory.
 pub struct PhysAllocator {
-    pages: Vec<Arc<VmPage>>, // vm_page_array + vm_page_array_size
-    segs: Vec<PhysSeg>,      // vm_phys_segs + vm_phys_nsegs
-    nfree: usize,            // vm_nfreelists
+    segs: Vec<PhysSeg>, // vm_phys_segs + vm_phys_nsegs
+    nfree: usize,       // vm_nfreelists
     #[allow(clippy::type_complexity)] // TODO: Remove this.
     lookup_lists: [Arc<[[[VecDeque<VmPage>; 13]; 3]; 2]>; 2], // vm_phys_lookup_lists
 }
@@ -21,27 +20,6 @@ impl PhysAllocator {
     /// |---------|--------|
     /// |PS4 11.00|0x15F410|
     pub fn new(phys_avail: &[u64; 61], ma: Option<&MemAffinity>) -> Self {
-        // Get vm_page_array_size. The orbis do this in vm_page_startup but we do it here instead.
-        let mut pages = 0;
-
-        for i in (0..).step_by(2) {
-            let end = phys_avail[i + 1];
-
-            if end == 0 {
-                break;
-            }
-
-            pages += (end - phys_avail[i]) >> PAGE_SHIFT;
-        }
-
-        // Populate vm_page_array. The orbis do this in vm_page_startup but we do it here instead.
-        let pages = pages.try_into().unwrap();
-        let mut all_pages = Vec::with_capacity(pages);
-
-        for _ in 0..pages {
-            all_pages.push(Arc::new(VmPage::new()));
-        }
-
         // Create segments.
         let mut segs = Vec::new();
         let mut nfree = 0;
@@ -86,27 +64,32 @@ impl PhysAllocator {
         let lookup_lists = [free_queues[0].clone(), free_queues[1].clone()];
 
         Self {
-            pages: all_pages,
             segs,
             nfree,
             lookup_lists,
         }
     }
 
-    /// See `vm_phys_paddr_to_vm_page` on the Orbis for a reference.
+    /// # Panics
+    /// If `i` is not valid.
+    pub fn segment(&self, i: usize) -> &PhysSeg {
+        &self.segs[i]
+    }
+
+    /// See `vm_phys_paddr_to_segind` on the Orbis for a reference. Our implementation is a bit
+    /// differences here. Orbis will panic if segment not found but we return [None] instead.
     ///
-    /// This function was inlined in `vm_phys_add_page` on the Orbis.
-    pub fn page_for(&self, pa: u64) -> Option<&Arc<VmPage>> {
-        for s in &self.segs {
-            // Check if address within this segment.
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x15FC40|
+    pub fn segment_index(&self, pa: u64) -> Option<usize> {
+        for (i, s) in self.segs.iter().enumerate() {
             if pa < s.start || pa >= s.end {
                 continue;
             }
 
-            // Get page index.
-            let i = s.first_page + usize::try_from((pa - s.start) >> PAGE_SHIFT).unwrap();
-
-            return Some(&self.pages[i]);
+            return Some(i);
         }
 
         None
@@ -227,8 +210,8 @@ impl PhysAllocator {
 }
 
 /// Implementation of `vm_phys_seg` structure.
-struct PhysSeg {
-    start: u64,
-    end: u64,
-    first_page: usize,
+pub struct PhysSeg {
+    pub start: u64,        // start
+    pub end: u64,          // end
+    pub first_page: usize, // first_page
 }
