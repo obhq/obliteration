@@ -3,12 +3,13 @@ pub use self::page::*;
 
 use self::phys::PhysAllocator;
 use self::stats::VmStats;
-use crate::config::PAGE_SIZE;
+use crate::config::{PAGE_SHIFT, PAGE_SIZE};
 use crate::context::{config, current_thread};
 use crate::dmem::Dmem;
 use crate::lock::GutexGroup;
 use crate::proc::Proc;
 use alloc::sync::{Arc, Weak};
+use alloc::vec::Vec;
 use core::cmp::max;
 use core::fmt::Debug;
 use core::sync::atomic::{AtomicUsize, Ordering};
@@ -24,6 +25,7 @@ mod stats;
 /// Implementation of Virtual Memory system.
 pub struct Vm {
     phys: PhysAllocator,
+    pages: Vec<Arc<VmPage>>, // vm_page_array + vm_page_array_size
     stats: [VmStats; 2],
     pagers: [Weak<Proc>; 2],         // pageproc
     pages_deficit: [AtomicUsize; 2], // vm_pageout_deficit
@@ -43,41 +45,58 @@ impl Vm {
     ) -> Result<Arc<Self>, VmError> {
         let phys = PhysAllocator::new(&phys_avail, ma);
 
-        // Get initial v_page_count and v_free_count.
-        let page_size = u64::try_from(PAGE_SIZE.get()).unwrap();
+        // Populate vm_page_array. We do a bit different than Orbis here to be able to make segind
+        // immutable.
         let config = config();
         let blocked = config.env("vm.blacklist");
         let unk = dmem.game_end() - dmem.config().fmem_max.get();
+        let mut pages = Vec::new();
+        let mut free_pages = Vec::new();
         let mut page_count = [0; 2];
         let mut free_count = [0; 2];
 
         for i in (0..).step_by(2) {
             // Check if end entry.
-            let mut addr = phys_avail[i];
+            let addr = phys_avail[i];
             let end = phys_avail[i + 1];
 
             if end == 0 {
                 break;
             }
 
-            while addr < end {
+            for addr in (addr..end).step_by(PAGE_SIZE.get()) {
+                // Check if blocked address.
                 if blocked.is_some() {
+                    // TODO: We probably want to use None for segment index here. The problem is
+                    // Orbis use zero here.
+                    pages.push(Arc::new(VmPage::new(addr, 0)));
+
                     todo!();
                 }
 
-                // TODO: Update vm_page.
-                phys.page_for(addr).unwrap(); // Orbis assume the return value never null.
-
-                if addr < unk || dmem.game_end() <= addr {
+                // Check if free page.
+                let free = if addr < unk || addr >= dmem.game_end() {
                     // We inline a call to vm_phys_add_page() here.
                     page_count[0] += 1;
                     free_count[0] += 1;
+
+                    true
                 } else {
                     // We inline a call to unknown function here.
                     page_count[1] += 1;
+
+                    false
+                };
+
+                // Add to list.
+                let seg = phys.segment_index(addr).unwrap();
+                let page = Arc::new(VmPage::new(addr, seg));
+
+                if free {
+                    free_pages.push(page.clone());
                 }
 
-                addr += page_size;
+                pages.push(page);
             }
         }
 
@@ -110,15 +129,22 @@ impl Vm {
             },
         ];
 
-        // Spawn page daemons. The Orbis do this in a separated sysinit but we do it here instead to
-        // keep it in the VM subsystem.
+        // Add free pages. The Orbis do this on the above loop but that is not possible for us since
+        // we use that loop to populate vm_page_array.
         let mut vm = Self {
             phys,
+            pages,
             stats,
             pagers: Default::default(),
             pages_deficit: [AtomicUsize::new(0), AtomicUsize::new(0)],
         };
 
+        for page in free_pages {
+            vm.free_page(&page, 0);
+        }
+
+        // Spawn page daemons. The Orbis do this in a separated sysinit but we do it here instead to
+        // keep it in the VM subsystem.
         vm.spawn_pagers();
 
         Ok(Arc::new(vm))
@@ -188,6 +214,43 @@ impl Vm {
             true => todo!(),
             false => todo!(),
         }
+    }
+
+    /// See `vm_phys_free_pages` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x15FCB0|
+    fn free_page(&self, page: &Arc<VmPage>, mut order: usize) {
+        // Get segment the page belong to.
+        let pa = page.addr();
+        let seg = if (page.unk1() & 1) == 0 {
+            self.phys.segment(page.segment())
+        } else {
+            todo!()
+        };
+
+        while order < 12 {
+            let start = seg.start;
+            let pa_buddy = pa ^ (1u64 << (order + PAGE_SHIFT));
+
+            if pa_buddy < start || pa_buddy >= seg.end {
+                break;
+            }
+
+            // Get buddy page index.
+            let i = (pa_buddy - start) >> PAGE_SHIFT;
+            let buddy = &self.pages[seg.first_page + usize::try_from(i).unwrap()];
+
+            if buddy.order() != order {
+                break;
+            }
+
+            order += 1;
+        }
+
+        todo!()
     }
 
     /// See `kick_pagedaemons` on the Orbis for a reference.
