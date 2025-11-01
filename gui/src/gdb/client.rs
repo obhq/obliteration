@@ -117,7 +117,11 @@ impl<'a, H: GdbHandler> GdbDispatcher for ClientDispatcher<'a, H> {
         } else if data == b"vCont?" {
             state.parse_vcont(res);
         } else if data == b"qVAttachOrWaitSupported" {
-            // TODO: Figure out how to implement this.
+            // TODO: https://github.com/obhq/obliteration/issues/1398
+        } else if data == b"QEnableErrorStrings" {
+            // I think this does not worth for additional complexity on our side so we don't support
+            // this. See https://lldb.llvm.org/resources/lldbgdbremote.html#qenableerrorstrings for
+            // more details.
         } else {
             todo!("{}", String::from_utf8_lossy(data));
         }
