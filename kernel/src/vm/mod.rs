@@ -69,20 +69,25 @@ impl Vm {
                 if blocked.is_some() {
                     // TODO: We probably want to use None for segment index here. The problem is
                     // Orbis use zero here.
-                    pages.push(Arc::new(VmPage::new(addr, 0)));
+                    pages.push(Arc::new(VmPage::new(0, 0, addr, 0)));
 
                     todo!();
                 }
 
                 // Check if free page.
+                let vm;
                 let free = if addr < unk || addr >= dmem.game_end() {
                     // We inline a call to vm_phys_add_page() here.
+                    vm = 0;
+
                     page_count[0] += 1;
                     free_count[0] += 1;
 
                     true
                 } else {
                     // We inline a call to unknown function here.
+                    vm = 1;
+
                     page_count[1] += 1;
 
                     false
@@ -90,7 +95,7 @@ impl Vm {
 
                 // Add to list.
                 let seg = phys.segment_index(addr).unwrap();
-                let page = Arc::new(VmPage::new(addr, seg));
+                let page = Arc::new(VmPage::new(vm, 0, addr, seg));
 
                 if free {
                     free_pages.push(page.clone());
@@ -222,8 +227,9 @@ impl Vm {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x15FCB0|
-    fn free_page(&self, page: &Arc<VmPage>, mut order: usize) {
+    fn free_page(&self, page: &Arc<VmPage>, order: usize) {
         // Get segment the page belong to.
+        let vm = page.vm();
         let pa = page.addr();
         let seg = if (page.unk1() & 1) == 0 {
             self.phys.segment(page.segment())
@@ -231,26 +237,34 @@ impl Vm {
             todo!()
         };
 
+        #[allow(clippy::while_immutable_condition)] // TODO: Remove this.
         while order < 12 {
             let start = seg.start;
-            let pa_buddy = pa ^ (1u64 << (order + PAGE_SHIFT));
+            let buddy_pa = pa ^ (1u64 << (order + PAGE_SHIFT));
 
-            if pa_buddy < start || pa_buddy >= seg.end {
+            if buddy_pa < start || buddy_pa >= seg.end {
                 break;
             }
 
             // Get buddy page index.
-            let i = (pa_buddy - start) >> PAGE_SHIFT;
+            let i = (buddy_pa - start) >> PAGE_SHIFT;
             let buddy = &self.pages[seg.first_page + usize::try_from(i).unwrap()];
+            let buddy_order = buddy.order().lock();
 
-            if buddy.order() != order {
+            if *buddy_order != order || buddy.vm() != vm || ((page.unk1() ^ buddy.unk1()) & 1) != 0
+            {
                 break;
             }
 
-            order += 1;
+            todo!()
         }
 
-        todo!()
+        // Add to free queue.
+        let mut page_order = page.order().lock();
+        let mut queues = seg.free_queues.lock();
+
+        *page_order = order;
+        queues[vm][page.pool()][order].push_back(page.clone());
     }
 
     /// See `kick_pagedaemons` on the Orbis for a reference.

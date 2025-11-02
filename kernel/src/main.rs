@@ -1,5 +1,6 @@
 #![no_std]
 #![cfg_attr(not(test), no_main)]
+#![allow(clippy::type_complexity)] // Type aliasing hide the actual type.
 
 use self::config::{Config, Dipsw, PAGE_MASK, PAGE_SHIFT, PAGE_SIZE, Param1};
 use self::context::{ContextSetup, arch, config};
@@ -609,4 +610,4 @@ struct BootInfo {
 #[allow(dead_code)]
 #[cfg_attr(target_os = "none", global_allocator)]
 static KERNEL_HEAP: KernelHeap = unsafe { KernelHeap::new(&raw mut PRIMITIVE_HEAP) };
-static mut PRIMITIVE_HEAP: [u8; 1024 * 1024 * 16] = [0; _];
+static mut PRIMITIVE_HEAP: [u8; 1024 * 1024 * 32] = [0; _];
