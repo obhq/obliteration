@@ -1,5 +1,6 @@
 use super::{MemAffinity, VmPage};
 use crate::config::PAGE_SHIFT;
+use crate::lock::Mutex;
 use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -9,7 +10,7 @@ pub struct PhysAllocator {
     segs: Vec<PhysSeg>, // vm_phys_segs + vm_phys_nsegs
     nfree: usize,       // vm_nfreelists
     #[allow(clippy::type_complexity)] // TODO: Remove this.
-    lookup_lists: [Arc<[[[VecDeque<VmPage>; 13]; 3]; 2]>; 2], // vm_phys_lookup_lists
+    lookup_lists: [Arc<Mutex<[[[VecDeque<Arc<VmPage>>; 13]; 3]; 2]>>; 2], // vm_phys_lookup_lists
 }
 
 impl PhysAllocator {
@@ -20,6 +21,14 @@ impl PhysAllocator {
     /// |---------|--------|
     /// |PS4 11.00|0x15F410|
     pub fn new(phys_avail: &[u64; 61], ma: Option<&MemAffinity>) -> Self {
+        // Populate vm_phys_free_queues. Do not use Clone to construct the array here since it will
+        // refer to the same object. The Orbis do this after segments creation but we do it before
+        // instead.
+        let free_queues = [
+            Arc::<Mutex<[[[VecDeque<Arc<VmPage>>; 13]; 3]; 2]>>::default(),
+            Arc::<Mutex<[[[VecDeque<Arc<VmPage>>; 13]; 3]; 2]>>::default(),
+        ];
+
         // Create segments.
         let mut segs = Vec::new();
         let mut nfree = 0;
@@ -38,27 +47,20 @@ impl PhysAllocator {
                 let unk = end < 0x1000001;
 
                 if !unk {
-                    Self::create_seg(&mut segs, ma, addr, 0x1000000);
+                    Self::create_seg(&mut segs, ma, &free_queues, addr, 0x1000000, 1);
 
                     // The Orbis also update end address here but it seems like the value is always
                     // the same as current value.
                     addr = 0x1000000;
                 }
 
-                Self::create_seg(&mut segs, ma, addr, end);
+                Self::create_seg(&mut segs, ma, &free_queues, addr, end, unk.into());
 
                 nfree = 1;
             } else {
-                Self::create_seg(&mut segs, ma, addr, end);
+                Self::create_seg(&mut segs, ma, &free_queues, addr, end, 0);
             }
         }
-
-        // Populate vm_phys_free_queues. Do not use Clone to construct the array here since it will
-        // refer to the same object.
-        let free_queues = [
-            Arc::<[[[VecDeque<VmPage>; 13]; 3]; 2]>::default(),
-            Arc::<[[[VecDeque<VmPage>; 13]; 3]; 2]>::default(),
-        ];
 
         // Populate vm_phys_lookup_lists.
         let lookup_lists = [free_queues[0].clone(), free_queues[1].clone()];
@@ -103,18 +105,18 @@ impl PhysAllocator {
     /// |PS4 11.00|0x160520|
     pub fn alloc_page(&self, vm: usize, pool: usize, order: usize) -> Option<VmPage> {
         // TODO: There is an increasement on unknown variable here.
-        let mut i = 0;
+        let mut flind = 0;
 
         loop {
-            let l = &self.lookup_lists[i];
+            let l = self.lookup_lists[flind].lock();
 
             if let Some(v) = self.alloc_freelist(&l[vm], pool, order) {
                 return Some(v);
             }
 
-            i += 1;
+            flind += 1;
 
-            if i >= (self.nfree + 1) {
+            if flind >= (self.nfree + 1) {
                 break;
             }
         }
@@ -130,10 +132,11 @@ impl PhysAllocator {
     /// |PS4 11.00|0x1605D0|
     fn alloc_freelist(
         &self,
-        list: &[[VecDeque<VmPage>; 13]; 3],
+        list: &[[VecDeque<Arc<VmPage>>; 13]; 3],
         pool: usize,
         order: usize,
     ) -> Option<VmPage> {
+        // Beware for deadlock here since we currently own a lock to free queue.
         if order >= 13 {
             return None;
         }
@@ -189,7 +192,14 @@ impl PhysAllocator {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x15F8A0|
-    fn create_seg(segs: &mut Vec<PhysSeg>, ma: Option<&MemAffinity>, start: u64, end: u64) {
+    fn create_seg(
+        segs: &mut Vec<PhysSeg>,
+        ma: Option<&MemAffinity>,
+        queues: &[Arc<Mutex<[[[VecDeque<Arc<VmPage>>; 13]; 3]; 2]>>; 2],
+        start: u64,
+        end: u64,
+        flind: usize,
+    ) {
         match ma {
             Some(_) => todo!(),
             None => {
@@ -203,6 +213,7 @@ impl PhysAllocator {
                     start,
                     end,
                     first_page: first_page.try_into().unwrap(),
+                    free_queues: queues[flind].clone(),
                 });
             }
         }
@@ -211,7 +222,8 @@ impl PhysAllocator {
 
 /// Implementation of `vm_phys_seg` structure.
 pub struct PhysSeg {
-    pub start: u64,        // start
-    pub end: u64,          // end
-    pub first_page: usize, // first_page
+    pub start: u64,                                                     // start
+    pub end: u64,                                                       // end
+    pub first_page: usize,                                              // first_page
+    pub free_queues: Arc<Mutex<[[[VecDeque<Arc<VmPage>>; 13]; 3]; 2]>>, // free_queues
 }
