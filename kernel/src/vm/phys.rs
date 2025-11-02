@@ -195,6 +195,7 @@ impl PhysAllocator {
     fn create_seg(
         segs: &mut Vec<PhysSeg>,
         ma: Option<&MemAffinity>,
+        #[allow(clippy::type_complexity)] // TODO: Remove this.
         queues: &[Arc<Mutex<[[[VecDeque<Arc<VmPage>>; 13]; 3]; 2]>>; 2],
         start: u64,
         end: u64,
@@ -222,8 +223,9 @@ impl PhysAllocator {
 
 /// Implementation of `vm_phys_seg` structure.
 pub struct PhysSeg {
-    pub start: u64,                                                     // start
-    pub end: u64,                                                       // end
-    pub first_page: usize,                                              // first_page
+    pub start: u64,        // start
+    pub end: u64,          // end
+    pub first_page: usize, // first_page
+    #[allow(clippy::type_complexity)] // TODO: Remove this.
     pub free_queues: Arc<Mutex<[[[VecDeque<Arc<VmPage>>; 13]; 3]; 2]>>, // free_queues
 }

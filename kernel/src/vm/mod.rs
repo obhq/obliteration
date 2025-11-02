@@ -237,6 +237,7 @@ impl Vm {
             todo!()
         };
 
+        #[allow(clippy::while_immutable_condition)] // TODO: Remove this.
         while order < 12 {
             let start = seg.start;
             let buddy_pa = pa ^ (1u64 << (order + PAGE_SHIFT));
