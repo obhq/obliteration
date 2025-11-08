@@ -122,6 +122,9 @@ impl<'a, H: GdbHandler> GdbDispatcher for ClientDispatcher<'a, H> {
             // I think this does not worth for additional complexity on our side so we don't support
             // this. See https://lldb.llvm.org/resources/lldbgdbremote.html#qenableerrorstrings for
             // more details.
+        } else if data == b"qProcessInfo" {
+            // This does not useful to us. See
+            // https://lldb.llvm.org/resources/lldbgdbremote.html#qprocessinfo for more details.
         } else {
             todo!("{}", String::from_utf8_lossy(data));
         }
