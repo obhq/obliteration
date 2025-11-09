@@ -227,17 +227,20 @@ impl Vm {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x15FCB0|
-    fn free_page(&self, page: &Arc<VmPage>, order: usize) {
+    fn free_page(&self, page: &Arc<VmPage>, mut order: usize) {
         // Get segment the page belong to.
+        let mut page = page; // For scoped lifetime.
         let vm = page.vm();
-        let pa = page.addr();
+        let mut pa = page.addr();
         let seg = if (page.unk1() & 1) == 0 {
             self.phys.segment(page.segment())
         } else {
             todo!()
         };
 
-        #[allow(clippy::while_immutable_condition)] // TODO: Remove this.
+        // TODO: What is this?
+        let mut queues = seg.free_queues.lock();
+
         while order < 12 {
             let start = seg.start;
             let buddy_pa = pa ^ (1u64 << (order + PAGE_SHIFT));
@@ -249,22 +252,34 @@ impl Vm {
             // Get buddy page index.
             let i = (buddy_pa - start) >> PAGE_SHIFT;
             let buddy = &self.pages[seg.first_page + usize::try_from(i).unwrap()];
-            let buddy_order = buddy.order().lock();
+            let mut buddy_order = buddy.order().lock();
 
             if *buddy_order != order || buddy.vm() != vm || ((page.unk1() ^ buddy.unk1()) & 1) != 0
             {
                 break;
             }
 
-            todo!()
+            // TODO: Check if we really need to preserve page order here. If not we need to replace
+            // IndexMap with HashMap otherwise we need to find a better solution than IndexMap.
+            queues[vm][buddy.pool()][*buddy_order].shift_remove(buddy);
+
+            *buddy_order = VmPage::FREE_ORDER;
+
+            if buddy.pool() != page.pool() {
+                todo!()
+            }
+
+            order += 1;
+            pa &= !((1u64 << (order + PAGE_SHIFT)) - 1);
+            page =
+                &self.pages[seg.first_page + usize::try_from((pa - start) >> PAGE_SHIFT).unwrap()];
         }
 
         // Add to free queue.
         let mut page_order = page.order().lock();
-        let mut queues = seg.free_queues.lock();
 
         *page_order = order;
-        queues[vm][page.pool()][order].push_back(page.clone());
+        queues[vm][page.pool()][order].insert(page.clone());
     }
 
     /// See `kick_pagedaemons` on the Orbis for a reference.

@@ -1,15 +1,16 @@
 use super::{MemAffinity, VmPage};
 use crate::config::PAGE_SHIFT;
 use crate::lock::Mutex;
-use alloc::collections::vec_deque::VecDeque;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
+use indexmap::IndexSet;
+use rustc_hash::FxBuildHasher;
 
 /// Provides methods to allocate physical memory.
 pub struct PhysAllocator {
     segs: Vec<PhysSeg>, // vm_phys_segs + vm_phys_nsegs
     nfree: usize,       // vm_nfreelists
-    lookup_lists: [Arc<Mutex<[[[VecDeque<Arc<VmPage>>; 13]; 3]; 2]>>; 2], // vm_phys_lookup_lists
+    lookup_lists: [Arc<Mutex<[[[IndexSet<Arc<VmPage>, FxBuildHasher>; 13]; 3]; 2]>>; 2], // vm_phys_lookup_lists
 }
 
 impl PhysAllocator {
@@ -24,8 +25,8 @@ impl PhysAllocator {
         // refer to the same object. The Orbis do this after segments creation but we do it before
         // instead.
         let free_queues = [
-            Arc::<Mutex<[[[VecDeque<Arc<VmPage>>; 13]; 3]; 2]>>::default(),
-            Arc::<Mutex<[[[VecDeque<Arc<VmPage>>; 13]; 3]; 2]>>::default(),
+            Arc::<Mutex<[[[IndexSet<Arc<VmPage>, FxBuildHasher>; 13]; 3]; 2]>>::default(),
+            Arc::<Mutex<[[[IndexSet<Arc<VmPage>, FxBuildHasher>; 13]; 3]; 2]>>::default(),
         ];
 
         // Create segments.
@@ -131,7 +132,7 @@ impl PhysAllocator {
     /// |PS4 11.00|0x1605D0|
     fn alloc_freelist(
         &self,
-        list: &[[VecDeque<Arc<VmPage>>; 13]; 3],
+        list: &[[IndexSet<Arc<VmPage>, FxBuildHasher>; 13]; 3],
         pool: usize,
         order: usize,
     ) -> Option<VmPage> {
@@ -143,7 +144,7 @@ impl PhysAllocator {
         let mut i = 0;
 
         loop {
-            match list[pool][order + i].front() {
+            match list[pool][order + i].first() {
                 Some(v) => v,
                 None => match (order + i) < 12 {
                     true => {
@@ -163,7 +164,7 @@ impl PhysAllocator {
             let mut found = None;
 
             for f in list {
-                found = f[next + 1].front();
+                found = f[next + 1].first();
 
                 if found.is_some() {
                     break;
@@ -194,7 +195,7 @@ impl PhysAllocator {
     fn create_seg(
         segs: &mut Vec<PhysSeg>,
         ma: Option<&MemAffinity>,
-        queues: &[Arc<Mutex<[[[VecDeque<Arc<VmPage>>; 13]; 3]; 2]>>; 2],
+        queues: &[Arc<Mutex<[[[IndexSet<Arc<VmPage>, FxBuildHasher>; 13]; 3]; 2]>>; 2],
         start: u64,
         end: u64,
         flind: usize,
@@ -221,8 +222,8 @@ impl PhysAllocator {
 
 /// Implementation of `vm_phys_seg` structure.
 pub struct PhysSeg {
-    pub start: u64,                                                     // start
-    pub end: u64,                                                       // end
-    pub first_page: usize,                                              // first_page
-    pub free_queues: Arc<Mutex<[[[VecDeque<Arc<VmPage>>; 13]; 3]; 2]>>, // free_queues
+    pub start: u64,        // start
+    pub end: u64,          // end
+    pub first_page: usize, // first_page
+    pub free_queues: Arc<Mutex<[[[IndexSet<Arc<VmPage>, FxBuildHasher>; 13]; 3]; 2]>>, // free_queues
 }
