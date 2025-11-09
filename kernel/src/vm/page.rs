@@ -1,4 +1,5 @@
 use crate::lock::Mutex;
+use core::hash::{Hash, Hasher};
 use macros::bitflag;
 
 /// Implementation of `vm_page` structure.
@@ -39,7 +40,7 @@ impl VmPage {
         self.addr
     }
 
-    /// This must be locked **before** free queues and the lock must be held while putting this page
+    /// This must be locked **after** free queues and the lock must be held while putting this page
     /// to free queues.
     pub fn order(&self) -> &Mutex<usize> {
         &self.order
@@ -55,6 +56,20 @@ impl VmPage {
 
     pub fn unk1(&self) -> u8 {
         self.unk1
+    }
+}
+
+impl PartialEq for VmPage {
+    fn eq(&self, other: &Self) -> bool {
+        self.addr == other.addr
+    }
+}
+
+impl Eq for VmPage {}
+
+impl Hash for VmPage {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.addr.hash(state);
     }
 }
 

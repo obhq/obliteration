@@ -12,6 +12,7 @@ use core::error::Error;
 use core::fmt::{Display, Formatter};
 use hashbrown::HashMap;
 use macros::bitflag;
+use rustc_hash::FxBuildHasher;
 
 mod abi;
 mod cell;
@@ -21,7 +22,7 @@ mod thread;
 
 /// Manage all processes in the system.
 pub struct ProcMgr {
-    procs: Mutex<HashMap<Pid, Weak<Proc>>>, // allproc + pidhashtbl + zombproc
+    procs: Mutex<HashMap<Pid, Weak<Proc>, FxBuildHasher>>, // allproc + pidhashtbl + zombproc
     events: Arc<EventSet<ProcEvents>>,
 }
 
@@ -30,7 +31,7 @@ impl ProcMgr {
         let events = Arc::default();
 
         Arc::new(Self {
-            procs: Mutex::new(HashMap::new()),
+            procs: Mutex::new(HashMap::with_hasher(FxBuildHasher)),
             events,
         })
     }

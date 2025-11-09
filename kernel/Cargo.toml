@@ -7,10 +7,12 @@ edition = "2024"
 bitfield-struct = "0.10.1"
 bitflag = { path = "../lib/bitflag" }
 config = { path = "../config" }
-hashbrown = "0.14.5"
+hashbrown = { version = "0.16.0", default-features = false }
 humansize = { version = "2.1.3", features = ["no_alloc"] }
+indexmap = { version = "2.12.0", default-features = false }
 krt = { path = "../lib/krt" }
 macros = { path = "../macros" }
+rustc-hash = { version = "2.1.1", default-features = false }
 talc = { version = "4.4.1", default-features = false }
 thiserror = { version = "2.0.12", default-features = false }
 
