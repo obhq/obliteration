@@ -1,12 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use super::cpu::GdbError;
-use super::{MainCpuError, RamMap, Vmm};
-use gdbstub::target::ext::base::BaseOps;
-use gdbstub::target::ext::breakpoints::{
-    Breakpoints, BreakpointsOps, SwBreakpoint, SwBreakpointOps,
-};
-use gdbstub::target::{TargetError, TargetResult};
-use gdbstub_arch::x86::X86_64_SSE;
+use super::{MainCpuError, RamMap};
 use hv::{Cpu, CpuCommit, CpuStates, Hypervisor};
 use std::num::NonZero;
 use x86_64::{Efer, Rflags};
@@ -71,85 +64,4 @@ pub fn setup_main_cpu<H: Hypervisor>(
     states
         .commit()
         .map_err(|e| MainCpuError::CommitCpuStatesFailed(Box::new(e)))
-}
-
-impl<H: Hypervisor> gdbstub::target::Target for Vmm<H> {
-    type Arch = X86_64_SSE;
-    type Error = GdbError;
-
-    fn base_ops(&mut self) -> BaseOps<'_, Self::Arch, Self::Error> {
-        BaseOps::MultiThread(self)
-    }
-
-    fn support_breakpoints(&mut self) -> Option<BreakpointsOps<'_, Self>> {
-        Some(self)
-    }
-}
-
-impl<H: Hypervisor> Breakpoints for Vmm<H> {
-    fn support_sw_breakpoint(&mut self) -> Option<SwBreakpointOps<'_, Self>> {
-        Some(self)
-    }
-}
-
-impl<H: Hypervisor> SwBreakpoint for Vmm<H> {
-    fn add_sw_breakpoint(&mut self, addr: u64, _kind: usize) -> TargetResult<bool, Self> {
-        let std::collections::hash_map::Entry::Vacant(entry) = self.sw_breakpoints.entry(addr)
-        else {
-            return Ok(false);
-        };
-
-        let cpu = self.cpus.get_mut(&0).unwrap();
-
-        let translated_addr = cpu
-            .debug
-            .as_mut()
-            .unwrap()
-            .translate_address(addr.try_into().unwrap())
-            .ok_or(TargetError::Fatal(GdbError::MainCpuExited))?;
-
-        // Get data.
-        let mut src = self
-            .hv
-            .ram()
-            .lock(translated_addr, BREAKPOINT_SIZE)
-            .ok_or(TargetError::Errno(Self::GDB_EFAULT))?;
-
-        let code_slice = src.as_mut_ptr();
-
-        let code_bytes = std::mem::replace(unsafe { &mut *code_slice }, 0xcc);
-
-        entry.insert([code_bytes]);
-
-        Ok(true)
-    }
-
-    fn remove_sw_breakpoint(&mut self, addr: u64, _kind: usize) -> TargetResult<bool, Self> {
-        let Some(code_bytes) = self.sw_breakpoints.remove(&addr) else {
-            return Ok(false);
-        };
-
-        let cpu = self.cpus.get_mut(&0).unwrap();
-
-        let translated_addr = cpu
-            .debug
-            .as_mut()
-            .unwrap()
-            .translate_address(addr.try_into().unwrap())
-            .ok_or(TargetError::Fatal(GdbError::MainCpuExited))?;
-
-        // Get data.
-        let mut src = self
-            .hv
-            .ram()
-            .lock(translated_addr, BREAKPOINT_SIZE)
-            .ok_or(TargetError::Errno(Self::GDB_EFAULT))?;
-
-        let code_slice =
-            unsafe { std::slice::from_raw_parts_mut(src.as_mut_ptr(), BREAKPOINT_SIZE.get()) };
-
-        code_slice.copy_from_slice(&code_bytes);
-
-        Ok(true)
-    }
 }

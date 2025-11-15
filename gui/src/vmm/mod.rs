@@ -10,11 +10,6 @@ use crate::profile::{CpuModel, Profile};
 use crate::util::channel::{Receiver, Sender};
 use config::{BootEnv, ConsoleType, KernelMap, MapType, PhysMap, Vm};
 use futures::{FutureExt, select_biased};
-use gdbstub::common::{Signal, Tid};
-use gdbstub::target::ext::base::multithread::{
-    MultiThreadBase, MultiThreadResume, MultiThreadResumeOps,
-};
-use gdbstub::target::{TargetError, TargetResult};
 use hv::{
     AllocInfo, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, HvError, Hypervisor,
     RamBuilder, RamBuilderError, RamError,
@@ -27,8 +22,8 @@ use std::io::Write;
 use std::mem::zeroed;
 use std::num::NonZero;
 use std::path::Path;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
 use std::task::Poll;
 use std::thread::JoinHandle;
 use thiserror::Error;
@@ -45,7 +40,6 @@ pub struct Vmm<H> {
     devices: Arc<DeviceTree>,
     cpus: FxHashMap<usize, Cpu>,
     next: usize,
-    breakpoint: Arc<Mutex<()>>,
     sw_breakpoints: HashMap<u64, [u8; BREAKPOINT_SIZE.get()]>,
     logs: Receiver<(ConsoleType, String)>,
     shutdown: Arc<AtomicBool>,
@@ -56,6 +50,7 @@ impl Vmm<()> {
         profile: &Profile,
         kernel: &Path,
         shutdown: &Arc<AtomicBool>,
+        debug: bool,
     ) -> Result<Vmm<impl Hypervisor>, VmmError> {
         // Get program header enumerator.
         let mut img = Kernel::open(kernel).map_err(|e| VmmError::OpenKernel(e))?;
@@ -462,20 +457,20 @@ impl Vmm<()> {
 
         // Setup main CPU arguments.
         let hv = Arc::new(hv);
-        let breakpoint = Arc::new(Mutex::default());
         let (tx, logs) = crate::util::channel::new(const { NonZero::new(100).unwrap() });
         let args = CpuArgs {
             hv: hv.clone(),
             devices: devices.clone(),
-            breakpoint: breakpoint.clone(),
             logs: tx,
             shutdown: shutdown.clone(),
         };
 
         // Setup debug channel.
-        let debug = false;
         let (debug, debugger) = if debug {
-            Some(self::cpu::debug::channel()).unzip()
+            let c1 = std::sync::mpsc::channel();
+            let c2 = futures::channel::mpsc::unbounded();
+
+            (Some((c1.0, c2.1)), Some((c1.1, c2.0)))
         } else {
             None.unzip()
         };
@@ -503,7 +498,6 @@ impl Vmm<()> {
                 },
             )]),
             next: 1,
-            breakpoint,
             sw_breakpoints: HashMap::new(),
             logs,
             shutdown: shutdown.clone(),
@@ -612,27 +606,15 @@ impl<H> Vmm<H> {
             v = exit.fuse() => VmmEvent::Exit(v.0, v.1)
         }
     }
-
-    pub fn lock(&mut self) {
-        for cpu in self.cpus.values_mut() {
-            cpu.debug.as_mut().unwrap().lock();
-        }
-    }
-
-    pub fn release(&mut self) {
-        for cpu in self.cpus.values_mut() {
-            cpu.debug.as_mut().unwrap().release();
-        }
-    }
 }
 
 impl<H: Hypervisor> Vmm<H> {
-    const GDB_ENOENT: u8 = 2;
-    const GDB_EFAULT: u8 = 14;
-
     fn main_cpu(
         args: CpuArgs<H>,
-        debug: Option<self::cpu::debug::Debugger>,
+        debug: Option<(
+            std::sync::mpsc::Receiver<DebugReq>,
+            futures::channel::mpsc::UnboundedSender<DebugRes>,
+        )>,
         entry: usize,
         map: RamMap,
     ) -> Result<bool, CpuError> {
@@ -660,7 +642,10 @@ impl<H: Hypervisor> Vmm<H> {
 
     fn run_cpu<'c>(
         args: &'c CpuArgs<H>,
-        debug: Option<self::cpu::debug::Debugger>,
+        debug: Option<(
+            std::sync::mpsc::Receiver<DebugReq>,
+            futures::channel::mpsc::UnboundedSender<DebugRes>,
+        )>,
         mut cpu: H::Cpu<'c>,
     ) -> Result<bool, CpuError> {
         // Build device contexts for this CPU.
@@ -712,7 +697,10 @@ impl<H: Hypervisor> Vmm<H> {
 
     fn handle_exit<'c, C: hv::Cpu>(
         args: &'c CpuArgs<H>,
-        debugger: Option<&self::cpu::debug::Debugger>,
+        debug: Option<&(
+            std::sync::mpsc::Receiver<DebugReq>,
+            futures::channel::mpsc::UnboundedSender<DebugRes>,
+        )>,
         devices: &mut BTreeMap<usize, self::cpu::Device<'c, C>>,
         exit: C::Exit<'_>,
     ) -> Result<Option<bool>, CpuError> {
@@ -731,11 +719,11 @@ impl<H: Hypervisor> Vmm<H> {
 
         // Check if debug.
         match exit.into_debug() {
-            Ok(mut debug) => {
-                let reason = debug.reason();
+            Ok(mut exit) => {
+                let reason = exit.reason();
 
-                if let Some(debugger) = debugger {
-                    Self::handle_breakpoint(args, debugger, debug.cpu(), Some(reason))
+                if let Some(debug) = debug {
+                    Self::handle_breakpoint(args, debug, exit.cpu(), Some(reason))
                 } else {
                     todo!()
                 }
@@ -768,44 +756,41 @@ impl<H: Hypervisor> Vmm<H> {
 
     fn handle_breakpoint(
         args: &CpuArgs<H>,
-        debug: &self::cpu::debug::Debugger,
+        debug: &(
+            std::sync::mpsc::Receiver<DebugReq>,
+            futures::channel::mpsc::UnboundedSender<DebugRes>,
+        ),
         cpu: &mut impl hv::Cpu,
         stop: Option<DebugEvent>,
     ) -> Result<Option<bool>, CpuError> {
-        // Notify GUI. We need to allow only one CPU to enter the debugger dispatch loop.
-        let lock = args.breakpoint.lock().unwrap();
-
-        todo!();
-
         // Wait for command from debugger thread.
+        let (rx, tx) = debug;
+
         loop {
-            let req = match debug.recv() {
-                Some(v) => v,
-                None => return Ok(Some(true)),
+            let req = match rx.recv() {
+                Ok(v) => v,
+                Err(_) => return Ok(Some(true)),
             };
 
             match req {
-                self::cpu::debug::DebugReq::GetRegs => {
+                DebugReq::GetRegs => {
                     // Get states.
                     let mut states = match cpu.states() {
                         Ok(v) => v,
                         Err(e) => return Err(CpuError::GetStates(Box::new(e))),
                     };
 
-                    debug.send(self::cpu::debug::DebugRes::Regs(Self::get_debug_regs(
-                        &mut states,
-                    )?));
+                    tx.unbounded_send(DebugRes::Regs(Self::get_debug_regs(&mut states)?))
+                        .unwrap();
                 }
-                self::cpu::debug::DebugReq::TranslateAddress(addr) => match cpu.translate(addr) {
-                    Ok(v) => debug.send(self::cpu::debug::DebugRes::TranslatedAddress(v)),
+                DebugReq::TranslateAddress(addr) => match cpu.translate(addr) {
+                    Ok(v) => tx.unbounded_send(DebugRes::TranslatedAddress(v)).unwrap(),
                     Err(e) => return Err(CpuError::TranslateAddr(addr, Box::new(e))),
                 },
-                self::cpu::debug::DebugReq::Lock => {} // We already in a locked loop.
-                self::cpu::debug::DebugReq::Release => break,
+                DebugReq::Lock => {} // We already in a locked loop.
+                DebugReq::Release => break,
             }
         }
-
-        drop(lock);
 
         Ok(None)
     }
@@ -929,125 +914,26 @@ impl<H> Drop for Vmm<H> {
 
 impl<H: Hypervisor> GdbHandler for Vmm<H> {}
 
-impl<H: Hypervisor> MultiThreadBase for Vmm<H> {
-    fn read_registers(&mut self, regs: &mut GdbRegs, tid: Tid) -> TargetResult<(), Self> {
-        let cpu = self
-            .cpus
-            .get_mut(&(tid.get() - 1))
-            .ok_or(TargetError::Errno(Self::GDB_ENOENT))?;
-
-        *regs = cpu
-            .debug
-            .as_mut()
-            .unwrap()
-            .get_regs()
-            .ok_or(TargetError::Errno(Self::GDB_ENOENT))?; // The CPU thread just stopped.
-
-        Ok(())
-    }
-
-    fn write_registers(&mut self, regs: &GdbRegs, tid: Tid) -> TargetResult<(), Self> {
-        todo!()
-    }
-
-    fn read_addrs(
-        &mut self,
-        start_addr: u64,
-        data: &mut [u8],
-        tid: Tid,
-    ) -> TargetResult<usize, Self> {
-        let Some(len) = NonZero::new(data.len()) else {
-            return Ok(0);
-        };
-
-        // Translate virtual address to physical address.
-        let cpu = self
-            .cpus
-            .get_mut(&(tid.get() - 1))
-            .ok_or(TargetError::Errno(Self::GDB_ENOENT))?;
-
-        let addr = cpu
-            .debug
-            .as_mut()
-            .unwrap()
-            .translate_address(start_addr.try_into().unwrap())
-            .ok_or(TargetError::Errno(Self::GDB_ENOENT))?;
-
-        // Get data.
-        let src = self
-            .hv
-            .ram()
-            .lock(addr, len)
-            .ok_or(TargetError::Errno(Self::GDB_EFAULT))?;
-
-        data.copy_from_slice(unsafe { std::slice::from_raw_parts(src.as_ptr(), src.len().get()) });
-
-        Ok(len.get())
-    }
-
-    fn write_addrs(&mut self, start_addr: u64, data: &[u8], tid: Tid) -> TargetResult<(), Self> {
-        todo!()
-    }
-
-    fn list_active_threads(
-        &mut self,
-        thread_is_active: &mut dyn FnMut(Tid),
-    ) -> Result<(), Self::Error> {
-        for id in (0..self.cpus.len()).map(|v| NonZero::new(v + 1).unwrap()) {
-            thread_is_active(id);
-        }
-
-        Ok(())
-    }
-
-    #[inline(always)]
-    fn support_resume(&mut self) -> Option<MultiThreadResumeOps<'_, Self>> {
-        Some(self)
-    }
-}
-
-impl<H: Hypervisor> MultiThreadResume for Vmm<H> {
-    fn resume(&mut self) -> Result<(), Self::Error> {
-        self.release();
-
-        Ok(())
-    }
-
-    fn clear_resume_actions(&mut self) -> Result<(), Self::Error> {
-        Ok(())
-    }
-
-    fn set_resume_action_continue(
-        &mut self,
-        tid: Tid,
-        signal: Option<Signal>,
-    ) -> Result<(), Self::Error> {
-        if let Some(signal) = signal {
-            todo!("set_resume_action_continue with signal {signal:?}");
-        }
-
-        Ok(())
-    }
-}
-
 /// Contains objects to control a CPU from outside.
 struct Cpu {
     thread: JoinHandle<Result<bool, CpuError>>,
     exiting: futures::channel::oneshot::Receiver<()>,
-    debug: Option<self::cpu::debug::Debuggee>,
+    debug: Option<(
+        std::sync::mpsc::Sender<DebugReq>,
+        futures::channel::mpsc::UnboundedReceiver<DebugRes>,
+    )>,
 }
 
 /// Encapsulates arguments for a function to run a CPU.
 struct CpuArgs<H> {
     hv: Arc<H>,
     devices: Arc<DeviceTree>,
-    breakpoint: Arc<Mutex<()>>,
     logs: Sender<(ConsoleType, String)>,
     shutdown: Arc<AtomicBool>,
 }
 
 /// Finalized layout of the RAM before execute the kernel entry point.
-pub struct RamMap {
+struct RamMap {
     page_table: usize,
     kern_paddr: usize,
     kern_vaddr: usize,
@@ -1063,6 +949,22 @@ pub struct RamMap {
 pub enum VmmEvent {
     Exit(usize, Result<bool, CpuError>),
     Log(ConsoleType, String),
+}
+
+/// Debug request from a debugger to a debuggee.
+#[derive(Debug)]
+pub enum DebugReq {
+    GetRegs,
+    Lock,
+    Release,
+    TranslateAddress(usize),
+}
+
+/// Debug response from a debuggee to a debugger.
+#[derive(Debug)]
+pub enum DebugRes {
+    Regs(GdbRegs),
+    TranslatedAddress(usize),
 }
 
 /// Represents an error when [`Vmm::new()`] fails.
