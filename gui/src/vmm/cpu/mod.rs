@@ -5,8 +5,6 @@ use std::collections::BTreeMap;
 use std::num::NonZero;
 use thiserror::Error;
 
-pub mod debug;
-
 /// Contains instantiated device context for a CPU.
 pub struct Device<'a, C: Cpu> {
     pub context: Box<dyn DeviceContext<C> + 'a>,

@@ -605,6 +605,51 @@ impl MainProgram {
 
         Ok(Some(client))
     }
+
+    async fn dispatch_gdb<H: Hypervisor>(
+        res: Result<usize, std::io::Error>,
+        gdb: &mut GdbSession,
+        buf: &[u8],
+        vmm: &mut Vmm<H>,
+        con: &mut (dyn AsyncWrite + Unpin),
+    ) -> Result<bool, ProgramError> {
+        // Check status.
+        let len = res.map_err(ProgramError::ReadDebuggerSocket)?;
+
+        if len == 0 {
+            return Ok(false);
+        }
+
+        // Dispatch the requests.
+        let mut dis = gdb.dispatch_client(&buf[..len], vmm);
+
+        while let Some(res) = dis.pump().map_err(ProgramError::DispatchDebugger)? {
+            let res = res.as_ref();
+
+            if !res.is_empty() {
+                con.write_all(res)
+                    .await
+                    .map_err(ProgramError::WriteDebuggerSocket)?;
+            }
+        }
+
+        Ok(true)
+    }
+
+    async fn dispatch_vmm(ev: VmmEvent, logs: &mut LogWriter) -> Result<bool, ProgramError> {
+        match ev {
+            VmmEvent::Exit(id, r) => {
+                if !r.map_err(ProgramError::CpuThread)? {
+                    return Err(ProgramError::CpuPanic(id, logs.path().into()));
+                } else if id == 0 {
+                    return Ok(false);
+                }
+            }
+            VmmEvent::Log(t, m) => logs.write(t, m),
+        }
+
+        Ok(true)
+    }
 }
 
 impl App for MainProgram {
@@ -782,7 +827,7 @@ impl App for MainProgram {
         let mut gdb_buf = [0; 1024];
 
         // Start VMM.
-        let mut vmm = match Vmm::new(&profile, &kernel, &shutdown) {
+        let mut vmm = match Vmm::new(&profile, &kernel, &shutdown, debug.is_some()) {
             Ok(v) => v,
             Err(e) => return Err(ProgramError::StartVmm(kernel, e)),
         };
@@ -791,9 +836,9 @@ impl App for MainProgram {
             // Wait for event.
             let r = select_biased! {
                 v = gdb_read.read(&mut gdb_buf).fuse() => {
-                    dispatch_gdb(v, &mut gdb, &gdb_buf, &mut vmm, &mut gdb_write).await?
+                    Self::dispatch_gdb(v, &mut gdb, &gdb_buf, &mut vmm, &mut gdb_write).await?
                 }
-                v = vmm.recv().fuse() => dispatch_vmm(v, &mut logs).await?,
+                v = vmm.recv().fuse() => Self::dispatch_vmm(v, &mut logs).await?,
             };
 
             if !r {
@@ -803,51 +848,6 @@ impl App for MainProgram {
 
         Ok(())
     }
-}
-
-async fn dispatch_gdb<H: Hypervisor>(
-    res: Result<usize, std::io::Error>,
-    gdb: &mut GdbSession,
-    buf: &[u8],
-    vmm: &mut Vmm<H>,
-    con: &mut (dyn AsyncWrite + Unpin),
-) -> Result<bool, ProgramError> {
-    // Check status.
-    let len = res.map_err(ProgramError::ReadDebuggerSocket)?;
-
-    if len == 0 {
-        return Ok(false);
-    }
-
-    // Dispatch the requests.
-    let mut dis = gdb.dispatch_client(&buf[..len], vmm);
-
-    while let Some(res) = dis.pump().map_err(ProgramError::DispatchDebugger)? {
-        let res = res.as_ref();
-
-        if !res.is_empty() {
-            con.write_all(res)
-                .await
-                .map_err(ProgramError::WriteDebuggerSocket)?;
-        }
-    }
-
-    Ok(true)
-}
-
-async fn dispatch_vmm(ev: VmmEvent, logs: &mut LogWriter) -> Result<bool, ProgramError> {
-    match ev {
-        VmmEvent::Exit(id, r) => {
-            if !r.map_err(ProgramError::CpuThread)? {
-                return Err(ProgramError::CpuPanic(id, logs.path().into()));
-            } else if id == 0 {
-                return Ok(false);
-            }
-        }
-        VmmEvent::Log(t, m) => logs.write(t, m),
-    }
-
-    Ok(true)
 }
 
 /// Program arguments parsed from command line.
