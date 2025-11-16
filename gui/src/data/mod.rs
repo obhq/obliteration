@@ -56,10 +56,10 @@ impl DataMgr {
     }
 
     fn create_dir(path: &Path) -> Result<(), DataError> {
-        if let Err(e) = std::fs::create_dir(path) {
-            if e.kind() != ErrorKind::AlreadyExists {
-                return Err(DataError::CreateDirectory(path.to_owned(), e));
-            }
+        if let Err(e) = std::fs::create_dir(path)
+            && e.kind() != ErrorKind::AlreadyExists
+        {
+            return Err(DataError::CreateDirectory(path.to_owned(), e));
         }
 
         Ok(())

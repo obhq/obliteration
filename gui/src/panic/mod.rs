@@ -78,13 +78,7 @@ fn panic_hook(i: &PanicHookInfo, ph: &Mutex<Option<HandlerProcess>>) {
     let mut stdin = ph.0.stdin.take().unwrap();
     let loc = i.location().unwrap();
     let info = PanicInfo {
-        message: if let Some(&s) = i.payload().downcast_ref::<&str>() {
-            s.into()
-        } else if let Some(s) = i.payload().downcast_ref::<String>() {
-            s.into()
-        } else {
-            "unknown panic payload".into()
-        },
+        message: Cow::Borrowed(i.payload_as_str().unwrap_or("unknown panic payload")),
         file: loc.file().into(),
         line: loc.line(),
     };

@@ -61,7 +61,7 @@ impl<'a, H: GdbHandler> GdbDispatcher for ClientDispatcher<'a, H> {
         let data = <[u8; 2]>::try_from(&cmd[(cmd.len() - 2)..]).unwrap();
         let mut checksum = 0;
 
-        if let Err(e) = hex::decode_to_slice(&data, std::slice::from_mut(&mut checksum)) {
+        if let Err(e) = hex::decode_to_slice(data, std::slice::from_mut(&mut checksum)) {
             match state.no_ack() {
                 Some(true) => return Err(GdbError::DecodeChecksum(data, e)),
                 Some(false) => return Err(GdbError::MissingAck),

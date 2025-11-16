@@ -19,41 +19,43 @@ use std::sync::atomic::AtomicBool;
 use thiserror::Error;
 use winit::window::WindowAttributes;
 
+#[allow(clippy::module_inception)]
 mod engine;
 mod window;
 
 pub fn builder(settings: &Settings) -> Result<impl GraphicsBuilder, GraphicsError> {
     // Get required extensions for window.
-    let mut exts = vec![c"VK_KHR_surface".as_ptr()];
-
-    match wae::raw_display_handle() {
+    let window_ext = match wae::raw_display_handle() {
         RawDisplayHandle::UiKit(_) | RawDisplayHandle::AppKit(_) | RawDisplayHandle::Web(_) => {
             unreachable!()
         }
-        RawDisplayHandle::Xlib(_) => exts.push(c"VK_KHR_xlib_surface".as_ptr()),
-        RawDisplayHandle::Xcb(_) => exts.push(c"VK_KHR_xcb_surface".as_ptr()),
-        RawDisplayHandle::Wayland(_) => exts.push(c"VK_KHR_wayland_surface".as_ptr()),
-        RawDisplayHandle::Windows(_) => exts.push(c"VK_KHR_win32_surface".as_ptr()),
+        RawDisplayHandle::Xlib(_) => c"VK_KHR_xlib_surface",
+        RawDisplayHandle::Xcb(_) => c"VK_KHR_xcb_surface",
+        RawDisplayHandle::Wayland(_) => c"VK_KHR_wayland_surface",
+        RawDisplayHandle::Windows(_) => c"VK_KHR_win32_surface",
         _ => todo!(),
-    }
+    };
+
+    let exts = [c"VK_KHR_surface".as_ptr(), window_ext.as_ptr()];
 
     // Setup application info.
-    let mut app = ApplicationInfo::default();
-
-    app.p_application_name = c"Obliteration".as_ptr();
-    app.api_version = API_VERSION_1_3;
+    let app = ApplicationInfo {
+        p_application_name: c"Obliteration".as_ptr(),
+        api_version: API_VERSION_1_3,
+        ..Default::default()
+    };
 
     // Setup validation layers.
-    let mut layers = Vec::new();
-
-    if settings.graphics_debug_layer() {
-        layers.push(c"VK_LAYER_KHRONOS_validation".as_ptr());
-    }
+    let layers: &[*const core::ffi::c_char] = if settings.graphics_debug_layer() {
+        &[c"VK_LAYER_KHRONOS_validation".as_ptr()]
+    } else {
+        &[]
+    };
 
     // Setup VkInstanceCreateInfo.
     let info = InstanceCreateInfo::builder()
         .application_info(&app)
-        .enabled_layer_names(&layers)
+        .enabled_layer_names(layers)
         .enabled_extension_names(&exts);
 
     // Create Vulkan instance.

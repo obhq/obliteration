@@ -310,10 +310,10 @@ impl WindowAdapter for SlintWindow {
 
             self.winit.set_visible(true);
 
-            let is_wayland = match self.winit.display_handle().unwrap().as_raw() {
-                RawDisplayHandle::Wayland(_) => true,
-                _ => false,
-            };
+            let is_wayland = matches!(
+                self.winit.display_handle().unwrap().as_raw(),
+                RawDisplayHandle::Wayland(_)
+            );
 
             // Render initial frame on macOS. Without this the modal will show a blank window until
             // show animation is complete. On Wayland there are some problems when another window is

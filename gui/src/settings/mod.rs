@@ -40,8 +40,7 @@ impl Settings {
     }
 
     pub fn save(&self, path: impl AsRef<Path>) -> Result<(), SettingsError> {
-        let path = path.as_ref();
-        let mut file = match File::create(&path) {
+        let mut file = match File::create(path) {
             Ok(v) => v,
             Err(e) => return Err(SettingsError::CreateFile(e)),
         };

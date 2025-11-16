@@ -257,7 +257,7 @@ impl<G: GraphicsBuilder> ProfileModel<G> {
                 .unwrap(),
         );
         dst.set_idps_sub_product(slint::format!("{:#x}", p.kernel_config.idps.prodsub));
-        dst.set_idps_serial(hex::encode(&p.kernel_config.idps.serial).into());
+        dst.set_idps_serial(hex::encode(p.kernel_config.idps.serial).into());
 
         self.environments.reset(p);
         self.selected.set(Some(row));

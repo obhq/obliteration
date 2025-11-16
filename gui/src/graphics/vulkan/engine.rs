@@ -31,21 +31,24 @@ impl Vulkan {
             .position(|p| p.queue_flags.contains(QueueFlags::GRAPHICS))
             .unwrap(); // We required all selectable devices to support graphics operations.
 
-        let mut queues = DeviceQueueCreateInfo::default();
         let priorities = [1.0];
 
-        queues.queue_family_index = queue.try_into().unwrap();
-        queues.queue_count = 1;
-        queues.p_queue_priorities = priorities.as_ptr();
+        let queue_create_info = DeviceQueueCreateInfo {
+            queue_family_index: queue.try_into().unwrap(),
+            queue_count: 1,
+            p_queue_priorities: priorities.as_ptr(),
+            ..Default::default()
+        };
 
         // Setup VkDeviceCreateInfo.
-        let mut device = DeviceCreateInfo::default();
-
-        device.p_queue_create_infos = &queues;
-        device.queue_create_info_count = 1;
+        let device_create_info = DeviceCreateInfo {
+            p_queue_create_infos: &queue_create_info,
+            queue_create_info_count: 1,
+            ..Default::default()
+        };
 
         // Create logical device.
-        let device = unsafe { instance.create_device(physical, &device, None) }
+        let device = unsafe { instance.create_device(physical, &device_create_info, None) }
             .map_err(GraphicsError::CreateDevice)?;
 
         Ok(Self { device, builder: b })
