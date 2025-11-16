@@ -4,8 +4,9 @@ use macros::bitflag;
 
 /// Implementation of `vm_page` structure.
 pub struct VmPage {
+    index: usize,
     vm: usize,
-    pool: usize,         // pool
+    pool: Mutex<usize>,  // pool
     addr: u64,           // phys_addr
     order: Mutex<usize>, // order
     flags: PageFlags,    // flags
@@ -16,10 +17,11 @@ pub struct VmPage {
 impl VmPage {
     pub const FREE_ORDER: usize = 13; // VM_NFREEORDER
 
-    pub fn new(vm: usize, pool: usize, addr: u64, segment: usize) -> Self {
+    pub fn new(index: usize, vm: usize, pool: usize, addr: u64, segment: usize) -> Self {
         Self {
+            index,
             vm,
-            pool,
+            pool: Mutex::new(pool),
             addr,
             order: Mutex::new(Self::FREE_ORDER),
             flags: PageFlags::zeroed(),
@@ -28,12 +30,18 @@ impl VmPage {
         }
     }
 
+    pub fn index(&self) -> usize {
+        self.index
+    }
+
     pub fn vm(&self) -> usize {
         self.vm
     }
 
-    pub fn pool(&self) -> usize {
-        self.pool
+    /// This must be locked **after** [Self::order()] and the lock must be held while putting this
+    /// page to free queues.
+    pub fn pool(&self) -> &Mutex<usize> {
+        &self.pool
     }
 
     pub fn addr(&self) -> u64 {

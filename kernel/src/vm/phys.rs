@@ -103,14 +103,20 @@ impl PhysAllocator {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x160520|
-    pub fn alloc_page(&self, vm: usize, pool: usize, order: usize) -> Option<VmPage> {
+    pub fn alloc_page(
+        &self,
+        pages: &[Arc<VmPage>],
+        vm: usize,
+        pool: usize,
+        order: usize,
+    ) -> Option<Arc<VmPage>> {
         // TODO: There is an increasement on unknown variable here.
         let mut flind = 0;
 
         loop {
-            let l = self.lookup_lists[flind].lock();
+            let mut l = self.lookup_lists[flind].lock();
 
-            if let Some(v) = self.alloc_freelist(&l[vm], pool, order) {
+            if let Some(v) = self.alloc_freelist(pages, &mut l[vm], pool, order) {
                 return Some(v);
             }
 
@@ -132,10 +138,11 @@ impl PhysAllocator {
     /// |PS4 11.00|0x1605D0|
     fn alloc_freelist(
         &self,
-        list: &[[IndexSet<Arc<VmPage>, FxBuildHasher>; 13]; 3],
+        pages: &[Arc<VmPage>],
+        list: &mut [[IndexSet<Arc<VmPage>, FxBuildHasher>; 13]; 3],
         pool: usize,
         order: usize,
-    ) -> Option<VmPage> {
+    ) -> Option<Arc<VmPage>> {
         // Beware for deadlock here since we currently own a lock to free queue.
         if order >= 13 {
             return None;
@@ -161,26 +168,35 @@ impl PhysAllocator {
         let mut next = 11;
 
         loop {
-            let mut found = None;
+            for f in list.iter_mut() {
+                if let Some(p) = f[next + 1].first().cloned() {
+                    let mut po = p.order().lock();
 
-            for f in list {
-                found = f[next + 1].first();
+                    f[next + 1].shift_remove(&p);
+                    *po = VmPage::FREE_ORDER;
 
-                if found.is_some() {
-                    break;
-                }
-            }
+                    // Set pool.
+                    let end = &pages[p.index() + (1 << (next + 1))];
 
-            match found {
-                Some(_) => todo!(),
-                None => {
-                    if next < order || next == 0 {
-                        break;
+                    for p in &pages[p.index()..end.index()] {
+                        *p.pool().lock() = pool;
                     }
 
-                    next -= 1;
+                    drop(po);
+
+                    if (next + 1) <= order {
+                        return Some(p);
+                    }
+
+                    todo!()
                 }
             }
+
+            if next < order || next == 0 {
+                break;
+            }
+
+            next -= 1;
         }
 
         None
