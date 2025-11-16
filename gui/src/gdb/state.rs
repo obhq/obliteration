@@ -32,35 +32,37 @@ impl SessionState {
         };
 
         for feat in req.split(|&b| b == b';') {
-            if let Some(_) = feat.strip_prefix(b"xmlRegisters=") {
-                res.extend_from_slice(b";xmlRegisters=");
-                res.extend_from_slice(if cfg!(target_arch = "aarch64") {
-                    b"arm"
-                } else if cfg!(target_arch = "x86_64") {
-                    b"i386"
-                } else {
-                    todo!()
-                });
-            } else if let Some(_) = feat.strip_prefix(b"multiprocess") {
-                // TODO: Maybe we can use this feature to debug both kernel and userspace process at
-                // the same time?
-            } else if let Some(_) = feat.strip_prefix(b"fork-events") {
+            match_bytes! { feat,
                 // TODO: This maybe useful when we support debugging both kernel and userspace at
                 // the same time.
-            } else if let Some(_) = feat.strip_prefix(b"vfork-events") {
+                ["fork-events", _data] => {},
+                // TODO: Implement this.
+                ["hwbreak", _data] => {},
+                // TODO: Maybe we can use this feature to debug both kernel and userspace process at
+                // the same time?
+                ["multiprocess", _data] => {},
+                ["swbreak", v] => {
+                    if v == b"+" {
+                        if cfg!(target_arch = "aarch64") || cfg!(target_arch = "x86_64") {
+                            res.extend_from_slice(b";swbreak+");
+                        } else {
+                            todo!()
+                        }
+                    }
+                },
                 // TODO: Same here.
-            } else if let Some(v) = feat.strip_prefix(b"swbreak") {
-                if v == b"+" {
-                    if cfg!(target_arch = "aarch64") || cfg!(target_arch = "x86_64") {
-                        res.extend_from_slice(b";swbreak+");
+                ["vfork-events", _data] => {},
+                ["xmlRegisters=", _data] => {
+                    res.extend_from_slice(b";xmlRegisters=");
+                    res.extend_from_slice(if cfg!(target_arch = "aarch64") {
+                        b"arm"
+                    } else if cfg!(target_arch = "x86_64") {
+                        b"i386"
                     } else {
                         todo!()
-                    }
-                }
-            } else if let Some(_) = feat.strip_prefix(b"hwbreak") {
-                // TODO: Implement this.
-            } else {
-                todo!("{}", String::from_utf8_lossy(feat));
+                    });
+                },
+                _ => todo!("{}", String::from_utf8_lossy(feat)),
             }
         }
     }

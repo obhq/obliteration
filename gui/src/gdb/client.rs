@@ -100,33 +100,27 @@ impl<'a, H: GdbHandler> GdbDispatcher for ClientDispatcher<'a, H> {
         // Execute command.
         let off = res.len();
 
-        if data == b"QStartNoAckMode" {
-            state.parse_start_no_ack_mode(res);
-        } else if let Some(data) = data.strip_prefix(b"qSupported") {
-            // It is unclear if qSupported can sent from GDB without additional payload.
-            state.parse_supported(data, res);
-        } else if data == b"QThreadSuffixSupported" {
-            // https://lldb.llvm.org/resources/lldbgdbremote.html#qthreadsuffixsupported
-            state.parse_thread_suffix_supported(res);
-        } else if data == b"QListThreadsInStopReply" {
-            // https://lldb.llvm.org/resources/lldbgdbremote.html#qlistthreadsinstopreply
-            state.parse_enable_threads_in_stop_reply(res);
-        } else if data == b"qHostInfo" {
-            // https://lldb.llvm.org/resources/lldbgdbremote.html#qhostinfo
-            state.parse_host_info(res);
-        } else if data == b"vCont?" {
-            state.parse_vcont(res);
-        } else if data == b"qVAttachOrWaitSupported" {
-            // TODO: https://github.com/obhq/obliteration/issues/1398
-        } else if data == b"QEnableErrorStrings" {
+        match_bytes! { data,
             // I think this does not worth for additional complexity on our side so we don't support
             // this. See https://lldb.llvm.org/resources/lldbgdbremote.html#qenableerrorstrings for
             // more details.
-        } else if data == b"qProcessInfo" {
+            "QEnableErrorStrings" => {},
+            // https://lldb.llvm.org/resources/lldbgdbremote.html#qhostinfo
+            "qHostInfo" => state.parse_host_info(res),
+            // https://lldb.llvm.org/resources/lldbgdbremote.html#qlistthreadsinstopreply
+            "QListThreadsInStopReply" => state.parse_enable_threads_in_stop_reply(res),
             // This does not useful to us. See
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qprocessinfo for more details.
-        } else {
-            todo!("{}", String::from_utf8_lossy(data));
+            "qProcessInfo" => {},
+            "QStartNoAckMode" => state.parse_start_no_ack_mode(res),
+            // It is unclear if qSupported can sent from GDB without additional payload.
+            ["qSupported", rest] => state.parse_supported(rest, res),
+            // https://lldb.llvm.org/resources/lldbgdbremote.html#qthreadsuffixsupported
+            "QThreadSuffixSupported" => state.parse_thread_suffix_supported(res),
+            // TODO: https://github.com/obhq/obliteration/issues/1398
+            "qVAttachOrWaitSupported" => {},
+            "vCont?" => state.parse_vcont(res),
+            _ => todo!("{}", String::from_utf8_lossy(data)),
         }
 
         // Push checksum.
