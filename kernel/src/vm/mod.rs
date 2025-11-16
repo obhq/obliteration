@@ -69,7 +69,9 @@ impl Vm {
                 if blocked.is_some() {
                     // TODO: We probably want to use None for segment index here. The problem is
                     // Orbis use zero here.
-                    pages.push(Arc::new(VmPage::new(0, 0, addr, 0)));
+                    let pi = pages.len();
+
+                    pages.push(Arc::new(VmPage::new(pi, 0, 0, addr, 0)));
 
                     todo!();
                 }
@@ -94,8 +96,9 @@ impl Vm {
                 };
 
                 // Add to list.
+                let pi = pages.len();
                 let seg = phys.segment_index(addr).unwrap();
-                let page = Arc::new(VmPage::new(vm, 0, addr, seg));
+                let page = Arc::new(VmPage::new(pi, vm, 0, addr, seg));
 
                 if free {
                     free_pages.push(page.clone());
@@ -208,7 +211,8 @@ impl Vm {
                     return None;
                 }
 
-                self.phys.alloc_page(vm, obj.is_none().into(), 0)
+                self.phys
+                    .alloc_page(&self.pages, vm, obj.is_none().into(), 0)
             }
         };
 
@@ -221,6 +225,8 @@ impl Vm {
         }
     }
 
+    /// `page` must not have active lock on any fields.
+    ///
     /// See `vm_phys_free_pages` on the Orbis for a reference.
     ///
     /// # Reference offsets
@@ -240,10 +246,12 @@ impl Vm {
 
         // TODO: What is this?
         let mut queues = seg.free_queues.lock();
+        let mut po = page.order().lock();
+        let mut pp = page.pool().lock();
 
         while order < 12 {
             let start = seg.start;
-            let buddy_pa = pa ^ (1u64 << (order + PAGE_SHIFT));
+            let buddy_pa = pa ^ (1u64 << (order + PAGE_SHIFT)); // TODO: What is this?
 
             if buddy_pa < start || buddy_pa >= seg.end {
                 break;
@@ -252,20 +260,20 @@ impl Vm {
             // Get buddy page index.
             let i = (buddy_pa - start) >> PAGE_SHIFT;
             let buddy = &self.pages[seg.first_page + usize::try_from(i).unwrap()];
-            let mut buddy_order = buddy.order().lock();
+            let mut bo = buddy.order().lock();
 
-            if *buddy_order != order || buddy.vm() != vm || ((page.unk1() ^ buddy.unk1()) & 1) != 0
-            {
+            if *bo != order || buddy.vm() != vm || ((page.unk1() ^ buddy.unk1()) & 1) != 0 {
                 break;
             }
 
             // TODO: Check if we really need to preserve page order here. If not we need to replace
             // IndexMap with HashMap otherwise we need to find a better solution than IndexMap.
-            queues[vm][buddy.pool()][*buddy_order].shift_remove(buddy);
+            let bp = buddy.pool().lock();
 
-            *buddy_order = VmPage::FREE_ORDER;
+            queues[vm][*bp][*bo].shift_remove(buddy);
+            *bo = VmPage::FREE_ORDER;
 
-            if buddy.pool() != page.pool() {
+            if *bp != *pp {
                 todo!()
             }
 
@@ -273,13 +281,13 @@ impl Vm {
             pa &= !((1u64 << (order + PAGE_SHIFT)) - 1);
             page =
                 &self.pages[seg.first_page + usize::try_from((pa - start) >> PAGE_SHIFT).unwrap()];
+            po = page.order().lock();
+            pp = page.pool().lock();
         }
 
         // Add to free queue.
-        let mut page_order = page.order().lock();
-
-        *page_order = order;
-        queues[vm][page.pool()][order].insert(page.clone());
+        *po = order;
+        queues[vm][*pp][order].insert(page.clone());
     }
 
     /// See `kick_pagedaemons` on the Orbis for a reference.
