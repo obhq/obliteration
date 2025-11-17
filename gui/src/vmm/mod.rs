@@ -53,10 +53,10 @@ impl Vmm<()> {
         debug: bool,
     ) -> Result<Vmm<impl Hypervisor>, VmmError> {
         // Get program header enumerator.
-        let mut img = Kernel::open(kernel).map_err(|e| VmmError::OpenKernel(e))?;
+        let mut img = Kernel::open(kernel).map_err(VmmError::OpenKernel)?;
         let hdrs = img
             .program_headers()
-            .map_err(|e| VmmError::EnumerateProgramHeaders(e))?;
+            .map_err(VmmError::EnumerateProgramHeaders)?;
 
         // Parse program headers.
         let mut segments = Vec::new();
@@ -303,7 +303,7 @@ impl Vmm<()> {
             .unwrap();
 
         // TODO: Allocate guard pages.
-        let stack_len = (1024usize * 1024 * 1)
+        let stack_len = (1024usize * 1024)
             .next_multiple_of(block_size.get())
             .try_into()
             .unwrap();
@@ -513,7 +513,7 @@ impl Vmm<()> {
         let p_vaddr = dynamic.p_vaddr;
         let p_memsz = dynamic.p_memsz;
 
-        if p_memsz % 16 != 0 {
+        if !p_memsz.is_multiple_of(16) {
             return Err(VmmError::InvalidDynamicLinking);
         }
 
@@ -630,10 +630,10 @@ impl<H: Hypervisor> Vmm<H> {
         }
 
         // Wait for debugger.
-        if let Some(debug) = &debug {
-            if let Some(v) = Self::handle_breakpoint(&args, debug, &mut cpu, None)? {
-                return Ok(v);
-            }
+        if let Some(debug) = &debug
+            && let Some(v) = Self::handle_breakpoint(&args, debug, &mut cpu, None)?
+        {
+            return Ok(v);
         }
 
         // Run.

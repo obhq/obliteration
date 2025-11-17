@@ -117,7 +117,7 @@ impl MainProgram {
         win.on_about({
             let win = win.as_weak();
 
-            move || spawn_handler(&win, |w| Self::about(w))
+            move || spawn_handler(&win, Self::about)
         });
 
         win.on_profile_selected({
@@ -777,7 +777,7 @@ impl App for MainProgram {
             match r.exit {
                 ExitAction::Run => (r.graphics, r.profile, None),
                 ExitAction::Debug => {
-                    let addr = r.profile.debug_addr.clone();
+                    let addr = r.profile.debug_addr;
 
                     (r.graphics, r.profile, Some(addr))
                 }

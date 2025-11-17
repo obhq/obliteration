@@ -58,25 +58,25 @@ pub async fn run_setup() -> Result<Option<DataMgr>, SetupError> {
     win.on_browse_data_root({
         let win = win.as_weak();
 
-        move || spawn_handler(&win, |w| browse_data_root(w))
+        move || spawn_handler(&win, browse_data_root)
     });
 
     win.on_set_data_root({
         let win = win.as_weak();
 
-        move || spawn_handler(&win, |w| set_data_root(w))
+        move || spawn_handler(&win, set_data_root)
     });
 
     win.on_browse_firmware({
         let win = win.as_weak();
 
-        move || spawn_handler(&win, |w| browse_firmware(w))
+        move || spawn_handler(&win, browse_firmware)
     });
 
     win.on_install_firmware({
         let win = win.as_weak();
 
-        move || spawn_handler(&win, |w| install_firmware(w))
+        move || spawn_handler(&win, install_firmware)
     });
 
     win.on_finish({

@@ -22,7 +22,7 @@ impl<T: DesktopWindow> DesktopExt for T {
         match back.protocol_specific() {
             Some(ProtocolSpecific::Wayland(_)) => {} // Wayland doesn't allow windows to position themselves.
             Some(ProtocolSpecific::X11(x11)) => unsafe {
-                self::x11::set_center(&x11, self)?;
+                self::x11::set_center(x11, self)?;
             },
             None => unimplemented!(),
         };
@@ -30,7 +30,7 @@ impl<T: DesktopWindow> DesktopExt for T {
         Ok(())
     }
 
-    fn set_modal<P>(self, parent: &P) -> Result<Modal<Self, P>, PlatformError>
+    fn set_modal<P>(self, parent: &P) -> Result<Modal<'_, Self, P>, PlatformError>
     where
         P: DesktopWindow,
         Self: Sized,
@@ -42,7 +42,7 @@ impl<T: DesktopWindow> DesktopExt for T {
                 self::wayland::set_modal(wayland, &self, parent).map(Some)?
             },
             Some(ProtocolSpecific::X11(x11)) => unsafe {
-                self::x11::set_modal(&x11, &self, parent)?;
+                self::x11::set_modal(x11, &self, parent)?;
 
                 None
             },

@@ -68,7 +68,7 @@ impl Kernel {
         self.e_entry
     }
 
-    pub fn program_headers(&mut self) -> Result<ProgramHeaders, Error> {
+    pub fn program_headers(&mut self) -> Result<ProgramHeaders<'_>, Error> {
         let off = self.file.seek(SeekFrom::Start(self.e_phoff))?;
 
         if off != self.e_phoff {

@@ -109,10 +109,10 @@ impl SlintBackend {
             let b = Rc::downgrade(&b);
 
             wae::spawn(async move {
-                if let Some(b) = b.upgrade() {
-                    if let Some(ProtocolSpecific::Wayland(wayland)) = &b.protocol_specific {
-                        wayland.run().await;
-                    }
+                if let Some(b) = b.upgrade()
+                    && let Some(ProtocolSpecific::Wayland(wayland)) = &b.protocol_specific
+                {
+                    wayland.run().await
                 }
             });
         }
