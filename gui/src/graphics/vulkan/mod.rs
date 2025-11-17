@@ -19,6 +19,7 @@ use std::sync::atomic::AtomicBool;
 use thiserror::Error;
 use winit::window::WindowAttributes;
 
+// Clippy lints this because the module is named the same as the parent module
 #[allow(clippy::module_inception)]
 mod engine;
 mod window;

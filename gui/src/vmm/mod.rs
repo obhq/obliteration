@@ -303,8 +303,7 @@ impl Vmm<()> {
             .unwrap();
 
         // TODO: Allocate guard pages.
-        #[allow(clippy::identity_op)]
-        let stack_len = (1024usize * 1024 * 1)
+        let stack_len = (1024usize * 1024)
             .next_multiple_of(block_size.get())
             .try_into()
             .unwrap();
