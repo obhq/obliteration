@@ -101,12 +101,24 @@ impl<'a, H: GdbHandler> GdbDispatcher for ClientDispatcher<'a, H> {
         let off = res.len();
 
         match_bytes! { data,
+            // Queries the reason the target halted. Defined on the Packets page (search for "'?'"
+            // near the top of the packet list).
+            // See https://sourceware.org/gdb/current/onlinedocs/gdb.html/Packets.html
+            "?" => state.parse_stop_reason(res),
             // I think this does not worth for additional complexity on our side so we don't support
             // this. See https://lldb.llvm.org/resources/lldbgdbremote.html#qenableerrorstrings for
             // more details.
             "QEnableErrorStrings" => {},
+            // https://sourceware.org/gdb/onlinedocs/gdb/General-Query-Packets.html#index-qC-packet
+            "qC" => state.parse_current_thread(res),
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qhostinfo
             "qHostInfo" => state.parse_host_info(res),
+            // https://sourceware.org/gdb/onlinedocs/gdb/General-Query-Packets.html#index-qfThreadInfo-packet
+            "qfThreadInfo" => state.parse_first_thread_info(res),
+            // https://lldb.llvm.org/resources/lldbgdbremote.html#qregisterinfo-hex-reg-id
+            ["qRegisterInfo", reg] => state.parse_register_info(reg, res),
+            // https://sourceware.org/gdb/onlinedocs/gdb/General-Query-Packets.html#index-qsThreadInfo-packet
+            "qsThreadInfo" => state.parse_subsequent_thread_info(res),
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qlistthreadsinstopreply
             "QListThreadsInStopReply" => state.parse_enable_threads_in_stop_reply(res),
             // This does not useful to us. See
