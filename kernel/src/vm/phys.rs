@@ -169,14 +169,16 @@ impl PhysAllocator {
 
         loop {
             for f in list.iter_mut() {
-                if let Some(p) = f[next + 1].first().cloned() {
+                let mut i = next + 1;
+
+                if let Some(p) = f[i].first().cloned() {
                     let mut po = p.order().lock();
 
-                    f[next + 1].shift_remove(&p);
+                    f[i].shift_remove(&p);
                     *po = VmPage::FREE_ORDER;
 
                     // Set pool.
-                    let end = &pages[p.index() + (1 << (next + 1))];
+                    let end = &pages[p.index() + (1 << i)];
 
                     for p in &pages[p.index()..end.index()] {
                         *p.pool().lock() = pool;
@@ -184,11 +186,18 @@ impl PhysAllocator {
 
                     drop(po);
 
-                    if (next + 1) <= order {
-                        return Some(p);
+                    while i > order {
+                        i -= 1;
+
+                        let buddy = &pages[p.index() + (1 << i)];
+                        let mut bo = buddy.order().lock();
+
+                        *bo = i;
+
+                        assert!(list[pool][i].shift_insert(0, buddy.clone()));
                     }
 
-                    todo!()
+                    return Some(p);
                 }
             }
 

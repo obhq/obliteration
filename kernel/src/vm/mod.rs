@@ -277,6 +277,9 @@ impl Vm {
                 todo!()
             }
 
+            drop(bp);
+            drop(bo);
+
             order += 1;
             pa &= !((1u64 << (order + PAGE_SHIFT)) - 1);
             page =

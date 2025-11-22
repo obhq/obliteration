@@ -23,7 +23,12 @@ impl<T> Mutex<T> {
         }
     }
 
-    /// See `_mtx_lock_flags` on the PS4 for a reference.
+    /// See `_mtx_lock_flags` on the Orbis for a reference.
+    ///
+    /// # Reference offsets
+    /// | Version | Offset |
+    /// |---------|--------|
+    /// |PS4 11.00|0x10E6A0|
     pub fn lock(&self) -> MutexGuard<'_, T> {
         // Check if the current thread can sleep.
         let td = current_thread();
