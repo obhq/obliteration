@@ -2,6 +2,7 @@
 use super::Console;
 use crate::hw::{DeviceContext, MmioError, read_ptr, read_u8, read_usize};
 use crate::util::channel::Sender;
+use crate::vmm::VmmEvent;
 use config::{ConsoleMemory, ConsoleType};
 use hv::{Cpu, CpuExit, CpuIo, Hypervisor};
 use std::error::Error;
@@ -13,17 +14,17 @@ use thiserror::Error;
 pub struct Context<'a, H> {
     dev: &'a Console,
     hv: &'a H,
-    logs: &'a Sender<(ConsoleType, String)>,
+    tx: &'a Sender<VmmEvent>,
     msg_len: Option<NonZero<usize>>,
     msg: Vec<u8>,
 }
 
 impl<'a, H> Context<'a, H> {
-    pub fn new(dev: &'a Console, hv: &'a H, logs: &'a Sender<(ConsoleType, String)>) -> Self {
+    pub fn new(dev: &'a Console, hv: &'a H, tx: &'a Sender<VmmEvent>) -> Self {
         Self {
             dev,
             hv,
-            logs,
+            tx,
             msg_len: None,
             msg: Vec::new(),
         }
@@ -70,7 +71,7 @@ impl<H: Hypervisor, C: Cpu> DeviceContext<C> for Context<'_, H> {
             // single allocation when the handler clone the string.
             let msg = std::str::from_utf8(&self.msg).map_err(|_| ExecError::InvalidMsg)?;
 
-            self.logs.send((ty, msg.to_owned()));
+            self.tx.send(VmmEvent::Log(ty, msg.to_owned()));
             self.msg.clear();
         } else {
             return Err(Box::new(ExecError::UnknownField(off)));

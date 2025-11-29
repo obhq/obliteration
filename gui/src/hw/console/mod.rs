@@ -2,7 +2,8 @@
 use self::context::Context;
 use super::{Device, DeviceContext};
 use crate::util::channel::Sender;
-use config::{ConsoleMemory, ConsoleType};
+use crate::vmm::VmmEvent;
+use config::ConsoleMemory;
 use hv::Hypervisor;
 use std::num::NonZero;
 
@@ -27,9 +28,9 @@ impl Console {
     pub fn create_context<'a, H: Hypervisor>(
         &'a self,
         hv: &'a H,
-        logs: &'a Sender<(ConsoleType, String)>,
+        tx: &'a Sender<VmmEvent>,
     ) -> Box<dyn DeviceContext<H::Cpu<'a>> + 'a> {
-        Box::new(Context::new(self, hv, logs))
+        Box::new(Context::new(self, hv, tx))
     }
 }
 

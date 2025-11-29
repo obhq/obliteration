@@ -33,14 +33,16 @@ impl<T> Default for Channel<T> {
             queue: Mutex::new(Queue {
                 items: VecDeque::new(),
                 waiter: None,
+                senders: 1,
             }),
             cv: Condvar::new(),
         }
     }
 }
 
-/// Pending items in [`Channel`].
+/// Pending items in [Channel].
 struct Queue<T> {
     items: VecDeque<T>,
     waiter: Option<Waker>,
+    senders: usize,
 }

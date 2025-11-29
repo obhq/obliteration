@@ -11,7 +11,7 @@ impl<T> Receiver<T> {
         Self(chan)
     }
 
-    pub fn recv(&mut self) -> impl Future<Output = T> + '_ {
+    pub fn recv(&mut self) -> impl Future<Output = Option<T>> + Unpin + '_ {
         Recv {
             chan: &self.0,
             waiting: false,
@@ -34,7 +34,7 @@ impl<'a, T> Drop for Recv<'a, T> {
 }
 
 impl<'a, T> Future for Recv<'a, T> {
-    type Output = T;
+    type Output = Option<T>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // Get item if available.
@@ -47,7 +47,15 @@ impl<'a, T> Future for Recv<'a, T> {
             self.waiting = false;
             self.chan.cv.notify_one();
 
-            return Poll::Ready(v);
+            return Poll::Ready(Some(v));
+        } else if q.senders == 0 {
+            // We don't need to notify the condition variable here since no other sender waiting for
+            // it.
+            q.waiter = None;
+
+            self.waiting = false;
+
+            return Poll::Ready(None);
         }
 
         // Store waker.
