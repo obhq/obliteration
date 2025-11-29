@@ -31,8 +31,24 @@ impl<T> Sender<T> {
     }
 }
 
+impl<T> Drop for Sender<T> {
+    fn drop(&mut self) {
+        let mut q = self.chan.queue.lock().unwrap();
+
+        q.senders -= 1;
+
+        if q.senders == 0
+            && let Some(w) = q.waiter.take()
+        {
+            w.wake();
+        }
+    }
+}
+
 impl<T> Clone for Sender<T> {
     fn clone(&self) -> Self {
+        self.chan.queue.lock().unwrap().senders += 1;
+
         Self {
             chan: self.chan.clone(),
             max: self.max,

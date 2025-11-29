@@ -636,16 +636,32 @@ impl MainProgram {
         Ok(true)
     }
 
-    async fn dispatch_vmm(ev: VmmEvent, logs: &mut LogWriter) -> Result<bool, ProgramError> {
-        match ev {
-            VmmEvent::Exit(id, r) => {
+    async fn dispatch_vmm(
+        vmm: &mut Vmm<impl Hypervisor>,
+        cpu: usize,
+        ev: Option<VmmEvent>,
+        logs: &mut LogWriter,
+    ) -> Result<bool, ProgramError> {
+        let ev = match ev {
+            Some(v) => v,
+            None => {
+                let r = vmm.remove_cpu(cpu);
+
                 if !r.map_err(ProgramError::CpuThread)? {
-                    return Err(ProgramError::CpuPanic(id, logs.path().into()));
-                } else if id == 0 {
+                    return Err(ProgramError::CpuPanic(cpu, logs.path().into()));
+                } else if cpu == 0 {
                     return Ok(false);
+                } else {
+                    return Ok(true);
                 }
             }
+        };
+
+        match ev {
             VmmEvent::Log(t, m) => logs.write(t, m),
+            VmmEvent::Breakpoint(_) => todo!(),
+            VmmEvent::Registers(_) => todo!(),
+            VmmEvent::TranslatedAddress(_) => todo!(),
         }
 
         Ok(true)
@@ -838,7 +854,7 @@ impl App for MainProgram {
                 v = gdb_read.read(&mut gdb_buf).fuse() => {
                     Self::dispatch_gdb(v, &mut gdb, &gdb_buf, &mut vmm, &mut gdb_write).await?
                 }
-                v = vmm.recv().fuse() => Self::dispatch_vmm(v, &mut logs).await?,
+                v = vmm.recv().fuse() => Self::dispatch_vmm(&mut vmm, v.0, v.1, &mut logs).await?,
             };
 
             if !r {
