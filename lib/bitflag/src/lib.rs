@@ -15,6 +15,7 @@ pub trait Type: From<Self::Raw> {
 pub trait Raw: Eq + BitOr<Output = Self> + Not<Output = Self> + Copy {}
 
 impl Raw for u8 {}
+impl Raw for u16 {}
 impl Raw for u32 {}
 
 /// Provides method to construct a value from [`Raw`].

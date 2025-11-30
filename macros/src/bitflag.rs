@@ -34,6 +34,8 @@ pub fn transform(opts: Options, item: ItemEnum) -> syn::Result<TokenStream> {
             )) => {
                 let bits = if ty.is_ident("u8") {
                     parse_discriminant::<u8>(&v)?
+                } else if ty.is_ident("u16") {
+                    parse_discriminant::<u16>(&v)?
                 } else if ty.is_ident("u32") {
                     parse_discriminant::<u32>(&v)?
                 } else {

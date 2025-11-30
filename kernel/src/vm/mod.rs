@@ -169,7 +169,7 @@ impl Vm {
         let td = current_thread();
         let stats = &self.stats[vm];
         let cache_count = stats.cache_count.read();
-        let free_count = stats.free_count.read();
+        let mut free_count = stats.free_count.write();
         let available = *free_count + *cache_count;
 
         if available <= stats.free_reserved {
@@ -216,13 +216,43 @@ impl Vm {
             }
         };
 
-        // TODO: The Orbis assume page is never null here.
+        // The Orbis assume page is never null here.
         let page = page.unwrap();
+        let mut pf = page.flags().lock();
 
-        match page.flags().has_any(PageFlags::Cached) {
+        match pf.has_any(PageFlags::Cached) {
             true => todo!(),
-            false => todo!(),
+            false => *free_count -= 1,
         }
+
+        match pf.has_any(PageFlags::Zero) {
+            true => todo!(),
+            false => *pf = PageFlags::zeroed(),
+        }
+
+        drop(pf);
+
+        *page.access().lock() = PageAccess::zeroed();
+
+        // Set oflags.
+        let mut oflags = PageExtFlags::zeroed();
+
+        match &obj {
+            Some(_) => todo!(),
+            None => oflags |= PageExtFlags::Unmanaged,
+        }
+
+        if !flags.has_any(VmAlloc::NoBusy | VmAlloc::NoObj) {
+            oflags |= PageExtFlags::Busy;
+        }
+
+        *page.extended_flags().lock() = oflags;
+
+        if flags.has_any(VmAlloc::Wired) {
+            todo!();
+        }
+
+        todo!()
     }
 
     /// `page` must not have active lock on any fields.
@@ -318,13 +348,19 @@ impl Vm {
 /// Implementation of `mem_affinity` structure.
 pub struct MemAffinity {}
 
-/// Flags for [`Vm::alloc_page()`].
+/// Flags for [Vm::alloc_page()].
 #[bitflag(u32)]
 pub enum VmAlloc {
     /// `VM_ALLOC_INTERRUPT`.
     Interrupt = 0x00000001,
     /// `VM_ALLOC_SYSTEM`.
     System = 0x00000002,
+    /// `VM_ALLOC_WIRED`.
+    Wired = 0x00000020,
+    /// `VM_ALLOC_NOOBJ`.
+    NoObj = 0x00000100,
+    /// `VM_ALLOC_NOBUSY`.
+    NoBusy = 0x00000200,
     /// `VM_ALLOC_IFCACHED`.
     Cached = 0x00000400,
     /// `VM_ALLOC_COUNT`.
