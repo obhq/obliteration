@@ -6,11 +6,13 @@ use macros::bitflag;
 pub struct VmPage {
     index: usize,
     vm: usize,
-    pool: Mutex<usize>,  // pool
-    addr: u64,           // phys_addr
-    order: Mutex<usize>, // order
-    flags: PageFlags,    // flags
-    segment: usize,      // segind
+    pool: Mutex<usize>,                  // pool
+    addr: u64,                           // phys_addr
+    order: Mutex<usize>,                 // order
+    flags: Mutex<PageFlags>,             // flags
+    extended_flags: Mutex<PageExtFlags>, // oflags
+    access: Mutex<PageAccess>,           // aflags
+    segment: usize,                      // segind
     unk1: u8,
 }
 
@@ -24,7 +26,9 @@ impl VmPage {
             pool: Mutex::new(pool),
             addr,
             order: Mutex::new(Self::FREE_ORDER),
-            flags: PageFlags::zeroed(),
+            flags: Mutex::new(PageFlags::zeroed()),
+            extended_flags: Mutex::new(PageExtFlags::zeroed()),
+            access: Mutex::new(PageAccess::zeroed()),
             segment,
             unk1: 0,
         }
@@ -54,8 +58,16 @@ impl VmPage {
         &self.order
     }
 
-    pub fn flags(&self) -> PageFlags {
-        self.flags
+    pub fn flags(&self) -> &Mutex<PageFlags> {
+        &self.flags
+    }
+
+    pub fn extended_flags(&self) -> &Mutex<PageExtFlags> {
+        &self.extended_flags
+    }
+
+    pub fn access(&self) -> &Mutex<PageAccess> {
+        &self.access
     }
 
     pub fn segment(&self) -> usize {
@@ -81,9 +93,24 @@ impl Hash for VmPage {
     }
 }
 
-/// Flags of [VmPage].
+/// Value for [VmPage::flags].
 #[bitflag(u8)]
 pub enum PageFlags {
     /// `PG_CACHED`.
     Cached = 0x01,
+    /// `PG_ZERO`.
+    Zero = 0x08,
 }
+
+/// Value for [VmPage::extended_flags].
+#[bitflag(u16)]
+pub enum PageExtFlags {
+    /// `VPO_BUSY`.
+    Busy = 0x0001,
+    /// `VPO_UNMANAGED`.
+    Unmanaged = 0x0004,
+}
+
+/// Value for [VmPage::access].
+#[bitflag(u8)]
+pub enum PageAccess {}
