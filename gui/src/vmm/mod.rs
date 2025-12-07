@@ -4,7 +4,6 @@ use self::kernel::{
     Kernel, NoteError, PT_DYNAMIC, PT_GNU_EH_FRAME, PT_GNU_RELRO, PT_GNU_STACK, PT_LOAD, PT_NOTE,
     PT_PHDR, ProgramHeader,
 };
-use crate::gdb::GdbHandler;
 use crate::hw::{Device, DeviceTree, setup_devices};
 use crate::profile::{CpuModel, Profile};
 use crate::util::channel::{Receiver, Sender};
@@ -569,6 +568,11 @@ impl Vmm<()> {
 }
 
 impl<H> Vmm<H> {
+    /// Returns **unordered** ID of active vCPU.
+    pub fn active_cpus(&self) -> impl Iterator<Item = usize> {
+        self.cpus.keys().copied()
+    }
+
     pub async fn recv(&mut self) -> (usize, Option<VmmEvent>) {
         // Prepare futures to poll.
         let mut tasks = Vec::with_capacity(self.cpus.len());
@@ -888,8 +892,6 @@ impl<H> Drop for Vmm<H> {
         }
     }
 }
-
-impl<H: Hypervisor> GdbHandler for Vmm<H> {}
 
 /// Contains objects to control a CPU from outside.
 struct Cpu {
