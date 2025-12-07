@@ -1,7 +1,7 @@
 #![windows_subsystem = "windows"]
 
 use self::data::{DataError, DataMgr};
-use self::gdb::{GdbDispatcher, GdbError, GdbSession};
+use self::gdb::{GdbDispatcher, GdbError, GdbHandler, GdbSession};
 use self::graphics::{GraphicsBuilder, GraphicsError};
 use self::log::LogWriter;
 use self::profile::{DisplayResolution, Profile};
@@ -19,10 +19,11 @@ use erdp::ErrorDisplay;
 use futures::{
     AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, FutureExt, TryStreamExt, select_biased,
 };
-use hv::Hypervisor;
+use hv::{DebugEvent, Hypervisor};
 use slint::{ComponentHandle, SharedString, ToSharedString};
 use std::cell::{Cell, RefMut};
 use std::net::SocketAddr;
+use std::num::NonZero;
 use std::path::PathBuf;
 use std::process::ExitCode;
 use std::rc::Rc;
@@ -607,10 +608,10 @@ impl MainProgram {
     }
 
     async fn dispatch_gdb<H: Hypervisor>(
+        cx: &mut Context<H>,
         res: Result<usize, std::io::Error>,
         gdb: &mut GdbSession,
         buf: &[u8],
-        vmm: &mut Vmm<H>,
         con: &mut (dyn AsyncWrite + Unpin),
     ) -> Result<bool, ProgramError> {
         // Check status.
@@ -621,7 +622,7 @@ impl MainProgram {
         }
 
         // Dispatch the requests.
-        let mut dis = gdb.dispatch_client(&buf[..len], vmm);
+        let mut dis = gdb.dispatch_client(&buf[..len], cx);
 
         while let Some(res) = dis.pump().map_err(ProgramError::DispatchDebugger)? {
             let res = res.as_ref();
@@ -631,37 +632,6 @@ impl MainProgram {
                     .await
                     .map_err(ProgramError::WriteDebuggerSocket)?;
             }
-        }
-
-        Ok(true)
-    }
-
-    async fn dispatch_vmm(
-        vmm: &mut Vmm<impl Hypervisor>,
-        cpu: usize,
-        ev: Option<VmmEvent>,
-        logs: &mut LogWriter,
-    ) -> Result<bool, ProgramError> {
-        let ev = match ev {
-            Some(v) => v,
-            None => {
-                let r = vmm.remove_cpu(cpu);
-
-                if !r.map_err(ProgramError::CpuThread)? {
-                    return Err(ProgramError::CpuPanic(cpu, logs.path().into()));
-                } else if cpu == 0 {
-                    return Ok(false);
-                } else {
-                    return Ok(true);
-                }
-            }
-        };
-
-        match ev {
-            VmmEvent::Log(t, m) => logs.write(t, m),
-            VmmEvent::Breakpoint(_) => todo!(),
-            VmmEvent::Registers(_) => todo!(),
-            VmmEvent::TranslatedAddress(_) => todo!(),
         }
 
         Ok(true)
@@ -833,7 +803,7 @@ impl App for MainProgram {
 
         // Prepare to launch VMM.
         let logs = data.logs();
-        let mut logs =
+        let logs =
             LogWriter::new(logs).map_err(|e| ProgramError::CreateKernelLog(logs.into(), e))?;
         let shutdown = Arc::default();
         let graphics = graphics
@@ -843,18 +813,25 @@ impl App for MainProgram {
         let mut gdb_buf = [0; 1024];
 
         // Start VMM.
-        let mut vmm = match Vmm::new(&profile, &kernel, &shutdown, debug.is_some()) {
+        let vmm = match Vmm::new(&profile, &kernel, &shutdown, debug.is_some()) {
             Ok(v) => v,
             Err(e) => return Err(ProgramError::StartVmm(kernel, e)),
+        };
+
+        // Dispatch events until shutdown.
+        let mut cx = Context {
+            vmm,
+            logs,
+            pending_bps: Vec::new(),
         };
 
         loop {
             // Wait for event.
             let r = select_biased! {
                 v = gdb_read.read(&mut gdb_buf).fuse() => {
-                    Self::dispatch_gdb(v, &mut gdb, &gdb_buf, &mut vmm, &mut gdb_write).await?
+                    Self::dispatch_gdb(&mut cx, v, &mut gdb, &gdb_buf, &mut gdb_write).await?
                 }
-                v = vmm.recv().fuse() => Self::dispatch_vmm(&mut vmm, v.0, v.1, &mut logs).await?,
+                v = cx.vmm.recv().fuse() => cx.dispatch_vmm(v.0, v.1).await?,
             };
 
             if !r {
@@ -863,6 +840,53 @@ impl App for MainProgram {
         }
 
         Ok(())
+    }
+}
+
+/// Contains state for the main loop.
+struct Context<H> {
+    vmm: Vmm<H>,
+    logs: LogWriter,
+    pending_bps: Vec<(usize, Option<DebugEvent>)>,
+}
+
+impl<H: Hypervisor> Context<H> {
+    async fn dispatch_vmm(
+        &mut self,
+        cpu: usize,
+        ev: Option<VmmEvent>,
+    ) -> Result<bool, ProgramError> {
+        let ev = match ev {
+            Some(v) => v,
+            None => {
+                let r = self.vmm.remove_cpu(cpu);
+
+                if !r.map_err(ProgramError::CpuThread)? {
+                    return Err(ProgramError::CpuPanic(cpu, self.logs.path().into()));
+                } else if cpu == 0 {
+                    return Ok(false);
+                } else {
+                    return Ok(true);
+                }
+            }
+        };
+
+        match ev {
+            VmmEvent::Log(t, m) => self.logs.write(t, m),
+            VmmEvent::Breakpoint(e) => self.pending_bps.push((cpu, e)),
+            VmmEvent::Registers(_) => todo!(),
+            VmmEvent::TranslatedAddress(_) => todo!(),
+        }
+
+        Ok(true)
+    }
+}
+
+impl<H: Hypervisor> GdbHandler for Context<H> {
+    fn active_thread(&mut self) -> impl IntoIterator<Item = NonZero<usize>> {
+        self.vmm
+            .active_cpus()
+            .map(|v| v.checked_add(1).unwrap().try_into().unwrap())
     }
 }
 
@@ -886,6 +910,12 @@ struct ProgramArgs {
     use_default_settings: bool,
 }
 
+/// Mode of our program.
+#[derive(Clone, ValueEnum)]
+enum ProgramMode {
+    PanicHandler,
+}
+
 /// Contains objects returned from [`MainProgram::run_launcher()`].
 struct Launch<G> {
     graphics: G,
@@ -898,12 +928,6 @@ struct Launch<G> {
 enum ExitAction {
     Run,
     Debug,
-}
-
-/// Mode of our program.
-#[derive(Clone, ValueEnum)]
-enum ProgramMode {
-    PanicHandler,
 }
 
 /// Represents an error when [`MainProgram`] fails.

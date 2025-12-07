@@ -1,4 +1,6 @@
+use super::GdbHandler;
 use std::borrow::Cow;
+use std::io::Write;
 
 /// Contains states for a GDB remote session.
 #[derive(Default)]
@@ -113,10 +115,8 @@ impl SessionState {
         res.extend_from_slice(b"vCont;c;t");
     }
 
-    pub fn parse_current_thread(&mut self, res: &mut Vec<u8>) {
-        // TODO: Retrieve actual thread ID from VMM instead of hardcoding.
-        // Return thread ID 1 as the current thread.
-        res.extend_from_slice(b"QC1");
+    pub fn parse_current_thread(&mut self, _: &mut Vec<u8>) {
+        // Return empty result to continue using current thread.
     }
 
     pub fn parse_stop_reason(&mut self, res: &mut Vec<u8>) {
@@ -126,10 +126,15 @@ impl SessionState {
         res.extend_from_slice(b"S05");
     }
 
-    pub fn parse_first_thread_info(&mut self, res: &mut Vec<u8>) {
-        // TODO: Retrieve actual thread information from VMM instead of hardcoding.
-        // Return thread ID 1 as the only thread.
-        res.extend_from_slice(b"m1");
+    pub fn parse_first_thread_info<H: GdbHandler>(&mut self, res: &mut Vec<u8>, h: &mut H) {
+        for (i, id) in h.active_thread().into_iter().enumerate() {
+            // TODO: The docs said "formatted as big-endian hex strings" but how?
+            if i == 0 {
+                write!(res, "m{id:x}").unwrap();
+            } else {
+                write!(res, ",{id:x}").unwrap();
+            }
+        }
     }
 
     pub fn parse_subsequent_thread_info(&mut self, res: &mut Vec<u8>) {

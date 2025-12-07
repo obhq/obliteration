@@ -114,7 +114,7 @@ impl<'a, H: GdbHandler> GdbDispatcher for ClientDispatcher<'a, H> {
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qhostinfo
             "qHostInfo" => state.parse_host_info(res),
             // https://sourceware.org/gdb/onlinedocs/gdb/General-Query-Packets.html#index-qfThreadInfo-packet
-            "qfThreadInfo" => state.parse_first_thread_info(res),
+            "qfThreadInfo" => state.parse_first_thread_info(res, self.handler),
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qregisterinfo-hex-reg-id
             ["qRegisterInfo", reg] => state.parse_register_info(reg, res),
             // https://sourceware.org/gdb/onlinedocs/gdb/General-Query-Packets.html#index-qsThreadInfo-packet
