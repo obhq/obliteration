@@ -4,16 +4,13 @@ use macros::bitflag;
 
 /// Implementation of `vm_page` structure.
 pub struct VmPage {
-    index: usize,
-    vm: usize,
-    pool: Mutex<usize>,                  // pool
-    addr: u64,                           // phys_addr
-    order: Mutex<usize>,                 // order
-    flags: Mutex<PageFlags>,             // flags
-    extended_flags: Mutex<PageExtFlags>, // oflags
-    access: Mutex<PageAccess>,           // aflags
-    segment: usize,                      // segind
-    unk1: u8,
+    pub index: usize,
+    pub vm: usize,
+    pub addr: u64,      // phys_addr
+    pub segment: usize, // segind
+    /// This **MUST** be locked after free queue.
+    pub state: Mutex<PageState>,
+    pub unk1: u8,
 }
 
 impl VmPage {
@@ -23,59 +20,17 @@ impl VmPage {
         Self {
             index,
             vm,
-            pool: Mutex::new(pool),
             addr,
-            order: Mutex::new(Self::FREE_ORDER),
-            flags: Mutex::new(PageFlags::zeroed()),
-            extended_flags: Mutex::new(PageExtFlags::zeroed()),
-            access: Mutex::new(PageAccess::zeroed()),
             segment,
+            state: Mutex::new(PageState {
+                pool,
+                order: Self::FREE_ORDER,
+                flags: PageFlags::zeroed(),
+                extended_flags: PageExtFlags::zeroed(),
+                access: PageAccess::zeroed(),
+            }),
             unk1: 0,
         }
-    }
-
-    pub fn index(&self) -> usize {
-        self.index
-    }
-
-    pub fn vm(&self) -> usize {
-        self.vm
-    }
-
-    /// This must be locked **after** [Self::order()] and the lock must be held while putting this
-    /// page to free queues.
-    pub fn pool(&self) -> &Mutex<usize> {
-        &self.pool
-    }
-
-    pub fn addr(&self) -> u64 {
-        self.addr
-    }
-
-    /// This must be locked **after** free queues and the lock must be held while putting this page
-    /// to free queues.
-    pub fn order(&self) -> &Mutex<usize> {
-        &self.order
-    }
-
-    pub fn flags(&self) -> &Mutex<PageFlags> {
-        &self.flags
-    }
-
-    pub fn extended_flags(&self) -> &Mutex<PageExtFlags> {
-        &self.extended_flags
-    }
-
-    pub fn access(&self) -> &Mutex<PageAccess> {
-        &self.access
-    }
-
-    pub fn segment(&self) -> usize {
-        self.segment
-    }
-
-    pub fn unk1(&self) -> u8 {
-        self.unk1
     }
 }
 
@@ -91,6 +46,15 @@ impl Hash for VmPage {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.addr.hash(state);
     }
+}
+
+/// Contains mutable data for [VmPage];
+pub struct PageState {
+    pub pool: usize,                  // pool
+    pub order: usize,                 // order
+    pub flags: PageFlags,             // flags
+    pub extended_flags: PageExtFlags, // oflags
+    pub access: PageAccess,           // aflags
 }
 
 /// Value for [VmPage::flags].
