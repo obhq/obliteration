@@ -128,12 +128,14 @@ impl Vm {
                 cache_count: gg.clone().spawn_default(),
                 free_count: gg.clone().spawn(free_count[0]),
                 interrupt_free_min: gg.clone().spawn(2),
+                wire_count: AtomicUsize::new(0),
             },
             VmStats {
                 free_reserved: pageout_page_count,
                 cache_count: gg.clone().spawn_default(),
                 free_count: gg.clone().spawn(free_count[1]),
                 interrupt_free_min: gg.clone().spawn(2),
+                wire_count: AtomicUsize::new(0),
             },
         ];
 
@@ -218,21 +220,19 @@ impl Vm {
 
         // The Orbis assume page is never null here.
         let page = page.unwrap();
-        let mut pf = page.flags().lock();
+        let mut ps = page.state.lock();
 
-        match pf.has_any(PageFlags::Cached) {
+        match ps.flags.has_any(PageFlags::Cached) {
             true => todo!(),
             false => *free_count -= 1,
         }
 
-        match pf.has_any(PageFlags::Zero) {
+        match ps.flags.has_any(PageFlags::Zero) {
             true => todo!(),
-            false => *pf = PageFlags::zeroed(),
+            false => ps.flags = PageFlags::zeroed(),
         }
 
-        drop(pf);
-
-        *page.access().lock() = PageAccess::zeroed();
+        ps.access = PageAccess::zeroed();
 
         // Set oflags.
         let mut oflags = PageExtFlags::zeroed();
@@ -246,10 +246,11 @@ impl Vm {
             oflags |= PageExtFlags::Busy;
         }
 
-        *page.extended_flags().lock() = oflags;
+        ps.extended_flags = oflags;
 
         if flags.has_any(VmAlloc::Wired) {
-            todo!();
+            stats.wire_count.fetch_add(1, Ordering::Relaxed);
+            todo!()
         }
 
         todo!()
@@ -266,18 +267,17 @@ impl Vm {
     fn free_page(&self, page: &Arc<VmPage>, mut order: usize) {
         // Get segment the page belong to.
         let mut page = page; // For scoped lifetime.
-        let vm = page.vm();
-        let mut pa = page.addr();
-        let seg = if (page.unk1() & 1) == 0 {
-            self.phys.segment(page.segment())
+        let vm = page.vm;
+        let mut pa = page.addr;
+        let seg = if (page.unk1 & 1) == 0 {
+            self.phys.segment(page.segment)
         } else {
             todo!()
         };
 
         // TODO: What is this?
         let mut queues = seg.free_queues.lock();
-        let mut po = page.order().lock();
-        let mut pp = page.pool().lock();
+        let mut ps = page.state.lock();
 
         while order < 12 {
             let start = seg.start;
@@ -290,37 +290,33 @@ impl Vm {
             // Get buddy page index.
             let i = (buddy_pa - start) >> PAGE_SHIFT;
             let buddy = &self.pages[seg.first_page + usize::try_from(i).unwrap()];
-            let mut bo = buddy.order().lock();
+            let mut bs = buddy.state.lock();
 
-            if *bo != order || buddy.vm() != vm || ((page.unk1() ^ buddy.unk1()) & 1) != 0 {
+            if bs.order != order || buddy.vm != vm || ((page.unk1 ^ buddy.unk1) & 1) != 0 {
                 break;
             }
 
             // TODO: Check if we really need to preserve page order here. If not we need to replace
             // IndexMap with HashMap otherwise we need to find a better solution than IndexMap.
-            let bp = buddy.pool().lock();
+            queues[vm][bs.pool][bs.order].shift_remove(buddy);
+            bs.order = VmPage::FREE_ORDER;
 
-            queues[vm][*bp][*bo].shift_remove(buddy);
-            *bo = VmPage::FREE_ORDER;
-
-            if *bp != *pp {
+            if bs.pool != ps.pool {
                 todo!()
             }
 
-            drop(bp);
-            drop(bo);
+            drop(bs);
 
             order += 1;
             pa &= !((1u64 << (order + PAGE_SHIFT)) - 1);
             page =
                 &self.pages[seg.first_page + usize::try_from((pa - start) >> PAGE_SHIFT).unwrap()];
-            po = page.order().lock();
-            pp = page.pool().lock();
+            ps = page.state.lock();
         }
 
         // Add to free queue.
-        *po = order;
-        queues[vm][*pp][order].insert(page.clone());
+        ps.order = order;
+        queues[vm][ps.pool][order].insert(page.clone());
     }
 
     /// See `kick_pagedaemons` on the Orbis for a reference.
