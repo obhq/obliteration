@@ -79,22 +79,16 @@ impl GdbSession {
         &'a mut self,
         data: &[u8],
         h: &'a mut H,
-    ) -> impl GdbDispatcher + 'a {
+    ) -> ClientDispatcher<'a, H> {
         self.req.extend_from_slice(data);
 
         ClientDispatcher::new(self, h)
     }
 }
 
-/// Provides method to dispatch debug operations.
-pub trait GdbDispatcher {
-    /// The returned response can be empty if this pump does not produce any response.
-    fn pump(&mut self) -> Result<Option<impl AsRef<[u8]> + '_>, GdbError>;
-}
-
-/// Represents an error when [`GdbDispatcher`] fails.
+/// Represents an error when [ClientDispatcher::pump()] fails.
 #[derive(Debug, Error)]
-pub enum GdbError {
+pub enum GdbError<H: std::error::Error> {
     #[error("unknown packet prefix {0:#x}")]
     UnknownPacketPrefix(u8),
 
@@ -109,4 +103,7 @@ pub enum GdbError {
 
     #[error("invalid checksum (expect {1}, got {0})")]
     InvalidChecksum(u8, u8),
+
+    #[error(transparent)]
+    Handler(H),
 }

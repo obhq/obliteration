@@ -457,18 +457,20 @@ impl Vmm<()> {
         let hv = Arc::new(hv);
         let (cpu_sender, receiver) = crate::util::channel::new(NonZero::new(100).unwrap());
         let (sender, cpu_receiver) = std::sync::mpsc::channel();
+        let suspend = Arc::new(AtomicBool::new(debug));
         let args = CpuArgs {
             hv: hv.clone(),
             devices: devices.clone(),
             sender: cpu_sender,
             receiver: cpu_receiver,
+            suspend: suspend.clone(),
             shutdown: shutdown.clone(),
         };
 
         // Spawn thread to drive main CPU.
         let start = map.kern_vaddr + img.entry();
         let thread = std::thread::Builder::new()
-            .spawn(move || Vmm::main_cpu(args, start, map, debug))
+            .spawn(move || Vmm::main_cpu(args, start, map))
             .map_err(VmmError::SpawnMainCpu)?;
 
         Ok(Vmm {
@@ -480,6 +482,7 @@ impl Vmm<()> {
                     thread,
                     sender,
                     receiver,
+                    suspend,
                 },
             )]),
             next: 1,
@@ -569,7 +572,7 @@ impl Vmm<()> {
 
 impl<H> Vmm<H> {
     /// Returns **unordered** ID of active vCPU.
-    pub fn active_cpus(&self) -> impl Iterator<Item = usize> {
+    pub fn active_cpus(&self) -> impl ExactSizeIterator<Item = usize> {
         self.cpus.keys().copied()
     }
 
@@ -596,6 +599,12 @@ impl<H> Vmm<H> {
 
     /// # Panics
     /// If `id` is not valid.
+    pub fn suspend_cpu(&mut self, id: usize) {
+        self.cpus[&id].suspend.store(true, Ordering::Relaxed);
+    }
+
+    /// # Panics
+    /// If `id` is not valid.
     pub fn remove_cpu(&mut self, id: usize) -> Result<bool, CpuError> {
         let c = self.cpus.remove(&id).unwrap();
 
@@ -606,12 +615,7 @@ impl<H> Vmm<H> {
 }
 
 impl<H: Hypervisor> Vmm<H> {
-    fn main_cpu(
-        args: CpuArgs<H>,
-        entry: usize,
-        map: RamMap,
-        debug: bool,
-    ) -> Result<bool, CpuError> {
+    fn main_cpu(args: CpuArgs<H>, entry: usize, map: RamMap) -> Result<bool, CpuError> {
         // Create CPU.
         let hv = args.hv.as_ref();
         let mut cpu = match hv.create_cpu(0) {
@@ -621,15 +625,6 @@ impl<H: Hypervisor> Vmm<H> {
 
         if let Err(e) = self::arch::setup_main_cpu(hv, &mut cpu, entry, map) {
             return Err(CpuError::Setup(Box::new(e)));
-        }
-
-        // Wait for debugger.
-        if debug {
-            args.sender.send(VmmEvent::Breakpoint(None));
-
-            if let Some(v) = Self::dispatch_command(&args, &mut cpu, None)? {
-                return Ok(v);
-            }
         }
 
         // Run.
@@ -651,6 +646,15 @@ impl<H: Hypervisor> Vmm<H> {
             // Check for shutdown signal.
             if args.shutdown.load(Ordering::Relaxed) {
                 return Ok(true);
+            }
+
+            // Check for suspend request.
+            if args.suspend.swap(false, Ordering::Relaxed) {
+                args.sender.send(VmmEvent::Breakpoint(None));
+
+                if let Some(v) = Self::dispatch_command(args, &mut cpu, None)? {
+                    return Ok(v);
+                }
             }
 
             // Run the vCPU.
@@ -898,6 +902,7 @@ struct Cpu {
     thread: JoinHandle<Result<bool, CpuError>>,
     sender: std::sync::mpsc::Sender<VmmCommand>,
     receiver: Receiver<VmmEvent>,
+    suspend: Arc<AtomicBool>,
 }
 
 /// Encapsulates arguments for a function to run a CPU.
@@ -906,6 +911,7 @@ struct CpuArgs<H> {
     devices: Arc<DeviceTree>,
     sender: Sender<VmmEvent>,
     receiver: std::sync::mpsc::Receiver<VmmCommand>,
+    suspend: Arc<AtomicBool>,
     shutdown: Arc<AtomicBool>,
 }
 
