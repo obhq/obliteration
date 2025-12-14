@@ -119,15 +119,23 @@ impl SessionState {
         // Return empty result to continue using current thread.
     }
 
-    pub fn parse_stop_reason(&mut self, res: &mut Vec<u8>) {
+    pub async fn parse_stop_reason<H: GdbHandler>(
+        &mut self,
+        res: &mut Vec<u8>,
+        h: &mut H,
+    ) -> Result<(), H::Err> {
         // Report stopped due to SIGTRAP (signal 5).
         // Signal numbers are from the host OS. SIGTRAP is typically 5 on Unix systems.
         // https://github.com/bminor/binutils-gdb/blob/83bf56647ce42ed79e5f007015afdd1f7a842d36/include/gdb/signals.def#L27
+        h.suspend_threads().await?;
+
         res.extend_from_slice(b"S05");
+
+        Ok(())
     }
 
     pub fn parse_first_thread_info<H: GdbHandler>(&mut self, res: &mut Vec<u8>, h: &mut H) {
-        for (i, id) in h.active_thread().into_iter().enumerate() {
+        for (i, id) in h.active_threads().into_iter().enumerate() {
             // TODO: The docs said "formatted as big-endian hex strings" but how?
             if i == 0 {
                 write!(res, "m{id:x}").unwrap();

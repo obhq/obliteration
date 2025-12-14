@@ -1,7 +1,7 @@
 #![windows_subsystem = "windows"]
 
 use self::data::{DataError, DataMgr};
-use self::gdb::{GdbDispatcher, GdbError, GdbHandler, GdbSession};
+use self::gdb::{GdbHandler, GdbSession};
 use self::graphics::{GraphicsBuilder, GraphicsError};
 use self::log::LogWriter;
 use self::profile::{DisplayResolution, Profile};
@@ -624,7 +624,11 @@ impl MainProgram {
         // Dispatch the requests.
         let mut dis = gdb.dispatch_client(&buf[..len], cx);
 
-        while let Some(res) = dis.pump().map_err(ProgramError::DispatchDebugger)? {
+        while let Some(res) = dis
+            .pump()
+            .await
+            .map_err(|e| ProgramError::DispatchDebugger(Box::new(e)))?
+        {
             let res = res.as_ref();
 
             if !res.is_empty() {
@@ -859,6 +863,8 @@ impl<H: Hypervisor> Context<H> {
         let ev = match ev {
             Some(v) => v,
             None => {
+                // We never receive this for a suspended CPU so no need to remove it from
+                // pending_bps.
                 let r = self.vmm.remove_cpu(cpu);
 
                 if !r.map_err(ProgramError::CpuThread)? {
@@ -883,10 +889,44 @@ impl<H: Hypervisor> Context<H> {
 }
 
 impl<H: Hypervisor> GdbHandler for Context<H> {
-    fn active_thread(&mut self) -> impl IntoIterator<Item = NonZero<usize>> {
+    type Err = ProgramError;
+
+    fn active_threads(&mut self) -> impl IntoIterator<Item = NonZero<usize>> {
         self.vmm
             .active_cpus()
             .map(|v| v.checked_add(1).unwrap().try_into().unwrap())
+    }
+
+    async fn suspend_threads(&mut self) -> Result<(), Self::Err> {
+        let mut active = self.vmm.active_cpus();
+
+        while self.pending_bps.len() != active.len() {
+            // Get CPU to suspend.
+            let mut target = None;
+
+            for id in active {
+                if !self.pending_bps.iter().any(move |e| e.0 == id) {
+                    target = Some(id);
+                    break;
+                }
+            }
+
+            // Suspend target CPU.
+            let target = target.unwrap();
+
+            self.vmm.suspend_cpu(target);
+
+            // Dispatch events.
+            let (id, ev) = self.vmm.recv().await;
+
+            if !self.dispatch_vmm(id, ev).await? {
+                return Err(ProgramError::MainCpuStopped);
+            }
+
+            active = self.vmm.active_cpus();
+        }
+
+        Ok(())
     }
 }
 
@@ -1010,11 +1050,14 @@ enum ProgramError {
     #[error("vCPU #{0} panicked, see {1} for more information")]
     CpuPanic(usize, PathBuf),
 
+    #[error("main vCPU was stopped")]
+    MainCpuStopped,
+
     #[error("couldn't read debugger connection")]
     ReadDebuggerSocket(#[source] std::io::Error),
 
     #[error("couldn't dispatch debugger requests")]
-    DispatchDebugger(#[source] GdbError),
+    DispatchDebugger(#[source] Box<dyn std::error::Error>),
 
     #[error("couldn't write debugger connection")]
     WriteDebuggerSocket(#[source] std::io::Error),

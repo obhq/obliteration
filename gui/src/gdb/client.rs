@@ -1,4 +1,4 @@
-use super::{GdbDispatcher, GdbError, GdbHandler, GdbSession};
+use super::{GdbError, GdbHandler, GdbSession};
 
 /// Implementation of [`GdbDispatcher`] to dispatch requests from GDB client.
 pub struct ClientDispatcher<'a, H> {
@@ -6,24 +6,12 @@ pub struct ClientDispatcher<'a, H> {
     handler: &'a mut H,
 }
 
-impl<'a, H> ClientDispatcher<'a, H> {
+impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
     pub fn new(session: &'a mut GdbSession, handler: &'a mut H) -> Self {
         Self { session, handler }
     }
 
-    fn get_checksum(data: &[u8]) -> u8 {
-        let mut r = 0u8;
-
-        for &b in data {
-            r = r.wrapping_add(b);
-        }
-
-        r
-    }
-}
-
-impl<'a, H: GdbHandler> GdbDispatcher for ClientDispatcher<'a, H> {
-    fn pump(&mut self) -> Result<Option<impl AsRef<[u8]> + '_>, GdbError> {
+    pub async fn pump(&mut self) -> Result<Option<impl AsRef<[u8]> + '_>, GdbError<H::Err>> {
         // Check if GDB packet.
         let req = &mut self.session.req;
         let res = &mut self.session.res;
@@ -104,7 +92,7 @@ impl<'a, H: GdbHandler> GdbDispatcher for ClientDispatcher<'a, H> {
             // Queries the reason the target halted. Defined on the Packets page (search for "'?'"
             // near the top of the packet list).
             // See https://sourceware.org/gdb/current/onlinedocs/gdb.html/Packets.html
-            "?" => state.parse_stop_reason(res),
+            "?" => state.parse_stop_reason(res, self.handler).await.map_err(GdbError::Handler)?,
             // I think this does not worth for additional complexity on our side so we don't support
             // this. See https://lldb.llvm.org/resources/lldbgdbremote.html#qenableerrorstrings for
             // more details.
@@ -144,5 +132,15 @@ impl<'a, H: GdbHandler> GdbDispatcher for ClientDispatcher<'a, H> {
         res.extend_from_slice(&checksum);
 
         Ok(res.drain(..).into())
+    }
+
+    fn get_checksum(data: &[u8]) -> u8 {
+        let mut r = 0u8;
+
+        for &b in data {
+            r = r.wrapping_add(b);
+        }
+
+        r
     }
 }
