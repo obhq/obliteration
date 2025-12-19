@@ -28,6 +28,9 @@ impl VmPage {
                 flags: PageFlags::zeroed(),
                 extended_flags: PageExtFlags::zeroed(),
                 access: PageAccess::zeroed(),
+                wire_count: 0,
+                act_count: 0,
+                pindex: 0,
             }),
             unk1: 0,
         }
@@ -55,6 +58,9 @@ pub struct PageState {
     pub flags: PageFlags,             // flags
     pub extended_flags: PageExtFlags, // oflags
     pub access: PageAccess,           // aflags
+    pub wire_count: usize,            // wire_count
+    pub act_count: u8,                // act_count
+    pub pindex: usize,                // pindex
 }
 
 /// Value for [VmPage::flags].

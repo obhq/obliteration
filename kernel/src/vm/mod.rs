@@ -121,17 +121,37 @@ impl Vm {
         // Initializes stats. The Orbis initialize these data in vm_pageout function but it is
         // possible for data race so we do it here instead.
         let pageout_page_count = 0x10; // TODO: Figure out where this value come from.
+        let free_reserved = [pageout_page_count + 100 + 10, pageout_page_count];
+        let free_min = [free_reserved[0] + 325, free_reserved[1] + 64];
         let gg = GutexGroup::new();
         let stats = [
             VmStats {
-                free_reserved: pageout_page_count + 100 + 10,
+                free_reserved: free_reserved[0],
+                cache_min: if free_count[0] < 2049 {
+                    // TODO: Figure out where 2049 value come from.
+                    0
+                } else if free_count[0] < 6145 {
+                    // TODO: Figure out where 6145 value come from.
+                    free_reserved[0] + free_min[0] * 2
+                } else {
+                    free_reserved[0] + free_min[0] * 4
+                },
                 cache_count: gg.clone().spawn_default(),
                 free_count: gg.clone().spawn(free_count[0]),
                 interrupt_free_min: gg.clone().spawn(2),
                 wire_count: AtomicUsize::new(0),
             },
             VmStats {
-                free_reserved: pageout_page_count,
+                free_reserved: free_reserved[1],
+                cache_min: if free_count[1] < 2049 {
+                    // TODO: Figure out where 2049 value come from.
+                    0
+                } else if free_count[1] < 6145 {
+                    // TODO: Figure out where 6145 value come from.
+                    free_reserved[1] + free_min[1] * 2
+                } else {
+                    free_reserved[1] + free_min[1] * 4
+                },
                 cache_count: gg.clone().spawn_default(),
                 free_count: gg.clone().spawn(free_count[1]),
                 interrupt_free_min: gg.clone().spawn(2),
@@ -166,7 +186,12 @@ impl Vm {
     /// | Version | Offset |
     /// |---------|--------|
     /// |PS4 11.00|0x02B030|
-    pub fn alloc_page(&self, obj: Option<VmObject>, flags: VmAlloc) -> Option<VmPage> {
+    pub fn alloc_page(
+        &self,
+        obj: Option<VmObject>,
+        pindex: usize,
+        flags: VmAlloc,
+    ) -> Option<Arc<VmPage>> {
         let vm = obj.as_ref().map_or(0, |v| v.vm());
         let td = current_thread();
         let stats = &self.stats[vm];
@@ -250,10 +275,25 @@ impl Vm {
 
         if flags.has_any(VmAlloc::Wired) {
             stats.wire_count.fetch_add(1, Ordering::Relaxed);
+            ps.wire_count = 1;
+        }
+
+        ps.act_count = 0;
+
+        match &obj {
+            Some(_) => todo!(),
+            None => ps.pindex = pindex,
+        }
+
+        // TODO: Call vdrop.
+        if (*cache_count + *free_count) < (stats.cache_min + stats.free_reserved) {
             todo!()
         }
 
-        todo!()
+        // TODO: Set unknown field.
+        drop(ps);
+
+        Some(page)
     }
 
     /// `page` must not have active lock on any fields.
