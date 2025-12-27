@@ -88,7 +88,7 @@ impl GdbSession {
 
 /// Represents an error when [ClientDispatcher::pump()] fails.
 #[derive(Debug, Error)]
-pub enum GdbError<H: std::error::Error> {
+pub enum GdbError {
     #[error("unknown packet prefix {0:#x}")]
     UnknownPacketPrefix(u8),
 
@@ -104,6 +104,6 @@ pub enum GdbError<H: std::error::Error> {
     #[error("invalid checksum (expect {1}, got {0})")]
     InvalidChecksum(u8, u8),
 
-    #[error(transparent)]
-    Handler(H),
+    #[error("couldn't parse '{0}'")]
+    Parse(&'static str, #[source] Box<dyn std::error::Error>),
 }
