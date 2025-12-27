@@ -15,24 +15,33 @@ impl SessionState {
         self.no_ack
     }
 
-    pub fn parse_start_no_ack_mode(&mut self, res: &mut Vec<u8>) {
+    pub fn parse_start_no_ack_mode(
+        &mut self,
+        res: &mut Vec<u8>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         self.no_ack = Some(false);
 
         res.extend_from_slice(b"OK");
+
+        Ok(())
     }
 
     pub fn parse_ack_no_ack(&mut self) {
         self.no_ack = Some(true);
     }
 
-    pub fn parse_supported(&mut self, req: &[u8], res: &mut Vec<u8>) {
+    pub fn parse_supported(
+        &mut self,
+        req: &[u8],
+        res: &mut Vec<u8>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // Push features that we always supported.
         res.extend_from_slice(b"QStartNoAckMode+");
 
         // Parse GDB features.
         let req = match req.strip_prefix(b":") {
             Some(v) => v,
-            None => return,
+            None => return Ok(()),
         };
 
         for feat in req.split(|&b| b == b';') {
@@ -69,21 +78,33 @@ impl SessionState {
                 _ => todo!("{}", String::from_utf8_lossy(feat)),
             }
         }
+
+        Ok(())
     }
 
-    pub fn parse_thread_suffix_supported(&mut self, res: &mut Vec<u8>) {
+    pub fn parse_thread_suffix_supported(
+        &mut self,
+        res: &mut Vec<u8>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         self.thread_suffix_supported = true;
 
         res.extend_from_slice(b"OK");
+
+        Ok(())
     }
 
-    pub fn parse_enable_threads_in_stop_reply(&mut self, res: &mut Vec<u8>) {
+    pub fn parse_enable_threads_in_stop_reply(
+        &mut self,
+        res: &mut Vec<u8>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         self.threads_in_stop_reply = true;
 
         res.extend_from_slice(b"OK");
+
+        Ok(())
     }
 
-    pub fn parse_host_info(&mut self, res: &mut Vec<u8>) {
+    pub fn parse_host_info(&mut self, res: &mut Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {
         // https://en.wikipedia.org/wiki/Mach-O
         if cfg!(target_arch = "aarch64") {
             res.extend_from_slice(b"cputype:16777228;cpusubtype:0"); // 0x100000C
@@ -108,22 +129,30 @@ impl SessionState {
 
         // It is unlikely for us to support page size other than 16K in a near future.
         res.extend_from_slice(b";vm-page-size:16384");
+
+        Ok(())
     }
 
-    pub fn parse_vcont(&mut self, res: &mut Vec<u8>) {
+    pub fn parse_vcont(&mut self, res: &mut Vec<u8>) -> Result<(), Box<dyn std::error::Error>> {
         // Only Continue and Stop is supported at the moment.
         res.extend_from_slice(b"vCont;c;t");
+
+        Ok(())
     }
 
-    pub fn parse_current_thread(&mut self, _: &mut Vec<u8>) {
+    pub fn parse_current_thread(
+        &mut self,
+        _: &mut Vec<u8>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // Return empty result to continue using current thread.
+        Ok(())
     }
 
     pub async fn parse_stop_reason<H: GdbHandler>(
         &mut self,
         res: &mut Vec<u8>,
         h: &mut H,
-    ) -> Result<(), H::Err> {
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // Report stopped due to SIGTRAP (signal 5).
         // Signal numbers are from the host OS. SIGTRAP is typically 5 on Unix systems.
         // https://github.com/bminor/binutils-gdb/blob/83bf56647ce42ed79e5f007015afdd1f7a842d36/include/gdb/signals.def#L27
@@ -134,7 +163,11 @@ impl SessionState {
         Ok(())
     }
 
-    pub fn parse_first_thread_info<H: GdbHandler>(&mut self, res: &mut Vec<u8>, h: &mut H) {
+    pub fn parse_first_thread_info<H: GdbHandler>(
+        &mut self,
+        res: &mut Vec<u8>,
+        h: &mut H,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         for (i, id) in h.active_threads().into_iter().enumerate() {
             // TODO: The docs said "formatted as big-endian hex strings" but how?
             if i == 0 {
@@ -143,21 +176,34 @@ impl SessionState {
                 write!(res, ",{id:x}").unwrap();
             }
         }
+
+        Ok(())
     }
 
-    pub fn parse_subsequent_thread_info(&mut self, res: &mut Vec<u8>) {
+    pub fn parse_subsequent_thread_info(
+        &mut self,
+        res: &mut Vec<u8>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // No more threads.
         res.extend_from_slice(b"l");
+
+        Ok(())
     }
 
-    pub fn parse_register_info(&mut self, reg: &[u8], res: &mut Vec<u8>) {
+    pub fn parse_register_info(
+        &mut self,
+        reg: &[u8],
+        res: &mut Vec<u8>,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         // Parse register number.
         let reg = match std::str::from_utf8(reg)
             .ok()
             .and_then(|s| usize::from_str_radix(s, 16).ok())
         {
             Some(v) => v,
-            None => return,
+            None => {
+                return Err(format!("unknown register '{}'", String::from_utf8_lossy(reg)).into());
+            }
         };
 
         // Get register info based on architecture.
@@ -168,6 +214,8 @@ impl SessionState {
         } else {
             todo!()
         }
+
+        Ok(())
     }
 
     fn parse_aarch64_register_info(&mut self, reg: usize, res: &mut Vec<u8>) {

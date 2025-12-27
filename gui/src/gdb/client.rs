@@ -11,7 +11,7 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
         Self { session, handler }
     }
 
-    pub async fn pump(&mut self) -> Result<Option<impl AsRef<[u8]> + '_>, GdbError<H::Err>> {
+    pub async fn pump(&mut self) -> Result<Option<impl AsRef<[u8]> + '_>, GdbError> {
         // Check if GDB packet.
         let req = &mut self.session.req;
         let res = &mut self.session.res;
@@ -88,15 +88,39 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
         // Execute command.
         let off = res.len();
 
-        match_bytes! { data,
+        macro_rules! parse {
+            () => {
+                todo!("{}", String::from_utf8_lossy(data));
+            };
+            ($cmd:literal => $body:expr, $($rem:tt)*) => {
+                if data == $cmd.as_bytes() {
+                    if let Err(e) = $body {
+                        return Err(GdbError::Parse($cmd, e));
+                    }
+                } else {
+                    parse!($($rem)*);
+                }
+            };
+            ($prefix:literal | $data:ident => $body:expr, $($rem:tt)*) => {
+                if let Some($data) = data.strip_prefix($prefix.as_bytes()) {
+                    if let Err(e) = $body {
+                        return Err(GdbError::Parse($prefix, e));
+                    }
+                } else {
+                    parse!($($rem)*);
+                }
+            }
+        }
+
+        parse! {
             // Queries the reason the target halted. Defined on the Packets page (search for "'?'"
             // near the top of the packet list).
             // See https://sourceware.org/gdb/current/onlinedocs/gdb.html/Packets.html
-            "?" => state.parse_stop_reason(res, self.handler).await.map_err(GdbError::Handler)?,
+            "?" => state.parse_stop_reason(res, self.handler).await,
             // I think this does not worth for additional complexity on our side so we don't support
             // this. See https://lldb.llvm.org/resources/lldbgdbremote.html#qenableerrorstrings for
             // more details.
-            "QEnableErrorStrings" => {},
+            "QEnableErrorStrings" => Ok(()),
             // https://sourceware.org/gdb/onlinedocs/gdb/General-Query-Packets.html#index-qC-packet
             "qC" => state.parse_current_thread(res),
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qhostinfo
@@ -104,23 +128,22 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
             // https://sourceware.org/gdb/onlinedocs/gdb/General-Query-Packets.html#index-qfThreadInfo-packet
             "qfThreadInfo" => state.parse_first_thread_info(res, self.handler),
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qregisterinfo-hex-reg-id
-            ["qRegisterInfo", reg] => state.parse_register_info(reg, res),
+            "qRegisterInfo" | reg => state.parse_register_info(reg, res),
             // https://sourceware.org/gdb/onlinedocs/gdb/General-Query-Packets.html#index-qsThreadInfo-packet
             "qsThreadInfo" => state.parse_subsequent_thread_info(res),
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qlistthreadsinstopreply
             "QListThreadsInStopReply" => state.parse_enable_threads_in_stop_reply(res),
             // This does not useful to us. See
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qprocessinfo for more details.
-            "qProcessInfo" => {},
+            "qProcessInfo" => Ok(()),
             "QStartNoAckMode" => state.parse_start_no_ack_mode(res),
             // It is unclear if qSupported can sent from GDB without additional payload.
-            ["qSupported", rest] => state.parse_supported(rest, res),
+            "qSupported" | rest => state.parse_supported(rest, res),
             // https://lldb.llvm.org/resources/lldbgdbremote.html#qthreadsuffixsupported
             "QThreadSuffixSupported" => state.parse_thread_suffix_supported(res),
             // TODO: https://github.com/obhq/obliteration/issues/1398
-            "qVAttachOrWaitSupported" => {},
+            "qVAttachOrWaitSupported" => Ok(()),
             "vCont?" => state.parse_vcont(res),
-            _ => todo!("{}", String::from_utf8_lossy(data)),
         }
 
         // Push checksum.
