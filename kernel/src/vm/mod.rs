@@ -6,7 +6,7 @@ use self::stats::VmStats;
 use crate::config::{PAGE_SHIFT, PAGE_SIZE};
 use crate::context::{config, current_thread};
 use crate::dmem::Dmem;
-use crate::lock::GutexGroup;
+use crate::lock::Mutex;
 use crate::proc::Proc;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
@@ -26,7 +26,7 @@ mod stats;
 pub struct Vm {
     phys: PhysAllocator,
     pages: Vec<Arc<VmPage>>, // vm_page_array + vm_page_array_size
-    stats: [VmStats; 2],
+    stats: [Mutex<VmStats>; 2],
     pagers: [Weak<Proc>; 2],         // pageproc
     pages_deficit: [AtomicUsize; 2], // vm_pageout_deficit
 }
@@ -123,9 +123,8 @@ impl Vm {
         let pageout_page_count = 0x10; // TODO: Figure out where this value come from.
         let free_reserved = [pageout_page_count + 100 + 10, pageout_page_count];
         let free_min = [free_reserved[0] + 325, free_reserved[1] + 64];
-        let gg = GutexGroup::new();
         let stats = [
-            VmStats {
+            Mutex::new(VmStats {
                 free_reserved: free_reserved[0],
                 cache_min: if free_count[0] < 2049 {
                     // TODO: Figure out where 2049 value come from.
@@ -136,12 +135,12 @@ impl Vm {
                 } else {
                     free_reserved[0] + free_min[0] * 4
                 },
-                cache_count: gg.clone().spawn_default(),
-                free_count: gg.clone().spawn(free_count[0]),
-                interrupt_free_min: gg.clone().spawn(2),
-                wire_count: AtomicUsize::new(0),
-            },
-            VmStats {
+                cache_count: 0,
+                free_count: free_count[0],
+                interrupt_free_min: 2,
+                wire_count: 0,
+            }),
+            Mutex::new(VmStats {
                 free_reserved: free_reserved[1],
                 cache_min: if free_count[1] < 2049 {
                     // TODO: Figure out where 2049 value come from.
@@ -152,11 +151,11 @@ impl Vm {
                 } else {
                     free_reserved[1] + free_min[1] * 4
                 },
-                cache_count: gg.clone().spawn_default(),
-                free_count: gg.clone().spawn(free_count[1]),
-                interrupt_free_min: gg.clone().spawn(2),
-                wire_count: AtomicUsize::new(0),
-            },
+                cache_count: 0,
+                free_count: free_count[1],
+                interrupt_free_min: 2,
+                wire_count: 0,
+            }),
         ];
 
         // Add free pages. The Orbis do this on the above loop but that is not possible for us since
@@ -194,10 +193,8 @@ impl Vm {
     ) -> Option<Arc<VmPage>> {
         let vm = obj.as_ref().map_or(0, |v| v.vm());
         let td = current_thread();
-        let stats = &self.stats[vm];
-        let cache_count = stats.cache_count.read();
-        let mut free_count = stats.free_count.write();
-        let available = *free_count + *cache_count;
+        let mut stats = self.stats[vm].lock();
+        let available = stats.free_count + stats.cache_count;
 
         if available <= stats.free_reserved {
             let p = td.proc();
@@ -214,11 +211,10 @@ impl Vm {
             if flags == VmAlloc::Interrupt {
                 todo!()
             } else if flags == VmAlloc::System {
-                if available <= *stats.interrupt_free_min.read() {
+                if available <= stats.interrupt_free_min {
                     let deficit = max(1, flags.get(VmAlloc::Count));
 
-                    drop(free_count);
-                    drop(cache_count);
+                    drop(stats);
 
                     self.pages_deficit[vm].fetch_add(deficit.into(), Ordering::Relaxed);
                     self.wake_pager(vm);
@@ -249,7 +245,7 @@ impl Vm {
 
         match ps.flags.has_any(PageFlags::Cached) {
             true => todo!(),
-            false => *free_count -= 1,
+            false => stats.free_count -= 1,
         }
 
         match ps.flags.has_any(PageFlags::Zero) {
@@ -274,7 +270,7 @@ impl Vm {
         ps.extended_flags = oflags;
 
         if flags.has_any(VmAlloc::Wired) {
-            stats.wire_count.fetch_add(1, Ordering::Relaxed);
+            stats.wire_count += 1;
             ps.wire_count = 1;
         }
 
@@ -286,7 +282,7 @@ impl Vm {
         }
 
         // TODO: Call vdrop.
-        if (*cache_count + *free_count) < (stats.cache_min + stats.free_reserved) {
+        if (stats.cache_count + stats.free_count) < (stats.cache_min + stats.free_reserved) {
             todo!()
         }
 
