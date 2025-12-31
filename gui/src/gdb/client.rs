@@ -117,6 +117,8 @@ impl<'a, H: GdbHandler> ClientDispatcher<'a, H> {
             // near the top of the packet list).
             // See https://sourceware.org/gdb/current/onlinedocs/gdb.html/Packets.html
             "?" => state.parse_stop_reason(res, self.handler).await,
+            // https://sourceware.org/gdb/current/onlinedocs/gdb.html/Packets.html
+            "p" | data => state.parse_read_register(data, res, self.handler),
             // I think this does not worth for additional complexity on our side so we don't support
             // this. See https://lldb.llvm.org/resources/lldbgdbremote.html#qenableerrorstrings for
             // more details.

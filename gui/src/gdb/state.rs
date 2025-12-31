@@ -168,13 +168,17 @@ impl SessionState {
         res: &mut Vec<u8>,
         h: &mut H,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        for (i, id) in h.active_threads().into_iter().enumerate() {
-            // TODO: The docs said "formatted as big-endian hex strings" but how?
-            if i == 0 {
-                write!(res, "m{id:x}").unwrap();
-            } else {
-                write!(res, ",{id:x}").unwrap();
-            }
+        // We don't need to do anything special because the hexadecimal already in a big-endian
+        // format.
+        let mut iter = h.active_threads().into_iter();
+
+        match iter.next() {
+            Some(v) => write!(res, "m{v:x}").unwrap(),
+            None => return Ok(()),
+        }
+
+        for id in iter {
+            write!(res, ",{id:x}").unwrap();
         }
 
         Ok(())
@@ -196,15 +200,8 @@ impl SessionState {
         res: &mut Vec<u8>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Parse register number.
-        let reg = match std::str::from_utf8(reg)
-            .ok()
-            .and_then(|s| usize::from_str_radix(s, 16).ok())
-        {
-            Some(v) => v,
-            None => {
-                return Err(format!("unknown register '{}'", String::from_utf8_lossy(reg)).into());
-            }
-        };
+        let reg = Self::parse_hex(reg)
+            .ok_or_else(|| format!("unknown register '{}'", String::from_utf8_lossy(reg)))?;
 
         // Get register info based on architecture.
         if cfg!(target_arch = "aarch64") {
@@ -216,6 +213,37 @@ impl SessionState {
         }
 
         Ok(())
+    }
+
+    pub fn parse_read_register<H: GdbHandler>(
+        &mut self,
+        req: &[u8],
+        res: &mut Vec<u8>,
+        h: &mut H,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // Get target register and thread.
+        let (reg, td) = if self.thread_suffix_supported {
+            // https://lldb.llvm.org/resources/lldbgdbremote.html#qthreadsuffixsupported
+            let mut iter = req.split(|&b| b == b';');
+            let reg = match iter.next() {
+                Some(v) => Self::parse_hex(v)
+                    .ok_or_else(|| format!("unknown register '{}'", String::from_utf8_lossy(v)))?,
+                None => return Err("missing register number".into()),
+            };
+
+            // Parse target thread.
+            let td = match iter.next().and_then(|s| s.strip_prefix(b"thread:")) {
+                Some(v) => Self::parse_hex(v)
+                    .ok_or_else(|| format!("invalid thread-id '{}'", String::from_utf8_lossy(v)))?,
+                None => return Err("missing thread-id".into()),
+            };
+
+            (reg, td)
+        } else {
+            todo!()
+        };
+
+        todo!()
     }
 
     fn parse_aarch64_register_info(&mut self, reg: usize, res: &mut Vec<u8>) {
@@ -286,5 +314,11 @@ impl SessionState {
         };
 
         res.extend_from_slice(info.as_bytes());
+    }
+
+    fn parse_hex(v: &[u8]) -> Option<usize> {
+        std::str::from_utf8(v)
+            .ok()
+            .and_then(|v| usize::from_str_radix(v, 16).ok())
     }
 }
