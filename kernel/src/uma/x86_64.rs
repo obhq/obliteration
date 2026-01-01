@@ -1,5 +1,5 @@
 use super::Alloc;
-use crate::vm::Vm;
+use crate::vm::{PageFlags, Vm};
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 /// See `uma_small_alloc` on the Orbis for a reference.
@@ -13,14 +13,24 @@ pub fn small_alloc(vm: &Vm, flags: Alloc) {
     // operation here.
     static UNK: AtomicUsize = AtomicUsize::new(0);
 
-    vm.alloc_page(
-        None,
-        UNK.fetch_add(1, Ordering::Relaxed),
-        // TODO: Refactor this for readability.
-        ((((u32::from(flags) & 0x100) >> 2) - (u32::from((u32::from(flags) & 0x401) == 1)) + 0x22)
-            | 0x100)
-            .into(),
-    );
+    // TODO: Refactor this for readability.
+    let req = ((((u32::from(flags) & 0x100) >> 2) - (u32::from((u32::from(flags) & 0x401) == 1))
+        + 0x22)
+        | 0x100)
+        .into();
+    let page = loop {
+        match vm.alloc_page(None, UNK.fetch_add(1, Ordering::Relaxed), req) {
+            Some(v) => break v,
+            None => todo!(),
+        }
+    };
+
+    // TODO: The Orbis set unknown field on vm_page here.
+    let ps = page.state.lock();
+
+    if flags.has_any(Alloc::Zero) && !ps.flags.has_any(PageFlags::Zero) {
+        todo!()
+    }
 
     todo!()
 }
