@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 pub use self::handler::*;
 
+use self::arch::*;
 use self::client::ClientDispatcher;
 use self::state::SessionState;
+use std::fmt::{Display, Formatter};
 use thiserror::Error;
 
 /// Match byte slices against patterns, similar to a match statement.
@@ -59,6 +61,9 @@ macro_rules! match_bytes {
     };
 }
 
+#[cfg_attr(target_arch = "aarch64", path = "aarch64.rs")]
+#[cfg_attr(target_arch = "x86_64", path = "x86_64.rs")]
+mod arch;
 mod client;
 mod handler;
 mod state;
@@ -83,6 +88,66 @@ impl GdbSession {
         self.req.extend_from_slice(data);
 
         ClientDispatcher::new(self, h)
+    }
+}
+
+/// Type of [Register].
+#[derive(Clone, Copy)]
+enum RegisterType {
+    Unsigned,
+}
+
+impl Display for RegisterType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Unsigned => "uint",
+        })
+    }
+}
+
+/// Category of [Register].
+#[derive(Clone, Copy)]
+enum RegisterCategory {
+    General,
+}
+
+impl Display for RegisterCategory {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::General => "General Purpose Registers",
+        })
+    }
+}
+
+/// Alias of [Register].
+#[derive(Clone, Copy)]
+enum RegisterAlias {
+    ProgramCounter,
+    StackPointer,
+    FramePointer,
+}
+
+impl Display for RegisterAlias {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::ProgramCounter => "pc",
+            Self::StackPointer => "sp",
+            Self::FramePointer => "fp",
+        })
+    }
+}
+
+/// Display format of [Register].
+#[derive(Clone, Copy)]
+enum RegisterFormat {
+    Hex,
+}
+
+impl Display for RegisterFormat {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Hex => "hex",
+        })
     }
 }
 

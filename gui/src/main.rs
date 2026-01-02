@@ -827,6 +827,7 @@ impl App for MainProgram {
             vmm,
             logs,
             pending_bps: Vec::new(),
+            registers: RegisterValues::default(),
         };
 
         loop {
@@ -852,6 +853,7 @@ struct Context<H> {
     vmm: Vmm<H>,
     logs: LogWriter,
     pending_bps: Vec<(usize, Option<DebugEvent>)>,
+    registers: RegisterValues,
 }
 
 impl<H: Hypervisor> Context<H> {
@@ -880,7 +882,8 @@ impl<H: Hypervisor> Context<H> {
         match ev {
             VmmEvent::Log(t, m) => self.logs.write(t, m),
             VmmEvent::Breakpoint(e) => self.pending_bps.push((cpu, e)),
-            VmmEvent::Registers(_) => todo!(),
+            #[cfg(target_arch = "x86_64")]
+            VmmEvent::RaxValue(v) => self.registers.rax = Some(v),
             VmmEvent::TranslatedAddress(_) => todo!(),
         }
 
@@ -928,6 +931,16 @@ impl<H: Hypervisor> GdbHandler for Context<H> {
 
         Ok(())
     }
+}
+
+#[cfg(target_arch = "aarch64")]
+#[derive(Default)]
+struct RegisterValues {}
+
+#[cfg(target_arch = "x86_64")]
+#[derive(Default)]
+struct RegisterValues {
+    rax: Option<usize>,
 }
 
 /// Program arguments parsed from command line.
