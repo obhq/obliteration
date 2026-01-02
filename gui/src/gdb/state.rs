@@ -1,5 +1,4 @@
-use super::GdbHandler;
-use std::borrow::Cow;
+use super::{GdbHandler, Register};
 use std::io::Write;
 
 /// Contains states for a GDB remote session.
@@ -202,20 +201,35 @@ impl SessionState {
         // Parse register number.
         let reg = Self::parse_hex(reg)
             .ok_or_else(|| format!("unknown register '{}'", String::from_utf8_lossy(reg)))?;
+        let reg = match Register::try_from(reg) {
+            Ok(v) => v,
+            Err(_) => return Ok(()), // No more registers.
+        };
 
-        // Get register info based on architecture.
-        if cfg!(target_arch = "aarch64") {
-            self.parse_aarch64_register_info(reg, res);
-        } else if cfg!(target_arch = "x86_64") {
-            self.parse_x86_64_register_info(reg, res);
-        } else {
-            todo!()
+        // Build response.
+        let mut info = format!(
+            "name:{};bitsize:{};offset:{};encoding:{};format:{};set:{};dwarf:{};",
+            reg,
+            reg.size(),
+            reg.offset(),
+            reg.ty(),
+            reg.format(),
+            reg.category(),
+            reg.dwarf_number()
+        );
+
+        if let Some(v) = reg.alias() {
+            use std::fmt::Write;
+
+            write!(info, "generic:{v};").unwrap();
         }
+
+        res.extend_from_slice(info.as_bytes());
 
         Ok(())
     }
 
-    pub fn parse_read_register<H: GdbHandler>(
+    pub async fn parse_read_register<H: GdbHandler>(
         &mut self,
         req: &[u8],
         res: &mut Vec<u8>,
@@ -244,76 +258,6 @@ impl SessionState {
         };
 
         todo!()
-    }
-
-    fn parse_aarch64_register_info(&mut self, reg: usize, res: &mut Vec<u8>) {
-        // Register numbering follows the DWARF for ARM 64-bit Architecture (AArch64) specification.
-        // See https://github.com/ARM-software/abi-aa/blob/main/aadwarf64/aadwarf64.rst
-        let info = match reg {
-            0..=28 => Cow::Owned(format!(
-                "name:x{reg};bitsize:64;offset:{};encoding:uint;format:hex;set:General Purpose Registers;gcc:{reg};dwarf:{reg};",
-                reg * 8,
-            )),
-            29 => Cow::Borrowed(
-                "name:fp;bitsize:64;offset:232;encoding:uint;format:hex;set:General Purpose Registers;gcc:29;dwarf:29;",
-            ),
-            30 => Cow::Borrowed(
-                "name:lr;bitsize:64;offset:240;encoding:uint;format:hex;set:General Purpose Registers;gcc:30;dwarf:30;",
-            ),
-            31 => Cow::Borrowed(
-                "name:sp;bitsize:64;offset:248;encoding:uint;format:hex;set:General Purpose Registers;gcc:31;dwarf:31;generic:sp;",
-            ),
-            32 => Cow::Borrowed(
-                "name:pc;bitsize:64;offset:256;encoding:uint;format:hex;set:General Purpose Registers;gcc:32;dwarf:32;generic:pc;",
-            ),
-            33 => Cow::Borrowed(
-                "name:cpsr;bitsize:32;offset:264;encoding:uint;format:hex;set:General Purpose Registers;",
-            ),
-            _ => return, // No more registers.
-        };
-
-        res.extend_from_slice(info.as_bytes());
-    }
-
-    fn parse_x86_64_register_info(&mut self, reg: usize, res: &mut Vec<u8>) {
-        // (name, gcc/dwarf number, generic)
-        // See https://gitlab.com/x86-psABIs/x86-64-ABI (Figure 3.36: DWARF Register Number Mapping)
-        const REGS: &[(&str, usize, &str)] = &[
-            ("rax", 0, ""),
-            ("rbx", 3, ""),
-            ("rcx", 2, ""),
-            ("rdx", 1, ""),
-            ("rsi", 4, ""),
-            ("rdi", 5, ""),
-            ("rbp", 6, "generic:fp;"),
-            ("rsp", 7, "generic:sp;"),
-            ("r8", 8, ""),
-            ("r9", 9, ""),
-            ("r10", 10, ""),
-            ("r11", 11, ""),
-            ("r12", 12, ""),
-            ("r13", 13, ""),
-            ("r14", 14, ""),
-            ("r15", 15, ""),
-            ("rip", 16, "generic:pc;"),
-        ];
-
-        let info = match reg {
-            0..=16 => {
-                let (name, dwarf, generic) = REGS[reg];
-
-                Cow::Owned(format!(
-                    "name:{name};bitsize:64;offset:{};encoding:uint;format:hex;set:General Purpose Registers;gcc:{dwarf};dwarf:{dwarf};{generic}",
-                    reg * 8,
-                ))
-            }
-            17 => Cow::Borrowed(
-                "name:rflags;bitsize:32;offset:136;encoding:uint;format:hex;set:General Purpose Registers;",
-            ),
-            _ => return, // No more registers.
-        };
-
-        res.extend_from_slice(info.as_bytes());
     }
 
     fn parse_hex(v: &[u8]) -> Option<usize> {

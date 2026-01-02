@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-use self::arch::{BREAKPOINT_SIZE, GdbRegs, RELOCATE_TYPE};
+use self::arch::{BREAKPOINT_SIZE, RELOCATE_TYPE};
 use self::kernel::{
     Kernel, NoteError, PT_DYNAMIC, PT_GNU_EH_FRAME, PT_GNU_RELRO, PT_GNU_STACK, PT_LOAD, PT_NOTE,
     PT_PHDR, ProgramHeader,
@@ -576,6 +576,14 @@ impl<H> Vmm<H> {
         self.cpus.keys().copied()
     }
 
+    /// # Panics
+    /// If `cpu` is not valid.
+    pub fn send(&mut self, cpu: usize, cmd: VmmCommand) {
+        // We don't need to check if the channel still intact here. It will be easier to let recv
+        // handle channel closing.
+        drop(self.cpus[&cpu].sender.send(cmd));
+    }
+
     pub async fn recv(&mut self) -> (usize, Option<VmmEvent>) {
         // Prepare futures to poll.
         let mut tasks = Vec::with_capacity(self.cpus.len());
@@ -760,14 +768,15 @@ impl<H: Hypervisor> Vmm<H> {
             };
 
             match cmd {
-                VmmCommand::GetRegs => {
-                    // Get states.
-                    let mut states = match cpu.states() {
-                        Ok(v) => v,
-                        Err(e) => return Err(CpuError::GetStates(Box::new(e))),
-                    };
+                #[cfg(target_arch = "x86_64")]
+                VmmCommand::ReadRax => {
+                    let v = cpu
+                        .states()
+                        .map_err(|e| CpuError::GetStates(Box::new(e)))?
+                        .get_rax()
+                        .map_err(|e| CpuError::ReadReg("rax", Box::new(e)))?;
 
-                    tx.send(VmmEvent::Registers(Self::get_debug_regs(&mut states)?));
+                    tx.send(VmmEvent::RaxValue(v));
                 }
                 VmmCommand::TranslateAddress(addr) => match cpu.translate(addr) {
                     Ok(v) => tx.send(VmmEvent::TranslatedAddress(v)),
@@ -778,106 +787,6 @@ impl<H: Hypervisor> Vmm<H> {
         }
 
         Ok(None)
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    fn get_debug_regs(_: &mut impl CpuStates) -> Result<GdbRegs, CpuError> {
-        todo!()
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    fn get_debug_regs<C: CpuStates>(states: &mut C) -> Result<GdbRegs, CpuError> {
-        use gdbstub_arch::x86::reg::{X86SegmentRegs, X87FpuInternalRegs};
-
-        let error = |n: &'static str, e: C::Err| CpuError::ReadReg(n, Box::new(e));
-        let mut load_greg = |name: &'static str, func: fn(&mut C) -> Result<usize, C::Err>| {
-            func(states)
-                .map(|v| TryInto::<u64>::try_into(v).unwrap())
-                .map_err(|e| error(name, e))
-        };
-
-        Ok(GdbRegs {
-            regs: [
-                load_greg("rax", |s| s.get_rax())?,
-                load_greg("rbx", |s| s.get_rbx())?,
-                load_greg("rcx", |s| s.get_rcx())?,
-                load_greg("rdx", |s| s.get_rdx())?,
-                load_greg("rsi", |s| s.get_rsi())?,
-                load_greg("rdi", |s| s.get_rdi())?,
-                load_greg("rbp", |s| s.get_rbp())?,
-                load_greg("rsp", |s| s.get_rsp())?,
-                load_greg("r8", |s| s.get_r8())?,
-                load_greg("r9", |s| s.get_r9())?,
-                load_greg("r10", |s| s.get_r10())?,
-                load_greg("r11", |s| s.get_r11())?,
-                load_greg("r12", |s| s.get_r12())?,
-                load_greg("r13", |s| s.get_r13())?,
-                load_greg("r14", |s| s.get_r14())?,
-                load_greg("r15", |s| s.get_r15())?,
-            ],
-            rip: load_greg("rip", |s| s.get_rip())?,
-            eflags: states
-                .get_rflags()
-                .map(|v| v.into_bits().try_into().unwrap())
-                .map_err(|e| error("rflags", e))?,
-            segments: X86SegmentRegs {
-                cs: states.get_cs().map_err(|e| error("cs", e))?.into(),
-                ss: states.get_ss().map_err(|e| error("ss", e))?.into(),
-                ds: states.get_ds().map_err(|e| error("ds", e))?.into(),
-                es: states.get_es().map_err(|e| error("es", e))?.into(),
-                fs: states.get_fs().map_err(|e| error("fs", e))?.into(),
-                gs: states.get_gs().map_err(|e| error("gs", e))?.into(),
-            },
-            st: [
-                states.get_st0().map_err(|e| error("st0", e))?,
-                states.get_st1().map_err(|e| error("st1", e))?,
-                states.get_st2().map_err(|e| error("st2", e))?,
-                states.get_st3().map_err(|e| error("st3", e))?,
-                states.get_st4().map_err(|e| error("st4", e))?,
-                states.get_st5().map_err(|e| error("st5", e))?,
-                states.get_st6().map_err(|e| error("st6", e))?,
-                states.get_st7().map_err(|e| error("st7", e))?,
-            ],
-            fpu: X87FpuInternalRegs {
-                fctrl: states.get_fcw().map_err(|e| error("fcw", e))?,
-                fstat: states.get_fsw().map_err(|e| error("fsw", e))?,
-                ftag: states.get_ftwx().map_err(|e| error("ftwx", e))?,
-                fiseg: states.get_fiseg().map_err(|e| error("fiseg", e))?,
-                fioff: states.get_fioff().map_err(|e| error("fioff", e))?,
-                foseg: states.get_foseg().map_err(|e| error("foseg", e))?,
-                fooff: states.get_fooff().map_err(|e| error("fooff", e))?,
-                fop: states.get_fop().map_err(|e| error("fop", e))?,
-            },
-            xmm: [
-                states.get_xmm0().map_err(|e| error("xmm0", e))?,
-                states.get_xmm1().map_err(|e| error("xmm1", e))?,
-                states.get_xmm2().map_err(|e| error("xmm2", e))?,
-                states.get_xmm3().map_err(|e| error("xmm3", e))?,
-                states.get_xmm4().map_err(|e| error("xmm4", e))?,
-                states.get_xmm5().map_err(|e| error("xmm5", e))?,
-                states.get_xmm6().map_err(|e| error("xmm6", e))?,
-                states.get_xmm7().map_err(|e| error("xmm7", e))?,
-                states.get_xmm8().map_err(|e| error("xmm8", e))?,
-                states.get_xmm9().map_err(|e| error("xmm9", e))?,
-                states.get_xmm10().map_err(|e| error("xmm10", e))?,
-                states.get_xmm11().map_err(|e| error("xmm11", e))?,
-                states.get_xmm12().map_err(|e| error("xmm12", e))?,
-                states.get_xmm13().map_err(|e| error("xmm13", e))?,
-                states.get_xmm14().map_err(|e| error("xmm14", e))?,
-                states.get_xmm15().map_err(|e| error("xmm15", e))?,
-            ],
-            mxcsr: states.get_mxcsr().map_err(|e| error("mxcsr", e))?,
-        })
-    }
-
-    #[cfg(target_arch = "aarch64")]
-    fn set_debug_regs(_: &mut impl CpuStates, _: GdbRegs) -> Result<(), CpuError> {
-        todo!()
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    fn set_debug_regs(_: &mut impl CpuStates, _: GdbRegs) -> Result<(), CpuError> {
-        todo!()
     }
 }
 
@@ -931,7 +840,8 @@ struct RamMap {
 /// Command to control a CPU from outside.
 #[derive(Debug)]
 pub enum VmmCommand {
-    GetRegs,
+    #[cfg(target_arch = "x86_64")]
+    ReadRax,
     TranslateAddress(usize),
     Release,
 }
@@ -940,7 +850,8 @@ pub enum VmmCommand {
 pub enum VmmEvent {
     Log(ConsoleType, String),
     Breakpoint(Option<DebugEvent>),
-    Registers(GdbRegs),
+    #[cfg(target_arch = "x86_64")]
+    RaxValue(usize),
     TranslatedAddress(usize),
 }
 

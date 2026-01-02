@@ -30,6 +30,7 @@
   "lldb.launch.initCommands": [
     "settings set target.x86-disassembly-flavor intel"
   ],
+  "rust-analyzer.assist.preferSelf": true,
   "rust-analyzer.cargo.features": "all",
   "rust-analyzer.imports.granularity.group": "module",
   "rust-analyzer.imports.group.enable": false,

@@ -4,8 +4,6 @@ use hv::{Cpu, CpuCommit, CpuStates, Hypervisor};
 use std::num::NonZero;
 use x86_64::{Efer, Rflags};
 
-pub type GdbRegs = gdbstub_arch::x86::reg::X86_64CoreRegs;
-
 pub const BREAKPOINT_SIZE: NonZero<usize> = NonZero::new(1).unwrap();
 pub const RELOCATE_TYPE: usize = 8;
 
