@@ -8,6 +8,7 @@ use thiserror::Error;
 impl<'a, H: Hypervisor> RamBuilder<'a, H> {
     pub(super) fn build_4k_page_tables(
         mut self,
+        recursive_index: usize,
         devices: impl IntoIterator<Item = AllocInfo>,
     ) -> Result<usize, RamBuilderError> {
         // Allocate page-map level-4 table.
@@ -46,6 +47,15 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
             self.setup_4k_page_tables(&mut cx, dev.vaddr, dev.paddr, len)?;
         }
 
+        // Add page-map level-4 table to itself.
+        let pml4e = &mut cx.pml4t[recursive_index];
+
+        if *pml4e != 0 {
+            return Err(RamBuilderError::RecursiveUnavailable);
+        }
+
+        Self::set_page_entry(pml4e, page_table);
+
         Ok(page_table)
     }
 
@@ -60,15 +70,6 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
         assert_eq!(paddr % 4096, 0);
         assert_eq!(len % 4096, 0);
 
-        fn set_page_entry(entry: &mut usize, addr: usize) {
-            assert_eq!(addr & 0x7FF0000000000000, 0);
-            assert_eq!(addr & 0xFFF, 0);
-
-            *entry = addr;
-            *entry |= 0b01; // Present (P) Bit.
-            *entry |= 0b10; // Read/Write (R/W) Bit.
-        }
-
         for off in (0..len).step_by(4096) {
             use std::collections::hash_map::Entry;
 
@@ -81,7 +82,7 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
                         .alloc_page_table()
                         .map_err(RamBuilderError::AllocPdpTable)?;
 
-                    set_page_entry(&mut cx.pml4t[pml4o], addr);
+                    Self::set_page_entry(&mut cx.pml4t[pml4o], addr);
 
                     match cx.pdpt.entry(addr) {
                         Entry::Occupied(_) => unreachable!(),
@@ -99,7 +100,7 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
                         .alloc_page_table()
                         .map_err(RamBuilderError::AllocPdTable)?;
 
-                    set_page_entry(&mut pdpt[pdpo], addr);
+                    Self::set_page_entry(&mut pdpt[pdpo], addr);
 
                     match cx.pdt.entry(addr) {
                         Entry::Occupied(_) => unreachable!(),
@@ -117,7 +118,7 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
                         .alloc_page_table()
                         .map_err(RamBuilderError::AllocPageTable)?;
 
-                    set_page_entry(&mut pdt[pdo], addr);
+                    Self::set_page_entry(&mut pdt[pdo], addr);
 
                     match cx.pt.entry(addr) {
                         Entry::Occupied(_) => unreachable!(),
@@ -135,7 +136,7 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
                 return Err(RamBuilderError::DuplicatedVirtualAddr(addr));
             }
 
-            set_page_entry(&mut pt[pto], paddr);
+            Self::set_page_entry(&mut pt[pto], paddr);
         }
 
         Ok(())
@@ -160,6 +161,15 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
         self.next += len.get();
 
         Ok((PageTable(tab), addr))
+    }
+
+    fn set_page_entry(entry: &mut usize, addr: usize) {
+        assert_eq!(addr & 0x7FF0000000000000, 0);
+        assert_eq!(addr & 0xFFF, 0);
+
+        *entry = addr;
+        *entry |= 0b01; // Present (P) Bit.
+        *entry |= 0b10; // Read/Write (R/W) Bit.
     }
 }
 
@@ -205,4 +215,7 @@ pub enum RamBuilderError {
 
     #[error("duplicated virtual address {0:#x}")]
     DuplicatedVirtualAddr(usize),
+
+    #[error("index for recursive unavailable")]
+    RecursiveUnavailable,
 }
