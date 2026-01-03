@@ -94,21 +94,26 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
         Ok((paddr, mem))
     }
 
+    /// `recursive_index` is and index of the page table to recursive itself. See
+    /// https://wiki.osdev.org/User:Neon/Recursive_Paging for the idea behind this.
+    ///
     /// # Panics
-    /// If any [`AllocInfo::paddr`] in `devices` within RAM address, [`AllocInfo::paddr`] or
-    /// [`AllocInfo::vaddr`] is not multiply by VM page size or [`AllocInfo::len`] size cannot round
-    /// to VM page size. The latter case only happen when the value is too large (e.g.
-    /// 0xFFFFFFFFFFFFF000 for 4K page).
+    /// - If `recursive_index` is not valid.
+    /// - If any [AllocInfo::paddr] in `devices` within RAM address.
+    /// - If [AllocInfo::paddr] or [AllocInfo::vaddr] is not multiply by VM page size.
+    /// - If [AllocInfo::len] size cannot round to VM page size. The can only happen when the value
+    ///   is too large (e.g. 0xFFFFFFFFFFFFF000 for 4K page).
     pub fn build_page_table(
         self,
+        recursive_index: usize,
         devices: impl IntoIterator<Item = AllocInfo>,
     ) -> Result<usize, RamBuilderError> {
         match self.hv.ram().vm_page_size().get() {
-            0x1000 => self.build_4k_page_tables(devices),
+            0x1000 => self.build_4k_page_tables(recursive_index, devices),
             #[cfg(target_arch = "aarch64")]
-            0x4000 => self.build_16k_page_tables(devices),
+            0x4000 => self.build_16k_page_tables(todo!(), devices),
             #[cfg(target_arch = "x86_64")]
-            0x4000 => self.build_4k_page_tables(devices),
+            0x4000 => self.build_4k_page_tables(recursive_index, devices),
             _ => todo!(),
         }
     }

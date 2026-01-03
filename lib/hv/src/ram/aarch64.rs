@@ -7,6 +7,7 @@ use thiserror::Error;
 impl<'a, H: Hypervisor> RamBuilder<'a, H> {
     pub(super) fn build_4k_page_tables(
         self,
+        _: usize,
         _: impl IntoIterator<Item = AllocInfo>,
     ) -> Result<usize, RamBuilderError> {
         todo!()
@@ -14,6 +15,7 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
 
     pub(super) fn build_16k_page_tables(
         mut self,
+        _: usize,
         devices: impl IntoIterator<Item = AllocInfo>,
     ) -> Result<usize, RamBuilderError> {
         // Allocate page table level 0.

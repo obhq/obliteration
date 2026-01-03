@@ -413,15 +413,25 @@ impl Vmm<()> {
 
         drop(mem);
 
+        // Get index for page table itself.
+        let table_index = if cfg!(target_arch = "x86_64") {
+            256
+        } else {
+            todo!()
+        };
+
         // Build page table.
         let page_table = ram
-            .build_page_table(devices.all().map(|(addr, dev)| AllocInfo {
-                paddr: addr,
-                vaddr: addr,
-                len: dev.len(),
-                #[cfg(target_arch = "aarch64")]
-                attr: self::arch::MEMORY_DEV_NG_NR_NE,
-            }))
+            .build_page_table(
+                table_index,
+                devices.all().map(|(addr, dev)| AllocInfo {
+                    paddr: addr,
+                    vaddr: addr,
+                    len: dev.len(),
+                    #[cfg(target_arch = "aarch64")]
+                    attr: self::arch::MEMORY_DEV_NG_NR_NE,
+                }),
+            )
             .map_err(VmmError::BuildPageTable)?;
 
         assert!(
@@ -430,6 +440,7 @@ impl Vmm<()> {
                 KernelMap {
                     kern_vaddr,
                     kern_vsize: (vaddr - kern_vaddr).try_into().unwrap(),
+                    page_table: table_index
                 }
             )
             .unwrap()
