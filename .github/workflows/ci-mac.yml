@@ -7,7 +7,7 @@ jobs:
     runs-on: macos-14
     steps:
     - name: Check out repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
     - name: Generate cache keys
       run: |
         echo "target=${{ runner.os }}-${{ runner.arch }}-target-${{ hashFiles('Cargo.lock') }}" >> $GITHUB_OUTPUT
@@ -25,15 +25,12 @@ jobs:
       run: rustup component add rust-src --toolchain nightly
     - name: Install additional Rust targets
       run: rustup target add aarch64-unknown-none-softfloat
+    - name: Install additional tools
+      run: cargo install project
     - name: Lint Rust sources
-      run: |
-        cargo clippy --package aarch64 --no-deps --target aarch64-unknown-none-softfloat -- -D warnings
-        cargo clippy --package bitflag --no-deps --target aarch64-unknown-none-softfloat -- -D warnings
-        cargo clippy --package config --no-deps --target aarch64-unknown-none-softfloat -- -D warnings
-        cargo clippy --package krt --no-deps --target aarch64-unknown-none-softfloat -- -D warnings
-        cargo clippy --package macros --no-deps -- -D warnings
+      run: project lint
     - name: Build
-      run: ./build.py -r
+      run: project build -r
     - name: Run tests
       run: cargo test
     - name: Create Apple Disk Image
