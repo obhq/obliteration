@@ -15,7 +15,7 @@ Replace `URL` with the URL you have copied.
 Change into the directory you just downloaded with `cd` and run the following command:
 
 ```sh
-python3 build.py -r
+project build -r
 ```
 
 Remove `-r` to disable optimization if you plan to make some contributions so the debugger will work properly. Build outputs will be placed in `dist` directory.

@@ -1,0 +1,24 @@
+commands:
+  build:
+    description: Build Obliteration and create distribution file
+    args:
+      release:
+        description: Enable optimization
+        long: release
+        short: r
+        type: bool
+      root:
+        description: Directory to store build outputs
+        long: root
+        type: string
+        placeholder: PATH
+      debug:
+        description: Immediate launch the VMM in debug mode
+        long: debug
+        type: string
+        placeholder: ADDR
+        default: 127.0.0.1:1234
+    script: scripts/build.lua
+  lint:
+    description: Run Clippy on all projects
+    script: scripts/lint.lua

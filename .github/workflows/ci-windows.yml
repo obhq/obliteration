@@ -7,7 +7,7 @@ jobs:
     runs-on: windows-2022
     steps:
     - name: Check out repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
     - name: Generate cache keys
       run: |
         echo "target=${{ runner.os }}-target-${{ hashFiles('Cargo.lock') }}" >> $env:GITHUB_OUTPUT
@@ -37,8 +37,10 @@ jobs:
       run: rustup update stable
     - name: Add additional Rust targets
       run: rustup target add x86_64-unknown-none
+    - name: Install additional tools
+      run: cargo install project
     - name: Build
-      run: python3 build.py -r
+      run: project build -r
     - name: Run tests
       run: cargo test
     - name: Upload artifacts

@@ -6,8 +6,8 @@ jobs:
     name: Linux
     runs-on: ubuntu-22.04 # Lowest version that support Vulkan 1.3.
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+    - name: Check out repository
+      uses: actions/checkout@v6
     - name: Install System Packages
       run: |
         sudo apt-get update
@@ -16,17 +16,12 @@ jobs:
       run: rustup update stable
     - name: Add additional Rust targets
       run: rustup target add x86_64-unknown-none
+    - name: Install additional tools
+      run: cargo install project
     - name: Lint Rust sources
-      run: |
-        cargo clippy --package bitflag --no-deps --target x86_64-unknown-none -- -D warnings
-        cargo clippy --package config --no-deps --target x86_64-unknown-none -- -D warnings
-        cargo clippy --package hv --no-deps -- -D warnings
-        cargo clippy --package krt --no-deps --target x86_64-unknown-none -- -D warnings
-        cargo clippy --package macros --no-deps -- -D warnings
-        cargo clippy --package obkrnl --no-deps --target x86_64-unknown-none -- -D warnings
-        cargo clippy --package x86-64 --no-deps --target x86_64-unknown-none -- -D warnings
+      run: project lint
     - name: Build
-      run: ./build.py -r
+      run: project build -r
     - name: Run tests
       run: cargo test
     - name: Create distribution tarball

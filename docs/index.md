@@ -12,10 +12,8 @@ In order to build Obliteration from source make sure you have the following prer
   - Make sure you install using `rustup`
   - On Linux your distro may provide a package for this
   - On macOS you can install from Homebrew
-- [Python 3](https://www.python.org)
-  - On Windows make sure you have `Add Python to PATH` selected when installing
-  - On Linux it is likely your distro already provided a package for this
-  - On macOS you can install latest version from Homebrew
+- [Project](https://github.com/ultimaweapon/project)
+  - You can install with `cargo install project`
 
 ## Windows
 

@@ -5,9 +5,9 @@
       "label": "Build",
       "detail": "Build Obliteration and create distribution files",
       "type": "process",
-      "command": "python3",
+      "command": "project",
       "args": [
-        "build.py"
+        "build"
       ],
       "group": {
         "kind": "build",
