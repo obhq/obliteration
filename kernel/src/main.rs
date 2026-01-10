@@ -71,7 +71,7 @@ fn main(map: &'static ::config::KernelMap, config: &'static ::config::Config) ->
 
     // Setup the CPU after the first print to let the bootloader developer know (some of) their code
     // are working.
-    let arch = unsafe { self::arch::setup_main_cpu(cpu) };
+    let arch = unsafe { self::arch::setup_main_cpu(&config, cpu, map) };
 
     // Setup proc0 to represent the kernel.
     let proc0 = Proc::new_bare(Arc::new(Proc0Abi));
@@ -101,8 +101,8 @@ fn setup(
     param1: Arc<Param1>,
 ) -> SetupResult {
     // Initialize physical memory.
-    let mut mi = load_memory_map(u64::try_from(map.kern_vsize.get()).unwrap());
-    let mut map = String::with_capacity(0x2000);
+    let mut mi = load_memory_map();
+    let mut buf = String::with_capacity(0x2000);
 
     fn format_map(tab: &[u64], last: usize, buf: &mut String) {
         for i in (0..=last).step_by(2) {
@@ -114,7 +114,7 @@ fn setup(
         }
     }
 
-    format_map(&mi.physmap, mi.physmap_last, &mut map);
+    format_map(&mi.physmap, mi.physmap_last, &mut buf);
 
     info!(
         concat!(
@@ -133,15 +133,15 @@ fn setup(
         mi.boot_info.addr,
         mi.boot_info.page_tables,
         mi.end_page,
-        map
+        buf
     );
 
-    map.clear();
+    buf.clear();
 
     // Initialize DMEM system.
     let dmem = Dmem::new(&mut mi);
 
-    format_map(&mi.physmap, mi.physmap_last, &mut map);
+    format_map(&mi.physmap, mi.physmap_last, &mut buf);
 
     info!(
         concat!(
@@ -153,10 +153,10 @@ fn setup(
         dmem.mode(),
         dmem.config().name,
         mi.end_page,
-        map
+        buf
     );
 
-    drop(map);
+    drop(buf);
 
     // TODO: We probably want to remove hard-coded start address of the first map here.
     let mut phys_avail = [0u64; 61];
@@ -168,8 +168,8 @@ fn setup(
     let page_mask = u64::try_from(PAGE_MASK.get()).unwrap();
     let unk1 = 0xA494000 + 0x2200000; // TODO: What is this?
     let paddr_free = match mi.unk {
-        0 => mi.paddr_free + 0x400000, // TODO: Why 0x400000?
-        _ => mi.paddr_free,
+        0 => u64::try_from(map.kern_vsize.get()).unwrap() + 0x400000, // TODO: Why 0x400000?
+        _ => map.kern_vsize.get().try_into().unwrap(),
     };
 
     mi.physmap[0] = page_size;
@@ -298,15 +298,15 @@ fn run(sr: SetupResult) -> ! {
 /// | Version | Offset |
 /// |---------|--------|
 /// |PS4 11.00|0x25CF00|
-fn load_memory_map(mut paddr_free: u64) -> MemoryInfo {
+fn load_memory_map() -> MemoryInfo {
     // TODO: Some of the logic around here are very hard to understand.
     let mut physmap = [0u64; 60];
     let mut last = 0usize;
-    let map = match boot_env() {
+    let memory_map = match boot_env() {
         BootEnv::Vm(v) => v.memory_map.as_slice(),
     };
 
-    'top: for m in map {
+    'top: for m in memory_map {
         // We only interested in RAM.
         match m.ty {
             MapType::None => break,
@@ -444,9 +444,7 @@ fn load_memory_map(mut paddr_free: u64) -> MemoryInfo {
         unk |= 2;
     }
 
-    paddr_free = load_pmap(paddr_free);
-
-    // Get dcons buffer address.
+    // The call to pmap_bootstrap has been moved to setup_main_cpu().
     let (dcons_addr, dcons_size) = match (config.env("dcons.addr"), config.env("dcons.size")) {
         (Some(addr), Some(size)) => (addr.parse().unwrap(), size.parse().unwrap()),
         _ => (0, 0),
@@ -463,7 +461,6 @@ fn load_memory_map(mut paddr_free: u64) -> MemoryInfo {
         initial_memory_size,
         end_page,
         unk,
-        paddr_free,
         memtest,
     }
 }
@@ -492,25 +489,6 @@ fn adjust_boot_area(original: u64) -> BootInfo {
         addr,
         page_tables: addr - (page_size * 3),
     }
-}
-
-/// See `pmap_bootstrap` on the Orbis for a reference.
-///
-/// # Reference offsets
-/// | Version | Offset |
-/// |---------|--------|
-/// |PS4 11.00|0x1127C0|
-fn load_pmap(paddr_free: u64) -> u64 {
-    let config = config();
-
-    if config.is_allow_disabling_aslr() && config.dipsw(Dipsw::DisabledKaslr) {
-        todo!()
-    } else {
-        // TODO: There are a lot of unknown variables here so we skip implementing this until we
-        // run into the code that using them.
-    }
-
-    paddr_free
 }
 
 /// See `vm_mem_init` function on the Orbis for a reference.
@@ -595,7 +573,6 @@ struct MemoryInfo {
     initial_memory_size: u64,
     end_page: u64,
     unk: u32, // Seems like the only possible values are 0 - 3.
-    paddr_free: u64,
     memtest: u64,
 }
 
