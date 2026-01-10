@@ -1,11 +1,17 @@
+use crate::config::Config;
 use alloc::string::String;
 use alloc::sync::Arc;
+use config::KernelMap;
 
 pub fn identify_cpu() -> CpuInfo {
     todo!()
 }
 
-pub unsafe fn setup_main_cpu(cpu: CpuInfo) -> Arc<ArchConfig> {
+pub unsafe fn setup_main_cpu(
+    config: &Config,
+    cpu: CpuInfo,
+    map: &'static KernelMap,
+) -> Arc<ArchConfig> {
     todo!()
 }
 

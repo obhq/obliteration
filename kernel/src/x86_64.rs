@@ -1,3 +1,4 @@
+use crate::config::{Config, Dipsw};
 use crate::context::{current_trap_rsp_offset, current_user_rsp_offset};
 use crate::trap::{interrupt_handler, syscall_handler};
 use alloc::boxed::Box;
@@ -6,7 +7,8 @@ use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use bitfield_struct::bitfield;
-use core::arch::{asm, global_asm};
+use config::KernelMap;
+use core::arch::{asm, global_asm, naked_asm};
 use core::fmt::Write;
 use core::mem::{transmute, zeroed};
 use x86_64::{
@@ -61,7 +63,11 @@ pub fn identify_cpu() -> CpuInfo {
 
 /// # Safety
 /// This function can be called only once and must be called by main CPU entry point.
-pub unsafe fn setup_main_cpu(cpu: CpuInfo) -> Arc<ArchConfig> {
+pub unsafe fn setup_main_cpu(
+    config: &Config,
+    cpu: CpuInfo,
+    map: &'static KernelMap,
+) -> Arc<ArchConfig> {
     // Setup GDT.
     let mut gdt = vec![
         // Null descriptor.
@@ -194,6 +200,10 @@ pub unsafe fn setup_main_cpu(cpu: CpuInfo) -> Arc<ArchConfig> {
 
     unsafe { wrmsr(0xC0000080, efer) };
 
+    // Initialize physical memory mapping. The Orbis do this in getmemsize() but we do it here
+    // instead.
+    init_pmap(config, map);
+
     // TODO: Find a better way.
     let len = unsafe { secondary_end.as_ptr().offset_from(secondary_start.as_ptr()) }
         .try_into()
@@ -216,6 +226,21 @@ pub unsafe fn wrmsr(reg: u32, val: usize) {
             options(nomem, preserves_flags, nostack)
         )
     };
+}
+
+/// See `pmap_bootstrap` on the Orbis for a reference.
+///
+/// # Reference offsets
+/// | Version | Offset |
+/// |---------|--------|
+/// |PS4 11.00|0x1127C0|
+fn init_pmap(config: &Config, _: &'static KernelMap) {
+    if config.is_allow_disabling_aslr() && config.dipsw(Dipsw::DisabledKaslr) {
+        todo!()
+    } else {
+        // TODO: There are a lot of unknown variables here so we skip implementing this until we
+        // run into the code that using them.
+    }
 }
 
 /// # Safety
@@ -249,30 +274,36 @@ unsafe fn push_tss<const L: usize>(
     SegmentSelector::new().with_si(si.try_into().unwrap())
 }
 
+/// See `lgdt` on the Orbis for a reference.
+///
+/// # Reference offsets
+/// | Version | Offset |
+/// |---------|--------|
+/// |PS4 11.00|0x2DE5C0|
+#[unsafe(naked)]
+unsafe extern "C" fn set_gdtr(v: &Gdtr, code: SegmentSelector, data: SegmentSelector) {
+    naked_asm!(
+        "lgdt qword ptr [rdi]",
+        "mov ds, dx",
+        "mov es, dx",
+        "mov fs, dx",
+        "mov gs, dx",
+        "mov ss, dx",
+        "pop rax",  // Return address.
+        "push rsi", // Code segment selector.
+        "push rax",
+        "retfq" // Set CS then return.
+    )
+}
+
 unsafe extern "C" {
     safe static secondary_start: [u8; 0];
     safe static secondary_end: [u8; 0];
 
-    fn set_gdtr(v: &Gdtr, code: SegmentSelector, data: SegmentSelector);
     fn Xbpt() -> !;
     fn syscall_entry64() -> !;
     fn syscall_entry32() -> !;
 }
-
-// See lgdt on the PS4 for a reference.
-global_asm!(
-    "set_gdtr:",
-    "lgdt qword ptr [rdi]",
-    "mov ds, dx",
-    "mov es, dx",
-    "mov fs, dx",
-    "mov gs, dx",
-    "mov ss, dx",
-    "pop rax",  // Return address.
-    "push rsi", // Code segment selector.
-    "push rax",
-    "retfq" // Set CS then return.
-);
 
 // See Xbpt on the PS4 for a reference.
 global_asm!(
