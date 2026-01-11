@@ -1,5 +1,7 @@
 use super::{GdbHandler, Register};
+use hex::ToHex;
 use std::io::Write;
+use std::num::NonZero;
 
 /// Contains states for a GDB remote session.
 #[derive(Default)]
@@ -241,6 +243,7 @@ impl SessionState {
             let mut iter = req.split(|&b| b == b';');
             let reg = match iter.next() {
                 Some(v) => Self::parse_hex(v)
+                    .and_then(|v| v.try_into().ok())
                     .ok_or_else(|| format!("unknown register '{}'", String::from_utf8_lossy(v)))?,
                 None => return Err("missing register number".into()),
             };
@@ -248,6 +251,7 @@ impl SessionState {
             // Parse target thread.
             let td = match iter.next().and_then(|s| s.strip_prefix(b"thread:")) {
                 Some(v) => Self::parse_hex(v)
+                    .and_then(|v| v.try_into().ok())
                     .ok_or_else(|| format!("invalid thread-id '{}'", String::from_utf8_lossy(v)))?,
                 None => return Err("missing thread-id".into()),
             };
@@ -257,7 +261,51 @@ impl SessionState {
             todo!()
         };
 
+        // Read register.
+        let val = Self::read_register(h, td, reg).await?;
+
+        res.extend_from_slice(val.as_bytes());
+
+        Ok(())
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    async fn read_register<H: GdbHandler>(
+        h: &mut H,
+        td: NonZero<usize>,
+        reg: Register,
+    ) -> Result<String, Box<dyn std::error::Error>> {
         todo!()
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    async fn read_register<H: GdbHandler>(
+        h: &mut H,
+        td: NonZero<usize>,
+        reg: Register,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let value = match reg {
+            Register::Rax => h.read_rax(td).await?.to_ne_bytes().encode_hex(),
+            Register::Rbx => todo!(),
+            Register::Rcx => todo!(),
+            Register::Rdx => todo!(),
+            Register::Rsi => todo!(),
+            Register::Rdi => todo!(),
+            Register::Rbp => todo!(),
+            Register::Rsp => todo!(),
+            Register::R8 => todo!(),
+            Register::R9 => todo!(),
+            Register::R10 => todo!(),
+            Register::R11 => todo!(),
+            Register::R12 => todo!(),
+            Register::R13 => todo!(),
+            Register::R14 => todo!(),
+            Register::R15 => todo!(),
+            Register::Rip => todo!(),
+            Register::Rflags => todo!(),
+        };
+
+        Ok(value)
     }
 
     fn parse_hex(v: &[u8]) -> Option<usize> {

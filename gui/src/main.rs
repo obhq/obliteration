@@ -12,7 +12,7 @@ use self::ui::{
     ProductList, ProfileModel, ResolutionModel, RuntimeExt, SettingsWindow, WaitForDebugger, error,
     spawn_handler,
 };
-use self::vmm::{CpuError, Vmm, VmmError, VmmEvent};
+use self::vmm::{CpuError, Vmm, VmmCommand, VmmError, VmmEvent};
 use async_net::{TcpListener, TcpStream};
 use clap::{Parser, ValueEnum};
 use erdp::ErrorDisplay;
@@ -857,6 +857,15 @@ struct Context<H> {
 }
 
 impl<H: Hypervisor> Context<H> {
+    async fn read_vmm(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let (id, ev) = self.vmm.recv().await;
+
+        match self.dispatch_vmm(id, ev).await? {
+            true => Ok(()),
+            false => Err("main vCPU was stopped".into()),
+        }
+    }
+
     async fn dispatch_vmm(
         &mut self,
         cpu: usize,
@@ -892,15 +901,13 @@ impl<H: Hypervisor> Context<H> {
 }
 
 impl<H: Hypervisor> GdbHandler for Context<H> {
-    type Err = ProgramError;
-
     fn active_threads(&mut self) -> impl IntoIterator<Item = NonZero<usize>> {
         self.vmm
             .active_cpus()
             .map(|v| v.checked_add(1).unwrap().try_into().unwrap())
     }
 
-    async fn suspend_threads(&mut self) -> Result<(), Self::Err> {
+    async fn suspend_threads(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let mut active = self.vmm.active_cpus();
 
         while self.pending_bps.len() != active.len() {
@@ -918,18 +925,31 @@ impl<H: Hypervisor> GdbHandler for Context<H> {
             let target = target.unwrap();
 
             self.vmm.suspend_cpu(target);
-
-            // Dispatch events.
-            let (id, ev) = self.vmm.recv().await;
-
-            if !self.dispatch_vmm(id, ev).await? {
-                return Err(ProgramError::MainCpuStopped);
-            }
+            self.read_vmm().await?;
 
             active = self.vmm.active_cpus();
         }
 
         Ok(())
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    async fn read_rax(&mut self, td: NonZero<usize>) -> Result<usize, Box<dyn std::error::Error>> {
+        // Send VMM request.
+        let cpu = td.get() - 1;
+
+        if self.vmm.send(cpu, VmmCommand::ReadRax).is_some() {
+            return Err(format!("invalid thread-id '{td}'").into());
+        }
+
+        // Wait for the value.
+        loop {
+            if let Some(v) = self.registers.rax.take() {
+                break Ok(v);
+            }
+
+            self.read_vmm().await?;
+        }
     }
 }
 
@@ -1062,9 +1082,6 @@ enum ProgramError {
 
     #[error("vCPU #{0} panicked, see {1} for more information")]
     CpuPanic(usize, PathBuf),
-
-    #[error("main vCPU was stopped")]
-    MainCpuStopped,
 
     #[error("couldn't read debugger connection")]
     ReadDebuggerSocket(#[source] std::io::Error),
