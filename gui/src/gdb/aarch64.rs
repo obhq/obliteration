@@ -9,7 +9,7 @@ use std::mem::offset_of;
 /// as the end of register list.
 #[repr(usize)]
 #[derive(Clone, Copy, IntoPrimitive, TryFromPrimitive)]
-pub enum Register {
+pub(super) enum Register {
     X0,
     X1,
     X2,

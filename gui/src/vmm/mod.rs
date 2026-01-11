@@ -587,12 +587,16 @@ impl<H> Vmm<H> {
         self.cpus.keys().copied()
     }
 
-    /// # Panics
-    /// If `cpu` is not valid.
-    pub fn send(&mut self, cpu: usize, cmd: VmmCommand) {
+    /// Returns `cmd` back if `cpu` is not valid.
+    pub fn send(&mut self, cpu: usize, cmd: VmmCommand) -> Option<VmmCommand> {
         // We don't need to check if the channel still intact here. It will be easier to let recv
         // handle channel closing.
-        drop(self.cpus[&cpu].sender.send(cmd));
+        match self.cpus.get(&cpu) {
+            Some(v) => v.sender.send(cmd),
+            None => return Some(cmd),
+        };
+
+        None
     }
 
     pub async fn recv(&mut self) -> (usize, Option<VmmEvent>) {
