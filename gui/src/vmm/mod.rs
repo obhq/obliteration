@@ -10,7 +10,7 @@ use crate::util::channel::{Receiver, Sender};
 use config::{BootEnv, ConsoleType, KernelMap, MapType, PhysMap, Vm};
 use futures::FutureExt;
 use hv::{
-    AllocInfo, CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, HvError, Hypervisor,
+    CpuDebug, CpuExit, CpuIo, CpuRun, CpuStates, DebugEvent, HvError, Hypervisor, PhysMapping,
     RamBuilder, RamBuilderError, RamError,
 };
 use kernel::{KernelError, ProgramHeaderError};
@@ -209,6 +209,7 @@ impl Vmm<()> {
 
         // TODO: Implement ASLR.
         let mut vaddr = 0xffffffff82200000;
+        let phys_vaddr = 0xffffff0000000000;
         let kern_vaddr = vaddr;
         let (kern_paddr, mut kern) = ram
             .alloc(
@@ -413,24 +414,22 @@ impl Vmm<()> {
 
         drop(mem);
 
-        // Get index for page table itself.
-        let table_index = if cfg!(target_arch = "x86_64") {
-            256
-        } else {
-            todo!()
-        };
-
         // Build page table.
         let page_table = ram
             .build_page_table(
-                table_index,
-                devices.all().map(|(addr, dev)| AllocInfo {
-                    paddr: addr,
-                    vaddr: addr,
-                    len: dev.len(),
-                    #[cfg(target_arch = "aarch64")]
-                    attr: self::arch::MEMORY_DEV_NG_NR_NE,
-                }),
+                phys_vaddr,
+                devices
+                    .all()
+                    .map(|(addr, dev)| PhysMapping {
+                        addr,
+                        len: dev.len(),
+                        #[cfg(target_arch = "aarch64")]
+                        attr: self::arch::MEMORY_DEV_NG_NR_NE,
+                    })
+                    .chain(std::iter::once(PhysMapping {
+                        addr: 0,
+                        len: ram_size,
+                    })),
             )
             .map_err(VmmError::BuildPageTable)?;
 
@@ -440,7 +439,7 @@ impl Vmm<()> {
                 KernelMap {
                     kern_vaddr,
                     kern_vsize: (vaddr - kern_vaddr).try_into().unwrap(),
-                    page_table: table_index
+                    phys_vaddr,
                 }
             )
             .unwrap()

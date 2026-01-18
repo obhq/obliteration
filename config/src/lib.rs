@@ -22,8 +22,8 @@ pub struct KernelMap {
     ///
     /// This include everything that need to be lived forever (e.g. stack for main CPU).
     pub kern_vsize: NonZero<usize>,
-    /// Index of page table within itself.
-    pub page_table: usize,
+    /// Virtual address of physical address 0.
+    pub phys_vaddr: usize,
 }
 
 /// Contains information about the boot environment.
