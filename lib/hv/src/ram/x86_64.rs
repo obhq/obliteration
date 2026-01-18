@@ -1,4 +1,4 @@
-use super::{AllocInfo, RamBuilder};
+use super::{PhysMapping, RamBuilder};
 use crate::{Hypervisor, LockedMem, RamError};
 use rustc_hash::FxHashMap;
 use std::num::NonZero;
@@ -8,8 +8,8 @@ use thiserror::Error;
 impl<'a, H: Hypervisor> RamBuilder<'a, H> {
     pub(super) fn build_4k_page_tables(
         mut self,
-        recursive_index: usize,
-        devices: impl IntoIterator<Item = AllocInfo>,
+        phys_vaddr: usize,
+        phys_addrs: impl IntoIterator<Item = PhysMapping>,
     ) -> Result<usize, RamBuilderError> {
         // Allocate page-map level-4 table.
         //
@@ -34,27 +34,17 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
             self.setup_4k_page_tables(&mut cx, info.vaddr, info.paddr, len)?;
         }
 
-        // Setup page tables to map virtual devices.
-        for dev in devices {
-            let len = dev
+        // Setup page tables to map physical addresses.
+        for phys in phys_addrs {
+            let vaddr = phys_vaddr.checked_add(phys.addr).unwrap();
+            let len = phys
                 .len
                 .get()
                 .checked_next_multiple_of(page_size.get())
                 .unwrap();
 
-            assert!(dev.paddr >= self.hv.ram().len().get());
-
-            self.setup_4k_page_tables(&mut cx, dev.vaddr, dev.paddr, len)?;
+            self.setup_4k_page_tables(&mut cx, vaddr, phys.addr, len)?;
         }
-
-        // Add page-map level-4 table to itself.
-        let pml4e = &mut cx.pml4t[recursive_index];
-
-        if *pml4e != 0 {
-            return Err(RamBuilderError::RecursiveUnavailable);
-        }
-
-        Self::set_page_entry(pml4e, page_table);
 
         Ok(page_table)
     }
@@ -215,7 +205,4 @@ pub enum RamBuilderError {
 
     #[error("duplicated virtual address {0:#x}")]
     DuplicatedVirtualAddr(usize),
-
-    #[error("index for recursive unavailable")]
-    RecursiveUnavailable,
 }

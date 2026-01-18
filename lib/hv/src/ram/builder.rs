@@ -94,26 +94,22 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
         Ok((paddr, mem))
     }
 
-    /// `recursive_index` is and index of the page table to recursive itself. See
-    /// https://wiki.osdev.org/User:Neon/Recursive_Paging for the idea behind this.
-    ///
     /// # Panics
-    /// - If `recursive_index` is not valid.
-    /// - If any [AllocInfo::paddr] in `devices` within RAM address.
-    /// - If [AllocInfo::paddr] or [AllocInfo::vaddr] is not multiply by VM page size.
-    /// - If [AllocInfo::len] size cannot round to VM page size. The can only happen when the value
-    ///   is too large (e.g. 0xFFFFFFFFFFFFF000 for 4K page).
+    /// - If `phys_vaddr` addition with [PhysMapping::addr] from `phys_addrs` is overflow or not
+    ///   multiply by VM page size.
+    /// - If [PhysMapping::len] in `phys_addrs` size cannot round to VM page size. The can only
+    ///   happen when the value is too large (e.g. 0xFFFFFFFFFFFFF000 for 4K page).
     pub fn build_page_table(
         self,
-        recursive_index: usize,
-        devices: impl IntoIterator<Item = AllocInfo>,
+        phys_vaddr: usize,
+        phys_addrs: impl IntoIterator<Item = PhysMapping>,
     ) -> Result<usize, RamBuilderError> {
         match self.hv.ram().vm_page_size().get() {
-            0x1000 => self.build_4k_page_tables(recursive_index, devices),
+            0x1000 => self.build_4k_page_tables(phys_vaddr, phys_addrs),
             #[cfg(target_arch = "aarch64")]
-            0x4000 => self.build_16k_page_tables(todo!(), devices),
+            0x4000 => self.build_16k_page_tables(phys_vaddr, phys_addrs),
             #[cfg(target_arch = "x86_64")]
-            0x4000 => self.build_4k_page_tables(recursive_index, devices),
+            0x4000 => self.build_4k_page_tables(phys_vaddr, phys_addrs),
             _ => todo!(),
         }
     }
@@ -123,6 +119,14 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
 pub struct AllocInfo {
     pub paddr: usize,
     pub vaddr: usize,
+    pub len: NonZero<usize>,
+    #[cfg(target_arch = "aarch64")]
+    pub attr: u8,
+}
+
+/// Contains information how to map a range of physical address to virtual address.
+pub struct PhysMapping {
+    pub addr: usize,
     pub len: NonZero<usize>,
     #[cfg(target_arch = "aarch64")]
     pub attr: u8,
