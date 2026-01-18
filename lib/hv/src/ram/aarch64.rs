@@ -1,4 +1,4 @@
-use super::{AllocInfo, RamBuilder};
+use super::{PhysMapping, RamBuilder};
 use crate::{Hypervisor, LockedMem, RamError};
 use rustc_hash::FxHashMap;
 use std::ops::{Deref, DerefMut};
@@ -7,16 +7,16 @@ use thiserror::Error;
 impl<'a, H: Hypervisor> RamBuilder<'a, H> {
     pub(super) fn build_4k_page_tables(
         self,
-        _: usize,
-        _: impl IntoIterator<Item = AllocInfo>,
+        phys_vaddr: usize,
+        phys_addrs: impl IntoIterator<Item = PhysMapping>,
     ) -> Result<usize, RamBuilderError> {
         todo!()
     }
 
     pub(super) fn build_16k_page_tables(
         mut self,
-        _: usize,
-        devices: impl IntoIterator<Item = AllocInfo>,
+        phys_vaddr: usize,
+        phys_addrs: impl IntoIterator<Item = PhysMapping>,
     ) -> Result<usize, RamBuilderError> {
         // Allocate page table level 0.
         let page_table = self.next;
@@ -48,13 +48,12 @@ impl<'a, H: Hypervisor> RamBuilder<'a, H> {
             self.setup_16k_page_tables(&mut cx, info.vaddr, info.paddr, len, info.attr)?;
         }
 
-        // Setup page tables to map virtual devices.
-        for dev in devices {
-            let len = dev.len.get().checked_next_multiple_of(0x4000).unwrap();
+        // Setup page tables to map physical addresses.
+        for phys in phys_addrs {
+            let vaddr = phys_vaddr.checked_add(phys.addr).unwrap();
+            let len = phys.len.get().checked_next_multiple_of(0x4000).unwrap();
 
-            assert!(dev.paddr >= self.hv.ram().len().get());
-
-            self.setup_16k_page_tables(&mut cx, dev.vaddr, dev.paddr, len, dev.attr)?;
+            self.setup_16k_page_tables(&mut cx, vaddr, phys.addr, len, phys.attr)?;
         }
 
         Ok(page_table)

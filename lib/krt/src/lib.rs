@@ -33,7 +33,7 @@ extern "C" fn _start(
     config: &'static ::config::Config,
 ) -> ! {
     // SAFETY: We call it as the first thing here.
-    unsafe { self::config::setup(env) };
+    unsafe { self::config::setup(map, env) };
     main(map, config);
 }
 

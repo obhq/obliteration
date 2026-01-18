@@ -1,3 +1,4 @@
+use crate::phys_vaddr;
 use config::{ConsoleMemory, ConsoleType, Vm};
 use core::cmp::min;
 use core::fmt::{Display, Write};
@@ -5,7 +6,7 @@ use core::num::NonZero;
 use core::ptr::write_volatile;
 
 pub fn print(env: &Vm, ty: ConsoleType, msg: impl Display) {
-    let c = env.console as *mut ConsoleMemory;
+    let c = (phys_vaddr() + env.console) as *mut ConsoleMemory;
     let mut w = Writer {
         con: c,
         buf: [0; 1024],
