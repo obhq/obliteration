@@ -429,6 +429,8 @@ impl Vmm<()> {
                     .chain(std::iter::once(PhysMapping {
                         addr: 0,
                         len: ram_size,
+                        #[cfg(target_arch = "aarch64")]
+                        attr: self::arch::MEMORY_NORMAL,
                     })),
             )
             .map_err(VmmError::BuildPageTable)?;
@@ -591,9 +593,9 @@ impl<H> Vmm<H> {
         // We don't need to check if the channel still intact here. It will be easier to let recv
         // handle channel closing.
         match self.cpus.get(&cpu) {
-            Some(v) => v.sender.send(cmd),
+            Some(v) => drop(v.sender.send(cmd)),
             None => return Some(cmd),
-        };
+        }
 
         None
     }
