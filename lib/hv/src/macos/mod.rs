@@ -81,7 +81,7 @@ pub fn new(
 
     // Set RAM.
     let prot = HV_MEMORY_READ | HV_MEMORY_WRITE | HV_MEMORY_EXEC;
-    let ret = unsafe { hv_vm_map(ram.as_ptr().cast(), 0, ram.len().get(), prot) };
+    let ret = unsafe { hv_vm_map(hv.ram.as_ptr().cast(), 0, hv.ram.len().get(), prot) };
 
     if let Some(v) = NonZero::new(ret) {
         return Err(HvError::MapRam(v));
